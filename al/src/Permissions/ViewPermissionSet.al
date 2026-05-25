@@ -47,8 +47,11 @@ permissionset 72096 "DOPSWHS-VIEW"
         page "DOPSWHS LP List" = X,
         page "DOPSWHS LP Template List" = X,
         page "DOPSWHS LP Movement Ledger" = X,
+        page "DOPSWHS Receiving Queue" = X,
         page "DOPSWHS LP API" = X,
         page "DOPSWHS LP Line API" = X,
+        page "DOPSWHS Receipt API" = X,
+        page "DOPSWHS Receipt Line API" = X,
         page "DOPSWHS LP Factbox Item" = X,
         page "DOPSWHS LP Factbox Bin" = X,
         page "DOPSWHS Print Job Log" = X,
@@ -60,5 +63,7 @@ permissionset 72096 "DOPSWHS-VIEW"
         codeunit "DOPSWHS GS1 AI Parser" = X,
         codeunit "DOPSWHS Bin Content Subscriber" = X,
         codeunit "DOPSWHS SSCC Generator" = X,
+        codeunit "DOPSWHS Receipt Mgmt" = X,
+        codeunit "DOPSWHS Event Publisher Legacy WI" = X,
         report "DOPSWHS LP Label" = X;
 }

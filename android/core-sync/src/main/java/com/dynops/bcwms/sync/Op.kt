@@ -15,4 +15,17 @@ sealed class Op {
   data class UsePartialLp(val lpNo: String, val lineNo: Int, val quantity: Double, val action: PartialUseAction) : Op()
   data class NestLp(val childLpNo: String, val parentLpNo: String) : Op()
   data class UnnestLp(val childLpNo: String) : Op()
+  data class ConfirmReceiptLine(
+    val receiptNo: String,
+    val lineNo: Int,
+    val qtyToReceive: Double,
+    val lotNo: String? = null,
+    val serialNo: String? = null,
+    val expiryDate: String? = null,
+    val licensePlateNo: String? = null,
+    val binCode: String? = null,
+  ) : Op()
+  data class AssignReceipt(val receiptNo: String, val userId: String) : Op()
+  data class StartReceiptLp(val receiptNo: String, val lpTemplateCode: String? = null) : Op()
+  data class StopReceiptLp(val receiptNo: String, val lpNo: String, val printLabel: Boolean = false) : Op()
 }

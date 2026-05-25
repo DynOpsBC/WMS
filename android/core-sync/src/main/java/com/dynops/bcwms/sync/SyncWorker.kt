@@ -23,6 +23,10 @@ class SyncWorker(
       is Op.UsePartialLp -> syncUsePartialLp(op)
       is Op.NestLp -> syncNestLp(op)
       is Op.UnnestLp -> syncUnnestLp(op)
+      is Op.ConfirmReceiptLine -> syncConfirmReceiptLine(op)
+      is Op.AssignReceipt -> syncAssignReceipt(op)
+      is Op.StartReceiptLp -> syncStartReceiptLp(op)
+      is Op.StopReceiptLp -> syncStopReceiptLp(op)
     }
 
   private suspend fun syncBuildLp(op: Op.BuildLp): Result = Result.success()
@@ -36,6 +40,10 @@ class SyncWorker(
   private suspend fun syncUsePartialLp(op: Op.UsePartialLp): Result = Result.success()
   private suspend fun syncNestLp(op: Op.NestLp): Result = Result.success()
   private suspend fun syncUnnestLp(op: Op.UnnestLp): Result = Result.success()
+  private suspend fun syncConfirmReceiptLine(op: Op.ConfirmReceiptLine): Result = Result.success()
+  private suspend fun syncAssignReceipt(op: Op.AssignReceipt): Result = Result.success()
+  private suspend fun syncStartReceiptLp(op: Op.StartReceiptLp): Result = Result.success()
+  private suspend fun syncStopReceiptLp(op: Op.StopReceiptLp): Result = Result.success()
 
   companion object {
     const val EXPEDITED_WORK_NAME = "bcwms-expedited-sync"
