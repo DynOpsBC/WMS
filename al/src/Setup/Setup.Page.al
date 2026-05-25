@@ -38,6 +38,10 @@ page 72061 "DOPSWHS Setup"
                 {
                     ApplicationArea = All;
                 }
+                field("Max LP Nesting Depth"; Rec."Max LP Nesting Depth")
+                {
+                    ApplicationArea = All;
+                }
             }
         }
     }
@@ -50,4 +54,3 @@ page 72061 "DOPSWHS Setup"
         end;
     end;
 }
-

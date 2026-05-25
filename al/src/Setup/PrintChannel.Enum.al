@@ -2,16 +2,12 @@ enum 72203 "DOPSWHS Print Channel"
 {
     Extensible = true;
 
-    value(0; None)
-    {
-        Caption = 'None';
-    }
-    value(1; "BC Native")
-    {
-        Caption = 'Business Central Native';
-    }
-    value(2; PrintNode)
+    value(0; PrintNode)
     {
         Caption = 'PrintNode';
+    }
+    value(1; BCNative)
+    {
+        Caption = 'Business Central Native';
     }
 }

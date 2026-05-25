@@ -39,6 +39,12 @@ table 72000 "DOPSWHS Setup"
             Caption = 'PrintNode API Key Set';
             Editable = false;
         }
+        field(70; "Max LP Nesting Depth"; Integer)
+        {
+            Caption = 'Max LP Nesting Depth';
+            InitValue = 3;
+            DataClassification = CustomerContent;
+        }
     }
 
     keys
@@ -58,4 +64,3 @@ table 72000 "DOPSWHS Setup"
             Error('Only one Advanced WMS Setup row is allowed.');
     end;
 }
-

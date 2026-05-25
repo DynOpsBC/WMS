@@ -1,8 +1,7 @@
 page 72077 "DOPSWHS LP Factbox Item"
 {
     PageType = ListPart;
-    SourceTable = Integer;
-    SourceTableView = where(Number = const(1));
+    SourceTable = "DOPSWHS LP Line";
     ApplicationArea = All;
     Caption = 'License Plates';
 
@@ -12,26 +11,11 @@ page 72077 "DOPSWHS LP Factbox Item"
         {
             repeater(Lines)
             {
-                field("LP No."; LpNo) { ApplicationArea = All; Caption = 'LP No.'; }
-                field("Bin Code"; BinCode) { ApplicationArea = All; Caption = 'Bin Code'; }
-                field(Quantity; QuantityText) { ApplicationArea = All; Caption = 'Quantity'; }
-                field(Status; StatusText) { ApplicationArea = All; Caption = 'Status'; }
+                field("LP No."; Rec."LP No.") { ApplicationArea = All; Caption = 'LP No.'; }
+                field("Item No."; Rec."Item No.") { ApplicationArea = All; Caption = 'Item No.'; }
+                field(Quantity; Rec.Quantity) { ApplicationArea = All; Caption = 'Quantity'; }
+                field("Lot No."; Rec."Lot No.") { ApplicationArea = All; Caption = 'Lot No.'; }
             }
         }
     }
-
-    trigger OnAfterGetRecord()
-    begin
-        // Sprint 2: bind to LP Line table once created
-        LpNo := '';
-        BinCode := '';
-        QuantityText := '';
-        StatusText := '';
-    end;
-
-    var
-        LpNo: Text[20];
-        BinCode: Text[20];
-        QuantityText: Text[30];
-        StatusText: Text[30];
 }

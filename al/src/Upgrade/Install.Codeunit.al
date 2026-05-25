@@ -12,5 +12,6 @@ codeunit 72033 "DOPSWHS Install"
             Setup.Insert(true);
         end;
         SetupWizard.SeedSprint1Defaults();
+        SetupWizard.SeedDefaultLPTemplates();
     end;
 }

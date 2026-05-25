@@ -29,6 +29,7 @@ codeunit 72031 "DOPSWHS Setup Wizard"
         SeedDeviceConfig();
         SeedSymbologies();
         SeedBarcodeRules();
+        SeedDefaultLPTemplates();
     end;
 
     local procedure SeedDeviceConfig()
@@ -45,7 +46,7 @@ codeunit 72031 "DOPSWHS Setup Wizard"
             DeviceConfig."LP Usage Default Action" := DeviceConfig."LP Usage Default Action"::CreateNewLP;
             DeviceConfig."Max List Rows" := 100;
             DeviceConfig."Scan Beep" := true;
-            DeviceConfig."Print Channel" := DeviceConfig."Print Channel"::None;
+            DeviceConfig."Print Channel" := DeviceConfig."Print Channel"::BCNative;
             DeviceConfig.Insert(true);
         end;
 
@@ -101,6 +102,34 @@ codeunit 72031 "DOPSWHS Setup Wizard"
         SeedRule(Rule, 'SSCC-18', 'SSCC-18 license plate', 'SSCC-18', '^\(00\)(\d{18})$', '{"sscc":"1"}', Rule."Maps To"::LP, 30);
         SeedRule(Rule, 'BIN-PREFIX', 'Bin barcode prefix', 'CODE128', '^B-(?<bin>[\w-]+)$', '{"bin":"bin"}', Rule."Maps To"::Bin, 40);
         SeedRule(Rule, 'LP-TEMPLATE', 'LP template barcode prefix', 'CODE128', '^TPL-(?<tpl>[\w-]+)$', '{"tpl":"tpl"}', Rule."Maps To"::LpTemplate, 50);
+    end;
+
+    procedure SeedDefaultLPTemplates()
+    var
+        Template: Record "DOPSWHS LP Template";
+    begin
+        SeedLPTemplate(Template, 'CARTON-S', 'Small carton', 30, 20, 15, 15);
+        SeedLPTemplate(Template, 'CARTON-M', 'Medium carton', 40, 30, 20, 25);
+        SeedLPTemplate(Template, 'PALLET-EUR', 'Euro pallet', 120, 80, 120, 1000);
+        SeedLPTemplate(Template, 'TOTE-A', 'Tote A', 50, 35, 30, 30);
+    end;
+
+    local procedure SeedLPTemplate(var Template: Record "DOPSWHS LP Template"; Code: Code[20]; Description: Text[100]; LengthCm: Decimal; WidthCm: Decimal; HeightCm: Decimal; MaxWeightKg: Decimal)
+    begin
+        if Template.Get(Code) then
+            exit;
+
+        Template.Init();
+        Template."Code" := Code;
+        Template.Description := Description;
+        Template."Default Length cm" := LengthCm;
+        Template."Default Width cm" := WidthCm;
+        Template."Default Height cm" := HeightCm;
+        Template."Max Weight kg" := MaxWeightKg;
+        Template."Label Report ID" := Report::"DOPSWHS LP Label";
+        Template."Allow Mixed Items" := true;
+        Template."Allow Mixed Lots" := true;
+        Template.Insert(true);
     end;
 
     local procedure SeedRule(var Rule: Record "DOPSWHS Barcode Rule"; Code: Code[30]; Description: Text[100]; Symbology: Code[20]; Regex: Text[250]; CaptureMapJson: Text[2048]; MapsTo: Enum "DOPSWHS Barcode Map Target"; SortOrder: Integer)
