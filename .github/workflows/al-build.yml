@@ -1,0 +1,27 @@
+name: AL Build
+
+on:
+  push:
+    paths:
+      - "al/**"
+      - ".github/workflows/al-build.yml"
+  pull_request:
+    paths:
+      - "al/**"
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Placeholder AL package step
+        shell: pwsh
+        run: |
+          Write-Host "Install AL tooling or containerized compiler here."
+          Write-Host "Compile .app and upload artifact in a configured Windows runner."
+      - name: Upload placeholder artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: al-build-notes
+          path: al/app.json
+

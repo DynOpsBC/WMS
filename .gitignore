@@ -1,0 +1,37 @@
+# OS/editor
+.DS_Store
+.idea/
+.vscode/*
+!.vscode/settings.json
+
+# AL
+al/.alpackages/
+al/.alcache/
+al/.netpackages/
+al/**/*.app
+al/rad.json
+al/**/*.g.xlf
+
+# Android
+android/.gradle/
+android/**/build/
+android/local.properties
+android/**/*.apk
+android/**/*.aab
+android/**/*.keystore
+
+# Node / web / Azure Functions
+node_modules/
+dist/
+coverage/
+.turbo/
+*.tsbuildinfo
+web/node_modules/
+push-relay/node_modules/
+push-relay/dist/
+
+# Secrets
+.env
+.env.*
+!.env.example
+

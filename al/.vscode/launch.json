@@ -1,0 +1,18 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "CustomerSandbox",
+      "type": "al",
+      "request": "launch",
+      "environmentType": "Sandbox",
+      "environmentName": "CustomerSandbox",
+      "tenant": "7fa2357e-26f2-4174-8e16-a713981356b8",
+      "company": "Demo Business Central",
+      "schemaUpdateMode": "ForceSync",
+      "startupObjectType": "Page",
+      "startupObjectId": 72061
+    }
+  ]
+}
+
