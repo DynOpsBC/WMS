@@ -45,6 +45,12 @@ table 72000 "DOPSWHS Setup"
             InitValue = 3;
             DataClassification = CustomerContent;
         }
+        field(80; "Webhook Endpoint"; Text[250])
+        {
+            Caption = 'Webhook Endpoint';
+            DataClassification = CustomerContent;
+            ExtendedDatatype = URL;
+        }
     }
 
     keys

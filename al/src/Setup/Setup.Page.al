@@ -42,6 +42,10 @@ page 72061 "DOPSWHS Setup"
                 {
                     ApplicationArea = All;
                 }
+                field("Webhook Endpoint"; Rec."Webhook Endpoint")
+                {
+                    ApplicationArea = All;
+                }
             }
         }
     }

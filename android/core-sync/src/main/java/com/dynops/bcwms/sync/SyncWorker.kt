@@ -4,6 +4,11 @@ import android.content.Context
 import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
 import com.dynops.bcwms.usecase.move.AdHocMove
+import com.dynops.bcwms.usecase.pick.AssignPickToMe
+import com.dynops.bcwms.usecase.pick.ConfirmPickLine
+import com.dynops.bcwms.usecase.pick.MarkPickShort
+import com.dynops.bcwms.usecase.pick.StartShippingLp
+import com.dynops.bcwms.usecase.pick.StopShippingLp
 import com.dynops.bcwms.usecase.putaway.ConfirmPutAwayLine
 
 class SyncWorker(
@@ -33,6 +38,12 @@ class SyncWorker(
       is Op.RegisterPutAway -> Result.failure()
       is Op.AdHocMove -> syncAdHocMove(op)
       is Op.RegisterDirectedMove -> Result.failure()
+      is Op.AssignPickToMe -> syncAssignPickToMe(op)
+      is Op.ConfirmPickLine -> syncConfirmPickLine(op)
+      is Op.StartShippingLp -> syncStartShippingLp(op)
+      is Op.StopShippingLp -> syncStopShippingLp(op)
+      is Op.MarkPickShort -> syncMarkPickShort(op)
+      is Op.RegisterPick -> Result.failure()
     }
 
   private suspend fun syncBuildLp(op: Op.BuildLp): Result = Result.success()
@@ -63,6 +74,29 @@ class SyncWorker(
       onSuccess = { Result.success() },
       onFailure = { Result.retry() },
     )
+  }
+  private suspend fun syncAssignPickToMe(op: Op.AssignPickToMe): Result {
+    val useCase = AssignPickToMe { Result.success(Unit) }
+    return useCase(op.pickNo).fold(onSuccess = { Result.success() }, onFailure = { Result.retry() })
+  }
+  private suspend fun syncConfirmPickLine(op: Op.ConfirmPickLine): Result {
+    val useCase = ConfirmPickLine { _, _, _, _, _ -> Result.success(Unit) }
+    return useCase(op.pickNo, op.lineNo, op.qtyToHandle, op.binCode, op.licensePlateNo).fold(
+      onSuccess = { Result.success() },
+      onFailure = { Result.retry() },
+    )
+  }
+  private suspend fun syncStartShippingLp(op: Op.StartShippingLp): Result {
+    val useCase = StartShippingLp { _, _ -> Result.success("LP-OFFLINE") }
+    return useCase(op.pickNo, op.templateCode).fold(onSuccess = { Result.success() }, onFailure = { Result.retry() })
+  }
+  private suspend fun syncStopShippingLp(op: Op.StopShippingLp): Result {
+    val useCase = StopShippingLp { _, _, _ -> Result.success("") }
+    return useCase(op.pickNo, op.lpNo, op.printLabel).fold(onSuccess = { Result.success() }, onFailure = { Result.retry() })
+  }
+  private suspend fun syncMarkPickShort(op: Op.MarkPickShort): Result {
+    val useCase = MarkPickShort { _, _, _, _ -> Result.success(Unit) }
+    return useCase(op.pickNo, op.lineNo, op.qty, op.reasonCode).fold(onSuccess = { Result.success() }, onFailure = { Result.retry() })
   }
 
   companion object {

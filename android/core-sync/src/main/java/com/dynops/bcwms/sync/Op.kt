@@ -34,4 +34,11 @@ sealed class Op {
   data class AdHocMove(val fromBin: String, val toBin: String, val itemNo: String, val lpNo: String, val qty: Double) : Op()
   // Online-only: directed movement registration must run against the latest Business Central activity state.
   data class RegisterDirectedMove(val docId: String) : Op()
+  data class AssignPickToMe(val pickNo: String) : Op()
+  data class ConfirmPickLine(val pickNo: String, val lineNo: Int, val qtyToHandle: Double, val binCode: String, val licensePlateNo: String) : Op()
+  data class StartShippingLp(val pickNo: String, val templateCode: String? = null) : Op()
+  data class StopShippingLp(val pickNo: String, val lpNo: String, val printLabel: Boolean = true) : Op()
+  data class MarkPickShort(val pickNo: String, val lineNo: Int, val qty: Double, val reasonCode: String) : Op()
+  // Online-only: pick registration posts warehouse entries and must use the latest server state.
+  data class RegisterPick(val pickNo: String) : Op()
 }

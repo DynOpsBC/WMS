@@ -30,6 +30,8 @@ codeunit 72031 "DOPSWHS Setup Wizard"
         SeedSymbologies();
         SeedBarcodeRules();
         SeedDefaultLPTemplates();
+        SeedShortPickReasons();
+        SubscribeDefaultWebhooks();
     end;
 
     local procedure SeedDeviceConfig()
@@ -147,5 +149,43 @@ codeunit 72031 "DOPSWHS Setup Wizard"
         Rule."Order" := SortOrder;
         Rule.Active := true;
         Rule.Insert(true);
+    end;
+
+    local procedure SeedShortPickReasons()
+    var
+        Reason: Record "DOPSWHS Short Pick Reason";
+    begin
+        SeedShortPickReason(Reason, 'NO_STOCK', 'No stock available', true, true);
+        SeedShortPickReason(Reason, 'DAMAGED', 'Damaged inventory', false, false);
+        SeedShortPickReason(Reason, 'EXPIRED', 'Expired inventory', false, false);
+        SeedShortPickReason(Reason, 'MISSING', 'Inventory missing from bin', false, false);
+        SeedShortPickReason(Reason, 'LOT_NOT_FOUND', 'Expected lot was not found', false, false);
+    end;
+
+    local procedure SeedShortPickReason(var Reason: Record "DOPSWHS Short Pick Reason"; Code: Code[20]; Description: Text[100]; IsDefault: Boolean; AllowsBackorder: Boolean)
+    begin
+        if Reason.Get(Code) then
+            exit;
+
+        Reason.Init();
+        Reason."Code" := Code;
+        Reason.Description := Description;
+        Reason.Default := IsDefault;
+        Reason."Allows Backorder" := AllowsBackorder;
+        Reason.Insert(true);
+    end;
+
+    local procedure SubscribeDefaultWebhooks()
+    var
+        Setup: Record "DOPSWHS Setup";
+        WebhookMgmt: Codeunit "DOPSWHS Webhook Mgmt";
+        Endpoint: Text[250];
+    begin
+        Endpoint := 'https://placeholder.invalid/api/webhook';
+        if Setup.Get('') then
+            if Setup."Webhook Endpoint" <> '' then
+                Endpoint := Setup."Webhook Endpoint";
+
+        WebhookMgmt.SubscribeWebhooks(Endpoint);
     end;
 }
