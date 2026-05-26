@@ -35,6 +35,7 @@ codeunit 72045 "DOPSWHS Movement Mgmt"
         ItemJournalTemplate: Record "Item Journal Template";
         ItemJournalLine: Record "Item Journal Line";
         ItemJnlPost: Codeunit "Item Jnl.-Post";
+        CustomDimensions: Dictionary of [Text, Text];
         BatchName: Code[10];
     begin
         if ItemNo = '' then
@@ -48,15 +49,18 @@ codeunit 72045 "DOPSWHS Movement Mgmt"
         BatchName := EnsureDeviceJournalBatch(UserId);
 
         CreateReclassLine(ItemJournalTemplate.Name, BatchName, Setup."Default Location Code", FromBinCode, ToBinCode, ItemNo, LpNo, Qty, ItemJournalLine);
-        Session.LogMessage('DOPSWHS-Move-AdHoc', StrSubstNo('Ad-hoc move item %1 qty %2 from %3 to %4 lp %5', ItemNo, Qty, FromBinCode, ToBinCode, LpNo), Verbosity::Normal, DataClassification::SystemMetadata, TelemetryScope::ExtensionPublisher, 'Category', 'Movement');
+        CustomDimensions.Add('Category', 'Movement');
+        Session.LogMessage('DOPSWHS-Move-AdHoc', StrSubstNo('Ad-hoc move item %1 qty %2 from %3 to %4 lp %5', ItemNo, Qty, FromBinCode, ToBinCode, LpNo), Verbosity::Normal, DataClassification::SystemMetadata, TelemetryScope::ExtensionPublisher, CustomDimensions);
         ItemJnlPost.Run(ItemJournalLine);
     end;
 
     procedure RegisterDirected(var WhseActivityHeader: Record "Warehouse Activity Header")
     var
         WhseActivityRegister: Codeunit "Whse.-Activity-Register";
+        CustomDimensions: Dictionary of [Text, Text];
     begin
-        Session.LogMessage('DOPSWHS-Move-RegisterDirected', StrSubstNo('Register warehouse activity %1 type %2', WhseActivityHeader."No.", Format(WhseActivityHeader.Type)), Verbosity::Normal, DataClassification::SystemMetadata, TelemetryScope::ExtensionPublisher, 'Category', 'Movement');
+        CustomDimensions.Add('Category', 'Movement');
+        Session.LogMessage('DOPSWHS-Move-RegisterDirected', StrSubstNo('Register warehouse activity %1 type %2', WhseActivityHeader."No.", Format(WhseActivityHeader.Type)), Verbosity::Normal, DataClassification::SystemMetadata, TelemetryScope::ExtensionPublisher, CustomDimensions);
         WhseActivityRegister.Run(WhseActivityHeader);
     end;
 

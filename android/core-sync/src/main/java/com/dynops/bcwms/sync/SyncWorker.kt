@@ -3,6 +3,8 @@ package com.dynops.bcwms.sync
 import android.content.Context
 import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
+import com.dynops.bcwms.usecase.move.AdHocMove
+import com.dynops.bcwms.usecase.putaway.ConfirmPutAwayLine
 
 class SyncWorker(
   appContext: Context,
@@ -27,6 +29,10 @@ class SyncWorker(
       is Op.AssignReceipt -> syncAssignReceipt(op)
       is Op.StartReceiptLp -> syncStartReceiptLp(op)
       is Op.StopReceiptLp -> syncStopReceiptLp(op)
+      is Op.ConfirmPutAwayLine -> syncConfirmPutAwayLine(op)
+      is Op.RegisterPutAway -> Result.failure()
+      is Op.AdHocMove -> syncAdHocMove(op)
+      is Op.RegisterDirectedMove -> Result.failure()
     }
 
   private suspend fun syncBuildLp(op: Op.BuildLp): Result = Result.success()
@@ -44,6 +50,20 @@ class SyncWorker(
   private suspend fun syncAssignReceipt(op: Op.AssignReceipt): Result = Result.success()
   private suspend fun syncStartReceiptLp(op: Op.StartReceiptLp): Result = Result.success()
   private suspend fun syncStopReceiptLp(op: Op.StopReceiptLp): Result = Result.success()
+  private suspend fun syncConfirmPutAwayLine(op: Op.ConfirmPutAwayLine): Result {
+    val useCase = ConfirmPutAwayLine { Result.success(Unit) }
+    return useCase(op.docId, op.lineNo, op.qtyToHandle, op.binCode, op.lpNo).fold(
+      onSuccess = { Result.success() },
+      onFailure = { Result.retry() },
+    )
+  }
+  private suspend fun syncAdHocMove(op: Op.AdHocMove): Result {
+    val useCase = AdHocMove { Result.success(Unit) }
+    return useCase(op.fromBin, op.toBin, op.itemNo, op.lpNo, op.qty).fold(
+      onSuccess = { Result.success() },
+      onFailure = { Result.retry() },
+    )
+  }
 
   companion object {
     const val EXPEDITED_WORK_NAME = "bcwms-expedited-sync"

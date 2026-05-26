@@ -28,4 +28,10 @@ sealed class Op {
   data class AssignReceipt(val receiptNo: String, val userId: String) : Op()
   data class StartReceiptLp(val receiptNo: String, val lpTemplateCode: String? = null) : Op()
   data class StopReceiptLp(val receiptNo: String, val lpNo: String, val printLabel: Boolean = false) : Op()
+  data class ConfirmPutAwayLine(val docId: String, val lineNo: Int, val qtyToHandle: Double, val binCode: String, val lpNo: String) : Op()
+  // Online-only: standard warehouse activity registration must not be replayed offline after document state changes.
+  data class RegisterPutAway(val docId: String) : Op()
+  data class AdHocMove(val fromBin: String, val toBin: String, val itemNo: String, val lpNo: String, val qty: Double) : Op()
+  // Online-only: directed movement registration must run against the latest Business Central activity state.
+  data class RegisterDirectedMove(val docId: String) : Op()
 }

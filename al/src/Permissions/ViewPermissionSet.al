@@ -52,6 +52,9 @@ permissionset 72096 "DOPSWHS-VIEW"
         page "DOPSWHS LP Line API" = X,
         page "DOPSWHS Receipt API" = X,
         page "DOPSWHS Receipt Line API" = X,
+        page "DOPSWHS PutAway API" = X,
+        page "DOPSWHS PutAway Line API" = X,
+        page "DOPSWHS Movement API" = X,
         page "DOPSWHS LP Factbox Item" = X,
         page "DOPSWHS LP Factbox Bin" = X,
         page "DOPSWHS Print Job Log" = X,
@@ -64,6 +67,8 @@ permissionset 72096 "DOPSWHS-VIEW"
         codeunit "DOPSWHS Bin Content Subscriber" = X,
         codeunit "DOPSWHS SSCC Generator" = X,
         codeunit "DOPSWHS Receipt Mgmt" = X,
+        codeunit "DOPSWHS Directed PutAway" = X,
+        codeunit "DOPSWHS Movement Mgmt" = X,
         codeunit "DOPSWHS Event Publisher Legacy WI" = X,
         report "DOPSWHS LP Label" = X;
 }
