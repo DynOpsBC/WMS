@@ -41,4 +41,11 @@ sealed class Op {
   data class MarkPickShort(val pickNo: String, val lineNo: Int, val qty: Double, val reasonCode: String) : Op()
   // Online-only: pick registration posts warehouse entries and must use the latest server state.
   data class RegisterPick(val pickNo: String) : Op()
+  data class ConfirmShipLine(val shipmentNo: String, val lineNo: Int, val qtyToShip: Double, val licensePlateNo: String, val sscc: String? = null) : Op()
+  // Online-only: shipment posting must run against the latest Business Central document state.
+  data class PostShipment(val shipmentNo: String, val print: Boolean = false, val invoice: Boolean = false) : Op()
+  // Online-only: sales ship-and-invoice is transactional posting and must not be replayed after order changes.
+  data class PostShipAndInvoice(val salesOrderNo: String) : Op()
+  // Online-only: transfer shipment posting must use current server availability and status.
+  data class PostTransferShip(val transferOrderNo: String) : Op()
 }

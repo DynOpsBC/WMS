@@ -1,0 +1,162 @@
+codeunit 72047 "DOPSWHS Shipment Mgmt"
+{
+    Access = Public;
+
+    procedure ConfirmShipmentLine(var WhseShipmentLine: Record "Warehouse Shipment Line"; QtyToShip: Decimal; LicensePlateNo: Code[20]; SSCC: Code[18])
+    begin
+        WhseShipmentLine.Validate("Qty. to Ship", QtyToShip);
+        WhseShipmentLine."LP No." := LicensePlateNo;
+        WhseShipmentLine.SSCC := SSCC;
+        WhseShipmentLine.Modify(true);
+    end;
+
+    procedure PostShipment(var WhseShipmentHeader: Record "Warehouse Shipment Header"; PrintPackingSlip: Boolean; Invoice: Boolean)
+    var
+        WhseShipmentLine: Record "Warehouse Shipment Line";
+        PostedWhseShipmentLine: Record "Posted Whse. Shipment Line";
+        PostedWhseShipmentHeader: Record "Posted Whse. Shipment Header";
+        WhsePostShipment: Codeunit "Whse.-Post Shipment";
+        LineLp: Dictionary of [Integer, Code[20]];
+        LineSscc: Dictionary of [Integer, Code[18]];
+        LpNo: Code[20];
+        Sscc: Code[18];
+        LineCount: Integer;
+        LpCount: Integer;
+        PostedNo: Code[20];
+    begin
+        WhseShipmentHeader.TestField(Status, WhseShipmentHeader.Status::Released);
+
+        WhseShipmentLine.SetRange("No.", WhseShipmentHeader."No.");
+        if WhseShipmentLine.FindSet(true) then
+            repeat
+                LineCount += 1;
+                if WhseShipmentLine."LP No." <> '' then begin
+                    LpNo := WhseShipmentLine."LP No.";
+                    EnsureLpSscc(LpNo, Sscc);
+                    WhseShipmentLine.SSCC := Sscc;
+                    WhseShipmentLine.Modify(true);
+                    LineLp.Set(WhseShipmentLine."Line No.", LpNo);
+                    LineSscc.Set(WhseShipmentLine."Line No.", Sscc);
+                end;
+            until WhseShipmentLine.Next() = 0;
+
+        EnsureAssignedShipmentLpsHaveSscc(WhseShipmentHeader."No.", LpCount);
+
+        WhsePostShipment.Run(WhseShipmentHeader);
+
+        PostedWhseShipmentHeader.SetRange("Whse. Shipment No.", WhseShipmentHeader."No.");
+        if PostedWhseShipmentHeader.FindLast() then
+            PostedNo := PostedWhseShipmentHeader."No.";
+
+        PostedWhseShipmentLine.SetRange("Whse. Shipment No.", WhseShipmentHeader."No.");
+        if PostedWhseShipmentLine.FindSet(true) then
+            repeat
+                if LineLp.Get(PostedWhseShipmentLine."Whse Shipment Line No.", LpNo) then begin
+                    LineSscc.Get(PostedWhseShipmentLine."Whse Shipment Line No.", Sscc);
+                    PostedWhseShipmentLine."LP No." := LpNo;
+                    PostedWhseShipmentLine.SSCC := Sscc;
+                    PostedWhseShipmentLine.Modify(true);
+                    MarkLpUsed(LpNo);
+                end;
+            until PostedWhseShipmentLine.Next() = 0;
+
+        if PrintPackingSlip then
+            QueuePostedShipmentPrint(PostedNo);
+
+        LogShipmentPosted(WhseShipmentHeader."No.", LineCount, LpCount + LineLp.Count());
+    end;
+
+    procedure PostSalesOrderShipAndInvoice(var SalesHeader: Record "Sales Header")
+    var
+        SalesPost: Codeunit "Sales-Post";
+        CustomDimensions: Dictionary of [Text, Text];
+    begin
+        SalesHeader.TestField("Document Type", SalesHeader."Document Type"::Order);
+        OnBeforeShipSales(SalesHeader."No.");
+        SalesHeader.Ship := true;
+        SalesHeader.Invoice := true;
+        SalesPost.Run(SalesHeader);
+        OnAfterInvoiceSales(SalesHeader."No.");
+        CustomDimensions.Add('docNo', SalesHeader."No.");
+        Session.LogMessage('AdvWMS.Sales.ShipAndInvoice', StrSubstNo('Sales order %1 shipped and invoiced from mobile.', SalesHeader."No."), Verbosity::Normal, DataClassification::SystemMetadata, TelemetryScope::ExtensionPublisher, CustomDimensions);
+    end;
+
+    procedure PostTransferShip(var TransferHeader: Record "Transfer Header")
+    var
+        TransferPostShipment: Codeunit "TransferOrder-Post Shipment";
+        CustomDimensions: Dictionary of [Text, Text];
+    begin
+        TransferPostShipment.Run(TransferHeader);
+        CustomDimensions.Add('docNo', TransferHeader."No.");
+        Session.LogMessage('AdvWMS.Transfer.Shipped', StrSubstNo('Transfer order %1 shipped from mobile.', TransferHeader."No."), Verbosity::Normal, DataClassification::SystemMetadata, TelemetryScope::ExtensionPublisher, CustomDimensions);
+    end;
+
+    local procedure EnsureLpSscc(LpNo: Code[20]; var Sscc: Code[18])
+    var
+        LP: Record "DOPSWHS LP Header";
+        Generator: Codeunit "DOPSWHS SSCC Generator";
+    begin
+        LP.Get(LpNo);
+        if LP.SSCC = '' then begin
+            LP.SSCC := Generator.Generate();
+            LP.Modify(true);
+        end;
+        Sscc := LP.SSCC;
+    end;
+
+    local procedure EnsureAssignedShipmentLpsHaveSscc(ShipmentNo: Code[20]; var LpCount: Integer)
+    var
+        LP: Record "DOPSWHS LP Header";
+        Sscc: Code[18];
+    begin
+        LP.SetRange("Assigned Document Type", LP."Assigned Document Type"::WhseShipment);
+        LP.SetRange("Assigned Document No.", ShipmentNo);
+        if LP.FindSet(true) then
+            repeat
+                LpCount += 1;
+                EnsureLpSscc(LP."No.", Sscc);
+            until LP.Next() = 0;
+    end;
+
+    local procedure MarkLpUsed(LpNo: Code[20])
+    var
+        LP: Record "DOPSWHS LP Header";
+    begin
+        if not LP.Get(LpNo) then
+            exit;
+        LP.Status := LP.Status::Used;
+        LP.Modify(true);
+    end;
+
+    local procedure QueuePostedShipmentPrint(PostedShipmentNo: Code[20])
+    var
+        ReportSelection: Record "DOPSWHS IWX Report Selection";
+        PrintDispatcher: Codeunit "DOPSWHS Print Dispatcher";
+    begin
+        if PostedShipmentNo = '' then
+            exit;
+        ReportSelection.SetRange(Usage, ReportSelection.Usage::PostedShipment);
+        if ReportSelection.FindFirst() then
+            PrintDispatcher.QueueReport(PostedShipmentNo, ReportSelection."Report ID");
+    end;
+
+    local procedure LogShipmentPosted(DocNo: Code[20]; LineCount: Integer; LpCount: Integer)
+    var
+        CustomDimensions: Dictionary of [Text, Text];
+    begin
+        CustomDimensions.Add('docNo', DocNo);
+        CustomDimensions.Add('lineCount', Format(LineCount));
+        CustomDimensions.Add('lpCount', Format(LpCount));
+        Session.LogMessage('AdvWMS.Shipment.Posted', StrSubstNo('Warehouse shipment %1 posted from mobile.', DocNo), Verbosity::Normal, DataClassification::SystemMetadata, TelemetryScope::ExtensionPublisher, CustomDimensions);
+    end;
+
+    [BusinessEvent(false)]
+    local procedure OnBeforeShipSales(SalesOrderNo: Code[20])
+    begin
+    end;
+
+    [BusinessEvent(false)]
+    local procedure OnAfterInvoiceSales(SalesOrderNo: Code[20])
+    begin
+    end;
+}

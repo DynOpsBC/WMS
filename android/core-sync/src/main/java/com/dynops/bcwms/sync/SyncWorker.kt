@@ -10,6 +10,7 @@ import com.dynops.bcwms.usecase.pick.MarkPickShort
 import com.dynops.bcwms.usecase.pick.StartShippingLp
 import com.dynops.bcwms.usecase.pick.StopShippingLp
 import com.dynops.bcwms.usecase.putaway.ConfirmPutAwayLine
+import com.dynops.bcwms.usecase.ship.ConfirmShipLine
 
 class SyncWorker(
   appContext: Context,
@@ -44,6 +45,10 @@ class SyncWorker(
       is Op.StopShippingLp -> syncStopShippingLp(op)
       is Op.MarkPickShort -> syncMarkPickShort(op)
       is Op.RegisterPick -> Result.failure()
+      is Op.ConfirmShipLine -> syncConfirmShipLine(op)
+      is Op.PostShipment -> Result.failure()
+      is Op.PostShipAndInvoice -> Result.failure()
+      is Op.PostTransferShip -> Result.failure()
     }
 
   private suspend fun syncBuildLp(op: Op.BuildLp): Result = Result.success()
@@ -97,6 +102,13 @@ class SyncWorker(
   private suspend fun syncMarkPickShort(op: Op.MarkPickShort): Result {
     val useCase = MarkPickShort { _, _, _, _ -> Result.success(Unit) }
     return useCase(op.pickNo, op.lineNo, op.qty, op.reasonCode).fold(onSuccess = { Result.success() }, onFailure = { Result.retry() })
+  }
+  private suspend fun syncConfirmShipLine(op: Op.ConfirmShipLine): Result {
+    val useCase = ConfirmShipLine { _, _, _, _, _ -> Result.success(Unit) }
+    return useCase(op.shipmentNo, op.lineNo, op.qtyToShip, op.licensePlateNo, op.sscc).fold(
+      onSuccess = { Result.success() },
+      onFailure = { Result.retry() },
+    )
   }
 
   companion object {

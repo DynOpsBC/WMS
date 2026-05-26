@@ -31,6 +31,7 @@ codeunit 72031 "DOPSWHS Setup Wizard"
         SeedBarcodeRules();
         SeedDefaultLPTemplates();
         SeedShortPickReasons();
+        SeedReportSelections();
         SubscribeDefaultWebhooks();
     end;
 
@@ -173,6 +174,21 @@ codeunit 72031 "DOPSWHS Setup Wizard"
         Reason.Default := IsDefault;
         Reason."Allows Backorder" := AllowsBackorder;
         Reason.Insert(true);
+    end;
+
+    procedure SeedReportSelections()
+    var
+        ReportSelection: Record "DOPSWHS IWX Report Selection";
+    begin
+        if ReportSelection.Get('POSTED-SHIP') then
+            exit;
+
+        ReportSelection.Init();
+        ReportSelection."Code" := 'POSTED-SHIP';
+        ReportSelection.Usage := ReportSelection.Usage::PostedShipment;
+        ReportSelection.Sequence := 10;
+        ReportSelection."Report ID" := 7321;
+        ReportSelection.Insert(true);
     end;
 
     local procedure SubscribeDefaultWebhooks()

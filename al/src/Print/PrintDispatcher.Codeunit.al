@@ -29,4 +29,19 @@ codeunit 72051 "DOPSWHS Print Dispatcher"
         else
             Report.Run(Report::"DOPSWHS LP Label", false, false, LP);
     end;
+
+    procedure QueueReport(SourceDoc: Code[50]; ReportId: Integer)
+    var
+        Queue: Record "DOPSWHS Print Job Queue";
+    begin
+        if ReportId = 0 then
+            exit;
+
+        Queue.Init();
+        Queue."Source Doc" := SourceDoc;
+        Queue."Report ID" := ReportId;
+        Queue.Status := Queue.Status::Queued;
+        Queue.Created := CurrentDateTime();
+        Queue.Insert(true);
+    end;
 }

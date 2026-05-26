@@ -20,4 +20,9 @@ class BcApiClient(
   fun binUrl(code: String): String = "${profile.warehouseApiBaseUrl}/bins($code)"
   fun deviceConfigUrl(deviceId: String): String = "${profile.warehouseApiBaseUrl}/devices($deviceId)/config"
   fun barcodeParseUrl(): String = "${profile.warehouseApiBaseUrl}/barcodes/Microsoft.NAV.parse"
+  fun shipmentsUrl(): String = "${profile.warehouseApiBaseUrl}/shipments"
+  fun shipmentLinesUrl(no: String): String = "${profile.warehouseApiBaseUrl}/shipments($no)/lines"
+  fun shipmentPostUrl(no: String): String = "${profile.warehouseApiBaseUrl}/shipments($no)/Microsoft.NAV.post"
+  fun salesOrdersUrl(): String = "${profile.warehouseApiBaseUrl}/salesOrders"
+  fun transferOrdersUrl(): String = "${profile.warehouseApiBaseUrl}/transferOrders"
 }
