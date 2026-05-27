@@ -7,10 +7,8 @@
   "application": "24.0.0.0",
   "runtime": "13.0",
   "idRanges": [
-    {
-      "from": 72000,
-      "to": 72499
-    }
+    { "from": 72100, "to": 72199 },
+    { "from": 72490, "to": 72499 }
   ],
   "features": [
     "TranslationFile",
@@ -21,7 +19,7 @@
       "id": "984e25aa-07c2-4401-babc-88f975303a52",
       "name": "BCWMSApp",
       "publisher": "DynOps",
-      "version": "1.0.0.0"
+      "version": "1.0.1.0"
     }
   ]
 }
