@@ -10,7 +10,5 @@ android {
 }
 
 dependencies {
-  implementation(libs.msal)
-  implementation(libs.security.crypto)
+  // MSAL ve EncryptedSharedPreferences gerçek production'da; demo için gerek yok
 }
-

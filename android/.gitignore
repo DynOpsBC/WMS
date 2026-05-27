@@ -6,3 +6,7 @@ local.properties
 *.keystore
 captures/
 
+*.apk
+build/
+.gradle/
+local.properties
