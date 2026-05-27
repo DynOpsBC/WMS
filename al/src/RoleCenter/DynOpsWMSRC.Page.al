@@ -12,6 +12,10 @@ page 72095 "DOPSWHS DynOps WMS RC"
             {
                 ApplicationArea = All;
             }
+            part(TestCenter; "DOPSWHS Test Center")
+            {
+                ApplicationArea = All;
+            }
         }
     }
 
@@ -199,6 +203,69 @@ page 72095 "DOPSWHS DynOps WMS RC"
                     Image = Bin;
                     Promoted = true;
                     PromotedCategory = Process;
+                }
+            }
+            group(TestCenterActions)
+            {
+                Caption = '🧪 Test Center';
+                action(SetupTestCatalog)
+                {
+                    Caption = '⚡ Setup Test Catalog';
+                    ToolTip = '50 Test Case + 5 Environment + 3 User Group seed (idempotent).';
+                    ApplicationArea = All;
+                    Image = Setup;
+                    Promoted = true;
+                    PromotedCategory = Category5;
+                    PromotedIsBig = true;
+                    RunObject = codeunit "DOPSWHS Test Catalog Seed";
+                }
+                action(SetupE2ETestData)
+                {
+                    Caption = '📦 Setup E2E Test Data';
+                    ToolTip = 'Cronus uzerinde eksik master data (test item, lot, prod, BOM) auto-create.';
+                    ApplicationArea = All;
+                    Image = TestDatabase;
+                    Promoted = true;
+                    PromotedCategory = Category5;
+                    PromotedIsBig = true;
+                    RunObject = codeunit "DOPSWHS E2E Test Data";
+                }
+                action(OpenTestRunList)
+                {
+                    Caption = '📋 Test Run List';
+                    ApplicationArea = All;
+                    Image = List;
+                    Promoted = true;
+                    PromotedCategory = Category5;
+                    PromotedIsBig = true;
+                    RunObject = page "DOPSWHS Test Run List";
+                }
+                action(OpenTestCaseList)
+                {
+                    Caption = '📑 Test Case Catalog';
+                    ApplicationArea = All;
+                    Image = ItemAttribute;
+                    Promoted = true;
+                    PromotedCategory = Category5;
+                    RunObject = page "DOPSWHS Test Case List";
+                }
+                action(OpenEnvList)
+                {
+                    Caption = '🌐 Environments';
+                    ApplicationArea = All;
+                    Image = Setup;
+                    Promoted = true;
+                    PromotedCategory = Category5;
+                    RunObject = page "DOPSWHS Test Environment List";
+                }
+                action(OpenGroupList)
+                {
+                    Caption = '👥 User Groups';
+                    ApplicationArea = All;
+                    Image = UserGroup;
+                    Promoted = true;
+                    PromotedCategory = Category5;
+                    RunObject = page "DOPSWHS Test User Group List";
                 }
             }
             group(DemoActions)

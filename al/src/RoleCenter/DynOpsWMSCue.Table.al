@@ -56,6 +56,15 @@ table 72027 "DOPSWHS DynOps WMS Cue"
         // ===== FILTERS =====
         field(100; "Late Pick Date Filter"; Date) { Caption = 'Late Pick Date Filter'; FieldClass = FlowFilter; }
         field(110; "Online Since DateTime Filter"; DateTime) { Caption = 'Online Since DateTime Filter'; FieldClass = FlowFilter; }
+
+        // ===== TEST CENTER =====
+        field(200; "Total Test Cases"; Integer) { Caption = 'Toplam Test Case'; FieldClass = FlowField; CalcFormula = count("DOPSWHS Test Case" where(Active = const(true))); }
+        field(201; "Recent Test Runs"; Integer) { Caption = 'Test Run Adedi'; FieldClass = FlowField; CalcFormula = count("DOPSWHS Test Run"); }
+        field(202; "Last Run Pass Rate"; Integer) { Caption = 'Toplam PASS'; FieldClass = FlowField; CalcFormula = count("DOPSWHS Test Run Result" where(Status = const(Passed))); }
+        field(203; "Pending Manual Total"; Integer) { Caption = 'Manuel Bekleyen'; FieldClass = FlowField; CalcFormula = count("DOPSWHS Test Run Result" where(Status = const(PendingManual))); }
+        field(204; "Recent Failures 7d"; Integer) { Caption = 'Failed Adedi'; FieldClass = FlowField; CalcFormula = count("DOPSWHS Test Run Result" where(Status = const(Failed))); }
+        field(205; "Active Environments"; Integer) { Caption = 'Aktif Environment'; FieldClass = FlowField; CalcFormula = count("DOPSWHS Test Environment" where(Active = const(true))); }
+        field(206; "Active User Groups"; Integer) { Caption = 'Aktif Kullanıcı Grubu'; FieldClass = FlowField; CalcFormula = count("DOPSWHS Test User Group" where(Active = const(true))); }
     }
 
     keys { key(PK; "Primary Key") { Clustered = true; } }
