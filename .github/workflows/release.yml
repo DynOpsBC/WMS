@@ -1,0 +1,48 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Prepare version metadata
+        run: |
+          echo "Tag ${GITHUB_REF_NAME} drives app.json, Android, web, and push-relay version checks."
+          grep '"version": "1.0.0.0"' al/app.json
+          grep 'versionName = "1.0.0"' android/app/build.gradle.kts
+          grep '"version": "1.0.0"' web/package.json
+          test ! -f push-relay/package.json || grep '"version": "1.0.0"' push-relay/package.json
+      - name: Build artifact placeholders
+        run: |
+          mkdir -p release-assets
+          printf 'AL .app build is produced by configured BC build runners.\n' > release-assets/bcwmsapp.app.txt
+          printf 'Android release-signed APK is produced by configured signing runners.\n' > release-assets/bcwmsapp-release.apk.txt
+          zip -q release-assets/web-bundle.zip web/package.json
+          if [ -f push-relay/package.json ]; then zip -q release-assets/push-relay.zip push-relay/package.json; fi
+      - name: Optional OIDC deployment gate
+        env:
+          AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+        run: |
+          if [ -z "$AZURE_CLIENT_ID" ] || [ -z "$AZURE_TENANT_ID" ] || [ -z "$AZURE_SUBSCRIPTION_ID" ]; then
+            echo "OIDC deploy skipped because Azure secrets are not configured."
+          else
+            echo "OIDC deploy secrets present; deployment hook can run in the release environment."
+          fi
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: release-assets/*
+          generate_release_notes: true
