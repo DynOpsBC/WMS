@@ -84,7 +84,7 @@ codeunit 72061 "DOPSWHS Test Catalog Seed"
         AddCase('TC-002', 'A', 'Demo Transactions 5 LP + 1 Count Sheet', 'CreateDemoLPs + CreateActiveCountSheet sonrası count doğrulanır.', 0, 0, CU_Setup, 'RunTC002', 5, true, 20);
         AddCase('TC-003', 'A', 'DynOpsWarehouseManagement profile validate', 'Profile.RoleCenter = 72095 doğrulanır.', 0, 0, CU_Setup, 'RunTC003', 3, false, 30);
         AddCase('TC-004', 'A', 'Role Center cue FlowFields çalışıyor', 'DynOpsWMS Cue tablosu Get + CalcFields hata vermeden çalışır.', 0, 0, CU_Setup, 'RunTC004', 5, true, 40);
-        AddCase('TC-005', 'A', 'Mevcut 42 AL test suite metadata', 'AllObjWithCaption üzerinde DOPSWHS Test prefix codeunit sayısı ≥40.', 0, 0, CU_Setup, 'RunTC005', 3, false, 50);
+        AddCase('TC-005', 'A', 'Test Catalog + Automation infrastructure', 'Test Case catalog 50 kayit + 11 automation codeunit (72061-72071) production app icinde mevcut.', 0, 0, CU_Setup, 'RunTC005', 3, false, 50);
     end;
 
     local procedure SeedSectionB()

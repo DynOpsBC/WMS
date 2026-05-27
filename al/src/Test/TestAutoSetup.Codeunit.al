@@ -86,13 +86,23 @@ codeunit 72064 "DOPSWHS Test Auto Setup"
 
     local procedure RunTC005(var ErrorMsg: Text)
     var
+        TestCase: Record "DOPSWHS Test Case";
         AllObj: Record AllObjWithCaption;
-        Count: Integer;
+        CatalogCount: Integer;
+        AutoCount: Integer;
     begin
+        // Production app içindeki Test Catalog kayıt sayısı (50 case bekleniyor)
+        TestCase.Reset();
+        CatalogCount := TestCase.Count();
+        if CatalogCount < 50 then begin
+            ErrorMsg := StrSubstNo('Test Case catalog count dusuk (%1 < 50) - Setup Test Catalog calistirin', CatalogCount);
+            exit;
+        end;
+        // Production app'in 11 automation codeunit'i (72061-72071)
         AllObj.SetRange("Object Type", AllObj."Object Type"::Codeunit);
-        AllObj.SetFilter("Object ID", '72100..72149');
-        Count := AllObj.Count();
-        if Count < 30 then
-            ErrorMsg := StrSubstNo('Mevcut AL test codeunit sayısı düşük (%1 < 30)', Count);
+        AllObj.SetFilter("Object ID", '72061..72071');
+        AutoCount := AllObj.Count();
+        if AutoCount < 11 then
+            ErrorMsg := StrSubstNo('Automation codeunit sayisi dusuk (%1 < 11)', AutoCount);
     end;
 }
