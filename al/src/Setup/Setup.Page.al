@@ -50,6 +50,39 @@ page 72061 "DOPSWHS Setup"
         }
     }
 
+    actions
+    {
+        area(Processing)
+        {
+            group(DemoData)
+            {
+                Caption = 'Demo Data';
+                action(RunDemoSetup)
+                {
+                    Caption = 'Run Demo Setup';
+                    ToolTip = 'Tüm konfigürasyon tablolarını best-practice değerlerle doldurur (No. Series, LP Templates, Device Configs, Barcode Rules, Short Pick Reasons, IWX Report Selection, Demo Devices).';
+                    ApplicationArea = All;
+                    Image = Setup;
+                    Promoted = true;
+                    PromotedCategory = Process;
+                    PromotedIsBig = true;
+                    RunObject = codeunit "DOPSWHS Demo Data Setup";
+                }
+                action(RunDemoTransactions)
+                {
+                    Caption = 'Create Demo Transactions';
+                    ToolTip = '5 demo License Plate ve 1 aktif Count Sheet oluşturur. Demo Setup tamamlandıktan sonra kullanın.';
+                    ApplicationArea = All;
+                    Image = Inventory;
+                    Promoted = true;
+                    PromotedCategory = Process;
+                    PromotedIsBig = true;
+                    RunObject = codeunit "DOPSWHS Demo Transactions";
+                }
+            }
+        }
+    }
+
     trigger OnOpenPage()
     begin
         if not Rec.Get('') then begin

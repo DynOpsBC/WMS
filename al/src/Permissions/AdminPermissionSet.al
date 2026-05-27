@@ -107,6 +107,8 @@ permissionset 72094 "DOPSWHS-ADMIN"
         page "DOPSWHS Warehouse Manager Act" = X,
         page "DOPSWHS DynOps WMS RC" = X,
         page "DOPSWHS DynOps WMS Activities" = X,
+        codeunit "DOPSWHS Demo Data Setup" = X,
+        codeunit "DOPSWHS Demo Transactions" = X,
         page "DOPSWHS Count API" = X,
         page "DOPSWHS Count Sheet Line API" = X,
         page "DOPSWHS Migrate From WI" = X,

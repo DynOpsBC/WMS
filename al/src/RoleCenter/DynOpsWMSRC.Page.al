@@ -201,6 +201,32 @@ page 72095 "DOPSWHS DynOps WMS RC"
                     PromotedCategory = Process;
                 }
             }
+            group(DemoActions)
+            {
+                Caption = '🧪 Demo Data (Danışman Modu)';
+                action(RunDemoSetupRC)
+                {
+                    Caption = '⚡ Run Demo Setup';
+                    ToolTip = 'Tüm konfigürasyon tablolarını best-practice değerlerle doldur (idempotent).';
+                    ApplicationArea = All;
+                    Image = Setup;
+                    Promoted = true;
+                    PromotedCategory = Category5;
+                    PromotedIsBig = true;
+                    RunObject = codeunit "DOPSWHS Demo Data Setup";
+                }
+                action(CreateDemoTransactionsRC)
+                {
+                    Caption = '📦 Create Demo Transactions';
+                    ToolTip = '5 demo LP + 1 aktif Count Sheet oluştur. Setup tamamlandıktan sonra çalıştır.';
+                    ApplicationArea = All;
+                    Image = Inventory;
+                    Promoted = true;
+                    PromotedCategory = Category5;
+                    PromotedIsBig = true;
+                    RunObject = codeunit "DOPSWHS Demo Transactions";
+                }
+            }
             group(SetupActions)
             {
                 Caption = 'Yapılandırma';
