@@ -142,6 +142,8 @@ permissionset 72094 "DOPSWHS-ADMIN"
         page "DOPSWHS Test User Group List" = X,
         page "DOPSWHS Test User Grp Members" = X,
         page "DOPSWHS Test Center" = X,
+        page "DOPSWHS Test Run API" = X,
+        page "DOPSWHS Test Run Result API" = X,
         page "DOPSWHS Count API" = X,
         page "DOPSWHS Count Sheet Line API" = X,
         page "DOPSWHS Migrate From WI" = X,
