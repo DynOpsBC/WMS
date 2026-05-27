@@ -11,10 +11,15 @@ export default defineConfig({
       input: {
         main: "index.html",
         pickBoard: "src/pickBoard/index.html",
+        lpBrowser: "src/lpBrowser/index.html",
       },
       output: {
-        entryFileNames: (chunk) => chunk.name === "pickBoard" ? "pickBoard.js" : "assets/[name].js",
-        assetFileNames: (asset) => asset.name?.endsWith(".css") ? "pickBoard.css" : "assets/[name][extname]",
+        entryFileNames: (chunk) => chunk.name === "pickBoard" ? "pickBoard.js" : chunk.name === "lpBrowser" ? "lpBrowser.js" : "assets/[name].js",
+        assetFileNames: (asset) => {
+          if (asset.name?.includes("lpBrowser") && asset.name.endsWith(".css")) return "lpBrowser.css";
+          if (asset.name?.endsWith(".css")) return "pickBoard.css";
+          return "assets/[name][extname]";
+        },
       },
     },
   },

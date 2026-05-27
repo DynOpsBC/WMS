@@ -51,6 +51,30 @@ table 72000 "DOPSWHS Setup"
             DataClassification = CustomerContent;
             ExtendedDatatype = URL;
         }
+        field(90; "Count Sheet No. Series"; Code[20])
+        {
+            Caption = 'Count Sheet No. Series';
+            TableRelation = "No. Series";
+            DataClassification = CustomerContent;
+        }
+        field(100; "License Tier"; Option)
+        {
+            Caption = 'License Tier';
+            OptionMembers = Essentials,Advanced,Enterprise;
+            OptionCaption = 'Essentials,Advanced,Enterprise';
+            DataClassification = CustomerContent;
+        }
+        field(110; "Device Limit"; Integer)
+        {
+            Caption = 'Device Limit';
+            InitValue = 10;
+            DataClassification = CustomerContent;
+        }
+        field(120; "WI Migration Complete"; Boolean)
+        {
+            Caption = 'WI Migration Complete';
+            DataClassification = CustomerContent;
+        }
     }
 
     keys

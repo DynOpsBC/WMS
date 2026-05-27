@@ -15,6 +15,7 @@ import com.dynops.bcwms.usecase.production.Consume
 import com.dynops.bcwms.usecase.production.ConsumeRequest
 import com.dynops.bcwms.usecase.production.ReportOutput
 import com.dynops.bcwms.usecase.production.ReportOutputRequest
+import com.dynops.bcwms.usecase.count.RecordCount
 
 class SyncWorker(
   appContext: Context,
@@ -56,6 +57,9 @@ class SyncWorker(
       is Op.Consume -> syncConsume(op)
       is Op.ReportOutput -> syncReportOutput(op)
       is Op.PostAssembly -> Result.failure()
+      is Op.RecordCount -> syncRecordCount(op)
+      is Op.CreateCountSheet -> Result.failure()
+      is Op.PostCountSheet -> Result.failure()
     }
 
   private suspend fun syncBuildLp(op: Op.BuildLp): Result = Result.success()
@@ -127,6 +131,13 @@ class SyncWorker(
   private suspend fun syncReportOutput(op: Op.ReportOutput): Result {
     val useCase = ReportOutput { Result.success(null) }
     return useCase(ReportOutputRequest(op.prodOrderNo, op.routingLineNo, op.outputQty, op.scrapQty, op.runtime, op.newLpTemplate, op.binCode)).fold(
+      onSuccess = { Result.success() },
+      onFailure = { Result.retry() },
+    )
+  }
+  private suspend fun syncRecordCount(op: Op.RecordCount): Result {
+    val useCase = RecordCount { _, _, _, _ -> Result.success(Unit) }
+    return useCase(op.sheetNo, op.lineNo, op.slot, op.qty).fold(
       onSuccess = { Result.success() },
       onFailure = { Result.retry() },
     )

@@ -2,6 +2,7 @@ package com.dynops.bcwms.sync
 
 import com.dynops.bcwms.entity.AssignedDocType
 import com.dynops.bcwms.entity.PartialUseAction
+import com.dynops.bcwms.domain.CountMode
 
 sealed class Op {
   data class BuildLp(val templateCode: String, val locationCode: String, val binCode: String) : Op()
@@ -69,4 +70,9 @@ sealed class Op {
   ) : Op()
   // Online-only: assembly posting wraps standard BC posting and must run against current component availability.
   data class PostAssembly(val assemblyNo: String, val quantity: Double) : Op()
+  data class RecordCount(val sheetNo: String, val lineNo: Int, val slot: Int, val qty: Double) : Op()
+  // Online-only: count sheet creation depends on current BC number series and journal batch state.
+  data class CreateCountSheet(val locationCode: String, val mode: CountMode) : Op()
+  // Online-only: count posting creates physical inventory journal entries and must run against latest stock.
+  data class PostCountSheet(val sheetNo: String) : Op()
 }

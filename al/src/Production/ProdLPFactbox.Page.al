@@ -1,4 +1,4 @@
-page 72081 "DOPSWHS Prod LP Factbox"
+page 72480 "DOPSWHS Prod LP Factbox"
 {
     PageType = ListPart;
     SourceTable = "DOPSWHS LP Header";
