@@ -1,4 +1,4 @@
-codeunit 72077 "DOPSWHS E2E Outbound Tests"
+codeunit 72106 "DOPSWHS E2E Outbound Tests"
 {
     Subtype = Test;
 

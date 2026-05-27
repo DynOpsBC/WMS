@@ -1,4 +1,4 @@
-codeunit 72097 "DOPSWHS Bin Content Rollup Tests"
+codeunit 72110 "DOPSWHS Bin Rollup Tests"
 {
     Subtype = Test;
 

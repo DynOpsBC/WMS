@@ -1,4 +1,4 @@
-codeunit 72094 "DOPSWHS PutAway LP Auto Tests"
+codeunit 72130 "DOPSWHS PutAway LP Auto Tests"
 {
     Subtype = Test;
 

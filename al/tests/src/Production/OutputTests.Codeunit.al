@@ -1,4 +1,4 @@
-codeunit 72079 "DOPSWHS Prod Output Tests"
+codeunit 72127 "DOPSWHS Prod Output Tests"
 {
     Subtype = Test;
 
@@ -27,7 +27,6 @@ codeunit 72079 "DOPSWHS Prod Output Tests"
         RoutingLine."Routing Reference No." := RoutingRefNo;
         RoutingLine."Routing No." := 'R-S7';
         RoutingLine."Operation No." := '10';
-        RoutingLine."Line No." := 10000;
         RoutingLine."No." := 'WC-S7';
         RoutingLine.Description := 'Assembly operation';
         RoutingLine.Insert(true);

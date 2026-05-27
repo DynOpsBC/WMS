@@ -8,8 +8,8 @@
   "runtime": "13.0",
   "idRanges": [
     {
-      "from": 72090,
-      "to": 72099
+      "from": 72000,
+      "to": 72499
     }
   ],
   "features": [
@@ -21,8 +21,7 @@
       "id": "984e25aa-07c2-4401-babc-88f975303a52",
       "name": "BCWMSApp",
       "publisher": "DynOps",
-      "version": "0.1.0.0"
+      "version": "1.0.0.0"
     }
   ]
 }
-

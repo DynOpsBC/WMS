@@ -1,4 +1,4 @@
-codeunit 72092 "DOPSWHS Receipt With LP Tests"
+codeunit 72133 "DOPSWHS Receipt With LP Tests"
 {
     Subtype = Test;
 

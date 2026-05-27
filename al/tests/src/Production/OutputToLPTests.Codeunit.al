@@ -1,4 +1,4 @@
-codeunit 72080 "DOPSWHS Output To LP Tests"
+codeunit 72128 "DOPSWHS Output To LP Tests"
 {
     Subtype = Test;
 
@@ -28,7 +28,6 @@ codeunit 72080 "DOPSWHS Output To LP Tests"
         RoutingLine."Routing Reference No." := RoutingRefNo;
         RoutingLine."Routing No." := 'R-S7';
         RoutingLine."Operation No." := '10';
-        RoutingLine."Line No." := 10000;
         RoutingLine."No." := 'WC-S7';
         RoutingLine.Insert(true);
     end;

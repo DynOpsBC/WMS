@@ -1,4 +1,4 @@
-codeunit 72462 "DOPSWHS Count Post Tests"
+codeunit 72102 "DOPSWHS Count Post Tests"
 {
     Subtype = Test;
 

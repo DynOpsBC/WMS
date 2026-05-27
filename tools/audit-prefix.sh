@@ -6,7 +6,8 @@ failed=0
 
 while IFS= read -r line; do
   file="${line%%:*}"
-  decl="${line#*:}"
+  rest="${line#*:}"
+  decl="${rest#*:}"
   object_name="$(printf '%s\n' "$decl" | sed -E 's/^[[:space:]]*[A-Za-z]+[[:space:]]+[0-9]+[[:space:]]+"?([^"]+)"?.*/\1/')"
   if printf '%s\n' "$object_name" | grep -Eiq '^DOPSWHS'; then
     echo "PASS $file uses DOPSWHS prefix"

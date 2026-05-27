@@ -1,4 +1,4 @@
-codeunit 72093 "DOPSWHS PutAway Register Tests"
+codeunit 72131 "DOPSWHS PutAway Register Tests"
 {
     Subtype = Test;
 
@@ -74,7 +74,7 @@ codeunit 72093 "DOPSWHS PutAway Register Tests"
             Zone.Init();
             Zone."Location Code" := LocationCode;
             Zone.Code := ZoneCode;
-            Zone."Bin Ranking" := BinRanking;
+            Zone."Zone Ranking" := BinRanking;
             Zone.Insert(true);
         end;
         if Bin.Get(LocationCode, BinCode) then

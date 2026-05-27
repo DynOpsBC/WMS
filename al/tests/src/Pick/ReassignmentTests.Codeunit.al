@@ -1,4 +1,4 @@
-codeunit 72093 "DOPSWHS Reassignment Tests"
+codeunit 72122 "DOPSWHS Reassignment Tests"
 {
     Subtype = Test;
 
@@ -6,7 +6,7 @@ codeunit 72093 "DOPSWHS Reassignment Tests"
     procedure ReassignWritesHistoryAndChangesUser()
     var
         Pick: Record "Warehouse Activity Header";
-        History: Record "DOPSWHS Pick Reassignment History";
+        History: Record "DOPSWHS Pick Reassign Hist";
         PickMgmt: Codeunit "DOPSWHS Pick Mgmt";
         Assert: Codeunit Assert;
     begin

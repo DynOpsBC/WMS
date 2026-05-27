@@ -1,4 +1,4 @@
-codeunit 72094 "DOPSWHS Webhook Tests"
+codeunit 72124 "DOPSWHS Webhook Tests"
 {
     Subtype = Test;
 
@@ -6,7 +6,7 @@ codeunit 72094 "DOPSWHS Webhook Tests"
     procedure SetupWizardCreatesSubscriptionsAndAuditRows()
     var
         WebhookMgmt: Codeunit "DOPSWHS Webhook Mgmt";
-        Audit: Record "DOPSWHS Webhook Subscription Audit";
+        Audit: Record "DOPSWHS Webhook Audit";
         Assert: Codeunit Assert;
     begin
         WebhookMgmt.SubscribeWebhooks('https://example.test/api/webhook');

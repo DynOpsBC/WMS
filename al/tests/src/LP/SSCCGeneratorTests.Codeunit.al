@@ -1,4 +1,4 @@
-codeunit 72096 "DOPSWHS SSCC Generator Tests"
+codeunit 72115 "DOPSWHS SSCC Generator Tests"
 {
     Subtype = Test;
 

@@ -1,4 +1,4 @@
-codeunit 72094 "DOPSWHS LP Partial Use Tests"
+codeunit 72113 "DOPSWHS LP Partial Use Tests"
 {
     Subtype = Test;
 

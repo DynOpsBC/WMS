@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?>
+<xliff version="1.2" xmlns="urn:oasis:names:tc:xliff:document:1.2">
+  <file datatype="xml" source-language="en-US" original="BCWMSApp">
+    <body>
+      <trans-unit id="CountSheet"><source>Count Sheet</source></trans-unit>
+      <trans-unit id="CountSheets"><source>Count Sheets</source></trans-unit>
+      <trans-unit id="Blind"><source>Blind</source></trans-unit>
+      <trans-unit id="Visible"><source>Visible</source></trans-unit>
+      <trans-unit id="Recount"><source>Recount</source></trans-unit>
+      <trans-unit id="Variance"><source>Variance</source></trans-unit>
+      <trans-unit id="Posted"><source>Posted</source></trans-unit>
+      <trans-unit id="WarehouseManager"><source>Warehouse Manager</source></trans-unit>
+      <trans-unit id="CountMode"><source>Count Mode</source></trans-unit>
+      <trans-unit id="CountSheetLine"><source>Count Sheet Line</source></trans-unit>
+      <trans-unit id="CountCounter"><source>Count Counter</source></trans-unit>
+      <trans-unit id="RecountRequired"><source>Recount Required</source></trans-unit>
+      <trans-unit id="CountVarianceReview"><source>Count Variance Review</source></trans-unit>
+      <trans-unit id="SourceCountSheet"><source>Source Count Sheet</source></trans-unit>
+      <trans-unit id="OpenReceipts"><source>Open Receipts</source></trans-unit>
+      <trans-unit id="OpenPicks"><source>Open Picks</source></trans-unit>
+      <trans-unit id="OpenShipments"><source>Open Shipments</source></trans-unit>
+      <trans-unit id="LatePicks"><source>Late Picks</source></trans-unit>
+      <trans-unit id="UnbuiltLPs"><source>Unbuilt LPs</source></trans-unit>
+      <trans-unit id="CountDiscrepancies"><source>Count Discrepancies</source></trans-unit>
+      <trans-unit id="DevicesOnline"><source>Devices Online</source></trans-unit>
+      <trans-unit id="MigrateFromWI"><source>Migrate from WI</source></trans-unit>
+      <trans-unit id="PreflightCheck"><source>Preflight Check</source></trans-unit>
+      <trans-unit id="DryRun"><source>Dry Run</source></trans-unit>
+      <trans-unit id="Cutover"><source>Cutover</source></trans-unit>
+    </body>
+  </file>
+</xliff>

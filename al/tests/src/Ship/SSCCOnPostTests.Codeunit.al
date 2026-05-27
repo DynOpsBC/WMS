@@ -1,4 +1,4 @@
-codeunit 72074 "DOPSWHS SSCC On Post Tests"
+codeunit 72135 "DOPSWHS SSCC On Post Tests"
 {
     Subtype = Test;
 

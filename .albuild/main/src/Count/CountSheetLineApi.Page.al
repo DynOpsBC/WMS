@@ -1,0 +1,42 @@
+page 72487 "DOPSWHS Count Sheet Line API"
+{
+    PageType = API;
+    APIPublisher = 'dynops';
+    APIGroup = 'advWms';
+    APIVersion = 'v2.0';
+    EntityName = 'countSheetLine';
+    EntitySetName = 'countSheetLines';
+    SourceTable = "DOPSWHS Count Sheet Line";
+    DelayedInsert = true;
+    ODataKeyFields = "Sheet No.", "Line No.";
+
+    layout
+    {
+        area(Content)
+        {
+            repeater(Group)
+            {
+                field(sheetNo; Rec."Sheet No.") { Caption = 'sheetNo'; }
+                field(lineNo; Rec."Line No.") { Caption = 'lineNo'; }
+                field(itemNo; Rec."Item No.") { Caption = 'itemNo'; }
+                field(variantCode; Rec."Variant Code") { Caption = 'variantCode'; }
+                field(binCode; Rec."Bin Code") { Caption = 'binCode'; }
+                field(lpNo; Rec."LP No.") { Caption = 'lpNo'; }
+                field(systemQty; Rec."System Qty") { Caption = 'systemQty'; }
+                field(countedQty1; Rec."Counted Qty 1") { Caption = 'countedQty1'; }
+                field(countedQty2; Rec."Counted Qty 2") { Caption = 'countedQty2'; }
+                field(countedQty3; Rec."Counted Qty 3") { Caption = 'countedQty3'; }
+                field(variance; Rec.Variance) { Caption = 'variance'; }
+                field(recountRequired; Rec."Recount Required") { Caption = 'recountRequired'; }
+            }
+        }
+    }
+
+    [ServiceEnabled]
+    procedure recordCount(counterSlot: Integer; qty: Decimal)
+    var
+        CountMgmt: Codeunit "DOPSWHS Count Mgmt";
+    begin
+        CountMgmt.RecordCount(Rec."Sheet No.", Rec."Line No.", counterSlot, qty);
+    end;
+}

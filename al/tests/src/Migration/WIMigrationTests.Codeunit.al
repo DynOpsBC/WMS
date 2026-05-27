@@ -1,4 +1,4 @@
-codeunit 72463 "DOPSWHS WI Migration Tests"
+codeunit 72116 "DOPSWHS WI Migration Tests"
 {
     Subtype = Test;
 

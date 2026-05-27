@@ -1,4 +1,4 @@
-codeunit 72078 "DOPSWHS Prod Consumption Tests"
+codeunit 72125 "DOPSWHS Prod Consumption Tests"
 {
     Subtype = Test;
 

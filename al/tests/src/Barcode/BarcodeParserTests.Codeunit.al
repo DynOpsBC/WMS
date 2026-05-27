@@ -1,4 +1,4 @@
-codeunit 72091 "DOPSWHS Barcode Parser Tests"
+codeunit 72101 "DOPSWHS Barcode Parser Tests"
 {
     Subtype = Test;
 
