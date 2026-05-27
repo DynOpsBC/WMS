@@ -11,6 +11,10 @@ import com.dynops.bcwms.usecase.pick.StartShippingLp
 import com.dynops.bcwms.usecase.pick.StopShippingLp
 import com.dynops.bcwms.usecase.putaway.ConfirmPutAwayLine
 import com.dynops.bcwms.usecase.ship.ConfirmShipLine
+import com.dynops.bcwms.usecase.production.Consume
+import com.dynops.bcwms.usecase.production.ConsumeRequest
+import com.dynops.bcwms.usecase.production.ReportOutput
+import com.dynops.bcwms.usecase.production.ReportOutputRequest
 
 class SyncWorker(
   appContext: Context,
@@ -49,6 +53,9 @@ class SyncWorker(
       is Op.PostShipment -> Result.failure()
       is Op.PostShipAndInvoice -> Result.failure()
       is Op.PostTransferShip -> Result.failure()
+      is Op.Consume -> syncConsume(op)
+      is Op.ReportOutput -> syncReportOutput(op)
+      is Op.PostAssembly -> Result.failure()
     }
 
   private suspend fun syncBuildLp(op: Op.BuildLp): Result = Result.success()
@@ -106,6 +113,20 @@ class SyncWorker(
   private suspend fun syncConfirmShipLine(op: Op.ConfirmShipLine): Result {
     val useCase = ConfirmShipLine { _, _, _, _, _ -> Result.success(Unit) }
     return useCase(op.shipmentNo, op.lineNo, op.qtyToShip, op.licensePlateNo, op.sscc).fold(
+      onSuccess = { Result.success() },
+      onFailure = { Result.retry() },
+    )
+  }
+  private suspend fun syncConsume(op: Op.Consume): Result {
+    val useCase = Consume { Result.success(Unit) }
+    return useCase(ConsumeRequest(op.prodOrderNo, op.componentLineNo, op.itemNo, op.qty, op.lpNo, op.lotNo, op.serialNo, op.binCode)).fold(
+      onSuccess = { Result.success() },
+      onFailure = { Result.retry() },
+    )
+  }
+  private suspend fun syncReportOutput(op: Op.ReportOutput): Result {
+    val useCase = ReportOutput { Result.success(null) }
+    return useCase(ReportOutputRequest(op.prodOrderNo, op.routingLineNo, op.outputQty, op.scrapQty, op.runtime, op.newLpTemplate, op.binCode)).fold(
       onSuccess = { Result.success() },
       onFailure = { Result.retry() },
     )

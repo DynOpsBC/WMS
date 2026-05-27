@@ -48,4 +48,25 @@ sealed class Op {
   data class PostShipAndInvoice(val salesOrderNo: String) : Op()
   // Online-only: transfer shipment posting must use current server availability and status.
   data class PostTransferShip(val transferOrderNo: String) : Op()
+  data class Consume(
+    val prodOrderNo: String,
+    val componentLineNo: Int,
+    val itemNo: String,
+    val qty: Double,
+    val lpNo: String? = null,
+    val lotNo: String? = null,
+    val serialNo: String? = null,
+    val binCode: String? = null,
+  ) : Op()
+  data class ReportOutput(
+    val prodOrderNo: String,
+    val routingLineNo: Int,
+    val outputQty: Double,
+    val scrapQty: Double,
+    val runtime: Double,
+    val newLpTemplate: String? = null,
+    val binCode: String? = null,
+  ) : Op()
+  // Online-only: assembly posting wraps standard BC posting and must run against current component availability.
+  data class PostAssembly(val assemblyNo: String, val quantity: Double) : Op()
 }
