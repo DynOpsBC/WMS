@@ -20,8 +20,11 @@ object BcApi {
     private const val PREFS = "bcwms_prefs"
     private const val KEY_TOKEN = "bc_access_token"
 
-    private fun apiBase() =
+    private fun customApiBase() =
         "https://api.businesscentral.dynamics.com/v2.0/$TENANT/$ENVIRONMENT/api/dynops/warehouse/v2.0/companies($COMPANY_ID)"
+
+    private fun standardApiBase() =
+        "https://api.businesscentral.dynamics.com/v2.0/$TENANT/$ENVIRONMENT/api/v2.0/companies($COMPANY_ID)"
 
     // ---- Token persistence ----
     fun saveToken(context: Context, token: String) {
@@ -45,6 +48,18 @@ object BcApi {
 
     suspend fun get(context: Context, path: String): ApiResult = request(context, "GET", path, null)
 
+    suspend fun getWithStandardFallback(context: Context, path: String): ApiResult {
+        val custom = get(context, path)
+        if (custom.httpCode != 404) return custom
+        return request(context, "GET", "${standardApiBase()}/$path", null)
+    }
+
+    suspend fun getWithStandardFallback(context: Context, customPath: String, standardPath: String): ApiResult {
+        val custom = get(context, customPath)
+        if (custom.httpCode != 404) return custom
+        return request(context, "GET", "${standardApiBase()}/$standardPath", null)
+    }
+
     suspend fun post(context: Context, path: String, jsonBody: String?): ApiResult =
         request(context, "POST", path, jsonBody)
 
@@ -53,7 +68,8 @@ object BcApi {
             val token = getToken(context)
             if (token.isBlank()) return@withContext ApiResult(false, 0, "Token yok — Connection ekranindan token girin")
             try {
-                val url = URL(if (path.startsWith("http")) path else "${apiBase()}/$path")
+                val rawUrl = if (path.startsWith("http")) path else "${customApiBase()}/$path"
+                val url = URL(rawUrl.replace(" ", "%20").replace("'", "%27"))
                 val conn = (url.openConnection() as HttpURLConnection).apply {
                     requestMethod = method
                     setRequestProperty("Authorization", "Bearer $token")
