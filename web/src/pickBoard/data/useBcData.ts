@@ -13,9 +13,14 @@ export type Pick = {
 export type PickBoardData = { picks: Pick[] };
 
 const seed: Pick[] = [
-  { no: "PICK-S5-0001", sourceNo: "SHIP-1001", assignedUserId: "MOBILE", status: "Open", percentComplete: 15, dueDate: "2026-05-27" },
-  { no: "PICK-S5-0002", sourceNo: "SHIP-1002", assignedUserId: "ADA", status: "InProgress", percentComplete: 45, dueDate: "2026-05-27" },
-  { no: "PICK-S5-0003", sourceNo: "SHIP-1003", assignedUserId: "MERT", status: "Open", percentComplete: 0, dueDate: "2026-05-28" },
+  { no: "WP-000142", sourceNo: "SO-104233", assignedUserId: "Ada Yılmaz", status: "InProgress", percentComplete: 72, dueDate: "2026-05-28" },
+  { no: "WP-000143", sourceNo: "SO-104251", assignedUserId: "Ada Yılmaz", status: "Open", percentComplete: 0, dueDate: "2026-05-28" },
+  { no: "WP-000144", sourceNo: "TO-100118", assignedUserId: "Mert Demir", status: "InProgress", percentComplete: 40, dueDate: "2026-05-28" },
+  { no: "WP-000145", sourceNo: "SO-104260", assignedUserId: "Mert Demir", status: "Open", percentComplete: 15, dueDate: "2026-05-29" },
+  { no: "WP-000146", sourceNo: "SO-104261", assignedUserId: "Mert Demir", status: "Done", percentComplete: 100, dueDate: "2026-05-27" },
+  { no: "WP-000147", sourceNo: "SO-104270", assignedUserId: "Selin Kaya", status: "InProgress", percentComplete: 88, dueDate: "2026-05-28" },
+  { no: "WP-000148", sourceNo: "TO-100120", assignedUserId: "", status: "Open", percentComplete: 0, dueDate: "2026-05-29" },
+  { no: "WP-000149", sourceNo: "SO-104288", assignedUserId: "", status: "Open", percentComplete: 0, dueDate: "2026-05-30" },
 ];
 
 export function useBcData(initialData?: PickBoardData) {

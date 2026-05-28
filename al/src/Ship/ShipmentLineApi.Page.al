@@ -2,7 +2,7 @@ page 72094 "DOPSWHS Shipment Line API"
 {
     PageType = API;
     APIPublisher = 'dynops';
-    APIGroup = 'warehouseOps';
+    APIGroup = 'warehouse';
     APIVersion = 'v2.0';
     EntityName = 'shipmentLine';
     EntitySetName = 'shipmentLines';

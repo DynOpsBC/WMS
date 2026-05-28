@@ -2,7 +2,7 @@ page 72221 "DOPSWHS Count API"
 {
     PageType = API;
     APIPublisher = 'dynops';
-    APIGroup = 'advWms';
+    APIGroup = 'warehouse';
     APIVersion = 'v2.0';
     EntityName = 'countSheet';
     EntitySetName = 'countSheets';
@@ -31,6 +31,22 @@ page 72221 "DOPSWHS Count API"
             }
         }
     }
+
+    [ServiceEnabled]
+    procedure generateLines(): Integer
+    var
+        CountMgmt: Codeunit "DOPSWHS Count Mgmt";
+    begin
+        exit(CountMgmt.GenerateLines(Rec."No."));
+    end;
+
+    [ServiceEnabled]
+    procedure addLine(itemNo: Code[20]; variantCode: Code[10]; binCode: Code[20]): Integer
+    var
+        CountMgmt: Codeunit "DOPSWHS Count Mgmt";
+    begin
+        exit(CountMgmt.AddLine(Rec."No.", itemNo, variantCode, binCode));
+    end;
 
     [ServiceEnabled]
     procedure startRecount()

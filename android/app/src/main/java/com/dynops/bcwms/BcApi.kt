@@ -13,35 +13,55 @@ import java.net.URL
  */
 object BcApi {
     const val TENANT = "7fa2357e-26f2-4174-8e16-a713981356b8"
-    const val ENVIRONMENT = "CustomerSandbox"
-    const val COMPANY_ID = "e83a57e9-38c9-f011-8542-6045bd6aeb9e"
-    const val COMPANY_NAME = "Demo Business Central"
+    const val CLIENT_ID = "8193e5c6-64d2-4e6f-8992-2114e77e4f24"  // BCWMSApp Mobile (public client, device-code)
+    const val BC_RESOURCE = "https://api.businesscentral.dynamics.com"
+
+    // Defaults (used until the user picks an environment/company after email sign-in).
+    const val DEFAULT_ENVIRONMENT = "SandboxUS"
+    const val DEFAULT_COMPANY_ID = "1534369d-f248-f111-b478-7c1e521cfdf0"
+    const val DEFAULT_COMPANY_NAME = "CRONUS USA, Inc."
+
+    /** Environments the app can discover companies in (probed after sign-in). */
+    val KNOWN_ENVIRONMENTS = listOf("SandboxUS", "CustomerSandbox")
 
     private const val PREFS = "bcwms_prefs"
     private const val KEY_TOKEN = "bc_access_token"
+    private const val KEY_ENV = "bc_environment"
+    private const val KEY_COMPANY_ID = "bc_company_id"
+    private const val KEY_COMPANY_NAME = "bc_company_name"
 
-    private fun customApiBase() =
-        "https://api.businesscentral.dynamics.com/v2.0/$TENANT/$ENVIRONMENT/api/dynops/warehouse/v2.0/companies($COMPANY_ID)"
+    private fun prefs(context: Context) = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
 
-    private fun standardApiBase() =
-        "https://api.businesscentral.dynamics.com/v2.0/$TENANT/$ENVIRONMENT/api/v2.0/companies($COMPANY_ID)"
+    // ---- Environment / company selection (runtime-configurable) ----
+    fun getEnvironment(context: Context): String = prefs(context).getString(KEY_ENV, DEFAULT_ENVIRONMENT) ?: DEFAULT_ENVIRONMENT
+    fun getCompanyId(context: Context): String = prefs(context).getString(KEY_COMPANY_ID, DEFAULT_COMPANY_ID) ?: DEFAULT_COMPANY_ID
+    fun getCompanyName(context: Context): String = prefs(context).getString(KEY_COMPANY_NAME, DEFAULT_COMPANY_NAME) ?: DEFAULT_COMPANY_NAME
+
+    fun setEnvironment(context: Context, env: String) { prefs(context).edit().putString(KEY_ENV, env).apply() }
+    fun setCompany(context: Context, id: String, name: String) {
+        prefs(context).edit().putString(KEY_COMPANY_ID, id).putString(KEY_COMPANY_NAME, name).apply()
+    }
+
+    private fun customApiBase(context: Context) =
+        "https://api.businesscentral.dynamics.com/v2.0/$TENANT/${getEnvironment(context)}/api/dynops/warehouse/v2.0/companies(${getCompanyId(context)})"
+
+    private fun standardApiBase(context: Context) =
+        "https://api.businesscentral.dynamics.com/v2.0/$TENANT/${getEnvironment(context)}/api/v2.0/companies(${getCompanyId(context)})"
+
+    /** Standard companies endpoint for a given environment (no company segment) — used for discovery. */
+    fun companiesUrl(env: String) =
+        "https://api.businesscentral.dynamics.com/v2.0/$TENANT/$env/api/v2.0/companies?\$select=id,name,displayName"
 
     // ---- Token persistence ----
     fun saveToken(context: Context, token: String) {
-        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-            .edit().putString(KEY_TOKEN, token.trim()).apply()
+        prefs(context).edit().putString(KEY_TOKEN, token.trim()).apply()
     }
 
-    fun getToken(context: Context): String =
-        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-            .getString(KEY_TOKEN, "") ?: ""
+    fun getToken(context: Context): String = prefs(context).getString(KEY_TOKEN, "") ?: ""
 
     fun hasToken(context: Context): Boolean = getToken(context).isNotBlank()
 
-    fun clearToken(context: Context) {
-        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-            .edit().remove(KEY_TOKEN).apply()
-    }
+    fun clearToken(context: Context) { prefs(context).edit().remove(KEY_TOKEN).apply() }
 
     // ---- HTTP ----
     data class ApiResult(val ok: Boolean, val httpCode: Int, val body: String)
@@ -51,13 +71,13 @@ object BcApi {
     suspend fun getWithStandardFallback(context: Context, path: String): ApiResult {
         val custom = get(context, path)
         if (custom.httpCode != 404) return custom
-        return request(context, "GET", "${standardApiBase()}/$path", null)
+        return request(context, "GET", "${standardApiBase(context)}/$path", null)
     }
 
     suspend fun getWithStandardFallback(context: Context, customPath: String, standardPath: String): ApiResult {
         val custom = get(context, customPath)
         if (custom.httpCode != 404) return custom
-        return request(context, "GET", "${standardApiBase()}/$standardPath", null)
+        return request(context, "GET", "${standardApiBase(context)}/$standardPath", null)
     }
 
     suspend fun post(context: Context, path: String, jsonBody: String?): ApiResult =
@@ -92,7 +112,7 @@ object BcApi {
             val token = getToken(context)
             if (token.isBlank()) return@withContext ApiResult(false, 0, "Token yok — Connection ekranindan token girin")
             try {
-                val rawUrl = if (path.startsWith("http")) path else "${customApiBase()}/$path"
+                val rawUrl = if (path.startsWith("http")) path else "${customApiBase(context)}/$path"
                 val url = URL(rawUrl.replace(" ", "%20").replace("'", "%27"))
                 // HttpURLConnection cannot send PATCH natively; tunnel it via POST + override header.
                 val needsOverride = method == "PATCH"
@@ -145,5 +165,37 @@ object BcApi {
         } catch (e: Exception) {
             emptyList()
         }
+    }
+
+    // ---- Environment / company discovery (after email sign-in) ----
+    data class Company(val id: String, val name: String, val displayName: String)
+    data class EnvCompanies(val environment: String, val companies: List<Company>)
+
+    /** Probes each known environment with the token; returns those that respond with companies. */
+    suspend fun discoverEnvironments(token: String): List<EnvCompanies> = withContext(Dispatchers.IO) {
+        KNOWN_ENVIRONMENTS.mapNotNull { env ->
+            val r = httpGet(companiesUrl(env), token)
+            if (!r.ok) return@mapNotNull null
+            val companies = parseValueArray(r.body).map {
+                Company(it.optString("id"), it.optString("name"), it.optString("displayName").ifBlank { it.optString("name") })
+            }
+            if (companies.isEmpty()) null else EnvCompanies(env, companies)
+        }
+    }
+
+    /** Plain authenticated GET with an explicit token (used by discovery / sign-in verification). */
+    suspend fun httpGet(url: String, token: String): ApiResult = withContext(Dispatchers.IO) {
+        try {
+            val conn = (URL(url.replace(" ", "%20")).openConnection() as HttpURLConnection).apply {
+                requestMethod = "GET"
+                setRequestProperty("Authorization", "Bearer $token")
+                setRequestProperty("Accept", "application/json")
+                connectTimeout = 15000; readTimeout = 20000
+            }
+            val code = conn.responseCode
+            val body = if (code in 200..299) conn.inputStream.bufferedReader().readText()
+                else conn.errorStream?.bufferedReader()?.readText() ?: "(no body)"
+            ApiResult(code in 200..299, code, body)
+        } catch (e: Exception) { ApiResult(false, -1, "Hata: ${e.message}") }
     }
 }

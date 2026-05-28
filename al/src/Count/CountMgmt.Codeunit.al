@@ -35,6 +35,81 @@ codeunit 72050 "DOPSWHS Count Mgmt"
         exit(CountHeader."No.");
     end;
 
+    /// <summary>
+    /// Populates count sheet lines from current Bin Content for the sheet's location, snapshotting
+    /// the on-hand quantity into "System Qty". Idempotent: clears existing lines first. Returns the
+    /// number of lines generated. This is the missing link that makes a sheet countable + postable.
+    /// </summary>
+    procedure GenerateLines(SheetNo: Code[20]) LinesCreated: Integer
+    var
+        CountHeader: Record "DOPSWHS Count Sheet Header";
+        CountLine: Record "DOPSWHS Count Sheet Line";
+        BinContent: Record "Bin Content";
+        NextLineNo: Integer;
+    begin
+        CountHeader.Get(SheetNo);
+        if CountHeader.Status = CountHeader.Status::Posted then
+            Error('Count sheet %1 is already posted.', SheetNo);
+
+        CountLine.SetRange("Sheet No.", SheetNo);
+        CountLine.DeleteAll(true);
+
+        NextLineNo := 0;
+        BinContent.SetRange("Location Code", CountHeader."Location Code");
+        if BinContent.FindSet() then
+            repeat
+                BinContent.CalcFields(Quantity);
+                NextLineNo += 10000;
+                CountLine.Init();
+                CountLine."Sheet No." := SheetNo;
+                CountLine."Line No." := NextLineNo;
+                CountLine."Item No." := BinContent."Item No.";
+                CountLine."Variant Code" := BinContent."Variant Code";
+                CountLine."Bin Code" := BinContent."Bin Code";
+                CountLine."System Qty" := BinContent.Quantity;  // snapshot on-hand at generation time
+                CountLine.Insert(true);
+                LinesCreated += 1;
+            until BinContent.Next() = 0;
+    end;
+
+    /// <summary>Adds (or refreshes) a single count line for a specific item/bin, snapshotting on-hand.</summary>
+    procedure AddLine(SheetNo: Code[20]; ItemNo: Code[20]; VariantCode: Code[10]; BinCode: Code[20]): Integer
+    var
+        CountHeader: Record "DOPSWHS Count Sheet Header";
+        CountLine: Record "DOPSWHS Count Sheet Line";
+        BinContent: Record "Bin Content";
+        NextLineNo: Integer;
+        OnHand: Decimal;
+    begin
+        CountHeader.Get(SheetNo);
+        CountLine.SetRange("Sheet No.", SheetNo);
+        CountLine.SetRange("Item No.", ItemNo);
+        CountLine.SetRange("Bin Code", BinCode);
+        if CountLine.FindFirst() then
+            exit(CountLine."Line No.");
+
+        if BinContent.Get(CountHeader."Location Code", BinCode, ItemNo, VariantCode, '') then begin
+            BinContent.CalcFields(Quantity);
+            OnHand := BinContent.Quantity;
+        end;
+
+        CountLine.Reset();
+        CountLine.SetRange("Sheet No.", SheetNo);
+        if CountLine.FindLast() then
+            NextLineNo := CountLine."Line No.";
+        NextLineNo += 10000;
+
+        CountLine.Init();
+        CountLine."Sheet No." := SheetNo;
+        CountLine."Line No." := NextLineNo;
+        CountLine."Item No." := ItemNo;
+        CountLine."Variant Code" := VariantCode;
+        CountLine."Bin Code" := BinCode;
+        CountLine."System Qty" := OnHand;
+        CountLine.Insert(true);
+        exit(NextLineNo);
+    end;
+
     procedure RecordCount(SheetNo: Code[20]; LineNo: Integer; CounterSlot: Integer; Qty: Decimal)
     var
         CountLine: Record "DOPSWHS Count Sheet Line";
@@ -67,7 +142,6 @@ codeunit 72050 "DOPSWHS Count Mgmt"
         CountLine.SetRange("Sheet No.", SheetNo);
         if CountLine.FindSet(true) then
             repeat
-                CountLine.CalcFields("System Qty");
                 WinningQty := GetWinningQty(CountLine, AssignedCounters);
                 CountLine.Variance := WinningQty - CountLine."System Qty";
                 CountLine."Recount Required" := ShouldRecount(CountLine, AssignedCounters);
@@ -104,17 +178,19 @@ codeunit 72050 "DOPSWHS Count Mgmt"
         if CountLine.FindSet() then
             repeat
                 LineNo += 10000;
-                CountLine.CalcFields("System Qty");
                 ItemJournalLine.Init();
                 ItemJournalLine.Validate("Journal Template Name", 'PHYS. INV.');
                 ItemJournalLine.Validate("Journal Batch Name", CountHeader."Source Phys. Inv. Journal Batch");
                 ItemJournalLine."Line No." := LineNo;
                 ItemJournalLine.Validate("Posting Date", Today());
-                ItemJournalLine.Validate("Entry Type", ItemJournalLine."Entry Type"::"Positive Adjmt.");
+                ItemJournalLine."Document No." := CopyStr('CNT-' + SheetNo, 1, MaxStrLen(ItemJournalLine."Document No."));
                 ItemJournalLine.Validate("Item No.", CountLine."Item No.");
                 ItemJournalLine.Validate("Location Code", CountHeader."Location Code");
-                ItemJournalLine.Validate("Bin Code", CountLine."Bin Code");
                 ItemJournalLine.Validate("Variant Code", CountLine."Variant Code");
+                ItemJournalLine.Validate("Bin Code", CountLine."Bin Code");
+                // Phys. inventory line: BC derives entry type + quantity from calculated vs counted.
+                ItemJournalLine.Validate("Phys. Inventory", true);
+                ItemJournalLine.Validate("Qty. (Calculated)", CountLine."System Qty");
                 ItemJournalLine.Validate("Qty. (Phys. Inventory)", GetWinningQty(CountLine, GetAssignedCounterCount(SheetNo)));
                 ItemJournalLine.Insert(true);
             until CountLine.Next() = 0;

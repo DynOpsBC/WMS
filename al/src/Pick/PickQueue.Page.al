@@ -108,7 +108,9 @@ page 72083 "DOPSWHS Pick Queue"
     end;
 
     local procedure BuildBoardJson(): Text
+    var
+        BoardData: Codeunit "DOPSWHS Board Data";
     begin
-        exit('{"picks":[]}');
+        exit(BoardData.BuildPickBoardJson());
     end;
 }

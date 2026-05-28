@@ -14,6 +14,7 @@ codeunit 72060 "DOPSWHS E2E Test Data"
         ResultMsg: Label '✅ E2E test data hazır.\n\n• Items: ITEM-LOT-1, ITEM-SN-1, ITEM-EXP-1\n• Production: ITEM-PROD-FG-1, ITEM-PROD-COMP-1/2 + BOM + Routing\n• Assembly: ITEM-ASM-FG-1 + BOM\n• BLUE location bins: RECEIVE-1, PICK-01, BULK-01, SHIP-01\n• Test lot: LOT-2026-001\n\nNot: Cronus default vendor/customer (10000, 30000) kullanılır.';
     begin
         EnsureBlueLocationBins();
+        EnsureWarehouseEmployee();
         EnsureBasicTestItem('ITEM-E2E-1', 'E2E Test Item Basic', 0);
         EnsureBasicTestItem('ITEM-LOT-1', 'E2E Test Lot-Tracked Item', 1);
         EnsureBasicTestItem('ITEM-SN-1', 'E2E Test Serial-Tracked Item', 2);
@@ -21,6 +22,38 @@ codeunit 72060 "DOPSWHS E2E Test Data"
         EnsureProductionMasterData();
         EnsureAssemblyMasterData();
         Message(ResultMsg);
+    end;
+
+    /// <summary>
+    /// Registers the current user as a Warehouse Employee on every bin-mandatory location, so warehouse
+    /// pages (Shipment/Pick/Receipt/Put-away) are accessible via the BC client AND the published web
+    /// services / OData ("You must first set up user X as a warehouse employee.").
+    /// </summary>
+    procedure EnsureWarehouseEmployee()
+    var
+        WhseEmployee: Record "Warehouse Employee";
+        ExistingDefault: Record "Warehouse Employee";
+        Location: Record Location;
+        CurrentUser: Code[50];
+        MakeDefault: Boolean;
+    begin
+        CurrentUser := CopyStr(UserId(), 1, MaxStrLen(CurrentUser));
+        if CurrentUser = '' then
+            exit;
+        Location.SetRange("Bin Mandatory", true);
+        if Location.FindSet() then
+            repeat
+                if not WhseEmployee.Get(CurrentUser, Location.Code) then begin
+                    ExistingDefault.SetRange("User ID", CurrentUser);
+                    ExistingDefault.SetRange(Default, true);
+                    MakeDefault := ExistingDefault.IsEmpty();
+                    WhseEmployee.Init();
+                    WhseEmployee.Validate("User ID", CurrentUser);
+                    WhseEmployee.Validate("Location Code", Location.Code);
+                    WhseEmployee.Validate(Default, MakeDefault);
+                    if WhseEmployee.Insert(true) then;
+                end;
+            until Location.Next() = 0;
     end;
 
     procedure EnsureBlueLocationBins()

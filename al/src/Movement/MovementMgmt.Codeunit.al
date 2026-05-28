@@ -34,7 +34,7 @@ codeunit 72045 "DOPSWHS Movement Mgmt"
         Setup: Record "DOPSWHS Setup";
         ItemJournalTemplate: Record "Item Journal Template";
         ItemJournalLine: Record "Item Journal Line";
-        ItemJnlPost: Codeunit "Item Jnl.-Post";
+        ItemJnlPostBatch: Codeunit "Item Jnl.-Post Batch";
         CustomDimensions: Dictionary of [Text, Text];
         BatchName: Code[10];
     begin
@@ -51,7 +51,9 @@ codeunit 72045 "DOPSWHS Movement Mgmt"
         CreateReclassLine(ItemJournalTemplate.Name, BatchName, Setup."Default Location Code", FromBinCode, ToBinCode, ItemNo, LpNo, Qty, ItemJournalLine);
         CustomDimensions.Add('Category', 'Movement');
         Session.LogMessage('DOPSWHS-Move-AdHoc', StrSubstNo('Ad-hoc move item %1 qty %2 from %3 to %4 lp %5', ItemNo, Qty, FromBinCode, ToBinCode, LpNo), Verbosity::Normal, DataClassification::SystemMetadata, TelemetryScope::ExtensionPublisher, CustomDimensions);
-        ItemJnlPost.Run(ItemJournalLine);
+        // Post via batch codeunit (22/23) rather than "Item Jnl.-Post" (241): the latter raises a
+        // "Do you want to post?" Confirm that fails as a client callback over the API / on the handheld.
+        ItemJnlPostBatch.Run(ItemJournalLine);
     end;
 
     procedure RegisterDirected(var WhseActivityHeader: Record "Warehouse Activity Header")

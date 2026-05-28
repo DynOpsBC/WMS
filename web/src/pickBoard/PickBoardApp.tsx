@@ -16,10 +16,13 @@ export function PickBoardApp() {
   const { data, setData } = useBcData();
   const [locale, setLocale] = useState<keyof typeof dictionaries>("en");
 
-  useEffect(() => listenBridge((message) => {
-    if (message.type === "setData") setData(normalizeData(message.payload));
-    if (message.type === "setLocale") setLocale(message.locale.startsWith("tr") ? "tr" : message.locale.startsWith("de") ? "de" : "en");
-  }), [setData]);
+  useEffect(() => {
+    const unsubscribe = listenBridge((message) => {
+      if (message.type === "setData") setData(normalizeData(message.payload));
+      if (message.type === "setLocale") setLocale(message.locale.startsWith("tr") ? "tr" : message.locale.startsWith("de") ? "de" : "en");
+    });
+    return () => { unsubscribe(); };
+  }, [setData]);
 
   const byPicker = useMemo(() => {
     const map = new Map<string, typeof data.picks>();
@@ -39,12 +42,30 @@ export function PickBoardApp() {
 
   const t = dictionaries[locale];
 
+  const stats = useMemo(() => {
+    const total = data.picks.length;
+    const open = data.picks.filter((p) => p.status === "Open").length;
+    const inProgress = data.picks.filter((p) => p.status === "InProgress").length;
+    const done = data.picks.filter((p) => p.status === "Done").length;
+    const avg = total ? Math.round(data.picks.reduce((s, p) => s + (p.percentComplete || 0), 0) / total) : 0;
+    return { total, open, inProgress, done, avg };
+  }, [data.picks]);
+
   return (
     <DndProvider backend={HTML5Backend}>
       <main className="pick-board">
         <header className="pick-board__header">
-          <h1>{t.title}</h1>
-          <span>{data.picks.length} picks</span>
+          <div className="pick-board__title">
+            <span className="pick-board__brand">DynOps WMS</span>
+            <h1>{t.title}</h1>
+          </div>
+          <div className="pick-board__stats">
+            <div className="stat"><span className="stat__value">{stats.total}</span><span className="stat__label">Toplam</span></div>
+            <div className="stat stat--open"><span className="stat__value">{stats.open}</span><span className="stat__label">Açık</span></div>
+            <div className="stat stat--prog"><span className="stat__value">{stats.inProgress}</span><span className="stat__label">Devam</span></div>
+            <div className="stat stat--done"><span className="stat__value">{stats.done}</span><span className="stat__label">Bitti</span></div>
+            <div className="stat stat--avg"><span className="stat__value">%{stats.avg}</span><span className="stat__label">Ortalama</span></div>
+          </div>
         </header>
         {data.picks.length === 0 ? <p className="pick-board__empty">{t.empty}</p> : (
           <div className="pick-board__columns">

@@ -39,7 +39,10 @@ enum class Screen(val title: String) {
     Shipping("Sevkiyat"),
     Production("Üretim"),
     Assembly("Montaj"),
+    DirectedMove("Yönlendirilmiş Hareket"),
+    Quality("Kalite Denetimi"),
     TestCenter("Test Center"),
+    PostingTest("Posting Test"),
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -73,7 +76,7 @@ fun AppRoot() {
         Box(Modifier.padding(padding).fillMaxSize()) {
             when (screen) {
                 Screen.Home -> HomeScreen(connected) { screen = it }
-                Screen.Connection -> ConnectionScreen(onConnected = { connected = it })
+                Screen.Connection -> LoginFlow(onConnected = { connected = it })
                 Screen.LicensePlates -> LicensePlateModule()
                 Screen.ItemInquiry -> ItemInquiryModule()
                 Screen.BinInquiry -> BinInquiryModule()
@@ -81,11 +84,14 @@ fun AppRoot() {
                 Screen.Picking -> PickingModule()
                 Screen.AdHocMove -> AdHocMoveModule()
                 Screen.Count -> CountModule()
-                Screen.PutAway -> ComingSoonScreen("Put-Away", "Yerleştirme belge listesi → suggest bin → Register. BC putaways API'si yayınlandığında aktif olur.")
-                Screen.Shipping -> ComingSoonScreen("Sevkiyat", "Released sevkiyat belgesi → Post + packing slip. BC shipments API'si yayınlandığında aktif olur.")
-                Screen.Production -> ComingSoonScreen("Üretim", "Sarfiyat (consume) + Output (→ yeni LP). productionConsumption/productionOutput action'ları Faz 2'de bağlanacak.")
-                Screen.Assembly -> ComingSoonScreen("Montaj", "Montaj emri → bileşenler → Post. assemblies API mevcut, akış Faz 2'de tamamlanacak.")
+                Screen.PutAway -> PutAwayModule()
+                Screen.Shipping -> ShippingModule()
+                Screen.Production -> ProductionModule()
+                Screen.Assembly -> AssemblyModule()
+                Screen.DirectedMove -> DirectedMoveModule()
+                Screen.Quality -> QualityModule()
                 Screen.TestCenter -> TestCenterScreen()
+                Screen.PostingTest -> PostingTestModule()
             }
         }
     }
@@ -106,25 +112,29 @@ data class Tile(val screen: Screen, val emoji: String, val label: String)
 
 @Composable
 private fun HomeScreen(connected: Boolean, onNavigate: (Screen) -> Unit) {
+    val context = androidx.compose.ui.platform.LocalContext.current
     val tiles = listOf(
         Tile(Screen.LicensePlates, "📦", "License Plate"),
         Tile(Screen.Receiving, "📥", "Mal Kabul"),
         Tile(Screen.Picking, "🚚", "Toplama"),
         Tile(Screen.AdHocMove, "↔️", "Ad-Hoc Hareket"),
+        Tile(Screen.DirectedMove, "🧭", "Yönlendirilmiş"),
         Tile(Screen.Count, "🔢", "Sayım"),
         Tile(Screen.PutAway, "📤", "Put-Away"),
         Tile(Screen.Shipping, "🚢", "Sevkiyat"),
         Tile(Screen.Production, "🏭", "Üretim"),
         Tile(Screen.Assembly, "🔧", "Montaj"),
+        Tile(Screen.Quality, "🔬", "Kalite Denetimi"),
         Tile(Screen.ItemInquiry, "🔎", "Item Inquiry"),
         Tile(Screen.BinInquiry, "📍", "Bin Inquiry"),
         Tile(Screen.TestCenter, "🧪", "Test Center"),
+        Tile(Screen.PostingTest, "📮", "Posting Test"),
         Tile(Screen.Connection, "⚙️", "Bağlantı"),
     )
     Column(Modifier.fillMaxSize().padding(16.dp)) {
         Text("DynOps Warehouse Management", fontWeight = FontWeight.Bold, fontSize = 18.sp)
         Text(
-            "BC Sandbox: ${BcApi.ENVIRONMENT} / ${BcApi.COMPANY_NAME}",
+            "BC: ${BcApi.getEnvironment(context)} / ${BcApi.getCompanyName(context)}",
             fontSize = 12.sp, color = Color.Gray
         )
         Spacer(Modifier.height(8.dp))

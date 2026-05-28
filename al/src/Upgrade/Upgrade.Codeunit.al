@@ -20,6 +20,10 @@ codeunit 72034 "DOPSWHS Upgrade"
         E2EData: Codeunit "DOPSWHS E2E Test Data";
         CatalogSeed: Codeunit "DOPSWHS Test Catalog Seed";
         Runner: Codeunit "DOPSWHS Test Runner";
+        PostingSmokeTest: Codeunit "DOPSWHS Posting Smoke Test";
+        QualityMgmt: Codeunit "DOPSWHS Quality Mgmt";
+        WebSvcPublisher: Codeunit "DOPSWHS Web Svc Publisher";
+        ConfigChecker: Codeunit "DOPSWHS Config Checker";
         RunNo: Code[20];
     begin
         if not Setup.Get('') then begin
@@ -35,6 +39,10 @@ codeunit 72034 "DOPSWHS Upgrade"
         DemoTx.CreateAllDemoTransactions();
         E2EData.PrepareE2EData();
         CatalogSeed.RunFullSeed();
+        PostingSmokeTest.EnsureRows();  // seed posting-test rows (run on-demand from the app, not auto)
+        QualityMgmt.SeedDemoOrders();   // seed demo quality orders for the mobile Quality screen
+        WebSvcPublisher.PublishAll();   // expose standard pages as web services (no-extension-API ops)
+        ConfigChecker.RegisterAssistedSetup();  // seed config checklist + register Assisted Setup
         RunNo := Runner.CreateNewRun('TEST', 'QA-TEAM', 'Auto-bootstrap on upgrade v1.0.4.0');
         Runner.StartRun(RunNo);
     end;

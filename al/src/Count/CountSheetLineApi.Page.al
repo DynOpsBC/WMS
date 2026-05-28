@@ -2,7 +2,7 @@ page 72487 "DOPSWHS Count Sheet Line API"
 {
     PageType = API;
     APIPublisher = 'dynops';
-    APIGroup = 'advWms';
+    APIGroup = 'warehouse';
     APIVersion = 'v2.0';
     EntityName = 'countSheetLine';
     EntitySetName = 'countSheetLines';

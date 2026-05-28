@@ -1,0 +1,363 @@
+package com.dynops.bcwms.feature
+
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import com.dynops.bcwms.BcApi
+import com.dynops.bcwms.scanner.BarcodeIntentResolver
+import com.dynops.bcwms.scanner.ScanField
+import com.dynops.bcwms.ui.*
+import kotlinx.coroutines.launch
+import org.json.JSONObject
+
+/**
+ * Put-Away — WI §10.2 parity.
+ * Lookup -> Put-Away Document -> per-line suggest bin / set bin+qty -> Register.
+ * BC: putAways / putAwayLines (warehouse/v2.0), bound actions suggestBin + register.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun PutAwayModule() {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var selected by remember { mutableStateOf<String?>(null) }
+    var rows by remember { mutableStateOf<List<JSONObject>>(emptyList()) }
+    var status by remember { mutableStateOf("") }
+    var loading by remember { mutableStateOf(false) }
+
+    fun load() {
+        scope.launch {
+            loading = true; status = "Yükleniyor..."
+            val r = BcApi.get(context, "putAways?\$top=30&\$select=no,locationCode,assignedUserId,status")
+            loading = false
+            rows = if (r.ok) BcApi.parseValueArray(r.body) else emptyList()
+            status = if (!r.ok) "HATA: Yerleştirme listesi alınamadı (HTTP ${r.httpCode})"
+                else if (rows.isEmpty()) "EMPTY: Açık yerleştirme belgesi yok (HTTP ${r.httpCode})"
+                else "PASS: ${rows.size} belge (HTTP ${r.httpCode})"
+        }
+    }
+    LaunchedEffect(Unit) { load() }
+
+    val sel = selected
+    if (sel != null) { PutAwayDocument(no = sel, onBack = { selected = null; load() }); return }
+
+    Column(Modifier.fillMaxSize().padding(12.dp)) {
+        Button(onClick = { load() }, enabled = !loading) { Text(if (loading) "..." else "🔄 Yenile") }
+        Spacer(Modifier.height(4.dp))
+        StatusText(status)
+        Spacer(Modifier.height(8.dp))
+        LazyColumn(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            items(rows) { d ->
+                Card(onClick = { selected = d.optString("no") }, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(10.dp)) {
+                    Column(Modifier.padding(12.dp)) {
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                            Text(d.optString("no"), fontWeight = FontWeight.Bold)
+                            Text(firstValue(d, "status"), fontSize = 12.sp, color = Color.Gray)
+                        }
+                        Text("Lokasyon: ${firstValue(d, "locationCode")} · Atanan: ${firstValue(d, "assignedUserId")}", fontSize = 12.sp, color = Color.Gray)
+                    }
+                }
+            }
+            if (rows.isEmpty() && !loading) item { EmptyState("Açık yerleştirme belgesi yok.") }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun PutAwayDocument(no: String, onBack: () -> Unit) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var header by remember { mutableStateOf<JSONObject?>(null) }
+    var lines by remember { mutableStateOf<List<JSONObject>>(emptyList()) }
+    var status by remember { mutableStateOf("") }
+    var busy by remember { mutableStateOf(false) }
+    var binLine by remember { mutableStateOf<JSONObject?>(null) }
+
+    fun reload() {
+        scope.launch {
+            busy = true
+            val h = BcApi.get(context, "putAways('$no')")
+            if (h.ok) header = JSONObject(h.body)
+            val l = BcApi.get(context, "putAwayLines?\$filter=no eq '$no'&\$top=100")
+            lines = if (l.ok) BcApi.parseValueArray(l.body) else emptyList()
+            busy = false
+        }
+    }
+    LaunchedEffect(no) { reload() }
+
+    fun register() {
+        scope.launch {
+            busy = true; status = "Register..."
+            val r = BcApi.boundAction(context, "putAways", no, "register", "{}")
+            busy = false
+            status = if (r.ok) "PASS: Yerleştirme kaydedildi (HTTP ${r.httpCode})" else "HATA: ${BcApi.errorMessage(r.body)} (HTTP ${r.httpCode})"
+            if (r.ok) reload()
+        }
+    }
+
+    val h = header
+    Column(Modifier.fillMaxSize()) {
+        Column(Modifier.weight(1f).padding(12.dp)) {
+            TextButton(onClick = onBack) { Text("‹ Belge Listesi") }
+            DocHeaderCard(
+                title = no,
+                subtitle = "Lokasyon: ${h?.optString("locationCode") ?: ""} · ${firstValue(h ?: JSONObject(), "status")}",
+            )
+            Spacer(Modifier.height(6.dp))
+            StatusText(status)
+            Spacer(Modifier.height(4.dp))
+            Text("Satırlar (${lines.size}) — bin atamak için dokunun", fontWeight = FontWeight.Bold, fontSize = 14.sp)
+            LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                items(lines) { ln ->
+                    Card(onClick = { binLine = ln }, modifier = Modifier.fillMaxWidth()) {
+                        Column(Modifier.padding(10.dp)) {
+                            Text("${ln.optString("itemNo")} — ${firstValue(ln, "lpNo")}", fontWeight = FontWeight.Medium)
+                            Text("Bin: ${firstValue(ln, "binCode")} · İşlenecek: ${ln.optDouble("qtyToHandle")}", fontSize = 12.sp, color = Color.Gray)
+                        }
+                    }
+                }
+                if (lines.isEmpty() && !busy) item { EmptyState("Bu belgede satır yok.") }
+            }
+        }
+        BottomActionBar {
+            Button(onClick = { register() }, enabled = !busy, modifier = Modifier.fillMaxWidth()) {
+                Text("✅ Register Put-Away", fontWeight = FontWeight.Bold)
+            }
+        }
+    }
+
+    val bl = binLine
+    if (bl != null) {
+        PutAwayBinSheet(
+            line = bl,
+            locationCode = h?.optString("locationCode") ?: "",
+            onDismiss = { binLine = null },
+            onConfirm = { bin, qty ->
+                binLine = null
+                scope.launch {
+                    busy = true; status = "Satır güncelleniyor..."
+                    val body = JSONObject().apply { put("binCode", bin); put("qtyToHandle", qty) }.toString()
+                    val lineNo = bl.optInt("lineNo")
+                    val actType = firstValue(bl, "activityType").ifBlank { "Put-away" }
+                    val r = BcApi.patch(context, "putAwayLines(activityType='$actType',no='$no',lineNo=$lineNo)", body)
+                    busy = false
+                    status = if (r.ok) "PASS: Satır güncellendi → $bin (HTTP ${r.httpCode})" else "HATA: ${BcApi.errorMessage(r.body)} (HTTP ${r.httpCode})"
+                    if (r.ok) reload()
+                }
+            }
+        )
+    }
+}
+
+/** Bottom sheet: scan/enter target bin (with "Öner" = suggestBin) + qty. */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun PutAwayBinSheet(line: JSONObject, locationCode: String, onDismiss: () -> Unit, onConfirm: (bin: String, qty: Double) -> Unit) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    var bin by remember { mutableStateOf(line.optString("binCode")) }
+    var qty by remember { mutableStateOf(line.optDouble("qtyToHandle").let { if (it == it.toLong().toDouble()) it.toLong().toString() else it.toString() }) }
+    var hint by remember { mutableStateOf("") }
+    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState) {
+        Column(Modifier.fillMaxWidth().padding(20.dp)) {
+            Text("Hedef Bin", fontWeight = FontWeight.Bold, fontSize = 18.sp)
+            Text("Item: ${line.optString("itemNo")}", fontSize = 12.sp, color = Color.Gray)
+            Spacer(Modifier.height(12.dp))
+            ScanField("Bin", bin, { bin = it }, modifier = Modifier.fillMaxWidth(), onScanned = {
+                bin = BarcodeIntentResolver.resolve(it).value
+            })
+            Spacer(Modifier.height(6.dp))
+            OutlinedButton(onClick = {
+                scope.launch {
+                    hint = "Bin öneriliyor..."
+                    val body = JSONObject().apply {
+                        put("itemNo", line.optString("itemNo"))
+                        put("qty", qty.toDoubleOrNull() ?: 0.0)
+                        put("locationCode", locationCode)
+                    }.toString()
+                    // suggestBin is bound to a record; call on the line's parent put-away header is not
+                    // possible, so target the entity set generically with the line key context.
+                    val r = BcApi.post(context, "putAways('${line.optString("no")}')/Microsoft.NAV.suggestBin", body)
+                    hint = if (r.ok) {
+                        val suggested = BcApi.scalarValue(r.body)
+                        if (suggested.isNotBlank()) { bin = suggested; "Önerilen bin: $suggested" } else "Öneri boş döndü"
+                    } else "Öneri alınamadı (HTTP ${r.httpCode})"
+                }
+            }) { Text("🎯 Bin Öner") }
+            if (hint.isNotBlank()) { Spacer(Modifier.height(4.dp)); Text(hint, fontSize = 12.sp, color = Color.Gray) }
+            Spacer(Modifier.height(10.dp))
+            OutlinedTextField(qty, { qty = it.filter { c -> c.isDigit() || c == '.' } }, label = { Text("Miktar") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+            Spacer(Modifier.height(16.dp))
+            Button(enabled = bin.isNotBlank(), modifier = Modifier.fillMaxWidth(), onClick = {
+                onConfirm(bin.trim(), qty.toDoubleOrNull() ?: 0.0)
+            }) { Text("Onayla") }
+            Spacer(Modifier.height(24.dp))
+        }
+    }
+}
+
+/**
+ * Shipping — WI §10.4 parity.
+ * Lookup (released) -> Shipment Document -> set qty/LP per line -> Post (+ packing slip / invoice).
+ * BC: shipments / shipmentLines (warehouse/v2.0), bound action post(print, invoice).
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun ShippingModule() {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var selected by remember { mutableStateOf<String?>(null) }
+    var rows by remember { mutableStateOf<List<JSONObject>>(emptyList()) }
+    var status by remember { mutableStateOf("") }
+    var loading by remember { mutableStateOf(false) }
+
+    fun load() {
+        scope.launch {
+            loading = true; status = "Yükleniyor..."
+            val r = BcApi.get(context, "shipments?\$top=30&\$select=no,locationCode,assignedUserId,status,shipmentDate,sourceNo,shipTo,lineCount")
+            loading = false
+            rows = if (r.ok) BcApi.parseValueArray(r.body) else emptyList()
+            status = if (!r.ok) "HATA: Sevkiyat listesi alınamadı (HTTP ${r.httpCode})"
+                else if (rows.isEmpty()) "EMPTY: Released sevkiyat belgesi yok (HTTP ${r.httpCode})"
+                else "PASS: ${rows.size} belge (HTTP ${r.httpCode})"
+        }
+    }
+    LaunchedEffect(Unit) { load() }
+
+    val sel = selected
+    if (sel != null) { ShipDocument(no = sel, onBack = { selected = null; load() }); return }
+
+    Column(Modifier.fillMaxSize().padding(12.dp)) {
+        Button(onClick = { load() }, enabled = !loading) { Text(if (loading) "..." else "🔄 Yenile") }
+        Spacer(Modifier.height(4.dp))
+        StatusText(status)
+        Spacer(Modifier.height(8.dp))
+        LazyColumn(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            items(rows) { d ->
+                Card(onClick = { selected = d.optString("no") }, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(10.dp)) {
+                    Column(Modifier.padding(12.dp)) {
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                            Text(d.optString("no"), fontWeight = FontWeight.Bold)
+                            Text(firstValue(d, "status"), fontSize = 12.sp, color = Color.Gray)
+                        }
+                        Text("Sevk: ${firstValue(d, "shipTo")} · Kaynak: ${firstValue(d, "sourceNo")}", fontSize = 12.sp, color = Color.Gray)
+                    }
+                }
+            }
+            if (rows.isEmpty() && !loading) item { EmptyState("Released sevkiyat belgesi yok.") }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun ShipDocument(no: String, onBack: () -> Unit) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var header by remember { mutableStateOf<JSONObject?>(null) }
+    var lines by remember { mutableStateOf<List<JSONObject>>(emptyList()) }
+    var status by remember { mutableStateOf("") }
+    var busy by remember { mutableStateOf(false) }
+    var printSlip by remember { mutableStateOf(true) }
+    var invoice by remember { mutableStateOf(false) }
+    var qtyLine by remember { mutableStateOf<JSONObject?>(null) }
+
+    fun reload() {
+        scope.launch {
+            busy = true
+            val h = BcApi.get(context, "shipments('$no')")
+            if (h.ok) header = JSONObject(h.body)
+            val l = BcApi.get(context, "shipmentLines?\$filter=no eq '$no'&\$top=100")
+            lines = if (l.ok) BcApi.parseValueArray(l.body) else emptyList()
+            busy = false
+        }
+    }
+    LaunchedEffect(no) { reload() }
+
+    val h = header
+    Column(Modifier.fillMaxSize()) {
+        Column(Modifier.weight(1f).padding(12.dp)) {
+            TextButton(onClick = onBack) { Text("‹ Belge Listesi") }
+            DocHeaderCard(
+                title = no,
+                subtitle = "Sevk: ${firstValue(h ?: JSONObject(), "shipTo")} · ${firstValue(h ?: JSONObject(), "status")}",
+            )
+            Spacer(Modifier.height(6.dp))
+            StatusText(status)
+            Spacer(Modifier.height(4.dp))
+            Text("Satırlar (${lines.size}) — qty/LP için dokunun", fontWeight = FontWeight.Bold, fontSize = 14.sp)
+            LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                items(lines) { ln ->
+                    Card(onClick = { qtyLine = ln }, modifier = Modifier.fillMaxWidth()) {
+                        Column(Modifier.padding(10.dp)) {
+                            Text("${ln.optString("itemNo")} — ${ln.optString("description")}", fontWeight = FontWeight.Medium)
+                            Text("Sevk edilecek: ${ln.optDouble("qtyToShip")} / ${ln.optDouble("qtyOutstanding")} · LP: ${firstValue(ln, "licensePlateNo")}", fontSize = 12.sp, color = Color.Gray)
+                        }
+                    }
+                }
+                if (lines.isEmpty() && !busy) item { EmptyState("Bu belgede satır yok.") }
+            }
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Checkbox(checked = printSlip, onCheckedChange = { printSlip = it })
+                Text("Packing slip yazdır", fontSize = 13.sp)
+                Spacer(Modifier.width(12.dp))
+                Checkbox(checked = invoice, onCheckedChange = { invoice = it })
+                Text("Faturalandır", fontSize = 13.sp)
+            }
+        }
+        BottomActionBar {
+            Button(
+                onClick = {
+                    scope.launch {
+                        busy = true; status = "Post..."
+                        val body = JSONObject().apply { put("print", printSlip); put("invoice", invoice) }.toString()
+                        val r = BcApi.boundAction(context, "shipments", no, "post", body)
+                        busy = false
+                        status = if (r.ok) "PASS: Sevkiyat kaydedildi (HTTP ${r.httpCode})" else "HATA: ${BcApi.errorMessage(r.body)} (HTTP ${r.httpCode})"
+                        if (r.ok) reload()
+                    }
+                },
+                enabled = !busy, modifier = Modifier.fillMaxWidth()
+            ) { Text("✅ Post Shipment", fontWeight = FontWeight.Bold) }
+        }
+    }
+
+    val ql = qtyLine
+    if (ql != null) {
+        QuantityDialogSheet(
+            title = "Sevk Miktarı + LP",
+            itemNo = ql.optString("itemNo"),
+            initialQty = ql.optDouble("qtyOutstanding").takeIf { it > 0 } ?: 1.0,
+            initialUom = ql.optString("uomCode"),
+            showLotSerial = false,
+            onDismiss = { qtyLine = null },
+            onConfirm = { res ->
+                qtyLine = null
+                scope.launch {
+                    busy = true; status = "Satır güncelleniyor..."
+                    val body = JSONObject().apply {
+                        put("qtyToShip", res.quantity)
+                        if (res.uom.isNotBlank()) put("binCode", firstValue(ql, "binCode"))
+                    }.toString()
+                    val lineNo = ql.optInt("lineNo")
+                    val r = BcApi.patch(context, "shipmentLines(no='$no',lineNo=$lineNo)", body)
+                    busy = false
+                    status = if (r.ok) "PASS: Satır güncellendi (HTTP ${r.httpCode})" else "HATA: ${BcApi.errorMessage(r.body)} (HTTP ${r.httpCode})"
+                    if (r.ok) reload()
+                }
+            }
+        )
+    }
+}

@@ -2,8 +2,8 @@ page 72220 "DOPSWHS Movement API"
 {
     PageType = API;
     APIPublisher = 'dynops';
-    APIGroup = 'wms';
-    APIVersion = 'v1.0';
+    APIGroup = 'warehouse';
+    APIVersion = 'v2.0';
     EntityName = 'movement';
     EntitySetName = 'movements';
     SourceTable = "Warehouse Activity Header";

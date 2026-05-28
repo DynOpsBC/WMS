@@ -1,0 +1,108 @@
+package com.dynops.bcwms
+
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.withContext
+import org.json.JSONObject
+import java.net.HttpURLConnection
+import java.net.URL
+import java.net.URLEncoder
+
+/**
+ * Email-based sign-in via the OAuth 2.0 Device Authorization Grant (no MSAL dependency).
+ * Flow: requestCode() -> show userCode + verificationUri -> user signs in (email) in a browser ->
+ * pollForToken() returns the BC access token. Tenant/client are BcApi.TENANT / BcApi.CLIENT_ID.
+ */
+object DeviceAuth {
+    private fun authority(path: String) =
+        "https://login.microsoftonline.com/${BcApi.TENANT}/oauth2/v2.0/$path"
+
+    // Request the BC delegated scope explicitly (dynamic consent) rather than ".default": the app
+    // registration's static API-permission list has a stale/invalid BC permission id, which makes
+    // ".default" fail with AADSTS65006. Asking for user_impersonation by URI resolves the real scope.
+    private val SCOPE = "${BcApi.BC_RESOURCE}/user_impersonation offline_access"
+
+    data class DeviceCode(
+        val deviceCode: String,
+        val userCode: String,
+        val verificationUri: String,
+        val interval: Int,
+        val expiresIn: Int,
+        val message: String,
+    )
+
+    sealed class TokenResult {
+        data class Success(val accessToken: String) : TokenResult()
+        data class Pending(val reason: String) : TokenResult()
+        data class Failure(val error: String) : TokenResult()
+    }
+
+    /** Step 1: request a device + user code. loginHint (email) is shown to the user as context. */
+    suspend fun requestCode(): Result<DeviceCode> = withContext(Dispatchers.IO) {
+        try {
+            val body = "client_id=${BcApi.CLIENT_ID}&scope=${enc(SCOPE)}"
+            val resp = postForm(authority("devicecode"), body)
+            val j = JSONObject(resp.second)
+            if (resp.first !in 200..299)
+                return@withContext Result.failure(Exception(j.optString("error_description", j.optString("error", "device code error"))))
+            Result.success(
+                DeviceCode(
+                    deviceCode = j.getString("device_code"),
+                    userCode = j.getString("user_code"),
+                    verificationUri = j.optString("verification_uri", "https://microsoft.com/devicelogin"),
+                    interval = j.optInt("interval", 5),
+                    expiresIn = j.optInt("expires_in", 900),
+                    message = j.optString("message"),
+                )
+            )
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    /**
+     * Step 2: poll the token endpoint until the user completes sign-in (or it times out).
+     * Honors the server interval and authorization_pending/slow_down semantics.
+     */
+    suspend fun pollForToken(code: DeviceCode): TokenResult = withContext(Dispatchers.IO) {
+        var intervalMs = code.interval.coerceAtLeast(1) * 1000L
+        val deadline = System.currentTimeMillis() + code.expiresIn * 1000L
+        while (System.currentTimeMillis() < deadline) {
+            delay(intervalMs)
+            val body = "grant_type=urn:ietf:params:oauth:grant-type:device_code" +
+                "&client_id=${BcApi.CLIENT_ID}&device_code=${enc(code.deviceCode)}"
+            val (status, text) = postForm(authority("token"), body)
+            val j = try { JSONObject(text) } catch (e: Exception) { JSONObject() }
+            if (status in 200..299) {
+                val token = j.optString("access_token")
+                if (token.isNotBlank()) return@withContext TokenResult.Success(token)
+            }
+            when (j.optString("error")) {
+                "authorization_pending" -> {}                       // keep waiting
+                "slow_down" -> intervalMs += 5000L                  // back off
+                "expired_token", "code_expired" -> return@withContext TokenResult.Failure("Kod süresi doldu, tekrar deneyin.")
+                "authorization_declined", "access_denied" -> return@withContext TokenResult.Failure("Giriş reddedildi.")
+                "" -> {}
+                else -> return@withContext TokenResult.Failure(j.optString("error_description", j.optString("error")))
+            }
+        }
+        TokenResult.Failure("Zaman aşımı — giriş tamamlanmadı.")
+    }
+
+    private fun enc(s: String) = URLEncoder.encode(s, "UTF-8")
+
+    private fun postForm(url: String, body: String): Pair<Int, String> {
+        val conn = (URL(url).openConnection() as HttpURLConnection).apply {
+            requestMethod = "POST"
+            setRequestProperty("Content-Type", "application/x-www-form-urlencoded")
+            setRequestProperty("Accept", "application/json")
+            doOutput = true
+            connectTimeout = 15000; readTimeout = 20000
+        }
+        conn.outputStream.use { it.write(body.toByteArray()) }
+        val code = conn.responseCode
+        val text = if (code in 200..299) conn.inputStream.bufferedReader().readText()
+            else conn.errorStream?.bufferedReader()?.readText() ?: "{}"
+        return code to text
+    }
+}

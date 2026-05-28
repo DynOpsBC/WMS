@@ -41,6 +41,9 @@ export function LpBrowserApp() {
     window.parent?.postMessage({ type: name, args }, "*");
   }, []);
 
+  // Tell the BC host the add-in is mounted so it can push the live LP tree via SetData.
+  useEffect(() => { invoke("ControlReady", []); }, [invoke]);
+
   const onNest = useCallback((childLpNo: string, parentLpNo: string) => {
     setLps((current) => moveNode(current, childLpNo, parentLpNo));
     invoke("NestLp", [childLpNo, parentLpNo]);

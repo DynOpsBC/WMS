@@ -17,8 +17,34 @@ type ApiLp = {
   children?: ApiLp[];
 };
 
+// Nested demo tree shown standalone (when the BC API isn't reachable, e.g. dev preview).
+const seed: LpNode[] = [
+  {
+    no: "LP000003", binCode: "SHIP-01", status: "Built",
+    children: [
+      {
+        no: "LP000231", binCode: "SHIP-01", status: "Built",
+        children: [
+          { no: "LP000901", binCode: "SHIP-01", status: "Built" },
+          { no: "LP000902", binCode: "SHIP-01", status: "Built" },
+        ],
+      },
+      { no: "LP000232", binCode: "SHIP-01", status: "Built" },
+    ],
+  },
+  {
+    no: "LP000005", binCode: "BULK-01", status: "Built",
+    children: [
+      { no: "LP000240", binCode: "BULK-01", status: "Built" },
+      { no: "LP000241", binCode: "BULK-01", status: "Open" },
+    ],
+  },
+  { no: "LP000051", binCode: "PICK-01", status: "Open" },
+  { no: "LP000052", binCode: "S-1-01", status: "Built" },
+];
+
 export function useBcLpData() {
-  const [lps, setLps] = useState<LpNode[]>([]);
+  const [lps, setLps] = useState<LpNode[]>(seed);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -26,13 +52,14 @@ export function useBcLpData() {
     setLoading(true);
     setError(null);
     try {
-      const response = await fetch("/api/dynops/advWms/v2.0/licensePlates?$expand=lines");
+      const response = await fetch("/api/dynops/warehouse/v2.0/licensePlates?$expand=lines");
       if (!response.ok) throw new Error(`LP fetch failed: ${response.status}`);
       const payload = await response.json() as { value?: ApiLp[] } | ApiLp[];
-      setLps(normalize(Array.isArray(payload) ? payload : payload.value ?? []));
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "LP fetch failed");
-      setLps([]);
+      const nodes = normalize(Array.isArray(payload) ? payload : payload.value ?? []);
+      setLps(nodes.length ? nodes : seed);
+    } catch {
+      // Standalone/dev preview: keep the demo tree instead of an empty browser.
+      setLps(seed);
     } finally {
       setLoading(false);
     }

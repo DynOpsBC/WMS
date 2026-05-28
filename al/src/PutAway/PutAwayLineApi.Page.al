@@ -2,8 +2,8 @@ page 72228 "DOPSWHS PutAway Line API"
 {
     PageType = API;
     APIPublisher = 'dynops';
-    APIGroup = 'wms';
-    APIVersion = 'v1.0';
+    APIGroup = 'warehouse';
+    APIVersion = 'v2.0';
     EntityName = 'putAwayLine';
     EntitySetName = 'putAwayLines';
     SourceTable = "Warehouse Activity Line";

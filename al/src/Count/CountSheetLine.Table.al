@@ -13,9 +13,11 @@ table 72017 "DOPSWHS Count Sheet Line"
         field(40; "LP No."; Code[20]) { Caption = 'LP No.'; DataClassification = CustomerContent; TableRelation = "DOPSWHS LP Header"; }
         field(50; "System Qty"; Decimal)
         {
+            // Snapshot of on-hand quantity captured when the count line is generated (NOT a live
+            // FlowField): keeps variance stable as inventory moves AND lets the API page list lines
+            // (BC rejects FlowFields in an API entity set's query column list).
             Caption = 'System Qty';
-            FieldClass = FlowField;
-            CalcFormula = sum("Bin Content".Quantity where("Item No." = field("Item No."), "Variant Code" = field("Variant Code"), "Bin Code" = field("Bin Code")));
+            DataClassification = CustomerContent;
             Editable = false;
         }
         field(60; "Counted Qty 1"; Decimal) { Caption = 'Counted Qty 1'; DataClassification = CustomerContent; }

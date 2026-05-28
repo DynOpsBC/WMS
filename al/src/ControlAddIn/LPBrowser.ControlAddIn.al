@@ -15,6 +15,7 @@ controladdin "DOPSWHS LP Browser"
     procedure SetLocale(code: Text);
     procedure RefreshTree();
 
+    event ControlReady();
     event NestLp(childLpNo: Text; parentLpNo: Text);
     event UnnestLp(childLpNo: Text);
     event PrintLabel(lpNo: Text; printerId: Text);

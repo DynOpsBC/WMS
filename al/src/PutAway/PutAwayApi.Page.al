@@ -2,8 +2,8 @@ page 72091 "DOPSWHS PutAway API"
 {
     PageType = API;
     APIPublisher = 'dynops';
-    APIGroup = 'wms';
-    APIVersion = 'v1.0';
+    APIGroup = 'warehouse';
+    APIVersion = 'v2.0';
     EntityName = 'putAway';
     EntitySetName = 'putAways';
     SourceTable = "Warehouse Activity Header";

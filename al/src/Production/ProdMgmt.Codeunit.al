@@ -5,7 +5,7 @@ codeunit 72048 "DOPSWHS Prod Mgmt"
     procedure Consume(var ProdOrderComponent: Record "Prod. Order Component"; ItemNo: Code[20]; Qty: Decimal; LpNo: Code[20]; LotNo: Code[50]; SerialNo: Code[50]; BinCode: Code[20])
     var
         ItemJournalLine: Record "Item Journal Line";
-        ItemJnlPost: Codeunit "Item Jnl.-Post";
+        ItemJnlPostBatch: Codeunit "Item Jnl.-Post Batch";
         ConsumeQty: Decimal;
         ConsumeItemNo: Code[20];
     begin
@@ -26,7 +26,8 @@ codeunit 72048 "DOPSWHS Prod Mgmt"
 
         CreateConsumptionLine(ProdOrderComponent, ConsumeItemNo, ConsumeQty, LpNo, LotNo, SerialNo, BinCode, ItemJournalLine);
         LogTelemetry('AdvWMS.Production.Consumed', ProdOrderComponent."Prod. Order No.");
-        ItemJnlPost.Run(ItemJournalLine);
+        // Post Batch (23) avoids the "Do you want to post?" Confirm that codeunit 241 raises (API/mobile-safe).
+        ItemJnlPostBatch.Run(ItemJournalLine);
         OnAfterConsume(ProdOrderComponent, ItemJournalLine);
     end;
 
@@ -50,7 +51,7 @@ codeunit 72048 "DOPSWHS Prod Mgmt"
     procedure ReportOutput(var ProdOrderRoutingLine: Record "Prod. Order Routing Line"; OutputQty: Decimal; ScrapQty: Decimal; Runtime: Decimal; NewLpTemplate: Code[20]; BinCode: Code[20]): Code[20]
     var
         ItemJournalLine: Record "Item Journal Line";
-        ItemJnlPost: Codeunit "Item Jnl.-Post";
+        ItemJnlPostBatch: Codeunit "Item Jnl.-Post Batch";
         NewLpNo: Code[20];
     begin
         OnBeforeOutput(ProdOrderRoutingLine, OutputQty, ScrapQty, Runtime, NewLpTemplate, BinCode);
@@ -60,7 +61,7 @@ codeunit 72048 "DOPSWHS Prod Mgmt"
 
         CreateOutputLine(ProdOrderRoutingLine, OutputQty, ScrapQty, Runtime, BinCode, ItemJournalLine);
         LogTelemetry('AdvWMS.Production.Output', ProdOrderRoutingLine."Prod. Order No.");
-        ItemJnlPost.Run(ItemJournalLine);
+        ItemJnlPostBatch.Run(ItemJournalLine);
 
         if NewLpTemplate <> '' then
             NewLpNo := CreateOutputLp(ProdOrderRoutingLine, OutputQty, NewLpTemplate, BinCode);
@@ -121,11 +122,13 @@ codeunit 72048 "DOPSWHS Prod Mgmt"
     begin
         EnsureItemJournalBatch(TemplateName, BatchName);
         InitItemJournalLine(TemplateName, BatchName, ItemJournalLine);
-        ItemJournalLine."Entry Type" := ItemJournalLine."Entry Type"::Consumption;
-        ItemJournalLine.Validate("Item No.", ItemNo);
+        // Order context BEFORE Item No.: validating Item No. first clears the order link, leaving the
+        // posting to reject the line with "Order Type must be Production".
+        ItemJournalLine.Validate("Entry Type", ItemJournalLine."Entry Type"::Consumption);
         ItemJournalLine.Validate("Order Type", ItemJournalLine."Order Type"::Production);
         ItemJournalLine.Validate("Order No.", ProdOrderComponent."Prod. Order No.");
         ItemJournalLine.Validate("Order Line No.", ProdOrderComponent."Prod. Order Line No.");
+        ItemJournalLine.Validate("Item No.", ItemNo);
         ItemJournalLine.Validate("Prod. Order Comp. Line No.", ProdOrderComponent."Line No.");
         ItemJournalLine.Validate("Location Code", ProdOrderComponent."Location Code");
         if BinCode <> '' then
@@ -149,11 +152,11 @@ codeunit 72048 "DOPSWHS Prod Mgmt"
         ProdOrderLine.Get(ProdOrderRoutingLine.Status, ProdOrderRoutingLine."Prod. Order No.", ProdOrderRoutingLine."Routing Reference No.");
         EnsureItemJournalBatch(TemplateName, BatchName);
         InitItemJournalLine(TemplateName, BatchName, ItemJournalLine);
-        ItemJournalLine."Entry Type" := ItemJournalLine."Entry Type"::Output;
-        ItemJournalLine.Validate("Item No.", ProdOrderLine."Item No.");
+        ItemJournalLine.Validate("Entry Type", ItemJournalLine."Entry Type"::Output);
         ItemJournalLine.Validate("Order Type", ItemJournalLine."Order Type"::Production);
         ItemJournalLine.Validate("Order No.", ProdOrderRoutingLine."Prod. Order No.");
         ItemJournalLine.Validate("Order Line No.", ProdOrderRoutingLine."Routing Reference No.");
+        ItemJournalLine.Validate("Item No.", ProdOrderLine."Item No.");
         ItemJournalLine.Validate("Routing No.", ProdOrderRoutingLine."Routing No.");
         ItemJournalLine.Validate("Operation No.", ProdOrderRoutingLine."Operation No.");
         ItemJournalLine.Validate("Location Code", ProdOrderLine."Location Code");

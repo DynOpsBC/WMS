@@ -116,13 +116,20 @@ suspend fun boundAction(context, entitySet, key, action, body): ApiResult
 
 ## Deploy Stratejisi (3 faz)
 
-### Faz 1 — Aksiyon-yetenekli çekirdek (bu deploy)
+### ✅ Faz 1 — Aksiyon-yetenekli çekirdek (v1.3.0, TAMAMLANDI)
 Receiving (post), Picking (register + pick-to-LP), LP (build/stop/transfer/unbuild), Count (post), Ad-hoc Move, Item/Bin inquiry detail kartları. Kamera barkod tarama entegre.
 
-### Faz 2 — Tam modül seti
-Put-Away, Shipping, Production, Assembly, Directed Move, Advanced Count blind.
+### ✅ Faz 2 — Tam modül seti (v1.4.0, TAMAMLANDI)
+Put-Away (suggest bin → Register), Shipping (qty/LP → Post + packing slip), Production (Sarfiyat + Output → yeni LP, sekmeli), Assembly (bileşenler → Post), Directed Move (movements → Register), Advanced/blind Count (sayıcı slot 1-3 + recount + post).
 
-### Faz 3 — Hardening
+**Önkoşul kök-neden düzeltmesi (v1.0.8.0):** `movements`/`countSheets`/`putAways`/`shipments` entity set'leri yanlış `APIGroup`/`APIVersion` (wms/v1.0, advWms, warehouseOps) ile yayınlanmıştı → mobil app'in sorguladığı `dynops/warehouse/v2.0` route'unda 404 dönüyordu. 7 API sayfası `warehouse`/`v2.0`'a normalize edildi, republish edildi, 8/8 entity set HTTP 200 doğrulandı.
+
+**Canlı doğrulama (emulator BCWMSEmu, BC SaaS CustomerSandbox):**
+- 🟢 Bağlı, tüm tile'lar görünür (Put-Away, Sevkiyat, Üretim, Montaj, Yönlendirilmiş dahil)
+- Put-Away → live `putAways` HTTP 200; Üretim → sekmeli, live `productionConsumption` HTTP 200
+- Sayım → 7 canlı count sheet (HTTP 200), drill → BLIND badge + lines fetch + Recount/Post action bar
+
+### Faz 3 — Hardening (sonraki)
 Offline queue, DataWedge/Honeywell SDK, MSAL OAuth (token-paste yerine), Play Store signing.
 
 ---

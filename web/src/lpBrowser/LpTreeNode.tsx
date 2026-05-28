@@ -16,6 +16,9 @@ export function LpTreeNode({ node, depth = 0, onNest, onContextMenu, onLoadChild
   const [{ isDragging }, dragRef] = useLpDrag(node.no);
   const [{ isOver }, dropRef] = useLpDrop(node.no, onNest);
   const hasChildren = children.length > 0;
+  const icon = depth === 0 ? "🟫" : depth === 1 ? "📦" : "🔖";
+  const kind = depth === 0 ? "Palet" : depth === 1 ? "Koli" : "Birim";
+  const statusKey = (node.status ?? "").toLowerCase();
 
   const toggle = useCallback(async () => {
     if (!expanded && children.length === 0) {
@@ -31,20 +34,21 @@ export function LpTreeNode({ node, depth = 0, onNest, onContextMenu, onLoadChild
           dragRef(element);
           dropRef(element);
         }}
-        className={`lp-node${isOver ? " lp-node--over" : ""}${isDragging ? " lp-node--dragging" : ""}`}
-        style={{ paddingLeft: depth * 18 + 8 }}
+        className={`lp-node lp-node--d${Math.min(depth, 2)}${isOver ? " lp-node--over" : ""}${isDragging ? " lp-node--dragging" : ""}`}
         onContextMenu={(event) => {
           event.preventDefault();
           onContextMenu(node.no, event.clientX, event.clientY);
         }}
       >
         <button className="lp-node__toggle" onClick={toggle} aria-label={expanded ? "Collapse" : "Expand"}>
-          {expanded ? "−" : "+"}
+          {hasChildren ? (expanded ? "▾" : "▸") : ""}
         </button>
-        <span className="lp-node__handle" aria-hidden="true">⋮⋮</span>
-        <span className="lp-node__no">{node.no}</span>
-        <span className="lp-node__meta">{node.binCode ?? ""}</span>
-        <span className="lp-node__status">{node.status ?? ""}</span>
+        <span className="lp-node__icon" aria-hidden="true">{icon}</span>
+        <span className="lp-node__no">{node.no}<span className="lp-node__kind">{kind}</span></span>
+        {node.binCode ? <span className="lp-node__bin">📍 {node.binCode}</span> : <span />}
+        {hasChildren ? <span className="lp-node__count">{children.length}</span> : <span />}
+        <span className={`lp-badge lp-badge--${statusKey || "none"}`}>{node.status ?? "—"}</span>
+        <span className="lp-node__handle" aria-hidden="true" title="Sürükle">⋮⋮</span>
       </div>
       {expanded && hasChildren ? (
         <ul className="lp-tree">
