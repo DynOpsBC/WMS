@@ -63,6 +63,30 @@ object BcApi {
     suspend fun post(context: Context, path: String, jsonBody: String?): ApiResult =
         request(context, "POST", path, jsonBody)
 
+    suspend fun patch(context: Context, path: String, jsonBody: String): ApiResult =
+        request(context, "PATCH", path, jsonBody)
+
+    suspend fun delete(context: Context, path: String): ApiResult =
+        request(context, "DELETE", path, null)
+
+    /**
+     * Bound action: POST .../{entitySet}({key})/Microsoft.NAV.{action}
+     * BC custom-API string keys MUST be single-quoted, e.g. licensePlates('LP000001').
+     * Multi-segment keys (composite) may be passed already-formatted; we only quote when
+     * the key is not already wrapped in parentheses-style segments.
+     */
+    suspend fun boundAction(
+        context: Context,
+        entitySet: String,
+        key: String,
+        action: String,
+        body: String = "{}"
+    ): ApiResult {
+        val keySegment = if (key.contains("=") || key.startsWith("'")) key else "'${key.replace("'", "''")}'"
+        val path = "$entitySet($keySegment)/Microsoft.NAV.$action"
+        return request(context, "POST", path, body)
+    }
+
     private suspend fun request(context: Context, method: String, path: String, jsonBody: String?): ApiResult =
         withContext(Dispatchers.IO) {
             val token = getToken(context)
@@ -70,10 +94,15 @@ object BcApi {
             try {
                 val rawUrl = if (path.startsWith("http")) path else "${customApiBase()}/$path"
                 val url = URL(rawUrl.replace(" ", "%20").replace("'", "%27"))
+                // HttpURLConnection cannot send PATCH natively; tunnel it via POST + override header.
+                val needsOverride = method == "PATCH"
                 val conn = (url.openConnection() as HttpURLConnection).apply {
-                    requestMethod = method
+                    requestMethod = if (needsOverride) "POST" else method
+                    if (needsOverride) setRequestProperty("X-HTTP-Method-Override", "PATCH")
                     setRequestProperty("Authorization", "Bearer $token")
                     setRequestProperty("Accept", "application/json")
+                    // BC requires If-Match for PATCH/DELETE; "*" skips optimistic-concurrency check.
+                    if (method == "PATCH" || method == "DELETE") setRequestProperty("If-Match", "*")
                     if (jsonBody != null) {
                         setRequestProperty("Content-Type", "application/json")
                         doOutput = true
@@ -95,6 +124,18 @@ object BcApi {
 
     // ---- Connection test ----
     suspend fun testConnection(context: Context): ApiResult = get(context, "licensePlates?\$top=1")
+
+    /** Bound actions that return Edm.String wrap the result as {"value":"..."}; extract it. */
+    fun scalarValue(body: String): String =
+        try { JSONObject(body).optString("value") } catch (e: Exception) { "" }
+
+    /** Pull a human-readable message out of a BC error body (or fall back to raw). */
+    fun errorMessage(body: String): String =
+        try {
+            JSONObject(body).getJSONObject("error").optString("message").ifBlank { body }
+        } catch (e: Exception) {
+            body.take(300)
+        }
 
     // ---- Helper: JSON value array parse ----
     fun parseValueArray(body: String): List<JSONObject> {

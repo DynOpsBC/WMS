@@ -12,8 +12,8 @@ android {
     applicationId = "com.dynops.bcwms"
     minSdk = 26
     targetSdk = 35
-    versionCode = 3
-    versionName = "1.2.0"
+    versionCode = 4
+    versionName = "1.3.0"
   }
 
   buildFeatures {
@@ -41,4 +41,12 @@ dependencies {
   implementation(libs.androidx.compose.material3)
   implementation("androidx.compose.foundation:foundation")
   implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0")
+
+  // Barcode scanning (camera) — graceful manual-entry fallback if camera/permission unavailable
+  implementation("com.google.mlkit:barcode-scanning:17.3.0")
+  implementation("androidx.camera:camera-core:1.4.0")
+  implementation("androidx.camera:camera-camera2:1.4.0")
+  implementation("androidx.camera:camera-lifecycle:1.4.0")
+  implementation("androidx.camera:camera-view:1.4.0")
+  implementation("androidx.lifecycle:lifecycle-runtime-compose:2.8.7")
 }

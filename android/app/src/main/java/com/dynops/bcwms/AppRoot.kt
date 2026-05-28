@@ -18,6 +18,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.dynops.bcwms.feature.*
 import kotlinx.coroutines.launch
 import org.json.JSONObject
 import java.text.SimpleDateFormat
@@ -32,6 +33,12 @@ enum class Screen(val title: String) {
     BinInquiry("Bin Inquiry"),
     Receiving("Mal Kabul"),
     Picking("Toplama"),
+    AdHocMove("Ad-Hoc Hareket"),
+    Count("Sayım"),
+    PutAway("Put-Away"),
+    Shipping("Sevkiyat"),
+    Production("Üretim"),
+    Assembly("Montaj"),
     TestCenter("Test Center"),
 }
 
@@ -67,11 +74,17 @@ fun AppRoot() {
             when (screen) {
                 Screen.Home -> HomeScreen(connected) { screen = it }
                 Screen.Connection -> ConnectionScreen(onConnected = { connected = it })
-                Screen.LicensePlates -> LicensePlatesScreen()
-                Screen.ItemInquiry -> ItemInquiryScreen()
-                Screen.BinInquiry -> BinInquiryScreen()
-                Screen.Receiving -> DocumentListScreen("receipts", "Mal Kabul Belgeleri", "Açık mal kabul belgesi yok.")
-                Screen.Picking -> DocumentListScreen("picks", "Toplama Belgeleri", "Açık toplama belgesi yok.")
+                Screen.LicensePlates -> LicensePlateModule()
+                Screen.ItemInquiry -> ItemInquiryModule()
+                Screen.BinInquiry -> BinInquiryModule()
+                Screen.Receiving -> ReceivingModule()
+                Screen.Picking -> PickingModule()
+                Screen.AdHocMove -> AdHocMoveModule()
+                Screen.Count -> CountModule()
+                Screen.PutAway -> ComingSoonScreen("Put-Away", "Yerleştirme belge listesi → suggest bin → Register. BC putaways API'si yayınlandığında aktif olur.")
+                Screen.Shipping -> ComingSoonScreen("Sevkiyat", "Released sevkiyat belgesi → Post + packing slip. BC shipments API'si yayınlandığında aktif olur.")
+                Screen.Production -> ComingSoonScreen("Üretim", "Sarfiyat (consume) + Output (→ yeni LP). productionConsumption/productionOutput action'ları Faz 2'de bağlanacak.")
+                Screen.Assembly -> ComingSoonScreen("Montaj", "Montaj emri → bileşenler → Post. assemblies API mevcut, akış Faz 2'de tamamlanacak.")
                 Screen.TestCenter -> TestCenterScreen()
             }
         }
@@ -97,6 +110,12 @@ private fun HomeScreen(connected: Boolean, onNavigate: (Screen) -> Unit) {
         Tile(Screen.LicensePlates, "📦", "License Plate"),
         Tile(Screen.Receiving, "📥", "Mal Kabul"),
         Tile(Screen.Picking, "🚚", "Toplama"),
+        Tile(Screen.AdHocMove, "↔️", "Ad-Hoc Hareket"),
+        Tile(Screen.Count, "🔢", "Sayım"),
+        Tile(Screen.PutAway, "📤", "Put-Away"),
+        Tile(Screen.Shipping, "🚢", "Sevkiyat"),
+        Tile(Screen.Production, "🏭", "Üretim"),
+        Tile(Screen.Assembly, "🔧", "Montaj"),
         Tile(Screen.ItemInquiry, "🔎", "Item Inquiry"),
         Tile(Screen.BinInquiry, "📍", "Bin Inquiry"),
         Tile(Screen.TestCenter, "🧪", "Test Center"),
@@ -189,222 +208,6 @@ private fun ConnectionScreen(onConnected: (Boolean) -> Unit) {
         Card { Text(status, Modifier.padding(12.dp), fontSize = 13.sp) }
     }
 }
-
-@Composable
-private fun LicensePlatesScreen() {
-    val context = androidx.compose.ui.platform.LocalContext.current
-    val scope = rememberCoroutineScope()
-    var rows by remember { mutableStateOf<List<JSONObject>>(emptyList()) }
-    var status by remember { mutableStateOf("") }
-    var loading by remember { mutableStateOf(false) }
-
-    fun load() {
-        scope.launch {
-            loading = true; status = "Yükleniyor..."
-            val r = BcApi.getWithStandardFallback(context, "licensePlates?\$top=50&\$select=no,status,locationCode,binCode,templateCode,sscc")
-            loading = false
-            if (r.ok) {
-                rows = BcApi.parseValueArray(r.body)
-                status = if (rows.isEmpty()) "EMPTY: License Plate kaydı bulunamadı (HTTP ${r.httpCode})." else "PASS: ${rows.size} LP yüklendi (HTTP ${r.httpCode})."
-            } else status = "EMPTY: License Plate servisi yanıt vermedi (HTTP ${r.httpCode})."
-        }
-    }
-    LaunchedEffect(Unit) { load() }
-
-    Column(Modifier.fillMaxSize().padding(12.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Button(onClick = { load() }, enabled = !loading) { Text(if (loading) "..." else "🔄 Yenile") }
-            Spacer(Modifier.width(8.dp))
-            Button(onClick = {
-                scope.launch {
-                    loading = true; status = "Yeni LP oluşturuluyor..."
-                    val generatedNo = "MOB-${SimpleDateFormat("HHmmss", Locale.US).format(Date())}"
-                    var r = BcApi.post(context, "licensePlates",
-                        """{"templateCode":"CARTON-S","locationCode":"SILVER","binCode":"S-1-01"}""")
-                    if (!r.ok) {
-                        r = BcApi.post(context, "licensePlates",
-                            """{"no":"$generatedNo","templateCode":"CARTON-S","locationCode":"SILVER","binCode":"S-1-01"}""")
-                    }
-                    loading = false
-                    status = if (r.ok) "PASS: Yeni LP oluşturuldu (HTTP ${r.httpCode})." else "EMPTY: LP oluşturma BC tarafından reddedildi (HTTP ${r.httpCode})."
-                    if (r.ok) load()
-                }
-            }, enabled = !loading) { Text("➕ Yeni LP") }
-        }
-        Spacer(Modifier.height(4.dp))
-        Text(status, fontSize = 12.sp, color = Color.Gray)
-        Spacer(Modifier.height(8.dp))
-        LazyColumn(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            items(rows) { lp ->
-                Card(Modifier.fillMaxWidth()) {
-                    Column(Modifier.padding(12.dp)) {
-                        Text(lp.optString("no"), fontWeight = FontWeight.Bold)
-                        Text("Status: ${lp.optString("status")} · ${lp.optString("templateCode")}", fontSize = 12.sp)
-                        Text("Bin: ${lp.optString("locationCode")}/${lp.optString("binCode")}", fontSize = 12.sp, color = Color.Gray)
-                        if (lp.optString("sscc").isNotBlank())
-                            Text("SSCC: ${lp.optString("sscc")}", fontSize = 11.sp, color = Color.Gray)
-                    }
-                }
-            }
-            if (rows.isEmpty() && !loading) {
-                item { EmptyState("License Plate kaydı bulunamadı.") }
-            }
-        }
-    }
-}
-
-@Composable
-private fun ItemInquiryScreen() {
-    val context = androidx.compose.ui.platform.LocalContext.current
-    val scope = rememberCoroutineScope()
-    var query by remember { mutableStateOf("1896-S") }
-    var rows by remember { mutableStateOf<List<JSONObject>>(emptyList()) }
-    var status by remember { mutableStateOf("1896-S için sorgulayın.") }
-    var loading by remember { mutableStateOf(false) }
-
-    fun load() {
-        scope.launch {
-            loading = true; status = "Sorgulanıyor..."
-            val customFilter = if (query.isBlank()) "\$top=10" else "\$filter=no eq '$query'&\$top=10"
-            val standardFilter = if (query.isBlank()) "\$top=10" else "\$filter=number eq '$query'&\$top=10"
-            val r = BcApi.getWithStandardFallback(context, "items?$customFilter", "items?$standardFilter")
-            loading = false
-            if (r.ok) {
-                rows = BcApi.parseValueArray(r.body)
-                status = if (rows.isEmpty()) "EMPTY: '${query}' için item bulunamadı (HTTP ${r.httpCode})." else "PASS: ${rows.size} item bulundu (HTTP ${r.httpCode})."
-            } else {
-                rows = emptyList()
-                status = "EMPTY: Item sorgusu başarısız oldu (HTTP ${r.httpCode})."
-            }
-        }
-    }
-    LaunchedEffect(Unit) { load() }
-
-    Column(Modifier.fillMaxSize().padding(12.dp)) {
-        OutlinedTextField(value = query, onValueChange = { query = it }, label = { Text("Item No (örn 1896-S)") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
-        Spacer(Modifier.height(8.dp))
-        Button(enabled = !loading, onClick = { load() }) { Text(if (loading) "..." else "🔎 Sorgula") }
-        Spacer(Modifier.height(12.dp))
-        Text(status, fontSize = 12.sp, color = Color.Gray)
-        Spacer(Modifier.height(8.dp))
-        LazyColumn(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            items(rows) { item ->
-                Card(Modifier.fillMaxWidth()) {
-                    Column(Modifier.padding(12.dp)) {
-                        Text(firstValue(item, "no", "number", "itemNo"), fontWeight = FontWeight.Bold)
-                        Text(firstValue(item, "description", "displayName"), fontSize = 13.sp)
-                        Text("Base UoM: ${firstValue(item, "baseUnitOfMeasure", "baseUoM", "unitOfMeasureCode")}", fontSize = 12.sp, color = Color.Gray)
-                    }
-                }
-            }
-            if (rows.isEmpty() && !loading) {
-                item { EmptyState("Item sonucu yok. Arama terimini kontrol edin.") }
-            }
-        }
-    }
-}
-
-@Composable
-private fun BinInquiryScreen() {
-    val context = androidx.compose.ui.platform.LocalContext.current
-    val scope = rememberCoroutineScope()
-    var query by remember { mutableStateOf("SILVER") }
-    var rows by remember { mutableStateOf<List<JSONObject>>(emptyList()) }
-    var status by remember { mutableStateOf("SILVER lokasyonu için sorgulayın.") }
-    var loading by remember { mutableStateOf(false) }
-
-    fun load() {
-        scope.launch {
-            loading = true; status = "Yükleniyor..."
-            val filter = if (query.isBlank()) "locationCode eq 'SILVER'" else "locationCode eq '$query'"
-            var r = BcApi.getWithStandardFallback(context, "bins?\$filter=$filter&\$top=20", "bins?\$filter=$filter&\$top=20")
-            if (!r.ok && query.isNotBlank()) {
-                r = BcApi.getWithStandardFallback(context, "bins?\$filter=code eq '$query'&\$top=20", "bins?\$filter=code eq '$query'&\$top=20")
-            }
-            loading = false
-            if (r.ok) {
-                rows = BcApi.parseValueArray(r.body)
-                status = if (rows.isEmpty()) "EMPTY: Bin bulunamadı (HTTP ${r.httpCode})." else "PASS: ${rows.size} bin yüklendi (HTTP ${r.httpCode})."
-            } else {
-                rows = emptyList()
-                status = "EMPTY: Bin servisi filtre ile veri döndürmedi (HTTP ${r.httpCode})."
-            }
-        }
-    }
-    LaunchedEffect(Unit) { load() }
-
-    Column(Modifier.fillMaxSize().padding(12.dp)) {
-        OutlinedTextField(value = query, onValueChange = { query = it }, label = { Text("Location Code veya Bin Code") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
-        Spacer(Modifier.height(8.dp))
-        Button(onClick = { load() }, enabled = !loading) { Text(if (loading) "..." else "🔎 Sorgula") }
-        Spacer(Modifier.height(8.dp))
-        Text(status, fontSize = 12.sp, color = Color.Gray)
-        Spacer(Modifier.height(8.dp))
-        LazyColumn(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            items(rows) { bin ->
-                Card(Modifier.fillMaxWidth()) {
-                    Column(Modifier.padding(12.dp)) {
-                        Text(firstValue(bin, "code", "no", "binCode"), fontWeight = FontWeight.Bold)
-                        Text("Location: ${firstValue(bin, "locationCode")}", fontSize = 12.sp)
-                        Text("Zone: ${firstValue(bin, "zoneCode")} · Type: ${firstValue(bin, "binTypeCode")}", fontSize = 12.sp, color = Color.Gray)
-                    }
-                }
-            }
-            if (rows.isEmpty() && !loading) {
-                item { EmptyState("Bin sonucu yok. SILVER lokasyonu varsayılan filtre olarak kullanılır.") }
-            }
-        }
-    }
-}
-
-@Composable
-private fun DocumentListScreen(entitySet: String, title: String, emptyMessage: String) {
-    val context = androidx.compose.ui.platform.LocalContext.current
-    val scope = rememberCoroutineScope()
-    var rows by remember { mutableStateOf<List<JSONObject>>(emptyList()) }
-    var status by remember { mutableStateOf("") }
-    var loading by remember { mutableStateOf(false) }
-
-    fun load() {
-        scope.launch {
-            loading = true; status = "Yükleniyor..."
-            val r = BcApi.getWithStandardFallback(context, "$entitySet?\$top=20")
-            loading = false
-            if (r.ok) {
-                rows = BcApi.parseValueArray(r.body)
-                status = if (rows.isEmpty()) "EMPTY: $emptyMessage (HTTP ${r.httpCode})." else "PASS: ${rows.size} kayıt yüklendi (HTTP ${r.httpCode})."
-            } else {
-                rows = emptyList()
-                status = "EMPTY: $title servisi veri döndürmedi (HTTP ${r.httpCode})."
-            }
-        }
-    }
-    LaunchedEffect(Unit) { load() }
-
-    Column(Modifier.fillMaxSize().padding(12.dp)) {
-        Text(title, fontWeight = FontWeight.Bold)
-        Spacer(Modifier.height(8.dp))
-        Button(onClick = { load() }, enabled = !loading) { Text(if (loading) "..." else "🔄 Yenile") }
-        Spacer(Modifier.height(8.dp))
-        Text(status, fontSize = 12.sp, color = Color.Gray)
-        Spacer(Modifier.height(8.dp))
-        LazyColumn(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            items(rows) { doc ->
-                Card(Modifier.fillMaxWidth()) {
-                    Column(Modifier.padding(12.dp)) {
-                        Text(firstValue(doc, "no", "number", "documentNo"), fontWeight = FontWeight.Bold)
-                        Text("Status: ${firstValue(doc, "status", "warehouseStatus")}", fontSize = 12.sp)
-                        Text("Location: ${firstValue(doc, "locationCode")} · Source: ${firstValue(doc, "sourceNo", "sourceDocumentNo")}", fontSize = 12.sp, color = Color.Gray)
-                    }
-                }
-            }
-            if (rows.isEmpty() && !loading) {
-                item { EmptyState(emptyMessage) }
-            }
-        }
-    }
-}
-
 @Composable
 private fun TestCenterScreen() {
     val context = androidx.compose.ui.platform.LocalContext.current
