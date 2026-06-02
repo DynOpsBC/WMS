@@ -15,6 +15,7 @@ codeunit 72033 "DOPSWHS Install"
         QualityMgmt: Codeunit "DOPSWHS Quality Mgmt";
         WebSvcPublisher: Codeunit "DOPSWHS Web Svc Publisher";
         ConfigChecker: Codeunit "DOPSWHS Config Checker";
+        AppProfileMgmt: Codeunit "DOPSWHS App Profile Mgmt";
     begin
         if not Setup.Get('') then begin
             Setup.Init();
@@ -34,6 +35,7 @@ codeunit 72033 "DOPSWHS Install"
         PostingSmokeTest.EnsureRows();
         QualityMgmt.SeedDemoOrders();
         WebSvcPublisher.PublishAll();  // expose standard pages as web services for no-API operations
+        AppProfileMgmt.SeedDefaults();          // seed DEFAULT app profile + install-user profile
         ConfigChecker.RegisterAssistedSetup();  // seed config checklist + register Assisted Setup
     end;
 }

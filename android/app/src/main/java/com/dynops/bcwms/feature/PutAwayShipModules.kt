@@ -149,7 +149,7 @@ private fun PutAwayDocument(no: String, onBack: () -> Unit) {
                     busy = true; status = "Satır güncelleniyor..."
                     val body = JSONObject().apply { put("binCode", bin); put("qtyToHandle", qty) }.toString()
                     val lineNo = bl.optInt("lineNo")
-                    val actType = firstValue(bl, "activityType").ifBlank { "Put-away" }
+                    val actType = firstValue(bl, "activityType").ifBlank { BcEnum.WhseActivityType.PUT_AWAY }
                     val r = BcApi.patch(context, "putAwayLines(activityType='$actType',no='$no',lineNo=$lineNo)", body)
                     busy = false
                     status = if (r.ok) "PASS: Satır güncellendi → $bin (HTTP ${r.httpCode})" else "HATA: ${BcApi.errorMessage(r.body)} (HTTP ${r.httpCode})"

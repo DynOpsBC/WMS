@@ -41,6 +41,16 @@ page 72088 "DOPSWHS LP API"
         }
     }
 
+    trigger OnOpenPage()
+    var
+        FilterMgmt: Codeunit "DOPSWHS App Role Filter Mgmt";
+        RecRef: RecordRef;
+    begin
+        RecRef.GetTable(Rec);
+        FilterMgmt.ApplyForCurrentUser(RecRef, Enum::"DOPSWHS App Filter Entity"::LicensePlate);
+        RecRef.SetTable(Rec);
+    end;
+
     [ServiceEnabled]
     procedure assign(docType: Enum "DOPSWHS Assigned Doc Type"; docNo: Code[20])
     var

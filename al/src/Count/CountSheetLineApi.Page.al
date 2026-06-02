@@ -32,6 +32,16 @@ page 72487 "DOPSWHS Count Sheet Line API"
         }
     }
 
+    trigger OnOpenPage()
+    var
+        FilterMgmt: Codeunit "DOPSWHS App Role Filter Mgmt";
+        RecRef: RecordRef;
+    begin
+        RecRef.GetTable(Rec);
+        FilterMgmt.ApplyForCurrentUser(RecRef, Enum::"DOPSWHS App Filter Entity"::CountSheetLine);
+        RecRef.SetTable(Rec);
+    end;
+
     [ServiceEnabled]
     procedure recordCount(counterSlot: Integer; qty: Decimal)
     var

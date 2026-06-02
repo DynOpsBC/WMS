@@ -38,6 +38,16 @@ page 72256 "DOPSWHS Quality Order API"
     }
 
     /// <summary>Records a PASS result on this quality order.</summary>
+    trigger OnOpenPage()
+    var
+        FilterMgmt: Codeunit "DOPSWHS App Role Filter Mgmt";
+        RecRef: RecordRef;
+    begin
+        RecRef.GetTable(Rec);
+        FilterMgmt.ApplyForCurrentUser(RecRef, Enum::"DOPSWHS App Filter Entity"::QualityOrder);
+        RecRef.SetTable(Rec);
+    end;
+
     [ServiceEnabled]
     procedure pass(inspector: Code[50]; notes: Text[250])
     var

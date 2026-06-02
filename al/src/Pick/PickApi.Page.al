@@ -36,6 +36,16 @@ page 72092 "DOPSWHS Pick API"
         }
     }
 
+    trigger OnOpenPage()
+    var
+        FilterMgmt: Codeunit "DOPSWHS App Role Filter Mgmt";
+        RecRef: RecordRef;
+    begin
+        RecRef.GetTable(Rec);
+        FilterMgmt.ApplyForCurrentUser(RecRef, Enum::"DOPSWHS App Filter Entity"::Pick);
+        RecRef.SetTable(Rec);
+    end;
+
     trigger OnAfterGetRecord()
     begin
         FillCalculatedFields();

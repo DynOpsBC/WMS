@@ -102,7 +102,7 @@ private fun ConsumptionTab() {
                         put("binCode", binCode.ifBlank { cl.optString("binCode") })
                     }.toString()
                     // Composite-key bound action target (status/prodOrderNo/prodOrderLineNo/componentLineNo).
-                    val key = "status='${cl.optString("status").ifBlank { "Released" }}'," +
+                    val key = "status='${cl.optString("status").ifBlank { BcEnum.ProdOrderStatus.RELEASED }}'," +
                         "prodOrderNo='${cl.optString("prodOrderNo")}'," +
                         "prodOrderLineNo=${cl.optInt("prodOrderLineNo")}," +
                         "componentLineNo=${cl.optInt("componentLineNo")}"
@@ -210,7 +210,7 @@ private fun OutputTab() {
                         put("newLpTemplate", newLpTemplate)
                         put("binCode", binCode)
                     }.toString()
-                    val key = "status='${ol.optString("status").ifBlank { "Released" }}'," +
+                    val key = "status='${ol.optString("status").ifBlank { BcEnum.ProdOrderStatus.RELEASED }}'," +
                         "prodOrderNo='${ol.optString("prodOrderNo")}'," +
                         "routingLineNo=${ol.optInt("routingLineNo")}," +
                         "routingNo='${ol.optString("routingNo")}'," +
@@ -318,7 +318,7 @@ private fun AssemblyDocument(no: String, onBack: () -> Unit) {
     var lines by remember { mutableStateOf<List<JSONObject>>(emptyList()) }
     var status by remember { mutableStateOf("") }
     var busy by remember { mutableStateOf(false) }
-    val key = "documentType='Order',no='$no'"
+    val key = "documentType='${BcEnum.AssemblyDocType.ORDER}',no='$no'"
 
     fun reload() {
         scope.launch {

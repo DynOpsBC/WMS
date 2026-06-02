@@ -36,6 +36,16 @@ page 72093 "DOPSWHS Shipment API"
         }
     }
 
+    trigger OnOpenPage()
+    var
+        FilterMgmt: Codeunit "DOPSWHS App Role Filter Mgmt";
+        RecRef: RecordRef;
+    begin
+        RecRef.GetTable(Rec);
+        FilterMgmt.ApplyForCurrentUser(RecRef, Enum::"DOPSWHS App Filter Entity"::Shipment);
+        RecRef.SetTable(Rec);
+    end;
+
     trigger OnAfterGetRecord()
     begin
         FillCalculatedFields();

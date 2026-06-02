@@ -27,4 +27,14 @@ page 72228 "DOPSWHS PutAway Line API"
             }
         }
     }
+    trigger OnOpenPage()
+    var
+        FilterMgmt: Codeunit "DOPSWHS App Role Filter Mgmt";
+        RecRef: RecordRef;
+    begin
+        RecRef.GetTable(Rec);
+        FilterMgmt.ApplyForCurrentUser(RecRef, Enum::"DOPSWHS App Filter Entity"::PutAwayLine);
+        RecRef.SetTable(Rec);
+    end;
+
 }

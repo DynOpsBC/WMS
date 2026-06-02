@@ -33,6 +33,16 @@ page 72091 "DOPSWHS PutAway API"
         }
     }
 
+    trigger OnOpenPage()
+    var
+        FilterMgmt: Codeunit "DOPSWHS App Role Filter Mgmt";
+        RecRef: RecordRef;
+    begin
+        RecRef.GetTable(Rec);
+        FilterMgmt.ApplyForCurrentUser(RecRef, Enum::"DOPSWHS App Filter Entity"::PutAway);
+        RecRef.SetTable(Rec);
+    end;
+
     [ServiceEnabled]
     procedure suggestBin(itemNo: Code[20]; qty: Decimal; locationCode: Code[10]): Code[20]
     var

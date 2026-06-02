@@ -36,10 +36,15 @@ Run after install, before using the warehouse flows. Items marked **(required)**
 - [ ] **Number series** — LP, SSCC, Count Sheet, Test Run, Quality Order series present (auto-seeded by Install/Upgrade).
 - [ ] **Permission set** — assign `DOPSWHS-ADMIN` (or User/View) to the user.
 - [ ] **Web service pages** — `DOPSWHSWarehouseShipment`, `DOPSWHSWarehousePick`, … published (auto by `DOPSWHS Web Svc Publisher`); verify in *Web Services* / OData root.
+- [ ] **WMS App User Profile (per user)** — every operator should have a row in **WMS App User Profiles** (page 72263) so the mobile app sees the right Device Config, default location, only-mine filters, and tile visibility. Auto-seeded: a `DEFAULT` row + a row for the install user. Add a row per operator (or leave them on DEFAULT). Mobile fetches via `POST .../appUserProfiles('DEFAULT')/Microsoft.NAV.resolveCurrent` — the action ignores the bound key and resolves the **calling** user.
+- [ ] **WMS App Roles (per user)** — open **WMS App Roles** (page 72274) and verify the 7 system roles are seeded (`OPERATOR`, `PICKER`, `RECEIVER`, `SHIPPER`, `COUNTER`, `QUALITY`, `INV_ADMIN`). Open the user's **WMS App User Profile** card and add one or more rows to the **Roles** sub-list. Effect is immediate and server-side: every BCWMS API page applies the user's role filters in OnOpenPage (e.g. `PICKER` sees only picks where `Assigned User ID = <them> OR blank`). Custom roles can be added freely; **system roles cannot be deleted**. Filter expression tokens: `%USER%`, `%LOC%` (= user's default location), `%TODAY%`, `%NOW%`.
+
+## License Plate (WI Parity) — v1.7 added
+
+The `DOPSWHS LP No.` field now propagates through the BC posting chain (matching Warehouse Insight): Warehouse Receipt/Shipment Header + posted twin, Purch. Rcpt. Line, Sales Shipment Line, Item Ledger Entry, Value Entry. Drive your OData reports off any of these tables — every stock movement carries the LP that touched it. Receipt-time scan stamps the Warehouse Receipt Header; subscribers carry it onto the posted line + ILE.
 
 ## External Dependencies
 
 - Azure AD app registration for Android MSAL.
 - Azure Function, SignalR, Key Vault, and Application Insights deployment for push relay.
 - Microsoft PartnerSource object range expansion request to `72000-72499`.
-

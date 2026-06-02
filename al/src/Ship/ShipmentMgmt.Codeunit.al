@@ -3,11 +3,22 @@ codeunit 72047 "DOPSWHS Shipment Mgmt"
     Access = Public;
 
     procedure ConfirmShipmentLine(var WhseShipmentLine: Record "Warehouse Shipment Line"; QtyToShip: Decimal; LicensePlateNo: Code[20]; SSCC: Code[18])
+    var
+        WhseShipmentHeader: Record "Warehouse Shipment Header";
     begin
         WhseShipmentLine.Validate("Qty. to Ship", QtyToShip);
         WhseShipmentLine."LP No." := LicensePlateNo;
         WhseShipmentLine.SSCC := SSCC;
         WhseShipmentLine.Modify(true);
+
+        // Stamp the Whse Shipment Header with this LP (first line wins) so the header-level
+        // OData query can surface the carton without drilling lines.
+        if LicensePlateNo <> '' then
+            if WhseShipmentHeader.Get(WhseShipmentLine."No.") then
+                if WhseShipmentHeader."DOPSWHS LP No." = '' then begin
+                    WhseShipmentHeader."DOPSWHS LP No." := LicensePlateNo;
+                    WhseShipmentHeader.Modify(true);
+                end;
     end;
 
     procedure PostShipment(var WhseShipmentHeader: Record "Warehouse Shipment Header"; PrintPackingSlip: Boolean; Invoice: Boolean)
@@ -61,10 +72,20 @@ codeunit 72047 "DOPSWHS Shipment Mgmt"
                 end;
             until PostedWhseShipmentLine.Next() = 0;
 
+        StampHeaders(WhseShipmentHeader."No.", PostedNo);
+
         if PrintPackingSlip then
             QueuePostedShipmentPrint(PostedNo);
 
         LogShipmentPosted(WhseShipmentHeader."No.", LineCount, LpCount + LineLp.Count());
+    end;
+
+    local procedure StampHeaders(WhseShipmentNo: Code[20]; PostedShipmentNo: Code[20])
+    var
+        LpPropagation: Codeunit "DOPSWHS LP Propagation";
+    begin
+        LpPropagation.StampShipmentHeader(WhseShipmentNo);
+        LpPropagation.StampPostedShipmentHeader(WhseShipmentNo, PostedShipmentNo);
     end;
 
     procedure PostSalesOrderShipAndInvoice(var SalesHeader: Record "Sales Header")

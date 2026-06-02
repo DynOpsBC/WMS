@@ -32,6 +32,16 @@ page 72222 "DOPSWHS Consumption API"
         }
     }
 
+    trigger OnOpenPage()
+    var
+        FilterMgmt: Codeunit "DOPSWHS App Role Filter Mgmt";
+        RecRef: RecordRef;
+    begin
+        RecRef.GetTable(Rec);
+        FilterMgmt.ApplyForCurrentUser(RecRef, Enum::"DOPSWHS App Filter Entity"::ProductionConsumption);
+        RecRef.SetTable(Rec);
+    end;
+
     [ServiceEnabled]
     procedure consume(prodOrderNo: Code[20]; componentLineNo: Integer; itemNo: Code[20]; qty: Decimal; lpNo: Code[20]; lotNo: Code[50]; serialNo: Code[50]; binCode: Code[20])
     var

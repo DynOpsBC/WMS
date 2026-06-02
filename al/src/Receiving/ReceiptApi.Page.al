@@ -35,6 +35,16 @@ page 72090 "DOPSWHS Receipt API"
         }
     }
 
+    trigger OnOpenPage()
+    var
+        FilterMgmt: Codeunit "DOPSWHS App Role Filter Mgmt";
+        RecRef: RecordRef;
+    begin
+        RecRef.GetTable(Rec);
+        FilterMgmt.ApplyForCurrentUser(RecRef, Enum::"DOPSWHS App Filter Entity"::Receipt);
+        RecRef.SetTable(Rec);
+    end;
+
     trigger OnAfterGetRecord()
     begin
         FillCalculatedFields();

@@ -41,6 +41,9 @@ codeunit 72260 "DOPSWHS Config Checker"
         EvalWebServices(Status, Detail);
         Upsert('WEB-SVC', 60, 'Web service pages published', true, false, Status, Detail);
 
+        EvalAppProfile(Status, Detail);
+        Upsert('APP-PROFILE', 70, 'WMS App User Profile (current user)', true, true, Status, Detail);
+
         // PKG-NOS / PKG-ITC become auto-fixable too (set after eval so the flag is accurate).
         if ConfigCheck.Get('PKG-NOS') then begin ConfigCheck."Auto Fixable" := true; ConfigCheck.Modify(); end;
         if ConfigCheck.Get('PKG-ITC') then begin ConfigCheck."Auto Fixable" := true; ConfigCheck.Modify(); end;
@@ -62,6 +65,8 @@ codeunit 72260 "DOPSWHS Config Checker"
                 FixNumberSeries();
             'WEB-SVC':
                 FixWebServices();
+            'APP-PROFILE':
+                FixAppProfile();
         end;
         RefreshChecks();
     end;
@@ -96,6 +101,8 @@ codeunit 72260 "DOPSWHS Config Checker"
                 FixNumberSeries();
             'WEB-SVC':
                 FixWebServices();
+            'APP-PROFILE':
+                FixAppProfile();
         end;
     end;
 
@@ -196,6 +203,26 @@ codeunit 72260 "DOPSWHS Config Checker"
         end;
     end;
 
+    local procedure EvalAppProfile(var Status: Option NotChecked,OK,Warning,Missing; var Detail: Text)
+    var
+        Profile: Record "DOPSWHS App User Profile";
+        CurrentUser: Code[50];
+    begin
+        CurrentUser := CopyStr(UserId(), 1, 50);
+        if Profile.Get(CurrentUser) then begin
+            Status := Status::OK;
+            Detail := StrSubstNo('%1 için profil: config=%2, loc=%3', CurrentUser, Profile."Config Code", Profile."Default Location Code");
+            exit;
+        end;
+        if Profile.Get('DEFAULT') then begin
+            Status := Status::Warning;
+            Detail := StrSubstNo('%1 için ayrı profil yok — DEFAULT profile düşülüyor (config=%2).', CurrentUser, Profile."Config Code");
+            exit;
+        end;
+        Status := Status::Missing;
+        Detail := 'Hiç App User Profile yok (DEFAULT bile). Mobil app fallback davranışla çalışır.';
+    end;
+
     // ============================ Fixes ============================
 
     local procedure FixPackageNos()
@@ -267,6 +294,13 @@ codeunit 72260 "DOPSWHS Config Checker"
         WebSvcPublisher: Codeunit "DOPSWHS Web Svc Publisher";
     begin
         WebSvcPublisher.PublishAll();
+    end;
+
+    local procedure FixAppProfile()
+    var
+        AppProfileMgmt: Codeunit "DOPSWHS App Profile Mgmt";
+    begin
+        AppProfileMgmt.SeedDefaults();
     end;
 
     // ============================ Helpers ============================

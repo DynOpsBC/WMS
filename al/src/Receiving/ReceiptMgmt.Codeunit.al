@@ -5,14 +5,24 @@ codeunit 72043 "DOPSWHS Receipt Mgmt"
     procedure PostReceipt(var WhseReceiptHeader: Record "Warehouse Receipt Header"; PrintReport: Boolean; Invoice: Boolean)
     var
         WhseReceiptLine: Record "Warehouse Receipt Line";
+        PostedWhseReceiptHeader: Record "Posted Whse. Receipt Header";
         PostedWhseReceiptLine: Record "Posted Whse. Receipt Line";
         WhsePostReceipt: Codeunit "Whse.-Post Receipt";
+        LpPropagation: Codeunit "DOPSWHS LP Propagation";
         LpNo: Code[20];
+        PostedNo: Code[20];
     begin
         Log('Receipt.Post', WhseReceiptHeader."No.");
         WhseReceiptLine.SetRange("No.", WhseReceiptHeader."No.");
         if WhseReceiptLine.FindFirst() then
             WhsePostReceipt.Run(WhseReceiptLine);
+
+        PostedWhseReceiptHeader.SetRange("Whse. Receipt No.", WhseReceiptHeader."No.");
+        if PostedWhseReceiptHeader.FindLast() then
+            PostedNo := PostedWhseReceiptHeader."No.";
+
+        LpPropagation.StampPostedReceiptHeader(WhseReceiptHeader."No.", PostedNo);
+        LpPropagation.StampPostedReceiptLines(WhseReceiptHeader."No.", PostedNo);
 
         PostedWhseReceiptLine.SetRange("Whse. Receipt No.", WhseReceiptHeader."No.");
         if PostedWhseReceiptLine.FindSet(true) then
@@ -57,6 +67,7 @@ codeunit 72043 "DOPSWHS Receipt Mgmt"
     procedure ConfirmLine(var WhseReceiptLine: Record "Warehouse Receipt Line"; QtyToReceive: Decimal; LotNo: Code[50]; SerialNo: Code[50]; ExpiryDate: Date; LicensePlateNo: Code[20]; BinCode: Code[20])
     var
         LP: Record "DOPSWHS LP Header";
+        WhseReceiptHeader: Record "Warehouse Receipt Header";
         LPMgt: Codeunit "DOPSWHS LP Management";
     begin
         Log('Receipt.ConfirmLine', WhseReceiptLine."No.");
@@ -69,6 +80,14 @@ codeunit 72043 "DOPSWHS Receipt Mgmt"
         if LicensePlateNo <> '' then begin
             LP.Get(LicensePlateNo);
             LPMgt.AddLine(LP, WhseReceiptLine."Item No.", WhseReceiptLine."Unit of Measure Code", QtyToReceive, LotNo, SerialNo, ExpiryDate);
+
+            // Stamp the Whse Receipt Header with this LP so downstream posting can carry it
+            // onto Posted Whse Receipt + Item Ledger Entry. Idempotent — only first LP wins.
+            if WhseReceiptHeader.Get(WhseReceiptLine."No.") then
+                if WhseReceiptHeader."DOPSWHS LP No." = '' then begin
+                    WhseReceiptHeader."DOPSWHS LP No." := LicensePlateNo;
+                    WhseReceiptHeader.Modify(true);
+                end;
         end;
     end;
 

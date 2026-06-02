@@ -121,7 +121,10 @@ private fun PickDocument(no: String, onBack: () -> Unit) {
         scope.launch {
             busy = true; status = "Satır güncelleniyor..."
             val body = JSONObject().apply { put("qtyToHandle", qtyHandled) }.toString()
-            val r = BcApi.patch(context, "pickLines(activityType='${line.optString("activityType")}',no='$no',lineNo=${line.optInt("lineNo")})", body)
+            // Composite key needs a non-blank activityType. Fall back to PICK if BC didn't echo it
+            // (some downlevel API page responses omit it from the line projection).
+            val actType = line.optString("activityType").ifBlank { BcEnum.WhseActivityType.PICK }
+            val r = BcApi.patch(context, "pickLines(activityType='$actType',no='$no',lineNo=${line.optInt("lineNo")})", body)
             busy = false
             status = if (r.ok) "PASS: Satır güncellendi (HTTP ${r.httpCode})" else "HATA: ${BcApi.errorMessage(r.body)} (HTTP ${r.httpCode})"
             if (r.ok) reload()

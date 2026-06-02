@@ -24,6 +24,8 @@ codeunit 72034 "DOPSWHS Upgrade"
         QualityMgmt: Codeunit "DOPSWHS Quality Mgmt";
         WebSvcPublisher: Codeunit "DOPSWHS Web Svc Publisher";
         ConfigChecker: Codeunit "DOPSWHS Config Checker";
+        AppProfileMgmt: Codeunit "DOPSWHS App Profile Mgmt";
+        AppRoleSeed: Codeunit "DOPSWHS App Role Seed";
         RunNo: Code[20];
     begin
         if not Setup.Get('') then begin
@@ -42,6 +44,8 @@ codeunit 72034 "DOPSWHS Upgrade"
         PostingSmokeTest.EnsureRows();  // seed posting-test rows (run on-demand from the app, not auto)
         QualityMgmt.SeedDemoOrders();   // seed demo quality orders for the mobile Quality screen
         WebSvcPublisher.PublishAll();   // expose standard pages as web services (no-extension-API ops)
+        AppProfileMgmt.SeedDefaults();          // seed DEFAULT app profile + install-user profile
+        AppRoleSeed.Seed();                     // seed system roles + starter filter rules (v1.7)
         ConfigChecker.RegisterAssistedSetup();  // seed config checklist + register Assisted Setup
         RunNo := Runner.CreateNewRun('TEST', 'QA-TEAM', 'Auto-bootstrap on upgrade v1.0.4.0');
         Runner.StartRun(RunNo);

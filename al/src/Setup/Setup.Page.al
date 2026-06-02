@@ -79,6 +79,27 @@ page 72061 "DOPSWHS Setup"
                     PromotedIsBig = true;
                     RunObject = codeunit "DOPSWHS Demo Transactions";
                 }
+                action(RunDemoE2ESuite)
+                {
+                    Caption = 'Run Demo E2E Suite (100 tx)';
+                    ToolTip = 'Tüm 10 WMS fonksiyonu (LP/Receive/PutAway/Pick/Ship/Move/Count/Quality/Production/Assembly) için 10''ar transaction çalıştırır = 100 demo transaction. Mobil app''in API ile çağırdığı aynı codeunit''ları AL üzerinden uçtan-uca koşturur. Sonuçlar Demo E2E Results sayfasında.';
+                    ApplicationArea = All;
+                    Image = TestFile;
+                    Promoted = true;
+                    PromotedCategory = Process;
+                    PromotedIsBig = true;
+                    RunObject = codeunit "DOPSWHS Demo E2E Suite";
+                }
+                action(ShowDemoE2EResults)
+                {
+                    Caption = 'Show Demo E2E Results';
+                    ToolTip = '100 demo transaction''ın sonuç sayfasını açar (Pass/Fail badge, durasyon, üretilen LP/dokuman).';
+                    ApplicationArea = All;
+                    Image = TestReport;
+                    Promoted = true;
+                    PromotedCategory = Process;
+                    RunObject = page "DOPSWHS Demo E2E Results";
+                }
             }
         }
     }

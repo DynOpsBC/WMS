@@ -32,4 +32,14 @@ page 72089 "DOPSWHS LP Line API"
             }
         }
     }
+    trigger OnOpenPage()
+    var
+        FilterMgmt: Codeunit "DOPSWHS App Role Filter Mgmt";
+        RecRef: RecordRef;
+    begin
+        RecRef.GetTable(Rec);
+        FilterMgmt.ApplyForCurrentUser(RecRef, Enum::"DOPSWHS App Filter Entity"::LicensePlateLine);
+        RecRef.SetTable(Rec);
+    end;
+
 }

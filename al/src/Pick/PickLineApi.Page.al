@@ -32,4 +32,14 @@ page 72229 "DOPSWHS Pick Line API"
             }
         }
     }
+    trigger OnOpenPage()
+    var
+        FilterMgmt: Codeunit "DOPSWHS App Role Filter Mgmt";
+        RecRef: RecordRef;
+    begin
+        RecRef.GetTable(Rec);
+        FilterMgmt.ApplyForCurrentUser(RecRef, Enum::"DOPSWHS App Filter Entity"::PickLine);
+        RecRef.SetTable(Rec);
+    end;
+
 }

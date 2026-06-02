@@ -30,4 +30,14 @@ page 72230 "DOPSWHS Assembly Line API"
             }
         }
     }
+    trigger OnOpenPage()
+    var
+        FilterMgmt: Codeunit "DOPSWHS App Role Filter Mgmt";
+        RecRef: RecordRef;
+    begin
+        RecRef.GetTable(Rec);
+        FilterMgmt.ApplyForCurrentUser(RecRef, Enum::"DOPSWHS App Filter Entity"::AssemblyLine);
+        RecRef.SetTable(Rec);
+    end;
+
 }

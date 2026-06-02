@@ -30,6 +30,16 @@ page 72223 "DOPSWHS Output API"
         }
     }
 
+    trigger OnOpenPage()
+    var
+        FilterMgmt: Codeunit "DOPSWHS App Role Filter Mgmt";
+        RecRef: RecordRef;
+    begin
+        RecRef.GetTable(Rec);
+        FilterMgmt.ApplyForCurrentUser(RecRef, Enum::"DOPSWHS App Filter Entity"::ProductionOutput);
+        RecRef.SetTable(Rec);
+    end;
+
     [ServiceEnabled]
     procedure report(prodOrderNo: Code[20]; routingLineNo: Integer; outputQty: Decimal; scrapQty: Decimal; runtime: Decimal; newLpTemplate: Code[20]; binCode: Code[20]): Code[20]
     var
