@@ -17,18 +17,22 @@ Warehouse Shipment'ı (ve doğrudan Sales Order ship / Transfer Order ship varya
 ## AL İş Paketleri
 
 ### Page extensions
+
 - `al/src/Ship/WhseShipmentExt.PageExt.al` (PageExt 72307) — Whse Shipment Header (7320) üzerine "Post Mobile" + "Print Packing Slip" actions
 - `al/src/Ship/SalesOrderExt.PageExt.al` (PageExt 72312) — Sales Order (42) "Ship Direct from Mobile" toggle
 
 ### Table extension
+
 - `al/src/Ship/PostedWhseShipmentLineExt.TableExt.al` (TableExt 72405) — Posted Whse Shipment Line (7323) üzerine `LP No.`, `SSCC`
 
 ### Shipment API
+
 - `al/src/Ship/ShipmentApi.Page.al` (P 72093) — `/shipments`, `/shipments({no})/lines`
   - PATCH `lines({lineNo})` — `{qtyToShip, licensePlateNo, sscc?}`
   - POST `Microsoft.NAV.post` — `{print, invoice}`
 
 ### Shipment Mgmt codeunit
+
 - `al/src/Ship/ShipmentMgmt.Codeunit.al` (CU 72047)
   - `PostShipment(WhseShipment; PrintPackingSlip: Boolean; Invoice: Boolean)` — wraps standart `Whse.-Post Shipment`
   - Pre-post hook: SSCC eksik LP'ler için `SSCCGenerator.Generate()` çağrısı
@@ -36,16 +40,20 @@ Warehouse Shipment'ı (ve doğrudan Sales Order ship / Transfer Order ship varya
   - `IWX Report Selection` `Posted Shipment` usage'a göre report dispatch
 
 ### Ship-and-Invoice (Sales Order varyantı)
+
 - `ShipmentMgmt.PostSalesOrderShipAndInvoice(SalesHeader)` — KB pattern wrap
 - VAR'lar için event'li: `OnBeforeShipSales`, `OnAfterInvoiceSales`
 
 ### Shipment Queue Role Center
+
 - `al/src/Ship/ShipmentQueue.Page.al` (P 72084) — ListPart; Whse Shipment + Sales (Ship Pending) + Transfer (Ship Pending) union view
 
 ### IWX Report Selection — Posted Shipment usage
+
 - Sprint 2'de oluşturulan `IWX Report Selection` tablosuna seed: Usage = `Posted Shipment`, Report ID = standart 7321 veya custom 72092
 
 ### Test
+
 - `tests/src/Ship/ShipmentPostingTests.Codeunit.al` — happy path
 - `tests/src/Ship/SSCCOnPostTests.Codeunit.al` — eksik SSCC otomatik üretilir
 - `tests/src/Ship/ShipAndInvoiceTests.Codeunit.al` — Sales Order varyantı
@@ -55,6 +63,7 @@ Warehouse Shipment'ı (ve doğrudan Sales Order ship / Transfer Order ship varya
 ## Android İş Paketleri
 
 ### `:feature-ship`
+
 - `feature/ship/ShipLookupListScreen.kt`
   - Default filter: Whse Shipment "Released"
   - Toggle: "Show Open" (released değilse de göster)
@@ -66,12 +75,15 @@ Warehouse Shipment'ı (ve doğrudan Sales Order ship / Transfer Order ship varya
 - `feature/ship/ShipViewModel.kt`
 
 ### `:core-domain` ship usecase'leri
+
 - `domain/usecase/GetShipments.kt`, `ConfirmShipLine.kt`, `PostShipment.kt`, `PostShipAndInvoice.kt`
 
 ### `:core-sync` ops
+
 - `Op.kt`: `ConfirmShipLine` (queue-able), `PostShipment` (online-only)
 
 ### Test
+
 - `feature/ship/test/ShipViewModelTest.kt` — 3 doc tipi
 - `feature/ship/test/ShipDocumentScreenTest.kt` — Compose UI
 

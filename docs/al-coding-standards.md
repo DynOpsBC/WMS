@@ -8,4 +8,3 @@
 - Use integration events with stable names before and after business operations.
 - Keep install and upgrade codeunits idempotent.
 - Do not use hardcoded sandbox credentials or secrets.
-

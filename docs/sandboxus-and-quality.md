@@ -5,6 +5,7 @@
 > Mobil **v1.7.0** SandboxUS/CRONUS USA'ya yönlendirildi.
 
 ## 1. SandboxUS deployment
+
 - AL extension SandboxUS'a publish edildi; `OnInstall`/`OnUpgrade` artık tam bootstrap yapıyor (demo data +
   test catalog + posting-test satırları + demo kalite emirleri) → yeni ortam **kendi kendine test-hazır**.
 - 8/8 custom entity set HTTP 200 (warehouse/v2.0). Bootstrap CRONUS USA + My Company için çalıştı.
@@ -29,6 +30,7 @@
 BC posting codeunit'lerini çağırıyor ve mantık düzeltildi (Consume artık WIP-account sınırına kadar doğru).
 
 ## 3. Mobil app → SandboxUS
+
 - `BcApi.kt`: `ENVIRONMENT="SandboxUS"`, `COMPANY_ID=CRONUS USA`. APK **v1.7.0** (`~/Desktop/BCWMSApp-v1.7.0-SandboxUS.apk`).
 - Emulator'da 🟢 Bağlı (HTTP 200), **📮 Posting Test** ekranından `runAll` app'ten tetiklendi → 4/9 (canlı belge: Count/Receipt/Put-Away/Assembly).
 
@@ -38,6 +40,7 @@ WMS'e kalite denetim emri yönetimi eklendi: mal kabul/üretim sonrası gelen ma
 KABUL eder (serbest bırak) veya RED eder (→ karantina bin'i).
 
 **AL (warehouse/v2.0):**
+
 - Tablo 72254 `DOPSWHS Quality Order` (No., Source Type, Item, Qty, Sample Size, Status, Inspector, Reject Reason, Quarantine Bin…)
 - CU 72255 `DOPSWHS Quality Mgmt` — `CreateOrder`, `Pass`, `Fail`, `SeedDemoOrders`, ANSI-tarzı numune boyutu (%10, min 1, max 20)
 - Page 72256 `DOPSWHS Quality Order API` (`qualityOrders`) — bound action'lar `pass`, `fail`, `createOrder`
@@ -45,17 +48,20 @@ KABUL eder (serbest bırak) veya RED eder (→ karantina bin'i).
 **Mobil:** `🔬 Kalite Denetimi` ekranı (`QualityModule.kt`) — açık/tümü filtre, denetim sheet'i (numune scan + KABUL/RED + RED sebebi + karantina bin).
 
 **Canlı doğrulama (SandboxUS / CRONUS USA):**
+
 - 3 demo kalite emri seed edildi (1896-S, 1900-S, 1906-S) numune boyutlarıyla.
 - API: `pass` → HTTP 204 (Passed, DENIZ) · `fail` → HTTP 204 (Failed, DAMAGED, QUARANTINE) · `createOrder` → HTTP 200 (yeni QO).
 - **Mobil app'ten:** QO-…-2 kartına dokunup **KABUL** → BC'de `Passed`, **Inspector = MOBIL** ✅ doğrulandı.
 
 ### Sonraki adımlar (Quality v2, istenirse)
+
 - Mal kabul/üretim post'unda **otomatik** kalite emri tetikleme (receipt → quality order).
 - RED'de stoğu otomatik karantina bin'e taşıma (whse movement entegrasyonu).
 - Ölçüm/karakteristik (test plan) alanları + foto ek.
 - RED sebep kodları master tablosu + zorunlu alan kuralları.
 
 ## Kalan platform/kurulum işleri (6 posting'in tamamı yeşil için)
+
 1. **Üretim (Consume/Output):** CRONUS USA'da Inventory Posting Setup WIP/Output hesapları + iş merkezi/rota kurulumu.
 2. **Sevkiyat/Pick:** non-directed (require-shipment) test lokasyonu **veya** pick'i mobil Pick akışından register edip Post Shipment.
 3. **Ad-Hoc Move:** default lokasyonu non-directed bin lokasyonu yap (directed'da Yönlendirilmiş Hareket kullanılır).

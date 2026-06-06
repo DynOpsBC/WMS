@@ -8,11 +8,13 @@
 **BCWMSApp**, Microsoft Dynamics 365 Business Central SaaS üzerine inşa edilmiş kapsamlı bir **Gelişmiş Depo Yönetim Sistemi (Advanced Warehouse Management System)** uzantısıdır. Warehouse Insight'a fonksiyonel parite hedefiyle tasarlanmıştır.
 
 **Hedef kullanıcılar:**
+
 - Depo operatörleri (mobil handheld cihazlar üzerinden mal kabul, toplama, sevkiyat, sayım, kalite, üretim)
 - Depo yöneticileri (BC Role Center, KPI cue'lar, raporlar)
 - Sistem yöneticileri (kurulum, kullanıcı/rol yönetimi, ayarlar)
 
 **Çözdüğü problemler:**
+
 - Standart BC'de eksik olan License Plate (LP) konsepti — pallet/carton hiyerarşisi, SSCC kodları, nest hierarchy
 - Operatör seviyesinde mobil-öncelikli iş akışı (BC web client değil, native Android)
 - Rol bazlı sunucu-taraflı görünürlük (her kullanıcı sadece kendi atanmış işini görsün)
@@ -62,6 +64,7 @@
 - **Bağımlılıklar:** Sadece Microsoft Base Application 24.0.0.0 (eklenti yok)
 
 İçerik özeti (v1.7.1):
+
 - ~150 AL objesi (table, codeunit, page, enum, permissionset, report)
 - 17 v2.0 API page (warehouse group) — REST/OData public surface
 - 9 LP tableextension — License Plate'i BC posting zincirine yayar
@@ -80,6 +83,7 @@ Tüm AL kaynak kodları için bkz. [al/src/](../al/src/). Kod standartları: [do
 - **Auth:** MSAL 4.x, Azure AD interactive token + cached refresh
 
 Modüller ([android/app/src/main/java/com/dynops/bcwms/feature/](../android/app/src/main/java/com/dynops/bcwms/feature/)):
+
 - `LicensePlateModule.kt` — LP build/stop/transfer/print/partial-use
 - `ReceivingModule.kt` — Mal kabul (Purchase Order, Transfer Order, Whse Receipt)
 - `PutAwayShipModules.kt` — Put-Away + Sevkiyat (Whse Activity + Whse Shipment)
@@ -113,12 +117,14 @@ Detaylı çalıştırma rehberi: [docs/mobile-app-guide.md](mobile-app-guide.md)
 Bir LP, fiziksel bir kabı (pallet, carton, tote) ve içindeki stoğu temsil eder. SSCC-18 koduyla globally tanımlanır.
 
 **Ana tablolar:**
+
 - `DOPSWHS LP Header` (72040) — No., Status (Open/Built/Used/Unbuilt), Location, Bin, Parent LP No. (nest), SSCC, Assigned Doc
 - `DOPSWHS LP Line` (72041) — Item, Qty, Lot, Serial, Expiry
 - `DOPSWHS LP Movement Ledger` (72043) — Her hareketin audit trail'i (Built/Transferred/Used/Unbuilt/...)
 - `DOPSWHS LP Template` (72042) — CARTON-S/M, PALLET-EUR, TOTE-A şablonları (boyut + max ağırlık)
 
 **LP Yaşam Döngüsü:**
+
 ```
 [Open] → AddLine* → [Open] → Stop() → [Built (SSCC üretildi)] → Assigned to Document
                                                               ↓
@@ -157,11 +163,13 @@ Tüm subscriber kodu: [al/src/LPPropagation/LPPropagationSubscriber.Codeunit.al]
 Kullanıcının BC Permission Set'inden bağımsız olarak, sunucu-taraflı `SetFilter()` ile API'lerden dönen kayıtları kısıtlar.
 
 **Tablolar:**
+
 - `DOPSWHS App Role` (72267) — Role kataloğu (Code, Description, Active, Is System, Hide Test/Admin Tools)
 - `DOPSWHS App User Role` (72268) — User ID + Role Code composite PK; çoklu rol destekli
 - `DOPSWHS App Role Filter Rule` (72269) — Role Code + Entity (enum) + Line No.; Field No. + Filter Expression + Combine Mode
 
 **Seed edilen 7 sistem role:**
+
 | Code | Açıklama | Otomatik Kurallar |
 |---|---|---|
 | `OPERATOR` | Generic (full visibility) | Kural yok |
@@ -173,12 +181,14 @@ Kullanıcının BC Permission Set'inden bağımsız olarak, sunucu-taraflı `Set
 | `INV_ADMIN` | Geniş (admin, test/admin tools görünür) | Kural yok |
 
 **Filter Expression token'ları:**
+
 - `%USER%` → `UserId()`
 - `%LOC%` → kullanıcının `App User Profile`'daki Default Location
 - `%TODAY%` → `Format(Today)`
 - `%NOW%` → `Format(CurrentDateTime)`
 
 **Uygulama mekanizması:** Her v2.0 API page `OnOpenPage` trigger'ında `AppRoleFilterMgmt.ApplyForCurrentUser(RecRef, EntityType)` çağırır. Mgmt codeunit:
+
 1. UserRoles tablosundan kullanıcının aktif rollerini çeker
 2. Her rolün `(Entity, FieldNo)` kurallarını gruplar, çoklu rol için `|` (OR) ile birleştirir
 3. Token'ları substitute eder
@@ -194,6 +204,7 @@ Kod: [al/src/Role/AppRoleFilterMgmt.Codeunit.al](../al/src/Role/AppRoleFilterMgm
 ### 3.4 App User Profile
 
 Kullanıcı bazlı tercihler ([al/src/Device/AppUserProfile.Table.al](../al/src/Device/AppUserProfile.Table.al), table 72262):
+
 - **Device Config Code** — Hangi tile setini görecek
 - **Default Location / Bin Code** — Hızlı doldurma için
 - **Locale** — tr / en / de
@@ -373,6 +384,7 @@ Tüm API yüzeyinin OpenAPI 3.0 spec'i: [docs/api-openapi.yaml](api-openapi.yaml
 ### 7.1 BC Integration Events Subscribe Ediyoruz
 
 `DOPSWHS LP Propagation` (CU 72428):
+
 - `Codeunit::"Item Jnl.-Post Line"::OnAfterInsertItemLedgEntry` → ILE.lpNo doldur
 - `Codeunit::"Item Jnl.-Post Line"::OnAfterInsertValueEntry` → Value Entry.lpNo doldur
 - `Codeunit::"Sales-Post"::OnAfterPostSalesDoc` → Posted Sales Shipment Line.lpNo
@@ -420,6 +432,7 @@ Detay: [docs/posting-tests.md](posting-tests.md).
 ### 8.3 Configuration Check
 
 `DOPSWHS Config Checker` (CU 72260) + Assisted Setup page 72261 — her kurulum kalemini ✅/⚠️/❌ değerlendirir, auto-fixable olanları "Tümünü Düzelt" ile uygular:
+
 - Package Nos. (Inventory Setup)
 - Item Tracking Code (Package Specific Tracking)
 - Warehouse Employee (current user)
@@ -471,6 +484,7 @@ Detay: [docs/posting-tests.md](posting-tests.md).
 ### 8.5 Audit Scripts
 
 [tools/](../tools/) klasöründe:
+
 - `audit-prefix.sh` — Tüm objelerin `DOPSWHS` prefix taşıdığını doğrular
 - `audit-permissions.sh` — Permission set'lerin tüm objeleri kapsadığını doğrular
 - `audit-obsolete.sh` — Obsolete API kullanımları
@@ -481,6 +495,7 @@ Detay: [docs/posting-tests.md](posting-tests.md).
 ### 9.1 Application Insights
 
 Telemetry event'leri:
+
 - `AdvWMS.Receipt.Post`, `AdvWMS.Shipment.Posted`, `AdvWMS.Pick.Registered`
 - `AdvWMS.LP.Built`, `AdvWMS.LP.Stopped`, `AdvWMS.LP.Transferred`
 - `AdvWMS.RoleFilter.BadExpression` (v1.7 — kötü filter expression silent fallback)
@@ -492,12 +507,14 @@ Her event correlation ID, tenant ID, user ID, custom dimensions taşır.
 ### 9.2 Dashboards
 
 [dashboards/](../dashboards/) klasöründe:
+
 - Application Insights workbook JSON'ları
 - Power BI report files (.pbix) — Test Run trends, LP throughput, pick efficiency
 
 ### 9.3 Sorun Giderme
 
 İlk yanıt prosedürü ([docs/operations-runbook.md](operations-runbook.md)):
+
 1. Tenant, company, user, device ID, app version, workflow tespit
 2. App Insights failures son 30 dk
 3. BC extension version + feature flags
@@ -544,12 +561,14 @@ Detaylı release notes: [docs/release-notes/](release-notes/).
 ## 12. Referans Linkler
 
 **Kurulum ve Operasyon:**
+
 - [Setup Runbook](setup-runbook.md) — İlk kurulum + Configuration Checklist
 - [Operations Runbook](operations-runbook.md) — Production destek + İlk yanıt prosedürü
 - [Troubleshooting](troubleshooting.md) — Tipik sorunlar ve çözümleri
 - [Sandboxus & Quality](sandboxus-and-quality.md) — Quality gate'ler ve sandbox deploy
 
 **Geliştirici Kılavuzları:**
+
 - [AL Coding Standards](al-coding-standards.md)
 - [Android Coding Standards](android-coding-standards.md)
 - [Mobile App Guide](mobile-app-guide.md) — APK build, emulator setup, token paste
@@ -557,6 +576,7 @@ Detaylı release notes: [docs/release-notes/](release-notes/).
 - [Mobile Full Scope Plan](mobile-full-scope-plan.md) — Mobil roadmap
 
 **API ve Test:**
+
 - [Web Services](web-services.md) — SOAP service kullanımı
 - [API OpenAPI](api-openapi.yaml) — OpenAPI 3.0 spec
 - [Test Management Guide](test-management-guide.md) — Test Center kullanımı
@@ -564,12 +584,14 @@ Detaylı release notes: [docs/release-notes/](release-notes/).
 - [User Test Checklist](user-test-checklist.md) — Manuel test rehberi
 
 **Compliance:**
+
 - [Security Audit](security-audit.md)
 - [i18n Glossary](i18n-glossary.md) — Çeviri terminolojisi
 - [AppSource Submission](appsource/submission-checklist.md)
 - [Play Store Submission](play-store/)
 
 **Karar Tarihçesi:**
+
 - [Sprint Decisions](decisions/) — Sprint 0-8 + Sprint H+ karar log'ları
 - [Sandbox Deployment Log](deployment/sandbox-deployment-2026-05-27.md)
 
@@ -578,6 +600,7 @@ Detaylı release notes: [docs/release-notes/](release-notes/).
 ## Hızlı Başlangıç (Yeni Geliştirici / Operatör)
 
 **Geliştirici için:**
+
 ```bash
 # 1. AL extension compile + publish
 ALC=~/.vscode/extensions/ms-dynamics-smb.al-17.0.2273547/bin/darwin/alc
@@ -600,6 +623,7 @@ cd push-relay && pnpm install && pnpm build
 ```
 
 **Operatör için:**
+
 1. Mobil app'i kurun (APK install veya Play Store)
 2. App açılır → "BC Sandbox" başlığı
 3. Login → MSAL veya token paste

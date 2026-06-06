@@ -29,4 +29,25 @@ page 72278 "DOPSWHS App Role API"
             }
         }
     }
+
+    /// <summary>Idempotently assigns this role to a user. Used by mobile/admin bootstrap scripts
+    /// to provision DOPSWHS role membership without going through the BC web client.</summary>
+    [ServiceEnabled]
+    procedure assignToUser(userId: Code[50])
+    var
+        UserRole: Record "DOPSWHS App User Role";
+    begin
+        if UserRole.Get(userId, Rec.Code) then begin
+            if UserRole.Disabled then begin
+                UserRole.Disabled := false;
+                UserRole.Modify(true);
+            end;
+            exit;
+        end;
+        UserRole.Init();
+        UserRole."User ID" := userId;
+        UserRole."Role Code" := Rec.Code;
+        UserRole.Insert(true);
+    end;
 }
+

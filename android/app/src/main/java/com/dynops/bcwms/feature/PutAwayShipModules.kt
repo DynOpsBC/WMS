@@ -209,13 +209,36 @@ private fun PutAwayBinSheet(line: JSONObject, locationCode: String, onDismiss: (
 }
 
 /**
- * Shipping — WI §10.4 parity.
- * Lookup (released) -> Shipment Document -> set qty/LP per line -> Post (+ packing slip / invoice).
- * BC: shipments / shipmentLines (warehouse/v2.0), bound action post(print, invoice).
+ * Sevkiyat (Shipping). 2 sekme:
+ *  - "Whse Shipment": Pick'lenmiş, Released Warehouse Shipment'lardan post
+ *  - "Sales Order": yönetilmeyen lokasyonda doğrudan SO satırı sevk + post
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ShippingModule() {
+    var tab by remember { mutableStateOf(0) }
+    val tabs = listOf("📋 Whse Shipment", "🛒 Sales Order")
+
+    Column(Modifier.fillMaxSize()) {
+        TabRow(selectedTabIndex = tab) {
+            tabs.forEachIndexed { i, title ->
+                Tab(selected = tab == i, onClick = { tab = i }, text = { Text(title, fontSize = 13.sp) })
+            }
+        }
+        when (tab) {
+            0 -> WhseShipmentTab()
+            1 -> SalesOrderTab()
+        }
+    }
+}
+
+// ============================================================
+// Tab 1: Warehouse Shipment (orijinal akış)
+// ============================================================
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun WhseShipmentTab() {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var selected by remember { mutableStateOf<String?>(null) }
@@ -230,7 +253,7 @@ fun ShippingModule() {
             loading = false
             rows = if (r.ok) BcApi.parseValueArray(r.body) else emptyList()
             status = if (!r.ok) "HATA: Sevkiyat listesi alınamadı (HTTP ${r.httpCode})"
-                else if (rows.isEmpty()) "EMPTY: Released sevkiyat belgesi yok (HTTP ${r.httpCode})"
+                else if (rows.isEmpty()) "EMPTY: Released Whse Shipment yok (HTTP ${r.httpCode})"
                 else "PASS: ${rows.size} belge (HTTP ${r.httpCode})"
         }
     }
@@ -256,7 +279,7 @@ fun ShippingModule() {
                     }
                 }
             }
-            if (rows.isEmpty() && !loading) item { EmptyState("Released sevkiyat belgesi yok.") }
+            if (rows.isEmpty() && !loading) item { EmptyState("Released Whse Shipment yok. SO'dan direkt sevkiyat için sağdaki sekmeyi kullanın.") }
         }
     }
 }
@@ -359,5 +382,198 @@ private fun ShipDocument(no: String, onBack: () -> Unit) {
                 }
             }
         )
+    }
+}
+
+// ============================================================
+// Tab 2: Sales Order direct ship
+// ============================================================
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun SalesOrderTab() {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var selected by remember { mutableStateOf<String?>(null) }
+    var rows by remember { mutableStateOf<List<JSONObject>>(emptyList()) }
+    var status by remember { mutableStateOf("") }
+    var loading by remember { mutableStateOf(false) }
+    var releasedOnly by remember { mutableStateOf(true) }
+
+    fun load() {
+        scope.launch {
+            loading = true; status = "Yükleniyor..."
+            val filter = if (releasedOnly) "&\$filter=status eq 'Released'" else ""
+            val r = BcApi.get(
+                context,
+                "salesSources?\$top=30$filter&\$select=no,customerNo,customerName,shipToName,locationCode,shipmentDate,status,lineCount,outstandingQty,percentComplete"
+            )
+            loading = false
+            rows = if (r.ok) BcApi.parseValueArray(r.body) else emptyList()
+            status = if (!r.ok) "HATA: SO listesi alınamadı (HTTP ${r.httpCode}) — ${BcApi.errorMessage(r.body).take(120)}"
+                else if (rows.isEmpty()) "EMPTY: ${if (releasedOnly) "Released" else "Açık"} SO yok (HTTP ${r.httpCode})"
+                else "PASS: ${rows.size} satış siparişi (HTTP ${r.httpCode})"
+        }
+    }
+    LaunchedEffect(releasedOnly) { load() }
+
+    val sel = selected
+    if (sel != null) { ShipSalesOrder(no = sel, onBack = { selected = null; load() }); return }
+
+    Column(Modifier.fillMaxSize().padding(12.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Button(onClick = { load() }, enabled = !loading) { Text(if (loading) "..." else "🔄 Yenile") }
+            Spacer(Modifier.width(12.dp))
+            FilterChip(
+                selected = releasedOnly,
+                onClick = { releasedOnly = !releasedOnly },
+                label = { Text(if (releasedOnly) "Sadece Released" else "Tüm Durumlar", fontSize = 12.sp) }
+            )
+        }
+        Spacer(Modifier.height(4.dp))
+        StatusText(status)
+        Spacer(Modifier.height(8.dp))
+        LazyColumn(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            items(rows) { d ->
+                Card(onClick = { selected = d.optString("no") }, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(10.dp)) {
+                    Column(Modifier.padding(12.dp)) {
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                            Text(d.optString("no"), fontWeight = FontWeight.Bold)
+                            Text(firstValue(d, "status"), fontSize = 12.sp, color = Color.Gray)
+                        }
+                        Text("Müşteri: ${firstValue(d, "customerName")} (${firstValue(d, "customerNo")})", fontSize = 12.sp, color = Color.Gray)
+                        val st = firstValue(d, "shipToName")
+                        if (st.isNotBlank() && st != firstValue(d, "customerName")) {
+                            Text("Sevk: $st", fontSize = 12.sp, color = Color.Gray)
+                        }
+                        Text("Lokasyon: ${firstValue(d, "locationCode")} · Satır: ${d.optInt("lineCount")} · Kalan: ${d.optDouble("outstandingQty")}", fontSize = 12.sp, color = Color.Gray)
+                        val pct = d.optInt("percentComplete")
+                        if (pct > 0) LinearProgressIndicator(progress = { pct / 100f }, modifier = Modifier.fillMaxWidth().padding(top = 4.dp))
+                    }
+                }
+            }
+            if (rows.isEmpty() && !loading) item { EmptyState("Uygun satış siparişi yok.") }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun ShipSalesOrder(no: String, onBack: () -> Unit) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var header by remember { mutableStateOf<JSONObject?>(null) }
+    var lines by remember { mutableStateOf<List<JSONObject>>(emptyList()) }
+    var status by remember { mutableStateOf("") }
+    var busy by remember { mutableStateOf(false) }
+    var invoiceToo by remember { mutableStateOf(false) }
+    var qtyLine by remember { mutableStateOf<JSONObject?>(null) }
+    var showScan by remember { mutableStateOf(false) }
+
+    fun reload() {
+        scope.launch {
+            busy = true
+            val h = BcApi.get(context, "salesSources('$no')")
+            if (h.ok) header = JSONObject(h.body)
+            val l = BcApi.get(context, "salesSourceLines?\$filter=no eq '$no' and type eq 'Item'&\$top=200&\$orderby=lineNo")
+            lines = if (l.ok) BcApi.parseValueArray(l.body) else emptyList()
+            busy = false
+        }
+    }
+    LaunchedEffect(no) { reload() }
+
+    val h = header
+    Column(Modifier.fillMaxSize()) {
+        Column(Modifier.weight(1f).padding(12.dp)) {
+            TextButton(onClick = onBack) { Text("‹ SO Listesi") }
+            DocHeaderCard(
+                title = no,
+                subtitle = "Müşteri: ${firstValue(h ?: JSONObject(), "customerName")} (${firstValue(h ?: JSONObject(), "customerNo")})\n" +
+                    "Lokasyon: ${firstValue(h ?: JSONObject(), "locationCode")} · Durum: ${firstValue(h ?: JSONObject(), "status")}",
+                percent = h?.optDouble("percentComplete")?.toInt() ?: 0
+            )
+            Spacer(Modifier.height(6.dp))
+            StatusText(status)
+            Spacer(Modifier.height(4.dp))
+            Text("Satırlar (${lines.size}) — qty/bin için dokunun", fontWeight = FontWeight.Bold, fontSize = 14.sp)
+            LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                items(lines) { ln ->
+                    val outstanding = ln.optDouble("outstandingQuantity")
+                    val toShip = ln.optDouble("qtyToShip")
+                    val shipped = ln.optDouble("qtyShipped")
+                    Card(onClick = { qtyLine = ln }, modifier = Modifier.fillMaxWidth()) {
+                        Column(Modifier.padding(10.dp)) {
+                            Text("${ln.optString("itemNo")} — ${ln.optString("description")}", fontWeight = FontWeight.Medium)
+                            Text("Kalan: $outstanding · Sevk: $toShip · Sevk edilen: $shipped", fontSize = 12.sp, color = Color.Gray)
+                            Text("Bin: ${firstValue(ln, "binCode").ifBlank { "-" }} · UoM: ${firstValue(ln, "unitOfMeasureCode")}", fontSize = 12.sp, color = Color.Gray)
+                        }
+                    }
+                }
+                if (lines.isEmpty() && !busy) item { EmptyState("Bu SO'da satır yok (veya tümü tamamlandı).") }
+            }
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Checkbox(checked = invoiceToo, onCheckedChange = { invoiceToo = it })
+                Text("Aynı zamanda faturalandır", fontSize = 13.sp)
+            }
+        }
+
+        BottomActionBar {
+            OutlinedButton(onClick = { showScan = true }, enabled = !busy, modifier = Modifier.weight(1f)) { Text("📷 Item Tara") }
+        }
+        BottomActionBar {
+            Button(
+                onClick = {
+                    scope.launch {
+                        busy = true; status = "Post-Ship..."
+                        val body = JSONObject().apply { put("invoice", invoiceToo) }.toString()
+                        val r = BcApi.boundAction(context, "salesSources", no, "ship", body)
+                        busy = false
+                        status = if (r.ok) "PASS: SO sevkiyat kaydedildi (HTTP ${r.httpCode})"
+                            else "HATA: ${BcApi.errorMessage(r.body)} (HTTP ${r.httpCode})"
+                        if (r.ok) reload()
+                    }
+                },
+                enabled = !busy, modifier = Modifier.fillMaxWidth()
+            ) { Text(if (invoiceToo) "✅ Post Ship & Invoice" else "✅ Post Ship", fontWeight = FontWeight.Bold) }
+        }
+    }
+
+    val ql = qtyLine
+    if (ql != null) {
+        QuantityDialogSheet(
+            title = "Sevk Edilecek Miktar",
+            itemNo = ql.optString("itemNo"),
+            initialQty = ql.optDouble("qtyToShip").takeIf { it > 0 }
+                ?: ql.optDouble("outstandingQuantity").takeIf { it > 0 } ?: 1.0,
+            initialUom = ql.optString("unitOfMeasureCode"),
+            showLotSerial = false,
+            onDismiss = { qtyLine = null },
+            onConfirm = { res ->
+                qtyLine = null
+                scope.launch {
+                    busy = true; status = "Satır güncelleniyor..."
+                    val lineNo = ql.optInt("lineNo")
+                    val body = JSONObject().apply {
+                        put("qtyToShip", res.quantity)
+                    }.toString()
+                    val r = BcApi.patch(
+                        context,
+                        "salesSourceLines(documentType='Order',no='$no',lineNo=$lineNo)",
+                        body
+                    )
+                    busy = false
+                    status = if (r.ok) "PASS: SO satırı qty=${res.quantity} (HTTP ${r.httpCode})"
+                        else "HATA: ${BcApi.errorMessage(r.body)} (HTTP ${r.httpCode})"
+                    if (r.ok) reload()
+                }
+            }
+        )
+    }
+
+    if (showScan) {
+        ScanItemSheet(title = "Item Tara (SO)", onDismiss = { showScan = false }, onItem = { _, line ->
+            showScan = false
+            qtyLine = line
+        }, lines = lines, matchKey = "itemNo")
     }
 }

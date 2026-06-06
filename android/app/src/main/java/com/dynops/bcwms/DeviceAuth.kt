@@ -89,6 +89,44 @@ object DeviceAuth {
         TokenResult.Failure("Zaman aşımı — giriş tamamlanmadı.")
     }
 
+    /**
+     * Direct username/password sign-in via OAuth 2.0 Resource Owner Password Credentials grant.
+     * Calls AAD's /token endpoint with the user's email + password and returns a BC access token.
+     *
+     * Caveats:
+     * - Only works for cloud-only AAD accounts (no MFA, no federated sign-in / ADFS).
+     * - Recommended only for warehouse operator accounts in controlled tenants — service-style
+     *   accounts where MFA is exempted by Conditional Access. For interactive users with MFA
+     *   on, use [requestCode] + [pollForToken] (device code flow) instead.
+     */
+    suspend fun loginWithPassword(email: String, password: String): TokenResult = withContext(Dispatchers.IO) {
+        try {
+            val body = "grant_type=password" +
+                "&client_id=${BcApi.CLIENT_ID}" +
+                "&scope=${enc(SCOPE)}" +
+                "&username=${enc(email)}" +
+                "&password=${enc(password)}"
+            val (status, text) = postForm(authority("token"), body)
+            val j = try { JSONObject(text) } catch (e: Exception) { JSONObject() }
+            if (status in 200..299) {
+                val token = j.optString("access_token")
+                if (token.isNotBlank()) return@withContext TokenResult.Success(token)
+                return@withContext TokenResult.Failure("Token boş döndü.")
+            }
+            val err = j.optString("error")
+            val desc = j.optString("error_description").substringBefore("\r").substringBefore("\n")
+            val friendly = when (err) {
+                "invalid_grant" -> "E-posta veya şifre hatalı. ($desc)"
+                "interaction_required", "consent_required" -> "Etkileşim gerekli — Cihaz koduyla giriş yapın (MFA / koşullu erişim)."
+                "unauthorized_client" -> "AAD app registration ROPC akışına izin vermiyor."
+                else -> if (desc.isNotBlank()) desc else (err.ifBlank { "AAD hatası ($status)" })
+            }
+            TokenResult.Failure(friendly)
+        } catch (e: Exception) {
+            TokenResult.Failure(e.message ?: "ağ hatası")
+        }
+    }
+
     private fun enc(s: String) = URLEncoder.encode(s, "UTF-8")
 
     private fun postForm(url: String, body: String): Pair<Int, String> {

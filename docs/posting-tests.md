@@ -32,6 +32,7 @@ standart BC posting codeunit'i):
 - Her domain bir `[TryFunction]` içinde izole → bir domain'in hatası diğerlerini bloke etmez.
 
 Çağrı (app'in yaptığıyla aynı yol):
+
 ```
 POST .../api/dynops/warehouse/v2.0/companies({id})/postingTests('1-MOVE')/Microsoft.NAV.runAll
 ```

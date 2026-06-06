@@ -120,6 +120,7 @@ adb shell screencap -p /sdcard/result.png && adb pull /sdcard/result.png /tmp/re
 ## 🏗️ Mevcut Mobile App Mimari
 
 ### Aktif modüller (canlı emulator build'inde)
+
 ```
 android/
 ├── app/              # MainActivity (Compose + Material3)
@@ -130,12 +131,14 @@ android/
                       # + Ktor-free HttpURLConnection ile BC API call
 ```
 
-### Demo build için settings.gradle.kts:
+### Demo build için settings.gradle.kts
+
 ```kotlin
 include(":app", ":core-auth", ":core-design", ":core-domain", ":feature-auth")
 ```
 
 Full production build için (24 modül):
+
 ```kotlin
 include(":app", ":macrobenchmark",
         ":core-network", ":core-auth", ":core-db", ":core-scanner",
@@ -146,11 +149,13 @@ include(":app", ":macrobenchmark",
         ":feature-pick", ":feature-ship", ":feature-consume",
         ":feature-output", ":feature-assembly", ":feature-count")
 ```
+
 > Yedek: `android/settings.gradle.kts.full` dosyasında saklı.
 
 ## 🔌 BC Sandbox Bağlantı Bilgileri (Hardcoded)
 
 `app-debug.apk` içinde:
+
 - **Tenant:** `7fa2357e-26f2-4174-8e16-a713981356b8`
 - **Environment:** `CustomerSandbox`
 - **Company ID:** `e83a57e9-38c9-f011-8542-6045bd6aeb9e` (Demo Business Central)
@@ -159,6 +164,7 @@ include(":app", ":macrobenchmark",
 ## 🔐 Azure AD App Registration (BCWMSApp Mobile)
 
 az CLI ile yaratıldı:
+
 - **App display name:** `BCWMSApp Mobile (sandbox)`
 - **Application (client) ID:** `8193e5c6-64d2-4e6f-8992-2114e77e4f24`
 - **Sign-in audience:** `AzureADMyOrg` (sadece bu tenant)
@@ -171,7 +177,9 @@ az CLI ile yaratıldı:
 ## 🧪 Canlı Demo Sonuçları (Bu oturumda kanıtlandı)
 
 ### Fetch License Plates → HTTP 200
+
 BC sandbox'tan **gerçek LP listesi** çekildi:
+
 ```
 LP000001  CARTON-S    SILVER/S-1-01  Built
 LP000002  CARTON-M    SILVER/S-1-01  Built
@@ -181,7 +189,9 @@ LP000005  PALLET-US   SILVER/S-1-01  Built
 ```
 
 ### Test Runs → HTTP 200
+
 4 Test Run sonucu (Section A-H, 50 case):
+
 - TR-000001: 49/50 Passed (%98, 3.584sn)
 - TR-000002: 49/50 Passed (%98, 3.019sn)
 - TR-000003: **50/50 Passed (%100, 0.812sn)** ✅

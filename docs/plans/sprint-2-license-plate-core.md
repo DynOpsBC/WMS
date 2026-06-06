@@ -15,12 +15,14 @@ License Plate (LP) modelini ve onun çevresindeki tüm yönetimi (build/stop/use
 ## AL İş Paketleri
 
 ### LP tabloları (4 tablo)
+
 - `al/src/LicensePlate/LPHeader.Table.al` (T 72010) — alanlar: `No.` (No. Series), `Location Code`, `Bin Code`, `Status` (Enum 72097), `Parent LP No.`, `LP Template Code`, `SSCC` (Code[18]), `Assigned Document Type` (Enum 72098), `Assigned Document No.`, `Built By User`, `Built DateTime`, `Last Modified DateTime`, `Weight (kg)` (FlowField sum lines), `Length cm`, `Width cm`, `Height cm`, `Notes`
 - `al/src/LicensePlate/LPLine.Table.al` (T 72011) — alanlar: `LP No.`, `Line No.`, `Item No.`, `Variant Code`, `Unit of Measure`, `Quantity`, `Lot No.`, `Serial No.`, `Package No.`, `Child LP No.` (mutex with Item No.), `Expiration Date`, `Source Document Type`, `Source Document No.`
 - `al/src/LicensePlate/LPMovementLedger.Table.al` (T 72012) — immutable; `Entry No.` (AutoIncrement, PK), `LP No.`, `Action` (Enum 72201), `From Bin`, `To Bin`, `Quantity`, `Item No.`, `Lot/Serial`, `User ID`, `Device ID`, `DateTime`, `Related Document`
 - `al/src/LicensePlate/LPTemplate.Table.al` (T 72013) — `Code`, `Description`, `Default Tare Weight`, `Default LxWxH`, `Max Weight`, `Label Report ID`, `No. Series`, `Allow Mixed Items`, `Allow Mixed Lots`
 
 ### LP Mgmt codeunits
+
 - `al/src/LicensePlate/LPManagement.Codeunit.al` (CU 72040) — public API:
   - `procedure Build(Template; Location; Bin; var LP)` + event `OnBeforeBuild`/`OnAfterBuild`
   - `procedure Stop(var LP; PrintLabel: Boolean)` (event'li)
@@ -36,11 +38,13 @@ License Plate (LP) modelini ve onun çevresindeki tüm yönetimi (build/stop/use
 - `al/src/LicensePlate/SSCCGenerator.Codeunit.al` (CU 72042) — 18 haneli SSCC üretimi, GS1 Company Prefix Setup'tan, "extension-prefix" işaret bayrağı
 
 ### Bin content rollup (CRITICAL — double-count önleme)
+
 - `al/src/LicensePlate/BinContentSubscriber.Codeunit.al` (CU 72039) — subscribe `OnAfterCalcBinContent` events; nested LP qty rollup; Sprint 2 sonu performance test ile doğrulanır
 - `al/src/Inquiry/BinContentExt.TableExt.al` (TableExt 72401) — Bin Content (7302) üzerine `Root LP Count` FlowField
 - `al/src/Inquiry/WhseEntryExt.TableExt.al` (TableExt 72402) — Warehouse Entry (7312) üzerine `LP No.` alanı
 
 ### LP API
+
 - `al/src/LicensePlate/LPApi.Page.al` (P 72088) — `/licensePlates` + bound actions:
   - POST `Microsoft.NAV.assign` — `{docType, docNo}`
   - POST `Microsoft.NAV.unbuild`
@@ -53,12 +57,14 @@ License Plate (LP) modelini ve onun çevresindeki tüm yönetimi (build/stop/use
 - `al/src/LicensePlate/LPLineApi.Page.al` (P 72089) — `/licensePlateLines`
 
 ### LP pages
+
 - `al/src/LicensePlate/LPCard.Page.al` (P 72069) — header + lines part + factbox actions
 - `al/src/LicensePlate/LPList.Page.al` (P 72070) — filter location/bin/status/template
 - `al/src/LicensePlate/LPTemplateList.Page.al` (P 72071)
 - `al/src/LicensePlate/LPMovementLedger.Page.al` (P 72072) — read-only
 
 ### Print altyapısı
+
 - `al/src/Print/IWXReportSelection.Table.al` (T 72007) — `Usage` (enum: LP Label, Receipt, Pick, Ship, Item, Bin, Posted Shipment, Custom 1-3), `Sequence`, `Report ID`, `Use For Email`, vs.
 - `al/src/Print/PrintJobQueue.Table.al` (T 72022) — async print queue
 - `al/src/Print/PrintJobLog.Table.al` (T 72023)
@@ -69,6 +75,7 @@ License Plate (LP) modelini ve onun çevresindeki tüm yönetimi (build/stop/use
 - `al/src/Print/LPLabel.Report.al` (R 72091) — ZPL section + RDLC fallback section; ZPL şablon: SSCC barcode + item summary + location + bin
 
 ### Enum'lar (eklenenler)
+
 - `al/src/Enums/LPStatus.Enum.al` (Enum 72097) — Open, Built, Assigned, Used, Unbuilt
 - `al/src/Enums/AssignedDocType.Enum.al` (Enum 72098)
 - `al/src/Enums/LPAction.Enum.al` (Enum 72201)
@@ -76,10 +83,12 @@ License Plate (LP) modelini ve onun çevresindeki tüm yönetimi (build/stop/use
 - `al/src/Enums/PartialUseAction.Enum.al` (Enum 72204)
 
 ### LP Migration placeholder
+
 - `al/src/Upgrade/MigrateFromWI.Codeunit.al` (CU 72055) — boş iskelet; gerçek mantık Sprint 8
 - `al/src/Upgrade/MigrationMapWI.Table.al` (T 72025) — boş
 
 ### Test
+
 - `tests/src/LP/LPBuildTests.Codeunit.al` — build/stop/reopen
 - `tests/src/LP/LPPartialUseTests.Codeunit.al` — 4 senaryo (CreateNewLP, RemoveExcess, RemoveUsedPortion, Unbuild)
 - `tests/src/LP/LPNestingTests.Codeunit.al` — nest, unnest, depth limit, location mismatch, status mismatch
@@ -90,6 +99,7 @@ License Plate (LP) modelini ve onun çevresindeki tüm yönetimi (build/stop/use
 ## Android İş Paketleri
 
 ### `:feature-lp`
+
 - `feature/lp/LpLookupListScreen.kt` — filter chips (location/bin/status), TopAppBar
 - `feature/lp/LpDocumentScreen.kt` — header + lines + bottom action bar (Build/Stop/Transfer/Print/Properties)
 - `feature/lp/LpBuildModal.kt` — Compose ModalBottomSheet; template seç, location/bin pick
@@ -99,18 +109,22 @@ License Plate (LP) modelini ve onun çevresindeki tüm yönetimi (build/stop/use
 - `feature/lp/LpViewModel.kt`
 
 ### `:core-domain` LP usecase'leri
+
 - `domain/usecase/BuildLp.kt`, `StopLp.kt`, `AssignLp.kt`, `UnbuildLp.kt`, `TransferLp.kt`, `AddLpLine.kt`, `RemoveLpLine.kt`, `PrintLpLabel.kt`, `NestLp.kt`, `UnnestLp.kt`, `UsePartialLp.kt`
 
 ### `:core-sync` LP ops
+
 - `core/sync/Op.kt` sealed class genişletilir: `BuildLp`, `StopLp`, `AddLpLine`, `RemoveLpLine`, `AssignLp`, `UnbuildLp`, `TransferLp`, `PrintLpLabel`
 - `core/sync/SyncWorker.kt` LP ops için handler
 
 ### `:core-printer`
+
 - `core/printer/ZplBuilder.kt` — LP label ZPL üretimi (template-based)
 - `core/printer/PrintNodeClient.kt` — Android'de de PrintNode REST'i çağırma (cihazın doğrudan yazıcıya erişimi olduğu senaryolar için; AL backend default)
 - `core/printer/PrinterRegistry.kt`
 
 ### Test
+
 - `feature/lp/test/LpUsePartialSheetTest.kt` — Compose UI
 - `core/domain/test/BuildLpTest.kt`, `TransferLpTest.kt`
 

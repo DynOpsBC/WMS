@@ -21,12 +21,40 @@ import kotlinx.coroutines.launch
 import org.json.JSONObject
 
 /**
- * Receiving — WI §10.1 parity.
- * Lookup -> Receive Document -> scan item -> qty -> Start/Stop LP -> Post Receipt.
+ * Mal Kabul (Receiving).
+ *
+ * Tek bir ana ekran, 2 sekme:
+ *  - "Whse Receipt": yönetilen lokasyon (BLUE/SILVER) için varolan Warehouse Receipt belgeleri
+ *  - "Purchase Order": yönetilmeyen veya bypass senaryosunda Whse Receipt olmadan PO satırı doğrudan mal kabul
+ *
+ * Her ikisinde de qty/LP/bin set + post akışı tek dokunuşla biter.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ReceivingModule() {
+    var tab by remember { mutableStateOf(0) }
+    val tabs = listOf("📋 Whse Receipt", "🛒 Purchase Order")
+
+    Column(Modifier.fillMaxSize()) {
+        TabRow(selectedTabIndex = tab) {
+            tabs.forEachIndexed { i, title ->
+                Tab(selected = tab == i, onClick = { tab = i }, text = { Text(title, fontSize = 13.sp) })
+            }
+        }
+        when (tab) {
+            0 -> WhseReceiptTab()
+            1 -> PurchaseOrderTab()
+        }
+    }
+}
+
+// ============================================================
+// Tab 1: Warehouse Receipt (orijinal akış)
+// ============================================================
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun WhseReceiptTab() {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var selected by remember { mutableStateOf<String?>(null) }
@@ -41,7 +69,7 @@ fun ReceivingModule() {
             loading = false
             rows = if (r.ok) BcApi.parseValueArray(r.body) else emptyList()
             status = if (!r.ok) "HATA: Mal kabul listesi alınamadı (HTTP ${r.httpCode})"
-                else if (rows.isEmpty()) "EMPTY: Açık mal kabul belgesi yok (HTTP ${r.httpCode})"
+                else if (rows.isEmpty()) "EMPTY: Açık Whse Receipt belgesi yok (HTTP ${r.httpCode})"
                 else "PASS: ${rows.size} belge (HTTP ${r.httpCode})"
         }
     }
@@ -66,7 +94,7 @@ fun ReceivingModule() {
                     }
                 }
             }
-            if (rows.isEmpty() && !loading) item { EmptyState("Açık mal kabul belgesi yok.") }
+            if (rows.isEmpty() && !loading) item { EmptyState("Açık Whse Receipt belgesi yok. PO'dan direkt mal kabul için sağdaki sekmeyi kullanın.") }
         }
     }
 }
@@ -199,6 +227,195 @@ private fun ReceiveDocument(no: String, onBack: () -> Unit) {
                 }
             }
         )
+    }
+}
+
+// ============================================================
+// Tab 2: Purchase Order direct receive
+// ============================================================
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun PurchaseOrderTab() {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var selected by remember { mutableStateOf<String?>(null) }
+    var rows by remember { mutableStateOf<List<JSONObject>>(emptyList()) }
+    var status by remember { mutableStateOf("") }
+    var loading by remember { mutableStateOf(false) }
+    var releasedOnly by remember { mutableStateOf(true) }
+
+    fun load() {
+        scope.launch {
+            loading = true; status = "Yükleniyor..."
+            val filter = if (releasedOnly) "&\$filter=status eq 'Released'" else ""
+            val r = BcApi.get(
+                context,
+                "purchaseSources?\$top=30$filter&\$select=no,vendorNo,vendorName,locationCode,expectedReceiptDate,status,lineCount,outstandingQty,percentComplete"
+            )
+            loading = false
+            rows = if (r.ok) BcApi.parseValueArray(r.body) else emptyList()
+            status = if (!r.ok) "HATA: PO listesi alınamadı (HTTP ${r.httpCode}) — ${BcApi.errorMessage(r.body).take(120)}"
+                else if (rows.isEmpty()) "EMPTY: ${if (releasedOnly) "Released" else "Açık"} PO yok (HTTP ${r.httpCode})"
+                else "PASS: ${rows.size} satınalma siparişi (HTTP ${r.httpCode})"
+        }
+    }
+    LaunchedEffect(releasedOnly) { load() }
+
+    val sel = selected
+    if (sel != null) { ReceivePurchaseOrder(no = sel, onBack = { selected = null; load() }); return }
+
+    Column(Modifier.fillMaxSize().padding(12.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Button(onClick = { load() }, enabled = !loading) { Text(if (loading) "..." else "🔄 Yenile") }
+            Spacer(Modifier.width(12.dp))
+            FilterChip(
+                selected = releasedOnly,
+                onClick = { releasedOnly = !releasedOnly },
+                label = { Text(if (releasedOnly) "Sadece Released" else "Tüm Durumlar", fontSize = 12.sp) }
+            )
+        }
+        Spacer(Modifier.height(4.dp))
+        StatusText(status)
+        Spacer(Modifier.height(8.dp))
+        LazyColumn(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            items(rows) { d ->
+                Card(onClick = { selected = d.optString("no") }, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(10.dp)) {
+                    Column(Modifier.padding(12.dp)) {
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                            Text(d.optString("no"), fontWeight = FontWeight.Bold)
+                            Text(firstValue(d, "status"), fontSize = 12.sp, color = Color.Gray)
+                        }
+                        Text("Tedarikçi: ${firstValue(d, "vendorName")} (${firstValue(d, "vendorNo")})", fontSize = 12.sp, color = Color.Gray)
+                        Text("Lokasyon: ${firstValue(d, "locationCode")} · Satır: ${d.optInt("lineCount")} · Kalan: ${d.optDouble("outstandingQty")}", fontSize = 12.sp, color = Color.Gray)
+                        val pct = d.optInt("percentComplete")
+                        if (pct > 0) LinearProgressIndicator(progress = { pct / 100f }, modifier = Modifier.fillMaxWidth().padding(top = 4.dp))
+                    }
+                }
+            }
+            if (rows.isEmpty() && !loading) item { EmptyState("Uygun satınalma siparişi yok.") }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun ReceivePurchaseOrder(no: String, onBack: () -> Unit) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var header by remember { mutableStateOf<JSONObject?>(null) }
+    var lines by remember { mutableStateOf<List<JSONObject>>(emptyList()) }
+    var status by remember { mutableStateOf("") }
+    var busy by remember { mutableStateOf(false) }
+    var invoiceToo by remember { mutableStateOf(false) }
+    var qtyLine by remember { mutableStateOf<JSONObject?>(null) }
+    var showScan by remember { mutableStateOf(false) }
+
+    fun reload() {
+        scope.launch {
+            busy = true
+            val h = BcApi.get(context, "purchaseSources('$no')")
+            if (h.ok) header = JSONObject(h.body)
+            val l = BcApi.get(context, "purchaseSourceLines?\$filter=no eq '$no' and type eq 'Item'&\$top=200&\$orderby=lineNo")
+            lines = if (l.ok) BcApi.parseValueArray(l.body) else emptyList()
+            busy = false
+        }
+    }
+    LaunchedEffect(no) { reload() }
+
+    val h = header
+    Column(Modifier.fillMaxSize()) {
+        Column(Modifier.weight(1f).padding(12.dp)) {
+            TextButton(onClick = onBack) { Text("‹ PO Listesi") }
+            DocHeaderCard(
+                title = no,
+                subtitle = "Tedarikçi: ${firstValue(h ?: JSONObject(), "vendorName")} (${firstValue(h ?: JSONObject(), "vendorNo")})\n" +
+                    "Lokasyon: ${firstValue(h ?: JSONObject(), "locationCode")} · Durum: ${firstValue(h ?: JSONObject(), "status")}",
+                percent = h?.optDouble("percentComplete")?.toInt() ?: 0
+            )
+            Spacer(Modifier.height(6.dp))
+            StatusText(status)
+            Spacer(Modifier.height(4.dp))
+            Text("Satırlar (${lines.size}) — qty/bin için dokunun", fontWeight = FontWeight.Bold, fontSize = 14.sp)
+            LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                items(lines) { ln ->
+                    val outstanding = ln.optDouble("outstandingQuantity")
+                    val toReceive = ln.optDouble("qtyToReceive")
+                    val received = ln.optDouble("qtyReceived")
+                    Card(onClick = { qtyLine = ln }, modifier = Modifier.fillMaxWidth()) {
+                        Column(Modifier.padding(10.dp)) {
+                            Text("${ln.optString("itemNo")} — ${ln.optString("description")}", fontWeight = FontWeight.Medium)
+                            Text("Kalan: $outstanding · Alınacak: $toReceive · Alınan: $received", fontSize = 12.sp, color = Color.Gray)
+                            Text("Bin: ${firstValue(ln, "binCode").ifBlank { "-" }} · UoM: ${firstValue(ln, "unitOfMeasureCode")}", fontSize = 12.sp, color = Color.Gray)
+                        }
+                    }
+                }
+                if (lines.isEmpty() && !busy) item { EmptyState("Bu PO'da satır yok (veya tümü tamamlandı).") }
+            }
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Checkbox(checked = invoiceToo, onCheckedChange = { invoiceToo = it })
+                Text("Aynı zamanda faturalandır", fontSize = 13.sp)
+            }
+        }
+
+        BottomActionBar {
+            OutlinedButton(onClick = { showScan = true }, enabled = !busy, modifier = Modifier.weight(1f)) { Text("📷 Item Tara") }
+        }
+        BottomActionBar {
+            Button(
+                onClick = {
+                    scope.launch {
+                        busy = true; status = "Post-Receive..."
+                        val body = JSONObject().apply { put("invoice", invoiceToo) }.toString()
+                        val r = BcApi.boundAction(context, "purchaseSources", no, "receive", body)
+                        busy = false
+                        status = if (r.ok) "PASS: PO mal kabul kaydedildi (HTTP ${r.httpCode})"
+                            else "HATA: ${BcApi.errorMessage(r.body)} (HTTP ${r.httpCode})"
+                        if (r.ok) reload()
+                    }
+                },
+                enabled = !busy, modifier = Modifier.fillMaxWidth()
+            ) { Text(if (invoiceToo) "✅ Post Receive & Invoice" else "✅ Post Receive", fontWeight = FontWeight.Bold) }
+        }
+    }
+
+    val ql = qtyLine
+    if (ql != null) {
+        QuantityDialogSheet(
+            title = "Alınacak Miktar",
+            itemNo = ql.optString("itemNo"),
+            initialQty = ql.optDouble("qtyToReceive").takeIf { it > 0 }
+                ?: ql.optDouble("outstandingQuantity").takeIf { it > 0 } ?: 1.0,
+            initialUom = ql.optString("unitOfMeasureCode"),
+            showLotSerial = true,
+            onDismiss = { qtyLine = null },
+            onConfirm = { res ->
+                qtyLine = null
+                scope.launch {
+                    busy = true; status = "Satır güncelleniyor..."
+                    val lineNo = ql.optInt("lineNo")
+                    val body = JSONObject().apply {
+                        put("qtyToReceive", res.quantity)
+                    }.toString()
+                    val r = BcApi.patch(
+                        context,
+                        "purchaseSourceLines(documentType='Order',no='$no',lineNo=$lineNo)",
+                        body
+                    )
+                    busy = false
+                    status = if (r.ok) "PASS: PO satırı qty=${res.quantity} (HTTP ${r.httpCode})"
+                        else "HATA: ${BcApi.errorMessage(r.body)} (HTTP ${r.httpCode})"
+                    if (r.ok) reload()
+                }
+            }
+        )
+    }
+
+    if (showScan) {
+        ScanItemSheet(title = "Item Tara (PO)", onDismiss = { showScan = false }, onItem = { _, line ->
+            showScan = false
+            qtyLine = line
+        }, lines = lines, matchKey = "itemNo")
     }
 }
 

@@ -109,9 +109,9 @@ Blocked. MCP verification/list-installed-extension tooling was not available, an
 
 ## Sandbox URLs
 
-- Setup Wizard: https://businesscentral.dynamics.com/7fa2357e-26f2-4174-8e16-a713981356b8/CustomerSandbox?company=Demo%20Business%20Central&page=72061
-- LP List: https://businesscentral.dynamics.com/7fa2357e-26f2-4174-8e16-a713981356b8/CustomerSandbox?company=Demo%20Business%20Central&page=72070
-- Pick Queue: https://businesscentral.dynamics.com/7fa2357e-26f2-4174-8e16-a713981356b8/CustomerSandbox?company=Demo%20Business%20Central&page=72083
+- Setup Wizard: <https://businesscentral.dynamics.com/7fa2357e-26f2-4174-8e16-a713981356b8/CustomerSandbox?company=Demo%20Business%20Central&page=72061>
+- LP List: <https://businesscentral.dynamics.com/7fa2357e-26f2-4174-8e16-a713981356b8/CustomerSandbox?company=Demo%20Business%20Central&page=72070>
+- Pick Queue: <https://businesscentral.dynamics.com/7fa2357e-26f2-4174-8e16-a713981356b8/CustomerSandbox?company=Demo%20Business%20Central&page=72083>
 
 ## Android Next Steps
 

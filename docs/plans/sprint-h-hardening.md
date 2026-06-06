@@ -41,12 +41,14 @@ v1.0-rc1 etiketi atıldıktan sonra production-shipping kalitesine getir: Micros
 - [ ] **Installation in fresh Cronus tenant** ≤30 dakika
 
 ### Audit scriptleri (CI'a entegre)
+
 - `tools/audit-permissions.sh` — her object için 3 permission set'in birinde mention edildiğini doğrular
 - `tools/audit-prefix.sh` — DOPSWHS prefix dışı obje var mı
 - `tools/audit-translation-coverage.sh` — eksik çeviri anahtarları
 - `tools/audit-obsolete.sh` — obsolete tag yanlış kullanımı
 
 ### Performans hardening
+
 - 10K LP + 100K LP Line + 500K Movement Ledger entry seed verisi ile API stress test
 - KQL dashboard `dashboards/api-latency.kql` ile p50/p95/p99 hedef gateleri
 - Optimization: heavy FlowField'ları SIFT key'lerle hızlandır
@@ -54,6 +56,7 @@ v1.0-rc1 etiketi atıldıktan sonra production-shipping kalitesine getir: Micros
 ## Android Hardening İş Paketleri
 
 ### Play Store gereksinimleri
+
 - [ ] **Data safety form** — camera, foreground service, internet
 - [ ] **Target API 35** ✓
 - [ ] **Minimum supported API 26** ✓
@@ -66,12 +69,14 @@ v1.0-rc1 etiketi atıldıktan sonra production-shipping kalitesine getir: Micros
 - [ ] **Closed testing track** → 5 internal user davet
 
 ### Build hardening
+
 - `android/app/proguard-rules.pro` — Kotlin reflection, Ktor, Room, MSAL için keep rules
 - R8 full mode aktif (`android.enableR8.fullMode=true`)
 - Resource shrinking
 - APK boyut hedefi: ≤35MB release
 
 ### Battery profiling
+
 - Zebra TC22 sertifika protokolü:
   - 8 saat (480 dakika) sürekli kullanım
   - Her 30 sn'de 1 scan (toplam 960 scan)
@@ -80,16 +85,19 @@ v1.0-rc1 etiketi atıldıktan sonra production-shipping kalitesine getir: Micros
   - Hedef: battery ≤ 60% düşüş
 
 ### Performance profiling
+
 - Firebase Performance: cold start ≤2.5s, API trace p95 ≤1200ms
 - Compose recomposition: her ekranda max 3 recomposition / interaction
 - Macrobenchmark profil — `android/macrobenchmark/` modülü ekle
 
 ### A11y audit
+
 - TalkBack tüm 14 feature screen'de test
 - Contrast WCAG AA — Compose Theme test
 - Touch target ≥48dp
 
 ### Instrumented test matrix
+
 - emulator (Pixel API 35) — CI default
 - Zebra TC22 — nightly scheduled
 - Honeywell CT45 — nightly (when available)
@@ -107,6 +115,7 @@ v1.0-rc1 etiketi atıldıktan sonra production-shipping kalitesine getir: Micros
 ## CI/CD Hardening
 
 ### Contract test suite (`.github/workflows/contract.yml`)
+
 - Newman runner — `contract-tests/postman/BCWMSApp.postman_collection.json`
 - 50+ endpoint smoke
 - OAuth pre-request ile token al
@@ -114,6 +123,7 @@ v1.0-rc1 etiketi atıldıktan sonra production-shipping kalitesine getir: Micros
 - Failure → Slack notification
 
 ### Release workflow (`.github/workflows/release.yml`)
+
 - Trigger: `v*` tag push
 - Steps:
   1. Bump versions (app.json, build.gradle.kts, package.json)
@@ -122,6 +132,7 @@ v1.0-rc1 etiketi atıldıktan sonra production-shipping kalitesine getir: Micros
   4. Notify (email, Slack)
 
 ### Branch protection
+
 - `main` direct push yok; PR + 1 review zorunlu
 - CI all green zorunlu
 - Branches: `main`, `release/v1.x`, `feature/*`, `bugfix/*`
@@ -129,6 +140,7 @@ v1.0-rc1 etiketi atıldıktan sonra production-shipping kalitesine getir: Micros
 ## Monitoring + Telemetry Activation
 
 ### App Insights dashboards (`dashboards/`)
+
 - `api-latency.kql` — endpoint × verb × percentile
 - `lp-throughput.kql` — LP built/sec per location
 - `error-funnel.kql` — scan → confirm → post drop-off
@@ -136,6 +148,7 @@ v1.0-rc1 etiketi atıldıktan sonra production-shipping kalitesine getir: Micros
 - Power BI workspace bağlanır (opsiyonel)
 
 ### Alerting
+
 - AL `AdvWMS.Api.*.Error` rate > 1% → email alert (Azure Monitor)
 - Function App 5xx > 5/dakika → page on-call
 

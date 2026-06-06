@@ -16,14 +16,17 @@ Warehouse Receipt, Purchase Order direct, Transfer Order receive akışlarını 
 ## AL İş Paketleri
 
 ### Page extensions (3 sayfa)
+
 - `al/src/Receiving/WhseReceiptExt.PageExt.al` (PageExt 72303) — Whse Receipt (7316) üzerine "Assigned User", "Start LP", "Stop LP" action'ları
 - `al/src/Receiving/PurchaseOrderExt.PageExt.al` (PageExt 72304) — Purchase Order (50) üzerine "Mobile Scan" action group
 - `al/src/Receiving/TransferOrderExt.PageExt.al` (PageExt 72305) — Transfer Order (5740) receive side
 
 ### Table extension
+
 - `al/src/Receiving/PostedWhseReceiptLineExt.TableExt.al` (TableExt 72404) — Posted Whse Receipt Line (7319) üzerine `LP No.` alanı
 
 ### Receipt API
+
 - `al/src/Receiving/ReceiptApi.Page.al` (P 72090) — `/receipts`, `/receipts({no})`, `/receipts({no})/lines`
   - PATCH `lines({lineNo})` — `{qtyToReceive, lotNo, serialNo, expiryDate, licensePlateNo, binCode}`
   - POST `Microsoft.NAV.assignToUser` — `{userId}`
@@ -32,19 +35,23 @@ Warehouse Receipt, Purchase Order direct, Transfer Order receive akışlarını 
   - POST `Microsoft.NAV.post` — `{print, invoice}`
 
 ### Receipt Mgmt codeunit
+
 - `al/src/Receiving/ReceiptMgmt.Codeunit.al` (CU 72043) — `Whse.-Post Receipt`'i wrap eder; LP'yi posted line'a `LP No.` ve `Package No.` üzerinden bağlar; LP'yi `Assigned` durumuna alır
 
 ### Legacy WI event compatibility
+
 - `al/src/Events/LegacyWIPublisher.Codeunit.al` (CU 72054) — re-publish (VAR compatibility):
   - `[IntegrationEvent] OnGetReceiptDocument(50001)` — yeni event'i wrap eder
   - `[IntegrationEvent] OnGetPurchaseOrder(50005)`
   - `[IntegrationEvent] OnGetTransferOrder(50013)`
 
 ### Receiving Queue Role Center
+
 - `al/src/Receiving/ReceivingQueue.Page.al` (P 72082) — ListPart; columns: No, Source No, Source Type, Vendor/Source Name, Due Date, Assigned User, % Complete (FlowField)
 - Action: "Assign to User" (modal user picker)
 
 ### Test
+
 - `tests/src/Receipt/ReceiptPostingTests.Codeunit.al` — happy path, partial receipt, over-receive disabled
 - `tests/src/Receipt/ReceiptWithLPTests.Codeunit.al` — LP'li receipt + posted line LP No. doğrulama
 - `tests/src/Integration/EndToEndReceiveTests.Codeunit.al` — PO → Whse Receipt → mobil flow → Post → Posted Whse Receipt → Item Ledger Entry zinciri
@@ -71,17 +78,21 @@ Warehouse Receipt, Purchase Order direct, Transfer Order receive akışlarını 
   - Intent: ScanBarcode, ChangeQty, StartLp, StopLp, PostDocument
 
 ### `:core-domain` receipt usecase'leri
+
 - `domain/usecase/GetReceipt.kt`, `ConfirmReceiptLine.kt`, `PostReceipt.kt`, `StartReceiptLp.kt`, `StopReceiptLp.kt`, `AssignReceiptToUser.kt`
 
 ### `:core-sync` receipt ops
+
 - `Op.kt` genişletme: `ConfirmReceiptLine`, `AssignReceipt`, `StartReceiptLp`, `StopReceiptLp` (Post asla queue'da değil — online-only)
 
 ### Offline davranışı
+
 - `feature/receive/ReceiveDocumentScreen.kt`'te Post butonu `connectivityObserver.isOnline` Flow'una bağlı
 - Offline'da tooltip: "Çevrimdışıyken kayıt yapılamaz"
 - Diğer mutations (qty, LP) queue'ya yazılır, replay olunca confirmation
 
 ### Test
+
 - `feature/receive/test/ReceiveViewModelTest.kt` — happy path, GS1-128 parse, mode switch
 - `feature/receive/test/ReceiveDocumentScreenTest.kt` — Compose UI + Roborazzi
 

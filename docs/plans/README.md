@@ -3,6 +3,7 @@
 Bu klasör, master implementation plan'ın faz-faz parçalanmış halini içerir. Her dosya kendi başına okunabilir ve ilgili sprint çalışılırken referans olarak kullanılır.
 
 ## Master Plan
+
 - [/Users/denizcelan/.claude/plans/business-central-i-in-gerekli-mossy-robin.md](/Users/denizcelan/.claude/plans/business-central-i-in-gerekli-mossy-robin.md) — onaylı master plan (kontekst + kararlar + tüm fazlar + referans materyaller)
 
 ## Sprint Faz Dosyaları (Yürütme sırasıyla)
@@ -55,6 +56,7 @@ Bu klasör, master implementation plan'ın faz-faz parçalanmış halini içerir
 ## Her Sprint İçin Standart Bitiş Kriterleri (DoD)
 
 Her sprint dosyasındaki kendi DoD'una ek olarak:
+
 1. AL test runner ≥ %75 coverage, AppSourceCop warning = 0
 2. Android `./gradlew testDebugUnitTest lintDebug` yeşil
 3. CI yeşil (al-build, android-build, web-build workflow'ları)

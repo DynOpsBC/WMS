@@ -29,6 +29,8 @@ object BcApi {
     private const val KEY_ENV = "bc_environment"
     private const val KEY_COMPANY_ID = "bc_company_id"
     private const val KEY_COMPANY_NAME = "bc_company_name"
+    private const val KEY_LOCAL_USER = "local_user_id"
+    private const val KEY_LOCAL_PROFILE = "local_user_profile_json"
 
     private fun prefs(context: Context) = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
 
@@ -62,6 +64,23 @@ object BcApi {
     fun hasToken(context: Context): Boolean = getToken(context).isNotBlank()
 
     fun clearToken(context: Context) { prefs(context).edit().remove(KEY_TOKEN).apply() }
+
+    // ---- Local WMS user (no AAD) overlay ----
+    /** Saves the locally-authenticated WMS username + resolved profile JSON. The AAD access token
+     * still carries the request to BC; this overlay just tells the app which local persona to
+     * display / filter for in the UI. */
+    fun saveLocalUser(context: Context, username: String, profileJson: String) {
+        prefs(context).edit()
+            .putString(KEY_LOCAL_USER, username)
+            .putString(KEY_LOCAL_PROFILE, profileJson)
+            .apply()
+    }
+    fun getLocalUser(context: Context): String = prefs(context).getString(KEY_LOCAL_USER, "") ?: ""
+    fun getLocalProfileJson(context: Context): String = prefs(context).getString(KEY_LOCAL_PROFILE, "") ?: ""
+    fun hasLocalUser(context: Context): Boolean = getLocalUser(context).isNotBlank()
+    fun clearLocalUser(context: Context) {
+        prefs(context).edit().remove(KEY_LOCAL_USER).remove(KEY_LOCAL_PROFILE).apply()
+    }
 
     // ---- HTTP ----
     data class ApiResult(val ok: Boolean, val httpCode: Int, val body: String)

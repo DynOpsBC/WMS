@@ -1,6 +1,6 @@
 # BCWMSApp Test Center — Kullanım Kılavuzu
 
-> **Sandbox:** https://businesscentral.dynamics.com/7fa2357e-26f2-4174-8e16-a713981356b8/CustomerSandbox?company=Demo%20Business%20Central
+> **Sandbox:** <https://businesscentral.dynamics.com/7fa2357e-26f2-4174-8e16-a713981356b8/CustomerSandbox?company=Demo%20Business%20Central>
 > **Versiyon:** v1.0.3.0
 > **Rol:** `DynOps Warehouse Management`
 
@@ -9,25 +9,30 @@
 Test Center, **50 uçtan uca test case**'i çoklu ortam (Dev/Test/UAT/Pre-Prod/Production) ve çoklu kullanıcı grubu (Dev/QA/Business) ortamlarında **otomatik koşturup** sonuçları tablo bazlı tutan bir mini test yönetim sistemidir.
 
 **Test Center'a erişim:**
+
 - Role Center → **🧪 Test Center** action group veya
 - Cue group: Total Cases, Test Run Adedi, Toplam PASS, Manuel Bekleyen, Failed Adedi, Aktif Environment, Aktif Kullanıcı Grubu
 
 ## 3 Adımda Kurulum
 
 ### 1. Test Catalog'u Seed Et (Tek Sefer)
+
 Role Center → **⚡ Setup Test Catalog** action
 
 Sonuç:
+
 - **50 Test Case** seed edilir (Section A-H)
 - **5 Environment**: DEV, TEST, UAT, PREPROD, PROD
 - **3 User Group**: DEV-TEAM, QA-TEAM, BUSINESS-USERS
 
 ### 2. E2E Test Data Hazırla (Tek Sefer)
+
 Role Center → **📦 Setup E2E Test Data** action
 
 Cronus'ta eksik master data (test items, prod components, demo PO/SO) auto-create.
 
 ### 3. İlk Test Run'ı Başlat
+
 1. Role Center → **📋 Test Run List** action
 2. **+ New Test Run** butonu → otomatik TR-000001 oluşur (Env=TEST, Group=QA-TEAM)
 3. Yeni Run satırı aç → **▶ Start Run** butonu
@@ -58,6 +63,7 @@ Cronus'ta eksik master data (test items, prod components, demo PO/SO) auto-creat
 | **H** | 5 | Sistem + SPA + API (TC-046 to TC-050) |
 
 **Kritik case'ler** (PASS olması zorunlu):
+
 - TC-013 — Bin Content nested LP rollup = 100 (çift sayım yok)
 - TC-036 — Batch isolation (2 user → ayrı journal batch)
 - TC-038 — Multi-counter variance (3-slot recount)
@@ -71,6 +77,7 @@ Cronus'ta eksik master data (test items, prod components, demo PO/SO) auto-creat
 | **Manual** | Sadece insan gözüyle doğrulanabilir — Run sonrası `Status=PendingManual`, kullanıcı manuel "Mark Passed/Failed" yapar |
 
 50 case'in mevcut dağılımı:
+
 - Auto: ~42 case
 - Surrogate: ~7 case (TC-015 LP Browser SPA, TC-018 GS1-128, TC-029 Pick Queue SPA, TC-049 Webhook, TC-050 LP tree)
 - Manual: 0 case (max otomasyon yaklaşımı)
@@ -78,6 +85,7 @@ Cronus'ta eksik master data (test items, prod components, demo PO/SO) auto-creat
 ## Multi-Environment + Multi-User-Group
 
 **Önemli:** BC AL codeunit'ları sadece deploy edildikleri tenant/environment'ta çalışır. Multi-environment anlamı:
+
 1. Aynı `.app` paketi 5 environment'a (DEV/TEST/UAT/PREPROD/PROD) deploy edilir
 2. Her environment kendi Test Run records'unu tutar
 3. Test Run header'ında `Environment Code` ve `User Group Code` etiket olarak işaretlenir (rapor + filtre için)
@@ -108,11 +116,13 @@ Cronus'ta eksik master data (test items, prod components, demo PO/SO) auto-creat
 ## Action'lar
 
 ### Test Run Card
+
 - **▶ Start Run** — tüm aktif case'leri sırayla çalıştır (~30-60 sn)
 - **🔁 Re-run Failed Only** — sadece Failed'leri tekrar çalıştır
 - **✓ Mark All Pending Manual as Passed** — (admin) tüm PendingManual'ları toplu onayla
 
 ### Test Run Result Lines
+
 - **Mark Passed** — bir case'i manuel Passed işaretle (sadece PendingManual için)
 - **Mark Failed** — bir case'i manuel Failed işaretle
 - **Run This Case** — tek bir case'i yeniden çalıştır (debug için)
@@ -120,6 +130,7 @@ Cronus'ta eksik master data (test items, prod components, demo PO/SO) auto-creat
 ## Hızlı Feedback: Test Center Cue Group
 
 Role Center → 🧪 Test Center cue panel:
+
 - **Toplam Test Case** — Active test case sayısı (50)
 - **Test Run Adedi** — şu ana kadar koşturulmuş run sayısı
 - **Toplam PASS** — birikmiş Passed result sayısı
@@ -132,11 +143,11 @@ Role Center → 🧪 Test Center cue panel:
 
 | Sayfa | URL |
 |---|---|
-| **🧪 Role Center** | https://businesscentral.dynamics.com/7fa2357e-26f2-4174-8e16-a713981356b8/CustomerSandbox?company=Demo%20Business%20Central&page=72095 |
-| **Test Run List** | https://businesscentral.dynamics.com/7fa2357e-26f2-4174-8e16-a713981356b8/CustomerSandbox?company=Demo%20Business%20Central&page=72242 |
-| **Test Case Catalog** | https://businesscentral.dynamics.com/7fa2357e-26f2-4174-8e16-a713981356b8/CustomerSandbox?company=Demo%20Business%20Central&page=72240 |
-| **Test Environments** | https://businesscentral.dynamics.com/7fa2357e-26f2-4174-8e16-a713981356b8/CustomerSandbox?company=Demo%20Business%20Central&page=72245 |
-| **Test User Groups** | https://businesscentral.dynamics.com/7fa2357e-26f2-4174-8e16-a713981356b8/CustomerSandbox?company=Demo%20Business%20Central&page=72246 |
+| **🧪 Role Center** | <https://businesscentral.dynamics.com/7fa2357e-26f2-4174-8e16-a713981356b8/CustomerSandbox?company=Demo%20Business%20Central&page=72095> |
+| **Test Run List** | <https://businesscentral.dynamics.com/7fa2357e-26f2-4174-8e16-a713981356b8/CustomerSandbox?company=Demo%20Business%20Central&page=72242> |
+| **Test Case Catalog** | <https://businesscentral.dynamics.com/7fa2357e-26f2-4174-8e16-a713981356b8/CustomerSandbox?company=Demo%20Business%20Central&page=72240> |
+| **Test Environments** | <https://businesscentral.dynamics.com/7fa2357e-26f2-4174-8e16-a713981356b8/CustomerSandbox?company=Demo%20Business%20Central&page=72245> |
+| **Test User Groups** | <https://businesscentral.dynamics.com/7fa2357e-26f2-4174-8e16-a713981356b8/CustomerSandbox?company=Demo%20Business%20Central&page=72246> |
 
 ## Sorun Çıkarsa
 
@@ -150,6 +161,7 @@ Role Center → 🧪 Test Center cue panel:
 ## AppSource ve Production Hazırlığı
 
 v1.0.3.0 production-ready durumda:
+
 - ✅ 4 audit script PASS (permissions, prefix, translation, obsolete)
 - ✅ 50 test case auto-runner
 - ✅ Multi-environment + multi-user-group altyapı

@@ -108,7 +108,7 @@ Rollback: reverse the warehouse journal or movement document where BC has posted
 
 Collect tenant ID, environment, company, user, device ID, app version, exact barcode, UTC timestamp, screenshot, and correlation ID.
 
-Escalate Severity 1 to support@dynops.com with subject `SEV1 BCWMSApp <tenant> <workflow>`. Include the customer contact, warehouse site, and production impact.
+Escalate Severity 1 to <support@dynops.com> with subject `SEV1 BCWMSApp <tenant> <workflow>`. Include the customer contact, warehouse site, and production impact.
 
 ## Release Rollback
 

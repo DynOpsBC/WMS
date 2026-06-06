@@ -16,35 +16,42 @@ Posted Whse Receipt'ten kaynaklanan Put-Away aktivitesini ve hem Ad-Hoc (Item Re
 ## AL İş Paketleri
 
 ### Whse Activity page extension
+
 - `al/src/PutAway/WhseActivityExt.PageExt.al` (PageExt 72306) — Whse. Activity Header (7330) page extension; Put-away, Pick, Movement aynı sayfayı kullanır; bu ext üçünde de geçerli olacak ek action'lar (LP scan, mobile sync)
 
 ### Table extension
+
 - `al/src/PutAway/WhseActivityLineExt.TableExt.al` (TableExt 72403) — Warehouse Activity Line (5767) üzerine `LP No.` (kaynak LP), `Target LP No.` (hedef LP)
 
 ### PutAway API
+
 - `al/src/PutAway/PutAwayApi.Page.al` (P 72091) — `/putaways`, `/putaways({no})/lines`
   - PATCH `lines({lineNo})` — `{qtyToHandle, binCode, licensePlateNo}`
   - POST `Microsoft.NAV.suggestBin` — `{itemNo, qty}` → `{binCode, zone}`
   - POST `Microsoft.NAV.register`
 
 ### Directed PutAway codeunit + interface
+
 - `al/src/Enums/IPutAwayStrategy.Interface.al` (Interface 72206) — `procedure SuggestBin(Item; Qty; Location; var BinCode; var Reason)`
 - `al/src/PutAway/DirectedPutAway.Codeunit.al` (CU 72044) — varsayılan strategy: zone rank → bin rank → capacity → mixing rules
 - VAR'lar kendi strategy implementasyonlarını `IPutAwayStrategy` üzerinden ekleyebilir; setup'tan strategy seçimi (`Setup.PutAway Strategy Code`)
 
 ### Movement API
+
 - `al/src/Movement/MovementApi.Page.al` (P 72220) — `/movements`
   - POST `Microsoft.NAV.adhoc` — `{fromBin, toBin, itemNo?, lpNo?, qty}` (Item Reclass Journal'a post)
   - GET `/movements` — `$filter=type` (AdHoc/Directed)
   - POST `Microsoft.NAV.register` — Directed Whse Movement register
 
 ### Movement Mgmt codeunit
+
 - `al/src/Movement/MovementMgmt.Codeunit.al` (CU 72045)
   - `AdHocMove(fromBin, toBin, item|lp, qty)` — Item Reclass Journal Line yarat + post
   - `RegisterDirected(WhseActivityHeader)` — standart `Whse.-Activity-Register` wrap
   - Critical: KB pattern "reclass batches must NOT be hardcoded across multiple scanners" → cihaz başına unique journal template/batch
 
 ### Test
+
 - `tests/src/PutAway/PutAwayRegisterTests.Codeunit.al` — happy path, suggested bin
 - `tests/src/PutAway/PutAwayLPAutoFillTests.Codeunit.al`
 - `tests/src/Movement/AdHocMoveTests.Codeunit.al` — bin-to-bin, LP move
@@ -54,6 +61,7 @@ Posted Whse Receipt'ten kaynaklanan Put-Away aktivitesini ve hem Ad-Hoc (Item Re
 ## Android İş Paketleri
 
 ### `:feature-putaway`
+
 - `feature/putaway/PutAwayLookupListScreen.kt` — assigned-to-me filter default
 - `feature/putaway/PutAwayDocumentScreen.kt`
   - Suggested bin gösterimi
@@ -63,18 +71,22 @@ Posted Whse Receipt'ten kaynaklanan Put-Away aktivitesini ve hem Ad-Hoc (Item Re
 - `feature/putaway/PutAwayViewModel.kt`
 
 ### `:feature-move`
+
 - `feature/move/AdHocMoveScreen.kt` — single-screen flow: source bin → item/LP → target bin → confirm
 - `feature/move/DirectedMoveScreen.kt` — list + doc
 - `feature/move/MoveViewModel.kt`
 
 ### `:core-domain` putaway/move usecase'leri
+
 - `domain/usecase/GetPutAway.kt`, `SuggestBin.kt`, `ConfirmPutAwayLine.kt`, `RegisterPutAway.kt`
 - `domain/usecase/AdHocMove.kt`, `RegisterDirectedMove.kt`
 
 ### `:core-sync` ops
+
 - `Op.kt` genişletme: `ConfirmPutAwayLine`, `RegisterPutAway`, `AdHocMove`, `RegisterDirectedMove`
 
 ### Test
+
 - `feature/putaway/test/PutAwayViewModelTest.kt` — LP auto-fill
 - `feature/move/test/AdHocMoveViewModelTest.kt`
 

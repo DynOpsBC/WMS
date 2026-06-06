@@ -17,12 +17,14 @@
 ## AL İş Paketleri
 
 ### Count tabloları
+
 - `al/src/Count/CountSheetHeader.Table.al` (T 72016) — `No.`, `Location Code`, `Mode` (Enum 72205: Blind/Visible/Recount), `Status`, `Created DateTime`, `Posted DateTime`, `Source Phys. Inv. Journal Batch`
 - `al/src/Count/CountSheetLine.Table.al` (T 72017) — `Sheet No.`, `Line No.`, `Item No.`, `Bin Code`, `LP No.`, `System Qty`, `Counted Qty 1`, `Counted Qty 2`, `Counted Qty 3`, `Variance`, `Recount Required`
 - `al/src/Count/CountCounter.Table.al` (T 72018) — `Sheet No.`, `Counter Slot`, `User ID`, `Assigned DateTime`
 - `al/src/Enums/CountMode.Enum.al` (Enum 72205)
 
 ### Count API
+
 - `al/src/Count/CountApi.Page.al` (P 72221) — `/countSheets`
   - GET — `$filter=status`
   - POST — `{locationCode, mode, counters: [userId]}`
@@ -32,6 +34,7 @@
   - POST `Microsoft.NAV.post`
 
 ### Count Mgmt codeunit
+
 - `al/src/Count/CountMgmt.Codeunit.al` (CU 72050)
   - `CreateSheet(Location; Mode; Counters)` — Phys. Inv. Journal Batch yarat
   - `RecordCount(Sheet; Line; CounterSlot; Qty)`
@@ -39,21 +42,25 @@
   - `PostSheet(Sheet)` — variance'ı Phys. Inv. Journal'a post
 
 ### Phys. Inv. Journal extension
+
 - `al/src/Count/PhysInvJournalExt.PageExt.al` (PageExt 72310) — Phys. Inv. Journal (191) üzerine "Count Sheet Source" reference
 
 ### Count pages
+
 - `al/src/Count/CountSheetList.Page.al` (P 72074)
 - `al/src/Count/CountSheetCard.Page.al` (P 72075)
 - `al/src/Count/CountVarianceReview.Page.al` (P 72085) — supervisor variance approve UI; web Role Center'da yer alır
 - `al/src/Count/CountVariance.Report.al` (R 72093)
 
 ### Warehouse Manager Role Center
+
 - `al/src/RoleCenter/WarehouseManagerRC.Page.al` (P 72081) — RoleCenter pageType
   - Cue Group: Receipts (Open count), Picks (Open count), Shipments (Released count), Late Picks (SLA breach), Unbuilt LPs, Count Discrepancies, Devices Online
   - Each tile drillthrough to relevant queue page
 - `al/src/RoleCenter/WarehouseManagerCue.Table.al` — cue values FlowField'lar
 
 ### WI Migration tamamlama
+
 - `al/src/Upgrade/MigrateFromWI.Codeunit.al` (CU 72055) tam implementasyon:
   - `PreflightCheck()` — WI sürüm tespiti, conflict raporu
   - `DryRun()` — kaç satır, kaç çakışma, varolan target verisi
@@ -64,18 +71,22 @@
 - `al/src/Upgrade/MigrateFromWI.Page.al` — Card UI (wizard tarzı)
 
 ### Upgrade codeunit + Entitlement
+
 - `al/src/Upgrade/Upgrade.Codeunit.al` (CU 72034) — OnUpgradePerDatabase / OnUpgradePerCompany; obsolete tag handling
 - `al/src/Setup/Entitlement.Codeunit.al` (CU 72056) — per-device licensing kontrolü (Sprint 0'da placeholder, burada tam)
 
 ### Translation
+
 - `al/Translations/DOPSWHS.g.xlf` — AL compiler tarafından regenerate
 - `al/Translations/DOPSWHS.tr-TR.xlf` — tüm string'ler çevrildi, `docs/i18n-glossary.md`'ye uyumlu
 - `al/Translations/DOPSWHS.de-DE.xlf` — aynı
 
 ### ControlAddIn (LP Browser için ek)
+
 - `al/src/ControlAddIn/LPBrowser.ControlAddIn.al` (ControlAddIn 72500) — `Scripts: ['Resources/lpBrowser.js']`, `StyleSheets: ['Resources/lpBrowser.css']`, bridge procedures (`setData`, `nestLp`, `unnestLp`, `printLabel`)
 
 ### Test
+
 - `tests/src/Count/CountSheetCreateTests.Codeunit.al`
 - `tests/src/Count/CountVarianceTests.Codeunit.al` — 3-counter senaryosu, recount
 - `tests/src/Count/CountPostTests.Codeunit.al` — Phys. Inv. Journal'a doğru post
@@ -85,29 +96,35 @@
 ## Android İş Paketleri
 
 ### `:feature-count`
+
 - `feature/count/CountSheetLookupListScreen.kt`
 - `feature/count/CountSheetDocumentScreen.kt`
 - `feature/count/BlindCountScreen.kt` — sistem qty'sini gizle
 - `feature/count/CountViewModel.kt`
 
 ### `:core-domain` count usecase'leri
+
 - `CreateCountSheet.kt`, `RecordCount.kt`, `StartRecount.kt`, `PostCountSheet.kt`
 
 ### `:core-sync` ops
+
 - `Op.kt`: `RecordCount` (queue), `PostCountSheet` (online-only)
 
 ### Polish + i18n
+
 - Tüm strings.xml → tr.xml, de.xml çeviri
 - Accessibility audit — TalkBack tüm screen'lerde test
 - Performance polish — Compose recomposition profili
 - Crashlytics 0 crash hedef
 
 ### Test
+
 - `feature/count/test/CountViewModelTest.kt`
 
 ## Web İş Paketleri
 
 ### LP Browser SPA
+
 - `web/src/lpBrowser/LpBrowserApp.tsx` — top-level component
 - `web/src/lpBrowser/LpTreeNode.tsx` — recursive tree node
 - `web/src/lpBrowser/DragNestHandler.ts` — react-dnd ile drag-nest
@@ -116,9 +133,11 @@
 - `web/vite.config.ts` — entry `lpBrowser` ekle, output `../al/src/ControlAddIn/Resources/lpBrowser.{js,css}`
 
 ### i18n
+
 - `web/src/i18n/{en,tr,de}.json` — `react-i18next` ile
 
 ### Test
+
 - `web/tests/lpBrowser.spec.ts` — Playwright E2E
 
 ## Eklenen API Endpoint'leri

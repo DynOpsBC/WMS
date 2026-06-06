@@ -37,6 +37,7 @@ ve **SOAP (sayfa aksiyonları, örn. CreatePick)** üzerinden çözüyoruz. Yay�
 - Servis listesi: `.../ODataV4/` (service document).
 
 ### Doğrulanan (SandboxUS / CRONUS USA, v1.3.1.0)
+
 - `.../ODataV4/` → 16 DOPSWHS entity set listelendi (11 servis + parent/line alt sayfaları).
 - `GET .../ODataV4/Company('CRONUS USA, Inc.')/DOPSWHSWarehouseShipment` → **HTTP 200** (SH000001/SH000002).
 - `GET .../DOPSWHSItemReclassJournal` → **HTTP 200**.
@@ -56,6 +57,7 @@ ve **SOAP (sayfa aksiyonları, örn. CreatePick)** üzerinden çözüyoruz. Yay�
 > kullanabilir** — directed-pick boşluğu kapandı.
 
 ## Sonraki adım (opsiyonel)
+
 - Mobil Pick modülüne SOAP `CreatePick` çağrısı ekleyip uçtan uca Shipment→Pick→Post'u handheld'den tamamlamak.
 - Üretim consume/output için Inventory Posting Setup (WIP) + iş merkezi/rota kurulumunu da bir setup
   prosedürüne eklemek (Quality/WebSvc publisher ile aynı desende).

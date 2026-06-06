@@ -8,4 +8,3 @@ Sprint 0 scaffolded the BCWMSApp monorepo foundations:
 - Azure Functions push relay scaffold with Bicep infrastructure placeholder.
 - GitHub Actions workflow stubs for AL, Android, and web.
 - Project documentation, coding standards, runbook, glossary, and Sprint 0 decisions.
-

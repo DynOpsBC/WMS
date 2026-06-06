@@ -16,6 +16,7 @@ Warehouse Pick + Inventory Pick akışları, **pick-to-LP** varsayılan davranı
 ## AL İş Paketleri
 
 ### Pick tabloları + extension
+
 - `al/src/Pick/ShortPickReason.Table.al` (T 72015) — `Code`, `Description`, `Default`, `Allows Backorder`
 - `al/src/Pick/ReassignHistory.Table.al` (T 72021) — audit
 - `al/src/Sync/SyncConflict.Table.al` (T 72019) — ETag 412 → conflict buffer (mobil için)
@@ -25,6 +26,7 @@ Warehouse Pick + Inventory Pick akışları, **pick-to-LP** varsayılan davranı
 - `al/src/Sync/SyncConflictList.Page.al` (P 72080)
 
 ### Pick API
+
 - `al/src/Pick/PickApi.Page.al` (P 72092) — `/picks`, `/picks({no})/lines`
   - POST `Microsoft.NAV.assignToMe`
   - PATCH `lines({lineNo})` — `{qtyToHandle, binCode, licensePlateNo}`
@@ -35,6 +37,7 @@ Warehouse Pick + Inventory Pick akışları, **pick-to-LP** varsayılan davranı
   - POST `Microsoft.NAV.reassign` — `{userId}` (supervisor permission gerekli)
 
 ### Pick Mgmt + Pick Strategy
+
 - `al/src/Enums/IPickStrategy.Interface.al` (Interface 72207) — `procedure SuggestNextLine(var WhseActivityLine): Boolean`
 - `al/src/Pick/PickMgmt.Codeunit.al` (CU 72046)
   - `StartShippingLP(Pick; Template)` — create LP in shipping zone
@@ -43,19 +46,23 @@ Warehouse Pick + Inventory Pick akışları, **pick-to-LP** varsayılan davranı
   - `ReassignPick(Pick; NewUser)` — audit + webhook publish
 
 ### Webhook altyapısı (BC subscriptions)
+
 - `al/src/Events/WebhookMgmt.Codeunit.al` (CU 72053) — `picks`, `licensePlates`, `shipments` resource'ları için BC standart webhook subscription register
 - `al/src/Events/WebhookEventPublisher.Codeunit.al` — entity change → BC webhook trigger
 
 ### Pick Queue Role Center
+
 - `al/src/Pick/PickQueue.Page.al` (P 72083) — ListPart + ControlAddIn `DOPSWHS Pick Board`
 - Action: "Manual Reassign" (table-driven, SPA olmadan da çalışır)
 
 ### ControlAddIn (Vite build output'unu host eden AL resource)
+
 - `al/src/ControlAddIn/PickBoard.ControlAddIn.al` (ControlAddIn 72501) — `Scripts: ['Resources/pickBoard.js']`, `StyleSheets: ['Resources/pickBoard.css']`, BC bridge procedures
 - AL'den SPA'ya `setData(json)`, `setLocale(code)`, `applyFilter(json)`
 - SPA'dan AL'ye `reassign(pickNo, userId)`, `requestRefresh()`
 
 ### Test
+
 - `tests/src/Pick/PickRegisterTests.Codeunit.al`
 - `tests/src/Pick/PickToLPTests.Codeunit.al` — shipping LP build during pick
 - `tests/src/Pick/ShortPickTests.Codeunit.al` — backorder allocation kontrolü
@@ -65,6 +72,7 @@ Warehouse Pick + Inventory Pick akışları, **pick-to-LP** varsayılan davranı
 ## Android İş Paketleri
 
 ### `:feature-pick`
+
 - `feature/pick/PickLookupListScreen.kt`
   - Default filter: "assigned to me"; toggle "Show All"
   - Status badge: Open / In Progress / Done
@@ -77,23 +85,28 @@ Warehouse Pick + Inventory Pick akışları, **pick-to-LP** varsayılan davranı
 - `feature/pick/PickViewModel.kt`
 
 ### `:core-domain` pick usecase'leri
+
 - `GetPicks.kt`, `AssignPickToMe.kt`, `ConfirmPickLine.kt`, `StartShippingLp.kt`, `StopShippingLp.kt`, `MarkPickShort.kt`, `RegisterPick.kt`
 
 ### `:core-sync` ops
+
 - `Op.kt`: `AssignPickToMe`, `ConfirmPickLine`, `StartShippingLp`, `StopShippingLp`, `MarkPickShort`
 - Register asla queue'da değil — online only (Post gibi)
 
 ### Push notification
+
 - FCM push handler: `PickReassignedNotification.kt` — Snackbar + auto-refresh
 - `core/network/PushTokenRegistrar.kt` — FCM token'ı BC'ye device registration ile birlikte gönderir
 
 ### Test
+
 - `feature/pick/test/PickViewModelTest.kt` — pick-to-LP flow
 - `feature/pick/test/ShortPickDialogTest.kt`
 
 ## Web İş Paketleri (İLK SPA BİLEŞENİ)
 
 ### React + Vite SPA
+
 - `web/src/pickBoard/PickBoardApp.tsx` — top-level component
 - `web/src/pickBoard/PickerColumn.tsx` — picker bazlı kolon
 - `web/src/pickBoard/PickCardDraggable.tsx` — react-dnd ile drag-drop kart
@@ -103,6 +116,7 @@ Warehouse Pick + Inventory Pick akışları, **pick-to-LP** varsayılan davranı
 - `web/tests/pickBoard.spec.ts` — Playwright E2E (BC'siz, mock veri)
 
 ### SignalR realtime
+
 - v1.0 default: 5-saniye polling (`useSWR`)
 - v1.1 hedefi: SignalR `@microsoft/signalr` ile gerçek zamanlı; bu sprint'te scaffold edilir, polling fallback aktif
 
@@ -125,6 +139,7 @@ Warehouse Pick + Inventory Pick akışları, **pick-to-LP** varsayılan davranı
 ## Webhook Subscriptions Setup (Sandbox seed)
 
 Sprint 5 sonunda sandbox'a aşağıdaki webhook subscription'lar otomatik kaydedilir (Setup Wizard genişlemesi):
+
 - Resource `picks` → endpoint `https://<azure-func>.azurewebsites.net/api/webhook`
 - Resource `licensePlates` → aynı
 - Resource `shipments` → aynı

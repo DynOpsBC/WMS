@@ -6,4 +6,3 @@
 - Business Central posting actions are online-only unless a later sprint explicitly defines queue semantics.
 - Scanner integrations expose a common abstraction and keep vendor-specific behavior isolated.
 - Use stable route names and keep feature modules independent.
-

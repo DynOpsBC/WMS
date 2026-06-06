@@ -16,10 +16,12 @@ Production Order Consumption + Output + Assembly Order akışlarını mobilden t
 ## AL İş Paketleri
 
 ### Page extensions
+
 - `al/src/Production/ProdOrderExt.PageExt.al` (PageExt 72308) — Released Prod Order (5409 family) üzerine "Mobile Consume" + "Mobile Output" actions
 - `al/src/Assembly/AssemblyHeaderExt.PageExt.al` (PageExt 72309) — Assembly Order (900) üzerine "Mobile Consume" action
 
 ### Production API'ler (2 API)
+
 - `al/src/Production/ConsumptionApi.Page.al` (P 72222) — `/productionConsumption`
   - GET — `$filter=prodOrderNo,status`
   - POST `Microsoft.NAV.consume` — `{prodOrderNo, componentLineNo, itemNo, qty, lpNo?, lotNo?, serialNo?, binCode?}`
@@ -28,12 +30,14 @@ Production Order Consumption + Output + Assembly Order akışlarını mobilden t
   - POST `Microsoft.NAV.report` — `{prodOrderNo, routingLineNo, outputQty, scrapQty, runtime, newLpTemplate?, binCode?}`
 
 ### Prod Mgmt codeunit
+
 - `al/src/Production/ProdMgmt.Codeunit.al` (CU 72048)
   - `Consume(ProdOrderComponent; ItemNo; Qty; LP?; Lot?; Serial?)` — Item Journal Type=Consumption line yarat + post
   - `ReportOutput(ProdOrderRoutingLine; OutputQty; ScrapQty; Runtime; NewLpTemplate?)` — Item Journal Type=Output line yarat + post; NewLpTemplate verilmişse `LPManagement.Build` çağır
   - LP auto-match by item: scan edilen LP'nin Item No'su component'le eşleşiyorsa tüm qty consume edilir
 
 ### Assembly API + Mgmt
+
 - `al/src/Assembly/AssemblyApi.Page.al` (P 72224) — `/assemblies`
   - GET, POST `Microsoft.NAV.post`
 - `al/src/Assembly/AssemblyMgmt.Codeunit.al` (CU 72049)
@@ -42,6 +46,7 @@ Production Order Consumption + Output + Assembly Order akışlarını mobilden t
   - Assemble-to-Order için sadece consumption tracking (output BC source document üzerinden)
 
 ### Test
+
 - `tests/src/Production/ConsumptionTests.Codeunit.al`
 - `tests/src/Production/OutputTests.Codeunit.al`
 - `tests/src/Production/OutputToLPTests.Codeunit.al` — KB pattern doğrulama
@@ -51,29 +56,35 @@ Production Order Consumption + Output + Assembly Order akışlarını mobilden t
 ## Android İş Paketleri
 
 ### `:feature-consume`
+
 - `feature/consume/ConsumptionLookupListScreen.kt` — released prod orders
 - `feature/consume/ConsumptionBOMScreen.kt` — BOM lines + component-wise consume
 - Menu (WI 15 parite): Close, Post, Enter Bin, Enter Item, Show Usage, Item Inquiry, Bin Inquiry
 - `feature/consume/ConsumeViewModel.kt`
 
 ### `:feature-output`
+
 - `feature/output/OutputLookupListScreen.kt`
 - `feature/output/OutputScreen.kt` — operation selector, qty fields, "New LP" toggle, runtime
 - `feature/output/OutputViewModel.kt`
 
 ### `:feature-assembly`
+
 - `feature/assembly/AssemblyLookupListScreen.kt`
 - `feature/assembly/AssemblyScreen.kt` — components + assembly qty
 - `feature/assembly/AssemblyViewModel.kt`
 
 ### `:core-domain` usecase'leri
+
 - `Consume.kt`, `ReportOutput.kt`, `PostAssembly.kt`
 - `GetProdOrder.kt`, `GetAssembly.kt`
 
 ### `:core-sync` ops
+
 - `Op.kt`: `Consume` (queue), `ReportOutput` (queue), `PostAssembly` (online-only)
 
 ### Test
+
 - `feature/consume/test/ConsumeViewModelTest.kt` — LP auto-match
 - `feature/output/test/OutputViewModelTest.kt` — new LP toggle
 
