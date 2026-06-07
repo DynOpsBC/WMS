@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import * as BcApi from "../lib/bcApi";
-import { DocHeader, EmptyState, Pill, StatusText } from "../ui/primitives";
+import { DocHeader, EmptyState, Modal, NumberField, Pill, StatusText } from "../ui/primitives";
 
 type Row = Record<string, any>;
 
@@ -62,6 +62,7 @@ function CountDocument({ no, onBack }: { no: string; onBack: () => void }) {
   const [lines, setLines] = useState<Row[]>([]);
   const [status, setStatus] = useState("");
   const [busy, setBusy] = useState(false);
+  const [countLine, setCountLine] = useState<Row | null>(null);
 
   async function reload() {
     setBusy(true);
@@ -73,10 +74,10 @@ function CountDocument({ no, onBack }: { no: string; onBack: () => void }) {
   }
   useEffect(() => { reload(); }, [no]);
 
-  async function action(name: string, body: string, okMsg: string) {
+  async function action(name: string, okMsg: string) {
     setBusy(true);
     setStatus(`${name}…`);
-    const r = await BcApi.boundAction("countSheets", no, name, body);
+    const r = await BcApi.boundAction("countSheets", no, name, "{}");
     setBusy(false);
     setStatus(
       r.ok
@@ -86,34 +87,135 @@ function CountDocument({ no, onBack }: { no: string; onBack: () => void }) {
     if (r.ok) reload();
   }
 
+  const mode = String(header?.mode ?? "");
+  const blind = mode === "Blind";
+  const sheetStatus = String(header?.status ?? "");
+
+  function fmt(n: number) {
+    return Number(n).toLocaleString("tr-TR");
+  }
+
   return (
     <div>
       <button className="ghost" onClick={onBack}>‹ Sayfa Listesi</button>
       <DocHeader
         title={no}
-        subtitle={`Lokasyon: ${BcApi.firstValue(header, "locationCode")} · Mode: ${BcApi.firstValue(header, "mode")} · ${BcApi.firstValue(header, "status")}`}
+        subtitle={`Lokasyon: ${BcApi.firstValue(header, "locationCode")} · Mode: ${mode} · ${sheetStatus}`}
       />
       <StatusText status={status} />
-      <h3 style={{ marginTop: 16 }}>Satırlar ({lines.length})</h3>
+      <h3 className="mt16">Satırlar ({lines.length}) — sayım girmek için tıklayın</h3>
       <div className="list">
-        {lines.map((ln) => (
-          <div key={String(ln.lineNo)} className="card">
-            <div className="card-title">{String(ln.itemNo)} · Bin: {BcApi.firstValue(ln, "binCode")}</div>
-            <div className="card-meta">
-              Sistem: {Number(ln.systemQty ?? 0)} · Sayılan: {Number(ln.countedQty ?? 0)} · Variance: {Number(ln.variance ?? 0)}
+        {lines.map((ln) => {
+          const c1 = Number(ln.countedQty1 ?? 0);
+          const c2 = Number(ln.countedQty2 ?? 0);
+          const c3 = Number(ln.countedQty3 ?? 0);
+          const counts = [c1, c2, c3].filter((q) => q !== 0).map(fmt).join(" / ") || "—";
+          const sys = Number(ln.systemQty ?? 0);
+          const variance = Number(ln.variance ?? 0);
+          const recount = Boolean(ln.recountRequired);
+          return (
+            <div key={String(ln.lineNo)} className="card clickable" onClick={() => setCountLine(ln)}>
+              <div className="row-between">
+                <div className="card-title">{String(ln.itemNo)} · Bin: {BcApi.firstValue(ln, "binCode") || "-"}</div>
+                {recount && <Pill text="⟳ recount" tone="warn" />}
+              </div>
+              <div className="card-meta">
+                Sayımlar: {counts}
+                {!blind && (
+                  <>
+                    {" · Sistem: "}{fmt(sys)}
+                    {" · Fark: "}{fmt(variance)}
+                  </>
+                )}
+              </div>
             </div>
-          </div>
-        ))}
-        {lines.length === 0 && !busy && <EmptyState message="Bu sayımda satır yok." />}
+          );
+        })}
+        {lines.length === 0 && !busy && <EmptyState message="Bu sayımda satır yok. ➕ Satır Üret ile bin content'ten oluşturun." />}
       </div>
       <div className="actions">
-        <button className="outline" disabled={busy} onClick={() => action("recount", "{}", "Recount tetiklendi")}>
-          🔁 Recount
+        <button className="outline" disabled={busy} onClick={() => action("generateLines", "Satırlar üretildi")}>
+          ➕ Satır Üret
         </button>
-        <button className="primary big" disabled={busy} onClick={() => action("post", "{}", "Sayım post edildi")}>
+        <button className="outline" disabled={busy} onClick={() => action("startRecount", "Recount başlatıldı")}>
+          ⟳ Recount
+        </button>
+        <button className="primary big" disabled={busy} onClick={() => action("postSheet", "Sayım post edildi")}>
           ✅ Post
         </button>
       </div>
+      {countLine && (
+        <CountEntryModal
+          line={countLine}
+          blind={blind}
+          onClose={() => setCountLine(null)}
+          onSubmit={async (slot, qty) => {
+            const ln = countLine;
+            setCountLine(null);
+            setBusy(true);
+            setStatus("Sayım kaydediliyor...");
+            const body = JSON.stringify({ counterSlot: slot, qty });
+            const sheetNo = BcApi.firstValue(ln, "sheetNo") || no;
+            const lineNo = Number(ln.lineNo);
+            const r = await BcApi.post(
+              `countSheetLines(sheetNo='${sheetNo}',lineNo=${lineNo})/Microsoft.NAV.recordCount`,
+              body,
+            );
+            setBusy(false);
+            setStatus(
+              r.ok
+                ? `PASS: Sayım kaydedildi (slot ${slot}, qty=${qty}) (HTTP ${r.httpCode})`
+                : `HATA: ${BcApi.errorMessage(r.body)} (HTTP ${r.httpCode})`,
+            );
+            if (r.ok) reload();
+          }}
+        />
+      )}
     </div>
+  );
+}
+
+function CountEntryModal({
+  line,
+  blind,
+  onClose,
+  onSubmit,
+}: {
+  line: Row;
+  blind: boolean;
+  onClose: () => void;
+  onSubmit: (slot: number, qty: number) => void;
+}) {
+  const [slot, setSlot] = useState<number>(1);
+  const [qty, setQty] = useState("0");
+  const sysQty = Number(line.systemQty ?? 0);
+
+  return (
+    <Modal
+      title="Sayım Gir"
+      meta={`Item: ${line.itemNo} · Bin: ${line.binCode ?? "-"}${blind ? "" : ` · Sistem: ${sysQty}`}`}
+      onClose={onClose}
+    >
+      <label className="field" htmlFor="counter-slot">Counter Slot</label>
+      <select
+        id="counter-slot"
+        title="Hangi counter slot'a kaydedilecek"
+        value={slot}
+        onChange={(e) => setSlot(Number(e.target.value))}
+      >
+        <option value={1}>Slot 1 (1. sayım)</option>
+        <option value={2}>Slot 2 (2. sayım)</option>
+        <option value={3}>Slot 3 (3. sayım)</option>
+      </select>
+      <div className="mt12">
+        <NumberField label={blind ? "Sayılan miktar" : `Sayılan miktar (sistem: ${sysQty})`} value={qty} onChange={setQty} />
+      </div>
+      <div className="actions" style={{ borderTop: "none", marginTop: 16 }}>
+        <button className="outline" onClick={onClose}>İptal</button>
+        <button className="primary" onClick={() => onSubmit(slot, Number(qty) || 0)}>
+          Slot {slot}'e Kaydet
+        </button>
+      </div>
+    </Modal>
   );
 }

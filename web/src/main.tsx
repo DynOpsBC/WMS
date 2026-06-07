@@ -11,6 +11,7 @@ import { LicensePlate } from "./modules/LicensePlate";
 import { Picking } from "./modules/Picking";
 import { PutAway } from "./modules/PutAway";
 import { Count } from "./modules/Count";
+import { Movement } from "./modules/Movement";
 
 function App() {
   const [screen, setScreen] = useState<Screen>(BcApi.hasToken() ? "home" : "login");
@@ -63,9 +64,10 @@ function App() {
         {screen === "picking" && <Picking />}
         {screen === "putaway" && <PutAway />}
         {screen === "count" && <Count />}
-        {(screen === "adhoc" ||
-          screen === "directed" ||
-          screen === "production" ||
+        {(screen === "adhoc" || screen === "directed") && (
+          <Movement initialTab={screen === "directed" ? "directed" : "adhoc"} />
+        )}
+        {(screen === "production" ||
           screen === "assembly" ||
           screen === "quality" ||
           screen === "inquiry") && (
