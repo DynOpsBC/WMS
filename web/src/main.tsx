@@ -17,6 +17,7 @@ import { Assembly } from "./modules/Assembly";
 import { Inquiry } from "./modules/Inquiry";
 import { PostingTest } from "./modules/PostingTest";
 import { Quality } from "./modules/Quality";
+import { QualityManagement } from "./modules/QualityManagement";
 
 function App() {
   const [screen, setScreen] = useState<Screen>(BcApi.hasToken() ? "home" : "login");
@@ -79,6 +80,7 @@ function App() {
         )}
         {screen === "posting" && <PostingTest />}
         {screen === "quality" && <Quality />}
+        {screen === "qms" && <QualityManagement />}
       </main>
     </div>
   );

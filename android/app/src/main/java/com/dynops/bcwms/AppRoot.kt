@@ -41,6 +41,7 @@ enum class Screen(val title: String) {
     Assembly("Montaj"),
     DirectedMove("Yönlendirilmiş Hareket"),
     Quality("Kalite Denetimi"),
+    QualityMgmt("MS Quality Mgmt"),
     TestCenter("Test Center"),
     PostingTest("Posting Test"),
 }
@@ -90,6 +91,7 @@ fun AppRoot() {
                 Screen.Assembly -> AssemblyModule()
                 Screen.DirectedMove -> DirectedMoveModule()
                 Screen.Quality -> QualityModule()
+                Screen.QualityMgmt -> QualityManagementModule()
                 Screen.TestCenter -> TestCenterScreen()
                 Screen.PostingTest -> PostingTestModule()
             }
@@ -125,6 +127,7 @@ private fun HomeScreen(connected: Boolean, onNavigate: (Screen) -> Unit) {
         Tile(Screen.Production, "🏭", "Üretim"),
         Tile(Screen.Assembly, "🔧", "Montaj"),
         Tile(Screen.Quality, "🔬", "Kalite Denetimi"),
+        Tile(Screen.QualityMgmt, "🧫", "MS Quality Mgmt"),
         Tile(Screen.ItemInquiry, "🔎", "Item Inquiry"),
         Tile(Screen.BinInquiry, "📍", "Bin Inquiry"),
         Tile(Screen.TestCenter, "🧪", "Test Center"),

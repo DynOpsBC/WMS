@@ -27,6 +27,7 @@ const TILES: Tile[] = [
   { key: "inquiry", icon: "🔍", label: "Item Inquiry", enabled: true },
   { key: "binInquiry", icon: "🪣", label: "Bin Inquiry", enabled: true },
   { key: "posting", icon: "🧪", label: "Posting Test", enabled: true },
+  { key: "qms", icon: "🔬", label: "MS Quality Mgmt", enabled: true },
 ];
 
 export function Home({ navigate }: HomeProps) {
