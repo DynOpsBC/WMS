@@ -42,6 +42,11 @@ jobs:
     name: Dependency Review
     runs-on: ubuntu-latest
     if: github.event_name == 'pull_request'
+    # Dependency Review private repolarda GitHub Advanced Security + Dependency
+    # Graph gerektirir. Lisans olmadığında "Dependency review is not supported
+    # on this repository" hatası alıyoruz. PR'yi engellememesi için soft-fail
+    # bırakıldı. Lisans alınırsa continue-on-error kaldırılabilir.
+    continue-on-error: true
     steps:
       - uses: actions/checkout@v4
       - uses: actions/dependency-review-action@v4
