@@ -406,7 +406,7 @@ private fun SalesOrderTab() {
             val filter = if (releasedOnly) "&\$filter=status eq 'Released'" else ""
             val r = BcApi.get(
                 context,
-                "salesSources?\$top=30$filter&\$select=no,customerNo,customerName,shipToName,locationCode,shipmentDate,status,lineCount,outstandingQty,percentComplete"
+                "salesSources?\$top=30$filter&\$select=no,customerNo,customerName,shipToName,locationCode,shipmentDate,status,lineCount,outstandingQty,percentComplete,requiresWhseShipment,directShipAllowed"
             )
             loading = false
             rows = if (r.ok) BcApi.parseValueArray(r.body) else emptyList()
@@ -435,11 +435,15 @@ private fun SalesOrderTab() {
         Spacer(Modifier.height(8.dp))
         LazyColumn(verticalArrangement = Arrangement.spacedBy(6.dp)) {
             items(rows) { d ->
+                val requiresWhse = d.optBoolean("requiresWhseShipment", false)
                 Card(onClick = { selected = d.optString("no") }, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(10.dp)) {
                     Column(Modifier.padding(12.dp)) {
                         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                             Text(d.optString("no"), fontWeight = FontWeight.Bold)
-                            Text(firstValue(d, "status"), fontSize = 12.sp, color = Color.Gray)
+                            Row {
+                                if (requiresWhse) Text("⚠ Whse Ship", fontSize = 11.sp, color = Color(0xFFD97706), modifier = Modifier.padding(end = 6.dp))
+                                Text(firstValue(d, "status"), fontSize = 12.sp, color = Color.Gray)
+                            }
                         }
                         Text("Müşteri: ${firstValue(d, "customerName")} (${firstValue(d, "customerNo")})", fontSize = 12.sp, color = Color.Gray)
                         val st = firstValue(d, "shipToName")
@@ -483,6 +487,7 @@ private fun ShipSalesOrder(no: String, onBack: () -> Unit) {
     LaunchedEffect(no) { reload() }
 
     val h = header
+    val directAllowed = h?.let { it.optBoolean("directShipAllowed", true) } ?: true
     Column(Modifier.fillMaxSize()) {
         Column(Modifier.weight(1f).padding(12.dp)) {
             TextButton(onClick = onBack) { Text("‹ SO Listesi") }
@@ -492,6 +497,21 @@ private fun ShipSalesOrder(no: String, onBack: () -> Unit) {
                     "Lokasyon: ${firstValue(h ?: JSONObject(), "locationCode")} · Durum: ${firstValue(h ?: JSONObject(), "status")}",
                 percent = h?.optDouble("percentComplete")?.toInt() ?: 0
             )
+            if (h != null && !directAllowed) {
+                Spacer(Modifier.height(8.dp))
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(containerColor = Color(0xFFFEF3C7)),
+                ) {
+                    Text(
+                        "⚠ Bu lokasyon (${firstValue(h, "locationCode")}) Warehouse Shipment zorunlu kılıyor. " +
+                            "Direkt Post Ship yapılamaz. Whse Shipment sekmesinden ilgili belgeyi açıp sevkiyatı tamamlayın.",
+                        modifier = Modifier.padding(10.dp),
+                        fontSize = 12.sp,
+                        color = Color(0xFF92400E),
+                    )
+                }
+            }
             Spacer(Modifier.height(6.dp))
             StatusText(status)
             Spacer(Modifier.height(4.dp))
@@ -501,7 +521,11 @@ private fun ShipSalesOrder(no: String, onBack: () -> Unit) {
                     val outstanding = ln.optDouble("outstandingQuantity")
                     val toShip = ln.optDouble("qtyToShip")
                     val shipped = ln.optDouble("qtyShipped")
-                    Card(onClick = { qtyLine = ln }, modifier = Modifier.fillMaxWidth()) {
+                    Card(
+                        onClick = { if (directAllowed) qtyLine = ln },
+                        enabled = directAllowed,
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
                         Column(Modifier.padding(10.dp)) {
                             Text("${ln.optString("itemNo")} — ${ln.optString("description")}", fontWeight = FontWeight.Medium)
                             Text("Kalan: $outstanding · Sevk: $toShip · Sevk edilen: $shipped", fontSize = 12.sp, color = Color.Gray)
@@ -518,7 +542,7 @@ private fun ShipSalesOrder(no: String, onBack: () -> Unit) {
         }
 
         BottomActionBar {
-            OutlinedButton(onClick = { showScan = true }, enabled = !busy, modifier = Modifier.weight(1f)) { Text("📷 Item Tara") }
+            OutlinedButton(onClick = { showScan = true }, enabled = !busy && directAllowed, modifier = Modifier.weight(1f)) { Text("📷 Item Tara") }
         }
         BottomActionBar {
             Button(
@@ -533,7 +557,7 @@ private fun ShipSalesOrder(no: String, onBack: () -> Unit) {
                         if (r.ok) reload()
                     }
                 },
-                enabled = !busy, modifier = Modifier.fillMaxWidth()
+                enabled = !busy && directAllowed, modifier = Modifier.fillMaxWidth()
             ) { Text(if (invoiceToo) "✅ Post Ship & Invoice" else "✅ Post Ship", fontWeight = FontWeight.Bold) }
         }
     }

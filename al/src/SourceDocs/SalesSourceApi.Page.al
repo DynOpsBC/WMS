@@ -29,6 +29,8 @@ page 72294 "DOPSWHS Sales Source API"
                 field(lineCount; LineCount) { Caption = 'lineCount'; }
                 field(outstandingQty; OutstandingQty) { Caption = 'outstandingQty'; }
                 field(percentComplete; PercentComplete) { Caption = 'percentComplete'; }
+                field(requiresWhseShipment; RequiresWhseShipment) { Caption = 'requiresWhseShipment'; }
+                field(directShipAllowed; DirectShipAllowed) { Caption = 'directShipAllowed'; }
                 part(lines; "DOPSWHS Sales Source Line API")
                 {
                     Caption = 'lines';
@@ -57,14 +59,18 @@ page 72294 "DOPSWHS Sales Source API"
         LineCount: Integer;
         OutstandingQty: Decimal;
         PercentComplete: Decimal;
+        RequiresWhseShipment: Boolean;
+        DirectShipAllowed: Boolean;
 
     local procedure FillCalculatedFields()
     var
         SL: Record "Sales Line";
+        Loc: Record Location;
         TotalQty: Decimal;
         ShippedQty: Decimal;
     begin
         Clear(LineCount); Clear(OutstandingQty); Clear(PercentComplete);
+        Clear(RequiresWhseShipment); Clear(DirectShipAllowed);
         SL.SetRange("Document Type", SL."Document Type"::Order);
         SL.SetRange("Document No.", Rec."No.");
         SL.SetFilter(Type, '<>%1', SL.Type::" ");
@@ -77,5 +83,16 @@ page 72294 "DOPSWHS Sales Source API"
             until SL.Next() = 0;
         if TotalQty <> 0 then
             PercentComplete := Round(ShippedQty / TotalQty * 100, 1);
+
+        if Rec."Location Code" = '' then begin
+            RequiresWhseShipment := false;
+            DirectShipAllowed := true;
+        end else if Loc.Get(Rec."Location Code") then begin
+            RequiresWhseShipment := Loc."Require Shipment";
+            DirectShipAllowed := not Loc."Require Shipment";
+        end else begin
+            RequiresWhseShipment := false;
+            DirectShipAllowed := true;
+        end;
     end;
 }

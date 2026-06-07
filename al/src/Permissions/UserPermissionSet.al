@@ -127,6 +127,7 @@ permissionset 72095 "DOPSWHS-USER"
         tabledata "DOPSWHS Local User" = R,
         codeunit "DOPSWHS Purch Source Mgmt" = X,
         codeunit "DOPSWHS Sales Source Mgmt" = X,
+        codeunit "DOPSWHS Scenario Generator" = X,
         page "DOPSWHS Purch Source API" = X,
         page "DOPSWHS Purch Source Line API" = X,
         page "DOPSWHS Sales Source API" = X,

@@ -101,6 +101,45 @@ page 72061 "DOPSWHS Setup"
                     RunObject = page "DOPSWHS Demo E2E Results";
                 }
             }
+            group(TestScenarios)
+            {
+                Caption = 'Test Scenarios';
+                action(GenerateAllScenarios)
+                {
+                    Caption = 'Generate All Test Scenarios';
+                    ToolTip = 'Eldeki master data ve referansları kullanarak tüm alternatif test senaryolarını idempotent olarak yaratır (PO/SO/LP/Count). Tekrar çalıştırıldığında mevcut belgeler atlanır.';
+                    ApplicationArea = All;
+                    Image = CreateDocument;
+                    Promoted = true;
+                    PromotedCategory = Process;
+                    PromotedIsBig = true;
+                    trigger OnAction()
+                    var
+                        Gen: Codeunit "DOPSWHS Scenario Generator";
+                        Result: Text;
+                    begin
+                        Result := Gen.GenerateAll();
+                        Message(Result);
+                    end;
+                }
+                action(CleanupScenarios)
+                {
+                    Caption = 'Cleanup Generated Scenarios';
+                    ToolTip = 'gen.* prefix''ine sahip tüm generated PO/SO belgelerini siler (test reset). LP ve Count Sheet''ler için manuel temizlik gerekir.';
+                    ApplicationArea = All;
+                    Image = ClearLog;
+                    Promoted = true;
+                    PromotedCategory = Process;
+                    trigger OnAction()
+                    var
+                        Gen: Codeunit "DOPSWHS Scenario Generator";
+                        DeletedCount: Integer;
+                    begin
+                        DeletedCount := Gen.CleanupGenerated();
+                        Message('Silinen belge: %1', DeletedCount);
+                    end;
+                }
+            }
         }
     }
 

@@ -35,3 +35,7 @@ push-relay/dist/
 .env.*
 !.env.example
 
+
+# Screenshots from MCP test runs
+web/.screenshots/
+web/.tmp-inject.js

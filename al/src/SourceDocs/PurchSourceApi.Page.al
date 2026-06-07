@@ -29,6 +29,8 @@ page 72292 "DOPSWHS Purch Source API"
                 field(lineCount; LineCount) { Caption = 'lineCount'; }
                 field(outstandingQty; OutstandingQty) { Caption = 'outstandingQty'; }
                 field(percentComplete; PercentComplete) { Caption = 'percentComplete'; }
+                field(requiresWhseReceipt; RequiresWhseReceipt) { Caption = 'requiresWhseReceipt'; }
+                field(directReceiveAllowed; DirectReceiveAllowed) { Caption = 'directReceiveAllowed'; }
                 part(lines; "DOPSWHS Purch Source Line API")
                 {
                     Caption = 'lines';
@@ -57,14 +59,18 @@ page 72292 "DOPSWHS Purch Source API"
         LineCount: Integer;
         OutstandingQty: Decimal;
         PercentComplete: Decimal;
+        RequiresWhseReceipt: Boolean;
+        DirectReceiveAllowed: Boolean;
 
     local procedure FillCalculatedFields()
     var
         PL: Record "Purchase Line";
+        Loc: Record Location;
         TotalQty: Decimal;
         ReceivedQty: Decimal;
     begin
         Clear(LineCount); Clear(OutstandingQty); Clear(PercentComplete);
+        Clear(RequiresWhseReceipt); Clear(DirectReceiveAllowed);
         PL.SetRange("Document Type", PL."Document Type"::Order);
         PL.SetRange("Document No.", Rec."No.");
         PL.SetFilter(Type, '<>%1', PL.Type::" ");
@@ -77,5 +83,16 @@ page 72292 "DOPSWHS Purch Source API"
             until PL.Next() = 0;
         if TotalQty <> 0 then
             PercentComplete := Round(ReceivedQty / TotalQty * 100, 1);
+
+        if Rec."Location Code" = '' then begin
+            RequiresWhseReceipt := false;
+            DirectReceiveAllowed := true;
+        end else if Loc.Get(Rec."Location Code") then begin
+            RequiresWhseReceipt := Loc."Require Receive";
+            DirectReceiveAllowed := not Loc."Require Receive";
+        end else begin
+            RequiresWhseReceipt := false;
+            DirectReceiveAllowed := true;
+        end;
     end;
 }

@@ -251,7 +251,7 @@ private fun PurchaseOrderTab() {
             val filter = if (releasedOnly) "&\$filter=status eq 'Released'" else ""
             val r = BcApi.get(
                 context,
-                "purchaseSources?\$top=30$filter&\$select=no,vendorNo,vendorName,locationCode,expectedReceiptDate,status,lineCount,outstandingQty,percentComplete"
+                "purchaseSources?\$top=30$filter&\$select=no,vendorNo,vendorName,locationCode,expectedReceiptDate,status,lineCount,outstandingQty,percentComplete,requiresWhseReceipt,directReceiveAllowed"
             )
             loading = false
             rows = if (r.ok) BcApi.parseValueArray(r.body) else emptyList()
@@ -280,11 +280,15 @@ private fun PurchaseOrderTab() {
         Spacer(Modifier.height(8.dp))
         LazyColumn(verticalArrangement = Arrangement.spacedBy(6.dp)) {
             items(rows) { d ->
+                val requiresWhse = d.optBoolean("requiresWhseReceipt", false)
                 Card(onClick = { selected = d.optString("no") }, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(10.dp)) {
                     Column(Modifier.padding(12.dp)) {
                         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                             Text(d.optString("no"), fontWeight = FontWeight.Bold)
-                            Text(firstValue(d, "status"), fontSize = 12.sp, color = Color.Gray)
+                            Row {
+                                if (requiresWhse) Text("⚠ Whse Rcpt", fontSize = 11.sp, color = Color(0xFFD97706), modifier = Modifier.padding(end = 6.dp))
+                                Text(firstValue(d, "status"), fontSize = 12.sp, color = Color.Gray)
+                            }
                         }
                         Text("Tedarikçi: ${firstValue(d, "vendorName")} (${firstValue(d, "vendorNo")})", fontSize = 12.sp, color = Color.Gray)
                         Text("Lokasyon: ${firstValue(d, "locationCode")} · Satır: ${d.optInt("lineCount")} · Kalan: ${d.optDouble("outstandingQty")}", fontSize = 12.sp, color = Color.Gray)
@@ -324,6 +328,7 @@ private fun ReceivePurchaseOrder(no: String, onBack: () -> Unit) {
     LaunchedEffect(no) { reload() }
 
     val h = header
+    val directAllowed = h?.let { it.optBoolean("directReceiveAllowed", true) } ?: true
     Column(Modifier.fillMaxSize()) {
         Column(Modifier.weight(1f).padding(12.dp)) {
             TextButton(onClick = onBack) { Text("‹ PO Listesi") }
@@ -333,6 +338,21 @@ private fun ReceivePurchaseOrder(no: String, onBack: () -> Unit) {
                     "Lokasyon: ${firstValue(h ?: JSONObject(), "locationCode")} · Durum: ${firstValue(h ?: JSONObject(), "status")}",
                 percent = h?.optDouble("percentComplete")?.toInt() ?: 0
             )
+            if (h != null && !directAllowed) {
+                Spacer(Modifier.height(8.dp))
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(containerColor = Color(0xFFFEF3C7)),
+                ) {
+                    Text(
+                        "⚠ Bu lokasyon (${firstValue(h, "locationCode")}) Warehouse Receipt zorunlu kılıyor. " +
+                            "Direkt Post Receive yapılamaz. Whse Receipt sekmesinden ilgili belgeyi açıp mal kabulü tamamlayın.",
+                        modifier = Modifier.padding(10.dp),
+                        fontSize = 12.sp,
+                        color = Color(0xFF92400E),
+                    )
+                }
+            }
             Spacer(Modifier.height(6.dp))
             StatusText(status)
             Spacer(Modifier.height(4.dp))
@@ -342,7 +362,11 @@ private fun ReceivePurchaseOrder(no: String, onBack: () -> Unit) {
                     val outstanding = ln.optDouble("outstandingQuantity")
                     val toReceive = ln.optDouble("qtyToReceive")
                     val received = ln.optDouble("qtyReceived")
-                    Card(onClick = { qtyLine = ln }, modifier = Modifier.fillMaxWidth()) {
+                    Card(
+                        onClick = { if (directAllowed) qtyLine = ln },
+                        enabled = directAllowed,
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
                         Column(Modifier.padding(10.dp)) {
                             Text("${ln.optString("itemNo")} — ${ln.optString("description")}", fontWeight = FontWeight.Medium)
                             Text("Kalan: $outstanding · Alınacak: $toReceive · Alınan: $received", fontSize = 12.sp, color = Color.Gray)
@@ -359,7 +383,7 @@ private fun ReceivePurchaseOrder(no: String, onBack: () -> Unit) {
         }
 
         BottomActionBar {
-            OutlinedButton(onClick = { showScan = true }, enabled = !busy, modifier = Modifier.weight(1f)) { Text("📷 Item Tara") }
+            OutlinedButton(onClick = { showScan = true }, enabled = !busy && directAllowed, modifier = Modifier.weight(1f)) { Text("📷 Item Tara") }
         }
         BottomActionBar {
             Button(
@@ -374,7 +398,7 @@ private fun ReceivePurchaseOrder(no: String, onBack: () -> Unit) {
                         if (r.ok) reload()
                     }
                 },
-                enabled = !busy, modifier = Modifier.fillMaxWidth()
+                enabled = !busy && directAllowed, modifier = Modifier.fillMaxWidth()
             ) { Text(if (invoiceToo) "✅ Post Receive & Invoice" else "✅ Post Receive", fontWeight = FontWeight.Bold) }
         }
     }
