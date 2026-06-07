@@ -16,6 +16,7 @@ import { Production } from "./modules/Production";
 import { Assembly } from "./modules/Assembly";
 import { Inquiry } from "./modules/Inquiry";
 import { PostingTest } from "./modules/PostingTest";
+import { Quality } from "./modules/Quality";
 
 function App() {
   const [screen, setScreen] = useState<Screen>(BcApi.hasToken() ? "home" : "login");
@@ -77,17 +78,7 @@ function App() {
           <Inquiry initialTab={screen === "binInquiry" ? "bin" : "item"} />
         )}
         {screen === "posting" && <PostingTest />}
-        {screen === "quality" && (
-          <div>
-            <h2>{SCREEN_TITLES[screen]}</h2>
-            <p style={{ color: "var(--text-muted)" }}>
-              Bu modül web app'te henüz aktif değil. Mobil app'te mevcut; web parite yol haritasında.
-            </p>
-            <button className="primary" onClick={() => setScreen("home")}>
-              ‹ Ana Menüye Dön
-            </button>
-          </div>
-        )}
+        {screen === "quality" && <Quality />}
       </main>
     </div>
   );
