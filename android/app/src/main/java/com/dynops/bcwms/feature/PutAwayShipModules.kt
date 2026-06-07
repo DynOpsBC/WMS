@@ -116,6 +116,13 @@ private fun PutAwayDocument(no: String, onBack: () -> Unit) {
             )
             Spacer(Modifier.height(6.dp))
             StatusText(status)
+            if (status.startsWith("🔬")) {
+                val navigator = com.dynops.bcwms.LocalNavigator.current
+                Spacer(Modifier.height(4.dp))
+                OutlinedButton(onClick = { navigator(com.dynops.bcwms.Screen.QualityMgmt) }) {
+                    Text("🧫 MS Quality Mgmt'i Aç", fontWeight = FontWeight.Medium)
+                }
+            }
             Spacer(Modifier.height(4.dp))
             Text("Satırlar (${lines.size}) — bin atamak için dokunun", fontWeight = FontWeight.Bold, fontSize = 14.sp)
             LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {

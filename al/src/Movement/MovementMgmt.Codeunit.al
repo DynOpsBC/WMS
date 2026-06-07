@@ -59,13 +59,24 @@ codeunit 72045 "DOPSWHS Movement Mgmt"
     procedure RegisterDirected(var WhseActivityHeader: Record "Warehouse Activity Header")
     var
         WhseActivityLine: Record "Warehouse Activity Line";
+        QualityBridge: Codeunit "DOPSWHS Quality Mgmt Bridge";
         WhseActivityRegister: Codeunit "Whse.-Activity-Register";
         CustomDimensions: Dictionary of [Text, Text];
     begin
         CustomDimensions.Add('Category', 'Movement');
         Session.LogMessage('DOPSWHS-Move-RegisterDirected', StrSubstNo('Register warehouse activity %1 type %2', WhseActivityHeader."No.", Format(WhseActivityHeader.Type)), Verbosity::Normal, DataClassification::SystemMetadata, TelemetryScope::ExtensionPublisher, CustomDimensions);
+
+        // MS Quality Management lot/serial block guard.
         WhseActivityLine.SetRange("Activity Type", WhseActivityHeader.Type);
         WhseActivityLine.SetRange("No.", WhseActivityHeader."No.");
+        if WhseActivityLine.FindSet() then
+            repeat
+                QualityBridge.VerifyNotBlocked(
+                    WhseActivityLine."Lot No.",
+                    WhseActivityLine."Serial No.",
+                    '');
+            until WhseActivityLine.Next() = 0;
+
         if WhseActivityLine.FindFirst() then
             WhseActivityRegister.Run(WhseActivityLine);
     end;

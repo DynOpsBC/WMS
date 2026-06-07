@@ -19,9 +19,22 @@ import { PostingTest } from "./modules/PostingTest";
 import { Quality } from "./modules/Quality";
 import { QualityManagement } from "./modules/QualityManagement";
 
+type Navigate = (s: Screen) => void;
+
+// Cross-module navigator — picking/put-away QC banner can deep-link to QM.
+let appNavigator: Navigate | null = null;
+export function navigateTo(s: Screen) {
+  appNavigator?.(s);
+}
+
 function App() {
   const [screen, setScreen] = useState<Screen>(BcApi.hasToken() ? "home" : "login");
   const [conn, setConn] = useState<"unknown" | "ok" | "bad">("unknown");
+
+  useEffect(() => {
+    appNavigator = setScreen;
+    return () => { appNavigator = null; };
+  }, []);
 
   useEffect(() => {
     if (screen === "login") return;

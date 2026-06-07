@@ -25,6 +25,11 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
+/** Cross-module navigator — Picking/PutAway/Shipment use this to deep-link
+ *  to the MS Quality Management screen when an action errors out with a
+ *  QC-block ("blocked by quality inspection ...") response. */
+val LocalNavigator = compositionLocalOf<(Screen) -> Unit> { {} }
+
 enum class Screen(val title: String) {
     Home("BCWMS Ana Menü"),
     Connection("Bağlantı Ayarları"),
@@ -74,6 +79,7 @@ fun AppRoot() {
             )
         }
     ) { padding ->
+        CompositionLocalProvider(LocalNavigator provides { target -> screen = target }) {
         Box(Modifier.padding(padding).fillMaxSize()) {
             when (screen) {
                 Screen.Home -> HomeScreen(connected) { screen = it }
@@ -95,6 +101,7 @@ fun AppRoot() {
                 Screen.TestCenter -> TestCenterScreen()
                 Screen.PostingTest -> PostingTestModule()
             }
+        }
         }
     }
 }

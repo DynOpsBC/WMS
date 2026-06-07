@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import * as BcApi from "../lib/bcApi";
 import { friendlyQcStatus, isQcBlocked, extractInspectionNo } from "../lib/qcErrorParser";
+import { navigateTo } from "../main";
 import { DocHeader, EmptyState, Modal, NumberField, Pill, StatusText } from "../ui/primitives";
 
 type Row = Record<string, any>;
@@ -115,6 +116,11 @@ function PickDocument({ no, onBack }: { no: string; onBack: () => void }) {
           . Bu pick'in lot/serial'i şu an blokda; denetim tamamlanmadan register edilemez.
           <br />
           <small>Detay: {qcBlock.raw}</small>
+          <div className="mt8">
+            <button className="primary small" onClick={() => navigateTo("qms")}>
+              🧫 MS Quality Mgmt'i aç
+            </button>
+          </div>
         </div>
       )}
       <StatusText status={status} />
