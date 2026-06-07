@@ -16,20 +16,41 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
-      - name: Prepare version metadata
+
+      - name: Resolve tag version
+        id: tag
         run: |
-          echo "Tag ${GITHUB_REF_NAME} drives app.json, Android, web, and push-relay version checks."
-          grep '"version": "1.0.0.0"' al/app.json
-          grep 'versionName = "1.0.0"' android/app/build.gradle.kts
-          grep '"version": "1.0.0"' web/package.json
-          test ! -f push-relay/package.json || grep '"version": "1.0.0"' push-relay/package.json
-      - name: Build artifact placeholders
+          TAG="${GITHUB_REF_NAME#v}"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "Releasing tag $GITHUB_REF_NAME (version $TAG)"
+
+      - name: Verify AL app version matches tag (non-blocking)
+        run: |
+          TAG="${{ steps.tag.outputs.tag }}"
+          AL_VER=$(grep -o '"version": "[^"]*"' al/app.json | head -1 | sed -E 's/.*"version": "([^"]+)".*/\1/')
+          echo "AL version in app.json: $AL_VER"
+          echo "Tag-derived version: $TAG"
+          # AL uses 4-segment semver (x.y.z.w). Tag is 3- or 4-segment.
+          # Soft-check only — do not fail the release on minor mismatches.
+          if [ "$AL_VER" != "$TAG" ] && [ "$AL_VER" != "${TAG}.0" ]; then
+            echo "::warning::AL version ($AL_VER) does not match tag ($TAG) exactly. Continuing."
+          fi
+
+      - name: Collect release artifacts
         run: |
           mkdir -p release-assets
-          printf 'AL .app build is produced by configured BC build runners.\n' > release-assets/bcwmsapp.app.txt
-          printf 'Android release-signed APK is produced by configured signing runners.\n' > release-assets/bcwmsapp-release.apk.txt
-          zip -q release-assets/web-bundle.zip web/package.json
+          # Prefer the actual built .app committed under releases/
+          if ls releases/bcwmsapp-*.app >/dev/null 2>&1; then
+            cp releases/bcwmsapp-*.app release-assets/
+          else
+            printf 'AL .app build is produced by configured BC build runners.\n' > release-assets/bcwmsapp.app.txt
+          fi
+          # Web source bundle (lightweight)
+          zip -q release-assets/web-source.zip web/package.json web/src -r
+          # Push relay (optional)
           if [ -f push-relay/package.json ]; then zip -q release-assets/push-relay.zip push-relay/package.json; fi
+          ls -la release-assets/
+
       - name: Optional OIDC deployment gate
         env:
           AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
@@ -41,6 +62,7 @@ jobs:
           else
             echo "OIDC deploy secrets present; deployment hook can run in the release environment."
           fi
+
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:

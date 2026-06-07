@@ -20,11 +20,11 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "20"
-          cache: pnpm
-          cache-dependency-path: web/pnpm-lock.yaml
       - name: Install
         working-directory: web
-        run: pnpm install --frozen-lockfile
+        # Lockfile not yet committed — generate on the fly. Switch back to
+        # --frozen-lockfile once web/pnpm-lock.yaml lands in the repo.
+        run: pnpm install --no-frozen-lockfile
       - name: Typecheck
         working-directory: web
         run: pnpm typecheck
