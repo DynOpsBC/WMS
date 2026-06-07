@@ -4,13 +4,35 @@ on:
   push:
     paths:
       - "al/**"
+      - "tools/**"
       - ".github/workflows/al-build.yml"
   pull_request:
     paths:
       - "al/**"
+      - "tools/**"
 
 jobs:
-  build:
+  audit:
+    name: AppSource audits
+    # Bash audit script'leri Ubuntu'da daha temiz koşar (CRLF/exec-bit
+    # gibi Windows-bash farklılıklarına maruz kalmaz). Her script ayrı
+    # adım: hangi denetim fail ederse Annotations'da net görünür.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Ensure scripts are executable
+        run: chmod +x tools/audit-*.sh
+      - name: audit-permissions
+        run: bash tools/audit-permissions.sh
+      - name: audit-prefix
+        run: bash tools/audit-prefix.sh
+      - name: audit-translation-coverage
+        run: bash tools/audit-translation-coverage.sh
+      - name: audit-obsolete
+        run: bash tools/audit-obsolete.sh
+
+  package:
+    name: AL package (placeholder)
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
@@ -19,13 +41,6 @@ jobs:
         run: |
           Write-Host "Install AL tooling or containerized compiler here."
           Write-Host "Compile .app and upload artifact in a configured Windows runner."
-      - name: Run AppSource audit scripts
-        shell: bash
-        run: |
-          tools/audit-permissions.sh
-          tools/audit-prefix.sh
-          tools/audit-translation-coverage.sh
-          tools/audit-obsolete.sh
       - name: Upload placeholder artifact
         uses: actions/upload-artifact@v4
         with:
