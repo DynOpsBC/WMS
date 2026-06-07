@@ -12,7 +12,9 @@ export type Screen =
   | "production"
   | "assembly"
   | "quality"
-  | "inquiry";
+  | "inquiry"
+  | "binInquiry"
+  | "posting";
 
 export const SCREEN_TITLES: Record<Screen, string> = {
   login: "Giriş",
@@ -29,4 +31,6 @@ export const SCREEN_TITLES: Record<Screen, string> = {
   assembly: "Montaj",
   quality: "Kalite",
   inquiry: "Item Inquiry",
+  binInquiry: "Bin Inquiry",
+  posting: "Posting Test",
 };

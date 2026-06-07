@@ -24,7 +24,9 @@ const TILES: Tile[] = [
   { key: "production", icon: "🏭", label: "Üretim", enabled: true },
   { key: "assembly", icon: "🔧", label: "Montaj", enabled: true },
   { key: "quality", icon: "🔬", label: "Kalite Denetimi", enabled: false },
-  { key: "inquiry", icon: "🔍", label: "Item Inquiry", enabled: false },
+  { key: "inquiry", icon: "🔍", label: "Item Inquiry", enabled: true },
+  { key: "binInquiry", icon: "🪣", label: "Bin Inquiry", enabled: true },
+  { key: "posting", icon: "🧪", label: "Posting Test", enabled: true },
 ];
 
 export function Home({ navigate }: HomeProps) {

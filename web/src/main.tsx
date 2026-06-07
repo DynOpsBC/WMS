@@ -14,6 +14,8 @@ import { Count } from "./modules/Count";
 import { Movement } from "./modules/Movement";
 import { Production } from "./modules/Production";
 import { Assembly } from "./modules/Assembly";
+import { Inquiry } from "./modules/Inquiry";
+import { PostingTest } from "./modules/PostingTest";
 
 function App() {
   const [screen, setScreen] = useState<Screen>(BcApi.hasToken() ? "home" : "login");
@@ -71,7 +73,11 @@ function App() {
         )}
         {screen === "production" && <Production />}
         {screen === "assembly" && <Assembly />}
-        {(screen === "quality" || screen === "inquiry") && (
+        {(screen === "inquiry" || screen === "binInquiry") && (
+          <Inquiry initialTab={screen === "binInquiry" ? "bin" : "item"} />
+        )}
+        {screen === "posting" && <PostingTest />}
+        {screen === "quality" && (
           <div>
             <h2>{SCREEN_TITLES[screen]}</h2>
             <p style={{ color: "var(--text-muted)" }}>
