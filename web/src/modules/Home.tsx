@@ -21,8 +21,8 @@ const TILES: Tile[] = [
   { key: "count", icon: "🔢", label: "Sayım", enabled: true },
   { key: "putaway", icon: "📮", label: "Put-Away", enabled: true },
   { key: "shipping", icon: "🚢", label: "Sevkiyat", enabled: true },
-  { key: "production", icon: "🏭", label: "Üretim", enabled: false },
-  { key: "assembly", icon: "🔧", label: "Montaj", enabled: false },
+  { key: "production", icon: "🏭", label: "Üretim", enabled: true },
+  { key: "assembly", icon: "🔧", label: "Montaj", enabled: true },
   { key: "quality", icon: "🔬", label: "Kalite Denetimi", enabled: false },
   { key: "inquiry", icon: "🔍", label: "Item Inquiry", enabled: false },
 ];

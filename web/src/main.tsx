@@ -12,6 +12,8 @@ import { Picking } from "./modules/Picking";
 import { PutAway } from "./modules/PutAway";
 import { Count } from "./modules/Count";
 import { Movement } from "./modules/Movement";
+import { Production } from "./modules/Production";
+import { Assembly } from "./modules/Assembly";
 
 function App() {
   const [screen, setScreen] = useState<Screen>(BcApi.hasToken() ? "home" : "login");
@@ -67,10 +69,9 @@ function App() {
         {(screen === "adhoc" || screen === "directed") && (
           <Movement initialTab={screen === "directed" ? "directed" : "adhoc"} />
         )}
-        {(screen === "production" ||
-          screen === "assembly" ||
-          screen === "quality" ||
-          screen === "inquiry") && (
+        {screen === "production" && <Production />}
+        {screen === "assembly" && <Assembly />}
+        {(screen === "quality" || screen === "inquiry") && (
           <div>
             <h2>{SCREEN_TITLES[screen]}</h2>
             <p style={{ color: "var(--text-muted)" }}>
