@@ -61,6 +61,8 @@ function PickDocument({ no, onBack }: { no: string; onBack: () => void }) {
   const [status, setStatus] = useState("");
   const [busy, setBusy] = useState(false);
   const [qtyLine, setQtyLine] = useState<Row | null>(null);
+  const [shortLine, setShortLine] = useState<Row | null>(null);
+  const [shipLp, setShipLp] = useState<string | null>(null);
 
   async function reload() {
     setBusy(true);
@@ -72,17 +74,18 @@ function PickDocument({ no, onBack }: { no: string; onBack: () => void }) {
   }
   useEffect(() => { reload(); }, [no]);
 
-  async function action(name: string, body: string, okMsg: string) {
+  async function action(name: string, body: string, okMsg: string, onOk?: (body: string) => void) {
     setBusy(true);
     setStatus(`${name}…`);
     const r = await BcApi.boundAction("picks", no, name, body);
     setBusy(false);
-    setStatus(
-      r.ok
-        ? `PASS: ${okMsg} (HTTP ${r.httpCode})`
-        : `HATA: ${BcApi.errorMessage(r.body)} (HTTP ${r.httpCode})`,
-    );
-    if (r.ok) reload();
+    if (r.ok) {
+      setStatus(`PASS: ${okMsg} (HTTP ${r.httpCode})`);
+      onOk?.(r.body);
+      reload();
+    } else {
+      setStatus(`HATA: ${BcApi.errorMessage(r.body)} (HTTP ${r.httpCode})`);
+    }
   }
 
   return (
@@ -90,14 +93,21 @@ function PickDocument({ no, onBack }: { no: string; onBack: () => void }) {
       <button className="ghost" onClick={onBack}>‹ Pick Listesi</button>
       <DocHeader
         title={no}
-        subtitle={`Lokasyon: ${BcApi.firstValue(header, "locationCode")} · Atanan: ${BcApi.firstValue(header, "assignedUserId") || "-"}\nDurum: ${BcApi.firstValue(header, "status")}`}
+        subtitle={`Lokasyon: ${BcApi.firstValue(header, "locationCode")} · Atanan: ${BcApi.firstValue(header, "assignedUserId") || "-"}\nDurum: ${BcApi.firstValue(header, "status")}${shipLp ? `\nAktif Ship LP: ${shipLp}` : ""}`}
       />
       <StatusText status={status} />
-      <h3 style={{ marginTop: 16 }}>Satırlar ({lines.length})</h3>
+      <h3 className="mt16">Satırlar ({lines.length})</h3>
       <div className="list">
         {lines.map((ln) => (
-          <div key={String(ln.lineNo)} className="card clickable" onClick={() => setQtyLine(ln)}>
-            <div className="card-title">{String(ln.itemNo)}</div>
+          <div key={String(ln.lineNo)} className="card">
+            <div className="row-between">
+              <div className="card-title clickable" onClick={() => setQtyLine(ln)}>
+                {String(ln.itemNo)}
+              </div>
+              <button className="outline small" disabled={busy} onClick={() => setShortLine(ln)}>
+                ⚠ Short
+              </button>
+            </div>
             <div className="card-meta">
               Action: {BcApi.firstValue(ln, "actionType")} · Bin: {BcApi.firstValue(ln, "binCode")} · İşlenecek: {Number(ln.qtyToHandle ?? 0)} / {Number(ln.qty ?? 0)}
             </div>
@@ -107,8 +117,39 @@ function PickDocument({ no, onBack }: { no: string; onBack: () => void }) {
       </div>
       <div className="actions">
         <button className="outline" disabled={busy} onClick={() => action("assignToMe", "{}", "Pick atandı")}>
-          ✋ Assign to Me
+          ✋ Bana Ata
         </button>
+        {shipLp === null ? (
+          <button
+            className="outline"
+            disabled={busy}
+            onClick={() =>
+              action(
+                "startShippingLP",
+                JSON.stringify({ lpTemplateCode: "PALLET-EUR" }),
+                "Shipping LP başladı",
+                (body) => setShipLp(BcApi.scalarValue(body)),
+              )
+            }
+          >
+            🏗️ Ship LP Başlat
+          </button>
+        ) : (
+          <button
+            className="outline"
+            disabled={busy}
+            onClick={() =>
+              action(
+                "stopShippingLP",
+                JSON.stringify({ lpNo: shipLp, printLabel: true }),
+                "Shipping LP kapandı + SSCC",
+                () => setShipLp(null),
+              )
+            }
+          >
+            🔚 Ship LP Kapat ({shipLp})
+          </button>
+        )}
         <button className="primary big" disabled={busy} onClick={() => action("register", "{}", "Pick register edildi")}>
           ✅ Register Pick
         </button>
@@ -136,7 +177,69 @@ function PickDocument({ no, onBack }: { no: string; onBack: () => void }) {
           }}
         />
       )}
+      {shortLine && (
+        <ShortPickModal
+          line={shortLine}
+          onClose={() => setShortLine(null)}
+          onSubmit={(qty, reason) => {
+            const ln = shortLine;
+            setShortLine(null);
+            action(
+              "markShort",
+              JSON.stringify({ lineNo: Number(ln.lineNo), qty, reasonCode: reason }),
+              `Short pick işlendi (qty=${qty}, reason=${reason})`,
+            );
+          }}
+        />
+      )}
     </div>
+  );
+}
+
+function ShortPickModal({
+  line,
+  onClose,
+  onSubmit,
+}: {
+  line: Row;
+  onClose: () => void;
+  onSubmit: (qty: number, reasonCode: string) => void;
+}) {
+  const [qty, setQty] = useState(String(Number(line.qtyToHandle ?? line.qty ?? 0)));
+  const [reason, setReason] = useState("NO_STOCK");
+  return (
+    <Modal
+      title="Kısa Pick (Short)"
+      meta={`Item: ${line.itemNo} · Bin: ${line.binCode ?? "-"} · Outstanding: ${Number(line.qtyToHandle ?? line.qty ?? 0)}`}
+      onClose={onClose}
+    >
+      <NumberField label="Eksik miktar" value={qty} onChange={setQty} />
+      <div className="mt12">
+        <label className="field" htmlFor="short-reason">Sebep</label>
+        <select
+          id="short-reason"
+          title="Short pick sebebi"
+          value={reason}
+          onChange={(e) => setReason(e.target.value)}
+        >
+          <option value="NO_STOCK">NO_STOCK — Bin'de yok</option>
+          <option value="DAMAGED">DAMAGED — Hasarlı</option>
+          <option value="WRONG_BIN">WRONG_BIN — Yanlış bin</option>
+          <option value="EXPIRED">EXPIRED — Vadesi geçmiş</option>
+          <option value="OTHER">OTHER — Diğer</option>
+        </select>
+      </div>
+      <div className="actions" style={{ borderTop: "none", marginTop: 16 }}>
+        <button className="outline" onClick={onClose}>İptal</button>
+        <button
+          className="primary"
+          onClick={() => onSubmit(Number(qty) || 0, reason)}
+          disabled={(Number(qty) || 0) <= 0}
+        >
+          Short Olarak İşaretle
+        </button>
+      </div>
+    </Modal>
   );
 }
 

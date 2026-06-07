@@ -378,3 +378,10 @@ code { background: var(--bg-soft); padding: 1px 6px; border-radius: 4px; font-si
 .mt12 { margin-top: 12px; }
 .mt16 { margin-top: 16px; }
 .mt20 { margin-top: 20px; }
+
+/* LP list search box width */
+.lp-search { flex: 1; max-width: 320px; }
+
+/* Danger outline button (Unbuild, etc.) */
+button.outline.danger-outline { color: var(--red); border-color: var(--red); }
+button.outline.danger-outline:hover:not(:disabled) { background: #fee2e2; }
