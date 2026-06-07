@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
 import * as BcApi from "../lib/bcApi";
+import { friendlyQcStatus, isQcBlocked, extractInspectionNo } from "../lib/qcErrorParser";
 import { DocHeader, EmptyState, Field, Modal, NumberField, Pill, StatusText } from "../ui/primitives";
 
 type Row = Record<string, any>;
@@ -58,8 +59,17 @@ function PutAwayDocument({ no, onBack }: { no: string; onBack: () => void }) {
   const [header, setHeader] = useState<Row | null>(null);
   const [lines, setLines] = useState<Row[]>([]);
   const [status, setStatus] = useState("");
+  const [qcBlock, setQcBlock] = useState<{ inspectionNo: string | null; raw: string } | null>(null);
   const [busy, setBusy] = useState(false);
   const [binLine, setBinLine] = useState<Row | null>(null);
+
+  function handleError(body: string, httpCode: number) {
+    const msg = BcApi.errorMessage(body);
+    if (isQcBlocked(msg)) {
+      setQcBlock({ inspectionNo: extractInspectionNo(msg), raw: msg });
+    }
+    setStatus(friendlyQcStatus(msg, httpCode));
+  }
 
   async function reload() {
     setBusy(true);
@@ -76,12 +86,13 @@ function PutAwayDocument({ no, onBack }: { no: string; onBack: () => void }) {
     setStatus("Register…");
     const r = await BcApi.boundAction("putAways", no, "register", "{}");
     setBusy(false);
-    setStatus(
-      r.ok
-        ? `PASS: Put-Away kaydedildi (HTTP ${r.httpCode})`
-        : `HATA: ${BcApi.errorMessage(r.body)} (HTTP ${r.httpCode})`,
-    );
-    if (r.ok) reload();
+    if (r.ok) {
+      setStatus(`PASS: Put-Away kaydedildi (HTTP ${r.httpCode})`);
+      setQcBlock(null);
+      reload();
+    } else {
+      handleError(r.body, r.httpCode);
+    }
   }
 
   return (
@@ -91,6 +102,17 @@ function PutAwayDocument({ no, onBack }: { no: string; onBack: () => void }) {
         title={no}
         subtitle={`Lokasyon: ${BcApi.firstValue(header, "locationCode")} · ${BcApi.firstValue(header, "status")}`}
       />
+      {qcBlock && (
+        <div className="banner-warn">
+          🔬 <b>Quality Inspection bekliyor</b>
+          {qcBlock.inspectionNo && (
+            <> — denetim <code>{qcBlock.inspectionNo}</code></>
+          )}
+          . Bu put-away'in lot/serial'i şu an blokda; denetim tamamlanmadan register edilemez.
+          <br />
+          <small>Detay: {qcBlock.raw}</small>
+        </div>
+      )}
       <StatusText status={status} />
       <h3 style={{ marginTop: 16 }}>Satırlar ({lines.length}) — bin atamak için tıklayın</h3>
       <div className="list">
@@ -124,12 +146,13 @@ function PutAwayDocument({ no, onBack }: { no: string; onBack: () => void }) {
               JSON.stringify({ binCode: bin, qtyToHandle: qty }),
             );
             setBusy(false);
-            setStatus(
-              r.ok
-                ? `PASS: Satır güncellendi → ${bin} (HTTP ${r.httpCode})`
-                : `HATA: ${BcApi.errorMessage(r.body)} (HTTP ${r.httpCode})`,
-            );
-            if (r.ok) reload();
+            if (r.ok) {
+              setStatus(`PASS: Satır güncellendi → ${bin} (HTTP ${r.httpCode})`);
+              setQcBlock(null);
+              reload();
+            } else {
+              handleError(r.body, r.httpCode);
+            }
           }}
         />
       )}

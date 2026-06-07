@@ -101,7 +101,7 @@ private fun PutAwayDocument(no: String, onBack: () -> Unit) {
             busy = true; status = "Register..."
             val r = BcApi.boundAction(context, "putAways", no, "register", "{}")
             busy = false
-            status = if (r.ok) "PASS: Yerleştirme kaydedildi (HTTP ${r.httpCode})" else "HATA: ${BcApi.errorMessage(r.body)} (HTTP ${r.httpCode})"
+            status = if (r.ok) "PASS: Yerleştirme kaydedildi (HTTP ${r.httpCode})" else QcErrorParser.friendlyStatus(BcApi.errorMessage(r.body), r.httpCode)
             if (r.ok) reload()
         }
     }
@@ -152,7 +152,7 @@ private fun PutAwayDocument(no: String, onBack: () -> Unit) {
                     val actType = firstValue(bl, "activityType").ifBlank { BcEnum.WhseActivityType.PUT_AWAY }
                     val r = BcApi.patch(context, "putAwayLines(activityType='$actType',no='$no',lineNo=$lineNo)", body)
                     busy = false
-                    status = if (r.ok) "PASS: Satır güncellendi → $bin (HTTP ${r.httpCode})" else "HATA: ${BcApi.errorMessage(r.body)} (HTTP ${r.httpCode})"
+                    status = if (r.ok) "PASS: Satır güncellendi → $bin (HTTP ${r.httpCode})" else QcErrorParser.friendlyStatus(BcApi.errorMessage(r.body), r.httpCode)
                     if (r.ok) reload()
                 }
             }
@@ -348,7 +348,7 @@ private fun ShipDocument(no: String, onBack: () -> Unit) {
                         val body = JSONObject().apply { put("print", printSlip); put("invoice", invoice) }.toString()
                         val r = BcApi.boundAction(context, "shipments", no, "post", body)
                         busy = false
-                        status = if (r.ok) "PASS: Sevkiyat kaydedildi (HTTP ${r.httpCode})" else "HATA: ${BcApi.errorMessage(r.body)} (HTTP ${r.httpCode})"
+                        status = if (r.ok) "PASS: Sevkiyat kaydedildi (HTTP ${r.httpCode})" else QcErrorParser.friendlyStatus(BcApi.errorMessage(r.body), r.httpCode)
                         if (r.ok) reload()
                     }
                 },
@@ -377,7 +377,7 @@ private fun ShipDocument(no: String, onBack: () -> Unit) {
                     val lineNo = ql.optInt("lineNo")
                     val r = BcApi.patch(context, "shipmentLines(no='$no',lineNo=$lineNo)", body)
                     busy = false
-                    status = if (r.ok) "PASS: Satır güncellendi (HTTP ${r.httpCode})" else "HATA: ${BcApi.errorMessage(r.body)} (HTTP ${r.httpCode})"
+                    status = if (r.ok) "PASS: Satır güncellendi (HTTP ${r.httpCode})" else QcErrorParser.friendlyStatus(BcApi.errorMessage(r.body), r.httpCode)
                     if (r.ok) reload()
                 }
             }
@@ -553,7 +553,7 @@ private fun ShipSalesOrder(no: String, onBack: () -> Unit) {
                         val r = BcApi.boundAction(context, "salesSources", no, "ship", body)
                         busy = false
                         status = if (r.ok) "PASS: SO sevkiyat kaydedildi (HTTP ${r.httpCode})"
-                            else "HATA: ${BcApi.errorMessage(r.body)} (HTTP ${r.httpCode})"
+                            else QcErrorParser.friendlyStatus(BcApi.errorMessage(r.body), r.httpCode)
                         if (r.ok) reload()
                     }
                 },
@@ -587,7 +587,7 @@ private fun ShipSalesOrder(no: String, onBack: () -> Unit) {
                     )
                     busy = false
                     status = if (r.ok) "PASS: SO satırı qty=${res.quantity} (HTTP ${r.httpCode})"
-                        else "HATA: ${BcApi.errorMessage(r.body)} (HTTP ${r.httpCode})"
+                        else QcErrorParser.friendlyStatus(BcApi.errorMessage(r.body), r.httpCode)
                     if (r.ok) reload()
                 }
             }

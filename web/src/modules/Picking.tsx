@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
 import * as BcApi from "../lib/bcApi";
+import { friendlyQcStatus, isQcBlocked, extractInspectionNo } from "../lib/qcErrorParser";
 import { DocHeader, EmptyState, Modal, NumberField, Pill, StatusText } from "../ui/primitives";
 
 type Row = Record<string, any>;
@@ -59,10 +60,19 @@ function PickDocument({ no, onBack }: { no: string; onBack: () => void }) {
   const [header, setHeader] = useState<Row | null>(null);
   const [lines, setLines] = useState<Row[]>([]);
   const [status, setStatus] = useState("");
+  const [qcBlock, setQcBlock] = useState<{ inspectionNo: string | null; raw: string } | null>(null);
   const [busy, setBusy] = useState(false);
   const [qtyLine, setQtyLine] = useState<Row | null>(null);
   const [shortLine, setShortLine] = useState<Row | null>(null);
   const [shipLp, setShipLp] = useState<string | null>(null);
+
+  function handleError(body: string, httpCode: number) {
+    const msg = BcApi.errorMessage(body);
+    if (isQcBlocked(msg)) {
+      setQcBlock({ inspectionNo: extractInspectionNo(msg), raw: msg });
+    }
+    setStatus(friendlyQcStatus(msg, httpCode));
+  }
 
   async function reload() {
     setBusy(true);
@@ -81,10 +91,11 @@ function PickDocument({ no, onBack }: { no: string; onBack: () => void }) {
     setBusy(false);
     if (r.ok) {
       setStatus(`PASS: ${okMsg} (HTTP ${r.httpCode})`);
+      setQcBlock(null);
       onOk?.(r.body);
       reload();
     } else {
-      setStatus(`HATA: ${BcApi.errorMessage(r.body)} (HTTP ${r.httpCode})`);
+      handleError(r.body, r.httpCode);
     }
   }
 
@@ -95,6 +106,17 @@ function PickDocument({ no, onBack }: { no: string; onBack: () => void }) {
         title={no}
         subtitle={`Lokasyon: ${BcApi.firstValue(header, "locationCode")} · Atanan: ${BcApi.firstValue(header, "assignedUserId") || "-"}\nDurum: ${BcApi.firstValue(header, "status")}${shipLp ? `\nAktif Ship LP: ${shipLp}` : ""}`}
       />
+      {qcBlock && (
+        <div className="banner-warn">
+          🔬 <b>Quality Inspection bekliyor</b>
+          {qcBlock.inspectionNo && (
+            <> — denetim <code>{qcBlock.inspectionNo}</code></>
+          )}
+          . Bu pick'in lot/serial'i şu an blokda; denetim tamamlanmadan register edilemez.
+          <br />
+          <small>Detay: {qcBlock.raw}</small>
+        </div>
+      )}
       <StatusText status={status} />
       <h3 className="mt16">Satırlar ({lines.length})</h3>
       <div className="list">
@@ -168,12 +190,13 @@ function PickDocument({ no, onBack }: { no: string; onBack: () => void }) {
               JSON.stringify({ qtyToHandle: qty }),
             );
             setBusy(false);
-            setStatus(
-              r.ok
-                ? `PASS: Satır güncellendi qty=${qty} (HTTP ${r.httpCode})`
-                : `HATA: ${BcApi.errorMessage(r.body)} (HTTP ${r.httpCode})`,
-            );
-            if (r.ok) reload();
+            if (r.ok) {
+              setStatus(`PASS: Satır güncellendi qty=${qty} (HTTP ${r.httpCode})`);
+              setQcBlock(null);
+              reload();
+            } else {
+              handleError(r.body, r.httpCode);
+            }
           }}
         />
       )}

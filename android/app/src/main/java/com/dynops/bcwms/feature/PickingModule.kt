@@ -111,7 +111,8 @@ private fun PickDocument(no: String, onBack: () -> Unit) {
             busy = true; status = "$name..."
             val r = BcApi.boundAction(context, "picks", no, name, body)
             busy = false
-            status = if (r.ok) "PASS: $okMsg (HTTP ${r.httpCode})" else "HATA: ${BcApi.errorMessage(r.body)} (HTTP ${r.httpCode})"
+            status = if (r.ok) "PASS: $okMsg (HTTP ${r.httpCode})"
+                else QcErrorParser.friendlyStatus(BcApi.errorMessage(r.body), r.httpCode)
             onResult(r)
             if (r.ok) reload()
         }
@@ -126,7 +127,8 @@ private fun PickDocument(no: String, onBack: () -> Unit) {
             val actType = line.optString("activityType").ifBlank { BcEnum.WhseActivityType.PICK }
             val r = BcApi.patch(context, "pickLines(activityType='$actType',no='$no',lineNo=${line.optInt("lineNo")})", body)
             busy = false
-            status = if (r.ok) "PASS: Satır güncellendi (HTTP ${r.httpCode})" else "HATA: ${BcApi.errorMessage(r.body)} (HTTP ${r.httpCode})"
+            status = if (r.ok) "PASS: Satır güncellendi (HTTP ${r.httpCode})"
+                else QcErrorParser.friendlyStatus(BcApi.errorMessage(r.body), r.httpCode)
             if (r.ok) reload()
         }
     }
