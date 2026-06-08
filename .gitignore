@@ -1,0 +1,47 @@
+# Dependencies
+node_modules/
+.pnpm-store/
+
+# Build artefacts
+dist/
+build/
+out/
+.next/
+.expo/
+.expo-shared/
+*.tsbuildinfo
+
+# AL build artefacts
+apps/al-extension/.alpackages/
+apps/al-extension/.alcache/
+apps/al-extension/*.app
+apps/al-extension/Translations/*.xlf.bak
+apps/al-extension/.snapshots/
+
+# IDE
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json.example
+.idea/
+*.swp
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs & env
+*.log
+.env
+.env.*
+!.env.example
+
+# Test
+coverage/
+.nyc_output/
+
+# Mobile native
+apps/mobile/ios/Pods/
+apps/mobile/ios/build/
+apps/mobile/android/.gradle/
+apps/mobile/android/build/
+apps/mobile/android/app/build/

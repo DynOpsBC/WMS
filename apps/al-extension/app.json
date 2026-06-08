@@ -1,0 +1,43 @@
+{
+  "id": "a3f1d2c0-5e91-4b8f-9a2e-7c1d4e6f8b00",
+  "name": "BCWMSApp",
+  "publisher": "DynOpsBC",
+  "version": "0.1.0.0",
+  "brief": "Hybrid WMS extension for Business Central with mobile + web companion apps.",
+  "description": "Publishes warehouse master data, license-plate, mobile-menu, and activity APIs consumed by the BCWMSApp React PWA and React Native mobile app. Targets parity with the Dynamics 365 Warehouse Management mobile app and Insight Works Warehouse Insight.",
+  "privacyStatement": "https://dynopsbc.com/privacy",
+  "EULA": "https://dynopsbc.com/eula",
+  "help": "https://dynopsbc.com/help/bcwmsapp",
+  "url": "https://dynopsbc.com/bcwmsapp",
+  "logo": "",
+  "dependencies": [
+    {
+      "id": "63ca2fa4-4f03-4f2b-a480-172fef340d3f",
+      "name": "System Application",
+      "publisher": "Microsoft",
+      "version": "26.0.0.0"
+    },
+    {
+      "id": "437dbf0e-84ff-417a-965d-ed2bb9650972",
+      "name": "Base Application",
+      "publisher": "Microsoft",
+      "version": "26.0.0.0"
+    }
+  ],
+  "screenshots": [],
+  "platform": "26.0.0.0",
+  "application": "26.0.0.0",
+  "idRanges": [
+    {
+      "from": 50100,
+      "to": 50249
+    }
+  ],
+  "resourceExposurePolicy": {
+    "allowDebugging": false,
+    "allowDownloadingSource": false,
+    "includeSourceInSymbolFile": false
+  },
+  "runtime": "14.0",
+  "features": ["NoImplicitWith"]
+}

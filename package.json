@@ -1,0 +1,22 @@
+{
+  "name": "bcwmsapp",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Hybrid WMS for Microsoft Dynamics 365 Business Central — web PWA + React Native mobile + BC AL extension.",
+  "packageManager": "pnpm@10.33.0",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "build": "pnpm -r --filter './apps/web' --filter './packages/*' build",
+    "typecheck": "pnpm -r typecheck",
+    "lint": "pnpm -r lint",
+    "test": "pnpm -r test",
+    "dev:web": "pnpm -C apps/web dev",
+    "dev:mobile": "pnpm -C apps/mobile start"
+  },
+  "devDependencies": {
+    "prettier": "^3.3.3",
+    "typescript": "^5.6.3"
+  }
+}

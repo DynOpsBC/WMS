@@ -1,0 +1,35 @@
+name: Mobile
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'apps/mobile/**'
+      - 'packages/shared/**'
+      - 'pnpm-workspace.yaml'
+      - 'package.json'
+      - '.github/workflows/mobile.yml'
+  pull_request:
+    paths:
+      - 'apps/mobile/**'
+      - 'packages/shared/**'
+      - 'pnpm-workspace.yaml'
+      - 'package.json'
+      - '.github/workflows/mobile.yml'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.33.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm -C packages/shared typecheck
+      - run: pnpm -C apps/mobile typecheck
+      - run: pnpm -C apps/mobile test

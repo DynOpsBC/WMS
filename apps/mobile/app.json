@@ -1,0 +1,50 @@
+{
+  "expo": {
+    "name": "BCWMSApp",
+    "slug": "bcwmsapp",
+    "scheme": "bcwmsapp",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "automatic",
+    "newArchEnabled": false,
+    "splash": {
+      "backgroundColor": "#0b3b66",
+      "resizeMode": "contain"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.dynopsbc.bcwmsapp",
+      "infoPlist": {
+        "NSCameraUsageDescription": "Scan barcodes and license plates."
+      }
+    },
+    "android": {
+      "package": "com.dynopsbc.bcwmsapp",
+      "permissions": [
+        "android.permission.CAMERA",
+        "android.permission.INTERNET",
+        "android.permission.ACCESS_NETWORK_STATE",
+        "android.permission.BLUETOOTH",
+        "android.permission.BLUETOOTH_CONNECT"
+      ],
+      "intentFilters": [
+        {
+          "action": "com.symbol.datawedge.api.RESULT_ACTION",
+          "category": "android.intent.category.DEFAULT"
+        }
+      ]
+    },
+    "plugins": [
+      "expo-router",
+      [
+        "react-native-vision-camera",
+        {
+          "cameraPermissionText": "BCWMSApp needs the camera to scan barcodes and license plates."
+        }
+      ]
+    ],
+    "experiments": {
+      "typedRoutes": true
+    }
+  }
+}

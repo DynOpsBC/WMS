@@ -1,0 +1,34 @@
+name: AL Extension
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'apps/al-extension/**'
+      - '.github/workflows/al.yml'
+  pull_request:
+    paths:
+      - 'apps/al-extension/**'
+      - '.github/workflows/al.yml'
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate app.json
+        run: |
+          python3 -c "import json,sys; json.load(open('apps/al-extension/app.json')); print('app.json is valid JSON')"
+      - name: AL file syntax presence check
+        run: |
+          missing=0
+          for d in Tables Pages PermissionSets Codeunits Enums; do
+            count=$(find apps/al-extension/src/$d -name '*.al' 2>/dev/null | wc -l)
+            echo "$d: $count files"
+            if [ "$count" -eq 0 ] && [ "$d" != "Enums" ]; then
+              echo "::warning::No AL files in $d"
+            fi
+          done
+          exit $missing
+      # M1 swaps this for AL-Go for GitHub:
+      #   uses: microsoft/AL-Go-Actions/.github/workflows/CICD.yaml@main
