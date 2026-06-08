@@ -28,7 +28,9 @@ import java.util.Locale
 /** Cross-module navigator — Picking/PutAway/Shipment use this to deep-link
  *  to the MS Quality Management screen when an action errors out with a
  *  QC-block ("blocked by quality inspection ...") response. */
-val LocalNavigator = compositionLocalOf<(Screen) -> Unit> { {} }
+val LocalNavigator = compositionLocalOf<(Screen) -> Unit> {
+    error("LocalNavigator used outside CompositionLocalProvider")
+}
 
 enum class Screen(val title: String) {
     Home("BCWMS Ana Menü"),

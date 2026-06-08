@@ -34,9 +34,13 @@ export function patch(path: string, body: string): Promise<BcApi.ApiResult> {
   return BcApi.patch(`${qmBase()}/${path}`, body);
 }
 
+export function inspectionKey(systemId: string): string {
+  return `'${systemId.replace(/'/g, "''")}'`;
+}
+
 /** Bound action — `qualityInspections(<systemId>)/Microsoft.NAV.<action>` */
 export function boundAction(systemId: string, action: string, body: string): Promise<BcApi.ApiResult> {
-  return post(`qualityInspections(${systemId})/Microsoft.NAV.${action}`, body);
+  return post(`qualityInspections(${inspectionKey(systemId)})/Microsoft.NAV.${action}`, body);
 }
 
 /**
@@ -48,7 +52,7 @@ export function createInspectionFromRecord(
   tableName: string,
 ): Promise<BcApi.ApiResult> {
   return post(
-    `createQualityInspections(${sourceSystemId})/Microsoft.NAV.CreateInspectionFromRecordID`,
+    `createQualityInspections(${inspectionKey(sourceSystemId)})/Microsoft.NAV.CreateInspectionFromRecordID`,
     JSON.stringify({ tableName }),
   );
 }

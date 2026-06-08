@@ -37,11 +37,15 @@ import org.json.JSONObject
 private fun qmBase(context: android.content.Context): String =
     "${BcApi.BC_RESOURCE}/v2.0/${BcApi.TENANT}/${BcApi.getEnvironment(context)}/api/microsoft/qualityManagement/v1.0/companies(${BcApi.getCompanyId(context)})"
 
+private fun inspectionKey(systemId: String): String =
+    "'${systemId.replace("'", "''")}'"
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun QualityManagementModule() {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
+    val qmBaseUrl = remember(context) { qmBase(context) }
     var rows by remember { mutableStateOf<List<JSONObject>>(emptyList()) }
     var status by remember { mutableStateOf("") }
     var loading by remember { mutableStateOf(false) }
@@ -52,7 +56,7 @@ fun QualityManagementModule() {
         scope.launch {
             loading = true; status = "Yükleniyor..."
             val filter = if (openOnly) "&\$filter=status eq 'Open'" else ""
-            val r = BcApi.get(context, "${qmBase(context)}/qualityInspections?\$top=50$filter&\$orderby=systemCreatedAt desc")
+            val r = BcApi.get(context, "$qmBaseUrl/qualityInspections?\$top=50$filter&\$orderby=systemCreatedAt desc")
             loading = false
             rows = if (r.ok) BcApi.parseValueArray(r.body) else emptyList()
             status = if (!r.ok) "HATA: MS QM listesi alınamadı (HTTP ${r.httpCode})"
@@ -108,6 +112,7 @@ fun QualityManagementModule() {
 private fun InspectionDetail(insp: JSONObject, onBack: () -> Unit) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
+    val qmBaseUrl = remember(context) { qmBase(context) }
     var current by remember { mutableStateOf(insp) }
     var status by remember { mutableStateOf("") }
     var busy by remember { mutableStateOf(false) }
@@ -124,7 +129,7 @@ private fun InspectionDetail(insp: JSONObject, onBack: () -> Unit) {
     fun reload() {
         scope.launch {
             busy = true
-            val r = BcApi.get(context, "${qmBase(context)}/qualityInspections($systemId)")
+            val r = BcApi.get(context, "$qmBaseUrl/qualityInspections(${inspectionKey(systemId)})")
             busy = false
             if (r.ok) try { current = JSONObject(r.body) } catch (_: Exception) {}
         }
@@ -133,7 +138,7 @@ private fun InspectionDetail(insp: JSONObject, onBack: () -> Unit) {
     fun action(name: String, body: String, okMsg: String) {
         scope.launch {
             busy = true; status = "$name..."
-            val r = BcApi.post(context, "${qmBase(context)}/qualityInspections($systemId)/Microsoft.NAV.$name", body)
+            val r = BcApi.post(context, "$qmBaseUrl/qualityInspections(${inspectionKey(systemId)})/Microsoft.NAV.$name", body)
             busy = false
             status = if (r.ok) "PASS: $okMsg (HTTP ${r.httpCode})"
                 else QcErrorParser.friendlyStatus(BcApi.errorMessage(r.body), r.httpCode)

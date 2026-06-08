@@ -105,7 +105,7 @@ function InspectionDetail({ row, onBack }: { row: Row; onBack: () => void }) {
 
   async function reload() {
     setBusy(true);
-    const r = await QmApi.get(`qualityInspections(${systemId})`);
+    const r = await QmApi.get(`qualityInspections(${QmApi.inspectionKey(systemId)})`);
     setBusy(false);
     if (r.ok) {
       try {
