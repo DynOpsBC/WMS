@@ -1,0 +1,12 @@
+{
+  "name": "BCWMSApp",
+  "short_name": "BCWMS",
+  "description": "Warehouse management for Microsoft Dynamics 365 Business Central",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0b3b66",
+  "theme_color": "#0b3b66",
+  "icons": [
+    { "src": "/favicon.svg", "sizes": "any", "type": "image/svg+xml" }
+  ]
+}
