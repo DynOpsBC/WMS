@@ -1,4 +1,5 @@
 import { Stack } from 'expo-router';
+import { FlowPayloadSchemas } from '@bcwmsapp/shared';
 import { FlowRunner } from '@/flows/FlowRunner';
 import type { FlowStep } from '@/flows/types';
 
@@ -13,12 +14,7 @@ export default function PalletPickFlow() {
   return (
     <>
       <Stack.Screen options={{ title: 'Pallet Pick' }} />
-      <FlowRunner
-        flowId="PALLET-PICK"
-        steps={STEPS}
-        endpoint={{ path: '/wmsPalletPicks', method: 'POST' }}
-        onComplete={() => {}}
-      />
+      <FlowRunner flowId="PALLET-PICK" steps={STEPS} schema={FlowPayloadSchemas['PALLET-PICK']} />
     </>
   );
 }

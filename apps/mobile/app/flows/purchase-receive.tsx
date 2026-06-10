@@ -1,4 +1,5 @@
 import { Stack } from 'expo-router';
+import { FlowPayloadSchemas } from '@bcwmsapp/shared';
 import { FlowRunner } from '@/flows/FlowRunner';
 import type { FlowStep } from '@/flows/types';
 
@@ -14,12 +15,7 @@ export default function PurchaseReceiveFlow() {
   return (
     <>
       <Stack.Screen options={{ title: 'PO Receive' }} />
-      <FlowRunner
-        flowId="PURCH-RECEIVE"
-        steps={STEPS}
-        endpoint={{ path: '/wmsReceipts', method: 'POST' }}
-        onComplete={() => {}}
-      />
+      <FlowRunner flowId="PURCH-RECEIVE" steps={STEPS} schema={FlowPayloadSchemas['PURCH-RECEIVE']} />
     </>
   );
 }

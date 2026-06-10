@@ -14,12 +14,7 @@ export default function TransferFlow() {
   return (
     <>
       <Stack.Screen options={{ title: 'Transfer' }} />
-      <FlowRunner
-        flowId="TRANSFER"
-        steps={STEPS}
-        endpoint={{ path: '/wmsTransfers', method: 'POST' }}
-        onComplete={() => {}}
-      />
+      <FlowRunner flowId="TRANSFER" steps={STEPS} />
     </>
   );
 }

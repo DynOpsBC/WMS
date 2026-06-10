@@ -14,12 +14,7 @@ export default function ProductionPickFlow() {
   return (
     <>
       <Stack.Screen options={{ title: 'Production pick' }} />
-      <FlowRunner
-        flowId="PRODUCTION-PICK"
-        steps={STEPS}
-        endpoint={{ path: '/wmsProduction/consume', method: 'POST' }}
-        onComplete={() => {}}
-      />
+      <FlowRunner flowId="PRODUCTION-PICK" steps={STEPS} />
     </>
   );
 }

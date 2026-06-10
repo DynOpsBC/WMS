@@ -1,4 +1,5 @@
 import { Stack } from 'expo-router';
+import { FlowPayloadSchemas } from '@bcwmsapp/shared';
 import { FlowRunner } from '@/flows/FlowRunner';
 import type { FlowStep } from '@/flows/types';
 
@@ -14,12 +15,7 @@ export default function CycleCountFlow() {
   return (
     <>
       <Stack.Screen options={{ title: 'Cycle count' }} />
-      <FlowRunner
-        flowId="CYCLE-COUNT"
-        steps={STEPS}
-        endpoint={{ path: '/wmsCountVariances', method: 'POST' }}
-        onComplete={() => {}}
-      />
+      <FlowRunner flowId="CYCLE-COUNT" steps={STEPS} schema={FlowPayloadSchemas['CYCLE-COUNT']} />
     </>
   );
 }

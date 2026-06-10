@@ -1,23 +1,27 @@
 import { useMemo, useState } from 'react';
 import { Text, View, StyleSheet, Pressable, TextInput, Alert } from 'react-native';
+import type { z } from 'zod';
 import { useScan } from '@/hooks/useScan';
 import { OfflineQueue } from '@/lib/offlineQueue';
+import { syncEngine } from '@/lib/runtime';
+import { auth } from '@/lib/auth';
+import { newRequestId } from '@/lib/id';
 import type { FlowStep } from './types';
 
 interface Props {
   flowId: string;
   steps: FlowStep[];
-  onComplete: (data: Record<string, string | number>) => Promise<void> | void;
-  endpoint?: { path: string; method: 'POST' | 'PATCH' };
+  /** Optional zod guard from FlowPayloadSchemas — rejects malformed input before enqueue. */
+  schema?: z.ZodTypeAny;
+  onComplete?: (data: Record<string, string | number>) => void;
 }
 
 /**
  * Generic flow runner mirroring D365 WMA's "step prompt + scan / enter / next" pattern.
- * - Each step prompts for one value (scan, qty, lot, serial, etc.).
- * - Scans auto-advance.
- * - On completion, enqueues a POST/PATCH if `endpoint` is provided.
+ * On completion it validates, enqueues a transactional action, and triggers the
+ * sync engine — which POSTs it to BC's `wmsActionRequests` endpoint with retry/backoff.
  */
-export function FlowRunner({ flowId, steps, onComplete, endpoint }: Props) {
+export function FlowRunner({ flowId, steps, schema, onComplete }: Props) {
   const [cursor, setCursor] = useState(0);
   const [data, setData] = useState<Record<string, string | number>>({});
   const [input, setInput] = useState('');
@@ -25,8 +29,7 @@ export function FlowRunner({ flowId, steps, onComplete, endpoint }: Props) {
 
   useScan(
     (e) => {
-      if (!step) return;
-      if (step.kind === 'scan') accept(e.data);
+      if (step?.kind === 'scan') accept(e.data);
     },
     [step],
   );
@@ -36,24 +39,41 @@ export function FlowRunner({ flowId, steps, onComplete, endpoint }: Props) {
     const next = { ...data, [step.id]: value };
     setData(next);
     setInput('');
-    if (cursor + 1 < steps.length) {
-      setCursor(cursor + 1);
-    } else {
-      complete(next);
-    }
+    if (cursor + 1 < steps.length) setCursor(cursor + 1);
+    else complete(next);
   }
 
-  async function complete(final: Record<string, string | number>) {
-    if (endpoint) {
-      OfflineQueue.enqueue({
-        type: endpoint.method,
-        path: endpoint.path,
-        body: { flowId, ...final },
-        idempotencyKey: `${flowId}-${Date.now()}`,
-      } as never);
+  function complete(final: Record<string, string | number>) {
+    // Strip the trailing "confirm" step value; it carries no data.
+    const payload: Record<string, string | number> = { ...final };
+    delete payload['confirm'];
+
+    if (schema) {
+      const parsed = schema.safeParse(payload);
+      if (!parsed.success) {
+        Alert.alert('Invalid entry', parsed.error.issues.map((i) => i.message).join('\n'));
+        return;
+      }
     }
-    await onComplete(final);
-    Alert.alert('Done', `${flowId} recorded.`);
+
+    const session = auth.loadSession();
+    OfflineQueue.enqueue({
+      requestId: newRequestId(),
+      flowId,
+      payload,
+      ...(session?.username ? { workerId: session.username } : {}),
+    });
+
+    void syncEngine.flush();
+    onComplete?.(final);
+
+    const pending = OfflineQueue.size();
+    Alert.alert(
+      'Recorded',
+      pending > 1
+        ? `${flowId} queued. ${pending} actions waiting to sync.`
+        : `${flowId} submitted to Business Central.`,
+    );
     setCursor(0);
     setData({});
   }
@@ -61,7 +81,7 @@ export function FlowRunner({ flowId, steps, onComplete, endpoint }: Props) {
   if (!step) {
     return (
       <View style={styles.container}>
-        <Text style={styles.heading}>Flow complete</Text>
+        <Text style={styles.label}>Flow complete</Text>
       </View>
     );
   }
@@ -96,10 +116,7 @@ export function FlowRunner({ flowId, steps, onComplete, endpoint }: Props) {
         ))}
       </View>
       <View style={styles.actions}>
-        <Pressable
-          style={[styles.button, styles.secondary]}
-          onPress={() => cursor > 0 && setCursor(cursor - 1)}
-        >
+        <Pressable style={[styles.button, styles.secondary]} onPress={() => cursor > 0 && setCursor(cursor - 1)}>
           <Text style={styles.secondaryText}>Back</Text>
         </Pressable>
         <Pressable

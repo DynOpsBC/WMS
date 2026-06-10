@@ -4,6 +4,7 @@ export const storage = new MMKV({ id: 'bcwmsapp' });
 
 interface StoredSession {
   accessToken: string;
+  refreshToken?: string;
   expiresAt: string;
   username: string;
   name: string;

@@ -1,4 +1,5 @@
 import { Stack } from 'expo-router';
+import { FlowPayloadSchemas } from '@bcwmsapp/shared';
 import { FlowRunner } from '@/flows/FlowRunner';
 import type { FlowStep } from '@/flows/types';
 
@@ -14,12 +15,7 @@ export default function MovementFlow() {
   return (
     <>
       <Stack.Screen options={{ title: 'Movement' }} />
-      <FlowRunner
-        flowId="MOVEMENT"
-        steps={STEPS}
-        endpoint={{ path: '/wmsMovements', method: 'POST' }}
-        onComplete={() => {}}
-      />
+      <FlowRunner flowId="MOVEMENT" steps={STEPS} schema={FlowPayloadSchemas.MOVEMENT} />
     </>
   );
 }

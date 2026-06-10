@@ -15,12 +15,7 @@ export default function PackFlow() {
   return (
     <>
       <Stack.Screen options={{ title: 'Pack' }} />
-      <FlowRunner
-        flowId="PACK"
-        steps={STEPS}
-        endpoint={{ path: '/wmsContainers/lines', method: 'POST' }}
-        onComplete={() => {}}
-      />
+      <FlowRunner flowId="PACK" steps={STEPS} />
     </>
   );
 }

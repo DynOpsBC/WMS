@@ -14,12 +14,7 @@ export default function RafFlow() {
   return (
     <>
       <Stack.Screen options={{ title: 'Report as finished' }} />
-      <FlowRunner
-        flowId="RAF"
-        steps={STEPS}
-        endpoint={{ path: '/wmsProduction/raf', method: 'POST' }}
-        onComplete={() => {}}
-      />
+      <FlowRunner flowId="RAF" steps={STEPS} />
     </>
   );
 }

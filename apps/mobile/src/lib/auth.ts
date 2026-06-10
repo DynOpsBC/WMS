@@ -1,57 +1,128 @@
-import { SessionStore } from '../storage';
+import * as AuthSession from 'expo-auth-session';
+import * as WebBrowser from 'expo-web-browser';
+import { SessionStore } from './storage';
 
-const tenantId = process.env.EXPO_PUBLIC_ENTRA_TENANT_ID!;
-const clientId = process.env.EXPO_PUBLIC_ENTRA_CLIENT_ID!;
-const redirectUri = 'bcwmsapp://auth';
+WebBrowser.maybeCompleteAuthSession();
 
-export interface AuthSession {
+const tenantId = process.env.EXPO_PUBLIC_ENTRA_TENANT_ID ?? '';
+const clientId = process.env.EXPO_PUBLIC_ENTRA_CLIENT_ID ?? '';
+
+const discovery: AuthSession.DiscoveryDocument = {
+  authorizationEndpoint: `https://login.microsoftonline.com/${tenantId}/oauth2/v2.0/authorize`,
+  tokenEndpoint: `https://login.microsoftonline.com/${tenantId}/oauth2/v2.0/token`,
+};
+
+const BC_SCOPE = 'https://api.businesscentral.dynamics.com/user_impersonation';
+const SCOPES = [BC_SCOPE, 'offline_access', 'openid', 'profile'];
+
+const redirectUri = AuthSession.makeRedirectUri({ scheme: 'bcwmsapp', path: 'auth' });
+
+export interface AuthSessionData {
   accessToken: string;
+  refreshToken?: string;
   expiresAt: string;
   username: string;
   name: string;
   objectId: string;
 }
 
-const BC_SCOPE = 'https://api.businesscentral.dynamics.com/.default';
+interface JwtClaims {
+  preferred_username?: string;
+  name?: string;
+  oid?: string;
+}
 
-/**
- * Entra ID PKCE flow.
- *
- * Implementation lives in M1.5: wraps expo-auth-session/providers/microsoft
- * with the authority `https://login.microsoftonline.com/{tenantId}/v2.0`
- * and the scopes `[BC_SCOPE, 'offline_access']`. The returned token is
- * cached via SessionStore and refreshed silently on expiry.
- *
- * The placeholder below short-circuits with a fake session so the rest of
- * the app can be exercised offline.
- */
-export async function signIn(): Promise<AuthSession> {
-  const session: AuthSession = {
-    accessToken: 'PLACEHOLDER',
-    expiresAt: new Date(Date.now() + 60 * 60 * 1000).toISOString(),
-    username: 'demo@dynopsbc.com',
-    name: 'Demo Worker',
-    objectId: '00000000-0000-0000-0000-000000000001',
+function decodeIdToken(idToken?: string): JwtClaims {
+  if (!idToken) return {};
+  try {
+    const payload = idToken.split('.')[1];
+    if (!payload) return {};
+    const json = atob(payload.replace(/-/g, '+').replace(/_/g, '/'));
+    return JSON.parse(json) as JwtClaims;
+  } catch {
+    return {};
+  }
+}
+
+function persist(token: AuthSession.TokenResponse, claims: JwtClaims): AuthSessionData {
+  const expiresInMs = (token.expiresIn ?? 3600) * 1000;
+  const session: AuthSessionData = {
+    accessToken: token.accessToken,
+    ...(token.refreshToken ? { refreshToken: token.refreshToken } : {}),
+    expiresAt: new Date(Date.now() + expiresInMs).toISOString(),
+    username: claims.preferred_username ?? '',
+    name: claims.name ?? claims.preferred_username ?? 'Worker',
+    objectId: claims.oid ?? '',
   };
   SessionStore.save(session);
   return session;
+}
+
+/** Interactive Entra ID sign-in using PKCE (Authorization Code + code_verifier). */
+export async function signIn(): Promise<AuthSessionData> {
+  if (!tenantId || !clientId) {
+    throw new Error('Entra ID not configured: set EXPO_PUBLIC_ENTRA_TENANT_ID and EXPO_PUBLIC_ENTRA_CLIENT_ID');
+  }
+
+  const request = new AuthSession.AuthRequest({
+    clientId,
+    scopes: SCOPES,
+    redirectUri,
+    usePKCE: true,
+    extraParams: { prompt: 'select_account' },
+  });
+
+  const result = await request.promptAsync(discovery);
+  if (result.type !== 'success' || !result.params['code']) {
+    throw new Error(`Sign-in ${result.type}`);
+  }
+
+  const token = await AuthSession.exchangeCodeAsync(
+    {
+      clientId,
+      code: result.params['code'],
+      redirectUri,
+      extraParams: { code_verifier: request.codeVerifier ?? '' },
+    },
+    discovery,
+  );
+
+  return persist(token, decodeIdToken(token.idToken));
 }
 
 export function signOut(): void {
   SessionStore.clear();
 }
 
-export function loadSession(): AuthSession | null {
+export function loadSession(): AuthSessionData | null {
   return SessionStore.load();
 }
 
+/** Returns a valid bearer token, silently refreshing via the refresh token when expired. */
 export async function getAccessToken(): Promise<string> {
   const s = SessionStore.load();
   if (!s) throw new Error('Not signed in');
-  if (new Date(s.expiresAt).getTime() < Date.now()) {
-    throw new Error('Session expired — re-authenticate');
-  }
-  return s.accessToken;
+
+  const expired = new Date(s.expiresAt).getTime() < Date.now() + 60_000; // 60s skew
+  if (!expired) return s.accessToken;
+
+  if (!s.refreshToken) throw new Error('Session expired — re-authenticate');
+
+  const refreshed = await AuthSession.refreshAsync(
+    { clientId, refreshToken: s.refreshToken, scopes: SCOPES },
+    discovery,
+  );
+  const next = persist(refreshed, decodeIdToken(refreshed.idToken));
+  return next.accessToken;
 }
 
-export const auth = { signIn, signOut, loadSession, getAccessToken, tenantId, clientId, redirectUri, BC_SCOPE };
+export const auth = {
+  signIn,
+  signOut,
+  loadSession,
+  getAccessToken,
+  tenantId,
+  clientId,
+  redirectUri,
+  configured: Boolean(tenantId && clientId),
+};

@@ -15,12 +15,7 @@ export default function PutawayFlow() {
   return (
     <>
       <Stack.Screen options={{ title: 'Put-away' }} />
-      <FlowRunner
-        flowId="PUTAWAY"
-        steps={STEPS}
-        endpoint={{ path: '/wmsPutaways', method: 'POST' }}
-        onComplete={() => {}}
-      />
+      <FlowRunner flowId="PUTAWAY" steps={STEPS} />
     </>
   );
 }

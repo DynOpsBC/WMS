@@ -21,13 +21,13 @@ export const BC_SCOPE = 'https://api.businesscentral.dynamics.com/.default';
 export const msalInstance = new PublicClientApplication(msalConfig);
 
 export async function getAccessToken(): Promise<string> {
-  const accounts = msalInstance.getAllAccounts();
-  if (accounts.length === 0) {
+  const account = msalInstance.getAllAccounts()[0];
+  if (!account) {
     throw new Error('Not signed in');
   }
   const result = await msalInstance.acquireTokenSilent({
     scopes: [BC_SCOPE],
-    account: accounts[0],
+    account,
   });
   return result.accessToken;
 }
