@@ -10,7 +10,7 @@ import type {
   WmsShippingRate,
   WmsWorker,
   WmsWorkerMenu,
-} from '../types/index.js';
+} from '../types';
 
 const API_NAMESPACE = 'dynopsbc/wms/v1.0';
 

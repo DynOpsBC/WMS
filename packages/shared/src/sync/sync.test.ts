@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { SYNC_LIMITS, backoffDelay, shouldRetry } from './index.js';
+import { SYNC_LIMITS, backoffDelay, shouldRetry } from './index';
 
 describe('backoffDelay', () => {
   it('grows exponentially with attempt count', () => {

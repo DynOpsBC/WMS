@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { BcApiError, BcClient, BcOfflineError } from './index.js';
+import { BcApiError, BcClient, BcOfflineError } from './index';
 
 const env = {
   tenantId: '11111111-1111-1111-1111-111111111111',
