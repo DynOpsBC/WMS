@@ -323,6 +323,23 @@ label.field {
 .login-card label.field { margin-top: 14px; }
 .login-card textarea { font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 11px; height: 100px; resize: vertical; }
 .login-card .helper { font-size: 11px; color: var(--text-muted); margin-top: 6px; }
+.login-card .code-block {
+  background: var(--bg-soft);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 8px 10px;
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-size: 10px;
+  line-height: 1.5;
+  margin-top: 6px;
+  overflow-x: auto;
+  white-space: pre;
+  color: var(--text);
+}
+.login-card details { margin-top: 8px; font-size: 11px; }
+.login-card details summary { cursor: pointer; color: var(--primary); font-weight: 600; }
+.login-card details ul { padding-left: 18px; margin: 8px 0; }
+.login-card details code { font-size: 10px; }
 
 /* Detail page two-column layout */
 .detail-grid {

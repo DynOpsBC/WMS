@@ -90,7 +90,35 @@ export function Login({ onSignedIn }: LoginProps) {
           placeholder="eyJhbGciOiJSUzI1NiIs… (az account get-access-token --resource https://api.businesscentral.dynamics.com)"
         />
         <div className="helper">
-          Terminal: <code>az account get-access-token --resource https://api.businesscentral.dynamics.com --query accessToken -o tsv</code>
+          Terminal komutu (panoya kopyalanır):
+          <pre className="code-block">{`# macOS
+az account get-access-token \\
+  --resource "https://api.businesscentral.dynamics.com" \\
+  --query accessToken -o tsv | pbcopy
+
+# Windows (PowerShell)
+az account get-access-token \`
+  --resource "https://api.businesscentral.dynamics.com" \`
+  --query accessToken -o tsv | Set-Clipboard`}</pre>
+          <details>
+            <summary>📖 Token nasıl alınır? (3 yöntem)</summary>
+            <ul>
+              <li><b>az CLI</b> (her platform): yukarıdaki komut. İlk kez: <code>az login --tenant 7fa2357e-26f2-4174-8e16-a713981356b8</code></li>
+              <li><b>PowerShell + MSAL.PS</b> (Windows): <code>Get-MsalToken … | Set-Clipboard</code></li>
+              <li><b>Device Code</b> (tarayıcısız): curl ile <code>/oauth2/v2.0/devicecode</code></li>
+            </ul>
+            <p>
+              Tam dokümantasyon:{" "}
+              <a
+                href="https://github.com/celandeniz/BCWMSApp/blob/main/docs/wms-token-generation.md"
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                docs/wms-token-generation.md
+              </a>{" "}
+              · Token ömrü ~1 saat · BC Role Center → "WMS Token Help" sayfası BC client'tan aynı rehberi gösterir.
+            </p>
+          </details>
         </div>
 
         <div className="row" style={{ marginTop: 12 }}>

@@ -151,6 +151,21 @@ page 72095 "DOPSWHS DynOps WMS RC"
         // ============================================
         area(Processing)
         {
+            group(WmsAccess)
+            {
+                Caption = '🔑 WMS Web / Mobile Bağlantısı';
+                action(WMSTokenHelpAction)
+                {
+                    Caption = 'WMS Token Nasıl Alınır?';
+                    ToolTip = 'Web tarayıcı veya mobil app için BCWMS giriş token''ı üretme adımları (az CLI, PowerShell, device-code). Komutları kopyala, çalıştır, çıkan token''ı uygulamaya yapıştır.';
+                    ApplicationArea = All;
+                    Image = EncryptionKeys;
+                    Promoted = true;
+                    PromotedCategory = Process;
+                    PromotedIsBig = true;
+                    RunObject = page "DOPSWHS WMS Token Help";
+                }
+            }
             group(QuickActions)
             {
                 Caption = 'Hızlı İşlemler';
