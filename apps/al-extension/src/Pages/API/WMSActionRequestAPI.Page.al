@@ -22,6 +22,7 @@ page 50127 "WMS Action Request API"
                 field(flowId; Rec."Flow Id") { }
                 field(payload; Rec.Payload) { }
                 field(workerId; Rec."Worker Id") { }
+                field(deviceId; Rec."Device Id") { }
                 field(status; Rec.Status) { Editable = false; }
                 field(resultMessage; Rec."Result Message") { Editable = false; }
                 field(resultDocumentNo; Rec."Result Document No.") { Editable = false; }

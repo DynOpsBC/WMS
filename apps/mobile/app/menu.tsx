@@ -1,9 +1,9 @@
-import { Link, Stack } from 'expo-router';
+import { Link, Stack, useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { FlatList, Text, View, StyleSheet, Pressable } from 'react-native';
-import { auth } from '@/lib/auth';
 import { useSync } from '@/hooks/useSync';
 import { bcClient } from '@/lib/runtime';
+import { loadDevice } from '@/lib/device';
 
 interface MenuRow {
   id: string;
@@ -47,15 +47,19 @@ const FLOW_HREF: Record<string, string> = {
 export default function MenuScreen() {
   const [items, setItems] = useState<MenuRow[]>(FALLBACK);
   const sync = useSync();
-  const session = auth.loadSession();
+  const router = useRouter();
+  const device = loadDevice();
+
+  // If the device was revoked while the menu was open, bounce back to pairing.
+  useEffect(() => {
+    if (device?.status === 'revoked') router.replace('/');
+  }, [device?.status, router]);
 
   useEffect(() => {
-    // Pull the worker's assigned menu from BC; fall back to the static list offline.
     let cancelled = false;
     (async () => {
-      const menuCode = session?.objectId ? 'MAIN' : 'MAIN';
       try {
-        const menu = await bcClient.getWorkerMenu(menuCode);
+        const menu = await bcClient.getWorkerMenu('MAIN');
         if (!cancelled && menu?.menuItems?.length) {
           setItems(
             menu.menuItems
@@ -67,16 +71,19 @@ export default function MenuScreen() {
         /* offline → keep FALLBACK */
       }
     })();
-    return () => {
-      cancelled = true;
-    };
-  }, [session?.objectId]);
+    return () => { cancelled = true; };
+  }, []);
 
   return (
     <View style={styles.container}>
       <Stack.Screen options={{ title: 'Main menu' }} />
       <View style={styles.statusBar}>
-        <Text style={styles.statusText}>Worker: {session?.name ?? '—'}</Text>
+        <View style={styles.deviceCol}>
+          <Text style={styles.deviceName}>{device?.deviceName ?? 'Unpaired device'}</Text>
+          <Text style={styles.deviceMeta}>
+            {device?.defaultWarehouse ?? '—'} · paired by {device?.pairedBy ?? '—'}
+          </Text>
+        </View>
         <View style={styles.syncWrap}>
           <View style={[styles.syncDot, { backgroundColor: SYNC_COLOR[sync.status] ?? '#94a3b8' }]} />
           <Text style={styles.statusText}>
@@ -108,7 +115,10 @@ export default function MenuScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#f8fafc' },
-  statusBar: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#0b3b66', paddingHorizontal: 16, paddingVertical: 10 },
+  statusBar: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#0b3b66', paddingHorizontal: 16, paddingVertical: 10, gap: 8 },
+  deviceCol: { flex: 1 },
+  deviceName: { color: '#fff', fontSize: 13, fontWeight: '600' },
+  deviceMeta: { color: '#cde0f3', fontSize: 10, marginTop: 1 },
   statusText: { color: '#cde0f3', fontSize: 12 },
   syncWrap: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   syncDot: { width: 8, height: 8, borderRadius: 4 },

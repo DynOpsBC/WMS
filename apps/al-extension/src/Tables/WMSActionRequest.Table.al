@@ -24,6 +24,12 @@ table 50118 "WMS Action Request"
         field(8; "Result Document No."; Code[20]) { Caption = 'Result Document No.'; }
         field(9; "Received At"; DateTime) { Caption = 'Received At'; Editable = false; }
         field(10; "Processed At"; DateTime) { Caption = 'Processed At'; Editable = false; }
+        field(11; "Device Id"; Code[50])
+        {
+            Caption = 'Device Id';
+            TableRelation = "WMS Mobile Device"."Device ID";
+            ToolTip = 'Device that submitted the action. Validated against WMS Mobile Device.Status = Active.';
+        }
     }
 
     keys
@@ -36,6 +42,7 @@ table 50118 "WMS Action Request"
     var
         Existing: Record "WMS Action Request";
         Dispatcher: Codeunit "WMS Action Dispatcher";
+        Pairing: Codeunit "WMS Pairing Svc";
     begin
         "Received At" := CurrentDateTime();
 
@@ -50,6 +57,16 @@ table 50118 "WMS Action Request"
                 exit;
             end;
         end;
+
+        // Reject submissions from devices that aren't paired (or have been revoked).
+        if ("Device Id" <> '') and not Pairing.IsActive("Device Id") then begin
+            Status := Status::Failed;
+            "Result Message" := 'Device is not paired with Business Central. Re-pair the device.';
+            "Processed At" := CurrentDateTime();
+            exit;
+        end;
+        if "Device Id" <> '' then
+            Pairing.RecordHeartbeat("Device Id", '');
 
         Dispatcher.Dispatch(Rec);
     end;

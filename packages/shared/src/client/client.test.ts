@@ -93,3 +93,50 @@ describe('BcClient reads', () => {
     expect(lps).toHaveLength(2);
   });
 });
+
+describe('BcClient.completePairing', () => {
+  it('POSTs to the bound action and returns the BC SystemId', async () => {
+    const fetchImpl = vi.fn(async (url: string, init?: RequestInit) => {
+      expect(url).toContain('/wmsMobileDevices/Microsoft.NAV.completePairing');
+      expect(init?.method).toBe('POST');
+      const body = JSON.parse(init!.body as string);
+      expect(body).toMatchObject({
+        deviceId: 'dev-1',
+        deviceName: 'Zebra TC22 #4',
+        defaultWarehouse: 'MAIN',
+      });
+      return new Response(
+        JSON.stringify({ value: '44444444-4444-4444-4444-444444444444' }),
+        { status: 200, headers: { 'Content-Type': 'application/json' } },
+      );
+    }) as unknown as typeof fetch;
+
+    const result = await clientWith(fetchImpl).completePairing({
+      deviceId: 'dev-1',
+      deviceName: 'Zebra TC22 #4',
+      manufacturer: 'Zebra',
+      model: 'TC22',
+      osVersion: 'Android 13',
+      appVersion: '0.1.0',
+      defaultWarehouse: 'MAIN',
+    });
+    expect(result.deviceSystemId).toBe('44444444-4444-4444-4444-444444444444');
+  });
+
+  it('heartbeats reach the recordHeartbeat action', async () => {
+    const fetchImpl = vi.fn(async (url: string, init?: RequestInit) => {
+      expect(url).toContain('/wmsMobileDevices/Microsoft.NAV.recordHeartbeat');
+      const body = JSON.parse(init!.body as string);
+      expect(body.deviceId).toBe('dev-1');
+      return new Response(null, { status: 204 });
+    }) as unknown as typeof fetch;
+    await expect(clientWith(fetchImpl).recordHeartbeat('dev-1', '0.1.0')).resolves.toBeUndefined();
+  });
+
+  it('revokeDevice surfaces a 404 as BcApiError', async () => {
+    const fetchImpl = vi.fn(async () => new Response('not found', { status: 404 })) as unknown as typeof fetch;
+    const err = await clientWith(fetchImpl).revokeDevice('dev-1', 'admin').catch((e) => e);
+    expect(err).toBeInstanceOf(BcApiError);
+    expect((err as BcApiError).status).toBe(404);
+  });
+});

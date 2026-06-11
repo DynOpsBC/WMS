@@ -4,7 +4,7 @@ import type { z } from 'zod';
 import { useScan } from '@/hooks/useScan';
 import { OfflineQueue } from '@/lib/offlineQueue';
 import { syncEngine } from '@/lib/runtime';
-import { auth } from '@/lib/auth';
+import { loadDevice } from '@/lib/device';
 import { newRequestId } from '@/lib/id';
 import type { FlowStep } from './types';
 
@@ -56,12 +56,13 @@ export function FlowRunner({ flowId, steps, schema, onComplete }: Props) {
       }
     }
 
-    const session = auth.loadSession();
+    const device = loadDevice();
     OfflineQueue.enqueue({
       requestId: newRequestId(),
       flowId,
       payload,
-      ...(session?.username ? { workerId: session.username } : {}),
+      ...(device?.deviceId ? { deviceId: device.deviceId } : {}),
+      ...(device?.pairedBy ? { workerId: device.pairedBy } : {}),
     });
 
     void syncEngine.flush();

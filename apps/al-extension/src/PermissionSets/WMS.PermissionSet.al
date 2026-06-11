@@ -26,6 +26,7 @@ permissionset 50100 "WMS"
         codeunit "WMS Api Setup" = X,
         codeunit "WMS Menu Renderer" = X,
         codeunit "WMS Action Dispatcher" = X,
+        codeunit "WMS Pairing Svc" = X,
         codeunit "WMS Receive Svc" = X,
         codeunit "WMS Putaway Svc" = X,
         codeunit "WMS Pick Svc" = X,

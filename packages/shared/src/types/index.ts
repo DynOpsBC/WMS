@@ -125,6 +125,40 @@ export interface WmsActionRequest {
   flowId: string;
   payload: Record<string, string | number | boolean | null>;
   workerId?: string;
+  /** Locally-generated device UUID. BC validates it's an Active WMS Mobile Device. */
+  deviceId?: string;
+}
+
+export type WmsDeviceStatus = 'Unpaired' | 'Pending' | 'Active' | 'Revoked';
+
+export interface WmsMobileDevice {
+  systemId: Guid;
+  deviceId: string;
+  deviceName: string;
+  manufacturer: string;
+  model: string;
+  osVersion: string;
+  appVersion: string;
+  defaultWarehouse: string;
+  status: WmsDeviceStatus;
+  pairedAt: Iso8601DateTime | null;
+  pairedBy: string;
+  companyId: Guid;
+  lastSeen: Iso8601DateTime | null;
+  revokedAt: Iso8601DateTime | null;
+  revokedBy: string;
+  revokeReason: string;
+  lastModifiedDateTime: Iso8601DateTime;
+}
+
+export interface CompletePairingInput {
+  deviceId: string;
+  deviceName: string;
+  manufacturer: string;
+  model: string;
+  osVersion: string;
+  appVersion: string;
+  defaultWarehouse: string;
 }
 
 export type WmsActionStatus = 'Pending' | 'Succeeded' | 'Failed';

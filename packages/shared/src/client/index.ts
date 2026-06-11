@@ -1,5 +1,6 @@
 import type {
   BcEnvironment,
+  CompletePairingInput,
   WmsActionRequest,
   WmsActionResult,
   WmsCarrier,
@@ -7,6 +8,7 @@ import type {
   WmsCountVariance,
   WmsCycleCountPlan,
   WmsLicensePlate,
+  WmsMobileDevice,
   WmsShippingRate,
   WmsWorker,
   WmsWorkerMenu,
@@ -90,6 +92,52 @@ export class BcClient {
   listShippingRates(shipmentNumber: string, signal?: AbortSignal): Promise<WmsShippingRate[]> {
     const filter = `?$filter=shipmentNumber eq '${encodeURIComponent(shipmentNumber)}'`;
     return this.getList<WmsShippingRate>(`/wmsShippingRates${filter}`, signal);
+  }
+
+  // ---- Device pairing ----------------------------------------------------
+
+  listMobileDevices(signal?: AbortSignal): Promise<WmsMobileDevice[]> {
+    return this.getList<WmsMobileDevice>('/wmsMobileDevices', signal);
+  }
+
+  /** Look up the device record by its locally-generated id (idempotent on re-pair). */
+  async getDeviceById(deviceId: string, signal?: AbortSignal): Promise<WmsMobileDevice | undefined> {
+    const path = `/wmsMobileDevices?$filter=deviceId eq '${encodeURIComponent(deviceId)}'`;
+    const rows = await this.getList<WmsMobileDevice>(path, signal);
+    return rows[0];
+  }
+
+  /**
+   * Finish device pairing once the admin has completed Entra ID auth.
+   * BC binds the device to the current company + caller user.
+   */
+  async completePairing(input: CompletePairingInput, signal?: AbortSignal): Promise<{ deviceSystemId: string }> {
+    const value = await this.send<{ value: string }>(
+      'POST',
+      '/wmsMobileDevices/Microsoft.NAV.completePairing',
+      input,
+      signal,
+    );
+    return { deviceSystemId: value.value };
+  }
+
+  /** Periodic heartbeat — keeps the BC last-seen field fresh, and surfaces revocation early. */
+  async recordHeartbeat(deviceId: string, appVersion: string, signal?: AbortSignal): Promise<void> {
+    await this.send<void>(
+      'POST',
+      '/wmsMobileDevices/Microsoft.NAV.recordHeartbeat',
+      { deviceId, appVersion },
+      signal,
+    );
+  }
+
+  async revokeDevice(deviceId: string, reason: string, signal?: AbortSignal): Promise<void> {
+    await this.send<void>(
+      'POST',
+      '/wmsMobileDevices/Microsoft.NAV.revokeDevice',
+      { deviceId, reason },
+      signal,
+    );
   }
 
   /** Worker menu tree, expanding child menu items for the mobile app. */

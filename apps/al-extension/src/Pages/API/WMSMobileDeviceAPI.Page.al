@@ -26,8 +26,39 @@ page 50115 "WMS Mobile Device API"
                 field(lastSeen; Rec."Last Seen") { }
                 field(assignedUserId; Rec."Assigned User ID") { }
                 field(defaultWarehouse; Rec."Default Warehouse") { }
+                field(status; Rec.Status) { }
+                field(pairedAt; Rec."Paired At") { }
+                field(pairedBy; Rec."Paired By") { }
+                field(companyId; Rec."Company Id") { }
+                field(revokedAt; Rec."Revoked At") { }
+                field(revokedBy; Rec."Revoked By") { }
+                field(revokeReason; Rec."Revoke Reason") { }
                 field(lastModifiedDateTime; Rec.SystemModifiedAt) { Editable = false; }
             }
         }
     }
+
+    [ServiceEnabled]
+    procedure completePairing(deviceId: Code[50]; deviceName: Text[100]; manufacturer: Enum "WMS Device Manufacturer"; model: Text[50]; osVersion: Text[30]; appVersion: Text[30]; defaultWarehouse: Code[10]): Guid
+    var
+        Svc: Codeunit "WMS Pairing Svc";
+    begin
+        exit(Svc.CompletePairing(deviceId, deviceName, manufacturer, model, osVersion, appVersion, defaultWarehouse));
+    end;
+
+    [ServiceEnabled]
+    procedure recordHeartbeat(deviceId: Code[50]; appVersion: Text[30])
+    var
+        Svc: Codeunit "WMS Pairing Svc";
+    begin
+        Svc.RecordHeartbeat(deviceId, appVersion);
+    end;
+
+    [ServiceEnabled]
+    procedure revokeDevice(deviceId: Code[50]; reason: Text[100])
+    var
+        Svc: Codeunit "WMS Pairing Svc";
+    begin
+        Svc.RevokeDevice(deviceId, reason);
+    end;
 }

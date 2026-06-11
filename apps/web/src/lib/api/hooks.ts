@@ -45,3 +45,22 @@ export function useSubmitAction() {
     },
   });
 }
+
+export function useMobileDevices() {
+  return useQuery({
+    queryKey: ['mobileDevices'],
+    queryFn: ({ signal }) => bcClient.listMobileDevices(signal),
+    retry: 1,
+  });
+}
+
+export function useRevokeDevice() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ deviceId, reason }: { deviceId: string; reason: string }) =>
+      bcClient.revokeDevice(deviceId, reason),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['mobileDevices'] });
+    },
+  });
+}

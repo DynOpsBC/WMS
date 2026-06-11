@@ -2,6 +2,8 @@ table 50105 "WMS Mobile Device"
 {
     Caption = 'WMS Mobile Device';
     DataClassification = CustomerContent;
+    LookupPageId = "WMS Mobile Devices";
+    DrillDownPageId = "WMS Mobile Devices";
 
     fields
     {
@@ -14,6 +16,43 @@ table 50105 "WMS Mobile Device"
         field(7; "Last Seen"; DateTime) { Caption = 'Last Seen'; Editable = false; }
         field(8; "Assigned User ID"; Code[50]) { Caption = 'Assigned User ID'; TableRelation = "WMS Worker"."User ID"; }
         field(9; "Default Warehouse"; Code[10]) { Caption = 'Default Warehouse'; TableRelation = Location.Code; }
+        field(10; Status; Enum "WMS Device Status")
+        {
+            Caption = 'Status';
+            InitValue = Unpaired;
+        }
+        field(11; "Paired At"; DateTime) { Caption = 'Paired At'; Editable = false; }
+        field(12; "Paired By"; Code[50])
+        {
+            Caption = 'Paired By';
+            ToolTip = 'Entra ID user-principal-name of the admin who completed the device pairing.';
+            Editable = false;
+        }
+        field(13; "Paired By Object Id"; Guid)
+        {
+            Caption = 'Paired By Object Id';
+            Editable = false;
+        }
+        field(14; "Company Id"; Guid)
+        {
+            Caption = 'Company Id';
+            Editable = false;
+            ToolTip = 'BC company SystemId the device is bound to.';
+        }
+        field(15; "Revoked At"; DateTime) { Caption = 'Revoked At'; Editable = false; }
+        field(16; "Revoked By"; Code[50]) { Caption = 'Revoked By'; Editable = false; }
+        field(17; "Revoke Reason"; Text[100]) { Caption = 'Revoke Reason'; }
     }
-    keys { key(PK; "Device ID") { Clustered = true; } }
+
+    keys
+    {
+        key(PK; "Device ID") { Clustered = true; }
+        key(Status; Status) { }
+    }
+
+    trigger OnInsert()
+    begin
+        if "Paired At" = 0DT then
+            "Paired At" := CurrentDateTime();
+    end;
 }
