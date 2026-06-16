@@ -18,6 +18,7 @@ import { Inquiry } from "./modules/Inquiry";
 import { PostingTest } from "./modules/PostingTest";
 import { Quality } from "./modules/Quality";
 import { QualityManagement } from "./modules/QualityManagement";
+import { Printers } from "./modules/Printers";
 
 type Navigate = (s: Screen) => void;
 
@@ -94,6 +95,7 @@ function App() {
         {screen === "posting" && <PostingTest />}
         {screen === "quality" && <Quality />}
         {screen === "qms" && <QualityManagement />}
+        {screen === "printers" && <Printers />}
       </main>
     </div>
   );

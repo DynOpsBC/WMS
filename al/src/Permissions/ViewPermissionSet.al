@@ -139,5 +139,14 @@ permissionset 72096 "DOPSWHS-VIEW"
         tabledata "Item Ledger Entry" = R,
         tabledata "Value Entry" = R,
         report "DOPSWHS Count Variance" = X,
-        report "DOPSWHS LP Label" = X;
+        report "DOPSWHS LP Label" = X,
+        tabledata "DOPSWHS Printer" = R,
+        tabledata "DOPSWHS Device Printer Map" = R,
+        table "DOPSWHS Printer" = X,
+        table "DOPSWHS Device Printer Map" = X,
+        page "DOPSWHS Printer List" = X,
+        page "DOPSWHS Printer Card" = X,
+        page "DOPSWHS Device Printer Map" = X,
+        page "DOPSWHS Print Job API" = X,
+        page "DOPSWHS Printer API" = X;
 }

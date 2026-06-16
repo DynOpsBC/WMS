@@ -38,6 +38,14 @@ page 72061 "DOPSWHS Setup"
                 {
                     ApplicationArea = All;
                 }
+                field("Print Relay URL"; Rec."Print Relay URL")
+                {
+                    ApplicationArea = All;
+                }
+                field("Print Token TTL Hours"; Rec."Print Token TTL Hours")
+                {
+                    ApplicationArea = All;
+                }
                 field("Max LP Nesting Depth"; Rec."Max LP Nesting Depth")
                 {
                     ApplicationArea = All;
@@ -99,6 +107,30 @@ page 72061 "DOPSWHS Setup"
                     Promoted = true;
                     PromotedCategory = Process;
                     RunObject = page "DOPSWHS Demo E2E Results";
+                }
+            }
+            group(PrinterBridge)
+            {
+                Caption = 'Printer Bridge';
+                action(PrintersListAction)
+                {
+                    Caption = 'Printers';
+                    ApplicationArea = All;
+                    Image = Printer;
+                    Promoted = true;
+                    PromotedCategory = Process;
+                    ToolTip = 'Register printers attached to local agents.';
+                    RunObject = page "DOPSWHS Printer List";
+                }
+                action(DevicePrinterMapAction)
+                {
+                    Caption = 'Device Printer Mapping';
+                    ApplicationArea = All;
+                    Image = LinkAccount;
+                    Promoted = true;
+                    PromotedCategory = Process;
+                    ToolTip = 'Map each device/user to a default printer per usage.';
+                    RunObject = page "DOPSWHS Device Printer Map";
                 }
             }
             group(TestScenarios)

@@ -10,4 +10,8 @@ enum 72203 "DOPSWHS Print Channel"
     {
         Caption = 'Business Central Native';
     }
+    value(2; SelfHosted)
+    {
+        Caption = 'Self-Hosted (Local Agent)';
+    }
 }

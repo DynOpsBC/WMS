@@ -10,8 +10,15 @@ codeunit 72052 "DOPSWHS PrintNode Client"
         ContentHeaders: HttpHeaders;
         ClientHeaders: HttpHeaders;
         Telemetry: Codeunit "DOPSWHS Telemetry";
+        Base64: Codeunit "Base64 Convert";
+        TempBlob: Codeunit "Temp Blob";
+        InStream: InStream;
+        TempOut: OutStream;
+        TempIn: InStream;
         ApiKey: Text;
         Payload: Text;
+        RawBytes: Text;
+        ContentB64: Text;
     begin
         ApiKey := GetApiKey();
         if ApiKey = '' then begin
@@ -19,7 +26,16 @@ codeunit 72052 "DOPSWHS PrintNode Client"
             Log(Queue."Job ID", 'Queued', 'Missing PrintNode API key.');
             exit;
         end;
-        Payload := StrSubstNo('{"printerId": "%1", "title": "%2", "contentType": "raw_base64", "content": "", "source": "BCWMSApp", "qty": %3}', Queue."Printer ID", Queue."Source Doc", Copies);
+        Queue.CalcFields(ZPL);
+        if Queue.ZPL.HasValue() then begin
+            Queue.ZPL.CreateInStream(InStream);
+            InStream.ReadText(RawBytes);
+            TempBlob.CreateOutStream(TempOut);
+            TempOut.WriteText(RawBytes);
+            TempBlob.CreateInStream(TempIn);
+            ContentB64 := Base64.ToBase64(TempIn);
+        end;
+        Payload := StrSubstNo('{"printerId": "%1", "title": "%2", "contentType": "raw_base64", "content": "%4", "source": "BCWMSApp", "qty": %3}', Queue."Printer ID", Queue."Source Doc", Copies, ContentB64);
         Content.WriteFrom(Payload);
         Content.GetHeaders(ContentHeaders);
         ContentHeaders.Remove('Content-Type');

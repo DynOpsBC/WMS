@@ -75,6 +75,20 @@ table 72000 "DOPSWHS Setup"
             Caption = 'WI Migration Complete';
             DataClassification = CustomerContent;
         }
+        field(130; "Print Relay URL"; Text[250])
+        {
+            Caption = 'Print Relay URL';
+            DataClassification = CustomerContent;
+            ExtendedDatatype = URL;
+            ToolTip = 'Base URL of the print-relay Azure Function used by the self-hosted local agent.';
+        }
+        field(140; "Print Token TTL Hours"; Integer)
+        {
+            Caption = 'Print Token TTL Hours';
+            DataClassification = CustomerContent;
+            InitValue = 8760;
+            ToolTip = 'Lifetime in hours of agent tokens. Zero disables rotation.';
+        }
     }
 
     keys

@@ -91,6 +91,8 @@ page 72095 "DOPSWHS DynOps WMS RC"
                 action(SymbologyNav) { Caption = 'Barcode Symbologies'; ApplicationArea = All; RunObject = page "DOPSWHS Symbology List"; }
                 action(IWXReportSelNav) { Caption = 'IWX Report Selection'; ApplicationArea = All; RunObject = page "DOPSWHS IWX Report Selection"; }
                 action(PrintJobLogNav) { Caption = 'Print Job Log'; ApplicationArea = All; RunObject = page "DOPSWHS Print Job Log"; }
+                action(PrintersNav) { Caption = '🖨 Printers'; ApplicationArea = All; RunObject = page "DOPSWHS Printer List"; }
+                action(DevicePrinterMapNav) { Caption = '🖨 Device Printer Mapping'; ApplicationArea = All; RunObject = page "DOPSWHS Device Printer Map"; }
                 action(SyncConflictNav) { Caption = 'Sync Conflicts'; ApplicationArea = All; RunObject = page "DOPSWHS Sync Conflict List"; }
             }
         }

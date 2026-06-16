@@ -252,5 +252,15 @@ permissionset 72094 "DOPSWHS-ADMIN"
         tabledata "Item Ledger Entry" = RIMD,
         tabledata "Value Entry" = RIMD,
         report "DOPSWHS Count Variance" = X,
-        report "DOPSWHS LP Label" = X;
+        report "DOPSWHS LP Label" = X,
+        tabledata "DOPSWHS Printer" = RIMD,
+        tabledata "DOPSWHS Device Printer Map" = RIMD,
+        table "DOPSWHS Printer" = X,
+        table "DOPSWHS Device Printer Map" = X,
+        page "DOPSWHS Printer List" = X,
+        page "DOPSWHS Printer Card" = X,
+        page "DOPSWHS Device Printer Map" = X,
+        page "DOPSWHS Print Job API" = X,
+        page "DOPSWHS Printer API" = X,
+        codeunit "DOPSWHS Self-Hosted Print Client" = X;
 }

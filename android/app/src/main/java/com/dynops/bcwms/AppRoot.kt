@@ -51,6 +51,7 @@ enum class Screen(val title: String) {
     QualityMgmt("MS Quality Mgmt"),
     TestCenter("Test Center"),
     PostingTest("Posting Test"),
+    Printers("Yazıcılar"),
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -102,6 +103,7 @@ fun AppRoot() {
                 Screen.QualityMgmt -> QualityManagementModule()
                 Screen.TestCenter -> TestCenterScreen()
                 Screen.PostingTest -> PostingTestModule()
+                Screen.Printers -> PrintersModule()
             }
         }
         }
@@ -141,6 +143,7 @@ private fun HomeScreen(connected: Boolean, onNavigate: (Screen) -> Unit) {
         Tile(Screen.BinInquiry, "📍", "Bin Inquiry"),
         Tile(Screen.TestCenter, "🧪", "Test Center"),
         Tile(Screen.PostingTest, "📮", "Posting Test"),
+        Tile(Screen.Printers, "🖨", "Yazıcılar"),
         Tile(Screen.Connection, "⚙️", "Bağlantı"),
     )
     Column(Modifier.fillMaxSize().padding(16.dp)) {
