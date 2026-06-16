@@ -1,4 +1,4 @@
-page 50102 "WMS License Plates"
+page 50029002 "WMS License Plates"
 {
     Caption = 'WMS License Plates';
     PageType = List;

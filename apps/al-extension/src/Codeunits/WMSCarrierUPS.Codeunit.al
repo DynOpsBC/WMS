@@ -1,4 +1,4 @@
-codeunit 50119 "WMS Carrier UPS" implements "WMS Carrier Adapter"
+codeunit 50029019 "WMS Carrier UPS" implements "WMS Carrier Adapter"
 {
     // TODO[carrier]: UPS OAuth2 + Rating + Shipping API.
     procedure RateShop(ShipmentNo: Code[20]) Rates: JsonArray begin end;

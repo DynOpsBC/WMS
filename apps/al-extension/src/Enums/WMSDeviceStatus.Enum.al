@@ -1,4 +1,4 @@
-enum 50111 "WMS Device Status"
+enum 50029011 "WMS Device Status"
 {
     Extensible = true;
     value(0; Unpaired) { Caption = 'Unpaired'; }

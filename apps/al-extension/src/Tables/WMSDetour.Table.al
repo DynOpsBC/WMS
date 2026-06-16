@@ -1,4 +1,4 @@
-table 50106 "WMS Detour"
+table 50029006 "WMS Detour"
 {
     Caption = 'WMS Detour';
     DataClassification = CustomerContent;

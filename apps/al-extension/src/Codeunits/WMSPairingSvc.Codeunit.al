@@ -1,4 +1,4 @@
-codeunit 50125 "WMS Pairing Svc"
+codeunit 50029025 "WMS Pairing Svc"
 {
     Access = Public;
 

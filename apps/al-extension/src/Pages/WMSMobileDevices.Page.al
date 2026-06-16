@@ -1,4 +1,4 @@
-page 50103 "WMS Mobile Devices"
+page 50029003 "WMS Mobile Devices"
 {
     Caption = 'WMS Mobile Devices';
     PageType = List;

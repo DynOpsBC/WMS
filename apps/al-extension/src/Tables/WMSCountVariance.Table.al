@@ -1,4 +1,4 @@
-table 50114 "WMS Count Variance"
+table 50029014 "WMS Count Variance"
 {
     Caption = 'WMS Count Variance';
     DataClassification = CustomerContent;

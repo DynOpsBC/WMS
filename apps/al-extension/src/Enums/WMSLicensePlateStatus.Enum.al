@@ -1,4 +1,4 @@
-enum 50101 "WMS License Plate Status"
+enum 50029001 "WMS License Plate Status"
 {
     Extensible = true;
 

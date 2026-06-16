@@ -1,4 +1,4 @@
-page 50114 "WMS Item Barcode API"
+page 50029014 "WMS Item Barcode API"
 {
     PageType = API;
     APIPublisher = 'dynopsbc';

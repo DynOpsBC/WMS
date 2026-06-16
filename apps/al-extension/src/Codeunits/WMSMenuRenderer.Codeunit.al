@@ -1,4 +1,4 @@
-codeunit 50101 "WMS Menu Renderer"
+codeunit 50029001 "WMS Menu Renderer"
 {
     Access = Public;
 

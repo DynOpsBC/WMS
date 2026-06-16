@@ -6,7 +6,7 @@ interface "WMS Carrier Adapter"
     procedure TrackShipment(TrackingNumber: Code[50]) Status: JsonObject;
 }
 
-codeunit 50117 "WMS Carrier Manual" implements "WMS Carrier Adapter"
+codeunit 50029017 "WMS Carrier Manual" implements "WMS Carrier Adapter"
 {
     procedure RateShop(ShipmentNo: Code[20]) Rates: JsonArray
     var

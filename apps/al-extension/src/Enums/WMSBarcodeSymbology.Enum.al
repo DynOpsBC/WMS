@@ -1,4 +1,4 @@
-enum 50103 "WMS Barcode Symbology"
+enum 50029003 "WMS Barcode Symbology"
 {
     Extensible = true;
     value(0; Code128) { Caption = 'Code 128'; }

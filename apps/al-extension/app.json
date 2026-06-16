@@ -29,8 +29,8 @@
   "application": "26.0.0.0",
   "idRanges": [
     {
-      "from": 50100,
-      "to": 50249
+      "from": 50029000,
+      "to": 50029329
     }
   ],
   "resourceExposurePolicy": {
@@ -39,5 +39,8 @@
     "includeSourceInSymbolFile": false
   },
   "runtime": "14.0",
-  "features": ["NoImplicitWith"]
+  "features": [
+    "NoImplicitWith"
+  ],
+  "target": "Cloud"
 }

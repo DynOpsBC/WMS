@@ -1,4 +1,4 @@
-codeunit 50112 "WMS Pick Svc"
+codeunit 50029012 "WMS Pick Svc"
 {
     Access = Public;
 

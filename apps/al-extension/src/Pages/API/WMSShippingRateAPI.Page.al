@@ -1,4 +1,4 @@
-page 50125 "WMS Shipping Rate API"
+page 50029025 "WMS Shipping Rate API"
 {
     PageType = API;
     APIPublisher = 'dynopsbc';

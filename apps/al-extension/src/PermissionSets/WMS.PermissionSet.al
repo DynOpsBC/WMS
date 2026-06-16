@@ -1,4 +1,4 @@
-permissionset 50100 "WMS"
+permissionset 50029000 "WMS"
 {
     Assignable = true;
     Caption = 'BCWMSApp - All', MaxLength = 30;

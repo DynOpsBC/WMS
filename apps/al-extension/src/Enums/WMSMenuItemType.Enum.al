@@ -1,4 +1,4 @@
-enum 50100 "WMS Menu Item Type"
+enum 50029000 "WMS Menu Item Type"
 {
     Extensible = true;
 

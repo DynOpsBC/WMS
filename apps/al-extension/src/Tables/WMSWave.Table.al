@@ -1,4 +1,4 @@
-table 50112 "WMS Wave"
+table 50029012 "WMS Wave"
 {
     Caption = 'WMS Wave';
     DataClassification = CustomerContent;

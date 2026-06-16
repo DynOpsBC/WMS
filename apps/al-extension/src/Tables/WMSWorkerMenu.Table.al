@@ -1,4 +1,4 @@
-table 50101 "WMS Worker Menu"
+table 50029001 "WMS Worker Menu"
 {
     Caption = 'WMS Worker Menu';
     DataClassification = CustomerContent;

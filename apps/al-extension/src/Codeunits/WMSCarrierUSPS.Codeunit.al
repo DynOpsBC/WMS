@@ -1,4 +1,4 @@
-codeunit 50120 "WMS Carrier USPS" implements "WMS Carrier Adapter"
+codeunit 50029020 "WMS Carrier USPS" implements "WMS Carrier Adapter"
 {
     procedure RateShop(ShipmentNo: Code[20]) Rates: JsonArray begin end;
     procedure CreateLabel(ShipmentNo: Code[20]; ServiceCode: Code[20]) LabelZpl: Text begin end;

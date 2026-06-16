@@ -1,4 +1,4 @@
-page 50101 "WMS Worker Card"
+page 50029001 "WMS Worker Card"
 {
     Caption = 'WMS Worker Card';
     PageType = Card;

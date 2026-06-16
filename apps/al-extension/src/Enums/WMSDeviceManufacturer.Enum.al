@@ -1,4 +1,4 @@
-enum 50102 "WMS Device Manufacturer"
+enum 50029002 "WMS Device Manufacturer"
 {
     Extensible = true;
     value(0; Other) { Caption = 'Other'; }

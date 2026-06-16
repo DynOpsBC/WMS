@@ -1,4 +1,4 @@
-codeunit 50100 "WMS Api Setup"
+codeunit 50029000 "WMS Api Setup"
 {
     Access = Internal;
 

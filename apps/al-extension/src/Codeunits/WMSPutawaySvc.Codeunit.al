@@ -1,4 +1,4 @@
-codeunit 50111 "WMS Putaway Svc"
+codeunit 50029011 "WMS Putaway Svc"
 {
     Access = Public;
 

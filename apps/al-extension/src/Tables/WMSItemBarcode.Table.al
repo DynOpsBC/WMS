@@ -1,4 +1,4 @@
-table 50109 "WMS Item Barcode"
+table 50029009 "WMS Item Barcode"
 {
     Caption = 'WMS Item Barcode';
     DataClassification = CustomerContent;

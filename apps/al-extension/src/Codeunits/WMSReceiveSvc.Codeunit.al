@@ -1,4 +1,4 @@
-codeunit 50110 "WMS Receive Svc"
+codeunit 50029010 "WMS Receive Svc"
 {
     Access = Public;
 

@@ -1,4 +1,4 @@
-page 50122 "WMS Count Plan API"
+page 50029022 "WMS Count Plan API"
 {
     PageType = API;
     APIPublisher = 'dynopsbc';

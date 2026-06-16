@@ -1,4 +1,4 @@
-table 50104 "WMS License Plate Line"
+table 50029004 "WMS License Plate Line"
 {
     Caption = 'WMS License Plate Line';
     DataClassification = CustomerContent;

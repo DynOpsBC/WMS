@@ -1,4 +1,4 @@
-enum 50110 "WMS Action Status"
+enum 50029010 "WMS Action Status"
 {
     Extensible = true;
     value(0; Pending) { Caption = 'Pending'; }

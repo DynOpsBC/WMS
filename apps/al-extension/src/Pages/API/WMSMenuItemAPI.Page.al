@@ -1,4 +1,4 @@
-page 50113 "WMS Menu Item API"
+page 50029013 "WMS Menu Item API"
 {
     PageType = API;
     APIPublisher = 'dynopsbc';

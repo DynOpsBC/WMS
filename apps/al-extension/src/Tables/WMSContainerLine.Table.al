@@ -1,4 +1,4 @@
-table 50111 "WMS Container Line"
+table 50029011 "WMS Container Line"
 {
     Caption = 'WMS Container Line';
     DataClassification = CustomerContent;

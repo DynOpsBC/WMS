@@ -1,4 +1,4 @@
-page 50115 "WMS Mobile Device API"
+page 50029015 "WMS Mobile Device API"
 {
     PageType = API;
     APIPublisher = 'dynopsbc';

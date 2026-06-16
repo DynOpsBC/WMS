@@ -1,4 +1,4 @@
-codeunit 50115 "WMS Cycle Count Svc"
+codeunit 50029015 "WMS Cycle Count Svc"
 {
     Access = Public;
 

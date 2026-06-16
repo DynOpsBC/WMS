@@ -1,4 +1,4 @@
-enum 50107 "WMS Count Plan Status"
+enum 50029007 "WMS Count Plan Status"
 {
     Extensible = true;
     value(0; Draft) { Caption = 'Draft'; }

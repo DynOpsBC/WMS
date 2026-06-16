@@ -4,7 +4,7 @@ Business Central AL extension publishing custom tables, list/card pages, and **v
 
 ## Object ID range
 
-`50100–50249` (per `app.json`).
+`50029000-50029329` (per `app.json`).
 
 ## Custom APIs
 
@@ -12,8 +12,8 @@ All exposed at `https://api.businesscentral.dynamics.com/v2.0/{tenant}/{environm
 
 | Entity set | Backing table | Page |
 |---|---|---|
-| `wmsWorkers` | `WMS Worker` | 50110 |
-| `wmsLicensePlates` | `WMS License Plate` | 50111 |
+| `wmsWorkers` | `WMS Worker` | 50029010 |
+| `wmsLicensePlates` | `WMS License Plate` | 50029011 |
 
 (M1 will add `wmsWorkerMenus`, `wmsMenuItems`, `wmsLicensePlateLines`, plus extensions to the standard `Item`, `Location`, `Bin`, `Zone`.)
 

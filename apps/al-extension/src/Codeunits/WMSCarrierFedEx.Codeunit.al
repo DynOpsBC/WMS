@@ -1,4 +1,4 @@
-codeunit 50118 "WMS Carrier FedEx" implements "WMS Carrier Adapter"
+codeunit 50029018 "WMS Carrier FedEx" implements "WMS Carrier Adapter"
 {
     // TODO[carrier]: real FedEx OAuth2 + rate / label endpoints.
     // https://developer.fedex.com/api/en-us/catalog.html

@@ -1,4 +1,4 @@
-page 50100 "WMS Workers"
+page 50029000 "WMS Workers"
 {
     Caption = 'WMS Workers';
     PageType = List;

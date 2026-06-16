@@ -1,4 +1,4 @@
-codeunit 50121 "WMS Carrier DHL" implements "WMS Carrier Adapter"
+codeunit 50029021 "WMS Carrier DHL" implements "WMS Carrier Adapter"
 {
     procedure RateShop(ShipmentNo: Code[20]) Rates: JsonArray begin end;
     procedure CreateLabel(ShipmentNo: Code[20]; ServiceCode: Code[20]) LabelZpl: Text begin end;

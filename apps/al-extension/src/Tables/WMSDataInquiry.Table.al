@@ -1,4 +1,4 @@
-table 50107 "WMS Data Inquiry"
+table 50029007 "WMS Data Inquiry"
 {
     Caption = 'WMS Data Inquiry';
     DataClassification = CustomerContent;

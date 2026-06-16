@@ -1,4 +1,4 @@
-enum 50104 "WMS Container Status"
+enum 50029004 "WMS Container Status"
 {
     Extensible = true;
     value(0; Open) { Caption = 'Open'; }

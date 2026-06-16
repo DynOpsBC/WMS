@@ -1,4 +1,4 @@
-page 50126 "WMS Packing Log API"
+page 50029026 "WMS Packing Log API"
 {
     PageType = API;
     APIPublisher = 'dynopsbc';

@@ -1,4 +1,4 @@
-table 50116 "WMS Shipping Rate"
+table 50029016 "WMS Shipping Rate"
 {
     Caption = 'WMS Shipping Rate';
     DataClassification = CustomerContent;

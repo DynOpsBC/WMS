@@ -1,4 +1,4 @@
-codeunit 50123 "WMS Webhook Publisher"
+codeunit 50029023 "WMS Webhook Publisher"
 {
     Access = Public;
 

@@ -1,4 +1,4 @@
-enum 50108 "WMS Carrier Provider"
+enum 50029008 "WMS Carrier Provider"
 {
     Extensible = true;
     value(0; Manual) { Caption = 'Manual'; }

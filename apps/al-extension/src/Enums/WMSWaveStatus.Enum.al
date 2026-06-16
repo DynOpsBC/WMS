@@ -1,4 +1,4 @@
-enum 50105 "WMS Wave Status"
+enum 50029005 "WMS Wave Status"
 {
     Extensible = true;
     value(0; Planned) { Caption = 'Planned'; }
@@ -7,7 +7,7 @@ enum 50105 "WMS Wave Status"
     value(3; Complete) { Caption = 'Complete'; }
 }
 
-enum 50106 "WMS Pick Grouping"
+enum 50029006 "WMS Pick Grouping"
 {
     Extensible = true;
     value(0; "User Grouped") { Caption = 'User Grouped'; }

@@ -1,4 +1,4 @@
-page 50121 "WMS Wave API"
+page 50029021 "WMS Wave API"
 {
     PageType = API;
     APIPublisher = 'dynopsbc';

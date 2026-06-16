@@ -1,4 +1,4 @@
-table 50113 "WMS Cycle Count Plan"
+table 50029013 "WMS Cycle Count Plan"
 {
     Caption = 'WMS Cycle Count Plan';
     DataClassification = CustomerContent;

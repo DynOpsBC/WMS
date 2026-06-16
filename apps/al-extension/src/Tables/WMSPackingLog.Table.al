@@ -1,4 +1,4 @@
-table 50117 "WMS Packing Log"
+table 50029017 "WMS Packing Log"
 {
     Caption = 'WMS Packing Log';
     DataClassification = CustomerContent;
@@ -21,7 +21,7 @@ table 50117 "WMS Packing Log"
     }
 }
 
-enum 50109 "WMS Packing Event"
+enum 50029009 "WMS Packing Event"
 {
     Extensible = true;
     value(0; ContainerCreated) { Caption = 'Container Created'; }

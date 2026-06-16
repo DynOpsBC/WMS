@@ -1,4 +1,4 @@
-table 50100 "WMS Worker"
+table 50029000 "WMS Worker"
 {
     Caption = 'WMS Worker';
     DataClassification = CustomerContent;
