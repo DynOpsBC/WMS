@@ -39,3 +39,6 @@ push-relay/dist/
 # Screenshots from MCP test runs
 web/.screenshots/
 web/.tmp-inject.js
+
+# Local design preview captures
+.snapshots/

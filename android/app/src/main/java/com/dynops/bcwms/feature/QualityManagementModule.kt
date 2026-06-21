@@ -76,7 +76,7 @@ fun QualityManagementModule() {
             FilterChip(
                 selected = openOnly,
                 onClick = { openOnly = !openOnly },
-                label = { Text(if (openOnly) "Sadece Açık" : "Tümü", fontSize = 12.sp) }
+                label = { Text(if (openOnly) "Sadece Açık" else "Tümü", fontSize = 12.sp) }
             )
         }
         Spacer(Modifier.height(4.dp))
