@@ -10,9 +10,42 @@ permissions:
   id-token: write
 
 jobs:
+  preflight:
+    name: Preflight — secrets present
+    runs-on: ubuntu-latest
+    steps:
+      - name: Required secret check
+        env:
+          AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          AZURE_STATIC_WEB_APPS_API_TOKEN_WEB: ${{ secrets.AZURE_STATIC_WEB_APPS_API_TOKEN_WEB }}
+          AZURE_STATIC_WEB_APPS_API_TOKEN_PORTAL: ${{ secrets.AZURE_STATIC_WEB_APPS_API_TOKEN_PORTAL }}
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          PLAY_SERVICE_ACCOUNT_JSON: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
+        run: |
+          # Public-tag release MUST have every secret set; missing secrets
+          # used to be silently swallowed via `|| echo`, leading to a "green"
+          # release that didn't actually publish anything. Fail-fast here.
+          missing=()
+          for name in AZURE_CLIENT_ID AZURE_TENANT_ID AZURE_SUBSCRIPTION_ID \
+                      AZURE_STATIC_WEB_APPS_API_TOKEN_WEB AZURE_STATIC_WEB_APPS_API_TOKEN_PORTAL \
+                      ANDROID_KEYSTORE_BASE64 ANDROID_KEYSTORE_PASSWORD ANDROID_KEY_PASSWORD \
+                      ANDROID_KEY_ALIAS PLAY_SERVICE_ACCOUNT_JSON; do
+            if [ -z "${!name}" ]; then missing+=("$name"); fi
+          done
+          if [ ${#missing[@]} -gt 0 ]; then
+            echo "::error::Release blocked — missing secrets: ${missing[*]}"
+            exit 1
+          fi
+
   resolve:
     name: Resolve version
     runs-on: ubuntu-latest
+    needs: preflight
     outputs:
       version: ${{ steps.tag.outputs.version }}
       al_version: ${{ steps.tag.outputs.al_version }}
@@ -90,27 +123,21 @@ jobs:
           pnpm build
           pnpm test
       - name: Azure login (OIDC)
-        if: env.AZURE_CLIENT_ID != ''
         uses: azure/login@v2
-        env:
-          AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
         with:
           client-id: ${{ secrets.AZURE_CLIENT_ID }}
           tenant-id: ${{ secrets.AZURE_TENANT_ID }}
           subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
       - name: Deploy Function App
-        if: env.AZURE_CLIENT_ID != ''
-        env:
-          AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+        working-directory: licensing-service
         run: |
-          cd licensing-service
-          npx --yes @azure/functions-core-tools@4 azure functionapp publish bcwms-licensing-func --typescript || \
-            echo "::warning::licensing-service publish failed, check secrets"
+          # `--strict` causes core-tools to error on publish failure instead of warning.
+          npx --yes @azure/functions-core-tools@4 azure functionapp publish bcwms-licensing-func --typescript
 
   web-deploy:
     name: Web SaaS bundle deploy
     runs-on: ubuntu-latest
-    needs: resolve
+    needs: [resolve, android-publish]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -123,10 +150,23 @@ jobs:
           pnpm install --frozen-lockfile=false
           pnpm typecheck
           pnpm build:saas
+      - name: Pull Android manifest from android-publish artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: android-release
+          path: android-manifest
+      - name: Embed releases/android/latest.json into SaaS bundle
+        run: |
+          # UpdateModule.kt reads $DEFAULT_UPDATE_BASE/releases/android/latest.json.
+          # Ship the manifest alongside the SaaS bundle so sideload clients can
+          # reach it from https://app.bcwms.dynops.com/releases/android/latest.json.
+          mkdir -p web/dist/releases/android
+          if [ -f android-manifest/latest.json ]; then
+            cp android-manifest/latest.json web/dist/releases/android/latest.json
+          else
+            echo "::warning::android-manifest/latest.json missing — sideload update path will 404"
+          fi
       - name: Deploy Azure Static Web App
-        if: env.AZURE_STATIC_WEB_APPS_API_TOKEN_WEB != ''
-        env:
-          AZURE_STATIC_WEB_APPS_API_TOKEN_WEB: ${{ secrets.AZURE_STATIC_WEB_APPS_API_TOKEN_WEB }}
         uses: Azure/static-web-apps-deploy@v1
         with:
           azure_static_web_apps_api_token: ${{ secrets.AZURE_STATIC_WEB_APPS_API_TOKEN_WEB }}
@@ -162,9 +202,6 @@ jobs:
           pnpm install --frozen-lockfile=false
           pnpm build
       - name: Deploy Azure Static Web App
-        if: env.AZURE_STATIC_WEB_APPS_API_TOKEN_PORTAL != ''
-        env:
-          AZURE_STATIC_WEB_APPS_API_TOKEN_PORTAL: ${{ secrets.AZURE_STATIC_WEB_APPS_API_TOKEN_PORTAL }}
         uses: Azure/static-web-apps-deploy@v1
         with:
           azure_static_web_apps_api_token: ${{ secrets.AZURE_STATIC_WEB_APPS_API_TOKEN_PORTAL }}
@@ -185,7 +222,6 @@ jobs:
           distribution: "temurin"
           java-version: "21"
       - name: Inject keystore + service account
-        if: env.ANDROID_KEYSTORE_BASE64 != ''
         env:
           ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
           KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
@@ -208,7 +244,6 @@ jobs:
         working-directory: android
         run: ./gradlew :app:assembleRelease
       - name: Publish to Play Closed Testing
-        if: hashFiles('android/play/play-service-account.json') != ''
         working-directory: android
         run: ./gradlew :app:publishReleaseBundle -PwithPlayPublisher
       - name: Compute APK SHA-256 + manifest
@@ -251,7 +286,9 @@ jobs:
     name: GitHub Release
     runs-on: ubuntu-latest
     needs: [resolve, al-package, licensing-deploy, web-deploy, customer-portal-deploy, android-publish]
-    if: always()
+    # Intentionally NOT `if: always()` — if any upstream job fails the release
+    # asset publication is blocked. A "green" tag must mean every deploy
+    # succeeded.
     steps:
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4

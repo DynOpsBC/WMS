@@ -2,20 +2,22 @@ codeunit 72033 "DOPSWHS Install"
 {
     Subtype = Install;
 
+    /// <summary>
+    /// On a fresh install (or upgrade), we only seed singleton master rows and
+    /// the assisted-setup checklist. Demo data, smoke tests, and quality demo
+    /// orders are NOT auto-seeded any more — they used to land in production
+    /// tenants and pollute customer environments.
+    ///
+    /// To self-provision a sandbox call `DOPSWHS Demo Bootstrap`.RunFullDemo()
+    /// from the Setup card explicitly. Production install is now data-clean.
+    /// </summary>
     trigger OnInstallAppPerCompany()
     var
         Setup: Record "DOPSWHS Setup";
         Cue: Record "DOPSWHS Warehouse Mgr Cue";
         SetupWizard: Codeunit "DOPSWHS Setup Wizard";
-        DemoSetup: Codeunit "DOPSWHS Demo Data Setup";
-        DemoTx: Codeunit "DOPSWHS Demo Transactions";
-        E2EData: Codeunit "DOPSWHS E2E Test Data";
-        CatalogSeed: Codeunit "DOPSWHS Test Catalog Seed";
-        PostingSmokeTest: Codeunit "DOPSWHS Posting Smoke Test";
-        QualityMgmt: Codeunit "DOPSWHS Quality Mgmt";
-        WebSvcPublisher: Codeunit "DOPSWHS Web Svc Publisher";
-        ConfigChecker: Codeunit "DOPSWHS Config Checker";
         AppProfileMgmt: Codeunit "DOPSWHS App Profile Mgmt";
+        ConfigChecker: Codeunit "DOPSWHS Config Checker";
     begin
         if not Setup.Get('') then begin
             Setup.Init();
@@ -27,14 +29,6 @@ codeunit 72033 "DOPSWHS Install"
         end;
         SetupWizard.SeedSprint1Defaults();
         SetupWizard.SeedDefaultLPTemplates();
-        // Fresh-install self-provisioning so a brand-new environment (e.g. SandboxUS) is test-ready.
-        DemoSetup.RunFullDemoSetup();
-        DemoTx.CreateAllDemoTransactions();
-        E2EData.PrepareE2EData();
-        CatalogSeed.RunFullSeed();
-        PostingSmokeTest.EnsureRows();
-        QualityMgmt.SeedDemoOrders();
-        WebSvcPublisher.PublishAll();  // expose standard pages as web services for no-API operations
         AppProfileMgmt.SeedDefaults();          // seed DEFAULT app profile + install-user profile
         ConfigChecker.RegisterAssistedSetup();  // seed config checklist + register Assisted Setup
     end;

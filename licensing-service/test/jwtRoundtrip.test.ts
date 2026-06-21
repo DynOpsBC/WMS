@@ -1,11 +1,6 @@
+import "./setup.js";
 import test from "node:test";
 import assert from "node:assert/strict";
-import { generateKeyPairSync } from "node:crypto";
-
-const { privateKey, publicKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
-process.env.LICENSE_PRIVATE_KEY_PEM = privateKey.export({ type: "pkcs8", format: "pem" }) as string;
-process.env.LICENSE_PUBLIC_KEY_PEM = publicKey.export({ type: "spki", format: "pem" }) as string;
-process.env.LICENSE_SIGNING_KID = "test";
 
 const { signLicense, verifyLicense } = await import("../shared/JwtSigner.js");
 

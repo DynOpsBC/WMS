@@ -11,22 +11,22 @@ codeunit 72034 "DOPSWHS Upgrade"
             RunDatabaseMigrations();
     end;
 
+    /// <summary>
+    /// Upgrade trigger now only refreshes singleton master rows, default
+    /// roles, assisted-setup checklist, and v1.10 print-channel migration.
+    /// Demo data, smoke test rows, quality demo orders and the auto-test-run
+    /// (`Runner.CreateNewRun('TEST'...) / StartRun`) were removed in v1.10
+    /// because they leaked into production tenants and polluted customer
+    /// environments. Sandbox bootstrap is now an explicit action on the
+    /// Setup card.
+    /// </summary>
     trigger OnUpgradePerCompany()
     var
         Setup: Record "DOPSWHS Setup";
         Cue: Record "DOPSWHS Warehouse Mgr Cue";
-        DemoSetup: Codeunit "DOPSWHS Demo Data Setup";
-        DemoTx: Codeunit "DOPSWHS Demo Transactions";
-        E2EData: Codeunit "DOPSWHS E2E Test Data";
-        CatalogSeed: Codeunit "DOPSWHS Test Catalog Seed";
-        Runner: Codeunit "DOPSWHS Test Runner";
-        PostingSmokeTest: Codeunit "DOPSWHS Posting Smoke Test";
-        QualityMgmt: Codeunit "DOPSWHS Quality Mgmt";
-        WebSvcPublisher: Codeunit "DOPSWHS Web Svc Publisher";
-        ConfigChecker: Codeunit "DOPSWHS Config Checker";
         AppProfileMgmt: Codeunit "DOPSWHS App Profile Mgmt";
         AppRoleSeed: Codeunit "DOPSWHS App Role Seed";
-        RunNo: Code[20];
+        ConfigChecker: Codeunit "DOPSWHS Config Checker";
     begin
         if not Setup.Get('') then begin
             Setup.Init();
@@ -36,19 +36,26 @@ codeunit 72034 "DOPSWHS Upgrade"
             Cue.Init();
             Cue.Insert(true);
         end;
-        // v1.0.4.0 upgrade auto-bootstrap: tum seed + ilk Test Run
-        DemoSetup.RunFullDemoSetup();
-        DemoTx.CreateAllDemoTransactions();
-        E2EData.PrepareE2EData();
-        CatalogSeed.RunFullSeed();
-        PostingSmokeTest.EnsureRows();  // seed posting-test rows (run on-demand from the app, not auto)
-        QualityMgmt.SeedDemoOrders();   // seed demo quality orders for the mobile Quality screen
-        WebSvcPublisher.PublishAll();   // expose standard pages as web services (no-extension-API ops)
+        MigratePrintChannelDefault(Setup);
         AppProfileMgmt.SeedDefaults();          // seed DEFAULT app profile + install-user profile
-        AppRoleSeed.Seed();                     // seed system roles + starter filter rules (v1.7)
+        AppRoleSeed.Seed();                     // seed system roles + starter filter rules
         ConfigChecker.RegisterAssistedSetup();  // seed config checklist + register Assisted Setup
-        RunNo := Runner.CreateNewRun('TEST', 'QA-TEAM', 'Auto-bootstrap on upgrade v1.0.4.0');
-        Runner.StartRun(RunNo);
+    end;
+
+    /// <summary>
+    /// Pre-v1.10 tenants that never explicitly set a Print Channel default to
+    /// enum value 0 (PrintNode), but they never configured a PrintNode API
+    /// key so jobs piled up un-sent. Map the still-default 0 to BCNative on
+    /// the v1.10 upgrade — the old SaaS behaviour was to fall through to
+    /// Report.Run anyway. Customers who explicitly switched to PrintNode or
+    /// SelfHosted keep their choice.
+    /// </summary>
+    local procedure MigratePrintChannelDefault(var Setup: Record "DOPSWHS Setup")
+    begin
+        if Setup."Print Channel" <> Setup."Print Channel"::PrintNode then exit;
+        if Setup."PrintNode API Key Set" then exit;
+        Setup."Print Channel" := Setup."Print Channel"::BCNative;
+        Setup.Modify(true);
     end;
 
     local procedure RunDatabaseMigrations()

@@ -31,16 +31,16 @@ codeunit 72079 "DOPSWHS Quality Mgmt Bridge"
     /// </summary>
     procedure FindBlockingInspection(LotNo: Code[50]; SerialNo: Code[50]; PackageNo: Code[50]): Code[20]
     var
-        License: Codeunit "DOPSWHS License Mgmt";
         QltyInspectionHeader: Record "Qlty. Inspection Header";
     begin
-        if not License.IsActive() then
-            exit(''); // Without an active license skip QM guard so core flow continues.
-
+        // QC hold is a SAFETY gate, not a feature gate — we always look up
+        // blocking inspections, even when the license is inactive or below
+        // the Advanced tier. License-tier guard is enforced on the QM UI/API
+        // affordances (Setup card actions, write paths), NOT on the read of
+        // "is this lot blocked?". Skipping this would let unlicensed tenants
+        // ship/move stock that quality has already held.
         if (LotNo = '') and (SerialNo = '') and (PackageNo = '') then
             exit('');
-
-        License.GuardFeature(Enum::"DOPSWHS License Feature"::QualityMgmt);
 
         QltyInspectionHeader.SetRange(Status, QltyInspectionHeader.Status::Open);
 

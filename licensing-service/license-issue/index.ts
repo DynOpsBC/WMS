@@ -1,7 +1,7 @@
 import type { HttpRequest, InvocationContext, HttpResponseInit } from "@azure/functions";
 import { signLicense } from "../shared/JwtSigner.js";
-import { createLicense, supersedeActive } from "../shared/LicenseStore.js";
-import { isAdminAuthorized } from "../shared/RequestAuth.js";
+import { createLicense as defaultCreateLicense, supersedeActive as defaultSupersedeActive } from "../shared/LicenseStore.js";
+import { isAdminAuthorized as defaultIsAdminAuthorized } from "../shared/RequestAuth.js";
 
 type IssueBody = {
   tenantId: string;
@@ -13,10 +13,29 @@ type IssueBody = {
   replaceActive?: boolean;
 };
 
-export default async function licenseIssue(
+/**
+ * Dependency-injectable deps so unit tests can drop in noop store/auth
+ * implementations without spinning up Azurite. Production callers go through
+ * the default export which wires the real shared modules.
+ */
+export type IssueDeps = {
+  isAdminAuthorized: (request: HttpRequest) => boolean;
+  createLicense: typeof defaultCreateLicense;
+  supersedeActive: typeof defaultSupersedeActive;
+};
+
+const defaultDeps: IssueDeps = {
+  isAdminAuthorized: defaultIsAdminAuthorized,
+  createLicense: defaultCreateLicense,
+  supersedeActive: defaultSupersedeActive,
+};
+
+export async function handleIssue(
   request: HttpRequest,
   context: InvocationContext,
+  deps: IssueDeps = defaultDeps,
 ): Promise<HttpResponseInit> {
+  const { isAdminAuthorized, createLicense, supersedeActive } = deps;
   if (!isAdminAuthorized(request)) {
     return { status: 401, jsonBody: { ok: false, error: "admin token required" } };
   }
@@ -85,6 +104,15 @@ export default async function licenseIssue(
     context.error("license/issue failed", err);
     return { status: 500, jsonBody: { ok: false, error: (err as Error).message } };
   }
+}
+
+// Azure Functions runtime expects a default export — wraps handleIssue with
+// the production deps wired up.
+export default async function licenseIssue(
+  request: HttpRequest,
+  context: InvocationContext,
+): Promise<HttpResponseInit> {
+  return handleIssue(request, context);
 }
 
 function cryptoRandomId(): string {
