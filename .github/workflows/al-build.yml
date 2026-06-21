@@ -19,7 +19,7 @@ jobs:
     # adım: hangi denetim fail ederse Annotations'da net görünür.
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Ensure scripts are executable
         run: chmod +x tools/audit-*.sh
       - name: audit-permissions
@@ -35,7 +35,7 @@ jobs:
     name: AL package (placeholder)
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Placeholder AL package step
         shell: pwsh
         run: |
