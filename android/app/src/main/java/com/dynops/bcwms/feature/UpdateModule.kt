@@ -50,8 +50,16 @@ data class UpdateManifest(
     val versionCode: Int,
     val versionName: String,
     val apkUrl: String,
-    val sha256: String?,
+    val sha256: String,
     val releaseNotes: String,
+)
+
+private val SHA256_HEX = Regex("^[0-9a-fA-F]{64}$")
+private val ALLOWED_APK_HOSTS = setOf(
+    "app.bcwms.dynops.com",
+    "github.com",
+    "objects.githubusercontent.com",
+    "release-assets.githubusercontent.com",
 )
 
 fun isUpdateCheckEnabled(context: Context): Boolean =
@@ -130,7 +138,10 @@ fun UpdateChecker() {
                             val apk = withContext(Dispatchers.IO) {
                                 downloadApk(context, m, onProgress = { downloadProgress = it })
                             }
-                            if (m.sha256 != null && !verifySha256(apk, m.sha256)) {
+                            // SHA-256 is mandatory: manifest fetch already validates the hex
+                            // form + apkUrl allowlist, but we recheck here in case the manifest
+                            // was cached and the on-disk APK was tampered with.
+                            if (!verifySha256(apk, m.sha256)) {
                                 error = "Doğrulama başarısız — paket bozulmuş olabilir."
                                 apk.delete()
                             } else {
@@ -157,8 +168,9 @@ fun UpdateChecker() {
 }
 
 private fun fetchManifest(): UpdateManifest? {
-    val url = URL("$DEFAULT_UPDATE_BASE/releases/android/latest.json")
-    val conn = (url.openConnection() as HttpURLConnection).apply {
+    val manifestUrl = URL("$DEFAULT_UPDATE_BASE/releases/android/latest.json")
+    require(manifestUrl.protocol == "https") { "manifest must be served over HTTPS" }
+    val conn = (manifestUrl.openConnection() as HttpURLConnection).apply {
         connectTimeout = 8_000
         readTimeout = 15_000
         requestMethod = "GET"
@@ -168,13 +180,23 @@ private fun fetchManifest(): UpdateManifest? {
         if (conn.responseCode / 100 != 2) return null
         val body = conn.inputStream.bufferedReader().use { it.readText() }
         val obj = org.json.JSONObject(body)
+        val sha = obj.optString("sha256").trim()
+        require(SHA256_HEX.matches(sha)) { "manifest sha256 missing or malformed" }
+        val apkUrlRaw = obj.optString("apkUrl")
+        val apkUri = Uri.parse(apkUrlRaw)
+        require(apkUri.scheme == "https") { "apkUrl must be https" }
+        val host = apkUri.host?.lowercase().orEmpty()
+        require(host in ALLOWED_APK_HOSTS) { "apkUrl host not on allowlist: $host" }
         UpdateManifest(
             versionCode = obj.optInt("versionCode"),
             versionName = obj.optString("versionName"),
-            apkUrl = obj.optString("apkUrl"),
-            sha256 = obj.optString("sha256").takeIf { it.isNotBlank() },
+            apkUrl = apkUrlRaw,
+            sha256 = sha,
             releaseNotes = obj.optString("releaseNotes"),
         )
+    } catch (e: IllegalArgumentException) {
+        android.util.Log.w("BcwmsUpdate", "rejecting manifest: ${e.message}")
+        null
     } finally {
         conn.disconnect()
     }
