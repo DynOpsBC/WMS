@@ -66,7 +66,7 @@ jobs:
               "::set-output name=app::bcwmsapp-${{ needs.resolve.outputs.al_version }}.app"
             }
           }
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: hashFiles('bcwmsapp-*.app') != ''
         with:
           name: bcwmsapp-app
@@ -134,7 +134,7 @@ jobs:
           action: "upload"
           app_location: "web/dist"
           skip_app_build: true
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: web-saas-bundle
           path: web/dist
@@ -238,7 +238,7 @@ jobs:
                 releaseNotes: ("v" + $vn + " — see GitHub Release notes")
               }' > android/latest.json
           fi
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: android-release
           path: |
