@@ -148,5 +148,6 @@ permissionset 72096 "DOPSWHS-VIEW"
         page "DOPSWHS Printer Card" = X,
         page "DOPSWHS Device Printer Map" = X,
         page "DOPSWHS Print Job API" = X,
-        page "DOPSWHS Printer API" = X;
+        page "DOPSWHS Printer API" = X,
+        codeunit "DOPSWHS License Mgmt" = X;
 }

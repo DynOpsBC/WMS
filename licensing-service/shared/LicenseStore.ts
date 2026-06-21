@@ -1,6 +1,15 @@
-import { TableClient, TableServiceClient } from "@azure/data-tables";
+import { TableClient, TableServiceClient, odata } from "@azure/data-tables";
 import { DefaultAzureCredential } from "@azure/identity";
 import { randomUUID } from "node:crypto";
+
+const TENANT_ID_PATTERN = /^[a-z0-9-]{8,80}$/i;
+
+function assertTenantId(tenantId: string): string {
+  if (!TENANT_ID_PATTERN.test(tenantId)) {
+    throw new Error("invalid tenantId shape");
+  }
+  return tenantId.toLowerCase();
+}
 
 export type LicenseRecord = {
   partitionKey: string; // tenantId (lowercased)
@@ -46,7 +55,7 @@ export async function createLicense(input: Omit<LicenseRecord, "rowKey" | "issue
   const t = await table();
   const id = input.id ?? randomUUID();
   const record: LicenseRecord = {
-    partitionKey: input.partitionKey.toLowerCase(),
+    partitionKey: assertTenantId(input.partitionKey),
     rowKey: id,
     tier: input.tier,
     seats: input.seats,
@@ -63,8 +72,9 @@ export async function createLicense(input: Omit<LicenseRecord, "rowKey" | "issue
 
 export async function getLicense(tenantId: string, id: string): Promise<LicenseRecord | null> {
   const t = await table();
+  const partition = assertTenantId(tenantId);
   try {
-    return (await t.getEntity<LicenseRecord>(tenantId.toLowerCase(), id)) as LicenseRecord;
+    return (await t.getEntity<LicenseRecord>(partition, id)) as LicenseRecord;
   } catch (err) {
     if ((err as { statusCode?: number }).statusCode === 404) return null;
     throw err;
@@ -73,9 +83,10 @@ export async function getLicense(tenantId: string, id: string): Promise<LicenseR
 
 export async function listActiveByTenant(tenantId: string): Promise<LicenseRecord[]> {
   const t = await table();
+  const partition = assertTenantId(tenantId);
   const records: LicenseRecord[] = [];
   for await (const entity of t.listEntities<LicenseRecord>({
-    queryOptions: { filter: `PartitionKey eq '${tenantId.toLowerCase()}' and status eq 'active'` },
+    queryOptions: { filter: odata`PartitionKey eq ${partition} and status eq 'active'` },
   })) {
     records.push(entity as LicenseRecord);
   }

@@ -15,4 +15,11 @@ table 72004 "DOPSWHS Device Registration"
     }
 
     keys { key(PK; "Device ID") { Clustered = true; } }
+
+    trigger OnInsert()
+    var
+        License: Codeunit "DOPSWHS License Mgmt";
+    begin
+        License.GuardSeats(1);
+    end;
 }

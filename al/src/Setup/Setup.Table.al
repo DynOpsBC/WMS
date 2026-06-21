@@ -89,6 +89,55 @@ table 72000 "DOPSWHS Setup"
             InitValue = 8760;
             ToolTip = 'Lifetime in hours of agent tokens. Zero disables rotation.';
         }
+        field(150; "License Service URL"; Text[250])
+        {
+            Caption = 'License Service URL';
+            DataClassification = CustomerContent;
+            ExtendedDatatype = URL;
+            ToolTip = 'Base URL of the DynOps licensing-service Azure Function (e.g. https://bcwms-licensing-func.azurewebsites.net).';
+        }
+        field(160; "License Key"; Text[2048])
+        {
+            Caption = 'License Key (JWT)';
+            DataClassification = CustomerContent;
+            ToolTip = 'RS256 JWT issued by DynOps licensing-service. Pasted from the customer portal.';
+        }
+        field(170; "License Status"; Enum "DOPSWHS License Status")
+        {
+            Caption = 'License Status';
+            DataClassification = CustomerContent;
+            Editable = false;
+        }
+        field(180; "License Last Verified At"; DateTime)
+        {
+            Caption = 'License Last Verified At';
+            DataClassification = CustomerContent;
+            Editable = false;
+        }
+        field(190; "License Expires At"; DateTime)
+        {
+            Caption = 'License Expires At';
+            DataClassification = CustomerContent;
+            Editable = false;
+        }
+        field(200; "License Seats"; Integer)
+        {
+            Caption = 'License Seats';
+            DataClassification = CustomerContent;
+            Editable = false;
+        }
+        field(210; "License Email"; Text[100])
+        {
+            Caption = 'License Email';
+            DataClassification = CustomerContent;
+            Editable = false;
+        }
+        field(220; "License Status Message"; Text[250])
+        {
+            Caption = 'License Status Message';
+            DataClassification = CustomerContent;
+            Editable = false;
+        }
     }
 
     keys

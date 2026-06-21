@@ -19,6 +19,7 @@ codeunit 72051 "DOPSWHS Print Dispatcher"
         Zpl := LabelReport.BuildZpl(LP);
 
         if Setup."Print Channel" = Setup."Print Channel"::SelfHosted then begin
+            GuardLicense().GuardFeature(Enum::"DOPSWHS License Feature"::PrintBridge);
             ResolvedPrinter := ResolveSelfHostedPrinter(PrinterId, Enum::"DOPSWHS IWX Report Usage"::LpLabel);
             if ResolvedPrinter = '' then
                 Error('No Self-Hosted printer is mapped for LP label printing. Configure Device Printer Mapping or pass a Printer Code.');
@@ -61,6 +62,13 @@ codeunit 72051 "DOPSWHS Print Dispatcher"
         Queue.Status := Queue.Status::Queued;
         Queue.Created := CurrentDateTime();
         Queue.Insert(true);
+    end;
+
+    local procedure GuardLicense(): Codeunit "DOPSWHS License Mgmt"
+    var
+        License: Codeunit "DOPSWHS License Mgmt";
+    begin
+        exit(License);
     end;
 
     local procedure ResolveSelfHostedPrinter(Candidate: Code[50]; Usage: Enum "DOPSWHS IWX Report Usage"): Code[20]

@@ -4,8 +4,11 @@ codeunit 72053 "DOPSWHS Webhook Mgmt"
 
     procedure SubscribeWebhooks(Endpoint: Text[250])
     var
+        License: Codeunit "DOPSWHS License Mgmt";
         SubscriptionId: Guid;
     begin
+        License.GuardFeature(Enum::"DOPSWHS License Feature"::WebhookPublish);
+
         if Endpoint = '' then
             Endpoint := 'https://placeholder.invalid/api/webhook';
 

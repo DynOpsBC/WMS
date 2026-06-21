@@ -6,9 +6,11 @@ codeunit 72048 "DOPSWHS Prod Mgmt"
     var
         ItemJournalLine: Record "Item Journal Line";
         ItemJnlPostBatch: Codeunit "Item Jnl.-Post Batch";
+        License: Codeunit "DOPSWHS License Mgmt";
         ConsumeQty: Decimal;
         ConsumeItemNo: Code[20];
     begin
+        License.GuardFeature(Enum::"DOPSWHS License Feature"::Production);
         OnBeforeConsume(ProdOrderComponent, ItemNo, Qty, LpNo, LotNo, SerialNo, BinCode);
         ProdOrderComponent.TestField(Status, ProdOrderComponent.Status::Released);
 
@@ -50,6 +52,14 @@ codeunit 72048 "DOPSWHS Prod Mgmt"
 
     procedure ReportOutput(var ProdOrderRoutingLine: Record "Prod. Order Routing Line"; OutputQty: Decimal; ScrapQty: Decimal; Runtime: Decimal; NewLpTemplate: Code[20]; BinCode: Code[20]): Code[20]
     var
+        License: Codeunit "DOPSWHS License Mgmt";
+    begin
+        License.GuardFeature(Enum::"DOPSWHS License Feature"::Production);
+        exit(ReportOutputInternal(ProdOrderRoutingLine, OutputQty, ScrapQty, Runtime, NewLpTemplate, BinCode));
+    end;
+
+    local procedure ReportOutputInternal(var ProdOrderRoutingLine: Record "Prod. Order Routing Line"; OutputQty: Decimal; ScrapQty: Decimal; Runtime: Decimal; NewLpTemplate: Code[20]; BinCode: Code[20]): Code[20]
+    var
         ItemJournalLine: Record "Item Journal Line";
         ItemJnlPostBatch: Codeunit "Item Jnl.-Post Batch";
         NewLpNo: Code[20];
@@ -82,7 +92,7 @@ codeunit 72048 "DOPSWHS Prod Mgmt"
             // TODO Sprint H+ post-deploy: restore alternate routing line lookup if target symbols expose a line number.
             ProdOrderRoutingLine.FindFirst();
         end;
-        exit(ReportOutput(ProdOrderRoutingLine, OutputQty, ScrapQty, Runtime, NewLpTemplate, BinCode));
+        exit(ReportOutputInternal(ProdOrderRoutingLine, OutputQty, ScrapQty, Runtime, NewLpTemplate, BinCode));
     end;
 
     procedure FindComponentForLp(ProdOrderNo: Code[20]; ItemNo: Code[20]; LpNo: Code[20]; var ProdOrderComponent: Record "Prod. Order Component")

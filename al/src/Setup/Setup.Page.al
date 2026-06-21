@@ -55,6 +55,62 @@ page 72061 "DOPSWHS Setup"
                     ApplicationArea = All;
                 }
             }
+            group(License)
+            {
+                Caption = 'License';
+                field("License Service URL"; Rec."License Service URL")
+                {
+                    ApplicationArea = All;
+                }
+                field("License Key"; Rec."License Key")
+                {
+                    ApplicationArea = All;
+                    MultiLine = true;
+                    trigger OnValidate()
+                    var
+                        Mgmt: Codeunit "DOPSWHS License Mgmt";
+                    begin
+                        if Rec."License Key" <> '' then
+                            Mgmt.VerifyNow();
+                    end;
+                }
+                field("License Tier"; Rec."License Tier")
+                {
+                    ApplicationArea = All;
+                    Editable = false;
+                }
+                field("License Status"; Rec."License Status")
+                {
+                    ApplicationArea = All;
+                    Editable = false;
+                    StyleExpr = LicenseStyle;
+                }
+                field("License Seats"; Rec."License Seats")
+                {
+                    ApplicationArea = All;
+                    Editable = false;
+                }
+                field("License Expires At"; Rec."License Expires At")
+                {
+                    ApplicationArea = All;
+                    Editable = false;
+                }
+                field("License Email"; Rec."License Email")
+                {
+                    ApplicationArea = All;
+                    Editable = false;
+                }
+                field("License Last Verified At"; Rec."License Last Verified At")
+                {
+                    ApplicationArea = All;
+                    Editable = false;
+                }
+                field("License Status Message"; Rec."License Status Message")
+                {
+                    ApplicationArea = All;
+                    Editable = false;
+                }
+            }
         }
     }
 
@@ -107,6 +163,27 @@ page 72061 "DOPSWHS Setup"
                     Promoted = true;
                     PromotedCategory = Process;
                     RunObject = page "DOPSWHS Demo E2E Results";
+                }
+            }
+            group(LicenseActions)
+            {
+                Caption = 'License';
+                action(VerifyLicense)
+                {
+                    Caption = 'Verify License Now';
+                    ApplicationArea = All;
+                    Image = ValidateEmailLoggingSetup;
+                    Promoted = true;
+                    PromotedCategory = Process;
+                    ToolTip = 'Forces an immediate call to the licensing-service /verify endpoint and refreshes the status.';
+                    trigger OnAction()
+                    var
+                        Mgmt: Codeunit "DOPSWHS License Mgmt";
+                    begin
+                        Mgmt.VerifyNow();
+                        CurrPage.Update(false);
+                        Message('License verification complete.');
+                    end;
                 }
             }
             group(PrinterBridge)
@@ -180,6 +257,26 @@ page 72061 "DOPSWHS Setup"
         if not Rec.Get('') then begin
             Rec.Init();
             Rec.Insert(true);
+        end;
+        UpdateLicenseStyle();
+    end;
+
+    trigger OnAfterGetRecord()
+    begin
+        UpdateLicenseStyle();
+    end;
+
+    var
+        LicenseStyle: Text;
+
+    local procedure UpdateLicenseStyle()
+    begin
+        case Rec."License Status" of
+            Rec."License Status"::Active: LicenseStyle := 'Favorable';
+            Rec."License Status"::Offline: LicenseStyle := 'Ambiguous';
+            Rec."License Status"::Expired, Rec."License Status"::Invalid, Rec."License Status"::Revoked: LicenseStyle := 'Unfavorable';
+            else
+                LicenseStyle := 'Standard';
         end;
     end;
 }
