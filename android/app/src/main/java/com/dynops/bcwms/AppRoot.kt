@@ -105,6 +105,7 @@ fun AppRoot() {
                 Screen.PostingTest -> PostingTestModule()
                 Screen.Printers -> PrintersModule()
             }
+            UpdateChecker()
         }
         }
     }
