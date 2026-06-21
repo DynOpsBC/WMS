@@ -42,3 +42,6 @@ web/.tmp-inject.js
 
 # Local design preview captures
 .snapshots/
+licensing-service/node_modules/
+licensing-service/dist/
+licensing-service/pnpm-lock.yaml
