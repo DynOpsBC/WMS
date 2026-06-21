@@ -711,6 +711,26 @@ button.outline.danger-outline:hover:not(:disabled) {
   background: hsl(var(--danger) / 0.08);
 }
 
+/* ---------- Update toast (PWA new-version banner) ---------- */
+.update-toast {
+  position: fixed;
+  right: 24px;
+  bottom: 24px;
+  z-index: 200;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  background: hsl(var(--card));
+  color: hsl(var(--card-foreground));
+  border: 1px solid hsl(var(--primary) / 0.3);
+  border-radius: var(--radius);
+  padding: 14px 18px;
+  box-shadow: var(--shadow-lg);
+  max-width: 360px;
+  animation: bcwms-zoom-in 220ms ease-out;
+}
+.update-toast .primary { white-space: nowrap; }
+
 /* ---------- Accessibility ---------- */
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {

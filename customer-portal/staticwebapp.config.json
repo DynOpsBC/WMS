@@ -5,11 +5,22 @@
   "navigationFallback": {
     "rewrite": "/index.html"
   },
-  "routes": [
-    {
-      "route": "/api/*",
-      "allowedRoles": ["anonymous", "authenticated"]
+  "auth": {
+    "identityProviders": {
+      "azureActiveDirectory": {
+        "registration": {
+          "openIdIssuer": "https://login.microsoftonline.com/common/v2.0",
+          "clientIdSettingName": "AZURE_CLIENT_ID"
+        },
+        "login": { "loginParameters": ["response_type=code"] }
+      }
     }
+  },
+  "routes": [
+    { "route": "/api/license/me", "allowedRoles": ["anonymous", "authenticated"] },
+    { "route": "/api/releases", "allowedRoles": ["anonymous", "authenticated"] },
+    { "route": "/api/bc/trigger-update", "allowedRoles": ["authenticated"] },
+    { "route": "/api/license/issue", "allowedRoles": ["authenticated"] }
   ],
   "responseOverrides": {
     "404": { "rewrite": "/index.html" }

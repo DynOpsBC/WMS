@@ -19,6 +19,8 @@ import { PostingTest } from "./modules/PostingTest";
 import { Quality } from "./modules/Quality";
 import { QualityManagement } from "./modules/QualityManagement";
 import { Printers } from "./modules/Printers";
+import { UpdateToast } from "./ui/UpdateToast";
+import { initServiceWorker } from "./lib/updateNotifier";
 
 type Navigate = (s: Screen) => void;
 
@@ -97,12 +99,14 @@ function App() {
         {screen === "qms" && <QualityManagement />}
         {screen === "printers" && <Printers />}
       </main>
+      <UpdateToast />
     </div>
   );
 }
 
 const root = document.getElementById("root");
 if (root) {
+  void initServiceWorker();
   createRoot(root).render(
     <React.StrictMode>
       <App />

@@ -1,5 +1,6 @@
 import type { HttpRequest, InvocationContext, HttpResponseInit } from "@azure/functions";
 import { DefaultAzureCredential } from "@azure/identity";
+import { AuthError, requireTenantOwner } from "../shared/PrincipalAuth.js";
 
 const TENANT_ID_PATTERN = /^[a-z0-9-]{8,80}$/i;
 const APP_ID = "984e25aa-07c2-4401-babc-88f975303a52"; // BCWMSApp id from al/app.json
@@ -35,6 +36,18 @@ export default async function triggerUpdate(
     version = assertSafe(body.version, /^\d+\.\d+\.\d+\.\d+$/, "version");
   } catch (err) {
     return { status: 400, jsonBody: { ok: false, error: (err as Error).message } };
+  }
+
+  // The caller must be the verified owner of the AAD tenant they're upgrading.
+  // Static Web App EasyAuth injects `x-ms-client-principal` with the signed-in
+  // claims; the tid claim must match the requested tenantId.
+  try {
+    requireTenantOwner(request, tenantId);
+  } catch (err) {
+    if (err instanceof AuthError) {
+      return { status: err.status, jsonBody: { ok: false, error: err.message } };
+    }
+    throw err;
   }
 
   const credential = new DefaultAzureCredential();

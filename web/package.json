@@ -7,6 +7,7 @@
     "dev": "vite",
     "typecheck": "tsc --noEmit",
     "build": "vite build",
+    "build:saas": "BCWMS_TARGET=saas vite build",
     "test": "vitest"
   },
   "dependencies": {
@@ -17,7 +18,9 @@
     "react-dnd": "^16.0.1",
     "react-dnd-html5-backend": "^16.0.1",
     "react-i18next": "^15.1.3",
-    "vite": "^5.4.11"
+    "vite": "^5.4.11",
+    "vite-plugin-pwa": "^0.21.1",
+    "workbox-window": "^7.3.0"
   },
   "devDependencies": {
     "@playwright/test": "^1.49.0",

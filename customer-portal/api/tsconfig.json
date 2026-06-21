@@ -9,5 +9,5 @@
     "esModuleInterop": true,
     "skipLibCheck": true
   },
-  "include": ["releases/**/*.ts", "trigger-update/**/*.ts", "shared/**/*.ts"]
+  "include": ["releases/**/*.ts", "trigger-update/**/*.ts", "shared/**/*.ts", "test/**/*.ts"]
 }
