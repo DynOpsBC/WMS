@@ -45,3 +45,9 @@ web/.tmp-inject.js
 licensing-service/node_modules/
 licensing-service/dist/
 licensing-service/pnpm-lock.yaml
+customer-portal/node_modules/
+customer-portal/dist/
+customer-portal/pnpm-lock.yaml
+customer-portal/api/node_modules/
+customer-portal/api/dist/
+customer-portal/api/pnpm-lock.yaml
