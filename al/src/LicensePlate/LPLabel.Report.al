@@ -32,8 +32,12 @@ report 72091 "DOPSWHS LP Label"
             repeat
                 Summary += StrSubstNo('%1 %2 %3\&', LPLine."Item No.", LPLine.Quantity, LPLine."Unit of Measure");
             until LPLine.Next() = 0;
+        // ^CI28 = UTF-8 character set so Turkish characters (ç ğ ş ü ö İ) and
+        // any non-ASCII Item/Bin descriptions print correctly. Without this
+        // the printer falls back to its default code page and outputs mojibake.
         exit(
             '^XA' +
+            '^CI28' +
             '^FO40,30^A0N,36,36^FDLP ' + LP."No." + '^FS' +
             '^FO40,80^BY3^BCN,100,Y,N,N^FD>;00' + LP.SSCC + '^FS' +
             '^FO40,210^A0N,28,28^FD' + LP."Location Code" + ' / ' + LP."Bin Code" + '^FS' +

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/hmac"
+	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -117,12 +118,22 @@ func (c *Client) post(ctx context.Context, path string, body []byte) error {
 
 func (c *Client) sign(req *http.Request, body []byte) {
 	ts := strconv.FormatInt(time.Now().Unix(), 10)
+	// Per-request nonce: relay caches each nonce for 5 minutes and rejects
+	// reuse. Combined with the timestamp window, replay attacks against a
+	// captured request become impossible.
+	nonceBytes := make([]byte, 16)
+	_, _ = rand.Read(nonceBytes)
+	nonce := hex.EncodeToString(nonceBytes)
+
 	mac := hmac.New(sha256.New, []byte(c.cfg.Secret))
 	mac.Write([]byte(ts))
+	mac.Write([]byte("."))
+	mac.Write([]byte(nonce))
 	mac.Write([]byte("."))
 	mac.Write(body)
 	sig := hex.EncodeToString(mac.Sum(nil))
 	req.Header.Set("X-Bcwms-Printer-Id", c.cfg.PrinterID)
 	req.Header.Set("X-Bcwms-Timestamp", ts)
+	req.Header.Set("X-Bcwms-Nonce", nonce)
 	req.Header.Set("X-Bcwms-Signature", sig)
 }

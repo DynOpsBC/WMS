@@ -3,14 +3,76 @@ codeunit 72082 "DOPSWHS License Mgmt"
     Access = Public;
 
     var
-        VerifyEvery: Duration; // 1 hour
+        VerifyEveryMs: Duration; // 1 hour
         GraceDays: Integer;    // 7
 
+    /// <summary>
+    /// Entry called by the Job Queue Entry seeded in Install / Upgrade.
+    /// Every guard path also calls `EnsureRecentVerify()` so the codeunit
+    /// works even before the job queue picks it up.
+    /// </summary>
     trigger OnRun()
     begin
-        VerifyEvery := 60 * 60 * 1000;
-        GraceDays := 7;
+        InitConstants();
         TryVerify(false);
+    end;
+
+    local procedure InitConstants()
+    begin
+        VerifyEveryMs := 60 * 60 * 1000; // 1 hour
+        GraceDays := 7;
+    end;
+
+    /// <summary>
+    /// Called by Install/Upgrade triggers (codeunit 72033/72034). Inserts a
+    /// hourly Job Queue Entry for codeunit 72082 if one doesn't already
+    /// exist. The first verify still happens inline via `EnsureRecentVerify`
+    /// during the first guarded action.
+    /// </summary>
+    procedure ScheduleVerifyJob()
+    var
+        JobQueueEntry: Record "Job Queue Entry";
+    begin
+        JobQueueEntry.SetRange("Object Type to Run", JobQueueEntry."Object Type to Run"::Codeunit);
+        JobQueueEntry.SetRange("Object ID to Run", Codeunit::"DOPSWHS License Mgmt");
+        if JobQueueEntry.FindFirst() then exit;
+
+        JobQueueEntry.Init();
+        JobQueueEntry."Object Type to Run" := JobQueueEntry."Object Type to Run"::Codeunit;
+        JobQueueEntry."Object ID to Run" := Codeunit::"DOPSWHS License Mgmt";
+        JobQueueEntry.Description := CopyStr('DOPSWHS license verify (hourly)', 1, MaxStrLen(JobQueueEntry.Description));
+        JobQueueEntry."Recurring Job" := true;
+        JobQueueEntry."Run on Mondays" := true;
+        JobQueueEntry."Run on Tuesdays" := true;
+        JobQueueEntry."Run on Wednesdays" := true;
+        JobQueueEntry."Run on Thursdays" := true;
+        JobQueueEntry."Run on Fridays" := true;
+        JobQueueEntry."Run on Saturdays" := true;
+        JobQueueEntry."Run on Sundays" := true;
+        JobQueueEntry."Starting Time" := 060000T;
+        JobQueueEntry."Ending Time" := 235959T;
+        JobQueueEntry."No. of Minutes between Runs" := 60;
+        if JobQueueEntry.Insert(true) then;
+    end;
+
+    /// <summary>
+    /// Called from any guarded operation (GuardFeature / GuardSeats). If the
+    /// last verify is older than `VerifyEveryMs` or never happened, kicks
+    /// off a sync verify. Keeps the system honest even when the job queue
+    /// is offline.
+    /// </summary>
+    procedure EnsureRecentVerify()
+    var
+        Setup: Record "DOPSWHS Setup";
+    begin
+        InitConstants();
+        if not Setup.Get('') then exit;
+        if Setup."License Last Verified At" = 0DT then begin
+            TryVerify(true);
+            exit;
+        end;
+        if CurrentDateTime() - Setup."License Last Verified At" > VerifyEveryMs then
+            TryVerify(false);
     end;
 
     procedure VerifyNow(): Boolean
@@ -51,6 +113,7 @@ codeunit 72082 "DOPSWHS License Mgmt"
         ErrFeatureBlockedLbl: Label 'Feature %1 requires the %2 tier. Current license: %3.', Comment = '%1=feature, %2=required tier, %3=current tier';
         ErrLicenseInactiveLbl: Label 'License is not active (%1). %2', Comment = '%1=status, %2=message';
     begin
+        EnsureRecentVerify();
         if not Setup.Get('') then exit;
         if not IsActive() then
             Error(ErrLicenseInactiveLbl, Format(Setup."License Status"), Setup."License Status Message");
@@ -69,6 +132,7 @@ codeunit 72082 "DOPSWHS License Mgmt"
         Limit: Integer;
         ErrSeatsLbl: Label 'License seat limit reached (%1 of %2). Upgrade the license or remove inactive devices.', Comment = '%1=used, %2=limit';
     begin
+        EnsureRecentVerify();
         if not Setup.Get('') then exit;
         if not IsActive() then exit;
         Limit := Setup."License Seats";
@@ -194,7 +258,27 @@ codeunit 72082 "DOPSWHS License Mgmt"
         Setup."License Status Message" := '';
         Setup."License Last Verified At" := CurrentDateTime();
         Setup.Modify(true);
+        OnFirstActivation(Setup);
         exit(true);
+    end;
+
+    /// <summary>
+    /// Runs idempotent post-activation seeds that must NOT run during install
+    /// (because they hit licensed feature guards). Called by TryVerify after
+    /// the first successful verify; safe to invoke on every subsequent verify
+    /// because each seed checks "already done" state.
+    /// </summary>
+    local procedure OnFirstActivation(var Setup: Record "DOPSWHS Setup")
+    var
+        Audit: Record "DOPSWHS Webhook Audit";
+        Wizard: Codeunit "DOPSWHS Setup Wizard";
+    begin
+        // Only attempt webhook subscribe once per environment — avoids
+        // re-registering on every hourly verify.
+        Audit.SetRange("Event Type", 'subscribe');
+        if not Audit.IsEmpty then exit;
+        if Setup."Webhook Endpoint" = '' then exit;
+        Wizard.SubscribeDefaultWebhooksAfterLicense();
     end;
 
     local procedure UpdateStatus(NewStatus: Enum "DOPSWHS License Status"; Message: Text; ExpiresAt: DateTime; Seats: Integer; Email: Text)

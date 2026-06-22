@@ -33,20 +33,43 @@ export class PrinterTokenRegistry {
   }
 }
 
+// 5-minute nonce cache prevents replay within the timestamp tolerance window.
+// Stores `${printerId}:${nonce}` until the timestamp window closes.
+const seenNonces = new Map<string, number>();
+const NONCE_TTL_MS = 5 * 60 * 1000;
+
+function rememberNonce(key: string): boolean {
+  const now = Date.now();
+  // Lazy GC: clear entries older than TTL on every check.
+  for (const [k, ts] of seenNonces) {
+    if (now - ts > NONCE_TTL_MS) seenNonces.delete(k);
+  }
+  if (seenNonces.has(key)) return false;
+  seenNonces.set(key, now);
+  return true;
+}
+
 export function verifyPrinterSignature(
   headers: Record<string, string | string[] | undefined>,
   body: string,
   secret: string,
+  printerId?: string,
 ): boolean {
   const sig = header(headers, "x-bcwms-signature");
   const ts = header(headers, "x-bcwms-timestamp");
-  if (!sig || !ts || !secret) return false;
+  const nonce = header(headers, "x-bcwms-nonce");
+  if (!sig || !ts || !nonce || !secret) return false;
   const tsNum = Number(ts);
   if (!Number.isFinite(tsNum)) return false;
   const now = Math.floor(Date.now() / 1000);
   if (Math.abs(now - tsNum) > 300) return false;
-  const expected = createHmac("sha256", secret).update(`${ts}.${body}`).digest("hex");
-  return safeEquals(sig, expected);
+
+  // Signature input now includes the nonce so a captured request cannot
+  // be replayed once the nonce is consumed.
+  const expected = createHmac("sha256", secret).update(`${ts}.${nonce}.${body}`).digest("hex");
+  if (!safeEquals(sig, expected)) return false;
+  const cacheKey = `${printerId ?? ""}:${nonce}`;
+  return rememberNonce(cacheKey);
 }
 
 function header(headers: Record<string, string | string[] | undefined>, key: string): string | undefined {

@@ -35,7 +35,13 @@ codeunit 72031 "DOPSWHS Setup Wizard"
         SeedDefaultLPTemplates();
         SeedShortPickReasons();
         SeedReportSelections();
-        SubscribeDefaultWebhooks();
+        // SubscribeDefaultWebhooks is intentionally NOT called here on a
+        // fresh install — webhook publish is license-gated. Wiring it up
+        // would fail with `GuardFeature(WebhookPublish)` during the
+        // OnInstallAppPerCompany trigger before any License Key is set,
+        // crashing the install. The customer admin must enter the License
+        // Key first; webhook subscription is then triggered automatically
+        // on the next license verify cycle.
     end;
 
     local procedure SeedDeviceConfig()
@@ -206,5 +212,15 @@ codeunit 72031 "DOPSWHS Setup Wizard"
                 Endpoint := Setup."Webhook Endpoint";
 
         WebhookMgmt.SubscribeWebhooks(Endpoint);
+    end;
+
+    /// <summary>
+    /// Public entry called by `LicenseMgmt.OnFirstActivation`. Same wiring as
+    /// the private install-time helper but only invoked once the license is
+    /// active so the WebhookPublish guard passes.
+    /// </summary>
+    procedure SubscribeDefaultWebhooksAfterLicense()
+    begin
+        SubscribeDefaultWebhooks();
     end;
 }

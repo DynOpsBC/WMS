@@ -86,6 +86,27 @@ Bizim portal manuel update'i şu şekilde tetikler:
 2. Portal → BC Admin Center upgrade API'sini çağırır
 3. ~5 dakika içinde yeni sürüm aktif
 
+### Portal "Şimdi yükselt" için tek seferlik AAD yapılandırması
+
+Portal'ın `/api/bc/trigger-update` fonksiyonu BC Admin Center API'sini
+müşterinin AAD tenant'ı altında çağırır. Bu çağrı için **müşteri tenant
+admin'i**nin bir defaya mahsus aşağıdaki adımları yapması gerekir:
+
+1. DynOps tarafı portal'ın managed identity service principal'ının
+   `appId`'sini ve display name'ini (`bcwms-portal-api`) müşteriye iletir.
+2. Müşteri admin BC Admin Center'da
+   (`https://businesscentral.dynamics.com/<aadtenant>/admin`) →
+   **Environments → <env> → App Registrations** sayfasını açar.
+3. **+ New** ile `bcwms-portal-api` AppId'sini ekler ve `D365 Automation`
+   permission set'ini seçer (veya en az `D365 BUS PREMIUM` + tenant-level
+   `Admin Center API` izni).
+4. Sayfa "Status = Active" gösterene kadar bekle (~2 dakika).
+5. Portal'da "Şimdi yükselt" butonu ilk denemede `401` döner ise bu adımın
+   tamamlandığını doğrula; izin propagation'ı ~15 dk sürebilir.
+
+> Bu adım yapılmazsa "Şimdi yükselt" her zaman `502` döner; PTE upload'ı
+> elle BC Admin Center'dan yapmaya devam edilebilir.
+
 ## Sorun giderme
 
 | Belirti | Olası sebep | Çözüm |

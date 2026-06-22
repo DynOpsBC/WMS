@@ -40,6 +40,14 @@ codeunit 72034 "DOPSWHS Upgrade"
         AppProfileMgmt.SeedDefaults();          // seed DEFAULT app profile + install-user profile
         AppRoleSeed.Seed();                     // seed system roles + starter filter rules
         ConfigChecker.RegisterAssistedSetup();  // seed config checklist + register Assisted Setup
+        ScheduleLicenseVerify();                // seed/refresh the hourly /verify job
+    end;
+
+    local procedure ScheduleLicenseVerify()
+    var
+        License: Codeunit "DOPSWHS License Mgmt";
+    begin
+        License.ScheduleVerifyJob();
     end;
 
     /// <summary>

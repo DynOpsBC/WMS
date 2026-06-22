@@ -22,7 +22,11 @@ export default async function webhook(
 
   if (type.startsWith("pick.")) {
     const client = new WebPubSubServiceClient(process.env.AzureSignalRConnectionString ?? "", tenant.signalRHub || "picks");
-    await client.sendToAll(body, { contentType: "application/json" });
+    // SDK ≥1.1 routes message contentType via the second-overload (string body
+    // → text/plain). We send the raw event JSON as a string and downstream
+    // listeners JSON.parse it. Avoids the dropped contentType option in the
+    // current SDK.
+    await client.sendToAll(body);
   } else {
     const fcm = new FcmClient();
     const tokens = Object.values(tenant.fcmTokens ?? {});

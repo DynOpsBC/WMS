@@ -29,7 +29,7 @@ export default async function printJobsGet(
 
   const headers = Object.fromEntries(request.headers.entries());
   const body = ""; // GET has no body — sign empty string
-  if (!verifyPrinterSignature(headers, body, secret)) {
+  if (!verifyPrinterSignature(headers, body, secret, printerId)) {
     return { status: 401, jsonBody: { ok: false, error: "invalid signature" } };
   }
 

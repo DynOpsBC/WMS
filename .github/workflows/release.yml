@@ -26,6 +26,10 @@ jobs:
           ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
           ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
           PLAY_SERVICE_ACCOUNT_JSON: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
+          PORTAL_AAD_CLIENT_ID: ${{ secrets.PORTAL_AAD_CLIENT_ID }}
+          PORTAL_AAD_AUTHORITY: ${{ secrets.PORTAL_AAD_AUTHORITY }}
+          PORTAL_API_BASE: ${{ secrets.PORTAL_API_BASE }}
+          PORTAL_LICENSING_URL: ${{ secrets.PORTAL_LICENSING_URL }}
         run: |
           # Public-tag release MUST have every secret set; missing secrets
           # used to be silently swallowed via `|| echo`, leading to a "green"
@@ -34,7 +38,9 @@ jobs:
           for name in AZURE_CLIENT_ID AZURE_TENANT_ID AZURE_SUBSCRIPTION_ID \
                       AZURE_STATIC_WEB_APPS_API_TOKEN_WEB AZURE_STATIC_WEB_APPS_API_TOKEN_PORTAL \
                       ANDROID_KEYSTORE_BASE64 ANDROID_KEYSTORE_PASSWORD ANDROID_KEY_PASSWORD \
-                      ANDROID_KEY_ALIAS PLAY_SERVICE_ACCOUNT_JSON; do
+                      ANDROID_KEY_ALIAS PLAY_SERVICE_ACCOUNT_JSON \
+                      PORTAL_AAD_CLIENT_ID PORTAL_AAD_AUTHORITY \
+                      PORTAL_API_BASE PORTAL_LICENSING_URL; do
             if [ -z "${!name}" ]; then missing+=("$name"); fi
           done
           if [ ${#missing[@]} -gt 0 ]; then
@@ -192,6 +198,15 @@ jobs:
         with: { version: 9 }
       - name: Build
         working-directory: customer-portal
+        env:
+          # MSAL.js refuses to bootstrap with an empty clientId, so the build
+          # must inject the AAD app registration values. PORTAL_LICENSING_URL
+          # tells the SPA where to hit the licensing-service for /license/*
+          # endpoints (Static Web App `api/` only owns releases + trigger-update).
+          VITE_PORTAL_CLIENT_ID: ${{ secrets.PORTAL_AAD_CLIENT_ID }}
+          VITE_PORTAL_AUTHORITY: ${{ secrets.PORTAL_AAD_AUTHORITY }}
+          VITE_PORTAL_API_BASE: ${{ secrets.PORTAL_API_BASE }}
+          VITE_PORTAL_LICENSING_URL: ${{ secrets.PORTAL_LICENSING_URL }}
         run: |
           pnpm install --frozen-lockfile=false
           pnpm typecheck

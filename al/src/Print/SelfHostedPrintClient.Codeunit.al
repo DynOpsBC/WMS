@@ -108,7 +108,9 @@ codeunit 72081 "DOPSWHS Self-Hosted Print Client"
     var
         Zpl: Text;
     begin
-        Zpl := '^XA^FO50,50^A0N,40,40^FDDynOps WMS Self-Test^FS^FO50,120^A0N,30,30^FDPrinter: ' + PrinterCode + '^FS^FO50,180^BCN,80,Y,N,N^FD' + Format(CurrentDateTime(), 0, 9) + '^FS^XZ';
+        // ^CI28 = UTF-8; matches the LP label template so the agent and printer
+        // always speak the same encoding regardless of payload origin.
+        Zpl := '^XA^CI28^FO50,50^A0N,40,40^FDDynOps WMS Self-Test^FS^FO50,120^A0N,30,30^FDPrinter: ' + PrinterCode + '^FS^FO50,180^BCN,80,Y,N,N^FD' + Format(CurrentDateTime(), 0, 9) + '^FS^XZ';
         exit(Enqueue('SELFTEST', PrinterCode, Enum::"DOPSWHS Print Format"::ZPL, Zpl, 1));
     end;
 

@@ -1,4 +1,8 @@
+// `apiBase` covers Static Web App attached Functions (releases, bc/trigger-update).
+// `licensingBase` points at the licensing-service Azure Function for /license/*
+// because those endpoints don't live in customer-portal/api/.
 const apiBase = (import.meta.env.VITE_PORTAL_API_BASE as string | undefined) ?? "/api";
+const licensingBase = (import.meta.env.VITE_PORTAL_LICENSING_URL as string | undefined) ?? apiBase;
 
 export type LicenseSummary = {
   ok: true;
@@ -25,8 +29,8 @@ export type ReleaseEntry = {
   agentBinaries?: { os: string; arch: string; url: string }[];
 };
 
-async function fetchJson<T>(path: string, init?: RequestInit): Promise<T> {
-  const url = `${apiBase.replace(/\/$/, "")}${path}`;
+async function fetchJson<T>(path: string, init?: RequestInit, base: string = apiBase): Promise<T> {
+  const url = `${base.replace(/\/$/, "")}${path}`;
   const response = await fetch(url, {
     credentials: "include",
     ...init,
@@ -44,10 +48,11 @@ async function fetchJson<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 export async function getMyLicense(tenantId: string, jwt?: string): Promise<LicenseSummary> {
-  return fetchJson<LicenseSummary>(`/license/me?tenant=${encodeURIComponent(tenantId)}`, {
-    method: "GET",
-    headers: jwt ? { "X-Bcwms-License-Key": jwt } : undefined,
-  });
+  return fetchJson<LicenseSummary>(
+    `/api/license/me?tenant=${encodeURIComponent(tenantId)}`,
+    { method: "GET", headers: jwt ? { "X-Bcwms-License-Key": jwt } : undefined },
+    licensingBase,
+  );
 }
 
 export async function issueLicense(payload: {
@@ -59,18 +64,22 @@ export async function issueLicense(payload: {
   adminToken: string;
   replaceActive?: boolean;
 }): Promise<{ ok: true; id: string; key: string; tier: string; seats: number; validUntil: string }> {
-  return fetchJson(`/license/issue`, {
-    method: "POST",
-    headers: { "X-Bcwms-Admin-Token": payload.adminToken },
-    body: JSON.stringify({
-      tenantId: payload.tenantId,
-      tier: payload.tier,
-      seats: payload.seats,
-      validUntil: payload.validUntil,
-      customerEmail: payload.customerEmail,
-      replaceActive: payload.replaceActive ?? false,
-    }),
-  });
+  return fetchJson(
+    `/api/license/issue`,
+    {
+      method: "POST",
+      headers: { "X-Bcwms-Admin-Token": payload.adminToken },
+      body: JSON.stringify({
+        tenantId: payload.tenantId,
+        tier: payload.tier,
+        seats: payload.seats,
+        validUntil: payload.validUntil,
+        customerEmail: payload.customerEmail,
+        replaceActive: payload.replaceActive ?? false,
+      }),
+    },
+    licensingBase,
+  );
 }
 
 export async function getReleases(): Promise<ReleaseEntry[]> {

@@ -56,7 +56,12 @@ export default async function triggerUpdate(
     return { status: 502, jsonBody: { ok: false, error: "could not acquire BC admin token" } };
   }
 
-  const url = `https://api.businesscentral.dynamics.com/admin/v2.21/applications/BusinessCentral/environments/${envName}/apps/${APP_ID}/upgrade`;
+  // BC Admin Center upgrade API is tenant-scoped — the customer's AAD tenant
+  // GUID is the first path segment. The previous tenantless URL silently
+  // 404'd against api.businesscentral.dynamics.com because the host requires
+  // a tenant context. See:
+  // https://learn.microsoft.com/en-us/dynamics365/business-central/dev-itpro/administration/administration-center-api_environments
+  const url = `https://api.businesscentral.dynamics.com/admin/v2.21/${tenantId}/applications/BusinessCentral/environments/${envName}/apps/${APP_ID}/upgrade`;
   const response = await fetch(url, {
     method: "POST",
     headers: {

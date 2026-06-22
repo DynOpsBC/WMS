@@ -18,6 +18,7 @@ codeunit 72033 "DOPSWHS Install"
         SetupWizard: Codeunit "DOPSWHS Setup Wizard";
         AppProfileMgmt: Codeunit "DOPSWHS App Profile Mgmt";
         ConfigChecker: Codeunit "DOPSWHS Config Checker";
+        License: Codeunit "DOPSWHS License Mgmt";
     begin
         if not Setup.Get('') then begin
             Setup.Init();
@@ -31,5 +32,6 @@ codeunit 72033 "DOPSWHS Install"
         SetupWizard.SeedDefaultLPTemplates();
         AppProfileMgmt.SeedDefaults();          // seed DEFAULT app profile + install-user profile
         ConfigChecker.RegisterAssistedSetup();  // seed config checklist + register Assisted Setup
+        License.ScheduleVerifyJob();            // seeds the hourly Job Queue Entry for /verify
     end;
 }

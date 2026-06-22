@@ -25,7 +25,7 @@ export default async function printJobsStatus(
   const secret = tenant.printerSecrets[printerId];
   if (!secret) return { status: 404, jsonBody: { ok: false, error: `printer ${printerId} not registered` } };
 
-  if (!verifyPrinterSignature(Object.fromEntries(request.headers.entries()), body, secret)) {
+  if (!verifyPrinterSignature(Object.fromEntries(request.headers.entries()), body, secret, printerId)) {
     return { status: 401, jsonBody: { ok: false, error: "invalid signature" } };
   }
 
