@@ -52,6 +52,7 @@ enum class Screen(val title: String) {
     TestCenter("Test Center"),
     PostingTest("Posting Test"),
     Printers("Yazıcılar"),
+    SelfTest("Sistem Sağlığı"),
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -104,6 +105,7 @@ fun AppRoot() {
                 Screen.TestCenter -> TestCenterScreen()
                 Screen.PostingTest -> PostingTestModule()
                 Screen.Printers -> PrintersModule()
+                Screen.SelfTest -> SelfTestModule()
             }
             UpdateChecker()
         }
@@ -145,6 +147,7 @@ private fun HomeScreen(connected: Boolean, onNavigate: (Screen) -> Unit) {
         Tile(Screen.TestCenter, "🧪", "Test Center"),
         Tile(Screen.PostingTest, "📮", "Posting Test"),
         Tile(Screen.Printers, "🖨", "Yazıcılar"),
+        Tile(Screen.SelfTest, "🩺", "Sistem Sağlığı"),
         Tile(Screen.Connection, "⚙️", "Bağlantı"),
     )
     Column(Modifier.fillMaxSize().padding(16.dp)) {

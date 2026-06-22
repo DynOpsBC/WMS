@@ -19,6 +19,7 @@ import { PostingTest } from "./modules/PostingTest";
 import { Quality } from "./modules/Quality";
 import { QualityManagement } from "./modules/QualityManagement";
 import { Printers } from "./modules/Printers";
+import { SelfTest } from "./modules/SelfTest";
 import { UpdateToast } from "./ui/UpdateToast";
 import { initServiceWorker } from "./lib/updateNotifier";
 
@@ -98,6 +99,7 @@ function App() {
         {screen === "quality" && <Quality />}
         {screen === "qms" && <QualityManagement />}
         {screen === "printers" && <Printers />}
+        {screen === "selfTest" && <SelfTest />}
       </main>
       <UpdateToast />
     </div>

@@ -16,7 +16,8 @@ export type Screen =
   | "binInquiry"
   | "posting"
   | "qms"
-  | "printers";
+  | "printers"
+  | "selfTest";
 
 export const SCREEN_TITLES: Record<Screen, string> = {
   login: "Giriş",
@@ -37,4 +38,5 @@ export const SCREEN_TITLES: Record<Screen, string> = {
   posting: "Posting Test",
   qms: "Quality Management (MS)",
   printers: "Yazıcılar",
+  selfTest: "Sistem Sağlığı",
 };

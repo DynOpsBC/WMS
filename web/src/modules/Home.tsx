@@ -29,6 +29,7 @@ const TILES: Tile[] = [
   { key: "posting", icon: "🧪", label: "Posting Test", enabled: true },
   { key: "qms", icon: "🔬", label: "MS Quality Mgmt", enabled: true },
   { key: "printers", icon: "🖨", label: "Yazıcılar", enabled: true },
+  { key: "selfTest", icon: "🩺", label: "Sistem Sağlığı", enabled: true },
 ];
 
 export function Home({ navigate }: HomeProps) {

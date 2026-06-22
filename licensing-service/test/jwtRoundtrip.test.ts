@@ -87,7 +87,13 @@ test("verify — bad signature", async () => {
     email: "e",
     validUntil: Math.floor(Date.now() / 1000) + 100,
   });
-  const tampered = jwt.replace(/.$/, (c) => (c === "a" ? "b" : "a"));
+  // Flip a character in the middle of the signature segment. Replacing
+  // only the last char is flaky because some base64url chars decode to
+  // the same trailing byte after rounding bits.
+  const dot = jwt.lastIndexOf(".");
+  const mid = dot + Math.floor((jwt.length - dot) / 2);
+  const flipped = jwt[mid] === "A" ? "B" : "A";
+  const tampered = jwt.slice(0, mid) + flipped + jwt.slice(mid + 1);
   const result = await verifyLicense(tampered, "t");
   assert.equal(result.valid, false);
 });
