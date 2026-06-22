@@ -38,16 +38,14 @@ fun PickingModule() {
     fun load() {
         scope.launch {
             loading = true; status = "Yükleniyor..."
-            val assigned = if (showAll) "" else "&\$filter=assignedUserId ne ''"
-            val noFilter = if (search.isBlank()) "" else
-                (if (assigned.contains("\$filter")) " and " else "&\$filter=") + "startswith(no,'${search.trim().replace("'", "''")}')"
-            // Merge assigned + search into a single filter clause if both used.
-            val combined = when {
-                assigned.isBlank() && noFilter.isBlank() -> ""
-                assigned.isBlank() -> noFilter
-                noFilter.isBlank() -> assigned
-                else -> assigned + noFilter.removePrefix("&\$filter=")
+            // Codex review Finding 4: prefix-aware string concatenation kırılgan
+            // idi; clause listesi üretip tek seferde "&$filter=" prefix ekleyen
+            // pattern Receiving ile aynı, OData üretimi daha güvenli.
+            val clauses = buildList {
+                if (!showAll) add("assignedUserId ne ''")
+                if (search.isNotBlank()) add("startswith(no,'${search.trim().replace("'", "''")}')")
             }
+            val combined = if (clauses.isEmpty()) "" else "&\$filter=" + clauses.joinToString(" and ")
             val r = BcApi.getWithStandardFallback(context, "picks?\$top=100&\$orderby=no desc&\$select=no,locationCode,assignedUserId,sourceNo,status,percentComplete$combined")
             loading = false
             rows = if (r.ok) BcApi.parseValueArray(r.body) else emptyList()
@@ -189,9 +187,11 @@ private fun PickDocument(no: String, onBack: () -> Unit) {
                             }
                             Text("Bin: ${ln.optString("binCode")} · İşlenecek: ${ln.optDouble("qtyToHandle")} / ${ln.optDouble("quantity")}", fontSize = 12.sp, color = Color.Gray)
                             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 6.dp)) {
-                                TextButton(onClick = { scanLine = ln }) { Text("📷 Tara & Tamamla") }
-                                TextButton(onClick = { updateLine(ln, ln.optDouble("quantity")) }) { Text("Tamamla") }
-                                TextButton(onClick = { shortLine = ln; showShort = true }) { Text("Short") }
+                                // Codex review Finding 2: busy iken satır
+                                // action'ları disabled — çift çağrı race fix.
+                                TextButton(onClick = { scanLine = ln }, enabled = !busy && scanLine == null) { Text("📷 Tara & Tamamla") }
+                                TextButton(onClick = { updateLine(ln, ln.optDouble("quantity")) }, enabled = !busy) { Text("Tamamla") }
+                                TextButton(onClick = { shortLine = ln; showShort = true }, enabled = !busy) { Text("Short") }
                             }
                         }
                     }
@@ -247,10 +247,29 @@ private fun PickDocument(no: String, onBack: () -> Unit) {
         ScanVerifySheet(
             expectedItemNo = scanTarget.optString("itemNo"),
             description = scanTarget.optString("description"),
-            onDismiss = { scanLine = null },
+            busy = busy,
+            onDismiss = { if (!busy) scanLine = null },
             onVerified = {
-                scanLine = null
-                updateLine(scanTarget, scanTarget.optDouble("quantity"))
+                // Codex review Finding 2: busy=true önce set edilir, recompose
+                // sırasında diğer "Tara/Tamamla/Short" butonları disabled olur,
+                // sheet sonra kapatılır. Tek updateLine coroutine'i garanti.
+                if (!busy) {
+                    busy = true
+                    scanLine = null
+                    scope.launch {
+                        try {
+                            val qty = scanTarget.optDouble("quantity")
+                            val body = JSONObject().apply { put("qtyToHandle", qty) }.toString()
+                            val actType = scanTarget.optString("activityType").ifBlank { BcEnum.WhseActivityType.PICK }
+                            val r = BcApi.patch(context, "pickLines(activityType='$actType',no='$no',lineNo=${scanTarget.optInt("lineNo")})", body)
+                            status = if (r.ok) "✅ Doğrulandı + tamamlandı (HTTP ${r.httpCode})"
+                                else QcErrorParser.friendlyStatus(BcApi.errorMessage(r.body), r.httpCode)
+                            if (r.ok) reload()
+                        } finally {
+                            busy = false
+                        }
+                    }
+                }
             },
             onMismatch = {
                 status = "❌ Tarama eşleşmedi: beklenen ${scanTarget.optString("itemNo")}, okunan $it"
@@ -269,6 +288,7 @@ private fun PickDocument(no: String, onBack: () -> Unit) {
 private fun ScanVerifySheet(
     expectedItemNo: String,
     description: String,
+    busy: Boolean,
     onDismiss: () -> Unit,
     onVerified: () -> Unit,
     onMismatch: (String) -> Unit,
@@ -299,9 +319,9 @@ private fun ScanVerifySheet(
         Text(hint, fontSize = 12.sp, color = Color.Gray)
         Spacer(Modifier.height(16.dp))
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            OutlinedButton(onClick = onDismiss, modifier = Modifier.weight(1f)) { Text("Vazgeç") }
+            OutlinedButton(onClick = onDismiss, enabled = !busy, modifier = Modifier.weight(1f)) { Text("Vazgeç") }
             Button(
-                enabled = raw.isNotBlank(),
+                enabled = raw.isNotBlank() && !busy,
                 onClick = {
                     if (raw.trim().equals(expectedItemNo, ignoreCase = true)) onVerified()
                     else { hint = "❌ Eşleşmedi: $raw"; onMismatch(raw.trim()) }

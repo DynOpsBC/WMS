@@ -6,6 +6,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.material3.Surface
+import androidx.compose.runtime.LaunchedEffect
 import com.dynops.bcwms.scanner.ScanBus
 import com.dynops.bcwms.ui.BcwmsTheme
 
@@ -13,9 +14,14 @@ class MainActivity : ComponentActivity() {
   override fun onCreate(savedInstanceState: Bundle?) {
     super.onCreate(savedInstanceState)
     enableEdgeToEdge()
-    // Cold-start: app launched directly by a DataWedge tarama intent'i.
-    ScanBus.dispatch(intent)
+    // Codex review Finding 7: cold-start'ta ScanBus.dispatch'i doğrudan
+    // burada çağırırsak hiç bir ScanField henüz collect etmediğinden
+    // SharedFlow(replay=0, extraBufferCapacity=4) emit'i drop edebilir.
+    // setContent içinden LaunchedEffect(Unit) ile dispatch, Compose tree
+    // mount edildikten sonra çalışır → subscriber'lar hazır → drop yok.
+    val coldStartIntent: Intent? = intent
     setContent {
+      LaunchedEffect(Unit) { ScanBus.dispatch(coldStartIntent) }
       BcwmsTheme {
         Surface {
           AppRoot()

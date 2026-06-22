@@ -55,4 +55,17 @@ page 72086 "DOPSWHS Item API"
             }
         }
     }
+
+    trigger OnAfterGetRecord()
+    begin
+        // FlowField'lar API page'inde otomatik hesaplanmaz; explicit CalcFields
+        // çağrılmazsa response'da Inventory=0 döner ve Item Inquiry "stok yok"
+        // göstermeye devam eder (Codex review Finding 6).
+        Rec.CalcFields(
+            Inventory,
+            "Qty. on Purch. Order",
+            "Qty. on Sales Order",
+            "Qty. on Prod. Order",
+            "Reserved Qty. on Inventory");
+    end;
 }
