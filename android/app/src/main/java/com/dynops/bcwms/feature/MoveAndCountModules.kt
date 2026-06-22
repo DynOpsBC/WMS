@@ -233,26 +233,23 @@ private fun CountDocument(no: String, onBack: () -> Unit) {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun CountEntrySheet(line: JSONObject, blind: Boolean, onDismiss: () -> Unit, onConfirm: (slot: Int, qty: Double) -> Unit) {
-    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     var slot by remember { mutableStateOf(1) }
     var qty by remember { mutableStateOf("") }
-    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState) {
-        Column(Modifier.fillMaxWidth().padding(20.dp)) {
-            Text("Sayım Gir — ${line.optString("itemNo")}", fontWeight = FontWeight.Bold, fontSize = 18.sp)
-            Text("Bin: ${firstValue(line, "binCode")}" + if (blind) " · BLIND (sistem miktarı gizli)" else " · Sistem: ${fmtq(line.optDouble("systemQty"))}", fontSize = 12.sp, color = Color.Gray)
-            Spacer(Modifier.height(12.dp))
-            Text("Sayıcı slotu", fontSize = 12.sp, color = Color.Gray)
-            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                (1..3).forEach { s -> FilterChip(selected = slot == s, onClick = { slot = s }, label = { Text("Sayıcı $s") }) }
-            }
-            Spacer(Modifier.height(10.dp))
-            OutlinedTextField(qty, { qty = it.filter { c -> c.isDigit() || c == '.' } }, label = { Text("Sayılan Miktar") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-            Spacer(Modifier.height(16.dp))
-            Button(modifier = Modifier.fillMaxWidth(), enabled = qty.isNotBlank(), onClick = {
-                onConfirm(slot, qty.toDoubleOrNull() ?: 0.0)
-            }) { Text("Sayımı Kaydet") }
-            Spacer(Modifier.height(24.dp))
+    com.dynops.bcwms.ui.SheetScaffold(onDismiss = onDismiss, contentPadding = androidx.compose.foundation.layout.PaddingValues(20.dp)) {
+        Text("Sayım Gir — ${line.optString("itemNo")}", fontWeight = FontWeight.Bold, fontSize = 18.sp)
+        Text("Bin: ${firstValue(line, "binCode")}" + if (blind) " · BLIND (sistem miktarı gizli)" else " · Sistem: ${fmtq(line.optDouble("systemQty"))}", fontSize = 12.sp, color = Color.Gray)
+        Spacer(Modifier.height(12.dp))
+        Text("Sayıcı slotu", fontSize = 12.sp, color = Color.Gray)
+        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            (1..3).forEach { s -> FilterChip(selected = slot == s, onClick = { slot = s }, label = { Text("Sayıcı $s") }) }
         }
+        Spacer(Modifier.height(10.dp))
+        OutlinedTextField(qty, { qty = it.filter { c -> c.isDigit() || c == '.' } }, label = { Text("Sayılan Miktar") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+        Spacer(Modifier.height(16.dp))
+        Button(modifier = Modifier.fillMaxWidth(), enabled = qty.isNotBlank(), onClick = {
+            onConfirm(slot, qty.toDoubleOrNull() ?: 0.0)
+        }) { Text("Sayımı Kaydet") }
+        Spacer(Modifier.height(24.dp))
     }
 }
 

@@ -10,6 +10,8 @@ import androidx.camera.core.ImageAnalysis
 import androidx.camera.core.Preview
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsFocusedAsState
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -49,6 +51,19 @@ fun ScanField(
     }
     var scanning by remember { mutableStateOf(false) }
     var cameraError by remember { mutableStateOf<String?>(null) }
+    // Hardware scanner (Zebra DataWedge) routing — sadece focuslu alan, ScanBus
+    // event'lerini dinler. Bu sayede aynı ekranda birden fazla ScanField olsa
+    // bile sarı tetik basışı sadece kullanıcının seçtiği alana yazar.
+    val interactionSource = remember { MutableInteractionSource() }
+    val isFocused by interactionSource.collectIsFocusedAsState()
+    LaunchedEffect(isFocused, enabled) {
+        if (!isFocused || !enabled) return@LaunchedEffect
+        ScanBus.events.collect { event ->
+            val raw = event.raw
+            onValueChange(raw)
+            onScanned?.invoke(raw)
+        }
+    }
 
     val permLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission()
@@ -65,6 +80,7 @@ fun ScanField(
                 label = { Text(label) },
                 singleLine = true,
                 enabled = enabled,
+                interactionSource = interactionSource,
                 modifier = Modifier.weight(1f),
             )
             Spacer(Modifier.width(8.dp))

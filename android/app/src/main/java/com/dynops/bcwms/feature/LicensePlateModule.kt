@@ -110,46 +110,69 @@ private fun StatusBadge(status: String) {
 private fun LpBuildSheet(onDismiss: () -> Unit, onBuilt: (String) -> Unit) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     var template by remember { mutableStateOf("CARTON-S") }
     var location by remember { mutableStateOf("SILVER") }
     var bin by remember { mutableStateOf("S-1-01") }
     var busy by remember { mutableStateOf(false) }
     var err by remember { mutableStateOf("") }
+    // PDF LP §5: Template alanı serbest text idi — operatör "CARTON-S"
+    // yerine "CARTONS" yazıp sessizce yanlış kayıt yaratıyordu. Dropdown
+    // ile mevcut template'lerden seçtirilir.
+    var templates by remember { mutableStateOf<List<String>>(emptyList()) }
+    LaunchedEffect(Unit) {
+        val r = BcApi.get(context, "licensePlateTemplates?\$top=50&\$select=code,description")
+        if (r.ok) templates = BcApi.parseValueArray(r.body).map { it.optString("code") }.filter { it.isNotBlank() }
+    }
+    var templateExpanded by remember { mutableStateOf(false) }
 
-    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState) {
-        Column(Modifier.fillMaxWidth().padding(20.dp)) {
-            Text("Yeni License Plate Build", fontWeight = FontWeight.Bold, fontSize = 18.sp)
-            Spacer(Modifier.height(12.dp))
-            OutlinedTextField(template, { template = it }, label = { Text("Template Code") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-            Spacer(Modifier.height(8.dp))
-            ScanField("Location", location, { location = it }, modifier = Modifier.fillMaxWidth())
-            Spacer(Modifier.height(8.dp))
-            ScanField("Bin", bin, { bin = it }, modifier = Modifier.fillMaxWidth())
-            if (err.isNotBlank()) { Spacer(Modifier.height(8.dp)); StatusText(err) }
-            Spacer(Modifier.height(16.dp))
-            Button(
-                enabled = !busy && template.isNotBlank(),
-                modifier = Modifier.fillMaxWidth().height(50.dp),
-                onClick = {
-                    scope.launch {
-                        busy = true; err = ""
-                        val body = JSONObject().apply {
-                            put("templateCode", template.trim())
-                            put("locationCode", location.trim())
-                            put("binCode", bin.trim())
-                        }.toString()
-                        val r = BcApi.post(context, "licensePlates", body)
-                        busy = false
-                        if (r.ok) {
-                            val no = JSONObject(r.body).optString("no")
-                            onBuilt(no)
-                        } else err = "HATA: ${BcApi.errorMessage(r.body)}"
+    com.dynops.bcwms.ui.SheetScaffold(onDismiss = onDismiss, contentPadding = androidx.compose.foundation.layout.PaddingValues(20.dp)) {
+        Text("Yeni License Plate Build", fontWeight = FontWeight.Bold, fontSize = 18.sp)
+        Spacer(Modifier.height(12.dp))
+        ExposedDropdownMenuBox(expanded = templateExpanded, onExpandedChange = { templateExpanded = !templateExpanded }) {
+            OutlinedTextField(
+                value = template,
+                onValueChange = { template = it },
+                readOnly = templates.isNotEmpty(),
+                label = { Text("Template Code") },
+                trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = templateExpanded) },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth().menuAnchor(),
+            )
+            if (templates.isNotEmpty()) {
+                ExposedDropdownMenu(expanded = templateExpanded, onDismissRequest = { templateExpanded = false }) {
+                    templates.forEach { code ->
+                        DropdownMenuItem(text = { Text(code) }, onClick = { template = code; templateExpanded = false })
                     }
                 }
-            ) { Text(if (busy) "Oluşturuluyor..." else "Build") }
-            Spacer(Modifier.height(24.dp))
+            }
         }
+        Spacer(Modifier.height(8.dp))
+        ScanField("Location", location, { location = it }, modifier = Modifier.fillMaxWidth())
+        Spacer(Modifier.height(8.dp))
+        ScanField("Bin", bin, { bin = it }, modifier = Modifier.fillMaxWidth())
+        if (err.isNotBlank()) { Spacer(Modifier.height(8.dp)); StatusText(err) }
+        Spacer(Modifier.height(16.dp))
+        Button(
+            enabled = !busy && template.isNotBlank(),
+            modifier = Modifier.fillMaxWidth().height(50.dp),
+            onClick = {
+                scope.launch {
+                    busy = true; err = ""
+                    val body = JSONObject().apply {
+                        put("templateCode", template.trim())
+                        put("locationCode", location.trim())
+                        put("binCode", bin.trim())
+                    }.toString()
+                    val r = BcApi.post(context, "licensePlates", body)
+                    busy = false
+                    if (r.ok) {
+                        val no = JSONObject(r.body).optString("no")
+                        onBuilt(no)
+                    } else err = "HATA: ${BcApi.errorMessage(r.body)}"
+                }
+            }
+        ) { Text(if (busy) "Oluşturuluyor..." else "Build") }
+        Spacer(Modifier.height(24.dp))
     }
 }
 
@@ -233,7 +256,21 @@ private fun LpDocument(lpNo: String, onBack: () -> Unit) {
             OutlinedButton(onClick = { showTransfer = true }, enabled = !busy, modifier = Modifier.weight(1f)) { Text("Transfer") }
         }
         BottomActionBar {
-            OutlinedButton(onClick = { action("printLabel", """{"printerId":"","copies":1}""", "Etiket yazdırma kuyruğa alındı") }, enabled = !busy, modifier = Modifier.weight(1f)) { Text("🖨 Print") }
+            OutlinedButton(
+                onClick = {
+                    // Use the default printer registered in the Printers screen
+                    // (per-device SharedPreferences). Empty printerId would
+                    // make BC PrintDispatcher default to BCNative PDF.
+                    val defaultPrinter = getDefaultPrinter(context)
+                    val payload = JSONObject().apply {
+                        put("printerId", defaultPrinter)
+                        put("copies", 1)
+                    }.toString()
+                    action("printLabel", payload, if (defaultPrinter.isBlank()) "Etiket BCNative'e gönderildi (default printer ayarlanmadı)" else "Etiket $defaultPrinter yazıcısına gönderildi")
+                },
+                enabled = !busy,
+                modifier = Modifier.weight(1f),
+            ) { Text("🖨 Print") }
             OutlinedButton(onClick = { showPartial = true }, enabled = !busy, modifier = Modifier.weight(1f)) { Text("Partial") }
             OutlinedButton(onClick = { action("unbuild", "{}", "LP Unbuild") }, enabled = !busy, modifier = Modifier.weight(1f)) { Text("Unbuild") }
         }
@@ -286,64 +323,55 @@ private fun LpDocument(lpNo: String, onBack: () -> Unit) {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun AddLineScanSheet(onDismiss: () -> Unit, onItem: (String) -> Unit) {
-    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     var item by remember { mutableStateOf("") }
-    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState) {
-        Column(Modifier.fillMaxWidth().padding(20.dp)) {
-            Text("Item Tara / Gir", fontWeight = FontWeight.Bold, fontSize = 18.sp)
-            Spacer(Modifier.height(12.dp))
-            ScanField("Item No", item, { item = it }, modifier = Modifier.fillMaxWidth(), onScanned = { raw ->
-                item = BarcodeIntentResolver.resolve(raw).itemNo ?: raw
-            })
-            Spacer(Modifier.height(16.dp))
-            Button(enabled = item.isNotBlank(), modifier = Modifier.fillMaxWidth(), onClick = { onItem(item.trim()) }) { Text("Devam → Miktar") }
-            Spacer(Modifier.height(24.dp))
-        }
+    com.dynops.bcwms.ui.SheetScaffold(onDismiss = onDismiss, contentPadding = androidx.compose.foundation.layout.PaddingValues(20.dp)) {
+        Text("Item Tara / Gir", fontWeight = FontWeight.Bold, fontSize = 18.sp)
+        Spacer(Modifier.height(12.dp))
+        ScanField("Item No", item, { item = it }, modifier = Modifier.fillMaxWidth(), onScanned = { raw ->
+            item = BarcodeIntentResolver.resolve(raw).itemNo ?: raw
+        })
+        Spacer(Modifier.height(16.dp))
+        Button(enabled = item.isNotBlank(), modifier = Modifier.fillMaxWidth(), onClick = { onItem(item.trim()) }) { Text("Devam → Miktar") }
+        Spacer(Modifier.height(24.dp))
     }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun TransferSheet(onDismiss: () -> Unit, onConfirm: (String) -> Unit) {
-    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     var target by remember { mutableStateOf("") }
-    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState) {
-        Column(Modifier.fillMaxWidth().padding(20.dp)) {
-            Text("LP Transfer", fontWeight = FontWeight.Bold, fontSize = 18.sp)
-            Text("İçeriği hedef LP'ye taşı (boş = yeni LP).", fontSize = 12.sp, color = Color.Gray)
-            Spacer(Modifier.height(12.dp))
-            ScanField("Hedef LP No", target, { target = it }, modifier = Modifier.fillMaxWidth())
-            Spacer(Modifier.height(16.dp))
-            Button(modifier = Modifier.fillMaxWidth(), onClick = { onConfirm(target.trim()) }) { Text("Transfer Et") }
-            Spacer(Modifier.height(24.dp))
-        }
+    com.dynops.bcwms.ui.SheetScaffold(onDismiss = onDismiss, contentPadding = androidx.compose.foundation.layout.PaddingValues(20.dp)) {
+        Text("LP Transfer", fontWeight = FontWeight.Bold, fontSize = 18.sp)
+        Text("İçeriği hedef LP'ye taşı (boş = yeni LP).", fontSize = 12.sp, color = Color.Gray)
+        Spacer(Modifier.height(12.dp))
+        ScanField("Hedef LP No", target, { target = it }, modifier = Modifier.fillMaxWidth())
+        Spacer(Modifier.height(16.dp))
+        Button(modifier = Modifier.fillMaxWidth(), onClick = { onConfirm(target.trim()) }) { Text("Transfer Et") }
+        Spacer(Modifier.height(24.dp))
     }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun PartialUseSheet(onDismiss: () -> Unit, onConfirm: (mode: String, qty: Double, lineNo: Int) -> Unit) {
-    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val modes = listOf("consume", "ship", "move", "produce")
     var mode by remember { mutableStateOf(modes.first()) }
     var qty by remember { mutableStateOf("1") }
     var lineNo by remember { mutableStateOf("10000") }
-    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState) {
-        Column(Modifier.fillMaxWidth().padding(20.dp)) {
-            Text("Partial Use", fontWeight = FontWeight.Bold, fontSize = 18.sp)
-            Spacer(Modifier.height(8.dp))
-            Text("Mod", fontSize = 12.sp, color = Color.Gray)
-            FlowRowChips(options = modes, selected = mode, onSelect = { mode = it })
-            Spacer(Modifier.height(8.dp))
-            OutlinedTextField(qty, { qty = it.filter { c -> c.isDigit() || c == '.' } }, label = { Text("Miktar") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-            Spacer(Modifier.height(8.dp))
-            OutlinedTextField(lineNo, { lineNo = it.filter { c -> c.isDigit() } }, label = { Text("Satır No") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-            Spacer(Modifier.height(16.dp))
-            Button(modifier = Modifier.fillMaxWidth(), onClick = {
-                onConfirm(mode, qty.toDoubleOrNull() ?: 0.0, lineNo.toIntOrNull() ?: 0)
-            }) { Text("Uygula") }
-            Spacer(Modifier.height(24.dp))
-        }
+    com.dynops.bcwms.ui.SheetScaffold(onDismiss = onDismiss, contentPadding = androidx.compose.foundation.layout.PaddingValues(20.dp)) {
+        Text("Partial Use", fontWeight = FontWeight.Bold, fontSize = 18.sp)
+        Spacer(Modifier.height(8.dp))
+        Text("Mod", fontSize = 12.sp, color = Color.Gray)
+        FlowRowChips(options = modes, selected = mode, onSelect = { mode = it })
+        Spacer(Modifier.height(8.dp))
+        OutlinedTextField(qty, { qty = it.filter { c -> c.isDigit() || c == '.' } }, label = { Text("Miktar") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+        Spacer(Modifier.height(8.dp))
+        OutlinedTextField(lineNo, { lineNo = it.filter { c -> c.isDigit() } }, label = { Text("Satır No") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+        Spacer(Modifier.height(16.dp))
+        Button(modifier = Modifier.fillMaxWidth(), onClick = {
+            onConfirm(mode, qty.toDoubleOrNull() ?: 0.0, lineNo.toIntOrNull() ?: 0)
+        }) { Text("Uygula") }
+        Spacer(Modifier.height(24.dp))
     }
 }
 

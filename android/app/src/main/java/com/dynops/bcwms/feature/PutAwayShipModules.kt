@@ -138,8 +138,16 @@ private fun PutAwayDocument(no: String, onBack: () -> Unit) {
             }
         }
         BottomActionBar {
-            Button(onClick = { register() }, enabled = !busy, modifier = Modifier.fillMaxWidth()) {
-                Text("✅ Register Put-Away", fontWeight = FontWeight.Bold)
+            val canRegister = com.dynops.bcwms.lib.ActionGuards.hasQuantity(lines)
+            Button(
+                onClick = { register() },
+                enabled = !busy && canRegister,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text(
+                    if (canRegister) "✅ Register Put-Away" else "Önce satırlara miktar girin",
+                    fontWeight = FontWeight.Bold,
+                )
             }
         }
     }
@@ -173,12 +181,10 @@ private fun PutAwayDocument(no: String, onBack: () -> Unit) {
 private fun PutAwayBinSheet(line: JSONObject, locationCode: String, onDismiss: () -> Unit, onConfirm: (bin: String, qty: Double) -> Unit) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     var bin by remember { mutableStateOf(line.optString("binCode")) }
     var qty by remember { mutableStateOf(line.optDouble("qtyToHandle").let { if (it == it.toLong().toDouble()) it.toLong().toString() else it.toString() }) }
     var hint by remember { mutableStateOf("") }
-    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState) {
-        Column(Modifier.fillMaxWidth().padding(20.dp)) {
+    com.dynops.bcwms.ui.SheetScaffold(onDismiss = onDismiss, contentPadding = androidx.compose.foundation.layout.PaddingValues(20.dp)) {
             Text("Hedef Bin", fontWeight = FontWeight.Bold, fontSize = 18.sp)
             Text("Item: ${line.optString("itemNo")}", fontSize = 12.sp, color = Color.Gray)
             Spacer(Modifier.height(12.dp))
@@ -211,7 +217,6 @@ private fun PutAwayBinSheet(line: JSONObject, locationCode: String, onDismiss: (
                 onConfirm(bin.trim(), qty.toDoubleOrNull() ?: 0.0)
             }) { Text("Onayla") }
             Spacer(Modifier.height(24.dp))
-        }
     }
 }
 
@@ -359,8 +364,14 @@ private fun ShipDocument(no: String, onBack: () -> Unit) {
                         if (r.ok) reload()
                     }
                 },
-                enabled = !busy, modifier = Modifier.fillMaxWidth()
-            ) { Text("✅ Post Shipment", fontWeight = FontWeight.Bold) }
+                enabled = !busy && com.dynops.bcwms.lib.ActionGuards.hasQuantity(lines),
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text(
+                    if (com.dynops.bcwms.lib.ActionGuards.hasQuantity(lines)) "✅ Post Shipment" else "Önce satırlara miktar girin",
+                    fontWeight = FontWeight.Bold,
+                )
+            }
         }
     }
 
@@ -564,8 +575,18 @@ private fun ShipSalesOrder(no: String, onBack: () -> Unit) {
                         if (r.ok) reload()
                     }
                 },
-                enabled = !busy && directAllowed, modifier = Modifier.fillMaxWidth()
-            ) { Text(if (invoiceToo) "✅ Post Ship & Invoice" else "✅ Post Ship", fontWeight = FontWeight.Bold) }
+                enabled = !busy && directAllowed && com.dynops.bcwms.lib.ActionGuards.hasQuantity(lines, field = "qtyToShip"),
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text(
+                    when {
+                        !directAllowed -> "Direkt Post Ship yapılamaz"
+                        !com.dynops.bcwms.lib.ActionGuards.hasQuantity(lines, field = "qtyToShip") -> "Önce satırlara miktar girin"
+                        else -> if (invoiceToo) "✅ Post Ship & Invoice" else "✅ Post Ship"
+                    },
+                    fontWeight = FontWeight.Bold,
+                )
+            }
         }
     }
 

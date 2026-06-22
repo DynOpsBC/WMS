@@ -119,35 +119,32 @@ private fun ConsumptionTab() {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun ConsumeSheet(line: JSONObject, onDismiss: () -> Unit, onConfirm: (qty: Double, lpNo: String, lotNo: String, serialNo: String, binCode: String) -> Unit) {
-    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     var qty by remember { mutableStateOf(line.optDouble("remainingQuantity").takeIf { it > 0 }?.let { fmt(it) } ?: "1") }
     var lp by remember { mutableStateOf("") }
     var lot by remember { mutableStateOf("") }
     var serial by remember { mutableStateOf("") }
     var bin by remember { mutableStateOf(line.optString("binCode")) }
-    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState) {
-        Column(Modifier.fillMaxWidth().padding(20.dp)) {
-            Text("Sarfiyat — ${line.optString("itemNo")}", fontWeight = FontWeight.Bold, fontSize = 18.sp)
-            Spacer(Modifier.height(12.dp))
-            ScanField("Bileşen / LP", lp, { lp = it }, modifier = Modifier.fillMaxWidth(), onScanned = {
-                val r = BarcodeIntentResolver.resolve(it)
-                lp = r.value
-                if (r.lotNo != null) lot = r.lotNo
-            })
-            Spacer(Modifier.height(8.dp))
-            OutlinedTextField(qty, { qty = it.filter { c -> c.isDigit() || c == '.' } }, label = { Text("Miktar") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-            Spacer(Modifier.height(8.dp))
-            OutlinedTextField(bin, { bin = it }, label = { Text("Bin") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-            Spacer(Modifier.height(8.dp))
-            OutlinedTextField(lot, { lot = it }, label = { Text("Lot No (opsiyonel)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-            Spacer(Modifier.height(8.dp))
-            OutlinedTextField(serial, { serial = it }, label = { Text("Seri No (opsiyonel)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-            Spacer(Modifier.height(16.dp))
-            Button(modifier = Modifier.fillMaxWidth(), enabled = (qty.toDoubleOrNull() ?: 0.0) > 0, onClick = {
-                onConfirm(qty.toDoubleOrNull() ?: 0.0, lp.trim(), lot.trim(), serial.trim(), bin.trim())
-            }) { Text("Sarfiyatı Onayla") }
-            Spacer(Modifier.height(24.dp))
-        }
+    com.dynops.bcwms.ui.SheetScaffold(onDismiss = onDismiss, contentPadding = androidx.compose.foundation.layout.PaddingValues(20.dp)) {
+        Text("Sarfiyat — ${line.optString("itemNo")}", fontWeight = FontWeight.Bold, fontSize = 18.sp)
+        Spacer(Modifier.height(12.dp))
+        ScanField("Bileşen / LP", lp, { lp = it }, modifier = Modifier.fillMaxWidth(), onScanned = {
+            val r = BarcodeIntentResolver.resolve(it)
+            lp = r.value
+            if (r.lotNo != null) lot = r.lotNo
+        })
+        Spacer(Modifier.height(8.dp))
+        OutlinedTextField(qty, { qty = it.filter { c -> c.isDigit() || c == '.' } }, label = { Text("Miktar") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+        Spacer(Modifier.height(8.dp))
+        OutlinedTextField(bin, { bin = it }, label = { Text("Bin") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+        Spacer(Modifier.height(8.dp))
+        OutlinedTextField(lot, { lot = it }, label = { Text("Lot No (opsiyonel)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+        Spacer(Modifier.height(8.dp))
+        OutlinedTextField(serial, { serial = it }, label = { Text("Seri No (opsiyonel)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+        Spacer(Modifier.height(16.dp))
+        Button(modifier = Modifier.fillMaxWidth(), enabled = (qty.toDoubleOrNull() ?: 0.0) > 0, onClick = {
+            onConfirm(qty.toDoubleOrNull() ?: 0.0, lp.trim(), lot.trim(), serial.trim(), bin.trim())
+        }) { Text("Sarfiyatı Onayla") }
+        Spacer(Modifier.height(24.dp))
     }
 }
 
@@ -231,31 +228,28 @@ private fun OutputTab() {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun OutputSheet(line: JSONObject, onDismiss: () -> Unit, onConfirm: (outQty: Double, scrapQty: Double, runtime: Double, newLpTemplate: String, binCode: String) -> Unit) {
-    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     var outQty by remember { mutableStateOf("1") }
     var scrapQty by remember { mutableStateOf("0") }
     var runtime by remember { mutableStateOf(fmt(line.optDouble("runTime"))) }
     var newLp by remember { mutableStateOf("") }
     var bin by remember { mutableStateOf("") }
-    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState) {
-        Column(Modifier.fillMaxWidth().padding(20.dp)) {
-            Text("Output Bildir — ${firstValue(line, "operationNo")}", fontWeight = FontWeight.Bold, fontSize = 18.sp)
-            Spacer(Modifier.height(12.dp))
-            OutlinedTextField(outQty, { outQty = it.filter { c -> c.isDigit() || c == '.' } }, label = { Text("Output Miktarı") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-            Spacer(Modifier.height(8.dp))
-            OutlinedTextField(scrapQty, { scrapQty = it.filter { c -> c.isDigit() || c == '.' } }, label = { Text("Fire (Scrap)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-            Spacer(Modifier.height(8.dp))
-            OutlinedTextField(runtime, { runtime = it.filter { c -> c.isDigit() || c == '.' } }, label = { Text("Çalışma Süresi (dk)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-            Spacer(Modifier.height(8.dp))
-            OutlinedTextField(newLp, { newLp = it }, label = { Text("Yeni LP Şablonu (opsiyonel → output LP)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-            Spacer(Modifier.height(8.dp))
-            OutlinedTextField(bin, { bin = it }, label = { Text("Output Bin (opsiyonel)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-            Spacer(Modifier.height(16.dp))
-            Button(modifier = Modifier.fillMaxWidth(), enabled = (outQty.toDoubleOrNull() ?: 0.0) > 0, onClick = {
-                onConfirm(outQty.toDoubleOrNull() ?: 0.0, scrapQty.toDoubleOrNull() ?: 0.0, runtime.toDoubleOrNull() ?: 0.0, newLp.trim(), bin.trim())
-            }) { Text("Output'u Bildir") }
-            Spacer(Modifier.height(24.dp))
-        }
+    com.dynops.bcwms.ui.SheetScaffold(onDismiss = onDismiss, contentPadding = androidx.compose.foundation.layout.PaddingValues(20.dp)) {
+        Text("Output Bildir — ${firstValue(line, "operationNo")}", fontWeight = FontWeight.Bold, fontSize = 18.sp)
+        Spacer(Modifier.height(12.dp))
+        OutlinedTextField(outQty, { outQty = it.filter { c -> c.isDigit() || c == '.' } }, label = { Text("Output Miktarı") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+        Spacer(Modifier.height(8.dp))
+        OutlinedTextField(scrapQty, { scrapQty = it.filter { c -> c.isDigit() || c == '.' } }, label = { Text("Fire (Scrap)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+        Spacer(Modifier.height(8.dp))
+        OutlinedTextField(runtime, { runtime = it.filter { c -> c.isDigit() || c == '.' } }, label = { Text("Çalışma Süresi (dk)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+        Spacer(Modifier.height(8.dp))
+        OutlinedTextField(newLp, { newLp = it }, label = { Text("Yeni LP Şablonu (opsiyonel → output LP)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+        Spacer(Modifier.height(8.dp))
+        OutlinedTextField(bin, { bin = it }, label = { Text("Output Bin (opsiyonel)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+        Spacer(Modifier.height(16.dp))
+        Button(modifier = Modifier.fillMaxWidth(), enabled = (outQty.toDoubleOrNull() ?: 0.0) > 0, onClick = {
+            onConfirm(outQty.toDoubleOrNull() ?: 0.0, scrapQty.toDoubleOrNull() ?: 0.0, runtime.toDoubleOrNull() ?: 0.0, newLp.trim(), bin.trim())
+        }) { Text("Output'u Bildir") }
+        Spacer(Modifier.height(24.dp))
     }
 }
 
@@ -367,8 +361,14 @@ private fun AssemblyDocument(no: String, onBack: () -> Unit) {
                         if (r.ok) reload()
                     }
                 },
-                enabled = !busy, modifier = Modifier.fillMaxWidth()
-            ) { Text("✅ Post Assembly", fontWeight = FontWeight.Bold) }
+                enabled = !busy && com.dynops.bcwms.lib.ActionGuards.hasQuantity(lines, field = "qtyToAssemble"),
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text(
+                    if (com.dynops.bcwms.lib.ActionGuards.hasQuantity(lines, field = "qtyToAssemble")) "✅ Post Assembly" else "Önce satırlara miktar girin",
+                    fontWeight = FontWeight.Bold,
+                )
+            }
         }
     }
 }

@@ -93,6 +93,10 @@ private fun PickDocument(no: String, onBack: () -> Unit) {
     var shipLp by remember { mutableStateOf<String?>(null) }
     var showShort by remember { mutableStateOf(false) }
     var shortLine by remember { mutableStateOf<JSONObject?>(null) }
+    // PDF Picking §7: scan-and-verify state. Operatör "Tara & Tamamla"ya
+    // bastığında scanLine doluyor; ScanVerifySheet açılıyor; barkod
+    // okununca itemNo karşılaştırılıp ya tamamlanıyor ya hata gösteriliyor.
+    var scanLine by remember { mutableStateOf<JSONObject?>(null) }
 
     fun reload() {
         scope.launch {
@@ -165,6 +169,7 @@ private fun PickDocument(no: String, onBack: () -> Unit) {
                             }
                             Text("Bin: ${ln.optString("binCode")} · İşlenecek: ${ln.optDouble("qtyToHandle")} / ${ln.optDouble("quantity")}", fontSize = 12.sp, color = Color.Gray)
                             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 6.dp)) {
+                                TextButton(onClick = { scanLine = ln }) { Text("📷 Tara & Tamamla") }
                                 TextButton(onClick = { updateLine(ln, ln.optDouble("quantity")) }) { Text("Tamamla") }
                                 TextButton(onClick = { shortLine = ln; showShort = true }) { Text("Short") }
                             }
@@ -193,8 +198,16 @@ private fun PickDocument(no: String, onBack: () -> Unit) {
             OutlinedButton(onClick = { action("assignToMe", "{}", "Bana atandı") }, enabled = !busy, modifier = Modifier.weight(1f)) { Text("Bana Ata") }
         }
         BottomActionBar {
-            Button(onClick = { action("register", "{}", "Toplama kaydedildi") }, enabled = !busy, modifier = Modifier.fillMaxWidth()) {
-                Text("✅ Register Pick", fontWeight = FontWeight.Bold)
+            val canRegister = com.dynops.bcwms.lib.ActionGuards.hasQuantity(lines)
+            Button(
+                onClick = { action("register", "{}", "Toplama kaydedildi") },
+                enabled = !busy && canRegister,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text(
+                    if (canRegister) "✅ Register Pick" else "Önce satırlara miktar girin",
+                    fontWeight = FontWeight.Bold,
+                )
             }
         }
     }
@@ -207,6 +220,76 @@ private fun PickDocument(no: String, onBack: () -> Unit) {
                 put("lineNo", ln.optInt("lineNo")); put("qty", qty); put("reasonCode", reason)
             }.toString(), "Short pick işlendi")
         })
+    }
+
+    val scanTarget = scanLine
+    if (scanTarget != null) {
+        ScanVerifySheet(
+            expectedItemNo = scanTarget.optString("itemNo"),
+            description = scanTarget.optString("description"),
+            onDismiss = { scanLine = null },
+            onVerified = {
+                scanLine = null
+                updateLine(scanTarget, scanTarget.optDouble("quantity"))
+            },
+            onMismatch = {
+                status = "❌ Tarama eşleşmedi: beklenen ${scanTarget.optString("itemNo")}, okunan $it"
+            },
+        )
+    }
+}
+
+/**
+ * Scan a barcode and confirm it matches the expected item on a pick line.
+ * Prevents "wrong item picked" errors that the PDF flagged (§7). Operatör
+ * yanlış raftan okutursa updateLine çağrılmaz ve ekrana belirgin hata yazılır.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun ScanVerifySheet(
+    expectedItemNo: String,
+    description: String,
+    onDismiss: () -> Unit,
+    onVerified: () -> Unit,
+    onMismatch: (String) -> Unit,
+) {
+    var raw by remember { mutableStateOf("") }
+    var hint by remember { mutableStateOf("Item barkodunu okutun. Beklenen: $expectedItemNo") }
+    com.dynops.bcwms.ui.SheetScaffold(onDismiss = onDismiss, contentPadding = androidx.compose.foundation.layout.PaddingValues(20.dp)) {
+        Text("Tara & Doğrula", fontWeight = FontWeight.Bold, fontSize = 18.sp)
+        Text("Beklenen: $expectedItemNo · $description", fontSize = 12.sp, color = Color.Gray)
+        Spacer(Modifier.height(12.dp))
+        com.dynops.bcwms.scanner.ScanField(
+            "Item / barkod", raw, { raw = it },
+            modifier = Modifier.fillMaxWidth(),
+            onScanned = { scanned ->
+                val resolved = com.dynops.bcwms.scanner.BarcodeIntentResolver.resolve(scanned)
+                val readItem = resolved.itemNo ?: scanned
+                raw = readItem
+                if (readItem.equals(expectedItemNo, ignoreCase = true)) {
+                    hint = "✅ Eşleşti — onaylanıyor..."
+                    onVerified()
+                } else {
+                    hint = "❌ Eşleşmedi: $readItem"
+                    onMismatch(readItem)
+                }
+            },
+        )
+        Spacer(Modifier.height(8.dp))
+        Text(hint, fontSize = 12.sp, color = Color.Gray)
+        Spacer(Modifier.height(16.dp))
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            OutlinedButton(onClick = onDismiss, modifier = Modifier.weight(1f)) { Text("Vazgeç") }
+            Button(
+                enabled = raw.isNotBlank(),
+                onClick = {
+                    if (raw.trim().equals(expectedItemNo, ignoreCase = true)) onVerified()
+                    else { hint = "❌ Eşleşmedi: $raw"; onMismatch(raw.trim()) }
+                },
+                modifier = Modifier.weight(1f),
+            ) { Text("Manuel Onayla") }
+        }
+        Spacer(Modifier.height(24.dp))
     }
 }
 
@@ -225,24 +308,21 @@ private fun ActionBadge(action: String) {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun ShortPickSheet(line: JSONObject?, onDismiss: () -> Unit, onConfirm: (qty: Double, reason: String) -> Unit) {
-    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     var qty by remember { mutableStateOf((line?.optDouble("qtyToHandle") ?: 0.0).let { if (it == it.toLong().toDouble()) it.toLong().toString() else it.toString() }) }
     val reasons = listOf("DAMAGED", "NOTFOUND", "SHORTAGE", "EXPIRED")
     var reason by remember { mutableStateOf(reasons.first()) }
-    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState) {
-        Column(Modifier.fillMaxWidth().padding(20.dp)) {
-            Text("Short Pick", fontWeight = FontWeight.Bold, fontSize = 18.sp)
-            Text("Item: ${line?.optString("itemNo") ?: "-"}", fontSize = 12.sp, color = Color.Gray)
-            Spacer(Modifier.height(12.dp))
-            OutlinedTextField(qty, { qty = it.filter { c -> c.isDigit() || c == '.' } }, label = { Text("Eksik Miktar") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-            Spacer(Modifier.height(10.dp))
-            Text("Sebep", fontSize = 12.sp, color = Color.Gray)
-            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                reasons.forEach { FilterChip(selected = it == reason, onClick = { reason = it }, label = { Text(it) }) }
-            }
-            Spacer(Modifier.height(16.dp))
-            Button(modifier = Modifier.fillMaxWidth(), onClick = { onConfirm(qty.toDoubleOrNull() ?: 0.0, reason) }) { Text("Short İşle") }
-            Spacer(Modifier.height(24.dp))
+    com.dynops.bcwms.ui.SheetScaffold(onDismiss = onDismiss, contentPadding = androidx.compose.foundation.layout.PaddingValues(20.dp)) {
+        Text("Short Pick", fontWeight = FontWeight.Bold, fontSize = 18.sp)
+        Text("Item: ${line?.optString("itemNo") ?: "-"}", fontSize = 12.sp, color = Color.Gray)
+        Spacer(Modifier.height(12.dp))
+        OutlinedTextField(qty, { qty = it.filter { c -> c.isDigit() || c == '.' } }, label = { Text("Eksik Miktar") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+        Spacer(Modifier.height(10.dp))
+        Text("Sebep", fontSize = 12.sp, color = Color.Gray)
+        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            reasons.forEach { FilterChip(selected = it == reason, onClick = { reason = it }, label = { Text(it) }) }
         }
+        Spacer(Modifier.height(16.dp))
+        Button(modifier = Modifier.fillMaxWidth(), onClick = { onConfirm(qty.toDoubleOrNull() ?: 0.0, reason) }) { Text("Short İşle") }
+        Spacer(Modifier.height(24.dp))
     }
 }

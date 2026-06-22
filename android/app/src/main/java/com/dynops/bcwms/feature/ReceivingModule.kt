@@ -187,10 +187,17 @@ private fun ReceiveDocument(no: String, onBack: () -> Unit) {
             }
         }
         BottomActionBar {
+            val canPost = com.dynops.bcwms.lib.ActionGuards.hasQuantity(lines, field = "qtyToReceive")
             Button(
                 onClick = { action("post", """{"print":false,"invoice":false}""", "Mal kabul kaydedildi") },
-                enabled = !busy, modifier = Modifier.fillMaxWidth()
-            ) { Text("✅ Post Receipt", fontWeight = FontWeight.Bold) }
+                enabled = !busy && canPost,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text(
+                    if (canPost) "✅ Post Receipt" else "Önce satırlara miktar girin",
+                    fontWeight = FontWeight.Bold,
+                )
+            }
         }
     }
 
@@ -453,25 +460,22 @@ fun ScanItemSheet(
     lines: List<JSONObject> = emptyList(),
     matchKey: String = "itemNo",
 ) {
-    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     var item by remember { mutableStateOf("") }
     var hint by remember { mutableStateOf("") }
-    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState) {
-        Column(Modifier.fillMaxWidth().padding(20.dp)) {
-            Text(title, fontWeight = FontWeight.Bold, fontSize = 18.sp)
-            Spacer(Modifier.height(12.dp))
-            ScanField("Item No", item, { item = it }, modifier = Modifier.fillMaxWidth(), onScanned = { raw ->
-                val resolved = BarcodeIntentResolver.resolve(raw)
-                item = resolved.itemNo ?: raw
-                hint = "Tarandı: ${resolved.kind} → ${resolved.value}"
-            })
-            if (hint.isNotBlank()) { Spacer(Modifier.height(6.dp)); Text(hint, fontSize = 12.sp, color = Color.Gray) }
-            Spacer(Modifier.height(16.dp))
-            Button(enabled = item.isNotBlank(), modifier = Modifier.fillMaxWidth(), onClick = {
-                val match = lines.firstOrNull { it.optString(matchKey).equals(item.trim(), ignoreCase = true) }
-                onItem(item.trim(), match)
-            }) { Text("Devam") }
-            Spacer(Modifier.height(24.dp))
-        }
+    com.dynops.bcwms.ui.SheetScaffold(onDismiss = onDismiss, contentPadding = androidx.compose.foundation.layout.PaddingValues(20.dp)) {
+        Text(title, fontWeight = FontWeight.Bold, fontSize = 18.sp)
+        Spacer(Modifier.height(12.dp))
+        ScanField("Item No", item, { item = it }, modifier = Modifier.fillMaxWidth(), onScanned = { raw ->
+            val resolved = BarcodeIntentResolver.resolve(raw)
+            item = resolved.itemNo ?: raw
+            hint = "Tarandı: ${resolved.kind} → ${resolved.value}"
+        })
+        if (hint.isNotBlank()) { Spacer(Modifier.height(6.dp)); Text(hint, fontSize = 12.sp, color = Color.Gray) }
+        Spacer(Modifier.height(16.dp))
+        Button(enabled = item.isNotBlank(), modifier = Modifier.fillMaxWidth(), onClick = {
+            val match = lines.firstOrNull { it.optString(matchKey).equals(item.trim(), ignoreCase = true) }
+            onItem(item.trim(), match)
+        }) { Text("Devam") }
+        Spacer(Modifier.height(24.dp))
     }
 }

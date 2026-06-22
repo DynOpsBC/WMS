@@ -23,6 +23,35 @@ page 72086 "DOPSWHS Item API"
                 field(blocked; Rec.Blocked) { Caption = 'blocked'; }
                 field(defaultLpTemplateCode; Rec."DOPSWHS Default LP Template") { Caption = 'defaultLpTemplateCode'; }
                 field(defaultPrintRuleCode; Rec."DOPSWHS Default Print Rule") { Caption = 'defaultPrintRuleCode'; }
+                // PDF feedback (Item Inquiry section 1): clients reported
+                // "stok yok" because Inventory FlowField was missing.
+                // Exposes the standard Inventory + on-order quantities so
+                // mobile/web can render a real stock card.
+                field(inventory; Rec.Inventory)
+                {
+                    Caption = 'inventory';
+                    Editable = false;
+                }
+                field(quantityOnPurchOrder; Rec."Qty. on Purch. Order")
+                {
+                    Caption = 'quantityOnPurchOrder';
+                    Editable = false;
+                }
+                field(quantityOnSalesOrder; Rec."Qty. on Sales Order")
+                {
+                    Caption = 'quantityOnSalesOrder';
+                    Editable = false;
+                }
+                field(quantityOnProdOrder; Rec."Qty. on Prod. Order")
+                {
+                    Caption = 'quantityOnProdOrder';
+                    Editable = false;
+                }
+                field(reservedQtyOnInventory; Rec."Reserved Qty. on Inventory")
+                {
+                    Caption = 'reservedQtyOnInventory';
+                    Editable = false;
+                }
             }
         }
     }

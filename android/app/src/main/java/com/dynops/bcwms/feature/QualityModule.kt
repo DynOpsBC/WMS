@@ -119,40 +119,37 @@ fun QualityModule() {
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 private fun InspectSheet(order: JSONObject, onDismiss: () -> Unit, onResult: (passed: Boolean, reason: String, notes: String, quarantine: String) -> Unit) {
-    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     var notes by remember { mutableStateOf("") }
     var quarantine by remember { mutableStateOf("QUARANTINE") }
     val reasons = listOf("DAMAGED", "WRONGITEM", "EXPIRED", "CONTAMINATED", "SPEC-FAIL")
     var reason by remember { mutableStateOf(reasons.first()) }
-    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState) {
-        Column(Modifier.fillMaxWidth().padding(20.dp)) {
-            Text("Kalite Denetimi — ${order.optString("no")}", fontWeight = FontWeight.Bold, fontSize = 18.sp)
-            Text("${order.optString("itemNo")} · Numune: ${order.optDouble("sampleSize")} / ${order.optDouble("quantity")}", fontSize = 12.sp, color = Color.Gray)
-            Spacer(Modifier.height(12.dp))
-            ScanField("Numune barkod (opsiyonel)", "", {}, modifier = Modifier.fillMaxWidth(), onScanned = { notes = "Tarandı: ${BarcodeIntentResolver.resolve(it).value}" })
-            Spacer(Modifier.height(8.dp))
-            OutlinedTextField(notes, { notes = it }, label = { Text("Notlar") }, modifier = Modifier.fillMaxWidth(), maxLines = 3)
-            Spacer(Modifier.height(12.dp))
-            Text("RED sebebi (fail için)", fontSize = 12.sp, color = Color.Gray)
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                reasons.forEach { FilterChip(selected = it == reason, onClick = { reason = it }, label = { Text(it, fontSize = 11.sp) }) }
-            }
-            Spacer(Modifier.height(8.dp))
-            OutlinedTextField(quarantine, { quarantine = it }, label = { Text("Karantina Bin (red için)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-            Spacer(Modifier.height(16.dp))
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Button(
-                    onClick = { onResult(true, "", notes, "") },
-                    modifier = Modifier.weight(1f),
-                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2E7D32))
-                ) { Text("✅ KABUL", fontWeight = FontWeight.Bold) }
-                Button(
-                    onClick = { onResult(false, reason, notes, quarantine.trim()) },
-                    modifier = Modifier.weight(1f),
-                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFC62828))
-                ) { Text("❌ RED", fontWeight = FontWeight.Bold) }
-            }
-            Spacer(Modifier.height(24.dp))
+    com.dynops.bcwms.ui.SheetScaffold(onDismiss = onDismiss, contentPadding = androidx.compose.foundation.layout.PaddingValues(20.dp)) {
+        Text("Kalite Denetimi — ${order.optString("no")}", fontWeight = FontWeight.Bold, fontSize = 18.sp)
+        Text("${order.optString("itemNo")} · Numune: ${order.optDouble("sampleSize")} / ${order.optDouble("quantity")}", fontSize = 12.sp, color = Color.Gray)
+        Spacer(Modifier.height(12.dp))
+        ScanField("Numune barkod (opsiyonel)", "", {}, modifier = Modifier.fillMaxWidth(), onScanned = { notes = "Tarandı: ${BarcodeIntentResolver.resolve(it).value}" })
+        Spacer(Modifier.height(8.dp))
+        OutlinedTextField(notes, { notes = it }, label = { Text("Notlar") }, modifier = Modifier.fillMaxWidth(), maxLines = 3)
+        Spacer(Modifier.height(12.dp))
+        Text("RED sebebi (fail için)", fontSize = 12.sp, color = Color.Gray)
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            reasons.forEach { FilterChip(selected = it == reason, onClick = { reason = it }, label = { Text(it, fontSize = 11.sp) }) }
         }
+        Spacer(Modifier.height(8.dp))
+        OutlinedTextField(quarantine, { quarantine = it }, label = { Text("Karantina Bin (red için)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+        Spacer(Modifier.height(16.dp))
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Button(
+                onClick = { onResult(true, "", notes, "") },
+                modifier = Modifier.weight(1f),
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2E7D32))
+            ) { Text("✅ KABUL", fontWeight = FontWeight.Bold) }
+            Button(
+                onClick = { onResult(false, reason, notes, quarantine.trim()) },
+                modifier = Modifier.weight(1f),
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFC62828))
+            ) { Text("❌ RED", fontWeight = FontWeight.Bold) }
+        }
+        Spacer(Modifier.height(24.dp))
     }
 }

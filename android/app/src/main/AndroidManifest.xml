@@ -22,7 +22,10 @@
 
     <activity
       android:name=".MainActivity"
-      android:exported="true">
+      android:exported="true"
+      android:launchMode="singleTop">
+      <!-- singleTop = DataWedge intent'i geldiğinde MainActivity yeniden create
+           edilmez, sadece onNewIntent() tetiklenir. Activity state korunur. -->
       <intent-filter>
         <action android:name="android.intent.action.MAIN" />
         <category android:name="android.intent.category.LAUNCHER" />

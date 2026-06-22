@@ -35,7 +35,6 @@ fun QuantityDialogSheet(
     onConfirm: (QuantityResult) -> Unit,
     onDismiss: () -> Unit,
 ) {
-    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     var qtyText by remember { mutableStateOf(formatQty(initialQty)) }
     var uom by remember { mutableStateOf(initialUom) }
     var lot by remember { mutableStateOf(initialLot) }
@@ -44,8 +43,7 @@ fun QuantityDialogSheet(
     fun qty(): Double = qtyText.toDoubleOrNull() ?: 0.0
     fun setQty(v: Double) { qtyText = formatQty(v.coerceAtLeast(0.0)) }
 
-    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState) {
-        Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 8.dp)) {
+    SheetScaffold(onDismiss = onDismiss) {
             Text(title, fontWeight = FontWeight.Bold, fontSize = 18.sp)
             Text("Item: $itemNo", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
             Spacer(Modifier.height(16.dp))
@@ -98,7 +96,6 @@ fun QuantityDialogSheet(
                 ) { Text("Onayla") }
             }
             Spacer(Modifier.height(24.dp))
-        }
     }
 }
 
