@@ -40,7 +40,7 @@ fun LicensePlateModule() {
     fun loadList() {
         scope.launch {
             loading = true; status = "Yükleniyor..."
-            val r = BcApi.getWithStandardFallback(context, "licensePlates?\$top=50&\$select=no,status,locationCode,binCode,templateCode,sscc")
+            val r = BcApi.getWithStandardFallback(context, "licensePlates?\$top=200&\$orderby=no desc&\$select=no,status,locationCode,binCode,templateCode,sscc")
             loading = false
             rows = if (r.ok) BcApi.parseValueArray(r.body) else emptyList()
             status = if (!r.ok) "HATA: LP listesi alınamadı (HTTP ${r.httpCode})"

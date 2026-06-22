@@ -65,7 +65,9 @@ private fun WhseReceiptTab() {
     fun load() {
         scope.launch {
             loading = true; status = "Yükleniyor..."
-            val r = BcApi.getWithStandardFallback(context, "receipts?\$top=30&\$select=no,locationCode,sourceNo,vendorSourceName,dueDate,percentComplete")
+            // PDF Mal Kabul §3: $top=30 + $orderby yok → en yeni belgeler kayıp.
+            // 100'e çıkarıldı, en yeniden sıralandı, ayrı search field aşağıda.
+            val r = BcApi.getWithStandardFallback(context, "receipts?\$top=100&\$orderby=no desc&\$select=no,locationCode,sourceNo,vendorSourceName,dueDate,percentComplete")
             loading = false
             rows = if (r.ok) BcApi.parseValueArray(r.body) else emptyList()
             status = if (!r.ok) "HATA: Mal kabul listesi alınamadı (HTTP ${r.httpCode})"
@@ -251,14 +253,20 @@ private fun PurchaseOrderTab() {
     var status by remember { mutableStateOf("") }
     var loading by remember { mutableStateOf(false) }
     var releasedOnly by remember { mutableStateOf(true) }
+    var search by remember { mutableStateOf("") }
 
     fun load() {
         scope.launch {
             loading = true; status = "Yükleniyor..."
-            val filter = if (releasedOnly) "&\$filter=status eq 'Released'" else ""
+            // PDF §3: belge no arama yoktu. Sabit "Released" filter ile birleşik clause.
+            val clauses = buildList {
+                if (releasedOnly) add("status eq 'Released'")
+                if (search.isNotBlank()) add("startswith(no,'${search.trim().replace("'", "''")}')")
+            }
+            val filter = if (clauses.isEmpty()) "" else "&\$filter=" + clauses.joinToString(" and ")
             val r = BcApi.get(
                 context,
-                "purchaseSources?\$top=30$filter&\$select=no,vendorNo,vendorName,locationCode,expectedReceiptDate,status,lineCount,outstandingQty,percentComplete,requiresWhseReceipt,directReceiveAllowed"
+                "purchaseSources?\$top=100&\$orderby=no desc$filter&\$select=no,vendorNo,vendorName,locationCode,expectedReceiptDate,status,lineCount,outstandingQty,percentComplete,requiresWhseReceipt,directReceiveAllowed"
             )
             loading = false
             rows = if (r.ok) BcApi.parseValueArray(r.body) else emptyList()
@@ -282,6 +290,15 @@ private fun PurchaseOrderTab() {
                 label = { Text(if (releasedOnly) "Sadece Released" else "Tüm Durumlar", fontSize = 12.sp) }
             )
         }
+        Spacer(Modifier.height(8.dp))
+        OutlinedTextField(
+            value = search,
+            onValueChange = { search = it },
+            singleLine = true,
+            label = { Text("PO no ile ara (örn: 106040)") },
+            trailingIcon = { TextButton(onClick = { load() }) { Text("🔎") } },
+            modifier = Modifier.fillMaxWidth(),
+        )
         Spacer(Modifier.height(4.dp))
         StatusText(status)
         Spacer(Modifier.height(8.dp))

@@ -54,7 +54,7 @@ private fun ConsumptionTab() {
     fun load() {
         scope.launch {
             loading = true; status = "Bileşenler yükleniyor..."
-            val r = BcApi.get(context, "productionConsumption?\$top=50&\$select=prodOrderNo,prodOrderLineNo,componentLineNo,itemNo,description,quantity,remainingQuantity,binCode,locationCode,status")
+            val r = BcApi.get(context, "productionConsumption?\$top=200&\$orderby=prodOrderNo desc&\$select=prodOrderNo,prodOrderLineNo,componentLineNo,itemNo,description,quantity,remainingQuantity,binCode,locationCode,status")
             loading = false
             rows = if (r.ok) BcApi.parseValueArray(r.body) else emptyList()
             status = if (!r.ok) "HATA: Sarfiyat listesi alınamadı (HTTP ${r.httpCode})"
@@ -161,7 +161,7 @@ private fun OutputTab() {
     fun load() {
         scope.launch {
             loading = true; status = "Rota satırları yükleniyor..."
-            val r = BcApi.get(context, "productionOutput?\$top=50&\$select=prodOrderNo,routingLineNo,routingNo,operationNo,workCenterNo,description,runTime,status")
+            val r = BcApi.get(context, "productionOutput?\$top=200&\$orderby=prodOrderNo desc&\$select=prodOrderNo,routingLineNo,routingNo,operationNo,workCenterNo,description,runTime,status")
             loading = false
             rows = if (r.ok) BcApi.parseValueArray(r.body) else emptyList()
             status = if (!r.ok) "HATA: Output listesi alınamadı (HTTP ${r.httpCode})"
@@ -271,7 +271,7 @@ fun AssemblyModule() {
     fun load() {
         scope.launch {
             loading = true; status = "Yükleniyor..."
-            val r = BcApi.get(context, "assemblies?\$top=30&\$select=no,documentType,status,itemNo,description,quantity,remainingQuantity,locationCode,binCode,dueDate")
+            val r = BcApi.get(context, "assemblies?\$top=100&\$orderby=no desc&\$select=no,documentType,status,itemNo,description,quantity,remainingQuantity,locationCode,binCode,dueDate")
             loading = false
             rows = if (r.ok) BcApi.parseValueArray(r.body) else emptyList()
             status = if (!r.ok) "HATA: Montaj listesi alınamadı (HTTP ${r.httpCode})"

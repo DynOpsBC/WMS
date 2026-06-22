@@ -38,7 +38,7 @@ fun PutAwayModule() {
     fun load() {
         scope.launch {
             loading = true; status = "Yükleniyor..."
-            val r = BcApi.get(context, "putAways?\$top=30&\$select=no,locationCode,assignedUserId,status")
+            val r = BcApi.get(context, "putAways?\$top=100&\$orderby=no desc&\$select=no,locationCode,assignedUserId,status")
             loading = false
             rows = if (r.ok) BcApi.parseValueArray(r.body) else emptyList()
             status = if (!r.ok) "HATA: Yerleştirme listesi alınamadı (HTTP ${r.httpCode})"
@@ -261,7 +261,7 @@ private fun WhseShipmentTab() {
     fun load() {
         scope.launch {
             loading = true; status = "Yükleniyor..."
-            val r = BcApi.get(context, "shipments?\$top=30&\$select=no,locationCode,assignedUserId,status,shipmentDate,sourceNo,shipTo,lineCount")
+            val r = BcApi.get(context, "shipments?\$top=100&\$orderby=shipmentDate desc&\$select=no,locationCode,assignedUserId,status,shipmentDate,sourceNo,shipTo,lineCount")
             loading = false
             rows = if (r.ok) BcApi.parseValueArray(r.body) else emptyList()
             status = if (!r.ok) "HATA: Sevkiyat listesi alınamadı (HTTP ${r.httpCode})"
@@ -424,7 +424,7 @@ private fun SalesOrderTab() {
             val filter = if (releasedOnly) "&\$filter=status eq 'Released'" else ""
             val r = BcApi.get(
                 context,
-                "salesSources?\$top=30$filter&\$select=no,customerNo,customerName,shipToName,locationCode,shipmentDate,status,lineCount,outstandingQty,percentComplete,requiresWhseShipment,directShipAllowed"
+                "salesSources?\$top=100&\$orderby=shipmentDate desc$filter&\$select=no,customerNo,customerName,shipToName,locationCode,shipmentDate,status,lineCount,outstandingQty,percentComplete,requiresWhseShipment,directShipAllowed"
             )
             loading = false
             rows = if (r.ok) BcApi.parseValueArray(r.body) else emptyList()

@@ -103,7 +103,7 @@ fun CountModule() {
     fun load() {
         scope.launch {
             loading = true; status = "Sayım sayfaları yükleniyor..."
-            val r = BcApi.get(context, "countSheets?\$top=30&\$select=no,locationCode,mode,status,createdDateTime")
+            val r = BcApi.get(context, "countSheets?\$top=100&\$orderby=createdDateTime desc&\$select=no,locationCode,mode,status,createdDateTime")
             loading = false
             rows = if (r.ok) BcApi.parseValueArray(r.body) else emptyList()
             status = if (!r.ok) "HATA: Sayım listesi alınamadı (HTTP ${r.httpCode})"
@@ -269,7 +269,7 @@ fun DirectedMoveModule() {
     fun load() {
         scope.launch {
             loading = true; status = "Hareket belgeleri yükleniyor..."
-            val r = BcApi.get(context, "movements?\$top=30&\$select=no,locationCode,assignedUserId,status")
+            val r = BcApi.get(context, "movements?\$top=100&\$orderby=no desc&\$select=no,locationCode,assignedUserId,status")
             loading = false
             rows = if (r.ok) BcApi.parseValueArray(r.body) else emptyList()
             status = if (!r.ok) "HATA: Hareket listesi alınamadı (HTTP ${r.httpCode})"

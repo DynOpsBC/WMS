@@ -33,12 +33,22 @@ fun PickingModule() {
     var status by remember { mutableStateOf("") }
     var loading by remember { mutableStateOf(false) }
     var showAll by remember { mutableStateOf(true) }
+    var search by remember { mutableStateOf("") }
 
     fun load() {
         scope.launch {
             loading = true; status = "Yükleniyor..."
-            val filter = if (showAll) "" else "&\$filter=assignedUserId ne ''"
-            val r = BcApi.getWithStandardFallback(context, "picks?\$top=30&\$select=no,locationCode,assignedUserId,sourceNo,status,percentComplete$filter")
+            val assigned = if (showAll) "" else "&\$filter=assignedUserId ne ''"
+            val noFilter = if (search.isBlank()) "" else
+                (if (assigned.contains("\$filter")) " and " else "&\$filter=") + "startswith(no,'${search.trim().replace("'", "''")}')"
+            // Merge assigned + search into a single filter clause if both used.
+            val combined = when {
+                assigned.isBlank() && noFilter.isBlank() -> ""
+                assigned.isBlank() -> noFilter
+                noFilter.isBlank() -> assigned
+                else -> assigned + noFilter.removePrefix("&\$filter=")
+            }
+            val r = BcApi.getWithStandardFallback(context, "picks?\$top=100&\$orderby=no desc&\$select=no,locationCode,assignedUserId,sourceNo,status,percentComplete$combined")
             loading = false
             rows = if (r.ok) BcApi.parseValueArray(r.body) else emptyList()
             status = if (!r.ok) "HATA: Toplama listesi alınamadı (HTTP ${r.httpCode})"
@@ -59,6 +69,16 @@ fun PickingModule() {
             Spacer(Modifier.width(6.dp))
             FilterChip(selected = showAll, onClick = { showAll = true }, label = { Text("Tümü") })
         }
+        Spacer(Modifier.height(8.dp))
+        // PDF Picking §7 / §16: belge no arama eksikti
+        OutlinedTextField(
+            value = search,
+            onValueChange = { search = it },
+            singleLine = true,
+            label = { Text("Belge no ile ara") },
+            trailingIcon = { TextButton(onClick = { load() }) { Text("🔎") } },
+            modifier = Modifier.fillMaxWidth(),
+        )
         Spacer(Modifier.height(4.dp))
         StatusText(status)
         Spacer(Modifier.height(8.dp))
