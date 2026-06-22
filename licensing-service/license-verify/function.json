@@ -5,7 +5,9 @@
       "type": "httpTrigger",
       "direction": "in",
       "name": "req",
-      "methods": ["post"],
+      "methods": [
+        "post"
+      ],
       "route": "license/verify"
     },
     {
@@ -13,5 +15,6 @@
       "direction": "out",
       "name": "res"
     }
-  ]
+  ],
+  "scriptFile": "../dist/license-verify/index.js"
 }

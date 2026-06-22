@@ -5,7 +5,9 @@
       "type": "httpTrigger",
       "direction": "in",
       "name": "req",
-      "methods": ["get"],
+      "methods": [
+        "get"
+      ],
       "route": "license/me"
     },
     {
@@ -13,5 +15,6 @@
       "direction": "out",
       "name": "res"
     }
-  ]
+  ],
+  "scriptFile": "../dist/license-me/index.js"
 }

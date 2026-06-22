@@ -200,8 +200,19 @@ codeunit 72082 "DOPSWHS License Mgmt"
     begin
         if not Setup.Get('') then exit(false);
         if Setup."License Service URL" = '' then begin
-            UpdateStatus(Setup."License Status"::Unknown, 'No License Service URL configured.', 0DT, 0, '');
-            exit(false);
+            // Permissive Essentials mode: when no licensing-service URL is
+            // configured the tenant runs on the most restrictive tier without
+            // ever calling out. This is intentional so customers can install
+            // the .app and operate the LP core flow before paid features /
+            // licensing backend are wired up. They cannot promote to Advanced
+            // or Enterprise without entering a key, so the gate is still safe.
+            Setup."License Status" := Setup."License Status"::Active;
+            Setup."License Tier" := Setup."License Tier"::Essentials;
+            Setup."License Seats" := 0; // 0 = unlimited (seat guard exits when limit <= 0)
+            Setup."License Status Message" := 'Running in permissive Essentials mode (no License Service URL).';
+            Setup."License Last Verified At" := CurrentDateTime();
+            Setup.Modify(true);
+            exit(true);
         end;
         if Setup."License Key" = '' then begin
             UpdateStatus(Setup."License Status"::Invalid, 'No License Key configured.', 0DT, 0, '');

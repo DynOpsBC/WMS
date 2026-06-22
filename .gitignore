@@ -52,3 +52,5 @@ customer-portal/api/node_modules/
 customer-portal/api/dist/
 customer-portal/api/pnpm-lock.yaml
 push-relay/pnpm-lock.yaml
+local.settings.json
+licensing-service/package-lock.json
