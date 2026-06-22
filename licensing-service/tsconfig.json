@@ -11,6 +11,7 @@
     "resolveJsonModule": true
   },
   "include": [
+    "src/**/*.ts",
     "license-issue/**/*.ts",
     "license-verify/**/*.ts",
     "license-me/**/*.ts",

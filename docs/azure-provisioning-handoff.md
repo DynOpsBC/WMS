@@ -45,13 +45,41 @@ kullanabilir. Print Bridge + MS QM + Production tier-gated kapalı kalır.
 → Müşteri admin Setup'a `License Service URL` GİRMESIN, hiç boş bırakın.
 → Function App fix sonraki sprint (programming model v4'e migrate, ~2 saat).
 
-**Çözüm yolu (programming model v4 migration):**
-1. `licensing-service/src/functions/index.ts` yeni single entry point
-2. `app.http("license-issue", { route, methods, handler })` her endpoint için
-3. `function.json` dosyaları kaldır
-4. `package.json` `main: "dist/functions/index.js"`
-5. `@azure/functions` peer ≥ 4.6 (zaten var)
-6. `pnpm install && pnpm build && func azure functionapp publish bcwms-licensing-prod-func --typescript`
+**Çözüm yolu (programming model v4 migration — KOD HAZIR):**
+v1.10.0 commit'inde v4 migration'a geçildi:
+- `licensing-service/src/index.ts` — yeni single entry point, `app.http()` ile 3 endpoint
+- `package.json` `"main": "dist/src/index.js"`
+- `function.json` dosyaları silindi
+- `tsconfig.json` `src/` ekledi
+
+**Publish komutu (auto-mode benim çalıştırmama izin vermiyor):**
+```bash
+cd licensing-service
+# macOS Finder duplicate'lerini temizle
+find node_modules -maxdepth 2 -name "* 2" -exec rm -rf {} \; 2>/dev/null
+pnpm build
+func azure functionapp publish bcwms-licensing-prod-func --typescript --no-build
+```
+Beklenen çıktı: "Functions in bcwms-licensing-prod-func: license-issue, license-me, license-verify" (3 endpoint).
+
+**Smoke test (sen çalıştır):**
+```bash
+ADMIN_TOKEN=$(grep admin_token /tmp/license-secrets.txt | cut -d= -f2)
+BASE=https://bcwms-licensing-prod-func.azurewebsites.net
+
+# 1. Health: license/me anonim — 401 dönmeli
+curl -sS "$BASE/api/license/me?tenant=00000000-0000-0000-0000-000000000000" -o /dev/null -w "license/me anonim: %{http_code}\n"
+
+# 2. License/me + JWT olmadan — 401 (auth required)
+curl -sS "$BASE/api/license/me?tenant=7fa2357e-26f2-4174-8e16-a713981356b8" -o /dev/null -w "license/me no key: %{http_code}\n"
+
+# 3. License/issue happy path
+curl -sS -X POST "$BASE/api/license/issue" \
+  -H "Content-Type: application/json" \
+  -H "X-Bcwms-Admin-Token: $ADMIN_TOKEN" \
+  -d '{"tenantId":"7fa2357e-26f2-4174-8e16-a713981356b8","tier":"Enterprise","seats":50,"validUntil":"2027-06-22","customerEmail":"deniz@dynamicsops.com","replaceActive":true}' | python3 -m json.tool
+```
+Bu adım `key` (JWT) döndüğünde Function App çalışıyor.
 
 ## Senin yapacaklarınız (sırayla)
 
