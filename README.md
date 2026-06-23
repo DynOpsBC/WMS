@@ -1,6 +1,6 @@
 # BCWMSApp
 
-[![Release](https://img.shields.io/github/v/release/celandeniz/BCWMSApp?label=latest&color=6c5ce7)](https://github.com/celandeniz/BCWMSApp/releases/latest)
+[![Release](https://img.shields.io/github/v/release/DynOpsBC/WMS?label=latest&color=6c5ce7)](https://github.com/DynOpsBC/WMS/releases/latest)
 [![License Tier](https://img.shields.io/badge/license-Essentials%20%E2%80%A2%20Advanced%20%E2%80%A2%20Enterprise-6c5ce7)](docs/license-protocol.md)
 [![BC Platform](https://img.shields.io/badge/Business%20Central-24.0%2B-026CC5)](docs/install-pte.md)
 [![Customer Portal](https://img.shields.io/badge/portal-bcwms.dynops.com-success)](https://portal.bcwms.dynops.com)

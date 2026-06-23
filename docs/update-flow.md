@@ -44,7 +44,7 @@ içinde güncel sürüme geçer.
 `release.yml` `al-package` job'u Windows runner'da `.app` artifact'i toplar
 ve GitHub Releases'a yükler. Müşterinin PTE upload akışı bu dosyayı kullanır.
 
-Verify: `https://github.com/celandeniz/BCWMSApp/releases/latest` →
+Verify: `https://github.com/DynOpsBC/WMS/releases/latest` →
 `bcwmsapp-1.10.0.0.app` görünmeli.
 
 ### 2. Web SaaS (`app.bcwms.dynops.com`)

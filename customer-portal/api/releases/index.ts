@@ -11,7 +11,7 @@ type GhRelease = {
 
 const cache = { fetchedAt: 0, body: null as null | unknown[] };
 const CACHE_TTL_MS = 5 * 60 * 1000;
-const REPO = process.env.PORTAL_GH_REPO ?? "celandeniz/BCWMSApp";
+const REPO = process.env.PORTAL_GH_REPO ?? "DynOpsBC/WMS";
 
 export default async function releases(
   _request: HttpRequest,

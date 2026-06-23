@@ -33,7 +33,7 @@ customer-portal/
 | `VITE_PORTAL_CLIENT_ID` | build | AAD app registration client id (multi-tenant) |
 | `VITE_PORTAL_AUTHORITY` | build | Default `https://login.microsoftonline.com/common` |
 | `VITE_PORTAL_API_BASE` | build | Default `/api` (Static Web App attached Functions) |
-| `PORTAL_GH_REPO` | api runtime | Default `celandeniz/BCWMSApp` |
+| `PORTAL_GH_REPO` | api runtime | Default `DynOpsBC/WMS` |
 | `PORTAL_GH_TOKEN` | api runtime | (opsiyonel) GitHub API rate limit için PAT |
 
 ## Local dev

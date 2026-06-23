@@ -12,7 +12,7 @@
 
 | | Web App | Mobile App |
 |---|---|---|
-| URL / APK | http://127.0.0.1:5173/ | [Releases sayfası](https://github.com/celandeniz/BCWMSApp/releases) |
+| URL / APK | http://127.0.0.1:5173/ | [Releases sayfası](https://github.com/DynOpsBC/WMS/releases) |
 | Login akışı | Token textarea | Device Code (default) **veya** "Gelişmiş: token ile giriş" |
 | Token ömrü | ~1 saat | ~1 saat |
 | Süre dolunca | Sağ üstte 🔴 Bağlı değil → Çıkış → yeni token | Aynı |

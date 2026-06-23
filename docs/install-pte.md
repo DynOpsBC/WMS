@@ -11,7 +11,7 @@ sandbox'ta deneyin.
 | BC SaaS sürümü ≥ 24.0 | `Help → About Business Central` → version `24.x.x.x` veya üstü |
 | AAD admin yetkisi | Tenant'ta Global Admin veya BC Admin Center'a erişim |
 | Microsoft Quality Management (BC v28+ first-party uzantısı) | Dependency: app.json'da declared. Pre-installed gelir BC v28'de |
-| `BCWMSApp-X.Y.Z.W.app` paketi | [GitHub Releases](https://github.com/celandeniz/BCWMSApp/releases/latest) → "Assets" → `bcwmsapp-X.Y.Z.W.app` |
+| `BCWMSApp-X.Y.Z.W.app` paketi | [GitHub Releases](https://github.com/DynOpsBC/WMS/releases/latest) → "Assets" → `bcwmsapp-X.Y.Z.W.app` |
 | (opsiyonel) DynOps Customer Portal hesabı | https://portal.bcwms.dynops.com — lisans + sürüm yönetimi |
 
 ## Adımlar

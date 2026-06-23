@@ -1,168 +1,107 @@
-# Repo Migration → `DynOpsBC/BCWMSApp`
+# Repo Migration: `celandeniz/BCWMSApp` → `DynOpsBC/WMS`
 
-Eski: `https://github.com/celandeniz/BCWMSApp` (kişisel hesap, arşiv).
-Yeni: `https://github.com/DynOpsBC/BCWMSApp` (organizasyon, canonical).
+**Tarih:** 2026-06-23
+**Tür:** Kopya migration (transfer DEĞİL). Eski repo arşivlenir, yeni
+DynOpsBC org repo canonical olur. CI secrets / branch protection /
+webhook'lar elle taşınır.
 
-Migration kopya tipindedir — eski repo silinmez, redirect kurulmaz.
-Tüm geliştirme yeni URL'e taşınır.
+## Yapıldı ✅
 
-## Adım 0 — Hedef repo (GitHub web UI)
+| # | İş | Sonuç |
+|---|----|-------|
+| 1 | DynOpsBC/WMS hedef repo oluşturuldu | denizcelan, GH UI |
+| 2 | `git push dynops main` | `new branch main → main`, SHA `9ce2936` |
+| 3 | `git push dynops --tags` | 7 tag (`v1.0-rc1`, `v1.7.7.0`..`v1.8.2.0`) |
+| 4 | Local origin swap | `origin → DynOpsBC/WMS`, `celandeniz-archive → celandeniz/BCWMSApp` |
+| 5 | Eski branch sil: `chore/isv-object-id-renumbering` | silindi |
+| 6 | 22 dependabot branch push | tüm `dependabot/*` DynOpsBC/WMS'e |
+| 7 | Doc + code'da URL update | `celandeniz/BCWMSApp` → `DynOpsBC/WMS` (sed) |
 
-1. https://github.com/organizations/DynOpsBC/repositories/new
-2. Name: `BCWMSApp`
-3. Visibility: **Private** (CI secrets + Azure config içerir)
-4. **Init etme** — README/.gitignore/license boş bırak
-5. Create
+**Son durum:** DynOpsBC/WMS'te 24 branch + 14 tag. Local repo origin'i
+DynOpsBC/WMS, celandeniz-archive backup remote olarak duruyor.
 
-## Adım 1 — History + tags push (local)
+## Sıradaki manuel adımlar 🚧
 
-Local repo'da `dynops` remote zaten eklendi:
+GH CLI auth olmadığı için bu kalemler senin tarafında.
 
-```bash
-cd /Users/denizcelan/Documents/ClaudeCode/BCWMSApp
-git remote -v
-# origin → celandeniz (eski)
-# dynops → DynOpsBC (yeni)
+### A. Default branch'i değiştir + eski branch'i sil
 
-# Tüm branch'ler + tag'ler
-git push -u dynops --all
-git push dynops --tags
-```
+1. <https://github.com/DynOpsBC/WMS/settings> → **Default branch** →
+   `claude/nice-davinci-31rojn` → **`main`** seç → Update
+2. <https://github.com/DynOpsBC/WMS/branches> → `claude/nice-davinci-31rojn`
+   satırında 🗑 → Confirm
 
-`push --all` 33+ branch (main + dependabot/* hepsi) gönderir.
-`--tags` annotated/lightweight her ikisini gönderir.
+### B. CI secrets (Settings → Secrets and variables → Actions)
 
-## Adım 2 — Remote swap (origin canonical)
+Eski `celandeniz/BCWMSApp` reposundan AYNI ADLA recreate:
 
-```bash
-git remote rename origin celandeniz-archive
-git remote rename dynops origin
-# main upstream'ini yeni origin'e bind
-git branch --set-upstream-to=origin/main main
-
-# Verify
-git remote -v
-# celandeniz-archive → ... (read-only, isteğe bağlı silinebilir)
-# origin → DynOpsBC/BCWMSApp.git ✓
-```
-
-## Adım 3 — GitHub-tarafı yapılandırma (yeni repo)
-
-Eski repo'da kurulmuş ve YENI repoya elle taşınmalı:
-
-### 3a. Secrets (Settings → Secrets and variables → Actions)
-
-| Eski adı | Açıklama |
+| Secret adı | Açıklama |
 |---|---|
-| `AZURE_CREDENTIALS` | Azure SP JSON — push-relay + licensing deploy için |
-| `AZURE_FUNCTIONAPP_PUBLISH_PROFILE_*` | Function App publish profile (her ortam için) |
-| `LICENSE_ADMIN_TOKEN` | `licensing-service`'in admin endpoint koruması |
+| `AZURE_CREDENTIALS` | Azure SP JSON — push-relay + licensing deploy |
+| `AZURE_FUNCTIONAPP_PUBLISH_PROFILE_*` | Function App publish profile/env |
+| `LICENSE_ADMIN_TOKEN` | licensing-service admin endpoint koruması |
 | `FCM_SERVICE_ACCOUNT_JSON` | Push-relay Firebase admin JSON |
-| `GITHUB_TOKEN` | Otomatik gelir, dokunmaya gerek yok |
+| `GITHUB_TOKEN` | Otomatik gelir |
 
-> Eski celandeniz/BCWMSApp'te Settings → Secrets'ı aç, her birini değer
-> kopyalama YAPMADAN (mask edilmiş) yeni repo'da aynı adla recreate et.
-> Hangi secrets'in mevcut olduğunu görmek için ad listesi yeterli.
+> Değer kopyalama yapmadan adları doğrula (Settings → Secrets'ta mask
+> edilmiş listede). Bilinen secret'in değerini elinde tutmuyorsan Azure
+> portalından yeniden çek.
 
-### 3b. Environments
+### C. Environments
 
-`production`, `staging` environment'lar varsa Settings → Environments
-altında yeniden oluştur. Protection rules (required reviewer, wait timer)
-manuel kopyalanır.
+`production`, `staging` varsa Settings → Environments altında recreate.
+Protection rules (required reviewer, wait timer) manuel.
 
-### 3c. Branch protection
+### D. Branch protection
 
-Settings → Branches → `main`:
-- Require pull request reviews before merging (1+ reviewer)
-- Require status checks: `android`, `web`, `push-relay`, `licensing`,
-  `customer-portal` (workflow `test-full.yml` job'ları)
-- Require branches to be up to date before merging
-- Include administrators
+Settings → Branches → `main` rule:
 
-### 3d. Webhooks
+- ✅ Require pull request reviews (1+ reviewer)
+- ✅ Required status checks: `android`, `web`, `push-relay`, `licensing`,
+  `customer-portal` (workflow `test-full.yml` job adları)
+- ✅ Require branches to be up-to-date before merge
+- ✅ Include administrators
 
-Eski repoda Azure webhook'u, dependabot, vs. varsa Settings →
-Webhooks'tan recreate. Bu commit'i izleyen bir Azure deployment varsa
-sırf URL değişikliği için yeni webhook kurulmalı.
+### E. Webhooks
 
-### 3e. Dependabot
+Eski repoda Azure webhook'u varsa Settings → Webhooks'tan recreate.
 
-`.github/dependabot.yml` repo'da mevcut. Yeni repoda otomatik aktive olur.
-14 açık dependabot PR (vite 5→8, AGP 9, ktor 3, vb.) eski repo'da kalır —
-yeni repoda dependabot yeniden tarayıp yeni PR'lar açar (bazıları eş
-zamanlı kalır, manuel review gerek).
+### F. Eski repo arşivle (opsiyonel)
 
-## Adım 4 — Tüketici taraflarını güncelle
+`celandeniz/BCWMSApp` → Settings → General → **Archive this repository**.
+Read-only mod, yeni issue/PR/push reddedilir. GitHub 301 redirect kurmaz.
+
+## Tüketici taraflarına bilgi
 
 ### Local clone'lar (her geliştirici)
 
 ```bash
-git remote set-url origin https://github.com/DynOpsBC/BCWMSApp.git
+git remote set-url origin https://github.com/DynOpsBC/WMS.git
 git fetch origin
 git branch --set-upstream-to=origin/main main
 ```
 
-### CI çıkışları
+### Azure Function App tag'leri
 
-`releases/` veya GitHub Pages URL'leri varsa kontrol et. `release.yml`
-workflow'unda `gh release create` kullanılıyorsa `GITHUB_REPOSITORY`
-otomatik yeni adı alır, manuel iş yok.
-
-### Azure deployment job'ları
-
-`azure-deploy.yml` veya CI içindeki Azure CLI komutları varsa:
-- Function App tag'leri (sourceRepoUrl) yeni URL'e güncellenmeli
-- Application Insights link'lerinde repo URL'i deprecated kalır
-
-### Müşteri doc + Print Bridge
-
-`docs/print-bridge-setup.md`, `docs/setup-runbook.md` içinde
-github.com/celandeniz/BCWMSApp linkleri varsa update et:
-
-```bash
-grep -rl "celandeniz/BCWMSApp" docs/ web/ android/ \
-  | xargs sed -i '' 's|celandeniz/BCWMSApp|DynOpsBC/BCWMSApp|g'
-```
-
-(Mevcut sed komutu test edilmeli — body'de string varsa replace olur.)
-
-## Adım 5 — Eski repo'yu arşivle (opsiyonel)
-
-`celandeniz/BCWMSApp` ileri geliştirme almasın diye:
-- Settings → General → Archive this repository → ✓
-- Read-only mod, yeni issue/PR/push reddedilir
-- 301 redirect kurulmaz (GitHub archive yapmaz)
-- README'ye en üste banner: "→ Moved to DynOpsBC/BCWMSApp"
+`sourceRepoUrl` etiketleri yeni URL'e güncellenmeli (manuel veya
+`az functionapp config appsettings set`). Application Insights link'leri
+eski adı tarihçeden gösterir, ekstra iş yok.
 
 ## Doğrulama
 
 ```bash
-git ls-remote dynops main      # SHA = local main'in SHA'sı olmalı
-git ls-remote --tags dynops    # tüm tag'ler görünmeli
-git fetch dynops --dry-run     # error yok
-
-cd web && pnpm exec playwright test  # baseURL değişmedi, OK
-./tools/run-all-tests.sh --quick      # 7/7 PASS olmalı
+git ls-remote origin main          # 9ce2936... olmalı
+git ls-remote --tags origin | wc -l  # 14
+./tools/run-all-tests.sh --quick    # 7/7 PASS
 ```
 
 ## Rollback
 
-Yeni repo'da bir şey ters giderse (CI ayar eksik, secrets yanlış):
-- `dynops` remote'una push edilmiş zarar verici değil — silmeden bırakılabilir
-- `origin` (celandeniz) aktif, push'lar oraya devam edebilir
-- Yeni repo'yu Settings → Delete this repository ile sil, sonra recreate
+Yeni repoda bir şey ters giderse:
 
-> **Önemli:** `git push --force --all` ile yeni repo'ya force push YAPMA.
-> Branch protection devreye girdikten sonra force-push reddedilir + tarihçe
-> tehlikeye atılır.
+- `celandeniz-archive` remote'una push'a devam edilebilir (eski repo
+  hâlâ aktif, arşivlenmediyse)
+- Yeni repo → Settings → Delete this repository → recreate
 
-## Aksiyon takvimi
-
-| Adım | Sorumlu | Tahmini süre |
-|------|---------|--------------|
-| 0. Hedef repo oluştur (GitHub UI) | denizcelan | 1 dk |
-| 1. `git push -u dynops --all` + `--tags` | Claude/CI | 2-5 dk |
-| 2. Remote swap (origin → dynops) | Claude | 30 sn |
-| 3. Secrets/env/branch/webhook config | denizcelan | 15-30 dk |
-| 4. Tüketici URL update'leri | denizcelan + Claude | 10 dk |
-| 5. Eski repo archive | denizcelan | 1 dk |
+> **Önemli:** Branch protection aktif olduktan sonra `git push --force`
+> reddedilir. Bu tetiklenmeden önce kritik adımları tamamla (B–E).

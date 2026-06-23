@@ -14,7 +14,7 @@ gh issue create --title "S1 — licensing-service Azure Function (JWT issue/veri
 
 Önce milestone'u oluştur:
 ```bash
-gh api -X POST repos/celandeniz/BCWMSApp/milestones -f title="v1.10.0" \
+gh api -X POST repos/DynOpsBC/WMS/milestones -f title="v1.10.0" \
   -f description="Release & Licensing — ship-ready to customers"
 ```
 

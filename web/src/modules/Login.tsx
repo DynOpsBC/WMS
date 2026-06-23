@@ -110,7 +110,7 @@ az account get-access-token \`
             <p>
               Tam dokümantasyon:{" "}
               <a
-                href="https://github.com/celandeniz/BCWMSApp/blob/main/docs/wms-token-generation.md"
+                href="https://github.com/DynOpsBC/WMS/blob/main/docs/wms-token-generation.md"
                 target="_blank"
                 rel="noopener noreferrer"
               >

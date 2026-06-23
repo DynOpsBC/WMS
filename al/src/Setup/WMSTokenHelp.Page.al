@@ -255,7 +255,7 @@ page 72009 "DOPSWHS WMS Token Help"
             '  -d "grant_type=urn:ietf:params:oauth:grant-type:device_code&client_id=04b07795-8ddb-461a-bbee-02f9e1bf7b46&device_code=<paste>"';
 
         WebUrl := 'http://127.0.0.1:5173/';
-        MobileApk := 'https://github.com/celandeniz/BCWMSApp/releases';
+        MobileApk := 'https://github.com/DynOpsBC/WMS/releases';
         BcEnvironment := 'SandboxUS / CRONUS USA, Inc.';
         Resource := 'https://api.businesscentral.dynamics.com';
     end;
