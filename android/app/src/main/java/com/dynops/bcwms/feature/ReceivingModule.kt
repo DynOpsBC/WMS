@@ -61,13 +61,13 @@ private fun WhseReceiptTab() {
     var rows by remember { mutableStateOf<List<JSONObject>>(emptyList()) }
     var status by remember { mutableStateOf("") }
     var loading by remember { mutableStateOf(false) }
+    var search by remember { mutableStateOf("") }
 
     fun load() {
         scope.launch {
             loading = true; status = "Yükleniyor..."
-            // PDF Mal Kabul §3: $top=30 + $orderby yok → en yeni belgeler kayıp.
-            // 100'e çıkarıldı, en yeniden sıralandı, ayrı search field aşağıda.
-            val r = BcApi.getWithStandardFallback(context, "receipts?\$top=100&\$orderby=no desc&\$select=no,locationCode,sourceNo,vendorSourceName,dueDate,percentComplete")
+            val filter = com.dynops.bcwms.ui.buildODataFilter(com.dynops.bcwms.ui.searchClause("no", search))
+            val r = BcApi.getWithStandardFallback(context, "receipts?\$top=100&\$orderby=no desc&\$select=no,locationCode,sourceNo,vendorSourceName,dueDate,percentComplete$filter")
             loading = false
             rows = if (r.ok) BcApi.parseValueArray(r.body) else emptyList()
             status = if (!r.ok) "HATA: Mal kabul listesi alınamadı (HTTP ${r.httpCode})"
@@ -82,6 +82,8 @@ private fun WhseReceiptTab() {
 
     Column(Modifier.fillMaxSize().padding(12.dp)) {
         Button(onClick = { load() }, enabled = !loading) { Text(if (loading) "..." else "🔄 Yenile") }
+        Spacer(Modifier.height(8.dp))
+        com.dynops.bcwms.ui.DocSearchBar(value = search, onValueChange = { search = it }, onSearch = { load() }, label = "Whse Receipt no ile ara")
         Spacer(Modifier.height(4.dp))
         StatusText(status)
         Spacer(Modifier.height(8.dp))

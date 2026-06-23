@@ -99,11 +99,13 @@ fun CountModule() {
     var rows by remember { mutableStateOf<List<JSONObject>>(emptyList()) }
     var status by remember { mutableStateOf("") }
     var loading by remember { mutableStateOf(false) }
+    var search by remember { mutableStateOf("") }
 
     fun load() {
         scope.launch {
             loading = true; status = "Sayım sayfaları yükleniyor..."
-            val r = BcApi.get(context, "countSheets?\$top=100&\$orderby=createdDateTime desc&\$select=no,locationCode,mode,status,createdDateTime")
+            val filter = com.dynops.bcwms.ui.buildODataFilter(com.dynops.bcwms.ui.searchClause("no", search))
+            val r = BcApi.get(context, "countSheets?\$top=100&\$orderby=createdDateTime desc&\$select=no,locationCode,mode,status,createdDateTime$filter")
             loading = false
             rows = if (r.ok) BcApi.parseValueArray(r.body) else emptyList()
             status = if (!r.ok) "HATA: Sayım listesi alınamadı (HTTP ${r.httpCode})"
@@ -118,6 +120,8 @@ fun CountModule() {
 
     Column(Modifier.fillMaxSize().padding(12.dp)) {
         Button(onClick = { load() }, enabled = !loading) { Text(if (loading) "..." else "🔄 Yenile") }
+        Spacer(Modifier.height(8.dp))
+        com.dynops.bcwms.ui.DocSearchBar(value = search, onValueChange = { search = it }, onSearch = { load() }, label = "Sayım no ile ara")
         Spacer(Modifier.height(6.dp))
         StatusText(status)
         Spacer(Modifier.height(8.dp))
@@ -265,11 +269,13 @@ fun DirectedMoveModule() {
     var rows by remember { mutableStateOf<List<JSONObject>>(emptyList()) }
     var status by remember { mutableStateOf("") }
     var loading by remember { mutableStateOf(false) }
+    var search by remember { mutableStateOf("") }
 
     fun load() {
         scope.launch {
             loading = true; status = "Hareket belgeleri yükleniyor..."
-            val r = BcApi.get(context, "movements?\$top=100&\$orderby=no desc&\$select=no,locationCode,assignedUserId,status")
+            val filter = com.dynops.bcwms.ui.buildODataFilter(com.dynops.bcwms.ui.searchClause("no", search))
+            val r = BcApi.get(context, "movements?\$top=100&\$orderby=no desc&\$select=no,locationCode,assignedUserId,status$filter")
             loading = false
             rows = if (r.ok) BcApi.parseValueArray(r.body) else emptyList()
             status = if (!r.ok) "HATA: Hareket listesi alınamadı (HTTP ${r.httpCode})"
@@ -281,6 +287,8 @@ fun DirectedMoveModule() {
 
     Column(Modifier.fillMaxSize().padding(12.dp)) {
         Button(onClick = { load() }, enabled = !loading) { Text(if (loading) "..." else "🔄 Yenile") }
+        Spacer(Modifier.height(8.dp))
+        com.dynops.bcwms.ui.DocSearchBar(value = search, onValueChange = { search = it }, onSearch = { load() }, label = "Hareket no ile ara")
         Spacer(Modifier.height(4.dp))
         StatusText(status)
         Spacer(Modifier.height(8.dp))

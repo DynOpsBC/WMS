@@ -34,11 +34,13 @@ fun PutAwayModule() {
     var rows by remember { mutableStateOf<List<JSONObject>>(emptyList()) }
     var status by remember { mutableStateOf("") }
     var loading by remember { mutableStateOf(false) }
+    var search by remember { mutableStateOf("") }
 
     fun load() {
         scope.launch {
             loading = true; status = "Yükleniyor..."
-            val r = BcApi.get(context, "putAways?\$top=100&\$orderby=no desc&\$select=no,locationCode,assignedUserId,status")
+            val filter = com.dynops.bcwms.ui.buildODataFilter(com.dynops.bcwms.ui.searchClause("no", search))
+            val r = BcApi.get(context, "putAways?\$top=100&\$orderby=no desc&\$select=no,locationCode,assignedUserId,status$filter")
             loading = false
             rows = if (r.ok) BcApi.parseValueArray(r.body) else emptyList()
             status = if (!r.ok) "HATA: Yerleştirme listesi alınamadı (HTTP ${r.httpCode})"
@@ -53,6 +55,8 @@ fun PutAwayModule() {
 
     Column(Modifier.fillMaxSize().padding(12.dp)) {
         Button(onClick = { load() }, enabled = !loading) { Text(if (loading) "..." else "🔄 Yenile") }
+        Spacer(Modifier.height(8.dp))
+        com.dynops.bcwms.ui.DocSearchBar(value = search, onValueChange = { search = it }, onSearch = { load() })
         Spacer(Modifier.height(4.dp))
         StatusText(status)
         Spacer(Modifier.height(8.dp))
@@ -257,11 +261,13 @@ private fun WhseShipmentTab() {
     var rows by remember { mutableStateOf<List<JSONObject>>(emptyList()) }
     var status by remember { mutableStateOf("") }
     var loading by remember { mutableStateOf(false) }
+    var search by remember { mutableStateOf("") }
 
     fun load() {
         scope.launch {
             loading = true; status = "Yükleniyor..."
-            val r = BcApi.get(context, "shipments?\$top=100&\$orderby=shipmentDate desc&\$select=no,locationCode,assignedUserId,status,shipmentDate,sourceNo,shipTo,lineCount")
+            val filter = com.dynops.bcwms.ui.buildODataFilter(com.dynops.bcwms.ui.searchClause("no", search))
+            val r = BcApi.get(context, "shipments?\$top=100&\$orderby=shipmentDate desc&\$select=no,locationCode,assignedUserId,status,shipmentDate,sourceNo,shipTo,lineCount$filter")
             loading = false
             rows = if (r.ok) BcApi.parseValueArray(r.body) else emptyList()
             status = if (!r.ok) "HATA: Sevkiyat listesi alınamadı (HTTP ${r.httpCode})"
@@ -276,6 +282,8 @@ private fun WhseShipmentTab() {
 
     Column(Modifier.fillMaxSize().padding(12.dp)) {
         Button(onClick = { load() }, enabled = !loading) { Text(if (loading) "..." else "🔄 Yenile") }
+        Spacer(Modifier.height(8.dp))
+        com.dynops.bcwms.ui.DocSearchBar(value = search, onValueChange = { search = it }, onSearch = { load() })
         Spacer(Modifier.height(4.dp))
         StatusText(status)
         Spacer(Modifier.height(8.dp))
@@ -417,11 +425,15 @@ private fun SalesOrderTab() {
     var status by remember { mutableStateOf("") }
     var loading by remember { mutableStateOf(false) }
     var releasedOnly by remember { mutableStateOf(true) }
+    var search by remember { mutableStateOf("") }
 
     fun load() {
         scope.launch {
             loading = true; status = "Yükleniyor..."
-            val filter = if (releasedOnly) "&\$filter=status eq 'Released'" else ""
+            val filter = com.dynops.bcwms.ui.buildODataFilter(
+                "status eq 'Released'".takeIf { releasedOnly },
+                com.dynops.bcwms.ui.searchClause("no", search),
+            )
             val r = BcApi.get(
                 context,
                 "salesSources?\$top=100&\$orderby=shipmentDate desc$filter&\$select=no,customerNo,customerName,shipToName,locationCode,shipmentDate,status,lineCount,outstandingQty,percentComplete,requiresWhseShipment,directShipAllowed"
@@ -448,6 +460,8 @@ private fun SalesOrderTab() {
                 label = { Text(if (releasedOnly) "Sadece Released" else "Tüm Durumlar", fontSize = 12.sp) }
             )
         }
+        Spacer(Modifier.height(8.dp))
+        com.dynops.bcwms.ui.DocSearchBar(value = search, onValueChange = { search = it }, onSearch = { load() }, label = "SO no ile ara")
         Spacer(Modifier.height(4.dp))
         StatusText(status)
         Spacer(Modifier.height(8.dp))

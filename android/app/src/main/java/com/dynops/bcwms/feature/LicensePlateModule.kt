@@ -36,11 +36,13 @@ fun LicensePlateModule() {
     var status by remember { mutableStateOf("") }
     var loading by remember { mutableStateOf(false) }
     var showBuild by remember { mutableStateOf(false) }
+    var search by remember { mutableStateOf("") }
 
     fun loadList() {
         scope.launch {
             loading = true; status = "Yükleniyor..."
-            val r = BcApi.getWithStandardFallback(context, "licensePlates?\$top=200&\$orderby=no desc&\$select=no,status,locationCode,binCode,templateCode,sscc")
+            val filter = com.dynops.bcwms.ui.buildODataFilter(com.dynops.bcwms.ui.searchClause("no", search))
+            val r = BcApi.getWithStandardFallback(context, "licensePlates?\$top=200&\$orderby=no desc&\$select=no,status,locationCode,binCode,templateCode,sscc$filter")
             loading = false
             rows = if (r.ok) BcApi.parseValueArray(r.body) else emptyList()
             status = if (!r.ok) "HATA: LP listesi alınamadı (HTTP ${r.httpCode})"
@@ -69,6 +71,8 @@ fun LicensePlateModule() {
             Spacer(Modifier.width(8.dp))
             Button(onClick = { showBuild = true }, enabled = !loading) { Text("➕ Build LP") }
         }
+        Spacer(Modifier.height(8.dp))
+        com.dynops.bcwms.ui.DocSearchBar(value = search, onValueChange = { search = it }, onSearch = { loadList() }, label = "LP no ile ara")
         Spacer(Modifier.height(4.dp))
         StatusText(status)
         Spacer(Modifier.height(8.dp))

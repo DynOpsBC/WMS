@@ -35,11 +35,13 @@ fun QualityModule() {
     var loading by remember { mutableStateOf(false) }
     var showOnlyOpen by remember { mutableStateOf(true) }
     var inspectOrder by remember { mutableStateOf<JSONObject?>(null) }
+    var search by remember { mutableStateOf("") }
 
     fun load() {
         scope.launch {
             loading = true; status = "Kalite emirleri yükleniyor..."
-            val r = BcApi.get(context, "qualityOrders?\$top=50&\$orderby=no&\$select=no,sourceType,sourceNo,itemNo,itemDescription,quantity,sampleSize,status,inspector,resultNotes,quarantineBin")
+            val filter = com.dynops.bcwms.ui.buildODataFilter(com.dynops.bcwms.ui.searchClause("no", search))
+            val r = BcApi.get(context, "qualityOrders?\$top=50&\$orderby=no&\$select=no,sourceType,sourceNo,itemNo,itemDescription,quantity,sampleSize,status,inspector,resultNotes,quarantineBin$filter")
             loading = false
             val all = if (r.ok) BcApi.parseValueArray(r.body) else emptyList()
             rows = if (showOnlyOpen) all.filter { it.optString("status") == "Open" } else all
@@ -58,6 +60,8 @@ fun QualityModule() {
             Spacer(Modifier.width(6.dp))
             FilterChip(selected = !showOnlyOpen, onClick = { showOnlyOpen = false }, label = { Text("Tümü") })
         }
+        Spacer(Modifier.height(8.dp))
+        com.dynops.bcwms.ui.DocSearchBar(value = search, onValueChange = { search = it }, onSearch = { load() }, label = "QO no ile ara")
         Spacer(Modifier.height(4.dp))
         StatusText(status)
         Spacer(Modifier.height(8.dp))

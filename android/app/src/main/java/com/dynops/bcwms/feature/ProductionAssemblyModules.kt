@@ -50,11 +50,13 @@ private fun ConsumptionTab() {
     var status by remember { mutableStateOf("") }
     var loading by remember { mutableStateOf(false) }
     var consumeLine by remember { mutableStateOf<JSONObject?>(null) }
+    var search by remember { mutableStateOf("") }
 
     fun load() {
         scope.launch {
             loading = true; status = "Bileşenler yükleniyor..."
-            val r = BcApi.get(context, "productionConsumption?\$top=200&\$orderby=prodOrderNo desc&\$select=prodOrderNo,prodOrderLineNo,componentLineNo,itemNo,description,quantity,remainingQuantity,binCode,locationCode,status")
+            val filter = com.dynops.bcwms.ui.buildODataFilter(com.dynops.bcwms.ui.searchClause("prodOrderNo", search))
+            val r = BcApi.get(context, "productionConsumption?\$top=200&\$orderby=prodOrderNo desc&\$select=prodOrderNo,prodOrderLineNo,componentLineNo,itemNo,description,quantity,remainingQuantity,binCode,locationCode,status$filter")
             loading = false
             rows = if (r.ok) BcApi.parseValueArray(r.body) else emptyList()
             status = if (!r.ok) "HATA: Sarfiyat listesi alınamadı (HTTP ${r.httpCode})"
@@ -66,6 +68,8 @@ private fun ConsumptionTab() {
 
     Column(Modifier.fillMaxSize().padding(12.dp)) {
         Button(onClick = { load() }, enabled = !loading) { Text(if (loading) "..." else "🔄 Yenile") }
+        Spacer(Modifier.height(8.dp))
+        com.dynops.bcwms.ui.DocSearchBar(value = search, onValueChange = { search = it }, onSearch = { load() }, label = "PÜ no ile ara")
         Spacer(Modifier.height(4.dp))
         StatusText(status)
         Spacer(Modifier.height(8.dp))
@@ -157,11 +161,13 @@ private fun OutputTab() {
     var status by remember { mutableStateOf("") }
     var loading by remember { mutableStateOf(false) }
     var outputLine by remember { mutableStateOf<JSONObject?>(null) }
+    var search by remember { mutableStateOf("") }
 
     fun load() {
         scope.launch {
             loading = true; status = "Rota satırları yükleniyor..."
-            val r = BcApi.get(context, "productionOutput?\$top=200&\$orderby=prodOrderNo desc&\$select=prodOrderNo,routingLineNo,routingNo,operationNo,workCenterNo,description,runTime,status")
+            val filter = com.dynops.bcwms.ui.buildODataFilter(com.dynops.bcwms.ui.searchClause("prodOrderNo", search))
+            val r = BcApi.get(context, "productionOutput?\$top=200&\$orderby=prodOrderNo desc&\$select=prodOrderNo,routingLineNo,routingNo,operationNo,workCenterNo,description,runTime,status$filter")
             loading = false
             rows = if (r.ok) BcApi.parseValueArray(r.body) else emptyList()
             status = if (!r.ok) "HATA: Output listesi alınamadı (HTTP ${r.httpCode})"
@@ -173,6 +179,8 @@ private fun OutputTab() {
 
     Column(Modifier.fillMaxSize().padding(12.dp)) {
         Button(onClick = { load() }, enabled = !loading) { Text(if (loading) "..." else "🔄 Yenile") }
+        Spacer(Modifier.height(8.dp))
+        com.dynops.bcwms.ui.DocSearchBar(value = search, onValueChange = { search = it }, onSearch = { load() }, label = "PÜ no ile ara")
         Spacer(Modifier.height(4.dp))
         StatusText(status)
         Spacer(Modifier.height(8.dp))
@@ -267,11 +275,13 @@ fun AssemblyModule() {
     var rows by remember { mutableStateOf<List<JSONObject>>(emptyList()) }
     var status by remember { mutableStateOf("") }
     var loading by remember { mutableStateOf(false) }
+    var search by remember { mutableStateOf("") }
 
     fun load() {
         scope.launch {
             loading = true; status = "Yükleniyor..."
-            val r = BcApi.get(context, "assemblies?\$top=100&\$orderby=no desc&\$select=no,documentType,status,itemNo,description,quantity,remainingQuantity,locationCode,binCode,dueDate")
+            val filter = com.dynops.bcwms.ui.buildODataFilter(com.dynops.bcwms.ui.searchClause("no", search))
+            val r = BcApi.get(context, "assemblies?\$top=100&\$orderby=no desc&\$select=no,documentType,status,itemNo,description,quantity,remainingQuantity,locationCode,binCode,dueDate$filter")
             loading = false
             rows = if (r.ok) BcApi.parseValueArray(r.body) else emptyList()
             status = if (!r.ok) "HATA: Montaj listesi alınamadı (HTTP ${r.httpCode})"
@@ -286,6 +296,8 @@ fun AssemblyModule() {
 
     Column(Modifier.fillMaxSize().padding(12.dp)) {
         Button(onClick = { load() }, enabled = !loading) { Text(if (loading) "..." else "🔄 Yenile") }
+        Spacer(Modifier.height(8.dp))
+        com.dynops.bcwms.ui.DocSearchBar(value = search, onValueChange = { search = it }, onSearch = { load() }, label = "Montaj no ile ara")
         Spacer(Modifier.height(4.dp))
         StatusText(status)
         Spacer(Modifier.height(8.dp))
