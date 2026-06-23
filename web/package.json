@@ -8,7 +8,9 @@
     "typecheck": "tsc --noEmit",
     "build": "vite build",
     "build:saas": "BCWMS_TARGET=saas vite build",
-    "test": "vitest"
+    "test": "vitest",
+    "test:e2e": "playwright test",
+    "test:e2e:install": "playwright install --with-deps chromium"
   },
   "dependencies": {
     "@vitejs/plugin-react": "^4.3.4",

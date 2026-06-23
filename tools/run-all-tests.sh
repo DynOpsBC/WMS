@@ -65,9 +65,16 @@ if [[ -f "$ROOT/web/package.json" ]]; then
   run "web typecheck"   bash -c "cd web && pnpm typecheck"
   run "web build"       bash -c "cd web && pnpm build"
   if [[ "$QUICK" -eq 0 ]]; then
-    # Vitest unit tests — şu an tests/ klasörü playwright spec'leri olduğu için
-    # boş geçer; CI'da çalışsın diye yine de çağırıyoruz.
+    # Vitest unit tests (src/**/*.{test,spec}.{ts,tsx}). Şu an boş geçer.
     run "web vitest"    bash -c "cd web && pnpm exec vitest run --passWithNoTests"
+
+    # Playwright e2e — tests/ klasöründeki spec'leri ve SelfTest panelini
+    # gerçek tarayıcıda doğrular. Chromium browser kurulu değilse SKIP.
+    if [[ -f "$ROOT/web/playwright.config.ts" ]] && [[ -d "$HOME/Library/Caches/ms-playwright" || -d "$HOME/.cache/ms-playwright" ]]; then
+      run "web playwright" bash -c "cd web && pnpm exec playwright test"
+    else
+      RESULTS+=("$(yellow '⏭ SKIP') web playwright  (run 'cd web && pnpm test:e2e:install' once)")
+    fi
   fi
 fi
 
