@@ -30,7 +30,7 @@ jobs:
           - language: java-kotlin
             build-mode: none
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: github/codeql-action/init@v3
         with:
           languages: ${{ matrix.language }}
@@ -48,5 +48,5 @@ jobs:
     # bırakıldı. Lisans alınırsa continue-on-error kaldırılabilir.
     continue-on-error: true
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/dependency-review-action@v4
