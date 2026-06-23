@@ -42,7 +42,7 @@ jobs:
           Write-Host "Install AL tooling or containerized compiler here."
           Write-Host "Compile .app and upload artifact in a configured Windows runner."
       - name: Upload placeholder artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: al-build-notes
           path: al/app.json
