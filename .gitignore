@@ -55,3 +55,4 @@ push-relay/pnpm-lock.yaml
 local.settings.json
 licensing-service/package-lock.json
 .claude/settings.local.json
+.playwright-mcp/
