@@ -3,11 +3,71 @@
 **Project:** BCWMSApp → DynOpsBC/WMS
 **Session ID:** 4bcfb97b-9aee-4b43-93b6-c736a8d6cc64
 **Exported:** 2026-06-24
+**Stats:** 166 user turn · 4846 Claude response · 26 459 satır · 848 KB
 
 Bu transcript projeyi şekillendiren çok-turn'lü bir Claude Code
-oturumunun özetidir. User pro mpt'ları + Claude'un ana text yanıtları
-(tool detayları kısa imza olarak). Tam ham JSONL transcript
-`~/.claude/projects/.../<session-id>.jsonl` (69MB, repo'ya konmuyor).
+oturumunun özetidir. User prompt'ları + Claude'un ana text yanıtları
+(tool detayları kısa imza olarak). `<system-reminder>`,
+`<task-notification>` ve tool result block'ları temizlendi.
+
+Tam ham JSONL transcript `~/.claude/projects/.../<session-id>.jsonl`
+(69 MB) repo'ya konmadı — gerekirse Git LFS düşünülebilir.
+
+## Coverage doğrulaması
+
+Bu log'un projenin tüm aşamalarını içerdiği grep ile doğrulandı
+(2026-06-24):
+
+### Erken evre — planlama + altyapı
+
+| Anahtar | Hit | Konu |
+|---|---|---|
+| v1.10.0 | 22 | release/licensing roadmap |
+| Sprint S1..S7 | 44+9 | lisanslama sprintleri |
+| Azure | 131 | provisioning (bcwms-prod-rg) |
+| Function App | 22 | push-relay + licensing service |
+| BCContainerHelper | 2 | AL publish denemeleri |
+| lisans | 14 | tier/admin token tasarımı |
+
+### Orta evre — QA review + mobil sprintler
+
+| Anahtar | Hit | Konu |
+|---|---|---|
+| QA review | 9 | PDF inceleme (50% misdiagnosis) |
+| PDF | 23 | 15 ekran + 60 madde |
+| Sprint | 256 | M1.1/M1.2/M1.3/M2/M3 |
+| SheetScaffold | 22 | 10 BottomSheet refactor |
+| ActionGuards | 10 | 5 Post/Register button guard |
+| DocSearchBar | 3 | M1.2 ortak search helper |
+| DataWedge | 20 | Zebra scanner integration |
+| ScanBus | 24 | event bus pattern |
+| BinContentApi | 10 | page 72097 |
+| Codex | 180 | 4 farklı review wave + fix'ler |
+| Finding 6 | 2 | ItemApi FlowField CalcFields fix |
+
+### Geç evre — migration + post-launch
+
+| Anahtar | Hit | Konu |
+|---|---|---|
+| celandeniz | 63 | eski repo |
+| DynOpsBC | 55 | yeni canonical org/repo |
+| AppUserRole | 14 | API page 72279 |
+| kaanodabas | 16 | user onboarding örneği |
+| LPTemplateApi | 4 | API page 72280 |
+| Sistem Sağlığı | 20 | self-test panel (10 check) |
+| Posting Test | 26 | grouping + collapsible |
+| Setup Eksik | 2 | hidden tab UX |
+
+### Komutlar + commit'ler
+
+Pipeline'daki tüm önemli commit'ler buradan izlenebilir:
+`aa9e793 → 61e426b → da4aaea → 40122d0 → 17be1f4 → bace34a → f33195a →
+9ce2936 → 78dfefe → 1b3249d → 58aa0a2 → 3e64cfe → 029037f → 8cd53e5`
+
+> **Not:** Bu log dosyasının kendisi (8cd53e5 commit'i ve onun
+> doğrulama turn'ü) commit'ten önce yazıldığı için son 1-2 turn'i
+> içermez — sonsuz döngü olmasın diye. Tam güncel transcript için
+> JSONL dosyasından regenerate edilebilir.
 
 ---
 
