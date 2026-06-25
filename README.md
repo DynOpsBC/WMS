@@ -9,7 +9,7 @@ Advanced Warehouse Management System for Microsoft Dynamics 365 Business Central
 
 > **Müşteri kurulumu için:** [docs/install-pte.md](docs/install-pte.md) (PTE upload + lisans key + ilk demo) · **Sürüm güncellemeleri:** [docs/update-flow.md](docs/update-flow.md) · **Lisans + JWT protokolü:** [docs/license-protocol.md](docs/license-protocol.md) · **v1.10.0 yol haritası:** [docs/release-roadmap.md](docs/release-roadmap.md)
 >
-> **📱 Android telefona kurulum:** [releases/android/bcwms-1.10.0-debug.apk](releases/android/bcwms-1.10.0-debug.apk) (32 MB) · sideload rehberi [docs/android-install-guide.md](docs/android-install-guide.md) · [CHANGELOG](releases/android/CHANGELOG.md)
+> **📱 Android telefona kurulum:** [releases/android/bcwms-1.10.0-debug.apk](releases/android/bcwms-1.10.0-debug.apk) (32 MB) · sideload [docs/android-install-guide.md](docs/android-install-guide.md) · **operatör girişi** [docs/wms-end-user-quickstart.md](docs/wms-end-user-quickstart.md) · [CHANGELOG](releases/android/CHANGELOG.md)
 
 This monorepo contains:
 
