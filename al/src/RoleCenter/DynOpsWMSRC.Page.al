@@ -95,6 +95,46 @@ page 72095 "DOPSWHS DynOps WMS RC"
                 action(DevicePrinterMapNav) { Caption = '🖨 Device Printer Mapping'; ApplicationArea = All; RunObject = page "DOPSWHS Device Printer Map"; }
                 action(SyncConflictNav) { Caption = 'Sync Conflicts'; ApplicationArea = All; RunObject = page "DOPSWHS Sync Conflict List"; }
             }
+
+            // ============================================
+            // 👥 KULLANICI YÖNETİMİ — hızlı user/role ataması
+            // ============================================
+            group(UserMgmtGroup)
+            {
+                Caption = '👥 Kullanıcı Yönetimi';
+                action(QuickUserAssignNav)
+                {
+                    Caption = '➕ Hızlı Kullanıcı Atama';
+                    ApplicationArea = All;
+                    RunObject = page "DOPSWHS Quick User Assign";
+                    Image = AddAction;
+                    ToolTip = 'Tek karttan email + rol seçip atama. Demo seed (Kaan + Deniz) shortcut da burada.';
+                }
+                action(AppUserRoleListNav)
+                {
+                    Caption = '📋 Atanmış Kullanıcılar';
+                    ApplicationArea = All;
+                    RunObject = page "DOPSWHS App User Role List";
+                    Image = UserSetup;
+                    ToolTip = 'Tüm WMS rol atamalarını listeler; satır ekleme/silme buradan.';
+                }
+                action(AppRoleListNav)
+                {
+                    Caption = '📜 Rol Kataloğu';
+                    ApplicationArea = All;
+                    RunObject = page "DOPSWHS App Role List";
+                    Image = SetupList;
+                    ToolTip = 'Mevcut WMS rollerini (INV_ADMIN, PICKER, RECEIVER, vb.) ve filter kurallarını gösterir.';
+                }
+                action(M365SyncNav)
+                {
+                    Caption = '🔄 M365 Kullanıcı Senkronizasyonu';
+                    ApplicationArea = All;
+                    RunObject = page Users;
+                    Image = Refresh;
+                    ToolTip = 'BC standart "Users" sayfasını açar; oradan "Get users from Microsoft 365" ile yeni kullanıcı çek.';
+                }
+            }
         }
 
         // ============================================
