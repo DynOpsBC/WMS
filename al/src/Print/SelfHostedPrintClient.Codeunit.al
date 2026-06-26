@@ -1,4 +1,4 @@
-codeunit 72081 "DOPSWHS Self-Hosted Print Client"
+codeunit 72081 "DOPSWHS Self-Host Print Client"
 {
     Access = Public;
 

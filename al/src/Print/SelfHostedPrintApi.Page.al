@@ -63,7 +63,7 @@ page 72299 "DOPSWHS Print Job API"
     [ServiceEnabled]
     procedure claim(agentId: Code[50]): Boolean
     var
-        Client: Codeunit "DOPSWHS Self-Hosted Print Client";
+        Client: Codeunit "DOPSWHS Self-Host Print Client";
     begin
         exit(Client.MarkClaimed(Rec."Job ID", agentId));
     end;
@@ -71,7 +71,7 @@ page 72299 "DOPSWHS Print Job API"
     [ServiceEnabled]
     procedure markSuccess(message: Text[250]): Boolean
     var
-        Client: Codeunit "DOPSWHS Self-Hosted Print Client";
+        Client: Codeunit "DOPSWHS Self-Host Print Client";
     begin
         Client.MarkStatus(Rec."Job ID", true, message);
         exit(true);
@@ -80,7 +80,7 @@ page 72299 "DOPSWHS Print Job API"
     [ServiceEnabled]
     procedure markFailure(message: Text[250]): Boolean
     var
-        Client: Codeunit "DOPSWHS Self-Hosted Print Client";
+        Client: Codeunit "DOPSWHS Self-Host Print Client";
     begin
         Client.MarkStatus(Rec."Job ID", false, message);
         exit(true);

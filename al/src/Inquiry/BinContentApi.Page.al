@@ -37,7 +37,8 @@ page 72097 "DOPSWHS Bin Content API"
                         Rec.CalcFields(Quantity);
                     end;
                 }
-                field(itemDescription; Rec.Description) { Caption = 'itemDescription'; Editable = false; }
+                // T7302 'Bin Content' has no Description field; mobile/web
+                // looks up the item description from /items separately.
                 field(zoneCode; Rec."Zone Code") { Caption = 'zoneCode'; Editable = false; }
                 field(binTypeCode; Rec."Bin Type Code") { Caption = 'binTypeCode'; Editable = false; }
                 field(qtyBaseUoM; Rec."Quantity (Base)")

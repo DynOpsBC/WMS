@@ -31,9 +31,9 @@ table 72288 "DOPSWHS Device Printer Map"
         field(5; Description; Text[100])
         {
             Caption = 'Description';
-            DataClassification = CustomerContent;
             FieldClass = FlowField;
             CalcFormula = lookup("DOPSWHS Printer".Description where("Code" = field("Printer Code")));
+            Editable = false;
         }
     }
 

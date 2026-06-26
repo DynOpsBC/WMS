@@ -41,7 +41,7 @@ page 72296 "DOPSWHS Printer List"
 
                 trigger OnAction()
                 var
-                    Client: Codeunit "DOPSWHS Self-Hosted Print Client";
+                    Client: Codeunit "DOPSWHS Self-Host Print Client";
                     Token: Text;
                 begin
                     Token := Client.RotateToken(Rec."Code");

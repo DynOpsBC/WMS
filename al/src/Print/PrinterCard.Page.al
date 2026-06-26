@@ -52,7 +52,7 @@ page 72297 "DOPSWHS Printer Card"
 
                 trigger OnAction()
                 var
-                    Client: Codeunit "DOPSWHS Self-Hosted Print Client";
+                    Client: Codeunit "DOPSWHS Self-Host Print Client";
                     Token: Text;
                 begin
                     Token := Client.RotateToken(Rec."Code");
@@ -70,7 +70,7 @@ page 72297 "DOPSWHS Printer Card"
 
                 trigger OnAction()
                 var
-                    Client: Codeunit "DOPSWHS Self-Hosted Print Client";
+                    Client: Codeunit "DOPSWHS Self-Host Print Client";
                 begin
                     Client.EnqueueSelfTest(Rec."Code");
                     Message('Self-test job queued for %1.', Rec."Code");

@@ -8,7 +8,7 @@ codeunit 72051 "DOPSWHS Print Dispatcher"
         Queue: Record "DOPSWHS Print Job Queue";
         LabelReport: Report "DOPSWHS LP Label";
         PrintNode: Codeunit "DOPSWHS PrintNode Client";
-        SelfHosted: Codeunit "DOPSWHS Self-Hosted Print Client";
+        SelfHosted: Codeunit "DOPSWHS Self-Host Print Client";
         OutStream: OutStream;
         Zpl: Text;
         ResolvedPrinter: Code[20];
@@ -74,7 +74,7 @@ codeunit 72051 "DOPSWHS Print Dispatcher"
     local procedure ResolveSelfHostedPrinter(Candidate: Code[50]; Usage: Enum "DOPSWHS IWX Report Usage"): Code[20]
     var
         Printer: Record "DOPSWHS Printer";
-        SelfHosted: Codeunit "DOPSWHS Self-Hosted Print Client";
+        SelfHosted: Codeunit "DOPSWHS Self-Host Print Client";
     begin
         if (Candidate <> '') and Printer.Get(CopyStr(Candidate, 1, MaxStrLen(Printer."Code"))) then
             exit(Printer."Code");

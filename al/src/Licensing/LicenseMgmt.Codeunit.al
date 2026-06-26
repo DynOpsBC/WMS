@@ -220,7 +220,7 @@ codeunit 72082 "DOPSWHS License Mgmt"
         end;
 
         if (not Force) and (Setup."License Last Verified At" <> 0DT) then
-            if (CurrentDateTime() - Setup."License Last Verified At" < VerifyEvery) then
+            if (CurrentDateTime() - Setup."License Last Verified At" < VerifyEveryMs) then
                 exit(IsActive());
 
         TenantId := GetAadTenantId();
@@ -338,11 +338,11 @@ codeunit 72082 "DOPSWHS License Mgmt"
         end;
     end;
 
-    local procedure ReadString(JObj: JsonObject; Key: Text): Text
+    local procedure ReadString(JObj: JsonObject; KeyName: Text): Text
     var
         Token: JsonToken;
     begin
-        if JObj.Get(Key, Token) then
+        if JObj.Get(KeyName, Token) then
             if not Token.AsValue().IsNull then
                 exit(Token.AsValue().AsText());
         exit('');
@@ -376,8 +376,12 @@ codeunit 72082 "DOPSWHS License Mgmt"
     end;
 
     local procedure GetAadTenantId(): Text
+    var
+        AzureAdTenant: Codeunit "Azure AD Tenant";
     begin
-        exit(LowerCase(Format(Database.AadTenantId())));
+        // BC 28+ kaldırdı: Database.AadTenantId(). Yeni karşılığı codeunit
+        // 417 "Azure AD Tenant".GetAadTenantId().
+        exit(LowerCase(AzureAdTenant.GetAadTenantId()));
     end;
 
     local procedure RTrim(Source: Text; Char: Char): Text

@@ -35,7 +35,7 @@ page 72289 "DOPSWHS Printer API"
     [ServiceEnabled]
     procedure generateToken(): Text
     var
-        Client: Codeunit "DOPSWHS Self-Hosted Print Client";
+        Client: Codeunit "DOPSWHS Self-Host Print Client";
     begin
         exit(Client.RotateToken(Rec."Code"));
     end;
@@ -43,7 +43,7 @@ page 72289 "DOPSWHS Printer API"
     [ServiceEnabled]
     procedure testPrint(): Integer
     var
-        Client: Codeunit "DOPSWHS Self-Hosted Print Client";
+        Client: Codeunit "DOPSWHS Self-Host Print Client";
     begin
         exit(Client.EnqueueSelfTest(Rec."Code"));
     end;

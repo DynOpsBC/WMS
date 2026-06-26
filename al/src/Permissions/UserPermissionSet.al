@@ -156,6 +156,6 @@ permissionset 72095 "DOPSWHS-USER"
         page "DOPSWHS Device Printer Map" = X,
         page "DOPSWHS Print Job API" = X,
         page "DOPSWHS Printer API" = X,
-        codeunit "DOPSWHS Self-Hosted Print Client" = X,
+        codeunit "DOPSWHS Self-Host Print Client" = X,
         codeunit "DOPSWHS License Mgmt" = X;
 }
