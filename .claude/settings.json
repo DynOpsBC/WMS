@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(grep -n '$top=\\\\|orderby=' /Users/kaanodabas/Desktop/EL_TERMINAL/WMS/android/app/src/main/java/com/dynops/bcwms/feature/PutAwayShipModules.kt)",
+      "Bash(grep -n '$top=\\\\|orderby=' /Users/kaanodabas/Desktop/EL_TERMINAL/WMS/android/app/src/main/java/com/dynops/bcwms/feature/MoveAndCountModules.kt)"
+    ]
+  }
+}
