@@ -176,17 +176,43 @@ codeunit 72045 "DOPSWHS Movement Mgmt"
         WhseJournalLine.Validate("To Zone Code", ToBin."Zone Code");
         WhseJournalLine.Validate("To Bin Code", ToBinCode);
         WhseJournalLine.Validate(Quantity, Qty);
-        if LotNo <> '' then begin
-            // Warehouse journal lot'u satır alanında taşır (item journal'ın
-            // aksine tracking spec gerekmez); reclass'ta yeni lot = aynı lot.
-            WhseJournalLine."Lot No." := LotNo;
-            WhseJournalLine."New Lot No." := LotNo;
-        end;
         WhseJournalLine.Insert(true);
+
+        // Saha hatası (17 Tem): "Item tracking lines ... must account for the
+        // same quantity" — whse journal lot'u satır alanından DEĞİL, bağlı
+        // "Whse. Item Tracking Line" kaydından okur (UI'daki Item Tracking
+        // Lines sayfasının kod karşılığı).
+        if LotNo <> '' then
+            AddWhseLotTracking(WhseJournalLine, LotNo);
 
         // Item Jnl.-Post Batch'in ambar karşılığı — confirm diyaloğu açmadan
         // register eder (web servis bağlamı).
         WhseJnlRegisterBatch.Run(WhseJournalLine);
+    end;
+
+    local procedure AddWhseLotTracking(WhseJnlLine: Record "Warehouse Journal Line"; LotNo: Code[50])
+    var
+        WhseItemTrackingLine: Record "Whse. Item Tracking Line";
+        EntryNo: Integer;
+    begin
+        WhseItemTrackingLine.Reset();
+        if WhseItemTrackingLine.FindLast() then
+            EntryNo := WhseItemTrackingLine."Entry No.";
+        WhseItemTrackingLine.Init();
+        WhseItemTrackingLine."Entry No." := EntryNo + 1;
+        WhseItemTrackingLine."Item No." := WhseJnlLine."Item No.";
+        WhseItemTrackingLine."Variant Code" := WhseJnlLine."Variant Code";
+        WhseItemTrackingLine."Location Code" := WhseJnlLine."Location Code";
+        WhseItemTrackingLine."Source Type" := Database::"Warehouse Journal Line";
+        WhseItemTrackingLine."Source ID" := WhseJnlLine."Journal Template Name";
+        WhseItemTrackingLine."Source Batch Name" := WhseJnlLine."Journal Batch Name";
+        WhseItemTrackingLine."Source Ref. No." := WhseJnlLine."Line No.";
+        WhseItemTrackingLine."Qty. per Unit of Measure" := WhseJnlLine."Qty. per Unit of Measure";
+        WhseItemTrackingLine.Validate("Quantity (Base)", WhseJnlLine."Qty. (Base)");
+        WhseItemTrackingLine."Lot No." := LotNo;
+        // Reclass: aynı lot hedef bin'e taşınır.
+        WhseItemTrackingLine."New Lot No." := LotNo;
+        WhseItemTrackingLine.Insert();
     end;
 
     local procedure EnsureWhseReclassTemplate(var WhseJournalTemplate: Record "Warehouse Journal Template")

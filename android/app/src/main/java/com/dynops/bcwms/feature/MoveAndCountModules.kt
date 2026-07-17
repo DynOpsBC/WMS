@@ -38,6 +38,7 @@ fun AdHocMoveModule() {
     var lpFlow by remember { mutableStateOf(true) }
     var fromBin by remember { mutableStateOf("") }
     var lpNo by remember { mutableStateOf("") }
+    var binLps by remember { mutableStateOf<List<JSONObject>>(emptyList()) }
     var lpLines by remember { mutableStateOf<List<JSONObject>>(emptyList()) }
     var target by remember { mutableStateOf("") }
     var targetIsLp by remember { mutableStateOf<Boolean?>(null) }
@@ -50,7 +51,23 @@ fun AdHocMoveModule() {
     var status by remember { mutableStateOf("") }
     var busy by remember { mutableStateOf(false) }
 
-    fun resetLpFlow() { fromBin = ""; lpNo = ""; lpLines = emptyList(); target = ""; targetIsLp = null; targetLpBin = "" }
+    fun resetLpFlow() { fromBin = ""; lpNo = ""; binLps = emptyList(); lpLines = emptyList(); target = ""; targetIsLp = null; targetLpBin = "" }
+
+    // Kaynak bin'deki LP'leri getir — operatör yazmak yerine dokunup seçer.
+    fun loadBinLps(bin: String) {
+        val b = bin.trim()
+        if (b.isBlank()) return
+        scope.launch {
+            busy = true; status = "Bindeki LP'ler aranıyor..."
+            val safe = b.replace("'", "''")
+            val r = BcApi.get(context, "licensePlates?\$filter=binCode eq '$safe'&\$top=50&\$select=no,templateCode,status,binCode")
+            binLps = if (r.ok) BcApi.parseValueArray(r.body) else emptyList()
+            busy = false
+            status = if (!r.ok) "HATA: LP listesi alınamadı (HTTP ${r.httpCode})"
+                else if (binLps.isEmpty()) "⚠️ $b bininde kayıtlı LP yok — LP barkodunu okutabilirsiniz"
+                else "PASS: $b bininde ${binLps.size} LP — dokunarak seçin"
+        }
+    }
 
     fun loadLp(no: String) {
         val t = no.trim()
@@ -164,20 +181,56 @@ fun AdHocMoveModule() {
         Spacer(Modifier.height(12.dp))
 
         if (lpFlow) {
-            // 1) Kaynak bin
+            // 1) Kaynak bin — okutulunca o bindeki LP'ler otomatik listelenir.
             ScanField("1) Kaynak Bin okut", fromBin, { fromBin = it }, modifier = Modifier.fillMaxWidth(), onScanned = {
-                fromBin = BarcodeIntentResolver.resolve(it).value
+                val b = BarcodeIntentResolver.resolve(it).value
+                fromBin = b
+                loadBinLps(b)
             })
             Spacer(Modifier.height(8.dp))
-            // 2) LP
+            // 2) LP: bindeki LP'lerden DOKUNARAK seç ya da barkod okut.
             if (fromBin.isNotBlank()) {
-                ScanField("2) License Plate okut", lpNo, { lpNo = it }, modifier = Modifier.fillMaxWidth(), onScanned = {
+                if (binLps.isEmpty() && lpLines.isEmpty()) {
+                    Button(
+                        enabled = !busy,
+                        onClick = { loadBinLps(fromBin) },
+                        modifier = Modifier.fillMaxWidth().height(44.dp),
+                    ) { Text("📋 2) Bu Bindeki LP'leri Listele", fontWeight = FontWeight.SemiBold) }
+                    Spacer(Modifier.height(8.dp))
+                }
+                if (binLps.isNotEmpty() && lpLines.isEmpty()) {
+                    Text("2) LP seçin (${binLps.size})", fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+                    Spacer(Modifier.height(4.dp))
+                    binLps.forEach { lp ->
+                        val no = lp.optString("no")
+                        Card(
+                            onClick = { if (!busy) loadLp(no) },
+                            modifier = Modifier.fillMaxWidth().padding(vertical = 3.dp),
+                            shape = RoundedCornerShape(12.dp),
+                        ) {
+                            Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                                Text("🧺", fontSize = 18.sp)
+                                Spacer(Modifier.width(10.dp))
+                                Column(Modifier.weight(1f)) {
+                                    Text(no, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                                    Text(
+                                        "${firstValue(lp, "templateCode")} · ${firstValue(lp, "status")}",
+                                        fontSize = 11.sp, color = Color.Gray,
+                                    )
+                                }
+                                Text("Seç ›", fontSize = 12.sp, color = Color(0xFF6C5CE7), fontWeight = FontWeight.SemiBold)
+                            }
+                        }
+                    }
+                    Spacer(Modifier.height(6.dp))
+                }
+                ScanField(if (lpLines.isEmpty()) "…ya da LP barkodu okut" else "2) License Plate", lpNo, { lpNo = it }, modifier = Modifier.fillMaxWidth(), onScanned = {
                     loadLp(BarcodeIntentResolver.resolve(it).value)
                 })
                 // Elle yazılan LP için: okuma tetiklenmediğinde içerik bu butonla gelir.
                 if (lpNo.isNotBlank() && lpLines.isEmpty()) {
                     Spacer(Modifier.height(6.dp))
-                    Button(
+                    OutlinedButton(
                         enabled = !busy,
                         onClick = { loadLp(lpNo) },
                         modifier = Modifier.fillMaxWidth().height(44.dp),
