@@ -22,6 +22,7 @@ page 72088 "DOPSWHS LP API"
                 field(status; Rec.Status) { Caption = 'status'; }
                 field(parentLpNo; Rec."Parent LP No.") { Caption = 'parentLpNo'; }
                 field(templateCode; Rec."LP Template Code") { Caption = 'templateCode'; }
+                field(reusable; Reusable) { Caption = 'reusable'; Editable = false; }
                 field(sscc; Rec.SSCC) { Caption = 'sscc'; }
                 field(assignedDocumentType; Rec."Assigned Document Type") { Caption = 'assignedDocumentType'; }
                 field(assignedDocumentNo; Rec."Assigned Document No.") { Caption = 'assignedDocumentNo'; }
@@ -51,6 +52,26 @@ page 72088 "DOPSWHS LP API"
         RecRef.SetTable(Rec);
     end;
 
+    trigger OnAfterGetRecord()
+    var
+        Template: Record "DOPSWHS LP Template";
+    begin
+        Reusable := false;
+        if (Rec."LP Template Code" <> '') and Template.Get(Rec."LP Template Code") then
+            Reusable := Template.Reusable;
+    end;
+
+    var
+        Reusable: Boolean;
+
+    [ServiceEnabled]
+    procedure release()
+    var
+        LPMgt: Codeunit "DOPSWHS LP Management";
+    begin
+        LPMgt.Release(Rec);
+    end;
+
     [ServiceEnabled]
     procedure assign(docType: Enum "DOPSWHS Assigned Doc Type"; docNo: Code[20])
     var
@@ -71,12 +92,22 @@ page 72088 "DOPSWHS LP API"
     procedure transfer(targetLpNo: Code[20]; linesJson: Text)
     var
         TargetLP: Record "DOPSWHS LP Header";
+        SourceLine: Record "DOPSWHS LP Line";
         LPMgt: Codeunit "DOPSWHS LP Management";
         Lines: List of [Integer];
         Quantities: Dictionary of [Integer, Decimal];
     begin
         TargetLP.Get(targetLpNo);
         ParseLines(linesJson, Lines, Quantities);
+        // Boş linesJson = "tüm içerik": önceden sessizce hiçbir satır
+        // taşınmıyordu (boş liste → boş döngü) — tüm satırlarla doldur.
+        if Lines.Count() = 0 then begin
+            SourceLine.SetRange("LP No.", Rec."No.");
+            if SourceLine.FindSet() then
+                repeat
+                    Lines.Add(SourceLine."Line No.");
+                until SourceLine.Next() = 0;
+        end;
         LPMgt.Transfer(Rec, TargetLP, Lines, Quantities);
     end;
 

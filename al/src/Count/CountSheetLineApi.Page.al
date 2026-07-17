@@ -19,6 +19,9 @@ page 72487 "DOPSWHS Count Sheet Line API"
                 field(sheetNo; Rec."Sheet No.") { Caption = 'sheetNo'; }
                 field(lineNo; Rec."Line No.") { Caption = 'lineNo'; }
                 field(itemNo; Rec."Item No.") { Caption = 'itemNo'; }
+                // Ek alanlar: benzer isimli ürünleri ayırt etmek için (Item'dan çözülür).
+                field(description; ItemDescription) { Caption = 'description'; Editable = false; }
+                field(unitOfMeasureCode; ItemBaseUoM) { Caption = 'unitOfMeasureCode'; Editable = false; }
                 field(variantCode; Rec."Variant Code") { Caption = 'variantCode'; }
                 field(binCode; Rec."Bin Code") { Caption = 'binCode'; }
                 field(lpNo; Rec."LP No.") { Caption = 'lpNo'; }
@@ -42,6 +45,18 @@ page 72487 "DOPSWHS Count Sheet Line API"
         RecRef.SetTable(Rec);
     end;
 
+    trigger OnAfterGetRecord()
+    var
+        Item: Record Item;
+    begin
+        Clear(ItemDescription);
+        Clear(ItemBaseUoM);
+        if (Rec."Item No." <> '') and Item.Get(Rec."Item No.") then begin
+            ItemDescription := Item.Description;
+            ItemBaseUoM := Item."Base Unit of Measure";
+        end;
+    end;
+
     [ServiceEnabled]
     procedure recordCount(counterSlot: Integer; qty: Decimal)
     var
@@ -49,4 +64,8 @@ page 72487 "DOPSWHS Count Sheet Line API"
     begin
         CountMgmt.RecordCount(Rec."Sheet No.", Rec."Line No.", counterSlot, qty);
     end;
+
+    var
+        ItemDescription: Text[100];
+        ItemBaseUoM: Code[10];
 }

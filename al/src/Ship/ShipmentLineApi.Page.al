@@ -16,9 +16,13 @@ page 72094 "DOPSWHS Shipment Line API"
         {
             repeater(Group)
             {
+                field(no; Rec."No.") { Caption = 'no'; Editable = false; }
                 field(lineNo; Rec."Line No.") { Caption = 'lineNo'; Editable = false; }
                 field(itemNo; Rec."Item No.") { Caption = 'itemNo'; Editable = false; }
                 field(description; Rec.Description) { Caption = 'description'; Editable = false; }
+                field(description2; Rec."Description 2") { Caption = 'description2'; Editable = false; }
+                field(variantCode; Rec."Variant Code") { Caption = 'variantCode'; Editable = false; }
+                field(gtin; ItemGtin) { Caption = 'gtin'; Editable = false; }
                 field(qtyOutstanding; Rec."Qty. Outstanding") { Caption = 'qtyOutstanding'; Editable = false; }
                 field(qtyToShip; Rec."Qty. to Ship") { Caption = 'qtyToShip'; }
                 field(licensePlateNo; Rec."LP No.") { Caption = 'licensePlateNo'; }
@@ -39,6 +43,15 @@ page 72094 "DOPSWHS Shipment Line API"
         RecRef.SetTable(Rec);
     end;
 
+    trigger OnAfterGetRecord()
+    var
+        Item: Record Item;
+    begin
+        Clear(ItemGtin);
+        if (Rec."Item No." <> '') and Item.Get(Rec."Item No.") then
+            ItemGtin := Item.GTIN;
+    end;
+
     trigger OnModifyRecord(): Boolean
     var
         ShipmentMgmt: Codeunit "DOPSWHS Shipment Mgmt";
@@ -46,4 +59,7 @@ page 72094 "DOPSWHS Shipment Line API"
         ShipmentMgmt.ConfirmShipmentLine(Rec, Rec."Qty. to Ship", Rec."LP No.", Rec.SSCC);
         exit(false);
     end;
+
+    var
+        ItemGtin: Code[14];
 }

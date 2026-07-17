@@ -57,3 +57,13 @@ fun searchClause(field: String, search: String): String? {
     if (q.isBlank()) return null
     return "startswith($field,'${q.replace("'", "''")}')"
 }
+
+/**
+ * "Bana atanan" chip'i için assignedUserId eşitlik clause'u. BC "Assigned User ID"
+ * alanları büyük harf Code değerleri tutar; userId BcApi.currentUserId'den gelir.
+ * enabled=false ("Tümü" seçili) veya kullanıcı çözülemedi (boş) → null, yani filtresiz liste.
+ */
+fun assignedToMeClause(userId: String, enabled: Boolean = true): String? {
+    if (!enabled || userId.isBlank()) return null
+    return "assignedUserId eq '${userId.trim().uppercase().replace("'", "''")}'"
+}

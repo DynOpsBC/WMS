@@ -13,7 +13,7 @@ package com.dynops.bcwms.scanner
  * A document screen declares which [BarcodeKind]s it accepts; [resolve] returns a
  * [ResolvedBarcode] the screen can accept or reject.
  */
-enum class BarcodeKind { Item, Bin, Lp, LpTemplate, Lot, Serial, Unknown }
+enum class BarcodeKind { Item, Bin, Lp, LpTemplate, Lot, Serial, Document, Unknown }
 
 data class ResolvedBarcode(
     val kind: BarcodeKind,
@@ -26,6 +26,8 @@ data class ResolvedBarcode(
     val lotNo: String? = null,
     val serialNo: String? = null,
     val expiry: String? = null,
+    /** Belge barkoduysa belge türü: receipt/shipment/putaway/pick/movement/salesOrder/purchaseOrder/... */
+    val docType: String? = null,
 )
 
 object BarcodeIntentResolver {
@@ -43,6 +45,9 @@ object BarcodeIntentResolver {
             raw.startsWith("LP", ignoreCase = true) && raw.drop(2).all { it.isDigit() } && raw.length >= 4 ->
                 return ResolvedBarcode(BarcodeKind.Lp, raw, raw)
         }
+
+        // Belge barkodları (Warehouse Insight %X% kodları + düz BC belge no'ları) → belgeyi aç.
+        resolveDocument(raw)?.let { return it }
 
         // Rule 2: GS1-128 — contains application identifiers like (01), (10), (17), (21) or FNC1 group separators
         if (looksLikeGs1(raw)) {
@@ -62,6 +67,47 @@ object BarcodeIntentResolver {
 
         // Default: treat as item code (alphanumeric item no like "1896-S")
         return ResolvedBarcode(BarcodeKind.Item, raw, raw, itemNo = raw)
+    }
+
+    /**
+     * Belge barkodu mu? İki format tanınır:
+     *  - Warehouse Insight sarmalayıcısı: %R%RE000035, %WS%SH..., %A%PU00001 (aktivite), %S%/%PO%/%T%/%AO%/%P%
+     *  - Düz BC belge no'su: RE.../SH.../PU.../PI.../WM... + rakam
+     * Kaynak belgeler (SO/PO numeric) yalnız %S%/%PO% ile tanınır; düz sayı üründen ayırt edilemez.
+     */
+    private fun resolveDocument(raw: String): ResolvedBarcode? {
+        val wrapped = Regex("^%([A-Za-z]+)%(\\S+)").find(raw)
+        if (wrapped != null) {
+            val tag = wrapped.groupValues[1].uppercase()
+            val no = wrapped.groupValues[2].trim()
+            val type = when (tag) {
+                "R" -> "receipt"
+                "WS" -> "shipment"
+                "S" -> "salesOrder"
+                "PO" -> "purchaseOrder"
+                "T" -> "transferOrder"
+                "AO" -> "assembly"
+                "P" -> "production"
+                "A" -> docTypeFromPrefix(no)   // Whse Activity: türü gömülü no'nun ön ekinden çöz
+                else -> null
+            }
+            if (type != null) return ResolvedBarcode(BarcodeKind.Document, no, raw, docType = type)
+        }
+        docTypeFromPrefix(raw)?.let { return ResolvedBarcode(BarcodeKind.Document, raw.trim(), raw, docType = it) }
+        return null
+    }
+
+    /** RE.../SH.../PU.../PI.../WM... + rakam → belge türü; aksi halde null. */
+    private fun docTypeFromPrefix(s: String): String? {
+        val v = s.trim().uppercase()
+        return when {
+            Regex("^RE\\d{3,}$").matches(v) -> "receipt"
+            Regex("^SH\\d{3,}$").matches(v) -> "shipment"
+            Regex("^PU\\d{3,}$").matches(v) -> "putaway"
+            Regex("^PI\\d{3,}$").matches(v) -> "pick"
+            Regex("^WM\\d{3,}$").matches(v) -> "movement"
+            else -> null
+        }
     }
 
     private fun looksLikeGs1(raw: String): Boolean {

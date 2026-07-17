@@ -32,7 +32,7 @@ object DeviceAuth {
     )
 
     sealed class TokenResult {
-        data class Success(val accessToken: String) : TokenResult()
+        data class Success(val accessToken: String, val refreshToken: String = "", val expiresInSec: Int = 3600) : TokenResult()
         data class Pending(val reason: String) : TokenResult()
         data class Failure(val error: String) : TokenResult()
     }
@@ -75,7 +75,7 @@ object DeviceAuth {
             val j = try { JSONObject(text) } catch (e: Exception) { JSONObject() }
             if (status in 200..299) {
                 val token = j.optString("access_token")
-                if (token.isNotBlank()) return@withContext TokenResult.Success(token)
+                if (token.isNotBlank()) return@withContext TokenResult.Success(token, j.optString("refresh_token"), j.optInt("expires_in", 3600))
             }
             when (j.optString("error")) {
                 "authorization_pending" -> {}                       // keep waiting
@@ -110,7 +110,7 @@ object DeviceAuth {
             val j = try { JSONObject(text) } catch (e: Exception) { JSONObject() }
             if (status in 200..299) {
                 val token = j.optString("access_token")
-                if (token.isNotBlank()) return@withContext TokenResult.Success(token)
+                if (token.isNotBlank()) return@withContext TokenResult.Success(token, j.optString("refresh_token"), j.optInt("expires_in", 3600))
                 return@withContext TokenResult.Failure("Token boş döndü.")
             }
             val err = j.optString("error")
@@ -125,6 +125,27 @@ object DeviceAuth {
         } catch (e: Exception) {
             TokenResult.Failure(e.message ?: "ağ hatası")
         }
+    }
+
+    /**
+     * Exchanges a refresh token for a fresh access token (blocking — call from an IO dispatcher).
+     * Returns Pair(accessToken, rotatedRefreshToken) or null when AAD rejects the refresh
+     * (revoked / expired refresh token) so the caller can fall back to a full re-login.
+     */
+    fun refreshAccessToken(refreshToken: String): Triple<String, String, Int>? {
+        return try {
+            val body = "grant_type=refresh_token" +
+                "&client_id=${BcApi.CLIENT_ID}" +
+                "&scope=${enc(SCOPE)}" +
+                "&refresh_token=${enc(refreshToken)}"
+            val (status, text) = postForm(authority("token"), body)
+            if (status !in 200..299) return null
+            val j = JSONObject(text)
+            val token = j.optString("access_token")
+            if (token.isBlank()) null
+            // AAD rotates refresh tokens; fall back to the old one if none returned.
+            else Triple(token, j.optString("refresh_token").ifBlank { refreshToken }, j.optInt("expires_in", 3600))
+        } catch (e: Exception) { null }
     }
 
     private fun enc(s: String) = URLEncoder.encode(s, "UTF-8")

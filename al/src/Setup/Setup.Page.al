@@ -54,6 +54,21 @@ page 72061 "DOPSWHS Setup"
                 {
                     ApplicationArea = All;
                 }
+                field("Show SO Shipment Mobile"; Rec."Show SO Shipment Mobile")
+                {
+                    ApplicationArea = All;
+                    ToolTip = 'Açık: el terminalinde "Sales Order" sevkiyat sekmesi gösterilir. Kapalı: sadece Warehouse Shipment belgeleri gösterilir.';
+                }
+                field("Lot No. Series"; Rec."Lot No. Series")
+                {
+                    ApplicationArea = All;
+                    ToolTip = 'Ayarlanırsa, mal kabulde lot boş bırakılınca otomatik lot numarası üretilir. Boş = elle giriş.';
+                }
+                field("Serial No. Series"; Rec."Serial No. Series")
+                {
+                    ApplicationArea = All;
+                    ToolTip = 'Ayarlanırsa, mal kabulde seri boş bırakılınca otomatik seri numarası üretilir. Boş = elle giriş.';
+                }
             }
             group(License)
             {

@@ -3,9 +3,14 @@ package com.dynops.bcwms
 import android.content.Context
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.OkHttpClient
+import okhttp3.Request
+import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONObject
 import java.net.HttpURLConnection
 import java.net.URL
+import java.util.concurrent.TimeUnit
 
 /**
  * Business Central SaaS API client.
@@ -26,11 +31,14 @@ object BcApi {
 
     private const val PREFS = "bcwms_prefs"
     private const val KEY_TOKEN = "bc_access_token"
+    private const val KEY_REFRESH = "bc_refresh_token"
+    private const val KEY_EXPIRY = "bc_token_expiry_ms"
     private const val KEY_ENV = "bc_environment"
     private const val KEY_COMPANY_ID = "bc_company_id"
     private const val KEY_COMPANY_NAME = "bc_company_name"
     private const val KEY_LOCAL_USER = "local_user_id"
     private const val KEY_LOCAL_PROFILE = "local_user_profile_json"
+    private const val KEY_BC_USER = "bc_user_id"
 
     private fun prefs(context: Context) = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
 
@@ -63,7 +71,44 @@ object BcApi {
 
     fun hasToken(context: Context): Boolean = getToken(context).isNotBlank()
 
-    fun clearToken(context: Context) { prefs(context).edit().remove(KEY_TOKEN).apply() }
+    fun clearToken(context: Context) { prefs(context).edit().remove(KEY_TOKEN).remove(KEY_REFRESH).remove(KEY_BC_USER).apply() }
+
+    fun saveRefreshToken(context: Context, token: String) {
+        if (token.isBlank()) return
+        prefs(context).edit().putString(KEY_REFRESH, token.trim()).apply()
+    }
+
+    fun getRefreshToken(context: Context): String = prefs(context).getString(KEY_REFRESH, "") ?: ""
+
+    /** Persists the absolute epoch-ms at which the current access token expires. */
+    fun saveTokenExpiry(context: Context, expiresInSec: Int) {
+        val at = System.currentTimeMillis() + expiresInSec * 1000L
+        prefs(context).edit().putLong(KEY_EXPIRY, at).apply()
+    }
+
+    private fun tokenExpiryMs(context: Context): Long = prefs(context).getLong(KEY_EXPIRY, 0L)
+
+    /**
+     * Proactively renews the access token when it is within [skewMs] of expiry (or already
+     * expired) and a refresh token is available. Runs before each request so an operator's
+     * session lasts as long as the AAD refresh token (hours → all shift), not the ~1h access
+     * token. Silent no-op when there is nothing to refresh or the refresh is rejected — the
+     * request then proceeds and the reactive 401 path is the final fallback.
+     */
+    private fun ensureFreshToken(context: Context, skewMs: Long = 5 * 60 * 1000L) {
+        val expiry = tokenExpiryMs(context)
+        if (expiry == 0L || System.currentTimeMillis() < expiry - skewMs) return
+        synchronized(this) {
+            // Re-check inside the lock: another thread may have just refreshed.
+            if (System.currentTimeMillis() < tokenExpiryMs(context) - skewMs) return
+            val rt = getRefreshToken(context)
+            if (rt.isBlank()) return
+            val refreshed = DeviceAuth.refreshAccessToken(rt) ?: return
+            saveToken(context, refreshed.first)
+            saveRefreshToken(context, refreshed.second)
+            saveTokenExpiry(context, refreshed.third)
+        }
+    }
 
     // ---- Local WMS user (no AAD) overlay ----
     /** Saves the locally-authenticated WMS username + resolved profile JSON. The AAD access token
@@ -80,6 +125,25 @@ object BcApi {
     fun hasLocalUser(context: Context): Boolean = getLocalUser(context).isNotBlank()
     fun clearLocalUser(context: Context) {
         prefs(context).edit().remove(KEY_LOCAL_USER).remove(KEY_LOCAL_PROFILE).apply()
+    }
+
+    /**
+     * Effective operator identity for "assigned to me" filters: the local WMS username when the
+     * operator signed in with a WMS account, otherwise the BC User ID of the AAD token — resolved
+     * once via appUserProfiles resolveCurrent and cached until sign-out. BC's "Assigned User ID"
+     * fields hold exactly this value, so list filters compare against it. Returns "" when BC is
+     * unreachable; callers should then fall back to an unfiltered list.
+     */
+    suspend fun currentUserId(context: Context): String {
+        val local = getLocalUser(context)
+        if (local.isNotBlank()) return local
+        val cached = prefs(context).getString(KEY_BC_USER, "") ?: ""
+        if (cached.isNotBlank()) return cached
+        val r = boundAction(context, "appUserProfiles", "DEFAULT", "resolveCurrent")
+        if (!r.ok) return ""
+        val userId = try { JSONObject(scalarValue(r.body)).optString("userId") } catch (e: Exception) { "" }
+        if (userId.isNotBlank()) prefs(context).edit().putString(KEY_BC_USER, userId).apply()
+        return userId
     }
 
     // ---- HTTP ----
@@ -126,36 +190,58 @@ object BcApi {
         return request(context, "POST", path, body)
     }
 
+    private val httpClient: OkHttpClient by lazy {
+        OkHttpClient.Builder()
+            .connectTimeout(15, TimeUnit.SECONDS)
+            .readTimeout(20, TimeUnit.SECONDS)
+            .build()
+    }
+
+    private val jsonMediaType = "application/json; charset=utf-8".toMediaType()
+
     private suspend fun request(context: Context, method: String, path: String, jsonBody: String?): ApiResult =
         withContext(Dispatchers.IO) {
+            ensureFreshToken(context)
             val token = getToken(context)
             if (token.isBlank()) return@withContext ApiResult(false, 0, "Token yok — Connection ekranindan token girin")
             try {
                 val rawUrl = if (path.startsWith("http")) path else "${customApiBase(context)}/$path"
-                val url = URL(rawUrl.replace(" ", "%20").replace("'", "%27"))
-                // HttpURLConnection cannot send PATCH natively; tunnel it via POST + override header.
-                val needsOverride = method == "PATCH"
-                val conn = (url.openConnection() as HttpURLConnection).apply {
-                    requestMethod = if (needsOverride) "POST" else method
-                    if (needsOverride) setRequestProperty("X-HTTP-Method-Override", "PATCH")
-                    setRequestProperty("Authorization", "Bearer $token")
-                    setRequestProperty("Accept", "application/json")
-                    // BC requires If-Match for PATCH/DELETE; "*" skips optimistic-concurrency check.
-                    if (method == "PATCH" || method == "DELETE") setRequestProperty("If-Match", "*")
-                    if (jsonBody != null) {
-                        setRequestProperty("Content-Type", "application/json")
-                        doOutput = true
-                    }
-                    connectTimeout = 15000
-                    readTimeout = 20000
+                val url = rawUrl.replace(" ", "%20").replace("'", "%27")
+                // OkHttp sends real PATCH/DELETE verbs. Android's HttpURLConnection cannot do PATCH, and
+                // BC's API endpoint ignores the X-HTTP-Method-Override fallback → POST-tunneled PATCH lands
+                // as a literal POST to a keyed entity and is rejected with HTTP 405 on line updates.
+                val requestBody = when {
+                    jsonBody != null -> jsonBody.toRequestBody(jsonMediaType)
+                    // OkHttp requires a (possibly empty) body for POST/PATCH/PUT.
+                    method == "POST" || method == "PATCH" || method == "PUT" -> ByteArray(0).toRequestBody(jsonMediaType)
+                    else -> null
                 }
-                if (jsonBody != null) conn.outputStream.use { it.write(jsonBody.toByteArray()) }
-                val code = conn.responseCode
-                val body = if (code in 200..299)
-                    conn.inputStream.bufferedReader().readText()
-                else
-                    conn.errorStream?.bufferedReader()?.readText() ?: "(no body)"
-                ApiResult(code in 200..299, code, body)
+                val builder = Request.Builder()
+                    .url(url)
+                    .method(method, requestBody)
+                    .header("Authorization", "Bearer $token")
+                    .header("Accept", "application/json")
+                // BC requires If-Match for PATCH/DELETE; "*" skips optimistic-concurrency check.
+                if (method == "PATCH" || method == "DELETE") builder.header("If-Match", "*")
+                httpClient.newCall(builder.build()).execute().use { resp ->
+                    val code = resp.code
+                    val body = resp.body?.string().let { if (it.isNullOrEmpty()) "(no body)" else it }
+                    if (code != 401) return@use ApiResult(code in 200..299, code, body)
+                    // Access token expired (~1h). Try a silent refresh once, then replay the request,
+                    // so the operator is not silently logged out mid-shift.
+                    val refreshed = synchronized(this@BcApi) {
+                        val rt = getRefreshToken(context)
+                        if (rt.isBlank()) null else DeviceAuth.refreshAccessToken(rt)
+                    } ?: return@use ApiResult(false, code, body)
+                    saveToken(context, refreshed.first)
+                    saveRefreshToken(context, refreshed.second)
+                    saveTokenExpiry(context, refreshed.third)
+                    val retry = builder.header("Authorization", "Bearer ${refreshed.first}").build()
+                    httpClient.newCall(retry).execute().use { r2 ->
+                        val b2 = r2.body?.string().let { if (it.isNullOrEmpty()) "(no body)" else it }
+                        ApiResult(r2.code in 200..299, r2.code, b2)
+                    }
+                }
             } catch (e: Exception) {
                 ApiResult(false, -1, "Hata: ${e.message}")
             }

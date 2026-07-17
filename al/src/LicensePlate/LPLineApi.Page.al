@@ -27,6 +27,7 @@ page 72089 "DOPSWHS LP Line API"
                 field(packageNo; Rec."Package No.") { Caption = 'packageNo'; }
                 field(childLpNo; Rec."Child LP No.") { Caption = 'childLpNo'; }
                 field(expirationDate; Rec."Expiration Date") { Caption = 'expirationDate'; }
+                field(sourceBinCode; Rec."Source Bin Code") { Caption = 'sourceBinCode'; }
                 field(sourceDocumentType; Rec."Source Document Type") { Caption = 'sourceDocumentType'; }
                 field(sourceDocumentNo; Rec."Source Document No.") { Caption = 'sourceDocumentNo'; }
             }

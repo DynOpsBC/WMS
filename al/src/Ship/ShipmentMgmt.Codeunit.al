@@ -27,6 +27,7 @@ codeunit 72047 "DOPSWHS Shipment Mgmt"
         PostedWhseShipmentLine: Record "Posted Whse. Shipment Line";
         PostedWhseShipmentHeader: Record "Posted Whse. Shipment Header";
         WhsePostShipment: Codeunit "Whse.-Post Shipment";
+        WhseShipmentRelease: Codeunit "Whse.-Shipment Release";
         LineLp: Dictionary of [Integer, Code[20]];
         LineSscc: Dictionary of [Integer, Code[18]];
         LpNo: Code[20];
@@ -35,6 +36,12 @@ codeunit 72047 "DOPSWHS Shipment Mgmt"
         LpCount: Integer;
         PostedNo: Code[20];
     begin
+        // Mobile-friendly: auto-release if the shipment is still Open (e.g. a Qty. to Ship edit
+        // reopened it), so the operator doesn't have to re-release in BC before posting.
+        if WhseShipmentHeader.Status <> WhseShipmentHeader.Status::Released then begin
+            WhseShipmentRelease.Release(WhseShipmentHeader);
+            WhseShipmentHeader.Get(WhseShipmentHeader."No.");
+        end;
         WhseShipmentHeader.TestField(Status, WhseShipmentHeader.Status::Released);
 
         WhseShipmentLine.SetRange("No.", WhseShipmentHeader."No.");

@@ -191,10 +191,12 @@ private fun LpDocument(lpNo: String, onBack: () -> Unit) {
     var status by remember { mutableStateOf("") }
     var busy by remember { mutableStateOf(false) }
 
-    // dialogs
+    // dialogs — ELOG akışı: LP okut (belge açık) → ürün okut → adet → KAYNAK BİN okut → kaydet.
     var showAddLine by remember { mutableStateOf(false) }
     var showQty by remember { mutableStateOf(false) }
     var scannedItem by remember { mutableStateOf("") }
+    var pendingQty by remember { mutableStateOf<com.dynops.bcwms.ui.QuantityResult?>(null) }
+    var showSourceBin by remember { mutableStateOf(false) }
     var showTransfer by remember { mutableStateOf(false) }
     var showPartial by remember { mutableStateOf(false) }
 
@@ -226,14 +228,23 @@ private fun LpDocument(lpNo: String, onBack: () -> Unit) {
     Column(Modifier.fillMaxSize()) {
         Column(Modifier.weight(1f).padding(12.dp)) {
             TextButton(onClick = onBack) { Text("‹ LP Listesi") }
+            val isTote = h?.optBoolean("reusable") == true
             DocHeaderCard(
                 title = lpNo,
-                subtitle = "${h?.optString("templateCode") ?: ""} · ${h?.optString("locationCode") ?: ""}/${h?.optString("binCode") ?: ""}" +
+                subtitle = "${h?.optString("templateCode") ?: ""}${if (isTote) " · ♻ Tote" else ""} · ${h?.optString("locationCode") ?: ""}/${h?.optString("binCode") ?: ""}" +
                     (h?.optString("sscc")?.takeIf { it.isNotBlank() }?.let { "\nSSCC: $it" } ?: ""),
                 badge = st.ifBlank { "Open" }
             )
             Spacer(Modifier.height(6.dp))
             StatusText(status)
+            // Tote (yeniden kullanılabilir LP): iş bitince Release → tekrar Built.
+            if (st.equals("Assigned", ignoreCase = true)) {
+                Spacer(Modifier.height(6.dp))
+                Button(
+                    onClick = { action("release", "{}", "LP serbest bırakıldı — yeniden kullanılabilir") },
+                    enabled = !busy, modifier = Modifier.fillMaxWidth().height(48.dp),
+                ) { Text(if (isTote) "♻ Tote'u Serbest Bırak" else "Serbest Bırak (Release)", fontWeight = FontWeight.SemiBold) }
+            }
             Spacer(Modifier.height(6.dp))
             Text("Satırlar (${lines.size})", fontWeight = FontWeight.Bold, fontSize = 14.sp)
             LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -242,6 +253,7 @@ private fun LpDocument(lpNo: String, onBack: () -> Unit) {
                         Column(Modifier.padding(10.dp)) {
                             Text("${ln.optString("itemNo")} × ${ln.optDouble("quantity")}", fontWeight = FontWeight.Medium)
                             val extra = listOfNotNull(
+                                ln.optString("sourceBinCode").takeIf { it.isNotBlank() && it != "null" }?.let { "📍 $it" },
                                 ln.optString("lotNo").takeIf { it.isNotBlank() }?.let { "Lot $it" },
                                 ln.optString("serialNo").takeIf { it.isNotBlank() }?.let { "Sr $it" },
                                 ln.optString("unitOfMeasure").takeIf { it.isNotBlank() }
@@ -293,18 +305,40 @@ private fun LpDocument(lpNo: String, onBack: () -> Unit) {
             itemNo = scannedItem,
             onDismiss = { showQty = false },
             onConfirm = { res ->
+                // Adet girildi — kayıttan önce ürünün alındığı KAYNAK BİN okutulur.
                 showQty = false
+                pendingQty = res
+                showSourceBin = true
+            }
+        )
+    }
+    if (showSourceBin) {
+        ToteScanSheet(
+            title = "Kaynak Bin Okutun",
+            hint = "Ürünün alındığı raf gözünün (bin) barkodunu okutun",
+            onDismiss = { showSourceBin = false; pendingQty = null },
+            onScanned = { scannedBin ->
+                showSourceBin = false
+                val res = pendingQty ?: return@ToteScanSheet
+                pendingQty = null
                 scope.launch {
                     busy = true; status = "Satır ekleniyor..."
                     val body = JSONObject().apply {
                         put("lpNo", lpNo); put("itemNo", scannedItem); put("quantity", res.quantity)
+                        put("sourceBinCode", scannedBin.trim())
                         if (res.uom.isNotBlank()) put("unitOfMeasure", res.uom)
                         if (res.lotNo.isNotBlank()) put("lotNo", res.lotNo)
                         if (res.serialNo.isNotBlank()) put("serialNo", res.serialNo)
                     }.toString()
-                    val r = BcApi.post(context, "licensePlateLines", body)
+                    var r = BcApi.post(context, "licensePlateLines", body)
+                    if (r.httpCode == 400) {
+                        // Eski publish'te sourceBinCode alanı yok — alansız gönder.
+                        val legacy = JSONObject(body).apply { remove("sourceBinCode") }.toString()
+                        r = BcApi.post(context, "licensePlateLines", legacy)
+                    }
                     busy = false
-                    status = if (r.ok) "PASS: Satır eklendi (HTTP ${r.httpCode})" else "HATA: ${BcApi.errorMessage(r.body)}"
+                    status = if (r.ok) "PASS: ${scannedItem} × ${res.quantity} eklendi (bin: ${scannedBin.trim()})"
+                        else "HATA: ${BcApi.errorMessage(r.body)}"
                     if (r.ok) reload()
                 }
             }
@@ -313,7 +347,12 @@ private fun LpDocument(lpNo: String, onBack: () -> Unit) {
     if (showTransfer) {
         TransferSheet(onDismiss = { showTransfer = false }, onConfirm = { target ->
             showTransfer = false
-            action("transfer", JSONObject().apply { put("targetLpNo", target); put("linesJson", "") }.toString(), "Transfer tamamlandı")
+            // Tüm satırları açıkça gönder — eski publish'te boş linesJson hiçbir
+            // satır taşımadan başarı dönüyordu (LPApi.ParseLines boş çıkışı).
+            val linesJson = org.json.JSONArray().apply {
+                lines.forEach { ln -> put(JSONObject().apply { put("lineNo", ln.optInt("lineNo")) }) }
+            }.toString()
+            action("transfer", JSONObject().apply { put("targetLpNo", target); put("linesJson", linesJson) }.toString(), "Transfer tamamlandı (${lines.size} satır)")
         })
     }
     if (showPartial) {

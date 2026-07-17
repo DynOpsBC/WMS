@@ -8,6 +8,7 @@ page 72086 "DOPSWHS Item API"
     EntitySetName = 'items';
     SourceTable = Item;
     DelayedInsert = true;
+    ODataKeyFields = "No.";
     ApplicationArea = All;
 
     layout
@@ -67,5 +68,13 @@ page 72086 "DOPSWHS Item API"
             "Qty. on Sales Order",
             "Qty. on Prod. Order",
             "Reserved Qty. on Inventory");
+    end;
+
+    [ServiceEnabled]
+    procedure printLabel(printerId: Code[50]; copies: Integer)
+    var
+        Dispatcher: Codeunit "DOPSWHS Print Dispatcher";
+    begin
+        Dispatcher.PrintItemLabel(Rec, printerId, copies);
     end;
 }

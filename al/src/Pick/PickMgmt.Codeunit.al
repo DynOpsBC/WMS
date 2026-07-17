@@ -106,6 +106,62 @@ codeunit 72046 "DOPSWHS Pick Mgmt"
         Log('Pick.Reassign', Pick."No.");
     end;
 
+    // ELOG saha ziyareti: toplama sırasında sipariş başına tote (sepet) bağlama.
+    // Terminal ürün okutunca satırın kaynak siparişi için atanmış tote'u sorar;
+    // yoksa okutulan yeni tote'u bu siparişe bağlar. Aynı tote aynı pick içinde
+    // birden çok siparişe hizmet edebilir (bulk/batch); farklı bir pick'in
+    // kapatılmamış tote'u yeniden bağlanamaz.
+    procedure AssignTote(var Pick: Record "Warehouse Activity Header"; SourceOrderNo: Code[20]; LpNo: Code[20])
+    var
+        Assignment: Record "DOPSWHS Pick Tote Assignment";
+        OtherAssignment: Record "DOPSWHS Pick Tote Assignment";
+        LP: Record "DOPSWHS LP Header";
+        LPMgt: Codeunit "DOPSWHS LP Management";
+    begin
+        EnsurePick(Pick);
+        if SourceOrderNo = '' then
+            Error(SourceOrderRequiredErr);
+        LP.Get(LpNo);
+
+        OtherAssignment.SetRange("LP No.", LpNo);
+        OtherAssignment.SetRange(Packed, false);
+        OtherAssignment.SetFilter("Pick No.", '<>%1', Pick."No.");
+        if not OtherAssignment.IsEmpty() then
+            Error(ToteBusyErr, LpNo);
+
+        if Assignment.Get(Pick."No.", SourceOrderNo) then begin
+            Assignment."LP No." := LpNo;
+            Assignment.Packed := false;
+            Assignment."Assigned By User" := CopyStr(UserId(), 1, MaxStrLen(Assignment."Assigned By User"));
+            Assignment."Assigned DateTime" := CurrentDateTime();
+            Assignment.Modify(true);
+        end else begin
+            Assignment.Init();
+            Assignment."Pick No." := Pick."No.";
+            Assignment."Source Order No." := SourceOrderNo;
+            Assignment."LP No." := LpNo;
+            Assignment."Location Code" := Pick."Location Code";
+            Assignment."Assigned By User" := CopyStr(UserId(), 1, MaxStrLen(Assignment."Assigned By User"));
+            Assignment."Assigned DateTime" := CurrentDateTime();
+            Assignment.Insert(true);
+        end;
+
+        // LP yaşam döngüsü: Built tote pick'e Assigned olur (Release paketlemede).
+        if LP.Status = LP.Status::Built then
+            LPMgt.Assign(LP, Enum::"DOPSWHS Assigned Doc Type"::WhsePick, Pick."No.");
+
+        Log('Pick.AssignTote', Pick."No.");
+    end;
+
+    procedure GetToteForOrder(PickNo: Code[20]; SourceOrderNo: Code[20]): Code[20]
+    var
+        Assignment: Record "DOPSWHS Pick Tote Assignment";
+    begin
+        if Assignment.Get(PickNo, SourceOrderNo) then
+            exit(Assignment."LP No.");
+        exit('');
+    end;
+
     local procedure EnsurePick(var Pick: Record "Warehouse Activity Header")
     begin
         if Pick.Type <> Pick.Type::Pick then
@@ -118,4 +174,8 @@ codeunit 72046 "DOPSWHS Pick Mgmt"
     begin
         Telemetry.LogInfo(Category, DocNo);
     end;
+
+    var
+        SourceOrderRequiredErr: Label 'Source order no. is required to assign a tote.';
+        ToteBusyErr: Label 'Tote %1 is still in use by another pick. Complete or release it first.', Comment = '%1 = LP No.';
 }

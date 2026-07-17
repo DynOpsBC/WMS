@@ -37,8 +37,7 @@ page 72097 "DOPSWHS Bin Content API"
                         Rec.CalcFields(Quantity);
                     end;
                 }
-                // T7302 'Bin Content' has no Description field; mobile/web
-                // looks up the item description from /items separately.
+                field(itemDescription; ItemDescription) { Caption = 'itemDescription'; Editable = false; }
                 field(zoneCode; Rec."Zone Code") { Caption = 'zoneCode'; Editable = false; }
                 field(binTypeCode; Rec."Bin Type Code") { Caption = 'binTypeCode'; Editable = false; }
                 field(qtyBaseUoM; Rec."Quantity (Base)")
@@ -52,8 +51,18 @@ page 72097 "DOPSWHS Bin Content API"
     }
 
     trigger OnAfterGetRecord()
+    var
+        Item: Record Item;
     begin
         // Ensure the FlowField is calculated before serialization.
         Rec.CalcFields(Quantity, "Quantity (Base)");
+        // Bin Content (T7302) has no Description column — resolve it from Item.
+        if Item.Get(Rec."Item No.") then
+            ItemDescription := Item.Description
+        else
+            ItemDescription := '';
     end;
+
+    var
+        ItemDescription: Text[100];
 }

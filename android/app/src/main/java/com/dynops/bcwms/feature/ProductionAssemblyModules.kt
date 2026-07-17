@@ -51,6 +51,9 @@ private fun ConsumptionTab() {
     var loading by remember { mutableStateOf(false) }
     var consumeLine by remember { mutableStateOf<JSONObject?>(null) }
     var search by remember { mutableStateOf("") }
+    var columns by remember { mutableStateOf(ColumnPrefs.get(context, "consumption", GridColumns.consumption)) }
+    var showColumns by remember { mutableStateOf(false) }
+    var scanFilter by remember { mutableStateOf("") }
 
     fun load() {
         scope.launch {
@@ -66,23 +69,42 @@ private fun ConsumptionTab() {
     }
     LaunchedEffect(Unit) { load() }
 
+    // Barkod-öncelikli akış: bileşeni raftan okut, satırı aramaya gerek kalmadan
+    // sarfiyat ekranı otomatik açılsın (tek eşleşme). Çoklu eşleşmede filtrele.
+    DocumentScanHandler(
+        enabled = consumeLine == null,
+        lines = rows,
+        onSingleMatch = { line, _ -> scanFilter = ""; consumeLine = line },
+        onMultiMatch = { itemNo, _ -> scanFilter = itemNo; status = "PASS: '$itemNo' için birden fazla satır — birini seçin" },
+        onNoMatch = { r -> status = "⚠️ '${r.itemNo ?: r.value}' bu belgede yok" },
+    )
+    val displayRows = if (scanFilter.isBlank()) rows else rows.filter { matchLinesByBarcode(listOf(it), com.dynops.bcwms.scanner.BarcodeIntentResolver.resolve(scanFilter)).isNotEmpty() }
+
     Column(Modifier.fillMaxSize().padding(12.dp)) {
         Button(onClick = { load() }, enabled = !loading) { Text(if (loading) "..." else "🔄 Yenile") }
         Spacer(Modifier.height(8.dp))
         com.dynops.bcwms.ui.DocSearchBar(value = search, onValueChange = { search = it }, onSearch = { load() }, label = "PÜ no ile ara")
         Spacer(Modifier.height(4.dp))
         StatusText(status)
-        Spacer(Modifier.height(8.dp))
-        LazyColumn(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            items(rows) { d ->
-                Card(onClick = { consumeLine = d }, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(10.dp)) {
-                    Column(Modifier.padding(12.dp)) {
-                        Text("${d.optString("itemNo")} — ${d.optString("description")}", fontWeight = FontWeight.Bold)
-                        Text("PÜ: ${firstValue(d, "prodOrderNo")} · Kalan: ${d.optDouble("remainingQuantity")} · Bin: ${firstValue(d, "binCode")}", fontSize = 12.sp, color = Color.Gray)
-                    }
-                }
-            }
-            if (rows.isEmpty() && !loading) item { EmptyState("Released üretim bileşeni yok.") }
+        Spacer(Modifier.height(4.dp))
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text("Bileşenler (${displayRows.size}/${rows.size})", fontWeight = FontWeight.Bold, fontSize = 14.sp)
+            Spacer(Modifier.weight(1f))
+            TextButton(onClick = { showColumns = true }) { Text("⚙ Kolonlar", fontSize = 12.sp) }
+        }
+        if (scanFilter.isNotBlank()) { ScanFilterChip(scanFilter) { scanFilter = "" }; Spacer(Modifier.height(4.dp)) }
+        LineGrid(
+            defs = GridColumns.consumption,
+            columns = columns,
+            rows = displayRows,
+            modifier = Modifier.weight(1f),
+            isDone = { it.optDouble("remainingQuantity") <= 0.0 },
+            onRowClick = { consumeLine = it },
+        )
+    }
+    if (showColumns) {
+        ChooseColumnsSheet(GridColumns.consumption, columns, onDismiss = { showColumns = false }) { c ->
+            columns = c; ColumnPrefs.save(context, "consumption", c); showColumns = false
         }
     }
 
@@ -162,6 +184,8 @@ private fun OutputTab() {
     var loading by remember { mutableStateOf(false) }
     var outputLine by remember { mutableStateOf<JSONObject?>(null) }
     var search by remember { mutableStateOf("") }
+    var columns by remember { mutableStateOf(ColumnPrefs.get(context, "output", GridColumns.output)) }
+    var showColumns by remember { mutableStateOf(false) }
 
     fun load() {
         scope.launch {
@@ -183,17 +207,23 @@ private fun OutputTab() {
         com.dynops.bcwms.ui.DocSearchBar(value = search, onValueChange = { search = it }, onSearch = { load() }, label = "PÜ no ile ara")
         Spacer(Modifier.height(4.dp))
         StatusText(status)
-        Spacer(Modifier.height(8.dp))
-        LazyColumn(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            items(rows) { d ->
-                Card(onClick = { outputLine = d }, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(10.dp)) {
-                    Column(Modifier.padding(12.dp)) {
-                        Text("${firstValue(d, "operationNo")} — ${d.optString("description")}", fontWeight = FontWeight.Bold)
-                        Text("PÜ: ${firstValue(d, "prodOrderNo")} · İş Merkezi: ${firstValue(d, "workCenterNo")}", fontSize = 12.sp, color = Color.Gray)
-                    }
-                }
-            }
-            if (rows.isEmpty() && !loading) item { EmptyState("Released üretim rota satırı yok.") }
+        Spacer(Modifier.height(4.dp))
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text("Rota Satırları (${rows.size})", fontWeight = FontWeight.Bold, fontSize = 14.sp)
+            Spacer(Modifier.weight(1f))
+            TextButton(onClick = { showColumns = true }) { Text("⚙ Kolonlar", fontSize = 12.sp) }
+        }
+        LineGrid(
+            defs = GridColumns.output,
+            columns = columns,
+            rows = rows,
+            modifier = Modifier.weight(1f),
+            onRowClick = { outputLine = it },
+        )
+    }
+    if (showColumns) {
+        ChooseColumnsSheet(GridColumns.output, columns, onDismiss = { showColumns = false }) { c ->
+            columns = c; ColumnPrefs.save(context, "output", c); showColumns = false
         }
     }
 
@@ -324,6 +354,9 @@ private fun AssemblyDocument(no: String, onBack: () -> Unit) {
     var lines by remember { mutableStateOf<List<JSONObject>>(emptyList()) }
     var status by remember { mutableStateOf("") }
     var busy by remember { mutableStateOf(false) }
+    var columns by remember { mutableStateOf(ColumnPrefs.get(context, "assembly", GridColumns.assembly)) }
+    var showColumns by remember { mutableStateOf(false) }
+    var scanFilter by remember { mutableStateOf("") }
     val key = "documentType='${BcEnum.AssemblyDocType.ORDER}',no='$no'"
 
     fun reload() {
@@ -338,6 +371,17 @@ private fun AssemblyDocument(no: String, onBack: () -> Unit) {
     }
     LaunchedEffect(no) { reload() }
 
+    // Barkod-öncelikli akış: bileşeni okutunca listeyi o bileşene filtrele — 20
+    // satırlı bir montaj emrinde manuel arama yapmaya gerek kalmasın.
+    DocumentScanHandler(
+        enabled = true,
+        lines = lines,
+        onSingleMatch = { line, _ -> scanFilter = line.optString("itemNo") },
+        onMultiMatch = { itemNo, _ -> scanFilter = itemNo },
+        onNoMatch = { r -> status = "⚠️ '${r.itemNo ?: r.value}' bu belgede yok" },
+    )
+    val displayLines = if (scanFilter.isBlank()) lines else lines.filter { matchLinesByBarcode(listOf(it), com.dynops.bcwms.scanner.BarcodeIntentResolver.resolve(scanFilter)).isNotEmpty() }
+
     val h = header
     Column(Modifier.fillMaxSize()) {
         Column(Modifier.weight(1f).padding(12.dp)) {
@@ -349,17 +393,24 @@ private fun AssemblyDocument(no: String, onBack: () -> Unit) {
             Spacer(Modifier.height(6.dp))
             StatusText(status)
             Spacer(Modifier.height(4.dp))
-            Text("Bileşenler (${lines.size})", fontWeight = FontWeight.Bold, fontSize = 14.sp)
-            LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                items(lines) { ln ->
-                    Card(Modifier.fillMaxWidth()) {
-                        Column(Modifier.padding(10.dp)) {
-                            Text("${ln.optString("itemNo")} — ${ln.optString("description")}", fontWeight = FontWeight.Medium)
-                            Text("Gerekli: ${ln.optDouble("quantity")} · Tüketilen: ${ln.optDouble("consumedQuantity")} · Bin: ${firstValue(ln, "binCode")}", fontSize = 12.sp, color = Color.Gray)
-                        }
-                    }
-                }
-                if (lines.isEmpty() && !busy) item { EmptyState("Bu emirde bileşen yok.") }
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("Bileşenler (${displayLines.size}/${lines.size})", fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                Spacer(Modifier.weight(1f))
+                TextButton(onClick = { showColumns = true }) { Text("⚙ Kolonlar", fontSize = 12.sp) }
+            }
+            if (scanFilter.isNotBlank()) { ScanFilterChip(scanFilter) { scanFilter = "" }; Spacer(Modifier.height(4.dp)) }
+            LineGrid(
+                defs = GridColumns.assembly,
+                columns = columns,
+                rows = displayLines,
+                modifier = Modifier.weight(1f),
+                isDone = { it.optDouble("consumedQuantity") >= it.optDouble("quantity") && it.optDouble("quantity") > 0.0 },
+                onRowClick = { },
+            )
+        }
+        if (showColumns) {
+            ChooseColumnsSheet(GridColumns.assembly, columns, onDismiss = { showColumns = false }) { c ->
+                columns = c; ColumnPrefs.save(context, "assembly", c); showColumns = false
             }
         }
         BottomActionBar {

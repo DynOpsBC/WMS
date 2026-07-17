@@ -23,6 +23,14 @@ table 72013 "DOPSWHS LP Template"
         field(50; "No. Series"; Code[20]) { Caption = 'No. Series'; DataClassification = CustomerContent; TableRelation = "No. Series"; }
         field(60; "Allow Mixed Items"; Boolean) { Caption = 'Allow Mixed Items'; DataClassification = CustomerContent; }
         field(61; "Allow Mixed Lots"; Boolean) { Caption = 'Allow Mixed Lots'; DataClassification = CustomerContent; }
+        field(70; "Reusable"; Boolean)
+        {
+            // Tote / yeniden kullanılabilir kap: pick→sevk arası taşır, işi bitince
+            // Release ile tekrar Built'e döner ve yeniden kullanılır (tek kullanımlık
+            // paletin aksine). Müşteri toplantısı: plastik sepet = tote.
+            Caption = 'Reusable (Tote)';
+            DataClassification = CustomerContent;
+        }
     }
 
     keys { key(PK; "Code") { Clustered = true; } }

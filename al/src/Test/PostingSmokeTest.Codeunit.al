@@ -160,7 +160,6 @@ codeunit 72252 "DOPSWHS Posting Smoke Test"
         ItemJnlTemplate: Record "Item Journal Template";
         ItemJnlBatch: Record "Item Journal Batch";
         ItemJnlPostBatch: Codeunit "Item Jnl.-Post Batch";
-        NextLineNo: Integer;
     begin
         EnsureItemJnlBatch(ItemJnlTemplate, ItemJnlBatch);
         ItemJnlLine.SetRange("Journal Template Name", ItemJnlTemplate.Name);
@@ -178,8 +177,51 @@ codeunit 72252 "DOPSWHS Posting Smoke Test"
         if BinCode <> '' then
             ItemJnlLine.Validate("Bin Code", BinCode);
         ItemJnlLine.Validate(Quantity, Qty);
+        EnsureInventoryPostingSetup(LocationCode, ItemNo);
+        ItemJnlLine.Insert(true);
         // Post Batch (23) drives warehouse integration so Bin Content is created on bin-mandatory locations.
         ItemJnlPostBatch.Run(ItemJnlLine);
+    end;
+
+    local procedure EnsureInventoryPostingSetup(LocationCode: Code[10]; ItemNo: Code[20])
+    var
+        Item: Record Item;
+        TargetSetup: Record "Inventory Posting Setup";
+        SourceSetup: Record "Inventory Posting Setup";
+        GLAccount: Record "G/L Account";
+        InventoryAccountNo: Code[20];
+    begin
+        Item.Get(ItemNo);
+        Item.TestField("Inventory Posting Group");
+
+        if TargetSetup.Get(LocationCode, Item."Inventory Posting Group") then
+            if TargetSetup."Inventory Account" <> '' then
+                exit;
+
+        SourceSetup.SetRange("Invt. Posting Group Code", Item."Inventory Posting Group");
+        SourceSetup.SetFilter("Inventory Account", '<>%1', '');
+        if SourceSetup.FindFirst() then
+            InventoryAccountNo := SourceSetup."Inventory Account"
+        else begin
+            GLAccount.SetRange("Account Type", GLAccount."Account Type"::Posting);
+            GLAccount.SetRange(Blocked, false);
+            GLAccount.SetRange("Direct Posting", true);
+            GLAccount.SetRange("Income/Balance", GLAccount."Income/Balance"::"Balance Sheet");
+            if not GLAccount.FindFirst() then
+                Error('Inventory Posting Setup cannot be prepared: no usable balance-sheet G/L Account exists for inventory account.');
+            InventoryAccountNo := GLAccount."No.";
+        end;
+
+        if not TargetSetup.Get(LocationCode, Item."Inventory Posting Group") then begin
+            TargetSetup.Init();
+            TargetSetup.Validate("Location Code", LocationCode);
+            TargetSetup.Validate("Invt. Posting Group Code", Item."Inventory Posting Group");
+            TargetSetup.Validate("Inventory Account", InventoryAccountNo);
+            TargetSetup.Insert(true);
+        end else begin
+            TargetSetup.Validate("Inventory Account", InventoryAccountNo);
+            TargetSetup.Modify(true);
+        end;
     end;
 
     local procedure EnsureItemJnlBatch(var ItemJnlTemplate: Record "Item Journal Template"; var ItemJnlBatch: Record "Item Journal Batch")
@@ -349,12 +391,11 @@ codeunit 72252 "DOPSWHS Posting Smoke Test"
         WhseShipmentHeader: Record "Warehouse Shipment Header";
         WmsLoc: Code[10];
     begin
-        WmsLoc := WmsLocation();
-        StockViaWhse(WmsLoc);  // ensure on-hand exists to ship
+        WmsLoc := ShipmentOnlyLocation();
+        StockItem(WmsLoc, '', 20);  // ensure on-hand exists to ship without a directed pick
         CreateSalesOrder(SalesHeader, WmsLoc);
         CreateWhseShipmentFromSales(SalesHeader, WhseShipmentHeader);
-        CreatePickFromShipment(WhseShipmentHeader);
-        RegisterActivityFor('Pick', WhseShipmentHeader."No.");
+        PrepareWhseShipmentLines(WhseShipmentHeader);
         ShipmentMgmt.PostShipment(WhseShipmentHeader, false, false);
         PostedDoc := WhseShipmentHeader."No.";
         Detail := StrSubstNo('Posted whse shipment from SO %1 on %2.', SalesHeader."No.", WmsLoc);
@@ -365,7 +406,7 @@ codeunit 72252 "DOPSWHS Posting Smoke Test"
     var
         RegdWhseActivityLine: Record "Registered Whse. Activity Line";
     begin
-        // The pick was created + registered inside the shipment flow; confirm a registration exists.
+        // Pick is a separate flow; confirm at least one registered pick exists.
         RegdWhseActivityLine.SetRange("Activity Type", RegdWhseActivityLine."Activity Type"::Pick);
         if RegdWhseActivityLine.IsEmpty() then
             Error('No registered pick found (shipment flow must run first).');
@@ -387,7 +428,7 @@ codeunit 72252 "DOPSWHS Posting Smoke Test"
         if not ProdOrderComp.FindFirst() then
             Error('Released prod order %1 has no components.', PreparedProdOrderNo);
         // Stock the component so consumption doesn't fail on availability.
-        StockItemAt(ProdOrderComp."Item No.", ProdOrderComp."Location Code", ProdOrderComp."Bin Code", 50);
+        StockProdOrderComponents(PreparedProdOrderNo);
         ProdMgmt.ConsumeByProdOrder(PreparedProdOrderNo, ProdOrderComp."Line No.", ProdOrderComp."Item No.", 1, '', '', '', ProdOrderComp."Bin Code");
         PostedDoc := PreparedProdOrderNo;
         Detail := StrSubstNo('Consumed component %1 on prod order %2.', ProdOrderComp."Item No.", PreparedProdOrderNo);
@@ -397,6 +438,7 @@ codeunit 72252 "DOPSWHS Posting Smoke Test"
     local procedure TryOutput(var Detail: Text; var PostedDoc: Code[35])
     var
         ProdMgmt: Codeunit "DOPSWHS Prod Mgmt";
+        ProdOrderLine: Record "Prod. Order Line";
         ProdOrderRtngLine: Record "Prod. Order Routing Line";
     begin
         if PreparedProdOrderNo = '' then
@@ -405,9 +447,28 @@ codeunit 72252 "DOPSWHS Posting Smoke Test"
         ProdOrderRtngLine.SetRange("Prod. Order No.", PreparedProdOrderNo);
         if not ProdOrderRtngLine.FindLast() then
             Error('Released prod order %1 has no routing lines.', PreparedProdOrderNo);
+        ProdOrderLine.Get(ProdOrderRtngLine.Status, ProdOrderRtngLine."Prod. Order No.", ProdOrderRtngLine."Routing Reference No.");
+        EnsureInventoryPostingSetup(ProdOrderLine."Location Code", ProdOrderLine."Item No.");
+        StockProdOrderComponents(PreparedProdOrderNo);
         ProdMgmt.ReportOutputByProdOrder(PreparedProdOrderNo, ProdOrderRtngLine."Routing Reference No.", 1, 0, 5, '', '');
         PostedDoc := PreparedProdOrderNo;
         Detail := StrSubstNo('Reported output on prod order %1 op %2.', PreparedProdOrderNo, ProdOrderRtngLine."Operation No.");
+    end;
+
+    local procedure StockProdOrderComponents(ProdOrderNo: Code[20])
+    var
+        ProdOrderComp: Record "Prod. Order Component";
+        StockQty: Decimal;
+    begin
+        ProdOrderComp.SetRange(Status, ProdOrderComp.Status::Released);
+        ProdOrderComp.SetRange("Prod. Order No.", ProdOrderNo);
+        if ProdOrderComp.FindSet() then
+            repeat
+                StockQty := Abs(ProdOrderComp."Remaining Quantity");
+                if StockQty < 1000 then
+                    StockQty := 1000;
+                StockItemAt(ProdOrderComp."Item No.", ProdOrderComp."Location Code", ProdOrderComp."Bin Code", StockQty);
+            until ProdOrderComp.Next() = 0;
     end;
 
     [TryFunction]
@@ -448,6 +509,39 @@ codeunit 72252 "DOPSWHS Posting Smoke Test"
         if Location.FindFirst() then
             exit(Location.Code);
         Error('No fully-directed WMS location (require receive/ship/pick/put-away) found.');
+    end;
+
+    local procedure ShipmentOnlyLocation(): Code[10]
+    var
+        Location: Record Location;
+        NeedsModify: Boolean;
+    begin
+        // This test validates Whse. Shipment posting itself. Directed pick creation
+        // is a separate BC page/SOAP action, so use a warehouse-shipment-only
+        // location where the shipment can be posted directly from AL.
+        if not Location.Get('DOPSSHIP') then begin
+            Location.Init();
+            Location.Code := 'DOPSSHIP';
+            Location.Name := 'DOPSWHS shipment test';
+            Location.Insert(true);
+        end;
+
+        if Location.Name = '' then begin
+            Location.Name := 'DOPSWHS shipment test';
+            NeedsModify := true;
+        end;
+        if (not Location."Require Shipment") or Location."Require Pick" or Location."Require Receive" or Location."Require Put-away" or Location."Bin Mandatory" then begin
+            Location.Validate("Require Shipment", true);
+            Location.Validate("Require Pick", false);
+            Location.Validate("Require Receive", false);
+            Location.Validate("Require Put-away", false);
+            Location.Validate("Bin Mandatory", false);
+            NeedsModify := true;
+        end;
+        if NeedsModify then
+            Location.Modify(true);
+
+        exit(Location.Code);
     end;
 
     local procedure CreatePurchOrder(var PurchHeader: Record "Purchase Header"; LocationCode: Code[10])
@@ -550,6 +644,23 @@ codeunit 72252 "DOPSWHS Posting Smoke Test"
         WhseShipmentHeader.Get(WhseShipmentLine."No.");
     end;
 
+    local procedure PrepareWhseShipmentLines(var WhseShipmentHeader: Record "Warehouse Shipment Header")
+    var
+        WhseShipmentLine: Record "Warehouse Shipment Line";
+        WhseShipmentRelease: Codeunit "Whse.-Shipment Release";
+    begin
+        WhseShipmentLine.SetRange("No.", WhseShipmentHeader."No.");
+        if WhseShipmentLine.FindSet(true) then
+            repeat
+                WhseShipmentLine.Validate("Qty. to Ship", WhseShipmentLine."Qty. Outstanding");
+                WhseShipmentLine.Modify(true);
+            until WhseShipmentLine.Next() = 0;
+
+        WhseShipmentHeader.Get(WhseShipmentHeader."No.");
+        if WhseShipmentHeader.Status <> WhseShipmentHeader.Status::Released then
+            WhseShipmentRelease.Release(WhseShipmentHeader);
+    end;
+
     local procedure CreatePickFromShipment(var WhseShipmentHeader: Record "Warehouse Shipment Header")
     var
         WhseShipmentLine: Record "Warehouse Shipment Line";
@@ -564,16 +675,6 @@ codeunit 72252 "DOPSWHS Posting Smoke Test"
         WhseActivLine.SetRange("Whse. Document No.", WhseShipmentHeader."No.");
         if WhseActivLine.IsEmpty() then
             Error('Whse shipment %1 created. Directed pick creation has no extension AL API in BC24 — create it via the published "DOPSWHSWarehouseShipment" web service (SOAP CreatePick) or the mobile Pick flow, then Post Shipment.', WhseShipmentHeader."No.");
-    end;
-
-    local procedure RegisterActivityFor(ActivityTypeText: Text; SourceNo: Code[20])
-    var
-        WhseActivityLine: Record "Warehouse Activity Line";
-        WhseActivityHeader: Record "Warehouse Activity Header";
-    begin
-        WhseActivityLine.SetRange("Whse. Document No.", SourceNo);
-        if WhseActivityLine.FindFirst() then
-            RegisterActivityByNo(WhseActivityLine."Activity Type", WhseActivityLine."No.");
     end;
 
     local procedure RegisterActivityByNo(ActivityType: Enum "Warehouse Activity Type"; ActivityNo: Code[20])
@@ -602,9 +703,10 @@ codeunit 72252 "DOPSWHS Posting Smoke Test"
     var
         ProdOrder: Record "Production Order";
         ProdOrderComp: Record "Prod. Order Component";
+        ProdOrderRtngLine: Record "Prod. Order Routing Line";
     begin
         PreparedProdOrderNo := '';
-        // Reuse an existing released prod order that already has components (postable).
+        // Reuse an existing released prod order that already has components and routing (postable).
         ProdOrder.SetRange(Status, ProdOrder.Status::Released);
         if ProdOrder.FindSet() then
             repeat
@@ -612,7 +714,15 @@ codeunit 72252 "DOPSWHS Posting Smoke Test"
                 ProdOrderComp.SetRange("Prod. Order No.", ProdOrder."No.");
                 if not ProdOrderComp.IsEmpty() then begin
                     PreparedProdOrderNo := ProdOrder."No.";
-                    exit;
+                    ProdOrderRtngLine.SetRange(Status, ProdOrderRtngLine.Status::Released);
+                    ProdOrderRtngLine.SetRange("Prod. Order No.", ProdOrder."No.");
+                    if not ProdOrderRtngLine.IsEmpty() then
+                        exit;
+                    if TryAddRoutingLine() then begin
+                        Commit();
+                        exit;
+                    end;
+                    PreparedProdOrderNo := '';
                 end;
             until ProdOrder.Next() = 0;
 

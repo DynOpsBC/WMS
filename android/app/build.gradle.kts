@@ -23,8 +23,8 @@ android {
     applicationId = "com.dynops.bcwms"
     minSdk = 26
     targetSdk = 35
-    versionCode = 110
-    versionName = "1.10.0"
+    versionCode = 1115
+    versionName = "1.10.15"
     buildConfigField("String", "UPDATE_BASE_URL", "\"https://app.bcwms.dynops.com\"")
   }
 
@@ -74,6 +74,8 @@ dependencies {
   implementation(libs.androidx.compose.material3)
   implementation("androidx.compose.foundation:foundation")
   implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0")
+  // Real PATCH/DELETE verbs for BC API (HttpURLConnection can't PATCH; BC ignores X-HTTP-Method-Override).
+  implementation(libs.okhttp)
 
   // Barcode scanning (camera) — graceful manual-entry fallback if camera/permission unavailable
   implementation("com.google.mlkit:barcode-scanning:17.3.0")

@@ -137,6 +137,8 @@ permissionset 72095 "DOPSWHS-USER"
         page "DOPSWHS Sales Source Line API" = X,
         tabledata "Purchase Header" = RIM,
         tabledata "Purchase Line" = RIM,
+        tabledata "Reservation Entry" = RIMD,
+        tabledata "Whse. Item Tracking Line" = RIMD,
         tabledata "Warehouse Shipment Header" = RIMD,
         tabledata "Posted Whse. Shipment Header" = RIMD,
         tabledata "Warehouse Receipt Header" = RIMD,
@@ -146,6 +148,9 @@ permissionset 72095 "DOPSWHS-USER"
         tabledata "Sales Shipment Line" = RIMD,
         tabledata "Item Ledger Entry" = RIM,
         tabledata "Value Entry" = RIM,
+        tabledata "Warehouse Entry" = RIM,           // LP Propagation stamps DOPSWHS LP No. at register time
+        tabledata "Warehouse Activity Line" = R,     // LP resolver reads the scanned LP
+        tabledata "Warehouse Receipt Line" = R,      // LP resolver reads receipt lines
         report "DOPSWHS LP Label" = X,
         tabledata "DOPSWHS Printer" = R,
         tabledata "DOPSWHS Device Printer Map" = R,
@@ -157,5 +162,32 @@ permissionset 72095 "DOPSWHS-USER"
         page "DOPSWHS Print Job API" = X,
         page "DOPSWHS Printer API" = X,
         codeunit "DOPSWHS Self-Host Print Client" = X,
-        codeunit "DOPSWHS License Mgmt" = X;
+        codeunit "DOPSWHS License Mgmt" = X,
+        // ELOG paketleme istasyonu + sepet-sipariş eşleştirme + multi-order pick
+        tabledata "DOPSWHS Pick Tote Assignment" = RIMD,
+        tabledata "DOPSWHS Pack Session" = RIMD,
+        tabledata "DOPSWHS Pack Session Line" = RIMD,
+        tabledata "Sales Invoice Header" = R,
+        table "DOPSWHS Pick Tote Assignment" = X,
+        table "DOPSWHS Pack Session" = X,
+        table "DOPSWHS Pack Session Line" = X,
+        page "DOPSWHS Pack Ops API" = X,
+        page "DOPSWHS Pack Session API" = X,
+        page "DOPSWHS Pack Session Line API" = X,
+        page "DOPSWHS Pack Station" = X,
+        page "DOPSWHS Pack Station Solo" = X,
+        page "DOPSWHS Pack Station Bulk" = X,
+        page "DOPSWHS Mono-SKU Pack Station" = X,
+        page "DOPSWHS Packer RC" = X,
+        page "DOPSWHS Packer Activities" = X,
+        page "DOPSWHS Pack Session Subform" = X,
+        page "DOPSWHS Pack Session List" = X,
+        page "DOPSWHS Pick Tote Assignments" = X,
+        codeunit "DOPSWHS Pack Station Mgmt" = X,
+        codeunit "DOPSWHS Multi Order Pick" = X,
+        // Multi-order pick: standard sales/warehouse codeunits invoked headlessly.
+        codeunit "Sales Warehouse Mgt." = X,
+        codeunit "Release Sales Document" = X,
+        codeunit "Whse.-Shipment Release" = X,
+        report "Whse.-Shipment - Create Pick" = X;
 }

@@ -115,6 +115,11 @@ codeunit 72082 "DOPSWHS License Mgmt"
     begin
         EnsureRecentVerify();
         if not Setup.Get('') then exit;
+        // Demo / pre-licensing mode: when no License Service URL is configured the
+        // tenant runs unlicensed (permissive). Feature tier gates are NOT enforced
+        // so demos can exercise every flow. As soon as a License Service URL is set
+        // (i.e. licensing goes live in development/production), enforcement resumes.
+        if Setup."License Service URL" = '' then exit;
         if not IsActive() then
             Error(ErrLicenseInactiveLbl, Format(Setup."License Status"), Setup."License Status Message");
 

@@ -46,6 +46,9 @@ table 72011 "DOPSWHS LP Line"
             end;
         }
         field(50; "Expiration Date"; Date) { Caption = 'Expiration Date'; DataClassification = CustomerContent; }
+        // ELOG LP kurma akışı: LP okut → ürün + adet → KAYNAK BİN okut.
+        // Ürünün hangi raftan alınıp LP'ye konduğunun izi (satır bazında).
+        field(55; "Source Bin Code"; Code[20]) { Caption = 'Source Bin Code'; DataClassification = CustomerContent; TableRelation = Bin.Code; }
         field(60; "Source Document Type"; Enum "DOPSWHS Assigned Doc Type") { Caption = 'Source Document Type'; DataClassification = CustomerContent; }
         field(61; "Source Document No."; Code[20]) { Caption = 'Source Document No.'; DataClassification = CustomerContent; }
         field(90; "Line Weight kg"; Decimal) { Caption = 'Line Weight kg'; DataClassification = CustomerContent; Editable = false; }

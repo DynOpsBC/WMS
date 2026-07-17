@@ -62,12 +62,17 @@ export default defineConfig({
             main: "index.html",
             pickBoard: "src/pickBoard/index.html",
             lpBrowser: "src/lpBrowser/index.html",
+            opsConsole: "src/opsConsole/index.html",
           },
           output: {
             entryFileNames: (chunk) =>
-              chunk.name === "pickBoard" ? "pickBoard.js" : chunk.name === "lpBrowser" ? "lpBrowser.js" : "assets/[name].js",
+              chunk.name === "pickBoard" ? "pickBoard.js"
+                : chunk.name === "lpBrowser" ? "lpBrowser.js"
+                : chunk.name === "opsConsole" ? "opsConsole.js"
+                : "assets/[name].js",
             assetFileNames: (asset) => {
               if (asset.name?.includes("lpBrowser") && asset.name.endsWith(".css")) return "lpBrowser.css";
+              if (asset.name?.includes("opsConsole") && asset.name.endsWith(".css")) return "opsConsole.css";
               if (asset.name?.endsWith(".css")) return "pickBoard.css";
               return "assets/[name][extname]";
             },

@@ -31,6 +31,7 @@ fun ItemInquiryModule() {
     var query by remember { mutableStateOf("") }
     var item by remember { mutableStateOf<JSONObject?>(null) }
     var lpLines by remember { mutableStateOf<List<JSONObject>>(emptyList()) }
+    var ledger by remember { mutableStateOf<List<JSONObject>>(emptyList()) }
     var status by remember { mutableStateOf("Item No tarayın/girin.") }
     var loading by remember { mutableStateOf(false) }
 
@@ -38,7 +39,7 @@ fun ItemInquiryModule() {
         if (query.trim().isBlank()) return
         scope.launch {
             loading = true; status = "Sorgulanıyor..."
-            item = null; lpLines = emptyList()
+            item = null; lpLines = emptyList(); ledger = emptyList()
             val q = query.trim()
             val r = BcApi.getWithStandardFallback(context, "items?\$filter=no eq '$q'&\$top=1", "items?\$filter=number eq '$q'&\$top=1")
             if (r.ok) {
@@ -48,17 +49,32 @@ fun ItemInquiryModule() {
             // on-hand by LP: lines for this item across license plates
             val l = BcApi.get(context, "licensePlateLines?\$filter=itemNo eq '$q'&\$top=50")
             if (l.ok) lpLines = BcApi.parseValueArray(l.body)
+            // Son Hareketler (Item Ledger) — WI "Recent Transactions" pariteti.
+            val le = BcApi.get(context, "itemLedgerEntries?\$filter=itemNo eq '$q'&\$orderby=postingDate desc,entryNo desc&\$top=20")
+            if (le.ok) ledger = BcApi.parseValueArray(le.body)
             loading = false
-            status = if (item == null) "EMPTY: '$q' için item bulunamadı." else "PASS: item bulundu · ${lpLines.size} LP satırı."
+            status = if (item == null) "EMPTY: '$q' için item bulunamadı." else "PASS: item bulundu · ${lpLines.size} LP · ${ledger.size} hareket."
         }
     }
 
+    fun printItemLabel() {
+        val no = item?.let { firstValue(it, "no", "number") } ?: return
+        scope.launch {
+            status = "🖨 Etiket yazdırılıyor..."
+            val r = BcApi.boundAction(context, "items", no, "printLabel", """{"printerId":"","copies":1}""")
+            status = if (r.ok) "🟢 Item etiketi kuyruğa alındı ($no)." else "🔴 Yazdırma: ${BcApi.errorMessage(r.body)} (HTTP ${r.httpCode})"
+        }
+    }
+
+    val palette = bcwmsStatus()
     Column(Modifier.fillMaxSize().padding(12.dp)) {
         ScanField("Item No", query, { query = it }, modifier = Modifier.fillMaxWidth(), onScanned = {
             query = BarcodeIntentResolver.resolve(it).itemNo ?: it
         })
         Spacer(Modifier.height(8.dp))
-        Button(onClick = { load() }, enabled = !loading) { Text(if (loading) "..." else "🔎 Sorgula") }
+        Button(onClick = { load() }, enabled = !loading, modifier = Modifier.fillMaxWidth()) {
+            Text(if (loading) "..." else "🔎 Sorgula", fontWeight = FontWeight.Bold)
+        }
         Spacer(Modifier.height(8.dp))
         StatusText(status)
         Spacer(Modifier.height(8.dp))
@@ -74,54 +90,75 @@ fun ItemInquiryModule() {
             val totalOnLp = lpLines.sumOf { l -> l.optDouble("quantity") }
             Card(
                 Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(12.dp),
+                shape = RoundedCornerShape(16.dp),
                 colors = CardDefaults.cardColors(
-                    containerColor = if (blocked) Color(0xFFFFEBEE) else Color(0xFFE3F2FD),
+                    containerColor = if (blocked) palette.danger.copy(alpha = 0.10f)
+                    else MaterialTheme.colorScheme.primary.copy(alpha = 0.07f),
                 ),
             ) {
                 Column(Modifier.padding(16.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(firstValue(it, "no", "number"), fontWeight = FontWeight.Bold, fontSize = 18.sp)
+                        Text(firstValue(it, "no", "number"), fontWeight = FontWeight.Bold, fontSize = 18.sp, color = MaterialTheme.colorScheme.onSurface)
                         if (blocked) {
                             Spacer(Modifier.width(8.dp))
-                            AssistChip(onClick = {}, label = { Text("🚫 Bloke", fontSize = 11.sp) }, colors = AssistChipDefaults.assistChipColors(containerColor = Color(0xFFEF5350), labelColor = Color.White))
+                            AssistChip(onClick = {}, label = { Text("🚫 Bloke", fontSize = 11.sp) }, colors = AssistChipDefaults.assistChipColors(containerColor = palette.danger, labelColor = Color.White))
                         }
                     }
-                    Text(firstValue(it, "description", "displayName"), fontSize = 14.sp)
-                    Spacer(Modifier.height(8.dp))
+                    Text(firstValue(it, "description", "displayName"), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurface)
+                    Spacer(Modifier.height(10.dp))
                     // Stock block — PDF Item Inquiry §1 critical fix.
                     if (!inventory.isNaN()) {
-                        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                            StockTile("Stok", inventory, uom, Color(0xFF2E7D32))
-                            StockTile("Müsait", available, uom, Color(0xFF1565C0))
-                            StockTile("Rezerve", reserved, uom, Color(0xFFEF6C00))
+                        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                            StockTile("Stok", inventory, uom, palette.success, Modifier.weight(1f))
+                            StockTile("Müsait", available, uom, MaterialTheme.colorScheme.primary, Modifier.weight(1f))
+                            StockTile("Rezerve", reserved, uom, palette.warning, Modifier.weight(1f))
                         }
-                        Spacer(Modifier.height(6.dp))
-                        Text("Gelen ${fmtItemQty(qtyOnPo)} · Giden ${fmtItemQty(qtyOnSo)} · Üretim ${fmtItemQty(qtyOnProd)}", fontSize = 11.sp, color = Color.Gray)
+                        Spacer(Modifier.height(8.dp))
+                        Text("Gelen ${fmtItemQty(qtyOnPo)} · Giden ${fmtItemQty(qtyOnSo)} · Üretim ${fmtItemQty(qtyOnProd)}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                     Spacer(Modifier.height(8.dp))
-                    Text("Base UoM: $uom", fontSize = 12.sp, color = Color.Gray)
-                    Text("Kategori: ${firstValue(it, "itemCategoryCode")} · LP Template: ${firstValue(it, "defaultLpTemplateCode")}", fontSize = 12.sp, color = Color.Gray)
-                    Text("LP'lerdeki toplam: ${fmtItemQty(totalOnLp)} $uom", fontSize = 12.sp, color = Color.Gray)
+                    Text("Base UoM: $uom", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text("Kategori: ${firstValue(it, "itemCategoryCode")} · LP Template: ${firstValue(it, "defaultLpTemplateCode")}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text("LP'lerdeki toplam: ${fmtItemQty(totalOnLp)} $uom", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
             Spacer(Modifier.height(8.dp))
-            Text("License Plate'lerde (${lpLines.size})", fontWeight = FontWeight.Bold, fontSize = 14.sp)
+            OutlinedButton(onClick = { printItemLabel() }, modifier = Modifier.fillMaxWidth().height(48.dp)) { Text("🖨 Item Etiketi Bas") }
+            Spacer(Modifier.height(12.dp))
+            Text("License Plate'lerde (${lpLines.size})", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
+            Spacer(Modifier.height(6.dp))
         }
         LazyColumn(verticalArrangement = Arrangement.spacedBy(6.dp)) {
             items(lpLines) { ln ->
-                Card(Modifier.fillMaxWidth()) {
-                    Column(Modifier.padding(10.dp)) {
-                        Text("${ln.optString("lpNo")} × ${ln.optDouble("quantity")}", fontWeight = FontWeight.Medium)
+                Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp)) {
+                    Column(Modifier.padding(12.dp)) {
+                        Text("${ln.optString("lpNo")} × ${fmtItemQty(ln.optDouble("quantity"))}", fontWeight = FontWeight.Medium, color = MaterialTheme.colorScheme.onSurface)
                         val extra = listOfNotNull(
                             ln.optString("lotNo").takeIf { it.isNotBlank() }?.let { "Lot $it" },
                             ln.optString("serialNo").takeIf { it.isNotBlank() }?.let { "Sr $it" }
                         ).joinToString(" · ")
-                        if (extra.isNotBlank()) Text(extra, fontSize = 11.sp, color = Color.Gray)
+                        if (extra.isNotBlank()) Text(extra, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }
             }
             if (item != null && lpLines.isEmpty() && !loading) item { EmptyState("Bu item hiçbir LP'de bulunmuyor.") }
+            if (ledger.isNotEmpty()) {
+                item {
+                    Text("Son Hareketler (${ledger.size})", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface, modifier = Modifier.padding(top = 10.dp, bottom = 4.dp))
+                }
+                items(ledger) { e ->
+                    val qty = e.optDouble("quantity")
+                    Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp)) {
+                        Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Column(Modifier.weight(1f)) {
+                                Text("${e.optString("entryType")} · ${e.optString("documentNo")}", fontWeight = FontWeight.Medium, color = MaterialTheme.colorScheme.onSurface)
+                                Text("${e.optString("postingDate").take(10)} · ${firstValue(e, "locationCode")}" + e.optString("lotNo").takeIf { it.isNotBlank() }?.let { " · Lot $it" }.orEmpty(), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                            Text(fmtItemQty(qty), fontWeight = FontWeight.Bold, color = if (qty < 0) bcwmsStatus().danger else bcwmsStatus().success)
+                        }
+                    }
+                }
+            }
         }
     }
 }
@@ -137,6 +174,7 @@ fun BinInquiryModule() {
     var bin by remember { mutableStateOf<JSONObject?>(null) }
     var contents by remember { mutableStateOf<List<JSONObject>>(emptyList()) }
     var lps by remember { mutableStateOf<List<JSONObject>>(emptyList()) }
+    var whseEntries by remember { mutableStateOf<List<JSONObject>>(emptyList()) }
     var status by remember { mutableStateOf("Lokasyon + Bin girin.") }
     var loading by remember { mutableStateOf(false) }
 
@@ -144,7 +182,7 @@ fun BinInquiryModule() {
         if (location.trim().isBlank() || binCode.trim().isBlank()) return
         scope.launch {
             loading = true; status = "Yükleniyor..."
-            bin = null; contents = emptyList(); lps = emptyList()
+            bin = null; contents = emptyList(); lps = emptyList(); whseEntries = emptyList()
             val loc = location.trim(); val code = binCode.trim()
             val b = BcApi.get(context, "bins?\$filter=locationCode eq '$loc' and code eq '$code'&\$top=1")
             if (b.ok) bin = BcApi.parseValueArray(b.body).firstOrNull()
@@ -154,12 +192,27 @@ fun BinInquiryModule() {
             if (c.ok) contents = BcApi.parseValueArray(c.body).filter { it.optDouble("quantity", 0.0) != 0.0 }
             val l = BcApi.get(context, "licensePlates?\$filter=locationCode eq '$loc' and binCode eq '$code'&\$top=50")
             if (l.ok) lps = BcApi.parseValueArray(l.body)
+            // Whse Entries (raf hareket geçmişi) — WI pariteti.
+            val we = BcApi.get(context, "warehouseEntries?\$filter=locationCode eq '$loc' and binCode eq '$code'&\$orderby=registeringDate desc,entryNo desc&\$top=20")
+            if (we.ok) whseEntries = BcApi.parseValueArray(we.body)
             loading = false
             status = if (bin == null && contents.isEmpty() && lps.isEmpty()) "EMPTY: '$loc/$code' için içerik yok."
-                else "PASS: ${contents.size} item · ${lps.size} LP bu bin'de."
+                else "PASS: ${contents.size} item · ${lps.size} LP · ${whseEntries.size} hareket."
         }
     }
 
+    fun printBinLabel() {
+        val b = bin ?: return
+        val loc = firstValue(b, "locationCode"); val code = firstValue(b, "code")
+        scope.launch {
+            status = "🖨 Bin etiketi yazdırılıyor..."
+            val key = "locationCode='${loc.replace("'", "''")}',code='${code.replace("'", "''")}'"
+            val r = BcApi.boundAction(context, "bins", key, "printLabel", """{"printerId":"","copies":1}""")
+            status = if (r.ok) "🟢 Bin etiketi kuyruğa alındı ($loc/$code)." else "🔴 Yazdırma: ${BcApi.errorMessage(r.body)} (HTTP ${r.httpCode})"
+        }
+    }
+
+    val palette = bcwmsStatus()
     Column(Modifier.fillMaxSize().padding(12.dp)) {
         ScanField("Lokasyon", location, { location = it }, modifier = Modifier.fillMaxWidth())
         Spacer(Modifier.height(8.dp))
@@ -167,7 +220,9 @@ fun BinInquiryModule() {
             binCode = BarcodeIntentResolver.resolve(it).value
         })
         Spacer(Modifier.height(8.dp))
-        Button(onClick = { load() }, enabled = !loading) { Text(if (loading) "..." else "🔎 Sorgula") }
+        Button(onClick = { load() }, enabled = !loading, modifier = Modifier.fillMaxWidth()) {
+            Text(if (loading) "..." else "🔎 Sorgula", fontWeight = FontWeight.Bold)
+        }
         Spacer(Modifier.height(8.dp))
         StatusText(status)
         Spacer(Modifier.height(8.dp))
@@ -175,42 +230,50 @@ fun BinInquiryModule() {
             val blocked = b.optBoolean("blockMovement", false)
             Card(
                 Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(12.dp),
-                colors = CardDefaults.cardColors(containerColor = if (blocked) Color(0xFFFFEBEE) else Color(0xFFE8F5E9)),
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(
+                    containerColor = if (blocked) palette.danger.copy(alpha = 0.10f) else palette.success.copy(alpha = 0.10f),
+                ),
             ) {
                 Column(Modifier.padding(16.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text("${firstValue(b, "locationCode")} / ${firstValue(b, "code")}", fontWeight = FontWeight.Bold, fontSize = 18.sp)
+                        Text("${firstValue(b, "locationCode")} / ${firstValue(b, "code")}", fontWeight = FontWeight.Bold, fontSize = 18.sp, color = MaterialTheme.colorScheme.onSurface)
                         if (blocked) {
                             Spacer(Modifier.width(8.dp))
-                            AssistChip(onClick = {}, label = { Text("🚫 Block Movement", fontSize = 11.sp) }, colors = AssistChipDefaults.assistChipColors(containerColor = Color(0xFFEF5350), labelColor = Color.White))
+                            AssistChip(onClick = {}, label = { Text("🚫 Block Movement", fontSize = 11.sp) }, colors = AssistChipDefaults.assistChipColors(containerColor = palette.danger, labelColor = Color.White))
                         }
                     }
-                    Text(firstValue(b, "description").ifBlank { "—" }, fontSize = 13.sp)
-                    Text("Zone: ${firstValue(b, "zoneCode").ifBlank { "—" }} · Type: ${firstValue(b, "binTypeCode").ifBlank { "—" }}", fontSize = 12.sp, color = Color.Gray)
+                    Text(firstValue(b, "description").ifBlank { "—" }, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurface)
+                    Text("Zone: ${firstValue(b, "zoneCode").ifBlank { "—" }} · Type: ${firstValue(b, "binTypeCode").ifBlank { "—" }}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
+            Spacer(Modifier.height(8.dp))
+            OutlinedButton(onClick = { printBinLabel() }, modifier = Modifier.fillMaxWidth().height(48.dp)) { Text("🖨 Bin Etiketi Bas") }
             Spacer(Modifier.height(8.dp))
         }
         LazyColumn(verticalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.weight(1f)) {
             if (contents.isNotEmpty()) {
                 item {
-                    Text("Bin İçeriği (${contents.size})", fontWeight = FontWeight.Bold, fontSize = 14.sp, modifier = Modifier.padding(vertical = 4.dp))
+                    Text("Bin İçeriği (${contents.size})", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface, modifier = Modifier.padding(vertical = 4.dp))
                 }
                 items(contents) { c ->
-                    Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = Color(0xFFFFF8E1))) {
+                    Card(
+                        Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(12.dp),
+                        colors = CardDefaults.cardColors(containerColor = palette.warning.copy(alpha = 0.10f)),
+                    ) {
                         Row(
-                            Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
+                            Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
                             Column(Modifier.weight(1f)) {
-                                Text(c.optString("itemNo"), fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                                Text(c.optString("itemNo"), fontWeight = FontWeight.Bold, fontSize = 14.sp, color = MaterialTheme.colorScheme.onSurface)
                                 val desc = c.optString("itemDescription")
-                                if (desc.isNotBlank()) Text(desc, fontSize = 11.sp, color = Color.Gray)
+                                if (desc.isNotBlank()) Text(desc, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                             }
                             Column(horizontalAlignment = Alignment.End) {
-                                Text(fmtItemQty(c.optDouble("quantity")), fontWeight = FontWeight.Bold, fontSize = 16.sp, color = Color(0xFF1565C0))
-                                Text(c.optString("unitOfMeasureCode").ifBlank { "—" }, fontSize = 10.sp, color = Color.Gray)
+                                Text(fmtItemQty(c.optDouble("quantity")), fontWeight = FontWeight.Bold, fontSize = 16.sp, color = MaterialTheme.colorScheme.primary)
+                                Text(c.optString("unitOfMeasureCode").ifBlank { "—" }, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                             }
                         }
                     }
@@ -218,17 +281,34 @@ fun BinInquiryModule() {
                 item { Spacer(Modifier.height(8.dp)) }
             }
             item {
-                Text("License Plate'ler (${lps.size})", fontWeight = FontWeight.Bold, fontSize = 14.sp, modifier = Modifier.padding(vertical = 4.dp))
+                Text("License Plate'ler (${lps.size})", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface, modifier = Modifier.padding(vertical = 4.dp))
             }
             items(lps) { lp ->
-                Card(Modifier.fillMaxWidth()) {
-                    Column(Modifier.padding(10.dp)) {
-                        Text("${lp.optString("no")} · ${lp.optString("status")}", fontWeight = FontWeight.Medium)
-                        Text("${lp.optString("templateCode")}${lp.optString("sscc").takeIf { it.isNotBlank() }?.let { " · SSCC $it" } ?: ""}", fontSize = 11.sp, color = Color.Gray)
+                Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp)) {
+                    Column(Modifier.padding(12.dp)) {
+                        Text("${lp.optString("no")} · ${lp.optString("status")}", fontWeight = FontWeight.Medium, color = MaterialTheme.colorScheme.onSurface)
+                        Text("${lp.optString("templateCode")}${lp.optString("sscc").takeIf { it.isNotBlank() }?.let { " · SSCC $it" } ?: ""}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }
             }
             if (lps.isEmpty() && !loading) item { EmptyState("Bu bin'de License Plate yok.") }
+            if (whseEntries.isNotEmpty()) {
+                item {
+                    Text("Whse Entries (${whseEntries.size})", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface, modifier = Modifier.padding(top = 10.dp, bottom = 4.dp))
+                }
+                items(whseEntries) { e ->
+                    val qty = e.optDouble("quantity")
+                    Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp)) {
+                        Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Column(Modifier.weight(1f)) {
+                                Text("${e.optString("itemNo")} · ${e.optString("entryType")}", fontWeight = FontWeight.Medium, color = MaterialTheme.colorScheme.onSurface)
+                                Text("${e.optString("registeringDate").take(10)}" + e.optString("lotNo").takeIf { it.isNotBlank() }?.let { " · Lot $it" }.orEmpty() + e.optString("lpNo").takeIf { it.isNotBlank() }?.let { " · LP $it" }.orEmpty(), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                            Text(fmtItemQty(qty), fontWeight = FontWeight.Bold, color = if (qty < 0) bcwmsStatus().danger else bcwmsStatus().success)
+                        }
+                    }
+                }
+            }
         }
     }
 }
@@ -241,15 +321,16 @@ internal fun fmtItemQty(q: Double): String {
 
 /** Compact stock tile used by ItemInquiry — label on top, qty bold, uom small. */
 @Composable
-private fun StockTile(label: String, qty: Double, uom: String, accent: Color) {
+private fun StockTile(label: String, qty: Double, uom: String, accent: Color, modifier: Modifier = Modifier) {
     Card(
-        shape = RoundedCornerShape(8.dp),
-        colors = CardDefaults.cardColors(containerColor = Color.White),
+        modifier = modifier,
+        shape = RoundedCornerShape(10.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
     ) {
-        Column(Modifier.padding(horizontal = 10.dp, vertical = 6.dp)) {
-            Text(label, fontSize = 10.sp, color = Color.Gray)
+        Column(Modifier.padding(horizontal = 10.dp, vertical = 8.dp)) {
+            Text(label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             Text(fmtItemQty(qty), fontWeight = FontWeight.Bold, fontSize = 16.sp, color = accent)
-            Text(uom.ifBlank { "—" }, fontSize = 10.sp, color = Color.Gray)
+            Text(uom.ifBlank { "—" }, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
 }

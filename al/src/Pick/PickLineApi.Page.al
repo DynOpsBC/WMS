@@ -23,12 +23,18 @@ page 72229 "DOPSWHS Pick Line API"
                 field(actionType; Rec."Action Type") { Caption = 'actionType'; Editable = false; }
                 field(itemNo; Rec."Item No.") { Caption = 'itemNo'; Editable = false; }
                 field(description; Rec.Description) { Caption = 'description'; Editable = false; }
+                field(description2; Rec."Description 2") { Caption = 'description2'; Editable = false; }
                 field(unitOfMeasureCode; Rec."Unit of Measure Code") { Caption = 'unitOfMeasureCode'; Editable = false; }
+                field(variantCode; Rec."Variant Code") { Caption = 'variantCode'; Editable = false; }
+                field(gtin; ItemGtin) { Caption = 'gtin'; Editable = false; }
                 field(quantity; Rec.Quantity) { Caption = 'quantity'; Editable = false; }
+                field(qtyOutstanding; Rec."Qty. Outstanding") { Caption = 'qtyOutstanding'; Editable = false; }
                 field(qtyToHandle; Rec."Qty. to Handle") { Caption = 'qtyToHandle'; }
                 field(qtyHandled; Rec."Qty. Handled") { Caption = 'qtyHandled'; Editable = false; }
                 field(binCode; Rec."Bin Code") { Caption = 'binCode'; }
                 field(licensePlateNo; Rec."LP No.") { Caption = 'licensePlateNo'; }
+                // ELOG: satırın kaynak siparişi — terminal tote önerisi için kullanır.
+                field(sourceNo; Rec."Source No.") { Caption = 'sourceNo'; Editable = false; }
             }
         }
     }
@@ -42,4 +48,15 @@ page 72229 "DOPSWHS Pick Line API"
         RecRef.SetTable(Rec);
     end;
 
+    trigger OnAfterGetRecord()
+    var
+        Item: Record Item;
+    begin
+        Clear(ItemGtin);
+        if (Rec."Item No." <> '') and Item.Get(Rec."Item No.") then
+            ItemGtin := Item.GTIN;
+    end;
+
+    var
+        ItemGtin: Code[14];
 }

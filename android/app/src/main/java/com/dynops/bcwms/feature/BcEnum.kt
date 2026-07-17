@@ -35,4 +35,17 @@ object BcEnum {
         const val RELEASED = "Released"
         const val FINISHED = "Finished"
     }
+
+    /**
+     * BC serialises Option/Enum members with non-identifier characters escaped as _xNNNN_
+     * (e.g. "Put-away" -> "Put_x002D_away") over OData. The underlying table's key/filter
+     * expects the real option string, so decode the escapes before putting an echoed enum
+     * value into a composite-key segment.
+     */
+    fun decodeOData(value: String): String {
+        if (!value.contains("_x")) return value
+        return Regex("_x([0-9A-Fa-f]{4})_").replace(value) { m ->
+            m.groupValues[1].toInt(16).toChar().toString()
+        }
+    }
 }

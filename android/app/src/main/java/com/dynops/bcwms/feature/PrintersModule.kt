@@ -17,6 +17,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.dynops.bcwms.BcApi
+import com.dynops.bcwms.ui.EmptyState
 import kotlinx.coroutines.launch
 import org.json.JSONObject
 
@@ -76,6 +77,7 @@ fun PrintersModule() {
         if (status.isNotBlank()) Text(status, fontSize = 12.sp, color = Color.Gray)
         Spacer(Modifier.height(8.dp))
         LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            if (rows.isEmpty() && !loading) item { EmptyState("Kayıtlı yazıcı yok. BC'de DOPSWHS Printers sayfasından ekleyin.") }
             items(rows) { row ->
                 val code = row.optString("code")
                 val desc = row.optString("description")

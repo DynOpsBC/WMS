@@ -22,12 +22,14 @@ page 72227 "DOPSWHS Receipt Line API"
                 field(sourceLineNo; Rec."Source Line No.") { Caption = 'sourceLineNo'; }
                 field(itemNo; Rec."Item No.") { Caption = 'itemNo'; }
                 field(description; Rec.Description) { Caption = 'description'; }
+                field(description2; Rec."Description 2") { Caption = 'description2'; Editable = false; }
                 field(unitOfMeasureCode; Rec."Unit of Measure Code") { Caption = 'unitOfMeasureCode'; }
+                field(variantCode; Rec."Variant Code") { Caption = 'variantCode'; Editable = false; }
+                field(gtin; ItemGtin) { Caption = 'gtin'; Editable = false; }
                 field(quantity; Rec.Quantity) { Caption = 'quantity'; }
                 field(qtyToReceive; Rec."Qty. to Receive") { Caption = 'qtyToReceive'; }
                 field(qtyReceived; Rec."Qty. Received") { Caption = 'qtyReceived'; }
                 field(binCode; Rec."Bin Code") { Caption = 'binCode'; }
-                // TODO Sprint H+ post-deploy: bind these fields to item tracking once exposed on the target receipt line surface.
                 field(lotNo; LotNo) { Caption = 'lotNo'; }
                 field(serialNo; SerialNo) { Caption = 'serialNo'; }
                 field(expiryDate; ExpiryDate) { Caption = 'expiryDate'; }
@@ -46,6 +48,20 @@ page 72227 "DOPSWHS Receipt Line API"
         RecRef.SetTable(Rec);
     end;
 
+    trigger OnAfterGetRecord()
+    var
+        Item: Record Item;
+        ReceiptMgmt: Codeunit "DOPSWHS Receipt Mgmt";
+    begin
+        // GTIN kolonu için Item'dan çöz (WI Receiving grid'inde GTIN kolonu var).
+        Clear(ItemGtin);
+        if (Rec."Item No." <> '') and Item.Get(Rec."Item No.") then
+            ItemGtin := Item.GTIN;
+        // BC UI'dan (veya önceki bir mobil kayıttan) atanmış lot/seri/SKT varsa
+        // oku — mobil ekranda GTIN gibi doldurulmuş gelsin, boş görünmesin.
+        ReceiptMgmt.GetItemTracking(Rec, LotNo, SerialNo, ExpiryDate);
+    end;
+
     trigger OnModifyRecord(): Boolean
     var
         ReceiptMgmt: Codeunit "DOPSWHS Receipt Mgmt";
@@ -59,4 +75,5 @@ page 72227 "DOPSWHS Receipt Line API"
         SerialNo: Code[50];
         ExpiryDate: Date;
         LicensePlateNo: Code[20];
+        ItemGtin: Code[14];
 }

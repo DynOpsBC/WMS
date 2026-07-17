@@ -12,4 +12,6 @@ enum 72205 "DOPSWHS IWX Report Usage"
     value(7; Custom1) { Caption = 'Custom 1'; }
     value(8; Custom2) { Caption = 'Custom 2'; }
     value(9; Custom3) { Caption = 'Custom 3'; }
+    // ELOG: paketleme istasyonunda sipariş tamamlanınca basılan fiş/fatura.
+    value(10; PackReceipt) { Caption = 'Pack Receipt'; }
 }

@@ -6,6 +6,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -25,9 +26,15 @@ fun firstValue(obj: JSONObject, vararg keys: String): String {
 fun EmptyState(message: String) {
     Card(
         Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = Color(0xFFF5F5F5))
+        shape = RoundedCornerShape(12.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
     ) {
-        Text(message, Modifier.padding(16.dp), fontSize = 13.sp, color = Color(0xFF616161))
+        Text(
+            message,
+            Modifier.padding(16.dp),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
     }
 }
 
@@ -35,34 +42,54 @@ fun EmptyState(message: String) {
 @Composable
 fun StatusText(status: String) {
     if (status.isBlank()) return
+    val palette = bcwmsStatus()
     val color = when {
-        status.startsWith("PASS") || status.startsWith("🟢") || status.startsWith("✅") -> Color(0xFF2E7D32)
-        status.startsWith("EMPTY") || status.startsWith("⚠️") -> Color(0xFFEF6C00)
-        status.startsWith("HATA") || status.startsWith("🔴") || status.startsWith("❌") -> Color(0xFFC62828)
-        else -> Color.Gray
+        status.startsWith("PASS") || status.startsWith("🟢") || status.startsWith("✅") -> palette.success
+        status.startsWith("EMPTY") || status.startsWith("⚠️") -> palette.warning
+        status.startsWith("HATA") || status.startsWith("🔴") || status.startsWith("❌") -> palette.danger
+        else -> MaterialTheme.colorScheme.onSurfaceVariant
     }
-    Text(status, fontSize = 12.sp, color = color)
+    Text(status, style = MaterialTheme.typography.bodySmall, color = color)
 }
 
 /** Reusable document header card. */
 @Composable
 fun DocHeaderCard(title: String, subtitle: String, badge: String? = null, percent: Int? = null) {
-    Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp)) {
+    Card(
+        Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(14.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+    ) {
         Column(Modifier.padding(14.dp)) {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                Text(title, fontWeight = FontWeight.Bold, fontSize = 17.sp)
+                Text(
+                    title,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    modifier = Modifier.weight(1f),
+                )
                 badge?.let {
-                    AssistChip(onClick = {}, label = { Text(it) })
+                    Surface(shape = RoundedCornerShape(50), color = MaterialTheme.colorScheme.primary.copy(alpha = 0.14f)) {
+                        Text(
+                            it,
+                            Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.primary,
+                        )
+                    }
                 }
             }
-            Text(subtitle, fontSize = 12.sp, color = Color.Gray)
+            Text(subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             if (percent != null) {
                 Spacer(Modifier.height(8.dp))
                 LinearProgressIndicator(
                     progress = { (percent.coerceIn(0, 100)) / 100f },
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier.fillMaxWidth().height(6.dp).clip(RoundedCornerShape(50)),
                 )
-                Text("%$percent tamamlandı", fontSize = 11.sp, color = Color.Gray)
+                Spacer(Modifier.height(4.dp))
+                Text("%$percent tamamlandı", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
     }

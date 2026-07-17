@@ -2,17 +2,46 @@
   "version": "0.2.0",
   "configurations": [
     {
-      "name": "CustomerSandbox",
+      "name": "Bade - SAND1506 (force sync)",
       "type": "al",
       "request": "launch",
       "environmentType": "Sandbox",
-      "environmentName": "CustomerSandbox",
-      "tenant": "7fa2357e-26f2-4174-8e16-a713981356b8",
-      "company": "Demo Business Central",
+      "environmentName": "sand1506",
+      "authentication": "AAD",
+      "tenant": "3bbd610b-95e4-47b3-8b48-4f7caf717bc3",
       "schemaUpdateMode": "ForceSync",
       "startupObjectType": "Page",
-      "startupObjectId": 72061
+      "startupObjectId": 72061,
+      "dependencyPublishingOption": "Default",
+      "launchBrowser": true
+    },
+    {
+      "name": "SandboxUS - CRONUS USA (fast publish)",
+      "type": "al",
+      "request": "launch",
+      "environmentType": "Sandbox",
+      "environmentName": "SandboxUS",
+      "tenant": "7fa2357e-26f2-4174-8e16-a713981356b8",
+      "company": "CRONUS USA, Inc.",
+      "schemaUpdateMode": "Synchronize",
+      "startupObjectType": "Page",
+      "startupObjectId": 72061,
+      "dependencyPublishingOption": "Default",
+      "launchBrowser": false
+    },
+    {
+      "name": "SandboxUS - CRONUS USA (force sync)",
+      "type": "al",
+      "request": "launch",
+      "environmentType": "Sandbox",
+      "environmentName": "SandboxUS",
+      "tenant": "7fa2357e-26f2-4174-8e16-a713981356b8",
+      "company": "CRONUS USA, Inc.",
+      "schemaUpdateMode": "ForceSync",
+      "startupObjectType": "Page",
+      "startupObjectId": 72061,
+      "dependencyPublishingOption": "Default",
+      "launchBrowser": false
     }
   ]
 }
-

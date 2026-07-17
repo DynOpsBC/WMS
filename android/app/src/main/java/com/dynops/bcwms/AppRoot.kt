@@ -1,24 +1,29 @@
 package com.dynops.bcwms
 
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.lazy.grid.GridCells
-import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.items as gridItems
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.dynops.bcwms.feature.*
+import com.dynops.bcwms.ui.bcwmsStatus
 import kotlinx.coroutines.launch
 import org.json.JSONObject
 import java.text.SimpleDateFormat
@@ -40,6 +45,7 @@ enum class Screen(val title: String) {
     BinInquiry("Bin Inquiry"),
     Receiving("Mal Kabul"),
     Picking("Toplama"),
+    Packing("Paketleme"),
     AdHocMove("Ad-Hoc Hareket"),
     Count("Sayım"),
     PutAway("Put-Away"),
@@ -53,6 +59,8 @@ enum class Screen(val title: String) {
     PostingTest("Posting Test"),
     Printers("Yazıcılar"),
     SelfTest("Sistem Sağlığı"),
+    FieldSettings("Alan Ayarları"),
+    Scratchpad("Scratchpad"),
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -61,6 +69,9 @@ fun AppRoot() {
     val context = androidx.compose.ui.platform.LocalContext.current
     var screen by remember { mutableStateOf(Screen.Home) }
     var connected by remember { mutableStateOf(BcApi.hasToken(context)) }
+
+    // Kişiselleştirilmiş görünür alan tercihlerini yükle (satır kartları okur).
+    com.dynops.bcwms.ui.FieldPrefs.load(context)
 
     LaunchedEffect(Unit) {
         if (BcApi.hasToken(context)) {
@@ -93,6 +104,7 @@ fun AppRoot() {
                 Screen.BinInquiry -> BinInquiryModule()
                 Screen.Receiving -> ReceivingModule()
                 Screen.Picking -> PickingModule()
+                Screen.Packing -> PackingModule()
                 Screen.AdHocMove -> AdHocMoveModule()
                 Screen.Count -> CountModule()
                 Screen.PutAway -> PutAwayModule()
@@ -106,6 +118,8 @@ fun AppRoot() {
                 Screen.PostingTest -> PostingTestModule()
                 Screen.Printers -> PrintersModule()
                 Screen.SelfTest -> SelfTestModule()
+                Screen.FieldSettings -> FieldSettingsModule()
+                Screen.Scratchpad -> ScratchpadModule()
             }
             UpdateChecker()
         }
@@ -115,75 +129,237 @@ fun AppRoot() {
 
 @Composable
 private fun ConnectionBadge(connected: Boolean, onClick: () -> Unit) {
-    TextButton(onClick = onClick) {
-        Text(
-            if (connected) "🟢 Bağlı" else "🔴 Bağlı değil",
-            color = if (connected) Color(0xFF2E7D32) else Color(0xFFC62828),
-            fontSize = 13.sp
-        )
+    val status = bcwmsStatus()
+    val c = if (connected) status.success else status.danger
+    Surface(
+        shape = RoundedCornerShape(50),
+        color = c.copy(alpha = 0.14f),
+        modifier = Modifier.padding(end = 8.dp).clickable { onClick() }
+    ) {
+        Row(
+            Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(Modifier.size(8.dp).clip(CircleShape).background(c))
+            Spacer(Modifier.width(6.dp))
+            Text(
+                if (connected) "Bağlı" else "Bağlı değil",
+                color = c,
+                style = MaterialTheme.typography.labelMedium,
+                fontWeight = FontWeight.SemiBold
+            )
+        }
     }
 }
 
-data class Tile(val screen: Screen, val emoji: String, val label: String)
+private data class HomeTile(val screen: Screen, val emoji: String, val label: String)
+private data class HomeCategory(val title: String, val accent: Color, val tiles: List<HomeTile>)
+
+private val HomeCategories = listOf(
+    HomeCategory("Gelen", Color(0xFF26A65B), listOf(
+        HomeTile(Screen.Receiving, "📥", "Mal Kabul"),
+        HomeTile(Screen.PutAway, "📤", "Put-Away"),
+    )),
+    HomeCategory("Giden", Color(0xFF6C5CE7), listOf(
+        HomeTile(Screen.Picking, "🚚", "Toplama"),
+        HomeTile(Screen.Packing, "📦", "Paketleme"),
+        HomeTile(Screen.Shipping, "🚢", "Sevkiyat"),
+    )),
+    HomeCategory("İç Operasyon", Color(0xFF2D9CDB), listOf(
+        HomeTile(Screen.LicensePlates, "📦", "License Plate"),
+        HomeTile(Screen.AdHocMove, "↔️", "Ad-Hoc Hareket"),
+        HomeTile(Screen.DirectedMove, "🧭", "Yönlendirilmiş"),
+        HomeTile(Screen.Count, "🔢", "Sayım"),
+        HomeTile(Screen.Scratchpad, "📝", "Scratchpad"),
+    )),
+    HomeCategory("Üretim", Color(0xFFE2873B), listOf(
+        HomeTile(Screen.Production, "🏭", "Üretim"),
+        HomeTile(Screen.Assembly, "🔧", "Montaj"),
+    )),
+    HomeCategory("Kalite", Color(0xFF14B8A6), listOf(
+        HomeTile(Screen.Quality, "🔬", "Kalite Denetimi"),
+        HomeTile(Screen.QualityMgmt, "🧫", "MS Quality"),
+    )),
+    HomeCategory("Sorgu", Color(0xFF9B59B6), listOf(
+        HomeTile(Screen.ItemInquiry, "🔎", "Item Inquiry"),
+        HomeTile(Screen.BinInquiry, "📍", "Bin Inquiry"),
+    )),
+    HomeCategory("Sistem", Color(0xFF64748B), listOf(
+        HomeTile(Screen.FieldSettings, "🧩", "Alan Ayarları"),
+        HomeTile(Screen.SelfTest, "🩺", "Sistem Sağlığı"),
+        HomeTile(Screen.Printers, "🖨", "Yazıcılar"),
+        HomeTile(Screen.TestCenter, "🧪", "Test Center"),
+        HomeTile(Screen.PostingTest, "📮", "Posting Test"),
+        HomeTile(Screen.Connection, "⚙️", "Bağlantı"),
+    )),
+)
 
 @Composable
 private fun HomeScreen(connected: Boolean, onNavigate: (Screen) -> Unit) {
     val context = androidx.compose.ui.platform.LocalContext.current
-    val tiles = listOf(
-        Tile(Screen.LicensePlates, "📦", "License Plate"),
-        Tile(Screen.Receiving, "📥", "Mal Kabul"),
-        Tile(Screen.Picking, "🚚", "Toplama"),
-        Tile(Screen.AdHocMove, "↔️", "Ad-Hoc Hareket"),
-        Tile(Screen.DirectedMove, "🧭", "Yönlendirilmiş"),
-        Tile(Screen.Count, "🔢", "Sayım"),
-        Tile(Screen.PutAway, "📤", "Put-Away"),
-        Tile(Screen.Shipping, "🚢", "Sevkiyat"),
-        Tile(Screen.Production, "🏭", "Üretim"),
-        Tile(Screen.Assembly, "🔧", "Montaj"),
-        Tile(Screen.Quality, "🔬", "Kalite Denetimi"),
-        Tile(Screen.QualityMgmt, "🧫", "MS Quality Mgmt"),
-        Tile(Screen.ItemInquiry, "🔎", "Item Inquiry"),
-        Tile(Screen.BinInquiry, "📍", "Bin Inquiry"),
-        Tile(Screen.TestCenter, "🧪", "Test Center"),
-        Tile(Screen.PostingTest, "📮", "Posting Test"),
-        Tile(Screen.Printers, "🖨", "Yazıcılar"),
-        Tile(Screen.SelfTest, "🩺", "Sistem Sağlığı"),
-        Tile(Screen.Connection, "⚙️", "Bağlantı"),
-    )
-    Column(Modifier.fillMaxSize().padding(16.dp)) {
-        Text("DynOps Warehouse Management", fontWeight = FontWeight.Bold, fontSize = 18.sp)
-        Text(
-            "BC: ${BcApi.getEnvironment(context)} / ${BcApi.getCompanyName(context)}",
-            fontSize = 12.sp, color = Color.Gray
+    Column(
+        Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp)
+    ) {
+        HomeHeader(
+            env = BcApi.getEnvironment(context),
+            company = BcApi.getCompanyName(context),
+            connected = connected
         )
-        Spacer(Modifier.height(8.dp))
+        Spacer(Modifier.height(16.dp))
+
         if (!connected) {
-            Card(colors = CardDefaults.cardColors(containerColor = Color(0xFFFFF3E0))) {
-                Text(
-                    "⚠️ Henüz bağlanmadınız. Önce ⚙️ Bağlantı'dan token girin.",
-                    Modifier.padding(12.dp), fontSize = 13.sp
-                )
-            }
-            Spacer(Modifier.height(8.dp))
+            NotConnectedCard()
+            Spacer(Modifier.height(16.dp))
         }
-        LazyVerticalGrid(columns = GridCells.Fixed(2), verticalArrangement = Arrangement.spacedBy(12.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            gridItems(tiles) { t ->
-                Card(
-                    modifier = Modifier.fillMaxWidth().height(110.dp),
-                    onClick = { onNavigate(t.screen) },
-                    shape = RoundedCornerShape(16.dp)
-                ) {
-                    Column(
-                        Modifier.fillMaxSize().padding(16.dp),
-                        verticalArrangement = Arrangement.Center,
-                        horizontalAlignment = Alignment.CenterHorizontally
-                    ) {
-                        Text(t.emoji, fontSize = 32.sp)
-                        Spacer(Modifier.height(8.dp))
-                        Text(t.label, fontWeight = FontWeight.Medium)
-                    }
+
+        HomeCategories.forEachIndexed { index, category ->
+            CategorySection(category, onNavigate)
+            if (index != HomeCategories.lastIndex) Spacer(Modifier.height(18.dp))
+        }
+        Spacer(Modifier.height(8.dp))
+    }
+}
+
+@Composable
+private fun HomeHeader(env: String, company: String, connected: Boolean) {
+    val status = bcwmsStatus()
+    val statusColor = if (connected) status.success else Color(0xFFFF7A7A)
+    Box(
+        Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(24.dp))
+            .background(
+                Brush.linearGradient(
+                    listOf(MaterialTheme.colorScheme.primary, Color(0xFF4A3DB8))
+                )
+            )
+            .padding(20.dp)
+    ) {
+        Column {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(
+                    Modifier.size(48.dp).clip(RoundedCornerShape(14.dp))
+                        .background(Color.White.copy(alpha = 0.18f)),
+                    contentAlignment = Alignment.Center
+                ) { Text("📦", fontSize = 26.sp) }
+                Spacer(Modifier.width(14.dp))
+                Column(Modifier.weight(1f)) {
+                    Text(
+                        "DynOps WMS",
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White
+                    )
+                    Text(
+                        "$env · $company",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Color.White.copy(alpha = 0.82f),
+                        maxLines = 1
+                    )
                 }
             }
+            Spacer(Modifier.height(14.dp))
+            Surface(
+                shape = RoundedCornerShape(50),
+                color = Color.White.copy(alpha = 0.16f)
+            ) {
+                Row(
+                    Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Box(Modifier.size(8.dp).clip(CircleShape).background(statusColor))
+                    Spacer(Modifier.width(6.dp))
+                    Text(
+                        if (connected) "Bağlı — canlı bağlantı" else "Bağlı değil",
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        color = Color.White
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun NotConnectedCard() {
+    val warn = bcwmsStatus().warning
+    Card(
+        colors = CardDefaults.cardColors(containerColor = warn.copy(alpha = 0.12f)),
+        shape = RoundedCornerShape(14.dp),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
+            Text("⚠️", fontSize = 20.sp)
+            Spacer(Modifier.width(10.dp))
+            Text(
+                "Henüz bağlanmadınız. ⚙️ Bağlantı'dan giriş yapın.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+        }
+    }
+}
+
+@Composable
+private fun CategorySection(category: HomeCategory, onNavigate: (Screen) -> Unit) {
+    Column {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Box(Modifier.size(width = 4.dp, height = 16.dp).clip(RoundedCornerShape(2.dp)).background(category.accent))
+            Spacer(Modifier.width(8.dp))
+            Text(
+                category.title.uppercase(),
+                style = MaterialTheme.typography.labelMedium,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+        Spacer(Modifier.height(10.dp))
+        val rows = category.tiles.chunked(2)
+        rows.forEachIndexed { index, rowTiles ->
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                rowTiles.forEach { tile ->
+                    HomeTileCard(tile, category.accent, Modifier.weight(1f), onNavigate)
+                }
+                if (rowTiles.size == 1) Spacer(Modifier.weight(1f))
+            }
+            if (index != rows.lastIndex) Spacer(Modifier.height(12.dp))
+        }
+    }
+}
+
+@Composable
+private fun HomeTileCard(
+    tile: HomeTile,
+    accent: Color,
+    modifier: Modifier,
+    onNavigate: (Screen) -> Unit
+) {
+    Card(
+        onClick = { onNavigate(tile.screen) },
+        shape = RoundedCornerShape(18.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp, pressedElevation = 8.dp),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.5f)),
+        modifier = modifier.height(112.dp)
+    ) {
+        Column(
+            Modifier.fillMaxSize().padding(12.dp),
+            verticalArrangement = Arrangement.Center,
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Box(
+                Modifier.size(50.dp).clip(RoundedCornerShape(15.dp)).background(accent.copy(alpha = 0.15f)),
+                contentAlignment = Alignment.Center
+            ) { Text(tile.emoji, fontSize = 26.sp) }
+            Spacer(Modifier.height(10.dp))
+            Text(
+                tile.label,
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.onSurface,
+                textAlign = TextAlign.Center,
+                maxLines = 2
+            )
         }
     }
 }

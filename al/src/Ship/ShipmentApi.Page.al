@@ -7,7 +7,8 @@ page 72093 "DOPSWHS Shipment API"
     EntityName = 'shipment';
     EntitySetName = 'shipments';
     SourceTable = "Warehouse Shipment Header";
-    SourceTableView = where(Status = const(Released));
+    // Show Open + Released so the mobile app can load a shipment that got reopened by a Qty edit;
+    // posting auto-releases an Open shipment (see DOPSWHS Shipment Mgmt.PostShipment).
     DelayedInsert = true;
     ODataKeyFields = "No.";
 

@@ -135,6 +135,9 @@ codeunit 72428 "DOPSWHS LP Propagation"
         if Lp = '' then
             exit;
         ItemLedgerEntry."DOPSWHS LP No." := Lp;
+        // OnAfterInsertItemLedgEntry fires AFTER Insert(true) and the base app does not re-write
+        // the row, so an in-memory assignment is discarded without an explicit Modify. Persist it.
+        ItemLedgerEntry.Modify();
     end;
 
     [EventSubscriber(ObjectType::Codeunit, Codeunit::"Item Jnl.-Post Line", 'OnAfterInsertValueEntry', '', false, false)]
@@ -142,8 +145,11 @@ codeunit 72428 "DOPSWHS LP Propagation"
     begin
         if ValueEntry."DOPSWHS LP No." <> '' then
             exit;
-        if ItemLedgerEntry."DOPSWHS LP No." <> '' then
+        if ItemLedgerEntry."DOPSWHS LP No." <> '' then begin
             ValueEntry."DOPSWHS LP No." := ItemLedgerEntry."DOPSWHS LP No.";
+            // Same as the ILE case: the row is already inserted, so persist explicitly.
+            ValueEntry.Modify();
+        end;
     end;
 
     /// <summary>After Sales-Post completes, copy the LP from the originating Warehouse Shipment
@@ -218,33 +224,107 @@ codeunit 72428 "DOPSWHS LP Propagation"
     /// Whse Shipment Line LP → Whse Receipt Header LP.</summary>
     local procedure ResolveLpForItemJnlLine(ItemJnlLine: Record "Item Journal Line"): Code[20]
     var
+        Lp: Code[20];
+    begin
+        // Sales-Post / Purch.-Post carry the originating ORDER no. on "Order No." while
+        // "Document No." becomes the posted document no.; Movement/Production carry their working
+        // no. on "Document No." (blank "Order No."). Try both keys so every flow resolves — the
+        // "Document No." pass preserves the previous behavior, the "Order No." pass adds
+        // shipping/receiving. First non-blank wins.
+        Lp := ResolveLpBySourceNo(ItemJnlLine."Order No.", ItemJnlLine."Item No.");
+        if Lp <> '' then
+            exit(Lp);
+        exit(ResolveLpBySourceNo(ItemJnlLine."Document No.", ItemJnlLine."Item No."));
+    end;
+
+    local procedure ResolveLpBySourceNo(SourceNo: Code[20]; ItemNo: Code[20]): Code[20]
+    var
         WhseActivityLine: Record "Warehouse Activity Line";
         WhseShipmentLine: Record "Warehouse Shipment Line";
         WhseReceiptHeader: Record "Warehouse Receipt Header";
         WhseReceiptLine: Record "Warehouse Receipt Line";
     begin
-        if ItemJnlLine."Document No." = '' then
+        if SourceNo = '' then
             exit('');
 
         // Pick / PutAway → Warehouse Activity Line
-        WhseActivityLine.SetRange("Source No.", ItemJnlLine."Document No.");
-        WhseActivityLine.SetRange("Item No.", ItemJnlLine."Item No.");
+        WhseActivityLine.SetRange("Source No.", SourceNo);
+        WhseActivityLine.SetRange("Item No.", ItemNo);
         WhseActivityLine.SetFilter("LP No.", '<>%1', '');
         if WhseActivityLine.FindFirst() then
             exit(WhseActivityLine."LP No.");
 
-        // Whse Shipment Line
-        WhseShipmentLine.SetRange("Source No.", ItemJnlLine."Document No.");
-        WhseShipmentLine.SetRange("Item No.", ItemJnlLine."Item No.");
+        // Whse Shipment Line (outbound)
+        WhseShipmentLine.SetRange("Source No.", SourceNo);
+        WhseShipmentLine.SetRange("Item No.", ItemNo);
         WhseShipmentLine.SetFilter("LP No.", '<>%1', '');
         if WhseShipmentLine.FindFirst() then
             exit(WhseShipmentLine."LP No.");
 
-        // Whse Receipt Header (when receipt-with-LP was scanned)
-        WhseReceiptLine.SetRange("Source No.", ItemJnlLine."Document No.");
-        WhseReceiptLine.SetRange("Item No.", ItemJnlLine."Item No.");
+        // Whse Receipt Header (inbound, when receipt-with-LP was scanned)
+        WhseReceiptLine.SetRange("Source No.", SourceNo);
+        WhseReceiptLine.SetRange("Item No.", ItemNo);
         if WhseReceiptLine.FindFirst() then
             if WhseReceiptHeader.Get(WhseReceiptLine."No.") then
+                exit(WhseReceiptHeader."DOPSWHS LP No.");
+
+        exit('');
+    end;
+
+    // =========================================================================
+    // (A) Warehouse Entry stamping — covers Pick/Put-away/Movement register-time
+    // =========================================================================
+
+    /// <summary>Stamps the LP onto each Warehouse Entry as it is registered (bin movements from
+    /// pick/put-away/movement). Uses the OnBefore event so the assignment is persisted by the base
+    /// Insert(true) with no Modify. The originating Warehouse Activity Line (carrying the scanned
+    /// LP) still exists at this point.</summary>
+    [EventSubscriber(ObjectType::Codeunit, Codeunit::"Whse. Jnl.-Register Line", 'OnBeforeInsertWhseEntry', '', false, false)]
+    local procedure CarryLpOntoWhseEntry(var WarehouseEntry: Record "Warehouse Entry"; var WarehouseJournalLine: Record "Warehouse Journal Line")
+    var
+        Lp: Code[20];
+    begin
+        if WarehouseEntry."DOPSWHS LP No." <> '' then
+            exit;
+        Lp := ResolveLpForWhseEntry(WarehouseEntry);
+        if Lp = '' then
+            exit;
+        WarehouseEntry."DOPSWHS LP No." := Lp;
+    end;
+
+    /// <summary>Resolve the LP for a Warehouse Entry. Priority mirrors ResolveLpForItemJnlLine:
+    /// live Whse Activity Line LP → Whse Shipment Line LP → Whse Receipt Header LP.</summary>
+    local procedure ResolveLpForWhseEntry(WhseEntry: Record "Warehouse Entry"): Code[20]
+    var
+        WhseActivityLine: Record "Warehouse Activity Line";
+        WhseShipmentLine: Record "Warehouse Shipment Line";
+        WhseReceiptHeader: Record "Warehouse Receipt Header";
+    begin
+        // (a) Pick / Put-away / Movement: the working activity line (with its scanned LP) is still
+        // present at OnBefore. Join on the shared source keys + item.
+        if WhseEntry."Source No." <> '' then begin
+            WhseActivityLine.SetRange("Source Type", WhseEntry."Source Type");
+            WhseActivityLine.SetRange("Source Subtype", WhseEntry."Source Subtype");
+            WhseActivityLine.SetRange("Source No.", WhseEntry."Source No.");
+            WhseActivityLine.SetRange("Source Line No.", WhseEntry."Source Line No.");
+            WhseActivityLine.SetRange("Item No.", WhseEntry."Item No.");
+            WhseActivityLine.SetFilter("LP No.", '<>%1', '');
+            if WhseActivityLine.FindFirst() then
+                exit(WhseActivityLine."LP No.");
+        end;
+
+        // (b) Outbound: the Warehouse Shipment Line carries the LP (keyed by whse document).
+        if WhseEntry."Whse. Document Type" = WhseEntry."Whse. Document Type"::Shipment then begin
+            WhseShipmentLine.SetRange("No.", WhseEntry."Whse. Document No.");
+            WhseShipmentLine.SetRange("Line No.", WhseEntry."Whse. Document Line No.");
+            WhseShipmentLine.SetFilter("LP No.", '<>%1', '');
+            if WhseShipmentLine.FindFirst() then
+                exit(WhseShipmentLine."LP No.");
+        end;
+
+        // (c) Inbound: the LP lives on the (still-open) Warehouse Receipt Header.
+        if WhseEntry."Whse. Document Type" = WhseEntry."Whse. Document Type"::Receipt then
+            if WhseReceiptHeader.Get(WhseEntry."Whse. Document No.") then
                 exit(WhseReceiptHeader."DOPSWHS LP No.");
 
         exit('');

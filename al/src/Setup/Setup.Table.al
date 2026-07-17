@@ -138,6 +138,29 @@ table 72000 "DOPSWHS Setup"
             DataClassification = CustomerContent;
             Editable = false;
         }
+        field(230; "Show SO Shipment Mobile"; Boolean)
+        {
+            // Müşteri toplantısı kararı: sipariş bazlı (Sales Order) sevkiyat
+            // terminalde opsiyonel olsun. Varsayılan açık — kapatınca el
+            // terminali sadece Warehouse Shipment belgelerini gösterir.
+            Caption = 'Show SO Shipment on Mobile';
+            DataClassification = CustomerContent;
+            InitValue = true;
+        }
+        field(240; "Lot No. Series"; Code[20])
+        {
+            // Otomatik Lot numarası üretimi (mal kabulde lot boş bırakılırsa).
+            Caption = 'Lot No. Series';
+            DataClassification = CustomerContent;
+            TableRelation = "No. Series";
+        }
+        field(250; "Serial No. Series"; Code[20])
+        {
+            // Otomatik Seri numarası üretimi (mal kabulde seri boş bırakılırsa).
+            Caption = 'Serial No. Series';
+            DataClassification = CustomerContent;
+            TableRelation = "No. Series";
+        }
     }
 
     keys

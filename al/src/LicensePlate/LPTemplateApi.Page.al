@@ -33,6 +33,7 @@ page 72280 "DOPSWHS LP Template API"
                 field(noSeries; Rec."No. Series") { Caption = 'noSeries'; }
                 field(allowMixedItems; Rec."Allow Mixed Items") { Caption = 'allowMixedItems'; }
                 field(allowMixedLots; Rec."Allow Mixed Lots") { Caption = 'allowMixedLots'; }
+                field(reusable; Rec.Reusable) { Caption = 'reusable'; }
             }
         }
     }

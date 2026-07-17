@@ -23,6 +23,9 @@ page 72295 "DOPSWHS Sales Source Line API"
                 field(type; Rec.Type) { Caption = 'type'; Editable = false; }
                 field(itemNo; Rec."No.") { Caption = 'itemNo'; Editable = false; }
                 field(description; Rec.Description) { Caption = 'description'; Editable = false; }
+                field(description2; Rec."Description 2") { Caption = 'description2'; Editable = false; }
+                field(variantCode; Rec."Variant Code") { Caption = 'variantCode'; Editable = false; }
+                field(itemReference; Rec."Item Reference No.") { Caption = 'itemReference'; Editable = false; }
                 field(locationCode; Rec."Location Code") { Caption = 'locationCode'; Editable = false; }
                 field(binCode; Rec."Bin Code") { Caption = 'binCode'; }
                 field(quantity; Rec.Quantity) { Caption = 'quantity'; Editable = false; }

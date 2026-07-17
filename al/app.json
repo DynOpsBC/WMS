@@ -2,7 +2,7 @@
   "id": "984e25aa-07c2-4401-babc-88f975303a52",
   "name": "BCWMSApp",
   "publisher": "DynOps",
-  "version": "1.10.2.0",
+  "version": "1.10.4.9",
   "brief": "Advanced Warehouse Management System for Business Central SaaS",
   "description": "Advanced warehouse management foundation for Business Central SaaS.",
   "privacyStatement": "https://dynops.com/privacy",
@@ -11,12 +11,6 @@
   "url": "https://dynops.com",
   "logo": "",
   "dependencies": [
-    {
-      "id": "437dbf0e-84ff-417a-965d-ed2bb9650972",
-      "name": "Base Application",
-      "publisher": "Microsoft",
-      "version": "24.0.0.0"
-    },
     {
       "id": "bc7b3891-f61b-4883-bbb3-384cdef88bec",
       "name": "Quality Management",

@@ -20,6 +20,7 @@ page 72092 "DOPSWHS Pick API"
                 field(no; Rec."No.") { Caption = 'no'; }
                 field(locationCode; Rec."Location Code") { Caption = 'locationCode'; }
                 field(assignedUserId; Rec."Assigned User ID") { Caption = 'assignedUserId'; }
+                field(pickMode; Rec."DOPSWHS Pick Mode") { Caption = 'pickMode'; }
                 field(sourceNo; SourceNo) { Caption = 'sourceNo'; }
                 // TODO Sprint H+ post-deploy: bind to activity status if exposed by the target BC app.
                 field(status; StatusText) { Caption = 'status'; }
@@ -99,6 +100,23 @@ page 72092 "DOPSWHS Pick API"
         PickMgmt: Codeunit "DOPSWHS Pick Mgmt";
     begin
         PickMgmt.ReassignPick(Rec, userId, reason);
+    end;
+
+    // ELOG: sipariş başına tote (sepet) bağlama — bkz. "DOPSWHS Pick Tote Assignment".
+    [ServiceEnabled]
+    procedure assignTote(sourceOrderNo: Code[20]; lpNo: Code[20])
+    var
+        PickMgmt: Codeunit "DOPSWHS Pick Mgmt";
+    begin
+        PickMgmt.AssignTote(Rec, sourceOrderNo, lpNo);
+    end;
+
+    [ServiceEnabled]
+    procedure toteForOrder(sourceOrderNo: Code[20]): Code[20]
+    var
+        PickMgmt: Codeunit "DOPSWHS Pick Mgmt";
+    begin
+        exit(PickMgmt.GetToteForOrder(Rec."No.", sourceOrderNo));
     end;
 
     var

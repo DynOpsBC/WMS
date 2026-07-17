@@ -36,7 +36,10 @@ fun LoginFlow(onConnected: (Boolean) -> Unit) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
 
-    var step by remember { mutableStateOf(Step.Email) }
+    // Paylaşımlı BC lisansı modeli: BC servis hesabı + ortam zaten bağlıysa
+    // ekran doğrudan WMS operatör girişinden başlar (vardiya/kullanıcı değişimi
+    // de "Bağlı" rozetine dokunup buradan yapılır).
+    var step by remember { mutableStateOf(if (BcApi.hasToken(context)) Step.LocalUser else Step.Email) }
     var email by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
     var localUsername by remember { mutableStateOf("") }
@@ -60,6 +63,8 @@ fun LoginFlow(onConnected: (Boolean) -> Unit) {
             when (val t = DeviceAuth.loginWithPassword(email.trim(), password)) {
                 is DeviceAuth.TokenResult.Success -> {
                     BcApi.saveToken(context, t.accessToken)
+                    BcApi.saveRefreshToken(context, t.refreshToken)
+                    BcApi.saveTokenExpiry(context, t.expiresInSec)
                     status = "Token alındı, ortamlar keşfediliyor..."
                     envList = BcApi.discoverEnvironments(t.accessToken)
                     busy = false
@@ -132,6 +137,8 @@ fun LoginFlow(onConnected: (Boolean) -> Unit) {
                     when (val t = DeviceAuth.pollForToken(code)) {
                         is DeviceAuth.TokenResult.Success -> {
                             BcApi.saveToken(context, t.accessToken)
+                    BcApi.saveRefreshToken(context, t.refreshToken)
+                    BcApi.saveTokenExpiry(context, t.expiresInSec)
                             status = "Token alındı, ortamlar keşfediliyor..."
                             envList = BcApi.discoverEnvironments(t.accessToken)
                             busy = false
@@ -266,6 +273,13 @@ fun LoginFlow(onConnected: (Boolean) -> Unit) {
                 ) { Text(if (busy) "..." else "🚪 Bağlan", fontWeight = FontWeight.Bold) }
                 Spacer(Modifier.height(8.dp))
                 TextButton(onClick = { step = Step.Email; status = "" }) { Text("‹ Geri (e-posta girişine dön)") }
+                // Kurulum/yönetici kaçış yolu: operatör hesabı henüz tanımlı
+                // değilken cihazı BC servis kimliğiyle kullanmaya izin verir.
+                TextButton(onClick = {
+                    BcApi.clearLocalUser(context)
+                    status = "⚠️ WMS girişi atlandı — BC hesabıyla devam ediliyor."
+                    onConnected(true)
+                }) { Text("Yönetici: WMS girişini atla", fontSize = 11.sp, color = Color.Gray) }
             }
 
             Step.DeviceCode -> {
@@ -317,8 +331,13 @@ fun LoginFlow(onConnected: (Boolean) -> Unit) {
                                 BcApi.setCompany(context, c.id, c.displayName)
                                 val r = BcApi.testConnection(context)
                                 busy = false
-                                if (r.ok) { status = "🟢 Bağlandı: ${selectedEnv!!.environment} / ${c.displayName}"; onConnected(true) }
-                                else { status = "🔴 Bağlanılamadı (HTTP ${r.httpCode})"; onConnected(false) }
+                                if (r.ok) {
+                                    // Paylaşımlı BC lisansı: ortam bağlantısı servis hesabıyla
+                                    // yapıldı; oturum ancak WMS operatörü kendi kullanıcı adı +
+                                    // şifresiyle doğrulanınca açılır (BC → WMS Users / Local User).
+                                    status = "🟢 Ortam bağlandı: ${selectedEnv!!.environment} / ${c.displayName} — şimdi WMS kullanıcınızla giriş yapın"
+                                    step = Step.LocalUser
+                                } else { status = "🔴 Bağlanılamadı (HTTP ${r.httpCode})"; onConnected(false) }
                             }
                         },
                         modifier = Modifier.fillMaxWidth().padding(vertical = 3.dp), shape = RoundedCornerShape(10.dp)

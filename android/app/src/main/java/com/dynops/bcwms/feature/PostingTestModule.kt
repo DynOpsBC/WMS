@@ -154,8 +154,8 @@ private fun groupPostingResults(rows: List<JSONObject>): GroupedPosting {
 
 private fun classify(row: JSONObject): PostingKind {
     val status = row.optString("status")
-    if (status == "Passed") return PostingKind.PASSED
-    if (status != "Failed") return PostingKind.FAILED
+    if (status.equals("Passed", ignoreCase = true)) return PostingKind.PASSED
+    if (status.equals("Skipped", ignoreCase = true)) return PostingKind.CASCADE_SKIP
     val d = row.optString("detail").lowercase()
 
     // BC tarafında veri/setup eksikliği — "şu hesap tanımlanmamış", "satır yok"

@@ -8,6 +8,7 @@ page 72087 "DOPSWHS Bin API"
     EntitySetName = 'bins';
     SourceTable = Bin;
     DelayedInsert = true;
+    ODataKeyFields = "Location Code", Code;
     ApplicationArea = All;
 
     layout
@@ -21,8 +22,20 @@ page 72087 "DOPSWHS Bin API"
                 field(description; Rec.Description) { Caption = 'description'; }
                 field(zoneCode; Rec."Zone Code") { Caption = 'zoneCode'; }
                 field(binTypeCode; Rec."Bin Type Code") { Caption = 'binTypeCode'; }
+                field(warehouseClassCode; Rec."Warehouse Class Code") { Caption = 'warehouseClassCode'; }
                 field(blockMovement; Rec."Block Movement") { Caption = 'blockMovement'; }
+                field(binRanking; Rec."Bin Ranking") { Caption = 'binRanking'; }
+                field(maximumCubage; Rec."Maximum Cubage") { Caption = 'maximumCubage'; }
+                field(maximumWeight; Rec."Maximum Weight") { Caption = 'maximumWeight'; }
             }
         }
     }
+
+    [ServiceEnabled]
+    procedure printLabel(printerId: Code[50]; copies: Integer)
+    var
+        Dispatcher: Codeunit "DOPSWHS Print Dispatcher";
+    begin
+        Dispatcher.PrintBinLabel(Rec, printerId, copies);
+    end;
 }
