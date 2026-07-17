@@ -72,6 +72,11 @@ codeunit 72045 "DOPSWHS Movement Mgmt"
         EnsureReclassTemplate(ItemJournalTemplate);
         BatchName := EnsureDeviceJournalBatch(UserId);
 
+        // Takılı satır koruması (whse yolundakiyle aynı gerekçe): post tüm
+        // sayfayı işler; önceki başarısız denemenin artığı her yeni hareketi
+        // düşürür. Bizim sayfamızda post öncesi ne varsa artıktır — temizle.
+        PurgeStaleItemLines(ItemJournalTemplate.Name, BatchName);
+
         CreateReclassLine(ItemJournalTemplate.Name, BatchName, LocationCode, FromBinCode, ToBinCode, ItemNo, LpNo, Qty, ItemJournalLine);
         // Lot izlemeli ürün: reclass satırına item tracking bağla — yoksa post
         // "You must assign a lot number" ile düşer.
@@ -161,6 +166,12 @@ codeunit 72045 "DOPSWHS Movement Mgmt"
         EnsureWhseReclassTemplate(WhseJournalTemplate);
         BatchName := EnsureWhseJournalBatch(WhseJournalTemplate.Name, LocationCode);
 
+        // Saha hatası ("The Item does not exist. No.=''"): register TÜM sayfayı
+        // postalar; önceki başarısız denemeden takılı (yarım/bozuk) satır varsa
+        // her yeni hareketi düşürür. DOPS-MOBIL bizim özel sayfamız — başarılı
+        // post satırları zaten siler, burada ne varsa artıktır: temizle.
+        PurgeStaleWhseLines(WhseJournalTemplate.Name, BatchName, LocationCode);
+
         WhseJournalLine.Init();
         WhseJournalLine.Validate("Journal Template Name", WhseJournalTemplate.Name);
         WhseJournalLine.Validate("Journal Batch Name", BatchName);
@@ -246,6 +257,42 @@ codeunit 72045 "DOPSWHS Movement Mgmt"
             WhseJournalBatch.Insert(true);
         end;
         exit(BatchName);
+    end;
+
+    local procedure PurgeStaleItemLines(TemplateName: Code[10]; BatchName: Code[10])
+    var
+        StaleLine: Record "Item Journal Line";
+        StaleReservEntry: Record "Reservation Entry";
+    begin
+        StaleLine.SetRange("Journal Template Name", TemplateName);
+        StaleLine.SetRange("Journal Batch Name", BatchName);
+        if not StaleLine.IsEmpty() then
+            StaleLine.DeleteAll(true);
+        StaleReservEntry.SetRange("Source Type", Database::"Item Journal Line");
+        StaleReservEntry.SetRange("Source ID", TemplateName);
+        StaleReservEntry.SetRange("Source Batch Name", BatchName);
+        if not StaleReservEntry.IsEmpty() then
+            StaleReservEntry.DeleteAll(true);
+    end;
+
+    local procedure PurgeStaleWhseLines(TemplateName: Code[10]; BatchName: Code[10]; LocationCode: Code[10])
+    var
+        StaleLine: Record "Warehouse Journal Line";
+        StaleTracking: Record "Whse. Item Tracking Line";
+    begin
+        StaleLine.SetRange("Journal Template Name", TemplateName);
+        StaleLine.SetRange("Journal Batch Name", BatchName);
+        StaleLine.SetRange("Location Code", LocationCode);
+        if not StaleLine.IsEmpty() then
+            StaleLine.DeleteAll(true);
+        // Takılı satırların tracking kayıtları da temizlenir (ters alan
+        // eşlemesiyle: Source ID = batch, Source Batch Name = template).
+        StaleTracking.SetRange("Source Type", Database::"Warehouse Journal Line");
+        StaleTracking.SetRange("Source ID", BatchName);
+        StaleTracking.SetRange("Source Batch Name", TemplateName);
+        StaleTracking.SetRange("Location Code", LocationCode);
+        if not StaleTracking.IsEmpty() then
+            StaleTracking.DeleteAll(true);
     end;
 
     local procedure NextWhseLineNo(TemplateName: Code[10]; BatchName: Code[10]; LocationCode: Code[10]): Integer
