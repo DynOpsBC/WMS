@@ -84,6 +84,7 @@ permissionset 72094 "DOPSWHS-ADMIN"
         page "DOPSWHS Pick API" = X,
         page "DOPSWHS Pick Line API" = X,
         page "DOPSWHS Movement API" = X,
+        page "DOPSWHS Movement Line API" = X,
         page "DOPSWHS Prod LP Factbox" = X,
         page "DOPSWHS Consumption API" = X,
         page "DOPSWHS Output API" = X,

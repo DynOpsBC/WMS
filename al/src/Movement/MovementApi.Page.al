@@ -53,6 +53,15 @@ page 72220 "DOPSWHS Movement API"
         MovementMgmt.RegisterDirected(Rec);
     end;
 
+    // Paylaşımlı BC lisansı: belge, oturumdaki WMS kullanıcısına atanır
+    // (pick'teki reassign deseninin movement karşılığı).
+    [ServiceEnabled]
+    procedure assignTo(userId: Code[50])
+    begin
+        Rec.Validate("Assigned User ID", userId);
+        Rec.Modify(true);
+    end;
+
     var
         StatusText: Text[30];
 }

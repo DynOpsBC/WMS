@@ -8,6 +8,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
@@ -483,15 +484,21 @@ private fun CountEntrySheet(line: JSONObject, blind: Boolean, onDismiss: () -> U
 fun DirectedMoveModule() {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
+    var selected by remember { mutableStateOf<String?>(null) }
     var rows by remember { mutableStateOf<List<JSONObject>>(emptyList()) }
     var status by remember { mutableStateOf("") }
     var loading by remember { mutableStateOf(false) }
     var search by remember { mutableStateOf("") }
+    var showAll by remember { mutableStateOf(true) }
 
     fun load() {
         scope.launch {
             loading = true; status = "Hareket belgeleri yükleniyor..."
-            val filter = com.dynops.bcwms.ui.buildODataFilter(com.dynops.bcwms.ui.searchClause("no", search))
+            val myUser = if (showAll) "" else BcApi.currentUserId(context)
+            val filter = buildODataFilter(
+                assignedToMeClause(myUser, enabled = !showAll),
+                searchClause("no", search),
+            )
             val r = BcApi.get(context, "movements?\$top=100&\$orderby=no desc&\$select=no,locationCode,assignedUserId,status$filter")
             loading = false
             rows = if (r.ok) BcApi.parseValueArray(r.body) else emptyList()
@@ -500,36 +507,220 @@ fun DirectedMoveModule() {
                 else "PASS: ${rows.size} belge (HTTP ${r.httpCode})"
         }
     }
-    LaunchedEffect(Unit) { load() }
+    LaunchedEffect(showAll) { load() }
+
+    // Paylaşımlı lisans: belge oturumdaki WMS kullanıcısına atanır.
+    fun takeOver(no: String) {
+        scope.launch {
+            loading = true; status = "Üzerine alınıyor..."
+            val me = BcApi.currentUserId(context)
+            val r = if (me.isNotBlank())
+                BcApi.boundAction(context, "movements", no, "assignTo", JSONObject().apply { put("userId", me) }.toString())
+            else BcApi.ApiResult(false, 0, "Oturum kullanıcısı çözülemedi")
+            status = if (r.ok) "PASS: $no üzerinize alındı ($me)"
+                else "HATA: ${BcApi.errorMessage(r.body)} (HTTP ${r.httpCode})" +
+                    if (r.httpCode == 404 || r.httpCode == 400) " — assignTo için BC publish gerekli olabilir" else ""
+            load()
+        }
+    }
+
+    val sel = selected
+    if (sel != null) { MovementDocument(no = sel, onBack = { selected = null; load() }); return }
 
     Column(Modifier.fillMaxSize().padding(12.dp)) {
-        Button(onClick = { load() }, enabled = !loading) { Text(if (loading) "..." else "🔄 Yenile") }
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            FilterChip(selected = !showAll, onClick = { showAll = false }, label = { Text("👤 Bana atanan") })
+            Spacer(Modifier.width(6.dp))
+            FilterChip(selected = showAll, onClick = { showAll = true }, label = { Text("Tümü") })
+            Spacer(Modifier.weight(1f))
+            OutlinedButton(
+                onClick = { load() },
+                enabled = !loading,
+                shape = RoundedCornerShape(50),
+                contentPadding = PaddingValues(horizontal = 14.dp),
+            ) { Text(if (loading) "…" else "🔄", fontSize = 15.sp) }
+        }
         Spacer(Modifier.height(8.dp))
-        com.dynops.bcwms.ui.DocSearchBar(value = search, onValueChange = { search = it }, onSearch = { load() }, label = "Hareket no ile ara")
+        DocSearchBar(value = search, onValueChange = { search = it }, onSearch = { load() }, label = "Hareket no ile ara")
         Spacer(Modifier.height(4.dp))
         StatusText(status)
         Spacer(Modifier.height(8.dp))
-        LazyColumn(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             items(rows) { d ->
                 val no = d.optString("no")
-                Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(10.dp)) {
+                val assigned = firstValue(d, "assignedUserId")
+                Card(onClick = { selected = no }, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp)) {
                     Column(Modifier.padding(12.dp)) {
-                        Text(no, fontWeight = FontWeight.Bold)
-                        Text("Lokasyon: ${firstValue(d, "locationCode")} · Atanan: ${firstValue(d, "assignedUserId")}", fontSize = 12.sp, color = Color.Gray)
-                        TextButton(onClick = {
-                            scope.launch {
-                                loading = true; status = "Register $no..."
-                                val r = BcApi.boundAction(context, "movements", no, "register", "{}")
-                                loading = false
-                                status = if (r.ok) "PASS: $no kaydedildi (HTTP ${r.httpCode})" else "HATA: ${BcApi.errorMessage(r.body)} (HTTP ${r.httpCode})"
-                                if (r.ok) load()
-                            }
-                        }) { Text("✅ Register") }
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                            Text("🧭 $no", fontWeight = FontWeight.Bold)
+                            Text(firstValue(d, "status"), fontSize = 12.sp, color = Color.Gray)
+                        }
+                        Text(
+                            "Lokasyon: ${firstValue(d, "locationCode")} · " +
+                                (if (assigned.isBlank()) "⏳ Atanmayı bekliyor" else "Atanan: $assigned"),
+                            fontSize = 12.sp, color = Color.Gray,
+                        )
+                        if (assigned.isBlank()) {
+                            Spacer(Modifier.height(6.dp))
+                            Button(
+                                onClick = { takeOver(no) },
+                                enabled = !loading,
+                                modifier = Modifier.fillMaxWidth().height(40.dp),
+                            ) { Text("✋ Üzerime Al", fontWeight = FontWeight.Bold, fontSize = 13.sp) }
+                        }
                     }
                 }
             }
-            if (rows.isEmpty() && !loading) item { EmptyState("Açık yönlendirilmiş hareket belgesi yok.") }
+            if (rows.isEmpty() && !loading) item { EmptyState("Açık yönlendirilmiş hareket belgesi yok. Ofis, Movement Worksheet'ten \"Create Movement\" ile belge oluşturur.") }
         }
+    }
+}
+
+/**
+ * Movement belgesi: Take/Place satırlarını göster, ürün okutunca (veya satıra
+ * dokunup miktar girince) qtyToHandle set edilir; "Register Movement" belgedeki
+ * işlenmiş miktarları BC'de kaydeder (Whse.-Activity-Register).
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun MovementDocument(no: String, onBack: () -> Unit) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var header by remember { mutableStateOf<JSONObject?>(null) }
+    var lines by remember { mutableStateOf<List<JSONObject>>(emptyList()) }
+    var status by remember { mutableStateOf("") }
+    var busy by remember { mutableStateOf(false) }
+    var qtyLine by remember { mutableStateOf<JSONObject?>(null) }
+
+    fun reload() {
+        scope.launch {
+            busy = true
+            val h = BcApi.get(context, "movements('$no')")
+            if (h.ok) header = JSONObject(h.body)
+            val l = BcApi.get(context, "movementLines?\$filter=no eq '$no'&\$top=200")
+            lines = if (l.ok) BcApi.parseValueArray(l.body) else emptyList()
+            busy = false
+            if (!l.ok && l.httpCode == 400) status = "⚠️ movementLines sunucuda yok — BC publish bekliyor"
+        }
+    }
+    LaunchedEffect(no) { reload() }
+
+    suspend fun patchLine(ln: JSONObject, qty: Double): Boolean {
+        val body = JSONObject().apply { put("qtyToHandle", qty) }.toString()
+        val r = BcApi.patch(context, "movementLines(activityType='${BcEnum.WhseActivityType.MOVEMENT}',no='$no',lineNo=${ln.optInt("lineNo")})", body)
+        if (!r.ok) status = "HATA: ${BcApi.errorMessage(r.body)} (HTTP ${r.httpCode})"
+        return r.ok
+    }
+
+    // Ürün onayı: o ürünün TÜM satırlarına (Take + Place) tam miktar yazılır.
+    fun confirmItem(itemNo: String) {
+        scope.launch {
+            busy = true; status = "$itemNo işleniyor..."
+            var ok = true
+            for (ln in lines.filter { it.optString("itemNo") == itemNo }) {
+                if (!patchLine(ln, ln.optDouble("qtyOutstanding", ln.optDouble("quantity")))) { ok = false; break }
+            }
+            busy = false
+            if (ok) { status = "PASS: $itemNo tam miktar onaylandı"; reload() }
+        }
+    }
+
+    DocumentScanHandler(
+        enabled = qtyLine == null && !busy,
+        lines = lines.filter { it.optString("actionType").equals("Take", ignoreCase = true) },
+        onSingleMatch = { line, _ -> confirmItem(line.optString("itemNo")) },
+        onMultiMatch = { itemNo, _ -> confirmItem(itemNo) },
+        onNoMatch = { r -> status = "⚠️ '${r.itemNo ?: r.value}' bu belgede yok" },
+    )
+
+    val totalQty = lines.sumOf { it.optDouble("quantity", 0.0) }
+    val handledOrStaged = lines.sumOf { maxOf(it.optDouble("qtyHandled", 0.0), it.optDouble("qtyToHandle", 0.0)) }
+    Column(Modifier.fillMaxSize()) {
+        Column(Modifier.weight(1f).padding(12.dp)) {
+            TextButton(onClick = onBack) { Text("‹ Hareket Listesi") }
+            DocHeaderCard(
+                title = "🧭 $no",
+                subtitle = "Lokasyon: ${header?.optString("locationCode") ?: ""} · Atanan: ${firstValue(header ?: JSONObject(), "assignedUserId").ifBlank { "—" }}",
+                percent = if (totalQty > 0) ((handledOrStaged / totalQty) * 100).toInt().coerceIn(0, 100) else 0,
+            )
+            Spacer(Modifier.height(6.dp))
+            StatusText(status)
+            Spacer(Modifier.height(6.dp))
+            Text("Satırlar (${lines.size}) — ürünü okutun ya da satıra dokunup miktar girin", fontSize = 12.sp, color = Color.Gray)
+            Spacer(Modifier.height(6.dp))
+            LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                items(lines) { ln ->
+                    val take = ln.optString("actionType").equals("Take", ignoreCase = true)
+                    val toHandle = ln.optDouble("qtyToHandle", 0.0)
+                    val qty = ln.optDouble("quantity", 0.0)
+                    val done = ln.optDouble("qtyHandled", 0.0) >= qty && qty > 0
+                    Card(
+                        onClick = { if (!busy) qtyLine = ln },
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(10.dp),
+                        colors = CardDefaults.cardColors(
+                            containerColor = when {
+                                done -> Color(0xFFE8F5E9)
+                                toHandle >= qty && qty > 0 -> Color(0xFFF3F1FD)
+                                else -> MaterialTheme.colorScheme.surface
+                            },
+                        ),
+                    ) {
+                        Column(Modifier.padding(10.dp)) {
+                            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                                Text(
+                                    "${if (take) "📤 Al" else "📥 Bırak"} · ${ln.optString("itemNo")}",
+                                    fontWeight = FontWeight.SemiBold, fontSize = 13.sp,
+                                )
+                                Text("${fmtq(toHandle)}/${fmtq(qty)}", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                            }
+                            Text(
+                                "📍 ${ln.optString("binCode")} · ${firstValue(ln, "description")}" +
+                                    (firstValue(ln, "lotNo").takeIf { it.isNotBlank() }?.let { " · Lot $it" } ?: ""),
+                                fontSize = 11.sp, color = Color.Gray,
+                            )
+                        }
+                    }
+                }
+                if (lines.isEmpty() && !busy) item { EmptyState("Satır yok.") }
+            }
+        }
+        BottomActionBar {
+            val canRegister = lines.any { it.optDouble("qtyToHandle", 0.0) > 0 }
+            Button(
+                onClick = {
+                    scope.launch {
+                        busy = true; status = "Register $no..."
+                        val r = BcApi.boundAction(context, "movements", no, "register", "{}")
+                        busy = false
+                        status = if (r.ok) "PASS: $no kaydedildi — stok taşındı (HTTP ${r.httpCode})"
+                            else "HATA: ${BcApi.errorMessage(r.body)} (HTTP ${r.httpCode})"
+                        if (r.ok) reload()
+                    }
+                },
+                enabled = !busy && canRegister,
+                modifier = Modifier.fillMaxWidth().height(54.dp),
+            ) { Text(if (canRegister) "✅ Register Movement" else "Önce satır onaylayın (okut / miktar gir)", fontWeight = FontWeight.Bold) }
+        }
+    }
+
+    val ql = qtyLine
+    if (ql != null) {
+        QuantityDialogSheet(
+            title = "Miktar (${if (ql.optString("actionType").equals("Take", true)) "Al" else "Bırak"} · 📍 ${ql.optString("binCode")})",
+            itemNo = ql.optString("itemNo"),
+            initialQty = ql.optDouble("qtyOutstanding", ql.optDouble("quantity")),
+            showLotSerial = false,
+            onDismiss = { qtyLine = null },
+            onConfirm = { res ->
+                qtyLine = null
+                scope.launch {
+                    busy = true
+                    if (patchLine(ql, res.quantity)) { status = "PASS: Satır güncellendi"; reload() }
+                    busy = false
+                }
+            },
+        )
     }
 }
 

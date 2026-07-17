@@ -23,8 +23,8 @@ android {
     applicationId = "com.dynops.bcwms"
     minSdk = 26
     targetSdk = 35
-    versionCode = 1115
-    versionName = "1.10.15"
+    versionCode = 1116
+    versionName = "1.10.16"
     buildConfigField("String", "UPDATE_BASE_URL", "\"https://app.bcwms.dynops.com\"")
   }
 
