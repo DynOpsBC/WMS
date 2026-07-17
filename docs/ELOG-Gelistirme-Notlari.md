@@ -95,6 +95,22 @@ Kullanıcının tarif ettiği akışın denetim sonucu:
   Console'da kullanıcı yapıyor (CreateGroupedPick). Otomatik öneri + onay
   kuyruğu istenirse ayrı iş.
 
+## 9. Yönlendirilmiş lokasyonda Ad-Hoc: Warehouse Reclass Journal (17 Temmuz)
+Saha bulgusu: WHITE (Directed Put-away and Pick) lokasyonunda Ad-Hoc hareket
+Item Reclass ile postalanınca warehouse entry'ler ADJUSTMENT zone / W-99-0001
+üzerinden geçiyor ve **raf seviyesinde taşıma OLMUYOR** (BC tasarımı: item
+journal directed lokasyonda bin taşıyamaz).
+Düzeltme (MovementMgmt.AdHocMove): lokasyon `Directed Put-away and Pick` ise
+otomatik dallanma → **Warehouse Reclass Journal (Entry Type=Movement)** satırı
+(template RECLASS/Reclassification, batch DOPS-MOBIL — whse batch anahtarı
+lokasyon içerir) + `Whse. Jnl.-Register Batch` ile confirm'siz register.
+Bin'den bin'e gerçek taşıma, ILE'ye dokunmaz; lot satır alanlarında
+("Lot No." + "New Lot No.") taşınır — tracking spec gerekmez. Basit
+lokasyonlar eski Item Reclass yolunda kaldı. Terminal değişikliği yok.
+**Windows publish doğrulama flag'leri:** `Whse. Jnl.-Register Batch` codeunit
+adı/TableNo, Warehouse Journal Line'da "New Lot No." alanı, template
+Type::Reclassification'da Movement entry type'ın kabulü.
+
 ## 8e. Lot reclass 3. saha hatası + NİHAİ düzeltme (17 Temmuz, AL-only)
 Yeni publish sonrası hata tersine döndü: **"New Lot No. must be equal to '' ...
 Current value is 'TEST#*'"** → codeunit 22, tracking specification (reservation

@@ -38,6 +38,7 @@ codeunit 72045 "DOPSWHS Movement Mgmt"
     procedure AdHocMove(FromBinCode: Code[20]; ToBinCode: Code[20]; ItemNo: Code[20]; LpNo: Code[20]; Qty: Decimal; UserId: Code[50]; LotNo: Code[50])
     var
         Setup: Record "DOPSWHS Setup";
+        Location: Record Location;
         ItemJournalTemplate: Record "Item Journal Template";
         ItemJournalLine: Record "Item Journal Line";
         ItemJnlPostBatch: Codeunit "Item Jnl.-Post Batch";
@@ -57,6 +58,17 @@ codeunit 72045 "DOPSWHS Movement Mgmt"
         LocationCode := ResolveLocationForBin(FromBinCode, Setup."Default Location Code");
         if LocationCode = '' then
             Error('Cannot determine a location for bin %1. Set a Default Location Code in DOPSWHS Setup, or scan a bin that exists in a warehouse location.', FromBinCode);
+
+        // Yönlendirilmiş (Directed Put-away and Pick) lokasyonda Item Journal
+        // bin taşıyamaz — post adjustment bin'den (W-99-...) geçer ve raf
+        // seviyesinde hareket OLMAZ. Doğru araç: Warehouse Reclass Journal
+        // (Movement) — bin'den bin'e, ILE'ye dokunmadan.
+        if Location.Get(LocationCode) and Location."Directed Put-away and Pick" then begin
+            RegisterWhseMove(LocationCode, FromBinCode, ToBinCode, ItemNo, Qty, UserId, LotNo);
+            CustomDimensions.Add('Category', 'Movement');
+            Session.LogMessage('DOPSWHS-Move-AdHocWhse', StrSubstNo('Directed whse move item %1 qty %2 from %3 to %4 lp %5', ItemNo, Qty, FromBinCode, ToBinCode, LpNo), Verbosity::Normal, DataClassification::SystemMetadata, TelemetryScope::ExtensionPublisher, CustomDimensions);
+            exit;
+        end;
         EnsureReclassTemplate(ItemJournalTemplate);
         BatchName := EnsureDeviceJournalBatch(UserId);
 
@@ -128,6 +140,94 @@ codeunit 72045 "DOPSWHS Movement Mgmt"
         if Bin.FindFirst() then
             exit(Bin."Location Code");
         exit(DefaultLocation);
+    end;
+
+    // ---- Yönlendirilmiş lokasyon: Warehouse Reclass Journal (bin-to-bin) ----
+
+    local procedure RegisterWhseMove(LocationCode: Code[10]; FromBinCode: Code[20]; ToBinCode: Code[20]; ItemNo: Code[20]; Qty: Decimal; UserId: Code[50]; LotNo: Code[50])
+    var
+        Item: Record Item;
+        FromBin: Record Bin;
+        ToBin: Record Bin;
+        WhseJournalTemplate: Record "Warehouse Journal Template";
+        WhseJournalLine: Record "Warehouse Journal Line";
+        WhseJnlRegisterBatch: Codeunit "Whse. Jnl.-Register Batch";
+        BatchName: Code[10];
+    begin
+        FromBin.Get(LocationCode, FromBinCode);
+        ToBin.Get(LocationCode, ToBinCode);
+        Item.Get(ItemNo);
+
+        EnsureWhseReclassTemplate(WhseJournalTemplate);
+        BatchName := EnsureWhseJournalBatch(WhseJournalTemplate.Name, LocationCode);
+
+        WhseJournalLine.Init();
+        WhseJournalLine.Validate("Journal Template Name", WhseJournalTemplate.Name);
+        WhseJournalLine.Validate("Journal Batch Name", BatchName);
+        WhseJournalLine.Validate("Location Code", LocationCode);
+        WhseJournalLine."Line No." := NextWhseLineNo(WhseJournalTemplate.Name, BatchName, LocationCode);
+        WhseJournalLine."Registering Date" := WorkDate();
+        WhseJournalLine."User ID" := CopyStr(UserId, 1, MaxStrLen(WhseJournalLine."User ID"));
+        WhseJournalLine.Validate("Entry Type", WhseJournalLine."Entry Type"::Movement);
+        WhseJournalLine.Validate("Item No.", ItemNo);
+        WhseJournalLine.Validate("Unit of Measure Code", Item."Base Unit of Measure");
+        WhseJournalLine.Validate("From Zone Code", FromBin."Zone Code");
+        WhseJournalLine.Validate("From Bin Code", FromBinCode);
+        WhseJournalLine.Validate("To Zone Code", ToBin."Zone Code");
+        WhseJournalLine.Validate("To Bin Code", ToBinCode);
+        WhseJournalLine.Validate(Quantity, Qty);
+        if LotNo <> '' then begin
+            // Warehouse journal lot'u satır alanında taşır (item journal'ın
+            // aksine tracking spec gerekmez); reclass'ta yeni lot = aynı lot.
+            WhseJournalLine."Lot No." := LotNo;
+            WhseJournalLine."New Lot No." := LotNo;
+        end;
+        WhseJournalLine.Insert(true);
+
+        // Item Jnl.-Post Batch'in ambar karşılığı — confirm diyaloğu açmadan
+        // register eder (web servis bağlamı).
+        WhseJnlRegisterBatch.Run(WhseJournalLine);
+    end;
+
+    local procedure EnsureWhseReclassTemplate(var WhseJournalTemplate: Record "Warehouse Journal Template")
+    begin
+        if WhseJournalTemplate.Get('RECLASS') then
+            exit;
+        WhseJournalTemplate.Init();
+        WhseJournalTemplate.Name := 'RECLASS';
+        WhseJournalTemplate.Description := 'BCWMS directed bin-to-bin moves';
+        WhseJournalTemplate.Validate(Type, WhseJournalTemplate.Type::Reclassification);
+        WhseJournalTemplate.Insert(true);
+    end;
+
+    // Warehouse Journal Batch anahtarı lokasyon içerir (template + name + location).
+    local procedure EnsureWhseJournalBatch(TemplateName: Code[10]; LocationCode: Code[10]): Code[10]
+    var
+        WhseJournalBatch: Record "Warehouse Journal Batch";
+        BatchName: Code[10];
+    begin
+        BatchName := 'DOPS-MOBIL';
+        if not WhseJournalBatch.Get(TemplateName, BatchName, LocationCode) then begin
+            WhseJournalBatch.Init();
+            WhseJournalBatch."Journal Template Name" := TemplateName;
+            WhseJournalBatch.Name := BatchName;
+            WhseJournalBatch."Location Code" := LocationCode;
+            WhseJournalBatch.Description := 'BCWMS mobil ad-hoc hareketler';
+            WhseJournalBatch.Insert(true);
+        end;
+        exit(BatchName);
+    end;
+
+    local procedure NextWhseLineNo(TemplateName: Code[10]; BatchName: Code[10]; LocationCode: Code[10]): Integer
+    var
+        ExistingLine: Record "Warehouse Journal Line";
+    begin
+        ExistingLine.SetRange("Journal Template Name", TemplateName);
+        ExistingLine.SetRange("Journal Batch Name", BatchName);
+        ExistingLine.SetRange("Location Code", LocationCode);
+        if ExistingLine.FindLast() then
+            exit(ExistingLine."Line No." + 10000);
+        exit(10000);
     end;
 
     // Reclass satırına lot tracking: aynı lot kaynaktan düşülüp hedefe yazılır
