@@ -43,6 +43,7 @@ enum class Screen(val title: String) {
     LicensePlates("License Plate"),
     ItemInquiry("Item Inquiry"),
     BinInquiry("Bin Inquiry"),
+    WhseEntries("Ambar Hareketleri"),
     Receiving("Mal Kabul"),
     Picking("Toplama"),
     Packing("Paketleme"),
@@ -102,6 +103,7 @@ fun AppRoot() {
                 Screen.LicensePlates -> LicensePlateModule()
                 Screen.ItemInquiry -> ItemInquiryModule()
                 Screen.BinInquiry -> BinInquiryModule()
+                Screen.WhseEntries -> WhseEntriesModule()
                 Screen.Receiving -> ReceivingModule()
                 Screen.Picking -> PickingModule()
                 Screen.Packing -> PackingModule()
@@ -183,6 +185,7 @@ private val HomeCategories = listOf(
     HomeCategory("Sorgu", Color(0xFF9B59B6), listOf(
         HomeTile(Screen.ItemInquiry, "🔎", "Item Inquiry"),
         HomeTile(Screen.BinInquiry, "📍", "Bin Inquiry"),
+        HomeTile(Screen.WhseEntries, "📜", "Ambar Hareketleri"),
     )),
     HomeCategory("Sistem", Color(0xFF64748B), listOf(
         HomeTile(Screen.FieldSettings, "🧩", "Alan Ayarları"),

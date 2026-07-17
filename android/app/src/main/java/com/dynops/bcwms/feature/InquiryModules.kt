@@ -334,3 +334,108 @@ private fun StockTile(label: String, qty: Double, uom: String, accent: Color, mo
         }
     }
 }
+
+/**
+ * Ambar Hareketleri (Warehouse Entries) — terminalden doğrulama ekranı.
+ * Ad-Hoc / register sonrası "taşındı mı?" sorusunun cevabı: bin/ürün/lot
+ * filtresiyle son kayıtlar, +/- renkli miktarlarla listelenir.
+ */
+@Composable
+fun WhseEntriesModule() {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var binFilter by remember { mutableStateOf("") }
+    var itemFilter by remember { mutableStateOf("") }
+    var lotFilter by remember { mutableStateOf("") }
+    var rows by remember { mutableStateOf<List<JSONObject>>(emptyList()) }
+    var status by remember { mutableStateOf("") }
+    var loading by remember { mutableStateOf(false) }
+
+    fun load() {
+        scope.launch {
+            loading = true; status = "Hareketler yükleniyor..."
+            fun eq(field: String, v: String): String? =
+                v.trim().takeIf { it.isNotBlank() }?.let { "$field eq '${it.replace("'", "''")}'" }
+            val filter = buildODataFilter(eq("binCode", binFilter), eq("itemNo", itemFilter), eq("lotNo", lotFilter))
+            val r = BcApi.get(context, "warehouseEntries?\$top=50&\$orderby=entryNo desc$filter")
+            loading = false
+            rows = if (r.ok) BcApi.parseValueArray(r.body) else emptyList()
+            status = if (!r.ok) "HATA: Hareketler alınamadı (HTTP ${r.httpCode})" +
+                    (if (r.httpCode == 400 || r.httpCode == 404) " — warehouseEntries için BC publish gerekli olabilir" else "")
+                else if (rows.isEmpty()) "EMPTY: Filtreye uyan hareket yok"
+                else "PASS: ${rows.size} kayıt (en yeni üstte)"
+        }
+    }
+    LaunchedEffect(Unit) { load() }
+
+    Column(Modifier.fillMaxSize().padding(12.dp)) {
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Text("📜 Ambar Hareketleri", fontWeight = FontWeight.Bold, fontSize = 17.sp)
+            Spacer(Modifier.weight(1f))
+            OutlinedButton(
+                onClick = { load() },
+                enabled = !loading,
+                shape = RoundedCornerShape(50),
+                contentPadding = PaddingValues(horizontal = 14.dp),
+            ) { Text(if (loading) "…" else "🔄", fontSize = 15.sp) }
+        }
+        Spacer(Modifier.height(8.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            ScanField("Bin", binFilter, { binFilter = it }, modifier = Modifier.weight(1f),
+                onScanned = { binFilter = BarcodeIntentResolver.resolve(it).value; load() })
+            ScanField("Ürün", itemFilter, { itemFilter = it }, modifier = Modifier.weight(1f),
+                onScanned = {
+                    val res = BarcodeIntentResolver.resolve(it)
+                    itemFilter = (res.itemNo ?: res.value); load()
+                })
+        }
+        Spacer(Modifier.height(6.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+            ScanField("Lot", lotFilter, { lotFilter = it }, modifier = Modifier.weight(1f),
+                onScanned = { lotFilter = BarcodeIntentResolver.resolve(it).value; load() })
+            Button(onClick = { load() }, enabled = !loading, modifier = Modifier.height(48.dp)) { Text("Ara") }
+            if (binFilter.isNotBlank() || itemFilter.isNotBlank() || lotFilter.isNotBlank()) {
+                OutlinedButton(
+                    onClick = { binFilter = ""; itemFilter = ""; lotFilter = ""; load() },
+                    modifier = Modifier.height(48.dp),
+                ) { Text("✕") }
+            }
+        }
+        Spacer(Modifier.height(6.dp))
+        StatusText(status)
+        Spacer(Modifier.height(8.dp))
+        LazyColumn(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            items(rows) { e ->
+                val qty = e.optDouble("quantity", 0.0)
+                val positive = qty >= 0
+                Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(10.dp)) {
+                    Column(Modifier.padding(10.dp)) {
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                "${e.optString("itemNo")} · ${firstValue(e, "entryType")}",
+                                fontWeight = FontWeight.SemiBold, fontSize = 13.sp,
+                            )
+                            Text(
+                                (if (positive) "+" else "") + fmtItemQty(qty),
+                                fontWeight = FontWeight.Bold, fontSize = 15.sp,
+                                color = if (positive) Color(0xFF2E7D32) else Color(0xFFB71C1C),
+                            )
+                        }
+                        Text(
+                            buildList {
+                                add("📍 ${firstValue(e, "binCode").ifBlank { "—" }}")
+                                firstValue(e, "zoneCode").takeIf { it.isNotBlank() }?.let { add(it) }
+                                firstValue(e, "lotNo").takeIf { it.isNotBlank() }?.let { add("Lot $it") }
+                                firstValue(e, "lpNo").takeIf { it.isNotBlank() }?.let { add("🧺 $it") }
+                                add("#${e.optInt("entryNo")}")
+                                firstValue(e, "registeringDate").takeIf { it.isNotBlank() }?.let { add(it) }
+                            }.joinToString(" · "),
+                            fontSize = 11.sp, color = Color.Gray,
+                        )
+                    }
+                }
+            }
+            if (rows.isEmpty() && !loading) item { EmptyState("Kayıt yok. Filtreyi değiştirin ya da 🔄 ile yenileyin.") }
+        }
+    }
+}
