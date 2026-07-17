@@ -63,15 +63,13 @@ codeunit 72045 "DOPSWHS Movement Mgmt"
         CreateReclassLine(ItemJournalTemplate.Name, BatchName, LocationCode, FromBinCode, ToBinCode, ItemNo, LpNo, Qty, ItemJournalLine);
         // Lot izlemeli ürün: reclass satırına item tracking bağla — yoksa post
         // "You must assign a lot number" ile düşer.
-        if LotNo <> '' then begin
-            // Saha hatası (16 Tem): "New Lot No. must have a value in Item
-            // Journal Line" — codeunit 22 reclass'ta satırın kendi lot
-            // alanlarını da denetliyor. Aynı lot kaynaktan düşer, hedefe yazılır.
-            ItemJournalLine."Lot No." := LotNo;
-            ItemJournalLine."New Lot No." := LotNo;
-            ItemJournalLine.Modify(true);
+        // DİKKAT (17 Tem saha hatası): satırın kendi "Lot No."/"New Lot No."
+        // alanları DOLDURULMAZ — reservation entry (tracking spec) varken
+        // codeunit 22 satır alanlarının boş olmasını şart koşar ("New Lot No.
+        // must be equal to ''"). Lot yalnızca AddLotTracking'in oluşturduğu
+        // reservation kaydında taşınır (Lot No. + New Lot No.).
+        if LotNo <> '' then
             AddLotTracking(ItemJournalLine, LotNo);
-        end;
         CustomDimensions.Add('Category', 'Movement');
         Session.LogMessage('DOPSWHS-Move-AdHoc', StrSubstNo('Ad-hoc move item %1 qty %2 from %3 to %4 lp %5', ItemNo, Qty, FromBinCode, ToBinCode, LpNo), Verbosity::Normal, DataClassification::SystemMetadata, TelemetryScope::ExtensionPublisher, CustomDimensions);
         // Post via batch codeunit (22/23) rather than "Item Jnl.-Post" (241): the latter raises a

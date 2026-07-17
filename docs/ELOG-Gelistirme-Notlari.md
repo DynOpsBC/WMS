@@ -95,6 +95,18 @@ Kullanıcının tarif ettiği akışın denetim sonucu:
   Console'da kullanıcı yapıyor (CreateGroupedPick). Otomatik öneri + onay
   kuyruğu istenirse ayrı iş.
 
+## 8e. Lot reclass 3. saha hatası + NİHAİ düzeltme (17 Temmuz, AL-only)
+Yeni publish sonrası hata tersine döndü: **"New Lot No. must be equal to '' ...
+Current value is 'TEST#*'"** → codeunit 22, tracking specification (reservation
+entry) VARKEN satırın kendi lot alanlarının BOŞ olmasını şart koşuyor — 8d'de
+eklediğim satır-alanı doldurma çakışma yarattı. Nihai model:
+- Journal satırının "Lot No."/"New Lot No." alanlarına DOKUNULMAZ.
+- Lot yalnızca AddLotTracking'in reservation kaydında taşınır; kaydın boş kalan
+  "New Lot No."su oluşturma sonrası doğrudan doldurulur (8d'nin 2. katmanı).
+Yeniden publish gerekiyor. Test ederken GERÇEK lot kullanılmalı: 'TEST#*'
+stokta yoksa sıradaki hata "lot yetersiz/yok" olur (kaynak binde o lottan
+yeterli miktar olmalı).
+
 ## 8d. Lot reclass 2. saha hatası + düzeltme (16 Temmuz öğleden sonra, AL-only)
 Publish sonrası adHocLot çalıştı ama post şu hatayla düştü: **"New Lot No.
 must have a value in Item Journal Line ... Line No.=20000"** — codeunit 22,
