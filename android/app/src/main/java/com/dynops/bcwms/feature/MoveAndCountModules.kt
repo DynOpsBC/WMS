@@ -50,6 +50,8 @@ fun AdHocMoveModule() {
     var lotNoInput by remember { mutableStateOf("") }
     var status by remember { mutableStateOf("") }
     var busy by remember { mutableStateOf(false) }
+    // Son başarılı hareketin kalıcı özeti — PASS sonrası ekranda kart olarak durur.
+    var lastMove by remember { mutableStateOf<List<String>?>(null) }
 
     fun resetLpFlow() { fromBin = ""; lpNo = ""; binLps = emptyList(); lpLines = emptyList(); target = ""; targetIsLp = null; targetLpBin = "" }
 
@@ -151,7 +153,16 @@ fun AdHocMoveModule() {
                 }
                 busy = false
                 status = "PASS: $lpNo içeriği $target LP'sine aktarıldı (${lpLines.size} satır)$reclassNote"
-                if (!status.contains("⚠️")) resetLpFlow()
+                if (!status.contains("⚠️")) {
+                    lastMove = buildList {
+                        add("🧺 $lpNo → 🧺 $target" + if (targetLpBin.isNotBlank()) " (📍 $targetLpBin)" else "")
+                        lpLines.forEach { ln ->
+                            add("• ${ln.optString("itemNo")} × ${fmtq(ln.optDouble("quantity"))}" +
+                                (ln.optString("lotNo").takeIf { it.isNotBlank() && it != "null" }?.let { " · Lot $it" } ?: ""))
+                        }
+                    }
+                    resetLpFlow()
+                }
             } else {
                 val err = postReclass(target)
                 if (err.isNotBlank()) {
@@ -166,6 +177,13 @@ fun AdHocMoveModule() {
                 busy = false
                 status = if (patch.ok) "PASS: LP $lpNo → $target (stok reclass edildi, LP kartı güncellendi)"
                     else "PASS: stok $target rafına taşındı · ⚠️ LP kartındaki bin güncellenemedi (HTTP ${patch.httpCode})"
+                lastMove = buildList {
+                    add("🧺 $lpNo · 📍 ${fromBin.trim()} → 📍 $target")
+                    lpLines.forEach { ln ->
+                        add("• ${ln.optString("itemNo")} × ${fmtq(ln.optDouble("quantity"))}" +
+                            (ln.optString("lotNo").takeIf { it.isNotBlank() && it != "null" }?.let { " · Lot $it" } ?: ""))
+                    }
+                }
                 resetLpFlow()
             }
         }
@@ -331,12 +349,46 @@ fun AdHocMoveModule() {
                             else "HATA: ${BcApi.errorMessage(r.body)} (HTTP ${r.httpCode})" +
                                 if (lot.isNotBlank() && (r.httpCode == 404 || r.httpCode == 400))
                                     " — lot desteği için BC publish gerekli olabilir" else ""
+                        if (r.ok) {
+                            lastMove = buildList {
+                                add("📍 ${fromBin.trim()} → 📍 ${toBin.trim()}")
+                                add("• ${itemOrLp.trim()} × ${qty.toDoubleOrNull()?.let { fmtq(it) } ?: qty}" +
+                                    if (lot.isNotBlank()) " · Lot $lot" else "")
+                            }
+                            itemOrLp = ""; qty = "1"; lotNoInput = ""
+                        }
                     }
                 }
             ) { Text(if (busy) "Gönderiliyor..." else "✅ Hareketi Onayla", fontWeight = FontWeight.Bold) }
         }
         Spacer(Modifier.height(12.dp))
         StatusText(status)
+        val lm = lastMove
+        if (lm != null) {
+            Spacer(Modifier.height(8.dp))
+            Card(
+                Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(14.dp),
+                colors = CardDefaults.cardColors(containerColor = Color(0xFFE8F5E9)),
+            ) {
+                Column(Modifier.padding(14.dp)) {
+                    Text("✅ Hareket kaydedildi", fontWeight = FontWeight.Bold, fontSize = 15.sp, color = Color(0xFF2E7D32))
+                    Spacer(Modifier.height(6.dp))
+                    lm.forEach { line -> Text(line, fontSize = 13.sp, color = Color(0xFF1B5E20)) }
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        "BC'de iz: Warehouse Entries (bin çifti + lot) · Bin Contents (güncel raf stoğu)",
+                        fontSize = 11.sp, color = Color(0xFF558B2F),
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    OutlinedButton(
+                        onClick = { lastMove = null; status = "" },
+                        modifier = Modifier.fillMaxWidth().height(42.dp),
+                        shape = RoundedCornerShape(50),
+                    ) { Text("Tamam — Yeni Hareket") }
+                }
+            }
+        }
     }
 }
 
