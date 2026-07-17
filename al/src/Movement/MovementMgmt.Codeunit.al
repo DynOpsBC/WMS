@@ -204,8 +204,12 @@ codeunit 72045 "DOPSWHS Movement Mgmt"
         WhseItemTrackingLine."Variant Code" := WhseJnlLine."Variant Code";
         WhseItemTrackingLine."Location Code" := WhseJnlLine."Location Code";
         WhseItemTrackingLine."Source Type" := Database::"Warehouse Journal Line";
-        WhseItemTrackingLine."Source ID" := WhseJnlLine."Journal Template Name";
-        WhseItemTrackingLine."Source Batch Name" := WhseJnlLine."Journal Batch Name";
+        // DİKKAT — BC'nin bilinen alan TERSLİĞİ (saha hatası "Tracking total: 0"):
+        // whse journal için base app "Source ID"ye BATCH adını, "Source Batch
+        // Name"e TEMPLATE adını yazar (ItemTrackingManagement.SplitWhseJnlLine
+        // aramayı bu terslikle yapar). Düz eşleme kayıt bulunamamasına yol açar.
+        WhseItemTrackingLine."Source ID" := WhseJnlLine."Journal Batch Name";
+        WhseItemTrackingLine."Source Batch Name" := WhseJnlLine."Journal Template Name";
         WhseItemTrackingLine."Source Ref. No." := WhseJnlLine."Line No.";
         WhseItemTrackingLine."Qty. per Unit of Measure" := WhseJnlLine."Qty. per Unit of Measure";
         WhseItemTrackingLine.Validate("Quantity (Base)", WhseJnlLine."Qty. (Base)");
