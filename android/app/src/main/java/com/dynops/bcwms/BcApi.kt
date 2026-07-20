@@ -154,7 +154,7 @@ object BcApi {
             if (System.currentTimeMillis() < tokenExpiryMs(context) - skewMs) return
             val rt = getRefreshToken(context)
             if (rt.isBlank()) return
-            val refreshed = DeviceAuth.refreshAccessToken(rt) ?: return
+            val refreshed = DeviceAuth.refreshAccessToken(rt, getTenant(context)) ?: return
             saveToken(context, refreshed.first)
             saveRefreshToken(context, refreshed.second)
             saveTokenExpiry(context, refreshed.third)
@@ -282,7 +282,7 @@ object BcApi {
                     // so the operator is not silently logged out mid-shift.
                     val refreshed = synchronized(this@BcApi) {
                         val rt = getRefreshToken(context)
-                        if (rt.isBlank()) null else DeviceAuth.refreshAccessToken(rt)
+                        if (rt.isBlank()) null else DeviceAuth.refreshAccessToken(rt, getTenant(context))
                     } ?: return@use ApiResult(false, code, body)
                     saveToken(context, refreshed.first)
                     saveRefreshToken(context, refreshed.second)

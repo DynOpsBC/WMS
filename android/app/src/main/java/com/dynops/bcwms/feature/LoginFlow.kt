@@ -127,7 +127,7 @@ fun LoginFlow(onConnected: (Boolean) -> Unit) {
     fun startSignIn() {
         scope.launch {
             busy = true; status = "Giriş kodu alınıyor..."
-            val res = DeviceAuth.requestCode()
+            val res = DeviceAuth.requestCode(email.trim())
             busy = false
             res.onSuccess { code ->
                 deviceCode = code

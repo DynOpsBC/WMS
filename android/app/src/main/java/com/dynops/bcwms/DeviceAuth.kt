@@ -21,8 +21,19 @@ import java.net.URLEncoder
  * her müşteri yöneticisi kendi tenant'ında bu client'a bir kez onay verir.)
  */
 object DeviceAuth {
-    private fun authority(path: String) =
-        "https://login.microsoftonline.com/organizations/oauth2/v2.0/$path"
+    // Multi-tenant authority. Tenant, kullanıcının e-posta DOMAIN'inden türetilir
+    // (badenatural.com → .../badenatural.com/...). Entra domainden tenant'ı
+    // çözer; token'daki gerçek tid sonra BcApi.captureTenantFromToken ile alınır.
+    //   - ROPC (password): tenant-belirsiz authority AADSTS50059 verir → domain ŞART.
+    //   - device-code: domain verilebilirse tenant-özel; yoksa /organizations.
+    private fun authority(path: String, tenantSegment: String) =
+        "https://login.microsoftonline.com/$tenantSegment/oauth2/v2.0/$path"
+
+    /** E-posta domainini tenant segmenti olarak döndürür; domain yoksa fallback. */
+    private fun tenantFromEmail(email: String, fallback: String): String {
+        val at = email.trim().substringAfter('@', "").trim()
+        return if (at.isNotBlank() && at.contains('.')) at else fallback
+    }
 
     // Request the BC delegated scope explicitly (dynamic consent) rather than ".default": the app
     // registration's static API-permission list has a stale/invalid BC permission id, which makes
@@ -36,6 +47,8 @@ object DeviceAuth {
         val interval: Int,
         val expiresIn: Int,
         val message: String,
+        // requestCode'un kullandığı tenant segment'i — poll aynısını kullanmalı.
+        val tenantSegment: String = "organizations",
     )
 
     sealed class TokenResult {
@@ -44,11 +57,16 @@ object DeviceAuth {
         data class Failure(val error: String) : TokenResult()
     }
 
-    /** Step 1: request a device + user code. loginHint (email) is shown to the user as context. */
-    suspend fun requestCode(): Result<DeviceCode> = withContext(Dispatchers.IO) {
+    /**
+     * Step 1: request a device + user code. E-posta domaininden tenant türetilir
+     * (badenatural.com gibi); domain yoksa /organizations. Aynı tenant segment'i
+     * DeviceCode içinde taşınır ki poll da onu kullansın (yoksa AADSTS50059).
+     */
+    suspend fun requestCode(email: String = ""): Result<DeviceCode> = withContext(Dispatchers.IO) {
         try {
+            val tenant = tenantFromEmail(email, "organizations")
             val body = "client_id=${BcApi.CLIENT_ID}&scope=${enc(SCOPE)}"
-            val resp = postForm(authority("devicecode"), body)
+            val resp = postForm(authority("devicecode", tenant), body)
             val j = JSONObject(resp.second)
             if (resp.first !in 200..299)
                 return@withContext Result.failure(Exception(j.optString("error_description", j.optString("error", "device code error"))))
@@ -60,6 +78,7 @@ object DeviceAuth {
                     interval = j.optInt("interval", 5),
                     expiresIn = j.optInt("expires_in", 900),
                     message = j.optString("message"),
+                    tenantSegment = tenant,
                 )
             )
         } catch (e: Exception) {
@@ -78,7 +97,7 @@ object DeviceAuth {
             delay(intervalMs)
             val body = "grant_type=urn:ietf:params:oauth:grant-type:device_code" +
                 "&client_id=${BcApi.CLIENT_ID}&device_code=${enc(code.deviceCode)}"
-            val (status, text) = postForm(authority("token"), body)
+            val (status, text) = postForm(authority("token", code.tenantSegment), body)
             val j = try { JSONObject(text) } catch (e: Exception) { JSONObject() }
             if (status in 200..299) {
                 val token = j.optString("access_token")
@@ -108,12 +127,15 @@ object DeviceAuth {
      */
     suspend fun loginWithPassword(email: String, password: String): TokenResult = withContext(Dispatchers.IO) {
         try {
+            // ROPC tenant-belirsiz authority ile çalışmaz (AADSTS50059) —
+            // e-posta domaininden tenant türetilir.
+            val tenant = tenantFromEmail(email, "organizations")
             val body = "grant_type=password" +
                 "&client_id=${BcApi.CLIENT_ID}" +
                 "&scope=${enc(SCOPE)}" +
                 "&username=${enc(email)}" +
                 "&password=${enc(password)}"
-            val (status, text) = postForm(authority("token"), body)
+            val (status, text) = postForm(authority("token", tenant), body)
             val j = try { JSONObject(text) } catch (e: Exception) { JSONObject() }
             if (status in 200..299) {
                 val token = j.optString("access_token")
@@ -139,13 +161,13 @@ object DeviceAuth {
      * Returns Pair(accessToken, rotatedRefreshToken) or null when AAD rejects the refresh
      * (revoked / expired refresh token) so the caller can fall back to a full re-login.
      */
-    fun refreshAccessToken(refreshToken: String): Triple<String, String, Int>? {
+    fun refreshAccessToken(refreshToken: String, tenantSegment: String = "organizations"): Triple<String, String, Int>? {
         return try {
             val body = "grant_type=refresh_token" +
                 "&client_id=${BcApi.CLIENT_ID}" +
                 "&scope=${enc(SCOPE)}" +
                 "&refresh_token=${enc(refreshToken)}"
-            val (status, text) = postForm(authority("token"), body)
+            val (status, text) = postForm(authority("token", tenantSegment), body)
             if (status !in 200..299) return null
             val j = JSONObject(text)
             val token = j.optString("access_token")
