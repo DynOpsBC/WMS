@@ -35,7 +35,7 @@ import org.json.JSONObject
  */
 
 private fun qmBase(context: android.content.Context): String =
-    "${BcApi.BC_RESOURCE}/v2.0/${BcApi.TENANT}/${BcApi.getEnvironment(context)}/api/microsoft/qualityManagement/v1.0/companies(${BcApi.getCompanyId(context)})"
+    "${BcApi.BC_RESOURCE}/v2.0/${BcApi.getTenant(context)}/${BcApi.getEnvironment(context)}/api/microsoft/qualityManagement/v1.0/companies(${BcApi.getCompanyId(context)})"
 
 private fun inspectionKey(systemId: String): String =
     "'${systemId.replace("'", "''")}'"

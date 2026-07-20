@@ -11,11 +11,18 @@ import java.net.URLEncoder
 /**
  * Email-based sign-in via the OAuth 2.0 Device Authorization Grant (no MSAL dependency).
  * Flow: requestCode() -> show userCode + verificationUri -> user signs in (email) in a browser ->
- * pollForToken() returns the BC access token. Tenant/client are BcApi.TENANT / BcApi.CLIENT_ID.
+ * pollForToken() returns the BC access token.
+ *
+ * MULTI-TENANT: authority = /organizations (herhangi bir iş/okul tenant'ı).
+ * Kullanıcı hangi tenant'ın hesabıyla girerse token o tenant'a ait olur;
+ * BcApi.captureTenantFromToken token'daki gerçek tenant'ı kaydeder. Böylece
+ * BADE, DynamicsOps vb. her müşteri aynı APK ile kendi tenant'ına bağlanır.
+ * (Client, Entra'da AzureADMultipleOrgs + "allow public client flows" olmalı;
+ * her müşteri yöneticisi kendi tenant'ında bu client'a bir kez onay verir.)
  */
 object DeviceAuth {
     private fun authority(path: String) =
-        "https://login.microsoftonline.com/${BcApi.TENANT}/oauth2/v2.0/$path"
+        "https://login.microsoftonline.com/organizations/oauth2/v2.0/$path"
 
     // Request the BC delegated scope explicitly (dynamic consent) rather than ".default": the app
     // registration's static API-permission list has a stale/invalid BC permission id, which makes

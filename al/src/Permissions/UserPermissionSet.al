@@ -129,9 +129,10 @@ permissionset 72095 "DOPSWHS-USER"
         codeunit "DOPSWHS Purch Source Mgmt" = X,
         codeunit "DOPSWHS Sales Source Mgmt" = X,
         codeunit "DOPSWHS Scenario Generator" = X,
-        codeunit "DOPSWHS Quality Mgmt Bridge" = X,
+        // QM (BC 28) devre dışı — bkz. QualityMgmtBridge.Codeunit.al
+        // codeunit "DOPSWHS Quality Mgmt Bridge" = X,
         page "DOPSWHS WMS Token Help" = X,
-        tabledata "Qlty. Inspection Header" = R,
+        // tabledata "Qlty. Inspection Header" = R,
         page "DOPSWHS Purch Source API" = X,
         page "DOPSWHS Purch Source Line API" = X,
         page "DOPSWHS Sales Source API" = X,

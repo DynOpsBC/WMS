@@ -291,3 +291,28 @@ Doğrulanan diğer imzalar (BC24 base app kaynağından teyit edildi):
 - Uçtan uca senaryo: Ops Console → 2-3 sipariş seç → pick oluştur+ata → terminalde
   raf okut → ürün okut → 🧺 sepet öner/okut → Register → Paketleme ekranı → sepet okut
   (kırmızı satırlar) → kutu okut → ürünleri okut → sipariş fişleri otomatik.
+
+## 10. Multi-tenant giriş (20 Temmuz) — APK 1.11.0
+Sorun: AL paketi başka müşteriye (BADE) publish edilse de mobil APK tenant'a
+SABİT kodluydu (BcApi.TENANT + DeviceAuth authority = DynamicsOps GUID). BADE
+e-postasıyla giriş çalışmıyordu; terminalde e-posta yazmak tenant'ı değiştirmiyordu.
+Çözüm (kod tarafı — her müşteri için ayrı APK gerekmez):
+- DeviceAuth authority `/organizations` (multi-tenant); kullanıcı hangi tenant
+  hesabıyla girerse token o tenant'a ait olur.
+- BcApi: TENANT sabiti kaldırıldı → `getTenant/setTenant` (SharedPreferences) +
+  `captureTenantFromToken` (JWT "tid" claim'i saveToken içinde otomatik yakalanır,
+  device-code/ROPC/refresh/token-paste yollarının hepsini kapsar). Tüm BC API
+  URL'leri getTenant(context) kullanır (Quality modülü dahil). FALLBACK_TENANT
+  yalnız token okunamazsa.
+- discoverEnvironments token'daki tenant'ı sorgular; KNOWN_ENVIRONMENTS'a
+  "Production"/"Sandbox" eklendi; LoginFlow'a **elle ortam adı + "Bul"** alanı
+  (probeEnvironment) — otomatik bulunamayan ortam adları için (BADE = Production).
+- clearToken artık tenant/env/company'yi de siler — farklı müşteri hesabıyla
+  yeniden girişte eski tenant'a takılmayı önler.
+
+**Entra tarafı (müşteri başına bir kez, kod dışı):** BCWMSApp Mobile client
+kaydı **AzureADMultipleOrgs** (multi-tenant) + "Allow public client flows" =
+Yes olmalı; her müşteri yöneticisi kendi tenant'ında bu client'a
+`Dynamics 365 Business Central / user_impersonation` (delegated) onayı verir.
+Sonra BADE kullanıcısı aynı APK'yla girer; ortam adı "Production" yazılır.
+Uzun vade: client'ı AppSource/publisher domain ile yayınlamak onayı basitleştirir.

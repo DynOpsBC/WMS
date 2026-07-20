@@ -51,6 +51,8 @@ fun LoginFlow(onConnected: (Boolean) -> Unit) {
     var deviceCode by remember { mutableStateOf<DeviceAuth.DeviceCode?>(null) }
     var envList by remember { mutableStateOf<List<BcApi.EnvCompanies>>(emptyList()) }
     var selectedEnv by remember { mutableStateOf<BcApi.EnvCompanies?>(null) }
+    var manualEnv by remember { mutableStateOf("") }
+    var lastToken by remember { mutableStateOf("") }
 
     /**
      * Direct username/password sign-in via AAD ROPC. Bypasses browser; works for cloud-only
@@ -66,15 +68,16 @@ fun LoginFlow(onConnected: (Boolean) -> Unit) {
                     BcApi.saveRefreshToken(context, t.refreshToken)
                     BcApi.saveTokenExpiry(context, t.expiresInSec)
                     status = "Token alındı, ortamlar keşfediliyor..."
+                    lastToken = t.accessToken
                     envList = BcApi.discoverEnvironments(t.accessToken)
                     busy = false
-                    if (envList.isEmpty()) {
-                        status = "🔴 Erişilebilir ortam bulunamadı. Yetkileri kontrol edin."
-                    } else {
-                        selectedEnv = envList.first()
-                        step = Step.SelectEnvCompany
-                        status = ""
-                    }
+                    // Ortam otomatik bulunamasa bile ekrana geç: kullanıcı ortam
+                    // adını (ör. "Production") elle girip yoklayabilir.
+                    selectedEnv = envList.firstOrNull()
+                    step = Step.SelectEnvCompany
+                    status = if (envList.isEmpty())
+                        "⚠️ Otomatik ortam bulunamadı — ortam adınızı aşağıya yazıp 'Ortamı Bul' deyin"
+                    else ""
                 }
                 is DeviceAuth.TokenResult.Failure -> { busy = false; status = "🔴 ${t.error}" }
                 is DeviceAuth.TokenResult.Pending -> { busy = false; status = t.reason }
@@ -140,13 +143,14 @@ fun LoginFlow(onConnected: (Boolean) -> Unit) {
                     BcApi.saveRefreshToken(context, t.refreshToken)
                     BcApi.saveTokenExpiry(context, t.expiresInSec)
                             status = "Token alındı, ortamlar keşfediliyor..."
+                            lastToken = t.accessToken
                             envList = BcApi.discoverEnvironments(t.accessToken)
                             busy = false
+                            selectedEnv = envList.firstOrNull()
+                            step = Step.SelectEnvCompany
                             if (envList.isEmpty()) {
-                                status = "🔴 Erişilebilir ortam bulunamadı. Yetkileri kontrol edin."
+                                status = "⚠️ Otomatik ortam bulunamadı — ortam adınızı yazıp 'Ortamı Bul' deyin"
                             } else {
-                                selectedEnv = envList.first()
-                                step = Step.SelectEnvCompany
                                 status = ""
                             }
                         }
@@ -306,6 +310,32 @@ fun LoginFlow(onConnected: (Boolean) -> Unit) {
             Step.SelectEnvCompany -> {
                 Text("Ortam seçin", fontWeight = FontWeight.Medium)
                 Spacer(Modifier.height(6.dp))
+                // Otomatik keşif her müşterinin ortam adını bilemez (BADE =
+                // "Production" vb.) — kullanıcı ortam adını elle yoklayabilir.
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    OutlinedTextField(
+                        value = manualEnv, onValueChange = { manualEnv = it },
+                        label = { Text("Ortam adı (ör. Production)") },
+                        singleLine = true, modifier = Modifier.weight(1f),
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    Button(
+                        enabled = !busy && manualEnv.isNotBlank() && lastToken.isNotBlank(),
+                        onClick = {
+                            scope.launch {
+                                busy = true; status = "'${manualEnv.trim()}' yoklanıyor..."
+                                val ec = BcApi.probeEnvironment(BcApi.getTenant(context), manualEnv.trim(), lastToken)
+                                busy = false
+                                if (ec != null) {
+                                    if (envList.none { it.environment == ec.environment }) envList = envList + ec
+                                    selectedEnv = ec
+                                    status = "🟢 ${ec.environment} bulundu (${ec.companies.size} şirket)"
+                                } else status = "🔴 '${manualEnv.trim()}' bulunamadı ya da şirket yok — ortam adını kontrol edin"
+                            }
+                        },
+                    ) { Text("Bul") }
+                }
+                Spacer(Modifier.height(10.dp))
                 envList.forEach { ec ->
                     val sel = ec.environment == selectedEnv?.environment
                     Card(

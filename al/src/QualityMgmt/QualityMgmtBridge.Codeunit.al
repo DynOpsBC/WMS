@@ -1,3 +1,17 @@
+// ============================================================================
+// GEÇİCİ OLARAK DEVRE DIŞI — BC 28'e geçince geri açın.
+//
+// Bu codeunit, Microsoft Quality Management (BC v28 first-party) eklentisine
+// bağımlıdır: "Qlty. Inspection Header" tablosu ve
+// Microsoft.QualityManagement.Document namespace'i yalnızca BC 28'de vardır.
+// Mevcut hedef BC 24.0 olduğu için bu semboller çözülemiyor ve yayınlama
+// başarısız oluyordu (AL0791 / AL0185).
+//
+// Silinmedi — BC 28'e yükseltince aşağıdaki bloğun yorumunu kaldırın,
+// app.json'a "Quality Management" bağımlılığını geri ekleyin ve izin
+// setlerindeki ilgili satırların yorumunu kaldırın.
+// ============================================================================
+/*
 namespace DynOps.Warehouse.QualityMgmt;
 
 using Microsoft.QualityManagement.Document;
@@ -85,3 +99,4 @@ codeunit 72079 "DOPSWHS Quality Mgmt Bridge"
     var
         QcBlockedErr: Label 'Bu kayıtta lot/serial/package %1 numaralı Quality Inspection ile blokda. blocked by quality inspection %1', Comment = '%1 = inspection no';
 }
+*/

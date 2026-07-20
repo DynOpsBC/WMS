@@ -17,7 +17,15 @@ import java.util.concurrent.TimeUnit
  * Token bir kez girilir, SharedPreferences'ta kalici saklanir, tum ekranlar otomatik kullanir.
  */
 object BcApi {
-    const val TENANT = "7fa2357e-26f2-4174-8e16-a713981356b8"
+    // Multi-tenant: uygulama artık tek bir tenant'a sabitlenmez. Giriş
+    // "common" authority ile yapılır (aşağıda DeviceAuth), gerçek tenant ID
+    // token'dan (tid claim) çıkarılıp cihaza kaydedilir; tüm BC API çağrıları
+    // o kayıtlı tenant'ı kullanır. Böylece her müşteri için ayrı APK gerekmez.
+    // FALLBACK_TENANT yalnızca token okunamazsa / geçiş dönemindeki eski
+    // kurulumlar için — DynamicsOps sandbox'ı.
+    const val FALLBACK_TENANT = "7fa2357e-26f2-4174-8e16-a713981356b8"
+    // Multi-tenant public client. AzureADMultipleOrgs olarak kayıtlı olmalı;
+    // her müşteri yöneticisi kendi tenant'ında bu client'a onay verir.
     const val CLIENT_ID = "8193e5c6-64d2-4e6f-8992-2114e77e4f24"  // BCWMSApp Mobile (public client, device-code)
     const val BC_RESOURCE = "https://api.businesscentral.dynamics.com"
 
@@ -26,8 +34,10 @@ object BcApi {
     const val DEFAULT_COMPANY_ID = "1534369d-f248-f111-b478-7c1e521cfdf0"
     const val DEFAULT_COMPANY_NAME = "CRONUS USA, Inc."
 
-    /** Environments the app can discover companies in (probed after sign-in). */
-    val KNOWN_ENVIRONMENTS = listOf("SandboxUS", "CustomerSandbox")
+    /** Sign-in sonrası yoklanan ortam adları. Multi-tenant: her müşterinin
+     *  ortam adı farklı olabildiğinden en yaygın adlar denenir; bulunamazsa
+     *  kullanıcı LoginFlow'da ortam adını elle girebilir (probeEnvironment). */
+    val KNOWN_ENVIRONMENTS = listOf("Production", "SandboxUS", "CustomerSandbox", "Sandbox")
 
     private const val PREFS = "bcwms_prefs"
     private const val KEY_TOKEN = "bc_access_token"
@@ -39,8 +49,36 @@ object BcApi {
     private const val KEY_LOCAL_USER = "local_user_id"
     private const val KEY_LOCAL_PROFILE = "local_user_profile_json"
     private const val KEY_BC_USER = "bc_user_id"
+    private const val KEY_TENANT = "bc_tenant_id"
 
     private fun prefs(context: Context) = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+
+    // ---- Tenant (runtime, multi-tenant) ----
+    /** Kayıtlı tenant ID; henüz giriş yapılmadıysa fallback (eski davranış). */
+    fun getTenant(context: Context): String = prefs(context).getString(KEY_TENANT, FALLBACK_TENANT) ?: FALLBACK_TENANT
+    fun setTenant(context: Context, tenantId: String) {
+        if (tenantId.isNotBlank()) prefs(context).edit().putString(KEY_TENANT, tenantId).apply()
+    }
+
+    /**
+     * Access token'ın "tid" (tenant id) claim'ini okur ve kaydeder. Giriş
+     * başarılı olunca çağrılır — sonraki tüm BC çağrıları doğru tenant'a gider.
+     * JWT payload = base64url(2. bölüm); tenant çözülemezse kayıt değişmez.
+     */
+    fun captureTenantFromToken(context: Context, accessToken: String) {
+        val tid = tenantIdFromJwt(accessToken)
+        if (!tid.isNullOrBlank()) setTenant(context, tid)
+    }
+
+    private fun tenantIdFromJwt(jwt: String): String? = try {
+        val parts = jwt.split(".")
+        if (parts.size < 2) null else {
+            val payload = String(
+                android.util.Base64.decode(parts[1], android.util.Base64.URL_SAFE or android.util.Base64.NO_PADDING or android.util.Base64.NO_WRAP)
+            )
+            JSONObject(payload).optString("tid").takeIf { it.isNotBlank() }
+        }
+    } catch (e: Exception) { null }
 
     // ---- Environment / company selection (runtime-configurable) ----
     fun getEnvironment(context: Context): String = prefs(context).getString(KEY_ENV, DEFAULT_ENVIRONMENT) ?: DEFAULT_ENVIRONMENT
@@ -53,25 +91,38 @@ object BcApi {
     }
 
     private fun customApiBase(context: Context) =
-        "https://api.businesscentral.dynamics.com/v2.0/$TENANT/${getEnvironment(context)}/api/dynops/warehouse/v2.0/companies(${getCompanyId(context)})"
+        "https://api.businesscentral.dynamics.com/v2.0/${getTenant(context)}/${getEnvironment(context)}/api/dynops/warehouse/v2.0/companies(${getCompanyId(context)})"
 
     private fun standardApiBase(context: Context) =
-        "https://api.businesscentral.dynamics.com/v2.0/$TENANT/${getEnvironment(context)}/api/v2.0/companies(${getCompanyId(context)})"
+        "https://api.businesscentral.dynamics.com/v2.0/${getTenant(context)}/${getEnvironment(context)}/api/v2.0/companies(${getCompanyId(context)})"
 
-    /** Standard companies endpoint for a given environment (no company segment) — used for discovery. */
-    fun companiesUrl(env: String) =
-        "https://api.businesscentral.dynamics.com/v2.0/$TENANT/$env/api/v2.0/companies?\$select=id,name,displayName"
+    /** Standard companies endpoint — discovery için tenant'ı açıkça alır (giriş
+     *  anında henüz kayıtlı değildir; token'dan çözülüp buraya geçirilir). */
+    fun companiesUrl(tenant: String, env: String) =
+        "https://api.businesscentral.dynamics.com/v2.0/$tenant/$env/api/v2.0/companies?\$select=id,name,displayName"
 
     // ---- Token persistence ----
     fun saveToken(context: Context, token: String) {
-        prefs(context).edit().putString(KEY_TOKEN, token.trim()).apply()
+        val t = token.trim()
+        prefs(context).edit().putString(KEY_TOKEN, t).apply()
+        // Multi-tenant: her token kaydında gerçek tenant'ı (tid claim) yakala —
+        // device-code, ROPC, refresh ve manuel token-paste yollarının hepsi
+        // buradan geçtiği için tek noktada doğru tenant sabitlenir.
+        captureTenantFromToken(context, t)
     }
 
     fun getToken(context: Context): String = prefs(context).getString(KEY_TOKEN, "") ?: ""
 
     fun hasToken(context: Context): Boolean = getToken(context).isNotBlank()
 
-    fun clearToken(context: Context) { prefs(context).edit().remove(KEY_TOKEN).remove(KEY_REFRESH).remove(KEY_BC_USER).apply() }
+    // Çıkış: tenant/env/company da temizlenir — farklı müşteri hesabıyla
+    // yeniden girildiğinde eski tenant'a takılıp kalmayı önler (multi-tenant).
+    fun clearToken(context: Context) {
+        prefs(context).edit()
+            .remove(KEY_TOKEN).remove(KEY_REFRESH).remove(KEY_BC_USER)
+            .remove(KEY_TENANT).remove(KEY_ENV).remove(KEY_COMPANY_ID).remove(KEY_COMPANY_NAME)
+            .apply()
+    }
 
     fun saveRefreshToken(context: Context, token: String) {
         if (token.isBlank()) return
@@ -276,16 +327,25 @@ object BcApi {
     data class Company(val id: String, val name: String, val displayName: String)
     data class EnvCompanies(val environment: String, val companies: List<Company>)
 
-    /** Probes each known environment with the token; returns those that respond with companies. */
+    /**
+     * Token'ın tenant'ında bilinen ortamları yoklar; şirket dönenleri listeler.
+     * Multi-tenant: tenant token'dan (tid) çözülür — BADE token'ıyla BADE
+     * tenant'ı, DynamicsOps token'ıyla DynamicsOps tenant'ı sorgulanır.
+     */
     suspend fun discoverEnvironments(token: String): List<EnvCompanies> = withContext(Dispatchers.IO) {
-        KNOWN_ENVIRONMENTS.mapNotNull { env ->
-            val r = httpGet(companiesUrl(env), token)
-            if (!r.ok) return@mapNotNull null
-            val companies = parseValueArray(r.body).map {
-                Company(it.optString("id"), it.optString("name"), it.optString("displayName").ifBlank { it.optString("name") })
-            }
-            if (companies.isEmpty()) null else EnvCompanies(env, companies)
+        val tenant = tenantIdFromJwt(token) ?: FALLBACK_TENANT
+        KNOWN_ENVIRONMENTS.mapNotNull { env -> probeEnvironment(tenant, env, token) }
+    }
+
+    /** Tek bir ortamı yoklar; şirket dönerse EnvCompanies, yoksa null.
+     *  Otomatik keşif ortamı bulamazsa kullanıcının elle girdiği ortam adı için. */
+    suspend fun probeEnvironment(tenant: String, env: String, token: String): EnvCompanies? = withContext(Dispatchers.IO) {
+        val r = httpGet(companiesUrl(tenant, env.trim()), token)
+        if (!r.ok) return@withContext null
+        val companies = parseValueArray(r.body).map {
+            Company(it.optString("id"), it.optString("name"), it.optString("displayName").ifBlank { it.optString("name") })
         }
+        if (companies.isEmpty()) null else EnvCompanies(env.trim(), companies)
     }
 
     /** Plain authenticated GET with an explicit token (used by discovery / sign-in verification). */

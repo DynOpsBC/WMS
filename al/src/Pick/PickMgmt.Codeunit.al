@@ -55,26 +55,30 @@ codeunit 72046 "DOPSWHS Pick Mgmt"
     procedure RegisterPick(var Pick: Record "Warehouse Activity Header")
     var
         PickLine: Record "Warehouse Activity Line";
-        QualityBridge: Codeunit "DOPSWHS Quality Mgmt Bridge";
+        // QM (BC 28) devre dışı — bkz. QualityMgmtBridge.Codeunit.al
+        // QualityBridge: Codeunit "DOPSWHS Quality Mgmt Bridge";
         WhseActivityRegister: Codeunit "Whse.-Activity-Register";
     begin
         EnsurePick(Pick);
         Log('Pick.Register', Pick."No.");
 
-        // Microsoft Quality Management block guard: refuse register if any
+        // Microsoft Quality Management block guard — QM (BC 28) devre dışı.
+        // BC 28'e geçince aşağıdaki bloğun yorumunu kaldırın. Register if any
         // pick line carries a Lot/Serial currently under an open inspection.
         // Error format matches BCWMSApp.QcErrorParser so the mobile/web UI
         // renders a friendly "🔬 QC BLOCK" banner.
+        // PickLine.SetRange("Activity Type", Pick.Type);
+        // PickLine.SetRange("No.", Pick."No.");
+        // if PickLine.FindSet() then
+        //     repeat
+        //         QualityBridge.VerifyNotBlocked(
+        //             PickLine."Lot No.",
+        //             PickLine."Serial No.",
+        //             '');
+        //     until PickLine.Next() = 0;
+
         PickLine.SetRange("Activity Type", Pick.Type);
         PickLine.SetRange("No.", Pick."No.");
-        if PickLine.FindSet() then
-            repeat
-                QualityBridge.VerifyNotBlocked(
-                    PickLine."Lot No.",
-                    PickLine."Serial No.",
-                    '');
-            until PickLine.Next() = 0;
-
         if PickLine.FindFirst() then
             WhseActivityRegister.Run(PickLine);
     end;
