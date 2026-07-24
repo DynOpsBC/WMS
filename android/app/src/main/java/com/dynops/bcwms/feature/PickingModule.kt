@@ -26,9 +26,46 @@ import org.json.JSONObject
  * Lookup (assigned-to-me + show all) -> Pick Document -> Take/Place -> Start/Stop shipping LP ->
  * Short pick (reason) -> Register.
  */
+// ELOG toplama dashboard sekmeleri. ("Bekleyen" kullanıcı isteğiyle kaldırıldı —
+// Pick Created durumu terminaldeki toplayıcıyı yanıltıyordu.)
+private enum class PickTab(val label: String) {
+    Active("⏳ Toplanmakta"),
+    Mine("👤 Benim Topladıklarım"),
+    AllDone("📦 Genel Toplananlar"),
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun PickingModule() {
+    // ELOG: Toplama artık sekmeli — açık pick listesi (Toplanmakta) + geçmiş/durum
+    // (Bekleyen / Benim Topladıklarım / Genel Toplananlar). Diğer sekmeler
+    // pickingOrders API'sini kullanır (Picking Order Header).
+    var tab by remember { mutableStateOf(PickTab.Active) }
+    Column(Modifier.fillMaxSize()) {
+        ScrollableTabRow(
+            selectedTabIndex = tab.ordinal,
+            edgePadding = 8.dp,
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            PickTab.entries.forEach { t ->
+                Tab(
+                    selected = tab == t,
+                    onClick = { tab = t },
+                    text = { Text(t.label, fontSize = 12.sp, maxLines = 1) },
+                )
+            }
+        }
+        when (tab) {
+            PickTab.Active -> ActivePicksTab()
+            PickTab.Mine -> PickHistoryTab(PickTab.Mine)
+            PickTab.AllDone -> PickHistoryTab(PickTab.AllDone)
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun ActivePicksTab() {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var selected by remember { mutableStateOf<String?>(null) }
@@ -37,41 +74,33 @@ fun PickingModule() {
     var loading by remember { mutableStateOf(false) }
     var showAll by remember { mutableStateOf(true) }
     var search by remember { mutableStateOf("") }
-    // ELOG akışı: depocu multi/bulk/batch moduna göre bekleyen pick'leri görür
-    // ve listeden üstüne alır (pickMode damgası MultiOrderPick'ten gelir).
-    var modeFilter by remember { mutableStateOf("") }
     var pendingOnly by remember { mutableStateOf(false) }
 
     fun load() {
         scope.launch {
             loading = true; status = "Yükleniyor..."
             val myUser = if (showAll) "" else BcApi.currentUserId(context)
+            // ELOG: "Bana atanan" seçiliyken bile ataması OLMAYAN (boşta) pick'ler
+            // listede kalsın — toplayıcı üstüne alabilsin. Yani "bana atanan VEYA
+            // atanmamış". showAll ise filtre yok; myUser çözülemezse (boş) filtre yok.
+            val mineOrUnassigned = if (!showAll && myUser.isNotBlank())
+                "(assignedUserId eq '${myUser.trim().uppercase().replace("'", "''")}' or assignedUserId eq '')"
+            else null
             val baseClauses = arrayOf(
-                assignedToMeClause(myUser, enabled = !showAll),
+                mineOrUnassigned,
                 searchClause("no", search),
                 if (pendingOnly) "assignedUserId eq ''" else null,
             )
-            val combined = buildODataFilter(
-                *baseClauses,
-                if (modeFilter.isNotBlank()) "pickMode eq '$modeFilter'" else null,
-            )
-            var r = BcApi.getWithStandardFallback(context, "picks?\$top=100&\$orderby=no desc&\$select=no,locationCode,assignedUserId,pickMode,sourceNo,status,percentComplete$combined")
-            var modeUnsupported = false
-            if (r.httpCode == 400) {
-                // Eski publish'te pickMode alanı yok — alansız/filtre­siz sorguya düş.
-                modeUnsupported = true
-                val legacy = buildODataFilter(*baseClauses)
-                r = BcApi.getWithStandardFallback(context, "picks?\$top=100&\$orderby=no desc&\$select=no,locationCode,assignedUserId,sourceNo,status,percentComplete$legacy")
-            }
+            val combined = buildODataFilter(*baseClauses)
+            val r = BcApi.getWithStandardFallback(context, "picks?\$top=100&\$orderby=no desc&\$select=no,locationCode,assignedUserId,vehicleNo,sourceNo,status,percentComplete$combined")
             loading = false
             rows = if (r.ok) BcApi.parseValueArray(r.body) else emptyList()
             status = if (!r.ok) "HATA: Toplama listesi alınamadı (HTTP ${r.httpCode})"
-                else if (modeUnsupported && modeFilter.isNotBlank()) "⚠️ Mod filtresi sunucuda henüz yok (publish bekliyor) — tümü listelendi"
-                else if (rows.isEmpty()) "EMPTY: Açık toplama belgesi yok (HTTP ${r.httpCode})"
-                else "PASS: ${rows.size} belge (HTTP ${r.httpCode})"
+                else if (rows.isEmpty()) "BOŞ: Açık toplama belgesi yok (HTTP ${r.httpCode})"
+                else "TAMAM: ${rows.size} belge (HTTP ${r.httpCode})"
         }
     }
-    LaunchedEffect(showAll, modeFilter, pendingOnly) { load() }
+    LaunchedEffect(showAll, pendingOnly) { load() }
 
     // Listeden "Üzerime Al": paylaşımlı BC lisansında atama BC hesabına değil
     // oturumdaki WMS kullanıcısına yazılır (reassign); WMS girişi yoksa
@@ -84,7 +113,7 @@ fun PickingModule() {
                 BcApi.boundAction(context, "picks", no, "reassign",
                     JSONObject().apply { put("userId", me); put("reason", "terminalden üstlenildi") }.toString())
             else BcApi.boundAction(context, "picks", no, "assignToMe", "{}")
-            status = if (r.ok) "PASS: $no üzerinize alındı${if (me.isNotBlank()) " ($me)" else ""}"
+            status = if (r.ok) "TAMAM: $no üzerinize alındı${if (me.isNotBlank()) " ($me)" else ""}"
                 else "HATA: ${BcApi.errorMessage(r.body)} (HTTP ${r.httpCode})"
             load()
         }
@@ -92,7 +121,7 @@ fun PickingModule() {
 
     var itemDocs by remember { mutableStateOf<Pair<String, Set<String>>?>(null) }
     val sel = selected
-    if (sel != null) { PickDocument(no = sel, onBack = { selected = null; load() }); return }
+    if (sel != null) { GuidedPickDocument(no = sel, onBack = { selected = null; load() }); return }
 
     DocListScanHandler(
         enabled = true,
@@ -101,7 +130,7 @@ fun PickingModule() {
         acceptDocTypes = setOf("pick"),
         onDocument = { selected = it },
     ) { item, docs ->
-        when { docs.isEmpty() -> status = "⚠️ '$item' açık toplamada yok"; docs.size == 1 -> selected = docs.first(); else -> { itemDocs = item to docs; status = "PASS: '$item' → ${docs.size} belge" } }
+        when { docs.isEmpty() -> status = "⚠️ '$item' açık toplamada yok"; docs.size == 1 -> selected = docs.first(); else -> { itemDocs = item to docs; status = "TAMAM: '$item' → ${docs.size} belge" } }
     }
     val shownRows = itemDocs?.let { f -> rows.filter { it.optString("no") in f.second } } ?: rows
 
@@ -119,13 +148,7 @@ fun PickingModule() {
             ) { Text(if (loading) "…" else "🔄", fontSize = 15.sp) }
         }
         Spacer(Modifier.height(6.dp))
-        // ELOG: multi/bulk/batch mod sekmeleri + atanmayı bekleyenler.
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            FilterChip(selected = modeFilter == "Multi", onClick = { modeFilter = if (modeFilter == "Multi") "" else "Multi" }, label = { Text("🧍 Multi") })
-            FilterChip(selected = modeFilter == "Bulk", onClick = { modeFilter = if (modeFilter == "Bulk") "" else "Bulk" }, label = { Text("📚 Bulk") })
-            FilterChip(selected = modeFilter == "Batch", onClick = { modeFilter = if (modeFilter == "Batch") "" else "Batch" }, label = { Text("1️⃣ Batch") })
-            FilterChip(selected = pendingOnly, onClick = { pendingOnly = !pendingOnly }, label = { Text("⏳ Bekleyen") })
-        }
+        FilterChip(selected = pendingOnly, onClick = { pendingOnly = !pendingOnly }, label = { Text("⏳ Atanmayı Bekleyen") })
         Spacer(Modifier.height(10.dp))
         // PDF Picking §7 / §16: belge no arama eksikti
         OutlinedTextField(
@@ -155,22 +178,709 @@ fun PickingModule() {
     }
 }
 
-private fun pickModeEmoji(mode: String): String = when (mode.lowercase()) {
-    "multi" -> "🧍 "
-    "bulk" -> "📚 "
-    "batch" -> "1️⃣ "
-    else -> ""
+// ELOG dashboard zaman filtresi seçenekleri.
+private enum class DateRange(val label: String) {
+    Last24h("Son 24 saat"),
+    Today("Bugün"),
+    Yesterday("Dün"),
+    Last7d("Son 7 gün"),
+    Custom("Tarih aralığı"),
+    All("Tümü"),
+}
+
+/**
+ * ELOG toplama geçmiş/durum sekmesi. Picking Order Header'ı (pickingOrders API)
+ * okur; sekmeye göre filtreler:
+ *  - Pending: status=Open (henüz pick oluşmamış, toplanmayı bekleyen)
+ *  - Mine: status=Completed + assignedUserId=ben (benim topladıklarım)
+ *  - AllDone: status=Completed (genel toplananlar)
+ * Zaman filtresi: Completed sekmelerinde completedDateTime, Pending'de createdDateTime.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun PickHistoryTab(tab: PickTab) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var rows by remember { mutableStateOf<List<JSONObject>>(emptyList()) }
+    var loading by remember { mutableStateOf(false) }
+    var status by remember { mutableStateOf("") }
+    var range by remember { mutableStateOf(DateRange.Last24h) }
+    var customFrom by remember { mutableStateOf("") } // yyyy-MM-dd
+    var customTo by remember { mutableStateOf("") }
+
+    // Her iki sekme de tamamlanmış toplamaları gösterir → completedDateTime.
+    val dateField = "completedDateTime"
+
+    fun isoStart(daysAgo: Long): String {
+        val cal = java.util.Calendar.getInstance()
+        cal.add(java.util.Calendar.DAY_OF_YEAR, -daysAgo.toInt())
+        cal.set(java.util.Calendar.HOUR_OF_DAY, 0); cal.set(java.util.Calendar.MINUTE, 0)
+        cal.set(java.util.Calendar.SECOND, 0); cal.set(java.util.Calendar.MILLISECOND, 0)
+        return isoUtc(cal.time)
+    }
+
+    fun buildRangeFilter(): String? {
+        val now = System.currentTimeMillis()
+        return when (range) {
+            DateRange.All -> null
+            DateRange.Last24h -> "$dateField ge ${isoUtc(java.util.Date(now - 24L * 3600 * 1000))}"
+            DateRange.Today -> "$dateField ge ${isoStart(0)}"
+            DateRange.Yesterday -> "$dateField ge ${isoStart(1)} and $dateField lt ${isoStart(0)}"
+            DateRange.Last7d -> "$dateField ge ${isoStart(7)}"
+            DateRange.Custom -> {
+                val parts = mutableListOf<String>()
+                if (customFrom.isNotBlank()) parts.add("$dateField ge ${customFrom}T00:00:00Z")
+                if (customTo.isNotBlank()) parts.add("$dateField le ${customTo}T23:59:59Z")
+                parts.joinToString(" and ").ifBlank { null }
+            }
+        }
+    }
+
+    fun load() {
+        scope.launch {
+            loading = true; status = "Yükleniyor..."
+            val statusClause = "status eq 'Completed'"
+            val mineClause = if (tab == PickTab.Mine) {
+                val me = BcApi.currentUserId(context)
+                if (me.isNotBlank()) "assignedUserId eq '${me.trim().uppercase().replace("'", "''")}'" else null
+            } else null
+            val combined = buildODataFilter(statusClause, mineClause, buildRangeFilter())
+            val orderBy = "$dateField desc"
+            val r = BcApi.getWithStandardFallback(
+                context,
+                "pickingOrders?\$top=100&\$orderby=$orderBy&\$select=entryNo,description,status,locationCode,assignedUserId,createdByUser,warehousePickNo,warehouseShipmentNo,createdDateTime,completedDateTime,orderCount$combined",
+            )
+            loading = false
+            rows = if (r.ok) BcApi.parseValueArray(r.body) else emptyList()
+            status = when {
+                r.httpCode == 400 || r.httpCode == 404 -> "⚠️ Bu ekran için BC güncellemesi (pickingOrders API) yayınlanmalı"
+                !r.ok -> "HATA: Liste alınamadı (HTTP ${r.httpCode})"
+                rows.isEmpty() -> "BOŞ: Kayıt yok"
+                else -> "TAMAM: ${rows.size} kayıt"
+            }
+        }
+    }
+    LaunchedEffect(tab, range, customFrom, customTo) { load() }
+
+    Column(Modifier.fillMaxSize().padding(12.dp)) {
+        // Zaman filtresi çipleri.
+        ScrollableTabRowChips(range, customLabel = customRangeLabel(customFrom, customTo)) { range = it }
+        if (range == DateRange.Custom) {
+            Spacer(Modifier.height(6.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedTextField(
+                    value = customFrom, onValueChange = { customFrom = it },
+                    label = { Text("Başlangıç (yyyy-aa-gg)") }, singleLine = true,
+                    modifier = Modifier.weight(1f),
+                )
+                OutlinedTextField(
+                    value = customTo, onValueChange = { customTo = it },
+                    label = { Text("Bitiş (yyyy-aa-gg)") }, singleLine = true,
+                    modifier = Modifier.weight(1f),
+                )
+            }
+        }
+        Spacer(Modifier.height(6.dp))
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            StatusText(status)
+            Spacer(Modifier.weight(1f))
+            OutlinedButton(
+                onClick = { load() }, enabled = !loading,
+                shape = RoundedCornerShape(50), contentPadding = PaddingValues(horizontal = 14.dp),
+            ) { Text(if (loading) "…" else "🔄", fontSize = 15.sp) }
+        }
+        Spacer(Modifier.height(8.dp))
+        LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            items(rows) { d -> PickHistoryCard(d, tab) }
+            if (rows.isEmpty() && !loading) item {
+                EmptyState(
+                    if (tab == PickTab.Mine) "Bu aralıkta sizin topladığınız yok."
+                    else "Bu aralıkta toplanan yok.",
+                )
+            }
+        }
+    }
+}
+
+/** ELOG dashboard kartı: pick no + zaman + toplayan (+ sipariş sayısı). */
+@Composable
+private fun PickHistoryCard(d: JSONObject, tab: PickTab) {
+    val whenField = "completedDateTime"
+    val whenText = friendlyDateTime(d.optString(whenField))
+    val user = firstValue(d, "assignedUserId", "createdByUser").ifBlank { "—" }
+    val pickNo = d.optString("warehousePickNo").ifBlank { "Grup #${d.optInt("entryNo")}" }
+    val orders = d.optInt("orderCount")
+    val statusVal = d.optString("status")
+    Card(
+        shape = RoundedCornerShape(14.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.4f)),
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
+            Box(
+                Modifier.size(44.dp).clip(RoundedCornerShape(13.dp)).background(PickAccent.copy(alpha = 0.12f)),
+                contentAlignment = Alignment.Center,
+            ) { Text("✅", fontSize = 20.sp) }
+            Spacer(Modifier.width(12.dp))
+            Column(Modifier.weight(1f)) {
+                Text(pickNo, fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                Text(d.optString("description").ifBlank { d.optString("locationCode") }, fontSize = 12.sp, color = Color.Gray)
+                Text(
+                    "🕒 $whenText   👤 $user" + if (orders > 0) "   🧾 $orders sipariş" else "",
+                    fontSize = 11.sp, color = Color.Gray,
+                )
+            }
+        }
+    }
+}
+
+// --- ELOG dashboard yardımcıları ---
+
+/** Zaman filtresi çip satırı. */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun ScrollableTabRowChips(current: DateRange, customLabel: String, onSelect: (DateRange) -> Unit) {
+    androidx.compose.foundation.lazy.LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        items(DateRange.entries) { r ->
+            val label = if (r == DateRange.Custom && customLabel.isNotBlank()) customLabel else r.label
+            FilterChip(selected = current == r, onClick = { onSelect(r) }, label = { Text(label, fontSize = 12.sp) })
+        }
+    }
+}
+
+private fun customRangeLabel(from: String, to: String): String =
+    when {
+        from.isNotBlank() && to.isNotBlank() -> "$from → $to"
+        from.isNotBlank() -> "$from →"
+        to.isNotBlank() -> "→ $to"
+        else -> ""
+    }
+
+/** UTC ISO-8601 (OData datetime filtresi için). */
+private fun isoUtc(date: java.util.Date): String {
+    val fmt = java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", java.util.Locale.US)
+    fmt.timeZone = java.util.TimeZone.getTimeZone("UTC")
+    return fmt.format(date)
+}
+
+/** BC datetime metnini kısa yerel gösterime çevirir (gün.ay saat:dk). */
+private fun friendlyDateTime(iso: String): String {
+    if (iso.isBlank()) return "—"
+    return try {
+        val parsers = listOf("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", "yyyy-MM-dd'T'HH:mm:ss'Z'", "yyyy-MM-dd'T'HH:mm:ssXXX")
+        var parsed: java.util.Date? = null
+        for (p in parsers) {
+            try {
+                val f = java.text.SimpleDateFormat(p, java.util.Locale.US)
+                f.timeZone = java.util.TimeZone.getTimeZone("UTC")
+                parsed = f.parse(iso); break
+            } catch (_: Exception) {}
+        }
+        if (parsed == null) iso
+        else java.text.SimpleDateFormat("dd.MM HH:mm", java.util.Locale.US).format(parsed)
+    } catch (_: Exception) { iso }
+}
+
+/**
+ * Yeni yönlendirmeli toplama: sistem sıradaki rafı söyler, raf doğrulanmadan
+ * ürünleri göstermez. Raf içindeki ürünler okutulunca otomatik olarak sonraki
+ * rafa geçer; bütün raflar bitmeden pick post edilemez.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun GuidedPickDocument(no: String, onBack: () -> Unit) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var header by remember { mutableStateOf<JSONObject?>(null) }
+    var lines by remember { mutableStateOf<List<JSONObject>>(emptyList()) }
+    var status by remember { mutableStateOf("") }
+    var busy by remember { mutableStateOf(false) }
+    var binVerified by remember { mutableStateOf(false) }
+    // ELOG: "ürüne dokunma, direkt okut" — görünür okut alanının metni.
+    var scanInput by remember { mutableStateOf("") }
+    // ELOG ana LP (toplama kabı): her pick için 1 sepet. Okutulmadan/oluşturulmadan
+    // toplamaya başlanamaz — tüm ürünler bu LP'ye gider (shipping LP).
+    var mainLp by remember { mutableStateOf("") }
+    var lpInput by remember { mutableStateOf("") }
+    // ELOG: ana sepet ekranında varsayılan olarak "önerilen sepeti kullan" öne çıkar;
+    // kullanıcı kendi kabını okutmak isterse bu bayrakla scan alanı açılır.
+    var showLpScan by remember { mutableStateOf(false) }
+    // ELOG: aynı ürün bu rafta birden çok satırda/siparişte ise tek okutmada miktar
+    // popup'ı aç (ör. BN.0353 ×4, 2 siparişte 2+2) — 4 kere okutma yok, 1 kez okut,
+    // "istenen 4" görüp gir → satırlara dağıt. qtyGroup dolunca dialog açılır.
+    var qtyGroup by remember { mutableStateOf<LineGroup?>(null) }
+
+    fun isComplete(line: JSONObject): Boolean {
+        val required = line.optDouble("quantity", 0.0)
+        return required > 0 && line.optDouble("qtyToHandle", 0.0) >= required
+    }
+
+    suspend fun reloadNow() {
+        val h = BcApi.get(context, "picks('$no')")
+        if (h.ok) header = JSONObject(h.body)
+        val l = BcApi.get(context, "pickLines?\$filter=no eq '$no'&\$top=500")
+        lines = if (l.ok) BcApi.parseValueArray(l.body) else emptyList()
+    }
+
+    fun reload() {
+        scope.launch {
+            busy = true
+            reloadNow()
+            busy = false
+        }
+    }
+
+    fun assignToMe() {
+        scope.launch {
+            busy = true
+            status = "Kendinize atanıyor..."
+            val me = BcApi.currentUserId(context)
+            val r = if (me.isNotBlank())
+                BcApi.boundAction(
+                    context, "picks", no, "reassign",
+                    JSONObject().apply { put("userId", me); put("reason", "terminalden kendime atadım") }.toString(),
+                )
+            else BcApi.boundAction(context, "picks", no, "assignToMe", "{}")
+            status = if (r.ok) "✅ Pick kendinize atandı" else "HATA: ${BcApi.errorMessage(r.body)}"
+            reloadNow()
+            busy = false
+        }
+    }
+
+    // ELOG ana sepet: okutulan LP'yi bu pick'in toplama kabı yap. Boş okutulursa
+    // sistem otomatik bir shipping LP üretir (startShippingLP). LP header'a bağlanır.
+    fun startMainLp(scannedLp: String) {
+        if (busy) return
+        scope.launch {
+            busy = true
+            val lp = com.dynops.bcwms.scanner.BarcodeIntentResolver.resolve(scannedLp).value.trim()
+            if (lp.isNotBlank()) {
+                // Okutulan mevcut LP → doğrudan toplama kabı olarak kullan.
+                mainLp = lp
+                lpInput = ""
+                status = "📦 Ana sepet: $lp — toplamaya başlayın"
+            } else {
+                // Boş → sistem otomatik shipping LP üretsin.
+                status = "📦 Ana sepet oluşturuluyor..."
+                val r = BcApi.boundAction(context, "picks", no, "startShippingLP",
+                    JSONObject().apply { put("lpTemplateCode", "PALLET") }.toString())
+                if (r.ok) {
+                    mainLp = BcApi.scalarValue(r.body)
+                    status = "📦 Ana sepet: $mainLp (oluşturuldu) — toplamaya başlayın"
+                } else status = "HATA: ${BcApi.errorMessage(r.body)} (HTTP ${r.httpCode})"
+            }
+            busy = false
+        }
+    }
+
+    fun completeLine(line: JSONObject, lotNo: String = "") {
+        if (busy || isComplete(line)) return
+        scope.launch {
+            busy = true
+            status = "${line.optString("itemNo")} kaydediliyor..."
+            val actType = line.optString("activityType").ifBlank { BcEnum.WhseActivityType.PICK }
+            val body = JSONObject().apply {
+                put("qtyToHandle", line.optDouble("quantity"))
+                val effectiveLot = lotNo.ifBlank { line.optString("lotNo") }
+                if (effectiveLot.isNotBlank()) put("lotNo", effectiveLot)
+            }.toString()
+            val r = BcApi.patch(context, "pickLines(activityType='$actType',no='$no',lineNo=${line.optInt("lineNo")})", body)
+            status = if (r.ok) "✅ ${line.optString("itemNo")} tamamlandı"
+                else QcErrorParser.friendlyStatus(BcApi.errorMessage(r.body), r.httpCode)
+            if (r.ok) reloadNow()
+            busy = false
+        }
+    }
+
+    // ELOG: aynı üründen bu rafta birden çok açık satır varsa, girilen toplam
+    // miktarı satırlara (outstanding'e göre) dağıt. Tek okutma → tek miktar girişi.
+    fun completeGroup(group: LineGroup, totalQty: Double, lotNo: String) {
+        if (busy) return
+        scope.launch {
+            busy = true; status = "${group.itemNo} dağıtılıyor..."
+            val plan = distributeQty(group, totalQty, ::pickLineCapacity)
+            var ok = 0; var firstErr: String? = null
+            for ((ln, q) in plan) {
+                val actType = ln.optString("activityType").ifBlank { BcEnum.WhseActivityType.PICK }
+                val body = JSONObject().apply {
+                    put("qtyToHandle", q)
+                    val effectiveLot = lotNo.ifBlank { ln.optString("lotNo") }
+                    if (effectiveLot.isNotBlank()) put("lotNo", effectiveLot)
+                }.toString()
+                val r = BcApi.patch(context, "pickLines(activityType='$actType',no='$no',lineNo=${ln.optInt("lineNo")})", body)
+                if (r.ok) ok++ else if (firstErr == null) firstErr = BcApi.errorMessage(r.body)
+            }
+            status = if (firstErr == null) "✅ ${group.itemNo} → ${plan.size} siparişe dağıtıldı (${pickQty(totalQty)} adet)"
+                else "HATA: $ok/${plan.size} yazıldı — $firstErr"
+            reloadNow()
+            busy = false
+        }
+    }
+
+    // Ürün okutma yönlendirmesi: bu rafta aynı üründen ÇOK açık satır varsa miktar
+    // popup'ı aç (dağıtım); tek satır varsa doğrudan tamamla. openLines = o an
+    // açık aktif-raf satırları (çağıran verir — activeLines composable'da sonra tanımlı).
+    fun handleItemScan(openLines: List<JSONObject>, itemNo: String, lotNo: String) {
+        val group = groupLines(openLines, ::pickLineCapacity)
+            .firstOrNull { it.itemNo.equals(itemNo, ignoreCase = true) }
+        when {
+            group == null -> status = "⚠️ Bu rafta açık $itemNo satırı yok"
+            group.count > 1 -> qtyGroup = group   // çok satır → miktar dialog
+            else -> completeLine(group.lines.first(), lotNo)
+        }
+    }
+
+    fun registerPick() {
+        scope.launch {
+            busy = true
+            status = "Pick post ediliyor..."
+            val r = BcApi.boundAction(context, "picks", no, "register", "{}")
+            busy = false
+            if (r.ok) {
+                status = "✅ Toplama tamamlandı; siparişler paketlemeye aktarıldı"
+                onBack()
+            } else status = QcErrorParser.friendlyStatus(BcApi.errorMessage(r.body), r.httpCode)
+        }
+    }
+
+    LaunchedEffect(no) { busy = true; reloadNow(); busy = false }
+
+    val takeLines = lines.filter { !it.optString("actionType").equals("Place", ignoreCase = true) }
+    val outstanding = takeLines.filterNot(::isComplete)
+    val currentBin = outstanding.sortedWith(compareBy(binWalkComparator) { it.optString("binCode") })
+        .firstOrNull()?.optString("binCode")
+    val activeLines = takeLines.filter { it.optString("binCode").equals(currentBin, ignoreCase = true) }
+    val allCollected = takeLines.isNotEmpty() && outstanding.isEmpty()
+    val orderCount = takeLines.map { firstValue(it, "sourceNo").ifBlank { "—" } }.distinct().size
+    val notAssigned = header?.optString("assignedUserId").isNullOrBlank()
+
+    LaunchedEffect(currentBin) {
+        binVerified = currentBin.isNullOrBlank()
+        if (currentBin != null && !currentBin.isBlank())
+            status = "📍 Sıradaki raf: $currentBin — raf barkodunu okutun"
+    }
+
+    // Arka plan donanım-tarayıcı dinleyicisi: hem raf doğrulama (onNoMatch) hem
+    // ürün okutma (onSingleMatch) burada işlenir — operatör görünür alana dokunmak
+    // zorunda kalmadan sarı tetikle okutabilsin. Görünür "📷 Ürün okut" alanı ise
+    // elle giriş + kamera içindir (focuslu iken donanımı da işler; tamamlanmış
+    // satır ikinci kez okununca zararsızca "açık satır yok" der).
+    val needsMainLp = mainLp.isBlank() && !header?.optString("assignedUserId").isNullOrBlank()
+    DocumentScanHandler(
+        enabled = !busy && !notAssigned && !allCollected && !needsMainLp && qtyGroup == null,
+        lines = if (binVerified) activeLines.filterNot(::isComplete) else emptyList(),
+        // Tek eşleşme de olsa handleItemScan'e ver — o ürünün rafta çok satırı varsa
+        // miktar popup'ı açar (BN.0353 ×4 = 2 sipariş → 1 okut, 4 gir).
+        onSingleMatch = { line, resolved -> handleItemScan(activeLines.filterNot(::isComplete), line.optString("itemNo"), resolved.lotNo.orEmpty()) },
+        onMultiMatch = { itemNo, resolved -> handleItemScan(activeLines.filterNot(::isComplete), itemNo, resolved.lotNo.orEmpty()) },
+        onNoMatch = { resolved ->
+            val scanned = resolved.value.trim()
+            if (!binVerified && !currentBin.isNullOrBlank() && scanned.equals(currentBin, ignoreCase = true)) {
+                binVerified = true
+                status = "✅ Raf $currentBin doğrulandı — aşağıdaki ürüne dokunup okutun"
+            } else if (!binVerified) {
+                status = "❌ Yanlış raf. Beklenen: $currentBin · Okunan: $scanned"
+            } else {
+                status = "❌ Bu ürün $currentBin rafında beklenmiyor: ${resolved.itemNo ?: scanned}"
+            }
+        },
+    )
+
+    Column(Modifier.fillMaxSize()) {
+        Column(Modifier.weight(1f).padding(12.dp)) {
+            TextButton(onClick = onBack) { Text("‹ Pick Listesi") }
+            DocHeaderCard(
+                title = no,
+                subtitle = "Lokasyon: ${header?.optString("locationCode").orEmpty()} · $orderCount sipariş" +
+                    (if (!notAssigned) " · Atanan: ${header?.optString("assignedUserId").orEmpty()}" else "") +
+                    (if (mainLp.isNotBlank()) "\n📦 Ana sepet: $mainLp" else ""),
+                percent = if (takeLines.isEmpty()) 0 else ((takeLines.count(::isComplete) * 100.0) / takeLines.size).toInt(),
+            )
+            Spacer(Modifier.height(8.dp))
+
+            StatusText(status)
+            Spacer(Modifier.height(8.dp))
+
+            when {
+                // ELOG: pick kimseye atanmadan ürün listesi/okutma hiç gösterilmez —
+                // toplama sadece "Kendime Ata" ile başlatılabilir.
+                notAssigned -> {
+                    Card(
+                        colors = CardDefaults.cardColors(containerColor = Color(0xFFEDE7F6)),
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Column(Modifier.fillMaxWidth().padding(20.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text("Bu pick henüz kimseye atanmadı", fontSize = 14.sp, color = Color(0xFF4527A0))
+                            Spacer(Modifier.height(4.dp))
+                            Text("Toplamaya başlamak için önce kendinize atayın.", fontSize = 12.sp, color = Color(0xFF5E35B1))
+                            Spacer(Modifier.height(14.dp))
+                            Button(
+                                onClick = { assignToMe() },
+                                enabled = !busy,
+                                modifier = Modifier.fillMaxWidth().height(50.dp),
+                            ) { Text("✋ Kendime Ata ve Toplamaya Başla", fontWeight = FontWeight.Bold) }
+                        }
+                    }
+                }
+                // ELOG: atandıktan sonra, toplamadan ÖNCE ana sepeti (LP) okut.
+                needsMainLp -> {
+                    Card(
+                        colors = CardDefaults.cardColors(containerColor = Color.White),
+                        border = BorderStroke(1.dp, Color(0xFFE0E0E0)),
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Column(Modifier.fillMaxWidth().padding(16.dp)) {
+                            Text("Toplama kabı (sepet)", fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                            Text(
+                                "Ürünler bu sepete toplanacak. Sistem senin için bir sepet önerdi — kullanabilir ya da elindeki sepeti okutabilirsin.",
+                                fontSize = 12.sp, color = Color.Gray,
+                            )
+                            Spacer(Modifier.height(14.dp))
+
+                            // Önerilen sepet kartı — sistem toplama başlarken numara üretir.
+                            Card(
+                                colors = CardDefaults.cardColors(containerColor = Color(0xFFEDE7F6)),
+                                border = BorderStroke(1.dp, PickAccent.copy(alpha = 0.4f)),
+                                modifier = Modifier.fillMaxWidth(),
+                            ) {
+                                Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
+                                    Text("📦", fontSize = 26.sp)
+                                    Spacer(Modifier.width(12.dp))
+                                    Column(Modifier.weight(1f)) {
+                                        Text("Önerilen sepet", fontSize = 11.sp, color = Color(0xFF5E35B1))
+                                        Text("Yeni sepet oluşturulacak", fontWeight = FontWeight.Bold, color = Color(0xFF4527A0))
+                                        Text("Onaylayınca sepet numarası atanır", fontSize = 11.sp, color = Color(0xFF7E57C2))
+                                    }
+                                }
+                            }
+                            Spacer(Modifier.height(12.dp))
+                            Button(
+                                onClick = { startMainLp("") },
+                                enabled = !busy,
+                                modifier = Modifier.fillMaxWidth().height(50.dp),
+                            ) { Text("✓ Önerilen sepeti kullan", fontWeight = FontWeight.Bold) }
+
+                            Spacer(Modifier.height(10.dp))
+                            if (!showLpScan) {
+                                TextButton(
+                                    onClick = { showLpScan = true },
+                                    enabled = !busy,
+                                    modifier = Modifier.fillMaxWidth(),
+                                ) { Text("📷 Farklı bir sepet okut / değiştir") }
+                            } else {
+                                Text("Elindeki sepetin/LP barkodunu okut:", fontSize = 12.sp, color = Color.Gray)
+                                Spacer(Modifier.height(6.dp))
+                                com.dynops.bcwms.scanner.ScanField(
+                                    label = "📦 Sepet / LP okut",
+                                    value = lpInput,
+                                    onValueChange = { lpInput = it },
+                                    modifier = Modifier.fillMaxWidth(),
+                                    enabled = !busy,
+                                    onScanned = { startMainLp(it) },
+                                )
+                                Spacer(Modifier.height(6.dp))
+                                TextButton(
+                                    onClick = { showLpScan = false; lpInput = "" },
+                                    enabled = !busy,
+                                    modifier = Modifier.fillMaxWidth(),
+                                ) { Text("‹ Vazgeç, öneriye dön", fontSize = 12.sp) }
+                            }
+                        }
+                    }
+                }
+                allCollected -> {
+                    Card(
+                        colors = CardDefaults.cardColors(containerColor = Color(0xFFE8F5E9)),
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Column(Modifier.padding(18.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text("✅ TÜM SİPARİŞLER TOPLANDI", color = Color(0xFF2E7D32), fontWeight = FontWeight.Bold, fontSize = 18.sp)
+                            Text("Pick'i post ederek paketleme kuyruğuna bırakın.", color = Color(0xFF2E7D32), fontSize = 12.sp)
+                        }
+                    }
+                }
+                !binVerified && !currentBin.isNullOrBlank() -> {
+                    Card(
+                        colors = CardDefaults.cardColors(containerColor = Color(0xFFFFF3E0)),
+                        border = BorderStroke(2.dp, Color(0xFFEF6C00)),
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Column(Modifier.fillMaxWidth().padding(22.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text("SIRADAKİ RAF", fontSize = 12.sp, color = Color(0xFFEF6C00), fontWeight = FontWeight.Bold)
+                            Text(currentBin, fontSize = 32.sp, fontWeight = FontWeight.Black, color = Color(0xFFBF360C))
+                            Text("Bu rafın barkodunu okutun", fontSize = 14.sp, color = Color(0xFFEF6C00))
+                        }
+                    }
+                }
+                else -> {
+                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                        Column(Modifier.weight(1f)) {
+                            Text(
+                                if (currentBin.isNullOrBlank()) "📦 Toplanacak ürünler" else "📍 Bu rafın ürünleri",
+                                fontSize = 12.sp, color = Color.Gray,
+                            )
+                            if (!currentBin.isNullOrBlank())
+                                Text(currentBin, fontSize = 20.sp, fontWeight = FontWeight.Black, color = Color(0xFFBF360C))
+                        }
+                        Surface(color = PickAccent.copy(alpha = 0.12f), shape = RoundedCornerShape(8.dp)) {
+                            Text(
+                                "${activeLines.count(::isComplete)}/${activeLines.size}",
+                                Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                                fontWeight = FontWeight.Bold, fontSize = 14.sp, color = PickAccent,
+                            )
+                        }
+                    }
+                    Spacer(Modifier.height(12.dp))
+                    // ELOG: dokunmadan direkt okut. Sadece barkod okutarak toplanır —
+                    // manuel/"elle" giriş yok, yanlış ürün karışmasın diye kaldırıldı.
+                    com.dynops.bcwms.scanner.ScanField(
+                        label = "📷 Ürün okut",
+                        value = scanInput,
+                        onValueChange = { scanInput = it },
+                        modifier = Modifier.fillMaxWidth(),
+                        enabled = !busy,
+                        onScanned = { raw ->
+                            scanInput = ""
+                            val resolved = com.dynops.bcwms.scanner.BarcodeIntentResolver.resolve(raw)
+                            val open = activeLines.filterNot(::isComplete)
+                            val match = matchLinesByBarcode(open, resolved)
+                            // Eşleşen satırın ürününü handleItemScan'e ver → aynı üründen
+                            // çok satır varsa miktar popup'ı açılır, tek satırsa tamamlanır.
+                            if (match.isNotEmpty()) handleItemScan(open, match.first().optString("itemNo"), resolved.lotNo.orEmpty())
+                            else status = "❌ Bu rafta açık '${resolved.itemNo ?: raw}' satırı yok"
+                        },
+                    )
+                    Spacer(Modifier.height(12.dp))
+                    // ELOG: satırları ÜRÜNE göre grupla (item+bin+varyant+lot/seri) —
+                    // aynı ürün N farklı siparişte varsa TEK kart, büyük toplam miktar,
+                    // altında hangi siparişlere ait olduğu küçük gri yazıyla listelenir.
+                    // Kartlar sadece bilgi amaçlıdır — toplama SADECE barkod okutarak
+                    // yapılır, dokunarak tamamlama/elle giriş yolu yok.
+                    val itemGroups = groupLines(activeLines, ::pickLineCapacity)
+                    LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        items(itemGroups, key = { it.key }) { group ->
+                            val done = group.lines.all(::isComplete)
+                            val doneCount = group.lines.count(::isComplete)
+                            val orderNos = group.lines.map { firstValue(it, "sourceNo").ifBlank { "—" } }.distinct()
+                            Card(
+                                // ELOG: henüz toplanmamış (bekleyen) satırlar hafif kırmızı/pembe
+                                // zeminde belirginleşsin; toplananlar yeşile döner.
+                                colors = CardDefaults.cardColors(containerColor = if (done) Color(0xFFE8F5E9) else Color(0xFFFFF0F0)),
+                                border = BorderStroke(1.dp, if (done) Color(0xFF66BB6A) else Color(0xFFF3BDBD)),
+                                modifier = Modifier.fillMaxWidth(),
+                            ) {
+                                Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
+                                    Text(if (done) "✅" else "📦", fontSize = 20.sp)
+                                    Spacer(Modifier.width(10.dp))
+                                    Column(Modifier.weight(1f)) {
+                                        Text(group.itemNo, fontWeight = FontWeight.Bold)
+                                        Text(group.description, fontSize = 12.sp, color = Color.Gray)
+                                        if (group.binCode.isNotBlank()) {
+                                            Spacer(Modifier.height(2.dp))
+                                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                                Surface(color = Color(0xFFF3E5F5), shape = RoundedCornerShape(6.dp)) {
+                                                    Text(
+                                                        "📍 ${group.binCode}",
+                                                        Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                                                        fontSize = 11.sp, color = Color(0xFF6A1B9A), fontWeight = FontWeight.Medium,
+                                                    )
+                                                }
+                                            }
+                                        }
+                                        if (group.count > 1) {
+                                            Spacer(Modifier.height(2.dp))
+                                            Text(
+                                                "🧾 ${orderNos.size} siparişe dağılıyor: ${orderNos.joinToString(" · ")}",
+                                                fontSize = 11.sp, color = Color.Gray,
+                                            )
+                                        } else {
+                                            Text("Sipariş: ${orderNos.first()}", fontSize = 11.sp, color = Color.Gray)
+                                        }
+                                    }
+                                    Spacer(Modifier.width(8.dp))
+                                    Text(
+                                        pickQty(group.lines.sumOf { it.optDouble("quantity") }),
+                                        fontSize = 28.sp, fontWeight = FontWeight.Black,
+                                        color = if (done) Color(0xFF2E7D32) else PickAccent,
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        BottomActionBar {
+            OutlinedButton(onClick = { reload() }, enabled = !busy, modifier = Modifier.weight(1f)) { Text("🔄 Yenile") }
+            Button(
+                onClick = { registerPick() },
+                enabled = !busy && allCollected,
+                modifier = Modifier.weight(2f).height(54.dp),
+            ) { Text(if (allCollected) "✅ Pick'i Post Et" else "Önce Tümünü Topla", fontWeight = FontWeight.Bold) }
+        }
+    }
+
+    // ELOG miktar popup'ı: aynı ürün bu rafta çok satır/siparişte → "istenen 4"
+    // göster, operatör miktarı girsin, satırlara dağıt.
+    val qg = qtyGroup
+    if (qg != null) {
+        QuantityDialogSheet(
+            title = "${qg.itemNo} — ${qg.count} siparişe dağıtılır",
+            itemNo = qg.itemNo,
+            initialQty = qg.totalOutstanding.takeIf { it > 0 } ?: 1.0,
+            initialUom = qg.lines.first().optString("unitOfMeasureCode"),
+            initialLot = qg.lines.first().optString("lotNo"),
+            showLotSerial = true,
+            showSerial = false,
+            onDismiss = { qtyGroup = null },
+            onConfirm = { res ->
+                qtyGroup = null
+                completeGroup(qg, res.quantity, res.lotNo)
+            },
+        )
+    }
+}
+
+private fun pickQty(value: Double): String =
+    if (value == value.toLong().toDouble()) value.toLong().toString() else value.toString()
+
+// Depo yürüme yolu sıralaması: bin kodunu doğal (natural) sırayla karşılaştır.
+// Kod içindeki sayı blokları sayısal, harf blokları harf-harf kıyaslanır; böylece
+// "A-2" < "A-10" olur (düz String kıyasında A-10 < A-2 olurdu). Boş bin en sona.
+private val binWalkComparator: Comparator<String> = Comparator { a, b ->
+    if (a.isBlank() != b.isBlank()) return@Comparator if (a.isBlank()) 1 else -1
+    val na = a.length; val nb = b.length
+    var i = 0; var j = 0
+    while (i < na && j < nb) {
+        val ca = a[i]; val cb = b[j]
+        if (ca.isDigit() && cb.isDigit()) {
+            var si = i; while (si < na && a[si].isDigit()) si++
+            var sj = j; while (sj < nb && b[sj].isDigit()) sj++
+            // Baştaki sıfırları atlayarak sayısal büyüklüğü kıyasla.
+            val da = a.substring(i, si).trimStart('0')
+            val db = b.substring(j, sj).trimStart('0')
+            if (da.length != db.length) return@Comparator da.length - db.length
+            val c = da.compareTo(db)
+            if (c != 0) return@Comparator c
+            i = si; j = sj
+        } else {
+            val c = ca.uppercaseChar().compareTo(cb.uppercaseChar())
+            if (c != 0) return@Comparator c
+            i++; j++
+        }
+    }
+    (na - i) - (nb - j)
 }
 
 private val PickAccent = Color(0xFF6C5CE7) // Ana menü "Giden" kategorisiyle aynı vurgu.
 private val PendingOrange = Color(0xFFE65100)
 
-/** Ana menü kart diliyle pick satırı: mod ikonu, ilerleme, atanma durumu, Üzerime Al. */
+/** Ana menü kart diliyle pick satırı: ilerleme, atanma durumu, Üzerime Al. */
 @Composable
 private fun PickListCard(d: JSONObject, busy: Boolean, onOpen: () -> Unit, onTake: () -> Unit) {
     val assigned = firstValue(d, "assignedUserId")
-    // BC boş enum değeri sürüme göre "-", " " ya da "_x0020_" dönebiliyor.
-    val mode = firstValue(d, "pickMode").trim().takeIf { it.isNotBlank() && it != "-" && it != "_x0020_" } ?: ""
     val pct = d.optInt("percentComplete").coerceIn(0, 100)
     Card(
         onClick = onOpen,
@@ -184,17 +894,11 @@ private fun PickListCard(d: JSONObject, busy: Boolean, onOpen: () -> Unit, onTak
             Box(
                 Modifier.size(44.dp).clip(RoundedCornerShape(13.dp)).background(PickAccent.copy(alpha = 0.12f)),
                 contentAlignment = Alignment.Center,
-            ) { Text(pickModeEmoji(mode).trim().ifBlank { "🚚" }, fontSize = 20.sp) }
+            ) { Text("🚚", fontSize = 20.sp) }
             Spacer(Modifier.width(12.dp))
             Column(Modifier.weight(1f)) {
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                     Text(d.optString("no"), fontWeight = FontWeight.Bold, fontSize = 15.sp)
-                    if (mode.isNotBlank()) {
-                        Box(
-                            Modifier.clip(RoundedCornerShape(50)).background(PickAccent.copy(alpha = 0.12f))
-                                .padding(horizontal = 8.dp, vertical = 2.dp),
-                        ) { Text(mode, fontSize = 10.sp, fontWeight = FontWeight.SemiBold, color = PickAccent) }
-                    }
                 }
                 Spacer(Modifier.height(2.dp))
                 Text(
@@ -251,9 +955,10 @@ private fun PickDocument(no: String, onBack: () -> Unit) {
     // okununca itemNo karşılaştırılıp ya tamamlanıyor ya hata gösteriliyor.
     var scanLine by remember { mutableStateOf<JSONObject?>(null) }
     var scanFilter by remember { mutableStateOf("") }
-    // Pick sıralama (hafif wave/rota): bin koduna göre sırala → depoda gereksiz
-    // gidip-gelme azalır.
-    var sortByBin by remember { mutableStateOf(false) }
+    // Pick sıralama (hafif wave/rota): bin koduna göre en küçükten en büyüğe
+    // sırala → toplayıcı depoda tek yönde, gereksiz gidip-gelmeden yürür.
+    // ELOG isteği: varsayılan AÇIK.
+    var sortByBin by remember { mutableStateOf(true) }
     var columns by remember { mutableStateOf(ColumnPrefs.get(context, "pick", GridColumns.pick)) }
     var showColumns by remember { mutableStateOf(false) }
     var actionLine by remember { mutableStateOf<JSONObject?>(null) }
@@ -286,7 +991,7 @@ private fun PickDocument(no: String, onBack: () -> Unit) {
             busy = true; status = "$name..."
             val r = BcApi.boundAction(context, "picks", no, name, body)
             busy = false
-            status = if (r.ok) "PASS: $okMsg (HTTP ${r.httpCode})"
+            status = if (r.ok) "TAMAM: $okMsg (HTTP ${r.httpCode})"
                 else QcErrorParser.friendlyStatus(BcApi.errorMessage(r.body), r.httpCode)
             onResult(r)
             if (r.ok) reload()
@@ -302,7 +1007,7 @@ private fun PickDocument(no: String, onBack: () -> Unit) {
             val actType = line.optString("activityType").ifBlank { BcEnum.WhseActivityType.PICK }
             val r = BcApi.patch(context, "pickLines(activityType='$actType',no='$no',lineNo=${line.optInt("lineNo")})", body)
             busy = false
-            status = if (r.ok) "PASS: Satır güncellendi (HTTP ${r.httpCode})"
+            status = if (r.ok) "TAMAM: Satır güncellendi (HTTP ${r.httpCode})"
                 else QcErrorParser.friendlyStatus(BcApi.errorMessage(r.body), r.httpCode)
             if (r.ok) reload()
         }
@@ -344,7 +1049,7 @@ private fun PickDocument(no: String, onBack: () -> Unit) {
                 else -> updateLine(line, line.optDouble("quantity"))
             }
         },
-        onMultiMatch = { itemNo, _ -> scanFilter = itemNo; status = "PASS: '$itemNo' için birden fazla satır — birini seçin" },
+        onMultiMatch = { itemNo, _ -> scanFilter = itemNo; status = "TAMAM: '$itemNo' için birden fazla satır — birini seçin" },
         onNoMatch = { r ->
             val scanned = r.value.trim()
             val bin = takeLines.firstOrNull { it.optString("binCode").equals(scanned, ignoreCase = true) }?.optString("binCode")
@@ -356,7 +1061,9 @@ private fun PickDocument(no: String, onBack: () -> Unit) {
     )
     val binLines = if (binFilter.isBlank()) takeLines else takeLines.filter { it.optString("binCode").equals(binFilter, ignoreCase = true) }
     val filteredLines = if (scanFilter.isBlank()) binLines else binLines.filter { matchLinesByBarcode(listOf(it), com.dynops.bcwms.scanner.BarcodeIntentResolver.resolve(scanFilter)).isNotEmpty() }
-    val displayLines = if (sortByBin) filteredLines.sortedBy { it.optString("binCode") } else filteredLines
+    // En küçükten en büyüğe yürüme yolu: bin kodunu sayısal-akıllı sırala
+    // (A-2 < A-10, düz alfabetik sıralamanın aksine).
+    val displayLines = if (sortByBin) filteredLines.sortedWith(compareBy(binWalkComparator) { it.optString("binCode") }) else filteredLines
     val displayGroups = if (merge) groupLines(displayLines, ::pickLineCapacity) else emptyList()
     Column(Modifier.fillMaxSize()) {
         Column(Modifier.weight(1f).padding(12.dp)) {
@@ -364,6 +1071,7 @@ private fun PickDocument(no: String, onBack: () -> Unit) {
             DocHeaderCard(
                 title = no,
                 subtitle = "Lokasyon: ${h?.optString("locationCode") ?: ""} · ${h?.optString("status") ?: ""}" +
+                    (h?.optString("vehicleNo")?.takeIf { it.isNotBlank() }?.let { "\n🚚 Araç: $it" } ?: "") +
                     (shipLp?.let { "\nShipping LP: $it" } ?: ""),
                 percent = h?.optDouble("percentComplete")?.toInt() ?: 0
             )
@@ -411,7 +1119,7 @@ private fun PickDocument(no: String, onBack: () -> Unit) {
                     action("startShippingLP", """{"lpTemplateCode":"PALLET"}""", "Shipping LP başladı") { r ->
                         if (r.ok) shipLp = BcApi.scalarValue(r.body)
                     }
-                }, enabled = !busy, modifier = Modifier.weight(1f)) { Text("Start LP") }
+                }, enabled = !busy, modifier = Modifier.weight(1f)) { Text("LP Başlat") }
                 OutlinedButton(onClick = { showTote = true }, enabled = !busy, modifier = Modifier.weight(1f)) { Text("🧺 Tote") }
             } else {
                 OutlinedButton(onClick = {
@@ -419,7 +1127,7 @@ private fun PickDocument(no: String, onBack: () -> Unit) {
                     action("stopShippingLP", JSONObject().apply { put("lpNo", lp); put("printLabel", true) }.toString(), "Shipping LP kapandı") { r ->
                         if (r.ok) shipLp = null
                     }
-                }, enabled = !busy, modifier = Modifier.weight(1f)) { Text("Stop Ship LP") }
+                }, enabled = !busy, modifier = Modifier.weight(1f)) { Text("Sevk LP Kapat") }
             }
             OutlinedButton(onClick = {
                 // Paylaşımlı BC lisansı: atama oturumdaki WMS kullanıcısına yazılır.
@@ -461,9 +1169,10 @@ private fun PickDocument(no: String, onBack: () -> Unit) {
         ScanVerifySheet(
             expectedItemNo = scanTarget.optString("itemNo"),
             description = scanTarget.optString("description"),
+            initialLot = scanTarget.optString("lotNo"),
             busy = busy,
             onDismiss = { if (!busy) scanLine = null },
-            onVerified = {
+            onVerified = { lotNo ->
                 // Codex review Finding 2: busy=true önce set edilir, recompose
                 // sırasında diğer "Tara/Tamamla/Short" butonları disabled olur,
                 // sheet sonra kapatılır. Tek updateLine coroutine'i garanti.
@@ -473,7 +1182,11 @@ private fun PickDocument(no: String, onBack: () -> Unit) {
                     scope.launch {
                         try {
                             val qty = scanTarget.optDouble("quantity")
-                            val body = JSONObject().apply { put("qtyToHandle", qty) }.toString()
+                            val body = JSONObject().apply {
+                                put("qtyToHandle", qty)
+                                // ELOG: terminalden girilen lot no'yu satıra yaz.
+                                if (lotNo.isNotBlank()) put("lotNo", lotNo)
+                            }.toString()
                             val actType = scanTarget.optString("activityType").ifBlank { BcEnum.WhseActivityType.PICK }
                             val r = BcApi.patch(context, "pickLines(activityType='$actType',no='$no',lineNo=${scanTarget.optInt("lineNo")})", body)
                             status = if (r.ok) "✅ Doğrulandı + tamamlandı (HTTP ${r.httpCode})"
@@ -540,7 +1253,10 @@ private fun PickDocument(no: String, onBack: () -> Unit) {
             itemNo = gt.itemNo,
             initialQty = gt.totalOutstanding.takeIf { it > 0 } ?: 1.0,
             initialUom = gt.lines.first().optString("unitOfMeasureCode"),
-            showLotSerial = false,
+            initialLot = gt.lines.first().optString("lotNo"),
+            // ELOG: lot no el terminalinden girilir; seri girişi pick'te kapalı.
+            showLotSerial = true,
+            showSerial = false,
             onDismiss = { groupTarget = null },
             onConfirm = { res ->
                 groupTarget = null
@@ -551,12 +1267,15 @@ private fun PickDocument(no: String, onBack: () -> Unit) {
                     var firstErr: String? = null
                     for ((ln, q) in plan) {
                         val actType = ln.optString("activityType").ifBlank { BcEnum.WhseActivityType.PICK }
-                        val body = JSONObject().apply { put("qtyToHandle", q) }.toString()
+                        val body = JSONObject().apply {
+                            put("qtyToHandle", q)
+                            if (res.lotNo.isNotBlank()) put("lotNo", res.lotNo)
+                        }.toString()
                         val r = BcApi.patch(context, "pickLines(activityType='$actType',no='$no',lineNo=${ln.optInt("lineNo")})", body)
                         if (r.ok) okCount++ else if (firstErr == null) firstErr = BcApi.errorMessage(r.body)
                     }
                     busy = false
-                    status = if (firstErr == null) "PASS: $okCount/${plan.size} satıra dağıtıldı"
+                    status = if (firstErr == null) "TAMAM: $okCount/${plan.size} satıra dağıtıldı"
                         else "HATA: $okCount/${plan.size} satır yazıldı — $firstErr"
                     reload()
                 }
@@ -672,31 +1391,46 @@ private fun PickLineActionSheet(
 private fun ScanVerifySheet(
     expectedItemNo: String,
     description: String,
+    initialLot: String,
     busy: Boolean,
     onDismiss: () -> Unit,
-    onVerified: () -> Unit,
+    onVerified: (lotNo: String) -> Unit,
     onMismatch: (String) -> Unit,
 ) {
     var raw by remember { mutableStateOf("") }
+    // ELOG: lot no el terminalinden girilir. GS1 barkodunda lot varsa otomatik
+    // dolar (AI 10); yoksa operatör okutur/yazar.
+    var lot by remember { mutableStateOf(initialLot) }
     var hint by remember { mutableStateOf("Item barkodunu okutun. Beklenen: $expectedItemNo") }
     com.dynops.bcwms.ui.SheetScaffold(onDismiss = onDismiss, contentPadding = androidx.compose.foundation.layout.PaddingValues(20.dp)) {
         Text("Tara & Doğrula", fontWeight = FontWeight.Bold, fontSize = 18.sp)
         Text("Beklenen: $expectedItemNo · $description", fontSize = 12.sp, color = Color.Gray)
         Spacer(Modifier.height(12.dp))
         com.dynops.bcwms.scanner.ScanField(
-            "Item / barkod", raw, { raw = it },
+            "Ürün / barkod", raw, { raw = it },
             modifier = Modifier.fillMaxWidth(),
             onScanned = { scanned ->
                 val resolved = com.dynops.bcwms.scanner.BarcodeIntentResolver.resolve(scanned)
                 val readItem = resolved.itemNo ?: scanned
                 raw = readItem
+                // GS1 barkodunda lot varsa alanı otomatik doldur (operatör düzeltebilir).
+                resolved.lotNo?.takeIf { it.isNotBlank() }?.let { lot = it }
                 if (readItem.equals(expectedItemNo, ignoreCase = true)) {
-                    hint = "✅ Eşleşti — onaylanıyor..."
-                    onVerified()
+                    hint = if (lot.isNotBlank()) "✅ Eşleşti · Lot $lot" else "✅ Eşleşti — lot girip onaylayın"
                 } else {
                     hint = "❌ Eşleşmedi: $readItem"
                     onMismatch(readItem)
                 }
+            },
+        )
+        Spacer(Modifier.height(8.dp))
+        com.dynops.bcwms.scanner.ScanField(
+            "Lot No", lot, { lot = it },
+            modifier = Modifier.fillMaxWidth(),
+            onScanned = { scanned ->
+                // Lot barkodu da GS1 olabilir; AI 10 varsa onu, yoksa ham değeri al.
+                val resolved = com.dynops.bcwms.scanner.BarcodeIntentResolver.resolve(scanned)
+                lot = resolved.lotNo?.takeIf { it.isNotBlank() } ?: scanned.trim()
             },
         )
         Spacer(Modifier.height(8.dp))
@@ -705,13 +1439,13 @@ private fun ScanVerifySheet(
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             OutlinedButton(onClick = onDismiss, enabled = !busy, modifier = Modifier.weight(1f)) { Text("Vazgeç") }
             Button(
-                enabled = raw.isNotBlank() && !busy,
+                enabled = raw.trim().equals(expectedItemNo, ignoreCase = true) && !busy,
                 onClick = {
-                    if (raw.trim().equals(expectedItemNo, ignoreCase = true)) onVerified()
+                    if (raw.trim().equals(expectedItemNo, ignoreCase = true)) onVerified(lot.trim())
                     else { hint = "❌ Eşleşmedi: $raw"; onMismatch(raw.trim()) }
                 },
                 modifier = Modifier.weight(1f),
-            ) { Text("Manuel Onayla") }
+            ) { Text("Onayla") }
         }
         Spacer(Modifier.height(24.dp))
     }
@@ -733,20 +1467,29 @@ private fun ActionBadge(action: String) {
 @Composable
 private fun ShortPickSheet(line: JSONObject?, onDismiss: () -> Unit, onConfirm: (qty: Double, reason: String) -> Unit) {
     var qty by remember { mutableStateOf((line?.optDouble("qtyToHandle") ?: 0.0).let { if (it == it.toLong().toDouble()) it.toLong().toString() else it.toString() }) }
+    // BC'ye gönderilen sebep KODLARI (wire) İngilizce kalır — Reason.Get(code)
+    // eşleşmesi için. Operatöre Türkçe etiket gösterilir.
     val reasons = listOf("DAMAGED", "NOTFOUND", "SHORTAGE", "EXPIRED")
+    fun reasonLabel(code: String) = when (code) {
+        "DAMAGED" -> "Hasarlı"
+        "NOTFOUND" -> "Bulunamadı"
+        "SHORTAGE" -> "Stok Eksik"
+        "EXPIRED" -> "Miadı Geçmiş"
+        else -> code
+    }
     var reason by remember { mutableStateOf(reasons.first()) }
     com.dynops.bcwms.ui.SheetScaffold(onDismiss = onDismiss, contentPadding = androidx.compose.foundation.layout.PaddingValues(20.dp)) {
-        Text("Short Pick", fontWeight = FontWeight.Bold, fontSize = 18.sp)
-        Text("Item: ${line?.optString("itemNo") ?: "-"}", fontSize = 12.sp, color = Color.Gray)
+        Text("Eksik Toplama", fontWeight = FontWeight.Bold, fontSize = 18.sp)
+        Text("Ürün: ${line?.optString("itemNo") ?: "-"}", fontSize = 12.sp, color = Color.Gray)
         Spacer(Modifier.height(12.dp))
         OutlinedTextField(qty, { qty = it.filter { c -> c.isDigit() || c == '.' } }, label = { Text("Eksik Miktar") }, singleLine = true, modifier = Modifier.fillMaxWidth())
         Spacer(Modifier.height(10.dp))
         Text("Sebep", fontSize = 12.sp, color = Color.Gray)
         Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            reasons.forEach { FilterChip(selected = it == reason, onClick = { reason = it }, label = { Text(it) }) }
+            reasons.forEach { FilterChip(selected = it == reason, onClick = { reason = it }, label = { Text(reasonLabel(it)) }) }
         }
         Spacer(Modifier.height(16.dp))
-        Button(modifier = Modifier.fillMaxWidth(), onClick = { onConfirm(qty.toDoubleOrNull() ?: 0.0, reason) }) { Text("Short İşle") }
+        Button(modifier = Modifier.fillMaxWidth(), onClick = { onConfirm(qty.toDoubleOrNull() ?: 0.0, reason) }) { Text("Eksik İşle") }
         Spacer(Modifier.height(24.dp))
     }
 }
