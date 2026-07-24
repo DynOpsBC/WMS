@@ -39,6 +39,16 @@ page 72335 "DOPSWHS Pack Ops API"
         exit(PackMgmt.StartSession(toteLpNo, mode));
     end;
 
+    // ELOG "ürün-önce": bir PICK'in tüm siparişlerini tek session'da paketle.
+    // userId dolu ise paketlemeyi üstlenen WMS operatörü olarak kaydedilir.
+    [ServiceEnabled]
+    procedure startPickPacking(pickNo: Code[20]; userId: Code[50]): Integer
+    var
+        PackMgmt: Codeunit "DOPSWHS Pack Station Mgmt";
+    begin
+        exit(PackMgmt.StartPickSession(pickNo, userId));
+    end;
+
     [ServiceEnabled]
     procedure setBox(sessionId: Integer; boxLpNo: Code[20]; lpTemplateCode: Code[20]): Code[20]
     var

@@ -13,6 +13,127 @@ codeunit 72334 "DOPSWHS Pack Station Mgmt"
     // Beklenmeyen (yanlış) ürün okutulursa hata verilir ve işlem geri alınır.
     Access = Public;
 
+    procedure StartOrderSession(OrderNo: Code[20]): Integer
+    begin
+        exit(StartOrderSession(OrderNo, ''));
+    end;
+
+    // ELOG: OperatorUserId dolu ise paketlemeyi üstlenen WMS operatörü olarak
+    // kaydedilir (Started By User / Created By User). Boşsa UserId() (eski davranış).
+    procedure StartOrderSession(OrderNo: Code[20]; OperatorUserId: Code[50]): Integer
+    var
+        PackingOrder: Record "DOPSWHS Packing Order";
+        ExistingSession: Record "DOPSWHS Pack Session";
+        PackSession: Record "DOPSWHS Pack Session";
+        LineNo: Integer;
+        Operator: Code[50];
+    begin
+        if OperatorUserId <> '' then
+            Operator := OperatorUserId
+        else
+            Operator := CopyStr(UserId(), 1, MaxStrLen(Operator));
+
+        PackingOrder.Get(OrderNo);
+        if (PackingOrder.Status = PackingOrder.Status::"In Progress") and
+           ExistingSession.Get(PackingOrder."Session Entry No.") and
+           (ExistingSession.Status = ExistingSession.Status::Open)
+        then
+            exit(ExistingSession."Entry No.");
+        PackingOrder.TestField(Status, PackingOrder.Status::Ready);
+
+        PackSession.Init();
+        PackSession."Pick No." := PackingOrder."Pick No.";
+        PackSession."Location Code" := PackingOrder."Location Code";
+        PackSession.Status := PackSession.Status::Open;
+        PackSession.Mode := PackSession.Mode::Solo;
+        PackSession."Direct Order Packing" := true;
+        PackSession."Created By User" := CopyStr(Operator, 1, MaxStrLen(PackSession."Created By User"));
+        PackSession."Created DateTime" := CurrentDateTime();
+        PackSession."Orders Total" := 1;
+        PackSession.Insert(true);
+
+        BuildExpectedLines(PackSession, OrderNo, LineNo);
+
+        PackingOrder.Status := PackingOrder.Status::"In Progress";
+        PackingOrder."Session Entry No." := PackSession."Entry No.";
+        PackingOrder."Started By User" := CopyStr(Operator, 1, MaxStrLen(PackingOrder."Started By User"));
+        PackingOrder."Started DateTime" := CurrentDateTime();
+        PackingOrder.Modify(true);
+        Log('Pack.StartOrder', OrderNo);
+        exit(PackSession."Entry No.");
+    end;
+
+    // ELOG "ürün-önce" paketleme: operatör bir PICK seçer, pick'in TÜM
+    // siparişlerinin beklenen satırları tek session'da toplanır. Sepetten eline
+    // gelen ürünü okuttukça ScanItem doğru siparişe yazar (Source Order No.
+    // eşleşmesi). Bir siparişin payı bitince o sipariş için kutu istenir
+    // (BoxNeededOrder batch akışı). Idempotent: pick'in In Progress bir siparişi
+    // ve açık session'ı varsa onu döndürür.
+    procedure StartPickSession(PickNo: Code[20]): Integer
+    begin
+        exit(StartPickSession(PickNo, ''));
+    end;
+
+    procedure StartPickSession(PickNo: Code[20]; OperatorUserId: Code[50]): Integer
+    var
+        PackingOrder: Record "DOPSWHS Packing Order";
+        ExistingSession: Record "DOPSWHS Pack Session";
+        PackSession: Record "DOPSWHS Pack Session";
+        LineNo: Integer;
+        Orders: Integer;
+        Operator: Code[50];
+    begin
+        if OperatorUserId <> '' then
+            Operator := OperatorUserId
+        else
+            Operator := CopyStr(UserId(), 1, MaxStrLen(Operator));
+
+        // Bu pick için hâlihazırda açık bir session varsa onu yeniden kullan.
+        PackingOrder.SetRange("Pick No.", PickNo);
+        PackingOrder.SetRange(Status, PackingOrder.Status::"In Progress");
+        if PackingOrder.FindFirst() and
+           ExistingSession.Get(PackingOrder."Session Entry No.") and
+           (ExistingSession.Status = ExistingSession.Status::Open)
+        then
+            exit(ExistingSession."Entry No.");
+
+        PackSession.Init();
+        PackSession."Pick No." := PickNo;
+        PackSession.Status := PackSession.Status::Open;
+        // Batch modu: kutu SİPARİŞ payı tamamlanınca istenir (ürün → kutu).
+        PackSession.Mode := PackSession.Mode::Batch;
+        PackSession."Direct Order Packing" := true;
+        PackSession."Created By User" := CopyStr(Operator, 1, MaxStrLen(PackSession."Created By User"));
+        PackSession."Created DateTime" := CurrentDateTime();
+        PackSession.Insert(true);
+
+        // Pick'in paketlemeye hazır TÜM siparişlerinin beklenen satırlarını tek
+        // session'a inşa et (StartSession'ın 90-99 tote deseninin pick varyantı).
+        LineNo := 0;
+        Orders := 0;
+        PackingOrder.Reset();
+        PackingOrder.SetRange("Pick No.", PickNo);
+        PackingOrder.SetFilter(Status, '%1|%2', PackingOrder.Status::Ready, PackingOrder.Status::"In Progress");
+        if not PackingOrder.FindSet() then
+            Error(NoOrdersForPickErr, PickNo);
+        repeat
+            if PackSession."Location Code" = '' then
+                PackSession."Location Code" := PackingOrder."Location Code";
+            BuildExpectedLines(PackSession, PackingOrder."Sales Order No.", LineNo);
+            PackingOrder.Status := PackingOrder.Status::"In Progress";
+            PackingOrder."Session Entry No." := PackSession."Entry No.";
+            PackingOrder."Started By User" := CopyStr(Operator, 1, MaxStrLen(PackingOrder."Started By User"));
+            PackingOrder."Started DateTime" := CurrentDateTime();
+            PackingOrder.Modify(true);
+            Orders += 1;
+        until PackingOrder.Next() = 0;
+
+        PackSession."Orders Total" := Orders;
+        PackSession.Modify(true);
+        Log('Pack.StartPickSession', PickNo);
+        exit(PackSession."Entry No.");
+    end;
+
     procedure StartSession(ToteLpNo: Code[20]; ModeTxt: Text): Integer
     var
         LP: Record "DOPSWHS LP Header";
@@ -192,11 +313,35 @@ codeunit 72334 "DOPSWHS Pack Station Mgmt"
     procedure CancelSession(SessionId: Integer)
     var
         PackSession: Record "DOPSWHS Pack Session";
+        PackingOrder: Record "DOPSWHS Packing Order";
+        PackLine: Record "DOPSWHS Pack Session Line";
+        Seen: Dictionary of [Code[20], Boolean];
     begin
         PackSession.Get(SessionId);
         PackSession.TestField(Status, PackSession.Status::Open);
         PackSession.Status := PackSession.Status::Cancelled;
         PackSession.Modify(true);
+        if PackSession."Direct Order Packing" then begin
+            // Session'daki HER ayrı siparişi (pick session'ında birden çok olur)
+            // henüz kapanmamışsa Ready'ye geri al. Kapanmış (fatura edilmiş)
+            // siparişlere dokunma.
+            PackLine.SetRange("Session Entry No.", SessionId);
+            if PackLine.FindSet() then
+                repeat
+                    if (not Seen.ContainsKey(PackLine."Source Order No.")) then begin
+                        Seen.Add(PackLine."Source Order No.", true);
+                        if PackingOrder.Get(PackLine."Source Order No.") and
+                           (PackingOrder.Status = PackingOrder.Status::"In Progress")
+                        then begin
+                            PackingOrder.Status := PackingOrder.Status::Ready;
+                            PackingOrder."Session Entry No." := 0;
+                            Clear(PackingOrder."Started By User");
+                            Clear(PackingOrder."Started DateTime");
+                            PackingOrder.Modify(true);
+                        end;
+                    end;
+                until PackLine.Next() = 0;
+        end;
         Log('Pack.CancelSession', PackSession."Tote LP No.");
     end;
 
@@ -373,7 +518,8 @@ codeunit 72334 "DOPSWHS Pack Station Mgmt"
     end;
 
     // Sipariş ancak (a) tüm satırları tam paketlenmiş VE (b) kutusu okutulmuşsa
-    // kapanır — solo/bulk'ta son ürün okuması, batch'te kutu okuması tetikler.
+    // kapanır. ELOG kutu-sonra akışı: ürünler bitse bile KUTU okutulmadan sipariş
+    // kapanmaz (Direct Order Packing dahil — eskiden bu modda kutu atlan­ıyordu).
     // Zaten kapanmış sipariş yeniden post edilmez.
     local procedure TryCompleteOrder(var PackSession: Record "DOPSWHS Pack Session"; OrderNo: Code[20]): Boolean
     var
@@ -408,6 +554,7 @@ codeunit 72334 "DOPSWHS Pack Station Mgmt"
     var
         Assignment: Record "DOPSWHS Pick Tote Assignment";
         Line: Record "DOPSWHS Pack Session Line";
+        PackingOrder: Record "DOPSWHS Packing Order";
     begin
         PostOrder(PackSession, OrderNo);
         QueuePackReceiptPrint(OrderNo);
@@ -416,9 +563,17 @@ codeunit 72334 "DOPSWHS Pack Station Mgmt"
         Line.SetRange("Source Order No.", OrderNo);
         Line.ModifyAll("Order Completed", true);
 
-        Assignment.SetRange("LP No.", PackSession."Tote LP No.");
-        Assignment.SetRange("Source Order No.", OrderNo);
-        Assignment.ModifyAll(Packed, true);
+        if not PackSession."Direct Order Packing" then begin
+            Assignment.SetRange("LP No.", PackSession."Tote LP No.");
+            Assignment.SetRange("Source Order No.", OrderNo);
+            Assignment.ModifyAll(Packed, true);
+        end;
+
+        if PackSession."Direct Order Packing" and PackingOrder.Get(OrderNo) then begin
+            PackingOrder.Status := PackingOrder.Status::Completed;
+            PackingOrder."Completed DateTime" := CurrentDateTime();
+            PackingOrder.Modify(true);
+        end;
 
         PackSession."Orders Completed" += 1;
         if PackSession."Orders Completed" >= PackSession."Orders Total" then begin
@@ -620,6 +775,7 @@ codeunit 72334 "DOPSWHS Pack Station Mgmt"
 
     var
         NoOrdersForToteErr: Label 'No open orders are assigned to tote %1. Assign the tote during picking first.', Comment = '%1 = LP No.';
+        NoOrdersForPickErr: Label 'No packable orders found for pick %1.', Comment = '%1 = Pick No.';
         NoLinesForOrderErr: Label 'No packable lines found for order %1.', Comment = '%1 = Sales Order No.';
         NoOpenOrderErr: Label 'There is no open order to attach a box to in this session.';
         UnexpectedItemErr: Label 'Item %1 is not expected in tote %2 or its orders are already fully packed.', Comment = '%1 = Item No., %2 = LP No.';

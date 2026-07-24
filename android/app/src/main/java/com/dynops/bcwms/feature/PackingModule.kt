@@ -64,9 +64,8 @@ fun PackingModule() {
 
     val sel = selectedPick
     if (sel != null) {
-        val pickOrders = orders.filter { it.optString("pickNo") == sel }
-            .map { it.optString("salesOrderNo") }
-        PickPackingFlow(pickNo = sel, orderNos = pickOrders, onBack = { selectedPick = null; load() })
+        val pickOrderCount = orders.count { it.optString("pickNo") == sel }
+        PickPackingDocument(pickNo = sel, orderCount = pickOrderCount, onBack = { selectedPick = null; load() })
         return
     }
 
@@ -130,39 +129,381 @@ fun PackingModule() {
 }
 
 /**
- * Bir pick'in siparişlerini SIRAYLA paketler. currentIndex ile ilerler; bir
- * sipariş tamamlanınca "fatura basılıyor" bildirimi gösterilir ve otomatik
- * sonrakine geçilir. Hepsi bitince pick özeti gösterilip listeye dönülür.
+ * ELOG "ürün-önce" paketleme: pick'in TÜM siparişleri tek session'da toplanır.
+ * Operatör sepetten eline gelen ürünü okutur; BC (ScanItem) o ürünü doğru
+ * siparişe yazar. Satırlar siparişe göre gruplanıp bilgi amaçlı gösterilir.
+ * Bir siparişin payı bitince o sipariş için kutu istenir; kutulanınca sevk+
+ * fatura kesilir. Tüm siparişler kapanınca pick özeti gösterilir.
  */
 @Composable
-private fun PickPackingFlow(pickNo: String, orderNos: List<String>, onBack: () -> Unit) {
-    var index by remember(pickNo) { mutableStateOf(0) }
-    var doneCount by remember(pickNo) { mutableStateOf(0) }
+private fun PickPackingDocument(
+    pickNo: String,
+    orderCount: Int,
+    onBack: () -> Unit,
+) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var sessionId by remember(pickNo) { mutableStateOf(0) }
+    var lines by remember(pickNo) { mutableStateOf<List<JSONObject>>(emptyList()) }
+    // Sipariş no -> müşteri adı (packingOrders'tan; başlıkta göstermek için).
+    var customerByOrder by remember(pickNo) { mutableStateOf<Map<String, String>>(emptyMap()) }
+    var status by remember(pickNo) { mutableStateOf("") }
+    var busy by remember(pickNo) { mutableStateOf(false) }
+    var itemInput by remember(pickNo) { mutableStateOf("") }
+    var boxInput by remember(pickNo) { mutableStateOf("") }
+    var showBoxScan by remember(pickNo) { mutableStateOf(false) }
     var pickDone by remember(pickNo) { mutableStateOf(false) }
 
-    if (pickDone || orderNos.isEmpty()) {
-        PickCompleteSummary(pickNo = pickNo, orderCount = orderNos.size, onBack = onBack)
+    suspend fun reloadLines() {
+        if (sessionId > 0) {
+            val l = BcApi.get(context, "packSessionLines?\$filter=sessionEntryNo eq $sessionId&\$top=1000")
+            lines = if (l.ok) BcApi.parseValueArray(l.body) else emptyList()
+        }
+    }
+
+    // Müşteri adlarını packingOrders'tan (pick filtresiyle) bir kez çek.
+    suspend fun loadCustomers() {
+        val r = BcApi.get(context, "packingOrders?\$filter=pickNo eq '$pickNo'&\$top=500")
+        if (r.ok) {
+            customerByOrder = BcApi.parseValueArray(r.body).associate {
+                it.optString("salesOrderNo") to it.optString("customerName")
+            }
+        }
+    }
+
+    suspend fun startIfNeeded() {
+        status = "Paketleme başlatılıyor..."
+        val me = BcApi.currentUserId(context)
+        val body = JSONObject().apply {
+            put("pickNo", pickNo)
+            put("userId", me)
+        }.toString()
+        val r = BcApi.boundAction(context, "packOps", "", "startPickPacking", body)
+        if (r.ok) {
+            sessionId = BcApi.scalarValue(r.body).toIntOrNull() ?: 0
+            loadCustomers()
+            reloadLines()
+            status = "🔴 Sepetteki ürünleri okutun — sistem doğru siparişe yazar"
+        } else if (r.httpCode == 404) {
+            // startPickPacking AL action'ı henüz publish edilmemiş — sessiz
+            // "hazırlanıyor" durumu (korkutucu HATA yazısı gösterme).
+            status = "⏳ Paketleme hazırlanıyor…"
+        } else status = "⏳ Paketleme hazırlanıyor…"
+    }
+
+    // ELOG katı kilit: bir siparişe başlandıysa (kısmen paketli ama bitmemiş),
+    // o siparişin TÜM ürünleri bitmeden başka siparişin ürünü okutulamaz.
+    // activeOrder = ilk kısmen-paketli sipariş; yoksa null (serbest okutma).
+    fun activeLockedOrder(): String? =
+        lines.groupBy { it.optString("sourceOrderNo") }
+            .entries
+            .firstOrNull { (_, ords) ->
+                val packed = ords.sumOf { it.optDouble("qtyPacked") }
+                val expected = ords.sumOf { it.optDouble("qtyExpected") }
+                packed > 0 && packed < expected
+            }?.key
+
+    fun scanItem(raw: String) {
+        if (raw.isBlank() || sessionId == 0 || busy) return
+        val resolved = BarcodeIntentResolver.resolve(raw)
+        val itemNo = (resolved.itemNo ?: resolved.value).trim()
+        // Aktif (yarım) sipariş varsa, okutulan ürün o siparişin BEKLEYEN bir
+        // satırı değilse reddet — "önce bu siparişi bitir".
+        val locked = activeLockedOrder()
+        if (locked != null) {
+            val itemBelongsToActive = lines.any {
+                it.optString("sourceOrderNo") == locked &&
+                    it.optString("itemNo").equals(itemNo, ignoreCase = true) &&
+                    it.optDouble("qtyPacked") < it.optDouble("qtyExpected")
+            }
+            if (!itemBelongsToActive) {
+                status = "🔒 Önce $locked siparişini bitir — bu ürün o siparişte beklenmiyor"
+                itemInput = ""
+                return
+            }
+        }
+        scope.launch {
+            busy = true
+            status = "$itemNo kontrol ediliyor..."
+            val body = JSONObject().apply {
+                put("sessionId", sessionId)
+                put("itemNo", itemNo)
+                put("qty", 1)
+            }.toString()
+            val r = BcApi.boundAction(context, "packOps", "", "scanItem", body)
+            if (r.ok) {
+                itemInput = ""
+                // ScanItem dönüşü: bu okutmayla TAMAMLANAN sipariş no'ları (virgüllü).
+                val completed = BcApi.scalarValue(r.body).split(",").map { it.trim() }.filter { it.isNotBlank() }
+                reloadLines()
+                status = when {
+                    completed.isNotEmpty() -> "🧾 ${completed.joinToString(", ")} tamamlandı — kutu okutun"
+                    else -> "✅ $itemNo paketlendi"
+                }
+            } else status = "❌ ${BcApi.errorMessage(r.body)} (HTTP ${r.httpCode})"
+            busy = false
+        }
+    }
+
+    // Bir sipariş için kutu bağla (boş → BC karton üretir) → sevk+fatura+fiş.
+    fun scanBox(orderNo: String, raw: String) {
+        if (sessionId == 0 || busy) return
+        val boxLp = BarcodeIntentResolver.resolve(raw).value.trim()
+        scope.launch {
+            busy = true
+            status = "📦 $orderNo için kutu bağlanıyor…"
+            val body = JSONObject().apply {
+                put("sessionId", sessionId)
+                put("orderNo", orderNo)
+                put("boxLpNo", boxLp)
+                put("lpTemplateCode", "")
+            }.toString()
+            val r = BcApi.boundAction(context, "packOps", "", "setBoxForOrder", body)
+            if (r.ok) {
+                boxInput = ""; showBoxScan = false
+                reloadLines()
+                status = "🧾 $orderNo kutulandı · sevk+fatura+fiş kesildi"
+            } else status = "❌ ${BcApi.errorMessage(r.body)} (HTTP ${r.httpCode})"
+            busy = false
+        }
+    }
+
+    LaunchedEffect(pickNo) { busy = true; startIfNeeded(); busy = false }
+
+    if (pickDone) {
+        PickCompleteSummary(pickNo = pickNo, orderCount = orderCount, onBack = onBack)
         return
     }
 
-    // index sınır aşarsa pick tamamlandı.
-    if (index >= orderNos.size) {
-        LaunchedEffect(index) { pickDone = true }
-        return
-    }
+    // Satırları siparişe göre grupla (görsel bilgi). Her grup: sipariş no +
+    // müşteri + paketlenen/toplam. Bekleyen satır pembe, tamamlanan yeşil.
+    val byOrder = lines.groupBy { it.optString("sourceOrderNo") }
+    // Kutu bekleyen siparişler: tüm satırları paketlenmiş ama henüz kutusuz.
+    val boxNeeded = byOrder.filter { (_, ords) ->
+        ords.isNotEmpty() &&
+            ords.all { it.optDouble("qtyPacked") >= it.optDouble("qtyExpected") } &&
+            ords.any { it.optString("boxLpNo").isBlank() }
+    }.keys.toList()
+    // Tüm satırlar paketlendi + hepsi kutulandı → pick biter.
+    val allBoxed = lines.isNotEmpty() &&
+        lines.all { it.optDouble("qtyPacked") >= it.optDouble("qtyExpected") && it.optString("boxLpNo").isNotBlank() }
+    LaunchedEffect(allBoxed) { if (allBoxed) { kotlinx.coroutines.delay(900); pickDone = true } }
 
-    val orderNo = orderNos[index]
-    OrderPackingDocument(
-        orderNo = orderNo,
-        pickNo = pickNo,
-        position = index + 1,
-        total = orderNos.size,
-        onOrderCompleted = {
-            doneCount += 1
-            if (index + 1 >= orderNos.size) pickDone = true else index += 1
-        },
-        onBack = onBack,
-    )
+    val totalExpected = lines.sumOf { it.optDouble("qtyExpected") }
+    val totalPacked = lines.sumOf { it.optDouble("qtyPacked") }
+
+    Column(Modifier.fillMaxSize()) {
+        Column(Modifier.weight(1f).padding(12.dp)) {
+            TextButton(onClick = onBack) { Text("‹ Paketleme Listesi") }
+            // Session açılınca gerçek sipariş sayısı satırlardan; açılmadan
+            // liste kartından gelen orderCount kullanılır.
+            val orderCountShown = if (byOrder.isNotEmpty()) byOrder.size else orderCount
+            Card(modifier = Modifier.fillMaxWidth()) {
+                Column(Modifier.padding(14.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Surface(color = PackAccent.copy(alpha = 0.12f), shape = RoundedCornerShape(8.dp)) {
+                            Text("Pick $pickNo", Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
+                                fontWeight = FontWeight.Bold, fontSize = 12.sp, color = PackAccent)
+                        }
+                        Spacer(Modifier.weight(1f))
+                        Text("$orderCountShown sipariş · ${packQty(totalExpected)} ürün", fontSize = 12.sp, color = Color.Gray)
+                    }
+                    Spacer(Modifier.height(8.dp))
+                    LinearProgressIndicator(
+                        progress = { if (totalExpected > 0) (totalPacked / totalExpected).toFloat().coerceIn(0f, 1f) else 0f },
+                        modifier = Modifier.fillMaxWidth(),
+                        color = Color(0xFF2E7D32),
+                    )
+                    Text("Paketlenen: ${packQty(totalPacked)} / ${packQty(totalExpected)} ürün", fontSize = 12.sp)
+                }
+            }
+            Spacer(Modifier.height(8.dp))
+            StatusText(status)
+            Spacer(Modifier.height(8.dp))
+
+            // Kutu bekleyen sipariş(ler) varsa önce kutu adımı öne çıkar.
+            if (boxNeeded.isNotEmpty()) {
+                val orderNo = boxNeeded.first()
+                BoxForOrderCard(
+                    orderNo = orderNo,
+                    customer = customerByOrder[orderNo].orEmpty(),
+                    remaining = boxNeeded.size,
+                    busy = busy,
+                    showScan = showBoxScan,
+                    boxInput = boxInput,
+                    onBoxInput = { boxInput = it },
+                    onUseCarton = { scanBox(orderNo, "") },
+                    onScanBox = { scanBox(orderNo, it) },
+                    onToggleScan = { showBoxScan = it },
+                )
+                Spacer(Modifier.height(10.dp))
+            } else {
+                // Ürün okut alanı — sadece barkod okutarak, doğru siparişe otomatik.
+                ScanField(
+                    label = "📷 Ürün okut",
+                    value = itemInput,
+                    onValueChange = { itemInput = it },
+                    modifier = Modifier.fillMaxWidth(),
+                    enabled = !busy && sessionId > 0,
+                    onScanned = { scanItem(it) },
+                )
+                Spacer(Modifier.height(10.dp))
+            }
+
+            val activeOrder = activeLockedOrder()
+            Text("Siparişler", fontWeight = FontWeight.Bold)
+            Text(
+                if (activeOrder != null) "🔒 Önce $activeOrder siparişini bitir — sadece o siparişin ürünleri okutulabilir."
+                else "Ürünü okut, sistem doğru siparişe yazar. Kırmızı = bekliyor, yeşil = tamam.",
+                fontSize = 11.sp, color = if (activeOrder != null) Color(0xFF1565C0) else Color.Gray,
+            )
+            Spacer(Modifier.height(8.dp))
+            LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                byOrder.forEach { (orderNo, ords) ->
+                    val orderDone = ords.all { it.optDouble("qtyPacked") >= it.optDouble("qtyExpected") }
+                    val boxed = ords.any { it.optString("boxLpNo").isNotBlank() }
+                    val isActive = orderNo == activeOrder
+                    val remainingInOrder = ords.count { it.optDouble("qtyPacked") < it.optDouble("qtyExpected") }
+                    item(key = "hdr-$orderNo") {
+                        Row(Modifier.fillMaxWidth().padding(top = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Surface(
+                                color = if (isActive) Color(0xFF1565C0) else PackAccent.copy(alpha = 0.12f),
+                                shape = RoundedCornerShape(8.dp),
+                            ) {
+                                Text("${if (isActive) "🔵 " else "🧾 "}$orderNo", Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
+                                    fontWeight = FontWeight.Bold, fontSize = 13.sp,
+                                    color = if (isActive) Color.White else PackAccent)
+                            }
+                            Spacer(Modifier.width(8.dp))
+                            Text(customerByOrder[orderNo].orEmpty(), fontSize = 12.sp, color = Color.Gray, modifier = Modifier.weight(1f))
+                            Text(
+                                when {
+                                    boxed -> "✅ kutulandı"
+                                    orderDone -> "📦 kutu bekliyor"
+                                    isActive -> "$remainingInOrder ürün kaldı"
+                                    else -> "${ords.count { l -> l.optDouble("qtyPacked") >= l.optDouble("qtyExpected") }}/${ords.size}"
+                                },
+                                fontSize = 11.sp,
+                                color = when {
+                                    boxed -> Color(0xFF2E7D32)
+                                    orderDone -> Color(0xFFEF6C00)
+                                    isActive -> Color(0xFF1565C0)
+                                    else -> Color.Gray
+                                },
+                            )
+                        }
+                    }
+                    items(ords, key = { it.optInt("lineNo") }) { line ->
+                        val done = line.optDouble("qtyPacked") >= line.optDouble("qtyExpected")
+                        Card(
+                            colors = CardDefaults.cardColors(containerColor = if (done) Color(0xFFE8F5E9) else Color(0xFFFFF0F0)),
+                            border = BorderStroke(1.dp, if (done) Color(0xFF66BB6A) else Color(0xFFF3BDBD)),
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
+                                Text(if (done) "✅" else "📦", fontSize = 20.sp)
+                                Spacer(Modifier.width(10.dp))
+                                Column(Modifier.weight(1f)) {
+                                    Text(line.optString("itemNo"), fontWeight = FontWeight.Bold)
+                                    Text(line.optString("description"), fontSize = 12.sp, color = Color.Gray)
+                                }
+                                Spacer(Modifier.width(8.dp))
+                                Text(
+                                    "${packQty(line.optDouble("qtyPacked"))}/${packQty(line.optDouble("qtyExpected"))}",
+                                    fontSize = 20.sp, fontWeight = FontWeight.Black,
+                                    color = if (done) Color(0xFF2E7D32) else Color(0xFFC62828),
+                                )
+                            }
+                        }
+                    }
+                }
+                if (lines.isEmpty() && !busy) item { EmptyState("Paketlenecek satır bulunamadı.") }
+            }
+        }
+        BottomActionBar {
+            OutlinedButton(
+                onClick = { scope.launch { busy = true; reloadLines(); busy = false } },
+                enabled = !busy,
+                modifier = Modifier.fillMaxWidth(),
+            ) { Text("🔄 Yenile") }
+        }
+    }
+}
+
+/** Bir sipariş için kutu seçim kartı — "karton üret" birincil, "kendi kutunu okut" ikincil. */
+@Composable
+private fun BoxForOrderCard(
+    orderNo: String,
+    customer: String,
+    remaining: Int,
+    busy: Boolean,
+    showScan: Boolean,
+    boxInput: String,
+    onBoxInput: (String) -> Unit,
+    onUseCarton: () -> Unit,
+    onScanBox: (String) -> Unit,
+    onToggleScan: (Boolean) -> Unit,
+) {
+    Card(
+        colors = CardDefaults.cardColors(containerColor = Color.White),
+        border = BorderStroke(1.dp, Color(0xFFE0E0E0)),
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Column(Modifier.fillMaxWidth().padding(16.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("✅", fontSize = 18.sp)
+                Spacer(Modifier.width(6.dp))
+                Column(Modifier.weight(1f)) {
+                    Text("🧾 $orderNo paketlendi", fontWeight = FontWeight.Bold, fontSize = 16.sp, color = Color(0xFF2E7D32))
+                    if (customer.isNotBlank()) Text(customer, fontSize = 12.sp, color = Color.Gray)
+                }
+                if (remaining > 1) Text("+${remaining - 1} bekliyor", fontSize = 11.sp, color = Color(0xFFEF6C00))
+            }
+            Text("Bu sipariş için kutu seç. Kendi kutunu okutabilir ya da karton ürettirebilirsin.", fontSize = 12.sp, color = Color.Gray)
+            Spacer(Modifier.height(14.dp))
+            Card(
+                colors = CardDefaults.cardColors(containerColor = Color(0xFFFFF3E0)),
+                border = BorderStroke(1.dp, Color(0xFFEF6C00).copy(alpha = 0.4f)),
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text("📦", fontSize = 26.sp)
+                    Spacer(Modifier.width(12.dp))
+                    Column(Modifier.weight(1f)) {
+                        Text("Önerilen kutu", fontSize = 11.sp, color = Color(0xFFBF360C))
+                        Text("Karton kutu üretilecek", fontWeight = FontWeight.Bold, color = Color(0xFFBF360C))
+                    }
+                }
+            }
+            Spacer(Modifier.height(12.dp))
+            Button(
+                onClick = onUseCarton,
+                enabled = !busy,
+                modifier = Modifier.fillMaxWidth().height(50.dp),
+            ) { Text("✓ Karton üret ve siparişi kapat", fontWeight = FontWeight.Bold) }
+            Spacer(Modifier.height(10.dp))
+            if (!showScan) {
+                TextButton(onClick = { onToggleScan(true) }, enabled = !busy, modifier = Modifier.fillMaxWidth()) {
+                    Text("📷 Kendi kutunu okut")
+                }
+            } else {
+                Text("Sevk kutusunun barkodunu okut:", fontSize = 12.sp, color = Color.Gray)
+                Spacer(Modifier.height(6.dp))
+                ScanField(
+                    label = "📦 Kutu / karton okut",
+                    value = boxInput,
+                    onValueChange = onBoxInput,
+                    modifier = Modifier.fillMaxWidth(),
+                    enabled = !busy,
+                    onScanned = onScanBox,
+                )
+                Spacer(Modifier.height(6.dp))
+                TextButton(onClick = { onToggleScan(false) }, enabled = !busy, modifier = Modifier.fillMaxWidth()) {
+                    Text("‹ Vazgeç, karton üretimine dön", fontSize = 12.sp)
+                }
+            }
+        }
+    }
 }
 
 @Composable
@@ -180,319 +521,6 @@ private fun PickCompleteSummary(pickNo: String, orderCount: Int, onBack: () -> U
         Spacer(Modifier.height(24.dp))
         Button(onClick = onBack, modifier = Modifier.fillMaxWidth().height(52.dp)) {
             Text("‹ Paketleme Listesi", fontWeight = FontWeight.Bold)
-        }
-    }
-}
-
-/**
- * Tek siparişi paketler: session başlat → line'ları okut → tamamlanınca
- * "fatura basılıyor" bildirimi + onOrderCompleted (üst akış sonrakine geçer).
- */
-@Composable
-private fun OrderPackingDocument(
-    orderNo: String,
-    pickNo: String,
-    position: Int,
-    total: Int,
-    onOrderCompleted: () -> Unit,
-    onBack: () -> Unit,
-) {
-    val context = LocalContext.current
-    val scope = rememberCoroutineScope()
-    var queue by remember(orderNo) { mutableStateOf<JSONObject?>(null) }
-    var lines by remember(orderNo) { mutableStateOf<List<JSONObject>>(emptyList()) }
-    var sessionId by remember(orderNo) { mutableStateOf(0) }
-    var status by remember(orderNo) { mutableStateOf("") }
-    var busy by remember(orderNo) { mutableStateOf(false) }
-    var itemInput by remember(orderNo) { mutableStateOf("") }
-    var boxInput by remember(orderNo) { mutableStateOf("") }
-    // ELOG: kutu adımında varsayılan "karton üret" öne çıkar; kullanıcı kendi
-    // kutusunu okutmak isterse bu bayrakla scan alanı açılır.
-    var showBoxScan by remember(orderNo) { mutableStateOf(false) }
-    var invoicing by remember(orderNo) { mutableStateOf(false) }
-
-    suspend fun reloadNow() {
-        val q = BcApi.get(context, "packingOrders('$orderNo')")
-        if (q.ok) {
-            queue = JSONObject(q.body)
-            sessionId = queue?.optInt("sessionEntryNo") ?: 0
-        }
-        if (sessionId > 0) {
-            val l = BcApi.get(context, "packSessionLines?\$filter=sessionEntryNo eq $sessionId&\$top=500")
-            lines = if (l.ok) BcApi.parseValueArray(l.body) else emptyList()
-        }
-    }
-
-    suspend fun startIfNeeded() {
-        reloadNow()
-        if (sessionId > 0) return
-        status = "Paketleme başlatılıyor..."
-        // ELOG: paketlemeyi ÜSTLENEN WMS operatörünü kaydet (başlatan = üstlenen).
-        // Eski publish'te startPackingAs yoksa (400/404) düz startPacking'e düş.
-        val me = BcApi.currentUserId(context)
-        var r = if (me.isNotBlank())
-            BcApi.boundAction(context, "packingOrders", orderNo, "startPackingAs",
-                JSONObject().apply { put("userId", me) }.toString())
-        else BcApi.boundAction(context, "packingOrders", orderNo, "startPacking", "{}")
-        if (!r.ok && (r.httpCode == 400 || r.httpCode == 404))
-            r = BcApi.boundAction(context, "packingOrders", orderNo, "startPacking", "{}")
-        if (r.ok) {
-            sessionId = BcApi.scalarValue(r.body).toIntOrNull() ?: 0
-            status = "🔴 Eksik ürünleri sırayla okutun"
-            reloadNow()
-        } else status = "HATA: ${BcApi.errorMessage(r.body)} (HTTP ${r.httpCode})"
-    }
-
-    fun scanItem(raw: String) {
-        if (raw.isBlank() || sessionId == 0 || busy || invoicing) return
-        val resolved = BarcodeIntentResolver.resolve(raw)
-        val itemNo = (resolved.itemNo ?: resolved.value).trim()
-        scope.launch {
-            busy = true
-            status = "$itemNo kontrol ediliyor..."
-            val body = JSONObject().apply {
-                put("sessionId", sessionId)
-                put("itemNo", itemNo)
-                put("qty", 1)
-            }.toString()
-            val r = BcApi.boundAction(context, "packOps", "", "scanItem", body)
-            if (r.ok) {
-                itemInput = ""
-                reloadNow()
-                // ELOG kutu-sonra: ürünler bitse bile sipariş kutu okutulmadan
-                // KAPANMAZ (AL TryCompleteOrder kutu ister). Tüm satır yeşilse
-                // kutu adımı UI'da otomatik belirir (aşağıdaki allPacked).
-                val nowComplete = firstValue(queue ?: JSONObject(), "status").equals("Completed", true)
-                status = if (nowComplete) {
-                    invoicing = true; "🧾 $orderNo tamamlandı · fatura basılıyor…"
-                } else "✅ $itemNo paketlendi"
-            } else status = "❌ ${BcApi.errorMessage(r.body)} (HTTP ${r.httpCode})"
-            busy = false
-        }
-    }
-
-    // ELOG kutu-sonra: tüm ürünler okununca kutuyu okut → sipariş kapanır + fiş.
-    // Kutu barkodu boş bırakılırsa BC geçici karton (CARTON-S) üretir.
-    fun scanBox(raw: String) {
-        if (sessionId == 0 || busy || invoicing) return
-        val boxLp = BarcodeIntentResolver.resolve(raw).value.trim()
-        scope.launch {
-            busy = true
-            status = "📦 Kutu bağlanıyor…"
-            val body = JSONObject().apply {
-                put("sessionId", sessionId)
-                put("orderNo", orderNo)
-                put("boxLpNo", boxLp) // boş → BC karton üretir
-                put("lpTemplateCode", "")
-            }.toString()
-            val r = BcApi.boundAction(context, "packOps", "", "setBoxForOrder", body)
-            if (r.ok) {
-                boxInput = ""
-                reloadNow()
-                // setBoxForOrder içinde TryCompleteOrder çağrılır → sipariş kapanır.
-                val nowComplete = firstValue(queue ?: JSONObject(), "status").equals("Completed", true)
-                if (nowComplete) {
-                    invoicing = true
-                    status = "🧾 $orderNo kutulandı · sevk+fatura+fiş…"
-                } else status = "📦 Kutu bağlandı: ${BcApi.scalarValue(r.body)}"
-            } else status = "❌ ${BcApi.errorMessage(r.body)} (HTTP ${r.httpCode})"
-            busy = false
-        }
-    }
-
-    LaunchedEffect(orderNo) { busy = true; startIfNeeded(); busy = false }
-
-    // "Fatura basılıyor" bildirimi kısa süre gösterilip otomatik sonraki siparişe geçer.
-    LaunchedEffect(invoicing) {
-        if (invoicing) {
-            kotlinx.coroutines.delay(1400)
-            onOrderCompleted()
-        }
-    }
-
-    val expected = lines.sumOf { it.optDouble("qtyExpected") }
-    val packed = lines.sumOf { it.optDouble("qtyPacked") }
-    // Tüm satırlar tam paketlendi mi? Öyleyse kutu okutma adımı gösterilir.
-    val allPacked = lines.isNotEmpty() && lines.all { it.optDouble("qtyPacked") >= it.optDouble("qtyExpected") }
-
-    Column(Modifier.fillMaxSize()) {
-        Column(Modifier.weight(1f).padding(12.dp)) {
-            TextButton(onClick = onBack) { Text("‹ Paketleme Listesi") }
-            // Pick + sipariş başlığı — hangi pick'in kaçıncı siparişindeyiz.
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(containerColor = if (invoicing) Color(0xFFE8F5E9) else MaterialTheme.colorScheme.surface),
-            ) {
-                Column(Modifier.padding(14.dp)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Surface(color = PackAccent.copy(alpha = 0.12f), shape = RoundedCornerShape(8.dp)) {
-                            Text("Pick $pickNo", Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
-                                fontWeight = FontWeight.Bold, fontSize = 12.sp, color = PackAccent)
-                        }
-                        Spacer(Modifier.weight(1f))
-                        Text("Sipariş $position / $total", fontSize = 12.sp, color = Color.Gray)
-                    }
-                    Spacer(Modifier.height(6.dp))
-                    Text("🧾 $orderNo", fontWeight = FontWeight.Bold, fontSize = 20.sp)
-                    Text(queue?.optString("customerName").orEmpty(), fontSize = 14.sp)
-                    queue?.optString("startedByUser")?.takeIf { it.isNotBlank() }?.let {
-                        Text("👤 Paketleyen: $it", fontSize = 11.sp, color = Color.Gray)
-                    }
-                    Spacer(Modifier.height(8.dp))
-                    LinearProgressIndicator(
-                        progress = { if (expected > 0) (packed / expected).toFloat().coerceIn(0f, 1f) else 0f },
-                        modifier = Modifier.fillMaxWidth(),
-                        color = if (invoicing) Color(0xFF2E7D32) else Color(0xFFC62828),
-                    )
-                    Text("Paketlenen: ${packQty(packed)} / ${packQty(expected)}", fontSize = 12.sp)
-                }
-            }
-            Spacer(Modifier.height(8.dp))
-            StatusText(status)
-            Spacer(Modifier.height(8.dp))
-
-            when {
-                invoicing -> {
-                    Card(colors = CardDefaults.cardColors(containerColor = Color(0xFFE8F5E9)), modifier = Modifier.fillMaxWidth()) {
-                        Column(Modifier.fillMaxWidth().padding(20.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                            Text("🧾 SİPARİŞ TAMAMLANDI", color = Color(0xFF2E7D32), fontWeight = FontWeight.Black, fontSize = 18.sp)
-                            Text("Sevk + fatura kesiliyor… Sonraki siparişe geçiliyor.", color = Color(0xFF2E7D32), fontSize = 12.sp)
-                        }
-                    }
-                }
-                // ELOG kutu-sonra: ürünler bitti → kutuyu okut → sipariş kapanır + fiş.
-                allPacked -> {
-                    Card(
-                        colors = CardDefaults.cardColors(containerColor = Color.White),
-                        border = BorderStroke(1.dp, Color(0xFFE0E0E0)),
-                        modifier = Modifier.fillMaxWidth(),
-                    ) {
-                        Column(Modifier.fillMaxWidth().padding(16.dp)) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Text("✅", fontSize = 18.sp)
-                                Spacer(Modifier.width(6.dp))
-                                Text("Tüm ürünler paketlendi", fontWeight = FontWeight.Bold, fontSize = 16.sp, color = Color(0xFF2E7D32))
-                            }
-                            Text("Şimdi sevk kutusunu seç. Kendi kutunu okutabilir ya da sistemin karton üretmesini sağlayabilirsin.", fontSize = 12.sp, color = Color.Gray)
-                            Spacer(Modifier.height(14.dp))
-
-                            // Önerilen: sistem karton üretsin (birincil aksiyon).
-                            Card(
-                                colors = CardDefaults.cardColors(containerColor = Color(0xFFFFF3E0)),
-                                border = BorderStroke(1.dp, Color(0xFFEF6C00).copy(alpha = 0.4f)),
-                                modifier = Modifier.fillMaxWidth(),
-                            ) {
-                                Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
-                                    Text("📦", fontSize = 26.sp)
-                                    Spacer(Modifier.width(12.dp))
-                                    Column(Modifier.weight(1f)) {
-                                        Text("Önerilen kutu", fontSize = 11.sp, color = Color(0xFFBF360C))
-                                        Text("Karton kutu üretilecek", fontWeight = FontWeight.Bold, color = Color(0xFFBF360C))
-                                    }
-                                }
-                            }
-                            Spacer(Modifier.height(12.dp))
-                            Button(
-                                onClick = { scanBox("") },
-                                enabled = !busy,
-                                modifier = Modifier.fillMaxWidth().height(50.dp),
-                            ) { Text("✓ Karton üret ve siparişi kapat", fontWeight = FontWeight.Bold) }
-
-                            Spacer(Modifier.height(10.dp))
-                            if (!showBoxScan) {
-                                TextButton(
-                                    onClick = { showBoxScan = true },
-                                    enabled = !busy,
-                                    modifier = Modifier.fillMaxWidth(),
-                                ) { Text("📷 Kendi kutunu okut") }
-                            } else {
-                                Text("Sevk kutusunun barkodunu okut:", fontSize = 12.sp, color = Color.Gray)
-                                Spacer(Modifier.height(6.dp))
-                                ScanField(
-                                    label = "📦 Kutu / karton okut",
-                                    value = boxInput,
-                                    onValueChange = { boxInput = it },
-                                    modifier = Modifier.fillMaxWidth(),
-                                    enabled = !busy,
-                                    onScanned = { scanBox(it) },
-                                )
-                                Spacer(Modifier.height(6.dp))
-                                TextButton(
-                                    onClick = { showBoxScan = false; boxInput = "" },
-                                    enabled = !busy,
-                                    modifier = Modifier.fillMaxWidth(),
-                                ) { Text("‹ Vazgeç, karton üretimine dön", fontSize = 12.sp) }
-                            }
-                        }
-                    }
-                }
-                else -> {
-                    ScanField(
-                        label = "📷 Ürün okut",
-                        value = itemInput,
-                        onValueChange = { itemInput = it },
-                        modifier = Modifier.fillMaxWidth(),
-                        enabled = !busy,
-                        onScanned = { scanItem(it) },
-                    )
-                }
-            }
-            Spacer(Modifier.height(8.dp))
-            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                Column(Modifier.weight(1f)) {
-                    Text("Paketlenecek ürünler", fontWeight = FontWeight.Bold)
-                    Text("Kırmızı = bekliyor · Yeşil = paketlendi", fontSize = 11.sp, color = Color.Gray)
-                }
-                val doneCount = lines.count { it.optDouble("qtyPacked") >= it.optDouble("qtyExpected") }
-                Surface(color = PackAccent.copy(alpha = 0.12f), shape = RoundedCornerShape(8.dp)) {
-                    Text(
-                        "$doneCount/${lines.size}",
-                        Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
-                        fontWeight = FontWeight.Bold, fontSize = 14.sp, color = PackAccent,
-                    )
-                }
-            }
-            Spacer(Modifier.height(8.dp))
-            LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                items(lines, key = { it.optInt("lineNo") }) { line ->
-                    val done = line.optDouble("qtyPacked") >= line.optDouble("qtyExpected")
-                    Card(
-                        // Toplama ekranıyla tutarlı: bekleyen satırlar yumuşak pembe zemin.
-                        colors = CardDefaults.cardColors(containerColor = if (done) Color(0xFFE8F5E9) else Color(0xFFFFF0F0)),
-                        border = BorderStroke(1.dp, if (done) Color(0xFF66BB6A) else Color(0xFFF3BDBD)),
-                        modifier = Modifier.fillMaxWidth(),
-                    ) {
-                        Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
-                            Text(if (done) "✅" else "📦", fontSize = 20.sp)
-                            Spacer(Modifier.width(10.dp))
-                            Column(Modifier.weight(1f)) {
-                                Text(line.optString("itemNo"), fontWeight = FontWeight.Bold)
-                                Text(line.optString("description"), fontSize = 12.sp, color = Color.Gray)
-                            }
-                            Spacer(Modifier.width(8.dp))
-                            Text(
-                                "${packQty(line.optDouble("qtyPacked"))}/${packQty(line.optDouble("qtyExpected"))}",
-                                fontSize = 20.sp, fontWeight = FontWeight.Black,
-                                color = if (done) Color(0xFF2E7D32) else Color(0xFFC62828),
-                            )
-                        }
-                    }
-                }
-                if (lines.isEmpty() && !busy) item { EmptyState("Sipariş satırları hazırlanamadı.") }
-            }
-        }
-        BottomActionBar {
-            OutlinedButton(
-                onClick = { scope.launch { busy = true; reloadNow(); busy = false } },
-                enabled = !busy && !invoicing,
-                modifier = Modifier.weight(1f),
-            ) { Text("🔄 Yenile") }
-            // Sonraki siparişi elle atlama (isteğe bağlı).
-            OutlinedButton(
-                onClick = { onOrderCompleted() },
-                enabled = !busy && !invoicing && position < total,
-                modifier = Modifier.weight(1f),
-            ) { Text("Sonraki ›") }
         }
     }
 }
