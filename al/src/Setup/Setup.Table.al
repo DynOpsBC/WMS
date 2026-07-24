@@ -161,6 +161,14 @@ table 72000 "DOPSWHS Setup"
             DataClassification = CustomerContent;
             TableRelation = "No. Series";
         }
+        field(260; "Default Quarantine Bin Code"; Code[20])
+        {
+            // GKK: "DOPSWHS QC Required" item'lar mal kabulde bu bin'e yönlendirilir.
+            // Boşsa QC Required item'lar için otomatik bin yönlendirmesi yapılmaz,
+            // sadece Quality Order açılır (mevcut bin'de kalır).
+            Caption = 'Default Quarantine Bin Code';
+            DataClassification = CustomerContent;
+        }
     }
 
     keys

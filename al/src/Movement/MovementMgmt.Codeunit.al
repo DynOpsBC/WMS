@@ -97,25 +97,24 @@ codeunit 72045 "DOPSWHS Movement Mgmt"
     procedure RegisterDirected(var WhseActivityHeader: Record "Warehouse Activity Header")
     var
         WhseActivityLine: Record "Warehouse Activity Line";
-        // QM (BC 28) devre dışı — bkz. QualityMgmtBridge.Codeunit.al
-        // QualityBridge: Codeunit "DOPSWHS Quality Mgmt Bridge";
+        // Microsoft Quality Management (BC 28) köprüsü hâlâ devre dışı (bkz.
+        // QualityMgmtBridge.Codeunit.al — platform 24.0'da MS QM sembolleri yok).
+        // Bunun yerine uygulamanın kendi DOPSWHS Quality Order tablosu üzerinden
+        // çalışan "DOPSWHS Quality Mgmt" ile bloklama uygulanıyor (GKK).
+        QualityMgmt: Codeunit "DOPSWHS Quality Mgmt";
         WhseActivityRegister: Codeunit "Whse.-Activity-Register";
         CustomDimensions: Dictionary of [Text, Text];
     begin
         CustomDimensions.Add('Category', 'Movement');
         Session.LogMessage('DOPSWHS-Move-RegisterDirected', StrSubstNo('Register warehouse activity %1 type %2', WhseActivityHeader."No.", Format(WhseActivityHeader.Type)), Verbosity::Normal, DataClassification::SystemMetadata, TelemetryScope::ExtensionPublisher, CustomDimensions);
 
-        // MS Quality Management lot/serial block guard — QM (BC 28) devre dışı.
-        // BC 28'e geçince aşağıdaki bloğun yorumunu kaldırın.
-        // WhseActivityLine.SetRange("Activity Type", WhseActivityHeader.Type);
-        // WhseActivityLine.SetRange("No.", WhseActivityHeader."No.");
-        // if WhseActivityLine.FindSet() then
-        //     repeat
-        //         QualityBridge.VerifyNotBlocked(
-        //             WhseActivityLine."Lot No.",
-        //             WhseActivityLine."Serial No.",
-        //             '');
-        //     until WhseActivityLine.Next() = 0;
+        // GKK blok kontrolü — bkz. DOPSWHS Pick Mgmt.RegisterPick ile aynı desen.
+        WhseActivityLine.SetRange("Activity Type", WhseActivityHeader.Type);
+        WhseActivityLine.SetRange("No.", WhseActivityHeader."No.");
+        if WhseActivityLine.FindSet() then
+            repeat
+                QualityMgmt.VerifyNotBlocked(WhseActivityLine."LP No.", WhseActivityLine."Item No.", WhseActivityLine."Bin Code");
+            until WhseActivityLine.Next() = 0;
 
         WhseActivityLine.SetRange("Activity Type", WhseActivityHeader.Type);
         WhseActivityLine.SetRange("No.", WhseActivityHeader."No.");

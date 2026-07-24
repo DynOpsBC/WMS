@@ -2,7 +2,86 @@ codeunit 72255 "DOPSWHS Quality Mgmt"
 {
     // Quality inspection orders, managed from the mobile app. A quality order gates goods (typically
     // received or produced) until an inspector passes/fails them; failing routes to a quarantine bin.
+    //
+    // NOT: Bu dosyaya yapılan GKK genişletmesi bu ortamda derlenmedi (BC sembol paketi/sandbox
+    // erişimi yok). Merge öncesi VS Code + AL derleyicisiyle veya bir BC sandbox'ta doğrulanmalı.
+    //
+    // Bu codeunit, BC v28'e özgü Microsoft Quality Management eklentisine bağımlı olan
+    // (ve bu yüzden devre dışı bırakılmış — bkz. QualityMgmtBridge.Codeunit.al) yol yerine,
+    // uygulamanın kendi "DOPSWHS Quality Order" tablosunu kullanır. Bu tablo ve mobil API
+    // (QualityOrderApi.Page.al) zaten mevcuttu; eksik olan tek şey gerçek akışlara (mal kabul,
+    // pick, movement) bağlanmasıydı.
     Access = Public;
+
+    /// <summary>
+    /// Verilen LP/Item/Bin için açık (Open veya InProgress) bir Quality Order varsa true döner.
+    /// LP No. öncelikli eşleşme kriteridir (birim-bazlı blok); LP yoksa Item+Bin fallback kullanılır.
+    /// </summary>
+    procedure IsBlocked(LpNo: Code[20]; ItemNo: Code[20]; BinCode: Code[20]): Boolean
+    var
+        QualityOrder: Record "DOPSWHS Quality Order";
+    begin
+        exit(FindBlockingOrder(LpNo, ItemNo, BinCode, QualityOrder));
+    end;
+
+    /// <summary>
+    /// Hard guard — blok varsa Error fırlatır. Hata metni mobil/web QcErrorParser'ın
+    /// yakalayabileceği formatta ("blocked by quality order QO-...").
+    /// </summary>
+    procedure VerifyNotBlocked(LpNo: Code[20]; ItemNo: Code[20]; BinCode: Code[20])
+    var
+        QualityOrder: Record "DOPSWHS Quality Order";
+    begin
+        if FindBlockingOrder(LpNo, ItemNo, BinCode, QualityOrder) then
+            Error(QcBlockedErr, QualityOrder."No.");
+    end;
+
+    local procedure FindBlockingOrder(LpNo: Code[20]; ItemNo: Code[20]; BinCode: Code[20]; var QualityOrder: Record "DOPSWHS Quality Order"): Boolean
+    begin
+        if (LpNo = '') and (ItemNo = '') then
+            exit(false);
+
+        QualityOrder.Reset();
+        QualityOrder.SetFilter(Status, '%1|%2', QualityOrder.Status::Open, QualityOrder.Status::InProgress);
+
+        if LpNo <> '' then begin
+            QualityOrder.SetRange("LP No.", LpNo);
+            if QualityOrder.FindFirst() then
+                exit(true);
+            QualityOrder.SetRange("LP No.");
+        end;
+
+        // LP yoksa (henüz LP'ye toplanmamış satır) Item+Bin fallback.
+        if (ItemNo <> '') and (BinCode <> '') then begin
+            QualityOrder.SetRange("Item No.", ItemNo);
+            QualityOrder.SetRange("Bin Code", BinCode);
+            exit(QualityOrder.FindFirst());
+        end;
+
+        exit(false);
+    end;
+
+    /// <summary>
+    /// Mal kabulde Item."DOPSWHS QC Required" açıksa çağrılır: bir Quality Order açar ve
+    /// Setup'ta "Default Quarantine Bin Code" tanımlıysa hedef bin'i döndürür (çağıran taraf
+    /// Warehouse Receipt Line'ın Bin Code'unu buna göre günceller). Setup'ta karantina bin'i
+    /// tanımlı değilse boş döner — Quality Order yine de açılır, sadece bin yönlendirmesi
+    /// yapılmaz (mevcut bin'de kalır, blok yine Pick/Movement seviyesinde uygulanır).
+    /// </summary>
+    procedure CreateOrderForReceipt(ReceiptNo: Code[20]; ItemNo: Code[20]; Qty: Decimal; LocationCode: Code[10]; ReceivingBinCode: Code[20]; LpNo: Code[20]; var QuarantineBinCode: Code[20]): Code[20]
+    var
+        Setup: Record "DOPSWHS Setup";
+        TargetBinCode: Code[20];
+    begin
+        QuarantineBinCode := '';
+        TargetBinCode := ReceivingBinCode;
+        if Setup.Get('') and (Setup."Default Quarantine Bin Code" <> '') then begin
+            TargetBinCode := Setup."Default Quarantine Bin Code";
+            QuarantineBinCode := TargetBinCode;
+        end;
+
+        exit(CreateOrder(1, ReceiptNo, ItemNo, Qty, LocationCode, TargetBinCode, LpNo));  // 1 = Source Type::Receipt
+    end;
 
     /// <summary>Creates an open quality order and returns its No.</summary>
     procedure CreateOrder(SourceTypeOpt: Integer; SourceNo: Code[20]; ItemNo: Code[20]; Qty: Decimal; LocationCode: Code[10]; BinCode: Code[20]; LpNo: Code[20]): Code[20]
@@ -110,4 +189,7 @@ codeunit 72255 "DOPSWHS Quality Mgmt"
         Dimensions.Add('qualityOrderNo', QoNo);
         Session.LogMessage(EventId, StrSubstNo('Quality order %1', QoNo), Verbosity::Normal, DataClassification::SystemMetadata, TelemetryScope::ExtensionPublisher, Dimensions);
     end;
+
+    var
+        QcBlockedErr: Label 'Bu LP/madde açık bir Quality Order (%1) tarafından bloklanıyor. blocked by quality order %1', Comment = '%1 = quality order no.';
 }
