@@ -37,4 +37,10 @@ codeunit 72053 "DOPSWHS Webhook Mgmt"
     procedure OnPickReassigned(PickNo: Code[20]; FromUserId: Code[50]; ToUserId: Code[50])
     begin
     end;
+
+    // SM-03: Servis Yönetimi SLA ihlali event'i — DOPSWHS SLA Monitor tarafından tetiklenir.
+    [BusinessEvent(false)]
+    procedure OnWorkOrderSLABreached(WorkOrderNo: Code[20]; BreachType: Text[50])
+    begin
+    end;
 }
