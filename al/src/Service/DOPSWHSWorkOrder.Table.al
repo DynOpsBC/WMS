@@ -1,4 +1,4 @@
-table 72033 "DOPSWHS Work Order"
+table 72040 "DOPSWHS Work Order"
 {
     // NOT: Bu obje bu ortamda derlenmedi (BC sembol paketi/sandbox erişimi yok).
     // Merge öncesi VS Code + AL derleyicisiyle veya bir BC sandbox'ta doğrulanmalı.

@@ -1,4 +1,4 @@
-table 72029 "DOPSWHS Service Contract"
+table 72037 "DOPSWHS Service Contract"
 {
     // NOT: Bu obje bu ortamda derlenmedi. Merge öncesi doğrulanmalı.
     // SM-02.

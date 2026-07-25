@@ -1,4 +1,4 @@
-table 72030 "DOPSWHS Service SLA"
+table 72038 "DOPSWHS Service SLA"
 {
     // NOT: Bu obje bu ortamda derlenmedi. Merge öncesi doğrulanmalı.
     // SM-03: SLA parametreleri (müdahale süresi, tekrar arıza limiti) sözleşmeye

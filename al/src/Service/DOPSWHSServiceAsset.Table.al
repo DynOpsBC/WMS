@@ -1,4 +1,4 @@
-table 72028 "DOPSWHS Service Asset"
+table 72036 "DOPSWHS Service Asset"
 {
     // NOT: Bu obje bu ortamda derlenmedi (BC sembol paketi/sandbox erişimi yok).
     // Merge öncesi VS Code + AL derleyicisiyle veya bir BC sandbox'ta doğrulanmalı.

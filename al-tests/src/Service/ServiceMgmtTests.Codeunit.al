@@ -19,7 +19,14 @@
 // çağrıldığında "Journal Batch DOPSWHS-WO does not exist" ile patlar.
 codeunit 72142 "DOPSWHS Service Mgmt Tests"
 {
+    // NOT (derleyici düzeltmesi): [EventSubscriber] içeren test codeunit'leri AL0501
+    // gereği EventSubscriberInstance = Manual olmalı ve abonelik testin kendi
+    // "self" örneği üzerinde değil, BindSubscription ile bağlanan AYRI bir örnek
+    // üzerinde çalışır — bu yüzden yakalanan olay, o örneğin genel değişkenlerinden
+    // değil, o örnek üzerinden çağrılan public getter procedure'larından okunur
+    // (bkz. WasBreachEventFired/GetLastBreachedWorkOrderNo/GetLastBreachType).
     Subtype = Test;
+    EventSubscriberInstance = Manual;
 
     // ------------------------------------------------------------------
     // Work Order lifecycle (DOPSWHS Work Order Svc)
@@ -149,16 +156,18 @@ codeunit 72142 "DOPSWHS Service Mgmt Tests"
         WorkOrder: Record "DOPSWHS Work Order";
         JobQueueEntry: Record "Job Queue Entry";
         SLAMonitor: Codeunit "DOPSWHS SLA Monitor";
+        Subscriber: Codeunit "DOPSWHS Service Mgmt Tests";
         Assert: Codeunit Assert;
     begin
-        ResetBreachCapture();
         CreateWorkOrderWithOverdueResponse(WorkOrder, 'ASSET-SM-5');
 
+        BindSubscription(Subscriber);
         SLAMonitor.Run(JobQueueEntry);
+        UnbindSubscription(Subscriber);
 
-        Assert.IsTrue(BreachEventFired, 'SLA Monitor must fire OnWorkOrderSLABreached for a work order past its response target.');
-        Assert.AreEqual(WorkOrder."No.", LastBreachedWorkOrderNo, 'Breach event must carry the correct work order no.');
-        Assert.AreEqual('response', LastBreachType, 'Breach event must report the response breach type.');
+        Assert.IsTrue(Subscriber.WasBreachEventFired(), 'SLA Monitor must fire OnWorkOrderSLABreached for a work order past its response target.');
+        Assert.AreEqual(WorkOrder."No.", Subscriber.GetLastBreachedWorkOrderNo(), 'Breach event must carry the correct work order no.');
+        Assert.AreEqual('response', Subscriber.GetLastBreachType(), 'Breach event must report the response breach type.');
 
         WorkOrder.Get(WorkOrder."No.");
         Assert.IsTrue(WorkOrder."SLA Breached", 'Work order must be flagged SLA Breached after the run.');
@@ -170,16 +179,18 @@ codeunit 72142 "DOPSWHS Service Mgmt Tests"
         WorkOrder: Record "DOPSWHS Work Order";
         JobQueueEntry: Record "Job Queue Entry";
         SLAMonitor: Codeunit "DOPSWHS SLA Monitor";
+        Subscriber: Codeunit "DOPSWHS Service Mgmt Tests";
         Assert: Codeunit Assert;
     begin
-        ResetBreachCapture();
         CreateWorkOrderWithOverdueResolution(WorkOrder, 'ASSET-SM-6');
 
+        BindSubscription(Subscriber);
         SLAMonitor.Run(JobQueueEntry);
+        UnbindSubscription(Subscriber);
 
-        Assert.IsTrue(BreachEventFired, 'SLA Monitor must fire OnWorkOrderSLABreached for a work order past its resolution target.');
-        Assert.AreEqual(WorkOrder."No.", LastBreachedWorkOrderNo, 'Breach event must carry the correct work order no.');
-        Assert.AreEqual('resolution', LastBreachType, 'Breach event must report the resolution breach type.');
+        Assert.IsTrue(Subscriber.WasBreachEventFired(), 'SLA Monitor must fire OnWorkOrderSLABreached for a work order past its resolution target.');
+        Assert.AreEqual(WorkOrder."No.", Subscriber.GetLastBreachedWorkOrderNo(), 'Breach event must carry the correct work order no.');
+        Assert.AreEqual('resolution', Subscriber.GetLastBreachType(), 'Breach event must report the resolution breach type.');
     end;
 
     [Test]
@@ -188,9 +199,9 @@ codeunit 72142 "DOPSWHS Service Mgmt Tests"
         WorkOrder: Record "DOPSWHS Work Order";
         JobQueueEntry: Record "Job Queue Entry";
         SLAMonitor: Codeunit "DOPSWHS SLA Monitor";
+        Subscriber: Codeunit "DOPSWHS Service Mgmt Tests";
         Assert: Codeunit Assert;
     begin
-        ResetBreachCapture();
         CreateAsset('ASSET-SM-7');
         WorkOrder.Init();
         WorkOrder.Status := WorkOrder.Status::Open;
@@ -199,9 +210,11 @@ codeunit 72142 "DOPSWHS Service Mgmt Tests"
         WorkOrder."Target Resolution By" := CurrentDateTime() + 86400000; // 24h in the future
         WorkOrder.Insert(true);
 
+        BindSubscription(Subscriber);
         SLAMonitor.Run(JobQueueEntry);
+        UnbindSubscription(Subscriber);
 
-        Assert.IsFalse(BreachEventFired, 'SLA Monitor must not fire the breach event for a work order still within its SLA targets.');
+        Assert.IsFalse(Subscriber.WasBreachEventFired(), 'SLA Monitor must not fire the breach event for a work order still within its SLA targets.');
         WorkOrder.Get(WorkOrder."No.");
         Assert.IsFalse(WorkOrder."SLA Breached", 'Work order within SLA must not be flagged SLA Breached.');
     end;
@@ -212,6 +225,21 @@ codeunit 72142 "DOPSWHS Service Mgmt Tests"
         BreachEventFired := true;
         LastBreachedWorkOrderNo := WorkOrderNo;
         LastBreachType := BreachType;
+    end;
+
+    procedure WasBreachEventFired(): Boolean
+    begin
+        exit(BreachEventFired);
+    end;
+
+    procedure GetLastBreachedWorkOrderNo(): Code[20]
+    begin
+        exit(LastBreachedWorkOrderNo);
+    end;
+
+    procedure GetLastBreachType(): Text[50]
+    begin
+        exit(LastBreachType);
     end;
 
     // ------------------------------------------------------------------
@@ -270,13 +298,6 @@ codeunit 72142 "DOPSWHS Service Mgmt Tests"
         BreachEventFired: Boolean;
         LastBreachedWorkOrderNo: Code[20];
         LastBreachType: Text[50];
-
-    local procedure ResetBreachCapture()
-    begin
-        Clear(BreachEventFired);
-        Clear(LastBreachedWorkOrderNo);
-        Clear(LastBreachType);
-    end;
 
     local procedure CreateAsset(AssetNo: Code[20])
     var

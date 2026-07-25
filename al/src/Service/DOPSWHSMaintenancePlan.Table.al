@@ -1,4 +1,4 @@
-table 72031 "DOPSWHS Maintenance Plan"
+table 72039 "DOPSWHS Maintenance Plan"
 {
     // NOT: Bu obje bu ortamda derlenmedi. Merge öncesi doğrulanmalı.
     // SM-04: koruyucu bakım planı — DOPSWHS Maintenance Scheduler süresi gelenler
