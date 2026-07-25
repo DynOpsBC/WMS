@@ -76,14 +76,14 @@ page 72257 "DOPSWHS Quality Order Queue"
                 var
                     QualityMgmt: Codeunit "DOPSWHS Quality Mgmt";
                     Setup: Record "DOPSWHS Setup";
-                    Notes: Text[250];
+                    FailReasonDialog: Page "DOPSWHS Fail Reason Dialog";
                     QuarantineBin: Code[20];
                 begin
                     if Setup.Get('') then
                         QuarantineBin := Setup."Default Quarantine Bin Code";
-                    if not Dialog.InputQuery('Red nedeni', Notes) then
+                    if FailReasonDialog.RunModal() <> Action::OK then
                         exit;
-                    QualityMgmt.Fail(Rec, CopyStr(UserId(), 1, 50), '', Notes, QuarantineBin);
+                    QualityMgmt.Fail(Rec, CopyStr(UserId(), 1, 50), '', FailReasonDialog.GetNotes(), QuarantineBin);
                     CurrPage.Update(false);
                 end;
             }

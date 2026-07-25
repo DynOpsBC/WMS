@@ -136,6 +136,7 @@ permissionset 72095 "DOPSWHS-USER"
         codeunit "DOPSWHS Quality Mgmt" = X,
         tabledata "DOPSWHS Quality Order" = RIMD,
         page "DOPSWHS Quality Order Queue" = X,
+        page "DOPSWHS Fail Reason Dialog" = X,
         page "DOPSWHS WMS Token Help" = X,
         // tabledata "Qlty. Inspection Header" = R,
         page "DOPSWHS Purch Source API" = X,
