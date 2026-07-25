@@ -55,27 +55,25 @@ codeunit 72046 "DOPSWHS Pick Mgmt"
     procedure RegisterPick(var Pick: Record "Warehouse Activity Header")
     var
         PickLine: Record "Warehouse Activity Line";
-        // QM (BC 28) devre dışı — bkz. QualityMgmtBridge.Codeunit.al
-        // QualityBridge: Codeunit "DOPSWHS Quality Mgmt Bridge";
+        // Microsoft Quality Management (BC 28) köprüsü hâlâ devre dışı (bkz.
+        // QualityMgmtBridge.Codeunit.al — platform 24.0'da MS QM sembolleri yok).
+        // Bunun yerine uygulamanın kendi DOPSWHS Quality Order tablosu üzerinden
+        // çalışan "DOPSWHS Quality Mgmt" ile bloklama uygulanıyor (GKK).
+        QualityMgmt: Codeunit "DOPSWHS Quality Mgmt";
         WhseActivityRegister: Codeunit "Whse.-Activity-Register";
     begin
         EnsurePick(Pick);
         Log('Pick.Register', Pick."No.");
 
-        // Microsoft Quality Management block guard — QM (BC 28) devre dışı.
-        // BC 28'e geçince aşağıdaki bloğun yorumunu kaldırın. Register if any
-        // pick line carries a Lot/Serial currently under an open inspection.
-        // Error format matches BCWMSApp.QcErrorParser so the mobile/web UI
-        // renders a friendly "🔬 QC BLOCK" banner.
-        // PickLine.SetRange("Activity Type", Pick.Type);
-        // PickLine.SetRange("No.", Pick."No.");
-        // if PickLine.FindSet() then
-        //     repeat
-        //         QualityBridge.VerifyNotBlocked(
-        //             PickLine."Lot No.",
-        //             PickLine."Serial No.",
-        //             '');
-        //     until PickLine.Next() = 0;
+        // GKK blok kontrolü: register'dan önce her satırın LP'sinde (yoksa Item+Bin
+        // fallback ile) açık bir Quality Order olup olmadığına bakılır. Hata metni
+        // BCWMSApp.QcErrorParser'ın yakaladığı formatta ("blocked by quality order ...").
+        PickLine.SetRange("Activity Type", Pick.Type);
+        PickLine.SetRange("No.", Pick."No.");
+        if PickLine.FindSet() then
+            repeat
+                QualityMgmt.VerifyNotBlocked(PickLine."LP No.", PickLine."Item No.", PickLine."Bin Code");
+            until PickLine.Next() = 0;
 
         PickLine.SetRange("Activity Type", Pick.Type);
         PickLine.SetRange("No.", Pick."No.");

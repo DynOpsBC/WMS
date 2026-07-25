@@ -131,6 +131,12 @@ permissionset 72095 "DOPSWHS-USER"
         codeunit "DOPSWHS Scenario Generator" = X,
         // QM (BC 28) devre dışı — bkz. QualityMgmtBridge.Codeunit.al
         // codeunit "DOPSWHS Quality Mgmt Bridge" = X,
+        // GKK: Pick/Movement/Receipt akışları artık DOPSWHS Quality Mgmt üzerinden
+        // bloklama kontrolü yapıyor — normal depo kullanıcısının da çalıştırabilmesi gerekiyor.
+        codeunit "DOPSWHS Quality Mgmt" = X,
+        tabledata "DOPSWHS Quality Order" = RIMD,
+        page "DOPSWHS Quality Order Queue" = X,
+        page "DOPSWHS Fail Reason Dialog" = X,
         page "DOPSWHS WMS Token Help" = X,
         // tabledata "Qlty. Inspection Header" = R,
         page "DOPSWHS Purch Source API" = X,

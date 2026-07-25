@@ -136,6 +136,8 @@ permissionset 72094 "DOPSWHS-ADMIN"
         codeunit "DOPSWHS Quality Mgmt" = X,
         table "DOPSWHS Quality Order" = X,
         page "DOPSWHS Quality Order API" = X,
+        page "DOPSWHS Quality Order Queue" = X,
+        page "DOPSWHS Fail Reason Dialog" = X,
         codeunit "DOPSWHS Web Svc Publisher" = X,
         tabledata "Tenant Web Service" = RIMD,
         tabledata "Warehouse Employee" = RIMD,

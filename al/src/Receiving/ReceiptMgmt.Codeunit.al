@@ -73,15 +73,30 @@ codeunit 72043 "DOPSWHS Receipt Mgmt"
         WhseReceiptHeader: Record "Warehouse Receipt Header";
         LPMgt: Codeunit "DOPSWHS LP Management";
         LotSerialGen: Codeunit "DOPSWHS Lot Serial Generator";
+        QualityMgmt: Codeunit "DOPSWHS Quality Mgmt";
         Item: Record Item;
         ItemTrackingCode: Record "Item Tracking Code";
         ExistingLotNo: Code[50];
         ExistingSerialNo: Code[50];
         ExistingExpiryDate: Date;
         HasItemTrackingCode: Boolean;
+        QuarantineBinCode: Code[20];
     begin
         Log('Receipt.ConfirmLine', WhseReceiptLine."No.");
         Item.Get(WhseReceiptLine."Item No.");
+
+        // GKK: QC gerektiren madde ise mal kabul öncesi bin'i (varsa) karantina bin'ine
+        // zorla; Quality Order LP oluşturulduktan sonra (aşağıda) açılır.
+        if Item."DOPSWHS QC Required" then begin
+            QualityMgmt.CreateOrderForReceipt(WhseReceiptLine."No.", WhseReceiptLine."Item No.", QtyToReceive,
+                WhseReceiptLine."Location Code", BinCode, LicensePlateNo, QuarantineBinCode);
+            // Not: yukarıdaki çağrı LicensePlateNo boşsa da bir Quality Order açar (Item+Bin
+            // fallback ile bloklanır); LP aşağıda oluşturulunca QO'nun "LP No." alanı henüz
+            // boş kalabilir — bilinen sınırlama, LP her zaman ConfirmLine'da biliniyorsa
+            // (mobil akış genelde böyle) sorun olmaz, aksi durumda Item+Bin fallback devrede.
+            if QuarantineBinCode <> '' then
+                BinCode := QuarantineBinCode;
+        end;
         // Otomatik Lot/Seri: SADECE item lot/serial izlemeli ise ve boş bırakıldıysa üret.
         // İzlenmeyen bir item'a Item Tracking kaydı eklemek post sırasında hataya yol
         // açar, o yüzden HasTracking dışında asla lot/seri üretmiyor/yazmıyoruz.

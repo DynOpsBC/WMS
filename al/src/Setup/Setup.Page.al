@@ -69,6 +69,11 @@ page 72061 "DOPSWHS Setup"
                     ApplicationArea = All;
                     ToolTip = 'Ayarlanırsa, mal kabulde seri boş bırakılınca otomatik seri numarası üretilir. Boş = elle giriş.';
                 }
+                field("Default Quarantine Bin Code"; Rec."Default Quarantine Bin Code")
+                {
+                    ApplicationArea = All;
+                    ToolTip = 'GKK: "Quality Control Required on Receipt" işaretli maddeler mal kabulde bu bin''e yönlendirilir. Boş = sadece Quality Order açılır, bin değişmez.';
+                }
             }
             group(License)
             {
