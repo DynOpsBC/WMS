@@ -316,22 +316,48 @@ private fun HomeHeader(
                 }
             }
             Spacer(Modifier.height(14.dp))
-            Surface(
-                shape = RoundedCornerShape(50),
-                color = Color.White.copy(alpha = 0.16f)
-            ) {
-                Row(
-                    Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
-                    verticalAlignment = Alignment.CenterVertically
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Surface(
+                    shape = RoundedCornerShape(50),
+                    color = Color.White.copy(alpha = 0.16f)
                 ) {
-                    Box(Modifier.size(8.dp).clip(CircleShape).background(statusColor))
-                    Spacer(Modifier.width(6.dp))
-                    Text(
-                        if (connected) "Bağlı — canlı bağlantı" else "Bağlı değil",
-                        style = MaterialTheme.typography.labelMedium,
-                        fontWeight = FontWeight.SemiBold,
-                        color = Color.White
-                    )
+                    Row(
+                        Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Box(Modifier.size(8.dp).clip(CircleShape).background(statusColor))
+                        Spacer(Modifier.width(6.dp))
+                        Text(
+                            if (connected) "Bağlı — canlı bağlantı" else "Bağlı değil",
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.SemiBold,
+                            color = Color.White
+                        )
+                    }
+                }
+                // Birden çok erişilebilir şirket varsa rozetin yanında net bir
+                // "Şirket Değiştir" butonu dursun (üstteki satır tıklaması da çalışır).
+                if (canSwitch) {
+                    Spacer(Modifier.width(8.dp))
+                    Surface(
+                        shape = RoundedCornerShape(50),
+                        color = Color.White.copy(alpha = 0.26f),
+                        modifier = Modifier.clip(RoundedCornerShape(50)).clickable { onSwitchClick() },
+                    ) {
+                        Row(
+                            Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text("🔀", fontSize = 12.sp)
+                            Spacer(Modifier.width(5.dp))
+                            Text(
+                                "Şirket Değiştir",
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = Color.White
+                            )
+                        }
+                    }
                 }
             }
         }
@@ -552,9 +578,9 @@ private fun TestCenterScreen() {
                                 fontWeight = FontWeight.Bold
                             )
                         }
-                        Text("Durum: ${run.optString("status")}", fontSize = 12.sp)
+                        Text("Durum: ${com.dynops.bcwms.feature.bcStatusLabelTr(run.optString("status"))}", fontSize = 12.sp)
                         Text(
-                            "Passed: ${run.optInt("passed")}/${run.optInt("totalCases")} · Failed: ${run.optInt("failed")} · ${run.optDouble("durationSec")}s",
+                            "Geçen: ${run.optInt("passed")}/${run.optInt("totalCases")} · Kalan: ${run.optInt("failed")} · ${run.optDouble("durationSec")}s",
                             fontSize = 12.sp, color = Color.Gray
                         )
                     }

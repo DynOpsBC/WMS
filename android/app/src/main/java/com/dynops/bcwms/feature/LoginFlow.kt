@@ -2,10 +2,12 @@ package com.dynops.bcwms.feature
 
 import android.content.Intent
 import android.net.Uri
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.ui.draw.clip
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -28,6 +30,9 @@ import org.json.JSONObject
 
 private enum class Step { Email, DeviceCode, SelectEnvCompany, LocalUser }
 
+/** Girişte listelenecek kayıtlı WMS operatörü. */
+data class LocalUserOption(val username: String, val displayName: String)
+
 /**
  * Email-based sign-in: email → device-code (browser) → environment + company selection → connect.
  * No token paste required. Token-paste remains available as an "advanced" fallback.
@@ -48,6 +53,13 @@ fun LoginFlow(onConnected: (Boolean) -> Unit) {
     var status by remember { mutableStateOf("") }
     var busy by remember { mutableStateOf(false) }
     var showAdvanced by remember { mutableStateOf(false) }
+
+    // Kayıtlı WMS operatörleri (BC localUsers) — girişte listeden seçilir.
+    var localUsers by remember { mutableStateOf<List<LocalUserOption>>(emptyList()) }
+    var usersLoading by remember { mutableStateOf(false) }
+    var manualUserEntry by remember { mutableStateOf(false) }
+    var showPassword by remember { mutableStateOf(false) }
+    var showForgotPassword by remember { mutableStateOf(false) }
 
     var deviceCode by remember { mutableStateOf<DeviceAuth.DeviceCode?>(null) }
     var envList by remember { mutableStateOf<List<BcApi.EnvCompanies>>(emptyList()) }
@@ -178,6 +190,38 @@ fun LoginFlow(onConnected: (Boolean) -> Unit) {
         }
     }
 
+    // WMS giriş adımına gelince kayıtlı operatörleri çek (token varsa).
+    LaunchedEffect(step) {
+        if (step != Step.LocalUser || localUsers.isNotEmpty() || !BcApi.hasToken(context)) return@LaunchedEffect
+        usersLoading = true
+        val r = runCatching {
+            BcApi.get(context, "localUsers?\$select=username,displayName,disabled&\$top=200&\$orderby=username")
+        }.getOrNull()
+        if (r?.ok == true) {
+            val arr = runCatching { JSONObject(r.body).optJSONArray("value") }.getOrNull()
+            val list = mutableListOf<LocalUserOption>()
+            for (i in 0 until (arr?.length() ?: 0)) {
+                val o = arr!!.optJSONObject(i) ?: continue
+                if (o.optBoolean("disabled", false)) continue
+                val u = o.optString("username").trim()
+                if (u.isNotBlank()) list += LocalUserOption(u, o.optString("displayName").trim())
+            }
+            localUsers = list
+            if (list.isEmpty()) manualUserEntry = true
+        } else {
+            // API yoksa/erişilemiyorsa elle giriş yolu açık kalsın.
+            manualUserEntry = true
+        }
+        usersLoading = false
+    }
+
+    if (showForgotPassword) {
+        ForgotPasswordSheet(
+            username = localUsername,
+            onDismiss = { showForgotPassword = false },
+        )
+    }
+
     Column(Modifier.fillMaxSize().padding(20.dp).verticalScroll(rememberScrollState())) {
         Text("BCWMS — Giriş", fontWeight = FontWeight.Bold, fontSize = 20.sp)
         Text("BC · tenant ${BuildConfig.TENANT_LABEL}", fontSize = 12.sp, color = Color.Gray)
@@ -271,28 +315,123 @@ fun LoginFlow(onConnected: (Boolean) -> Unit) {
                     }
                     Spacer(Modifier.height(12.dp))
                 }
-                OutlinedTextField(
-                    value = localUsername, onValueChange = { localUsername = it },
-                    label = { Text("WMS Kullanıcı Adı") },
-                    placeholder = { Text("wms-op-01") },
-                    singleLine = true, modifier = Modifier.fillMaxWidth()
-                )
-                Spacer(Modifier.height(8.dp))
-                OutlinedTextField(
-                    value = localPassword, onValueChange = { localPassword = it },
-                    label = { Text("Şifre") },
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
-                    visualTransformation = PasswordVisualTransformation(),
-                    singleLine = true, modifier = Modifier.fillMaxWidth()
-                )
-                Spacer(Modifier.height(16.dp))
-                Button(
-                    onClick = { startLocalSignIn() },
-                    enabled = !busy && localUsername.isNotBlank() && localPassword.isNotBlank() && BcApi.hasToken(context),
-                    modifier = Modifier.fillMaxWidth().height(52.dp)
-                ) { Text(if (busy) "..." else "🚪 Bağlan", fontWeight = FontWeight.Bold) }
-                Spacer(Modifier.height(8.dp))
-                TextButton(onClick = { step = Step.Email; status = "" }) { Text("‹ Geri (e-posta girişine dön)") }
+                // Kayıtlı operatörler: BC'den çekilen listeden seç → şifre alanına odaklan.
+                // Liste boşsa (API yok / yetki yok) elle yazma alanına düşer.
+                if (localUsername.isBlank()) {
+                    when {
+                        usersLoading -> {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
+                                Spacer(Modifier.width(10.dp))
+                                Text("Kullanıcılar yükleniyor...", fontSize = 12.sp, color = Color.Gray)
+                            }
+                            Spacer(Modifier.height(8.dp))
+                        }
+                        localUsers.isNotEmpty() -> {
+                            Text("Kullanıcınızı seçin", fontSize = 12.sp, fontWeight = FontWeight.Medium, color = Color.Gray)
+                            Spacer(Modifier.height(8.dp))
+                            localUsers.forEach { u ->
+                                Card(
+                                    onClick = { localUsername = u.username; status = "" },
+                                    colors = CardDefaults.cardColors(containerColor = Color(0xFFF3F0FF)),
+                                    shape = RoundedCornerShape(12.dp),
+                                    modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
+                                ) {
+                                    Row(
+                                        Modifier.fillMaxWidth().padding(14.dp),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                    ) {
+                                        Box(
+                                            Modifier.size(38.dp).clip(RoundedCornerShape(12.dp))
+                                                .background(Color(0xFF6C5CE7).copy(alpha = 0.15f)),
+                                            contentAlignment = Alignment.Center,
+                                        ) { Text("👷", fontSize = 18.sp) }
+                                        Spacer(Modifier.width(12.dp))
+                                        Column(Modifier.weight(1f)) {
+                                            Text(
+                                                u.displayName.ifBlank { u.username },
+                                                fontWeight = FontWeight.SemiBold,
+                                                fontSize = 15.sp,
+                                            )
+                                            Text(u.username, fontSize = 11.sp, color = Color.Gray)
+                                        }
+                                        Text("›", fontSize = 20.sp, color = Color(0xFF6C5CE7))
+                                    }
+                                }
+                            }
+                            Spacer(Modifier.height(4.dp))
+                            TextButton(onClick = { manualUserEntry = true }) {
+                                Text("Listede yokum — elle yazayım", fontSize = 12.sp)
+                            }
+                        }
+                        else -> { manualUserEntry = true }
+                    }
+                }
+
+                // Seçilmiş kullanıcı rozeti + değiştir
+                if (localUsername.isNotBlank() && !manualUserEntry) {
+                    Card(
+                        colors = CardDefaults.cardColors(containerColor = Color(0xFFEDE7F6)),
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Row(
+                            Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 10.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Text("👷", fontSize = 20.sp)
+                            Spacer(Modifier.width(10.dp))
+                            Column(Modifier.weight(1f)) {
+                                val disp = localUsers.firstOrNull { it.username == localUsername }?.displayName.orEmpty()
+                                Text(disp.ifBlank { localUsername }, fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                                if (disp.isNotBlank()) Text(localUsername, fontSize = 11.sp, color = Color.Gray)
+                            }
+                            TextButton(onClick = { localUsername = ""; localPassword = ""; status = "" }) {
+                                Text("Değiştir", fontSize = 12.sp)
+                            }
+                        }
+                    }
+                    Spacer(Modifier.height(10.dp))
+                }
+
+                if (manualUserEntry) {
+                    OutlinedTextField(
+                        value = localUsername, onValueChange = { localUsername = it },
+                        label = { Text("WMS Kullanıcı Adı") },
+                        placeholder = { Text("wms-op-01") },
+                        singleLine = true, modifier = Modifier.fillMaxWidth()
+                    )
+                    Spacer(Modifier.height(8.dp))
+                }
+
+                if (localUsername.isNotBlank() || manualUserEntry) {
+                    OutlinedTextField(
+                        value = localPassword, onValueChange = { localPassword = it },
+                        label = { Text("Şifre") },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                        visualTransformation = if (showPassword) androidx.compose.ui.text.input.VisualTransformation.None
+                            else PasswordVisualTransformation(),
+                        trailingIcon = {
+                            TextButton(onClick = { showPassword = !showPassword }) {
+                                Text(if (showPassword) "🙈" else "👁", fontSize = 16.sp)
+                            }
+                        },
+                        singleLine = true, modifier = Modifier.fillMaxWidth()
+                    )
+                    Spacer(Modifier.height(16.dp))
+                    Button(
+                        onClick = { startLocalSignIn() },
+                        enabled = !busy && localUsername.isNotBlank() && localPassword.isNotBlank() && BcApi.hasToken(context),
+                        modifier = Modifier.fillMaxWidth().height(52.dp)
+                    ) { Text(if (busy) "..." else "🚪 Bağlan", fontWeight = FontWeight.Bold) }
+                    Spacer(Modifier.height(4.dp))
+                    TextButton(
+                        onClick = { showForgotPassword = true },
+                        modifier = Modifier.align(Alignment.CenterHorizontally),
+                    ) { Text("Şifremi unuttum", fontSize = 12.sp, color = Color(0xFF6C5CE7)) }
+                }
+                Spacer(Modifier.height(4.dp))
+                TextButton(onClick = { step = Step.Email; status = ""; manualUserEntry = false }) { Text("‹ Geri (e-posta girişine dön)") }
                 // Kurulum/yönetici kaçış yolu: operatör hesabı henüz tanımlı
                 // değilken cihazı BC servis kimliğiyle kullanmaya izin verir.
                 TextButton(onClick = {
@@ -444,5 +583,56 @@ private fun TokenPasteFallback(onConnected: (Boolean) -> Unit) {
             }
         }) { Text("Token ile Bağlan") }
         StatusText(status)
+    }
+}
+
+/**
+ * "Şifremi unuttum" — WMS operatör şifreleri BC'de hash'li tutulur, terminalden
+ * sıfırlanamaz. Bu sayfa operatöre kimden yardım isteyeceğini net söyler ve
+ * yöneticiye BC'deki adımı hatırlatır.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun ForgotPasswordSheet(username: String, onDismiss: () -> Unit) {
+    ModalBottomSheet(onDismissRequest = onDismiss) {
+        Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp).padding(bottom = 28.dp)) {
+            Text("🔑 Şifremi unuttum", fontWeight = FontWeight.Bold, fontSize = 18.sp)
+            Spacer(Modifier.height(6.dp))
+            Text(
+                if (username.isNotBlank()) "Kullanıcı: $username" else "WMS operatör şifresi",
+                fontSize = 12.sp, color = Color.Gray,
+            )
+            Spacer(Modifier.height(16.dp))
+            Card(
+                colors = CardDefaults.cardColors(containerColor = Color(0xFFFFF8E1)),
+                shape = RoundedCornerShape(12.dp),
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Column(Modifier.padding(14.dp)) {
+                    Text("Şifreniz terminalden sıfırlanamaz", fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        "Güvenlik gereği WMS şifreleri Business Central'da şifrelenmiş saklanır. " +
+                            "Depo sorumlunuz size yeni bir şifre belirlemeli.",
+                        fontSize = 12.sp, color = Color(0xFF6D4C41),
+                    )
+                }
+            }
+            Spacer(Modifier.height(16.dp))
+            Text("Depo sorumlusu için adımlar", fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+            Spacer(Modifier.height(8.dp))
+            listOf(
+                "1. Business Central'da \"Local WMS Users\" sayfasını açın",
+                "2. İlgili kullanıcıyı seçip Düzenle deyin",
+                "3. \"Şifre\" bölümüne yeni şifreyi yazın (kaydedilince hash'lenir)",
+                "4. Yeni şifreyi operatöre güvenli kanaldan iletin",
+            ).forEach {
+                Text(it, fontSize = 12.sp, modifier = Modifier.padding(vertical = 3.dp))
+            }
+            Spacer(Modifier.height(20.dp))
+            Button(onClick = onDismiss, modifier = Modifier.fillMaxWidth().height(48.dp)) {
+                Text("Anladım")
+            }
+        }
     }
 }

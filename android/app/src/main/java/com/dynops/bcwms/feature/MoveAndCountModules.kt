@@ -662,7 +662,7 @@ fun DirectedMoveModule() {
                         }
                         Text(
                             "Lokasyon: ${firstValue(d, "locationCode")} · " +
-                                (if (assigned.isBlank()) "⏳ Atanmayı bekliyor" else "Atanan: $assigned"),
+                                (if (assigned.isBlank()) "⏳ Atanmayı bekliyor" else "👤 Atanan Kullanıcı: $assigned"),
                             fontSize = 12.sp, color = Color.Gray,
                         )
                         if (assigned.isBlank()) {
@@ -745,7 +745,7 @@ private fun MovementDocument(no: String, onBack: () -> Unit) {
             TextButton(onClick = onBack) { Text("‹ Hareket Listesi") }
             DocHeaderCard(
                 title = "🧭 $no",
-                subtitle = "Lokasyon: ${header?.optString("locationCode") ?: ""} · Atanan: ${firstValue(header ?: JSONObject(), "assignedUserId").ifBlank { "—" }}",
+                subtitle = "Lokasyon: ${header?.optString("locationCode") ?: ""} · 👤 Atanan Kullanıcı: ${firstValue(header ?: JSONObject(), "assignedUserId").ifBlank { "—" }}",
                 percent = if (totalQty > 0) ((handledOrStaged / totalQty) * 100).toInt().coerceIn(0, 100) else 0,
             )
             Spacer(Modifier.height(6.dp))

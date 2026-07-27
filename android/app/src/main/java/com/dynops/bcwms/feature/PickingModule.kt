@@ -28,6 +28,17 @@ import org.json.JSONObject
  */
 // ELOG toplama dashboard sekmeleri. ("Bekleyen" kullanıcı isteğiyle kaldırıldı —
 // Pick Created durumu terminaldeki toplayıcıyı yanıltıyordu.)
+/** Sistem sepeti üretilirken başlıkta gösterilen geçici değer. */
+private const val MAIN_LP_PENDING = "hazırlanıyor…"
+
+/**
+ * İyimser UI için satırın kopyasını "toplandı" durumuyla döndürür.
+ * JSONObject mutable olduğundan kopya alınır — Compose'un eski/yeni listeyi
+ * ayırt edebilmesi için yeni nesne şart.
+ */
+private fun cloneWithQtyHandled(line: JSONObject, qty: Double): JSONObject =
+    JSONObject(line.toString()).apply { put("qtyToHandle", qty) }
+
 private enum class PickTab(val label: String) {
     Active("⏳ Toplanmakta"),
     Mine("👤 Benim Topladıklarım"),
@@ -402,6 +413,11 @@ private fun GuidedPickDocument(no: String, onBack: () -> Unit) {
     // ELOG ana LP (toplama kabı): her pick için 1 sepet. Okutulmadan/oluşturulmadan
     // toplamaya başlanamaz — tüm ürünler bu LP'ye gider (shipping LP).
     var mainLp by remember { mutableStateOf("") }
+    // Sistem sepeti üretilirken operatör beklemesin: iyimser olarak kapı açılır,
+    // gerçek LP numarası gelince başlıkta güncellenir.
+    var mainLpPending by remember { mutableStateOf(false) }
+    // BC'ye yazımı süren satırlar — aynı satırın iki kez gönderilmesini engeller.
+    var inFlightLines by remember { mutableStateOf<Set<Int>>(emptySet()) }
     var lpInput by remember { mutableStateOf("") }
     // ELOG: ana sepet ekranında varsayılan olarak "önerilen sepeti kullan" öne çıkar;
     // kullanıcı kendi kabını okutmak isterse bu bayrakla scan alanı açılır.
@@ -451,45 +467,66 @@ private fun GuidedPickDocument(no: String, onBack: () -> Unit) {
     // ELOG ana sepet: okutulan LP'yi bu pick'in toplama kabı yap. Boş okutulursa
     // sistem otomatik bir shipping LP üretir (startShippingLP). LP header'a bağlanır.
     fun startMainLp(scannedLp: String) {
-        if (busy) return
+        val lp = com.dynops.bcwms.scanner.BarcodeIntentResolver.resolve(scannedLp).value.trim()
+        if (lp.isNotBlank()) {
+            // Okutulan mevcut LP → anında toplama kabı yap; ağ beklemesi yok.
+            mainLp = lp
+            lpInput = ""
+            status = "📦 Ana sepet: $lp — toplamaya başlayın"
+            return
+        }
+        // Boş okutma → sistem LP üretsin. İyimser akış: kapıyı hemen aç,
+        // LP numarası gelince başlıktaki değeri güncelle. Operatör beklemez.
+        if (mainLpPending) return
+        mainLpPending = true
+        mainLp = MAIN_LP_PENDING
+        status = "📦 Ana sepet hazırlanıyor — toplamaya başlayabilirsiniz"
         scope.launch {
-            busy = true
-            val lp = com.dynops.bcwms.scanner.BarcodeIntentResolver.resolve(scannedLp).value.trim()
-            if (lp.isNotBlank()) {
-                // Okutulan mevcut LP → doğrudan toplama kabı olarak kullan.
-                mainLp = lp
-                lpInput = ""
-                status = "📦 Ana sepet: $lp — toplamaya başlayın"
+            val r = BcApi.boundAction(context, "picks", no, "startShippingLP",
+                JSONObject().apply { put("lpTemplateCode", "PALLET") }.toString())
+            if (r.ok) {
+                mainLp = BcApi.scalarValue(r.body)
+                status = "📦 Ana sepet: $mainLp"
             } else {
-                // Boş → sistem otomatik shipping LP üretsin.
-                status = "📦 Ana sepet oluşturuluyor..."
-                val r = BcApi.boundAction(context, "picks", no, "startShippingLP",
-                    JSONObject().apply { put("lpTemplateCode", "PALLET") }.toString())
-                if (r.ok) {
-                    mainLp = BcApi.scalarValue(r.body)
-                    status = "📦 Ana sepet: $mainLp (oluşturuldu) — toplamaya başlayın"
-                } else status = "HATA: ${BcApi.errorMessage(r.body)} (HTTP ${r.httpCode})"
+                mainLp = ""
+                status = "HATA: ${BcApi.errorMessage(r.body)} (HTTP ${r.httpCode})"
             }
-            busy = false
+            mainLpPending = false
         }
     }
 
+    /**
+     * Satırı tamamla. İYİMSER: okutma anında satır yerel olarak "toplandı"
+     * işaretlenir ve ekran açık kalır (operatör beklemeden sonrakine geçer).
+     * BC yazımı arka planda gider; hata olursa yerel işaret geri alınır.
+     */
     fun completeLine(line: JSONObject, lotNo: String = "") {
-        if (busy || isComplete(line)) return
+        if (isComplete(line)) return
+        val lineNo = line.optInt("lineNo")
+        if (lineNo in inFlightLines) return
+        val itemNo = line.optString("itemNo")
+        val qty = line.optDouble("quantity")
+        // 1) Anında yerel tamamlama — UI hemen tepki verir.
+        inFlightLines = inFlightLines + lineNo
+        lines = lines.map { l ->
+            if (l.optInt("lineNo") == lineNo) cloneWithQtyHandled(l, qty) else l
+        }
+        status = "✅ $itemNo tamamlandı"
+        // 2) BC'ye arka planda yaz.
         scope.launch {
-            busy = true
-            status = "${line.optString("itemNo")} kaydediliyor..."
             val actType = line.optString("activityType").ifBlank { BcEnum.WhseActivityType.PICK }
             val body = JSONObject().apply {
-                put("qtyToHandle", line.optDouble("quantity"))
+                put("qtyToHandle", qty)
                 val effectiveLot = lotNo.ifBlank { line.optString("lotNo") }
                 if (effectiveLot.isNotBlank()) put("lotNo", effectiveLot)
             }.toString()
-            val r = BcApi.patch(context, "pickLines(activityType='$actType',no='$no',lineNo=${line.optInt("lineNo")})", body)
-            status = if (r.ok) "✅ ${line.optString("itemNo")} tamamlandı"
-                else QcErrorParser.friendlyStatus(BcApi.errorMessage(r.body), r.httpCode)
-            if (r.ok) reloadNow()
-            busy = false
+            val r = BcApi.patch(context, "pickLines(activityType='$actType',no='$no',lineNo=$lineNo)", body)
+            if (!r.ok) {
+                // Geri al + gerçek durumu tazele.
+                status = QcErrorParser.friendlyStatus(BcApi.errorMessage(r.body), r.httpCode)
+                reloadNow()
+            }
+            inFlightLines = inFlightLines - lineNo
         }
     }
 
@@ -568,7 +605,9 @@ private fun GuidedPickDocument(no: String, onBack: () -> Unit) {
     // satır ikinci kez okununca zararsızca "açık satır yok" der).
     val needsMainLp = mainLp.isBlank() && !header?.optString("assignedUserId").isNullOrBlank()
     DocumentScanHandler(
-        enabled = !busy && !notAssigned && !allCollected && !needsMainLp && qtyGroup == null,
+        // `busy` artık okutmayı engellemiyor: satır tamamlama iyimser çalışıyor,
+        // operatör arka plandaki BC yazımını beklemeden sonraki ürüne geçebilir.
+        enabled = !notAssigned && !allCollected && !needsMainLp && qtyGroup == null,
         lines = if (binVerified) activeLines.filterNot(::isComplete) else emptyList(),
         // Tek eşleşme de olsa handleItemScan'e ver — o ürünün rafta çok satırı varsa
         // miktar popup'ı açar (BN.0353 ×4 = 2 sipariş → 1 okut, 4 gir).
@@ -590,12 +629,16 @@ private fun GuidedPickDocument(no: String, onBack: () -> Unit) {
     Column(Modifier.fillMaxSize()) {
         Column(Modifier.weight(1f).padding(12.dp)) {
             TextButton(onClick = onBack) { Text("‹ Pick Listesi") }
+            // Başlık özeti: kaç sipariş, kaç ürün (tamamlanan/toplam) — operatör
+            // daha ilk bakışta işin büyüklüğünü görsün.
+            val doneCount = takeLines.count(::isComplete)
             DocHeaderCard(
                 title = no,
-                subtitle = "Lokasyon: ${header?.optString("locationCode").orEmpty()} · $orderCount sipariş" +
-                    (if (!notAssigned) " · Atanan: ${header?.optString("assignedUserId").orEmpty()}" else "") +
+                subtitle = "📦 $orderCount sipariş · 🧾 $doneCount/${takeLines.size} ürün" +
+                    "\nLokasyon: ${header?.optString("locationCode").orEmpty()}" +
+                    (if (!notAssigned) " · 👤 Atanan Kullanıcı: ${header?.optString("assignedUserId").orEmpty()}" else "") +
                     (if (mainLp.isNotBlank()) "\n📦 Ana sepet: $mainLp" else ""),
-                percent = if (takeLines.isEmpty()) 0 else ((takeLines.count(::isComplete) * 100.0) / takeLines.size).toInt(),
+                percent = if (takeLines.isEmpty()) 0 else ((doneCount * 100.0) / takeLines.size).toInt(),
             )
             Spacer(Modifier.height(8.dp))
 
@@ -1070,7 +1113,7 @@ private fun PickDocument(no: String, onBack: () -> Unit) {
             TextButton(onClick = onBack) { Text("‹ Belge Listesi") }
             DocHeaderCard(
                 title = no,
-                subtitle = "Lokasyon: ${h?.optString("locationCode") ?: ""} · ${h?.optString("status") ?: ""}" +
+                subtitle = "Lokasyon: ${h?.optString("locationCode") ?: ""} · ${bcStatusLabelTr(h?.optString("status") ?: "")}" +
                     (h?.optString("vehicleNo")?.takeIf { it.isNotBlank() }?.let { "\n🚚 Araç: $it" } ?: "") +
                     (shipLp?.let { "\nShipping LP: $it" } ?: ""),
                 percent = h?.optDouble("percentComplete")?.toInt() ?: 0
@@ -1147,7 +1190,7 @@ private fun PickDocument(no: String, onBack: () -> Unit) {
                 modifier = Modifier.fillMaxWidth().height(54.dp),
             ) {
                 Text(
-                    if (canRegister) "✅ Register Pick" else "Önce satırlara miktar girin",
+                    if (canRegister) "✅ Toplamayı Kaydet" else "Önce satırlara miktar girin",
                     fontWeight = FontWeight.Bold,
                 )
             }
@@ -1401,7 +1444,7 @@ private fun ScanVerifySheet(
     // ELOG: lot no el terminalinden girilir. GS1 barkodunda lot varsa otomatik
     // dolar (AI 10); yoksa operatör okutur/yazar.
     var lot by remember { mutableStateOf(initialLot) }
-    var hint by remember { mutableStateOf("Item barkodunu okutun. Beklenen: $expectedItemNo") }
+    var hint by remember { mutableStateOf("Ürün barkodunu okutun. Beklenen: $expectedItemNo") }
     com.dynops.bcwms.ui.SheetScaffold(onDismiss = onDismiss, contentPadding = androidx.compose.foundation.layout.PaddingValues(20.dp)) {
         Text("Tara & Doğrula", fontWeight = FontWeight.Bold, fontSize = 18.sp)
         Text("Beklenen: $expectedItemNo · $description", fontSize = 12.sp, color = Color.Gray)

@@ -81,7 +81,7 @@ fun PutAwayModule() {
                             Text(d.optString("no"), fontWeight = FontWeight.Bold)
                             Text(firstValue(d, "status"), fontSize = 12.sp, color = Color.Gray)
                         }
-                        Text("Lokasyon: ${firstValue(d, "locationCode")} · Atanan: ${firstValue(d, "assignedUserId")}", fontSize = 12.sp, color = Color.Gray)
+                        Text("Lokasyon: ${firstValue(d, "locationCode")} · 👤 Atanan Kullanıcı: ${firstValue(d, "assignedUserId")}", fontSize = 12.sp, color = Color.Gray)
                     }
                 }
             }
@@ -595,7 +595,7 @@ private fun BinListContent(locationCode: String, onSelect: ((String) -> Unit)?) 
                         listOf(
                             b.optString("description"),
                             "Zone ${b.optString("zoneCode").ifBlank { "-" }}",
-                            "Type ${b.optString("binTypeCode").ifBlank { "-" }}",
+                            "Tip ${b.optString("binTypeCode").ifBlank { "-" }}",
                             "Rank ${b.optInt("binRanking", 0)}",
                             if (block.isBlank() || block == " ") "Blok yok" else "Blok $block",
                         ).filter { it.isNotBlank() }.joinToString(" · "),
@@ -739,9 +739,9 @@ private fun WhsePickTab(initialPickNo: String? = null, onInitialPickConsumed: ()
                     Column(Modifier.padding(12.dp)) {
                         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                             Text(d.optString("no"), fontWeight = FontWeight.Bold)
-                            Text(d.optString("status"), fontSize = 12.sp, color = Color.Gray)
+                            Text(bcStatusLabelTr(d.optString("status")), fontSize = 12.sp, color = Color.Gray)
                         }
-                        Text("Lokasyon: ${firstValue(d, "locationCode")} · Kaynak: ${firstValue(d, "sourceNo")} · Atanan: ${firstValue(d, "assignedUserId")}", fontSize = 12.sp, color = Color.Gray)
+                        Text("Lokasyon: ${firstValue(d, "locationCode")} · Kaynak: ${firstValue(d, "sourceNo")} · 👤 Atanan Kullanıcı: ${firstValue(d, "assignedUserId")}", fontSize = 12.sp, color = Color.Gray)
                         val pct = d.optInt("percentComplete")
                         LinearProgressIndicator(progress = { pct / 100f }, modifier = Modifier.fillMaxWidth().padding(top = 4.dp))
                     }
@@ -842,7 +842,7 @@ private fun WhsePickDocument(no: String, onBack: () -> Unit) {
             TextButton(onClick = onBack) { Text("‹ Belge Listesi") }
             DocHeaderCard(
                 title = no,
-                subtitle = "Lokasyon: ${h?.optString("locationCode") ?: ""} · ${h?.optString("status") ?: ""}",
+                subtitle = "Lokasyon: ${h?.optString("locationCode") ?: ""} · ${bcStatusLabelTr(h?.optString("status") ?: "")}",
                 percent = h?.optDouble("percentComplete")?.toInt() ?: 0,
             )
             Spacer(Modifier.height(6.dp))
@@ -1022,7 +1022,7 @@ private fun WhseShipmentTab(onPickCreated: (String) -> Unit) {
                             Text(d.optString("no"), fontWeight = FontWeight.Bold)
                             Text(firstValue(d, "status"), fontSize = 12.sp, color = Color.Gray)
                         }
-                        Text("Sevk: ${firstValue(d, "shipTo")} · Kaynak: ${firstValue(d, "sourceNo")} · Atanan: ${firstValue(d, "assignedUserId")}", fontSize = 12.sp, color = Color.Gray)
+                        Text("Sevk: ${firstValue(d, "shipTo")} · Kaynak: ${firstValue(d, "sourceNo")} · 👤 Atanan Kullanıcı: ${firstValue(d, "assignedUserId")}", fontSize = 12.sp, color = Color.Gray)
                     }
                 }
             }
@@ -1073,7 +1073,7 @@ private fun ShipDocument(no: String, onBack: () -> Unit, onPickCreated: (String)
             TextButton(onClick = onBack) { Text("‹ Belge Listesi") }
             DocHeaderCard(
                 title = no,
-                subtitle = "Sevk: ${firstValue(h ?: JSONObject(), "shipTo")} · ${firstValue(h ?: JSONObject(), "status")} · Atanan: ${firstValue(h ?: JSONObject(), "assignedUserId").ifBlank { "-" }}",
+                subtitle = "Sevk: ${firstValue(h ?: JSONObject(), "shipTo")} · ${firstValue(h ?: JSONObject(), "status")} · 👤 Atanan Kullanıcı: ${firstValue(h ?: JSONObject(), "assignedUserId").ifBlank { "-" }}",
             )
             Spacer(Modifier.height(6.dp))
             StatusText(status)
@@ -1370,7 +1370,7 @@ private fun ShipSalesOrder(no: String, onBack: () -> Unit) {
         }
 
         BottomActionBar {
-            OutlinedButton(onClick = { showScan = true }, enabled = !busy && directAllowed, modifier = Modifier.weight(1f)) { Text("📷 Item Tara") }
+            OutlinedButton(onClick = { showScan = true }, enabled = !busy && directAllowed, modifier = Modifier.weight(1f)) { Text("📷 Ürün Tara") }
         }
         BottomActionBar {
             Button(

@@ -33,7 +33,7 @@ import org.json.JSONObject
 @Composable
 fun ReceivingModule() {
     var tab by remember { mutableStateOf(0) }
-    val tabs = listOf("📋 Whse Receipt", "🛒 Purchase Order")
+    val tabs = listOf("📋 Ambar Mal Kabul", "🛒 Satın Alma Siparişi")
 
     Column(Modifier.fillMaxSize()) {
         TabRow(selectedTabIndex = tab) {
@@ -88,7 +88,7 @@ private fun WhseReceiptTab() {
             }
             loading = false
             status = if (!r.ok) "HATA: Mal kabul listesi alınamadı (HTTP ${r.httpCode})"
-                else if (rows.isEmpty()) (if (q.isNotBlank()) "BOŞ: '$q' ile eşleşen belge/ürün yok" else if (showAll) "BOŞ: Açık Whse Receipt belgesi yok (HTTP ${r.httpCode})" else "BOŞ: Size atanmış mal kabul yok (HTTP ${r.httpCode})")
+                else if (rows.isEmpty()) (if (q.isNotBlank()) "BOŞ: '$q' ile eşleşen belge/ürün yok" else if (showAll) "BOŞ: Açık ambar mal kabul belgesi yok (HTTP ${r.httpCode})" else "BOŞ: Size atanmış mal kabul yok (HTTP ${r.httpCode})")
                 else "TAMAM: ${rows.size} belge" + (if (itemHit > 0) " · 🔎 '$q' ürününü içerenler dahil" else "")
         }
     }
@@ -119,7 +119,7 @@ private fun WhseReceiptTab() {
             FilterChip(selected = showAll, onClick = { showAll = true }, label = { Text("Tümü") })
         }
         Spacer(Modifier.height(8.dp))
-        com.dynops.bcwms.ui.DocSearchBar(value = search, onValueChange = { search = it }, onSearch = { load() }, label = "Whse Receipt no ile ara")
+        com.dynops.bcwms.ui.DocSearchBar(value = search, onValueChange = { search = it }, onSearch = { load() }, label = "Mal kabul no ile ara")
         Spacer(Modifier.height(4.dp))
         StatusText(status)
         if (itemDocs != null) { ScanFilterChip("${itemDocs!!.first} → ${itemDocs!!.second.size} belge") { itemDocs = null } }
@@ -129,13 +129,13 @@ private fun WhseReceiptTab() {
                 Card(onClick = { selected = d.optString("no") }, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(10.dp)) {
                     Column(Modifier.padding(12.dp)) {
                         Text(d.optString("no"), fontWeight = FontWeight.Bold)
-                        Text("Lokasyon: ${firstValue(d, "locationCode")} · Kaynak: ${firstValue(d, "sourceNo")} · Atanan: ${firstValue(d, "assignedUserId").ifBlank { "-" }}", fontSize = 12.sp, color = Color.Gray)
+                        Text("Lokasyon: ${firstValue(d, "locationCode")} · Kaynak: ${firstValue(d, "sourceNo")} · 👤 Atanan Kullanıcı: ${firstValue(d, "assignedUserId").ifBlank { "-" }}", fontSize = 12.sp, color = Color.Gray)
                         val pct = d.optInt("percentComplete")
                         LinearProgressIndicator(progress = { pct / 100f }, modifier = Modifier.fillMaxWidth().padding(top = 4.dp))
                     }
                 }
             }
-            if (rows.isEmpty() && !loading) item { EmptyState(if (showAll) "Açık Whse Receipt belgesi yok. PO'dan direkt mal kabul için sağdaki sekmeyi kullanın." else "Size atanmış mal kabul yok. Tümünü görmek için \"Tümü\" seçin.") }
+            if (rows.isEmpty() && !loading) item { EmptyState(if (showAll) "Açık ambar mal kabul belgesi yok. PO'dan direkt mal kabul için sağdaki sekmeyi kullanın." else "Size atanmış mal kabul yok. Tümünü görmek için \"Tümü\" seçin.") }
         }
     }
 }
@@ -549,8 +549,8 @@ private fun ReceivePurchaseOrder(no: String, onBack: () -> Unit) {
                     colors = CardDefaults.cardColors(containerColor = Color(0xFFFEF3C7)),
                 ) {
                     Text(
-                        "⚠ Bu lokasyon (${firstValue(h, "locationCode")}) Warehouse Receipt zorunlu kılıyor. " +
-                            "Direkt Post Receive yapılamaz. Whse Receipt sekmesinden ilgili belgeyi açıp mal kabulü tamamlayın.",
+                        "⚠ Bu lokasyon (${firstValue(h, "locationCode")}) Ambar Mal Kabul belgesi zorunlu kılıyor. " +
+                            "Doğrudan mal kabul yapılamaz. Ambar Mal Kabul sekmesinden ilgili belgeyi açıp mal kabulü tamamlayın.",
                         modifier = Modifier.padding(10.dp),
                         fontSize = 12.sp,
                         color = Color(0xFF92400E),
@@ -579,7 +579,7 @@ private fun ReceivePurchaseOrder(no: String, onBack: () -> Unit) {
                         Column(Modifier.padding(14.dp)) {
                             Text("${donePrefix(done)}${ln.optString("itemNo")} — ${ln.optString("description")}", fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
                             Text("Kalan: $outstanding · Alınacak: $toReceive · Alınan: $received", fontSize = 12.sp, color = Color.Gray)
-                            Text("Bin: ${firstValue(ln, "binCode").ifBlank { "-" }} · UoM: ${firstValue(ln, "unitOfMeasureCode")}" + extraFieldsText(ln).let { if (it.isNotBlank()) " · $it" else "" }, fontSize = 12.sp, color = Color.Gray)
+                            Text("Bin: ${firstValue(ln, "binCode").ifBlank { "-" }} · UOM: ${firstValue(ln, "unitOfMeasureCode")}" + extraFieldsText(ln).let { if (it.isNotBlank()) " · $it" else "" }, fontSize = 12.sp, color = Color.Gray)
                         }
                     }
                 }
@@ -592,7 +592,7 @@ private fun ReceivePurchaseOrder(no: String, onBack: () -> Unit) {
         }
 
         BottomActionBar {
-            OutlinedButton(onClick = { showScan = true }, enabled = !busy && directAllowed, modifier = Modifier.weight(1f)) { Text("📷 Item Tara") }
+            OutlinedButton(onClick = { showScan = true }, enabled = !busy && directAllowed, modifier = Modifier.weight(1f)) { Text("📷 Ürün Tara") }
         }
         BottomActionBar {
             Button(
@@ -667,7 +667,7 @@ fun ScanItemSheet(
     com.dynops.bcwms.ui.SheetScaffold(onDismiss = onDismiss, contentPadding = androidx.compose.foundation.layout.PaddingValues(20.dp)) {
         Text(title, fontWeight = FontWeight.Bold, fontSize = 18.sp)
         Spacer(Modifier.height(12.dp))
-        ScanField("Item No", item, { item = it }, modifier = Modifier.fillMaxWidth(), onScanned = { raw ->
+        ScanField("Ürün No.", item, { item = it }, modifier = Modifier.fillMaxWidth(), onScanned = { raw ->
             val resolved = BarcodeIntentResolver.resolve(raw)
             item = resolved.itemNo ?: raw
             hint = "Tarandı: ${resolved.kind} → ${resolved.value}"

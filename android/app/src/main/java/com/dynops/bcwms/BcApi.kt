@@ -335,6 +335,11 @@ object BcApi {
         OkHttpClient.Builder()
             .connectTimeout(15, TimeUnit.SECONDS)
             .readTimeout(20, TimeUnit.SECONDS)
+            // Depoda her okutma bir HTTP çağrısı: TLS el sıkışmasını her seferinde
+            // tekrarlamamak için bağlantıları uzun süre havuzda tut (aksi halde
+            // her scan'de ~300-600 ms sadece handshake'e gidiyor).
+            .connectionPool(okhttp3.ConnectionPool(8, 5, TimeUnit.MINUTES))
+            .retryOnConnectionFailure(true)
             .build()
     }
 

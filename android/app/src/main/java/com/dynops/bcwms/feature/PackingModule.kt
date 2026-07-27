@@ -27,6 +27,31 @@ import org.json.JSONObject
 private val PackAccent = Color(0xFF6C5CE7)
 
 /**
+ * İyimser paketleme için: verilen sipariş+ürünün ilk eksik satırında
+ * paketlenen miktarı [delta] kadar artırıp YENİ liste döndürür (Compose'un
+ * değişimi görmesi için nesneler kopyalanır).
+ */
+private fun bumpPackedQty(
+    lines: List<JSONObject>,
+    orderNo: String,
+    itemNo: String,
+    delta: Double,
+): List<JSONObject> {
+    var applied = false
+    return lines.map { l ->
+        if (applied) return@map l
+        val matches = l.optString("sourceOrderNo").equals(orderNo, ignoreCase = true) &&
+            l.optString("itemNo").equals(itemNo, ignoreCase = true) &&
+            l.optDouble("qtyPacked") < l.optDouble("qtyExpected")
+        if (!matches) return@map l
+        applied = true
+        JSONObject(l.toString()).apply {
+            put("qtyPacked", (l.optDouble("qtyPacked") + delta).coerceAtMost(l.optDouble("qtyExpected")))
+        }
+    }
+}
+
+/**
  * ELOG pick-bazlı paketleme. Register edilen pick, siparişlerini paketleme
  * kuyruğuna bırakır (packingOrders, her satır bir sipariş + pickNo). Liste
  * PICK bazında gruplanır; bir pick'e girince o pick'in siparişleri SIRAYLA
@@ -111,13 +136,23 @@ fun PackingModule() {
                         Spacer(Modifier.width(10.dp))
                         Column(Modifier.weight(1f)) {
                             Text("Pick $pickNo", fontWeight = FontWeight.Bold, fontSize = 16.sp)
-                            Text("${ords.size} sipariş · ${ords.firstOrNull()?.optString("locationCode").orEmpty()}", fontSize = 12.sp, color = Color.Gray)
+                            Text(
+                                "📦 ${ords.size} sipariş · ${ords.firstOrNull()?.optString("locationCode").orEmpty()}",
+                                fontSize = 12.sp, fontWeight = FontWeight.Medium,
+                            )
                             // İlk birkaç siparişi göster.
                             Text(
                                 ords.take(3).joinToString(" · ") { it.optString("salesOrderNo") } +
                                     if (ords.size > 3) " …" else "",
                                 fontSize = 11.sp, color = Color.Gray,
                             )
+                            // Paketlemeyi kim üstlendi (varsa).
+                            val packer = ords.firstNotNullOfOrNull {
+                                it.optString("startedByUser").takeIf { s -> s.isNotBlank() }
+                            }
+                            if (!packer.isNullOrBlank()) {
+                                Text("👤 Paketleyen: $packer", fontSize = 11.sp, color = Color(0xFF6D4C41))
+                            }
                         }
                         Text("Paketle ›", fontWeight = FontWeight.Bold, color = Color(0xFFC62828))
                     }
@@ -226,8 +261,13 @@ private fun PickPackingDocument(
         return candidates.sortedBy { it }.minByOrNull { orderRemaining(it) }
     }
 
+    /**
+     * Ürün okut. İYİMSER: satırın paketlenen miktarı anında yerelde artar ve
+     * kırmızıdan yeşile döner; BC yazımı arka planda gider. Operatör ard arda
+     * okutmaya devam edebilir — hata olursa gerçek durum geri yüklenir.
+     */
     fun scanItem(raw: String) {
-        if (raw.isBlank() || sessionId == 0 || busy) return
+        if (raw.isBlank() || sessionId == 0) return
         val resolved = BarcodeIntentResolver.resolve(raw)
         val itemNo = (resolved.itemNo ?: resolved.value).trim()
         val locked = activeLockedOrder()
@@ -243,9 +283,12 @@ private fun PickPackingDocument(
             itemInput = ""
             return
         }
+        // 1) Yerel artış — ekran anında tepki verir.
+        itemInput = ""
+        lines = bumpPackedQty(lines, target, itemNo, 1.0)
+        status = "✅ $itemNo → $target"
+        // 2) BC'ye arka planda yaz.
         scope.launch {
-            busy = true
-            status = "$itemNo → $target kontrol ediliyor..."
             val body = JSONObject().apply {
                 put("sessionId", sessionId)
                 put("orderNo", target)
@@ -254,17 +297,16 @@ private fun PickPackingDocument(
             }.toString()
             val r = BcApi.boundAction(context, "packOps", "", "scanItemForOrder", body)
             if (r.ok) {
-                itemInput = ""
                 // scanItemForOrder dönüşü: tamamlandıysa o sipariş no'su, yoksa boş.
                 val done = BcApi.scalarValue(r.body).trim()
-                val completed = if (done.isNotBlank()) listOf(done) else emptyList()
-                reloadLines()
-                status = when {
-                    completed.isNotEmpty() -> "🧾 ${completed.joinToString(", ")} tamamlandı — kutu okutun"
-                    else -> "✅ $itemNo → $target"
+                if (done.isNotBlank()) {
+                    status = "🧾 $done tamamlandı — kutu okutun"
+                    reloadLines()   // sipariş kapandı → gerçek durumu al
                 }
-            } else status = "❌ ${BcApi.errorMessage(r.body)} (HTTP ${r.httpCode})"
-            busy = false
+            } else {
+                status = "❌ ${BcApi.errorMessage(r.body)} (HTTP ${r.httpCode})"
+                reloadLines()       // iyimser artışı geri al
+            }
         }
     }
 
@@ -329,7 +371,11 @@ private fun PickPackingDocument(
                                 fontWeight = FontWeight.Bold, fontSize = 12.sp, color = PackAccent)
                         }
                         Spacer(Modifier.weight(1f))
-                        Text("$orderCountShown sipariş · ${packQty(totalExpected)} ürün", fontSize = 12.sp, color = Color.Gray)
+                        Text(
+                            "📦 $orderCountShown sipariş · 🧾 ${packQty(totalExpected)} ürün",
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.SemiBold,
+                        )
                     }
                     Spacer(Modifier.height(8.dp))
                     LinearProgressIndicator(
@@ -367,7 +413,9 @@ private fun PickPackingDocument(
                     value = itemInput,
                     onValueChange = { itemInput = it },
                     modifier = Modifier.fillMaxWidth(),
-                    enabled = !busy && sessionId > 0,
+                    // İyimser okutma: arka planda BC yazımı sürerken bile
+                    // operatör sonraki ürünü okutabilsin.
+                    enabled = sessionId > 0,
                     onScanned = { scanItem(it) },
                 )
                 Spacer(Modifier.height(10.dp))
