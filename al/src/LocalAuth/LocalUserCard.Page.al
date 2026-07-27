@@ -16,6 +16,27 @@ page 72286 "DOPSWHS Local User Card"
                 field("Display Name"; Rec."Display Name") { ApplicationArea = All; }
                 field("Disabled"; Rec.Disabled) { ApplicationArea = All; }
             }
+            group(Security)
+            {
+                Caption = 'Şifre';
+                field(PasswordTemp; PasswordTemp)
+                {
+                    ApplicationArea = All;
+                    Caption = 'Yeni Şifre';
+                    ExtendedDatatype = Masked;
+                    ToolTip = 'Yeni şifre belirleyin, Enter sonrası otomatik kaydedilir';
+
+                    trigger OnValidate()
+                    begin
+                        if PasswordTemp <> '' then
+                        begin
+                            AuthMgt.Register(Rec.Username, Rec."Display Name", PasswordTemp, Rec."Default Location Code", Rec."Default Bin Code");
+                            Message('✅ Şifre kaydedildi.');
+                            PasswordTemp := '';
+                        end;
+                    end;
+                }
+            }
             group(Defaults)
             {
                 Caption = 'Mobil Varsayılanları';
@@ -51,19 +72,19 @@ page 72286 "DOPSWHS Local User Card"
                 ToolTip = 'Bu kullanıcı için yeni şifre belirler. Mobil app bu şifreyle "WMS Hesabı" girişini yapar.';
 
                 trigger OnAction()
-                var
-                    AuthMgt: Codeunit "DOPSWHS Local Auth Mgmt";
-                    NewPwd: Text;
                 begin
                     if Rec.Username = '' then
                         Error('Önce kullanıcı kaydını oluşturun ve username belirleyin.');
-                    NewPwd := '';
                     if not Dialog.Confirm('Bu kullanıcının şifresini "wms1234" olarak ayarla?', true) then
                         exit;
                     AuthMgt.Register(Rec.Username, Rec."Display Name", 'wms1234', Rec."Default Location Code", Rec."Default Bin Code");
-                    Message('Şifre belirlendi. Operatöre "wms1234" değerini güvenli kanaldan bildirin.');
+                    Message('✅ Şifre belirlendi: wms1234');
                 end;
             }
         }
     }
+
+    var
+        AuthMgt: Codeunit "DOPSWHS Local Auth Mgmt";
+        PasswordTemp: Text;
 }
