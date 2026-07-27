@@ -74,8 +74,8 @@ private fun firstNonBlank(obj: JSONObject, vararg keys: String): String? {
  */
 fun extraFieldsText(ln: JSONObject): String {
     val parts = buildList {
-        if (FieldPrefs.isOn("uom")) firstNonBlank(ln, "unitOfMeasureCode", "uomCode")?.let { add("UoM $it") }
-        if (FieldPrefs.isOn("variant")) firstNonBlank(ln, "variantCode")?.let { add("Var $it") }
+        if (FieldPrefs.isOn("uom")) firstNonBlank(ln, "unitOfMeasureCode", "uomCode")?.let { add("UOM $it") }
+        if (FieldPrefs.isOn("variant")) firstNonBlank(ln, "variantCode")?.let { add("Varyant $it") }
         if (FieldPrefs.isOn("itemRef")) firstNonBlank(ln, "itemReference")?.let { add("Brkd $it") }
         if (FieldPrefs.isOn("lot")) firstNonBlank(ln, "lotNo", "serialNo")?.let { add("Lot $it") }
         if (FieldPrefs.isOn("desc2")) firstNonBlank(ln, "description2")?.let { add(it) }

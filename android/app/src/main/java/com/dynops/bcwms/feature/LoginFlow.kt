@@ -332,7 +332,7 @@ fun LoginFlow(onConnected: (Boolean) -> Unit) {
                             Spacer(Modifier.height(8.dp))
                             localUsers.forEach { u ->
                                 Card(
-                                    onClick = { localUsername = u.username; status = "" },
+                                    onClick = { localUsername = u.username; manualUserEntry = false; status = "" },
                                     colors = CardDefaults.cardColors(containerColor = Color(0xFFF3F0FF)),
                                     shape = RoundedCornerShape(12.dp),
                                     modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
@@ -364,7 +364,9 @@ fun LoginFlow(onConnected: (Boolean) -> Unit) {
                                 Text("Listede yokum — elle yazayım", fontSize = 12.sp)
                             }
                         }
-                        else -> { manualUserEntry = true }
+                        // Liste boş/çekilemedi: elle yazma alanı zaten aşağıda
+                        // görünür (manualUserEntry LaunchedEffect'te açılır).
+                        else -> Unit
                     }
                 }
 

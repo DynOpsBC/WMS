@@ -1419,7 +1419,7 @@ private fun PickLineActionSheet(
         Spacer(Modifier.height(8.dp))
         OutlinedButton(onClick = onComplete, modifier = Modifier.fillMaxWidth().height(50.dp)) { Text("✅ Tamamla (tam miktar)") }
         Spacer(Modifier.height(8.dp))
-        OutlinedButton(onClick = onShort, modifier = Modifier.fillMaxWidth().height(50.dp)) { Text("⚠ Short (eksik)") }
+        OutlinedButton(onClick = onShort, modifier = Modifier.fillMaxWidth().height(50.dp)) { Text("⚠ Eksik Topla") }
         Spacer(Modifier.height(24.dp))
     }
 }

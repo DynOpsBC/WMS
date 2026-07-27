@@ -436,7 +436,7 @@ fun AssemblyModule() {
                     }
                 }
             }
-            if (rows.isEmpty() && !loading) item { EmptyState("Released montaj emri yok.") }
+            if (rows.isEmpty() && !loading) item { EmptyState("Serbest bırakılmış montaj emri yok.") }
         }
     }
 }

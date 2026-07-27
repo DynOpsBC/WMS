@@ -162,7 +162,7 @@ private fun LpBuildSheet(onDismiss: () -> Unit, onBuilt: (String) -> Unit) {
             }
         }
         Spacer(Modifier.height(8.dp))
-        ScanField("Location", location, { location = it }, modifier = Modifier.fillMaxWidth())
+        ScanField("Lokasyon", location, { location = it }, modifier = Modifier.fillMaxWidth())
         Spacer(Modifier.height(8.dp))
         ScanField("Bin", bin, { bin = it }, modifier = Modifier.fillMaxWidth())
         if (err.isNotBlank()) { Spacer(Modifier.height(8.dp)); StatusText(err) }
@@ -266,7 +266,7 @@ private fun LpDocument(lpNo: String, onBack: () -> Unit) {
                             val extra = listOfNotNull(
                                 ln.optString("sourceBinCode").takeIf { it.isNotBlank() && it != "null" }?.let { "📍 $it" },
                                 ln.optString("lotNo").takeIf { it.isNotBlank() }?.let { "Lot $it" },
-                                ln.optString("serialNo").takeIf { it.isNotBlank() }?.let { "Sr $it" },
+                                ln.optString("serialNo").takeIf { it.isNotBlank() }?.let { "Seri $it" },
                                 ln.optString("unitOfMeasure").takeIf { it.isNotBlank() }
                             ).joinToString(" · ")
                             if (extra.isNotBlank()) Text(extra, fontSize = 11.sp, color = Color.Gray)
@@ -299,7 +299,7 @@ private fun LpDocument(lpNo: String, onBack: () -> Unit) {
                 modifier = Modifier.weight(1f),
             ) { Text("🖨 Yazdır") }
             OutlinedButton(onClick = { showPartial = true }, enabled = !busy, modifier = Modifier.weight(1f)) { Text("Kısmi") }
-            OutlinedButton(onClick = { action("unbuild", "{}", "LP Unbuild") }, enabled = !busy, modifier = Modifier.weight(1f)) { Text("Boz") }
+            OutlinedButton(onClick = { action("unbuild", "{}", "LP bozuldu") }, enabled = !busy, modifier = Modifier.weight(1f)) { Text("Boz") }
         }
     }
 
@@ -381,7 +381,7 @@ private fun AddLineScanSheet(onDismiss: () -> Unit, onItem: (String) -> Unit) {
     com.dynops.bcwms.ui.SheetScaffold(onDismiss = onDismiss, contentPadding = androidx.compose.foundation.layout.PaddingValues(20.dp)) {
         Text("Ürün Tara / Gir", fontWeight = FontWeight.Bold, fontSize = 18.sp)
         Spacer(Modifier.height(12.dp))
-        ScanField("Item No", item, { item = it }, modifier = Modifier.fillMaxWidth(), onScanned = { raw ->
+        ScanField("Ürün No.", item, { item = it }, modifier = Modifier.fillMaxWidth(), onScanned = { raw ->
             item = BarcodeIntentResolver.resolve(raw).itemNo ?: raw
         })
         Spacer(Modifier.height(16.dp))

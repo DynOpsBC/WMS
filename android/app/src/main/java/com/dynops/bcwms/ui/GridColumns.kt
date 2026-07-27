@@ -28,6 +28,13 @@ private fun nz(o: JSONObject, key: String): String {
     val v = o.optString(key); return if (v == "null") "" else v
 }
 
+/** Warehouse Activity Line.Action Type (wire) → ekranda gösterilen Türkçe etiket. */
+private fun actionTypeLabel(actionType: String): String = when (actionType) {
+    "Take" -> "Al"
+    "Place" -> "Koy"
+    else -> actionType
+}
+
 /** Ekran-bazlı kolon tanımları (mevcut olabilecek tüm kolonlar). */
 object GridColumns {
 
@@ -69,7 +76,7 @@ object GridColumns {
     )
 
     val putaway = listOf(
-        GridColumn("action", "İşlem", true, 72) { nz(it, "actionType") },
+        GridColumn("action", "İşlem", true, 72) { actionTypeLabel(nz(it, "actionType")) },
         GridColumn("bin", "Bin", true, 92) { nz(it, "binCode") },
         GridColumn("itemNo", "Ürün No.", true, 104) { nz(it, "itemNo") },
         GridColumn("description", "Açıklama", false, 170) { nz(it, "description") },

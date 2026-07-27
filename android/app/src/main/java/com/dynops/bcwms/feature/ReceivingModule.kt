@@ -429,7 +429,7 @@ private fun PurchaseOrderTab() {
             }
             loading = false
             status = if (!r.ok) "HATA: PO listesi alınamadı (HTTP ${r.httpCode}) — ${BcApi.errorMessage(r.body).take(120)}"
-                else if (rows.isEmpty()) (if (q.isNotBlank()) "BOŞ: '$q' ile eşleşen PO/ürün yok" else "BOŞ: ${if (releasedOnly) "Released" else "Açık"} PO yok (HTTP ${r.httpCode})")
+                else if (rows.isEmpty()) (if (q.isNotBlank()) "BOŞ: '$q' ile eşleşen PO/ürün yok" else "BOŞ: ${if (releasedOnly) "serbest bırakılmış" else "açık"} PO yok (HTTP ${r.httpCode})")
                 else "TAMAM: ${rows.size} satınalma siparişi" + (if (itemHit > 0) " · 🔎 '$q' ürününü içerenler dahil" else "")
         }
     }
@@ -457,7 +457,7 @@ private fun PurchaseOrderTab() {
             FilterChip(
                 selected = releasedOnly,
                 onClick = { releasedOnly = !releasedOnly },
-                label = { Text(if (releasedOnly) "Sadece Released" else "Tüm Durumlar", fontSize = 12.sp) }
+                label = { Text(if (releasedOnly) "Sadece Serbest" else "Tüm Durumlar", fontSize = 12.sp) }
             )
         }
         Spacer(Modifier.height(8.dp))

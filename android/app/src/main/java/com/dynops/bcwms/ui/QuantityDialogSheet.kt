@@ -70,7 +70,7 @@ fun QuantityDialogSheet(
             Spacer(Modifier.height(12.dp))
             OutlinedTextField(
                 value = uom, onValueChange = { uom = it },
-                label = { Text("Ölçü Birimi (UoM)") }, singleLine = true,
+                label = { Text("Ölçü Birimi (UOM)") }, singleLine = true,
                 modifier = Modifier.fillMaxWidth()
             )
             if (showLotSerial) {

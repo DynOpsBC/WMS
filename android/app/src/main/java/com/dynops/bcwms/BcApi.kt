@@ -349,7 +349,7 @@ object BcApi {
         withContext(Dispatchers.IO) {
             ensureFreshToken(context)
             val token = getToken(context)
-            if (token.isBlank()) return@withContext ApiResult(false, 0, "Token yok — Connection ekranindan token girin")
+            if (token.isBlank()) return@withContext ApiResult(false, 0, "Token yok — Bağlantı Ayarları ekranından token girin")
             try {
                 val rawUrl = if (path.startsWith("http")) path else "${customApiBase(context)}/$path"
                 val url = rawUrl.replace(" ", "%20").replace("'", "%27")

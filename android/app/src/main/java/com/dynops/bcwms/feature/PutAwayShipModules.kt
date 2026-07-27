@@ -594,9 +594,9 @@ private fun BinListContent(locationCode: String, onSelect: ((String) -> Unit)?) 
                     Text(
                         listOf(
                             b.optString("description"),
-                            "Zone ${b.optString("zoneCode").ifBlank { "-" }}",
+                            "Bölge ${b.optString("zoneCode").ifBlank { "-" }}",
                             "Tip ${b.optString("binTypeCode").ifBlank { "-" }}",
-                            "Rank ${b.optInt("binRanking", 0)}",
+                            "Sıra ${b.optInt("binRanking", 0)}",
                             if (block.isBlank() || block == " ") "Blok yok" else "Blok $block",
                         ).filter { it.isNotBlank() }.joinToString(" · "),
                         fontSize = 12.sp,
@@ -1214,7 +1214,7 @@ private fun SalesOrderTab() {
             loading = false
             rows = if (r.ok) BcApi.parseValueArray(r.body) else emptyList()
             status = if (!r.ok) "HATA: SO listesi alınamadı (HTTP ${r.httpCode}) — ${BcApi.errorMessage(r.body).take(120)}"
-                else if (rows.isEmpty()) "BOŞ: ${if (releasedOnly) "Released" else "Açık"} SO yok (HTTP ${r.httpCode})"
+                else if (rows.isEmpty()) "BOŞ: ${if (releasedOnly) "serbest bırakılmış" else "açık"} SO yok (HTTP ${r.httpCode})"
                 else "TAMAM: ${rows.size} satış siparişi (HTTP ${r.httpCode})"
         }
     }
@@ -1242,7 +1242,7 @@ private fun SalesOrderTab() {
             FilterChip(
                 selected = releasedOnly,
                 onClick = { releasedOnly = !releasedOnly },
-                label = { Text(if (releasedOnly) "Sadece Released" else "Tüm Durumlar", fontSize = 12.sp) }
+                label = { Text(if (releasedOnly) "Sadece Serbest" else "Tüm Durumlar", fontSize = 12.sp) }
             )
         }
         Spacer(Modifier.height(8.dp))

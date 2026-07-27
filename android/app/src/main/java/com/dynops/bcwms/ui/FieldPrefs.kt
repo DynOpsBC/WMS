@@ -22,9 +22,9 @@ object FieldPrefs {
 
     /** Kişiselleştirilebilir ek alanlar (satır kartı ikincil satırında). */
     val fields = listOf(
-        LineFieldDef("uom", "Ölçü Birimi (UoM)", "Adet / Koli / Palet", true),
+        LineFieldDef("uom", "Ölçü Birimi (UOM)", "Adet / Koli / Palet", true),
         LineFieldDef("variant", "Varyant", "Renk/beden vb. varyant kodu", true),
-        LineFieldDef("itemRef", "Satıcı Barkodu", "Item Reference (sipariş satırlarında)", true),
+        LineFieldDef("itemRef", "Satıcı Barkodu", "Ürün Referansı (sipariş satırlarında)", true),
         LineFieldDef("lot", "Lot / Seri No", "Satırdaki lot veya seri numarası", false),
         LineFieldDef("desc2", "Açıklama 2", "Ürünün ikinci açıklama satırı", false),
     )

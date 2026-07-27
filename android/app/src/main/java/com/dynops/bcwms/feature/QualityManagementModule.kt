@@ -40,6 +40,37 @@ private fun qmBase(context: android.content.Context): String =
 private fun inspectionKey(systemId: String): String =
     "'${systemId.replace("'", "''")}'"
 
+/**
+ * BC durum değeri (wire) → operatöre gösterilen Türkçe etiket. Karşılaştırmalar
+ * hep ham değerle yapılır; ekranda sadece bu etiket görünür.
+ */
+internal fun bcStatusLabelTr(status: String): String = when (status) {
+    "Open" -> "Açık"
+    "InProgress" -> "Devam Ediyor"
+    "Completed" -> "Tamamlandı"
+    "Finished" -> "Bitti"
+    "Passed" -> "Geçti"
+    "Failed" -> "Başarısız"
+    "Released" -> "Serbest"
+    "Cancelled", "Canceled" -> "İptal"
+    else -> status
+}
+
+/** Item/Warehouse Ledger Entry Type (wire) → operatöre gösterilen Türkçe etiket. */
+internal fun bcEntryTypeLabelTr(entryType: String): String = when (entryType) {
+    "Purchase" -> "Satın Alma"
+    "Sale" -> "Satış"
+    "Positive Adjmt.", "Positive Adjmt" -> "Pozitif Düzeltme"
+    "Negative Adjmt.", "Negative Adjmt" -> "Negatif Düzeltme"
+    "Transfer" -> "Transfer"
+    "Consumption" -> "Sarfiyat"
+    "Output" -> "Çıktı"
+    "Assembly Consumption" -> "Montaj Sarfiyatı"
+    "Assembly Output" -> "Montaj Çıktısı"
+    "Movement" -> "Hareket"
+    else -> entryType
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun QualityManagementModule() {
@@ -88,7 +119,7 @@ fun QualityManagementModule() {
                     Column(Modifier.padding(12.dp)) {
                         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                             Text("${d.optString("inspectionNo")} · ${firstValue(d, "templateCode").ifBlank { "—" }}", fontWeight = FontWeight.Bold)
-                            Text(firstValue(d, "status").ifBlank { "Open" }, fontSize = 12.sp, color = Color.Gray)
+                            Text(firstValue(d, "status").ifBlank { "Open" }.let { bcStatusLabelTr(it) }, fontSize = 12.sp, color = Color.Gray)
                         }
                         Text(firstValue(d, "description"), fontSize = 12.sp, color = Color.Gray)
                         val parts = mutableListOf<String>()
@@ -157,7 +188,7 @@ private fun InspectionDetail(insp: JSONObject, onBack: () -> Unit) {
                     if (lot.isNotBlank()) append(" · Lot: ").append(lot)
                     if (serial.isNotBlank()) append(" · SN: ").append(serial)
                     if (pkg.isNotBlank()) append(" · Paket: ").append(pkg)
-                    append("\nDurum: ").append(sval.ifBlank { "Open" })
+                    append("\nDurum: ").append(bcStatusLabelTr(sval.ifBlank { "Open" }))
                     append(" · Sonuç: ").append(firstValue(current, "resultCode").ifBlank { "—" })
                 },
             )

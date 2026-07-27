@@ -58,7 +58,7 @@ fun PrintersModule() {
             rows = if (r.ok) BcApi.parseValueArray(r.body) else emptyList()
             status = if (!r.ok) "HATA: Printer listesi alınamadı (HTTP ${r.httpCode})"
                 else if (rows.isEmpty()) "BOŞ: kayıtlı printer yok (HTTP ${r.httpCode})"
-                else "TAMAM: ${rows.size} printer (HTTP ${r.httpCode})"
+                else "TAMAM: ${rows.size} yazıcı (HTTP ${r.httpCode})"
         }
     }
     LaunchedEffect(Unit) { load() }
@@ -66,7 +66,7 @@ fun PrintersModule() {
     Column(Modifier.fillMaxSize().padding(12.dp)) {
         Text("🖨 Yazıcılar", fontWeight = FontWeight.Bold, fontSize = 18.sp)
         Text(
-            "Self-Hosted Print Bridge — agent kayıtları + bu cihaz için default printer.",
+            "Kendi sunucunuzdaki yazdırma köprüsü — agent kayıtları + bu cihaz için varsayılan yazıcı.",
             fontSize = 12.sp, color = Color.Gray
         )
         Spacer(Modifier.height(8.dp))
@@ -130,7 +130,7 @@ fun PrintersModule() {
             confirmButton = {
                 TextButton(onClick = { tokenDialog = null }) { Text("Kapat") }
             },
-            title = { Text("Agent Token — $code") },
+            title = { Text("Agent Tokenı — $code") },
             text = {
                 Column {
                     Text("Token yalnızca şimdi gösterilir. Kopyalayıp local agent config.json'a yazın.", fontSize = 12.sp)

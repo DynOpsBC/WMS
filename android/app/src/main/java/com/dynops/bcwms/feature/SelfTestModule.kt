@@ -68,7 +68,7 @@ fun SelfTestModule() {
     suspend fun timed(id: String, block: suspend () -> Pair<CheckStatus, String>) {
         update(id, CheckStatus.RUNNING)
         val start = System.currentTimeMillis()
-        val (status, msg) = try { block() } catch (e: Exception) { CheckStatus.FAIL to "exception: ${e.message ?: e.javaClass.simpleName}" }
+        val (status, msg) = try { block() } catch (e: Exception) { CheckStatus.FAIL to "istisna: ${e.message ?: e.javaClass.simpleName}" }
         update(id, status, msg, System.currentTimeMillis() - start)
     }
 
@@ -93,7 +93,7 @@ fun SelfTestModule() {
             timed("bc_standard") {
                 if (!hasToken) return@timed CheckStatus.SKIP to "Token gerek"
                 val r = BcApi.getWithStandardFallback(context, "items?\$top=1")
-                if (r.ok) CheckStatus.PASS to "items endpoint çalışıyor (HTTP ${r.httpCode})"
+                if (r.ok) CheckStatus.PASS to "items servisi çalışıyor (HTTP ${r.httpCode})"
                 else CheckStatus.FAIL to "HTTP ${r.httpCode}"
             }
             timed("token_age") {
@@ -108,16 +108,16 @@ fun SelfTestModule() {
             timed("item_inventory") {
                 if (!hasToken) return@timed CheckStatus.SKIP to "Token gerek"
                 val r = BcApi.get(context, "items?\$top=1&\$select=no,inventory,quantityOnPurchOrder,quantityOnSalesOrder")
-                if (!r.ok) return@timed CheckStatus.FAIL to "items query HTTP ${r.httpCode}"
+                if (!r.ok) return@timed CheckStatus.FAIL to "items sorgusu HTTP ${r.httpCode}"
                 val first = BcApi.parseValueArray(r.body).firstOrNull()
-                    ?: return@timed CheckStatus.SKIP to "Hiç item yok"
-                if (!first.has("inventory")) return@timed CheckStatus.FAIL to "inventory field yok — ItemApi.Page.al güncel mi?"
-                CheckStatus.PASS to "inventory field döner (${first.optString("no")}=${first.optDouble("inventory")})"
+                    ?: return@timed CheckStatus.SKIP to "Hiç ürün yok"
+                if (!first.has("inventory")) return@timed CheckStatus.FAIL to "inventory alanı yok — ItemApi.Page.al güncel mi?"
+                CheckStatus.PASS to "inventory alanı dönüyor (${first.optString("no")}=${first.optDouble("inventory")})"
             }
             timed("bin_contents") {
                 if (!hasToken) return@timed CheckStatus.SKIP to "Token gerek"
                 val r = BcApi.get(context, "binContents?\$top=1")
-                if (r.ok) CheckStatus.PASS to "binContents endpoint çalışıyor"
+                if (r.ok) CheckStatus.PASS to "binContents servisi çalışıyor"
                 else CheckStatus.FAIL to "HTTP ${r.httpCode} — DOPSWHS BinContent API publish edildi mi?"
             }
             timed("bins") { probe(context, hasToken, "bins?\$top=1", "Bin kartları") }
@@ -127,12 +127,12 @@ fun SelfTestModule() {
                 val codes = if (r.ok) BcApi.parseValueArray(r.body) else emptyList()
                 when {
                     !r.ok -> CheckStatus.FAIL to "HTTP ${r.httpCode}"
-                    codes.isEmpty() -> CheckStatus.FAIL to "Hiç LP template yok — Setup gerekli"
-                    else -> CheckStatus.PASS to "${codes.size} template (${codes.first().optString("code")}...)"
+                    codes.isEmpty() -> CheckStatus.FAIL to "Hiç LP şablonu yok — kurulum gerekli"
+                    else -> CheckStatus.PASS to "${codes.size} şablon (${codes.first().optString("code")}...)"
                 }
             }
             timed("receiving") { probe(context, hasToken, "receipts?\$top=1", "Mal Kabul (receipts)") }
-            timed("putaway") { probe(context, hasToken, "putAways?\$top=1", "Put-Away") }
+            timed("putaway") { probe(context, hasToken, "putAways?\$top=1", "Yerleştirme") }
             timed("picking") { probe(context, hasToken, "picks?\$top=1", "Toplama (picks)") }
             timed("shipping") { probe(context, hasToken, "shipments?\$top=1", "Sevkiyat (shipments)") }
             timed("count") { probe(context, hasToken, "countSheets?\$top=1", "Sayım (countSheets)") }
@@ -145,8 +145,8 @@ fun SelfTestModule() {
             // --- Cihaz ---
             timed("default_printer") {
                 val printer = com.dynops.bcwms.feature.getDefaultPrinter(context)
-                if (printer.isBlank()) CheckStatus.SKIP to "Default printer atanmadı (Yazıcılar ekranından seçin)"
-                else CheckStatus.PASS to "Default: $printer"
+                if (printer.isBlank()) CheckStatus.SKIP to "Varsayılan yazıcı atanmadı (Yazıcılar ekranından seçin)"
+                else CheckStatus.PASS to "Varsayılan: $printer"
             }
             timed("scan_bus") {
                 val received = withTimeoutOrNull(500) {
@@ -159,8 +159,8 @@ fun SelfTestModule() {
                         deferred.await()
                     }
                 }
-                if (received?.raw == "SELF_TEST_PROBE") CheckStatus.PASS to "ScanBus emit + collect OK"
-                else CheckStatus.FAIL to "Bus event alınmadı (DataWedge wiring kontrolü)"
+                if (received?.raw == "SELF_TEST_PROBE") CheckStatus.PASS to "ScanBus emit + collect başarılı"
+                else CheckStatus.FAIL to "Bus olayı alınmadı (DataWedge bağlantısını kontrol edin)"
             }
 
             running = false
@@ -214,7 +214,7 @@ private suspend fun probe(
 ): Pair<CheckStatus, String> {
     if (!hasToken) return CheckStatus.SKIP to "Token gerek"
     val r = BcApi.get(context, path)
-    return if (r.ok) CheckStatus.PASS to "$label endpoint çalışıyor"
+    return if (r.ok) CheckStatus.PASS to "$label servisi çalışıyor"
     else CheckStatus.FAIL to "HTTP ${r.httpCode}"
 }
 
@@ -316,12 +316,12 @@ private fun initialChecks(): List<CheckResult> = listOf(
     CheckResult("bc_standard", "Standart items fallback çalışıyor mu?", CheckStatus.PENDING, G_CONN),
     CheckResult("token_age", "Token süresi geçerli mi?", CheckStatus.PENDING, G_CONN),
     // Veri & Modüller
-    CheckResult("item_inventory", "Item Inquiry · inventory FlowField", CheckStatus.PENDING, G_MOD),
-    CheckResult("bin_contents", "Bin Inquiry · binContents (72097)", CheckStatus.PENDING, G_MOD),
+    CheckResult("item_inventory", "Ürün Sorgu · inventory FlowField", CheckStatus.PENDING, G_MOD),
+    CheckResult("bin_contents", "Bin Sorgu · binContents (72097)", CheckStatus.PENDING, G_MOD),
     CheckResult("bins", "Bin kartları (bins) çalışıyor mu?", CheckStatus.PENDING, G_MOD),
-    CheckResult("lp_templates", "LP templates seed edilmiş mi?", CheckStatus.PENDING, G_MOD),
+    CheckResult("lp_templates", "LP şablonları yüklenmiş mi?", CheckStatus.PENDING, G_MOD),
     CheckResult("receiving", "Mal Kabul (receipts) çalışıyor mu?", CheckStatus.PENDING, G_MOD),
-    CheckResult("putaway", "Put-Away (putAways) çalışıyor mu?", CheckStatus.PENDING, G_MOD),
+    CheckResult("putaway", "Yerleştirme (putAways) çalışıyor mu?", CheckStatus.PENDING, G_MOD),
     CheckResult("picking", "Toplama (picks) çalışıyor mu?", CheckStatus.PENDING, G_MOD),
     CheckResult("shipping", "Sevkiyat (shipments) çalışıyor mu?", CheckStatus.PENDING, G_MOD),
     CheckResult("count", "Sayım (countSheets) çalışıyor mu?", CheckStatus.PENDING, G_MOD),
@@ -331,6 +331,6 @@ private fun initialChecks(): List<CheckResult> = listOf(
     CheckResult("quality_orders", "Kalite (qualityOrders) çalışıyor mu?", CheckStatus.PENDING, G_MOD),
     CheckResult("printers", "Yazıcılar (printers) çalışıyor mu?", CheckStatus.PENDING, G_MOD),
     // Cihaz
-    CheckResult("default_printer", "Default printer atanmış mı?", CheckStatus.PENDING, G_DEVICE),
+    CheckResult("default_printer", "Varsayılan yazıcı atanmış mı?", CheckStatus.PENDING, G_DEVICE),
     CheckResult("scan_bus", "ScanBus emit + collect çalışıyor mu?", CheckStatus.PENDING, G_DEVICE),
 )

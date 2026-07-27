@@ -89,7 +89,7 @@ fun PostingTestModule() {
                 item {
                     SectionHeader(
                         icon = "⚙️",
-                        title = "Setup Eksiklikleri",
+                        title = "Kurulum Eksiklikleri",
                         count = grouped.setupMissing.size,
                         subtitle = "BC'de Inventory Posting Setup / routing / hesap planı eksik",
                         expanded = showSetup,
@@ -202,7 +202,7 @@ private fun PostingSummary(g: GroupedPosting) {
     Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
         SummaryChip("Geçen", g.passed.size, total, Color(0xFF2E7D32))
         if (g.realFailure.isNotEmpty()) SummaryChip("Gerçek hata", g.realFailure.size, total, Color(0xFFC62828))
-        if (g.setupMissing.isNotEmpty()) SummaryChip("Setup eksik", g.setupMissing.size, total, Color(0xFFEF6C00))
+        if (g.setupMissing.isNotEmpty()) SummaryChip("Kurulum eksik", g.setupMissing.size, total, Color(0xFFEF6C00))
         if (g.cascadeSkip.isNotEmpty()) SummaryChip("Atlandı", g.cascadeSkip.size, total, Color(0xFF1565C0))
     }
 }
@@ -268,7 +268,7 @@ private fun PostingRowCard(d: JSONObject, kind: PostingKind) {
                 val statusLabel = when (kind) {
                     PostingKind.PASSED -> "Geçti"
                     PostingKind.FAILED -> "Başarısız"
-                    PostingKind.SETUP_MISSING -> "Setup eksik"
+                    PostingKind.SETUP_MISSING -> "Kurulum eksik"
                     PostingKind.CASCADE_SKIP -> "Atlandı"
                 }
                 Text(statusLabel, color = color, fontSize = 12.sp, fontWeight = FontWeight.Bold)

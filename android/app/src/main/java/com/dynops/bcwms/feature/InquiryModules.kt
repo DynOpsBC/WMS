@@ -32,7 +32,7 @@ fun ItemInquiryModule() {
     var item by remember { mutableStateOf<JSONObject?>(null) }
     var lpLines by remember { mutableStateOf<List<JSONObject>>(emptyList()) }
     var ledger by remember { mutableStateOf<List<JSONObject>>(emptyList()) }
-    var status by remember { mutableStateOf("Item No tarayın/girin.") }
+    var status by remember { mutableStateOf("Ürün No. tarayın/girin.") }
     var loading by remember { mutableStateOf(false) }
 
     fun load() {
@@ -53,7 +53,7 @@ fun ItemInquiryModule() {
             val le = BcApi.get(context, "itemLedgerEntries?\$filter=itemNo eq '$q'&\$orderby=postingDate desc,entryNo desc&\$top=20")
             if (le.ok) ledger = BcApi.parseValueArray(le.body)
             loading = false
-            status = if (item == null) "BOŞ: '$q' için item bulunamadı." else "TAMAM: item bulundu · ${lpLines.size} LP · ${ledger.size} hareket."
+            status = if (item == null) "BOŞ: '$q' için item bulunamadı." else "TAMAM: ürün bulundu · ${lpLines.size} LP · ${ledger.size} hareket."
         }
     }
 
@@ -62,7 +62,7 @@ fun ItemInquiryModule() {
         scope.launch {
             status = "🖨 Etiket yazdırılıyor..."
             val r = BcApi.boundAction(context, "items", no, "printLabel", """{"printerId":"","copies":1}""")
-            status = if (r.ok) "🟢 Item etiketi kuyruğa alındı ($no)." else "🔴 Yazdırma: ${BcApi.errorMessage(r.body)} (HTTP ${r.httpCode})"
+            status = if (r.ok) "🟢 Ürün etiketi kuyruğa alındı ($no)." else "🔴 Yazdırma: ${BcApi.errorMessage(r.body)} (HTTP ${r.httpCode})"
         }
     }
 
@@ -117,13 +117,13 @@ fun ItemInquiryModule() {
                         Text("Gelen ${fmtItemQty(qtyOnPo)} · Giden ${fmtItemQty(qtyOnSo)} · Üretim ${fmtItemQty(qtyOnProd)}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                     Spacer(Modifier.height(8.dp))
-                    Text("Temel UoM: $uom", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    Text("Kategori: ${firstValue(it, "itemCategoryCode")} · LP Template: ${firstValue(it, "defaultLpTemplateCode")}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text("Temel UOM: $uom", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text("Kategori: ${firstValue(it, "itemCategoryCode")} · LP Şablonu: ${firstValue(it, "defaultLpTemplateCode")}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     Text("LP'lerdeki toplam: ${fmtItemQty(totalOnLp)} $uom", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
             Spacer(Modifier.height(8.dp))
-            OutlinedButton(onClick = { printItemLabel() }, modifier = Modifier.fillMaxWidth().height(48.dp)) { Text("🖨 Item Etiketi Bas") }
+            OutlinedButton(onClick = { printItemLabel() }, modifier = Modifier.fillMaxWidth().height(48.dp)) { Text("🖨 Ürün Etiketi Bas") }
             Spacer(Modifier.height(12.dp))
             Text("LP'lerde (${lpLines.size})", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
             Spacer(Modifier.height(6.dp))
@@ -135,13 +135,13 @@ fun ItemInquiryModule() {
                         Text("${ln.optString("lpNo")} × ${fmtItemQty(ln.optDouble("quantity"))}", fontWeight = FontWeight.Medium, color = MaterialTheme.colorScheme.onSurface)
                         val extra = listOfNotNull(
                             ln.optString("lotNo").takeIf { it.isNotBlank() }?.let { "Lot $it" },
-                            ln.optString("serialNo").takeIf { it.isNotBlank() }?.let { "Sr $it" }
+                            ln.optString("serialNo").takeIf { it.isNotBlank() }?.let { "Seri $it" }
                         ).joinToString(" · ")
                         if (extra.isNotBlank()) Text(extra, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }
             }
-            if (item != null && lpLines.isEmpty() && !loading) item { EmptyState("Bu item hiçbir LP'de bulunmuyor.") }
+            if (item != null && lpLines.isEmpty() && !loading) item { EmptyState("Bu ürün hiçbir LP'de bulunmuyor.") }
             if (ledger.isNotEmpty()) {
                 item {
                     Text("Son Hareketler (${ledger.size})", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface, modifier = Modifier.padding(top = 10.dp, bottom = 4.dp))
@@ -151,7 +151,7 @@ fun ItemInquiryModule() {
                     Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp)) {
                         Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
                             Column(Modifier.weight(1f)) {
-                                Text("${e.optString("entryType")} · ${e.optString("documentNo")}", fontWeight = FontWeight.Medium, color = MaterialTheme.colorScheme.onSurface)
+                                Text("${bcEntryTypeLabelTr(e.optString("entryType"))} · ${e.optString("documentNo")}", fontWeight = FontWeight.Medium, color = MaterialTheme.colorScheme.onSurface)
                                 Text("${e.optString("postingDate").take(10)} · ${firstValue(e, "locationCode")}" + e.optString("lotNo").takeIf { it.isNotBlank() }?.let { " · Lot $it" }.orEmpty(), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                             }
                             Text(fmtItemQty(qty), fontWeight = FontWeight.Bold, color = if (qty < 0) bcwmsStatus().danger else bcwmsStatus().success)
@@ -197,7 +197,7 @@ fun BinInquiryModule() {
             if (we.ok) whseEntries = BcApi.parseValueArray(we.body)
             loading = false
             status = if (bin == null && contents.isEmpty() && lps.isEmpty()) "BOŞ: '$loc/$code' için içerik yok."
-                else "TAMAM: ${contents.size} item · ${lps.size} LP · ${whseEntries.size} hareket."
+                else "TAMAM: ${contents.size} ürün · ${lps.size} LP · ${whseEntries.size} hareket."
         }
     }
 
@@ -244,7 +244,7 @@ fun BinInquiryModule() {
                         }
                     }
                     Text(firstValue(b, "description").ifBlank { "—" }, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurface)
-                    Text("Zone: ${firstValue(b, "zoneCode").ifBlank { "—" }} · Type: ${firstValue(b, "binTypeCode").ifBlank { "—" }}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text("Bölge: ${firstValue(b, "zoneCode").ifBlank { "—" }} · Tip: ${firstValue(b, "binTypeCode").ifBlank { "—" }}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
             Spacer(Modifier.height(8.dp))
@@ -286,7 +286,7 @@ fun BinInquiryModule() {
             items(lps) { lp ->
                 Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp)) {
                     Column(Modifier.padding(12.dp)) {
-                        Text("${lp.optString("no")} · ${lp.optString("status")}", fontWeight = FontWeight.Medium, color = MaterialTheme.colorScheme.onSurface)
+                        Text("${lp.optString("no")} · ${lpStatusLabel(lp.optString("status"))}", fontWeight = FontWeight.Medium, color = MaterialTheme.colorScheme.onSurface)
                         Text("${lp.optString("templateCode")}${lp.optString("sscc").takeIf { it.isNotBlank() }?.let { " · SSCC $it" } ?: ""}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }
@@ -301,7 +301,7 @@ fun BinInquiryModule() {
                     Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp)) {
                         Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
                             Column(Modifier.weight(1f)) {
-                                Text("${e.optString("itemNo")} · ${e.optString("entryType")}", fontWeight = FontWeight.Medium, color = MaterialTheme.colorScheme.onSurface)
+                                Text("${e.optString("itemNo")} · ${bcEntryTypeLabelTr(e.optString("entryType"))}", fontWeight = FontWeight.Medium, color = MaterialTheme.colorScheme.onSurface)
                                 Text("${e.optString("registeringDate").take(10)}" + e.optString("lotNo").takeIf { it.isNotBlank() }?.let { " · Lot $it" }.orEmpty() + e.optString("lpNo").takeIf { it.isNotBlank() }?.let { " · LP $it" }.orEmpty(), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                             }
                             Text(fmtItemQty(qty), fontWeight = FontWeight.Bold, color = if (qty < 0) bcwmsStatus().danger else bcwmsStatus().success)
