@@ -21,6 +21,8 @@ page 72092 "DOPSWHS Pick API"
                 field(locationCode; Rec."Location Code") { Caption = 'locationCode'; }
                 field(assignedUserId; Rec."Assigned User ID") { Caption = 'assignedUserId'; }
                 field(pickMode; Rec."DOPSWHS Pick Mode") { Caption = 'pickMode'; }
+                // ELOG: araç bilgisini sorumlu masadan girer; terminal salt-okunur gösterir.
+                field(vehicleNo; Rec."DOPSWHS Vehicle No.") { Caption = 'vehicleNo'; Editable = false; }
                 field(sourceNo; SourceNo) { Caption = 'sourceNo'; }
                 // TODO Sprint H+ post-deploy: bind to activity status if exposed by the target BC app.
                 field(status; StatusText) { Caption = 'status'; }
@@ -137,6 +139,7 @@ page 72092 "DOPSWHS Pick API"
 
         PickLine.SetRange("Activity Type", Rec.Type);
         PickLine.SetRange("No.", Rec."No.");
+        PickLine.SetRange("Action Type", PickLine."Action Type"::Take);
         if PickLine.FindSet() then
             repeat
                 if SourceNo = '' then begin
@@ -144,7 +147,7 @@ page 72092 "DOPSWHS Pick API"
                     DueDate := PickLine."Due Date";
                 end;
                 TotalQty += PickLine.Quantity;
-                HandledQty += PickLine."Qty. Handled";
+                HandledQty += PickLine."Qty. to Handle";
             until PickLine.Next() = 0;
 
         if TotalQty <> 0 then

@@ -7,6 +7,7 @@ import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
+import org.json.JSONArray
 import org.json.JSONObject
 import java.net.HttpURLConnection
 import java.net.URL
@@ -23,21 +24,25 @@ object BcApi {
     // o kayıtlı tenant'ı kullanır. Böylece her müşteri için ayrı APK gerekmez.
     // FALLBACK_TENANT yalnızca token okunamazsa / geçiş dönemindeki eski
     // kurulumlar için — DynamicsOps sandbox'ı.
-    const val FALLBACK_TENANT = "7fa2357e-26f2-4174-8e16-a713981356b8"
+    val FALLBACK_TENANT = BuildConfig.BC_FALLBACK_TENANT
     // Multi-tenant public client. AzureADMultipleOrgs olarak kayıtlı olmalı;
     // her müşteri yöneticisi kendi tenant'ında bu client'a onay verir.
-    const val CLIENT_ID = "8193e5c6-64d2-4e6f-8992-2114e77e4f24"  // BCWMSApp Mobile (public client, device-code)
+    val CLIENT_ID = BuildConfig.BC_CLIENT_ID  // Tenant flavor public client (device-code)
     const val BC_RESOURCE = "https://api.businesscentral.dynamics.com"
 
     // Defaults (used until the user picks an environment/company after email sign-in).
-    const val DEFAULT_ENVIRONMENT = "SandboxUS"
+    val DEFAULT_ENVIRONMENT = BuildConfig.BC_DEFAULT_ENVIRONMENT
     const val DEFAULT_COMPANY_ID = "1534369d-f248-f111-b478-7c1e521cfdf0"
     const val DEFAULT_COMPANY_NAME = "CRONUS USA, Inc."
 
     /** Sign-in sonrası yoklanan ortam adları. Multi-tenant: her müşterinin
      *  ortam adı farklı olabildiğinden en yaygın adlar denenir; bulunamazsa
      *  kullanıcı LoginFlow'da ortam adını elle girebilir (probeEnvironment). */
-    val KNOWN_ENVIRONMENTS = listOf("Production", "SandboxUS", "CustomerSandbox", "Sandbox")
+    val KNOWN_ENVIRONMENTS = buildList {
+        add(DEFAULT_ENVIRONMENT)
+        addAll(listOf("Sandbox", "SandboxUS", "CustomerSandbox"))
+        if (BuildConfig.BC_ALLOW_PRODUCTION) add("Production")
+    }.distinct()
 
     private const val PREFS = "bcwms_prefs"
     private const val KEY_TOKEN = "bc_access_token"
@@ -90,6 +95,90 @@ object BcApi {
         prefs(context).edit().putString(KEY_COMPANY_ID, id).putString(KEY_COMPANY_NAME, name).apply()
     }
 
+    // ---- Multi-company switcher (BADE / BS / ... aynı ortamda) ----
+    // ELOG: operatör aynı ortamdaki farklı BC şirketleri arasında login yapmadan
+    // geçebilsin. Yalnız erişilebilir (WMS kurulu + operatörün localUser'ı olan)
+    // şirketler saklanır; PIM gibi WMS'siz/kullanıcısız şirketler dışarıda kalır.
+    private const val KEY_ACCESSIBLE_COMPANIES = "accessible_companies_json"
+
+    /** Girişte hesaplanan erişilebilir şirketleri (aktif ortam için) saklar. */
+    fun saveAccessibleCompanies(context: Context, companies: List<Company>) {
+        val arr = JSONArray()
+        companies.forEach { arr.put(JSONObject().apply { put("id", it.id); put("name", it.name); put("displayName", it.displayName) }) }
+        prefs(context).edit().putString(KEY_ACCESSIBLE_COMPANIES, arr.toString()).apply()
+    }
+
+    fun getAccessibleCompanies(context: Context): List<Company> {
+        val raw = prefs(context).getString(KEY_ACCESSIBLE_COMPANIES, null) ?: return emptyList()
+        return runCatching {
+            val arr = JSONArray(raw)
+            (0 until arr.length()).map {
+                val o = arr.getJSONObject(it)
+                Company(o.optString("id"), o.optString("name"), o.optString("displayName").ifBlank { o.optString("name") })
+            }
+        }.getOrDefault(emptyList())
+    }
+
+    /**
+     * Verilen şirket listesinden operatörün erişebildiklerini döndürür.
+     * Kriter: o şirketin DOPSWHS WMS API'sinde `localUsers('<username>')` kaydı
+     * bulunur (HTTP 200) → WMS kurulu VE kullanıcı var. WMS yok (404 host/app)
+     * ya da kullanıcı yok (404) → şirket elenir. Aktif token ile çağrılır.
+     */
+    suspend fun probeAccessibleCompanies(
+        context: Context, env: String, username: String, companies: List<Company>,
+    ): List<Company> = withContext(Dispatchers.IO) {
+        val token = getToken(context)
+        val tenant = getTenant(context)
+        val safeUser = java.net.URLEncoder.encode(username.trim().lowercase().replace("'", "''"), "UTF-8")
+        companies.filter { c ->
+            val url = "https://api.businesscentral.dynamics.com/v2.0/$tenant/$env/api/dynops/warehouse/v2.0/companies(${c.id})/localUsers('$safeUser')"
+            httpGet(url, token).ok
+        }
+    }
+
+    /**
+     * WMS kullanıcı adı olmadan (AAD/admin girişi) erişilebilir şirketleri bulur:
+     * kriter yalnız "DOPSWHS WMS API'si o şirkette yanıt veriyor" — localUsers
+     * entity set'i sorgulanır (HTTP 200 → WMS kurulu). PIM gibi WMS'siz şirketler
+     * elenir; kullanıcı-bazlı filtre yoktur (username bilinmiyor).
+     */
+    suspend fun probeWmsCompanies(
+        context: Context, env: String, companies: List<Company>,
+    ): List<Company> = withContext(Dispatchers.IO) {
+        val token = getToken(context)
+        val tenant = getTenant(context)
+        companies.filter { c ->
+            val url = "https://api.businesscentral.dynamics.com/v2.0/$tenant/$env/api/dynops/warehouse/v2.0/companies(${c.id})/localUsers?\$top=1"
+            httpGet(url, token).ok
+        }
+    }
+
+    /**
+     * Erişilebilir şirket listesi boşsa (ör. login akışı switcher eklenmeden
+     * yapılmış) mevcut ortamdaki tüm şirketleri çekip WMS kurulu olanları
+     * hesaplar ve saklar. Home ekranı ilk açılışta çağırır. Zaten liste doluysa
+     * ya da token yoksa no-op. Sonuç doluysa true döner (UI tazelemek için).
+     */
+    suspend fun refreshAccessibleCompaniesIfEmpty(context: Context): Boolean = withContext(Dispatchers.IO) {
+        if (getAccessibleCompanies(context).isNotEmpty()) return@withContext false
+        val token = getToken(context)
+        if (token.isBlank()) return@withContext false
+        val tenant = getTenant(context)
+        val env = getEnvironment(context)
+        val r = httpGet(companiesUrl(tenant, env), token)
+        if (!r.ok) return@withContext false
+        val all = parseValueArray(r.body).map {
+            Company(it.optString("id"), it.optString("name"), it.optString("displayName").ifBlank { it.optString("name") })
+        }
+        val wms = probeWmsCompanies(context, env, all)
+        val result = wms.ifEmpty {
+            listOf(Company(getCompanyId(context), getCompanyName(context), getCompanyName(context)))
+        }
+        saveAccessibleCompanies(context, result)
+        result.size > 1
+    }
+
     private fun customApiBase(context: Context) =
         "https://api.businesscentral.dynamics.com/v2.0/${getTenant(context)}/${getEnvironment(context)}/api/dynops/warehouse/v2.0/companies(${getCompanyId(context)})"
 
@@ -121,6 +210,7 @@ object BcApi {
         prefs(context).edit()
             .remove(KEY_TOKEN).remove(KEY_REFRESH).remove(KEY_BC_USER)
             .remove(KEY_TENANT).remove(KEY_ENV).remove(KEY_COMPANY_ID).remove(KEY_COMPANY_NAME)
+            .remove(KEY_ACCESSIBLE_COMPANIES)
             .apply()
     }
 
@@ -340,12 +430,16 @@ object BcApi {
     /** Tek bir ortamı yoklar; şirket dönerse EnvCompanies, yoksa null.
      *  Otomatik keşif ortamı bulamazsa kullanıcının elle girdiği ortam adı için. */
     suspend fun probeEnvironment(tenant: String, env: String, token: String): EnvCompanies? = withContext(Dispatchers.IO) {
-        val r = httpGet(companiesUrl(tenant, env.trim()), token)
+        val cleanEnv = env.trim()
+        if (!BuildConfig.BC_ALLOW_PRODUCTION && cleanEnv.equals("Production", ignoreCase = true)) {
+            return@withContext null
+        }
+        val r = httpGet(companiesUrl(tenant, cleanEnv), token)
         if (!r.ok) return@withContext null
         val companies = parseValueArray(r.body).map {
             Company(it.optString("id"), it.optString("name"), it.optString("displayName").ifBlank { it.optString("name") })
         }
-        if (companies.isEmpty()) null else EnvCompanies(env.trim(), companies)
+        if (companies.isEmpty()) null else EnvCompanies(cleanEnv, companies)
     }
 
     /** Plain authenticated GET with an explicit token (used by discovery / sign-in verification). */

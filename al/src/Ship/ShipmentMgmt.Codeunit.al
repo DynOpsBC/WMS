@@ -2,11 +2,12 @@ codeunit 72047 "DOPSWHS Shipment Mgmt"
 {
     Access = Public;
 
-    procedure ConfirmShipmentLine(var WhseShipmentLine: Record "Warehouse Shipment Line"; QtyToShip: Decimal; LicensePlateNo: Code[20]; SSCC: Code[18])
+    procedure ConfirmShipmentLine(var WhseShipmentLine: Record "Warehouse Shipment Line"; QtyToShip: Decimal; LotNo: Code[50]; LicensePlateNo: Code[20]; SSCC: Code[18])
     var
         WhseShipmentHeader: Record "Warehouse Shipment Header";
     begin
         WhseShipmentLine.Validate("Qty. to Ship", QtyToShip);
+        WhseShipmentLine."DOPSWHS Lot No." := LotNo;
         WhseShipmentLine."LP No." := LicensePlateNo;
         WhseShipmentLine.SSCC := SSCC;
         WhseShipmentLine.Modify(true);
@@ -19,6 +20,89 @@ codeunit 72047 "DOPSWHS Shipment Mgmt"
                     WhseShipmentHeader."DOPSWHS LP No." := LicensePlateNo;
                     WhseShipmentHeader.Modify(true);
                 end;
+    end;
+
+    procedure CreatePick(var WhseShipmentHeader: Record "Warehouse Shipment Header"): Code[20]
+    var
+        WhseShipmentLine: Record "Warehouse Shipment Line";
+        WhseActivityLine: Record "Warehouse Activity Line";
+        PickHeader: Record "Warehouse Activity Header";
+        WhseShipmentRelease: Codeunit "Whse.-Shipment Release";
+        CreatePickReport: Report "Whse.-Shipment - Create Pick";
+        PickNo: Code[20];
+        AssignToUserId: Code[50];
+    begin
+        // Aynı sevkiyat için açık pick varsa ikinci bir pick üretme; mevcut kaydı döndür.
+        PickNo := FindOpenPick(WhseShipmentHeader."No.");
+        if PickNo <> '' then begin
+            StampShipmentLotsOnPick(WhseShipmentHeader."No.", PickNo);
+            exit(PickNo);
+        end;
+
+        if WhseShipmentHeader.Status <> WhseShipmentHeader.Status::Released then begin
+            WhseShipmentRelease.Release(WhseShipmentHeader);
+            WhseShipmentHeader.Get(WhseShipmentHeader."No.");
+        end;
+
+        WhseShipmentLine.SetRange("No.", WhseShipmentHeader."No.");
+        if not WhseShipmentLine.FindFirst() then
+            Error(NoShipmentLinesErr, WhseShipmentHeader."No.");
+
+        AssignToUserId := CopyStr(UserId(), 1, MaxStrLen(AssignToUserId));
+        CreatePickReport.SetWhseShipmentLine(WhseShipmentLine, WhseShipmentHeader);
+        CreatePickReport.SetHideValidationDialog(true);
+        CreatePickReport.Initialize(AssignToUserId, Enum::"Whse. Activity Sorting Method"::"Shelf or Bin", false, false, false);
+        CreatePickReport.UseRequestPage(false);
+        CreatePickReport.RunModal();
+
+        WhseActivityLine.SetRange("Activity Type", WhseActivityLine."Activity Type"::Pick);
+        WhseActivityLine.SetRange("Whse. Document Type", WhseActivityLine."Whse. Document Type"::Shipment);
+        WhseActivityLine.SetRange("Whse. Document No.", WhseShipmentHeader."No.");
+        if not WhseActivityLine.FindLast() then
+            Error(PickNotCreatedErr, WhseShipmentHeader."No.");
+        PickNo := WhseActivityLine."No.";
+
+        // Report sürümüne göre atama başlığa taşınmayabilir; mobil "Bana atanan"
+        // filtresinde görünmesi için başlıkta garanti et.
+        if PickHeader.Get(PickHeader.Type::Pick, PickNo) then
+            if PickHeader."Assigned User ID" <> AssignToUserId then begin
+                PickHeader.Validate("Assigned User ID", AssignToUserId);
+                PickHeader.Modify(true);
+            end;
+
+        StampShipmentLotsOnPick(WhseShipmentHeader."No.", PickNo);
+        exit(PickNo);
+    end;
+
+    local procedure FindOpenPick(ShipmentNo: Code[20]): Code[20]
+    var
+        WhseActivityLine: Record "Warehouse Activity Line";
+    begin
+        WhseActivityLine.SetRange("Activity Type", WhseActivityLine."Activity Type"::Pick);
+        WhseActivityLine.SetRange("Whse. Document Type", WhseActivityLine."Whse. Document Type"::Shipment);
+        WhseActivityLine.SetRange("Whse. Document No.", ShipmentNo);
+        if WhseActivityLine.FindFirst() then
+            exit(WhseActivityLine."No.");
+        exit('');
+    end;
+
+    local procedure StampShipmentLotsOnPick(ShipmentNo: Code[20]; PickNo: Code[20])
+    var
+        WhseShipmentLine: Record "Warehouse Shipment Line";
+        WhseActivityLine: Record "Warehouse Activity Line";
+    begin
+        WhseActivityLine.SetRange("Activity Type", WhseActivityLine."Activity Type"::Pick);
+        WhseActivityLine.SetRange("No.", PickNo);
+        WhseActivityLine.SetRange("Whse. Document Type", WhseActivityLine."Whse. Document Type"::Shipment);
+        WhseActivityLine.SetRange("Whse. Document No.", ShipmentNo);
+        if WhseActivityLine.FindSet(true) then
+            repeat
+                if WhseShipmentLine.Get(ShipmentNo, WhseActivityLine."Whse. Document Line No.") then
+                    if WhseShipmentLine."DOPSWHS Lot No." <> '' then begin
+                        WhseActivityLine.Validate("Lot No.", WhseShipmentLine."DOPSWHS Lot No.");
+                        WhseActivityLine.Modify(true);
+                    end;
+            until WhseActivityLine.Next() = 0;
     end;
 
     procedure PostShipment(var WhseShipmentHeader: Record "Warehouse Shipment Header"; PrintPackingSlip: Boolean; Invoice: Boolean)
@@ -178,6 +262,10 @@ codeunit 72047 "DOPSWHS Shipment Mgmt"
         CustomDimensions.Add('lpCount', Format(LpCount));
         Session.LogMessage('AdvWMS.Shipment.Posted', StrSubstNo('Warehouse shipment %1 posted from mobile.', DocNo), Verbosity::Normal, DataClassification::SystemMetadata, TelemetryScope::ExtensionPublisher, CustomDimensions);
     end;
+
+    var
+        NoShipmentLinesErr: Label 'Warehouse shipment %1 has no lines.', Comment = '%1 = Warehouse Shipment No.';
+        PickNotCreatedErr: Label 'No warehouse pick was created for shipment %1. Check bin content and available quantity.', Comment = '%1 = Warehouse Shipment No.';
 
     [BusinessEvent(false)]
     local procedure OnBeforeShipSales(SalesOrderNo: Code[20])

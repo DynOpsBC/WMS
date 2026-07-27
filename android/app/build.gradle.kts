@@ -23,9 +23,37 @@ android {
     applicationId = "com.dynops.bcwms"
     minSdk = 26
     targetSdk = 35
-    versionCode = 1121
-    versionName = "1.11.1"
+    versionCode = 1200
+    versionName = "1.12.0"
+    manifestPlaceholders["appLabel"] = "BCWMS"
     buildConfigField("String", "UPDATE_BASE_URL", "\"https://app.bcwms.dynops.com\"")
+  }
+
+  flavorDimensions += "tenant"
+  productFlavors {
+    create("dynops") {
+      dimension = "tenant"
+      buildConfigField("String", "BC_CLIENT_ID", "\"8193e5c6-64d2-4e6f-8992-2114e77e4f24\"")
+      buildConfigField("String", "BC_FALLBACK_TENANT", "\"7fa2357e-26f2-4174-8e16-a713981356b8\"")
+      buildConfigField("String", "BC_DEFAULT_ENVIRONMENT", "\"SandboxUS\"")
+      buildConfigField("boolean", "BC_ALLOW_PRODUCTION", "true")
+      buildConfigField("String", "TENANT_LABEL", "\"DynamicsOps\"")
+      buildConfigField("String", "LOGIN_EMAIL_HINT", "\"ornek@dynamicsops.com\"")
+    }
+    create("bade") {
+      dimension = "tenant"
+      applicationIdSuffix = ".bade"
+      versionCode = 1200
+      versionName = "1.12.0"
+      versionNameSuffix = "-bade"
+      manifestPlaceholders["appLabel"] = "BCWMS BADE"
+      buildConfigField("String", "BC_CLIENT_ID", "\"3c4ba25a-89f4-41df-acf8-ebab8cb4809b\"")
+      buildConfigField("String", "BC_FALLBACK_TENANT", "\"3bbd610b-95e4-47b3-8b48-4f7caf717bc3\"")
+      buildConfigField("String", "BC_DEFAULT_ENVIRONMENT", "\"sand1506\"")
+      buildConfigField("boolean", "BC_ALLOW_PRODUCTION", "false")
+      buildConfigField("String", "TENANT_LABEL", "\"Bade Natural\"")
+      buildConfigField("String", "LOGIN_EMAIL_HINT", "\"kullanici@badenatural.com\"")
+    }
   }
 
   buildFeatures {

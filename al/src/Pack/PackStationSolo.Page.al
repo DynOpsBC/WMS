@@ -8,7 +8,7 @@ page 72344 "DOPSWHS Pack Station Solo"
     PageType = Card;
     Caption = 'Solo Package Worksheet';
     ApplicationArea = All;
-    UsageCategory = Tasks;
+    UsageCategory = None;
     SourceTable = "DOPSWHS Pack Session";
     InsertAllowed = false;
     DeleteAllowed = false;

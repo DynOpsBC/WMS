@@ -19,6 +19,9 @@ table 72026 "DOPSWHS Warehouse Mgr Cue"
         field(80; "Open Solo Pack Sessions"; Integer) { Caption = 'Open Solo Pack Sessions'; FieldClass = FlowField; CalcFormula = count("DOPSWHS Pack Session" where(Status = const(Open), Mode = const(Solo))); }
         field(81; "Open Bulk Pack Sessions"; Integer) { Caption = 'Open Bulk Pack Sessions'; FieldClass = FlowField; CalcFormula = count("DOPSWHS Pack Session" where(Status = const(Open), Mode = const(Bulk))); }
         field(82; "Open Batch Pack Sessions"; Integer) { Caption = 'Open Mono-SKU Pack Sessions'; FieldClass = FlowField; CalcFormula = count("DOPSWHS Pack Session" where(Status = const(Open), Mode = const(Batch))); }
+        field(83; "Orders Ready for Packing"; Integer) { Caption = 'Orders Ready for Packing'; FieldClass = FlowField; CalcFormula = count("DOPSWHS Packing Order" where(Status = const(Ready))); }
+        field(84; "Orders Being Packed"; Integer) { Caption = 'Orders Being Packed'; FieldClass = FlowField; CalcFormula = count("DOPSWHS Packing Order" where(Status = const("In Progress"))); }
+        field(85; "Open Picking Orders"; Integer) { Caption = 'Open Picking Orders'; FieldClass = FlowField; CalcFormula = count("DOPSWHS Picking Order Header" where(Status = const(Open))); }
         field(100; "Late Pick Date Filter"; Date) { Caption = 'Late Pick Date Filter'; FieldClass = FlowFilter; }
         field(110; "Online Since DateTime Filter"; DateTime) { Caption = 'Online Since DateTime Filter'; FieldClass = FlowFilter; }
     }

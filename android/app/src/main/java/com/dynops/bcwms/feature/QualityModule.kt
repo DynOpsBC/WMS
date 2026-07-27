@@ -46,8 +46,8 @@ fun QualityModule() {
             val all = if (r.ok) BcApi.parseValueArray(r.body) else emptyList()
             rows = if (showOnlyOpen) all.filter { it.optString("status") == "Open" } else all
             status = if (!r.ok) "HATA: Kalite emirleri alınamadı (HTTP ${r.httpCode})"
-                else if (rows.isEmpty()) "EMPTY: ${if (showOnlyOpen) "Açık kalite emri yok" else "Kalite emri yok"} (HTTP ${r.httpCode})"
-                else "PASS: ${rows.size} kalite emri (HTTP ${r.httpCode})"
+                else if (rows.isEmpty()) "BOŞ: ${if (showOnlyOpen) "Açık kalite emri yok" else "Kalite emri yok"} (HTTP ${r.httpCode})"
+                else "TAMAM: ${rows.size} kalite emri (HTTP ${r.httpCode})"
         }
     }
     LaunchedEffect(showOnlyOpen) { load() }
@@ -68,6 +68,15 @@ fun QualityModule() {
         LazyColumn(verticalArrangement = Arrangement.spacedBy(6.dp)) {
             items(rows) { d ->
                 val st = d.optString("status")
+                // BC durum değeri (st) karşılaştırmalarda kullanılır; ekrana Türkçe etiket gösterilir.
+                val stLabel = when (st) {
+                    "Open" -> "Açık"
+                    "Passed" -> "Geçti"
+                    "Failed" -> "Başarısız"
+                    "Skipped" -> "Atlandı"
+                    "InProgress" -> "Devam ediyor"
+                    else -> st
+                }
                 val (bg, fg) = when (st) {
                     "Passed" -> Color(0xFFE8F5E9) to Color(0xFF2E7D32)
                     "Failed" -> Color(0xFFFFEBEE) to Color(0xFFC62828)
@@ -81,7 +90,7 @@ fun QualityModule() {
                         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                             Text(d.optString("no"), fontWeight = FontWeight.Bold)
                             Surface(color = bg, shape = RoundedCornerShape(6.dp)) {
-                                Text(st, Modifier.padding(horizontal = 8.dp, vertical = 2.dp), color = fg, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                Text(stLabel, Modifier.padding(horizontal = 8.dp, vertical = 2.dp), color = fg, fontSize = 11.sp, fontWeight = FontWeight.Bold)
                             }
                         }
                         Text("${d.optString("itemNo")} — ${firstValue(d, "itemDescription")}", fontSize = 13.sp)
@@ -113,7 +122,7 @@ fun QualityModule() {
                     BcApi.boundAction(context, "qualityOrders", no, "fail",
                         JSONObject().apply { put("inspector", "MOBIL"); put("reasonCode", reason); put("notes", notes); put("quarantineBin", quarantine) }.toString())
                 loading = false
-                status = if (r.ok) "PASS: $no → ${if (passed) "KABUL" else "RED"} (HTTP ${r.httpCode})" else "HATA: ${BcApi.errorMessage(r.body)} (HTTP ${r.httpCode})"
+                status = if (r.ok) "TAMAM: $no → ${if (passed) "KABUL" else "RED"} (HTTP ${r.httpCode})" else "HATA: ${BcApi.errorMessage(r.body)} (HTTP ${r.httpCode})"
                 load()
             }
         })
@@ -135,7 +144,7 @@ private fun InspectSheet(order: JSONObject, onDismiss: () -> Unit, onResult: (pa
         Spacer(Modifier.height(8.dp))
         OutlinedTextField(notes, { notes = it }, label = { Text("Notlar") }, modifier = Modifier.fillMaxWidth(), maxLines = 3)
         Spacer(Modifier.height(12.dp))
-        Text("RED sebebi (fail için)", fontSize = 12.sp, color = Color.Gray)
+        Text("RED sebebi (başarısız için)", fontSize = 12.sp, color = Color.Gray)
         FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             reasons.forEach { FilterChip(selected = it == reason, onClick = { reason = it }, label = { Text(it, fontSize = 11.sp) }) }
         }

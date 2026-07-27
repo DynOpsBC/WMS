@@ -20,14 +20,12 @@ page 72489 "DOPSWHS Warehouse Manager Act"
                 field("Count Discrepancies"; Rec."Count Discrepancies") { ApplicationArea = All; DrillDownPageId = "DOPSWHS Count Sheet List"; }
                 field("Devices Online"; Rec."Devices Online") { ApplicationArea = All; DrillDownPageId = "DOPSWHS Device Reg List"; }
             }
-            // ELOG saha ziyareti: ana ekranda 3 ayrı Pack Station bölümü —
-            // her tıklama ilgili moda özel sayfayı açar (Solo/Bulk/Mono-SKU).
             cuegroup(PackStation)
             {
-                Caption = 'Pack Station';
-                field("Open Solo Pack Sessions"; Rec."Open Solo Pack Sessions") { ApplicationArea = All; DrillDownPageId = "DOPSWHS Pack Station Solo"; }
-                field("Open Bulk Pack Sessions"; Rec."Open Bulk Pack Sessions") { ApplicationArea = All; DrillDownPageId = "DOPSWHS Pack Station Bulk"; }
-                field("Open Batch Pack Sessions"; Rec."Open Batch Pack Sessions") { ApplicationArea = All; DrillDownPageId = "DOPSWHS Mono-SKU Pack Station"; }
+                Caption = 'Pick & Packing';
+                field("Open Picking Orders"; Rec."Open Picking Orders") { ApplicationArea = All; DrillDownPageId = "DOPSWHS Picking Order List"; }
+                field("Orders Ready for Packing"; Rec."Orders Ready for Packing") { ApplicationArea = All; DrillDownPageId = "DOPSWHS Packing Order List"; }
+                field("Orders Being Packed"; Rec."Orders Being Packed") { ApplicationArea = All; DrillDownPageId = "DOPSWHS Packing Order List"; }
             }
         }
     }

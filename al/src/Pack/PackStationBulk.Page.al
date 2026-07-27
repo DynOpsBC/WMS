@@ -8,7 +8,7 @@ page 72345 "DOPSWHS Pack Station Bulk"
     PageType = Card;
     Caption = 'Batch Package Worksheet';
     ApplicationArea = All;
-    UsageCategory = Tasks;
+    UsageCategory = None;
     SourceTable = "DOPSWHS Pack Session";
     InsertAllowed = false;
     DeleteAllowed = false;

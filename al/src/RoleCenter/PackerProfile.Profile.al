@@ -1,6 +1,6 @@
 profile "DOPSWHS PACKER"
 {
     Caption = 'Packer';
-    ProfileDescription = 'Packing station operator — Solo / Batch / Mono-SKU package worksheets (ELOG flow).';
+    ProfileDescription = 'Sipariş bazlı okutmalı paketleme operatörü.';
     RoleCenter = "DOPSWHS Packer RC";
 }

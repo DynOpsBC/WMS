@@ -25,6 +25,7 @@ page 72094 "DOPSWHS Shipment Line API"
                 field(gtin; ItemGtin) { Caption = 'gtin'; Editable = false; }
                 field(qtyOutstanding; Rec."Qty. Outstanding") { Caption = 'qtyOutstanding'; Editable = false; }
                 field(qtyToShip; Rec."Qty. to Ship") { Caption = 'qtyToShip'; }
+                field(lotNo; Rec."DOPSWHS Lot No.") { Caption = 'lotNo'; }
                 field(licensePlateNo; Rec."LP No.") { Caption = 'licensePlateNo'; }
                 field(sscc; Rec.SSCC) { Caption = 'sscc'; }
                 field(uomCode; Rec."Unit of Measure Code") { Caption = 'uomCode'; Editable = false; }
@@ -56,7 +57,7 @@ page 72094 "DOPSWHS Shipment Line API"
     var
         ShipmentMgmt: Codeunit "DOPSWHS Shipment Mgmt";
     begin
-        ShipmentMgmt.ConfirmShipmentLine(Rec, Rec."Qty. to Ship", Rec."LP No.", Rec.SSCC);
+        ShipmentMgmt.ConfirmShipmentLine(Rec, Rec."Qty. to Ship", Rec."DOPSWHS Lot No.", Rec."LP No.", Rec.SSCC);
         exit(false);
     end;
 

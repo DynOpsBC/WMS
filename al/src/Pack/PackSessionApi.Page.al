@@ -29,6 +29,7 @@ page 72336 "DOPSWHS Pack Session API"
                 field(mode; Rec.Mode) { Caption = 'mode'; Editable = false; }
                 field(ordersTotal; Rec."Orders Total") { Caption = 'ordersTotal'; Editable = false; }
                 field(ordersCompleted; Rec."Orders Completed") { Caption = 'ordersCompleted'; Editable = false; }
+                field(directOrderPacking; Rec."Direct Order Packing") { Caption = 'directOrderPacking'; Editable = false; }
                 field(createdBy; Rec."Created By User") { Caption = 'createdBy'; Editable = false; }
             }
         }

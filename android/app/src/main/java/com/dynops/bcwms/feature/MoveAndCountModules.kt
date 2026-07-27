@@ -67,7 +67,7 @@ fun AdHocMoveModule() {
             busy = false
             status = if (!r.ok) "HATA: LP listesi alınamadı (HTTP ${r.httpCode})"
                 else if (binLps.isEmpty()) "⚠️ $b bininde kayıtlı LP yok — LP barkodunu okutabilirsiniz"
-                else "PASS: $b bininde ${binLps.size} LP — dokunarak seçin"
+                else "TAMAM: $b bininde ${binLps.size} LP — dokunarak seçin"
         }
     }
 
@@ -83,7 +83,7 @@ fun AdHocMoveModule() {
             lpNo = t
             busy = false
             status = if (lpLines.isEmpty()) "⚠️ LP boş görünüyor — yine de taşınabilir"
-                else "PASS: $t içinde ${lpLines.size} satır"
+                else "TAMAM: $t içinde ${lpLines.size} satır"
         }
     }
 
@@ -152,7 +152,7 @@ fun AdHocMoveModule() {
                         else " ⚠️ içerik aktarıldı ama stok reclass HATASI: $err"
                 }
                 busy = false
-                status = "PASS: $lpNo içeriği $target LP'sine aktarıldı (${lpLines.size} satır)$reclassNote"
+                status = "TAMAM: $lpNo içeriği $target LP'sine aktarıldı (${lpLines.size} satır)$reclassNote"
                 if (!status.contains("⚠️")) {
                     lastMove = buildList {
                         add("🧺 $lpNo → 🧺 $target" + if (targetLpBin.isNotBlank()) " (📍 $targetLpBin)" else "")
@@ -175,8 +175,8 @@ fun AdHocMoveModule() {
                 val patch = BcApi.patch(context, "licensePlates('$lpNo')",
                     JSONObject().apply { put("binCode", target) }.toString())
                 busy = false
-                status = if (patch.ok) "PASS: LP $lpNo → $target (stok reclass edildi, LP kartı güncellendi)"
-                    else "PASS: stok $target rafına taşındı · ⚠️ LP kartındaki bin güncellenemedi (HTTP ${patch.httpCode})"
+                status = if (patch.ok) "TAMAM: LP $lpNo → $target (stok reclass edildi, LP kartı güncellendi)"
+                    else "TAMAM: stok $target rafına taşındı · ⚠️ LP kartındaki bin güncellenemedi (HTTP ${patch.httpCode})"
                 lastMove = buildList {
                     add("🧺 $lpNo · 📍 ${fromBin.trim()} → 📍 $target")
                     lpLines.forEach { ln ->
@@ -242,7 +242,7 @@ fun AdHocMoveModule() {
                     }
                     Spacer(Modifier.height(6.dp))
                 }
-                ScanField(if (lpLines.isEmpty()) "…ya da LP barkodu okut" else "2) License Plate", lpNo, { lpNo = it }, modifier = Modifier.fillMaxWidth(), onScanned = {
+                ScanField(if (lpLines.isEmpty()) "…ya da LP barkodu okut" else "2) LP", lpNo, { lpNo = it }, modifier = Modifier.fillMaxWidth(), onScanned = {
                     loadLp(BarcodeIntentResolver.resolve(it).value)
                 })
                 // Elle yazılan LP için: okuma tetiklenmediğinde içerik bu butonla gelir.
@@ -307,7 +307,7 @@ fun AdHocMoveModule() {
                 fromBin = BarcodeIntentResolver.resolve(it).value
             })
             Spacer(Modifier.height(8.dp))
-            ScanField("Item / LP", itemOrLp, { itemOrLp = it }, modifier = Modifier.fillMaxWidth(), onScanned = {
+            ScanField("Ürün / LP", itemOrLp, { itemOrLp = it }, modifier = Modifier.fillMaxWidth(), onScanned = {
                 itemOrLp = BarcodeIntentResolver.resolve(it).value
             })
             Spacer(Modifier.height(8.dp))
@@ -345,7 +345,7 @@ fun AdHocMoveModule() {
                         // Lot girildiyse lot-tracking bağlayan adHocLot action'ı kullanılır.
                         val r = BcApi.boundAction(context, "movementOps", "", if (lot.isBlank()) "adHoc" else "adHocLot", body)
                         busy = false
-                        status = if (r.ok) "PASS: Hareket kaydedildi (HTTP ${r.httpCode})"
+                        status = if (r.ok) "TAMAM: Hareket kaydedildi (HTTP ${r.httpCode})"
                             else "HATA: ${BcApi.errorMessage(r.body)} (HTTP ${r.httpCode})" +
                                 if (lot.isNotBlank() && (r.httpCode == 404 || r.httpCode == 400))
                                     " — lot desteği için BC publish gerekli olabilir" else ""
@@ -416,8 +416,8 @@ fun CountModule() {
             loading = false
             rows = if (r.ok) BcApi.parseValueArray(r.body) else emptyList()
             status = if (!r.ok) "HATA: Sayım listesi alınamadı (HTTP ${r.httpCode})"
-                else if (rows.isEmpty()) "EMPTY: Sayım sayfası yok (HTTP ${r.httpCode})"
-                else "PASS: ${rows.size} sayfa (HTTP ${r.httpCode})"
+                else if (rows.isEmpty()) "BOŞ: Sayım sayfası yok (HTTP ${r.httpCode})"
+                else "TAMAM: ${rows.size} sayfa (HTTP ${r.httpCode})"
         }
     }
     LaunchedEffect(Unit) { load() }
@@ -427,7 +427,7 @@ fun CountModule() {
     if (sel != null) { CountDocument(no = sel, onBack = { selected = null; load() }); return }
 
     DocListScanHandler(enabled = true, linesEndpoint = "countSheetLines", docKey = "sheetNo") { item, docs ->
-        when { docs.isEmpty() -> status = "⚠️ '$item' sayım sayfasında yok"; docs.size == 1 -> selected = docs.first(); else -> { itemDocs = item to docs; status = "PASS: '$item' → ${docs.size} sayfa" } }
+        when { docs.isEmpty() -> status = "⚠️ '$item' sayım sayfasında yok"; docs.size == 1 -> selected = docs.first(); else -> { itemDocs = item to docs; status = "TAMAM: '$item' → ${docs.size} sayfa" } }
     }
     val shownRows = itemDocs?.let { f -> rows.filter { firstValue(it, "no", "batchName") in f.second } } ?: rows
 
@@ -487,7 +487,7 @@ private fun CountDocument(no: String, onBack: () -> Unit) {
             busy = true; status = "$name..."
             val r = BcApi.boundAction(context, "countSheets", no, name, "{}")
             busy = false
-            status = if (r.ok) "PASS: $okMsg (HTTP ${r.httpCode})" else "HATA: ${BcApi.errorMessage(r.body)} (HTTP ${r.httpCode})"
+            status = if (r.ok) "TAMAM: $okMsg (HTTP ${r.httpCode})" else "HATA: ${BcApi.errorMessage(r.body)} (HTTP ${r.httpCode})"
             if (r.ok) reload()
         }
     }
@@ -498,7 +498,7 @@ private fun CountDocument(no: String, onBack: () -> Unit) {
         enabled = countLine == null,
         lines = lines,
         onSingleMatch = { line, _ -> scanFilter = ""; countLine = line },
-        onMultiMatch = { itemNo, _ -> scanFilter = itemNo; status = "PASS: '$itemNo' için birden fazla satır — birini seçin" },
+        onMultiMatch = { itemNo, _ -> scanFilter = itemNo; status = "TAMAM: '$itemNo' için birden fazla satır — birini seçin" },
         onNoMatch = { r -> status = "⚠️ '${r.itemNo ?: r.value}' bu sayfada yok" },
     )
     val displayLines = if (scanFilter.isBlank()) lines else lines.filter { matchLinesByBarcode(listOf(it), BarcodeIntentResolver.resolve(scanFilter)).isNotEmpty() }
@@ -508,7 +508,7 @@ private fun CountDocument(no: String, onBack: () -> Unit) {
             DocHeaderCard(
                 title = no,
                 subtitle = "Lokasyon: ${h?.optString("locationCode") ?: ""} · Mod: ${firstValue(h ?: JSONObject(), "mode")} · ${firstValue(h ?: JSONObject(), "status")}",
-                badge = if (blind) "BLIND" else null
+                badge = if (blind) "KÖR" else null
             )
             Spacer(Modifier.height(6.dp))
             StatusText(status)
@@ -531,8 +531,8 @@ private fun CountDocument(no: String, onBack: () -> Unit) {
         BottomActionBar {
             // Generate lines from bin content when the sheet is empty (the count flow needs lines).
             OutlinedButton(onClick = { action("generateLines", "Satırlar üretildi") }, enabled = !busy, modifier = Modifier.weight(1f).height(52.dp)) { Text("➕ Satır Üret") }
-            OutlinedButton(onClick = { action("startRecount", "Recount başlatıldı") }, enabled = !busy, modifier = Modifier.weight(1f).height(52.dp)) { Text("⟳ Recount") }
-            Button(onClick = { action("postSheet", "Sayım kaydedildi") }, enabled = !busy, modifier = Modifier.weight(1f).height(52.dp)) { Text("✅ Post", fontWeight = FontWeight.Bold) }
+            OutlinedButton(onClick = { action("startRecount", "Recount başlatıldı") }, enabled = !busy, modifier = Modifier.weight(1f).height(52.dp)) { Text("⟳ Yeniden Say") }
+            Button(onClick = { action("postSheet", "Sayım kaydedildi") }, enabled = !busy, modifier = Modifier.weight(1f).height(52.dp)) { Text("✅ Kaydet", fontWeight = FontWeight.Bold) }
         }
     }
 
@@ -547,7 +547,7 @@ private fun CountDocument(no: String, onBack: () -> Unit) {
                 val lineNo = cl.optInt("lineNo")
                 val r = BcApi.post(context, "countSheetLines(sheetNo='$sheetNo',lineNo=$lineNo)/Microsoft.NAV.recordCount", body)
                 busy = false
-                status = if (r.ok) "PASS: Sayım kaydedildi (slot $slot) (HTTP ${r.httpCode})" else "HATA: ${BcApi.errorMessage(r.body)} (HTTP ${r.httpCode})"
+                status = if (r.ok) "TAMAM: Sayım kaydedildi (slot $slot) (HTTP ${r.httpCode})" else "HATA: ${BcApi.errorMessage(r.body)} (HTTP ${r.httpCode})"
                 if (r.ok) reload()
             }
         })
@@ -564,7 +564,7 @@ private fun CountEntrySheet(line: JSONObject, blind: Boolean, onDismiss: () -> U
     var qty by remember { mutableStateOf("") }
     com.dynops.bcwms.ui.SheetScaffold(onDismiss = onDismiss, contentPadding = androidx.compose.foundation.layout.PaddingValues(20.dp)) {
         Text("Sayım Gir — ${line.optString("itemNo")}", fontWeight = FontWeight.Bold, fontSize = 18.sp)
-        Text("Bin: ${firstValue(line, "binCode")}" + if (blind) " · BLIND (sistem miktarı gizli)" else " · Sistem: ${fmtq(line.optDouble("systemQty"))}", fontSize = 12.sp, color = Color.Gray)
+        Text("Bin: ${firstValue(line, "binCode")}" + if (blind) " · KÖR (sistem miktarı gizli)" else " · Sistem: ${fmtq(line.optDouble("systemQty"))}", fontSize = 12.sp, color = Color.Gray)
         Spacer(Modifier.height(12.dp))
         Text("Sayıcı slotu", fontSize = 12.sp, color = Color.Gray)
         Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -608,8 +608,8 @@ fun DirectedMoveModule() {
             loading = false
             rows = if (r.ok) BcApi.parseValueArray(r.body) else emptyList()
             status = if (!r.ok) "HATA: Hareket listesi alınamadı (HTTP ${r.httpCode})"
-                else if (rows.isEmpty()) "EMPTY: Açık yönlendirilmiş hareket belgesi yok (HTTP ${r.httpCode})"
-                else "PASS: ${rows.size} belge (HTTP ${r.httpCode})"
+                else if (rows.isEmpty()) "BOŞ: Açık yönlendirilmiş hareket belgesi yok (HTTP ${r.httpCode})"
+                else "TAMAM: ${rows.size} belge (HTTP ${r.httpCode})"
         }
     }
     LaunchedEffect(showAll) { load() }
@@ -622,7 +622,7 @@ fun DirectedMoveModule() {
             val r = if (me.isNotBlank())
                 BcApi.boundAction(context, "movements", no, "assignTo", JSONObject().apply { put("userId", me) }.toString())
             else BcApi.ApiResult(false, 0, "Oturum kullanıcısı çözülemedi")
-            status = if (r.ok) "PASS: $no üzerinize alındı ($me)"
+            status = if (r.ok) "TAMAM: $no üzerinize alındı ($me)"
                 else "HATA: ${BcApi.errorMessage(r.body)} (HTTP ${r.httpCode})" +
                     if (r.httpCode == 404 || r.httpCode == 400) " — assignTo için BC publish gerekli olabilir" else ""
             load()
@@ -726,7 +726,7 @@ private fun MovementDocument(no: String, onBack: () -> Unit) {
                 if (!patchLine(ln, ln.optDouble("qtyOutstanding", ln.optDouble("quantity")))) { ok = false; break }
             }
             busy = false
-            if (ok) { status = "PASS: $itemNo tam miktar onaylandı"; reload() }
+            if (ok) { status = "TAMAM: $itemNo tam miktar onaylandı"; reload() }
         }
     }
 
@@ -795,17 +795,17 @@ private fun MovementDocument(no: String, onBack: () -> Unit) {
             Button(
                 onClick = {
                     scope.launch {
-                        busy = true; status = "Register $no..."
+                        busy = true; status = "$no kaydediliyor..."
                         val r = BcApi.boundAction(context, "movements", no, "register", "{}")
                         busy = false
-                        status = if (r.ok) "PASS: $no kaydedildi — stok taşındı (HTTP ${r.httpCode})"
+                        status = if (r.ok) "TAMAM: $no kaydedildi — stok taşındı (HTTP ${r.httpCode})"
                             else "HATA: ${BcApi.errorMessage(r.body)} (HTTP ${r.httpCode})"
                         if (r.ok) reload()
                     }
                 },
                 enabled = !busy && canRegister,
                 modifier = Modifier.fillMaxWidth().height(54.dp),
-            ) { Text(if (canRegister) "✅ Register Movement" else "Önce satır onaylayın (okut / miktar gir)", fontWeight = FontWeight.Bold) }
+            ) { Text(if (canRegister) "✅ Hareketi Kaydet" else "Önce satır onaylayın (okut / miktar gir)", fontWeight = FontWeight.Bold) }
         }
     }
 
@@ -821,7 +821,7 @@ private fun MovementDocument(no: String, onBack: () -> Unit) {
                 qtyLine = null
                 scope.launch {
                     busy = true
-                    if (patchLine(ql, res.quantity)) { status = "PASS: Satır güncellendi"; reload() }
+                    if (patchLine(ql, res.quantity)) { status = "TAMAM: Satır güncellendi"; reload() }
                     busy = false
                 }
             },

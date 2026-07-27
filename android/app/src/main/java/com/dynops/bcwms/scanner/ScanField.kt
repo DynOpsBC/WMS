@@ -17,8 +17,11 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
@@ -81,9 +84,23 @@ fun ScanField(
                 singleLine = true,
                 enabled = enabled,
                 interactionSource = interactionSource,
+                // Elle giriş: klavye "bitti"/Enter → okutmayı tetikle (emülatörde ve
+                // gerçek cihazda yazıp Enter'a basınca donanım taraması gibi işlenir).
+                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                keyboardActions = KeyboardActions(onDone = {
+                    if (value.isNotBlank()) onScanned?.invoke(value.trim())
+                }),
                 modifier = Modifier.weight(1f),
             )
             Spacer(Modifier.width(8.dp))
+            // Elle giriş için "OK" — yazıp bas, hemen işlensin (Enter'a alternatif).
+            if (onScanned != null) {
+                FilledTonalButton(
+                    enabled = enabled && value.isNotBlank(),
+                    onClick = { onScanned.invoke(value.trim()) },
+                ) { Text("OK") }
+                Spacer(Modifier.width(6.dp))
+            }
             FilledTonalButton(
                 enabled = enabled,
                 onClick = {

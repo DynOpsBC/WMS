@@ -20,5 +20,5 @@ object PickReassignedNotification {
   }
 
   fun snackbarText(message: PickReassignedMessage): String =
-    "Pick ${message.pickNo} reassigned${message.assignedUserId.takeIf { it.isNotBlank() }?.let { " to $it" } ?: ""}"
+    "Toplama ${message.pickNo}${message.assignedUserId.takeIf { it.isNotBlank() }?.let { " → $it kullanıcısına atandı" } ?: " yeniden atandı"}"
 }

@@ -33,9 +33,9 @@ object GridColumns {
 
     val receipt = listOf(
         GridColumn("bin", "Bin", true, 92) { nz(it, "binCode") },
-        GridColumn("itemNo", "Item No.", true, 104) { nz(it, "itemNo") },
+        GridColumn("itemNo", "Ürün No.", true, 104) { nz(it, "itemNo") },
         GridColumn("description", "Açıklama", false, 170) { nz(it, "description") },
-        GridColumn("openQty", "Open Qty.", true, 84) {
+        GridColumn("openQty", "Açık Mik.", true, 84) {
             val q = it.optDouble("quantity"); val r = it.optDouble("qtyReceived")
             fmtCol(if (q > 0) (q - r) else it.optDouble("qtyToReceive"))
         },
@@ -54,7 +54,8 @@ object GridColumns {
 
     val pick = listOf(
         GridColumn("bin", "Bin", true, 92) { nz(it, "binCode") },
-        GridColumn("itemNo", "Item No.", true, 104) { nz(it, "itemNo") },
+        GridColumn("itemNo", "Ürün No.", true, 104) { nz(it, "itemNo") },
+        GridColumn("lotNo", "Lot No.", true, 96) { nz(it, "lotNo") },
         GridColumn("description", "Açıklama", false, 170) { nz(it, "description") },
         GridColumn("toHandle", "Girilen", true, 72) { fmtCol(it.optDouble("qtyToHandle", 0.0)) },
         GridColumn("outstanding", "Kalan", true, 68) { fmtCol(it.optDouble("qtyOutstanding", 0.0)) },
@@ -70,7 +71,7 @@ object GridColumns {
     val putaway = listOf(
         GridColumn("action", "İşlem", true, 72) { nz(it, "actionType") },
         GridColumn("bin", "Bin", true, 92) { nz(it, "binCode") },
-        GridColumn("itemNo", "Item No.", true, 104) { nz(it, "itemNo") },
+        GridColumn("itemNo", "Ürün No.", true, 104) { nz(it, "itemNo") },
         GridColumn("description", "Açıklama", false, 170) { nz(it, "description") },
         // Kısmi register netliği: Girilen (bu register'da konacak) / Kalan / Konan.
         GridColumn("toHandle", "Girilen", true, 72) { fmtCol(it.optDouble("qtyToHandle", 0.0)) },
@@ -85,12 +86,13 @@ object GridColumns {
     )
 
     val shipment = listOf(
-        GridColumn("itemNo", "Item No.", true, 104) { nz(it, "itemNo") },
+        GridColumn("itemNo", "Ürün No.", true, 104) { nz(it, "itemNo") },
         GridColumn("description", "Açıklama", false, 170) { nz(it, "description") },
-        GridColumn("toShip", "Ship Qty.", true, 84) { fmtCol(it.optDouble("qtyToShip")) },
+        GridColumn("toShip", "Sevk Mik.", true, 84) { fmtCol(it.optDouble("qtyToShip")) },
         GridColumn("outstanding", "Kalan", true, 72) { fmtCol(it.optDouble("qtyOutstanding")) },
         GridColumn("uom", "UOM", true, 62) { nz(it, "uomCode") },
         GridColumn("gtin", "GTIN", true, 116) { nz(it, "gtin") },
+        GridColumn("lotNo", "Lot No.", true, 96) { nz(it, "lotNo") },
         GridColumn("bin", "Bin", false, 92) { nz(it, "binCode") },
         GridColumn("lp", "LP", false, 110) { nz(it, "licensePlateNo") },
         GridColumn("variant", "Varyant", false, 84) { nz(it, "variantCode") },
@@ -98,10 +100,10 @@ object GridColumns {
     )
 
     val salesSource = listOf(
-        GridColumn("itemNo", "Item No.", true, 104) { nz(it, "itemNo") },
+        GridColumn("itemNo", "Ürün No.", true, 104) { nz(it, "itemNo") },
         GridColumn("description", "Açıklama", false, 170) { nz(it, "description") },
         GridColumn("outstanding", "Kalan", true, 76) { fmtCol(it.optDouble("outstandingQuantity")) },
-        GridColumn("toShip", "Ship Qty.", true, 84) { fmtCol(it.optDouble("qtyToShip")) },
+        GridColumn("toShip", "Sevk Mik.", true, 84) { fmtCol(it.optDouble("qtyToShip")) },
         GridColumn("uom", "UOM", true, 62) { nz(it, "unitOfMeasureCode") },
         GridColumn("bin", "Bin", true, 92) { nz(it, "binCode") },
         GridColumn("gtin", "GTIN", false, 116) { nz(it, "itemReference") },
@@ -110,7 +112,7 @@ object GridColumns {
     )
 
     val count = listOf(
-        GridColumn("itemNo", "Item No.", true, 104) { nz(it, "itemNo") },
+        GridColumn("itemNo", "Ürün No.", true, 104) { nz(it, "itemNo") },
         GridColumn("bin", "Bin", true, 92) { nz(it, "binCode") },
         GridColumn("description", "Açıklama", false, 170) { nz(it, "description") },
         GridColumn("systemQty", "Sistem", true, 72) { fmtCol(it.optDouble("systemQty")) },

@@ -44,8 +44,8 @@ fun StatusText(status: String) {
     if (status.isBlank()) return
     val palette = bcwmsStatus()
     val color = when {
-        status.startsWith("PASS") || status.startsWith("🟢") || status.startsWith("✅") -> palette.success
-        status.startsWith("EMPTY") || status.startsWith("⚠️") -> palette.warning
+        status.startsWith("TAMAM") || status.startsWith("🟢") || status.startsWith("✅") -> palette.success
+        status.startsWith("BOŞ") || status.startsWith("⚠️") -> palette.warning
         status.startsWith("HATA") || status.startsWith("🔴") || status.startsWith("❌") -> palette.danger
         else -> MaterialTheme.colorScheme.onSurfaceVariant
     }

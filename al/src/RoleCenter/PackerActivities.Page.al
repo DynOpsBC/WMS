@@ -1,9 +1,6 @@
 page 72348 "DOPSWHS Packer Activities"
 {
-    // Packer ana ekranı: 3 worksheet kutusu — her kutu o moddaki AÇIK oturum
-    // sayısını gösterir ve tıklanınca ilgili worksheet'i açar. El terminali
-    // aynı Pack Session tablosuna yazdığı için terminalden başlatılan
-    // oturumlar da bu sayaçlarda görünür.
+    // Packer ana ekranı: tek sipariş paketleme kuyruğu.
     Caption = 'Packing Activities';
     PageType = CardPart;
     SourceTable = "DOPSWHS Warehouse Mgr Cue";
@@ -15,24 +12,18 @@ page 72348 "DOPSWHS Packer Activities"
         {
             cuegroup(PackageWorksheets)
             {
-                Caption = 'Package Worksheets';
-                field("Open Bulk Pack Sessions"; Rec."Open Bulk Pack Sessions")
+                Caption = 'Sipariş Paketleme';
+                field("Orders Ready for Packing"; Rec."Orders Ready for Packing")
                 {
-                    Caption = 'Batch Package Worksheet';
+                    Caption = 'Paketleme Bekleyen';
                     ApplicationArea = All;
-                    DrillDownPageId = "DOPSWHS Pack Station Bulk";
+                    DrillDownPageId = "DOPSWHS Packing Order List";
                 }
-                field("Open Batch Pack Sessions"; Rec."Open Batch Pack Sessions")
+                field("Orders Being Packed"; Rec."Orders Being Packed")
                 {
-                    Caption = 'Mono-SKU Package Worksheet';
+                    Caption = 'Paketlenen Siparişler';
                     ApplicationArea = All;
-                    DrillDownPageId = "DOPSWHS Mono-SKU Pack Station";
-                }
-                field("Open Solo Pack Sessions"; Rec."Open Solo Pack Sessions")
-                {
-                    Caption = 'Solo Package Worksheet';
-                    ApplicationArea = All;
-                    DrillDownPageId = "DOPSWHS Pack Station Solo";
+                    DrillDownPageId = "DOPSWHS Packing Order List";
                 }
             }
         }

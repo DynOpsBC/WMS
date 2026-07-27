@@ -13,5 +13,10 @@ tableextension 72406 "DOPSWHS Whse Shipment Line" extends "Warehouse Shipment Li
             Caption = 'SSCC';
             DataClassification = CustomerContent;
         }
+        field(72408; "DOPSWHS Lot No."; Code[50])
+        {
+            Caption = 'Lot No.';
+            DataClassification = CustomerContent;
+        }
     }
 }

@@ -28,9 +28,30 @@ page 72222 "DOPSWHS Consumption API"
                 field(unitOfMeasureCode; Rec."Unit of Measure Code") { Caption = 'unitOfMeasureCode'; }
                 field(locationCode; Rec."Location Code") { Caption = 'locationCode'; }
                 field(binCode; Rec."Bin Code") { Caption = 'binCode'; }
+                field(producedItemNo; ProducedItemNo) { Caption = 'producedItemNo'; }
+                field(producedItemDescription; ProducedItemDescription) { Caption = 'producedItemDescription'; }
+                field(productionQuantity; ProductionQuantity) { Caption = 'productionQuantity'; }
+                field(dueDate; DueDate) { Caption = 'dueDate'; }
             }
         }
     }
+
+    trigger OnAfterGetRecord()
+    var
+        ProdOrderLine: Record "Prod. Order Line";
+    begin
+        Clear(ProducedItemNo);
+        Clear(ProducedItemDescription);
+        Clear(ProductionQuantity);
+        Clear(DueDate);
+
+        if ProdOrderLine.Get(Rec.Status, Rec."Prod. Order No.", Rec."Prod. Order Line No.") then begin
+            ProducedItemNo := ProdOrderLine."Item No.";
+            ProducedItemDescription := ProdOrderLine.Description;
+            ProductionQuantity := ProdOrderLine.Quantity;
+            DueDate := ProdOrderLine."Due Date";
+        end;
+    end;
 
     trigger OnOpenPage()
     var
@@ -49,4 +70,18 @@ page 72222 "DOPSWHS Consumption API"
     begin
         ProdMgmt.ConsumeByProdOrder(prodOrderNo, componentLineNo, itemNo, qty, lpNo, lotNo, serialNo, binCode);
     end;
+
+    [ServiceEnabled]
+    procedure createPick(): Code[20]
+    var
+        ProdMgmt: Codeunit "DOPSWHS Prod Mgmt";
+    begin
+        exit(ProdMgmt.CreateProductionPick(Rec."Prod. Order No."));
+    end;
+
+    var
+        ProducedItemNo: Code[20];
+        ProducedItemDescription: Text[100];
+        ProductionQuantity: Decimal;
+        DueDate: Date;
 }

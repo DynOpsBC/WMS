@@ -153,6 +153,8 @@ private fun PickPackingDocument(
     var boxInput by remember(pickNo) { mutableStateOf("") }
     var showBoxScan by remember(pickNo) { mutableStateOf(false) }
     var pickDone by remember(pickNo) { mutableStateOf(false) }
+    // Kullanıcının elle açtığı (katlanmış) siparişler. Aktif sipariş her zaman açık.
+    var expandedOrders by remember(pickNo) { mutableStateOf<Set<String>>(emptySet()) }
 
     suspend fun reloadLines() {
         if (sessionId > 0) {
@@ -203,42 +205,63 @@ private fun PickPackingDocument(
                 packed > 0 && packed < expected
             }?.key
 
+    // Bir siparişte kalan (bekleyen) toplam ürün adedi.
+    fun orderRemaining(orderNo: String): Double =
+        lines.filter { it.optString("sourceOrderNo") == orderNo }
+            .sumOf { (it.optDouble("qtyExpected") - it.optDouble("qtyPacked")).coerceAtLeast(0.0) }
+
+    // Okutulan ürünün YAZILACAĞI siparişi seç:
+    // 1) Aktif (yarım) sipariş varsa → o siparişin bekleyen satırı ise oraya.
+    // 2) Yoksa → ürünün bekleyen satırı olan siparişlerden TOPLAM KALANI EN AZ
+    //    olan (o sipariş daha çabuk kapanır). Eşitlikte sipariş no'ya göre.
+    fun targetOrderFor(itemNo: String): String? {
+        val candidates = lines.filter {
+            it.optString("itemNo").equals(itemNo, ignoreCase = true) &&
+                it.optDouble("qtyPacked") < it.optDouble("qtyExpected")
+        }.map { it.optString("sourceOrderNo") }.distinct()
+        if (candidates.isEmpty()) return null
+        val locked = activeLockedOrder()
+        if (locked != null) return if (locked in candidates) locked else null
+        // En az kalan; eşitlikte sipariş no'ya göre deterministik.
+        return candidates.sortedBy { it }.minByOrNull { orderRemaining(it) }
+    }
+
     fun scanItem(raw: String) {
         if (raw.isBlank() || sessionId == 0 || busy) return
         val resolved = BarcodeIntentResolver.resolve(raw)
         val itemNo = (resolved.itemNo ?: resolved.value).trim()
-        // Aktif (yarım) sipariş varsa, okutulan ürün o siparişin BEKLEYEN bir
-        // satırı değilse reddet — "önce bu siparişi bitir".
         val locked = activeLockedOrder()
-        if (locked != null) {
-            val itemBelongsToActive = lines.any {
-                it.optString("sourceOrderNo") == locked &&
-                    it.optString("itemNo").equals(itemNo, ignoreCase = true) &&
-                    it.optDouble("qtyPacked") < it.optDouble("qtyExpected")
-            }
-            if (!itemBelongsToActive) {
-                status = "🔒 Önce $locked siparişini bitir — bu ürün o siparişte beklenmiyor"
-                itemInput = ""
-                return
-            }
+        val target = targetOrderFor(itemNo)
+        // Aktif sipariş varsa ve bu ürün ona ait değilse → kilit reddi.
+        if (locked != null && target == null) {
+            status = "🔒 Önce $locked siparişini bitir — bu ürün o siparişte beklenmiyor"
+            itemInput = ""
+            return
+        }
+        if (target == null) {
+            status = "❌ $itemNo bu pickte beklenmiyor veya tümü paketlendi"
+            itemInput = ""
+            return
         }
         scope.launch {
             busy = true
-            status = "$itemNo kontrol ediliyor..."
+            status = "$itemNo → $target kontrol ediliyor..."
             val body = JSONObject().apply {
                 put("sessionId", sessionId)
+                put("orderNo", target)
                 put("itemNo", itemNo)
                 put("qty", 1)
             }.toString()
-            val r = BcApi.boundAction(context, "packOps", "", "scanItem", body)
+            val r = BcApi.boundAction(context, "packOps", "", "scanItemForOrder", body)
             if (r.ok) {
                 itemInput = ""
-                // ScanItem dönüşü: bu okutmayla TAMAMLANAN sipariş no'ları (virgüllü).
-                val completed = BcApi.scalarValue(r.body).split(",").map { it.trim() }.filter { it.isNotBlank() }
+                // scanItemForOrder dönüşü: tamamlandıysa o sipariş no'su, yoksa boş.
+                val done = BcApi.scalarValue(r.body).trim()
+                val completed = if (done.isNotBlank()) listOf(done) else emptyList()
                 reloadLines()
                 status = when {
                     completed.isNotEmpty() -> "🧾 ${completed.joinToString(", ")} tamamlandı — kutu okutun"
-                    else -> "✅ $itemNo paketlendi"
+                    else -> "✅ $itemNo → $target"
                 }
             } else status = "❌ ${BcApi.errorMessage(r.body)} (HTTP ${r.httpCode})"
             busy = false
@@ -351,68 +374,94 @@ private fun PickPackingDocument(
             }
 
             val activeOrder = activeLockedOrder()
-            Text("Siparişler", fontWeight = FontWeight.Bold)
+            // Sipariş sırası: AKTİF önce, sonra kalanı en az olan (öncelikli).
+            // Kutulanmış/tamamlanmış olanlar en sona.
+            val orderedKeys = byOrder.keys.sortedWith(
+                compareByDescending<String> { it == activeOrder }
+                    .thenBy { k -> byOrder[k]?.all { it.optString("boxLpNo").isNotBlank() } == true }
+                    .thenBy { k -> orderRemaining(k) }
+                    .thenBy { it }
+            )
             Text(
-                if (activeOrder != null) "🔒 Önce $activeOrder siparişini bitir — sadece o siparişin ürünleri okutulabilir."
-                else "Ürünü okut, sistem doğru siparişe yazar. Kırmızı = bekliyor, yeşil = tamam.",
-                fontSize = 11.sp, color = if (activeOrder != null) Color(0xFF1565C0) else Color.Gray,
+                if (activeOrder != null) "🔒 Önce $activeOrder siparişini bitir"
+                else "Sepetten bir ürün okut — sistem en uygun siparişe yazar.",
+                fontWeight = FontWeight.Bold,
+                color = if (activeOrder != null) Color(0xFF1565C0) else Color(0xFF333333),
             )
             Spacer(Modifier.height(8.dp))
             LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                byOrder.forEach { (orderNo, ords) ->
+                orderedKeys.forEach { orderNo ->
+                    val ords = byOrder[orderNo].orEmpty()
                     val orderDone = ords.all { it.optDouble("qtyPacked") >= it.optDouble("qtyExpected") }
                     val boxed = ords.any { it.optString("boxLpNo").isNotBlank() }
                     val isActive = orderNo == activeOrder
-                    val remainingInOrder = ords.count { it.optDouble("qtyPacked") < it.optDouble("qtyExpected") }
+                    val remainingInOrder = orderRemaining(orderNo).toInt()
+                    // Aktif sipariş her zaman açık; diğerleri sadece elle açılınca.
+                    val expanded = isActive || orderNo in expandedOrders
                     item(key = "hdr-$orderNo") {
-                        Row(Modifier.fillMaxWidth().padding(top = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-                            Surface(
-                                color = if (isActive) Color(0xFF1565C0) else PackAccent.copy(alpha = 0.12f),
-                                shape = RoundedCornerShape(8.dp),
-                            ) {
-                                Text("${if (isActive) "🔵 " else "🧾 "}$orderNo", Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
-                                    fontWeight = FontWeight.Bold, fontSize = 13.sp,
-                                    color = if (isActive) Color.White else PackAccent)
+                        Surface(
+                            color = if (isActive) Color(0xFF1565C0) else Color(0xFFF3F0FF),
+                            shape = RoundedCornerShape(10.dp),
+                            modifier = Modifier.fillMaxWidth(),
+                            onClick = {
+                                if (!isActive) expandedOrders =
+                                    if (orderNo in expandedOrders) expandedOrders - orderNo else expandedOrders + orderNo
+                            },
+                        ) {
+                            Row(Modifier.padding(horizontal = 12.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+                                Text(if (isActive) "🔵" else if (boxed) "✅" else "🧾", fontSize = 16.sp)
+                                Spacer(Modifier.width(8.dp))
+                                Column(Modifier.weight(1f)) {
+                                    Text(orderNo, fontWeight = FontWeight.Bold, fontSize = 14.sp,
+                                        color = if (isActive) Color.White else PackAccent)
+                                    Text(customerByOrder[orderNo].orEmpty(), fontSize = 11.sp,
+                                        color = if (isActive) Color.White.copy(alpha = 0.85f) else Color.Gray)
+                                }
+                                Text(
+                                    when {
+                                        boxed -> "kutulandı"
+                                        orderDone -> "📦 kutu bekliyor"
+                                        isActive -> "$remainingInOrder ürün kaldı"
+                                        else -> "$remainingInOrder ürün"
+                                    },
+                                    fontSize = 12.sp, fontWeight = FontWeight.Bold,
+                                    color = when {
+                                        isActive -> Color.White
+                                        boxed -> Color(0xFF2E7D32)
+                                        orderDone -> Color(0xFFEF6C00)
+                                        else -> Color.Gray
+                                    },
+                                )
+                                if (!isActive) {
+                                    Spacer(Modifier.width(6.dp))
+                                    Text(if (expanded) "▾" else "▸", color = PackAccent, fontSize = 14.sp)
+                                }
                             }
-                            Spacer(Modifier.width(8.dp))
-                            Text(customerByOrder[orderNo].orEmpty(), fontSize = 12.sp, color = Color.Gray, modifier = Modifier.weight(1f))
-                            Text(
-                                when {
-                                    boxed -> "✅ kutulandı"
-                                    orderDone -> "📦 kutu bekliyor"
-                                    isActive -> "$remainingInOrder ürün kaldı"
-                                    else -> "${ords.count { l -> l.optDouble("qtyPacked") >= l.optDouble("qtyExpected") }}/${ords.size}"
-                                },
-                                fontSize = 11.sp,
-                                color = when {
-                                    boxed -> Color(0xFF2E7D32)
-                                    orderDone -> Color(0xFFEF6C00)
-                                    isActive -> Color(0xFF1565C0)
-                                    else -> Color.Gray
-                                },
-                            )
                         }
                     }
-                    items(ords, key = { it.optInt("lineNo") }) { line ->
-                        val done = line.optDouble("qtyPacked") >= line.optDouble("qtyExpected")
-                        Card(
-                            colors = CardDefaults.cardColors(containerColor = if (done) Color(0xFFE8F5E9) else Color(0xFFFFF0F0)),
-                            border = BorderStroke(1.dp, if (done) Color(0xFF66BB6A) else Color(0xFFF3BDBD)),
-                            modifier = Modifier.fillMaxWidth(),
-                        ) {
-                            Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
-                                Text(if (done) "✅" else "📦", fontSize = 20.sp)
-                                Spacer(Modifier.width(10.dp))
-                                Column(Modifier.weight(1f)) {
-                                    Text(line.optString("itemNo"), fontWeight = FontWeight.Bold)
-                                    Text(line.optString("description"), fontSize = 12.sp, color = Color.Gray)
+                    if (expanded) {
+                        items(ords, key = { it.optInt("lineNo") }) { line ->
+                            val done = line.optDouble("qtyPacked") >= line.optDouble("qtyExpected")
+                            Card(
+                                colors = CardDefaults.cardColors(containerColor = if (done) Color(0xFFE8F5E9) else Color(0xFFFFF0F0)),
+                                border = BorderStroke(if (isActive && !done) 2.dp else 1.dp,
+                                    if (done) Color(0xFF66BB6A) else if (isActive) Color(0xFF1565C0) else Color(0xFFF3BDBD)),
+                                modifier = Modifier.fillMaxWidth().padding(start = 12.dp),
+                            ) {
+                                Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
+                                    Text(if (done) "✅" else "📦", fontSize = 20.sp)
+                                    Spacer(Modifier.width(10.dp))
+                                    Column(Modifier.weight(1f)) {
+                                        Text(line.optString("itemNo"), fontWeight = FontWeight.Bold)
+                                        Text(line.optString("description"), fontSize = 12.sp, color = Color.Gray)
+                                    }
+                                    Spacer(Modifier.width(8.dp))
+                                    Text(
+                                        "${packQty(line.optDouble("qtyPacked"))}/${packQty(line.optDouble("qtyExpected"))}",
+                                        fontSize = 20.sp, fontWeight = FontWeight.Black,
+                                        color = if (done) Color(0xFF2E7D32) else Color(0xFFC62828),
+                                    )
                                 }
-                                Spacer(Modifier.width(8.dp))
-                                Text(
-                                    "${packQty(line.optDouble("qtyPacked"))}/${packQty(line.optDouble("qtyExpected"))}",
-                                    fontSize = 20.sp, fontWeight = FontWeight.Black,
-                                    color = if (done) Color(0xFF2E7D32) else Color(0xFFC62828),
-                                )
                             }
                         }
                     }

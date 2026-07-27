@@ -60,6 +60,14 @@ page 72093 "DOPSWHS Shipment API"
         ShipmentMgmt.PostShipment(Rec, print, invoice);
     end;
 
+    [ServiceEnabled]
+    procedure createPick(): Code[20]
+    var
+        ShipmentMgmt: Codeunit "DOPSWHS Shipment Mgmt";
+    begin
+        exit(ShipmentMgmt.CreatePick(Rec));
+    end;
+
     var
         SourceNo: Code[20];
         ShipTo: Text[100];

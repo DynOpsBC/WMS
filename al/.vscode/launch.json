@@ -2,6 +2,36 @@
   "version": "0.2.0",
   "configurations": [
     {
+      "name": "SAND1 - My Company (fast publish)",
+      "type": "al",
+      "request": "launch",
+      "environmentType": "Sandbox",
+      "environmentName": "SAND1",
+      "tenant": "c668a820-eed5-4966-8ab2-f7055cc1ac15",
+      "company": "My Company",
+      "authentication": "AAD",
+      "schemaUpdateMode": "Synchronize",
+      "startupObjectType": "Page",
+      "startupObjectId": 72061,
+      "dependencyPublishingOption": "Default",
+      "launchBrowser": false
+    },
+    {
+      "name": "SAND1 - My Company (force sync)",
+      "type": "al",
+      "request": "launch",
+      "environmentType": "Sandbox",
+      "environmentName": "SAND1",
+      "tenant": "c668a820-eed5-4966-8ab2-f7055cc1ac15",
+      "company": "My Company",
+      "authentication": "AAD",
+      "schemaUpdateMode": "ForceSync",
+      "startupObjectType": "Page",
+      "startupObjectId": 72061,
+      "dependencyPublishingOption": "Default",
+      "launchBrowser": true
+    },
+    {
       "name": "Bade - SAND1506 (force sync)",
       "type": "al",
       "request": "launch",

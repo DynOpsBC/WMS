@@ -50,6 +50,55 @@ codeunit 72048 "DOPSWHS Prod Mgmt"
         Consume(ProdOrderComponent, ItemNo, Qty, LpNo, LotNo, SerialNo, BinCode);
     end;
 
+    procedure CreateProductionPick(ProdOrderNo: Code[20]): Code[20]
+    var
+        ProductionOrder: Record "Production Order";
+        PickHeader: Record "Warehouse Activity Header";
+        License: Codeunit "DOPSWHS License Mgmt";
+        SortingMethod: Option "None","Item","Document","Shelf or Bin","Due Date","Bin Ranking","Action Type";
+        PickNo: Code[20];
+        AssignToUserId: Code[50];
+    begin
+        License.GuardFeature(Enum::"DOPSWHS License Feature"::Production);
+
+        // Aynı üretim emri için açık bir pick varsa ikinci belge üretmeden onu aç.
+        PickNo := FindOpenProductionPick(ProdOrderNo);
+        if PickNo <> '' then
+            exit(PickNo);
+
+        if not ProductionOrder.Get(ProductionOrder.Status::Released, ProdOrderNo) then
+            Error('Released production order %1 was not found.', ProdOrderNo);
+
+        AssignToUserId := CopyStr(UserId(), 1, MaxStrLen(AssignToUserId));
+        ProductionOrder.SetHideValidationDialog(true);
+        ProductionOrder.CreatePick(AssignToUserId, SortingMethod::"Shelf or Bin", false, false, false);
+
+        PickNo := FindOpenProductionPick(ProdOrderNo);
+        if PickNo = '' then
+            Error('Warehouse pick could not be created for production order %1. Check the location and warehouse pick setup.', ProdOrderNo);
+
+        // Standart fonksiyon bazı sürümlerde atamayı satırda bırakabiliyor;
+        // mobilde "Bana atanan" filtresinde görünmesini başlıkta garanti et.
+        if PickHeader.Get(PickHeader.Type::Pick, PickNo) then
+            if PickHeader."Assigned User ID" <> AssignToUserId then begin
+                PickHeader.Validate("Assigned User ID", AssignToUserId);
+                PickHeader.Modify(true);
+            end;
+
+        exit(PickNo);
+    end;
+
+    local procedure FindOpenProductionPick(ProdOrderNo: Code[20]): Code[20]
+    var
+        WhseActivityLine: Record "Warehouse Activity Line";
+    begin
+        WhseActivityLine.SetRange("Activity Type", WhseActivityLine."Activity Type"::Pick);
+        WhseActivityLine.SetRange("Source No.", ProdOrderNo);
+        if WhseActivityLine.FindFirst() then
+            exit(WhseActivityLine."No.");
+        exit('');
+    end;
+
     procedure ReportOutput(var ProdOrderRoutingLine: Record "Prod. Order Routing Line"; OutputQty: Decimal; ScrapQty: Decimal; Runtime: Decimal; NewLpTemplate: Code[20]; BinCode: Code[20]): Code[20]
     var
         License: Codeunit "DOPSWHS License Mgmt";

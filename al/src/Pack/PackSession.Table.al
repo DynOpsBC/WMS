@@ -21,6 +21,7 @@ table 72332 "DOPSWHS Pack Session"
         field(32; "Completed DateTime"; DateTime) { Caption = 'Completed DateTime'; DataClassification = CustomerContent; Editable = false; }
         field(40; "Orders Total"; Integer) { Caption = 'Orders Total'; DataClassification = CustomerContent; Editable = false; }
         field(41; "Orders Completed"; Integer) { Caption = 'Orders Completed'; DataClassification = CustomerContent; Editable = false; }
+        field(42; "Direct Order Packing"; Boolean) { Caption = 'Direct Order Packing'; DataClassification = CustomerContent; Editable = false; }
     }
 
     keys

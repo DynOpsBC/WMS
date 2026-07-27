@@ -43,6 +43,7 @@ page 72095 "DOPSWHS DynOps WMS RC"
             group(ToplamaNav)
             {
                 Caption = '🚚 Toplama';
+                action(PickingOrdersNav) { Caption = 'Toplanacak Siparişler'; ApplicationArea = All; RunObject = page "DOPSWHS Picking Order List"; }
                 action(WhsePicksNav) { Caption = 'Warehouse Picks'; ApplicationArea = All; RunObject = page "Warehouse Picks"; }
                 action(InvtPicksNav) { Caption = 'Inventory Picks'; ApplicationArea = All; RunObject = page "Inventory Picks"; }
                 action(PickQueueNav) { Caption = 'Pick Kuyruğu (Drag-Drop)'; ApplicationArea = All; RunObject = page "DOPSWHS Pick Queue"; }
@@ -51,6 +52,7 @@ page 72095 "DOPSWHS DynOps WMS RC"
             group(SevkiyatNav)
             {
                 Caption = '📤 Sevkiyat';
+                action(OrderPackingNav) { Caption = 'Sipariş Paketleme'; ApplicationArea = All; RunObject = page "DOPSWHS Packing Order List"; }
                 action(WhseShipmentsNav) { Caption = 'Warehouse Shipments'; ApplicationArea = All; RunObject = page "Warehouse Shipment List"; }
                 action(ShipmentQueueNav) { Caption = 'Sevkiyat Kuyruğu'; ApplicationArea = All; RunObject = page "DOPSWHS Shipment Queue"; }
                 action(SalesOrdersNav) { Caption = 'Sales Orders'; ApplicationArea = All; RunObject = page "Sales Order List"; }

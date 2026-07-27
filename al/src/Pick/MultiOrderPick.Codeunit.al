@@ -161,7 +161,9 @@ codeunit 72338 "DOPSWHS Multi Order Pick"
         // Raf/bin sırasına göre sıralı pick — ELOG: "1. raftan son rafa yürüyor".
         CreatePick.SetWhseShipmentLine(WhseShptLine, WhseShptHeader);
         CreatePick.SetHideValidationDialog(true);
-        CreatePick.Initialize(AssignToUserId, Enum::"Whse. Activity Sorting Method"::"Shelf or Bin", false, false, false);
+        // Qty. to Handle boş başlar: el terminalinde raf ve ürün okutulmadan
+        // satır tamamlanmış görünmez.
+        CreatePick.Initialize(AssignToUserId, Enum::"Whse. Activity Sorting Method"::"Shelf or Bin", false, true, false);
         CreatePick.UseRequestPage(false);
         CreatePick.RunModal();
 

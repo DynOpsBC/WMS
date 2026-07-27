@@ -32,6 +32,7 @@ fun QuantityDialogSheet(
     initialLot: String = "",
     initialSerial: String = "",
     showLotSerial: Boolean = true,
+    showSerial: Boolean = showLotSerial,
     onConfirm: (QuantityResult) -> Unit,
     onDismiss: () -> Unit,
 ) {
@@ -45,7 +46,7 @@ fun QuantityDialogSheet(
 
     SheetScaffold(onDismiss = onDismiss) {
             Text(title, fontWeight = FontWeight.Bold, fontSize = 18.sp)
-            Text("Item: $itemNo", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text("Ürün: $itemNo", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
             Spacer(Modifier.height(16.dp))
 
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -79,6 +80,8 @@ fun QuantityDialogSheet(
                     label = { Text("Lot No (opsiyonel)") }, singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )
+            }
+            if (showSerial) {
                 Spacer(Modifier.height(8.dp))
                 OutlinedTextField(
                     value = serial, onValueChange = { serial = it },

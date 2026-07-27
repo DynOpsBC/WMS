@@ -5,7 +5,9 @@ codeunit 72046 "DOPSWHS Pick Mgmt"
     procedure AssignToMe(var Pick: Record "Warehouse Activity Header")
     begin
         EnsurePick(Pick);
-        Pick.Validate("Assigned User ID", CopyStr(UserId(), 1, MaxStrLen(Pick."Assigned User ID")));
+        // Bkz. ReassignPick: WMS operatörü Warehouse Employee olmayabilir; ilişki
+        // doğrulamasını tetiklemeden doğrudan yaz ki atama kalıcı olsun.
+        Pick."Assigned User ID" := CopyStr(UserId(), 1, MaxStrLen(Pick."Assigned User ID"));
         Pick.Modify(true);
         Log('Pick.AssignToMe', Pick."No.");
     end;
@@ -52,15 +54,60 @@ codeunit 72046 "DOPSWHS Pick Mgmt"
         Log('Pick.Short.' + ReasonCode, PickLine."No.");
     end;
 
+    procedure ConfirmPickLine(var PickLine: Record "Warehouse Activity Line"; QtyToHandle: Decimal; LotNo: Code[50])
+    var
+        CompanionLine: Record "Warehouse Activity Line";
+        WhseShipmentLine: Record "Warehouse Shipment Line";
+    begin
+        if PickLine."Activity Type" <> PickLine."Activity Type"::Pick then
+            Error('Warehouse activity %1 must be a Pick.', PickLine."No.");
+
+        PickLine.Validate("Qty. to Handle", QtyToHandle);
+        PickLine.Validate("Lot No.", LotNo);
+        PickLine.Modify(true);
+
+        // Directed pick'te aynı sevkiyat satırına bağlı Take ve Place satırları
+        // aynı lotu taşımalıdır. Terminal tek satır gösterir; BC tarafında eş
+        // satırları burada senkronlarız ki Register "Lot No. must have a value"
+        // hatası vermesin.
+        CompanionLine.SetRange("Activity Type", PickLine."Activity Type");
+        CompanionLine.SetRange("No.", PickLine."No.");
+        CompanionLine.SetRange("Whse. Document Type", PickLine."Whse. Document Type");
+        CompanionLine.SetRange("Whse. Document No.", PickLine."Whse. Document No.");
+        CompanionLine.SetRange("Whse. Document Line No.", PickLine."Whse. Document Line No.");
+        CompanionLine.SetRange("Item No.", PickLine."Item No.");
+        CompanionLine.SetRange("Variant Code", PickLine."Variant Code");
+        CompanionLine.SetFilter("Line No.", '<>%1', PickLine."Line No.");
+        if CompanionLine.FindSet(true) then
+            repeat
+                CompanionLine.Validate("Qty. to Handle", QtyToHandle);
+                CompanionLine.Validate("Lot No.", LotNo);
+                CompanionLine.Modify(true);
+            until CompanionLine.Next() = 0;
+
+        // Pick'te girilen lot bağlı Warehouse Shipment satırında da görünür.
+        if (PickLine."Whse. Document Type" = PickLine."Whse. Document Type"::Shipment) and
+           WhseShipmentLine.Get(PickLine."Whse. Document No.", PickLine."Whse. Document Line No.")
+        then begin
+            WhseShipmentLine."DOPSWHS Lot No." := LotNo;
+            WhseShipmentLine.Modify(true);
+        end;
+    end;
+
     procedure RegisterPick(var Pick: Record "Warehouse Activity Header")
     var
         PickLine: Record "Warehouse Activity Line";
+        PickingHeader: Record "DOPSWHS Picking Order Header";
+        PickNo: Code[20];
         // QM (BC 28) devre dışı — bkz. QualityMgmtBridge.Codeunit.al
         // QualityBridge: Codeunit "DOPSWHS Quality Mgmt Bridge";
         WhseActivityRegister: Codeunit "Whse.-Activity-Register";
     begin
         EnsurePick(Pick);
+        PickNo := Pick."No.";
         Log('Pick.Register', Pick."No.");
+        if Pick."DOPSWHS Pick Mode" = Pick."DOPSWHS Pick Mode"::Multi then
+            EnsureAllMultiPickLinesScanned(Pick);
 
         // Microsoft Quality Management block guard — QM (BC 28) devre dışı.
         // BC 28'e geçince aşağıdaki bloğun yorumunu kaldırın. Register if any
@@ -79,8 +126,87 @@ codeunit 72046 "DOPSWHS Pick Mgmt"
 
         PickLine.SetRange("Activity Type", Pick.Type);
         PickLine.SetRange("No.", Pick."No.");
-        if PickLine.FindFirst() then
+        if PickLine.FindFirst() then begin
+            PreparePackingOrders(Pick);
             WhseActivityRegister.Run(PickLine);
+            PickingHeader.SetRange("Warehouse Pick No.", PickNo);
+            if PickingHeader.FindSet(true) then
+                repeat
+                    PickingHeader.Status := PickingHeader.Status::Completed;
+                    PickingHeader."Completed DateTime" := CurrentDateTime();
+                    PickingHeader.Modify(true);
+                until PickingHeader.Next() = 0;
+        end;
+    end;
+
+    local procedure EnsureAllMultiPickLinesScanned(var Pick: Record "Warehouse Activity Header")
+    var
+        PickLine: Record "Warehouse Activity Line";
+    begin
+        PickLine.SetRange("Activity Type", Pick.Type);
+        PickLine.SetRange("No.", Pick."No.");
+        PickLine.SetRange("Action Type", PickLine."Action Type"::Take);
+        if PickLine.FindSet() then
+            repeat
+                if PickLine."Qty. to Handle" < PickLine.Quantity then
+                    Error('Complete all items before posting. Bin %1, item %2 still has %3 remaining.',
+                        PickLine."Bin Code", PickLine."Item No.", PickLine.Quantity - PickLine."Qty. to Handle");
+            until PickLine.Next() = 0;
+    end;
+
+    local procedure PreparePackingOrders(var Pick: Record "Warehouse Activity Header")
+    var
+        PickLine: Record "Warehouse Activity Line";
+        Handled: Dictionary of [Code[20], Boolean];
+    begin
+        // ELOG: register'dan ÖNCE, pick'teki her satış siparişi için paketleme
+        // kaydı (DOPSWHS Packing Order) hazırlanır. Eskiden Action Type=Take +
+        // Source Type=Sales Line filtreleniyordu; ancak Whse.-Shipment-Create-Pick
+        // ile üretilen satırlarda bu alanlar beklenenden farklı olabildiği için
+        // paketleme kuyruğu BOŞ kalıyordu. Artık tüm pick satırlarını dolaşıp
+        // Source No.'yu doğrudan satış siparişi olarak deniyoruz (tekilleştirilmiş).
+        PickLine.SetRange("Activity Type", Pick.Type);
+        PickLine.SetRange("No.", Pick."No.");
+        if PickLine.FindSet() then
+            repeat
+                if (PickLine."Source No." <> '') and (not Handled.ContainsKey(PickLine."Source No.")) then begin
+                    Handled.Add(PickLine."Source No.", true);
+                    UpsertPackingOrder(Pick, PickLine);
+                end;
+            until PickLine.Next() = 0;
+    end;
+
+    // Bir satış siparişi için paketleme kaydını oluşturur/günceller (Ready).
+    // Source No. bir satış siparişi değilse sessizce atlar.
+    local procedure UpsertPackingOrder(var Pick: Record "Warehouse Activity Header"; var PickLine: Record "Warehouse Activity Line")
+    var
+        PackingOrder: Record "DOPSWHS Packing Order";
+        SalesHeader: Record "Sales Header";
+        PackingOrderExists: Boolean;
+    begin
+        if not SalesHeader.Get(SalesHeader."Document Type"::Order, PickLine."Source No.") then
+            exit;
+
+        PackingOrderExists := PackingOrder.Get(PickLine."Source No.");
+        if PackingOrderExists then begin
+            if PackingOrder.Status = PackingOrder.Status::"In Progress" then
+                Error('Sales order %1 is already being packed.', PickLine."Source No.");
+            PackingOrder.Status := PackingOrder.Status::Ready;
+            PackingOrder."Session Entry No." := 0;
+        end else begin
+            PackingOrder.Init();
+            PackingOrder."Sales Order No." := PickLine."Source No.";
+        end;
+        PackingOrder."Pick No." := Pick."No.";
+        PackingOrder."Warehouse Shipment No." := PickLine."Whse. Document No.";
+        PackingOrder."Location Code" := Pick."Location Code";
+        PackingOrder."Customer No." := SalesHeader."Sell-to Customer No.";
+        PackingOrder."Customer Name" := SalesHeader."Sell-to Customer Name";
+        PackingOrder."Ready DateTime" := CurrentDateTime();
+        if PackingOrderExists then
+            PackingOrder.Modify(true)
+        else
+            PackingOrder.Insert(true);
     end;
 
     procedure ReassignPick(var Pick: Record "Warehouse Activity Header"; NewUserId: Code[50]; Reason: Text[250])
@@ -94,7 +220,11 @@ codeunit 72046 "DOPSWHS Pick Mgmt"
             Error('New user is required.');
 
         FromUserId := Pick."Assigned User ID";
-        Pick.Validate("Assigned User ID", NewUserId);
+        // "Assigned User ID" TableRelation'ı Warehouse Employee'dir. WMS operatörü
+        // (ör. DYNOPS) her zaman bir Warehouse Employee olmayabilir; Validate bu
+        // durumda değeri reddedip alanı boş bırakabiliyordu. Atamanın her koşulda
+        // kalıcı olması için ilişki doğrulamasını tetiklemeden doğrudan yazılır.
+        Pick."Assigned User ID" := CopyStr(NewUserId, 1, MaxStrLen(Pick."Assigned User ID"));
         Pick.Modify(true);
 
         History.Init();

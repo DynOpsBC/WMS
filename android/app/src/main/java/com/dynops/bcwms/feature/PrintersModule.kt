@@ -57,8 +57,8 @@ fun PrintersModule() {
             loading = false
             rows = if (r.ok) BcApi.parseValueArray(r.body) else emptyList()
             status = if (!r.ok) "HATA: Printer listesi alınamadı (HTTP ${r.httpCode})"
-                else if (rows.isEmpty()) "EMPTY: kayıtlı printer yok (HTTP ${r.httpCode})"
-                else "PASS: ${rows.size} printer (HTTP ${r.httpCode})"
+                else if (rows.isEmpty()) "BOŞ: kayıtlı printer yok (HTTP ${r.httpCode})"
+                else "TAMAM: ${rows.size} printer (HTTP ${r.httpCode})"
         }
     }
     LaunchedEffect(Unit) { load() }
@@ -90,7 +90,7 @@ fun PrintersModule() {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Text(code, fontWeight = FontWeight.Bold)
                             Spacer(Modifier.width(8.dp))
-                            if (isDefault) AssistChip(onClick = {}, label = { Text("Default", fontSize = 11.sp) })
+                            if (isDefault) AssistChip(onClick = {}, label = { Text("Varsayılan", fontSize = 11.sp) })
                             if (!active) {
                                 Spacer(Modifier.width(4.dp))
                                 AssistChip(onClick = {}, label = { Text("Pasif", fontSize = 11.sp) })
@@ -102,7 +102,7 @@ fun PrintersModule() {
                             OutlinedButton(onClick = {
                                 setDefaultPrinter(context, code)
                                 defaultCode = code
-                            }) { Text(if (isDefault) "✓ Default" else "Default yap", fontSize = 12.sp) }
+                            }) { Text(if (isDefault) "✓ Varsayılan" else "Varsayılan yap", fontSize = 12.sp) }
                             OutlinedButton(onClick = {
                                 scope.launch {
                                     val r = BcApi.boundAction(context, "printers", code, "generateToken", "{}")
@@ -114,7 +114,7 @@ fun PrintersModule() {
                             OutlinedButton(onClick = {
                                 scope.launch {
                                     val r = BcApi.boundAction(context, "printers", code, "testPrint", "{}")
-                                    status = if (r.ok) "Self-test job ${code} kuyruğa alındı." else "HATA: ${r.body.take(140)}"
+                                    status = if (r.ok) "Test yazdırma işi ${code} kuyruğa alındı." else "HATA: ${r.body.take(140)}"
                                 }
                             }) { Text("🧪 Test", fontSize = 12.sp) }
                         }

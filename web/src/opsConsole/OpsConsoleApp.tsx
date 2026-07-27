@@ -13,7 +13,20 @@ export function OpsConsoleApp() {
   const [selectedOrders, setSelectedOrders] = useState<Set<string>>(new Set());
   const [pickUser, setPickUser] = useState("");
   const [notice, setNotice] = useState("");
+  const [noticeType, setNoticeType] = useState<"pending" | "success" | "error">("pending");
+  const [lastPickRequest, setLastPickRequest] = useState<{ orders: string; user: string } | null>(null);
   const t = useMemo(() => pickDict(locale), [locale]);
+
+  // Auto-clear notice after 5s for success/error messages
+  useEffect(() => {
+    if (noticeType !== "pending" && notice) {
+      const timer = setTimeout(() => {
+        setNotice("");
+        setNoticeType("pending");
+      }, 5000);
+      return () => clearTimeout(timer);
+    }
+  }, [notice, noticeType]);
 
   useEffect(() => {
     const off = listenBridge((m) => {
@@ -23,8 +36,16 @@ export function OpsConsoleApp() {
       }
       if (m.type === "setLocale") setLocale(m.locale);
       if (m.type === "notifyResult") {
-        const r = (m.payload ?? {}) as { pickNo?: string; shipmentNo?: string };
-        if (r.pickNo) setNotice(`✅ ${r.pickNo} · ${r.shipmentNo ?? ""}`);
+        const r = (m.payload ?? {}) as { pickNo?: string; shipmentNo?: string; error?: string };
+        if (r.error) {
+          setNotice(`❌ ${r.error}`);
+          setNoticeType("error");
+        } else if (r.pickNo) {
+          setNotice(`✅ ${r.pickNo} · ${r.shipmentNo ?? ""}`);
+          setNoticeType("success");
+          // Clear selected orders after successful creation
+          setSelectedOrders(new Set());
+        }
       }
     });
     requestRefresh();
@@ -52,15 +73,34 @@ export function OpsConsoleApp() {
 
   const onCreatePick = () => {
     if (selectedOrders.size === 0) return;
-    setNotice("…");
-    createMultiPick(Array.from(selectedOrders).join(","), pickUser);
+    const orderCsv = Array.from(selectedOrders).join(",");
+    setNotice("⏳");
+    setNoticeType("pending");
+    setLastPickRequest({ orders: orderCsv, user: pickUser });
+    createMultiPick(orderCsv, pickUser);
+  };
+
+  const onRetryPick = () => {
+    if (!lastPickRequest) return;
+    setNotice("⏳");
+    setNoticeType("pending");
+    createMultiPick(lastPickRequest.orders, lastPickRequest.user);
   };
 
   return (
     <div className="ops">
       <header className="ops-top">
         <h1>{t.title}</h1>
-        {notice && <span className="ops-notice">{notice}</span>}
+        <div className="ops-notice-group">
+          {notice && (
+            <span className={"ops-notice s-" + noticeType}>
+              {notice}
+              {noticeType === "error" && lastPickRequest && (
+                <button className="ops-notice-retry" onClick={onRetryPick}>↻</button>
+              )}
+            </span>
+          )}
+        </div>
         <button className="ops-btn" onClick={() => requestRefresh()}>↻ {t.refresh}</button>
       </header>
 

@@ -16,7 +16,7 @@
   <application
     android:name=".BcwmsApplication"
     android:allowBackup="false"
-    android:label="BCWMS"
+    android:label="${appLabel}"
     android:supportsRtl="true"
     android:theme="@style/AppTheme">
 
@@ -46,4 +46,3 @@
     </provider>
   </application>
 </manifest>
-

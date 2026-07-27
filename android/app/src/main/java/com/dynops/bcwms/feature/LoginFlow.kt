@@ -20,6 +20,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.dynops.bcwms.BcApi
+import com.dynops.bcwms.BuildConfig
 import com.dynops.bcwms.DeviceAuth
 import com.dynops.bcwms.ui.StatusText
 import kotlinx.coroutines.launch
@@ -115,6 +116,21 @@ fun LoginFlow(onConnected: (Boolean) -> Unit) {
             if (r.ok) {
                 val resolved = BcApi.scalarValue(r.body)
                 BcApi.saveLocalUser(context, rawUser, resolved)
+                // ELOG multi-company: operatörün bu ortamda erişebildiği (WMS kurulu +
+                // localUser kaydı olan) şirketleri hesapla → üstteki şirket değiştiricide
+                // yalnız bunlar görünür (PIM vb. dışarıda kalır). Keşif listesi yoksa
+                // en azından aktif şirketi kaydet ki switcher tutarlı olsun.
+                val candidates = selectedEnv?.companies
+                    ?: listOf(BcApi.Company(BcApi.getCompanyId(context), BcApi.getCompanyName(context), BcApi.getCompanyName(context)))
+                val accessible = runCatching {
+                    BcApi.probeAccessibleCompanies(context, BcApi.getEnvironment(context), rawUser, candidates)
+                }.getOrDefault(emptyList())
+                BcApi.saveAccessibleCompanies(
+                    context,
+                    accessible.ifEmpty {
+                        listOf(BcApi.Company(BcApi.getCompanyId(context), BcApi.getCompanyName(context), BcApi.getCompanyName(context)))
+                    },
+                )
                 status = "🟢 ${displayNameFromJson(resolved) ?: rawUser} olarak bağlandı."
                 onConnected(true)
             } else {
@@ -164,7 +180,7 @@ fun LoginFlow(onConnected: (Boolean) -> Unit) {
 
     Column(Modifier.fillMaxSize().padding(20.dp).verticalScroll(rememberScrollState())) {
         Text("BCWMS — Giriş", fontWeight = FontWeight.Bold, fontSize = 20.sp)
-        Text("BC Sandbox · tenant dynamicsops", fontSize = 12.sp, color = Color.Gray)
+        Text("BC · tenant ${BuildConfig.TENANT_LABEL}", fontSize = 12.sp, color = Color.Gray)
         Spacer(Modifier.height(20.dp))
 
         when (step) {
@@ -174,7 +190,7 @@ fun LoginFlow(onConnected: (Boolean) -> Unit) {
                 OutlinedTextField(
                     value = email, onValueChange = { email = it },
                     label = { Text("E-posta (BC kullanıcısı)") },
-                    placeholder = { Text("ornek@dynamicsops.com") },
+                    placeholder = { Text(BuildConfig.LOGIN_EMAIL_HINT) },
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
                     singleLine = true, modifier = Modifier.fillMaxWidth()
                 )
@@ -315,7 +331,7 @@ fun LoginFlow(onConnected: (Boolean) -> Unit) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     OutlinedTextField(
                         value = manualEnv, onValueChange = { manualEnv = it },
-                        label = { Text("Ortam adı (ör. Production)") },
+                    label = { Text("Ortam adı (ör. ${BuildConfig.BC_DEFAULT_ENVIRONMENT})") },
                         singleLine = true, modifier = Modifier.weight(1f),
                     )
                     Spacer(Modifier.width(8.dp))
@@ -362,6 +378,17 @@ fun LoginFlow(onConnected: (Boolean) -> Unit) {
                                 val r = BcApi.testConnection(context)
                                 busy = false
                                 if (r.ok) {
+                                    // ELOG multi-company: WMS kullanıcı girişi ATLANSA bile (admin/AAD)
+                                    // üstteki şirket değiştirici çalışsın diye erişilebilir (WMS kurulu)
+                                    // şirketleri şimdi hesapla/sakla. WMS kullanıcı girişi yapılırsa
+                                    // orada kullanıcı-bazlı daha dar listeyle üzerine yazılır.
+                                    val wmsCompanies = runCatching {
+                                        BcApi.probeWmsCompanies(context, selectedEnv!!.environment, selectedEnv!!.companies)
+                                    }.getOrDefault(emptyList())
+                                    BcApi.saveAccessibleCompanies(
+                                        context,
+                                        wmsCompanies.ifEmpty { listOf(c) },
+                                    )
                                     // Paylaşımlı BC lisansı: ortam bağlantısı servis hesabıyla
                                     // yapıldı; oturum ancak WMS operatörü kendi kullanıcı adı +
                                     // şifresiyle doğrulanınca açılır (BC → WMS Users / Local User).
@@ -406,7 +433,7 @@ private fun TokenPasteFallback(onConnected: (Boolean) -> Unit) {
         Text("az account get-access-token --resource https://api.businesscentral.dynamics.com --query accessToken -o tsv",
             fontSize = 10.sp, color = Color.Gray)
         Spacer(Modifier.height(6.dp))
-        OutlinedTextField(token, { token = it }, label = { Text("Access token") }, modifier = Modifier.fillMaxWidth(), maxLines = 3)
+        OutlinedTextField(token, { token = it }, label = { Text("Erişim belirteci") }, modifier = Modifier.fillMaxWidth(), maxLines = 3)
         Spacer(Modifier.height(8.dp))
         Button(enabled = token.isNotBlank(), onClick = {
             BcApi.saveToken(context, token)

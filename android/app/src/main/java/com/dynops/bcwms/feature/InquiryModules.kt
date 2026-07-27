@@ -53,7 +53,7 @@ fun ItemInquiryModule() {
             val le = BcApi.get(context, "itemLedgerEntries?\$filter=itemNo eq '$q'&\$orderby=postingDate desc,entryNo desc&\$top=20")
             if (le.ok) ledger = BcApi.parseValueArray(le.body)
             loading = false
-            status = if (item == null) "EMPTY: '$q' için item bulunamadı." else "PASS: item bulundu · ${lpLines.size} LP · ${ledger.size} hareket."
+            status = if (item == null) "BOŞ: '$q' için item bulunamadı." else "TAMAM: item bulundu · ${lpLines.size} LP · ${ledger.size} hareket."
         }
     }
 
@@ -68,7 +68,7 @@ fun ItemInquiryModule() {
 
     val palette = bcwmsStatus()
     Column(Modifier.fillMaxSize().padding(12.dp)) {
-        ScanField("Item No", query, { query = it }, modifier = Modifier.fillMaxWidth(), onScanned = {
+        ScanField("Ürün No", query, { query = it }, modifier = Modifier.fillMaxWidth(), onScanned = {
             query = BarcodeIntentResolver.resolve(it).itemNo ?: it
         })
         Spacer(Modifier.height(8.dp))
@@ -117,7 +117,7 @@ fun ItemInquiryModule() {
                         Text("Gelen ${fmtItemQty(qtyOnPo)} · Giden ${fmtItemQty(qtyOnSo)} · Üretim ${fmtItemQty(qtyOnProd)}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                     Spacer(Modifier.height(8.dp))
-                    Text("Base UoM: $uom", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text("Temel UoM: $uom", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     Text("Kategori: ${firstValue(it, "itemCategoryCode")} · LP Template: ${firstValue(it, "defaultLpTemplateCode")}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     Text("LP'lerdeki toplam: ${fmtItemQty(totalOnLp)} $uom", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
@@ -125,7 +125,7 @@ fun ItemInquiryModule() {
             Spacer(Modifier.height(8.dp))
             OutlinedButton(onClick = { printItemLabel() }, modifier = Modifier.fillMaxWidth().height(48.dp)) { Text("🖨 Item Etiketi Bas") }
             Spacer(Modifier.height(12.dp))
-            Text("License Plate'lerde (${lpLines.size})", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
+            Text("LP'lerde (${lpLines.size})", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
             Spacer(Modifier.height(6.dp))
         }
         LazyColumn(verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -196,8 +196,8 @@ fun BinInquiryModule() {
             val we = BcApi.get(context, "warehouseEntries?\$filter=locationCode eq '$loc' and binCode eq '$code'&\$orderby=registeringDate desc,entryNo desc&\$top=20")
             if (we.ok) whseEntries = BcApi.parseValueArray(we.body)
             loading = false
-            status = if (bin == null && contents.isEmpty() && lps.isEmpty()) "EMPTY: '$loc/$code' için içerik yok."
-                else "PASS: ${contents.size} item · ${lps.size} LP · ${whseEntries.size} hareket."
+            status = if (bin == null && contents.isEmpty() && lps.isEmpty()) "BOŞ: '$loc/$code' için içerik yok."
+                else "TAMAM: ${contents.size} item · ${lps.size} LP · ${whseEntries.size} hareket."
         }
     }
 
@@ -240,7 +240,7 @@ fun BinInquiryModule() {
                         Text("${firstValue(b, "locationCode")} / ${firstValue(b, "code")}", fontWeight = FontWeight.Bold, fontSize = 18.sp, color = MaterialTheme.colorScheme.onSurface)
                         if (blocked) {
                             Spacer(Modifier.width(8.dp))
-                            AssistChip(onClick = {}, label = { Text("🚫 Block Movement", fontSize = 11.sp) }, colors = AssistChipDefaults.assistChipColors(containerColor = palette.danger, labelColor = Color.White))
+                            AssistChip(onClick = {}, label = { Text("🚫 Hareket Engelle", fontSize = 11.sp) }, colors = AssistChipDefaults.assistChipColors(containerColor = palette.danger, labelColor = Color.White))
                         }
                     }
                     Text(firstValue(b, "description").ifBlank { "—" }, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurface)
@@ -281,7 +281,7 @@ fun BinInquiryModule() {
                 item { Spacer(Modifier.height(8.dp)) }
             }
             item {
-                Text("License Plate'ler (${lps.size})", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface, modifier = Modifier.padding(vertical = 4.dp))
+                Text("LP'ler (${lps.size})", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface, modifier = Modifier.padding(vertical = 4.dp))
             }
             items(lps) { lp ->
                 Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp)) {
@@ -291,10 +291,10 @@ fun BinInquiryModule() {
                     }
                 }
             }
-            if (lps.isEmpty() && !loading) item { EmptyState("Bu bin'de License Plate yok.") }
+            if (lps.isEmpty() && !loading) item { EmptyState("Bu bin'de LP yok.") }
             if (whseEntries.isNotEmpty()) {
                 item {
-                    Text("Whse Entries (${whseEntries.size})", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface, modifier = Modifier.padding(top = 10.dp, bottom = 4.dp))
+                    Text("Ambar Kayıtları (${whseEntries.size})", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface, modifier = Modifier.padding(top = 10.dp, bottom = 4.dp))
                 }
                 items(whseEntries) { e ->
                     val qty = e.optDouble("quantity")
@@ -362,8 +362,8 @@ fun WhseEntriesModule() {
             rows = if (r.ok) BcApi.parseValueArray(r.body) else emptyList()
             status = if (!r.ok) "HATA: Hareketler alınamadı (HTTP ${r.httpCode})" +
                     (if (r.httpCode == 400 || r.httpCode == 404) " — warehouseEntries için BC publish gerekli olabilir" else "")
-                else if (rows.isEmpty()) "EMPTY: Filtreye uyan hareket yok"
-                else "PASS: ${rows.size} kayıt (en yeni üstte)"
+                else if (rows.isEmpty()) "BOŞ: Filtreye uyan hareket yok"
+                else "TAMAM: ${rows.size} kayıt (en yeni üstte)"
         }
     }
     LaunchedEffect(Unit) { load() }

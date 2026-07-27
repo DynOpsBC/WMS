@@ -74,6 +74,15 @@ page 72335 "DOPSWHS Pack Ops API"
         exit(PackMgmt.ScanItem(sessionId, itemNo, qty));
     end;
 
+    // ELOG "ürün-önce" öncelik: ürünü belirli (en az kalan) siparişe yaz.
+    [ServiceEnabled]
+    procedure scanItemForOrder(sessionId: Integer; orderNo: Code[20]; itemNo: Code[20]; qty: Decimal): Text
+    var
+        PackMgmt: Codeunit "DOPSWHS Pack Station Mgmt";
+    begin
+        exit(PackMgmt.ScanItemForOrder(sessionId, orderNo, itemNo, qty));
+    end;
+
     [ServiceEnabled]
     procedure cancelSession(sessionId: Integer)
     var

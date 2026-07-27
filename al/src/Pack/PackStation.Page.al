@@ -8,7 +8,7 @@ page 72339 "DOPSWHS Pack Station"
     PageType = Card;
     Caption = 'Pack Station (WMS)';
     ApplicationArea = All;
-    UsageCategory = Tasks;
+    UsageCategory = None;
     SourceTable = "DOPSWHS Pack Session";
     InsertAllowed = false;
     DeleteAllowed = false;

@@ -310,6 +310,52 @@ codeunit 72334 "DOPSWHS Pack Station Mgmt"
         exit(CompletedOrders);
     end;
 
+    // ELOG "ürün-önce" + öncelik: okutulan ürünü BELİRLİ bir siparişe yazar.
+    // Android, aynı ürün birden çok siparişte varsa "en az kalan" siparişi seçip
+    // buraya yollar; ayrıca aktif (yarım) sipariş kilidini uygular. Böylece
+    // "ilk bulunan" yerine kasıtlı sipariş hedeflenir. OrderNo boşsa düz
+    // ScanItem'a düşer (geriye dönük uyum).
+    procedure ScanItemForOrder(SessionId: Integer; OrderNo: Code[20]; ItemNo: Code[20]; Qty: Decimal): Text
+    var
+        PackSession: Record "DOPSWHS Pack Session";
+        Line: Record "DOPSWHS Pack Session Line";
+        Remaining: Decimal;
+        Take: Decimal;
+    begin
+        if OrderNo = '' then
+            exit(ScanItem(SessionId, ItemNo, Qty));
+
+        PackSession.Get(SessionId);
+        PackSession.TestField(Status, PackSession.Status::Open);
+        if Qty <= 0 then
+            Qty := 1;
+
+        Line.SetRange("Session Entry No.", SessionId);
+        Line.SetRange("Source Order No.", OrderNo);
+        if Line.FindSet(true) then
+            repeat
+                if (Qty > 0) and MatchesItem(Line, ItemNo) and (Line."Qty. Packed" < Line."Qty. Expected") then begin
+                    Remaining := Line."Qty. Expected" - Line."Qty. Packed";
+                    Take := Qty;
+                    if Take > Remaining then
+                        Take := Remaining;
+                    Line."Qty. Packed" += Take;
+                    Line.Modify(true);
+                    Qty -= Take;
+                end;
+            until (Line.Next() = 0) or (Qty <= 0);
+
+        if Qty > 0 then
+            Error(UnexpectedItemErr, ItemNo, OrderNo);
+
+        if TryCompleteOrder(PackSession, OrderNo) then begin
+            Log('Pack.ScanItemForOrder', OrderNo);
+            exit(OrderNo);
+        end;
+        Log('Pack.ScanItemForOrder', OrderNo);
+        exit('');
+    end;
+
     procedure CancelSession(SessionId: Integer)
     var
         PackSession: Record "DOPSWHS Pack Session";

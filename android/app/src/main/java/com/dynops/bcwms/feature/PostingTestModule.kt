@@ -54,7 +54,7 @@ fun PostingTestModule() {
             running = true; status = "Tüm posting testleri çalışıyor (BC'de gerçek belge post ediliyor)..."
             val r = BcApi.boundAction(context, "postingTests", "1-MOVE", "runAll", "{}")
             running = false
-            status = if (r.ok) "PASS: Posting testleri tamamlandı." else "HATA: ${BcApi.errorMessage(r.body)} (HTTP ${r.httpCode})"
+            status = if (r.ok) "TAMAM: Posting testleri tamamlandı." else "HATA: ${BcApi.errorMessage(r.body)} (HTTP ${r.httpCode})"
             load()
         }
     }
@@ -63,7 +63,7 @@ fun PostingTestModule() {
     val grouped = remember(rows) { groupPostingResults(rows) }
 
     Column(Modifier.fillMaxSize().padding(12.dp)) {
-        Text("BC Posting Test Harness", fontWeight = FontWeight.Bold, fontSize = 16.sp)
+        Text("BC Kayıt Testi", fontWeight = FontWeight.Bold, fontSize = 16.sp)
         Text("Her WMS post/register aksiyonu için BC'de gerçek belge oluşturup post eder.", fontSize = 11.sp, color = Color.Gray)
         Spacer(Modifier.height(8.dp))
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -266,8 +266,8 @@ private fun PostingRowCard(d: JSONObject, kind: PostingKind) {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                 Text("$mark ${d.optString("description")}", fontWeight = FontWeight.Medium, modifier = Modifier.weight(1f))
                 val statusLabel = when (kind) {
-                    PostingKind.PASSED -> "Passed"
-                    PostingKind.FAILED -> "Failed"
+                    PostingKind.PASSED -> "Geçti"
+                    PostingKind.FAILED -> "Başarısız"
                     PostingKind.SETUP_MISSING -> "Setup eksik"
                     PostingKind.CASCADE_SKIP -> "Atlandı"
                 }

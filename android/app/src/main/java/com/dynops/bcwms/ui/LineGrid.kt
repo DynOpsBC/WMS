@@ -178,7 +178,7 @@ fun ChooseColumnsSheet(
         Spacer(Modifier.height(12.dp))
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             OutlinedButton(onClick = onDismiss, modifier = Modifier.weight(1f).height(50.dp)) { Text("İPTAL") }
-            Button(onClick = { onSave(cols) }, modifier = Modifier.weight(1f).height(50.dp)) { Text("OK", fontWeight = FontWeight.Bold) }
+            Button(onClick = { onSave(cols) }, modifier = Modifier.weight(1f).height(50.dp)) { Text("Tamam", fontWeight = FontWeight.Bold) }
         }
         Spacer(Modifier.height(16.dp))
     }

@@ -316,3 +316,48 @@ Yes olmalı; her müşteri yöneticisi kendi tenant'ında bu client'a
 `Dynamics 365 Business Central / user_impersonation` (delegated) onayı verir.
 Sonra BADE kullanıcısı aynı APK'yla girer; ortam adı "Production" yazılır.
 Uzun vade: client'ı AppSource/publisher domain ile yayınlamak onayı basitleştirir.
+
+## Toplanacak Siparişler — toplama durumu + akıllı filtre (21 Tem 2026)
+
+"Satış siparişleri statüleriyle birlikte BC ekranına toplanacak siparişler olarak
+çekilsin" isteği. Mevcut Picking Order (tablo 72352 "Toplanacak Siparişler",
+sayfa 72356/72357) üzerine eklendi — yeni sayfa açılmadı.
+
+- **Toplama Durumu kolonu** (sayfa 72355 Picking Order Lines): sipariş satırında
+  Pick Yok / Pick Açık / Toplandı (renkli: Unfavorable/Ambiguous/Favorable).
+  `PickingOrderMgmt.GetSalesOrderPickStatus(salesOrderNo)`:
+  0=açık Warehouse Activity Line yok + Registered da yok; 1=açık pick satırı var;
+  2=Registered Whse. Activity Line var (register edilince açık satır silindiği için
+  tamamlanma yalnız Registered'dan anlaşılır). Source Type=Sales Line, Subtype=1.
+- **"Satış Siparişlerini Seç" filtresi** (sayfa 72356 SelectSalesOrders): artık
+  yalnız **Released + pick'i olmayan** siparişler. `FilterToPickable(SalesHeader)`
+  açık/registered pick'i olan No.'ları `<>...&` filtresiyle eler (uzun filtre riski
+  var ama AddOrder guard'ı slip-through'u yakalar). AddOrder'a da
+  `SalesOrderHasOpenPick` guard eklendi (zaten pick'li sipariş gruba eklenemez).
+- Yeni kod: PickingOrderMgmt cu 72354 (GetSalesOrderPickStatus / SalesOrderHasOpenPick
+  / FilterToPickable). **AL derlenmedi — Windows publish gerekli.**
+
+## Toplanacak Siparişler — OPS Status = Pending filtresi (21 Tem 2026)
+
+Saha gözlemi: "Satış Siparişlerini Seç" listesinde Refunded/Canceled/Returned
+siparişler de çıkıyordu. Kullanıcı: yalnız **OPS Status = Pending** toplanabilir.
+"OPS Status" başka eklentinin alanı (field 60000, Option) — bizim koda derleme
+bağımlılığı yaratmamak için RecordRef/FieldRef ile field-no üzerinden erişilir.
+
+- `PickingOrderMgmt.ApplyOpsPendingFilter(SalesHeader)`: RecRef.FieldExist(60000)
+  → yoksa atla (o eklenti kurulu değilse hata verme). FieldRef.OptionMembers()'tan
+  'Pending' üyesinin ordinal'i `OptionOrdinal()` ile çözülür, FldRef.SetRange(ordinal).
+- PickingOrderCard SelectSalesOrders: SetRange(Status,Released) + ApplyOpsPendingFilter
+  + FilterToPickable (açık/registered pick eleme) sırasıyla uygulanır.
+- 'Pending' üyesi bulunamazsa filtre atlanır (güvenli taraf — hepsi görünür).
+
+## Toplanacak Siparişler — Released şartı kaldırıldı + ölçeklenebilir filtre (21 Tem 2026)
+
+Saha: BADE'de 5.341 Pending sipariş var ama sadece 2'si Released → liste 2 gösteriyordu.
+Kullanıcı: toplama için Released ŞART DEĞİL, OPS Status = Pending yeterli.
+- PickingOrderCard SelectSalesOrders: `SetRange(Status, Released)` KALDIRILDI.
+  Kalan: Document Type=Order + ApplyOpsPendingFilter (OPS=Pending) + FilterToPickable.
+- FilterToPickable ÖLÇEKLENEBİLİR yeniden yazıldı: 5000+ siparişi tek tek dolaşmak
+  yerine PICK SATIRLARINI (az) tarar, pick'i olan Source No.'ları Dictionary'de
+  toplar, tek <>...& filtresi kurar (SetLoadFields ile hızlı). ~1900 char sınırı
+  aşılırsa durur; AddOrder guard'ı kalanı yakalar.

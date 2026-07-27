@@ -32,6 +32,7 @@ page 72229 "DOPSWHS Pick Line API"
                 field(qtyToHandle; Rec."Qty. to Handle") { Caption = 'qtyToHandle'; }
                 field(qtyHandled; Rec."Qty. Handled") { Caption = 'qtyHandled'; Editable = false; }
                 field(binCode; Rec."Bin Code") { Caption = 'binCode'; }
+                field(lotNo; Rec."Lot No.") { Caption = 'lotNo'; }
                 field(licensePlateNo; Rec."LP No.") { Caption = 'licensePlateNo'; }
                 // ELOG: satırın kaynak siparişi — terminal tote önerisi için kullanır.
                 field(sourceNo; Rec."Source No.") { Caption = 'sourceNo'; Editable = false; }
@@ -55,6 +56,14 @@ page 72229 "DOPSWHS Pick Line API"
         Clear(ItemGtin);
         if (Rec."Item No." <> '') and Item.Get(Rec."Item No.") then
             ItemGtin := Item.GTIN;
+    end;
+
+    trigger OnModifyRecord(): Boolean
+    var
+        PickMgmt: Codeunit "DOPSWHS Pick Mgmt";
+    begin
+        PickMgmt.ConfirmPickLine(Rec, Rec."Qty. to Handle", Rec."Lot No.");
+        exit(false);
     end;
 
     var

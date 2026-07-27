@@ -10,6 +10,12 @@ pageextension 72311 "DOPSWHS Whse Pick Header Ext" extends "Warehouse Pick"
                 Caption = 'Assigned User';
                 ToolTip = 'Specifies the mobile user assigned to this pick.';
             }
+            field("DOPSWHS Vehicle No."; Rec."DOPSWHS Vehicle No.")
+            {
+                ApplicationArea = All;
+                Caption = 'Vehicle No.';
+                ToolTip = 'Specifies the vehicle (forklift/pallet truck) assigned to this pick. Entered by the desk supervisor; shown read-only on the handheld.';
+            }
         }
     }
 

@@ -7,7 +7,7 @@ page 72346 "DOPSWHS Mono-SKU Pack Station"
     PageType = Card;
     Caption = 'Mono-SKU Package Worksheet';
     ApplicationArea = All;
-    UsageCategory = Tasks;
+    UsageCategory = None;
     SourceTable = "DOPSWHS Pack Session";
     InsertAllowed = false;
     DeleteAllowed = false;

@@ -46,8 +46,8 @@ fun LicensePlateModule() {
             loading = false
             rows = if (r.ok) BcApi.parseValueArray(r.body) else emptyList()
             status = if (!r.ok) "HATA: LP listesi alınamadı (HTTP ${r.httpCode})"
-                else if (rows.isEmpty()) "EMPTY: LP kaydı yok (HTTP ${r.httpCode})"
-                else "PASS: ${rows.size} LP (HTTP ${r.httpCode})"
+                else if (rows.isEmpty()) "BOŞ: LP kaydı yok (HTTP ${r.httpCode})"
+                else "TAMAM: ${rows.size} LP (HTTP ${r.httpCode})"
         }
     }
     LaunchedEffect(Unit) { loadList() }
@@ -69,7 +69,7 @@ fun LicensePlateModule() {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Button(onClick = { loadList() }, enabled = !loading) { Text(if (loading) "..." else "🔄 Yenile") }
             Spacer(Modifier.width(8.dp))
-            Button(onClick = { showBuild = true }, enabled = !loading) { Text("➕ Build LP") }
+            Button(onClick = { showBuild = true }, enabled = !loading) { Text("➕ LP Oluştur") }
         }
         Spacer(Modifier.height(8.dp))
         com.dynops.bcwms.ui.DocSearchBar(value = search, onValueChange = { search = it }, onSearch = { loadList() }, label = "LP no ile ara")
@@ -90,9 +90,20 @@ fun LicensePlateModule() {
                     }
                 }
             }
-            if (rows.isEmpty() && !loading) item { EmptyState("License Plate kaydı bulunamadı.") }
+            if (rows.isEmpty() && !loading) item { EmptyState("LP kaydı bulunamadı.") }
         }
     }
+}
+
+// BC LP durum değeri (wire) → operatöre gösterilen Türkçe etiket. Karşılaştırma/
+// renk seçimi ham değerle yapılır; ekranda hep bu etiket görünür.
+internal fun lpStatusLabel(status: String): String = when (status) {
+    "Built" -> "Oluşturuldu"
+    "Assigned" -> "Atandı"
+    "Used" -> "Kullanıldı"
+    "Unbuilt" -> "Bozuldu"
+    "" -> "Açık"
+    else -> status
 }
 
 @Composable
@@ -105,7 +116,7 @@ private fun StatusBadge(status: String) {
         else -> Color(0xFFF5F5F5) to Color(0xFF616161)
     }
     Surface(color = bg, shape = RoundedCornerShape(6.dp)) {
-        Text(status.ifBlank { "Open" }, Modifier.padding(horizontal = 8.dp, vertical = 2.dp), color = fg, fontSize = 11.sp, fontWeight = FontWeight.Medium)
+        Text(lpStatusLabel(status), Modifier.padding(horizontal = 8.dp, vertical = 2.dp), color = fg, fontSize = 11.sp, fontWeight = FontWeight.Medium)
     }
 }
 
@@ -130,14 +141,14 @@ private fun LpBuildSheet(onDismiss: () -> Unit, onBuilt: (String) -> Unit) {
     var templateExpanded by remember { mutableStateOf(false) }
 
     com.dynops.bcwms.ui.SheetScaffold(onDismiss = onDismiss, contentPadding = androidx.compose.foundation.layout.PaddingValues(20.dp)) {
-        Text("Yeni License Plate Build", fontWeight = FontWeight.Bold, fontSize = 18.sp)
+        Text("Yeni LP Oluştur", fontWeight = FontWeight.Bold, fontSize = 18.sp)
         Spacer(Modifier.height(12.dp))
         ExposedDropdownMenuBox(expanded = templateExpanded, onExpandedChange = { templateExpanded = !templateExpanded }) {
             OutlinedTextField(
                 value = template,
                 onValueChange = { template = it },
                 readOnly = templates.isNotEmpty(),
-                label = { Text("Template Code") },
+                label = { Text("Şablon Kodu") },
                 trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = templateExpanded) },
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth().menuAnchor(),
@@ -175,7 +186,7 @@ private fun LpBuildSheet(onDismiss: () -> Unit, onBuilt: (String) -> Unit) {
                     } else err = "HATA: ${BcApi.errorMessage(r.body)}"
                 }
             }
-        ) { Text(if (busy) "Oluşturuluyor..." else "Build") }
+        ) { Text(if (busy) "Oluşturuluyor..." else "Oluştur") }
         Spacer(Modifier.height(24.dp))
     }
 }
@@ -217,7 +228,7 @@ private fun LpDocument(lpNo: String, onBack: () -> Unit) {
             busy = true; status = "$name çalışıyor..."
             val r = BcApi.boundAction(context, "licensePlates", lpNo, name, body)
             busy = false
-            status = if (r.ok) "PASS: $okMsg (HTTP ${r.httpCode})" else "HATA: ${BcApi.errorMessage(r.body)} (HTTP ${r.httpCode})"
+            status = if (r.ok) "TAMAM: $okMsg (HTTP ${r.httpCode})" else "HATA: ${BcApi.errorMessage(r.body)} (HTTP ${r.httpCode})"
             if (r.ok) reload()
         }
     }
@@ -233,7 +244,7 @@ private fun LpDocument(lpNo: String, onBack: () -> Unit) {
                 title = lpNo,
                 subtitle = "${h?.optString("templateCode") ?: ""}${if (isTote) " · ♻ Tote" else ""} · ${h?.optString("locationCode") ?: ""}/${h?.optString("binCode") ?: ""}" +
                     (h?.optString("sscc")?.takeIf { it.isNotBlank() }?.let { "\nSSCC: $it" } ?: ""),
-                badge = st.ifBlank { "Open" }
+                badge = lpStatusLabel(st)
             )
             Spacer(Modifier.height(6.dp))
             StatusText(status)
@@ -286,9 +297,9 @@ private fun LpDocument(lpNo: String, onBack: () -> Unit) {
                 },
                 enabled = !busy,
                 modifier = Modifier.weight(1f),
-            ) { Text("🖨 Print") }
-            OutlinedButton(onClick = { showPartial = true }, enabled = !busy, modifier = Modifier.weight(1f)) { Text("Partial") }
-            OutlinedButton(onClick = { action("unbuild", "{}", "LP Unbuild") }, enabled = !busy, modifier = Modifier.weight(1f)) { Text("Unbuild") }
+            ) { Text("🖨 Yazdır") }
+            OutlinedButton(onClick = { showPartial = true }, enabled = !busy, modifier = Modifier.weight(1f)) { Text("Kısmi") }
+            OutlinedButton(onClick = { action("unbuild", "{}", "LP Unbuild") }, enabled = !busy, modifier = Modifier.weight(1f)) { Text("Boz") }
         }
     }
 
@@ -337,7 +348,7 @@ private fun LpDocument(lpNo: String, onBack: () -> Unit) {
                         r = BcApi.post(context, "licensePlateLines", legacy)
                     }
                     busy = false
-                    status = if (r.ok) "PASS: ${scannedItem} × ${res.quantity} eklendi (bin: ${scannedBin.trim()})"
+                    status = if (r.ok) "TAMAM: ${scannedItem} × ${res.quantity} eklendi (bin: ${scannedBin.trim()})"
                         else "HATA: ${BcApi.errorMessage(r.body)}"
                     if (r.ok) reload()
                 }
@@ -358,7 +369,7 @@ private fun LpDocument(lpNo: String, onBack: () -> Unit) {
     if (showPartial) {
         PartialUseSheet(onDismiss = { showPartial = false }, onConfirm = { mode, qty, lineNo ->
             showPartial = false
-            action("usePartial", JSONObject().apply { put("action", mode); put("qty", qty); put("lineNo", lineNo) }.toString(), "Partial-use ($mode) tamamlandı")
+            action("usePartial", JSONObject().apply { put("action", mode); put("qty", qty); put("lineNo", lineNo) }.toString(), "Kısmi kullanım ($mode) tamamlandı")
         })
     }
 }
@@ -368,7 +379,7 @@ private fun LpDocument(lpNo: String, onBack: () -> Unit) {
 private fun AddLineScanSheet(onDismiss: () -> Unit, onItem: (String) -> Unit) {
     var item by remember { mutableStateOf("") }
     com.dynops.bcwms.ui.SheetScaffold(onDismiss = onDismiss, contentPadding = androidx.compose.foundation.layout.PaddingValues(20.dp)) {
-        Text("Item Tara / Gir", fontWeight = FontWeight.Bold, fontSize = 18.sp)
+        Text("Ürün Tara / Gir", fontWeight = FontWeight.Bold, fontSize = 18.sp)
         Spacer(Modifier.height(12.dp))
         ScanField("Item No", item, { item = it }, modifier = Modifier.fillMaxWidth(), onScanned = { raw ->
             item = BarcodeIntentResolver.resolve(raw).itemNo ?: raw
@@ -384,7 +395,7 @@ private fun AddLineScanSheet(onDismiss: () -> Unit, onItem: (String) -> Unit) {
 private fun TransferSheet(onDismiss: () -> Unit, onConfirm: (String) -> Unit) {
     var target by remember { mutableStateOf("") }
     com.dynops.bcwms.ui.SheetScaffold(onDismiss = onDismiss, contentPadding = androidx.compose.foundation.layout.PaddingValues(20.dp)) {
-        Text("LP Transfer", fontWeight = FontWeight.Bold, fontSize = 18.sp)
+        Text("LP Transferi", fontWeight = FontWeight.Bold, fontSize = 18.sp)
         Text("İçeriği hedef LP'ye taşı (boş = yeni LP).", fontSize = 12.sp, color = Color.Gray)
         Spacer(Modifier.height(12.dp))
         ScanField("Hedef LP No", target, { target = it }, modifier = Modifier.fillMaxWidth())
@@ -402,7 +413,7 @@ private fun PartialUseSheet(onDismiss: () -> Unit, onConfirm: (mode: String, qty
     var qty by remember { mutableStateOf("1") }
     var lineNo by remember { mutableStateOf("10000") }
     com.dynops.bcwms.ui.SheetScaffold(onDismiss = onDismiss, contentPadding = androidx.compose.foundation.layout.PaddingValues(20.dp)) {
-        Text("Partial Use", fontWeight = FontWeight.Bold, fontSize = 18.sp)
+        Text("Kısmi Kullanım", fontWeight = FontWeight.Bold, fontSize = 18.sp)
         Spacer(Modifier.height(8.dp))
         Text("Mod", fontSize = 12.sp, color = Color.Gray)
         FlowRowChips(options = modes, selected = mode, onSelect = { mode = it })

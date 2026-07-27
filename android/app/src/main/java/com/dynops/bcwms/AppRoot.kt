@@ -37,31 +37,41 @@ val LocalNavigator = compositionLocalOf<(Screen) -> Unit> {
     error("LocalNavigator used outside CompositionLocalProvider")
 }
 
+/** Bir modülde oluşturulan WHSE Pick'i Sevkiyat ekranında doğrudan açar. */
+object WhsePickNavigation {
+    private var pendingPickNo: String? = null
+
+    fun request(pickNo: String) {
+        pendingPickNo = pickNo.takeIf { it.isNotBlank() }
+    }
+
+    fun consume(): String? = pendingPickNo.also { pendingPickNo = null }
+}
+
 enum class Screen(val title: String) {
     Home("BCWMS Ana Menü"),
     Connection("Bağlantı Ayarları"),
-    LicensePlates("License Plate"),
-    ItemInquiry("Item Inquiry"),
-    BinInquiry("Bin Inquiry"),
+    LicensePlates("LP (Taşıma Kabı)"),
+    ItemInquiry("Ürün Sorgu"),
+    BinInquiry("Bin Sorgu"),
     WhseEntries("Ambar Hareketleri"),
     Receiving("Mal Kabul"),
     Picking("Toplama"),
     Packing("Paketleme"),
     AdHocMove("Ad-Hoc Hareket"),
     Count("Sayım"),
-    PutAway("Put-Away"),
+    PutAway("Yerleştirme"),
     Shipping("Sevkiyat"),
     Production("Üretim"),
     Assembly("Montaj"),
     DirectedMove("Yönlendirilmiş Hareket"),
     Quality("Kalite Denetimi"),
-    QualityMgmt("MS Quality Mgmt"),
-    TestCenter("Test Center"),
-    PostingTest("Posting Test"),
+    QualityMgmt("MS Kalite Yönetimi"),
+    TestCenter("Test Merkezi"),
+    PostingTest("Kayıt Testi"),
     Printers("Yazıcılar"),
     SelfTest("Sistem Sağlığı"),
     FieldSettings("Alan Ayarları"),
-    Scratchpad("Scratchpad"),
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -121,7 +131,6 @@ fun AppRoot() {
                 Screen.Printers -> PrintersModule()
                 Screen.SelfTest -> SelfTestModule()
                 Screen.FieldSettings -> FieldSettingsModule()
-                Screen.Scratchpad -> ScratchpadModule()
             }
             UpdateChecker()
         }
@@ -160,7 +169,7 @@ private data class HomeCategory(val title: String, val accent: Color, val tiles:
 private val HomeCategories = listOf(
     HomeCategory("Gelen", Color(0xFF26A65B), listOf(
         HomeTile(Screen.Receiving, "📥", "Mal Kabul"),
-        HomeTile(Screen.PutAway, "📤", "Put-Away"),
+        HomeTile(Screen.PutAway, "📤", "Yerleştirme"),
     )),
     HomeCategory("Giden", Color(0xFF6C5CE7), listOf(
         HomeTile(Screen.Picking, "🚚", "Toplama"),
@@ -168,11 +177,10 @@ private val HomeCategories = listOf(
         HomeTile(Screen.Shipping, "🚢", "Sevkiyat"),
     )),
     HomeCategory("İç Operasyon", Color(0xFF2D9CDB), listOf(
-        HomeTile(Screen.LicensePlates, "📦", "License Plate"),
+        HomeTile(Screen.LicensePlates, "📦", "LP"),
         HomeTile(Screen.AdHocMove, "↔️", "Ad-Hoc Hareket"),
         HomeTile(Screen.DirectedMove, "🧭", "Yönlendirilmiş"),
         HomeTile(Screen.Count, "🔢", "Sayım"),
-        HomeTile(Screen.Scratchpad, "📝", "Scratchpad"),
     )),
     HomeCategory("Üretim", Color(0xFFE2873B), listOf(
         HomeTile(Screen.Production, "🏭", "Üretim"),
@@ -180,19 +188,19 @@ private val HomeCategories = listOf(
     )),
     HomeCategory("Kalite", Color(0xFF14B8A6), listOf(
         HomeTile(Screen.Quality, "🔬", "Kalite Denetimi"),
-        HomeTile(Screen.QualityMgmt, "🧫", "MS Quality"),
+        HomeTile(Screen.QualityMgmt, "🧫", "MS Kalite"),
     )),
     HomeCategory("Sorgu", Color(0xFF9B59B6), listOf(
-        HomeTile(Screen.ItemInquiry, "🔎", "Item Inquiry"),
-        HomeTile(Screen.BinInquiry, "📍", "Bin Inquiry"),
+        HomeTile(Screen.ItemInquiry, "🔎", "Ürün Sorgu"),
+        HomeTile(Screen.BinInquiry, "📍", "Bin Sorgu"),
         HomeTile(Screen.WhseEntries, "📜", "Ambar Hareketleri"),
     )),
     HomeCategory("Sistem", Color(0xFF64748B), listOf(
         HomeTile(Screen.FieldSettings, "🧩", "Alan Ayarları"),
         HomeTile(Screen.SelfTest, "🩺", "Sistem Sağlığı"),
         HomeTile(Screen.Printers, "🖨", "Yazıcılar"),
-        HomeTile(Screen.TestCenter, "🧪", "Test Center"),
-        HomeTile(Screen.PostingTest, "📮", "Posting Test"),
+        HomeTile(Screen.TestCenter, "🧪", "Test Merkezi"),
+        HomeTile(Screen.PostingTest, "📮", "Kayıt Testi"),
         HomeTile(Screen.Connection, "⚙️", "Bağlantı"),
     )),
 )
@@ -200,14 +208,43 @@ private val HomeCategories = listOf(
 @Composable
 private fun HomeScreen(connected: Boolean, onNavigate: (Screen) -> Unit) {
     val context = androidx.compose.ui.platform.LocalContext.current
+    // ELOG multi-company: şirket değişince header + alt ekranlar tazelensin diye
+    // basit bir sürüm sayacı. setCompany sonrası artırılır.
+    var companyEpoch by remember { mutableStateOf(0) }
+    var showSwitcher by remember { mutableStateOf(false) }
+    // companyEpoch değişince company adını yeniden oku.
+    val companyName = remember(companyEpoch) { BcApi.getCompanyName(context) }
+    var accessible by remember(companyEpoch, connected) { mutableStateOf(BcApi.getAccessibleCompanies(context)) }
+    // ELOG: liste boşsa (login switcher eklenmeden yapılmış / AAD-only atlama)
+    // bağlıyken bir kez erişilebilir şirketleri hesapla → switcher görünür olur.
+    LaunchedEffect(connected, companyEpoch) {
+        if (connected && accessible.isEmpty()) {
+            BcApi.refreshAccessibleCompaniesIfEmpty(context)
+            accessible = BcApi.getAccessibleCompanies(context)
+        }
+    }
     Column(
         Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp)
     ) {
         HomeHeader(
             env = BcApi.getEnvironment(context),
-            company = BcApi.getCompanyName(context),
-            connected = connected
+            company = companyName,
+            connected = connected,
+            canSwitch = accessible.size > 1,
+            onSwitchClick = { showSwitcher = true },
         )
+        if (showSwitcher) {
+            CompanySwitcherSheet(
+                companies = accessible,
+                currentId = BcApi.getCompanyId(context),
+                onDismiss = { showSwitcher = false },
+                onSelect = { c ->
+                    BcApi.setCompany(context, c.id, c.displayName)
+                    showSwitcher = false
+                    companyEpoch++   // header + aktif ekran reload tetikler
+                },
+            )
+        }
         Spacer(Modifier.height(16.dp))
 
         if (!connected) {
@@ -224,7 +261,13 @@ private fun HomeScreen(connected: Boolean, onNavigate: (Screen) -> Unit) {
 }
 
 @Composable
-private fun HomeHeader(env: String, company: String, connected: Boolean) {
+private fun HomeHeader(
+    env: String,
+    company: String,
+    connected: Boolean,
+    canSwitch: Boolean = false,
+    onSwitchClick: () -> Unit = {},
+) {
     val status = bcwmsStatus()
     val statusColor = if (connected) status.success else Color(0xFFFF7A7A)
     Box(
@@ -253,12 +296,23 @@ private fun HomeHeader(env: String, company: String, connected: Boolean) {
                         fontWeight = FontWeight.Bold,
                         color = Color.White
                     )
-                    Text(
-                        "$env · $company",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = Color.White.copy(alpha = 0.82f),
-                        maxLines = 1
-                    )
+                    // Şirket satırı: birden çok erişilebilir şirket varsa tıklanınca
+                    // değiştirici açılır (▾). Tek şirkette düz metin.
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = if (canSwitch) Modifier.clip(RoundedCornerShape(6.dp)).clickable { onSwitchClick() }.padding(vertical = 2.dp) else Modifier,
+                    ) {
+                        Text(
+                            "$env · $company",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = Color.White.copy(alpha = 0.82f),
+                            maxLines = 1
+                        )
+                        if (canSwitch) {
+                            Spacer(Modifier.width(4.dp))
+                            Text("🔀 ▾", fontSize = 11.sp, color = Color.White)
+                        }
+                    }
                 }
             }
             Spacer(Modifier.height(14.dp))
@@ -301,6 +355,49 @@ private fun NotConnectedCard() {
                 color = MaterialTheme.colorScheme.onSurface
             )
         }
+    }
+}
+
+/**
+ * ELOG: aynı ortamdaki farklı BC şirketleri (BADE / BS / ...) arasında login
+ * yapmadan geçiş. Yalnız operatörün erişebildiği şirketler listelenir. Seçim
+ * BcApi.setCompany'yi çağırır; sonraki tüm API çağrıları yeni şirkete gider.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun CompanySwitcherSheet(
+    companies: List<BcApi.Company>,
+    currentId: String,
+    onDismiss: () -> Unit,
+    onSelect: (BcApi.Company) -> Unit,
+) {
+    com.dynops.bcwms.ui.SheetScaffold(onDismiss = onDismiss) {
+        Text("Şirket Seç", fontWeight = FontWeight.Bold, fontSize = 18.sp)
+        Text(
+            "Erişebildiğiniz şirketler. Seçince tüm belgeler o şirketten gelir.",
+            fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Spacer(Modifier.height(12.dp))
+        companies.forEach { c ->
+            val selected = c.id.equals(currentId, ignoreCase = true)
+            Card(
+                onClick = { if (!selected) onSelect(c) },
+                modifier = Modifier.fillMaxWidth().padding(vertical = 3.dp),
+                colors = CardDefaults.cardColors(
+                    containerColor = if (selected) MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)
+                    else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
+                ),
+                shape = RoundedCornerShape(12.dp),
+            ) {
+                Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text(if (selected) "🏢" else "🏭", fontSize = 20.sp)
+                    Spacer(Modifier.width(12.dp))
+                    Text(c.displayName, fontWeight = FontWeight.Medium, modifier = Modifier.weight(1f))
+                    if (selected) Text("● Aktif", fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.primary)
+                }
+            }
+        }
+        Spacer(Modifier.height(16.dp))
     }
 }
 
@@ -376,7 +473,7 @@ private fun ConnectionScreen(onConnected: (Boolean) -> Unit) {
     var testing by remember { mutableStateOf(false) }
 
     Column(Modifier.fillMaxSize().padding(16.dp).verticalScroll(rememberScrollState())) {
-        Text("Azure AD Access Token", fontWeight = FontWeight.Bold)
+        Text("Azure AD Erişim Belirteci", fontWeight = FontWeight.Bold)
         Text(
             "Mac terminal: az account get-access-token --resource https://api.businesscentral.dynamics.com --query accessToken -o tsv | pbcopy → sonra buraya Cmd+V",
             fontSize = 11.sp, color = Color.Gray
@@ -431,8 +528,8 @@ private fun TestCenterScreen() {
             loading = false
             if (r.ok) {
                 rows = BcApi.parseValueArray(r.body)
-                status = if (rows.isEmpty()) "EMPTY: Test run bulunamadı (HTTP ${r.httpCode})." else "PASS: ${rows.size} Test Run (HTTP ${r.httpCode})."
-            } else status = "EMPTY: Test Center servisi yanıt vermedi (HTTP ${r.httpCode})."
+                status = if (rows.isEmpty()) "BOŞ: Test run bulunamadı (HTTP ${r.httpCode})." else "TAMAM: ${rows.size} Test Run (HTTP ${r.httpCode})."
+            } else status = "BOŞ: Test Center servisi yanıt vermedi (HTTP ${r.httpCode})."
         }
     }
     LaunchedEffect(Unit) { load() }
@@ -455,7 +552,7 @@ private fun TestCenterScreen() {
                                 fontWeight = FontWeight.Bold
                             )
                         }
-                        Text("Status: ${run.optString("status")}", fontSize = 12.sp)
+                        Text("Durum: ${run.optString("status")}", fontSize = 12.sp)
                         Text(
                             "Passed: ${run.optInt("passed")}/${run.optInt("totalCases")} · Failed: ${run.optInt("failed")} · ${run.optDouble("durationSec")}s",
                             fontSize = 12.sp, color = Color.Gray

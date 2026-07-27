@@ -60,8 +60,8 @@ fun QualityManagementModule() {
             loading = false
             rows = if (r.ok) BcApi.parseValueArray(r.body) else emptyList()
             status = if (!r.ok) "HATA: MS QM listesi alınamadı (HTTP ${r.httpCode})"
-                else if (rows.isEmpty()) "EMPTY: ${if (openOnly) "Açık" else ""} inspection yok (HTTP ${r.httpCode})"
-                else "PASS: ${rows.size} inspection (HTTP ${r.httpCode})"
+                else if (rows.isEmpty()) "BOŞ: ${if (openOnly) "Açık" else ""} denetim yok (HTTP ${r.httpCode})"
+                else "TAMAM: ${rows.size} denetim (HTTP ${r.httpCode})"
         }
     }
     LaunchedEffect(openOnly) { load() }
@@ -92,7 +92,7 @@ fun QualityManagementModule() {
                         }
                         Text(firstValue(d, "description"), fontSize = 12.sp, color = Color.Gray)
                         val parts = mutableListOf<String>()
-                        parts.add("Item: ${firstValue(d, "sourceItemNo").ifBlank { "—" }}")
+                        parts.add("Ürün: ${firstValue(d, "sourceItemNo").ifBlank { "—" }}")
                         firstValue(d, "sourceLotNo").takeIf { it.isNotBlank() }?.let { parts.add("Lot: $it") }
                         firstValue(d, "sourceSerialNo").takeIf { it.isNotBlank() }?.let { parts.add("SN: $it") }
                         firstValue(d, "resultCode").takeIf { it.isNotBlank() }?.let { parts.add("Sonuç: $it") }
@@ -101,7 +101,7 @@ fun QualityManagementModule() {
                 }
             }
             if (rows.isEmpty() && !loading) item {
-                EmptyState(if (openOnly) "Açık quality inspection yok." else "Hiç quality inspection yok.")
+                EmptyState(if (openOnly) "Açık kalite denetimi yok." else "Hiç kalite denetimi yok.")
             }
         }
     }
@@ -140,7 +140,7 @@ private fun InspectionDetail(insp: JSONObject, onBack: () -> Unit) {
             busy = true; status = "$name..."
             val r = BcApi.post(context, "$qmBaseUrl/qualityInspections(${inspectionKey(systemId)})/Microsoft.NAV.$name", body)
             busy = false
-            status = if (r.ok) "PASS: $okMsg (HTTP ${r.httpCode})"
+            status = if (r.ok) "TAMAM: $okMsg (HTTP ${r.httpCode})"
                 else QcErrorParser.friendlyStatus(BcApi.errorMessage(r.body), r.httpCode)
             if (r.ok) reload()
         }
@@ -148,15 +148,15 @@ private fun InspectionDetail(insp: JSONObject, onBack: () -> Unit) {
 
     Column(Modifier.fillMaxSize()) {
         Column(Modifier.weight(1f).padding(12.dp)) {
-            TextButton(onClick = onBack) { Text("‹ Inspection Listesi") }
+            TextButton(onClick = onBack) { Text("‹ Denetim Listesi") }
             DocHeaderCard(
                 title = "${current.optString("inspectionNo")} · ${firstValue(current, "templateCode").ifBlank { "—" }}",
                 subtitle = buildString {
                     append(firstValue(current, "description"))
-                    append("\nItem: ").append(firstValue(current, "sourceItemNo").ifBlank { "—" })
+                    append("\nÜrün: ").append(firstValue(current, "sourceItemNo").ifBlank { "—" })
                     if (lot.isNotBlank()) append(" · Lot: ").append(lot)
                     if (serial.isNotBlank()) append(" · SN: ").append(serial)
-                    if (pkg.isNotBlank()) append(" · Pkg: ").append(pkg)
+                    if (pkg.isNotBlank()) append(" · Paket: ").append(pkg)
                     append("\nDurum: ").append(sval.ifBlank { "Open" })
                     append(" · Sonuç: ").append(firstValue(current, "resultCode").ifBlank { "—" })
                 },
@@ -181,17 +181,17 @@ private fun InspectionDetail(insp: JSONObject, onBack: () -> Unit) {
                 onClick = { action("BlockLot", "{}", "Lot $lot bloklandı") },
                 enabled = !busy && lot.isNotBlank(),
                 modifier = Modifier.weight(1f),
-            ) { Text("🔒 Block Lot") }
+            ) { Text("🔒 Lot Blokla") }
             OutlinedButton(
                 onClick = { action("UnBlockLot", "{}", "Lot $lot açıldı") },
                 enabled = !busy && lot.isNotBlank(),
                 modifier = Modifier.weight(1f),
-            ) { Text("🔓 Unblock Lot") }
+            ) { Text("🔓 Lot Blokunu Aç") }
             OutlinedButton(
                 onClick = { action("ReopenInspection", "{}", "Yeniden açıldı") },
                 enabled = !busy && !isOpen,
                 modifier = Modifier.weight(1f),
-            ) { Text("↩️ Reopen") }
+            ) { Text("↩️ Yeniden Aç") }
         }
     }
 
@@ -210,7 +210,7 @@ private fun InspectionDetail(insp: JSONObject, onBack: () -> Unit) {
             onDismiss = { showFinish = false },
             onConfirm = {
                 showFinish = false
-                action("FinishInspection", "{}", "Inspection bitirildi")
+                action("FinishInspection", "{}", "Denetim bitirildi")
             }
         )
     }
@@ -226,9 +226,9 @@ private fun SetTestValueSheet(onDismiss: () -> Unit, onConfirm: (code: String, v
         Column(Modifier.fillMaxWidth().padding(20.dp)) {
             Text("Test Değeri Gir", fontWeight = FontWeight.Bold, fontSize = 18.sp)
             Spacer(Modifier.height(12.dp))
-            OutlinedTextField(code, { code = it }, label = { Text("Test Code") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+            OutlinedTextField(code, { code = it }, label = { Text("Test Kodu") }, singleLine = true, modifier = Modifier.fillMaxWidth())
             Spacer(Modifier.height(8.dp))
-            OutlinedTextField(value, { value = it }, label = { Text("Test Value") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+            OutlinedTextField(value, { value = it }, label = { Text("Test Değeri") }, singleLine = true, modifier = Modifier.fillMaxWidth())
             Spacer(Modifier.height(16.dp))
             Button(
                 enabled = code.isNotBlank() && value.isNotBlank(),
@@ -246,11 +246,11 @@ private fun FinishSheet(onDismiss: () -> Unit, onConfirm: () -> Unit) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState) {
         Column(Modifier.fillMaxWidth().padding(20.dp)) {
-            Text("Inspection'ı Bitir", fontWeight = FontWeight.Bold, fontSize = 18.sp)
+            Text("Denetimi Bitir", fontWeight = FontWeight.Bold, fontSize = 18.sp)
             Spacer(Modifier.height(8.dp))
             Text(
-                "Template kurallarına göre BC otomatik resultCode atayacak. " +
-                    "Lot/Serial/Package blok ayarları sonuca göre tetiklenebilir. Devam?",
+                "Şablon kurallarına göre BC otomatik sonuç kodu atayacak. " +
+                    "Lot/Seri/Paket blok ayarları sonuca göre tetiklenebilir. Devam?",
                 fontSize = 13.sp, color = Color.Gray,
             )
             Spacer(Modifier.height(16.dp))

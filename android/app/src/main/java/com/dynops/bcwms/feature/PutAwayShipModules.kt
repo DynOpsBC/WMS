@@ -44,8 +44,8 @@ fun PutAwayModule() {
             loading = false
             rows = if (r.ok) BcApi.parseValueArray(r.body) else emptyList()
             status = if (!r.ok) "HATA: Yerleştirme listesi alınamadı (HTTP ${r.httpCode})"
-                else if (rows.isEmpty()) "EMPTY: Açık yerleştirme belgesi yok (HTTP ${r.httpCode})"
-                else "PASS: ${rows.size} belge (HTTP ${r.httpCode})"
+                else if (rows.isEmpty()) "BOŞ: Açık yerleştirme belgesi yok (HTTP ${r.httpCode})"
+                else "TAMAM: ${rows.size} belge (HTTP ${r.httpCode})"
         }
     }
     LaunchedEffect(Unit) { load() }
@@ -61,7 +61,7 @@ fun PutAwayModule() {
         acceptDocTypes = setOf("putaway"),
         onDocument = { selected = it },
     ) { item, docs ->
-        when { docs.isEmpty() -> status = "⚠️ '$item' açık yerleştirmede yok"; docs.size == 1 -> selected = docs.first(); else -> { itemDocs = item to docs; status = "PASS: '$item' → ${docs.size} belge" } }
+        when { docs.isEmpty() -> status = "⚠️ '$item' açık yerleştirmede yok"; docs.size == 1 -> selected = docs.first(); else -> { itemDocs = item to docs; status = "TAMAM: '$item' → ${docs.size} belge" } }
     }
     val shownRows = itemDocs?.let { f -> rows.filter { it.optString("no") in f.second } } ?: rows
 
@@ -147,7 +147,7 @@ private fun PutAwayDocument(no: String, onBack: () -> Unit) {
             if (qty > 0) qtyByPair[putAwayPairKey(ln)] = qty
         }
         if (qtyByPair.isEmpty()) {
-            status = "HATA: Register edilecek pozitif miktar yok."
+            status = "HATA: Kaydedilecek pozitif miktar yok."
             return false
         }
 
@@ -163,12 +163,12 @@ private fun PutAwayDocument(no: String, onBack: () -> Unit) {
 
     fun register() {
         scope.launch {
-            busy = true; status = "Register hazırlanıyor..."
+            busy = true; status = "Kayıt hazırlanıyor..."
             if (!prepareRegisterLines()) {
                 busy = false
                 return@launch
             }
-            status = "Register..."
+            status = "Kaydediliyor..."
             val r = BcApi.boundAction(context, "putAways", no, "register", "{}")
             if (!r.ok) {
                 busy = false
@@ -184,9 +184,9 @@ private fun PutAwayDocument(no: String, onBack: () -> Unit) {
             stagedLineNos = emptySet()
             val remaining = lines.sumOf { it.optDouble("qtyOutstanding", 0.0) }
             status = when {
-                lines.isEmpty() -> "PASS: Tüm satırlar yerleştirildi — belge tamamlandı ✅"
-                remaining > 0 -> "PASS: Kısmi register yapıldı — kalan ${fmtNum(remaining)} adet listede (sarı satırlar)"
-                else -> "PASS: Yerleştirme kaydedildi (HTTP ${r.httpCode})"
+                lines.isEmpty() -> "TAMAM: Tüm satırlar yerleştirildi — belge tamamlandı ✅"
+                remaining > 0 -> "TAMAM: Kısmi kayıt yapıldı — kalan ${fmtNum(remaining)} adet listede (sarı satırlar)"
+                else -> "TAMAM: Yerleştirme kaydedildi (HTTP ${r.httpCode})"
             }
         }
     }
@@ -204,7 +204,7 @@ private fun PutAwayDocument(no: String, onBack: () -> Unit) {
             }
             stagedLineNos = lines.map { it.optInt("lineNo") }.toSet()
             busy = false
-            status = "PASS: $okCount/${lines.size} satır → $bin"
+            status = "TAMAM: $okCount/${lines.size} satır → $bin"
             reload()
         }
     }
@@ -214,7 +214,7 @@ private fun PutAwayDocument(no: String, onBack: () -> Unit) {
         enabled = binLine == null && !showBulkBin,
         lines = lines,
         onSingleMatch = { line, _ -> scanFilter = ""; binLine = line },
-        onMultiMatch = { itemNo, _ -> scanFilter = itemNo; status = "PASS: '$itemNo' için birden fazla satır — birini seçin" },
+        onMultiMatch = { itemNo, _ -> scanFilter = itemNo; status = "TAMAM: '$itemNo' için birden fazla satır — birini seçin" },
         onNoMatch = { r -> status = "⚠️ '${r.itemNo ?: r.value}' bu belgede yok" },
     )
     val displayLines = if (scanFilter.isBlank()) lines else lines.filter { matchLinesByBarcode(listOf(it), com.dynops.bcwms.scanner.BarcodeIntentResolver.resolve(scanFilter)).isNotEmpty() }
@@ -298,7 +298,7 @@ private fun PutAwayDocument(no: String, onBack: () -> Unit) {
                     busy = false
                     if (okCount == affected.size) {
                         stagedLineNos = stagedLineNos + affected.map { it.optInt("lineNo") }
-                        status = "PASS: ${affected.size} satır hazırlandı → $bin"
+                        status = "TAMAM: ${affected.size} satır hazırlandı → $bin"
                         reload()
                     }
                 }
@@ -440,7 +440,7 @@ private fun PutAwayBinSheet(line: JSONObject, locationCode: String, onDismiss: (
             Text("Hedef Bin", fontWeight = FontWeight.Bold, fontSize = 18.sp)
             Text(
                 buildString {
-                    append("Item: ${line.optString("itemNo")}")
+                    append("Ürün: ${line.optString("itemNo")}")
                     if (!outstanding.isNaN()) append(" · Kalan: ${fmtNum(outstanding)}")
                     if (handled > 0) append(" · Konan: ${fmtNum(handled)}")
                 },
@@ -448,7 +448,7 @@ private fun PutAwayBinSheet(line: JSONObject, locationCode: String, onDismiss: (
             )
             if (!outstanding.isNaN() && (handled > 0 || outstanding > 0)) {
                 Text(
-                    "Kısmi miktar girebilirsiniz — kalan, register sonrası listede sarı satır olarak devam eder.",
+                    "Kısmi miktar girebilirsiniz — kalan, kayıt sonrası listede sarı satır olarak devam eder.",
                     fontSize = 11.sp, color = Color.Gray
                 )
             }
@@ -549,7 +549,7 @@ private fun BinListContent(locationCode: String, onSelect: ((String) -> Unit)?) 
             val filter = if (locationCode.isNotBlank()) "?\$filter=locationCode eq '${odataLiteral(locationCode)}'&\$orderby=code&\$top=200" else "?\$orderby=code&\$top=200"
             val r = BcApi.get(context, "bins$filter")
             bins = if (r.ok) BcApi.parseValueArray(r.body) else emptyList()
-            status = if (r.ok) "PASS: ${bins.size} bin" else "HATA: Bin listesi alınamadı (HTTP ${r.httpCode})"
+            status = if (r.ok) "TAMAM: ${bins.size} bin" else "HATA: Bin listesi alınamadı (HTTP ${r.httpCode})"
             loading = false
         }
     }
@@ -641,7 +641,8 @@ fun ShippingModule() {
         if (r.ok) runCatching { showSo = JSONObject(r.body).optBoolean("showSoShipment", true) }
     }
     var tab by remember { mutableStateOf(0) }
-    val tabs = if (showSo) listOf("📦 Whse Pick", "📋 Whse Shipment", "🛒 Sales Order") else listOf("📦 Whse Pick", "📋 Whse Shipment")
+    var requestedPickNo by remember { mutableStateOf(com.dynops.bcwms.WhsePickNavigation.consume()) }
+    val tabs = if (showSo) listOf("📦 Ambar Toplama", "📋 Ambar Sevkiyatı", "🛒 Satış Siparişi") else listOf("📦 Ambar Toplama", "📋 Ambar Sevkiyatı")
     if (tab >= tabs.size) tab = 0
 
     Column(Modifier.fillMaxSize()) {
@@ -651,8 +652,8 @@ fun ShippingModule() {
             }
         }
         when (tab) {
-            0 -> WhsePickTab()
-            1 -> WhseShipmentTab()
+            0 -> WhsePickTab(initialPickNo = requestedPickNo, onInitialPickConsumed = { requestedPickNo = null })
+            1 -> WhseShipmentTab(onPickCreated = { pickNo -> requestedPickNo = pickNo; tab = 0 })
             2 -> SalesOrderTab()
         }
     }
@@ -664,7 +665,7 @@ fun ShippingModule() {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun WhsePickTab() {
+private fun WhsePickTab(initialPickNo: String? = null, onInitialPickConsumed: () -> Unit = {}) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var selected by remember { mutableStateOf<String?>(null) }
@@ -673,6 +674,13 @@ private fun WhsePickTab() {
     var loading by remember { mutableStateOf(false) }
     var showAll by remember { mutableStateOf(true) }
     var search by remember { mutableStateOf("") }
+
+    LaunchedEffect(initialPickNo) {
+        if (!initialPickNo.isNullOrBlank()) {
+            selected = initialPickNo
+            onInitialPickConsumed()
+        }
+    }
 
     fun load() {
         scope.launch {
@@ -686,8 +694,8 @@ private fun WhsePickTab() {
             loading = false
             rows = if (r.ok) BcApi.parseValueArray(r.body) else emptyList()
             status = if (!r.ok) "HATA: Ambar çekme listesi alınamadı (HTTP ${r.httpCode})"
-                else if (rows.isEmpty()) "EMPTY: Açık ambar çekme yok (HTTP ${r.httpCode})"
-                else "PASS: ${rows.size} ambar çekme (HTTP ${r.httpCode})"
+                else if (rows.isEmpty()) "BOŞ: Açık ambar çekme yok (HTTP ${r.httpCode})"
+                else "TAMAM: ${rows.size} ambar çekme (HTTP ${r.httpCode})"
         }
     }
     LaunchedEffect(showAll) { load() }
@@ -706,7 +714,7 @@ private fun WhsePickTab() {
         when {
             docs.isEmpty() -> status = "⚠️ '$item' açık ambar çekmede yok"
             docs.size == 1 -> selected = docs.first()
-            else -> { itemDocs = item to docs; status = "PASS: '$item' → ${docs.size} ambar çekme" }
+            else -> { itemDocs = item to docs; status = "TAMAM: '$item' → ${docs.size} ambar çekme" }
         }
     }
     val shownRows = itemDocs?.let { f -> rows.filter { it.optString("no") in f.second } } ?: rows
@@ -756,7 +764,8 @@ private fun WhsePickDocument(no: String, onBack: () -> Unit) {
     var qtyLine by remember { mutableStateOf<JSONObject?>(null) }
     var scanFilter by remember { mutableStateOf("") }
     var sortByBin by remember { mutableStateOf(true) }
-    var columns by remember { mutableStateOf(ColumnPrefs.get(context, "shippingPick", GridColumns.pick)) }
+    // v2: Lot No. varsayılan olarak Item No.'nun yanında görünür.
+    var columns by remember { mutableStateOf(ColumnPrefs.get(context, "shippingPickLotV2", GridColumns.pick)) }
     var showColumns by remember { mutableStateOf(false) }
     // ELOG müşteri isteği: bin+item aynı olan satırları tek satırda göster,
     // girilen miktarı alt satırlara dağıt (bkz. LineGrouping/LineGroupCards).
@@ -782,19 +791,22 @@ private fun WhsePickDocument(no: String, onBack: () -> Unit) {
             busy = true; status = "$name..."
             val r = BcApi.boundAction(context, "picks", no, name, body)
             busy = false
-            status = if (r.ok) "PASS: $okMsg (HTTP ${r.httpCode})" else QcErrorParser.friendlyStatus(BcApi.errorMessage(r.body), r.httpCode)
+            status = if (r.ok) "TAMAM: $okMsg (HTTP ${r.httpCode})" else QcErrorParser.friendlyStatus(BcApi.errorMessage(r.body), r.httpCode)
             if (r.ok) reload()
         }
     }
 
-    fun updateLine(line: JSONObject, qty: Double) {
+    fun updateLine(line: JSONObject, qty: Double, lotNo: String) {
         scope.launch {
             busy = true; status = "Satır güncelleniyor..."
             val actType = BcEnum.decodeOData(line.optString("activityType")).ifBlank { BcEnum.WhseActivityType.PICK }
-            val body = JSONObject().apply { put("qtyToHandle", qty) }.toString()
+            val body = JSONObject().apply {
+                put("qtyToHandle", qty)
+                put("lotNo", lotNo)
+            }.toString()
             val r = BcApi.patch(context, "pickLines(activityType='$actType',no='$no',lineNo=${line.optInt("lineNo")})", body)
             busy = false
-            status = if (r.ok) "PASS: Satır güncellendi (HTTP ${r.httpCode})" else QcErrorParser.friendlyStatus(BcApi.errorMessage(r.body), r.httpCode)
+            status = if (r.ok) "TAMAM: Satır güncellendi (HTTP ${r.httpCode})" else QcErrorParser.friendlyStatus(BcApi.errorMessage(r.body), r.httpCode)
             if (r.ok) reload()
         }
     }
@@ -808,9 +820,9 @@ private fun WhsePickDocument(no: String, onBack: () -> Unit) {
             scanFilter = ""
             val g = if (merge) groupLines(takeLines, ::pickLineCapacity)
                 .firstOrNull { grp -> grp.lines.any { it.optInt("lineNo") == line.optInt("lineNo") } } else null
-            if (g != null && g.count > 1) groupTarget = g else updateLine(line, line.optDouble("quantity"))
+            if (g != null && g.count > 1) groupTarget = g else qtyLine = line
         },
-        onMultiMatch = { itemNo, _ -> scanFilter = itemNo; status = "PASS: '$itemNo' için birden fazla satır — birini seçin" },
+        onMultiMatch = { itemNo, _ -> scanFilter = itemNo; status = "TAMAM: '$itemNo' için birden fazla satır — birini seçin" },
         onNoMatch = { r ->
             val scanned = r.value.trim()
             val bin = takeLines.firstOrNull { it.optString("binCode").equals(scanned, ignoreCase = true) }?.optString("binCode")
@@ -877,7 +889,7 @@ private fun WhsePickDocument(no: String, onBack: () -> Unit) {
             }
             val canRegister = com.dynops.bcwms.lib.ActionGuards.hasQuantity(lines)
             Button(onClick = { action("register", "{}", "Ambar çekme kaydedildi") }, enabled = !busy && canRegister, modifier = Modifier.weight(1f).height(54.dp)) {
-                Text(if (canRegister) "✅ Register Pick" else "Miktar girin", fontWeight = FontWeight.Bold)
+                Text(if (canRegister) "✅ Toplamayı Kaydet" else "Miktar girin", fontWeight = FontWeight.Bold)
             }
         }
     }
@@ -889,11 +901,13 @@ private fun WhsePickDocument(no: String, onBack: () -> Unit) {
             itemNo = ql.optString("itemNo"),
             initialQty = ql.optDouble("qtyOutstanding").takeIf { it > 0 } ?: ql.optDouble("quantity").takeIf { it > 0 } ?: 1.0,
             initialUom = ql.optString("unitOfMeasureCode"),
-            showLotSerial = false,
+            initialLot = ql.optString("lotNo"),
+            showLotSerial = true,
+            showSerial = false,
             onDismiss = { qtyLine = null },
             onConfirm = { res ->
                 qtyLine = null
-                updateLine(ql, res.quantity)
+                updateLine(ql, res.quantity, res.lotNo)
             },
         )
     }
@@ -904,7 +918,9 @@ private fun WhsePickDocument(no: String, onBack: () -> Unit) {
             itemNo = gt.itemNo,
             initialQty = gt.totalOutstanding.takeIf { it > 0 } ?: 1.0,
             initialUom = gt.lines.first().optString("unitOfMeasureCode"),
-            showLotSerial = false,
+            initialLot = gt.lines.first().optString("lotNo"),
+            showLotSerial = true,
+            showSerial = false,
             onDismiss = { groupTarget = null },
             onConfirm = { res ->
                 groupTarget = null
@@ -915,12 +931,15 @@ private fun WhsePickDocument(no: String, onBack: () -> Unit) {
                     var firstErr: String? = null
                     for ((ln, q) in plan) {
                         val actType = BcEnum.decodeOData(ln.optString("activityType")).ifBlank { BcEnum.WhseActivityType.PICK }
-                        val body = JSONObject().apply { put("qtyToHandle", q) }.toString()
+                        val body = JSONObject().apply {
+                            put("qtyToHandle", q)
+                            put("lotNo", res.lotNo)
+                        }.toString()
                         val r = BcApi.patch(context, "pickLines(activityType='$actType',no='$no',lineNo=${ln.optInt("lineNo")})", body)
                         if (r.ok) okCount++ else if (firstErr == null) firstErr = BcApi.errorMessage(r.body)
                     }
                     busy = false
-                    status = if (firstErr == null) "PASS: $okCount/${plan.size} satıra dağıtıldı"
+                    status = if (firstErr == null) "TAMAM: $okCount/${plan.size} satıra dağıtıldı"
                         else "HATA: $okCount/${plan.size} satır yazıldı — $firstErr"
                     reload()
                 }
@@ -928,7 +947,7 @@ private fun WhsePickDocument(no: String, onBack: () -> Unit) {
         )
     }
     if (showColumns) {
-        ChooseColumnsSheet(GridColumns.pick, columns, onDismiss = { showColumns = false }) { c -> columns = c; ColumnPrefs.save(context, "shippingPick", c); showColumns = false }
+        ChooseColumnsSheet(GridColumns.pick, columns, onDismiss = { showColumns = false }) { c -> columns = c; ColumnPrefs.save(context, "shippingPickLotV2", c); showColumns = false }
     }
 }
 
@@ -938,7 +957,7 @@ private fun WhsePickDocument(no: String, onBack: () -> Unit) {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun WhseShipmentTab() {
+private fun WhseShipmentTab(onPickCreated: (String) -> Unit) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var selected by remember { mutableStateOf<String?>(null) }
@@ -960,15 +979,15 @@ private fun WhseShipmentTab() {
             loading = false
             rows = if (r.ok) BcApi.parseValueArray(r.body) else emptyList()
             status = if (!r.ok) "HATA: Sevkiyat listesi alınamadı (HTTP ${r.httpCode})"
-                else if (rows.isEmpty()) (if (showAll) "EMPTY: Released Whse Shipment yok (HTTP ${r.httpCode})" else "EMPTY: Size atanmış sevkiyat yok (HTTP ${r.httpCode})")
-                else "PASS: ${rows.size} belge (HTTP ${r.httpCode})"
+                else if (rows.isEmpty()) (if (showAll) "BOŞ: Serbest bırakılmış Ambar Sevkiyatı yok (HTTP ${r.httpCode})" else "BOŞ: Size atanmış sevkiyat yok (HTTP ${r.httpCode})")
+                else "TAMAM: ${rows.size} belge (HTTP ${r.httpCode})"
         }
     }
     LaunchedEffect(showAll) { load() }
 
     var itemDocs by remember { mutableStateOf<Pair<String, Set<String>>?>(null) }
     val sel = selected
-    if (sel != null) { ShipDocument(no = sel, onBack = { selected = null; load() }); return }
+    if (sel != null) { ShipDocument(no = sel, onBack = { selected = null; load() }, onPickCreated = onPickCreated); return }
 
     DocListScanHandler(
         enabled = true,
@@ -977,7 +996,7 @@ private fun WhseShipmentTab() {
         acceptDocTypes = setOf("shipment"),
         onDocument = { selected = it },
     ) { item, docs ->
-        when { docs.isEmpty() -> status = "⚠️ '$item' açık sevkiyatta yok"; docs.size == 1 -> selected = docs.first(); else -> { itemDocs = item to docs; status = "PASS: '$item' → ${docs.size} belge" } }
+        when { docs.isEmpty() -> status = "⚠️ '$item' açık sevkiyatta yok"; docs.size == 1 -> selected = docs.first(); else -> { itemDocs = item to docs; status = "TAMAM: '$item' → ${docs.size} belge" } }
     }
     val shownRows = itemDocs?.let { f -> rows.filter { it.optString("no") in f.second } } ?: rows
 
@@ -1007,14 +1026,14 @@ private fun WhseShipmentTab() {
                     }
                 }
             }
-            if (rows.isEmpty() && !loading) item { EmptyState(if (showAll) "Released Whse Shipment yok. SO'dan direkt sevkiyat için sağdaki sekmeyi kullanın." else "Size atanmış sevkiyat yok. Tümünü görmek için \"Tümü\" seçin.") }
+            if (rows.isEmpty() && !loading) item { EmptyState(if (showAll) "Serbest bırakılmış Ambar Sevkiyatı yok. Siparişten direkt sevkiyat için sağdaki sekmeyi kullanın." else "Size atanmış sevkiyat yok. Tümünü görmek için \"Tümü\" seçin.") }
         }
     }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun ShipDocument(no: String, onBack: () -> Unit) {
+private fun ShipDocument(no: String, onBack: () -> Unit, onPickCreated: (String) -> Unit) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var header by remember { mutableStateOf<JSONObject?>(null) }
@@ -1045,7 +1064,7 @@ private fun ShipDocument(no: String, onBack: () -> Unit) {
         enabled = qtyLine == null,
         lines = lines,
         onSingleMatch = { line, _ -> scanFilter = ""; qtyLine = line },
-        onMultiMatch = { itemNo, _ -> scanFilter = itemNo; status = "PASS: '$itemNo' için birden fazla satır — birini seçin" },
+        onMultiMatch = { itemNo, _ -> scanFilter = itemNo; status = "TAMAM: '$itemNo' için birden fazla satır — birini seçin" },
         onNoMatch = { r -> status = "⚠️ '${r.itemNo ?: r.value}' bu belgede yok" },
     )
     val displayLines = if (scanFilter.isBlank()) lines else lines.filter { matchLinesByBarcode(listOf(it), com.dynops.bcwms.scanner.BarcodeIntentResolver.resolve(scanFilter)).isNotEmpty() }
@@ -1080,29 +1099,50 @@ private fun ShipDocument(no: String, onBack: () -> Unit) {
             )
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Checkbox(checked = printSlip, onCheckedChange = { printSlip = it })
-                Text("Packing slip yazdır", fontSize = 13.sp)
+                Text("İrsaliye yazdır", fontSize = 13.sp)
                 Spacer(Modifier.width(12.dp))
                 Checkbox(checked = invoice, onCheckedChange = { invoice = it })
                 Text("Faturalandır", fontSize = 13.sp)
             }
         }
         BottomActionBar {
+            OutlinedButton(
+                onClick = {
+                    scope.launch {
+                        busy = true; status = "Ambar Toplama oluşturuluyor..."
+                        val r = BcApi.boundAction(context, "shipments", no, "createPick", "{}")
+                        val pickNo = if (r.ok) BcApi.scalarValue(r.body) else ""
+                        busy = false
+                        if (r.ok && pickNo.isNotBlank()) {
+                            status = "TAMAM: Ambar Toplama $pickNo oluşturuldu"
+                            onPickCreated(pickNo)
+                        } else {
+                            status = if (r.ok) "HATA: Pick numarası alınamadı"
+                                else QcErrorParser.friendlyStatus(BcApi.errorMessage(r.body), r.httpCode)
+                        }
+                    }
+                },
+                enabled = !busy && lines.isNotEmpty(),
+                modifier = Modifier.weight(1f).height(54.dp),
+            ) {
+                Text("📦 Pick Oluştur", fontWeight = FontWeight.Bold)
+            }
             Button(
                 onClick = {
                     scope.launch {
-                        busy = true; status = "Post..."
+                        busy = true; status = "Sevk kaydı..."
                         val body = JSONObject().apply { put("print", printSlip); put("invoice", invoice) }.toString()
                         val r = BcApi.boundAction(context, "shipments", no, "post", body)
                         busy = false
-                        status = if (r.ok) "PASS: Sevkiyat kaydedildi (HTTP ${r.httpCode})" else QcErrorParser.friendlyStatus(BcApi.errorMessage(r.body), r.httpCode)
+                        status = if (r.ok) "TAMAM: Sevkiyat kaydedildi (HTTP ${r.httpCode})" else QcErrorParser.friendlyStatus(BcApi.errorMessage(r.body), r.httpCode)
                         if (r.ok) reload()
                     }
                 },
                 enabled = !busy && com.dynops.bcwms.lib.ActionGuards.hasQuantity(lines, field = "qtyToShip"),
-                modifier = Modifier.fillMaxWidth().height(54.dp),
+                modifier = Modifier.weight(1f).height(54.dp),
             ) {
                 Text(
-                    if (com.dynops.bcwms.lib.ActionGuards.hasQuantity(lines, field = "qtyToShip")) "✅ Post Shipment" else "Önce satırlara miktar girin",
+                    if (com.dynops.bcwms.lib.ActionGuards.hasQuantity(lines, field = "qtyToShip")) "✅ Sevkiyatı Kaydet" else "Önce satırlara miktar girin",
                     fontWeight = FontWeight.Bold,
                 )
             }
@@ -1112,11 +1152,13 @@ private fun ShipDocument(no: String, onBack: () -> Unit) {
     val ql = qtyLine
     if (ql != null) {
         QuantityDialogSheet(
-            title = "Sevk Miktarı + LP",
+            title = "Sevk Miktarı + Lot",
             itemNo = ql.optString("itemNo"),
             initialQty = ql.optDouble("qtyOutstanding").takeIf { it > 0 } ?: 1.0,
             initialUom = ql.optString("uomCode"),
-            showLotSerial = false,
+            initialLot = ql.optString("lotNo"),
+            showLotSerial = true,
+            showSerial = false,
             onDismiss = { qtyLine = null },
             onConfirm = { res ->
                 qtyLine = null
@@ -1124,13 +1166,14 @@ private fun ShipDocument(no: String, onBack: () -> Unit) {
                     busy = true; status = "Satır güncelleniyor..."
                     val body = JSONObject().apply {
                         put("qtyToShip", res.quantity)
+                        put("lotNo", res.lotNo)
                         val lineBin = firstValue(ql, "binCode")
                         if (lineBin.isNotBlank()) put("binCode", lineBin)
                     }.toString()
                     val lineNo = ql.optInt("lineNo")
                     val r = BcApi.patch(context, "shipmentLines(no='$no',lineNo=$lineNo)", body)
                     busy = false
-                    status = if (r.ok) "PASS: Satır güncellendi (HTTP ${r.httpCode})" else QcErrorParser.friendlyStatus(BcApi.errorMessage(r.body), r.httpCode)
+                    status = if (r.ok) "TAMAM: Satır güncellendi (HTTP ${r.httpCode})" else QcErrorParser.friendlyStatus(BcApi.errorMessage(r.body), r.httpCode)
                     if (r.ok) reload()
                 }
             }
@@ -1171,8 +1214,8 @@ private fun SalesOrderTab() {
             loading = false
             rows = if (r.ok) BcApi.parseValueArray(r.body) else emptyList()
             status = if (!r.ok) "HATA: SO listesi alınamadı (HTTP ${r.httpCode}) — ${BcApi.errorMessage(r.body).take(120)}"
-                else if (rows.isEmpty()) "EMPTY: ${if (releasedOnly) "Released" else "Açık"} SO yok (HTTP ${r.httpCode})"
-                else "PASS: ${rows.size} satış siparişi (HTTP ${r.httpCode})"
+                else if (rows.isEmpty()) "BOŞ: ${if (releasedOnly) "Released" else "Açık"} SO yok (HTTP ${r.httpCode})"
+                else "TAMAM: ${rows.size} satış siparişi (HTTP ${r.httpCode})"
         }
     }
     LaunchedEffect(releasedOnly) { load() }
@@ -1188,7 +1231,7 @@ private fun SalesOrderTab() {
         acceptDocTypes = setOf("salesOrder"),
         onDocument = { selected = it },
     ) { item, docs ->
-        when { docs.isEmpty() -> status = "⚠️ '$item' açık SO'da yok"; docs.size == 1 -> selected = docs.first(); else -> { itemDocs = item to docs; status = "PASS: '$item' → ${docs.size} SO" } }
+        when { docs.isEmpty() -> status = "⚠️ '$item' açık SO'da yok"; docs.size == 1 -> selected = docs.first(); else -> { itemDocs = item to docs; status = "TAMAM: '$item' → ${docs.size} SO" } }
     }
     val shownRows = itemDocs?.let { f -> rows.filter { it.optString("no") in f.second } } ?: rows
 
@@ -1216,7 +1259,7 @@ private fun SalesOrderTab() {
                         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                             Text(d.optString("no"), fontWeight = FontWeight.Bold)
                             Row {
-                                if (requiresWhse) Text("⚠ Whse Ship", fontSize = 11.sp, color = Color(0xFFD97706), modifier = Modifier.padding(end = 6.dp))
+                                if (requiresWhse) Text("⚠ Ambar Sevk", fontSize = 11.sp, color = Color(0xFFD97706), modifier = Modifier.padding(end = 6.dp))
                                 Text(firstValue(d, "status"), fontSize = 12.sp, color = Color.Gray)
                             }
                         }
@@ -1270,7 +1313,7 @@ private fun ShipSalesOrder(no: String, onBack: () -> Unit) {
         enabled = qtyLine == null && !showScan,
         lines = lines,
         onSingleMatch = { line, _ -> if (directAllowed) { scanFilter = ""; qtyLine = line } },
-        onMultiMatch = { itemNo, _ -> scanFilter = itemNo; status = "PASS: '$itemNo' için birden fazla satır — birini seçin" },
+        onMultiMatch = { itemNo, _ -> scanFilter = itemNo; status = "TAMAM: '$itemNo' için birden fazla satır — birini seçin" },
         onNoMatch = { r -> status = "⚠️ '${r.itemNo ?: r.value}' bu SO'da yok" },
     )
     val displayLines = if (scanFilter.isBlank()) lines else lines.filter { matchLinesByBarcode(listOf(it), com.dynops.bcwms.scanner.BarcodeIntentResolver.resolve(scanFilter)).isNotEmpty() }
@@ -1290,8 +1333,8 @@ private fun ShipSalesOrder(no: String, onBack: () -> Unit) {
                     colors = CardDefaults.cardColors(containerColor = Color(0xFFFEF3C7)),
                 ) {
                     Text(
-                        "⚠ Bu lokasyon (${firstValue(h, "locationCode")}) Warehouse Shipment zorunlu kılıyor. " +
-                            "Direkt Post Ship yapılamaz. Whse Shipment sekmesinden ilgili belgeyi açıp sevkiyatı tamamlayın.",
+                        "⚠ Bu lokasyon (${firstValue(h, "locationCode")}) Ambar Sevkiyatı zorunlu kılıyor. " +
+                            "Direkt sevkiyat yapılamaz. Ambar Sevkiyatı sekmesinden ilgili belgeyi açıp sevkiyatı tamamlayın.",
                         modifier = Modifier.padding(10.dp),
                         fontSize = 12.sp,
                         color = Color(0xFF92400E),
@@ -1333,11 +1376,11 @@ private fun ShipSalesOrder(no: String, onBack: () -> Unit) {
             Button(
                 onClick = {
                     scope.launch {
-                        busy = true; status = "Post-Ship..."
+                        busy = true; status = "Sevk kaydı..."
                         val body = JSONObject().apply { put("invoice", invoiceToo) }.toString()
                         val r = BcApi.boundAction(context, "salesSources", no, "ship", body)
                         busy = false
-                        status = if (r.ok) "PASS: SO sevkiyat kaydedildi (HTTP ${r.httpCode})"
+                        status = if (r.ok) "TAMAM: SO sevkiyat kaydedildi (HTTP ${r.httpCode})"
                             else QcErrorParser.friendlyStatus(BcApi.errorMessage(r.body), r.httpCode)
                         if (r.ok) reload()
                     }
@@ -1347,9 +1390,9 @@ private fun ShipSalesOrder(no: String, onBack: () -> Unit) {
             ) {
                 Text(
                     when {
-                        !directAllowed -> "Direkt Post Ship yapılamaz"
+                        !directAllowed -> "Direkt sevkiyat yapılamaz"
                         !com.dynops.bcwms.lib.ActionGuards.hasQuantity(lines, field = "qtyToShip") -> "Önce satırlara miktar girin"
-                        else -> if (invoiceToo) "✅ Post Ship & Invoice" else "✅ Post Ship"
+                        else -> if (invoiceToo) "✅ Sevk Et ve Faturalandır" else "✅ Sevk Et"
                     },
                     fontWeight = FontWeight.Bold,
                 )
@@ -1381,7 +1424,7 @@ private fun ShipSalesOrder(no: String, onBack: () -> Unit) {
                         body
                     )
                     busy = false
-                    status = if (r.ok) "PASS: SO satırı qty=${res.quantity} (HTTP ${r.httpCode})"
+                    status = if (r.ok) "TAMAM: SO satırı qty=${res.quantity} (HTTP ${r.httpCode})"
                         else QcErrorParser.friendlyStatus(BcApi.errorMessage(r.body), r.httpCode)
                     if (r.ok) reload()
                 }
@@ -1390,7 +1433,7 @@ private fun ShipSalesOrder(no: String, onBack: () -> Unit) {
     }
 
     if (showScan) {
-        ScanItemSheet(title = "Item Tara (SO)", onDismiss = { showScan = false }, onItem = { _, line ->
+        ScanItemSheet(title = "Ürün Tara (SO)", onDismiss = { showScan = false }, onItem = { _, line ->
             showScan = false
             qtyLine = line
         }, lines = lines, matchKey = "itemNo")

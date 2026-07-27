@@ -1,10 +1,7 @@
 page 72347 "DOPSWHS Packer RC"
 {
-    // ELOG paketleme istasyonu operatörü rolü. Üç worksheet butonu üst
-    // navigasyonda (Embedding) görünür; ana ekranda ayrıca 3 tıklanabilir
-    // sayaç kutusu vardır (Packer Activities). El terminali aynı Pack
-    // Session tablolarına yazar — terminalden açılan oturumlar buradaki
-    // sayaçlarda ve Pack Sessions listesinde canlı görünür.
+    // Sipariş bazlı paketleme rolü. Eski Bulk/Batch/Mono-SKU ayrımı kaldırıldı;
+    // paketleyici hazır siparişi seçer ve eksik (kırmızı) satırları okutur.
     Caption = 'Packer';
     PageType = RoleCenter;
     ApplicationArea = All;
@@ -24,23 +21,11 @@ page 72347 "DOPSWHS Packer RC"
     {
         area(Embedding)
         {
-            action(BatchWorksheet)
+            action(OrderPacking)
             {
-                Caption = 'Batch Package Worksheet';
+                Caption = 'Sipariş Paketleme';
                 ApplicationArea = All;
-                RunObject = page "DOPSWHS Pack Station Bulk";
-            }
-            action(MonoSkuWorksheet)
-            {
-                Caption = 'Mono-SKU Package Worksheet';
-                ApplicationArea = All;
-                RunObject = page "DOPSWHS Mono-SKU Pack Station";
-            }
-            action(SoloWorksheet)
-            {
-                Caption = 'Solo Package Worksheet';
-                ApplicationArea = All;
-                RunObject = page "DOPSWHS Pack Station Solo";
+                RunObject = page "DOPSWHS Packing Order List";
             }
         }
         area(Sections)
@@ -48,11 +33,8 @@ page 72347 "DOPSWHS Packer RC"
             group(Packing)
             {
                 Caption = 'Packing';
-                action(BatchWorksheetNav) { Caption = 'Batch Package Worksheet'; ApplicationArea = All; RunObject = page "DOPSWHS Pack Station Bulk"; }
-                action(MonoSkuWorksheetNav) { Caption = 'Mono-SKU Package Worksheet'; ApplicationArea = All; RunObject = page "DOPSWHS Mono-SKU Pack Station"; }
-                action(SoloWorksheetNav) { Caption = 'Solo Package Worksheet'; ApplicationArea = All; RunObject = page "DOPSWHS Pack Station Solo"; }
+                action(OrderPackingNav) { Caption = 'Sipariş Paketleme'; ApplicationArea = All; RunObject = page "DOPSWHS Packing Order List"; }
                 action(PackSessions) { Caption = 'Pack Sessions (All)'; ApplicationArea = All; RunObject = page "DOPSWHS Pack Session List"; }
-                action(ToteAssignments) { Caption = 'Pick Tote Assignments'; ApplicationArea = All; RunObject = page "DOPSWHS Pick Tote Assignments"; }
             }
         }
     }
