@@ -252,7 +252,7 @@ fun LoginFlow(onConnected: (Boolean) -> Unit) {
                     onClick = { startPasswordSignIn() },
                     enabled = !busy && email.isNotBlank() && password.isNotBlank(),
                     modifier = Modifier.fillMaxWidth().height(52.dp)
-                ) { Text(if (busy) "..." else "🔑 Şifre ile Bağlan", fontWeight = FontWeight.Bold) }
+                ) { Text(if (busy) "..." else "Şifre ile Bağlan", fontWeight = FontWeight.Bold) }
                 Spacer(Modifier.height(10.dp))
                 Text(
                     "ya da",
@@ -267,7 +267,7 @@ fun LoginFlow(onConnected: (Boolean) -> Unit) {
                     onClick = { startSignIn() },
                     enabled = !busy && email.isNotBlank(),
                     modifier = Modifier.fillMaxWidth().height(48.dp)
-                ) { Text("🌐 Tarayıcıda Microsoft ile Giriş (MFA için)", fontSize = 13.sp) }
+                ) { Text("Tarayıcıda Microsoft ile Giriş (MFA için)", fontSize = 13.sp) }
                 Spacer(Modifier.height(8.dp))
                 Text(
                     "Not: ROPC (Şifre ile Bağlan) sadece MFA / koşullu erişim olmayan hesaplar için. " +
@@ -283,7 +283,7 @@ fun LoginFlow(onConnected: (Boolean) -> Unit) {
                     onClick = { step = Step.LocalUser; status = "" },
                     enabled = !busy,
                     modifier = Modifier.fillMaxWidth().height(48.dp)
-                ) { Text("👷 WMS Hesabı ile Giriş (e-postasız)", fontSize = 13.sp) }
+                ) { Text("WMS Hesabı ile Giriş (e-postasız)", fontSize = 13.sp) }
                 Spacer(Modifier.height(4.dp))
                 Text(
                     "Depo operatörleri için BC içinde tanımlı yerel kullanıcı + şifre.",
@@ -303,7 +303,7 @@ fun LoginFlow(onConnected: (Boolean) -> Unit) {
                 if (!BcApi.hasToken(context)) {
                     Card(colors = CardDefaults.cardColors(containerColor = Color(0xFFFFF3E0))) {
                         Column(Modifier.fillMaxWidth().padding(12.dp)) {
-                            Text("⚠️ Önce paylaşımlı erişim ayarlayın", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                            Text("Önce paylaşımlı erişim ayarlayın", fontWeight = FontWeight.Bold, fontSize = 13.sp)
                             Text(
                                 "WMS Hesabı girişi BC'ye admin/servis AAD token üzerinden yapılır. " +
                                     "Önce \"Gelişmiş: token ile giriş\" ya da e-posta ile bir admin/servis hesabı bağlantısı yapılmalı. " +
@@ -341,11 +341,19 @@ fun LoginFlow(onConnected: (Boolean) -> Unit) {
                                         Modifier.fillMaxWidth().padding(14.dp),
                                         verticalAlignment = Alignment.CenterVertically,
                                     ) {
+                                        // Avatar: adın baş harfi (emoji yerine — kurumsal görünüm).
                                         Box(
                                             Modifier.size(38.dp).clip(RoundedCornerShape(12.dp))
                                                 .background(Color(0xFF6C5CE7).copy(alpha = 0.15f)),
                                             contentAlignment = Alignment.Center,
-                                        ) { Text("👷", fontSize = 18.sp) }
+                                        ) {
+                                            Text(
+                                                u.displayName.ifBlank { u.username }.take(1).uppercase(),
+                                                fontSize = 17.sp,
+                                                fontWeight = FontWeight.Bold,
+                                                color = Color(0xFF6C5CE7),
+                                            )
+                                        }
                                         Spacer(Modifier.width(12.dp))
                                         Column(Modifier.weight(1f)) {
                                             Text(
@@ -381,10 +389,21 @@ fun LoginFlow(onConnected: (Boolean) -> Unit) {
                             Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 10.dp),
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
-                            Text("👷", fontSize = 20.sp)
+                            val disp = localUsers.firstOrNull { it.username == localUsername }?.displayName.orEmpty()
+                            Box(
+                                Modifier.size(34.dp).clip(RoundedCornerShape(10.dp))
+                                    .background(Color(0xFF6C5CE7).copy(alpha = 0.18f)),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                Text(
+                                    disp.ifBlank { localUsername }.take(1).uppercase(),
+                                    fontSize = 15.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color(0xFF6C5CE7),
+                                )
+                            }
                             Spacer(Modifier.width(10.dp))
                             Column(Modifier.weight(1f)) {
-                                val disp = localUsers.firstOrNull { it.username == localUsername }?.displayName.orEmpty()
                                 Text(disp.ifBlank { localUsername }, fontWeight = FontWeight.Bold, fontSize = 15.sp)
                                 if (disp.isNotBlank()) Text(localUsername, fontSize = 11.sp, color = Color.Gray)
                             }
@@ -415,7 +434,7 @@ fun LoginFlow(onConnected: (Boolean) -> Unit) {
                             else PasswordVisualTransformation(),
                         trailingIcon = {
                             TextButton(onClick = { showPassword = !showPassword }) {
-                                Text(if (showPassword) "🙈" else "👁", fontSize = 16.sp)
+                                Text(if (showPassword) "Gizle" else "Göster", fontSize = 12.sp)
                             }
                         },
                         singleLine = true, modifier = Modifier.fillMaxWidth()
@@ -425,7 +444,7 @@ fun LoginFlow(onConnected: (Boolean) -> Unit) {
                         onClick = { startLocalSignIn() },
                         enabled = !busy && localUsername.isNotBlank() && localPassword.isNotBlank() && BcApi.hasToken(context),
                         modifier = Modifier.fillMaxWidth().height(52.dp)
-                    ) { Text(if (busy) "..." else "🚪 Bağlan", fontWeight = FontWeight.Bold) }
+                    ) { Text(if (busy) "..." else "Bağlan", fontWeight = FontWeight.Bold) }
                     Spacer(Modifier.height(4.dp))
                     TextButton(
                         onClick = { showForgotPassword = true },
@@ -457,7 +476,7 @@ fun LoginFlow(onConnected: (Boolean) -> Unit) {
                 Spacer(Modifier.height(12.dp))
                 OutlinedButton(onClick = {
                     code?.let { runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(it.verificationUri)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) } }
-                }, modifier = Modifier.fillMaxWidth()) { Text("🌐 Tarayıcıda Aç") }
+                }, modifier = Modifier.fillMaxWidth()) { Text("Tarayıcıda Aç") }
                 Spacer(Modifier.height(12.dp))
                 if (busy) LinearProgressIndicator(Modifier.fillMaxWidth())
                 Spacer(Modifier.height(8.dp))
@@ -598,7 +617,7 @@ private fun TokenPasteFallback(onConnected: (Boolean) -> Unit) {
 private fun ForgotPasswordSheet(username: String, onDismiss: () -> Unit) {
     ModalBottomSheet(onDismissRequest = onDismiss) {
         Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp).padding(bottom = 28.dp)) {
-            Text("🔑 Şifremi unuttum", fontWeight = FontWeight.Bold, fontSize = 18.sp)
+            Text("Şifremi unuttum", fontWeight = FontWeight.Bold, fontSize = 18.sp)
             Spacer(Modifier.height(6.dp))
             Text(
                 if (username.isNotBlank()) "Kullanıcı: $username" else "WMS operatör şifresi",

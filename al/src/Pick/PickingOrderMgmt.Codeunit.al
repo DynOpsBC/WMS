@@ -263,4 +263,280 @@ codeunit 72354 "DOPSWHS Picking Order Mgmt"
         PickingHeader.Modify(true);
         exit(PickNo);
     end;
+
+    // ------------------------------------------------------------------
+    // ÖNERİ MOTORU
+    // Depo sorumlusu "Öner" deyince: gruptaki siparişlerle BENZER ÜRÜNLERİ olan
+    // ve SEVK TARİHİ YAKIN olan toplanabilir siparişleri puanlayıp döndürür.
+    // Amaç: aynı raflardan toplanacak siparişleri tek pick'te birleştirmek —
+    // toplayıcının yürüme yolu kısalır.
+    //
+    // Puanlama:
+    //   ortak ürün    : +20 / ürün  (en belirleyici kriter — aynı raf)
+    //   tarih yakınlığı: aynı gün +30, 1 gün +20, 2-3 gün +10, 4-7 gün +5
+    //   aynı müşteri  : +15 (tek sevkiyatta birleşebilir)
+    //   küçük sipariş : +5  (3 satır veya altı — gruba ucuz eklenir)
+    // Grup boşsa ürün/tarih karşılaştırması yapılamaz; bu durumda en erken
+    // sevk tarihli toplanabilir siparişler önerilir (işe buradan başlanır).
+    // ------------------------------------------------------------------
+    procedure BuildSuggestions(var PickingHeader: Record "DOPSWHS Picking Order Header"; var TempSugg: Record "DOPSWHS Picking Order Sugg." temporary; MaxDateGapDays: Integer; MaxSuggestions: Integer)
+    var
+        SalesHeader: Record "Sales Header";
+        GroupItems: Dictionary of [Code[20], Boolean];
+        GroupCustomers: Dictionary of [Code[20], Boolean];
+        EarliestShipment: Date;
+        GroupLocation: Code[10];
+        HasGroupLines: Boolean;
+        Considered: Integer;
+    begin
+        TempSugg.Reset();
+        TempSugg.DeleteAll();
+        if MaxDateGapDays <= 0 then
+            MaxDateGapDays := 7;
+        if MaxSuggestions <= 0 then
+            MaxSuggestions := 25;
+
+        HasGroupLines := CollectGroupProfile(PickingHeader, GroupItems, GroupCustomers, EarliestShipment, GroupLocation);
+
+        // Aday havuzu: toplanabilir (OPS Pending + açık pick'i olmayan) siparişler.
+        SalesHeader.SetRange("Document Type", SalesHeader."Document Type"::Order);
+        if GroupLocation <> '' then
+            SalesHeader.SetRange("Location Code", GroupLocation);
+        ApplyOpsPendingFilter(SalesHeader);
+        FilterToPickable(SalesHeader);
+
+        if SalesHeader.FindSet() then
+            repeat
+                // Zaten bu gruptaysa aday değil.
+                if not OrderAlreadyInGroup(PickingHeader."Entry No.", SalesHeader."No.") then begin
+                    Considered += 1;
+                    // Çok büyük şirketlerde tüm siparişleri puanlamak pahalı;
+                    // makul bir tavanla sınırla (en erken tarihliler önce gelir).
+                    if Considered <= 500 then
+                        EvaluateCandidate(
+                            SalesHeader, TempSugg, GroupItems, GroupCustomers,
+                            EarliestShipment, HasGroupLines, MaxDateGapDays);
+                end;
+            until (SalesHeader.Next() = 0) or (Considered > 500);
+
+        TrimSuggestions(TempSugg, MaxSuggestions);
+    end;
+
+    /// <summary>Gruptaki siparişlerin ürün/müşteri/tarih profilini çıkarır.</summary>
+    local procedure CollectGroupProfile(var PickingHeader: Record "DOPSWHS Picking Order Header"; var GroupItems: Dictionary of [Code[20], Boolean]; var GroupCustomers: Dictionary of [Code[20], Boolean]; var EarliestShipment: Date; var GroupLocation: Code[10]): Boolean
+    var
+        PickingLine: Record "DOPSWHS Picking Order Line";
+        SalesLine: Record "Sales Line";
+        Found: Boolean;
+    begin
+        GroupLocation := PickingHeader."Location Code";
+        EarliestShipment := 0D;
+        PickingLine.SetRange("Header Entry No.", PickingHeader."Entry No.");
+        if PickingLine.FindSet() then
+            repeat
+                Found := true;
+                if PickingLine."Sell-to Customer No." <> '' then
+                    if not GroupCustomers.ContainsKey(PickingLine."Sell-to Customer No.") then
+                        GroupCustomers.Add(PickingLine."Sell-to Customer No.", true);
+                if PickingLine."Shipment Date" <> 0D then
+                    if (EarliestShipment = 0D) or (PickingLine."Shipment Date" < EarliestShipment) then
+                        EarliestShipment := PickingLine."Shipment Date";
+                if (GroupLocation = '') and (PickingLine."Location Code" <> '') then
+                    GroupLocation := PickingLine."Location Code";
+
+                // Gruptaki siparişin ürünleri — ortak ürün sayımı buna göre yapılır.
+                SalesLine.SetRange("Document Type", SalesLine."Document Type"::Order);
+                SalesLine.SetRange("Document No.", PickingLine."Sales Order No.");
+                SalesLine.SetRange(Type, SalesLine.Type::Item);
+                SalesLine.SetFilter("No.", '<>%1', '');
+                SalesLine.SetLoadFields("No.");
+                if SalesLine.FindSet() then
+                    repeat
+                        if not GroupItems.ContainsKey(SalesLine."No.") then
+                            GroupItems.Add(SalesLine."No.", true);
+                    until SalesLine.Next() = 0;
+            until PickingLine.Next() = 0;
+        exit(Found);
+    end;
+
+    local procedure OrderAlreadyInGroup(HeaderEntryNo: Integer; SalesOrderNo: Code[20]): Boolean
+    var
+        PickingLine: Record "DOPSWHS Picking Order Line";
+    begin
+        PickingLine.SetRange("Header Entry No.", HeaderEntryNo);
+        PickingLine.SetRange("Sales Order No.", SalesOrderNo);
+        exit(not PickingLine.IsEmpty());
+    end;
+
+    /// <summary>Tek bir adayı puanlar; eşik üstündeyse öneri listesine ekler.</summary>
+    local procedure EvaluateCandidate(var SalesHeader: Record "Sales Header"; var TempSugg: Record "DOPSWHS Picking Order Sugg." temporary; var GroupItems: Dictionary of [Code[20], Boolean]; var GroupCustomers: Dictionary of [Code[20], Boolean]; EarliestShipment: Date; HasGroupLines: Boolean; MaxDateGapDays: Integer)
+    var
+        SalesLine: Record "Sales Line";
+        SharedItems: Integer;
+        LineCount: Integer;
+        TotalQty: Decimal;
+        DateGap: Integer;
+        Score: Integer;
+        SameCustomer: Boolean;
+        Reason: Text;
+    begin
+        // Aday siparişin ürünleri: ortak ürün sayısı + satır/miktar özeti.
+        SalesLine.SetRange("Document Type", SalesLine."Document Type"::Order);
+        SalesLine.SetRange("Document No.", SalesHeader."No.");
+        SalesLine.SetRange(Type, SalesLine.Type::Item);
+        SalesLine.SetFilter("No.", '<>%1', '');
+        SalesLine.SetLoadFields("No.", Quantity);
+        if SalesLine.FindSet() then
+            repeat
+                LineCount += 1;
+                TotalQty += SalesLine.Quantity;
+                if GroupItems.ContainsKey(SalesLine."No.") then
+                    SharedItems += 1;
+            until SalesLine.Next() = 0;
+        if LineCount = 0 then
+            exit;
+
+        // Sevk tarihi yakınlığı (grup boşsa bugüne göre).
+        DateGap := 0;
+        if SalesHeader."Shipment Date" <> 0D then
+            if EarliestShipment <> 0D then
+                DateGap := Abs(SalesHeader."Shipment Date" - EarliestShipment)
+            else
+                DateGap := Abs(SalesHeader."Shipment Date" - Today());
+
+        SameCustomer := GroupCustomers.ContainsKey(SalesHeader."Sell-to Customer No.");
+
+        // --- Puan ---
+        Score := SharedItems * 20;
+        case true of
+            DateGap = 0:
+                Score += 30;
+            DateGap = 1:
+                Score += 20;
+            DateGap <= 3:
+                Score += 10;
+            DateGap <= 7:
+                Score += 5;
+        end;
+        if SameCustomer then
+            Score += 15;
+        if LineCount <= 3 then
+            Score += 5;
+
+        // Grup doluyken alakasız siparişleri önerme: ortak ürün de yok,
+        // tarih de uzaksa listeye alma (sorumlu boş öneriyle uğraşmasın).
+        if HasGroupLines and (SharedItems = 0) and (DateGap > MaxDateGapDays) then
+            exit;
+
+        Reason := BuildReason(SharedItems, DateGap, SameCustomer, HasGroupLines);
+
+        TempSugg.Init();
+        TempSugg."Sales Order No." := SalesHeader."No.";
+        TempSugg."Sell-to Customer No." := SalesHeader."Sell-to Customer No.";
+        TempSugg."Sell-to Customer Name" := SalesHeader."Sell-to Customer Name";
+        TempSugg."Location Code" := SalesHeader."Location Code";
+        TempSugg."Shipment Date" := SalesHeader."Shipment Date";
+        TempSugg."Item Line Count" := LineCount;
+        TempSugg."Total Quantity" := TotalQty;
+        TempSugg."Shared Item Count" := SharedItems;
+        TempSugg."Date Gap Days" := DateGap;
+        TempSugg."Same Customer" := SameCustomer;
+        TempSugg.Score := Score;
+        TempSugg.Reason := CopyStr(Reason, 1, MaxStrLen(TempSugg.Reason));
+        TempSugg."Selected" := true;   // varsayılan işaretli — sorumlu istemediğini kaldırır
+        if TempSugg.Insert() then;
+    end;
+
+    local procedure BuildReason(SharedItems: Integer; DateGap: Integer; SameCustomer: Boolean; HasGroupLines: Boolean): Text
+    var
+        Parts: Text;
+    begin
+        if not HasGroupLines then
+            exit('Grup boş — en yakın sevk tarihli siparişlerden başlayın');
+
+        if SharedItems > 0 then
+            Parts := StrSubstNo('%1 ortak ürün (aynı raflar)', SharedItems);
+
+        case true of
+            DateGap = 0:
+                Parts := AppendPart(Parts, 'aynı gün sevk');
+            DateGap = 1:
+                Parts := AppendPart(Parts, '1 gün fark');
+            DateGap > 1:
+                Parts := AppendPart(Parts, StrSubstNo('%1 gün fark', DateGap));
+        end;
+
+        if SameCustomer then
+            Parts := AppendPart(Parts, 'aynı müşteri');
+
+        if Parts = '' then
+            exit('Toplanabilir sipariş');
+        exit(Parts);
+    end;
+
+    local procedure AppendPart(Existing: Text; NewPart: Text): Text
+    begin
+        if Existing = '' then
+            exit(NewPart);
+        exit(Existing + ' · ' + NewPart);
+    end;
+
+    /// <summary>Puanı en düşük olanları eleyerek listeyi MaxSuggestions'a indirir.</summary>
+    local procedure TrimSuggestions(var TempSugg: Record "DOPSWHS Picking Order Sugg." temporary; MaxSuggestions: Integer)
+    var
+        DeleteSugg: Record "DOPSWHS Picking Order Sugg." temporary;
+        Total: Integer;
+        ToDelete: Integer;
+    begin
+        TempSugg.Reset();
+        Total := TempSugg.Count();
+        if Total <= MaxSuggestions then
+            exit;
+        ToDelete := Total - MaxSuggestions;
+        // Silinecekleri önce topla, sonra sil: FindSet döngüsü içinde silmek
+        // imleç davranışını bozabiliyor.
+        TempSugg.SetCurrentKey(Score);   // artan: en düşük puanlılar başta
+        if TempSugg.FindSet() then
+            repeat
+                DeleteSugg := TempSugg;
+                if DeleteSugg.Insert() then;
+                ToDelete -= 1;
+            until (ToDelete = 0) or (TempSugg.Next() = 0);
+
+        TempSugg.Reset();
+        if DeleteSugg.FindSet() then
+            repeat
+                if TempSugg.Get(DeleteSugg."Sales Order No.") then
+                    TempSugg.Delete();
+            until DeleteSugg.Next() = 0;
+        TempSugg.Reset();
+    end;
+
+    /// <summary>Öneri listesinde işaretlenenleri gruba ekler; eklenen sayıyı döndürür.</summary>
+    procedure AddSuggestedOrders(var PickingHeader: Record "DOPSWHS Picking Order Header"; var TempSugg: Record "DOPSWHS Picking Order Sugg." temporary): Integer
+    var
+        SalesHeader: Record "Sales Header";
+        Added: Integer;
+    begin
+        PickingHeader.TestField(Status, PickingHeader.Status::Open);
+        TempSugg.Reset();
+        TempSugg.SetRange("Selected", true);
+        if TempSugg.FindSet() then
+            repeat
+                if SalesHeader.Get(SalesHeader."Document Type"::Order, TempSugg."Sales Order No.") then
+                    // Aday listelendikten sonra başka biri pick oluşturmuş olabilir;
+                    // AddOrder bu durumda Error verir → tek siparişi atla, akış sürsün.
+                    if not TryAddOrder(PickingHeader, SalesHeader) then
+                        ;
+                Added += 1;
+            until TempSugg.Next() = 0;
+        TempSugg.Reset();
+        exit(Added);
+    end;
+
+    [TryFunction]
+    local procedure TryAddOrder(var PickingHeader: Record "DOPSWHS Picking Order Header"; var SalesHeader: Record "Sales Header")
+    begin
+        AddOrder(PickingHeader, SalesHeader);
+    end;
 }
