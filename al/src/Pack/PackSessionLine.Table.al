@@ -19,9 +19,14 @@ table 72333 "DOPSWHS Pack Session Line"
         field(20; "Qty. Expected"; Decimal) { Caption = 'Qty. Expected'; DataClassification = CustomerContent; DecimalPlaces = 0 : 5; }
         field(21; "Qty. Packed"; Decimal) { Caption = 'Qty. Packed'; DataClassification = CustomerContent; DecimalPlaces = 0 : 5; }
         field(30; "Order Completed"; Boolean) { Caption = 'Order Completed'; DataClassification = CustomerContent; }
-        // Kutu sipariş başınadır (bulk: her pay yeni kutu; batch: ürün→kutu).
-        // Siparişin tüm satırlarına aynı kutu yazılır.
+        // KUTU = müşteriye giden KARGO KOLİSİ (depoda kalan sepet/tote DEĞİL).
+        // Koli barkodu genelde sistemde kayıtlı bir LP değildir; kolinin üzerindeki
+        // kargo etiketi / SSCC okutulur. Bu yüzden "Box Barcode" serbest metindir ve
+        // TableRelation'ı YOKTUR — LP zorunlu tutulursa operatörün elindeki koli
+        // okutulamaz. "Box LP No." yalnızca sistemin ürettiği karton LP'lerde dolar
+        // (geriye dönük uyumluluk + LP izlemesi isteyen kurulumlar).
         field(40; "Box LP No."; Code[20]) { Caption = 'Box LP No.'; DataClassification = CustomerContent; TableRelation = "DOPSWHS LP Header"; }
+        field(41; "Box Barcode"; Code[50]) { Caption = 'Kargo Kolisi Barkodu'; DataClassification = CustomerContent; }
     }
 
     keys

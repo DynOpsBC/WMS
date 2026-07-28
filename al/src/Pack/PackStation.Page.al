@@ -173,7 +173,8 @@ page 72339 "DOPSWHS Pack Station"
             // kutu okuması siparişi kapatır ve fişini bastırır.
             BoxOrder := PackMgmt.BoxNeededOrder(Rec."Entry No.");
             if BoxOrder <> '' then begin
-                PackMgmt.SetBoxForOrder(Rec."Entry No.", BoxOrder, CopyStr(LastScan, 1, 20), '');
+                // Kargo kolisi barkodu 20 karakteri aşabilir (kargo etiketi/SSCC).
+                PackMgmt.SetBoxForOrder(Rec."Entry No.", BoxOrder, CopyStr(LastScan, 1, 50), '');
                 if OrderCompleted(Rec."Entry No.", BoxOrder) then
                     LastPackedOrder := BoxOrder;
             end else begin

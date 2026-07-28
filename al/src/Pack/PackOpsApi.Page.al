@@ -49,17 +49,20 @@ page 72335 "DOPSWHS Pack Ops API"
         exit(PackMgmt.StartPickSession(pickNo, userId));
     end;
 
+    // boxLpNo = okutulan KARGO KOLİSİ barkodu. Kayıtlı bir LP olmak zorunda
+    // değildir (kargo etiketi / SSCC olabilir); boş gelirse sistem karton üretir.
+    // Kargo barkodları 20 karakteri aşabildiğinden Code[50].
     [ServiceEnabled]
-    procedure setBox(sessionId: Integer; boxLpNo: Code[20]; lpTemplateCode: Code[20]): Code[20]
+    procedure setBox(sessionId: Integer; boxLpNo: Code[50]; lpTemplateCode: Code[20]): Code[50]
     var
         PackMgmt: Codeunit "DOPSWHS Pack Station Mgmt";
     begin
         exit(PackMgmt.SetBox(sessionId, boxLpNo, lpTemplateCode));
     end;
 
-    // Bulk/batch: kutu sipariş başına — belirli siparişe kutu bağla.
+    // Bulk/batch: kutu sipariş başına — belirli siparişe kargo kolisi bağla.
     [ServiceEnabled]
-    procedure setBoxForOrder(sessionId: Integer; orderNo: Code[20]; boxLpNo: Code[20]; lpTemplateCode: Code[20]): Code[20]
+    procedure setBoxForOrder(sessionId: Integer; orderNo: Code[20]; boxLpNo: Code[50]; lpTemplateCode: Code[20]): Code[50]
     var
         PackMgmt: Codeunit "DOPSWHS Pack Station Mgmt";
     begin

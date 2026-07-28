@@ -176,12 +176,20 @@ codeunit 72334 "DOPSWHS Pack Station Mgmt"
     // paya, batch'te ürünleri okutulup kutu bekleyen siparişe bağlanır. Sipariş
     // hem tam paketlenmiş hem kutulanmışsa bu çağrı siparişi kapatır (batch:
     // "ürün okuttum, kutumu okuttum, fatura kesti").
-    procedure SetBoxForOrder(SessionId: Integer; OrderNo: Code[20]; BoxLpNo: Code[20]; LpTemplateCode: Code[20]): Code[20]
+    /// <summary>
+    /// Bir sipariş için KARGO KOLİSİNİ bağlar ve siparişi kapatmayı dener.
+    /// BoxLpNo aslında "okutulan koli barkodu"dur: kayıtlı bir LP olabilir de
+    /// olmayabilir de (kargo etiketi / SSCC). Boş gelirse sistem karton LP üretir.
+    /// Dönüş: kolinin barkodu (LP ise LP no., değilse okutulan barkod).
+    /// </summary>
+    procedure SetBoxForOrder(SessionId: Integer; OrderNo: Code[20]; BoxLpNo: Code[50]; LpTemplateCode: Code[20]): Code[50]
     var
         PackSession: Record "DOPSWHS Pack Session";
         Line: Record "DOPSWHS Pack Session Line";
         LP: Record "DOPSWHS LP Header";
         LPMgt: Codeunit "DOPSWHS LP Management";
+        BoxLpNoResolved: Code[20];
+        BoxBarcode: Code[50];
     begin
         PackSession.Get(SessionId);
         PackSession.TestField(Status, PackSession.Status::Open);
@@ -192,29 +200,46 @@ codeunit 72334 "DOPSWHS Pack Station Mgmt"
         if OrderNo = '' then
             Error(NoOpenOrderErr);
 
-        if BoxLpNo <> '' then
-            LP.Get(BoxLpNo)
-        else begin
-            // Kutu barkodu yoksa geçici (karton) LP üret — ELOG'daki karton kutular.
+        // KUTU = müşteriye giden KARGO KOLİSİ. Depoda kalan sepet (tote) değil.
+        // Operatörün elindeki koli genelde sistemde kayıtlı bir LP DEĞİLDİR
+        // (kargo etiketi / SSCC / matbu koli barkodu). Bu yüzden:
+        //  - Okutulan barkod kayıtlı bir LP ise onu kullan (LP izlemesi isteyen
+        //    kurulumlar + sistemin ürettiği kartonlar).
+        //  - Kayıtlı değilse HATA VERME: barkodu "Box Barcode" olarak sakla.
+        //    (Eskiden LP.Get(BoxLpNo) çağrılıyordu; sıradan koli okutulunca
+        //    "kayıt bulunamadı" hatası veriyordu.)
+        //  - Hiç barkod okutulmadıysa sistem karton LP üretir.
+        BoxLpNoResolved := '';
+        BoxBarcode := BoxLpNo;
+        if BoxLpNo <> '' then begin
+            // LP No. Code[20]; daha uzun barkod zaten LP olamaz → LP araması atlanır.
+            if StrLen(BoxLpNo) <= 20 then
+                if LP.Get(CopyStr(BoxLpNo, 1, 20)) then
+                    BoxLpNoResolved := LP."No.";
+        end else begin
             if LpTemplateCode = '' then
                 LpTemplateCode := 'CARTON-S';
             LPMgt.Build(LpTemplateCode, PackSession."Location Code", '', LP);
+            BoxLpNoResolved := LP."No.";
+            BoxBarcode := LP."No.";
         end;
 
         Line.SetRange("Session Entry No.", SessionId);
         Line.SetRange("Source Order No.", OrderNo);
-        Line.ModifyAll("Box LP No.", LP."No.");
+        Line.ModifyAll("Box LP No.", BoxLpNoResolved);
+        Line.ModifyAll("Box Barcode", CopyStr(BoxBarcode, 1, MaxStrLen(Line."Box Barcode")));
 
-        PackSession."Box LP No." := LP."No.";
+        PackSession."Box LP No." := BoxLpNoResolved;
+        PackSession."Box Barcode" := CopyStr(BoxBarcode, 1, MaxStrLen(PackSession."Box Barcode"));
         PackSession.Modify(true);
-        Log('Pack.SetBox', LP."No.");
+        Log('Pack.SetBox', BoxBarcode);
 
         TryCompleteOrder(PackSession, OrderNo);
-        exit(LP."No.");
+        exit(BoxBarcode);
     end;
 
-    /// <summary>Geriye dönük sarmalayıcı: kutuyu sıradaki siparişe bağlar.</summary>
-    procedure SetBox(SessionId: Integer; BoxLpNo: Code[20]; LpTemplateCode: Code[20]): Code[20]
+    /// <summary>Geriye dönük sarmalayıcı: kargo kolisini sıradaki siparişe bağlar.</summary>
+    procedure SetBox(SessionId: Integer; BoxLpNo: Code[50]; LpTemplateCode: Code[20]): Code[50]
     begin
         exit(SetBoxForOrder(SessionId, '', BoxLpNo, LpTemplateCode));
     end;
@@ -553,6 +578,12 @@ codeunit 72334 "DOPSWHS Pack Station Mgmt"
         exit(true);
     end;
 
+    /// <summary>
+    /// Siparişe kargo kolisi bağlanmış mı? Koli LP olmak zorunda değildir
+    /// (kargo etiketi / SSCC okutulur), bu yüzden HEM "Box LP No." HEM
+    /// "Box Barcode" kontrol edilir. Yalnız LP'ye bakılsaydı LP'siz koli
+    /// okutulan siparişler asla kapanmazdı.
+    /// </summary>
     local procedure OrderHasBox(SessionId: Integer; OrderNo: Code[20]): Boolean
     var
         Line: Record "DOPSWHS Pack Session Line";
@@ -560,6 +591,11 @@ codeunit 72334 "DOPSWHS Pack Station Mgmt"
         Line.SetRange("Session Entry No.", SessionId);
         Line.SetRange("Source Order No.", OrderNo);
         Line.SetFilter("Box LP No.", '<>%1', '');
+        if not Line.IsEmpty() then
+            exit(true);
+
+        Line.SetRange("Box LP No.");
+        Line.SetFilter("Box Barcode", '<>%1', '');
         exit(not Line.IsEmpty());
     end;
 

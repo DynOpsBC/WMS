@@ -300,7 +300,7 @@ private fun PickPackingDocument(
                 // scanItemForOrder dönüşü: tamamlandıysa o sipariş no'su, yoksa boş.
                 val done = BcApi.scalarValue(r.body).trim()
                 if (done.isNotBlank()) {
-                    status = "🧾 $done tamamlandı — kutu okutun"
+                    status = "🧾 $done tamamlandı — kargo kolisini okutun"
                     reloadLines()   // sipariş kapandı → gerçek durumu al
                 }
             } else {
@@ -310,13 +310,16 @@ private fun PickPackingDocument(
         }
     }
 
-    // Bir sipariş için kutu bağla (boş → BC karton üretir) → sevk+fatura+fiş.
+    // Siparişe KARGO KOLİSİ bağla → sevk+fatura+fiş.
+    // Okutulan barkod müşteriye giden kolinin barkodudur (kargo etiketi / SSCC /
+    // matbu koli barkodu); sistemde kayıtlı bir LP olmak ZORUNDA DEĞİLDİR —
+    // depoda kalan sepetle (tote) karıştırılmamalı. Boş gönderilirse BC karton üretir.
     fun scanBox(orderNo: String, raw: String) {
         if (sessionId == 0 || busy) return
         val boxLp = BarcodeIntentResolver.resolve(raw).value.trim()
         scope.launch {
             busy = true
-            status = "📦 $orderNo için kutu bağlanıyor…"
+            status = "📦 $orderNo için kargo kolisi bağlanıyor…"
             val body = JSONObject().apply {
                 put("sessionId", sessionId)
                 put("orderNo", orderNo)
@@ -327,7 +330,7 @@ private fun PickPackingDocument(
             if (r.ok) {
                 boxInput = ""; showBoxScan = false
                 reloadLines()
-                status = "🧾 $orderNo kutulandı · sevk+fatura+fiş kesildi"
+                status = "🧾 $orderNo kolilendi · sevk+fatura+fiş kesildi"
             } else status = "❌ ${BcApi.errorMessage(r.body)} (HTTP ${r.httpCode})"
             busy = false
         }
@@ -474,8 +477,8 @@ private fun PickPackingDocument(
                                 }
                                 Text(
                                     when {
-                                        boxed -> "kutulandı"
-                                        orderDone -> "📦 kutu bekliyor"
+                                        boxed -> "kolilendi"
+                                        orderDone -> "📦 koli bekliyor"
                                         isActive -> "$remainingInOrder ürün kaldı"
                                         else -> "$remainingInOrder ürün"
                                     },
@@ -563,7 +566,11 @@ private fun BoxForOrderCard(
                 }
                 if (remaining > 1) Text("+${remaining - 1} bekliyor", fontSize = 11.sp, color = Color(0xFFEF6C00))
             }
-            Text("Bu sipariş için kutu seç. Kendi kutunu okutabilir ya da karton ürettirebilirsin.", fontSize = 12.sp, color = Color.Gray)
+            Text(
+                "Bu sipariş müşteriye hangi koliyle gidecek? Elindeki kolinin barkodunu " +
+                    "okut ya da sistem karton üretsin. (Depoda kalan sepet DEĞİL — kargoya çıkan koli.)",
+                fontSize = 12.sp, color = Color.Gray,
+            )
             Spacer(Modifier.height(14.dp))
             Card(
                 colors = CardDefaults.cardColors(containerColor = Color(0xFFFFF3E0)),
@@ -574,8 +581,8 @@ private fun BoxForOrderCard(
                     Text("📦", fontSize = 26.sp)
                     Spacer(Modifier.width(12.dp))
                     Column(Modifier.weight(1f)) {
-                        Text("Önerilen kutu", fontSize = 11.sp, color = Color(0xFFBF360C))
-                        Text("Karton kutu üretilecek", fontWeight = FontWeight.Bold, color = Color(0xFFBF360C))
+                        Text("Önerilen kargo kolisi", fontSize = 11.sp, color = Color(0xFFBF360C))
+                        Text("Karton koli üretilecek", fontWeight = FontWeight.Bold, color = Color(0xFFBF360C))
                     }
                 }
             }
@@ -588,13 +595,13 @@ private fun BoxForOrderCard(
             Spacer(Modifier.height(10.dp))
             if (!showScan) {
                 TextButton(onClick = { onToggleScan(true) }, enabled = !busy, modifier = Modifier.fillMaxWidth()) {
-                    Text("📷 Kendi kutunu okut")
+                    Text("📷 Elimdeki koliyi okut")
                 }
             } else {
-                Text("Sevk kutusunun barkodunu okut:", fontSize = 12.sp, color = Color.Gray)
+                Text("Müşteriye gidecek kolinin barkodunu okut:", fontSize = 12.sp, color = Color.Gray)
                 Spacer(Modifier.height(6.dp))
                 ScanField(
-                    label = "📦 Kutu / karton okut",
+                    label = "📦 Kargo kolisi okut",
                     value = boxInput,
                     onValueChange = onBoxInput,
                     modifier = Modifier.fillMaxWidth(),

@@ -29,9 +29,9 @@ page 72362 "DOPSWHS Packing Order Card"
                 field(BoxText; BoxText)
                 {
                     ApplicationArea = All;
-                    Caption = 'Kutu';
+                    Caption = 'Kargo Kolisi';
                     Editable = false;
-                    ToolTip = 'Bu siparişin kutusu (LP). Ürünler bitince kutu okutulmadan sipariş kapanmaz.';
+                    ToolTip = 'Bu siparişin müşteriye gideceği kargo kolisinin barkodu. Depoda kalan sepet (tote) değildir. Ürünler bitse bile koli okutulmadan sipariş kapanmaz.';
                     StyleExpr = BoxStyle;
                 }
                 field(ScanHere; ScanValue)
@@ -124,23 +124,28 @@ page 72362 "DOPSWHS Packing Order Card"
     var
         PackLine: Record "DOPSWHS Pack Session Line";
         Remaining: Decimal;
-        BoxLpNo: Code[20];
     begin
-        // Kutu bilgisi: bu siparişin satırlarından ilk dolu "Box LP No.".
-        BoxLpNo := '';
+        // Kargo kolisi: koli kayıtlı bir LP olabilir de olmayabilir de
+        // (kargo etiketi / SSCC), bu yüzden önce barkod, yoksa LP no. gösterilir.
+        BoxText := '';
         if Rec."Session Entry No." <> 0 then begin
             PackLine.SetRange("Session Entry No.", Rec."Session Entry No.");
             PackLine.SetRange("Source Order No.", Rec."Sales Order No.");
-            PackLine.SetFilter("Box LP No.", '<>%1', '');
+            PackLine.SetFilter("Box Barcode", '<>%1', '');
             if PackLine.FindFirst() then
-                BoxLpNo := PackLine."Box LP No.";
+                BoxText := CopyStr(PackLine."Box Barcode", 1, MaxStrLen(BoxText));
+            if BoxText = '' then begin
+                PackLine.SetRange("Box Barcode");
+                PackLine.SetFilter("Box LP No.", '<>%1', '');
+                if PackLine.FindFirst() then
+                    BoxText := PackLine."Box LP No.";
+            end;
             PackLine.Reset();
         end;
-        if BoxLpNo <> '' then begin
-            BoxText := BoxLpNo;
-            BoxStyle := 'Favorable';
-        end else begin
-            BoxText := 'Kutu okutulmadı';
+        if BoxText <> '' then
+            BoxStyle := 'Favorable'
+        else begin
+            BoxText := 'Koli okutulmadı';
             BoxStyle := 'Ambiguous';
         end;
 
@@ -163,9 +168,9 @@ page 72362 "DOPSWHS Packing Order Card"
         if Remaining > 0 then begin
             InstructionText := StrSubstNo('Eksik miktar: %1. Kırmızı satırlardaki ürünleri okutun.', Remaining);
             InstructionStyle := 'Unfavorable';
-        end else if BoxLpNo = '' then begin
-            // Ürünler bitti ama kutu yok — terminaldeki "KUTUYU OKUT" adımının karşılığı.
-            InstructionText := 'Tüm ürünler paketlendi. Siparişi kapatmak için kutuyu okutun.';
+        end else if BoxStyle = 'Ambiguous' then begin
+            // Ürünler bitti ama koli yok — terminaldeki "KOLİYİ OKUT" adımının karşılığı.
+            InstructionText := 'Tüm ürünler paketlendi. Siparişi kapatmak için kargo kolisini okutun.';
             InstructionStyle := 'Ambiguous';
         end else begin
             InstructionText := 'Paketleme tamam, kapanış bekleniyor.';

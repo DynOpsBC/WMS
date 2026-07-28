@@ -10,8 +10,13 @@ table 72332 "DOPSWHS Pack Session"
     fields
     {
         field(1; "Entry No."; Integer) { Caption = 'Entry No.'; DataClassification = CustomerContent; AutoIncrement = true; }
-        field(10; "Tote LP No."; Code[20]) { Caption = 'Tote LP No.'; DataClassification = CustomerContent; TableRelation = "DOPSWHS LP Header"; }
-        field(11; "Box LP No."; Code[20]) { Caption = 'Box LP No.'; DataClassification = CustomerContent; TableRelation = "DOPSWHS LP Header"; }
+        // SEPET (tote): depoda kalan, geri dönen taşıma kabı → gerçek bir LP.
+        field(10; "Tote LP No."; Code[20]) { Caption = 'Sepet LP No.'; DataClassification = CustomerContent; TableRelation = "DOPSWHS LP Header"; }
+        // KUTU (koli): müşteriye giden kargo kolisi → depoda kalmaz, LP olmak
+        // zorunda değildir. Okutulan koli barkodu "Box Barcode"a yazılır;
+        // "Box LP No." yalnızca sistem karton LP ürettiğinde dolar.
+        field(11; "Box LP No."; Code[20]) { Caption = 'Kutu LP No.'; DataClassification = CustomerContent; TableRelation = "DOPSWHS LP Header"; }
+        field(14; "Box Barcode"; Code[50]) { Caption = 'Kargo Kolisi Barkodu'; DataClassification = CustomerContent; }
         field(12; "Pick No."; Code[20]) { Caption = 'Pick No.'; DataClassification = CustomerContent; }
         field(13; "Location Code"; Code[10]) { Caption = 'Location Code'; DataClassification = CustomerContent; TableRelation = Location; }
         field(20; Status; Enum "DOPSWHS Pack Status") { Caption = 'Status'; DataClassification = CustomerContent; }
