@@ -76,7 +76,7 @@ fun LicensePlateModule() {
         Spacer(Modifier.height(4.dp))
         StatusText(status)
         Spacer(Modifier.height(8.dp))
-        LazyColumn(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             items(rows) { lp ->
                 Card(onClick = { selected = lp.optString("no") }, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(10.dp)) {
                     Column(Modifier.padding(12.dp)) {

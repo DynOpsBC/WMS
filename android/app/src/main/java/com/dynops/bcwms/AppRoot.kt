@@ -12,6 +12,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -78,7 +79,11 @@ enum class Screen(val title: String) {
 @Composable
 fun AppRoot() {
     val context = androidx.compose.ui.platform.LocalContext.current
-    var screen by remember { mutableStateOf(Screen.Home) }
+    // rememberSaveable: sistem uygulamayı bellek baskısıyla öldürüp geri
+    // getirirse operatör ana menüye düşmesin, son ekranda kalsın.
+    // (Cihaz döndürmede zaten manifest'teki configChanges sayesinde Activity
+    // yeniden yaratılmıyor — tüm ekran state'i olduğu gibi korunuyor.)
+    var screen by rememberSaveable { mutableStateOf(Screen.Home) }
     var connected by remember { mutableStateOf(BcApi.hasToken(context)) }
 
     // Kişiselleştirilmiş görünür alan tercihlerini yükle (satır kartları okur).

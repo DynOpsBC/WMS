@@ -128,7 +128,9 @@ fun ItemInquiryModule() {
             Text("LP'lerde (${lpLines.size})", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
             Spacer(Modifier.height(6.dp))
         }
-        LazyColumn(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        // weight(1f): üstteki sabit ürün kartı listeyi sıfır yüksekliğe
+        // sıkıştırıp LP/hareket satırlarını kesiyordu (yatay mod / küçük ekran).
+        LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             items(lpLines) { ln ->
                 Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp)) {
                     Column(Modifier.padding(12.dp)) {
@@ -404,7 +406,7 @@ fun WhseEntriesModule() {
         Spacer(Modifier.height(6.dp))
         StatusText(status)
         Spacer(Modifier.height(8.dp))
-        LazyColumn(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             items(rows) { e ->
                 val qty = e.optDouble("quantity", 0.0)
                 val positive = qty >= 0

@@ -65,7 +65,7 @@ fun QualityModule() {
         Spacer(Modifier.height(4.dp))
         StatusText(status)
         Spacer(Modifier.height(8.dp))
-        LazyColumn(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             items(rows) { d ->
                 val st = d.optString("status")
                 // BC durum değeri (st) karşılaştırmalarda kullanılır; ekrana Türkçe etiket gösterilir.

@@ -77,7 +77,7 @@ fun PostingTestModule() {
         if (rows.isNotEmpty()) PostingSummary(grouped)
         Spacer(Modifier.height(6.dp))
 
-        LazyColumn(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             // 1) Passed — yeşil özet kart (varsa, default açık)
             items(grouped.passed) { row -> PostingRowCard(row, kind = PostingKind.PASSED) }
 

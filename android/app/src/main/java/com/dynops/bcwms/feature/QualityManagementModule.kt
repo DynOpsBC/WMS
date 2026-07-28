@@ -3,7 +3,9 @@ package com.dynops.bcwms.feature
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -17,6 +19,25 @@ import com.dynops.bcwms.BcApi
 import com.dynops.bcwms.ui.*
 import kotlinx.coroutines.launch
 import org.json.JSONObject
+
+/**
+ * Sabit içerikli ekran gövdeleri için kaydırılabilir kapsayıcı.
+ * Cihaz yan çevrilince ya da küçük ekranda kartlar sığmıyordu; alttaki
+ * aksiyon çubuğu içeriği kesiyordu.
+ */
+@Composable
+private fun ColumnScope.ScrollableBranch(
+    modifier: Modifier = Modifier,
+    content: @Composable ColumnScope.() -> Unit,
+) {
+    Column(
+        Modifier
+            .weight(1f)
+            .verticalScroll(rememberScrollState())
+            .then(modifier),
+        content = content,
+    )
+}
 
 /**
  * Microsoft Quality Management (BC v28+ first-party extension).
@@ -113,7 +134,7 @@ fun QualityManagementModule() {
         Spacer(Modifier.height(4.dp))
         StatusText(status)
         Spacer(Modifier.height(8.dp))
-        LazyColumn(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             items(rows) { d ->
                 Card(onClick = { selected = d }, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(10.dp)) {
                     Column(Modifier.padding(12.dp)) {
@@ -178,7 +199,7 @@ private fun InspectionDetail(insp: JSONObject, onBack: () -> Unit) {
     }
 
     Column(Modifier.fillMaxSize()) {
-        Column(Modifier.weight(1f).padding(12.dp)) {
+        ScrollableBranch(Modifier.padding(12.dp)) {
             TextButton(onClick = onBack) { Text("‹ Denetim Listesi") }
             DocHeaderCard(
                 title = "${current.optString("inspectionNo")} · ${firstValue(current, "templateCode").ifBlank { "—" }}",

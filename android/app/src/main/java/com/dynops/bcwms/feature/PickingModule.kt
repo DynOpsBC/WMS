@@ -5,7 +5,9 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -30,6 +32,21 @@ import org.json.JSONObject
 // Pick Created durumu terminaldeki toplayıcıyı yanıltıyordu.)
 /** Sistem sepeti üretilirken başlıkta gösterilen geçici değer. */
 private const val MAIN_LP_PENDING = "hazırlanıyor…"
+
+/**
+ * Sabit içerikli ekran dalları için kaydırılabilir kapsayıcı.
+ * Cihaz yan çevrilince ya da küçük ekranda kartlar sığmıyordu; altta kalan
+ * butonlara (ör. "Kendime Ata", "Önerilen sepeti kullan") ulaşılamıyordu.
+ */
+@Composable
+private fun ColumnScope.ScrollableBranch(content: @Composable ColumnScope.() -> Unit) {
+    Column(
+        Modifier
+            .weight(1f)
+            .verticalScroll(rememberScrollState()),
+        content = content,
+    )
+}
 
 /**
  * İyimser UI için satırın kopyasını "toplandı" durumuyla döndürür.
@@ -627,6 +644,10 @@ private fun GuidedPickDocument(no: String, onBack: () -> Unit) {
     )
 
     Column(Modifier.fillMaxSize()) {
+        // Not: `else` dalı kendi LazyColumn'unu weight(1f) ile kullanır; diğer
+        // dallar (atama, sepet okutma, raf doğrulama) sabit içerik olduğundan
+        // yatay moda / küçük ekrana sığmayabilir → o dallar aşağıda kendi
+        // verticalScroll'unu alır. Bu yüzden dış Column kaydırılabilir DEĞİL.
         Column(Modifier.weight(1f).padding(12.dp)) {
             TextButton(onClick = onBack) { Text("‹ Pick Listesi") }
             // Başlık özeti: kaç sipariş, kaç ürün (tamamlanan/toplam) — operatör
@@ -648,7 +669,7 @@ private fun GuidedPickDocument(no: String, onBack: () -> Unit) {
             when {
                 // ELOG: pick kimseye atanmadan ürün listesi/okutma hiç gösterilmez —
                 // toplama sadece "Kendime Ata" ile başlatılabilir.
-                notAssigned -> {
+                notAssigned -> ScrollableBranch {
                     Card(
                         colors = CardDefaults.cardColors(containerColor = Color(0xFFEDE7F6)),
                         modifier = Modifier.fillMaxWidth(),
@@ -667,7 +688,7 @@ private fun GuidedPickDocument(no: String, onBack: () -> Unit) {
                     }
                 }
                 // ELOG: atandıktan sonra, toplamadan ÖNCE ana sepeti (LP) okut.
-                needsMainLp -> {
+                needsMainLp -> ScrollableBranch {
                     Card(
                         colors = CardDefaults.cardColors(containerColor = Color.White),
                         border = BorderStroke(1.dp, Color(0xFFE0E0E0)),
@@ -732,7 +753,7 @@ private fun GuidedPickDocument(no: String, onBack: () -> Unit) {
                         }
                     }
                 }
-                allCollected -> {
+                allCollected -> ScrollableBranch {
                     Card(
                         colors = CardDefaults.cardColors(containerColor = Color(0xFFE8F5E9)),
                         modifier = Modifier.fillMaxWidth(),
@@ -743,7 +764,7 @@ private fun GuidedPickDocument(no: String, onBack: () -> Unit) {
                         }
                     }
                 }
-                !binVerified && !currentBin.isNullOrBlank() -> {
+                !binVerified && !currentBin.isNullOrBlank() -> ScrollableBranch {
                     Card(
                         colors = CardDefaults.cardColors(containerColor = Color(0xFFFFF3E0)),
                         border = BorderStroke(2.dp, Color(0xFFEF6C00)),

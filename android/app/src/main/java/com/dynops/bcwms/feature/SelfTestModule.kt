@@ -193,7 +193,7 @@ fun SelfTestModule() {
             ) { Text("Sıfırla") }
         }
         Spacer(Modifier.height(10.dp))
-        LazyColumn(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             GroupOrder.forEach { group ->
                 val rows = grouped[group].orEmpty()
                 if (rows.isNotEmpty()) {

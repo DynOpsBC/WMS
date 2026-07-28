@@ -76,7 +76,7 @@ fun PrintersModule() {
         Spacer(Modifier.height(6.dp))
         if (status.isNotBlank()) Text(status, fontSize = 12.sp, color = Color.Gray)
         Spacer(Modifier.height(8.dp))
-        LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             if (rows.isEmpty() && !loading) item { EmptyState("Kayıtlı yazıcı yok. BC'de DOPSWHS Printers sayfasından ekleyin.") }
             items(rows) { row ->
                 val code = row.optString("code")

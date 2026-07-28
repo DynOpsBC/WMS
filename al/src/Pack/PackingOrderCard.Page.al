@@ -14,11 +14,26 @@ page 72362 "DOPSWHS Packing Order Card"
         {
             group(General)
             {
-                field("Sales Order No."; Rec."Sales Order No.") { ApplicationArea = All; Editable = false; }
-                field("Customer Name"; Rec."Customer Name") { ApplicationArea = All; Editable = false; }
-                field("Location Code"; Rec."Location Code") { ApplicationArea = All; Editable = false; }
-                field("Pick No."; Rec."Pick No.") { ApplicationArea = All; Editable = false; }
-                field(Status; Rec.Status) { ApplicationArea = All; Editable = false; }
+                field("Sales Order No."; Rec."Sales Order No.") { ApplicationArea = All; Caption = 'Satış Siparişi'; Editable = false; }
+                field("Customer Name"; Rec."Customer Name") { ApplicationArea = All; Caption = 'Müşteri'; Editable = false; }
+                field("Location Code"; Rec."Location Code") { ApplicationArea = All; Caption = 'Lokasyon'; Editable = false; }
+                field("Pick No."; Rec."Pick No.") { ApplicationArea = All; Caption = 'Toplama No.'; Editable = false; }
+                field(Status; Rec.Status) { ApplicationArea = All; Caption = 'Durum'; Editable = false; }
+                field("Started By User"; Rec."Started By User")
+                {
+                    ApplicationArea = All;
+                    Caption = 'Paketleyen';
+                    Editable = false;
+                    ToolTip = 'Paketlemeyi üstlenen WMS operatörü. Terminalde paketlemeye başlayan kişi otomatik yazılır.';
+                }
+                field(BoxText; BoxText)
+                {
+                    ApplicationArea = All;
+                    Caption = 'Kutu';
+                    Editable = false;
+                    ToolTip = 'Bu siparişin kutusu (LP). Ürünler bitince kutu okutulmadan sipariş kapanmaz.';
+                    StyleExpr = BoxStyle;
+                }
                 field(ScanHere; ScanValue)
                 {
                     Caption = 'Ürün Barkodu Okut';
@@ -109,9 +124,28 @@ page 72362 "DOPSWHS Packing Order Card"
     var
         PackLine: Record "DOPSWHS Pack Session Line";
         Remaining: Decimal;
+        BoxLpNo: Code[20];
     begin
+        // Kutu bilgisi: bu siparişin satırlarından ilk dolu "Box LP No.".
+        BoxLpNo := '';
+        if Rec."Session Entry No." <> 0 then begin
+            PackLine.SetRange("Session Entry No.", Rec."Session Entry No.");
+            PackLine.SetRange("Source Order No.", Rec."Sales Order No.");
+            PackLine.SetFilter("Box LP No.", '<>%1', '');
+            if PackLine.FindFirst() then
+                BoxLpNo := PackLine."Box LP No.";
+            PackLine.Reset();
+        end;
+        if BoxLpNo <> '' then begin
+            BoxText := BoxLpNo;
+            BoxStyle := 'Favorable';
+        end else begin
+            BoxText := 'Kutu okutulmadı';
+            BoxStyle := 'Ambiguous';
+        end;
+
         if Rec.Status = Rec.Status::Completed then begin
-            InstructionText := 'Sipariş tamamlandı.';
+            InstructionText := 'Sipariş tamamlandı — sevk ve fatura kesildi.';
             InstructionStyle := 'Favorable';
             exit;
         end;
@@ -121,16 +155,28 @@ page 72362 "DOPSWHS Packing Order Card"
             exit;
         end;
         PackLine.SetRange("Session Entry No.", Rec."Session Entry No.");
+        PackLine.SetRange("Source Order No.", Rec."Sales Order No.");
         if PackLine.FindSet() then
             repeat
                 Remaining += PackLine."Qty. Expected" - PackLine."Qty. Packed";
             until PackLine.Next() = 0;
-        InstructionText := StrSubstNo('Eksik miktar: %1. Kırmızı satırlardaki ürünleri okutun.', Remaining);
-        InstructionStyle := 'Unfavorable';
+        if Remaining > 0 then begin
+            InstructionText := StrSubstNo('Eksik miktar: %1. Kırmızı satırlardaki ürünleri okutun.', Remaining);
+            InstructionStyle := 'Unfavorable';
+        end else if BoxLpNo = '' then begin
+            // Ürünler bitti ama kutu yok — terminaldeki "KUTUYU OKUT" adımının karşılığı.
+            InstructionText := 'Tüm ürünler paketlendi. Siparişi kapatmak için kutuyu okutun.';
+            InstructionStyle := 'Ambiguous';
+        end else begin
+            InstructionText := 'Paketleme tamam, kapanış bekleniyor.';
+            InstructionStyle := 'Favorable';
+        end;
     end;
 
     var
         ScanValue: Text[100];
         InstructionText: Text[250];
         InstructionStyle: Text;
+        BoxText: Text[50];
+        BoxStyle: Text;
 }

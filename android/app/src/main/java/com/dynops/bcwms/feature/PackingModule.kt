@@ -390,23 +390,11 @@ private fun PickPackingDocument(
             StatusText(status)
             Spacer(Modifier.height(8.dp))
 
-            // Kutu bekleyen sipariş(ler) varsa önce kutu adımı öne çıkar.
-            if (boxNeeded.isNotEmpty()) {
-                val orderNo = boxNeeded.first()
-                BoxForOrderCard(
-                    orderNo = orderNo,
-                    customer = customerByOrder[orderNo].orEmpty(),
-                    remaining = boxNeeded.size,
-                    busy = busy,
-                    showScan = showBoxScan,
-                    boxInput = boxInput,
-                    onBoxInput = { boxInput = it },
-                    onUseCarton = { scanBox(orderNo, "") },
-                    onScanBox = { scanBox(orderNo, it) },
-                    onToggleScan = { showBoxScan = it },
-                )
-                Spacer(Modifier.height(10.dp))
-            } else {
+            // Kutu adımı yokken ürün okutma alanı sabit dursun (klavye/tetik
+            // odağı kaymasın). Kutu adımı geldiğinde kart LİSTENİN İÇİNE alınır
+            // (aşağıda) — yatay ekranda sabit dursaydı sipariş listesini
+            // sıkıştırıp satırları kırpardı.
+            if (boxNeeded.isEmpty()) {
                 // Ürün okut alanı — sadece barkod okutarak, doğru siparişe otomatik.
                 ScanField(
                     label = "📷 Ürün okut",
@@ -438,6 +426,25 @@ private fun PickPackingDocument(
             )
             Spacer(Modifier.height(8.dp))
             LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                // Kutu adımı listenin başında: yüksek kart artık listeyi
+                // sıkıştırmıyor, gerekirse liste ile birlikte kaydırılıyor.
+                if (boxNeeded.isNotEmpty()) {
+                    val boxOrderNo = boxNeeded.first()
+                    item(key = "box-step") {
+                        BoxForOrderCard(
+                            orderNo = boxOrderNo,
+                            customer = customerByOrder[boxOrderNo].orEmpty(),
+                            remaining = boxNeeded.size,
+                            busy = busy,
+                            showScan = showBoxScan,
+                            boxInput = boxInput,
+                            onBoxInput = { boxInput = it },
+                            onUseCarton = { scanBox(boxOrderNo, "") },
+                            onScanBox = { scanBox(boxOrderNo, it) },
+                            onToggleScan = { showBoxScan = it },
+                        )
+                    }
+                }
                 orderedKeys.forEach { orderNo ->
                     val ords = byOrder[orderNo].orEmpty()
                     val orderDone = ords.all { it.optDouble("qtyPacked") >= it.optDouble("qtyExpected") }
