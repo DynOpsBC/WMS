@@ -7,26 +7,17 @@ pageextension 72311 "DOPSWHS Whse Pick Header Ext" extends "Warehouse Pick"
             field("DOPSWHS Assigned User"; Rec."Assigned User ID")
             {
                 ApplicationArea = All;
-                Caption = 'Assigned User';
-                ToolTip = 'Specifies the WMS operator assigned to this pick. Pick a WMS user from the lookup; warehouse-employee validation is skipped so operators without a Warehouse Employee record can be assigned.';
-                // "Assigned User ID" alanının TableRelation'ı Warehouse Employee.
-                // WMS operatörleri (DOPSWHS Local User) her zaman Warehouse
-                // Employee değil; standart Validate atamayı sessizce geri
-                // alıyordu (kullanıcı yazıyor, kaydedince alan boşalıyordu).
-                // Bu yüzden lookup WMS kullanıcı listesinden yapılır ve değer
-                // Validate tetiklemeden doğrudan yazılır.
-                TableRelation = "DOPSWHS Local User".Username;
-                ValidateTableRelation = false;
-                LookupPageId = "DOPSWHS Local User List";
-
-                trigger OnValidate()
-                var
-                    PickMgmt: Codeunit "DOPSWHS Pick Mgmt";
-                begin
-                    // Geçmiş kaydı + webhook için codeunit üzerinden yaz.
-                    if Rec."Assigned User ID" <> '' then
-                        PickMgmt.ReassignPick(Rec, Rec."Assigned User ID", 'Assigned from pick card');
-                end;
+                Caption = 'Assigned User (WMS)';
+                ToolTip = 'Specifies the WMS operator assigned to this pick. Use the "Assign to WMS Operator" action to change it — direct entry is disabled because the underlying field validates against Warehouse Employee, which silently cleared operators that have no such record.';
+                // Alan SALT-OKUNUR. Sebebi: "Assigned User ID" alanının
+                // TableRelation'ı Warehouse Employee'dir. WMS operatörleri
+                // (DOPSWHS Local User) her zaman Warehouse Employee değil;
+                // kullanıcı elle yazınca standart Validate atamayı sessizce geri
+                // alıyor, alan boşalıyordu. Atama "Assign to WMS Operator"
+                // aksiyonundan yapılır; orada değer Validate tetiklemeden
+                // doğrudan yazılır (bkz. PickMgmt.ReassignPick).
+                Editable = false;
+                DrillDown = false;
             }
             field("DOPSWHS Vehicle No."; Rec."DOPSWHS Vehicle No.")
             {

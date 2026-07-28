@@ -118,7 +118,6 @@ page 72361 "DOPSWHS Packing Order List"
                     ToolTip = 'Sadece paketlenmeyi bekleyen ve paketlenmekte olan siparişleri gösterir.';
                     Promoted = true;
                     PromotedCategory = Process;
-                    PromotedOnly = true;
 
                     trigger OnAction()
                     begin
@@ -134,7 +133,6 @@ page 72361 "DOPSWHS Packing Order List"
                     ToolTip = 'Sadece paketlemesi bitmiş (sevk + fatura kesilmiş) siparişleri gösterir.';
                     Promoted = true;
                     PromotedCategory = Process;
-                    PromotedOnly = true;
 
                     trigger OnAction()
                     begin
@@ -150,7 +148,6 @@ page 72361 "DOPSWHS Packing Order List"
                     ToolTip = 'Tüm paketleme siparişlerini gösterir.';
                     Promoted = true;
                     PromotedCategory = Process;
-                    PromotedOnly = true;
 
                     trigger OnAction()
                     begin
@@ -184,7 +181,7 @@ page 72361 "DOPSWHS Packing Order List"
                     Image = AssignItemCharge;
                     ToolTip = 'Seçili siparişi bir WMS operatörüne atar. Liste, operatörlerin terminalde giriş yaptığı yerel WMS kullanıcılarını gösterir.';
                     Promoted = true;
-                    PromotedCategory = Category4;
+                    PromotedCategory = Process;
 
                     trigger OnAction()
                     var
@@ -236,7 +233,7 @@ page 72361 "DOPSWHS Packing Order List"
                     Image = Document;
                     ToolTip = 'Bu paketleme kaydının kaynağı olan satış siparişini açar.';
                     Promoted = true;
-                    PromotedCategory = Category5;
+                    PromotedCategory = Category4;
 
                     trigger OnAction()
                     var
@@ -254,7 +251,7 @@ page 72361 "DOPSWHS Packing Order List"
                     Image = PickLines;
                     ToolTip = 'Bu siparişin geldiği toplama (pick) belgesini açar.';
                     Promoted = true;
-                    PromotedCategory = Category5;
+                    PromotedCategory = Category4;
 
                     trigger OnAction()
                     var
