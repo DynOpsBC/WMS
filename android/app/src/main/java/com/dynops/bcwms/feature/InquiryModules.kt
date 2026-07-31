@@ -1,5 +1,6 @@
 package com.dynops.bcwms.feature
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -8,6 +9,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -349,6 +351,8 @@ fun WhseEntriesModule() {
     var binFilter by remember { mutableStateOf("") }
     var itemFilter by remember { mutableStateOf("") }
     var lotFilter by remember { mutableStateOf("") }
+    // Filtre bölümü varsayılan KAPALI: ekran açılır açılmaz liste görünsün.
+    var filtersOpen by remember { mutableStateOf(false) }
     var rows by remember { mutableStateOf<List<JSONObject>>(emptyList()) }
     var status by remember { mutableStateOf("") }
     var loading by remember { mutableStateOf(false) }
@@ -372,7 +376,7 @@ fun WhseEntriesModule() {
 
     Column(Modifier.fillMaxSize().padding(12.dp)) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Text("📜 Ambar Hareketleri", fontWeight = FontWeight.Bold, fontSize = 17.sp)
+            Text("Ambar Hareketleri", fontWeight = FontWeight.Bold, fontSize = 17.sp)
             Spacer(Modifier.weight(1f))
             OutlinedButton(
                 onClick = { load() },
@@ -382,26 +386,65 @@ fun WhseEntriesModule() {
             ) { Text(if (loading) "…" else "🔄", fontSize = 15.sp) }
         }
         Spacer(Modifier.height(8.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            ScanField("Bin", binFilter, { binFilter = it }, modifier = Modifier.weight(1f),
+        // Filtreler: ScanField'ler kendi OK + kamera butonlarını taşıdığı için
+        // yan yana iki tanesi ekrana sığmıyordu (etiketler dikey harflere
+        // bölünüyordu). Her biri TAM GENİŞLİK, alt alta; hepsi katlanabilir
+        // bölümde — filtre kullanılmadığında liste tüm ekranı kullanır.
+        val hasFilter = binFilter.isNotBlank() || itemFilter.isNotBlank() || lotFilter.isNotBlank()
+        Row(
+            Modifier.fillMaxWidth()
+                .clip(RoundedCornerShape(10.dp))
+                .clickable { filtersOpen = !filtersOpen }
+                .padding(vertical = 6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                if (hasFilter) "Filtreler · açık" else "Filtrele",
+                fontSize = 13.sp,
+                fontWeight = if (hasFilter) FontWeight.SemiBold else FontWeight.Normal,
+                color = if (hasFilter) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            if (hasFilter) {
+                Spacer(Modifier.width(8.dp))
+                // Aktif filtreleri özetle — bölüm kapalıyken de görünsün.
+                Text(
+                    listOfNotNull(
+                        binFilter.takeIf { it.isNotBlank() }?.let { "Bin: $it" },
+                        itemFilter.takeIf { it.isNotBlank() }?.let { "Ürün: $it" },
+                        lotFilter.takeIf { it.isNotBlank() }?.let { "Lot: $it" },
+                    ).joinToString(" · "),
+                    fontSize = 11.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    modifier = Modifier.weight(1f),
+                )
+            } else Spacer(Modifier.weight(1f))
+            if (hasFilter) {
+                TextButton(onClick = { binFilter = ""; itemFilter = ""; lotFilter = ""; load() }) {
+                    Text("Temizle", fontSize = 12.sp)
+                }
+            }
+            Text(if (filtersOpen) "▲" else "▼", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        if (filtersOpen) {
+            Spacer(Modifier.height(6.dp))
+            ScanField("Bin", binFilter, { binFilter = it }, modifier = Modifier.fillMaxWidth(),
                 onScanned = { binFilter = BarcodeIntentResolver.resolve(it).value; load() })
-            ScanField("Ürün", itemFilter, { itemFilter = it }, modifier = Modifier.weight(1f),
+            Spacer(Modifier.height(6.dp))
+            ScanField("Ürün", itemFilter, { itemFilter = it }, modifier = Modifier.fillMaxWidth(),
                 onScanned = {
                     val res = BarcodeIntentResolver.resolve(it)
                     itemFilter = (res.itemNo ?: res.value); load()
                 })
-        }
-        Spacer(Modifier.height(6.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
-            ScanField("Lot", lotFilter, { lotFilter = it }, modifier = Modifier.weight(1f),
+            Spacer(Modifier.height(6.dp))
+            ScanField("Lot", lotFilter, { lotFilter = it }, modifier = Modifier.fillMaxWidth(),
                 onScanned = { lotFilter = BarcodeIntentResolver.resolve(it).value; load() })
-            Button(onClick = { load() }, enabled = !loading, modifier = Modifier.height(48.dp)) { Text("Ara") }
-            if (binFilter.isNotBlank() || itemFilter.isNotBlank() || lotFilter.isNotBlank()) {
-                OutlinedButton(
-                    onClick = { binFilter = ""; itemFilter = ""; lotFilter = ""; load() },
-                    modifier = Modifier.height(48.dp),
-                ) { Text("✕") }
-            }
+            Spacer(Modifier.height(8.dp))
+            Button(
+                onClick = { load(); filtersOpen = false },
+                enabled = !loading,
+                modifier = Modifier.fillMaxWidth().height(46.dp),
+            ) { Text("Ara") }
         }
         Spacer(Modifier.height(6.dp))
         StatusText(status)
