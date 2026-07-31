@@ -271,11 +271,13 @@ codeunit 72354 "DOPSWHS Picking Order Mgmt"
     // Amaç: aynı raflardan toplanacak siparişleri tek pick'te birleştirmek —
     // toplayıcının yürüme yolu kısalır.
     //
-    // Puanlama:
-    //   ortak ürün    : +20 / ürün  (en belirleyici kriter — aynı raf)
+    // Puanlama (ortak ürün baskın):
+    //   ortak ürün    : +50 / ürün, 2+ ortak ürüne ayrıca +25
+    //                   (tek ortak ürün bile en iyi tarih uyumunu geçer)
     //   tarih yakınlığı: aynı gün +30, 1 gün +20, 2-3 gün +10, 4-7 gün +5
     //   aynı müşteri  : +15 (tek sevkiyatta birleşebilir)
     //   küçük sipariş : +5  (3 satır veya altı — gruba ucuz eklenir)
+    // Liste kırpılırken de ortak ürünü olmayanlar önce elenir.
     // Grup boşsa ürün/tarih karşılaştırması yapılamaz; bu durumda en erken
     // sevk tarihli toplanabilir siparişler önerilir (işe buradan başlanır).
     // ------------------------------------------------------------------
@@ -305,6 +307,12 @@ codeunit 72354 "DOPSWHS Picking Order Mgmt"
         ApplyOpsPendingFilter(SalesHeader);
         FilterToPickable(SalesHeader);
 
+        // SEVK TARİHİNE GÖRE SIRALA. Aday taraması 500 ile sınırlı; sırasız
+        // taramada rastgele (çok ileri tarihli) siparişler öne geçiyordu.
+        // En erken sevk tarihliler önce değerlendirilir.
+        SalesHeader.SetCurrentKey("Document Type", "Shipment Date");
+        SalesHeader.SetAscending("Shipment Date", true);
+
         if SalesHeader.FindSet() then
             repeat
                 // Zaten bu gruptaysa aday değil.
@@ -319,7 +327,10 @@ codeunit 72354 "DOPSWHS Picking Order Mgmt"
                 end;
             until (SalesHeader.Next() = 0) or (Considered > 500);
 
-        TrimSuggestions(TempSugg, MaxSuggestions);
+        // ORTAK ÜRÜNÜ OLANLARA ÖNCELİK: liste MaxSuggestions'a indirilirken
+        // ortak ürünü olmayanlar önce elenir (grup doluyken). Böylece "aynı
+        // raflardan toplanır" adayları listede kalır.
+        TrimSuggestions(TempSugg, MaxSuggestions, HasGroupLines);
     end;
 
     /// <summary>Gruptaki siparişlerin ürün/müşteri/tarih profilini çıkarır.</summary>
@@ -407,7 +418,13 @@ codeunit 72354 "DOPSWHS Picking Order Mgmt"
         SameCustomer := GroupCustomers.ContainsKey(SalesHeader."Sell-to Customer No.");
 
         // --- Puan ---
-        Score := SharedItems * 20;
+        // ORTAK ÜRÜN EN AĞIR KRİTER: aynı raflardan toplanacağı için asıl
+        // kazancı o sağlar. Tek bir ortak ürün (+50) bile en iyi tarih
+        // uyumunu (+30) geçer; ortak ürünlü aday hep üstte kalır.
+        Score := SharedItems * 50;
+        // Birden çok ortak ürün ek prim alır (2 ortak ürün = aynı rafta iki iş).
+        if SharedItems >= 2 then
+            Score += 25;
         case true of
             DateGap = 0:
                 Score += 30;
@@ -451,8 +468,18 @@ codeunit 72354 "DOPSWHS Picking Order Mgmt"
     var
         Parts: Text;
     begin
+        // Grup boşken kıyaslanacak ürün/tarih yok; sevk tarihi bilgisi ver.
         if not HasGroupLines then
-            exit('Grup boş — en yakın sevk tarihli siparişlerden başlayın');
+            case true of
+                DateGap = 0:
+                    exit('Bugün sevk edilecek');
+                DateGap = 1:
+                    exit('Yarın sevk edilecek');
+                DateGap <= 7:
+                    exit(StrSubstNo('%1 gün içinde sevk', DateGap));
+                else
+                    exit(StrSubstNo('Sevke %1 gün var', DateGap));
+            end;
 
         if SharedItems > 0 then
             Parts := StrSubstNo('%1 ortak ürün (aynı raflar)', SharedItems);
@@ -481,35 +508,64 @@ codeunit 72354 "DOPSWHS Picking Order Mgmt"
         exit(Existing + ' · ' + NewPart);
     end;
 
-    /// <summary>Puanı en düşük olanları eleyerek listeyi MaxSuggestions'a indirir.</summary>
-    local procedure TrimSuggestions(var TempSugg: Record "DOPSWHS Picking Order Sugg." temporary; MaxSuggestions: Integer)
+    /// <summary>
+    /// Listeyi MaxSuggestions'a indirir. Grup doluysa ÖNCE ortak ürünü
+    /// OLMAYANLAR elenir (ortak ürünlü adaylar aynı raflardan toplanacağı için
+    /// asıl kazancı onlar sağlar); yer kalmazsa kalanlar puana göre elenir.
+    /// </summary>
+    local procedure TrimSuggestions(var TempSugg: Record "DOPSWHS Picking Order Sugg." temporary; MaxSuggestions: Integer; HasGroupLines: Boolean)
     var
-        DeleteSugg: Record "DOPSWHS Picking Order Sugg." temporary;
-        Total: Integer;
         ToDelete: Integer;
     begin
         TempSugg.Reset();
-        Total := TempSugg.Count();
-        if Total <= MaxSuggestions then
+        if TempSugg.Count() <= MaxSuggestions then
             exit;
-        ToDelete := Total - MaxSuggestions;
-        // Silinecekleri önce topla, sonra sil: FindSet döngüsü içinde silmek
-        // imleç davranışını bozabiliyor.
-        TempSugg.SetCurrentKey(Score);   // artan: en düşük puanlılar başta
+
+        // 1) Grup doluyken: ortak ürünü olmayanları puanı düşükten başlayarak ele.
+        if HasGroupLines then begin
+            ToDelete := TempSugg.Count() - MaxSuggestions;
+            TempSugg.SetCurrentKey(Score);
+            TempSugg.SetRange("Shared Item Count", 0);
+            ToDelete := DeleteLowestScored(TempSugg, ToDelete);
+            TempSugg.SetRange("Shared Item Count");
+        end;
+
+        // 2) Hâlâ fazlaysa (ya da grup boşsa) puanı en düşükleri ele.
+        TempSugg.Reset();
+        ToDelete := TempSugg.Count() - MaxSuggestions;
+        if ToDelete > 0 then begin
+            TempSugg.SetCurrentKey(Score);
+            DeleteLowestScored(TempSugg, ToDelete);
+        end;
+        TempSugg.Reset();
+    end;
+
+    /// <summary>
+    /// Geçerli filtre/sıra altındaki ilk [Count] kaydı siler; silinemeyen
+    /// (yani kalan) adet döner. Silinecekler önce toplanır: FindSet döngüsü
+    /// içinde silmek imleç davranışını bozabiliyor.
+    /// </summary>
+    local procedure DeleteLowestScored(var TempSugg: Record "DOPSWHS Picking Order Sugg." temporary; Count: Integer): Integer
+    var
+        DeleteSugg: Record "DOPSWHS Picking Order Sugg." temporary;
+        Remaining: Integer;
+    begin
+        Remaining := Count;
+        if Remaining <= 0 then
+            exit(0);
         if TempSugg.FindSet() then
             repeat
                 DeleteSugg := TempSugg;
                 if DeleteSugg.Insert() then;
-                ToDelete -= 1;
-            until (ToDelete = 0) or (TempSugg.Next() = 0);
+                Remaining -= 1;
+            until (Remaining = 0) or (TempSugg.Next() = 0);
 
-        TempSugg.Reset();
         if DeleteSugg.FindSet() then
             repeat
                 if TempSugg.Get(DeleteSugg."Sales Order No.") then
                     TempSugg.Delete();
             until DeleteSugg.Next() = 0;
-        TempSugg.Reset();
+        exit(Remaining);
     end;
 
     /// <summary>Öneri listesinde işaretlenenleri gruba ekler; eklenen sayıyı döndürür.</summary>

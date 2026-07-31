@@ -53,19 +53,21 @@ page 72363 "DOPSWHS Picking Order Sugg."
                     Editable = false;
                     StyleExpr = RowStyle;
                 }
-                field(Reason; Rec.Reason)
-                {
-                    ApplicationArea = All;
-                    Caption = 'Neden Öneriliyor';
-                    Editable = false;
-                    StyleExpr = RowStyle;
-                }
+                // Ortak ürün, önerinin ASIL gerekçesi — sipariş/müşteriden hemen
+                // sonra gelsin (uzun "Neden" metni bu kolonu sağa itiyordu).
                 field("Shared Item Count"; Rec."Shared Item Count")
                 {
                     ApplicationArea = All;
                     Caption = 'Ortak Ürün';
                     Editable = false;
                     StyleExpr = SharedStyle;
+                }
+                field(Reason; Rec.Reason)
+                {
+                    ApplicationArea = All;
+                    Caption = 'Neden Öneriliyor';
+                    Editable = false;
+                    StyleExpr = RowStyle;
                 }
                 field("Shipment Date"; Rec."Shipment Date")
                 {
@@ -187,13 +189,23 @@ page 72363 "DOPSWHS Picking Order Sugg."
         Rec.SetFilter("Shared Item Count", '>%1', 0);
         WithShared := Rec.Count();
         Rec.Reset();
-        if Rec.Count() = 0 then
-            HeaderText := 'Uygun öneri bulunamadı. "Satış Siparişlerini Seç" ile elle ekleyebilirsiniz.'
-        else
-            HeaderText := StrSubstNo(
-                '%1 sipariş önerildi (%2 tanesinin gruptaki siparişlerle ortak ürünü var — aynı raflardan toplanır). ' +
-                'İstemediğinizin işaretini kaldırıp "Seçilenleri Ekle" deyin.',
-                Rec.Count(), WithShared);
+        case true of
+            Rec.Count() = 0:
+                HeaderText := 'Uygun öneri bulunamadı. "Satış Siparişlerini Seç" ile elle ekleyebilirsiniz.';
+            // Grup boşken ortak ürün kıyaslaması yapılamaz — yanıltıcı
+            // "0 tanesinin ortak ürünü var" yazmak yerine durumu açıkla.
+            WithShared = 0:
+                HeaderText := StrSubstNo(
+                    '%1 sipariş önerildi, en yakın sevk tarihlileri üstte. Grupta sipariş olmadığı için ' +
+                    'ortak ürün kıyaslaması yapılamadı — birkaçını ekleyip "Öner" derseniz, aynı ürünleri ' +
+                    'içeren siparişler öne çıkar. İstemediğinizin işaretini kaldırıp "Tamam" deyin.',
+                    Rec.Count());
+            else
+                HeaderText := StrSubstNo(
+                    '%1 sipariş önerildi · %2 tanesinin gruptakilerle ORTAK ÜRÜNÜ var (yeşil satırlar — aynı ' +
+                    'raflardan toplanır, yürüme yolu kısalır). İstemediğinizin işaretini kaldırıp "Tamam" deyin.',
+                    Rec.Count(), WithShared);
+        end;
     end;
 
     /// <summary>Çağıran sayfa önerileri buraya yükler.</summary>
