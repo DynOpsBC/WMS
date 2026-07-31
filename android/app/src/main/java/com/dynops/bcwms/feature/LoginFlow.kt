@@ -57,6 +57,7 @@ fun LoginFlow(onConnected: (Boolean) -> Unit) {
     // Kayıtlı WMS operatörleri (BC localUsers) — girişte listeden seçilir.
     var localUsers by remember { mutableStateOf<List<LocalUserOption>>(emptyList()) }
     var usersLoading by remember { mutableStateOf(false) }
+    var usersError by remember { mutableStateOf("") }
     var manualUserEntry by remember { mutableStateOf(false) }
     var showPassword by remember { mutableStateOf(false) }
     var showForgotPassword by remember { mutableStateOf(false) }
@@ -210,23 +211,32 @@ fun LoginFlow(onConnected: (Boolean) -> Unit) {
     LaunchedEffect(step) {
         if (step != Step.LocalUser || localUsers.isNotEmpty() || !BcApi.hasToken(context)) return@LaunchedEffect
         usersLoading = true
-        val r = runCatching {
-            BcApi.get(context, "localUsers?\$select=username,displayName,disabled&\$top=200&\$orderby=username")
-        }.getOrNull()
+        // Sade sorgu: $select/$orderby bazı BC sürümlerinde bu entity'de hata
+        // veriyor ve liste sessizce boş kalıyordu. Önce sade dene, olmazsa
+        // seçili alanlarla tekrar dene.
+        var r = runCatching { BcApi.get(context, "localUsers?\$top=200") }.getOrNull()
+        if (r?.ok != true)
+            r = runCatching {
+                BcApi.get(context, "localUsers?\$select=username,displayName,disabled&\$top=200")
+            }.getOrNull()
+
         if (r?.ok == true) {
-            val arr = runCatching { JSONObject(r.body).optJSONArray("value") }.getOrNull()
-            val list = mutableListOf<LocalUserOption>()
-            for (i in 0 until (arr?.length() ?: 0)) {
-                val o = arr!!.optJSONObject(i) ?: continue
-                if (o.optBoolean("disabled", false)) continue
+            val list = BcApi.parseValueArray(r.body).mapNotNull { o ->
+                if (o.optBoolean("disabled", false)) return@mapNotNull null
                 val u = o.optString("username").trim()
-                if (u.isNotBlank()) list += LocalUserOption(u, o.optString("displayName").trim())
-            }
+                if (u.isBlank()) null else LocalUserOption(u, o.optString("displayName").trim())
+            }.sortedBy { it.displayName.ifBlank { it.username }.lowercase() }
             localUsers = list
-            if (list.isEmpty()) manualUserEntry = true
+            if (list.isEmpty()) {
+                manualUserEntry = true
+                usersError = "BC'de tanımlı WMS kullanıcısı yok. Yönetici \"Local WMS Users\" sayfasından oluşturmalı."
+            } else usersError = ""
         } else {
-            // API yoksa/erişilemiyorsa elle giriş yolu açık kalsın.
+            // API yoksa/erişilemiyorsa elle giriş yolu açık kalsın — ama nedenini
+            // göster, kullanıcı listenin neden gelmediğini anlasın.
             manualUserEntry = true
+            usersError = if (r == null) "Kullanıcı listesi alınamadı (bağlantı hatası)."
+                else "Kullanıcı listesi alınamadı (HTTP ${r.httpCode}). WMS eklentisi yayınlanmamış olabilir."
         }
         usersLoading = false
     }
@@ -346,6 +356,57 @@ fun LoginFlow(onConnected: (Boolean) -> Unit) {
                         localUsers.isNotEmpty() -> {
                             Text("Kullanıcınızı seçin", fontSize = 12.sp, fontWeight = FontWeight.Medium, color = Color.Gray)
                             Spacer(Modifier.height(8.dp))
+
+                            // Yönetici girişi: BC servis hesabıyla devam eder,
+                            // operatör doğrulaması yapılmaz. Kurulum/deneme için.
+                            Card(
+                                onClick = {
+                                    BcApi.clearLocalUser(context)
+                                    status = "Yönetici olarak bağlandı (demo sürüm)."
+                                    onConnected(true)
+                                },
+                                colors = CardDefaults.cardColors(containerColor = Color(0xFFFFF3E0)),
+                                shape = RoundedCornerShape(12.dp),
+                                modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
+                            ) {
+                                Row(
+                                    Modifier.fillMaxWidth().padding(14.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                ) {
+                                    Box(
+                                        Modifier.size(38.dp).clip(RoundedCornerShape(12.dp))
+                                            .background(Color(0xFFEF6C00).copy(alpha = 0.15f)),
+                                        contentAlignment = Alignment.Center,
+                                    ) {
+                                        Text("A", fontSize = 17.sp, fontWeight = FontWeight.Bold, color = Color(0xFFEF6C00))
+                                    }
+                                    Spacer(Modifier.width(12.dp))
+                                    Column(Modifier.weight(1f)) {
+                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                            Text("Yönetici", fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
+                                            Spacer(Modifier.width(6.dp))
+                                            Surface(
+                                                shape = RoundedCornerShape(50),
+                                                color = Color(0xFFEF6C00).copy(alpha = 0.15f),
+                                            ) {
+                                                Text(
+                                                    "demo sürüm",
+                                                    Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
+                                                    fontSize = 10.sp,
+                                                    fontWeight = FontWeight.SemiBold,
+                                                    color = Color(0xFFBF360C),
+                                                )
+                                            }
+                                        }
+                                        Text(
+                                            "Şifresiz, BC hesabıyla devam et",
+                                            fontSize = 11.sp, color = Color.Gray,
+                                        )
+                                    }
+                                    Text("›", fontSize = 20.sp, color = Color(0xFFEF6C00))
+                                }
+                            }
+
                             localUsers.forEach { u ->
                                 Card(
                                     onClick = { localUsername = u.username; manualUserEntry = false; status = "" },
@@ -388,9 +449,34 @@ fun LoginFlow(onConnected: (Boolean) -> Unit) {
                                 Text("Listede yokum — elle yazayım", fontSize = 12.sp)
                             }
                         }
-                        // Liste boş/çekilemedi: elle yazma alanı zaten aşağıda
-                        // görünür (manualUserEntry LaunchedEffect'te açılır).
-                        else -> Unit
+                        // Liste boş/çekilemedi: nedenini göster + yönetici yolu
+                        // sun; elle yazma alanı zaten aşağıda görünür.
+                        else -> {
+                            if (usersError.isNotBlank()) {
+                                Card(
+                                    colors = CardDefaults.cardColors(containerColor = Color(0xFFFFF8E1)),
+                                    shape = RoundedCornerShape(12.dp),
+                                    modifier = Modifier.fillMaxWidth(),
+                                ) {
+                                    Text(
+                                        usersError,
+                                        Modifier.padding(12.dp),
+                                        fontSize = 11.sp,
+                                        color = Color(0xFF6D4C41),
+                                    )
+                                }
+                                Spacer(Modifier.height(10.dp))
+                            }
+                            OutlinedButton(
+                                onClick = {
+                                    BcApi.clearLocalUser(context)
+                                    status = "Yönetici olarak bağlandı (demo sürüm)."
+                                    onConnected(true)
+                                },
+                                modifier = Modifier.fillMaxWidth().height(48.dp),
+                            ) { Text("Yönetici olarak devam et (demo sürüm)", fontSize = 13.sp) }
+                            Spacer(Modifier.height(10.dp))
+                        }
                     }
                 }
 
@@ -478,13 +564,8 @@ fun LoginFlow(onConnected: (Boolean) -> Unit) {
                 }
                 Spacer(Modifier.height(4.dp))
                 TextButton(onClick = { step = Step.Email; status = ""; manualUserEntry = false }) { Text("‹ Geri (e-posta girişine dön)") }
-                // Kurulum/yönetici kaçış yolu: operatör hesabı henüz tanımlı
-                // değilken cihazı BC servis kimliğiyle kullanmaya izin verir.
-                TextButton(onClick = {
-                    BcApi.clearLocalUser(context)
-                    status = "⚠️ WMS girişi atlandı — BC hesabıyla devam ediliyor."
-                    onConnected(true)
-                }) { Text("Yönetici: WMS girişini atla", fontSize = 11.sp, color = Color.Gray) }
+                // Not: yönetici girişi artık kullanıcı listesinin başındaki
+                // "Yönetici (demo sürüm)" kartından yapılıyor.
             }
 
             // Operatör birden çok şirkete erişebiliyorsa hangisinde çalışacağını
