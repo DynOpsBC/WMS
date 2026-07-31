@@ -40,8 +40,11 @@ page 72356 "DOPSWHS Picking Order Card"
                 {
                     ApplicationArea = All;
                     Caption = 'Atanan Toplayıcı';
-                    Editable = Rec.Status = Rec.Status::Open;
-                    ToolTip = 'Boş bırakırsanız toplayıcı terminalden "Üzerime Al" ile kendisi alabilir.';
+                    Editable = false;
+                    ToolTip = 'Toplamayı üstlenen WMS operatörü. Değiştirmek için "Toplayıcı Ata" aksiyonunu kullanın. Boş bırakırsanız toplayıcı terminalden "Üzerime Al" ile kendisi alabilir.';
+                    // Salt-okunur: alanın TableRelation'ı Warehouse Employee ve WMS
+                    // operatörü orada kayıtlı olmayabilir → elle yazınca Validate
+                    // atamayı sessizce geri alıyordu. Atama aksiyondan yapılır.
                 }
                 field(Status; Rec.Status) { ApplicationArea = All; Caption = 'Durum'; StyleExpr = StatusStyle; }
                 field("Entry No."; Rec."Entry No.") { ApplicationArea = All; Caption = 'Kayıt No.'; Editable = false; }
@@ -168,6 +171,38 @@ page 72356 "DOPSWHS Picking Order Card"
                     PickNo := PickingOrderMgmt.PostPickingOrder(Rec);
                     Message('Warehouse Pick %1 created. It is now visible on the handheld.', PickNo);
                     CurrPage.Update(false);
+                end;
+            }
+            action(AssignPicker)
+            {
+                Caption = 'Toplayıcı Ata';
+                ApplicationArea = All;
+                Image = AssignItemCharge;
+                Promoted = true;
+                PromotedCategory = Category4;
+                Enabled = Rec.Status <> Rec.Status::Completed;
+                ToolTip = 'Bu grubu bir WMS operatörüne atar. Pick oluşturulmuşsa toplama belgesine de yazılır; operatör terminalde "bana atanan" listesinde görür.';
+
+                trigger OnAction()
+                var
+                    LocalUser: Record "DOPSWHS Local User";
+                    PickHeader: Record "Warehouse Activity Header";
+                    PickMgmt: Codeunit "DOPSWHS Pick Mgmt";
+                begin
+                    LocalUser.SetRange(Disabled, false);
+                    if Page.RunModal(Page::"DOPSWHS Local User List", LocalUser) <> Action::LookupOK then
+                        exit;
+
+                    Rec."Assigned User ID" := LocalUser.Username;
+                    Rec.Modify(true);
+
+                    // Pick zaten oluşmuşsa toplama belgesine de yaz.
+                    if Rec."Warehouse Pick No." <> '' then
+                        if PickHeader.Get(PickHeader.Type::Pick, Rec."Warehouse Pick No.") then
+                            PickMgmt.ReassignPick(PickHeader, LocalUser.Username, 'Toplanacak Siparişler kartından atandı');
+
+                    CurrPage.Update(false);
+                    Message('Grup %1 kullanıcısına atandı.', LocalUser."Display Name");
                 end;
             }
             action(OpenWarehousePick)

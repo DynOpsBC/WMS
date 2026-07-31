@@ -9,7 +9,33 @@ codeunit 72046 "DOPSWHS Pick Mgmt"
         // doğrulamasını tetiklemeden doğrudan yaz ki atama kalıcı olsun.
         Pick."Assigned User ID" := CopyStr(UserId(), 1, MaxStrLen(Pick."Assigned User ID"));
         Pick.Modify(true);
+        SyncPickingOrderAssignment(Pick."No.", Pick."Assigned User ID");
         Log('Pick.AssignToMe', Pick."No.");
+    end;
+
+    /// <summary>
+    /// Pick'teki atamayı, o pick'i doğuran "Toplanacak Siparişler" (Picking Order)
+    /// kaydına da yazar. Terminalden "Üzerime Al" yapan operatör masadaki
+    /// listede de görünsün diye — aksi halde bağ tek yönlü kalıyor ve sorumlu
+    /// pick'i kimin aldığını Toplanacak Siparişler ekranından göremiyordu.
+    /// </summary>
+    local procedure SyncPickingOrderAssignment(PickNo: Code[20]; NewUserId: Code[50])
+    var
+        PickingHeader: Record "DOPSWHS Picking Order Header";
+    begin
+        if PickNo = '' then
+            exit;
+        PickingHeader.SetRange("Warehouse Pick No.", PickNo);
+        if not PickingHeader.FindSet(true) then
+            exit;
+        repeat
+            if PickingHeader."Assigned User ID" <> NewUserId then begin
+                // Doğrudan yaz: alanın TableRelation'ı Warehouse Employee ve
+                // WMS operatörü orada kayıtlı olmayabilir (Validate reddederdi).
+                PickingHeader."Assigned User ID" := NewUserId;
+                PickingHeader.Modify(true);
+            end;
+        until PickingHeader.Next() = 0;
     end;
 
     procedure StartShippingLP(var Pick: Record "Warehouse Activity Header"; TemplateCode: Code[20]): Code[20]
@@ -235,6 +261,9 @@ codeunit 72046 "DOPSWHS Pick Mgmt"
         History.DateTime := CurrentDateTime();
         History.Reason := Reason;
         History.Insert(true);
+
+        // Masadaki "Toplanacak Siparişler" listesi de aynı operatörü göstersin.
+        SyncPickingOrderAssignment(Pick."No.", Pick."Assigned User ID");
 
         WebhookMgmt.OnPickReassigned(Pick."No.", FromUserId, NewUserId);
         Log('Pick.Reassign', Pick."No.");

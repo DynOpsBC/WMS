@@ -175,9 +175,13 @@ codeunit 72338 "DOPSWHS Multi Order Pick"
         PickNo := WhseActivityLine."No.";
 
         // Emniyet: Initialize ataması sürüme göre değişebilir — başlıkta garanti et.
+        // "Assigned User ID" alanının TableRelation'ı Warehouse Employee'dir;
+        // WMS operatörü (yerel WMS kullanıcısı) her zaman Warehouse Employee
+        // değildir ve Validate atamayı sessizce geri alır. Bu yüzden alan
+        // doğrudan yazılır (aynı yaklaşım PickMgmt.ReassignPick'te de var).
         if (AssignToUserId <> '') and PickHeader.Get(PickHeader.Type::Pick, PickNo) then
             if PickHeader."Assigned User ID" <> AssignToUserId then begin
-                PickHeader.Validate("Assigned User ID", AssignToUserId);
+                PickHeader."Assigned User ID" := CopyStr(AssignToUserId, 1, MaxStrLen(PickHeader."Assigned User ID"));
                 PickHeader.Modify(true);
             end;
         exit(PickNo);
