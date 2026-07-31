@@ -152,6 +152,8 @@ private fun ReceiveDocument(no: String, onBack: () -> Unit) {
     var status by remember { mutableStateOf("") }
     var busy by remember { mutableStateOf(false) }
     var activeLp by remember { mutableStateOf<String?>(null) }
+    // İki adımlı kabul: önce "Hazır", sonra "Kaydet (post)".
+    var readyMarked by remember(no) { mutableStateOf(false) }
 
     var showScan by remember { mutableStateOf(false) }
     var showQty by remember { mutableStateOf(false) }
@@ -295,15 +297,37 @@ private fun ReceiveDocument(no: String, onBack: () -> Unit) {
         }
         BottomActionBar {
             val canPost = com.dynops.bcwms.lib.ActionGuards.hasQuantity(lines, field = "qtyToReceive")
-            Button(
-                onClick = { action("post", """{"print":false,"invoice":false}""", "Mal kabul kaydedildi") },
-                enabled = !busy && canPost,
-                modifier = Modifier.fillMaxWidth().height(54.dp),
-            ) {
-                Text(
-                    if (canPost) "✅ Kabul Et" else "Önce satırlara miktar girin",
-                    fontWeight = FontWeight.Bold,
-                )
+            // İKİ ADIM: operatör miktarları girer ve "Hazır" der (BC'ye postalanmaz,
+            // belge hazır durumda bekler); postalamayı sorumlu BC'den ya da
+            // buradaki ikinci butondan yapar. Eskiden tek dokunuşla anında
+            // postalanıyordu, geri alınamıyordu.
+            if (!readyMarked) {
+                Button(
+                    onClick = {
+                        readyMarked = true
+                        status = "Mal kabul HAZIR — sorumlu onaylayınca kaydedilecek."
+                    },
+                    enabled = !busy && canPost,
+                    modifier = Modifier.fillMaxWidth().height(54.dp),
+                ) {
+                    Text(
+                        if (canPost) "Hazır olarak işaretle" else "Önce satırlara miktar girin",
+                        fontWeight = FontWeight.Bold,
+                    )
+                }
+            } else {
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedButton(
+                        onClick = { readyMarked = false; status = "" },
+                        enabled = !busy,
+                        modifier = Modifier.weight(1f).height(54.dp),
+                    ) { Text("Geri al") }
+                    Button(
+                        onClick = { action("post", """{"print":false,"invoice":false}""", "Mal kabul kaydedildi") },
+                        enabled = !busy && canPost,
+                        modifier = Modifier.weight(1.4f).height(54.dp),
+                    ) { Text("Kaydet (post)", fontWeight = FontWeight.Bold) }
+                }
             }
         }
     }
@@ -512,6 +536,8 @@ private fun ReceivePurchaseOrder(no: String, onBack: () -> Unit) {
     var qtyLine by remember { mutableStateOf<JSONObject?>(null) }
     var showScan by remember { mutableStateOf(false) }
     var scanFilter by remember { mutableStateOf("") }
+    // İki adımlı kabul: önce "Hazır", sonra kayıt.
+    var readyMarked by remember(no) { mutableStateOf(false) }
     // Ambar Mal Kabul'deki gibi konfigüre edilebilir kolonlar (kendi tercihi:
     // PO satırlarının alan adları farklı olduğu için ayrı kolon seti + ayrı anahtar).
     var columns by remember { mutableStateOf(ColumnPrefs.get(context, "purchaseOrder", GridColumns.purchaseOrder)) }
@@ -600,20 +626,35 @@ private fun ReceivePurchaseOrder(no: String, onBack: () -> Unit) {
             OutlinedButton(onClick = { showScan = true }, enabled = !busy && directAllowed, modifier = Modifier.weight(1f)) { Text("📷 Ürün Tara") }
         }
         BottomActionBar {
-            Button(
-                onClick = {
-                    scope.launch {
-                        busy = true; status = "Mal kabul kaydı..."
-                        val body = JSONObject().apply { put("invoice", invoiceToo) }.toString()
-                        val r = BcApi.boundAction(context, "purchaseSources", no, "receive", body)
-                        busy = false
-                        status = if (r.ok) "TAMAM: PO mal kabul kaydedildi (HTTP ${r.httpCode})"
-                            else "HATA: ${BcApi.errorMessage(r.body)} (HTTP ${r.httpCode})"
-                        if (r.ok) reload()
-                    }
-                },
-                enabled = !busy && directAllowed, modifier = Modifier.fillMaxWidth().height(54.dp)
-            ) { Text(if (invoiceToo) "✅ Kabul Et ve Faturala" else "✅ Kabul Et", fontWeight = FontWeight.Bold) }
+            // İki adım (bkz. Ambar Mal Kabul): önce "Hazır", sonra kayıt.
+            if (!readyMarked) {
+                Button(
+                    onClick = { readyMarked = true; status = "Mal kabul HAZIR — onaylayınca kaydedilecek." },
+                    enabled = !busy && directAllowed,
+                    modifier = Modifier.fillMaxWidth().height(54.dp),
+                ) { Text("Hazır olarak işaretle", fontWeight = FontWeight.Bold) }
+            } else Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedButton(
+                    onClick = { readyMarked = false; status = "" },
+                    enabled = !busy,
+                    modifier = Modifier.weight(1f).height(54.dp),
+                ) { Text("Geri al") }
+                Button(
+                    onClick = {
+                        scope.launch {
+                            busy = true; status = "Mal kabul kaydı..."
+                            val body = JSONObject().apply { put("invoice", invoiceToo) }.toString()
+                            val r = BcApi.boundAction(context, "purchaseSources", no, "receive", body)
+                            busy = false
+                            status = if (r.ok) "TAMAM: PO mal kabul kaydedildi (HTTP ${r.httpCode})"
+                                else "HATA: ${BcApi.errorMessage(r.body)} (HTTP ${r.httpCode})"
+                            if (r.ok) { readyMarked = false; reload() }
+                        }
+                    },
+                    enabled = !busy && directAllowed,
+                    modifier = Modifier.weight(1.4f).height(54.dp),
+                ) { Text(if (invoiceToo) "Kaydet ve Faturala" else "Kaydet (post)", fontWeight = FontWeight.Bold) }
+            }
         }
     }
 

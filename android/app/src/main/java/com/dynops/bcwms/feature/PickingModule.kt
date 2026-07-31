@@ -103,7 +103,9 @@ private fun ActivePicksTab() {
     var rows by remember { mutableStateOf<List<JSONObject>>(emptyList()) }
     var status by remember { mutableStateOf("") }
     var loading by remember { mutableStateOf(false) }
-    var showAll by remember { mutableStateOf(true) }
+    // Varsayılan "Bana atanan": toplayıcı ekranı açar açmaz kendi işini görsün.
+    // (Bu filtre atanmamışları da gösterir — üstüne alabilsin diye.)
+    var showAll by remember { mutableStateOf(false) }
     var search by remember { mutableStateOf("") }
     var pendingOnly by remember { mutableStateOf(false) }
 

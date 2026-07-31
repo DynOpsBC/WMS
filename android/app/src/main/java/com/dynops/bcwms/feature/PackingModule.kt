@@ -101,7 +101,9 @@ fun PackingModule() {
         pick.contains(search, ignoreCase = true) ||
             ords.any {
                 it.optString("salesOrderNo").contains(search, ignoreCase = true) ||
-                    it.optString("customerName").contains(search, ignoreCase = true)
+                    it.optString("customerName").contains(search, ignoreCase = true) ||
+                    // Sepet (LP) ile de bulunabilsin.
+                    it.optString("mainLpNo").contains(search, ignoreCase = true)
             }
     }
 
@@ -112,12 +114,29 @@ fun PackingModule() {
             OutlinedButton(onClick = { load() }, enabled = !loading) { Text(if (loading) "…" else "🔄") }
         }
         Spacer(Modifier.height(8.dp))
-        OutlinedTextField(
+        // Sepet/LP, pick ya da sipariş okutulunca DOĞRUDAN o belgeye gir —
+        // paketleyici listede aramakla uğraşmasın.
+        ScanField(
+            label = "📷 Sepet / pick / sipariş okut",
             value = search,
             onValueChange = { search = it },
-            label = { Text("Pick, sipariş veya müşteri ara") },
-            singleLine = true,
             modifier = Modifier.fillMaxWidth(),
+            enabled = !loading,
+            onScanned = { raw ->
+                val v = BarcodeIntentResolver.resolve(raw).value.trim()
+                search = v
+                val hit = byPick.entries.firstOrNull { (pick, ords) ->
+                    pick.equals(v, ignoreCase = true) ||
+                        ords.any {
+                            it.optString("mainLpNo").equals(v, ignoreCase = true) ||
+                                it.optString("salesOrderNo").equals(v, ignoreCase = true)
+                        }
+                }
+                if (hit != null) {
+                    search = ""
+                    selectedPick = hit.key
+                } else status = "⚠️ '$v' paketleme kuyruğunda bulunamadı"
+            },
         )
         Spacer(Modifier.height(6.dp))
         StatusText(status)
@@ -147,6 +166,19 @@ fun PackingModule() {
                                     if (ords.size > 3) " …" else "",
                                 fontSize = 11.sp, color = Color.Gray,
                             )
+                            // Ürünlerin toplandığı sepet (LP) — paketleyici
+                            // sepeti okutarak da bu belgeye girebilir.
+                            val lp = ords.firstNotNullOfOrNull {
+                                it.optString("mainLpNo").takeIf { s -> s.isNotBlank() }
+                            }
+                            if (!lp.isNullOrBlank()) {
+                                Text(
+                                    "📦 Sepet: $lp",
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = Color(0xFF4527A0),
+                                )
+                            }
                             // Paketlemeyi kim üstlendi (varsa).
                             val packer = ords.firstNotNullOfOrNull {
                                 it.optString("startedByUser").takeIf { s -> s.isNotBlank() }
