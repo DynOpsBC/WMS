@@ -23,6 +23,9 @@ page 72092 "DOPSWHS Pick API"
                 field(pickMode; Rec."DOPSWHS Pick Mode") { Caption = 'pickMode'; }
                 // ELOG: araç bilgisini sorumlu masadan girer; terminal salt-okunur gösterir.
                 field(vehicleNo; Rec."DOPSWHS Vehicle No.") { Caption = 'vehicleNo'; Editable = false; }
+                // Ana sepet: terminal toplamaya başlarken PATCH'ler; ekrandan
+                // çıkıp girince kaybolmasın diye kalıcı. Paketleme de okur.
+                field(mainLpNo; Rec."DOPSWHS Main LP No.") { Caption = 'mainLpNo'; }
                 field(sourceNo; SourceNo) { Caption = 'sourceNo'; }
                 // TODO Sprint H+ post-deploy: bind to activity status if exposed by the target BC app.
                 field(status; StatusText) { Caption = 'status'; }

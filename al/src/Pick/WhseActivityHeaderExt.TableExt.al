@@ -16,5 +16,16 @@ tableextension 72429 "DOPSWHS Whse Activity Hdr Ext" extends "Warehouse Activity
             Caption = 'Vehicle No. (WMS)';
             DataClassification = CustomerContent;
         }
+        // ELOG ana sepet: toplayıcı pick'e başlarken okuttuğu sepet/LP.
+        // Terminalde yalnız ekran state'inde tutuluyordu; ekrandan çıkıp
+        // girince kayboluyordu. Burada kalıcı: paketleme "ürünler hangi
+        // sepette" bilgisini buradan okur.
+        field(72402; "DOPSWHS Main LP No."; Code[20])
+        {
+            Caption = 'Ana Sepet (LP)';
+            DataClassification = CustomerContent;
+            TableRelation = "DOPSWHS LP Header";
+            ValidateTableRelation = false;   // sepet barkodu kayıtlı LP olmayabilir
+        }
     }
 }

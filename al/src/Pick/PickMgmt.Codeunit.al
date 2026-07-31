@@ -224,6 +224,9 @@ codeunit 72046 "DOPSWHS Pick Mgmt"
             PackingOrder."Sales Order No." := PickLine."Source No.";
         end;
         PackingOrder."Pick No." := Pick."No.";
+        // Toplamada kullanılan ana sepeti paketlemeye taşı: paketleyici
+        // "ürünler hangi sepette" bilgisini terminalde görsün.
+        PackingOrder."Main LP No." := Pick."DOPSWHS Main LP No.";
         PackingOrder."Warehouse Shipment No." := PickLine."Whse. Document No.";
         PackingOrder."Location Code" := Pick."Location Code";
         PackingOrder."Customer No." := SalesHeader."Sell-to Customer No.";

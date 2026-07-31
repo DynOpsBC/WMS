@@ -17,6 +17,9 @@ table 72359 "DOPSWHS Packing Order"
         field(60; "Session Entry No."; Integer) { Caption = 'Session Entry No.'; Editable = false; DataClassification = CustomerContent; }
         field(70; "Ready DateTime"; DateTime) { Caption = 'Ready DateTime'; Editable = false; DataClassification = CustomerContent; }
         field(80; "Started By User"; Code[50]) { Caption = 'Started By User'; Editable = false; DataClassification = EndUserIdentifiableInformation; }
+        // Toplamada kullanılan ana sepet (LP). Paketlemede operatöre "ürünler
+        // hangi sepette" bilgisini vermek için pick'ten taşınır.
+        field(85; "Main LP No."; Code[20]) { Caption = 'Ana Sepet (LP)'; Editable = false; DataClassification = CustomerContent; }
         field(81; "Started DateTime"; DateTime) { Caption = 'Started DateTime'; Editable = false; DataClassification = CustomerContent; }
         field(90; "Completed DateTime"; DateTime) { Caption = 'Completed DateTime'; Editable = false; DataClassification = CustomerContent; }
     }

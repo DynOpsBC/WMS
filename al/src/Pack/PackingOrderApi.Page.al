@@ -21,6 +21,8 @@ page 72360 "DOPSWHS Packing Order API"
             {
                 field(salesOrderNo; Rec."Sales Order No.") { Caption = 'salesOrderNo'; }
                 field(pickNo; Rec."Pick No.") { Caption = 'pickNo'; }
+                // Toplamada kullanılan sepet — paketleyici ürünleri nereden alacağını görür.
+                field(mainLpNo; Rec."Main LP No.") { Caption = 'mainLpNo'; }
                 field(warehouseShipmentNo; Rec."Warehouse Shipment No.") { Caption = 'warehouseShipmentNo'; }
                 field(locationCode; Rec."Location Code") { Caption = 'locationCode'; }
                 field(customerNo; Rec."Customer No.") { Caption = 'customerNo'; }

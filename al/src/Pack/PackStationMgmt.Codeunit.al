@@ -682,8 +682,16 @@ codeunit 72334 "DOPSWHS Pack Station Mgmt"
         end;
 
         // Basit lokasyon: paketlenen miktarları satış satırlarına yazıp doğrudan sevk+fatura.
+        // Sipariş bulunamazsa (silinmiş ya da başka yoldan kaydedilmiş) ham BC
+        // hatası yerine ne yapılacağını söyleyen mesaj ver — eskiden
+        // "The Sales Header does not exist..." çıkıp terminal o siparişte
+        // kilitleniyordu, operatör sonraki siparişe geçemiyordu.
         SetSalesQtyToShipFromPacked(PackSession."Entry No.", OrderNo);
-        SalesHeader.Get(SalesHeader."Document Type"::Order, OrderNo);
+        if not SalesHeader.Get(SalesHeader."Document Type"::Order, OrderNo) then
+            Error(
+                'Satış siparişi %1 artık açık değil (silinmiş ya da başka bir yoldan kaydedilmiş olabilir). ' +
+                'Paketleme kaydı BC''de "Paketleme Siparişleri" sayfasından kapatılmalı.',
+                OrderNo);
         ShipmentMgmt.PostSalesOrderShipAndInvoice(SalesHeader);
     end;
 

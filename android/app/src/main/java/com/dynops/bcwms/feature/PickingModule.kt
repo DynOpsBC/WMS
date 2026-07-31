@@ -446,6 +446,8 @@ private fun GuidedPickDocument(no: String, onBack: () -> Unit) {
     // popup'ı aç (ör. BN.0353 ×4, 2 siparişte 2+2) — 4 kere okutma yok, 1 kez okut,
     // "istenen 4" görüp gir → satırlara dağıt. qtyGroup dolunca dialog açılır.
     var qtyGroup by remember { mutableStateOf<LineGroup?>(null) }
+    // Tek satırlı ürün okutulunca çıkan onay kartı (grup + okutulan lot).
+    var confirmGroup by remember { mutableStateOf<Pair<LineGroup, String>?>(null) }
 
     fun isComplete(line: JSONObject): Boolean {
         val required = line.optDouble("quantity", 0.0)
@@ -459,7 +461,13 @@ private fun GuidedPickDocument(no: String, onBack: () -> Unit) {
             val headerJob = async { BcApi.get(context, "picks('$no')") }
             val linesJob = async { BcApi.get(context, "pickLines?\$filter=no eq '$no'&\$top=500") }
             val h = headerJob.await()
-            if (h.ok) header = JSONObject(h.body)
+            if (h.ok) {
+                header = JSONObject(h.body)
+                // Kayıtlı ana sepeti geri yükle — ekrandan çıkıp girince
+                // sepetin sıfırlanmasının önüne geçer.
+                val saved = header?.optString("mainLpNo").orEmpty()
+                if (saved.isNotBlank() && mainLp.isBlank()) mainLp = saved
+            }
             val l = linesJob.await()
             lines = if (l.ok) BcApi.parseValueArray(l.body) else emptyList()
         }
@@ -492,6 +500,19 @@ private fun GuidedPickDocument(no: String, onBack: () -> Unit) {
 
     // ELOG ana sepet: okutulan LP'yi bu pick'in toplama kabı yap. Boş okutulursa
     // sistem otomatik bir shipping LP üretir (startShippingLP). LP header'a bağlanır.
+    /** Ana sepeti BC'ye yaz (kalıcı olsun; ekrandan çıkıp girince kaybolmasın). */
+    fun persistMainLp(lp: String) {
+        if (lp.isBlank()) return
+        scope.launch {
+            val body = JSONObject().apply { put("mainLpNo", lp) }.toString()
+            val r = BcApi.patch(context, "picks('$no')", body)
+            // Alan henüz publish edilmemişse (400/404) sessiz geç: sepet yine de
+            // ekranda çalışır, sadece kalıcı olmaz.
+            if (!r.ok && r.httpCode !in listOf(400, 404))
+                status = "⚠️ Sepet kaydedilemedi: ${BcApi.errorMessage(r.body)}"
+        }
+    }
+
     fun startMainLp(scannedLp: String) {
         val lp = com.dynops.bcwms.scanner.BarcodeIntentResolver.resolve(scannedLp).value.trim()
         if (lp.isNotBlank()) {
@@ -499,6 +520,7 @@ private fun GuidedPickDocument(no: String, onBack: () -> Unit) {
             mainLp = lp
             lpInput = ""
             status = "📦 Ana sepet: $lp — toplamaya başlayın"
+            persistMainLp(lp)
             return
         }
         // Boş okutma → sistem LP üretsin. İyimser akış: kapıyı hemen aç,
@@ -513,6 +535,7 @@ private fun GuidedPickDocument(no: String, onBack: () -> Unit) {
             if (r.ok) {
                 mainLp = BcApi.scalarValue(r.body)
                 status = "📦 Ana sepet: $mainLp"
+                persistMainLp(mainLp)
             } else {
                 mainLp = ""
                 status = "HATA: ${BcApi.errorMessage(r.body)} (HTTP ${r.httpCode})"
@@ -607,8 +630,12 @@ private fun GuidedPickDocument(no: String, onBack: () -> Unit) {
             .firstOrNull { it.itemNo.equals(itemNo, ignoreCase = true) }
         when {
             group == null -> status = "⚠️ Bu rafta açık $itemNo satırı yok"
-            group.count > 1 -> qtyGroup = group   // çok satır → miktar dialog
-            else -> completeLine(group.lines.first(), lotNo)
+            // Çok satır → miktar dağıtım dialogu (operatör toplamı girer).
+            group.count > 1 -> qtyGroup = group
+            // Tek satır → ONAY kartı: kaç adet alınacağı büyük puntoyla gösterilir.
+            // Eskiden sessizce tamamlanıyordu, operatör sepete kaç koyacağını
+            // ekranda göremiyordu.
+            else -> confirmGroup = group to lotNo
         }
     }
 
@@ -651,7 +678,7 @@ private fun GuidedPickDocument(no: String, onBack: () -> Unit) {
     DocumentScanHandler(
         // `busy` artık okutmayı engellemiyor: satır tamamlama iyimser çalışıyor,
         // operatör arka plandaki BC yazımını beklemeden sonraki ürüne geçebilir.
-        enabled = !notAssigned && !allCollected && !needsMainLp && qtyGroup == null,
+        enabled = !notAssigned && !allCollected && !needsMainLp && qtyGroup == null && confirmGroup == null,
         lines = if (binVerified) activeLines.filterNot(::isComplete) else emptyList(),
         // Tek eşleşme de olsa handleItemScan'e ver — o ürünün rafta çok satırı varsa
         // miktar popup'ı açar (BN.0353 ×4 = 2 sipariş → 1 okut, 4 gir).
@@ -830,7 +857,9 @@ private fun GuidedPickDocument(no: String, onBack: () -> Unit) {
                         value = scanInput,
                         onValueChange = { scanInput = it },
                         modifier = Modifier.fillMaxWidth(),
-                        enabled = !busy,
+                        // Onay/miktar kartı açıkken okutma kapalı: arkadan gelen
+                        // ikinci okutma açık kartı sessizce ezmesin.
+                        enabled = qtyGroup == null && confirmGroup == null,
                         onScanned = { raw ->
                             scanInput = ""
                             val resolved = com.dynops.bcwms.scanner.BarcodeIntentResolver.resolve(raw)
@@ -931,6 +960,92 @@ private fun GuidedPickDocument(no: String, onBack: () -> Unit) {
                 completeGroup(qg, res.quantity, res.lotNo)
             },
         )
+    }
+
+    // Tek satırlı ürün okutuldu → sepete KAÇ ADET koyacağını göster, onaylat.
+    val cg = confirmGroup
+    if (cg != null) {
+        PickConfirmSheet(
+            group = cg.first,
+            onDismiss = { confirmGroup = null },
+            onConfirm = {
+                val g = cg.first
+                val lot = cg.second
+                confirmGroup = null
+                completeLine(g.lines.first(), lot)
+            },
+        )
+    }
+}
+
+/**
+ * Okutulan ürün için onay kartı: sepete kaç adet konacağı büyük puntoyla,
+ * hangi siparişe gittiği ve raf bilgisiyle birlikte. Operatör miktarı görmeden
+ * satır kapanmasın diye eklendi.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun PickConfirmSheet(
+    group: LineGroup,
+    onDismiss: () -> Unit,
+    onConfirm: () -> Unit,
+) {
+    val line = group.lines.first()
+    val qty = group.totalOutstanding.takeIf { it > 0 } ?: line.optDouble("quantity", 1.0)
+    val uom = line.optString("unitOfMeasureCode")
+    val bin = firstValue(line, "binCode")
+    val orderNo = firstValue(line, "sourceNo")
+    val lot = line.optString("lotNo")
+
+    com.dynops.bcwms.ui.SheetScaffold(onDismiss = onDismiss) {
+        Text(group.itemNo, fontWeight = FontWeight.Bold, fontSize = 20.sp)
+        val desc = line.optString("description")
+        if (desc.isNotBlank())
+            Text(desc, fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Spacer(Modifier.height(16.dp))
+
+        // Asıl bilgi: sepete kaç adet.
+        Card(
+            colors = CardDefaults.cardColors(containerColor = PickAccent.copy(alpha = 0.12f)),
+            shape = RoundedCornerShape(14.dp),
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Column(
+                Modifier.fillMaxWidth().padding(vertical = 18.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+                Text("SEPETE KOY", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = PickAccent)
+                Spacer(Modifier.height(6.dp))
+                Text(
+                    pickQty(qty) + (if (uom.isNotBlank()) " $uom" else ""),
+                    fontSize = 40.sp,
+                    fontWeight = FontWeight.Black,
+                    color = PickAccent,
+                )
+            }
+        }
+        Spacer(Modifier.height(14.dp))
+
+        if (bin.isNotBlank()) ConfirmRow("Raf", bin)
+        if (orderNo.isNotBlank()) ConfirmRow("Sipariş", orderNo)
+        if (lot.isNotBlank()) ConfirmRow("Lot", lot)
+
+        Spacer(Modifier.height(20.dp))
+        Button(
+            onClick = onConfirm,
+            modifier = Modifier.fillMaxWidth().height(54.dp),
+        ) { Text("Aldım, devam", fontWeight = FontWeight.Bold, fontSize = 16.sp) }
+        Spacer(Modifier.height(8.dp))
+        TextButton(onClick = onDismiss, modifier = Modifier.fillMaxWidth()) { Text("Vazgeç") }
+        Spacer(Modifier.height(8.dp))
+    }
+}
+
+@Composable
+private fun ConfirmRow(label: String, value: String) {
+    Row(Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
+        Text(label, fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.width(80.dp))
+        Text(value, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
     }
 }
 

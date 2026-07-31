@@ -188,6 +188,11 @@ private fun PickPackingDocument(
     var itemInput by remember(pickNo) { mutableStateOf("") }
     var boxInput by remember(pickNo) { mutableStateOf("") }
     var showBoxScan by remember(pickNo) { mutableStateOf(false) }
+    // BC'de artık açık olmayan (silinmiş/kaydedilmiş) siparişler. Bunlar asla
+    // kapanamaz; kutu adımında ekranı kilitlememeleri için atlanır.
+    var blockedOrders by remember(pickNo) { mutableStateOf<Set<String>>(emptySet()) }
+    // Toplamada kullanılan ana sepet — paketleyici ürünleri nereden alacağını görsün.
+    var mainLp by remember(pickNo) { mutableStateOf("") }
     var pickDone by remember(pickNo) { mutableStateOf(false) }
     // Kullanıcının elle açtığı (katlanmış) siparişler. Aktif sipariş her zaman açık.
     var expandedOrders by remember(pickNo) { mutableStateOf<Set<String>>(emptySet()) }
@@ -203,9 +208,14 @@ private fun PickPackingDocument(
     suspend fun loadCustomers() {
         val r = BcApi.get(context, "packingOrders?\$filter=pickNo eq '$pickNo'&\$top=500")
         if (r.ok) {
-            customerByOrder = BcApi.parseValueArray(r.body).associate {
+            val rows = BcApi.parseValueArray(r.body)
+            customerByOrder = rows.associate {
                 it.optString("salesOrderNo") to it.optString("customerName")
             }
+            // Ana sepet pick bazında aynı — ilk dolu değeri al.
+            mainLp = rows.firstNotNullOfOrNull {
+                it.optString("mainLpNo").takeIf { s -> s.isNotBlank() }
+            }.orEmpty()
         }
     }
 
@@ -334,9 +344,23 @@ private fun PickPackingDocument(
             val r = BcApi.boundAction(context, "packOps", "", "setBoxForOrder", body)
             if (r.ok) {
                 boxInput = ""; showBoxScan = false
+                blockedOrders = blockedOrders - orderNo
                 reloadLines()
                 status = "🧾 $orderNo kolilendi · sevk+fatura+fiş kesildi"
-            } else status = "❌ ${BcApi.errorMessage(r.body)} (HTTP ${r.httpCode})"
+            } else {
+                val msg = BcApi.errorMessage(r.body)
+                // Satış siparişi yoksa/kapalıysa bu sipariş ASLA kapanmaz;
+                // ekran kutu adımında kilitleniyordu. Siparişi "engelli" işaretle,
+                // operatör atlayıp sonraki siparişe geçebilsin.
+                val gone = r.httpCode == 404 ||
+                    msg.contains("Sales Header does not exist", ignoreCase = true) ||
+                    msg.contains("artık açık değil", ignoreCase = true)
+                if (gone) {
+                    blockedOrders = blockedOrders + orderNo
+                    boxInput = ""; showBoxScan = false
+                    status = "⚠️ $orderNo BC'de açık değil — atlandı. Sorumluya bildirin."
+                } else status = "❌ $msg (HTTP ${r.httpCode})"
+            }
             busy = false
         }
     }
@@ -352,8 +376,11 @@ private fun PickPackingDocument(
     // müşteri + paketlenen/toplam. Bekleyen satır pembe, tamamlanan yeşil.
     val byOrder = lines.groupBy { it.optString("sourceOrderNo") }
     // Kutu bekleyen siparişler: tüm satırları paketlenmiş ama henüz kutusuz.
-    val boxNeeded = byOrder.filter { (_, ords) ->
-        ords.isNotEmpty() &&
+    val boxNeeded = byOrder.filter { (orderNo, ords) ->
+        // BC'de açık olmayan sipariş kapanamaz → kutu adımına düşürme,
+        // yoksa ekran o siparişte kilitleniyor.
+        orderNo !in blockedOrders &&
+            ords.isNotEmpty() &&
             ords.all { it.optDouble("qtyPacked") >= it.optDouble("qtyExpected") } &&
             ords.any { it.optString("boxLpNo").isBlank() }
     }.keys.toList()
@@ -392,6 +419,23 @@ private fun PickPackingDocument(
                         color = Color(0xFF2E7D32),
                     )
                     Text("Paketlenen: ${packQty(totalPacked)} / ${packQty(totalExpected)} ürün", fontSize = 12.sp)
+                    // Ürünler hangi sepette toplandı — paketleyici nereden
+                    // alacağını bilsin (toplamadaki ana sepet pick'ten taşınır).
+                    if (mainLp.isNotBlank()) {
+                        Spacer(Modifier.height(6.dp))
+                        Surface(
+                            color = Color(0xFF6C5CE7).copy(alpha = 0.12f),
+                            shape = RoundedCornerShape(8.dp),
+                        ) {
+                            Text(
+                                "📦 Bu sepete toplandı: $mainLp",
+                                Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = Color(0xFF4527A0),
+                            )
+                        }
+                    }
                 }
             }
             Spacer(Modifier.height(8.dp))
@@ -450,6 +494,11 @@ private fun PickPackingDocument(
                             onUseCarton = { scanBox(boxOrderNo, "") },
                             onScanBox = { scanBox(boxOrderNo, it) },
                             onToggleScan = { showBoxScan = it },
+                            onSkip = {
+                                blockedOrders = blockedOrders + boxOrderNo
+                                boxInput = ""; showBoxScan = false
+                                status = "⏭ $boxOrderNo atlandı — sorumluya bildirin."
+                            },
                         )
                     }
                 }
@@ -555,6 +604,7 @@ private fun BoxForOrderCard(
     onUseCarton: () -> Unit,
     onScanBox: (String) -> Unit,
     onToggleScan: (Boolean) -> Unit,
+    onSkip: () -> Unit = {},
 ) {
     Card(
         colors = CardDefaults.cardColors(containerColor = Color.White),
@@ -617,6 +667,12 @@ private fun BoxForOrderCard(
                 TextButton(onClick = { onToggleScan(false) }, enabled = !busy, modifier = Modifier.fillMaxWidth()) {
                     Text("‹ Vazgeç, karton üretimine dön", fontSize = 12.sp)
                 }
+            }
+            // Kaçış yolu: sipariş BC'de kapanamıyorsa (silinmiş/kaydedilmiş)
+            // operatör burada kilitlenmesin, sonraki siparişe geçebilsin.
+            Spacer(Modifier.height(4.dp))
+            TextButton(onClick = onSkip, enabled = !busy, modifier = Modifier.fillMaxWidth()) {
+                Text("Bu siparişi atla (kapatılamıyor)", fontSize = 11.sp, color = Color.Gray)
             }
         }
     }
