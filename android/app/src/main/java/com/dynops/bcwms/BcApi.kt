@@ -160,8 +160,18 @@ object BcApi {
      * hesaplar ve saklar. Home ekranı ilk açılışta çağırır. Zaten liste doluysa
      * ya da token yoksa no-op. Sonuç doluysa true döner (UI tazelemek için).
      */
-    suspend fun refreshAccessibleCompaniesIfEmpty(context: Context): Boolean = withContext(Dispatchers.IO) {
-        if (getAccessibleCompanies(context).isNotEmpty()) return@withContext false
+    suspend fun refreshAccessibleCompaniesIfEmpty(context: Context): Boolean {
+        if (getAccessibleCompanies(context).isNotEmpty()) return false
+        return rediscoverAccessibleCompanies(context)
+    }
+
+    /**
+     * Erişilebilir şirketleri KOŞULSUZ yeniden keşfeder ve kaydeder.
+     * Şirket değiştirici her açıldığında çağrılır: kayıtlı liste eski olabilir
+     * (yeni şirket eklenmiş ya da ilk keşif tek şirketle sonuçlanmış olabilir).
+     * Dönüş: birden çok şirkete erişim var mı.
+     */
+    suspend fun rediscoverAccessibleCompanies(context: Context): Boolean = withContext(Dispatchers.IO) {
         val token = getToken(context)
         if (token.isBlank()) return@withContext false
         val tenant = getTenant(context)
@@ -171,8 +181,13 @@ object BcApi {
         val all = parseValueArray(r.body).map {
             Company(it.optString("id"), it.optString("name"), it.optString("displayName").ifBlank { it.optString("name") })
         }
-        val wms = probeWmsCompanies(context, env, all)
-        val result = wms.ifEmpty {
+        // WMS operatörü girişliyse kullanıcı-bazlı, değilse yalnız WMS-kurulu filtresi.
+        val localUser = getLocalUser(context)
+        val accessible = if (localUser.isNotBlank())
+            runCatching { probeAccessibleCompanies(context, env, localUser, all) }.getOrDefault(emptyList())
+        else
+            runCatching { probeWmsCompanies(context, env, all) }.getOrDefault(emptyList())
+        val result = accessible.ifEmpty {
             listOf(Company(getCompanyId(context), getCompanyName(context), getCompanyName(context)))
         }
         saveAccessibleCompanies(context, result)

@@ -220,6 +220,7 @@ private fun HomeScreen(connected: Boolean, onNavigate: (Screen) -> Unit) {
     // companyEpoch değişince company adını yeniden oku.
     val companyName = remember(companyEpoch) { BcApi.getCompanyName(context) }
     var accessible by remember(companyEpoch, connected) { mutableStateOf(BcApi.getAccessibleCompanies(context)) }
+    var discovering by remember { mutableStateOf(false) }
     // ELOG: liste boşsa (login switcher eklenmeden yapılmış / AAD-only atlama)
     // bağlıyken bir kez erişilebilir şirketleri hesapla → switcher görünür olur.
     LaunchedEffect(connected, companyEpoch) {
@@ -227,6 +228,15 @@ private fun HomeScreen(connected: Boolean, onNavigate: (Screen) -> Unit) {
             BcApi.refreshAccessibleCompaniesIfEmpty(context)
             accessible = BcApi.getAccessibleCompanies(context)
         }
+    }
+    // Switcher açılınca listeyi tazele: kayıtlı liste eski olabilir (yeni şirket
+    // eklenmiş ya da ilk keşif tek şirketle sonuçlanmış olabilir).
+    LaunchedEffect(showSwitcher) {
+        if (!showSwitcher || !connected) return@LaunchedEffect
+        discovering = true
+        runCatching { BcApi.rediscoverAccessibleCompanies(context) }
+        accessible = BcApi.getAccessibleCompanies(context)
+        discovering = false
     }
     Column(
         Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp)
@@ -242,6 +252,7 @@ private fun HomeScreen(connected: Boolean, onNavigate: (Screen) -> Unit) {
             CompanySwitcherSheet(
                 companies = accessible,
                 currentId = BcApi.getCompanyId(context),
+                loading = discovering,
                 onDismiss = { showSwitcher = false },
                 onSelect = { c ->
                     BcApi.setCompany(context, c.id, c.displayName)
@@ -340,28 +351,25 @@ private fun HomeHeader(
                         )
                     }
                 }
-                // Birden çok erişilebilir şirket varsa rozetin yanında net bir
-                // "Şirket Değiştir" butonu dursun (üstteki satır tıklaması da çalışır).
-                if (canSwitch) {
+                // "Şirket Değiştir" bağlıyken HER ZAMAN görünür. Eskiden yalnız
+                // birden çok erişilebilir şirket kayıtlıysa çıkıyordu; liste eski
+                // ya da eksik olduğunda buton hiç görünmüyor, operatör şirket
+                // değiştiremiyordu. Artık tek şirkette de açılıyor — sayfa
+                // erişilebilir şirketleri yeniden keşfedip listeliyor.
+                if (connected) {
                     Spacer(Modifier.width(8.dp))
                     Surface(
                         shape = RoundedCornerShape(50),
                         color = Color.White.copy(alpha = 0.26f),
                         modifier = Modifier.clip(RoundedCornerShape(50)).clickable { onSwitchClick() },
                     ) {
-                        Row(
+                        Text(
+                            "Şirket Değiştir",
                             Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text("🔀", fontSize = 12.sp)
-                            Spacer(Modifier.width(5.dp))
-                            Text(
-                                "Şirket Değiştir",
-                                style = MaterialTheme.typography.labelMedium,
-                                fontWeight = FontWeight.Bold,
-                                color = Color.White
-                            )
-                        }
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = Color.White
+                        )
                     }
                 }
             }
@@ -399,6 +407,7 @@ private fun NotConnectedCard() {
 private fun CompanySwitcherSheet(
     companies: List<BcApi.Company>,
     currentId: String,
+    loading: Boolean = false,
     onDismiss: () -> Unit,
     onSelect: (BcApi.Company) -> Unit,
 ) {
@@ -409,6 +418,13 @@ private fun CompanySwitcherSheet(
             fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         Spacer(Modifier.height(12.dp))
+        if (loading) {
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(vertical = 8.dp)) {
+                CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
+                Spacer(Modifier.width(10.dp))
+                Text("Şirketler kontrol ediliyor...", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        }
         companies.forEach { c ->
             val selected = c.id.equals(currentId, ignoreCase = true)
             Card(
@@ -421,12 +437,19 @@ private fun CompanySwitcherSheet(
                 shape = RoundedCornerShape(12.dp),
             ) {
                 Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Text(if (selected) "🏢" else "🏭", fontSize = 20.sp)
-                    Spacer(Modifier.width(12.dp))
                     Text(c.displayName, fontWeight = FontWeight.Medium, modifier = Modifier.weight(1f))
                     if (selected) Text("● Aktif", fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.primary)
                 }
             }
+        }
+        // Tek şirket varsa operatöre nedenini söyle — buton çalışmıyor sanmasın.
+        if (!loading && companies.size <= 1) {
+            Spacer(Modifier.height(10.dp))
+            Text(
+                "Bu ortamda erişebildiğiniz başka şirket bulunamadı. Şirketin WMS eklentisi " +
+                    "kurulu ve sizin o şirkette WMS kullanıcınız olmalı.",
+                fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
         }
         Spacer(Modifier.height(16.dp))
     }
