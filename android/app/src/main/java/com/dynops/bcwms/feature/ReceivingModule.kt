@@ -17,6 +17,8 @@ import com.dynops.bcwms.BcApi
 import com.dynops.bcwms.scanner.BarcodeIntentResolver
 import com.dynops.bcwms.scanner.ScanField
 import com.dynops.bcwms.ui.*
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
 import org.json.JSONObject
 
@@ -510,14 +512,23 @@ private fun ReceivePurchaseOrder(no: String, onBack: () -> Unit) {
     var qtyLine by remember { mutableStateOf<JSONObject?>(null) }
     var showScan by remember { mutableStateOf(false) }
     var scanFilter by remember { mutableStateOf("") }
+    // Ambar Mal Kabul'deki gibi konfigüre edilebilir kolonlar (kendi tercihi:
+    // PO satırlarının alan adları farklı olduğu için ayrı kolon seti + ayrı anahtar).
+    var columns by remember { mutableStateOf(ColumnPrefs.get(context, "purchaseOrder", GridColumns.purchaseOrder)) }
+    var showColumns by remember { mutableStateOf(false) }
 
     fun reload() {
         scope.launch {
             busy = true
-            val h = BcApi.get(context, "purchaseSources('$no')")
-            if (h.ok) header = JSONObject(h.body)
-            val l = BcApi.get(context, "purchaseSourceLines?\$filter=no eq '$no' and type eq 'Item'&\$top=200&\$orderby=lineNo")
-            lines = if (l.ok) BcApi.parseValueArray(l.body) else emptyList()
+            // Başlık ve satırlar bağımsız — paralel çek.
+            coroutineScope {
+                val hJob = async { BcApi.get(context, "purchaseSources('$no')") }
+                val lJob = async { BcApi.get(context, "purchaseSourceLines?\$filter=no eq '$no' and type eq 'Item'&\$top=200&\$orderby=lineNo") }
+                val h = hJob.await()
+                if (h.ok) header = JSONObject(h.body)
+                val l = lJob.await()
+                lines = if (l.ok) BcApi.parseValueArray(l.body) else emptyList()
+            }
             busy = false
         }
     }
@@ -563,27 +574,21 @@ private fun ReceivePurchaseOrder(no: String, onBack: () -> Unit) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text("Satırlar (${displayLines.size}/${lines.size}) — qty/bin için dokunun", fontWeight = FontWeight.Bold, fontSize = 14.sp)
                 if (scanFilter.isNotBlank()) { Spacer(Modifier.width(8.dp)); ScanFilterChip(scanFilter) { scanFilter = "" } }
+                Spacer(Modifier.weight(1f))
+                TextButton(onClick = { showColumns = true }) { Text("Kolonlar", fontSize = 12.sp) }
             }
-            LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                items(displayLines) { ln ->
-                    val outstanding = ln.optDouble("outstandingQuantity")
-                    val toReceive = ln.optDouble("qtyToReceive")
-                    val received = ln.optDouble("qtyReceived")
-                    val done = lineDone(ln, LineModule.PURCHASE)
-                    Card(
-                        onClick = { if (directAllowed) qtyLine = ln },
-                        enabled = directAllowed,
-                        modifier = Modifier.fillMaxWidth(),
-                        colors = doneCardColors(done),
-                    ) {
-                        Column(Modifier.padding(14.dp)) {
-                            Text("${donePrefix(done)}${ln.optString("itemNo")} — ${ln.optString("description")}", fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
-                            Text("Kalan: $outstanding · Alınacak: $toReceive · Alınan: $received", fontSize = 12.sp, color = Color.Gray)
-                            Text("Bin: ${firstValue(ln, "binCode").ifBlank { "-" }} · UOM: ${firstValue(ln, "unitOfMeasureCode")}" + extraFieldsText(ln).let { if (it.isNotBlank()) " · $it" else "" }, fontSize = 12.sp, color = Color.Gray)
-                        }
-                    }
-                }
-                if (displayLines.isEmpty() && !busy) item { EmptyState(if (scanFilter.isNotBlank()) "Filtreyle eşleşen satır yok." else "Bu PO'da satır yok (veya tümü tamamlandı).") }
+            if (displayLines.isEmpty() && !busy) {
+                EmptyState(if (scanFilter.isNotBlank()) "Filtreyle eşleşen satır yok." else "Bu PO'da satır yok (veya tümü tamamlandı).")
+            } else {
+                // Ambar Mal Kabul ile aynı konfigüre edilebilir kolonlu grid.
+                LineGrid(
+                    defs = GridColumns.purchaseOrder,
+                    columns = columns,
+                    rows = displayLines,
+                    modifier = Modifier.weight(1f),
+                    isDone = { lineDone(it, LineModule.PURCHASE) },
+                    onRowClick = { ln -> if (directAllowed) qtyLine = ln },
+                )
             }
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Checkbox(checked = invoiceToo, onCheckedChange = { invoiceToo = it })
@@ -649,6 +654,14 @@ private fun ReceivePurchaseOrder(no: String, onBack: () -> Unit) {
             showScan = false
             qtyLine = line
         }, lines = lines, matchKey = "itemNo")
+    }
+    if (showColumns) {
+        ChooseColumnsSheet(
+            defs = GridColumns.purchaseOrder,
+            initial = columns,
+            onDismiss = { showColumns = false },
+            onSave = { newCols -> columns = newCols; ColumnPrefs.save(context, "purchaseOrder", newCols); showColumns = false },
+        )
     }
 }
 

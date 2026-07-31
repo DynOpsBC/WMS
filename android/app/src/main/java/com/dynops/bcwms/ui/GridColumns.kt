@@ -59,6 +59,27 @@ object GridColumns {
         GridColumn("lineNo", "Satır", false, 60) { it.optInt("lineNo").toString() },
     )
 
+    /**
+     * Satın Alma Siparişi (PO) satırları. Ambar Mal Kabul'den AYRI bir kolon
+     * seti: PO API'si farklı alan adları döndürüyor
+     * (outstandingQuantity / qtyToReceive / qtyReceived).
+     */
+    val purchaseOrder = listOf(
+        GridColumn("itemNo", "Ürün No.", true, 104) { nz(it, "itemNo") },
+        GridColumn("description", "Açıklama", true, 170) { nz(it, "description") },
+        GridColumn("outstanding", "Kalan", true, 76) { fmtCol(it.optDouble("outstandingQuantity")) },
+        GridColumn("toReceive", "Alınacak", true, 84) { fmtCol(it.optDouble("qtyToReceive")) },
+        GridColumn("received", "Alınan", true, 76) { fmtCol(it.optDouble("qtyReceived")) },
+        GridColumn("bin", "Bin", true, 92) { nz(it, "binCode") },
+        GridColumn("uom", "UOM", true, 62) { nz(it, "unitOfMeasureCode") },
+        GridColumn("gtin", "GTIN", false, 116) { nz(it, "gtin").ifBlank { nz(it, "itemReference") } },
+        GridColumn("lotNo", "Lot No.", false, 96) { nz(it, "lotNo") },
+        GridColumn("serialNo", "Seri No.", false, 96) { nz(it, "serialNo") },
+        GridColumn("variant", "Varyant", false, 84) { nz(it, "variantCode") },
+        GridColumn("quantity", "Toplam", false, 76) { fmtCol(it.optDouble("quantity")) },
+        GridColumn("lineNo", "Satır", false, 60) { it.optInt("lineNo").toString() },
+    )
+
     val pick = listOf(
         GridColumn("bin", "Bin", true, 92) { nz(it, "binCode") },
         GridColumn("itemNo", "Ürün No.", true, 104) { nz(it, "itemNo") },
