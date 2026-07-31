@@ -1,10 +1,14 @@
 page 72356 "DOPSWHS Picking Order Card"
 {
+    // Tek bir toplama grubunun kartı. Aramada GÖRÜNMEZ (UsageCategory = None):
+    // eskiden liste sayfasıyla AYNI adı ve UsageCategory=Tasks taşıyordu, bu
+    // yüzden aramada iki "Toplanacak Siparişler" çıkıyor, kart seçilince tek
+    // boş kayıt açılıyordu. Kart yalnızca listeden açılır.
     PageType = Card;
-    Caption = 'Toplanacak Siparişler';
+    Caption = 'Toplama Grubu';
     SourceTable = "DOPSWHS Picking Order Header";
     ApplicationArea = All;
-    UsageCategory = Tasks;
+    UsageCategory = None;
 
     layout
     {
