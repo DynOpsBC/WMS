@@ -21,6 +21,7 @@ import com.dynops.bcwms.ui.BottomActionBar
 import com.dynops.bcwms.ui.EmptyState
 import com.dynops.bcwms.ui.StatusText
 import com.dynops.bcwms.ui.firstValue
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
 import org.json.JSONObject
 
@@ -218,8 +219,12 @@ private fun PickPackingDocument(
         val r = BcApi.boundAction(context, "packOps", "", "startPickPacking", body)
         if (r.ok) {
             sessionId = BcApi.scalarValue(r.body).toIntOrNull() ?: 0
-            loadCustomers()
-            reloadLines()
+            // Müşteri adları ve satırlar birbirinden bağımsız — PARALEL çek
+            // (sırayla ~2 istek beklemesi oluyordu, belge açılışı yavaşlıyordu).
+            coroutineScope {
+                launch { loadCustomers() }
+                launch { reloadLines() }
+            }
             status = "🔴 Sepetteki ürünleri okutun — sistem doğru siparişe yazar"
         } else if (r.httpCode == 404) {
             // startPickPacking AL action'ı henüz publish edilmemiş — sessiz

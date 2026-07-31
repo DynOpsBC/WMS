@@ -20,6 +20,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.dynops.bcwms.BcApi
 import com.dynops.bcwms.ui.*
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.launch
 import org.json.JSONObject
 
@@ -450,10 +453,16 @@ private fun GuidedPickDocument(no: String, onBack: () -> Unit) {
     }
 
     suspend fun reloadNow() {
-        val h = BcApi.get(context, "picks('$no')")
-        if (h.ok) header = JSONObject(h.body)
-        val l = BcApi.get(context, "pickLines?\$filter=no eq '$no'&\$top=500")
-        lines = if (l.ok) BcApi.parseValueArray(l.body) else emptyList()
+        // Başlık ve satırlar bağımsız — PARALEL çek (sırayla iki tur beklemek
+        // belge açılışını ve her yenilemeyi gereksiz yavaşlatıyordu).
+        coroutineScope {
+            val headerJob = async { BcApi.get(context, "picks('$no')") }
+            val linesJob = async { BcApi.get(context, "pickLines?\$filter=no eq '$no'&\$top=500") }
+            val h = headerJob.await()
+            if (h.ok) header = JSONObject(h.body)
+            val l = linesJob.await()
+            lines = if (l.ok) BcApi.parseValueArray(l.body) else emptyList()
+        }
     }
 
     fun reload() {
@@ -549,26 +558,44 @@ private fun GuidedPickDocument(no: String, onBack: () -> Unit) {
 
     // ELOG: aynı üründen bu rafta birden çok açık satır varsa, girilen toplam
     // miktarı satırlara (outstanding'e göre) dağıt. Tek okutma → tek miktar girişi.
+    /**
+     * Grup dağıtımı. İYİMSER + PARALEL: satırlar anında yerelde tamamlanır,
+     * BC yazımları aynı anda gider (eskiden ekran kilitlenip PATCH'ler sırayla
+     * atılıyordu — 4 siparişe dağıtım ~2-3 sn sürüyordu).
+     */
     fun completeGroup(group: LineGroup, totalQty: Double, lotNo: String) {
-        if (busy) return
+        val plan = distributeQty(group, totalQty, ::pickLineCapacity)
+        if (plan.isEmpty()) return
+
+        // 1) Anında yerel tamamlama.
+        val planned = plan.associate { (ln, q) -> ln.optInt("lineNo") to q }
+        inFlightLines = inFlightLines + planned.keys
+        lines = lines.map { l ->
+            val q = planned[l.optInt("lineNo")]
+            if (q != null) cloneWithQtyHandled(l, q) else l
+        }
+        status = "✅ ${group.itemNo} → ${plan.size} siparişe dağıtıldı (${pickQty(totalQty)} adet)"
+
+        // 2) BC'ye paralel yaz.
         scope.launch {
-            busy = true; status = "${group.itemNo} dağıtılıyor..."
-            val plan = distributeQty(group, totalQty, ::pickLineCapacity)
-            var ok = 0; var firstErr: String? = null
-            for ((ln, q) in plan) {
-                val actType = ln.optString("activityType").ifBlank { BcEnum.WhseActivityType.PICK }
-                val body = JSONObject().apply {
-                    put("qtyToHandle", q)
-                    val effectiveLot = lotNo.ifBlank { ln.optString("lotNo") }
-                    if (effectiveLot.isNotBlank()) put("lotNo", effectiveLot)
-                }.toString()
-                val r = BcApi.patch(context, "pickLines(activityType='$actType',no='$no',lineNo=${ln.optInt("lineNo")})", body)
-                if (r.ok) ok++ else if (firstErr == null) firstErr = BcApi.errorMessage(r.body)
+            val results = plan.map { (ln, q) ->
+                async {
+                    val actType = ln.optString("activityType").ifBlank { BcEnum.WhseActivityType.PICK }
+                    val body = JSONObject().apply {
+                        put("qtyToHandle", q)
+                        val effectiveLot = lotNo.ifBlank { ln.optString("lotNo") }
+                        if (effectiveLot.isNotBlank()) put("lotNo", effectiveLot)
+                    }.toString()
+                    BcApi.patch(context, "pickLines(activityType='$actType',no='$no',lineNo=${ln.optInt("lineNo")})", body)
+                }
+            }.awaitAll()
+
+            val failed = results.filterNot { it.ok }
+            if (failed.isNotEmpty()) {
+                status = "HATA: ${results.size - failed.size}/${results.size} yazıldı — ${BcApi.errorMessage(failed.first().body)}"
+                reloadNow()   // iyimser değişikliği geri al
             }
-            status = if (firstErr == null) "✅ ${group.itemNo} → ${plan.size} siparişe dağıtıldı (${pickQty(totalQty)} adet)"
-                else "HATA: $ok/${plan.size} yazıldı — $firstErr"
-            reloadNow()
-            busy = false
+            inFlightLines = inFlightLines - planned.keys
         }
     }
 

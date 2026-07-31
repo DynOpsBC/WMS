@@ -28,7 +28,7 @@ import com.dynops.bcwms.ui.StatusText
 import kotlinx.coroutines.launch
 import org.json.JSONObject
 
-private enum class Step { Email, DeviceCode, SelectEnvCompany, LocalUser }
+private enum class Step { Email, DeviceCode, SelectEnvCompany, LocalUser, SelectCompanyAfterLogin }
 
 /** Girişte listelenecek kayıtlı WMS operatörü. */
 data class LocalUserOption(val username: String, val displayName: String)
@@ -60,6 +60,10 @@ fun LoginFlow(onConnected: (Boolean) -> Unit) {
     var manualUserEntry by remember { mutableStateOf(false) }
     var showPassword by remember { mutableStateOf(false) }
     var showForgotPassword by remember { mutableStateOf(false) }
+    // Giriş sonrası şirket seçimi (operatör birden çok şirkete erişebiliyorsa).
+    var loginCompanies by remember { mutableStateOf<List<BcApi.Company>>(emptyList()) }
+    var companyDiscovering by remember { mutableStateOf(false) }
+    var signedInAs by remember { mutableStateOf("") }
 
     var deviceCode by remember { mutableStateOf<DeviceAuth.DeviceCode?>(null) }
     var envList by remember { mutableStateOf<List<BcApi.EnvCompanies>>(emptyList()) }
@@ -128,23 +132,35 @@ fun LoginFlow(onConnected: (Boolean) -> Unit) {
             if (r.ok) {
                 val resolved = BcApi.scalarValue(r.body)
                 BcApi.saveLocalUser(context, rawUser, resolved)
-                // ELOG multi-company: operatörün bu ortamda erişebildiği (WMS kurulu +
-                // localUser kaydı olan) şirketleri hesapla → üstteki şirket değiştiricide
-                // yalnız bunlar görünür (PIM vb. dışarıda kalır). Keşif listesi yoksa
-                // en azından aktif şirketi kaydet ki switcher tutarlı olsun.
-                val candidates = selectedEnv?.companies
-                    ?: listOf(BcApi.Company(BcApi.getCompanyId(context), BcApi.getCompanyName(context), BcApi.getCompanyName(context)))
+                signedInAs = displayNameFromJson(resolved) ?: rawUser
+                status = "🟢 $signedInAs olarak bağlandı."
+
+                // Şirket keşfi ARKA PLANDA: operatör beklemesin. Aktif şirket
+                // hemen kaydedilir, keşif bitince liste genişler ve seçim adımı
+                // birden çok şirket varsa açılır.
+                val activeCompany = BcApi.Company(
+                    BcApi.getCompanyId(context), BcApi.getCompanyName(context), BcApi.getCompanyName(context),
+                )
+                if (BcApi.getAccessibleCompanies(context).isEmpty())
+                    BcApi.saveAccessibleCompanies(context, listOf(activeCompany))
+
+                val candidates = selectedEnv?.companies ?: listOf(activeCompany)
+                companyDiscovering = true
                 val accessible = runCatching {
                     BcApi.probeAccessibleCompanies(context, BcApi.getEnvironment(context), rawUser, candidates)
                 }.getOrDefault(emptyList())
-                BcApi.saveAccessibleCompanies(
-                    context,
-                    accessible.ifEmpty {
-                        listOf(BcApi.Company(BcApi.getCompanyId(context), BcApi.getCompanyName(context), BcApi.getCompanyName(context)))
-                    },
-                )
-                status = "🟢 ${displayNameFromJson(resolved) ?: rawUser} olarak bağlandı."
-                onConnected(true)
+                companyDiscovering = false
+                val finalList = accessible.ifEmpty { listOf(activeCompany) }
+                BcApi.saveAccessibleCompanies(context, finalList)
+
+                // Birden çok şirkete erişim varsa hangisine gireceğini SOR —
+                // eskiden sessizce son şirkete giriliyordu, operatör yanlış
+                // şirkette çalıştığını fark etmiyordu.
+                if (finalList.size > 1) {
+                    loginCompanies = finalList
+                    step = Step.SelectCompanyAfterLogin
+                } else
+                    onConnected(true)
             } else {
                 val msg = BcApi.errorMessage(r.body).ifBlank { "HTTP ${r.httpCode}" }
                 status = "🔴 ${if (msg.contains("Invalid username")) "Kullanıcı adı veya şifre hatalı." else msg}"
@@ -444,7 +460,16 @@ fun LoginFlow(onConnected: (Boolean) -> Unit) {
                         onClick = { startLocalSignIn() },
                         enabled = !busy && localUsername.isNotBlank() && localPassword.isNotBlank() && BcApi.hasToken(context),
                         modifier = Modifier.fillMaxWidth().height(52.dp)
-                    ) { Text(if (busy) "..." else "Bağlan", fontWeight = FontWeight.Bold) }
+                    ) {
+                        Text(
+                            when {
+                                busy -> "..."
+                                companyDiscovering -> "Şirketler kontrol ediliyor..."
+                                else -> "Bağlan"
+                            },
+                            fontWeight = FontWeight.Bold,
+                        )
+                    }
                     Spacer(Modifier.height(4.dp))
                     TextButton(
                         onClick = { showForgotPassword = true },
@@ -460,6 +485,49 @@ fun LoginFlow(onConnected: (Boolean) -> Unit) {
                     status = "⚠️ WMS girişi atlandı — BC hesabıyla devam ediliyor."
                     onConnected(true)
                 }) { Text("Yönetici: WMS girişini atla", fontSize = 11.sp, color = Color.Gray) }
+            }
+
+            // Operatör birden çok şirkete erişebiliyorsa hangisinde çalışacağını
+            // giriş anında seçsin — yanlış şirkette iş yapmanın önüne geçer.
+            Step.SelectCompanyAfterLogin -> {
+                Text("Hangi şirkette çalışacaksınız?", fontWeight = FontWeight.Bold, fontSize = 17.sp)
+                if (signedInAs.isNotBlank()) {
+                    Spacer(Modifier.height(4.dp))
+                    Text("$signedInAs olarak girdiniz", fontSize = 12.sp, color = Color.Gray)
+                }
+                Spacer(Modifier.height(14.dp))
+                val activeId = BcApi.getCompanyId(context)
+                loginCompanies.forEach { c ->
+                    val isActive = c.id.equals(activeId, ignoreCase = true)
+                    Card(
+                        onClick = {
+                            BcApi.setCompany(context, c.id, c.displayName)
+                            onConnected(true)
+                        },
+                        colors = CardDefaults.cardColors(
+                            containerColor = if (isActive) Color(0xFFEDE7F6) else Color(0xFFF3F0FF),
+                        ),
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
+                    ) {
+                        Row(
+                            Modifier.fillMaxWidth().padding(16.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Column(Modifier.weight(1f)) {
+                                Text(c.displayName, fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
+                                if (isActive)
+                                    Text("son kullandığınız şirket", fontSize = 11.sp, color = Color(0xFF6C5CE7))
+                            }
+                            Text("›", fontSize = 20.sp, color = Color(0xFF6C5CE7))
+                        }
+                    }
+                }
+                Spacer(Modifier.height(6.dp))
+                Text(
+                    "Şirketi sonradan ana ekrandaki \"Şirket Değiştir\" ile de değiştirebilirsiniz.",
+                    fontSize = 11.sp, color = Color.Gray,
+                )
             }
 
             Step.DeviceCode -> {

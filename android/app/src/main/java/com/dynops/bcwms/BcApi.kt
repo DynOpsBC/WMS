@@ -2,6 +2,8 @@ package com.dynops.bcwms
 
 import android.content.Context
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
@@ -131,10 +133,20 @@ object BcApi {
         val token = getToken(context)
         val tenant = getTenant(context)
         val safeUser = java.net.URLEncoder.encode(username.trim().lowercase().replace("'", "''"), "UTF-8")
-        companies.filter { c ->
-            val url = "https://api.businesscentral.dynamics.com/v2.0/$tenant/$env/api/dynops/warehouse/v2.0/companies(${c.id})/localUsers('$safeUser')"
-            httpGet(url, token).ok
-        }
+        // PARALEL yoklama: sıralı filter'da 10 şirket = 10 ardışık istek (~3-6 sn).
+        // Hepsi aynı anda gider, süre en yavaş isteğe iner.
+        companies.map { c ->
+            async {
+                val base = "https://api.businesscentral.dynamics.com/v2.0/$tenant/$env/api/dynops/warehouse/v2.0/companies(${c.id})"
+                // Önce kullanıcı-bazlı yokla. Operatörün o şirkette localUser kaydı
+                // yoksa da şirket ERİŞİLEBİLİR sayılır (WMS kurulu olması yeterli):
+                // BC'de tek kullanıcı kaydıyla birden çok şirkete girilebiliyor,
+                // eski katı kriter bu şirketleri listeden düşürüyordu.
+                val hasUser = httpGet("$base/localUsers('$safeUser')", token).ok
+                val wmsInstalled = hasUser || httpGet("$base/localUsers?\$top=1", token).ok
+                if (wmsInstalled) c else null
+            }
+        }.awaitAll().filterNotNull()
     }
 
     /**
@@ -148,10 +160,13 @@ object BcApi {
     ): List<Company> = withContext(Dispatchers.IO) {
         val token = getToken(context)
         val tenant = getTenant(context)
-        companies.filter { c ->
-            val url = "https://api.businesscentral.dynamics.com/v2.0/$tenant/$env/api/dynops/warehouse/v2.0/companies(${c.id})/localUsers?\$top=1"
-            httpGet(url, token).ok
-        }
+        // Paralel yoklama (bkz. probeAccessibleCompanies).
+        companies.map { c ->
+            async {
+                val url = "https://api.businesscentral.dynamics.com/v2.0/$tenant/$env/api/dynops/warehouse/v2.0/companies(${c.id})/localUsers?\$top=1"
+                if (httpGet(url, token).ok) c else null
+            }
+        }.awaitAll().filterNotNull()
     }
 
     /**
@@ -348,13 +363,23 @@ object BcApi {
 
     private val httpClient: OkHttpClient by lazy {
         OkHttpClient.Builder()
-            .connectTimeout(15, TimeUnit.SECONDS)
-            .readTimeout(20, TimeUnit.SECONDS)
+            // Depo hızı: kopuk/zayıf bağlantıda operatör 20 sn beklemesin.
+            // BC normalde <1 sn yanıtlar; bu değerler "gerçekten sorun var"ı
+            // hızla ortaya çıkarır, kullanıcı erken hata görüp tekrar dener.
+            .connectTimeout(8, TimeUnit.SECONDS)
+            .readTimeout(12, TimeUnit.SECONDS)
+            .writeTimeout(12, TimeUnit.SECONDS)
             // Depoda her okutma bir HTTP çağrısı: TLS el sıkışmasını her seferinde
             // tekrarlamamak için bağlantıları uzun süre havuzda tut (aksi halde
             // her scan'de ~300-600 ms sadece handshake'e gidiyor).
-            .connectionPool(okhttp3.ConnectionPool(8, 5, TimeUnit.MINUTES))
+            .connectionPool(okhttp3.ConnectionPool(12, 10, TimeUnit.MINUTES))
             .retryOnConnectionFailure(true)
+            // Şirket keşfi gibi paralel yoklamalarda host başına eşzamanlılık
+            // varsayılan 5'te sıkışmasın.
+            .dispatcher(okhttp3.Dispatcher().apply {
+                maxRequests = 32
+                maxRequestsPerHost = 16
+            })
             .build()
     }
 
