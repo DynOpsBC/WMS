@@ -42,6 +42,7 @@ codeunit 72045 "DOPSWHS Movement Mgmt"
         ItemJournalTemplate: Record "Item Journal Template";
         ItemJournalLine: Record "Item Journal Line";
         ItemJnlPostBatch: Codeunit "Item Jnl.-Post Batch";
+        Telemetry: Codeunit "DOPSWHS Telemetry";
         CustomDimensions: Dictionary of [Text, Text];
         BatchName: Code[10];
         LocationCode: Code[10];
@@ -66,6 +67,10 @@ codeunit 72045 "DOPSWHS Movement Mgmt"
         if Location.Get(LocationCode) and Location."Directed Put-away and Pick" then begin
             RegisterWhseMove(LocationCode, FromBinCode, ToBinCode, ItemNo, Qty, UserId, LotNo);
             CustomDimensions.Add('Category', 'Movement');
+            // Hareketi yapan operatör terminalden parametre olarak geliyor
+            // (UserId parametresi). Paylaşımlı BC hesabı ile ayırt edilemezdi;
+            // log satırına operatör alanları da yazılır.
+            Telemetry.AddUserDimensions(CustomDimensions, UserId);
             Session.LogMessage('DOPSWHS-Move-AdHocWhse', StrSubstNo('Directed whse move item %1 qty %2 from %3 to %4 lp %5', ItemNo, Qty, FromBinCode, ToBinCode, LpNo), Verbosity::Normal, DataClassification::SystemMetadata, TelemetryScope::ExtensionPublisher, CustomDimensions);
             exit;
         end;
@@ -88,21 +93,41 @@ codeunit 72045 "DOPSWHS Movement Mgmt"
         if LotNo <> '' then
             AddLotTracking(ItemJournalLine, LotNo);
         CustomDimensions.Add('Category', 'Movement');
+        Telemetry.AddUserDimensions(CustomDimensions, UserId);
         Session.LogMessage('DOPSWHS-Move-AdHoc', StrSubstNo('Ad-hoc move item %1 qty %2 from %3 to %4 lp %5', ItemNo, Qty, FromBinCode, ToBinCode, LpNo), Verbosity::Normal, DataClassification::SystemMetadata, TelemetryScope::ExtensionPublisher, CustomDimensions);
         // Post via batch codeunit (22/23) rather than "Item Jnl.-Post" (241): the latter raises a
         // "Do you want to post?" Confirm that fails as a client callback over the API / on the handheld.
         ItemJnlPostBatch.Run(ItemJournalLine);
     end;
 
+    /// <summary>Geriye dönük imza: operatör kimliği belgenin atamasından okunur.</summary>
     procedure RegisterDirected(var WhseActivityHeader: Record "Warehouse Activity Header")
+    begin
+        RegisterDirected(WhseActivityHeader, '');
+    end;
+
+    /// <summary>
+    /// Ambar aktivitesini kaydeder. OperatorUserId = işlemi yapan WMS operatörü;
+    /// boşsa belgeye atanmış kullanıcıya düşülür. NEDEN: tüm çağrılar paylaşımlı
+    /// servis hesabıyla geldiği için UserId() "kim kaydetti" sorusunu cevaplamıyor.
+    /// </summary>
+    procedure RegisterDirected(var WhseActivityHeader: Record "Warehouse Activity Header"; OperatorUserId: Code[50])
     var
         WhseActivityLine: Record "Warehouse Activity Line";
         // QM (BC 28) devre dışı — bkz. QualityMgmtBridge.Codeunit.al
         // QualityBridge: Codeunit "DOPSWHS Quality Mgmt Bridge";
         WhseActivityRegister: Codeunit "Whse.-Activity-Register";
+        Telemetry: Codeunit "DOPSWHS Telemetry";
         CustomDimensions: Dictionary of [Text, Text];
+        Operator: Code[50];
     begin
+        if OperatorUserId <> '' then
+            Operator := OperatorUserId
+        else
+            Operator := WhseActivityHeader."Assigned User ID";
+
         CustomDimensions.Add('Category', 'Movement');
+        Telemetry.AddUserDimensions(CustomDimensions, Operator);
         Session.LogMessage('DOPSWHS-Move-RegisterDirected', StrSubstNo('Register warehouse activity %1 type %2', WhseActivityHeader."No.", Format(WhseActivityHeader.Type)), Verbosity::Normal, DataClassification::SystemMetadata, TelemetryScope::ExtensionPublisher, CustomDimensions);
 
         // MS Quality Management lot/serial block guard — QM (BC 28) devre dışı.

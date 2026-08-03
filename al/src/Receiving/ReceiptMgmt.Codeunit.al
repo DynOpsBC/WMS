@@ -5,7 +5,19 @@ codeunit 72043 "DOPSWHS Receipt Mgmt"
         tabledata "Reservation Entry" = rimd,
         tabledata "Whse. Item Tracking Line" = rimd;
 
+    /// <summary>Geriye dönük imza: operatör kimliği belgenin atamasından okunur.</summary>
     procedure PostReceipt(var WhseReceiptHeader: Record "Warehouse Receipt Header"; PrintReport: Boolean; Invoice: Boolean)
+    begin
+        PostReceipt(WhseReceiptHeader, PrintReport, Invoice, '');
+    end;
+
+    /// <summary>
+    /// Mal kabul kaydı. OperatorUserId = işlemi yapan WMS operatörü; terminal
+    /// kimliği taşıyorsa buradan geçirir, taşımıyorsa belgeye atanmış kullanıcıya
+    /// düşülür. NEDEN: BC'ye tüm çağrılar paylaşımlı servis hesabıyla geldiği
+    /// için UserId() "kim postaladı" sorusunu cevaplamıyor.
+    /// </summary>
+    procedure PostReceipt(var WhseReceiptHeader: Record "Warehouse Receipt Header"; PrintReport: Boolean; Invoice: Boolean; OperatorUserId: Code[50])
     var
         WhseReceiptLine: Record "Warehouse Receipt Line";
         PostedWhseReceiptHeader: Record "Posted Whse. Receipt Header";
@@ -15,7 +27,7 @@ codeunit 72043 "DOPSWHS Receipt Mgmt"
         LpNo: Code[20];
         PostedNo: Code[20];
     begin
-        Log('Receipt.Post', WhseReceiptHeader."No.");
+        Log('Receipt.Post', WhseReceiptHeader."No.", EffectiveOperator(OperatorUserId, WhseReceiptHeader."Assigned User ID"));
         WhseReceiptLine.SetRange("No.", WhseReceiptHeader."No.");
         if WhseReceiptLine.FindFirst() then
             WhsePostReceipt.Run(WhseReceiptLine);
@@ -35,9 +47,20 @@ codeunit 72043 "DOPSWHS Receipt Mgmt"
             until PostedWhseReceiptLine.Next() = 0;
     end;
 
+    /// <summary>Geriye dönük imza: atamayı yapan kimlik bilinmiyor.</summary>
     procedure AssignUser(var WhseReceiptHeader: Record "Warehouse Receipt Header"; AssignedUserId: Code[50])
     begin
-        Log('Receipt.AssignUser', WhseReceiptHeader."No.");
+        AssignUser(WhseReceiptHeader, AssignedUserId, '');
+    end;
+
+    /// <summary>
+    /// Belgeyi bir operatöre atar. PerformedByUserId = atamayı YAPAN kimlik
+    /// (masadan başkası atayabilir); boşsa oturumun BC hesabına düşülür.
+    /// Atanan kullanıcı log mesajına yazılır ki devir zinciri okunabilsin.
+    /// </summary>
+    procedure AssignUser(var WhseReceiptHeader: Record "Warehouse Receipt Header"; AssignedUserId: Code[50]; PerformedByUserId: Code[50])
+    begin
+        Log('Receipt.AssignUser', StrSubstNo(AssignLogTxt, WhseReceiptHeader."No.", OperatorOrNone(AssignedUserId)), PerformedByUserId);
         WhseReceiptHeader.Validate("Assigned User ID", AssignedUserId);
         WhseReceiptHeader.Modify(true);
     end;
@@ -48,7 +71,8 @@ codeunit 72043 "DOPSWHS Receipt Mgmt"
         LPMgt: Codeunit "DOPSWHS LP Management";
         EffectiveTemplateCode: Code[20];
     begin
-        Log('Receipt.StartLP', WhseReceiptHeader."No.");
+        // LP açan operatör: belgeye atanmış kullanıcı (uç nokta ayrı kimlik taşımıyor).
+        Log('Receipt.StartLP', WhseReceiptHeader."No.", WhseReceiptHeader."Assigned User ID");
         EffectiveTemplateCode := TemplateCode;
         if EffectiveTemplateCode = '' then
             EffectiveTemplateCode := 'PALLET-EUR';
@@ -62,12 +86,22 @@ codeunit 72043 "DOPSWHS Receipt Mgmt"
         LP: Record "DOPSWHS LP Header";
         LPMgt: Codeunit "DOPSWHS LP Management";
     begin
-        Log('Receipt.StopLP', WhseReceiptHeader."No.");
+        Log('Receipt.StopLP', WhseReceiptHeader."No.", WhseReceiptHeader."Assigned User ID");
         LP.Get(LpNo);
         LPMgt.Stop(LP, PrintLabel);
     end;
 
+    /// <summary>Geriye dönük imza: operatör kimliği belgenin atamasından okunur.</summary>
     procedure ConfirmLine(var WhseReceiptLine: Record "Warehouse Receipt Line"; QtyToReceive: Decimal; LotNo: Code[50]; SerialNo: Code[50]; ExpiryDate: Date; LicensePlateNo: Code[20]; BinCode: Code[20])
+    begin
+        ConfirmLine(WhseReceiptLine, QtyToReceive, LotNo, SerialNo, ExpiryDate, LicensePlateNo, BinCode, '');
+    end;
+
+    /// <summary>
+    /// Satır onayı (okutma). OperatorUserId = okutmayı yapan WMS operatörü;
+    /// boşsa belgeye atanmış kullanıcıya düşülür.
+    /// </summary>
+    procedure ConfirmLine(var WhseReceiptLine: Record "Warehouse Receipt Line"; QtyToReceive: Decimal; LotNo: Code[50]; SerialNo: Code[50]; ExpiryDate: Date; LicensePlateNo: Code[20]; BinCode: Code[20]; OperatorUserId: Code[50])
     var
         LP: Record "DOPSWHS LP Header";
         WhseReceiptHeader: Record "Warehouse Receipt Header";
@@ -80,7 +114,7 @@ codeunit 72043 "DOPSWHS Receipt Mgmt"
         ExistingExpiryDate: Date;
         HasItemTrackingCode: Boolean;
     begin
-        Log('Receipt.ConfirmLine', WhseReceiptLine."No.");
+        Log('Receipt.ConfirmLine', WhseReceiptLine."No.", EffectiveOperator(OperatorUserId, ReceiptOperator(WhseReceiptLine."No.")));
         Item.Get(WhseReceiptLine."Item No.");
         // Otomatik Lot/Seri: SADECE item lot/serial izlemeli ise ve boş bırakıldıysa üret.
         // İzlenmeyen bir item'a Item Tracking kaydı eklemek post sırasında hataya yol
@@ -281,10 +315,51 @@ codeunit 72043 "DOPSWHS Receipt Mgmt"
             LPMgt.Assign(LP, Enum::"DOPSWHS Assigned Doc Type"::WhseReceipt, ReceiptNo);
     end;
 
-    local procedure Log(Category: Text; DocNo: Code[20])
+    /// <summary>
+    /// İşlemi yapan operatörü belirler: çağıran kimliğini AÇIKÇA bildirdiyse o,
+    /// aksi halde belgeye atanmış kullanıcı. NEDEN: paylaşımlı BC hesabı yüzünden
+    /// UserId() operatörü göstermiyor; atama tek güvenilir kaynak.
+    /// </summary>
+    local procedure EffectiveOperator(OperatorUserId: Code[50]; AssignedUserId: Code[50]): Code[50]
+    begin
+        if OperatorUserId <> '' then
+            exit(OperatorUserId);
+        exit(AssignedUserId);
+    end;
+
+    /// <summary>Belgeye atanmış operatör — satırdan başlığa GÜNCEL okunur.</summary>
+    local procedure ReceiptOperator(ReceiptNo: Code[20]): Code[50]
+    var
+        WhseReceiptHeader: Record "Warehouse Receipt Header";
+    begin
+        if ReceiptNo = '' then
+            exit('');
+        if not WhseReceiptHeader.Get(ReceiptNo) then
+            exit('');
+        exit(WhseReceiptHeader."Assigned User ID");
+    end;
+
+    local procedure OperatorOrNone(UserIdValue: Code[50]): Text
+    begin
+        if UserIdValue = '' then
+            exit(NoOperatorTxt);
+        exit(UserIdValue);
+    end;
+
+    /// <summary>
+    /// İşlemi YAPAN operatörle birlikte loglar. Operatör parametresi BİLEREK
+    /// zorunlu: her çağrı yeri "kim yaptı" sorusuna cevap vermek zorunda kalsın.
+    /// Bilinmiyorsa açıkça '' geçilir (telemetri 'actorSource=BC' yazar).
+    /// </summary>
+    local procedure Log(Category: Text; Message: Text; OperatorUserId: Code[50])
     var
         Telemetry: Codeunit "DOPSWHS Telemetry";
     begin
-        Telemetry.LogInfo(Category, DocNo);
+        Telemetry.LogInfo(Category, Message, OperatorUserId);
     end;
+
+    var
+        // Telemetri mesajları çevrilmez (Locked): log sorguları dile göre değişmemeli.
+        AssignLogTxt: Label '%1 -> %2', Locked = true;
+        NoOperatorTxt: Label '(none)', Locked = true;
 }

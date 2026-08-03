@@ -59,7 +59,7 @@ codeunit 72334 "DOPSWHS Pack Station Mgmt"
         PackingOrder."Started By User" := CopyStr(Operator, 1, MaxStrLen(PackingOrder."Started By User"));
         PackingOrder."Started DateTime" := CurrentDateTime();
         PackingOrder.Modify(true);
-        Log('Pack.StartOrder', OrderNo);
+        Log('Pack.StartOrder', OrderNo, Operator);
         exit(PackSession."Entry No.");
     end;
 
@@ -130,18 +130,33 @@ codeunit 72334 "DOPSWHS Pack Station Mgmt"
 
         PackSession."Orders Total" := Orders;
         PackSession.Modify(true);
-        Log('Pack.StartPickSession', PickNo);
+        Log('Pack.StartPickSession', PickNo, Operator);
         exit(PackSession."Entry No.");
     end;
 
+    /// <summary>Geriye dönük imza: operatör kimliği taşınmıyor (masa/BC sayfası).</summary>
     procedure StartSession(ToteLpNo: Code[20]; ModeTxt: Text): Integer
+    begin
+        exit(StartSession(ToteLpNo, ModeTxt, ''));
+    end;
+
+    // ELOG: OperatorUserId dolu ise oturumu üstlenen WMS operatörü olarak
+    // kaydedilir (Created By User) ve tüm paketleme logları bu kimlikle akar.
+    // Boşsa UserId() (eski davranış — paylaşımlı servis hesabı).
+    procedure StartSession(ToteLpNo: Code[20]; ModeTxt: Text; OperatorUserId: Code[50]): Integer
     var
         LP: Record "DOPSWHS LP Header";
         Assignment: Record "DOPSWHS Pick Tote Assignment";
         PackSession: Record "DOPSWHS Pack Session";
         LineNo: Integer;
         Orders: Integer;
+        Operator: Code[50];
     begin
+        if OperatorUserId <> '' then
+            Operator := OperatorUserId
+        else
+            Operator := CopyStr(UserId(), 1, MaxStrLen(Operator));
+
         LP.Get(ToteLpNo);
 
         Assignment.SetRange("LP No.", ToteLpNo);
@@ -154,7 +169,7 @@ codeunit 72334 "DOPSWHS Pack Station Mgmt"
         PackSession."Location Code" := LP."Location Code";
         PackSession.Status := PackSession.Status::Open;
         PackSession.Mode := MapMode(ModeTxt);
-        PackSession."Created By User" := CopyStr(UserId(), 1, MaxStrLen(PackSession."Created By User"));
+        PackSession."Created By User" := CopyStr(Operator, 1, MaxStrLen(PackSession."Created By User"));
         PackSession."Created DateTime" := CurrentDateTime();
         PackSession.Insert(true);
 
@@ -168,7 +183,7 @@ codeunit 72334 "DOPSWHS Pack Station Mgmt"
 
         PackSession."Orders Total" := Orders;
         PackSession.Modify(true);
-        Log('Pack.StartSession', PackSession."Tote LP No.");
+        Log('Pack.StartSession', PackSession."Tote LP No.", Operator);
         exit(PackSession."Entry No.");
     end;
 
@@ -232,7 +247,9 @@ codeunit 72334 "DOPSWHS Pack Station Mgmt"
         PackSession."Box LP No." := BoxLpNoResolved;
         PackSession."Box Barcode" := CopyStr(BoxBarcode, 1, MaxStrLen(PackSession."Box Barcode"));
         PackSession.Modify(true);
-        Log('Pack.SetBox', BoxBarcode);
+        // Paketleyen operatör oturumu açan kullanıcıdır: uç noktalar (SetBox,
+        // ScanItem) ayrı kimlik taşımıyor, oturum kaydı taşıyor.
+        Log('Pack.SetBox', BoxBarcode, PackSession."Created By User");
 
         TryCompleteOrder(PackSession, OrderNo);
         exit(BoxBarcode);
@@ -331,7 +348,7 @@ codeunit 72334 "DOPSWHS Pack Station Mgmt"
         if Qty > 0 then
             Error(UnexpectedItemErr, ItemNo, PackSession."Tote LP No.");
 
-        Log('Pack.ScanItem', PackSession."Tote LP No.");
+        Log('Pack.ScanItem', PackSession."Tote LP No.", PackSession."Created By User");
         exit(CompletedOrders);
     end;
 
@@ -374,10 +391,10 @@ codeunit 72334 "DOPSWHS Pack Station Mgmt"
             Error(UnexpectedItemErr, ItemNo, OrderNo);
 
         if TryCompleteOrder(PackSession, OrderNo) then begin
-            Log('Pack.ScanItemForOrder', OrderNo);
+            Log('Pack.ScanItemForOrder', OrderNo, PackSession."Created By User");
             exit(OrderNo);
         end;
-        Log('Pack.ScanItemForOrder', OrderNo);
+        Log('Pack.ScanItemForOrder', OrderNo, PackSession."Created By User");
         exit('');
     end;
 
@@ -413,7 +430,7 @@ codeunit 72334 "DOPSWHS Pack Station Mgmt"
                     end;
                 until PackLine.Next() = 0;
         end;
-        Log('Pack.CancelSession', PackSession."Tote LP No.");
+        Log('Pack.CancelSession', PackSession."Tote LP No.", PackSession."Created By User");
     end;
 
     // ELOG'daki gibi Solo/Bulk/Batch için AYRI BC sayfaları (Pack Station
@@ -664,7 +681,9 @@ codeunit 72334 "DOPSWHS Pack Station Mgmt"
             ReleaseTote(PackSession);
         end;
         PackSession.Modify(true);
-        Log('Pack.OrderCompleted', OrderNo);
+        // Sipariş burada sevk+fatura ediliyor: "bu siparişi kim paketleyip
+        // kapattı" sorusunun cevabı bu log satırında durmalı.
+        Log('Pack.OrderCompleted', OrderNo, PackSession."Created By User");
     end;
 
     local procedure PostOrder(var PackSession: Record "DOPSWHS Pack Session"; OrderNo: Code[20])
@@ -809,10 +828,19 @@ codeunit 72334 "DOPSWHS Pack Station Mgmt"
     /// fişini yeniden kuyruğa alır.</summary>
     procedure ReprintOrderReceipt(OrderNo: Code[20])
     begin
+        ReprintOrderReceipt(OrderNo, '');
+    end;
+
+    /// <summary>
+    /// Fişi yeniden bastırır. OperatorUserId boşsa siparişi paketleyen operatöre
+    /// düşülür — fişi bastıran kimlik uç noktadan gelmiyor.
+    /// </summary>
+    procedure ReprintOrderReceipt(OrderNo: Code[20]; OperatorUserId: Code[50])
+    begin
         if OrderNo = '' then
             exit;
         QueuePackReceiptPrint(OrderNo);
-        Log('Pack.Reprint', OrderNo);
+        Log('Pack.Reprint', OrderNo, EffectiveOperator(OperatorUserId, OrderNo));
     end;
 
     // ELOG: "tüm ürünler okutulunca fiş çıkıyor, poşete yapıştırılıyor" —
@@ -856,11 +884,34 @@ codeunit 72334 "DOPSWHS Pack Station Mgmt"
         exit(ItemNo + '|' + VariantCode);
     end;
 
-    local procedure Log(Category: Text; DocNo: Code[20])
+    /// <summary>
+    /// İşlemi yapan operatörü belirler: çağıran kimliğini AÇIKÇA bildirdiyse o,
+    /// aksi halde siparişi paketlemeye başlayan kullanıcı. NEDEN: paylaşımlı BC
+    /// hesabı yüzünden UserId() operatörü göstermiyor.
+    /// </summary>
+    local procedure EffectiveOperator(OperatorUserId: Code[50]; OrderNo: Code[20]): Code[50]
+    var
+        PackingOrder: Record "DOPSWHS Packing Order";
+    begin
+        if OperatorUserId <> '' then
+            exit(OperatorUserId);
+        if OrderNo = '' then
+            exit('');
+        if not PackingOrder.Get(OrderNo) then
+            exit('');
+        exit(PackingOrder."Started By User");
+    end;
+
+    /// <summary>
+    /// İşlemi YAPAN operatörle birlikte loglar. Operatör parametresi BİLEREK
+    /// zorunlu: her çağrı yeri "kim yaptı" sorusuna cevap vermek zorunda kalsın.
+    /// Bilinmiyorsa açıkça '' geçilir (telemetri 'actorSource=BC' yazar).
+    /// </summary>
+    local procedure Log(Category: Text; Message: Text; OperatorUserId: Code[50])
     var
         Telemetry: Codeunit "DOPSWHS Telemetry";
     begin
-        Telemetry.LogInfo(Category, DocNo);
+        Telemetry.LogInfo(Category, Message, OperatorUserId);
     end;
 
     var

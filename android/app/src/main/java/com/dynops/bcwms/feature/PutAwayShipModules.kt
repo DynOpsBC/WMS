@@ -773,6 +773,11 @@ private fun WhsePickDocument(no: String, onBack: () -> Unit) {
     var groupTarget by remember { mutableStateOf<LineGroup?>(null) }
     // ELOG raf modu: raf (bin) barkodu okutulunca liste o rafın satırlarına iner.
     var binFilter by remember { mutableStateOf("") }
+    // Eş zamanlılık: aynı pick belgesine Toplama ekranından da girilebiliyor.
+    // Belge başkasının üzerindeyse burada da işlem yapılamamalı — iki operatör
+    // aynı satırı toplarsa miktarlar çakışır. Kimlik bir kez çözülür.
+    var myUserId by remember { mutableStateOf("") }
+    LaunchedEffect(Unit) { myUserId = BcApi.currentUserId(context) }
 
     fun reload() {
         scope.launch {
@@ -812,9 +817,14 @@ private fun WhsePickDocument(no: String, onBack: () -> Unit) {
     }
 
     val h = header
+    val assignedTo = firstValue(h ?: JSONObject(), "assignedUserId")
+    // Kimlik çözülemediyse (myUserId boş) KİLİTLEME: yanlış yere iş durdurmak,
+    // kilitlememekten daha kötü. Karar Toplama ekranındaki kuralla aynı.
+    val lockedByOther = assignedTo.isNotBlank() && myUserId.isNotBlank() &&
+        !assignedTo.trim().equals(myUserId.trim(), ignoreCase = true)
     val takeLines = lines.filter { !BcEnum.decodeOData(it.optString("actionType")).equals("Place", ignoreCase = true) }
     DocumentScanHandler(
-        enabled = qtyLine == null && groupTarget == null && !busy,
+        enabled = qtyLine == null && groupTarget == null && !busy && !lockedByOther,
         lines = takeLines,
         onSingleMatch = { line, _ ->
             scanFilter = ""
@@ -843,8 +853,25 @@ private fun WhsePickDocument(no: String, onBack: () -> Unit) {
             DocHeaderCard(
                 title = no,
                 subtitle = "Lokasyon: ${h?.optString("locationCode") ?: ""} · ${bcStatusLabelTr(h?.optString("status") ?: "")}",
+                badge = assignedTo.ifBlank { "Atanmadı" },
                 percent = h?.optDouble("percentComplete")?.toInt() ?: 0,
             )
+            if (lockedByOther) {
+                Spacer(Modifier.height(6.dp))
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(containerColor = bcwmsStatus().danger.copy(alpha = 0.14f)),
+                ) {
+                    Column(Modifier.padding(12.dp)) {
+                        Text("Bu çekme $assignedTo kullanıcısında", fontWeight = FontWeight.Bold, fontSize = 14.sp, color = bcwmsStatus().danger)
+                        Text(
+                            "Salt görüntüleme. Aynı belgeyi iki kişi toplarsa miktarlar çakışır. " +
+                                "Devam edecekseniz önce \"Bana Ata\" ile devralın.",
+                            fontSize = 12.sp,
+                        )
+                    }
+                }
+            }
             Spacer(Modifier.height(6.dp))
             StatusText(status)
             if (status.startsWith("🔬")) {
@@ -869,7 +896,7 @@ private fun WhsePickDocument(no: String, onBack: () -> Unit) {
                     groups = displayGroups,
                     staged = { it.optDouble("qtyToHandle", 0.0) },
                     modifier = Modifier.weight(1f),
-                    onGroupClick = { if (!busy) groupTarget = it },
+                    onGroupClick = { if (!busy && !lockedByOther) groupTarget = it },
                 )
             } else {
                 LineGrid(
@@ -879,17 +906,26 @@ private fun WhsePickDocument(no: String, onBack: () -> Unit) {
                     modifier = Modifier.weight(1f),
                     isDone = { lineDone(it, LineModule.PICK) },
                     isPartial = { linePartial(it, LineModule.PICK) },
-                    onRowClick = { qtyLine = it },
+                    onRowClick = { if (!lockedByOther) qtyLine = it },
                 )
             }
         }
         BottomActionBar {
+            // "Bana Ata" kilitliyken de açık: devralma tek çıkış yolu. BC tarafı
+            // (ClaimPick) belge başkasındaysa zaten reddeder, o hata gösterilir.
             OutlinedButton(onClick = { action("assignToMe", "{}", "Bana atandı") }, enabled = !busy, modifier = Modifier.weight(1f).height(54.dp)) {
                 Text("Bana Ata")
             }
-            val canRegister = com.dynops.bcwms.lib.ActionGuards.hasQuantity(lines)
+            val canRegister = com.dynops.bcwms.lib.ActionGuards.hasQuantity(lines) && !lockedByOther
             Button(onClick = { action("register", "{}", "Ambar çekme kaydedildi") }, enabled = !busy && canRegister, modifier = Modifier.weight(1f).height(54.dp)) {
-                Text(if (canRegister) "✅ Toplamayı Kaydet" else "Miktar girin", fontWeight = FontWeight.Bold)
+                Text(
+                    when {
+                        lockedByOther -> "Belge $assignedTo kullanıcısında"
+                        canRegister -> "✅ Toplamayı Kaydet"
+                        else -> "Miktar girin"
+                    },
+                    fontWeight = FontWeight.Bold,
+                )
             }
         }
     }

@@ -2,6 +2,36 @@
   "version": "0.2.0",
   "configurations": [
     {
+      "name": "Sandbox3007 - My Company (fast publish)",
+      "type": "al",
+      "request": "launch",
+      "environmentType": "Sandbox",
+      "environmentName": "Sandbox3007",
+      "tenant": "9de3e840-2fae-4ffb-b690-2fca32956342",
+      "company": "My Company",
+      "authentication": "AAD",
+      "schemaUpdateMode": "Synchronize",
+      "startupObjectType": "Page",
+      "startupObjectId": 72061,
+      "dependencyPublishingOption": "Default",
+      "launchBrowser": false
+    },
+    {
+      "name": "Sandbox3007 - My Company (force sync)",
+      "type": "al",
+      "request": "launch",
+      "environmentType": "Sandbox",
+      "environmentName": "Sandbox3007",
+      "tenant": "9de3e840-2fae-4ffb-b690-2fca32956342",
+      "company": "My Company",
+      "authentication": "AAD",
+      "schemaUpdateMode": "ForceSync",
+      "startupObjectType": "Page",
+      "startupObjectId": 72061,
+      "dependencyPublishingOption": "Default",
+      "launchBrowser": true
+    },
+    {
       "name": "SAND1 - My Company (fast publish)",
       "type": "al",
       "request": "launch",

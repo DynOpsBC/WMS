@@ -19,7 +19,11 @@ page 72092 "DOPSWHS Pick API"
             {
                 field(no; Rec."No.") { Caption = 'no'; }
                 field(locationCode; Rec."Location Code") { Caption = 'locationCode'; }
-                field(assignedUserId; Rec."Assigned User ID") { Caption = 'assignedUserId'; }
+                // SALT-OKUNUR: atama yalnızca claim/assignToMe (kural kontrollü) ya da
+                // forceReassign (yönetici) uçlarından değişir. Alan yazılabilir kalsaydı
+                // PATCH ile başkasının üstündeki toplama sessizce devralınabilirdi —
+                // eş zamanlılık kontrollerinin tamamı atlanmış olurdu.
+                field(assignedUserId; Rec."Assigned User ID") { Caption = 'assignedUserId'; Editable = false; }
                 field(pickMode; Rec."DOPSWHS Pick Mode") { Caption = 'pickMode'; }
                 // ELOG: araç bilgisini sorumlu masadan girer; terminal salt-okunur gösterir.
                 field(vehicleNo; Rec."DOPSWHS Vehicle No.") { Caption = 'vehicleNo'; Editable = false; }
@@ -65,11 +69,27 @@ page 72092 "DOPSWHS Pick API"
         PickMgmt.AssignToMe(Rec);
     end;
 
+    /// <summary>
+    /// Terminaldeki "Üzerime Al" — WMS oturumundaki operatör kendi adına üstlenir.
+    /// Toplama başka bir operatördeyse reddedilir (bkz. PickMgmt.ClaimPick).
+    /// </summary>
+    [ServiceEnabled]
+    procedure claim(userId: Code[50])
+    var
+        PickMgmt: Codeunit "DOPSWHS Pick Mgmt";
+    begin
+        PickMgmt.ClaimPick(Rec, userId, ClaimReasonLbl);
+    end;
+
     [ServiceEnabled]
     procedure startShippingLP(lpTemplateCode: Code[20]): Code[20]
     var
         PickMgmt: Codeunit "DOPSWHS Pick Mgmt";
     begin
+        // Sevk LP'si açmak toplamanın parçası: belge bu operatörde olmalı.
+        // (StartShippingLP masadaki Warehouse Pick kartından da çağrıldığı için
+        // kontrol codeunit'e değil, terminale bakan bu uca konuldu.)
+        PickMgmt.EnsurePickOperator(Rec);
         exit(PickMgmt.StartShippingLP(Rec, lpTemplateCode));
     end;
 
@@ -78,6 +98,7 @@ page 72092 "DOPSWHS Pick API"
     var
         PickMgmt: Codeunit "DOPSWHS Pick Mgmt";
     begin
+        PickMgmt.EnsurePickOperator(Rec);
         exit(PickMgmt.StopShippingLP(Rec, lpNo, printLabel));
     end;
 
@@ -91,6 +112,20 @@ page 72092 "DOPSWHS Pick API"
         PickMgmt.RegisterShortPick(PickLine, qty, reasonCode);
     end;
 
+    /// <summary>
+    /// Satır onayı — operatör kimliğiyle. Paylaşımlı BC hesabında sahipliği kesin
+    /// doğrulayan tek yol budur (pickLines PATCH yolu kimlik taşımaz).
+    /// </summary>
+    [ServiceEnabled]
+    procedure confirmLine(lineNo: Integer; qtyToHandle: Decimal; lotNo: Code[50]; userId: Code[50])
+    var
+        PickLine: Record "Warehouse Activity Line";
+        PickMgmt: Codeunit "DOPSWHS Pick Mgmt";
+    begin
+        PickLine.Get(Rec.Type, Rec."No.", lineNo);
+        PickMgmt.ConfirmPickLineFor(PickLine, qtyToHandle, lotNo, userId);
+    end;
+
     [ServiceEnabled]
     procedure register()
     var
@@ -99,8 +134,24 @@ page 72092 "DOPSWHS Pick API"
         PickMgmt.RegisterPick(Rec);
     end;
 
+    /// <summary>
+    /// Terminal bu ucu YALNIZCA kendine atama için çağırır ("Bana Ata"/"Üzerine Al",
+    /// userId = oturumdaki operatör). Bu yüzden zorla devretme değil, kural
+    /// kontrollü üstlenme (ClaimPick) çalıştırılır: belge başkasındaysa reddedilir.
+    /// Zorla devretme masa tarafındadır (Warehouse Pick kartı, Toplanacak
+    /// Siparişler, Pick Board) ve API'de forceReassign ucundan yapılır.
+    /// </summary>
     [ServiceEnabled]
     procedure reassign(userId: Code[50]; reason: Text[250])
+    var
+        PickMgmt: Codeunit "DOPSWHS Pick Mgmt";
+    begin
+        PickMgmt.ClaimPick(Rec, userId, reason);
+    end;
+
+    /// <summary>Yönetici yolu: belgeyi başka bir operatörden zorla devralır/devreder.</summary>
+    [ServiceEnabled]
+    procedure forceReassign(userId: Code[50]; reason: Text[250])
     var
         PickMgmt: Codeunit "DOPSWHS Pick Mgmt";
     begin
@@ -108,6 +159,7 @@ page 72092 "DOPSWHS Pick API"
     end;
 
     // ELOG: sipariş başına tote (sepet) bağlama — bkz. "DOPSWHS Pick Tote Assignment".
+    // Sahiplik kontrolü PickMgmt.AssignTote içinde (EnsurePickOperator).
     [ServiceEnabled]
     procedure assignTote(sourceOrderNo: Code[20]; lpNo: Code[20])
     var
@@ -129,6 +181,7 @@ page 72092 "DOPSWHS Pick API"
         DueDate: Date;
         PercentComplete: Decimal;
         StatusText: Text[30];
+        ClaimReasonLbl: Label 'Terminalden üzerine alındı.';
 
     local procedure FillCalculatedFields()
     var

@@ -152,8 +152,15 @@ private fun ReceiveDocument(no: String, onBack: () -> Unit) {
     var status by remember { mutableStateOf("") }
     var busy by remember { mutableStateOf(false) }
     var activeLp by remember { mutableStateOf<String?>(null) }
-    // İki adımlı kabul: önce "Hazır", sonra "Kaydet (post)".
-    var readyMarked by remember(no) { mutableStateOf(false) }
+    // TOPLU POST: satır onayı (PATCH receiptLines) belgeyi ASLA postlamaz —
+    // yalnız "Qty. to Receive"/lot/seri/LP yazar. Post tek bir yerden, alttaki
+    // butondan ve özet onayından sonra çalışır.
+    var showPostConfirm by remember(no) { mutableStateOf(false) }
+    // Operatörün bu oturumda onayladığı satırların Line No. kümesi. BC, belge
+    // oluşturulurken "Qty. to Receive" alanını kalan miktarla ÖNCEDEN doldurduğu
+    // için tek başına miktar alanı "bu satır işlendi" demek değildir; renk kodu
+    // ve post aktifliği bu kümeye bakar.
+    var touched by remember(no) { mutableStateOf(setOf<Int>()) }
 
     var showScan by remember { mutableStateOf(false) }
     var showQty by remember { mutableStateOf(false) }
@@ -211,6 +218,26 @@ private fun ReceiveDocument(no: String, onBack: () -> Unit) {
         onNoMatch = { r -> status = "⚠️ '${r.itemNo ?: r.value}' bu belgede yok" },
     )
     val displayLines = if (scanFilter.isBlank()) lines else lines.filter { matchLinesByBarcode(listOf(it), com.dynops.bcwms.scanner.BarcodeIntentResolver.resolve(scanFilter)).isNotEmpty() }
+
+    // Satırın kalan (henüz alınmamış) miktarı. Renk kodu bunun ne kadarının
+    // girildiğine bakar: tamamı → yeşil, bir kısmı → sarı.
+    val outstandingOf: (JSONObject) -> Double = { l ->
+        val q = l.optDouble("quantity", 0.0); val rec = l.optDouble("qtyReceived", 0.0)
+        if (q > 0) (q - rec).coerceAtLeast(0.0) else 0.0
+    }
+    val rowDone: (JSONObject) -> Boolean = { l ->
+        val out = outstandingOf(l); val t = l.optDouble("qtyToReceive", 0.0)
+        l.optInt("lineNo") in touched && t > 0.0 && (out <= 0.0 || t >= out)
+    }
+    val rowPartial: (JSONObject) -> Boolean = { l ->
+        val out = outstandingOf(l); val t = l.optDouble("qtyToReceive", 0.0)
+        l.optInt("lineNo") in touched && t > 0.0 && out > 0.0 && t < out
+    }
+    // Özet/aktiflik sayıları: "hazır" = operatörün miktar girdiği satır.
+    val readyCount = lines.count { rowDone(it) || rowPartial(it) }
+    val postLines = lines.filter { it.optDouble("qtyToReceive", 0.0) > 0.0 }
+    val postQty = postLines.sumOf { it.optDouble("qtyToReceive", 0.0) }
+
     Column(Modifier.fillMaxSize()) {
         Column(Modifier.weight(1f).padding(12.dp)) {
             TextButton(onClick = onBack) { Text("‹ Belge Listesi") }
@@ -221,6 +248,8 @@ private fun ReceiveDocument(no: String, onBack: () -> Unit) {
                 badge = firstValue(h ?: JSONObject(), "assignedUserId").ifBlank { "Atanmadı" },
                 percent = h?.optDouble("percentComplete")?.toInt() ?: 0
             )
+            Spacer(Modifier.height(6.dp))
+            LineReadySummary(ready = readyCount, total = lines.size, stagedQty = postQty)
             Spacer(Modifier.height(6.dp))
             StatusText(status)
             Spacer(Modifier.height(4.dp))
@@ -240,8 +269,16 @@ private fun ReceiveDocument(no: String, onBack: () -> Unit) {
                 LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     items(groups) { g ->
                         val staged = g.lines.sumOf { it.optDouble("qtyToReceive") }
-                        val done = staged > 0
-                        Card(onClick = { groupTarget = g }, modifier = Modifier.fillMaxWidth(), colors = doneCardColors(done)) {
+                        // Grup rengi de satır kuralıyla aynı: hepsi tamamsa yeşil,
+                        // bir kısmı işlendiyse sarı, hiçbiri işlenmediyse nötr.
+                        val done = g.lines.isNotEmpty() && g.lines.all { rowDone(it) }
+                        val partial = !done && g.lines.any { rowDone(it) || rowPartial(it) }
+                        val colors = when {
+                            done -> doneCardColors(true)
+                            partial -> CardDefaults.cardColors(containerColor = bcwmsStatus().warning.copy(alpha = 0.18f))
+                            else -> CardDefaults.cardColors()
+                        }
+                        Card(onClick = { groupTarget = g }, modifier = Modifier.fillMaxWidth(), colors = colors) {
                             Column(Modifier.padding(14.dp)) {
                                 Text("${donePrefix(done)}${g.itemNo} — ${g.description}", fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
                                 Text("${g.count} satır · Toplam kalan: ${fmtNum(g.totalOutstanding)}" + if (staged > 0) " · Girilen: ${fmtNum(staged)}" else "", fontSize = 12.sp, color = Color.Gray)
@@ -257,7 +294,9 @@ private fun ReceiveDocument(no: String, onBack: () -> Unit) {
                     columns = columns,
                     rows = displayLines,
                     modifier = Modifier.weight(1f),
-                    isDone = { lineDone(it, LineModule.RECEIPT) },
+                    isDone = rowDone,
+                    isPartial = rowPartial,
+                    showProgress = true,
                     onRowClick = { ln ->
                         scannedItem = ln.optString("itemNo"); scannedLine = ln
                         scanLot = ln.optString("lotNo"); scanSerial = ln.optString("serialNo")
@@ -296,40 +335,39 @@ private fun ReceiveDocument(no: String, onBack: () -> Unit) {
             }
         }
         BottomActionBar {
-            val canPost = com.dynops.bcwms.lib.ActionGuards.hasQuantity(lines, field = "qtyToReceive")
-            // İKİ ADIM: operatör miktarları girer ve "Hazır" der (BC'ye postalanmaz,
-            // belge hazır durumda bekler); postalamayı sorumlu BC'den ya da
-            // buradaki ikinci butondan yapar. Eskiden tek dokunuşla anında
-            // postalanıyordu, geri alınamıyordu.
-            if (!readyMarked) {
-                Button(
-                    onClick = {
-                        readyMarked = true
-                        status = "Mal kabul HAZIR — sorumlu onaylayınca kaydedilecek."
-                    },
-                    enabled = !busy && canPost,
-                    modifier = Modifier.fillMaxWidth().height(54.dp),
-                ) {
-                    Text(
-                        if (canPost) "Hazır olarak işaretle" else "Önce satırlara miktar girin",
-                        fontWeight = FontWeight.Bold,
-                    )
-                }
-            } else {
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedButton(
-                        onClick = { readyMarked = false; status = "" },
-                        enabled = !busy,
-                        modifier = Modifier.weight(1f).height(54.dp),
-                    ) { Text("Geri al") }
-                    Button(
-                        onClick = { action("post", """{"print":false,"invoice":false}""", "Mal kabul kaydedildi") },
-                        enabled = !busy && canPost,
-                        modifier = Modifier.weight(1.4f).height(54.dp),
-                    ) { Text("Kaydet (post)", fontWeight = FontWeight.Bold) }
-                }
+            // TOPLU POST: operatör istediği kadar satırı okutur/girer, belge
+            // ancak burada ve özet onayından sonra postalanır. En az bir satır
+            // işlenmeden buton açılmaz (yanlışlıkla boş belge postlanmasın).
+            val canPost = readyCount > 0 && postQty > 0.0
+            Button(
+                onClick = { showPostConfirm = true },
+                enabled = !busy && canPost,
+                modifier = Modifier.fillMaxWidth().height(54.dp),
+            ) {
+                Text(
+                    if (canPost) "Kaydet (post) — $readyCount satır" else "Önce satırlara miktar girin",
+                    fontWeight = FontWeight.Bold,
+                )
             }
         }
+    }
+
+    if (showPostConfirm) {
+        PostConfirmDialog(
+            title = "Mal kabulü kaydet",
+            readyCount = readyCount,
+            postLineCount = postLines.size,
+            totalLineCount = lines.size,
+            totalQty = postQty,
+            confirmLabel = "Kaydet",
+            onDismiss = { showPostConfirm = false },
+            onConfirm = {
+                showPostConfirm = false
+                action("post", """{"print":false,"invoice":false}""", "Mal kabul kaydedildi") { r ->
+                    if (r.ok) touched = emptySet()
+                }
+            },
+        )
     }
 
     if (showScan) {
@@ -365,7 +403,9 @@ private fun ReceiveDocument(no: String, onBack: () -> Unit) {
                     val r = BcApi.patch(context, "receiptLines(no='$no',lineNo=$lineNo)", body)
                     busy = false
                     status = if (r.ok) "TAMAM: Satır güncellendi (HTTP ${r.httpCode})" else "HATA: ${BcApi.errorMessage(r.body)} (HTTP ${r.httpCode})"
-                    if (r.ok) reload()
+                    // Satır işlendi olarak işaretlenir (post YOK) — grid'de yeşil/sarı
+                    // olması ve toplu post'un açılması bu kayda bağlı.
+                    if (r.ok) { touched = touched + lineNo; reload() }
                 }
             }
         )
@@ -388,14 +428,16 @@ private fun ReceiveDocument(no: String, onBack: () -> Unit) {
                     busy = true; status = "Grup dağıtılıyor..."
                     val plan = distributeQty(gt, res.quantity, capReceipt)
                     var okCount = 0
+                    val okLines = mutableSetOf<Int>()
                     for ((ln, q) in plan) {
                         val body = JSONObject().apply {
                             put("qtyToReceive", q)
                             activeLp?.let { put("licensePlateNo", it) }
                         }.toString()
                         val r = BcApi.patch(context, "receiptLines(no='$no',lineNo=${ln.optInt("lineNo")})", body)
-                        if (r.ok) okCount++
+                        if (r.ok) { okCount++; okLines.add(ln.optInt("lineNo")) }
                     }
+                    touched = touched + okLines
                     busy = false
                     status = "TAMAM: $okCount/${plan.size} satıra dağıtıldı (toplam ${fmtNum(res.quantity)})"
                     reload()
@@ -414,6 +456,80 @@ private fun ReceiveDocument(no: String, onBack: () -> Unit) {
 }
 
 private fun fmtNum(v: Double): String = if (v == v.toLong().toDouble()) v.toLong().toString() else v.toString()
+
+/**
+ * Belge üstü toplu-post özeti: kaç satır hazır ve kaydedilecek toplam miktar.
+ * Operatör satırları tek tek girerken belgenin bütününde nerede olduğunu
+ * görsün diye başlığın hemen altında durur.
+ */
+@Composable
+private fun LineReadySummary(ready: Int, total: Int, stagedQty: Double) {
+    val palette = bcwmsStatus()
+    Surface(
+        color = if (ready > 0) palette.success.copy(alpha = 0.14f) else MaterialTheme.colorScheme.surfaceVariant,
+        shape = RoundedCornerShape(10.dp),
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Row(Modifier.padding(horizontal = 12.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                "$ready/$total satır hazır",
+                fontWeight = FontWeight.Bold,
+                fontSize = 13.sp,
+                color = if (ready > 0) palette.success else MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Spacer(Modifier.weight(1f))
+            Text("Kaydedilecek miktar: ${fmtNum(stagedQty)}", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+    }
+}
+
+/**
+ * Post öncesi özet onayı. Post geri alınamadığı için operatör ne kadarını
+ * kaydettiğini rakamla görmeden ilerleyemesin. [postLineCount] BC'nin gerçekten
+ * kaydedeceği satır sayısıdır — miktar alanı BC tarafından önceden doldurulmuş
+ * (operatörün dokunmadığı) satırlar da buna dahildir, o fark ayrıca uyarılır.
+ */
+@Composable
+private fun PostConfirmDialog(
+    title: String,
+    readyCount: Int,
+    postLineCount: Int,
+    totalLineCount: Int,
+    totalQty: Double,
+    confirmLabel: String,
+    onDismiss: () -> Unit,
+    onConfirm: () -> Unit,
+) {
+    val palette = bcwmsStatus()
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(title, fontWeight = FontWeight.Bold) },
+        text = {
+            Column {
+                Text("İşlediğiniz satır: $readyCount/$totalLineCount", fontSize = 14.sp)
+                Text("Kaydedilecek satır: $postLineCount", fontSize = 14.sp)
+                Text("Toplam miktar: ${fmtNum(totalQty)}", fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                val extra = postLineCount - readyCount
+                if (extra > 0) {
+                    Spacer(Modifier.height(6.dp))
+                    Text(
+                        "Dikkat: $extra satırda miktar sizin girişiniz olmadan dolu (BC varsayılanı) ve bunlar da kaydedilecek.",
+                        fontSize = 12.sp,
+                        color = palette.warning,
+                    )
+                }
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    "Kayıt, belgeyi Business Central'da postalar ve geri alınamaz.",
+                    fontSize = 12.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        },
+        confirmButton = { Button(onClick = onConfirm) { Text(confirmLabel, fontWeight = FontWeight.Bold) } },
+        dismissButton = { OutlinedButton(onClick = onDismiss) { Text("Vazgeç") } },
+    )
+}
 
 // ============================================================
 // Tab 2: Purchase Order direct receive
@@ -536,8 +652,11 @@ private fun ReceivePurchaseOrder(no: String, onBack: () -> Unit) {
     var qtyLine by remember { mutableStateOf<JSONObject?>(null) }
     var showScan by remember { mutableStateOf(false) }
     var scanFilter by remember { mutableStateOf("") }
-    // İki adımlı kabul: önce "Hazır", sonra kayıt.
-    var readyMarked by remember(no) { mutableStateOf(false) }
+    // TOPLU POST (bkz. Ambar Mal Kabul): satır PATCH'i belgeyi postlamaz, kayıt
+    // yalnız alttaki butondan + özet onayından sonra çalışır.
+    var showPostConfirm by remember(no) { mutableStateOf(false) }
+    // Operatörün bu oturumda miktar girdiği PO satırları (Line No.).
+    var touched by remember(no) { mutableStateOf(setOf<Int>()) }
     // Ambar Mal Kabul'deki gibi konfigüre edilebilir kolonlar (kendi tercihi:
     // PO satırlarının alan adları farklı olduğu için ayrı kolon seti + ayrı anahtar).
     var columns by remember { mutableStateOf(ColumnPrefs.get(context, "purchaseOrder", GridColumns.purchaseOrder)) }
@@ -570,6 +689,22 @@ private fun ReceivePurchaseOrder(no: String, onBack: () -> Unit) {
         onNoMatch = { r -> status = "⚠️ '${r.itemNo ?: r.value}' bu PO'da yok" },
     )
     val displayLines = if (scanFilter.isBlank()) lines else lines.filter { matchLinesByBarcode(listOf(it), com.dynops.bcwms.scanner.BarcodeIntentResolver.resolve(scanFilter)).isNotEmpty() }
+
+    // Satır durumu: PO satırında kalan miktar "outstandingQuantity" alanından
+    // gelir; girilen miktar kalanın tamamını kapatıyorsa yeşil, bir kısmını
+    // kapatıyorsa sarı, operatör dokunmadıysa nötr.
+    val rowDone: (JSONObject) -> Boolean = { l ->
+        val out = l.optDouble("outstandingQuantity", 0.0); val t = l.optDouble("qtyToReceive", 0.0)
+        l.optInt("lineNo") in touched && t > 0.0 && (out <= 0.0 || t >= out)
+    }
+    val rowPartial: (JSONObject) -> Boolean = { l ->
+        val out = l.optDouble("outstandingQuantity", 0.0); val t = l.optDouble("qtyToReceive", 0.0)
+        l.optInt("lineNo") in touched && t > 0.0 && out > 0.0 && t < out
+    }
+    val readyCount = lines.count { rowDone(it) || rowPartial(it) }
+    val postLines = lines.filter { it.optDouble("qtyToReceive", 0.0) > 0.0 }
+    val postQty = postLines.sumOf { it.optDouble("qtyToReceive", 0.0) }
+
     Column(Modifier.fillMaxSize()) {
         Column(Modifier.weight(1f).padding(12.dp)) {
             TextButton(onClick = onBack) { Text("‹ PO Listesi") }
@@ -595,6 +730,8 @@ private fun ReceivePurchaseOrder(no: String, onBack: () -> Unit) {
                 }
             }
             Spacer(Modifier.height(6.dp))
+            LineReadySummary(ready = readyCount, total = lines.size, stagedQty = postQty)
+            Spacer(Modifier.height(6.dp))
             StatusText(status)
             Spacer(Modifier.height(4.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -612,7 +749,9 @@ private fun ReceivePurchaseOrder(no: String, onBack: () -> Unit) {
                     columns = columns,
                     rows = displayLines,
                     modifier = Modifier.weight(1f),
-                    isDone = { lineDone(it, LineModule.PURCHASE) },
+                    isDone = rowDone,
+                    isPartial = rowPartial,
+                    showProgress = true,
                     onRowClick = { ln -> if (directAllowed) qtyLine = ln },
                 )
             }
@@ -626,36 +765,48 @@ private fun ReceivePurchaseOrder(no: String, onBack: () -> Unit) {
             OutlinedButton(onClick = { showScan = true }, enabled = !busy && directAllowed, modifier = Modifier.weight(1f)) { Text("📷 Ürün Tara") }
         }
         BottomActionBar {
-            // İki adım (bkz. Ambar Mal Kabul): önce "Hazır", sonra kayıt.
-            if (!readyMarked) {
-                Button(
-                    onClick = { readyMarked = true; status = "Mal kabul HAZIR — onaylayınca kaydedilecek." },
-                    enabled = !busy && directAllowed,
-                    modifier = Modifier.fillMaxWidth().height(54.dp),
-                ) { Text("Hazır olarak işaretle", fontWeight = FontWeight.Bold) }
-            } else Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedButton(
-                    onClick = { readyMarked = false; status = "" },
-                    enabled = !busy,
-                    modifier = Modifier.weight(1f).height(54.dp),
-                ) { Text("Geri al") }
-                Button(
-                    onClick = {
-                        scope.launch {
-                            busy = true; status = "Mal kabul kaydı..."
-                            val body = JSONObject().apply { put("invoice", invoiceToo) }.toString()
-                            val r = BcApi.boundAction(context, "purchaseSources", no, "receive", body)
-                            busy = false
-                            status = if (r.ok) "TAMAM: PO mal kabul kaydedildi (HTTP ${r.httpCode})"
-                                else "HATA: ${BcApi.errorMessage(r.body)} (HTTP ${r.httpCode})"
-                            if (r.ok) { readyMarked = false; reload() }
-                        }
+            // TOPLU POST: en az bir satır işlenmeden kayıt açılmaz.
+            val canPost = directAllowed && readyCount > 0 && postQty > 0.0
+            Button(
+                onClick = { showPostConfirm = true },
+                enabled = !busy && canPost,
+                modifier = Modifier.fillMaxWidth().height(54.dp),
+            ) {
+                Text(
+                    when {
+                        !directAllowed -> "Doğrudan mal kabul kapalı"
+                        readyCount == 0 -> "Önce satırlara miktar girin"
+                        invoiceToo -> "Kaydet ve Faturala — $readyCount satır"
+                        else -> "Kaydet (post) — $readyCount satır"
                     },
-                    enabled = !busy && directAllowed,
-                    modifier = Modifier.weight(1.4f).height(54.dp),
-                ) { Text(if (invoiceToo) "Kaydet ve Faturala" else "Kaydet (post)", fontWeight = FontWeight.Bold) }
+                    fontWeight = FontWeight.Bold,
+                )
             }
         }
+    }
+
+    if (showPostConfirm) {
+        PostConfirmDialog(
+            title = if (invoiceToo) "Mal kabul + fatura kaydı" else "PO mal kabulünü kaydet",
+            readyCount = readyCount,
+            postLineCount = postLines.size,
+            totalLineCount = lines.size,
+            totalQty = postQty,
+            confirmLabel = if (invoiceToo) "Kaydet ve Faturala" else "Kaydet",
+            onDismiss = { showPostConfirm = false },
+            onConfirm = {
+                showPostConfirm = false
+                scope.launch {
+                    busy = true; status = "Mal kabul kaydı..."
+                    val body = JSONObject().apply { put("invoice", invoiceToo) }.toString()
+                    val r = BcApi.boundAction(context, "purchaseSources", no, "receive", body)
+                    busy = false
+                    status = if (r.ok) "TAMAM: PO mal kabul kaydedildi (HTTP ${r.httpCode})"
+                        else "HATA: ${BcApi.errorMessage(r.body)} (HTTP ${r.httpCode})"
+                    if (r.ok) { touched = emptySet(); reload() }
+                }
+            },
+        )
     }
 
     val ql = qtyLine
@@ -684,7 +835,8 @@ private fun ReceivePurchaseOrder(no: String, onBack: () -> Unit) {
                     busy = false
                     status = if (r.ok) "TAMAM: PO satırı qty=${res.quantity} (HTTP ${r.httpCode})"
                         else "HATA: ${BcApi.errorMessage(r.body)} (HTTP ${r.httpCode})"
-                    if (r.ok) reload()
+                    // Satır işlendi (post YOK) — renk kodu ve toplu post aktifliği buna bağlı.
+                    if (r.ok) { touched = touched + lineNo; reload() }
                 }
             }
         )

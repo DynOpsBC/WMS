@@ -9,23 +9,50 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.dynops.bcwms.BcApi
 import com.dynops.bcwms.scanner.BarcodeIntentResolver
 import com.dynops.bcwms.scanner.ScanField
 import com.dynops.bcwms.ui.BottomActionBar
 import com.dynops.bcwms.ui.EmptyState
-import com.dynops.bcwms.ui.StatusText
+import com.dynops.bcwms.ui.bcwmsStatus
 import com.dynops.bcwms.ui.firstValue
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
 import org.json.JSONObject
 
-private val PackAccent = Color(0xFF6C5CE7)
+/**
+ * Operatör mesajının tonu. Metnin başına işaret koymak yerine rengi tondan
+ * geliyor — böylece mesajlar kısa kalıyor ve tema (açık/koyu) ile uyumlu.
+ */
+private enum class PackTone { INFO, OK, WARN, ERR }
+
+private data class PackMsg(val text: String = "", val tone: PackTone = PackTone.INFO)
+
+/** Ekranda en fazla TEK satır mesaj — boşsa hiç yer kaplamaz. */
+@Composable
+private fun PackStatusLine(msg: PackMsg) {
+    if (msg.text.isBlank()) return
+    val palette = bcwmsStatus()
+    val color = when (msg.tone) {
+        PackTone.OK -> palette.success
+        PackTone.WARN -> palette.warning
+        PackTone.ERR -> palette.danger
+        PackTone.INFO -> MaterialTheme.colorScheme.onSurfaceVariant
+    }
+    Text(
+        msg.text,
+        style = MaterialTheme.typography.bodyMedium,
+        fontWeight = FontWeight.Medium,
+        color = color,
+    )
+}
+
+/** Listede gösterilen "şimdi okutulacak" ürün — aynı ürün tek satırda toplanır. */
+private data class PendingItem(val itemNo: String, val description: String, val qty: Double)
 
 /**
  * İyimser paketleme için: verilen sipariş+ürünün ilk eksik satırında
@@ -53,12 +80,10 @@ private fun bumpPackedQty(
 }
 
 /**
- * ELOG pick-bazlı paketleme. Register edilen pick, siparişlerini paketleme
- * kuyruğuna bırakır (packingOrders, her satır bir sipariş + pickNo). Liste
- * PICK bazında gruplanır; bir pick'e girince o pick'in siparişleri SIRAYLA
- * paketlenir — sipariş bitince "fatura basılıyor" bildirimi + otomatik sonraki
- * siparişe geçiş. Sevk+fatura BC tarafında (PackStationMgmt.PostOrder →
- * PostSalesOrderShipAndInvoice) otomatik kesilir.
+ * ELOG pick-bazlı paketleme listesi. Her kart bir sepet (pick) — kart başlığı
+ * SEPET no'su, çünkü operatörün elindeki fiziksel nesne o. Sepet/pick/sipariş
+ * okutunca doğrudan belgeye girilir; liste ekranı arama için değil, sadece
+ * "elimde barkod yoksa" durumu için.
  */
 @Composable
 fun PackingModule() {
@@ -66,23 +91,21 @@ fun PackingModule() {
     val scope = rememberCoroutineScope()
     var orders by remember { mutableStateOf<List<JSONObject>>(emptyList()) }
     var selectedPick by remember { mutableStateOf<String?>(null) }
-    var status by remember { mutableStateOf("") }
+    var msg by remember { mutableStateOf(PackMsg()) }
     var loading by remember { mutableStateOf(false) }
     var search by remember { mutableStateOf("") }
 
     fun load() {
         scope.launch {
             loading = true
-            status = "Paketlenecek siparişler yükleniyor..."
+            msg = PackMsg("Yükleniyor…")
             val r = BcApi.get(context, "packingOrders?\$top=500&\$orderby=readyDateTime asc")
             orders = if (r.ok) BcApi.parseValueArray(r.body).filter {
                 !firstValue(it, "status").equals("Completed", ignoreCase = true)
             } else emptyList()
-            status = when {
-                !r.ok -> "HATA: Paketleme kuyruğu alınamadı (HTTP ${r.httpCode})"
-                orders.isEmpty() -> "BOŞ: Paketlenecek sipariş yok"
-                else -> "TAMAM: ${orders.size} sipariş paketleme bekliyor"
-            }
+            // Başarı mesajı yazmıyoruz: sayı zaten başlıkta, boş liste kendi
+            // kartında. Ekranda gereksiz satır kalmasın.
+            msg = if (r.ok) PackMsg() else PackMsg("Liste alınamadı, tekrar deneyin.", PackTone.ERR)
             loading = false
         }
     }
@@ -95,7 +118,7 @@ fun PackingModule() {
         return
     }
 
-    // Pick bazında grupla — her pick kartı, altındaki siparişlerin özeti.
+    // Pick bazında grupla — her kart bir sepet.
     val byPick = orders.groupBy { it.optString("pickNo").ifBlank { "—" } }
     val shownPicks = if (search.isBlank()) byPick else byPick.filter { (pick, ords) ->
         pick.contains(search, ignoreCase = true) ||
@@ -108,16 +131,21 @@ fun PackingModule() {
     }
 
     Column(Modifier.fillMaxSize().padding(12.dp)) {
+        // Ekran başlığı üst çubukta ("Paketleme") zaten var — burada sadece
+        // sayaç + yenile duruyor.
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Text("📦 Paketleme", fontWeight = FontWeight.Bold, fontSize = 18.sp)
-            Spacer(Modifier.weight(1f))
-            OutlinedButton(onClick = { load() }, enabled = !loading) { Text(if (loading) "…" else "🔄") }
+            Text(
+                if (orders.isEmpty()) "" else "${byPick.size} sepet · ${orders.size} sipariş",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.weight(1f),
+            )
+            TextButton(onClick = { load() }, enabled = !loading) { Text(if (loading) "…" else "Yenile") }
         }
-        Spacer(Modifier.height(8.dp))
         // Sepet/LP, pick ya da sipariş okutulunca DOĞRUDAN o belgeye gir —
         // paketleyici listede aramakla uğraşmasın.
         ScanField(
-            label = "📷 Sepet / pick / sipariş okut",
+            label = "Sepet / sipariş okut",
             value = search,
             onValueChange = { search = it },
             modifier = Modifier.fillMaxWidth(),
@@ -135,63 +163,62 @@ fun PackingModule() {
                 if (hit != null) {
                     search = ""
                     selectedPick = hit.key
-                } else status = "⚠️ '$v' paketleme kuyruğunda bulunamadı"
+                } else msg = PackMsg("'$v' bulunamadı", PackTone.WARN)
             },
         )
         Spacer(Modifier.height(6.dp))
-        StatusText(status)
+        PackStatusLine(msg)
         Spacer(Modifier.height(8.dp))
         LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             items(shownPicks.entries.toList(), key = { it.key }) { (pickNo, ords) ->
-                val anyInProgress = ords.any { firstValue(it, "status").contains("Progress", ignoreCase = true) }
+                val started = ords.any { firstValue(it, "status").contains("Progress", ignoreCase = true) }
+                // Ürünlerin toplandığı sepet (LP) — operatörün elindeki nesne bu,
+                // o yüzden kart başlığı. Okutunca da bu belgeye giriliyor.
+                val lp = ords.firstNotNullOfOrNull {
+                    it.optString("mainLpNo").takeIf { s -> s.isNotBlank() }
+                }
+                val packer = ords.firstNotNullOfOrNull {
+                    it.optString("startedByUser").takeIf { s -> s.isNotBlank() }
+                }
+                // Tek satırda özet: sipariş sayısı, pick ve (varsa) paketleyen.
+                val meta = buildList {
+                    add("${ords.size} sipariş")
+                    if (lp != null) add("Pick $pickNo")
+                    if (!packer.isNullOrBlank()) add(packer)
+                }.joinToString(" · ")
+                val warn = bcwmsStatus().warning
                 Card(
                     onClick = { selectedPick = pickNo },
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(14.dp),
-                    border = BorderStroke(1.dp, if (anyInProgress) Color(0xFFFFA000) else Color(0xFFEF5350)),
-                    colors = CardDefaults.cardColors(containerColor = if (anyInProgress) Color(0xFFFFF8E1) else Color(0xFFFFEBEE)),
+                    border = BorderStroke(1.dp, if (started) warn else MaterialTheme.colorScheme.outline),
                 ) {
                     Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Text(if (anyInProgress) "🟠" else "📦", fontSize = 22.sp)
-                        Spacer(Modifier.width(10.dp))
                         Column(Modifier.weight(1f)) {
-                            Text("Pick $pickNo", fontWeight = FontWeight.Bold, fontSize = 16.sp)
                             Text(
-                                "📦 ${ords.size} sipariş · ${ords.firstOrNull()?.optString("locationCode").orEmpty()}",
-                                fontSize = 12.sp, fontWeight = FontWeight.Medium,
+                                if (lp != null) "Sepet $lp" else "Pick $pickNo",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold,
                             )
-                            // İlk birkaç siparişi göster.
                             Text(
-                                ords.take(3).joinToString(" · ") { it.optString("salesOrderNo") } +
-                                    if (ords.size > 3) " …" else "",
-                                fontSize = 11.sp, color = Color.Gray,
+                                meta,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
-                            // Ürünlerin toplandığı sepet (LP) — paketleyici
-                            // sepeti okutarak da bu belgeye girebilir.
-                            val lp = ords.firstNotNullOfOrNull {
-                                it.optString("mainLpNo").takeIf { s -> s.isNotBlank() }
-                            }
-                            if (!lp.isNullOrBlank()) {
-                                Text(
-                                    "📦 Sepet: $lp",
-                                    fontSize = 12.sp,
-                                    fontWeight = FontWeight.SemiBold,
-                                    color = Color(0xFF4527A0),
-                                )
-                            }
-                            // Paketlemeyi kim üstlendi (varsa).
-                            val packer = ords.firstNotNullOfOrNull {
-                                it.optString("startedByUser").takeIf { s -> s.isNotBlank() }
-                            }
-                            if (!packer.isNullOrBlank()) {
-                                Text("👤 Paketleyen: $packer", fontSize = 11.sp, color = Color(0xFF6D4C41))
-                            }
                         }
-                        Text("Paketle ›", fontWeight = FontWeight.Bold, color = Color(0xFFC62828))
+                        if (started) {
+                            Text("başlandı", style = MaterialTheme.typography.labelSmall, color = warn)
+                            Spacer(Modifier.width(8.dp))
+                        }
+                        Text(
+                            "›",
+                            style = MaterialTheme.typography.titleLarge,
+                            color = MaterialTheme.colorScheme.primary,
+                        )
                     }
                 }
             }
-            if (shownPicks.isEmpty() && !loading) item { EmptyState("Paketlenecek sipariş yok.") }
+            if (shownPicks.isEmpty() && !loading) item { EmptyState("Paketlenecek sepet yok.") }
         }
     }
 }
@@ -199,9 +226,13 @@ fun PackingModule() {
 /**
  * ELOG "ürün-önce" paketleme: pick'in TÜM siparişleri tek session'da toplanır.
  * Operatör sepetten eline gelen ürünü okutur; BC (ScanItem) o ürünü doğru
- * siparişe yazar. Satırlar siparişe göre gruplanıp bilgi amaçlı gösterilir.
- * Bir siparişin payı bitince o sipariş için kutu istenir; kutulanınca sevk+
- * fatura kesilir. Tüm siparişler kapanınca pick özeti gösterilir.
+ * siparişe yazar. Bir siparişin payı bitince o sipariş için koli istenir;
+ * kolilenince sevk+fatura kesilir.
+ *
+ * SADELEŞTİRME: ekranda aynı anda tek iş var — ya "ürün okut" ya "koli okut".
+ * Ürün listesi sipariş sipariş değil, ÜRÜN bazında ve sadece kalanlar
+ * gösterilir (biten satır listeden düşer). Sipariş dökümü en altta kapalı
+ * durur, isteyen açar; böylece tamamlananlar listeyi şişirmez.
  */
 @Composable
 private fun PickPackingDocument(
@@ -213,21 +244,21 @@ private fun PickPackingDocument(
     val scope = rememberCoroutineScope()
     var sessionId by remember(pickNo) { mutableStateOf(0) }
     var lines by remember(pickNo) { mutableStateOf<List<JSONObject>>(emptyList()) }
-    // Sipariş no -> müşteri adı (packingOrders'tan; başlıkta göstermek için).
+    // Sipariş no -> müşteri adı (packingOrders'tan; koli adımında göstermek için).
     var customerByOrder by remember(pickNo) { mutableStateOf<Map<String, String>>(emptyMap()) }
-    var status by remember(pickNo) { mutableStateOf("") }
+    var msg by remember(pickNo) { mutableStateOf(PackMsg()) }
     var busy by remember(pickNo) { mutableStateOf(false) }
     var itemInput by remember(pickNo) { mutableStateOf("") }
     var boxInput by remember(pickNo) { mutableStateOf("") }
-    var showBoxScan by remember(pickNo) { mutableStateOf(false) }
     // BC'de artık açık olmayan (silinmiş/kaydedilmiş) siparişler. Bunlar asla
-    // kapanamaz; kutu adımında ekranı kilitlememeleri için atlanır.
+    // kapanamaz; koli adımında ekranı kilitlememeleri için atlanır.
     var blockedOrders by remember(pickNo) { mutableStateOf<Set<String>>(emptySet()) }
     // Toplamada kullanılan ana sepet — paketleyici ürünleri nereden alacağını görsün.
     var mainLp by remember(pickNo) { mutableStateOf("") }
     var pickDone by remember(pickNo) { mutableStateOf(false) }
-    // Kullanıcının elle açtığı (katlanmış) siparişler. Aktif sipariş her zaman açık.
-    var expandedOrders by remember(pickNo) { mutableStateOf<Set<String>>(emptySet()) }
+    // Sipariş dökümü varsayılan KAPALI — operatörün işi ürün okutmak, sipariş
+    // kırılımı sadece merak edilince açılan bir detay.
+    var showOrders by remember(pickNo) { mutableStateOf(false) }
 
     suspend fun reloadLines() {
         if (sessionId > 0) {
@@ -252,7 +283,7 @@ private fun PickPackingDocument(
     }
 
     suspend fun startIfNeeded() {
-        status = "Paketleme başlatılıyor..."
+        msg = PackMsg("Hazırlanıyor…")
         val me = BcApi.currentUserId(context)
         val body = JSONObject().apply {
             put("pickNo", pickNo)
@@ -267,12 +298,14 @@ private fun PickPackingDocument(
                 launch { loadCustomers() }
                 launch { reloadLines() }
             }
-            status = "🔴 Sepetteki ürünleri okutun — sistem doğru siparişe yazar"
-        } else if (r.httpCode == 404) {
-            // startPickPacking AL action'ı henüz publish edilmemiş — sessiz
-            // "hazırlanıyor" durumu (korkutucu HATA yazısı gösterme).
-            status = "⏳ Paketleme hazırlanıyor…"
-        } else status = "⏳ Paketleme hazırlanıyor…"
+            // Ne yapılacağını okutma alanı ve liste zaten söylüyor.
+            msg = PackMsg()
+        } else {
+            // startPickPacking AL action'ı henüz publish edilmemiş olabilir (404)
+            // ya da BC yanıt vermemiş olabilir — her iki durumda da korkutucu
+            // HATA yazısı yerine sessiz "hazırlanıyor" durumu gösterilir.
+            msg = PackMsg("Hazırlanıyor…")
+        }
     }
 
     // ELOG katı kilit: bir siparişe başlandıysa (kısmen paketli ama bitmemiş),
@@ -309,8 +342,8 @@ private fun PickPackingDocument(
     }
 
     /**
-     * Ürün okut. İYİMSER: satırın paketlenen miktarı anında yerelde artar ve
-     * kırmızıdan yeşile döner; BC yazımı arka planda gider. Operatör ard arda
+     * Ürün okut. İYİMSER: satırın kalan miktarı anında yerelde düşer (biten
+     * satır listeden kalkar); BC yazımı arka planda gider. Operatör ard arda
      * okutmaya devam edebilir — hata olursa gerçek durum geri yüklenir.
      */
     fun scanItem(raw: String) {
@@ -321,19 +354,19 @@ private fun PickPackingDocument(
         val target = targetOrderFor(itemNo)
         // Aktif sipariş varsa ve bu ürün ona ait değilse → kilit reddi.
         if (locked != null && target == null) {
-            status = "🔒 Önce $locked siparişini bitir — bu ürün o siparişte beklenmiyor"
+            msg = PackMsg("Önce $locked siparişini bitir", PackTone.WARN)
             itemInput = ""
             return
         }
         if (target == null) {
-            status = "❌ $itemNo bu pickte beklenmiyor veya tümü paketlendi"
+            msg = PackMsg("$itemNo bu sepette kalmadı", PackTone.ERR)
             itemInput = ""
             return
         }
-        // 1) Yerel artış — ekran anında tepki verir.
+        // 1) Yerel düşüş — ekran anında tepki verir.
         itemInput = ""
         lines = bumpPackedQty(lines, target, itemNo, 1.0)
-        status = "✅ $itemNo → $target"
+        msg = PackMsg("$itemNo okundu", PackTone.OK)
         // 2) BC'ye arka planda yaz.
         scope.launch {
             val body = JSONObject().apply {
@@ -347,11 +380,13 @@ private fun PickPackingDocument(
                 // scanItemForOrder dönüşü: tamamlandıysa o sipariş no'su, yoksa boş.
                 val done = BcApi.scalarValue(r.body).trim()
                 if (done.isNotBlank()) {
-                    status = "🧾 $done tamamlandı — kargo kolisini okutun"
+                    // Sipariş bitti — koli kartı zaten ekranı devraldığı için
+                    // ayrıca mesaj yazmıyoruz.
+                    msg = PackMsg()
                     reloadLines()   // sipariş kapandı → gerçek durumu al
                 }
             } else {
-                status = "❌ ${BcApi.errorMessage(r.body)} (HTTP ${r.httpCode})"
+                msg = PackMsg("Okutma kaydedilemedi: ${BcApi.errorMessage(r.body)}", PackTone.ERR)
                 reloadLines()       // iyimser artışı geri al
             }
         }
@@ -366,7 +401,7 @@ private fun PickPackingDocument(
         val boxLp = BarcodeIntentResolver.resolve(raw).value.trim()
         scope.launch {
             busy = true
-            status = "📦 $orderNo için kargo kolisi bağlanıyor…"
+            msg = PackMsg("$orderNo kapatılıyor…")
             val body = JSONObject().apply {
                 put("sessionId", sessionId)
                 put("orderNo", orderNo)
@@ -375,23 +410,23 @@ private fun PickPackingDocument(
             }.toString()
             val r = BcApi.boundAction(context, "packOps", "", "setBoxForOrder", body)
             if (r.ok) {
-                boxInput = ""; showBoxScan = false
+                boxInput = ""
                 blockedOrders = blockedOrders - orderNo
                 reloadLines()
-                status = "🧾 $orderNo kolilendi · sevk+fatura+fiş kesildi"
+                msg = PackMsg("$orderNo kapandı, faturası kesildi", PackTone.OK)
             } else {
-                val msg = BcApi.errorMessage(r.body)
+                val err = BcApi.errorMessage(r.body)
                 // Satış siparişi yoksa/kapalıysa bu sipariş ASLA kapanmaz;
-                // ekran kutu adımında kilitleniyordu. Siparişi "engelli" işaretle,
+                // ekran koli adımında kilitleniyordu. Siparişi "engelli" işaretle,
                 // operatör atlayıp sonraki siparişe geçebilsin.
                 val gone = r.httpCode == 404 ||
-                    msg.contains("Sales Header does not exist", ignoreCase = true) ||
-                    msg.contains("artık açık değil", ignoreCase = true)
+                    err.contains("Sales Header does not exist", ignoreCase = true) ||
+                    err.contains("artık açık değil", ignoreCase = true)
                 if (gone) {
                     blockedOrders = blockedOrders + orderNo
-                    boxInput = ""; showBoxScan = false
-                    status = "⚠️ $orderNo BC'de açık değil — atlandı. Sorumluya bildirin."
-                } else status = "❌ $msg (HTTP ${r.httpCode})"
+                    boxInput = ""
+                    msg = PackMsg("$orderNo kapatılamıyor — atlandı, sorumluya bildirin.", PackTone.WARN)
+                } else msg = PackMsg("Koli bağlanamadı: $err", PackTone.ERR)
             }
             busy = false
         }
@@ -404,84 +439,110 @@ private fun PickPackingDocument(
         return
     }
 
-    // Satırları siparişe göre grupla (görsel bilgi). Her grup: sipariş no +
-    // müşteri + paketlenen/toplam. Bekleyen satır pembe, tamamlanan yeşil.
     val byOrder = lines.groupBy { it.optString("sourceOrderNo") }
-    // Kutu bekleyen siparişler: tüm satırları paketlenmiş ama henüz kutusuz.
+    // Koli bekleyen siparişler: tüm satırları paketlenmiş ama henüz kolisiz.
     val boxNeeded = byOrder.filter { (orderNo, ords) ->
-        // BC'de açık olmayan sipariş kapanamaz → kutu adımına düşürme,
+        // BC'de açık olmayan sipariş kapanamaz → koli adımına düşürme,
         // yoksa ekran o siparişte kilitleniyor.
         orderNo !in blockedOrders &&
             ords.isNotEmpty() &&
             ords.all { it.optDouble("qtyPacked") >= it.optDouble("qtyExpected") } &&
             ords.any { it.optString("boxLpNo").isBlank() }
     }.keys.toList()
-    // Tüm satırlar paketlendi + hepsi kutulandı → pick biter.
+    // Tüm satırlar paketlendi + hepsi kolilendi → pick biter.
     val allBoxed = lines.isNotEmpty() &&
         lines.all { it.optDouble("qtyPacked") >= it.optDouble("qtyExpected") && it.optString("boxLpNo").isNotBlank() }
     LaunchedEffect(allBoxed) { if (allBoxed) { kotlinx.coroutines.delay(900); pickDone = true } }
 
     val totalExpected = lines.sumOf { it.optDouble("qtyExpected") }
     val totalPacked = lines.sumOf { it.optDouble("qtyPacked") }
+    val activeOrder = activeLockedOrder()
+    // Ekranda tek iş olsun: koli bekleyen sipariş varsa o, yoksa ürün okutma.
+    val boxOrderNo = boxNeeded.firstOrNull()
+
+    // Şimdi okutulabilecek ürünler. Kilit varsa sadece aktif siparişin kalanı
+    // (diğerleri nasılsa reddedilir, listede durup kafa karıştırmasın). Aynı
+    // ürünün farklı siparişlerdeki satırları tek satırda toplanır.
+    val pending = lines
+        .filter {
+            it.optDouble("qtyPacked") < it.optDouble("qtyExpected") &&
+                (activeOrder == null || it.optString("sourceOrderNo") == activeOrder)
+        }
+        .groupBy { it.optString("itemNo") }
+        .map { (itemNo, group) ->
+            PendingItem(
+                itemNo = itemNo,
+                description = group.first().optString("description"),
+                qty = group.sumOf { (it.optDouble("qtyExpected") - it.optDouble("qtyPacked")).coerceAtLeast(0.0) },
+            )
+        }
+        .sortedBy { it.itemNo }
+
+    // Sipariş dökümü sırası: AKTİF önce, kapananlar en sona.
+    val orderedKeys = byOrder.keys.sortedWith(
+        compareByDescending<String> { it == activeOrder }
+            .thenBy { k -> byOrder[k]?.all { it.optString("boxLpNo").isNotBlank() } == true }
+            .thenBy { k -> orderRemaining(k) }
+            .thenBy { it }
+    )
+    val closedCount = byOrder.count { (_, ords) -> ords.any { it.optString("boxLpNo").isNotBlank() } }
 
     Column(Modifier.fillMaxSize()) {
-        Column(Modifier.weight(1f).padding(12.dp)) {
-            TextButton(onClick = onBack) { Text("‹ Paketleme Listesi") }
+        Column(Modifier.weight(1f).padding(horizontal = 12.dp)) {
+            TextButton(onClick = onBack) { Text("‹ Liste") }
             // Session açılınca gerçek sipariş sayısı satırlardan; açılmadan
             // liste kartından gelen orderCount kullanılır.
             val orderCountShown = if (byOrder.isNotEmpty()) byOrder.size else orderCount
-            Card(modifier = Modifier.fillMaxWidth()) {
+            // Tek şerit başlık: SEPET (operatörün elindeki nesne) + ilerleme.
+            Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(14.dp)) {
                 Column(Modifier.padding(14.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Surface(color = PackAccent.copy(alpha = 0.12f), shape = RoundedCornerShape(8.dp)) {
-                            Text("Pick $pickNo", Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
-                                fontWeight = FontWeight.Bold, fontSize = 12.sp, color = PackAccent)
+                        Column(Modifier.weight(1f)) {
+                            Text(
+                                if (mainLp.isNotBlank()) "Sepet $mainLp" else "Pick $pickNo",
+                                style = MaterialTheme.typography.titleLarge,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.primary,
+                            )
+                            Text(
+                                if (mainLp.isNotBlank()) "$orderCountShown sipariş · Pick $pickNo"
+                                else "$orderCountShown sipariş",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
                         }
-                        Spacer(Modifier.weight(1f))
                         Text(
-                            "📦 $orderCountShown sipariş · 🧾 ${packQty(totalExpected)} ürün",
-                            fontSize = 13.sp,
-                            fontWeight = FontWeight.SemiBold,
+                            "${packQty(totalPacked)} / ${packQty(totalExpected)}",
+                            style = MaterialTheme.typography.titleLarge,
+                            fontWeight = FontWeight.Bold,
                         )
                     }
                     Spacer(Modifier.height(8.dp))
                     LinearProgressIndicator(
                         progress = { if (totalExpected > 0) (totalPacked / totalExpected).toFloat().coerceIn(0f, 1f) else 0f },
-                        modifier = Modifier.fillMaxWidth(),
-                        color = Color(0xFF2E7D32),
+                        modifier = Modifier.fillMaxWidth().height(6.dp).clip(RoundedCornerShape(50)),
                     )
-                    Text("Paketlenen: ${packQty(totalPacked)} / ${packQty(totalExpected)} ürün", fontSize = 12.sp)
-                    // Ürünler hangi sepette toplandı — paketleyici nereden
-                    // alacağını bilsin (toplamadaki ana sepet pick'ten taşınır).
-                    if (mainLp.isNotBlank()) {
-                        Spacer(Modifier.height(6.dp))
-                        Surface(
-                            color = Color(0xFF6C5CE7).copy(alpha = 0.12f),
-                            shape = RoundedCornerShape(8.dp),
-                        ) {
-                            Text(
-                                "📦 Bu sepete toplandı: $mainLp",
-                                Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
-                                fontSize = 13.sp,
-                                fontWeight = FontWeight.SemiBold,
-                                color = Color(0xFF4527A0),
-                            )
-                        }
-                    }
                 }
             }
             Spacer(Modifier.height(8.dp))
-            StatusText(status)
+            PackStatusLine(msg)
             Spacer(Modifier.height(8.dp))
 
-            // Kutu adımı yokken ürün okutma alanı sabit dursun (klavye/tetik
-            // odağı kaymasın). Kutu adımı geldiğinde kart LİSTENİN İÇİNE alınır
-            // (aşağıda) — yatay ekranda sabit dursaydı sipariş listesini
-            // sıkıştırıp satırları kırpardı.
-            if (boxNeeded.isEmpty()) {
-                // Ürün okut alanı — sadece barkod okutarak, doğru siparişe otomatik.
+            // Koli adımı yokken ürün okutma alanı SABİT durur (klavye/tetik odağı
+            // kaymasın). Koli adımı gelince kart listenin içine alınır — yatay
+            // ekranda sabit dursaydı listeyi sıkıştırıp satırları kırpardı.
+            if (boxOrderNo == null) {
+                if (activeOrder != null) {
+                    Text(
+                        "Önce $activeOrder: ${packQty(orderRemaining(activeOrder))} ürün kaldı",
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary,
+                    )
+                    Spacer(Modifier.height(6.dp))
+                }
                 ScanField(
-                    label = "📷 Ürün okut",
+                    label = "Ürün okut",
                     value = itemInput,
                     onValueChange = { itemInput = it },
                     modifier = Modifier.fillMaxWidth(),
@@ -493,124 +554,86 @@ private fun PickPackingDocument(
                 Spacer(Modifier.height(10.dp))
             }
 
-            val activeOrder = activeLockedOrder()
-            // Sipariş sırası: AKTİF önce, sonra kalanı en az olan (öncelikli).
-            // Kutulanmış/tamamlanmış olanlar en sona.
-            val orderedKeys = byOrder.keys.sortedWith(
-                compareByDescending<String> { it == activeOrder }
-                    .thenBy { k -> byOrder[k]?.all { it.optString("boxLpNo").isNotBlank() } == true }
-                    .thenBy { k -> orderRemaining(k) }
-                    .thenBy { it }
-            )
-            Text(
-                if (activeOrder != null) "🔒 Önce $activeOrder siparişini bitir"
-                else "Sepetten bir ürün okut — sistem en uygun siparişe yazar.",
-                fontWeight = FontWeight.Bold,
-                color = if (activeOrder != null) Color(0xFF1565C0) else Color(0xFF333333),
-            )
-            Spacer(Modifier.height(8.dp))
             LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                // Kutu adımı listenin başında: yüksek kart artık listeyi
-                // sıkıştırmıyor, gerekirse liste ile birlikte kaydırılıyor.
-                if (boxNeeded.isNotEmpty()) {
-                    val boxOrderNo = boxNeeded.first()
+                if (boxOrderNo != null) {
                     item(key = "box-step") {
                         BoxForOrderCard(
                             orderNo = boxOrderNo,
                             customer = customerByOrder[boxOrderNo].orEmpty(),
                             remaining = boxNeeded.size,
                             busy = busy,
-                            showScan = showBoxScan,
                             boxInput = boxInput,
                             onBoxInput = { boxInput = it },
                             onUseCarton = { scanBox(boxOrderNo, "") },
                             onScanBox = { scanBox(boxOrderNo, it) },
-                            onToggleScan = { showBoxScan = it },
                             onSkip = {
                                 blockedOrders = blockedOrders + boxOrderNo
-                                boxInput = ""; showBoxScan = false
-                                status = "⏭ $boxOrderNo atlandı — sorumluya bildirin."
+                                boxInput = ""
+                                msg = PackMsg("$boxOrderNo atlandı — sorumluya bildirin.", PackTone.WARN)
                             },
                         )
                     }
+                } else {
+                    items(pending, key = { it.itemNo }) { row -> PendingItemRow(row) }
+                    if (pending.isEmpty() && lines.isNotEmpty()) {
+                        item(key = "no-pending") { EmptyState("Okutulacak ürün kalmadı.") }
+                    }
                 }
-                orderedKeys.forEach { orderNo ->
-                    val ords = byOrder[orderNo].orEmpty()
-                    val orderDone = ords.all { it.optDouble("qtyPacked") >= it.optDouble("qtyExpected") }
-                    val boxed = ords.any { it.optString("boxLpNo").isNotBlank() }
-                    val isActive = orderNo == activeOrder
-                    val remainingInOrder = orderRemaining(orderNo).toInt()
-                    // Aktif sipariş her zaman açık; diğerleri sadece elle açılınca.
-                    val expanded = isActive || orderNo in expandedOrders
-                    item(key = "hdr-$orderNo") {
+                // Sipariş dökümü en altta ve kapalı: tamamlananlar dahil hepsi
+                // tek satıra iner, liste şişmez.
+                if (byOrder.isNotEmpty()) {
+                    item(key = "orders-toggle") {
                         Surface(
-                            color = if (isActive) Color(0xFF1565C0) else Color(0xFFF3F0FF),
-                            shape = RoundedCornerShape(10.dp),
+                            onClick = { showOrders = !showOrders },
+                            shape = RoundedCornerShape(12.dp),
+                            color = MaterialTheme.colorScheme.surfaceVariant,
                             modifier = Modifier.fillMaxWidth(),
-                            onClick = {
-                                if (!isActive) expandedOrders =
-                                    if (orderNo in expandedOrders) expandedOrders - orderNo else expandedOrders + orderNo
-                            },
                         ) {
-                            Row(Modifier.padding(horizontal = 12.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
-                                Text(if (isActive) "🔵" else if (boxed) "✅" else "🧾", fontSize = 16.sp)
-                                Spacer(Modifier.width(8.dp))
-                                Column(Modifier.weight(1f)) {
-                                    Text(orderNo, fontWeight = FontWeight.Bold, fontSize = 14.sp,
-                                        color = if (isActive) Color.White else PackAccent)
-                                    Text(customerByOrder[orderNo].orEmpty(), fontSize = 11.sp,
-                                        color = if (isActive) Color.White.copy(alpha = 0.85f) else Color.Gray)
-                                }
+                            Row(
+                                Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
                                 Text(
-                                    when {
-                                        boxed -> "kolilendi"
-                                        orderDone -> "📦 koli bekliyor"
-                                        isActive -> "$remainingInOrder ürün kaldı"
-                                        else -> "$remainingInOrder ürün"
-                                    },
-                                    fontSize = 12.sp, fontWeight = FontWeight.Bold,
-                                    color = when {
-                                        isActive -> Color.White
-                                        boxed -> Color(0xFF2E7D32)
-                                        orderDone -> Color(0xFFEF6C00)
-                                        else -> Color.Gray
-                                    },
+                                    "Siparişler · $closedCount/${byOrder.size} kapandı",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.weight(1f),
                                 )
-                                if (!isActive) {
-                                    Spacer(Modifier.width(6.dp))
-                                    Text(if (expanded) "▾" else "▸", color = PackAccent, fontSize = 14.sp)
-                                }
+                                Text(
+                                    if (showOrders) "gizle" else "göster",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.primary,
+                                )
                             }
                         }
                     }
-                    if (expanded) {
-                        items(ords, key = { it.optInt("lineNo") }) { line ->
-                            val done = line.optDouble("qtyPacked") >= line.optDouble("qtyExpected")
-                            Card(
-                                colors = CardDefaults.cardColors(containerColor = if (done) Color(0xFFE8F5E9) else Color(0xFFFFF0F0)),
-                                border = BorderStroke(if (isActive && !done) 2.dp else 1.dp,
-                                    if (done) Color(0xFF66BB6A) else if (isActive) Color(0xFF1565C0) else Color(0xFFF3BDBD)),
-                                modifier = Modifier.fillMaxWidth().padding(start = 12.dp),
-                            ) {
-                                Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
-                                    Text(if (done) "✅" else "📦", fontSize = 20.sp)
-                                    Spacer(Modifier.width(10.dp))
-                                    Column(Modifier.weight(1f)) {
-                                        Text(line.optString("itemNo"), fontWeight = FontWeight.Bold)
-                                        Text(line.optString("description"), fontSize = 12.sp, color = Color.Gray)
-                                    }
-                                    Spacer(Modifier.width(8.dp))
-                                    Text(
-                                        "${packQty(line.optDouble("qtyPacked"))}/${packQty(line.optDouble("qtyExpected"))}",
-                                        fontSize = 20.sp, fontWeight = FontWeight.Black,
-                                        color = if (done) Color(0xFF2E7D32) else Color(0xFFC62828),
-                                    )
-                                }
+                    if (showOrders) {
+                        items(orderedKeys, key = { "ord-$it" }) { orderNo ->
+                            val ords = byOrder[orderNo].orEmpty()
+                            val boxed = ords.any { it.optString("boxLpNo").isNotBlank() }
+                            val remaining = orderRemaining(orderNo)
+                            val state = when {
+                                boxed -> "kapandı"
+                                orderNo in blockedOrders -> "atlandı"
+                                remaining <= 0.0 -> "koli bekliyor"
+                                else -> "${packQty(remaining)} ürün"
                             }
+                            val tone = when {
+                                boxed -> PackTone.OK
+                                orderNo in blockedOrders || remaining <= 0.0 -> PackTone.WARN
+                                else -> PackTone.INFO
+                            }
+                            OrderStatusRow(
+                                orderNo = orderNo,
+                                customer = customerByOrder[orderNo].orEmpty(),
+                                state = state,
+                                tone = tone,
+                                active = orderNo == activeOrder,
+                            )
                         }
                     }
                 }
-                if (lines.isEmpty() && !busy) item { EmptyState("Paketlenecek satır bulunamadı.") }
+                if (lines.isEmpty() && !busy) item(key = "empty") { EmptyState("Paketlenecek satır yok.") }
             }
         }
         BottomActionBar {
@@ -618,93 +641,160 @@ private fun PickPackingDocument(
                 onClick = { scope.launch { busy = true; reloadLines(); busy = false } },
                 enabled = !busy,
                 modifier = Modifier.fillMaxWidth(),
-            ) { Text("🔄 Yenile") }
+            ) { Text("Yenile") }
         }
     }
 }
 
-/** Bir sipariş için kutu seçim kartı — "karton üret" birincil, "kendi kutunu okut" ikincil. */
+/** Kalan ürün satırı — sadece "ne okutulacak" ve "kaç tane". */
+@Composable
+private fun PendingItemRow(row: PendingItem) {
+    Surface(
+        shape = RoundedCornerShape(12.dp),
+        color = MaterialTheme.colorScheme.surface,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text(row.itemNo, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                if (row.description.isNotBlank()) {
+                    Text(
+                        row.description,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                    )
+                }
+            }
+            Spacer(Modifier.width(8.dp))
+            Text(
+                packQty(row.qty),
+                style = MaterialTheme.typography.headlineSmall,
+                fontWeight = FontWeight.Black,
+                color = MaterialTheme.colorScheme.primary,
+            )
+        }
+    }
+}
+
+/** Sipariş dökümündeki tek satır — no, müşteri ve durumu. */
+@Composable
+private fun OrderStatusRow(
+    orderNo: String,
+    customer: String,
+    state: String,
+    tone: PackTone,
+    active: Boolean,
+) {
+    val palette = bcwmsStatus()
+    val stateColor = when (tone) {
+        PackTone.OK -> palette.success
+        PackTone.WARN -> palette.warning
+        PackTone.ERR -> palette.danger
+        PackTone.INFO -> MaterialTheme.colorScheme.onSurfaceVariant
+    }
+    Row(
+        Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(Modifier.weight(1f)) {
+            Text(
+                orderNo,
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = if (active) FontWeight.Bold else FontWeight.Normal,
+                color = if (active) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
+            )
+            if (customer.isNotBlank()) {
+                Text(
+                    customer,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                )
+            }
+        }
+        Text(state, style = MaterialTheme.typography.labelSmall, color = stateColor)
+    }
+}
+
+/**
+ * Koli adımı: sipariş paketlendi, geriye TEK iş kaldı — koliyi okut ya da
+ * karton üret. Okutma alanı doğrudan görünür (eskiden "elimdeki koliyi okut"
+ * için fazladan bir dokunuş gerekiyordu).
+ */
 @Composable
 private fun BoxForOrderCard(
     orderNo: String,
     customer: String,
     remaining: Int,
     busy: Boolean,
-    showScan: Boolean,
     boxInput: String,
     onBoxInput: (String) -> Unit,
     onUseCarton: () -> Unit,
     onScanBox: (String) -> Unit,
-    onToggleScan: (Boolean) -> Unit,
     onSkip: () -> Unit = {},
 ) {
+    val palette = bcwmsStatus()
     Card(
-        colors = CardDefaults.cardColors(containerColor = Color.White),
-        border = BorderStroke(1.dp, Color(0xFFE0E0E0)),
         modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(14.dp),
+        border = BorderStroke(1.dp, palette.success),
     ) {
         Column(Modifier.fillMaxWidth().padding(16.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("✅", fontSize = 18.sp)
-                Spacer(Modifier.width(6.dp))
                 Column(Modifier.weight(1f)) {
-                    Text("🧾 $orderNo paketlendi", fontWeight = FontWeight.Bold, fontSize = 16.sp, color = Color(0xFF2E7D32))
-                    if (customer.isNotBlank()) Text(customer, fontSize = 12.sp, color = Color.Gray)
-                }
-                if (remaining > 1) Text("+${remaining - 1} bekliyor", fontSize = 11.sp, color = Color(0xFFEF6C00))
-            }
-            Text(
-                "Bu sipariş müşteriye hangi koliyle gidecek? Elindeki kolinin barkodunu " +
-                    "okut ya da sistem karton üretsin. (Depoda kalan sepet DEĞİL — kargoya çıkan koli.)",
-                fontSize = 12.sp, color = Color.Gray,
-            )
-            Spacer(Modifier.height(14.dp))
-            Card(
-                colors = CardDefaults.cardColors(containerColor = Color(0xFFFFF3E0)),
-                border = BorderStroke(1.dp, Color(0xFFEF6C00).copy(alpha = 0.4f)),
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Text("📦", fontSize = 26.sp)
-                    Spacer(Modifier.width(12.dp))
-                    Column(Modifier.weight(1f)) {
-                        Text("Önerilen kargo kolisi", fontSize = 11.sp, color = Color(0xFFBF360C))
-                        Text("Karton koli üretilecek", fontWeight = FontWeight.Bold, color = Color(0xFFBF360C))
+                    Text(
+                        "$orderNo hazır — koliyi okut",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = palette.success,
+                    )
+                    if (customer.isNotBlank()) {
+                        Text(
+                            customer,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
                     }
                 }
+                if (remaining > 1) {
+                    Text(
+                        "+${remaining - 1} sipariş",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = palette.warning,
+                    )
+                }
             }
+            Spacer(Modifier.height(12.dp))
+            ScanField(
+                label = "Koli barkodu",
+                value = boxInput,
+                onValueChange = onBoxInput,
+                modifier = Modifier.fillMaxWidth(),
+                enabled = !busy,
+                onScanned = onScanBox,
+            )
+            // Sık yapılan hata: depoda kalan sepeti okutmak.
+            Text(
+                "Kargoya çıkan koli — sepet değil.",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
             Spacer(Modifier.height(12.dp))
             Button(
                 onClick = onUseCarton,
                 enabled = !busy,
                 modifier = Modifier.fillMaxWidth().height(50.dp),
-            ) { Text("✓ Karton üret ve siparişi kapat", fontWeight = FontWeight.Bold) }
-            Spacer(Modifier.height(10.dp))
-            if (!showScan) {
-                TextButton(onClick = { onToggleScan(true) }, enabled = !busy, modifier = Modifier.fillMaxWidth()) {
-                    Text("📷 Elimdeki koliyi okut")
-                }
-            } else {
-                Text("Müşteriye gidecek kolinin barkodunu okut:", fontSize = 12.sp, color = Color.Gray)
-                Spacer(Modifier.height(6.dp))
-                ScanField(
-                    label = "📦 Kargo kolisi okut",
-                    value = boxInput,
-                    onValueChange = onBoxInput,
-                    modifier = Modifier.fillMaxWidth(),
-                    enabled = !busy,
-                    onScanned = onScanBox,
-                )
-                Spacer(Modifier.height(6.dp))
-                TextButton(onClick = { onToggleScan(false) }, enabled = !busy, modifier = Modifier.fillMaxWidth()) {
-                    Text("‹ Vazgeç, karton üretimine dön", fontSize = 12.sp)
-                }
-            }
+            ) { Text("Barkodsuz kapat (karton üret)", fontWeight = FontWeight.Bold) }
             // Kaçış yolu: sipariş BC'de kapanamıyorsa (silinmiş/kaydedilmiş)
             // operatör burada kilitlenmesin, sonraki siparişe geçebilsin.
-            Spacer(Modifier.height(4.dp))
             TextButton(onClick = onSkip, enabled = !busy, modifier = Modifier.fillMaxWidth()) {
-                Text("Bu siparişi atla (kapatılamıyor)", fontSize = 11.sp, color = Color.Gray)
+                Text(
+                    "Kapatılamıyor, atla",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
             }
         }
     }
@@ -712,19 +802,32 @@ private fun BoxForOrderCard(
 
 @Composable
 private fun PickCompleteSummary(pickNo: String, orderCount: Int, onBack: () -> Unit) {
+    val palette = bcwmsStatus()
     Column(
         Modifier.fillMaxSize().padding(24.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
     ) {
-        Text("✅", fontSize = 56.sp)
-        Spacer(Modifier.height(12.dp))
-        Text("Pick $pickNo tamamlandı", fontWeight = FontWeight.Black, fontSize = 22.sp, color = Color(0xFF2E7D32))
+        Surface(shape = RoundedCornerShape(50), color = palette.success.copy(alpha = 0.15f)) {
+            Text(
+                "TAMAM",
+                Modifier.padding(horizontal = 22.dp, vertical = 10.dp),
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.Black,
+                color = palette.success,
+            )
+        }
+        Spacer(Modifier.height(16.dp))
+        Text("Paketleme bitti", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
         Spacer(Modifier.height(6.dp))
-        Text("$orderCount sipariş sevk + fatura edildi.", fontSize = 14.sp, color = Color(0xFF2E7D32))
+        Text(
+            "Pick $pickNo · $orderCount sipariş sevk edildi ve faturalandı.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
         Spacer(Modifier.height(24.dp))
         Button(onClick = onBack, modifier = Modifier.fillMaxWidth().height(52.dp)) {
-            Text("‹ Paketleme Listesi", fontWeight = FontWeight.Bold)
+            Text("Listeye dön", fontWeight = FontWeight.Bold)
         }
     }
 }

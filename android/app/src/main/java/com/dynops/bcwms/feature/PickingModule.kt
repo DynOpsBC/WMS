@@ -65,6 +65,42 @@ private enum class PickTab(val label: String) {
     AllDone("📦 Genel Toplananlar"),
 }
 
+/**
+ * Açık toplama listesinin görünürlük kuralı. Üç kapsam BİRBİRİNDEN AYRIDIR:
+ * eskiden "Bana atanan" seçiliyken atanmamış pick'ler de listeye karışıyordu
+ * ("bana atanan VEYA atanmamış") ve toplayıcı ekrandaki işin gerçekten kendisine
+ * mi ait olduğunu ayırt edemiyordu. Artık her kapsam tek bir şeyi gösterir ve
+ * ne gösterdiği ekranda yazar.
+ */
+private enum class PickScope(val label: String, val hint: String) {
+    Mine(
+        "Bana atanan",
+        "Sadece size atanmış açık toplamalar. Doğrudan açıp toplamaya başlayabilirsiniz.",
+    ),
+    Unassigned(
+        "Atanmamış",
+        "Kimseye atanmamış (boştaki) toplamalar. Üzerime Al ile üstlenebilirsiniz.",
+    ),
+    All(
+        "Tümü",
+        "Depodaki tüm açık toplamalar. Başkasına atanmış olanlar rozetle işaretlidir; açılmadan önce uyarı verilir.",
+    ),
+}
+
+/** Bir pick satırının okuyan kullanıcıya göre sahiplik durumu. */
+private enum class PickOwner { Mine, Unassigned, Other, Unknown }
+
+/**
+ * Sahiplik kararı. Kullanıcı kimliği çözülemediyse (me boş) kimseyi "başkası"
+ * diye kilitlemeyiz — yanlış kilitlemektense nötr göstermek daha güvenli.
+ */
+private fun pickOwnerOf(assignedUserId: String, me: String): PickOwner = when {
+    assignedUserId.isBlank() -> PickOwner.Unassigned
+    me.isBlank() -> PickOwner.Unknown
+    assignedUserId.trim().equals(me.trim(), ignoreCase = true) -> PickOwner.Mine
+    else -> PickOwner.Other
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun PickingModule() {
@@ -103,37 +139,48 @@ private fun ActivePicksTab() {
     var rows by remember { mutableStateOf<List<JSONObject>>(emptyList()) }
     var status by remember { mutableStateOf("") }
     var loading by remember { mutableStateOf(false) }
-    // Varsayılan "Bana atanan": toplayıcı ekranı açar açmaz kendi işini görsün.
-    // (Bu filtre atanmamışları da gösterir — üstüne alabilsin diye.)
-    var showAll by remember { mutableStateOf(false) }
+    // Varsayılan "Bana atanan": toplayıcı ekranı açar açmaz SADECE kendi işini görsün.
+    var pickScope by remember { mutableStateOf(PickScope.Mine) }
     var search by remember { mutableStateOf("") }
-    var pendingOnly by remember { mutableStateOf(false) }
+    // Rozetleri ("… kullanıcısında") çizebilmek için oturumdaki kullanıcı kimliği.
+    // Liste yüklenirken tek sefer çözülür, sonra cache'ten gelir.
+    var myUserId by remember { mutableStateOf("") }
+    // "Tümü"de başkasına atanmış bir pick'e dokunulunca çıkan uyarı: belge no + sahibi.
+    var blockedPick by remember { mutableStateOf<Pair<String, String>?>(null) }
 
     fun load() {
         scope.launch {
             loading = true; status = "Yükleniyor..."
-            val myUser = if (showAll) "" else BcApi.currentUserId(context)
-            // ELOG: "Bana atanan" seçiliyken bile ataması OLMAYAN (boşta) pick'ler
-            // listede kalsın — toplayıcı üstüne alabilsin. Yani "bana atanan VEYA
-            // atanmamış". showAll ise filtre yok; myUser çözülemezse (boş) filtre yok.
-            val mineOrUnassigned = if (!showAll && myUser.isNotBlank())
-                "(assignedUserId eq '${myUser.trim().uppercase().replace("'", "''")}' or assignedUserId eq '')"
-            else null
-            val baseClauses = arrayOf(
-                mineOrUnassigned,
-                searchClause("no", search),
-                if (pendingOnly) "assignedUserId eq ''" else null,
-            )
-            val combined = buildODataFilter(*baseClauses)
+            val myUser = BcApi.currentUserId(context)
+            myUserId = myUser
+            // Kapsam filtresi — her kapsam TEK bir kümeyi getirir, karışım yok:
+            //  Mine       -> assignedUserId = ben
+            //  Unassigned -> assignedUserId boş
+            //  All        -> filtre yok
+            val scopeClause = when (pickScope) {
+                PickScope.Mine -> assignedToMeClause(myUser)
+                PickScope.Unassigned -> "assignedUserId eq ''"
+                PickScope.All -> null
+            }
+            // "Bana atanan" isteniyor ama kimlik çözülemedi: filtresiz listeye DÜŞME —
+            // aksi halde kullanıcı başkasının işlerini kendi işi sanır.
+            if (pickScope == PickScope.Mine && scopeClause == null) {
+                rows = emptyList(); loading = false
+                status = "HATA: Kullanıcı kimliğiniz çözülemedi; kime atandığı bilinemiyor. Yeniden giriş yapın veya Tümü ile bakın."
+                return@launch
+            }
+            val combined = buildODataFilter(scopeClause, searchClause("no", search))
             val r = BcApi.getWithStandardFallback(context, "picks?\$top=100&\$orderby=no desc&\$select=no,locationCode,assignedUserId,vehicleNo,sourceNo,status,percentComplete$combined")
             loading = false
             rows = if (r.ok) BcApi.parseValueArray(r.body) else emptyList()
-            status = if (!r.ok) "HATA: Toplama listesi alınamadı (HTTP ${r.httpCode})"
-                else if (rows.isEmpty()) "BOŞ: Açık toplama belgesi yok (HTTP ${r.httpCode})"
-                else "TAMAM: ${rows.size} belge (HTTP ${r.httpCode})"
+            status = when {
+                !r.ok -> "HATA: Toplama listesi alınamadı (HTTP ${r.httpCode})"
+                rows.isEmpty() -> "BOŞ: ${pickScope.label} filtresinde kayıt yok"
+                else -> "TAMAM: ${rows.size} belge · ${pickScope.label}"
+            }
         }
     }
-    LaunchedEffect(showAll, pendingOnly) { load() }
+    LaunchedEffect(pickScope) { load() }
 
     // Listeden "Üzerime Al": paylaşımlı BC lisansında atama BC hesabına değil
     // oturumdaki WMS kullanıcısına yazılır (reassign); WMS girişi yoksa
@@ -146,8 +193,12 @@ private fun ActivePicksTab() {
                 BcApi.boundAction(context, "picks", no, "reassign",
                     JSONObject().apply { put("userId", me); put("reason", "terminalden üstlenildi") }.toString())
             else BcApi.boundAction(context, "picks", no, "assignToMe", "{}")
-            status = if (r.ok) "TAMAM: $no üzerinize alındı${if (me.isNotBlank()) " ($me)" else ""}"
-                else "HATA: ${BcApi.errorMessage(r.body)} (HTTP ${r.httpCode})"
+            // "Atanmamış" kapsamındayken üstlenilen iş listeden düşer; nereye
+            // gittiğini söylemezsek operatör işi kaybettiğini sanıyor.
+            status = if (r.ok)
+                "TAMAM: $no üzerinize alındı${if (me.isNotBlank()) " ($me)" else ""}" +
+                    if (pickScope != PickScope.Mine) " — artık 'Bana atanan' filtresinde" else ""
+            else "HATA: ${BcApi.errorMessage(r.body)} (HTTP ${r.httpCode})"
             load()
         }
     }
@@ -169,9 +220,15 @@ private fun ActivePicksTab() {
 
     Column(Modifier.fillMaxSize().padding(12.dp)) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            FilterChip(selected = !showAll, onClick = { showAll = false }, label = { Text("👤 Bana atanan") })
-            Spacer(Modifier.width(6.dp))
-            FilterChip(selected = showAll, onClick = { showAll = true }, label = { Text("Tümü") })
+            // Üç kapsam yan yana ve tek seçimli — hangisinin açık olduğu net görünsün.
+            PickScope.entries.forEach { s ->
+                FilterChip(
+                    selected = pickScope == s,
+                    onClick = { pickScope = s },
+                    label = { Text(s.label, fontSize = 12.sp, maxLines = 1) },
+                )
+                Spacer(Modifier.width(6.dp))
+            }
             Spacer(Modifier.weight(1f))
             OutlinedButton(
                 onClick = { load() },
@@ -181,7 +238,13 @@ private fun ActivePicksTab() {
             ) { Text(if (loading) "…" else "🔄", fontSize = 15.sp) }
         }
         Spacer(Modifier.height(6.dp))
-        FilterChip(selected = pendingOnly, onClick = { pendingOnly = !pendingOnly }, label = { Text("⏳ Atanmayı Bekleyen") })
+        // Seçili filtrenin NE gösterdiği tek satırda yazılı olsun — "atanmamışlar
+        // da geliyor mu?" belirsizliği ekranda çözülsün.
+        Text(
+            pickScope.hint,
+            fontSize = 11.sp,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
         Spacer(Modifier.height(10.dp))
         // PDF Picking §7 / §16: belge no arama eksikti
         OutlinedTextField(
@@ -199,15 +262,59 @@ private fun ActivePicksTab() {
         Spacer(Modifier.height(8.dp))
         LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             items(shownRows) { d ->
+                val no = d.optString("no")
+                val assigned = firstValue(d, "assignedUserId")
+                val owner = pickOwnerOf(assigned, myUserId)
                 PickListCard(
                     d = d,
                     busy = loading,
-                    onOpen = { selected = d.optString("no") },
-                    onTake = { takeOver(d.optString("no")) },
+                    owner = owner,
+                    // Başkasının işi açılmaya çalışılınca önce uyarı çıkar; belge
+                    // ancak operatör bilerek onaylarsa açılır.
+                    onOpen = {
+                        if (owner == PickOwner.Other) blockedPick = no to assigned else selected = no
+                    },
+                    onTake = { takeOver(no) },
                 )
             }
-            if (rows.isEmpty() && !loading) item { EmptyState("Açık toplama belgesi yok.") }
+            // Boş liste mesajı filtreye özel ve yol gösterici — "hiç iş yok" ile
+            // "senin işin yok" birbirinden ayrılsın.
+            if (shownRows.isEmpty() && !loading) item {
+                EmptyState(
+                    when {
+                        itemDocs != null -> "Bu ürün seçili filtredeki hiçbir belgede yok. Filtreyi Tümü yapıp tekrar deneyin."
+                        search.isNotBlank() -> "'$search' ile başlayan belge bu filtrede yok. Aramayı temizleyin ya da filtreyi değiştirin."
+                        pickScope == PickScope.Mine ->
+                            "Size atanmış açık toplama yok. Atanmamış filtresine geçip boştaki bir işi üzerinize alabilirsiniz."
+                        pickScope == PickScope.Unassigned ->
+                            "Boşta bekleyen toplama yok. Açık işlerin hepsi birine atanmış — Tümü ile kimde olduğunu görebilirsiniz."
+                        else -> "Depoda açık toplama belgesi yok."
+                    },
+                )
+            }
         }
+    }
+
+    // "Tümü"de başkasına atanmış belge uyarısı: aynı pick'i iki kişi toplarsa
+    // miktarlar çakışır. Yine de açılabilir (denetim/devralma için) ama bilerek.
+    val bp = blockedPick
+    if (bp != null) {
+        AlertDialog(
+            onDismissRequest = { blockedPick = null },
+            title = { Text("Bu toplama başkasında") },
+            text = {
+                Text(
+                    "${bp.first} belgesi ${bp.second} kullanıcısına atanmış. " +
+                        "Aynı toplamayı iki kişi yaparsa miktarlar çakışır. " +
+                        "Devam ederseniz belge salt görüntüleme olarak açılır; toplamak için önce devralmanız gerekir.",
+                    fontSize = 13.sp,
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = { blockedPick = null; selected = bp.first }) { Text("Yine de aç") }
+            },
+            dismissButton = { TextButton(onClick = { blockedPick = null }) { Text("Vazgeç") } },
+        )
     }
 }
 
@@ -450,6 +557,8 @@ private fun GuidedPickDocument(no: String, onBack: () -> Unit) {
     var qtyGroup by remember { mutableStateOf<LineGroup?>(null) }
     // Tek satırlı ürün okutulunca çıkan onay kartı (grup + okutulan lot).
     var confirmGroup by remember { mutableStateOf<Pair<LineGroup, String>?>(null) }
+    // Belge başkasına atanmışsa toplamayı kilitlemek için oturum kullanıcısı.
+    var myUserId by remember { mutableStateOf("") }
 
     fun isComplete(line: JSONObject): Boolean {
         val required = line.optDouble("quantity", 0.0)
@@ -655,6 +764,7 @@ private fun GuidedPickDocument(no: String, onBack: () -> Unit) {
     }
 
     LaunchedEffect(no) { busy = true; reloadNow(); busy = false }
+    LaunchedEffect(Unit) { myUserId = BcApi.currentUserId(context) }
 
     val takeLines = lines.filter { !it.optString("actionType").equals("Place", ignoreCase = true) }
     val outstanding = takeLines.filterNot(::isComplete)
@@ -663,7 +773,12 @@ private fun GuidedPickDocument(no: String, onBack: () -> Unit) {
     val activeLines = takeLines.filter { it.optString("binCode").equals(currentBin, ignoreCase = true) }
     val allCollected = takeLines.isNotEmpty() && outstanding.isEmpty()
     val orderCount = takeLines.map { firstValue(it, "sourceNo").ifBlank { "—" } }.distinct().size
-    val notAssigned = header?.optString("assignedUserId").isNullOrBlank()
+    val assignedTo = header?.optString("assignedUserId").orEmpty()
+    val notAssigned = assignedTo.isBlank()
+    // Belge başkasına atanmış: liste ekranındaki uyarıya rağmen açıldıysa burada
+    // toplama kilitli kalır — iki kişinin aynı pick'i toplaması miktarları bozar.
+    // Kimlik çözülemediyse (myUserId boş) kilitleme, yanlış kilitlemek daha kötü.
+    val lockedByOther = pickOwnerOf(assignedTo, myUserId) == PickOwner.Other
 
     LaunchedEffect(currentBin) {
         binVerified = currentBin.isNullOrBlank()
@@ -676,11 +791,11 @@ private fun GuidedPickDocument(no: String, onBack: () -> Unit) {
     // zorunda kalmadan sarı tetikle okutabilsin. Görünür "📷 Ürün okut" alanı ise
     // elle giriş + kamera içindir (focuslu iken donanımı da işler; tamamlanmış
     // satır ikinci kez okununca zararsızca "açık satır yok" der).
-    val needsMainLp = mainLp.isBlank() && !header?.optString("assignedUserId").isNullOrBlank()
+    val needsMainLp = mainLp.isBlank() && !notAssigned && !lockedByOther
     DocumentScanHandler(
         // `busy` artık okutmayı engellemiyor: satır tamamlama iyimser çalışıyor,
         // operatör arka plandaki BC yazımını beklemeden sonraki ürüne geçebilir.
-        enabled = !notAssigned && !allCollected && !needsMainLp && qtyGroup == null && confirmGroup == null,
+        enabled = !notAssigned && !lockedByOther && !allCollected && !needsMainLp && qtyGroup == null && confirmGroup == null,
         lines = if (binVerified) activeLines.filterNot(::isComplete) else emptyList(),
         // Tek eşleşme de olsa handleItemScan'e ver — o ürünün rafta çok satırı varsa
         // miktar popup'ı açar (BN.0353 ×4 = 2 sipariş → 1 okut, 4 gir).
@@ -713,7 +828,7 @@ private fun GuidedPickDocument(no: String, onBack: () -> Unit) {
                 title = no,
                 subtitle = "📦 $orderCount sipariş · 🧾 $doneCount/${takeLines.size} ürün" +
                     "\nLokasyon: ${header?.optString("locationCode").orEmpty()}" +
-                    (if (!notAssigned) " · 👤 Atanan Kullanıcı: ${header?.optString("assignedUserId").orEmpty()}" else "") +
+                    (if (!notAssigned) " · 👤 Atanan Kullanıcı: $assignedTo" else "") +
                     (if (mainLp.isNotBlank()) "\n📦 Ana sepet: $mainLp" else ""),
                 percent = if (takeLines.isEmpty()) 0 else ((doneCount * 100.0) / takeLines.size).toInt(),
             )
@@ -740,6 +855,33 @@ private fun GuidedPickDocument(no: String, onBack: () -> Unit) {
                                 enabled = !busy,
                                 modifier = Modifier.fillMaxWidth().height(50.dp),
                             ) { Text("✋ Kendime Ata ve Toplamaya Başla", fontWeight = FontWeight.Bold) }
+                        }
+                    }
+                }
+                // Başkasına atanmış belge: salt görüntüleme. Toplamak isteyen
+                // önce açıkça devralmalı — sessizce ortak toplama yapılamaz.
+                lockedByOther -> ScrollableBranch {
+                    Card(
+                        colors = CardDefaults.cardColors(containerColor = Color(0xFFFFEBEE)),
+                        border = BorderStroke(1.dp, OtherUserRed.copy(alpha = 0.5f)),
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Column(Modifier.fillMaxWidth().padding(20.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text("Bu toplama $assignedTo kullanıcısında", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = OtherUserRed)
+                            Spacer(Modifier.height(4.dp))
+                            Text(
+                                "Salt görüntüleme. Aynı pick'i iki kişi toplarsa miktarlar çakışır. " +
+                                    "Toplamayı siz sürdürecekseniz işi devralın; değilse listeye dönün.",
+                                fontSize = 12.sp, color = Color(0xFF8E2B2B),
+                            )
+                            Spacer(Modifier.height(14.dp))
+                            Button(
+                                onClick = { assignToMe() },
+                                enabled = !busy,
+                                modifier = Modifier.fillMaxWidth().height(50.dp),
+                            ) { Text("Devral ve Toplamaya Başla", fontWeight = FontWeight.Bold) }
+                            Spacer(Modifier.height(6.dp))
+                            TextButton(onClick = onBack, modifier = Modifier.fillMaxWidth()) { Text("‹ Listeye dön", fontSize = 12.sp) }
                         }
                     }
                 }
@@ -938,9 +1080,19 @@ private fun GuidedPickDocument(no: String, onBack: () -> Unit) {
             OutlinedButton(onClick = { reload() }, enabled = !busy, modifier = Modifier.weight(1f)) { Text("🔄 Yenile") }
             Button(
                 onClick = { registerPick() },
-                enabled = !busy && allCollected,
+                // Başkasının pick'i post edilemez — önce devralınmalı.
+                enabled = !busy && allCollected && !lockedByOther,
                 modifier = Modifier.weight(2f).height(54.dp),
-            ) { Text(if (allCollected) "✅ Pick'i Post Et" else "Önce Tümünü Topla", fontWeight = FontWeight.Bold) }
+            ) {
+                Text(
+                    when {
+                        lockedByOther -> "Önce Devralın"
+                        allCollected -> "✅ Pick'i Post Et"
+                        else -> "Önce Tümünü Topla"
+                    },
+                    fontWeight = FontWeight.Bold,
+                )
+            }
         }
     }
 
@@ -1084,10 +1236,31 @@ private val binWalkComparator: Comparator<String> = Comparator { a, b ->
 
 private val PickAccent = Color(0xFF6C5CE7) // Ana menü "Giden" kategorisiyle aynı vurgu.
 private val PendingOrange = Color(0xFFE65100)
+// Başkasına atanmış işlerin rozeti — turuncudan (boşta) ayrışsın diye kırmızı.
+private val OtherUserRed = Color(0xFFC62828)
 
-/** Ana menü kart diliyle pick satırı: ilerleme, atanma durumu, Üzerime Al. */
+/** Sahiplik rozeti — metin + renk; ikon yok, okunabilirlik için kısa etiket. */
 @Composable
-private fun PickListCard(d: JSONObject, busy: Boolean, onOpen: () -> Unit, onTake: () -> Unit) {
+private fun OwnerBadge(text: String, color: Color) {
+    Box(
+        Modifier.clip(RoundedCornerShape(50)).background(color.copy(alpha = 0.10f))
+            .padding(horizontal = 8.dp, vertical = 3.dp),
+    ) { Text(text, fontSize = 10.sp, fontWeight = FontWeight.SemiBold, color = color) }
+}
+
+/**
+ * Ana menü kart diliyle pick satırı: ilerleme, sahiplik rozeti, Üzerime Al.
+ * Rozet HER satırda görünür — özellikle "Tümü" filtresinde işin kimde olduğu
+ * karta bakar bakmaz anlaşılsın diye.
+ */
+@Composable
+private fun PickListCard(
+    d: JSONObject,
+    busy: Boolean,
+    owner: PickOwner,
+    onOpen: () -> Unit,
+    onTake: () -> Unit,
+) {
     val assigned = firstValue(d, "assignedUserId")
     val pct = d.optInt("percentComplete").coerceIn(0, 100)
     Card(
@@ -1109,9 +1282,9 @@ private fun PickListCard(d: JSONObject, busy: Boolean, onOpen: () -> Unit, onTak
                     Text(d.optString("no"), fontWeight = FontWeight.Bold, fontSize = 15.sp)
                 }
                 Spacer(Modifier.height(2.dp))
+                // Atama bilgisi artık alttaki rozette — burada tekrar edilmiyor.
                 Text(
-                    "📍 ${firstValue(d, "locationCode").ifBlank { "—" }}" +
-                        if (assigned.isNotBlank()) "   👤 $assigned" else "",
+                    "📍 ${firstValue(d, "locationCode").ifBlank { "—" }}",
                     fontSize = 11.sp, color = Color.Gray,
                 )
                 Spacer(Modifier.height(6.dp))
@@ -1124,14 +1297,17 @@ private fun PickListCard(d: JSONObject, busy: Boolean, onOpen: () -> Unit, onTak
                     Spacer(Modifier.width(6.dp))
                     Text("%$pct", fontSize = 10.sp, fontWeight = FontWeight.SemiBold, color = Color.Gray)
                 }
-                if (assigned.isBlank()) {
-                    Spacer(Modifier.height(8.dp))
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Box(
-                            Modifier.clip(RoundedCornerShape(50)).background(PendingOrange.copy(alpha = 0.10f))
-                                .padding(horizontal = 8.dp, vertical = 3.dp),
-                        ) { Text("⏳ Atanmayı bekliyor", fontSize = 10.sp, fontWeight = FontWeight.SemiBold, color = PendingOrange) }
-                        Spacer(Modifier.weight(1f))
+                Spacer(Modifier.height(8.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    when (owner) {
+                        PickOwner.Unassigned -> OwnerBadge("Atanmamış — üstüne alınabilir", PendingOrange)
+                        PickOwner.Mine -> OwnerBadge("Size atanmış", PickAccent)
+                        // Başkasının işi: açılmadan önce uyarı çıkacağını da söyler.
+                        PickOwner.Other -> OwnerBadge("$assigned kullanıcısında", OtherUserRed)
+                        PickOwner.Unknown -> OwnerBadge("Atanan: $assigned", Color.Gray)
+                    }
+                    Spacer(Modifier.weight(1f))
+                    if (owner == PickOwner.Unassigned) {
                         Button(
                             onClick = onTake,
                             enabled = !busy,

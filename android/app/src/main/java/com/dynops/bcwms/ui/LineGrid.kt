@@ -14,6 +14,8 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -24,6 +26,13 @@ import org.json.JSONObject
  * Konfigüre edilebilir kolonlu satır tablosu (Warehouse Insight grid pariteti).
  * Başlık satırı + veri satırları; kolonlar [ColumnPrefs] düzenine göre görünür/
  * gizli, sıralı ve genişlikli. Yatay kaydırma başlık ve satırlarda ortaktır.
+ *
+ * Satır durumu üç renkle ayrışır: tamamlanan yeşil, kısmi sarı, bekleyen nötr.
+ * Zemin tonunun yanına SOL KENAR ŞERİDİ de çizilir — açık renk zeminler
+ * el terminali ekranında güneş altında zor seçildiği için tek sinyal yetmiyor.
+ *
+ * [showProgress] açıldığında grid'in üstünde "3/8 satır işlendi" sayacı ve renk
+ * lejantı görünür; varsayılan kapalı olduğu için diğer modüller etkilenmez.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -36,6 +45,7 @@ fun LineGrid(
     isSelected: (JSONObject) -> Boolean = { false },
     isDone: (JSONObject) -> Boolean = { false },
     isPartial: (JSONObject) -> Boolean = { false },
+    showProgress: Boolean = false,
 ) {
     val byKey = remember(defs) { defs.associateBy { it.key } }
     val visible = columns.filter { it.visible }.mapNotNull { c -> byKey[c.key]?.let { it to c.width } }
@@ -44,6 +54,28 @@ fun LineGrid(
     val warning = bcwmsStatus().warning
 
     Column(modifier) {
+        if (showProgress) {
+            // Sayaç: "işlendi" = tamamlanan + kısmi; kısmi ayrıca yazılır ki
+            // operatör "hepsi bitti" sanıp erken post etmesin.
+            val doneCount = rows.count { isDone(it) }
+            val partialCount = rows.count { !isDone(it) && isPartial(it) }
+            val handled = doneCount + partialCount
+            Row(
+                Modifier.fillMaxWidth().padding(bottom = 4.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    "$handled/${rows.size} satır işlendi" + if (partialCount > 0) " · $partialCount kısmi" else "",
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = if (handled > 0) success else MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Spacer(Modifier.weight(1f))
+                LegendDot(success, "tamam")
+                Spacer(Modifier.width(10.dp))
+                LegendDot(warning, "kısmi")
+            }
+        }
         // Başlık satırı
         Row(
             Modifier.fillMaxWidth()
@@ -65,13 +97,26 @@ fun LineGrid(
                 val sel = isSelected(row); val done = isDone(row); val partial = !done && isPartial(row)
                 val bg = when {
                     sel -> MaterialTheme.colorScheme.primary.copy(alpha = 0.20f)
-                    done -> success.copy(alpha = 0.13f)
+                    done -> success.copy(alpha = 0.16f)
                     // Kısmi işlenmiş satır (kalan var): sarı — "bitti" sanılmasın.
-                    partial -> warning.copy(alpha = 0.15f)
+                    partial -> warning.copy(alpha = 0.18f)
+                    else -> Color.Transparent
+                }
+                val stripe = when {
+                    sel -> MaterialTheme.colorScheme.primary
+                    done -> success
+                    partial -> warning
                     else -> Color.Transparent
                 }
                 Row(
                     Modifier.fillMaxWidth().background(bg)
+                        // Şerit, horizontalScroll'dan ÖNCE çiziliyor: kolonlar yana
+                        // kaydırıldığında da sol kenarda sabit kalsın diye.
+                        .drawBehind {
+                            if (stripe != Color.Transparent) {
+                                drawRect(color = stripe, size = Size(STRIPE_DP.toPx(), size.height))
+                            }
+                        }
                         .clickable { onRowClick(row) }
                         .horizontalScroll(hScroll)
                 ) {
@@ -88,6 +133,20 @@ fun LineGrid(
             }
             if (rows.isEmpty()) item { Text("Satır yok.", Modifier.padding(16.dp), color = MaterialTheme.colorScheme.onSurfaceVariant) }
         }
+    }
+}
+
+/** Satır durum şeridinin kalınlığı — hücrelerin 6.dp iç boşluğunun altında kalır,
+ *  bu yüzden metinle çakışmaz. */
+private val STRIPE_DP = 4.dp
+
+/** Renk lejantı öğesi (nokta + etiket) — hangi rengin ne anlama geldiğini yazar. */
+@Composable
+private fun LegendDot(color: Color, label: String) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Box(Modifier.size(9.dp).background(color, RoundedCornerShape(50)))
+        Spacer(Modifier.width(4.dp))
+        Text(label, fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
 

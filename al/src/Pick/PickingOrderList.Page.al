@@ -177,28 +177,29 @@ page 72357 "DOPSWHS Picking Order List"
                     trigger OnAction()
                     var
                         LocalUser: Record "DOPSWHS Local User";
-                        PickHeader: Record "Warehouse Activity Header";
                         PickMgmt: Codeunit "DOPSWHS Pick Mgmt";
                     begin
                         if Rec."Entry No." = 0 then
                             exit;
                         if Rec.Status = Rec.Status::Completed then
-                            Error('Tamamlanmış grup yeniden atanamaz.');
+                            Error(CompletedNotAssignableErr);
                         LocalUser.SetRange(Disabled, false);
                         if Page.RunModal(Page::"DOPSWHS Local User List", LocalUser) <> Action::LookupOK then
                             exit;
 
-                        Rec."Assigned User ID" := LocalUser.Username;
-                        Rec.Modify(true);
+                        // Grup başkasındaysa bu bir DEVİR'dir: yanlışlıkla iş elinden
+                        // alınmasın diye sorumluya onaylatılır.
+                        if (Rec."Assigned User ID" <> '') and (Rec."Assigned User ID" <> LocalUser.Username) then
+                            if not Confirm(TakeOverQst, false, PickMgmt.OperatorLabel(Rec."Assigned User ID"), LocalUser."Display Name") then
+                                exit;
 
-                        // Pick zaten oluşmuşsa toplama belgesine de yaz —
-                        // operatör terminalde "bana atanan" filtresinde görsün.
-                        if Rec."Warehouse Pick No." <> '' then
-                            if PickHeader.Get(PickHeader.Type::Pick, Rec."Warehouse Pick No.") then
-                                PickMgmt.ReassignPick(PickHeader, LocalUser.Username, 'Toplanacak Siparişler ekranından atandı');
+                        // Kilitli yeniden okuma + pick belgesine yansıtma PickMgmt'te:
+                        // eskiden ekrandaki (stale) kayıt doğrudan Modify ediliyordu,
+                        // iki sorumlu aynı anda atarsa biri diğerini sessizce eziyordu.
+                        PickMgmt.SetPickingOrderPicker(Rec, LocalUser.Username, AssignedFromListLbl);
 
                         CurrPage.Update(false);
-                        Message('Grup %1 kullanıcısına atandı.', LocalUser."Display Name");
+                        Message(AssignedMsg, LocalUser."Display Name");
                     end;
                 }
                 action(ClearPicker)
@@ -210,17 +211,19 @@ page 72357 "DOPSWHS Picking Order List"
 
                     trigger OnAction()
                     var
-                        PickHeader: Record "Warehouse Activity Header";
+                        PickMgmt: Codeunit "DOPSWHS Pick Mgmt";
                     begin
+                        if Rec."Entry No." = 0 then
+                            exit;
                         if Rec.Status = Rec.Status::Completed then
-                            Error('Tamamlanmış grubun ataması değiştirilemez.');
-                        Rec."Assigned User ID" := '';
-                        Rec.Modify(true);
-                        if Rec."Warehouse Pick No." <> '' then
-                            if PickHeader.Get(PickHeader.Type::Pick, Rec."Warehouse Pick No.") then begin
-                                PickHeader."Assigned User ID" := '';
-                                PickHeader.Modify(true);
-                            end;
+                            Error(CompletedNotAssignableErr);
+                        if Rec."Assigned User ID" = '' then
+                            exit;
+                        // Atama kaldırılınca belge terminalde tekrar herkese açılır;
+                        // toplamaya başlamış operatörün işi yarıda kalabilir.
+                        if not Confirm(ClearPickerQst, false, PickMgmt.OperatorLabel(Rec."Assigned User ID")) then
+                            exit;
+                        PickMgmt.SetPickingOrderPicker(Rec, '', ClearedFromListLbl);
                         CurrPage.Update(false);
                     end;
                 }
@@ -337,4 +340,10 @@ page 72357 "DOPSWHS Picking Order List"
         OrderCountText: Text;
         ProgressText: Text;
         ProgressStyle: Text;
+        CompletedNotAssignableErr: Label 'Tamamlanmış grubun ataması değiştirilemez.';
+        TakeOverQst: Label 'Bu grup %1 kullanıcısında. %2 kullanıcısına devredilsin mi?', Comment = '%1 = mevcut operatör, %2 = yeni operatör';
+        ClearPickerQst: Label '%1 kullanıcısının ataması kaldırılsın mı? Toplama terminalde yeniden herkese açılır.', Comment = '%1 = mevcut operatör';
+        AssignedMsg: Label 'Grup %1 kullanıcısına atandı.', Comment = '%1 = operatör';
+        AssignedFromListLbl: Label 'Toplanacak Siparişler ekranından atandı.';
+        ClearedFromListLbl: Label 'Toplanacak Siparişler ekranından atama kaldırıldı.';
 }

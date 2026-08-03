@@ -69,7 +69,7 @@ pageextension 72311 "DOPSWHS Whse Pick Header Ext" extends "Warehouse Pick"
                     Image = AssignItemCharge;
                     Promoted = true;
                     PromotedCategory = Process;
-                    ToolTip = 'Assigns this pick to a WMS operator. The list shows local WMS users (the accounts operators sign in with on the handheld), not Business Central users.';
+                    ToolTip = 'Assigns this pick to a WMS operator. The list shows local WMS users (the accounts operators sign in with on the handheld), not Business Central users. This is the supervisor override: a pick already held by another operator can only be handed over here — on the handheld a second operator is refused.';
                     trigger OnAction()
                     var
                         PickMgmt: Codeunit "DOPSWHS Pick Mgmt";
@@ -82,9 +82,36 @@ pageextension 72311 "DOPSWHS Whse Pick Header Ext" extends "Warehouse Pick"
                         LocalUser.SetRange(Disabled, false);
                         if Page.RunModal(Page::"DOPSWHS Local User List", LocalUser) <> Action::LookupOK then
                             exit;
-                        PickMgmt.ReassignPick(Rec, LocalUser.Username, 'Assigned from pick card');
+
+                        // Belge başkasındaysa bu bir ZORLA DEVİR: operatör toplamanın
+                        // ortasında olabilir, sorumlu bilerek onaylasın.
+                        if (Rec."Assigned User ID" <> '') and (Rec."Assigned User ID" <> LocalUser.Username) then
+                            if not Confirm(TakeOverQst, false, PickMgmt.OperatorLabel(Rec."Assigned User ID"), LocalUser."Display Name") then
+                                exit;
+
+                        PickMgmt.ReassignPick(Rec, LocalUser.Username, AssignedFromCardLbl);
                         CurrPage.Update(false);
-                        Message('Pick %1 assigned to %2.', Rec."No.", LocalUser."Display Name");
+                        Message(AssignedMsg, Rec."No.", LocalUser."Display Name");
+                    end;
+                }
+                action("DOPSWHS Clear Assignment")
+                {
+                    ApplicationArea = All;
+                    Caption = 'Clear Assignment';
+                    Image = UnApply;
+                    ToolTip = 'Clears the operator assignment. The pick becomes claimable again on the handheld: the first operator who takes it owns it.';
+                    trigger OnAction()
+                    var
+                        PickMgmt: Codeunit "DOPSWHS Pick Mgmt";
+                    begin
+                        if Rec."Assigned User ID" = '' then
+                            exit;
+                        // Atama kaldırılınca belge terminalde herkese açılır;
+                        // toplamaya başlamış operatörün işi yarıda kalabilir.
+                        if not Confirm(ClearAssignmentQst, false, PickMgmt.OperatorLabel(Rec."Assigned User ID")) then
+                            exit;
+                        PickMgmt.ReleasePick(Rec, ClearedFromCardLbl);
+                        CurrPage.Update(false);
                     end;
                 }
                 action("DOPSWHS Mark Short")
@@ -99,4 +126,11 @@ pageextension 72311 "DOPSWHS Whse Pick Header Ext" extends "Warehouse Pick"
             }
         }
     }
+
+    var
+        TakeOverQst: Label 'Bu toplama %1 kullanıcısında. %2 kullanıcısına devredilsin mi?', Comment = '%1 = mevcut operatör, %2 = yeni operatör';
+        ClearAssignmentQst: Label '%1 kullanıcısının ataması kaldırılsın mı? Toplama terminalde yeniden herkese açılır.', Comment = '%1 = mevcut operatör';
+        AssignedMsg: Label 'Toplama %1, %2 kullanıcısına atandı.', Comment = '%1 = Toplama no., %2 = operatör';
+        AssignedFromCardLbl: Label 'Toplama belgesi kartından atandı.';
+        ClearedFromCardLbl: Label 'Toplama belgesi kartından atama kaldırıldı.';
 }
