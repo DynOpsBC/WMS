@@ -16,4 +16,9 @@ dependencyResolutionManagement {
 
 rootProject.name = "BCWMSApp"
 
-include(":app", ":core-auth", ":core-design", ":core-domain", ":feature-auth")
+// Aktif derleme: yalnız :app ve onun tek bağımlılığı :core-design.
+// :core-auth / :core-domain / :feature-auth yalnızca İNAKTİF scaffold
+// modüllerince (feature-pick, feature-ship, …) kullanılıyor; bunlar zaten
+// derlemeye dahil değil. Include listesinde tutulmaları her derlemede
+// gereksiz yapılandırma + build çıktısı üretiyordu.
+include(":app", ":core-design")

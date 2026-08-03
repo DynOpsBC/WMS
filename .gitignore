@@ -56,3 +56,8 @@ local.settings.json
 licensing-service/package-lock.json
 .claude/settings.local.json
 .playwright-mcp/
+
+# Release APK'lari depoda tutulmaz: her biri ~30 MB, git gecmisini sisiriyordu
+# (27 APK = 805 MB, .git 512 MB'a cikmisti). Yayinlanan surumler GitHub
+# Releases'e yuklenir. Bilerek eklemek gerekirse: git add -f <dosya>
+releases/**/*.apk
