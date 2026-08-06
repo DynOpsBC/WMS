@@ -1,7 +1,7 @@
 page 72346 "DOPSWHS Mono-SKU Pack Station"
 {
     // ELOG'un "Mono-SKU Batch Package Worksheet"inin karşılığı: tek ürünlük
-    // siparişler. Sepet BİR KEZ okutulur; ürün → kutu döngüsü — kutu okuması
+    // siparişler. Sepet BİR KEZ okutulur; ürün kutu döngüsü — kutu okuması
     // siparişi kapatır ve fişini bastırır ("ürün okuttum, kutumu okuttum,
     // fatura kesti"). Mod sabit Batch. İş mantığı codeunit 72334'te.
     PageType = Card;

@@ -350,7 +350,7 @@ codeunit 72046 "DOPSWHS Pick Mgmt"
         // BC 28'e geçince aşağıdaki bloğun yorumunu kaldırın. Register if any
         // pick line carries a Lot/Serial currently under an open inspection.
         // Error format matches BCWMSApp.QcErrorParser so the mobile/web UI
-        // renders a friendly "🔬 QC BLOCK" banner.
+        // renders a friendly " QC BLOCK" banner.
         // PickLine.SetRange("Activity Type", Pick.Type);
         // PickLine.SetRange("No.", Pick."No.");
         // if PickLine.FindSet() then
@@ -418,6 +418,7 @@ codeunit 72046 "DOPSWHS Pick Mgmt"
     local procedure UpsertPackingOrder(var Pick: Record "Warehouse Activity Header"; var PickLine: Record "Warehouse Activity Line")
     var
         PackingOrder: Record "DOPSWHS Packing Order";
+        PickingHeader: Record "DOPSWHS Picking Order Header";
         SalesHeader: Record "Sales Header";
         PackingOrderExists: Boolean;
     begin
@@ -438,6 +439,12 @@ codeunit 72046 "DOPSWHS Pick Mgmt"
         // Toplamada kullanılan ana sepeti paketlemeye taşı: paketleyici
         // "ürünler hangi sepette" bilgisini terminalde görsün.
         PackingOrder."Main LP No." := Pick."DOPSWHS Main LP No.";
+        // Toplama grubunun akış tipini paketlemeye taşı: terminaldeki V2
+        // sekmeleri (Multi / Mono / Tek SKU) listeyi bu alanla filtreliyor.
+        // Grup bulunamazsa mod boş kalır — standart BC pick'i gibi davranır.
+        PickingHeader.SetRange("Warehouse Pick No.", Pick."No.");
+        if PickingHeader.FindFirst() then
+            PackingOrder."Order Flow Mode" := PickingHeader."Order Flow Mode";
         PackingOrder."Warehouse Shipment No." := PickLine."Whse. Document No.";
         PackingOrder."Location Code" := Pick."Location Code";
         PackingOrder."Customer No." := SalesHeader."Sell-to Customer No.";

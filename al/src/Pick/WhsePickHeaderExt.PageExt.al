@@ -66,7 +66,7 @@ pageextension 72311 "DOPSWHS Whse Pick Header Ext" extends "Warehouse Pick"
                 {
                     ApplicationArea = All;
                     Caption = 'Assign to WMS Operator';
-                    Image = AssignItemCharge;
+                    Image = UserSetup;
                     Promoted = true;
                     PromotedCategory = Process;
                     ToolTip = 'Assigns this pick to a WMS operator. The list shows local WMS users (the accounts operators sign in with on the handheld), not Business Central users. This is the supervisor override: a pick already held by another operator can only be handed over here — on the handheld a second operator is refused.';

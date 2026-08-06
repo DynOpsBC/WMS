@@ -110,17 +110,17 @@ page 72261 "DOPSWHS Config Check"
         case Rec."Status" of
             Rec."Status"::OK:
                 begin
-                    StatusIcon := '✅';
+                    StatusIcon := '';
                     StatusStyle := 'Favorable';
                 end;
             Rec."Status"::Warning:
                 begin
-                    StatusIcon := '⚠️';
+                    StatusIcon := '';
                     StatusStyle := 'Ambiguous';
                 end;
             Rec."Status"::Missing:
                 begin
-                    StatusIcon := '❌';
+                    StatusIcon := '';
                     StatusStyle := 'Unfavorable';
                 end;
             else begin

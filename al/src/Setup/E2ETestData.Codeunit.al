@@ -11,7 +11,7 @@ codeunit 72060 "DOPSWHS E2E Test Data"
 
     procedure PrepareE2EData()
     var
-        ResultMsg: Label '✅ E2E test data hazır.\n\n• Items: ITEM-LOT-1, ITEM-SN-1, ITEM-EXP-1\n• Production: ITEM-PROD-FG-1, ITEM-PROD-COMP-1/2 + BOM + Routing\n• Assembly: ITEM-ASM-FG-1 + BOM\n• BLUE location bins: RECEIVE-1, PICK-01, BULK-01, SHIP-01\n• Test lot: LOT-2026-001\n\nNot: Cronus default vendor/customer (10000, 30000) kullanılır.';
+        ResultMsg: Label 'E2E test data hazır.\n\n• Items: ITEM-LOT-1, ITEM-SN-1, ITEM-EXP-1\n• Production: ITEM-PROD-FG-1, ITEM-PROD-COMP-1/2 + BOM + Routing\n• Assembly: ITEM-ASM-FG-1 + BOM\n• BLUE location bins: RECEIVE-1, PICK-01, BULK-01, SHIP-01\n• Test lot: LOT-2026-001\n\nNot: Cronus default vendor/customer (10000, 30000) kullanılır.';
     begin
         EnsureBlueLocationBins();
         EnsureWarehouseEmployee();

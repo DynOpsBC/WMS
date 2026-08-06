@@ -47,7 +47,7 @@ page 72356 "DOPSWHS Picking Order Card"
                     Editable = false;
                     ToolTip = 'Toplamayı üstlenen WMS operatörü. Değiştirmek için "Toplayıcı Ata" aksiyonunu kullanın. Boş bırakırsanız toplayıcı terminalden "Üzerime Al" ile kendisi alabilir.';
                     // Salt-okunur: alanın TableRelation'ı Warehouse Employee ve WMS
-                    // operatörü orada kayıtlı olmayabilir → elle yazınca Validate
+                    // operatörü orada kayıtlı olmayabilir elle yazınca Validate
                     // atamayı sessizce geri alıyordu. Atama aksiyondan yapılır.
                 }
                 field(Status; Rec.Status) { ApplicationArea = All; Caption = 'Durum'; StyleExpr = StatusStyle; }
@@ -205,7 +205,7 @@ page 72356 "DOPSWHS Picking Order Card"
             {
                 Caption = 'Toplayıcı Ata';
                 ApplicationArea = All;
-                Image = AssignItemCharge;
+                Image = UserSetup;
                 Promoted = true;
                 PromotedCategory = Category4;
                 Enabled = Rec.Status <> Rec.Status::Completed;

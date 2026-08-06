@@ -178,7 +178,7 @@ page 72361 "DOPSWHS Packing Order List"
                 {
                     ApplicationArea = All;
                     Caption = 'Paketleyici Ata';
-                    Image = AssignItemCharge;
+                    Image = UserSetup;
                     ToolTip = 'Seçili siparişi bir WMS operatörüne atar. Liste, operatörlerin terminalde giriş yaptığı yerel WMS kullanıcılarını gösterir.';
                     Promoted = true;
                     PromotedCategory = Process;

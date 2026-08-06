@@ -28,6 +28,9 @@ page 72360 "DOPSWHS Packing Order API"
                 field(customerNo; Rec."Customer No.") { Caption = 'customerNo'; }
                 field(customerName; Rec."Customer Name") { Caption = 'customerName'; }
                 field(status; Rec.Status) { Caption = 'status'; }
+                // V2 paketleme sekmeleri (Multi / Mono / Tek SKU) listeyi bu
+                // alanla filtreliyor; yayınlanmadan $filter 400 dönüyordu.
+                field(orderFlowMode; Rec."Order Flow Mode") { Caption = 'orderFlowMode'; }
                 field(sessionEntryNo; Rec."Session Entry No.") { Caption = 'sessionEntryNo'; }
                 field(readyDateTime; Rec."Ready DateTime") { Caption = 'readyDateTime'; }
                 field(startedByUser; Rec."Started By User") { Caption = 'startedByUser'; }

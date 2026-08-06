@@ -26,7 +26,7 @@ using Microsoft.QualityManagement.Document;
 /// Inspection. DOPSWHS Pick / Put-Away / Movement codeunits call
 /// VerifyNotBlocked() before register; if blocked, the raised Error uses a
 /// format that BCWMSApp's mobile/web QcErrorParser picks up to render the
-/// friendly "🔬 QC BLOCK" banner.
+// / friendly " QC BLOCK" banner.
 ///
 /// A direct event subscriber on Whse.-Activity-Register is intentionally
 /// omitted in this commit — the exact event signature differs per BC build,

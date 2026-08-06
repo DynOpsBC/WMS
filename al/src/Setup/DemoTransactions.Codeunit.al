@@ -19,8 +19,8 @@ codeunit 72059 "DOPSWHS Demo Transactions"
         LP4: Code[20];
         LP5: Code[20];
         Created: Integer;
-        Msg: Label '✅ Demo transaction tamamlandı.\n\n%1 yeni LP oluşturuldu (built durumunda):\n• %2 (CARTON-S)\n• %3 (CARTON-M)\n• %4 (PALLET-EUR)\n• %5 (TOTE-A)\n• %6 (PALLET-US)\n\nRole Center → 🏷️ License Plate cue grubu otomatik dolacak.';
-        NoLocationMsg: Label '⚠️ Demo LP oluşturulamadı: Setup tablosunda Default Location Code boş veya geçersiz. Önce "Run Demo Setup" çalıştırın.';
+        Msg: Label 'Demo transaction tamamlandı.\n\n%1 yeni LP oluşturuldu (built durumunda):\n• %2 (CARTON-S)\n• %3 (CARTON-M)\n• %4 (PALLET-EUR)\n• %5 (TOTE-A)\n• %6 (PALLET-US)\n\nRole Center  License Plate cue grubu otomatik dolacak.';
+        NoLocationMsg: Label 'Demo LP oluşturulamadı: Setup tablosunda Default Location Code boş veya geçersiz. Önce "Run Demo Setup" çalıştırın.';
     begin
         Setup.Get('');
         if Setup."Default Location Code" = '' then begin

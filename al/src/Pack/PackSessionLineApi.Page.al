@@ -32,6 +32,10 @@ page 72337 "DOPSWHS Pack Session Line API"
                 field(qtyPacked; Rec."Qty. Packed") { Caption = 'qtyPacked'; Editable = false; }
                 field(orderCompleted; Rec."Order Completed") { Caption = 'orderCompleted'; Editable = false; }
                 field(boxLpNo; Rec."Box LP No.") { Caption = 'boxLpNo'; Editable = false; }
+                // Kargo kolisi kayıtlı LP OLMAK ZORUNDA DEĞİL (kargo etiketi /
+                // SSCC / matbu koli barkodu). Bu alan yayınlanmadan terminal
+                // koliyi bağlanmış saymıyor ve sipariş kapanmıyordu.
+                field(boxBarcode; Rec."Box Barcode") { Caption = 'boxBarcode'; Editable = false; }
             }
         }
     }

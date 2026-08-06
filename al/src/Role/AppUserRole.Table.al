@@ -1,7 +1,7 @@
 table 72268 "DOPSWHS App User Role"
 {
     // Assigns one or more roles to a user. A user can carry multiple roles (PICKER + QUALITY);
-    // when they hit the same entity, filters from each role are OR-joined → broader visibility.
+    // when they hit the same entity, filters from each role are OR-joined broader visibility.
     Caption = 'App User Role';
     DataClassification = EndUserIdentifiableInformation;
     Access = Public;

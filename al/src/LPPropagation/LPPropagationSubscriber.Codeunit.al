@@ -68,7 +68,7 @@ codeunit 72428 "DOPSWHS LP Propagation"
         Header.Modify(true);
     end;
 
-    /// <summary>Mirror of StampPostedShipmentHeader for Whse Receipt → Posted Whse Receipt.</summary>
+    // / <summary>Mirror of StampPostedShipmentHeader for Whse Receipt Posted Whse Receipt.</summary>
     procedure StampPostedReceiptHeader(WhseReceiptNo: Code[20]; PostedReceiptNo: Code[20])
     var
         PostedHeader: Record "Posted Whse. Receipt Header";
@@ -220,8 +220,8 @@ codeunit 72428 "DOPSWHS LP Propagation"
     // =========================================================================
 
     /// <summary>Walks the Item Journal Line context to find the originating warehouse document
-    /// that captured the LP scan. Source priority: explicit Whse Activity Line LP →
-    /// Whse Shipment Line LP → Whse Receipt Header LP.</summary>
+    // / that captured the LP scan. Source priority: explicit Whse Activity Line LP
+    // / Whse Shipment Line LP Whse Receipt Header LP.</summary>
     local procedure ResolveLpForItemJnlLine(ItemJnlLine: Record "Item Journal Line"): Code[20]
     var
         Lp: Code[20];
@@ -247,7 +247,7 @@ codeunit 72428 "DOPSWHS LP Propagation"
         if SourceNo = '' then
             exit('');
 
-        // Pick / PutAway → Warehouse Activity Line
+        // Pick / PutAway Warehouse Activity Line
         WhseActivityLine.SetRange("Source No.", SourceNo);
         WhseActivityLine.SetRange("Item No.", ItemNo);
         WhseActivityLine.SetFilter("LP No.", '<>%1', '');
@@ -293,7 +293,7 @@ codeunit 72428 "DOPSWHS LP Propagation"
     end;
 
     /// <summary>Resolve the LP for a Warehouse Entry. Priority mirrors ResolveLpForItemJnlLine:
-    /// live Whse Activity Line LP → Whse Shipment Line LP → Whse Receipt Header LP.</summary>
+    // / live Whse Activity Line LP Whse Shipment Line LP Whse Receipt Header LP.</summary>
     local procedure ResolveLpForWhseEntry(WhseEntry: Record "Warehouse Entry"): Code[20]
     var
         WhseActivityLine: Record "Warehouse Activity Line";

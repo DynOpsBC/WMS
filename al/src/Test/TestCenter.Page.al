@@ -12,7 +12,7 @@ page 72248 "DOPSWHS Test Center"
         {
             cuegroup(TestMetrics)
             {
-                Caption = '🧪 Test Center';
+                Caption = 'Test Center';
                 field("Total Test Cases"; Rec."Total Test Cases") { ApplicationArea = All; DrillDownPageId = "DOPSWHS Test Case List"; }
                 field("Recent Test Runs"; Rec."Recent Test Runs") { ApplicationArea = All; DrillDownPageId = "DOPSWHS Test Run List"; }
                 field("Last Run Pass Rate"; Rec."Last Run Pass Rate") { ApplicationArea = All; DrillDownPageId = "DOPSWHS Test Run List"; }

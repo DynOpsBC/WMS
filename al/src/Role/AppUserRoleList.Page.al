@@ -4,11 +4,11 @@ page 72288 "DOPSWHS App User Role List"
     // 72277) bir user kartının içinde tek-user görünümü içindi; bu page
     // tüm system için "kim hangi role sahip" tablo görünümü.
     //
-    // Role Center → "👥 Atanmış Kullanıcılar" tıklandığında veya search
+    // Role Center " Atanmış Kullanıcılar" tıklandığında veya search
     // "App User Roles" ile açılır.
     PageType = List;
     SourceTable = "DOPSWHS App User Role";
-    Caption = '👥 WMS Kullanıcı Rolleri';
+    Caption = 'WMS Kullanıcı Rolleri';
     ApplicationArea = All;
     UsageCategory = Lists;
     Editable = true;
@@ -65,7 +65,7 @@ page 72288 "DOPSWHS App User Role List"
         {
             action(QuickAssign)
             {
-                Caption = '➕ Hızlı Atama';
+                Caption = 'Hızlı Atama';
                 ApplicationArea = All;
                 Image = New;
                 ToolTip = 'Yeni kullanıcı atamak için Quick User Assign kartını aç.';
@@ -73,10 +73,10 @@ page 72288 "DOPSWHS App User Role List"
             }
             action(SeedDemo)
             {
-                Caption = '🌱 Demo Seed';
+                Caption = 'Demo Seed';
                 ApplicationArea = All;
                 Image = SuggestLines;
-                ToolTip = 'Pilot kullanıcı setini (Kaan + Deniz → INV_ADMIN) idempotent ata.';
+                ToolTip = 'Pilot kullanıcı setini (Kaan + Deniz INV_ADMIN) idempotent ata.';
                 trigger OnAction()
                 var
                     Provisioner: Codeunit "DOPSWHS Quick User Provision";
@@ -86,7 +86,7 @@ page 72288 "DOPSWHS App User Role List"
             }
             action(GetUsersFromM365)
             {
-                Caption = '🔄 M365 Senkronizasyonu';
+                Caption = 'M365 Senkronizasyonu';
                 ApplicationArea = All;
                 Image = Refresh;
                 ToolTip = 'BC standart "Users" sayfasını açar; oradan M365 senkronu yapılır.';
@@ -94,7 +94,7 @@ page 72288 "DOPSWHS App User Role List"
             }
             action(RoleCatalog)
             {
-                Caption = '📜 Rol Kataloğu';
+                Caption = 'Rol Kataloğu';
                 ApplicationArea = All;
                 Image = SetupList;
                 ToolTip = 'Mevcut WMS rollerini gösterir (INV_ADMIN, PICKER, RECEIVER, vb.).';

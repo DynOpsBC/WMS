@@ -10,7 +10,7 @@ codeunit 72061 "DOPSWHS Test Catalog Seed"
 
     procedure RunFullSeed()
     var
-        Msg: Label '✅ Test Catalog seed tamamlandı.\n\n• 50 Test Case (Section A-H)\n• 5 Environment (DEV/TEST/UAT/PREPROD/PROD)\n• 3 User Group (DEV-TEAM/QA-TEAM/BUSINESS-USERS)\n\nRole Center → 🧪 Test Center → "New Test Run" ile koşumu başlatabilirsiniz.';
+        Msg: Label 'Test Catalog seed tamamlandı.\n\n• 50 Test Case (Section A-H)\n• 5 Environment (DEV/TEST/UAT/PREPROD/PROD)\n• 3 User Group (DEV-TEAM/QA-TEAM/BUSINESS-USERS)\n\nRole Center  Test Center "New Test Run" ile koşumu başlatabilirsiniz.';
     begin
         SeedEnvironments();
         SeedUserGroups();
@@ -93,13 +93,13 @@ codeunit 72061 "DOPSWHS Test Catalog Seed"
     begin
         CU_LP := 72065;
         AddCase('TC-006', 'B', 'LP build (CARTON-S, default location)', 'LP Management.Build çağrılır, Status=Open doğrulanır.', 0, 0, CU_LP, 'RunTC006', 5, true, 10);
-        AddCase('TC-007', 'B', 'LP AddLine 3x → Movement Ledger', 'AddLine 3 kez, Movement Ledger ItemAdded entry sayısı 3.', 0, 0, CU_LP, 'RunTC007', 5, true, 20);
-        AddCase('TC-008', 'B', 'LP Stop → Built + SSCC üretilir', 'Stop çağrılır, Status=Built, SSCC 18 char doğrulanır.', 0, 0, CU_LP, 'RunTC008', 5, true, 30);
-        AddCase('TC-009', 'B', 'LP Print Label → Print Job Queue entry', 'PrintLabel çağrılır, Print Job Queue satır sayısı 1 artar.', 0, 1, CU_LP, 'RunTC009', 5, false, 40);
-        AddCase('TC-010', 'B', 'Partial Use CreateNewLP (10 / use 6)', 'SplitForPartialUse(CreateNewLP, 6) → 2 LP oluşur.', 0, 0, CU_LP, 'RunTC010', 7, true, 50);
-        AddCase('TC-011', 'B', 'Partial Use Unbuild (10 / use 6)', 'SplitForPartialUse(Unbuild, 6) → kaynak Unbuilt, leftover loose.', 0, 0, CU_LP, 'RunTC011', 7, true, 60);
-        AddCase('TC-012', 'B', 'LP Transfer line subset', 'Transfer 2 line → kaynak ve hedef LP Movement Ledger entries.', 0, 0, CU_LP, 'RunTC012', 7, true, 70);
-        AddCase('TC-013', 'B', 'KRİTİK — Bin Content nested rollup = 100 (çift sayım YOK)', '3-level nesting (Pallet→2 Cartons→50 unit each), Bin Content = 100.', 0, 0, CU_LP, 'RunTC013', 10, true, 80);
+        AddCase('TC-007', 'B', 'LP AddLine 3x Movement Ledger', 'AddLine 3 kez, Movement Ledger ItemAdded entry sayısı 3.', 0, 0, CU_LP, 'RunTC007', 5, true, 20);
+        AddCase('TC-008', 'B', 'LP Stop Built + SSCC üretilir', 'Stop çağrılır, Status=Built, SSCC 18 char doğrulanır.', 0, 0, CU_LP, 'RunTC008', 5, true, 30);
+        AddCase('TC-009', 'B', 'LP Print Label Print Job Queue entry', 'PrintLabel çağrılır, Print Job Queue satır sayısı 1 artar.', 0, 1, CU_LP, 'RunTC009', 5, false, 40);
+        AddCase('TC-010', 'B', 'Partial Use CreateNewLP (10 / use 6)', 'SplitForPartialUse(CreateNewLP, 6) 2 LP oluşur.', 0, 0, CU_LP, 'RunTC010', 7, true, 50);
+        AddCase('TC-011', 'B', 'Partial Use Unbuild (10 / use 6)', 'SplitForPartialUse(Unbuild, 6) kaynak Unbuilt, leftover loose.', 0, 0, CU_LP, 'RunTC011', 7, true, 60);
+        AddCase('TC-012', 'B', 'LP Transfer line subset', 'Transfer 2 line kaynak ve hedef LP Movement Ledger entries.', 0, 0, CU_LP, 'RunTC012', 7, true, 70);
+        AddCase('TC-013', 'B', 'KRİTİK — Bin Content nested rollup = 100 (çift sayım YOK)', '3-level nesting (Pallet 2 Cartons 50 unit each), Bin Content = 100.', 0, 0, CU_LP, 'RunTC013', 10, true, 80);
         AddCase('TC-014', 'B', 'Nest depth 4 reddedilir', 'Nest depth=4 deneyimi exception fırlatır.', 0, 0, CU_LP, 'RunTC014', 5, true, 90);
         AddCase('TC-015', 'B', 'SURROGATE — LPNestManager.Nest direct call (SPA simulate)', 'LP Browser SPA drag-drop = direct AL Nest call.', 2, 1, CU_LP, 'RunTC015', 5, false, 100);
     end;
@@ -109,7 +109,7 @@ codeunit 72061 "DOPSWHS Test Catalog Seed"
         CU_Recv: Integer;
     begin
         CU_Recv := 72066;
-        AddCase('TC-016', 'C', 'Demo Whse Receipt + Post → ILE', 'Whse Receipt yarat, Post, Posted Whse Receipt + Item Ledger.', 0, 0, CU_Recv, 'RunTC016', 10, true, 10);
+        AddCase('TC-016', 'C', 'Demo Whse Receipt + Post ILE', 'Whse Receipt yarat, Post, Posted Whse Receipt + Item Ledger.', 0, 0, CU_Recv, 'RunTC016', 10, true, 10);
         AddCase('TC-017', 'C', 'Receipt + LP build during receive', 'StartLP + StopLP receipt akışı; posted line LP No doluyor.', 0, 0, CU_Recv, 'RunTC017', 10, true, 20);
         AddCase('TC-018', 'C', 'SURROGATE — GS1-128 ParseBarcode', '(01)08401234567890(10)LOT123(17)260101(21)SN42 parse doğru.', 3, 1, CU_Recv, 'RunTC018', 3, true, 30);
         AddCase('TC-019', 'C', 'Transfer Order receive side', 'Transfer Order receipt akışı, Whse Receipt post.', 0, 0, CU_Recv, 'RunTC019', 10, false, 40);
@@ -124,14 +124,14 @@ codeunit 72061 "DOPSWHS Test Catalog Seed"
         CU_PickShip: Integer;
     begin
         CU_PickShip := 72067;
-        AddCase('TC-024', 'D', 'Sales Order → Pick oluşturma', 'Released SO → Whse Shipment → Pick (Type=Pick) oluşur.', 0, 0, CU_PickShip, 'RunTC024', 10, true, 10);
+        AddCase('TC-024', 'D', 'Sales Order Pick oluşturma', 'Released SO Whse Shipment Pick (Type=Pick) oluşur.', 0, 0, CU_PickShip, 'RunTC024', 10, true, 10);
         AddCase('TC-025', 'D', 'Pick AssignToMe', 'AssignToMe sonrası AssignedUser=current.', 0, 0, CU_PickShip, 'RunTC025', 3, false, 20);
         AddCase('TC-026', 'D', 'Pick-to-LP + SSCC', 'StartShippingLP + 5 line + StopShippingLP, SSCC üretilir.', 0, 0, CU_PickShip, 'RunTC026', 10, true, 30);
         AddCase('TC-027', 'D', 'MarkPickShort + backorder', 'MarkPickShort(NO_STOCK), backorder flag, register devam eder.', 0, 0, CU_PickShip, 'RunTC027', 7, false, 40);
-        AddCase('TC-028', 'D', 'RegisterPick → Whse Entries + ILE', 'Pick register, Whse Activity silindi, Whse Entries oluştu.', 0, 0, CU_PickShip, 'RunTC028', 10, true, 50);
+        AddCase('TC-028', 'D', 'RegisterPick Whse Entries + ILE', 'Pick register, Whse Activity silindi, Whse Entries oluştu.', 0, 0, CU_PickShip, 'RunTC028', 10, true, 50);
         AddCase('TC-029', 'D', 'SURROGATE — PickMgmt.ReassignPick direct call', 'Pick Queue SPA reassign = direct AL ReassignPick.', 2, 1, CU_PickShip, 'RunTC029', 5, false, 60);
-        AddCase('TC-030', 'D', 'Whse Shipment Post (print=true)', 'Shipment post, LP→Used, Print Job entry oluşur.', 0, 0, CU_PickShip, 'RunTC030', 10, true, 70);
-        AddCase('TC-031', 'D', 'Sales Order Ship & Invoice atomic', 'ShipAndInvoice → Posted Sales Shipment + Posted Sales Invoice.', 0, 0, CU_PickShip, 'RunTC031', 10, false, 80);
+        AddCase('TC-030', 'D', 'Whse Shipment Post (print=true)', 'Shipment post, LP Used, Print Job entry oluşur.', 0, 0, CU_PickShip, 'RunTC030', 10, true, 70);
+        AddCase('TC-031', 'D', 'Sales Order Ship & Invoice atomic', 'ShipAndInvoice Posted Sales Shipment + Posted Sales Invoice.', 0, 0, CU_PickShip, 'RunTC031', 10, false, 80);
         AddCase('TC-032', 'D', 'Transfer Order ship side post', 'Transfer ship-side post, Posted Transfer Shipment.', 0, 0, CU_PickShip, 'RunTC032', 10, false, 90);
         AddCase('TC-033', 'D', 'Eksik SSCC otomatik üretilir', 'Stop ile SSCC üretilmediyse Shipment.Post sırasında auto-gen.', 0, 0, CU_PickShip, 'RunTC033', 7, false, 100);
     end;
@@ -141,8 +141,8 @@ codeunit 72061 "DOPSWHS Test Catalog Seed"
         CU_Move: Integer;
     begin
         CU_Move := 72068;
-        AddCase('TC-034', 'E', 'AdHocMove → Item Reclass Journal', 'AdHocMove(fromBin, toBin, qty=5) → Warehouse Entries 2x.', 0, 0, CU_Move, 'RunTC034', 7, false, 10);
-        AddCase('TC-035', 'E', 'Directed Whse Movement Register', 'Whse Movement document → Register → bin contents transfer.', 0, 0, CU_Move, 'RunTC035', 10, false, 20);
+        AddCase('TC-034', 'E', 'AdHocMove Item Reclass Journal', 'AdHocMove(fromBin, toBin, qty=5) Warehouse Entries 2x.', 0, 0, CU_Move, 'RunTC034', 7, false, 10);
+        AddCase('TC-035', 'E', 'Directed Whse Movement Register', 'Whse Movement document Register bin contents transfer.', 0, 0, CU_Move, 'RunTC035', 10, false, 20);
         AddCase('TC-036', 'E', 'KRİTİK — Batch isolation (2 user)', 'İki simulated user, ayrı DOPS-<userId> batch oluşur.', 0, 0, CU_Move, 'RunTC036', 7, true, 30);
     end;
 
@@ -152,8 +152,8 @@ codeunit 72061 "DOPSWHS Test Catalog Seed"
     begin
         CU_Count := 72069;
         AddCase('TC-037', 'F', 'CreateSheet (Blind, 1 counter)', 'CountSheet yarat, Status=Open, Phys Inv Batch oluşur.', 0, 0, CU_Count, 'RunTC037', 7, true, 10);
-        AddCase('TC-038', 'F', 'Multi-counter variance (3 slot)', '3 counter (100/100/95) → RecountRequired=true.', 0, 0, CU_Count, 'RunTC038', 10, true, 20);
-        AddCase('TC-039', 'F', 'PostSheet → Phys Inv Journal + ILE', 'Sheet post, Phys Inv Journal entries, ILE adjustment.', 0, 0, CU_Count, 'RunTC039', 10, true, 30);
+        AddCase('TC-038', 'F', 'Multi-counter variance (3 slot)', '3 counter (100/100/95) RecountRequired=true.', 0, 0, CU_Count, 'RunTC038', 10, true, 20);
+        AddCase('TC-039', 'F', 'PostSheet Phys Inv Journal + ILE', 'Sheet post, Phys Inv Journal entries, ILE adjustment.', 0, 0, CU_Count, 'RunTC039', 10, true, 30);
         AddCase('TC-040', 'F', 'Variance Review workflow', 'Variance Review page (P 72085) supervisor approve flow.', 0, 0, CU_Count, 'RunTC040', 7, false, 40);
     end;
 
@@ -162,11 +162,11 @@ codeunit 72061 "DOPSWHS Test Catalog Seed"
         CU_Prod: Integer;
     begin
         CU_Prod := 72070;
-        AddCase('TC-041', 'G', 'Consume → ILE Consumption', 'Consume(component, qty, lpNo) → ILE Type=Consumption.', 0, 0, CU_Prod, 'RunTC041', 10, false, 10);
-        AddCase('TC-042', 'G', 'ReportOutput → ILE Output', 'ReportOutput(qty=10, scrap=1, runtime=120) → ILE Type=Output.', 0, 0, CU_Prod, 'RunTC042', 10, false, 20);
-        AddCase('TC-043', 'G', 'Output to new LP (KB pattern)', 'newLpTemplate=CARTON-S → output bin yeni Built LP.', 0, 0, CU_Prod, 'RunTC043', 10, false, 30);
-        AddCase('TC-044', 'G', 'Assembly Post (Assemble-to-Stock)', 'AssemblyMgmt.PostAssembly → components consume + output.', 0, 0, CU_Prod, 'RunTC044', 10, false, 40);
-        AddCase('TC-045', 'G', 'Full prod cycle: Consume → Output→LP', 'Released Prod → Consume → Output to LP → finished item.', 0, 0, CU_Prod, 'RunTC045', 15, false, 50);
+        AddCase('TC-041', 'G', 'Consume ILE Consumption', 'Consume(component, qty, lpNo) ILE Type=Consumption.', 0, 0, CU_Prod, 'RunTC041', 10, false, 10);
+        AddCase('TC-042', 'G', 'ReportOutput ILE Output', 'ReportOutput(qty=10, scrap=1, runtime=120) ILE Type=Output.', 0, 0, CU_Prod, 'RunTC042', 10, false, 20);
+        AddCase('TC-043', 'G', 'Output to new LP (KB pattern)', 'newLpTemplate=CARTON-S output bin yeni Built LP.', 0, 0, CU_Prod, 'RunTC043', 10, false, 30);
+        AddCase('TC-044', 'G', 'Assembly Post (Assemble-to-Stock)', 'AssemblyMgmt.PostAssembly components consume + output.', 0, 0, CU_Prod, 'RunTC044', 10, false, 40);
+        AddCase('TC-045', 'G', 'Full prod cycle: Consume Output LP', 'Released Prod Consume Output to LP finished item.', 0, 0, CU_Prod, 'RunTC045', 15, false, 50);
     end;
 
     local procedure SeedSectionH()
@@ -174,10 +174,10 @@ codeunit 72061 "DOPSWHS Test Catalog Seed"
         CU_System: Integer;
     begin
         CU_System := 72071;
-        AddCase('TC-046', 'H', 'Device.LastSeen heartbeat → cue', 'LastSeen update → Çevrimiçi Cihazlar cue=3 (<5dk filter).', 0, 0, CU_System, 'RunTC046', 5, false, 10);
+        AddCase('TC-046', 'H', 'Device.LastSeen heartbeat cue', 'LastSeen update Çevrimiçi Cihazlar cue=3 (<5dk filter).', 0, 0, CU_System, 'RunTC046', 5, false, 10);
         AddCase('TC-047', 'H', 'Sync Conflict simulate (412)', 'SyncConflictBuffer row oluşur, resolve flow doğrulanır.', 0, 0, CU_System, 'RunTC047', 7, false, 20);
         AddCase('TC-048', 'H', 'REST API smoke (4 endpoint)', 'GET /licensePlates + POST assign + GET /items + POST barcodes/parse.', 3, 0, CU_System, 'RunTC048', 10, false, 30);
-        AddCase('TC-049', 'H', 'SURROGATE — Webhook event delivery', 'OnPickReassigned BusinessEvent → Webhook Audit row.', 2, 1, CU_System, 'RunTC049', 5, false, 40);
+        AddCase('TC-049', 'H', 'SURROGATE — Webhook event delivery', 'OnPickReassigned BusinessEvent Webhook Audit row.', 2, 1, CU_System, 'RunTC049', 5, false, 40);
         AddCase('TC-050', 'H', 'SURROGATE — LP Browser tree traversal', '3-level nesting fetch + PrintLpLabel call simulate.', 2, 1, CU_System, 'RunTC050', 5, false, 50);
     end;
 

@@ -3,7 +3,7 @@ page 72280 "DOPSWHS LP Template API"
     // LP template listesi mobil/web tarafında "Build LP" dropdown'u için
     // gereken seed verisi. Şimdiye kadar sadece BC içi list page (72012)
     // vardı — mobil LP Build sheet & Sistem Sağlığı paneli `licensePlateTemplates`
-    // endpoint'ini çağırıyor ama AL page yoktu → her zaman 404 dönüyordu.
+    // endpoint'ini çağırıyor ama AL page yoktu her zaman 404 dönüyordu.
     PageType = API;
     APIPublisher = 'dynops';
     APIGroup = 'warehouse';

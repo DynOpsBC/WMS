@@ -1,7 +1,7 @@
 codeunit 72265 "DOPSWHS App Profile Mgmt"
 {
-    // Resolves the effective WMS App profile for the calling user: their own row → falls back to a
-    // 'DEFAULT' profile → finally to an empty default. Returns JSON the mobile app consumes once
+    // Resolves the effective WMS App profile for the calling user: their own row falls back to a
+    // 'DEFAULT' profile finally to an empty default. Returns JSON the mobile app consumes once
     // after login to tailor visible modules + filters + defaults.
     Access = Public;
 

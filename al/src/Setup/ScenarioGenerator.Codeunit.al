@@ -281,7 +281,7 @@ codeunit 72072 "DOPSWHS Scenario Generator"
         end;
 
         CreatedCount += 1;
-        AppendLog(StrSubstNo('PO %1 → %2 (loc=%3, lines=%4)', ScenarioKey, PH."No.", LocationCode, Items.Count));
+        AppendLog(StrSubstNo('PO %1 %2 (loc=%3, lines=%4)', ScenarioKey, PH."No.", LocationCode, Items.Count));
         exit(true);
     end;
 
@@ -351,7 +351,7 @@ codeunit 72072 "DOPSWHS Scenario Generator"
         end;
 
         CreatedCount += 1;
-        AppendLog(StrSubstNo('SO %1 → %2 (loc=%3, lines=%4)', ScenarioKey, SH."No.", LocationCode, Items.Count));
+        AppendLog(StrSubstNo('SO %1 %2 (loc=%3, lines=%4)', ScenarioKey, SH."No.", LocationCode, Items.Count));
         exit(true);
     end;
 
@@ -403,19 +403,19 @@ codeunit 72072 "DOPSWHS Scenario Generator"
     // Whse Receipt + Shipment auto-create — v1 manuel
     //
     // Notlar: Generator PO/SO'ları Released yarattığı için kullanıcı
-    // BC web client'tan "Whse Receipt → Get Source Documents" veya
-    // "Whse Shipment → Get Source Documents" tıklayarak Whse belgesini
+    // BC web client'tan "Whse Receipt Get Source Documents" veya
+    // "Whse Shipment Get Source Documents" tıklayarak Whse belgesini
     // yaratabilir. v2'de headless yaratma eklenecek.
     // ============================================================
 
     local procedure TryCreateWhseReceipt(var PH: Record "Purchase Header")
     begin
-        AppendLog(StrSubstNo('  PO %1 Whse Receipt manual: BC client → Whse Receipt → Get Source Docs.', PH."No."));
+        AppendLog(StrSubstNo('PO %1 Whse Receipt manual: BC client Whse Receipt Get Source Docs.', PH."No."));
     end;
 
     local procedure TryCreateWhseShipment(var SH: Record "Sales Header")
     begin
-        AppendLog(StrSubstNo('  SO %1 Whse Shipment manual: BC client → Whse Shipment → Get Source Docs.', SH."No."));
+        AppendLog(StrSubstNo('SO %1 Whse Shipment manual: BC client Whse Shipment Get Source Docs.', SH."No."));
     end;
 
     // ============================================================
@@ -441,7 +441,7 @@ codeunit 72072 "DOPSWHS Scenario Generator"
         end;
 
         CreatedCount += 1;
-        AppendLog(StrSubstNo('LP %1 → %2 (template=%3, item=%4, qty=%5)', ScenarioKey, LP."No.", TemplateCode, ItemNo, Qty));
+        AppendLog(StrSubstNo('LP %1 %2 (template=%3, item=%4, qty=%5)', ScenarioKey, LP."No.", TemplateCode, ItemNo, Qty));
     end;
 
     [TryFunction]
@@ -511,7 +511,7 @@ codeunit 72072 "DOPSWHS Scenario Generator"
         end;
 
         CreatedCount += 1;
-        AppendLog(StrSubstNo('Count %1 → %2 (loc=%3, mode=%4)', ScenarioKey, SheetNo, LocationCode, Mode));
+        AppendLog(StrSubstNo('Count %1 %2 (loc=%3, mode=%4)', ScenarioKey, SheetNo, LocationCode, Mode));
     end;
 
     [TryFunction]

@@ -169,7 +169,7 @@ page 72357 "DOPSWHS Picking Order List"
                 {
                     ApplicationArea = All;
                     Caption = 'Toplayıcı Ata';
-                    Image = AssignItemCharge;
+                    Image = UserSetup;
                     Promoted = true;
                     PromotedCategory = Category4;
                     ToolTip = 'Seçili grubu bir WMS operatörüne atar. Pick oluşturulmuşsa toplama belgesine de yazılır; operatör terminalde görür.';
@@ -325,7 +325,7 @@ page 72357 "DOPSWHS Picking Order List"
                 else
                     ProgressStyle := 'Attention';
             end else
-                // Register edilince açık satırlar silinir → toplama bitmiş demektir.
+                // Register edilince açık satırlar silinir toplama bitmiş demektir.
                 if Rec.Status = Rec.Status::"Pick Created" then begin
                     ProgressText := 'Toplandı';
                     ProgressStyle := 'Favorable';

@@ -70,7 +70,7 @@ page 72009 "DOPSWHS WMS Token Help"
                 label(Method1Step3)
                 {
                     ApplicationArea = All;
-                    Caption = 'Adım 3: Token''ı Web App''in Login ekranındaki textarea''ya, veya Mobile App''in "Gelişmiş: token ile giriş" alanına yapıştır → Bağlan';
+                    Caption = 'Adım 3: Token''ı Web App''in Login ekranındaki textarea''ya, veya Mobile App''in "Gelişmiş: token ile giriş" alanına yapıştır Bağlan';
                 }
             }
             group(Method2)
@@ -131,7 +131,7 @@ page 72009 "DOPSWHS WMS Token Help"
                 label(NoteExpiry)
                 {
                     ApplicationArea = All;
-                    Caption = '• Token ömrü ~1 saat. Süre dolunca aynı komutla yenisini al ve yapıştır. Web app sağ üstte 🔴 Bağlı değil gösterirse token expired demektir.';
+                    Caption = '• Token ömrü ~1 saat. Süre dolunca aynı komutla yenisini al ve yapıştır. Web app sağ üstte Bağlı değil gösterirse token expired demektir.';
                 }
                 label(NoteSecurity)
                 {
@@ -178,9 +178,9 @@ page 72009 "DOPSWHS WMS Token Help"
                     Message(
                         'WMS Token akışı:\n\n' +
                         '1) İş istasyonunuzda terminal/PowerShell aç.\n' +
-                        '2) Aşağıdaki "Method 1" alanındaki komutu kopyala (alanın içine tıkla → Ctrl+A → Ctrl+C).\n' +
+                        '2) Aşağıdaki "Method 1" alanındaki komutu kopyala (alanın içine tıkla Ctrl+A Ctrl+C).\n' +
                         '3) Terminal''e yapıştır, çalıştır. Komut sonunda "| pbcopy" (macOS) veya "| Set-Clipboard" (Win) varsa token doğrudan panonda olur.\n' +
-                        '4) Tarayıcıda WMS web app''i aç → Login ekranında token textarea''ya yapıştır → 🔓 Bağlan.\n' +
+                        '4) Tarayıcıda WMS web app''i aç Login ekranında token textarea''ya yapıştır  Bağlan.\n' +
                         '5) (Opsiyonel) Token''ı bu sayfadaki "Token Doğrulayıcı" alanına da yapıştırıp ▶ Token Doğrula ile içeriği kontrol et.');
                 end;
             }
@@ -248,7 +248,7 @@ page 72009 "DOPSWHS WMS Token Help"
             '  "https://login.microsoftonline.com/7fa2357e-26f2-4174-8e16-a713981356b8/oauth2/v2.0/devicecode" \' + NL +
             '  -d "client_id=04b07795-8ddb-461a-bbee-02f9e1bf7b46&scope=https://api.businesscentral.dynamics.com/.default offline_access"' + NL +
             '' + NL +
-            '# Step 2: tarayıcıda https://microsoft.com/devicelogin → user_code gir' + NL +
+            '# Step 2: tarayıcıda https://microsoft.com/devicelogin user_code gir' + NL +
             '# Step 3: token al' + NL +
             'curl -s -X POST \' + NL +
             '  "https://login.microsoftonline.com/7fa2357e-26f2-4174-8e16-a713981356b8/oauth2/v2.0/token" \' + NL +
@@ -284,12 +284,12 @@ page 72009 "DOPSWHS WMS Token Help"
         Parts := TokenText.Trim().Split('.');
         if Parts.Count < 3 then begin
             TokenStatusStyle := 'Unfavorable';
-            TokenStatusMsg := '❌ Geçersiz JWT formatı (header.payload.signature 3 parça olmalı). Yapıştırılan metin JWT değil olabilir.';
+            TokenStatusMsg := 'Geçersiz JWT formatı (header.payload.signature 3 parça olmalı). Yapıştırılan metin JWT değil olabilir.';
             exit;
         end;
 
         PayloadB64 := Parts.Get(2);
-        // Base64URL → Base64 (gerçek '+' '/' ve padding)
+        // Base64URL Base64 (gerçek '+' '/' ve padding)
         PayloadB64 := PayloadB64.Replace('-', '+');
         PayloadB64 := PayloadB64.Replace('_', '/');
         for I := 1 to (4 - (StrLen(PayloadB64) mod 4)) mod 4 do
@@ -298,13 +298,13 @@ page 72009 "DOPSWHS WMS Token Help"
 
         if not TryDecodeBase64(Base64, PayloadB64, PayloadJson) then begin
             TokenStatusStyle := 'Unfavorable';
-            TokenStatusMsg := '❌ Base64 decode başarısız. Token yapıştırılırken kırpılmış olabilir (boşluk/yeni satır?).';
+            TokenStatusMsg := 'Base64 decode başarısız. Token yapıştırılırken kırpılmış olabilir (boşluk/yeni satır?).';
             exit;
         end;
 
         if not Payload.ReadFrom(PayloadJson) then begin
             TokenStatusStyle := 'Unfavorable';
-            TokenStatusMsg := '❌ JSON parse başarısız. Geçersiz token.';
+            TokenStatusMsg := 'JSON parse başarısız. Geçersiz token.';
             exit;
         end;
 
@@ -342,9 +342,9 @@ page 72009 "DOPSWHS WMS Token Help"
         if ExpSec > 0 then begin
             Remaining := ExpSec - NowSec;
             if Remaining > 0 then
-                Summary += StrSubstNo('✅ Geçerli, %1 dakika kalan', Remaining div 60)
+                Summary += StrSubstNo('Geçerli, %1 dakika kalan', Remaining div 60)
             else
-                Summary += StrSubstNo('❌ Süresi %1 dakika önce dolmuş', Abs(Remaining) div 60);
+                Summary += StrSubstNo('Süresi %1 dakika önce dolmuş', Abs(Remaining) div 60);
         end;
 
         exit(CopyStr(Summary, 1, 500));

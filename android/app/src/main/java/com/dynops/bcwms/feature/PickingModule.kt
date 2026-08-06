@@ -10,6 +10,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -103,7 +104,17 @@ private fun pickOwnerOf(assignedUserId: String, me: String): PickOwner = when {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun PickingModule() {
+fun PickingModule(v2Enabled: Boolean = false) {
+    if (v2Enabled) {
+        V2PickingModule()
+        return
+    }
+    ClassicPickingModule()
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun ClassicPickingModule() {
     // ELOG: Toplama artık sekmeli — açık pick listesi (Toplanmakta) + geçmiş/durum
     // (Bekleyen / Benim Topladıklarım / Genel Toplananlar). Diğer sekmeler
     // pickingOrders API'sini kullanır (Picking Order Header).
@@ -127,6 +138,179 @@ fun PickingModule() {
             PickTab.Mine -> PickHistoryTab(PickTab.Mine)
             PickTab.AllDone -> PickHistoryTab(PickTab.AllDone)
         }
+    }
+}
+
+/** V2: üç operasyon kuyruğu birbirine karışmadan ayrı ekranlarda çalışır. */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun V2PickingModule() {
+    var flow by rememberSaveable { mutableStateOf(OutboundFlowMode.Multi) }
+    Column(Modifier.fillMaxSize()) {
+        V2FlowSelector(current = flow, onSelect = { flow = it })
+        Box(Modifier.weight(1f)) { key(flow) { V2PicksForFlow(flow) } }
+    }
+}
+
+@Composable
+internal fun V2FlowSelector(
+    current: OutboundFlowMode,
+    onSelect: (OutboundFlowMode) -> Unit,
+    sectionTitle: String = "V2 Toplama",
+) {
+    Column(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 10.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(sectionTitle, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+            Spacer(Modifier.weight(1f))
+            Surface(shape = RoundedCornerShape(50), color = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)) {
+                Text("AKTİF", Modifier.padding(horizontal = 9.dp, vertical = 4.dp), fontSize = 10.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+            }
+        }
+        Spacer(Modifier.height(9.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(7.dp)) {
+            OutboundFlowMode.entries.forEach { item ->
+                val selected = current == item
+                Surface(
+                    onClick = { onSelect(item) },
+                    shape = RoundedCornerShape(13.dp),
+                    color = if (selected) item.accent.copy(alpha = 0.14f) else MaterialTheme.colorScheme.surface,
+                    border = BorderStroke(if (selected) 2.dp else 1.dp, if (selected) item.accent else MaterialTheme.colorScheme.outline),
+                    modifier = Modifier.weight(1f),
+                ) {
+                    Column(Modifier.padding(horizontal = 8.dp, vertical = 10.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text(item.icon, fontSize = 18.sp, fontWeight = FontWeight.Black, color = item.accent)
+                        Text(item.title, fontSize = 12.sp, fontWeight = FontWeight.Bold, maxLines = 1)
+                    }
+                }
+            }
+        }
+        Spacer(Modifier.height(6.dp))
+        Text(current.subtitle, style = MaterialTheme.typography.bodySmall, color = current.accent, fontWeight = FontWeight.SemiBold)
+    }
+    HorizontalDivider()
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun V2PicksForFlow(flow: OutboundFlowMode) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var rows by remember { mutableStateOf<List<JSONObject>>(emptyList()) }
+    var selected by remember { mutableStateOf<String?>(null) }
+    var loading by remember { mutableStateOf(false) }
+    var status by remember { mutableStateOf("") }
+    var pickScope by remember { mutableStateOf(PickScope.Mine) }
+    var search by remember { mutableStateOf("") }
+    var myUserId by remember { mutableStateOf("") }
+    var blockedPick by remember { mutableStateOf<Pair<String, String>?>(null) }
+
+    fun load() {
+        scope.launch {
+            loading = true
+            status = "${flow.title} işleri yükleniyor…"
+            val me = BcApi.currentUserId(context)
+            myUserId = me
+            val ownerClause = when (pickScope) {
+                PickScope.Mine -> assignedToMeClause(me)
+                PickScope.Unassigned -> "assignedUserId eq ''"
+                PickScope.All -> null
+            }
+            if (pickScope == PickScope.Mine && ownerClause == null) {
+                rows = emptyList()
+                loading = false
+                status = "HATA: Kullanıcı kimliği çözülemedi."
+                return@launch
+            }
+            val filter = buildODataFilter(
+                "pickMode eq '${flow.apiValue}'",
+                ownerClause,
+                searchClause("no", search),
+            )
+            val r = BcApi.getWithStandardFallback(
+                context,
+                "picks?\$top=100&\$orderby=no desc&\$select=no,locationCode,assignedUserId,sourceNo,status,percentComplete,pickMode,mainLpNo$filter",
+            )
+            rows = if (r.ok) BcApi.parseValueArray(r.body) else emptyList()
+            loading = false
+            status = when {
+                r.httpCode == 400 || r.httpCode == 404 -> "BC V2 API güncellemesi yayınlanmalı."
+                !r.ok -> "HATA: Liste alınamadı (HTTP ${r.httpCode})"
+                rows.isEmpty() -> "${pickScope.label} kapsamında ${flow.title} işi yok."
+                else -> "${rows.size} ${flow.title} toplaması"
+            }
+        }
+    }
+
+    fun takeOver(no: String) {
+        scope.launch {
+            loading = true
+            val me = BcApi.currentUserId(context)
+            val r = if (me.isNotBlank())
+                BcApi.boundAction(context, "picks", no, "reassign", JSONObject().apply {
+                    put("userId", me); put("reason", "V2 ${flow.title} terminalinden üstlenildi")
+                }.toString())
+            else BcApi.boundAction(context, "picks", no, "assignToMe", "{}")
+            status = if (r.ok) "$no üzerinize alındı." else "HATA: ${BcApi.errorMessage(r.body)}"
+            load()
+        }
+    }
+
+    LaunchedEffect(flow, pickScope) { load() }
+    val selectedNo = selected
+    if (selectedNo != null) {
+        GuidedPickDocument(no = selectedNo, flowMode = flow, onBack = { selected = null; load() })
+        return
+    }
+
+    Column(Modifier.fillMaxSize().padding(12.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            PickScope.entries.forEach { item ->
+                FilterChip(
+                    selected = pickScope == item,
+                    onClick = { pickScope = item },
+                    label = { Text(item.label, fontSize = 11.sp, maxLines = 1) },
+                )
+                Spacer(Modifier.width(5.dp))
+            }
+            Spacer(Modifier.weight(1f))
+            TextButton(onClick = { load() }, enabled = !loading) { Text(if (loading) "…" else "Yenile") }
+        }
+        OutlinedTextField(
+            value = search,
+            onValueChange = { search = it },
+            label = { Text("Toplama no ile ara") },
+            singleLine = true,
+            trailingIcon = { TextButton(onClick = { load() }) { Text("Ara") } },
+            modifier = Modifier.fillMaxWidth(),
+        )
+        Spacer(Modifier.height(4.dp))
+        StatusText(status)
+        Spacer(Modifier.height(6.dp))
+        LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            items(rows, key = { it.optString("no") }) { row ->
+                val no = row.optString("no")
+                val assigned = firstValue(row, "assignedUserId")
+                val owner = pickOwnerOf(assigned, myUserId)
+                PickListCard(
+                    d = row,
+                    busy = loading,
+                    owner = owner,
+                    onOpen = { if (owner == PickOwner.Other) blockedPick = no to assigned else selected = no },
+                    onTake = { takeOver(no) },
+                )
+            }
+            if (rows.isEmpty() && !loading) item { EmptyState("${flow.title} kuyruğunda açık toplama yok.") }
+        }
+    }
+
+    blockedPick?.let { blocked ->
+        AlertDialog(
+            onDismissRequest = { blockedPick = null },
+            title = { Text("Toplama ${blocked.second} kullanıcısında") },
+            text = { Text("Belgeyi görüntüleyebilirsiniz; işlem yapmak için önce sorumlu kullanıcıdan devralın.") },
+            confirmButton = { TextButton(onClick = { blockedPick = null; selected = blocked.first }) { Text("Görüntüle") } },
+            dismissButton = { TextButton(onClick = { blockedPick = null }) { Text("Vazgeç") } },
+        )
     }
 }
 
@@ -529,7 +713,7 @@ private fun friendlyDateTime(iso: String): String {
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun GuidedPickDocument(no: String, onBack: () -> Unit) {
+private fun GuidedPickDocument(no: String, flowMode: OutboundFlowMode? = null, onBack: () -> Unit) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var header by remember { mutableStateOf<JSONObject?>(null) }
@@ -821,6 +1005,10 @@ private fun GuidedPickDocument(no: String, onBack: () -> Unit) {
         // verticalScroll'unu alır. Bu yüzden dış Column kaydırılabilir DEĞİL.
         Column(Modifier.weight(1f).padding(12.dp)) {
             TextButton(onClick = onBack) { Text("‹ Pick Listesi") }
+            if (flowMode != null) {
+                V2PickFlowBanner(flowMode)
+                Spacer(Modifier.height(8.dp))
+            }
             // Başlık özeti: kaç sipariş, kaç ürün (tamamlanan/toplam) — operatör
             // daha ilk bakışta işin büyüklüğünü görsün.
             val doneCount = takeLines.count(::isComplete)
@@ -1129,6 +1317,30 @@ private fun GuidedPickDocument(no: String, onBack: () -> Unit) {
                 completeLine(g.lines.first(), lot)
             },
         )
+    }
+}
+
+@Composable
+private fun V2PickFlowBanner(flow: OutboundFlowMode) {
+    val instruction = when (flow) {
+        OutboundFlowMode.Multi -> "Raf rotasını izle; aynı ürün farklı siparişlerdeyse toplam miktarı tek okumada dağıt."
+        OutboundFlowMode.Mono -> "Her ürün tek siparişe gider. Rafı ve ürünü doğrula, siparişi tek adımda tamamla."
+        OutboundFlowMode.SingleSku -> "Ortak SKU'yu toplu al; miktar sipariş paylarına otomatik dağıtılır."
+    }
+    Surface(
+        shape = RoundedCornerShape(12.dp),
+        color = flow.accent.copy(alpha = 0.11f),
+        border = BorderStroke(1.dp, flow.accent.copy(alpha = 0.45f)),
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+            Text(flow.icon, fontSize = 22.sp, fontWeight = FontWeight.Black, color = flow.accent)
+            Spacer(Modifier.width(10.dp))
+            Column {
+                Text("${flow.title} toplama", fontWeight = FontWeight.Bold, color = flow.accent)
+                Text(instruction, fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        }
     }
 }
 

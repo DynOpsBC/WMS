@@ -13,7 +13,7 @@ page 72096 "DOPSWHS DynOps WMS Activities"
             // ===== MAL KABUL =====
             cuegroup(MalKabul)
             {
-                Caption = '📥 Mal Kabul';
+                Caption = 'Mal Kabul';
                 field("Open Whse Receipts"; Rec."Open Whse Receipts") { ApplicationArea = All; DrillDownPageId = "Warehouse Receipts"; }
                 field("PO Pending Receive"; Rec."PO Pending Receive") { ApplicationArea = All; DrillDownPageId = "Purchase Order List"; }
                 field("Transfer In Pending"; Rec."Transfer In Pending") { ApplicationArea = All; DrillDownPageId = "Transfer Orders"; }
@@ -22,7 +22,7 @@ page 72096 "DOPSWHS DynOps WMS Activities"
             // ===== YERLEŞTIRME =====
             cuegroup(Yerlestirme)
             {
-                Caption = '📦 Yerleştirme';
+                Caption = 'Yerleştirme';
                 field("Open PutAways"; Rec."Open PutAways") { ApplicationArea = All; DrillDownPageId = "Warehouse Put-aways"; }
                 field("Invt PutAways"; Rec."Invt PutAways") { ApplicationArea = All; DrillDownPageId = "Inventory Put-aways"; }
             }
@@ -30,7 +30,7 @@ page 72096 "DOPSWHS DynOps WMS Activities"
             // ===== TOPLAMA =====
             cuegroup(Toplama)
             {
-                Caption = '🚚 Toplama';
+                Caption = 'Toplama';
                 field("Open Picks"; Rec."Open Picks") { ApplicationArea = All; DrillDownPageId = "Warehouse Picks"; }
                 field("Invt Picks"; Rec."Invt Picks") { ApplicationArea = All; DrillDownPageId = "Inventory Picks"; }
                 field("Late Picks"; Rec."Late Picks") { ApplicationArea = All; DrillDownPageId = "Warehouse Picks"; }
@@ -39,7 +39,7 @@ page 72096 "DOPSWHS DynOps WMS Activities"
             // ===== SEVKIYAT =====
             cuegroup(Sevkiyat)
             {
-                Caption = '📤 Sevkiyat';
+                Caption = 'Sevkiyat';
                 field("Released Shipments"; Rec."Released Shipments") { ApplicationArea = All; DrillDownPageId = "Warehouse Shipment List"; }
                 field("Sales Ship Pending"; Rec."Sales Ship Pending") { ApplicationArea = All; DrillDownPageId = "Sales Order List"; }
                 field("Transfer Ship Pending"; Rec."Transfer Ship Pending") { ApplicationArea = All; DrillDownPageId = "Transfer Orders"; }
@@ -48,7 +48,7 @@ page 72096 "DOPSWHS DynOps WMS Activities"
             // ===== HAREKETLER =====
             cuegroup(Hareketler)
             {
-                Caption = '🔄 Hareketler';
+                Caption = 'Hareketler';
                 field("Open Movements"; Rec."Open Movements") { ApplicationArea = All; DrillDownPageId = "Warehouse Activity List"; }
                 field("Invt Movements"; Rec."Invt Movements") { ApplicationArea = All; DrillDownPageId = "Inventory Movement"; }
             }
@@ -56,7 +56,7 @@ page 72096 "DOPSWHS DynOps WMS Activities"
             // ===== ÜRETİM + MONTAJ =====
             cuegroup(Uretim)
             {
-                Caption = '🏭 Üretim ve Montaj';
+                Caption = 'Üretim ve Montaj';
                 field("Released Prod Orders"; Rec."Released Prod Orders") { ApplicationArea = All; DrillDownPageId = "Released Production Orders"; }
                 field("Open Assembly"; Rec."Open Assembly") { ApplicationArea = All; DrillDownPageId = "Assembly Orders"; }
             }
@@ -64,7 +64,7 @@ page 72096 "DOPSWHS DynOps WMS Activities"
             // ===== LICENSE PLATE =====
             cuegroup(LicensePlate)
             {
-                Caption = '🏷️ License Plate';
+                Caption = 'License Plate';
                 field("Open LPs"; Rec."Open LPs") { ApplicationArea = All; DrillDownPageId = "DOPSWHS LP List"; }
                 field("Built LPs"; Rec."Built LPs") { ApplicationArea = All; DrillDownPageId = "DOPSWHS LP List"; }
                 field("Assigned LPs"; Rec."Assigned LPs") { ApplicationArea = All; DrillDownPageId = "DOPSWHS LP List"; }
@@ -74,7 +74,7 @@ page 72096 "DOPSWHS DynOps WMS Activities"
             // ===== SAYIM =====
             cuegroup(Sayim)
             {
-                Caption = '📊 Sayım';
+                Caption = 'Sayım';
                 field("Active Count Sheets"; Rec."Active Count Sheets") { ApplicationArea = All; DrillDownPageId = "DOPSWHS Count Sheet List"; }
                 field("InProgress Counts"; Rec."InProgress Counts") { ApplicationArea = All; DrillDownPageId = "DOPSWHS Count Sheet List"; }
             }
@@ -82,7 +82,7 @@ page 72096 "DOPSWHS DynOps WMS Activities"
             // ===== SİSTEM =====
             cuegroup(Sistem)
             {
-                Caption = '⚙️ Sistem';
+                Caption = 'Sistem';
                 field("Total Devices"; Rec."Total Devices") { ApplicationArea = All; DrillDownPageId = "DOPSWHS Device Reg List"; }
                 field("Devices Online"; Rec."Devices Online") { ApplicationArea = All; DrillDownPageId = "DOPSWHS Device Reg List"; }
                 field("Pending Sync Conflicts"; Rec."Pending Sync Conflicts") { ApplicationArea = All; DrillDownPageId = "DOPSWHS Sync Conflict List"; }

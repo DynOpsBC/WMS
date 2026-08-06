@@ -177,7 +177,7 @@ codeunit 72280 "DOPSWHS Demo E2E Suite"
         // ConfirmLine. We exercise the LP build leg deterministically because creating an isolated
         // Whse Receipt + posted-receipt cycle per call would require Cronus PO + WhseReceipt + lot tracking
         // pre-conditions that aren't all present on every tenant. The LP-creation side is the
-        // most error-prone leg of the mobile receive flow → we surrogate that.
+        // most error-prone leg of the mobile receive flow we surrogate that.
         if not TryBuildLP('PALLET-EUR', DefaultLoc, LP, ErrMsg) then begin
             Fail(Result, ErrMsg, DurationMs(Started));
             exit;
@@ -228,7 +228,7 @@ codeunit 72280 "DOPSWHS Demo E2E Suite"
         Result."Item No." := '1896-S';
         Result."Location Code" := DefaultLoc;
         Result.Surrogate := true;
-        Result."Result Detail" := StrSubstNo('SuggestBin → %1', BinSuggestion);
+        Result."Result Detail" := StrSubstNo('SuggestBin %1', BinSuggestion);
         Pass(Result, DurationMs(Started));
     end;
 
@@ -262,7 +262,7 @@ codeunit 72280 "DOPSWHS Demo E2E Suite"
         ErrMsg: Text;
     begin
         InitAndStart('PICK', TxNo,
-            StrSubstNo('Pick → shipping LP scan #%1 (surrogate)', TxNo), Started, Result);
+            StrSubstNo('Pick shipping LP scan #%1 (surrogate)', TxNo), Started, Result);
 
         // PickMgt.StartShippingLP inner step: build a new shipping LP
         if not TryBuildLP('CARTON-S', DefaultLoc, LP, ErrMsg) then begin
@@ -367,7 +367,7 @@ codeunit 72280 "DOPSWHS Demo E2E Suite"
         Result."LP No." := LP."No.";
         Result."Location Code" := DefaultLoc;
         Result.Surrogate := true;
-        Result."Result Detail" := StrSubstNo('LP %1 moved → bin %2', LP."No.", ToBin);
+        Result."Result Detail" := StrSubstNo('LP %1 moved bin %2', LP."No.", ToBin);
         Pass(Result, DurationMs(Started));
     end;
 
@@ -493,9 +493,9 @@ codeunit 72280 "DOPSWHS Demo E2E Suite"
         ErrMsg: Text;
     begin
         InitAndStart('PRODUCTION', TxNo,
-            StrSubstNo('Production output → new LP #%1', TxNo), Started, Result);
+            StrSubstNo('Production output new LP #%1', TxNo), Started, Result);
 
-        // Production output → new LP surrogate (the BC posting half requires a Released prod order
+        // Production output new LP surrogate (the BC posting half requires a Released prod order
         // with components on the running tenant; the LP creation half is what the mobile module
         // actually drives via the Output API)
         if not TryBuildLP('PALLET-EUR', DefaultLoc, LP, ErrMsg) then begin
@@ -538,9 +538,9 @@ codeunit 72280 "DOPSWHS Demo E2E Suite"
         ErrMsg: Text;
     begin
         InitAndStart('ASSEMBLY', TxNo,
-            StrSubstNo('Assembly output → finished LP #%1', TxNo), Started, Result);
+            StrSubstNo('Assembly output finished LP #%1', TxNo), Started, Result);
 
-        // Assembly post → output LP surrogate
+        // Assembly post output LP surrogate
         if not TryBuildLP('TOTE-A', DefaultLoc, LP, ErrMsg) then begin
             Fail(Result, ErrMsg, DurationMs(Started));
             exit;

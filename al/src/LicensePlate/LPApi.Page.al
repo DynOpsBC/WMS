@@ -100,7 +100,7 @@ page 72088 "DOPSWHS LP API"
         TargetLP.Get(targetLpNo);
         ParseLines(linesJson, Lines, Quantities);
         // Boş linesJson = "tüm içerik": önceden sessizce hiçbir satır
-        // taşınmıyordu (boş liste → boş döngü) — tüm satırlarla doldur.
+        // taşınmıyordu (boş liste boş döngü) — tüm satırlarla doldur.
         if Lines.Count() = 0 then begin
             SourceLine.SetRange("LP No.", Rec."No.");
             if SourceLine.FindSet() then

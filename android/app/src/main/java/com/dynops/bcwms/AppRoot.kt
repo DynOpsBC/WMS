@@ -85,6 +85,14 @@ fun AppRoot() {
     // yeniden yaratılmıyor — tüm ekran state'i olduğu gibi korunuyor.)
     var screen by rememberSaveable { mutableStateOf(Screen.Home) }
     var connected by remember { mutableStateOf(BcApi.hasToken(context)) }
+    // V2 yerel bir özellik anahtarıdır: sunucu verisini değiştirmez ve klasik
+    // ekranları silmez. Operatör aynı cihazda son seçimini korur.
+    var v2Enabled by rememberSaveable {
+        mutableStateOf(
+            context.getSharedPreferences("bcwms_prefs", android.content.Context.MODE_PRIVATE)
+                .getBoolean("ui_mode_v2", false)
+        )
+    }
 
     // Kişiselleştirilmiş görünür alan tercihlerini yükle (satır kartları okur).
     com.dynops.bcwms.ui.FieldPrefs.load(context)
@@ -105,6 +113,14 @@ fun AppRoot() {
                     }
                 },
                 actions = {
+                    V2ModeButton(
+                        enabled = v2Enabled,
+                        onToggle = {
+                            v2Enabled = !v2Enabled
+                            context.getSharedPreferences("bcwms_prefs", android.content.Context.MODE_PRIVATE)
+                                .edit().putBoolean("ui_mode_v2", v2Enabled).apply()
+                        },
+                    )
                     ConnectionBadge(connected) { screen = Screen.Connection }
                 }
             )
@@ -120,8 +136,8 @@ fun AppRoot() {
                 Screen.BinInquiry -> BinInquiryModule()
                 Screen.WhseEntries -> WhseEntriesModule()
                 Screen.Receiving -> ReceivingModule()
-                Screen.Picking -> PickingModule()
-                Screen.Packing -> PackingModule()
+                Screen.Picking -> key(v2Enabled) { PickingModule(v2Enabled = v2Enabled) }
+                Screen.Packing -> key(v2Enabled) { PackingModule(v2Enabled = v2Enabled) }
                 Screen.AdHocMove -> AdHocMoveModule()
                 Screen.Count -> CountModule()
                 Screen.PutAway -> PutAwayModule()
@@ -139,6 +155,29 @@ fun AppRoot() {
             }
             UpdateChecker()
         }
+        }
+    }
+}
+
+/** Tek dokunuşla klasik ve V2 operasyonlarını değiştirir. */
+@Composable
+private fun V2ModeButton(enabled: Boolean, onToggle: () -> Unit) {
+    val container = if (enabled) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant
+    val content = if (enabled) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant
+    Surface(
+        onClick = onToggle,
+        shape = RoundedCornerShape(50),
+        color = container,
+        border = if (enabled) null else BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
+        modifier = Modifier.padding(end = 6.dp),
+    ) {
+        Row(
+            Modifier.padding(horizontal = 11.dp, vertical = 7.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Box(Modifier.size(7.dp).clip(CircleShape).background(if (enabled) Color(0xFF7EF0B2) else content.copy(alpha = 0.45f)))
+            Spacer(Modifier.width(6.dp))
+            Text("V2", color = content, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
         }
     }
 }
@@ -307,7 +346,9 @@ private fun HomeHeader(
                 Spacer(Modifier.width(14.dp))
                 Column(Modifier.weight(1f)) {
                     Text(
-                        "DynOps WMS",
+                        // Marka flavor'dan gelir: Bade sürümünde "DynOps WMS"
+                        // yazıyordu — müşteriye giden uygulamada yanlış marka.
+                        "${BuildConfig.TENANT_LABEL} WMS",
                         style = MaterialTheme.typography.titleLarge,
                         fontWeight = FontWeight.Bold,
                         color = Color.White

@@ -12,7 +12,7 @@ codeunit 72058 "DOPSWHS Demo Data Setup"
     procedure RunFullDemoSetup()
     var
         SetupWizard: Codeunit "DOPSWHS Setup Wizard";
-        Msg: Label '✅ Demo setup tamamlandı.\n\n• No. Series\n• Setup row default değerlerle\n• Symbology + Barcode Rules\n• LP Templates (extended)\n• Device Configurations (5 rol)\n• Short Pick Reasons (extended)\n• IWX Report Selection\n• Demo Devices (3)\n\nRole Center artık veriyle dolu.';
+        Msg: Label 'Demo setup tamamlandı.\n\n• No. Series\n• Setup row default değerlerle\n• Symbology + Barcode Rules\n• LP Templates (extended)\n• Device Configurations (5 rol)\n• Short Pick Reasons (extended)\n• IWX Report Selection\n• Demo Devices (3)\n\nRole Center artık veriyle dolu.';
     begin
         EnsureNumberSeries();
         EnsureSetupRow();

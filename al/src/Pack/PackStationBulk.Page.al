@@ -2,7 +2,7 @@ page 72345 "DOPSWHS Pack Station Bulk"
 {
     // ELOG "Batch Package Worksheet" muadili (ELOG bu akışa "batch" der,
     // motorumuzdaki adı Bulk): aynı ürün aynı tote'ta birden çok siparişe
-    // bölünmüş (ör. 6 adet krem → 2+2+2). Sepet BİR KEZ okutulur; her sipariş
+    // bölünmüş (ör. 6 adet krem 2+2+2). Sepet BİR KEZ okutulur; her sipariş
     // payı için ayrı kutu okutulur, pay dolunca o siparişin fişi basılır.
     // Mod sabit Bulk. İş mantığı codeunit 72334'te; bu sayfa UI kabuğudur.
     PageType = Card;

@@ -4,7 +4,10 @@ page 72362 "DOPSWHS Packing Order Card"
     Caption = 'Sipariş Paketleme';
     SourceTable = "DOPSWHS Packing Order";
     ApplicationArea = All;
-    UsageCategory = Tasks;
+    // Kart, listeden (72361) açılır. Aramada ayrıca çıkınca liste ile kart
+    // yan yana iki aynı sonuç veriyordu — Picking Order Card'da da (72356)
+    // aynı düzeltme yapıldı.
+    UsageCategory = None;
     InsertAllowed = false;
     DeleteAllowed = false;
 

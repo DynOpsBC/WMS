@@ -1,7 +1,7 @@
 codeunit 72281 "DOPSWHS Quick User Provision"
 {
     // Tek-noktadan kullanıcı atama. Hem AL kod'undan (Install/Upgrade,
-    // demo seed) hem de Role Center → Quick User Assign sayfasından çağrılır.
+    // demo seed) hem de Role Center Quick User Assign sayfasından çağrılır.
     //
     // Sorumluluklar:
     //   1. BC User kaydının (T2000000120) varlığını idempotent garanti et —
@@ -15,9 +15,9 @@ codeunit 72281 "DOPSWHS Quick User Provision"
     Access = Public;
 
     var
-        UserNotInBCErr: Label 'BC user not found: %1. Önce admin M365 invite + BC "Users" sayfasında "Get users from Microsoft 365" yapsın (action: page 9800 Users → Get users from Microsoft 365).', Comment = '%1 = email';
+        UserNotInBCErr: Label 'BC user not found: %1. Önce admin M365 invite + BC "Users" sayfasında "Get users from Microsoft 365" yapsın (action: page 9800 Users Get users from Microsoft 365).', Comment = '%1 = email';
         RoleNotFoundErr: Label 'WMS rolü tanımlı değil: %1. AppRoleSeed çalıştırın.', Comment = '%1 = role code';
-        AssignedMsg: Label '%1 → %2 atandı.', Comment = '%1 = email, %2 = role';
+        AssignedMsg: Label '%1 %2 atandı.', Comment = '%1 = email, %2 = role';
         AlreadyAssignedMsg: Label '%1 zaten %2 rolüne sahip.', Comment = '%1 = email, %2 = role';
         DemoSetCompleteMsg: Label 'Demo kullanıcı seti hazır: %1 atama tamamlandı.', Comment = '%1 = count';
 
@@ -99,10 +99,10 @@ codeunit 72281 "DOPSWHS Quick User Provision"
     end;
 
     /// <summary>
-    /// BC SaaS'ta M365 → BC user sync için PTE'lere açık bir codeunit yok
+    // / BC SaaS'ta M365 BC user sync için PTE'lere açık bir codeunit yok
     /// (`Codeunit "Azure AD User Management".CreateNewUsersFromAzureAD()`
     /// OnPrem scope, AppSource extensiyonlarından çağrılamaz). Bu stub
-    /// no-op; admin BC web UI'da page 9800 "Users" → "Get users from
+    // / no-op; admin BC web UI'da page 9800 "Users" "Get users from
     /// Microsoft 365" action'ını manuel tetiklemeli, sonra Quick Assign
     /// tekrar deneyebilir. EnsureUserRole hata mesajı bu adımı söyler.
     /// </summary>

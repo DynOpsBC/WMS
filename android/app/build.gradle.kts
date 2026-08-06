@@ -23,8 +23,8 @@ android {
     applicationId = "com.dynops.bcwms"
     minSdk = 26
     targetSdk = 35
-    versionCode = 1200
-    versionName = "1.12.0"
+    versionCode = 1300
+    versionName = "1.13.0"
     manifestPlaceholders["appLabel"] = "BCWMS"
     buildConfigField("String", "UPDATE_BASE_URL", "\"https://app.bcwms.dynops.com\"")
   }
@@ -43,8 +43,8 @@ android {
     create("bade") {
       dimension = "tenant"
       applicationIdSuffix = ".bade"
-      versionCode = 1200
-      versionName = "1.12.0"
+      versionCode = 1300
+      versionName = "1.13.0"
       versionNameSuffix = "-bade"
       manifestPlaceholders["appLabel"] = "BCWMS BADE"
       buildConfigField("String", "BC_CLIENT_ID", "\"3c4ba25a-89f4-41df-acf8-ebab8cb4809b\"")
@@ -113,6 +113,7 @@ dependencies {
   implementation("androidx.camera:camera-view:1.4.0")
   implementation("androidx.lifecycle:lifecycle-runtime-compose:2.8.7")
   implementation("androidx.core:core:1.13.1")
+  testImplementation(libs.junit)
 }
 
 // Closed-track Play publishing block is read by gradle-play-publisher only when

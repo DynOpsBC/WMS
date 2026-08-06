@@ -1,7 +1,7 @@
 codeunit 72285 "DOPSWHS Local Auth Mgmt"
 {
     // E-postası olmayan WMS operatörleri için yerel kimlik doğrulama yönetimi.
-    // Şifre saklama: salt + password → SHA-256 hex. Salt her kayıt için unique (GUID).
+    // Şifre saklama: salt + password SHA-256 hex. Salt her kayıt için unique (GUID).
     // Verify: timing-attack korunması için her zaman hash hesaplar (kayıt bulunmasa bile).
     Access = Public;
 

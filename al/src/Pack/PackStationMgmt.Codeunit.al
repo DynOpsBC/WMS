@@ -1,8 +1,8 @@
 codeunit 72334 "DOPSWHS Pack Station Mgmt"
 {
     // ELOG saha ziyareti (07.07.2026) — paketleme istasyonu motoru.
-    // Akış: tote (LP) okut → tote'a bağlı siparişlerin beklenen satırları
-    // oluşur → kutu okut → ürünleri tek tek okut → bir siparişin payı
+    // Akış: tote (LP) okut tote'a bağlı siparişlerin beklenen satırları
+    // oluşur kutu okut ürünleri tek tek okut bir siparişin payı
     // tamamlanınca sipariş sevk+fatura edilir ve fişi basılır.
     //
     // Tek motor üç modu da karşılar:
@@ -100,7 +100,7 @@ codeunit 72334 "DOPSWHS Pack Station Mgmt"
         PackSession.Init();
         PackSession."Pick No." := PickNo;
         PackSession.Status := PackSession.Status::Open;
-        // Batch modu: kutu SİPARİŞ payı tamamlanınca istenir (ürün → kutu).
+        // Batch modu: kutu SİPARİŞ payı tamamlanınca istenir (ürün kutu).
         PackSession.Mode := PackSession.Mode::Batch;
         PackSession."Direct Order Packing" := true;
         PackSession."Created By User" := CopyStr(Operator, 1, MaxStrLen(PackSession."Created By User"));
@@ -227,7 +227,7 @@ codeunit 72334 "DOPSWHS Pack Station Mgmt"
         BoxLpNoResolved := '';
         BoxBarcode := BoxLpNo;
         if BoxLpNo <> '' then begin
-            // LP No. Code[20]; daha uzun barkod zaten LP olamaz → LP araması atlanır.
+            // LP No. Code[20]; daha uzun barkod zaten LP olamaz LP araması atlanır.
             if StrLen(BoxLpNo) <= 20 then
                 if LP.Get(CopyStr(BoxLpNo, 1, 20)) then
                     BoxLpNoResolved := LP."No.";
@@ -274,8 +274,8 @@ codeunit 72334 "DOPSWHS Pack Station Mgmt"
     end;
 
     /// <summary>Şu an kutu okutulması gereken sipariş (yoksa boş):
-    /// 1) tam paketlenmiş ama kutusuz sipariş (batch akışı: ürün → kutu),
-    /// 2) Solo/Bulk'ta sıradaki siparişin kutusu yoksa o (kutu → ürünler).</summary>
+    // / 1) tam paketlenmiş ama kutusuz sipariş (batch akışı: ürün kutu),
+    // / 2) Solo/Bulk'ta sıradaki siparişin kutusu yoksa o (kutu ürünler).</summary>
     procedure BoxNeededOrder(SessionId: Integer): Code[20]
     var
         PackSession: Record "DOPSWHS Pack Session";
@@ -307,7 +307,7 @@ codeunit 72334 "DOPSWHS Pack Station Mgmt"
 
     // Ürün okutma. Okutulan miktar sipariş sırasına göre açık satırlara dolar;
     // tamamlanan siparişler sevk+fatura edilir, fişleri basılır. Dönüş: bu
-    // okutmayla tamamlanan sipariş no'ları (virgülle). Beklenmeyen ürün → hata.
+    // okutmayla tamamlanan sipariş no'ları (virgülle). Beklenmeyen ürün hata.
     procedure ScanItem(SessionId: Integer; ItemNo: Code[20]; Qty: Decimal): Text
     var
         PackSession: Record "DOPSWHS Pack Session";
@@ -342,7 +342,7 @@ codeunit 72334 "DOPSWHS Pack Station Mgmt"
                 end;
             until (Line.Next() = 0) or (Qty <= 0);
 
-        // Hiç eşleşmedi ya da beklenenden fazla okutuldu → tüm okuma geri alınır
+        // Hiç eşleşmedi ya da beklenenden fazla okutuldu tüm okuma geri alınır
         // (Error web servis işlemini rollback eder) — ELOG: "farklı ürün
         // okutulunca hata veriyor".
         if Qty > 0 then
@@ -466,7 +466,7 @@ codeunit 72334 "DOPSWHS Pack Station Mgmt"
         exit(ScanItem(SessionId, Trimmed, 1));
     end;
 
-    /// <summary>Sipariş bu oturumda faturalanıp kapatılmış mı (ekranda 🧾 göstermek için).</summary>
+    // / <summary>Sipariş bu oturumda faturalanıp kapatılmış mı (ekranda göstermek için).</summary>
     procedure IsOrderCompleted(SessionId: Integer; OrderNo: Code[20]): Boolean
     var
         Line: Record "DOPSWHS Pack Session Line";

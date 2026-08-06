@@ -64,7 +64,7 @@ page 72243 "DOPSWHS Test Run Card"
             }
             action(RerunFailed)
             {
-                Caption = '🔁 Re-run Failed Only';
+                Caption = 'Re-run Failed Only';
                 ToolTip = 'Sadece Failed caseleri tekrar calistir.';
                 ApplicationArea = All;
                 Image = RefreshLines;
@@ -80,7 +80,7 @@ page 72243 "DOPSWHS Test Run Card"
             }
             action(MarkAllPendingPassed)
             {
-                Caption = '✓ Mark All Pending Manual as Passed';
+                Caption = 'Mark All Pending Manual as Passed';
                 ToolTip = '(Admin) Tum PendingManual caseleri Passed isaretle. Sadece manuel dogrulama yapildiktan sonra kullanin.';
                 ApplicationArea = All;
                 Image = ApproveAll;

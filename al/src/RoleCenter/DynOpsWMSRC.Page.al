@@ -28,7 +28,7 @@ page 72095 "DOPSWHS DynOps WMS RC"
         {
             group(MalKabulNav)
             {
-                Caption = '📥 Mal Kabul';
+                Caption = 'Mal Kabul';
                 action(WhseReceiptsNav) { Caption = 'Açık Mal Kabul'; ApplicationArea = All; RunObject = page "Warehouse Receipts"; }
                 action(ReceivingQueueNav) { Caption = 'Mal Kabul Kuyruğu'; ApplicationArea = All; RunObject = page "DOPSWHS Receiving Queue"; }
                 action(POListNav) { Caption = 'Sipariş Listesi (PO)'; ApplicationArea = All; RunObject = page "Purchase Order List"; }
@@ -36,13 +36,13 @@ page 72095 "DOPSWHS DynOps WMS RC"
             }
             group(YerlestirmeNav)
             {
-                Caption = '📦 Yerleştirme';
+                Caption = 'Yerleştirme';
                 action(WhsePutAwayNav) { Caption = 'Warehouse Put-Away'; ApplicationArea = All; RunObject = page "Warehouse Put-aways"; }
                 action(InvtPutAwayNav) { Caption = 'Inventory Put-Away'; ApplicationArea = All; RunObject = page "Inventory Put-aways"; }
             }
             group(ToplamaNav)
             {
-                Caption = '🚚 Toplama';
+                Caption = 'Toplama';
                 action(PickingOrdersNav) { Caption = 'Toplanacak Siparişler'; ApplicationArea = All; RunObject = page "DOPSWHS Picking Order List"; }
                 action(WhsePicksNav) { Caption = 'Warehouse Picks'; ApplicationArea = All; RunObject = page "Warehouse Picks"; }
                 action(InvtPicksNav) { Caption = 'Inventory Picks'; ApplicationArea = All; RunObject = page "Inventory Picks"; }
@@ -51,7 +51,7 @@ page 72095 "DOPSWHS DynOps WMS RC"
             }
             group(SevkiyatNav)
             {
-                Caption = '📤 Sevkiyat';
+                Caption = 'Sevkiyat';
                 action(OrderPackingNav) { Caption = 'Sipariş Paketleme'; ApplicationArea = All; RunObject = page "DOPSWHS Packing Order List"; }
                 action(WhseShipmentsNav) { Caption = 'Warehouse Shipments'; ApplicationArea = All; RunObject = page "Warehouse Shipment List"; }
                 action(ShipmentQueueNav) { Caption = 'Sevkiyat Kuyruğu'; ApplicationArea = All; RunObject = page "DOPSWHS Shipment Queue"; }
@@ -59,33 +59,33 @@ page 72095 "DOPSWHS DynOps WMS RC"
             }
             group(HareketlerNav)
             {
-                Caption = '🔄 Hareketler';
+                Caption = 'Hareketler';
                 // TODO Sprint H+ post-deploy: bind to "Warehouse Movements" once standard BC page name resolves in target symbols.
                 action(WhseMovementsNav) { Caption = 'Warehouse Movements (Activity)'; ApplicationArea = All; RunObject = page "Warehouse Activity List"; }
                 action(ItemReclassNav) { Caption = 'Item Reclass. Journal (Ad-Hoc)'; ApplicationArea = All; RunObject = page "Item Reclass. Journal"; }
             }
             group(UretimNav)
             {
-                Caption = '🏭 Üretim & Montaj';
+                Caption = 'Üretim & Montaj';
                 action(ReleasedProdOrdersNav) { Caption = 'Released Production Orders'; ApplicationArea = All; RunObject = page "Released Production Orders"; }
                 action(AssemblyOrdersNav) { Caption = 'Assembly Orders'; ApplicationArea = All; RunObject = page "Assembly Orders"; }
             }
             group(LPNav)
             {
-                Caption = '🏷️ License Plate';
+                Caption = 'License Plate';
                 action(LPListNav) { Caption = 'LP List'; ApplicationArea = All; RunObject = page "DOPSWHS LP List"; }
                 action(LPTemplateNav) { Caption = 'LP Templates'; ApplicationArea = All; RunObject = page "DOPSWHS LP Template List"; }
                 action(LPMovLedgerNav) { Caption = 'LP Movement Ledger'; ApplicationArea = All; RunObject = page "DOPSWHS LP Movement Ledger"; }
             }
             group(SayimNav)
             {
-                Caption = '📊 Sayım';
+                Caption = 'Sayım';
                 action(CountSheetsNav) { Caption = 'Count Sheets'; ApplicationArea = All; RunObject = page "DOPSWHS Count Sheet List"; }
                 action(PhysInvJournalNav) { Caption = 'Physical Inventory Journal'; ApplicationArea = All; RunObject = page "Phys. Inventory Journal"; }
             }
             group(SistemNav)
             {
-                Caption = '⚙️ Sistem Yönetimi';
+                Caption = 'Sistem Yönetimi';
                 action(SetupNav) { Caption = 'BCWMSApp Setup'; ApplicationArea = All; RunObject = page "DOPSWHS Setup"; }
                 action(DeviceConfigNav) { Caption = 'Device Configuration'; ApplicationArea = All; RunObject = page "DOPSWHS Device Config List"; }
                 action(DeviceRegistrationNav) { Caption = 'Device Registration'; ApplicationArea = All; RunObject = page "DOPSWHS Device Reg List"; }
@@ -93,20 +93,20 @@ page 72095 "DOPSWHS DynOps WMS RC"
                 action(SymbologyNav) { Caption = 'Barcode Symbologies'; ApplicationArea = All; RunObject = page "DOPSWHS Symbology List"; }
                 action(IWXReportSelNav) { Caption = 'IWX Report Selection'; ApplicationArea = All; RunObject = page "DOPSWHS IWX Report Selection"; }
                 action(PrintJobLogNav) { Caption = 'Print Job Log'; ApplicationArea = All; RunObject = page "DOPSWHS Print Job Log"; }
-                action(PrintersNav) { Caption = '🖨 Printers'; ApplicationArea = All; RunObject = page "DOPSWHS Printer List"; }
-                action(DevicePrinterMapNav) { Caption = '🖨 Device Printer Mapping'; ApplicationArea = All; RunObject = page "DOPSWHS Device Printer Map"; }
+                action(PrintersNav) { Caption = 'Printers'; ApplicationArea = All; RunObject = page "DOPSWHS Printer List"; }
+                action(DevicePrinterMapNav) { Caption = 'Device Printer Mapping'; ApplicationArea = All; RunObject = page "DOPSWHS Device Printer Map"; }
                 action(SyncConflictNav) { Caption = 'Sync Conflicts'; ApplicationArea = All; RunObject = page "DOPSWHS Sync Conflict List"; }
             }
 
             // ============================================
-            // 👥 KULLANICI YÖNETİMİ — hızlı user/role ataması
+            // KULLANICI YÖNETİMİ — hızlı user/role ataması
             // ============================================
             group(UserMgmtGroup)
             {
-                Caption = '👥 Kullanıcı Yönetimi';
+                Caption = 'Kullanıcı Yönetimi';
                 action(QuickUserAssignNav)
                 {
-                    Caption = '➕ Hızlı Kullanıcı Atama';
+                    Caption = 'Hızlı Kullanıcı Atama';
                     ApplicationArea = All;
                     RunObject = page "DOPSWHS Quick User Assign";
                     Image = AddAction;
@@ -114,7 +114,7 @@ page 72095 "DOPSWHS DynOps WMS RC"
                 }
                 action(AppUserRoleListNav)
                 {
-                    Caption = '📋 Atanmış Kullanıcılar';
+                    Caption = 'Atanmış Kullanıcılar';
                     ApplicationArea = All;
                     RunObject = page "DOPSWHS App User Role List";
                     Image = UserSetup;
@@ -122,7 +122,7 @@ page 72095 "DOPSWHS DynOps WMS RC"
                 }
                 action(AppRoleListNav)
                 {
-                    Caption = '📜 Rol Kataloğu';
+                    Caption = 'Rol Kataloğu';
                     ApplicationArea = All;
                     RunObject = page "DOPSWHS App Role List";
                     Image = SetupList;
@@ -130,7 +130,7 @@ page 72095 "DOPSWHS DynOps WMS RC"
                 }
                 action(M365SyncNav)
                 {
-                    Caption = '🔄 M365 Kullanıcı Senkronizasyonu';
+                    Caption = 'M365 Kullanıcı Senkronizasyonu';
                     ApplicationArea = All;
                     RunObject = page Users;
                     Image = Refresh;
@@ -162,28 +162,28 @@ page 72095 "DOPSWHS DynOps WMS RC"
             }
             action(QuickMoveShortcut)
             {
-                Caption = '🔄 Hızlı Bin-to-Bin';
+                Caption = 'Hızlı Bin-to-Bin';
                 ApplicationArea = All;
                 RunObject = page "Item Reclass. Journal";
                 Image = TransferOrder;
             }
             action(ItemInquiryShortcut)
             {
-                Caption = '🔎 Item Inquiry';
+                Caption = 'Item Inquiry';
                 ApplicationArea = All;
                 RunObject = page "Item List";
                 Image = Item;
             }
             action(BinInquiryShortcut)
             {
-                Caption = '📍 Bin Inquiry';
+                Caption = 'Bin Inquiry';
                 ApplicationArea = All;
                 RunObject = page "Bin Contents List";
                 Image = Bin;
             }
             action(SetupWizardShortcut)
             {
-                Caption = '⚙️ Setup';
+                Caption = 'Setup';
                 ApplicationArea = All;
                 RunObject = page "DOPSWHS Setup";
                 Image = Setup;
@@ -197,7 +197,7 @@ page 72095 "DOPSWHS DynOps WMS RC"
         {
             group(WmsAccess)
             {
-                Caption = '🔑 WMS Web / Mobile Bağlantısı';
+                Caption = 'WMS Web / Mobile Bağlantısı';
                 action(WMSTokenHelpAction)
                 {
                     Caption = 'WMS Token Nasıl Alınır?';
@@ -266,10 +266,10 @@ page 72095 "DOPSWHS DynOps WMS RC"
             }
             group(TestCenterActions)
             {
-                Caption = '🧪 Test Center';
+                Caption = 'Test Center';
                 action(SetupTestCatalog)
                 {
-                    Caption = '⚡ Setup Test Catalog';
+                    Caption = 'Setup Test Catalog';
                     ToolTip = '50 Test Case + 5 Environment + 3 User Group seed (idempotent).';
                     ApplicationArea = All;
                     Image = Setup;
@@ -280,7 +280,7 @@ page 72095 "DOPSWHS DynOps WMS RC"
                 }
                 action(SetupE2ETestData)
                 {
-                    Caption = '📦 Setup E2E Test Data';
+                    Caption = 'Setup E2E Test Data';
                     ToolTip = 'Cronus uzerinde eksik master data (test item, lot, prod, BOM) auto-create.';
                     ApplicationArea = All;
                     Image = TestDatabase;
@@ -291,7 +291,7 @@ page 72095 "DOPSWHS DynOps WMS RC"
                 }
                 action(OpenTestRunList)
                 {
-                    Caption = '📋 Test Run List';
+                    Caption = 'Test Run List';
                     ApplicationArea = All;
                     Image = List;
                     Promoted = true;
@@ -301,7 +301,7 @@ page 72095 "DOPSWHS DynOps WMS RC"
                 }
                 action(OpenTestCaseList)
                 {
-                    Caption = '📑 Test Case Catalog';
+                    Caption = 'Test Case Catalog';
                     ApplicationArea = All;
                     Image = ItemAttribute;
                     Promoted = true;
@@ -310,7 +310,7 @@ page 72095 "DOPSWHS DynOps WMS RC"
                 }
                 action(OpenEnvList)
                 {
-                    Caption = '🌐 Environments';
+                    Caption = 'Environments';
                     ApplicationArea = All;
                     Image = Setup;
                     Promoted = true;
@@ -319,7 +319,7 @@ page 72095 "DOPSWHS DynOps WMS RC"
                 }
                 action(OpenGroupList)
                 {
-                    Caption = '👥 User Groups';
+                    Caption = 'User Groups';
                     ApplicationArea = All;
                     Image = UserGroup;
                     Promoted = true;
@@ -329,10 +329,10 @@ page 72095 "DOPSWHS DynOps WMS RC"
             }
             group(DemoActions)
             {
-                Caption = '🧪 Demo Data (Danışman Modu)';
+                Caption = 'Demo Data (Danışman Modu)';
                 action(RunDemoSetupRC)
                 {
-                    Caption = '⚡ Run Demo Setup';
+                    Caption = 'Run Demo Setup';
                     ToolTip = 'Tüm konfigürasyon tablolarını best-practice değerlerle doldur (idempotent).';
                     ApplicationArea = All;
                     Image = Setup;
@@ -343,7 +343,7 @@ page 72095 "DOPSWHS DynOps WMS RC"
                 }
                 action(CreateDemoTransactionsRC)
                 {
-                    Caption = '📦 Create Demo Transactions';
+                    Caption = 'Create Demo Transactions';
                     ToolTip = '5 demo LP + 1 aktif Count Sheet oluştur. Setup tamamlandıktan sonra çalıştır.';
                     ApplicationArea = All;
                     Image = Inventory;

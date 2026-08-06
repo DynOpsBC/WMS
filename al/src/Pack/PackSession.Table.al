@@ -1,7 +1,7 @@
 table 72332 "DOPSWHS Pack Session"
 {
     // ELOG saha ziyareti: paketleme istasyonu oturumu. Operatör tote'u (LP)
-    // okutur → beklenen satırlar oluşur; kutuyu okutur; ürünleri tek tek
+    // okutur beklenen satırlar oluşur; kutuyu okutur; ürünleri tek tek
     // okutur; bir siparişin tüm satırları tamamlanınca sipariş sevk+fatura
     // edilir ve fişi basılır (bkz. "DOPSWHS Pack Station Mgmt").
     Caption = 'Pack Session';
@@ -10,9 +10,9 @@ table 72332 "DOPSWHS Pack Session"
     fields
     {
         field(1; "Entry No."; Integer) { Caption = 'Entry No.'; DataClassification = CustomerContent; AutoIncrement = true; }
-        // SEPET (tote): depoda kalan, geri dönen taşıma kabı → gerçek bir LP.
+        // SEPET (tote): depoda kalan, geri dönen taşıma kabı gerçek bir LP.
         field(10; "Tote LP No."; Code[20]) { Caption = 'Sepet LP No.'; DataClassification = CustomerContent; TableRelation = "DOPSWHS LP Header"; }
-        // KUTU (koli): müşteriye giden kargo kolisi → depoda kalmaz, LP olmak
+        // KUTU (koli): müşteriye giden kargo kolisi depoda kalmaz, LP olmak
         // zorunda değildir. Okutulan koli barkodu "Box Barcode"a yazılır;
         // "Box LP No." yalnızca sistem karton LP ürettiğinde dolar.
         field(11; "Box LP No."; Code[20]) { Caption = 'Kutu LP No.'; DataClassification = CustomerContent; TableRelation = "DOPSWHS LP Header"; }

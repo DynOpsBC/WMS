@@ -14,6 +14,9 @@ table 72359 "DOPSWHS Packing Order"
         field(40; "Customer No."; Code[20]) { Caption = 'Customer No.'; DataClassification = CustomerContent; }
         field(41; "Customer Name"; Text[100]) { Caption = 'Customer Name'; DataClassification = CustomerContent; }
         field(50; Status; Enum "DOPSWHS Packing Order Status") { Caption = 'Status'; DataClassification = CustomerContent; }
+        // Toplama grubundan taşınan ELOG akış tipi. Terminaldeki V2 paketleme
+        // sekmeleri (Multi / Mono / Tek SKU) listeyi bu alanla filtreler.
+        field(55; "Order Flow Mode"; Enum "DOPSWHS Pick Mode") { Caption = 'V2 Sipariş Tipi'; Editable = false; DataClassification = CustomerContent; }
         field(60; "Session Entry No."; Integer) { Caption = 'Session Entry No.'; Editable = false; DataClassification = CustomerContent; }
         field(70; "Ready DateTime"; DateTime) { Caption = 'Ready DateTime'; Editable = false; DataClassification = CustomerContent; }
         field(80; "Started By User"; Code[50]) { Caption = 'Started By User'; Editable = false; DataClassification = EndUserIdentifiableInformation; }
@@ -28,5 +31,7 @@ table 72359 "DOPSWHS Packing Order"
     {
         key(PK; "Sales Order No.") { Clustered = true; }
         key(StatusKey; Status, "Ready DateTime") { }
+        // Terminalin V2 sorgusu: orderFlowMode filtresi + readyDateTime sıralaması.
+        key(FlowStatusKey; "Order Flow Mode", Status, "Ready DateTime") { }
     }
 }

@@ -1,17 +1,17 @@
 page 72287 "DOPSWHS Quick User Assign"
 {
-    // Hızlı rol atama kartı. Role Center → "👥 Hızlı Kullanıcı Atama"
+    // Hızlı rol atama kartı. Role Center " Hızlı Kullanıcı Atama"
     // tıklandığında veya search'ten "Quick User Assign" ile açılır.
     //
     // Operasyonel akış:
     //   1. Email yaz (kaanodabas@dynamicsops.com)
     //   2. Role dropdown'undan seç (INV_ADMIN, PICKER, vb.)
-    //   3. "Ata" butonu → Codeunit 72281 EnsureUserRole çağırır
+    // 3. "Ata" butonu Codeunit 72281 EnsureUserRole çağırır
     //   4. Result message ekrana basılır (PASS / zaten var / hata)
     //
     // Aynı kartta "Demo Seed (Kaan + Deniz)" tek-tık aksiyonu da var.
     PageType = StandardDialog;
-    Caption = '👥 Hızlı Kullanıcı Atama';
+    Caption = 'Hızlı Kullanıcı Atama';
     ApplicationArea = All;
     UsageCategory = Tasks;
     SourceTable = "DOPSWHS App User Role";
@@ -43,7 +43,7 @@ page 72287 "DOPSWHS Quick User Assign"
             }
             group(Suggestions)
             {
-                Caption = '🚀 Tek-tık örnekler';
+                Caption = 'Tek-tık örnekler';
                 field(KaanShortcut; KaanLabel)
                 {
                     Caption = 'Kaan (pilot)';
@@ -78,7 +78,7 @@ page 72287 "DOPSWHS Quick User Assign"
         {
             action(DoAssign)
             {
-                Caption = '✅ Ata';
+                Caption = 'Ata';
                 ApplicationArea = All;
                 Image = AddAction;
                 ToolTip = 'Email + Role kombinasyonunu kaydet. Mevcut atama varsa "zaten var" mesajı; yoksa yeni satır + permission set.';
@@ -91,7 +91,7 @@ page 72287 "DOPSWHS Quick User Assign"
             }
             action(SeedDemo)
             {
-                Caption = '🌱 Demo Seed (Kaan + Deniz)';
+                Caption = 'Demo Seed (Kaan + Deniz)';
                 ApplicationArea = All;
                 Image = SuggestLines;
                 ToolTip = 'Pilot kullanıcılarını tek tıkla INV_ADMIN olarak atar. Idempotent — tekrar çalıştırılabilir.';
@@ -104,7 +104,7 @@ page 72287 "DOPSWHS Quick User Assign"
             }
             action(OpenUserRoleList)
             {
-                Caption = '📋 Atanmışları Gör';
+                Caption = 'Atanmışları Gör';
                 ApplicationArea = All;
                 Image = ViewDetails;
                 ToolTip = 'Tüm aktif rol atamalarının listesini açar.';
@@ -116,6 +116,6 @@ page 72287 "DOPSWHS Quick User Assign"
     var
         UserEmail: Code[50];
         SelectedRole: Code[20];
-        KaanLabel: Label 'kaanodabas@dynamicsops.com → INV_ADMIN';
-        DenizLabel: Label 'Deniz@dynamicsops.com → INV_ADMIN';
+        KaanLabel: Label 'kaanodabas@dynamicsops.com INV_ADMIN';
+        DenizLabel: Label 'Deniz@dynamicsops.com INV_ADMIN';
 }

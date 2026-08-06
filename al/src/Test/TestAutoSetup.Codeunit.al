@@ -34,7 +34,7 @@ codeunit 72064 "DOPSWHS Test Auto Setup"
         CountBefore := BarcodeRule.Count();
         DemoSetup.EnsureNumberSeries();
         if BarcodeRule.Count() <> CountBefore then
-            ErrorMsg := StrSubstNo('İdempotency bozuk: barcode rule sayısı değişti (%1 → %2)', CountBefore, BarcodeRule.Count());
+            ErrorMsg := StrSubstNo('İdempotency bozuk: barcode rule sayısı değişti (%1 %2)', CountBefore, BarcodeRule.Count());
     end;
 
     local procedure RunTC002(var ErrorMsg: Text)

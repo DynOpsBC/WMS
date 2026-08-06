@@ -31,7 +31,7 @@ page 72286 "DOPSWHS Local User Card"
                         if PasswordTemp <> '' then
                         begin
                             AuthMgt.Register(Rec.Username, Rec."Display Name", PasswordTemp, Rec."Default Location Code", Rec."Default Bin Code");
-                            Message('✅ Şifre kaydedildi.');
+                            Message('Şifre kaydedildi.');
                             PasswordTemp := '';
                         end;
                     end;
@@ -78,7 +78,7 @@ page 72286 "DOPSWHS Local User Card"
                     if not Dialog.Confirm('Bu kullanıcının şifresini "wms1234" olarak ayarla?', true) then
                         exit;
                     AuthMgt.Register(Rec.Username, Rec."Display Name", 'wms1234', Rec."Default Location Code", Rec."Default Bin Code");
-                    Message('✅ Şifre belirlendi: wms1234');
+                    Message('Şifre belirlendi: wms1234');
                 end;
             }
         }

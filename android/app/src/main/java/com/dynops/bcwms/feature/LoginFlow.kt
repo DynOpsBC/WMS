@@ -564,6 +564,31 @@ fun LoginFlow(onConnected: (Boolean) -> Unit) {
                 }
                 Spacer(Modifier.height(4.dp))
                 TextButton(onClick = { step = Step.Email; status = ""; manualUserEntry = false }) { Text("‹ Geri (e-posta girişine dön)") }
+                // Ortam (sandbox) değiştirmek için eskiden baştan e-posta girişi
+                // yapmak gerekiyordu — oysa AAD token'ı zaten kayıtlı. Kayıtlı
+                // token'la ortamları doğrudan yeniden keşfedip seçiciye geçiyoruz.
+                if (BcApi.hasToken(context)) {
+                    TextButton(
+                        enabled = !busy,
+                        onClick = {
+                            scope.launch {
+                                busy = true; status = "Ortamlar aranıyor…"
+                                val token = BcApi.getToken(context)
+                                envList = runCatching { BcApi.discoverEnvironments(token) }
+                                    .getOrDefault(emptyList())
+                                lastToken = token
+                                selectedEnv = envList.firstOrNull {
+                                    it.environment == BcApi.getEnvironment(context)
+                                } ?: envList.firstOrNull()
+                                busy = false
+                                step = Step.SelectEnvCompany
+                                status = if (envList.isEmpty())
+                                    "Ortam listelenemedi — ortam adını yazıp 'Ortamı Bul' deyin"
+                                else ""
+                            }
+                        },
+                    ) { Text("Ortam / sandbox değiştir (${BcApi.getEnvironment(context)})", fontSize = 12.sp) }
+                }
                 // Not: yönetici girişi artık kullanıcı listesinin başındaki
                 // "Yönetici (demo sürüm)" kartından yapılıyor.
             }
@@ -712,6 +737,14 @@ fun LoginFlow(onConnected: (Boolean) -> Unit) {
                             Text(c.displayName, fontWeight = FontWeight.Medium)
                             Text("Seçmek için dokunun →", fontSize = 11.sp, color = Color(0xFF6A1B9A))
                         }
+                    }
+                }
+                // Vazgeçme yolu: bu adımda şirket seçmeden çıkılamıyordu, ortamı
+                // yanlışlıkla açan operatör ekranda kilitli kalıyordu.
+                if (BcApi.hasToken(context)) {
+                    Spacer(Modifier.height(8.dp))
+                    TextButton(onClick = { step = Step.LocalUser; status = "" }) {
+                        Text("‹ Vazgeç (WMS girişine dön)", fontSize = 12.sp)
                     }
                 }
             }

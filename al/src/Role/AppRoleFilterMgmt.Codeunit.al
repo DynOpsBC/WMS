@@ -8,7 +8,7 @@ codeunit 72272 "DOPSWHS App Role Filter Mgmt"
     //
     // Pulls every active rule for the current user's roles, OR-joins rules that target the
     // same (Entity, Field No.), substitutes %USER%/%LOC%/%TODAY%/%NOW% tokens, and SetFilter()s
-    // the result. Bad expressions are caught silently (TryFunction) → the page never breaks.
+    // the result. Bad expressions are caught silently (TryFunction) the page never breaks.
     Access = Public;
 
     /// <summary>Applies the current user's role filters to a record reference. Returns true if

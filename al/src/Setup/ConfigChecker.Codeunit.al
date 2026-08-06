@@ -117,7 +117,7 @@ codeunit 72260 "DOPSWHS Config Checker"
             Detail := StrSubstNo('Package no. series: %1', InventorySetup."Package Nos.");
         end else begin
             Status := Status::Missing;
-            Detail := 'Inventory Setup → Package Nos. atanmamış. (Standart BC package tracking için gerekli.)';
+            Detail := 'Inventory Setup Package Nos. atanmamış. (Standart BC package tracking için gerekli.)';
         end;
     end;
 

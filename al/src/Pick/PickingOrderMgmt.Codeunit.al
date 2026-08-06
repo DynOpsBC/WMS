@@ -122,7 +122,7 @@ codeunit 72354 "DOPSWHS Picking Order Mgmt"
 
     // Satış siparişinin zaten bir warehouse pick'i var mı (açık VEYA register edilmiş)?
     // "Satış Siparişlerini Seç" listesini filtrelemek için kullanılır
-    // (Released + pick yok → yalnızca gerçekten toplanmayı bekleyenler).
+    // (Released + pick yok yalnızca gerçekten toplanmayı bekleyenler).
     procedure SalesOrderHasOpenPick(SalesOrderNo: Code[20]): Boolean
     begin
         exit(GetSalesOrderPickStatus(SalesOrderNo) <> 0);
@@ -581,7 +581,7 @@ codeunit 72354 "DOPSWHS Picking Order Mgmt"
             repeat
                 if SalesHeader.Get(SalesHeader."Document Type"::Order, TempSugg."Sales Order No.") then
                     // Aday listelendikten sonra başka biri pick oluşturmuş olabilir;
-                    // AddOrder bu durumda Error verir → tek siparişi atla, akış sürsün.
+                    // AddOrder bu durumda Error verir tek siparişi atla, akış sürsün.
                     if not TryAddOrder(PickingHeader, SalesHeader) then
                         ;
                 Added += 1;

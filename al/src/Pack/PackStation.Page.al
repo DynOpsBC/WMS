@@ -2,7 +2,7 @@ page 72339 "DOPSWHS Pack Station"
 {
     // ELOG "Batch Package Worksheet" muadili — masaüstü + USB/wedge barkod
     // okuyucu ile BC istemcisi içinde paketleme. Tek "Scan Here" alanı adım
-    // bazlı yönlendirir: sepet (tote LP) → kutu → ürünler. Bir siparişin payı
+    // bazlı yönlendirir: sepet (tote LP) kutu ürünler. Bir siparişin payı
     // tamamlanınca sipariş sevk+fatura edilir ve fişi basılır (Pack Station
     // Mgmt). Multi / bulk / mono-SKU tek motorla çalışır; ayrı sayfa gerekmez.
     PageType = Card;
