@@ -1,8 +1,29 @@
-# BCWMSApp License Protocol
+# DynOpsBC License Protocol
 
 `licensing-service` Azure Function tarafından üretilen RS256 JWT'nin format,
 endpoint sözleşmesi, BC + web + mobil entegrasyon adımları ve operasyonel
 rotasyon planı.
+
+## Çok ürün
+
+Servis BCWMSApp için doğdu; artık DynOpsBC ürün ailesinin ortak lisans
+omurgası. Tanınan ürünler `shared/Products.ts` içindeki `KNOWN_PRODUCTS`
+listesidir: **`BCWMSApp`**, **`BCTraining`** (DynOps Guide).
+
+Kurallar:
+
+- **Issue** bilinmeyen ürünü 400 ile reddeder — yazım hatası, hiçbir
+  extension'ın kabul etmeyeceği bir anahtar üretmesin diye.
+- **`replaceActive` ürün kapsamlıdır** — WMS lisansı yenilemek aynı tenant'ın
+  BCTraining lisansını supersede etmez.
+- **Verify** istekte `product` varsa claims ile eşleşme arar
+  (`product_mismatch`) — çapraz ürün anahtarı ücretli katman açamaz.
+- **`/api/license/me`** `&product=` filtresi kabul eder; iki ürünlü tenant'ta
+  filtresiz çağrı en geç süreli olanı döndürür.
+
+Yeni ürün eklemek = `KNOWN_PRODUCTS`'a satır + bu dokümana satır. AL tarafında
+istemci deseni `BCTraining` reposundaki `DOTR License Mgmt.Codeunit.al`'dır
+(WMS'in `DOPSWHS License Mgmt` klonu, `product` alanı eklenmiş hâli).
 
 ## JWT claims
 
@@ -71,8 +92,14 @@ Hata kodları: 400 (validation), 401 (admin token yok), 500 (internal).
 
 Anonim. Body:
 ```json
-{ "tenantId": "<aad guid>", "key": "<jwt>" }
+{ "tenantId": "<aad guid>", "key": "<jwt>", "product": "BCTraining" }
 ```
+
+`product` opsiyoneldir (geriye dönük uyumluluk: sahadaki BCWMSApp extension'ı
+göndermez). Gönderildiğinde anahtarın claims'indeki `product` ile birebir
+eşleşmelidir; eşleşmezse `valid:false, reason:"product_mismatch"` döner. Yeni
+extension'lar (BCTraining ve sonrası) **her zaman** göndermelidir — aksi hâlde
+bir ürünün Enterprise anahtarı diğer ürünün ücretli katmanını açar.
 
 Response (200):
 ```json
@@ -99,6 +126,7 @@ Response (200):
 | `expired` | `exp <= now` |
 | `not_yet_valid` | `iat > now + 60s` (clock skew) |
 | `tenant_mismatch` | `tid` parametre tenant ile eşleşmiyor |
+| `product_mismatch` | Anahtar başka bir ürün için basılmış (istek `product` gönderdiyse) |
 | `revoked` / `superseded` | Storage status active değil |
 | `key` | Public key yüklenemedi |
 
