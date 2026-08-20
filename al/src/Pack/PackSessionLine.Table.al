@@ -33,5 +33,6 @@ table 72333 "DOPSWHS Pack Session Line"
     {
         key(PK; "Session Entry No.", "Line No.") { Clustered = true; }
         key(Order; "Session Entry No.", "Source Order No.") { }
+        key(BoxBarcode; "Box Barcode") { }
     }
 }

@@ -49,6 +49,14 @@ page 72335 "DOPSWHS Pack Ops API"
         exit(PackMgmt.StartPickSession(pickNo, userId));
     end;
 
+    [ServiceEnabled]
+    procedure startPickPackingWithPrinter(pickNo: Code[20]; userId: Code[50]; printerId: Code[50]): Integer
+    var
+        PackMgmt: Codeunit "DOPSWHS Pack Station Mgmt";
+    begin
+        exit(PackMgmt.StartPickSession(pickNo, userId, printerId));
+    end;
+
     // boxLpNo = okutulan KARGO KOLİSİ barkodu. Kayıtlı bir LP olmak zorunda
     // değildir (kargo etiketi / SSCC olabilir); boş gelirse sistem karton üretir.
     // Kargo barkodları 20 karakteri aşabildiğinden Code[50].

@@ -19,6 +19,7 @@ page 72298 "DOPSWHS Device Printer Map"
                 }
                 field(Usage; Rec.Usage) { ApplicationArea = All; }
                 field("Printer Code"; Rec."Printer Code") { ApplicationArea = All; }
+                field("Station ID"; Rec."Station ID") { ApplicationArea = All; }
                 field(Copies; Rec.Copies) { ApplicationArea = All; }
                 field(Description; Rec.Description) { ApplicationArea = All; }
             }

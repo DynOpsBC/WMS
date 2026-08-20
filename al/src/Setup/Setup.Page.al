@@ -126,6 +126,70 @@ page 72061 "DOPSWHS Setup"
                     Editable = false;
                 }
             }
+            group(AzureDirectPrint)
+            {
+                Caption = 'Azure Direct Print';
+                field(HttpClientInstruction; HttpClientInstruction)
+                {
+                    Caption = 'Required Extension Setting';
+                    ApplicationArea = All;
+                    Editable = false;
+                    MultiLine = true;
+                    ToolTip = 'Azure Direct uses outbound HTTPS for Blob Storage and Service Bus.';
+                }
+                field("Azure Tenant Route ID"; Rec."Azure Tenant Route ID") { ApplicationArea = All; }
+                field("Azure Company Route ID"; Rec."Azure Company Route ID") { ApplicationArea = All; }
+                field("Azure SB Namespace"; Rec."Azure SB Namespace") { ApplicationArea = All; }
+                field("Azure Print Jobs Queue"; Rec."Azure Print Jobs Queue") { ApplicationArea = All; Editable = false; }
+                field("Azure Printer Status Queue"; Rec."Azure Printer Status Queue") { ApplicationArea = All; Editable = false; }
+                field("Azure Jobs SAS Policy"; Rec."Azure Jobs SAS Policy") { ApplicationArea = All; Editable = false; }
+                field("Azure Status SAS Policy"; Rec."Azure Status SAS Policy") { ApplicationArea = All; Editable = false; }
+                field("Azure Storage Account"; Rec."Azure Storage Account") { ApplicationArea = All; }
+                field("Azure Blob Container"; Rec."Azure Blob Container") { ApplicationArea = All; Editable = false; }
+                field("Azure Blob Endpoint Suffix"; Rec."Azure Blob Endpoint Suffix") { ApplicationArea = All; Editable = false; }
+                field("Azure SB Endpoint Suffix"; Rec."Azure SB Endpoint Suffix") { ApplicationArea = All; Editable = false; }
+                field("Azure Dispatch Max Attempts"; Rec."Azure Dispatch Max Attempts") { ApplicationArea = All; }
+                field("Azure Blob SAS Expires At"; Rec."Azure Blob SAS Expires At")
+                {
+                    ApplicationArea = All;
+                    StyleExpr = BlobSasExpiryStyle;
+                    ToolTip = 'UTC expiration of the Blob create/write SAS. Rotate the credential before this time; the health check warns during the final seven days.';
+                }
+                field(BlobUploadSecretSet; BlobUploadSecretSet)
+                {
+                    Caption = 'Blob Upload SAS Set';
+                    ApplicationArea = All;
+                    Editable = false;
+                }
+                field(JobsSecretSet; JobsSecretSet)
+                {
+                    Caption = 'Jobs Send Key Set';
+                    ApplicationArea = All;
+                    Editable = false;
+                }
+                field(StatusSecretSet; StatusSecretSet)
+                {
+                    Caption = 'Status Listen Key Set';
+                    ApplicationArea = All;
+                    Editable = false;
+                }
+                field("Azure Last Health Check"; Rec."Azure Last Health Check") { ApplicationArea = All; }
+                field("Azure Last Health Result"; Rec."Azure Last Health Result") { ApplicationArea = All; }
+                field(StaleDispatchedJobs; StaleDispatchedJobs)
+                {
+                    Caption = 'Stale Dispatched Jobs';
+                    ApplicationArea = All;
+                    Editable = false;
+                    ToolTip = 'Azure jobs waiting more than 8 days for an agent result. Inspect the agent outbox and Azure dead-letter queues before using the controlled retry action.';
+                }
+                field(UnavailableActivePrinters; UnavailableActivePrinters)
+                {
+                    Caption = 'Selected Printers Not Online';
+                    ApplicationArea = All;
+                    Editable = false;
+                    ToolTip = 'Active Azure Direct printers whose agent status is offline/error/unknown or whose heartbeat is older than 15 minutes. Jobs may still be queued durably while the workstation is offline.';
+                }
+            }
         }
     }
 
@@ -224,6 +288,126 @@ page 72061 "DOPSWHS Setup"
                     ToolTip = 'Map each device/user to a default printer per usage.';
                     RunObject = page "DOPSWHS Device Printer Map";
                 }
+                action(ImportAzureRuntimeConfig)
+                {
+                    Caption = 'Import BC Azure Print Config';
+                    ApplicationArea = All;
+                    Image = ImportDatabase;
+                    Promoted = true;
+                    PromotedCategory = Process;
+                    PromotedIsBig = true;
+                    AccessByPermission = tabledata "DOPSWHS Setup" = D;
+                    ToolTip = 'Imports schemaVersion 1 business-central.runtime.secrets.json. Credentials are extracted into company-scoped Isolated Storage and are never written to a table. Enable Allow HttpClient Requests for this extension first.';
+
+                    trigger OnAction()
+                    var
+                        AzureBridge: Codeunit "DOPSWHS Azure Print Bridge";
+                        ConfigStream: InStream;
+                    begin
+                        if not UploadIntoStream('JSON files (*.json)|*.json', ConfigStream) then
+                            exit;
+                        AzureBridge.ImportRuntimeConfiguration(ConfigStream);
+                        RefreshAzureSecretIndicators();
+                        CurrPage.Update(false);
+                        Message('Azure Direct print configuration imported and activated. No credential was stored in a table. In Extension Management, make sure Allow HttpClient Requests is enabled for BCWMSApp, then run Validate Azure Print.');
+                    end;
+                }
+                action(ConfigureAzureSecrets)
+                {
+                    Caption = 'Configure Azure Secrets';
+                    ApplicationArea = All;
+                    Image = EncryptionKeys;
+                    AccessByPermission = tabledata "DOPSWHS Setup" = D;
+                    ToolTip = 'Stores or rotates Azure credentials in company-scoped Isolated Storage. A new Blob SAS requires its expiry date from the deployment output.';
+
+                    trigger OnAction()
+                    var
+                        SecretDialog: Page "DOPSWHS Azure Print Secrets";
+                        AzureBridge: Codeunit "DOPSWHS Azure Print Bridge";
+                    begin
+                        if SecretDialog.RunModal() <> Action::OK then
+                            exit;
+                        AzureBridge.ConfigureSecrets(
+                            SecretDialog.GetBlobUploadSas(),
+                            SecretDialog.GetBlobSasExpiresAt(),
+                            SecretDialog.GetJobsSharedKey(),
+                            SecretDialog.GetStatusSharedKey());
+                        RefreshAzureSecretIndicators();
+                        CurrPage.Update(false);
+                        Message('Azure print credentials were stored securely.');
+                    end;
+                }
+                action(ClearAzureSecrets)
+                {
+                    Caption = 'Clear Azure Secrets';
+                    ApplicationArea = All;
+                    Image = ClearLog;
+                    AccessByPermission = tabledata "DOPSWHS Setup" = D;
+
+                    trigger OnAction()
+                    var
+                        AzureBridge: Codeunit "DOPSWHS Azure Print Bridge";
+                    begin
+                        if not Confirm('Clear all Azure Direct print credentials for this company?', false) then
+                            exit;
+                        AzureBridge.ClearSecrets();
+                        RefreshAzureSecretIndicators();
+                        CurrPage.Update(false);
+                    end;
+                }
+                action(ValidateAzurePrint)
+                {
+                    Caption = 'Validate Azure Print';
+                    ApplicationArea = All;
+                    Image = TestFile;
+                    AccessByPermission = tabledata "DOPSWHS Setup" = M;
+
+                    trigger OnAction()
+                    var
+                        AzureBridge: Codeunit "DOPSWHS Azure Print Bridge";
+                        Worker: Codeunit "DOPSWHS Azure Print Worker";
+                        StaleCount: Integer;
+                        UnavailableCount: Integer;
+                    begin
+                        AzureBridge.ValidateConfiguration(true);
+                        Worker.ScheduleWorkerJob();
+                        Worker.RunNow();
+                        StaleCount := AzureBridge.CountStaleDispatched();
+                        UnavailableCount := AzureBridge.CountUnavailableActivePrinters();
+                        Rec."Azure Last Health Check" := CurrentDateTime();
+                        if AzureBridge.BlobSasExpiresSoon() then
+                            Rec."Azure Last Health Result" := CopyStr(
+                                StrSubstNo('WARNING: Blob SAS expires at %1. Offline selected printers: %2; stale jobs: %3.', Rec."Azure Blob SAS Expires At", UnavailableCount, StaleCount),
+                                1,
+                                MaxStrLen(Rec."Azure Last Health Result"))
+                        else
+                            if UnavailableCount > 0 then
+                                Rec."Azure Last Health Result" := CopyStr(
+                                    StrSubstNo('WARNING: %1 selected printer(s) not online; jobs remain queued. Stale dispatched jobs: %2.', UnavailableCount, StaleCount),
+                                    1,
+                                    MaxStrLen(Rec."Azure Last Health Result"))
+                        else
+                            Rec."Azure Last Health Result" := CopyStr(
+                                StrSubstNo('Configuration valid; worker completed. Stale dispatched jobs: %1.', StaleCount),
+                                1,
+                                MaxStrLen(Rec."Azure Last Health Result"));
+                        Rec.Modify(true);
+                        if AzureBridge.BlobSasExpiresSoon() then
+                            Message('Azure Direct configuration is valid, but the Blob SAS expires at %1. Rotate it now. Selected printers not online: %2. Stale dispatched jobs: %3.', Rec."Azure Blob SAS Expires At", UnavailableCount, StaleCount)
+                        else
+                            if UnavailableCount > 0 then
+                                Message('Azure Direct configuration is valid. %1 selected printer(s) are not online; new jobs can still wait in Azure until the agent returns. Stale dispatched jobs: %2.', UnavailableCount, StaleCount)
+                        else
+                            Message('Azure Direct configuration is valid and the worker completed one cycle. Stale dispatched jobs: %1. Use a ZPL printer Test Print or a standard BC report on a PDF printer to verify Blob upload, queue send and physical output.', StaleCount);
+                    end;
+                }
+                action(PrintJobQueueAction)
+                {
+                    Caption = 'Print Job Queue';
+                    ApplicationArea = All;
+                    Image = Queue;
+                    RunObject = page "DOPSWHS Print Job Queue";
+                }
             }
             group(TestScenarios)
             {
@@ -274,15 +458,25 @@ page 72061 "DOPSWHS Setup"
             Rec.Insert(true);
         end;
         UpdateLicenseStyle();
+        HttpClientInstruction := 'Required: open Extension Management, select BCWMSApp, and enable Allow HttpClient Requests before importing/testing Azure Direct.';
+        RefreshAzureSecretIndicators();
     end;
 
     trigger OnAfterGetRecord()
     begin
         UpdateLicenseStyle();
+        RefreshAzureSecretIndicators();
     end;
 
     var
         LicenseStyle: Text;
+        BlobUploadSecretSet: Boolean;
+        JobsSecretSet: Boolean;
+        StatusSecretSet: Boolean;
+        HttpClientInstruction: Text[250];
+        StaleDispatchedJobs: Integer;
+        UnavailableActivePrinters: Integer;
+        BlobSasExpiryStyle: Text;
 
     local procedure UpdateLicenseStyle()
     begin
@@ -293,5 +487,25 @@ page 72061 "DOPSWHS Setup"
             else
                 LicenseStyle := 'Standard';
         end;
+    end;
+
+    local procedure RefreshAzureSecretIndicators()
+    var
+        AzureBridge: Codeunit "DOPSWHS Azure Print Bridge";
+    begin
+        BlobUploadSecretSet := AzureBridge.BlobSecretIsSet();
+        JobsSecretSet := AzureBridge.JobsSecretIsSet();
+        StatusSecretSet := AzureBridge.StatusSecretIsSet();
+        StaleDispatchedJobs := AzureBridge.CountStaleDispatched();
+        UnavailableActivePrinters := AzureBridge.CountUnavailableActivePrinters();
+        if (Rec."Azure Blob SAS Expires At" = 0DT) or
+           (Rec."Azure Blob SAS Expires At" <= CurrentDateTime())
+        then
+            BlobSasExpiryStyle := 'Unfavorable'
+        else
+            if AzureBridge.BlobSasExpiresSoon() then
+                BlobSasExpiryStyle := 'Ambiguous'
+            else
+                BlobSasExpiryStyle := 'Favorable';
     end;
 }

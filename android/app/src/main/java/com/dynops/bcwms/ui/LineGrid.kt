@@ -46,6 +46,13 @@ fun LineGrid(
     isDone: (JSONObject) -> Boolean = { false },
     isPartial: (JSONObject) -> Boolean = { false },
     showProgress: Boolean = false,
+    /**
+     * Satırlar üst ekranın kaydırmasıyla birlikte hareket edecekse true.
+     * Bu mod, LineGrid'in kendi LazyColumn'unu kaldırır; böylece iç içe dikey
+     * kaydırma oluşmaz ve belge başlığından son satıra kadar tek hareketle
+     * kaydırılabilir.
+     */
+    expandRows: Boolean = false,
 ) {
     val byKey = remember(defs) { defs.associateBy { it.key } }
     val visible = columns.filter { it.visible }.mapNotNull { c -> byKey[c.key]?.let { it to c.width } }
@@ -92,8 +99,8 @@ fun LineGrid(
             }
         }
         HorizontalDivider()
-        LazyColumn(Modifier.fillMaxWidth()) {
-            items(rows) { row ->
+        @Composable
+        fun GridRow(row: JSONObject) {
                 val sel = isSelected(row); val done = isDone(row); val partial = !done && isPartial(row)
                 val bg = when {
                     sel -> MaterialTheme.colorScheme.primary.copy(alpha = 0.20f)
@@ -130,8 +137,17 @@ fun LineGrid(
                     }
                 }
                 HorizontalDivider(thickness = 0.5.dp, color = MaterialTheme.colorScheme.outlineVariant)
+        }
+        if (expandRows) {
+            Column(Modifier.fillMaxWidth()) {
+                rows.forEach { row -> key(row.optString("systemId", row.toString())) { GridRow(row) } }
+                if (rows.isEmpty()) Text("Satır yok.", Modifier.padding(16.dp), color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
-            if (rows.isEmpty()) item { Text("Satır yok.", Modifier.padding(16.dp), color = MaterialTheme.colorScheme.onSurfaceVariant) }
+        } else {
+            LazyColumn(Modifier.fillMaxWidth()) {
+                items(rows) { row -> GridRow(row) }
+                if (rows.isEmpty()) item { Text("Satır yok.", Modifier.padding(16.dp), color = MaterialTheme.colorScheme.onSurfaceVariant) }
+            }
         }
     }
 }

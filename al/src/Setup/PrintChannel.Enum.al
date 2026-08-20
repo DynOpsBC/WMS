@@ -14,4 +14,8 @@ enum 72203 "DOPSWHS Print Channel"
     {
         Caption = 'Self-Hosted (Local Agent)';
     }
+    value(3; AzureDirect)
+    {
+        Caption = 'Azure Direct (Blob + Service Bus)';
+    }
 }

@@ -9,6 +9,7 @@ page 72356 "DOPSWHS Picking Order Card"
     SourceTable = "DOPSWHS Picking Order Header";
     ApplicationArea = All;
     UsageCategory = None;
+    InsertAllowed = false;
 
     layout
     {
@@ -40,15 +41,19 @@ page 72356 "DOPSWHS Picking Order Card"
                     Caption = 'Lokasyon';
                     Editable = Rec.Status = Rec.Status::Open;
                 }
+                field("Order Flow Mode"; Rec."Order Flow Mode")
+                {
+                    ApplicationArea = All;
+                    Caption = 'Akış Tipi';
+                    Editable = false;
+                    ToolTip = 'Toplamanın V2 terminalde Multi, Mono veya Tek SKU olarak hangi akışla yürütüleceğini gösterir.';
+                }
                 field("Assigned User ID"; Rec."Assigned User ID")
                 {
                     ApplicationArea = All;
                     Caption = 'Atanan Toplayıcı';
                     Editable = false;
-                    ToolTip = 'Toplamayı üstlenen WMS operatörü. Değiştirmek için "Toplayıcı Ata" aksiyonunu kullanın. Boş bırakırsanız toplayıcı terminalden "Üzerime Al" ile kendisi alabilir.';
-                    // Salt-okunur: alanın TableRelation'ı Warehouse Employee ve WMS
-                    // operatörü orada kayıtlı olmayabilir elle yazınca Validate
-                    // atamayı sessizce geri alıyordu. Atama aksiyondan yapılır.
+                    ToolTip = 'Toplamayı üstlenen WMS operatörü. Pick oluşturmadan önce "Toplayıcı Ata" aksiyonuyla seçilmesi zorunludur.';
                 }
                 field(Status; Rec.Status) { ApplicationArea = All; Caption = 'Durum'; StyleExpr = StatusStyle; }
                 field("Entry No."; Rec."Entry No.") { ApplicationArea = All; Caption = 'Kayıt No.'; Editable = false; }
@@ -166,7 +171,7 @@ page 72356 "DOPSWHS Picking Order Card"
                 PromotedCategory = Process;
                 PromotedIsBig = true;
                 Enabled = Rec.Status = Rec.Status::Open;
-                ToolTip = 'Gruptaki siparişlerden warehouse pick oluşturur. Önce "Toplayıcı Ata" demeniz önerilir: atanmamış toplamayı terminalde ilk üstlenen operatör alır ve belge o operatöre kilitlenir.';
+                ToolTip = 'Gruptaki siparişlerden warehouse pick oluşturur. İşlemi kullanmadan önce "Toplayıcı Ata" ile operatör seçilmesi zorunludur.';
 
                 trigger OnAction()
                 var
@@ -184,21 +189,17 @@ page 72356 "DOPSWHS Picking Order Card"
                     if FreshHeader.Status <> FreshHeader.Status::Open then
                         Error(GroupAlreadyPostedErr, FreshHeader."Warehouse Pick No.");
 
-                    // ZORUNLU ATAMA uyarısı: toplayıcı atanmadan oluşan pick terminalde
-                    // herkese açık olur; iki operatör aynı belgeye girebilir.
+                    // Atamasız pick oluşturulmaz; iş terminalde yalnızca seçilen
+                    // operatörün "Bana atanan" listesine gitmelidir.
                     if FreshHeader."Assigned User ID" = '' then
-                        if not Confirm(NoPickerQst, false) then
-                            exit;
+                        Error(PickerRequiredErr);
 
                     PickNo := PickingOrderMgmt.PostPickingOrder(FreshHeader);
                     if Rec.Get(FreshHeader."Entry No.") then;
                     CurrPage.Update(false);
                     UpdateSummary();
 
-                    if FreshHeader."Assigned User ID" = '' then
-                        Message(PickCreatedUnassignedMsg, PickNo)
-                    else
-                        Message(PickCreatedMsg, PickNo, FreshHeader."Assigned User ID");
+                    Message(PickCreatedMsg, PickNo, FreshHeader."Assigned User ID");
                 end;
             }
             action(AssignPicker)
@@ -215,6 +216,7 @@ page 72356 "DOPSWHS Picking Order Card"
                 var
                     LocalUser: Record "DOPSWHS Local User";
                     PickMgmt: Codeunit "DOPSWHS Pick Mgmt";
+                    HeaderEntryNo: Integer;
                 begin
                     LocalUser.SetRange(Disabled, false);
                     if Page.RunModal(Page::"DOPSWHS Local User List", LocalUser) <> Action::LookupOK then
@@ -227,11 +229,15 @@ page 72356 "DOPSWHS Picking Order Card"
                             exit;
 
                     // Kilitli yeniden okuma + pick belgesine yansıtma PickMgmt'te.
+                    HeaderEntryNo := Rec."Entry No.";
                     PickMgmt.SetPickingOrderPicker(Rec, LocalUser.Username, AssignedFromCardLbl);
+                    if not Rec.Get(HeaderEntryNo) then
+                        Error(GroupGoneErr, HeaderEntryNo);
+                    if Rec."Assigned User ID" <> LocalUser.Username then
+                        Error(AssignmentNotSavedErr, LocalUser.Username);
 
                     CurrPage.Update(false);
                     UpdateSummary();
-                    Message(AssignedMsg, LocalUser."Display Name");
                 end;
             }
             action(OpenWarehousePick)
@@ -324,12 +330,11 @@ page 72356 "DOPSWHS Picking Order Card"
     var
         SummaryText: Text;
         StatusStyle: Text;
-        NoPickerQst: Label 'Bu gruba toplayıcı atanmadı. Pick oluşturulursa terminalde herkes üstüne alabilir. Devam edilsin mi?';
+        PickerRequiredErr: Label 'Pick oluşturmadan önce "Toplayıcı Ata" ile bir operatör seçin.';
         TakeOverQst: Label 'Bu grup %1 kullanıcısında. %2 kullanıcısına devredilsin mi?', Comment = '%1 = mevcut operatör, %2 = yeni operatör';
         GroupGoneErr: Label 'Toplama grubu %1 bulunamadı — silinmiş olabilir. Listeyi yenileyin.', Comment = '%1 = Kayıt No.';
         GroupAlreadyPostedErr: Label 'Bu grup için toplama zaten oluşturulmuş (%1). Sayfayı yenileyin.', Comment = '%1 = Toplama belgesi no.';
         PickCreatedMsg: Label 'Toplama %1 oluşturuldu — terminalde %2 kullanıcısına görünüyor.', Comment = '%1 = Toplama no., %2 = operatör';
-        PickCreatedUnassignedMsg: Label 'Toplama %1 oluşturuldu. Toplayıcı atanmadı: terminalde ilk üstlenen operatör alır.', Comment = '%1 = Toplama no.';
-        AssignedMsg: Label 'Grup %1 kullanıcısına atandı.', Comment = '%1 = operatör';
+        AssignmentNotSavedErr: Label '%1 kullanıcısına yapılan atama kayda yazılamadı.', Comment = '%1 = operatör';
         AssignedFromCardLbl: Label 'Toplama grubu kartından atandı.';
 }

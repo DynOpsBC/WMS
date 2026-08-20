@@ -23,8 +23,8 @@ android {
     applicationId = "com.dynops.bcwms"
     minSdk = 26
     targetSdk = 35
-    versionCode = 1300
-    versionName = "1.13.0"
+    versionCode = 1409
+    versionName = "1.14.9"
     manifestPlaceholders["appLabel"] = "BCWMS"
     buildConfigField("String", "UPDATE_BASE_URL", "\"https://app.bcwms.dynops.com\"")
   }
@@ -43,16 +43,28 @@ android {
     create("bade") {
       dimension = "tenant"
       applicationIdSuffix = ".bade"
-      versionCode = 1300
-      versionName = "1.13.0"
+      versionCode = 1409
+      versionName = "1.14.9"
       versionNameSuffix = "-bade"
       manifestPlaceholders["appLabel"] = "BCWMS BADE"
       buildConfigField("String", "BC_CLIENT_ID", "\"3c4ba25a-89f4-41df-acf8-ebab8cb4809b\"")
       buildConfigField("String", "BC_FALLBACK_TENANT", "\"3bbd610b-95e4-47b3-8b48-4f7caf717bc3\"")
-      buildConfigField("String", "BC_DEFAULT_ENVIRONMENT", "\"sand1506\"")
+      buildConfigField("String", "BC_DEFAULT_ENVIRONMENT", "\"E-DefterSandbox\"")
       buildConfigField("boolean", "BC_ALLOW_PRODUCTION", "false")
       buildConfigField("String", "TENANT_LABEL", "\"Bade Natural\"")
       buildConfigField("String", "LOGIN_EMAIL_HINT", "\"kullanici@badenatural.com\"")
+    }
+    create("emu") {
+      dimension = "tenant"
+      applicationIdSuffix = ".emu"
+      versionNameSuffix = "-emu"
+      manifestPlaceholders["appLabel"] = "BCWMS EMU"
+      buildConfigField("String", "BC_CLIENT_ID", "\"9f9a9965-f358-4b0b-a89e-923f1d8b7a04\"")
+      buildConfigField("String", "BC_FALLBACK_TENANT", "\"9de3e840-2fae-4ffb-b690-2fca32956342\"")
+      buildConfigField("String", "BC_DEFAULT_ENVIRONMENT", "\"Sandbox3007\"")
+      buildConfigField("boolean", "BC_ALLOW_PRODUCTION", "false")
+      buildConfigField("String", "TENANT_LABEL", "\"EMU\"")
+      buildConfigField("String", "LOGIN_EMAIL_HINT", "\"kullanici@atesci.com\"")
     }
   }
 

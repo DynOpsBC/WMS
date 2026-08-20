@@ -8,6 +8,6 @@ enum 72349 "DOPSWHS Pick Mode"
     // (mod atanmamış) — "Tümü" görünümünde listelenir.
     value(0; " ") { Caption = ' '; }
     value(1; Multi) { Caption = 'Multi'; }
-    value(2; Bulk) { Caption = 'Bulk'; }
-    value(3; Batch) { Caption = 'Batch'; }
+    value(2; Bulk) { Caption = 'Tek SKU'; }
+    value(3; Batch) { Caption = 'Mono'; }
 }

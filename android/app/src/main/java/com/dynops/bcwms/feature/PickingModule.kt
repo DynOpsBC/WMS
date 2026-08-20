@@ -38,21 +38,6 @@ import org.json.JSONObject
 private const val MAIN_LP_PENDING = "hazırlanıyor…"
 
 /**
- * Sabit içerikli ekran dalları için kaydırılabilir kapsayıcı.
- * Cihaz yan çevrilince ya da küçük ekranda kartlar sığmıyordu; altta kalan
- * butonlara (ör. "Kendime Ata", "Önerilen sepeti kullan") ulaşılamıyordu.
- */
-@Composable
-private fun ColumnScope.ScrollableBranch(content: @Composable ColumnScope.() -> Unit) {
-    Column(
-        Modifier
-            .weight(1f)
-            .verticalScroll(rememberScrollState()),
-        content = content,
-    )
-}
-
-/**
  * İyimser UI için satırın kopyasını "toplandı" durumuyla döndürür.
  * JSONObject mutable olduğundan kopya alınır — Compose'un eski/yeni listeyi
  * ayırt edebilmesi için yeni nesne şart.
@@ -999,11 +984,15 @@ private fun GuidedPickDocument(no: String, flowMode: OutboundFlowMode? = null, o
     )
 
     Column(Modifier.fillMaxSize()) {
-        // Not: `else` dalı kendi LazyColumn'unu weight(1f) ile kullanır; diğer
-        // dallar (atama, sepet okutma, raf doğrulama) sabit içerik olduğundan
-        // yatay moda / küçük ekrana sığmayabilir → o dallar aşağıda kendi
-        // verticalScroll'unu alır. Bu yüzden dış Column kaydırılabilir DEĞİL.
-        Column(Modifier.weight(1f).padding(12.dp)) {
+        // Belge başlığından ürün kartlarının sonuna kadar TEK kaydırma alanı.
+        // Önceden yalnız satır LazyColumn'u kayıyor, üstteki başlık/LP/okutma
+        // alanları sabit kalıyordu; küçük ekranda kullanılabilir alan daralıyordu.
+        Column(
+            Modifier
+                .weight(1f)
+                .verticalScroll(rememberScrollState())
+                .padding(12.dp),
+        ) {
             TextButton(onClick = onBack) { Text("‹ Pick Listesi") }
             if (flowMode != null) {
                 V2PickFlowBanner(flowMode)
@@ -1028,7 +1017,7 @@ private fun GuidedPickDocument(no: String, flowMode: OutboundFlowMode? = null, o
             when {
                 // ELOG: pick kimseye atanmadan ürün listesi/okutma hiç gösterilmez —
                 // toplama sadece "Kendime Ata" ile başlatılabilir.
-                notAssigned -> ScrollableBranch {
+                notAssigned -> Column {
                     Card(
                         colors = CardDefaults.cardColors(containerColor = Color(0xFFEDE7F6)),
                         modifier = Modifier.fillMaxWidth(),
@@ -1048,7 +1037,7 @@ private fun GuidedPickDocument(no: String, flowMode: OutboundFlowMode? = null, o
                 }
                 // Başkasına atanmış belge: salt görüntüleme. Toplamak isteyen
                 // önce açıkça devralmalı — sessizce ortak toplama yapılamaz.
-                lockedByOther -> ScrollableBranch {
+                lockedByOther -> Column {
                     Card(
                         colors = CardDefaults.cardColors(containerColor = Color(0xFFFFEBEE)),
                         border = BorderStroke(1.dp, OtherUserRed.copy(alpha = 0.5f)),
@@ -1074,7 +1063,7 @@ private fun GuidedPickDocument(no: String, flowMode: OutboundFlowMode? = null, o
                     }
                 }
                 // ELOG: atandıktan sonra, toplamadan ÖNCE ana sepeti (LP) okut.
-                needsMainLp -> ScrollableBranch {
+                needsMainLp -> Column {
                     Card(
                         colors = CardDefaults.cardColors(containerColor = Color.White),
                         border = BorderStroke(1.dp, Color(0xFFE0E0E0)),
@@ -1139,7 +1128,7 @@ private fun GuidedPickDocument(no: String, flowMode: OutboundFlowMode? = null, o
                         }
                     }
                 }
-                allCollected -> ScrollableBranch {
+                allCollected -> Column {
                     Card(
                         colors = CardDefaults.cardColors(containerColor = Color(0xFFE8F5E9)),
                         modifier = Modifier.fillMaxWidth(),
@@ -1150,7 +1139,7 @@ private fun GuidedPickDocument(no: String, flowMode: OutboundFlowMode? = null, o
                         }
                     }
                 }
-                !binVerified && !currentBin.isNullOrBlank() -> ScrollableBranch {
+                !binVerified && !currentBin.isNullOrBlank() -> Column {
                     Card(
                         colors = CardDefaults.cardColors(containerColor = Color(0xFFFFF3E0)),
                         border = BorderStroke(2.dp, Color(0xFFEF6C00)),
@@ -1210,8 +1199,8 @@ private fun GuidedPickDocument(no: String, flowMode: OutboundFlowMode? = null, o
                     // Kartlar sadece bilgi amaçlıdır — toplama SADECE barkod okutarak
                     // yapılır, dokunarak tamamlama/elle giriş yolu yok.
                     val itemGroups = groupLines(activeLines, ::pickLineCapacity)
-                    LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        items(itemGroups, key = { it.key }) { group ->
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        itemGroups.forEach { group ->
                             val done = group.lines.all(::isComplete)
                             val doneCount = group.lines.count(::isComplete)
                             val orderNos = group.lines.map { firstValue(it, "sourceNo").ifBlank { "—" } }.distinct()
@@ -1296,6 +1285,11 @@ private fun GuidedPickDocument(no: String, flowMode: OutboundFlowMode? = null, o
             initialLot = qg.lines.first().optString("lotNo"),
             showLotSerial = true,
             showSerial = false,
+            lotRequired = qg.lines.any { it.optBoolean("lotRequired", false) },
+            showAvailableLotLookup = true,
+            autoDetectLotFromStock = true,
+            locationCode = firstValue(qg.lines.first(), "locationCode"),
+            variantCode = firstValue(qg.lines.first(), "variantCode"),
             onDismiss = { qtyGroup = null },
             onConfirm = { res ->
                 qtyGroup = null
@@ -1662,7 +1656,7 @@ private fun PickDocument(no: String, onBack: () -> Unit) {
     val displayLines = if (sortByBin) filteredLines.sortedWith(compareBy(binWalkComparator) { it.optString("binCode") }) else filteredLines
     val displayGroups = if (merge) groupLines(displayLines, ::pickLineCapacity) else emptyList()
     Column(Modifier.fillMaxSize()) {
-        Column(Modifier.weight(1f).padding(12.dp)) {
+        Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(12.dp)) {
             TextButton(onClick = onBack) { Text("‹ Belge Listesi") }
             DocHeaderCard(
                 title = no,
@@ -1695,15 +1689,17 @@ private fun PickDocument(no: String, onBack: () -> Unit) {
                 LineGroupCards(
                     groups = displayGroups,
                     staged = { it.optDouble("qtyToHandle", 0.0) },
-                    modifier = Modifier.weight(1f),
+                    modifier = Modifier.fillMaxWidth(),
+                    expandRows = true,
                     onGroupClick = { if (!busy) groupTarget = it },
                 )
             } else {
                 LineGrid(
                     defs = GridColumns.pick, columns = columns, rows = displayLines,
-                    modifier = Modifier.weight(1f),
+                    modifier = Modifier.fillMaxWidth(),
                     isDone = { lineDone(it, LineModule.PICK) },
                     isPartial = { linePartial(it, LineModule.PICK) },
+                    expandRows = true,
                     onRowClick = { if (!busy) actionLine = it },
                 )
             }
@@ -1720,7 +1716,11 @@ private fun PickDocument(no: String, onBack: () -> Unit) {
             } else {
                 OutlinedButton(onClick = {
                     val lp = shipLp!!
-                    action("stopShippingLP", JSONObject().apply { put("lpNo", lp); put("printLabel", true) }.toString(), "Shipping LP kapandı") { r ->
+                    action("stopShippingLPToPrinter", JSONObject().apply {
+                        put("lpNo", lp)
+                        put("printLabel", true)
+                        put("printerId", getDefaultPrinter(context))
+                    }.toString(), "Shipping LP kapandı") { r ->
                         if (r.ok) shipLp = null
                     }
                 }, enabled = !busy, modifier = Modifier.weight(1f)) { Text("Sevk LP Kapat") }
@@ -1853,6 +1853,11 @@ private fun PickDocument(no: String, onBack: () -> Unit) {
             // ELOG: lot no el terminalinden girilir; seri girişi pick'te kapalı.
             showLotSerial = true,
             showSerial = false,
+            lotRequired = gt.lines.any { it.optBoolean("lotRequired", false) },
+            showAvailableLotLookup = true,
+            autoDetectLotFromStock = true,
+            locationCode = firstValue(gt.lines.first(), "locationCode"),
+            variantCode = firstValue(gt.lines.first(), "variantCode"),
             onDismiss = { groupTarget = null },
             onConfirm = { res ->
                 groupTarget = null

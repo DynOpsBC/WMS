@@ -19,8 +19,14 @@ page 72296 "DOPSWHS Printer List"
                 field("Location Code"; Rec."Location Code") { ApplicationArea = All; }
                 field("Format"; Rec."Format") { ApplicationArea = All; }
                 field("Printer Handle"; Rec."Printer Handle") { ApplicationArea = All; }
+                field("Station ID"; Rec."Station ID") { ApplicationArea = All; }
                 field(Active; Rec.Active) { ApplicationArea = All; }
+                field("Enable BC Reports"; Rec."Enable BC Reports") { ApplicationArea = All; }
                 field("Last Seen At"; Rec."Last Seen At") { ApplicationArea = All; }
+                field("Last Agent ID"; Rec."Last Agent ID") { ApplicationArea = All; }
+                field("Agent Status"; Rec."Agent Status") { ApplicationArea = All; }
+                field("Last Status At"; Rec."Last Status At") { ApplicationArea = All; }
+                field("Agent Version"; Rec."Agent Version") { ApplicationArea = All; }
             }
         }
     }
@@ -37,6 +43,7 @@ page 72296 "DOPSWHS Printer List"
                 Promoted = true;
                 PromotedCategory = Process;
                 PromotedIsBig = true;
+                Visible = not IsAzureDirect;
                 ToolTip = 'Generates a fresh agent secret. Copy it now — it will not be shown again.';
 
                 trigger OnAction()
@@ -50,4 +57,14 @@ page 72296 "DOPSWHS Printer List"
             }
         }
     }
+
+    trigger OnOpenPage()
+    var
+        Setup: Record "DOPSWHS Setup";
+    begin
+        IsAzureDirect := Setup.Get('') and (Setup."Print Channel" = Setup."Print Channel"::AzureDirect);
+    end;
+
+    var
+        IsAzureDirect: Boolean;
 }

@@ -361,6 +361,23 @@ object BcApi {
         return request(context, "POST", path, body)
     }
 
+    /**
+     * Sevk/fatura/post gibi BC tarafında birden fazla kayıt oluşturan işlemler
+     * normal okutma timeout'uyla kesilmez. Aynı endpoint ve idempotent anahtarlar
+     * kullanılır; yalnız bekleme penceresi uzundur.
+     */
+    suspend fun boundActionLongRunning(
+        context: Context,
+        entitySet: String,
+        key: String,
+        action: String,
+        body: String = "{}"
+    ): ApiResult {
+        val keySegment = if (key.contains("=") || key.startsWith("'")) key else "'${key.replace("'", "''")}'"
+        val path = "$entitySet($keySegment)/Microsoft.NAV.$action"
+        return request(context, "POST", path, body, longRunningClient)
+    }
+
     private val httpClient: OkHttpClient by lazy {
         OkHttpClient.Builder()
             // Depo hızı: kopuk/zayıf bağlantıda operatör 20 sn beklemesin.
@@ -383,9 +400,24 @@ object BcApi {
             .build()
     }
 
+    private val longRunningClient: OkHttpClient by lazy {
+        httpClient.newBuilder()
+            .connectTimeout(15, TimeUnit.SECONDS)
+            .readTimeout(90, TimeUnit.SECONDS)
+            .writeTimeout(30, TimeUnit.SECONDS)
+            .callTimeout(120, TimeUnit.SECONDS)
+            .build()
+    }
+
     private val jsonMediaType = "application/json; charset=utf-8".toMediaType()
 
-    private suspend fun request(context: Context, method: String, path: String, jsonBody: String?): ApiResult =
+    private suspend fun request(
+        context: Context,
+        method: String,
+        path: String,
+        jsonBody: String?,
+        client: OkHttpClient = httpClient,
+    ): ApiResult =
         withContext(Dispatchers.IO) {
             ensureFreshToken(context)
             val token = getToken(context)
@@ -409,7 +441,7 @@ object BcApi {
                     .header("Accept", "application/json")
                 // BC requires If-Match for PATCH/DELETE; "*" skips optimistic-concurrency check.
                 if (method == "PATCH" || method == "DELETE") builder.header("If-Match", "*")
-                httpClient.newCall(builder.build()).execute().use { resp ->
+                client.newCall(builder.build()).execute().use { resp ->
                     val code = resp.code
                     val body = resp.body?.string().let { if (it.isNullOrEmpty()) "(no body)" else it }
                     if (code != 401) return@use ApiResult(code in 200..299, code, body)
@@ -423,7 +455,7 @@ object BcApi {
                     saveRefreshToken(context, refreshed.second)
                     saveTokenExpiry(context, refreshed.third)
                     val retry = builder.header("Authorization", "Bearer ${refreshed.first}").build()
-                    httpClient.newCall(retry).execute().use { r2 ->
+                    client.newCall(retry).execute().use { r2 ->
                         val b2 = r2.body?.string().let { if (it.isNullOrEmpty()) "(no body)" else it }
                         ApiResult(r2.code in 200..299, r2.code, b2)
                     }

@@ -38,6 +38,7 @@ table 72016 "DOPSWHS Count Sheet Header"
     var
         Setup: Record "DOPSWHS Setup";
         NoSeries: Codeunit "No. Series";
+        CountMgmt: Codeunit "DOPSWHS Count Mgmt";
     begin
         if "No." = '' then begin
             if Setup.Get('') then
@@ -48,5 +49,7 @@ table 72016 "DOPSWHS Count Sheet Header"
         end;
         if "Created DateTime" = 0DT then
             "Created DateTime" := CurrentDateTime();
+        if "Source Phys. Inv. Journal Batch" = '' then
+            "Source Phys. Inv. Journal Batch" := CountMgmt.EnsurePhysInvBatch("No.");
     end;
 }

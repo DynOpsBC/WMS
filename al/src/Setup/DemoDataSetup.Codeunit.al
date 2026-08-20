@@ -202,7 +202,7 @@ codeunit 72058 "DOPSWHS Demo Data Setup"
     begin
         AddReportSelection(ReportSelection, 'LP-LABEL', ReportSelection.Usage::LpLabel, Report::"DOPSWHS LP Label", 10);
         AddReportSelection(ReportSelection, 'PICK-CONF', ReportSelection.Usage::Pick, 7340, 20);
-        AddReportSelection(ReportSelection, 'RECEIPT-POSTED', ReportSelection.Usage::Receipt, 7318, 30);
+        AddReportSelection(ReportSelection, 'RECEIPT-POSTED', ReportSelection.Usage::Receipt, 7308, 30);
     end;
 
     local procedure AddReportSelection(var ReportSelection: Record "DOPSWHS IWX Report Selection"; Code: Code[20]; Usage: Enum "DOPSWHS IWX Report Usage"; ReportId: Integer; Sequence: Integer)

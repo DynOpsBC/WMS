@@ -27,12 +27,22 @@ table 72288 "DOPSWHS Device Printer Map"
             Caption = 'Copies';
             DataClassification = CustomerContent;
             InitValue = 1;
+            MinValue = 0;
+            MaxValue = 10;
+            ToolTip = 'Number of copies used by this mapping. Set to 0 to use the printer default.';
         }
         field(5; Description; Text[100])
         {
             Caption = 'Description';
             FieldClass = FlowField;
             CalcFormula = lookup("DOPSWHS Printer".Description where("Code" = field("Printer Code")));
+            Editable = false;
+        }
+        field(6; "Station ID"; Code[128])
+        {
+            Caption = 'Station ID';
+            FieldClass = FlowField;
+            CalcFormula = lookup("DOPSWHS Printer"."Station ID" where("Code" = field("Printer Code")));
             Editable = false;
         }
     }

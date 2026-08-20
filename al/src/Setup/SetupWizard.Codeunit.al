@@ -186,17 +186,34 @@ codeunit 72031 "DOPSWHS Setup Wizard"
     end;
 
     procedure SeedReportSelections()
+    begin
+        SeedReportSelection('POSTED-SHIP', Enum::"DOPSWHS IWX Report Usage"::PostedShipment, 10, 7309, 7321);
+        SeedReportSelection('RECEIPT-POSTED', Enum::"DOPSWHS IWX Report Usage"::Receipt, 20, 7308, 7318);
+        SeedReportSelection('PACK-RECEIPT', Enum::"DOPSWHS IWX Report Usage"::PackReceipt, 30, 1306, 0);
+    end;
+
+    local procedure SeedReportSelection(Code: Code[20]; Usage: Enum "DOPSWHS IWX Report Usage"; Sequence: Integer; ReportId: Integer; LegacyReportId: Integer)
     var
         ReportSelection: Record "DOPSWHS IWX Report Selection";
     begin
-        if ReportSelection.Get('POSTED-SHIP') then
+        if ReportSelection.Get(Code) then begin
+            // Preserve customer-selected reports. Only repair an empty value or
+            // one of the known incorrect IDs shipped by an older seed.
+            if (ReportSelection."Report ID" = 0) or
+               ((LegacyReportId <> 0) and (ReportSelection."Report ID" = LegacyReportId))
+            then begin
+                ReportSelection.Usage := Usage;
+                ReportSelection.Sequence := Sequence;
+                ReportSelection."Report ID" := ReportId;
+                ReportSelection.Modify(true);
+            end;
             exit;
-
+        end;
         ReportSelection.Init();
-        ReportSelection."Code" := 'POSTED-SHIP';
-        ReportSelection.Usage := ReportSelection.Usage::PostedShipment;
-        ReportSelection.Sequence := 10;
-        ReportSelection."Report ID" := 7321;
+        ReportSelection."Code" := Code;
+        ReportSelection.Usage := Usage;
+        ReportSelection.Sequence := Sequence;
+        ReportSelection."Report ID" := ReportId;
         ReportSelection.Insert(true);
     end;
 

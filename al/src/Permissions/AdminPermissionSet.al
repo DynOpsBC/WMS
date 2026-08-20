@@ -27,6 +27,7 @@ permissionset 72094 "DOPSWHS-ADMIN"
         tabledata "DOPSWHS Count Counter" = RIMD,
         tabledata "DOPSWHS Warehouse Mgr Cue" = RIMD,
         tabledata "DOPSWHS DynOps WMS Cue" = RIMD,
+        tabledata "Lot No. Information" = RIMD,
         tabledata "DOPSWHS Print Job Queue" = RIMD,
         tabledata "DOPSWHS Print Job Log" = RIMD,
         tabledata "DOPSWHS Telemetry Buffer" = RIMD,
@@ -175,6 +176,8 @@ permissionset 72094 "DOPSWHS-ADMIN"
         page "DOPSWHS Test Run Result API" = X,
         page "DOPSWHS Count API" = X,
         page "DOPSWHS Count Sheet Line API" = X,
+        page "DOPSWHS Supplier Lot API" = X,
+        query "DOPSWHS Available Lot API" = X,
         page "DOPSWHS Migrate From WI" = X,
         codeunit "DOPSWHS Setup Wizard" = X,
         codeunit "DOPSWHS Barcode Parser" = X,
@@ -195,6 +198,13 @@ permissionset 72094 "DOPSWHS-ADMIN"
         codeunit "DOPSWHS Webhook Mgmt" = X,
         codeunit "DOPSWHS Legacy WI Publisher" = X,
         codeunit "DOPSWHS Print Dispatcher" = X,
+        codeunit "DOPSWHS BC Printer Provider" = X,
+        codeunit "DOPSWHS Print Queue Cleanup" = X,
+        codeunit "DOPSWHS Azure Print Bridge" = X,
+        codeunit "DOPSWHS Azure Dispatch Task" = X,
+        codeunit "DOPSWHS Azure Print Worker" = X,
+        codeunit "DOPSWHS Azure Print Status" = X,
+        codeunit "DOPSWHS ZPL Encoder" = X,
         codeunit "DOPSWHS PrintNode Client" = X,
         codeunit "DOPSWHS Migrate From WI" = X,
         codeunit "DOPSWHS Entitlement" = X,
@@ -260,6 +270,7 @@ permissionset 72094 "DOPSWHS-ADMIN"
         tabledata "Warehouse Receipt Line" = R,      // LP resolver reads receipt lines
         report "DOPSWHS Count Variance" = X,
         report "DOPSWHS LP Label" = X,
+        report "DOPSWHS Barcode Print Test" = X,
         tabledata "DOPSWHS Printer" = RIMD,
         tabledata "DOPSWHS Device Printer Map" = RIMD,
         table "DOPSWHS Printer" = X,
@@ -269,6 +280,9 @@ permissionset 72094 "DOPSWHS-ADMIN"
         page "DOPSWHS Device Printer Map" = X,
         page "DOPSWHS Print Job API" = X,
         page "DOPSWHS Printer API" = X,
+        page "DOPSWHS Print Job Queue" = X,
+        page "DOPSWHS Printer Agent API" = X,
+        page "DOPSWHS Azure Print Secrets" = X,
         codeunit "DOPSWHS Self-Host Print Client" = X,
         codeunit "DOPSWHS License Mgmt" = X,
         // ELOG paketleme istasyonu + sepet-sipariş eşleştirme + multi-order pick
@@ -313,5 +327,8 @@ permissionset 72094 "DOPSWHS-ADMIN"
         codeunit "Sales Warehouse Mgt." = X,
         codeunit "Release Sales Document" = X,
         codeunit "Whse.-Shipment Release" = X,
-        report "Whse.-Shipment - Create Pick" = X;
+        report "Whse.-Shipment - Create Pick" = X,
+        report "Whse. - Posted Receipt" = X,
+        report "Whse. - Posted Shipment" = X,
+        report "Standard Sales - Invoice" = X;
 }

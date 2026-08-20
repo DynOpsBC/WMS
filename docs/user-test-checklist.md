@@ -53,6 +53,11 @@ Role Center açılır açılmaz ekranın üstünde **🧪 Demo Data (Danışman 
   - Print Channel = `BCNative`
   - Max LP Nesting Depth = `3`
 
+> `BCNative` yeni/demo kurulumun güvenli başlangıç değeridir. Fiziksel terminal
+> baskı testlerinden önce [Azure Direct kurulumunu](azure-direct-print-setup.md)
+> tamamlayın; başarılı config importundan sonra Print Channel=`AzureDirect`
+> olmalıdır.
+
 ### Test 2.2 — Number Series
 
 - [ ] Search box → **No. Series**
@@ -159,7 +164,8 @@ Role Center açılır açılmaz ekranın üstünde **🧪 Demo Data (Danışman 
 
 - [ ] Whse Receipt açıkken → action **Start LP** (DOPSWHS Mobile group)
 - [ ] LP otomatik yaratıldı → notification görünür
-- [ ] Lines'a item ekleyin → **Stop LP** → label yazıcıya gider (BCNative PDF)
+- [ ] Lines'a item ekleyin → **Stop LP** → ZPL etiket, terminalde seçili **Etiket** yazıcısına gider
+- [ ] Mal kabul belgesini yazdırarak post edin → PDF, terminalde seçili **Belge** yazıcısına gider
 - [ ] **Post Receipt** → Posted line'da `LP No.` görünür
 
 ---
@@ -295,7 +301,10 @@ Role Center açılır açılmaz ekranın üstünde **🧪 Demo Data (Danışman 
 ### Senaryo 11.3 — Print Job Log
 
 - [ ] Sol menü → **Sistem → Print Job Log**
-- [ ] LP Stop sırasında oluşan job entry'leri (BCNative kanaldaysa)
+- [ ] Azure Direct ajan bağlı ve hedef yazıcı `Online`
+- [ ] LP Stop sırasında oluşan iş `Queued → Dispatched → Sent` olur
+- [ ] Job ID, Station ID ve fiziksel çıktının aynı test işine ait olduğu doğrulanır
+- [ ] **Failed** veya 8 günden uzun **Dispatched** iş varsa agent logu ve Azure DLQ kontrol edilir; sonucu bilinmeyen iş operatör kontrolü olmadan tekrar basılmaz
 
 ---
 

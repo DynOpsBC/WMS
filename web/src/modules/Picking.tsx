@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
 import * as BcApi from "../lib/bcApi";
+import { getDefaultPrinter } from "./Printers";
 import { friendlyQcStatus, isQcBlocked, extractInspectionNo } from "../lib/qcErrorParser";
 import { navigateTo } from "../main";
 import { DocHeader, EmptyState, Modal, NumberField, Pill, StatusText } from "../ui/primitives";
@@ -168,8 +169,8 @@ function PickDocument({ no, onBack }: { no: string; onBack: () => void }) {
             disabled={busy}
             onClick={() =>
               action(
-                "stopShippingLP",
-                JSON.stringify({ lpNo: shipLp, printLabel: true }),
+                "stopShippingLPToPrinter",
+                JSON.stringify({ lpNo: shipLp, printLabel: true, printerId: getDefaultPrinter() }),
                 "Shipping LP kapandı + SSCC",
                 () => setShipLp(null),
               )

@@ -54,6 +54,7 @@ func (c *Client) ListJobs(ctx context.Context) ([]Job, error) {
 	q := url.Values{}
 	q.Set("printer", c.cfg.PrinterID)
 	q.Set("tenant", c.cfg.TenantID)
+	q.Set("agent", c.cfg.AgentID)
 	q.Set("top", "10")
 	endpoint := fmt.Sprintf("%s/api/print-jobs?%s", c.cfg.RelayURL, q.Encode())
 
@@ -84,12 +85,12 @@ func (c *Client) Claim(ctx context.Context, jobID int) error {
 }
 
 func (c *Client) MarkSuccess(ctx context.Context, jobID int, message string) error {
-	body, _ := json.Marshal(map[string]string{"status": "Sent", "message": message})
+	body, _ := json.Marshal(map[string]string{"status": "Sent", "message": message, "agentId": c.cfg.AgentID})
 	return c.post(ctx, fmt.Sprintf("/api/print-jobs/%d/status", jobID), body)
 }
 
 func (c *Client) MarkFailure(ctx context.Context, jobID int, message string) error {
-	body, _ := json.Marshal(map[string]string{"status": "Failed", "message": message})
+	body, _ := json.Marshal(map[string]string{"status": "Failed", "message": message, "agentId": c.cfg.AgentID})
 	return c.post(ctx, fmt.Sprintf("/api/print-jobs/%d/status", jobID), body)
 }
 
@@ -118,19 +119,20 @@ func (c *Client) post(ctx context.Context, path string, body []byte) error {
 
 func (c *Client) sign(req *http.Request, body []byte) {
 	ts := strconv.FormatInt(time.Now().Unix(), 10)
-	// Per-request nonce: relay caches each nonce for 5 minutes and rejects
-	// reuse. Combined with the timestamp window, replay attacks against a
-	// captured request become impossible.
+	// Per-request nonce: relay retains it until the signed timestamp leaves
+	// the accepted window and rejects reuse. Combined with the timestamp
+	// check, this blocks replay on a running relay instance.
 	nonceBytes := make([]byte, 16)
 	_, _ = rand.Read(nonceBytes)
 	nonce := hex.EncodeToString(nonceBytes)
 
 	mac := hmac.New(sha256.New, []byte(c.cfg.Secret))
+	canonical := req.Method + "\n" + req.URL.EscapedPath() + "\n" + req.URL.RawQuery + "\n" + string(body)
 	mac.Write([]byte(ts))
 	mac.Write([]byte("."))
 	mac.Write([]byte(nonce))
 	mac.Write([]byte("."))
-	mac.Write(body)
+	mac.Write([]byte(canonical))
 	sig := hex.EncodeToString(mac.Sum(nil))
 	req.Header.Set("X-Bcwms-Printer-Id", c.cfg.PrinterID)
 	req.Header.Set("X-Bcwms-Timestamp", ts)

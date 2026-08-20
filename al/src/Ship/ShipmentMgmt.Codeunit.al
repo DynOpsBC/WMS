@@ -1,12 +1,14 @@
 codeunit 72047 "DOPSWHS Shipment Mgmt"
 {
     Access = Public;
+    Permissions = tabledata "Warehouse Entry" = r;
 
     procedure ConfirmShipmentLine(var WhseShipmentLine: Record "Warehouse Shipment Line"; QtyToShip: Decimal; LotNo: Code[50]; LicensePlateNo: Code[20]; SSCC: Code[18])
     var
         WhseShipmentHeader: Record "Warehouse Shipment Header";
     begin
         WhseShipmentLine.Validate("Qty. to Ship", QtyToShip);
+        EnsureShipmentLot(WhseShipmentLine, LotNo);
         WhseShipmentLine."DOPSWHS Lot No." := LotNo;
         WhseShipmentLine."LP No." := LicensePlateNo;
         WhseShipmentLine.SSCC := SSCC;
@@ -106,12 +108,19 @@ codeunit 72047 "DOPSWHS Shipment Mgmt"
     end;
 
     procedure PostShipment(var WhseShipmentHeader: Record "Warehouse Shipment Header"; PrintPackingSlip: Boolean; Invoice: Boolean)
+    begin
+        PostShipment(WhseShipmentHeader, PrintPackingSlip, Invoice, '');
+    end;
+
+    procedure PostShipment(var WhseShipmentHeader: Record "Warehouse Shipment Header"; PrintPackingSlip: Boolean; Invoice: Boolean; PrinterId: Code[50])
     var
         WhseShipmentLine: Record "Warehouse Shipment Line";
         PostedWhseShipmentLine: Record "Posted Whse. Shipment Line";
         PostedWhseShipmentHeader: Record "Posted Whse. Shipment Header";
         WhsePostShipment: Codeunit "Whse.-Post Shipment";
         WhseShipmentRelease: Codeunit "Whse.-Shipment Release";
+        PrintDispatcher: Codeunit "DOPSWHS Print Dispatcher";
+        Telemetry: Codeunit "DOPSWHS Telemetry";
         LineLp: Dictionary of [Integer, Code[20]];
         LineSscc: Dictionary of [Integer, Code[18]];
         LpNo: Code[20];
@@ -120,6 +129,11 @@ codeunit 72047 "DOPSWHS Shipment Mgmt"
         LpCount: Integer;
         PostedNo: Code[20];
     begin
+        EnsureRequiredShipmentLots(WhseShipmentHeader."No.");
+        if PrintPackingSlip then begin
+            EnsureShipmentReportConfigured();
+            PrintDispatcher.EnsureDocumentPrinter(PrinterId, Enum::"DOPSWHS IWX Report Usage"::PostedShipment);
+        end;
         // Mobile-friendly: auto-release if the shipment is still Open (e.g. a Qty. to Ship edit
         // reopened it), so the operator doesn't have to re-release in BC before posting.
         if WhseShipmentHeader.Status <> WhseShipmentHeader.Status::Released then begin
@@ -165,10 +179,82 @@ codeunit 72047 "DOPSWHS Shipment Mgmt"
 
         StampHeaders(WhseShipmentHeader."No.", PostedNo);
 
-        if PrintPackingSlip then
-            QueuePostedShipmentPrint(PostedNo);
+        if PrintPackingSlip then begin
+            ClearLastError();
+            if not QueuePostedShipmentPrint(PostedNo, PrinterId) then
+                Telemetry.LogWarning(
+                    'Print.ShipmentFailed',
+                    CopyStr(StrSubstNo('Shipment %1 posted, but its print job could not be queued: %2', PostedNo, GetLastErrorText()), 1, 250),
+                    WhseShipmentHeader."Assigned User ID");
+        end;
 
         LogShipmentPosted(WhseShipmentHeader."No.", LineCount, LpCount + LineLp.Count());
+    end;
+
+    /// <summary>
+    /// Sevkiyat satırındaki ürünün lot takipli olup olmadığını döndürür.
+    /// Mobil uygulama alan etiketini ve Onayla butonunu bu bilgiyle yönetir;
+    /// asıl zorunluluk Confirm/Post içinde sunucu tarafında da uygulanır.
+    /// </summary>
+    procedure ShipmentLineRequiresLot(WhseShipmentLine: Record "Warehouse Shipment Line"): Boolean
+    var
+        Item: Record Item;
+        ItemTrackingCode: Record "Item Tracking Code";
+    begin
+        if not Item.Get(WhseShipmentLine."Item No.") then
+            exit(false);
+        if Item."Item Tracking Code" = '' then
+            exit(false);
+        if not ItemTrackingCode.Get(Item."Item Tracking Code") then
+            exit(false);
+        exit(
+            ItemTrackingCode."Lot Specific Tracking" or
+            ItemTrackingCode."Lot Warehouse Tracking" or
+            ItemTrackingCode."Lot Sales Outbound Tracking");
+    end;
+
+    local procedure EnsureRequiredShipmentLots(ShipmentNo: Code[20])
+    var
+        WhseShipmentLine: Record "Warehouse Shipment Line";
+    begin
+        WhseShipmentLine.SetRange("No.", ShipmentNo);
+        WhseShipmentLine.SetFilter("Qty. to Ship", '>0');
+        if WhseShipmentLine.FindSet() then
+            repeat
+                EnsureShipmentLot(WhseShipmentLine, WhseShipmentLine."DOPSWHS Lot No.");
+            until WhseShipmentLine.Next() = 0;
+    end;
+
+    local procedure EnsureShipmentLot(WhseShipmentLine: Record "Warehouse Shipment Line"; LotNo: Code[50])
+    var
+        WarehouseEntry: Record "Warehouse Entry";
+        AvailableQtyBase: Decimal;
+    begin
+        if (WhseShipmentLine."Qty. to Ship" <= 0) or (not ShipmentLineRequiresLot(WhseShipmentLine)) then
+            exit;
+
+        if LotNo = '' then
+            Error(
+                '%1 ürününün %2 sevkiyat satırında lot numarası zorunludur. Stoktaki lotlardan birini seçin.',
+                WhseShipmentLine."Item No.", WhseShipmentLine."Line No.");
+
+        WarehouseEntry.SetCurrentKey(
+            "Item No.", "Bin Code", "Location Code", "Variant Code",
+            "Unit of Measure Code", "Lot No.");
+        WarehouseEntry.SetRange("Item No.", WhseShipmentLine."Item No.");
+        WarehouseEntry.SetRange("Variant Code", WhseShipmentLine."Variant Code");
+        WarehouseEntry.SetRange("Location Code", WhseShipmentLine."Location Code");
+        WarehouseEntry.SetRange("Lot No.", LotNo);
+        WarehouseEntry.CalcSums("Qty. (Base)");
+        AvailableQtyBase := WarehouseEntry."Qty. (Base)";
+
+        if AvailableQtyBase < WhseShipmentLine."Qty. to Ship (Base)" then
+            Error(
+                '%1 lotunda %2 lokasyonunda yeterli stok yok. Mevcut (temel): %3, sevk edilecek (temel): %4.',
+                LotNo,
+                WhseShipmentLine."Location Code",
+                AvailableQtyBase,
+                WhseShipmentLine."Qty. to Ship (Base)");
     end;
 
     local procedure StampHeaders(WhseShipmentNo: Code[20]; PostedShipmentNo: Code[20])
@@ -241,16 +327,36 @@ codeunit 72047 "DOPSWHS Shipment Mgmt"
         LP.Modify(true);
     end;
 
-    local procedure QueuePostedShipmentPrint(PostedShipmentNo: Code[20])
+    [TryFunction]
+    local procedure QueuePostedShipmentPrint(PostedShipmentNo: Code[20]; PrinterId: Code[50])
     var
+        PostedShipment: Record "Posted Whse. Shipment Header";
         ReportSelection: Record "DOPSWHS IWX Report Selection";
         PrintDispatcher: Codeunit "DOPSWHS Print Dispatcher";
+        SourceRecord: RecordRef;
     begin
         if PostedShipmentNo = '' then
-            exit;
+            Error('The posted warehouse shipment could not be found for printing.');
+        ReportSelection.SetCurrentKey(Usage, Sequence);
         ReportSelection.SetRange(Usage, ReportSelection.Usage::PostedShipment);
-        if ReportSelection.FindFirst() then
-            PrintDispatcher.QueueReport(PostedShipmentNo, ReportSelection."Report ID");
+        ReportSelection.SetFilter("Report ID", '<>0');
+        if not ReportSelection.FindFirst() then
+            Error('No report is configured for Posted Shipment printing.');
+        PostedShipment.Get(PostedShipmentNo);
+        PostedShipment.SetRecFilter();
+        SourceRecord.GetTable(PostedShipment);
+        PrintDispatcher.PrintReport(PostedShipmentNo, ReportSelection."Report ID", PrinterId, 1, ReportSelection.Usage, SourceRecord);
+    end;
+
+    local procedure EnsureShipmentReportConfigured()
+    var
+        ReportSelection: Record "DOPSWHS IWX Report Selection";
+    begin
+        ReportSelection.SetCurrentKey(Usage, Sequence);
+        ReportSelection.SetRange(Usage, ReportSelection.Usage::PostedShipment);
+        ReportSelection.SetFilter("Report ID", '<>0');
+        if not ReportSelection.FindFirst() then
+            Error('No report is configured for Posted Shipment printing.');
     end;
 
     local procedure LogShipmentPosted(DocNo: Code[20]; LineCount: Integer; LpCount: Integer)

@@ -19,6 +19,7 @@ page 72299 "DOPSWHS Print Job API"
             {
                 field(jobId; Rec."Job ID") { Caption = 'jobId'; }
                 field(sourceDoc; Rec."Source Doc") { Caption = 'sourceDoc'; }
+                field(reportId; Rec."Report ID") { Caption = 'reportId'; }
                 field(printerId; Rec."Printer ID") { Caption = 'printerId'; }
                 field(channel; Rec.Channel) { Caption = 'channel'; }
                 field(format; Rec."Format") { Caption = 'format'; }
@@ -32,6 +33,14 @@ page 72299 "DOPSWHS Print Job API"
                 field(claimedAt; Rec."Claimed At") { Caption = 'claimedAt'; }
                 field(lastError; Rec."Last Error") { Caption = 'lastError'; }
                 field(retryCount; Rec."Retry Count") { Caption = 'retryCount'; }
+                field(correlationId; Rec."Correlation ID") { Caption = 'correlationId'; }
+                field(cloudJobId; Rec."Cloud Job ID") { Caption = 'cloudJobId'; }
+                field(stationId; Rec."Station ID") { Caption = 'stationId'; }
+                field(blobName; Rec."Blob Name") { Caption = 'blobName'; }
+                field(payloadSha256; Rec."Payload SHA256") { Caption = 'payloadSha256'; }
+                field(dispatchedAt; Rec."Dispatched At") { Caption = 'dispatchedAt'; }
+                field(completedAt; Rec."Completed At") { Caption = 'completedAt'; }
+                field(nextRetryAt; Rec."Next Retry At") { Caption = 'nextRetryAt'; }
             }
         }
     }
@@ -42,47 +51,37 @@ page 72299 "DOPSWHS Print Job API"
     trigger OnAfterGetRecord()
     var
         InStream: InStream;
-        RawBytes: Text;
         Base64: Codeunit "Base64 Convert";
-        TempBlob: Codeunit "Temp Blob";
-        TempOut: OutStream;
-        TempIn: InStream;
     begin
         Clear(PayloadBase64);
         Rec.CalcFields(ZPL);
         if not Rec.ZPL.HasValue() then
             exit;
         Rec.ZPL.CreateInStream(InStream);
-        InStream.ReadText(RawBytes);
-        TempBlob.CreateOutStream(TempOut);
-        TempOut.WriteText(RawBytes);
-        TempBlob.CreateInStream(TempIn);
-        PayloadBase64 := Base64.ToBase64(TempIn);
+        PayloadBase64 := Base64.ToBase64(InStream);
     end;
 
     [ServiceEnabled]
-    procedure claim(agentId: Code[50]): Boolean
+    procedure claimForPrinter(agentId: Code[50]; printerId: Code[20]): Boolean
     var
         Client: Codeunit "DOPSWHS Self-Host Print Client";
     begin
-        exit(Client.MarkClaimed(Rec."Job ID", agentId));
+        exit(Client.MarkClaimed(Rec."Job ID", agentId, printerId));
     end;
 
     [ServiceEnabled]
-    procedure markSuccess(message: Text[250]): Boolean
+    procedure markSuccessForPrinter(message: Text[250]; agentId: Code[50]; printerId: Code[20]): Boolean
     var
         Client: Codeunit "DOPSWHS Self-Host Print Client";
     begin
-        Client.MarkStatus(Rec."Job ID", true, message);
-        exit(true);
+        exit(Client.MarkStatus(Rec."Job ID", true, message, agentId, printerId));
     end;
 
     [ServiceEnabled]
-    procedure markFailure(message: Text[250]): Boolean
+    procedure markFailureForPrinter(message: Text[250]; agentId: Code[50]; printerId: Code[20]): Boolean
     var
         Client: Codeunit "DOPSWHS Self-Host Print Client";
     begin
-        Client.MarkStatus(Rec."Job ID", false, message);
-        exit(true);
+        exit(Client.MarkStatus(Rec."Job ID", false, message, agentId, printerId));
     end;
 }

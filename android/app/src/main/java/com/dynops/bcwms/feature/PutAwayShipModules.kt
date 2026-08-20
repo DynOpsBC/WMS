@@ -1,8 +1,10 @@
 package com.dynops.bcwms.feature
 
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -99,7 +101,7 @@ private fun PutAwayDocument(no: String, onBack: () -> Unit) {
     var lines by remember { mutableStateOf<List<JSONObject>>(emptyList()) }
     var status by remember { mutableStateOf("") }
     var busy by remember { mutableStateOf(false) }
-    var binLine by remember { mutableStateOf<JSONObject?>(null) }
+    var guidedPair by remember { mutableStateOf<PutAwayPair?>(null) }
     var scanFilter by remember { mutableStateOf("") }
     var showBulkBin by remember { mutableStateOf(false) }
     var showBins by remember { mutableStateOf(false) }
@@ -211,15 +213,15 @@ private fun PutAwayDocument(no: String, onBack: () -> Unit) {
 
     val h = header
     DocumentScanHandler(
-        enabled = binLine == null && !showBulkBin,
+        enabled = guidedPair == null && !showBulkBin,
         lines = lines,
-        onSingleMatch = { line, _ -> scanFilter = ""; binLine = line },
+        onSingleMatch = { line, _ -> scanFilter = ""; guidedPair = groupPutAwayPairs(putAwayPairLines(line, lines)).firstOrNull() },
         onMultiMatch = { itemNo, _ -> scanFilter = itemNo; status = "TAMAM: '$itemNo' için birden fazla satır — birini seçin" },
         onNoMatch = { r -> status = "⚠️ '${r.itemNo ?: r.value}' bu belgede yok" },
     )
     val displayLines = if (scanFilter.isBlank()) lines else lines.filter { matchLinesByBarcode(listOf(it), com.dynops.bcwms.scanner.BarcodeIntentResolver.resolve(scanFilter)).isNotEmpty() }
     Column(Modifier.fillMaxSize()) {
-        Column(Modifier.weight(1f).padding(12.dp)) {
+        Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(12.dp)) {
             TextButton(onClick = onBack) { Text("‹ Belge Listesi") }
             DocHeaderCard(
                 title = no,
@@ -241,12 +243,12 @@ private fun PutAwayDocument(no: String, onBack: () -> Unit) {
                 Spacer(Modifier.weight(1f))
                 TextButton(onClick = { showBins = true }) { Text("📍 Binler", fontSize = 12.sp) }
             }
-            Text("Bir yerleştirmeye dokunun → hedef bini ve miktarı onaylayın.", fontSize = 12.sp, color = Color.Gray)
+            Text("Bir yerleştirmeye dokunun → kaynak raf, ürün ve hedef raf okutularak doğrulanır.", fontSize = 12.sp, color = Color.Gray)
             if (scanFilter.isNotBlank()) { ScanFilterChip(scanFilter) { scanFilter = "" }; Spacer(Modifier.height(4.dp)) }
             Spacer(Modifier.height(8.dp))
-            LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                items(pairs) { pair -> PutAwayPairCard(pair, staged = pair.place.optInt("lineNo") in stagedLineNos) { binLine = pair.place } }
-                if (pairs.isEmpty() && !busy) item { EmptyState("Yerleştirilecek satır yok.") }
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                pairs.forEach { pair -> PutAwayPairCard(pair, staged = pair.place.optInt("lineNo") in stagedLineNos) { guidedPair = pair } }
+                if (pairs.isEmpty() && !busy) EmptyState("Yerleştirilecek satır yok.")
             }
         }
         BottomActionBar {
@@ -280,25 +282,25 @@ private fun PutAwayDocument(no: String, onBack: () -> Unit) {
             onSelect = null,
         )
     }
-    val bl = binLine
-    if (bl != null) {
-        PutAwayBinSheet(
-            line = bl,
+    val gp = guidedPair
+    if (gp != null) {
+        PutAwayGuidedSheet(
+            pair = gp,
             locationCode = h?.optString("locationCode") ?: "",
-            onDismiss = { binLine = null },
+            onDismiss = { guidedPair = null },
             onConfirm = { bin, qty ->
-                binLine = null
+                guidedPair = null
                 scope.launch {
                     busy = true; status = "Satır güncelleniyor..."
                     var okCount = 0
-                    val affected = putAwayPairLines(bl, lines)
+                    val affected = putAwayPairLines(gp.place, lines)
                     for (ln in affected) {
                         if (patchPutAwayLine(ln, qty, bin)) okCount++
                     }
                     busy = false
                     if (okCount == affected.size) {
                         stagedLineNos = stagedLineNos + affected.map { it.optInt("lineNo") }
-                        status = "TAMAM: ${affected.size} satır hazırlandı → $bin"
+                        status = "TAMAM: ${affected.size} satır doğrulandı → $bin"
                         reload()
                     }
                 }
@@ -409,80 +411,221 @@ private fun BinPill(label: String, bin: String, accent: Color) {
 private fun odataLiteral(value: String): String = value.replace("'", "''")
 
 /** Bottom sheet: scan/enter target bin (with "Öner" = suggestBin) + qty. */
+private enum class PutAwayStep { SOURCE_BIN, ITEM, TARGET_BIN, QTY }
+
+/**
+ * Yönlendirilmiş yerleştirme: kaynak raf → ürün → hedef raf → miktar.
+ *
+ * Her adımda okutulan barkod belgedeki beklenen değerle karşılaştırılır; uyuşmazsa
+ * adım İLERLEMEZ (sert blok). Amaç, depocunun yanlış raftan alıp yanlış rafa
+ * koymasını fiziksel olarak engellemek — ekranda doğru satır seçili olsa bile.
+ *
+ * Kaynak raf yalnızca BC'nin Take satırı bir bin veriyorsa sorulur; hedef raf ise
+ * BC bir bin önerdiyse doğrulanır, önermediyse okutulan bin serbestçe kabul edilir.
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun PutAwayBinSheet(line: JSONObject, locationCode: String, onDismiss: () -> Unit, onConfirm: (bin: String, qty: Double) -> Unit) {
+private fun PutAwayGuidedSheet(
+    pair: PutAwayPair,
+    locationCode: String,
+    onDismiss: () -> Unit,
+    onConfirm: (bin: String, qty: Double) -> Unit,
+) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    var bin by remember { mutableStateOf(line.optString("binCode")) }
+    val place = pair.place
+    val pairLines = listOfNotNull(pair.take, place)
+    val expectedSource = pair.take?.optString("binCode").orEmpty().trim()
+    val expectedTarget = place.optString("binCode").trim()
+    val expectedItem = place.optString("itemNo").trim()
+
+    val steps = buildList {
+        if (expectedSource.isNotBlank()) add(PutAwayStep.SOURCE_BIN)
+        add(PutAwayStep.ITEM)
+        add(PutAwayStep.TARGET_BIN)
+        add(PutAwayStep.QTY)
+    }
+    var step by remember(place.optInt("lineNo")) { mutableStateOf(steps.first()) }
+    var scan by remember { mutableStateOf("") }
+    var error by remember { mutableStateOf("") }
+    var targetBin by remember { mutableStateOf("") }
+    var hint by remember { mutableStateOf("") }
     var showBinList by remember { mutableStateOf(false) }
-    // Öndeğer = KALAN miktar (kısmi register'dan sonra kaldığı yerden devam).
-    val outstanding = line.optDouble("qtyOutstanding", Double.NaN)
-    val handled = line.optDouble("qtyHandled", 0.0)
+
+    val outstanding = place.optDouble("qtyOutstanding", Double.NaN)
+    val handled = place.optDouble("qtyHandled", 0.0)
     val prefill = when {
         !outstanding.isNaN() && outstanding > 0 -> outstanding
-        line.optDouble("qtyToHandle", 0.0) > 0 -> line.optDouble("qtyToHandle", 0.0)
-        else -> line.optDouble("quantity", 0.0)
+        place.optDouble("qtyToHandle", 0.0) > 0 -> place.optDouble("qtyToHandle", 0.0)
+        else -> place.optDouble("quantity", 0.0)
     }
-    var qty by remember { mutableStateOf(prefill.let { if (it == it.toLong().toDouble()) it.toLong().toString() else it.toString() }) }
-    var hint by remember { mutableStateOf("") }
-    com.dynops.bcwms.ui.SheetScaffold(onDismiss = onDismiss, contentPadding = androidx.compose.foundation.layout.PaddingValues(20.dp)) {
+    var qty by remember { mutableStateOf(fmtNum(prefill)) }
+
+    // Bin barkodu bazen ham metin, bazen resolver'dan geçmiş değerdir; ikisini de dene.
+    fun binEquals(raw: String, expected: String): Boolean {
+        val candidates = listOf(raw.trim(), BarcodeIntentResolver.resolve(raw).value.trim())
+        return candidates.any { it.isNotBlank() && it.equals(expected, ignoreCase = true) }
+    }
+
+    fun itemMatches(raw: String): Boolean {
+        val resolved = BarcodeIntentResolver.resolve(raw)
+        if (matchLinesByBarcode(pairLines, resolved, listOf("itemNo", "itemReference", "gtin")).isNotEmpty()) return true
+        val needle = (resolved.itemNo ?: resolved.value).trim()
+        return needle.isNotBlank() && needle.equals(expectedItem, ignoreCase = true)
+    }
+
+    fun advance() {
+        error = ""
+        scan = ""
+        step = steps[(steps.indexOf(step) + 1).coerceAtMost(steps.lastIndex)]
+    }
+
+    fun submit(raw: String) {
+        val v = raw.trim()
+        if (v.isBlank()) return
+        when (step) {
+            PutAwayStep.SOURCE_BIN ->
+                if (binEquals(v, expectedSource)) advance()
+                else error = "❌ Yanlış raf. Beklenen: $expectedSource · Okuttuğunuz: $v"
+            PutAwayStep.ITEM ->
+                if (itemMatches(v)) advance()
+                else error = "❌ Yanlış ürün. Beklenen: $expectedItem · Okuttuğunuz: $v"
+            PutAwayStep.TARGET_BIN -> {
+                if (expectedTarget.isNotBlank() && !binEquals(v, expectedTarget)) {
+                    error = "❌ Yanlış hedef raf. Beklenen: $expectedTarget · Okuttuğunuz: $v"
+                } else {
+                    targetBin = BarcodeIntentResolver.resolve(v).value.trim().ifBlank { v }
+                    advance()
+                }
+            }
+            PutAwayStep.QTY -> Unit
+        }
+    }
+
+    com.dynops.bcwms.ui.SheetScaffold(onDismiss = onDismiss, contentPadding = PaddingValues(20.dp)) {
         if (showBinList) {
-            TextButton(onClick = { showBinList = false }) { Text("‹ Hedef Bin") }
+            TextButton(onClick = { showBinList = false }) { Text("‹ Geri") }
             BinListContent(
                 locationCode = locationCode,
-                onSelect = {
-                    bin = it
-                    showBinList = false
-                },
+                onSelect = { picked -> showBinList = false; submit(picked) },
             )
         } else {
-            Text("Hedef Bin", fontWeight = FontWeight.Bold, fontSize = 18.sp)
+            val stepNo = steps.indexOf(step) + 1
+            Text("Yerleştirme · Adım $stepNo/${steps.size}", fontWeight = FontWeight.Bold, fontSize = 18.sp)
             Text(
-                buildString {
-                    append("Ürün: ${line.optString("itemNo")}")
-                    if (!outstanding.isNaN()) append(" · Kalan: ${fmtNum(outstanding)}")
-                    if (handled > 0) append(" · Konan: ${fmtNum(handled)}")
-                },
-                fontSize = 12.sp, color = Color.Gray
+                "${pair.itemNo}${if (pair.description.isNotBlank()) " — ${pair.description}" else ""}",
+                fontSize = 12.sp, color = Color.Gray,
             )
-            if (!outstanding.isNaN() && (handled > 0 || outstanding > 0)) {
-                Text(
-                    "Kısmi miktar girebilirsiniz — kalan, kayıt sonrası listede sarı satır olarak devam eder.",
-                    fontSize = 11.sp, color = Color.Gray
-                )
+            Spacer(Modifier.height(8.dp))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                BinPill("📤 Al", expectedSource.ifBlank { "-" }, Color(0xFF64748B))
+                Text("  →  ", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = Color(0xFF6366F1))
+                BinPill("📥 Koy", targetBin.ifBlank { expectedTarget.ifBlank { "Okutun" } }, Color(0xFF16A34A))
             }
-            Spacer(Modifier.height(12.dp))
-            ScanField("Bin", bin, { bin = it }, modifier = Modifier.fillMaxWidth(), onScanned = {
-                bin = BarcodeIntentResolver.resolve(it).value
-            })
-            Spacer(Modifier.height(6.dp))
-            OutlinedButton(onClick = {
-                scope.launch {
-                    hint = "Bin öneriliyor..."
-                    val body = JSONObject().apply {
-                        put("itemNo", line.optString("itemNo"))
-                        put("qty", qty.toDoubleOrNull() ?: 0.0)
-                        put("locationCode", locationCode)
-                    }.toString()
-                    // suggestBin is bound to a record; call on the line's parent put-away header is not
-                    // possible, so target the entity set generically with the line key context.
-                    val r = BcApi.post(context, "putAways('${line.optString("no")}')/Microsoft.NAV.suggestBin", body)
-                    hint = if (r.ok) {
-                        val suggested = BcApi.scalarValue(r.body)
-                        if (suggested.isNotBlank()) { bin = suggested; "Önerilen bin: $suggested" } else "Öneri boş döndü"
-                    } else "Öneri alınamadı (HTTP ${r.httpCode})"
+            Spacer(Modifier.height(14.dp))
+
+            when (step) {
+                PutAwayStep.SOURCE_BIN -> {
+                    Text("1) Bulunduğunuz rafı okutun", fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
+                    Text("Doğru raftan aldığınızı teyit eder. Beklenen: $expectedSource", fontSize = 12.sp, color = Color.Gray)
                 }
-            }) { Text("🎯 Bin Öner") }
-            Spacer(Modifier.height(6.dp))
-            OutlinedButton(onClick = { showBinList = true }, modifier = Modifier.fillMaxWidth()) { Text("📍 Bin Listesinden Seç") }
-            if (hint.isNotBlank()) { Spacer(Modifier.height(4.dp)); Text(hint, fontSize = 12.sp, color = Color.Gray) }
+                PutAwayStep.ITEM -> {
+                    Text("2) Ürünü okutun", fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
+                    Text("Doğru ürünü aldığınızı teyit eder. Beklenen: $expectedItem", fontSize = 12.sp, color = Color.Gray)
+                }
+                PutAwayStep.TARGET_BIN -> {
+                    Text("3) Koyacağınız rafı okutun", fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
+                    Text(
+                        if (expectedTarget.isNotBlank()) "Beklenen: $expectedTarget"
+                        else "Belgede hedef raf yok — okuttuğunuz raf kullanılacak.",
+                        fontSize = 12.sp, color = Color.Gray,
+                    )
+                }
+                PutAwayStep.QTY -> {
+                    Text("4) Miktarı onaylayın", fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
+                    Text(
+                        buildString {
+                            append("Hedef raf: $targetBin")
+                            if (!outstanding.isNaN()) append(" · Kalan: ${fmtNum(outstanding)}")
+                            if (handled > 0) append(" · Konan: ${fmtNum(handled)}")
+                        },
+                        fontSize = 12.sp, color = Color.Gray,
+                    )
+                }
+            }
             Spacer(Modifier.height(10.dp))
-            OutlinedTextField(qty, { qty = it.filter { c -> c.isDigit() || c == '.' } }, label = { Text("Miktar") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+
+            if (step == PutAwayStep.QTY) {
+                OutlinedTextField(
+                    qty,
+                    { qty = it.filter { c -> c.isDigit() || c == '.' } },
+                    label = { Text("Miktar") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            } else {
+                ScanField(
+                    label = if (step == PutAwayStep.ITEM) "Ürün okut" else "Raf okut",
+                    value = scan,
+                    onValueChange = { scan = it },
+                    modifier = Modifier.fillMaxWidth(),
+                    onScanned = { submit(it) },
+                )
+                Spacer(Modifier.height(6.dp))
+                Button(onClick = { submit(scan) }, enabled = scan.isNotBlank(), modifier = Modifier.fillMaxWidth()) {
+                    Text("Doğrula")
+                }
+            }
+
+            if (step == PutAwayStep.TARGET_BIN) {
+                Spacer(Modifier.height(6.dp))
+                OutlinedButton(onClick = { showBinList = true }, modifier = Modifier.fillMaxWidth()) {
+                    Text("📍 Bin Listesinden Seç")
+                }
+                if (expectedTarget.isBlank()) {
+                    Spacer(Modifier.height(6.dp))
+                    OutlinedButton(onClick = {
+                        scope.launch {
+                            hint = "Bin öneriliyor..."
+                            val body = JSONObject().apply {
+                                put("itemNo", expectedItem)
+                                put("qty", qty.toDoubleOrNull() ?: 0.0)
+                                put("locationCode", locationCode)
+                            }.toString()
+                            val r = BcApi.post(context, "putAways('${place.optString("no")}')/Microsoft.NAV.suggestBin", body)
+                            hint = if (r.ok) {
+                                val suggested = BcApi.scalarValue(r.body)
+                                if (suggested.isNotBlank()) { scan = suggested; "Önerilen bin: $suggested — okutup doğrulayın" }
+                                else "Öneri boş döndü"
+                            } else "Öneri alınamadı (HTTP ${r.httpCode})"
+                        }
+                    }, modifier = Modifier.fillMaxWidth()) { Text("🎯 Bin Öner") }
+                }
+                if (hint.isNotBlank()) { Spacer(Modifier.height(4.dp)); Text(hint, fontSize = 12.sp, color = Color.Gray) }
+            }
+
+            if (error.isNotBlank()) {
+                Spacer(Modifier.height(10.dp))
+                Surface(shape = RoundedCornerShape(10.dp), color = Color(0xFFDC2626).copy(alpha = 0.12f)) {
+                    Text(
+                        error,
+                        Modifier.fillMaxWidth().padding(12.dp),
+                        color = Color(0xFFB91C1C),
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                }
+            }
+
             Spacer(Modifier.height(16.dp))
-            Button(enabled = bin.isNotBlank(), modifier = Modifier.fillMaxWidth(), onClick = {
-                onConfirm(bin.trim(), qty.toDoubleOrNull() ?: 0.0)
-            }) { Text("Onayla") }
+            if (step == PutAwayStep.QTY) {
+                Button(
+                    enabled = targetBin.isNotBlank() && (qty.toDoubleOrNull() ?: 0.0) > 0,
+                    modifier = Modifier.fillMaxWidth(),
+                    onClick = { onConfirm(targetBin, qty.toDoubleOrNull() ?: 0.0) },
+                ) { Text("✅ Yerleştirmeyi Onayla", fontWeight = FontWeight.Bold) }
+            }
+            TextButton(onClick = onDismiss, modifier = Modifier.fillMaxWidth()) { Text("Vazgeç") }
             Spacer(Modifier.height(24.dp))
         }
     }
@@ -848,7 +991,7 @@ private fun WhsePickDocument(no: String, onBack: () -> Unit) {
     val displayGroups = if (merge) groupLines(displayLines, ::pickLineCapacity) else emptyList()
 
     Column(Modifier.fillMaxSize()) {
-        Column(Modifier.weight(1f).padding(12.dp)) {
+        Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(12.dp)) {
             TextButton(onClick = onBack) { Text("‹ Belge Listesi") }
             DocHeaderCard(
                 title = no,
@@ -895,7 +1038,8 @@ private fun WhsePickDocument(no: String, onBack: () -> Unit) {
                 LineGroupCards(
                     groups = displayGroups,
                     staged = { it.optDouble("qtyToHandle", 0.0) },
-                    modifier = Modifier.weight(1f),
+                    modifier = Modifier.fillMaxWidth(),
+                    expandRows = true,
                     onGroupClick = { if (!busy && !lockedByOther) groupTarget = it },
                 )
             } else {
@@ -903,9 +1047,10 @@ private fun WhsePickDocument(no: String, onBack: () -> Unit) {
                     defs = GridColumns.pick,
                     columns = columns,
                     rows = displayLines,
-                    modifier = Modifier.weight(1f),
+                    modifier = Modifier.fillMaxWidth(),
                     isDone = { lineDone(it, LineModule.PICK) },
                     isPartial = { linePartial(it, LineModule.PICK) },
+                    expandRows = true,
                     onRowClick = { if (!lockedByOther) qtyLine = it },
                 )
             }
@@ -940,6 +1085,12 @@ private fun WhsePickDocument(no: String, onBack: () -> Unit) {
             initialLot = ql.optString("lotNo"),
             showLotSerial = true,
             showSerial = false,
+            lotRequired = ql.optBoolean("lotRequired", false),
+            showAvailableLotLookup = true,
+            autoDetectLotFromStock = true,
+            locationCode = firstValue(ql, "locationCode").ifBlank { h?.optString("locationCode").orEmpty() },
+            binCode = firstValue(ql, "binCode"),
+            variantCode = firstValue(ql, "variantCode"),
             onDismiss = { qtyLine = null },
             onConfirm = { res ->
                 qtyLine = null
@@ -957,6 +1108,12 @@ private fun WhsePickDocument(no: String, onBack: () -> Unit) {
             initialLot = gt.lines.first().optString("lotNo"),
             showLotSerial = true,
             showSerial = false,
+            lotRequired = gt.lines.any { it.optBoolean("lotRequired", false) },
+            showAvailableLotLookup = true,
+            autoDetectLotFromStock = true,
+            locationCode = firstValue(gt.lines.first(), "locationCode").ifBlank { h?.optString("locationCode").orEmpty() },
+            binCode = firstValue(gt.lines.first(), "binCode"),
+            variantCode = firstValue(gt.lines.first(), "variantCode"),
             onDismiss = { groupTarget = null },
             onConfirm = { res ->
                 groupTarget = null
@@ -1105,7 +1262,7 @@ private fun ShipDocument(no: String, onBack: () -> Unit, onPickCreated: (String)
     )
     val displayLines = if (scanFilter.isBlank()) lines else lines.filter { matchLinesByBarcode(listOf(it), com.dynops.bcwms.scanner.BarcodeIntentResolver.resolve(scanFilter)).isNotEmpty() }
     Column(Modifier.fillMaxSize()) {
-        Column(Modifier.weight(1f).padding(12.dp)) {
+        Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(12.dp)) {
             TextButton(onClick = onBack) { Text("‹ Belge Listesi") }
             DocHeaderCard(
                 title = no,
@@ -1129,8 +1286,9 @@ private fun ShipDocument(no: String, onBack: () -> Unit, onPickCreated: (String)
             if (scanFilter.isNotBlank()) { ScanFilterChip(scanFilter) { scanFilter = "" }; Spacer(Modifier.height(4.dp)) }
             LineGrid(
                 defs = GridColumns.shipment, columns = columns, rows = displayLines,
-                modifier = Modifier.weight(1f),
+                modifier = Modifier.fillMaxWidth(),
                 isDone = { lineDone(it, LineModule.SHIPMENT) },
+                expandRows = true,
                 onRowClick = { qtyLine = it },
             )
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -1167,8 +1325,12 @@ private fun ShipDocument(no: String, onBack: () -> Unit, onPickCreated: (String)
                 onClick = {
                     scope.launch {
                         busy = true; status = "Sevk kaydı..."
-                        val body = JSONObject().apply { put("print", printSlip); put("invoice", invoice) }.toString()
-                        val r = BcApi.boundAction(context, "shipments", no, "post", body)
+                        val body = JSONObject().apply {
+                            put("print", printSlip)
+                            put("invoice", invoice)
+                            put("printerId", getDefaultPrinter(context, PRINTER_USAGE_DOCUMENT))
+                        }.toString()
+                        val r = BcApi.boundAction(context, "shipments", no, "postToPrinter", body)
                         busy = false
                         status = if (r.ok) "TAMAM: Sevkiyat kaydedildi (HTTP ${r.httpCode})" else QcErrorParser.friendlyStatus(BcApi.errorMessage(r.body), r.httpCode)
                         if (r.ok) reload()
@@ -1195,6 +1357,14 @@ private fun ShipDocument(no: String, onBack: () -> Unit, onPickCreated: (String)
             initialLot = ql.optString("lotNo"),
             showLotSerial = true,
             showSerial = false,
+            lotRequired = ql.optBoolean("lotRequired", false),
+            showAvailableLotLookup = true,
+            autoDetectLotFromStock = true,
+            locationCode = firstValue(ql, "locationCode").ifBlank { h?.optString("locationCode").orEmpty() },
+            // Warehouse Shipment satırındaki bin sevk/hedef binidir.
+            // Kaynak stok lotları lokasyonun tüm fiziksel raflarından listelenir.
+            binCode = "",
+            variantCode = firstValue(ql, "variantCode"),
             onDismiss = { qtyLine = null },
             onConfirm = { res ->
                 qtyLine = null
@@ -1354,7 +1524,7 @@ private fun ShipSalesOrder(no: String, onBack: () -> Unit) {
     )
     val displayLines = if (scanFilter.isBlank()) lines else lines.filter { matchLinesByBarcode(listOf(it), com.dynops.bcwms.scanner.BarcodeIntentResolver.resolve(scanFilter)).isNotEmpty() }
     Column(Modifier.fillMaxSize()) {
-        Column(Modifier.weight(1f).padding(12.dp)) {
+        Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(12.dp)) {
             TextButton(onClick = onBack) { Text("‹ SO Listesi") }
             DocHeaderCard(
                 title = no,
@@ -1395,8 +1565,9 @@ private fun ShipSalesOrder(no: String, onBack: () -> Unit) {
             if (scanFilter.isNotBlank()) { ScanFilterChip(scanFilter) { scanFilter = "" }; Spacer(Modifier.height(4.dp)) }
             LineGrid(
                 defs = GridColumns.salesSource, columns = columns, rows = displayLines,
-                modifier = Modifier.weight(1f),
+                modifier = Modifier.fillMaxWidth(),
                 isDone = { lineDone(it, LineModule.SALES) },
+                expandRows = true,
                 onRowClick = { if (directAllowed) qtyLine = it },
             )
             Row(verticalAlignment = Alignment.CenterVertically) {

@@ -140,8 +140,11 @@ object GridColumns {
     )
 
     val count = listOf(
+        GridColumn("lpNo", "LP", true, 110) { nz(it, "lpNo") },
         GridColumn("itemNo", "Ürün No.", true, 104) { nz(it, "itemNo") },
         GridColumn("bin", "Bin", true, 92) { nz(it, "binCode") },
+        GridColumn("lotNo", "Lot No.", true, 96) { nz(it, "lotNo") },
+        GridColumn("serialNo", "Seri No.", false, 96) { nz(it, "serialNo") },
         GridColumn("description", "Açıklama", false, 170) { nz(it, "description") },
         GridColumn("systemQty", "Sistem", true, 72) { fmtCol(it.optDouble("systemQty")) },
         GridColumn("counted1", "Sayım 1", true, 74) { fmtCol(it.optDouble("countedQty1")) },

@@ -222,13 +222,18 @@ codeunit 72046 "DOPSWHS Pick Mgmt"
     end;
 
     procedure StopShippingLP(var Pick: Record "Warehouse Activity Header"; LpNo: Code[20]; PrintLabel: Boolean): Code[18]
+    begin
+        exit(StopShippingLP(Pick, LpNo, PrintLabel, ''));
+    end;
+
+    procedure StopShippingLP(var Pick: Record "Warehouse Activity Header"; LpNo: Code[20]; PrintLabel: Boolean; PrinterId: Code[50]): Code[18]
     var
         LP: Record "DOPSWHS LP Header";
         LPMgt: Codeunit "DOPSWHS LP Management";
     begin
         EnsurePick(Pick);
         LP.Get(LpNo);
-        LPMgt.Stop(LP, PrintLabel);
+        LPMgt.Stop(LP, PrintLabel, PrinterId);
         Log('Pick.StopShippingLP', Pick."No.", Pick."Assigned User ID");
         exit(LP.SSCC);
     end;
@@ -285,6 +290,7 @@ codeunit 72046 "DOPSWHS Pick Mgmt"
         CheckLineOwnership(PickLine, RequestingUserId);
 
         PickLine.Validate("Qty. to Handle", QtyToHandle);
+        EnsurePickLot(PickLine, LotNo);
         PickLine.Validate("Lot No.", LotNo);
         PickLine.Modify(true);
 
@@ -318,6 +324,34 @@ codeunit 72046 "DOPSWHS Pick Mgmt"
         // Satır onayı sahadaki EN SIK işlem; "bu satırı kim okuttu" sorusu
         // ancak burada kayıt altına alınırsa cevaplanabiliyor.
         Log('Pick.ConfirmLine', PickLine."No.", EffectiveOperator(PickLine."No.", RequestingUserId));
+    end;
+
+    /// <summary>Lot takipli toplama satırlarında mobil lot seçimini zorunlu kılar.</summary>
+    procedure PickLineRequiresLot(PickLine: Record "Warehouse Activity Line"): Boolean
+    var
+        Item: Record Item;
+        ItemTrackingCode: Record "Item Tracking Code";
+    begin
+        if not Item.Get(PickLine."Item No.") then
+            exit(false);
+        if Item."Item Tracking Code" = '' then
+            exit(false);
+        if not ItemTrackingCode.Get(Item."Item Tracking Code") then
+            exit(false);
+        exit(
+            ItemTrackingCode."Lot Specific Tracking" or
+            ItemTrackingCode."Lot Warehouse Tracking" or
+            ItemTrackingCode."Lot Sales Outbound Tracking");
+    end;
+
+    local procedure EnsurePickLot(PickLine: Record "Warehouse Activity Line"; LotNo: Code[50])
+    begin
+        if (PickLine."Qty. to Handle" <= 0) or (not PickLineRequiresLot(PickLine)) then
+            exit;
+        if LotNo = '' then
+            Error(
+                '%1 ürününün %2 toplama satırında lot numarası zorunludur. %3 rafındaki stok lotlarından birini seçin.',
+                PickLine."Item No.", PickLine."Line No.", PickLine."Bin Code");
     end;
 
     procedure RegisterPick(var Pick: Record "Warehouse Activity Header")
@@ -441,10 +475,14 @@ codeunit 72046 "DOPSWHS Pick Mgmt"
         PackingOrder."Main LP No." := Pick."DOPSWHS Main LP No.";
         // Toplama grubunun akış tipini paketlemeye taşı: terminaldeki V2
         // sekmeleri (Multi / Mono / Tek SKU) listeyi bu alanla filtreliyor.
-        // Grup bulunamazsa mod boş kalır — standart BC pick'i gibi davranır.
+        // Pick başlığı ana kaynaktır; özel grup kaydı bazı eski/standart
+        // pick'lerde bulunmadığında modu boş bırakmak V2 kuyruğundan kaydı
+        // tamamen gizliyordu. Grup kaydında dolu bir mod varsa onu tercih et.
+        PackingOrder."Order Flow Mode" := Pick."DOPSWHS Pick Mode";
         PickingHeader.SetRange("Warehouse Pick No.", Pick."No.");
         if PickingHeader.FindFirst() then
-            PackingOrder."Order Flow Mode" := PickingHeader."Order Flow Mode";
+            if PickingHeader."Order Flow Mode" <> PickingHeader."Order Flow Mode"::" " then
+                PackingOrder."Order Flow Mode" := PickingHeader."Order Flow Mode";
         PackingOrder."Warehouse Shipment No." := PickLine."Whse. Document No.";
         PackingOrder."Location Code" := Pick."Location Code";
         PackingOrder."Customer No." := SalesHeader."Sell-to Customer No.";
@@ -613,8 +651,8 @@ codeunit 72046 "DOPSWHS Pick Mgmt"
         if LockedHeader.Status = LockedHeader.Status::Completed then
             Error(PickingOrderCompletedErr, LockedHeader."Entry No.");
 
-        // Doğrudan yaz: alanın TableRelation'ı Warehouse Employee ve WMS operatörü
-        // orada kayıtlı olmayabilir (Validate atamayı sessizce geri alırdı).
+        // Atama aksiyonu yerel WMS kullanıcı listesini kullanır; kilitli
+        // kayıt üzerindeki değeri tek adımda kalıcı hale getiririz.
         LockedHeader."Assigned User ID" := CopyStr(NewUserId, 1, MaxStrLen(LockedHeader."Assigned User ID"));
         LockedHeader.Modify(true);
         PickingHeader := LockedHeader;

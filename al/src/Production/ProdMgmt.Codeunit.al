@@ -67,7 +67,7 @@ codeunit 72048 "DOPSWHS Prod Mgmt"
             exit(PickNo);
 
         if not ProductionOrder.Get(ProductionOrder.Status::Released, ProdOrderNo) then
-            Error('Released production order %1 was not found.', ProdOrderNo);
+            Error('Serbest bırakılmış %1 numaralı üretim emri bulunamadı.', ProdOrderNo);
 
         AssignToUserId := CopyStr(UserId(), 1, MaxStrLen(AssignToUserId));
         ProductionOrder.SetHideValidationDialog(true);
@@ -86,6 +86,38 @@ codeunit 72048 "DOPSWHS Prod Mgmt"
             end;
 
         exit(PickNo);
+    end;
+
+    procedure FinishProductionOrder(ProdOrderNo: Code[20]; UpdateUnitCost: Boolean): Code[20]
+    var
+        ProductionOrder: Record "Production Order";
+        FinishedProductionOrder: Record "Production Order";
+        ProdOrderStatusManagement: Codeunit "Prod. Order Status Management";
+        License: Codeunit "DOPSWHS License Mgmt";
+    begin
+        License.GuardFeature(Enum::"DOPSWHS License Feature"::Production);
+
+        if not ProductionOrder.Get(ProductionOrder.Status::Released, ProdOrderNo) then begin
+            // Mobil istemci aynı isteği bağlantı kesintisinden sonra yeniden
+            // gönderebilir. Emir zaten bitmişse işlem idempotent kabul edilir.
+            if FinishedProductionOrder.Get(FinishedProductionOrder.Status::Finished, ProdOrderNo) then
+                exit(ProdOrderNo);
+            Error('Released production order %1 was not found.', ProdOrderNo);
+        end;
+
+        OnBeforeFinishProductionOrder(ProductionOrder, UpdateUnitCost);
+        ProdOrderStatusManagement.ChangeProdOrderStatus(
+            ProductionOrder,
+            Enum::"Production Order Status"::Finished,
+            WorkDate(),
+            UpdateUnitCost);
+
+        if not FinishedProductionOrder.Get(FinishedProductionOrder.Status::Finished, ProdOrderNo) then
+            Error('%1 numaralı üretim emri bitirilemedi.', ProdOrderNo);
+
+        LogTelemetry('AdvWMS.Production.Finished', ProdOrderNo);
+        OnAfterFinishProductionOrder(FinishedProductionOrder);
+        exit(ProdOrderNo);
     end;
 
     local procedure FindOpenProductionPick(ProdOrderNo: Code[20]): Code[20]
@@ -343,6 +375,16 @@ codeunit 72048 "DOPSWHS Prod Mgmt"
 
     [IntegrationEvent(false, false)]
     local procedure OnAfterOutput(var ProdOrderRoutingLine: Record "Prod. Order Routing Line"; var ItemJournalLine: Record "Item Journal Line"; NewLpNo: Code[20])
+    begin
+    end;
+
+    [IntegrationEvent(false, false)]
+    local procedure OnBeforeFinishProductionOrder(var ProductionOrder: Record "Production Order"; var UpdateUnitCost: Boolean)
+    begin
+    end;
+
+    [IntegrationEvent(false, false)]
+    local procedure OnAfterFinishProductionOrder(var ProductionOrder: Record "Production Order")
     begin
     end;
 }

@@ -3,7 +3,8 @@ codeunit 72043 "DOPSWHS Receipt Mgmt"
     Access = Public;
     Permissions =
         tabledata "Reservation Entry" = rimd,
-        tabledata "Whse. Item Tracking Line" = rimd;
+        tabledata "Whse. Item Tracking Line" = rimd,
+        tabledata "Lot No. Information" = rimd;
 
     /// <summary>Geriye dönük imza: operatör kimliği belgenin atamasından okunur.</summary>
     procedure PostReceipt(var WhseReceiptHeader: Record "Warehouse Receipt Header"; PrintReport: Boolean; Invoice: Boolean)
@@ -18,15 +19,27 @@ codeunit 72043 "DOPSWHS Receipt Mgmt"
     /// için UserId() "kim postaladı" sorusunu cevaplamıyor.
     /// </summary>
     procedure PostReceipt(var WhseReceiptHeader: Record "Warehouse Receipt Header"; PrintReport: Boolean; Invoice: Boolean; OperatorUserId: Code[50])
+    begin
+        PostReceipt(WhseReceiptHeader, PrintReport, Invoice, OperatorUserId, '');
+    end;
+
+    procedure PostReceipt(var WhseReceiptHeader: Record "Warehouse Receipt Header"; PrintReport: Boolean; Invoice: Boolean; OperatorUserId: Code[50]; PrinterId: Code[50])
     var
         WhseReceiptLine: Record "Warehouse Receipt Line";
         PostedWhseReceiptHeader: Record "Posted Whse. Receipt Header";
         PostedWhseReceiptLine: Record "Posted Whse. Receipt Line";
         WhsePostReceipt: Codeunit "Whse.-Post Receipt";
         LpPropagation: Codeunit "DOPSWHS LP Propagation";
+        PrintDispatcher: Codeunit "DOPSWHS Print Dispatcher";
+        Telemetry: Codeunit "DOPSWHS Telemetry";
         LpNo: Code[20];
         PostedNo: Code[20];
     begin
+        EnsureRequiredSupplierLots(WhseReceiptHeader);
+        if PrintReport then begin
+            EnsureReceiptReportConfigured();
+            PrintDispatcher.EnsureDocumentPrinter(PrinterId, Enum::"DOPSWHS IWX Report Usage"::Receipt);
+        end;
         Log('Receipt.Post', WhseReceiptHeader."No.", EffectiveOperator(OperatorUserId, WhseReceiptHeader."Assigned User ID"));
         WhseReceiptLine.SetRange("No.", WhseReceiptHeader."No.");
         if WhseReceiptLine.FindFirst() then
@@ -39,12 +52,76 @@ codeunit 72043 "DOPSWHS Receipt Mgmt"
         LpPropagation.StampPostedReceiptHeader(WhseReceiptHeader."No.", PostedNo);
         LpPropagation.StampPostedReceiptLines(WhseReceiptHeader."No.", PostedNo);
 
+        if PrintReport then begin
+            ClearLastError();
+            if not QueuePostedReceiptPrint(PostedNo, PrinterId) then
+                Telemetry.LogWarning(
+                    'Print.ReceiptFailed',
+                    CopyStr(StrSubstNo('Receipt %1 posted, but its print job could not be queued: %2', PostedNo, GetLastErrorText()), 1, 250),
+                    EffectiveOperator(OperatorUserId, WhseReceiptHeader."Assigned User ID"));
+        end;
+
         PostedWhseReceiptLine.SetRange("Whse. Receipt No.", WhseReceiptHeader."No.");
         if PostedWhseReceiptLine.FindSet(true) then
             repeat
                 if LpNo <> '' then
                     AssignLP(LpNo, WhseReceiptHeader."No.");
             until PostedWhseReceiptLine.Next() = 0;
+    end;
+
+    local procedure EnsureRequiredSupplierLots(WhseReceiptHeader: Record "Warehouse Receipt Header")
+    var
+        WhseReceiptLine: Record "Warehouse Receipt Line";
+        LotNo: Code[50];
+        SerialNo: Code[50];
+        ExpiryDate: Date;
+        SupplierLotNo: Code[50];
+    begin
+        WhseReceiptLine.SetRange("No.", WhseReceiptHeader."No.");
+        WhseReceiptLine.SetFilter("Qty. to Receive", '>0');
+        if WhseReceiptLine.FindSet() then
+            repeat
+                if ReceiptLineRequiresSupplierLot(WhseReceiptLine) then begin
+                    GetItemTracking(WhseReceiptLine, LotNo, SerialNo, ExpiryDate);
+                    GetSupplierLot(WhseReceiptLine, LotNo, SupplierLotNo);
+                    if SupplierLotNo = '' then
+                        Error(
+                            'Mal kabul kaydedilemez. %1 ürününün %2 satırında tedarikçi lotu eksik.',
+                            WhseReceiptLine."Item No.", WhseReceiptLine."Line No.");
+                end;
+            until WhseReceiptLine.Next() = 0;
+    end;
+
+    [TryFunction]
+    local procedure QueuePostedReceiptPrint(PostedReceiptNo: Code[20]; PrinterId: Code[50])
+    var
+        PostedReceipt: Record "Posted Whse. Receipt Header";
+        ReportSelection: Record "DOPSWHS IWX Report Selection";
+        PrintDispatcher: Codeunit "DOPSWHS Print Dispatcher";
+        SourceRecord: RecordRef;
+    begin
+        if PostedReceiptNo = '' then
+            Error('The posted warehouse receipt could not be found for printing.');
+        ReportSelection.SetCurrentKey(Usage, Sequence);
+        ReportSelection.SetRange(Usage, ReportSelection.Usage::Receipt);
+        ReportSelection.SetFilter("Report ID", '<>0');
+        if not ReportSelection.FindFirst() then
+            Error('No report is configured for Receipt printing.');
+        PostedReceipt.Get(PostedReceiptNo);
+        PostedReceipt.SetRecFilter();
+        SourceRecord.GetTable(PostedReceipt);
+        PrintDispatcher.PrintReport(PostedReceiptNo, ReportSelection."Report ID", PrinterId, 1, ReportSelection.Usage, SourceRecord);
+    end;
+
+    local procedure EnsureReceiptReportConfigured()
+    var
+        ReportSelection: Record "DOPSWHS IWX Report Selection";
+    begin
+        ReportSelection.SetCurrentKey(Usage, Sequence);
+        ReportSelection.SetRange(Usage, ReportSelection.Usage::Receipt);
+        ReportSelection.SetFilter("Report ID", '<>0');
+        if not ReportSelection.FindFirst() then
+            Error('No report is configured for Receipt printing.');
     end;
 
     /// <summary>Geriye dönük imza: atamayı yapan kimlik bilinmiyor.</summary>
@@ -82,19 +159,24 @@ codeunit 72043 "DOPSWHS Receipt Mgmt"
     end;
 
     procedure StopLP(var WhseReceiptHeader: Record "Warehouse Receipt Header"; LpNo: Code[20]; PrintLabel: Boolean)
+    begin
+        StopLP(WhseReceiptHeader, LpNo, PrintLabel, '');
+    end;
+
+    procedure StopLP(var WhseReceiptHeader: Record "Warehouse Receipt Header"; LpNo: Code[20]; PrintLabel: Boolean; PrinterId: Code[50])
     var
         LP: Record "DOPSWHS LP Header";
         LPMgt: Codeunit "DOPSWHS LP Management";
     begin
         Log('Receipt.StopLP', WhseReceiptHeader."No.", WhseReceiptHeader."Assigned User ID");
         LP.Get(LpNo);
-        LPMgt.Stop(LP, PrintLabel);
+        LPMgt.Stop(LP, PrintLabel, PrinterId);
     end;
 
     /// <summary>Geriye dönük imza: operatör kimliği belgenin atamasından okunur.</summary>
     procedure ConfirmLine(var WhseReceiptLine: Record "Warehouse Receipt Line"; QtyToReceive: Decimal; LotNo: Code[50]; SerialNo: Code[50]; ExpiryDate: Date; LicensePlateNo: Code[20]; BinCode: Code[20])
     begin
-        ConfirmLine(WhseReceiptLine, QtyToReceive, LotNo, SerialNo, ExpiryDate, LicensePlateNo, BinCode, '');
+        ConfirmLine(WhseReceiptLine, QtyToReceive, LotNo, SerialNo, ExpiryDate, LicensePlateNo, BinCode, '', '');
     end;
 
     /// <summary>
@@ -102,6 +184,16 @@ codeunit 72043 "DOPSWHS Receipt Mgmt"
     /// boşsa belgeye atanmış kullanıcıya düşülür.
     /// </summary>
     procedure ConfirmLine(var WhseReceiptLine: Record "Warehouse Receipt Line"; QtyToReceive: Decimal; LotNo: Code[50]; SerialNo: Code[50]; ExpiryDate: Date; LicensePlateNo: Code[20]; BinCode: Code[20]; OperatorUserId: Code[50])
+    begin
+        ConfirmLine(WhseReceiptLine, QtyToReceive, LotNo, SerialNo, ExpiryDate, LicensePlateNo, BinCode, '', OperatorUserId);
+    end;
+
+    /// <summary>
+    /// Mal kabul satırını iç lot/seri ve tedarikçi lotuyla birlikte onaylar.
+    /// Tedarikçi lotu, lot takipli ürünlerde zorunludur ve Lot No. Information
+    /// kartına yazılır; terminalden girilen bilgi post öncesinde de görülebilir.
+    /// </summary>
+    procedure ConfirmLine(var WhseReceiptLine: Record "Warehouse Receipt Line"; QtyToReceive: Decimal; LotNo: Code[50]; SerialNo: Code[50]; ExpiryDate: Date; LicensePlateNo: Code[20]; BinCode: Code[20]; SupplierLotNo: Code[50]; OperatorUserId: Code[50])
     var
         LP: Record "DOPSWHS LP Header";
         WhseReceiptHeader: Record "Warehouse Receipt Header";
@@ -130,8 +222,12 @@ codeunit 72043 "DOPSWHS Receipt Mgmt"
 
             HasItemTrackingCode := ItemTrackingCode.Get(Item."Item Tracking Code");
             if RequiresLotTracking(ItemTrackingCode) then begin
+                if SupplierLotNo = '' then
+                    Error(
+                        'Tedarikçi lotu zorunludur. %1 ürünü için el terminalinden tedarikçi lotunu girin.',
+                        WhseReceiptLine."Item No.");
                 if LotNo = '' then
-                    LotNo := LotSerialGen.GenerateLotNo();
+                    LotNo := LotSerialGen.GenerateLotNoForItem(WhseReceiptLine."Item No.");
             end else
                 LotNo := '';
             if RequiresSerialTracking(ItemTrackingCode) then begin
@@ -155,6 +251,9 @@ codeunit 72043 "DOPSWHS Receipt Mgmt"
         // sırasında sessizce kaybolur — bu yüzden burada gerçek kalıcılığı sağlıyoruz.
         if Item."Item Tracking Code" <> '' then
             PersistItemTracking(WhseReceiptLine, LotNo, SerialNo, ExpiryDate);
+        if SupplierLotNo <> '' then
+            PersistSupplierLot(
+                WhseReceiptLine."Item No.", WhseReceiptLine."Variant Code", LotNo, SupplierLotNo);
 
         if LicensePlateNo <> '' then begin
             LP.Get(LicensePlateNo);
@@ -167,6 +266,107 @@ codeunit 72043 "DOPSWHS Receipt Mgmt"
                     WhseReceiptHeader."DOPSWHS LP No." := LicensePlateNo;
                     WhseReceiptHeader.Modify(true);
                 end;
+        end;
+    end;
+
+    /// <summary>
+    /// Ensures that an inbound lot-tracked receipt line has an internal lot
+    /// before it is returned to existing mobile clients. The operation is
+    /// idempotent: an existing BC item-tracking assignment is always reused.
+    /// The receipt-line lock prevents two simultaneous terminal reads from
+    /// consuming two numbers for the same line.
+    /// </summary>
+    procedure EnsureAutoInboundLot(WhseReceiptLine: Record "Warehouse Receipt Line"; var LotNo: Code[50]; var SerialNo: Code[50]; var ExpiryDate: Date)
+    var
+        LockedReceiptLine: Record "Warehouse Receipt Line";
+        Item: Record Item;
+        ItemTrackingCode: Record "Item Tracking Code";
+        LotSerialGen: Codeunit "DOPSWHS Lot Serial Generator";
+    begin
+        GetItemTracking(WhseReceiptLine, LotNo, SerialNo, ExpiryDate);
+        if LotNo <> '' then
+            exit;
+        if WhseReceiptLine."Qty. to Receive" <= 0 then
+            exit;
+        if not Item.Get(WhseReceiptLine."Item No.") then
+            exit;
+        if (Item."Item Tracking Code" = '') or (not ItemTrackingCode.Get(Item."Item Tracking Code")) then
+            exit;
+        if not RequiresLotTracking(ItemTrackingCode) then
+            exit;
+
+        LockedReceiptLine.LockTable();
+        if not LockedReceiptLine.Get(WhseReceiptLine."No.", WhseReceiptLine."Line No.") then
+            exit;
+
+        // Recheck after taking the lock; another request may have assigned it.
+        GetItemTracking(LockedReceiptLine, LotNo, SerialNo, ExpiryDate);
+        if LotNo <> '' then
+            exit;
+
+        LotNo := LotSerialGen.GenerateLotNoForItem(LockedReceiptLine."Item No.");
+        if LotNo = '' then
+            exit;
+
+        PersistItemTracking(LockedReceiptLine, LotNo, SerialNo, ExpiryDate);
+    end;
+
+    /// <summary>Satırdaki ürün için tedarikçi lotu girişinin zorunlu olup olmadığını döndürür.</summary>
+    procedure ReceiptLineRequiresSupplierLot(WhseReceiptLine: Record "Warehouse Receipt Line"): Boolean
+    var
+        Item: Record Item;
+        ItemTrackingCode: Record "Item Tracking Code";
+    begin
+        if not Item.Get(WhseReceiptLine."Item No.") then
+            exit(false);
+        if Item."Item Tracking Code" = '' then
+            exit(false);
+        if not ItemTrackingCode.Get(Item."Item Tracking Code") then
+            exit(false);
+        exit(RequiresLotTracking(ItemTrackingCode));
+    end;
+
+    /// <summary>
+    /// İç lot numarasına bağlı tedarikçi lotunu Lot No. Information
+    /// Description alanından okur. BadeProduction mevcut Tedarikçi Lotu alanı
+    /// olarak bu standart alanı kullanır; mobil istemci de aynı kaynağı kullanmalıdır.
+    /// </summary>
+    procedure GetSupplierLot(WhseReceiptLine: Record "Warehouse Receipt Line"; LotNo: Code[50]; var SupplierLotNo: Code[50])
+    var
+        LotNoInformation: Record "Lot No. Information";
+    begin
+        Clear(SupplierLotNo);
+        if LotNo = '' then
+            exit;
+        if LotNoInformation.Get(WhseReceiptLine."Item No.", WhseReceiptLine."Variant Code", LotNo) then
+            SupplierLotNo := CopyStr(LotNoInformation.Description, 1, MaxStrLen(SupplierLotNo));
+    end;
+
+    local procedure PersistSupplierLot(ItemNo: Code[20]; VariantCode: Code[10]; LotNo: Code[50]; SupplierLotNo: Code[50])
+    var
+        LotNoInformation: Record "Lot No. Information";
+    begin
+        if LotNo = '' then
+            Error('Tedarikçi lotu %1 kaydedilemedi; iç lot numarası boş.', SupplierLotNo);
+
+        if not LotNoInformation.Get(ItemNo, VariantCode, LotNo) then begin
+            LotNoInformation.Init();
+            LotNoInformation."Item No." := ItemNo;
+            LotNoInformation."Variant Code" := VariantCode;
+            LotNoInformation."Lot No." := LotNo;
+            LotNoInformation.Insert(true);
+        end;
+
+        if (LotNoInformation.Description <> '') and
+           (LotNoInformation.Description <> SupplierLotNo)
+        then
+            Error(
+                '%1 iç lotu daha önce %2 tedarikçi lotuyla eşleştirilmiş. Girilen değer: %3.',
+                LotNo, LotNoInformation.Description, SupplierLotNo);
+
+        if LotNoInformation.Description <> SupplierLotNo then begin
+            LotNoInformation.Validate(Description, SupplierLotNo);
+            LotNoInformation.Modify(true);
         end;
     end;
 

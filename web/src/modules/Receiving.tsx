@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
 import * as BcApi from "../lib/bcApi";
+import { getDefaultPrinter } from "./Printers";
 import {
   Checkbox,
   DocHeader,
@@ -109,6 +110,7 @@ function ReceiveDocument({ no, onBack }: { no: string; onBack: () => void }) {
   const [busy, setBusy] = useState(false);
   const [activeLp, setActiveLp] = useState<string | null>(null);
   const [qtyLine, setQtyLine] = useState<Row | null>(null);
+  const [printReceipt, setPrintReceipt] = useState(false);
 
   async function reload() {
     setBusy(true);
@@ -157,6 +159,9 @@ function ReceiveDocument({ no, onBack }: { no: string; onBack: () => void }) {
         {lines.length === 0 && !busy && <EmptyState message="Bu belgede satır yok." />}
       </div>
 
+      <div style={{ marginTop: 12 }}>
+        <Checkbox label="Mal kabul belgesi yazdır" value={printReceipt} onChange={setPrintReceipt} />
+      </div>
       <div className="actions">
         {!activeLp ? (
           <button
@@ -175,7 +180,7 @@ function ReceiveDocument({ no, onBack }: { no: string; onBack: () => void }) {
             className="outline"
             disabled={busy}
             onClick={() =>
-              action("stopLP", JSON.stringify({ lpNo: activeLp, printLabel: true }), "LP kapatıldı", () =>
+              action("stopLPToPrinter", JSON.stringify({ lpNo: activeLp, printLabel: true, printerId: getDefaultPrinter() }), "LP kapatıldı", () =>
                 setActiveLp(null),
               )
             }
@@ -186,7 +191,7 @@ function ReceiveDocument({ no, onBack }: { no: string; onBack: () => void }) {
         <button
           className="primary big"
           disabled={busy}
-          onClick={() => action("post", JSON.stringify({ print: false, invoice: false }), "Mal kabul kaydedildi")}
+          onClick={() => action("postToPrinter", JSON.stringify({ print: printReceipt, invoice: false, printerId: getDefaultPrinter("document") }), "Mal kabul kaydedildi")}
         >
           ✅ Post Receipt
         </button>

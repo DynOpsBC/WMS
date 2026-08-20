@@ -75,6 +75,11 @@ codeunit 72334 "DOPSWHS Pack Station Mgmt"
     end;
 
     procedure StartPickSession(PickNo: Code[20]; OperatorUserId: Code[50]): Integer
+    begin
+        exit(StartPickSession(PickNo, OperatorUserId, ''));
+    end;
+
+    procedure StartPickSession(PickNo: Code[20]; OperatorUserId: Code[50]; PrinterId: Code[50]): Integer
     var
         PackingOrder: Record "DOPSWHS Packing Order";
         ExistingSession: Record "DOPSWHS Pack Session";
@@ -94,8 +99,13 @@ codeunit 72334 "DOPSWHS Pack Station Mgmt"
         if PackingOrder.FindFirst() and
            ExistingSession.Get(PackingOrder."Session Entry No.") and
            (ExistingSession.Status = ExistingSession.Status::Open)
-        then
+        then begin
+            if (PrinterId <> '') and (ExistingSession."Printer Code" <> CopyStr(PrinterId, 1, MaxStrLen(ExistingSession."Printer Code"))) then begin
+                ExistingSession."Printer Code" := CopyStr(PrinterId, 1, MaxStrLen(ExistingSession."Printer Code"));
+                ExistingSession.Modify(true);
+            end;
             exit(ExistingSession."Entry No.");
+        end;
 
         PackSession.Init();
         PackSession."Pick No." := PickNo;
@@ -103,6 +113,7 @@ codeunit 72334 "DOPSWHS Pack Station Mgmt"
         // Batch modu: kutu SİPARİŞ payı tamamlanınca istenir (ürün kutu).
         PackSession.Mode := PackSession.Mode::Batch;
         PackSession."Direct Order Packing" := true;
+        PackSession."Printer Code" := CopyStr(PrinterId, 1, MaxStrLen(PackSession."Printer Code"));
         PackSession."Created By User" := CopyStr(Operator, 1, MaxStrLen(PackSession."Created By User"));
         PackSession."Created DateTime" := CurrentDateTime();
         PackSession.Insert(true);
@@ -239,6 +250,8 @@ codeunit 72334 "DOPSWHS Pack Station Mgmt"
             BoxBarcode := LP."No.";
         end;
 
+        EnsureBoxBarcodeAvailable(SessionId, OrderNo, BoxBarcode);
+
         Line.SetRange("Session Entry No.", SessionId);
         Line.SetRange("Source Order No.", OrderNo);
         Line.ModifyAll("Box LP No.", BoxLpNoResolved);
@@ -253,6 +266,25 @@ codeunit 72334 "DOPSWHS Pack Station Mgmt"
 
         TryCompleteOrder(PackSession, OrderNo);
         exit(BoxBarcode);
+    end;
+
+    local procedure EnsureBoxBarcodeAvailable(SessionId: Integer; OrderNo: Code[20]; BoxBarcode: Code[50])
+    var
+        ExistingLine: Record "DOPSWHS Pack Session Line";
+    begin
+        if BoxBarcode = '' then
+            exit;
+        ExistingLine.SetCurrentKey("Box Barcode");
+        ExistingLine.SetRange("Box Barcode", BoxBarcode);
+        if ExistingLine.FindSet() then
+            repeat
+                // Aynı action'ın güvenli tekrarına izin ver; başka siparişte ya
+                // da başka session'da kullanılan koli barkodu kesinlikle reddedilir.
+                if (ExistingLine."Session Entry No." <> SessionId) or
+                   (ExistingLine."Source Order No." <> OrderNo)
+                then
+                    Error(BoxBarcodeAlreadyUsedErr, BoxBarcode, ExistingLine."Source Order No.");
+            until ExistingLine.Next() = 0;
     end;
 
     /// <summary>Geriye dönük sarmalayıcı: kargo kolisini sıradaki siparişe bağlar.</summary>
@@ -654,9 +686,12 @@ codeunit 72334 "DOPSWHS Pack Station Mgmt"
         Assignment: Record "DOPSWHS Pick Tote Assignment";
         Line: Record "DOPSWHS Pack Session Line";
         PackingOrder: Record "DOPSWHS Packing Order";
+        PrintDispatcher: Codeunit "DOPSWHS Print Dispatcher";
+        Telemetry: Codeunit "DOPSWHS Telemetry";
+        PrintConfigured: Boolean;
     begin
+        PrintConfigured := PrintDispatcher.IsDocumentPrinterConfigured(PackSession."Printer Code", Enum::"DOPSWHS IWX Report Usage"::PackReceipt);
         PostOrder(PackSession, OrderNo);
-        QueuePackReceiptPrint(OrderNo);
 
         Line.SetRange("Session Entry No.", PackSession."Entry No.");
         Line.SetRange("Source Order No.", OrderNo);
@@ -684,6 +719,22 @@ codeunit 72334 "DOPSWHS Pack Station Mgmt"
         // Sipariş burada sevk+fatura ediliyor: "bu siparişi kim paketleyip
         // kapattı" sorusunun cevabı bu log satırında durmalı.
         Log('Pack.OrderCompleted', OrderNo, PackSession."Created By User");
+
+        // Sales/warehouse posting codeunits can COMMIT internally. Printing is
+        // therefore best-effort after every pack state change is durable: a
+        // renderer/queue failure must never leave the session half-completed.
+        if PrintConfigured then begin
+            ClearLastError();
+            if not QueuePackReceiptPrint(OrderNo, PackSession."Printer Code") then
+                Telemetry.LogWarning(
+                    'Print.PackReceiptFailed',
+                    CopyStr(StrSubstNo('Order %1 completed, but its pack receipt could not be queued: %2', OrderNo, GetLastErrorText()), 1, 250),
+                    PackSession."Created By User");
+        end else
+            Telemetry.LogWarning(
+                'Print.PackReceiptSkipped',
+                CopyStr(StrSubstNo('Order %1 completed without a pack receipt because no document printer is configured.', OrderNo), 1, 250),
+                PackSession."Created By User");
     end;
 
     local procedure PostOrder(var PackSession: Record "DOPSWHS Pack Session"; OrderNo: Code[20])
@@ -839,29 +890,37 @@ codeunit 72334 "DOPSWHS Pack Station Mgmt"
     begin
         if OrderNo = '' then
             exit;
-        QueuePackReceiptPrint(OrderNo);
+        ClearLastError();
+        if not QueuePackReceiptPrint(OrderNo, '') then
+            Error('Pack receipt could not be queued: %1', GetLastErrorText());
         Log('Pack.Reprint', OrderNo, EffectiveOperator(OperatorUserId, OrderNo));
     end;
 
     // ELOG: "tüm ürünler okutulunca fiş çıkıyor, poşete yapıştırılıyor" —
     // faturanın fişi IWX PackReceipt seçimi (yoksa standart satış faturası)
     // ile Print Dispatcher üzerinden istasyon yazıcısına kuyruklanır.
-    local procedure QueuePackReceiptPrint(OrderNo: Code[20])
+    [TryFunction]
+    local procedure QueuePackReceiptPrint(OrderNo: Code[20]; PrinterId: Code[50])
     var
         SalesInvHeader: Record "Sales Invoice Header";
         ReportSelection: Record "DOPSWHS IWX Report Selection";
         PrintDispatcher: Codeunit "DOPSWHS Print Dispatcher";
+        SourceRecord: RecordRef;
         ReportId: Integer;
     begin
         SalesInvHeader.SetRange("Order No.", OrderNo);
         if not SalesInvHeader.FindLast() then
-            exit;
+            Error('No posted sales invoice was found for packed order %1.', OrderNo);
+        ReportSelection.SetCurrentKey(Usage, Sequence);
         ReportSelection.SetRange(Usage, ReportSelection.Usage::PackReceipt);
+        ReportSelection.SetFilter("Report ID", '<>0');
         if ReportSelection.FindFirst() then
             ReportId := ReportSelection."Report ID"
         else
             ReportId := Report::"Standard Sales - Invoice";
-        PrintDispatcher.QueueReport(SalesInvHeader."No.", ReportId);
+        SalesInvHeader.SetRecFilter();
+        SourceRecord.GetTable(SalesInvHeader);
+        PrintDispatcher.PrintReport(SalesInvHeader."No.", ReportId, PrinterId, 1, Enum::"DOPSWHS IWX Report Usage"::PackReceipt, SourceRecord);
     end;
 
     local procedure ReleaseTote(var PackSession: Record "DOPSWHS Pack Session")
@@ -919,6 +978,7 @@ codeunit 72334 "DOPSWHS Pack Station Mgmt"
         NoOrdersForPickErr: Label 'No packable orders found for pick %1.', Comment = '%1 = Pick No.';
         NoLinesForOrderErr: Label 'No packable lines found for order %1.', Comment = '%1 = Sales Order No.';
         NoOpenOrderErr: Label 'There is no open order to attach a box to in this session.';
+        BoxBarcodeAlreadyUsedErr: Label '%1 koli barkodu daha önce %2 siparişinde kullanılmıştır. Her fiziksel koli için benzersiz bir barkod okutun.', Comment = '%1 barcode, %2 sales order';
         UnexpectedItemErr: Label 'Item %1 is not expected in tote %2 or its orders are already fully packed.', Comment = '%1 = Item No., %2 = LP No.';
         NothingToPostErr: Label 'Nothing to post for order %1 — no shipment line received a quantity.', Comment = '%1 = Sales Order No.';
         ScanToteTxt: Label 'Scan a tote (LP) to start';

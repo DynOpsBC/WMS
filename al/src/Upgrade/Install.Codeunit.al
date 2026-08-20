@@ -19,6 +19,8 @@ codeunit 72033 "DOPSWHS Install"
         AppProfileMgmt: Codeunit "DOPSWHS App Profile Mgmt";
         ConfigChecker: Codeunit "DOPSWHS Config Checker";
         License: Codeunit "DOPSWHS License Mgmt";
+        PrintCleanup: Codeunit "DOPSWHS Print Queue Cleanup";
+        AzurePrintWorker: Codeunit "DOPSWHS Azure Print Worker";
     begin
         if not Setup.Get('') then begin
             Setup.Init();
@@ -33,5 +35,7 @@ codeunit 72033 "DOPSWHS Install"
         AppProfileMgmt.SeedDefaults();          // seed DEFAULT app profile + install-user profile
         ConfigChecker.RegisterAssistedSetup();  // seed config checklist + register Assisted Setup
         License.ScheduleVerifyJob();            // seeds the hourly Job Queue Entry for /verify
+        PrintCleanup.ScheduleCleanupJob();      // keeps binary PDF/ZPL payloads out of permanent company storage
+        AzurePrintWorker.ScheduleWorkerJob();  // one-minute fallback; exits until AzureDirect is activated
     end;
 }

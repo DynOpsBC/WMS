@@ -1,8 +1,10 @@
 package com.dynops.bcwms.feature
 
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -52,6 +54,7 @@ private fun ConsumptionTab() {
     var loading by remember { mutableStateOf(false) }
     var consumeLine by remember { mutableStateOf<JSONObject?>(null) }
     var selectedOrderNo by remember { mutableStateOf<String?>(null) }
+    var showFinishConfirm by remember { mutableStateOf(false) }
     var search by remember { mutableStateOf("") }
     var columns by remember { mutableStateOf(ColumnPrefs.get(context, "consumption", GridColumns.consumption)) }
     var showColumns by remember { mutableStateOf(false) }
@@ -115,6 +118,30 @@ private fun ConsumptionTab() {
         }
     }
 
+    fun finishProductionOrder() {
+        val firstLine = selectedRows.firstOrNull() ?: return
+        val orderNo = firstLine.optString("prodOrderNo")
+        scope.launch {
+            loading = true
+            status = "Üretim emri bitiriliyor..."
+            val key = "status='${firstLine.optString("status").ifBlank { BcEnum.ProdOrderStatus.RELEASED }}'," +
+                "prodOrderNo='$orderNo'," +
+                "prodOrderLineNo=${firstLine.optInt("prodOrderLineNo")}," +
+                "componentLineNo=${firstLine.optInt("componentLineNo")}"
+            val body = JSONObject().put("updateUnitCost", true).toString()
+            val r = BcApi.post(context, "productionConsumption($key)/Microsoft.NAV.finish", body)
+            loading = false
+            if (r.ok) {
+                rows = rows.filterNot { it.optString("prodOrderNo") == orderNo }
+                selectedOrderNo = null
+                scanFilter = ""
+                status = "TAMAM: $orderNo üretim emri bitirildi"
+            } else {
+                status = "HATA: ${BcApi.errorMessage(r.body)} (HTTP ${r.httpCode})"
+            }
+        }
+    }
+
     if (selectedOrderNo == null) {
         val grouped = rows.groupBy { it.optString("prodOrderNo") }.filterKeys { it.isNotBlank() }
         Column(Modifier.fillMaxSize().padding(12.dp)) {
@@ -165,7 +192,7 @@ private fun ConsumptionTab() {
         }
     } else {
         val header = selectedRows.firstOrNull()
-        Column(Modifier.fillMaxSize().padding(12.dp)) {
+        Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(12.dp)) {
             TextButton(onClick = { selectedOrderNo = null; scanFilter = "" }) { Text("‹ Üretim Emri Listesi") }
             DocHeaderCard(
                 title = selectedOrderNo.orEmpty(),
@@ -180,6 +207,14 @@ private fun ConsumptionTab() {
                 Spacer(Modifier.width(8.dp))
                 OutlinedButton(onClick = { load() }, enabled = !loading) { Text("🔄 Yenile") }
             }
+            Spacer(Modifier.height(6.dp))
+            OutlinedButton(
+                onClick = { showFinishConfirm = true },
+                enabled = !loading && selectedRows.isNotEmpty(),
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text("✅ Üretim Emrini Bitir", fontWeight = FontWeight.Bold)
+            }
             Spacer(Modifier.height(4.dp))
             StatusText(status)
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -192,8 +227,9 @@ private fun ConsumptionTab() {
                 defs = GridColumns.consumption,
                 columns = columns,
                 rows = displayRows,
-                modifier = Modifier.weight(1f),
+                modifier = Modifier.fillMaxWidth(),
                 isDone = { it.optDouble("remainingQuantity") <= 0.0 },
+                expandRows = true,
                 onRowClick = { consumeLine = it },
             )
         }
@@ -202,6 +238,29 @@ private fun ConsumptionTab() {
                 columns = c; ColumnPrefs.save(context, "consumption", c); showColumns = false
             }
         }
+    }
+
+    if (showFinishConfirm) {
+        AlertDialog(
+            onDismissRequest = { showFinishConfirm = false },
+            title = { Text("Üretim Emrini Bitir", fontWeight = FontWeight.Bold) },
+            text = {
+                Text(
+                    "${selectedOrderNo.orEmpty()} numaralı üretim emri Bitti durumuna alınacak. " +
+                        "Açık toplama varsa Business Central işlemi reddeder. Eksik sarfiyat veya çıktı bulunuyorsa " +
+                        "Business Central'ın standart bitirme kuralları uygulanır. Bu işlem geri alınamaz."
+                )
+            },
+            confirmButton = {
+                Button(onClick = {
+                    showFinishConfirm = false
+                    finishProductionOrder()
+                }) { Text("Emri Bitir", fontWeight = FontWeight.Bold) }
+            },
+            dismissButton = {
+                OutlinedButton(onClick = { showFinishConfirm = false }) { Text("Vazgeç") }
+            },
+        )
     }
 
     val cl = consumeLine
@@ -297,7 +356,7 @@ private fun OutputTab() {
     }
     LaunchedEffect(Unit) { load() }
 
-    Column(Modifier.fillMaxSize().padding(12.dp)) {
+    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(12.dp)) {
         Button(onClick = { load() }, enabled = !loading) { Text(if (loading) "..." else "🔄 Yenile") }
         Spacer(Modifier.height(8.dp))
         com.dynops.bcwms.ui.DocSearchBar(value = search, onValueChange = { search = it }, onSearch = { load() }, label = "PÜ no ile ara")
@@ -313,7 +372,8 @@ private fun OutputTab() {
             defs = GridColumns.output,
             columns = columns,
             rows = rows,
-            modifier = Modifier.weight(1f),
+            modifier = Modifier.fillMaxWidth(),
+            expandRows = true,
             onRowClick = { outputLine = it },
         )
     }
@@ -480,7 +540,7 @@ private fun AssemblyDocument(no: String, onBack: () -> Unit) {
 
     val h = header
     Column(Modifier.fillMaxSize()) {
-        Column(Modifier.weight(1f).padding(12.dp)) {
+        Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(12.dp)) {
             TextButton(onClick = onBack) { Text("‹ Belge Listesi") }
             DocHeaderCard(
                 title = "$no — ${h?.optString("itemNo") ?: ""}",
@@ -499,8 +559,9 @@ private fun AssemblyDocument(no: String, onBack: () -> Unit) {
                 defs = GridColumns.assembly,
                 columns = columns,
                 rows = displayLines,
-                modifier = Modifier.weight(1f),
+                modifier = Modifier.fillMaxWidth(),
                 isDone = { it.optDouble("consumedQuantity") >= it.optDouble("quantity") && it.optDouble("quantity") > 0.0 },
+                expandRows = true,
                 onRowClick = { },
             )
         }

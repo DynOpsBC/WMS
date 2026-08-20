@@ -61,6 +61,14 @@ page 72093 "DOPSWHS Shipment API"
     end;
 
     [ServiceEnabled]
+    procedure postToPrinter(print: Boolean; invoice: Boolean; printerId: Code[50])
+    var
+        ShipmentMgmt: Codeunit "DOPSWHS Shipment Mgmt";
+    begin
+        ShipmentMgmt.PostShipment(Rec, print, invoice, printerId);
+    end;
+
+    [ServiceEnabled]
     procedure createPick(): Code[20]
     var
         ShipmentMgmt: Codeunit "DOPSWHS Shipment Mgmt";

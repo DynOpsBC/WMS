@@ -24,6 +24,11 @@ codeunit 72040 "DOPSWHS LP Management"
     end;
 
     procedure Stop(var LP: Record "DOPSWHS LP Header"; PrintLabel: Boolean)
+    begin
+        Stop(LP, PrintLabel, '');
+    end;
+
+    procedure Stop(var LP: Record "DOPSWHS LP Header"; PrintLabel: Boolean; PrinterId: Code[50])
     var
         Dispatcher: Codeunit "DOPSWHS Print Dispatcher";
         Generator: Codeunit "DOPSWHS SSCC Generator";
@@ -37,7 +42,7 @@ codeunit 72040 "DOPSWHS LP Management"
         LP.Modify(true);
         WriteToLedger(LP, LPActionBuilt(), LP."Bin Code", LP."Bin Code", 0, '', '', '');
         if PrintLabel then
-            Dispatcher.PrintLPLabel(LP, '', 1);
+            Dispatcher.PrintLPLabel(LP, PrinterId, 1);
         OnAfterStop(LP);
     end;
 

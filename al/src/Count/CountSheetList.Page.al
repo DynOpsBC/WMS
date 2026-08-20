@@ -55,6 +55,21 @@ page 72074 "DOPSWHS Count Sheet List"
                     CurrPage.Update(false);
                 end;
             }
+            action(GenerateLines)
+            {
+                Caption = 'Satırları Üret';
+                ApplicationArea = All;
+                Image = CalculateLines;
+                trigger OnAction()
+                var
+                    CountMgmt: Codeunit "DOPSWHS Count Mgmt";
+                    LinesCreated: Integer;
+                begin
+                    LinesCreated := CountMgmt.GenerateLines(Rec."No.");
+                    CurrPage.Update(false);
+                    Message('%1 sayım satırı oluşturuldu.', LinesCreated);
+                end;
+            }
         }
     }
 }

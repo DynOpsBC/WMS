@@ -11,14 +11,12 @@ codeunit 72052 "DOPSWHS PrintNode Client"
         ClientHeaders: HttpHeaders;
         Telemetry: Codeunit "DOPSWHS Telemetry";
         Base64: Codeunit "Base64 Convert";
-        TempBlob: Codeunit "Temp Blob";
         InStream: InStream;
-        TempOut: OutStream;
-        TempIn: InStream;
+        PayloadObject: JsonObject;
         ApiKey: Text;
         Payload: Text;
-        RawBytes: Text;
         ContentB64: Text;
+        ContentType: Text;
     begin
         ApiKey := GetApiKey();
         if ApiKey = '' then begin
@@ -29,13 +27,19 @@ codeunit 72052 "DOPSWHS PrintNode Client"
         Queue.CalcFields(ZPL);
         if Queue.ZPL.HasValue() then begin
             Queue.ZPL.CreateInStream(InStream);
-            InStream.ReadText(RawBytes);
-            TempBlob.CreateOutStream(TempOut);
-            TempOut.WriteText(RawBytes);
-            TempBlob.CreateInStream(TempIn);
-            ContentB64 := Base64.ToBase64(TempIn);
+            ContentB64 := Base64.ToBase64(InStream);
         end;
-        Payload := StrSubstNo('{"printerId": "%1", "title": "%2", "contentType": "raw_base64", "content": "%4", "source": "BCWMSApp", "qty": %3}', Queue."Printer ID", Queue."Source Doc", Copies, ContentB64);
+        if Queue."Format" = Queue."Format"::PDF then
+            ContentType := 'pdf_base64'
+        else
+            ContentType := 'raw_base64';
+        PayloadObject.Add('printerId', Queue."Printer ID");
+        PayloadObject.Add('title', Queue."Source Doc");
+        PayloadObject.Add('contentType', ContentType);
+        PayloadObject.Add('content', ContentB64);
+        PayloadObject.Add('source', 'BCWMSApp');
+        PayloadObject.Add('qty', Copies);
+        PayloadObject.WriteTo(Payload);
         Content.WriteFrom(Payload);
         Content.GetHeaders(ContentHeaders);
         ContentHeaders.Remove('Content-Type');
@@ -50,8 +54,10 @@ codeunit 72052 "DOPSWHS PrintNode Client"
             Log(Queue."Job ID", 'Sent', 'PrintNode accepted job.');
         end else begin
             Queue.Status := Queue.Status::Failed;
+            Queue."Last Error" := CopyStr(Format(Response.HttpStatusCode()), 1, MaxStrLen(Queue."Last Error"));
+            Queue."Retry Count" += 1;
             Queue.Modify(true);
-            Log(Queue."Job ID", 'Failed', CopyStr(Format(Response.HttpStatusCode()), 1, 250));
+            Log(Queue."Job ID", 'Failed', Queue."Last Error");
         end;
     end;
 

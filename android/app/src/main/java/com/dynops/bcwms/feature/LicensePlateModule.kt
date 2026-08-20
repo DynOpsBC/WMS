@@ -1,8 +1,10 @@
 package com.dynops.bcwms.feature
 
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -237,7 +239,7 @@ private fun LpDocument(lpNo: String, onBack: () -> Unit) {
     val st = h?.optString("status") ?: ""
 
     Column(Modifier.fillMaxSize()) {
-        Column(Modifier.weight(1f).padding(12.dp)) {
+        Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(12.dp)) {
             TextButton(onClick = onBack) { Text("‹ LP Listesi") }
             val isTote = h?.optBoolean("reusable") == true
             DocHeaderCard(
@@ -258,8 +260,8 @@ private fun LpDocument(lpNo: String, onBack: () -> Unit) {
             }
             Spacer(Modifier.height(6.dp))
             Text("Satırlar (${lines.size})", fontWeight = FontWeight.Bold, fontSize = 14.sp)
-            LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                items(lines) { ln ->
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                lines.forEach { ln ->
                     Card(Modifier.fillMaxWidth()) {
                         Column(Modifier.padding(10.dp)) {
                             Text("${ln.optString("itemNo")} × ${ln.optDouble("quantity")}", fontWeight = FontWeight.Medium)
@@ -273,27 +275,32 @@ private fun LpDocument(lpNo: String, onBack: () -> Unit) {
                         }
                     }
                 }
-                if (lines.isEmpty() && !busy) item { EmptyState("Henüz satır yok. ➕ ile item ekleyin.") }
+                if (lines.isEmpty() && !busy) EmptyState("Henüz satır yok. ➕ ile item ekleyin.")
             }
         }
 
         BottomActionBar {
             Button(onClick = { showAddLine = true }, enabled = !busy, modifier = Modifier.weight(1f)) { Text("➕ Satır") }
-            Button(onClick = { action("stop", """{"printLabel":true}""", "LP Stop + SSCC") }, enabled = !busy, modifier = Modifier.weight(1f)) { Text("⏹ Stop") }
+            Button(onClick = {
+                val payload = JSONObject().apply {
+                    put("printLabel", true)
+                    put("printerId", getDefaultPrinter(context))
+                }.toString()
+                action("stopToPrinter", payload, "LP Stop + SSCC")
+            }, enabled = !busy, modifier = Modifier.weight(1f)) { Text("⏹ Stop") }
             OutlinedButton(onClick = { showTransfer = true }, enabled = !busy, modifier = Modifier.weight(1f)) { Text("Transfer") }
         }
         BottomActionBar {
             OutlinedButton(
                 onClick = {
-                    // Use the default printer registered in the Printers screen
-                    // (per-device SharedPreferences). Empty printerId would
-                    // make BC PrintDispatcher default to BCNative PDF.
+                    // Use the label printer registered for this device. If it
+                    // is blank, BC resolves the usage-specific server mapping.
                     val defaultPrinter = getDefaultPrinter(context)
                     val payload = JSONObject().apply {
                         put("printerId", defaultPrinter)
                         put("copies", 1)
                     }.toString()
-                    action("printLabel", payload, if (defaultPrinter.isBlank()) "Etiket BCNative'e gönderildi (default printer ayarlanmadı)" else "Etiket $defaultPrinter yazıcısına gönderildi")
+                    action("printLabel", payload, if (defaultPrinter.isBlank()) "Etiket varsayılan sunucu eşlemesine gönderildi" else "Etiket $defaultPrinter yazıcısına gönderildi")
                 },
                 enabled = !busy,
                 modifier = Modifier.weight(1f),

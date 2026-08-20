@@ -31,6 +31,8 @@ page 72227 "DOPSWHS Receipt Line API"
                 field(qtyReceived; Rec."Qty. Received") { Caption = 'qtyReceived'; }
                 field(binCode; Rec."Bin Code") { Caption = 'binCode'; }
                 field(lotNo; LotNo) { Caption = 'lotNo'; }
+                field(supplierLotNo; SupplierLotNo) { Caption = 'supplierLotNo'; }
+                field(supplierLotRequired; SupplierLotRequired) { Caption = 'supplierLotRequired'; Editable = false; }
                 field(serialNo; SerialNo) { Caption = 'serialNo'; }
                 field(expiryDate; ExpiryDate) { Caption = 'expiryDate'; }
                 field(licensePlateNo; LicensePlateNo) { Caption = 'licensePlateNo'; }
@@ -57,21 +59,28 @@ page 72227 "DOPSWHS Receipt Line API"
         Clear(ItemGtin);
         if (Rec."Item No." <> '') and Item.Get(Rec."Item No.") then
             ItemGtin := Item.GTIN;
-        // BC UI'dan (veya önceki bir mobil kayıttan) atanmış lot/seri/SKT varsa
-        // oku — mobil ekranda GTIN gibi doldurulmuş gelsin, boş görünmesin.
-        ReceiptMgmt.GetItemTracking(Rec, LotNo, SerialNo, ExpiryDate);
+        // Mevcut APK iç lotu zorunlu tuttuğu için, satır terminale dönmeden
+        // standart Item."Lot Nos." serisinden bir kez ata ve BC tracking'e yaz.
+        // Daha önce UI/mobil tarafından atanmış lot varsa aynen korunur.
+        ReceiptMgmt.EnsureAutoInboundLot(Rec, LotNo, SerialNo, ExpiryDate);
+        SupplierLotRequired := ReceiptMgmt.ReceiptLineRequiresSupplierLot(Rec);
+        ReceiptMgmt.GetSupplierLot(Rec, LotNo, SupplierLotNo);
     end;
 
     trigger OnModifyRecord(): Boolean
     var
         ReceiptMgmt: Codeunit "DOPSWHS Receipt Mgmt";
     begin
-        ReceiptMgmt.ConfirmLine(Rec, Rec."Qty. to Receive", LotNo, SerialNo, ExpiryDate, LicensePlateNo, Rec."Bin Code");
+        ReceiptMgmt.ConfirmLine(
+            Rec, Rec."Qty. to Receive", LotNo, SerialNo, ExpiryDate,
+            LicensePlateNo, Rec."Bin Code", SupplierLotNo, '');
         exit(false);
     end;
 
     var
         LotNo: Code[50];
+        SupplierLotNo: Code[50];
+        SupplierLotRequired: Boolean;
         SerialNo: Code[50];
         ExpiryDate: Date;
         LicensePlateNo: Code[20];

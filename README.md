@@ -2,8 +2,8 @@
 
 [![Release](https://img.shields.io/github/v/release/DynOpsBC/WMS?label=latest&color=6c5ce7)](https://github.com/DynOpsBC/WMS/releases/latest)
 [![BC Platform](https://img.shields.io/badge/Business%20Central-24.0%2B-026CC5)](docs/install-pte.md)
-[![AL](https://img.shields.io/badge/AL-1.12.0.0-026CC5)](al/app.json)
-[![Android](https://img.shields.io/badge/Android-1.13.0-3DDC84)](android/app/build.gradle.kts)
+[![AL](https://img.shields.io/badge/AL-1.14.0.7-026CC5)](al/app.json)
+[![Android](https://img.shields.io/badge/Android-1.14.2-3DDC84)](android/app/build.gradle.kts)
 
 Microsoft Dynamics 365 Business Central SaaS için gelişmiş depo yönetim sistemi (WMS): el terminali, BC eklentisi ve iş istasyonu arayüzü.
 
@@ -20,8 +20,10 @@ Microsoft Dynamics 365 Business Central SaaS için gelişmiş depo yönetim sist
 | `al/` | Business Central AL eklentisi — publisher `DynamicsOps`, prefix `DOPSWHS`, obje aralığı `72000-72099` + `72200-72489` |
 | `android/` | Kotlin / Jetpack Compose el terminali uygulaması (iki flavor) |
 | `web/` | React + Vite iş istasyonu arayüzü — BC ControlAddIn ve bağımsız SaaS PWA olmak üzere iki hedef |
-| `print-agent/` | Go ile yazılmış çapraz platform yazdırma köprüsü (BC → relay → yerel yazıcı) |
-| `push-relay/` | BC webhook + SignalR + FCM için Azure Functions relay'i |
+| `windows-print-agent/` | Önerilen Azure Direct yolu için .NET Windows tray ajanı (PDF + ZPL/ESC-POS/RAW) |
+| `direct-print-azure/` | Blob Storage + Service Bus altyapısı ve güvenli kurulum/test scriptleri |
+| `print-agent/` | Eski SelfHosted kanalını destekleyen Go yazdırma ajanı |
+| `push-relay/` | Webhook/SignalR/FCM ve eski SelfHosted print relay Azure Function'ları |
 | `licensing-service/` | RS256 JWT lisans üretici/doğrulayıcı Azure Function (KeyVault destekli) |
 | `customer-portal/` | Lisans ve sürüm yönetimi için Vite + MSAL portal |
 | `docs/` | Teknik dokümantasyon, kurulum kılavuzları, kod standartları |
@@ -54,7 +56,9 @@ Uygulama ELOG saha gözlemlerine göre tasarlandı; standart BC ambar akışlar�
 | AL | **Windows** + AL Language uzantısı — macOS'ta derlenmez |
 | Android | JDK 17 + Android SDK |
 | Web / relay / portal | Node.js 20 + pnpm |
-| print-agent | Go 1.22+ |
+| Windows print agent | .NET 10 SDK (yayın ZIP'i self-contained'dır) |
+| Azure Direct altyapı | Azure CLI 2.60+ + PowerShell 7+ |
+| Eski Go print-agent | Go 1.22+ |
 
 ### Android
 
@@ -111,7 +115,7 @@ Bunun sonucu: AL tarafında `UserId()` her zaman servis hesabını döndürür. 
 | ELOG saha notları | [docs/ELOG-Gelistirme-Notlari.md](docs/ELOG-Gelistirme-Notlari.md) |
 | AL kod standartları | [docs/al-coding-standards.md](docs/al-coding-standards.md) |
 | Android kod standartları | [docs/android-coding-standards.md](docs/android-coding-standards.md) |
-| Yazdırma köprüsü | [docs/print-bridge-setup.md](docs/print-bridge-setup.md) · [protokol](docs/print-bridge-protocol.md) |
+| Yazdırma | [Azure Direct kurulum/test](docs/azure-direct-print-setup.md) · [eski SelfHosted](docs/print-bridge-setup.md) |
 | Operasyon runbook | [docs/operations-runbook.md](docs/operations-runbook.md) |
 | Güvenlik denetimi | [docs/security-audit.md](docs/security-audit.md) |
 | Üretime hazırlık | [PRODUCTION_READINESS.md](PRODUCTION_READINESS.md) |
@@ -123,8 +127,25 @@ Bunun sonucu: AL tarafında `UserId()` her zaman servis hesabını döndürür. 
 
 Aşağıdakiler tespit edildi, henüz kapatılmadı:
 
-- **Belge yazdırma çalışmıyor.** `Print Dispatcher.QueueReport` kuyruğa yazıcısı, kanalı ve içeriği boş bir satır yazıyor; paket fişi ve sevkiyat notu hiçbir zaman basılmıyor. Etiket basımı (LP / ürün / raf, ZPL) etkilenmiyor.
-- **print-relay Azure Function'ı depoda yok.** `print-agent` `{relayUrl}/api/print-jobs` çağırıyor ama o fonksiyonun kaynağı burada değil. Ajanı doğrudan BC API sayfası `72299`'a bağlamak bu bağımlılığı kaldırır.
+- Terminal yazıcıya doğrudan bağlanmaz. Önerilen üretim yolu
+  `AzureDirect`: BC → private Blob/Service Bus → Windows print agent → Windows
+  yazıcı sürücüsüdür. Kurulum ve fiziksel test adımları
+  [Azure Direct kılavuzunda](docs/azure-direct-print-setup.md) bulunur.
+- Print Job `Sent`, Windows spooler'ın işi kabul ettiğini gösterir; kağıt,
+  toner, sıkışma ve fiziksel çıktı ancak hedef yazıcıyla yapılan uçtan uca testle
+  kanıtlanabilir.
+- Genel Windows/yazıcı protokollerinde fiziksel olarak exactly-once garantisi
+  verilemez. Ajan kalıcı journal ve belirsiz-sonuç karantinasıyla otomatik çift
+  baskıyı önler; güç kesintisi gibi sonucu kanıtlanamayan işler operatör kararı
+  ister.
+- Bir Azure Direct deployment tek BC environment/company ve tek güvenlik
+  bölgesidir. Ayrıştırılması gereken şirket/istasyonlar ayrı Azure stack
+  kullanmalıdır.
+- Windows ajanı henüz imzalı bir kurumsal installer değildir; yayın ZIP'i ve
+  PowerShell kurucusu dağıtımdan önce kuruluşun code-signing sürecinden
+  geçirilmelidir.
+- LP etiketi terminalde ZPL olarak çalışır; LP raporunun RDLC/PDF yerleşimi henüz
+  gerçek bir etiket tasarımı değildir.
 - Sevkiyat ekranındaki *"Faturalandır"* seçeneği işlevsiz.
 - Paketlemede geri alma (undo) yok.
 - `PATCH pickLines` yolunda sunucu tarafı eşzamanlılık koruması eksik.

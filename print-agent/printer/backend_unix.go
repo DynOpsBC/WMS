@@ -4,9 +4,11 @@ package printer
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"os/exec"
 	"strconv"
+	"time"
 
 	"github.com/dynops/bcwms-print-agent/config"
 )
@@ -30,9 +32,14 @@ func (b *unixBackend) Print(format string, payload []byte, copies int) error {
 	if format == "ZPL" || format == "RAW" || format == "ESCPOS" {
 		args = append(args, "-o", "raw")
 	}
-	cmd := exec.Command("lp", args...)
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, "lp", args...)
 	cmd.Stdin = bytes.NewReader(payload)
 	out, err := cmd.CombinedOutput()
+	if ctx.Err() == context.DeadlineExceeded {
+		return fmt.Errorf("lp command timed out")
+	}
 	if err != nil {
 		return fmt.Errorf("lp failed: %v output=%s", err, string(out))
 	}

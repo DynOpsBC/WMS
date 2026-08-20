@@ -11,6 +11,10 @@ table 72017 "DOPSWHS Count Sheet Line"
         field(20; "Variant Code"; Code[10]) { Caption = 'Variant Code'; DataClassification = CustomerContent; TableRelation = "Item Variant".Code where("Item No." = field("Item No.")); }
         field(30; "Bin Code"; Code[20]) { Caption = 'Bin Code'; DataClassification = CustomerContent; TableRelation = Bin.Code; }
         field(40; "LP No."; Code[20]) { Caption = 'LP No.'; DataClassification = CustomerContent; TableRelation = "DOPSWHS LP Header"; }
+        field(41; "LP Line No."; Integer) { Caption = 'LP Line No.'; DataClassification = CustomerContent; Editable = false; }
+        field(42; "Lot No."; Code[50]) { Caption = 'Lot No.'; DataClassification = CustomerContent; Editable = false; }
+        field(43; "Serial No."; Code[50]) { Caption = 'Serial No.'; DataClassification = CustomerContent; Editable = false; }
+        field(44; "Unit of Measure Code"; Code[10]) { Caption = 'Unit of Measure Code'; DataClassification = CustomerContent; TableRelation = "Item Unit of Measure".Code where("Item No." = field("Item No.")); }
         field(50; "System Qty"; Decimal)
         {
             // Snapshot of on-hand quantity captured when the count line is generated (NOT a live
@@ -31,6 +35,7 @@ table 72017 "DOPSWHS Count Sheet Line"
     {
         key(PK; "Sheet No.", "Line No.") { Clustered = true; }
         key(ItemBin; "Item No.", "Variant Code", "Bin Code") { }
+        key(LicensePlate; "LP No.", "LP Line No.") { }
         key(Recount; "Recount Required") { }
     }
 }

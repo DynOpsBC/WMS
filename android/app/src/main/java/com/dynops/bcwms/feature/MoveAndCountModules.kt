@@ -393,8 +393,10 @@ fun AdHocMoveModule() {
 }
 
 /**
- * Inventory Count — WI §10.6 parity (basic + advanced/blind).
- * Sheet list -> Count Document -> per-line recordCount (counter slot, blind hides system qty)
+ * Inventory Count — adres (bin) bazlı sayım.
+ * Sayfa listesi -> Sayım Belgesi -> raf okut -> etiket okut -> adresi kapat.
+ * Miktar her zaman gösterilir: sayım palet/etiket doğrulamasıyla yürüdüğü için
+ * BC'deki Blind modu terminalde uygulanmaz.
  * -> Start Recount / Post. BC: countSheets / countSheetLines (warehouse/v2.0, live since v1.0.8.0).
  */
 @OptIn(ExperimentalMaterial3Api::class)
@@ -466,17 +468,32 @@ private fun CountDocument(no: String, onBack: () -> Unit) {
     var status by remember { mutableStateOf("") }
     var busy by remember { mutableStateOf(false) }
     var countLine by remember { mutableStateOf<JSONObject?>(null) }
-    var scanFilter by remember { mutableStateOf("") }
-    var columns by remember { mutableStateOf(ColumnPrefs.get(context, "count", GridColumns.count)) }
-    var showColumns by remember { mutableStateOf(false) }
+    // Sayıcı slotu belge seviyesinde tutulur: pane'deki okutmalar ve satır
+    // düzeltme ekranı (CountEntrySheet) AYNI slota yazsın diye. paneReset,
+    // 'Yeniden Say' sonrası pane'in yerel ilerleme durumunu sıfırlar.
+    var slot by remember(no) { mutableStateOf(1) }
+    var paneReset by remember(no) { mutableStateOf(0) }
 
     fun reload() {
         scope.launch {
             busy = true
             val h = BcApi.get(context, "countSheets('$no')")
             if (h.ok) header = JSONObject(h.body)
-            val l = BcApi.get(context, "countSheetLines?\$filter=sheetNo eq '$no'&\$top=200")
-            lines = if (l.ok) BcApi.parseValueArray(l.body) else emptyList()
+            // Sayfalama: tam lokasyon sayımı 200 satırı kolay aşar; kesilen satırlar
+            // ne sayılır ne 0'lanır ve kimse fark etmezdi. 5000 satır güvenlik tavanı.
+            val all = mutableListOf<JSONObject>()
+            var skip = 0
+            var pageOk = true
+            while (true) {
+                val l = BcApi.get(context, "countSheetLines?\$filter=sheetNo eq '$no'&\$top=200&\$skip=$skip")
+                if (!l.ok) { pageOk = skip > 0; break }
+                val page = BcApi.parseValueArray(l.body)
+                all += page
+                if (page.size < 200 || all.size >= 5000) break
+                skip += 200
+            }
+            lines = all
+            if (!pageOk) status = "HATA: Sayım satırları alınamadı"
             busy = false
         }
     }
@@ -492,58 +509,74 @@ private fun CountDocument(no: String, onBack: () -> Unit) {
         }
     }
 
+    fun postSheetAndPrintLpLabels() {
+        val countedLpNos = lines.map { it.optString("lpNo") }.filter { it.isNotBlank() }.distinct()
+        scope.launch {
+            busy = true; status = "Sayım BC'ye kaydediliyor..."
+            val r = BcApi.boundActionLongRunning(context, "countSheets", no, "postSheet", "{}")
+            if (!r.ok) {
+                busy = false
+                status = "HATA: ${BcApi.errorMessage(r.body)} (HTTP ${r.httpCode})"
+                return@launch
+            }
+
+            val printerId = getDefaultPrinter(context)
+            var printFailures = 0
+            countedLpNos.forEach { lpNo ->
+                val body = JSONObject().apply { put("printerId", printerId); put("copies", 1) }.toString()
+                val pr = BcApi.boundAction(context, "licensePlates", lpNo, "printLabel", body)
+                if (!pr.ok) printFailures += 1
+            }
+            reload()
+            busy = false
+            status = if (printFailures == 0)
+                "TAMAM: Sayım kaydedildi; ${countedLpNos.size} LP etiketi güncel miktarla yazdırıldı"
+            else
+                "UYARI: Sayım kaydedildi; $printFailures LP etiketi yazdırılamadı"
+        }
+    }
+
     val h = header
-    val blind = firstValue(h ?: JSONObject(), "mode").contains("Blind", ignoreCase = true)
-    DocumentScanHandler(
-        enabled = countLine == null,
-        lines = lines,
-        onSingleMatch = { line, _ -> scanFilter = ""; countLine = line },
-        onMultiMatch = { itemNo, _ -> scanFilter = itemNo; status = "TAMAM: '$itemNo' için birden fazla satır — birini seçin" },
-        onNoMatch = { r -> status = "⚠️ '${r.itemNo ?: r.value}' bu sayfada yok" },
-    )
-    val displayLines = if (scanFilter.isBlank()) lines else lines.filter { matchLinesByBarcode(listOf(it), BarcodeIntentResolver.resolve(scanFilter)).isNotEmpty() }
     Column(Modifier.fillMaxSize()) {
-        Column(Modifier.weight(1f).padding(12.dp)) {
+        Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(12.dp)) {
             TextButton(onClick = onBack) { Text("‹ Sayfa Listesi") }
             DocHeaderCard(
                 title = no,
-                subtitle = "Lokasyon: ${h?.optString("locationCode") ?: ""} · Mod: ${firstValue(h ?: JSONObject(), "mode")} · ${firstValue(h ?: JSONObject(), "status")}",
-                badge = if (blind) "KÖR" else null
+                subtitle = "Lokasyon: ${h?.optString("locationCode") ?: ""} · ${firstValue(h ?: JSONObject(), "status")}",
             )
-            Spacer(Modifier.height(6.dp))
+            Spacer(Modifier.height(8.dp))
             StatusText(status)
-            Spacer(Modifier.height(4.dp))
-            Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
-                Text("Satırlar (${displayLines.size}/${lines.size})", fontWeight = FontWeight.Bold, fontSize = 14.sp)
-                Spacer(Modifier.weight(1f))
-                TextButton(onClick = { showColumns = true }) { Text("⚙ Kolonlar", fontSize = 12.sp) }
-            }
-            if (scanFilter.isNotBlank()) { ScanFilterChip(scanFilter) { scanFilter = "" }; Spacer(Modifier.height(4.dp)) }
-            // Blind sayımda sistem/fark kolonları gizli.
-            val effectiveCols = if (blind) columns.map { if (it.key == "systemQty" || it.key == "variance") it.copy(visible = false) else it } else columns
-            LineGrid(
-                defs = GridColumns.count, columns = effectiveCols, rows = displayLines,
-                modifier = Modifier.weight(1f),
-                isDone = { lineDone(it, LineModule.COUNT) },
-                onRowClick = { countLine = it },
+            Spacer(Modifier.height(8.dp))
+            CountByBinPane(
+                sheetNo = no,
+                locationCode = h?.optString("locationCode").orEmpty(),
+                lines = lines,
+                slot = slot,
+                onSlotChange = { slot = it },
+                resetTick = paneReset,
+                busy = busy,
+                onBusy = { busy = it },
+                onStatus = { status = it },
+                onReload = { reload() },
+                onEditLine = { countLine = it },
             )
         }
         BottomActionBar {
             // Generate lines from bin content when the sheet is empty (the count flow needs lines).
             OutlinedButton(onClick = { action("generateLines", "Satırlar üretildi") }, enabled = !busy, modifier = Modifier.weight(1f).height(52.dp)) { Text("➕ Satır Üret") }
-            OutlinedButton(onClick = { action("startRecount", "Recount başlatıldı") }, enabled = !busy, modifier = Modifier.weight(1f).height(52.dp)) { Text("⟳ Yeniden Say") }
-            Button(onClick = { action("postSheet", "Sayım kaydedildi") }, enabled = !busy, modifier = Modifier.weight(1f).height(52.dp)) { Text("✅ Kaydet", fontWeight = FontWeight.Bold) }
+            OutlinedButton(onClick = { paneReset += 1; action("startRecount", "Recount başlatıldı") }, enabled = !busy, modifier = Modifier.weight(1f).height(52.dp)) { Text("⟳ Yeniden Say") }
+            Button(onClick = { postSheetAndPrintLpLabels() }, enabled = !busy, modifier = Modifier.weight(1f).height(52.dp)) { Text("✅ Kaydet", fontWeight = FontWeight.Bold) }
         }
     }
 
     val cl = countLine
     if (cl != null) {
-        CountEntrySheet(line = cl, blind = blind, onDismiss = { countLine = null }, onConfirm = { slot, qty ->
+        CountEntrySheet(line = cl, initialSlot = slot, onDismiss = { countLine = null }, onConfirm = { slot, qty ->
             countLine = null
             scope.launch {
                 busy = true; status = "Sayım kaydediliyor..."
                 val body = JSONObject().apply { put("counterSlot", slot); put("qty", qty) }.toString()
-                val sheetNo = cl.optString("sheetNo").ifBlank { no }
+                val sheetNo = cl.optString("sheetNo").ifBlank { no }.replace("'", "''")
                 val lineNo = cl.optInt("lineNo")
                 val r = BcApi.post(context, "countSheetLines(sheetNo='$sheetNo',lineNo=$lineNo)/Microsoft.NAV.recordCount", body)
                 busy = false
@@ -552,29 +585,801 @@ private fun CountDocument(no: String, onBack: () -> Unit) {
             }
         })
     }
-    if (showColumns) {
-        ChooseColumnsSheet(GridColumns.count, columns, onDismiss = { showColumns = false }) { c -> columns = c; ColumnPrefs.save(context, "count", c); showColumns = false }
+}
+
+/** Okutulan etiketin (palet ya da madde) sayım sayfasındaki karşılığı. */
+private data class CountScanTarget(
+    /** Gruplama anahtarı: palet no ya da paletsiz satır için "#<lineNo>". */
+    val key: String,
+    /** Ekranda gösterilen ad: palet no ya da madde no. */
+    val label: String,
+    val lines: List<JSONObject>,
+    val misplacedFrom: String = "",
+    /** Etiketten okunan miktar (varsa). Yoksa sistem miktarı esas alınır. */
+    val labelQty: Double? = null,
+    /** Lot-only QR sonrasında BC lot bakiyesinden önerilen, düzenlenebilir miktar. */
+    val suggestedQty: Double? = null,
+    val suggestedQtySource: String = "",
+    val lotNo: String = "",
+)
+
+/**
+ * Adres (bin) bazlı sayım — depocunun sahadaki gerçek yürüyüşünü izler:
+ * rafı okut → o rafta beklenen paletler listelenir → paletleri tek tek okut →
+ * "Adresi Kapat" → sonraki rafa geç.
+ *
+ * LP okutmak o paleti TAM kabul eder: paletin tüm satırlarına sistem miktarı
+ * sayılan miktar olarak yazılır. Palet fiilen eksikse okutulmaz; adres
+ * kapatılırken okutulmayanlar onay alınarak 0 sayılır (eksik). Bir paletin
+ * içeriği farklıysa satırına dokunup miktar elle girilebilir.
+ *
+ * BC tarafında yeni bir nesne gerekmez — mevcut countSheetLines + recordCount
+ * kullanılır; satırlar zaten LP No. ve Bin Code taşıyor.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun CountByBinPane(
+    sheetNo: String,
+    locationCode: String,
+    lines: List<JSONObject>,
+    slot: Int,
+    onSlotChange: (Int) -> Unit,
+    resetTick: Int,
+    busy: Boolean,
+    onBusy: (Boolean) -> Unit,
+    onStatus: (String) -> Unit,
+    onReload: () -> Unit,
+    onEditLine: (JSONObject) -> Unit,
+) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var activeBin by remember(sheetNo, resetTick) { mutableStateOf("") }
+    var binScan by remember { mutableStateOf("") }
+    var lpScan by remember { mutableStateOf("") }
+    // Slot'a da keyed: done-durumu seçili sayıcı slotuna göre hesaplandığından
+    // slot değişince yerel ilerleme de o slotun gerçeğine göre yeniden kurulur.
+    var handledLps by remember(sheetNo, resetTick, slot) { mutableStateOf<Set<String>>(emptySet()) }
+    var closedBins by remember(sheetNo, resetTick, slot) { mutableStateOf<Set<String>>(emptySet()) }
+    var expandedLp by remember { mutableStateOf("") }
+    var confirmClose by remember { mutableStateOf(false) }
+    var misplaced by remember { mutableStateOf<Pair<String, String>?>(null) }
+    var scanned by remember { mutableStateOf<CountScanTarget?>(null) }
+    var lotSelection by remember { mutableStateOf<Pair<String, List<CountScanTarget>>?>(null) }
+    var itemNames by remember(sheetNo) { mutableStateOf<Map<String, String>>(emptyMap()) }
+
+    // Paletli depoda kalem = palet; paletsiz depoda kalem = tek sayım satırı.
+    // Hepsini tek "(paletsiz)" kartına yığmak 68 kalemlik rafı sayılamaz hale
+    // getiriyordu — ürün etiketiyle sayabilmek için her satır ayrı kalem olmalı.
+    fun lpKey(ln: JSONObject) = ln.optString("lpNo").ifBlank { "#" + ln.optInt("lineNo") }
+    fun isLoose(key: String) = key.startsWith("#")
+    fun binOf(ln: JSONObject) = ln.optString("binCode").ifBlank { "(rafsız)" }
+
+    val binOrder = remember(lines) { lines.map { binOf(it) }.distinct().sorted() }
+    val binLines = lines.filter { binOf(it) == activeBin }
+    val lpGroups = binLines.groupBy { lpKey(it) }
+
+    // Done-durumu SEÇİLİ slota göredir: sayıcı 2, sayıcı 1'in bitirdiği rafı
+    // kendi slotuyla yeniden sayabilmeli (recount). Bilinen sınırlama: 0 girilen
+    // sayım sunucuda 'hiç sayılmadı'dan ayırt edilemez (şema bayrağı yok).
+    fun alreadyCounted(ln: JSONObject) = ln.optDouble("countedQty$slot", 0.0) != 0.0
+    // Görsel geri bildirim: seçili slotun girdiği sayım.
+    fun countedQtyOf(ln: JSONObject): Double? =
+        ln.optDouble("countedQty$slot", 0.0).takeIf { it != 0.0 }
+    fun lpDone(lpNo: String): Boolean =
+        lpNo in handledLps || (lpGroups[lpNo]?.all { alreadyCounted(it) } == true)
+
+    suspend fun writeQty(ln: JSONObject, qty: Double): Boolean {
+        val body = JSONObject().apply { put("counterSlot", slot); put("qty", qty) }.toString()
+        val lineNo = ln.optInt("lineNo")
+        val safeSheet = sheetNo.replace("'", "''")
+        val r = BcApi.post(context, "countSheetLines(sheetNo='$safeSheet',lineNo=$lineNo)/Microsoft.NAV.recordCount", body)
+        if (!r.ok) onStatus("HATA: ${BcApi.errorMessage(r.body)} (HTTP ${r.httpCode})")
+        return r.ok
+    }
+
+    fun handleBinScan(raw: String) {
+        val value = BarcodeIntentResolver.resolve(raw).value.trim().ifBlank { raw.trim() }
+        binScan = ""
+        val match = binOrder.firstOrNull { it.equals(value, ignoreCase = true) }
+        if (match == null) {
+            onStatus("⚠️ '$value' bu sayım sayfasında bir adres değil")
+            return
+        }
+        activeBin = match
+        expandedLp = ""
+        lotSelection = null
+        onStatus("TAMAM: $match açıldı — ${lines.count { binOf(it) == match }} satır")
+    }
+
+    // Ürün adı sayım satırında boş gelirse (eski AL sürümü) Item kartından tamamlanır:
+    // depocunun ekranda ürün adını görmesi bu akışın şartı.
+    fun ensureItemNames(target: List<JSONObject>) {
+        val missing = target
+            .filter { it.optString("description").isBlank() }
+            .map { it.optString("itemNo") }
+            .filter { it.isNotBlank() && itemNames[it] == null }
+            .distinct()
+        if (missing.isEmpty()) return
+        scope.launch {
+            val found = itemNames.toMutableMap()
+            for (code in missing) {
+                val safe = code.replace("'", "''")
+                val r = BcApi.get(context, "items?\$filter=no eq '$safe'&\$select=no,description&\$top=1")
+                if (r.ok) BcApi.parseValueArray(r.body).firstOrNull()?.let { found[code] = it.optString("description") }
+            }
+            itemNames = found
+        }
+    }
+
+    fun openTarget(
+        key: String,
+        label: String,
+        group: List<JSONObject>,
+        misplacedFrom: String = "",
+        labelQty: Double? = null,
+        suggestedQty: Double? = null,
+        suggestedQtySource: String = "",
+        lotNo: String = "",
+    ) {
+        ensureItemNames(group)
+        scanned = CountScanTarget(
+            key = key,
+            label = label,
+            lines = group,
+            misplacedFrom = misplacedFrom,
+            labelQty = labelQty,
+            suggestedQty = suggestedQty,
+            suggestedQtySource = suggestedQtySource,
+            lotNo = lotNo,
+        )
+    }
+
+    fun lotTargets(
+        lotNo: String,
+        matchingLines: List<JSONObject>,
+        balanceRows: List<JSONObject> = emptyList(),
+    ): List<CountScanTarget> = matchingLines
+        .groupBy { lpKey(it) }
+        .map { (key, matches) ->
+            // LP bulunduysa yalnız lot satırını değil LP'nin tamamını aç; aksi halde
+            // LP'nin diğer ürünleri fark edilmeden sayılmamış kalır.
+            val targetLines = if (isLoose(key)) matches else lpGroups[key].orEmpty()
+            val head = matches.first()
+            val balance = balanceRows.firstOrNull { row ->
+                row.optString("itemNo").equals(head.optString("itemNo"), ignoreCase = true) &&
+                    row.optString("variantCode").equals(head.optString("variantCode"), ignoreCase = true) &&
+                    (row.optString("unitOfMeasureCode").isBlank() ||
+                        row.optString("unitOfMeasureCode").equals(firstValue(head, "unitOfMeasureCode"), ignoreCase = true))
+            }
+            val suggested = if (targetLines.size == 1) {
+                balance?.let { row ->
+                    if (row.has("quantity")) row.optDouble("quantity") else row.optDouble("quantityBase")
+                } ?: head.optDouble("systemQty", 0.0)
+            } else null
+            CountScanTarget(
+                key = key,
+                label = head.optString("lpNo").ifBlank { head.optString("itemNo") },
+                lines = targetLines,
+                suggestedQty = suggested,
+                suggestedQtySource = "BC lot kaydı",
+                lotNo = lotNo,
+            )
+        }
+        .distinctBy { it.key }
+
+    fun presentLotTargets(lotNo: String, targets: List<CountScanTarget>) {
+        when (targets.size) {
+            0 -> onStatus("⚠️ Lot $lotNo için $activeBin adresinde sayılabilir kayıt bulunamadı")
+            1 -> {
+                ensureItemNames(targets.first().lines)
+                scanned = targets.first()
+                onStatus("TAMAM: Lot $lotNo bulundu — miktarı kontrol edip kaydedin")
+            }
+            else -> {
+                targets.forEach { ensureItemNames(it.lines) }
+                lotSelection = lotNo to targets
+                onStatus("ℹ️ Lot $lotNo için ${targets.size} kayıt var — ilgili kaydı seçin")
+            }
+        }
+    }
+
+    fun loadLotFromBc(lotNo: String) {
+        scope.launch {
+            onBusy(true)
+            onStatus("Lot $lotNo BC stok kayıtlarında aranıyor...")
+            fun safe(value: String) = value.replace("'", "''")
+            val filters = buildList {
+                if (locationCode.isNotBlank()) add("locationCode eq '${safe(locationCode)}'")
+                add("binCode eq '${safe(activeBin)}'")
+                add("lotNo eq '${safe(lotNo)}'")
+            }.joinToString(" and ")
+            val result = BcApi.get(context, "availableLots?\$filter=$filters&\$top=200")
+            if (!result.ok) {
+                onBusy(false)
+                onStatus(
+                    if (result.httpCode == 404)
+                        "HATA: Lot servisi BC'de yok; güncel BCWMS AL paketini yayınlayın"
+                    else "HATA: Lot $lotNo alınamadı (HTTP ${result.httpCode})"
+                )
+                return@launch
+            }
+            val balances = BcApi.parseValueArray(result.body)
+                .filter {
+                    it.optString("lotNo").equals(lotNo, ignoreCase = true) &&
+                        (if (it.has("quantity")) it.optDouble("quantity") else it.optDouble("quantityBase")) > 0.0
+                }
+            val allMatches = balances.flatMap { balance ->
+                binLines.filter { line ->
+                    line.optString("itemNo").equals(balance.optString("itemNo"), ignoreCase = true) &&
+                        line.optString("variantCode").equals(balance.optString("variantCode"), ignoreCase = true) &&
+                        (line.optString("lotNo").isBlank() ||
+                            line.optString("lotNo").equals(lotNo, ignoreCase = true))
+                }
+            }.distinctBy { it.optInt("lineNo") }
+            val matches = allMatches.filter {
+                !alreadyCounted(it) && lpKey(it) !in handledLps
+            }
+            onBusy(false)
+            if (balances.isEmpty()) {
+                onStatus("⚠️ Lot $lotNo için $activeBin adresinde pozitif stok bulunamadı")
+            } else if (matches.isEmpty() && allMatches.isNotEmpty() &&
+                allMatches.all { alreadyCounted(it) || lpKey(it) in handledLps }
+            ) {
+                onStatus("ℹ️ Lot $lotNo bu adreste zaten sayıldı")
+            } else if (matches.isEmpty()) {
+                onStatus("⚠️ Lot $lotNo bulundu ancak sayım sayfasında karşılık gelen madde satırı yok")
+            } else {
+                presentLotTargets(lotNo, lotTargets(lotNo, matches, balances))
+            }
+        }
+    }
+
+    fun handleLpScan(raw: String) {
+        val resolved = BarcodeIntentResolver.resolve(raw)
+        val value = (resolved.value).trim().ifBlank { raw.trim() }
+        lpScan = ""
+        if (activeBin.isBlank()) { onStatus("⚠️ Önce raf adresini okutun"); return }
+
+        // 1) Bu raftaki bir palet mi?
+        val here = lpGroups.keys.firstOrNull { it.equals(value, ignoreCase = true) }
+        if (here != null) {
+            if (lpDone(here)) onStatus("ℹ️ $here zaten sayıldı")
+            else openTarget(here, here, lpGroups[here].orEmpty(), labelQty = resolved.quantity)
+            return
+        }
+        // 2) Palet değil de madde etiketi olabilir: bu raftaki ürün satırlarını ara.
+        val directItemHits = matchLinesByBarcode(binLines, resolved, listOf("itemNo", "itemReference", "gtin"))
+            .filter { !alreadyCounted(it) && lpKey(it) !in handledLps }
+        val resolvedLot = resolved.lotNo?.trim().orEmpty()
+        val itemLotHits = if (resolvedLot.isNotBlank())
+            directItemHits.filter { it.optString("lotNo").equals(resolvedLot, ignoreCase = true) }
+        else emptyList()
+        val itemHits = if (itemLotHits.isNotEmpty()) itemLotHits else directItemHits
+        if (itemHits.isNotEmpty()) {
+            if (resolvedLot.isNotBlank()) {
+                val targets = lotTargets(resolvedLot, itemHits).map { target ->
+                    target.copy(labelQty = resolved.quantity ?: target.labelQty)
+                }
+                if (targets.isNotEmpty()) {
+                    presentLotTargets(resolvedLot, targets)
+                    return
+                }
+            }
+            val hit = itemHits.first()
+            val hitLp = hit.optString("lpNo")
+            if (hitLp.isNotBlank()) {
+                // Ürün etiketi paletli satıra denk geldi: sayım kalemi PALETTİR.
+                // Tek satırı sayıp paleti 'bitti' işaretlemek diğer ürünleri
+                // sayımsız bırakır — o yüzden paletin TÜM satırları açılır.
+                if (lpDone(hitLp)) onStatus("ℹ️ $hitLp zaten sayıldı")
+                else openTarget(hitLp, hitLp, lpGroups[hitLp].orEmpty(), labelQty = resolved.quantity)
+            } else {
+                openTarget(lpKey(hit), hit.optString("itemNo"), listOf(hit), labelQty = resolved.quantity)
+            }
+            return
+        }
+
+        // 3) QR yalnız lot no taşıyabilir. Önce aktif bin'deki sayım satırında
+        // ara; bulunmazsa availableLots üzerinden BC lot bakiyesine git.
+        val lotValue = resolved.lotNo?.trim().takeUnless { it.isNullOrBlank() } ?: value
+        val allLotHits = binLines.filter { it.optString("lotNo").equals(lotValue, ignoreCase = true) }
+        val lotHits = allLotHits.filter { !alreadyCounted(it) && lpKey(it) !in handledLps }
+        if (lotHits.isNotEmpty()) {
+            presentLotTargets(lotValue, lotTargets(lotValue, lotHits))
+            return
+        }
+        if (allLotHits.isNotEmpty()) {
+            onStatus("ℹ️ Lot $lotValue bu adreste zaten sayıldı")
+            return
+        }
+        // 4) Sayfada var ama başka adreste: yanlış yere konmuş palet.
+        val elsewhere = lines.filter { it.optString("lpNo").equals(value, ignoreCase = true) }
+        if (elsewhere.isNotEmpty()) {
+            if (elsewhere.all { alreadyCounted(it) })
+                onStatus("ℹ️ $value zaten sayıldı (adres: ${binOf(elsewhere.first())})")
+            else
+                misplaced = value to binOf(elsewhere.first())
+            return
+        }
+
+        // Düz lot numarası ürün kodundan ayırt edilemediği için yerel satırda
+        // eşleşme yoksa BC'nin lot bakiyesiyle güvenli biçimde çözülür.
+        loadLotFromBc(lotValue)
+    }
+
+    // Okutulan hedefi (palet ya da madde satırları) okutulan adrese sayılmış olarak yazar.
+    fun commitTarget(target: CountScanTarget, manualQty: Double? = null) {
+        scope.launch {
+            onBusy(true); onStatus("${target.label} kaydediliyor...")
+            var ok = true
+            for (ln in target.lines) {
+                // Öncelik: elle girilen sayım > etiketten okunan miktar (GS1) >
+                // LP/etiket kaydı (systemQty). LP'li palette etiket = LP kaydı
+                // olduğundan systemQty etiketteki miktarla aynıdır.
+                val qty = manualQty
+                    ?: (if (target.lines.size == 1) target.labelQty else null)
+                    ?: ln.optDouble("systemQty", 0.0)
+                if (!writeQty(ln, qty)) { ok = false; break }
+            }
+            onBusy(false)
+            if (ok) {
+                handledLps = handledLps + target.key
+                onStatus(
+                    "TAMAM: ${target.label} → $activeBin sayıldı (${target.lines.size} satır)" +
+                        if (target.misplacedFrom.isNotBlank()) " — sistemde ${target.misplacedFrom}" else ""
+                )
+                // Satır verisi tazelenmeli: aynı ürünün İKİNCİ satırı (başka lot)
+                // okutulduğunda bayat alreadyCounted ilk satırı yeniden seçmesin.
+                onReload()
+            }
+        }
+    }
+
+    // ---- görünüm ----
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Text("Sayıcı slotu", fontSize = 12.sp, color = Color.Gray)
+        Spacer(Modifier.width(8.dp))
+        (1..3).forEach { sIdx ->
+            FilterChip(selected = slot == sIdx, onClick = { onSlotChange(sIdx) }, enabled = !busy, label = { Text("$sIdx") })
+            Spacer(Modifier.width(4.dp))
+        }
+    }
+    Spacer(Modifier.height(8.dp))
+    StatusText("")
+
+    if (activeBin.isBlank()) {
+        ScanField(
+            label = "Raf adresi okut",
+            value = binScan,
+            onValueChange = { binScan = it },
+            onScanned = { handleBinScan(it) },
+            enabled = !busy,
+            modifier = Modifier.fillMaxWidth(),
+        )
+        Spacer(Modifier.height(10.dp))
+        val doneBins = closedBins.size
+        Text("Adresler ($doneBins/${binOrder.size} kapatıldı)", fontWeight = FontWeight.Bold, fontSize = 14.sp)
+        Spacer(Modifier.height(6.dp))
+        if (binOrder.isEmpty()) EmptyState("Sayım satırı yok — önce 'Satır Üret'.")
+        binOrder.forEach { b ->
+            val inBin = lines.filter { binOf(it) == b }
+            val total = inBin.size
+            val counted = inBin.count { alreadyCounted(it) }
+            val closed = b in closedBins || (total > 0 && counted == total)
+            Card(
+                onClick = { activeBin = b; expandedLp = "" },
+                modifier = Modifier.fillMaxWidth().padding(vertical = 3.dp),
+                shape = RoundedCornerShape(10.dp),
+            ) {
+                Column(Modifier.padding(12.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(if (closed) "✅ $b" else "📍 $b", fontWeight = FontWeight.Bold)
+                        Spacer(Modifier.weight(1f))
+                        Text(
+                            "$counted/$total sayıldı",
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = when {
+                                counted == total && total > 0 -> Color(0xFF15803D)
+                                counted > 0 -> Color(0xFFC2410C)
+                                else -> Color.Gray
+                            },
+                        )
+                    }
+                    if (total > 0) {
+                        Spacer(Modifier.height(6.dp))
+                        LinearProgressIndicator(
+                            progress = { counted.toFloat() / total },
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                    }
+                }
+            }
+        }
+    } else {
+        val lpKeys = lpGroups.keys.sortedBy { key ->
+            lpGroups[key]?.firstOrNull()?.let { if (isLoose(key)) it.optString("itemNo") else key } ?: key
+        }
+        val doneCount = lpKeys.count { lpDone(it) }
+        val hasPallets = lpKeys.any { !isLoose(it) }
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text("📍 $activeBin", fontWeight = FontWeight.Bold, fontSize = 16.sp)
+            Spacer(Modifier.weight(1f))
+            TextButton(onClick = { activeBin = ""; expandedLp = "" }) { Text("‹ Adresler", fontSize = 12.sp) }
+        }
+        Text(
+            "$doneCount/${lpKeys.size} " + (if (hasPallets) "kalem" else "ürün") + " sayıldı",
+            fontSize = 12.sp, color = Color.Gray,
+        )
+        Spacer(Modifier.height(8.dp))
+        ScanField(
+            label = "LP veya ürün barkodu okut",
+            value = lpScan,
+            onValueChange = { lpScan = it },
+            onScanned = { handleLpScan(it) },
+            // Bilgi kartı açıkken ikinci okutma hedefi sessizce değiştirmesin.
+            enabled = !busy && scanned == null,
+            modifier = Modifier.fillMaxWidth(),
+        )
+        Spacer(Modifier.height(10.dp))
+        lpKeys.forEach { lp ->
+            val group = lpGroups[lp].orEmpty()
+            val done = lpDone(lp)
+            val loose = isLoose(lp)
+            val head = group.firstOrNull() ?: JSONObject()
+            val title = if (loose) head.optString("itemNo") else lp
+            Card(
+                onClick = { if (loose) openTarget(lp, title, group) else expandedLp = if (expandedLp == lp) "" else lp },
+                modifier = Modifier.fillMaxWidth().padding(vertical = 3.dp),
+                shape = RoundedCornerShape(10.dp),
+            ) {
+                Column(Modifier.padding(12.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text((if (done) "✅ " else "⏳ ") + title, fontWeight = FontWeight.Bold)
+                        Spacer(Modifier.weight(1f))
+                        val countedShown = if (loose) countedQtyOf(head) else null
+                        Text(
+                            when {
+                                countedShown != null -> "Sayılan: ${fmtq(countedShown)} ${firstValue(head, "unitOfMeasureCode")}".trim()
+                                loose -> "Sistem: ${fmtq(head.optDouble("systemQty"))} ${firstValue(head, "unitOfMeasureCode")}".trim()
+                                else -> "${group.size} satır"
+                            },
+                            fontSize = 12.sp,
+                            fontWeight = if (countedShown != null) FontWeight.SemiBold else FontWeight.Normal,
+                            color = if (countedShown != null) Color(0xFF15803D) else Color.Gray,
+                        )
+                    }
+                    if (loose) {
+                        val nm = head.optString("description").ifBlank { itemNames[title].orEmpty() }
+                        if (nm.isNotBlank()) Text(nm, fontSize = 12.sp, color = Color.Gray)
+                    }
+                    if (expandedLp == lp) {
+                        Spacer(Modifier.height(8.dp))
+                        group.forEach { ln ->
+                            TextButton(onClick = { onEditLine(ln) }, modifier = Modifier.fillMaxWidth()) {
+                                Text(
+                                    ln.optString("itemNo") +
+                                        " · Sistem: ${fmtq(ln.optDouble("systemQty"))}" +
+                                        (if (alreadyCounted(ln)) " · ✅" else ""),
+                                    fontSize = 12.sp,
+                                )
+                            }
+                        }
+                        if (!loose && !done) {
+                            OutlinedButton(onClick = { openTarget(lp, lp, group) }, enabled = !busy, modifier = Modifier.fillMaxWidth()) {
+                                Text("✅ Paleti say")
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        Spacer(Modifier.height(12.dp))
+        Button(
+            onClick = { confirmClose = true },
+            enabled = !busy,
+            modifier = Modifier.fillMaxWidth().height(52.dp),
+        ) { Text("🔒 Adresi Kapat", fontWeight = FontWeight.Bold) }
+    }
+
+    val sc = scanned
+    if (sc != null) {
+        val total = sc.lines.sumOf { it.optDouble("systemQty", 0.0) }
+        // LP'siz (dökme) kalemde QR miktarı varsa alan onunla başlar; operatör
+        // fiziksel sonuca göre değiştirebilir. QR miktarı yoksa manuel giriş
+        // zorunludur. Sistemin sayısını otomatik onaylatmak sayım değildir.
+        val loose = sc.lines.all { it.optString("lpNo").isBlank() }
+        val singleLineLabelQty = sc.labelQty.takeIf { sc.lines.size == 1 }
+        val singleLineSuggestedQty = sc.suggestedQty.takeIf { sc.lines.size == 1 }
+        val singleLinePrefillQty = singleLineLabelQty
+            ?: singleLineSuggestedQty
+            ?: sc.lines.singleOrNull()?.takeUnless { loose }?.optDouble("systemQty", 0.0)
+        val prefillSource = when {
+            singleLineLabelQty != null -> "Etiket QR'ı"
+            singleLineSuggestedQty != null -> sc.suggestedQtySource.ifBlank { "BC lot kaydı" }
+            singleLinePrefillQty != null -> "LP kaydı"
+            else -> ""
+        }
+        var manualQty by remember(sc) { mutableStateOf(singleLinePrefillQty?.let(::fmtq).orEmpty()) }
+        com.dynops.bcwms.ui.SheetScaffold(
+            onDismiss = { scanned = null },
+            contentPadding = PaddingValues(20.dp),
+        ) {
+            Text("Okutulan: ${sc.label}", fontWeight = FontWeight.Bold, fontSize = 18.sp)
+            Text("Adres: $activeBin", fontSize = 12.sp, color = Color.Gray)
+            if (sc.misplacedFrom.isNotBlank()) {
+                Spacer(Modifier.height(8.dp))
+                Surface(shape = RoundedCornerShape(10.dp), color = Color(0xFFEA580C).copy(alpha = 0.14f)) {
+                    Text(
+                        "⚠️ Bu palet sistemde ${sc.misplacedFrom} adresinde kayıtlı, siz $activeBin adresinde okuttunuz.",
+                        Modifier.fillMaxWidth().padding(12.dp),
+                        fontSize = 12.sp,
+                        color = Color(0xFFC2410C),
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                }
+            }
+            Spacer(Modifier.height(14.dp))
+            sc.lines.forEach { ln ->
+                val itemNo = ln.optString("itemNo")
+                val name = ln.optString("description").ifBlank { itemNames[itemNo].orEmpty() }
+                val uom = firstValue(ln, "unitOfMeasureCode")
+                val shownLot = ln.optString("lotNo").ifBlank { sc.lotNo }
+                val tracking = listOfNotNull(
+                    shownLot.takeIf { it.isNotBlank() }?.let { "Lot: $it" },
+                    ln.optString("serialNo").takeIf { it.isNotBlank() }?.let { "Seri: $it" },
+                ).joinToString(" · ")
+                Card(
+                    onClick = { val line = ln; scanned = null; onEditLine(line) },
+                    modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                    shape = RoundedCornerShape(10.dp),
+                ) {
+                    Column(Modifier.padding(12.dp)) {
+                        Text("Madde No: $itemNo", fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                        Text(
+                            "Ürün Adı: " + name.ifBlank { "—" },
+                            fontSize = 14.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        val labelQty = singleLineLabelQty
+                        if (loose) {
+                            // Dökme mal: sistem miktarı yalnız karşılaştırma bilgisidir.
+                            Text(
+                                "Sistem kaydı: ${fmtq(ln.optDouble("systemQty"))} $uom".trim(),
+                                fontSize = 13.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                            val automaticQty = labelQty ?: singleLineSuggestedQty
+                            if (automaticQty != null) {
+                                val sysQty = ln.optDouble("systemQty", 0.0)
+                                val diff = automaticQty - sysQty
+                                Text(
+                                    "Önerilen miktar: ${fmtq(automaticQty)} $uom · $prefillSource kaynağından geldi" +
+                                        if (diff != 0.0) " · Sistem farkı: ${if (diff > 0) "+" else ""}${fmtq(diff)}" else " · Fark yok",
+                                    fontSize = 12.sp,
+                                    color = if (diff != 0.0) Color(0xFFC2410C) else Color(0xFF15803D),
+                                    fontWeight = FontWeight.SemiBold,
+                                )
+                            }
+                        } else {
+                            Text(
+                                "Miktar: ${fmtq(labelQty ?: singleLineSuggestedQty ?: ln.optDouble("systemQty"))} $uom".trim(),
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 16.sp,
+                            )
+                            if (labelQty != null) {
+                                val sysQty = ln.optDouble("systemQty", 0.0)
+                                val diff = labelQty - sysQty
+                                Text(
+                                    "Etiket QR'ından okundu · Sistem: ${fmtq(sysQty)}" +
+                                        if (diff != 0.0) " · Fark: ${if (diff > 0) "+" else ""}${fmtq(diff)}" else " · Fark yok",
+                                    fontSize = 12.sp,
+                                    color = if (diff != 0.0) Color(0xFFC2410C) else Color(0xFF15803D),
+                                    fontWeight = FontWeight.SemiBold,
+                                )
+                            } else if (singleLineSuggestedQty != null) {
+                                Text(
+                                    "BC lot kaydından otomatik getirildi · Fiziksel sayıma göre düzenlenebilir",
+                                    fontSize = 11.sp,
+                                    color = Color.Gray,
+                                )
+                            } else {
+                                Text("Kaynak: LP kaydı (etiket basımındaki içerik)", fontSize = 11.sp, color = Color.Gray)
+                            }
+                        }
+                        if (tracking.isNotBlank()) Text(tracking, fontSize = 12.sp, color = Color.Gray)
+                        if (!loose) Text("Dokunarak miktarı düzeltebilirsiniz", fontSize = 11.sp, color = Color.Gray)
+                    }
+                }
+            }
+            if (sc.lines.size > 1) {
+                Spacer(Modifier.height(4.dp))
+                Text("Toplam: ${fmtq(total)}", fontWeight = FontWeight.Bold)
+            }
+            Spacer(Modifier.height(16.dp))
+            if (sc.lines.size == 1) {
+                OutlinedTextField(
+                    value = manualQty,
+                    onValueChange = { manualQty = it.replace(',', '.').filter { c -> c.isDigit() || c == '.' } },
+                    label = {
+                        Text(
+                            if (singleLinePrefillQty != null) "Sayılan Miktar ($prefillSource)"
+                            else "Sayılan Miktar (zorunlu)"
+                        )
+                    },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                Text(
+                    if (singleLinePrefillQty != null)
+                        "Miktar $prefillSource kaynağından otomatik dolduruldu. Fiziksel sayım farklıysa değeri değiştirebilirsiniz."
+                    else
+                        "Etiket ve BC lot kaydında miktar bulunamadı — fiziksel miktarı elle girin.",
+                    fontSize = 12.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Spacer(Modifier.height(10.dp))
+                Button(
+                    onClick = {
+                        val t = sc
+                        val q = manualQty.toDoubleOrNull()
+                        if (q != null) { scanned = null; commitTarget(t, manualQty = q) }
+                    },
+                    enabled = !busy && manualQty.toDoubleOrNull() != null,
+                    modifier = Modifier.fillMaxWidth().height(52.dp),
+                ) { Text("✅ Sayılan miktarla $activeBin adresine kaydet", fontWeight = FontWeight.Bold) }
+            } else {
+                Button(
+                    onClick = { val t = sc; scanned = null; commitTarget(t) },
+                    enabled = !busy,
+                    modifier = Modifier.fillMaxWidth().height(52.dp),
+                ) { Text("✅ $activeBin adresine sayıldı olarak kaydet", fontWeight = FontWeight.Bold) }
+            }
+            TextButton(onClick = { scanned = null }, modifier = Modifier.fillMaxWidth()) { Text("Vazgeç") }
+            Spacer(Modifier.height(24.dp))
+        }
+    }
+
+    val lotPick = lotSelection
+    if (lotPick != null) {
+        AlertDialog(
+            onDismissRequest = { lotSelection = null },
+            title = { Text("Lot ${lotPick.first} — ilgili kaydı seçin") },
+            text = {
+                Column(
+                    modifier = Modifier.fillMaxWidth().heightIn(max = 460.dp).verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    Text(
+                        "Aynı lot için birden fazla sayım kaydı bulundu. Madde, LP ve miktarı kontrol ederek doğru kaydı seçin.",
+                        fontSize = 12.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    lotPick.second.forEach { target ->
+                        val head = target.lines.first()
+                        val itemNo = head.optString("itemNo")
+                        val name = head.optString("description").ifBlank { itemNames[itemNo].orEmpty() }
+                        val lpNo = head.optString("lpNo")
+                        val uom = firstValue(head, "unitOfMeasureCode")
+                        val qty = target.suggestedQty ?: target.lines.sumOf { it.optDouble("systemQty", 0.0) }
+                        OutlinedButton(
+                            onClick = {
+                                lotSelection = null
+                                scanned = target
+                                onStatus("TAMAM: Lot ${lotPick.first} için ${target.label} seçildi")
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            Column(Modifier.fillMaxWidth()) {
+                                Text("$itemNo — ${name.ifBlank { "Ürün adı yok" }}", fontWeight = FontWeight.Bold)
+                                Text(
+                                    (if (lpNo.isNotBlank()) "LP: $lpNo · " else "") +
+                                        "Miktar: ${fmtq(qty)} $uom",
+                                    fontSize = 12.sp,
+                                )
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { lotSelection = null }) { Text("Vazgeç") }
+            },
+        )
+    }
+
+    val mp = misplaced
+    if (mp != null) {
+        AlertDialog(
+            onDismissRequest = { misplaced = null },
+            title = { Text("Palet başka adreste görünüyor") },
+            text = {
+                Text(
+                    "${mp.first} sistemde ${mp.second} adresinde kayıtlı, siz $activeBin adresinde okuttunuz. " +
+                        "Paleti bulunduğu yerde tam sayalım mı? (Adres farkı sayım sonrası düzeltilmeli.)"
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    val lp = mp.first
+                    val from = mp.second
+                    misplaced = null
+                    openTarget(lp, lp, lines.filter { it.optString("lpNo").equals(lp, ignoreCase = true) }, misplacedFrom = from)
+                }) { Text("Evet, göster") }
+            },
+            dismissButton = { TextButton(onClick = { misplaced = null }) { Text("Vazgeç") } },
+        )
+    }
+
+    if (confirmClose) {
+        val pending = lpGroups.keys.filter { !lpDone(it) }
+        AlertDialog(
+            onDismissRequest = { confirmClose = false },
+            title = { Text("$activeBin kapatılsın mı?") },
+            text = {
+                val names = pending.map { key ->
+                    if (isLoose(key)) lpGroups[key]?.firstOrNull()?.optString("itemNo").orEmpty().ifBlank { key } else key
+                }
+                Text(
+                    if (pending.isEmpty()) "Bu adresteki tüm kalemler sayıldı."
+                    else "Sayılmayan ${pending.size} kalem var: ${names.joinToString(", ")}. " +
+                        "Kapatırsanız bunlar EKSİK sayılır (miktar 0) ve sayım farkı oluşur."
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    confirmClose = false
+                    val toZero = pending.flatMap { lpGroups[it].orEmpty() }.filter { !alreadyCounted(it) }
+                    scope.launch {
+                        onBusy(true); onStatus("$activeBin kapatılıyor...")
+                        var ok = true
+                        for (ln in toZero) if (!writeQty(ln, 0.0)) { ok = false; break }
+                        onBusy(false)
+                        if (ok) {
+                            closedBins = closedBins + activeBin
+                            handledLps = handledLps + pending
+                            onStatus("TAMAM: $activeBin kapatıldı" + if (pending.isEmpty()) "" else " — ${pending.size} palet eksik")
+                            activeBin = ""
+                            expandedLp = ""
+                            onReload()
+                        }
+                    }
+                }) { Text("Kapat") }
+            },
+            dismissButton = { TextButton(onClick = { confirmClose = false }) { Text("Vazgeç") } },
+        )
     }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun CountEntrySheet(line: JSONObject, blind: Boolean, onDismiss: () -> Unit, onConfirm: (slot: Int, qty: Double) -> Unit) {
-    var slot by remember { mutableStateOf(1) }
+private fun CountEntrySheet(line: JSONObject, initialSlot: Int = 1, onDismiss: () -> Unit, onConfirm: (slot: Int, qty: Double) -> Unit) {
+    // Panelde seçilen sayıcı slotu devralınır: elle düzeltme başka slota
+    // (varsayılan 1'e) kayıp 1. sayıcının değerini ezmesin.
+    var slot by remember { mutableStateOf(initialSlot) }
     var qty by remember { mutableStateOf("") }
     com.dynops.bcwms.ui.SheetScaffold(onDismiss = onDismiss, contentPadding = androidx.compose.foundation.layout.PaddingValues(20.dp)) {
         Text("Sayım Gir — ${line.optString("itemNo")}", fontWeight = FontWeight.Bold, fontSize = 18.sp)
-        Text("Bin: ${firstValue(line, "binCode")}" + if (blind) " · KÖR (sistem miktarı gizli)" else " · Sistem: ${fmtq(line.optDouble("systemQty"))}", fontSize = 12.sp, color = Color.Gray)
+        val lpInfo = line.optString("lpNo").takeIf { it.isNotBlank() }?.let { "LP: $it · " }.orEmpty()
+        val tracking = listOfNotNull(
+            line.optString("lotNo").takeIf { it.isNotBlank() }?.let { "Lot: $it" },
+            line.optString("serialNo").takeIf { it.isNotBlank() }?.let { "Seri: $it" },
+        ).joinToString(" · ")
+        Text(lpInfo + "Bin: ${firstValue(line, "binCode")} · Sistem: ${fmtq(line.optDouble("systemQty"))}", fontSize = 12.sp, color = Color.Gray)
+        if (tracking.isNotBlank()) Text(tracking, fontSize = 12.sp, color = Color.Gray)
         Spacer(Modifier.height(12.dp))
         Text("Sayıcı slotu", fontSize = 12.sp, color = Color.Gray)
         Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             (1..3).forEach { s -> FilterChip(selected = slot == s, onClick = { slot = s }, label = { Text("Sayıcı $s") }) }
         }
         Spacer(Modifier.height(10.dp))
-        OutlinedTextField(qty, { qty = it.filter { c -> c.isDigit() || c == '.' } }, label = { Text("Sayılan Miktar") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+        // Virgül noktaya çevrilir (TR klavye '12,5' → '125' olmasın); geçersiz
+        // girdide buton kilitli kalır — 0.0'a sessiz düşüş yok.
+        OutlinedTextField(qty, { qty = it.replace(',', '.').filter { c -> c.isDigit() || c == '.' } }, label = { Text("Sayılan Miktar") }, singleLine = true, modifier = Modifier.fillMaxWidth())
         Spacer(Modifier.height(16.dp))
-        Button(modifier = Modifier.fillMaxWidth(), enabled = qty.isNotBlank(), onClick = {
-            onConfirm(slot, qty.toDoubleOrNull() ?: 0.0)
+        val parsedQty = qty.toDoubleOrNull()
+        Button(modifier = Modifier.fillMaxWidth(), enabled = parsedQty != null, onClick = {
+            parsedQty?.let { onConfirm(slot, it) }
         }) { Text("Sayımı Kaydet") }
         Spacer(Modifier.height(24.dp))
     }
@@ -741,7 +1546,7 @@ private fun MovementDocument(no: String, onBack: () -> Unit) {
     val totalQty = lines.sumOf { it.optDouble("quantity", 0.0) }
     val handledOrStaged = lines.sumOf { maxOf(it.optDouble("qtyHandled", 0.0), it.optDouble("qtyToHandle", 0.0)) }
     Column(Modifier.fillMaxSize()) {
-        Column(Modifier.weight(1f).padding(12.dp)) {
+        Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(12.dp)) {
             TextButton(onClick = onBack) { Text("‹ Hareket Listesi") }
             DocHeaderCard(
                 title = "🧭 $no",
@@ -753,8 +1558,8 @@ private fun MovementDocument(no: String, onBack: () -> Unit) {
             Spacer(Modifier.height(6.dp))
             Text("Satırlar (${lines.size}) — ürünü okutun ya da satıra dokunup miktar girin", fontSize = 12.sp, color = Color.Gray)
             Spacer(Modifier.height(6.dp))
-            LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                items(lines) { ln ->
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                lines.forEach { ln ->
                     val take = ln.optString("actionType").equals("Take", ignoreCase = true)
                     val toHandle = ln.optDouble("qtyToHandle", 0.0)
                     val qty = ln.optDouble("quantity", 0.0)
@@ -787,7 +1592,7 @@ private fun MovementDocument(no: String, onBack: () -> Unit) {
                         }
                     }
                 }
-                if (lines.isEmpty() && !busy) item { EmptyState("Satır yok.") }
+                if (lines.isEmpty() && !busy) EmptyState("Satır yok.")
             }
         }
         BottomActionBar {

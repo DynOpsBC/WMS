@@ -10,11 +10,12 @@
     "skipLibCheck": true
   },
   "include": [
+    "index.ts",
     "webhook/**/*.ts",
+    "signalr/**/*.ts",
     "print-jobs-get/**/*.ts",
     "print-jobs-claim/**/*.ts",
     "print-jobs-status/**/*.ts",
     "shared/**/*.ts"
   ]
 }
-

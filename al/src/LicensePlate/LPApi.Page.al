@@ -163,6 +163,14 @@ page 72088 "DOPSWHS LP API"
         LPMgt.Stop(Rec, printLabel);
     end;
 
+    [ServiceEnabled]
+    procedure stopToPrinter(printLabel: Boolean; printerId: Code[50])
+    var
+        LPMgt: Codeunit "DOPSWHS LP Management";
+    begin
+        LPMgt.Stop(Rec, printLabel, printerId);
+    end;
+
     local procedure ParseLines(LinesJson: Text; var Lines: List of [Integer]; var Quantities: Dictionary of [Integer, Decimal])
     var
         JsonArray: JsonArray;

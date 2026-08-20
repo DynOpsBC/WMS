@@ -79,6 +79,14 @@ page 72222 "DOPSWHS Consumption API"
         exit(ProdMgmt.CreateProductionPick(Rec."Prod. Order No."));
     end;
 
+    [ServiceEnabled]
+    procedure finish(updateUnitCost: Boolean): Code[20]
+    var
+        ProdMgmt: Codeunit "DOPSWHS Prod Mgmt";
+    begin
+        exit(ProdMgmt.FinishProductionOrder(Rec."Prod. Order No.", updateUnitCost));
+    end;
+
     var
         ProducedItemNo: Code[20];
         ProducedItemDescription: Text[100];

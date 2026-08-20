@@ -26,9 +26,11 @@ page 72094 "DOPSWHS Shipment Line API"
                 field(qtyOutstanding; Rec."Qty. Outstanding") { Caption = 'qtyOutstanding'; Editable = false; }
                 field(qtyToShip; Rec."Qty. to Ship") { Caption = 'qtyToShip'; }
                 field(lotNo; Rec."DOPSWHS Lot No.") { Caption = 'lotNo'; }
+                field(lotRequired; LotRequired) { Caption = 'lotRequired'; Editable = false; }
                 field(licensePlateNo; Rec."LP No.") { Caption = 'licensePlateNo'; }
                 field(sscc; Rec.SSCC) { Caption = 'sscc'; }
                 field(uomCode; Rec."Unit of Measure Code") { Caption = 'uomCode'; Editable = false; }
+                field(locationCode; Rec."Location Code") { Caption = 'locationCode'; Editable = false; }
                 field(binCode; Rec."Bin Code") { Caption = 'binCode'; }
             }
         }
@@ -47,10 +49,12 @@ page 72094 "DOPSWHS Shipment Line API"
     trigger OnAfterGetRecord()
     var
         Item: Record Item;
+        ShipmentMgmt: Codeunit "DOPSWHS Shipment Mgmt";
     begin
         Clear(ItemGtin);
         if (Rec."Item No." <> '') and Item.Get(Rec."Item No.") then
             ItemGtin := Item.GTIN;
+        LotRequired := ShipmentMgmt.ShipmentLineRequiresLot(Rec);
     end;
 
     trigger OnModifyRecord(): Boolean
@@ -63,4 +67,5 @@ page 72094 "DOPSWHS Shipment Line API"
 
     var
         ItemGtin: Code[14];
+        LotRequired: Boolean;
 }

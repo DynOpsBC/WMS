@@ -28,8 +28,14 @@ table 72287 "DOPSWHS Printer"
         {
             Caption = 'Format';
             DataClassification = CustomerContent;
+
+            trigger OnValidate()
+            begin
+                if ("Format" <> "Format"::PDF) and "Enable BC Reports" then
+                    "Enable BC Reports" := false;
+            end;
         }
-        field(5; "Printer Handle"; Text[100])
+        field(5; "Printer Handle"; Text[260])
         {
             Caption = 'Printer Handle (OS Name)';
             DataClassification = CustomerContent;
@@ -58,6 +64,9 @@ table 72287 "DOPSWHS Printer"
             Caption = 'Default Copies';
             DataClassification = CustomerContent;
             InitValue = 1;
+            MinValue = 0;
+            MaxValue = 10;
+            ToolTip = 'Fallback copy count when neither the request nor a device mapping specifies a positive value.';
         }
         field(10; "Last Seen At"; DateTime)
         {
@@ -83,17 +92,104 @@ table 72287 "DOPSWHS Printer"
             Caption = 'Comment';
             DataClassification = CustomerContent;
         }
+        field(14; "Enable BC Reports"; Boolean)
+        {
+            Caption = 'Enable for BC Reports';
+            DataClassification = CustomerContent;
+            InitValue = false;
+            ToolTip = 'Registers this printer in the standard Business Central printer list. Standard reports are rendered as PDF and routed through the WMS print bridge.';
+
+            trigger OnValidate()
+            begin
+                if "Enable BC Reports" and ("Format" <> "Format"::PDF) then
+                    Error('Only a PDF printer can be enabled for standard Business Central reports.');
+            end;
+        }
+        field(15; "Paper Width (mm)"; Integer)
+        {
+            Caption = 'Paper Width (mm)';
+            DataClassification = CustomerContent;
+            MinValue = 0;
+            ToolTip = 'Custom paper width in millimetres. Leave width and height at zero to use A4.';
+        }
+        field(16; "Paper Height (mm)"; Integer)
+        {
+            Caption = 'Paper Height (mm)';
+            DataClassification = CustomerContent;
+            MinValue = 0;
+            ToolTip = 'Custom paper height in millimetres. Leave width and height at zero to use A4.';
+        }
+        field(17; "Last Agent ID"; Code[50])
+        {
+            Caption = 'Last Agent ID';
+            DataClassification = SystemMetadata;
+            Editable = false;
+        }
+        field(18; "Station ID"; Code[128])
+        {
+            Caption = 'Station ID';
+            DataClassification = CustomerContent;
+            ToolTip = 'Canonical station that owns this printer. Allowed characters: A-Z, 0-9, period, underscore and hyphen.';
+
+            trigger OnValidate()
+            var
+                AzureBridge: Codeunit "DOPSWHS Azure Print Bridge";
+            begin
+                "Station ID" := CopyStr(UpperCase(DelChr("Station ID", '=', ' ')), 1, MaxStrLen("Station ID"));
+                if "Station ID" <> '' then
+                    AzureBridge.ValidateStationId("Station ID");
+            end;
+        }
+        field(19; "Discovered by Agent"; Boolean)
+        {
+            Caption = 'Discovered by Agent';
+            DataClassification = SystemMetadata;
+            Editable = false;
+        }
+        field(20; "Agent Status"; Option)
+        {
+            Caption = 'Agent Status';
+            DataClassification = SystemMetadata;
+            Editable = false;
+            OptionMembers = Unknown,Online,Offline,Printing,Error;
+            OptionCaption = 'Unknown,Online,Offline,Printing,Error';
+        }
+        field(21; "Last Status At"; DateTime)
+        {
+            Caption = 'Last Status At';
+            DataClassification = SystemMetadata;
+            Editable = false;
+        }
+        field(22; "Last Status Message"; Text[250])
+        {
+            Caption = 'Last Status Message';
+            DataClassification = SystemMetadata;
+            Editable = false;
+        }
+        field(23; "Agent Version"; Text[50])
+        {
+            Caption = 'Agent Version';
+            DataClassification = SystemMetadata;
+            Editable = false;
+        }
+        field(24; "Agent Default Printer"; Boolean)
+        {
+            Caption = 'Agent Default Printer';
+            DataClassification = SystemMetadata;
+            Editable = false;
+        }
     }
 
     keys
     {
         key(PK; "Code") { Clustered = true; }
         key(Location; "Location Code") { }
+        key(Station; "Station ID", "Discovered by Agent") { }
     }
 
     fieldgroups
     {
-        fieldgroup(DropDown; "Code", Description, "Format", "Location Code") { }
+        fieldgroup(DropDown; "Code", Description, "Format", "Location Code", "Enable BC Reports") { }
     }
 
     trigger OnDelete()

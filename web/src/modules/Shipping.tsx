@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
 import * as BcApi from "../lib/bcApi";
+import { getDefaultPrinter } from "./Printers";
 import {
   Checkbox,
   DocHeader,
@@ -144,8 +145,8 @@ function ShipDocument({ no, onBack }: { no: string; onBack: () => void }) {
             setBusy(true);
             setStatus("Post…");
             const r = await BcApi.boundAction(
-              "shipments", no, "post",
-              JSON.stringify({ print: printSlip, invoice }),
+              "shipments", no, "postToPrinter",
+              JSON.stringify({ print: printSlip, invoice, printerId: getDefaultPrinter("document") }),
             );
             setBusy(false);
             setStatus(

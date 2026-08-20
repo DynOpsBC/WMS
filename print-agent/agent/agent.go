@@ -3,6 +3,7 @@ package agent
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log"
 	"time"
 
@@ -58,9 +59,19 @@ func (a *Agent) process(ctx context.Context, job relay.Job) error {
 		_ = a.Client.MarkFailure(ctx, job.JobID, "decode: "+err.Error())
 		return err
 	}
+	if job.PayloadSize > 0 && len(payload) != job.PayloadSize {
+		err = fmt.Errorf("payload size mismatch: decoded=%d expected=%d", len(payload), job.PayloadSize)
+		_ = a.Client.MarkFailure(ctx, job.JobID, err.Error())
+		return err
+	}
 	copies := job.Copies
 	if copies <= 0 {
 		copies = 1
+	}
+	if copies > 10 {
+		err = fmt.Errorf("copies %d exceeds the agent limit of 10", copies)
+		_ = a.Client.MarkFailure(ctx, job.JobID, err.Error())
+		return err
 	}
 	if err := a.Printer.Print(job.Format, payload, copies); err != nil {
 		_ = a.Client.MarkFailure(ctx, job.JobID, err.Error())

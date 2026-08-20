@@ -1,8 +1,10 @@
 package com.dynops.bcwms.feature
 
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -152,6 +154,7 @@ private fun ReceiveDocument(no: String, onBack: () -> Unit) {
     var status by remember { mutableStateOf("") }
     var busy by remember { mutableStateOf(false) }
     var activeLp by remember { mutableStateOf<String?>(null) }
+    var printReceipt by remember(no) { mutableStateOf(false) }
     // TOPLU POST: satır onayı (PATCH receiptLines) belgeyi ASLA postlamaz —
     // yalnız "Qty. to Receive"/lot/seri/LP yazar. Post tek bir yerden, alttaki
     // butondan ve özet onayından sonra çalışır.
@@ -170,6 +173,7 @@ private fun ReceiveDocument(no: String, onBack: () -> Unit) {
     var scanFilter by remember { mutableStateOf("") }
     var scanLot by remember { mutableStateOf("") }
     var scanSerial by remember { mutableStateOf("") }
+    var scanSupplierLot by remember { mutableStateOf("") }
     // İade birleştirme: aynı ürün+bin satırlarını tek grupta göster, tek okutmada dağıt.
     var merge by remember { mutableStateOf(false) }
     var groupTarget by remember { mutableStateOf<LineGroup?>(null) }
@@ -211,6 +215,7 @@ private fun ReceiveDocument(no: String, onBack: () -> Unit) {
             // BC'de satıra zaten atanmış lot/seri varsa onu kullan; yoksa barkoddan (GS1 AI) gelen değere düş.
             scanLot = line.optString("lotNo").ifBlank { r.lotNo ?: "" }
             scanSerial = line.optString("serialNo").ifBlank { r.serialNo ?: "" }
+            scanSupplierLot = line.optString("supplierLotNo")
             scanFilter = ""
             showQty = true
         },
@@ -239,7 +244,14 @@ private fun ReceiveDocument(no: String, onBack: () -> Unit) {
     val postQty = postLines.sumOf { it.optDouble("qtyToReceive", 0.0) }
 
     Column(Modifier.fillMaxSize()) {
-        Column(Modifier.weight(1f).padding(12.dp)) {
+        // Belge başlığı, LP bilgisi, özet ve satırlar tek kaydırma alanında.
+        // Önceden yalnız LineGrid/LazyColumn kayıyor; küçük el terminalinde
+        // başlıklar ekranı kapladığında alt satırlara ulaşmak zorlaşıyordu.
+        Column(
+            Modifier.weight(1f)
+                .verticalScroll(rememberScrollState())
+                .padding(12.dp)
+        ) {
             TextButton(onClick = onBack) { Text("‹ Belge Listesi") }
             DocHeaderCard(
                 title = no,
@@ -266,8 +278,8 @@ private fun ReceiveDocument(no: String, onBack: () -> Unit) {
             }
             if (scanFilter.isNotBlank()) { ScanFilterChip(scanFilter) { scanFilter = "" }; Spacer(Modifier.height(4.dp)) }
             if (merge) {
-                LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    items(groups) { g ->
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    groups.forEach { g ->
                         val staged = g.lines.sumOf { it.optDouble("qtyToReceive") }
                         // Grup rengi de satır kuralıyla aynı: hepsi tamamsa yeşil,
                         // bir kısmı işlendiyse sarı, hiçbiri işlenmediyse nötr.
@@ -285,7 +297,7 @@ private fun ReceiveDocument(no: String, onBack: () -> Unit) {
                             }
                         }
                     }
-                    if (groups.isEmpty() && !busy) item { EmptyState("Grup yok.") }
+                    if (groups.isEmpty() && !busy) EmptyState("Grup yok.")
                 }
             } else {
                 // WI-benzeri konfigüre edilebilir kolonlu grid.
@@ -293,19 +305,27 @@ private fun ReceiveDocument(no: String, onBack: () -> Unit) {
                     defs = GridColumns.receipt,
                     columns = columns,
                     rows = displayLines,
-                    modifier = Modifier.weight(1f),
+                    modifier = Modifier.fillMaxWidth(),
                     isDone = rowDone,
                     isPartial = rowPartial,
                     showProgress = true,
+                    expandRows = true,
                     onRowClick = { ln ->
                         scannedItem = ln.optString("itemNo"); scannedLine = ln
                         scanLot = ln.optString("lotNo"); scanSerial = ln.optString("serialNo")
+                        scanSupplierLot = ln.optString("supplierLotNo")
                         showQty = true
                     },
                 )
             }
         }
 
+        BottomActionBar {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Checkbox(checked = printReceipt, onCheckedChange = { printReceipt = it })
+                Text("Mal kabul belgesi yazdır", fontSize = 13.sp)
+            }
+        }
         BottomActionBar {
             OutlinedButton(onClick = {
                 scope.launch {
@@ -328,7 +348,11 @@ private fun ReceiveDocument(no: String, onBack: () -> Unit) {
             } else {
                 OutlinedButton(onClick = {
                     val lp = activeLp!!
-                    action("stopLP", JSONObject().apply { put("lpNo", lp); put("printLabel", true) }.toString(), "LP kapatıldı") { r ->
+                    action("stopLPToPrinter", JSONObject().apply {
+                        put("lpNo", lp)
+                        put("printLabel", true)
+                        put("printerId", getDefaultPrinter(context))
+                    }.toString(), "LP kapatıldı") { r ->
                         if (r.ok) activeLp = null
                     }
                 }, enabled = !busy, modifier = Modifier.weight(1f)) { Text("LP Kapat") }
@@ -363,7 +387,11 @@ private fun ReceiveDocument(no: String, onBack: () -> Unit) {
             onDismiss = { showPostConfirm = false },
             onConfirm = {
                 showPostConfirm = false
-                action("post", """{"print":false,"invoice":false}""", "Mal kabul kaydedildi") { r ->
+                action("postToPrinter", JSONObject().apply {
+                    put("print", printReceipt)
+                    put("invoice", false)
+                    put("printerId", getDefaultPrinter(context, PRINTER_USAGE_DOCUMENT))
+                }.toString(), "Mal kabul kaydedildi") { r ->
                     if (r.ok) touched = emptySet()
                 }
             },
@@ -374,6 +402,7 @@ private fun ReceiveDocument(no: String, onBack: () -> Unit) {
         ScanItemSheet(title = "Ürün Tara", onDismiss = { showScan = false }, onItem = { item, line ->
             scannedItem = item; scannedLine = line
             scanLot = line?.optString("lotNo") ?: ""; scanSerial = line?.optString("serialNo") ?: ""
+            scanSupplierLot = line?.optString("supplierLotNo") ?: ""
             showScan = false; showQty = true
         }, lines = lines, matchKey = "itemNo")
     }
@@ -386,9 +415,12 @@ private fun ReceiveDocument(no: String, onBack: () -> Unit) {
             initialUom = line?.optString("unitOfMeasureCode") ?: "",
             initialLot = scanLot,
             initialSerial = scanSerial,
-            onDismiss = { showQty = false; scanLot = ""; scanSerial = "" },
+            initialSupplierLot = scanSupplierLot,
+            showSupplierLot = line?.optBoolean("supplierLotRequired") == true,
+            supplierLotRequired = line?.optBoolean("supplierLotRequired") == true,
+            onDismiss = { showQty = false; scanLot = ""; scanSerial = ""; scanSupplierLot = "" },
             onConfirm = { res ->
-                showQty = false; scanLot = ""; scanSerial = ""
+                showQty = false; scanLot = ""; scanSerial = ""; scanSupplierLot = ""
                 val ln = scannedLine
                 if (ln == null) { status = "HATA: Satır eşleşmedi — listeden seçin"; return@QuantityDialogSheet }
                 scope.launch {
@@ -397,6 +429,7 @@ private fun ReceiveDocument(no: String, onBack: () -> Unit) {
                         put("qtyToReceive", res.quantity)
                         if (res.lotNo.isNotBlank()) put("lotNo", res.lotNo)
                         if (res.serialNo.isNotBlank()) put("serialNo", res.serialNo)
+                        if (res.supplierLotNo.isNotBlank()) put("supplierLotNo", res.supplierLotNo)
                         activeLp?.let { put("licensePlateNo", it) }
                     }.toString()
                     val lineNo = ln.optInt("lineNo")
@@ -412,6 +445,7 @@ private fun ReceiveDocument(no: String, onBack: () -> Unit) {
     }
     val gt = groupTarget
     if (gt != null) {
+        val groupRequiresSupplierLot = gt.lines.any { it.optBoolean("supplierLotRequired") }
         val capReceipt: (JSONObject) -> Double = { l ->
             val q = l.optDouble("quantity"); val rec = l.optDouble("qtyReceived")
             if (q > 0) (q - rec).coerceAtLeast(0.0) else (l.optDouble("qtyToReceive").takeIf { it > 0 } ?: 1.0)
@@ -421,6 +455,12 @@ private fun ReceiveDocument(no: String, onBack: () -> Unit) {
             itemNo = gt.itemNo,
             initialQty = gt.totalOutstanding.takeIf { it > 0 } ?: 1.0,
             initialUom = gt.lines.first().optString("unitOfMeasureCode"),
+            initialLot = gt.lines.first().optString("lotNo"),
+            initialSupplierLot = gt.lines.firstNotNullOfOrNull {
+                it.optString("supplierLotNo").takeIf(String::isNotBlank)
+            }.orEmpty(),
+            showSupplierLot = groupRequiresSupplierLot,
+            supplierLotRequired = groupRequiresSupplierLot,
             onDismiss = { groupTarget = null },
             onConfirm = { res ->
                 groupTarget = null
@@ -432,6 +472,8 @@ private fun ReceiveDocument(no: String, onBack: () -> Unit) {
                     for ((ln, q) in plan) {
                         val body = JSONObject().apply {
                             put("qtyToReceive", q)
+                            if (res.lotNo.isNotBlank()) put("lotNo", res.lotNo)
+                            if (res.supplierLotNo.isNotBlank()) put("supplierLotNo", res.supplierLotNo)
                             activeLp?.let { put("licensePlateNo", it) }
                         }.toString()
                         val r = BcApi.patch(context, "receiptLines(no='$no',lineNo=${ln.optInt("lineNo")})", body)
@@ -706,7 +748,11 @@ private fun ReceivePurchaseOrder(no: String, onBack: () -> Unit) {
     val postQty = postLines.sumOf { it.optDouble("qtyToReceive", 0.0) }
 
     Column(Modifier.fillMaxSize()) {
-        Column(Modifier.weight(1f).padding(12.dp)) {
+        Column(
+            Modifier.weight(1f)
+                .verticalScroll(rememberScrollState())
+                .padding(12.dp)
+        ) {
             TextButton(onClick = onBack) { Text("‹ PO Listesi") }
             DocHeaderCard(
                 title = no,
@@ -748,10 +794,11 @@ private fun ReceivePurchaseOrder(no: String, onBack: () -> Unit) {
                     defs = GridColumns.purchaseOrder,
                     columns = columns,
                     rows = displayLines,
-                    modifier = Modifier.weight(1f),
+                    modifier = Modifier.fillMaxWidth(),
                     isDone = rowDone,
                     isPartial = rowPartial,
                     showProgress = true,
+                    expandRows = true,
                     onRowClick = { ln -> if (directAllowed) qtyLine = ln },
                 )
             }

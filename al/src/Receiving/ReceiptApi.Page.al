@@ -89,6 +89,18 @@ page 72090 "DOPSWHS Receipt API"
     end;
 
     [ServiceEnabled]
+    procedure stopLPToPrinter(lpNo: Code[20]; printLabel: Boolean; printerId: Code[50])
+    var
+        ReceiptMgmt: Codeunit "DOPSWHS Receipt Mgmt";
+        LegacyWI: Codeunit "DOPSWHS Legacy WI Publisher";
+        DocNo: Code[20];
+    begin
+        DocNo := Rec."No.";
+        LegacyWI.FireGetReceiptDocument(DocNo);
+        ReceiptMgmt.StopLP(Rec, lpNo, printLabel, printerId);
+    end;
+
+    [ServiceEnabled]
     procedure post(print: Boolean; invoice: Boolean)
     var
         ReceiptMgmt: Codeunit "DOPSWHS Receipt Mgmt";
@@ -98,6 +110,18 @@ page 72090 "DOPSWHS Receipt API"
         DocNo := Rec."No.";
         LegacyWI.FireGetReceiptDocument(DocNo);
         ReceiptMgmt.PostReceipt(Rec, print, invoice);
+    end;
+
+    [ServiceEnabled]
+    procedure postToPrinter(print: Boolean; invoice: Boolean; printerId: Code[50])
+    var
+        ReceiptMgmt: Codeunit "DOPSWHS Receipt Mgmt";
+        LegacyWI: Codeunit "DOPSWHS Legacy WI Publisher";
+        DocNo: Code[20];
+    begin
+        DocNo := Rec."No.";
+        LegacyWI.FireGetReceiptDocument(DocNo);
+        ReceiptMgmt.PostReceipt(Rec, print, invoice, '', printerId);
     end;
 
     var

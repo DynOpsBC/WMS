@@ -26,7 +26,18 @@ page 72289 "DOPSWHS Printer API"
                 field(active; Rec.Active) { Caption = 'active'; }
                 field(defaultCopies; Rec."Default Copies") { Caption = 'defaultCopies'; }
                 field(lastSeenAt; Rec."Last Seen At") { Caption = 'lastSeenAt'; }
+                field(lastAgentId; Rec."Last Agent ID") { Caption = 'lastAgentId'; }
+                field(stationId; Rec."Station ID") { Caption = 'stationId'; }
+                field(discoveredByAgent; Rec."Discovered by Agent") { Caption = 'discoveredByAgent'; }
+                field(agentStatus; Rec."Agent Status") { Caption = 'agentStatus'; }
+                field(lastStatusAt; Rec."Last Status At") { Caption = 'lastStatusAt'; }
+                field(lastStatusMessage; Rec."Last Status Message") { Caption = 'lastStatusMessage'; }
+                field(agentVersion; Rec."Agent Version") { Caption = 'agentVersion'; }
+                field(agentDefaultPrinter; Rec."Agent Default Printer") { Caption = 'agentDefaultPrinter'; }
                 field(tokenIssuedAt; Rec."Token Issued At") { Caption = 'tokenIssuedAt'; }
+                field(enableBcReports; Rec."Enable BC Reports") { Caption = 'enableBcReports'; }
+                field(paperWidthMm; Rec."Paper Width (mm)") { Caption = 'paperWidthMm'; }
+                field(paperHeightMm; Rec."Paper Height (mm)") { Caption = 'paperHeightMm'; }
                 field(comment; Rec.Comment) { Caption = 'comment'; }
             }
         }
@@ -47,4 +58,13 @@ page 72289 "DOPSWHS Printer API"
     begin
         exit(Client.EnqueueSelfTest(Rec."Code"));
     end;
+
+    [ServiceEnabled]
+    procedure printBarcodeTest(barcodeValue: Text; copies: Integer): Integer
+    var
+        Dispatcher: Codeunit "DOPSWHS Print Dispatcher";
+    begin
+        exit(Dispatcher.PrintBarcodeTest(Rec."Code", barcodeValue, copies));
+    end;
+
 }

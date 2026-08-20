@@ -32,10 +32,11 @@ fun LineGroupCards(
     modifier: Modifier = Modifier,
     emptyText: String = "Grup yok.",
     showEmpty: Boolean = true,
+    expandRows: Boolean = false,
     onGroupClick: (LineGroup) -> Unit,
 ) {
-    LazyColumn(modifier, verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        items(groups) { g ->
+    @Composable
+    fun GroupCard(g: LineGroup) {
             val stagedSum = g.lines.sumOf { staged(it) }
             val done = stagedSum > 0
             Card(onClick = { onGroupClick(g) }, modifier = Modifier.fillMaxWidth(), colors = doneCardColors(done)) {
@@ -53,8 +54,17 @@ fun LineGroupCards(
                     )
                 }
             }
+    }
+    if (expandRows) {
+        Column(modifier, verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            groups.forEach { g -> GroupCard(g) }
+            if (groups.isEmpty() && showEmpty) EmptyState(emptyText)
         }
-        if (groups.isEmpty() && showEmpty) item { EmptyState(emptyText) }
+    } else {
+        LazyColumn(modifier, verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            items(groups) { g -> GroupCard(g) }
+            if (groups.isEmpty() && showEmpty) item { EmptyState(emptyText) }
+        }
     }
 }
 

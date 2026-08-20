@@ -28,6 +28,7 @@ permissionset 72095 "DOPSWHS-USER"
         tabledata "DOPSWHS Print Job Log" = RI,
         tabledata "DOPSWHS Telemetry Buffer" = RIMD,
         tabledata "DOPSWHS DynOps WMS Cue" = RIM,
+        tabledata "Lot No. Information" = R,
         tabledata "Warehouse Shipment Line" = RIMD,
         tabledata "Posted Whse. Shipment Line" = RIMD,
         tabledata "Sales Header" = RIMD,
@@ -96,6 +97,8 @@ permissionset 72095 "DOPSWHS-USER"
         page "DOPSWHS Count Sheet Card" = X,
         page "DOPSWHS Count API" = X,
         page "DOPSWHS Count Sheet Line API" = X,
+        page "DOPSWHS Supplier Lot API" = X,
+        query "DOPSWHS Available Lot API" = X,
         codeunit "DOPSWHS Barcode Parser" = X,
         codeunit "DOPSWHS GS1 AI Parser" = X,
         codeunit "DOPSWHS Device Auth" = X,
@@ -114,6 +117,10 @@ permissionset 72095 "DOPSWHS-USER"
         codeunit "DOPSWHS Webhook Mgmt" = X,
         codeunit "DOPSWHS Legacy WI Publisher" = X,
         codeunit "DOPSWHS Print Dispatcher" = X,
+        codeunit "DOPSWHS BC Printer Provider" = X,
+        codeunit "DOPSWHS Azure Print Bridge" = X,
+        codeunit "DOPSWHS Azure Dispatch Task" = X,
+        codeunit "DOPSWHS ZPL Encoder" = X,
         codeunit "DOPSWHS PrintNode Client" = X,
         codeunit "DOPSWHS Telemetry" = X,
         codeunit "DOPSWHS Permission Helper" = X,
@@ -154,6 +161,7 @@ permissionset 72095 "DOPSWHS-USER"
         tabledata "Warehouse Activity Line" = R,     // LP resolver reads the scanned LP
         tabledata "Warehouse Receipt Line" = R,      // LP resolver reads receipt lines
         report "DOPSWHS LP Label" = X,
+        report "DOPSWHS Barcode Print Test" = X,
         tabledata "DOPSWHS Printer" = R,
         tabledata "DOPSWHS Device Printer Map" = R,
         table "DOPSWHS Printer" = X,
@@ -163,6 +171,7 @@ permissionset 72095 "DOPSWHS-USER"
         page "DOPSWHS Device Printer Map" = X,
         page "DOPSWHS Print Job API" = X,
         page "DOPSWHS Printer API" = X,
+        page "DOPSWHS Print Job Queue" = X,
         codeunit "DOPSWHS Self-Host Print Client" = X,
         codeunit "DOPSWHS License Mgmt" = X,
         // ELOG paketleme istasyonu + sepet-sipariş eşleştirme + multi-order pick
@@ -206,5 +215,8 @@ permissionset 72095 "DOPSWHS-USER"
         codeunit "Sales Warehouse Mgt." = X,
         codeunit "Release Sales Document" = X,
         codeunit "Whse.-Shipment Release" = X,
-        report "Whse.-Shipment - Create Pick" = X;
+        report "Whse.-Shipment - Create Pick" = X,
+        report "Whse. - Posted Receipt" = X,
+        report "Whse. - Posted Shipment" = X,
+        report "Standard Sales - Invoice" = X;
 }

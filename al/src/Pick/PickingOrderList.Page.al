@@ -10,6 +10,7 @@ page 72357 "DOPSWHS Picking Order List"
     ApplicationArea = All;
     UsageCategory = Tasks;
     Editable = false;
+    InsertAllowed = false;
     SourceTableView = sorting("Entry No.") order(descending);
 
     layout
@@ -27,6 +28,12 @@ page 72357 "DOPSWHS Picking Order List"
                 {
                     ApplicationArea = All;
                     Caption = 'Açıklama';
+                }
+                field("Order Flow Mode"; Rec."Order Flow Mode")
+                {
+                    ApplicationArea = All;
+                    Caption = 'Akış Tipi';
+                    ToolTip = 'Sistemin sipariş içeriğine göre belirlediği Multi, Mono veya Tek SKU toplama akışı.';
                 }
                 field(OrderCountText; OrderCountText)
                 {
@@ -84,15 +91,52 @@ page 72357 "DOPSWHS Picking Order List"
     {
         area(Processing)
         {
-            action(NewPickingOrder)
+            action(AutoSeparateOrders)
             {
-                Caption = 'Yeni Toplama Grubu';
+                Caption = 'Siparişleri Seç ve Otomatik Grupla';
                 ApplicationArea = All;
-                Image = NewDocument;
+                Image = Suggest;
                 Promoted = true;
                 PromotedCategory = New;
-                RunObject = page "DOPSWHS Picking Order Card";
-                RunPageMode = Create;
+                PromotedIsBig = true;
+                ToolTip = 'Seçtiğiniz toplanabilir satış siparişlerini lokasyon ve ürün içeriğine göre Multi, Mono ve Tek SKU gruplarına otomatik ayırır.';
+
+                trigger OnAction()
+                var
+                    SalesHeader: Record "Sales Header";
+                    SalesOrderList: Page "Sales Order List";
+                    PickingOrderMgmt: Codeunit "DOPSWHS Picking Order Mgmt";
+                    MultiGroupCount: Integer;
+                    MonoGroupCount: Integer;
+                    SingleSkuGroupCount: Integer;
+                    OrderCount: Integer;
+                    SkippedOrderCount: Integer;
+                begin
+                    SalesHeader.SetRange("Document Type", SalesHeader."Document Type"::Order);
+                    PickingOrderMgmt.ApplyOpsPendingFilter(SalesHeader);
+                    PickingOrderMgmt.FilterToPickable(SalesHeader);
+                    SalesOrderList.SetTableView(SalesHeader);
+                    SalesOrderList.LookupMode(true);
+                    if SalesOrderList.RunModal() <> Action::LookupOK then
+                        exit;
+
+                    SalesOrderList.SetSelectionFilter(SalesHeader);
+                    PickingOrderMgmt.AutoCreatePickingGroups(
+                        SalesHeader, MultiGroupCount, MonoGroupCount,
+                        SingleSkuGroupCount, OrderCount, SkippedOrderCount);
+                    Rec.SetRange(Status);
+                    Rec.SetRange("Assigned User ID");
+                    Rec.SetRange("Order Flow Mode");
+                    CurrPage.Update(false);
+                    if SkippedOrderCount > 0 then
+                        Message(
+                            '%1 sipariş otomatik ayrıldı. Oluşan gruplar: %2 Multi, %3 Mono, %4 Tek SKU. Zaten başka bir toplama grubunda veya pick''te bulunan %5 sipariş atlandı.',
+                            OrderCount, MultiGroupCount, MonoGroupCount, SingleSkuGroupCount, SkippedOrderCount)
+                    else
+                        Message(
+                            '%1 sipariş otomatik ayrıldı. Oluşan gruplar: %2 Multi, %3 Mono, %4 Tek SKU. Sıradaki adım: grubu açıp toplayıcı atayın ve pick oluşturun.',
+                            OrderCount, MultiGroupCount, MonoGroupCount, SingleSkuGroupCount);
+                end;
             }
             group(Filters)
             {
@@ -145,6 +189,45 @@ page 72357 "DOPSWHS Picking Order List"
                         CurrPage.Update(false);
                     end;
                 }
+                action(ShowMulti)
+                {
+                    ApplicationArea = All;
+                    Caption = 'Multi';
+                    Image = FilterLines;
+                    ToolTip = 'Yalnızca Multi toplama gruplarını gösterir.';
+
+                    trigger OnAction()
+                    begin
+                        Rec.SetRange("Order Flow Mode", Rec."Order Flow Mode"::Multi);
+                        CurrPage.Update(false);
+                    end;
+                }
+                action(ShowMono)
+                {
+                    ApplicationArea = All;
+                    Caption = 'Mono';
+                    Image = FilterLines;
+                    ToolTip = 'Yalnızca Mono toplama gruplarını gösterir.';
+
+                    trigger OnAction()
+                    begin
+                        Rec.SetRange("Order Flow Mode", Rec."Order Flow Mode"::Batch);
+                        CurrPage.Update(false);
+                    end;
+                }
+                action(ShowSingleSku)
+                {
+                    ApplicationArea = All;
+                    Caption = 'Tek SKU';
+                    Image = FilterLines;
+                    ToolTip = 'Yalnızca Tek SKU toplama gruplarını gösterir.';
+
+                    trigger OnAction()
+                    begin
+                        Rec.SetRange("Order Flow Mode", Rec."Order Flow Mode"::Bulk);
+                        CurrPage.Update(false);
+                    end;
+                }
                 action(ShowAll)
                 {
                     ApplicationArea = All;
@@ -157,6 +240,7 @@ page 72357 "DOPSWHS Picking Order List"
                     begin
                         Rec.SetRange(Status);
                         Rec.SetRange("Assigned User ID");
+                        Rec.SetRange("Order Flow Mode");
                         CurrPage.Update(false);
                     end;
                 }
@@ -164,6 +248,84 @@ page 72357 "DOPSWHS Picking Order List"
             group(Manage)
             {
                 Caption = 'Yönet';
+
+                action(CreatePick)
+                {
+                    ApplicationArea = All;
+                    Caption = 'Pick Oluştur / Post Et';
+                    Image = CreateMovement;
+                    Promoted = true;
+                    PromotedCategory = Category4;
+                    PromotedIsBig = true;
+                    Enabled = Rec.Status = Rec.Status::Open;
+                    ToolTip = 'Seçili otomatik grubun ambar sevkiyatını ve toplama belgesini oluşturur; iş terminalde görünür.';
+
+                    trigger OnAction()
+                    var
+                        FreshHeader: Record "DOPSWHS Picking Order Header";
+                        PickingOrderMgmt: Codeunit "DOPSWHS Picking Order Mgmt";
+                        PickNo: Code[20];
+                    begin
+                        if Rec."Entry No." = 0 then
+                            exit;
+                        if not FreshHeader.Get(Rec."Entry No.") then
+                            Error(GroupGoneErr, Rec."Entry No.");
+                        if FreshHeader.Status <> FreshHeader.Status::Open then
+                            Error(GroupAlreadyPostedErr, FreshHeader."Warehouse Pick No.");
+                        if FreshHeader."Assigned User ID" = '' then
+                            Error(PickerRequiredErr);
+
+                        PickNo := PickingOrderMgmt.PostPickingOrder(FreshHeader);
+                        if Rec.Get(FreshHeader."Entry No.") then;
+                        CurrPage.Update(false);
+                        Message(PickCreatedMsg, PickNo, FreshHeader."Assigned User ID");
+                    end;
+                }
+
+                action(PostSelectedGroups)
+                {
+                    ApplicationArea = All;
+                    Caption = 'Seçili Grupları Terminale Gönder';
+                    Image = SendTo;
+                    Promoted = true;
+                    PromotedCategory = Category4;
+                    ToolTip = 'İşaretlenen Mono, Multi veya Tek SKU gruplarını kontrollü şekilde post eder. Sistem kendiliğinden post etmez.';
+
+                    trigger OnAction()
+                    var
+                        SelectedHeader: Record "DOPSWHS Picking Order Header";
+                        PickingOrderMgmt: Codeunit "DOPSWHS Picking Order Mgmt";
+                        SelectedCount: Integer;
+                        PostedCount: Integer;
+                    begin
+                        CurrPage.SetSelectionFilter(SelectedHeader);
+                        SelectedCount := SelectedHeader.Count();
+                        if SelectedCount = 0 then
+                            Error(NoGroupsSelectedErr);
+
+                        // Ön kontrolün tamamı post başlamadan yapılır; yarım toplu
+                        // işlem yerine kullanıcıya eksik atama/grup açıkça gösterilir.
+                        if SelectedHeader.FindSet() then
+                            repeat
+                                if SelectedHeader.Status <> SelectedHeader.Status::Open then
+                                    Error(GroupNotOpenErr, SelectedHeader."Entry No.");
+                                if SelectedHeader."Assigned User ID" = '' then
+                                    Error(GroupPickerMissingErr, SelectedHeader."Entry No.");
+                            until SelectedHeader.Next() = 0;
+
+                        if not Confirm(PostSelectedGroupsQst, false, SelectedCount) then
+                            exit;
+
+                        if SelectedHeader.FindSet() then
+                            repeat
+                                PickingOrderMgmt.PostPickingOrder(SelectedHeader);
+                                PostedCount += 1;
+                            until SelectedHeader.Next() = 0;
+
+                        CurrPage.Update(false);
+                        Message(SelectedGroupsPostedMsg, PostedCount);
+                    end;
+                }
 
                 action(AssignPicker)
                 {
@@ -178,6 +340,7 @@ page 72357 "DOPSWHS Picking Order List"
                     var
                         LocalUser: Record "DOPSWHS Local User";
                         PickMgmt: Codeunit "DOPSWHS Pick Mgmt";
+                        HeaderEntryNo: Integer;
                     begin
                         if Rec."Entry No." = 0 then
                             exit;
@@ -196,10 +359,14 @@ page 72357 "DOPSWHS Picking Order List"
                         // Kilitli yeniden okuma + pick belgesine yansıtma PickMgmt'te:
                         // eskiden ekrandaki (stale) kayıt doğrudan Modify ediliyordu,
                         // iki sorumlu aynı anda atarsa biri diğerini sessizce eziyordu.
+                        HeaderEntryNo := Rec."Entry No.";
                         PickMgmt.SetPickingOrderPicker(Rec, LocalUser.Username, AssignedFromListLbl);
+                        if not Rec.Get(HeaderEntryNo) then
+                            Error(GroupGoneErr, HeaderEntryNo);
+                        if Rec."Assigned User ID" <> LocalUser.Username then
+                            Error(AssignmentNotSavedErr, LocalUser.Username);
 
                         CurrPage.Update(false);
-                        Message(AssignedMsg, LocalUser."Display Name");
                     end;
                 }
                 action(ClearPicker)
@@ -343,7 +510,16 @@ page 72357 "DOPSWHS Picking Order List"
         CompletedNotAssignableErr: Label 'Tamamlanmış grubun ataması değiştirilemez.';
         TakeOverQst: Label 'Bu grup %1 kullanıcısında. %2 kullanıcısına devredilsin mi?', Comment = '%1 = mevcut operatör, %2 = yeni operatör';
         ClearPickerQst: Label '%1 kullanıcısının ataması kaldırılsın mı? Toplama terminalde yeniden herkese açılır.', Comment = '%1 = mevcut operatör';
-        AssignedMsg: Label 'Grup %1 kullanıcısına atandı.', Comment = '%1 = operatör';
         AssignedFromListLbl: Label 'Toplanacak Siparişler ekranından atandı.';
         ClearedFromListLbl: Label 'Toplanacak Siparişler ekranından atama kaldırıldı.';
+        GroupGoneErr: Label 'Toplama grubu %1 bulunamadı — silinmiş olabilir. Listeyi yenileyin.', Comment = '%1 = Kayıt No.';
+        GroupAlreadyPostedErr: Label 'Bu grup için toplama zaten oluşturulmuş (%1). Sayfayı yenileyin.', Comment = '%1 = Toplama belgesi no.';
+        PickerRequiredErr: Label 'Pick oluşturmadan önce "Toplayıcı Ata" ile bir operatör seçin.';
+        PickCreatedMsg: Label 'Toplama %1 oluşturuldu — terminalde %2 kullanıcısına görünüyor.', Comment = '%1 = Toplama no., %2 = operatör';
+        AssignmentNotSavedErr: Label '%1 kullanıcısına yapılan atama kayda yazılamadı.', Comment = '%1 = operatör';
+        NoGroupsSelectedErr: Label 'Terminale göndermek için en az bir toplama grubu seçin.';
+        GroupNotOpenErr: Label '%1 numaralı grup açık değil. Yalnız açık gruplar toplu gönderilebilir.', Comment = '%1 = group entry no.';
+        GroupPickerMissingErr: Label '%1 numaralı grupta toplayıcı atanmamış. Önce Toplayıcı Ata işlemini tamamlayın.', Comment = '%1 = group entry no.';
+        PostSelectedGroupsQst: Label 'Seçilen %1 toplama grubu terminale gönderilsin mi?', Comment = '%1 = count';
+        SelectedGroupsPostedMsg: Label '%1 toplama grubu terminale gönderildi.', Comment = '%1 = count';
 }

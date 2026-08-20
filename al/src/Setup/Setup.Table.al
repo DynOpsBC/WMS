@@ -161,6 +161,143 @@ table 72000 "DOPSWHS Setup"
             DataClassification = CustomerContent;
             TableRelation = "No. Series";
         }
+        field(260; "Azure SB Namespace"; Text[50])
+        {
+            Caption = 'Service Bus Namespace';
+            DataClassification = CustomerContent;
+            ToolTip = 'Azure Service Bus namespace name only, without protocol or DNS suffix.';
+
+            trigger OnValidate()
+            begin
+                "Azure SB Namespace" := LowerCase(DelChr("Azure SB Namespace", '=', ' '));
+            end;
+        }
+        field(270; "Azure Print Jobs Queue"; Text[260])
+        {
+            Caption = 'Print Jobs Queue';
+            DataClassification = CustomerContent;
+            InitValue = 'print-jobs-queue';
+
+            trigger OnValidate()
+            begin
+                "Azure Print Jobs Queue" := LowerCase(DelChr("Azure Print Jobs Queue", '=', ' '));
+            end;
+        }
+        field(280; "Azure Printer Status Queue"; Text[260])
+        {
+            Caption = 'Printer Status Queue';
+            DataClassification = CustomerContent;
+            InitValue = 'printer-status-queue';
+
+            trigger OnValidate()
+            begin
+                "Azure Printer Status Queue" := LowerCase(DelChr("Azure Printer Status Queue", '=', ' '));
+            end;
+        }
+        field(290; "Azure Jobs SAS Policy"; Text[50])
+        {
+            Caption = 'Jobs Send SAS Policy';
+            DataClassification = CustomerContent;
+            InitValue = 'bc-send-jobs';
+            ToolTip = 'Name of the queue-scoped Service Bus policy with Send permission. The key is stored separately in Isolated Storage.';
+        }
+        field(300; "Azure Status SAS Policy"; Text[50])
+        {
+            Caption = 'Status Listen SAS Policy';
+            DataClassification = CustomerContent;
+            InitValue = 'bc-listen-status';
+            ToolTip = 'Name of the queue-scoped Service Bus policy with Listen permission. The key is stored separately in Isolated Storage.';
+        }
+        field(310; "Azure Storage Account"; Text[24])
+        {
+            Caption = 'Storage Account';
+            DataClassification = CustomerContent;
+
+            trigger OnValidate()
+            begin
+                "Azure Storage Account" := LowerCase(DelChr("Azure Storage Account", '=', ' '));
+            end;
+        }
+        field(320; "Azure Blob Container"; Text[63])
+        {
+            Caption = 'Print Blob Container';
+            DataClassification = CustomerContent;
+            InitValue = 'print-jobs';
+
+            trigger OnValidate()
+            begin
+                "Azure Blob Container" := LowerCase(DelChr("Azure Blob Container", '=', ' '));
+            end;
+        }
+        field(330; "Azure Blob Endpoint Suffix"; Text[100])
+        {
+            Caption = 'Blob Endpoint Suffix';
+            DataClassification = CustomerContent;
+            InitValue = 'blob.core.windows.net';
+            ToolTip = 'DNS suffix for Azure Blob Storage. Keep the default for Azure public cloud.';
+        }
+        field(340; "Azure SB Endpoint Suffix"; Text[100])
+        {
+            Caption = 'Service Bus Endpoint Suffix';
+            DataClassification = CustomerContent;
+            InitValue = 'servicebus.windows.net';
+            ToolTip = 'DNS suffix for Azure Service Bus. Keep the default for Azure public cloud.';
+        }
+        field(350; "Azure Dispatch Max Attempts"; Integer)
+        {
+            Caption = 'Maximum Dispatch Attempts';
+            DataClassification = CustomerContent;
+            InitValue = 5;
+            MinValue = 1;
+            MaxValue = 20;
+        }
+        field(360; "Azure Last Health Check"; DateTime)
+        {
+            Caption = 'Last Health Check';
+            DataClassification = SystemMetadata;
+            Editable = false;
+        }
+        field(370; "Azure Last Health Result"; Text[250])
+        {
+            Caption = 'Last Health Result';
+            DataClassification = SystemMetadata;
+            Editable = false;
+        }
+        field(380; "Azure Tenant Route ID"; Code[32])
+        {
+            Caption = 'Tenant Route ID';
+            DataClassification = CustomerContent;
+            ToolTip = 'First segment of every canonical station ID. This is a routing identifier, not a credential.';
+
+            trigger OnValidate()
+            begin
+                "Azure Tenant Route ID" := CopyStr(UpperCase(DelChr("Azure Tenant Route ID", '=', ' ')), 1, MaxStrLen("Azure Tenant Route ID"));
+            end;
+        }
+        field(390; "Azure Company Route ID"; Code[32])
+        {
+            Caption = 'Company Route ID';
+            DataClassification = CustomerContent;
+            ToolTip = 'Second segment of every canonical station ID. Use one dedicated Azure deployment/status queue per Business Central company.';
+
+            trigger OnValidate()
+            begin
+                "Azure Company Route ID" := CopyStr(UpperCase(DelChr("Azure Company Route ID", '=', ' ')), 1, MaxStrLen("Azure Company Route ID"));
+            end;
+        }
+        field(400; "Azure Blob SAS Expires At"; DateTime)
+        {
+            Caption = 'Blob Upload SAS Expires At';
+            DataClassification = SystemMetadata;
+            Editable = false;
+            ToolTip = 'UTC expiration of the Blob create/write SAS. Regenerate and re-import credentials before this time.';
+        }
+        field(410; "Azure Expiry Warning At"; DateTime)
+        {
+            Caption = 'Blob SAS Expiry Warning At';
+            DataClassification = SystemMetadata;
+            Editable = false;
+        }
     }
 
     keys
@@ -178,5 +315,26 @@ table 72000 "DOPSWHS Setup"
         "Primary Key" := '';
         if ExistingSetup.Get('') then
             Error('Only one Advanced WMS Setup row is allowed.');
+        ApplyAzureDefaults();
+    end;
+
+    procedure ApplyAzureDefaults()
+    begin
+        if "Azure Print Jobs Queue" = '' then
+            "Azure Print Jobs Queue" := 'print-jobs-queue';
+        if "Azure Printer Status Queue" = '' then
+            "Azure Printer Status Queue" := 'printer-status-queue';
+        if "Azure Jobs SAS Policy" = '' then
+            "Azure Jobs SAS Policy" := 'bc-send-jobs';
+        if "Azure Status SAS Policy" = '' then
+            "Azure Status SAS Policy" := 'bc-listen-status';
+        if "Azure Blob Container" = '' then
+            "Azure Blob Container" := 'print-jobs';
+        if "Azure Blob Endpoint Suffix" = '' then
+            "Azure Blob Endpoint Suffix" := 'blob.core.windows.net';
+        if "Azure SB Endpoint Suffix" = '' then
+            "Azure SB Endpoint Suffix" := 'servicebus.windows.net';
+        if "Azure Dispatch Max Attempts" <= 0 then
+            "Azure Dispatch Max Attempts" := 5;
     end;
 }

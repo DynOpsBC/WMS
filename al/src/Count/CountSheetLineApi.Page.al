@@ -21,10 +21,13 @@ page 72487 "DOPSWHS Count Sheet Line API"
                 field(itemNo; Rec."Item No.") { Caption = 'itemNo'; }
                 // Ek alanlar: benzer isimli ürünleri ayırt etmek için (Item'dan çözülür).
                 field(description; ItemDescription) { Caption = 'description'; Editable = false; }
-                field(unitOfMeasureCode; ItemBaseUoM) { Caption = 'unitOfMeasureCode'; Editable = false; }
+                field(unitOfMeasureCode; Rec."Unit of Measure Code") { Caption = 'unitOfMeasureCode'; }
                 field(variantCode; Rec."Variant Code") { Caption = 'variantCode'; }
                 field(binCode; Rec."Bin Code") { Caption = 'binCode'; }
                 field(lpNo; Rec."LP No.") { Caption = 'lpNo'; }
+                field(lpLineNo; Rec."LP Line No.") { Caption = 'lpLineNo'; }
+                field(lotNo; Rec."Lot No.") { Caption = 'lotNo'; }
+                field(serialNo; Rec."Serial No.") { Caption = 'serialNo'; }
                 field(systemQty; Rec."System Qty") { Caption = 'systemQty'; }
                 field(countedQty1; Rec."Counted Qty 1") { Caption = 'countedQty1'; }
                 field(countedQty2; Rec."Counted Qty 2") { Caption = 'countedQty2'; }
@@ -50,10 +53,10 @@ page 72487 "DOPSWHS Count Sheet Line API"
         Item: Record Item;
     begin
         Clear(ItemDescription);
-        Clear(ItemBaseUoM);
         if (Rec."Item No." <> '') and Item.Get(Rec."Item No.") then begin
             ItemDescription := Item.Description;
-            ItemBaseUoM := Item."Base Unit of Measure";
+            if Rec."Unit of Measure Code" = '' then
+                Rec."Unit of Measure Code" := Item."Base Unit of Measure";
         end;
     end;
 
@@ -67,5 +70,4 @@ page 72487 "DOPSWHS Count Sheet Line API"
 
     var
         ItemDescription: Text[100];
-        ItemBaseUoM: Code[10];
 }

@@ -20,7 +20,10 @@ table 72352 "DOPSWHS Picking Order Header"
         // (72364/72365/72366) kaynağı bu alanla filtreler; boş = mod atanmamış
         // standart BC pick'i, "Tümü" görünümünde çıkar.
         field(35; "Order Flow Mode"; Enum "DOPSWHS Pick Mode") { Caption = 'V2 Sipariş Tipi'; DataClassification = CustomerContent; }
-        field(40; "Assigned User ID"; Code[50]) { Caption = 'Assigned User ID'; TableRelation = "Warehouse Employee"."User ID" where("Location Code" = field("Location Code")); DataClassification = EndUserIdentifiableInformation; }
+        // Atama yalnızca "Toplayıcı Ata" aksiyonundan yapılır. Değer hem
+        // yerel WMS kullanıcısı hem BC kullanıcısı olabileceği için tek bir
+        // tabloya TableRelation vermek doğru değildir.
+        field(40; "Assigned User ID"; Code[50]) { Caption = 'Assigned User ID'; DataClassification = EndUserIdentifiableInformation; }
         field(50; "Warehouse Pick No."; Code[20]) { Caption = 'Warehouse Pick No.'; Editable = false; DataClassification = CustomerContent; }
         field(60; "Warehouse Shipment No."; Code[20]) { Caption = 'Warehouse Shipment No.'; Editable = false; DataClassification = CustomerContent; }
         field(70; "Created By User"; Code[50]) { Caption = 'Created By User'; Editable = false; DataClassification = EndUserIdentifiableInformation; }

@@ -122,11 +122,25 @@
       "launchBrowser": true
     },
     {
-      "name": "Bade - SAND1506 (force sync)",
+      "name": "Bade - E-DefterSandbox (fast publish)",
       "type": "al",
       "request": "launch",
       "environmentType": "Sandbox",
-      "environmentName": "Sand2707",
+      "environmentName": "E-DefterSandbox",
+      "authentication": "AAD",
+      "tenant": "3bbd610b-95e4-47b3-8b48-4f7caf717bc3",
+      "schemaUpdateMode": "Synchronize",
+      "startupObjectType": "Page",
+      "startupObjectId": 72061,
+      "dependencyPublishingOption": "Default",
+      "launchBrowser": false
+    },
+    {
+      "name": "Bade - E-DefterSandbox (force sync)",
+      "type": "al",
+      "request": "launch",
+      "environmentType": "Sandbox",
+      "environmentName": "E-DefterSandbox",
       "authentication": "AAD",
       "tenant": "3bbd610b-95e4-47b3-8b48-4f7caf717bc3",
       "schemaUpdateMode": "ForceSync",

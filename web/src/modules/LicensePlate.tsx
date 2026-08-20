@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
 import * as BcApi from "../lib/bcApi";
+import { getDefaultPrinter } from "./Printers";
 import { DocHeader, EmptyState, Field, Modal, NumberField, Pill, StatusText } from "../ui/primitives";
 
 type Row = Record<string, any>;
@@ -146,11 +147,11 @@ function LpDetail({ no, onBack }: { no: string; onBack: () => void }) {
         <button
           className="primary"
           disabled={busy || isBuilt}
-          onClick={() => action("stop", JSON.stringify({ printLabel: true }), "LP kapatıldı + etiket")}
+          onClick={() => action("stopToPrinter", JSON.stringify({ printLabel: true, printerId: getDefaultPrinter() }), "LP kapatıldı + etiket")}
         >
           🔚 Stop
         </button>
-        <button className="outline" disabled={busy} onClick={() => action("printLabel", JSON.stringify({ printerId: "", copies: 1 }), "Etiket kuyruğa alındı")}>
+        <button className="outline" disabled={busy} onClick={() => action("printLabel", JSON.stringify({ printerId: getDefaultPrinter(), copies: 1 }), "Etiket kuyruğa alındı")}>
           🖨️ Print
         </button>
         <button className="outline" disabled={busy} onClick={() => setShowTransfer(true)}>

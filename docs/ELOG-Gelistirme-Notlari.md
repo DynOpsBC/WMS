@@ -51,8 +51,8 @@ derlenip sandbox'a publish edilmeli** (macOS'ta AL derlenemiyor).
   diğer siparişlerin satırları sıfırlanır (kendi tamamlanmalarında post edilirler).
 - Basit lokasyon: paketlenen miktarlar sales satırlarına yazılır → `PostSalesOrderShipAndInvoice`.
 - Fiş: `IWX Report Usage` yeni değer **PackReceipt (10)** → `IWX Report Selection`'da
-  seçili rapor; seçim yoksa **Standard Sales - Invoice (1306)**. `PrintDispatcher.QueueReport`
-  ile istasyon yazıcısına kuyruklanır.
+  seçili rapor; seçim yoksa **Standard Sales - Invoice (1306)**. Filtreli kayıt
+  `PrintDispatcher.PrintReport` ile PDF üretilerek istasyonun belge yazıcısına kuyruklanır.
 
 ## 5. Multi-order pick — TAMAM (AL + Ops Console + terminal)
 - Codeunit 72338 `DOPSWHS Multi Order Pick`: CSV sipariş listesi → hepsi tek

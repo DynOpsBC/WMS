@@ -103,6 +103,15 @@ page 72092 "DOPSWHS Pick API"
     end;
 
     [ServiceEnabled]
+    procedure stopShippingLPToPrinter(lpNo: Code[20]; printLabel: Boolean; printerId: Code[50]): Code[18]
+    var
+        PickMgmt: Codeunit "DOPSWHS Pick Mgmt";
+    begin
+        PickMgmt.EnsurePickOperator(Rec);
+        exit(PickMgmt.StopShippingLP(Rec, lpNo, printLabel, printerId));
+    end;
+
+    [ServiceEnabled]
     procedure markShort(lineNo: Integer; qty: Decimal; reasonCode: Code[20])
     var
         PickLine: Record "Warehouse Activity Line";

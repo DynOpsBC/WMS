@@ -25,24 +25,50 @@ report 72091 "DOPSWHS LP Label"
     procedure BuildZpl(var LP: Record "DOPSWHS LP Header"): Text
     var
         LPLine: Record "DOPSWHS LP Line";
-        Summary: Text;
+        Item: Record Item;
+        ZplEncoder: Codeunit "DOPSWHS ZPL Encoder";
+        Dimensions: Text;
+        ItemText: Text;
+        LotText: Text;
+        QtyText: Text;
+        BarcodeData: Text;
+        ExtraLinesText: Text;
+        LineCount: Integer;
     begin
         LPLine.SetRange("LP No.", LP."No.");
-        if LPLine.FindSet() then
+        LPLine.SetFilter("Item No.", '<>%1', '');
+        if LPLine.FindSet() then begin
             repeat
-                Summary += StrSubstNo('%1 %2 %3\&', LPLine."Item No.", LPLine.Quantity, LPLine."Unit of Measure");
+                LineCount += 1;
+                if LineCount = 1 then begin
+                    ItemText := LPLine."Item No.";
+                    if Item.Get(LPLine."Item No.") then
+                        ItemText += ' - ' + Item.Description;
+                    QtyText := StrSubstNo('PALET MIKTARI: %1 %2', LPLine.Quantity, LPLine."Unit of Measure");
+                    if LPLine."Lot No." <> '' then
+                        LotText := 'LOT: ' + LPLine."Lot No.";
+                end;
             until LPLine.Next() = 0;
+            if LineCount > 1 then
+                ExtraLinesText := StrSubstNo('+%1 DIGER URUN SATIRI', LineCount - 1);
+        end;
         // ^CI28 = UTF-8 character set so Turkish characters (ç ğ ş ü ö İ) and
         // any non-ASCII Item/Bin descriptions print correctly. Without this
         // the printer falls back to its default code page and outputs mojibake.
+        Dimensions := Format(LP."Built DateTime") + ' ' + Format(LP."Weight kg") + 'kg ' +
+            Format(LP."Length cm") + 'x' + Format(LP."Width cm") + 'x' + Format(LP."Height cm");
+        BarcodeData := LP.SSCC;
+        if BarcodeData = '' then
+            BarcodeData := LP."No.";
         exit(
-            '^XA' +
-            '^CI28' +
-            '^FO40,30^A0N,36,36^FDLP ' + LP."No." + '^FS' +
-            '^FO40,80^BY3^BCN,100,Y,N,N^FD>;00' + LP.SSCC + '^FS' +
-            '^FO40,210^A0N,28,28^FD' + LP."Location Code" + ' / ' + LP."Bin Code" + '^FS' +
-            '^FO40,250^A0N,24,24^FD' + CopyStr(Summary, 1, 80) + '^FS' +
-            '^FO40,320^A0N,24,24^FD' + Format(LP."Built DateTime") + ' ' + Format(LP."Weight kg") + 'kg ' + Format(LP."Length cm") + 'x' + Format(LP."Width cm") + 'x' + Format(LP."Height cm") + '^FS' +
+            '^XA^CI28^PW812^LL406' +
+            '^FO40,30^A0N,36,36^FH_^FDLP ' + ZplEncoder.EncodeFieldData(LP."No.") + '^FS' +
+            '^FO40,72^BY3^BCN,82,Y,N,N^FH_^FD' + ZplEncoder.EncodeFieldData(BarcodeData) + '^FS' +
+            '^FO40,185^A0N,25,25^FH_^FD' + ZplEncoder.EncodeFieldData(LP."Location Code" + ' / ' + LP."Bin Code") + '^FS' +
+            '^FO40,220^A0N,25,25^FH_^FD' + ZplEncoder.EncodeFieldData(CopyStr(ItemText, 1, 52)) + '^FS' +
+            '^FO40,258^A0N,34,34^FH_^FD' + ZplEncoder.EncodeFieldData(CopyStr(QtyText, 1, 42)) + '^FS' +
+            '^FO40,304^A0N,22,22^FH_^FD' + ZplEncoder.EncodeFieldData(CopyStr(LotText + ' ' + ExtraLinesText, 1, 65)) + '^FS' +
+            '^FO40,350^A0N,18,18^FH_^FD' + ZplEncoder.EncodeFieldData(CopyStr(Dimensions, 1, 75)) + '^FS' +
             '^XZ');
     end;
 }

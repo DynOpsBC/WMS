@@ -63,7 +63,11 @@ fun ItemInquiryModule() {
         val no = item?.let { firstValue(it, "no", "number") } ?: return
         scope.launch {
             status = "🖨 Etiket yazdırılıyor..."
-            val r = BcApi.boundAction(context, "items", no, "printLabel", """{"printerId":"","copies":1}""")
+            val payload = JSONObject().apply {
+                put("printerId", getDefaultPrinter(context))
+                put("copies", 1)
+            }.toString()
+            val r = BcApi.boundAction(context, "items", no, "printLabel", payload)
             status = if (r.ok) "🟢 Ürün etiketi kuyruğa alındı ($no)." else "🔴 Yazdırma: ${BcApi.errorMessage(r.body)} (HTTP ${r.httpCode})"
         }
     }
@@ -211,7 +215,11 @@ fun BinInquiryModule() {
         scope.launch {
             status = "🖨 Bin etiketi yazdırılıyor..."
             val key = "locationCode='${loc.replace("'", "''")}',code='${code.replace("'", "''")}'"
-            val r = BcApi.boundAction(context, "bins", key, "printLabel", """{"printerId":"","copies":1}""")
+            val payload = JSONObject().apply {
+                put("printerId", getDefaultPrinter(context))
+                put("copies", 1)
+            }.toString()
+            val r = BcApi.boundAction(context, "bins", key, "printLabel", payload)
             status = if (r.ok) "🟢 Bin etiketi kuyruğa alındı ($loc/$code)." else "🔴 Yazdırma: ${BcApi.errorMessage(r.body)} (HTTP ${r.httpCode})"
         }
     }

@@ -25,17 +25,29 @@ export default async function printJobsStatus(
   const secret = tenant.printerSecrets[printerId];
   if (!secret) return { status: 404, jsonBody: { ok: false, error: `printer ${printerId} not registered` } };
 
-  if (!verifyPrinterSignature(Object.fromEntries(request.headers.entries()), body, secret, printerId)) {
+  if (!verifyPrinterSignature(Object.fromEntries(request.headers.entries()), request.method, request.url, body, secret, printerId)) {
     return { status: 401, jsonBody: { ok: false, error: "invalid signature" } };
   }
 
-  const payload = body ? (JSON.parse(body) as { status?: string; message?: string }) : {};
-  const success = (payload.status ?? "").toLowerCase() === "sent";
+  let payload: { status?: string; message?: string; agentId?: string } = {};
+  try {
+    payload = body ? (JSON.parse(body) as { status?: string; message?: string; agentId?: string }) : {};
+  } catch {
+    return { status: 400, jsonBody: { ok: false, error: "invalid JSON body" } };
+  }
+  const normalizedStatus = (payload.status ?? "").trim().toLowerCase();
+  if (normalizedStatus !== "sent" && normalizedStatus !== "failed") {
+    return { status: 400, jsonBody: { ok: false, error: "status must be Sent or Failed" } };
+  }
+  const success = normalizedStatus === "sent";
   const message = (payload.message ?? "").slice(0, 250);
+  const agentId = payload.agentId?.trim() ?? "";
+  if (!agentId) return { status: 400, jsonBody: { ok: false, error: "agentId required" } };
+  if (agentId.length > 50) return { status: 400, jsonBody: { ok: false, error: "agentId cannot exceed 50 characters" } };
   try {
     const client = new BcODataClient(tenant);
-    const ok = await client.markStatus(jobId, success, message);
-    return { status: ok ? 200 : 502, jsonBody: { ok } };
+    const ok = await client.markStatus(jobId, success, message, agentId, printerId);
+    return { status: ok ? 200 : 409, jsonBody: { ok } };
   } catch (err) {
     context.error("BC OData status error", err);
     return { status: 502, jsonBody: { ok: false, error: (err as Error).message } };

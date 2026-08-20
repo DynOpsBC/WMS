@@ -11,6 +11,196 @@ codeunit 72354 "DOPSWHS Picking Order Mgmt"
             until SalesHeader.Next() = 0;
     end;
 
+    /// <summary>
+    /// Seçili satış siparişlerini lokasyon ve sipariş içeriğine göre otomatik
+    /// toplama gruplarına ayırır. Aynı lokasyondaki:
+    /// - iki veya daha fazla bekleyen ürün satırı içeren siparişler Multi,
+    /// - tek ürün satırı içeren ve SKU'su seçimde benzersiz olan siparişler Mono,
+    /// - aynı SKU'lu tek ürün satırını içeren birden fazla sipariş Tek SKU grubuna alınır.
+    /// Pick oluşturmaz; depo sorumlusu oluşan grupları listeden kontrol eder,
+    /// toplayıcıyı atar ve karttan pick oluşturur.
+    /// </summary>
+    procedure AutoCreatePickingGroups(var SalesHeader: Record "Sales Header"; var MultiGroupCount: Integer; var MonoGroupCount: Integer; var SingleSkuGroupCount: Integer; var OrderCount: Integer; var SkippedOrderCount: Integer)
+    var
+        PickingHeader: Record "DOPSWHS Picking Order Header";
+        PickingLineGuard: Record "DOPSWHS Picking Order Line";
+        FlowMode: Enum "DOPSWHS Pick Mode";
+        SingleSkuCounts: Dictionary of [Text, Integer];
+        HeaderEntryNos: Dictionary of [Text, Integer];
+        LocationCode: Code[10];
+        SingleSkuNo: Text;
+        GroupKey: Text;
+        SkuProfileKey: Text;
+        ItemLineCount: Integer;
+        ExistingSkuOrderCount: Integer;
+        IsNewGroup: Boolean;
+    begin
+        Clear(MultiGroupCount);
+        Clear(MonoGroupCount);
+        Clear(SingleSkuGroupCount);
+        Clear(OrderCount);
+        Clear(SkippedOrderCount);
+
+        if SalesHeader.IsEmpty() then
+            Error('Otomatik ayırma için en az bir satış siparişi seçin.');
+
+        // Seçim açıkken başka bir oturum aynı siparişi gruplamasın.
+        // Böylece ilk ve ikinci sınıflandırma geçişi aynı veri kümesini görür.
+        PickingLineGuard.LockTable();
+
+        // İlk geçiş: tek SKU siparişlerinde aynı lokasyon + SKU tekrarını
+        // say. Tekrar edenler Tek SKU, benzersiz kalanlar Mono olacaktır.
+        if SalesHeader.FindSet() then
+            repeat
+                if IsOrderAvailableForAutoGrouping(SalesHeader."No.") then begin
+                    GetOrderProfile(SalesHeader, LocationCode, ItemLineCount, SingleSkuNo);
+                    if ItemLineCount = 1 then begin
+                        SkuProfileKey := BuildGroupKey('SKU', LocationCode, SingleSkuNo);
+                        if SingleSkuCounts.Get(SkuProfileKey, ExistingSkuOrderCount) then
+                            SingleSkuCounts.Set(SkuProfileKey, ExistingSkuOrderCount + 1)
+                        else
+                            SingleSkuCounts.Add(SkuProfileKey, 1);
+                    end;
+                end;
+            until SalesHeader.Next() = 0;
+
+        // İkinci geçiş: her siparişi uygun otomatik gruba ekle. Grup anahtarı
+        // lokasyonu da içerir; farklı depolar aynı pick'e karışmaz.
+        if SalesHeader.FindSet() then
+            repeat
+                if IsOrderAvailableForAutoGrouping(SalesHeader."No.") then begin
+                    GetOrderProfile(SalesHeader, LocationCode, ItemLineCount, SingleSkuNo);
+                    if ItemLineCount > 1 then begin
+                        FlowMode := FlowMode::Multi;
+                        GroupKey := BuildGroupKey('MULTI', LocationCode, '');
+                    end else begin
+                        SkuProfileKey := BuildGroupKey('SKU', LocationCode, SingleSkuNo);
+                        SingleSkuCounts.Get(SkuProfileKey, ExistingSkuOrderCount);
+                        if ExistingSkuOrderCount > 1 then begin
+                            FlowMode := FlowMode::Bulk;
+                            GroupKey := BuildGroupKey('BULK', LocationCode, SingleSkuNo);
+                        end else begin
+                            FlowMode := FlowMode::Batch;
+                            GroupKey := BuildGroupKey('BATCH', LocationCode, '');
+                        end;
+                    end;
+
+                    IsNewGroup := not HeaderEntryNos.ContainsKey(GroupKey);
+                    GetOrCreateAutoHeader(
+                        GroupKey, FlowMode, LocationCode, SingleSkuNo,
+                        HeaderEntryNos, PickingHeader);
+                    if IsNewGroup then
+                        case FlowMode of
+                            FlowMode::Multi:
+                                MultiGroupCount += 1;
+                            FlowMode::Batch:
+                                MonoGroupCount += 1;
+                            FlowMode::Bulk:
+                                SingleSkuGroupCount += 1;
+                        end;
+
+                    AddOrder(PickingHeader, SalesHeader);
+                    OrderCount += 1;
+                end else
+                    SkippedOrderCount += 1;
+            until SalesHeader.Next() = 0;
+    end;
+
+    local procedure IsOrderAvailableForAutoGrouping(SalesOrderNo: Code[20]): Boolean
+    begin
+        exit(
+            (not SalesOrderHasOpenPick(SalesOrderNo)) and
+            (not SalesOrderHasActivePickingGroup(SalesOrderNo)));
+    end;
+
+    local procedure GetOrderProfile(var SalesHeader: Record "Sales Header"; var LocationCode: Code[10]; var ItemLineCount: Integer; var SingleSkuNo: Text)
+    var
+        SalesLine: Record "Sales Line";
+        SkuKey: Text;
+        FirstLocationRead: Boolean;
+    begin
+        Clear(LocationCode);
+        Clear(ItemLineCount);
+        Clear(SingleSkuNo);
+
+        SalesHeader.TestField("Document Type", SalesHeader."Document Type"::Order);
+        if SalesOrderHasOpenPick(SalesHeader."No.") then
+            Error('Satış siparişi %1 için zaten açık veya kaydedilmiş bir toplama var.', SalesHeader."No.");
+
+        SalesLine.SetRange("Document Type", SalesLine."Document Type"::Order);
+        SalesLine.SetRange("Document No.", SalesHeader."No.");
+        SalesLine.SetRange(Type, SalesLine.Type::Item);
+        SalesLine.SetFilter("Outstanding Quantity", '>0');
+        SalesLine.SetFilter("No.", '<>%1', '');
+        SalesLine.SetLoadFields("No.", "Variant Code", "Location Code");
+        if SalesLine.FindSet() then
+            repeat
+                ItemLineCount += 1;
+                if not FirstLocationRead then begin
+                    LocationCode := SalesLine."Location Code";
+                    FirstLocationRead := true;
+                end else
+                    if SalesLine."Location Code" <> LocationCode then
+                        Error(
+                            'Satış siparişi %1 birden fazla lokasyon içeriyor. Otomatik ayırma için sipariş satırları tek lokasyonda olmalıdır.',
+                            SalesHeader."No.");
+
+                SkuKey := SalesLine."No.";
+                if SalesLine."Variant Code" <> '' then
+                    SkuKey += '/' + SalesLine."Variant Code";
+                if ItemLineCount = 1 then
+                    SingleSkuNo := SkuKey;
+            until SalesLine.Next() = 0;
+
+        if ItemLineCount = 0 then
+            Error('Satış siparişi %1 için bekleyen ürün satırı bulunamadı.', SalesHeader."No.");
+        if LocationCode = '' then
+            Error('Satış siparişi %1 için lokasyon belirtilmemiş. Otomatik ayırmadan önce sipariş satırlarına lokasyon girin.', SalesHeader."No.");
+        if ItemLineCount <> 1 then
+            Clear(SingleSkuNo);
+    end;
+
+    local procedure GetOrCreateAutoHeader(GroupKey: Text; FlowMode: Enum "DOPSWHS Pick Mode"; LocationCode: Code[10]; SingleSkuNo: Text; var HeaderEntryNos: Dictionary of [Text, Integer]; var PickingHeader: Record "DOPSWHS Picking Order Header")
+    var
+        HeaderEntryNo: Integer;
+        DescriptionText: Text;
+    begin
+        if HeaderEntryNos.Get(GroupKey, HeaderEntryNo) then begin
+            PickingHeader.Get(HeaderEntryNo);
+            exit;
+        end;
+
+        case FlowMode of
+            FlowMode::Multi:
+                DescriptionText := 'Otomatik Multi';
+            FlowMode::Batch:
+                DescriptionText := 'Otomatik Mono';
+            FlowMode::Bulk:
+                DescriptionText := StrSubstNo('Otomatik Tek SKU - %1', SingleSkuNo);
+        end;
+        if LocationCode <> '' then
+            DescriptionText += StrSubstNo(' - %1', LocationCode);
+
+        // Init(), AutoIncrement olan birincil anahtarı temizlemez. Bu değişken
+        // daha önce oluşturulan/okunan grubu taşıyorsa aynı Entry No. ile ikinci
+        // Insert denenir. Clear ile PK dahil kayıt durumunu tamamen sıfırla.
+        Clear(PickingHeader);
+        PickingHeader.Init();
+        PickingHeader."Entry No." := 0;
+        PickingHeader.Description := CopyStr(DescriptionText, 1, MaxStrLen(PickingHeader.Description));
+        PickingHeader."Location Code" := LocationCode;
+        PickingHeader."Order Flow Mode" := FlowMode;
+        PickingHeader.Insert(true);
+        HeaderEntryNos.Add(GroupKey, PickingHeader."Entry No.");
+    end;
+
+    local procedure BuildGroupKey(Prefix: Text; LocationCode: Code[10]; ItemNo: Text): Text
+    begin
+        // ASCII birim ayıracına gerek yok; Code alanlarında '|' normalde
+        // kullanılmadığı için okunabilir ve deterministik bir anahtar yeterli.
+        exit(Prefix + '|' + LocationCode + '|' + ItemNo);
+    end;
+
     procedure AddOrder(var PickingHeader: Record "DOPSWHS Picking Order Header"; SalesHeader: Record "Sales Header")
     var
         PickingLine: Record "DOPSWHS Picking Order Line";
@@ -128,6 +318,29 @@ codeunit 72354 "DOPSWHS Picking Order Mgmt"
         exit(GetSalesOrderPickStatus(SalesOrderNo) <> 0);
     end;
 
+    /// <summary>
+    /// Sipariş henüz warehouse pick'e dönüşmemiş olsa bile açık bir
+    /// DOPSWHS toplama grubundaysa yeniden seçilemez.
+    /// </summary>
+    procedure SalesOrderHasActivePickingGroup(SalesOrderNo: Code[20]): Boolean
+    var
+        PickingLine: Record "DOPSWHS Picking Order Line";
+        PickingHeader: Record "DOPSWHS Picking Order Header";
+    begin
+        if SalesOrderNo = '' then
+            exit(false);
+
+        PickingLine.SetRange("Sales Order No.", SalesOrderNo);
+        PickingLine.SetLoadFields("Header Entry No.");
+        if PickingLine.FindSet() then
+            repeat
+                if PickingHeader.Get(PickingLine."Header Entry No.") then
+                    if PickingHeader.Status <> PickingHeader.Status::Completed then
+                        exit(true);
+            until PickingLine.Next() = 0;
+        exit(false);
+    end;
+
     // Sales Header kümesini yalnızca "toplanabilir" siparişlere daraltır:
     // pick'i (açık VEYA register edilmiş) olan siparişler hariç tutulur.
     // ÖLÇEKLENEBİLİRLİK: 5000+ satış siparişini tek tek dolaşmak yerine, PICK
@@ -137,6 +350,8 @@ codeunit 72354 "DOPSWHS Picking Order Mgmt"
     var
         WhseActivityLine: Record "Warehouse Activity Line";
         RegisteredLine: Record "Registered Whse. Activity Line";
+        PickingLine: Record "DOPSWHS Picking Order Line";
+        PickingHeader: Record "DOPSWHS Picking Order Header";
         PickedOrders: Dictionary of [Code[20], Boolean];
         ExcludeFilter: Text;
         OrderNo: Code[20];
@@ -162,6 +377,18 @@ codeunit 72354 "DOPSWHS Picking Order Mgmt"
                 if not PickedOrders.ContainsKey(RegisteredLine."Source No.") then
                     PickedOrders.Add(RegisteredLine."Source No.", true);
             until RegisteredLine.Next() = 0;
+
+        // Warehouse pick henüz oluşturulmamış olsa da açık bir toplama
+        // grubuna eklenmiş sipariş tekrar seçilmemelidir. HB.0001315 gibi
+        // kayıtların ikinci bir otomatik gruba alınmasını burada engelleriz.
+        PickingLine.SetLoadFields("Sales Order No.", "Header Entry No.");
+        if PickingLine.FindSet() then
+            repeat
+                if PickingHeader.Get(PickingLine."Header Entry No.") then
+                    if PickingHeader.Status <> PickingHeader.Status::Completed then
+                        if not PickedOrders.ContainsKey(PickingLine."Sales Order No.") then
+                            PickedOrders.Add(PickingLine."Sales Order No.", true);
+            until PickingLine.Next() = 0;
 
         foreach OrderNo in PickedOrders.Keys() do begin
             if ExcludeFilter <> '' then
@@ -245,6 +472,8 @@ codeunit 72354 "DOPSWHS Picking Order Mgmt"
     begin
         PickingHeader.TestField(Status, PickingHeader.Status::Open);
         PickingHeader.TestField("Location Code");
+        if PickingHeader."Assigned User ID" = '' then
+            Error('Pick oluşturmadan önce "Toplayıcı Ata" ile bir operatör seçin. Atamasız pick oluşturulamaz.');
 
         PickingLine.SetRange("Header Entry No.", PickingHeader."Entry No.");
         if PickingLine.FindSet() then
@@ -256,12 +485,28 @@ codeunit 72354 "DOPSWHS Picking Order Mgmt"
         if OrderNosCsv = '' then
             Error('Select at least one sales order.');
 
-        PickNo := MultiOrderPick.CreateGroupedPick(OrderNosCsv, PickingHeader."Assigned User ID", ShipmentNo, 'multi');
+        PickNo := MultiOrderPick.CreateGroupedPick(
+            OrderNosCsv,
+            PickingHeader."Assigned User ID",
+            ShipmentNo,
+            PickModeToText(PickingHeader."Order Flow Mode"));
         PickingHeader."Warehouse Pick No." := PickNo;
         PickingHeader."Warehouse Shipment No." := ShipmentNo;
         PickingHeader.Status := PickingHeader.Status::"Pick Created";
         PickingHeader.Modify(true);
         exit(PickNo);
+    end;
+
+    local procedure PickModeToText(PickMode: Enum "DOPSWHS Pick Mode"): Text
+    begin
+        case PickMode of
+            PickMode::Bulk:
+                exit('bulk');
+            PickMode::Batch:
+                exit('batch');
+            else
+                exit('multi');
+        end;
     end;
 
     // ------------------------------------------------------------------
