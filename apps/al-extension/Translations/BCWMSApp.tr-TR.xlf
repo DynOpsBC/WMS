@@ -1,1525 +1,1829 @@
 <?xml version="1.0" encoding="utf-8"?>
 <xliff version="1.2" xmlns="urn:oasis:names:tc:xliff:document:1.2" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="urn:oasis:names:tc:xliff:document:1.2 xliff-core-1.2-transitional.xsd">
-  <file datatype="xml" source-language="en-US" target-language="en-US" original="BCWMSApp">
+  <file datatype="xml" source-language="en-US" target-language="tr-TR" original="BCWMSApp">
     <body>
       <group id="body">
         <trans-unit id="Table 3517625322 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
           <source>WMS Action Request</source>
+          <target state="translated">WMS Eylem İsteği</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Table WMS Action Request - Property Caption</note>
         </trans-unit>
         <trans-unit id="Table 3517625322 - Field 1613214047 - Property 1295455071" size-unit="char" translate="yes" xml:space="preserve">
           <source>Device that submitted the action. Validated against WMS Mobile Device.Status = Active.</source>
+          <target state="translated">Eylemi gönderen cihaz. WMS Mobil Cihaz.Durum = Aktif değerine göre doğrulanır.</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Table WMS Action Request - Field Device Id - Property ToolTip</note>
         </trans-unit>
         <trans-unit id="Table 3517625322 - Field 1613214047 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
           <source>Device Id</source>
+          <target state="translated">Cihaz Kimliği</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Table WMS Action Request - Field Device Id - Property Caption</note>
         </trans-unit>
         <trans-unit id="Table 3517625322 - Field 883711285 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
           <source>Entry No.</source>
+          <target state="translated">Girdi No.</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Table WMS Action Request - Field Entry No. - Property Caption</note>
         </trans-unit>
         <trans-unit id="Table 3517625322 - Field 2090362857 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
           <source>Flow Id</source>
+          <target state="translated">Akış Kimliği</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Table WMS Action Request - Field Flow Id - Property Caption</note>
         </trans-unit>
         <trans-unit id="Table 3517625322 - Field 4208776898 - Property 1295455071" size-unit="char" translate="yes" xml:space="preserve">
           <source>JSON payload of the captured flow fields.</source>
+          <target state="translated">Yakalanan akış alanlarının JSON yükü.</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Table WMS Action Request - Field Payload - Property ToolTip</note>
         </trans-unit>
         <trans-unit id="Table 3517625322 - Field 4208776898 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
           <source>Payload</source>
+          <target state="translated">Yük</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Table WMS Action Request - Field Payload - Property Caption</note>
         </trans-unit>
         <trans-unit id="Table 3517625322 - Field 2446130881 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
           <source>Processed At</source>
+          <target state="translated">İşlenme Tarihi</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Table WMS Action Request - Field Processed At - Property Caption</note>
         </trans-unit>
         <trans-unit id="Table 3517625322 - Field 3030477902 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
           <source>Received At</source>
+          <target state="translated">Alınma Tarihi</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Table WMS Action Request - Field Received At - Property Caption</note>
         </trans-unit>
         <trans-unit id="Table 3517625322 - Field 2928927360 - Property 1295455071" size-unit="char" translate="yes" xml:space="preserve">
           <source>Idempotency key supplied by the device. Re-posting the same id replays the prior result.</source>
+          <target state="translated">Cihaz tarafından sağlanan tekrarsızlık (idempotency) anahtarı. Aynı kimlikle tekrar gönderim önceki sonucu tekrar oynatır.</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Table WMS Action Request - Field Request Id - Property ToolTip</note>
         </trans-unit>
         <trans-unit id="Table 3517625322 - Field 2928927360 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
           <source>Request Id</source>
+          <target state="translated">İstek Kimliği</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Table WMS Action Request - Field Request Id - Property Caption</note>
         </trans-unit>
         <trans-unit id="Table 3517625322 - Field 730432307 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
           <source>Result Document No.</source>
+          <target state="translated">Sonuç Belge No.</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Table WMS Action Request - Field Result Document No. - Property Caption</note>
         </trans-unit>
         <trans-unit id="Table 3517625322 - Field 2826898470 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
           <source>Result Message</source>
+          <target state="translated">Sonuç Mesajı</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Table WMS Action Request - Field Result Message - Property Caption</note>
         </trans-unit>
         <trans-unit id="Table 3517625322 - Field 513339096 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
           <source>Status</source>
+          <target state="translated">Durum</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Table WMS Action Request - Field Status - Property Caption</note>
         </trans-unit>
         <trans-unit id="Table 3517625322 - Field 2117676341 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
           <source>Worker Id</source>
+          <target state="translated">Çalışan Kimliği</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Table WMS Action Request - Field Worker Id - Property Caption</note>
         </trans-unit>
         <trans-unit id="Table 2163557943 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
           <source>WMS Carrier</source>
+          <target state="translated">WMS Taşıyıcı</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Table WMS Carrier - Property Caption</note>
         </trans-unit>
         <trans-unit id="Table 2163557943 - Field 3459191678 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
           <source>Account Number</source>
+          <target state="translated">Hesap Numarası</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Table WMS Carrier - Field Account Number - Property Caption</note>
         </trans-unit>
         <trans-unit id="Table 2163557943 - Field 1090351696 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
           <source>Active</source>
+          <target state="translated">Aktif</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Table WMS Carrier - Field Active - Property Caption</note>
         </trans-unit>
         <trans-unit id="Table 2163557943 - Field 132998021 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
           <source>API Endpoint</source>
+          <target state="translated">API Uç Noktası</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Table WMS Carrier - Field API Endpoint - Property Caption</note>
         </trans-unit>
         <trans-unit id="Table 2163557943 - Field 3004954119 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
           <source>Code</source>
+          <target state="translated">Kod</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Table WMS Carrier - Field Code - Property Caption</note>
         </trans-unit>
         <trans-unit id="Table 2163557943 - Field 2961552353 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
           <source>Name</source>
+          <target state="translated">Ad</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Table WMS Carrier - Field Name - Property Caption</note>
         </trans-unit>
         <trans-unit id="Table 2163557943 - Field 297635827 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
           <source>Provider</source>
+          <target state="translated">Sağlayıcı</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Table WMS Carrier - Field Provider - Property Caption</note>
         </trans-unit>
         <trans-unit id="Table 2163557943 - Field 3957778759 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
           <source>Sandbox</source>
+          <target state="translated">Test Ortamı</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Table WMS Carrier - Field Sandbox - Property Caption</note>
         </trans-unit>
         <trans-unit id="Table 2548725138 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
           <source>WMS Container</source>
+          <target state="translated">WMS Konteyner</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Table WMS Container - Property Caption</note>
         </trans-unit>
         <trans-unit id="Table 2548725138 - Field 230801761 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
           <source>Closed At</source>
+          <target state="translated">Kapanış Tarihi</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Table WMS Container - Field Closed At - Property Caption</note>
         </trans-unit>
         <trans-unit id="Table 2548725138 - Field 1060753699 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
           <source>Closed By</source>
+          <target state="translated">Kapatan</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Table WMS Container - Field Closed By - Property Caption</note>
         </trans-unit>
         <trans-unit id="Table 2548725138 - Field 3947730430 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
           <source>Container Type Code</source>
+          <target state="translated">Konteyner Türü Kodu</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Table WMS Container - Field Container Type Code - Property Caption</note>
         </trans-unit>
         <trans-unit id="Table 2548725138 - Field 2570673311 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
           <source>Created At</source>
+          <target state="translated">Oluşturulma Tarihi</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Table WMS Container - Field Created At - Property Caption</note>
         </trans-unit>
         <trans-unit id="Table 2548725138 - Field 2369664869 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
           <source>Created By</source>
+          <target state="translated">Oluşturan</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Table WMS Container - Field Created By - Property Caption</note>
         </trans-unit>
         <trans-unit id="Table 2548725138 - Field 4239513174 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
           <source>Gross Weight</source>
+          <target state="translated">Brüt Ağırlık</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Table WMS Container - Field Gross Weight - Property Caption</note>
         </trans-unit>
         <trans-unit id="Table 2548725138 - Field 3581037481 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
           <source>Height</source>
+          <target state="translated">Yükseklik</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Table WMS Container - Field Height - Property Caption</note>
         </trans-unit>
         <trans-unit id="Table 2548725138 - Field 1881551368 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
           <source>Length</source>
+          <target state="translated">Uzunluk</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Table WMS Container - Field Length - Property Caption</note>
         </trans-unit>
         <trans-unit id="Table 2548725138 - Field 4200184881 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
           <source>No.</source>
+          <target state="translated">No.</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Table WMS Container - Field No. - Property Caption</note>
         </trans-unit>
         <trans-unit id="Table 2548725138 - Field 67311704 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
           <source>Packing Location</source>
+          <target state="translated">Paketleme Lokasyonu</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Table WMS Container - Field Packing Location - Property Caption</note>
         </trans-unit>
         <trans-unit id="Table 2548725138 - Field 64970433 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
           <source>Shipment No.</source>
+          <target state="translated">Sevkiyat No.</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Table WMS Container - Field Shipment No. - Property Caption</note>
         </trans-unit>
         <trans-unit id="Table 2548725138 - Field 513339096 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
           <source>Status</source>
+          <target state="translated">Durum</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Table WMS Container - Field Status - Property Caption</note>
         </trans-unit>
         <trans-unit id="Table 2548725138 - Field 3367172142 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
           <source>Tare Weight</source>
+          <target state="translated">Dara Ağırlığı</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Table WMS Container - Field Tare Weight - Property Caption</note>
         </trans-unit>
         <trans-unit id="Table 2548725138 - Field 4246736440 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
           <source>Tracking Number</source>
+          <target state="translated">Takip Numarası</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Table WMS Container - Field Tracking Number - Property Caption</note>
         </trans-unit>
         <trans-unit id="Table 2548725138 - Field 613790498 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
           <source>Width</source>
+          <target state="translated">Genişlik</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Table WMS Container - Field Width - Property Caption</note>
         </trans-unit>
         <trans-unit id="Table 3412374164 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
           <source>WMS Container Line</source>
+          <target state="translated">WMS Konteyner Satırı</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Table WMS Container Line - Property Caption</note>
         </trans-unit>
         <trans-unit id="Table 3412374164 - Field 3100996228 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
           <source>Container No.</source>
+          <target state="translated">Konteyner No.</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Table WMS Container Line - Field Container No. - Property Caption</note>
         </trans-unit>
         <trans-unit id="Table 3412374164 - Field 568743302 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
           <source>Item No.</source>
+          <target state="translated">Kalem No.</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Table WMS Container Line - Field Item No. - Property Caption</note>
         </trans-unit>
         <trans-unit id="Table 3412374164 - Field 3320823955 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
           <source>Line No.</source>
+          <target state="translated">Satır No.</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Table WMS Container Line - Field Line No. - Property Caption</note>
         </trans-unit>
         <trans-unit id="Table 3412374164 - Field 1482668068 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
           <source>Lot No.</source>
+          <target state="translated">Lot No.</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Table WMS Container Line - Field Lot No. - Property Caption</note>
         </trans-unit>
         <trans-unit id="Table 3412374164 - Field 788705631 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
           <source>Packed At</source>
+          <target state="translated">Paketlenme Tarihi</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Table WMS Container Line - Field Packed At - Property Caption</note>
         </trans-unit>
         <trans-unit id="Table 3412374164 - Field 546120485 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
           <source>Packed By</source>
+          <target state="translated">Paketleyen</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Table WMS Container Line - Field Packed By - Property Caption</note>
         </trans-unit>
         <trans-unit id="Table 3412374164 - Field 2704404533 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
           <source>Quantity</source>
+          <target state="translated">Miktar</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Table WMS Container Line - Field Quantity - Property Caption</note>
         </trans-unit>
         <trans-unit id="Table 3412374164 - Field 47037625 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
           <source>Serial No.</source>
+          <target state="translated">Seri No.</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Table WMS Container Line - Field Serial No. - Property Caption</note>
         </trans-unit>
         <trans-unit id="Table 3412374164 - Field 2385270358 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
           <source>Unit of Measure Code</source>
+          <target state="translated">Ölçü Birimi Kodu</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Table WMS Container Line - Field Unit of Measure Code - Property Caption</note>
         </trans-unit>
         <trans-unit id="Table 3412374164 - Field 3450651614 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
           <source>Variant Code</source>
+          <target state="translated">Varyant Kodu</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Table WMS Container Line - Field Variant Code - Property Caption</note>
         </trans-unit>
         <trans-unit id="Table 1805194753 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
           <source>WMS Count Variance</source>
+          <target state="translated">WMS Sayım Farkı</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Table WMS Count Variance - Property Caption</note>
         </trans-unit>
         <trans-unit id="Table 1805194753 - Field 1378760138 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
           <source>Approved At</source>
+          <target state="translated">Onay Tarihi</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Table WMS Count Variance - Field Approved At - Property Caption</note>
         </trans-unit>
         <trans-unit id="Table 1805194753 - Field 4041162204 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
           <source>Approved By</source>
+          <target state="translated">Onaylayan</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Table WMS Count Variance - Field Approved By - Property Caption</note>
         </trans-unit>
         <trans-unit id="Table 1805194753 - Field 2814799924 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
           <source>Bin Code</source>
+          <target state="translated">Bölme Kodu</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Table WMS Count Variance - Field Bin Code - Property Caption</note>
         </trans-unit>
         <trans-unit id="Table 1805194753 - Field 4095824225 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
           <source>Counted At</source>
+          <target state="translated">Sayım Tarihi</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Table WMS Count Variance - Field Counted At - Property Caption</note>
         </trans-unit>
         <trans-unit id="Table 1805194753 - Field 630808867 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
           <source>Counted By</source>
+          <target state="translated">Sayan</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Table WMS Count Variance - Field Counted By - Property Caption</note>
         </trans-unit>
         <trans-unit id="Table 1805194753 - Field 1216590499 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
           <source>Counted Quantity</source>
+          <target state="translated">Sayılan Miktar</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Table WMS Count Variance - Field Counted Quantity - Property Caption</note>
         </trans-unit>
         <trans-unit id="Table 1805194753 - Field 568743302 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
           <source>Item No.</source>
+          <target state="translated">Kalem No.</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Table WMS Count Variance - Field Item No. - Property Caption</note>
         </trans-unit>
         <trans-unit id="Table 1805194753 - Field 3320823955 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
           <source>Line No.</source>
+          <target state="translated">Satır No.</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Table WMS Count Variance - Field Line No. - Property Caption</note>
         </trans-unit>
         <trans-unit id="Table 1805194753 - Field 2161572060 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
           <source>Location Code</source>
+          <target state="translated">Lokasyon Kodu</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Table WMS Count Variance - Field Location Code - Property Caption</note>
         </trans-unit>
         <trans-unit id="Table 1805194753 - Field 469236552 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
           <source>Plan No.</source>
+          <target state="translated">Plan No.</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Table WMS Count Variance - Field Plan No. - Property Caption</note>
         </trans-unit>
         <trans-unit id="Table 1805194753 - Field 644587141 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
           <source>Recount No.</source>
+          <target state="translated">Yeniden Sayım No.</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Table WMS Count Variance - Field Recount No. - Property Caption</note>
         </trans-unit>
         <trans-unit id="Table 1805194753 - Field 3539302210 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
           <source>System Quantity</source>
+          <target state="translated">Sistem Miktarı</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Table WMS Count Variance - Field System Quantity - Property Caption</note>
         </trans-unit>
         <trans-unit id="Table 1805194753 - Field 2704364727 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
           <source>Variance</source>
+          <target state="translated">Fark</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Table WMS Count Variance - Field Variance - Property Caption</note>
         </trans-unit>
         <trans-unit id="Table 1805194753 - Field 3450651614 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
           <source>Variant Code</source>
+          <target state="translated">Varyant Kodu</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Table WMS Count Variance - Field Variant Code - Property Caption</note>
         </trans-unit>
         <trans-unit id="Table 104228803 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
           <source>WMS Cycle Count Plan</source>
+          <target state="translated">WMS Döngü Sayım Planı</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Table WMS Cycle Count Plan - Property Caption</note>
         </trans-unit>
         <trans-unit id="Table 104228803 - Field 3801397439 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
           <source>Bin Filter</source>
+          <target state="translated">Bölme Filtresi</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Table WMS Cycle Count Plan - Field Bin Filter - Property Caption</note>
         </trans-unit>
         <trans-unit id="Table 104228803 - Field 3461834954 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
           <source>Description</source>
+          <target state="translated">Açıklama</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Table WMS Cycle Count Plan - Field Description - Property Caption</note>
         </trans-unit>
         <trans-unit id="Table 104228803 - Field 60453471 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
           <source>Item Filter</source>
+          <target state="translated">Kalem Filtresi</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Table WMS Cycle Count Plan - Field Item Filter - Property Caption</note>
         </trans-unit>
         <trans-unit id="Table 104228803 - Field 2161572060 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
           <source>Location Code</source>
+          <target state="translated">Lokasyon Kodu</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Table WMS Cycle Count Plan - Field Location Code - Property Caption</note>
         </trans-unit>
         <trans-unit id="Table 104228803 - Field 469236552 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
           <source>Plan No.</source>
+          <target state="translated">Plan No.</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Table WMS Cycle Count Plan - Field Plan No. - Property Caption</note>
         </trans-unit>
         <trans-unit id="Table 104228803 - Field 1338209228 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
           <source>Recount On Variance</source>
+          <target state="translated">Farkta Yeniden Say</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Table WMS Cycle Count Plan - Field Recount On Variance - Property Caption</note>
         </trans-unit>
         <trans-unit id="Table 104228803 - Field 696650142 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
           <source>Recount Times</source>
+          <target state="translated">Yeniden Sayım Sayısı</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Table WMS Cycle Count Plan - Field Recount Times - Property Caption</note>
         </trans-unit>
         <trans-unit id="Table 104228803 - Field 531672242 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
           <source>Requires Supervisor</source>
+          <target state="translated">Amir Onayı Gerekli</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Table WMS Cycle Count Plan - Field Requires Supervisor - Property Caption</note>
         </trans-unit>
         <trans-unit id="Table 104228803 - Field 2428523582 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
           <source>Scheduled For</source>
+          <target state="translated">Planlanan Tarih</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Table WMS Cycle Count Plan - Field Scheduled For - Property Caption</note>
         </trans-unit>
         <trans-unit id="Table 104228803 - Field 513339096 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
           <source>Status</source>
+          <target state="translated">Durum</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Table WMS Cycle Count Plan - Field Status - Property Caption</note>
         </trans-unit>
         <trans-unit id="Table 104228803 - Field 580922234 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
           <source>Zone Filter</source>
+          <target state="translated">Bölge Filtresi</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Table WMS Cycle Count Plan - Field Zone Filter - Property Caption</note>
         </trans-unit>
         <trans-unit id="Table 2030743620 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
           <source>WMS Data Inquiry</source>
+          <target state="translated">WMS Veri Sorgusu</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Table WMS Data Inquiry - Property Caption</note>
         </trans-unit>
         <trans-unit id="Table 2030743620 - Field 3461834954 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
           <source>Description</source>
+          <target state="translated">Açıklama</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Table WMS Data Inquiry - Field Description - Property Caption</note>
         </trans-unit>
         <trans-unit id="Table 2030743620 - Field 3793438982 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
           <source>Filter Expression</source>
+          <target state="translated">Filtre İfadesi</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Table WMS Data Inquiry - Field Filter Expression - Property Caption</note>
         </trans-unit>
         <trans-unit id="Table 2030743620 - Field 793541024 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
           <source>Inquiry Code</source>
+          <target state="translated">Sorgu Kodu</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Table WMS Data Inquiry - Field Inquiry Code - Property Caption</note>
         </trans-unit>
         <trans-unit id="Table 2030743620 - Field 1204269083 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
           <source>Mobile Page Layout</source>
+          <target state="translated">Mobil Sayfa Yerleşimi</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Table WMS Data Inquiry - Field Mobile Page Layout - Property Caption</note>
         </trans-unit>
         <trans-unit id="Table 2030743620 - Field 76420432 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
           <source>Source Table No.</source>
+          <target state="translated">Kaynak Tablo No.</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Table WMS Data Inquiry - Field Source Table No. - Property Caption</note>
         </trans-unit>
         <trans-unit id="Table 3816578184 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
           <source>WMS Detour</source>
+          <target state="translated">WMS Yönlendirme</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Table WMS Detour - Property Caption</note>
         </trans-unit>
         <trans-unit id="Table 3816578184 - Field 3858754529 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
           <source>Auto Trigger</source>
+          <target state="translated">Otomatik Tetikle</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Table WMS Detour - Field Auto Trigger - Property Caption</note>
         </trans-unit>
         <trans-unit id="Table 3816578184 - Field 1057313380 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
           <source>Detour Code</source>
+          <target state="translated">Yönlendirme Kodu</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Table WMS Detour - Field Detour Code - Property Caption</note>
         </trans-unit>
         <trans-unit id="Table 3816578184 - Field 2891538263 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
           <source>Enabled</source>
+          <target state="translated">Etkin</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Table WMS Detour - Field Enabled - Property Caption</note>
         </trans-unit>
         <trans-unit id="Table 3816578184 - Field 1021818121 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
           <source>Flow ID</source>
+          <target state="translated">Akış Kimliği</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Table WMS Detour - Field Flow ID - Property Caption</note>
         </trans-unit>
         <trans-unit id="Table 3816578184 - Field 1579147675 - Property 1295455071" size-unit="char" translate="yes" xml:space="preserve">
           <source>Sub-flow invoked when this detour is triggered.</source>
+          <target state="translated">Bu yönlendirme tetiklendiğinde çağrılan alt akış.</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Table WMS Detour - Field Inner Flow ID - Property ToolTip</note>
         </trans-unit>
         <trans-unit id="Table 3816578184 - Field 1579147675 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
           <source>Inner Flow ID</source>
+          <target state="translated">İç Akış Kimliği</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Table WMS Detour - Field Inner Flow ID - Property Caption</note>
         </trans-unit>
         <trans-unit id="Table 3816578184 - Field 1457054730 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
           <source>Label</source>
+          <target state="translated">Etiket</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Table WMS Detour - Field Label - Property Caption</note>
         </trans-unit>
         <trans-unit id="Table 3816578184 - Field 209031772 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
           <source>Step Tag</source>
+          <target state="translated">Adım Etiketi</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Table WMS Detour - Field Step Tag - Property Caption</note>
         </trans-unit>
         <trans-unit id="Table 2808557540 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
           <source>WMS Item Barcode</source>
+          <target state="translated">WMS Kalem Barkodu</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Table WMS Item Barcode - Property Caption</note>
         </trans-unit>
         <trans-unit id="Table 2808557540 - Field 1650050144 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
           <source>Barcode</source>
+          <target state="translated">Barkod</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Table WMS Item Barcode - Field Barcode - Property Caption</note>
         </trans-unit>
         <trans-unit id="Table 2808557540 - Field 568743302 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
           <source>Item No.</source>
+          <target state="translated">Kalem No.</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Table WMS Item Barcode - Field Item No. - Property Caption</note>
         </trans-unit>
         <trans-unit id="Table 2808557540 - Field 2104648824 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
           <source>Primary</source>
+          <target state="translated">Birincil</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Table WMS Item Barcode - Field Primary - Property Caption</note>
         </trans-unit>
         <trans-unit id="Table 2808557540 - Field 1463074693 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
           <source>Quantity per UoM</source>
+          <target state="translated">Ölçü Birimi Başına Miktar</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Table WMS Item Barcode - Field Quantity per UoM - Property Caption</note>
         </trans-unit>
         <trans-unit id="Table 2808557540 - Field 1211164305 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
           <source>Symbology</source>
+          <target state="translated">Barkod Türü</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Table WMS Item Barcode - Field Symbology - Property Caption</note>
         </trans-unit>
         <trans-unit id="Table 2808557540 - Field 2385270358 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
           <source>Unit of Measure Code</source>
+          <target state="translated">Ölçü Birimi Kodu</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Table WMS Item Barcode - Field Unit of Measure Code - Property Caption</note>
         </trans-unit>
         <trans-unit id="Table 2808557540 - Field 3450651614 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
           <source>Variant Code</source>
+          <target state="translated">Varyant Kodu</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Table WMS Item Barcode - Field Variant Code - Property Caption</note>
         </trans-unit>
         <trans-unit id="Table 3692650914 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
           <source>WMS License Plate</source>
+          <target state="translated">WMS Lisans Plakası</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Table WMS License Plate - Property Caption</note>
         </trans-unit>
         <trans-unit id="Table 3692650914 - Field 2814799924 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
           <source>Bin Code</source>
+          <target state="translated">Bölme Kodu</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Table WMS License Plate - Field Bin Code - Property Caption</note>
         </trans-unit>
         <trans-unit id="Table 3692650914 - Field 1778072510 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
           <source>Closed</source>
+          <target state="translated">Kapalı</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Table WMS License Plate - Field Closed - Property Caption</note>
         </trans-unit>
         <trans-unit id="Table 3692650914 - Field 3947730430 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
           <source>Container Type Code</source>
+          <target state="translated">Konteyner Türü Kodu</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Table WMS License Plate - Field Container Type Code - Property Caption</note>
         </trans-unit>
         <trans-unit id="Table 3692650914 - Field 2570673311 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
           <source>Created At</source>
+          <target state="translated">Oluşturulma Tarihi</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Table WMS License Plate - Field Created At - Property Caption</note>
         </trans-unit>
         <trans-unit id="Table 3692650914 - Field 2369664869 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
           <source>Created By</source>
+          <target state="translated">Oluşturan</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Table WMS License Plate - Field Created By - Property Caption</note>
         </trans-unit>
         <trans-unit id="Table 3692650914 - Field 2161572060 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
           <source>Location Code</source>
+          <target state="translated">Lokasyon Kodu</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Table WMS License Plate - Field Location Code - Property Caption</note>
         </trans-unit>
         <trans-unit id="Table 3692650914 - Field 4200184881 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
           <source>No.</source>
+          <target state="translated">No.</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Table WMS License Plate - Field No. - Property Caption</note>
         </trans-unit>
         <trans-unit id="Table 3692650914 - Field 1264498657 - Property 1295455071" size-unit="char" translate="yes" xml:space="preserve">
           <source>For nested license plates (LP-on-LP). Empty for top-level pallets.</source>
+          <target state="translated">İç içe lisans plakaları içindir (LP-üzerinde-LP). Üst düzey paletler için boş bırakılır.</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Table WMS License Plate - Field Parent LP No. - Property ToolTip</note>
         </trans-unit>
         <trans-unit id="Table 3692650914 - Field 1264498657 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
           <source>Parent LP No.</source>
+          <target state="translated">Üst LP No.</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Table WMS License Plate - Field Parent LP No. - Property Caption</note>
         </trans-unit>
         <trans-unit id="Table 3692650914 - Field 513339096 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
           <source>Status</source>
+          <target state="translated">Durum</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Table WMS License Plate - Field Status - Property Caption</note>
         </trans-unit>
         <trans-unit id="Table 3160593316 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
           <source>WMS License Plate Line</source>
+          <target state="translated">WMS Lisans Plakası Satırı</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Table WMS License Plate Line - Property Caption</note>
         </trans-unit>
         <trans-unit id="Table 3160593316 - Field 1579714849 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
           <source>Expiration Date</source>
+          <target state="translated">Son Kullanma Tarihi</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Table WMS License Plate Line - Field Expiration Date - Property Caption</note>
         </trans-unit>
         <trans-unit id="Table 3160593316 - Field 568743302 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
           <source>Item No.</source>
+          <target state="translated">Kalem No.</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Table WMS License Plate Line - Field Item No. - Property Caption</note>
         </trans-unit>
         <trans-unit id="Table 3160593316 - Field 3320823955 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
           <source>Line No.</source>
+          <target state="translated">Satır No.</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Table WMS License Plate Line - Field Line No. - Property Caption</note>
         </trans-unit>
         <trans-unit id="Table 3160593316 - Field 1482668068 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
           <source>Lot No.</source>
+          <target state="translated">Lot No.</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Table WMS License Plate Line - Field Lot No. - Property Caption</note>
         </trans-unit>
         <trans-unit id="Table 3160593316 - Field 2835493861 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
           <source>LP No.</source>
+          <target state="translated">LP No.</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Table WMS License Plate Line - Field LP No. - Property Caption</note>
         </trans-unit>
         <trans-unit id="Table 3160593316 - Field 2704404533 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
           <source>Quantity</source>
+          <target state="translated">Miktar</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Table WMS License Plate Line - Field Quantity - Property Caption</note>
         </trans-unit>
         <trans-unit id="Table 3160593316 - Field 47037625 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
           <source>Serial No.</source>
+          <target state="translated">Seri No.</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Table WMS License Plate Line - Field Serial No. - Property Caption</note>
         </trans-unit>
         <trans-unit id="Table 3160593316 - Field 2385270358 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
           <source>Unit of Measure Code</source>
+          <target state="translated">Ölçü Birimi Kodu</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Table WMS License Plate Line - Field Unit of Measure Code - Property Caption</note>
         </trans-unit>
         <trans-unit id="Table 3160593316 - Field 3450651614 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
           <source>Variant Code</source>
+          <target state="translated">Varyant Kodu</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Table WMS License Plate Line - Field Variant Code - Property Caption</note>
         </trans-unit>
         <trans-unit id="Table 2452198081 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
           <source>WMS Menu Item</source>
+          <target state="translated">WMS Menü Öğesi</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Table WMS Menu Item - Property Caption</note>
         </trans-unit>
         <trans-unit id="Table 2452198081 - Field 3009014896 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
           <source>Child Menu Code</source>
+          <target state="translated">Alt Menü Kodu</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Table WMS Menu Item - Field Child Menu Code - Property Caption</note>
         </trans-unit>
         <trans-unit id="Table 2452198081 - Field 3461834954 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
           <source>Description</source>
+          <target state="translated">Açıklama</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Table WMS Menu Item - Field Description - Property Caption</note>
         </trans-unit>
         <trans-unit id="Table 2452198081 - Field 1021818121 - Property 1295455071" size-unit="char" translate="yes" xml:space="preserve">
           <source>Identifies the scanner flow rendered on the mobile app (e.g. PURCH-RECEIVE, WHSE-PICK, CYCLE-COUNT).</source>
+          <target state="translated">Mobil uygulamada gösterilen tarayıcı akışını tanımlar (örn. PURCH-RECEIVE, WHSE-PICK, CYCLE-COUNT).</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Table WMS Menu Item - Field Flow ID - Property ToolTip</note>
         </trans-unit>
         <trans-unit id="Table 2452198081 - Field 1021818121 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
           <source>Flow ID</source>
+          <target state="translated">Akış Kimliği</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Table WMS Menu Item - Field Flow ID - Property Caption</note>
         </trans-unit>
         <trans-unit id="Table 2452198081 - Field 4036313429 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
           <source>Icon</source>
+          <target state="translated">Simge</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Table WMS Menu Item - Field Icon - Property Caption</note>
         </trans-unit>
         <trans-unit id="Table 2452198081 - Field 4093180191 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
           <source>Item Type</source>
+          <target state="translated">Öğe Türü</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Table WMS Menu Item - Field Item Type - Property Caption</note>
         </trans-unit>
         <trans-unit id="Table 2452198081 - Field 3320823955 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
           <source>Line No.</source>
+          <target state="translated">Satır No.</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Table WMS Menu Item - Field Line No. - Property Caption</note>
         </trans-unit>
         <trans-unit id="Table 2452198081 - Field 2684488250 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
           <source>Menu Code</source>
+          <target state="translated">Menü Kodu</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Table WMS Menu Item - Field Menu Code - Property Caption</note>
         </trans-unit>
         <trans-unit id="Table 4150950875 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
           <source>WMS Mobile Device</source>
+          <target state="translated">WMS Mobil Cihaz</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Table WMS Mobile Device - Property Caption</note>
         </trans-unit>
         <trans-unit id="Table 4150950875 - Field 2709452997 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
           <source>App Version</source>
+          <target state="translated">Uygulama Sürümü</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Table WMS Mobile Device - Field App Version - Property Caption</note>
         </trans-unit>
         <trans-unit id="Table 4150950875 - Field 3294270728 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
           <source>Assigned User ID</source>
+          <target state="translated">Atanan Kullanıcı Kimliği</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Table WMS Mobile Device - Field Assigned User ID - Property Caption</note>
         </trans-unit>
         <trans-unit id="Table 4150950875 - Field 613381766 - Property 1295455071" size-unit="char" translate="yes" xml:space="preserve">
           <source>BC company SystemId the device is bound to.</source>
+          <target state="translated">Cihazın bağlı olduğu BC şirketinin SystemId değeri.</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Table WMS Mobile Device - Field Company Id - Property ToolTip</note>
         </trans-unit>
         <trans-unit id="Table 4150950875 - Field 613381766 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
           <source>Company Id</source>
+          <target state="translated">Şirket Kimliği</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Table WMS Mobile Device - Field Company Id - Property Caption</note>
         </trans-unit>
         <trans-unit id="Table 4150950875 - Field 931262850 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
           <source>Default Warehouse</source>
+          <target state="translated">Varsayılan Depo</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Table WMS Mobile Device - Field Default Warehouse - Property Caption</note>
         </trans-unit>
         <trans-unit id="Table 4150950875 - Field 2681758783 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
           <source>Device ID</source>
+          <target state="translated">Cihaz Kimliği</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Table WMS Mobile Device - Field Device ID - Property Caption</note>
         </trans-unit>
         <trans-unit id="Table 4150950875 - Field 1572848233 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
           <source>Device Name</source>
+          <target state="translated">Cihaz Adı</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Table WMS Mobile Device - Field Device Name - Property Caption</note>
         </trans-unit>
         <trans-unit id="Table 4150950875 - Field 3018364873 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
           <source>Last Seen</source>
+          <target state="translated">Son Görülme</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Table WMS Mobile Device - Field Last Seen - Property Caption</note>
         </trans-unit>
         <trans-unit id="Table 4150950875 - Field 3647128553 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
           <source>Manufacturer</source>
+          <target state="translated">Üretici</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Table WMS Mobile Device - Field Manufacturer - Property Caption</note>
         </trans-unit>
         <trans-unit id="Table 4150950875 - Field 1695122201 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
           <source>Model</source>
+          <target state="translated">Model</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Table WMS Mobile Device - Field Model - Property Caption</note>
         </trans-unit>
         <trans-unit id="Table 4150950875 - Field 3806630242 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
           <source>OS Version</source>
+          <target state="translated">İşletim Sistemi Sürümü</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Table WMS Mobile Device - Field OS Version - Property Caption</note>
         </trans-unit>
         <trans-unit id="Table 4150950875 - Field 2953106802 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
           <source>Paired At</source>
+          <target state="translated">Eşleştirme Tarihi</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Table WMS Mobile Device - Field Paired At - Property Caption</note>
         </trans-unit>
         <trans-unit id="Table 4150950875 - Field 3960720884 - Property 1295455071" size-unit="char" translate="yes" xml:space="preserve">
           <source>Entra ID user-principal-name of the admin who completed the device pairing.</source>
+          <target state="translated">Cihaz eşleştirmesini tamamlayan yöneticinin Entra ID kullanıcı asıl adı (UPN).</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Table WMS Mobile Device - Field Paired By - Property ToolTip</note>
         </trans-unit>
         <trans-unit id="Table 4150950875 - Field 3960720884 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
           <source>Paired By</source>
+          <target state="translated">Eşleştiren</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Table WMS Mobile Device - Field Paired By - Property Caption</note>
         </trans-unit>
         <trans-unit id="Table 4150950875 - Field 2311705724 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
           <source>Paired By Object Id</source>
+          <target state="translated">Eşleştiren Nesne Kimliği</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Table WMS Mobile Device - Field Paired By Object Id - Property Caption</note>
         </trans-unit>
         <trans-unit id="Table 4150950875 - Field 1017326864 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
           <source>Revoke Reason</source>
+          <target state="translated">İptal Nedeni</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Table WMS Mobile Device - Field Revoke Reason - Property Caption</note>
         </trans-unit>
         <trans-unit id="Table 4150950875 - Field 2302872123 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
           <source>Revoked At</source>
+          <target state="translated">İptal Tarihi</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Table WMS Mobile Device - Field Revoked At - Property Caption</note>
         </trans-unit>
         <trans-unit id="Table 4150950875 - Field 3935437353 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
           <source>Revoked By</source>
+          <target state="translated">İptal Eden</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Table WMS Mobile Device - Field Revoked By - Property Caption</note>
         </trans-unit>
         <trans-unit id="Table 4150950875 - Field 513339096 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
           <source>Status</source>
+          <target state="translated">Durum</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Table WMS Mobile Device - Field Status - Property Caption</note>
         </trans-unit>
         <trans-unit id="Table 2433831880 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
           <source>WMS Packing Log</source>
+          <target state="translated">WMS Paketleme Kaydı</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Table WMS Packing Log - Property Caption</note>
         </trans-unit>
         <trans-unit id="Table 2433831880 - Field 3100996228 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
           <source>Container No.</source>
+          <target state="translated">Konteyner No.</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Table WMS Packing Log - Field Container No. - Property Caption</note>
         </trans-unit>
         <trans-unit id="Table 2433831880 - Field 883711285 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
           <source>Entry No.</source>
+          <target state="translated">Girdi No.</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Table WMS Packing Log - Field Entry No. - Property Caption</note>
         </trans-unit>
         <trans-unit id="Table 2433831880 - Field 1270596704 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
           <source>Event Type</source>
+          <target state="translated">Olay Türü</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Table WMS Packing Log - Field Event Type - Property Caption</note>
         </trans-unit>
         <trans-unit id="Table 2433831880 - Field 568743302 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
           <source>Item No.</source>
+          <target state="translated">Kalem No.</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Table WMS Packing Log - Field Item No. - Property Caption</note>
         </trans-unit>
         <trans-unit id="Table 2433831880 - Field 2704404533 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
           <source>Quantity</source>
+          <target state="translated">Miktar</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Table WMS Packing Log - Field Quantity - Property Caption</note>
         </trans-unit>
         <trans-unit id="Table 2433831880 - Field 2864120147 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
           <source>Recorded At</source>
+          <target state="translated">Kayıt Tarihi</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Table WMS Packing Log - Field Recorded At - Property Caption</note>
         </trans-unit>
         <trans-unit id="Table 2433831880 - Field 1049131605 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
           <source>Worker ID</source>
+          <target state="translated">Çalışan Kimliği</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Table WMS Packing Log - Field Worker ID - Property Caption</note>
         </trans-unit>
         <trans-unit id="Table 2588819124 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
           <source>WMS Packing Policy</source>
+          <target state="translated">WMS Paketleme Politikası</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Table WMS Packing Policy - Property Caption</note>
         </trans-unit>
         <trans-unit id="Table 2588819124 - Field 4073278786 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
           <source>Auto Close Container</source>
+          <target state="translated">Otomatik Konteyner Kapat</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Table WMS Packing Policy - Field Auto Close Container - Property Caption</note>
         </trans-unit>
         <trans-unit id="Table 2588819124 - Field 3889558856 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
           <source>Auto Create Container</source>
+          <target state="translated">Otomatik Konteyner Oluştur</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Table WMS Packing Policy - Field Auto Create Container - Property Caption</note>
         </trans-unit>
         <trans-unit id="Table 2588819124 - Field 1391710065 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
           <source>Capture Dimensions</source>
+          <target state="translated">Boyutları Kaydet</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Table WMS Packing Policy - Field Capture Dimensions - Property Caption</note>
         </trans-unit>
         <trans-unit id="Table 2588819124 - Field 2281841944 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
           <source>Capture Weight</source>
+          <target state="translated">Ağırlığı Kaydet</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Table WMS Packing Policy - Field Capture Weight - Property Caption</note>
         </trans-unit>
         <trans-unit id="Table 2588819124 - Field 3004954119 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
           <source>Code</source>
+          <target state="translated">Kod</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Table WMS Packing Policy - Field Code - Property Caption</note>
         </trans-unit>
         <trans-unit id="Table 2588819124 - Field 1616974632 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
           <source>Default Container Type</source>
+          <target state="translated">Varsayılan Konteyner Türü</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Table WMS Packing Policy - Field Default Container Type - Property Caption</note>
         </trans-unit>
         <trans-unit id="Table 2588819124 - Field 3461834954 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
           <source>Description</source>
+          <target state="translated">Açıklama</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Table WMS Packing Policy - Field Description - Property Caption</note>
         </trans-unit>
         <trans-unit id="Table 2588819124 - Field 1663206370 - Property 1295455071" size-unit="char" translate="yes" xml:space="preserve">
           <source>WMA 2025 W1 parity: log worker on every container event.</source>
+          <target state="translated">WMA 2025 W1 uyumluluğu: her konteyner olayında çalışanı kaydet.</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Table WMS Packing Policy - Field Require Worker ID - Property ToolTip</note>
         </trans-unit>
         <trans-unit id="Table 2588819124 - Field 1663206370 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
           <source>Require Worker ID</source>
+          <target state="translated">Çalışan Kimliği Zorunlu</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Table WMS Packing Policy - Field Require Worker ID - Property Caption</note>
         </trans-unit>
         <trans-unit id="Table 1514813299 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
           <source>WMS Shipping Rate</source>
+          <target state="translated">WMS Nakliye Ücreti</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Table WMS Shipping Rate - Property Caption</note>
         </trans-unit>
         <trans-unit id="Table 1514813299 - Field 636392376 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
           <source>Amount</source>
+          <target state="translated">Tutar</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Table WMS Shipping Rate - Field Amount - Property Caption</note>
         </trans-unit>
         <trans-unit id="Table 1514813299 - Field 2113466595 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
           <source>Carrier Code</source>
+          <target state="translated">Taşıyıcı Kodu</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Table WMS Shipping Rate - Field Carrier Code - Property Caption</note>
         </trans-unit>
         <trans-unit id="Table 1514813299 - Field 3561154705 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
           <source>Currency</source>
+          <target state="translated">Para Birimi</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Table WMS Shipping Rate - Field Currency - Property Caption</note>
         </trans-unit>
         <trans-unit id="Table 1514813299 - Field 2634000359 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
           <source>Estimated Days</source>
+          <target state="translated">Tahmini Gün Sayısı</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Table WMS Shipping Rate - Field Estimated Days - Property Caption</note>
         </trans-unit>
         <trans-unit id="Table 1514813299 - Field 1239306285 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
           <source>Quoted At</source>
+          <target state="translated">Teklif Tarihi</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Table WMS Shipping Rate - Field Quoted At - Property Caption</note>
         </trans-unit>
         <trans-unit id="Table 1514813299 - Field 2329393281 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
           <source>Rate ID</source>
+          <target state="translated">Ücret Kimliği</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Table WMS Shipping Rate - Field Rate ID - Property Caption</note>
         </trans-unit>
         <trans-unit id="Table 1514813299 - Field 90423963 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
           <source>Selected</source>
+          <target state="translated">Seçili</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Table WMS Shipping Rate - Field Selected - Property Caption</note>
         </trans-unit>
         <trans-unit id="Table 1514813299 - Field 2205837876 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
           <source>Service Code</source>
+          <target state="translated">Hizmet Kodu</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Table WMS Shipping Rate - Field Service Code - Property Caption</note>
         </trans-unit>
         <trans-unit id="Table 1514813299 - Field 2229797486 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
           <source>Service Name</source>
+          <target state="translated">Hizmet Adı</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Table WMS Shipping Rate - Field Service Name - Property Caption</note>
         </trans-unit>
         <trans-unit id="Table 1514813299 - Field 64970433 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
           <source>Shipment No.</source>
+          <target state="translated">Sevkiyat No.</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Table WMS Shipping Rate - Field Shipment No. - Property Caption</note>
         </trans-unit>
         <trans-unit id="Table 1885671904 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
           <source>WMS Wave</source>
+          <target state="translated">WMS Dalga</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Table WMS Wave - Property Caption</note>
         </trans-unit>
         <trans-unit id="Table 1885671904 - Field 2161572060 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
           <source>Location Code</source>
+          <target state="translated">Lokasyon Kodu</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Table WMS Wave - Field Location Code - Property Caption</note>
         </trans-unit>
         <trans-unit id="Table 1885671904 - Field 371480563 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
           <source>Pick Group Method</source>
+          <target state="translated">Toplama Gruplama Yöntemi</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Table WMS Wave - Field Pick Group Method - Property Caption</note>
         </trans-unit>
         <trans-unit id="Table 1885671904 - Field 918321535 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
           <source>Planned Release</source>
+          <target state="translated">Planlanan Serbest Bırakma</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Table WMS Wave - Field Planned Release - Property Caption</note>
         </trans-unit>
         <trans-unit id="Table 1885671904 - Field 199855140 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
           <source>Released At</source>
+          <target state="translated">Serbest Bırakılma Tarihi</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Table WMS Wave - Field Released At - Property Caption</note>
         </trans-unit>
         <trans-unit id="Table 1885671904 - Field 513339096 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
           <source>Status</source>
+          <target state="translated">Durum</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Table WMS Wave - Field Status - Property Caption</note>
         </trans-unit>
         <trans-unit id="Table 1885671904 - Field 3893086334 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
           <source>Wave No.</source>
+          <target state="translated">Dalga No.</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Table WMS Wave - Field Wave No. - Property Caption</note>
         </trans-unit>
         <trans-unit id="Table 3217228385 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
           <source>WMS Worker</source>
+          <target state="translated">WMS Çalışan</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Table WMS Worker - Property Caption</note>
         </trans-unit>
         <trans-unit id="Table 3217228385 - Field 1612500827 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
           <source>Allow Pick Location Override</source>
+          <target state="translated">Toplama Lokasyonu Değişikliğine İzin Ver</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Table WMS Worker - Field Allow Pick Location Override - Property Caption</note>
         </trans-unit>
         <trans-unit id="Table 3217228385 - Field 3304189517 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
           <source>Cycle Count Supervisor</source>
+          <target state="translated">Döngü Sayım Amiri</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Table WMS Worker - Field Cycle Count Supervisor - Property Caption</note>
         </trans-unit>
         <trans-unit id="Table 3217228385 - Field 2477103885 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
           <source>Default Location Code</source>
+          <target state="translated">Varsayılan Lokasyon Kodu</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Table WMS Worker - Field Default Location Code - Property Caption</note>
         </trans-unit>
         <trans-unit id="Table 3217228385 - Field 2317000075 - Property 1295455071" size-unit="char" translate="yes" xml:space="preserve">
           <source>Microsoft Entra ID object ID for SSO-mapped workers.</source>
+          <target state="translated">SSO ile eşlenen çalışanlar için Microsoft Entra ID nesne kimliği.</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Table WMS Worker - Field Entra ID Object ID - Property ToolTip</note>
         </trans-unit>
         <trans-unit id="Table 3217228385 - Field 2317000075 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
           <source>Entra ID Object ID</source>
+          <target state="translated">Entra ID Nesne Kimliği</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Table WMS Worker - Field Entra ID Object ID - Property Caption</note>
         </trans-unit>
         <trans-unit id="Table 3217228385 - Field 525852245 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
           <source>Inactive</source>
+          <target state="translated">Pasif</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Table WMS Worker - Field Inactive - Property Caption</note>
         </trans-unit>
         <trans-unit id="Table 3217228385 - Field 784149301 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
           <source>Last Sign-In</source>
+          <target state="translated">Son Oturum Açma</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Table WMS Worker - Field Last Sign-In - Property Caption</note>
         </trans-unit>
         <trans-unit id="Table 3217228385 - Field 2684488250 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
           <source>Menu Code</source>
+          <target state="translated">Menü Kodu</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Table WMS Worker - Field Menu Code - Property Caption</note>
         </trans-unit>
         <trans-unit id="Table 3217228385 - Field 2708250016 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
           <source>User ID</source>
+          <target state="translated">Kullanıcı Kimliği</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Table WMS Worker - Field User ID - Property Caption</note>
         </trans-unit>
         <trans-unit id="Table 3217228385 - Field 129688762 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
           <source>User Name</source>
+          <target state="translated">Kullanıcı Adı</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Table WMS Worker - Field User Name - Property Caption</note>
         </trans-unit>
         <trans-unit id="Table 2190154048 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
           <source>WMS Worker Menu</source>
+          <target state="translated">WMS Çalışan Menüsü</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Table WMS Worker Menu - Property Caption</note>
         </trans-unit>
         <trans-unit id="Table 2190154048 - Field 3004954119 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
           <source>Code</source>
+          <target state="translated">Kod</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Table WMS Worker Menu - Field Code - Property Caption</note>
         </trans-unit>
         <trans-unit id="Table 2190154048 - Field 3461834954 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
           <source>Description</source>
+          <target state="translated">Açıklama</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Table WMS Worker Menu - Field Description - Property Caption</note>
         </trans-unit>
         <trans-unit id="Table 2190154048 - Field 3380670736 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
           <source>Is Root</source>
+          <target state="translated">Kök Menü mü</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Table WMS Worker Menu - Field Is Root - Property Caption</note>
         </trans-unit>
         <trans-unit id="Page 4101278226 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
           <source>WMS Action Request API</source>
+          <target state="translated">WMS Eylem İsteği API'si</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Page WMS Action Request API - Property Caption</note>
         </trans-unit>
         <trans-unit id="Page 4033083226 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
           <source>WMS License Plate API</source>
+          <target state="translated">WMS Lisans Plakası API'si</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Page WMS License Plate API - Property Caption</note>
         </trans-unit>
         <trans-unit id="Page 4033083226 - Control 3536435188 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
           <source>binCode</source>
+          <target state="translated">binCode</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Page WMS License Plate API - Control binCode - Property Caption</note>
         </trans-unit>
         <trans-unit id="Page 4033083226 - Control 245570718 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
           <source>closed</source>
+          <target state="translated">closed</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Page WMS License Plate API - Control closed - Property Caption</note>
         </trans-unit>
         <trans-unit id="Page 4033083226 - Control 1440812894 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
           <source>containerTypeCode</source>
+          <target state="translated">containerTypeCode</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Page WMS License Plate API - Control containerTypeCode - Property Caption</note>
         </trans-unit>
         <trans-unit id="Page 4033083226 - Control 2475235959 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
           <source>createdAt</source>
+          <target state="translated">createdAt</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Page WMS License Plate API - Control createdAt - Property Caption</note>
         </trans-unit>
         <trans-unit id="Page 4033083226 - Control 661016237 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
           <source>createdBy</source>
+          <target state="translated">createdBy</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Page WMS License Plate API - Control createdBy - Property Caption</note>
         </trans-unit>
         <trans-unit id="Page 4033083226 - Control 2245436958 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
           <source>lastModifiedDateTime</source>
+          <target state="translated">lastModifiedDateTime</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Page WMS License Plate API - Control lastModifiedDateTime - Property Caption</note>
         </trans-unit>
         <trans-unit id="Page 4033083226 - Control 2626499740 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
           <source>locationCode</source>
+          <target state="translated">locationCode</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Page WMS License Plate API - Control locationCode - Property Caption</note>
         </trans-unit>
         <trans-unit id="Page 4033083226 - Control 2757394829 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
           <source>number</source>
+          <target state="translated">number</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Page WMS License Plate API - Control number - Property Caption</note>
         </trans-unit>
         <trans-unit id="Page 4033083226 - Control 2340082525 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
           <source>parentLpNumber</source>
+          <target state="translated">parentLpNumber</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Page WMS License Plate API - Control parentLpNumber - Property Caption</note>
         </trans-unit>
         <trans-unit id="Page 4033083226 - Control 998393528 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
           <source>status</source>
+          <target state="translated">status</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Page WMS License Plate API - Control status - Property Caption</note>
         </trans-unit>
         <trans-unit id="Page 4033083226 - Control 3092263724 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
           <source>systemId</source>
+          <target state="translated">systemId</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Page WMS License Plate API - Control systemId - Property Caption</note>
         </trans-unit>
         <trans-unit id="Page 44449359 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
           <source>WMS License Plates</source>
+          <target state="translated">WMS Lisans Plakaları</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Page WMS License Plates - Property Caption</note>
         </trans-unit>
         <trans-unit id="Page 721166534 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
           <source>WMS Mobile Devices</source>
+          <target state="translated">WMS Mobil Cihazlar</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Page WMS Mobile Devices - Property Caption</note>
         </trans-unit>
         <trans-unit id="Page 721166534 - Action 4157270236 - Property 1295455071" size-unit="char" translate="yes" xml:space="preserve">
           <source>Revoke this device. The mobile app will be forced to re-pair.</source>
+          <target state="translated">Bu cihazı iptal et. Mobil uygulama yeniden eşleştirmeye zorlanacaktır.</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Page WMS Mobile Devices - Action Revoke - Property ToolTip</note>
         </trans-unit>
         <trans-unit id="Page 721166534 - Action 4157270236 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
           <source>Revoke</source>
+          <target state="translated">İptal Et</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Page WMS Mobile Devices - Action Revoke - Property Caption</note>
         </trans-unit>
         <trans-unit id="Page 2484482729 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
           <source>WMS Worker API</source>
+          <target state="translated">WMS Çalışan API'si</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Page WMS Worker API - Property Caption</note>
         </trans-unit>
         <trans-unit id="Page 2484482729 - Control 2514469027 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
           <source>allowPickLocationOverride</source>
+          <target state="translated">allowPickLocationOverride</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Page WMS Worker API - Control allowPickLocationOverride - Property Caption</note>
         </trans-unit>
         <trans-unit id="Page 2484482729 - Control 3448229557 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
           <source>cycleCountSupervisor</source>
+          <target state="translated">cycleCountSupervisor</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Page WMS Worker API - Control cycleCountSupervisor - Property Caption</note>
         </trans-unit>
         <trans-unit id="Page 2484482729 - Control 3774887509 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
           <source>defaultLocationCode</source>
+          <target state="translated">defaultLocationCode</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Page WMS Worker API - Control defaultLocationCode - Property Caption</note>
         </trans-unit>
         <trans-unit id="Page 2484482729 - Control 1402486272 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
           <source>entraObjectId</source>
+          <target state="translated">entraObjectId</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Page WMS Worker API - Control entraObjectId - Property Caption</note>
         </trans-unit>
         <trans-unit id="Page 2484482729 - Control 394567733 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
           <source>inactive</source>
+          <target state="translated">inactive</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Page WMS Worker API - Control inactive - Property Caption</note>
         </trans-unit>
         <trans-unit id="Page 2484482729 - Control 2245436958 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
           <source>lastModifiedDateTime</source>
+          <target state="translated">lastModifiedDateTime</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Page WMS Worker API - Control lastModifiedDateTime - Property Caption</note>
         </trans-unit>
         <trans-unit id="Page 2484482729 - Control 4152371466 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
           <source>lastSignIn</source>
+          <target state="translated">lastSignIn</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Page WMS Worker API - Control lastSignIn - Property Caption</note>
         </trans-unit>
         <trans-unit id="Page 2484482729 - Control 537159498 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
           <source>menuCode</source>
+          <target state="translated">menuCode</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Page WMS Worker API - Control menuCode - Property Caption</note>
         </trans-unit>
         <trans-unit id="Page 2484482729 - Control 3092263724 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
           <source>systemId</source>
+          <target state="translated">systemId</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Page WMS Worker API - Control systemId - Property Caption</note>
         </trans-unit>
         <trans-unit id="Page 2484482729 - Control 1893738592 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
           <source>userId</source>
+          <target state="translated">userId</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Page WMS Worker API - Control userId - Property Caption</note>
         </trans-unit>
         <trans-unit id="Page 2484482729 - Control 33021082 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
           <source>userName</source>
+          <target state="translated">userName</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Page WMS Worker API - Control userName - Property Caption</note>
         </trans-unit>
         <trans-unit id="Page 3397310285 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
           <source>WMS Worker Card</source>
+          <target state="translated">WMS Çalışan Kartı</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Page WMS Worker Card - Property Caption</note>
         </trans-unit>
         <trans-unit id="Page 538571512 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
           <source>WMS Workers</source>
+          <target state="translated">WMS Çalışanlar</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Page WMS Workers - Property Caption</note>
         </trans-unit>
         <trans-unit id="TableExtension 3813986479 - Field 453142134 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve" al-object-target="Table 400793991">
           <source>WMS Bin Ranking</source>
+          <target state="translated">WMS Bölme Sıralaması</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">TableExtension WMS Bin Ext - Field WMS Bin Ranking - Property Caption</note>
         </trans-unit>
         <trans-unit id="TableExtension 3813986479 - Field 2343607542 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve" al-object-target="Table 400793991">
           <source>WMS Pickable</source>
+          <target state="translated">WMS Toplanabilir</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">TableExtension WMS Bin Ext - Field WMS Pickable - Property Caption</note>
         </trans-unit>
         <trans-unit id="TableExtension 3813986479 - Field 531070273 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve" al-object-target="Table 400793991">
           <source>WMS Quarantine</source>
+          <target state="translated">WMS Karantina</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">TableExtension WMS Bin Ext - Field WMS Quarantine - Property Caption</note>
         </trans-unit>
         <trans-unit id="TableExtension 3813986479 - Field 3002621879 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve" al-object-target="Table 400793991">
           <source>WMS Receivable</source>
+          <target state="translated">WMS Mal Kabule Uygun</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">TableExtension WMS Bin Ext - Field WMS Receivable - Property Caption</note>
         </trans-unit>
         <trans-unit id="TableExtension 3237242791 - Field 3429529912 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve" al-object-target="Table 3276313895">
           <source>WMS Catch Weight</source>
+          <target state="translated">WMS Değişken Ağırlık</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">TableExtension WMS Item Ext - Field WMS Catch Weight - Property Caption</note>
         </trans-unit>
         <trans-unit id="TableExtension 3237242791 - Field 3390302902 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve" al-object-target="Table 3276313895">
           <source>WMS FEFO Required</source>
+          <target state="translated">WMS FEFO Zorunlu</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">TableExtension WMS Item Ext - Field WMS FEFO Required - Property Caption</note>
         </trans-unit>
         <trans-unit id="TableExtension 3237242791 - Field 1541620296 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve" al-object-target="Table 3276313895">
           <source>WMS Hazmat Class</source>
+          <target state="translated">WMS Tehlikeli Madde Sınıfı</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">TableExtension WMS Item Ext - Field WMS Hazmat Class - Property Caption</note>
         </trans-unit>
         <trans-unit id="TableExtension 425322095 - Field 4046086344 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve" al-object-target="Table 3891454143">
           <source>Allow License Plate Picking</source>
+          <target state="translated">Lisans Plakalı Toplamaya İzin Ver</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">TableExtension WMS Location Ext - Field Allow LP Pick - Property Caption</note>
         </trans-unit>
         <trans-unit id="TableExtension 425322095 - Field 3506938565 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve" al-object-target="Table 3891454143">
           <source>Allow License Plate Receiving</source>
+          <target state="translated">Lisans Plakalı Mal Kabule İzin Ver</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">TableExtension WMS Location Ext - Field Allow LP Receiving - Property Caption</note>
         </trans-unit>
         <trans-unit id="TableExtension 425322095 - Field 2107155950 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve" al-object-target="Table 3891454143">
           <source>Default Packing Policy</source>
+          <target state="translated">Varsayılan Paketleme Politikası</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">TableExtension WMS Location Ext - Field Default Packing Policy - Property Caption</note>
         </trans-unit>
         <trans-unit id="TableExtension 425322095 - Field 3658558176 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve" al-object-target="Table 3891454143">
           <source>WMS Enabled</source>
+          <target state="translated">WMS Etkin</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">TableExtension WMS Location Ext - Field WMS Enabled - Property Caption</note>
         </trans-unit>
         <trans-unit id="Enum 2048001973 - EnumValue 3826689261 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
           <source>Failed</source>
+          <target state="translated">Başarısız</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Enum WMS Action Status - EnumValue Failed - Property Caption</note>
         </trans-unit>
         <trans-unit id="Enum 2048001973 - EnumValue 3481143665 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
           <source>Pending</source>
+          <target state="translated">Beklemede</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Enum WMS Action Status - EnumValue Pending - Property Caption</note>
         </trans-unit>
         <trans-unit id="Enum 2048001973 - EnumValue 4250603909 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
           <source>Succeeded</source>
+          <target state="translated">Başarılı</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Enum WMS Action Status - EnumValue Succeeded - Property Caption</note>
         </trans-unit>
         <trans-unit id="Enum 989363574 - EnumValue 2611489258 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
           <source>Code 128</source>
+          <target state="translated">Code 128</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Enum WMS Barcode Symbology - EnumValue Code128 - Property Caption</note>
         </trans-unit>
         <trans-unit id="Enum 989363574 - EnumValue 1915896857 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
           <source>Code 39</source>
+          <target state="translated">Code 39</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Enum WMS Barcode Symbology - EnumValue Code39 - Property Caption</note>
         </trans-unit>
         <trans-unit id="Enum 989363574 - EnumValue 1295089957 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
           <source>Data Matrix</source>
+          <target state="translated">Veri Matrisi</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Enum WMS Barcode Symbology - EnumValue DataMatrix - Property Caption</note>
         </trans-unit>
         <trans-unit id="Enum 989363574 - EnumValue 391053012 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
           <source>EAN-13</source>
+          <target state="translated">EAN-13</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Enum WMS Barcode Symbology - EnumValue EAN13 - Property Caption</note>
         </trans-unit>
         <trans-unit id="Enum 989363574 - EnumValue 1660298586 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
           <source>GS1-128</source>
+          <target state="translated">GS1-128</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Enum WMS Barcode Symbology - EnumValue GS1128 - Property Caption</note>
         </trans-unit>
         <trans-unit id="Enum 989363574 - EnumValue 2471443676 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
           <source>PDF417</source>
+          <target state="translated">PDF417</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Enum WMS Barcode Symbology - EnumValue PDF417 - Property Caption</note>
         </trans-unit>
         <trans-unit id="Enum 989363574 - EnumValue 3751398229 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
           <source>QR</source>
+          <target state="translated">QR</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Enum WMS Barcode Symbology - EnumValue QR - Property Caption</note>
         </trans-unit>
         <trans-unit id="Enum 989363574 - EnumValue 1458067209 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
           <source>UPC-A</source>
+          <target state="translated">UPC-A</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Enum WMS Barcode Symbology - EnumValue UPCA - Property Caption</note>
         </trans-unit>
         <trans-unit id="Enum 1424861864 - EnumValue 1422171468 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
           <source>DHL</source>
+          <target state="translated">DHL</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Enum WMS Carrier Provider - EnumValue DHL - Property Caption</note>
         </trans-unit>
         <trans-unit id="Enum 1424861864 - EnumValue 4125883078 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
           <source>FedEx</source>
+          <target state="translated">FedEx</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Enum WMS Carrier Provider - EnumValue FedEx - Property Caption</note>
         </trans-unit>
         <trans-unit id="Enum 1424861864 - EnumValue 1508634494 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
           <source>Manual</source>
+          <target state="translated">Manuel</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Enum WMS Carrier Provider - EnumValue Manual - Property Caption</note>
         </trans-unit>
         <trans-unit id="Enum 1424861864 - EnumValue 461864906 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
           <source>UPS</source>
+          <target state="translated">UPS</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Enum WMS Carrier Provider - EnumValue UPS - Property Caption</note>
         </trans-unit>
         <trans-unit id="Enum 1424861864 - EnumValue 1824801391 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
           <source>USPS</source>
+          <target state="translated">USPS</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Enum WMS Carrier Provider - EnumValue USPS - Property Caption</note>
         </trans-unit>
         <trans-unit id="Enum 3273630022 - EnumValue 1778072510 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
           <source>Closed</source>
+          <target state="translated">Kapalı</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Enum WMS Container Status - EnumValue Closed - Property Caption</note>
         </trans-unit>
         <trans-unit id="Enum 3273630022 - EnumValue 1886010121 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
           <source>Labeled</source>
+          <target state="translated">Etiketlendi</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Enum WMS Container Status - EnumValue Labeled - Property Caption</note>
         </trans-unit>
         <trans-unit id="Enum 3273630022 - EnumValue 4259830144 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
           <source>Open</source>
+          <target state="translated">Açık</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Enum WMS Container Status - EnumValue Open - Property Caption</note>
         </trans-unit>
         <trans-unit id="Enum 3273630022 - EnumValue 3650764876 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
           <source>Packed</source>
+          <target state="translated">Paketlendi</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Enum WMS Container Status - EnumValue Packed - Property Caption</note>
         </trans-unit>
         <trans-unit id="Enum 3273630022 - EnumValue 1090071933 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
           <source>Shipped</source>
+          <target state="translated">Sevk Edildi</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Enum WMS Container Status - EnumValue Shipped - Property Caption</note>
         </trans-unit>
         <trans-unit id="Enum 2021255263 - EnumValue 4069904181 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
           <source>Cancelled</source>
+          <target state="translated">İptal Edildi</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Enum WMS Count Plan Status - EnumValue Cancelled - Property Caption</note>
         </trans-unit>
         <trans-unit id="Enum 2021255263 - EnumValue 253238575 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
           <source>Draft</source>
+          <target state="translated">Taslak</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Enum WMS Count Plan Status - EnumValue Draft - Property Caption</note>
         </trans-unit>
         <trans-unit id="Enum 2021255263 - EnumValue 1090713286 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
           <source>In Progress</source>
+          <target state="translated">Devam Ediyor</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Enum WMS Count Plan Status - EnumValue In Progress - Property Caption</note>
         </trans-unit>
         <trans-unit id="Enum 2021255263 - EnumValue 1487485508 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
           <source>Pending Approval</source>
+          <target state="translated">Onay Bekliyor</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Enum WMS Count Plan Status - EnumValue Pending Approval - Property Caption</note>
         </trans-unit>
         <trans-unit id="Enum 2021255263 - EnumValue 35450067 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
           <source>Posted</source>
+          <target state="translated">Kaydedildi</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Enum WMS Count Plan Status - EnumValue Posted - Property Caption</note>
         </trans-unit>
         <trans-unit id="Enum 2021255263 - EnumValue 3431804371 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
           <source>Scheduled</source>
+          <target state="translated">Planlandı</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Enum WMS Count Plan Status - EnumValue Scheduled - Property Caption</note>
         </trans-unit>
         <trans-unit id="Enum 949242522 - EnumValue 2407556357 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
           <source>Generic Android</source>
+          <target state="translated">Genel Android</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Enum WMS Device Manufacturer - EnumValue Android - Property Caption</note>
         </trans-unit>
         <trans-unit id="Enum 949242522 - EnumValue 3306878847 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
           <source>Apple iOS</source>
+          <target state="translated">Apple iOS</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Enum WMS Device Manufacturer - EnumValue Apple iOS - Property Caption</note>
         </trans-unit>
         <trans-unit id="Enum 949242522 - EnumValue 2769900914 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
           <source>Datalogic</source>
+          <target state="translated">Datalogic</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Enum WMS Device Manufacturer - EnumValue Datalogic - Property Caption</note>
         </trans-unit>
         <trans-unit id="Enum 949242522 - EnumValue 2494096649 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
           <source>Honeywell</source>
+          <target state="translated">Honeywell</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Enum WMS Device Manufacturer - EnumValue Honeywell - Property Caption</note>
         </trans-unit>
         <trans-unit id="Enum 949242522 - EnumValue 3448339824 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
           <source>Other</source>
+          <target state="translated">Diğer</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Enum WMS Device Manufacturer - EnumValue Other - Property Caption</note>
         </trans-unit>
         <trans-unit id="Enum 949242522 - EnumValue 201482906 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
           <source>Zebra</source>
+          <target state="translated">Zebra</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Enum WMS Device Manufacturer - EnumValue Zebra - Property Caption</note>
         </trans-unit>
         <trans-unit id="Enum 2454205207 - EnumValue 1090351696 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
           <source>Active</source>
+          <target state="translated">Aktif</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Enum WMS Device Status - EnumValue Active - Property Caption</note>
         </trans-unit>
         <trans-unit id="Enum 2454205207 - EnumValue 3481143665 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
           <source>Pending</source>
+          <target state="translated">Beklemede</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Enum WMS Device Status - EnumValue Pending - Property Caption</note>
         </trans-unit>
         <trans-unit id="Enum 2454205207 - EnumValue 2626919904 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
           <source>Revoked</source>
+          <target state="translated">İptal Edildi</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Enum WMS Device Status - EnumValue Revoked - Property Caption</note>
         </trans-unit>
         <trans-unit id="Enum 2454205207 - EnumValue 2681904316 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
           <source>Unpaired</source>
+          <target state="translated">Eşleştirilmedi</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Enum WMS Device Status - EnumValue Unpaired - Property Caption</note>
         </trans-unit>
         <trans-unit id="Enum 1065287542 - EnumValue 1778072510 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
           <source>Closed</source>
+          <target state="translated">Kapalı</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Enum WMS License Plate Status - EnumValue Closed - Property Caption</note>
         </trans-unit>
         <trans-unit id="Enum 1065287542 - EnumValue 341853908 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
           <source>In Transit</source>
+          <target state="translated">Taşınıyor</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Enum WMS License Plate Status - EnumValue In Transit - Property Caption</note>
         </trans-unit>
         <trans-unit id="Enum 1065287542 - EnumValue 4259830144 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
           <source>Open</source>
+          <target state="translated">Açık</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Enum WMS License Plate Status - EnumValue Open - Property Caption</note>
         </trans-unit>
         <trans-unit id="Enum 1065287542 - EnumValue 1765622098 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
           <source>Quarantine</source>
+          <target state="translated">Karantina</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Enum WMS License Plate Status - EnumValue Quarantine - Property Caption</note>
         </trans-unit>
         <trans-unit id="Enum 1065287542 - EnumValue 1090071933 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
           <source>Shipped</source>
+          <target state="translated">Sevk Edildi</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Enum WMS License Plate Status - EnumValue Shipped - Property Caption</note>
         </trans-unit>
         <trans-unit id="Enum 1060992249 - EnumValue 44615077 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
           <source>Change Warehouse</source>
+          <target state="translated">Depo Değiştir</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Enum WMS Menu Item Type - EnumValue Change Warehouse - Property Caption</note>
         </trans-unit>
         <trans-unit id="Enum 1060992249 - EnumValue 2668096654 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
           <source>Flow</source>
+          <target state="translated">Akış</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Enum WMS Menu Item Type - EnumValue Flow - Property Caption</note>
         </trans-unit>
         <trans-unit id="Enum 1060992249 - EnumValue 3962349339 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
           <source>Inquiry</source>
+          <target state="translated">Sorgu</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Enum WMS Menu Item Type - EnumValue Inquiry - Property Caption</note>
         </trans-unit>
         <trans-unit id="Enum 1060992249 - EnumValue 1540347591 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
           <source>Sign Out</source>
+          <target state="translated">Oturumu Kapat</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Enum WMS Menu Item Type - EnumValue Sign Out - Property Caption</note>
         </trans-unit>
         <trans-unit id="Enum 1060992249 - EnumValue 154881038 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
           <source>Sub-Menu</source>
+          <target state="translated">Alt Menü</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Enum WMS Menu Item Type - EnumValue Sub-Menu - Property Caption</note>
         </trans-unit>
         <trans-unit id="Enum 3491021240 - EnumValue 3767438287 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
           <source>Container Closed</source>
+          <target state="translated">Konteyner Kapatıldı</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Enum WMS Packing Event - EnumValue ContainerClosed - Property Caption</note>
         </trans-unit>
         <trans-unit id="Enum 3491021240 - EnumValue 1425015113 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
           <source>Container Created</source>
+          <target state="translated">Konteyner Oluşturuldu</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Enum WMS Packing Event - EnumValue ContainerCreated - Property Caption</note>
         </trans-unit>
         <trans-unit id="Enum 3491021240 - EnumValue 3191001887 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
           <source>Item Added</source>
+          <target state="translated">Kalem Eklendi</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Enum WMS Packing Event - EnumValue ItemAdded - Property Caption</note>
         </trans-unit>
         <trans-unit id="Enum 3491021240 - EnumValue 2473239265 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
           <source>Item Removed</source>
+          <target state="translated">Kalem Çıkarıldı</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Enum WMS Packing Event - EnumValue ItemRemoved - Property Caption</note>
         </trans-unit>
         <trans-unit id="Enum 3491021240 - EnumValue 1584387946 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
           <source>Label Printed</source>
+          <target state="translated">Etiket Yazdırıldı</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Enum WMS Packing Event - EnumValue LabelPrinted - Property Caption</note>
         </trans-unit>
         <trans-unit id="Enum 3196137 - EnumValue 1644269158 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
           <source>Cluster Pick</source>
+          <target state="translated">Toplu Toplama</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Enum WMS Pick Grouping - EnumValue Cluster - Property Caption</note>
         </trans-unit>
         <trans-unit id="Enum 3196137 - EnumValue 3197327757 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
           <source>System Grouped</source>
+          <target state="translated">Sistem Gruplu</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Enum WMS Pick Grouping - EnumValue System Grouped - Property Caption</note>
         </trans-unit>
         <trans-unit id="Enum 3196137 - EnumValue 2415263489 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
           <source>User Grouped</source>
+          <target state="translated">Kullanıcı Gruplu</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Enum WMS Pick Grouping - EnumValue User Grouped - Property Caption</note>
         </trans-unit>
         <trans-unit id="Enum 3196137 - EnumValue 1859955153 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
           <source>Validated User Directed</source>
+          <target state="translated">Doğrulanmış Kullanıcı Yönlendirmeli</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Enum WMS Pick Grouping - EnumValue Validated User Directed - Property Caption</note>
         </trans-unit>
         <trans-unit id="Enum 425223652 - EnumValue 2588201939 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
           <source>Complete</source>
+          <target state="translated">Tamamlandı</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Enum WMS Wave Status - EnumValue Complete - Property Caption</note>
         </trans-unit>
         <trans-unit id="Enum 425223652 - EnumValue 1090713286 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
           <source>In Progress</source>
+          <target state="translated">Devam Ediyor</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Enum WMS Wave Status - EnumValue In Progress - Property Caption</note>
         </trans-unit>
         <trans-unit id="Enum 425223652 - EnumValue 957872088 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
           <source>Planned</source>
+          <target state="translated">Planlandı</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Enum WMS Wave Status - EnumValue Planned - Property Caption</note>
         </trans-unit>
         <trans-unit id="Enum 425223652 - EnumValue 4020758431 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
           <source>Released</source>
+          <target state="translated">Serbest Bırakıldı</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Enum WMS Wave Status - EnumValue Released - Property Caption</note>
         </trans-unit>
         <trans-unit id="PermissionSet 789065139 - Property 2879900210" maxwidth="30" size-unit="char" translate="yes" xml:space="preserve">
           <source>BCWMSApp - All</source>
+          <target state="translated">BCWMSApp - Tümü</target>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">PermissionSet WMS - Property Caption</note>
         </trans-unit>
@@ -1527,3 +1831,4 @@
     </body>
   </file>
 </xliff>
+

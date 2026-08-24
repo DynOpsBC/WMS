@@ -39,5 +39,8 @@
     "includeSourceInSymbolFile": false
   },
   "runtime": "14.0",
-  "features": ["NoImplicitWith"]
+  "features": [
+    "NoImplicitWith",
+    "TranslationFile"
+  ]
 }
