@@ -10,6 +10,8 @@ page 72092 "DOPSWHS Pick API"
     SourceTableView = where(Type = const(Pick));
     DelayedInsert = true;
     ODataKeyFields = "No.";
+    InsertAllowed = false;
+    DeleteAllowed = false;
 
     layout
     {
@@ -17,21 +19,20 @@ page 72092 "DOPSWHS Pick API"
         {
             repeater(Group)
             {
-                field(no; Rec."No.") { Caption = 'no'; }
-                field(locationCode; Rec."Location Code") { Caption = 'locationCode'; }
+                field(no; Rec."No.") { Caption = 'no'; Editable = false; }
+                field(locationCode; Rec."Location Code") { Caption = 'locationCode'; Editable = false; }
                 // SALT-OKUNUR: atama yalnızca claim/assignToMe (kural kontrollü) ya da
                 // forceReassign (yönetici) uçlarından değişir. Alan yazılabilir kalsaydı
                 // PATCH ile başkasının üstündeki toplama sessizce devralınabilirdi —
                 // eş zamanlılık kontrollerinin tamamı atlanmış olurdu.
                 field(assignedUserId; Rec."Assigned User ID") { Caption = 'assignedUserId'; Editable = false; }
-                field(pickMode; Rec."DOPSWHS Pick Mode") { Caption = 'pickMode'; }
+                field(pickMode; Rec."DOPSWHS Pick Mode") { Caption = 'pickMode'; Editable = false; }
                 // ELOG: araç bilgisini sorumlu masadan girer; terminal salt-okunur gösterir.
                 field(vehicleNo; Rec."DOPSWHS Vehicle No.") { Caption = 'vehicleNo'; Editable = false; }
                 // Ana sepet: terminal toplamaya başlarken PATCH'ler; ekrandan
                 // çıkıp girince kaybolmasın diye kalıcı. Paketleme de okur.
                 field(mainLpNo; Rec."DOPSWHS Main LP No.") { Caption = 'mainLpNo'; }
                 field(sourceNo; SourceNo) { Caption = 'sourceNo'; }
-                // TODO Sprint H+ post-deploy: bind to activity status if exposed by the target BC app.
                 field(status; StatusText) { Caption = 'status'; }
                 field(dueDate; DueDate) { Caption = 'dueDate'; }
                 field(percentComplete; PercentComplete) { Caption = 'percentComplete'; }
@@ -144,6 +145,18 @@ page 72092 "DOPSWHS Pick API"
     end;
 
     /// <summary>
+    /// Terminalin kullanması gereken strict kayıt yolu. userId WMS oturumundaki
+    /// operatördür; shared BC hesabıyla yanlış operatör adına register engellenir.
+    /// </summary>
+    [ServiceEnabled]
+    procedure registerFor(userId: Code[50])
+    var
+        PickMgmt: Codeunit "DOPSWHS Pick Mgmt";
+    begin
+        PickMgmt.RegisterPickFor(Rec, userId);
+    end;
+
+    /// <summary>
     /// Terminal bu ucu YALNIZCA kendine atama için çağırır ("Bana Ata"/"Üzerine Al",
     /// userId = oturumdaki operatör). Bu yüzden zorla devretme değil, kural
     /// kontrollü üstlenme (ClaimPick) çalıştırılır: belge başkasındaysa reddedilir.
@@ -201,6 +214,7 @@ page 72092 "DOPSWHS Pick API"
         Clear(SourceNo);
         Clear(DueDate);
         Clear(PercentComplete);
+        Clear(StatusText);
 
         PickLine.SetRange("Activity Type", Rec.Type);
         PickLine.SetRange("No.", Rec."No.");
@@ -215,7 +229,21 @@ page 72092 "DOPSWHS Pick API"
                 HandledQty += PickLine."Qty. to Handle";
             until PickLine.Next() = 0;
 
-        if TotalQty <> 0 then
+        if TotalQty > 0 then begin
             PercentComplete := Round(HandledQty / TotalQty * 100, 1);
+            if PercentComplete > 100 then
+                PercentComplete := 100;
+        end;
+
+        // Warehouse Activity Header has no lifecycle status that maps cleanly
+        // to the handheld contract. Derive the stable API values from the
+        // actual Take-line progress and assignment instead of returning blank.
+        if (TotalQty > 0) and (HandledQty >= TotalQty) then
+            StatusText := 'Done'
+        else
+            if (HandledQty > 0) or (Rec."Assigned User ID" <> '') then
+                StatusText := 'InProgress'
+            else
+                StatusText := 'Open';
     end;
 }

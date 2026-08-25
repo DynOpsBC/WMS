@@ -113,6 +113,10 @@ function CountDocument({ no, onBack }: { no: string; onBack: () => void }) {
           const sys = Number(ln.systemQty ?? 0);
           const variance = Number(ln.variance ?? 0);
           const recount = Boolean(ln.recountRequired);
+          const lot = String(ln.lotNo ?? "");
+          const serial = String(ln.serialNo ?? "");
+          const lpNo = String(ln.lpNo ?? "");
+          const tracking = [lot ? `Lot: ${lot}` : "", serial ? `Seri: ${serial}` : ""].filter(Boolean).join(" · ");
           return (
             <div key={String(ln.lineNo)} className="card clickable" onClick={() => setCountLine(ln)}>
               <div className="row-between">
@@ -120,7 +124,9 @@ function CountDocument({ no, onBack }: { no: string; onBack: () => void }) {
                 {recount && <Pill text="⟳ recount" tone="warn" />}
               </div>
               <div className="card-meta">
-                Sayımlar: {counts}
+                {lpNo && <>LP: {lpNo} · </>}
+                {tracking && <>{tracking} · </>}
+                Sayılan: {counts}
                 {!blind && (
                   <>
                     {" · Sistem: "}{fmt(sys)}
@@ -186,22 +192,41 @@ function CountEntryModal({
   onClose: () => void;
   onSubmit: (slot: number, qty: number) => void;
 }) {
+  const qtyForSlot = (selectedSlot: number) => {
+    const value = Number(line[`countedQty${selectedSlot}`] ?? 0);
+    return value === 0 ? "" : String(value);
+  };
   const [slot, setSlot] = useState<number>(1);
-  const [qty, setQty] = useState("0");
+  const [qty, setQty] = useState(qtyForSlot(1));
   const sysQty = Number(line.systemQty ?? 0);
+  const tracking = [
+    line.lotNo ? `Lot: ${line.lotNo}` : "",
+    line.serialNo ? `Seri: ${line.serialNo}` : "",
+  ].filter(Boolean).join(" · ");
+  const lpInfo = line.lpNo ? ` · LP: ${line.lpNo}` : "";
+  const enteredCounts = [1, 2, 3]
+    .map((countSlot) => ({ countSlot, value: Number(line[`countedQty${countSlot}`] ?? 0) }))
+    .filter(({ value }) => value !== 0)
+    .map(({ countSlot, value }) => `${countSlot}. sayım: ${value}`)
+    .join(" · ");
 
   return (
     <Modal
       title="Sayım Gir"
-      meta={`Item: ${line.itemNo} · Bin: ${line.binCode ?? "-"}${blind ? "" : ` · Sistem: ${sysQty}`}`}
+      meta={`Item: ${line.itemNo} · Bin: ${line.binCode ?? "-"}${lpInfo}${tracking ? ` · ${tracking}` : ""}${blind ? "" : ` · Sistem: ${sysQty}`}`}
       onClose={onClose}
     >
+      {enteredCounts && <div className="card-meta">Girilen miktarlar · {enteredCounts}</div>}
       <label className="field" htmlFor="counter-slot">Counter Slot</label>
       <select
         id="counter-slot"
         title="Hangi counter slot'a kaydedilecek"
         value={slot}
-        onChange={(e) => setSlot(Number(e.target.value))}
+        onChange={(e) => {
+          const nextSlot = Number(e.target.value);
+          setSlot(nextSlot);
+          setQty(qtyForSlot(nextSlot));
+        }}
       >
         <option value={1}>Slot 1 (1. sayım)</option>
         <option value={2}>Slot 2 (2. sayım)</option>

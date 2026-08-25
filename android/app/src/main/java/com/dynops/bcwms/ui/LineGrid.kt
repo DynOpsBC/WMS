@@ -40,7 +40,7 @@ fun LineGrid(
     defs: List<GridColumn>,
     columns: List<ColumnState>,
     rows: List<JSONObject>,
-    onRowClick: (JSONObject) -> Unit,
+    onRowClick: ((JSONObject) -> Unit)? = null,
     modifier: Modifier = Modifier,
     isSelected: (JSONObject) -> Boolean = { false },
     isDone: (JSONObject) -> Boolean = { false },
@@ -124,7 +124,7 @@ fun LineGrid(
                                 drawRect(color = stripe, size = Size(STRIPE_DP.toPx(), size.height))
                             }
                         }
-                        .clickable { onRowClick(row) }
+                        .then(if (onRowClick != null) Modifier.clickable { onRowClick.invoke(row) } else Modifier)
                         .horizontalScroll(hScroll)
                 ) {
                     visible.forEach { (def, w) ->

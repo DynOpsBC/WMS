@@ -31,10 +31,14 @@ page 72227 "DOPSWHS Receipt Line API"
                 field(qtyReceived; Rec."Qty. Received") { Caption = 'qtyReceived'; }
                 field(binCode; Rec."Bin Code") { Caption = 'binCode'; }
                 field(lotNo; LotNo) { Caption = 'lotNo'; }
+                field(lotRequired; LotRequired) { Caption = 'lotRequired'; Editable = false; }
                 field(supplierLotNo; SupplierLotNo) { Caption = 'supplierLotNo'; }
                 field(supplierLotRequired; SupplierLotRequired) { Caption = 'supplierLotRequired'; Editable = false; }
                 field(serialNo; SerialNo) { Caption = 'serialNo'; }
+                field(serialRequired; SerialRequired) { Caption = 'serialRequired'; Editable = false; }
                 field(expiryDate; ExpiryDate) { Caption = 'expiryDate'; }
+                field(expirationDateEnabled; ExpirationDateEnabled) { Caption = 'expirationDateEnabled'; Editable = false; }
+                field(expirationDateRequired; ExpirationDateRequired) { Caption = 'expirationDateRequired'; Editable = false; }
                 field(licensePlateNo; LicensePlateNo) { Caption = 'licensePlateNo'; }
             }
         }
@@ -59,11 +63,15 @@ page 72227 "DOPSWHS Receipt Line API"
         Clear(ItemGtin);
         if (Rec."Item No." <> '') and Item.Get(Rec."Item No.") then
             ItemGtin := Item.GTIN;
-        // Mevcut APK iç lotu zorunlu tuttuğu için, satır terminale dönmeden
-        // standart Item."Lot Nos." serisinden bir kez ata ve BC tracking'e yaz.
-        // Daha önce UI/mobil tarafından atanmış lot varsa aynen korunur.
-        ReceiptMgmt.EnsureAutoInboundLot(Rec, LotNo, SerialNo, ExpiryDate);
+        // GET yalnız mevcut BC item-tracking bilgisini okur. İç lot numarası
+        // satır açılırken üretilmez; operatör terminalde "Lot No Ata" dediğinde
+        // aşağıdaki bound action standart Item."Lot Nos." serisini tüketir.
+        ReceiptMgmt.GetItemTracking(Rec, LotNo, SerialNo, ExpiryDate);
+        LotRequired := ReceiptMgmt.ReceiptLineRequiresLot(Rec);
         SupplierLotRequired := ReceiptMgmt.ReceiptLineRequiresSupplierLot(Rec);
+        SerialRequired := ReceiptMgmt.ReceiptLineRequiresSerial(Rec);
+        ExpirationDateEnabled := ReceiptMgmt.ReceiptLineUsesExpirationDates(Rec);
+        ExpirationDateRequired := ReceiptMgmt.ReceiptLineRequiresExpirationDate(Rec);
         ReceiptMgmt.GetSupplierLot(Rec, LotNo, SupplierLotNo);
     end;
 
@@ -77,12 +85,24 @@ page 72227 "DOPSWHS Receipt Line API"
         exit(false);
     end;
 
+    [ServiceEnabled]
+    procedure assignLotNo(): Text
+    var
+        ReceiptMgmt: Codeunit "DOPSWHS Receipt Mgmt";
+    begin
+        exit(ReceiptMgmt.AssignInboundLotNo(Rec));
+    end;
+
     var
         LotNo: Code[50];
         SupplierLotNo: Code[50];
         SupplierLotRequired: Boolean;
+        LotRequired: Boolean;
         SerialNo: Code[50];
+        SerialRequired: Boolean;
         ExpiryDate: Date;
+        ExpirationDateEnabled: Boolean;
+        ExpirationDateRequired: Boolean;
         LicensePlateNo: Code[20];
         ItemGtin: Code[14];
 }

@@ -18,6 +18,8 @@ report 72093 "DOPSWHS Count Variance"
                 column(Item_No_; "Item No.") { }
                 column(Bin_Code; "Bin Code") { }
                 column(LP_No_; "LP No.") { }
+                column(Lot_No_; "Lot No.") { }
+                column(Serial_No_; "Serial No.") { }
                 column(System_Qty; "System Qty") { }
                 column(Counted_Qty_1; "Counted Qty 1") { }
                 column(Counted_Qty_2; "Counted Qty 2") { }

@@ -69,6 +69,39 @@ page 72091 "DOPSWHS PutAway API"
         MovementMgmt.RegisterDirected(Rec);
     end;
 
+    [ServiceEnabled]
+    procedure assignToMe(userId: Code[50])
+    var
+        LockedPutAway: Record "Warehouse Activity Header";
+        CurrentOwner: Code[50];
+    begin
+        if userId = '' then
+            Error('WMS kullanıcı kimliği boş olamaz. Terminal oturumunu yenileyin.');
+
+        // Aynı belgeyi iki terminal eş zamanlı üstlenirse son yazanın kazanmasını
+        // önle. Yalnızca boşta olan belge veya zaten aynı kullanıcıdaki belge
+        // üstlenilebilir; başka operatördeki belge terminalden devralınamaz.
+        LockedPutAway.LockTable();
+        if not LockedPutAway.Get(LockedPutAway.Type::"Put-away", Rec."No.") then
+            Error('Yerleştirme belgesi %1 artık bulunamıyor. Listeyi yenileyin.', Rec."No.");
+
+        CurrentOwner := LockedPutAway."Assigned User ID";
+        if (CurrentOwner <> '') and (CurrentOwner <> userId) then
+            Error('Yerleştirme belgesi %1, %2 kullanıcısına atanmış.', Rec."No.", CurrentOwner);
+
+        if CurrentOwner = userId then begin
+            Rec := LockedPutAway;
+            exit;
+        end;
+
+        // WMS yerel kullanıcısı her kurulumda Warehouse Employee tablosunda
+        // bulunmayabilir. Pick self-claim ile aynı nedenle TableRelation
+        // doğrulaması tetiklenmeden operatör kimliğini kalıcı yaz.
+        LockedPutAway."Assigned User ID" := CopyStr(userId, 1, MaxStrLen(LockedPutAway."Assigned User ID"));
+        LockedPutAway.Modify(true);
+        Rec := LockedPutAway;
+    end;
+
     var
         StatusText: Text[30];
 }

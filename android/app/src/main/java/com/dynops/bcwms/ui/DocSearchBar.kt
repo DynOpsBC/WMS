@@ -61,9 +61,16 @@ fun searchClause(field: String, search: String): String? {
 /**
  * "Bana atanan" chip'i için assignedUserId eşitlik clause'u. BC "Assigned User ID"
  * alanları büyük harf Code değerleri tutar; userId BcApi.currentUserId'den gelir.
- * enabled=false ("Tümü" seçili) veya kullanıcı çözülemedi (boş) → null, yani filtresiz liste.
+ * enabled=false ("Tümü" seçili) → null. "Bana atanan" seçiliyken kullanıcı
+ * çözülemediyse güvenli tarafta kalır ve sonuç döndürmeyen bir clause üretir;
+ * aksi halde tüm belgeleri açmak yetki/iş sahipliği ihlaline yol açabilir.
  */
 fun assignedToMeClause(userId: String, enabled: Boolean = true): String? {
-    if (!enabled || userId.isBlank()) return null
+    if (!enabled) return null
+    if (userId.isBlank()) return "assignedUserId eq '__BCWMS_USER_UNRESOLVED__'"
     return "assignedUserId eq '${userId.trim().uppercase().replace("'", "''")}'"
 }
+
+/** Assigned-only queues must not query with a shared/unknown warehouse user. */
+fun canLoadAssignedOnlyList(showAll: Boolean, localUserId: String): Boolean =
+    showAll || localUserId.isNotBlank()

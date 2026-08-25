@@ -1,5 +1,8 @@
 package com.dynops.bcwms.feature
 
+import android.util.Log
+import com.dynops.bcwms.ui.operatorFacingApiError
+
 /**
  * Quality-related API error parser.
  *
@@ -42,9 +45,10 @@ object QcErrorParser {
      */
     fun friendlyStatus(errMsg: String?, httpCode: Int = 0): String {
         val raw = errMsg ?: "Bilinmeyen hata"
-        if (!isQcBlocked(raw)) return "HATA: $raw (HTTP $httpCode)"
+        runCatching { Log.w("BCWMS.ApiError", "HTTP $httpCode ${raw.take(2000)}") }
+        if (!isQcBlocked(raw)) return operatorFacingApiError(raw, httpCode)
         val ins = extractInspectionNo(raw)
-        val tail = if (ins != null) "Quality Inspection $ins tamamlanmalı." else "Açık bir Quality Inspection bekliyor."
-        return "🔬 QC BLOCK: Lot/Serial bloklu — $tail (HTTP $httpCode)"
+        val tail = if (ins != null) "Kalite denetimi $ins tamamlanmalı." else "Açık kalite denetimi tamamlanmalı."
+        return "🔬 Kalite kontrolü bekliyor — lot/seri kullanılamıyor. $tail"
     }
 }

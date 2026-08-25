@@ -1,7 +1,7 @@
 page 72098 "DOPSWHS Pick Board Page"
 {
     PageType = Card;
-    Caption = 'Pick Board';
+    Caption = 'Toplama Atama Panosu';
     ApplicationArea = All;
     UsageCategory = Tasks;  // searchable in "Tell me"
 
@@ -24,8 +24,12 @@ page 72098 "DOPSWHS Pick Board Page"
                     Pick: Record "Warehouse Activity Header";
                     PickMgmt: Codeunit "DOPSWHS Pick Mgmt";
                 begin
-                    if Pick.Get(Pick.Type::Pick, PickNo) then
-                        PickMgmt.ReassignPick(Pick, UserId, 'Pick Board drag-drop');
+                    if not Pick.Get(Pick.Type::Pick, PickNo) then
+                        Error(PickNotFoundErr, PickNo);
+                    if UserId = '' then
+                        PickMgmt.ReleasePick(Pick, BoardReleaseReasonLbl)
+                    else
+                        PickMgmt.ReassignPick(Pick, UserId, BoardAssignReasonLbl);
                     CurrPage.Board.SetData(BoardData.BuildPickBoardJson());
                 end;
 
@@ -44,7 +48,7 @@ page 72098 "DOPSWHS Pick Board Page"
             action(Refresh)
             {
                 ApplicationArea = All;
-                Caption = 'Refresh';
+                Caption = 'Yenile';
                 Image = Refresh;
                 trigger OnAction()
                 begin
@@ -56,4 +60,7 @@ page 72098 "DOPSWHS Pick Board Page"
 
     var
         BoardData: Codeunit "DOPSWHS Board Data";
+        PickNotFoundErr: Label 'Toplama belgesi %1 artık bulunamıyor. Panoyu yenileyip tekrar deneyin.', Comment = '%1 = toplama belge numarası';
+        BoardAssignReasonLbl: Label 'Toplama atama panosundan atandı.';
+        BoardReleaseReasonLbl: Label 'Toplama atama panosundan boşa alındı.';
 }

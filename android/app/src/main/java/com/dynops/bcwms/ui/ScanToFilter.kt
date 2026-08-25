@@ -101,6 +101,7 @@ fun DocListScanHandler(
     documentsEndpoint: String? = null,        // belgelerin API endpoint'i (aç + doğrula), ör. "receipts"
     acceptDocTypes: Set<String> = emptySet(), // bu ekranın açtığı belge türleri, ör. setOf("receipt")
     onDocument: ((docNo: String) -> Unit)? = null,
+    onError: ((message: String) -> Unit)? = null,
     onResult: (itemNo: String, docs: Set<String>) -> Unit,
 ) {
     val context = LocalContext.current
@@ -127,8 +128,12 @@ fun DocListScanHandler(
             val itemNo = (resolved.itemNo ?: resolved.value).trim()
             if (itemNo.isBlank()) return@collect
             val safe = itemNo.replace("'", "''")
-            val r = BcApi.get(context, "$linesEndpoint?\$filter=itemNo eq '$safe'&\$top=100&\$select=$docKey")
-            val docs = if (r.ok) BcApi.parseValueArray(r.body).map { it.optString(docKey) }.filter { it.isNotBlank() }.toSet() else emptySet()
+            val page = BcApi.getAllPages(context, "$linesEndpoint?\$filter=itemNo eq '$safe'&\$top=100&\$select=$docKey")
+            if (!page.complete) {
+                onError?.invoke("HATA: Ürün-belge eşleşmelerinin tamamı alınamadı. Yenileyip tekrar okutun.")
+                return@collect
+            }
+            val docs = page.rows.map { it.optString(docKey) }.filter { it.isNotBlank() }.toSet()
             cb(itemNo, docs)
         }
     }
@@ -144,12 +149,12 @@ suspend fun docsContainingItem(
     linesEndpoint: String,
     itemNo: String,
     docKey: String = "no",
-): Set<String> {
+): Set<String>? {
     val safe = itemNo.trim().replace("'", "''")
     if (safe.isBlank()) return emptySet()
-    val r = BcApi.get(context, "$linesEndpoint?\$filter=itemNo eq '$safe'&\$top=100&\$select=$docKey")
-    return if (r.ok) BcApi.parseValueArray(r.body).map { it.optString(docKey) }.filter { it.isNotBlank() }.toSet()
-    else emptySet()
+    val page = BcApi.getAllPages(context, "$linesEndpoint?\$filter=itemNo eq '$safe'&\$top=100&\$select=$docKey")
+    return if (page.complete) page.rows.map { it.optString(docKey) }.filter { it.isNotBlank() }.toSet()
+    else null
 }
 
 /** Aktif tarama filtresini gösteren, temizlenebilir çip. Boş filtrede hiçbir şey çizmez. */

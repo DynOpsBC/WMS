@@ -22,6 +22,53 @@ data class LineGroup(
     val count: Int get() = lines.size
 }
 
+enum class ScannedGroupIssue {
+    ItemMissing,
+    TrackingMismatch,
+    Ambiguous,
+}
+
+data class ScannedGroupSelection(
+    val group: LineGroup? = null,
+    val issue: ScannedGroupIssue? = null,
+)
+
+/**
+ * Selects the exact item/lot/serial group represented by a scanned barcode.
+ *
+ * A pick can contain the same item more than once with different tracking
+ * values. Picking the first item group in that case can write LOT-B against the
+ * LOT-A warehouse line. Tracking is therefore matched before a group is
+ * returned and an untracked scan is rejected whenever it is ambiguous.
+ */
+fun selectScannedLineGroup(
+    groups: List<LineGroup>,
+    itemNo: String,
+    lotNo: String = "",
+    serialNo: String = "",
+): ScannedGroupSelection {
+    val itemGroups = groups.filter { it.itemNo.equals(itemNo.trim(), ignoreCase = true) }
+    if (itemGroups.isEmpty()) return ScannedGroupSelection(issue = ScannedGroupIssue.ItemMissing)
+
+    val expectedLot = lotNo.trim()
+    val expectedSerial = serialNo.trim()
+    val hasTracking = expectedLot.isNotBlank() || expectedSerial.isNotBlank()
+    val matchingGroups = if (!hasTracking) itemGroups else itemGroups.filter { group ->
+        group.lines.any { line ->
+            val lineLot = s(line, "lotNo")
+            val lineSerial = s(line, "serialNo")
+            (expectedLot.isBlank() || lineLot.equals(expectedLot, ignoreCase = true)) &&
+                (expectedSerial.isBlank() || lineSerial.equals(expectedSerial, ignoreCase = true))
+        }
+    }
+
+    if (hasTracking && matchingGroups.isEmpty())
+        return ScannedGroupSelection(issue = ScannedGroupIssue.TrackingMismatch)
+    if (matchingGroups.size != 1)
+        return ScannedGroupSelection(issue = ScannedGroupIssue.Ambiguous)
+    return ScannedGroupSelection(group = matchingGroups.single())
+}
+
 private fun s(o: JSONObject, key: String): String {
     val v = o.optString(key)
     return if (v == "null") "" else v

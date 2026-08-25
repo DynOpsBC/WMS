@@ -1,0 +1,4 @@
+1. Wi-Fi yaziciyi Windows'ta varsayilan yazici yapin ve test sayfasi alin.
+2. KURULUM.bat dosyasina cift tiklayin.
+
+Kurulum bitince el terminalinde Yazicilar > Yenile > Belge secin.

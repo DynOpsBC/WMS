@@ -1,5 +1,6 @@
 package com.dynops.bcwms.feature
 
+import android.os.SystemClock
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -20,8 +21,13 @@ import com.dynops.bcwms.ui.BottomActionBar
 import com.dynops.bcwms.ui.EmptyState
 import com.dynops.bcwms.ui.bcwmsStatus
 import com.dynops.bcwms.ui.firstValue
+import com.dynops.bcwms.ui.operatorFacingStatus
+import com.dynops.bcwms.ui.rawValue
+import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import org.json.JSONObject
 
 /**
@@ -32,10 +38,40 @@ private enum class PackTone { INFO, OK, WARN, ERR }
 
 private data class PackMsg(val text: String = "", val tone: PackTone = PackTone.INFO)
 
+internal fun packingStartFailureMessage(httpCode: Int): String =
+    if (httpCode == 404 || httpCode == 405)
+        "Paketleme servisi bu şirkette hazır değil. Sistem yöneticinize bildirin."
+    else
+        "Paketleme başlatılamadı. Bağlantıyı kontrol edip tekrar deneyin."
+
+internal fun shouldAcceptPackingScan(
+    currentBarcode: String,
+    lastBarcode: String,
+    lastScanAtMs: Long,
+    nowMs: Long,
+    duplicateWindowMs: Long = 250,
+): Boolean = currentBarcode.isNotBlank() &&
+    (!currentBarcode.equals(lastBarcode, ignoreCase = true) || nowMs - lastScanAtMs >= duplicateWindowMs)
+
+/** Aynı fiziksel koli iki farklı siparişe bağlanamaz (sunucu da doğrular). */
+internal fun packingBoxHasConflict(
+    orderNo: String,
+    boxBarcode: String,
+    existingAssignments: Iterable<Pair<String, String>>,
+): Boolean = boxBarcode.isNotBlank() && existingAssignments.any { (assignedOrder, assignedBox) ->
+    !assignedOrder.equals(orderNo, ignoreCase = true) &&
+        assignedBox.equals(boxBarcode, ignoreCase = true)
+}
+
+/** Koli kapama, son iyimser ürün yazımı sunucuda kesinleşmeden başlayamaz. */
+internal fun packingCanCloseOrder(busy: Boolean, pendingItemWrites: Int): Boolean =
+    !busy && pendingItemWrites == 0
+
 /** Ekranda en fazla TEK satır mesaj — boşsa hiç yer kaplamaz. */
 @Composable
 private fun PackStatusLine(msg: PackMsg) {
-    if (msg.text.isBlank()) return
+    val visibleText = operatorFacingStatus(msg.text)
+    if (visibleText.isBlank()) return
     val palette = bcwmsStatus()
     val color = when (msg.tone) {
         PackTone.OK -> palette.success
@@ -44,7 +80,7 @@ private fun PackStatusLine(msg: PackMsg) {
         PackTone.INFO -> MaterialTheme.colorScheme.onSurfaceVariant
     }
     Text(
-        msg.text,
+        visibleText,
         style = MaterialTheme.typography.bodyMedium,
         fontWeight = FontWeight.Medium,
         color = color,
@@ -102,7 +138,7 @@ fun PackingModule(v2Enabled: Boolean = false) {
 private fun V2PackingModule() {
     var flow by remember { mutableStateOf(OutboundFlowMode.Multi) }
     Column(Modifier.fillMaxSize()) {
-        V2FlowSelector(current = flow, onSelect = { flow = it }, sectionTitle = "V2 Paketleme")
+        V2FlowSelector(current = flow, onSelect = { flow = it }, sectionTitle = "Paketleme türü")
         Box(Modifier.weight(1f)) { key(flow) { PackingQueue(flowMode = flow) } }
     }
 }
@@ -125,16 +161,19 @@ private fun PackingQueue(flowMode: OutboundFlowMode?) {
             loading = true
             msg = PackMsg("Yükleniyor…")
             val modeFilter = flowMode?.let { "&\$filter=orderFlowMode eq '${it.apiValue}'" }.orEmpty()
-            val r = BcApi.get(context, "packingOrders?\$top=500&\$orderby=readyDateTime asc$modeFilter")
-            orders = if (r.ok) BcApi.parseValueArray(r.body).filter {
-                !firstValue(it, "status").equals("Completed", ignoreCase = true)
+            val page = BcApi.getAllPages(
+                context,
+                "packingOrders?\$top=500&\$orderby=readyDateTime asc$modeFilter",
+            )
+            orders = if (page.complete) page.rows.filter {
+                !rawValue(it, "status").equals("Completed", ignoreCase = true)
             } else emptyList()
             // Başarı mesajı yazmıyoruz: sayı zaten başlıkta, boş liste kendi
             // kartında. Ekranda gereksiz satır kalmasın.
             msg = when {
-                r.ok -> PackMsg()
-                flowMode != null && r.httpCode in listOf(400, 404) ->
-                    PackMsg("BC V2 API güncellemesi yayınlanmalı.", PackTone.WARN)
+                page.complete -> PackMsg()
+                flowMode != null && page.error?.httpCode in listOf(400, 404) ->
+                    PackMsg("Paketleme kuyruğu bu şirkette kullanılamıyor. Depo sorumlusuna bildirin.", PackTone.WARN)
                 else -> PackMsg("Liste alınamadı, tekrar deneyin.", PackTone.ERR)
             }
             loading = false
@@ -206,7 +245,7 @@ private fun PackingQueue(flowMode: OutboundFlowMode?) {
         Spacer(Modifier.height(8.dp))
         LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             items(shownPicks.entries.toList(), key = { it.key }) { (pickNo, ords) ->
-                val started = ords.any { firstValue(it, "status").contains("Progress", ignoreCase = true) }
+                val started = ords.any { rawValue(it, "status").contains("Progress", ignoreCase = true) }
                 // Ürünlerin toplandığı sepet (LP) — operatörün elindeki nesne bu,
                 // o yüzden kart başlığı. Okutunca da bu belgeye giriliyor.
                 val lp = ords.firstNotNullOfOrNull {
@@ -281,15 +320,13 @@ private fun PickPackingDocument(
     val scope = rememberCoroutineScope()
     var sessionId by remember(pickNo) { mutableStateOf(0) }
     var lines by remember(pickNo) { mutableStateOf<List<JSONObject>>(emptyList()) }
+    var linesComplete by remember(pickNo) { mutableStateOf(false) }
     // Sipariş no -> müşteri adı (packingOrders'tan; koli adımında göstermek için).
     var customerByOrder by remember(pickNo) { mutableStateOf<Map<String, String>>(emptyMap()) }
     var msg by remember(pickNo) { mutableStateOf(PackMsg()) }
     var busy by remember(pickNo) { mutableStateOf(false) }
     var itemInput by remember(pickNo) { mutableStateOf("") }
     var boxInput by remember(pickNo) { mutableStateOf("") }
-    // BC'de artık açık olmayan (silinmiş/kaydedilmiş) siparişler. Bunlar asla
-    // kapanamaz; koli adımında ekranı kilitlememeleri için atlanır.
-    var blockedOrders by remember(pickNo) { mutableStateOf<Set<String>>(emptySet()) }
     // Toplamada kullanılan ana sepet — paketleyici ürünleri nereden alacağını görsün.
     var mainLp by remember(pickNo) { mutableStateOf("") }
     var lpConfirmed by remember(pickNo) { mutableStateOf(lpConfirmedOnEntry) }
@@ -298,19 +335,38 @@ private fun PickPackingDocument(
     // Sipariş dökümü varsayılan KAPALI — operatörün işi ürün okutmak, sipariş
     // kırılımı sadece merak edilince açılan bir detay.
     var showOrders by remember(pickNo) { mutableStateOf(false) }
+    val itemScanMutex = remember(pickNo) { Mutex() }
+    var pendingItemWrites by remember(pickNo) { mutableIntStateOf(0) }
+    var lastItemBarcode by remember(pickNo) { mutableStateOf("") }
+    var lastItemScanAtMs by remember(pickNo) { mutableLongStateOf(0L) }
 
-    suspend fun reloadLines() {
-        if (sessionId > 0) {
-            val l = BcApi.get(context, "packSessionLines?\$filter=sessionEntryNo eq $sessionId&\$top=1000")
-            lines = if (l.ok) BcApi.parseValueArray(l.body) else emptyList()
+    suspend fun reloadLines(): Boolean {
+        linesComplete = false
+        if (sessionId <= 0) {
+            lines = emptyList()
+            return false
         }
+        val page = BcApi.getAllPages(
+            context,
+            "packSessionLines?\$filter=sessionEntryNo eq $sessionId&\$top=500",
+        )
+        lines = page.rows
+        linesComplete = page.complete
+        if (!page.complete) {
+            msg = PackMsg("Paketleme satırlarının tamamı alınamadı. Yenileyip tekrar deneyin.", PackTone.ERR)
+        }
+        return page.complete
     }
 
     // Müşteri adlarını packingOrders'tan (pick filtresiyle) bir kez çek.
-    suspend fun loadCustomers() {
-        val r = BcApi.get(context, "packingOrders?\$filter=pickNo eq '$pickNo'&\$top=500")
-        if (r.ok) {
-            val rows = BcApi.parseValueArray(r.body)
+    suspend fun loadCustomers(): Boolean {
+        val safePickNo = pickNo.replace("'", "''")
+        val page = BcApi.getAllPages(
+            context,
+            "packingOrders?\$filter=pickNo eq '$safePickNo'&\$top=500",
+        )
+        if (page.complete) {
+            val rows = page.rows
             customerByOrder = rows.associate {
                 it.optString("salesOrderNo") to it.optString("customerName")
             }
@@ -319,11 +375,16 @@ private fun PickPackingDocument(
                 it.optString("mainLpNo").takeIf { s -> s.isNotBlank() }
             }.orEmpty()
         }
+        return page.complete
     }
 
     suspend fun startIfNeeded() {
         msg = PackMsg("Hazırlanıyor…")
-        val me = BcApi.currentUserId(context)
+        val me = BcApi.currentUserId(context).trim()
+        if (me.isBlank()) {
+            msg = PackMsg("Kullanıcı kimliği doğrulanamadı. Yeniden giriş yapın.", PackTone.ERR)
+            return
+        }
         val body = JSONObject().apply {
             put("pickNo", pickNo)
             put("userId", me)
@@ -337,20 +398,24 @@ private fun PickPackingDocument(
         val r = BcApi.boundAction(context, "packOps", "", "startPickPackingWithPrinter", body)
         if (r.ok) {
             sessionId = BcApi.scalarValue(r.body).toIntOrNull() ?: 0
+            if (sessionId <= 0) {
+                msg = PackMsg("Paketleme oturumu doğrulanamadı. Yenileyip tekrar deneyin.", PackTone.ERR)
+                return
+            }
             // Müşteri adları ve satırlar birbirinden bağımsız — PARALEL çek
             // (sırayla ~2 istek beklemesi oluyordu, belge açılışı yavaşlıyordu).
-            coroutineScope {
-                launch { loadCustomers() }
-                launch { reloadLines() }
+            val (customersOk, linesOk) = coroutineScope {
+                val customers = async { loadCustomers() }
+                val sessionLines = async { reloadLines() }
+                customers.await() to sessionLines.await()
             }
-            // Ne yapılacağını okutma alanı ve liste zaten söylüyor.
-            msg = PackMsg()
-        } else {
-            // startPickPacking AL action'ı henüz publish edilmemiş olabilir (404)
-            // ya da BC yanıt vermemiş olabilir — her iki durumda da korkutucu
-            // HATA yazısı yerine sessiz "hazırlanıyor" durumu gösterilir.
-            msg = PackMsg("Hazırlanıyor…")
-        }
+            msg = when {
+                !linesOk -> PackMsg("Paketleme satırları alınamadı. Yenileyip tekrar deneyin.", PackTone.ERR)
+                !customersOk -> PackMsg("Sipariş bilgileri eksik geldi. Yenileyip tekrar deneyin.", PackTone.WARN)
+                mainLp.isBlank() -> PackMsg("Toplama LP'si bulunamadı. Depo sorumlusuna bildirin.", PackTone.ERR)
+                else -> PackMsg()
+            }
+        } else msg = PackMsg(packingStartFailureMessage(r.httpCode), PackTone.ERR)
     }
 
     // ELOG katı kilit: bir siparişe başlandıysa (kısmen paketli ama bitmemiş),
@@ -393,8 +458,16 @@ private fun PickPackingDocument(
      */
     fun scanItem(raw: String) {
         if (raw.isBlank() || sessionId == 0 || !lpConfirmed) return
+        if (!linesComplete) {
+            msg = PackMsg("Paketleme satırları eksik. Yenileyip tekrar deneyin.", PackTone.ERR)
+            return
+        }
         val resolved = BarcodeIntentResolver.resolve(raw)
         val itemNo = (resolved.itemNo ?: resolved.value).trim()
+        val now = SystemClock.elapsedRealtime()
+        if (!shouldAcceptPackingScan(itemNo, lastItemBarcode, lastItemScanAtMs, now)) return
+        lastItemBarcode = itemNo
+        lastItemScanAtMs = now
         val locked = activeLockedOrder()
         val target = targetOrderFor(itemNo)
         // Aktif sipariş varsa ve bu ürün ona ait değilse → kilit reddi.
@@ -412,27 +485,36 @@ private fun PickPackingDocument(
         itemInput = ""
         lines = bumpPackedQty(lines, target, itemNo, 1.0)
         msg = PackMsg("$itemNo okundu", PackTone.OK)
+        pendingItemWrites += 1
         // 2) BC'ye arka planda yaz.
         scope.launch {
-            val body = JSONObject().apply {
-                put("sessionId", sessionId)
-                put("orderNo", target)
-                put("itemNo", itemNo)
-                put("qty", 1)
-            }.toString()
-            val r = BcApi.boundAction(context, "packOps", "", "scanItemForOrder", body)
-            if (r.ok) {
-                // scanItemForOrder dönüşü: tamamlandıysa o sipariş no'su, yoksa boş.
-                val done = BcApi.scalarValue(r.body).trim()
-                if (done.isNotBlank()) {
-                    // Sipariş bitti — koli kartı zaten ekranı devraldığı için
-                    // ayrıca mesaj yazmıyoruz.
-                    msg = PackMsg()
-                    reloadLines()   // sipariş kapandı → gerçek durumu al
+            // Aynı paketleme oturumundaki yazımlar BC'ye seri gider. Çok hızlı
+            // taramada iki action'ın aynı satırı eşzamanlı güncellemesi önlenir.
+            try {
+                itemScanMutex.withLock {
+                    val body = JSONObject().apply {
+                        put("sessionId", sessionId)
+                        put("orderNo", target)
+                        put("itemNo", itemNo)
+                        put("qty", 1)
+                    }.toString()
+                    val r = BcApi.boundAction(context, "packOps", "", "scanItemForOrder", body)
+                    if (r.ok) {
+                        // scanItemForOrder dönüşü: tamamlandıysa o sipariş no'su, yoksa boş.
+                        val done = BcApi.scalarValue(r.body).trim()
+                        if (done.isNotBlank()) {
+                            // Sipariş bitti — koli kartı zaten ekranı devraldığı için
+                            // ayrıca mesaj yazmıyoruz.
+                            msg = PackMsg()
+                            reloadLines()   // sipariş kapandı → gerçek durumu al
+                        }
+                    } else {
+                        msg = PackMsg("Okutma kaydedilemedi. Yenileyip tekrar deneyin.", PackTone.ERR)
+                        reloadLines()       // iyimser artışı geri al
+                    }
                 }
-            } else {
-                msg = PackMsg("Okutma kaydedilemedi: ${BcApi.errorMessage(r.body)}", PackTone.ERR)
-                reloadLines()       // iyimser artışı geri al
+            } finally {
+                pendingItemWrites = (pendingItemWrites - 1).coerceAtLeast(0)
             }
         }
     }
@@ -442,13 +524,32 @@ private fun PickPackingDocument(
     // matbu koli barkodu); sistemde kayıtlı bir LP olmak ZORUNDA DEĞİLDİR —
     // depoda kalan sepetle (tote) karıştırılmamalı. Boş gönderilirse BC karton üretir.
     fun scanBox(orderNo: String, raw: String) {
-        if (sessionId == 0 || busy || !lpConfirmed) return
+        if (sessionId == 0 || !lpConfirmed) return
+        if (!linesComplete) {
+            msg = PackMsg("Paketleme satırları eksik. Yenileyip tekrar deneyin.", PackTone.ERR)
+            return
+        }
+        if (!packingCanCloseOrder(busy, pendingItemWrites)) {
+            msg = PackMsg("Son ürün kaydı tamamlanıyor. Lütfen bekleyin.", PackTone.WARN)
+            return
+        }
         val boxLp = BarcodeIntentResolver.resolve(raw).value.trim()
+        val assignments = lines.mapNotNull { line ->
+            val assigned = line.optString("boxLpNo").ifBlank { line.optString("boxBarcode") }
+            assigned.takeIf { it.isNotBlank() }?.let { line.optString("sourceOrderNo") to it }
+        }
+        if (packingBoxHasConflict(orderNo, boxLp, assignments)) {
+            boxInput = ""
+            msg = PackMsg("Bu koli başka bir siparişe bağlı. Farklı koli okutun.", PackTone.ERR)
+            return
+        }
         // Aynı barkod timeout/çift tetik yüzünden yeniden gönderilmesin.
         // Sonucu sunucudan uzlaştıracağımız için alan isteğin başında temizlenir.
         boxInput = ""
+        // Busy değerini coroutine başlamadan yükselt: iki donanım tetikleyicisi
+        // aynı frame içinde gelirse aynı sipariş iki kez kapatılmasın.
+        busy = true
         scope.launch {
-            busy = true
             msg = PackMsg("$orderNo kapatılıyor…")
             val body = JSONObject().apply {
                 put("sessionId", sessionId)
@@ -458,8 +559,11 @@ private fun PickPackingDocument(
             }.toString()
             val r = BcApi.boundActionLongRunning(context, "packOps", "", "setBoxForOrder", body)
             if (r.ok) {
-                blockedOrders = blockedOrders - orderNo
-                reloadLines()
+                if (!reloadLines()) {
+                    msg = PackMsg("Koli kaydı tamamlandı; güncel satırlar alınamadı. Yenileyin.", PackTone.WARN)
+                    busy = false
+                    return@launch
+                }
                 val stillOpen = lines.any {
                     it.optString("sourceOrderNo") == orderNo &&
                         it.optDouble("qtyPacked") < it.optDouble("qtyExpected")
@@ -472,28 +576,34 @@ private fun PickPackingDocument(
                 val err = BcApi.errorMessage(r.body)
                 // İstemci timeout olmuş olsa bile BC sevk/fatura işlemini tamamlamış
                 // olabilir. Tekrar post etmek yerine gerçek session satırlarını oku.
-                reloadLines()
+                if (!reloadLines()) {
+                    msg = PackMsg("İşlemin sonucu doğrulanamadı. Yenileyip tekrar deneyin.", PackTone.WARN)
+                    busy = false
+                    return@launch
+                }
                 val orderLines = lines.filter { it.optString("sourceOrderNo") == orderNo }
                 val completedOnServer = orderLines.isNotEmpty() && orderLines.all {
                     it.optBoolean("orderCompleted") ||
                         (it.optDouble("qtyPacked") >= it.optDouble("qtyExpected") && it.hasShippingBox())
                 }
                 if (completedOnServer) {
-                    blockedOrders = blockedOrders - orderNo
                     msg = PackMsg("$orderNo sunucuda kapandı, koli $boxLp doğrulandı", PackTone.OK)
                     busy = false
                     return@launch
                 }
-                // Satış siparişi yoksa/kapalıysa bu sipariş ASLA kapanmaz;
-                // ekran koli adımında kilitleniyordu. Siparişi "engelli" işaretle,
-                // operatör atlayıp sonraki siparişe geçebilsin.
+                // Satış siparişi yoksa/kapalıysa bu paketleme sunucuda
+                // tamamlanamaz. Siparişi sessizce atlamak ileride tüm pick'i
+                // tamamlandı gösterirdi; bu yüzden açık destek gerektiren
+                // fail-closed durumda bırakılır.
                 val gone = r.httpCode == 404 ||
                     err.contains("Sales Header does not exist", ignoreCase = true) ||
                     err.contains("artık açık değil", ignoreCase = true)
                 if (gone) {
-                    blockedOrders = blockedOrders + orderNo
-                    msg = PackMsg("$orderNo kapatılamıyor — atlandı, sorumluya bildirin.", PackTone.WARN)
-                } else msg = PackMsg("Koli bağlanamadı: $err", PackTone.ERR)
+                    msg = PackMsg("$orderNo artık açık değil. Bu paketleme tamamlanamaz; depo sorumlusuna bildirin.", PackTone.ERR)
+                } else {
+                    val friendly = QcErrorParser.friendlyStatus(err, r.httpCode).removePrefix("HATA: ")
+                    msg = PackMsg(friendly, PackTone.ERR)
+                }
             }
             busy = false
         }
@@ -523,19 +633,16 @@ private fun PickPackingDocument(
 
     val byOrder = lines.groupBy { it.optString("sourceOrderNo") }
     // Koli bekleyen siparişler: tüm satırları paketlenmiş ama henüz kolisiz.
-    val completedButUnboxed = byOrder.filter { (orderNo, ords) ->
-        // BC'de açık olmayan sipariş kapanamaz → koli adımına düşürme,
-        // yoksa ekran o siparişte kilitleniyor.
-        orderNo !in blockedOrders &&
-            ords.isNotEmpty() &&
+    val completedButUnboxed = if (linesComplete) byOrder.filter { (orderNo, ords) ->
+        ords.isNotEmpty() &&
             ords.all { it.optDouble("qtyPacked") >= it.optDouble("qtyExpected") } &&
             ords.any { !it.hasShippingBox() }
-    }.keys.toList()
+    }.keys.toList() else emptyList()
     // Tüm akışlarda ürün önce, koli sonra: bir siparişin bütün ürünleri
     // doğrulanmadan koli okutma/oluşturma adımı gösterilmez.
     val boxNeeded = completedButUnboxed
     // Tüm satırlar paketlendi + hepsi kolilendi → pick biter.
-    val allBoxed = lines.isNotEmpty() &&
+    val allBoxed = linesComplete && lines.isNotEmpty() &&
         lines.all { it.optDouble("qtyPacked") >= it.optDouble("qtyExpected") && it.hasShippingBox() }
     LaunchedEffect(allBoxed) { if (allBoxed) { kotlinx.coroutines.delay(900); pickDone = true } }
 
@@ -652,7 +759,7 @@ private fun PickPackingDocument(
                             value = lpConfirmInput,
                             onValueChange = { lpConfirmInput = it },
                             modifier = Modifier.fillMaxWidth(),
-                            enabled = !busy && mainLp.isNotBlank(),
+                            enabled = !busy && linesComplete && mainLp.isNotBlank(),
                             onScanned = { confirmMainLp(it) },
                         )
                     }
@@ -678,7 +785,7 @@ private fun PickPackingDocument(
             // Koli adımı yokken ürün okutma alanı SABİT durur (klavye/tetik odağı
             // kaymasın). Koli adımı gelince kart listenin içine alınır — yatay
             // ekranda sabit dursaydı listeyi sıkıştırıp satırları kırpardı.
-            if (lpConfirmed && boxOrderNo == null) {
+            if (lpConfirmed && linesComplete && boxOrderNo == null) {
                 if (activeOrder != null) {
                     Text(
                         "Önce $activeOrder: ${packQty(orderRemaining(activeOrder))} ürün kaldı",
@@ -695,14 +802,18 @@ private fun PickPackingDocument(
                     modifier = Modifier.fillMaxWidth(),
                     // İyimser okutma: arka planda BC yazımı sürerken bile
                     // operatör sonraki ürünü okutabilsin.
-                    enabled = sessionId > 0,
+                    enabled = sessionId > 0 && linesComplete,
                     onScanned = { scanItem(it) },
                 )
                 Spacer(Modifier.height(10.dp))
             }
                 }
             }
-                if (!lpConfirmed) {
+                if (!linesComplete) {
+                    item(key = "incomplete-lines") {
+                        EmptyState("Paketleme satırlarının tamamı alınamadı. Yenileyip tekrar deneyin.")
+                    }
+                } else if (!lpConfirmed) {
                     item(key = "lp-wait") { EmptyState("Önce toplama sepetinin LP'sini doğrulayın.") }
                 } else if (boxOrderNo != null) {
                     item(key = "box-step") {
@@ -711,16 +822,11 @@ private fun PickPackingDocument(
                             customer = customerByOrder[boxOrderNo].orEmpty(),
                             remaining = boxNeeded.size,
                             closesOrder = orderRemaining(boxOrderNo) <= 0.0,
-                            busy = busy,
+                            busy = !packingCanCloseOrder(busy, pendingItemWrites),
                             boxInput = boxInput,
                             onBoxInput = { boxInput = it },
                             onUseCarton = { scanBox(boxOrderNo, "") },
                             onScanBox = { scanBox(boxOrderNo, it) },
-                            onSkip = {
-                                blockedOrders = blockedOrders + boxOrderNo
-                                boxInput = ""
-                                msg = PackMsg("$boxOrderNo atlandı — sorumluya bildirin.", PackTone.WARN)
-                            },
                         )
                     }
                 } else {
@@ -765,13 +871,12 @@ private fun PickPackingDocument(
                             val remaining = orderRemaining(orderNo)
                             val state = when {
                                 boxed -> "kapandı"
-                                orderNo in blockedOrders -> "atlandı"
                                 remaining <= 0.0 -> "koli bekliyor"
                                 else -> "${packQty(remaining)} ürün"
                             }
                             val tone = when {
                                 boxed -> PackTone.OK
-                                orderNo in blockedOrders || remaining <= 0.0 -> PackTone.WARN
+                                remaining <= 0.0 -> PackTone.WARN
                                 else -> PackTone.INFO
                             }
                             OrderStatusRow(
@@ -788,7 +893,18 @@ private fun PickPackingDocument(
         }
         BottomActionBar {
             OutlinedButton(
-                onClick = { scope.launch { busy = true; reloadLines(); busy = false } },
+                onClick = {
+                    scope.launch {
+                        busy = true
+                        if (sessionId <= 0) {
+                            startIfNeeded()
+                        } else {
+                            msg = if (reloadLines()) PackMsg()
+                            else PackMsg("Liste yenilenemedi. Bağlantıyı kontrol edip tekrar deneyin.", PackTone.ERR)
+                        }
+                        busy = false
+                    }
+                },
                 enabled = !busy,
                 modifier = Modifier.fillMaxWidth(),
             ) { Text("Yenile") }
@@ -908,7 +1024,6 @@ private fun BoxForOrderCard(
     onBoxInput: (String) -> Unit,
     onUseCarton: () -> Unit,
     onScanBox: (String) -> Unit,
-    onSkip: () -> Unit = {},
 ) {
     val palette = bcwmsStatus()
     Card(
@@ -965,15 +1080,6 @@ private fun BoxForOrderCard(
                 Text(
                     if (closesOrder) "Barkodsuz kapat (karton üret)" else "Barkodsuz koli oluştur",
                     fontWeight = FontWeight.Bold,
-                )
-            }
-            // Kaçış yolu: sipariş BC'de kapanamıyorsa (silinmiş/kaydedilmiş)
-            // operatör burada kilitlenmesin, sonraki siparişe geçebilsin.
-            TextButton(onClick = onSkip, enabled = !busy, modifier = Modifier.fillMaxWidth()) {
-                Text(
-                    "Kapatılamıyor, atla",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
         }

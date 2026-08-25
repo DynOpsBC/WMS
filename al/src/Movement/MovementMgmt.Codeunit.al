@@ -1,6 +1,18 @@
 codeunit 72045 "DOPSWHS Movement Mgmt"
 {
     Access = Public;
+    Permissions =
+        tabledata Item = R,
+        tabledata Location = R,
+        tabledata Bin = R,
+        tabledata "Item Journal Template" = RIMD,
+        tabledata "Item Journal Batch" = RIMD,
+        tabledata "Item Journal Line" = RIMD,
+        tabledata "Warehouse Journal Template" = RIMD,
+        tabledata "Warehouse Journal Batch" = RIMD,
+        tabledata "Warehouse Journal Line" = RIMD,
+        tabledata "Reservation Entry" = RIMD,
+        tabledata "Whse. Item Tracking Line" = RIMD;
 
     procedure EnsureDeviceJournalBatch(UserId: Code[50]): Code[10]
     var
@@ -38,33 +50,61 @@ codeunit 72045 "DOPSWHS Movement Mgmt"
     procedure AdHocMove(FromBinCode: Code[20]; ToBinCode: Code[20]; ItemNo: Code[20]; LpNo: Code[20]; Qty: Decimal; UserId: Code[50]; LotNo: Code[50])
     var
         Setup: Record "DOPSWHS Setup";
+        LocationCode: Code[10];
+    begin
+        Setup.Get('');
+        // The mobile form captures bins, not a location. Resolve the location from the source bin
+        // (the bins are location-scoped) so the reclass posts where the bin actually lives, instead
+        // of forcing the Setup default location (which may not own this bin).
+        LocationCode := ResolveLocationForBin(FromBinCode, Setup."Default Location Code");
+        ExecuteAdHocMove(LocationCode, FromBinCode, ToBinCode, ItemNo, LpNo, Qty, UserId, LotNo);
+    end;
+
+    /// <summary>
+    /// Posts a bin-to-bin move in an explicitly known location. LP operations use this overload so
+    /// an identically named bin in another location can never receive the stock accidentally.
+    /// </summary>
+    procedure AdHocMoveAtLocation(LocationCode: Code[10]; FromBinCode: Code[20]; ToBinCode: Code[20]; ItemNo: Code[20]; LpNo: Code[20]; Qty: Decimal; UserId: Code[50]; LotNo: Code[50])
+    begin
+        ExecuteAdHocMove(LocationCode, FromBinCode, ToBinCode, ItemNo, LpNo, Qty, UserId, LotNo);
+    end;
+
+    local procedure ExecuteAdHocMove(LocationCode: Code[10]; FromBinCode: Code[20]; ToBinCode: Code[20]; ItemNo: Code[20]; LpNo: Code[20]; Qty: Decimal; UserId: Code[50]; LotNo: Code[50])
+    var
         Location: Record Location;
+        FromBin: Record Bin;
+        ToBin: Record Bin;
         ItemJournalTemplate: Record "Item Journal Template";
         ItemJournalLine: Record "Item Journal Line";
         ItemJnlPostBatch: Codeunit "Item Jnl.-Post Batch";
         Telemetry: Codeunit "DOPSWHS Telemetry";
         CustomDimensions: Dictionary of [Text, Text];
         BatchName: Code[10];
-        LocationCode: Code[10];
     begin
         if ItemNo = '' then
             Error('Item No. is required for ad-hoc moves.');
         if Qty <= 0 then
             Error('Quantity must be greater than zero.');
-
-        Setup.Get('');
-        // The mobile form captures bins, not a location. Resolve the location from the source bin
-        // (the bins are location-scoped) so the reclass posts where the bin actually lives, instead
-        // of forcing the Setup default location (which may not own this bin).
-        LocationCode := ResolveLocationForBin(FromBinCode, Setup."Default Location Code");
         if LocationCode = '' then
             Error('Cannot determine a location for bin %1. Set a Default Location Code in DOPSWHS Setup, or scan a bin that exists in a warehouse location.', FromBinCode);
+        if FromBinCode = '' then
+            Error('Source bin is required.');
+        if ToBinCode = '' then
+            Error('Target bin is required.');
+        if FromBinCode = ToBinCode then
+            Error('Source bin and target bin must be different.');
+        if not Location.Get(LocationCode) then
+            Error('Location %1 does not exist.', LocationCode);
+        if not FromBin.Get(LocationCode, FromBinCode) then
+            Error('Source bin %1 does not exist in location %2.', FromBinCode, LocationCode);
+        if not ToBin.Get(LocationCode, ToBinCode) then
+            Error('Target bin %1 does not exist in location %2.', ToBinCode, LocationCode);
 
         // Yönlendirilmiş (Directed Put-away and Pick) lokasyonda Item Journal
         // bin taşıyamaz — post adjustment bin'den (W-99-...) geçer ve raf
         // seviyesinde hareket OLMAZ. Doğru araç: Warehouse Reclass Journal
         // (Movement) — bin'den bin'e, ILE'ye dokunmadan.
-        if Location.Get(LocationCode) and Location."Directed Put-away and Pick" then begin
+        if Location."Directed Put-away and Pick" then begin
             RegisterWhseMove(LocationCode, FromBinCode, ToBinCode, ItemNo, Qty, UserId, LotNo);
             CustomDimensions.Add('Category', 'Movement');
             // Hareketi yapan operatör terminalden parametre olarak geliyor
@@ -97,6 +137,7 @@ codeunit 72045 "DOPSWHS Movement Mgmt"
         Session.LogMessage('DOPSWHS-Move-AdHoc', StrSubstNo('Ad-hoc move item %1 qty %2 from %3 to %4 lp %5', ItemNo, Qty, FromBinCode, ToBinCode, LpNo), Verbosity::Normal, DataClassification::SystemMetadata, TelemetryScope::ExtensionPublisher, CustomDimensions);
         // Post via batch codeunit (22/23) rather than "Item Jnl.-Post" (241): the latter raises a
         // "Do you want to post?" Confirm that fails as a client callback over the API / on the handheld.
+        ItemJnlPostBatch.SetSuppressCommit(true);
         ItemJnlPostBatch.Run(ItemJournalLine);
     end;
 
@@ -227,6 +268,7 @@ codeunit 72045 "DOPSWHS Movement Mgmt"
 
         // Item Jnl.-Post Batch'in ambar karşılığı — confirm diyaloğu açmadan
         // register eder (web servis bağlamı).
+        WhseJnlRegisterBatch.SetSuppressCommit(true);
         WhseJnlRegisterBatch.Run(WhseJournalLine);
     end;
 

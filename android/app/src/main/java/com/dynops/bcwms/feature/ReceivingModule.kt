@@ -72,18 +72,28 @@ private fun WhseReceiptTab() {
         scope.launch {
             loading = true; status = "Yükleniyor..."
             val myUser = if (showAll) "" else BcApi.currentUserId(context)
+            if (!canLoadAssignedOnlyList(showAll, myUser)) {
+                rows = emptyList(); loading = false
+                status = "HATA: Depo kullanıcısı doğrulanamadı. Yeniden giriş yapın."
+                return@launch
+            }
             // Arama yalnız belge no'ya değil, SATIRLARDAKİ ürün no'ya da bakar:
             // "1002" yazınca 1002'yi içeren belgeler de listede kalır. Belgeler
             // aramasız çekilir, eşleşme istemcide birleştirilir.
             val filter = com.dynops.bcwms.ui.buildODataFilter(
                 com.dynops.bcwms.ui.assignedToMeClause(myUser, enabled = !showAll),
             )
-            val r = BcApi.getWithStandardFallback(context, "receipts?\$top=100&\$orderby=no desc&\$select=no,locationCode,assignedUserId,sourceNo,vendorSourceName,dueDate,percentComplete$filter")
-            val all = if (r.ok) BcApi.parseValueArray(r.body) else emptyList()
+            val page = BcApi.getAllPagesWithStandardFallback(context, "receipts?\$top=100&\$orderby=no desc&\$select=no,locationCode,assignedUserId,sourceNo,vendorSourceName,dueDate,percentComplete$filter")
+            val all = if (page.complete) page.rows else emptyList()
             val q = search.trim()
             var itemHit = 0
             rows = if (q.isBlank()) all else {
                 val itemDocsSet = com.dynops.bcwms.ui.docsContainingItem(context, "receiptLines", q)
+                if (itemDocsSet == null) {
+                    rows = emptyList(); loading = false
+                    status = "HATA: Ürün-belge eşleşmelerinin tamamı alınamadı. Yenileyin."
+                    return@launch
+                }
                 all.filter {
                     it.optString("no").contains(q, ignoreCase = true) ||
                         firstValue(it, "sourceNo").contains(q, ignoreCase = true) ||
@@ -91,8 +101,8 @@ private fun WhseReceiptTab() {
                 }.also { filtered -> itemHit = filtered.count { it.optString("no") in itemDocsSet } }
             }
             loading = false
-            status = if (!r.ok) "HATA: Mal kabul listesi alınamadı (HTTP ${r.httpCode})"
-                else if (rows.isEmpty()) (if (q.isNotBlank()) "BOŞ: '$q' ile eşleşen belge/ürün yok" else if (showAll) "BOŞ: Açık ambar mal kabul belgesi yok (HTTP ${r.httpCode})" else "BOŞ: Size atanmış mal kabul yok (HTTP ${r.httpCode})")
+            status = if (!page.complete) "HATA: Mal kabul listesinin tamamı alınamadı. Yenileyin."
+                else if (rows.isEmpty()) (if (q.isNotBlank()) "BOŞ: '$q' ile eşleşen belge/ürün yok" else if (showAll) "BOŞ: Açık ambar mal kabul belgesi yok" else "BOŞ: Size atanmış mal kabul yok")
                 else "TAMAM: ${rows.size} belge" + (if (itemHit > 0) " · 🔎 '$q' ürününü içerenler dahil" else "")
         }
     }
@@ -109,6 +119,7 @@ private fun WhseReceiptTab() {
         documentsEndpoint = "receipts",
         acceptDocTypes = setOf("receipt"),
         onDocument = { selected = it },
+        onError = { status = it },
     ) { item, docs ->
         when { docs.isEmpty() -> status = "⚠️ '$item' açık belgede yok"; docs.size == 1 -> selected = docs.first(); else -> { itemDocs = item to docs; status = "TAMAM: '$item' → ${docs.size} belge" } }
     }
@@ -133,7 +144,7 @@ private fun WhseReceiptTab() {
                 Card(onClick = { selected = d.optString("no") }, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(10.dp)) {
                     Column(Modifier.padding(12.dp)) {
                         Text(d.optString("no"), fontWeight = FontWeight.Bold)
-                        Text("Lokasyon: ${firstValue(d, "locationCode")} · Kaynak: ${firstValue(d, "sourceNo")} · 👤 Atanan Kullanıcı: ${firstValue(d, "assignedUserId").ifBlank { "-" }}", fontSize = 12.sp, color = Color.Gray)
+                        Text("Lokasyon: ${firstValue(d, "locationCode")} · Kaynak: ${firstValue(d, "sourceNo")} · 👤 Atanan Kullanıcı: ${rawValue(d, "assignedUserId").ifBlank { "-" }}", fontSize = 12.sp, color = Color.Gray)
                         val pct = d.optInt("percentComplete")
                         LinearProgressIndicator(progress = { pct / 100f }, modifier = Modifier.fillMaxWidth().padding(top = 4.dp))
                     }
@@ -151,6 +162,9 @@ private fun ReceiveDocument(no: String, onBack: () -> Unit) {
     val scope = rememberCoroutineScope()
     var header by remember { mutableStateOf<JSONObject?>(null) }
     var lines by remember { mutableStateOf<List<JSONObject>>(emptyList()) }
+    var headerLoaded by remember { mutableStateOf(false) }
+    var linesComplete by remember { mutableStateOf(false) }
+    var myUserId by remember { mutableStateOf("") }
     var status by remember { mutableStateOf("") }
     var busy by remember { mutableStateOf(false) }
     var activeLp by remember { mutableStateOf<String?>(null) }
@@ -174,6 +188,7 @@ private fun ReceiveDocument(no: String, onBack: () -> Unit) {
     var scanLot by remember { mutableStateOf("") }
     var scanSerial by remember { mutableStateOf("") }
     var scanSupplierLot by remember { mutableStateOf("") }
+    var scanExpiryDate by remember { mutableStateOf("") }
     // İade birleştirme: aynı ürün+bin satırlarını tek grupta göster, tek okutmada dağıt.
     var merge by remember { mutableStateOf(false) }
     var groupTarget by remember { mutableStateOf<LineGroup?>(null) }
@@ -184,16 +199,27 @@ private fun ReceiveDocument(no: String, onBack: () -> Unit) {
     fun reload() {
         scope.launch {
             busy = true
+            header = null; lines = emptyList(); headerLoaded = false; linesComplete = false
+            myUserId = BcApi.currentUserId(context).trim()
             val h = BcApi.get(context, "receipts('$no')")
-            if (h.ok) header = JSONObject(h.body)
-            val l = BcApi.get(context, "receiptLines?\$filter=no eq '$no'&\$top=100")
-            lines = if (l.ok) BcApi.parseValueArray(l.body) else emptyList()
+            header = if (h.ok) runCatching { JSONObject(h.body) }.getOrNull() else null
+            headerLoaded = header != null
+            val page = BcApi.getAllPages(context, "receiptLines?\$filter=no eq '$no'&\$top=100")
+            lines = page.rows
+            linesComplete = page.complete
+            if (!headerLoaded || !linesComplete) {
+                status = "HATA: Belgenin tüm satırları yüklenemedi. Yenileyip tekrar deneyin."
+            }
             busy = false
         }
     }
     LaunchedEffect(no) { reload() }
 
     fun action(name: String, body: String, okMsg: String, onResult: (BcApi.ApiResult) -> Unit = {}) {
+        if (!canMutateAssignedDocument(header?.optString("assignedUserId").orEmpty(), myUserId)) {
+            status = documentOwnershipMessage(header?.optString("assignedUserId").orEmpty(), myUserId)
+            return
+        }
         scope.launch {
             busy = true; status = "$name..."
             val r = BcApi.boundAction(context, "receipts", no, name, body)
@@ -204,11 +230,35 @@ private fun ReceiveDocument(no: String, onBack: () -> Unit) {
         }
     }
 
+    suspend fun assignReceiptLot(lineNo: Int): Result<String> {
+        if (lineNo <= 0)
+            return Result.failure(IllegalStateException("Mal kabul satırı belirlenemedi."))
+        val safeNo = no.replace("'", "''")
+        val result = BcApi.boundAction(
+            context = context,
+            entitySet = "receiptLines",
+            key = "no='$safeNo',lineNo=$lineNo",
+            action = "assignLotNo",
+        )
+        if (!result.ok)
+            return Result.failure(
+                IllegalStateException(
+                    "${BcApi.errorMessage(result.body)} (HTTP ${result.httpCode})"
+                )
+            )
+        val assigned = BcApi.scalarValue(result.body).trim()
+        return if (assigned.isNotBlank()) Result.success(assigned)
+        else Result.failure(IllegalStateException("BC lot numarası üretmedi."))
+    }
+
     val h = header
+    val assignedUserId = h?.optString("assignedUserId")?.trim().orEmpty()
+    val canMutate = headerLoaded && linesComplete &&
+        canMutateAssignedDocument(assignedUserId, myUserId)
     // Donanım tarayıcı: satırı okut → 1 eşleşme miktar ekranını açar, çok eşleşme
     // listeyi o ürüne filtreler, eşleşme yoksa uyarı. Dialog/sheet açıkken kapalı.
     DocumentScanHandler(
-        enabled = !showQty && !showScan,
+        enabled = canMutate && !busy && !showQty && !showScan,
         lines = lines,
         onSingleMatch = { line, r ->
             scannedItem = line.optString("itemNo"); scannedLine = line
@@ -216,6 +266,7 @@ private fun ReceiveDocument(no: String, onBack: () -> Unit) {
             scanLot = line.optString("lotNo").ifBlank { r.lotNo ?: "" }
             scanSerial = line.optString("serialNo").ifBlank { r.serialNo ?: "" }
             scanSupplierLot = line.optString("supplierLotNo")
+            scanExpiryDate = line.optString("expiryDate")
             scanFilter = ""
             showQty = true
         },
@@ -240,7 +291,7 @@ private fun ReceiveDocument(no: String, onBack: () -> Unit) {
     }
     // Özet/aktiflik sayıları: "hazır" = operatörün miktar girdiği satır.
     val readyCount = lines.count { rowDone(it) || rowPartial(it) }
-    val postLines = lines.filter { it.optDouble("qtyToReceive", 0.0) > 0.0 }
+    val postLines = lines.filter { it.optInt("lineNo") in touched && it.optDouble("qtyToReceive", 0.0) > 0.0 }
     val postQty = postLines.sumOf { it.optDouble("qtyToReceive", 0.0) }
 
     Column(Modifier.fillMaxSize()) {
@@ -257,13 +308,21 @@ private fun ReceiveDocument(no: String, onBack: () -> Unit) {
                 title = no,
                 subtitle = "Lokasyon: ${h?.optString("locationCode") ?: ""} · Kaynak: ${h?.optString("sourceNo") ?: "-"}" +
                     (activeLp?.let { "\nAktif LP: $it" } ?: ""),
-                badge = firstValue(h ?: JSONObject(), "assignedUserId").ifBlank { "Atanmadı" },
+                badge = rawValue(h ?: JSONObject(), "assignedUserId").ifBlank { "Atanmadı" },
                 percent = h?.optDouble("percentComplete")?.toInt() ?: 0
             )
             Spacer(Modifier.height(6.dp))
             LineReadySummary(ready = readyCount, total = lines.size, stagedQty = postQty)
             Spacer(Modifier.height(6.dp))
             StatusText(status)
+            if (!canMutate && headerLoaded) {
+                Text(
+                    documentOwnershipMessage(assignedUserId, myUserId),
+                    color = bcwmsStatus().danger,
+                    fontSize = 13.sp,
+                    modifier = Modifier.padding(vertical = 4.dp),
+                )
+            }
             Spacer(Modifier.height(4.dp))
             val capReceipt: (JSONObject) -> Double = { l ->
                 val q = l.optDouble("quantity"); val rec = l.optDouble("qtyReceived")
@@ -290,7 +349,12 @@ private fun ReceiveDocument(no: String, onBack: () -> Unit) {
                             partial -> CardDefaults.cardColors(containerColor = bcwmsStatus().warning.copy(alpha = 0.18f))
                             else -> CardDefaults.cardColors()
                         }
-                        Card(onClick = { groupTarget = g }, modifier = Modifier.fillMaxWidth(), colors = colors) {
+                        Card(
+                            onClick = { groupTarget = g },
+                            enabled = canMutate && !busy,
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = colors,
+                        ) {
                             Column(Modifier.padding(14.dp)) {
                                 Text("${donePrefix(done)}${g.itemNo} — ${g.description}", fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
                                 Text("${g.count} satır · Toplam kalan: ${fmtNum(g.totalOutstanding)}" + if (staged > 0) " · Girilen: ${fmtNum(staged)}" else "", fontSize = 12.sp, color = Color.Gray)
@@ -310,12 +374,13 @@ private fun ReceiveDocument(no: String, onBack: () -> Unit) {
                     isPartial = rowPartial,
                     showProgress = true,
                     expandRows = true,
-                    onRowClick = { ln ->
+                    onRowClick = { ln -> if (canMutate && !busy) {
                         scannedItem = ln.optString("itemNo"); scannedLine = ln
                         scanLot = ln.optString("lotNo"); scanSerial = ln.optString("serialNo")
                         scanSupplierLot = ln.optString("supplierLotNo")
+                        scanExpiryDate = ln.optString("expiryDate")
                         showQty = true
-                    },
+                    } },
                 )
             }
         }
@@ -337,14 +402,34 @@ private fun ReceiveDocument(no: String, onBack: () -> Unit) {
                     status = if (r.ok) "TAMAM: Bana atandı (HTTP ${r.httpCode})" else "HATA: ${BcApi.errorMessage(r.body)} (HTTP ${r.httpCode})"
                     if (r.ok) reload()
                 }
-            }, enabled = !busy, modifier = Modifier.weight(1f)) { Text("Bana Ata") }
-            Button(onClick = { showScan = true }, enabled = !busy, modifier = Modifier.weight(1f)) { Text("📷 Tara") }
+            }, enabled = !busy && headerLoaded && linesComplete && myUserId.isNotBlank() && !canMutate, modifier = Modifier.weight(1f)) { Text("Bana Ata") }
+            Button(onClick = { showScan = true }, enabled = !busy && canMutate, modifier = Modifier.weight(1f)) { Text("📷 Tara") }
             if (activeLp == null) {
                 OutlinedButton(onClick = {
-                    action("startLP", """{"lpTemplateCode":"CARTON-S"}""", "LP başlatıldı") { r ->
-                        if (r.ok) activeLp = BcApi.scalarValue(r.body)
+                    scope.launch {
+                        busy = true
+                        status = "Uygun koli şablonu belirleniyor..."
+                        val template = resolveLpTemplate(context, LpPurpose.CARTON)
+                        if (template == null) {
+                            status = "HATA: Uygun koli şablonu belirlenemedi. LP ekranından şablon seçerek bir LP oluşturun."
+                            busy = false
+                            return@launch
+                        }
+                        val r = BcApi.boundAction(
+                            context, "receipts", no, "startLP",
+                            JSONObject().apply { put("lpTemplateCode", template) }.toString(),
+                        )
+                        val createdLp = if (r.ok) BcApi.scalarValue(r.body).trim() else ""
+                        status = when {
+                            !r.ok -> QcErrorParser.friendlyStatus(BcApi.errorMessage(r.body), r.httpCode)
+                            createdLp.isBlank() -> "HATA: LP oluşturuldu ancak numarası alınamadı. Belgeyi yenileyip kontrol edin."
+                            else -> "TAMAM: $createdLp başlatıldı"
+                        }
+                        if (createdLp.isNotBlank()) activeLp = createdLp
+                        busy = false
+                        if (createdLp.isNotBlank()) reload()
                     }
-                }, enabled = !busy, modifier = Modifier.weight(1f)) { Text("LP Başlat") }
+                }, enabled = !busy && canMutate, modifier = Modifier.weight(1f)) { Text("LP Başlat") }
             } else {
                 OutlinedButton(onClick = {
                     val lp = activeLp!!
@@ -355,14 +440,14 @@ private fun ReceiveDocument(no: String, onBack: () -> Unit) {
                     }.toString(), "LP kapatıldı") { r ->
                         if (r.ok) activeLp = null
                     }
-                }, enabled = !busy, modifier = Modifier.weight(1f)) { Text("LP Kapat") }
+                }, enabled = !busy && canMutate, modifier = Modifier.weight(1f)) { Text("LP Kapat") }
             }
         }
         BottomActionBar {
             // TOPLU POST: operatör istediği kadar satırı okutur/girer, belge
             // ancak burada ve özet onayından sonra postalanır. En az bir satır
             // işlenmeden buton açılmaz (yanlışlıkla boş belge postlanmasın).
-            val canPost = readyCount > 0 && postQty > 0.0
+            val canPost = canMutate && readyCount > 0 && postQty > 0.0
             Button(
                 onClick = { showPostConfirm = true },
                 enabled = !busy && canPost,
@@ -387,12 +472,46 @@ private fun ReceiveDocument(no: String, onBack: () -> Unit) {
             onDismiss = { showPostConfirm = false },
             onConfirm = {
                 showPostConfirm = false
-                action("postToPrinter", JSONObject().apply {
-                    put("print", printReceipt)
-                    put("invoice", false)
-                    put("printerId", getDefaultPrinter(context, PRINTER_USAGE_DOCUMENT))
-                }.toString(), "Mal kabul kaydedildi") { r ->
-                    if (r.ok) touched = emptySet()
+                scope.launch {
+                    if (!canMutateAssignedDocument(header?.optString("assignedUserId").orEmpty(), myUserId)) {
+                        status = documentOwnershipMessage(header?.optString("assignedUserId").orEmpty(), myUserId)
+                        return@launch
+                    }
+                    busy = true; status = "Mal kabul hazırlanıyor..."
+                    // BC yeni belgelerde tüm satırları önceden doldurabilir. Bu
+                    // oturumda okutulmayan satırları sıfırlamadan post etmek tüm
+                    // belgeyi yanlışlıkla kaydeder; seri ve fail-closed ilerle.
+                    var preflightOk = true
+                    var resetCount = 0
+                    for (line in lines.filter {
+                        it.optInt("lineNo") !in touched && it.optDouble("qtyToReceive", 0.0) > 0.0
+                    }) {
+                        val reset = BcApi.patch(
+                            context,
+                            "receiptLines(no='${no.replace("'", "''")}',lineNo=${line.optInt("lineNo")})",
+                            JSONObject().apply { put("qtyToReceive", 0) }.toString(),
+                        )
+                        if (!reset.ok) { preflightOk = false; break }
+                        resetCount++
+                    }
+                    if (!preflightOk) {
+                        busy = false
+                        status = receivingPreflightFailureStatus(resetCount)
+                        reload()
+                        return@launch
+                    }
+                    val r = BcApi.boundAction(
+                        context, "receipts", no, "postToPrinter",
+                        JSONObject().apply {
+                            put("print", printReceipt)
+                            put("invoice", false)
+                            put("printerId", getDefaultPrinter(context, PRINTER_USAGE_DOCUMENT))
+                        }.toString(),
+                    )
+                    busy = false
+                    status = if (r.ok) "TAMAM: Mal kabul kaydedildi."
+                        else QcErrorParser.friendlyStatus(BcApi.errorMessage(r.body), r.httpCode)
+                    if (r.ok) { touched = emptySet(); reload() }
                 }
             },
         )
@@ -403,6 +522,7 @@ private fun ReceiveDocument(no: String, onBack: () -> Unit) {
             scannedItem = item; scannedLine = line
             scanLot = line?.optString("lotNo") ?: ""; scanSerial = line?.optString("serialNo") ?: ""
             scanSupplierLot = line?.optString("supplierLotNo") ?: ""
+            scanExpiryDate = line?.optString("expiryDate") ?: ""
             showScan = false; showQty = true
         }, lines = lines, matchKey = "itemNo")
     }
@@ -416,13 +536,26 @@ private fun ReceiveDocument(no: String, onBack: () -> Unit) {
             initialLot = scanLot,
             initialSerial = scanSerial,
             initialSupplierLot = scanSupplierLot,
-            showSupplierLot = line?.optBoolean("supplierLotRequired") == true,
-            supplierLotRequired = line?.optBoolean("supplierLotRequired") == true,
-            onDismiss = { showQty = false; scanLot = ""; scanSerial = ""; scanSupplierLot = "" },
+            initialExpiryDate = scanExpiryDate,
+            showSupplierLot = line?.optBoolean("lotRequired") == true,
+            supplierLotRequired = false,
+            lotRequired = line?.optBoolean("lotRequired") == true,
+            serialRequired = line?.optBoolean("serialRequired") == true,
+            showExpiryDate = line?.optBoolean("expirationDateEnabled") == true,
+            expiryDateRequired = line?.optBoolean("expirationDateRequired") == true,
+            onAssignLotNo = if (line?.optBoolean("lotRequired") == true) {
+                { assignReceiptLot(line.optInt("lineNo")) }
+            } else null,
+            onDismiss = {
+                showQty = false
+                scanLot = ""; scanSerial = ""; scanSupplierLot = ""; scanExpiryDate = ""
+            },
             onConfirm = { res ->
-                showQty = false; scanLot = ""; scanSerial = ""; scanSupplierLot = ""
+                showQty = false
+                scanLot = ""; scanSerial = ""; scanSupplierLot = ""; scanExpiryDate = ""
                 val ln = scannedLine
                 if (ln == null) { status = "HATA: Satır eşleşmedi — listeden seçin"; return@QuantityDialogSheet }
+                if (!canMutate) { status = documentOwnershipMessage(assignedUserId, myUserId); return@QuantityDialogSheet }
                 scope.launch {
                     busy = true; status = "Satır güncelleniyor..."
                     val body = JSONObject().apply {
@@ -430,6 +563,7 @@ private fun ReceiveDocument(no: String, onBack: () -> Unit) {
                         if (res.lotNo.isNotBlank()) put("lotNo", res.lotNo)
                         if (res.serialNo.isNotBlank()) put("serialNo", res.serialNo)
                         if (res.supplierLotNo.isNotBlank()) put("supplierLotNo", res.supplierLotNo)
+                        if (res.expiryDate.isNotBlank()) put("expiryDate", res.expiryDate)
                         activeLp?.let { put("licensePlateNo", it) }
                     }.toString()
                     val lineNo = ln.optInt("lineNo")
@@ -445,7 +579,11 @@ private fun ReceiveDocument(no: String, onBack: () -> Unit) {
     }
     val gt = groupTarget
     if (gt != null) {
-        val groupRequiresSupplierLot = gt.lines.any { it.optBoolean("supplierLotRequired") }
+        val groupRequiresLot = gt.lines.any { it.optBoolean("lotRequired") }
+        val groupRequiresSerial = gt.lines.any { it.optBoolean("serialRequired") }
+        val groupUsesExpiryDate = gt.lines.any { it.optBoolean("expirationDateEnabled") }
+        val groupRequiresExpiryDate = gt.lines.any { it.optBoolean("expirationDateRequired") }
+        val firstGroupLine = gt.lines.first()
         val capReceipt: (JSONObject) -> Double = { l ->
             val q = l.optDouble("quantity"); val rec = l.optDouble("qtyReceived")
             if (q > 0) (q - rec).coerceAtLeast(0.0) else (l.optDouble("qtyToReceive").takeIf { it > 0 } ?: 1.0)
@@ -456,32 +594,57 @@ private fun ReceiveDocument(no: String, onBack: () -> Unit) {
             initialQty = gt.totalOutstanding.takeIf { it > 0 } ?: 1.0,
             initialUom = gt.lines.first().optString("unitOfMeasureCode"),
             initialLot = gt.lines.first().optString("lotNo"),
+            initialSerial = gt.lines.first().optString("serialNo"),
             initialSupplierLot = gt.lines.firstNotNullOfOrNull {
                 it.optString("supplierLotNo").takeIf(String::isNotBlank)
             }.orEmpty(),
-            showSupplierLot = groupRequiresSupplierLot,
-            supplierLotRequired = groupRequiresSupplierLot,
+            initialExpiryDate = gt.lines.firstNotNullOfOrNull {
+                it.optString("expiryDate").takeIf(String::isNotBlank)
+            }.orEmpty(),
+            showSupplierLot = groupRequiresLot,
+            supplierLotRequired = false,
+            lotRequired = groupRequiresLot,
+            serialRequired = groupRequiresSerial,
+            showExpiryDate = groupUsesExpiryDate,
+            expiryDateRequired = groupRequiresExpiryDate,
+            onAssignLotNo = if (groupRequiresLot) {
+                { assignReceiptLot(firstGroupLine.optInt("lineNo")) }
+            } else null,
             onDismiss = { groupTarget = null },
             onConfirm = { res ->
                 groupTarget = null
+                if (!canMutate) { status = documentOwnershipMessage(assignedUserId, myUserId); return@QuantityDialogSheet }
                 scope.launch {
                     busy = true; status = "Grup dağıtılıyor..."
                     val plan = distributeQty(gt, res.quantity, capReceipt)
                     var okCount = 0
                     val okLines = mutableSetOf<Int>()
+                    var firstError = ""
                     for ((ln, q) in plan) {
                         val body = JSONObject().apply {
                             put("qtyToReceive", q)
                             if (res.lotNo.isNotBlank()) put("lotNo", res.lotNo)
+                            if (res.serialNo.isNotBlank()) put("serialNo", res.serialNo)
                             if (res.supplierLotNo.isNotBlank()) put("supplierLotNo", res.supplierLotNo)
+                            if (res.expiryDate.isNotBlank()) put("expiryDate", res.expiryDate)
                             activeLp?.let { put("licensePlateNo", it) }
                         }.toString()
                         val r = BcApi.patch(context, "receiptLines(no='$no',lineNo=${ln.optInt("lineNo")})", body)
-                        if (r.ok) { okCount++; okLines.add(ln.optInt("lineNo")) }
+                        if (r.ok) {
+                            okCount++
+                            okLines.add(ln.optInt("lineNo"))
+                        } else {
+                            firstError = QcErrorParser.friendlyStatus(BcApi.errorMessage(r.body), r.httpCode)
+                            break
+                        }
                     }
                     touched = touched + okLines
                     busy = false
-                    status = "TAMAM: $okCount/${plan.size} satıra dağıtıldı (toplam ${fmtNum(res.quantity)})"
+                    status = if (okCount == plan.size)
+                        "TAMAM: $okCount/${plan.size} satıra dağıtıldı (toplam ${fmtNum(res.quantity)})"
+                    else if (okCount > 0)
+                        "UYARI: $okCount/${plan.size} satır yazıldı; kalan satırlar başarısız. $firstError"
+                    else firstError.ifBlank { "HATA: Grup satırları güncellenemedi." }
                     reload()
                 }
             }
@@ -595,15 +758,20 @@ private fun PurchaseOrderTab() {
             // PDF §3: belge no arama yoktu. Arama artık belge no + satıcı adı +
             // SATIRLARDAKİ ürün no'ya bakar ("1002" → 1002 içeren PO'lar).
             val filter = if (releasedOnly) "&\$filter=status eq 'Released'" else ""
-            val r = BcApi.get(
+            val page = BcApi.getAllPages(
                 context,
                 "purchaseSources?\$top=100&\$orderby=no desc$filter&\$select=no,vendorNo,vendorName,locationCode,expectedReceiptDate,status,lineCount,outstandingQty,percentComplete,requiresWhseReceipt,directReceiveAllowed"
             )
-            val all = if (r.ok) BcApi.parseValueArray(r.body) else emptyList()
+            val all = if (page.complete) page.rows else emptyList()
             val q = search.trim()
             var itemHit = 0
             rows = if (q.isBlank()) all else {
                 val itemDocsSet = com.dynops.bcwms.ui.docsContainingItem(context, "purchaseSourceLines", q)
+                if (itemDocsSet == null) {
+                    rows = emptyList(); loading = false
+                    status = "HATA: Ürün-sipariş eşleşmelerinin tamamı alınamadı. Yenileyin."
+                    return@launch
+                }
                 all.filter {
                     it.optString("no").contains(q, ignoreCase = true) ||
                         firstValue(it, "vendorName").contains(q, ignoreCase = true) ||
@@ -612,8 +780,8 @@ private fun PurchaseOrderTab() {
                 }.also { filtered -> itemHit = filtered.count { it.optString("no") in itemDocsSet } }
             }
             loading = false
-            status = if (!r.ok) "HATA: PO listesi alınamadı (HTTP ${r.httpCode}) — ${BcApi.errorMessage(r.body).take(120)}"
-                else if (rows.isEmpty()) (if (q.isNotBlank()) "BOŞ: '$q' ile eşleşen PO/ürün yok" else "BOŞ: ${if (releasedOnly) "serbest bırakılmış" else "açık"} PO yok (HTTP ${r.httpCode})")
+            status = if (!page.complete) "HATA: Satınalma siparişi listesinin tamamı alınamadı. Yenileyin."
+                else if (rows.isEmpty()) (if (q.isNotBlank()) "BOŞ: '$q' ile eşleşen sipariş/ürün yok" else "BOŞ: ${if (releasedOnly) "serbest bırakılmış" else "açık"} satınalma siparişi yok")
                 else "TAMAM: ${rows.size} satınalma siparişi" + (if (itemHit > 0) " · 🔎 '$q' ürününü içerenler dahil" else "")
         }
     }
@@ -629,6 +797,7 @@ private fun PurchaseOrderTab() {
         documentsEndpoint = "purchaseSources",
         acceptDocTypes = setOf("purchaseOrder"),
         onDocument = { selected = it },
+        onError = { status = it },
     ) { item, docs ->
         when { docs.isEmpty() -> status = "⚠️ '$item' açık PO'da yok"; docs.size == 1 -> selected = docs.first(); else -> { itemDocs = item to docs; status = "TAMAM: '$item' → ${docs.size} PO" } }
     }
@@ -688,6 +857,8 @@ private fun ReceivePurchaseOrder(no: String, onBack: () -> Unit) {
     val scope = rememberCoroutineScope()
     var header by remember { mutableStateOf<JSONObject?>(null) }
     var lines by remember { mutableStateOf<List<JSONObject>>(emptyList()) }
+    var headerLoaded by remember { mutableStateOf(false) }
+    var linesComplete by remember { mutableStateOf(false) }
     var status by remember { mutableStateOf("") }
     var busy by remember { mutableStateOf(false) }
     var invoiceToo by remember { mutableStateOf(false) }
@@ -704,17 +875,28 @@ private fun ReceivePurchaseOrder(no: String, onBack: () -> Unit) {
     var columns by remember { mutableStateOf(ColumnPrefs.get(context, "purchaseOrder", GridColumns.purchaseOrder)) }
     var showColumns by remember { mutableStateOf(false) }
 
-    fun reload() {
+    fun reload(statusAfterReload: String? = null) {
         scope.launch {
             busy = true
+            header = null; lines = emptyList(); headerLoaded = false; linesComplete = false
             // Başlık ve satırlar bağımsız — paralel çek.
             coroutineScope {
                 val hJob = async { BcApi.get(context, "purchaseSources('$no')") }
-                val lJob = async { BcApi.get(context, "purchaseSourceLines?\$filter=no eq '$no' and type eq 'Item'&\$top=200&\$orderby=lineNo") }
+                val lJob = async { BcApi.getAllPages(context, "purchaseSourceLines?\$filter=no eq '$no' and type eq 'Item'&\$top=200&\$orderby=lineNo") }
                 val h = hJob.await()
-                if (h.ok) header = JSONObject(h.body)
+                header = if (h.ok) runCatching { JSONObject(h.body) }.getOrNull() else null
+                headerLoaded = header != null
                 val l = lJob.await()
-                lines = if (l.ok) BcApi.parseValueArray(l.body) else emptyList()
+                lines = l.rows
+                linesComplete = l.complete
+            }
+            status = when {
+                statusAfterReload != null && (!headerLoaded || !linesComplete) ->
+                    "$statusAfterReload Ayrıca güncel siparişin tüm satırları yüklenemedi; tekrar yenileyin."
+                statusAfterReload != null -> statusAfterReload
+                !headerLoaded || !linesComplete ->
+                    "HATA: Siparişin tüm satırları yüklenemedi. Yenileyip tekrar deneyin."
+                else -> status
             }
             busy = false
         }
@@ -722,7 +904,12 @@ private fun ReceivePurchaseOrder(no: String, onBack: () -> Unit) {
     LaunchedEffect(no) { reload() }
 
     val h = header
-    val directAllowed = h?.let { it.optBoolean("directReceiveAllowed", true) } ?: true
+    val trackingRequiresWarehouse = lines.any {
+        it.optBoolean("lotRequired", false) || it.optBoolean("serialRequired", false)
+    }
+    val directAllowed = headerLoaded && linesComplete &&
+        (h?.optBoolean("directReceiveAllowed", false) == true) &&
+        !trackingRequiresWarehouse
     DocumentScanHandler(
         enabled = qtyLine == null && !showScan,
         lines = lines,
@@ -744,7 +931,7 @@ private fun ReceivePurchaseOrder(no: String, onBack: () -> Unit) {
         l.optInt("lineNo") in touched && t > 0.0 && out > 0.0 && t < out
     }
     val readyCount = lines.count { rowDone(it) || rowPartial(it) }
-    val postLines = lines.filter { it.optDouble("qtyToReceive", 0.0) > 0.0 }
+    val postLines = lines.filter { it.optInt("lineNo") in touched && it.optDouble("qtyToReceive", 0.0) > 0.0 }
     val postQty = postLines.sumOf { it.optDouble("qtyToReceive", 0.0) }
 
     Column(Modifier.fillMaxSize()) {
@@ -767,8 +954,9 @@ private fun ReceivePurchaseOrder(no: String, onBack: () -> Unit) {
                     colors = CardDefaults.cardColors(containerColor = Color(0xFFFEF3C7)),
                 ) {
                     Text(
-                        "⚠ Bu lokasyon (${firstValue(h, "locationCode")}) Ambar Mal Kabul belgesi zorunlu kılıyor. " +
-                            "Doğrudan mal kabul yapılamaz. Ambar Mal Kabul sekmesinden ilgili belgeyi açıp mal kabulü tamamlayın.",
+                        if (trackingRequiresWarehouse)
+                            "Bu siparişte lot/seri izlemeli ürün var. Lot ve seri kaydını korumak için Ambar Mal Kabul ekranındaki belgeyi kullanın."
+                        else "Bu lokasyon (${firstValue(h, "locationCode")}) için Ambar Mal Kabul belgesi zorunlu. İlgili belgeyi Ambar Mal Kabul ekranından tamamlayın.",
                         modifier = Modifier.padding(10.dp),
                         fontSize = 12.sp,
                         color = Color(0xFF92400E),
@@ -813,7 +1001,7 @@ private fun ReceivePurchaseOrder(no: String, onBack: () -> Unit) {
         }
         BottomActionBar {
             // TOPLU POST: en az bir satır işlenmeden kayıt açılmaz.
-            val canPost = directAllowed && readyCount > 0 && postQty > 0.0
+            val canPost = headerLoaded && linesComplete && directAllowed && readyCount > 0 && postQty > 0.0
             Button(
                 onClick = { showPostConfirm = true },
                 enabled = !busy && canPost,
@@ -844,12 +1032,32 @@ private fun ReceivePurchaseOrder(no: String, onBack: () -> Unit) {
             onConfirm = {
                 showPostConfirm = false
                 scope.launch {
-                    busy = true; status = "Mal kabul kaydı..."
+                    busy = true; status = "Mal kabul hazırlanıyor..."
+                    var preflightOk = true
+                    var resetCount = 0
+                    for (line in lines.filter {
+                        it.optInt("lineNo") !in touched && it.optDouble("qtyToReceive", 0.0) > 0.0
+                    }) {
+                        val reset = BcApi.patch(
+                            context,
+                            "purchaseSourceLines(documentType='Order',no='${no.replace("'", "''")}',lineNo=${line.optInt("lineNo")})",
+                            JSONObject().apply { put("qtyToReceive", 0) }.toString(),
+                        )
+                        if (!reset.ok) { preflightOk = false; break }
+                        resetCount++
+                    }
+                    if (!preflightOk) {
+                        val failureStatus = receivingPreflightFailureStatus(resetCount)
+                        status = failureStatus
+                        reload(statusAfterReload = failureStatus)
+                        return@launch
+                    }
+                    status = "Mal kabul kaydı..."
                     val body = JSONObject().apply { put("invoice", invoiceToo) }.toString()
                     val r = BcApi.boundAction(context, "purchaseSources", no, "receive", body)
                     busy = false
-                    status = if (r.ok) "TAMAM: PO mal kabul kaydedildi (HTTP ${r.httpCode})"
-                        else "HATA: ${BcApi.errorMessage(r.body)} (HTTP ${r.httpCode})"
+                    status = if (r.ok) "TAMAM: Satınalma mal kabulü kaydedildi."
+                        else QcErrorParser.friendlyStatus(BcApi.errorMessage(r.body), r.httpCode)
                     if (r.ok) { touched = emptySet(); reload() }
                 }
             },
@@ -864,7 +1072,10 @@ private fun ReceivePurchaseOrder(no: String, onBack: () -> Unit) {
             initialQty = ql.optDouble("qtyToReceive").takeIf { it > 0 }
                 ?: ql.optDouble("outstandingQuantity").takeIf { it > 0 } ?: 1.0,
             initialUom = ql.optString("unitOfMeasureCode"),
-            showLotSerial = true,
+            // Doğrudan satınalma satırı Reservation Entry lot/seri takibini
+            // taşımaz. Takipli satırlar yukarıdaki directAllowed kapısıyla
+            // Ambar Mal Kabul akışına yönlendirilir; burada kaybolacak alanı gösterme.
+            showLotSerial = false,
             onDismiss = { qtyLine = null },
             onConfirm = { res ->
                 qtyLine = null
@@ -880,8 +1091,8 @@ private fun ReceivePurchaseOrder(no: String, onBack: () -> Unit) {
                         body
                     )
                     busy = false
-                    status = if (r.ok) "TAMAM: PO satırı qty=${res.quantity} (HTTP ${r.httpCode})"
-                        else "HATA: ${BcApi.errorMessage(r.body)} (HTTP ${r.httpCode})"
+                    status = if (r.ok) "TAMAM: Satır miktarı güncellendi."
+                        else QcErrorParser.friendlyStatus(BcApi.errorMessage(r.body), r.httpCode)
                     // Satır işlendi (post YOK) — renk kodu ve toplu post aktifliği buna bağlı.
                     if (r.ok) { touched = touched + lineNo; reload() }
                 }
@@ -923,7 +1134,7 @@ fun ScanItemSheet(
         ScanField("Ürün No.", item, { item = it }, modifier = Modifier.fillMaxWidth(), onScanned = { raw ->
             val resolved = BarcodeIntentResolver.resolve(raw)
             item = resolved.itemNo ?: raw
-            hint = "Tarandı: ${resolved.kind} → ${resolved.value}"
+            hint = "Okutuldu: ${resolved.value}"
         })
         if (hint.isNotBlank()) { Spacer(Modifier.height(6.dp)); Text(hint, fontSize = 12.sp, color = Color.Gray) }
         Spacer(Modifier.height(16.dp))

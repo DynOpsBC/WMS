@@ -4,14 +4,20 @@ codeunit 72258 "DOPSWHS Board Data"
     // mutating helpers their drag-drop / context actions call back into.
     Access = Public;
 
-    /// <summary>{"picks":[{no,sourceNo,assignedUserId,status,percentComplete,dueDate}]} from open picks.</summary>
+    /// <summary>
+    /// Pick Board payload. `users` intentionally contains every enabled local
+    /// WMS operator, including operators who currently have no pick. Without
+    /// this list an empty operator column could never be a drag/drop target.
+    /// </summary>
     procedure BuildPickBoardJson(): Text
     var
         Pick: Record "Warehouse Activity Header";
         Json: TextBuilder;
         First: Boolean;
     begin
-        Json.Append('{"picks":[');
+        Json.Append('{"users":');
+        Json.Append(BuildPickBoardUsersJson());
+        Json.Append(',"picks":[');
         First := true;
         Pick.SetRange(Type, Pick.Type::Pick);
         if Pick.FindSet() then
@@ -21,6 +27,28 @@ codeunit 72258 "DOPSWHS Board Data"
                 Json.Append(BuildPickObject(Pick));
             until Pick.Next() = 0;
         Json.Append(']}');
+        exit(Json.ToText());
+    end;
+
+    local procedure BuildPickBoardUsersJson(): Text
+    var
+        LocalUser: Record "DOPSWHS Local User";
+        Json: TextBuilder;
+        First: Boolean;
+    begin
+        Json.Append('[');
+        First := true;
+        LocalUser.SetRange(Disabled, false);
+        if LocalUser.FindSet() then
+            repeat
+                if LocalUser.Username <> '' then begin
+                    if not First then
+                        Json.Append(',');
+                    First := false;
+                    Json.Append(StrSubstNo('"%1"', Esc(LocalUser.Username)));
+                end;
+            until LocalUser.Next() = 0;
+        Json.Append(']');
         exit(Json.ToText());
     end;
 

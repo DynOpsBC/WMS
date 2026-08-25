@@ -7,8 +7,13 @@ codeunit 72290 "DOPSWHS Purch Source Mgmt"
 
     procedure SetLineQtyToReceive(OrderNo: Code[20]; LineNo: Integer; QtyToReceive: Decimal; BinCode: Code[20])
     var
+        PH: Record "Purchase Header";
         PL: Record "Purchase Line";
     begin
+        if not PH.Get(PH."Document Type"::Order, OrderNo) then
+            Error('Purchase order %1 not found.', OrderNo);
+        EnsureDirectReceiveAllowed(PH);
+
         if not PL.Get(PL."Document Type"::Order, OrderNo, LineNo) then
             Error('Purchase line %1 / %2 not found.', OrderNo, LineNo);
         if BinCode <> '' then
@@ -27,8 +32,10 @@ codeunit 72290 "DOPSWHS Purch Source Mgmt"
         PH: Record "Purchase Header";
         PurchPost: Codeunit "Purch.-Post";
     begin
+        PH.LockTable();
         if not PH.Get(PH."Document Type"::Order, OrderNo) then
             Error('Purchase order %1 not found.', OrderNo);
+        EnsureDirectReceiveAllowed(PH);
         if PH.Status <> PH.Status::Released then
             PH.Validate(Status, PH.Status::Released);
 
@@ -49,6 +56,19 @@ codeunit 72290 "DOPSWHS Purch Source Mgmt"
             TelemetryScope::ExtensionPublisher, EmptyDims());
 
         exit(OrderNo);
+    end;
+
+    local procedure EnsureDirectReceiveAllowed(PurchaseHeader: Record "Purchase Header")
+    var
+        Location: Record Location;
+    begin
+        if PurchaseHeader."Location Code" = '' then
+            exit;
+        if not Location.Get(PurchaseHeader."Location Code") then
+            Error('Location %1 does not exist.', PurchaseHeader."Location Code");
+        if Location."Require Receive" then
+            Error('Purchase order %1 uses location %2, which requires a Warehouse Receipt. Use the warehouse receiving flow instead.',
+                PurchaseHeader."No.", PurchaseHeader."Location Code");
     end;
 
     local procedure EmptyDims(): Dictionary of [Text, Text]

@@ -21,8 +21,11 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.dynops.bcwms.BcApi
+import com.dynops.bcwms.BuildConfig
 import com.dynops.bcwms.scanner.ScanField
 import com.dynops.bcwms.ui.EmptyState
+import com.dynops.bcwms.ui.InfoPill
+import com.dynops.bcwms.ui.StatusText
 import kotlinx.coroutines.launch
 import org.json.JSONObject
 
@@ -60,16 +63,17 @@ fun PrintersModule() {
     var defaultDocumentCode by remember { mutableStateOf(getDefaultPrinter(context, PRINTER_USAGE_DOCUMENT)) }
     var scannedBarcode by rememberSaveable { mutableStateOf("") }
     var barcodePrintBusy by remember { mutableStateOf(false) }
+    val productionBade = BuildConfig.FLAVOR == "bade"
 
     fun load() {
         scope.launch {
             loading = true; status = "Yükleniyor..."
-            val r = BcApi.get(context, "printers?\$top=100&\$orderby=code")
+            val page = BcApi.getAllPages(context, "printers?\$top=100&\$orderby=code")
             loading = false
-            rows = if (r.ok) BcApi.parseValueArray(r.body) else emptyList()
-            status = if (!r.ok) "HATA: Printer listesi alınamadı (HTTP ${r.httpCode})"
-                else if (rows.isEmpty()) "BOŞ: kayıtlı printer yok (HTTP ${r.httpCode})"
-                else "TAMAM: ${rows.size} yazıcı (HTTP ${r.httpCode})"
+            rows = if (page.complete) page.rows else emptyList()
+            status = if (!page.complete) "HATA: Yazıcı listesinin tamamı alınamadı. Windows yazıcı ajanının bağlantısını kontrol edin."
+                else if (rows.isEmpty()) "Henüz eşitlenmiş yazıcı yok. Windows ajanında Yazıcıları Yenile ve Buluta Eşitle'yi çalıştırın."
+                else "TAMAM: ${rows.size} yazıcı hazır"
         }
     }
     LaunchedEffect(Unit) { load() }
@@ -85,10 +89,10 @@ fun PrintersModule() {
             Button(onClick = { load() }, enabled = !loading) { Text(if (loading) "..." else "🔄 Yenile") }
         }
         Spacer(Modifier.height(6.dp))
-        if (status.isNotBlank()) Text(status, fontSize = 12.sp, color = Color.Gray)
+        StatusText(status)
         Spacer(Modifier.height(8.dp))
         LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            item {
+            if (!productionBade) item {
                 Card(
                     shape = RoundedCornerShape(12.dp),
                     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
@@ -187,22 +191,31 @@ fun PrintersModule() {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Text(code, fontWeight = FontWeight.Bold)
                             Spacer(Modifier.width(8.dp))
-                            if (isLabelDefault) AssistChip(onClick = {}, label = { Text("Etiket", fontSize = 11.sp) })
+                            if (isLabelDefault) InfoPill("Etiket")
                             if (isDocumentDefault) {
                                 Spacer(Modifier.width(4.dp))
-                                AssistChip(onClick = {}, label = { Text("Belge", fontSize = 11.sp) })
+                                InfoPill("Belge")
                             }
                             if (!active) {
                                 Spacer(Modifier.width(4.dp))
-                                AssistChip(onClick = {}, label = { Text("Pasif", fontSize = 11.sp) })
+                                InfoPill(
+                                    "Pasif",
+                                    containerColor = MaterialTheme.colorScheme.errorContainer,
+                                    contentColor = MaterialTheme.colorScheme.onErrorContainer,
+                                )
                             }
-                            if (agentStatus.isNotBlank()) {
+                            if (agentStatus.isNotBlank() && !productionBade) {
                                 Spacer(Modifier.width(4.dp))
-                                AssistChip(onClick = {}, label = { Text("Agent $agentStatus", fontSize = 11.sp) })
+                                InfoPill("Bağlantı $agentStatus")
                             }
                         }
-                        Text("$desc · $format · ${handle.ifBlank { "-" }}", fontSize = 12.sp, color = Color.Gray)
-                        if (stationId.isNotBlank()) Text(stationId, fontSize = 11.sp, color = Color.Gray)
+                        Text(
+                            if (productionBade) "$desc · ${if (format == "ZPL") "Etiket yazıcısı" else "Belge yazıcısı"}"
+                            else "$desc · $format · ${handle.ifBlank { "-" }}",
+                            fontSize = 12.sp,
+                            color = Color.Gray,
+                        )
+                        if (!productionBade && stationId.isNotBlank()) Text(stationId, fontSize = 11.sp, color = Color.Gray)
                         Spacer(Modifier.height(8.dp))
                         Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                             OutlinedButton(
@@ -220,14 +233,16 @@ fun PrintersModule() {
                                 enabled = active && format == "PDF",
                             ) { Text(if (isDocumentDefault) "✓ Belge" else "Belge", fontSize = 12.sp) }
                         }
-                        Spacer(Modifier.height(6.dp))
-                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                            OutlinedButton(onClick = {
-                                scope.launch {
-                                    val r = BcApi.boundAction(context, "printers", code, "testPrint", "{}")
-                                    status = if (r.ok) "Test yazdırma işi ${code} kuyruğa alındı." else "HATA: ${r.body.take(140)}"
-                                }
-                            }, enabled = active && format == "ZPL") { Text("🧪 ZPL Test", fontSize = 12.sp) }
+                        if (!productionBade) {
+                            Spacer(Modifier.height(6.dp))
+                            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                OutlinedButton(onClick = {
+                                    scope.launch {
+                                        val r = BcApi.boundAction(context, "printers", code, "testPrint", "{}")
+                                        status = if (r.ok) "Test yazdırma işi ${code} kuyruğa alındı." else "HATA: ${r.body.take(140)}"
+                                    }
+                                }, enabled = active && format == "ZPL") { Text("🧪 ZPL Test", fontSize = 12.sp) }
+                            }
                         }
                     }
                 }

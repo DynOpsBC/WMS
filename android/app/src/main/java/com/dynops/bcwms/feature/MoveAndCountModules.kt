@@ -19,6 +19,8 @@ import com.dynops.bcwms.BcApi
 import com.dynops.bcwms.scanner.BarcodeIntentResolver
 import com.dynops.bcwms.scanner.ScanField
 import com.dynops.bcwms.ui.*
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
 import org.json.JSONObject
 
@@ -33,27 +35,88 @@ fun AdHocMoveModule() {
     val scope = rememberCoroutineScope()
     // ELOG akışı (varsayılan "🧺 LP ile" modu):
     //   1) kaynak bin okut → 2) LP okut → 3) sistem LP içeriğini gösterir →
-    //   4) hedef okut: hedef bir LP ise içerik o LP'ye aktarılır (transfer),
-    //      bin ise satırlar reclass ile o rafa taşınır.
+    //   4) hedef okut: aynı raftaki LP ise içerik atomik transfer edilir;
+    //      bin ise LP ve stok içeriği tek moveToBin transaction'ıyla taşınır.
     var lpFlow by remember { mutableStateOf(true) }
     var fromBin by remember { mutableStateOf("") }
     var lpNo by remember { mutableStateOf("") }
     var binLps by remember { mutableStateOf<List<JSONObject>>(emptyList()) }
     var lpLines by remember { mutableStateOf<List<JSONObject>>(emptyList()) }
+    var lpLinesComplete by remember { mutableStateOf(false) }
     var target by remember { mutableStateOf("") }
     var targetIsLp by remember { mutableStateOf<Boolean?>(null) }
     var targetLpBin by remember { mutableStateOf("") }
+    var sourceLpLocation by remember { mutableStateOf("") }
+    var sourceLpBin by remember { mutableStateOf("") }
     // Eski ürün-bazlı mod
     var itemOrLp by remember { mutableStateOf("") }
     var toBin by remember { mutableStateOf("") }
     var qty by remember { mutableStateOf("1") }
     var lotNoInput by remember { mutableStateOf("") }
+    var lotPickerOpen by remember { mutableStateOf(false) }
+    var availableLots by remember { mutableStateOf<List<JSONObject>>(emptyList()) }
+    var availableLotsLoading by remember { mutableStateOf(false) }
+    var availableLotsError by remember { mutableStateOf("") }
+    var lotLookupItem by remember { mutableStateOf("") }
+    var lotLookupBin by remember { mutableStateOf("") }
+    var lotLookupRequestId by remember { mutableIntStateOf(0) }
     var status by remember { mutableStateOf("") }
     var busy by remember { mutableStateOf(false) }
     // Son başarılı hareketin kalıcı özeti — PASS sonrası ekranda kart olarak durur.
     var lastMove by remember { mutableStateOf<List<String>?>(null) }
 
-    fun resetLpFlow() { fromBin = ""; lpNo = ""; binLps = emptyList(); lpLines = emptyList(); target = ""; targetIsLp = null; targetLpBin = "" }
+    fun resetLpFlow() { fromBin = ""; lpNo = ""; binLps = emptyList(); lpLines = emptyList(); lpLinesComplete = false; target = ""; targetIsLp = null; targetLpBin = ""; sourceLpLocation = ""; sourceLpBin = "" }
+
+    fun invalidateAvailableLots() {
+        lotLookupRequestId += 1
+        lotNoInput = ""
+        availableLots = emptyList()
+        availableLotsLoading = false
+        availableLotsError = ""
+        lotPickerOpen = false
+    }
+
+    fun openAvailableLots() {
+        val bin = fromBin.trim()
+        val resolved = BarcodeIntentResolver.resolve(itemOrLp)
+        val item = resolved.itemNo?.trim().takeUnless { it.isNullOrBlank() }
+            ?: resolved.value.trim()
+        if (bin.isBlank() || item.isBlank()) {
+            status = "HATA: Lotları listelemek için önce Kaynak Bin ve Ürün alanlarını doldurun."
+            return
+        }
+        if (resolved.kind == com.dynops.bcwms.scanner.BarcodeKind.Lp) {
+            status = "HATA: LP hareketinde lot seçimi gerekmez. Ürün ile hareket için ürün barkodunu okutun."
+            return
+        }
+
+        val requestId = lotLookupRequestId + 1
+        lotLookupRequestId = requestId
+        lotLookupItem = item
+        lotLookupBin = bin
+        availableLots = emptyList()
+        availableLotsError = ""
+        availableLotsLoading = true
+        lotPickerOpen = true
+        scope.launch {
+            val result = fetchAvailableLots(
+                context = context,
+                itemNo = item,
+                locationCode = "",
+                binCode = bin,
+                variantCode = "",
+            )
+            if (lotLookupRequestId != requestId) return@launch
+            result
+                .onSuccess { availableLots = it }
+                .onFailure {
+                    availableLotsError = it.message.orEmpty().ifBlank {
+                        "Lot listesi alınamadı. Bağlantıyı kontrol edip yeniden deneyin."
+                    }
+                }
+            availableLotsLoading = false
+        }
+    }
 
     // Kaynak bin'deki LP'leri getir — operatör yazmak yerine dokunup seçer.
     fun loadBinLps(bin: String) {
@@ -62,10 +125,10 @@ fun AdHocMoveModule() {
         scope.launch {
             busy = true; status = "Bindeki LP'ler aranıyor..."
             val safe = b.replace("'", "''")
-            val r = BcApi.get(context, "licensePlates?\$filter=binCode eq '$safe'&\$top=50&\$select=no,templateCode,status,binCode")
-            binLps = if (r.ok) BcApi.parseValueArray(r.body) else emptyList()
+            val page = BcApi.getAllPages(context, "licensePlates?\$filter=binCode eq '$safe'&\$top=50&\$select=no,templateCode,status,binCode")
+            binLps = if (page.complete) page.rows else emptyList()
             busy = false
-            status = if (!r.ok) "HATA: LP listesi alınamadı (HTTP ${r.httpCode})"
+            status = if (!page.complete) "HATA: LP listesinin tamamı alınamadı. Yenileyip tekrar deneyin."
                 else if (binLps.isEmpty()) "⚠️ $b bininde kayıtlı LP yok — LP barkodunu okutabilirsiniz"
                 else "TAMAM: $b bininde ${binLps.size} LP — dokunarak seçin"
         }
@@ -75,11 +138,29 @@ fun AdHocMoveModule() {
         val t = no.trim()
         if (t.isBlank()) return
         scope.launch {
-            busy = true; status = "LP içeriği alınıyor..."
-            val h = BcApi.get(context, "licensePlates('$t')")
+            busy = true; status = "LP içeriği alınıyor..."; lpLinesComplete = false
+            lpNo = ""; lpLines = emptyList(); target = ""; targetIsLp = null; targetLpBin = ""
+            val safeNo = t.replace("'", "''")
+            val h = BcApi.get(context, "licensePlates('$safeNo')")
             if (!h.ok) { busy = false; status = "HATA: LP bulunamadı: $t"; return@launch }
-            val l = BcApi.get(context, "licensePlateLines?\$filter=lpNo eq '$t'&\$top=100")
-            lpLines = if (l.ok) BcApi.parseValueArray(l.body) else emptyList()
+            val header = JSONObject(h.body)
+            sourceLpLocation = header.optString("locationCode").trim().takeUnless { it == "null" }.orEmpty()
+            sourceLpBin = header.optString("binCode").trim().takeUnless { it == "null" }.orEmpty()
+            if (sourceLpBin.isNotBlank() && fromBin.isNotBlank() && !sourceLpBin.equals(fromBin.trim(), ignoreCase = true)) {
+                busy = false
+                lpNo = ""; lpLines = emptyList(); lpLinesComplete = false
+                status = "HATA: $t, ${sourceLpBin} rafında kayıtlı. Kaynak rafı kontrol edin."
+                return@launch
+            }
+            val l = BcApi.getAllPages(context, "licensePlateLines?\$filter=lpNo eq '$safeNo'&\$orderby=lineNo")
+            if (!l.complete) {
+                busy = false; lpNo = ""; lpLines = emptyList(); lpLinesComplete = false
+                val http = l.error?.httpCode?.takeIf { it > 0 }?.let { " (HTTP $it)" }.orEmpty()
+                status = "HATA: LP satırlarının tamamı alınamadı$http. Yenileyip tekrar deneyin."
+                return@launch
+            }
+            lpLines = l.rows
+            lpLinesComplete = true
             lpNo = t
             busy = false
             status = if (lpLines.isEmpty()) "⚠️ LP boş görünüyor — yine de taşınabilir"
@@ -87,50 +168,78 @@ fun AdHocMoveModule() {
         }
     }
 
-    // Hedef LP mi bin mi? LP kaydı varsa LP'ye aktarım, yoksa rafa taşıma.
+    // Hedef LP mi bin mi? LP bulunamadığında otomatik olarak "bin" kabul
+    // edilmez; bin kaydı da sunucudan doğrulanır. Ağ/API hatası fail-closed'dur.
     fun resolveTarget(scanned: String) {
         val t = scanned.trim()
         if (t.isBlank()) return
+        if (!lpLinesComplete) {
+            status = "HATA: LP satırları eksik yüklendi. Hedef seçmeden önce LP içeriğini yenileyin."
+            return
+        }
         scope.launch {
-            busy = true
-            val r = BcApi.get(context, "licensePlates('$t')")
-            targetIsLp = r.ok
-            targetLpBin = if (r.ok) JSONObject(r.body).optString("binCode").takeIf { it != "null" } ?: "" else ""
+            busy = true; targetIsLp = null; targetLpBin = ""
+            if (t.equals(lpNo, ignoreCase = true)) {
+                busy = false; status = "HATA: Kaynak ve hedef LP aynı olamaz."
+                return@launch
+            }
+            val safe = t.replace("'", "''")
+            val r = BcApi.get(context, "licensePlates('$safe')")
+            if (r.ok) {
+                val targetHeader = JSONObject(r.body)
+                val targetStatus = targetHeader.optString("status")
+                if (targetStatus.equals("Closed", true) || targetStatus.equals("Used", true)) {
+                    busy = false; status = "HATA: Hedef LP açık değil. Başka bir LP seçin."
+                    return@launch
+                }
+                targetLpBin = targetHeader.optString("binCode").takeIf { it != "null" } ?: ""
+                if (targetLpBin.isBlank() || !targetLpBin.equals(fromBin.trim(), ignoreCase = true)) {
+                    busy = false
+                    targetIsLp = null
+                    status = "HATA: Hedef LP kaynak LP ile aynı rafta değil. Önce hedef LP’yi aynı rafa taşıyın."
+                    return@launch
+                }
+                targetIsLp = true
+            } else if (r.httpCode == 404) {
+                val locationFilter = if (sourceLpLocation.isBlank()) "" else
+                    " and locationCode eq '${sourceLpLocation.replace("'", "''")}'"
+                val bins = BcApi.get(context, "bins?\$filter=code eq '$safe'$locationFilter&\$top=2&\$select=code,locationCode")
+                val matches = if (bins.ok) BcApi.parseValueArray(bins.body) else emptyList()
+                if (!bins.ok || matches.size != 1) {
+                    busy = false
+                    status = if (!bins.ok) "HATA: Hedef doğrulanamadı. Bağlantıyı kontrol edip yeniden deneyin."
+                        else "HATA: '$t' geçerli bir LP veya raf değil."
+                    return@launch
+                }
+                targetIsLp = false
+            } else {
+                busy = false; status = "HATA: Hedef doğrulanamadı. Bağlantıyı kontrol edip yeniden deneyin."
+                return@launch
+            }
             target = t
             busy = false
-            status = if (r.ok) "🧺 Hedef LP: $t${if (targetLpBin.isNotBlank()) " (bin: $targetLpBin)" else ""} — içerik bu LP'ye aktarılacak"
+            status = if (targetIsLp == true) "🧺 Hedef LP: $t${if (targetLpBin.isNotBlank()) " (bin: $targetLpBin)" else ""} — içerik bu LP'ye aktarılacak"
                 else "📍 Hedef bin: $t — LP içeriği bu rafa taşınacak"
         }
     }
 
-    // Satırları hedefe reclass et (stok gerçekten taşınsın) — hem bin hedefi
-    // hem de farklı bindeki LP hedefi için ortak. Lot izlemeli satırlar LP
-    // satırındaki lot ile adHocLot'a gider; lot'suzlar adHoc'a.
-    suspend fun postReclass(toBin: String): String {
-        for (ln in lpLines) {
-            val lot = ln.optString("lotNo").takeIf { it.isNotBlank() && it != "null" } ?: ""
-            val body = JSONObject().apply {
-                put("fromBin", fromBin.trim()); put("toBin", toBin)
-                put("qty", ln.optDouble("quantity"))
-                put("itemNo", ln.optString("itemNo")); put("lpNo", lpNo)
-                put("userId", BcApi.getLocalUser(context).ifBlank { "MOBILE" })
-                if (lot.isNotBlank()) put("lotNo", lot)
-            }.toString()
-            val action = if (lot.isBlank()) "adHoc" else "adHocLot"
-            val r = BcApi.boundAction(context, "movementOps", "", action, body)
-            if (!r.ok) {
-                val hint = if (lot.isNotBlank() && (r.httpCode == 404 || r.httpCode == 400))
-                    " — lot desteği için BC uzantısının güncel publish'i gerekli olabilir" else ""
-                return "${BcApi.errorMessage(r.body)} (HTTP ${r.httpCode})$hint"
-            }
-        }
-        return ""
-    }
-
     fun confirmLpMove() {
+        if (!lpLinesComplete) {
+            status = "HATA: LP satırları eksik yüklendi. Hareket yapılmadı; LP içeriğini yenileyin."
+            return
+        }
+        if (targetIsLp == null || target.isBlank()) {
+            status = "HATA: Hareket yapılmadı. Önce hedef LP veya rafı doğrulayın."
+            return
+        }
         scope.launch {
             busy = true; status = "Hareket gönderiliyor..."
             if (targetIsLp == true) {
+                if (targetLpBin.isBlank() || !targetLpBin.equals(fromBin.trim(), ignoreCase = true)) {
+                    busy = false
+                    status = "HATA: Hedef LP kaynak LP ile aynı rafta değil. Önce hedef LP’yi aynı rafa taşıyın."
+                    return@launch
+                }
                 // Tüm satırları AÇIKÇA gönder: eski publish'te boş linesJson
                 // hiçbir satır taşımadan başarı dönüyordu (ParseLines boş çıkışı).
                 val linesJson = org.json.JSONArray().apply {
@@ -143,40 +252,47 @@ fun AdHocMoveModule() {
                     status = "HATA: ${BcApi.errorMessage(r.body)} (HTTP ${r.httpCode})"
                     return@launch
                 }
-                // Hedef LP farklı bindeyse stok da fiziksel olarak taşınmalı:
-                // LP transferi bizim içerik kaydımızdır, reclass'ı ayrıca atıyoruz.
-                var reclassNote = ""
-                if (targetLpBin.isNotBlank() && !targetLpBin.equals(fromBin.trim(), ignoreCase = true)) {
-                    val err = postReclass(targetLpBin)
-                    reclassNote = if (err.isBlank()) " + stok $targetLpBin rafına reclass edildi"
-                        else " ⚠️ içerik aktarıldı ama stok reclass HATASI: $err"
-                }
                 busy = false
-                status = "TAMAM: $lpNo içeriği $target LP'sine aktarıldı (${lpLines.size} satır)$reclassNote"
-                if (!status.contains("⚠️")) {
-                    lastMove = buildList {
-                        add("🧺 $lpNo → 🧺 $target" + if (targetLpBin.isNotBlank()) " (📍 $targetLpBin)" else "")
-                        lpLines.forEach { ln ->
-                            add("• ${ln.optString("itemNo")} × ${fmtq(ln.optDouble("quantity"))}" +
-                                (ln.optString("lotNo").takeIf { it.isNotBlank() && it != "null" }?.let { " · Lot $it" } ?: ""))
-                        }
+                status = "TAMAM: $lpNo içeriği aynı raftaki $target LP'sine aktarıldı (${lpLines.size} satır)"
+                lastMove = buildList {
+                    add("🧺 $lpNo → 🧺 $target (📍 $targetLpBin)")
+                    lpLines.forEach { ln ->
+                        add("• ${ln.optString("itemNo")} × ${fmtq(ln.optDouble("quantity"))}" +
+                            (ln.optString("lotNo").takeIf { it.isNotBlank() && it != "null" }?.let { " · Lot $it" } ?: ""))
                     }
-                    resetLpFlow()
                 }
+                resetLpFlow()
             } else {
-                val err = postReclass(target)
-                if (err.isNotBlank()) {
+                // currentUserId: WMS yerel kullanıcısı yoksa AAD token'ının BC User
+                // ID'sine düşer. getLocalUser tek başına, servis/admin test oturumunda
+                // ve yalnız AAD ile girişte boş döndüğü için hareketi haksız yere
+                // engelliyordu ("Bağlı" görünürken bile).
+                val userId = BcApi.currentUserId(context).trim()
+                if (userId.isBlank()) {
                     busy = false
-                    status = "HATA: $err"
+                    status = "HATA: Kullanıcı kimliği çözülemedi (BC'ye ulaşılamıyor). " +
+                        "Bağlantıyı kontrol edip tekrar deneyin."
                     return@launch
                 }
-                // Stok taşındı; LP kartının bin'ini de hedefe güncelle (LP raf
-                // değiştirdi). Eski publish'te alan salt-okunursa not düşülür.
-                val patch = BcApi.patch(context, "licensePlates('$lpNo')",
-                    JSONObject().apply { put("binCode", target) }.toString())
+                // LP→bin tek sunucu transaction'ıdır. Satır bazlı adHoc + sonradan
+                // header PATCH zinciri kısmi stok/LP konumu üretebildiği için kullanılmaz.
+                val r = BcApi.boundAction(
+                    context,
+                    "licensePlates",
+                    lpNo,
+                    "moveToBin",
+                    JSONObject().apply {
+                        put("targetBinCode", target)
+                        put("userId", userId)
+                    }.toString(),
+                )
                 busy = false
-                status = if (patch.ok) "TAMAM: LP $lpNo → $target (stok reclass edildi, LP kartı güncellendi)"
-                    else "TAMAM: stok $target rafına taşındı · ⚠️ LP kartındaki bin güncellenemedi (HTTP ${patch.httpCode})"
+                if (!r.ok) {
+                    status = "HATA: LP taşınamadı: ${BcApi.errorMessage(r.body)} (HTTP ${r.httpCode}). " +
+                        "LP konumunu yenileyip doğrulayın."
+                    return@launch
+                }
+                status = "TAMAM: LP $lpNo ve stok içeriği atomik olarak $target rafına taşındı"
                 lastMove = buildList {
                     add("🧺 $lpNo · 📍 ${fromBin.trim()} → 📍 $target")
                     lpLines.forEach { ln ->
@@ -187,6 +303,84 @@ fun AdHocMoveModule() {
                 resetLpFlow()
             }
         }
+    }
+
+    if (lotPickerOpen) {
+        AlertDialog(
+            onDismissRequest = {
+                lotLookupRequestId += 1
+                lotPickerOpen = false
+                availableLotsLoading = false
+            },
+            title = { Text("Kaynak Bindeki Lotlar", fontWeight = FontWeight.Bold) },
+            text = {
+                Column {
+                    Text(
+                        "Ürün: $lotLookupItem · Kaynak Bin: $lotLookupBin",
+                        fontSize = 12.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Spacer(Modifier.height(12.dp))
+                    when {
+                        availableLotsLoading -> Row(
+                            Modifier.fillMaxWidth().padding(vertical = 24.dp),
+                            horizontalArrangement = Arrangement.Center,
+                        ) { CircularProgressIndicator() }
+                        availableLotsError.isNotBlank() -> Column {
+                            Text(availableLotsError, color = MaterialTheme.colorScheme.error)
+                            Spacer(Modifier.height(8.dp))
+                            OutlinedButton(
+                                onClick = { openAvailableLots() },
+                                modifier = Modifier.fillMaxWidth(),
+                            ) { Text("Yeniden Dene") }
+                        }
+                        availableLots.isEmpty() -> Text(
+                            "Bu ürünün $lotLookupBin kaynak bininde pozitif stoklu lotu bulunamadı. Lot numarasını QR ile okutabilir veya elle girebilirsiniz.",
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        else -> LazyColumn(
+                            modifier = Modifier.fillMaxWidth().heightIn(max = 420.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            items(availableLots) { row ->
+                                val lotNo = row.optString("lotNo")
+                                OutlinedButton(
+                                    onClick = {
+                                        lotNoInput = lotNo
+                                        lotPickerOpen = false
+                                        status = "TAMAM: $lotNo lotu seçildi ($lotLookupBin / $lotLookupItem)"
+                                    },
+                                    modifier = Modifier.fillMaxWidth(),
+                                ) {
+                                    Column(Modifier.fillMaxWidth()) {
+                                        Text(lotNo, fontWeight = FontWeight.Bold)
+                                        Text(
+                                            buildString {
+                                                append("Stok: ${fmtq(row.optDouble("quantityBase", 0.0))}")
+                                                row.optString("unitOfMeasureCode")
+                                                    .takeIf { it.isNotBlank() && it != "null" }
+                                                    ?.let { append(" $it") }
+                                                row.optString("locationCode")
+                                                    .takeIf { it.isNotBlank() && it != "null" }
+                                                    ?.let { append(" · Lokasyon: $it") }
+                                            },
+                                            fontSize = 12.sp,
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    lotLookupRequestId += 1
+                    lotPickerOpen = false
+                    availableLotsLoading = false
+                }) { Text("Kapat") }
+            },
+        )
     }
 
     Column(Modifier.fillMaxSize().padding(16.dp).verticalScroll(rememberScrollState())) {
@@ -222,7 +416,8 @@ fun AdHocMoveModule() {
                     binLps.forEach { lp ->
                         val no = lp.optString("no")
                         Card(
-                            onClick = { if (!busy) loadLp(no) },
+                            onClick = { loadLp(no) },
+                            enabled = !busy,
                             modifier = Modifier.fillMaxWidth().padding(vertical = 3.dp),
                             shape = RoundedCornerShape(12.dp),
                         ) {
@@ -274,7 +469,9 @@ fun AdHocMoveModule() {
                 }
                 Spacer(Modifier.height(8.dp))
                 // 4) Hedef: LP ya da bin
-                ScanField("4) Hedef okut (LP veya Bin)", target, { target = it }, modifier = Modifier.fillMaxWidth(), onScanned = {
+                ScanField("4) Hedef okut (LP veya Bin)", target, {
+                    target = it; targetIsLp = null; targetLpBin = ""
+                }, modifier = Modifier.fillMaxWidth(), onScanned = {
                     resolveTarget(BarcodeIntentResolver.resolve(it).value)
                 })
                 if (target.isNotBlank() && targetIsLp == null) {
@@ -287,7 +484,7 @@ fun AdHocMoveModule() {
                 }
                 Spacer(Modifier.height(12.dp))
                 Button(
-                    enabled = !busy && lpNo.isNotBlank() && target.isNotBlank() && targetIsLp != null,
+                    enabled = !busy && lpLinesComplete && lpNo.isNotBlank() && target.isNotBlank() && targetIsLp != null,
                     modifier = Modifier.fillMaxWidth().height(52.dp),
                     onClick = { confirmLpMove() },
                 ) {
@@ -303,12 +500,22 @@ fun AdHocMoveModule() {
                 }
             }
         } else {
-            ScanField("Kaynak Bin", fromBin, { fromBin = it }, modifier = Modifier.fillMaxWidth(), onScanned = {
-                fromBin = BarcodeIntentResolver.resolve(it).value
+            ScanField("Kaynak Bin", fromBin, {
+                if (it != fromBin) invalidateAvailableLots()
+                fromBin = it
+            }, modifier = Modifier.fillMaxWidth(), onScanned = {
+                val scanned = BarcodeIntentResolver.resolve(it).value
+                if (scanned != fromBin) invalidateAvailableLots()
+                fromBin = scanned
             })
             Spacer(Modifier.height(8.dp))
-            ScanField("Ürün / LP", itemOrLp, { itemOrLp = it }, modifier = Modifier.fillMaxWidth(), onScanned = {
-                itemOrLp = BarcodeIntentResolver.resolve(it).value
+            ScanField("Ürün / LP", itemOrLp, {
+                if (it != itemOrLp) invalidateAvailableLots()
+                itemOrLp = it
+            }, modifier = Modifier.fillMaxWidth(), onScanned = {
+                val scanned = BarcodeIntentResolver.resolve(it).value
+                if (scanned != itemOrLp) invalidateAvailableLots()
+                itemOrLp = scanned
             })
             Spacer(Modifier.height(8.dp))
             ScanField("Hedef Bin", toBin, { toBin = it }, modifier = Modifier.fillMaxWidth(), onScanned = {
@@ -321,6 +528,18 @@ fun AdHocMoveModule() {
             ScanField("Lot No (lot izlemeli üründe)", lotNoInput, { lotNoInput = it }, modifier = Modifier.fillMaxWidth(), onScanned = {
                 lotNoInput = BarcodeIntentResolver.resolve(it).value
             })
+            Spacer(Modifier.height(6.dp))
+            OutlinedButton(
+                enabled = !busy && fromBin.isNotBlank() && itemOrLp.isNotBlank(),
+                onClick = { openAvailableLots() },
+                modifier = Modifier.fillMaxWidth().height(44.dp),
+            ) {
+                Text(
+                    if (lotNoInput.isBlank()) "📋 Kaynak Bindeki Lotları Göster"
+                    else "📋 Seçili Lotu Değiştir",
+                    fontWeight = FontWeight.SemiBold,
+                )
+            }
             Spacer(Modifier.height(16.dp))
             Button(
                 enabled = !busy && fromBin.isNotBlank() && toBin.isNotBlank() && itemOrLp.isNotBlank(),
@@ -328,6 +547,17 @@ fun AdHocMoveModule() {
                 onClick = {
                     scope.launch {
                         busy = true; status = "Hareket gönderiliyor..."
+                        // currentUserId: WMS yerel kullanıcısı yoksa AAD token'ının BC User
+                        // ID'sine düşer. getLocalUser tek başına, servis/admin test oturumunda
+                        // ve yalnız AAD ile girişte boş döndüğü için hareketi haksız yere
+                        // engelliyordu ("Bağlı" görünürken bile).
+                        val userId = BcApi.currentUserId(context).trim()
+                        if (userId.isBlank()) {
+                            busy = false
+                            status = "HATA: Kullanıcı kimliği çözülemedi (BC'ye ulaşılamıyor). " +
+                                "Bağlantıyı kontrol edip tekrar deneyin."
+                            return@launch
+                        }
                         val resolved = BarcodeIntentResolver.resolve(itemOrLp)
                         val isLp = resolved.kind == com.dynops.bcwms.scanner.BarcodeKind.Lp
                         val lot = lotNoInput.trim()
@@ -337,7 +567,7 @@ fun AdHocMoveModule() {
                             put("qty", qty.toDoubleOrNull() ?: 0.0)
                             put("itemNo", if (isLp) "" else itemOrLp.trim())
                             put("lpNo", if (isLp) itemOrLp.trim() else "")
-                            put("userId", BcApi.getLocalUser(context).ifBlank { "MOBILE" })
+                            put("userId", userId)
                             if (lot.isNotBlank()) put("lotNo", lot)
                         }.toString()
                         // adHoc is bound to the singleton Setup record (key '') via the movementOps API,
@@ -414,12 +644,12 @@ fun CountModule() {
         scope.launch {
             loading = true; status = "Sayım sayfaları yükleniyor..."
             val filter = com.dynops.bcwms.ui.buildODataFilter(com.dynops.bcwms.ui.searchClause("no", search))
-            val r = BcApi.get(context, "countSheets?\$top=100&\$orderby=createdDateTime desc&\$select=no,locationCode,mode,status,createdDateTime$filter")
+            val page = BcApi.getAllPages(context, "countSheets?\$top=100&\$orderby=createdDateTime desc&\$select=no,locationCode,mode,status,createdDateTime$filter")
             loading = false
-            rows = if (r.ok) BcApi.parseValueArray(r.body) else emptyList()
-            status = if (!r.ok) "HATA: Sayım listesi alınamadı (HTTP ${r.httpCode})"
-                else if (rows.isEmpty()) "BOŞ: Sayım sayfası yok (HTTP ${r.httpCode})"
-                else "TAMAM: ${rows.size} sayfa (HTTP ${r.httpCode})"
+            rows = if (page.complete) page.rows else emptyList()
+            status = if (!page.complete) "HATA: Sayım listesinin tamamı alınamadı. Yenileyin."
+                else if (rows.isEmpty()) "BOŞ: Sayım sayfası yok"
+                else "TAMAM: ${rows.size} sayfa"
         }
     }
     LaunchedEffect(Unit) { load() }
@@ -428,7 +658,12 @@ fun CountModule() {
     val sel = selected
     if (sel != null) { CountDocument(no = sel, onBack = { selected = null; load() }); return }
 
-    DocListScanHandler(enabled = true, linesEndpoint = "countSheetLines", docKey = "sheetNo") { item, docs ->
+    DocListScanHandler(
+        enabled = true,
+        linesEndpoint = "countSheetLines",
+        docKey = "sheetNo",
+        onError = { status = it },
+    ) { item, docs ->
         when { docs.isEmpty() -> status = "⚠️ '$item' sayım sayfasında yok"; docs.size == 1 -> selected = docs.first(); else -> { itemDocs = item to docs; status = "TAMAM: '$item' → ${docs.size} sayfa" } }
     }
     val shownRows = itemDocs?.let { f -> rows.filter { firstValue(it, "no", "batchName") in f.second } } ?: rows
@@ -468,38 +703,79 @@ private fun CountDocument(no: String, onBack: () -> Unit) {
     var status by remember { mutableStateOf("") }
     var busy by remember { mutableStateOf(false) }
     var countLine by remember { mutableStateOf<JSONObject?>(null) }
+    var countCapabilities by remember(no) { mutableStateOf<BcApi.CountCapabilities?>(null) }
     // Sayıcı slotu belge seviyesinde tutulur: pane'deki okutmalar ve satır
     // düzeltme ekranı (CountEntrySheet) AYNI slota yazsın diye. paneReset,
     // 'Yeniden Say' sonrası pane'in yerel ilerleme durumunu sıfırlar.
     var slot by remember(no) { mutableStateOf(1) }
     var paneReset by remember(no) { mutableStateOf(0) }
+    var linesComplete by remember(no) { mutableStateOf(false) }
+    var showPostConfirm by remember(no) { mutableStateOf(false) }
+    var showRecountConfirm by remember(no) { mutableStateOf(false) }
+    var myUserId by remember(no) { mutableStateOf("") }
+    var adminTestSession by remember(no) { mutableStateOf(false) }
+
+    fun counterAssignments(h: JSONObject?): List<CountSlotAssignment> = listOf(
+        CountSlotAssignment(1, h?.optString("counter1UserId").orEmpty()),
+        CountSlotAssignment(2, h?.optString("counter2UserId").orEmpty()),
+        CountSlotAssignment(3, h?.optString("counter3UserId").orEmpty()),
+    )
+
+    fun configuredSlots(h: JSONObject?): List<Int> = counterAssignments(h)
+        .filter { it.userId.isNotBlank() }
+        .map { it.slot }
+        .ifEmpty { listOf(1) }
+
+    fun operatorSlots(h: JSONObject?): List<Int> = assignedCountSlotsForOperator(
+        assignments = counterAssignments(h),
+        currentUserId = myUserId,
+        adminTestSession = adminTestSession,
+    )
 
     fun reload() {
         scope.launch {
             busy = true
-            val h = BcApi.get(context, "countSheets('$no')")
-            if (h.ok) header = JSONObject(h.body)
-            // Sayfalama: tam lokasyon sayımı 200 satırı kolay aşar; kesilen satırlar
-            // ne sayılır ne 0'lanır ve kimse fark etmezdi. 5000 satır güvenlik tavanı.
-            val all = mutableListOf<JSONObject>()
-            var skip = 0
-            var pageOk = true
-            while (true) {
-                val l = BcApi.get(context, "countSheetLines?\$filter=sheetNo eq '$no'&\$top=200&\$skip=$skip")
-                if (!l.ok) { pageOk = skip > 0; break }
-                val page = BcApi.parseValueArray(l.body)
-                all += page
-                if (page.size < 200 || all.size >= 5000) break
-                skip += 200
+            // Her yenilemede eski veriyi önce kapat. Ağ/sunucu hatasında önceki
+            // satırlar güncelmiş gibi düzenlenip kaydedilemesin.
+            header = null
+            lines = emptyList()
+            linesComplete = false
+            countLine = null
+            showPostConfirm = false
+            showRecountConfirm = false
+            myUserId = BcApi.currentUserId(context).trim()
+            adminTestSession = BcApi.isAdminTestSession(context)
+            val safeNo = no.replace("'", "''")
+            val h = BcApi.get(context, "countSheets('$safeNo')")
+            val loadedHeader = if (h.ok) runCatching { JSONObject(h.body) }.getOrNull() else null
+            val page = BcApi.getAllPages(
+                context,
+                "countSheetLines?\$filter=sheetNo eq '$safeNo'&\$top=200",
+            )
+            header = loadedHeader
+            val allowedSlots = operatorSlots(loadedHeader)
+            if (allowedSlots.isNotEmpty() && slot !in allowedSlots)
+                slot = allowedSlots.first()
+            linesComplete = loadedHeader != null && page.complete
+            if (linesComplete) {
+                lines = page.rows
+                if (status.startsWith("HATA:")) status = ""
+            } else {
+                status = "HATA: Sayım belgesi ve tüm satırları alınamadı. İşlem yapmadan önce yenileyin."
             }
-            lines = all
-            if (!pageOk) status = "HATA: Sayım satırları alınamadı"
             busy = false
         }
     }
-    LaunchedEffect(no) { reload() }
+    LaunchedEffect(no) {
+        countCapabilities = BcApi.getCountCapabilities(context)
+        reload()
+    }
 
     fun action(name: String, okMsg: String) {
+        if (header == null || !linesComplete) {
+            status = "HATA: Sayım belgesi tamamen yüklenmeden bu işlem yapılamaz. Yenileyin."
+            return
+        }
         scope.launch {
             busy = true; status = "$name..."
             val r = BcApi.boundAction(context, "countSheets", no, name, "{}")
@@ -510,6 +786,33 @@ private fun CountDocument(no: String, onBack: () -> Unit) {
     }
 
     fun postSheetAndPrintLpLabels() {
+        val requiredSlots = configuredSlots(header)
+        val allAssignedSlotsComplete = requiredSlots.all { requiredSlot ->
+            allRequiredCountLinesExplicitlyCompleted(lines.map { line ->
+                CountSlotLineState(
+                    hasExplicitFlag = line.has("counted$requiredSlot"),
+                    explicitlyCounted = line.optBoolean("counted$requiredSlot"),
+                    quantity = line.optDouble("countedQty$requiredSlot", Double.NaN),
+                )
+            })
+        }
+        val postAllowed = countDocumentActions(
+            lineCount = lines.size,
+            busy = busy,
+            linesComplete = linesComplete,
+            headerLoaded = header != null,
+            activeSlotComplete = allAssignedSlotsComplete,
+            status = header?.optString("status").orEmpty(),
+            activeSlotAssigned = slot in operatorSlots(header),
+            hasRecountRequired = lines.any { it.optBoolean("recountRequired") },
+        ).canPost
+        if (!postAllowed) {
+            status = if (lines.any { it.optBoolean("recountRequired") })
+                "Uyuşmayan sayım satırları var. Yeniden Say ile yeni tur başlatın."
+            else
+                "Atanmış tüm sayıcılar bütün satırları, sıfır olanlar dahil, tamamlamadan kayıt yapılamaz."
+            return
+        }
         val countedLpNos = lines.map { it.optString("lpNo") }.filter { it.isNotBlank() }.distinct()
         scope.launch {
             busy = true; status = "Sayım BC'ye kaydediliyor..."
@@ -517,6 +820,7 @@ private fun CountDocument(no: String, onBack: () -> Unit) {
             if (!r.ok) {
                 busy = false
                 status = "HATA: ${BcApi.errorMessage(r.body)} (HTTP ${r.httpCode})"
+                reload()
                 return@launch
             }
 
@@ -537,6 +841,29 @@ private fun CountDocument(no: String, onBack: () -> Unit) {
     }
 
     val h = header
+    val requiredSlots = configuredSlots(h)
+    val allowedSlots = operatorSlots(h)
+    val allAssignedSlotsComplete = requiredSlots.all { requiredSlot ->
+        allRequiredCountLinesExplicitlyCompleted(lines.map { line ->
+            CountSlotLineState(
+                hasExplicitFlag = line.has("counted$requiredSlot"),
+                explicitlyCounted = line.optBoolean("counted$requiredSlot"),
+                quantity = line.optDouble("countedQty$requiredSlot", Double.NaN),
+            )
+        })
+    }
+    val documentStatus = h?.optString("status").orEmpty()
+    val recountLines = lines.filter { it.optBoolean("recountRequired") }
+    val availableActions = countDocumentActions(
+        lineCount = lines.size,
+        busy = busy,
+        linesComplete = linesComplete,
+        headerLoaded = header != null,
+        activeSlotComplete = allAssignedSlotsComplete,
+        status = documentStatus,
+        activeSlotAssigned = slot in allowedSlots,
+        hasRecountRequired = recountLines.isNotEmpty(),
+    )
     Column(Modifier.fillMaxSize()) {
         Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(12.dp)) {
             TextButton(onClick = onBack) { Text("‹ Sayfa Listesi") }
@@ -546,32 +873,94 @@ private fun CountDocument(no: String, onBack: () -> Unit) {
             )
             Spacer(Modifier.height(8.dp))
             StatusText(status)
+            if (h != null) {
+                val assignmentText = counterAssignments(h)
+                    .filter { it.userId.isNotBlank() }
+                    .joinToString(" · ") { "${it.slot}: ${it.userId}" }
+                    .ifBlank { "1: Eski belge varsayılanı" }
+                Text("Atanmış sayıcılar: $assignmentText", fontSize = 12.sp, color = Color.Gray)
+            }
+            if (documentStatus.equals("Posted", ignoreCase = true)) {
+                Spacer(Modifier.height(8.dp))
+                StatusText("Bu sayım kaydedilmiş ve kapatılmıştır; terminalden değiştirilemez.")
+            } else if (h != null && allowedSlots.isEmpty()) {
+                Spacer(Modifier.height(8.dp))
+                StatusText("Bu sayımda $myUserId kullanıcısına atanmış sayıcı slotu yok. BC'deki Count Counters bölümünü kontrol edin.")
+            }
+            if (recountLines.isNotEmpty()) {
+                Spacer(Modifier.height(8.dp))
+                Card(colors = CardDefaults.cardColors(containerColor = Color(0xFFFFE4E6))) {
+                    Column(Modifier.fillMaxWidth().padding(12.dp)) {
+                        Text("Yeniden sayılması gereken ${recountLines.size} satır", fontWeight = FontWeight.Bold, color = Color(0xFF9F1239))
+                        recountLines.take(8).forEach { line ->
+                            Text(
+                                "${line.optString("itemNo")} · ${line.optString("binCode")} · fark ${fmtq(line.optDouble("variance"))}",
+                                fontSize = 12.sp,
+                                color = Color(0xFF9F1239),
+                            )
+                        }
+                    }
+                }
+            }
+            val capabilities = countCapabilities
+            if (capabilities != null && !capabilities.varianceReady) {
+                Spacer(Modifier.height(8.dp))
+                Card(
+                    colors = CardDefaults.cardColors(containerColor = Color(0xFFFFE4E6)),
+                    shape = RoundedCornerShape(12.dp),
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text(
+                        if (!capabilities.metadataLoaded)
+                            "Gelişmiş sayım işlemleri doğrulanamadı. Bağlantıyı kontrol edip tekrar deneyin."
+                        else
+                            "Beklenmeyen stok ve sıfır sayım özellikleri bu şirkette henüz etkin değil. " +
+                                "Sistem yöneticinize bildirin.",
+                        modifier = Modifier.padding(12.dp),
+                        color = Color(0xFF9F1239),
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                }
+            }
             Spacer(Modifier.height(8.dp))
-            CountByBinPane(
-                sheetNo = no,
-                locationCode = h?.optString("locationCode").orEmpty(),
-                lines = lines,
-                slot = slot,
-                onSlotChange = { slot = it },
-                resetTick = paneReset,
-                busy = busy,
-                onBusy = { busy = it },
-                onStatus = { status = it },
-                onReload = { reload() },
-                onEditLine = { countLine = it },
-            )
+            if (h != null && linesComplete && countDocumentIsMutable(documentStatus) && allowedSlots.isNotEmpty()) {
+                CountByBinPane(
+                    sheetNo = no,
+                    locationCode = h.optString("locationCode"),
+                    lines = lines,
+                    slot = slot,
+                    allowedSlots = allowedSlots,
+                    onSlotChange = { slot = it },
+                    resetTick = paneReset,
+                    busy = busy,
+                    onBusy = { busy = it },
+                    onStatus = { status = it },
+                    onReload = { reload() },
+                    onEditLine = { countLine = it },
+                    serverCapabilities = countCapabilities,
+                )
+            } else if (h == null || !linesComplete) {
+                EmptyState("Sayım belgesi tam olarak yüklenemedi. Yenileyip tekrar deneyin.")
+            }
         }
         BottomActionBar {
             // Generate lines from bin content when the sheet is empty (the count flow needs lines).
-            OutlinedButton(onClick = { action("generateLines", "Satırlar üretildi") }, enabled = !busy, modifier = Modifier.weight(1f).height(52.dp)) { Text("➕ Satır Üret") }
-            OutlinedButton(onClick = { paneReset += 1; action("startRecount", "Recount başlatıldı") }, enabled = !busy, modifier = Modifier.weight(1f).height(52.dp)) { Text("⟳ Yeniden Say") }
-            Button(onClick = { postSheetAndPrintLpLabels() }, enabled = !busy, modifier = Modifier.weight(1f).height(52.dp)) { Text("✅ Kaydet", fontWeight = FontWeight.Bold) }
+            OutlinedButton(onClick = { action("generateLines", "Satırlar üretildi") }, enabled = availableActions.canGenerateLines, modifier = Modifier.weight(1f).height(52.dp)) { Text("➕ Satır Üret") }
+            OutlinedButton(onClick = { showRecountConfirm = true }, enabled = availableActions.canStartRecount, modifier = Modifier.weight(1f).height(52.dp)) { Text("⟳ Yeniden Say") }
+            Button(onClick = { showPostConfirm = true }, enabled = availableActions.canPost, modifier = Modifier.weight(1f).height(52.dp)) { Text("✅ Kaydet", fontWeight = FontWeight.Bold) }
         }
     }
 
-    val cl = countLine
+    val cl = countLine.takeIf { h != null && linesComplete && !busy }
     if (cl != null) {
-        CountEntrySheet(line = cl, initialSlot = slot, onDismiss = { countLine = null }, onConfirm = { slot, qty ->
+        CountEntrySheet(
+            line = cl,
+            locationCode = h?.optString("locationCode").orEmpty(),
+            initialSlot = slot,
+            allowedSlots = allowedSlots,
+            onDismiss = { countLine = null },
+            onConfirm = { slot, qty ->
             countLine = null
             scope.launch {
                 busy = true; status = "Sayım kaydediliyor..."
@@ -584,6 +973,42 @@ private fun CountDocument(no: String, onBack: () -> Unit) {
                 if (r.ok) reload()
             }
         })
+    }
+    if (showPostConfirm) {
+        AlertDialog(
+            onDismissRequest = { if (!busy) showPostConfirm = false },
+            title = { Text("Sayımı kaydet") },
+            text = { Text("${lines.size} sayım satırının sayım turu $slot sonuçları Business Central'a kaydedilecek. Bu işlemden sonra belge kapanabilir. Devam edilsin mi?") },
+            confirmButton = {
+                TextButton(
+                    enabled = availableActions.canPost,
+                    onClick = { showPostConfirm = false; postSheetAndPrintLpLabels() },
+                ) { Text("Kaydet") }
+            },
+            dismissButton = {
+                TextButton(enabled = !busy, onClick = { showPostConfirm = false }) { Text("Vazgeç") }
+            },
+        )
+    }
+    if (showRecountConfirm) {
+        AlertDialog(
+            onDismissRequest = { if (!busy) showRecountConfirm = false },
+            title = { Text("Yeniden sayım başlatılsın mı?") },
+            text = { Text("Mevcut 1/2/3 sayıcı miktarları temizlenecek ve bütün satırlar yeniden sayılacak.") },
+            confirmButton = {
+                TextButton(
+                    enabled = availableActions.canStartRecount,
+                    onClick = {
+                        showRecountConfirm = false
+                        paneReset += 1
+                        action("startRecount", "Eski sayımlar temizlendi; yeniden sayım başlatıldı")
+                    },
+                ) { Text("Yeniden Say") }
+            },
+            dismissButton = {
+                TextButton(enabled = !busy, onClick = { showRecountConfirm = false }) { Text("Vazgeç") }
+            },
+        )
     }
 }
 
@@ -601,6 +1026,21 @@ private data class CountScanTarget(
     val suggestedQty: Double? = null,
     val suggestedQtySource: String = "",
     val lotNo: String = "",
+)
+
+private data class UnexpectedItemDraft(
+    val itemNo: String = "",
+    val variantCode: String = "",
+    val unitOfMeasureCode: String = "",
+    val lotNo: String = "",
+    val serialNo: String = "",
+    val suggestedQty: Double? = null,
+    val systemBins: Set<String> = emptySet(),
+)
+
+private data class UnexpectedLpDraft(
+    val lpNo: String,
+    val registeredBin: String,
 )
 
 /**
@@ -623,6 +1063,7 @@ private fun CountByBinPane(
     locationCode: String,
     lines: List<JSONObject>,
     slot: Int,
+    allowedSlots: List<Int>,
     onSlotChange: (Int) -> Unit,
     resetTick: Int,
     busy: Boolean,
@@ -630,6 +1071,7 @@ private fun CountByBinPane(
     onStatus: (String) -> Unit,
     onReload: () -> Unit,
     onEditLine: (JSONObject) -> Unit,
+    serverCapabilities: BcApi.CountCapabilities?,
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -645,6 +1087,9 @@ private fun CountByBinPane(
     var misplaced by remember { mutableStateOf<Pair<String, String>?>(null) }
     var scanned by remember { mutableStateOf<CountScanTarget?>(null) }
     var lotSelection by remember { mutableStateOf<Pair<String, List<CountScanTarget>>?>(null) }
+    var unexpectedItem by remember { mutableStateOf<UnexpectedItemDraft?>(null) }
+    var unexpectedLp by remember { mutableStateOf<UnexpectedLpDraft?>(null) }
+    var discoveredBins by remember(sheetNo, resetTick) { mutableStateOf<Set<String>>(emptySet()) }
     var itemNames by remember(sheetNo) { mutableStateOf<Map<String, String>>(emptyMap()) }
 
     // Paletli depoda kalem = palet; paletsiz depoda kalem = tek sayım satırı.
@@ -654,17 +1099,28 @@ private fun CountByBinPane(
     fun isLoose(key: String) = key.startsWith("#")
     fun binOf(ln: JSONObject) = ln.optString("binCode").ifBlank { "(rafsız)" }
 
-    val binOrder = remember(lines) { lines.map { binOf(it) }.distinct().sorted() }
+    val binOrder = remember(lines, discoveredBins) {
+        (lines.map { binOf(it) } + discoveredBins).distinct().sorted()
+    }
     val binLines = lines.filter { binOf(it) == activeBin }
     val lpGroups = binLines.groupBy { lpKey(it) }
 
     // Done-durumu SEÇİLİ slota göredir: sayıcı 2, sayıcı 1'in bitirdiği rafı
-    // kendi slotuyla yeniden sayabilmeli (recount). Bilinen sınırlama: 0 girilen
-    // sayım sunucuda 'hiç sayılmadı'dan ayırt edilemez (şema bayrağı yok).
-    fun alreadyCounted(ln: JSONObject) = ln.optDouble("countedQty$slot", 0.0) != 0.0
+    // kendi slotuyla yeniden sayabilmeli (recount). Counted bayrakları sayesinde
+    // kaydedilmiş 0, artık "hiç sayılmadı" durumundan ayrı tutulur.
+    fun alreadyCounted(ln: JSONObject): Boolean =
+        isCountRecorded(
+            hasExplicitFlag = ln.has("counted$slot"),
+            explicitFlag = ln.optBoolean("counted$slot"),
+            quantity = ln.optDouble("countedQty$slot", 0.0),
+        )
     // Görsel geri bildirim: seçili slotun girdiği sayım.
     fun countedQtyOf(ln: JSONObject): Double? =
-        ln.optDouble("countedQty$slot", 0.0).takeIf { it != 0.0 }
+        ln.optDouble("countedQty$slot", 0.0).takeIf { alreadyCounted(ln) }
+    fun trackingText(ln: JSONObject): String = listOfNotNull(
+        ln.optString("lotNo").takeIf { it.isNotBlank() }?.let { "Lot: $it" },
+        ln.optString("serialNo").takeIf { it.isNotBlank() }?.let { "Seri: $it" },
+    ).joinToString(" · ")
     fun lpDone(lpNo: String): Boolean =
         lpNo in handledLps || (lpGroups[lpNo]?.all { alreadyCounted(it) } == true)
 
@@ -677,12 +1133,57 @@ private fun CountByBinPane(
         return r.ok
     }
 
+    fun printLpLabel(lpNo: String) {
+        scope.launch {
+            onBusy(true)
+            val printerId = getDefaultPrinter(context)
+            onStatus(
+                if (printerId.isBlank()) "$lpNo etiketi varsayılan sunucu yazıcısına gönderiliyor..."
+                else "$lpNo etiketi $printerId yazıcısına gönderiliyor..."
+            )
+            val body = JSONObject().apply {
+                put("printerId", printerId)
+                put("copies", 1)
+            }.toString()
+            val result = BcApi.boundAction(context, "licensePlates", lpNo, "printLabel", body)
+            onBusy(false)
+            onStatus(
+                if (result.ok) "TAMAM: $lpNo LP etiketi yazdırma kuyruğuna alındı"
+                else "HATA: ${BcApi.errorMessage(result.body)} (HTTP ${result.httpCode})"
+            )
+        }
+    }
+
     fun handleBinScan(raw: String) {
         val value = BarcodeIntentResolver.resolve(raw).value.trim().ifBlank { raw.trim() }
         binScan = ""
         val match = binOrder.firstOrNull { it.equals(value, ignoreCase = true) }
         if (match == null) {
-            onStatus("⚠️ '$value' bu sayım sayfasında bir adres değil")
+            // Fiziksel rafta stok bulunabilir fakat üretilen sayım sayfasında o
+            // rafa ait hiç satır olmayabilir. Rafı BC'den doğrula; geçerliyse boş
+            // adres olarak aç ve operatörün beklenmeyen stoku okutmasına izin ver.
+            scope.launch {
+                onBusy(true)
+                onStatus("$value rafı BC'de doğrulanıyor...")
+                fun safe(text: String) = text.replace("'", "''")
+                val filters = buildList {
+                    if (locationCode.isNotBlank()) add("locationCode eq '${safe(locationCode)}'")
+                    add("code eq '${safe(value)}'")
+                }.joinToString(" and ")
+                val result = BcApi.get(context, "bins?\$filter=$filters&\$select=code,locationCode&\$top=1")
+                val verified = if (result.ok) BcApi.parseValueArray(result.body).firstOrNull() else null
+                onBusy(false)
+                if (verified == null) {
+                    onStatus("⚠️ '$value' bu lokasyonda geçerli bir raf değil")
+                } else {
+                    val verifiedCode = verified.optString("code").ifBlank { value }
+                    discoveredBins = discoveredBins + verifiedCode
+                    activeBin = verifiedCode
+                    expandedLp = ""
+                    lotSelection = null
+                    onStatus("TAMAM: $verifiedCode boş sayım rafı olarak açıldı — fiziksel ürünü/LP'yi okutun")
+                }
+            }
             return
         }
         activeBin = match
@@ -749,7 +1250,7 @@ private fun CountByBinPane(
                 row.optString("itemNo").equals(head.optString("itemNo"), ignoreCase = true) &&
                     row.optString("variantCode").equals(head.optString("variantCode"), ignoreCase = true) &&
                     (row.optString("unitOfMeasureCode").isBlank() ||
-                        row.optString("unitOfMeasureCode").equals(firstValue(head, "unitOfMeasureCode"), ignoreCase = true))
+                    row.optString("unitOfMeasureCode").equals(rawValue(head, "unitOfMeasureCode"), ignoreCase = true))
             }
             val suggested = if (targetLines.size == 1) {
                 balance?.let { row ->
@@ -783,7 +1284,7 @@ private fun CountByBinPane(
         }
     }
 
-    fun loadLotFromBc(lotNo: String) {
+    fun loadLotFromBc(lotNo: String, itemNo: String = "") {
         scope.launch {
             onBusy(true)
             onStatus("Lot $lotNo BC stok kayıtlarında aranıyor...")
@@ -792,18 +1293,15 @@ private fun CountByBinPane(
                 if (locationCode.isNotBlank()) add("locationCode eq '${safe(locationCode)}'")
                 add("binCode eq '${safe(activeBin)}'")
                 add("lotNo eq '${safe(lotNo)}'")
+                if (itemNo.isNotBlank()) add("itemNo eq '${safe(itemNo)}'")
             }.joinToString(" and ")
-            val result = BcApi.get(context, "availableLots?\$filter=$filters&\$top=200")
-            if (!result.ok) {
+            val page = BcApi.getAllPages(context, "availableLots?\$filter=$filters&\$top=200")
+            if (!page.complete) {
                 onBusy(false)
-                onStatus(
-                    if (result.httpCode == 404)
-                        "HATA: Lot servisi BC'de yok; güncel BCWMS AL paketini yayınlayın"
-                    else "HATA: Lot $lotNo alınamadı (HTTP ${result.httpCode})"
-                )
+                onStatus("HATA: Lot stoklarının tamamı alınamadı. Yenileyip tekrar deneyin.")
                 return@launch
             }
-            val balances = BcApi.parseValueArray(result.body)
+            val balances = page.rows
                 .filter {
                     it.optString("lotNo").equals(lotNo, ignoreCase = true) &&
                         (if (it.has("quantity")) it.optDouble("quantity") else it.optDouble("quantityBase")) > 0.0
@@ -821,13 +1319,24 @@ private fun CountByBinPane(
             }
             onBusy(false)
             if (balances.isEmpty()) {
-                onStatus("⚠️ Lot $lotNo için $activeBin adresinde pozitif stok bulunamadı")
+                unexpectedItem = UnexpectedItemDraft(itemNo = itemNo, lotNo = lotNo)
+                onStatus("⚠️ Lot $lotNo bu rafta beklenmiyor — fiziksel fazla stok olarak eklemek için ürünü doğrulayın")
             } else if (matches.isEmpty() && allMatches.isNotEmpty() &&
                 allMatches.all { alreadyCounted(it) || lpKey(it) in handledLps }
             ) {
                 onStatus("ℹ️ Lot $lotNo bu adreste zaten sayıldı")
             } else if (matches.isEmpty()) {
-                onStatus("⚠️ Lot $lotNo bulundu ancak sayım sayfasında karşılık gelen madde satırı yok")
+                val first = balances.first()
+                unexpectedItem = UnexpectedItemDraft(
+                    itemNo = first.optString("itemNo"),
+                    variantCode = first.optString("variantCode"),
+                    unitOfMeasureCode = first.optString("unitOfMeasureCode"),
+                    lotNo = lotNo,
+                    suggestedQty = (if (first.has("quantity")) first.optDouble("quantity") else first.optDouble("quantityBase"))
+                        .takeIf { it > 0.0 },
+                    systemBins = balances.map { it.optString("binCode") }.filter { it.isNotBlank() }.toSet(),
+                )
+                onStatus("⚠️ Lot $lotNo BC'de bulundu fakat sayım satırında yok — beklenmeyen stok olarak doğrulayın")
             } else {
                 presentLotTargets(lotNo, lotTargets(lotNo, matches, balances))
             }
@@ -854,10 +1363,9 @@ private fun CountByBinPane(
         val itemLotHits = if (resolvedLot.isNotBlank())
             directItemHits.filter { it.optString("lotNo").equals(resolvedLot, ignoreCase = true) }
         else emptyList()
-        val itemHits = if (itemLotHits.isNotEmpty()) itemLotHits else directItemHits
-        if (itemHits.isNotEmpty()) {
-            if (resolvedLot.isNotBlank()) {
-                val targets = lotTargets(resolvedLot, itemHits).map { target ->
+        if (resolvedLot.isNotBlank()) {
+            if (itemLotHits.isNotEmpty()) {
+                val targets = lotTargets(resolvedLot, itemLotHits).map { target ->
                     target.copy(labelQty = resolved.quantity ?: target.labelQty)
                 }
                 if (targets.isNotEmpty()) {
@@ -865,7 +1373,17 @@ private fun CountByBinPane(
                     return
                 }
             }
-            val hit = itemHits.first()
+            // Ürün + lot taşıyan etikette aynı ürünün başka lotuna kesinlikle
+            // düşme. İstenen lot sayım satırında yoksa BC lot bakiyesinden tam
+            // ürün/lot eşleşmesini doğrula; aksi davranış yanlış lotu sayardı.
+            val scannedItemNo = resolved.itemNo?.trim().orEmpty().ifBlank {
+                if (resolved.kind == com.dynops.bcwms.scanner.BarcodeKind.Item) value else ""
+            }
+            loadLotFromBc(resolvedLot, scannedItemNo)
+            return
+        }
+        if (directItemHits.isNotEmpty()) {
+            val hit = directItemHits.first()
             val hitLp = hit.optString("lpNo")
             if (hitLp.isNotBlank()) {
                 // Ürün etiketi paletli satıra denk geldi: sayım kalemi PALETTİR.
@@ -879,7 +1397,141 @@ private fun CountByBinPane(
             return
         }
 
-        // 3) QR yalnız lot no taşıyabilir. Önce aktif bin'deki sayım satırında
+        // Düz lot numarası resolver tarafından ürün kodu gibi sınıflandırılabilir.
+        // Aktif rafta bu lot zaten varsa ürün-dışı akışa düşmeden lot satır(lar)ını aç.
+        val plainLotValue = value
+        val plainAllLotHits = binLines.filter {
+            it.optString("lotNo").equals(plainLotValue, ignoreCase = true)
+        }
+        if (plainAllLotHits.isNotEmpty()) {
+            val plainLotHits = plainAllLotHits.filter {
+                !alreadyCounted(it) && lpKey(it) !in handledLps
+            }
+            if (plainLotHits.isNotEmpty()) {
+                presentLotTargets(plainLotValue, lotTargets(plainLotValue, plainLotHits))
+            } else {
+                onStatus("ℹ️ Lot $plainLotValue bu adreste zaten sayıldı")
+            }
+            return
+        }
+
+        // Ürün ile lot aynı düz barkod biçiminde gelebilir. BC ürün kartında bu
+        // değer gerçekten ürün numarasıysa beklenmeyen stok akışını koru; değilse
+        // lot servisine yönlendir. Böylece lot girişi yanlış fiziksel stok sayfasını açmaz.
+        if (resolved.kind == com.dynops.bcwms.scanner.BarcodeKind.Item) {
+            val itemNo = resolved.itemNo?.trim().orEmpty().ifBlank { value }
+            scope.launch {
+                onBusy(true)
+                onStatus("$itemNo ürün/lot kaydı doğrulanıyor...")
+                val safeItemNo = itemNo.replace("'", "''")
+                val itemResult = BcApi.get(
+                    context,
+                    "items?\$filter=no eq '$safeItemNo'&\$select=no&\$top=1",
+                )
+                val itemExists = itemResult.ok && BcApi.parseValueArray(itemResult.body).isNotEmpty()
+                onBusy(false)
+
+                if (shouldResolvePlainCountBarcodeAsLot(
+                        hasLocalLotMatch = false,
+                        itemExistsInBc = itemExists,
+                    )
+                ) {
+                    loadLotFromBc(itemNo)
+                    return@launch
+                }
+
+                val expectedBins = lines
+                    .filter { it.optString("itemNo").equals(itemNo, ignoreCase = true) }
+                    .map { binOf(it) }
+                    .filter { it != activeBin }
+                    .toSet()
+                unexpectedItem = UnexpectedItemDraft(
+                    itemNo = itemNo,
+                    lotNo = resolved.lotNo.orEmpty(),
+                    serialNo = resolved.serialNo.orEmpty(),
+                    suggestedQty = resolved.quantity,
+                    systemBins = expectedBins,
+                )
+                onStatus("⚠️ $itemNo $activeBin rafında beklenmiyor — fiziksel stok olarak doğrulayın")
+            }
+            return
+        }
+
+        // 3) Sayım satırlarında henüz bulunmayan gerçek bir LP olabilir. Özellikle
+        // yeni oluşturulan LP'nin Bin Code'u boşsa GenerateLines onu güvenle
+        // atlar; operatör önce rafı, sonra LP'yi okuttuğunda BC tarafındaki
+        // attachLpToBin işlemi LP'yi bu rafa bağlar ve satırlarını sayıma ekler.
+        if (resolved.kind == com.dynops.bcwms.scanner.BarcodeKind.Lp) {
+            scope.launch {
+                onBusy(true)
+                onStatus("$value LP kaydı kontrol ediliyor...")
+                fun safe(text: String) = text.replace("'", "''")
+
+                var lpHeaderResult = BcApi.get(context, "licensePlates('${safe(value)}')")
+                var lpHeader = if (lpHeaderResult.ok) JSONObject(lpHeaderResult.body) else null
+                // GS1/SSCC okutulduğunda resolver SSCC değerini döndürür; API'nin
+                // anahtarı LP No. olduğundan ikinci arama SSCC alanından yapılır.
+                if (lpHeader == null) {
+                    lpHeaderResult = BcApi.get(
+                        context,
+                        "licensePlates?\$filter=sscc eq '${safe(value)}'&\$top=1&\$select=no,locationCode,binCode,status,sscc",
+                    )
+                    if (lpHeaderResult.ok) lpHeader = BcApi.parseValueArray(lpHeaderResult.body).firstOrNull()
+                }
+                if (lpHeader == null) {
+                    onBusy(false)
+                    onStatus("HATA: $value LP kaydı bulunamadı")
+                    return@launch
+                }
+
+                val actualLpNo = lpHeader.optString("no").ifBlank { value }
+                val lpLocation = lpHeader.optString("locationCode")
+                val currentBin = lpHeader.optString("binCode").takeUnless { it == "null" }.orEmpty()
+                if (locationCode.isNotBlank() && !lpLocation.equals(locationCode, ignoreCase = true)) {
+                    onBusy(false)
+                    onStatus("HATA: $actualLpNo LP'si $lpLocation lokasyonunda; bu sayım $locationCode lokasyonunda")
+                    return@launch
+                }
+                if (currentBin.isNotBlank() && !currentBin.equals(activeBin, ignoreCase = true)) {
+                    onBusy(false)
+                    unexpectedLp = UnexpectedLpDraft(actualLpNo, currentBin)
+                    onStatus("⚠️ $actualLpNo sistemde $currentBin rafında, fiziksel olarak $activeBin rafında bulundu — farkı doğrulayın")
+                    return@launch
+                }
+
+                val body = JSONObject().apply {
+                    put("lpNo", actualLpNo)
+                    put("binCode", activeBin)
+                }.toString()
+                val attach = BcApi.boundAction(context, "countSheets", sheetNo, "attachLpToBin", body)
+                if (!attach.ok) {
+                    onBusy(false)
+                    onStatus("HATA: ${BcApi.errorMessage(attach.body)} (HTTP ${attach.httpCode})")
+                    return@launch
+                }
+
+                val linePage = BcApi.getAllPages(
+                    context,
+                    "countSheetLines?\$filter=sheetNo eq '${safe(sheetNo)}' and lpNo eq '${safe(actualLpNo)}'&\$top=100",
+                )
+                onBusy(false)
+                onReload()
+                if (!linePage.complete) {
+                    onStatus("UYARI: $actualLpNo rafa bağlandı ancak sayım satırlarının tamamı alınamadı. Belge yenilendi; tekrar deneyin.")
+                    return@launch
+                }
+                val attachedLines = linePage.rows
+                if (attachedLines.isEmpty()) {
+                    onStatus("TAMAM: $actualLpNo → $activeBin bağlandı; LP içinde sayılacak ürün satırı yok")
+                } else {
+                    openTarget(actualLpNo, actualLpNo, attachedLines, labelQty = resolved.quantity)
+                    onStatus("TAMAM: $actualLpNo → $activeBin bağlandı — miktarı kontrol edip kaydedin")
+                }
+            }
+            return
+        }
+
+        // 4) QR yalnız lot no taşıyabilir. Önce aktif bin'deki sayım satırında
         // ara; bulunmazsa availableLots üzerinden BC lot bakiyesine git.
         val lotValue = resolved.lotNo?.trim().takeUnless { it.isNullOrBlank() } ?: value
         val allLotHits = binLines.filter { it.optString("lotNo").equals(lotValue, ignoreCase = true) }
@@ -892,7 +1544,7 @@ private fun CountByBinPane(
             onStatus("ℹ️ Lot $lotValue bu adreste zaten sayıldı")
             return
         }
-        // 4) Sayfada var ama başka adreste: yanlış yere konmuş palet.
+        // 5) Sayfada var ama başka adreste: yanlış yere konmuş palet.
         val elsewhere = lines.filter { it.optString("lpNo").equals(value, ignoreCase = true) }
         if (elsewhere.isNotEmpty()) {
             if (elsewhere.all { alreadyCounted(it) })
@@ -911,7 +1563,7 @@ private fun CountByBinPane(
     fun commitTarget(target: CountScanTarget, manualQty: Double? = null) {
         scope.launch {
             onBusy(true); onStatus("${target.label} kaydediliyor...")
-            var ok = true
+            var savedCount = 0
             for (ln in target.lines) {
                 // Öncelik: elle girilen sayım > etiketten okunan miktar (GS1) >
                 // LP/etiket kaydı (systemQty). LP'li palette etiket = LP kaydı
@@ -919,27 +1571,103 @@ private fun CountByBinPane(
                 val qty = manualQty
                     ?: (if (target.lines.size == 1) target.labelQty else null)
                     ?: ln.optDouble("systemQty", 0.0)
-                if (!writeQty(ln, qty)) { ok = false; break }
+                if (!writeQty(ln, qty)) break
+                savedCount += 1
             }
             onBusy(false)
-            if (ok) {
-                handledLps = handledLps + target.key
-                onStatus(
-                    "TAMAM: ${target.label} → $activeBin sayıldı (${target.lines.size} satır)" +
-                        if (target.misplacedFrom.isNotBlank()) " — sistemde ${target.misplacedFrom}" else ""
-                )
-                // Satır verisi tazelenmeli: aynı ürünün İKİNCİ satırı (başka lot)
-                // okutulduğunda bayat alreadyCounted ilk satırı yeniden seçmesin.
+            val progress = sequentialWriteProgress(target.lines.size, savedCount)
+            when {
+                progress.complete -> {
+                    handledLps = handledLps + target.key
+                    onStatus(
+                        "TAMAM: ${target.label} → $activeBin sayıldı (${target.lines.size} satır)" +
+                            if (target.misplacedFrom.isNotBlank()) " — sistemde ${target.misplacedFrom}" else ""
+                    )
+                    // Satır verisi tazelenmeli: aynı ürünün İKİNCİ satırı (başka lot)
+                    // okutulduğunda bayat alreadyCounted ilk satırı yeniden seçmesin.
+                    onReload()
+                }
+                progress.partial -> {
+                    onStatus(
+                        "UYARI: ${target.label} için ${progress.succeeded}/${progress.total} satır kaydedildi; " +
+                            "işlem kısmi kaldı. Veriler yeniden yükleniyor. Satırları kontrol edip yeniden sayın."
+                    )
+                    onReload()
+                }
+            }
+        }
+    }
+
+    fun recordUnexpectedItem(itemNo: String, variantCode: String, uom: String, lotNo: String, serialNo: String, qty: Double) {
+        if (serverCapabilities?.unexpectedItemAction != true) {
+            onStatus("HATA: Beklenmeyen stok şu anda kaydedilemiyor. Uygulamayı yenileyin; sorun sürerse yöneticinize bildirin.")
+            return
+        }
+        scope.launch {
+            onBusy(true)
+            onStatus("$itemNo beklenmeyen stok olarak kaydediliyor...")
+            val body = JSONObject().apply {
+                put("itemNo", itemNo.trim())
+                put("variantCode", variantCode.trim())
+                put("binCode", activeBin)
+                put("unitOfMeasureCode", uom.trim())
+                put("lotNo", lotNo.trim())
+                put("serialNo", serialNo.trim())
+                put("qty", qty)
+                put("counterSlot", slot)
+            }.toString()
+            val result = BcApi.boundAction(context, "countSheets", sheetNo, "addUnexpectedItem", body)
+            onBusy(false)
+            if (result.ok) {
+                unexpectedItem = null
+                handledLps = handledLps + "unexpected:$itemNo:${lotNo.trim()}:${serialNo.trim()}"
+                onStatus("TAMAM: $itemNo → $activeBin beklenmeyen fiziksel stok olarak sayıldı")
                 onReload()
+            } else {
+                onStatus(
+                    "HATA: ${BcApi.errorMessage(result.body)} (HTTP ${result.httpCode})" +
+                        if (result.httpCode == 404 || result.httpCode == 405)
+                            " — güncel BADE BCWMS AL paketini yayınlayın" else ""
+                )
+            }
+        }
+    }
+
+    fun recordUnexpectedLp(draft: UnexpectedLpDraft) {
+        if (serverCapabilities?.unexpectedLpAction != true) {
+            onStatus("HATA: Farklı raftaki LP şu anda kaydedilemiyor. Uygulamayı yenileyin; sorun sürerse yöneticinize bildirin.")
+            return
+        }
+        scope.launch {
+            onBusy(true)
+            onStatus("${draft.lpNo} fiziksel raf farkı kaydediliyor...")
+            val body = JSONObject().apply {
+                put("lpNo", draft.lpNo)
+                put("binCode", activeBin)
+                put("counterSlot", slot)
+            }.toString()
+            val result = BcApi.boundAction(context, "countSheets", sheetNo, "addUnexpectedLp", body)
+            onBusy(false)
+            if (result.ok) {
+                unexpectedLp = null
+                handledLps = handledLps + draft.lpNo
+                onStatus("TAMAM: ${draft.lpNo} sistemde ${draft.registeredBin}, fizikselde $activeBin olarak sayıldı")
+                onReload()
+            } else {
+                onStatus(
+                    "HATA: ${BcApi.errorMessage(result.body)} (HTTP ${result.httpCode})" +
+                        if (result.httpCode == 404 || result.httpCode == 405)
+                            " — güncel BADE BCWMS AL paketini yayınlayın" else ""
+                )
             }
         }
     }
 
     // ---- görünüm ----
     Row(verticalAlignment = Alignment.CenterVertically) {
-        Text("Sayıcı slotu", fontSize = 12.sp, color = Color.Gray)
+        Text("Sayım turu", fontSize = 12.sp, color = Color.Gray)
         Spacer(Modifier.width(8.dp))
-        (1..3).forEach { sIdx ->
+        allowedSlots.forEach { sIdx ->
             FilterChip(selected = slot == sIdx, onClick = { onSlotChange(sIdx) }, enabled = !busy, label = { Text("$sIdx") })
             Spacer(Modifier.width(4.dp))
         }
@@ -968,6 +1696,7 @@ private fun CountByBinPane(
             val closed = b in closedBins || (total > 0 && counted == total)
             Card(
                 onClick = { activeBin = b; expandedLp = "" },
+                enabled = !busy,
                 modifier = Modifier.fillMaxWidth().padding(vertical = 3.dp),
                 shape = RoundedCornerShape(10.dp),
             ) {
@@ -1013,12 +1742,12 @@ private fun CountByBinPane(
         )
         Spacer(Modifier.height(8.dp))
         ScanField(
-            label = "LP veya ürün barkodu okut",
+            label = "LP, ürün veya lot barkodu okut",
             value = lpScan,
             onValueChange = { lpScan = it },
             onScanned = { handleLpScan(it) },
             // Bilgi kartı açıkken ikinci okutma hedefi sessizce değiştirmesin.
-            enabled = !busy && scanned == null,
+            enabled = !busy && scanned == null && unexpectedItem == null && unexpectedLp == null && lotSelection == null,
             modifier = Modifier.fillMaxWidth(),
         )
         Spacer(Modifier.height(10.dp))
@@ -1030,6 +1759,7 @@ private fun CountByBinPane(
             val title = if (loose) head.optString("itemNo") else lp
             Card(
                 onClick = { if (loose) openTarget(lp, title, group) else expandedLp = if (expandedLp == lp) "" else lp },
+                enabled = !busy,
                 modifier = Modifier.fillMaxWidth().padding(vertical = 3.dp),
                 shape = RoundedCornerShape(10.dp),
             ) {
@@ -1052,18 +1782,50 @@ private fun CountByBinPane(
                     if (loose) {
                         val nm = head.optString("description").ifBlank { itemNames[title].orEmpty() }
                         if (nm.isNotBlank()) Text(nm, fontSize = 12.sp, color = Color.Gray)
+                        val tracking = trackingText(head)
+                        if (tracking.isNotBlank()) {
+                            Text(
+                                tracking,
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = MaterialTheme.colorScheme.primary,
+                            )
+                        } else {
+                            Text("Lot/seri takibi yok", fontSize = 11.sp, color = Color.Gray)
+                        }
+                    }
+                    if (head.optBoolean("unexpectedStock")) {
+                        Text(
+                            "⚠️ Bu rafta beklenmeyen fiziksel stok",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = Color(0xFFC2410C),
+                        )
                     }
                     if (expandedLp == lp) {
                         Spacer(Modifier.height(8.dp))
                         group.forEach { ln ->
-                            TextButton(onClick = { onEditLine(ln) }, modifier = Modifier.fillMaxWidth()) {
-                                Text(
-                                    ln.optString("itemNo") +
-                                        " · Sistem: ${fmtq(ln.optDouble("systemQty"))}" +
-                                        (if (alreadyCounted(ln)) " · ✅" else ""),
-                                    fontSize = 12.sp,
-                                )
+                            TextButton(onClick = { onEditLine(ln) }, enabled = !busy, modifier = Modifier.fillMaxWidth()) {
+                                Column(Modifier.fillMaxWidth()) {
+                                    Text(ln.optString("itemNo"), fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                    val tracking = trackingText(ln)
+                                    if (tracking.isNotBlank()) Text(tracking, fontSize = 12.sp)
+                                    val counted = countedQtyOf(ln)
+                                    Text(
+                                        "Sistem: ${fmtq(ln.optDouble("systemQty"))} ${firstValue(ln, "unitOfMeasureCode")}" +
+                                            if (counted != null) " · Sayılan: ${fmtq(counted)}" else " · Henüz sayılmadı",
+                                        fontSize = 12.sp,
+                                        color = if (counted != null) Color(0xFF15803D) else Color.Gray,
+                                    )
+                                }
                             }
+                        }
+                        if (!loose) {
+                            OutlinedButton(
+                                onClick = { printLpLabel(lp) },
+                                enabled = !busy,
+                                modifier = Modifier.fillMaxWidth(),
+                            ) { Text("🖨 LP etiketini yazdır") }
                         }
                         if (!loose && !done) {
                             OutlinedButton(onClick = { openTarget(lp, lp, group) }, enabled = !busy, modifier = Modifier.fillMaxWidth()) {
@@ -1240,6 +2002,46 @@ private fun CountByBinPane(
         }
     }
 
+    val unexpectedItemDraft = unexpectedItem
+    if (unexpectedItemDraft != null) {
+        UnexpectedStockSheet(
+            activeBin = activeBin,
+            draft = unexpectedItemDraft,
+            busy = busy,
+            serverReady = serverCapabilities?.unexpectedItemAction == true,
+            onDismiss = { unexpectedItem = null },
+            onConfirm = { itemNo, variantCode, uom, lotNo, serialNo, qty ->
+                recordUnexpectedItem(itemNo, variantCode, uom, lotNo, serialNo, qty)
+            },
+        )
+    }
+
+    val unexpectedLpDraft = unexpectedLp
+    if (unexpectedLpDraft != null) {
+        AlertDialog(
+            onDismissRequest = { if (!busy) unexpectedLp = null },
+            title = { Text("LP farklı rafta bulundu") },
+            text = {
+                Text(
+                    "${unexpectedLpDraft.lpNo} sistemde ${unexpectedLpDraft.registeredBin} rafında görünüyor. " +
+                        "Fiziksel olarak $activeBin rafında buldunuz. Bu LP'yi $activeBin rafında sayarsanız " +
+                        "eski rafta eksik, bu rafta fazla farkı oluşur; post başarılı olunca LP rafı güncellenir."
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = { recordUnexpectedLp(unexpectedLpDraft) },
+                    enabled = !busy && serverCapabilities?.unexpectedLpAction == true,
+                ) {
+                    Text("Fiziksel rafta say")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { unexpectedLp = null }, enabled = !busy) { Text("Vazgeç") }
+            },
+        )
+    }
+
     val lotPick = lotSelection
     if (lotPick != null) {
         AlertDialog(
@@ -1288,6 +2090,7 @@ private fun CountByBinPane(
         )
     }
 
+
     val mp = misplaced
     if (mp != null) {
         AlertDialog(
@@ -1313,6 +2116,7 @@ private fun CountByBinPane(
 
     if (confirmClose) {
         val pending = lpGroups.keys.filter { !lpDone(it) }
+        val canRecordZero = serverCapabilities?.explicitZeroCount == true
         AlertDialog(
             onDismissRequest = { confirmClose = false },
             title = { Text("$activeBin kapatılsın mı?") },
@@ -1322,8 +2126,12 @@ private fun CountByBinPane(
                 }
                 Text(
                     if (pending.isEmpty()) "Bu adresteki tüm kalemler sayıldı."
-                    else "Sayılmayan ${pending.size} kalem var: ${names.joinToString(", ")}. " +
-                        "Kapatırsanız bunlar EKSİK sayılır (miktar 0) ve sayım farkı oluşur."
+                    else if (canRecordZero)
+                        "Sayılmayan ${pending.size} kalem var: ${names.joinToString(", ")}. " +
+                            "Kapatırsanız bunlar EKSİK sayılır (miktar 0) ve sayım farkı oluşur."
+                    else
+                        "Sayılmayan ${pending.size} kalem var: ${names.joinToString(", ")}. " +
+                            "Sıfır sayımı şu anda kaydedilemiyor. Yenileyip tekrar deneyin; sorun sürerse yöneticinize bildirin."
                 )
             },
             confirmButton = {
@@ -1332,19 +2140,29 @@ private fun CountByBinPane(
                     val toZero = pending.flatMap { lpGroups[it].orEmpty() }.filter { !alreadyCounted(it) }
                     scope.launch {
                         onBusy(true); onStatus("$activeBin kapatılıyor...")
-                        var ok = true
-                        for (ln in toZero) if (!writeQty(ln, 0.0)) { ok = false; break }
+                        var savedCount = 0
+                        for (ln in toZero) {
+                            if (!writeQty(ln, 0.0)) break
+                            savedCount += 1
+                        }
                         onBusy(false)
-                        if (ok) {
+                        val progress = sequentialWriteProgress(toZero.size, savedCount)
+                        if (toZero.isEmpty() || progress.complete) {
                             closedBins = closedBins + activeBin
                             handledLps = handledLps + pending
                             onStatus("TAMAM: $activeBin kapatıldı" + if (pending.isEmpty()) "" else " — ${pending.size} palet eksik")
                             activeBin = ""
                             expandedLp = ""
                             onReload()
+                        } else if (progress.partial) {
+                            onStatus(
+                                "UYARI: $activeBin için ${progress.succeeded}/${progress.total} sıfır sayım kaydı yazıldı; " +
+                                    "adres kapatılmadı. Veriler yeniden yükleniyor; kalemleri kontrol edin."
+                            )
+                            onReload()
                         }
                     }
-                }) { Text("Kapat") }
+                }, enabled = pending.isEmpty() || canRecordZero) { Text("Kapat") }
             },
             dismissButton = { TextButton(onClick = { confirmClose = false }) { Text("Vazgeç") } },
         )
@@ -1353,32 +2171,295 @@ private fun CountByBinPane(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun CountEntrySheet(line: JSONObject, initialSlot: Int = 1, onDismiss: () -> Unit, onConfirm: (slot: Int, qty: Double) -> Unit) {
+private fun UnexpectedStockSheet(
+    activeBin: String,
+    draft: UnexpectedItemDraft,
+    busy: Boolean,
+    serverReady: Boolean,
+    onDismiss: () -> Unit,
+    onConfirm: (itemNo: String, variantCode: String, uom: String, lotNo: String, serialNo: String, qty: Double) -> Unit,
+) {
+    var itemNo by remember(draft) { mutableStateOf(draft.itemNo) }
+    var variantCode by remember(draft) { mutableStateOf(draft.variantCode) }
+    var uom by remember(draft) { mutableStateOf(draft.unitOfMeasureCode) }
+    var lotNo by remember(draft) { mutableStateOf(draft.lotNo) }
+    var serialNo by remember(draft) { mutableStateOf(draft.serialNo) }
+    var qty by remember(draft) { mutableStateOf(draft.suggestedQty?.let(::fmtq).orEmpty()) }
+    val parsedQty = qty.toDoubleOrNull()
+
+    com.dynops.bcwms.ui.SheetScaffold(
+        onDismiss = { if (!busy) onDismiss() },
+        contentPadding = PaddingValues(20.dp),
+    ) {
+        Text("Beklenmeyen fiziksel stok", fontWeight = FontWeight.Bold, fontSize = 18.sp)
+        Spacer(Modifier.height(6.dp))
+        Text(
+            "$activeBin rafında, üretilen sayım satırlarında bulunmayan stok tespit edildi. " +
+                "Doğrulanan miktar sistem 0'a karşı pozitif fark olarak kaydedilecek.",
+            fontSize = 12.sp,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        if (!serverReady) {
+            Spacer(Modifier.height(8.dp))
+            Text(
+                "Kayıt şu anda kullanılamıyor. Yenileyip tekrar deneyin; sorun sürerse yöneticinize bildirin.",
+                fontSize = 12.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = Color(0xFFBE123C),
+            )
+        }
+        if (draft.systemBins.isNotEmpty()) {
+            Spacer(Modifier.height(8.dp))
+            Text(
+                "Sistemde beklenen raf: ${draft.systemBins.joinToString(", ")}",
+                fontSize = 12.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = Color(0xFFC2410C),
+            )
+        }
+        Spacer(Modifier.height(12.dp))
+        OutlinedTextField(
+            value = itemNo,
+            onValueChange = { itemNo = it },
+            label = { Text("Ürün No. *") },
+            singleLine = true,
+            modifier = Modifier.fillMaxWidth(),
+        )
+        Spacer(Modifier.height(8.dp))
+        OutlinedTextField(
+            value = qty,
+            onValueChange = { qty = it.replace(',', '.').filter { c -> c.isDigit() || c == '.' } },
+            label = { Text("Fiziksel Miktar *") },
+            singleLine = true,
+            modifier = Modifier.fillMaxWidth(),
+        )
+        Spacer(Modifier.height(8.dp))
+        OutlinedTextField(
+            value = variantCode,
+            onValueChange = { variantCode = it },
+            label = { Text("Varyant (varsa)") },
+            singleLine = true,
+            modifier = Modifier.fillMaxWidth(),
+        )
+        Spacer(Modifier.height(8.dp))
+        OutlinedTextField(
+            value = uom,
+            onValueChange = { uom = it },
+            label = { Text("Birim (boşsa ürün temel birimi)") },
+            singleLine = true,
+            modifier = Modifier.fillMaxWidth(),
+        )
+        Spacer(Modifier.height(8.dp))
+        OutlinedTextField(
+            value = lotNo,
+            onValueChange = { lotNo = it },
+            label = { Text("Lot No.") },
+            singleLine = true,
+            modifier = Modifier.fillMaxWidth(),
+        )
+        Spacer(Modifier.height(8.dp))
+        OutlinedTextField(
+            value = serialNo,
+            onValueChange = { serialNo = it },
+            label = { Text("Seri No.") },
+            singleLine = true,
+            modifier = Modifier.fillMaxWidth(),
+        )
+        Spacer(Modifier.height(16.dp))
+        Button(
+            onClick = {
+                parsedQty?.let {
+                    onConfirm(itemNo.trim(), variantCode.trim(), uom.trim(), lotNo.trim(), serialNo.trim(), it)
+                }
+            },
+            enabled = serverReady && !busy && itemNo.isNotBlank() && parsedQty != null && parsedQty > 0.0,
+            modifier = Modifier.fillMaxWidth().height(52.dp),
+        ) { Text("Bu rafta say", fontWeight = FontWeight.Bold) }
+        TextButton(onClick = onDismiss, enabled = !busy, modifier = Modifier.fillMaxWidth()) { Text("Vazgeç") }
+        Spacer(Modifier.height(24.dp))
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun CountEntrySheet(
+    line: JSONObject,
+    locationCode: String,
+    initialSlot: Int = 1,
+    allowedSlots: List<Int> = listOf(initialSlot),
+    onDismiss: () -> Unit,
+    onConfirm: (slot: Int, qty: Double) -> Unit,
+) {
+    val context = LocalContext.current
     // Panelde seçilen sayıcı slotu devralınır: elle düzeltme başka slota
     // (varsayılan 1'e) kayıp 1. sayıcının değerini ezmesin.
     var slot by remember { mutableStateOf(initialSlot) }
-    var qty by remember { mutableStateOf("") }
+    fun slotWasCounted(selectedSlot: Int): Boolean =
+        isCountRecorded(
+            hasExplicitFlag = line.has("counted$selectedSlot"),
+            explicitFlag = line.optBoolean("counted$selectedSlot"),
+            quantity = line.optDouble("countedQty$selectedSlot", 0.0),
+        )
+    fun qtyForSlot(selectedSlot: Int): String = line.optDouble("countedQty$selectedSlot", 0.0)
+        .takeIf { slotWasCounted(selectedSlot) }
+        ?.let(::fmtq)
+        .orEmpty()
+    var qty by remember(line, initialSlot) { mutableStateOf(qtyForSlot(initialSlot)) }
+    var lotBalances by remember(line, locationCode) { mutableStateOf<List<JSONObject>>(emptyList()) }
+    var lotProbeFinished by remember(line, locationCode) { mutableStateOf(false) }
+    var lotProbeSucceeded by remember(line, locationCode) { mutableStateOf(false) }
+    LaunchedEffect(line.optInt("lineNo"), locationCode) {
+        val itemNo = line.optString("itemNo")
+        val binCode = rawValue(line, "binCode")
+        val variantCode = line.optString("variantCode")
+        if (locationCode.isBlank() || itemNo.isBlank() || binCode.isBlank()) {
+            lotProbeFinished = true
+            lotProbeSucceeded = true
+            return@LaunchedEffect
+        }
+        fun safe(value: String) = value.replace("'", "''")
+        val filter = buildList {
+            add("locationCode eq '${safe(locationCode)}'")
+            add("binCode eq '${safe(binCode)}'")
+            add("itemNo eq '${safe(itemNo)}'")
+            if (variantCode.isNotBlank()) add("variantCode eq '${safe(variantCode)}'")
+        }.joinToString(" and ")
+        val page = BcApi.getAllPages(context, "availableLots?\$filter=$filter&\$top=100")
+        lotBalances = if (page.complete) {
+            page.rows.filter { row ->
+                row.optString("lotNo").isNotBlank() &&
+                    (if (row.has("quantity")) row.optDouble("quantity") else row.optDouble("quantityBase")) > 0.0
+            }
+        } else emptyList()
+        lotProbeSucceeded = page.complete
+        lotProbeFinished = true
+    }
     com.dynops.bcwms.ui.SheetScaffold(onDismiss = onDismiss, contentPadding = androidx.compose.foundation.layout.PaddingValues(20.dp)) {
         Text("Sayım Gir — ${line.optString("itemNo")}", fontWeight = FontWeight.Bold, fontSize = 18.sp)
         val lpInfo = line.optString("lpNo").takeIf { it.isNotBlank() }?.let { "LP: $it · " }.orEmpty()
+        val lineLotNo = line.optString("lotNo")
+        val lineSerialNo = line.optString("serialNo")
         val tracking = listOfNotNull(
-            line.optString("lotNo").takeIf { it.isNotBlank() }?.let { "Lot: $it" },
-            line.optString("serialNo").takeIf { it.isNotBlank() }?.let { "Seri: $it" },
+            lineLotNo.takeIf { it.isNotBlank() }?.let { "Lot: $it" },
+            lineSerialNo.takeIf { it.isNotBlank() }?.let { "Seri: $it" },
         ).joinToString(" · ")
-        Text(lpInfo + "Bin: ${firstValue(line, "binCode")} · Sistem: ${fmtq(line.optDouble("systemQty"))}", fontSize = 12.sp, color = Color.Gray)
-        if (tracking.isNotBlank()) Text(tracking, fontSize = 12.sp, color = Color.Gray)
+        Text(lpInfo + "Bin: ${firstValue(line, "binCode")}", fontSize = 12.sp, color = Color.Gray)
+        if (tracking.isNotBlank()) {
+            Spacer(Modifier.height(8.dp))
+            Surface(
+                shape = RoundedCornerShape(10.dp),
+                color = MaterialTheme.colorScheme.primary.copy(alpha = 0.10f),
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Column(Modifier.padding(12.dp)) {
+                    Text(
+                        if (lineLotNo.isNotBlank()) "Bu giriş yalnız Lot $lineLotNo içindir"
+                        else "Bu giriş yalnız Seri $lineSerialNo içindir",
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary,
+                    )
+                    Text(
+                        "Bu lot/serinin sistem miktarı: ${fmtq(line.optDouble("systemQty"))} ${firstValue(line, "unitOfMeasureCode")}".trim(),
+                        fontSize = 13.sp,
+                    )
+                }
+            }
+        } else {
+            Text(
+                "Bu satırın sistem miktarı: ${fmtq(line.optDouble("systemQty"))} ${firstValue(line, "unitOfMeasureCode")}".trim(),
+                fontSize = 12.sp,
+                color = Color.Gray,
+            )
+        }
+        if (lotBalances.isNotEmpty()) {
+            Spacer(Modifier.height(10.dp))
+            Text("Bu raftaki lot bazlı BC miktarı", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+            lotBalances.forEach { balance ->
+                val balanceQty = if (balance.has("quantity")) balance.optDouble("quantity") else balance.optDouble("quantityBase")
+                val selected = balance.optString("lotNo").equals(lineLotNo, ignoreCase = true)
+                Text(
+                    (if (selected) "▶ " else "• ") +
+                        "Lot ${balance.optString("lotNo")}: ${fmtq(balanceQty)} ${balance.optString("unitOfMeasureCode")}".trim(),
+                    fontSize = 12.sp,
+                    fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
+                    color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+        val needsLotSelection = countLineNeedsLotSelection(
+            lineLotNo,
+            lotBalances.map { it.optString("lotNo") },
+        )
+        if (lotProbeFinished && !lotProbeSucceeded) {
+            Spacer(Modifier.height(8.dp))
+            StatusText("HATA: Raftaki lotların tamamı doğrulanamadı. Sayımı kaydetmeden önce bağlantıyı kontrol edip yeniden açın.")
+        }
+        if (lotProbeFinished && needsLotSelection) {
+            Spacer(Modifier.height(8.dp))
+            Surface(
+                shape = RoundedCornerShape(10.dp),
+                color = Color(0xFFFFE4E6),
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text(
+                    "Bu ürünün rafta lotlu stoğu var ancak seçilen sayım satırında lot yok. " +
+                        "Yanlış lota miktar yazılmaması için kayıt kapatıldı; geri dönüp lot satırını seçin veya lot barkodunu okutun.",
+                    Modifier.padding(12.dp),
+                    color = Color(0xFF9F1239),
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.SemiBold,
+                )
+            }
+        }
+        val existingCounts = (1..3).mapNotNull { countSlot ->
+            line.optDouble("countedQty$countSlot", 0.0)
+                .takeIf { slotWasCounted(countSlot) }
+                ?.let { "$countSlot. sayım: ${fmtq(it)}" }
+        }
+        if (existingCounts.isNotEmpty()) {
+            Text(
+                "Girilen miktarlar · ${existingCounts.joinToString(" · ")}",
+                fontSize = 12.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = Color(0xFF15803D),
+            )
+        }
         Spacer(Modifier.height(12.dp))
-        Text("Sayıcı slotu", fontSize = 12.sp, color = Color.Gray)
+        Text("Sayım turu", fontSize = 12.sp, color = Color.Gray)
         Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            (1..3).forEach { s -> FilterChip(selected = slot == s, onClick = { slot = s }, label = { Text("Sayıcı $s") }) }
+            allowedSlots.forEach { s ->
+                FilterChip(
+                    selected = slot == s,
+                    onClick = { slot = s; qty = qtyForSlot(s) },
+                    label = { Text("Sayıcı $s") },
+                )
+            }
         }
         Spacer(Modifier.height(10.dp))
         // Virgül noktaya çevrilir (TR klavye '12,5' → '125' olmasın); geçersiz
         // girdide buton kilitli kalır — 0.0'a sessiz düşüş yok.
-        OutlinedTextField(qty, { qty = it.replace(',', '.').filter { c -> c.isDigit() || c == '.' } }, label = { Text("Sayılan Miktar") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+        OutlinedTextField(
+            qty,
+            { qty = it.replace(',', '.').filter { c -> c.isDigit() || c == '.' } },
+            label = {
+                Text(
+                    when {
+                        lineLotNo.isNotBlank() -> "Sayılan Miktar — Lot $lineLotNo"
+                        lineSerialNo.isNotBlank() -> "Sayılan Miktar — Seri $lineSerialNo"
+                        else -> "Sayılan Miktar"
+                    }
+                )
+            },
+            enabled = lotProbeFinished && lotProbeSucceeded && !needsLotSelection,
+            singleLine = true,
+            modifier = Modifier.fillMaxWidth(),
+        )
         Spacer(Modifier.height(16.dp))
         val parsedQty = qty.toDoubleOrNull()
-        Button(modifier = Modifier.fillMaxWidth(), enabled = parsedQty != null, onClick = {
+        Button(
+            modifier = Modifier.fillMaxWidth(),
+            enabled = parsedQty != null && lotProbeFinished && lotProbeSucceeded && !needsLotSelection,
+            onClick = {
             parsedQty?.let { onConfirm(slot, it) }
         }) { Text("Sayımı Kaydet") }
         Spacer(Modifier.height(24.dp))
@@ -1405,16 +2486,22 @@ fun DirectedMoveModule() {
         scope.launch {
             loading = true; status = "Hareket belgeleri yükleniyor..."
             val myUser = if (showAll) "" else BcApi.currentUserId(context)
+            if (!showAll && myUser.isBlank()) {
+                rows = emptyList()
+                loading = false
+                status = "HATA: Depo kullanıcınız doğrulanamadı. Yeniden giriş yapın."
+                return@launch
+            }
             val filter = buildODataFilter(
                 assignedToMeClause(myUser, enabled = !showAll),
                 searchClause("no", search),
             )
-            val r = BcApi.get(context, "movements?\$top=100&\$orderby=no desc&\$select=no,locationCode,assignedUserId,status$filter")
+            val page = BcApi.getAllPages(context, "movements?\$top=100&\$orderby=no desc&\$select=no,locationCode,assignedUserId,status$filter")
             loading = false
-            rows = if (r.ok) BcApi.parseValueArray(r.body) else emptyList()
-            status = if (!r.ok) "HATA: Hareket listesi alınamadı (HTTP ${r.httpCode})"
-                else if (rows.isEmpty()) "BOŞ: Açık yönlendirilmiş hareket belgesi yok (HTTP ${r.httpCode})"
-                else "TAMAM: ${rows.size} belge (HTTP ${r.httpCode})"
+            rows = if (page.complete) page.rows else emptyList()
+            status = if (!page.complete) "HATA: Hareket listesinin tamamı alınamadı. Yenileyin."
+                else if (rows.isEmpty()) "BOŞ: Açık yönlendirilmiş hareket belgesi yok"
+                else "TAMAM: ${rows.size} belge"
         }
     }
     LaunchedEffect(showAll) { load() }
@@ -1428,8 +2515,7 @@ fun DirectedMoveModule() {
                 BcApi.boundAction(context, "movements", no, "assignTo", JSONObject().apply { put("userId", me) }.toString())
             else BcApi.ApiResult(false, 0, "Oturum kullanıcısı çözülemedi")
             status = if (r.ok) "TAMAM: $no üzerinize alındı ($me)"
-                else "HATA: ${BcApi.errorMessage(r.body)} (HTTP ${r.httpCode})" +
-                    if (r.httpCode == 404 || r.httpCode == 400) " — assignTo için BC publish gerekli olabilir" else ""
+                else operatorFacingStatus("HATA: ${BcApi.errorMessage(r.body)}")
             load()
         }
     }
@@ -1458,7 +2544,7 @@ fun DirectedMoveModule() {
         LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             items(rows) { d ->
                 val no = d.optString("no")
-                val assigned = firstValue(d, "assignedUserId")
+                val assigned = d.optString("assignedUserId").trim()
                 Card(onClick = { selected = no }, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp)) {
                     Column(Modifier.padding(12.dp)) {
                         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
@@ -1501,21 +2587,69 @@ private fun MovementDocument(no: String, onBack: () -> Unit) {
     var status by remember { mutableStateOf("") }
     var busy by remember { mutableStateOf(false) }
     var qtyLine by remember { mutableStateOf<JSONObject?>(null) }
+    var headerLoaded by remember(no) { mutableStateOf(false) }
+    var linesComplete by remember(no) { mutableStateOf(false) }
+    var myUserId by remember(no) { mutableStateOf("") }
 
-    fun reload() {
+    fun canMutate(): Boolean = headerLoaded && linesComplete &&
+        canMutateAssignedDocument(header?.optString("assignedUserId").orEmpty(), myUserId)
+
+    fun requireMutationAccess(): Boolean {
+        if (canMutate()) return true
+        status = when {
+            !headerLoaded || !linesComplete -> "HATA: Hareket belgesi tamamen yüklenmedi. Yenileyin."
+            myUserId.isBlank() -> "HATA: Depo kullanıcınız doğrulanamadı. Yeniden giriş yapın."
+            header?.optString("assignedUserId").isNullOrBlank() -> "Bu belge henüz size atanmadı. Listeden Üzerime Al işlemini kullanın."
+            else -> "Bu belge başka bir kullanıcıya atanmış. İşlem yapılamaz."
+        }
+        return false
+    }
+
+    fun reload(afterRegisterAttempt: Boolean = false) {
         scope.launch {
             busy = true
-            val h = BcApi.get(context, "movements('$no')")
-            if (h.ok) header = JSONObject(h.body)
-            val l = BcApi.get(context, "movementLines?\$filter=no eq '$no'&\$top=200")
-            lines = if (l.ok) BcApi.parseValueArray(l.body) else emptyList()
+            header = null
+            lines = emptyList()
+            headerLoaded = false
+            linesComplete = false
+            qtyLine = null
+            val safeNo = no.replace("'", "''")
+            val (h, l, me) = coroutineScope {
+                val headerRequest = async { BcApi.get(context, "movements('$safeNo')") }
+                val linesRequest = async {
+                    BcApi.getAllPages(context, "movementLines?\$filter=no eq '$safeNo'&\$top=200")
+                }
+                val userRequest = async { BcApi.currentUserId(context) }
+                Triple(headerRequest.await(), linesRequest.await(), userRequest.await())
+            }
+            // Register tamamlandığında açık belge API'sinden kaybolması
+            // beklenen durumdur. Timeout sonrası 404 de sunucu başarısını
+            // doğrular; operatörü yeniden kayda yönlendirmeyiz.
+            if (afterRegisterAttempt && h.httpCode == 404) {
+                busy = false
+                status = "TAMAM: $no sunucuda kaydedildi."
+                onBack()
+                return@launch
+            }
+            header = if (h.ok) runCatching { JSONObject(h.body) }.getOrNull() else null
+            headerLoaded = header != null
+            linesComplete = l.complete
+            lines = if (l.complete) l.rows else emptyList()
+            myUserId = me.trim()
             busy = false
-            if (!l.ok && l.httpCode == 400) status = "⚠️ movementLines sunucuda yok — BC publish bekliyor"
+            status = when {
+                !headerLoaded || !linesComplete -> "HATA: Hareket belgesi ve tüm satırları alınamadı. Yenileyin."
+                myUserId.isBlank() -> "HATA: Depo kullanıcınız doğrulanamadı. Yeniden giriş yapın."
+                !canMutate() -> "Bu belge size atanmadığı için salt okunur açıldı."
+                status.startsWith("HATA:") -> ""
+                else -> status
+            }
         }
     }
     LaunchedEffect(no) { reload() }
 
     suspend fun patchLine(ln: JSONObject, qty: Double): Boolean {
+        if (!requireMutationAccess()) return false
         val body = JSONObject().apply { put("qtyToHandle", qty) }.toString()
         val r = BcApi.patch(context, "movementLines(activityType='${BcEnum.WhseActivityType.MOVEMENT}',no='$no',lineNo=${ln.optInt("lineNo")})", body)
         if (!r.ok) status = "HATA: ${BcApi.errorMessage(r.body)} (HTTP ${r.httpCode})"
@@ -1524,19 +2658,24 @@ private fun MovementDocument(no: String, onBack: () -> Unit) {
 
     // Ürün onayı: o ürünün TÜM satırlarına (Take + Place) tam miktar yazılır.
     fun confirmItem(itemNo: String) {
+        if (!requireMutationAccess()) return
         scope.launch {
             busy = true; status = "$itemNo işleniyor..."
-            var ok = true
-            for (ln in lines.filter { it.optString("itemNo") == itemNo }) {
-                if (!patchLine(ln, ln.optDouble("qtyOutstanding", ln.optDouble("quantity")))) { ok = false; break }
+            val targets = lines.filter { it.optString("itemNo") == itemNo }
+            var okCount = 0
+            for (ln in targets) {
+                if (!patchLine(ln, ln.optDouble("qtyOutstanding", ln.optDouble("quantity")))) break
+                okCount += 1
             }
             busy = false
-            if (ok) { status = "TAMAM: $itemNo tam miktar onaylandı"; reload() }
+            status = if (okCount == targets.size) "TAMAM: $itemNo tam miktar onaylandı"
+                else "HATA: $okCount/${targets.size} satır kaydedildi. Belge yenilendi; kalanları kontrol edin."
+            reload()
         }
     }
 
     DocumentScanHandler(
-        enabled = qtyLine == null && !busy,
+        enabled = qtyLine == null && !busy && canMutate(),
         lines = lines.filter { it.optString("actionType").equals("Take", ignoreCase = true) },
         onSingleMatch = { line, _ -> confirmItem(line.optString("itemNo")) },
         onMultiMatch = { itemNo, _ -> confirmItem(itemNo) },
@@ -1550,13 +2689,18 @@ private fun MovementDocument(no: String, onBack: () -> Unit) {
             TextButton(onClick = onBack) { Text("‹ Hareket Listesi") }
             DocHeaderCard(
                 title = "🧭 $no",
-                subtitle = "Lokasyon: ${header?.optString("locationCode") ?: ""} · 👤 Atanan Kullanıcı: ${firstValue(header ?: JSONObject(), "assignedUserId").ifBlank { "—" }}",
+                subtitle = "Lokasyon: ${header?.optString("locationCode") ?: ""} · 👤 Atanan Kullanıcı: ${rawValue(header ?: JSONObject(), "assignedUserId").ifBlank { "—" }}",
                 percent = if (totalQty > 0) ((handledOrStaged / totalQty) * 100).toInt().coerceIn(0, 100) else 0,
             )
             Spacer(Modifier.height(6.dp))
             StatusText(status)
             Spacer(Modifier.height(6.dp))
-            Text("Satırlar (${lines.size}) — ürünü okutun ya da satıra dokunup miktar girin", fontSize = 12.sp, color = Color.Gray)
+            Text(
+                if (canMutate()) "Satırlar (${lines.size}) — ürünü okutun ya da satıra dokunup miktar girin"
+                else "Satırlar (${lines.size}) — işlem için belgeyi üzerinize alın",
+                fontSize = 12.sp,
+                color = Color.Gray,
+            )
             Spacer(Modifier.height(6.dp))
             Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 lines.forEach { ln ->
@@ -1565,7 +2709,8 @@ private fun MovementDocument(no: String, onBack: () -> Unit) {
                     val qty = ln.optDouble("quantity", 0.0)
                     val done = ln.optDouble("qtyHandled", 0.0) >= qty && qty > 0
                     Card(
-                        onClick = { if (!busy) qtyLine = ln },
+                        onClick = { qtyLine = ln },
+                        enabled = !busy && canMutate(),
                         modifier = Modifier.fillMaxWidth(),
                         shape = RoundedCornerShape(10.dp),
                         colors = CardDefaults.cardColors(
@@ -1586,7 +2731,7 @@ private fun MovementDocument(no: String, onBack: () -> Unit) {
                             }
                             Text(
                                 "📍 ${ln.optString("binCode")} · ${firstValue(ln, "description")}" +
-                                    (firstValue(ln, "lotNo").takeIf { it.isNotBlank() }?.let { " · Lot $it" } ?: ""),
+                                    (rawValue(ln, "lotNo").takeIf { it.isNotBlank() }?.let { " · Lot $it" } ?: ""),
                                 fontSize = 11.sp, color = Color.Gray,
                             )
                         }
@@ -1596,25 +2741,36 @@ private fun MovementDocument(no: String, onBack: () -> Unit) {
             }
         }
         BottomActionBar {
-            val canRegister = lines.any { it.optDouble("qtyToHandle", 0.0) > 0 }
+            val canRegister = canMutate() && lines.isNotEmpty() && lines.all {
+                val quantity = it.optDouble("quantity", 0.0)
+                maxOf(it.optDouble("qtyHandled", 0.0), it.optDouble("qtyToHandle", 0.0)) >= quantity
+            }
             Button(
                 onClick = {
-                    scope.launch {
-                        busy = true; status = "$no kaydediliyor..."
-                        val r = BcApi.boundAction(context, "movements", no, "register", "{}")
-                        busy = false
-                        status = if (r.ok) "TAMAM: $no kaydedildi — stok taşındı (HTTP ${r.httpCode})"
-                            else "HATA: ${BcApi.errorMessage(r.body)} (HTTP ${r.httpCode})"
-                        if (r.ok) reload()
+                    if (requireMutationAccess()) {
+                        scope.launch {
+                            busy = true; status = "$no kaydediliyor..."
+                            val r = BcApi.boundAction(context, "movements", no, "register", "{}")
+                            busy = false
+                            status = if (r.ok) {
+                                "TAMAM: $no kaydedildi — stok taşındı"
+                            } else {
+                                "UYARI: Kayıt sonucunun sunucudaki durumu doğrulanamadı. Tekrar kaydetmeyin; güncel durum okunuyor."
+                            }
+                            // Timeout/5xx sonrasında BC işlemi tamamlamış olabilir. Her iki
+                            // durumda da gerçek sunucu durumunu yeniden okuyarak tekrar kayıt
+                            // riskini önleriz.
+                            reload(afterRegisterAttempt = true)
+                        }
                     }
                 },
                 enabled = !busy && canRegister,
                 modifier = Modifier.fillMaxWidth().height(54.dp),
-            ) { Text(if (canRegister) "✅ Hareketi Kaydet" else "Önce satır onaylayın (okut / miktar gir)", fontWeight = FontWeight.Bold) }
+            ) { Text(if (canRegister) "✅ Hareketi Kaydet" else "Tüm satırları onaylayın", fontWeight = FontWeight.Bold) }
         }
     }
 
-    val ql = qtyLine
+    val ql = qtyLine.takeIf { canMutate() && !busy }
     if (ql != null) {
         QuantityDialogSheet(
             title = "Miktar (${if (ql.optString("actionType").equals("Take", true)) "Al" else "Bırak"} · 📍 ${ql.optString("binCode")})",

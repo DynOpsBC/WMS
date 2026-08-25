@@ -218,6 +218,15 @@ codeunit 72334 "DOPSWHS Pack Station Mgmt"
         BoxBarcode: Code[50];
     begin
         PackSession.Get(SessionId);
+
+        // HTTP yanıtı terminale ulaşmadan sunucudaki işlem tamamlanmış olabilir.
+        // Aynı sipariş + aynı koli ile yapılan güvenli tekrar, oturum bu sırada
+        // kapanmış olsa dahi başarılı kabul edilir. Böylece operatör ikinci bir
+        // koli üretmek/okutmak zorunda kalmaz. Farklı barkodla tekrar ise aşağıdaki
+        // normal durum kontrolüne girer ve kapalı oturumda kesin olarak reddedilir.
+        if TryGetIdempotentBoxResult(SessionId, OrderNo, BoxLpNo, BoxBarcode) then
+            exit(BoxBarcode);
+
         PackSession.TestField(Status, PackSession.Status::Open);
         if OrderNo = '' then
             OrderNo := BoxNeededOrder(SessionId);
@@ -274,6 +283,12 @@ codeunit 72334 "DOPSWHS Pack Station Mgmt"
     begin
         if BoxBarcode = '' then
             exit;
+
+        // Kontrol + atama aynı transaction içinde ve tablo kilidi altında yapılır.
+        // İki terminal aynı koli barkodunu aynı anda farklı siparişlere göndermeye
+        // çalışsa bile yalnız ilk işlem ilerler; ikinci işlem kilit açıldıktan sonra
+        // kaydı görüp reddedilir.
+        ExistingLine.LockTable();
         ExistingLine.SetCurrentKey("Box Barcode");
         ExistingLine.SetRange("Box Barcode", BoxBarcode);
         if ExistingLine.FindSet() then
@@ -285,6 +300,35 @@ codeunit 72334 "DOPSWHS Pack Station Mgmt"
                 then
                     Error(BoxBarcodeAlreadyUsedErr, BoxBarcode, ExistingLine."Source Order No.");
             until ExistingLine.Next() = 0;
+    end;
+
+    local procedure TryGetIdempotentBoxResult(SessionId: Integer; OrderNo: Code[20]; RequestedBoxBarcode: Code[50]; var ExistingBoxBarcode: Code[50]): Boolean
+    var
+        ExistingLine: Record "DOPSWHS Pack Session Line";
+        FoundOrder: Code[20];
+    begin
+        if OrderNo = '' then
+            exit(false);
+
+        ExistingLine.SetRange("Session Entry No.", SessionId);
+        ExistingLine.SetRange("Source Order No.", OrderNo);
+        ExistingLine.SetFilter("Box Barcode", '<>%1', '');
+        if not ExistingLine.FindFirst() then
+            exit(false);
+
+        ExistingBoxBarcode := ExistingLine."Box Barcode";
+        if (RequestedBoxBarcode <> '') and (ExistingBoxBarcode <> RequestedBoxBarcode) then
+            Error(OrderAlreadyHasDifferentBoxErr, OrderNo, ExistingBoxBarcode, RequestedBoxBarcode);
+
+        // Aynı siparişin satırlarında farklı koli görülmesi veri bütünlüğü
+        // problemidir; sessizce birini seçip devam etmeyiz.
+        ExistingLine.SetFilter("Box Barcode", '<>%1&<>%2', '', ExistingBoxBarcode);
+        if ExistingLine.FindFirst() then begin
+            FoundOrder := ExistingLine."Source Order No.";
+            Error(OrderHasMultipleBoxesErr, FoundOrder);
+        end;
+
+        exit(true);
     end;
 
     /// <summary>Geriye dönük sarmalayıcı: kargo kolisini sıradaki siparişe bağlar.</summary>
@@ -305,9 +349,10 @@ codeunit 72334 "DOPSWHS Pack Station Mgmt"
         exit('');
     end;
 
-    /// <summary>Şu an kutu okutulması gereken sipariş (yoksa boş):
-    // / 1) tam paketlenmiş ama kutusuz sipariş (batch akışı: ürün kutu),
-    // / 2) Solo/Bulk'ta sıradaki siparişin kutusu yoksa o (kutu ürünler).</summary>
+    /// <summary>
+    /// Şu an kutu okutulması gereken siparişi döndürür (yoksa boş).
+    /// Öncelik: tam paketlenmiş ama kutusuz sipariş; ardından Solo/Bulk'ta sıradaki kutusuz sipariş.
+    /// </summary>
     procedure BoxNeededOrder(SessionId: Integer): Code[20]
     var
         PackSession: Record "DOPSWHS Pack Session";
@@ -498,7 +543,7 @@ codeunit 72334 "DOPSWHS Pack Station Mgmt"
         exit(ScanItem(SessionId, Trimmed, 1));
     end;
 
-    // / <summary>Sipariş bu oturumda faturalanıp kapatılmış mı (ekranda göstermek için).</summary>
+    /// <summary>Siparişin bu oturumda faturalanıp kapatılıp kapatılmadığını döndürür.</summary>
     procedure IsOrderCompleted(SessionId: Integer; OrderNo: Code[20]): Boolean
     var
         Line: Record "DOPSWHS Pack Session Line";
@@ -979,6 +1024,8 @@ codeunit 72334 "DOPSWHS Pack Station Mgmt"
         NoLinesForOrderErr: Label 'No packable lines found for order %1.', Comment = '%1 = Sales Order No.';
         NoOpenOrderErr: Label 'There is no open order to attach a box to in this session.';
         BoxBarcodeAlreadyUsedErr: Label '%1 koli barkodu daha önce %2 siparişinde kullanılmıştır. Her fiziksel koli için benzersiz bir barkod okutun.', Comment = '%1 barcode, %2 sales order';
+        OrderAlreadyHasDifferentBoxErr: Label '%1 siparişi zaten %2 kolisiyle kapatılmıştır; %3 barkodu bu siparişe bağlanamaz.', Comment = '%1 order, %2 existing barcode, %3 requested barcode';
+        OrderHasMultipleBoxesErr: Label '%1 siparişinin paketleme kayıtlarında birden fazla koli barkodu bulundu. Devam etmeden önce veri bütünlüğünü kontrol edin.', Comment = '%1 order';
         UnexpectedItemErr: Label 'Item %1 is not expected in tote %2 or its orders are already fully packed.', Comment = '%1 = Item No., %2 = LP No.';
         NothingToPostErr: Label 'Nothing to post for order %1 — no shipment line received a quantity.', Comment = '%1 = Sales Order No.';
         ScanToteTxt: Label 'Scan a tote (LP) to start';

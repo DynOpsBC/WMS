@@ -10,6 +10,8 @@ page 72295 "DOPSWHS Sales Source Line API"
     SourceTableView = where("Document Type" = const(Order));
     DelayedInsert = true;
     ODataKeyFields = "Document Type", "Document No.", "Line No.";
+    InsertAllowed = false;
+    DeleteAllowed = false;
 
     layout
     {
@@ -34,7 +36,42 @@ page 72295 "DOPSWHS Sales Source Line API"
                 field(qtyToShip; Rec."Qty. to Ship") { Caption = 'qtyToShip'; }
                 field(unitOfMeasureCode; Rec."Unit of Measure Code") { Caption = 'unitOfMeasureCode'; Editable = false; }
                 field(unitPrice; Rec."Unit Price") { Caption = 'unitPrice'; Editable = false; }
+                field(lotRequired; LotRequired) { Caption = 'lotRequired'; Editable = false; }
+                field(serialRequired; SerialRequired) { Caption = 'serialRequired'; Editable = false; }
             }
         }
     }
+
+    trigger OnAfterGetRecord()
+    begin
+        ResolveTrackingRequirements();
+    end;
+
+    local procedure ResolveTrackingRequirements()
+    var
+        Item: Record Item;
+        ItemTrackingCode: Record "Item Tracking Code";
+    begin
+        Clear(LotRequired);
+        Clear(SerialRequired);
+        if Rec.Type <> Rec.Type::Item then
+            exit;
+        if not Item.Get(Rec."No.") then
+            exit;
+        if (Item."Item Tracking Code" = '') or (not ItemTrackingCode.Get(Item."Item Tracking Code")) then
+            exit;
+
+        LotRequired :=
+            ItemTrackingCode."Lot Specific Tracking" or
+            ItemTrackingCode."Lot Warehouse Tracking" or
+            ItemTrackingCode."Lot Sales Outbound Tracking";
+        SerialRequired :=
+            ItemTrackingCode."SN Specific Tracking" or
+            ItemTrackingCode."SN Warehouse Tracking" or
+            ItemTrackingCode."SN Sales Outbound Tracking";
+    end;
+
+    var
+        LotRequired: Boolean;
+        SerialRequired: Boolean;
 }

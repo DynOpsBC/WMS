@@ -46,6 +46,8 @@ page 72097 "DOPSWHS Bin Content API"
                     Editable = false;
                 }
                 field(blockMovement; Rec."Block Movement") { Caption = 'blockMovement'; Editable = false; }
+                field(activeLpNos; ActiveLpNos) { Caption = 'activeLpNos'; Editable = false; }
+                field(activeLpQuantity; ActiveLpQuantity) { Caption = 'activeLpQuantity'; Editable = false; }
             }
         }
     }
@@ -53,6 +55,7 @@ page 72097 "DOPSWHS Bin Content API"
     trigger OnAfterGetRecord()
     var
         Item: Record Item;
+        BinContentSubscriber: Codeunit "DOPSWHS Bin Content Subscriber";
     begin
         // Ensure the FlowField is calculated before serialization.
         Rec.CalcFields(Quantity, "Quantity (Base)");
@@ -61,8 +64,13 @@ page 72097 "DOPSWHS Bin Content API"
             ItemDescription := Item.Description
         else
             ItemDescription := '';
+        BinContentSubscriber.GetActiveLPItemInfo(
+            Rec."Location Code", Rec."Bin Code", Rec."Item No.", Rec."Variant Code", Rec."Unit of Measure Code",
+            ActiveLpNos, ActiveLpQuantity);
     end;
 
     var
         ItemDescription: Text[100];
+        ActiveLpNos: Text[250];
+        ActiveLpQuantity: Decimal;
 }

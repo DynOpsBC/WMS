@@ -31,6 +31,7 @@ page 72228 "DOPSWHS PutAway Line API"
                 field(unitOfMeasureCode; Rec."Unit of Measure Code") { Caption = 'unitOfMeasureCode'; Editable = false; }
                 field(variantCode; Rec."Variant Code") { Caption = 'variantCode'; Editable = false; }
                 field(gtin; ItemGtin) { Caption = 'gtin'; Editable = false; }
+                field(zoneCode; Rec."Zone Code") { Caption = 'zoneCode'; Editable = false; }
                 field(binCode; Rec."Bin Code") { Caption = 'binCode'; }
                 // Kısmi register görünürlüğü: toplam / kalan / konan — mobil bu
                 // üçlü olmadan parçalı yerleştirmede kalan miktarı gösteremiyor.
@@ -60,6 +61,38 @@ page 72228 "DOPSWHS PutAway Line API"
         Clear(ItemGtin);
         if (Rec."Item No." <> '') and Item.Get(Rec."Item No.") then
             ItemGtin := Item.GTIN;
+    end;
+
+    /// <summary>
+    /// Mobil yerleştirme için hedef raf ve miktarı tek işlemde doğrular ve
+    /// Place satırına kalıcı olarak yazar. Genel API PATCH'i bazı BC
+    /// sürümlerinde Warehouse Activity Line'ın raf doğrulamasını güvenilir
+    /// biçimde çalıştırmadığı için register önerilen eski rafla devam
+    /// edebiliyordu.
+    /// </summary>
+    [ServiceEnabled]
+    procedure setPlacement(targetBinCode: Code[20]; qtyToHandle: Decimal)
+    var
+        TargetBin: Record Bin;
+    begin
+        Rec.TestField("Action Type", Rec."Action Type"::Place);
+        if targetBinCode = '' then
+            Error('Hedef raf zorunludur.');
+        if not TargetBin.Get(Rec."Location Code", targetBinCode) then
+            Error('%1 hedef rafı %2 lokasyonunda bulunamadı.', targetBinCode, Rec."Location Code");
+        if qtyToHandle <= 0 then
+            Error('Yerleştirme miktarı sıfırdan büyük olmalıdır.');
+        if qtyToHandle > Rec."Qty. Outstanding" then
+            Error('Yerleştirme miktarı %1, kalan %2 miktarını aşamaz.', qtyToHandle, Rec."Qty. Outstanding");
+
+        // Önerilen raftan farklı bir hedef başka zone'da olabilir. Yalnız Bin
+        // Code'u doğrulamak, Place satırındaki eski öneri zone'unu korur ve BC
+        // geçerli hedef rafı reddeder. Önce hedef binin gerçek zone'unu uygula;
+        // standart Validate yine bin tipi/blokaj gibi depo kurallarını korur.
+        Rec.Validate("Zone Code", TargetBin."Zone Code");
+        Rec.Validate("Bin Code", targetBinCode);
+        Rec.Validate("Qty. to Handle", qtyToHandle);
+        Rec.Modify(true);
     end;
 
     var

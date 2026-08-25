@@ -1,7 +1,10 @@
 codeunit 72047 "DOPSWHS Shipment Mgmt"
 {
     Access = Public;
-    Permissions = tabledata "Warehouse Entry" = r;
+    Permissions =
+        tabledata "Warehouse Entry" = r,
+        tabledata "Reservation Entry" = r,
+        tabledata "Whse. Item Tracking Line" = r;
 
     procedure ConfirmShipmentLine(var WhseShipmentLine: Record "Warehouse Shipment Line"; QtyToShip: Decimal; LotNo: Code[50]; LicensePlateNo: Code[20]; SSCC: Code[18])
     var
@@ -22,6 +25,36 @@ codeunit 72047 "DOPSWHS Shipment Mgmt"
                     WhseShipmentHeader."DOPSWHS LP No." := LicensePlateNo;
                     WhseShipmentHeader.Modify(true);
                 end;
+    end;
+
+    /// <summary>
+    /// Returns the effective outbound lot for a warehouse shipment line. The
+    /// mobile override wins; otherwise a single lot assigned on the source
+    /// Sales Order Item Tracking Lines is surfaced automatically. Multiple
+    /// distinct lots are deliberately left blank so the operator must choose.
+    /// </summary>
+    procedure GetShipmentLineLot(WhseShipmentLine: Record "Warehouse Shipment Line"; var LotNo: Code[50])
+    var
+        ReservationEntry: Record "Reservation Entry";
+        WhseItemTrackingLine: Record "Whse. Item Tracking Line";
+    begin
+        Clear(LotNo);
+        if WhseShipmentLine."DOPSWHS Lot No." <> '' then begin
+            LotNo := WhseShipmentLine."DOPSWHS Lot No.";
+            exit;
+        end;
+
+        SetSourceReservationFilters(ReservationEntry, WhseShipmentLine);
+        ReservationEntry.SetFilter("Lot No.", '<>%1', '');
+        if UniqueReservationLot(ReservationEntry, LotNo) then
+            exit;
+        Clear(LotNo);
+
+        WhseItemTrackingLine.SetRange("Source Type", Database::"Warehouse Shipment Line");
+        WhseItemTrackingLine.SetRange("Source ID", WhseShipmentLine."No.");
+        WhseItemTrackingLine.SetRange("Source Ref. No.", WhseShipmentLine."Line No.");
+        WhseItemTrackingLine.SetFilter("Lot No.", '<>%1', '');
+        UniqueWarehouseTrackingLot(WhseItemTrackingLine, LotNo);
     end;
 
     procedure CreatePick(var WhseShipmentHeader: Record "Warehouse Shipment Header"): Code[20]
@@ -92,6 +125,7 @@ codeunit 72047 "DOPSWHS Shipment Mgmt"
     var
         WhseShipmentLine: Record "Warehouse Shipment Line";
         WhseActivityLine: Record "Warehouse Activity Line";
+        LotNo: Code[50];
     begin
         WhseActivityLine.SetRange("Activity Type", WhseActivityLine."Activity Type"::Pick);
         WhseActivityLine.SetRange("No.", PickNo);
@@ -99,11 +133,13 @@ codeunit 72047 "DOPSWHS Shipment Mgmt"
         WhseActivityLine.SetRange("Whse. Document No.", ShipmentNo);
         if WhseActivityLine.FindSet(true) then
             repeat
-                if WhseShipmentLine.Get(ShipmentNo, WhseActivityLine."Whse. Document Line No.") then
-                    if WhseShipmentLine."DOPSWHS Lot No." <> '' then begin
-                        WhseActivityLine.Validate("Lot No.", WhseShipmentLine."DOPSWHS Lot No.");
+                if WhseShipmentLine.Get(ShipmentNo, WhseActivityLine."Whse. Document Line No.") then begin
+                    GetShipmentLineLot(WhseShipmentLine, LotNo);
+                    if LotNo <> '' then begin
+                        WhseActivityLine.Validate("Lot No.", LotNo);
                         WhseActivityLine.Modify(true);
                     end;
+                end;
             until WhseActivityLine.Next() = 0;
     end;
 
@@ -213,15 +249,59 @@ codeunit 72047 "DOPSWHS Shipment Mgmt"
             ItemTrackingCode."Lot Sales Outbound Tracking");
     end;
 
+    local procedure SetSourceReservationFilters(var ReservationEntry: Record "Reservation Entry"; WhseShipmentLine: Record "Warehouse Shipment Line")
+    begin
+        ReservationEntry.SetRange("Source Type", WhseShipmentLine."Source Type");
+        ReservationEntry.SetRange("Source Subtype", WhseShipmentLine."Source Subtype");
+        ReservationEntry.SetRange("Source ID", WhseShipmentLine."Source No.");
+        ReservationEntry.SetRange("Source Ref. No.", WhseShipmentLine."Source Line No.");
+        ReservationEntry.SetRange("Item No.", WhseShipmentLine."Item No.");
+        ReservationEntry.SetRange("Variant Code", WhseShipmentLine."Variant Code");
+    end;
+
+    local procedure UniqueReservationLot(var ReservationEntry: Record "Reservation Entry"; var LotNo: Code[50]): Boolean
+    begin
+        Clear(LotNo);
+        if ReservationEntry.FindSet() then
+            repeat
+                if LotNo = '' then
+                    LotNo := ReservationEntry."Lot No."
+                else
+                    if LotNo <> ReservationEntry."Lot No." then begin
+                        Clear(LotNo);
+                        exit(false);
+                    end;
+            until ReservationEntry.Next() = 0;
+        exit(LotNo <> '');
+    end;
+
+    local procedure UniqueWarehouseTrackingLot(var WhseItemTrackingLine: Record "Whse. Item Tracking Line"; var LotNo: Code[50]): Boolean
+    begin
+        Clear(LotNo);
+        if WhseItemTrackingLine.FindSet() then
+            repeat
+                if LotNo = '' then
+                    LotNo := WhseItemTrackingLine."Lot No."
+                else
+                    if LotNo <> WhseItemTrackingLine."Lot No." then begin
+                        Clear(LotNo);
+                        exit(false);
+                    end;
+            until WhseItemTrackingLine.Next() = 0;
+        exit(LotNo <> '');
+    end;
+
     local procedure EnsureRequiredShipmentLots(ShipmentNo: Code[20])
     var
         WhseShipmentLine: Record "Warehouse Shipment Line";
+        LotNo: Code[50];
     begin
         WhseShipmentLine.SetRange("No.", ShipmentNo);
         WhseShipmentLine.SetFilter("Qty. to Ship", '>0');
         if WhseShipmentLine.FindSet() then
             repeat
-                EnsureShipmentLot(WhseShipmentLine, WhseShipmentLine."DOPSWHS Lot No.");
+                GetShipmentLineLot(WhseShipmentLine, LotNo);
+                EnsureShipmentLot(WhseShipmentLine, LotNo);
             until WhseShipmentLine.Next() = 0;
     end;
 

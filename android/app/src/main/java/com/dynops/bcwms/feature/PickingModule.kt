@@ -20,10 +20,10 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.dynops.bcwms.BcApi
+import com.dynops.bcwms.BuildConfig
 import com.dynops.bcwms.ui.*
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
-import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.launch
 import org.json.JSONObject
 
@@ -34,8 +34,23 @@ import org.json.JSONObject
  */
 // ELOG toplama dashboard sekmeleri. ("Bekleyen" kullanıcı isteğiyle kaldırıldı —
 // Pick Created durumu terminaldeki toplayıcıyı yanıltıyordu.)
-/** Sistem sepeti üretilirken başlıkta gösterilen geçici değer. */
-private const val MAIN_LP_PENDING = "hazırlanıyor…"
+/** Kapalı/bozulmuş bir LP toplama kabı olarak kullanılamaz. */
+internal fun isPickContainerStatusUsable(status: String): Boolean =
+    status.equals("Open", true) || status.equals("Built", true) ||
+        status.equals("Assigned", true)
+
+/** Assigned picks are mutable only after the local warehouse identity is resolved
+ * and verified as the current owner. Unknown identity is deliberately fail-closed. */
+internal fun canMutateAssignedPick(assignedUserId: String, localUserId: String): Boolean =
+    canMutateAssignedDocument(assignedUserId, localUserId)
+
+internal fun canRegisterAssignedPick(
+    assignedUserId: String,
+    localUserId: String,
+    allCollected: Boolean,
+    inFlightLineCount: Int,
+): Boolean = canMutateAssignedPick(assignedUserId, localUserId) &&
+    allCollected && inFlightLineCount == 0
 
 /**
  * İyimser UI için satırın kopyasını "toplandı" durumuyla döndürür.
@@ -90,7 +105,9 @@ private fun pickOwnerOf(assignedUserId: String, me: String): PickOwner = when {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun PickingModule(v2Enabled: Boolean = false) {
-    if (v2Enabled) {
+    // BADE production uses the guarded V2 workflow exclusively. The classic
+    // screen remains available to other flavors for backwards compatibility.
+    if (BuildConfig.FLAVOR == "bade" || v2Enabled) {
         V2PickingModule()
         return
     }
@@ -141,14 +158,14 @@ private fun V2PickingModule() {
 internal fun V2FlowSelector(
     current: OutboundFlowMode,
     onSelect: (OutboundFlowMode) -> Unit,
-    sectionTitle: String = "V2 Toplama",
+    sectionTitle: String = "Toplama türü",
 ) {
     Column(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 10.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(sectionTitle, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
             Spacer(Modifier.weight(1f))
             Surface(shape = RoundedCornerShape(50), color = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)) {
-                Text("AKTİF", Modifier.padding(horizontal = 9.dp, vertical = 4.dp), fontSize = 10.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+                Text("SEÇİLİ", Modifier.padding(horizontal = 9.dp, vertical = 4.dp), fontSize = 10.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
             }
         }
         Spacer(Modifier.height(9.dp))
@@ -200,7 +217,7 @@ private fun V2PicksForFlow(flow: OutboundFlowMode) {
                 PickScope.Unassigned -> "assignedUserId eq ''"
                 PickScope.All -> null
             }
-            if (pickScope == PickScope.Mine && ownerClause == null) {
+            if (pickScope == PickScope.Mine && me.isBlank()) {
                 rows = emptyList()
                 loading = false
                 status = "HATA: Kullanıcı kimliği çözülemedi."
@@ -211,15 +228,14 @@ private fun V2PicksForFlow(flow: OutboundFlowMode) {
                 ownerClause,
                 searchClause("no", search),
             )
-            val r = BcApi.getWithStandardFallback(
+            val page = BcApi.getAllPagesWithStandardFallback(
                 context,
                 "picks?\$top=100&\$orderby=no desc&\$select=no,locationCode,assignedUserId,sourceNo,status,percentComplete,pickMode,mainLpNo$filter",
             )
-            rows = if (r.ok) BcApi.parseValueArray(r.body) else emptyList()
+            rows = if (page.complete) page.rows else emptyList()
             loading = false
             status = when {
-                r.httpCode == 400 || r.httpCode == 404 -> "BC V2 API güncellemesi yayınlanmalı."
-                !r.ok -> "HATA: Liste alınamadı (HTTP ${r.httpCode})"
+                !page.complete -> "HATA: Toplama kuyruğunun tamamı alınamadı. Yenileyin."
                 rows.isEmpty() -> "${pickScope.label} kapsamında ${flow.title} işi yok."
                 else -> "${rows.size} ${flow.title} toplaması"
             }
@@ -230,11 +246,14 @@ private fun V2PicksForFlow(flow: OutboundFlowMode) {
         scope.launch {
             loading = true
             val me = BcApi.currentUserId(context)
-            val r = if (me.isNotBlank())
-                BcApi.boundAction(context, "picks", no, "reassign", JSONObject().apply {
-                    put("userId", me); put("reason", "V2 ${flow.title} terminalinden üstlenildi")
-                }.toString())
-            else BcApi.boundAction(context, "picks", no, "assignToMe", "{}")
+            if (me.isBlank()) {
+                loading = false
+                status = "HATA: Depo kullanıcınız doğrulanamadı. Yeniden giriş yapın."
+                return@launch
+            }
+            val r = BcApi.boundAction(context, "picks", no, "reassign", JSONObject().apply {
+                put("userId", me); put("reason", "V2 ${flow.title} terminalinden üstlenildi")
+            }.toString())
             status = if (r.ok) "$no üzerinize alındı." else "HATA: ${BcApi.errorMessage(r.body)}"
             load()
         }
@@ -274,7 +293,7 @@ private fun V2PicksForFlow(flow: OutboundFlowMode) {
         LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             items(rows, key = { it.optString("no") }) { row ->
                 val no = row.optString("no")
-                val assigned = firstValue(row, "assignedUserId")
+                val assigned = row.optString("assignedUserId").trim()
                 val owner = pickOwnerOf(assigned, myUserId)
                 PickListCard(
                     d = row,
@@ -333,17 +352,17 @@ private fun ActivePicksTab() {
             }
             // "Bana atanan" isteniyor ama kimlik çözülemedi: filtresiz listeye DÜŞME —
             // aksi halde kullanıcı başkasının işlerini kendi işi sanır.
-            if (pickScope == PickScope.Mine && scopeClause == null) {
+            if (pickScope == PickScope.Mine && myUser.isBlank()) {
                 rows = emptyList(); loading = false
                 status = "HATA: Kullanıcı kimliğiniz çözülemedi; kime atandığı bilinemiyor. Yeniden giriş yapın veya Tümü ile bakın."
                 return@launch
             }
             val combined = buildODataFilter(scopeClause, searchClause("no", search))
-            val r = BcApi.getWithStandardFallback(context, "picks?\$top=100&\$orderby=no desc&\$select=no,locationCode,assignedUserId,vehicleNo,sourceNo,status,percentComplete$combined")
+            val page = BcApi.getAllPagesWithStandardFallback(context, "picks?\$top=100&\$orderby=no desc&\$select=no,locationCode,assignedUserId,vehicleNo,sourceNo,status,percentComplete$combined")
             loading = false
-            rows = if (r.ok) BcApi.parseValueArray(r.body) else emptyList()
+            rows = if (page.complete) page.rows else emptyList()
             status = when {
-                !r.ok -> "HATA: Toplama listesi alınamadı (HTTP ${r.httpCode})"
+                !page.complete -> "HATA: Toplama listesinin tamamı alınamadı. Yenileyin."
                 rows.isEmpty() -> "BOŞ: ${pickScope.label} filtresinde kayıt yok"
                 else -> "TAMAM: ${rows.size} belge · ${pickScope.label}"
             }
@@ -358,10 +377,13 @@ private fun ActivePicksTab() {
         scope.launch {
             loading = true; status = "Üzerine alınıyor..."
             val me = BcApi.currentUserId(context)
-            val r = if (me.isNotBlank())
-                BcApi.boundAction(context, "picks", no, "reassign",
-                    JSONObject().apply { put("userId", me); put("reason", "terminalden üstlenildi") }.toString())
-            else BcApi.boundAction(context, "picks", no, "assignToMe", "{}")
+            if (me.isBlank()) {
+                loading = false
+                status = "HATA: Depo kullanıcınız doğrulanamadı. Yeniden giriş yapın."
+                return@launch
+            }
+            val r = BcApi.boundAction(context, "picks", no, "reassign",
+                JSONObject().apply { put("userId", me); put("reason", "terminalden üstlenildi") }.toString())
             // "Atanmamış" kapsamındayken üstlenilen iş listeden düşer; nereye
             // gittiğini söylemezsek operatör işi kaybettiğini sanıyor.
             status = if (r.ok)
@@ -382,6 +404,7 @@ private fun ActivePicksTab() {
         documentsEndpoint = "picks",
         acceptDocTypes = setOf("pick"),
         onDocument = { selected = it },
+        onError = { status = it },
     ) { item, docs ->
         when { docs.isEmpty() -> status = "⚠️ '$item' açık toplamada yok"; docs.size == 1 -> selected = docs.first(); else -> { itemDocs = item to docs; status = "TAMAM: '$item' → ${docs.size} belge" } }
     }
@@ -432,7 +455,7 @@ private fun ActivePicksTab() {
         LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             items(shownRows) { d ->
                 val no = d.optString("no")
-                val assigned = firstValue(d, "assignedUserId")
+                val assigned = d.optString("assignedUserId").trim()
                 val owner = pickOwnerOf(assigned, myUserId)
                 PickListCard(
                     d = d,
@@ -549,21 +572,26 @@ private fun PickHistoryTab(tab: PickTab) {
         scope.launch {
             loading = true; status = "Yükleniyor..."
             val statusClause = "status eq 'Completed'"
+            val me = BcApi.currentUserId(context)
+            if (!canLoadAssignedOnlyList(showAll = tab != PickTab.Mine, localUserId = me)) {
+                rows = emptyList()
+                loading = false
+                status = "HATA: Depo kullanıcınız doğrulanamadı. Yeniden giriş yapın."
+                return@launch
+            }
             val mineClause = if (tab == PickTab.Mine) {
-                val me = BcApi.currentUserId(context)
-                if (me.isNotBlank()) "assignedUserId eq '${me.trim().uppercase().replace("'", "''")}'" else null
+                "assignedUserId eq '${me.trim().uppercase().replace("'", "''")}'"
             } else null
             val combined = buildODataFilter(statusClause, mineClause, buildRangeFilter())
             val orderBy = "$dateField desc"
-            val r = BcApi.getWithStandardFallback(
+            val page = BcApi.getAllPagesWithStandardFallback(
                 context,
                 "pickingOrders?\$top=100&\$orderby=$orderBy&\$select=entryNo,description,status,locationCode,assignedUserId,createdByUser,warehousePickNo,warehouseShipmentNo,createdDateTime,completedDateTime,orderCount$combined",
             )
             loading = false
-            rows = if (r.ok) BcApi.parseValueArray(r.body) else emptyList()
+            rows = if (page.complete) page.rows else emptyList()
             status = when {
-                r.httpCode == 400 || r.httpCode == 404 -> "⚠️ Bu ekran için BC güncellemesi (pickingOrders API) yayınlanmalı"
-                !r.ok -> "HATA: Liste alınamadı (HTTP ${r.httpCode})"
+                !page.complete -> "HATA: Toplama geçmişinin tamamı alınamadı. Yenileyin."
                 rows.isEmpty() -> "BOŞ: Kayıt yok"
                 else -> "TAMAM: ${rows.size} kayıt"
             }
@@ -616,7 +644,7 @@ private fun PickHistoryTab(tab: PickTab) {
 private fun PickHistoryCard(d: JSONObject, tab: PickTab) {
     val whenField = "completedDateTime"
     val whenText = friendlyDateTime(d.optString(whenField))
-    val user = firstValue(d, "assignedUserId", "createdByUser").ifBlank { "—" }
+    val user = rawValue(d, "assignedUserId", "createdByUser").ifBlank { "—" }
     val pickNo = d.optString("warehousePickNo").ifBlank { "Grup #${d.optInt("entryNo")}" }
     val orders = d.optInt("orderCount")
     val statusVal = d.optString("status")
@@ -703,6 +731,8 @@ private fun GuidedPickDocument(no: String, flowMode: OutboundFlowMode? = null, o
     val scope = rememberCoroutineScope()
     var header by remember { mutableStateOf<JSONObject?>(null) }
     var lines by remember { mutableStateOf<List<JSONObject>>(emptyList()) }
+    var headerLoaded by remember { mutableStateOf(false) }
+    var linesComplete by remember { mutableStateOf(false) }
     var status by remember { mutableStateOf("") }
     var busy by remember { mutableStateOf(false) }
     var binVerified by remember { mutableStateOf(false) }
@@ -729,27 +759,49 @@ private fun GuidedPickDocument(no: String, flowMode: OutboundFlowMode? = null, o
     // Belge başkasına atanmışsa toplamayı kilitlemek için oturum kullanıcısı.
     var myUserId by remember { mutableStateOf("") }
 
+    fun canSafelyMutateNow(): Boolean =
+        headerLoaded && linesComplete &&
+            canMutateAssignedPick(header?.optString("assignedUserId").orEmpty(), myUserId)
+
     fun isComplete(line: JSONObject): Boolean {
         val required = line.optDouble("quantity", 0.0)
         return required > 0 && line.optDouble("qtyToHandle", 0.0) >= required
     }
 
     suspend fun reloadNow() {
+        // Eski/eksik veriyle işlem yapılmasın. Başlık veya satırların herhangi
+        // bir sayfası alınamazsa ekran salt okunur kalır.
+        headerLoaded = false
+        linesComplete = false
+        header = null
+        lines = emptyList()
         // Başlık ve satırlar bağımsız — PARALEL çek (sırayla iki tur beklemek
         // belge açılışını ve her yenilemeyi gereksiz yavaşlatıyordu).
         coroutineScope {
             val headerJob = async { BcApi.get(context, "picks('$no')") }
-            val linesJob = async { BcApi.get(context, "pickLines?\$filter=no eq '$no'&\$top=500") }
+            val linesJob = async {
+                BcApi.getAllPages(context, "pickLines?\$filter=no eq '$no'&\$top=500")
+            }
             val h = headerJob.await()
             if (h.ok) {
-                header = JSONObject(h.body)
-                // Kayıtlı ana sepeti geri yükle — ekrandan çıkıp girince
-                // sepetin sıfırlanmasının önüne geçer.
-                val saved = header?.optString("mainLpNo").orEmpty()
-                if (saved.isNotBlank() && mainLp.isBlank()) mainLp = saved
+                val parsed = runCatching { JSONObject(h.body) }.getOrNull()
+                if (parsed != null) {
+                    header = parsed
+                    headerLoaded = true
+                    // Kayıtlı ana sepeti geri yükle — ekrandan çıkıp girince
+                    // sepetin sıfırlanmasının önüne geçer.
+                    val saved = parsed.optString("mainLpNo")
+                    if (saved.isNotBlank() && mainLp.isBlank()) mainLp = saved
+                }
             }
             val l = linesJob.await()
-            lines = if (l.ok) BcApi.parseValueArray(l.body) else emptyList()
+            lines = l.rows
+            linesComplete = l.complete
+            status = when {
+                !headerLoaded -> "HATA: Toplama belgesi alınamadı. Yenileyip tekrar deneyin."
+                !linesComplete -> "HATA: Toplama satırlarının tamamı alınamadı. Yenileyip tekrar deneyin."
+                else -> status
+            }
         }
     }
 
@@ -763,16 +815,24 @@ private fun GuidedPickDocument(no: String, flowMode: OutboundFlowMode? = null, o
 
     fun assignToMe() {
         scope.launch {
+            if (!headerLoaded || !linesComplete) {
+                status = "HATA: Belge tamamen yüklenmeden atama yapılamaz. Yenileyin."
+                return@launch
+            }
             busy = true
             status = "Kendinize atanıyor..."
             val me = BcApi.currentUserId(context)
-            val r = if (me.isNotBlank())
-                BcApi.boundAction(
-                    context, "picks", no, "reassign",
-                    JSONObject().apply { put("userId", me); put("reason", "terminalden kendime atadım") }.toString(),
-                )
-            else BcApi.boundAction(context, "picks", no, "assignToMe", "{}")
+            if (me.isBlank()) {
+                status = "HATA: Depo kullanıcısı doğrulanamadı. Yeniden giriş yapın."
+                busy = false
+                return@launch
+            }
+            val r = BcApi.boundAction(
+                context, "picks", no, "reassign",
+                JSONObject().apply { put("userId", me); put("reason", "terminalden kendime atadım") }.toString(),
+            )
             status = if (r.ok) "✅ Pick kendinize atandı" else "HATA: ${BcApi.errorMessage(r.body)}"
+            if (r.ok) myUserId = me
             reloadNow()
             busy = false
         }
@@ -780,45 +840,66 @@ private fun GuidedPickDocument(no: String, flowMode: OutboundFlowMode? = null, o
 
     // ELOG ana sepet: okutulan LP'yi bu pick'in toplama kabı yap. Boş okutulursa
     // sistem otomatik bir shipping LP üretir (startShippingLP). LP header'a bağlanır.
-    /** Ana sepeti BC'ye yaz (kalıcı olsun; ekrandan çıkıp girince kaybolmasın). */
-    fun persistMainLp(lp: String) {
-        if (lp.isBlank()) return
-        scope.launch {
-            val body = JSONObject().apply { put("mainLpNo", lp) }.toString()
-            val r = BcApi.patch(context, "picks('$no')", body)
-            // Alan henüz publish edilmemişse (400/404) sessiz geç: sepet yine de
-            // ekranda çalışır, sadece kalıcı olmaz.
-            if (!r.ok && r.httpCode !in listOf(400, 404))
-                status = "⚠️ Sepet kaydedilemedi: ${BcApi.errorMessage(r.body)}"
-        }
+    /** LP'yi sunucuda doğrula ve pick başlığına kalıcı bağla. İki adım da
+     * başarılı olmadan ürün okutma kapısı açılmaz. */
+    suspend fun validateAndPersistMainLp(lp: String): String? {
+        if (lp.isBlank()) return "Geçerli bir sepet numarası alınamadı."
+        val safeLp = lp.replace("'", "''")
+        val validation = BcApi.get(context, "licensePlates('$safeLp')")
+        if (!validation.ok) return "Sepet bulunamadı veya doğrulanamadı."
+        val lpHeader = runCatching { JSONObject(validation.body) }.getOrNull()
+            ?: return "Sepet bilgisi okunamadı."
+        if (!isPickContainerStatusUsable(lpHeader.optString("status")))
+            return "Bu sepet açık değil. Başka bir sepet seçin."
+
+        val persisted = BcApi.patch(
+            context,
+            "picks('${no.replace("'", "''")}')",
+            JSONObject().apply { put("mainLpNo", lp) }.toString(),
+        )
+        return if (persisted.ok) null else "Sepet toplama belgesine bağlanamadı. Yenileyip tekrar deneyin."
     }
 
     fun startMainLp(scannedLp: String) {
-        val lp = com.dynops.bcwms.scanner.BarcodeIntentResolver.resolve(scannedLp).value.trim()
-        if (lp.isNotBlank()) {
-            // Okutulan mevcut LP → anında toplama kabı yap; ağ beklemesi yok.
-            mainLp = lp
-            lpInput = ""
-            status = "📦 Ana sepet: $lp — toplamaya başlayın"
-            persistMainLp(lp)
+        if (!canSafelyMutateNow()) {
+            status = if (!headerLoaded || !linesComplete)
+                "HATA: Belge tamamen yüklenmedi. Yenileyip tekrar deneyin."
+            else "HATA: Depo kullanıcısı doğrulanamadı. Yeniden giriş yapın."
             return
         }
-        // Boş okutma → sistem LP üretsin. İyimser akış: kapıyı hemen aç,
-        // LP numarası gelince başlıktaki değeri güncelle. Operatör beklemez.
+        val lp = com.dynops.bcwms.scanner.BarcodeIntentResolver.resolve(scannedLp).value.trim()
         if (mainLpPending) return
         mainLpPending = true
-        mainLp = MAIN_LP_PENDING
-        status = "📦 Ana sepet hazırlanıyor — toplamaya başlayabilirsiniz"
+        mainLp = ""
+        status = if (lp.isNotBlank()) "📦 Sepet doğrulanıyor…" else "📦 Ana sepet hazırlanıyor…"
         scope.launch {
-            val r = BcApi.boundAction(context, "picks", no, "startShippingLP",
-                JSONObject().apply { put("lpTemplateCode", "PALLET") }.toString())
-            if (r.ok) {
-                mainLp = BcApi.scalarValue(r.body)
-                status = "📦 Ana sepet: $mainLp"
-                persistMainLp(mainLp)
-            } else {
-                mainLp = ""
-                status = "HATA: ${BcApi.errorMessage(r.body)} (HTTP ${r.httpCode})"
+            val candidate = if (lp.isNotBlank()) lp else {
+                val template = resolveLpTemplate(context, LpPurpose.PALLET)
+                if (template == null) {
+                    status = "HATA: Uygun palet şablonu belirlenemedi. Mevcut bir LP okutun veya LP ekranından şablon seçerek oluşturun."
+                    mainLpPending = false
+                    return@launch
+                }
+                val r = BcApi.boundAction(
+                    context, "picks", no, "startShippingLP",
+                    JSONObject().apply { put("lpTemplateCode", template) }.toString(),
+                )
+                if (!r.ok) {
+                    status = QcErrorParser.friendlyStatus(BcApi.errorMessage(r.body), r.httpCode)
+                    ""
+                } else BcApi.scalarValue(r.body).trim()
+            }
+            if (candidate.isNotBlank()) {
+                val validationError = validateAndPersistMainLp(candidate)
+                if (validationError == null) {
+                    mainLp = candidate
+                    lpInput = ""
+                    showLpScan = false
+                    status = "📦 Ana sepet: $candidate — toplamaya başlayın"
+                } else {
+                    mainLp = ""
+                    status = "HATA: $validationError"
+                }
             }
             mainLpPending = false
         }
@@ -830,6 +911,12 @@ private fun GuidedPickDocument(no: String, flowMode: OutboundFlowMode? = null, o
      * BC yazımı arka planda gider; hata olursa yerel işaret geri alınır.
      */
     fun completeLine(line: JSONObject, lotNo: String = "") {
+        if (!canSafelyMutateNow()) {
+            status = if (!headerLoaded || !linesComplete)
+                "HATA: Toplama satırları eksik. Yenileyip tekrar deneyin."
+            else "HATA: Depo kullanıcısı doğrulanamadı. Yeniden giriş yapın."
+            return
+        }
         if (isComplete(line)) return
         val lineNo = line.optInt("lineNo")
         if (lineNo in inFlightLines) return
@@ -843,13 +930,8 @@ private fun GuidedPickDocument(no: String, flowMode: OutboundFlowMode? = null, o
         status = "✅ $itemNo tamamlandı"
         // 2) BC'ye arka planda yaz.
         scope.launch {
-            val actType = line.optString("activityType").ifBlank { BcEnum.WhseActivityType.PICK }
-            val body = JSONObject().apply {
-                put("qtyToHandle", qty)
-                val effectiveLot = lotNo.ifBlank { line.optString("lotNo") }
-                if (effectiveLot.isNotBlank()) put("lotNo", effectiveLot)
-            }.toString()
-            val r = BcApi.patch(context, "pickLines(activityType='$actType',no='$no',lineNo=$lineNo)", body)
+            val effectiveLot = lotNo.ifBlank { line.optString("lotNo") }
+            val r = BcApi.confirmPickLine(context, no, lineNo, qty, effectiveLot)
             if (!r.ok) {
                 // Geri al + gerçek durumu tazele.
                 status = QcErrorParser.friendlyStatus(BcApi.errorMessage(r.body), r.httpCode)
@@ -861,12 +943,14 @@ private fun GuidedPickDocument(no: String, flowMode: OutboundFlowMode? = null, o
 
     // ELOG: aynı üründen bu rafta birden çok açık satır varsa, girilen toplam
     // miktarı satırlara (outstanding'e göre) dağıt. Tek okutma → tek miktar girişi.
-    /**
-     * Grup dağıtımı. İYİMSER + PARALEL: satırlar anında yerelde tamamlanır,
-     * BC yazımları aynı anda gider (eskiden ekran kilitlenip PATCH'ler sırayla
-     * atılıyordu — 4 siparişe dağıtım ~2-3 sn sürüyordu).
-     */
+    /** Grup dağıtımı iyimser görünür; sunucu yazımları deadlock oluşmaması için seri gider. */
     fun completeGroup(group: LineGroup, totalQty: Double, lotNo: String) {
+        if (!canSafelyMutateNow()) {
+            status = if (!headerLoaded || !linesComplete)
+                "HATA: Toplama satırları eksik. Yenileyip tekrar deneyin."
+            else "HATA: Depo kullanıcısı doğrulanamadı. Yeniden giriş yapın."
+            return
+        }
         val plan = distributeQty(group, totalQty, ::pickLineCapacity)
         if (plan.isEmpty()) return
 
@@ -879,23 +963,21 @@ private fun GuidedPickDocument(no: String, flowMode: OutboundFlowMode? = null, o
         }
         status = "✅ ${group.itemNo} → ${plan.size} siparişe dağıtıldı (${pickQty(totalQty)} adet)"
 
-        // 2) BC'ye paralel yaz.
+        // 2) BC'ye seri ve sınırlı retry ile yaz. Aynı pick tablosundaki paralel
+        // PATCH'ler sahada deadlock üretip 1/2 satır yazılmış bırakıyordu.
         scope.launch {
-            val results = plan.map { (ln, q) ->
-                async {
-                    val actType = ln.optString("activityType").ifBlank { BcEnum.WhseActivityType.PICK }
-                    val body = JSONObject().apply {
-                        put("qtyToHandle", q)
-                        val effectiveLot = lotNo.ifBlank { ln.optString("lotNo") }
-                        if (effectiveLot.isNotBlank()) put("lotNo", effectiveLot)
-                    }.toString()
-                    BcApi.patch(context, "pickLines(activityType='$actType',no='$no',lineNo=${ln.optInt("lineNo")})", body)
+            var okCount = 0
+            var firstFailure: BcApi.ApiResult? = null
+            for ((ln, q) in plan) {
+                val effectiveLot = lotNo.ifBlank { ln.optString("lotNo") }
+                val result = BcApi.confirmPickLine(context, no, ln.optInt("lineNo"), q, effectiveLot)
+                if (result.ok) okCount++ else {
+                    firstFailure = result
+                    break
                 }
-            }.awaitAll()
-
-            val failed = results.filterNot { it.ok }
-            if (failed.isNotEmpty()) {
-                status = "HATA: ${results.size - failed.size}/${results.size} yazıldı — ${BcApi.errorMessage(failed.first().body)}"
+            }
+            if (firstFailure != null) {
+                status = "HATA: $okCount/${plan.size} satır yazıldı — ${BcApi.errorMessage(firstFailure.body)}"
                 reloadNow()   // iyimser değişikliği geri al
             }
             inFlightLines = inFlightLines - planned.keys
@@ -905,11 +987,22 @@ private fun GuidedPickDocument(no: String, flowMode: OutboundFlowMode? = null, o
     // Ürün okutma yönlendirmesi: bu rafta aynı üründen ÇOK açık satır varsa miktar
     // popup'ı aç (dağıtım); tek satır varsa doğrudan tamamla. openLines = o an
     // açık aktif-raf satırları (çağıran verir — activeLines composable'da sonra tanımlı).
-    fun handleItemScan(openLines: List<JSONObject>, itemNo: String, lotNo: String) {
-        val group = groupLines(openLines, ::pickLineCapacity)
-            .firstOrNull { it.itemNo.equals(itemNo, ignoreCase = true) }
+    fun handleItemScan(openLines: List<JSONObject>, itemNo: String, lotNo: String, serialNo: String = "") {
+        val selection = selectScannedLineGroup(
+            groups = groupLines(openLines, ::pickLineCapacity),
+            itemNo = itemNo,
+            lotNo = lotNo,
+            serialNo = serialNo,
+        )
+        val group = selection.group
         when {
-            group == null -> status = "⚠️ Bu rafta açık $itemNo satırı yok"
+            selection.issue == ScannedGroupIssue.ItemMissing ->
+                status = "⚠️ Bu rafta açık $itemNo satırı yok"
+            selection.issue == ScannedGroupIssue.TrackingMismatch ->
+                status = "HATA: Okutulan lot/seri bu ürünün açık toplama satırıyla eşleşmiyor."
+            selection.issue == ScannedGroupIssue.Ambiguous ->
+                status = "HATA: Bu ürün birden fazla lot/seri satırında. Lot veya seri barkodunu okutun."
+            group == null -> status = "HATA: Toplama satırı seçilemedi. Yenileyip tekrar deneyin."
             // Çok satır → miktar dağıtım dialogu (operatör toplamı girer).
             group.count > 1 -> qtyGroup = group
             // Tek satır → ONAY kartı: kaç adet alınacağı büyük puntoyla gösterilir.
@@ -920,10 +1013,29 @@ private fun GuidedPickDocument(no: String, flowMode: OutboundFlowMode? = null, o
     }
 
     fun registerPick() {
+        val registerTakeLines = lines.filter { !it.optString("actionType").equals("Place", ignoreCase = true) }
+        val registerAllCollected = headerLoaded && linesComplete &&
+            registerTakeLines.isNotEmpty() && registerTakeLines.all(::isComplete)
+        if (!canRegisterAssignedPick(
+                header?.optString("assignedUserId").orEmpty(),
+                myUserId,
+                registerAllCollected,
+                inFlightLines.size,
+            )
+        ) {
+            status = when {
+                !headerLoaded || !linesComplete -> "Belge tamamen yüklenmedi. Yenileyip tekrar deneyin."
+                myUserId.isBlank() -> "HATA: Depo kullanıcısı doğrulanamadı. Yeniden giriş yapın."
+                inFlightLines.isNotEmpty() -> "Ürün kayıtları tamamlanıyor. Lütfen bekleyin."
+                !registerAllCollected -> "Önce tüm ürünleri toplayın."
+                else -> "Bu toplamayı kaydetme yetkiniz yok."
+            }
+            return
+        }
         scope.launch {
             busy = true
-            status = "Pick post ediliyor..."
-            val r = BcApi.boundAction(context, "picks", no, "register", "{}")
+            status = "Toplama kaydediliyor..."
+            val r = BcApi.registerPick(context, no)
             busy = false
             if (r.ok) {
                 status = "✅ Toplama tamamlandı; siparişler paketlemeye aktarıldı"
@@ -940,14 +1052,16 @@ private fun GuidedPickDocument(no: String, flowMode: OutboundFlowMode? = null, o
     val currentBin = outstanding.sortedWith(compareBy(binWalkComparator) { it.optString("binCode") })
         .firstOrNull()?.optString("binCode")
     val activeLines = takeLines.filter { it.optString("binCode").equals(currentBin, ignoreCase = true) }
-    val allCollected = takeLines.isNotEmpty() && outstanding.isEmpty()
-    val orderCount = takeLines.map { firstValue(it, "sourceNo").ifBlank { "—" } }.distinct().size
+    val allCollected = headerLoaded && linesComplete && takeLines.isNotEmpty() && outstanding.isEmpty()
+    val orderCount = takeLines.map { rawValue(it, "sourceNo").ifBlank { "—" } }.distinct().size
     val assignedTo = header?.optString("assignedUserId").orEmpty()
-    val notAssigned = assignedTo.isBlank()
+    val notAssigned = headerLoaded && assignedTo.isBlank()
     // Belge başkasına atanmış: liste ekranındaki uyarıya rağmen açıldıysa burada
     // toplama kilitli kalır — iki kişinin aynı pick'i toplaması miktarları bozar.
-    // Kimlik çözülemediyse (myUserId boş) kilitleme, yanlış kilitlemek daha kötü.
+    // Kimlik çözülemediyse ayrı bir güvenli kilit gösterilir; mutasyonlar açılmaz.
     val lockedByOther = pickOwnerOf(assignedTo, myUserId) == PickOwner.Other
+    val identityUnresolved = assignedTo.isNotBlank() && myUserId.isBlank()
+    val canMutate = headerLoaded && linesComplete && canMutateAssignedPick(assignedTo, myUserId)
 
     LaunchedEffect(currentBin) {
         binVerified = currentBin.isNullOrBlank()
@@ -960,16 +1074,16 @@ private fun GuidedPickDocument(no: String, flowMode: OutboundFlowMode? = null, o
     // zorunda kalmadan sarı tetikle okutabilsin. Görünür "📷 Ürün okut" alanı ise
     // elle giriş + kamera içindir (focuslu iken donanımı da işler; tamamlanmış
     // satır ikinci kez okununca zararsızca "açık satır yok" der).
-    val needsMainLp = mainLp.isBlank() && !notAssigned && !lockedByOther
+    val needsMainLp = (mainLp.isBlank() || mainLpPending) && canMutate
     DocumentScanHandler(
         // `busy` artık okutmayı engellemiyor: satır tamamlama iyimser çalışıyor,
         // operatör arka plandaki BC yazımını beklemeden sonraki ürüne geçebilir.
-        enabled = !notAssigned && !lockedByOther && !allCollected && !needsMainLp && qtyGroup == null && confirmGroup == null,
+        enabled = canMutate && !allCollected && !needsMainLp && qtyGroup == null && confirmGroup == null,
         lines = if (binVerified) activeLines.filterNot(::isComplete) else emptyList(),
         // Tek eşleşme de olsa handleItemScan'e ver — o ürünün rafta çok satırı varsa
         // miktar popup'ı açar (BN.0353 ×4 = 2 sipariş → 1 okut, 4 gir).
-        onSingleMatch = { line, resolved -> handleItemScan(activeLines.filterNot(::isComplete), line.optString("itemNo"), resolved.lotNo.orEmpty()) },
-        onMultiMatch = { itemNo, resolved -> handleItemScan(activeLines.filterNot(::isComplete), itemNo, resolved.lotNo.orEmpty()) },
+        onSingleMatch = { line, resolved -> handleItemScan(activeLines.filterNot(::isComplete), line.optString("itemNo"), resolved.lotNo.orEmpty(), resolved.serialNo.orEmpty()) },
+        onMultiMatch = { itemNo, resolved -> handleItemScan(activeLines.filterNot(::isComplete), itemNo, resolved.lotNo.orEmpty(), resolved.serialNo.orEmpty()) },
         onNoMatch = { resolved ->
             val scanned = resolved.value.trim()
             if (!binVerified && !currentBin.isNullOrBlank() && scanned.equals(currentBin, ignoreCase = true)) {
@@ -1015,6 +1129,9 @@ private fun GuidedPickDocument(no: String, flowMode: OutboundFlowMode? = null, o
             Spacer(Modifier.height(8.dp))
 
             when {
+                !headerLoaded || !linesComplete -> EmptyState(
+                    "Toplama belgesi tamamen yüklenemedi. Yenileyip tekrar deneyin.",
+                )
                 // ELOG: pick kimseye atanmadan ürün listesi/okutma hiç gösterilmez —
                 // toplama sadece "Kendime Ata" ile başlatılabilir.
                 notAssigned -> Column {
@@ -1029,7 +1146,7 @@ private fun GuidedPickDocument(no: String, flowMode: OutboundFlowMode? = null, o
                             Spacer(Modifier.height(14.dp))
                             Button(
                                 onClick = { assignToMe() },
-                                enabled = !busy,
+                                enabled = !busy && !mainLpPending,
                                 modifier = Modifier.fillMaxWidth().height(50.dp),
                             ) { Text("✋ Kendime Ata ve Toplamaya Başla", fontWeight = FontWeight.Bold) }
                         }
@@ -1037,6 +1154,18 @@ private fun GuidedPickDocument(no: String, flowMode: OutboundFlowMode? = null, o
                 }
                 // Başkasına atanmış belge: salt görüntüleme. Toplamak isteyen
                 // önce açıkça devralmalı — sessizce ortak toplama yapılamaz.
+                identityUnresolved -> Column {
+                    Card(
+                        colors = CardDefaults.cardColors(containerColor = Color(0xFFFFF3E0)),
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Column(Modifier.fillMaxWidth().padding(20.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text("Depo kullanıcısı doğrulanamadı", fontWeight = FontWeight.Bold, color = Color(0xFFB45309))
+                            Spacer(Modifier.height(4.dp))
+                            Text("Güvenli devam etmek için yeniden giriş yapın.", fontSize = 12.sp, color = Color(0xFF92400E))
+                        }
+                    }
+                }
                 lockedByOther -> Column {
                     Card(
                         colors = CardDefaults.cardColors(containerColor = Color(0xFFFFEBEE)),
@@ -1054,7 +1183,7 @@ private fun GuidedPickDocument(no: String, flowMode: OutboundFlowMode? = null, o
                             Spacer(Modifier.height(14.dp))
                             Button(
                                 onClick = { assignToMe() },
-                                enabled = !busy,
+                                enabled = !busy && myUserId.isNotBlank(),
                                 modifier = Modifier.fillMaxWidth().height(50.dp),
                             ) { Text("Devral ve Toplamaya Başla", fontWeight = FontWeight.Bold) }
                             Spacer(Modifier.height(6.dp))
@@ -1096,7 +1225,7 @@ private fun GuidedPickDocument(no: String, flowMode: OutboundFlowMode? = null, o
                             Spacer(Modifier.height(12.dp))
                             Button(
                                 onClick = { startMainLp("") },
-                                enabled = !busy,
+                                enabled = !busy && canMutate,
                                 modifier = Modifier.fillMaxWidth().height(50.dp),
                             ) { Text("✓ Önerilen sepeti kullan", fontWeight = FontWeight.Bold) }
 
@@ -1104,7 +1233,7 @@ private fun GuidedPickDocument(no: String, flowMode: OutboundFlowMode? = null, o
                             if (!showLpScan) {
                                 TextButton(
                                     onClick = { showLpScan = true },
-                                    enabled = !busy,
+                                    enabled = !busy && !mainLpPending && canMutate,
                                     modifier = Modifier.fillMaxWidth(),
                                 ) { Text("📷 Farklı bir sepet okut / değiştir") }
                             } else {
@@ -1115,13 +1244,13 @@ private fun GuidedPickDocument(no: String, flowMode: OutboundFlowMode? = null, o
                                     value = lpInput,
                                     onValueChange = { lpInput = it },
                                     modifier = Modifier.fillMaxWidth(),
-                                    enabled = !busy,
+                                    enabled = !busy && !mainLpPending && canMutate,
                                     onScanned = { startMainLp(it) },
                                 )
                                 Spacer(Modifier.height(6.dp))
                                 TextButton(
                                     onClick = { showLpScan = false; lpInput = "" },
-                                    enabled = !busy,
+                                    enabled = !busy && !mainLpPending && canMutate,
                                     modifier = Modifier.fillMaxWidth(),
                                 ) { Text("‹ Vazgeç, öneriye dön", fontSize = 12.sp) }
                             }
@@ -1180,7 +1309,7 @@ private fun GuidedPickDocument(no: String, flowMode: OutboundFlowMode? = null, o
                         modifier = Modifier.fillMaxWidth(),
                         // Onay/miktar kartı açıkken okutma kapalı: arkadan gelen
                         // ikinci okutma açık kartı sessizce ezmesin.
-                        enabled = qtyGroup == null && confirmGroup == null,
+                        enabled = canMutate && qtyGroup == null && confirmGroup == null,
                         onScanned = { raw ->
                             scanInput = ""
                             val resolved = com.dynops.bcwms.scanner.BarcodeIntentResolver.resolve(raw)
@@ -1188,7 +1317,7 @@ private fun GuidedPickDocument(no: String, flowMode: OutboundFlowMode? = null, o
                             val match = matchLinesByBarcode(open, resolved)
                             // Eşleşen satırın ürününü handleItemScan'e ver → aynı üründen
                             // çok satır varsa miktar popup'ı açılır, tek satırsa tamamlanır.
-                            if (match.isNotEmpty()) handleItemScan(open, match.first().optString("itemNo"), resolved.lotNo.orEmpty())
+                            if (match.isNotEmpty()) handleItemScan(open, match.first().optString("itemNo"), resolved.lotNo.orEmpty(), resolved.serialNo.orEmpty())
                             else status = "❌ Bu rafta açık '${resolved.itemNo ?: raw}' satırı yok"
                         },
                     )
@@ -1203,7 +1332,7 @@ private fun GuidedPickDocument(no: String, flowMode: OutboundFlowMode? = null, o
                         itemGroups.forEach { group ->
                             val done = group.lines.all(::isComplete)
                             val doneCount = group.lines.count(::isComplete)
-                            val orderNos = group.lines.map { firstValue(it, "sourceNo").ifBlank { "—" } }.distinct()
+                            val orderNos = group.lines.map { rawValue(it, "sourceNo").ifBlank { "—" } }.distinct()
                             Card(
                                 // ELOG: henüz toplanmamış (bekleyen) satırlar hafif kırmızı/pembe
                                 // zeminde belirginleşsin; toplananlar yeşile döner.
@@ -1258,12 +1387,14 @@ private fun GuidedPickDocument(no: String, flowMode: OutboundFlowMode? = null, o
             Button(
                 onClick = { registerPick() },
                 // Başkasının pick'i post edilemez — önce devralınmalı.
-                enabled = !busy && allCollected && !lockedByOther,
+                enabled = !busy && canRegisterAssignedPick(assignedTo, myUserId, allCollected, inFlightLines.size),
                 modifier = Modifier.weight(2f).height(54.dp),
             ) {
                 Text(
                     when {
+                        identityUnresolved -> "Yeniden Giriş Gerekli"
                         lockedByOther -> "Önce Devralın"
+                        inFlightLines.isNotEmpty() -> "Kayıtlar Tamamlanıyor"
                         allCollected -> "✅ Pick'i Post Et"
                         else -> "Önce Tümünü Topla"
                     },
@@ -1288,8 +1419,8 @@ private fun GuidedPickDocument(no: String, flowMode: OutboundFlowMode? = null, o
             lotRequired = qg.lines.any { it.optBoolean("lotRequired", false) },
             showAvailableLotLookup = true,
             autoDetectLotFromStock = true,
-            locationCode = firstValue(qg.lines.first(), "locationCode"),
-            variantCode = firstValue(qg.lines.first(), "variantCode"),
+            locationCode = rawValue(qg.lines.first(), "locationCode"),
+            variantCode = qg.lines.first().optString("variantCode"),
             onDismiss = { qtyGroup = null },
             onConfirm = { res ->
                 qtyGroup = null
@@ -1467,7 +1598,7 @@ private fun PickListCard(
     onOpen: () -> Unit,
     onTake: () -> Unit,
 ) {
-    val assigned = firstValue(d, "assignedUserId")
+    val assigned = d.optString("assignedUserId").trim()
     val pct = d.optInt("percentComplete").coerceIn(0, 100)
     Card(
         onClick = onOpen,
@@ -1490,7 +1621,7 @@ private fun PickListCard(
                 Spacer(Modifier.height(2.dp))
                 // Atama bilgisi artık alttaki rozette — burada tekrar edilmiyor.
                 Text(
-                    "📍 ${firstValue(d, "locationCode").ifBlank { "—" }}",
+                    "📍 ${rawValue(d, "locationCode").ifBlank { "—" }}",
                     fontSize = 11.sp, color = Color.Gray,
                 )
                 Spacer(Modifier.height(6.dp))
@@ -1588,14 +1719,28 @@ private fun PickDocument(no: String, onBack: () -> Unit) {
         }
     }
 
+    fun registerForCurrentUser() {
+        scope.launch {
+            busy = true
+            status = "Toplama kaydediliyor..."
+            val r = BcApi.registerPick(context, no)
+            busy = false
+            status = if (r.ok) "TAMAM: Toplama kaydedildi"
+                else QcErrorParser.friendlyStatus(BcApi.errorMessage(r.body), r.httpCode)
+            if (r.ok) reload()
+        }
+    }
+
     fun updateLine(line: JSONObject, qtyHandled: Double) {
         scope.launch {
             busy = true; status = "Satır güncelleniyor..."
-            val body = JSONObject().apply { put("qtyToHandle", qtyHandled) }.toString()
-            // Composite key needs a non-blank activityType. Fall back to PICK if BC didn't echo it
-            // (some downlevel API page responses omit it from the line projection).
-            val actType = line.optString("activityType").ifBlank { BcEnum.WhseActivityType.PICK }
-            val r = BcApi.patch(context, "pickLines(activityType='$actType',no='$no',lineNo=${line.optInt("lineNo")})", body)
+            val r = BcApi.confirmPickLine(
+                context = context,
+                pickNo = no,
+                lineNo = line.optInt("lineNo"),
+                qtyToHandle = qtyHandled,
+                lotNo = line.optString("lotNo"),
+            )
             busy = false
             status = if (r.ok) "TAMAM: Satır güncellendi (HTTP ${r.httpCode})"
                 else QcErrorParser.friendlyStatus(BcApi.errorMessage(r.body), r.httpCode)
@@ -1612,7 +1757,7 @@ private fun PickDocument(no: String, onBack: () -> Unit) {
     fun requestToteSuggestion(line: JSONObject) {
         scope.launch {
             busy = true; status = "Sepet sorgulanıyor..."
-            val src = firstValue(line, "sourceNo")
+            val src = rawValue(line, "sourceNo")
             val r = BcApi.boundAction(context, "picks", no, "toteForOrder",
                 JSONObject().apply { put("sourceOrderNo", src) }.toString())
             busy = false
@@ -1708,8 +1853,28 @@ private fun PickDocument(no: String, onBack: () -> Unit) {
         BottomActionBar {
             if (shipLp == null) {
                 OutlinedButton(onClick = {
-                    action("startShippingLP", """{"lpTemplateCode":"PALLET"}""", "Shipping LP başladı") { r ->
-                        if (r.ok) shipLp = BcApi.scalarValue(r.body)
+                    scope.launch {
+                        busy = true
+                        status = "Uygun palet şablonu belirleniyor..."
+                        val template = resolveLpTemplate(context, LpPurpose.PALLET)
+                        if (template == null) {
+                            status = "HATA: Uygun palet şablonu belirlenemedi. LP ekranından şablon seçerek bir LP oluşturun."
+                            busy = false
+                            return@launch
+                        }
+                        val r = BcApi.boundAction(
+                            context, "picks", no, "startShippingLP",
+                            JSONObject().apply { put("lpTemplateCode", template) }.toString(),
+                        )
+                        val createdLp = if (r.ok) BcApi.scalarValue(r.body).trim() else ""
+                        status = when {
+                            !r.ok -> QcErrorParser.friendlyStatus(BcApi.errorMessage(r.body), r.httpCode)
+                            createdLp.isBlank() -> "HATA: LP oluşturuldu ancak numarası alınamadı. Belgeyi yenileyip kontrol edin."
+                            else -> "TAMAM: $createdLp başlatıldı"
+                        }
+                        if (createdLp.isNotBlank()) shipLp = createdLp
+                        busy = false
+                        if (createdLp.isNotBlank()) reload()
                     }
                 }, enabled = !busy, modifier = Modifier.weight(1f)) { Text("LP Başlat") }
                 OutlinedButton(onClick = { showTote = true }, enabled = !busy, modifier = Modifier.weight(1f)) { Text("🧺 Tote") }
@@ -1738,7 +1903,7 @@ private fun PickDocument(no: String, onBack: () -> Unit) {
         BottomActionBar {
             val canRegister = com.dynops.bcwms.lib.ActionGuards.hasQuantity(lines)
             Button(
-                onClick = { action("register", "{}", "Toplama kaydedildi") },
+                onClick = { registerForCurrentUser() },
                 enabled = !busy && canRegister,
                 modifier = Modifier.fillMaxWidth().height(54.dp),
             ) {
@@ -1778,13 +1943,13 @@ private fun PickDocument(no: String, onBack: () -> Unit) {
                     scope.launch {
                         try {
                             val qty = scanTarget.optDouble("quantity")
-                            val body = JSONObject().apply {
-                                put("qtyToHandle", qty)
-                                // ELOG: terminalden girilen lot no'yu satıra yaz.
-                                if (lotNo.isNotBlank()) put("lotNo", lotNo)
-                            }.toString()
-                            val actType = scanTarget.optString("activityType").ifBlank { BcEnum.WhseActivityType.PICK }
-                            val r = BcApi.patch(context, "pickLines(activityType='$actType',no='$no',lineNo=${scanTarget.optInt("lineNo")})", body)
+                            val r = BcApi.confirmPickLine(
+                                context = context,
+                                pickNo = no,
+                                lineNo = scanTarget.optInt("lineNo"),
+                                qtyToHandle = qty,
+                                lotNo = lotNo,
+                            )
                             status = if (r.ok) "✅ Doğrulandı + tamamlandı (HTTP ${r.httpCode})"
                                 else QcErrorParser.friendlyStatus(BcApi.errorMessage(r.body), r.httpCode)
                             if (r.ok) reload()
@@ -1826,7 +1991,7 @@ private fun PickDocument(no: String, onBack: () -> Unit) {
                 scope.launch {
                     if (expected.isBlank()) {
                         busy = true; status = "Sepet bağlanıyor..."
-                        val src = firstValue(line, "sourceNo")
+                        val src = rawValue(line, "sourceNo")
                         val r = BcApi.boundAction(context, "picks", no, "assignTote",
                             JSONObject().apply { put("sourceOrderNo", src); put("lpNo", scannedLp) }.toString())
                         busy = false
@@ -1856,8 +2021,8 @@ private fun PickDocument(no: String, onBack: () -> Unit) {
             lotRequired = gt.lines.any { it.optBoolean("lotRequired", false) },
             showAvailableLotLookup = true,
             autoDetectLotFromStock = true,
-            locationCode = firstValue(gt.lines.first(), "locationCode"),
-            variantCode = firstValue(gt.lines.first(), "variantCode"),
+            locationCode = rawValue(gt.lines.first(), "locationCode"),
+            variantCode = gt.lines.first().optString("variantCode"),
             onDismiss = { groupTarget = null },
             onConfirm = { res ->
                 groupTarget = null
@@ -1867,13 +2032,11 @@ private fun PickDocument(no: String, onBack: () -> Unit) {
                     var okCount = 0
                     var firstErr: String? = null
                     for ((ln, q) in plan) {
-                        val actType = ln.optString("activityType").ifBlank { BcEnum.WhseActivityType.PICK }
-                        val body = JSONObject().apply {
-                            put("qtyToHandle", q)
-                            if (res.lotNo.isNotBlank()) put("lotNo", res.lotNo)
-                        }.toString()
-                        val r = BcApi.patch(context, "pickLines(activityType='$actType',no='$no',lineNo=${ln.optInt("lineNo")})", body)
-                        if (r.ok) okCount++ else if (firstErr == null) firstErr = BcApi.errorMessage(r.body)
+                        val r = BcApi.confirmPickLine(context, no, ln.optInt("lineNo"), q, res.lotNo)
+                        if (r.ok) okCount++ else {
+                            if (firstErr == null) firstErr = BcApi.errorMessage(r.body)
+                            break
+                        }
                     }
                     busy = false
                     status = if (firstErr == null) "TAMAM: $okCount/${plan.size} satıra dağıtıldı"
@@ -1927,7 +2090,7 @@ private fun ToteSuggestSheet(
     com.dynops.bcwms.ui.SheetScaffold(onDismiss = onDismiss, contentPadding = androidx.compose.foundation.layout.PaddingValues(20.dp)) {
         Text("🧺 Sepete Koy", fontWeight = FontWeight.Bold, fontSize = 18.sp)
         Text("${line.optString("itemNo")} — ${line.optString("description")}", fontSize = 12.sp, color = Color.Gray)
-        Text("Sipariş: ${firstValue(line, "sourceNo").ifBlank { "-" }} · Miktar: ${line.optDouble("quantity")}", fontSize = 12.sp, color = Color.Gray)
+        Text("Sipariş: ${rawValue(line, "sourceNo").ifBlank { "-" }} · Miktar: ${line.optDouble("quantity")}", fontSize = 12.sp, color = Color.Gray)
         Spacer(Modifier.height(12.dp))
         if (expectedLp.isNotBlank()) {
             Surface(color = Color(0xFFE3F2FD), shape = RoundedCornerShape(10.dp)) {

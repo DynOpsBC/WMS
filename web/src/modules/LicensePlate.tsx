@@ -131,10 +131,10 @@ function LpDetail({ no, onBack }: { no: string; onBack: () => void }) {
         {lines.map((ln) => (
           <div key={`${ln.lpNo}-${ln.lineNo}`} className="card">
             <div className="card-title">
-              #{Number(ln.lineNo)} · {String(ln.itemNo)} × {Number(ln.quantity ?? 0)} {BcApi.firstValue(ln, "unitOfMeasureCode")}
+              #{Number(ln.lineNo)} · {String(ln.itemNo)} × {Number(ln.quantity ?? 0)} {BcApi.firstValue(ln, "unitOfMeasure")}
             </div>
             <div className="card-meta">
-              Lot: {BcApi.firstValue(ln, "lotNo") || "-"} · Serial: {BcApi.firstValue(ln, "serialNo") || "-"}
+              Kaynak raf: {BcApi.firstValue(ln, "sourceBinCode") || "-"} · Lot: {BcApi.firstValue(ln, "lotNo") || "-"} · Serial: {BcApi.firstValue(ln, "serialNo") || "-"}
             </div>
           </div>
         ))}
@@ -171,22 +171,21 @@ function LpDetail({ no, onBack }: { no: string; onBack: () => void }) {
       {showAddLine && (
         <AddLineModal
           onClose={() => setShowAddLine(false)}
-          onSubmit={async (itemNo, qty, uom, lot, serial) => {
+          onSubmit={async (itemNo, qty, uom, sourceBin, lot, serial) => {
             setShowAddLine(false);
-            setBusy(true);
-            setStatus("Satır ekleniyor...");
-            const body: Record<string, unknown> = { lpNo: no, itemNo, quantity: qty };
-            if (uom) body.unitOfMeasureCode = uom;
-            if (lot) body.lotNo = lot;
-            if (serial) body.serialNo = serial;
-            const r = await BcApi.post("licensePlateLines", JSON.stringify(body));
-            setBusy(false);
-            setStatus(
-              r.ok
-                ? `PASS: Satır eklendi (${itemNo} × ${qty}) (HTTP ${r.httpCode})`
-                : `HATA: ${BcApi.errorMessage(r.body)} (HTTP ${r.httpCode})`,
+            await action(
+              "addLineFromBin",
+              JSON.stringify({
+                itemNo,
+                unitOfMeasure: uom,
+                quantity: qty,
+                lotNo: lot ?? "",
+                serialNo: serial ?? "",
+                sourceBinCode: sourceBin,
+                userId: "WEB",
+              }),
+              `Satır eklendi ve stok ${sourceBin} → ${BcApi.firstValue(header, "binCode")} taşındı (${itemNo} × ${qty})`,
             );
-            if (r.ok) reload();
           }}
         />
       )}
@@ -273,11 +272,12 @@ function AddLineModal({
   onSubmit,
 }: {
   onClose: () => void;
-  onSubmit: (itemNo: string, qty: number, uom: string, lot?: string, serial?: string) => void;
+  onSubmit: (itemNo: string, qty: number, uom: string, sourceBin: string, lot?: string, serial?: string) => void;
 }) {
   const [itemNo, setItemNo] = useState("");
   const [qty, setQty] = useState("1");
   const [uom, setUom] = useState("PCS");
+  const [sourceBin, setSourceBin] = useState("");
   const [lot, setLot] = useState("");
   const [serial, setSerial] = useState("");
 
@@ -288,6 +288,9 @@ function AddLineModal({
         <NumberField label="Miktar" value={qty} onChange={setQty} />
         <Field label="UoM" value={uom} onChange={setUom} placeholder="PCS" />
       </div>
+      <div className="mt12">
+        <Field label="Kaynak Raf" value={sourceBin} onChange={setSourceBin} placeholder="A.B04.13" />
+      </div>
       <div className="row mt12">
         <Field label="Lot No (ops.)" value={lot} onChange={setLot} />
         <Field label="Serial No (ops.)" value={serial} onChange={setSerial} />
@@ -296,8 +299,8 @@ function AddLineModal({
         <button className="outline" onClick={onClose}>İptal</button>
         <button
           className="primary"
-          onClick={() => onSubmit(itemNo.trim(), Number(qty) || 0, uom.trim(), lot.trim() || undefined, serial.trim() || undefined)}
-          disabled={itemNo.trim().length === 0 || (Number(qty) || 0) <= 0}
+          onClick={() => onSubmit(itemNo.trim(), Number(qty) || 0, uom.trim(), sourceBin.trim(), lot.trim() || undefined, serial.trim() || undefined)}
+          disabled={itemNo.trim().length === 0 || sourceBin.trim().length === 0 || (Number(qty) || 0) <= 0}
         >
           Onayla
         </button>

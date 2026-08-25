@@ -233,6 +233,7 @@ codeunit 72046 "DOPSWHS Pick Mgmt"
     begin
         EnsurePick(Pick);
         LP.Get(LpNo);
+        ValidateLPForPick(LP, Pick, false);
         LPMgt.Stop(LP, PrintLabel, PrinterId);
         Log('Pick.StopShippingLP', Pick."No.", Pick."Assigned User ID");
         exit(LP.SSCC);
@@ -288,6 +289,13 @@ codeunit 72046 "DOPSWHS Pick Mgmt"
         // Belge hâlâ bu operatörde mi? Satır bazında her onayda doğrulanır;
         // sorumlu toplamayı toplama sırasında devretmiş olabilir.
         CheckLineOwnership(PickLine, RequestingUserId);
+
+        // El terminalindeki toplama fiziksel bir raf/bin doğrulamasıdır. Kaynak
+        // rafı boş bir satırın miktarını onaylamak, terminalde gerçekte hangi
+        // raftan ürün alındığını kanıtsız bırakır ve yanlış stok hareketine yol
+        // açar. Böyle bir pick genellikle eksik bin content/setup nedeniyle
+        // oluşur; operatöre düşürmek yerine sunucuda kesin olarak reddedilir.
+        EnsurePickLineHasBin(PickLine, QtyToHandle);
 
         PickLine.Validate("Qty. to Handle", QtyToHandle);
         EnsurePickLot(PickLine, LotNo);
@@ -355,6 +363,23 @@ codeunit 72046 "DOPSWHS Pick Mgmt"
     end;
 
     procedure RegisterPick(var Pick: Record "Warehouse Activity Header")
+    begin
+        RegisterPickInternal(Pick, '');
+    end;
+
+    /// <summary>
+    /// Terminal için strict register yolu. Paylaşımlı BC hesabı yerine WMS
+    /// oturumundaki gerçek operatör kimliğini taşır; belge son anda başka birine
+    /// devredildiyse kayıt işlemi kilit altında reddedilir.
+    /// </summary>
+    procedure RegisterPickFor(var Pick: Record "Warehouse Activity Header"; RequestingUserId: Code[50])
+    begin
+        if RequestingUserId = '' then
+            Error(RequestingUserRequiredErr);
+        RegisterPickInternal(Pick, RequestingUserId);
+    end;
+
+    local procedure RegisterPickInternal(var Pick: Record "Warehouse Activity Header"; RequestingUserId: Code[50])
     var
         PickLine: Record "Warehouse Activity Line";
         PickingHeader: Record "DOPSWHS Picking Order Header";
@@ -373,10 +398,14 @@ codeunit 72046 "DOPSWHS Pick Mgmt"
             Error(PickGoneErr, Pick."No.");
         Pick := LockedPick;
         // Kaydetme de bir işlemdir: atanmamış ya da başkasındaki belge kaydedilemez.
-        CheckOwnership(Pick."No.", Pick."Assigned User ID");
+        if RequestingUserId = '' then
+            CheckOwnership(Pick."No.", Pick."Assigned User ID")
+        else
+            CheckOwnershipFor(Pick."No.", Pick."Assigned User ID", RequestingUserId);
         PickNo := Pick."No.";
         // Kaydeden operatör: belge sahibi (CheckOwnership hemen üstte doğruladı).
-        Log('Pick.Register', Pick."No.", Pick."Assigned User ID");
+        Log('Pick.Register', Pick."No.", EffectiveOperator(Pick."No.", RequestingUserId));
+        EnsurePickHasBins(Pick);
         if Pick."DOPSWHS Pick Mode" = Pick."DOPSWHS Pick Mode"::Multi then
             EnsureAllMultiPickLinesScanned(Pick);
 
@@ -408,6 +437,29 @@ codeunit 72046 "DOPSWHS Pick Mgmt"
                     PickingHeader.Modify(true);
                 until PickingHeader.Next() = 0;
         end;
+    end;
+
+    local procedure EnsurePickLineHasBin(PickLine: Record "Warehouse Activity Line"; QtyToHandle: Decimal)
+    begin
+        if QtyToHandle <= 0 then
+            exit;
+        PickLine.TestField("Location Code");
+        if PickLine."Bin Code" = '' then
+            Error(PickLineBinRequiredErr, PickLine."No.", PickLine."Line No.", PickLine."Item No.");
+    end;
+
+    local procedure EnsurePickHasBins(var Pick: Record "Warehouse Activity Header")
+    var
+        PickLine: Record "Warehouse Activity Line";
+    begin
+        PickLine.SetRange("Activity Type", Pick.Type);
+        PickLine.SetRange("No.", Pick."No.");
+        PickLine.SetRange("Action Type", PickLine."Action Type"::Take);
+        PickLine.SetFilter(Quantity, '>0');
+        if PickLine.FindSet() then
+            repeat
+                EnsurePickLineHasBin(PickLine, PickLine.Quantity);
+            until PickLine.Next() = 0;
     end;
 
     local procedure EnsureAllMultiPickLinesScanned(var Pick: Record "Warehouse Activity Header")
@@ -584,6 +636,8 @@ codeunit 72046 "DOPSWHS Pick Mgmt"
         if SourceOrderNo = '' then
             Error(SourceOrderRequiredErr);
         LP.Get(LpNo);
+        EnsureSourceOrderInPick(Pick, SourceOrderNo);
+        ValidateLPForPick(LP, Pick, true);
 
         // Sepeti bağlayan operatör = belgeyi üstlenen kullanıcı. Eskiden bu alana
         // UserId() yazılıyordu; paylaşımlı hesap yüzünden her satır aynı kimliği
@@ -620,6 +674,38 @@ codeunit 72046 "DOPSWHS Pick Mgmt"
             LPMgt.Assign(LP, Enum::"DOPSWHS Assigned Doc Type"::WhsePick, Pick."No.");
 
         Log('Pick.AssignTote', Pick."No.", Operator);
+    end;
+
+    local procedure EnsureSourceOrderInPick(Pick: Record "Warehouse Activity Header"; SourceOrderNo: Code[20])
+    var
+        PickLine: Record "Warehouse Activity Line";
+    begin
+        PickLine.SetRange("Activity Type", Pick.Type);
+        PickLine.SetRange("No.", Pick."No.");
+        PickLine.SetRange("Source Type", Database::"Sales Line");
+        PickLine.SetRange("Source No.", SourceOrderNo);
+        if PickLine.IsEmpty() then
+            Error('Sales order %1 is not a source order of pick %2.', SourceOrderNo, Pick."No.");
+    end;
+
+    local procedure ValidateLPForPick(LP: Record "DOPSWHS LP Header"; Pick: Record "Warehouse Activity Header"; AllowAssignedToThisPick: Boolean)
+    begin
+        LP.TestField("Location Code");
+        Pick.TestField("Location Code");
+        if LP."Location Code" <> Pick."Location Code" then
+            Error(
+                'LP %1 belongs to location %2, but pick %3 belongs to location %4.',
+                LP."No.", LP."Location Code", Pick."No.", Pick."Location Code");
+        if LP.Status in [LP.Status::Used, LP.Status::Unbuilt] then
+            Error('LP %1 cannot be used for picking because its status is %2.', LP."No.", LP.Status);
+        if LP.Status = LP.Status::Assigned then begin
+            if not AllowAssignedToThisPick then
+                Error('LP %1 is already assigned to %2 %3.', LP."No.", LP."Assigned Document Type", LP."Assigned Document No.");
+            if (LP."Assigned Document Type" <> LP."Assigned Document Type"::WhsePick) or
+               (LP."Assigned Document No." <> Pick."No.")
+            then
+                Error('LP %1 is already assigned to %2 %3.', LP."No.", LP."Assigned Document Type", LP."Assigned Document No.");
+        end;
     end;
 
     procedure GetToteForOrder(PickNo: Code[20]; SourceOrderNo: Code[20]): Code[20]
@@ -735,6 +821,7 @@ codeunit 72046 "DOPSWHS Pick Mgmt"
         PickingOrderCompletedErr: Label 'Toplama grubu %1 tamamlandı; ataması değiştirilemez.', Comment = '%1 = Entry No.';
         NewUserRequiredErr: Label 'Atanacak kullanıcı seçilmedi.';
         RequestingUserRequiredErr: Label 'İşlemi yapan operatör kimliği gönderilmedi.';
+        PickLineBinRequiredErr: Label '%1 toplamasının %2 satırında (%3 ürünü) kaynak raf/bin boş. Bin içeriğini düzeltip pick''i yeniden oluşturun; rafı belli olmayan satır terminalden onaylanamaz.', Comment = '%1 = Pick No., %2 = Line No., %3 = Item No.';
         SelfClaimReasonLbl: Label 'Terminalden üzerine alındı.';
         UnassignedLbl: Label 'atanmamış';
         // Telemetri mesajları çevrilmez (Locked): log sorguları dile göre değişmemeli.

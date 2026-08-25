@@ -1,0 +1,4 @@
+af18719b05b651537d264f8d128fb89330df6475ebb6c0586b7a9871b030564c  bcwms-print-agent-1.0.0-win-x64.zip
+75e0c0664baf20f89d9301e349f8d1b1ed7fd8018c57f1708e1fdcccf2626820  lp-qr-smoke-test.zpl
+5e2bad2bd657d3c06309b545f7b0f07b756e9a47d317ed158a93659952ed08f0  bcwms-bade-1.14.15-release.apk
+039eb639fa9d0dff067fe78484f212687fbe0ca5564ce37aa02d826e9173e474  BADE-LP-QR-Azure-Yazici-Kurulum.md

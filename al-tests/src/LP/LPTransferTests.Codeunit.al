@@ -64,6 +64,57 @@ codeunit 72114 "DOPSWHS LP Transfer Tests"
         Assert.AreEqual(5, GetLPQty(TargetLP."No."), 'New target LP should receive transferred quantity.');
     end;
 
+    [Test]
+    procedure EmptyBuiltLpMoveUpdatesHeaderBin()
+    var
+        LP: Record "DOPSWHS LP Header";
+        LPMgt: Codeunit "DOPSWHS LP Management";
+        Assert: Codeunit "Library Assert";
+    begin
+        Seed();
+        BuildEmptyBuiltLP(LP);
+
+        LPMgt.MoveToBin(LP, 'STAGE', 'USER1');
+
+        LP.Get(LP."No.");
+        Assert.AreEqual('STAGE', LP."Bin Code", 'An empty LP move must update its bin inside the server action.');
+    end;
+
+    [Test]
+    procedure LpMoveRequiresAuthenticatedOperator()
+    var
+        LP: Record "DOPSWHS LP Header";
+        LPMgt: Codeunit "DOPSWHS LP Management";
+        Assert: Codeunit "Library Assert";
+    begin
+        Seed();
+        BuildEmptyBuiltLP(LP);
+
+        asserterror LPMgt.MoveToBin(LP, 'STAGE', '');
+
+        Assert.ExpectedError('Operator user ID is required');
+        LP.Get(LP."No.");
+        Assert.AreEqual('PICK', LP."Bin Code", 'A rejected move must leave the LP bin unchanged.');
+    end;
+
+    [Test]
+    procedure AssignedLpCannotBeMovedAdHoc()
+    var
+        LP: Record "DOPSWHS LP Header";
+        LPMgt: Codeunit "DOPSWHS LP Management";
+        Assert: Codeunit "Library Assert";
+    begin
+        Seed();
+        BuildEmptyBuiltLP(LP);
+        LPMgt.Assign(LP, Enum::"DOPSWHS Assigned Doc Type"::WhsePick, 'PICK-1');
+
+        asserterror LPMgt.MoveToBin(LP, 'STAGE', 'USER1');
+
+        Assert.ExpectedError('cannot be moved while its status is Assigned');
+        LP.Get(LP."No.");
+        Assert.AreEqual('PICK', LP."Bin Code", 'A rejected assigned-LP move must leave the bin unchanged.');
+    end;
+
     local procedure BuildLPWithLine(var LP: Record "DOPSWHS LP Header"; Qty: Decimal; var LPLine: Record "DOPSWHS LP Line")
     var
         LPMgt: Codeunit "DOPSWHS LP Management";
@@ -112,6 +163,7 @@ codeunit 72114 "DOPSWHS LP Transfer Tests"
         Setup."LP No. Series" := 'LP'; Setup."SSCC No. Series" := 'SSCC'; Setup.Modify(true);
         SeedItem('ITEMY', 'PCS');
         SeedLocationBin('BLUE', 'PICK');
+        SeedLocationBin('BLUE', 'STAGE');
         SetupWizard.SeedDefaultLPTemplates();
     end;
 

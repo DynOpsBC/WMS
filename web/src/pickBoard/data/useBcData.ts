@@ -10,7 +10,7 @@ export type Pick = {
   dueDate?: string;
 };
 
-export type PickBoardData = { picks: Pick[] };
+export type PickBoardData = { picks: Pick[]; users: string[] };
 
 const seed: Pick[] = [
   { no: "WP-000142", sourceNo: "SO-104233", assignedUserId: "Ada Yılmaz", status: "InProgress", percentComplete: 72, dueDate: "2026-05-28" },
@@ -24,7 +24,10 @@ const seed: Pick[] = [
 ];
 
 export function useBcData(initialData?: PickBoardData) {
-  const [data, setData] = useState<PickBoardData>(initialData ?? { picks: seed });
+  const [data, setData] = useState<PickBoardData>(initialData ?? {
+    picks: seed,
+    users: [...new Set(seed.map((pick) => pick.assignedUserId).filter(Boolean))],
+  });
 
   useEffect(() => {
     const load = async () => {
@@ -32,7 +35,13 @@ export function useBcData(initialData?: PickBoardData) {
         const response = await fetch("/picks?$filter=status eq 'Open' or status eq 'InProgress'");
         if (response.ok) {
           const json = await response.json();
-          setData({ picks: json.value ?? json.picks ?? seed });
+          const picks = json.value ?? json.picks ?? seed;
+          setData({
+            picks,
+            users: Array.isArray(json.users)
+              ? json.users.filter((user: unknown): user is string => typeof user === "string" && user.trim().length > 0)
+              : [...new Set(picks.map((pick: Pick) => pick.assignedUserId).filter(Boolean))],
+          });
         } else {
           requestRefresh();
         }

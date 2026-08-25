@@ -32,6 +32,7 @@ report 72091 "DOPSWHS LP Label"
         LotText: Text;
         QtyText: Text;
         BarcodeData: Text;
+        QrData: Text;
         ExtraLinesText: Text;
         LineCount: Integer;
     begin
@@ -60,10 +61,15 @@ report 72091 "DOPSWHS LP Label"
         BarcodeData := LP.SSCC;
         if BarcodeData = '' then
             BarcodeData := LP."No.";
+        // The QR always carries the actual LP number. SSCC remains available in
+        // the linear barcode, while scanning the QR reopens the exact LP record
+        // even before Stop has generated an SSCC.
+        QrData := LP."No.";
         exit(
             '^XA^CI28^PW812^LL406' +
             '^FO40,30^A0N,36,36^FH_^FDLP ' + ZplEncoder.EncodeFieldData(LP."No.") + '^FS' +
-            '^FO40,72^BY3^BCN,82,Y,N,N^FH_^FD' + ZplEncoder.EncodeFieldData(BarcodeData) + '^FS' +
+            '^FO40,72^BY2^BCN,82,Y,N,N^FH_^FD' + ZplEncoder.EncodeFieldData(BarcodeData) + '^FS' +
+            '^FO590,24^BQN,2,6^FH_^FDLA,' + ZplEncoder.EncodeFieldData(QrData) + '^FS' +
             '^FO40,185^A0N,25,25^FH_^FD' + ZplEncoder.EncodeFieldData(LP."Location Code" + ' / ' + LP."Bin Code") + '^FS' +
             '^FO40,220^A0N,25,25^FH_^FD' + ZplEncoder.EncodeFieldData(CopyStr(ItemText, 1, 52)) + '^FS' +
             '^FO40,258^A0N,34,34^FH_^FD' + ZplEncoder.EncodeFieldData(CopyStr(QtyText, 1, 42)) + '^FS' +

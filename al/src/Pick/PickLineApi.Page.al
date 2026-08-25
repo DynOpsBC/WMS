@@ -8,7 +8,10 @@ page 72229 "DOPSWHS Pick Line API"
     EntitySetName = 'pickLines';
     SourceTable = "Warehouse Activity Line";
     SourceTableView = where("Activity Type" = const(Pick));
-    DelayedInsert = true;
+    Editable = false;
+    InsertAllowed = false;
+    ModifyAllowed = false;
+    DeleteAllowed = false;
     ODataKeyFields = "Activity Type", "No.", "Line No.";
 
     layout
@@ -29,13 +32,13 @@ page 72229 "DOPSWHS Pick Line API"
                 field(gtin; ItemGtin) { Caption = 'gtin'; Editable = false; }
                 field(quantity; Rec.Quantity) { Caption = 'quantity'; Editable = false; }
                 field(qtyOutstanding; Rec."Qty. Outstanding") { Caption = 'qtyOutstanding'; Editable = false; }
-                field(qtyToHandle; Rec."Qty. to Handle") { Caption = 'qtyToHandle'; }
+                field(qtyToHandle; Rec."Qty. to Handle") { Caption = 'qtyToHandle'; Editable = false; }
                 field(qtyHandled; Rec."Qty. Handled") { Caption = 'qtyHandled'; Editable = false; }
-                field(binCode; Rec."Bin Code") { Caption = 'binCode'; }
-                field(lotNo; Rec."Lot No.") { Caption = 'lotNo'; }
+                field(binCode; Rec."Bin Code") { Caption = 'binCode'; Editable = false; }
+                field(lotNo; Rec."Lot No.") { Caption = 'lotNo'; Editable = false; }
                 field(lotRequired; LotRequired) { Caption = 'lotRequired'; Editable = false; }
                 field(locationCode; Rec."Location Code") { Caption = 'locationCode'; Editable = false; }
-                field(licensePlateNo; Rec."LP No.") { Caption = 'licensePlateNo'; }
+                field(licensePlateNo; Rec."LP No.") { Caption = 'licensePlateNo'; Editable = false; }
                 // ELOG: satırın kaynak siparişi — terminal tote önerisi için kullanır.
                 field(sourceNo; Rec."Source No.") { Caption = 'sourceNo'; Editable = false; }
             }
@@ -60,14 +63,6 @@ page 72229 "DOPSWHS Pick Line API"
         if (Rec."Item No." <> '') and Item.Get(Rec."Item No.") then
             ItemGtin := Item.GTIN;
         LotRequired := PickMgmt.PickLineRequiresLot(Rec);
-    end;
-
-    trigger OnModifyRecord(): Boolean
-    var
-        PickMgmt: Codeunit "DOPSWHS Pick Mgmt";
-    begin
-        PickMgmt.ConfirmPickLine(Rec, Rec."Qty. to Handle", Rec."Lot No.");
-        exit(false);
     end;
 
     var

@@ -30,6 +30,20 @@ table 72010 "DOPSWHS LP Header"
         field(101; "Width cm"; Decimal) { Caption = 'Width cm'; DataClassification = CustomerContent; }
         field(102; "Height cm"; Decimal) { Caption = 'Height cm'; DataClassification = CustomerContent; }
         field(110; Notes; Text[250]) { Caption = 'Notes'; DataClassification = CustomerContent; }
+        field(120; "Line Count"; Integer)
+        {
+            Caption = 'Line Count';
+            FieldClass = FlowField;
+            CalcFormula = count("DOPSWHS LP Line" where("LP No." = field("No.")));
+            Editable = false;
+        }
+        field(121; "Total Quantity"; Decimal)
+        {
+            Caption = 'Total Quantity';
+            FieldClass = FlowField;
+            CalcFormula = sum("DOPSWHS LP Line".Quantity where("LP No." = field("No.")));
+            Editable = false;
+        }
     }
 
     keys
@@ -43,14 +57,14 @@ table 72010 "DOPSWHS LP Header"
 
     trigger OnInsert()
     var
-        Setup: Record "DOPSWHS Setup";
+        LPSeriesSetup: Codeunit "DOPSWHS LP Series Setup";
         NoSeries: Codeunit "No. Series";
         Telemetry: Codeunit "DOPSWHS Telemetry";
+        LPNoSeriesCode: Code[20];
     begin
         if "No." = '' then begin
-            Setup.Get('');
-            Setup.TestField("LP No. Series");
-            "No." := NoSeries.GetNextNo(Setup."LP No. Series");
+            LPNoSeriesCode := LPSeriesSetup.EnsureLpNoSeries();
+            "No." := NoSeries.GetNextNo(LPNoSeriesCode);
         end;
         "Built By User" := CopyStr(UserId(), 1, MaxStrLen("Built By User"));
         "Built DateTime" := CurrentDateTime();
@@ -67,10 +81,10 @@ table 72010 "DOPSWHS LP Header"
         LPLine: Record "DOPSWHS LP Line";
     begin
         if not (Status in [Status::Open, Status::Unbuilt]) then
-            Error('Only open or unbuilt license plates can be deleted.');
+            Error('Yalnız açık veya bozulmuş LP silinebilir.');
 
         LPLine.SetRange("LP No.", "No.");
         if not LPLine.IsEmpty() then
-            Error('License plate %1 has lines and cannot be deleted.', "No.");
+            Error('%1 LP numarasının satırları bulunduğu için silinemez.', "No.");
     end;
 }

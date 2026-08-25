@@ -8,6 +8,7 @@ page 72088 "DOPSWHS LP API"
     EntitySetName = 'licensePlates';
     SourceTable = "DOPSWHS LP Header";
     DelayedInsert = true;
+    DeleteAllowed = true;
     ODataKeyFields = "No.";
 
     layout
@@ -31,6 +32,8 @@ page 72088 "DOPSWHS LP API"
                 field(widthCm; Rec."Width cm") { Caption = 'widthCm'; }
                 field(heightCm; Rec."Height cm") { Caption = 'heightCm'; }
                 field(notes; Rec.Notes) { Caption = 'notes'; }
+                field(lineCount; Rec."Line Count") { Caption = 'lineCount'; Editable = false; }
+                field(totalQuantity; Rec."Total Quantity") { Caption = 'totalQuantity'; Editable = false; }
             }
             part(lines; "DOPSWHS LP Line API")
             {
@@ -52,10 +55,23 @@ page 72088 "DOPSWHS LP API"
         RecRef.SetTable(Rec);
     end;
 
+    trigger OnInsertRecord(BelowxRec: Boolean): Boolean
+    var
+        LPMgt: Codeunit "DOPSWHS LP Management";
+        CreatedLP: Record "DOPSWHS LP Header";
+    begin
+        // API POST doğrudan tablo insert'i yaparsa şablon ölçüleri ve Built
+        // hareket kaydı atlanır. Tüm LP oluşturma kanallarını tek iş kuralına bağla.
+        LPMgt.Build(Rec."LP Template Code", Rec."Location Code", Rec."Bin Code", CreatedLP);
+        Rec := CreatedLP;
+        exit(false);
+    end;
+
     trigger OnAfterGetRecord()
     var
         Template: Record "DOPSWHS LP Template";
     begin
+        Rec.CalcFields("Line Count", "Total Quantity");
         Reusable := false;
         if (Rec."LP Template Code" <> '') and Template.Get(Rec."LP Template Code") then
             Reusable := Template.Reusable;
@@ -128,6 +144,14 @@ page 72088 "DOPSWHS LP API"
     end;
 
     [ServiceEnabled]
+    procedure printDocument(printerId: Code[50]; copies: Integer): Integer
+    var
+        Dispatcher: Codeunit "DOPSWHS Print Dispatcher";
+    begin
+        exit(Dispatcher.PrintLPDocument(Rec, printerId, copies));
+    end;
+
+    [ServiceEnabled]
     procedure nest(parentLpNo: Code[20])
     var
         ParentLP: Record "DOPSWHS LP Header";
@@ -153,6 +177,23 @@ page 72088 "DOPSWHS LP API"
     begin
         LPMgt.Build(templateCode, locationCode, binCode, NewLP);
         Rec.Get(NewLP."No.");
+    end;
+
+    [ServiceEnabled]
+    procedure addLineFromBin(itemNo: Code[20]; unitOfMeasure: Code[10]; quantity: Decimal; lotNo: Code[50]; serialNo: Code[50]; sourceBinCode: Code[20]; userId: Code[50])
+    var
+        LPMgt: Codeunit "DOPSWHS LP Management";
+    begin
+        LPMgt.AddLineFromBin(Rec, itemNo, unitOfMeasure, quantity, lotNo, serialNo, sourceBinCode, userId);
+    end;
+
+    [ServiceEnabled]
+    procedure moveToBin(targetBinCode: Code[20]; userId: Code[50])
+    var
+        LPMgt: Codeunit "DOPSWHS LP Management";
+    begin
+        LPMgt.MoveToBin(Rec, targetBinCode, userId);
+        Rec.Get(Rec."No.");
     end;
 
     [ServiceEnabled]

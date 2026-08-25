@@ -10,6 +10,7 @@ page 72086 "DOPSWHS Item API"
     DelayedInsert = true;
     ODataKeyFields = "No.";
     ApplicationArea = All;
+    Permissions = tabledata "Item Tracking Code" = R;
 
     layout
     {
@@ -20,6 +21,16 @@ page 72086 "DOPSWHS Item API"
                 field(no; Rec."No.") { Caption = 'no'; }
                 field(description; Rec.Description) { Caption = 'description'; }
                 field(baseUnitOfMeasure; Rec."Base Unit of Measure") { Caption = 'baseUnitOfMeasure'; }
+                field(lotTrackingRequired; LotTrackingRequired)
+                {
+                    Caption = 'lotTrackingRequired';
+                    Editable = false;
+                }
+                field(serialTrackingRequired; SerialTrackingRequired)
+                {
+                    Caption = 'serialTrackingRequired';
+                    Editable = false;
+                }
                 field(itemCategoryCode; Rec."Item Category Code") { Caption = 'itemCategoryCode'; }
                 field(blocked; Rec.Blocked) { Caption = 'blocked'; }
                 field(defaultLpTemplateCode; Rec."DOPSWHS Default LP Template") { Caption = 'defaultLpTemplateCode'; }
@@ -58,6 +69,8 @@ page 72086 "DOPSWHS Item API"
     }
 
     trigger OnAfterGetRecord()
+    var
+        ItemTrackingCode: Record "Item Tracking Code";
     begin
         // FlowField'lar API page'inde otomatik hesaplanmaz; explicit CalcFields
         // çağrılmazsa response'da Inventory=0 döner ve Item Inquiry "stok yok"
@@ -68,7 +81,22 @@ page 72086 "DOPSWHS Item API"
             "Qty. on Sales Order",
             "Qty. on Prod. Order",
             "Reserved Qty. on Inventory");
+
+        Clear(LotTrackingRequired);
+        Clear(SerialTrackingRequired);
+        if (Rec."Item Tracking Code" <> '') and ItemTrackingCode.Get(Rec."Item Tracking Code") then begin
+            LotTrackingRequired :=
+                ItemTrackingCode."Lot Specific Tracking" or
+                ItemTrackingCode."Lot Warehouse Tracking";
+            SerialTrackingRequired :=
+                ItemTrackingCode."SN Specific Tracking" or
+                ItemTrackingCode."SN Warehouse Tracking";
+        end;
     end;
+
+    var
+        LotTrackingRequired: Boolean;
+        SerialTrackingRequired: Boolean;
 
     [ServiceEnabled]
     procedure printLabel(printerId: Code[50]; copies: Integer)

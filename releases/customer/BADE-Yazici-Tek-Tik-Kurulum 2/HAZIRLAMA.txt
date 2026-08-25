@@ -1,0 +1,20 @@
+BU KLASORU MUSTERIYE GONDERMEDEN ONCE
+
+1. Windows Azure kurulum bilgisayarinda su klasoru acin:
+   direct-print-azure\.local
+
+2. Yalniz print-agent.runtime.secrets.json dosyasini bu klasore kopyalayin.
+   business-central.runtime.secrets.json dosyasini BURAYA KOYMAYIN.
+
+3. BADE-Yazici-Tek-Tik-Kurulum klasorunu ZIP yapip guvenli kanaldan gonderin.
+
+MUSTERI YALNIZ SUNLARI YAPACAK
+
+1. Wi-Fi yazicidan Windows test sayfasi alacak.
+2. Wi-Fi yaziciyi Windows varsayilan yazicisi yapacak.
+3. ZIP'i tamamen cikaracak.
+4. KURULUM.bat dosyasina cift tiklayacak.
+5. El terminalinde Yazicilar > Yenile > Belge secimine bir kez basacak.
+
+Azure CLI, az login, PowerShell 7 veya terminal komutu gerekmez.
+Kurulumdan sonra acik JSON otomatik silinir ve ajan Windows ile otomatik baslar.

@@ -8,6 +8,9 @@ page 72487 "DOPSWHS Count Sheet Line API"
     EntitySetName = 'countSheetLines';
     SourceTable = "DOPSWHS Count Sheet Line";
     DelayedInsert = true;
+    InsertAllowed = false;
+    ModifyAllowed = false;
+    DeleteAllowed = false;
     ODataKeyFields = "Sheet No.", "Line No.";
 
     layout
@@ -32,6 +35,10 @@ page 72487 "DOPSWHS Count Sheet Line API"
                 field(countedQty1; Rec."Counted Qty 1") { Caption = 'countedQty1'; }
                 field(countedQty2; Rec."Counted Qty 2") { Caption = 'countedQty2'; }
                 field(countedQty3; Rec."Counted Qty 3") { Caption = 'countedQty3'; }
+                field(unexpectedStock; Rec."Unexpected Stock") { Caption = 'unexpectedStock'; }
+                field(counted1; Rec."Counted 1") { Caption = 'counted1'; }
+                field(counted2; Rec."Counted 2") { Caption = 'counted2'; }
+                field(counted3; Rec."Counted 3") { Caption = 'counted3'; }
                 field(variance; Rec.Variance) { Caption = 'variance'; }
                 field(recountRequired; Rec."Recount Required") { Caption = 'recountRequired'; }
             }

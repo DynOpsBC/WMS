@@ -10,6 +10,8 @@ page 72293 "DOPSWHS Purch Source Line API"
     SourceTableView = where("Document Type" = const(Order));
     DelayedInsert = true;
     ODataKeyFields = "Document Type", "Document No.", "Line No.";
+    InsertAllowed = false;
+    DeleteAllowed = false;
 
     layout
     {
@@ -33,8 +35,43 @@ page 72293 "DOPSWHS Purch Source Line API"
                 field(qtyReceived; Rec."Quantity Received") { Caption = 'qtyReceived'; Editable = false; }
                 field(qtyToReceive; Rec."Qty. to Receive") { Caption = 'qtyToReceive'; }
                 field(unitOfMeasureCode; Rec."Unit of Measure Code") { Caption = 'unitOfMeasureCode'; Editable = false; }
-                field(directUnitCost; Rec."Direct Unit Cost") { Caption = 'directUnitCost'; }
+                field(directUnitCost; Rec."Direct Unit Cost") { Caption = 'directUnitCost'; Editable = false; }
+                field(lotRequired; LotRequired) { Caption = 'lotRequired'; Editable = false; }
+                field(serialRequired; SerialRequired) { Caption = 'serialRequired'; Editable = false; }
             }
         }
     }
+
+    trigger OnAfterGetRecord()
+    begin
+        ResolveTrackingRequirements();
+    end;
+
+    local procedure ResolveTrackingRequirements()
+    var
+        Item: Record Item;
+        ItemTrackingCode: Record "Item Tracking Code";
+    begin
+        Clear(LotRequired);
+        Clear(SerialRequired);
+        if Rec.Type <> Rec.Type::Item then
+            exit;
+        if not Item.Get(Rec."No.") then
+            exit;
+        if (Item."Item Tracking Code" = '') or (not ItemTrackingCode.Get(Item."Item Tracking Code")) then
+            exit;
+
+        LotRequired :=
+            ItemTrackingCode."Lot Specific Tracking" or
+            ItemTrackingCode."Lot Warehouse Tracking" or
+            ItemTrackingCode."Lot Purchase Inbound Tracking";
+        SerialRequired :=
+            ItemTrackingCode."SN Specific Tracking" or
+            ItemTrackingCode."SN Warehouse Tracking" or
+            ItemTrackingCode."SN Purchase Inbound Tracking";
+    end;
+
+    var
+        LotRequired: Boolean;
+        SerialRequired: Boolean;
 }

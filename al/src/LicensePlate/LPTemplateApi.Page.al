@@ -11,10 +11,13 @@ page 72280 "DOPSWHS LP Template API"
     EntityName = 'licensePlateTemplate';
     EntitySetName = 'licensePlateTemplates';
     SourceTable = "DOPSWHS LP Template";
-    DelayedInsert = true;
     ODataKeyFields = "Code";
     Caption = 'WMS License Plate Template API';
     ApplicationArea = All;
+    Editable = false;
+    InsertAllowed = false;
+    ModifyAllowed = false;
+    DeleteAllowed = false;
 
     layout
     {

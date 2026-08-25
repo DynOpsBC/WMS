@@ -29,6 +29,10 @@ table 72017 "DOPSWHS Count Sheet Line"
         field(80; "Counted Qty 3"; Decimal) { Caption = 'Counted Qty 3'; DataClassification = CustomerContent; }
         field(90; Variance; Decimal) { Caption = 'Variance'; DataClassification = CustomerContent; Editable = false; }
         field(100; "Recount Required"; Boolean) { Caption = 'Recount Required'; DataClassification = CustomerContent; }
+        field(110; "Unexpected Stock"; Boolean) { Caption = 'Unexpected Stock'; DataClassification = CustomerContent; Editable = false; }
+        field(120; "Counted 1"; Boolean) { Caption = 'Counted 1'; DataClassification = CustomerContent; Editable = false; }
+        field(130; "Counted 2"; Boolean) { Caption = 'Counted 2'; DataClassification = CustomerContent; Editable = false; }
+        field(140; "Counted 3"; Boolean) { Caption = 'Counted 3'; DataClassification = CustomerContent; Editable = false; }
     }
 
     keys

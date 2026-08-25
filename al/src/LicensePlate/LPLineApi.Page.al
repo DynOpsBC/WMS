@@ -8,6 +8,9 @@ page 72089 "DOPSWHS LP Line API"
     EntitySetName = 'licensePlateLines';
     SourceTable = "DOPSWHS LP Line";
     DelayedInsert = true;
+    InsertAllowed = false;
+    ModifyAllowed = false;
+    DeleteAllowed = false;
     ODataKeyFields = "LP No.", "Line No.";
 
     layout

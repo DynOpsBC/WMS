@@ -464,18 +464,29 @@ codeunit 72354 "DOPSWHS Picking Order Mgmt"
 
     procedure PostPickingOrder(var PickingHeader: Record "DOPSWHS Picking Order Header"): Code[20]
     var
+        LockedHeader: Record "DOPSWHS Picking Order Header";
         PickingLine: Record "DOPSWHS Picking Order Line";
         MultiOrderPick: Codeunit "DOPSWHS Multi Order Pick";
         OrderNosCsv: Text;
         ShipmentNo: Code[20];
         PickNo: Code[20];
     begin
-        PickingHeader.TestField(Status, PickingHeader.Status::Open);
-        PickingHeader.TestField("Location Code");
-        if PickingHeader."Assigned User ID" = '' then
+        // Aynı grubun iki terminal/oturum tarafından paralel post edilmesini
+        // engelle; sunucu tamamlayıp istemci timeout alırsa mevcut pick'i dön.
+        LockedHeader.LockTable();
+        if not LockedHeader.Get(PickingHeader."Entry No.") then
+            Error('Picking order %1 no longer exists.', PickingHeader."Entry No.");
+        if LockedHeader."Warehouse Pick No." <> '' then begin
+            PickingHeader := LockedHeader;
+            exit(LockedHeader."Warehouse Pick No.");
+        end;
+
+        LockedHeader.TestField(Status, LockedHeader.Status::Open);
+        LockedHeader.TestField("Location Code");
+        if LockedHeader."Assigned User ID" = '' then
             Error('Pick oluşturmadan önce "Toplayıcı Ata" ile bir operatör seçin. Atamasız pick oluşturulamaz.');
 
-        PickingLine.SetRange("Header Entry No.", PickingHeader."Entry No.");
+        PickingLine.SetRange("Header Entry No.", LockedHeader."Entry No.");
         if PickingLine.FindSet() then
             repeat
                 if OrderNosCsv <> '' then
@@ -487,13 +498,14 @@ codeunit 72354 "DOPSWHS Picking Order Mgmt"
 
         PickNo := MultiOrderPick.CreateGroupedPick(
             OrderNosCsv,
-            PickingHeader."Assigned User ID",
+            LockedHeader."Assigned User ID",
             ShipmentNo,
-            PickModeToText(PickingHeader."Order Flow Mode"));
-        PickingHeader."Warehouse Pick No." := PickNo;
-        PickingHeader."Warehouse Shipment No." := ShipmentNo;
-        PickingHeader.Status := PickingHeader.Status::"Pick Created";
-        PickingHeader.Modify(true);
+            PickModeToText(LockedHeader."Order Flow Mode"));
+        LockedHeader."Warehouse Pick No." := PickNo;
+        LockedHeader."Warehouse Shipment No." := ShipmentNo;
+        LockedHeader.Status := LockedHeader.Status::"Pick Created";
+        LockedHeader.Modify(true);
+        PickingHeader := LockedHeader;
         exit(PickNo);
     end;
 
@@ -827,9 +839,8 @@ codeunit 72354 "DOPSWHS Picking Order Mgmt"
                 if SalesHeader.Get(SalesHeader."Document Type"::Order, TempSugg."Sales Order No.") then
                     // Aday listelendikten sonra başka biri pick oluşturmuş olabilir;
                     // AddOrder bu durumda Error verir tek siparişi atla, akış sürsün.
-                    if not TryAddOrder(PickingHeader, SalesHeader) then
-                        ;
-                Added += 1;
+                    if TryAddOrder(PickingHeader, SalesHeader) then
+                        Added += 1;
             until TempSugg.Next() = 0;
         TempSugg.Reset();
         exit(Added);

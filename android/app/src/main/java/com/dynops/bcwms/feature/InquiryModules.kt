@@ -49,18 +49,22 @@ fun ItemInquiryModule() {
                 item = list.firstOrNull()
             }
             // on-hand by LP: lines for this item across license plates
-            val l = BcApi.get(context, "licensePlateLines?\$filter=itemNo eq '$q'&\$top=50")
-            if (l.ok) lpLines = BcApi.parseValueArray(l.body)
+            val lpPage = BcApi.getAllPages(context, "licensePlateLines?\$filter=itemNo eq '$q'&\$top=50")
+            if (lpPage.complete) lpLines = lpPage.rows
             // Son Hareketler (Item Ledger) — WI "Recent Transactions" pariteti.
             val le = BcApi.get(context, "itemLedgerEntries?\$filter=itemNo eq '$q'&\$orderby=postingDate desc,entryNo desc&\$top=20")
             if (le.ok) ledger = BcApi.parseValueArray(le.body)
             loading = false
-            status = if (item == null) "BOŞ: '$q' için item bulunamadı." else "TAMAM: ürün bulundu · ${lpLines.size} LP · ${ledger.size} hareket."
+            status = when {
+                !lpPage.complete -> "HATA: Ürünün LP kayıtlarının tamamı alınamadı. Yenileyin."
+                item == null -> "BOŞ: '$q' için ürün bulunamadı."
+                else -> "TAMAM: ürün bulundu · ${lpLines.size} LP · ${ledger.size} hareket."
+            }
         }
     }
 
     fun printItemLabel() {
-        val no = item?.let { firstValue(it, "no", "number") } ?: return
+        val no = item?.let { rawValue(it, "no", "number") }?.takeIf { it.isNotBlank() } ?: return
         scope.launch {
             status = "🖨 Etiket yazdırılıyor..."
             val payload = JSONObject().apply {
@@ -107,7 +111,7 @@ fun ItemInquiryModule() {
                         Text(firstValue(it, "no", "number"), fontWeight = FontWeight.Bold, fontSize = 18.sp, color = MaterialTheme.colorScheme.onSurface)
                         if (blocked) {
                             Spacer(Modifier.width(8.dp))
-                            AssistChip(onClick = {}, label = { Text("🚫 Bloke", fontSize = 11.sp) }, colors = AssistChipDefaults.assistChipColors(containerColor = palette.danger, labelColor = Color.White))
+                            InfoPill("🚫 Bloke", containerColor = palette.danger, contentColor = Color.White)
                         }
                     }
                     Text(firstValue(it, "description", "displayName"), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurface)
@@ -196,22 +200,24 @@ fun BinInquiryModule() {
             if (b.ok) bin = BcApi.parseValueArray(b.body).firstOrNull()
             // PDF Bin Inquiry §2 critical fix: now also fetch the real item
             // quantities from the new BinContent API page (T7302 Bin Content).
-            val c = BcApi.get(context, "binContents?\$filter=locationCode eq '$loc' and binCode eq '$code'&\$top=100")
-            if (c.ok) contents = BcApi.parseValueArray(c.body).filter { it.optDouble("quantity", 0.0) != 0.0 }
-            val l = BcApi.get(context, "licensePlates?\$filter=locationCode eq '$loc' and binCode eq '$code'&\$top=50")
-            if (l.ok) lps = BcApi.parseValueArray(l.body)
+            val contentsPage = BcApi.getAllPages(context, "binContents?\$filter=locationCode eq '$loc' and binCode eq '$code'&\$top=100")
+            if (contentsPage.complete) contents = contentsPage.rows.filter { it.optDouble("quantity", 0.0) != 0.0 }
+            val lpPage = BcApi.getAllPages(context, "licensePlates?\$filter=locationCode eq '$loc' and binCode eq '$code'&\$top=50")
+            if (lpPage.complete) lps = lpPage.rows.filter { activeLicensePlateStatus(it.optString("status")) }
             // Whse Entries (raf hareket geçmişi) — WI pariteti.
             val we = BcApi.get(context, "warehouseEntries?\$filter=locationCode eq '$loc' and binCode eq '$code'&\$orderby=registeringDate desc,entryNo desc&\$top=20")
             if (we.ok) whseEntries = BcApi.parseValueArray(we.body)
             loading = false
-            status = if (bin == null && contents.isEmpty() && lps.isEmpty()) "BOŞ: '$loc/$code' için içerik yok."
+            status = if (!contentsPage.complete || !lpPage.complete) "HATA: Raf içeriğinin tamamı alınamadı. Yenileyin."
+                else if (bin == null && contents.isEmpty() && lps.isEmpty()) "BOŞ: '$loc/$code' için içerik yok."
                 else "TAMAM: ${contents.size} ürün · ${lps.size} LP · ${whseEntries.size} hareket."
         }
     }
 
     fun printBinLabel() {
         val b = bin ?: return
-        val loc = firstValue(b, "locationCode"); val code = firstValue(b, "code")
+        val loc = rawValue(b, "locationCode"); val code = rawValue(b, "code")
+        if (loc.isBlank() || code.isBlank()) return
         scope.launch {
             status = "🖨 Bin etiketi yazdırılıyor..."
             val key = "locationCode='${loc.replace("'", "''")}',code='${code.replace("'", "''")}'"
@@ -252,11 +258,11 @@ fun BinInquiryModule() {
                         Text("${firstValue(b, "locationCode")} / ${firstValue(b, "code")}", fontWeight = FontWeight.Bold, fontSize = 18.sp, color = MaterialTheme.colorScheme.onSurface)
                         if (blocked) {
                             Spacer(Modifier.width(8.dp))
-                            AssistChip(onClick = {}, label = { Text("🚫 Hareket Engelle", fontSize = 11.sp) }, colors = AssistChipDefaults.assistChipColors(containerColor = palette.danger, labelColor = Color.White))
+                            InfoPill("🚫 Hareket Engelli", containerColor = palette.danger, contentColor = Color.White)
                         }
                     }
-                    Text(firstValue(b, "description").ifBlank { "—" }, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurface)
-                    Text("Bölge: ${firstValue(b, "zoneCode").ifBlank { "—" }} · Tip: ${firstValue(b, "binTypeCode").ifBlank { "—" }}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(rawValue(b, "description").ifBlank { "—" }, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurface)
+                    Text("Bölge: ${rawValue(b, "zoneCode").ifBlank { "—" }} · Tip: ${rawValue(b, "binTypeCode").ifBlank { "—" }}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
             Spacer(Modifier.height(8.dp))
@@ -282,6 +288,15 @@ fun BinInquiryModule() {
                                 Text(c.optString("itemNo"), fontWeight = FontWeight.Bold, fontSize = 14.sp, color = MaterialTheme.colorScheme.onSurface)
                                 val desc = c.optString("itemDescription")
                                 if (desc.isNotBlank()) Text(desc, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                val activeLpNos = c.optString("activeLpNos")
+                                if (activeLpNos.isNotBlank()) {
+                                    Text(
+                                        "LP: $activeLpNos · LP içindeki miktar: ${fmtItemQty(c.optDouble("activeLpQuantity"))}",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = MaterialTheme.colorScheme.primary,
+                                    )
+                                }
                             }
                             Column(horizontalAlignment = Alignment.End) {
                                 Text(fmtItemQty(c.optDouble("quantity")), fontWeight = FontWeight.Bold, fontSize = 16.sp, color = MaterialTheme.colorScheme.primary)
@@ -300,6 +315,14 @@ fun BinInquiryModule() {
                     Column(Modifier.padding(12.dp)) {
                         Text("${lp.optString("no")} · ${lpStatusLabel(lp.optString("status"))}", fontWeight = FontWeight.Medium, color = MaterialTheme.colorScheme.onSurface)
                         Text("${lp.optString("templateCode")}${lp.optString("sscc").takeIf { it.isNotBlank() }?.let { " · SSCC $it" } ?: ""}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        if (lp.has("lineCount") || lp.has("totalQuantity")) {
+                            Text(
+                                "LP içeriği: ${fmtItemQty(lp.optDouble("totalQuantity"))} adet · ${lp.optInt("lineCount")} satır",
+                                style = MaterialTheme.typography.bodySmall,
+                                fontWeight = FontWeight.SemiBold,
+                                color = MaterialTheme.colorScheme.primary,
+                            )
+                        }
                     }
                 }
             }
@@ -476,12 +499,12 @@ fun WhseEntriesModule() {
                         }
                         Text(
                             buildList {
-                                add("📍 ${firstValue(e, "binCode").ifBlank { "—" }}")
-                                firstValue(e, "zoneCode").takeIf { it.isNotBlank() }?.let { add(it) }
-                                firstValue(e, "lotNo").takeIf { it.isNotBlank() }?.let { add("Lot $it") }
-                                firstValue(e, "lpNo").takeIf { it.isNotBlank() }?.let { add("🧺 $it") }
+                                add("📍 ${rawValue(e, "binCode").ifBlank { "—" }}")
+                                rawValue(e, "zoneCode").takeIf { it.isNotBlank() }?.let { add(it) }
+                                rawValue(e, "lotNo").takeIf { it.isNotBlank() }?.let { add("Lot $it") }
+                                rawValue(e, "lpNo").takeIf { it.isNotBlank() }?.let { add("🧺 $it") }
                                 add("#${e.optInt("entryNo")}")
-                                firstValue(e, "registeringDate").takeIf { it.isNotBlank() }?.let { add(it) }
+                                rawValue(e, "registeringDate").takeIf { it.isNotBlank() }?.let { add(it) }
                             }.joinToString(" · "),
                             fontSize = 11.sp, color = Color.Gray,
                         )

@@ -24,8 +24,32 @@ tableextension 72429 "DOPSWHS Whse Activity Hdr Ext" extends "Warehouse Activity
         {
             Caption = 'Ana Sepet (LP)';
             DataClassification = CustomerContent;
-            TableRelation = "DOPSWHS LP Header";
-            ValidateTableRelation = false;   // sepet barkodu kayıtlı LP olmayabilir
+            TableRelation = "DOPSWHS LP Header"."No." where("Location Code" = field("Location Code"));
+            ValidateTableRelation = true;
+
+            trigger OnValidate()
+            var
+                LP: Record "DOPSWHS LP Header";
+            begin
+                if "DOPSWHS Main LP No." = '' then
+                    exit;
+                if not LP.Get("DOPSWHS Main LP No.") then
+                    Error('Ana sepet %1 kayıtlı bir LP değildir.', "DOPSWHS Main LP No.");
+                TestField("Location Code");
+                if LP."Location Code" <> "Location Code" then
+                    Error(
+                        'Ana sepet %1, %2 lokasyonundadır; pick %3 lokasyonundadır.',
+                        LP."No.", LP."Location Code", "Location Code");
+                if LP.Status in [LP.Status::Used, LP.Status::Unbuilt] then
+                    Error('Ana sepet %1 kullanılamaz; LP durumu %2.', LP."No.", LP.Status);
+                if (LP.Status = LP.Status::Assigned) and
+                   ((LP."Assigned Document Type" <> LP."Assigned Document Type"::WhsePick) or
+                    (LP."Assigned Document No." <> "No."))
+                then
+                    Error(
+                        'Ana sepet %1 başka bir belgeye atanmıştır (%2 %3).',
+                        LP."No.", LP."Assigned Document Type", LP."Assigned Document No.");
+            end;
         }
     }
 }

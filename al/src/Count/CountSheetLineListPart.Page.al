@@ -43,6 +43,7 @@ page 72481 "DOPSWHS Count Sheet Line Part"
                 field("Counted Qty 3"; Rec."Counted Qty 3") { ApplicationArea = All; }
                 field(Variance; Rec.Variance) { ApplicationArea = All; StyleExpr = VarianceStyle; }
                 field("Recount Required"; Rec."Recount Required") { ApplicationArea = All; StyleExpr = VarianceStyle; }
+                field("Unexpected Stock"; Rec."Unexpected Stock") { ApplicationArea = All; StyleExpr = VarianceStyle; }
                 field("Line No."; Rec."Line No.") { ApplicationArea = All; Visible = false; }
             }
         }
@@ -52,7 +53,9 @@ page 72481 "DOPSWHS Count Sheet Line Part"
     var
         Item: Record Item;
     begin
-        CountedFlag := (Rec."Counted Qty 1" <> 0) or (Rec."Counted Qty 2" <> 0) or (Rec."Counted Qty 3" <> 0);
+        CountedFlag :=
+            Rec."Counted 1" or Rec."Counted 2" or Rec."Counted 3" or
+            (Rec."Counted Qty 1" <> 0) or (Rec."Counted Qty 2" <> 0) or (Rec."Counted Qty 3" <> 0);
 
         Clear(ItemDescription);
         if (Rec."Item No." <> '') and Item.Get(Rec."Item No.") then

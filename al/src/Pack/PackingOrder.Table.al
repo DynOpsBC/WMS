@@ -31,6 +31,8 @@ table 72359 "DOPSWHS Packing Order"
     {
         key(PK; "Sales Order No.") { Clustered = true; }
         key(StatusKey; Status, "Ready DateTime") { }
+        // StartPickSession ve paketleme listeleri Pick No. ile filtreler.
+        key(PickKey; "Pick No.") { }
         // Terminalin V2 sorgusu: orderFlowMode filtresi + readyDateTime sıralaması.
         key(FlowStatusKey; "Order Flow Mode", Status, "Ready DateTime") { }
     }

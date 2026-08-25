@@ -2,7 +2,9 @@ pageextension 72303 "DOPSWHS Whse Receipt Ext" extends "Warehouse Receipt"
 {
     layout
     {
-        addlast(FactBoxes)
+        // FactBoxes may only contain part/systempart controls. Keep these header
+        // fields in the document's General area instead of an invalid FactBox group.
+        addlast(General)
         {
             group("DOPSWHS Mobile FactBox")
             {

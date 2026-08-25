@@ -26,15 +26,18 @@ export function PickBoardApp() {
 
   const byPicker = useMemo(() => {
     const map = new Map<string, typeof data.picks>();
+    map.set("", []);
+    data.users.forEach((userId) => map.set(userId, []));
     data.picks.forEach((pick) => {
       const key = pick.assignedUserId || "";
       map.set(key, [...(map.get(key) ?? []), pick]);
     });
     return [...map.entries()].sort(([a], [b]) => a.localeCompare(b));
-  }, [data.picks]);
+  }, [data.picks, data.users]);
 
   const onReassign = useCallback((pickNo: string, userId: string) => {
     setData((current) => ({
+      users: current.users,
       picks: current.picks.map((pick) => pick.no === pickNo ? { ...pick, assignedUserId: userId, status: "InProgress" } : pick),
     }));
     reassignPick(pickNo, userId);
@@ -84,9 +87,14 @@ function normalizeData(payload: unknown): PickBoardData {
     try {
       return normalizeData(JSON.parse(payload));
     } catch {
-      return { picks: [] };
+      return { picks: [], users: [] };
     }
   }
   const candidate = payload as Partial<PickBoardData> | undefined;
-  return { picks: Array.isArray(candidate?.picks) ? candidate.picks : [] };
+  return {
+    picks: Array.isArray(candidate?.picks) ? candidate.picks : [],
+    users: Array.isArray(candidate?.users)
+      ? candidate.users.filter((user): user is string => typeof user === "string" && user.trim().length > 0)
+      : [],
+  };
 }

@@ -49,7 +49,8 @@ page 72069 "DOPSWHS LP Card"
             part(NestTree; "DOPSWHS LP Factbox Bin")
             {
                 ApplicationArea = All;
-                SubPageLink = "Bin Code" = field("Bin Code");
+                SubPageLink = "Location Code" = field("Location Code"),
+                              "Bin Code" = field("Bin Code");
             }
             part(MovementLedger; "DOPSWHS LP Movement Ledger")
             {

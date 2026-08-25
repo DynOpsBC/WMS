@@ -18,6 +18,7 @@ import androidx.core.content.FileProvider
 import com.dynops.bcwms.BuildConfig
 import com.dynops.bcwms.BcApi
 import com.dynops.bcwms.ui.bcwmsStatus
+import com.dynops.bcwms.ui.operatorFacingStatus
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -123,7 +124,7 @@ fun UpdateChecker() {
                 }
                 error?.let {
                     Spacer(Modifier.height(8.dp))
-                    Text(it, color = status.danger)
+                    Text(operatorFacingStatus(it), color = status.danger)
                 }
             }
         },
@@ -149,7 +150,7 @@ fun UpdateChecker() {
                                 manifest = null
                             }
                         } catch (t: Throwable) {
-                            error = "Hata: ${t.message ?: t::class.java.simpleName}"
+                            error = "HATA: Güncelleme indirilemedi. Bağlantıyı kontrol edip tekrar deneyin."
                         } finally {
                             downloading = false
                         }

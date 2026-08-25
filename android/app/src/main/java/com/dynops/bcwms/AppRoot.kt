@@ -15,11 +15,11 @@ import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -79,18 +79,23 @@ enum class Screen(val title: String) {
 @Composable
 fun AppRoot() {
     val context = androidx.compose.ui.platform.LocalContext.current
+    val forceProductionFlow = shouldForceProductionFlow(BuildConfig.FLAVOR)
     // rememberSaveable: sistem uygulamayı bellek baskısıyla öldürüp geri
     // getirirse operatör ana menüye düşmesin, son ekranda kalsın.
     // (Cihaz döndürmede zaten manifest'teki configChanges sayesinde Activity
     // yeniden yaratılmıyor — tüm ekran state'i olduğu gibi korunuyor.)
     var screen by rememberSaveable { mutableStateOf(Screen.Home) }
-    var connected by remember { mutableStateOf(BcApi.hasToken(context)) }
+    // Bir belirtecin diskte bulunması bağlantı anlamına gelmez. Şirket ve API
+    // doğrulanana kadar operasyonlar kapalı kalır.
+    var connected by remember { mutableStateOf(false) }
     // V2 yerel bir özellik anahtarıdır: sunucu verisini değiştirmez ve klasik
     // ekranları silmez. Operatör aynı cihazda son seçimini korur.
     var v2Enabled by rememberSaveable {
         mutableStateOf(
-            context.getSharedPreferences("bcwms_prefs", android.content.Context.MODE_PRIVATE)
-                .getBoolean("ui_mode_v2", false)
+            forceProductionFlow || context.getSharedPreferences(
+                "bcwms_prefs",
+                android.content.Context.MODE_PRIVATE,
+            ).getBoolean("ui_mode_v2", false)
         )
     }
 
@@ -99,6 +104,9 @@ fun AppRoot() {
 
     LaunchedEffect(Unit) {
         if (BcApi.hasToken(context)) {
+            // Flavor-specific company must be resolved before testing the API;
+            // BADE must not inherit the historical shared CRONUS company UUID.
+            BcApi.ensurePreferredCompany(context)
             connected = BcApi.testConnection(context).ok
         }
     }
@@ -113,14 +121,19 @@ fun AppRoot() {
                     }
                 },
                 actions = {
-                    V2ModeButton(
-                        enabled = v2Enabled,
-                        onToggle = {
-                            v2Enabled = !v2Enabled
-                            context.getSharedPreferences("bcwms_prefs", android.content.Context.MODE_PRIVATE)
-                                .edit().putBoolean("ui_mode_v2", v2Enabled).apply()
-                        },
-                    )
+                    // BADE müşterisi yalnız doğrulanmış üretim akışını görür. Teknik
+                    // "V2" anahtarı operatöre yanlışlıkla eski akışa dönme imkânı
+                    // veriyor ve aynı iş için iki farklı ekran oluşturuyordu.
+                    if (!forceProductionFlow) {
+                        V2ModeButton(
+                            enabled = v2Enabled,
+                            onToggle = {
+                                v2Enabled = !v2Enabled
+                                context.getSharedPreferences("bcwms_prefs", android.content.Context.MODE_PRIVATE)
+                                    .edit().putBoolean("ui_mode_v2", v2Enabled).apply()
+                            },
+                        )
+                    }
                     ConnectionBadge(connected) { screen = Screen.Connection }
                 }
             )
@@ -129,7 +142,12 @@ fun AppRoot() {
         CompositionLocalProvider(LocalNavigator provides { target -> screen = target }) {
         Box(Modifier.padding(padding).fillMaxSize()) {
             when (screen) {
-                Screen.Home -> HomeScreen(connected) { screen = it }
+                Screen.Home -> HomeScreen(
+                    connected = connected,
+                    flavor = BuildConfig.FLAVOR,
+                    onConnectionChanged = { connected = it },
+                    onNavigate = { screen = it },
+                )
                 Screen.Connection -> LoginFlow(onConnected = { connected = it })
                 Screen.LicensePlates -> LicensePlateModule()
                 Screen.ItemInquiry -> ItemInquiryModule()
@@ -159,6 +177,27 @@ fun AppRoot() {
     }
 }
 
+/** Müşteri APK'sı tek, doğrulanmış operasyon akışıyla açılır. */
+internal fun shouldForceProductionFlow(flavor: String): Boolean = flavor.equals("bade", ignoreCase = true)
+
+/** Bağlantı gerektiren operasyonlar çevrimdışıyken tıklanıp hata üretmemelidir. */
+internal fun isHomeTileEnabled(screen: Screen, connected: Boolean): Boolean =
+    connected || screen == Screen.Connection
+
+/** Operatör ana menüsünde destek/test araçları gösterilmez; ekranlar koddan silinmez. */
+internal fun operatorHomeScreens(flavor: String): Set<Screen> =
+    if (flavor.equals("bade", ignoreCase = true)) {
+        Screen.entries.toSet() - setOf(
+            Screen.Home,
+            Screen.FieldSettings,
+            Screen.SelfTest,
+            Screen.TestCenter,
+            Screen.PostingTest,
+        )
+    } else {
+        Screen.entries.toSet() - Screen.Home
+    }
+
 /** Tek dokunuşla klasik ve V2 operasyonlarını değiştirir. */
 @Composable
 private fun V2ModeButton(enabled: Boolean, onToggle: () -> Unit) {
@@ -177,7 +216,7 @@ private fun V2ModeButton(enabled: Boolean, onToggle: () -> Unit) {
         ) {
             Box(Modifier.size(7.dp).clip(CircleShape).background(if (enabled) Color(0xFF7EF0B2) else content.copy(alpha = 0.45f)))
             Spacer(Modifier.width(6.dp))
-            Text("V2", color = content, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
+            Text("Yeni Akış", color = content, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
         }
     }
 }
@@ -250,8 +289,14 @@ private val HomeCategories = listOf(
 )
 
 @Composable
-private fun HomeScreen(connected: Boolean, onNavigate: (Screen) -> Unit) {
+private fun HomeScreen(
+    connected: Boolean,
+    flavor: String,
+    onConnectionChanged: (Boolean) -> Unit,
+    onNavigate: (Screen) -> Unit,
+) {
     val context = androidx.compose.ui.platform.LocalContext.current
+    val scope = rememberCoroutineScope()
     // ELOG multi-company: şirket değişince header + alt ekranlar tazelensin diye
     // basit bir sürüm sayacı. setCompany sonrası artırılır.
     var companyEpoch by remember { mutableStateOf(0) }
@@ -294,9 +339,18 @@ private fun HomeScreen(connected: Boolean, onNavigate: (Screen) -> Unit) {
                 loading = discovering,
                 onDismiss = { showSwitcher = false },
                 onSelect = { c ->
-                    BcApi.setCompany(context, c.id, c.displayName)
                     showSwitcher = false
-                    companyEpoch++   // header + aktif ekran reload tetikler
+                    onConnectionChanged(false)
+                    scope.launch {
+                        BcApi.setCompany(context, c.id, c.displayName)
+                        val ok = BcApi.testConnection(context).ok
+                        onConnectionChanged(ok)
+                        if (ok) {
+                            companyEpoch++
+                        } else {
+                            onNavigate(Screen.Connection)
+                        }
+                    }
                 },
             )
         }
@@ -307,9 +361,14 @@ private fun HomeScreen(connected: Boolean, onNavigate: (Screen) -> Unit) {
             Spacer(Modifier.height(16.dp))
         }
 
-        HomeCategories.forEachIndexed { index, category ->
-            CategorySection(category, onNavigate)
-            if (index != HomeCategories.lastIndex) Spacer(Modifier.height(18.dp))
+        val visibleScreens = operatorHomeScreens(flavor)
+        val visibleCategories = HomeCategories.mapNotNull { category ->
+            category.copy(tiles = category.tiles.filter { it.screen in visibleScreens })
+                .takeIf { it.tiles.isNotEmpty() }
+        }
+        visibleCategories.forEachIndexed { index, category ->
+            CategorySection(category, connected, onNavigate)
+            if (index != visibleCategories.lastIndex) Spacer(Modifier.height(18.dp))
         }
         Spacer(Modifier.height(8.dp))
     }
@@ -469,7 +528,8 @@ private fun CompanySwitcherSheet(
         companies.forEach { c ->
             val selected = c.id.equals(currentId, ignoreCase = true)
             Card(
-                onClick = { if (!selected) onSelect(c) },
+                onClick = { onSelect(c) },
+                enabled = !selected && !loading,
                 modifier = Modifier.fillMaxWidth().padding(vertical = 3.dp),
                 colors = CardDefaults.cardColors(
                     containerColor = if (selected) MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)
@@ -497,7 +557,7 @@ private fun CompanySwitcherSheet(
 }
 
 @Composable
-private fun CategorySection(category: HomeCategory, onNavigate: (Screen) -> Unit) {
+private fun CategorySection(category: HomeCategory, connected: Boolean, onNavigate: (Screen) -> Unit) {
     Column {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Box(Modifier.size(width = 4.dp, height = 16.dp).clip(RoundedCornerShape(2.dp)).background(category.accent))
@@ -514,7 +574,13 @@ private fun CategorySection(category: HomeCategory, onNavigate: (Screen) -> Unit
         rows.forEachIndexed { index, rowTiles ->
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 rowTiles.forEach { tile ->
-                    HomeTileCard(tile, category.accent, Modifier.weight(1f), onNavigate)
+                    HomeTileCard(
+                        tile = tile,
+                        accent = category.accent,
+                        enabled = isHomeTileEnabled(tile.screen, connected),
+                        modifier = Modifier.weight(1f),
+                        onNavigate = onNavigate,
+                    )
                 }
                 if (rowTiles.size == 1) Spacer(Modifier.weight(1f))
             }
@@ -527,16 +593,18 @@ private fun CategorySection(category: HomeCategory, onNavigate: (Screen) -> Unit
 private fun HomeTileCard(
     tile: HomeTile,
     accent: Color,
+    enabled: Boolean,
     modifier: Modifier,
     onNavigate: (Screen) -> Unit
 ) {
     Card(
         onClick = { onNavigate(tile.screen) },
+        enabled = enabled,
         shape = RoundedCornerShape(18.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp, pressedElevation = 8.dp),
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.5f)),
-        modifier = modifier.height(112.dp)
+        modifier = modifier.height(112.dp).alpha(if (enabled) 1f else 0.45f)
     ) {
         Column(
             Modifier.fillMaxSize().padding(12.dp),
@@ -559,55 +627,6 @@ private fun HomeTileCard(
     }
 }
 
-@Composable
-private fun ConnectionScreen(onConnected: (Boolean) -> Unit) {
-    val context = androidx.compose.ui.platform.LocalContext.current
-    val scope = rememberCoroutineScope()
-    var token by remember { mutableStateOf(BcApi.getToken(context)) }
-    var status by remember { mutableStateOf(if (BcApi.hasToken(context)) "Token kayıtlı. Test edebilirsiniz." else "Token girin.") }
-    var testing by remember { mutableStateOf(false) }
-
-    Column(Modifier.fillMaxSize().padding(16.dp).verticalScroll(rememberScrollState())) {
-        Text("Azure AD Erişim Belirteci", fontWeight = FontWeight.Bold)
-        Text(
-            "Mac terminal: az account get-access-token --resource https://api.businesscentral.dynamics.com --query accessToken -o tsv | pbcopy → sonra buraya Cmd+V",
-            fontSize = 11.sp, color = Color.Gray
-        )
-        Spacer(Modifier.height(8.dp))
-        OutlinedTextField(
-            value = token, onValueChange = { token = it },
-            label = { Text("Token") },
-            modifier = Modifier.fillMaxWidth(),
-            visualTransformation = PasswordVisualTransformation(),
-            maxLines = 4
-        )
-        Spacer(Modifier.height(12.dp))
-        Row {
-            Button(enabled = token.isNotBlank() && !testing, onClick = {
-                BcApi.saveToken(context, token)
-                scope.launch {
-                    testing = true
-                    status = "Test ediliyor..."
-                    val r = BcApi.testConnection(context)
-                    testing = false
-                    if (r.ok) {
-                        status = "🟢 Bağlantı başarılı (HTTP ${r.httpCode}). Token kaydedildi."
-                        onConnected(true)
-                    } else {
-                        status = "🔴 Başarısız (HTTP ${r.httpCode}): ${r.body.take(200)}"
-                        onConnected(false)
-                    }
-                }
-            }) { Text(if (testing) "..." else "Kaydet + Test Et") }
-            Spacer(Modifier.width(8.dp))
-            OutlinedButton(onClick = {
-                BcApi.clearToken(context); token = ""; status = "Token temizlendi."; onConnected(false)
-            }) { Text("Temizle") }
-        }
-        Spacer(Modifier.height(16.dp))
-        Card { Text(status, Modifier.padding(12.dp), fontSize = 13.sp) }
-    }
-}
 @Composable
 private fun TestCenterScreen() {
     val context = androidx.compose.ui.platform.LocalContext.current

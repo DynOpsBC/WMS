@@ -108,12 +108,12 @@ fun QualityManagementModule() {
         scope.launch {
             loading = true; status = "Yükleniyor..."
             val filter = if (openOnly) "&\$filter=status eq 'Open'" else ""
-            val r = BcApi.get(context, "$qmBaseUrl/qualityInspections?\$top=50$filter&\$orderby=systemCreatedAt desc")
+            val page = BcApi.getAllPages(context, "$qmBaseUrl/qualityInspections?\$top=50$filter&\$orderby=systemCreatedAt desc")
             loading = false
-            rows = if (r.ok) BcApi.parseValueArray(r.body) else emptyList()
-            status = if (!r.ok) "HATA: MS QM listesi alınamadı (HTTP ${r.httpCode})"
-                else if (rows.isEmpty()) "BOŞ: ${if (openOnly) "Açık" else ""} denetim yok (HTTP ${r.httpCode})"
-                else "TAMAM: ${rows.size} denetim (HTTP ${r.httpCode})"
+            rows = if (page.complete) page.rows else emptyList()
+            status = if (!page.complete) "HATA: Kalite denetimlerinin tamamı alınamadı. Yenileyin."
+                else if (rows.isEmpty()) "BOŞ: ${if (openOnly) "Açık" else ""} denetim yok."
+                else "TAMAM: ${rows.size} denetim"
         }
     }
     LaunchedEffect(openOnly) { load() }
@@ -139,15 +139,15 @@ fun QualityManagementModule() {
                 Card(onClick = { selected = d }, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(10.dp)) {
                     Column(Modifier.padding(12.dp)) {
                         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                            Text("${d.optString("inspectionNo")} · ${firstValue(d, "templateCode").ifBlank { "—" }}", fontWeight = FontWeight.Bold)
-                            Text(firstValue(d, "status").ifBlank { "Open" }.let { bcStatusLabelTr(it) }, fontSize = 12.sp, color = Color.Gray)
+                            Text("${d.optString("inspectionNo")} · ${rawValue(d, "templateCode").ifBlank { "—" }}", fontWeight = FontWeight.Bold)
+                            Text(rawValue(d, "status").ifBlank { "Open" }.let { bcStatusLabelTr(it) }, fontSize = 12.sp, color = Color.Gray)
                         }
                         Text(firstValue(d, "description"), fontSize = 12.sp, color = Color.Gray)
                         val parts = mutableListOf<String>()
-                        parts.add("Ürün: ${firstValue(d, "sourceItemNo").ifBlank { "—" }}")
-                        firstValue(d, "sourceLotNo").takeIf { it.isNotBlank() }?.let { parts.add("Lot: $it") }
-                        firstValue(d, "sourceSerialNo").takeIf { it.isNotBlank() }?.let { parts.add("SN: $it") }
-                        firstValue(d, "resultCode").takeIf { it.isNotBlank() }?.let { parts.add("Sonuç: $it") }
+                        parts.add("Ürün: ${rawValue(d, "sourceItemNo").ifBlank { "—" }}")
+                        d.optString("sourceLotNo").trim().takeIf { it.isNotBlank() && it != "null" }?.let { parts.add("Lot: $it") }
+                        d.optString("sourceSerialNo").trim().takeIf { it.isNotBlank() && it != "null" }?.let { parts.add("SN: $it") }
+                        d.optString("resultCode").trim().takeIf { it.isNotBlank() && it != "null" }?.let { parts.add("Sonuç: $it") }
                         Text(parts.joinToString(" · "), fontSize = 12.sp, color = Color.Gray)
                     }
                 }
@@ -170,13 +170,20 @@ private fun InspectionDetail(insp: JSONObject, onBack: () -> Unit) {
     var busy by remember { mutableStateOf(false) }
     var showTest by remember { mutableStateOf(false) }
     var showFinish by remember { mutableStateOf(false) }
+    var myUserId by remember { mutableStateOf("") }
+    LaunchedEffect(Unit) { myUserId = BcApi.currentUserId(context).trim() }
 
     val systemId = current.optString("systemIDOfInspection")
     val sval = current.optString("status")
     val isOpen = sval == "Open" || sval == "InProgress" || sval.isBlank()
-    val lot = firstValue(current, "sourceLotNo")
-    val serial = firstValue(current, "sourceSerialNo")
-    val pkg = firstValue(current, "sourcePackageNo")
+    val lot = current.optString("sourceLotNo").trim().takeUnless { it == "null" }.orEmpty()
+    val serial = current.optString("sourceSerialNo").trim().takeUnless { it == "null" }.orEmpty()
+    val pkg = current.optString("sourcePackageNo").trim().takeUnless { it == "null" }.orEmpty()
+    val assignedUser = listOf("assignedUserId", "assignedToUserId", "assignedUser")
+        .map { current.optString(it).trim().takeUnless { value -> value == "null" }.orEmpty() }
+        .firstOrNull { it.isNotBlank() }
+        .orEmpty()
+    val canMutate = myUserId.isNotBlank() && assignedUser.isNotBlank() && assignedUser.equals(myUserId, ignoreCase = true)
 
     fun reload() {
         scope.launch {
@@ -202,46 +209,52 @@ private fun InspectionDetail(insp: JSONObject, onBack: () -> Unit) {
         ScrollableBranch(Modifier.padding(12.dp)) {
             TextButton(onClick = onBack) { Text("‹ Denetim Listesi") }
             DocHeaderCard(
-                title = "${current.optString("inspectionNo")} · ${firstValue(current, "templateCode").ifBlank { "—" }}",
+                title = "${current.optString("inspectionNo")} · ${rawValue(current, "templateCode").ifBlank { "—" }}",
                 subtitle = buildString {
                     append(firstValue(current, "description"))
-                    append("\nÜrün: ").append(firstValue(current, "sourceItemNo").ifBlank { "—" })
+                    append("\nÜrün: ").append(rawValue(current, "sourceItemNo").ifBlank { "—" })
                     if (lot.isNotBlank()) append(" · Lot: ").append(lot)
                     if (serial.isNotBlank()) append(" · SN: ").append(serial)
                     if (pkg.isNotBlank()) append(" · Paket: ").append(pkg)
                     append("\nDurum: ").append(bcStatusLabelTr(sval.ifBlank { "Open" }))
-                    append(" · Sonuç: ").append(firstValue(current, "resultCode").ifBlank { "—" })
+                    append(" · Sonuç: ").append(rawValue(current, "resultCode").ifBlank { "—" })
                 },
             )
             Spacer(Modifier.height(6.dp))
             StatusText(status)
+            if (!canMutate) {
+                StatusText(
+                    if (myUserId.isBlank()) "HATA: Kullanıcı kimliği doğrulanamadı. Kalite işlemleri için yeniden giriş yapın."
+                    else "BİLGİ: Bu denetim size atanmadığı için salt okunur açıldı."
+                )
+            }
         }
         BottomActionBar {
             OutlinedButton(
                 onClick = { showTest = true },
-                enabled = !busy && isOpen,
+                enabled = !busy && isOpen && canMutate,
                 modifier = Modifier.weight(1f),
             ) { Text("➕ Test Değeri") }
             Button(
                 onClick = { showFinish = true },
-                enabled = !busy && isOpen,
+                enabled = !busy && isOpen && canMutate,
                 modifier = Modifier.weight(1f),
             ) { Text("✅ Bitir", fontWeight = FontWeight.Bold) }
         }
         BottomActionBar {
             OutlinedButton(
                 onClick = { action("BlockLot", "{}", "Lot $lot bloklandı") },
-                enabled = !busy && lot.isNotBlank(),
+                enabled = !busy && canMutate && lot.isNotBlank(),
                 modifier = Modifier.weight(1f),
             ) { Text("🔒 Lot Blokla") }
             OutlinedButton(
                 onClick = { action("UnBlockLot", "{}", "Lot $lot açıldı") },
-                enabled = !busy && lot.isNotBlank(),
+                enabled = !busy && canMutate && lot.isNotBlank(),
                 modifier = Modifier.weight(1f),
             ) { Text("🔓 Lot Blokunu Aç") }
             OutlinedButton(
                 onClick = { action("ReopenInspection", "{}", "Yeniden açıldı") },
-                enabled = !busy && !isOpen,
+                enabled = !busy && canMutate && !isOpen,
                 modifier = Modifier.weight(1f),
             ) { Text("↩️ Yeniden Aç") }
         }

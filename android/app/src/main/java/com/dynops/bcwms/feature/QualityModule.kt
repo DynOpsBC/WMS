@@ -41,13 +41,13 @@ fun QualityModule() {
         scope.launch {
             loading = true; status = "Kalite emirleri yükleniyor..."
             val filter = com.dynops.bcwms.ui.buildODataFilter(com.dynops.bcwms.ui.searchClause("no", search))
-            val r = BcApi.get(context, "qualityOrders?\$top=50&\$orderby=no&\$select=no,sourceType,sourceNo,itemNo,itemDescription,quantity,sampleSize,status,inspector,resultNotes,quarantineBin$filter")
+            val page = BcApi.getAllPages(context, "qualityOrders?\$top=50&\$orderby=no&\$select=no,sourceType,sourceNo,itemNo,itemDescription,quantity,sampleSize,status,inspector,resultNotes,quarantineBin$filter")
             loading = false
-            val all = if (r.ok) BcApi.parseValueArray(r.body) else emptyList()
+            val all = if (page.complete) page.rows else emptyList()
             rows = if (showOnlyOpen) all.filter { it.optString("status") == "Open" } else all
-            status = if (!r.ok) "HATA: Kalite emirleri alınamadı (HTTP ${r.httpCode})"
-                else if (rows.isEmpty()) "BOŞ: ${if (showOnlyOpen) "Açık kalite emri yok" else "Kalite emri yok"} (HTTP ${r.httpCode})"
-                else "TAMAM: ${rows.size} kalite emri (HTTP ${r.httpCode})"
+            status = if (!page.complete) "HATA: Kalite emirlerinin tamamı alınamadı. Yenileyin."
+                else if (rows.isEmpty()) "BOŞ: ${if (showOnlyOpen) "Açık kalite emri yok" else "Kalite emri yok"}"
+                else "TAMAM: ${rows.size} kalite emri"
         }
     }
     LaunchedEffect(showOnlyOpen) { load() }
@@ -83,7 +83,8 @@ fun QualityModule() {
                     else -> Color(0xFFFFF8E1) to Color(0xFFEF6C00)
                 }
                 Card(
-                    onClick = { if (st == "Open") inspectOrder = d },
+                    onClick = { inspectOrder = d },
+                    enabled = st == "Open",
                     modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(10.dp)
                 ) {
                     Column(Modifier.padding(12.dp)) {
@@ -111,18 +112,24 @@ fun QualityModule() {
     val io = inspectOrder
     if (io != null) {
         InspectSheet(order = io, onDismiss = { inspectOrder = null }, onResult = { passed, reason, notes, quarantine ->
-            inspectOrder = null
             scope.launch {
+                val inspector = BcApi.currentUserId(context).trim()
+                if (inspector.isBlank()) {
+                    status = "HATA: Depo kullanıcınız doğrulanamadı. Yeniden giriş yapın."
+                    return@launch
+                }
+                inspectOrder = null
                 loading = true; status = "Sonuç kaydediliyor..."
                 val no = io.optString("no")
                 val r = if (passed)
                     BcApi.boundAction(context, "qualityOrders", no, "pass",
-                        JSONObject().apply { put("inspector", "MOBIL"); put("notes", notes) }.toString())
+                        JSONObject().apply { put("inspector", inspector); put("notes", notes) }.toString())
                 else
                     BcApi.boundAction(context, "qualityOrders", no, "fail",
-                        JSONObject().apply { put("inspector", "MOBIL"); put("reasonCode", reason); put("notes", notes); put("quarantineBin", quarantine) }.toString())
+                        JSONObject().apply { put("inspector", inspector); put("reasonCode", reason); put("notes", notes); put("quarantineBin", quarantine) }.toString())
                 loading = false
-                status = if (r.ok) "TAMAM: $no → ${if (passed) "KABUL" else "RED"} (HTTP ${r.httpCode})" else "HATA: ${BcApi.errorMessage(r.body)} (HTTP ${r.httpCode})"
+                status = if (r.ok) "TAMAM: $no → ${if (passed) "KABUL" else "RED"}"
+                    else operatorFacingStatus("HATA: ${BcApi.errorMessage(r.body)}")
                 load()
             }
         })
@@ -133,6 +140,7 @@ fun QualityModule() {
 @Composable
 private fun InspectSheet(order: JSONObject, onDismiss: () -> Unit, onResult: (passed: Boolean, reason: String, notes: String, quarantine: String) -> Unit) {
     var notes by remember { mutableStateOf("") }
+    var sampleBarcode by remember { mutableStateOf("") }
     var quarantine by remember { mutableStateOf("QUARANTINE") }
     val reasons = listOf("DAMAGED", "WRONGITEM", "EXPIRED", "CONTAMINATED", "SPEC-FAIL")
     var reason by remember { mutableStateOf(reasons.first()) }
@@ -140,7 +148,17 @@ private fun InspectSheet(order: JSONObject, onDismiss: () -> Unit, onResult: (pa
         Text("Kalite Denetimi — ${order.optString("no")}", fontWeight = FontWeight.Bold, fontSize = 18.sp)
         Text("${order.optString("itemNo")} · Numune: ${order.optDouble("sampleSize")} / ${order.optDouble("quantity")}", fontSize = 12.sp, color = Color.Gray)
         Spacer(Modifier.height(12.dp))
-        ScanField("Numune barkod (opsiyonel)", "", {}, modifier = Modifier.fillMaxWidth(), onScanned = { notes = "Tarandı: ${BarcodeIntentResolver.resolve(it).value}" })
+        ScanField(
+            "Numune barkod (opsiyonel)",
+            sampleBarcode,
+            { sampleBarcode = it },
+            modifier = Modifier.fillMaxWidth(),
+            onScanned = {
+                val value = BarcodeIntentResolver.resolve(it).value.trim()
+                sampleBarcode = value
+                if (value.isNotBlank()) notes = "Numune barkodu: $value"
+            },
+        )
         Spacer(Modifier.height(8.dp))
         OutlinedTextField(notes, { notes = it }, label = { Text("Notlar") }, modifier = Modifier.fillMaxWidth(), maxLines = 3)
         Spacer(Modifier.height(12.dp))

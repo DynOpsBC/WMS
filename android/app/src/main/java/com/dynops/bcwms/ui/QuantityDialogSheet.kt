@@ -11,10 +11,18 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import android.util.Log
 import com.dynops.bcwms.BcApi
 import com.dynops.bcwms.scanner.BarcodeIntentResolver
 import com.dynops.bcwms.scanner.ScanField
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import org.json.JSONObject
+import java.time.LocalDate
+import java.time.format.DateTimeFormatter
+import java.time.format.DateTimeParseException
+import java.time.format.ResolverStyle
+import java.util.Locale
 
 data class QuantityResult(
     val quantity: Double,
@@ -22,6 +30,7 @@ data class QuantityResult(
     val lotNo: String,
     val serialNo: String,
     val supplierLotNo: String = "",
+    val expiryDate: String = "",
 )
 
 /**
@@ -38,11 +47,17 @@ fun QuantityDialogSheet(
     initialLot: String = "",
     initialSerial: String = "",
     initialSupplierLot: String = "",
+    initialExpiryDate: String = "",
+    uomOptions: List<String> = emptyList(),
+    uomRequired: Boolean = false,
+    uomSelectionOnly: Boolean = false,
     showLotSerial: Boolean = true,
     showSerial: Boolean = showLotSerial,
     showSupplierLot: Boolean = false,
     lotRequired: Boolean = false,
+    lotSelectionOnly: Boolean = false,
     showAvailableLotLookup: Boolean = false,
+    serialRequired: Boolean = false,
     // Stoktaki lotları açılışta yoklar: lot bulunursa alan zorunlu sayılır ve
     // seçim listesi görünür. BC'deki lotRequired alanı yayınlanmamış olsa bile
     // lot takipli üründe boş lotla sevk edilmesini engeller.
@@ -51,6 +66,9 @@ fun QuantityDialogSheet(
     binCode: String = "",
     variantCode: String = "",
     supplierLotRequired: Boolean = false,
+    showExpiryDate: Boolean = false,
+    expiryDateRequired: Boolean = false,
+    onAssignLotNo: (suspend () -> Result<String>)? = null,
     onConfirm: (QuantityResult) -> Unit,
     onDismiss: () -> Unit,
 ) {
@@ -59,11 +77,22 @@ fun QuantityDialogSheet(
     var lot by remember { mutableStateOf(initialLot) }
     var serial by remember { mutableStateOf(initialSerial) }
     var supplierLot by remember { mutableStateOf(initialSupplierLot) }
+    var expiryDateText by remember(initialExpiryDate) { mutableStateOf(expiryDateForDisplay(initialExpiryDate)) }
+    var assigningLot by remember { mutableStateOf(false) }
+    var lotAssignmentError by remember { mutableStateOf("") }
     var showSupplierLotLookup by remember { mutableStateOf(false) }
     var showAvailableLotLookupContent by remember { mutableStateOf(false) }
+    var uomExpanded by remember { mutableStateOf(false) }
+    val selectableUoms = remember(uomOptions) {
+        uomOptions.map(String::trim).filter(String::isNotBlank).distinctBy(String::uppercase)
+    }
+    LaunchedEffect(selectableUoms, initialUom) {
+        if (uom.isBlank()) uom = selectableUoms.firstOrNull().orEmpty()
+    }
     // -1 = henüz bilinmiyor / sorgulanamadı, 0 = stokta lot yok, >0 = lot var.
     var stockLotCount by remember(itemNo, locationCode, binCode, variantCode) { mutableStateOf(-1) }
     val probeContext = LocalContext.current
+    val actionScope = rememberCoroutineScope()
     LaunchedEffect(autoDetectLotFromStock, showLotSerial, itemNo, locationCode, binCode, variantCode) {
         if (!autoDetectLotFromStock || !showLotSerial || itemNo.isBlank()) return@LaunchedEffect
         stockLotCount = fetchAvailableLots(probeContext, itemNo, locationCode, binCode, variantCode)
@@ -71,6 +100,9 @@ fun QuantityDialogSheet(
     }
     val effectiveLotRequired = lotRequired || stockLotCount > 0
     val lotLookupVisible = showAvailableLotLookup || stockLotCount > 0
+    val stockLotProbeReady = !autoDetectLotFromStock || !showLotSerial || itemNo.isBlank() || stockLotCount >= 0
+    val normalizedExpiryDate = normalizeExpiryDate(expiryDateText)
+    val expiryDateValid = expiryDateText.isBlank() || normalizedExpiryDate != null
 
     fun qty(): Double = qtyText.toDoubleOrNull() ?: 0.0
     fun setQty(v: Double) { qtyText = formatQty(v.coerceAtLeast(0.0)) }
@@ -126,18 +158,90 @@ fun QuantityDialogSheet(
             ) { Text("+1", fontSize = 20.sp, fontWeight = FontWeight.Bold) }
 
             Spacer(Modifier.height(12.dp))
-            OutlinedTextField(
-                value = uom, onValueChange = { uom = it },
-                label = { Text("Ölçü Birimi (UOM)") }, singleLine = true,
-                modifier = Modifier.fillMaxWidth()
-            )
+            if (uomSelectionOnly || selectableUoms.isNotEmpty()) {
+                ExposedDropdownMenuBox(
+                    expanded = uomExpanded,
+                    onExpandedChange = { if (selectableUoms.isNotEmpty()) uomExpanded = !uomExpanded },
+                ) {
+                    OutlinedTextField(
+                        value = uom,
+                        onValueChange = {},
+                        readOnly = true,
+                        label = { Text(if (uomRequired) "Ölçü Birimi (zorunlu)" else "Ölçü Birimi (UOM)") },
+                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = uomExpanded) },
+                        singleLine = true,
+                        modifier = Modifier.menuAnchor().fillMaxWidth(),
+                    )
+                    ExposedDropdownMenu(expanded = uomExpanded, onDismissRequest = { uomExpanded = false }) {
+                        selectableUoms.forEach { option ->
+                            DropdownMenuItem(
+                                text = { Text(option) },
+                                onClick = { uom = option; uomExpanded = false },
+                            )
+                        }
+                    }
+                }
+                if (uomRequired && uom.isBlank()) {
+                    Text(
+                        "Bu ürün için geçerli bir ölçü birimi seçilmelidir.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                }
+            } else {
+                OutlinedTextField(
+                    value = uom, onValueChange = { uom = it },
+                    label = { Text("Ölçü Birimi (UOM)") }, singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
             if (showLotSerial) {
                 Spacer(Modifier.height(8.dp))
                 OutlinedTextField(
-                    value = lot, onValueChange = { lot = it },
+                    value = lot,
+                    onValueChange = { if (!lotSelectionOnly) lot = it },
+                    readOnly = lotSelectionOnly || onAssignLotNo != null,
                     label = { Text(if (effectiveLotRequired || supplierLotRequired) "Lot No (zorunlu)" else "Lot No (opsiyonel)") }, singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )
+                if (onAssignLotNo != null) {
+                    Spacer(Modifier.height(6.dp))
+                    OutlinedButton(
+                        onClick = {
+                            lotAssignmentError = ""
+                            actionScope.launch {
+                                assigningLot = true
+                                onAssignLotNo()
+                                    .onSuccess { assigned ->
+                                        lot = assigned.trim()
+                                        if (lot.isBlank())
+                                            lotAssignmentError = "BC lot numarası üretmedi. Ürün kartındaki numara serisini kontrol edin."
+                                    }
+                                    .onFailure { error ->
+                                        lotAssignmentError = error.message.orEmpty().ifBlank {
+                                            "Lot numarası atanamadı."
+                                        }
+                                    }
+                                assigningLot = false
+                            }
+                        },
+                        enabled = !assigningLot && lot.isBlank(),
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        if (assigningLot) {
+                            CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
+                            Spacer(Modifier.width(8.dp))
+                        }
+                        Text(if (lot.isBlank()) "Lot No Ata" else "Lot No Atandı")
+                    }
+                    if (lotAssignmentError.isNotBlank()) {
+                        Text(
+                            lotAssignmentError,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.error,
+                        )
+                    }
+                }
                 if (lotLookupVisible) {
                     Spacer(Modifier.height(6.dp))
                     OutlinedButton(
@@ -150,6 +254,13 @@ fun QuantityDialogSheet(
                 if (effectiveLotRequired && lot.isBlank()) {
                     Text(
                         "Lot takipli üründe sevkiyat için stoktaki bir lotu seçmelisiniz.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                }
+                if (!stockLotProbeReady) {
+                    Text(
+                        "Stoktaki lotlar doğrulanamadı. Bağlantıyı kontrol edip bu ekranı yeniden açın.",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.error,
                     )
@@ -186,9 +297,50 @@ fun QuantityDialogSheet(
                 Spacer(Modifier.height(8.dp))
                 OutlinedTextField(
                     value = serial, onValueChange = { serial = it },
-                    label = { Text("Seri No (opsiyonel)") }, singleLine = true,
+                    label = { Text(if (serialRequired) "Seri No (zorunlu)" else "Seri No (opsiyonel)") }, singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )
+                if (serialRequired && serial.isBlank()) {
+                    Text(
+                        "Seri takipli üründe seri numarası girilmelidir.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                }
+            }
+            if (showExpiryDate || expiryDateRequired) {
+                Spacer(Modifier.height(8.dp))
+                OutlinedTextField(
+                    value = expiryDateText,
+                    onValueChange = { value ->
+                        expiryDateText = value.filter { it.isDigit() || it == '.' || it == '/' || it == '-' }
+                            .take(10)
+                    },
+                    label = {
+                        Text(
+                            if (expiryDateRequired) "Son Kullanma Tarihi (zorunlu)"
+                            else "Son Kullanma Tarihi"
+                        )
+                    },
+                    supportingText = { Text("GG.AA.YYYY") },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    isError = (expiryDateRequired && expiryDateText.isBlank()) || !expiryDateValid,
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                if (expiryDateRequired && expiryDateText.isBlank()) {
+                    Text(
+                        "Bu ürünün takip kodu son kullanma tarihini zorunlu tutuyor.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                } else if (!expiryDateValid) {
+                    Text(
+                        "Geçerli bir tarih girin (ör. 31.12.2027).",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                }
             }
             Spacer(Modifier.height(16.dp))
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -197,17 +349,51 @@ fun QuantityDialogSheet(
                     onClick = {
                         onConfirm(
                             QuantityResult(
-                                qty(), uom.trim(), lot.trim(), serial.trim(), supplierLot.trim()
+                                quantity = qty(),
+                                uom = uom.trim(),
+                                lotNo = lot.trim(),
+                                serialNo = serial.trim(),
+                                supplierLotNo = supplierLot.trim(),
+                                expiryDate = normalizedExpiryDate.orEmpty(),
                             )
                         )
                     },
                     enabled = qty() > 0 &&
+                        stockLotProbeReady &&
+                        (!uomRequired || uom.isNotBlank()) &&
                         (!effectiveLotRequired || lot.isNotBlank()) &&
-                        (!supplierLotRequired || (lot.isNotBlank() && supplierLot.isNotBlank())),
+                        (!serialRequired || serial.isNotBlank()) &&
+                        (!supplierLotRequired || (lot.isNotBlank() && supplierLot.isNotBlank())) &&
+                        expiryDateValid &&
+                        (!expiryDateRequired || normalizedExpiryDate != null),
                     modifier = Modifier.weight(1f)
                 ) { Text("Onayla") }
             }
             Spacer(Modifier.height(24.dp))
+    }
+}
+
+private val TurkishDateFormatter: DateTimeFormatter =
+    DateTimeFormatter.ofPattern("dd.MM.uuuu", Locale.forLanguageTag("tr-TR"))
+        .withResolverStyle(ResolverStyle.STRICT)
+
+internal fun normalizeExpiryDate(value: String): String? {
+    val normalized = value.trim().replace('/', '.').replace('-', '.')
+    if (normalized.isBlank()) return null
+    return try {
+        LocalDate.parse(normalized, TurkishDateFormatter).format(DateTimeFormatter.ISO_LOCAL_DATE)
+    } catch (_: DateTimeParseException) {
+        null
+    }
+}
+
+internal fun expiryDateForDisplay(value: String): String {
+    val trimmed = value.trim()
+    if (trimmed.isBlank() || trimmed.startsWith("0001-01-01")) return ""
+    return try {
+        LocalDate.parse(trimmed.take(10), DateTimeFormatter.ISO_LOCAL_DATE).format(TurkishDateFormatter)
+    } catch (_: DateTimeParseException) {
+        trimmed
     }
 }
 
@@ -249,7 +435,7 @@ private fun AvailableLotLookupContent(
         loading -> Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) {
             CircularProgressIndicator()
         }
-        error.isNotBlank() -> Text(error, color = MaterialTheme.colorScheme.error)
+        error.isNotBlank() -> StatusText(error)
         rows.isEmpty() -> Text(
             "Bu lokasyon/rafta pozitif stoklu lot bulunamadı.",
             color = MaterialTheme.colorScheme.error,
@@ -292,17 +478,14 @@ private fun SupplierLotLookupContent(
         loading = true
         error = ""
         val safeItemNo = itemNo.replace("'", "''")
-        val result = BcApi.get(
+        val page = BcApi.getAllPages(
             context,
             "supplierLots?\$filter=itemNo eq '$safeItemNo'&\$orderby=supplierLotNo&\$top=100",
         )
-        if (result.ok) {
-            rows = BcApi.parseValueArray(result.body)
+        if (page.complete) {
+            rows = page.rows
         } else {
-            error = if (result.httpCode == 404)
-                "Lookup servisi BC'de bulunamadı. 1.14.0.20 paketini yayımlayın."
-            else
-                "Tedarikçi lotları alınamadı (HTTP ${result.httpCode})."
+            error = "Tedarikçi lotlarının tamamı alınamadı. Bağlantıyı kontrol edip yeniden deneyin."
         }
         loading = false
     }
@@ -315,7 +498,7 @@ private fun SupplierLotLookupContent(
     }
 
     TextButton(onClick = onBack) { Text("‹ Mal kabule dön") }
-    Text("Tedarikçi Lotu Lookup", fontWeight = FontWeight.Bold, fontSize = 18.sp)
+    Text("Tedarikçi Lotu Seç", fontWeight = FontWeight.Bold, fontSize = 18.sp)
     Text(
         "Ürün: $itemNo · Seçildiğinde iç lot ve tedarikçi lotu birlikte doldurulur.",
         fontSize = 12.sp,
@@ -335,7 +518,7 @@ private fun SupplierLotLookupContent(
         loading -> Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) {
             CircularProgressIndicator()
         }
-        error.isNotBlank() -> Text(error, color = MaterialTheme.colorScheme.error)
+        error.isNotBlank() -> StatusText(error)
         filteredRows.isEmpty() -> Text(
             if (rows.isEmpty()) "Bu ürün için kayıtlı tedarikçi lotu bulunamadı. Yeni lotu elle girebilir veya okutabilirsiniz."
             else "Aramayla eşleşen tedarikçi lotu bulunamadı.",
@@ -380,6 +563,51 @@ internal suspend fun fetchAvailableLots(
     binCode: String,
     variantCode: String,
 ): Result<List<JSONObject>> {
+    val path = availableLotsPath(itemNo, locationCode, binCode, variantCode)
+    var page = BcApi.getAllPages(context, path)
+    repeat(2) { attempt ->
+        val error = page.error
+        if (page.complete || error == null || !BcApi.isRetryableConnectionFailure(error)) return@repeat
+        delay(if (attempt == 0) 250L else 650L)
+        page = BcApi.getAllPages(context, path)
+    }
+    if (!page.complete) {
+        Log.e(
+            "BCWMS-Lots",
+            "availableLots incomplete: http=${page.error?.httpCode}, body=${page.error?.body.orEmpty().take(500)}",
+        )
+        val code = page.error?.httpCode?.takeIf { it != 0 }
+        val detail = page.error?.body
+            ?.takeIf { it.isNotBlank() }
+            ?.let(BcApi::errorMessage)
+            ?.take(180)
+        val message = buildString {
+            append("Stoktaki lotların tamamı alınamadı. Bağlantıyı kontrol edip yeniden deneyin.")
+            if (code != null) append(" (HTTP $code)")
+            if (!detail.isNullOrBlank()) append(" — $detail")
+        }
+        return Result.failure(IllegalStateException(message))
+    }
+    Log.d(
+        "BCWMS-Lots",
+        "availableLots complete: path=$path, rows=${page.rows.size}, " +
+            "balances=${page.rows.joinToString(limit = 20) { row ->
+                "${row.optString("lotNo")}@${row.optString("binCode")}:${row.opt("quantityBase")}" 
+            }}",
+    )
+    return Result.success(
+        page.rows
+            .filter { it.optString("lotNo").isNotBlank() && it.optDouble("quantityBase", 0.0) > 0.0 }
+            .sortedBy { it.optString("lotNo") }
+    )
+}
+
+internal fun availableLotsPath(
+    itemNo: String,
+    locationCode: String,
+    binCode: String,
+    variantCode: String,
+): String {
     fun safe(value: String) = value.replace("'", "''")
     val filters = buildList {
         add("itemNo eq '${safe(itemNo)}'")
@@ -388,17 +616,7 @@ internal suspend fun fetchAvailableLots(
         if (variantCode.isNotBlank()) add("variantCode eq '${safe(variantCode)}'")
         add("lotNo ne ''")
     }.joinToString(" and ")
-    val result = BcApi.get(context, "availableLots?\$filter=$filters&\$orderby=lotNo&\$top=200")
-    if (!result.ok) {
-        val message = if (result.httpCode == 404)
-            "Stok lot servisi BC'de bulunamadı. BCWMSApp 1.14.0.24 veya üzerini yayınlayın."
-        else
-            "Stoktaki lotlar alınamadı (HTTP ${result.httpCode})."
-        return Result.failure(IllegalStateException(message))
-    }
-    return Result.success(
-        BcApi.parseValueArray(result.body)
-            .filter { it.optString("lotNo").isNotBlank() && it.optDouble("quantityBase", 0.0) > 0.0 }
-            .sortedBy { it.optString("lotNo") }
-    )
+    // availableLots bir BC Query API'sidir; Query nesnelerinde sunucu tarafı OrderBy
+    // desteklenmez (HTTP 501). Sonuç aşağıda cihazda sıralandığı için yalnız filtrele.
+    return "availableLots?\$filter=$filters&\$top=200"
 }

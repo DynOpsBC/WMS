@@ -35,7 +35,6 @@ codeunit 72043 "DOPSWHS Receipt Mgmt"
         LpNo: Code[20];
         PostedNo: Code[20];
     begin
-        EnsureRequiredSupplierLots(WhseReceiptHeader);
         if PrintReport then begin
             EnsureReceiptReportConfigured();
             PrintDispatcher.EnsureDocumentPrinter(PrinterId, Enum::"DOPSWHS IWX Report Usage"::Receipt);
@@ -189,9 +188,8 @@ codeunit 72043 "DOPSWHS Receipt Mgmt"
     end;
 
     /// <summary>
-    /// Mal kabul satırını iç lot/seri ve tedarikçi lotuyla birlikte onaylar.
-    /// Tedarikçi lotu, lot takipli ürünlerde zorunludur ve Lot No. Information
-    /// kartına yazılır; terminalden girilen bilgi post öncesinde de görülebilir.
+    /// Mal kabul satırını iç lot/seri ve isteğe bağlı tedarikçi lotuyla birlikte onaylar.
+    /// Girilmişse tedarikçi lotu Lot No. Information kartına yazılır.
     /// </summary>
     procedure ConfirmLine(var WhseReceiptLine: Record "Warehouse Receipt Line"; QtyToReceive: Decimal; LotNo: Code[50]; SerialNo: Code[50]; ExpiryDate: Date; LicensePlateNo: Code[20]; BinCode: Code[20]; SupplierLotNo: Code[50]; OperatorUserId: Code[50])
     var
@@ -204,13 +202,12 @@ codeunit 72043 "DOPSWHS Receipt Mgmt"
         ExistingLotNo: Code[50];
         ExistingSerialNo: Code[50];
         ExistingExpiryDate: Date;
-        HasItemTrackingCode: Boolean;
     begin
         Log('Receipt.ConfirmLine', WhseReceiptLine."No.", EffectiveOperator(OperatorUserId, ReceiptOperator(WhseReceiptLine."No.")));
         Item.Get(WhseReceiptLine."Item No.");
-        // Otomatik Lot/Seri: SADECE item lot/serial izlemeli ise ve boş bırakıldıysa üret.
-        // İzlenmeyen bir item'a Item Tracking kaydı eklemek post sırasında hataya yol
-        // açar, o yüzden HasTracking dışında asla lot/seri üretmiyor/yazmıyoruz.
+        // Mevcut BC takip bilgisi korunur. İç lot yalnız terminaldeki açık
+        // "Lot No Ata" komutuyla üretilir; ConfirmLine boş lotu tamamlamaz.
+        // Seri numarası için mevcut geriye uyumlu otomatik üretim korunur.
         if Item."Item Tracking Code" <> '' then begin
             GetItemTracking(WhseReceiptLine, ExistingLotNo, ExistingSerialNo, ExistingExpiryDate);
             if LotNo = '' then
@@ -220,24 +217,25 @@ codeunit 72043 "DOPSWHS Receipt Mgmt"
             if ExpiryDate = 0D then
                 ExpiryDate := ExistingExpiryDate;
 
-            HasItemTrackingCode := ItemTrackingCode.Get(Item."Item Tracking Code");
+            if not ItemTrackingCode.Get(Item."Item Tracking Code") then
+                Error('%1 takip kodu bulunamadı.', Item."Item Tracking Code");
             if RequiresLotTracking(ItemTrackingCode) then begin
-                if SupplierLotNo = '' then
-                    Error(
-                        'Tedarikçi lotu zorunludur. %1 ürünü için el terminalinden tedarikçi lotunu girin.',
-                        WhseReceiptLine."Item No.");
                 if LotNo = '' then
-                    LotNo := LotSerialGen.GenerateLotNoForItem(WhseReceiptLine."Item No.");
+                    Error(
+                        'İç lot numarası zorunludur. %1 ürünü için el terminalinde Lot No Ata düğmesine basın.',
+                        WhseReceiptLine."Item No.");
             end else
                 LotNo := '';
+            if ItemTrackingCode."Man. Expir. Date Entry Reqd." and (ExpiryDate = 0D) then
+                Error(
+                    'Son kullanma tarihi zorunludur. %1 ürünü için el terminalinden son kullanma tarihini girin.',
+                    WhseReceiptLine."Item No.");
             if RequiresSerialTracking(ItemTrackingCode) then begin
                 if SerialNo = '' then
                     SerialNo := LotSerialGen.GenerateSerialNo();
             end else
                 SerialNo := '';
 
-            if (LotNo = '') and (SerialNo = '') and (not HasItemTrackingCode) then
-                LotNo := LotSerialGen.GenerateLotNo();
         end else begin
             LotNo := '';
             SerialNo := '';
@@ -246,7 +244,7 @@ codeunit 72043 "DOPSWHS Receipt Mgmt"
             WhseReceiptLine.Validate("Bin Code", BinCode);
         WhseReceiptLine.Validate("Qty. to Receive", QtyToReceive);
         WhseReceiptLine.Modify(true);
-        // Mobilden girilen (veya otomatik üretilen) lot/seri, BC'nin Item Tracking
+        // Mobilden girilen lot/seri, BC'nin Item Tracking
         // Lines mekanizmasının okuduğu Reservation Entry kayıtlarına yazılmazsa post
         // sırasında sessizce kaybolur — bu yüzden burada gerçek kalıcılığı sağlıyoruz.
         if Item."Item Tracking Code" <> '' then
@@ -270,60 +268,87 @@ codeunit 72043 "DOPSWHS Receipt Mgmt"
     end;
 
     /// <summary>
-    /// Ensures that an inbound lot-tracked receipt line has an internal lot
-    /// before it is returned to existing mobile clients. The operation is
-    /// idempotent: an existing BC item-tracking assignment is always reused.
-    /// The receipt-line lock prevents two simultaneous terminal reads from
-    /// consuming two numbers for the same line.
+    /// Operatörün açık "Lot No Ata" komutuyla Item kartındaki Lot Nos.
+    /// serisinden yeni bir iç lot üretir. Satırı okumak veya miktarı açmak bu
+    /// metodu çağırmaz. Var olan BC item-tracking lotu varsa aynen döndürülür.
+    /// Takip kaydı miktar/SKT/tedarikçi lotu birlikte onaylanana kadar yazılmaz.
     /// </summary>
-    procedure EnsureAutoInboundLot(WhseReceiptLine: Record "Warehouse Receipt Line"; var LotNo: Code[50]; var SerialNo: Code[50]; var ExpiryDate: Date)
+    procedure AssignInboundLotNo(WhseReceiptLine: Record "Warehouse Receipt Line"): Text
     var
-        LockedReceiptLine: Record "Warehouse Receipt Line";
         Item: Record Item;
         ItemTrackingCode: Record "Item Tracking Code";
         LotSerialGen: Codeunit "DOPSWHS Lot Serial Generator";
+        LotNo: Code[50];
+        SerialNo: Code[50];
+        ExpiryDate: Date;
     begin
         GetItemTracking(WhseReceiptLine, LotNo, SerialNo, ExpiryDate);
         if LotNo <> '' then
-            exit;
-        if WhseReceiptLine."Qty. to Receive" <= 0 then
-            exit;
-        if not Item.Get(WhseReceiptLine."Item No.") then
-            exit;
-        if (Item."Item Tracking Code" = '') or (not ItemTrackingCode.Get(Item."Item Tracking Code")) then
-            exit;
-        if not RequiresLotTracking(ItemTrackingCode) then
-            exit;
+            exit(LotNo);
 
-        LockedReceiptLine.LockTable();
-        if not LockedReceiptLine.Get(WhseReceiptLine."No.", WhseReceiptLine."Line No.") then
-            exit;
+        Item.Get(WhseReceiptLine."Item No.");
+        if (Item."Item Tracking Code" = '') or
+           (not ItemTrackingCode.Get(Item."Item Tracking Code")) or
+           (not RequiresLotTracking(ItemTrackingCode))
+        then
+            Error('%1 ürünü lot takipli değildir.', WhseReceiptLine."Item No.");
 
-        // Recheck after taking the lock; another request may have assigned it.
-        GetItemTracking(LockedReceiptLine, LotNo, SerialNo, ExpiryDate);
-        if LotNo <> '' then
-            exit;
-
-        LotNo := LotSerialGen.GenerateLotNoForItem(LockedReceiptLine."Item No.");
+        LotNo := LotSerialGen.GenerateLotNoForItem(WhseReceiptLine."Item No.");
         if LotNo = '' then
-            exit;
-
-        PersistItemTracking(LockedReceiptLine, LotNo, SerialNo, ExpiryDate);
+            Error(
+                '%1 ürünü için Lot Nos. numara serisi tanımlı değildir. Ürün kartındaki Lot Nos. alanını kontrol edin.',
+                WhseReceiptLine."Item No.");
+        exit(LotNo);
     end;
 
-    /// <summary>Satırdaki ürün için tedarikçi lotu girişinin zorunlu olup olmadığını döndürür.</summary>
+    /// <summary>Tedarikçi lotu isteğe bağlıdır; girilmişse iç lotla ilişkilendirilir.</summary>
     procedure ReceiptLineRequiresSupplierLot(WhseReceiptLine: Record "Warehouse Receipt Line"): Boolean
+    begin
+        exit(false);
+    end;
+
+    /// <summary>Satırdaki ürünün lot takibi gerektirip gerektirmediğini döndürür.</summary>
+    procedure ReceiptLineRequiresLot(WhseReceiptLine: Record "Warehouse Receipt Line"): Boolean
     var
         Item: Record Item;
         ItemTrackingCode: Record "Item Tracking Code";
     begin
-        if not Item.Get(WhseReceiptLine."Item No.") then
-            exit(false);
-        if Item."Item Tracking Code" = '' then
-            exit(false);
-        if not ItemTrackingCode.Get(Item."Item Tracking Code") then
+        if not GetReceiptLineTrackingCode(WhseReceiptLine, Item, ItemTrackingCode) then
             exit(false);
         exit(RequiresLotTracking(ItemTrackingCode));
+    end;
+
+    /// <summary>Satırdaki ürünün seri takibi gerektirip gerektirmediğini döndürür.</summary>
+    procedure ReceiptLineRequiresSerial(WhseReceiptLine: Record "Warehouse Receipt Line"): Boolean
+    var
+        Item: Record Item;
+        ItemTrackingCode: Record "Item Tracking Code";
+    begin
+        if not GetReceiptLineTrackingCode(WhseReceiptLine, Item, ItemTrackingCode) then
+            exit(false);
+        exit(RequiresSerialTracking(ItemTrackingCode));
+    end;
+
+    /// <summary>Satırdaki takip kodunda son kullanma tarihinin kullanıldığını döndürür.</summary>
+    procedure ReceiptLineUsesExpirationDates(WhseReceiptLine: Record "Warehouse Receipt Line"): Boolean
+    var
+        Item: Record Item;
+        ItemTrackingCode: Record "Item Tracking Code";
+    begin
+        if not GetReceiptLineTrackingCode(WhseReceiptLine, Item, ItemTrackingCode) then
+            exit(false);
+        exit(ItemTrackingCode."Use Expiration Dates");
+    end;
+
+    /// <summary>Satırdaki takip kodunda SKT girişinin zorunlu olduğunu döndürür.</summary>
+    procedure ReceiptLineRequiresExpirationDate(WhseReceiptLine: Record "Warehouse Receipt Line"): Boolean
+    var
+        Item: Record Item;
+        ItemTrackingCode: Record "Item Tracking Code";
+    begin
+        if not GetReceiptLineTrackingCode(WhseReceiptLine, Item, ItemTrackingCode) then
+            exit(false);
+        exit(ItemTrackingCode."Man. Expir. Date Entry Reqd.");
     end;
 
     /// <summary>
@@ -502,6 +527,15 @@ codeunit 72043 "DOPSWHS Receipt Mgmt"
     local procedure RequiresSerialTracking(ItemTrackingCode: Record "Item Tracking Code"): Boolean
     begin
         exit(ItemTrackingCode."SN Specific Tracking" or ItemTrackingCode."SN Warehouse Tracking" or ItemTrackingCode."SN Purchase Inbound Tracking");
+    end;
+
+    local procedure GetReceiptLineTrackingCode(WhseReceiptLine: Record "Warehouse Receipt Line"; var Item: Record Item; var ItemTrackingCode: Record "Item Tracking Code"): Boolean
+    begin
+        if not Item.Get(WhseReceiptLine."Item No.") then
+            exit(false);
+        if Item."Item Tracking Code" = '' then
+            exit(false);
+        exit(ItemTrackingCode.Get(Item."Item Tracking Code"));
     end;
 
     local procedure AssignLP(LpNo: Code[20]; ReceiptNo: Code[20])

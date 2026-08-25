@@ -2,7 +2,13 @@
 set -euo pipefail
 
 translation_dir="${1:-al/Translations}"
-base="$translation_dir/DOPSWHS.g.xlf"
+# The compiler names the generated base XLIFF after app.json `name`
+# (currently BCWMSApp.g.xlf). Keep the legacy DOPSWHS name as a fallback for
+# older worktrees, but do not fail a valid build because of a stale hard-code.
+base="$translation_dir/BCWMSApp.g.xlf"
+if [[ ! -f "$base" && -f "$translation_dir/DOPSWHS.g.xlf" ]]; then
+  base="$translation_dir/DOPSWHS.g.xlf"
+fi
 tr="$translation_dir/DOPSWHS.tr-TR.xlf"
 de="$translation_dir/DOPSWHS.de-DE.xlf"
 status=0

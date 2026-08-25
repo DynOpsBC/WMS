@@ -18,6 +18,8 @@ page 72085 "DOPSWHS Count Variance Review"
                 field("Item No."; Rec."Item No.") { ApplicationArea = All; }
                 field("Bin Code"; Rec."Bin Code") { ApplicationArea = All; }
                 field("LP No."; Rec."LP No.") { ApplicationArea = All; }
+                field("Lot No."; Rec."Lot No.") { ApplicationArea = All; }
+                field("Serial No."; Rec."Serial No.") { ApplicationArea = All; }
                 field("System Qty"; Rec."System Qty") { ApplicationArea = All; }
                 field("Counted Qty 1"; Rec."Counted Qty 1") { ApplicationArea = All; }
                 field("Counted Qty 2"; Rec."Counted Qty 2") { ApplicationArea = All; }

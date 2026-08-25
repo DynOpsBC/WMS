@@ -4,6 +4,7 @@ import android.content.Context
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
@@ -34,8 +35,8 @@ object BcApi {
 
     // Defaults (used until the user picks an environment/company after email sign-in).
     val DEFAULT_ENVIRONMENT = BuildConfig.BC_DEFAULT_ENVIRONMENT
-    const val DEFAULT_COMPANY_ID = "1534369d-f248-f111-b478-7c1e521cfdf0"
-    const val DEFAULT_COMPANY_NAME = "CRONUS USA, Inc."
+    val DEFAULT_COMPANY_ID = BuildConfig.BC_DEFAULT_COMPANY_ID
+    val DEFAULT_COMPANY_NAME = BuildConfig.BC_DEFAULT_COMPANY_NAME
 
     /** Sign-in sonrası yoklanan ortam adları. Multi-tenant: her müşterinin
      *  ortam adı farklı olabildiğinden en yaygın adlar denenir; bulunamazsa
@@ -55,6 +56,7 @@ object BcApi {
     private const val KEY_COMPANY_NAME = "bc_company_name"
     private const val KEY_LOCAL_USER = "local_user_id"
     private const val KEY_LOCAL_PROFILE = "local_user_profile_json"
+    private const val KEY_ADMIN_TEST_SESSION = "admin_test_session"
     private const val KEY_BC_USER = "bc_user_id"
     private const val KEY_TENANT = "bc_tenant_id"
 
@@ -95,6 +97,48 @@ object BcApi {
     fun setEnvironment(context: Context, env: String) { prefs(context).edit().putString(KEY_ENV, env).apply() }
     fun setCompany(context: Context, id: String, name: String) {
         prefs(context).edit().putString(KEY_COMPANY_ID, id).putString(KEY_COMPANY_NAME, name).apply()
+    }
+
+    /**
+     * Resolves a flavor's preferred company by name before the first API call.
+     *
+     * BADE used to inherit the shared CRONUS UUID. A token-paste or an upgraded
+     * installation could therefore connect successfully to CRONUS without ever
+     * showing the company picker. We only auto-correct an unset company or that
+     * legacy CRONUS selection; an operator's deliberate BS/BADE company choice
+     * remains untouched.
+     */
+    suspend fun ensurePreferredCompany(context: Context): Boolean = withContext(Dispatchers.IO) {
+        val token = getToken(context)
+        if (token.isBlank() || DEFAULT_COMPANY_NAME.isBlank()) return@withContext false
+
+        val storedId = prefs(context).getString(KEY_COMPANY_ID, null).orEmpty()
+        val storedName = prefs(context).getString(KEY_COMPANY_NAME, null).orEmpty()
+        val legacyCronus = DEFAULT_COMPANY_NAME != "CRONUS USA, Inc." &&
+            storedName.equals("CRONUS USA, Inc.", ignoreCase = true)
+        if (storedId.isNotBlank() && storedName.isNotBlank() && !legacyCronus)
+            return@withContext false
+
+        val env = getEnvironment(context)
+        val response = httpGet(companiesUrl(getTenant(context), env), token)
+        if (!response.ok) return@withContext false
+        val preferred = parseValueArray(response.body)
+            .map {
+                Company(
+                    it.optString("id"),
+                    it.optString("name"),
+                    it.optString("displayName").ifBlank { it.optString("name") },
+                )
+            }
+            .firstOrNull {
+                it.displayName.equals(DEFAULT_COMPANY_NAME, ignoreCase = true) ||
+                    it.name.equals(DEFAULT_COMPANY_NAME, ignoreCase = true)
+            }
+            ?: return@withContext false
+
+        setCompany(context, preferred.id, preferred.displayName)
+        saveAccessibleCompanies(context, listOf(preferred))
+        true
     }
 
     // ---- Multi-company switcher (BADE / BS / ... aynı ortamda) ----
@@ -215,6 +259,9 @@ object BcApi {
     private fun standardApiBase(context: Context) =
         "https://api.businesscentral.dynamics.com/v2.0/${getTenant(context)}/${getEnvironment(context)}/api/v2.0/companies(${getCompanyId(context)})"
 
+    private fun customApiMetadataUrl(context: Context) =
+        "https://api.businesscentral.dynamics.com/v2.0/${getTenant(context)}/${getEnvironment(context)}/api/dynops/warehouse/v2.0/\$metadata"
+
     /** Standard companies endpoint — discovery için tenant'ı açıkça alır (giriş
      *  anında henüz kayıtlı değildir; token'dan çözülüp buraya geçirilir). */
     fun companiesUrl(tenant: String, env: String) =
@@ -240,6 +287,7 @@ object BcApi {
         prefs(context).edit()
             .remove(KEY_TOKEN).remove(KEY_REFRESH).remove(KEY_BC_USER)
             .remove(KEY_TENANT).remove(KEY_ENV).remove(KEY_COMPANY_ID).remove(KEY_COMPANY_NAME)
+            .remove(KEY_ADMIN_TEST_SESSION)
             .remove(KEY_ACCESSIBLE_COMPANIES)
             .apply()
     }
@@ -289,14 +337,33 @@ object BcApi {
         prefs(context).edit()
             .putString(KEY_LOCAL_USER, username)
             .putString(KEY_LOCAL_PROFILE, profileJson)
+            .putBoolean(KEY_ADMIN_TEST_SESSION, false)
             .apply()
     }
     fun getLocalUser(context: Context): String = prefs(context).getString(KEY_LOCAL_USER, "") ?: ""
     fun getLocalProfileJson(context: Context): String = prefs(context).getString(KEY_LOCAL_PROFILE, "") ?: ""
     fun hasLocalUser(context: Context): Boolean = getLocalUser(context).isNotBlank()
     fun clearLocalUser(context: Context) {
-        prefs(context).edit().remove(KEY_LOCAL_USER).remove(KEY_LOCAL_PROFILE).apply()
+        prefs(context).edit()
+            .remove(KEY_LOCAL_USER)
+            .remove(KEY_LOCAL_PROFILE)
+            .putBoolean(KEY_ADMIN_TEST_SESSION, false)
+            .apply()
     }
+
+    /** BADE/Dynops saha testi için servis oturumunu açar. Bu bayrak yalnız uygulama içindeki
+     * belge sahipliği kapısını aşar; BC isteği yine kurulu servis token'ı ve BC yetkileriyle
+     * doğrulanır. Normal WMS kullanıcı girişi veya çıkış bu bayrağı otomatik kapatır. */
+    fun startAdminTestSession(context: Context) {
+        prefs(context).edit()
+            .remove(KEY_LOCAL_USER)
+            .remove(KEY_LOCAL_PROFILE)
+            .putBoolean(KEY_ADMIN_TEST_SESSION, true)
+            .apply()
+    }
+
+    fun isAdminTestSession(context: Context): Boolean =
+        prefs(context).getBoolean(KEY_ADMIN_TEST_SESSION, false)
 
     /**
      * Effective operator identity for "assigned to me" filters: the local WMS username when the
@@ -320,7 +387,94 @@ object BcApi {
     // ---- HTTP ----
     data class ApiResult(val ok: Boolean, val httpCode: Int, val body: String)
 
+    data class CountCapabilities(
+        val metadataLoaded: Boolean,
+        val unexpectedItemAction: Boolean,
+        val unexpectedLpAction: Boolean,
+        val explicitZeroCount: Boolean,
+        val httpCode: Int,
+    ) {
+        val varianceReady: Boolean
+            get() = metadataLoaded && unexpectedItemAction && unexpectedLpAction && explicitZeroCount
+    }
+
+    /** Read-only metadata probe used to prevent a newer APK from calling count actions that the
+     * currently published AL extension does not yet expose. */
+    suspend fun getCountCapabilities(context: Context): CountCapabilities {
+        val result = get(context, customApiMetadataUrl(context))
+        if (!result.ok)
+            return CountCapabilities(false, false, false, false, result.httpCode)
+        return parseCountCapabilities(result.body, result.httpCode)
+    }
+
+    internal fun parseCountCapabilities(metadata: String, httpCode: Int = 200): CountCapabilities {
+        return CountCapabilities(
+            metadataLoaded = true,
+            unexpectedItemAction = metadata.contains("addUnexpectedItem", ignoreCase = true),
+            unexpectedLpAction = metadata.contains("addUnexpectedLp", ignoreCase = true),
+            explicitZeroCount = metadata.contains("counted1", ignoreCase = true) &&
+                metadata.contains("counted2", ignoreCase = true) &&
+                metadata.contains("counted3", ignoreCase = true),
+            httpCode = httpCode,
+        )
+    }
+
     suspend fun get(context: Context, path: String): ApiResult = request(context, "GET", path, null)
+
+    /**
+     * Reads every OData page for a document collection. A fixed `$top` response
+     * is not proof that the document is complete: Business Central returns an
+     * `@odata.nextLink` when more rows exist. Mutating/posting screens use the
+     * [complete] flag to fail closed after a page or payload error.
+     */
+    data class PagedItemsResult(
+        val rows: List<JSONObject>,
+        val complete: Boolean,
+        val error: ApiResult? = null,
+    )
+
+    internal fun odataNextLink(body: String): String? = runCatching {
+        JSONObject(body).optString("@odata.nextLink").trim().takeIf { it.isNotBlank() }
+    }.getOrNull()
+
+    suspend fun getAllPages(
+        context: Context,
+        path: String,
+        maxPages: Int = 100,
+    ): PagedItemsResult {
+        val rows = mutableListOf<JSONObject>()
+        val visited = mutableSetOf<String>()
+        var next = path
+        repeat(maxPages.coerceAtLeast(1)) {
+            if (!visited.add(next)) {
+                return PagedItemsResult(rows, complete = false, error = ApiResult(false, -1, "Tekrarlanan sayfa bağlantısı"))
+            }
+            val response = get(context, next)
+            if (!response.ok) return PagedItemsResult(rows, complete = false, error = response)
+            val page = runCatching {
+                val array = JSONObject(response.body).getJSONArray("value")
+                (0 until array.length()).map { array.getJSONObject(it) }
+            }.getOrElse {
+                return PagedItemsResult(rows, complete = false, error = ApiResult(false, -1, "Geçersiz sayfa yanıtı"))
+            }
+            rows += page
+            next = odataNextLink(response.body)
+                ?: return PagedItemsResult(rows, complete = true)
+        }
+        return PagedItemsResult(rows, complete = false, error = ApiResult(false, -1, "Sayfa sınırı aşıldı"))
+    }
+
+    /** Custom API first, then the standard API only when the custom collection
+     * does not exist. Both branches still follow every server nextLink. */
+    suspend fun getAllPagesWithStandardFallback(
+        context: Context,
+        path: String,
+        maxPages: Int = 100,
+    ): PagedItemsResult {
+        val custom = getAllPages(context, path, maxPages)
+        if (custom.error?.httpCode != 404 || custom.rows.isNotEmpty()) return custom
+        return getAllPages(context, "${standardApiBase(context)}/$path", maxPages)
+    }
 
     suspend fun getWithStandardFallback(context: Context, path: String): ApiResult {
         val custom = get(context, path)
@@ -339,6 +493,67 @@ object BcApi {
 
     suspend fun patch(context: Context, path: String, jsonBody: String): ApiResult =
         request(context, "PATCH", path, jsonBody)
+
+    /**
+     * Warehouse Pick satırları doğrudan PATCH edilmez. Bu action yerel WMS
+     * kullanıcısını sunucuya taşır; BC sahiplik ve lot kontrollerini atomik
+     * uygular. Geçici deadlock/throttle yanıtları kısa aralıklarla ve en fazla
+     * üç kez denenir; kalıcı doğrulama hataları hiçbir zaman tekrarlanmaz.
+     */
+    suspend fun confirmPickLine(
+        context: Context,
+        pickNo: String,
+        lineNo: Int,
+        qtyToHandle: Double,
+        lotNo: String = "",
+    ): ApiResult {
+        val userId = currentUserId(context)
+        if (userId.isBlank()) {
+            return ApiResult(
+                ok = false,
+                httpCode = HttpURLConnection.HTTP_UNAUTHORIZED,
+                body = """{"error":{"message":"Depo kullanıcısı belirlenemedi. Yeniden giriş yapın."}}""",
+            )
+        }
+        val body = JSONObject().apply {
+            put("lineNo", lineNo)
+            put("qtyToHandle", qtyToHandle)
+            put("lotNo", lotNo)
+            put("userId", userId)
+        }.toString()
+        var result = boundAction(context, "picks", pickNo, "confirmLine", body)
+        repeat(2) { attempt ->
+            if (result.ok || !isRetryablePickConfirmation(result.httpCode, result.body)) return result
+            delay(if (attempt == 0) 200L else 500L)
+            result = boundAction(context, "picks", pickNo, "confirmLine", body)
+        }
+        return result
+    }
+
+    /**
+     * Toplama belgesini paylaşılan BC oturumu adına değil, terminalde oturum
+     * açmış depo kullanıcısı adına kaydeder. Sunucu bu kimliği mevcut belge
+     * sahibiyle atomik olarak karşılaştırır; kullanıcı çözülemezse işlem hiç
+     * gönderilmez. Kayıt/post işlemi uzun sürebildiği için uzun zaman aşımlı
+     * istemci kullanılır, belirsiz yanıtta ikinci kez post edilmez.
+     */
+    suspend fun registerPick(context: Context, pickNo: String): ApiResult {
+        val userId = currentUserId(context)
+        if (userId.isBlank()) {
+            return ApiResult(
+                ok = false,
+                httpCode = HttpURLConnection.HTTP_UNAUTHORIZED,
+                body = """{"error":{"message":"Depo kullanıcısı belirlenemedi. Yeniden giriş yapın."}}""",
+            )
+        }
+        val body = JSONObject().apply { put("userId", userId) }.toString()
+        return boundActionLongRunning(context, "picks", pickNo, "registerFor", body)
+    }
+
+    internal fun isRetryablePickConfirmation(httpCode: Int, body: String): Boolean =
+        httpCode == 409 || httpCode == 423 || httpCode == 429 || httpCode >= 500 ||
+            body.contains("deadlock", ignoreCase = true) ||
+            body.contains("try again", ignoreCase = true)
 
     suspend fun delete(context: Context, path: String): ApiResult =
         request(context, "DELETE", path, null)
@@ -466,7 +681,53 @@ object BcApi {
         }
 
     // ---- Connection test ----
-    suspend fun testConnection(context: Context): ApiResult = get(context, "licensePlates?\$top=1")
+    /**
+     * Şirket bağlantısını tek bir operasyonel veri kümesine bağlama. LP tablosundaki
+     * bozuk/eski bir kayıt veya LP'ye özel filtre hatası, WMS API'si ve şirket erişimi
+     * sağlam olsa bile giriş ekranını kapatabiliyordu. Yerel kullanıcı API'si giriş
+     * akışının gerçekten ihtiyaç duyduğu en hafif probdur; eski BC paketleri için LP
+     * sorgusu yedek olarak korunur.
+     */
+    suspend fun testConnection(context: Context): ApiResult {
+        var result = ApiResult(false, -1, "Bağlantı henüz denenmedi")
+        repeat(4) { attempt ->
+            val localUsers = get(context, "localUsers?\$top=1&\$select=username")
+            if (localUsers.ok) return localUsers
+            val licensePlates = get(context, "licensePlates?\$top=1&\$select=no")
+            result = selectConnectionProbeResult(localUsers, licensePlates)
+            if (!isRetryableConnectionFailure(result) || attempt == 3) return result
+
+            // Extension publish/upgrade sonrasında BC'nin OData rotaları birkaç
+            // saniye 404/5xx dönebiliyor. Operatöre yanlış bir ilk-hata göstermeden
+            // kısa artan aralıklarla aynı şirketi yeniden doğrula.
+            delay(listOf(250L, 650L, 1_200L)[attempt])
+        }
+        return result
+    }
+
+    internal fun selectConnectionProbeResult(primary: ApiResult, fallback: ApiResult): ApiResult =
+        when {
+            primary.ok -> primary
+            fallback.ok -> fallback
+            primary.httpCode !in listOf(404, 405) -> primary
+            else -> fallback
+        }
+
+    internal fun isRetryableConnectionFailure(result: ApiResult): Boolean =
+        result.httpCode == -1 ||
+            result.httpCode == 404 ||
+            result.httpCode == 408 ||
+            result.httpCode == 425 ||
+            result.httpCode == 429 ||
+            result.httpCode >= 500
+
+    fun connectionFailureMessage(result: ApiResult): String = when (result.httpCode) {
+        0, -1 -> "BC sunucusuna ulaşılamadı. İnternet bağlantısını kontrol edip tekrar deneyin."
+        401 -> "BC oturumunun süresi dolmuş. E-posta ile yeniden giriş yapın."
+        403 -> "Bu kullanıcıya seçilen şirkette WMS API yetkisi verilmemiş. BC yetkilerini kontrol edin."
+        404, 405 -> "WMS BC paketi bu ortamda erişilebilir değil. Doğru ortama güncel paketi yükleyin."
+        else -> "Şirket bağlantısı doğrulanamadı (kod ${result.httpCode}). Tekrar deneyin."
+    }
 
     /** Bound actions that return Edm.String wrap the result as {"value":"..."}; extract it. */
     fun scalarValue(body: String): String =

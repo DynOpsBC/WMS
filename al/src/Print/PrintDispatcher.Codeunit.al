@@ -9,9 +9,13 @@ codeunit 72051 "DOPSWHS Print Dispatcher"
         LabelReport: Report "DOPSWHS LP Label";
         PrintNode: Codeunit "DOPSWHS PrintNode Client";
         SelfHosted: Codeunit "DOPSWHS Self-Host Print Client";
+        AzureBridge: Codeunit "DOPSWHS Azure Print Bridge";
+        TempBlob: Codeunit "Temp Blob";
+        ZplInStream: InStream;
         OutStream: OutStream;
         Zpl: Text;
         ResolvedPrinter: Code[20];
+        JobId: Integer;
     begin
         if Copies > 10 then
             Error('A print job cannot exceed 10 copies.');
@@ -23,7 +27,28 @@ codeunit 72051 "DOPSWHS Print Dispatcher"
             ResolvedPrinter := ResolveSelfHostedPrinter(PrinterId, Enum::"DOPSWHS IWX Report Usage"::LpLabel, Copies);
             if ResolvedPrinter = '' then
                 Error('No WMS bridge printer is mapped for LP label printing. Configure Device Printer Mapping or pass a Printer Code.');
-            SelfHosted.Enqueue(LP."No.", ResolvedPrinter, Enum::"DOPSWHS Print Format"::ZPL, Zpl, Copies);
+            if Setup."Print Channel" = Setup."Print Channel"::AzureDirect then begin
+                TempBlob.CreateOutStream(OutStream, TextEncoding::UTF8);
+                OutStream.WriteText(Zpl);
+                TempBlob.CreateInStream(ZplInStream);
+                JobId := SelfHosted.EnqueueStreamForImmediateDispatch(
+                    LP."No.",
+                    Report::"DOPSWHS LP Label",
+                    ResolvedPrinter,
+                    Enum::"DOPSWHS Print Format"::ZPL,
+                    ZplInStream,
+                    Copies,
+                    '');
+                // The LP button is an explicit operator action: persist the job,
+                // dispatch it now, and leave the recurring worker as recovery.
+                Commit();
+                AzureBridge.DispatchJob(JobId);
+                Commit();
+                Queue.Get(JobId);
+                if Queue.Status in [Queue.Status::Queued, Queue.Status::Failed] then
+                    Error('The LP label job was saved but Azure dispatch failed: %1', Queue."Last Error");
+            end else
+                SelfHosted.Enqueue(LP."No.", ResolvedPrinter, Enum::"DOPSWHS Print Format"::ZPL, Zpl, Copies);
             exit;
         end;
         if Setup."Print Channel" = Setup."Print Channel"::BCNative then begin
@@ -137,6 +162,66 @@ codeunit 72051 "DOPSWHS Print Dispatcher"
             Queue.Get(JobId);
             if Queue.Status in [Queue.Status::Queued, Queue.Status::Failed] then
                 Error('The barcode print job was saved but Azure dispatch failed: %1', Queue."Last Error");
+        end;
+        exit(JobId);
+    end;
+
+    /// <summary>
+    /// Creates an A4 PDF containing the LP number as a QR code and immediately
+    /// dispatches it to the selected PDF/document printer.
+    /// </summary>
+    procedure PrintLPDocument(var LP: Record "DOPSWHS LP Header"; PrinterId: Code[50]; Copies: Integer): Integer
+    var
+        LpQrReport: Report "DOPSWHS LP QR Document";
+        TempBlob: Codeunit "Temp Blob";
+        AzureBridge: Codeunit "DOPSWHS Azure Print Bridge";
+        SelfHosted: Codeunit "DOPSWHS Self-Host Print Client";
+        Setup: Record "DOPSWHS Setup";
+        Queue: Record "DOPSWHS Print Job Queue";
+        PdfInStream: InStream;
+        PdfOutStream: OutStream;
+        ResolvedPrinter: Code[20];
+        JobId: Integer;
+    begin
+        if Copies <= 0 then
+            Copies := 1;
+        if Copies > 10 then
+            Error('A print job cannot exceed 10 copies.');
+
+        ResolvedPrinter := ResolveSelfHostedPrinter(PrinterId, Enum::"DOPSWHS IWX Report Usage"::Receipt, Copies);
+        if ResolvedPrinter = '' then
+            Error('No PDF document printer is selected for LP QR printing.');
+        EnsureDocumentPrinter(ResolvedPrinter, Enum::"DOPSWHS IWX Report Usage"::Receipt);
+
+        LP.SetRecFilter();
+        LpQrReport.SetTableView(LP);
+        TempBlob.CreateOutStream(PdfOutStream);
+        if not LpQrReport.SaveAs('', ReportFormat::Pdf, PdfOutStream) then
+            Error('The LP QR PDF could not be rendered.');
+        if not TempBlob.HasValue() then
+            Error('The LP QR report produced an empty PDF.');
+
+        Setup.Get('');
+        TempBlob.CreateInStream(PdfInStream);
+        if Setup."Print Channel" = Setup."Print Channel"::AzureDirect then
+            JobId := SelfHosted.EnqueueStreamForImmediateDispatch(
+                LP."No.",
+                Report::"DOPSWHS LP QR Document",
+                ResolvedPrinter,
+                Enum::"DOPSWHS Print Format"::PDF,
+                PdfInStream,
+                Copies,
+                '')
+        else
+            JobId := EnqueuePdf(LP."No.", Report::"DOPSWHS LP QR Document", ResolvedPrinter, Copies, Enum::"DOPSWHS IWX Report Usage"::Receipt, PdfInStream);
+
+        if Setup."Print Channel" = Setup."Print Channel"::AzureDirect then begin
+            Commit();
+            AzureBridge.DispatchJob(JobId);
+            Commit();
+            Queue.Get(JobId);
+            if Queue.Status in [Queue.Status::Queued, Queue.Status::Failed] then
+                Error('The LP QR print job was saved but Azure dispatch failed: %1', Queue."Last Error");
         end;
         exit(JobId);
     end;

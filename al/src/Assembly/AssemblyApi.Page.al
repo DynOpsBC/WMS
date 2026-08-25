@@ -10,6 +10,10 @@ page 72224 "DOPSWHS Assembly API"
     SourceTableView = where(Status = const(Released));
     DelayedInsert = true;
     ODataKeyFields = "Document Type", "No.";
+    Editable = false;
+    InsertAllowed = false;
+    ModifyAllowed = false;
+    DeleteAllowed = false;
 
     layout
     {

@@ -64,11 +64,11 @@ private fun ConsumptionTab() {
         scope.launch {
             loading = true; status = "Bileşenler yükleniyor..."
             val filter = com.dynops.bcwms.ui.buildODataFilter(com.dynops.bcwms.ui.searchClause("prodOrderNo", search))
-            val r = BcApi.get(context, "productionConsumption?\$top=500&\$orderby=prodOrderNo desc&\$select=prodOrderNo,prodOrderLineNo,componentLineNo,itemNo,description,quantity,remainingQuantity,binCode,locationCode,status,producedItemNo,producedItemDescription,productionQuantity,dueDate$filter")
+            val page = BcApi.getAllPages(context, "productionConsumption?\$top=500&\$orderby=prodOrderNo desc&\$select=prodOrderNo,prodOrderLineNo,componentLineNo,itemNo,description,quantity,remainingQuantity,binCode,locationCode,status,producedItemNo,producedItemDescription,productionQuantity,dueDate$filter")
             loading = false
-            rows = if (r.ok) BcApi.parseValueArray(r.body) else emptyList()
-            status = if (!r.ok) "HATA: Sarfiyat listesi alınamadı (HTTP ${r.httpCode})"
-                else if (rows.isEmpty()) "BOŞ: Released üretim bileşeni yok (HTTP ${r.httpCode})"
+            rows = if (page.complete) page.rows else emptyList()
+            status = if (!page.complete) "HATA: Sarfiyat listesinin tamamı alınamadı. Yenileyin."
+                else if (rows.isEmpty()) "BOŞ: Serbest üretim bileşeni yok."
                 else "TAMAM: ${rows.map { it.optString("prodOrderNo") }.distinct().size} üretim emri · ${rows.size} bileşen"
 
             if (selectedOrderNo != null && rows.none { it.optString("prodOrderNo") == selectedOrderNo })
@@ -346,12 +346,12 @@ private fun OutputTab() {
         scope.launch {
             loading = true; status = "Rota satırları yükleniyor..."
             val filter = com.dynops.bcwms.ui.buildODataFilter(com.dynops.bcwms.ui.searchClause("prodOrderNo", search))
-            val r = BcApi.get(context, "productionOutput?\$top=200&\$orderby=prodOrderNo desc&\$select=prodOrderNo,routingLineNo,routingNo,operationNo,workCenterNo,description,runTime,status$filter")
+            val page = BcApi.getAllPages(context, "productionOutput?\$top=200&\$orderby=prodOrderNo desc&\$select=prodOrderNo,routingLineNo,routingNo,operationNo,workCenterNo,description,runTime,status$filter")
             loading = false
-            rows = if (r.ok) BcApi.parseValueArray(r.body) else emptyList()
-            status = if (!r.ok) "HATA: Çıktı listesi alınamadı (HTTP ${r.httpCode})"
-                else if (rows.isEmpty()) "BOŞ: Released üretim rota satırı yok (HTTP ${r.httpCode})"
-                else "TAMAM: ${rows.size} rota satırı (HTTP ${r.httpCode})"
+            rows = if (page.complete) page.rows else emptyList()
+            status = if (!page.complete) "HATA: Çıktı listesinin tamamı alınamadı. Yenileyin."
+                else if (rows.isEmpty()) "BOŞ: Serbest üretim rota satırı yok."
+                else "TAMAM: ${rows.size} rota satırı"
         }
     }
     LaunchedEffect(Unit) { load() }
@@ -467,12 +467,12 @@ fun AssemblyModule() {
         scope.launch {
             loading = true; status = "Yükleniyor..."
             val filter = com.dynops.bcwms.ui.buildODataFilter(com.dynops.bcwms.ui.searchClause("no", search))
-            val r = BcApi.get(context, "assemblies?\$top=100&\$orderby=no desc&\$select=no,documentType,status,itemNo,description,quantity,remainingQuantity,locationCode,binCode,dueDate$filter")
+            val page = BcApi.getAllPages(context, "assemblies?\$top=100&\$orderby=no desc&\$select=no,documentType,status,itemNo,description,quantity,remainingQuantity,locationCode,binCode,dueDate$filter")
             loading = false
-            rows = if (r.ok) BcApi.parseValueArray(r.body) else emptyList()
-            status = if (!r.ok) "HATA: Montaj listesi alınamadı (HTTP ${r.httpCode})"
-                else if (rows.isEmpty()) "BOŞ: Released montaj emri yok (HTTP ${r.httpCode})"
-                else "TAMAM: ${rows.size} emir (HTTP ${r.httpCode})"
+            rows = if (page.complete) page.rows else emptyList()
+            status = if (!page.complete) "HATA: Montaj listesinin tamamı alınamadı. Yenileyin."
+                else if (rows.isEmpty()) "BOŞ: Serbest bırakılmış montaj emri yok"
+                else "TAMAM: ${rows.size} emir"
         }
     }
     LaunchedEffect(Unit) { load() }
@@ -513,15 +513,37 @@ private fun AssemblyDocument(no: String, onBack: () -> Unit) {
     var columns by remember { mutableStateOf(ColumnPrefs.get(context, "assembly", GridColumns.assembly)) }
     var showColumns by remember { mutableStateOf(false) }
     var scanFilter by remember { mutableStateOf("") }
-    val key = "documentType='${BcEnum.AssemblyDocType.ORDER}',no='$no'"
+    var showPostConfirm by remember { mutableStateOf(false) }
+    var linesComplete by remember(no) { mutableStateOf(false) }
+    var stagedLineNos by remember(no) { mutableStateOf<Set<Int>>(emptySet()) }
+    var stagingLine by remember { mutableStateOf<JSONObject?>(null) }
+    val safeNo = no.replace("'", "''")
+    val key = "documentType='${BcEnum.AssemblyDocType.ORDER}',no='$safeNo'"
 
     fun reload() {
         scope.launch {
             busy = true
+            header = null
+            lines = emptyList()
+            linesComplete = false
+            stagedLineNos = emptySet()
             val h = BcApi.get(context, "assemblies($key)")
-            if (h.ok) header = JSONObject(h.body)
-            val l = BcApi.get(context, "assemblyLines?\$filter=documentNo eq '$no'&\$top=100")
-            lines = if (l.ok) BcApi.parseValueArray(l.body) else emptyList()
+            val loadedHeader = if (h.ok) runCatching { JSONObject(h.body) }.getOrNull() else null
+            val l = BcApi.getAllPages(
+                context,
+                "assemblyLines?\$filter=documentNo eq '$safeNo'&\$orderby=lineNo&" +
+                    "\$select=documentNo,documentType,lineNo,type,itemNo,description,quantity," +
+                    "consumedQuantity,qtyToAssemble,remainingQuantity,quantityPer," +
+                    "unitOfMeasureCode,locationCode,binCode",
+            )
+            if (loadedHeader != null && l.complete) {
+                header = loadedHeader
+                lines = l.rows
+                linesComplete = true
+                if (status.startsWith("HATA:")) status = ""
+            } else {
+                status = "HATA: Montaj belgesi veya bileşen satırlarının tamamı alınamadı. Yenileyip tekrar deneyin."
+            }
             busy = false
         }
     }
@@ -530,13 +552,27 @@ private fun AssemblyDocument(no: String, onBack: () -> Unit) {
     // Barkod-öncelikli akış: bileşeni okutunca listeyi o bileşene filtrele — 20
     // satırlı bir montaj emrinde manuel arama yapmaya gerek kalmasın.
     DocumentScanHandler(
-        enabled = true,
+        enabled = linesComplete && !busy,
         lines = lines,
-        onSingleMatch = { line, _ -> scanFilter = line.optString("itemNo") },
+        onSingleMatch = { line, _ -> stagingLine = line },
         onMultiMatch = { itemNo, _ -> scanFilter = itemNo },
         onNoMatch = { r -> status = "⚠️ '${r.itemNo ?: r.value}' bu belgede yok" },
     )
     val displayLines = if (scanFilter.isBlank()) lines else lines.filter { matchLinesByBarcode(listOf(it), com.dynops.bcwms.scanner.BarcodeIntentResolver.resolve(scanFilter)).isNotEmpty() }
+    val postLineStates = lines.map { line ->
+        AssemblyLineStageState(
+            remainingQuantity = line.optDouble("remainingQuantity", 0.0),
+            explicitlyStaged = line.optInt("lineNo") in stagedLineNos,
+            stagedQuantity = line.optDouble("qtyToAssemble", Double.NaN),
+        )
+    }
+    val canPost = canPostAssemblyDocument(
+        headerLoaded = header != null,
+        linesComplete = linesComplete,
+        busy = busy,
+        lines = postLineStates,
+    )
+    val pendingLineCount = assemblyPendingLineCount(postLineStates)
 
     val h = header
     Column(Modifier.fillMaxSize()) {
@@ -560,36 +596,152 @@ private fun AssemblyDocument(no: String, onBack: () -> Unit) {
                 columns = columns,
                 rows = displayLines,
                 modifier = Modifier.fillMaxWidth(),
-                isDone = { it.optDouble("consumedQuantity") >= it.optDouble("quantity") && it.optDouble("quantity") > 0.0 },
+                isDone = {
+                    it.optDouble("remainingQuantity", 0.0) <= 0.0 ||
+                        it.optInt("lineNo") in stagedLineNos
+                },
                 expandRows = true,
-                onRowClick = { },
+                onRowClick = if (!busy && linesComplete) ({ line -> stagingLine = line }) else null,
             )
+            if (linesComplete && lines.isNotEmpty()) {
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    if (pendingLineCount == 0)
+                        "Tüm kalan bileşen satırları doğrulandı."
+                    else
+                        "$pendingLineCount bileşen satırı daha doğrulanmalı.",
+                    fontSize = 12.sp,
+                    color = if (pendingLineCount == 0) Color(0xFF15803D) else MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
         }
         if (showColumns) {
             ChooseColumnsSheet(GridColumns.assembly, columns, onDismiss = { showColumns = false }) { c ->
                 columns = c; ColumnPrefs.save(context, "assembly", c); showColumns = false
             }
         }
+        if (showPostConfirm) {
+            AlertDialog(
+                onDismissRequest = { if (!busy) showPostConfirm = false },
+                title = { Text("Montajı kaydet") },
+                text = { Text("Girilen montaj miktarları kaydedilecek. Devam edilsin mi?") },
+                confirmButton = {
+                    Button(
+                        enabled = canPost,
+                        onClick = {
+                            if (!canPost) {
+                                status = "Montaj kaydedilemedi: tüm kalan bileşen satırlarını tek tek doğrulayın."
+                                showPostConfirm = false
+                                return@Button
+                            }
+                            showPostConfirm = false
+                            scope.launch {
+                                busy = true; status = "Kaydediliyor..."
+                                val r = BcApi.post(context, "assemblies($key)/Microsoft.NAV.post", "{}")
+                                busy = false
+                                status = if (r.ok) "TAMAM: Montaj kaydedildi."
+                                    else QcErrorParser.friendlyStatus(BcApi.errorMessage(r.body), r.httpCode)
+                                if (r.ok) reload()
+                            }
+                        },
+                    ) { Text("Kaydet") }
+                },
+                dismissButton = { TextButton(onClick = { showPostConfirm = false }) { Text("Vazgeç") } },
+            )
+        }
         BottomActionBar {
             Button(
-                onClick = {
-                    scope.launch {
-                        busy = true; status = "Kaydediliyor..."
-                        val r = BcApi.post(context, "assemblies($key)/Microsoft.NAV.post", "{}")
-                        busy = false
-                        status = if (r.ok) "TAMAM: Montaj kaydedildi (HTTP ${r.httpCode})" else "HATA: ${BcApi.errorMessage(r.body)} (HTTP ${r.httpCode})"
-                        if (r.ok) reload()
-                    }
-                },
-                enabled = !busy && com.dynops.bcwms.lib.ActionGuards.hasQuantity(lines, field = "qtyToAssemble"),
+                onClick = { showPostConfirm = true },
+                enabled = canPost,
                 modifier = Modifier.fillMaxWidth(),
             ) {
                 Text(
-                    if (com.dynops.bcwms.lib.ActionGuards.hasQuantity(lines, field = "qtyToAssemble")) "✅ Montajı Kaydet" else "Önce satırlara miktar girin",
+                    if (canPost) "✅ Montajı Kaydet" else "Önce tüm bileşenleri doğrulayın",
                     fontWeight = FontWeight.Bold,
                 )
             }
         }
+    }
+
+    val lineToStage = stagingLine
+    if (lineToStage != null) {
+        AssemblyQuantitySheet(
+            line = lineToStage,
+            onDismiss = { stagingLine = null },
+            onConfirm = { quantity ->
+                stagingLine = null
+                scope.launch {
+                    busy = true
+                    status = "Bileşen miktarı kaydediliyor..."
+                    val lineNo = lineToStage.optInt("lineNo")
+                    val body = JSONObject().apply { put("qtyToAssemble", quantity) }.toString()
+                    val lineKey = "documentType='${BcEnum.AssemblyDocType.ORDER}',documentNo='$safeNo',lineNo=$lineNo"
+                    val r = BcApi.patch(context, "assemblyLines($lineKey)", body)
+                    if (r.ok) {
+                        lines = lines.map { line ->
+                            if (line.optInt("lineNo") == lineNo)
+                                JSONObject(line.toString()).apply { put("qtyToAssemble", quantity) }
+                            else line
+                        }
+                        stagedLineNos = stagedLineNos + lineNo
+                        status = "TAMAM: ${lineToStage.optString("itemNo")} miktarı doğrulandı."
+                    } else {
+                        status = QcErrorParser.friendlyStatus(BcApi.errorMessage(r.body), r.httpCode)
+                    }
+                    busy = false
+                }
+            },
+        )
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun AssemblyQuantitySheet(
+    line: JSONObject,
+    onDismiss: () -> Unit,
+    onConfirm: (Double) -> Unit,
+) {
+    val remaining = line.optDouble("remainingQuantity", 0.0).coerceAtLeast(0.0)
+    val initial = line.optDouble("qtyToAssemble", Double.NaN)
+        .takeIf { it.isFinite() && it >= 0.0 && it <= remaining }
+        ?: remaining
+    var quantityText by remember(line.optInt("lineNo")) { mutableStateOf(fmt(initial)) }
+    val quantity = quantityText.toDoubleOrNull()
+    val valid = quantity != null && quantity.isFinite() && quantity >= 0.0 && quantity <= remaining
+
+    SheetScaffold(onDismiss = onDismiss) {
+        Text("Bileşen miktarını doğrula", fontWeight = FontWeight.Bold, fontSize = 18.sp)
+        Text(
+            "${line.optString("itemNo")} · Kalan: ${fmt(remaining)} ${line.optString("unitOfMeasureCode")}",
+            fontSize = 13.sp,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Spacer(Modifier.height(14.dp))
+        OutlinedTextField(
+            value = quantityText,
+            onValueChange = { quantityText = it.filter { c -> c.isDigit() || c == '.' } },
+            label = { Text("Tüketilecek miktar") },
+            supportingText = {
+                when {
+                    !valid -> Text("0 ile ${fmt(remaining)} arasında bir miktar girin.")
+                    quantity == 0.0 -> Text("Bu bileşen açıkça 0 olarak doğrulanacak.")
+                }
+            },
+            isError = !valid,
+            singleLine = true,
+            modifier = Modifier.fillMaxWidth(),
+        )
+        Spacer(Modifier.height(14.dp))
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            OutlinedButton(onClick = onDismiss, modifier = Modifier.weight(1f)) { Text("Vazgeç") }
+            Button(
+                onClick = { quantity?.let(onConfirm) },
+                enabled = valid,
+                modifier = Modifier.weight(1f),
+            ) { Text("Doğrula") }
+        }
+        Spacer(Modifier.height(24.dp))
     }
 }
 

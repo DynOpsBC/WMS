@@ -121,7 +121,9 @@ page 72075 "DOPSWHS Count Sheet Card"
         if CountLine.FindSet() then
             repeat
                 TotalLines += 1;
-                if (CountLine."Counted Qty 1" <> 0) or (CountLine."Counted Qty 2" <> 0) or (CountLine."Counted Qty 3" <> 0) then begin
+                if CountLine."Counted 1" or CountLine."Counted 2" or CountLine."Counted 3" or
+                   (CountLine."Counted Qty 1" <> 0) or (CountLine."Counted Qty 2" <> 0) or (CountLine."Counted Qty 3" <> 0)
+                then begin
                     CountedLines += 1;
                     if CountLine."Counted Qty 1" <> CountLine."System Qty" then
                         VarianceLines += 1;

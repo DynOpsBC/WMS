@@ -3,7 +3,7 @@ page 72083 "DOPSWHS Pick Queue"
     PageType = ListPart;
     SourceTable = "Warehouse Activity Header";
     SourceTableView = where(Type = const(Pick));
-    Caption = 'DOPSWHS Pick Queue';
+    Caption = 'Toplama Kuyruğu';
     ApplicationArea = All;
     Editable = false;
 
@@ -13,13 +13,13 @@ page 72083 "DOPSWHS Pick Queue"
         {
             repeater(Picks)
             {
-                field("Pick No."; Rec."No.") { ApplicationArea = All; Caption = 'Pick No.'; }
-                field("Source No."; SourceNo) { ApplicationArea = All; Caption = 'Source No.'; }
-                field("Assigned User"; Rec."Assigned User ID") { ApplicationArea = All; Caption = 'Assigned User'; }
-                field(Lines; LineCount) { ApplicationArea = All; Caption = 'Lines'; }
-                field("% Complete"; PercentComplete) { ApplicationArea = All; Caption = '% Complete'; ExtendedDatatype = Ratio; }
-                field(Created; Rec."Assignment Date") { ApplicationArea = All; Caption = 'Created'; }
-                field("Due Date"; DueDate) { ApplicationArea = All; Caption = 'Due Date'; }
+                field("Pick No."; Rec."No.") { ApplicationArea = All; Caption = 'Toplama No.'; }
+                field("Source No."; SourceNo) { ApplicationArea = All; Caption = 'Kaynak No.'; }
+                field("Assigned User"; Rec."Assigned User ID") { ApplicationArea = All; Caption = 'Atanan Toplayıcı'; }
+                field(Lines; LineCount) { ApplicationArea = All; Caption = 'Satır'; }
+                field("% Complete"; PercentComplete) { ApplicationArea = All; Caption = 'Tamamlanma %'; ExtendedDatatype = Ratio; }
+                field(Created; Rec."Assignment Date") { ApplicationArea = All; Caption = 'Oluşturulma'; }
+                field("Due Date"; DueDate) { ApplicationArea = All; Caption = 'Termin Tarihi'; }
             }
             usercontrol(PickBoard; "DOPSWHS Pick Board")
             {
@@ -35,8 +35,12 @@ page 72083 "DOPSWHS Pick Queue"
                     Pick: Record "Warehouse Activity Header";
                     PickMgmt: Codeunit "DOPSWHS Pick Mgmt";
                 begin
-                    Pick.Get(Pick.Type::Pick, PickNo);
-                    PickMgmt.ReassignPick(Pick, UserId, 'Pick Board drag-drop');
+                    if not Pick.Get(Pick.Type::Pick, PickNo) then
+                        Error(PickNotFoundErr, PickNo);
+                    if UserId = '' then
+                        PickMgmt.ReleasePick(Pick, BoardReleaseReasonLbl)
+                    else
+                        PickMgmt.ReassignPick(Pick, UserId, BoardAssignReasonLbl);
                     CurrPage.Update(false);
                 end;
 
@@ -55,15 +59,21 @@ page 72083 "DOPSWHS Pick Queue"
             action("Manual Reassign")
             {
                 ApplicationArea = All;
-                Caption = 'Manual Reassign';
+                Caption = 'Toplayıcı Ata / Değiştir';
                 trigger OnAction()
                 var
                     PickMgmt: Codeunit "DOPSWHS Pick Mgmt";
-                    User: Record User;
+                    LocalUser: Record "DOPSWHS Local User";
                 begin
-                    if Page.RunModal(Page::"User Lookup", User) <> Action::LookupOK then
+                    LocalUser.SetRange(Disabled, false);
+                    if Page.RunModal(Page::"DOPSWHS Local User List", LocalUser) <> Action::LookupOK then
                         exit;
-                    PickMgmt.ReassignPick(Rec, User."User Name", 'Manual queue action');
+
+                    if (Rec."Assigned User ID" <> '') and (Rec."Assigned User ID" <> LocalUser.Username) then
+                        if not Confirm(TakeOverQst, false, PickMgmt.OperatorLabel(Rec."Assigned User ID"), LocalUser."Display Name") then
+                            exit;
+
+                    PickMgmt.ReassignPick(Rec, LocalUser.Username, ManualQueueReasonLbl);
                     CurrPage.Update(false);
                 end;
             }
@@ -80,6 +90,11 @@ page 72083 "DOPSWHS Pick Queue"
         DueDate: Date;
         LineCount: Integer;
         PercentComplete: Integer;
+        TakeOverQst: Label 'Bu toplama %1 kullanıcısında. %2 kullanıcısına devredilsin mi?', Comment = '%1 = mevcut operatör, %2 = yeni operatör';
+        ManualQueueReasonLbl: Label 'Toplama kuyruğundan atandı.';
+        BoardAssignReasonLbl: Label 'Toplama atama panosundan atandı.';
+        BoardReleaseReasonLbl: Label 'Toplama atama panosundan boşa alındı.';
+        PickNotFoundErr: Label 'Toplama belgesi %1 artık bulunamıyor. Kuyruğu yenileyip tekrar deneyin.', Comment = '%1 = toplama belge numarası';
 
     local procedure FillCalculatedFields()
     var
@@ -93,6 +108,7 @@ page 72083 "DOPSWHS Pick Queue"
         Clear(PercentComplete);
         PickLine.SetRange("Activity Type", Rec.Type);
         PickLine.SetRange("No.", Rec."No.");
+        PickLine.SetRange("Action Type", PickLine."Action Type"::Take);
         if PickLine.FindSet() then
             repeat
                 if SourceNo = '' then begin
@@ -101,10 +117,13 @@ page 72083 "DOPSWHS Pick Queue"
                 end;
                 LineCount += 1;
                 TotalQty += PickLine.Quantity;
-                HandledQty += PickLine."Qty. Handled";
+                HandledQty += PickLine."Qty. to Handle";
             until PickLine.Next() = 0;
-        if TotalQty <> 0 then
+        if TotalQty > 0 then begin
             PercentComplete := Round(HandledQty / TotalQty * 100, 1);
+            if PercentComplete > 100 then
+                PercentComplete := 100;
+        end;
     end;
 
     local procedure BuildBoardJson(): Text

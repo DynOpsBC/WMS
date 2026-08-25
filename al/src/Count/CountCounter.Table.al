@@ -7,7 +7,29 @@ table 72018 "DOPSWHS Count Counter"
     {
         field(1; "Sheet No."; Code[20]) { Caption = 'Sheet No.'; DataClassification = CustomerContent; TableRelation = "DOPSWHS Count Sheet Header"; }
         field(2; "Counter Slot"; Integer) { Caption = 'Counter Slot'; DataClassification = CustomerContent; MinValue = 1; MaxValue = 3; }
-        field(10; "User ID"; Code[50]) { Caption = 'User ID'; DataClassification = EndUserIdentifiableInformation; TableRelation = User."User Name"; }
+        field(10; "User ID"; Code[50])
+        {
+            Caption = 'User ID';
+            DataClassification = EndUserIdentifiableInformation;
+            TableRelation = "DOPSWHS Local User".Username where(Disabled = const(false));
+
+            trigger OnValidate()
+            var
+                LocalUser: Record "DOPSWHS Local User";
+            begin
+                if "User ID" = '' then begin
+                    "Assigned DateTime" := 0DT;
+                    exit;
+                end;
+
+                if not LocalUser.Get(CopyStr("User ID", 1, MaxStrLen(LocalUser.Username))) then
+                    Error(UserNotFoundErr, "User ID");
+                if LocalUser.Disabled then
+                    Error(UserDisabledErr, "User ID");
+
+                "Assigned DateTime" := CurrentDateTime();
+            end;
+        }
         field(20; "Assigned DateTime"; DateTime) { Caption = 'Assigned DateTime'; DataClassification = CustomerContent; }
     }
 
@@ -16,4 +38,8 @@ table 72018 "DOPSWHS Count Counter"
         key(PK; "Sheet No.", "Counter Slot") { Clustered = true; }
         key(User; "User ID") { }
     }
+
+    var
+        UserNotFoundErr: Label '%1 kullanıcısı Local WMS Users listesinde bulunamadı.';
+        UserDisabledErr: Label '%1 kullanıcısı devre dışıdır. Etkin bir WMS kullanıcısı seçin.';
 }

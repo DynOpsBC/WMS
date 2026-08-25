@@ -99,10 +99,10 @@ codeunit 72281 "DOPSWHS Quick User Provision"
     end;
 
     /// <summary>
-    // / BC SaaS'ta M365 BC user sync için PTE'lere açık bir codeunit yok
+    /// BC SaaS'ta M365 BC user sync için PTE'lere açık bir codeunit yok
     /// (`Codeunit "Azure AD User Management".CreateNewUsersFromAzureAD()`
     /// OnPrem scope, AppSource extensiyonlarından çağrılamaz). Bu stub
-    // / no-op; admin BC web UI'da page 9800 "Users" "Get users from
+    /// no-op; admin BC web UI'da page 9800 "Users" "Get users from
     /// Microsoft 365" action'ını manuel tetiklemeli, sonra Quick Assign
     /// tekrar deneyebilir. EnsureUserRole hata mesajı bu adımı söyler.
     /// </summary>

@@ -156,7 +156,10 @@ if ($outputs.Contains('logAnalyticsWorkspaceName') -and
         $diagnosticResult = Invoke-AzureCli -Arguments @(
             'monitor', 'diagnostic-settings', 'list',
             '--resource', $diagnosticResourceId,
-            '--query', "value[?name=='send-to-log-analytics'] | length(@)",
+            # Azure CLI returns this command as a top-level array. Querying the
+            # REST envelope's old `value` property yields null on current CLI
+            # versions and makes length() fail before validation can finish.
+            '--query', "[?name=='send-to-log-analytics'] | length(@)",
             '--output', 'tsv',
             '--only-show-errors'
         )
