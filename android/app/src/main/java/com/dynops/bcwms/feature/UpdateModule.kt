@@ -37,7 +37,7 @@ import java.util.Locale
  * only when the running app was installed outside of Play (UNKNOWN_SOURCES).
  *
  * Boot:
- *   GET BuildConfig.UPDATE_BASE_URL/releases/android/latest.json
+ *   GET BuildConfig.UPDATE_MANIFEST_URL
  *   { versionCode, versionName, apkUrl, sha256, releaseNotes }
  * Compare versionCode > BuildConfig.VERSION_CODE → show dialog → download
  * via DownloadManager → SHA-256 verify → ACTION_INSTALL_PACKAGE.
@@ -49,7 +49,7 @@ private const val KEY_LAST_PROMPTED = "bcwms.updates.lastPromptedVersionCode"
 private const val KEY_LAST_CHECKED_AT = "bcwms.updates.lastCheckedAt"
 private const val UPDATE_POLL_INTERVAL_MS = 4L * 60L * 60L * 1_000L
 
-private val UPDATE_BASE = BuildConfig.UPDATE_BASE_URL.trimEnd('/')
+private val UPDATE_MANIFEST_URL = BuildConfig.UPDATE_MANIFEST_URL
 
 data class UpdateManifest(
     val versionCode: Int,
@@ -303,7 +303,7 @@ private fun UpdatePromptDialog(
 }
 
 private fun fetchManifest(): UpdateManifest? {
-    val manifestUrl = URL("$UPDATE_BASE/releases/android/latest.json")
+    val manifestUrl = URL(UPDATE_MANIFEST_URL)
     require(manifestUrl.protocol == "https") { "manifest must be served over HTTPS" }
     val conn = (manifestUrl.openConnection() as HttpURLConnection).apply {
         connectTimeout = 8_000

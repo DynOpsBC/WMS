@@ -31,9 +31,9 @@ android {
     versionCode = releaseVersionCodeOverride ?: 1442
     versionName = releaseVersionNameOverride ?: "1.14.42"
     manifestPlaceholders["appLabel"] = "BCWMS"
-    // Özel alan adının TLS kurulumu tamamlanana kadar çalışan SWA origin'i.
-    // release.yml latest.json dosyasını bu sitenin /releases/android yoluna koyar.
-    buildConfigField("String", "UPDATE_BASE_URL", "\"https://icy-glacier-067645703.7.azurestaticapps.net\"")
+    // Ücretsiz dağıtım kanalı: public GitHub Release içindeki sabit latest.json.
+    // APK aynı release'de tutulur; uygulamaya GitHub hesabı/token gömülmez.
+    buildConfigField("String", "UPDATE_MANIFEST_URL", "\"https://github.com/DynOpsBC/WMS/releases/latest/download/latest.json\"")
   }
 
   flavorDimensions += "tenant"
