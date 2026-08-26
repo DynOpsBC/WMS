@@ -24,6 +24,7 @@ import androidx.compose.ui.unit.sp
 import com.dynops.bcwms.BcApi
 import com.dynops.bcwms.BuildConfig
 import com.dynops.bcwms.DeviceAuth
+import com.dynops.bcwms.shouldForceProductionFlow
 import com.dynops.bcwms.ui.CompanyLogo
 import com.dynops.bcwms.ui.StatusText
 import com.dynops.bcwms.ui.operatorFacingStatus
@@ -844,10 +845,10 @@ fun LoginFlow(onConnected: (Boolean) -> Unit) {
         StatusText(status)
 
         Spacer(Modifier.height(24.dp))
-        // Servis hesabı belirteci bir operatör ayarı değildir. BADE saha
+        // Servis hesabı belirteci bir operatör ayarı değildir. Müşteri saha
         // sürümünde yanlışlıkla paylaşılmasını/değiştirilmesini önlemek için
         // yalnızca geliştirme varyantlarında gösterilir.
-        if (BuildConfig.FLAVOR != "bade") {
+        if (!shouldForceProductionFlow(BuildConfig.FLAVOR)) {
             TextButton(onClick = { showAdvanced = !showAdvanced }) { Text(if (showAdvanced) "Token girişini gizle" else "Gelişmiş: token ile giriş") }
             if (showAdvanced) TokenPasteFallback(onConnected = onConnected)
         }

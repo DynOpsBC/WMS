@@ -65,6 +65,9 @@ internal fun normalizedCompanyName(value: String): String =
 fun resolveCompanyBrand(companyName: String, flavor: String = ""): CompanyBrand {
     val normalized = normalizedCompanyName(companyName)
     return when {
+        // EMU/DKÇ ayrı müşteri paketidir; önceki kurulumdan taşınmış bir şirket
+        // adı olsa dahi BADE/BS/PİM görseli göstermez, genel WMS kimliğini kullanır.
+        flavor.equals("emu", ignoreCase = true) -> CompanyBrand.DEFAULT
         "BADE" in normalized -> CompanyBrand.BADE
         "PIM" in normalized -> CompanyBrand.PIM
         "BS GROUP" in normalized || "BSGROUP" in normalized || "BS GRUP" in normalized -> CompanyBrand.BS

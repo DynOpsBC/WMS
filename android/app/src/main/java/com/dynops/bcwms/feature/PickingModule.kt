@@ -21,6 +21,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.dynops.bcwms.BcApi
 import com.dynops.bcwms.BuildConfig
+import com.dynops.bcwms.shouldForceProductionFlow
 import com.dynops.bcwms.ui.*
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
@@ -115,9 +116,9 @@ private fun pickOwnerOf(assignedUserId: String, me: String): PickOwner = when {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun PickingModule(v2Enabled: Boolean = false) {
-    // BADE production uses the guarded V2 workflow exclusively. The classic
-    // screen remains available to other flavors for backwards compatibility.
-    if (BuildConfig.FLAVOR == "bade" || v2Enabled) {
+    // Müşteri sürümleri doğrulanmış V2 akışını kullanır. Klasik ekran yalnız
+    // geliştirme/demonstrasyon flavor'larında geriye uyumluluk için kalır.
+    if (shouldForceProductionFlow(BuildConfig.FLAVOR) || v2Enabled) {
         V2PickingModule()
         return
     }

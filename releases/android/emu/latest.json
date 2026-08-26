@@ -1,0 +1,7 @@
+{
+  "versionCode": 1446,
+  "versionName": "1.14.46-emu",
+  "apkUrl": "https://github.com/DynOpsBC/WMS/releases/download/android-emu-v1.14.46/BCWMS-EMU-1.14.46-RELEASE.apk",
+  "sha256": "7d1c7bf4211ceaa3834a356de8dd668e479a32986c76f3d0bf89c8281d6b6001",
+  "releaseNotes": "EMU müşteri sürümü: güncel WMS operasyon ekranları, sadeleştirilmiş saha akışı, genel WMS markası, deniz@atesci.com giriş varsayılanı ve EMU'ya özel güvenli güncelleme kanalı."
+}

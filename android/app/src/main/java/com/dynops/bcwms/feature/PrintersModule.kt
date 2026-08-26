@@ -22,6 +22,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.dynops.bcwms.BcApi
 import com.dynops.bcwms.BuildConfig
+import com.dynops.bcwms.shouldForceProductionFlow
 import com.dynops.bcwms.scanner.ScanField
 import com.dynops.bcwms.ui.EmptyState
 import com.dynops.bcwms.ui.InfoPill
@@ -66,7 +67,7 @@ fun PrintersModule() {
     var defaultDocumentCode by remember { mutableStateOf(getDefaultPrinter(context, PRINTER_USAGE_DOCUMENT)) }
     var scannedBarcode by rememberSaveable { mutableStateOf("") }
     var barcodePrintBusy by remember { mutableStateOf(false) }
-    val productionBade = BuildConfig.FLAVOR == "bade"
+    val productionCustomer = shouldForceProductionFlow(BuildConfig.FLAVOR)
 
     fun load() {
         scope.launch {
@@ -99,7 +100,7 @@ fun PrintersModule() {
         StatusText(status)
         Spacer(Modifier.height(8.dp))
         LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            if (!productionBade) item {
+            if (!productionCustomer) item {
                 Card(
                     shape = RoundedCornerShape(12.dp),
                     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
@@ -215,18 +216,18 @@ fun PrintersModule() {
                                     contentColor = MaterialTheme.colorScheme.onErrorContainer,
                                 )
                             }
-                            if (agentStatus.isNotBlank() && !productionBade) {
+                            if (agentStatus.isNotBlank() && !productionCustomer) {
                                 Spacer(Modifier.width(4.dp))
                                 InfoPill("Bağlantı $agentStatus")
                             }
                         }
                         Text(
-                            if (productionBade) "$desc · ${if (format == "ZPL") "Etiket yazıcısı" else "Belge yazıcısı"}"
+                            if (productionCustomer) "$desc · ${if (format == "ZPL") "Etiket yazıcısı" else "Belge yazıcısı"}"
                             else "$desc · $format · ${handle.ifBlank { "-" }}",
                             fontSize = 12.sp,
                             color = Color.Gray,
                         )
-                        if (!productionBade && stationId.isNotBlank()) Text(stationId, fontSize = 11.sp, color = Color.Gray)
+                        if (!productionCustomer && stationId.isNotBlank()) Text(stationId, fontSize = 11.sp, color = Color.Gray)
                         Spacer(Modifier.height(8.dp))
                         Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                             OutlinedButton(
@@ -244,7 +245,7 @@ fun PrintersModule() {
                                 enabled = active && format == "PDF",
                             ) { Text(if (isDocumentDefault) "✓ Belge" else "Belge", fontSize = 12.sp) }
                         }
-                        if (!productionBade) {
+                        if (!productionCustomer) {
                             Spacer(Modifier.height(6.dp))
                             Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                                 OutlinedButton(onClick = {

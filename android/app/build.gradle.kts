@@ -84,12 +84,21 @@ android {
       buildConfigField("String", "BC_CLIENT_ID", "\"9f9a9965-f358-4b0b-a89e-923f1d8b7a04\"")
       buildConfigField("String", "BC_FALLBACK_TENANT", "\"9de3e840-2fae-4ffb-b690-2fca32956342\"")
       buildConfigField("String", "BC_DEFAULT_ENVIRONMENT", "\"Sandbox3007\"")
-      buildConfigField("String", "BC_DEFAULT_COMPANY_ID", "\"1534369d-f248-f111-b478-7c1e521cfdf0\"")
-      buildConfigField("String", "BC_DEFAULT_COMPANY_NAME", "\"CRONUS USA, Inc.\"")
+      // DKÇ tenant'ında şirket, ilk Microsoft girişinden sonra erişilebilir
+      // şirketlerden seçilir. Ortak CRONUS kimliğine sessizce düşülmez.
+      buildConfigField("String", "BC_DEFAULT_COMPANY_ID", "\"\"")
+      buildConfigField("String", "BC_DEFAULT_COMPANY_NAME", "\"My Company\"")
       buildConfigField("boolean", "BC_ALLOW_PRODUCTION", "false")
-      buildConfigField("String", "TENANT_LABEL", "\"EMU\"")
-      buildConfigField("String", "LOGIN_EMAIL_HINT", "\"kullanici@atesci.com\"")
-      buildConfigField("String", "LOGIN_DEFAULT_EMAIL", "\"\"")
+      buildConfigField("String", "TENANT_LABEL", "\"DKÇ / EMU\"")
+      buildConfigField("String", "LOGIN_EMAIL_HINT", "\"deniz@atesci.com\"")
+      buildConfigField("String", "LOGIN_DEFAULT_EMAIL", "\"deniz@atesci.com\"")
+      // EMU kendi manifestini izler; GitHub'ın genel latest yayını BADE'ye
+      // ait kalır ve iki farklı applicationId birbirine APK önermez.
+      buildConfigField(
+        "String",
+        "UPDATE_MANIFEST_URL",
+        "\"https://raw.githubusercontent.com/DynOpsBC/WMS/main/releases/android/emu/latest.json\"",
+      )
     }
   }
 

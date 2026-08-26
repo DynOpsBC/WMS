@@ -206,8 +206,9 @@ fun AppRoot() {
     }
 }
 
-/** Müşteri APK'sı tek, doğrulanmış operasyon akışıyla açılır. */
-internal fun shouldForceProductionFlow(flavor: String): Boolean = flavor.equals("bade", ignoreCase = true)
+/** Müşteri APK'ları tek, doğrulanmış operasyon akışıyla açılır. */
+internal fun shouldForceProductionFlow(flavor: String): Boolean =
+    flavor.equals("bade", ignoreCase = true) || flavor.equals("emu", ignoreCase = true)
 
 /** Bağlantı gerektiren operasyonlar çevrimdışıyken tıklanıp hata üretmemelidir. */
 internal fun isHomeTileEnabled(screen: Screen, connected: Boolean): Boolean =
@@ -215,7 +216,7 @@ internal fun isHomeTileEnabled(screen: Screen, connected: Boolean): Boolean =
 
 /** Operatör ana menüsünde destek/test araçları gösterilmez; ekranlar koddan silinmez. */
 internal fun operatorHomeScreens(flavor: String): Set<Screen> =
-    if (flavor.equals("bade", ignoreCase = true)) {
+    if (shouldForceProductionFlow(flavor)) {
         Screen.entries.toSet() - setOf(
             Screen.Home,
             Screen.FieldSettings,

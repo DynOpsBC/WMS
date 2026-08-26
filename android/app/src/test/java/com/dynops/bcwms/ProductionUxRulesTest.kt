@@ -15,7 +15,16 @@ class ProductionUxRulesTest {
     fun `BADE always uses the production operation flow`() {
         assertTrue(shouldForceProductionFlow("bade"))
         assertFalse(shouldForceProductionFlow("dynops"))
-        assertFalse(shouldForceProductionFlow("emu"))
+        assertTrue(shouldForceProductionFlow("emu"))
+    }
+
+    @Test
+    fun `emu customer home hides technical test screens`() {
+        val screens = operatorHomeScreens("emu")
+        assertFalse(Screen.TestCenter in screens)
+        assertFalse(Screen.PostingTest in screens)
+        assertFalse(Screen.SelfTest in screens)
+        assertTrue(Screen.Printers in screens)
     }
 
     @Test

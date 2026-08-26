@@ -16,4 +16,11 @@ class CompanyBrandTest {
         assertEquals(CompanyBrand.BADE, resolveCompanyBrand("", "bade"))
         assertEquals(CompanyBrand.DEFAULT, resolveCompanyBrand("CRONUS USA, Inc.", "dynops"))
     }
+
+    @Test
+    fun `emu flavor never inherits customer logos`() {
+        assertEquals(CompanyBrand.DEFAULT, resolveCompanyBrand("", "emu"))
+        assertEquals(CompanyBrand.DEFAULT, resolveCompanyBrand("BADE NATURAL", "emu"))
+        assertEquals(CompanyBrand.DEFAULT, resolveCompanyBrand("BS GROUP", "emu"))
+    }
 }

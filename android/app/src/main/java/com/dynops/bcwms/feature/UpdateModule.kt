@@ -169,7 +169,7 @@ fun AppUpdateCard() {
                 fontWeight = FontWeight.SemiBold,
             )
             Text(
-                "✓ 1.14.46 güncellemesi kuruldu",
+                "✓ ${BuildConfig.VERSION_NAME} sürümü kurulu",
                 style = MaterialTheme.typography.bodySmall,
                 color = statusColors.success,
                 fontWeight = FontWeight.SemiBold,
