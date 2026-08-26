@@ -162,6 +162,12 @@ fun AppUpdateCard() {
                 color = statusColors.success,
                 fontWeight = FontWeight.SemiBold,
             )
+            Text(
+                "⚡ Hızlı indirme etkin",
+                style = MaterialTheme.typography.bodySmall,
+                color = statusColors.success,
+                fontWeight = FontWeight.SemiBold,
+            )
             Spacer(Modifier.height(10.dp))
             Text("Mevcut sürüm: v${BuildConfig.VERSION_NAME}", style = MaterialTheme.typography.bodyMedium)
             Text("Son güncelleme: ${formatUpdateDate(installDate)}", style = MaterialTheme.typography.bodySmall)
