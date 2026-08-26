@@ -682,6 +682,13 @@ object BcApi {
                     .method(method, requestBody)
                     .header("Authorization", "Bearer $token")
                     .header("Accept", "application/json")
+                // Manual/automatic refresh must reach BC. Some customer
+                // proxies cache identical OData GETs and made the Yenile
+                // button appear to do nothing after a warehouse transaction.
+                if (method == "GET") {
+                    builder.header("Cache-Control", "no-cache, no-store")
+                    builder.header("Pragma", "no-cache")
+                }
                 // BC requires If-Match for PATCH/DELETE; "*" skips optimistic-concurrency check.
                 if (method == "PATCH" || method == "DELETE") builder.header("If-Match", "*")
                 client.newCall(builder.build()).execute().use { resp ->

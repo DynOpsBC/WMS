@@ -33,23 +33,45 @@ codeunit 72043 "DOPSWHS Receipt Mgmt"
         PrintDispatcher: Codeunit "DOPSWHS Print Dispatcher";
         Telemetry: Codeunit "DOPSWHS Telemetry";
         LpNo: Code[20];
+        ReceiptNo: Code[20];
         PostedNo: Code[20];
     begin
         if PrintReport then begin
             EnsureReceiptReportConfigured();
             PrintDispatcher.EnsureDocumentPrinter(PrinterId, Enum::"DOPSWHS IWX Report Usage"::Receipt);
         end;
-        Log('Receipt.Post', WhseReceiptHeader."No.", EffectiveOperator(OperatorUserId, WhseReceiptHeader."Assigned User ID"));
-        WhseReceiptLine.SetRange("No.", WhseReceiptHeader."No.");
+        // Posting deletes the working receipt. Preserve the keys which are
+        // needed to stamp the posted document and finish the LP afterwards.
+        ReceiptNo := WhseReceiptHeader."No.";
+        LpNo := WhseReceiptHeader."DOPSWHS LP No.";
+        Log('Receipt.Post', ReceiptNo, EffectiveOperator(OperatorUserId, WhseReceiptHeader."Assigned User ID"));
+        WhseReceiptLine.SetRange("No.", ReceiptNo);
         if WhseReceiptLine.FindFirst() then
             WhsePostReceipt.Run(WhseReceiptLine);
 
-        PostedWhseReceiptHeader.SetRange("Whse. Receipt No.", WhseReceiptHeader."No.");
+        PostedWhseReceiptHeader.SetRange("Whse. Receipt No.", ReceiptNo);
         if PostedWhseReceiptHeader.FindLast() then
             PostedNo := PostedWhseReceiptHeader."No.";
 
-        LpPropagation.StampPostedReceiptHeader(WhseReceiptHeader."No.", PostedNo);
-        LpPropagation.StampPostedReceiptLines(WhseReceiptHeader."No.", PostedNo);
+        // The normal propagation helper reads the working header, but that
+        // row no longer exists after Whse.-Post Receipt. Stamp from the value
+        // captured above so the posted lines and the LP never lose the link.
+        if (PostedNo <> '') and (LpNo <> '') then begin
+            if PostedWhseReceiptHeader.Get(PostedNo) then
+                if PostedWhseReceiptHeader."DOPSWHS LP No." = '' then begin
+                    PostedWhseReceiptHeader."DOPSWHS LP No." := LpNo;
+                    PostedWhseReceiptHeader.Modify(true);
+                end;
+            PostedWhseReceiptLine.SetRange("No.", PostedNo);
+            PostedWhseReceiptLine.SetRange("LP No.", '');
+            if PostedWhseReceiptLine.FindSet(true) then
+                repeat
+                    PostedWhseReceiptLine."LP No." := LpNo;
+                    PostedWhseReceiptLine.Modify(true);
+                until PostedWhseReceiptLine.Next() = 0;
+        end;
+        LpPropagation.StampPostedReceiptHeader(ReceiptNo, PostedNo);
+        LpPropagation.StampPostedReceiptLines(ReceiptNo, PostedNo);
 
         if PrintReport then begin
             ClearLastError();
@@ -60,12 +82,8 @@ codeunit 72043 "DOPSWHS Receipt Mgmt"
                     EffectiveOperator(OperatorUserId, WhseReceiptHeader."Assigned User ID"));
         end;
 
-        PostedWhseReceiptLine.SetRange("Whse. Receipt No.", WhseReceiptHeader."No.");
-        if PostedWhseReceiptLine.FindSet(true) then
-            repeat
-                if LpNo <> '' then
-                    AssignLP(LpNo, WhseReceiptHeader."No.");
-            until PostedWhseReceiptLine.Next() = 0;
+        if LpNo <> '' then
+            AssignLP(LpNo, ReceiptNo);
     end;
 
     local procedure EnsureRequiredSupplierLots(WhseReceiptHeader: Record "Warehouse Receipt Header")
@@ -146,6 +164,7 @@ codeunit 72043 "DOPSWHS Receipt Mgmt"
         LP: Record "DOPSWHS LP Header";
         LPMgt: Codeunit "DOPSWHS LP Management";
         EffectiveTemplateCode: Code[20];
+        ReceiptBinCode: Code[20];
     begin
         // LP açan operatör: belgeye atanmış kullanıcı (uç nokta ayrı kimlik taşımıyor).
         Log('Receipt.StartLP', WhseReceiptHeader."No.", WhseReceiptHeader."Assigned User ID");
@@ -153,7 +172,8 @@ codeunit 72043 "DOPSWHS Receipt Mgmt"
         if EffectiveTemplateCode = '' then
             EffectiveTemplateCode := 'PALLET-EUR';
 
-        LPMgt.Build(EffectiveTemplateCode, WhseReceiptHeader."Location Code", '', LP);
+        ReceiptBinCode := GetSingleReceiptBin(WhseReceiptHeader."No.");
+        LPMgt.Build(EffectiveTemplateCode, WhseReceiptHeader."Location Code", ReceiptBinCode, LP);
         exit(LP."No.");
     end;
 
@@ -271,6 +291,7 @@ codeunit 72043 "DOPSWHS Receipt Mgmt"
 
         if LicensePlateNo <> '' then begin
             LP.Get(LicensePlateNo);
+            BindLpToReceiptBin(LP, WhseReceiptLine);
             LPMgt.AddLine(LP, WhseReceiptLine."Item No.", WhseReceiptLine."Unit of Measure Code", QtyToReceive, LotNo, SerialNo, ExpiryDate);
             StampReceiptSourceOnLastLpLine(LicensePlateNo, WhseReceiptLine);
 
@@ -294,10 +315,58 @@ codeunit 72043 "DOPSWHS Receipt Mgmt"
         LPLine."Source Document Type" := LPLine."Source Document Type"::WhseReceipt;
         LPLine."Source Document No." := WhseReceiptLine."No.";
         LPLine."Source Document Line No." := WhseReceiptLine."Line No.";
+        LPLine."Source Bin Code" := WhseReceiptLine."Bin Code";
         // Quantity is the original receipt-line total (for example 500), while
         // LP Line.Quantity remains this pallet's amount (for example 250).
         LPLine."Source Document Quantity" := WhseReceiptLine.Quantity;
         LPLine.Modify(true);
+    end;
+
+    local procedure GetSingleReceiptBin(ReceiptNo: Code[20]): Code[20]
+    var
+        WhseReceiptLine: Record "Warehouse Receipt Line";
+        CandidateBin: Code[20];
+    begin
+        WhseReceiptLine.SetRange("No.", ReceiptNo);
+        WhseReceiptLine.SetFilter("Bin Code", '<>%1', '');
+        if WhseReceiptLine.FindSet() then
+            repeat
+                if CandidateBin = '' then
+                    CandidateBin := WhseReceiptLine."Bin Code"
+                else
+                    if CandidateBin <> WhseReceiptLine."Bin Code" then
+                        exit('');
+            until WhseReceiptLine.Next() = 0;
+        exit(CandidateBin);
+    end;
+
+    local procedure BindLpToReceiptBin(var LP: Record "DOPSWHS LP Header"; WhseReceiptLine: Record "Warehouse Receipt Line")
+    var
+        Location: Record Location;
+    begin
+        if LP."Location Code" <> WhseReceiptLine."Location Code" then
+            Error(
+                '%1 LP''si %2 lokasyonundadır; %3 lokasyonundaki mal kabul satırına eklenemez.',
+                LP."No.", LP."Location Code", WhseReceiptLine."Location Code");
+
+        if WhseReceiptLine."Bin Code" = '' then begin
+            if Location.Get(WhseReceiptLine."Location Code") and Location."Bin Mandatory" then
+                Error(
+                    '%1 LP''sini mal kabulde kullanmak için önce depo gözünü okutun veya satırdaki Depo Gözü alanını doldurun.',
+                    LP."No.");
+            exit;
+        end;
+
+        if LP."Bin Code" = '' then begin
+            LP.Validate("Bin Code", WhseReceiptLine."Bin Code");
+            LP.Modify(true);
+            exit;
+        end;
+
+        if LP."Bin Code" <> WhseReceiptLine."Bin Code" then
+            Error(
+                '%1 LP''si %2 gözündedir; %3 gözündeki mal kabul satırı aynı LP''ye eklenemez.',
+                LP."No.", LP."Bin Code", WhseReceiptLine."Bin Code");
     end;
 
     [TryFunction]

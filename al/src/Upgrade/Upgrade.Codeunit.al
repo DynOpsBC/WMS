@@ -1,7 +1,13 @@
 codeunit 72034 "DOPSWHS Upgrade"
 {
     Subtype = Upgrade;
-    Permissions = tabledata "Lot No. Information" = rm;
+    Permissions =
+        tabledata "Lot No. Information" = rm,
+        tabledata "DOPSWHS LP Header" = rm,
+        tabledata "DOPSWHS LP Line" = r,
+        tabledata "Warehouse Receipt Line" = r,
+        tabledata "Posted Whse. Receipt Line" = r,
+        tabledata "Warehouse Entry" = r;
 
     trigger OnUpgradePerDatabase()
     var
@@ -51,6 +57,8 @@ codeunit 72034 "DOPSWHS Upgrade"
             RepairPackingOrderFlowModes();
         if ModuleInfo.DataVersion() < Version.Create(1, 14, 0, 22) then
             MigrateSupplierLotToDescription();
+        if ModuleInfo.DataVersion() < Version.Create(1, 14, 0, 54) then
+            RepairReceiptLpBins();
         AppProfileMgmt.SeedDefaults();          // seed DEFAULT app profile + install-user profile
         AppRoleSeed.Seed();                     // seed system roles + starter filter rules
         SetupWizard.SeedReportSelections();     // repair legacy empty/wrong document print routes
@@ -58,6 +66,80 @@ codeunit 72034 "DOPSWHS Upgrade"
         ScheduleLicenseVerify();                // seed/refresh the hourly /verify job
         PrintCleanup.ScheduleCleanupJob();      // seed daily print payload retention cleanup
         AzurePrintWorker.ScheduleWorkerJob();  // instant tasks use this as durable fallback/status pump
+    end;
+
+    /// <summary>
+    /// Older mobile receipt builds created the LP before a bin was known and
+    /// never copied the receipt-line bin afterwards. Repair only records for
+    /// which one unambiguous bin can be proved; ambiguous LPs remain untouched.
+    /// </summary>
+    local procedure RepairReceiptLpBins()
+    var
+        LP: Record "DOPSWHS LP Header";
+        BinCode: Code[20];
+    begin
+        LP.SetRange("Bin Code", '');
+        if LP.FindSet(true) then
+            repeat
+                BinCode := ResolveReceiptLpBin(LP."No.");
+                if BinCode <> '' then begin
+                    LP.Validate("Bin Code", BinCode);
+                    LP.Modify(true);
+                end;
+            until LP.Next() = 0;
+    end;
+
+    local procedure ResolveReceiptLpBin(LpNo: Code[20]): Code[20]
+    var
+        LPLine: Record "DOPSWHS LP Line";
+        ReceiptLine: Record "Warehouse Receipt Line";
+        PostedReceiptLine: Record "Posted Whse. Receipt Line";
+        WarehouseEntry: Record "Warehouse Entry";
+        CandidateBin: Code[20];
+    begin
+        LPLine.SetRange("LP No.", LpNo);
+        LPLine.SetRange("Source Document Type", LPLine."Source Document Type"::WhseReceipt);
+        if LPLine.FindSet() then
+            repeat
+                if LPLine."Source Bin Code" <> '' then
+                    if not AddUniqueBin(CandidateBin, LPLine."Source Bin Code") then
+                        exit('');
+                if ReceiptLine.Get(LPLine."Source Document No.", LPLine."Source Document Line No.") then
+                    if not AddUniqueBin(CandidateBin, ReceiptLine."Bin Code") then
+                        exit('');
+            until LPLine.Next() = 0;
+        if CandidateBin <> '' then
+            exit(CandidateBin);
+
+        PostedReceiptLine.SetRange("LP No.", LpNo);
+        PostedReceiptLine.SetFilter("Bin Code", '<>%1', '');
+        if PostedReceiptLine.FindSet() then
+            repeat
+                if not AddUniqueBin(CandidateBin, PostedReceiptLine."Bin Code") then
+                    exit('');
+            until PostedReceiptLine.Next() = 0;
+        if CandidateBin <> '' then
+            exit(CandidateBin);
+
+        WarehouseEntry.SetRange("DOPSWHS LP No.", LpNo);
+        WarehouseEntry.SetFilter("Bin Code", '<>%1', '');
+        if WarehouseEntry.FindSet() then
+            repeat
+                if not AddUniqueBin(CandidateBin, WarehouseEntry."Bin Code") then
+                    exit('');
+            until WarehouseEntry.Next() = 0;
+        exit(CandidateBin);
+    end;
+
+    local procedure AddUniqueBin(var CandidateBin: Code[20]; NewBin: Code[20]): Boolean
+    begin
+        if NewBin = '' then
+            exit(true);
+        if CandidateBin = '' then begin
+            CandidateBin := NewBin;
+            exit(true);
+        end;
+        exit(CandidateBin = NewBin);
     end;
 
     /// <summary>

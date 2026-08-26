@@ -141,7 +141,13 @@ fun WmsTabLabel(glyph: WmsGlyph, text: String) {
 @Composable
 fun WmsRefreshLabel(loading: Boolean, compact: Boolean = false) {
     if (loading) {
-        CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
+            if (!compact) {
+                Spacer(Modifier.width(7.dp))
+                Text("Yenileniyor...", fontWeight = FontWeight.SemiBold, style = MaterialTheme.typography.labelLarge)
+            }
+        }
     } else if (compact) {
         WmsIcon(WmsGlyph.REFRESH, LocalContentColor.current, Modifier.size(20.dp))
     } else {
@@ -424,11 +430,14 @@ fun WmsIcon(
                 listOf(0.34f, 0.43f, 0.53f, 0.62f, 0.70f).forEachIndexed { i, x -> thinLine(x, 0.31f, x, if (i % 2 == 0) 0.70f else 0.64f) }
             }
             WmsGlyph.REFRESH -> {
-                // Tek, açık dairesel ok. Önceki ok başı yayın başlangıcında
-                // kaldığı için bazı yoğunluklarda ters/kopuk görünüyordu.
-                drawArc(color, 40f, 285f, false, p(0.17f, 0.17f), Size(s * 0.66f, s * 0.66f), style = lineStroke)
-                line(0.77f, 0.24f, 0.78f, 0.45f)
-                line(0.77f, 0.24f, 0.57f, 0.29f)
+                // İki dengeli ok: küçük terminal ekranında da yönü ve yenileme
+                // anlamı net kalır; ok uçları yayın gerçek uçlarına bağlıdır.
+                drawArc(color, 205f, 205f, false, p(0.17f, 0.17f), Size(s * 0.66f, s * 0.66f), style = lineStroke)
+                line(0.77f, 0.25f, 0.78f, 0.45f)
+                line(0.77f, 0.25f, 0.57f, 0.28f)
+                drawArc(color, 25f, 145f, false, p(0.17f, 0.17f), Size(s * 0.66f, s * 0.66f), style = lineStroke)
+                line(0.23f, 0.75f, 0.22f, 0.55f)
+                line(0.23f, 0.75f, 0.43f, 0.72f)
             }
             WmsGlyph.CLOSE -> { line(0.24f, 0.24f, 0.76f, 0.76f); line(0.76f, 0.24f, 0.24f, 0.76f) }
             WmsGlyph.CHEVRON -> { line(0.38f, 0.23f, 0.64f, 0.50f); line(0.64f, 0.50f, 0.38f, 0.77f) }
