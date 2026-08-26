@@ -157,9 +157,10 @@ fun AppUpdateCard() {
         Column(Modifier.fillMaxWidth().padding(16.dp)) {
             Text("Sürüm ve Güncelleme", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
             Text(
-                "Terminal güncellemelerini buradan yönetin.",
+                "✓ Uzaktan güncelleme etkin",
                 style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                color = statusColors.success,
+                fontWeight = FontWeight.SemiBold,
             )
             Spacer(Modifier.height(10.dp))
             Text("Mevcut sürüm: v${BuildConfig.VERSION_NAME}", style = MaterialTheme.typography.bodyMedium)
