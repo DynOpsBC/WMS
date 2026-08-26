@@ -345,8 +345,10 @@ private suspend fun downloadApk(
     manifest: UpdateManifest,
     onProgress: suspend (Int) -> Unit,
 ): File {
-    val dest = File(context.cacheDir, "updates/bcwms-${manifest.versionCode}.apk").apply {
-        parentFile?.mkdirs()
+    val dest = File(
+        context.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS),
+        "bcwms-${manifest.versionCode}.apk",
+    ).apply {
         if (exists()) delete()
     }
 
@@ -369,10 +371,12 @@ private suspend fun downloadApk(
                 val status = cursor.getInt(cursor.getColumnIndexOrThrow(DownloadManager.COLUMN_STATUS))
                 when (status) {
                     DownloadManager.STATUS_SUCCESSFUL -> {
-                        val localUriRaw = cursor.getString(cursor.getColumnIndexOrThrow(DownloadManager.COLUMN_LOCAL_URI))
-                        val source = File(Uri.parse(localUriRaw).path ?: error("download local uri missing"))
-                        source.copyTo(dest, overwrite = true)
-                        source.delete()
+                        // DownloadManager zaten nihai, FileProvider tarafından
+                        // paylaşılabilen hedefe yazdı. 30 MB dosyayı cache'e bir
+                        // kez daha kopyalamak özellikle eski terminallerde
+                        // kurulum ekranını gereksiz yere geciktiriyordu.
+                        if (!dest.isFile || dest.length() <= 0L)
+                            error("downloaded APK missing")
                         finishedFile = dest
                     }
                     DownloadManager.STATUS_FAILED -> {

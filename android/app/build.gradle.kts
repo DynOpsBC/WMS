@@ -28,12 +28,18 @@ android {
     applicationId = "com.dynops.bcwms"
     minSdk = 26
     targetSdk = 35
-    versionCode = releaseVersionCodeOverride ?: 1444
-    versionName = releaseVersionNameOverride ?: "1.14.44"
+    versionCode = releaseVersionCodeOverride ?: 1445
+    versionName = releaseVersionNameOverride ?: "1.14.45"
     manifestPlaceholders["appLabel"] = "BCWMS"
     // Ücretsiz dağıtım kanalı: public GitHub Release içindeki sabit latest.json.
     // APK aynı release'de tutulur; uygulamaya GitHub hesabı/token gömülmez.
     buildConfigField("String", "UPDATE_MANIFEST_URL", "\"https://github.com/DynOpsBC/WMS/releases/latest/download/latest.json\"")
+    // El terminalleri ARM tabanlıdır. ML Kit'in x86/x86_64 yerel
+    // kütüphaneleri gerçek cihazda hiç kullanılmıyor ve APK'yı yaklaşık
+    // 12 MB şişiriyordu. ARM32 desteği eski terminaller için korunur.
+    ndk {
+      abiFilters += listOf("armeabi-v7a", "arm64-v8a")
+    }
   }
 
   flavorDimensions += "tenant"
@@ -53,8 +59,8 @@ android {
     create("bade") {
       dimension = "tenant"
       applicationIdSuffix = ".bade"
-      versionCode = releaseVersionCodeOverride ?: 1444
-      versionName = releaseVersionNameOverride ?: "1.14.44"
+      versionCode = releaseVersionCodeOverride ?: 1445
+      versionName = releaseVersionNameOverride ?: "1.14.45"
       versionNameSuffix = "-bade"
       manifestPlaceholders["appLabel"] = "BCWMS BADE"
       buildConfigField("String", "BC_CLIENT_ID", "\"3c4ba25a-89f4-41df-acf8-ebab8cb4809b\"")
@@ -97,7 +103,12 @@ android {
       isMinifyEnabled = false
     }
     release {
-      isMinifyEnabled = false
+      isMinifyEnabled = true
+      isShrinkResources = true
+      proguardFiles(
+        getDefaultProguardFile("proguard-android-optimize.txt"),
+        "proguard-rules.pro",
+      )
       val keystorePropsFile = rootProject.file("play/keystore/keystore.properties")
       if (keystorePropsFile.exists()) {
         val props = Properties()

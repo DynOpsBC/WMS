@@ -386,19 +386,19 @@ page 72061 "DOPSWHS Setup"
                                     StrSubstNo('WARNING: %1 selected printer(s) not online; jobs remain queued. Stale dispatched jobs: %2.', UnavailableCount, StaleCount),
                                     1,
                                     MaxStrLen(Rec."Azure Last Health Result"))
-                        else
-                            Rec."Azure Last Health Result" := CopyStr(
-                                StrSubstNo('Configuration valid; worker completed. Stale dispatched jobs: %1.', StaleCount),
-                                1,
-                                MaxStrLen(Rec."Azure Last Health Result"));
+                            else
+                                Rec."Azure Last Health Result" := CopyStr(
+                                    StrSubstNo('Configuration valid; worker completed. Stale dispatched jobs: %1.', StaleCount),
+                                    1,
+                                    MaxStrLen(Rec."Azure Last Health Result"));
                         Rec.Modify(true);
                         if AzureBridge.BlobSasExpiresSoon() then
                             Message('Azure Direct configuration is valid, but the Blob SAS expires at %1. Rotate it now. Selected printers not online: %2. Stale dispatched jobs: %3.', Rec."Azure Blob SAS Expires At", UnavailableCount, StaleCount)
                         else
                             if UnavailableCount > 0 then
                                 Message('Azure Direct configuration is valid. %1 selected printer(s) are not online; new jobs can still wait in Azure until the agent returns. Stale dispatched jobs: %2.', UnavailableCount, StaleCount)
-                        else
-                            Message('Azure Direct configuration is valid and the worker completed one cycle. Stale dispatched jobs: %1. Use a ZPL printer Test Print or a standard BC report on a PDF printer to verify Blob upload, queue send and physical output.', StaleCount);
+                            else
+                                Message('Azure Direct configuration is valid and the worker completed one cycle. Stale dispatched jobs: %1. Use a ZPL printer Test Print or a standard BC report on a PDF printer to verify Blob upload, queue send and physical output.', StaleCount);
                     end;
                 }
                 action(PrintJobQueueAction)
@@ -481,9 +481,12 @@ page 72061 "DOPSWHS Setup"
     local procedure UpdateLicenseStyle()
     begin
         case Rec."License Status" of
-            Rec."License Status"::Active: LicenseStyle := 'Favorable';
-            Rec."License Status"::Offline: LicenseStyle := 'Ambiguous';
-            Rec."License Status"::Expired, Rec."License Status"::Invalid, Rec."License Status"::Revoked: LicenseStyle := 'Unfavorable';
+            Rec."License Status"::Active:
+                LicenseStyle := 'Favorable';
+            Rec."License Status"::Offline:
+                LicenseStyle := 'Ambiguous';
+            Rec."License Status"::Expired, Rec."License Status"::Invalid, Rec."License Status"::Revoked:
+                LicenseStyle := 'Unfavorable';
             else
                 LicenseStyle := 'Standard';
         end;
