@@ -21,11 +21,16 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.dynops.bcwms.feature.*
 import com.dynops.bcwms.ui.CompanyBrand
 import com.dynops.bcwms.ui.CompanyLogo
+import com.dynops.bcwms.ui.WmsGlyph
+import com.dynops.bcwms.ui.WmsIcon
+import com.dynops.bcwms.ui.WmsIconBadge
+import com.dynops.bcwms.ui.WmsRefreshLabel
 import com.dynops.bcwms.ui.WmsSplashScreen
 import com.dynops.bcwms.ui.bcwmsStatus
 import com.dynops.bcwms.ui.resolveCompanyBrand
@@ -270,48 +275,53 @@ private fun ConnectionBadge(connected: Boolean, onClick: () -> Unit) {
     }
 }
 
-private data class HomeTile(val screen: Screen, val emoji: String, val label: String)
+private data class HomeTile(
+    val screen: Screen,
+    val glyph: WmsGlyph,
+    val label: String,
+    val description: String,
+)
 private data class HomeCategory(val title: String, val accent: Color, val tiles: List<HomeTile>)
 
 private val HomeCategories = listOf(
     HomeCategory("Gelen", Color(0xFF26A65B), listOf(
-        HomeTile(Screen.Receiving, "📥", "Mal Kabul"),
-        HomeTile(Screen.PutAway, "📤", "Yerleştirme"),
+        HomeTile(Screen.Receiving, WmsGlyph.RECEIVING, "Mal Kabul", "Gelen ürünü kaydet, LP'yi başlat"),
+        HomeTile(Screen.PutAway, WmsGlyph.PUT_AWAY, "Yerleştirme", "Ürünü veya LP'yi rafına kaldır"),
     )),
     HomeCategory("Giden", Color(0xFF6C5CE7), listOf(
-        HomeTile(Screen.Picking, "🚚", "Toplama"),
-        HomeTile(Screen.Packing, "📦", "Paketleme"),
-        HomeTile(Screen.Shipping, "🚢", "Sevkiyat"),
+        HomeTile(Screen.Picking, WmsGlyph.PICKING, "Toplama", "Sipariş ürünlerini raflardan topla"),
+        HomeTile(Screen.Packing, WmsGlyph.PACKING, "Paketleme", "Toplanan ürünleri kolilere ayır"),
+        HomeTile(Screen.Shipping, WmsGlyph.SHIPPING, "Sevkiyat", "Belgeyi tamamla ve çıkışı kaydet"),
     )),
     HomeCategory("İç Operasyon", Color(0xFF2D9CDB), listOf(
-        HomeTile(Screen.LicensePlates, "📦", "LP"),
-        HomeTile(Screen.AdHocMove, "↔️", "Ad-Hoc Hareket"),
-        HomeTile(Screen.DirectedMove, "🧭", "Yönlendirilmiş"),
-        HomeTile(Screen.Count, "🔢", "Sayım"),
-        HomeTile(Screen.CountV2, "📲", "Sayım V2"),
+        HomeTile(Screen.LicensePlates, WmsGlyph.LICENSE_PLATE, "LP", "Palet ve taşıma kabı işlemleri"),
+        HomeTile(Screen.AdHocMove, WmsGlyph.AD_HOC, "Ad-Hoc Hareket", "Belgesiz raf veya LP hareketi"),
+        HomeTile(Screen.DirectedMove, WmsGlyph.DIRECTED_MOVE, "Yönlendirilmiş", "Hazırlanmış taşıma emrini uygula"),
+        HomeTile(Screen.Count, WmsGlyph.COUNT, "Sayım", "Hazır sayım belgesini tamamla"),
+        HomeTile(Screen.CountV2, WmsGlyph.COUNT_V2, "Sayım V2", "QR okutarak sıfırdan sayım yap"),
     )),
     HomeCategory("Üretim", Color(0xFFE2873B), listOf(
-        HomeTile(Screen.Production, "🏭", "Üretim"),
-        HomeTile(Screen.Assembly, "🔧", "Montaj"),
+        HomeTile(Screen.Production, WmsGlyph.PRODUCTION, "Üretim", "Tüketim ve üretim çıkışı kaydet"),
+        HomeTile(Screen.Assembly, WmsGlyph.ASSEMBLY, "Montaj", "Montaj emrinin sarf ve çıktıları"),
     )),
     HomeCategory("Kalite", Color(0xFF14B8A6), listOf(
-        HomeTile(Screen.Quality, "🔬", "Kalite Denetimi"),
-        HomeTile(Screen.QualityMgmt, "🧫", "MS Kalite"),
+        HomeTile(Screen.Quality, WmsGlyph.QUALITY, "Kalite Denetimi", "Kontrol sonuçlarını değerlendir"),
+        HomeTile(Screen.QualityMgmt, WmsGlyph.QUALITY_MANAGEMENT, "MS Kalite", "Lot blokajlarını ve ölçümleri yönet"),
     )),
     HomeCategory("Sorgu", Color(0xFF9B59B6), listOf(
-        HomeTile(Screen.ItemInquiry, "🔎", "Ürün Sorgu"),
-        HomeTile(Screen.BinInquiry, "📍", "Bin Sorgu"),
-        HomeTile(Screen.WhseEntries, "📜", "Ambar Hareketleri"),
+        HomeTile(Screen.ItemInquiry, WmsGlyph.ITEM_SEARCH, "Ürün Sorgu", "Ürünün raf, lot ve miktarını bul"),
+        HomeTile(Screen.BinInquiry, WmsGlyph.BIN_SEARCH, "Bin Sorgu", "Bir rafın mevcut içeriğini gör"),
+        HomeTile(Screen.WhseEntries, WmsGlyph.ENTRIES, "Ambar Hareketleri", "Geçmiş stok hareketlerini incele"),
     )),
     // Yardım bu listede DEĞİL: ana sayfanın en altındaki HelpButton ile açılır.
     // Aynı ekrana hem kutu hem buton koymak menüyü gereksiz kalabalıklaştırıyordu.
     HomeCategory("Destek ve Ayarlar", Color(0xFF64748B), listOf(
-        HomeTile(Screen.FieldSettings, "🧩", "Alan Ayarları"),
-        HomeTile(Screen.SelfTest, "🩺", "Sistem Sağlığı"),
-        HomeTile(Screen.Printers, "🖨", "Yazıcılar"),
-        HomeTile(Screen.TestCenter, "🧪", "Test Merkezi"),
-        HomeTile(Screen.PostingTest, "📮", "Kayıt Testi"),
-        HomeTile(Screen.Connection, "⚙️", "Bağlantı"),
+        HomeTile(Screen.FieldSettings, WmsGlyph.FIELD_SETTINGS, "Alan Ayarları", "Kartlarda gösterilen bilgileri seç"),
+        HomeTile(Screen.SelfTest, WmsGlyph.HEALTH, "Sistem Sağlığı", "Bağlantıları ve servisleri kontrol et"),
+        HomeTile(Screen.Printers, WmsGlyph.PRINTER, "Yazıcılar", "Etiket ve belge yazıcısını seç"),
+        HomeTile(Screen.TestCenter, WmsGlyph.TEST, "Test Merkezi", "Operasyon test sonuçlarını incele"),
+        HomeTile(Screen.PostingTest, WmsGlyph.POSTING, "Kayıt Testi", "BC kayıt servislerini doğrula"),
+        HomeTile(Screen.Connection, WmsGlyph.CONNECTION, "Bağlantı", "Hesap, ortam ve şirket ayarları"),
     )),
 )
 
@@ -351,8 +361,18 @@ private fun HomeScreen(
         accessible = BcApi.getAccessibleCompanies(context)
         discovering = false
     }
+    val visibleScreens = operatorHomeScreens(flavor)
+    val visibleCategories = HomeCategories.mapNotNull { category ->
+        category.copy(tiles = category.tiles.filter { it.screen in visibleScreens })
+            .takeIf { it.tiles.isNotEmpty() }
+    }
+
     Column(
-        Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp)
+        Modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.background)
+            .verticalScroll(rememberScrollState())
+            .padding(16.dp)
     ) {
         HomeHeader(
             env = BcApi.getEnvironment(context),
@@ -392,11 +412,6 @@ private fun HomeScreen(
             Spacer(Modifier.height(16.dp))
         }
 
-        val visibleScreens = operatorHomeScreens(flavor)
-        val visibleCategories = HomeCategories.mapNotNull { category ->
-            category.copy(tiles = category.tiles.filter { it.screen in visibleScreens })
-                .takeIf { it.tiles.isNotEmpty() }
-        }
         visibleCategories.forEachIndexed { index, category ->
             CategorySection(category, connected, onNavigate)
             if (index != visibleCategories.lastIndex) Spacer(Modifier.height(18.dp))
@@ -516,13 +531,15 @@ private fun HomeHeader(
  * modüllere bakar, yardıma ihtiyaç duyarsa aşağı iner.
  */
 @Composable
-private fun HelpButton(onClick: () -> Unit) {
+private fun HelpButton(
+    onClick: () -> Unit,
+) {
     FilledTonalButton(
         onClick = onClick,
         shape = RoundedCornerShape(14.dp),
         modifier = Modifier.fillMaxWidth().height(52.dp),
     ) {
-        Text("❔", fontSize = 17.sp)
+        WmsIcon(WmsGlyph.HELP, MaterialTheme.colorScheme.primary, Modifier.size(20.dp))
         Spacer(Modifier.width(9.dp))
         Text("Terminali Nasıl Kullanırım?", fontWeight = FontWeight.Bold)
     }
@@ -537,10 +554,10 @@ private fun NotConnectedCard() {
         modifier = Modifier.fillMaxWidth()
     ) {
         Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
-            Text("⚠️", fontSize = 20.sp)
+            WmsIcon(WmsGlyph.WARNING, warn, Modifier.size(23.dp))
             Spacer(Modifier.width(10.dp))
             Text(
-                "Henüz bağlanmadınız. ⚙️ Bağlantı'dan giriş yapın.",
+                "Henüz bağlanmadınız. Bağlantı ekranından giriş yapın.",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurface
             )
@@ -665,10 +682,7 @@ private fun HomeTileCard(
             verticalArrangement = Arrangement.Center,
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Box(
-                Modifier.size(52.dp).clip(RoundedCornerShape(16.dp)).background(accent.copy(alpha = 0.17f)),
-                contentAlignment = Alignment.Center
-            ) { Text(tile.emoji, fontSize = 27.sp) }
+            WmsIconBadge(tile.glyph, accent, size = 52.dp, iconSize = 29.dp)
             Spacer(Modifier.height(9.dp))
             Text(
                 tile.label,
@@ -703,7 +717,7 @@ private fun TestCenterScreen() {
     LaunchedEffect(Unit) { load() }
 
     Column(Modifier.fillMaxSize().padding(12.dp)) {
-        Button(onClick = { load() }, enabled = !loading) { Text(if (loading) "..." else "🔄 Yenile") }
+        Button(onClick = { load() }, enabled = !loading) { WmsRefreshLabel(loading) }
         Spacer(Modifier.height(4.dp))
         Text(status, fontSize = 12.sp, color = Color.Gray)
         Spacer(Modifier.height(8.dp))

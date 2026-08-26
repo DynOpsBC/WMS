@@ -70,7 +70,7 @@ fun PutAwayModule() {
     val shownRows = itemDocs?.let { f -> rows.filter { it.optString("no") in f.second } } ?: rows
 
     Column(Modifier.fillMaxSize().padding(12.dp)) {
-        Button(onClick = { load() }, enabled = !loading) { Text(if (loading) "..." else "🔄 Yenile") }
+        Button(onClick = { load() }, enabled = !loading) { WmsRefreshLabel(loading) }
         Spacer(Modifier.height(8.dp))
         com.dynops.bcwms.ui.DocSearchBar(value = search, onValueChange = { search = it }, onSearch = { load() })
         Spacer(Modifier.height(4.dp))
@@ -79,15 +79,12 @@ fun PutAwayModule() {
         Spacer(Modifier.height(8.dp))
         LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             items(shownRows) { d ->
-                Card(onClick = { selected = d.optString("no") }, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(10.dp)) {
-                    Column(Modifier.padding(12.dp)) {
-                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                            Text(d.optString("no"), fontWeight = FontWeight.Bold)
-                            Text(firstValue(d, "status"), fontSize = 12.sp, color = Color.Gray)
-                        }
-                        Text("Lokasyon: ${firstValue(d, "locationCode")} · 👤 Atanan Kullanıcı: ${firstValue(d, "assignedUserId")}", fontSize = 12.sp, color = Color.Gray)
-                    }
-                }
+                OperationDocumentCard(
+                    title = d.optString("no"),
+                    status = firstValue(d, "status"),
+                    metadata = "Lokasyon: ${firstValue(d, "locationCode")}\nAtanan: ${firstValue(d, "assignedUserId")}",
+                    onClick = { selected = d.optString("no") },
+                )
             }
             if (rows.isEmpty() && !loading) item { EmptyState("Açık yerleştirme belgesi yok.") }
         }
@@ -1000,13 +997,21 @@ fun ShippingModule() {
     }
     var tab by remember { mutableStateOf(0) }
     var requestedPickNo by remember { mutableStateOf(com.dynops.bcwms.WhsePickNavigation.consume()) }
-    val tabs = if (showSo) listOf("📦 Ambar Toplama", "📋 Ambar Sevkiyatı", "🛒 Satış Siparişi") else listOf("📦 Ambar Toplama", "📋 Ambar Sevkiyatı")
+    val tabs = if (showSo) {
+        listOf(
+            WmsGlyph.PICKING to "Ambar Toplama",
+            WmsGlyph.SHIPPING to "Ambar Sevkiyatı",
+            WmsGlyph.ENTRIES to "Satış Siparişi",
+        )
+    } else {
+        listOf(WmsGlyph.PICKING to "Ambar Toplama", WmsGlyph.SHIPPING to "Ambar Sevkiyatı")
+    }
     if (tab >= tabs.size) tab = 0
 
     Column(Modifier.fillMaxSize()) {
         TabRow(selectedTabIndex = tab) {
-            tabs.forEachIndexed { i, title ->
-                Tab(selected = tab == i, onClick = { tab = i }, text = { Text(title, fontSize = 13.sp) })
+            tabs.forEachIndexed { i, item ->
+                Tab(selected = tab == i, onClick = { tab = i }, text = { WmsTabLabel(item.first, item.second) })
             }
         }
         when (tab) {
@@ -1085,7 +1090,7 @@ private fun WhsePickTab(initialPickNo: String? = null, onInitialPickConsumed: ()
 
     Column(Modifier.fillMaxSize().padding(12.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Button(onClick = { load() }, enabled = !loading) { Text(if (loading) "..." else "🔄 Yenile") }
+            Button(onClick = { load() }, enabled = !loading) { WmsRefreshLabel(loading) }
             Spacer(Modifier.width(12.dp))
             FilterChip(selected = !showAll, onClick = { showAll = false }, label = { Text("Bana atanan") })
             Spacer(Modifier.width(6.dp))
@@ -1099,17 +1104,13 @@ private fun WhsePickTab(initialPickNo: String? = null, onInitialPickConsumed: ()
         Spacer(Modifier.height(8.dp))
         LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             items(shownRows) { d ->
-                Card(onClick = { selected = d.optString("no") }, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(10.dp)) {
-                    Column(Modifier.padding(12.dp)) {
-                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                            Text(d.optString("no"), fontWeight = FontWeight.Bold)
-                            Text(bcStatusLabelTr(d.optString("status")), fontSize = 12.sp, color = Color.Gray)
-                        }
-                        Text("Lokasyon: ${firstValue(d, "locationCode")} · Kaynak: ${firstValue(d, "sourceNo")} · 👤 Atanan Kullanıcı: ${firstValue(d, "assignedUserId")}", fontSize = 12.sp, color = Color.Gray)
-                        val pct = d.optInt("percentComplete")
-                        LinearProgressIndicator(progress = { pct / 100f }, modifier = Modifier.fillMaxWidth().padding(top = 4.dp))
-                    }
-                }
+                OperationDocumentCard(
+                    title = d.optString("no"),
+                    status = bcStatusLabelTr(d.optString("status")),
+                    metadata = "Lokasyon: ${firstValue(d, "locationCode")}  ·  Kaynak: ${firstValue(d, "sourceNo")}\nAtanan: ${firstValue(d, "assignedUserId")}",
+                    progressPercent = d.optInt("percentComplete"),
+                    onClick = { selected = d.optString("no") },
+                )
             }
             if (rows.isEmpty() && !loading) item { EmptyState("Açık ambar çekme yok.") }
         }
@@ -1275,7 +1276,7 @@ private fun WhsePickDocument(no: String, onBack: () -> Unit) {
                 Spacer(Modifier.weight(1f))
                 FilterChip(selected = merge, onClick = { merge = !merge }, label = { Text("🔗 Birleştir", fontSize = 12.sp) })
                 FilterChip(selected = sortByBin, onClick = { sortByBin = !sortByBin }, label = { Text("🧭 Bin", fontSize = 12.sp) })
-                if (!merge) { TextButton(onClick = { showColumns = true }) { Text("⚙ Kolonlar", fontSize = 12.sp) } }
+                if (!merge) { TextButton(onClick = { showColumns = true }) { WmsActionLabel(WmsGlyph.FIELD_SETTINGS, "Kolonlar") } }
             }
             if (binFilter.isNotBlank()) { ScanFilterChip("📍 Raf $binFilter") { binFilter = "" }; Spacer(Modifier.height(4.dp)) }
             if (scanFilter.isNotBlank()) { ScanFilterChip(scanFilter) { scanFilter = "" }; Spacer(Modifier.height(4.dp)) }
@@ -1466,7 +1467,7 @@ private fun WhseShipmentTab(onPickCreated: (String) -> Unit) {
 
     Column(Modifier.fillMaxSize().padding(12.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Button(onClick = { load() }, enabled = !loading) { Text(if (loading) "..." else "🔄 Yenile") }
+            Button(onClick = { load() }, enabled = !loading) { WmsRefreshLabel(loading) }
             Spacer(Modifier.width(12.dp))
             FilterChip(selected = !showAll, onClick = { showAll = false }, label = { Text("Bana atanan") })
             Spacer(Modifier.width(6.dp))
@@ -1480,15 +1481,12 @@ private fun WhseShipmentTab(onPickCreated: (String) -> Unit) {
         Spacer(Modifier.height(8.dp))
         LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             items(shownRows) { d ->
-                Card(onClick = { selected = d.optString("no") }, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(10.dp)) {
-                    Column(Modifier.padding(12.dp)) {
-                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                            Text(d.optString("no"), fontWeight = FontWeight.Bold)
-                            Text(firstValue(d, "status"), fontSize = 12.sp, color = Color.Gray)
-                        }
-                        Text("Sevk: ${firstValue(d, "shipTo")} · Kaynak: ${firstValue(d, "sourceNo")} · 👤 Atanan Kullanıcı: ${firstValue(d, "assignedUserId")}", fontSize = 12.sp, color = Color.Gray)
-                    }
-                }
+                OperationDocumentCard(
+                    title = d.optString("no"),
+                    status = firstValue(d, "status"),
+                    metadata = "Sevk: ${firstValue(d, "shipTo")}  ·  Kaynak: ${firstValue(d, "sourceNo")}\nAtanan: ${firstValue(d, "assignedUserId")}",
+                    onClick = { selected = d.optString("no") },
+                )
             }
             if (rows.isEmpty() && !loading) item { EmptyState(if (showAll) "Serbest bırakılmış Ambar Sevkiyatı yok. Siparişten direkt sevkiyat için sağdaki sekmeyi kullanın." else "Size atanmış sevkiyat yok. Tümünü görmek için \"Tümü\" seçin.") }
         }
@@ -1574,7 +1572,7 @@ private fun ShipDocument(no: String, onBack: () -> Unit, onPickCreated: (String)
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text("Satırlar (${displayLines.size}/${lines.size})", fontWeight = FontWeight.Bold, fontSize = 14.sp)
                 Spacer(Modifier.weight(1f))
-                TextButton(onClick = { showColumns = true }) { Text("⚙ Kolonlar", fontSize = 12.sp) }
+                TextButton(onClick = { showColumns = true }) { WmsActionLabel(WmsGlyph.FIELD_SETTINGS, "Kolonlar") }
             }
             if (scanFilter.isNotBlank()) { ScanFilterChip(scanFilter) { scanFilter = "" }; Spacer(Modifier.height(4.dp)) }
             LineGrid(
@@ -1767,7 +1765,7 @@ private fun SalesOrderTab() {
 
     Column(Modifier.fillMaxSize().padding(12.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Button(onClick = { load() }, enabled = !loading) { Text(if (loading) "..." else "🔄 Yenile") }
+            Button(onClick = { load() }, enabled = !loading) { WmsRefreshLabel(loading) }
             Spacer(Modifier.width(12.dp))
             FilterChip(
                 selected = releasedOnly,
@@ -1911,7 +1909,7 @@ private fun ShipSalesOrder(no: String, onBack: () -> Unit) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text("Satırlar (${displayLines.size}/${lines.size})", fontWeight = FontWeight.Bold, fontSize = 14.sp)
                 Spacer(Modifier.weight(1f))
-                TextButton(onClick = { showColumns = true }) { Text("⚙ Kolonlar", fontSize = 12.sp) }
+                TextButton(onClick = { showColumns = true }) { WmsActionLabel(WmsGlyph.FIELD_SETTINGS, "Kolonlar") }
             }
             if (scanFilter.isNotBlank()) { ScanFilterChip(scanFilter) { scanFilter = "" }; Spacer(Modifier.height(4.dp)) }
             LineGrid(
@@ -1928,7 +1926,9 @@ private fun ShipSalesOrder(no: String, onBack: () -> Unit) {
         }
 
         BottomActionBar {
-            OutlinedButton(onClick = { showScan = true }, enabled = !busy && directAllowed, modifier = Modifier.weight(1f)) { Text("📷 Ürün Tara") }
+            OutlinedButton(onClick = { showScan = true }, enabled = !busy && directAllowed, modifier = Modifier.weight(1f)) {
+                WmsActionLabel(WmsGlyph.SCAN, "Ürün Tara")
+            }
         }
         BottomActionBar {
             Button(

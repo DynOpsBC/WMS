@@ -292,6 +292,9 @@ fun LoginFlow(onConnected: (Boolean) -> Unit) {
         }
         Spacer(Modifier.height(20.dp))
 
+        AppUpdateCard()
+        Spacer(Modifier.height(20.dp))
+
         when (step) {
             Step.Email -> {
                 Text("Bu terminali bir kez bağlayın", fontWeight = FontWeight.Bold, fontSize = 18.sp)

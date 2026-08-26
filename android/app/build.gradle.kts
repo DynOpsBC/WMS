@@ -1,6 +1,11 @@
 import java.util.Properties
 import java.io.FileInputStream
 
+// GitHub release işi monoton versionCode ve etiket sürümünü Gradle property
+// olarak verir. Lokal/emülatör derlemeleri aşağıdaki kaynak sürümünü kullanır.
+val releaseVersionCodeOverride = providers.gradleProperty("releaseVersionCode").orNull?.toIntOrNull()
+val releaseVersionNameOverride = providers.gradleProperty("releaseVersionName").orNull?.takeIf { it.isNotBlank() }
+
 plugins {
   alias(libs.plugins.android.application)
   alias(libs.plugins.kotlin.android)
@@ -23,10 +28,12 @@ android {
     applicationId = "com.dynops.bcwms"
     minSdk = 26
     targetSdk = 35
-    versionCode = 1435
-    versionName = "1.14.35"
+    versionCode = releaseVersionCodeOverride ?: 1442
+    versionName = releaseVersionNameOverride ?: "1.14.42"
     manifestPlaceholders["appLabel"] = "BCWMS"
-    buildConfigField("String", "UPDATE_BASE_URL", "\"https://app.bcwms.dynops.com\"")
+    // Özel alan adının TLS kurulumu tamamlanana kadar çalışan SWA origin'i.
+    // release.yml latest.json dosyasını bu sitenin /releases/android yoluna koyar.
+    buildConfigField("String", "UPDATE_BASE_URL", "\"https://icy-glacier-067645703.7.azurestaticapps.net\"")
   }
 
   flavorDimensions += "tenant"
@@ -46,8 +53,8 @@ android {
     create("bade") {
       dimension = "tenant"
       applicationIdSuffix = ".bade"
-      versionCode = 1435
-      versionName = "1.14.35"
+      versionCode = releaseVersionCodeOverride ?: 1442
+      versionName = releaseVersionNameOverride ?: "1.14.42"
       versionNameSuffix = "-bade"
       manifestPlaceholders["appLabel"] = "BCWMS BADE"
       buildConfigField("String", "BC_CLIENT_ID", "\"3c4ba25a-89f4-41df-acf8-ebab8cb4809b\"")

@@ -20,6 +20,7 @@ import com.dynops.bcwms.ui.DocHeaderCard
 import com.dynops.bcwms.ui.DocSearchBar
 import com.dynops.bcwms.ui.EmptyState
 import com.dynops.bcwms.ui.StatusText
+import com.dynops.bcwms.ui.WmsRefreshLabel
 import com.dynops.bcwms.ui.buildODataFilter
 import com.dynops.bcwms.ui.firstValue
 import com.dynops.bcwms.ui.searchClause
@@ -155,7 +156,7 @@ fun CountV2Module() {
         }
         Spacer(Modifier.height(8.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Button(onClick = { load() }, enabled = !loading) { Text(if (loading) "..." else "🔄 Yenile") }
+            Button(onClick = { load() }, enabled = !loading) { WmsRefreshLabel(loading) }
             Button(
                 onClick = { showCreate = true },
                 enabled = backendReady && !loading && !creating,

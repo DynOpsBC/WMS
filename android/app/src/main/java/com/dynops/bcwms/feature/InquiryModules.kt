@@ -133,7 +133,9 @@ fun ItemInquiryModule() {
                 }
             }
             Spacer(Modifier.height(8.dp))
-            OutlinedButton(onClick = { printItemLabel() }, modifier = Modifier.fillMaxWidth().height(48.dp)) { Text("🖨 Ürün Etiketi Bas") }
+            OutlinedButton(onClick = { printItemLabel() }, modifier = Modifier.fillMaxWidth().height(48.dp)) {
+                WmsActionLabel(WmsGlyph.PRINTER, "Ürün Etiketi Bas")
+            }
             Spacer(Modifier.height(12.dp))
             Text("LP'lerde (${lpLines.size})", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
             Spacer(Modifier.height(6.dp))
@@ -266,7 +268,9 @@ fun BinInquiryModule() {
                 }
             }
             Spacer(Modifier.height(8.dp))
-            OutlinedButton(onClick = { printBinLabel() }, modifier = Modifier.fillMaxWidth().height(48.dp)) { Text("🖨 Bin Etiketi Bas") }
+            OutlinedButton(onClick = { printBinLabel() }, modifier = Modifier.fillMaxWidth().height(48.dp)) {
+                WmsActionLabel(WmsGlyph.PRINTER, "Bin Etiketi Bas")
+            }
             Spacer(Modifier.height(8.dp))
         }
         LazyColumn(verticalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.weight(1f)) {
@@ -414,7 +418,7 @@ fun WhseEntriesModule() {
                 enabled = !loading,
                 shape = RoundedCornerShape(50),
                 contentPadding = PaddingValues(horizontal = 14.dp),
-            ) { Text(if (loading) "…" else "🔄", fontSize = 15.sp) }
+            ) { WmsRefreshLabel(loading, compact = true) }
         }
         Spacer(Modifier.height(8.dp))
         // Filtreler: ScanField'ler kendi OK + kamera butonlarını taşıdığı için

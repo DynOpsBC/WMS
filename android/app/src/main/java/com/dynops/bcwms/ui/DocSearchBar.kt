@@ -5,13 +5,14 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.unit.dp
 
 /**
  * Standart belge no arama kutusu. Tüm list ekranları (Picking, Receiving,
  * PutAway, Shipping, Movement, Count, LP, Production, Assembly, Quality)
  * burayı kullanır — PDF QA review M1.2 kapsamı.
  *
- * `onSearch` enter'a basıldığında veya 🔎 butonuna tıklandığında çağrılır.
+ * `onSearch` enter'a basıldığında veya arama ikonuna tıklandığında çağrılır.
  * Boş içerikle çağrı da geçerli (kullanıcı sıfırlamak istiyor).
  */
 @Composable
@@ -27,7 +28,11 @@ fun DocSearchBar(
         onValueChange = onValueChange,
         singleLine = true,
         label = { Text(label) },
-        trailingIcon = { TextButton(onClick = onSearch) { Text("🔎") } },
+        trailingIcon = {
+            TextButton(onClick = onSearch) {
+                WmsIcon(WmsGlyph.ITEM_SEARCH, MaterialTheme.colorScheme.primary, Modifier.size(21.dp))
+            }
+        },
         keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(imeAction = ImeAction.Search),
         keyboardActions = androidx.compose.foundation.text.KeyboardActions(onSearch = { onSearch() }),
         modifier = modifier.fillMaxWidth(),

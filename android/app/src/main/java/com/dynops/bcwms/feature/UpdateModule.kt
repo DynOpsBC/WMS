@@ -4,19 +4,19 @@ import android.app.DownloadManager
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
-import android.content.IntentFilter
 import android.net.Uri
-import android.os.Build
 import android.os.Environment
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.core.content.FileProvider
 import com.dynops.bcwms.BuildConfig
-import com.dynops.bcwms.BcApi
+import com.dynops.bcwms.ui.WmsActionLabel
+import com.dynops.bcwms.ui.WmsGlyph
 import com.dynops.bcwms.ui.bcwmsStatus
 import com.dynops.bcwms.ui.operatorFacingStatus
 import kotlinx.coroutines.Dispatchers
@@ -27,6 +27,9 @@ import java.io.File
 import java.net.HttpURLConnection
 import java.net.URL
 import java.security.MessageDigest
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 /**
  * In-app update channel for the sideload (APK fallback) distribution. The
@@ -34,7 +37,7 @@ import java.security.MessageDigest
  * only when the running app was installed outside of Play (UNKNOWN_SOURCES).
  *
  * Boot:
- *   GET <base>/releases/android/latest.json
+ *   GET BuildConfig.UPDATE_BASE_URL/releases/android/latest.json
  *   { versionCode, versionName, apkUrl, sha256, releaseNotes }
  * Compare versionCode > BuildConfig.VERSION_CODE → show dialog → download
  * via DownloadManager → SHA-256 verify → ACTION_INSTALL_PACKAGE.
@@ -43,9 +46,10 @@ import java.security.MessageDigest
 private const val PREFS = "bcwms_prefs"
 private const val KEY_UPDATE_CHECK = "bcwms.updates.enabled"
 private const val KEY_LAST_PROMPTED = "bcwms.updates.lastPromptedVersionCode"
+private const val KEY_LAST_CHECKED_AT = "bcwms.updates.lastCheckedAt"
+private const val UPDATE_POLL_INTERVAL_MS = 4L * 60L * 60L * 1_000L
 
-private val DEFAULT_UPDATE_BASE =
-    BcApi::class.java.`package`?.let { "https://app.bcwms.dynops.com" } ?: "https://app.bcwms.dynops.com"
+private val UPDATE_BASE = BuildConfig.UPDATE_BASE_URL.trimEnd('/')
 
 data class UpdateManifest(
     val versionCode: Int,
@@ -58,6 +62,7 @@ data class UpdateManifest(
 private val SHA256_HEX = Regex("^[0-9a-fA-F]{64}$")
 private val ALLOWED_APK_HOSTS = setOf(
     "app.bcwms.dynops.com",
+    "icy-glacier-067645703.7.azurestaticapps.net",
     "github.com",
     "objects.githubusercontent.com",
     "release-assets.githubusercontent.com",
@@ -71,6 +76,25 @@ fun setUpdateCheckEnabled(context: Context, enabled: Boolean) {
         .putBoolean(KEY_UPDATE_CHECK, enabled).apply()
 }
 
+private fun lastCheckedAt(context: Context): Long =
+    context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getLong(KEY_LAST_CHECKED_AT, 0L)
+
+private fun saveLastCheckedAt(context: Context, value: Long = System.currentTimeMillis()) {
+    context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
+        .putLong(KEY_LAST_CHECKED_AT, value).apply()
+}
+
+private fun installedAt(context: Context): Long = runCatching {
+    @Suppress("DEPRECATION")
+    context.packageManager.getPackageInfo(context.packageName, 0).lastUpdateTime
+}.getOrDefault(0L)
+
+private fun formatUpdateDate(value: Long): String = if (value <= 0L) {
+    "Henüz kontrol edilmedi"
+} else {
+    SimpleDateFormat("dd.MM.yyyy HH:mm", Locale("tr", "TR")).format(Date(value))
+}
+
 /**
  * Top-level composable that polls once on first composition. Should be
  * placed near AppRoot so the dialog is reachable from any screen.
@@ -78,44 +102,158 @@ fun setUpdateCheckEnabled(context: Context, enabled: Boolean) {
 @Composable
 fun UpdateChecker() {
     val context = LocalContext.current
-    val scope = rememberCoroutineScope()
     var manifest by remember { mutableStateOf<UpdateManifest?>(null) }
-    var downloading by remember { mutableStateOf(false) }
-    var downloadProgress by remember { mutableStateOf(0) }
-    var error by remember { mutableStateOf<String?>(null) }
 
     LaunchedEffect(Unit) {
         if (!isUpdateCheckEnabled(context)) return@LaunchedEffect
-        try {
-            val fetched = withContext(Dispatchers.IO) { fetchManifest() }
-            val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-            val last = prefs.getInt(KEY_LAST_PROMPTED, 0)
-            if (fetched != null && fetched.versionCode > BuildConfig.VERSION_CODE && fetched.versionCode != last) {
-                manifest = fetched
+        while (true) {
+            if (manifest == null) {
+                try {
+                    val fetched = withContext(Dispatchers.IO) { fetchManifest() }
+                    if (fetched != null) saveLastCheckedAt(context)
+                    val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+                    val last = prefs.getInt(KEY_LAST_PROMPTED, 0)
+                    if (fetched != null && fetched.versionCode > BuildConfig.VERSION_CODE && fetched.versionCode != last) {
+                        manifest = fetched
+                    }
+                } catch (_: Throwable) {
+                    // Ağ yoksa saha operasyonunu kesme; dört saat sonra yeniden dene.
+                }
             }
-        } catch (_: Throwable) {
-            // Network glitch — try again next boot.
+            delay(UPDATE_POLL_INTERVAL_MS)
         }
     }
 
     val m = manifest ?: return
-    val status = bcwmsStatus()
-    AlertDialog(
-        onDismissRequest = {
+    UpdatePromptDialog(
+        manifest = m,
+        onClose = {
             context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
                 .putInt(KEY_LAST_PROMPTED, m.versionCode).apply()
             manifest = null
         },
-        title = { Text("Yeni sürüm hazır: v${m.versionName}") },
+    )
+}
+
+/** Bağlantı ekranından operatörün istediği anda sürüm kontrolü yapabilmesi için. */
+@Composable
+fun AppUpdateCard() {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val statusColors = bcwmsStatus()
+    var checking by remember { mutableStateOf(false) }
+    var message by remember { mutableStateOf("") }
+    var messageIsError by remember { mutableStateOf(false) }
+    var latestVersion by remember { mutableStateOf<String?>(null) }
+    var lastCheck by remember { mutableLongStateOf(lastCheckedAt(context)) }
+    var availableUpdate by remember { mutableStateOf<UpdateManifest?>(null) }
+    val installDate = remember { installedAt(context) }
+
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = MaterialTheme.shapes.large,
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f)),
+    ) {
+        Column(Modifier.fillMaxWidth().padding(16.dp)) {
+            Text("Sürüm ve Güncelleme", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
+            Text(
+                "Terminal güncellemelerini buradan yönetin.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Spacer(Modifier.height(10.dp))
+            Text("Mevcut sürüm: v${BuildConfig.VERSION_NAME}", style = MaterialTheme.typography.bodyMedium)
+            Text("Son güncelleme: ${formatUpdateDate(installDate)}", style = MaterialTheme.typography.bodySmall)
+            Text("Son kontrol: ${formatUpdateDate(lastCheck)}", style = MaterialTheme.typography.bodySmall)
+            latestVersion?.let {
+                Text("Sunucudaki sürüm: v$it", style = MaterialTheme.typography.bodySmall)
+            }
+            if (message.isNotBlank()) {
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    message,
+                    color = if (messageIsError) statusColors.danger else statusColors.success,
+                    style = MaterialTheme.typography.bodySmall,
+                    fontWeight = FontWeight.SemiBold,
+                )
+            }
+            Spacer(Modifier.height(12.dp))
+            Button(
+                enabled = !checking,
+                onClick = {
+                    scope.launch {
+                        checking = true
+                        message = "Güncelleme sunucusu kontrol ediliyor…"
+                        messageIsError = false
+                        val fetched = withContext(Dispatchers.IO) {
+                            runCatching { fetchManifest() }.getOrNull()
+                        }
+                        checking = false
+                        if (fetched == null) {
+                            message = "Güncelleme hizmetine ulaşılamadı. İnternet açıksa son sürüm henüz sunucuya yayımlanmamış olabilir."
+                            messageIsError = true
+                        } else {
+                            val checkedAt = System.currentTimeMillis()
+                            saveLastCheckedAt(context, checkedAt)
+                            lastCheck = checkedAt
+                            latestVersion = fetched.versionName
+                            if (fetched.versionCode > BuildConfig.VERSION_CODE) {
+                                message = "Yeni sürüm bulundu: v${fetched.versionName}"
+                                availableUpdate = fetched
+                            } else {
+                                message = "Uygulama güncel."
+                            }
+                        }
+                    }
+                },
+                modifier = Modifier.fillMaxWidth().height(50.dp),
+            ) {
+                if (checking) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(19.dp),
+                        strokeWidth = 2.dp,
+                        color = MaterialTheme.colorScheme.onPrimary,
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    Text("Kontrol ediliyor…")
+                } else {
+                    WmsActionLabel(WmsGlyph.REFRESH, "Güncellemeyi Kontrol Et")
+                }
+            }
+        }
+    }
+
+    availableUpdate?.let { update ->
+        UpdatePromptDialog(
+            manifest = update,
+            onClose = { availableUpdate = null },
+        )
+    }
+}
+
+@Composable
+private fun UpdatePromptDialog(
+    manifest: UpdateManifest,
+    onClose: () -> Unit,
+) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var downloading by remember(manifest.versionCode) { mutableStateOf(false) }
+    var downloadProgress by remember(manifest.versionCode) { mutableStateOf(0) }
+    var error by remember(manifest.versionCode) { mutableStateOf<String?>(null) }
+    val status = bcwmsStatus()
+    AlertDialog(
+        onDismissRequest = onClose,
+        title = { Text("Yeni sürüm hazır: v${manifest.versionName}") },
         text = {
             Column {
                 Text(
                     "Şu anki sürüm: v${BuildConfig.VERSION_NAME}. Güncellemek için 'İndir' butonuna dokunun.",
                     style = MaterialTheme.typography.bodyMedium,
                 )
-                if (m.releaseNotes.isNotBlank()) {
+                if (manifest.releaseNotes.isNotBlank()) {
                     Spacer(Modifier.height(8.dp))
-                    Text(m.releaseNotes, style = MaterialTheme.typography.bodySmall)
+                    Text(manifest.releaseNotes, style = MaterialTheme.typography.bodySmall)
                 }
                 if (downloading) {
                     Spacer(Modifier.height(8.dp))
@@ -137,17 +275,17 @@ fun UpdateChecker() {
                         error = null
                         try {
                             val apk = withContext(Dispatchers.IO) {
-                                downloadApk(context, m, onProgress = { downloadProgress = it })
+                                downloadApk(context, manifest, onProgress = { downloadProgress = it })
                             }
                             // SHA-256 is mandatory: manifest fetch already validates the hex
                             // form + apkUrl allowlist, but we recheck here in case the manifest
                             // was cached and the on-disk APK was tampered with.
-                            if (!verifySha256(apk, m.sha256)) {
+                            if (!verifySha256(apk, manifest.sha256)) {
                                 error = "Doğrulama başarısız — paket bozulmuş olabilir."
                                 apk.delete()
                             } else {
                                 installApk(context, apk)
-                                manifest = null
+                                onClose()
                             }
                         } catch (t: Throwable) {
                             error = "HATA: Güncelleme indirilemedi. Bağlantıyı kontrol edip tekrar deneyin."
@@ -159,17 +297,13 @@ fun UpdateChecker() {
             ) { Text(if (downloading) "İndiriliyor…" else "İndir & yükle") }
         },
         dismissButton = {
-            TextButton(onClick = {
-                context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
-                    .putInt(KEY_LAST_PROMPTED, m.versionCode).apply()
-                manifest = null
-            }) { Text("Şimdi değil") }
+            TextButton(onClick = onClose) { Text("Şimdi değil") }
         },
     )
 }
 
 private fun fetchManifest(): UpdateManifest? {
-    val manifestUrl = URL("$DEFAULT_UPDATE_BASE/releases/android/latest.json")
+    val manifestUrl = URL("$UPDATE_BASE/releases/android/latest.json")
     require(manifestUrl.protocol == "https") { "manifest must be served over HTTPS" }
     val conn = (manifestUrl.openConnection() as HttpURLConnection).apply {
         connectTimeout = 8_000
@@ -183,6 +317,8 @@ private fun fetchManifest(): UpdateManifest? {
         val obj = org.json.JSONObject(body)
         val sha = obj.optString("sha256").trim()
         require(SHA256_HEX.matches(sha)) { "manifest sha256 missing or malformed" }
+        require(obj.optInt("versionCode") > 0) { "manifest versionCode missing or malformed" }
+        require(obj.optString("versionName").isNotBlank()) { "manifest versionName missing" }
         val apkUrlRaw = obj.optString("apkUrl")
         val apkUri = Uri.parse(apkUrlRaw)
         require(apkUri.scheme == "https") { "apkUrl must be https" }

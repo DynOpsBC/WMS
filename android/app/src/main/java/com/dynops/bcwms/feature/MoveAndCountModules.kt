@@ -700,7 +700,7 @@ fun CountModule() {
     val shownRows = itemDocs?.let { f -> rows.filter { firstValue(it, "no", "batchName") in f.second } } ?: rows
 
     Column(Modifier.fillMaxSize().padding(12.dp)) {
-        Button(onClick = { load() }, enabled = !loading) { Text(if (loading) "..." else "🔄 Yenile") }
+        Button(onClick = { load() }, enabled = !loading) { WmsRefreshLabel(loading) }
         Spacer(Modifier.height(8.dp))
         com.dynops.bcwms.ui.DocSearchBar(value = search, onValueChange = { search = it }, onSearch = { load() }, label = "Sayım no ile ara")
         Spacer(Modifier.height(6.dp))
@@ -1868,7 +1868,7 @@ private fun CountByBinPane(
                                 onClick = { printLpLabel(lp) },
                                 enabled = !busy,
                                 modifier = Modifier.fillMaxWidth(),
-                            ) { Text("🖨 LP etiketini yazdır") }
+                            ) { WmsActionLabel(WmsGlyph.PRINTER, "LP etiketini yazdır") }
                         }
                         if (!loose && !done) {
                             OutlinedButton(onClick = { openTarget(lp, lp, group) }, enabled = !busy, modifier = Modifier.fillMaxWidth()) {
@@ -2577,7 +2577,7 @@ fun DirectedMoveModule() {
                 enabled = !loading,
                 shape = RoundedCornerShape(50),
                 contentPadding = PaddingValues(horizontal = 14.dp),
-            ) { Text(if (loading) "…" else "🔄", fontSize = 15.sp) }
+            ) { WmsRefreshLabel(loading, compact = true) }
         }
         Spacer(Modifier.height(8.dp))
         DocSearchBar(value = search, onValueChange = { search = it }, onSearch = { load() }, label = "Hareket no ile ara")

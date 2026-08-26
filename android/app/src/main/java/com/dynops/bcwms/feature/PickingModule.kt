@@ -437,7 +437,7 @@ private fun ActivePicksTab() {
                 enabled = !loading,
                 shape = RoundedCornerShape(50),
                 contentPadding = PaddingValues(horizontal = 14.dp),
-            ) { Text(if (loading) "…" else "🔄", fontSize = 15.sp) }
+            ) { WmsRefreshLabel(loading, compact = true) }
         }
         Spacer(Modifier.height(6.dp))
         // Seçili filtrenin NE gösterdiği tek satırda yazılı olsun — "atanmamışlar
@@ -455,7 +455,11 @@ private fun ActivePicksTab() {
             singleLine = true,
             label = { Text("Belge no ile ara") },
             shape = RoundedCornerShape(14.dp),
-            trailingIcon = { TextButton(onClick = { load() }) { Text("🔎") } },
+            trailingIcon = {
+                TextButton(onClick = { load() }) {
+                    WmsIcon(WmsGlyph.ITEM_SEARCH, MaterialTheme.colorScheme.primary, Modifier.size(21.dp))
+                }
+            },
             modifier = Modifier.fillMaxWidth(),
         )
         Spacer(Modifier.height(6.dp))
@@ -634,7 +638,7 @@ private fun PickHistoryTab(tab: PickTab) {
             OutlinedButton(
                 onClick = { load() }, enabled = !loading,
                 shape = RoundedCornerShape(50), contentPadding = PaddingValues(horizontal = 14.dp),
-            ) { Text(if (loading) "…" else "🔄", fontSize = 15.sp) }
+            ) { WmsRefreshLabel(loading, compact = true) }
         }
         Spacer(Modifier.height(8.dp))
         LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -1245,7 +1249,7 @@ private fun GuidedPickDocument(no: String, flowMode: OutboundFlowMode? = null, o
                                     onClick = { showLpScan = true },
                                     enabled = !busy && !mainLpPending && canMutate,
                                     modifier = Modifier.fillMaxWidth(),
-                                ) { Text("📷 Farklı bir sepet okut / değiştir") }
+                                ) { WmsActionLabel(WmsGlyph.SCAN, "Farklı bir sepet okut / değiştir") }
                             } else {
                                 Text("Elindeki sepetin/LP barkodunu okut:", fontSize = 12.sp, color = Color.Gray)
                                 Spacer(Modifier.height(6.dp))
@@ -1393,7 +1397,9 @@ private fun GuidedPickDocument(no: String, flowMode: OutboundFlowMode? = null, o
         }
 
         BottomActionBar {
-            OutlinedButton(onClick = { reload() }, enabled = !busy, modifier = Modifier.weight(1f)) { Text("🔄 Yenile") }
+            OutlinedButton(onClick = { reload() }, enabled = !busy, modifier = Modifier.weight(1f)) {
+                WmsActionLabel(WmsGlyph.ENTRIES, "Yenile")
+            }
             Button(
                 onClick = { registerPick() },
                 // Başkasının pick'i post edilemez — önce devralınmalı.
@@ -1836,7 +1842,7 @@ private fun PickDocument(no: String, onBack: () -> Unit) {
                 FilterChip(selected = toteMode, onClick = { toteMode = !toteMode }, label = { Text("🧺", fontSize = 12.sp) })
                 FilterChip(selected = merge, onClick = { merge = !merge }, label = { Text("🔗 Birleştir", fontSize = 12.sp) })
                 FilterChip(selected = sortByBin, onClick = { sortByBin = !sortByBin }, label = { Text("🧭 Bin", fontSize = 12.sp) })
-                if (!merge) { TextButton(onClick = { showColumns = true }) { Text("⚙ Kolonlar", fontSize = 12.sp) } }
+                if (!merge) { TextButton(onClick = { showColumns = true }) { WmsActionLabel(WmsGlyph.FIELD_SETTINGS, "Kolonlar") } }
             }
             if (binFilter.isNotBlank()) { ScanFilterChip("📍 Raf $binFilter") { binFilter = "" }; Spacer(Modifier.height(4.dp)) }
             if (scanFilter.isNotBlank()) { ScanFilterChip(scanFilter) { scanFilter = "" }; Spacer(Modifier.height(4.dp)) }
@@ -2146,7 +2152,9 @@ private fun PickLineActionSheet(
         Text("${line.optString("itemNo")} — ${line.optString("description")}", fontWeight = FontWeight.Bold, fontSize = 16.sp)
         Text("Bin: ${line.optString("binCode")} · Miktar: ${line.optDouble("qtyToHandle")} / ${line.optDouble("quantity")}", fontSize = 12.sp, color = Color.Gray)
         Spacer(Modifier.height(16.dp))
-        Button(onClick = onScan, modifier = Modifier.fillMaxWidth().height(52.dp)) { Text("📷 Tara & Tamamla", fontWeight = FontWeight.Bold) }
+        Button(onClick = onScan, modifier = Modifier.fillMaxWidth().height(52.dp)) {
+            WmsActionLabel(WmsGlyph.SCAN, "Tara ve Tamamla")
+        }
         Spacer(Modifier.height(8.dp))
         OutlinedButton(onClick = onComplete, modifier = Modifier.fillMaxWidth().height(50.dp)) { Text("✅ Tamamla (tam miktar)") }
         Spacer(Modifier.height(8.dp))

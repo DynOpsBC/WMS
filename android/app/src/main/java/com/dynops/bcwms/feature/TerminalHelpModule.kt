@@ -34,11 +34,16 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.dynops.bcwms.Screen
+import com.dynops.bcwms.ui.WmsGlyph
+import com.dynops.bcwms.ui.WmsIcon
+import com.dynops.bcwms.ui.WmsIconBadge
+import com.dynops.bcwms.ui.glyphForScreen
 
 internal enum class HelpCategory(val label: String) {
     START("Başlangıç"),
@@ -304,6 +309,17 @@ internal val TerminalHelpTopics = listOf(
     ),
 )
 
+internal fun glyphForHelpTopic(topic: HelpTopic): WmsGlyph = when (topic.id) {
+    "login" -> WmsGlyph.CONNECTION
+    "company" -> WmsGlyph.LAYOUT
+    "scan" -> WmsGlyph.SCAN
+    "lp-partial-transfer" -> WmsGlyph.LICENSE_PLATE
+    "production" -> WmsGlyph.PRODUCTION
+    "quality" -> WmsGlyph.QUALITY
+    "inquiry-printer" -> WmsGlyph.ITEM_SEARCH
+    else -> topic.target?.let(::glyphForScreen) ?: WmsGlyph.HELP
+}
+
 @Composable
 fun TerminalHelpModule(connected: Boolean, onNavigate: (Screen) -> Unit) {
     var query by remember { mutableStateOf("") }
@@ -358,7 +374,13 @@ fun TerminalHelpModule(connected: Boolean, onNavigate: (Screen) -> Unit) {
                 onValueChange = { query = it },
                 label = { Text("Ne yapacaksınız?") },
                 placeholder = { Text("örn. mal kabul, sayım, LP transfer") },
-                leadingIcon = { Text("🔎") },
+                leadingIcon = {
+                    WmsIcon(
+                        WmsGlyph.ITEM_SEARCH,
+                        MaterialTheme.colorScheme.primary,
+                        Modifier.size(21.dp),
+                    )
+                },
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth(),
             )
@@ -446,16 +468,22 @@ private fun HelpTopicCard(
     ) {
         Column(Modifier.padding(14.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Box(
-                    Modifier.size(44.dp).background(MaterialTheme.colorScheme.primary.copy(alpha = 0.11f), RoundedCornerShape(13.dp)),
-                    contentAlignment = Alignment.Center,
-                ) { Text(topic.icon, fontSize = 22.sp) }
+                WmsIconBadge(
+                    glyph = glyphForHelpTopic(topic),
+                    color = MaterialTheme.colorScheme.primary,
+                    size = 44.dp,
+                    iconSize = 24.dp,
+                )
                 Spacer(Modifier.width(12.dp))
                 Column(Modifier.weight(1f)) {
                     Text(topic.title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                     Text(topic.summary, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
-                Text(if (expanded) "⌃" else "⌄", fontSize = 20.sp, color = MaterialTheme.colorScheme.primary)
+                WmsIcon(
+                    WmsGlyph.CHEVRON,
+                    MaterialTheme.colorScheme.primary,
+                    Modifier.size(18.dp).rotate(if (expanded) -90f else 90f),
+                )
             }
             if (expanded) {
                 Spacer(Modifier.height(14.dp))
@@ -478,7 +506,7 @@ private fun HelpTopicCard(
                         shape = RoundedCornerShape(12.dp),
                     ) {
                         Row(Modifier.fillMaxWidth().padding(11.dp), verticalAlignment = Alignment.Top) {
-                            Text("💡")
+                            WmsIcon(WmsGlyph.HELP, Color(0xFFE08A00), Modifier.size(19.dp))
                             Spacer(Modifier.width(7.dp))
                             Text(topic.tip, style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f))
                         }

@@ -37,12 +37,15 @@ import org.json.JSONObject
 @Composable
 fun ReceivingModule() {
     var tab by remember { mutableStateOf(0) }
-    val tabs = listOf("📋 Ambar Mal Kabul", "🛒 Satın Alma Siparişi")
+    val tabs = listOf(
+        WmsGlyph.RECEIVING to "Ambar Mal Kabul",
+        WmsGlyph.PICKING to "Satın Alma Siparişi",
+    )
 
     Column(Modifier.fillMaxSize()) {
         TabRow(selectedTabIndex = tab) {
-            tabs.forEachIndexed { i, title ->
-                Tab(selected = tab == i, onClick = { tab = i }, text = { Text(title, fontSize = 13.sp) })
+            tabs.forEachIndexed { i, item ->
+                Tab(selected = tab == i, onClick = { tab = i }, text = { WmsTabLabel(item.first, item.second) })
             }
         }
         when (tab) {
@@ -127,7 +130,7 @@ private fun WhseReceiptTab() {
 
     Column(Modifier.fillMaxSize().padding(12.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Button(onClick = { load() }, enabled = !loading) { Text(if (loading) "..." else "🔄 Yenile") }
+            Button(onClick = { load() }, enabled = !loading) { WmsRefreshLabel(loading) }
             Spacer(Modifier.width(12.dp))
             FilterChip(selected = !showAll, onClick = { showAll = false }, label = { Text("Bana atanan") })
             Spacer(Modifier.width(6.dp))
@@ -141,14 +144,12 @@ private fun WhseReceiptTab() {
         Spacer(Modifier.height(8.dp))
         LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             items(shownRows) { d ->
-                Card(onClick = { selected = d.optString("no") }, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(10.dp)) {
-                    Column(Modifier.padding(12.dp)) {
-                        Text(d.optString("no"), fontWeight = FontWeight.Bold)
-                        Text("Lokasyon: ${firstValue(d, "locationCode")} · Kaynak: ${firstValue(d, "sourceNo")} · 👤 Atanan Kullanıcı: ${rawValue(d, "assignedUserId").ifBlank { "-" }}", fontSize = 12.sp, color = Color.Gray)
-                        val pct = d.optInt("percentComplete")
-                        LinearProgressIndicator(progress = { pct / 100f }, modifier = Modifier.fillMaxWidth().padding(top = 4.dp))
-                    }
-                }
+                OperationDocumentCard(
+                    title = d.optString("no"),
+                    metadata = "Lokasyon: ${firstValue(d, "locationCode")}  ·  Kaynak: ${firstValue(d, "sourceNo")}\nAtanan: ${rawValue(d, "assignedUserId").ifBlank { "Atanmamış" }}",
+                    progressPercent = d.optInt("percentComplete"),
+                    onClick = { selected = d.optString("no") },
+                )
             }
             if (rows.isEmpty() && !loading) item { EmptyState(if (showAll) "Açık ambar mal kabul belgesi yok. PO'dan direkt mal kabul için sağdaki sekmeyi kullanın." else "Size atanmış mal kabul yok. Tümünü görmek için \"Tümü\" seçin.") }
         }
@@ -332,7 +333,7 @@ private fun ReceiveDocument(no: String, onBack: () -> Unit) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(if (merge) "Gruplar (${groups.size})" else "Satırlar (${displayLines.size}/${lines.size})", fontWeight = FontWeight.Bold, fontSize = 14.sp)
                 Spacer(Modifier.weight(1f))
-                if (!merge) { TextButton(onClick = { showColumns = true }) { Text("⚙ Kolonlar", fontSize = 12.sp) } }
+                if (!merge) { TextButton(onClick = { showColumns = true }) { WmsActionLabel(WmsGlyph.FIELD_SETTINGS, "Kolonlar") } }
                 FilterChip(selected = merge, onClick = { merge = !merge }, label = { Text("🔗 Birleştir", fontSize = 12.sp) })
             }
             if (scanFilter.isNotBlank()) { ScanFilterChip(scanFilter) { scanFilter = "" }; Spacer(Modifier.height(4.dp)) }
@@ -403,7 +404,9 @@ private fun ReceiveDocument(no: String, onBack: () -> Unit) {
                     if (r.ok) reload()
                 }
             }, enabled = !busy && headerLoaded && linesComplete && myUserId.isNotBlank() && !canMutate, modifier = Modifier.weight(1f)) { Text("Bana Ata") }
-            Button(onClick = { showScan = true }, enabled = !busy && canMutate, modifier = Modifier.weight(1f)) { Text("📷 Tara") }
+            Button(onClick = { showScan = true }, enabled = !busy && canMutate, modifier = Modifier.weight(1f)) {
+                WmsActionLabel(WmsGlyph.SCAN, "Tara")
+            }
             if (activeLp == null) {
                 OutlinedButton(onClick = {
                     scope.launch {
@@ -805,7 +808,7 @@ private fun PurchaseOrderTab() {
 
     Column(Modifier.fillMaxSize().padding(12.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Button(onClick = { load() }, enabled = !loading) { Text(if (loading) "..." else "🔄 Yenile") }
+            Button(onClick = { load() }, enabled = !loading) { WmsRefreshLabel(loading) }
             Spacer(Modifier.width(12.dp))
             FilterChip(
                 selected = releasedOnly,
@@ -819,7 +822,11 @@ private fun PurchaseOrderTab() {
             onValueChange = { search = it },
             singleLine = true,
             label = { Text("PO no ile ara (örn: 106040)") },
-            trailingIcon = { TextButton(onClick = { load() }) { Text("🔎") } },
+            trailingIcon = {
+                TextButton(onClick = { load() }) {
+                    WmsIcon(WmsGlyph.ITEM_SEARCH, MaterialTheme.colorScheme.primary, Modifier.size(21.dp))
+                }
+            },
             modifier = Modifier.fillMaxWidth(),
         )
         Spacer(Modifier.height(4.dp))
@@ -997,7 +1004,9 @@ private fun ReceivePurchaseOrder(no: String, onBack: () -> Unit) {
         }
 
         BottomActionBar {
-            OutlinedButton(onClick = { showScan = true }, enabled = !busy && directAllowed, modifier = Modifier.weight(1f)) { Text("📷 Ürün Tara") }
+            OutlinedButton(onClick = { showScan = true }, enabled = !busy && directAllowed, modifier = Modifier.weight(1f)) {
+                WmsActionLabel(WmsGlyph.SCAN, "Ürün Tara")
+            }
         }
         BottomActionBar {
             // TOPLU POST: en az bir satır işlenmeden kayıt açılmaz.

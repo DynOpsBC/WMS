@@ -123,7 +123,7 @@ fun QualityManagementModule() {
 
     Column(Modifier.fillMaxSize().padding(12.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Button(onClick = { load() }, enabled = !loading) { Text(if (loading) "..." else "🔄 Yenile") }
+            Button(onClick = { load() }, enabled = !loading) { WmsRefreshLabel(loading) }
             Spacer(Modifier.width(12.dp))
             FilterChip(
                 selected = openOnly,

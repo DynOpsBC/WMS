@@ -25,6 +25,8 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
+import com.dynops.bcwms.ui.WmsGlyph
+import com.dynops.bcwms.ui.WmsIcon
 import com.google.mlkit.vision.barcode.BarcodeScanning
 import com.google.mlkit.vision.common.InputImage
 import java.util.concurrent.Executors
@@ -108,7 +110,13 @@ fun ScanField(
                     if (hasCameraPermission) scanning = !scanning
                     else permLauncher.launch(Manifest.permission.CAMERA)
                 }
-            ) { Text(if (scanning) "✕" else "📷") }
+            ) {
+                WmsIcon(
+                    glyph = if (scanning) WmsGlyph.CLOSE else WmsGlyph.SCAN,
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(22.dp),
+                )
+            }
         }
         cameraError?.let {
             Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)

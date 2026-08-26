@@ -163,7 +163,7 @@ jobs:
           path: android-manifest
       - name: Embed releases/android/latest.json into SaaS bundle
         run: |
-          # UpdateModule.kt reads $DEFAULT_UPDATE_BASE/releases/android/latest.json.
+          # UpdateModule.kt reads BuildConfig.UPDATE_BASE_URL/releases/android/latest.json.
           # Ship the manifest alongside the SaaS bundle so sideload clients can
           # reach it from https://app.bcwms.dynops.com/releases/android/latest.json.
           mkdir -p web/dist/releases/android
@@ -255,12 +255,25 @@ jobs:
           if [ -n "$PLAY_SERVICE_ACCOUNT_JSON" ]; then
             echo "$PLAY_SERVICE_ACCOUNT_JSON" > android/play/play-service-account.json
           fi
-      - name: assembleRelease
+      - name: Assemble signed BADE release APK
         working-directory: android
-        run: ./gradlew :app:assembleRelease
+        env:
+          RELEASE_VERSION: ${{ needs.resolve.outputs.version }}
+        run: |
+          # Workflow run_number repo içinde sürekli artar; mevcut saha
+          # versionCode'larından yüksek ve her yayında monoton bir sayı üretir.
+          RELEASE_VERSION_CODE=$((100000 + GITHUB_RUN_NUMBER))
+          echo "RELEASE_VERSION_CODE=$RELEASE_VERSION_CODE" >> "$GITHUB_ENV"
+          echo "RELEASE_VERSION_NAME=$RELEASE_VERSION" >> "$GITHUB_ENV"
+          ./gradlew :app:assembleBadeRelease \
+            -PreleaseVersionCode="$RELEASE_VERSION_CODE" \
+            -PreleaseVersionName="$RELEASE_VERSION"
       - name: Publish to Play Closed Testing
         working-directory: android
-        run: ./gradlew :app:publishReleaseBundle -PwithPlayPublisher
+        run: |
+          ./gradlew :app:publishReleaseBundle -PwithPlayPublisher \
+            -PreleaseVersionCode="$RELEASE_VERSION_CODE" \
+            -PreleaseVersionName="$RELEASE_VERSION_NAME"
       - name: Compute APK SHA-256 + manifest
         env:
           RELEASE_VERSION: ${{ needs.resolve.outputs.version }}
@@ -269,30 +282,32 @@ jobs:
         run: |
           # Inputs are passed via env so the shell never expands attacker-controlled
           # GitHub context interpolations directly into the script.
-          APK=$(ls android/app/build/outputs/apk/release/*.apk 2>/dev/null | head -1 || true)
-          if [ -z "$APK" ]; then APK=$(ls android/app/build/outputs/bundle/release/*.aab 2>/dev/null | head -1 || true); fi
-          if [ -n "$APK" ]; then
-            SHA=$(sha256sum "$APK" | awk '{print $1}')
-            VERSION_CODE=$(grep "versionCode" android/app/build.gradle.kts | head -1 | grep -oE '[0-9]+')
-            jq -n \
-              --arg vc "$VERSION_CODE" \
-              --arg vn "$RELEASE_VERSION" \
-              --arg repo "$REPO" \
-              --arg ref "$REF_NAME" \
-              --arg sha "$SHA" \
-              '{
-                versionCode: ($vc | tonumber),
-                versionName: $vn,
-                apkUrl: ("https://github.com/" + $repo + "/releases/download/" + $ref + "/bcwms-" + $vn + ".apk"),
-                sha256: $sha,
-                releaseNotes: ("v" + $vn + " — see GitHub Release notes")
-              }' > android/latest.json
+          APK="android/app/build/outputs/apk/bade/release/app-bade-release.apk"
+          if [ ! -f "$APK" ]; then
+            echo "::error::Signed BADE release APK not found: $APK"
+            exit 1
           fi
+          RELEASE_APK="android/bcwms-${RELEASE_VERSION}.apk"
+          cp "$APK" "$RELEASE_APK"
+          SHA=$(sha256sum "$RELEASE_APK" | awk '{print $1}')
+          jq -n \
+            --arg vc "$RELEASE_VERSION_CODE" \
+            --arg vn "$RELEASE_VERSION" \
+            --arg repo "$REPO" \
+            --arg ref "$REF_NAME" \
+            --arg sha "$SHA" \
+            '{
+              versionCode: ($vc | tonumber),
+              versionName: $vn,
+              apkUrl: ("https://github.com/" + $repo + "/releases/download/" + $ref + "/bcwms-" + $vn + ".apk"),
+              sha256: $sha,
+              releaseNotes: ("v" + $vn + " — see GitHub Release notes")
+            }' > android/latest.json
       - uses: actions/upload-artifact@v7
         with:
           name: android-release
           path: |
-            android/app/build/outputs/apk/release/*.apk
+            android/bcwms-*.apk
             android/app/build/outputs/bundle/release/*.aab
             android/latest.json
           retention-days: 30

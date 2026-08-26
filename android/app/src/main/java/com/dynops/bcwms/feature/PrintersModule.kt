@@ -26,6 +26,9 @@ import com.dynops.bcwms.scanner.ScanField
 import com.dynops.bcwms.ui.EmptyState
 import com.dynops.bcwms.ui.InfoPill
 import com.dynops.bcwms.ui.StatusText
+import com.dynops.bcwms.ui.WmsGlyph
+import com.dynops.bcwms.ui.WmsIcon
+import com.dynops.bcwms.ui.WmsRefreshLabel
 import kotlinx.coroutines.launch
 import org.json.JSONObject
 
@@ -79,14 +82,18 @@ fun PrintersModule() {
     LaunchedEffect(Unit) { load() }
 
     Column(Modifier.fillMaxSize().padding(12.dp)) {
-        Text("🖨 Yazıcılar", fontWeight = FontWeight.Bold, fontSize = 18.sp)
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            WmsIcon(WmsGlyph.PRINTER, MaterialTheme.colorScheme.primary, Modifier.size(24.dp))
+            Spacer(Modifier.width(8.dp))
+            Text("Yazıcılar", fontWeight = FontWeight.Bold, fontSize = 18.sp)
+        }
         Text(
             "Windows ajanının buluta eşitlediği yazıcılardan bu cihaz için etiket ve belge varsayılanını seçin.",
             fontSize = 12.sp, color = Color.Gray
         )
         Spacer(Modifier.height(8.dp))
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Button(onClick = { load() }, enabled = !loading) { Text(if (loading) "..." else "🔄 Yenile") }
+            Button(onClick = { load() }, enabled = !loading) { WmsRefreshLabel(loading) }
         }
         Spacer(Modifier.height(6.dp))
         StatusText(status)
@@ -98,7 +105,11 @@ fun PrintersModule() {
                     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
                 ) {
                     Column(Modifier.padding(12.dp)) {
-                        Text("📷 Barkod Baskı Testi", fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            WmsIcon(WmsGlyph.SCAN, MaterialTheme.colorScheme.primary, Modifier.size(22.dp))
+                            Spacer(Modifier.width(8.dp))
+                            Text("Barkod Baskı Testi", fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                        }
                         Text(
                             "Barkodu okutun; okunan numara aşağıda görünür ve seçili belge yazıcısına PDF olarak basılır.",
                             fontSize = 12.sp,

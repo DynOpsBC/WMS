@@ -1,5 +1,6 @@
 package com.dynops.bcwms.ui
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
@@ -9,6 +10,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import org.json.JSONObject
@@ -42,6 +44,75 @@ fun EmptyState(message: String) {
     }
 }
 
+/**
+ * Operasyon listelerinin ortak belge kartı. Uzun kaynak/lokasyon/kullanıcı
+ * bilgilerini telefonda güvenli biçimde iki satıra sınırlar; eski renkli dolgu
+ * yerine beyaz zemin ve ince sınır kullanır.
+ */
+@Composable
+fun OperationDocumentCard(
+    title: String,
+    metadata: String,
+    onClick: () -> Unit,
+    status: String = "",
+    progressPercent: Int? = null,
+) {
+    Card(
+        onClick = onClick,
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+    ) {
+        Column(Modifier.padding(horizontal = 14.dp, vertical = 12.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    title,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f),
+                )
+                if (status.isNotBlank()) {
+                    Spacer(Modifier.width(8.dp))
+                    Surface(
+                        color = MaterialTheme.colorScheme.primaryContainer,
+                        shape = RoundedCornerShape(50),
+                    ) {
+                        Text(
+                            status,
+                            modifier = Modifier.padding(horizontal = 9.dp, vertical = 4.dp),
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.onPrimaryContainer,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
+                }
+            }
+            Spacer(Modifier.height(4.dp))
+            Text(
+                metadata,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+            )
+            progressPercent?.let { percent ->
+                Spacer(Modifier.height(9.dp))
+                LinearProgressIndicator(
+                    progress = { percent.coerceIn(0, 100) / 100f },
+                    modifier = Modifier.fillMaxWidth().height(4.dp).clip(RoundedCornerShape(50)),
+                    color = MaterialTheme.colorScheme.primary,
+                    trackColor = MaterialTheme.colorScheme.surfaceVariant,
+                )
+            }
+        }
+    }
+}
+
 /** Status banner that colour-codes PASS / EMPTY / error text. */
 @Composable
 fun StatusText(status: String) {
@@ -54,7 +125,27 @@ fun StatusText(status: String) {
         visibleStatus.startsWith("HATA") || visibleStatus.startsWith("🔴") || visibleStatus.startsWith("❌") -> palette.danger
         else -> MaterialTheme.colorScheme.onSurfaceVariant
     }
-    Text(visibleStatus, style = MaterialTheme.typography.bodySmall, color = color)
+    Surface(
+        color = color.copy(alpha = 0.10f),
+        shape = RoundedCornerShape(10.dp),
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Row(Modifier.padding(horizontal = 11.dp, vertical = 9.dp), verticalAlignment = Alignment.Top) {
+            val glyph = if (visibleStatus.startsWith("HATA") || visibleStatus.startsWith("BOŞ") || visibleStatus.startsWith("⚠")) {
+                WmsGlyph.WARNING
+            } else {
+                WmsGlyph.QUALITY
+            }
+            WmsIcon(glyph, color, Modifier.size(18.dp))
+            Spacer(Modifier.width(8.dp))
+            Text(
+                visibleStatus,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurface,
+                modifier = Modifier.weight(1f),
+            )
+        }
+    }
 }
 
 /**
@@ -135,30 +226,36 @@ fun InfoPill(
 fun DocHeaderCard(title: String, subtitle: String, badge: String? = null, percent: Int? = null) {
     Card(
         Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(14.dp),
+        shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
     ) {
-        Column(Modifier.padding(14.dp)) {
+        Column(Modifier.padding(16.dp)) {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                 Text(
                     title,
-                    style = MaterialTheme.typography.titleMedium,
+                    style = MaterialTheme.typography.titleLarge,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.onSurface,
                     modifier = Modifier.weight(1f),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
                 )
                 badge?.let {
+                    Spacer(Modifier.width(10.dp))
                     Surface(shape = RoundedCornerShape(50), color = MaterialTheme.colorScheme.primary.copy(alpha = 0.14f)) {
                         Text(
                             it,
-                            Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
-                            style = MaterialTheme.typography.titleMedium,
+                            Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
+                            style = MaterialTheme.typography.labelMedium,
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.primary,
+                            maxLines = 1,
                         )
                     }
                 }
             }
+            Spacer(Modifier.height(6.dp))
             Text(subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             if (percent != null) {
                 Spacer(Modifier.height(8.dp))

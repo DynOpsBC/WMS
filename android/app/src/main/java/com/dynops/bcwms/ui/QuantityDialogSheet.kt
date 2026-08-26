@@ -267,7 +267,7 @@ fun QuantityDialogSheet(
                         onClick = { showAvailableLotLookupContent = true },
                         modifier = Modifier.fillMaxWidth(),
                     ) {
-                        Text("📦 Stoktaki Lotlardan Seç")
+                        WmsActionLabel(WmsGlyph.LICENSE_PLATE, "Stoktaki Lotlardan Seç")
                     }
                 }
                 if (effectiveLotRequired && lot.isBlank()) {
@@ -302,7 +302,7 @@ fun QuantityDialogSheet(
                     onClick = { showSupplierLotLookup = true },
                     modifier = Modifier.fillMaxWidth(),
                 ) {
-                    Text("🔎 Tedarikçi Lotu Lookup")
+                    WmsActionLabel(WmsGlyph.ITEM_SEARCH, "Tedarikçi Lotu Lookup")
                 }
                 if (supplierLotRequired && supplierLot.isBlank()) {
                     Text(

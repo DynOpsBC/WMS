@@ -69,7 +69,9 @@ fun PostingTestModule() {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Button(onClick = { runAll() }, enabled = !running) { Text(if (running) "Çalışıyor..." else "▶ Tüm Postingleri Test Et") }
             Spacer(Modifier.width(8.dp))
-            OutlinedButton(onClick = { load() }, enabled = !running) { Text("🔄") }
+            OutlinedButton(onClick = { load() }, enabled = !running) {
+                WmsIcon(WmsGlyph.ENTRIES, MaterialTheme.colorScheme.primary, Modifier.size(20.dp))
+            }
         }
         Spacer(Modifier.height(6.dp))
         StatusText(status)

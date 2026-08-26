@@ -145,7 +145,7 @@ private fun ConsumptionTab() {
     if (selectedOrderNo == null) {
         val grouped = rows.groupBy { it.optString("prodOrderNo") }.filterKeys { it.isNotBlank() }
         Column(Modifier.fillMaxSize().padding(12.dp)) {
-            Button(onClick = { load() }, enabled = !loading) { Text(if (loading) "..." else "🔄 Yenile") }
+            Button(onClick = { load() }, enabled = !loading) { WmsRefreshLabel(loading) }
             Spacer(Modifier.height(8.dp))
             com.dynops.bcwms.ui.DocSearchBar(value = search, onValueChange = { search = it }, onSearch = { load() }, label = "PÜ no ile ara")
             Spacer(Modifier.height(4.dp))
@@ -205,7 +205,9 @@ private fun ConsumptionTab() {
                     Text(if (loading) "..." else "📦 Pick Et")
                 }
                 Spacer(Modifier.width(8.dp))
-                OutlinedButton(onClick = { load() }, enabled = !loading) { Text("🔄 Yenile") }
+                OutlinedButton(onClick = { load() }, enabled = !loading) {
+                    WmsActionLabel(WmsGlyph.ENTRIES, "Yenile")
+                }
             }
             Spacer(Modifier.height(6.dp))
             OutlinedButton(
@@ -220,7 +222,7 @@ private fun ConsumptionTab() {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text("Bileşenler (${displayRows.size}/${selectedRows.size})", fontWeight = FontWeight.Bold, fontSize = 14.sp)
                 Spacer(Modifier.weight(1f))
-                TextButton(onClick = { showColumns = true }) { Text("⚙ Kolonlar", fontSize = 12.sp) }
+                TextButton(onClick = { showColumns = true }) { WmsActionLabel(WmsGlyph.FIELD_SETTINGS, "Kolonlar") }
             }
             if (scanFilter.isNotBlank()) { ScanFilterChip(scanFilter) { scanFilter = "" }; Spacer(Modifier.height(4.dp)) }
             LineGrid(
@@ -357,7 +359,7 @@ private fun OutputTab() {
     LaunchedEffect(Unit) { load() }
 
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(12.dp)) {
-        Button(onClick = { load() }, enabled = !loading) { Text(if (loading) "..." else "🔄 Yenile") }
+        Button(onClick = { load() }, enabled = !loading) { WmsRefreshLabel(loading) }
         Spacer(Modifier.height(8.dp))
         com.dynops.bcwms.ui.DocSearchBar(value = search, onValueChange = { search = it }, onSearch = { load() }, label = "PÜ no ile ara")
         Spacer(Modifier.height(4.dp))
@@ -366,7 +368,7 @@ private fun OutputTab() {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text("Rota Satırları (${rows.size})", fontWeight = FontWeight.Bold, fontSize = 14.sp)
             Spacer(Modifier.weight(1f))
-            TextButton(onClick = { showColumns = true }) { Text("⚙ Kolonlar", fontSize = 12.sp) }
+            TextButton(onClick = { showColumns = true }) { WmsActionLabel(WmsGlyph.FIELD_SETTINGS, "Kolonlar") }
         }
         LineGrid(
             defs = GridColumns.output,
@@ -481,7 +483,7 @@ fun AssemblyModule() {
     if (sel != null) { AssemblyDocument(no = sel, onBack = { selected = null; load() }); return }
 
     Column(Modifier.fillMaxSize().padding(12.dp)) {
-        Button(onClick = { load() }, enabled = !loading) { Text(if (loading) "..." else "🔄 Yenile") }
+        Button(onClick = { load() }, enabled = !loading) { WmsRefreshLabel(loading) }
         Spacer(Modifier.height(8.dp))
         com.dynops.bcwms.ui.DocSearchBar(value = search, onValueChange = { search = it }, onSearch = { load() }, label = "Montaj no ile ara")
         Spacer(Modifier.height(4.dp))
@@ -588,7 +590,7 @@ private fun AssemblyDocument(no: String, onBack: () -> Unit) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text("Bileşenler (${displayLines.size}/${lines.size})", fontWeight = FontWeight.Bold, fontSize = 14.sp)
                 Spacer(Modifier.weight(1f))
-                TextButton(onClick = { showColumns = true }) { Text("⚙ Kolonlar", fontSize = 12.sp) }
+                TextButton(onClick = { showColumns = true }) { WmsActionLabel(WmsGlyph.FIELD_SETTINGS, "Kolonlar") }
             }
             if (scanFilter.isNotBlank()) { ScanFilterChip(scanFilter) { scanFilter = "" }; Spacer(Modifier.height(4.dp)) }
             LineGrid(

@@ -20,18 +20,18 @@ import androidx.compose.ui.unit.sp
  */
 
 // Iris brand
-private val IrisLight = Color(0xFF6C5CE7)
+private val IrisLight = Color(0xFF4F46E5)
 private val IrisDark = Color(0xFF8B7DD8)
 
 // Light tokens
-private val BackgroundLight = Color(0xFFFAF8F3)
+private val BackgroundLight = Color(0xFFF6F7F9)
 private val SurfaceLight = Color(0xFFFFFFFF)
-private val SurfaceVariantLight = Color(0xFFF3F4F8)
-private val OnSurfaceLight = Color(0xFF1A1A2E)
-private val OnSurfaceVariantLight = Color(0xFF6B7280)
-private val AccentBgLight = Color(0xFFF5F1FF)
-private val AccentFgLight = Color(0xFF6C5CE7)
-private val OutlineLight = Color(0xFFE5E7EB)
+private val SurfaceVariantLight = Color(0xFFEEF1F5)
+private val OnSurfaceLight = Color(0xFF18212F)
+private val OnSurfaceVariantLight = Color(0xFF667085)
+private val AccentBgLight = Color(0xFFEEF2FF)
+private val AccentFgLight = Color(0xFF4338CA)
+private val OutlineLight = Color(0xFFD8DEE8)
 private val ErrorLight = Color(0xFFE74C3C)
 private val OnErrorLight = Color(0xFFFFFFFF)
 

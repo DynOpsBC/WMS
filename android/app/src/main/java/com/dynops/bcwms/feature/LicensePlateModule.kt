@@ -69,9 +69,11 @@ fun LicensePlateModule() {
 
     Column(Modifier.fillMaxSize().padding(12.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Button(onClick = { loadList() }, enabled = !loading) { Text(if (loading) "..." else "🔄 Yenile") }
+            Button(onClick = { loadList() }, enabled = !loading) { WmsRefreshLabel(loading) }
             Spacer(Modifier.width(8.dp))
-            Button(onClick = { showBuild = true }, enabled = !loading) { Text("➕ LP Oluştur") }
+            Button(onClick = { showBuild = true }, enabled = !loading) {
+                WmsActionLabel(WmsGlyph.LICENSE_PLATE, "LP Oluştur")
+            }
         }
         Spacer(Modifier.height(8.dp))
         com.dynops.bcwms.ui.DocSearchBar(value = search, onValueChange = { search = it }, onSearch = { loadList() }, label = "LP no ile ara")
@@ -80,15 +82,21 @@ fun LicensePlateModule() {
         Spacer(Modifier.height(8.dp))
         LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             items(rows) { lp ->
-                Card(onClick = { selected = lp.optString("no") }, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(10.dp)) {
-                    Column(Modifier.padding(12.dp)) {
+                Card(
+                    onClick = { selected = lp.optString("no") },
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(16.dp),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+                ) {
+                    Column(Modifier.padding(14.dp)) {
                         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                             Text(lp.optString("no"), fontWeight = FontWeight.Bold)
                             StatusBadge(lp.optString("status"))
                         }
-                        Text("${lp.optString("templateCode")} · ${lp.optString("locationCode")}/${lp.optString("binCode")}", fontSize = 12.sp, color = Color.Gray)
+                        Text("${lp.optString("templateCode")} · ${lp.optString("locationCode")}/${lp.optString("binCode")}", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         if (lp.optString("sscc").isNotBlank())
-                            Text("SSCC: ${lp.optString("sscc")}", fontSize = 11.sp, color = Color.Gray)
+                            Text("SSCC: ${lp.optString("sscc")}", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }
             }
@@ -112,14 +120,14 @@ internal fun lpStatusLabel(status: String): String = when (status) {
 @Composable
 private fun StatusBadge(status: String) {
     val (bg, fg) = when (status) {
-        "Built" -> Color(0xFFE3F2FD) to Color(0xFF1565C0)
-        "Assigned" -> Color(0xFFFFF3E0) to Color(0xFFEF6C00)
-        "Used" -> Color(0xFFE8F5E9) to Color(0xFF2E7D32)
-        "Unbuilt" -> Color(0xFFFFEBEE) to Color(0xFFC62828)
-        else -> Color(0xFFF5F5F5) to Color(0xFF616161)
+        "Built" -> Color(0xFFEFF4FF) to Color(0xFF3448A5)
+        "Assigned" -> Color(0xFFFFF4E5) to Color(0xFF9A5B00)
+        "Used" -> Color(0xFFEAF7EF) to Color(0xFF216E43)
+        "Unbuilt" -> Color(0xFFFFECEC) to Color(0xFFA82B2B)
+        else -> Color(0xFFF0F2F5) to Color(0xFF536070)
     }
-    Surface(color = bg, shape = RoundedCornerShape(6.dp)) {
-        Text(lpStatusLabel(status), Modifier.padding(horizontal = 8.dp, vertical = 2.dp), color = fg, fontSize = 11.sp, fontWeight = FontWeight.Medium)
+    Surface(color = bg, shape = RoundedCornerShape(50)) {
+        Text(lpStatusLabel(status), Modifier.padding(horizontal = 10.dp, vertical = 5.dp), color = fg, fontSize = 11.sp, fontWeight = FontWeight.Bold)
     }
 }
 
@@ -378,74 +386,133 @@ private fun LpDocument(lpNo: String, onBack: () -> Unit) {
                 Button(
                     onClick = { action("release", "{}", "LP serbest bırakıldı — yeniden kullanılabilir") },
                     enabled = !busy, modifier = Modifier.fillMaxWidth().height(48.dp),
-                ) { Text(if (isTote) "♻ Tote'u Serbest Bırak" else "Serbest Bırak", fontWeight = FontWeight.SemiBold) }
+                ) { WmsActionLabel(WmsGlyph.LICENSE_PLATE, if (isTote) "Tote'u Serbest Bırak" else "Serbest Bırak") }
             }
             Spacer(Modifier.height(6.dp))
             Text("Satırlar (${lines.size})", fontWeight = FontWeight.Bold, fontSize = 14.sp)
-            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Spacer(Modifier.height(8.dp))
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 lines.forEach { ln ->
-                    Card(Modifier.fillMaxWidth()) {
-                        Column(Modifier.padding(10.dp)) {
-                            Text("${ln.optString("itemNo")} × ${ln.optDouble("quantity")}", fontWeight = FontWeight.Medium)
+                    Card(
+                        Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(14.dp),
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+                    ) {
+                        Row(Modifier.padding(13.dp), verticalAlignment = Alignment.CenterVertically) {
+                            WmsIconBadge(WmsGlyph.LICENSE_PLATE, MaterialTheme.colorScheme.primary, size = 40.dp, iconSize = 22.dp)
+                            Spacer(Modifier.width(11.dp))
+                            Column(Modifier.weight(1f)) {
+                                Text(ln.optString("itemNo"), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                                Text(
+                                    "${ln.optDouble("quantity")} ${ln.optString("unitOfMeasure")}".trim(),
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = MaterialTheme.colorScheme.primary,
+                                    fontWeight = FontWeight.Bold,
+                                )
                             val extra = listOfNotNull(
                                 ln.optString("sourceBinCode").takeIf { it.isNotBlank() && it != "null" }?.let { "Kaynak raf: $it" },
                                 ln.optString("lotNo").takeIf { it.isNotBlank() }?.let { "Lot $it" },
                                 ln.optString("serialNo").takeIf { it.isNotBlank() }?.let { "Seri $it" },
-                                ln.optString("unitOfMeasure").takeIf { it.isNotBlank() }
                             ).joinToString(" · ")
-                            if (extra.isNotBlank()) Text(extra, fontSize = 11.sp, color = Color.Gray)
+                                if (extra.isNotBlank()) Text(extra, fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
                         }
                     }
                 }
-                if (lines.isEmpty() && !busy) EmptyState("Henüz satır yok. ➕ ile item ekleyin.")
+                if (lines.isEmpty() && !busy) EmptyState("Henüz satır yok. Satır Ekle düğmesiyle ürün ekleyin.")
             }
         }
 
-        BottomActionBar {
-            Button(onClick = { showAddLine = true }, enabled = !busy && canEdit, modifier = Modifier.weight(1f)) { Text("➕ Satır") }
-            Button(onClick = {
-                val payload = JSONObject().apply {
-                    put("printLabel", true)
-                    put("printerId", getDefaultPrinter(context))
-                }.toString()
-                action("stopToPrinter", payload, "LP tamamlandı")
-            }, enabled = !busy && canEdit && lines.isNotEmpty(), modifier = Modifier.weight(1f)) { Text("⏹ Tamamla") }
-            OutlinedButton(onClick = { showTransfer = true }, enabled = !busy && canTransfer, modifier = Modifier.weight(1f)) { Text("Transfer") }
-        }
-        BottomActionBar {
-            OutlinedButton(
-                onClick = {
-                    // LP QR is an A4 PDF document. Route it to the Windows
-                    // document printer selected on the Printers screen.
-                    val defaultPrinter = getDefaultPrinter(context, PRINTER_USAGE_DOCUMENT)
-                    val payload = JSONObject().apply {
-                        put("printerId", defaultPrinter)
-                        put("copies", 1)
-                    }.toString()
-                    action(
-                        "printDocument",
-                        payload,
-                        if (defaultPrinter.isBlank()) "LP QR belgesi varsayılan yazıcıya gönderildi" else "LP QR belgesi $defaultPrinter yazıcısına gönderildi",
-                        requiresCompleteLines = false,
-                    )
-                },
-                enabled = !busy && headerLoaded,
-                modifier = Modifier.weight(1f),
-            ) { Text("🖨 QR Yazdır") }
-            OutlinedButton(onClick = { showPartial = true }, enabled = !busy && canPartiallyUse, modifier = Modifier.weight(1f)) { Text("Kısmi") }
-            when {
-                canDelete -> OutlinedButton(
-                    onClick = { showDeleteConfirm = true },
-                    enabled = !busy,
-                    modifier = Modifier.weight(1f),
-                    colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error),
-                ) { Text("🗑 Sil") }
-                canUnbuild -> OutlinedButton(
-                    onClick = { showUnbuildConfirm = true },
-                    enabled = !busy,
-                    modifier = Modifier.weight(1f),
-                ) { Text("Boz") }
-                else -> Spacer(Modifier.weight(1f))
+        Surface(
+            tonalElevation = 2.dp,
+            shadowElevation = 10.dp,
+            color = MaterialTheme.colorScheme.surface,
+        ) {
+            Column(
+                Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 10.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                // Açık LP'de önce ürün eklenir, iş bitince tek ve belirgin ana
+                // eylemle tamamlanır. Geçersiz eylemler dar gri düğme olarak
+                // gösterilmez; yalnız kullanılabilen seçenekler görünür.
+                if (canEdit) {
+                    OutlinedButton(
+                        onClick = { showAddLine = true },
+                        enabled = !busy,
+                        modifier = Modifier.fillMaxWidth().height(52.dp),
+                        shape = RoundedCornerShape(14.dp),
+                    ) { WmsActionLabel(WmsGlyph.LICENSE_PLATE, "Satır Ekle") }
+                    Button(
+                        onClick = {
+                            val payload = JSONObject().apply {
+                                put("printLabel", true)
+                                put("printerId", getDefaultPrinter(context))
+                            }.toString()
+                            action("stopToPrinter", payload, "LP tamamlandı")
+                        },
+                        enabled = !busy && lines.isNotEmpty(),
+                        modifier = Modifier.fillMaxWidth().height(56.dp),
+                        shape = RoundedCornerShape(14.dp),
+                    ) { WmsActionLabel(WmsGlyph.QUALITY, "LP'yi Tamamla") }
+                }
+
+                if (canTransfer || canPartiallyUse) {
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        if (canTransfer) {
+                            OutlinedButton(
+                                onClick = { showTransfer = true },
+                                enabled = !busy,
+                                modifier = Modifier.weight(1f).height(52.dp),
+                                shape = RoundedCornerShape(14.dp),
+                            ) { WmsActionLabel(WmsGlyph.AD_HOC, "Transfer") }
+                        }
+                        if (canPartiallyUse) {
+                            OutlinedButton(
+                                onClick = { showPartial = true },
+                                enabled = !busy,
+                                modifier = Modifier.weight(1f).height(52.dp),
+                                shape = RoundedCornerShape(14.dp),
+                            ) { WmsActionLabel(WmsGlyph.PACKING, "Kısmi İşlem") }
+                        }
+                    }
+                }
+
+                OutlinedButton(
+                    onClick = {
+                        val defaultPrinter = getDefaultPrinter(context, PRINTER_USAGE_DOCUMENT)
+                        val payload = JSONObject().apply {
+                            put("printerId", defaultPrinter)
+                            put("copies", 1)
+                        }.toString()
+                        action(
+                            "printDocument",
+                            payload,
+                            if (defaultPrinter.isBlank()) "LP QR belgesi varsayılan yazıcıya gönderildi" else "LP QR belgesi $defaultPrinter yazıcısına gönderildi",
+                            requiresCompleteLines = false,
+                        )
+                    },
+                    enabled = !busy && headerLoaded,
+                    modifier = Modifier.fillMaxWidth().height(50.dp),
+                    shape = RoundedCornerShape(14.dp),
+                ) { WmsActionLabel(WmsGlyph.PRINTER, "QR Etiketini Yazdır") }
+
+                when {
+                    canDelete -> OutlinedButton(
+                        onClick = { showDeleteConfirm = true },
+                        enabled = !busy,
+                        modifier = Modifier.fillMaxWidth().height(50.dp),
+                        shape = RoundedCornerShape(14.dp),
+                        colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error),
+                    ) { WmsActionLabel(WmsGlyph.WARNING, "Boş LP'yi Sil") }
+                    canUnbuild -> OutlinedButton(
+                        onClick = { showUnbuildConfirm = true },
+                        enabled = !busy,
+                        modifier = Modifier.fillMaxWidth().height(50.dp),
+                        shape = RoundedCornerShape(14.dp),
+                        colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error),
+                    ) { WmsActionLabel(WmsGlyph.WARNING, "LP'yi Boz") }
+                }
             }
         }
     }
