@@ -23,8 +23,8 @@ android {
     applicationId = "com.dynops.bcwms"
     minSdk = 26
     targetSdk = 35
-        versionCode = 1415
-        versionName = "1.14.15"
+    versionCode = 1434
+    versionName = "1.14.34"
     manifestPlaceholders["appLabel"] = "BCWMS"
     buildConfigField("String", "UPDATE_BASE_URL", "\"https://app.bcwms.dynops.com\"")
   }
@@ -45,8 +45,8 @@ android {
     create("bade") {
       dimension = "tenant"
       applicationIdSuffix = ".bade"
-            versionCode = 1429
-            versionName = "1.14.29"
+      versionCode = 1434
+      versionName = "1.14.34"
       versionNameSuffix = "-bade"
       manifestPlaceholders["appLabel"] = "BCWMS BADE"
       buildConfigField("String", "BC_CLIENT_ID", "\"3c4ba25a-89f4-41df-acf8-ebab8cb4809b\"")

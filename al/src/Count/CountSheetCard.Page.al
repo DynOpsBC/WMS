@@ -13,10 +13,11 @@ page 72075 "DOPSWHS Count Sheet Card"
             group(General)
             {
                 Caption = 'General';
-                field("No."; Rec."No.") { ApplicationArea = All; }
-                field("Location Code"; Rec."Location Code") { ApplicationArea = All; }
-                field(Mode; Rec.Mode) { ApplicationArea = All; }
-                field(Status; Rec.Status) { ApplicationArea = All; }
+                field("No."; Rec."No.") { ApplicationArea = All; Editable = HeaderEditable; }
+                field("Location Code"; Rec."Location Code") { ApplicationArea = All; Editable = HeaderEditable; }
+                field(Mode; Rec.Mode) { ApplicationArea = All; Editable = HeaderEditable; }
+                field(Status; Rec.Status) { ApplicationArea = All; Editable = HeaderEditable; }
+                field("V2 Scan Mode"; Rec."V2 Scan Mode") { ApplicationArea = All; }
             }
             group(Progress)
             {
@@ -53,11 +54,13 @@ page 72075 "DOPSWHS Count Sheet Card"
             {
                 ApplicationArea = All;
                 SubPageLink = "Sheet No." = field("No.");
+                Editable = HeaderEditable;
             }
             part(Lines; "DOPSWHS Count Sheet Line Part")
             {
                 ApplicationArea = All;
                 SubPageLink = "Sheet No." = field("No.");
+                Editable = HeaderEditable;
             }
         }
     }
@@ -71,6 +74,7 @@ page 72075 "DOPSWHS Count Sheet Card"
                 Caption = 'Satırları Üret';
                 ApplicationArea = All;
                 Image = CalculateLines;
+                Enabled = HeaderEditable;
                 trigger OnAction()
                 var
                     CountMgmt: Codeunit "DOPSWHS Count Mgmt";
@@ -86,6 +90,7 @@ page 72075 "DOPSWHS Count Sheet Card"
                 Caption = 'Post';
                 ApplicationArea = All;
                 Image = Post;
+                Enabled = HeaderEditable;
                 trigger OnAction()
                 var
                     CountMgmt: Codeunit "DOPSWHS Count Mgmt";
@@ -114,6 +119,7 @@ page 72075 "DOPSWHS Count Sheet Card"
     var
         CountLine: Record "DOPSWHS Count Sheet Line";
     begin
+        HeaderEditable := Rec.Status <> Rec.Status::Posted;
         TotalLines := 0;
         CountedLines := 0;
         VarianceLines := 0;
@@ -145,4 +151,5 @@ page 72075 "DOPSWHS Count Sheet Card"
         VarianceLines: Integer;
         RemainingStyle: Text;
         VarianceLinesStyle: Text;
+        HeaderEditable: Boolean;
 }

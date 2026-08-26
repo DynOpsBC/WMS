@@ -3,6 +3,7 @@ package com.dynops.bcwms
 import com.dynops.bcwms.feature.isPickContainerStatusUsable
 import com.dynops.bcwms.feature.canMutateAssignedPick
 import com.dynops.bcwms.feature.canRegisterAssignedPick
+import com.dynops.bcwms.feature.pickReadyToRegister
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -47,8 +48,19 @@ class PickConfirmationPolicyTest {
 
     @Test
     fun `pick register waits for every line write`() {
-        assertTrue(canRegisterAssignedPick("MERve", "merve", allCollected = true, inFlightLineCount = 0))
-        assertFalse(canRegisterAssignedPick("MERve", "merve", allCollected = true, inFlightLineCount = 1))
-        assertFalse(canRegisterAssignedPick("MERve", "merve", allCollected = false, inFlightLineCount = 0))
+        assertTrue(canRegisterAssignedPick("MERve", "merve", readyToRegister = true, inFlightLineCount = 0))
+        assertFalse(canRegisterAssignedPick("MERve", "merve", readyToRegister = true, inFlightLineCount = 1))
+        assertFalse(canRegisterAssignedPick("MERve", "merve", readyToRegister = false, inFlightLineCount = 0))
+    }
+
+    @Test
+    fun `normal pick can register a partial collected quantity`() {
+        assertTrue(pickReadyToRegister("Single", listOf(4.0, 0.0), allCollected = false))
+    }
+
+    @Test
+    fun `multi pick still requires every line`() {
+        assertFalse(pickReadyToRegister("Multi", listOf(4.0, 0.0), allCollected = false))
+        assertTrue(pickReadyToRegister("Multi", listOf(4.0, 2.0), allCollected = true))
     }
 }

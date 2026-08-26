@@ -128,11 +128,24 @@ page 72088 "DOPSWHS LP API"
     end;
 
     [ServiceEnabled]
-    procedure usePartial(action: Enum "DOPSWHS Partial Use Action"; qty: Decimal; lineNo: Integer)
+    procedure usePartial(action: Text; qty: Decimal; lineNo: Integer)
     var
         LPMgt: Codeunit "DOPSWHS LP Management";
+        PartialAction: Enum "DOPSWHS Partial Use Action";
     begin
-        LPMgt.SplitForPartialUse(Rec, action, qty, lineNo);
+        case UpperCase(DelChr(action, '=', ' _-')) of
+            'CREATENEWLP':
+                PartialAction := PartialAction::CreateNewLP;
+            'REMOVEEXCESS':
+                PartialAction := PartialAction::RemoveExcess;
+            'REMOVEUSEDPORTION':
+                PartialAction := PartialAction::RemoveUsedPortion;
+            'UNBUILD':
+                PartialAction := PartialAction::Unbuild;
+            else
+                Error('Geçersiz kısmi kullanım işlemi: %1.', action);
+        end;
+        LPMgt.SplitForPartialUse(Rec, PartialAction, qty, lineNo);
     end;
 
     [ServiceEnabled]
@@ -208,8 +221,32 @@ page 72088 "DOPSWHS LP API"
     procedure stopToPrinter(printLabel: Boolean; printerId: Code[50])
     var
         LPMgt: Codeunit "DOPSWHS LP Management";
+        Telemetry: Codeunit "DOPSWHS Telemetry";
     begin
-        LPMgt.Stop(Rec, printLabel, printerId);
+        // LP completion is the primary warehouse transaction. Printing is
+        // best-effort and must not roll the LP back to Open when a printer is
+        // missing/offline or the print channel is temporarily unavailable.
+        LPMgt.Stop(Rec, false);
+        if printLabel then begin
+            ClearLastError();
+            if not TryPrintLabels(Rec, printerId) then
+                Telemetry.LogWarning(
+                    'Print.LPLabelFailed',
+                    CopyStr(
+                        StrSubstNo(
+                            'LP %1 completed, but its combined MTE/LP label could not be printed: %2',
+                            Rec."No.", GetLastErrorText()),
+                        1, 250),
+                    '');
+        end;
+    end;
+
+    [TryFunction]
+    local procedure TryPrintLabels(var LP: Record "DOPSWHS LP Header"; PrinterId: Code[50])
+    var
+        Dispatcher: Codeunit "DOPSWHS Print Dispatcher";
+    begin
+        Dispatcher.PrintPalletItemLabels(LP, PrinterId, 1);
     end;
 
     local procedure ParseLines(LinesJson: Text; var Lines: List of [Integer]; var Quantities: Dictionary of [Integer, Decimal])

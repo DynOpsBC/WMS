@@ -57,4 +57,14 @@ class BcApiPaginationTest {
             assertEquals(false, BcApi.isRetryableConnectionFailure(BcApi.ApiResult(false, code, "")))
         }
     }
+
+    @Test
+    fun `mutation validation errors are definite but transport failures are ambiguous`() {
+        listOf(-1, 408, 425, 429, 500, 503).forEach { code ->
+            assertEquals(true, BcApi.isAmbiguousMutationFailure(BcApi.ApiResult(false, code, "")))
+        }
+        listOf(400, 401, 403, 404, 405, 409, 422).forEach { code ->
+            assertEquals(false, BcApi.isAmbiguousMutationFailure(BcApi.ApiResult(false, code, "")))
+        }
+    }
 }

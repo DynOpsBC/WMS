@@ -10,6 +10,7 @@ codeunit 72133 "DOPSWHS Receipt With LP Tests"
         WhseReceiptLine: Record "Warehouse Receipt Line";
         PostedWhseReceiptLine: Record "Posted Whse. Receipt Line";
         LP: Record "DOPSWHS LP Header";
+        LPLine: Record "DOPSWHS LP Line";
         ReceiptMgmt: Codeunit "DOPSWHS Receipt Mgmt";
         LpNo: Code[20];
     begin
@@ -20,6 +21,11 @@ codeunit 72133 "DOPSWHS Receipt With LP Tests"
         ReceiptMgmt.ConfirmLine(WhseReceiptLine, 10, '', '', 0D, LpNo, 'RECEIVE');
         ReceiptMgmt.ConfirmLine(WhseReceiptLine, 10, '', '', 0D, LpNo, 'RECEIVE');
         ReceiptMgmt.ConfirmLine(WhseReceiptLine, 10, '', '', 0D, LpNo, 'RECEIVE');
+        LPLine.SetRange("LP No.", LpNo);
+        LPLine.FindFirst();
+        Assert.AreEqual(30, LPLine."Source Document Quantity", 'LP line must retain the total receipt-line quantity for MTE printing.');
+        Assert.AreEqual(10, LPLine.Quantity, 'LP line must retain this pallet scan quantity independently.');
+        Assert.AreEqual(WhseReceiptLine."No.", LPLine."Source Document No.", 'LP line must retain its receipt reference.');
         ReceiptMgmt.StopLP(WhseReceiptHeader, LpNo, false);
         LP.Get(LpNo);
         Assert.AreEqual(Format(LP.Status::Built), Format(LP.Status), 'Stopped LP must be built.');

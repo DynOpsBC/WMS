@@ -47,10 +47,20 @@ internal fun canMutateAssignedPick(assignedUserId: String, localUserId: String):
 internal fun canRegisterAssignedPick(
     assignedUserId: String,
     localUserId: String,
-    allCollected: Boolean,
+    readyToRegister: Boolean,
     inFlightLineCount: Int,
 ): Boolean = canMutateAssignedPick(assignedUserId, localUserId) &&
-    allCollected && inFlightLineCount == 0
+    readyToRegister && inFlightLineCount == 0
+
+internal fun pickReadyToRegister(
+    pickMode: String,
+    qtyToHandle: List<Double>,
+    allCollected: Boolean,
+): Boolean = if (pickMode.equals("Multi", ignoreCase = true)) {
+    allCollected
+} else {
+    qtyToHandle.any { it > 0.0 }
+}
 
 /**
  * İyimser UI için satırın kopyasını "toplandı" durumuyla döndürür.

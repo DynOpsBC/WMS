@@ -166,10 +166,26 @@ codeunit 72043 "DOPSWHS Receipt Mgmt"
     var
         LP: Record "DOPSWHS LP Header";
         LPMgt: Codeunit "DOPSWHS LP Management";
+        Telemetry: Codeunit "DOPSWHS Telemetry";
     begin
         Log('Receipt.StopLP', WhseReceiptHeader."No.", WhseReceiptHeader."Assigned User ID");
         LP.Get(LpNo);
-        LPMgt.Stop(LP, PrintLabel, PrinterId);
+        // Closing the LP is the warehouse transaction; the combined MTE/LP label
+        // is best-effort output and must not reopen the LP when a printer is
+        // unavailable. No mobile/API contract changes are required.
+        LPMgt.Stop(LP, false, PrinterId);
+        if PrintLabel then begin
+            ClearLastError();
+            if not TryPrintCombinedMteLabel(LP, PrinterId) then
+                Telemetry.LogWarning(
+                    'Print.ReceiptLpLabelsFailed',
+                    CopyStr(
+                        StrSubstNo(
+                            'Receipt LP %1 completed, but its combined MTE/LP label could not be printed: %2',
+                            LP."No.", GetLastErrorText()),
+                        1, 250),
+                    WhseReceiptHeader."Assigned User ID");
+        end;
     end;
 
     /// <summary>Geriye dönük imza: operatör kimliği belgenin atamasından okunur.</summary>
@@ -256,6 +272,7 @@ codeunit 72043 "DOPSWHS Receipt Mgmt"
         if LicensePlateNo <> '' then begin
             LP.Get(LicensePlateNo);
             LPMgt.AddLine(LP, WhseReceiptLine."Item No.", WhseReceiptLine."Unit of Measure Code", QtyToReceive, LotNo, SerialNo, ExpiryDate);
+            StampReceiptSourceOnLastLpLine(LicensePlateNo, WhseReceiptLine);
 
             // Stamp the Whse Receipt Header with this LP so downstream posting can carry it
             // onto Posted Whse Receipt + Item Ledger Entry. Idempotent — only first LP wins.
@@ -265,6 +282,30 @@ codeunit 72043 "DOPSWHS Receipt Mgmt"
                     WhseReceiptHeader.Modify(true);
                 end;
         end;
+    end;
+
+    local procedure StampReceiptSourceOnLastLpLine(LpNo: Code[20]; WhseReceiptLine: Record "Warehouse Receipt Line")
+    var
+        LPLine: Record "DOPSWHS LP Line";
+    begin
+        LPLine.SetRange("LP No.", LpNo);
+        if not LPLine.FindLast() then
+            Error('%1 LP satırı oluşturulamadı.', LpNo);
+        LPLine."Source Document Type" := LPLine."Source Document Type"::WhseReceipt;
+        LPLine."Source Document No." := WhseReceiptLine."No.";
+        LPLine."Source Document Line No." := WhseReceiptLine."Line No.";
+        // Quantity is the original receipt-line total (for example 500), while
+        // LP Line.Quantity remains this pallet's amount (for example 250).
+        LPLine."Source Document Quantity" := WhseReceiptLine.Quantity;
+        LPLine.Modify(true);
+    end;
+
+    [TryFunction]
+    local procedure TryPrintCombinedMteLabel(var LP: Record "DOPSWHS LP Header"; PrinterId: Code[50])
+    var
+        Dispatcher: Codeunit "DOPSWHS Print Dispatcher";
+    begin
+        Dispatcher.PrintPalletItemLabels(LP, PrinterId, 1);
     end;
 
     /// <summary>

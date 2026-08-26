@@ -29,6 +29,51 @@ codeunit 72111 "DOPSWHS LP Build Tests"
     end;
 
     [Test]
+    procedure ConsecutiveStopsCreateDifferentSsccValues()
+    var
+        FirstLP: Record "DOPSWHS LP Header";
+        SecondLP: Record "DOPSWHS LP Header";
+        LPMgt: Codeunit "DOPSWHS LP Management";
+        Assert: Codeunit "Library Assert";
+    begin
+        Seed();
+        BuildOpenLP(FirstLP);
+        BuildOpenLP(SecondLP);
+
+        LPMgt.Stop(FirstLP, false);
+        LPMgt.Stop(SecondLP, false);
+
+        Assert.AreNotEqual('', FirstLP.SSCC, 'The first LP must receive an SSCC.');
+        Assert.AreNotEqual('', SecondLP.SSCC, 'The second LP must receive an SSCC.');
+        Assert.AreNotEqual(FirstLP.SSCC, SecondLP.SSCC, 'Consecutive LPs must never share an SSCC.');
+    end;
+
+    [Test]
+    procedure StopCreatesMissingSsccSeriesOnDemand()
+    var
+        LP: Record "DOPSWHS LP Header";
+        Setup: Record "DOPSWHS Setup";
+        NoSeries: Record "No. Series";
+        LPMgt: Codeunit "DOPSWHS LP Management";
+        Assert: Codeunit "Library Assert";
+    begin
+        Seed();
+        Setup.Get('');
+        Setup."SSCC No. Series" := '';
+        Setup.Modify(true);
+        if NoSeries.Get('AWMS-SSCC') then
+            NoSeries.Delete(true);
+
+        BuildOpenLP(LP);
+        LPMgt.Stop(LP, false);
+
+        Setup.Get('');
+        Assert.AreEqual(LP.Status::Built, LP.Status, 'Stop should complete when SSCC setup was initially missing.');
+        Assert.AreNotEqual('', LP.SSCC, 'Stop should generate an SSCC.');
+        Assert.AreEqual('AWMS-SSCC', Setup."SSCC No. Series", 'Default SSCC series should be assigned automatically.');
+    end;
+
+    [Test]
     procedure ReopenTransitionsBuiltToOpen()
     var
         LP: Record "DOPSWHS LP Header";

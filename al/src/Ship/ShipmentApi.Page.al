@@ -20,7 +20,7 @@ page 72093 "DOPSWHS Shipment API"
             {
                 field(no; Rec."No.") { Caption = 'no'; }
                 field(locationCode; Rec."Location Code") { Caption = 'locationCode'; }
-                field(assignedUserId; Rec."Assigned User ID") { Caption = 'assignedUserId'; }
+                field(assignedUserId; Rec."Assigned User ID") { Caption = 'assignedUserId'; Editable = false; }
                 field(status; Rec.Status) { Caption = 'status'; }
                 field(shipmentDate; Rec."Shipment Date") { Caption = 'shipmentDate'; }
                 field(sourceNo; SourceNo) { Caption = 'sourceNo'; }
@@ -74,6 +74,37 @@ page 72093 "DOPSWHS Shipment API"
         ShipmentMgmt: Codeunit "DOPSWHS Shipment Mgmt";
     begin
         exit(ShipmentMgmt.CreatePick(Rec));
+    end;
+
+    [ServiceEnabled]
+    procedure createPickFor(userId: Code[50]): Code[20]
+    var
+        ShipmentMgmt: Codeunit "DOPSWHS Shipment Mgmt";
+    begin
+        exit(ShipmentMgmt.CreatePickFor(Rec, userId));
+    end;
+
+    [ServiceEnabled]
+    procedure assignToUser(userId: Code[50])
+    var
+        LockedShipment: Record "Warehouse Shipment Header";
+    begin
+        if userId = '' then
+            Error('WMS kullanıcı kimliği boş olamaz. Terminal oturumunu yenileyin.');
+
+        LockedShipment.LockTable();
+        if not LockedShipment.Get(Rec."No.") then
+            Error('Sevkiyat belgesi %1 artık bulunamıyor. Listeyi yenileyin.', Rec."No.");
+        if (LockedShipment."Assigned User ID" <> '') and
+           (LockedShipment."Assigned User ID" <> userId)
+        then
+            Error('Sevkiyat belgesi %1, %2 kullanıcısına atanmış.', LockedShipment."No.", LockedShipment."Assigned User ID");
+
+        if LockedShipment."Assigned User ID" <> userId then begin
+            LockedShipment."Assigned User ID" := CopyStr(userId, 1, MaxStrLen(LockedShipment."Assigned User ID"));
+            LockedShipment.Modify(true);
+        end;
+        Rec := LockedShipment;
     end;
 
     var

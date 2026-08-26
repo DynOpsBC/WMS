@@ -1206,6 +1206,11 @@ private fun WhsePickDocument(no: String, onBack: () -> Unit) {
         canMutateAssignedDocument(assignedTo, myUserId)
     val takeLines = lines.filter { !BcEnum.decodeOData(it.optString("actionType")).equals("Place", ignoreCase = true) }
     val allCollected = takeLines.isNotEmpty() && takeLines.all { lineDone(it, LineModule.PICK) }
+    val readyToRegister = pickReadyToRegister(
+        pickMode = BcEnum.decodeOData(h?.optString("pickMode").orEmpty()),
+        qtyToHandle = takeLines.map { it.optDouble("qtyToHandle", 0.0) },
+        allCollected = allCollected,
+    )
     DocumentScanHandler(
         enabled = qtyLine == null && groupTarget == null && !busy && canMutate,
         lines = takeLines,
@@ -1301,7 +1306,7 @@ private fun WhsePickDocument(no: String, onBack: () -> Unit) {
             OutlinedButton(onClick = { action("assignToMe", "{}", "Bana atandı") }, enabled = !busy && headerLoaded && linesComplete && myUserId.isNotBlank() && !canMutate, modifier = Modifier.weight(1f).height(54.dp)) {
                 Text("Bana Ata")
             }
-            val canRegister = canRegisterAssignedPick(assignedTo, myUserId, allCollected, inFlightLineNos.size) && headerLoaded && linesComplete
+            val canRegister = canRegisterAssignedPick(assignedTo, myUserId, readyToRegister, inFlightLineNos.size) && headerLoaded && linesComplete
             Button(onClick = {
                 scope.launch {
                     busy = true; status = "Toplama kaydediliyor..."
@@ -1588,15 +1593,38 @@ private fun ShipDocument(no: String, onBack: () -> Unit, onPickCreated: (String)
             }
         }
         BottomActionBar {
-            OutlinedButton(
-                onClick = {
-                    scope.launch {
-                        if (!canMutate) {
-                            status = documentOwnershipMessage(assignedUserId, myUserId)
-                            return@launch
+            if (!canMutate) {
+                OutlinedButton(
+                    onClick = {
+                        scope.launch {
+                            if (myUserId.isBlank()) {
+                                status = "Depo kullanıcısı doğrulanamadı. Yeniden giriş yapın."
+                                return@launch
+                            }
+                            busy = true; status = "Sevkiyat üzerinize alınıyor..."
+                            val body = JSONObject().apply { put("userId", myUserId) }.toString()
+                            val r = BcApi.boundAction(context, "shipments", no, "assignToUser", body)
+                            busy = false
+                            status = if (r.ok) "TAMAM: Sevkiyat bana atandı"
+                                else QcErrorParser.friendlyStatus(BcApi.errorMessage(r.body), r.httpCode)
+                            if (r.ok) reload()
                         }
+                    },
+                    enabled = !busy && headerLoaded && linesComplete && myUserId.isNotBlank(),
+                    modifier = Modifier.fillMaxWidth().height(54.dp),
+                ) { Text("👤 Bana Ata", fontWeight = FontWeight.Bold) }
+            } else {
+                OutlinedButton(
+                    onClick = {
+                        scope.launch {
                         busy = true; status = "Ambar Toplama oluşturuluyor..."
-                        val r = BcApi.boundAction(context, "shipments", no, "createPick", "{}")
+                        val r = BcApi.boundAction(
+                            context,
+                            "shipments",
+                            no,
+                            "createPickFor",
+                            JSONObject().apply { put("userId", myUserId) }.toString(),
+                        )
                         val pickNo = if (r.ok) BcApi.scalarValue(r.body) else ""
                         busy = false
                         if (r.ok && pickNo.isNotBlank()) {
@@ -1606,39 +1634,34 @@ private fun ShipDocument(no: String, onBack: () -> Unit, onPickCreated: (String)
                             status = if (r.ok) "HATA: Pick numarası alınamadı"
                                 else QcErrorParser.friendlyStatus(BcApi.errorMessage(r.body), r.httpCode)
                         }
-                    }
-                },
-                enabled = !busy && canMutate && lines.isNotEmpty(),
-                modifier = Modifier.weight(1f).height(54.dp),
-            ) {
-                Text("📦 Pick Oluştur", fontWeight = FontWeight.Bold)
-            }
-            Button(
-                onClick = {
-                    scope.launch {
-                        if (!canMutate) {
-                            status = documentOwnershipMessage(assignedUserId, myUserId)
-                            return@launch
                         }
-                        busy = true; status = "Sevk kaydı..."
-                        val body = JSONObject().apply {
-                            put("print", printSlip)
-                            put("invoice", invoice)
-                            put("printerId", getDefaultPrinter(context, PRINTER_USAGE_DOCUMENT))
-                        }.toString()
-                        val r = BcApi.boundAction(context, "shipments", no, "postToPrinter", body)
-                        busy = false
-                        status = if (r.ok) "TAMAM: Sevkiyat kaydedildi" else QcErrorParser.friendlyStatus(BcApi.errorMessage(r.body), r.httpCode)
-                        if (r.ok) reload()
-                    }
-                },
-                enabled = !busy && canMutate && com.dynops.bcwms.lib.ActionGuards.hasQuantity(lines, field = "qtyToShip"),
-                modifier = Modifier.weight(1f).height(54.dp),
-            ) {
-                Text(
-                    if (com.dynops.bcwms.lib.ActionGuards.hasQuantity(lines, field = "qtyToShip")) "✅ Sevkiyatı Kaydet" else "Önce satırlara miktar girin",
-                    fontWeight = FontWeight.Bold,
-                )
+                    },
+                    enabled = !busy && lines.isNotEmpty(),
+                    modifier = Modifier.weight(1f).height(54.dp),
+                ) { Text("📦 Pick Oluştur", fontWeight = FontWeight.Bold) }
+                Button(
+                    onClick = {
+                        scope.launch {
+                            busy = true; status = "Sevk kaydı..."
+                            val body = JSONObject().apply {
+                                put("print", printSlip)
+                                put("invoice", invoice)
+                                put("printerId", getDefaultPrinter(context, PRINTER_USAGE_DOCUMENT))
+                            }.toString()
+                            val r = BcApi.boundAction(context, "shipments", no, "postToPrinter", body)
+                            busy = false
+                            status = if (r.ok) "TAMAM: Sevkiyat kaydedildi" else QcErrorParser.friendlyStatus(BcApi.errorMessage(r.body), r.httpCode)
+                            if (r.ok) reload()
+                        }
+                    },
+                    enabled = !busy && com.dynops.bcwms.lib.ActionGuards.hasQuantity(lines, field = "qtyToShip"),
+                    modifier = Modifier.weight(1f).height(54.dp),
+                ) {
+                    Text(
+                        if (com.dynops.bcwms.lib.ActionGuards.hasQuantity(lines, field = "qtyToShip")) "✅ Sevkiyatı Kaydet" else "Önce satırlara miktar girin",
+                        fontWeight = FontWeight.Bold,
+                    )
+                }
             }
         }
     }

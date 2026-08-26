@@ -38,6 +38,30 @@ codeunit 72050 "DOPSWHS Count Mgmt"
     end;
 
     /// <summary>
+    /// Creates a brand-new, empty V2 count sheet for the terminal operator.
+    /// Keeping this server-side prevents the mobile app from creating a classic
+    /// sheet and then leaving it half-converted if a second request fails.
+    /// </summary>
+    procedure CreateV2Sheet(LocationCode: Code[10]; OperatorUserId: Code[50]): Code[20]
+    var
+        Location: Record Location;
+        Counters: array[3] of Code[50];
+        SheetNo: Code[20];
+    begin
+        if LocationCode = '' then
+            Error('Sayım V2 oluşturmak için lokasyon zorunludur.');
+        if not Location.Get(LocationCode) then
+            Error('%1 lokasyonu bulunamadı.', LocationCode);
+        if OperatorUserId = '' then
+            Error('Sayım V2 oluşturmak için terminal kullanıcı kimliği zorunludur. Yeniden giriş yapın.');
+
+        Counters[1] := OperatorUserId;
+        SheetNo := CreateSheet(LocationCode, Enum::"DOPSWHS Count Mode"::Visible, Counters);
+        PrepareV2(SheetNo);
+        exit(SheetNo);
+    end;
+
+    /// <summary>
     /// Populates count sheet lines from current Bin Content for the sheet's location, snapshotting
     /// the on-hand quantity into "System Qty". Idempotent: clears existing lines first. Returns the
     /// number of lines generated. This is the missing link that makes a sheet countable + postable.
@@ -69,6 +93,8 @@ codeunit 72050 "DOPSWHS Count Mgmt"
         CountHeader.Get(SheetNo);
         if CountHeader.Status = CountHeader.Status::Posted then
             Error(CountAlreadyPostedErr, SheetNo);
+        if CountHeader."V2 Scan Mode" then
+            Error(V2SheetCannotGenerateErr, SheetNo);
 
         CountLine.SetRange("Sheet No.", SheetNo);
         CountLine.DeleteAll(true);
@@ -324,6 +350,178 @@ codeunit 72050 "DOPSWHS Count Mgmt"
         CountLine."System Qty" := OnHand;
         CountLine.Insert(true);
         exit(NextLineNo);
+    end;
+
+    /// <summary>
+    /// Marks an empty count sheet for scan-created V2 lines. A sheet that already contains classic
+    /// generated lines cannot be converted, preventing the two counting semantics from being mixed.
+    /// </summary>
+    procedure PrepareV2(SheetNo: Code[20])
+    var
+        CountHeader: Record "DOPSWHS Count Sheet Header";
+        CountLine: Record "DOPSWHS Count Sheet Line";
+    begin
+        CountHeader.Get(SheetNo);
+        if CountHeader.Status = CountHeader.Status::Posted then
+            Error(CountAlreadyPostedErr, SheetNo);
+        if CountHeader."V2 Scan Mode" then
+            exit;
+
+        CountLine.SetRange("Sheet No.", SheetNo);
+        if not CountLine.IsEmpty() then
+            Error(V2RequiresEmptySheetErr, SheetNo);
+
+        CountHeader."V2 Scan Mode" := true;
+        CountHeader.Modify(true);
+    end;
+
+    /// <summary>
+    /// Atomically creates/fetches the exact item+bin+tracking line and adds the QR quantity to the
+    /// selected counter. ScanId makes a retry idempotent when the HTTP response is lost.
+    /// </summary>
+    procedure ScanV2Label(SheetNo: Code[20]; ScanId: Guid; ItemNo: Code[20]; VariantCode: Code[10]; BinCode: Code[20]; UomCode: Code[10]; LotNo: Code[50]; SerialNo: Code[50]; Qty: Decimal; CounterSlot: Integer): Integer
+    var
+        CountHeader: Record "DOPSWHS Count Sheet Header";
+        CountLine: Record "DOPSWHS Count Sheet Line";
+        ScanEvent: Record "DOPSWHS Count V2 Scan";
+        WarehouseEntry: Record "Warehouse Entry";
+        Item: Record Item;
+        ItemVariant: Record "Item Variant";
+        ItemUom: Record "Item Unit of Measure";
+        ItemTrackingCode: Record "Item Tracking Code";
+        Bin: Record Bin;
+        NextLineNo: Integer;
+        CurrentQty: Decimal;
+        SystemQty: Decimal;
+    begin
+        if Qty <= 0 then
+            Error(V2QtyPositiveErr);
+        if not (CounterSlot in [1, 2, 3]) then
+            Error(CounterSlotErr);
+
+        // Serialize idempotency checks before touching the count line. A mobile timeout can safely
+        // replay the same ScanId: the already committed line is returned without adding quantity.
+        ScanEvent.LockTable();
+        if ScanEvent.Get(ScanId) then begin
+            if ScanEvent."Sheet No." <> SheetNo then
+                Error(V2ScanIdConflictErr, ScanId);
+            exit(ScanEvent."Line No.");
+        end;
+
+        PrepareV2(SheetNo);
+        CountHeader.Get(SheetNo);
+        if not Bin.Get(CountHeader."Location Code", BinCode) then
+            Error(BinNotInLocationErr, BinCode, CountHeader."Location Code");
+
+        Item.Get(ItemNo);
+        if VariantCode <> '' then
+            ItemVariant.Get(ItemNo, VariantCode);
+        if UomCode = '' then
+            UomCode := Item."Base Unit of Measure";
+        ItemUom.Get(ItemNo, UomCode);
+
+        if (Item."Item Tracking Code" <> '') and ItemTrackingCode.Get(Item."Item Tracking Code") then begin
+            if (ItemTrackingCode."Lot Specific Tracking" or ItemTrackingCode."Lot Warehouse Tracking") and (LotNo = '') then
+                Error(V2LotRequiredErr, ItemNo);
+            if (ItemTrackingCode."SN Specific Tracking" or ItemTrackingCode."SN Warehouse Tracking") and (SerialNo = '') then
+                Error(V2SerialRequiredErr, ItemNo);
+        end;
+
+        CountLine.LockTable();
+        CountLine.SetRange("Sheet No.", SheetNo);
+        CountLine.SetRange("Item No.", ItemNo);
+        CountLine.SetRange("Variant Code", VariantCode);
+        CountLine.SetRange("Bin Code", BinCode);
+        CountLine.SetRange("LP No.", '');
+        CountLine.SetRange("Unit of Measure Code", UomCode);
+        CountLine.SetRange("Lot No.", LotNo);
+        CountLine.SetRange("Serial No.", SerialNo);
+        if not CountLine.FindFirst() then begin
+            WarehouseEntry.SetRange("Location Code", CountHeader."Location Code");
+            WarehouseEntry.SetRange("Bin Code", BinCode);
+            WarehouseEntry.SetRange("Item No.", ItemNo);
+            WarehouseEntry.SetRange("Variant Code", VariantCode);
+            WarehouseEntry.SetRange("Unit of Measure Code", UomCode);
+            WarehouseEntry.SetRange("Lot No.", LotNo);
+            WarehouseEntry.SetRange("Serial No.", SerialNo);
+            if WarehouseEntry.FindSet() then
+                repeat
+                    SystemQty += WarehouseEntry.Quantity;
+                until WarehouseEntry.Next() = 0;
+
+            CountLine.Reset();
+            CountLine.SetRange("Sheet No.", SheetNo);
+            if CountLine.FindLast() then
+                NextLineNo := CountLine."Line No.";
+
+            CountLine.Init();
+            CountLine."Sheet No." := SheetNo;
+            CountLine."Line No." := NextLineNo + 10000;
+            CountLine."Item No." := ItemNo;
+            CountLine."Variant Code" := VariantCode;
+            CountLine."Bin Code" := BinCode;
+            CountLine."Unit of Measure Code" := UomCode;
+            CountLine."Lot No." := LotNo;
+            CountLine."Serial No." := SerialNo;
+            CountLine."System Qty" := SystemQty;
+            CountLine."Unexpected Stock" := SystemQty <= 0;
+            CountLine.Insert(true);
+        end;
+
+        if IsSlotCounted(CountLine, CounterSlot) then
+            CurrentQty := CountedQtyForSlot(CountLine, CounterSlot);
+        RecordCount(SheetNo, CountLine."Line No.", CounterSlot, CurrentQty + Qty);
+
+        if CountHeader.Status = CountHeader.Status::Open then begin
+            CountHeader.Status := CountHeader.Status::InProgress;
+            CountHeader.Modify(true);
+        end;
+
+        ScanEvent.Init();
+        ScanEvent."Scan ID" := ScanId;
+        ScanEvent."Sheet No." := SheetNo;
+        ScanEvent."Line No." := CountLine."Line No.";
+        ScanEvent."Counter Slot" := CounterSlot;
+        ScanEvent.Quantity := Qty;
+        ScanEvent."Created DateTime" := CurrentDateTime();
+        ScanEvent.Insert(true);
+        exit(CountLine."Line No.");
+    end;
+
+    /// <summary>Idempotently subtracts the quantity contributed by one V2 scan event.</summary>
+    procedure UndoV2Scan(SheetNo: Code[20]; ScanId: Guid): Integer
+    var
+        CountHeader: Record "DOPSWHS Count Sheet Header";
+        CountLine: Record "DOPSWHS Count Sheet Line";
+        ScanEvent: Record "DOPSWHS Count V2 Scan";
+        CurrentQty: Decimal;
+    begin
+        CountHeader.Get(SheetNo);
+        if CountHeader.Status = CountHeader.Status::Posted then
+            Error(CountAlreadyPostedErr, SheetNo);
+        if not CountHeader."V2 Scan Mode" then
+            Error(NotV2SheetErr, SheetNo);
+
+        ScanEvent.LockTable();
+        if not ScanEvent.Get(ScanId) then
+            Error(V2ScanNotFoundErr, ScanId);
+        if ScanEvent."Sheet No." <> SheetNo then
+            Error(V2ScanIdConflictErr, ScanId);
+        if ScanEvent.Reversed then
+            exit(ScanEvent."Line No.");
+
+        CountLine.LockTable();
+        CountLine.Get(SheetNo, ScanEvent."Line No.");
+        if not IsSlotCounted(CountLine, ScanEvent."Counter Slot") then
+            Error(V2UndoCountMissingErr, ScanId);
+        CurrentQty := CountedQtyForSlot(CountLine, ScanEvent."Counter Slot");
+        if CurrentQty < ScanEvent.Quantity then
+            Error(V2UndoQtyErr, ScanId, CurrentQty, ScanEvent.Quantity);
+
+        RecordCount(SheetNo, CountLine."Line No.", ScanEvent."Counter Slot", CurrentQty - ScanEvent.Quantity);
+        ScanEvent.Reversed := true;
+        ScanEvent.Modify(true);
+        exit(CountLine."Line No.");
     end;
 
     /// <summary>
@@ -1012,4 +1210,14 @@ codeunit 72050 "DOPSWHS Count Mgmt"
         UnexpectedQtyPositiveErr: Label 'Beklenmeyen fiziksel stok miktarı sıfırdan büyük olmalıdır.';
         CountLineNotRecordedErr: Label 'Sayım satırı %1, sayıcı slotu %2 tarafından henüz sayılmadı. Tüm satırlar sayılmadan kayıt yapılamaz.', Comment = '%1 line no, %2 counter slot';
         LPHasNoCountableLinesErr: Label '%1 LP numarasında sayılabilecek pozitif miktarlı ürün satırı yok.', Comment = '%1 LP no';
+        V2SheetCannotGenerateErr: Label '%1 sayım belgesi Sayım V2 ile başlatıldı; klasik satır üretme işlemi kullanılamaz.', Comment = '%1 count sheet no';
+        V2RequiresEmptySheetErr: Label '%1 sayım belgesinde klasik sayım satırları var. Sayım V2 için satır üretilmemiş boş bir belge seçin.', Comment = '%1 count sheet no';
+        NotV2SheetErr: Label '%1 sayım belgesi Sayım V2 modunda değildir.', Comment = '%1 count sheet no';
+        V2QtyPositiveErr: Label 'Sayım V2 QR miktarı sıfırdan büyük olmalıdır.';
+        V2LotRequiredErr: Label '%1 ürünü lot takiplidir; QR içinde lot numarası bulunmalıdır.', Comment = '%1 item no';
+        V2SerialRequiredErr: Label '%1 ürünü seri takiplidir; QR içinde seri numarası bulunmalıdır.', Comment = '%1 item no';
+        V2ScanIdConflictErr: Label '%1 okutma kimliği başka bir sayım belgesinde kullanılmıştır.', Comment = '%1 scan guid';
+        V2ScanNotFoundErr: Label '%1 okutması bulunamadığı için geri alınamadı.', Comment = '%1 scan guid';
+        V2UndoCountMissingErr: Label '%1 okutmasının sayım değeri bulunamadığı için geri alınamadı.', Comment = '%1 scan guid';
+        V2UndoQtyErr: Label '%1 okutması geri alınamadı: güncel miktar %2, okutmanın miktarı %3.', Comment = '%1 scan guid, %2 current qty, %3 scan qty';
 }

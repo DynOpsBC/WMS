@@ -58,18 +58,32 @@ codeunit 72047 "DOPSWHS Shipment Mgmt"
     end;
 
     procedure CreatePick(var WhseShipmentHeader: Record "Warehouse Shipment Header"): Code[20]
+    begin
+        exit(CreatePickForUser(WhseShipmentHeader, CopyStr(UserId(), 1, MaxStrLen(WhseShipmentHeader."Assigned User ID"))));
+    end;
+
+    procedure CreatePickFor(var WhseShipmentHeader: Record "Warehouse Shipment Header"; RequestingUserId: Code[50]): Code[20]
+    begin
+        if RequestingUserId = '' then
+            Error('WMS kullanıcı kimliği boş olamaz. Terminal oturumunu yenileyin.');
+        if WhseShipmentHeader."Assigned User ID" <> RequestingUserId then
+            Error('Sevkiyat belgesi %1 bu kullanıcıya atanmış değil.', WhseShipmentHeader."No.");
+        exit(CreatePickForUser(WhseShipmentHeader, RequestingUserId));
+    end;
+
+    local procedure CreatePickForUser(var WhseShipmentHeader: Record "Warehouse Shipment Header"; AssignToUserId: Code[50]): Code[20]
     var
         WhseShipmentLine: Record "Warehouse Shipment Line";
         WhseActivityLine: Record "Warehouse Activity Line";
-        PickHeader: Record "Warehouse Activity Header";
         WhseShipmentRelease: Codeunit "Whse.-Shipment Release";
         CreatePickReport: Report "Whse.-Shipment - Create Pick";
         PickNo: Code[20];
-        AssignToUserId: Code[50];
+        ReportUserId: Code[50];
     begin
         // Aynı sevkiyat için açık pick varsa ikinci bir pick üretme; mevcut kaydı döndür.
         PickNo := FindOpenPick(WhseShipmentHeader."No.");
         if PickNo <> '' then begin
+            EnsurePickAssignedTo(PickNo, AssignToUserId);
             StampShipmentLotsOnPick(WhseShipmentHeader."No.", PickNo);
             exit(PickNo);
         end;
@@ -83,10 +97,13 @@ codeunit 72047 "DOPSWHS Shipment Mgmt"
         if not WhseShipmentLine.FindFirst() then
             Error(NoShipmentLinesErr, WhseShipmentHeader."No.");
 
-        AssignToUserId := CopyStr(UserId(), 1, MaxStrLen(AssignToUserId));
+        // Microsoft raporu gerçek BC/Warehouse Employee hesabıyla çalışsın;
+        // oluşturulan başlığın operasyonel sahibi aşağıda yerel WMS kullanıcısı
+        // olarak atomik biçimde damgalanır.
+        ReportUserId := CopyStr(UserId(), 1, MaxStrLen(ReportUserId));
         CreatePickReport.SetWhseShipmentLine(WhseShipmentLine, WhseShipmentHeader);
         CreatePickReport.SetHideValidationDialog(true);
-        CreatePickReport.Initialize(AssignToUserId, Enum::"Whse. Activity Sorting Method"::"Shelf or Bin", false, false, false);
+        CreatePickReport.Initialize(ReportUserId, Enum::"Whse. Activity Sorting Method"::"Shelf or Bin", false, false, false);
         CreatePickReport.UseRequestPage(false);
         CreatePickReport.RunModal();
 
@@ -97,16 +114,30 @@ codeunit 72047 "DOPSWHS Shipment Mgmt"
             Error(PickNotCreatedErr, WhseShipmentHeader."No.");
         PickNo := WhseActivityLine."No.";
 
-        // Report sürümüne göre atama başlığa taşınmayabilir; mobil "Bana atanan"
-        // filtresinde görünmesi için başlıkta garanti et.
-        if PickHeader.Get(PickHeader.Type::Pick, PickNo) then
-            if PickHeader."Assigned User ID" <> AssignToUserId then begin
-                PickHeader.Validate("Assigned User ID", AssignToUserId);
-                PickHeader.Modify(true);
-            end;
+        EnsurePickAssignedTo(PickNo, AssignToUserId);
 
         StampShipmentLotsOnPick(WhseShipmentHeader."No.", PickNo);
         exit(PickNo);
+    end;
+
+    local procedure EnsurePickAssignedTo(PickNo: Code[20]; AssignToUserId: Code[50])
+    var
+        PickHeader: Record "Warehouse Activity Header";
+        ServiceUserId: Code[50];
+    begin
+        if AssignToUserId = '' then
+            exit;
+        PickHeader.Get(PickHeader.Type::Pick, PickNo);
+        ServiceUserId := CopyStr(UserId(), 1, MaxStrLen(ServiceUserId));
+        if (PickHeader."Assigned User ID" <> '') and
+           (PickHeader."Assigned User ID" <> AssignToUserId) and
+           (PickHeader."Assigned User ID" <> ServiceUserId)
+        then
+            Error('Ambar toplama %1, %2 kullanıcısına atanmış.', PickNo, PickHeader."Assigned User ID");
+        if PickHeader."Assigned User ID" <> AssignToUserId then begin
+            PickHeader."Assigned User ID" := CopyStr(AssignToUserId, 1, MaxStrLen(PickHeader."Assigned User ID"));
+            PickHeader.Modify(true);
+        end;
     end;
 
     local procedure FindOpenPick(ShipmentNo: Code[20]): Code[20]

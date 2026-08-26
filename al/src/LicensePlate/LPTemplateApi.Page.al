@@ -40,4 +40,17 @@ page 72280 "DOPSWHS LP Template API"
             }
         }
     }
+
+    [ServiceEnabled]
+    procedure build(locationCode: Code[10]; binCode: Code[20]): Code[20]
+    var
+        LPMgt: Codeunit "DOPSWHS LP Management";
+        CreatedLP: Record "DOPSWHS LP Header";
+    begin
+        // LP creation is intentionally an explicit domain action.  This makes
+        // it impossible for the mobile client to bypass template defaults,
+        // number-series handling or the LP movement ledger via a flat POST.
+        LPMgt.Build(Rec.Code, locationCode, binCode, CreatedLP);
+        exit(CreatedLP."No.");
+    end;
 }

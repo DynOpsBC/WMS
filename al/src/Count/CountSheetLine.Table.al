@@ -42,4 +42,36 @@ table 72017 "DOPSWHS Count Sheet Line"
         key(LicensePlate; "LP No.", "LP Line No.") { }
         key(Recount; "Recount Required") { }
     }
+
+    trigger OnInsert()
+    begin
+        EnsureSheetIsMutable();
+    end;
+
+    trigger OnModify()
+    begin
+        EnsureSheetIsMutable();
+    end;
+
+    trigger OnDelete()
+    begin
+        EnsureSheetIsMutable();
+    end;
+
+    trigger OnRename()
+    begin
+        EnsureSheetIsMutable();
+    end;
+
+    local procedure EnsureSheetIsMutable()
+    var
+        CountHeader: Record "DOPSWHS Count Sheet Header";
+    begin
+        CountHeader.Get("Sheet No.");
+        if CountHeader.Status = CountHeader.Status::Posted then
+            Error(PostedSheetImmutableErr, "Sheet No.");
+    end;
+
+    var
+        PostedSheetImmutableErr: Label 'Posted count sheet %1 cannot be changed or deleted.';
 }

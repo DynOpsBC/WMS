@@ -53,13 +53,32 @@ page 72220 "DOPSWHS Movement API"
         MovementMgmt.RegisterDirected(Rec);
     end;
 
+    [ServiceEnabled]
+    procedure registerFor(userId: Code[50])
+    var
+        MovementMgmt: Codeunit "DOPSWHS Movement Mgmt";
+    begin
+        MovementMgmt.RegisterDirectedFor(Rec, userId);
+    end;
+
+    [ServiceEnabled]
+    procedure confirmLine(lineNo: Integer; qtyToHandle: Decimal; lotNo: Code[50]; serialNo: Code[50]; userId: Code[50])
+    var
+        MovementLine: Record "Warehouse Activity Line";
+        MovementMgmt: Codeunit "DOPSWHS Movement Mgmt";
+    begin
+        MovementLine.Get(Rec.Type, Rec."No.", lineNo);
+        MovementMgmt.ConfirmDirectedLineFor(MovementLine, qtyToHandle, lotNo, serialNo, userId);
+    end;
+
     // Paylaşımlı BC lisansı: belge, oturumdaki WMS kullanıcısına atanır
     // (pick'teki reassign deseninin movement karşılığı).
     [ServiceEnabled]
     procedure assignTo(userId: Code[50])
+    var
+        MovementMgmt: Codeunit "DOPSWHS Movement Mgmt";
     begin
-        Rec.Validate("Assigned User ID", userId);
-        Rec.Modify(true);
+        MovementMgmt.ClaimDirected(Rec, userId);
     end;
 
     var

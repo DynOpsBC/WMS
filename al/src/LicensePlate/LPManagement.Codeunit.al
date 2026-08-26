@@ -7,7 +7,8 @@ codeunit 72040 "DOPSWHS LP Management"
         tabledata "Item Tracking Code" = R,
         tabledata Location = R,
         tabledata Bin = R,
-        tabledata "Bin Content" = R;
+        tabledata "Bin Content" = R,
+        tabledata "Warehouse Entry" = R;
 
     procedure Build(TemplateCode: Code[20]; LocationCode: Code[10]; BinCode: Code[20]; var LP: Record "DOPSWHS LP Header")
     var
@@ -124,13 +125,14 @@ codeunit 72040 "DOPSWHS LP Management"
         LP.TestField("Bin Code");
         if SourceBinCode = '' then
             Error('Kaynak raf zorunludur.');
-        if SerialNo <> '' then
-            Error('%1 seri numarası için LP raf hareketi desteklenmiyor. Standart depo hareketini kullanın.', SerialNo);
 
         Item.Get(ItemNo);
-        if (Item."Item Tracking Code" <> '') and ItemTrackingCode.Get(Item."Item Tracking Code") then
+        if (Item."Item Tracking Code" <> '') and ItemTrackingCode.Get(Item."Item Tracking Code") then begin
             if (ItemTrackingCode."Lot Specific Tracking" or ItemTrackingCode."Lot Warehouse Tracking") and (LotNo = '') then
                 Error('%1 lot takipli maddesi için lot numarası zorunludur. Stoktaki lotlardan birini seçin.', ItemNo);
+            if (ItemTrackingCode."SN Specific Tracking" or ItemTrackingCode."SN Warehouse Tracking") and (SerialNo = '') then
+                Error('%1 seri takipli maddesi için seri numarası zorunludur. Stoktaki seri numarasını okutun.', ItemNo);
+        end;
         EffectiveUoM := UoM;
         if EffectiveUoM = '' then
             EffectiveUoM := Item."Base Unit of Measure";
@@ -141,6 +143,8 @@ codeunit 72040 "DOPSWHS LP Management"
                 Error('%1 maddesinin %2 birimi için birim başına miktar sıfırdan büyük olmalıdır.', ItemNo, EffectiveUoM);
             MovementQty := Qty * ItemUoM."Qty. per Unit of Measure";
         end;
+        if (SerialNo <> '') and (MovementQty <> 1) then
+            Error('%1 seri numarası tek bir temel birimi temsil eder; miktar 1 olmalıdır.', SerialNo);
 
         if not SourceBin.Get(LP."Location Code", SourceBinCode) then begin
             SourceBinInOtherLocation.SetRange(Code, SourceBinCode);
@@ -153,13 +157,13 @@ codeunit 72040 "DOPSWHS LP Management"
         if not TargetBin.Get(LP."Location Code", LP."Bin Code") then
             Error('%1 LP hedef rafı %2 lokasyonunda bulunamadı.', LP."Bin Code", LP."Location Code");
 
-        EnsureLooseStockAvailable(LP."Location Code", SourceBinCode, ItemNo, LotNo, MovementQty);
+        EnsureLooseStockAvailable(LP."Location Code", SourceBinCode, ItemNo, LotNo, SerialNo, MovementQty);
 
         LogMutation('LP.AddLineFromBin');
         if SourceBinCode <> LP."Bin Code" then
-            MovementMgmt.AdHocMoveAtLocation(
+            MovementMgmt.AdHocMoveTrackedAtLocation(
                 LP."Location Code", SourceBinCode, LP."Bin Code", ItemNo, LP."No.",
-                MovementQty, OperatorUserId, LotNo);
+                MovementQty, OperatorUserId, LotNo, SerialNo);
 
         LPLine.Init();
         LPLine."LP No." := LP."No.";
@@ -222,8 +226,6 @@ codeunit 72040 "DOPSWHS LP Management"
                     Error('%1 LP numarasının %2 satırında madde bulunmadığı için taşınamaz.', LP."No.", LPLine."Line No.");
                 if LPLine."Variant Code" <> '' then
                     Error('%1 maddesinin %2 varyantı için LP hareketi desteklenmiyor. Standart depo hareketini kullanın.', LPLine."Item No.", LPLine."Variant Code");
-                if LPLine."Serial No." <> '' then
-                    Error('%1 seri numarası için LP hareketi desteklenmiyor. Standart depo hareketini kullanın.', LPLine."Serial No.");
                 if LPLine.Quantity <= 0 then
                     Error('%1 LP numarasının %2 satırındaki miktar sıfırdan büyük olmalıdır.', LP."No.", LPLine."Line No.");
 
@@ -238,10 +240,12 @@ codeunit 72040 "DOPSWHS LP Management"
                         Error('%1 maddesinin %2 birimi için birim başına miktar sıfırdan büyük olmalıdır.', LPLine."Item No.", EffectiveUoM);
                     MovementQty := LPLine.Quantity * ItemUoM."Qty. per Unit of Measure";
                 end;
+                if (LPLine."Serial No." <> '') and (MovementQty <> 1) then
+                    Error('%1 seri numarası tek bir temel birimi temsil eder; miktar 1 olmalıdır.', LPLine."Serial No.");
 
-                MovementMgmt.AdHocMoveAtLocation(
+                MovementMgmt.AdHocMoveTrackedAtLocation(
                     LP."Location Code", SourceBinCode, TargetBinCode, LPLine."Item No.", LP."No.",
-                    MovementQty, OperatorUserId, LPLine."Lot No.");
+                    MovementQty, OperatorUserId, LPLine."Lot No.", LPLine."Serial No.");
                 TotalQty += LPLine.Quantity;
             until LPLine.Next() = 0;
 
@@ -300,8 +304,10 @@ codeunit 72040 "DOPSWHS LP Management"
         OnBeforeTransfer(SourceLP, TargetLP);
         if SourceLP."No." = TargetLP."No." then
             Error('Kaynak ve hedef LP aynı olamaz: %1.', SourceLP."No.");
-        RequireStatus(SourceLP, SourceLP.Status::Built);
-        RequireStatus(TargetLP, TargetLP.Status::Built);
+        if not (SourceLP.Status in [SourceLP.Status::Open, SourceLP.Status::Built]) then
+            Error('Kaynak LP %1 açık veya tamamlanmış durumda olmalıdır. Mevcut durum: %2.', SourceLP."No.", SourceLP.Status);
+        if not (TargetLP.Status in [TargetLP.Status::Open, TargetLP.Status::Built]) then
+            Error('Hedef LP %1 açık veya tamamlanmış durumda olmalıdır. Mevcut durum: %2.', TargetLP."No.", TargetLP.Status);
         SourceLP.TestField("Location Code");
         TargetLP.TestField("Location Code");
         if SourceLP."Location Code" <> TargetLP."Location Code" then
@@ -330,6 +336,11 @@ codeunit 72040 "DOPSWHS LP Management"
             TargetLine."Serial No." := SourceLine."Serial No.";
             TargetLine."Package No." := SourceLine."Package No.";
             TargetLine."Expiration Date" := SourceLine."Expiration Date";
+            TargetLine."Source Bin Code" := SourceLine."Source Bin Code";
+            TargetLine."Source Document Type" := SourceLine."Source Document Type";
+            TargetLine."Source Document No." := SourceLine."Source Document No.";
+            TargetLine."Source Document Line No." := SourceLine."Source Document Line No.";
+            TargetLine."Source Document Quantity" := SourceLine."Source Document Quantity";
             TargetLine.Insert(true);
 
             SourceLine.Validate(Quantity, SourceLine.Quantity - TransferQty);
@@ -426,15 +437,18 @@ codeunit 72040 "DOPSWHS LP Management"
         Ledger.Insert(true);
     end;
 
-    local procedure EnsureLooseStockAvailable(LocationCode: Code[10]; BinCode: Code[20]; ItemNo: Code[20]; LotNo: Code[50]; RequiredBaseQty: Decimal)
+    local procedure EnsureLooseStockAvailable(LocationCode: Code[10]; BinCode: Code[20]; ItemNo: Code[20]; LotNo: Code[50]; SerialNo: Code[50]; RequiredBaseQty: Decimal)
     var
         BinContent: Record "Bin Content";
+        WarehouseEntry: Record "Warehouse Entry";
         LPHeader: Record "DOPSWHS LP Header";
         LPLine: Record "DOPSWHS LP Line";
         Item: Record Item;
         ItemUoM: Record "Item Unit of Measure";
         BinQtyBase: Decimal;
         AllocatedQtyBase: Decimal;
+        AllocatedTrackedQtyBase: Decimal;
+        TrackedQtyBase: Decimal;
         LineQtyBase: Decimal;
     begin
         BinContent.SetRange("Location Code", LocationCode);
@@ -447,6 +461,21 @@ codeunit 72040 "DOPSWHS LP Management"
                 BinQtyBase += BinContent."Quantity (Base)";
             until BinContent.Next() = 0;
 
+        if (LotNo <> '') or (SerialNo <> '') then begin
+            WarehouseEntry.SetRange("Location Code", LocationCode);
+            WarehouseEntry.SetRange("Bin Code", BinCode);
+            WarehouseEntry.SetRange("Item No.", ItemNo);
+            WarehouseEntry.SetRange("Variant Code", '');
+            if LotNo <> '' then
+                WarehouseEntry.SetRange("Lot No.", LotNo);
+            if SerialNo <> '' then
+                WarehouseEntry.SetRange("Serial No.", SerialNo);
+            if WarehouseEntry.FindSet() then
+                repeat
+                    TrackedQtyBase += WarehouseEntry."Qty. (Base)";
+                until WarehouseEntry.Next() = 0;
+        end;
+
         Item.Get(ItemNo);
         LPHeader.SetRange("Location Code", LocationCode);
         LPHeader.SetRange("Bin Code", BinCode);
@@ -457,8 +486,6 @@ codeunit 72040 "DOPSWHS LP Management"
                 LPLine.SetRange("LP No.", LPHeader."No.");
                 LPLine.SetRange("Item No.", ItemNo);
                 LPLine.SetRange("Variant Code", '');
-                if LotNo <> '' then
-                    LPLine.SetRange("Lot No.", LotNo);
                 if LPLine.FindSet() then
                     repeat
                         LineQtyBase := LPLine.Quantity;
@@ -468,8 +495,19 @@ codeunit 72040 "DOPSWHS LP Management"
                         then
                             LineQtyBase *= ItemUoM."Qty. per Unit of Measure";
                         AllocatedQtyBase += LineQtyBase;
+                        if ((LotNo = '') or (LPLine."Lot No." = LotNo)) and
+                           ((SerialNo = '') or (LPLine."Serial No." = SerialNo))
+                        then
+                            AllocatedTrackedQtyBase += LineQtyBase;
                     until LPLine.Next() = 0;
             until LPHeader.Next() = 0;
+
+        if ((LotNo <> '') or (SerialNo <> '')) and
+           ((TrackedQtyBase - AllocatedTrackedQtyBase) < RequiredBaseQty)
+        then
+            Error(
+                'Insufficient unassigned tracked stock for item %1 in bin %2 (lot %3, serial %4). Tracked stock: %5, already assigned: %6, requested: %7.',
+                ItemNo, BinCode, LotNo, SerialNo, TrackedQtyBase, AllocatedTrackedQtyBase, RequiredBaseQty);
 
         if (BinQtyBase - AllocatedQtyBase) < RequiredBaseQty then
             Error(

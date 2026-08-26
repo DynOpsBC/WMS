@@ -25,6 +25,12 @@ table 72016 "DOPSWHS Count Sheet Header"
             DataClassification = CustomerContent;
             TableRelation = "Item Journal Batch".Name where("Journal Template Name" = const('PHYS. INV.'));
         }
+        field(70; "V2 Scan Mode"; Boolean)
+        {
+            Caption = 'V2 Scan Mode';
+            DataClassification = CustomerContent;
+            Editable = false;
+        }
     }
 
     keys
@@ -52,4 +58,27 @@ table 72016 "DOPSWHS Count Sheet Header"
         if "Source Phys. Inv. Journal Batch" = '' then
             "Source Phys. Inv. Journal Batch" := CountMgmt.EnsurePhysInvBatch("No.");
     end;
+
+    trigger OnModify()
+    begin
+        // A posted count is an immutable inventory document.  Keep the guard in
+        // the table as well as the pages/API so alternate clients cannot bypass it.
+        if xRec.Status = xRec.Status::Posted then
+            Error(PostedSheetImmutableErr, "No.");
+    end;
+
+    trigger OnDelete()
+    begin
+        if Status = Status::Posted then
+            Error(PostedSheetImmutableErr, "No.");
+    end;
+
+    trigger OnRename()
+    begin
+        if Status = Status::Posted then
+            Error(PostedSheetImmutableErr, "No.");
+    end;
+
+    var
+        PostedSheetImmutableErr: Label 'Posted count sheet %1 cannot be changed or deleted.';
 }

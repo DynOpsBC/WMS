@@ -15,6 +15,13 @@ internal fun chooseLpTemplate(rows: List<Pair<String, String>>, purpose: LpPurpo
         if (code.isBlank()) null else code to description
     }
     if (valid.size == 1) return valid.single().first
+    val preferredCodes = when (purpose) {
+        LpPurpose.PALLET -> listOf("PALLET-EUR")
+        LpPurpose.CARTON -> listOf("CARTON-S")
+    }
+    preferredCodes.firstNotNullOfOrNull { preferred ->
+        valid.firstOrNull { (code, _) -> code.equals(preferred, ignoreCase = true) }?.first
+    }?.let { return it }
     val tokens = when (purpose) {
         LpPurpose.PALLET -> listOf("pallet", "palet")
         LpPurpose.CARTON -> listOf("carton", "koli", "kutu")

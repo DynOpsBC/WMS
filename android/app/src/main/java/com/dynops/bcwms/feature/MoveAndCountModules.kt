@@ -24,6 +24,37 @@ import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
 import org.json.JSONObject
 
+internal fun directedMovementTakeMatches(lines: List<JSONObject>, itemNo: String): List<JSONObject> =
+    lines.filter {
+        it.optString("itemNo").equals(itemNo, ignoreCase = true) &&
+            BcEnum.decodeOData(it.optString("actionType")).equals("Take", ignoreCase = true)
+    }
+
+internal fun directedMovementReadyToRegister(lines: List<JSONObject>): Boolean {
+    val stagedTakeLines = lines.filter {
+        BcEnum.decodeOData(it.optString("actionType")).equals("Take", ignoreCase = true) &&
+            it.optDouble("qtyToHandle", 0.0) > 0.0
+    }
+    return stagedTakeLines.isNotEmpty() && stagedTakeLines.all {
+        (!it.optBoolean("lotRequired", false) || rawValue(it, "lotNo").isNotBlank()) &&
+            (!it.optBoolean("serialRequired", false) || rawValue(it, "serialNo").isNotBlank())
+    }
+}
+
+private val directedMovementStockError = Regex(
+    """must not be less than ([0-9.,]+).*Bin Code='([^']+)'.*Item No.='([^']+)'""",
+    setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL),
+)
+
+internal fun directedMovementRegisterError(raw: String, httpCode: Int): String {
+    val match = directedMovementStockError.find(raw)
+    if (match != null) {
+        val (quantity, binCode, itemNo) = match.destructured
+        return "HATA: $binCode rafında $itemNo için $quantity miktar kullanılabilir stok yok. Hareket miktarını veya raf stoğunu kontrol edin."
+    }
+    return QcErrorParser.friendlyStatus(raw, httpCode)
+}
+
 /**
  * Ad-Hoc Move — WI §10.5.
  * Single screen: scan from-bin -> scan item/LP -> scan to-bin -> qty -> Confirm.
@@ -188,8 +219,8 @@ fun AdHocMoveModule() {
             if (r.ok) {
                 val targetHeader = JSONObject(r.body)
                 val targetStatus = targetHeader.optString("status")
-                if (targetStatus.equals("Closed", true) || targetStatus.equals("Used", true)) {
-                    busy = false; status = "HATA: Hedef LP açık değil. Başka bir LP seçin."
+                if (!targetStatus.equals("Open", true) && !targetStatus.equals("Built", true)) {
+                    busy = false; status = "HATA: Hedef LP açık veya tamamlanmış durumda değil. Başka bir LP seçin."
                     return@launch
                 }
                 targetLpBin = targetHeader.optString("binCode").takeIf { it != "null" } ?: ""
@@ -853,6 +884,7 @@ private fun CountDocument(no: String, onBack: () -> Unit) {
         })
     }
     val documentStatus = h?.optString("status").orEmpty()
+    val isV2Document = h?.optBoolean("v2ScanMode", false) == true
     val recountLines = lines.filter { it.optBoolean("recountRequired") }
     val availableActions = countDocumentActions(
         lineCount = lines.size,
@@ -886,6 +918,17 @@ private fun CountDocument(no: String, onBack: () -> Unit) {
             } else if (h != null && allowedSlots.isEmpty()) {
                 Spacer(Modifier.height(8.dp))
                 StatusText("Bu sayımda $myUserId kullanıcısına atanmış sayıcı slotu yok. BC'deki Count Counters bölümünü kontrol edin.")
+            }
+            if (isV2Document) {
+                Spacer(Modifier.height(8.dp))
+                Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.10f))) {
+                    Text(
+                        "Bu belge Sayım V2 ile başlatılmıştır. Otomatik QR satırlarına devam etmek için ana menüde Sayım V2'yi açın.",
+                        Modifier.fillMaxWidth().padding(12.dp),
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.primary,
+                    )
+                }
             }
             if (recountLines.isNotEmpty()) {
                 Spacer(Modifier.height(8.dp))
@@ -924,7 +967,7 @@ private fun CountDocument(no: String, onBack: () -> Unit) {
                 }
             }
             Spacer(Modifier.height(8.dp))
-            if (h != null && linesComplete && countDocumentIsMutable(documentStatus) && allowedSlots.isNotEmpty()) {
+            if (!isV2Document && h != null && linesComplete && countDocumentIsMutable(documentStatus) && allowedSlots.isNotEmpty()) {
                 CountByBinPane(
                     sheetNo = no,
                     locationCode = h.optString("locationCode"),
@@ -946,13 +989,13 @@ private fun CountDocument(no: String, onBack: () -> Unit) {
         }
         BottomActionBar {
             // Generate lines from bin content when the sheet is empty (the count flow needs lines).
-            OutlinedButton(onClick = { action("generateLines", "Satırlar üretildi") }, enabled = availableActions.canGenerateLines, modifier = Modifier.weight(1f).height(52.dp)) { Text("➕ Satır Üret") }
-            OutlinedButton(onClick = { showRecountConfirm = true }, enabled = availableActions.canStartRecount, modifier = Modifier.weight(1f).height(52.dp)) { Text("⟳ Yeniden Say") }
-            Button(onClick = { showPostConfirm = true }, enabled = availableActions.canPost, modifier = Modifier.weight(1f).height(52.dp)) { Text("✅ Kaydet", fontWeight = FontWeight.Bold) }
+            OutlinedButton(onClick = { action("generateLines", "Satırlar üretildi") }, enabled = !isV2Document && availableActions.canGenerateLines, modifier = Modifier.weight(1f).height(52.dp)) { Text("➕ Satır Üret") }
+            OutlinedButton(onClick = { showRecountConfirm = true }, enabled = !isV2Document && availableActions.canStartRecount, modifier = Modifier.weight(1f).height(52.dp)) { Text("⟳ Yeniden Say") }
+            Button(onClick = { showPostConfirm = true }, enabled = !isV2Document && availableActions.canPost, modifier = Modifier.weight(1f).height(52.dp)) { Text("✅ Kaydet", fontWeight = FontWeight.Bold) }
         }
     }
 
-    val cl = countLine.takeIf { h != null && linesComplete && !busy }
+    val cl = countLine.takeIf { !isV2Document && h != null && linesComplete && !busy }
     if (cl != null) {
         CountEntrySheet(
             line = cl,
@@ -2607,6 +2650,7 @@ private fun MovementDocument(no: String, onBack: () -> Unit) {
 
     fun reload(afterRegisterAttempt: Boolean = false) {
         scope.launch {
+            val previousStatus = status
             busy = true
             header = null
             lines = emptyList()
@@ -2641,36 +2685,40 @@ private fun MovementDocument(no: String, onBack: () -> Unit) {
                 !headerLoaded || !linesComplete -> "HATA: Hareket belgesi ve tüm satırları alınamadı. Yenileyin."
                 myUserId.isBlank() -> "HATA: Depo kullanıcınız doğrulanamadı. Yeniden giriş yapın."
                 !canMutate() -> "Bu belge size atanmadığı için salt okunur açıldı."
-                status.startsWith("HATA:") -> ""
-                else -> status
+                afterRegisterAttempt -> previousStatus
+                previousStatus.startsWith("HATA:") -> ""
+                else -> previousStatus
             }
         }
     }
     LaunchedEffect(no) { reload() }
 
-    suspend fun patchLine(ln: JSONObject, qty: Double): Boolean {
+    suspend fun patchLine(ln: JSONObject, qty: Double, lotNo: String, serialNo: String): Boolean {
         if (!requireMutationAccess()) return false
-        val body = JSONObject().apply { put("qtyToHandle", qty) }.toString()
-        val r = BcApi.patch(context, "movementLines(activityType='${BcEnum.WhseActivityType.MOVEMENT}',no='$no',lineNo=${ln.optInt("lineNo")})", body)
+        val body = directedMovementConfirmBody(ln.optInt("lineNo"), qty, lotNo, serialNo, myUserId)
+        // Sunucu Take + Place eşini birlikte günceller; tek satır PATCH'i
+        // companion satırı sıfırda bırakıp register butonunu kilitliyordu.
+        val r = BcApi.boundAction(context, "movements", no, "confirmLine", body)
         if (!r.ok) status = "HATA: ${BcApi.errorMessage(r.body)} (HTTP ${r.httpCode})"
         return r.ok
     }
 
-    // Ürün onayı: o ürünün TÜM satırlarına (Take + Place) tam miktar yazılır.
+    // Barkod yalnızca tek bir Take satırını belirliyorsa miktar/lot
+    // ekranını aç. Lot takipli stokta doğrudan miktar yazmak, hatayı ancak
+    // register sırasında gösteriyordu.
+    // Aynı ürün farklı lot/raf satırlarında yer alıyorsa topluca yazmak
+    // yanlış stok hareketi yaratır; operatör kesin satırı seçmelidir.
     fun confirmItem(itemNo: String) {
         if (!requireMutationAccess()) return
-        scope.launch {
-            busy = true; status = "$itemNo işleniyor..."
-            val targets = lines.filter { it.optString("itemNo") == itemNo }
-            var okCount = 0
-            for (ln in targets) {
-                if (!patchLine(ln, ln.optDouble("qtyOutstanding", ln.optDouble("quantity")))) break
-                okCount += 1
+        val targets = directedMovementTakeMatches(lines, itemNo)
+        when {
+            targets.isEmpty() -> status = "HATA: $itemNo için bekleyen Al satırı bulunamadı."
+            targets.size > 1 ->
+                status = "HATA: $itemNo için birden fazla Al satırı var. Lot/rafı doğrulamak için ilgili Al satırına dokunun."
+            else -> {
+                status = ""
+                qtyLine = targets.single()
             }
-            busy = false
-            status = if (okCount == targets.size) "TAMAM: $itemNo tam miktar onaylandı"
-                else "HATA: $okCount/${targets.size} satır kaydedildi. Belge yenilendi; kalanları kontrol edin."
-            reload()
         }
     }
 
@@ -2710,7 +2758,7 @@ private fun MovementDocument(no: String, onBack: () -> Unit) {
                     val done = ln.optDouble("qtyHandled", 0.0) >= qty && qty > 0
                     Card(
                         onClick = { qtyLine = ln },
-                        enabled = !busy && canMutate(),
+                        enabled = !busy && canMutate() && take,
                         modifier = Modifier.fillMaxWidth(),
                         shape = RoundedCornerShape(10.dp),
                         colors = CardDefaults.cardColors(
@@ -2741,21 +2789,25 @@ private fun MovementDocument(no: String, onBack: () -> Unit) {
             }
         }
         BottomActionBar {
-            val canRegister = canMutate() && lines.isNotEmpty() && lines.all {
-                val quantity = it.optDouble("quantity", 0.0)
-                maxOf(it.optDouble("qtyHandled", 0.0), it.optDouble("qtyToHandle", 0.0)) >= quantity
-            }
+            val canRegister = canMutate() && directedMovementReadyToRegister(lines)
             Button(
                 onClick = {
                     if (requireMutationAccess()) {
                         scope.launch {
                             busy = true; status = "$no kaydediliyor..."
-                            val r = BcApi.boundAction(context, "movements", no, "register", "{}")
+                            val r = BcApi.boundActionLongRunning(
+                                context,
+                                "movements",
+                                no,
+                                "registerFor",
+                                JSONObject().apply { put("userId", myUserId) }.toString(),
+                            )
                             busy = false
-                            status = if (r.ok) {
-                                "TAMAM: $no kaydedildi — stok taşındı"
-                            } else {
-                                "UYARI: Kayıt sonucunun sunucudaki durumu doğrulanamadı. Tekrar kaydetmeyin; güncel durum okunuyor."
+                            status = when {
+                                r.ok -> "TAMAM: $no kaydedildi — stok taşındı"
+                                BcApi.isAmbiguousMutationFailure(r) ->
+                                    "UYARI: Kayıt sonucunun sunucudaki durumu doğrulanamadı. Tekrar kaydetmeyin; güncel durum okunuyor."
+                                else -> directedMovementRegisterError(BcApi.errorMessage(r.body), r.httpCode)
                             }
                             // Timeout/5xx sonrasında BC işlemi tamamlamış olabilir. Her iki
                             // durumda da gerçek sunucu durumunu yeniden okuyarak tekrar kayıt
@@ -2766,7 +2818,7 @@ private fun MovementDocument(no: String, onBack: () -> Unit) {
                 },
                 enabled = !busy && canRegister,
                 modifier = Modifier.fillMaxWidth().height(54.dp),
-            ) { Text(if (canRegister) "✅ Hareketi Kaydet" else "Tüm satırları onaylayın", fontWeight = FontWeight.Bold) }
+            ) { Text(if (canRegister) "✅ Hareketi Kaydet" else "Önce miktar ve takip bilgisi girin", fontWeight = FontWeight.Bold) }
         }
     }
 
@@ -2776,19 +2828,45 @@ private fun MovementDocument(no: String, onBack: () -> Unit) {
             title = "Miktar (${if (ql.optString("actionType").equals("Take", true)) "Al" else "Bırak"} · 📍 ${ql.optString("binCode")})",
             itemNo = ql.optString("itemNo"),
             initialQty = ql.optDouble("qtyOutstanding", ql.optDouble("quantity")),
-            showLotSerial = false,
+            initialUom = ql.optString("unitOfMeasureCode"),
+            initialLot = ql.optString("lotNo"),
+            initialSerial = ql.optString("serialNo"),
+            showLotSerial = true,
+            showSerial = ql.optBoolean("serialRequired", false),
+            lotRequired = ql.optBoolean("lotRequired", false),
+            serialRequired = ql.optBoolean("serialRequired", false),
+            showAvailableLotLookup = true,
+            autoDetectLotFromStock = true,
+            locationCode = rawValue(ql, "locationCode").ifBlank { header?.optString("locationCode").orEmpty() },
+            binCode = rawValue(ql, "binCode"),
+            variantCode = ql.optString("variantCode"),
             onDismiss = { qtyLine = null },
             onConfirm = { res ->
                 qtyLine = null
                 scope.launch {
                     busy = true
-                    if (patchLine(ql, res.quantity)) { status = "TAMAM: Satır güncellendi"; reload() }
+                    if (patchLine(ql, res.quantity, res.lotNo, res.serialNo)) { status = "TAMAM: Satır güncellendi"; reload() }
                     busy = false
                 }
             },
         )
     }
 }
+
+internal fun directedMovementConfirmBody(
+    lineNo: Int,
+    qty: Double,
+    lotNo: String,
+    serialNo: String,
+    userId: String,
+): String =
+    JSONObject().apply {
+        put("lineNo", lineNo)
+        put("qtyToHandle", qty)
+        put("lotNo", lotNo)
+        put("serialNo", serialNo)
+        put("userId", userId)
+    }.toString()
 
 private fun fmtq(v: Double): String = if (v == v.toLong().toDouble()) v.toLong().toString() else v.toString()
 

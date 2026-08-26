@@ -58,6 +58,7 @@ fun QuantityDialogSheet(
     lotSelectionOnly: Boolean = false,
     showAvailableLotLookup: Boolean = false,
     serialRequired: Boolean = false,
+    quantityExactlyOne: Boolean = false,
     // Stoktaki lotları açılışta yoklar: lot bulunursa alan zorunlu sayılır ve
     // seçim listesi görünür. BC'deki lotRequired alanı yayınlanmamış olsa bile
     // lot takipli üründe boş lotla sevk edilmesini engeller.
@@ -106,6 +107,9 @@ fun QuantityDialogSheet(
 
     fun qty(): Double = qtyText.toDoubleOrNull() ?: 0.0
     fun setQty(v: Double) { qtyText = formatQty(v.coerceAtLeast(0.0)) }
+    LaunchedEffect(quantityExactlyOne) {
+        if (quantityExactlyOne) setQty(1.0)
+    }
 
     SheetScaffold(onDismiss = onDismiss) {
             if (showSupplierLotLookup) {
@@ -140,22 +144,37 @@ fun QuantityDialogSheet(
             Spacer(Modifier.height(16.dp))
 
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedIconButton(onClick = { setQty(qty() - 1) }) { Text("−", fontSize = 22.sp) }
+                OutlinedIconButton(
+                    onClick = { setQty(qty() - 1) },
+                    enabled = !quantityExactlyOne,
+                ) { Text("−", fontSize = 22.sp) }
                 OutlinedTextField(
                     value = qtyText,
                     onValueChange = { qtyText = it.filter { c -> c.isDigit() || c == '.' } },
                     label = { Text("Miktar") },
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                    readOnly = quantityExactlyOne,
                     singleLine = true,
                     modifier = Modifier.weight(1f),
                 )
-                OutlinedIconButton(onClick = { setQty(qty() + 1) }) { Text("+", fontSize = 22.sp) }
+                OutlinedIconButton(
+                    onClick = { setQty(qty() + 1) },
+                    enabled = !quantityExactlyOne,
+                ) { Text("+", fontSize = 22.sp) }
             }
             Spacer(Modifier.height(10.dp))
             Button(
                 onClick = { setQty(qty() + 1) },
+                enabled = !quantityExactlyOne,
                 modifier = Modifier.fillMaxWidth().height(52.dp)
             ) { Text("+1", fontSize = 20.sp, fontWeight = FontWeight.Bold) }
+            if (quantityExactlyOne) {
+                Text(
+                    "Seri takipli üründe her seri numarası tam olarak 1 temel birimdir.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
 
             Spacer(Modifier.height(12.dp))
             if (uomSelectionOnly || selectableUoms.isNotEmpty()) {
@@ -359,6 +378,7 @@ fun QuantityDialogSheet(
                         )
                     },
                     enabled = qty() > 0 &&
+                        (!quantityExactlyOne || qty() == 1.0) &&
                         stockLotProbeReady &&
                         (!uomRequired || uom.isNotBlank()) &&
                         (!effectiveLotRequired || lot.isNotBlank()) &&

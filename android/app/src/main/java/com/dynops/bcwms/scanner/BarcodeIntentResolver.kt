@@ -26,6 +26,9 @@ data class ResolvedBarcode(
     val lotNo: String? = null,
     val serialNo: String? = null,
     val expiry: String? = null,
+    /** Etikette açıkça yazan varyant ve ölçü birimi; yoksa sunucu ürün kartından tamamlar. */
+    val variantCode: String? = null,
+    val unitOfMeasureCode: String? = null,
     /** Belge barkoduysa belge türü: receipt/shipment/putaway/pick/movement/salesOrder/purchaseOrder/... */
     val docType: String? = null,
     /** Etiketin üzerindeki miktar (GS1 AI 30/37 veya alan adlı firma QR'ı). */
@@ -186,6 +189,12 @@ object BarcodeIntentResolver {
             ?.takeIf { it.isNotBlank() }
         val lotNo = CUSTOM_LOT.find(raw)?.groupValues?.get(1)?.trim()?.trim('"', '\'')
             ?.takeIf { it.isNotBlank() }
+        val serialNo = CUSTOM_SERIAL.find(raw)?.groupValues?.get(1)?.trim()?.trim('"', '\'')
+            ?.takeIf { it.isNotBlank() }
+        val variantCode = CUSTOM_VARIANT.find(raw)?.groupValues?.get(1)?.trim()?.trim('"', '\'')
+            ?.takeIf { it.isNotBlank() }
+        val unitOfMeasureCode = CUSTOM_UOM.find(raw)?.groupValues?.get(1)?.trim()?.trim('"', '\'')
+            ?.takeIf { it.isNotBlank() }
         val quantity = CUSTOM_QUANTITY.find(raw)?.groupValues?.get(1)?.let(::parseLocalizedQuantity)
 
         if (itemNo == null && lotNo == null) return null
@@ -195,7 +204,10 @@ object BarcodeIntentResolver {
                 value = lotNo!!,
                 raw = raw,
                 lotNo = lotNo,
+                serialNo = serialNo,
                 quantity = quantity,
+                variantCode = variantCode,
+                unitOfMeasureCode = unitOfMeasureCode,
             )
         }
 
@@ -205,7 +217,10 @@ object BarcodeIntentResolver {
             raw = raw,
             itemNo = itemNo,
             lotNo = lotNo,
+            serialNo = serialNo,
             quantity = quantity,
+            variantCode = variantCode,
+            unitOfMeasureCode = unitOfMeasureCode,
         )
     }
 
@@ -234,6 +249,18 @@ object BarcodeIntentResolver {
     )
     private val CUSTOM_LOT = Regex(
         """(?:lot\s*(?:no|number)?|tedarikci\s*lotu|tedarikçi\s*lotu)[\"']?\s*[:=]\s*[\"']?([\p{L}\p{N}._/-]+)""",
+        RegexOption.IGNORE_CASE,
+    )
+    private val CUSTOM_SERIAL = Regex(
+        """(?:seri\s*(?:no|number)?|serial\s*(?:no|number)?|sn)[\"']?\s*[:=]\s*[\"']?([\p{L}\p{N}._/-]+)""",
+        RegexOption.IGNORE_CASE,
+    )
+    private val CUSTOM_VARIANT = Regex(
+        """(?:varyant(?:\s*kodu)?|variant(?:\s*(?:no|code))?)[\"']?\s*[:=]\s*[\"']?([\p{L}\p{N}._/-]+)""",
+        RegexOption.IGNORE_CASE,
+    )
+    private val CUSTOM_UOM = Regex(
+        """(?<![/\p{L}])(?:birim|ölçü\s*birimi|olcu\s*birimi|uom|unit\s*of\s*measure)[\"']?\s*[:=]\s*[\"']?([\p{L}\p{N}._/-]+)""",
         RegexOption.IGNORE_CASE,
     )
     private val CUSTOM_QUANTITY = Regex(

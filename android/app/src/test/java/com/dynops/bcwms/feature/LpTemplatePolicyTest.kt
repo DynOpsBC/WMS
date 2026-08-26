@@ -23,4 +23,16 @@ class LpTemplatePolicyTest {
     fun `single template is safe default`() {
         assertEquals("ONLY", chooseLpTemplate(listOf(row("ONLY")), LpPurpose.CARTON))
     }
+
+    @Test
+    fun `standard receiving pallet wins when multiple pallet templates exist`() {
+        val rows = listOf(row("PALLET-US", "US pallet"), row("PALLET-EUR", "Euro pallet"))
+        assertEquals("PALLET-EUR", chooseLpTemplate(rows, LpPurpose.PALLET))
+    }
+
+    @Test
+    fun `standard small carton wins when multiple carton templates exist`() {
+        val rows = listOf(row("CARTON-M", "Medium carton"), row("CARTON-S", "Small carton"))
+        assertEquals("CARTON-S", chooseLpTemplate(rows, LpPurpose.CARTON))
+    }
 }

@@ -61,6 +61,7 @@ enum class Screen(val title: String) {
     Packing("Paketleme"),
     AdHocMove("Ad-Hoc Hareket"),
     Count("Sayım"),
+    CountV2("Sayım V2"),
     PutAway("Yerleştirme"),
     Shipping("Sevkiyat"),
     Production("Üretim"),
@@ -158,6 +159,7 @@ fun AppRoot() {
                 Screen.Packing -> key(v2Enabled) { PackingModule(v2Enabled = v2Enabled) }
                 Screen.AdHocMove -> AdHocMoveModule()
                 Screen.Count -> CountModule()
+                Screen.CountV2 -> CountV2Module()
                 Screen.PutAway -> PutAwayModule()
                 Screen.Shipping -> ShippingModule()
                 Screen.Production -> ProductionModule()
@@ -264,6 +266,7 @@ private val HomeCategories = listOf(
         HomeTile(Screen.AdHocMove, "↔️", "Ad-Hoc Hareket"),
         HomeTile(Screen.DirectedMove, "🧭", "Yönlendirilmiş"),
         HomeTile(Screen.Count, "🔢", "Sayım"),
+        HomeTile(Screen.CountV2, "📲", "Sayım V2"),
     )),
     HomeCategory("Üretim", Color(0xFFE2873B), listOf(
         HomeTile(Screen.Production, "🏭", "Üretim"),

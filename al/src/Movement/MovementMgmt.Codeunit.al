@@ -3,6 +3,7 @@ codeunit 72045 "DOPSWHS Movement Mgmt"
     Access = Public;
     Permissions =
         tabledata Item = R,
+        tabledata "Item Tracking Code" = R,
         tabledata Location = R,
         tabledata Bin = R,
         tabledata "Item Journal Template" = RIMD,
@@ -57,7 +58,7 @@ codeunit 72045 "DOPSWHS Movement Mgmt"
         // (the bins are location-scoped) so the reclass posts where the bin actually lives, instead
         // of forcing the Setup default location (which may not own this bin).
         LocationCode := ResolveLocationForBin(FromBinCode, Setup."Default Location Code");
-        ExecuteAdHocMove(LocationCode, FromBinCode, ToBinCode, ItemNo, LpNo, Qty, UserId, LotNo);
+        ExecuteAdHocMove(LocationCode, FromBinCode, ToBinCode, ItemNo, LpNo, Qty, UserId, LotNo, '');
     end;
 
     /// <summary>
@@ -66,14 +67,25 @@ codeunit 72045 "DOPSWHS Movement Mgmt"
     /// </summary>
     procedure AdHocMoveAtLocation(LocationCode: Code[10]; FromBinCode: Code[20]; ToBinCode: Code[20]; ItemNo: Code[20]; LpNo: Code[20]; Qty: Decimal; UserId: Code[50]; LotNo: Code[50])
     begin
-        ExecuteAdHocMove(LocationCode, FromBinCode, ToBinCode, ItemNo, LpNo, Qty, UserId, LotNo);
+        ExecuteAdHocMove(LocationCode, FromBinCode, ToBinCode, ItemNo, LpNo, Qty, UserId, LotNo, '');
     end;
 
-    local procedure ExecuteAdHocMove(LocationCode: Code[10]; FromBinCode: Code[20]; ToBinCode: Code[20]; ItemNo: Code[20]; LpNo: Code[20]; Qty: Decimal; UserId: Code[50]; LotNo: Code[50])
+    /// <summary>
+    /// Posts a lot/serial tracked bin move in an explicitly known location.
+    /// Serial quantity is expressed in the item's base unit and must be one.
+    /// </summary>
+    procedure AdHocMoveTrackedAtLocation(LocationCode: Code[10]; FromBinCode: Code[20]; ToBinCode: Code[20]; ItemNo: Code[20]; LpNo: Code[20]; Qty: Decimal; UserId: Code[50]; LotNo: Code[50]; SerialNo: Code[50])
+    begin
+        ExecuteAdHocMove(LocationCode, FromBinCode, ToBinCode, ItemNo, LpNo, Qty, UserId, LotNo, SerialNo);
+    end;
+
+    local procedure ExecuteAdHocMove(LocationCode: Code[10]; FromBinCode: Code[20]; ToBinCode: Code[20]; ItemNo: Code[20]; LpNo: Code[20]; Qty: Decimal; UserId: Code[50]; LotNo: Code[50]; SerialNo: Code[50])
     var
         Location: Record Location;
         FromBin: Record Bin;
         ToBin: Record Bin;
+        Item: Record Item;
+        ItemTrackingCode: Record "Item Tracking Code";
         ItemJournalTemplate: Record "Item Journal Template";
         ItemJournalLine: Record "Item Journal Line";
         ItemJnlPostBatch: Codeunit "Item Jnl.-Post Batch";
@@ -99,13 +111,22 @@ codeunit 72045 "DOPSWHS Movement Mgmt"
             Error('Source bin %1 does not exist in location %2.', FromBinCode, LocationCode);
         if not ToBin.Get(LocationCode, ToBinCode) then
             Error('Target bin %1 does not exist in location %2.', ToBinCode, LocationCode);
+        Item.Get(ItemNo);
+        if (Item."Item Tracking Code" <> '') and ItemTrackingCode.Get(Item."Item Tracking Code") then begin
+            if (ItemTrackingCode."Lot Specific Tracking" or ItemTrackingCode."Lot Warehouse Tracking") and (LotNo = '') then
+                Error('%1 lot takipli maddesi için lot numarası zorunludur.', ItemNo);
+            if (ItemTrackingCode."SN Specific Tracking" or ItemTrackingCode."SN Warehouse Tracking") and (SerialNo = '') then
+                Error('%1 seri takipli maddesi için seri numarası zorunludur.', ItemNo);
+        end;
+        if (SerialNo <> '') and (Qty <> 1) then
+            Error('%1 seri numarası tek bir temel birimi temsil eder; hareket miktarı 1 olmalıdır.', SerialNo);
 
         // Yönlendirilmiş (Directed Put-away and Pick) lokasyonda Item Journal
         // bin taşıyamaz — post adjustment bin'den (W-99-...) geçer ve raf
         // seviyesinde hareket OLMAZ. Doğru araç: Warehouse Reclass Journal
         // (Movement) — bin'den bin'e, ILE'ye dokunmadan.
         if Location."Directed Put-away and Pick" then begin
-            RegisterWhseMove(LocationCode, FromBinCode, ToBinCode, ItemNo, Qty, UserId, LotNo);
+            RegisterWhseMove(LocationCode, FromBinCode, ToBinCode, ItemNo, Qty, UserId, LotNo, SerialNo);
             CustomDimensions.Add('Category', 'Movement');
             // Hareketi yapan operatör terminalden parametre olarak geliyor
             // (UserId parametresi). Paylaşımlı BC hesabı ile ayırt edilemezdi;
@@ -123,15 +144,15 @@ codeunit 72045 "DOPSWHS Movement Mgmt"
         PurgeStaleItemLines(ItemJournalTemplate.Name, BatchName);
 
         CreateReclassLine(ItemJournalTemplate.Name, BatchName, LocationCode, FromBinCode, ToBinCode, ItemNo, LpNo, Qty, ItemJournalLine);
-        // Lot izlemeli ürün: reclass satırına item tracking bağla — yoksa post
-        // "You must assign a lot number" ile düşer.
+        // Lot/seri izlemeli ürün: reclass satırına item tracking bağla — yoksa
+        // post zorunlu izleme bilgisi eksik hatasıyla düşer.
         // DİKKAT (17 Tem saha hatası): satırın kendi "Lot No."/"New Lot No."
         // alanları DOLDURULMAZ — reservation entry (tracking spec) varken
         // codeunit 22 satır alanlarının boş olmasını şart koşar ("New Lot No.
-        // must be equal to ''"). Lot yalnızca AddLotTracking'in oluşturduğu
-        // reservation kaydında taşınır (Lot No. + New Lot No.).
-        if LotNo <> '' then
-            AddLotTracking(ItemJournalLine, LotNo);
+        // must be equal to ''"). İzleme yalnızca AddItemTracking'in oluşturduğu
+        // reservation kaydında taşınır (lot/seri + yeni lot/seri).
+        if (LotNo <> '') or (SerialNo <> '') then
+            AddItemTracking(ItemJournalLine, LotNo, SerialNo);
         CustomDimensions.Add('Category', 'Movement');
         Telemetry.AddUserDimensions(CustomDimensions, UserId);
         Session.LogMessage('DOPSWHS-Move-AdHoc', StrSubstNo('Ad-hoc move item %1 qty %2 from %3 to %4 lp %5', ItemNo, Qty, FromBinCode, ToBinCode, LpNo), Verbosity::Normal, DataClassification::SystemMetadata, TelemetryScope::ExtensionPublisher, CustomDimensions);
@@ -189,6 +210,130 @@ codeunit 72045 "DOPSWHS Movement Mgmt"
             WhseActivityRegister.Run(WhseActivityLine);
     end;
 
+    /// <summary>
+    /// Claims an unassigned directed movement for the local WMS user. The
+    /// shared Business Central service account is deliberately not used as the
+    /// warehouse operator identity.
+    /// </summary>
+    procedure ClaimDirected(var WhseActivityHeader: Record "Warehouse Activity Header"; RequestingUserId: Code[50])
+    var
+        LockedHeader: Record "Warehouse Activity Header";
+    begin
+        if RequestingUserId = '' then
+            Error('WMS kullanıcı kimliği boş olamaz. Terminal oturumunu yenileyin.');
+
+        LockedHeader.LockTable();
+        if not LockedHeader.Get(LockedHeader.Type::Movement, WhseActivityHeader."No.") then
+            Error('Hareket belgesi %1 artık bulunamıyor. Listeyi yenileyin.', WhseActivityHeader."No.");
+        if (LockedHeader."Assigned User ID" <> '') and
+           (LockedHeader."Assigned User ID" <> RequestingUserId)
+        then
+            Error('Hareket belgesi %1, %2 kullanıcısına atanmış.', LockedHeader."No.", LockedHeader."Assigned User ID");
+
+        if LockedHeader."Assigned User ID" <> RequestingUserId then begin
+            LockedHeader."Assigned User ID" := CopyStr(RequestingUserId, 1, MaxStrLen(LockedHeader."Assigned User ID"));
+            LockedHeader.Modify(true);
+        end;
+        WhseActivityHeader := LockedHeader;
+    end;
+
+    /// <summary>
+    /// Updates a movement Take/Place pair together. Writing only the tapped
+    /// row leaves its companion at zero and prevents warehouse registration.
+    /// </summary>
+    procedure ConfirmDirectedLineFor(var WhseActivityLine: Record "Warehouse Activity Line"; QtyToHandle: Decimal; LotNo: Code[50]; SerialNo: Code[50]; RequestingUserId: Code[50])
+    var
+        WhseActivityHeader: Record "Warehouse Activity Header";
+        CompanionLine: Record "Warehouse Activity Line";
+    begin
+        if RequestingUserId = '' then
+            Error('WMS kullanıcı kimliği boş olamaz. Terminal oturumunu yenileyin.');
+        if WhseActivityLine."Activity Type" <> WhseActivityLine."Activity Type"::Movement then
+            Error('%1 ambar aktivitesi yönlendirilmiş hareket değildir.', WhseActivityLine."No.");
+        if not WhseActivityHeader.Get(WhseActivityHeader.Type::Movement, WhseActivityLine."No.") then
+            Error('Hareket belgesi %1 artık bulunamıyor. Listeyi yenileyin.', WhseActivityLine."No.");
+        if WhseActivityHeader."Assigned User ID" <> RequestingUserId then
+            Error('Hareket belgesi %1 bu kullanıcıya atanmış değil.', WhseActivityLine."No.");
+        // Eş satırı, kullanıcının seçtiği yeni lotu yazmadan önce mevcut
+        // satır anahtarlarıyla bul. Aksi halde lotu boş oluşturulmuş Place satırı,
+        // lot girilen Take satırıyla artık eşleşmez.
+        WhseActivityLine.LockTable();
+        if not WhseActivityLine.Get(
+             WhseActivityLine."Activity Type", WhseActivityLine."No.", WhseActivityLine."Line No.")
+        then
+            Error('Hareket satırı %1 artık bulunamıyor. Belgeyi yenileyin.', WhseActivityLine."Line No.");
+        if (QtyToHandle <= 0) or (QtyToHandle > WhseActivityLine."Qty. Outstanding") then
+            Error('%1 satırı için hareket miktarı 0 ile %2 arasında olmalıdır.', WhseActivityLine."Line No.", WhseActivityLine."Qty. Outstanding");
+
+        CompanionLine.SetRange("Activity Type", WhseActivityLine."Activity Type");
+        CompanionLine.SetRange("No.", WhseActivityLine."No.");
+        CompanionLine.SetRange("Whse. Document Type", WhseActivityLine."Whse. Document Type");
+        CompanionLine.SetRange("Whse. Document No.", WhseActivityLine."Whse. Document No.");
+        CompanionLine.SetRange("Whse. Document Line No.", WhseActivityLine."Whse. Document Line No.");
+        CompanionLine.SetRange("Item No.", WhseActivityLine."Item No.");
+        CompanionLine.SetRange("Variant Code", WhseActivityLine."Variant Code");
+        CompanionLine.SetRange("Unit of Measure Code", WhseActivityLine."Unit of Measure Code");
+        CompanionLine.SetRange("Lot No.", WhseActivityLine."Lot No.");
+        CompanionLine.SetRange("Serial No.", WhseActivityLine."Serial No.");
+        CompanionLine.SetRange("Package No.", WhseActivityLine."Package No.");
+        CompanionLine.SetRange("LP No.", WhseActivityLine."LP No.");
+        if WhseActivityLine."Action Type" = WhseActivityLine."Action Type"::Take then
+            CompanionLine.SetRange("Action Type", CompanionLine."Action Type"::Place)
+        else
+            CompanionLine.SetRange("Action Type", CompanionLine."Action Type"::Take);
+        if CompanionLine.Count() <> 1 then
+            Error(
+                '%1 hareket satırı için lot/seri/LP bilgileriyle eşleşen tek bir karşı satır bulunamadı. Belgeyi BC''de yeniden oluşturun.',
+                WhseActivityLine."Line No.");
+        CompanionLine.FindFirst();
+
+        EnsureDirectedMovementTracking(WhseActivityLine, QtyToHandle, LotNo, SerialNo);
+        WhseActivityLine.Validate("Lot No.", LotNo);
+        WhseActivityLine.Validate("Serial No.", SerialNo);
+        WhseActivityLine.Validate("Qty. to Handle", QtyToHandle);
+        WhseActivityLine.Modify(true);
+        CompanionLine.Validate("Lot No.", LotNo);
+        CompanionLine.Validate("Serial No.", SerialNo);
+        CompanionLine.Validate("Qty. to Handle", QtyToHandle);
+        CompanionLine.Modify(true);
+    end;
+
+    local procedure EnsureDirectedMovementTracking(WhseActivityLine: Record "Warehouse Activity Line"; QtyToHandle: Decimal; LotNo: Code[50]; SerialNo: Code[50])
+    var
+        Item: Record Item;
+        ItemTrackingCode: Record "Item Tracking Code";
+    begin
+        if QtyToHandle <= 0 then
+            exit;
+        if not Item.Get(WhseActivityLine."Item No.") then
+            exit;
+        if (Item."Item Tracking Code" = '') or (not ItemTrackingCode.Get(Item."Item Tracking Code")) then
+            exit;
+        if (ItemTrackingCode."Lot Specific Tracking" or ItemTrackingCode."Lot Warehouse Tracking") and (LotNo = '') then
+            Error(
+                '%1 ürününün %2 hareket satırında lot numarası zorunludur. %3 rafındaki stok lotlarından birini seçin.',
+                WhseActivityLine."Item No.", WhseActivityLine."Line No.", WhseActivityLine."Bin Code");
+        if (ItemTrackingCode."SN Specific Tracking" or ItemTrackingCode."SN Warehouse Tracking") and (SerialNo = '') then
+            Error(
+                '%1 ürününün %2 hareket satırında seri numarası zorunludur. %3 rafındaki stok serisini okutun.',
+                WhseActivityLine."Item No.", WhseActivityLine."Line No.", WhseActivityLine."Bin Code");
+    end;
+
+    procedure RegisterDirectedFor(var WhseActivityHeader: Record "Warehouse Activity Header"; RequestingUserId: Code[50])
+    var
+        LockedHeader: Record "Warehouse Activity Header";
+    begin
+        if RequestingUserId = '' then
+            Error('WMS kullanıcı kimliği boş olamaz. Terminal oturumunu yenileyin.');
+        LockedHeader.LockTable();
+        if not LockedHeader.Get(LockedHeader.Type::Movement, WhseActivityHeader."No.") then
+            Error('Hareket belgesi %1 artık bulunamıyor. Listeyi yenileyin.', WhseActivityHeader."No.");
+        if LockedHeader."Assigned User ID" <> RequestingUserId then
+            Error('Hareket belgesi %1 bu kullanıcıya atanmış değil.', LockedHeader."No.");
+        WhseActivityHeader := LockedHeader;
+        RegisterDirected(WhseActivityHeader, RequestingUserId);
+    end;
+
     local procedure EnsureReclassTemplate(var ItemJournalTemplate: Record "Item Journal Template")
     begin
         ItemJournalTemplate.SetRange(Type, ItemJournalTemplate.Type::Transfer);
@@ -219,7 +364,7 @@ codeunit 72045 "DOPSWHS Movement Mgmt"
 
     // ---- Yönlendirilmiş lokasyon: Warehouse Reclass Journal (bin-to-bin) ----
 
-    local procedure RegisterWhseMove(LocationCode: Code[10]; FromBinCode: Code[20]; ToBinCode: Code[20]; ItemNo: Code[20]; Qty: Decimal; UserId: Code[50]; LotNo: Code[50])
+    local procedure RegisterWhseMove(LocationCode: Code[10]; FromBinCode: Code[20]; ToBinCode: Code[20]; ItemNo: Code[20]; Qty: Decimal; UserId: Code[50]; LotNo: Code[50]; SerialNo: Code[50])
     var
         Item: Record Item;
         FromBin: Record Bin;
@@ -260,11 +405,11 @@ codeunit 72045 "DOPSWHS Movement Mgmt"
         WhseJournalLine.Insert(true);
 
         // Saha hatası (17 Tem): "Item tracking lines ... must account for the
-        // same quantity" — whse journal lot'u satır alanından DEĞİL, bağlı
+        // same quantity" — whse journal izlemeyi satır alanından DEĞİL, bağlı
         // "Whse. Item Tracking Line" kaydından okur (UI'daki Item Tracking
         // Lines sayfasının kod karşılığı).
-        if LotNo <> '' then
-            AddWhseLotTracking(WhseJournalLine, LotNo);
+        if (LotNo <> '') or (SerialNo <> '') then
+            AddWhseItemTracking(WhseJournalLine, LotNo, SerialNo);
 
         // Item Jnl.-Post Batch'in ambar karşılığı — confirm diyaloğu açmadan
         // register eder (web servis bağlamı).
@@ -272,7 +417,7 @@ codeunit 72045 "DOPSWHS Movement Mgmt"
         WhseJnlRegisterBatch.Run(WhseJournalLine);
     end;
 
-    local procedure AddWhseLotTracking(WhseJnlLine: Record "Warehouse Journal Line"; LotNo: Code[50])
+    local procedure AddWhseItemTracking(WhseJnlLine: Record "Warehouse Journal Line"; LotNo: Code[50]; SerialNo: Code[50])
     var
         WhseItemTrackingLine: Record "Whse. Item Tracking Line";
         EntryNo: Integer;
@@ -296,8 +441,10 @@ codeunit 72045 "DOPSWHS Movement Mgmt"
         WhseItemTrackingLine."Qty. per Unit of Measure" := WhseJnlLine."Qty. per Unit of Measure";
         WhseItemTrackingLine.Validate("Quantity (Base)", WhseJnlLine."Qty. (Base)");
         WhseItemTrackingLine."Lot No." := LotNo;
-        // Reclass: aynı lot hedef bin'e taşınır.
+        WhseItemTrackingLine."Serial No." := SerialNo;
+        // Reclass: aynı lot/seri hedef bin'e taşınır.
         WhseItemTrackingLine."New Lot No." := LotNo;
+        WhseItemTrackingLine."New Serial No." := SerialNo;
         WhseItemTrackingLine.Insert();
     end;
 
@@ -378,10 +525,10 @@ codeunit 72045 "DOPSWHS Movement Mgmt"
         exit(10000);
     end;
 
-    // Reclass satırına lot tracking: aynı lot kaynaktan düşülüp hedefe yazılır
-    // ("Lot No." + "New Lot No."). Standart desen: Create Reserv. Entry ile
+    // Reclass satırına item tracking: aynı lot/seri kaynaktan düşülüp hedefe
+    // yazılır. Standart desen: Create Reserv. Entry ile
     // Prospect rezervasyon kaydı (item journal post bunu tracking spec olarak okur).
-    local procedure AddLotTracking(var ItemJnlLine: Record "Item Journal Line"; LotNo: Code[50])
+    local procedure AddItemTracking(var ItemJnlLine: Record "Item Journal Line"; LotNo: Code[50]; SerialNo: Code[50])
     var
         TempReservEntry: Record "Reservation Entry";
         ReservEntry: Record "Reservation Entry";
@@ -389,6 +536,8 @@ codeunit 72045 "DOPSWHS Movement Mgmt"
     begin
         TempReservEntry."Lot No." := LotNo;
         TempReservEntry."New Lot No." := LotNo;
+        TempReservEntry."Serial No." := SerialNo;
+        TempReservEntry."New Serial No." := SerialNo;
         CreateReservEntry.CreateReservEntryFor(
             Database::"Item Journal Line",
             ItemJnlLine."Entry Type".AsInteger(),
@@ -412,13 +561,18 @@ codeunit 72045 "DOPSWHS Movement Mgmt"
         ReservEntry.SetRange("Source ID", ItemJnlLine."Journal Template Name");
         ReservEntry.SetRange("Source Batch Name", ItemJnlLine."Journal Batch Name");
         ReservEntry.SetRange("Source Ref. No.", ItemJnlLine."Line No.");
-        ReservEntry.SetRange("Lot No.", LotNo);
+        if LotNo <> '' then
+            ReservEntry.SetRange("Lot No.", LotNo);
+        if SerialNo <> '' then
+            ReservEntry.SetRange("Serial No.", SerialNo);
         if ReservEntry.FindSet(true) then
             repeat
                 if ReservEntry."New Lot No." = '' then begin
                     ReservEntry."New Lot No." := LotNo;
-                    ReservEntry.Modify();
                 end;
+                if ReservEntry."New Serial No." = '' then
+                    ReservEntry."New Serial No." := SerialNo;
+                ReservEntry.Modify();
             until ReservEntry.Next() = 0;
     end;
 

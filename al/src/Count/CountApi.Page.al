@@ -23,6 +23,7 @@ page 72221 "DOPSWHS Count API"
                 field(mode; Rec.Mode) { Caption = 'mode'; }
                 field(status; Rec.Status) { Caption = 'status'; }
                 field(createdDateTime; Rec."Created DateTime") { Caption = 'createdDateTime'; }
+                field(v2ScanMode; Rec."V2 Scan Mode") { Caption = 'v2ScanMode'; }
                 field(counter1UserId; Counter1UserId) { Caption = 'counter1UserId'; Editable = false; }
                 field(counter2UserId; Counter2UserId) { Caption = 'counter2UserId'; Editable = false; }
                 field(counter3UserId; Counter3UserId) { Caption = 'counter3UserId'; Editable = false; }
@@ -108,6 +109,32 @@ page 72221 "DOPSWHS Count API"
         CountMgmt: Codeunit "DOPSWHS Count Mgmt";
     begin
         exit(CountMgmt.AddUnexpectedLp(Rec."No.", lpNo, binCode, counterSlot));
+    end;
+
+    [ServiceEnabled]
+    procedure prepareV2()
+    var
+        CountMgmt: Codeunit "DOPSWHS Count Mgmt";
+    begin
+        CountMgmt.PrepareV2(Rec."No.");
+    end;
+
+    [ServiceEnabled]
+    procedure scanV2Label(scanId: Guid; itemNo: Code[20]; variantCode: Code[10]; binCode: Code[20]; unitOfMeasureCode: Code[10]; lotNo: Code[50]; serialNo: Code[50]; qty: Decimal; counterSlot: Integer): Integer
+    var
+        CountMgmt: Codeunit "DOPSWHS Count Mgmt";
+    begin
+        exit(CountMgmt.ScanV2Label(
+            Rec."No.", scanId, itemNo, variantCode, binCode, unitOfMeasureCode,
+            lotNo, serialNo, qty, counterSlot));
+    end;
+
+    [ServiceEnabled]
+    procedure undoV2Scan(scanId: Guid): Integer
+    var
+        CountMgmt: Codeunit "DOPSWHS Count Mgmt";
+    begin
+        exit(CountMgmt.UndoV2Scan(Rec."No.", scanId));
     end;
 
     [ServiceEnabled]

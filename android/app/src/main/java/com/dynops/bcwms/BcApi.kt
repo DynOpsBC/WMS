@@ -392,10 +392,15 @@ object BcApi {
         val unexpectedItemAction: Boolean,
         val unexpectedLpAction: Boolean,
         val explicitZeroCount: Boolean,
+        val v2PrepareAction: Boolean,
+        val v2ScanAction: Boolean,
+        val v2UndoAction: Boolean,
         val httpCode: Int,
     ) {
         val varianceReady: Boolean
             get() = metadataLoaded && unexpectedItemAction && unexpectedLpAction && explicitZeroCount
+        val v2Ready: Boolean
+            get() = metadataLoaded && v2PrepareAction && v2ScanAction && v2UndoAction
     }
 
     /** Read-only metadata probe used to prevent a newer APK from calling count actions that the
@@ -403,7 +408,7 @@ object BcApi {
     suspend fun getCountCapabilities(context: Context): CountCapabilities {
         val result = get(context, customApiMetadataUrl(context))
         if (!result.ok)
-            return CountCapabilities(false, false, false, false, result.httpCode)
+            return CountCapabilities(false, false, false, false, false, false, false, result.httpCode)
         return parseCountCapabilities(result.body, result.httpCode)
     }
 
@@ -415,6 +420,9 @@ object BcApi {
             explicitZeroCount = metadata.contains("counted1", ignoreCase = true) &&
                 metadata.contains("counted2", ignoreCase = true) &&
                 metadata.contains("counted3", ignoreCase = true),
+            v2PrepareAction = metadata.contains("prepareV2", ignoreCase = true),
+            v2ScanAction = metadata.contains("scanV2Label", ignoreCase = true),
+            v2UndoAction = metadata.contains("undoV2Scan", ignoreCase = true),
             httpCode = httpCode,
         )
     }
@@ -716,6 +724,14 @@ object BcApi {
     internal fun isRetryableConnectionFailure(result: ApiResult): Boolean =
         result.httpCode == -1 ||
             result.httpCode == 404 ||
+            result.httpCode == 408 ||
+            result.httpCode == 425 ||
+            result.httpCode == 429 ||
+            result.httpCode >= 500
+
+    /** True when a mutating request may have reached BC despite the failed response. */
+    internal fun isAmbiguousMutationFailure(result: ApiResult): Boolean =
+        result.httpCode == -1 ||
             result.httpCode == 408 ||
             result.httpCode == 425 ||
             result.httpCode == 429 ||

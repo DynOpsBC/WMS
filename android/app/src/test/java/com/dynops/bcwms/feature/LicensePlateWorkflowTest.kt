@@ -22,9 +22,10 @@ class LicensePlateWorkflowTest {
     }
 
     @Test
-    fun `serial tracked item is rejected before unsupported LP bin movement`() {
-        assertFalse(canAddItemToLicensePlate(serialTrackingRequired = true))
-        assertTrue(canAddItemToLicensePlate(serialTrackingRequired = false))
+    fun `serial tracked LP line accepts exactly one base unit`() {
+        assertTrue(validLpTrackingQuantity(serialTrackingRequired = true, quantity = 1.0))
+        assertFalse(validLpTrackingQuantity(serialTrackingRequired = true, quantity = 2.0))
+        assertTrue(validLpTrackingQuantity(serialTrackingRequired = false, quantity = 25.0))
     }
 
     @Test

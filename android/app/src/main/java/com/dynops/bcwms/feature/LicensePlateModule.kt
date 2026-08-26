@@ -197,19 +197,27 @@ private fun LpBuildSheet(onDismiss: () -> Unit, onBuilt: (String) -> Unit) {
                         return@launch
                     }
                     val body = JSONObject().apply {
-                        put("templateCode", template.trim())
                         put("locationCode", location.trim())
                         put("binCode", bin.trim())
                     }.toString()
-                    val r = BcApi.post(context, "licensePlates", body)
+                    val r = BcApi.boundAction(
+                        context,
+                        "licensePlateTemplates",
+                        template.trim(),
+                        "build",
+                        body,
+                    )
                     busy = false
                     if (r.ok) {
-                        val no = JSONObject(r.body).optString("no")
-                        onBuilt(no)
+                        val no = BcApi.scalarValue(r.body).trim()
+                        if (no.isNotBlank()) onBuilt(no)
+                        else err = "HATA: Business Central LP numarası döndürmedi."
                     } else {
                         val serverError = BcApi.errorMessage(r.body)
                         err = if (serverError.contains("LP No. Series", ignoreCase = true))
                             "HATA: LP numara serisi tanımlı değil. Advanced WMS kurulumunu tamamlayın."
+                        else if (r.httpCode == 404 || r.httpCode == 405)
+                            "HATA: LP Build servisi henüz Business Central'a yayımlanmamış. Güncel AL uzantısını yayımlayın."
                         else QcErrorParser.friendlyStatus(serverError, r.httpCode)
                     }
                 }
@@ -521,6 +529,7 @@ private fun LpDocument(lpNo: String, onBack: () -> Unit) {
             uomSelectionOnly = true,
             showLotSerial = selection?.let { it.lotRequired || it.serialRequired } == true,
             showSerial = selection?.serialRequired == true,
+            quantityExactlyOne = selection?.serialRequired == true,
             lotRequired = selection?.lotRequired == true,
             lotSelectionOnly = (selection?.availableLotCount ?: 0) > 0,
             showAvailableLotLookup = (selection?.availableLotCount ?: 0) > 0,
@@ -529,11 +538,14 @@ private fun LpDocument(lpNo: String, onBack: () -> Unit) {
             binCode = selection?.sourceBinCode.orEmpty(),
             onDismiss = { showQty = false },
             onConfirm = { res ->
-                showQty = false
                 val sourceBin = selection?.sourceBinCode.orEmpty()
                 if (sourceBin.isBlank()) {
+                    showQty = false
                     status = "HATA: Kaynak bin kodu seçilmeden LP satırı eklenemez."
+                } else if (!validLpTrackingQuantity(selection?.serialRequired == true, res.quantity)) {
+                    status = "HATA: Seri takipli üründe her seri numarası için miktar 1 olmalıdır."
                 } else {
+                    showQty = false
                     addLineFromSourceBin(res, sourceBin)
                 }
             }
@@ -586,13 +598,7 @@ private fun AddLineScanSheet(
     var error by remember { mutableStateOf("") }
     var candidates by remember { mutableStateOf<List<LpItemSelection>>(emptyList()) }
 
-    fun select(candidate: LpItemSelection) {
-        if (!canAddItemToLicensePlate(candidate.serialRequired)) {
-            error = "Seri takipli ürünler LP'ye doğrudan eklenemez. Bu ürün için standart depo hareketini kullanın."
-            return
-        }
-        onItem(candidate)
-    }
+    fun select(candidate: LpItemSelection) = onItem(candidate)
 
     fun resolve() {
         if (itemOrLot.isBlank() || busy) return
@@ -730,11 +736,15 @@ private suspend fun resolveLpItemOrLot(
         val itemNo = item.optString("no")
         val availableLots = allLots(itemNo)
         val baseUom = item.optString("baseUnitOfMeasure")
-        val uomOptions = lpUomOptions(
-            baseUom,
-            uoms(itemNo),
-            availableLots.map { it.optString("unitOfMeasureCode") },
-        )
+        val serialRequired = item.optBoolean("serialTrackingRequired")
+        // A serial identifies exactly one base unit.  Do not offer a case/pallet
+        // UOM here because the server correctly rejects a converted base qty > 1.
+        val uomOptions = if (serialRequired) listOf(baseUom).filter(String::isNotBlank) else
+            lpUomOptions(
+                baseUom,
+                uoms(itemNo),
+                availableLots.map { it.optString("unitOfMeasureCode") },
+            )
         val initialUom = lotUom.takeIf(String::isNotBlank)
             ?: uomOptions.firstOrNull().orEmpty()
         val lotRequired = lpLotIsRequired(
@@ -750,7 +760,7 @@ private suspend fun resolveLpItemOrLot(
             uomOptions = uomOptions,
             initialLotNo = scannedLot,
             lotRequired = lotRequired,
-            serialRequired = item.optBoolean("serialTrackingRequired"),
+            serialRequired = serialRequired,
             availableLotCount = availableLots.size,
         )
     }

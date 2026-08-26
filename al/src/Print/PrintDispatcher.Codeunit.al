@@ -87,6 +87,110 @@ codeunit 72051 "DOPSWHS Print Dispatcher"
         EnqueueZpl(Item."No.", BuildItemZpl(Item), PrinterId, Copies, Enum::"DOPSWHS IWX Report Usage"::Item, 'Item');
     end;
 
+    /// <summary>
+    /// Prints one material-identification label for every item line on an LP.
+    /// The same physical LP printer is used so the existing mobile request and
+    /// printer selection remain unchanged.
+    /// </summary>
+    procedure PrintPalletItemLabels(var LP: Record "DOPSWHS LP Header"; PrinterId: Code[50]; Copies: Integer)
+    var
+        LPLine: Record "DOPSWHS LP Line";
+        LabelLine: Record "DOPSWHS LP Line";
+        PrintedGroups: Dictionary of [Text, Boolean];
+        GroupKey: Text;
+    begin
+        LPLine.SetRange("LP No.", LP."No.");
+        LPLine.SetFilter("Item No.", '<>%1', '');
+        if LPLine.FindSet() then
+            repeat
+                GroupKey := PalletItemGroupKey(LPLine);
+                if not PrintedGroups.ContainsKey(GroupKey) then begin
+                    PrintedGroups.Add(GroupKey, true);
+                    LabelLine := LPLine;
+                    LabelLine.Quantity := PalletItemGroupQuantity(LPLine);
+                    EnqueueZpl(
+                        LP."No.",
+                        BuildPalletItemZpl(LP, LabelLine),
+                        PrinterId,
+                        Copies,
+                        Enum::"DOPSWHS IWX Report Usage"::LpLabel,
+                        'LP material identification');
+                end;
+            until LPLine.Next() = 0;
+    end;
+
+    procedure BuildPalletItemZpl(var LP: Record "DOPSWHS LP Header"; var LPLine: Record "DOPSWHS LP Line"): Text
+    var
+        Item: Record Item;
+        ZplEncoder: Codeunit "DOPSWHS ZPL Encoder";
+        DescriptionText: Text;
+        TotalQuantity: Decimal;
+        QrData: Text;
+        TotalText: Text;
+        PalletText: Text;
+        LotText: Text;
+    begin
+        if Item.Get(LPLine."Item No.") then
+            DescriptionText := Item.Description;
+        TotalQuantity := LPLine."Source Document Quantity";
+        if TotalQuantity = 0 then
+            TotalQuantity := LPLine.Quantity;
+
+        TotalText := StrSubstNo('TOPLAM MAL KABUL: %1 %2', TotalQuantity, LPLine."Unit of Measure");
+        PalletText := StrSubstNo('PALET MIKTARI: %1 %2', LPLine.Quantity, LPLine."Unit of Measure");
+        if LPLine."Lot No." <> '' then
+            LotText := 'LOT: ' + LPLine."Lot No.";
+
+        // A pallet-bound MTE is the single physical label for both identities:
+        // scan the LP when present, otherwise preserve the lot/item fallback.
+        QrData := LP."No.";
+        if QrData = '' then
+            QrData := LPLine."Lot No.";
+        if QrData = '' then
+            QrData := LPLine."Item No.";
+
+        exit(
+            '^XA^CI28^PW812^LL406' +
+            '^FO35,18^A0N,28,28^FH_^FDMADDE TANIMLAMA ETIKETI^FS' +
+            '^FO35,62^A0N,28,28^FH_^FDMADDE: ' + ZplEncoder.EncodeFieldData(CopyStr(LPLine."Item No.", 1, 18)) + '^FS' +
+            '^FO35,104^A0N,21,21^FH_^FD' + ZplEncoder.EncodeFieldData(CopyStr(DescriptionText, 1, 24)) + '^FS' +
+            '^FO35,142^A0N,24,24^FH_^FD' + ZplEncoder.EncodeFieldData(CopyStr(LotText, 1, 20)) + '^FS' +
+            '^FO35,182^A0N,24,24^FH_^FDLP: ' + ZplEncoder.EncodeFieldData(LP."No.") + '^FS' +
+            '^FO35,232^A0N,26,26^FH_^FD' + ZplEncoder.EncodeFieldData(CopyStr(TotalText, 1, 48)) + '^FS' +
+            '^FO35,282^A0N,36,36^FH_^FD' + ZplEncoder.EncodeFieldData(CopyStr(PalletText, 1, 42)) + '^FS' +
+            '^FO610,58^BQN,2,5^FH_^FDLA,' + ZplEncoder.EncodeFieldData(QrData) + '^FS' +
+            '^XZ');
+    end;
+
+    local procedure PalletItemGroupKey(LPLine: Record "DOPSWHS LP Line"): Text
+    begin
+        exit(
+            LPLine."Item No." + '|' + LPLine."Variant Code" + '|' + LPLine."Unit of Measure" + '|' +
+            LPLine."Lot No." + '|' + LPLine."Serial No." + '|' + Format(LPLine."Source Document Type") + '|' +
+            LPLine."Source Document No." + '|' + Format(LPLine."Source Document Line No."));
+    end;
+
+    local procedure PalletItemGroupQuantity(LPLine: Record "DOPSWHS LP Line"): Decimal
+    var
+        GroupLine: Record "DOPSWHS LP Line";
+        GroupQuantity: Decimal;
+    begin
+        GroupLine.SetRange("LP No.", LPLine."LP No.");
+        GroupLine.SetRange("Item No.", LPLine."Item No.");
+        GroupLine.SetRange("Variant Code", LPLine."Variant Code");
+        GroupLine.SetRange("Unit of Measure", LPLine."Unit of Measure");
+        GroupLine.SetRange("Lot No.", LPLine."Lot No.");
+        GroupLine.SetRange("Serial No.", LPLine."Serial No.");
+        GroupLine.SetRange("Source Document Type", LPLine."Source Document Type");
+        GroupLine.SetRange("Source Document No.", LPLine."Source Document No.");
+        GroupLine.SetRange("Source Document Line No.", LPLine."Source Document Line No.");
+        if GroupLine.FindSet() then
+            repeat
+                GroupQuantity += GroupLine.Quantity;
+            until GroupLine.Next() = 0;
+        exit(GroupQuantity);
+    end;
+
     procedure PrintBinLabel(var Bin: Record Bin; PrinterId: Code[50]; Copies: Integer)
     begin
         EnqueueZpl(Bin."Code", BuildBinZpl(Bin), PrinterId, Copies, Enum::"DOPSWHS IWX Report Usage"::Bin, 'Bin');

@@ -6,8 +6,8 @@ internal fun canDeleteLicensePlate(status: String, lineCount: Int): Boolean =
             status.equals("Unbuilt", ignoreCase = true)
         )
 
-internal fun canAddItemToLicensePlate(serialTrackingRequired: Boolean): Boolean =
-    !serialTrackingRequired
+internal fun validLpTrackingQuantity(serialTrackingRequired: Boolean, quantity: Double): Boolean =
+    !serialTrackingRequired || quantity == 1.0
 
 internal fun sourceBinBelongsToLpLocation(lpLocation: String, sourceBinLocations: List<String>): Boolean =
     lpLocation.isNotBlank() && sourceBinLocations.any { it.equals(lpLocation, ignoreCase = true) }

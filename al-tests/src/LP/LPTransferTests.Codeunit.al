@@ -65,6 +65,54 @@ codeunit 72114 "DOPSWHS LP Transfer Tests"
     end;
 
     [Test]
+    procedure TransferAcceptsOpenEmptyTargetLP()
+    var
+        SourceLP: Record "DOPSWHS LP Header";
+        TargetLP: Record "DOPSWHS LP Header";
+        Line: Record "DOPSWHS LP Line";
+        Lines: List of [Integer];
+        QtyByLine: Dictionary of [Integer, Decimal];
+        LPMgt: Codeunit "DOPSWHS LP Management";
+        Assert: Codeunit "Library Assert";
+    begin
+        Seed();
+        BuildLPWithLine(SourceLP, 5, Line);
+        LPMgt.Build('CARTON-S', SourceLP."Location Code", SourceLP."Bin Code", TargetLP);
+        Lines.Add(Line."Line No.");
+
+        LPMgt.Transfer(SourceLP, TargetLP, Lines, QtyByLine);
+
+        Assert.AreEqual(TargetLP.Status::Open, TargetLP.Status, 'The operator may transfer into a newly created open target LP.');
+        Assert.AreEqual(5, GetLPQty(TargetLP."No."), 'The open target LP should receive the source contents.');
+    end;
+
+    [Test]
+    procedure TransferAcceptsOpenSourceLP()
+    var
+        SourceLP: Record "DOPSWHS LP Header";
+        TargetLP: Record "DOPSWHS LP Header";
+        SourceLine: Record "DOPSWHS LP Line";
+        Lines: List of [Integer];
+        QtyByLine: Dictionary of [Integer, Decimal];
+        LPMgt: Codeunit "DOPSWHS LP Management";
+        Assert: Codeunit "Library Assert";
+    begin
+        Seed();
+        LPMgt.Build('CARTON-S', 'BLUE', 'PICK', SourceLP);
+        LPMgt.AddLine(SourceLP, 'ITEMY', 'PCS', 5, '', '', 0D);
+        SourceLine.SetRange("LP No.", SourceLP."No.");
+        SourceLine.FindFirst();
+        BuildEmptyBuiltLP(TargetLP);
+        Lines.Add(SourceLine."Line No.");
+
+        LPMgt.Transfer(SourceLP, TargetLP, Lines, QtyByLine);
+
+        Assert.AreEqual(SourceLP.Status::Open, SourceLP.Status, 'An open source LP should remain open after its contents are transferred.');
+        Assert.AreEqual(0, CountLines(SourceLP."No."), 'The open source LP should be empty after a full transfer.');
+        Assert.AreEqual(5, GetLPQty(TargetLP."No."), 'The target LP should receive the open source LP contents.');
+    end;
+
+    [Test]
     procedure EmptyBuiltLpMoveUpdatesHeaderBin()
     var
         LP: Record "DOPSWHS LP Header";

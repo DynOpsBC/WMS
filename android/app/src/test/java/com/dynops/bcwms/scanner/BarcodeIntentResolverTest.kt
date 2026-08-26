@@ -13,6 +13,7 @@ class BarcodeIntentResolverTest {
         assertEquals("08691234567890", result.itemNo)
         assertEquals("A100797", result.lotNo)
         assertEquals(5000.0, result.quantity ?: -1.0, 0.0)
+        assertNull(result.unitOfMeasureCode)
     }
 
     @Test
@@ -36,6 +37,18 @@ class BarcodeIntentResolverTest {
         assertEquals("AB.00005", result.itemNo)
         assertEquals("A100797", result.lotNo)
         assertEquals(1147.0, result.quantity ?: -1.0, 0.0)
+        assertEquals("ADET", result.unitOfMeasureCode)
+    }
+
+    @Test
+    fun `custom V2 fields include serial variant and unit`() {
+        val result = BarcodeIntentResolver.resolve(
+            "MADDE KODU=AB.00005; LOT NO=A100797; SERİ NO=S-42; VARYANT KODU=KRM; MİKTAR=25; BİRİM=ADET"
+        )
+
+        assertEquals("S-42", result.serialNo)
+        assertEquals("KRM", result.variantCode)
+        assertEquals("ADET", result.unitOfMeasureCode)
     }
 
     @Test

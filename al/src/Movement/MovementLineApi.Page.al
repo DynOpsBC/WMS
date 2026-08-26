@@ -36,6 +36,10 @@ page 72350 "DOPSWHS Movement Line API"
                 field(qtyHandled; Rec."Qty. Handled") { Caption = 'qtyHandled'; Editable = false; }
                 field(binCode; Rec."Bin Code") { Caption = 'binCode'; }
                 field(lotNo; Rec."Lot No.") { Caption = 'lotNo'; Editable = false; }
+                field(lotRequired; LotRequired) { Caption = 'lotRequired'; Editable = false; }
+                field(serialNo; Rec."Serial No.") { Caption = 'serialNo'; Editable = false; }
+                field(serialRequired; SerialRequired) { Caption = 'serialRequired'; Editable = false; }
+                field(locationCode; Rec."Location Code") { Caption = 'locationCode'; Editable = false; }
                 field(licensePlateNo; Rec."LP No.") { Caption = 'licensePlateNo'; }
             }
         }
@@ -54,12 +58,26 @@ page 72350 "DOPSWHS Movement Line API"
     trigger OnAfterGetRecord()
     var
         Item: Record Item;
+        ItemTrackingCode: Record "Item Tracking Code";
     begin
         Clear(ItemGtin);
-        if (Rec."Item No." <> '') and Item.Get(Rec."Item No.") then
+        Clear(LotRequired);
+        Clear(SerialRequired);
+        if (Rec."Item No." <> '') and Item.Get(Rec."Item No.") then begin
             ItemGtin := Item.GTIN;
+            if (Item."Item Tracking Code" <> '') and ItemTrackingCode.Get(Item."Item Tracking Code") then begin
+                LotRequired :=
+                    ItemTrackingCode."Lot Specific Tracking" or
+                    ItemTrackingCode."Lot Warehouse Tracking";
+                SerialRequired :=
+                    ItemTrackingCode."SN Specific Tracking" or
+                    ItemTrackingCode."SN Warehouse Tracking";
+            end;
+        end;
     end;
 
     var
         ItemGtin: Code[14];
+        LotRequired: Boolean;
+        SerialRequired: Boolean;
 }

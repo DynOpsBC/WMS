@@ -408,10 +408,10 @@ private fun ReceiveDocument(no: String, onBack: () -> Unit) {
                 OutlinedButton(onClick = {
                     scope.launch {
                         busy = true
-                        status = "Uygun koli şablonu belirleniyor..."
-                        val template = resolveLpTemplate(context, LpPurpose.CARTON)
+                        status = "Uygun palet şablonu belirleniyor..."
+                        val template = resolveLpTemplate(context, LpPurpose.PALLET)
                         if (template == null) {
-                            status = "HATA: Uygun koli şablonu belirlenemedi. LP ekranından şablon seçerek bir LP oluşturun."
+                            status = "HATA: Uygun palet şablonu belirlenemedi. BC'de PALLET-EUR şablonunu kontrol edin."
                             busy = false
                             return@launch
                         }

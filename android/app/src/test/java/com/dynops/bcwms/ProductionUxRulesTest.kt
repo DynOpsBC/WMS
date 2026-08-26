@@ -34,6 +34,7 @@ class ProductionUxRulesTest {
         assertTrue(Screen.Packing in screens)
         assertTrue(Screen.LicensePlates in screens)
         assertTrue(Screen.Count in screens)
+        assertTrue(Screen.CountV2 in screens)
         assertTrue(Screen.Printers in screens)
         assertTrue(Screen.Connection in screens)
         assertFalse(Screen.TestCenter in screens)
