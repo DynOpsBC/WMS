@@ -59,6 +59,7 @@ object BcApi {
     private const val KEY_ADMIN_TEST_SESSION = "admin_test_session"
     private const val KEY_BC_USER = "bc_user_id"
     private const val KEY_TENANT = "bc_tenant_id"
+    private const val KEY_LOGIN_EMAIL = "login_email"
 
     private fun prefs(context: Context) = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
 
@@ -93,6 +94,13 @@ object BcApi {
     fun getEnvironment(context: Context): String = prefs(context).getString(KEY_ENV, DEFAULT_ENVIRONMENT) ?: DEFAULT_ENVIRONMENT
     fun getCompanyId(context: Context): String = prefs(context).getString(KEY_COMPANY_ID, DEFAULT_COMPANY_ID) ?: DEFAULT_COMPANY_ID
     fun getCompanyName(context: Context): String = prefs(context).getString(KEY_COMPANY_NAME, DEFAULT_COMPANY_NAME) ?: DEFAULT_COMPANY_NAME
+
+    fun saveLoginEmail(context: Context, email: String) {
+        if (email.isNotBlank()) prefs(context).edit().putString(KEY_LOGIN_EMAIL, email.trim()).apply()
+    }
+
+    fun getLoginEmail(context: Context, fallback: String): String =
+        prefs(context).getString(KEY_LOGIN_EMAIL, fallback)?.takeIf { it.isNotBlank() } ?: fallback
 
     fun setEnvironment(context: Context, env: String) { prefs(context).edit().putString(KEY_ENV, env).apply() }
     fun setCompany(context: Context, id: String, name: String) {
@@ -343,6 +351,18 @@ object BcApi {
     fun getLocalUser(context: Context): String = prefs(context).getString(KEY_LOCAL_USER, "") ?: ""
     fun getLocalProfileJson(context: Context): String = prefs(context).getString(KEY_LOCAL_PROFILE, "") ?: ""
     fun hasLocalUser(context: Context): Boolean = getLocalUser(context).isNotBlank()
+
+    /** Ana sayfadaki karşılama için teknik kullanıcı kodu yerine görünen adı döndürür. */
+    fun getOperatorDisplayName(context: Context): String {
+        val profile = getLocalProfileJson(context)
+        val displayName = runCatching {
+            JSONObject(profile.replace("{,", "{")).optString("displayName").trim()
+        }.getOrDefault("")
+        if (displayName.isNotBlank()) return displayName
+        val localUser = getLocalUser(context).trim()
+        if (localUser.isNotBlank()) return localUser
+        return if (isAdminTestSession(context)) "Yönetici" else ""
+    }
     fun clearLocalUser(context: Context) {
         prefs(context).edit()
             .remove(KEY_LOCAL_USER)

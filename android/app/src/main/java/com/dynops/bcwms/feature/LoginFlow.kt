@@ -24,8 +24,10 @@ import androidx.compose.ui.unit.sp
 import com.dynops.bcwms.BcApi
 import com.dynops.bcwms.BuildConfig
 import com.dynops.bcwms.DeviceAuth
+import com.dynops.bcwms.ui.CompanyLogo
 import com.dynops.bcwms.ui.StatusText
 import com.dynops.bcwms.ui.operatorFacingStatus
+import com.dynops.bcwms.ui.resolveCompanyBrand
 import kotlinx.coroutines.launch
 import org.json.JSONObject
 
@@ -54,7 +56,10 @@ fun LoginFlow(onConnected: (Boolean) -> Unit) {
     // ekran doğrudan WMS operatör girişinden başlar (vardiya/kullanıcı değişimi
     // de "Bağlı" rozetine dokunup buradan yapılır).
     var step by remember { mutableStateOf(if (BcApi.hasToken(context)) Step.LocalUser else Step.Email) }
-    var email by remember { mutableStateOf("") }
+    var email by remember {
+        mutableStateOf(BcApi.getLoginEmail(context, BuildConfig.LOGIN_DEFAULT_EMAIL))
+    }
+    var editEmail by remember { mutableStateOf(email.isBlank()) }
     var password by remember { mutableStateOf("") }
     var localUsername by remember { mutableStateOf("") }
     var localPassword by remember { mutableStateOf("") }
@@ -108,6 +113,7 @@ fun LoginFlow(onConnected: (Boolean) -> Unit) {
             busy = true; status = "BC'ye bağlanılıyor..."
             when (val t = DeviceAuth.loginWithPassword(email.trim(), password)) {
                 is DeviceAuth.TokenResult.Success -> {
+                    BcApi.saveLoginEmail(context, email)
                     BcApi.saveToken(context, t.accessToken)
                     BcApi.saveRefreshToken(context, t.refreshToken)
                     BcApi.saveTokenExpiry(context, t.expiresInSec)
@@ -210,6 +216,7 @@ fun LoginFlow(onConnected: (Boolean) -> Unit) {
                     busy = true; status = "Tarayıcıda giriş bekleniyor..."
                     when (val t = DeviceAuth.pollForToken(code)) {
                         is DeviceAuth.TokenResult.Success -> {
+                            BcApi.saveLoginEmail(context, email)
                             BcApi.saveToken(context, t.accessToken)
                     BcApi.saveRefreshToken(context, t.refreshToken)
                     BcApi.saveTokenExpiry(context, t.expiresInSec)
@@ -273,64 +280,103 @@ fun LoginFlow(onConnected: (Boolean) -> Unit) {
         )
     }
 
+    val loginBrand = resolveCompanyBrand(BcApi.getCompanyName(context), BuildConfig.FLAVOR)
     Column(Modifier.fillMaxSize().padding(20.dp).verticalScroll(rememberScrollState())) {
-        Text("${BuildConfig.TENANT_LABEL} WMS", fontWeight = FontWeight.Bold, fontSize = 20.sp)
-        Text("Oturum açın veya vardiya kullanıcısını değiştirin.", fontSize = 12.sp, color = Color.Gray)
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            CompanyLogo(brand = loginBrand, height = 28.dp)
+            Spacer(Modifier.width(12.dp))
+            Column {
+                Text("WMS Girişi", fontWeight = FontWeight.Bold, fontSize = 20.sp)
+                Text("Hızlı ve güvenli depo erişimi", fontSize = 12.sp, color = Color.Gray)
+            }
+        }
         Spacer(Modifier.height(20.dp))
 
         when (step) {
             Step.Email -> {
-                Text("Business Central ile bağlan", fontWeight = FontWeight.Medium)
-                Spacer(Modifier.height(8.dp))
-                OutlinedTextField(
-                    value = email, onValueChange = { email = it },
-                    label = { Text("E-posta (BC kullanıcısı)") },
-                    placeholder = { Text(BuildConfig.LOGIN_EMAIL_HINT) },
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
-                    singleLine = true, modifier = Modifier.fillMaxWidth()
+                Text("Bu terminali bir kez bağlayın", fontWeight = FontWeight.Bold, fontSize = 18.sp)
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    "İlk bağlantıdan sonra güvenli oturum cihazda hatırlanır; her açılışta e-posta girmeniz gerekmez.",
+                    fontSize = 12.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
-                Spacer(Modifier.height(8.dp))
+                Spacer(Modifier.height(14.dp))
+                if (editEmail) {
+                    OutlinedTextField(
+                        value = email,
+                        onValueChange = { email = it },
+                        label = { Text("Business Central e-postası") },
+                        placeholder = { Text(BuildConfig.LOGIN_EMAIL_HINT) },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                } else {
+                    Card(
+                        colors = CardDefaults.cardColors(containerColor = loginBrand.primary.copy(alpha = 0.10f)),
+                        shape = RoundedCornerShape(14.dp),
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Row(
+                            Modifier.fillMaxWidth().padding(14.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Box(
+                                Modifier.size(38.dp).clip(RoundedCornerShape(11.dp))
+                                    .background(loginBrand.primary.copy(alpha = 0.16f)),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                Text("@", fontWeight = FontWeight.Black, color = loginBrand.primary)
+                            }
+                            Spacer(Modifier.width(12.dp))
+                            Column(Modifier.weight(1f)) {
+                                Text("Bağlantı hesabı", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Text(email, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+                            }
+                            TextButton(onClick = { editEmail = true }) { Text("Değiştir") }
+                        }
+                    }
+                }
+                Spacer(Modifier.height(10.dp))
                 OutlinedTextField(
                     value = password, onValueChange = { password = it },
-                    label = { Text("Şifre") },
+                    label = { Text("Microsoft hesabı şifresi") },
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
                     visualTransformation = PasswordVisualTransformation(),
+                    supportingText = { Text("Şifre kaydedilmez; yalnız ilk bağlantı için kullanılır.") },
                     singleLine = true, modifier = Modifier.fillMaxWidth()
                 )
                 Spacer(Modifier.height(12.dp))
-                // Primary: username + password direct (no browser, no token paste)
                 Button(
                     onClick = { startPasswordSignIn() },
                     enabled = !busy && email.isNotBlank() && password.isNotBlank(),
                     modifier = Modifier.fillMaxWidth().height(52.dp)
-                ) { Text(if (busy) "Bağlanıyor…" else "Bağlan", fontWeight = FontWeight.Bold) }
+                ) { Text(if (busy) "Bağlanıyor…" else "Bağlan ve Bu Cihazı Hatırla", fontWeight = FontWeight.Bold) }
                 Spacer(Modifier.height(10.dp))
-                Text(
-                    "ya da",
-                    fontSize = 11.sp,
-                    color = Color.Gray,
-                    textAlign = TextAlign.Center,
-                    modifier = Modifier.fillMaxWidth()
-                )
-                Spacer(Modifier.height(10.dp))
-                // Alt: device-code (browser) flow — for MFA / federated accounts
                 OutlinedButton(
                     onClick = { startSignIn() },
                     enabled = !busy && email.isNotBlank(),
                     modifier = Modifier.fillMaxWidth().height(48.dp)
-                ) { Text("Microsoft ile güvenli giriş", fontSize = 13.sp) }
+                ) { Text("Tarayıcıda Microsoft ile Giriş", fontSize = 13.sp) }
+                Text(
+                    "MFA açıksa bu seçeneği kullanın. Kod yalnız ilk cihaz kurulumunda istenir.",
+                    fontSize = 10.sp,
+                    color = Color.Gray,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.fillMaxWidth().padding(top = 5.dp),
+                )
                 Spacer(Modifier.height(20.dp))
                 HorizontalDivider()
                 Spacer(Modifier.height(16.dp))
-                // 3rd option: local WMS user (no AAD email)
                 OutlinedButton(
                     onClick = { step = Step.LocalUser; status = "" },
                     enabled = !busy,
                     modifier = Modifier.fillMaxWidth().height(48.dp)
-                ) { Text("Depo çalışanı girişi", fontSize = 13.sp) }
+                ) { Text("Bu Cihaz Zaten Kurulu — Depo Girişi", fontSize = 13.sp) }
                 Spacer(Modifier.height(4.dp))
                 Text(
-                    "Kayıtlı depo kullanıcınızı seçip şifrenizi girin.",
+                    "Servis bağlantısı daha önce yapıldıysa operatörünüzü seçin.",
                     fontSize = 10.sp,
                     color = Color.Gray
                 )

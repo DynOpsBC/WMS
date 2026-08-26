@@ -24,7 +24,12 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.dynops.bcwms.feature.*
+import com.dynops.bcwms.ui.CompanyBrand
+import com.dynops.bcwms.ui.CompanyLogo
+import com.dynops.bcwms.ui.WmsSplashScreen
 import com.dynops.bcwms.ui.bcwmsStatus
+import com.dynops.bcwms.ui.resolveCompanyBrand
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import org.json.JSONObject
 import java.text.SimpleDateFormat
@@ -50,7 +55,7 @@ object WhsePickNavigation {
 }
 
 enum class Screen(val title: String) {
-    Home("BCWMS Ana Menü"),
+    Home("Ana Menü"),
     Connection("Bağlantı Ayarları"),
     LicensePlates("LP (Taşıma Kabı)"),
     ItemInquiry("Ürün Sorgu"),
@@ -74,6 +79,7 @@ enum class Screen(val title: String) {
     Printers("Yazıcılar"),
     SelfTest("Sistem Sağlığı"),
     FieldSettings("Alan Ayarları"),
+    Help("Nasıl Kullanılır"),
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -85,10 +91,13 @@ fun AppRoot() {
     // getirirse operatör ana menüye düşmesin, son ekranda kalsın.
     // (Cihaz döndürmede zaten manifest'teki configChanges sayesinde Activity
     // yeniden yaratılmıyor — tüm ekran state'i olduğu gibi korunuyor.)
-    var screen by rememberSaveable { mutableStateOf(Screen.Home) }
+    var screen by rememberSaveable {
+        mutableStateOf(if (BcApi.hasToken(context)) Screen.Home else Screen.Connection)
+    }
     // Bir belirtecin diskte bulunması bağlantı anlamına gelmez. Şirket ve API
     // doğrulanana kadar operasyonlar kapalı kalır.
     var connected by remember { mutableStateOf(false) }
+    var booting by remember { mutableStateOf(true) }
     // V2 yerel bir özellik anahtarıdır: sunucu verisini değiştirmez ve klasik
     // ekranları silmez. Operatör aynı cihazda son seçimini korur.
     var v2Enabled by rememberSaveable {
@@ -104,12 +113,24 @@ fun AppRoot() {
     com.dynops.bcwms.ui.FieldPrefs.load(context)
 
     LaunchedEffect(Unit) {
+        val startedAt = android.os.SystemClock.elapsedRealtime()
         if (BcApi.hasToken(context)) {
             // Flavor-specific company must be resolved before testing the API;
             // BADE must not inherit the historical shared CRONUS company UUID.
             BcApi.ensurePreferredCompany(context)
             connected = BcApi.testConnection(context).ok
         }
+        // Marka açılışı görülebilsin ama operatörü gereksiz yere bekletmesin.
+        val remaining = 850L - (android.os.SystemClock.elapsedRealtime() - startedAt)
+        if (remaining > 0) delay(remaining)
+        booting = false
+    }
+
+    if (booting) {
+        WmsSplashScreen(
+            resolveCompanyBrand(BcApi.getCompanyName(context), BuildConfig.FLAVOR),
+        )
+        return
     }
 
     Scaffold(
@@ -172,6 +193,7 @@ fun AppRoot() {
                 Screen.Printers -> PrintersModule()
                 Screen.SelfTest -> SelfTestModule()
                 Screen.FieldSettings -> FieldSettingsModule()
+                Screen.Help -> TerminalHelpModule(connected = connected, onNavigate = { screen = it })
             }
             UpdateChecker()
         }
@@ -184,7 +206,7 @@ internal fun shouldForceProductionFlow(flavor: String): Boolean = flavor.equals(
 
 /** Bağlantı gerektiren operasyonlar çevrimdışıyken tıklanıp hata üretmemelidir. */
 internal fun isHomeTileEnabled(screen: Screen, connected: Boolean): Boolean =
-    connected || screen == Screen.Connection
+    connected || screen == Screen.Connection || screen == Screen.Help
 
 /** Operatör ana menüsünde destek/test araçları gösterilmez; ekranlar koddan silinmez. */
 internal fun operatorHomeScreens(flavor: String): Set<Screen> =
@@ -281,7 +303,9 @@ private val HomeCategories = listOf(
         HomeTile(Screen.BinInquiry, "📍", "Bin Sorgu"),
         HomeTile(Screen.WhseEntries, "📜", "Ambar Hareketleri"),
     )),
-    HomeCategory("Sistem", Color(0xFF64748B), listOf(
+    // Yardım bu listede DEĞİL: ana sayfanın en altındaki HelpButton ile açılır.
+    // Aynı ekrana hem kutu hem buton koymak menüyü gereksiz kalabalıklaştırıyordu.
+    HomeCategory("Destek ve Ayarlar", Color(0xFF64748B), listOf(
         HomeTile(Screen.FieldSettings, "🧩", "Alan Ayarları"),
         HomeTile(Screen.SelfTest, "🩺", "Sistem Sağlığı"),
         HomeTile(Screen.Printers, "🖨", "Yazıcılar"),
@@ -306,6 +330,8 @@ private fun HomeScreen(
     var showSwitcher by remember { mutableStateOf(false) }
     // companyEpoch değişince company adını yeniden oku.
     val companyName = remember(companyEpoch) { BcApi.getCompanyName(context) }
+    val companyBrand = remember(companyName, flavor) { resolveCompanyBrand(companyName, flavor) }
+    val operatorName = remember(companyEpoch, connected) { BcApi.getOperatorDisplayName(context) }
     var accessible by remember(companyEpoch, connected) { mutableStateOf(BcApi.getAccessibleCompanies(context)) }
     var discovering by remember { mutableStateOf(false) }
     // ELOG: liste boşsa (login switcher eklenmeden yapılmış / AAD-only atlama)
@@ -331,6 +357,8 @@ private fun HomeScreen(
         HomeHeader(
             env = BcApi.getEnvironment(context),
             company = companyName,
+            brand = companyBrand,
+            operatorName = operatorName,
             connected = connected,
             canSwitch = accessible.size > 1,
             onSwitchClick = { showSwitcher = true },
@@ -373,6 +401,8 @@ private fun HomeScreen(
             CategorySection(category, connected, onNavigate)
             if (index != visibleCategories.lastIndex) Spacer(Modifier.height(18.dp))
         }
+        Spacer(Modifier.height(22.dp))
+        HelpButton(onClick = { onNavigate(Screen.Help) })
         Spacer(Modifier.height(8.dp))
     }
 }
@@ -381,6 +411,8 @@ private fun HomeScreen(
 private fun HomeHeader(
     env: String,
     company: String,
+    brand: CompanyBrand,
+    operatorName: String,
     connected: Boolean,
     canSwitch: Boolean = false,
     onSwitchClick: () -> Unit = {},
@@ -390,51 +422,43 @@ private fun HomeHeader(
     Box(
         Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(24.dp))
+            .clip(RoundedCornerShape(18.dp))
             .background(
                 Brush.linearGradient(
-                    listOf(MaterialTheme.colorScheme.primary, Color(0xFF4A3DB8))
+                    listOf(brand.primary, brand.secondary)
                 )
             )
-            .padding(20.dp)
+            .padding(14.dp)
     ) {
         Column {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Box(
-                    Modifier.size(48.dp).clip(RoundedCornerShape(14.dp))
-                        .background(Color.White.copy(alpha = 0.18f)),
-                    contentAlignment = Alignment.Center
-                ) { Text("📦", fontSize = 26.sp) }
-                Spacer(Modifier.width(14.dp))
+                CompanyLogo(brand = brand, height = 26.dp)
+                Spacer(Modifier.width(12.dp))
                 Column(Modifier.weight(1f)) {
                     Text(
-                        // Marka flavor'dan gelir: Bade sürümünde "DynOps WMS"
-                        // yazıyordu — müşteriye giden uygulamada yanlış marka.
-                        "${BuildConfig.TENANT_LABEL} WMS",
-                        style = MaterialTheme.typography.titleLarge,
+                        if (operatorName.isBlank()) "Hoş geldiniz" else "Hoş geldin, $operatorName",
+                        style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold,
                         color = Color.White
                     )
-                    // Şirket satırı: birden çok erişilebilir şirket varsa tıklanınca
-                    // değiştirici açılır (▾). Tek şirkette düz metin.
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
                         modifier = if (canSwitch) Modifier.clip(RoundedCornerShape(6.dp)).clickable { onSwitchClick() }.padding(vertical = 2.dp) else Modifier,
                     ) {
                         Text(
-                            "$env · $company",
+                            company.ifBlank { brand.shortName },
                             style = MaterialTheme.typography.bodySmall,
                             color = Color.White.copy(alpha = 0.82f),
                             maxLines = 1
                         )
                         if (canSwitch) {
                             Spacer(Modifier.width(4.dp))
-                            Text("🔀 ▾", fontSize = 11.sp, color = Color.White)
+                            Text("▾", fontSize = 13.sp, color = Color.White)
                         }
                     }
                 }
             }
-            Spacer(Modifier.height(14.dp))
+            Spacer(Modifier.height(11.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Surface(
                     shape = RoundedCornerShape(50),
@@ -476,7 +500,31 @@ private fun HomeHeader(
                     }
                 }
             }
+            Text(
+                "Ortam: $env",
+                modifier = Modifier.padding(top = 7.dp),
+                style = MaterialTheme.typography.labelSmall,
+                color = Color.White.copy(alpha = 0.62f),
+            )
         }
+    }
+}
+
+/**
+ * Yardım girişi ana sayfanın EN ALTINDA sade bir buton. Eskiden banner'ın hemen
+ * altında büyük bir karttı; her açılışta modüllerin önüne geçiyordu. Operatör
+ * modüllere bakar, yardıma ihtiyaç duyarsa aşağı iner.
+ */
+@Composable
+private fun HelpButton(onClick: () -> Unit) {
+    FilledTonalButton(
+        onClick = onClick,
+        shape = RoundedCornerShape(14.dp),
+        modifier = Modifier.fillMaxWidth().height(52.dp),
+    ) {
+        Text("❔", fontSize = 17.sp)
+        Spacer(Modifier.width(9.dp))
+        Text("Terminali Nasıl Kullanırım?", fontWeight = FontWeight.Bold)
     }
 }
 
@@ -530,6 +578,7 @@ private fun CompanySwitcherSheet(
         }
         companies.forEach { c ->
             val selected = c.id.equals(currentId, ignoreCase = true)
+            val brand = resolveCompanyBrand(c.displayName, BuildConfig.FLAVOR)
             Card(
                 onClick = { onSelect(c) },
                 enabled = !selected && !loading,
@@ -541,7 +590,9 @@ private fun CompanySwitcherSheet(
                 shape = RoundedCornerShape(12.dp),
             ) {
                 Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Text(c.displayName, fontWeight = FontWeight.Medium, modifier = Modifier.weight(1f))
+                    CompanyLogo(brand = brand, height = 22.dp)
+                    Spacer(Modifier.width(10.dp))
+                    Text(c.displayName, fontWeight = FontWeight.Medium, modifier = Modifier.weight(1f), maxLines = 2)
                     if (selected) Text("● Aktif", fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.primary)
                 }
             }
@@ -563,8 +614,8 @@ private fun CompanySwitcherSheet(
 private fun CategorySection(category: HomeCategory, connected: Boolean, onNavigate: (Screen) -> Unit) {
     Column {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Box(Modifier.size(width = 4.dp, height = 16.dp).clip(RoundedCornerShape(2.dp)).background(category.accent))
-            Spacer(Modifier.width(8.dp))
+            Box(Modifier.size(width = 4.dp, height = 18.dp).clip(RoundedCornerShape(3.dp)).background(category.accent))
+            Spacer(Modifier.width(9.dp))
             Text(
                 category.title.uppercase(),
                 style = MaterialTheme.typography.labelMedium,
@@ -603,11 +654,11 @@ private fun HomeTileCard(
     Card(
         onClick = { onNavigate(tile.screen) },
         enabled = enabled,
-        shape = RoundedCornerShape(18.dp),
+        shape = RoundedCornerShape(20.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp, pressedElevation = 8.dp),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.5f)),
-        modifier = modifier.height(112.dp).alpha(if (enabled) 1f else 0.45f)
+        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp, pressedElevation = 6.dp),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.32f)),
+        modifier = modifier.height(116.dp).alpha(if (enabled) 1f else 0.42f)
     ) {
         Column(
             Modifier.fillMaxSize().padding(12.dp),
@@ -615,10 +666,10 @@ private fun HomeTileCard(
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             Box(
-                Modifier.size(50.dp).clip(RoundedCornerShape(15.dp)).background(accent.copy(alpha = 0.15f)),
+                Modifier.size(52.dp).clip(RoundedCornerShape(16.dp)).background(accent.copy(alpha = 0.17f)),
                 contentAlignment = Alignment.Center
-            ) { Text(tile.emoji, fontSize = 26.sp) }
-            Spacer(Modifier.height(10.dp))
+            ) { Text(tile.emoji, fontSize = 27.sp) }
+            Spacer(Modifier.height(9.dp))
             Text(
                 tile.label,
                 style = MaterialTheme.typography.labelLarge,

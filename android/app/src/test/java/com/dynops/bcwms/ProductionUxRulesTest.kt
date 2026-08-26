@@ -21,6 +21,7 @@ class ProductionUxRulesTest {
     @Test
     fun `offline home only allows connection setup`() {
         assertTrue(isHomeTileEnabled(Screen.Connection, connected = false))
+        assertTrue(isHomeTileEnabled(Screen.Help, connected = false))
         assertFalse(isHomeTileEnabled(Screen.Picking, connected = false))
         assertFalse(isHomeTileEnabled(Screen.Count, connected = false))
         assertTrue(isHomeTileEnabled(Screen.Packing, connected = true))
@@ -37,6 +38,7 @@ class ProductionUxRulesTest {
         assertTrue(Screen.CountV2 in screens)
         assertTrue(Screen.Printers in screens)
         assertTrue(Screen.Connection in screens)
+        assertTrue(Screen.Help in screens)
         assertFalse(Screen.TestCenter in screens)
         assertFalse(Screen.PostingTest in screens)
         assertFalse(Screen.SelfTest in screens)

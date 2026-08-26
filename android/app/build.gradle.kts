@@ -23,8 +23,8 @@ android {
     applicationId = "com.dynops.bcwms"
     minSdk = 26
     targetSdk = 35
-    versionCode = 1434
-    versionName = "1.14.34"
+    versionCode = 1435
+    versionName = "1.14.35"
     manifestPlaceholders["appLabel"] = "BCWMS"
     buildConfigField("String", "UPDATE_BASE_URL", "\"https://app.bcwms.dynops.com\"")
   }
@@ -41,12 +41,13 @@ android {
       buildConfigField("boolean", "BC_ALLOW_PRODUCTION", "true")
       buildConfigField("String", "TENANT_LABEL", "\"DynamicsOps\"")
       buildConfigField("String", "LOGIN_EMAIL_HINT", "\"ornek@dynamicsops.com\"")
+      buildConfigField("String", "LOGIN_DEFAULT_EMAIL", "\"\"")
     }
     create("bade") {
       dimension = "tenant"
       applicationIdSuffix = ".bade"
-      versionCode = 1434
-      versionName = "1.14.34"
+      versionCode = 1435
+      versionName = "1.14.35"
       versionNameSuffix = "-bade"
       manifestPlaceholders["appLabel"] = "BCWMS BADE"
       buildConfigField("String", "BC_CLIENT_ID", "\"3c4ba25a-89f4-41df-acf8-ebab8cb4809b\"")
@@ -59,7 +60,8 @@ android {
       buildConfigField("String", "BC_DEFAULT_COMPANY_NAME", "\"BADE NATURAL DOĞAL YAŞAM ÜRÜNLERİ SAN. TİC. A.Ş.\"")
       buildConfigField("boolean", "BC_ALLOW_PRODUCTION", "false")
       buildConfigField("String", "TENANT_LABEL", "\"Bade Natural\"")
-      buildConfigField("String", "LOGIN_EMAIL_HINT", "\"kullanici@badenatural.com\"")
+      buildConfigField("String", "LOGIN_EMAIL_HINT", "\"dynops@badenatural.com\"")
+      buildConfigField("String", "LOGIN_DEFAULT_EMAIL", "\"dynops@badenatural.com\"")
     }
     create("emu") {
       dimension = "tenant"
@@ -74,6 +76,7 @@ android {
       buildConfigField("boolean", "BC_ALLOW_PRODUCTION", "false")
       buildConfigField("String", "TENANT_LABEL", "\"EMU\"")
       buildConfigField("String", "LOGIN_EMAIL_HINT", "\"kullanici@atesci.com\"")
+      buildConfigField("String", "LOGIN_DEFAULT_EMAIL", "\"\"")
     }
   }
 
