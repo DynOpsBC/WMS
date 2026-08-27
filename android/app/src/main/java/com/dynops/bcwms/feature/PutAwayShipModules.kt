@@ -1094,12 +1094,15 @@ fun ShippingModule() {
     var requestedPickNo by remember { mutableStateOf(com.dynops.bcwms.WhsePickNavigation.consume()) }
     val tabs = if (showSo) {
         listOf(
-            WmsGlyph.PICKING to "Ambar Toplama",
-            WmsGlyph.SHIPPING to "Ambar Sevkiyatı",
-            WmsGlyph.ENTRIES to "Satış Siparişi",
+            // Dar el terminalinde ortak "Ambar" öneki üç sekmenin metnini
+            // kesiyor ve ilk iki sekmeyi aynı gösteriyordu. Ekran başlığı zaten
+            // Sevkiyat olduğu için kısa, birbirinden ayırt edilebilir adlar kullan.
+            WmsGlyph.PICKING to "Toplama",
+            WmsGlyph.SHIPPING to "Sevkiyat",
+            WmsGlyph.ENTRIES to "Sipariş",
         )
     } else {
-        listOf(WmsGlyph.PICKING to "Ambar Toplama", WmsGlyph.SHIPPING to "Ambar Sevkiyatı")
+        listOf(WmsGlyph.PICKING to "Toplama", WmsGlyph.SHIPPING to "Sevkiyat")
     }
     if (tab >= tabs.size) tab = 0
 
