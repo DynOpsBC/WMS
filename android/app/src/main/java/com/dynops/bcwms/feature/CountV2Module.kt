@@ -290,8 +290,6 @@ private fun CountV2Document(no: String, onBack: () -> Unit) {
     // Satıra dokunarak sayılan miktarı düzeltme (fark varsa).
     var adjustLine by remember(no) { mutableStateOf<JSONObject?>(null) }
     var showPostConfirm by remember(no) { mutableStateOf(false) }
-    // Miktarsız ürün okutması (madde no / GTIN+lot): miktar diyaloğu açılır.
-    var manualEntry by remember(no) { mutableStateOf<CountV2ManualCandidate?>(null) }
 
     fun assignments(h: JSONObject?): List<CountSlotAssignment> = listOf(
         CountSlotAssignment(1, h?.optString("counter1UserId").orEmpty()),
@@ -497,8 +495,8 @@ private fun CountV2Document(no: String, onBack: () -> Unit) {
     /**
      * Miktarsız ürün/lot barkodu: okutulan rafın BC stoku (lot ve birim bazında)
      * "burada" diye teyit edilir; her lot ayrı satır olur. Operatör yalnız fark
-     * varsa satıra dokunup düzeltir. Rafta stok yoksa (beklenmeyen ürün) miktar
-     * sorulur — sistem miktarı uydurulmaz.
+     * varsa satıra dokunup düzeltir. Rafta stok yoksa lotun/ürünün lokasyondaki
+     * BC miktarı bu rafa yazılır; hiç yoksa yalnız uyarı (pencere açılmaz).
      */
     fun autoCountFromStock(candidate: CountV2ManualCandidate) {
         scope.launch {
@@ -546,16 +544,40 @@ private fun CountV2Document(no: String, onBack: () -> Unit) {
                     }
                 }
             }
+            // Rafta yoksa lotun/ürünün LOKASYONDAKİ BC miktarı alınır: "QR'da
+            // tanımlı miktar neyse o" — operatör asla miktar girmez, pencere açılmaz.
+            // Satır bu rafta açılır; BC başka rafta biliyorsa fark kayıtta çıkar.
+            var fromOtherBin = false
+            if (rows.isEmpty() && complete) {
+                // Query API "or" kabul etmez: önce madde, sonra lot olarak ayrı ayrı ara.
+                val key = candidate.itemNo.ifBlank { candidate.lotNo }
+                val lotClause = if (candidate.lotNo.isNotBlank() && candidate.itemNo.isNotBlank())
+                    " and lotNo eq '${safe(candidate.lotNo)}'" else ""
+                val found = mutableListOf<JSONObject>()
+                for (field in listOf("itemNo", "lotNo")) {
+                    if (found.isNotEmpty()) break
+                    val locPage = BcApi.getAllPages(
+                        context,
+                        "availableLots?\$filter=locationCode eq '${safe(loc)}' and $field eq '${safe(key)}'$lotClause&\$top=200",
+                    )
+                    if (!locPage.complete) { complete = false; break }
+                    found += locPage.rows.filter { it.optDouble("quantityBase", 0.0) > 0.0 }
+                }
+                rows = found
+                    .groupBy { Triple(it.optString("itemNo"), it.optString("lotNo"), it.optString("unitOfMeasureCode")) }
+                    .map { (_, group) ->
+                        JSONObject(group.first().toString()).apply {
+                            put("quantity", group.sumOf { it.optDouble("quantity", 0.0) })
+                            put("quantityBase", group.sumOf { it.optDouble("quantityBase", 0.0) })
+                        }
+                    }
+                fromOtherBin = rows.isNotEmpty()
+            }
             if (rows.isEmpty()) {
                 busy = false
-                when {
-                    !complete -> status = "HATA: Raf stoku okunamadı. Yenileyip tekrar okutun."
-                    candidate.itemNo.isBlank() ->
-                        status = "HATA: ${candidate.lotNo} lotu $activeBin rafında BC stokunda yok. Ürün barkodunu okutun."
-                    else -> {
-                        manualEntry = candidate
-                        status = "${candidate.itemNo} $activeBin rafında BC stokunda yok — bulunan miktarı girin"
-                    }
+                status = when {
+                    !complete -> "HATA: Stok okunamadı. Yenileyip tekrar okutun."
+                    else -> "HATA: $what $loc lokasyonunda BC stokunda yok (madde/lot bulunamadı). LP okutun veya BC'de kontrol edin."
                 }
                 return@launch
             }
@@ -609,7 +631,8 @@ private fun CountV2Document(no: String, onBack: () -> Unit) {
             val first = batch.first().label
             reload(
                 "TAMAM: ${first.itemNo} · ${batch.size} satır · toplam ${formatCountV2Qty(total)} ${first.unitOfMeasureCode} " +
-                    "$activeBin rafında teyit edildi" + (if (skipped > 0) " ($skipped satır zaten sayılıydı)" else "") +
+                    (if (fromOtherBin) "$activeBin rafına yazıldı (BC başka rafta biliyordu)" else "$activeBin rafında teyit edildi") +
+                    (if (skipped > 0) " ($skipped satır zaten sayılıydı)" else "") +
                     " — farklıysa satıra dokunup düzeltin"
             )
         }
@@ -907,44 +930,6 @@ private fun CountV2Document(no: String, onBack: () -> Unit) {
             onConfirm = { res ->
                 adjustLine = null
                 recordLineCount(line, res.quantity)
-            },
-        )
-    }
-
-    manualEntry?.let { candidate ->
-        QuantityDialogSheet(
-            title = "Sayım Miktarı — $activeBin",
-            itemNo = candidate.itemNo,
-            initialQty = 1.0,
-            initialLot = candidate.lotNo,
-            initialSerial = candidate.serialNo,
-            showLotSerial = true,
-            showAvailableLotLookup = true,
-            autoDetectLotFromStock = true,
-            locationCode = header?.optString("locationCode").orEmpty(),
-            binCode = activeBin,
-            onDismiss = { manualEntry = null },
-            onConfirm = { res ->
-                manualEntry = null
-                if (res.quantity <= 0.0) {
-                    status = "HATA: Sayım miktarı sıfırdan büyük olmalıdır."
-                    return@QuantityDialogSheet
-                }
-                sendScan(
-                    PendingCountV2Scan(
-                        scanId = UUID.randomUUID().toString(),
-                        binCode = activeBin,
-                        label = CountV2Label(
-                            itemNo = candidate.itemNo,
-                            variantCode = "",
-                            unitOfMeasureCode = res.uom.trim(),
-                            lotNo = res.lotNo.trim(),
-                            serialNo = res.serialNo.trim(),
-                            quantity = res.quantity,
-                            raw = candidate.raw,
-                        ),
-                    )
-                )
             },
         )
     }

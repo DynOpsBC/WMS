@@ -29,6 +29,11 @@ codeunit 72040 "DOPSWHS LP Management"
             Error('%1 rafı %2 lokasyonunda bulunamadı.', BinCode, LocationCode);
 
         LogMutation('LP.Build');
+        // Record.Init() deliberately keeps primary-key fields in AL. StartLP
+        // may have used this same variable to inspect a previously assigned LP;
+        // without Clear(), the old No. survives Init() and Insert attempts to
+        // create that LP again instead of requesting a new number-series value.
+        Clear(LP);
         LP.Init();
         LP."LP Template Code" := TemplateCode;
         LP."Location Code" := LocationCode;

@@ -7,6 +7,29 @@ Kurulum: [docs/android-install-guide.md](../../docs/android-install-guide.md)
 
 ---
 
+## v1.14.59-bade — 2026-08-28
+
+**APK:** `BCWMS-BADE-1.14.59-RELEASE.apk`
+
+**SHA-256:** `b7bfba1383d8abfbd282c5594bf248d2f57ec8c0e7ed906bcaeb9637dc01408c`
+
+**versionCode:** 200059 · **BC paketi:** 1.14.0.72
+
+### Sayım V2, çoklu lot sevkiyat ve mal kabul LP
+
+- Sayım V2'de LP veya lot barkodu ürün, lot, UOM ve BC miktarını otomatik getirir; miktar penceresi açmadan sonraki okutmaya geçilir. Satıra dokunarak miktar isteğe bağlı değiştirilebilir.
+- Sevkiyat pick'i ürünün mevcut miktarını lot ve depo gözü bazında ayrı satırlara böler; eski tek-lot seçimine takılmaz.
+- Hatalı veya eski pick, yalnız belge sahibi ve kaydedilmiş hareket yokken güvenli şekilde iptal edilip yeniden oluşturulabilir.
+- Mal kabulde yeni LP numarası eski bir LP ile çakışmaz; LP kapatılıp tekrar açılabilir ve alınan ürün aktif LP'nin içine kaydedilir.
+- Mal kabul lot alanındaki yönlendirme artık sevkiyat metni göstermeden `Lot No Ata` adımını açıkça anlatır.
+
+### Canlı BADE doğrulaması
+
+- `SH000273` için `PI001130` dört ayrı lot/depo gözü satırıyla oluşturuldu.
+- `RE000625` içinden `LP000048` üzerine `HM.00181`, lot `H100782`, `1 KG` eklendi ve LP detayından geri okundu.
+
+---
+
 ## v1.14.58-bade — 2026-08-27
 
 **APK:** `BCWMS-BADE-1.14.58-RELEASE.apk`
@@ -84,8 +107,9 @@ Kurulum: [docs/android-install-guide.md](../../docs/android-install-guide.md)
   fark üretir. Geri alma LP bazında (`undoV2Lp`).
 - **Ürün / lot barkodu okutma:** okutulan rafın BC stoku lot ve birim bazında
   "burada" diye teyit edilir; her lot ayrı satır. Aynı raf/ürün/lot ikinci
-  okutmada toplanmaz. Rafta stok yoksa (beklenmeyen ürün) yalnız o zaman
-  miktar sorulur.
+  okutmada toplanmaz. Rafta stok yoksa lotun/ürünün lokasyondaki BC miktarı bu
+  rafa yazılır ("BC başka rafta biliyordu"); hiç yoksa yalnız uyarı. Hiçbir
+  durumda miktar penceresi açılmaz.
 - Miktar taşıyan QR'larda davranış değişmedi (otomatik satır).
 - **Satıra dokun → miktarı düzelt** (`recordCount`); geri alma son LP /
   ürün okutmasının ürettiği tüm satırları kapsar.
