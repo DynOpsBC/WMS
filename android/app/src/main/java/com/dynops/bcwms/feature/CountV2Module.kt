@@ -506,6 +506,29 @@ private fun CountV2Document(no: String, onBack: () -> Unit) {
                     "binContents?\$filter=locationCode eq '${safe(loc)}' and binCode eq '${safe(activeBin)}' and itemNo eq '${safe(candidate.itemNo)}'&\$top=50",
                 )
                 if (page.complete) rows = page.rows.filter { it.optDouble("quantity", 0.0) > 0.0 } else complete = false
+
+                // Düz metin barkodu madde numarası da yalnız lot numarası da
+                // olabilir. Önce gerçek maddeyi tercih et; BC'de bu madde hiç
+                // yoksa aynı değeri lot olarak ara. Lot etiketi böylece manuel
+                // miktar/UOM ekranına düşmeden ürününü ve raf bakiyesini çözer.
+                if (rows.isEmpty() && complete) {
+                    val itemPage = BcApi.getAllPages(
+                        context,
+                        "items?\$filter=no eq '${safe(candidate.itemNo)}'&\$select=no&\$top=1",
+                    )
+                    if (!itemPage.complete) {
+                        complete = false
+                    } else if (itemPage.rows.none { it.optString("no").equals(candidate.itemNo, ignoreCase = true) }) {
+                        val byLotPage = BcApi.getAllPages(
+                            context,
+                            "availableLots?\$filter=locationCode eq '${safe(loc)}' and binCode eq '${safe(activeBin)}' and lotNo eq '${safe(candidate.itemNo)}'&\$top=200",
+                        )
+                        if (byLotPage.complete)
+                            rows = byLotPage.rows.filter { it.optDouble("quantityBase", 0.0) > 0.0 }
+                        else
+                            complete = false
+                    }
+                }
             }
             if (rows.isEmpty()) {
                 busy = false

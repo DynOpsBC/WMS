@@ -7,6 +7,20 @@ Kurulum: [docs/android-install-guide.md](../../docs/android-install-guide.md)
 
 ---
 
+## v1.14.57-bade — 2026-08-27
+
+**APK:** `BCWMS-BADE-1.14.57-RELEASE.apk`
+
+**versionCode:** 200057 · **BC paketi:** 1.14.0.69
+
+### Sayım V2: yalnız lot kodu taşıyan QR
+
+- Düz metin barkodu önce gerçek madde numarası olarak kontrol edilir.
+- Madde bulunamazsa aynı değer otomatik olarak lot numarası kabul edilir.
+- Lotun ürün, UOM ve okutulan raftaki miktarı BC stokundan getirilir; manuel giriş ekranı açılmaz.
+
+---
+
 ## v1.14.56-bade — 2026-08-27
 
 **APK:** `BCWMS-BADE-1.14.56-RELEASE.apk`
