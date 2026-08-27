@@ -45,6 +45,7 @@ codeunit 72050 "DOPSWHS Count Mgmt"
     procedure CreateV2Sheet(LocationCode: Code[10]; OperatorUserId: Code[50]): Code[20]
     var
         Location: Record Location;
+        LocalUser: Record "DOPSWHS Local User";
         Counters: array[3] of Code[50];
         SheetNo: Code[20];
     begin
@@ -54,8 +55,16 @@ codeunit 72050 "DOPSWHS Count Mgmt"
             Error('%1 lokasyonu bulunamadı.', LocationCode);
         if OperatorUserId = '' then
             Error('Sayım V2 oluşturmak için terminal kullanıcı kimliği zorunludur. Yeniden giriş yapın.');
-
-        Counters[1] := OperatorUserId;
+        // Sayıcı ataması ZORUNLU DEĞİL: sayıcısız belgede slot 1 herkese
+        // açıktır (GetAssignedCounterSlots / EnsureAllRequiredCountsRecorded ve
+        // terminal bunu zaten destekler). Operatör bu şirketin Local WMS Users
+        // listesinde kayıtlı ve etkinse izlenebilirlik için sayıcı-1 olarak
+        // atanır; değilse (admin oturumu, çok şirketli tenant'ta başka şirkette
+        // tanımlı kullanıcı) belge sayıcısız açılır. Önceden burada hata
+        // veriliyordu ve terminalden sayım başlatılamıyordu.
+        if LocalUser.Get(CopyStr(OperatorUserId, 1, MaxStrLen(LocalUser.Username))) then
+            if not LocalUser.Disabled then
+                Counters[1] := OperatorUserId;
         SheetNo := CreateSheet(LocationCode, Enum::"DOPSWHS Count Mode"::Visible, Counters);
         PrepareV2(SheetNo);
         exit(SheetNo);
@@ -1217,6 +1226,7 @@ codeunit 72050 "DOPSWHS Count Mgmt"
         V2LotRequiredErr: Label '%1 ürünü lot takiplidir; QR içinde lot numarası bulunmalıdır.', Comment = '%1 item no';
         V2SerialRequiredErr: Label '%1 ürünü seri takiplidir; QR içinde seri numarası bulunmalıdır.', Comment = '%1 item no';
         V2ScanIdConflictErr: Label '%1 okutma kimliği başka bir sayım belgesinde kullanılmıştır.', Comment = '%1 scan guid';
+
         V2ScanNotFoundErr: Label '%1 okutması bulunamadığı için geri alınamadı.', Comment = '%1 scan guid';
         V2UndoCountMissingErr: Label '%1 okutmasının sayım değeri bulunamadığı için geri alınamadı.', Comment = '%1 scan guid';
         V2UndoQtyErr: Label '%1 okutması geri alınamadı: güncel miktar %2, okutmanın miktarı %3.', Comment = '%1 scan guid, %2 current qty, %3 scan qty';

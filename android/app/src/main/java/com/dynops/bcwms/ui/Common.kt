@@ -175,6 +175,7 @@ fun operatorFacingStatus(raw: String): String {
         englishBcValidation ||
         raw.trimStart().startsWith("{")
     if (technicalDeployment) {
+        operatorSafeBcMessage(raw)?.let { return "HATA: $it" }
         return operatorFacingApiError(raw)
     }
     return raw
@@ -190,9 +191,65 @@ fun operatorFacingStatus(raw: String): String {
 fun operatorSupportReference(raw: String, httpCode: Int = 0): String =
     "REF-" + "$httpCode:${raw.trim()}".hashCode().toUInt().toString(16).uppercase().padStart(8, '0')
 
+/**
+ * BCWMS'in kendi AL hataları Türkçe ve operatöre yöneliktir ("Araç bilgileri
+ * eksik…", "Terminal kullanıcısı … kayıtlı değil"). Bunlar yalnız yanlarındaki
+ * CorrelationId/HTTP eki yüzünden maskeleniyor, kullanıcı adı/şirket gibi
+ * eyleme dönük bilgi kayboluyordu. Ek temizlenince İngilizce/teknik iz
+ * kalmıyorsa ve metin Türkçe ise mesaj olduğu gibi döner; aksi halde null.
+ * "HATA:" öneki çıkarılmış döner; çağıran ekler.
+ */
+fun operatorSafeBcMessage(raw: String): String? {
+    val stripped = raw
+        .replace(Regex("""\s*CorrelationId:\s*[0-9a-fA-F-]+\.?""", RegexOption.IGNORE_CASE), "")
+        .replace(Regex("""\s*\(HTTP\s*\d+\)""", RegexOption.IGNORE_CASE), "")
+        .replace(Regex("""\bHTTP\s*\d+\b""", RegexOption.IGNORE_CASE), "")
+        .replace(Regex("""\s{2,}"""), " ")
+        .trim()
+        .removePrefix("HATA:").trim()
+    if (stripped.isBlank() || stripped.startsWith("{")) return null
+    val technical = Regex(
+        """\b(required|must|cannot|already|not\s+found|no\s+longer|nothing\s+to|not\s+allowed|unable\s+to|failed\s+to|does\s+not|is\s+not|Exception|OData|Bad\s+Request|Identification\s+fields|publish)\b""",
+        RegexOption.IGNORE_CASE,
+    ).containsMatchIn(stripped) ||
+        Regex("""\b(Table|Field)\s+[A-Za-z0-9_. -]+""").containsMatchIn(stripped) ||
+        stripped.contains("Microsoft.") ||
+        stripped.contains("No.=") ||
+        stripped.contains("güncel BC", ignoreCase = true) ||
+        stripped.contains("uzantısını yayın", ignoreCase = true)
+    if (technical) return null
+    // Operatör metni Türkçedir; Türkçe karakter yoksa kaynağı bilinmeyen bir
+    // İngilizce mesajdır ve maskelenmeye devam eder.
+    if (!Regex("""[çğıöşüÇĞİÖŞÜ]""").containsMatchIn(stripped)) return null
+    return stripped
+}
+
 /** Raw BC/transport errors never belong on the warehouse terminal. */
 fun operatorFacingApiError(raw: String, httpCode: Int = 0): String {
+    operatorSafeBcMessage(raw)?.let {
+        return "HATA: $it Sorun sürerse yöneticinize ${operatorSupportReference(raw, httpCode)} kodunu iletin."
+    }
+    // BC TestField: "<Alan> must have a value in <Tablo>: No.=X. It cannot be
+    // zero or empty." Operatör hangi alanın boş olduğunu görmeli; aksi halde
+    // BC'de dolu görünen belge terminalde nedensiz "tamamlanamadı" der.
+    val missingField = Regex(
+        """^\s*(.+?)\s+must have a value in\s+([^:.]+)""",
+        RegexOption.IGNORE_CASE,
+    ).find(raw)
+    // Count Counter → Local WMS User tablo ilişkisi: operatör bu şirketin WMS
+    // kullanıcı listesinde yok. Çözüm veri tarafında; operatör bunu bilmeli.
+    val notWmsUser = raw.contains("Local WMS User", ignoreCase = true) ||
+        raw.contains("Local WMS Users", ignoreCase = true)
     val action = when {
+        notWmsUser -> {
+            val who = Regex("""contains a value \((.+?)\)""").find(raw)?.groupValues?.get(1)?.trim().orEmpty()
+            "Terminal kullanıcısı${if (who.isNotBlank()) " ($who)" else ""} bu şirketin Local WMS Users listesinde kayıtlı değil. BC'de ekleyin veya kayıtlı bir WMS kullanıcısıyla giriş yapın."
+        }
+        missingField != null -> {
+            val field = operatorFieldCaption(missingField.groupValues[1].trim())
+            val table = operatorTableCaption(missingField.groupValues[2].trim())
+            "Zorunlu alan boş: $field ($table). Belge bilgilerini tamamlayıp tekrar deneyin."
+        }
         raw.contains("lot", ignoreCase = true) ->
             "Lot bilgisi doğrulanamadı. Yenileyip tekrar deneyin."
         raw.contains("printer", ignoreCase = true) || raw.contains("yazıcı", ignoreCase = true) ->
@@ -202,6 +259,24 @@ fun operatorFacingApiError(raw: String, httpCode: Int = 0): String {
         else -> "İşlem tamamlanamadı. Yenileyip tekrar deneyin."
     }
     return "HATA: $action Sorun sürerse yöneticinize ${operatorSupportReference(raw, httpCode)} kodunu iletin."
+}
+
+private fun operatorFieldCaption(field: String): String = when (field.lowercase()) {
+    "vendor shipment no." -> "Tedarikçi İrsaliye No"
+    "posting date" -> "Kayıt Tarihi"
+    "vehicle plate no" -> "Araç Plaka No"
+    "driver code" -> "Araç Sürücü Kodu"
+    "actual receipt datetime" -> "Fiili Alış Tarihi - Saati"
+    else -> field
+}
+
+private fun operatorTableCaption(table: String): String = when (table.lowercase()) {
+    "warehouse receipt header" -> "mal kabul başlığı"
+    "warehouse shipment header" -> "sevkiyat başlığı"
+    "purchase header" -> "satın alma siparişi"
+    "sales header" -> "satış siparişi"
+    "transfer header" -> "transfer siparişi"
+    else -> table
 }
 
 /** Non-clickable state badge. AssistChip is intentionally not used. */

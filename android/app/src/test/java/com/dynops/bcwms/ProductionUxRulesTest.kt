@@ -94,6 +94,49 @@ class ProductionUxRulesTest {
     }
 
     @Test
+    fun `missing mandatory BC header field names the field for the operator`() {
+        val visible = operatorFacingApiError(
+            "Araç Sürücü Kodu must have a value in Warehouse Receipt Header: No.=RE000624. It cannot be zero or empty.  CorrelationId:  5331615a-d761",
+            400,
+        )
+        assertTrue(visible, visible.startsWith("HATA: Zorunlu alan boş: Araç Sürücü Kodu (mal kabul başlığı)."))
+        assertTrue(visible.contains("REF-"))
+        assertFalse(visible.contains("CorrelationId"))
+        assertFalse(visible.contains("No.="))
+        assertTrue(
+            operatorFacingApiError("Vendor Shipment No. must have a value in Warehouse Receipt Header: No.=RE1.", 400)
+                .contains("Tedarikçi İrsaliye No"),
+        )
+    }
+
+    @Test
+    fun `operator missing from Local WMS Users is explained instead of masked`() {
+        val visible = operatorFacingStatus(
+            "HATA: Sayım V2 oluşturulamadı — The field User ID of table Count Counter contains a value (DYNOPS) that cannot be found in the related table (Local WMS User).  CorrelationId:  07a7d7e7",
+        )
+        assertTrue(visible, visible.contains("Terminal kullanıcısı (DYNOPS) bu şirketin Local WMS Users listesinde kayıtlı değil"))
+        assertTrue(visible.contains("REF-"))
+        assertFalse(visible.contains("CorrelationId"))
+    }
+
+    @Test
+    fun `Turkish BCWMS AL errors reach the operator without the correlation tail`() {
+        val visible = operatorFacingStatus(
+            "HATA: Sayım V2 oluşturulamadı — Terminal kullanıcısı DYNOPS, BS GROUP şirketinin Local WMS Users listesinde kayıtlı değil. BC'de bu kullanıcıyı ekleyin.  CorrelationId:  8c7872a0-3fc9-4d36-98fb-d5cd70b6504b.",
+        )
+        assertEquals(
+            "HATA: Sayım V2 oluşturulamadı — Terminal kullanıcısı DYNOPS, BS GROUP şirketinin Local WMS Users listesinde kayıtlı değil. BC'de bu kullanıcıyı ekleyin.",
+            visible,
+        )
+        val posted = operatorFacingApiError("Araç bilgileri eksik (plaka ve sürücü). Terminalde \"Araç / Sürücü\" kartından girip tekrar kaydedin.  CorrelationId:  aa-bb.", 400)
+        assertTrue(posted, posted.startsWith("HATA: Araç bilgileri eksik (plaka ve sürücü)."))
+        assertTrue(posted.contains("REF-"))
+        assertFalse(posted.contains("CorrelationId"))
+        // English BC text stays masked even when it has Turkish captions inside.
+        assertTrue(operatorFacingStatus("HATA: Araç Sürücü Kodu must have a value in Warehouse Receipt Header: No.=RE1.").contains("Zorunlu alan boş"))
+    }
+
+    @Test
     fun `common English AL validations never reach the operator`() {
         listOf(
             "HATA: Item No. is required.",

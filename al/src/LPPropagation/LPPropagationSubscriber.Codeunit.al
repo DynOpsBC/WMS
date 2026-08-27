@@ -10,6 +10,24 @@ codeunit 72428 "DOPSWHS LP Propagation"
     //   (2) BC integration events — for Sales/Purchase posting and Item Jnl posting where we don't
     //       control the orchestration but need to capture the LP onto downstream ledger rows.
     Access = Public;
+    // NEDEN: Aşağıdaki abonelikler BC'nin kayıt zincirinde (Purch.-Post, Item
+    // Jnl.-Post Line...) kayıtlı satırlara LP numarası yazar. Terminal kullanıcısı
+    // çoğu tenant'ta Team Member/Device lisanslıdır ve bu tablolara doğrudan
+    // Modify hakkı yoktur; izin verilmezse LP'li mal kabul "Your license does
+    // not grant ... Purch. Rcpt. Line: Modify" ile düşer (LP'siz kabulde bu kod
+    // hiç çalışmadığı için sorun yalnız LP'li belgelerde görülüyordu).
+    Permissions =
+        tabledata "Item Ledger Entry" = RM,
+        tabledata "Value Entry" = RM,
+        tabledata "Warehouse Entry" = RM,
+        tabledata "Purch. Rcpt. Line" = RM,
+        tabledata "Sales Shipment Line" = RM,
+        tabledata "Posted Whse. Receipt Header" = RM,
+        tabledata "Posted Whse. Receipt Line" = RM,
+        tabledata "Posted Whse. Shipment Header" = RM,
+        tabledata "Posted Whse. Shipment Line" = RM,
+        tabledata "Warehouse Receipt Header" = RM,
+        tabledata "Warehouse Shipment Header" = RM;
 
     // =========================================================================
     // (1) Synchronous helpers — invoked from DOPSWHS Receipt/Shipment Mgmt

@@ -7,6 +7,119 @@ Kurulum: [docs/android-install-guide.md](../../docs/android-install-guide.md)
 
 ---
 
+## v1.14.51-bade — 2026-08-27
+
+**APK:** `BCWMS-BADE-1.14.51-RELEASE.apk`
+
+**SHA-256:** `00d56ef42f59b880bf480c5bf97bf40680573e82e1f0135bed6a7abd111a5937`
+
+**versionCode:** 200051 · **minSdk:** 26 · **targetSdk:** 35
+
+### Mal kabul: tedarikçi lotu ve BADE başlık alanları
+
+- Terminalden girilen tedarikçi lotu artık BC'deki **Madde İzleme
+  Satırları → Tedarikçi Lotu** kolonuna da yazılır.
+- Eski mobil sürümde yalnız Lot Bilgi Kartına kaydedilmiş değerler,
+  mal kabul postundan önce takip satırına otomatik senkronlanır.
+- Fiili alış tarihi, tedarikçi irsaliye numarası ve BADE araç/sürücü
+  alanları için tamamlanan doğrulamalar bu pakete dahildir.
+- Sayım V2, şirketin yerel WMS kullanıcı listesinde kaydı olmayan
+  oturumlarda sayıcısız belge oluşturarak kullanılabilir kalır.
+
+Bu Android sürümü BADE BCWMS AL `1.14.0.63` ile birlikte kullanılmalıdır.
+
+### Doğrulama
+
+- `testBadeDebugUnitTest`: **129 test, 0 hata**
+- `assembleBadeRelease`: başarılı
+- APK Signature Scheme v2: doğrulandı
+- BC AL `1.14.0.63`: alc derlemesi başarılı
+
+---
+
+## v1.14.50-bade — 2026-08-27
+
+**APK:** `bcwms-bade-1.14.50-sayim-v2-kullanici-release.apk`
+
+**SHA-256:** `2f1b3530f35aa330f712525dfab3cb971e4d7c0801264ce2e719dacb3bd93bdd`
+
+**versionCode:** 200050 · **minSdk:** 26 · **targetSdk:** 35
+
+### Sayım V2 oluşturma: kullanıcı şirkette kayıtlı değilse net mesaj
+
+- "Yeni V2 Sayımı → Oluştur ve Aç" hiçbir şey oluşturmuyor gibi görünüyordu:
+  BC, sayıcı-1 olarak atanan terminal kullanıcısı o şirketin *Local WMS
+  Users* listesinde yoksa `Count Counter → Local WMS User` tablo ilişkisi
+  hatası veriyor, uygulama da bunu REF koduna çevirip diyaloğu açık bırakıyordu.
+- Hata artık diyalog kapanınca listede okunuyor: "Terminal kullanıcısı (X) bu
+  şirketin Local WMS Users listesinde kayıtlı değil. BC'de ekleyin veya kayıtlı
+  bir WMS kullanıcısıyla giriş yapın."
+- Başarısız her BC isteği artık `BCWMS.ApiError` etiketiyle logcat'e ham
+  haliyle yazılıyor; REF kodu destek tarafında bu satırla eşleşir.
+- BCWMS'in kendi Türkçe AL hataları (ör. "Araç bilgileri eksik…", "Terminal
+  kullanıcısı … kayıtlı değil") artık CorrelationId eki yüzünden maskelenmiyor;
+  operatör kullanıcı adı ve şirket gibi eyleme dönük bilgiyi görüyor. İngilizce
+  BC/platform hataları maskelenmeye devam ediyor.
+
+Bu Android sürümü BADE BCWMS AL `1.14.0.62` ile birlikte yayımlanmalıdır
+(`build/al/BCWMS-BC-1.14.0.62-BADE.app`): `createV2` artık sayıcı atamasını
+zorunlu tutmuyor — operatör şirketin Local WMS Users listesinde kayıtlı ve
+etkinse sayıcı-1 olarak atanır, değilse belge sayıcısız açılır ve slot 1
+herkese açık kalır (BC ve terminal sayıcısız belgeyi zaten destekliyordu).
+Uygulamadaki "Local WMS Users" açıklaması yalnız eski BC paketleriyle görülür.
+
+### Doğrulama
+
+- `testBadeDebugUnitTest`: **129 test, 0 hata**
+- `assembleBadeRelease`: başarılı
+- BC AL `1.14.0.62`: alc derlemesi başarılı
+
+---
+
+## v1.14.49-bade — 2026-08-27
+
+**APK:** `bcwms-bade-1.14.49-arac-bilgisi-release.apk`
+
+**SHA-256:** `7063ebc5f5c974f33d4637d050728b2c7f07020456726ff4d6d2e0d68fc67b63`
+
+**versionCode:** 200049 · **minSdk:** 26 · **targetSdk:** 35
+
+### Mal kabul: BADE zorunlu başlık alanları (plaka / sürücü)
+
+- BADE uzantısı mal kabul kaydında Fiili Alış Tarihi, Tedarikçi İrsaliye No,
+  Araç Plaka No ve Sürücü Kodu'nu zorunlu tutuyor; terminal bu alanları
+  giremediği için `Kaydet` HTTP 400 ile düşüyor ve ekranda yalnız
+  "İşlem tamamlanamadı … REF-…" görünüyordu.
+- Belge ekranına **Araç / Sürücü** kartı eklendi: plaka, tedarikçi irsaliye no
+  ve BC'deki Araç Sürücüleri listesinden aranabilir sürücü seçimi. Bilgi
+  eksikse `Kaydet` önce bu formu açar. Kart yalnız bu alanları isteyen
+  şirketlerde (`vehicleInfoRequired`) görünür; diğer müşterilerde değişiklik yok.
+- BC'nin "X must have a value in Y" hatası artık operatöre
+  "Zorunlu alan boş: <alan> (<belge>)" olarak gösteriliyor (REF kodu korunuyor).
+- Açık LP artık sunucudan okunuyor (`lpNo`/`lpOpen`): uygulama yeniden
+  açılınca "Aktif LP" kaybolmuyor, ikinci bir LP başlatılmıyor.
+
+Bu Android sürümü BADE BCWMS AL `1.14.0.59` ile birlikte yayımlanmalıdır
+(`build/al/BCWMS-BC-1.14.0.59-BADE.app`): Receipt API'de `vehicleInfoRequired`,
+`vehiclePlateNo`, `driverCode`, `driverName`, `vendorShipmentNo` alanları ve
+`setVehicleInfo` / `listVehicleDrivers` aksiyonları; Kayıt Tarihi, Fiili Alış
+Tarihi ve Tedarikçi İrsaliye No post öncesi otomatik dolduruluyor, plaka/sürücü
+eksikse Türkçe hata ile erken duruluyor. **LP'li kabulün asıl kök nedeni:**
+LP yayılım codeunit'i (72428) `Purch.-Post` sonrası `Purch. Rcpt. Line`'a LP
+yazıyordu ve kullanıcı lisansı bu tabloya Modify vermiyordu (403 "Your license
+does not grant…"); LP'siz kabulde bu kod hiç çalışmadığından sorun yalnız LP'li
+belgelerde çıkıyordu. 72428 ve Receipt Mgmt'e dolaylı tablo izinleri
+(`Permissions`) eklendi; akış artık kullanıcı lisansından bağımsız.
+
+### Doğrulama
+
+- `testBadeDebugUnitTest --tests ProductionUxRulesTest`: **10 test, 0 hata**
+- `assembleBadeRelease`: başarılı
+- BC AL `1.14.0.59`: alc derlemesi başarılı (325 dosya) (canlı post + put-away doğrulaması
+  uzantı E-DefterSandbox'a yayımlandıktan sonra yapılacak)
+
+---
+
 ## v1.14.28-bade — 2026-08-25
 
 **APK:** `BCWMS-BADE-1.14.28-BAGLANTI-LP-SAYIM-DUZELTMELERI.apk`

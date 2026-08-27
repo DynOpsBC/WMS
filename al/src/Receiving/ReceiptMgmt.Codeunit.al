@@ -1,10 +1,17 @@
 codeunit 72043 "DOPSWHS Receipt Mgmt"
 {
     Access = Public;
+    // Kayıt sonrası put-away doğrulama/oluşturma ve LP damgalama kayıtlı
+    // tablolara yazar; terminal kullanıcısının lisansı bunlara doğrudan izin
+    // vermeyebilir. Dolaylı izinle akış kullanıcı lisansından bağımsız çalışır.
     Permissions =
         tabledata "Reservation Entry" = rimd,
         tabledata "Whse. Item Tracking Line" = rimd,
-        tabledata "Lot No. Information" = rimd;
+        tabledata "Lot No. Information" = rimd,
+        tabledata "Posted Whse. Receipt Header" = rm,
+        tabledata "Posted Whse. Receipt Line" = rm,
+        tabledata "Warehouse Activity Header" = rim,
+        tabledata "Warehouse Activity Line" = rim;
 
     /// <summary>Geriye dönük imza: operatör kimliği belgenin atamasından okunur.</summary>
     procedure PostReceipt(var WhseReceiptHeader: Record "Warehouse Receipt Header"; PrintReport: Boolean; Invoice: Boolean)
@@ -54,7 +61,23 @@ codeunit 72043 "DOPSWHS Receipt Mgmt"
         // zorunlu kılıyor. Alan başka bir PTE'ye ait olduğundan derleme-zamanı
         // bağımlılığı kurmadan RecordRef ile bulup yalnız boşsa dolduruyoruz.
         // Alanın olmadığı diğer müşterilerde işlem standart akışta devam eder.
+        EnsurePostingDate(WhseReceiptHeader);
         EnsureActualReceiptDateTime(WhseReceiptHeader);
+        // BADE'nin mal kabul doğrulaması ayrıca Warehouse Receipt Header
+        // üzerindeki "Vendor Shipment No." alanını zorunlu tutuyor. Satın
+        // alma siparişinde bir tedarikçi irsaliye numarası varsa onu, yoksa
+        // izlenebilir ve benzersiz kaynak sipariş numarasını kullanıyoruz.
+        // Alan BADE PTE'sine ait olduğu için bağımlılık oluşturmadan
+        // dinamik olarak dolduruluyor; diğer tenant'larda no-op kalır.
+        EnsureVendorShipmentNo(WhseReceiptHeader);
+        // Daha eski mobil sürümler tedarikçi lotunu yalnız Lot No.
+        // Information kartına yazıyordu. Hazırlanmış satırları da
+        // yeniden giriş istemeden BADE takip kolonuna taşı.
+        SyncSupplierLotsToReservations(WhseReceiptHeader);
+        // BADE ayrıca plaka ve sürücü kodunu zorunlu tutuyor. Bunlar operatör
+        // girdisidir (e-irsaliye verisi), varsayılan atanamaz. BC'nin İngilizce
+        // TestField hatası yerine terminalin gösterebileceği net mesajla erken dur.
+        EnsureVehicleInfoComplete(WhseReceiptHeader);
         // A terminal operator can post without first tapping "LP Kapat". An
         // open LP must be completed before the warehouse receipt disappears;
         // otherwise it cannot be assigned to the resulting put-away.
@@ -140,6 +163,200 @@ codeunit 72043 "DOPSWHS Receipt Mgmt"
                 exit;
             end;
         end;
+    end;
+
+    local procedure EnsureVendorShipmentNo(var WhseReceiptHeader: Record "Warehouse Receipt Header")
+    var
+        WhseReceiptLine: Record "Warehouse Receipt Line";
+        PurchaseHeader: Record "Purchase Header";
+        ReceiptRef: RecordRef;
+        CandidateField: FieldRef;
+        VendorShipmentNo: Code[35];
+        FieldIndex: Integer;
+    begin
+        WhseReceiptLine.SetRange("No.", WhseReceiptHeader."No.");
+        WhseReceiptLine.SetRange("Source Type", Database::"Purchase Line");
+        if not WhseReceiptLine.FindFirst() then
+            exit;
+
+        if PurchaseHeader.Get(PurchaseHeader."Document Type"::Order, WhseReceiptLine."Source No.") then
+            VendorShipmentNo := PurchaseHeader."Vendor Shipment No.";
+        if VendorShipmentNo = '' then
+            VendorShipmentNo := CopyStr(WhseReceiptLine."Source No.", 1, MaxStrLen(VendorShipmentNo));
+
+        ReceiptRef.GetTable(WhseReceiptHeader);
+        for FieldIndex := 1 to ReceiptRef.FieldCount do begin
+            CandidateField := ReceiptRef.FieldIndex(FieldIndex);
+            if (CandidateField.Type in [FieldType::Code, FieldType::Text]) and
+               ((CandidateField.Name = 'Vendor Shipment No.') or
+                (CandidateField.Caption = 'Vendor Shipment No.'))
+            then begin
+                if Format(CandidateField.Value) = '' then begin
+                    CandidateField.Value := CopyStr(VendorShipmentNo, 1, CandidateField.Length);
+                    ReceiptRef.Modify(true);
+                    ReceiptRef.SetTable(WhseReceiptHeader);
+                end;
+                exit;
+            end;
+        end;
+    end;
+
+    local procedure EnsurePostingDate(var WhseReceiptHeader: Record "Warehouse Receipt Header")
+    begin
+        if WhseReceiptHeader."Posting Date" <> 0D then
+            exit;
+        WhseReceiptHeader.Validate("Posting Date", WorkDate());
+        WhseReceiptHeader.Modify(true);
+    end;
+
+    /// <summary>
+    /// Tenant özelleştirmesi (BADE) mal kabul başlığında plaka ve sürücü kodu
+    /// istiyorsa bunlar terminalden girilmiş olmalı. Alanlar yoksa no-op.
+    /// </summary>
+    local procedure EnsureVehicleInfoComplete(WhseReceiptHeader: Record "Warehouse Receipt Header")
+    var
+        Missing: Text;
+    begin
+        if not VehicleInfoRequired(WhseReceiptHeader) then
+            exit;
+        if GetTenantHeaderField(WhseReceiptHeader, VehiclePlateFieldTok) = '' then
+            Missing := PlateTxt;
+        if GetTenantHeaderField(WhseReceiptHeader, DriverCodeFieldTok) = '' then
+            if Missing = '' then
+                Missing := DriverTxt
+            else
+                Missing := Missing + ' ' + AndTxt + ' ' + DriverTxt;
+        if Missing <> '' then
+            Error(VehicleInfoMissingErr, Missing);
+    end;
+
+    /// <summary>True when the tenant's receipt header carries the BADE vehicle fields.</summary>
+    procedure VehicleInfoRequired(WhseReceiptHeader: Record "Warehouse Receipt Header"): Boolean
+    var
+        ReceiptRef: RecordRef;
+        PlateField: FieldRef;
+        DriverField: FieldRef;
+    begin
+        ReceiptRef.GetTable(WhseReceiptHeader);
+        exit(FindFieldByName(ReceiptRef, VehiclePlateFieldTok, PlateField) and
+             FindFieldByName(ReceiptRef, DriverCodeFieldTok, DriverField));
+    end;
+
+    /// <summary>
+    /// Başka bir PTE'ye ait başlık alanını adıyla okur; alan yoksa ''. NEDEN:
+    /// BCWMS, BADE uzantısına derleme-zamanı bağımlılığı kurmadan aynı kodla
+    /// tüm müşterilerde çalışmalı.
+    /// </summary>
+    procedure GetTenantHeaderField(WhseReceiptHeader: Record "Warehouse Receipt Header"; FieldName: Text): Text
+    var
+        ReceiptRef: RecordRef;
+        TenantField: FieldRef;
+    begin
+        ReceiptRef.GetTable(WhseReceiptHeader);
+        if not FindFieldByName(ReceiptRef, FieldName, TenantField) then
+            exit('');
+        exit(Format(TenantField.Value));
+    end;
+
+    /// <summary>
+    /// Terminalden gelen araç/irsaliye başlık bilgisi. Validate ile sürücü adı
+    /// vb. alanlar BADE tablo uzantısının OnValidate tetikleyicisinde dolar.
+    /// </summary>
+    procedure SetVehicleInfo(var WhseReceiptHeader: Record "Warehouse Receipt Header"; VehiclePlateNo: Text; DriverCode: Code[20]; VendorShipmentNo: Text)
+    var
+        ReceiptRef: RecordRef;
+        Changed: Boolean;
+    begin
+        if not VehicleInfoRequired(WhseReceiptHeader) then
+            Error(VehicleInfoUnsupportedErr);
+        ReceiptRef.GetTable(WhseReceiptHeader);
+        Changed := WriteFieldByName(ReceiptRef, VehiclePlateFieldTok, UpperCase(DelChr(VehiclePlateNo, '<>', ' ')));
+        Changed := WriteFieldByName(ReceiptRef, DriverCodeFieldTok, DriverCode) or Changed;
+        if DelChr(VendorShipmentNo, '<>', ' ') <> '' then
+            Changed := WriteFieldByName(ReceiptRef, VendorShipmentFieldTok, DelChr(VendorShipmentNo, '<>', ' ')) or Changed;
+        if Changed then begin
+            ReceiptRef.Modify(true);
+            ReceiptRef.SetTable(WhseReceiptHeader);
+        end;
+        Log('Receipt.VehicleInfo', StrSubstNo(VehicleInfoLogTxt, WhseReceiptHeader."No.", VehiclePlateNo, DriverCode), WhseReceiptHeader."Assigned User ID");
+    end;
+
+    /// <summary>
+    /// Sürücü ana verisi BADE PTE'sinin tablosunda; bağımlılık kurmadan tablo
+    /// adıyla açılır. Tablo yoksa boş JSON dizisi döner. Çıktı: [{code,name}].
+    /// </summary>
+    procedure ListVehicleDrivers(): Text
+    var
+        AllObj: Record AllObjWithCaption;
+        DriverRef: RecordRef;
+        CodeField: FieldRef;
+        BlockedField: FieldRef;
+        Drivers: JsonArray;
+        Driver: JsonObject;
+        Result: Text;
+    begin
+        AllObj.SetRange("Object Type", AllObj."Object Type"::Table);
+        AllObj.SetRange("Object Name", VehicleDriverTableTok);
+        if not AllObj.FindFirst() then
+            exit('[]');
+        DriverRef.Open(AllObj."Object ID");
+        if not FindFieldByName(DriverRef, 'Code', CodeField) then
+            exit('[]');
+        if FindFieldByName(DriverRef, 'Blocked', BlockedField) then
+            BlockedField.SetRange(false);
+        if DriverRef.FindSet() then
+            repeat
+                Clear(Driver);
+                Driver.Add('code', Format(CodeField.Value));
+                Driver.Add('name', DriverDisplayName(DriverRef));
+                Drivers.Add(Driver);
+            until DriverRef.Next() = 0;
+        DriverRef.Close();
+        Drivers.WriteTo(Result);
+        exit(Result);
+    end;
+
+    local procedure DriverDisplayName(var DriverRef: RecordRef): Text
+    var
+        NameField: FieldRef;
+        SurnameField: FieldRef;
+        FullName: Text;
+    begin
+        if FindFieldByName(DriverRef, 'Full Name', NameField) then
+            FullName := Format(NameField.Value);
+        if FullName = '' then begin
+            if FindFieldByName(DriverRef, 'Name', NameField) then
+                FullName := Format(NameField.Value);
+            if FindFieldByName(DriverRef, 'Surname', SurnameField) then
+                FullName := DelChr(FullName + ' ' + Format(SurnameField.Value), '<>', ' ');
+        end;
+        exit(FullName);
+    end;
+
+    local procedure FindFieldByName(var RecRef: RecordRef; FieldName: Text; var Found: FieldRef): Boolean
+    var
+        FieldIndex: Integer;
+    begin
+        for FieldIndex := 1 to RecRef.FieldCount do begin
+            Found := RecRef.FieldIndex(FieldIndex);
+            if (Found.Name = FieldName) or (Found.Caption = FieldName) then
+                exit(true);
+        end;
+        exit(false);
+    end;
+
+    local procedure WriteFieldByName(var RecRef: RecordRef; FieldName: Text; NewValue: Text): Boolean
+    var
+        Target: FieldRef;
+    begin
+        if not FindFieldByName(RecRef, FieldName, Target) then
+            exit(false);
+        if not (Target.Type in [FieldType::Code, FieldType::Text]) then
+            exit(false);
+        if Format(Target.Value) = NewValue then
+            exit(false);
+        Target.Validate(CopyStr(NewValue, 1, Target.Length));
+        exit(true);
     end;
 
     local procedure EnsureReceiptLPReady(LpNo: Code[20])
@@ -428,7 +645,7 @@ codeunit 72043 "DOPSWHS Receipt Mgmt"
         // Lines mekanizmasının okuduğu Reservation Entry kayıtlarına yazılmazsa post
         // sırasında sessizce kaybolur — bu yüzden burada gerçek kalıcılığı sağlıyoruz.
         if Item."Item Tracking Code" <> '' then
-            PersistItemTracking(WhseReceiptLine, LotNo, SerialNo, ExpiryDate);
+            PersistItemTracking(WhseReceiptLine, LotNo, SerialNo, ExpiryDate, SupplierLotNo);
         if SupplierLotNo <> '' then
             PersistSupplierLot(
                 WhseReceiptLine."Item No.", WhseReceiptLine."Variant Code", LotNo, SupplierLotNo);
@@ -617,8 +834,36 @@ codeunit 72043 "DOPSWHS Receipt Mgmt"
         Clear(SupplierLotNo);
         if LotNo = '' then
             exit;
+        // BADE'nin Madde İzleme Satırlarındaki Tedarikçi Lotu kolonu
+        // Reservation Entry uzantısından beslenir. İki ekranın aynı
+        // değeri göstermesi için önce gerçek takip kaydını oku.
+        GetSupplierLotFromReservation(WhseReceiptLine, LotNo, SupplierLotNo);
+        if SupplierLotNo <> '' then
+            exit;
         if LotNoInformation.Get(WhseReceiptLine."Item No.", WhseReceiptLine."Variant Code", LotNo) then
             SupplierLotNo := CopyStr(LotNoInformation.Description, 1, MaxStrLen(SupplierLotNo));
+    end;
+
+    local procedure GetSupplierLotFromReservation(WhseReceiptLine: Record "Warehouse Receipt Line"; LotNo: Code[50]; var SupplierLotNo: Code[50])
+    var
+        ReservationEntry: Record "Reservation Entry";
+        ReservationRef: RecordRef;
+        CandidateField: FieldRef;
+        FieldIndex: Integer;
+    begin
+        SetSourceReservationFilters(ReservationEntry, WhseReceiptLine);
+        ReservationEntry.SetRange("Lot No.", LotNo);
+        if not ReservationEntry.FindFirst() then
+            exit;
+
+        ReservationRef.GetTable(ReservationEntry);
+        for FieldIndex := 1 to ReservationRef.FieldCount do begin
+            CandidateField := ReservationRef.FieldIndex(FieldIndex);
+            if IsSupplierLotField(CandidateField) then begin
+                SupplierLotNo := CopyStr(Format(CandidateField.Value), 1, MaxStrLen(SupplierLotNo));
+                exit;
+            end;
+        end;
     end;
 
     local procedure PersistSupplierLot(ItemNo: Code[20]; VariantCode: Code[10]; LotNo: Code[50]; SupplierLotNo: Code[50])
@@ -656,7 +901,7 @@ codeunit 72043 "DOPSWHS Receipt Mgmt"
     /// Entry kayıtlarını gösterir. Idempotent: aynı kaynak satırın önceki
     /// takip kayıtları silinip yeniden yazılır.
     /// </summary>
-    local procedure PersistItemTracking(WhseReceiptLine: Record "Warehouse Receipt Line"; LotNo: Code[50]; SerialNo: Code[50]; ExpiryDate: Date)
+    local procedure PersistItemTracking(WhseReceiptLine: Record "Warehouse Receipt Line"; LotNo: Code[50]; SerialNo: Code[50]; ExpiryDate: Date; SupplierLotNo: Code[50])
     var
         CreateReservEntry: Codeunit "Create Reserv. Entry";
         ReservationEntry: Record "Reservation Entry";
@@ -696,6 +941,86 @@ codeunit 72043 "DOPSWHS Receipt Mgmt"
             0D,
             0,
             Enum::"Reservation Status"::Surplus);
+
+        if SupplierLotNo <> '' then
+            PersistSupplierLotOnReservation(WhseReceiptLine, LotNo, SerialNo, SupplierLotNo);
+    end;
+
+    local procedure PersistSupplierLotOnReservation(WhseReceiptLine: Record "Warehouse Receipt Line"; LotNo: Code[50]; SerialNo: Code[50]; SupplierLotNo: Code[50])
+    var
+        ReservationEntry: Record "Reservation Entry";
+    begin
+        SetSourceReservationFilters(ReservationEntry, WhseReceiptLine);
+        if LotNo <> '' then
+            ReservationEntry.SetRange("Lot No.", LotNo);
+        if SerialNo <> '' then
+            ReservationEntry.SetRange("Serial No.", SerialNo);
+        if ReservationEntry.FindSet(true) then
+            repeat
+                SetSupplierLotField(ReservationEntry, SupplierLotNo);
+            until ReservationEntry.Next() = 0;
+    end;
+
+    local procedure SyncSupplierLotsToReservations(WhseReceiptHeader: Record "Warehouse Receipt Header")
+    var
+        WhseReceiptLine: Record "Warehouse Receipt Line";
+        LotNo: Code[50];
+        SerialNo: Code[50];
+        SupplierLotNo: Code[50];
+        ExpiryDate: Date;
+    begin
+        WhseReceiptLine.SetRange("No.", WhseReceiptHeader."No.");
+        WhseReceiptLine.SetFilter("Qty. to Receive", '>0');
+        if WhseReceiptLine.FindSet() then
+            repeat
+                GetItemTracking(WhseReceiptLine, LotNo, SerialNo, ExpiryDate);
+                GetSupplierLot(WhseReceiptLine, LotNo, SupplierLotNo);
+                if (LotNo <> '') and (SupplierLotNo <> '') then
+                    PersistSupplierLotOnReservation(WhseReceiptLine, LotNo, SerialNo, SupplierLotNo);
+            until WhseReceiptLine.Next() = 0;
+    end;
+
+    local procedure SetSupplierLotField(var ReservationEntry: Record "Reservation Entry"; SupplierLotNo: Code[50])
+    var
+        ReservationRef: RecordRef;
+        CandidateField: FieldRef;
+        ExistingValue: Text;
+        FieldIndex: Integer;
+    begin
+        ReservationRef.GetTable(ReservationEntry);
+        for FieldIndex := 1 to ReservationRef.FieldCount do begin
+            CandidateField := ReservationRef.FieldIndex(FieldIndex);
+            if IsSupplierLotField(CandidateField) then begin
+                ExistingValue := Format(CandidateField.Value);
+                if (ExistingValue <> '') and (ExistingValue <> SupplierLotNo) then
+                    Error(
+                        'Tedarikçi lotu takip satırında zaten %1 olarak kayıtlı. Girilen değer: %2.',
+                        ExistingValue, SupplierLotNo);
+                if ExistingValue = '' then begin
+                    CandidateField.Validate(CopyStr(SupplierLotNo, 1, CandidateField.Length));
+                    ReservationRef.Modify(true);
+                    ReservationRef.SetTable(ReservationEntry);
+                end;
+                exit;
+            end;
+        end;
+    end;
+
+    local procedure IsSupplierLotField(CandidateField: FieldRef): Boolean
+    begin
+        if not (CandidateField.Type in [FieldType::Code, FieldType::Text]) then
+            exit(false);
+        exit(
+            (CandidateField.Name = 'Tedarikçi Lotu') or
+            (CandidateField.Caption = 'Tedarikçi Lotu') or
+            (CandidateField.Name = 'Tedarikci Lotu') or
+            (CandidateField.Caption = 'Tedarikci Lotu') or
+            (CandidateField.Name = 'Supplier Lot') or
+            (CandidateField.Caption = 'Supplier Lot') or
+            (CandidateField.Name = 'Supplier Lot No.') or
+            (CandidateField.Caption = 'Supplier Lot No.') or
+            (CandidateField.Name = 'Vendor Lot No.') or
+            (CandidateField.Caption = 'Vendor Lot No.'));
     end;
 
     /// <summary>
@@ -850,4 +1175,14 @@ codeunit 72043 "DOPSWHS Receipt Mgmt"
         // Telemetri mesajları çevrilmez (Locked): log sorguları dile göre değişmemeli.
         AssignLogTxt: Label '%1 -> %2', Locked = true;
         NoOperatorTxt: Label '(none)', Locked = true;
+        VehicleInfoLogTxt: Label '%1 plate=%2 driver=%3', Locked = true;
+        VehiclePlateFieldTok: Label 'Vehicle Plate No', Locked = true;
+        DriverCodeFieldTok: Label 'Driver Code', Locked = true;
+        VendorShipmentFieldTok: Label 'Vendor Shipment No.', Locked = true;
+        VehicleDriverTableTok: Label 'BADE Vehicle Driver', Locked = true;
+        PlateTxt: Label 'plaka';
+        DriverTxt: Label 'sürücü';
+        AndTxt: Label 've';
+        VehicleInfoMissingErr: Label 'Araç bilgileri eksik (%1). Terminalde "Araç / Sürücü" kartından girip tekrar kaydedin.', Comment = '%1 = eksik alanlar';
+        VehicleInfoUnsupportedErr: Label 'Bu şirkette mal kabul başlığında araç alanları tanımlı değil.';
 }

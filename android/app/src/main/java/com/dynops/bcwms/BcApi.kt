@@ -1,6 +1,7 @@
 package com.dynops.bcwms
 
 import android.content.Context
+import android.util.Log
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
@@ -694,7 +695,7 @@ object BcApi {
                 client.newCall(builder.build()).execute().use { resp ->
                     val code = resp.code
                     val body = resp.body?.string().let { if (it.isNullOrEmpty()) "(no body)" else it }
-                    if (code != 401) return@use ApiResult(code in 200..299, code, body)
+                    if (code != 401) return@use logFailure(method, path, ApiResult(code in 200..299, code, body))
                     // Access token expired (~1h). Try a silent refresh once, then replay the request,
                     // so the operator is not silently logged out mid-shift.
                     val refreshed = synchronized(this@BcApi) {
@@ -707,13 +708,25 @@ object BcApi {
                     val retry = builder.header("Authorization", "Bearer ${refreshed.first}").build()
                     client.newCall(retry).execute().use { r2 ->
                         val b2 = r2.body?.string().let { if (it.isNullOrEmpty()) "(no body)" else it }
-                        ApiResult(r2.code in 200..299, r2.code, b2)
+                        logFailure(method, path, ApiResult(r2.code in 200..299, r2.code, b2))
                     }
                 }
             } catch (e: Exception) {
-                ApiResult(false, -1, "Hata: ${e.message}")
+                logFailure(method, path, ApiResult(false, -1, "Hata: ${e.message}"))
             }
         }
+
+    /**
+     * Operatör ekranı ham BC hatasını göstermez (REF-… kodu verir). Destek, REF
+     * kodunu bu logcat satırıyla eşleştirir; o yüzden HER başarısız istek
+     * burada bir kez, ham haliyle loglanır. Token/başlık loglanmaz.
+     */
+    private fun logFailure(method: String, path: String, result: ApiResult): ApiResult {
+        if (!result.ok) runCatching {
+            Log.w("BCWMS.ApiError", "$method $path -> HTTP ${result.httpCode} ${errorMessage(result.body).take(1500)}")
+        }
+        return result
+    }
 
     // ---- Connection test ----
     /**

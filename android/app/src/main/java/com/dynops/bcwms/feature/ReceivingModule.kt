@@ -1,5 +1,6 @@
 package com.dynops.bcwms.feature
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.lazy.LazyColumn
@@ -174,6 +175,9 @@ private fun ReceiveDocument(no: String, onBack: () -> Unit) {
     // yalnız "Qty. to Receive"/lot/seri/LP yazar. Post tek bir yerden, alttaki
     // butondan ve özet onayından sonra çalışır.
     var showPostConfirm by remember(no) { mutableStateOf(false) }
+    // BADE gibi tenant'larda post, başlıkta plaka + sürücü ister. Sunucu
+    // "vehicleInfoRequired" ile söyler; diğer müşterilerde kart hiç görünmez.
+    var showVehicle by remember(no) { mutableStateOf(false) }
     // Operatörün bu oturumda onayladığı satırların Line No. kümesi. BC, belge
     // oluşturulurken "Qty. to Receive" alanını kalan miktarla ÖNCEDEN doldurduğu
     // için tek başına miktar alanı "bu satır işlendi" demek değildir; renk kodu
@@ -205,6 +209,11 @@ private fun ReceiveDocument(no: String, onBack: () -> Unit) {
             val h = BcApi.get(context, "receipts('$no')")
             header = if (h.ok) runCatching { JSONObject(h.body) }.getOrNull() else null
             headerLoaded = header != null
+            // Açık LP sunucudan gelir: uygulama yeniden açılınca/başka terminalde
+            // devam edince "LP Başlat" ile ikinci bir LP oluşturulmasın.
+            header?.takeIf { it.has("lpOpen") }?.let { hd ->
+                activeLp = hd.optString("lpNo").trim().takeIf { hd.optBoolean("lpOpen") && it.isNotBlank() }
+            }
             val page = BcApi.getAllPages(context, "receiptLines?\$filter=no eq '$no'&\$top=100")
             lines = page.rows
             linesComplete = page.complete
@@ -256,6 +265,11 @@ private fun ReceiveDocument(no: String, onBack: () -> Unit) {
     val assignedUserId = h?.optString("assignedUserId")?.trim().orEmpty()
     val canMutate = headerLoaded && linesComplete &&
         canMutateAssignedDocument(assignedUserId, myUserId)
+    val vehicleInfoRequired = h?.optBoolean("vehicleInfoRequired") == true
+    val vehiclePlate = h?.optString("vehiclePlateNo")?.trim().orEmpty()
+    val driverCode = h?.optString("driverCode")?.trim().orEmpty()
+    val driverName = h?.optString("driverName")?.trim().orEmpty()
+    val vehicleInfoMissing = vehicleInfoRequired && (vehiclePlate.isBlank() || driverCode.isBlank())
     // Donanım tarayıcı: satırı okut → 1 eşleşme miktar ekranını açar, çok eşleşme
     // listeyi o ürüne filtreler, eşleşme yoksa uyarı. Dialog/sheet açıkken kapalı.
     DocumentScanHandler(
@@ -312,6 +326,17 @@ private fun ReceiveDocument(no: String, onBack: () -> Unit) {
                 badge = rawValue(h ?: JSONObject(), "assignedUserId").ifBlank { "Atanmadı" },
                 percent = h?.optDouble("percentComplete")?.toInt() ?: 0
             )
+            if (vehicleInfoRequired) {
+                Spacer(Modifier.height(6.dp))
+                VehicleInfoCard(
+                    plate = vehiclePlate,
+                    driverCode = driverCode,
+                    driverName = driverName,
+                    missing = vehicleInfoMissing,
+                    enabled = canMutate && !busy,
+                    onEdit = { showVehicle = true },
+                )
+            }
             Spacer(Modifier.height(6.dp))
             LineReadySummary(ready = readyCount, total = lines.size, stagedQty = postQty)
             Spacer(Modifier.height(6.dp))
@@ -452,12 +477,18 @@ private fun ReceiveDocument(no: String, onBack: () -> Unit) {
             // işlenmeden buton açılmaz (yanlışlıkla boş belge postlanmasın).
             val canPost = canMutate && readyCount > 0 && postQty > 0.0
             Button(
-                onClick = { showPostConfirm = true },
+                // Araç bilgisi eksikse post BC'de zaten reddedilir; operatörü
+                // önce forma yönlendir, hatayı sonradan göstermek yerine.
+                onClick = { if (vehicleInfoMissing) showVehicle = true else showPostConfirm = true },
                 enabled = !busy && canPost,
                 modifier = Modifier.fillMaxWidth().height(54.dp),
             ) {
                 Text(
-                    if (canPost) "Kaydet (post) — $readyCount satır" else "Önce satırlara miktar girin",
+                    when {
+                        !canPost -> "Önce satırlara miktar girin"
+                        vehicleInfoMissing -> "Araç bilgisi gir → Kaydet"
+                        else -> "Kaydet (post) — $readyCount satır"
+                    },
                     fontWeight = FontWeight.Bold,
                 )
             }
@@ -520,6 +551,30 @@ private fun ReceiveDocument(no: String, onBack: () -> Unit) {
         )
     }
 
+    if (showVehicle) {
+        VehicleInfoDialog(
+            initialPlate = vehiclePlate,
+            initialDriverCode = driverCode,
+            initialVendorShipmentNo = h?.optString("vendorShipmentNo")?.trim().orEmpty(),
+            loadDrivers = {
+                val r = BcApi.boundAction(context, "receipts", no, "listVehicleDrivers")
+                if (r.ok) parseVehicleDrivers(BcApi.scalarValue(r.body)) else null
+            },
+            onDismiss = { showVehicle = false },
+            onSave = { plate, driver, vendorNo ->
+                showVehicle = false
+                action(
+                    "setVehicleInfo",
+                    JSONObject().apply {
+                        put("vehiclePlateNo", plate)
+                        put("driverCode", driver)
+                        put("vendorShipmentNo", vendorNo)
+                    }.toString(),
+                    "Araç bilgisi kaydedildi",
+                )
+            },
+        )
+    }
     if (showScan) {
         ScanItemSheet(title = "Ürün Tara", onDismiss = { showScan = false }, onItem = { item, line ->
             scannedItem = item; scannedLine = line
@@ -1153,4 +1208,142 @@ fun ScanItemSheet(
         }) { Text("Devam") }
         Spacer(Modifier.height(24.dp))
     }
+}
+
+/** BC `listVehicleDrivers` çıktısı: [{code,name}] → (code, name). Bozuk gövdede boş liste. */
+fun parseVehicleDrivers(json: String): List<Pair<String, String>> =
+    runCatching {
+        val arr = org.json.JSONArray(json)
+        (0 until arr.length()).mapNotNull { i ->
+            val o = arr.optJSONObject(i) ?: return@mapNotNull null
+            val code = o.optString("code").trim()
+            if (code.isBlank()) null else code to o.optString("name").trim()
+        }
+    }.getOrDefault(emptyList())
+
+@Composable
+private fun VehicleInfoCard(
+    plate: String,
+    driverCode: String,
+    driverName: String,
+    missing: Boolean,
+    enabled: Boolean,
+    onEdit: () -> Unit,
+) {
+    val palette = bcwmsStatus()
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(12.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = if (missing) palette.warning.copy(alpha = 0.18f) else MaterialTheme.colorScheme.surface,
+        ),
+        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+    ) {
+        Row(Modifier.padding(horizontal = 14.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text("Araç / Sürücü", fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+                Text(
+                    if (missing) "Plaka ve sürücü zorunlu — kayıttan önce girin"
+                    else "Plaka: $plate · Sürücü: ${driverName.ifBlank { driverCode }}",
+                    fontSize = 12.sp,
+                    color = if (missing) palette.danger else Color.Gray,
+                )
+            }
+            TextButton(onClick = onEdit, enabled = enabled) { Text(if (missing) "Gir" else "Düzenle") }
+        }
+    }
+}
+
+@Composable
+private fun VehicleInfoDialog(
+    initialPlate: String,
+    initialDriverCode: String,
+    initialVendorShipmentNo: String,
+    loadDrivers: suspend () -> List<Pair<String, String>>?,
+    onDismiss: () -> Unit,
+    onSave: (plate: String, driverCode: String, vendorShipmentNo: String) -> Unit,
+) {
+    var plate by remember { mutableStateOf(initialPlate) }
+    var vendorNo by remember { mutableStateOf(initialVendorShipmentNo) }
+    var driver by remember { mutableStateOf(initialDriverCode) }
+    var query by remember { mutableStateOf("") }
+    var drivers by remember { mutableStateOf<List<Pair<String, String>>?>(null) }
+    var loadError by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) {
+        val d = loadDrivers()
+        loadError = d == null
+        drivers = d ?: emptyList()
+    }
+    val shown = (drivers ?: emptyList()).filter {
+        query.isBlank() || it.first.contains(query, ignoreCase = true) || it.second.contains(query, ignoreCase = true)
+    }
+    val valid = plate.trim().isNotBlank() && driver.isNotBlank()
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Araç Bilgisi") },
+        text = {
+            Column(Modifier.fillMaxWidth()) {
+                OutlinedTextField(
+                    value = plate,
+                    onValueChange = { plate = it.uppercase() },
+                    label = { Text("Araç Plaka No *") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                Spacer(Modifier.height(6.dp))
+                OutlinedTextField(
+                    value = vendorNo,
+                    onValueChange = { vendorNo = it },
+                    label = { Text("Tedarikçi İrsaliye No") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                Spacer(Modifier.height(10.dp))
+                Text(
+                    "Sürücü *" + (if (driver.isNotBlank()) ": $driver" else ""),
+                    fontWeight = FontWeight.SemiBold,
+                    fontSize = 13.sp,
+                )
+                OutlinedTextField(
+                    value = query,
+                    onValueChange = { query = it },
+                    label = { Text("Sürücü ara") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                Spacer(Modifier.height(4.dp))
+                when {
+                    drivers == null -> Text("Sürücüler yükleniyor...", fontSize = 12.sp, color = Color.Gray)
+                    loadError -> Text(
+                        "HATA: Sürücü listesi alınamadı. Yenileyip tekrar deneyin.",
+                        fontSize = 12.sp,
+                        color = bcwmsStatus().danger,
+                    )
+                    shown.isEmpty() -> Text(
+                        "Eşleşen sürücü yok. BC'de Araç Sürücüleri listesini kontrol edin.",
+                        fontSize = 12.sp,
+                        color = Color.Gray,
+                    )
+                    else -> LazyColumn(Modifier.fillMaxWidth().heightIn(max = 220.dp)) {
+                        items(shown) { (code, name) ->
+                            Row(
+                                Modifier.fillMaxWidth().clickable { driver = code }.padding(vertical = 2.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                RadioButton(selected = driver == code, onClick = { driver = code })
+                                Column {
+                                    Text(name.ifBlank { code }, fontSize = 14.sp)
+                                    if (name.isNotBlank()) Text(code, fontSize = 11.sp, color = Color.Gray)
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            Button(onClick = { onSave(plate.trim(), driver, vendorNo.trim()) }, enabled = valid) { Text("Kaydet") }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Vazgeç") } },
+    )
 }

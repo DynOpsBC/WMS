@@ -24,6 +24,13 @@ page 72090 "DOPSWHS Receipt API"
                 field(vendorSourceName; VendorSourceName) { Caption = 'vendorSourceName'; }
                 field(dueDate; DueDate) { Caption = 'dueDate'; }
                 field(percentComplete; PercentComplete) { Caption = 'percentComplete'; }
+                field(vendorShipmentNo; VendorShipmentNo) { Caption = 'vendorShipmentNo'; }
+                field(vehicleInfoRequired; VehicleInfoRequired) { Caption = 'vehicleInfoRequired'; }
+                field(vehiclePlateNo; VehiclePlateNo) { Caption = 'vehiclePlateNo'; }
+                field(driverCode; DriverCode) { Caption = 'driverCode'; }
+                field(driverName; DriverName) { Caption = 'driverName'; }
+                field(lpNo; Rec."DOPSWHS LP No.") { Caption = 'lpNo'; }
+                field(lpOpen; LpOpen) { Caption = 'lpOpen'; }
                 part(lines; "DOPSWHS Receipt Line API")
                 {
                     Caption = 'lines';
@@ -124,18 +131,47 @@ page 72090 "DOPSWHS Receipt API"
         ReceiptMgmt.PostReceipt(Rec, print, invoice, '', printerId);
     end;
 
+    /// <summary>
+    /// BADE gibi tenant'larda mal kabul postu plaka + sürücü ister. Terminal bu
+    /// aksiyonla başlığı doldurur; alanlar yoksa BC anlaşılır hata döner.
+    /// </summary>
+    [ServiceEnabled]
+    procedure setVehicleInfo(vehiclePlateNo: Text; driverCode: Code[20]; vendorShipmentNo: Text)
+    var
+        ReceiptMgmt: Codeunit "DOPSWHS Receipt Mgmt";
+    begin
+        ReceiptMgmt.SetVehicleInfo(Rec, vehiclePlateNo, driverCode, vendorShipmentNo);
+    end;
+
+    /// <summary>JSON dizisi [{code,name}] — tenant'ta sürücü tablosu yoksa [].</summary>
+    [ServiceEnabled]
+    procedure listVehicleDrivers(): Text
+    var
+        ReceiptMgmt: Codeunit "DOPSWHS Receipt Mgmt";
+    begin
+        exit(ReceiptMgmt.ListVehicleDrivers());
+    end;
+
     var
         SourceNo: Code[20];
         SourceType: Text[30];
         VendorSourceName: Text[100];
         DueDate: Date;
         PercentComplete: Decimal;
+        VendorShipmentNo: Text[35];
+        VehicleInfoRequired: Boolean;
+        VehiclePlateNo: Text[50];
+        DriverCode: Code[20];
+        DriverName: Text[200];
+        LpOpen: Boolean;
 
     local procedure FillCalculatedFields()
     var
         WhseReceiptLine: Record "Warehouse Receipt Line";
         PurchaseHeader: Record "Purchase Header";
         TransferHeader: Record "Transfer Header";
+        LPHeader: Record "DOPSWHS LP Header";
+        ReceiptMgmt: Codeunit "DOPSWHS Receipt Mgmt";
         TotalQty: Decimal;
         HandledQty: Decimal;
     begin
@@ -144,6 +180,29 @@ page 72090 "DOPSWHS Receipt API"
         Clear(VendorSourceName);
         Clear(DueDate);
         Clear(PercentComplete);
+        Clear(VendorShipmentNo);
+        Clear(VehicleInfoRequired);
+        Clear(VehiclePlateNo);
+        Clear(DriverCode);
+        Clear(DriverName);
+        Clear(LpOpen);
+
+        // Terminal yeniden açıldığında açık LP'yi bulabilsin; aksi halde ikinci
+        // bir LP başlatılıyor. StopLP başlıktaki LP No.'yu silmez, o yüzden
+        // "açık mı" ayrıca bildirilir.
+        if Rec."DOPSWHS LP No." <> '' then
+            if LPHeader.Get(Rec."DOPSWHS LP No.") then
+                LpOpen := LPHeader.Status = LPHeader.Status::Open;
+
+        VendorShipmentNo := CopyStr(ReceiptMgmt.GetTenantHeaderField(Rec, 'Vendor Shipment No.'), 1, MaxStrLen(VendorShipmentNo));
+        VehicleInfoRequired := ReceiptMgmt.VehicleInfoRequired(Rec);
+        if VehicleInfoRequired then begin
+            VehiclePlateNo := CopyStr(ReceiptMgmt.GetTenantHeaderField(Rec, 'Vehicle Plate No'), 1, MaxStrLen(VehiclePlateNo));
+            DriverCode := CopyStr(ReceiptMgmt.GetTenantHeaderField(Rec, 'Driver Code'), 1, MaxStrLen(DriverCode));
+            DriverName := CopyStr(
+                DelChr(ReceiptMgmt.GetTenantHeaderField(Rec, 'Driver Name') + ' ' + ReceiptMgmt.GetTenantHeaderField(Rec, 'Driver Surname'), '<>', ' '),
+                1, MaxStrLen(DriverName));
+        end;
 
         WhseReceiptLine.SetRange("No.", Rec."No.");
         if WhseReceiptLine.FindSet() then

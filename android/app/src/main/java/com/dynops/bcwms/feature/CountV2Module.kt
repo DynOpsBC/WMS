@@ -129,7 +129,10 @@ fun CountV2Module() {
                 status = "UYARI: Sunucu cevabı alınamadı. Mükerrer belge oluşturmamak için tekrar basmadan listeyi yenileyin."
                 load()
             } else {
-                status = "Sayım V2 oluşturulamadı: ${BcApi.errorMessage(result.body)}"
+                // Diyalog açık kalırsa hata arkada kalır ve "hiçbir şey olmadı"
+                // gibi görünür; kapat ki mesaj listede görünsün.
+                showCreate = false
+                status = "HATA: Sayım V2 oluşturulamadı — ${BcApi.errorMessage(result.body)}"
             }
         }
     }
