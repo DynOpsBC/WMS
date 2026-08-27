@@ -129,6 +129,16 @@ object BarcodeIntentResolver {
         ) return true
         // FNC1 group separator (GS, ASCII 29) present
         if (raw.contains('\u001D')) return true
+        // Bazı el terminalleri GS1'i parantez ve ilk FNC1 karakteri olmadan
+        // "01<14 hane GTIN>10<lot>" olarak iletir. Sabit GTIN bölümünü ve onu
+        // izleyen bilinen AI'ı birlikte doğrula; sıradan uzun ürün kodunu GS1
+        // sanma.
+        if (raw.length >= 18 && (raw.startsWith("01") || raw.startsWith("02"))) {
+            val gtin = raw.substring(2, 16)
+            val followingAi = raw.substring(16, 18)
+            if (gtin.all(Char::isDigit) && followingAi in setOf("10", "17", "21", "30", "37"))
+                return true
+        }
         return false
     }
 

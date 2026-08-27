@@ -7,6 +7,48 @@ Kurulum: [docs/android-install-guide.md](../../docs/android-install-guide.md)
 
 ---
 
+## v1.14.53-bade — 2026-08-27
+
+**APK:** `BCWMS-BADE-1.14.53-RELEASE.apk`
+
+**SHA-256:** `a4ca44b177587a5a32b0b9295e974261c7c2b6caf1b6d3c380d18c548b734051`
+
+**versionCode:** 200053 · **minSdk:** 26 · **targetSdk:** 35
+
+### Sayım V2: madde no okutunca miktar sorulur
+
+- Miktar taşımayan ürün barkodu / yazılan madde no (ve GS1 GTIN+lot) artık
+  reddedilmiyor: raf seçiliyken miktar diyaloğu açılır (lot/seri, UOM,
+  "Stoktaki Lotlardan Seç"), onaylanınca aynı `scanV2Label` ile satır oluşur.
+  Miktar taşıyan QR'larda davranış değişmedi (otomatik satır). Raf/LP/belge
+  barkodları ürün sayılmaz.
+
+### SKT hızlı girişi ve sevkiyatta çoklu lot/raf
+
+- Son kullanma tarihi yalnız rakamla girilir; `11122028` yazılırken uygulama
+  ayraçları ekleyerek değeri `11.12.2028` biçimine getirir.
+- Otomatik biçimlendirme sırasında imleç sonda tutulur; hızlı terminal girişinde
+  gün, ay ve yıl hanelerinin sırası bozulmaz.
+- Lot takipli sevkiyat satırına `Birden Fazla Lot / Raf Seç` eylemi eklendi.
+- Çoklu seçim, BC'nin doğru depo akışı olan ambar toplamayı açar; mevcut toplama
+  varsa onu kullanır, yoksa oluşturur. Farklı lot ve raf miktarları ayrı toplama
+  satırlarından işlenir.
+- Parantezsiz `01<GTIN>10<lot>` GS1 barkodları da ürün ve lot olarak doğru
+  ayrıştırılır.
+
+Bu Android sürümü BADE BCWMS AL `1.14.0.64` ile birlikte kullanılmalıdır.
+
+### Doğrulama
+
+- `testBadeDebugUnitTest`: **135 test, 0 hata**
+- `assembleBadeRelease`: başarılı
+- APK Signature Scheme v2: doğrulandı
+- Emülatör SKT: `11122028 → 11.12.2028` başarılı
+- Emülatör sevkiyat: `SH000273 / AB.00005` satırında çoklu lot/raf eylemi görünür
+- Canlı BC verisi değiştirilmedi; toplama oluşturma eylemine testte basılmadı
+
+---
+
 ## v1.14.52-bade — 2026-08-27
 
 **APK:** `BCWMS-BADE-1.14.52-RELEASE.apk`
@@ -14,6 +56,7 @@ Kurulum: [docs/android-install-guide.md](../../docs/android-install-guide.md)
 **SHA-256:** `5fce8305ad102cc10b46e9deeda326e7e2e6ce626a265262d90c2283d6461a5b`
 
 **versionCode:** 200052 · **minSdk:** 26 · **targetSdk:** 35
+
 
 ### Mal kabul: LP başlatma durumu ve ürün bağlantısı
 

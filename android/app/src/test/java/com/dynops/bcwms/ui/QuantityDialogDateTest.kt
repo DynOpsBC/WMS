@@ -6,6 +6,19 @@ import org.junit.Test
 
 class QuantityDialogDateTest {
     @Test
+    fun `eight expiry digits are formatted while typing`() {
+        assertEquals("11.12.2028", formatExpiryDateInput("11122028"))
+        assertEquals("11.1", formatExpiryDateInput("111"))
+        assertEquals("11.12", formatExpiryDateInput("1112"))
+    }
+
+    @Test
+    fun `pasted expiry date is normalized and limited to eight digits`() {
+        assertEquals("11.12.2028", formatExpiryDateInput("11/12/2028"))
+        assertEquals("11.12.2028", formatExpiryDateInput("1112202899"))
+    }
+
+    @Test
     fun `turkish expiry input is converted to BC ISO date`() {
         assertEquals("2027-12-31", normalizeExpiryDate("31.12.2027"))
         assertEquals("2027-12-31", normalizeExpiryDate("31/12/2027"))

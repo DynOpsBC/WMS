@@ -50,6 +50,37 @@ internal fun validateCountV2Label(resolved: ResolvedBarcode): CountV2LabelResult
     )
 }
 
+/** Miktarsız ürün okutması: madde no (+ varsa lot/seri) belli, miktar operatörden sorulacak. */
+internal data class CountV2ManualCandidate(
+    val itemNo: String,
+    val lotNo: String,
+    val serialNo: String,
+    val raw: String,
+)
+
+/**
+ * Sahadaki ürün etiketlerinin çoğu miktar taşımaz (yalnız madde no ya da GS1
+ * GTIN+lot). V2 bu durumda okutmayı reddetmek yerine miktarı elle sorar; QR'da
+ * miktar varsa (etiketli koli) dokunmadan otomatik satır oluşur. Raf, LP, şablon
+ * ve belge barkodları ürün sayılmaz → null.
+ */
+internal fun countV2ManualCandidate(resolved: ResolvedBarcode): CountV2ManualCandidate? {
+    if (resolved.quantity != null) return null
+    val itemNo = when (resolved.kind) {
+        BarcodeKind.Item -> resolved.itemNo?.trim().orEmpty().ifBlank { resolved.value.trim() }
+        BarcodeKind.Unknown -> resolved.value.trim()
+        BarcodeKind.Lot, BarcodeKind.Serial -> resolved.itemNo?.trim().orEmpty()
+        else -> return null
+    }
+    if (itemNo.isBlank()) return null
+    return CountV2ManualCandidate(
+        itemNo = itemNo,
+        lotNo = resolved.lotNo?.trim().orEmpty(),
+        serialNo = resolved.serialNo?.trim().orEmpty(),
+        raw = resolved.raw,
+    )
+}
+
 /** Donanım/kamera aynı decode olayını art arda yayarsa miktarın iki kez eklenmesini önler. */
 internal fun isRapidCountV2Duplicate(
     previousRaw: String,

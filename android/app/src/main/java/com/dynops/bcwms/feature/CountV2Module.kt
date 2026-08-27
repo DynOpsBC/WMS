@@ -19,6 +19,7 @@ import com.dynops.bcwms.scanner.ScanField
 import com.dynops.bcwms.ui.DocHeaderCard
 import com.dynops.bcwms.ui.DocSearchBar
 import com.dynops.bcwms.ui.EmptyState
+import com.dynops.bcwms.ui.QuantityDialogSheet
 import com.dynops.bcwms.ui.StatusText
 import com.dynops.bcwms.ui.WmsRefreshLabel
 import com.dynops.bcwms.ui.buildODataFilter
@@ -149,9 +150,9 @@ fun CountV2Module() {
             shape = RoundedCornerShape(12.dp),
         ) {
             Column(Modifier.fillMaxWidth().padding(12.dp)) {
-                Text("Sayım V2 — QR ile otomatik satır", fontWeight = FontWeight.Bold)
+                Text("Sayım V2 — okut, miktarı gir, satır oluşsun", fontWeight = FontWeight.Bold)
                 Text(
-                    "Yeni V2 Sayımı Oluştur'a basın. Sistem boş belgeyi hazırlar; rafı ve miktarlı ürün QR'larını okuttukça satırlar otomatik oluşur.",
+                    "Yeni V2 Sayımı Oluştur'a basın. Rafı okutun, sonra ürün barkodunu/madde no'yu okutup miktarı girin; miktar taşıyan QR'larda satır otomatik oluşur.",
                     fontSize = 12.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -263,6 +264,8 @@ private fun CountV2Document(no: String, onBack: () -> Unit) {
     var pendingRetry by remember(no) { mutableStateOf<PendingCountV2Scan?>(null) }
     var lastCompleted by remember(no) { mutableStateOf<CompletedCountV2Scan?>(null) }
     var showPostConfirm by remember(no) { mutableStateOf(false) }
+    // Miktarsız ürün okutması (madde no / GTIN+lot): miktar diyaloğu açılır.
+    var manualEntry by remember(no) { mutableStateOf<CountV2ManualCandidate?>(null) }
 
     fun assignments(h: JSONObject?): List<CountSlotAssignment> = listOf(
         CountSlotAssignment(1, h?.optString("counter1UserId").orEmpty()),
@@ -351,7 +354,7 @@ private fun CountV2Document(no: String, onBack: () -> Unit) {
             }
             loadDocument()
         }
-        status = if (prepared) "TAMAM: V2 hazır — önce rafı, sonra miktarlı ürün QR'larını okutun" else status
+        status = if (prepared) "TAMAM: V2 hazır — önce rafı, sonra ürünü okutun" else status
         busy = false
     }
 
@@ -380,7 +383,7 @@ private fun CountV2Document(no: String, onBack: () -> Unit) {
                 previousAt = 0L
                 pendingRetry = null
                 lastCompleted = null
-                status = "TAMAM: 📍 $activeBin — şimdi miktarlı ürün QR'ını okutun"
+                status = "TAMAM: 📍 $activeBin — şimdi ürünü okutun (madde no / GTIN / miktarlı QR)"
             }
         }
     }
@@ -433,7 +436,13 @@ private fun CountV2Document(no: String, onBack: () -> Unit) {
             status = "ℹ️ Aynı tarayıcı olayı ikinci kez geldi; mükerrer miktar eklenmedi."
             return
         }
-        when (val validation = validateCountV2Label(BarcodeIntentResolver.resolve(raw))) {
+        val resolved = BarcodeIntentResolver.resolve(raw)
+        countV2ManualCandidate(resolved)?.let { candidate ->
+            manualEntry = candidate
+            status = "${candidate.itemNo} için miktarı girin"
+            return
+        }
+        when (val validation = validateCountV2Label(resolved)) {
             is CountV2LabelResult.Invalid -> status = "HATA: ${validation.message}"
             is CountV2LabelResult.Valid -> {
                 previousRaw = raw
@@ -561,7 +570,7 @@ private fun CountV2Document(no: String, onBack: () -> Unit) {
                     ) { Text("Rafı değiştir") }
                 }
                 ScanField(
-                    label = "2. Ürün + lot/seri + miktar QR'ını okut",
+                    label = "2. Ürün barkodu / madde no okut",
                     value = labelScan,
                     onValueChange = { labelScan = it },
                     onScanned = { scanLabel(it) },
@@ -629,7 +638,7 @@ private fun CountV2Document(no: String, onBack: () -> Unit) {
                 }
             }
             if (lines.isEmpty() && prepared && !busy) item {
-                EmptyState("Ekran boş. Rafı ve ilk miktarlı ürün QR'ını okutun.")
+                EmptyState("Ekran boş. Rafı okutun, sonra ürünü okutup miktarı girin.")
             }
         }
         Spacer(Modifier.height(8.dp))
@@ -645,6 +654,44 @@ private fun CountV2Document(no: String, onBack: () -> Unit) {
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
+    }
+
+    manualEntry?.let { candidate ->
+        QuantityDialogSheet(
+            title = "Sayım Miktarı — $activeBin",
+            itemNo = candidate.itemNo,
+            initialQty = 1.0,
+            initialLot = candidate.lotNo,
+            initialSerial = candidate.serialNo,
+            showLotSerial = true,
+            showAvailableLotLookup = true,
+            autoDetectLotFromStock = true,
+            locationCode = header?.optString("locationCode").orEmpty(),
+            binCode = activeBin,
+            onDismiss = { manualEntry = null },
+            onConfirm = { res ->
+                manualEntry = null
+                if (res.quantity <= 0.0) {
+                    status = "HATA: Sayım miktarı sıfırdan büyük olmalıdır."
+                    return@QuantityDialogSheet
+                }
+                sendScan(
+                    PendingCountV2Scan(
+                        scanId = UUID.randomUUID().toString(),
+                        binCode = activeBin,
+                        label = CountV2Label(
+                            itemNo = candidate.itemNo,
+                            variantCode = "",
+                            unitOfMeasureCode = res.uom.trim(),
+                            lotNo = res.lotNo.trim(),
+                            serialNo = res.serialNo.trim(),
+                            quantity = res.quantity,
+                            raw = candidate.raw,
+                        ),
+                    )
+                )
+            },
+        )
     }
 
     if (showPostConfirm) {

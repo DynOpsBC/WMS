@@ -7,8 +7,10 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import android.util.Log
@@ -70,6 +72,7 @@ fun QuantityDialogSheet(
     showExpiryDate: Boolean = false,
     expiryDateRequired: Boolean = false,
     onAssignLotNo: (suspend () -> Result<String>)? = null,
+    onSelectMultipleLots: (() -> Unit)? = null,
     onConfirm: (QuantityResult) -> Unit,
     onDismiss: () -> Unit,
 ) {
@@ -78,7 +81,11 @@ fun QuantityDialogSheet(
     var lot by remember { mutableStateOf(initialLot) }
     var serial by remember { mutableStateOf(initialSerial) }
     var supplierLot by remember { mutableStateOf(initialSupplierLot) }
-    var expiryDateText by remember(initialExpiryDate) { mutableStateOf(expiryDateForDisplay(initialExpiryDate)) }
+    var expiryDateInput by remember(initialExpiryDate) {
+        val displayValue = expiryDateForDisplay(initialExpiryDate)
+        mutableStateOf(TextFieldValue(displayValue, TextRange(displayValue.length)))
+    }
+    val expiryDateText = expiryDateInput.text
     var assigningLot by remember { mutableStateOf(false) }
     var lotAssignmentError by remember { mutableStateOf("") }
     var showSupplierLotLookup by remember { mutableStateOf(false) }
@@ -270,6 +277,20 @@ fun QuantityDialogSheet(
                         WmsActionLabel(WmsGlyph.LICENSE_PLATE, "Stoktaki Lotlardan Seç")
                     }
                 }
+                if (onSelectMultipleLots != null && effectiveLotRequired) {
+                    Spacer(Modifier.height(6.dp))
+                    Button(
+                        onClick = onSelectMultipleLots,
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        WmsActionLabel(WmsGlyph.PICKING, "Birden Fazla Lot / Raf Seç")
+                    }
+                    Text(
+                        "Farklı lot veya raflardaki miktarlar toplama ekranında ayrı satırlar olarak işlenir.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
                 if (effectiveLotRequired && lot.isBlank()) {
                     Text(
                         "Lot takipli üründe sevkiyat için stoktaki bir lotu seçmelisiniz.",
@@ -330,10 +351,10 @@ fun QuantityDialogSheet(
             if (showExpiryDate || expiryDateRequired) {
                 Spacer(Modifier.height(8.dp))
                 OutlinedTextField(
-                    value = expiryDateText,
+                    value = expiryDateInput,
                     onValueChange = { value ->
-                        expiryDateText = value.filter { it.isDigit() || it == '.' || it == '/' || it == '-' }
-                            .take(10)
+                        val formatted = formatExpiryDateInput(value.text)
+                        expiryDateInput = TextFieldValue(formatted, TextRange(formatted.length))
                     },
                     label = {
                         Text(
@@ -396,6 +417,25 @@ fun QuantityDialogSheet(
 private val TurkishDateFormatter: DateTimeFormatter =
     DateTimeFormatter.ofPattern("dd.MM.uuuu", Locale.forLanguageTag("tr-TR"))
         .withResolverStyle(ResolverStyle.STRICT)
+
+/**
+ * El terminalinde SKT yalnız rakamla hızlı girilir. Kullanıcı 11122028 yazarken
+ * görünüm sırasıyla 11.1, 11.12 ve 11.12.2028 olur; ayraçları uygulama ekler.
+ */
+internal fun formatExpiryDateInput(value: String): String {
+    val digits = value.filter(Char::isDigit).take(8)
+    return buildString(10) {
+        append(digits.take(2))
+        if (digits.length > 2) {
+            append('.')
+            append(digits.substring(2, minOf(4, digits.length)))
+        }
+        if (digits.length > 4) {
+            append('.')
+            append(digits.substring(4))
+        }
+    }
+}
 
 internal fun normalizeExpiryDate(value: String): String? {
     val normalized = value.trim().replace('/', '.').replace('-', '.')

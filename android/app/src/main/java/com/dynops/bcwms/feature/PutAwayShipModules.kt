@@ -1638,6 +1638,34 @@ private fun ShipDocument(no: String, onBack: () -> Unit, onPickCreated: (String)
     val assignedUserId = h?.optString("assignedUserId").orEmpty()
     val canMutate = headerLoaded && linesComplete &&
         canMutateAssignedDocument(assignedUserId, myUserId)
+
+    fun openPickForMultipleLots() {
+        if (!canMutate) {
+            status = documentOwnershipMessage(assignedUserId, myUserId)
+            return
+        }
+        scope.launch {
+            busy = true
+            status = "Çoklu lot/raf için ambar toplama açılıyor..."
+            val r = BcApi.boundAction(
+                context,
+                "shipments",
+                no,
+                "createPickFor",
+                JSONObject().apply { put("userId", myUserId) }.toString(),
+            )
+            val pickNo = if (r.ok) BcApi.scalarValue(r.body) else ""
+            busy = false
+            if (r.ok && pickNo.isNotBlank()) {
+                status = "TAMAM: Ambar Toplama $pickNo açıldı"
+                onPickCreated(pickNo)
+            } else {
+                status = if (r.ok) "HATA: Toplama numarası alınamadı"
+                    else QcErrorParser.friendlyStatus(BcApi.errorMessage(r.body), r.httpCode)
+            }
+        }
+    }
+
     DocumentScanHandler(
         enabled = qtyLine == null && canMutate && !busy,
         lines = lines,
@@ -1711,27 +1739,7 @@ private fun ShipDocument(no: String, onBack: () -> Unit, onPickCreated: (String)
                 ) { Text("👤 Bana Ata", fontWeight = FontWeight.Bold) }
             } else {
                 OutlinedButton(
-                    onClick = {
-                        scope.launch {
-                        busy = true; status = "Ambar Toplama oluşturuluyor..."
-                        val r = BcApi.boundAction(
-                            context,
-                            "shipments",
-                            no,
-                            "createPickFor",
-                            JSONObject().apply { put("userId", myUserId) }.toString(),
-                        )
-                        val pickNo = if (r.ok) BcApi.scalarValue(r.body) else ""
-                        busy = false
-                        if (r.ok && pickNo.isNotBlank()) {
-                            status = "TAMAM: Ambar Toplama $pickNo oluşturuldu"
-                            onPickCreated(pickNo)
-                        } else {
-                            status = if (r.ok) "HATA: Pick numarası alınamadı"
-                                else QcErrorParser.friendlyStatus(BcApi.errorMessage(r.body), r.httpCode)
-                        }
-                        }
-                    },
+                    onClick = { openPickForMultipleLots() },
                     enabled = !busy && lines.isNotEmpty(),
                     modifier = Modifier.weight(1f).height(54.dp),
                 ) { Text("📦 Pick Oluştur", fontWeight = FontWeight.Bold) }
@@ -1780,6 +1788,10 @@ private fun ShipDocument(no: String, onBack: () -> Unit, onPickCreated: (String)
             // Kaynak stok lotları lokasyonun tüm fiziksel raflarından listelenir.
             binCode = "",
             variantCode = ql.optString("variantCode"),
+            onSelectMultipleLots = {
+                qtyLine = null
+                openPickForMultipleLots()
+            },
             onDismiss = { qtyLine = null },
             onConfirm = { res ->
                 qtyLine = null

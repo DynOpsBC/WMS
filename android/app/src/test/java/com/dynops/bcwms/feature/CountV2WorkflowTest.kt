@@ -30,6 +30,21 @@ class CountV2WorkflowTest {
     }
 
     @Test
+    fun `item without quantity becomes a manual entry candidate, labels with quantity do not`() {
+        val typed = countV2ManualCandidate(BarcodeIntentResolver.resolve("HM.00115"))
+        assertEquals("HM.00115", typed?.itemNo)
+        assertEquals("", typed?.lotNo)
+
+        val gs1NoQty = countV2ManualCandidate(BarcodeIntentResolver.resolve("(01)08690000000001(10)H100773"))
+        assertEquals("08690000000001", gs1NoQty?.itemNo)
+        assertEquals("H100773", gs1NoQty?.lotNo)
+
+        assertTrue(countV2ManualCandidate(BarcodeIntentResolver.resolve("madde kodu=HM.00115 lot=H100773 miktar=5")) == null)
+        assertTrue(countV2ManualCandidate(BarcodeIntentResolver.resolve("B-A.A01.11")) == null)
+        assertTrue(countV2ManualCandidate(BarcodeIntentResolver.resolve("LP000040")) == null)
+    }
+
+    @Test
     fun `rapid duplicate is blocked but intentional later scan is allowed`() {
         assertTrue(isRapidCountV2Duplicate("QR-1", 1_000, "QR-1", 2_000))
         assertFalse(isRapidCountV2Duplicate("QR-1", 1_000, "QR-1", 2_500))
