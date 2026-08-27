@@ -3,6 +3,7 @@ package com.dynops.bcwms.scanner
 import android.Manifest
 import android.content.pm.PackageManager
 import android.util.Log
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.camera.core.CameraSelector
@@ -76,6 +77,10 @@ fun ScanField(
         hasCameraPermission = granted
         if (granted) scanning = true else cameraError = "Kamera izni reddedildi — elle giriş yapın."
     }
+
+    // Kamera önizlemesi ekrana gömülü olduğu için sistem geri tuşu önce yalnızca
+    // önizlemeyi kapatmalı; aksi halde operatör belge ekranından tamamen çıkıyordu.
+    BackHandler(enabled = scanning) { scanning = false }
 
     Column(modifier) {
         Row(verticalAlignment = Alignment.CenterVertically) {

@@ -7,6 +7,18 @@ Kurulum: [docs/android-install-guide.md](../../docs/android-install-guide.md)
 
 ---
 
+## v1.14.58-bade — 2026-08-27
+
+**APK:** `BCWMS-BADE-1.14.58-RELEASE.apk`
+
+**versionCode:** 200058 · **BC paketi:** 1.14.0.69
+
+### Sayım V2 kullanım düzeltmeleri
+
+- Sayım sayfası araması yazıldığı anda listeyi gerçekten filtreler; eşleşme yoksa açık mesaj gösterir.
+- Kamera önizlemesi açıkken Android geri tuşu artık belge ekranından çıkmaz, yalnız kamerayı kapatır.
+- Raf, ürün, lot ve çok satırlı LP okutma; LP geri alma, satır düzeltme ve kaydetme onayı canlı BADE belgesinde yeniden doğrulandı.
+
 ## v1.14.57-bade — 2026-08-27
 
 **APK:** `BCWMS-BADE-1.14.57-RELEASE.apk`

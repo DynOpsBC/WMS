@@ -59,6 +59,15 @@ fun CountV2Module() {
     var showCreate by remember { mutableStateOf(false) }
     var newLocation by remember { mutableStateOf("") }
     var creating by remember { mutableStateOf(false) }
+    val visibleRows = remember(rows, search) {
+        val query = search.trim()
+        if (query.isBlank()) rows
+        else rows.filter { sheet ->
+            sheet.optString("no").contains(query, ignoreCase = true) ||
+                sheet.optString("locationCode").contains(query, ignoreCase = true) ||
+                sheet.optString("status").contains(query, ignoreCase = true)
+        }
+    }
 
     fun load() {
         scope.launch {
@@ -177,7 +186,7 @@ fun CountV2Module() {
         StatusText(status)
         Spacer(Modifier.height(8.dp))
         LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            items(rows) { sheet ->
+            items(visibleRows) { sheet ->
                 val posted = sheet.optString("status").equals("Posted", ignoreCase = true)
                 val v2 = sheet.optBoolean("v2ScanMode", false)
                 Card(
@@ -207,7 +216,14 @@ fun CountV2Module() {
                     }
                 }
             }
-            if (rows.isEmpty() && !loading) item { EmptyState("Sayım sayfası yok.") }
+            if (visibleRows.isEmpty() && !loading) {
+                item {
+                    EmptyState(
+                        if (search.isBlank()) "Sayım sayfası yok."
+                        else "Aramayla eşleşen sayım sayfası yok.",
+                    )
+                }
+            }
         }
     }
 
