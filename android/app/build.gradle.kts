@@ -31,8 +31,8 @@ android {
     // Saha APK'larından bazılarında CI tarafından 100000+ versionCode
     // kullanıldı. Görünen sürüm adı eski olsa bile Android yalnız sayısal kodu
     // karşılaştırdığı için semantik sürümleri 200000 bandında monoton tutuyoruz.
-    versionCode = releaseVersionCodeOverride ?: 200051
-    versionName = releaseVersionNameOverride ?: "1.14.51"
+    versionCode = releaseVersionCodeOverride ?: 200052
+    versionName = releaseVersionNameOverride ?: "1.14.52"
     manifestPlaceholders["appLabel"] = "BCWMS"
     // Ücretsiz dağıtım kanalı: public GitHub Release içindeki sabit latest.json.
     // APK aynı release'de tutulur; uygulamaya GitHub hesabı/token gömülmez.
@@ -62,8 +62,8 @@ android {
     create("bade") {
       dimension = "tenant"
       applicationIdSuffix = ".bade"
-      versionCode = releaseVersionCodeOverride ?: 200051
-      versionName = releaseVersionNameOverride ?: "1.14.51"
+      versionCode = releaseVersionCodeOverride ?: 200052
+      versionName = releaseVersionNameOverride ?: "1.14.52"
       versionNameSuffix = "-bade"
       manifestPlaceholders["appLabel"] = "BCWMS BADE"
       buildConfigField("String", "BC_CLIENT_ID", "\"3c4ba25a-89f4-41df-acf8-ebab8cb4809b\"")

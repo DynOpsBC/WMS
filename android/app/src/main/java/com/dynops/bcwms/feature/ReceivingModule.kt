@@ -25,6 +25,13 @@ import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
 import org.json.JSONObject
 
+internal fun resolvedActiveReceiptLp(
+    serverLpNo: String,
+    serverLpOpen: Boolean,
+    successfulStartLp: String? = null,
+): String? = serverLpNo.trim().takeIf { serverLpOpen && it.isNotBlank() }
+    ?: successfulStartLp?.trim()?.takeIf { it.isNotBlank() }
+
 /**
  * Mal Kabul (Receiving).
  *
@@ -201,7 +208,7 @@ private fun ReceiveDocument(no: String, onBack: () -> Unit) {
     var columns by remember { mutableStateOf(ColumnPrefs.get(context, "receipt", GridColumns.receipt)) }
     var showColumns by remember { mutableStateOf(false) }
 
-    fun reload() {
+    fun reload(preserveActiveLp: String? = null) {
         scope.launch {
             busy = true
             header = null; lines = emptyList(); headerLoaded = false; linesComplete = false
@@ -212,7 +219,11 @@ private fun ReceiveDocument(no: String, onBack: () -> Unit) {
             // Açık LP sunucudan gelir: uygulama yeniden açılınca/başka terminalde
             // devam edince "LP Başlat" ile ikinci bir LP oluşturulmasın.
             header?.takeIf { it.has("lpOpen") }?.let { hd ->
-                activeLp = hd.optString("lpNo").trim().takeIf { hd.optBoolean("lpOpen") && it.isNotBlank() }
+                activeLp = resolvedActiveReceiptLp(
+                    serverLpNo = hd.optString("lpNo"),
+                    serverLpOpen = hd.optBoolean("lpOpen"),
+                    successfulStartLp = preserveActiveLp,
+                )
             }
             val page = BcApi.getAllPages(context, "receiptLines?\$filter=no eq '$no'&\$top=100")
             lines = page.rows
@@ -455,7 +466,9 @@ private fun ReceiveDocument(no: String, onBack: () -> Unit) {
                         }
                         if (createdLp.isNotBlank()) activeLp = createdLp
                         busy = false
-                        if (createdLp.isNotBlank()) reload()
+                        // Başlık alanı API replikasında kısa süre gecikse
+                        // bile başarılı startLP yanıtını kaybetme.
+                        if (createdLp.isNotBlank()) reload(preserveActiveLp = createdLp)
                     }
                 }, enabled = !busy && canMutate, modifier = Modifier.weight(1f)) { Text("LP Başlat") }
             } else {

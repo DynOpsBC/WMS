@@ -18,6 +18,8 @@ codeunit 72133 "DOPSWHS Receipt With LP Tests"
         CreateReceipt(WhseReceiptHeader, WhseReceiptLine, 'PO-S3-LP', 30);
 
         LpNo := ReceiptMgmt.StartLP(WhseReceiptHeader, 'PALLET-EUR');
+        WhseReceiptHeader.Get(WhseReceiptHeader."No.");
+        Assert.AreEqual(LpNo, WhseReceiptHeader."DOPSWHS LP No.", 'Started LP must immediately be linked to the receipt header.');
         ReceiptMgmt.ConfirmLine(WhseReceiptLine, 10, '', '', 0D, LpNo, 'RECEIVE');
         ReceiptMgmt.ConfirmLine(WhseReceiptLine, 10, '', '', 0D, LpNo, 'RECEIVE');
         ReceiptMgmt.ConfirmLine(WhseReceiptLine, 10, '', '', 0D, LpNo, 'RECEIVE');

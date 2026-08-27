@@ -529,12 +529,24 @@ codeunit 72043 "DOPSWHS Receipt Mgmt"
     begin
         // LP açan operatör: belgeye atanmış kullanıcı (uç nokta ayrı kimlik taşımıyor).
         Log('Receipt.StartLP', WhseReceiptHeader."No.", WhseReceiptHeader."Assigned User ID");
+        // Ağ gecikmesi/tekrar dokunma aynı belge için sahipsiz ikinci bir LP
+        // üretmesin. Başlıkta halen açık LP varsa idempotent olarak onu dön.
+        if (WhseReceiptHeader."DOPSWHS LP No." <> '') and
+           LP.Get(WhseReceiptHeader."DOPSWHS LP No.") and
+           (LP.Status = LP.Status::Open)
+        then
+            exit(LP."No.");
+
         EffectiveTemplateCode := TemplateCode;
         if EffectiveTemplateCode = '' then
             EffectiveTemplateCode := 'PALLET-EUR';
 
         ReceiptBinCode := GetSingleReceiptBin(WhseReceiptHeader."No.");
         LPMgt.Build(EffectiveTemplateCode, WhseReceiptHeader."Location Code", ReceiptBinCode, LP);
+        // Aktif LP yalnız Android belleğinde kalırsa ekran yenilenince
+        // "LP Başlat" geri gelir ve ConfirmLine ürünü LP'siz kaydeder.
+        WhseReceiptHeader."DOPSWHS LP No." := LP."No.";
+        WhseReceiptHeader.Modify(true);
         exit(LP."No.");
     end;
 

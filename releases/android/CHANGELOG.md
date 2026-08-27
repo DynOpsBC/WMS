@@ -7,6 +7,37 @@ Kurulum: [docs/android-install-guide.md](../../docs/android-install-guide.md)
 
 ---
 
+## v1.14.52-bade — 2026-08-27
+
+**APK:** `BCWMS-BADE-1.14.52-RELEASE.apk`
+
+**SHA-256:** `5fce8305ad102cc10b46e9deeda326e7e2e6ce626a265262d90c2283d6461a5b`
+
+**versionCode:** 200052 · **minSdk:** 26 · **targetSdk:** 35
+
+### Mal kabul: LP başlatma durumu ve ürün bağlantısı
+
+- `LP Başlat` sonrası oluşan LP anında mal kabul başlığına bağlanır.
+- Başarılı LP yanıtı, hemen ardından gelen gecikmeli belge yenilemesi
+  tarafından artık silinmez; buton doğrudan `LP Kapat` olur.
+- Satır onayı aktif LP numarasını koruduğu için okutulan ürün LP
+  içine eklenir.
+- Aynı belgeye art arda dokunulursa ikinci sahipsiz LP oluşturulmaz;
+  mevcut açık LP döndürülür.
+
+Bu Android sürümü BADE BCWMS AL `1.14.0.64` ile birlikte kullanılmalıdır.
+
+### Doğrulama
+
+- `testBadeDebugUnitTest`: **132 test, 0 hata**
+- `assembleBadeRelease`: başarılı
+- APK Signature Scheme v2: doğrulandı
+- Simülatör: `RE000625 → LP000046 → HM.00181 / 1 KG / H100781` başarılı
+- Mal kabul post edilmedi; test LP'si açık bırakıldı
+- BC AL `1.14.0.64`: alc derlemesi başarılı
+
+---
+
 ## v1.14.51-bade — 2026-08-27
 
 **APK:** `BCWMS-BADE-1.14.51-RELEASE.apk`
