@@ -470,7 +470,8 @@ private fun CountV2Document(no: String, onBack: () -> Unit) {
                     labelScan = ""
                     reload("TAMAM: LP $lpNo → $n satır $activeBin rafında sayıldı")
                 }
-                result.httpCode == 404 || result.httpCode == 405 ->
+                result.httpCode == 404 || result.httpCode == 405 ||
+                    BcApi.errorMessage(result.body).contains("scanV2Lp", ignoreCase = true) ->
                     status = "HATA: LP okutma için güncel BCWMS AL paketi (scanV2Lp) yayınlanmalı."
                 else -> status = "HATA: ${BcApi.errorMessage(result.body)} (HTTP ${result.httpCode})"
             }

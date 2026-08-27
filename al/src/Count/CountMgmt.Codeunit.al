@@ -632,8 +632,6 @@ codeunit 72050 "DOPSWHS Count Mgmt"
     var
         CountHeader: Record "DOPSWHS Count Sheet Header";
         CountLine: Record "DOPSWHS Count Sheet Line";
-        OtherSlot: Integer;
-        OtherCounted: Boolean;
     begin
         if not (CounterSlot in [1, 2, 3]) then
             Error(CounterSlotErr);
@@ -649,16 +647,7 @@ codeunit 72050 "DOPSWHS Count Mgmt"
         CountLine.SetRange("Bin Code", BinCode);
         if CountLine.FindSet(true) then
             repeat
-                OtherCounted := false;
-                for OtherSlot := 1 to 3 do
-                    if (OtherSlot <> CounterSlot) and IsSlotCounted(CountLine, OtherSlot) then
-                        OtherCounted := true;
-                if OtherCounted then begin
-                    ClearCountValue(CountLine, CounterSlot);
-                    EvaluateLineVariance(CountLine, SheetNo);
-                    CountLine.Modify(true);
-                end else
-                    CountLine.Delete(true);
+                RemoveSlotCount(CountLine, CounterSlot, SheetNo);
                 LinesReverted += 1;
             until CountLine.Next() = 0;
     end;
@@ -714,10 +703,32 @@ codeunit 72050 "DOPSWHS Count Mgmt"
         if CurrentQty < ScanEvent.Quantity then
             Error(V2UndoQtyErr, ScanId, CurrentQty, ScanEvent.Quantity);
 
-        RecordCount(SheetNo, CountLine."Line No.", ScanEvent."Counter Slot", CurrentQty - ScanEvent.Quantity);
+        if CurrentQty - ScanEvent.Quantity > 0 then
+            RecordCount(SheetNo, CountLine."Line No.", ScanEvent."Counter Slot", CurrentQty - ScanEvent.Quantity)
+        else
+            // Geri alınan okutma satırın tek katkısıysa "0 sayıldı" bırakma:
+            // 0 sayım kayıtta stoku sıfıra düşürür. Sayıcının kaydı silinir;
+            // başka sayıcı da yoksa V2 satırı (okutmayla oluşmuştu) kalkar.
+            RemoveSlotCount(CountLine, ScanEvent."Counter Slot", SheetNo);
         ScanEvent.Reversed := true;
         ScanEvent.Modify(true);
         exit(CountLine."Line No.");
+    end;
+
+    local procedure RemoveSlotCount(var CountLine: Record "DOPSWHS Count Sheet Line"; CounterSlot: Integer; SheetNo: Code[20])
+    var
+        OtherSlot: Integer;
+        OtherCounted: Boolean;
+    begin
+        ClearCountValue(CountLine, CounterSlot);
+        for OtherSlot := 1 to 3 do
+            if (OtherSlot <> CounterSlot) and IsSlotCounted(CountLine, OtherSlot) then
+                OtherCounted := true;
+        if OtherCounted then begin
+            EvaluateLineVariance(CountLine, SheetNo);
+            CountLine.Modify(true);
+        end else
+            CountLine.Delete(true);
     end;
 
     /// <summary>

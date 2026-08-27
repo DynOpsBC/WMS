@@ -7,6 +7,22 @@ Kurulum: [docs/android-install-guide.md](../../docs/android-install-guide.md)
 
 ---
 
+## v1.14.56-bade — 2026-08-27
+
+**APK:** `BCWMS-BADE-1.14.56-RELEASE.apk`
+
+**versionCode:** 200056 · **BC paketi:** 1.14.0.69
+
+### Sayım V2: manuel girişsiz hızlı okutma
+
+- Raf QR ardından LP/MTE QR okutulunca LP içeriğindeki ürün, lot, seri, UOM ve miktarlar otomatik sayılır.
+- LP'siz ürünlerde GTIN/madde ve lot barkodu, okutulan raftaki BC stok miktarını ve UOM'u otomatik getirir.
+- Aynı barkodu tekrar okutmak miktarı katlamaz; sayılan satır yalnız gerektiğinde dokunularak düzeltilebilir.
+- Geri alma, tek katkı kalan satırı `0 sayıldı` bırakmak yerine güvenli biçimde kaldırır.
+- Yalnız BC'de ilgili rafta bulunmayan beklenmeyen üründe fiziksel miktar sorulur.
+
+---
+
 ## v1.14.54-bade — 2026-08-27
 
 **APK:** `BCWMS-BADE-1.14.54-RELEASE.apk`
@@ -34,13 +50,26 @@ Kurulum: [docs/android-install-guide.md](../../docs/android-install-guide.md)
 
 **versionCode:** 200053 · **minSdk:** 26 · **targetSdk:** 35
 
-### Sayım V2: madde no okutunca miktar sorulur
+### Sayım V2: sadece okut — LP, ürün, lot
 
-- Miktar taşımayan ürün barkodu / yazılan madde no (ve GS1 GTIN+lot) artık
-  reddedilmiyor: raf seçiliyken miktar diyaloğu açılır (lot/seri, UOM,
-  "Stoktaki Lotlardan Seç"), onaylanınca aynı `scanV2Label` ile satır oluşur.
-  Miktar taşıyan QR'larda davranış değişmedi (otomatik satır). Raf/LP/belge
-  barkodları ürün sayılmaz.
+- **LP (MTE etiketi) okutma:** LP içeriği (ürün, lot, seri, birim, miktar)
+  sunucuda olduğu gibi sayılır (`scanV2Lp`); tekrar okutma miktarı toplamaz.
+  BC'de başka rafta kayıtlı LP hata vermez, bu rafta beklenmeyen stok olarak
+  fark üretir. Geri alma LP bazında (`undoV2Lp`).
+- **Ürün / lot barkodu okutma:** okutulan rafın BC stoku lot ve birim bazında
+  "burada" diye teyit edilir; her lot ayrı satır. Aynı raf/ürün/lot ikinci
+  okutmada toplanmaz. Rafta stok yoksa (beklenmeyen ürün) yalnız o zaman
+  miktar sorulur.
+- Miktar taşıyan QR'larda davranış değişmedi (otomatik satır).
+- **Satıra dokun → miktarı düzelt** (`recordCount`); geri alma son LP /
+  ürün okutmasının ürettiği tüm satırları kapsar.
+- UOM, lot, seri artık hiçbir adımda elle girilmiyor.
+
+Bu değişiklik BADE BCWMS AL `1.14.0.68` ister (`scanV2Lp`, `undoV2Lp`);
+eski BC'de LP okutma "güncel paket yayınlanmalı" der, ürün/lot teyidi çalışır.
+AL `1.14.0.68` ayrıca V2 geri almayı düzeltir: geri alınan okutma satırın tek
+katkısıysa artık "0 sayıldı" (kayıtta stoku sıfırlayan eksi fark) bırakılmaz;
+sayıcının kaydı silinir, başka sayıcı yoksa satır kalkar.
 
 ### SKT hızlı girişi ve sevkiyatta çoklu lot/raf
 
