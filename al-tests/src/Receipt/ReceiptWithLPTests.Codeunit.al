@@ -38,6 +38,36 @@ codeunit 72133 "DOPSWHS Receipt With LP Tests"
         Assert.AreEqual(LpNo, PostedWhseReceiptLine."LP No.", 'Posted receipt line must keep LP No.');
     end;
 
+    [Test]
+    procedure StartStopStartCreatesANewActiveLp()
+    var
+        TestHelper: Codeunit "DOPSWHS Test Helper";
+        WhseReceiptHeader: Record "Warehouse Receipt Header";
+        WhseReceiptLine: Record "Warehouse Receipt Line";
+        FirstLP: Record "DOPSWHS LP Header";
+        SecondLP: Record "DOPSWHS LP Header";
+        ReceiptMgmt: Codeunit "DOPSWHS Receipt Mgmt";
+        FirstLpNo: Code[20];
+        SecondLpNo: Code[20];
+    begin
+        TestHelper.EnsureSetup();
+        CreateReceipt(WhseReceiptHeader, WhseReceiptLine, 'PO-LP-RESTART', 20);
+
+        FirstLpNo := ReceiptMgmt.StartLP(WhseReceiptHeader, 'PALLET-EUR');
+        ReceiptMgmt.StopLP(WhseReceiptHeader, FirstLpNo, false);
+        WhseReceiptHeader.Get(WhseReceiptHeader."No.");
+        Assert.AreEqual('', WhseReceiptHeader."DOPSWHS LP No.", 'Closing an LP must clear the active receipt LP pointer.');
+
+        SecondLpNo := ReceiptMgmt.StartLP(WhseReceiptHeader, 'PALLET-EUR');
+        Assert.AreNotEqual(FirstLpNo, SecondLpNo, 'Restarting after close must create a new LP.');
+        FirstLP.Get(FirstLpNo);
+        SecondLP.Get(SecondLpNo);
+        Assert.AreEqual(Format(FirstLP.Status::Built), Format(FirstLP.Status), 'The first LP must stay closed.');
+        Assert.AreEqual(Format(SecondLP.Status::Open), Format(SecondLP.Status), 'The second LP must be open.');
+        WhseReceiptHeader.Get(WhseReceiptHeader."No.");
+        Assert.AreEqual(SecondLpNo, WhseReceiptHeader."DOPSWHS LP No.", 'The receipt must point to the second active LP.');
+    end;
+
     local procedure CreateReceipt(var Header: Record "Warehouse Receipt Header"; var Line: Record "Warehouse Receipt Line"; SourceNo: Code[20]; Qty: Decimal)
     begin
         Header.Init();

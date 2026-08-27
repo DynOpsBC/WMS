@@ -567,6 +567,14 @@ codeunit 72043 "DOPSWHS Receipt Mgmt"
         // is best-effort output and must not reopen the LP when a printer is
         // unavailable. No mobile/API contract changes are required.
         LPMgt.Stop(LP, false, PrinterId);
+        // Bu alan geçmiş LP değil, terminalin o anda içine ürün ekleyeceği
+        // aktif LP işaretçisidir. Kapalı LP burada kalırsa aynı mal kabulde
+        // ikinci kez LP Başlat akışı eski Built LP'ye takılır. Kaynak ilişkisi
+        // kapatılan LP satırlarında korunur; yalnız aktif işaretçiyi temizle.
+        if WhseReceiptHeader."DOPSWHS LP No." = LpNo then begin
+            WhseReceiptHeader."DOPSWHS LP No." := '';
+            WhseReceiptHeader.Modify(true);
+        end;
         if PrintLabel then begin
             ClearLastError();
             if not TryPrintCombinedMteLabel(LP, PrinterId) then
