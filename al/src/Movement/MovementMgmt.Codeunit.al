@@ -182,6 +182,8 @@ codeunit 72045 "DOPSWHS Movement Mgmt"
         Telemetry: Codeunit "DOPSWHS Telemetry";
         CustomDimensions: Dictionary of [Text, Text];
         Operator: Code[50];
+        PutAwayLpNo: Code[20];
+        PutAwayTargetBin: Code[20];
     begin
         if OperatorUserId <> '' then
             Operator := OperatorUserId
@@ -204,10 +206,60 @@ codeunit 72045 "DOPSWHS Movement Mgmt"
         //             '');
         //     until WhseActivityLine.Next() = 0;
 
+        // Register deletes the activity lines. Preserve the LP + final Place bin
+        // first, then move the LP header after BC has successfully registered the
+        // physical warehouse movement. Without this, stock reaches the put-away
+        // bin while the LP remains attached to the receipt bin and Bin Contents
+        // shows Quantity in Active LPs as zero.
+        if WhseActivityHeader.Type = WhseActivityHeader.Type::"Put-away" then
+            ResolvePutAwayLpDestination(WhseActivityHeader, PutAwayLpNo, PutAwayTargetBin);
+
         WhseActivityLine.SetRange("Activity Type", WhseActivityHeader.Type);
         WhseActivityLine.SetRange("No.", WhseActivityHeader."No.");
-        if WhseActivityLine.FindFirst() then
+        if WhseActivityLine.FindFirst() then begin
             WhseActivityRegister.Run(WhseActivityLine);
+            if (PutAwayLpNo <> '') and (PutAwayTargetBin <> '') then
+                MoveLpHeaderToBin(PutAwayLpNo, WhseActivityHeader."Location Code", PutAwayTargetBin);
+        end;
+    end;
+
+    local procedure ResolvePutAwayLpDestination(WhseActivityHeader: Record "Warehouse Activity Header"; var LpNo: Code[20]; var TargetBinCode: Code[20])
+    var
+        ActivityLine: Record "Warehouse Activity Line";
+    begin
+        Clear(LpNo);
+        Clear(TargetBinCode);
+        ActivityLine.SetRange("Activity Type", WhseActivityHeader.Type);
+        ActivityLine.SetRange("No.", WhseActivityHeader."No.");
+        ActivityLine.SetRange("Action Type", ActivityLine."Action Type"::Place);
+        ActivityLine.SetFilter("LP No.", '<>%1', '');
+        if ActivityLine.FindSet() then
+            repeat
+                if LpNo = '' then begin
+                    LpNo := ActivityLine."LP No.";
+                    TargetBinCode := ActivityLine."Bin Code";
+                end else
+                    if (LpNo <> ActivityLine."LP No.") or (TargetBinCode <> ActivityLine."Bin Code") then begin
+                        // A single LP cannot physically finish in two bins. Leave
+                        // its header untouched instead of recording a false bin.
+                        Clear(LpNo);
+                        Clear(TargetBinCode);
+                        exit;
+                    end;
+            until ActivityLine.Next() = 0;
+    end;
+
+    local procedure MoveLpHeaderToBin(LpNo: Code[20]; LocationCode: Code[10]; TargetBinCode: Code[20])
+    var
+        LP: Record "DOPSWHS LP Header";
+    begin
+        if not LP.Get(LpNo) then
+            exit;
+        if (LP."Location Code" = LocationCode) and (LP."Bin Code" = TargetBinCode) then
+            exit;
+        LP.Validate("Location Code", LocationCode);
+        LP.Validate("Bin Code", TargetBinCode);
+        LP.Modify(true);
     end;
 
     /// <summary>

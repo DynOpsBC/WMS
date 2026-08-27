@@ -130,6 +130,22 @@ page 72221 "DOPSWHS Count API"
     end;
 
     [ServiceEnabled]
+    procedure scanV2Lp(scanId: Guid; lpNo: Code[20]; binCode: Code[20]; counterSlot: Integer): Integer
+    var
+        CountMgmt: Codeunit "DOPSWHS Count Mgmt";
+    begin
+        exit(CountMgmt.ScanV2Lp(Rec."No.", scanId, lpNo, binCode, counterSlot));
+    end;
+
+    [ServiceEnabled]
+    procedure undoV2Lp(lpNo: Code[20]; binCode: Code[20]; counterSlot: Integer): Integer
+    var
+        CountMgmt: Codeunit "DOPSWHS Count Mgmt";
+    begin
+        exit(CountMgmt.UndoV2Lp(Rec."No.", lpNo, binCode, counterSlot));
+    end;
+
+    [ServiceEnabled]
     procedure undoV2Scan(scanId: Guid): Integer
     var
         CountMgmt: Codeunit "DOPSWHS Count Mgmt";

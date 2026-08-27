@@ -251,7 +251,7 @@ fun operatorFacingApiError(raw: String, httpCode: Int = 0): String {
             "Zorunlu alan boş: $field ($table). Belge bilgilerini tamamlayıp tekrar deneyin."
         }
         raw.contains("lot", ignoreCase = true) ->
-            "Lot bilgisi doğrulanamadı. Yenileyip tekrar deneyin."
+            "Lot bilgisi doğrulanamadı. Birden fazla lot veya raf varsa Pick Oluştur ile toplama yapın."
         raw.contains("printer", ignoreCase = true) || raw.contains("yazıcı", ignoreCase = true) ->
             "Yazıcı ayarı tamamlanamadı. Yazıcılar ekranını yenileyin."
         raw.contains("quantity", ignoreCase = true) || raw.contains("miktar", ignoreCase = true) ->

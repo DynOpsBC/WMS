@@ -697,6 +697,7 @@ codeunit 72043 "DOPSWHS Receipt Mgmt"
         LPLine."Source Document No." := WhseReceiptLine."No.";
         LPLine."Source Document Line No." := WhseReceiptLine."Line No.";
         LPLine."Source Bin Code" := WhseReceiptLine."Bin Code";
+        LPLine."Variant Code" := WhseReceiptLine."Variant Code";
         // Quantity is the original receipt-line total (for example 500), while
         // LP Line.Quantity remains this pallet's amount (for example 250).
         LPLine."Source Document Quantity" := WhseReceiptLine.Quantity;

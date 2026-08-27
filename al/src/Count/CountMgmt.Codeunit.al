@@ -497,6 +497,193 @@ codeunit 72050 "DOPSWHS Count Mgmt"
         exit(CountLine."Line No.");
     end;
 
+    /// <summary>
+    /// Sayım V2 LP okutması: MTE/LP etiketi okutulunca LP içeriği (ürün, lot,
+    /// seri, birim, miktar) olduğu gibi sayılır; operatör hiçbir şey girmez.
+    /// Aynı LP aynı rafta tekrar okutulursa miktar SET edilir (toplanmaz) ve
+    /// ScanId tekrarı mevcut satır sayısını döndürür → idempotent. LP BC'de
+    /// başka rafta kayıtlıysa hata verilmez: sayım gerçeği kaydeder, satır bu
+    /// rafta "beklenmeyen stok" (sistem 0) olarak açılır ve fark kayıtta çıkar.
+    /// </summary>
+    procedure ScanV2Lp(SheetNo: Code[20]; ScanId: Guid; LpNo: Code[20]; BinCode: Code[20]; CounterSlot: Integer) LinesCounted: Integer
+    var
+        CountHeader: Record "DOPSWHS Count Sheet Header";
+        CountLine: Record "DOPSWHS Count Sheet Line";
+        Counter: Record "DOPSWHS Count Counter";
+        ScanEvent: Record "DOPSWHS Count V2 Scan";
+        LPHeader: Record "DOPSWHS LP Header";
+        LPLine: Record "DOPSWHS LP Line";
+        Item: Record Item;
+        Bin: Record Bin;
+        LPMgt: Codeunit "DOPSWHS LP Management";
+        UomCode: Code[10];
+        NextLineNo: Integer;
+        FirstLineNo: Integer;
+        LpInThisBin: Boolean;
+    begin
+        if not (CounterSlot in [1, 2, 3]) then
+            Error(CounterSlotErr);
+
+        ScanEvent.LockTable();
+        if ScanEvent.Get(ScanId) then begin
+            if ScanEvent."Sheet No." <> SheetNo then
+                Error(V2ScanIdConflictErr, ScanId);
+            CountLine.SetRange("Sheet No.", SheetNo);
+            CountLine.SetRange("LP No.", LpNo);
+            CountLine.SetRange("Bin Code", BinCode);
+            exit(CountLine.Count());
+        end;
+
+        PrepareV2(SheetNo);
+        CountHeader.Get(SheetNo);
+        if BinCode = '' then
+            Error(BinRequiredErr);
+        if not Bin.Get(CountHeader."Location Code", BinCode) then
+            Error(BinNotInLocationErr, BinCode, CountHeader."Location Code");
+        Counter.SetRange("Sheet No.", SheetNo);
+        if not Counter.IsEmpty() then
+            if not Counter.Get(SheetNo, CounterSlot) then
+                Error(CounterNotAssignedErr, CounterSlot, SheetNo);
+        if not LPHeader.Get(LpNo) then
+            Error(LPNotFoundErr, LpNo);
+        if LPHeader."Location Code" <> CountHeader."Location Code" then
+            Error(LPLocationMismatchErr, LpNo, LPHeader."Location Code", CountHeader."Location Code");
+        if not (LPHeader.Status in [LPHeader.Status::Open, LPHeader.Status::Built, LPHeader.Status::Assigned]) then
+            Error(LPStatusNotCountableErr, LpNo, Format(LPHeader.Status));
+
+        // Rafsız LP'ye okutulan raf yazılır (AttachLpToBin ile aynı); başka rafta
+        // kayıtlı LP taşınmaz, fark sayımda görünür.
+        if LPHeader."Bin Code" = '' then begin
+            LPHeader.Validate("Bin Code", BinCode);
+            LPHeader.Modify(true);
+            LPMgt.WriteToLedger(LPHeader, Enum::"DOPSWHS LP Action"::Moved, '', BinCode, 0, '', '', SheetNo);
+        end;
+        LpInThisBin := LPHeader."Bin Code" = BinCode;
+
+        CountLine.LockTable();
+        CountLine.SetRange("Sheet No.", SheetNo);
+        if CountLine.FindLast() then
+            NextLineNo := CountLine."Line No.";
+
+        LPLine.SetRange("LP No.", LpNo);
+        LPLine.SetFilter("Item No.", '<>%1', '');
+        LPLine.SetFilter(Quantity, '>%1', 0);
+        if not LPLine.FindSet() then
+            Error(LPHasNoCountableLinesErr, LpNo);
+        repeat
+            CountLine.Reset();
+            CountLine.SetRange("Sheet No.", SheetNo);
+            CountLine.SetRange("LP No.", LpNo);
+            CountLine.SetRange("LP Line No.", LPLine."Line No.");
+            CountLine.SetRange("Bin Code", BinCode);
+            if CountLine.FindFirst() then
+                SetCountValueAndModify(CountLine, CounterSlot, LPLine.Quantity)
+            else begin
+                UomCode := LPLine."Unit of Measure";
+                if (UomCode = '') and Item.Get(LPLine."Item No.") then
+                    UomCode := Item."Base Unit of Measure";
+                NextLineNo += 10000;
+                CountLine.Init();
+                CountLine."Sheet No." := SheetNo;
+                CountLine."Line No." := NextLineNo;
+                CountLine."Item No." := LPLine."Item No.";
+                CountLine."Variant Code" := LPLine."Variant Code";
+                CountLine."Bin Code" := BinCode;
+                CountLine."LP No." := LpNo;
+                CountLine."LP Line No." := LPLine."Line No.";
+                CountLine."Lot No." := LPLine."Lot No.";
+                CountLine."Serial No." := LPLine."Serial No.";
+                CountLine."Unit of Measure Code" := UomCode;
+                if LpInThisBin then
+                    CountLine."System Qty" := LPLine.Quantity
+                else
+                    CountLine."System Qty" := 0;
+                CountLine."Unexpected Stock" := not LpInThisBin;
+                SetCountValue(CountLine, CounterSlot, LPLine.Quantity);
+                CountLine.Insert(true);
+            end;
+            if FirstLineNo = 0 then
+                FirstLineNo := CountLine."Line No.";
+            LinesCounted += 1;
+        until LPLine.Next() = 0;
+
+        if CountHeader.Status = CountHeader.Status::Open then begin
+            CountHeader.Status := CountHeader.Status::InProgress;
+            CountHeader.Modify(true);
+        end;
+
+        // Miktar 0: LP satırları SET edildiği için genel UndoV2Scan bir şey
+        // düşmez; LP geri alma UndoV2Lp ile yapılır. Kayıt yalnız idempotency içindir.
+        ScanEvent.Init();
+        ScanEvent."Scan ID" := ScanId;
+        ScanEvent."Sheet No." := SheetNo;
+        ScanEvent."Line No." := FirstLineNo;
+        ScanEvent."Counter Slot" := CounterSlot;
+        ScanEvent.Quantity := 0;
+        ScanEvent."Created DateTime" := CurrentDateTime();
+        ScanEvent.Insert(true);
+    end;
+
+    /// <summary>
+    /// LP okutmasını geri alır: bu sayıcının LP satırlarındaki sayımı siler.
+    /// Başka sayıcı da saymışsa satır kalır, yalnız bu slot temizlenir.
+    /// </summary>
+    procedure UndoV2Lp(SheetNo: Code[20]; LpNo: Code[20]; BinCode: Code[20]; CounterSlot: Integer) LinesReverted: Integer
+    var
+        CountHeader: Record "DOPSWHS Count Sheet Header";
+        CountLine: Record "DOPSWHS Count Sheet Line";
+        OtherSlot: Integer;
+        OtherCounted: Boolean;
+    begin
+        if not (CounterSlot in [1, 2, 3]) then
+            Error(CounterSlotErr);
+        CountHeader.Get(SheetNo);
+        if CountHeader.Status = CountHeader.Status::Posted then
+            Error(CountAlreadyPostedErr, SheetNo);
+        if not CountHeader."V2 Scan Mode" then
+            Error(NotV2SheetErr, SheetNo);
+
+        CountLine.LockTable();
+        CountLine.SetRange("Sheet No.", SheetNo);
+        CountLine.SetRange("LP No.", LpNo);
+        CountLine.SetRange("Bin Code", BinCode);
+        if CountLine.FindSet(true) then
+            repeat
+                OtherCounted := false;
+                for OtherSlot := 1 to 3 do
+                    if (OtherSlot <> CounterSlot) and IsSlotCounted(CountLine, OtherSlot) then
+                        OtherCounted := true;
+                if OtherCounted then begin
+                    ClearCountValue(CountLine, CounterSlot);
+                    EvaluateLineVariance(CountLine, SheetNo);
+                    CountLine.Modify(true);
+                end else
+                    CountLine.Delete(true);
+                LinesReverted += 1;
+            until CountLine.Next() = 0;
+    end;
+
+    local procedure ClearCountValue(var CountLine: Record "DOPSWHS Count Sheet Line"; CounterSlot: Integer)
+    begin
+        case CounterSlot of
+            1:
+                begin
+                    CountLine."Counted Qty 1" := 0;
+                    CountLine."Counted 1" := false;
+                end;
+            2:
+                begin
+                    CountLine."Counted Qty 2" := 0;
+                    CountLine."Counted 2" := false;
+                end;
+            3:
+                begin
+                    CountLine."Counted Qty 3" := 0;
+                    CountLine."Counted 3" := false;
+                end;
+        end;
+    end;
+
     /// <summary>Idempotently subtracts the quantity contributed by one V2 scan event.</summary>
     procedure UndoV2Scan(SheetNo: Code[20]; ScanId: Guid): Integer
     var

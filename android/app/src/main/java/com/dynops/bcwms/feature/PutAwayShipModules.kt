@@ -1706,7 +1706,18 @@ private fun ShipDocument(no: String, onBack: () -> Unit, onPickCreated: (String)
                 modifier = Modifier.fillMaxWidth(),
                 isDone = { lineDone(it, LineModule.SHIPMENT) },
                 expandRows = true,
-                onRowClick = { if (canMutate) qtyLine = it },
+                onRowClick = {
+                    if (canMutate) {
+                        // A warehouse shipment line can consume several lots
+                        // and bins. Direct line PATCH only represents one lot;
+                        // route tracked items to BC's pick flow where Take lines
+                        // can be split safely per lot/bin.
+                        if (it.optBoolean("lotRequired", false))
+                            openPickForMultipleLots()
+                        else
+                            qtyLine = it
+                    }
+                },
             )
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Checkbox(checked = printSlip, enabled = canMutate && !busy, onCheckedChange = { printSlip = it })
