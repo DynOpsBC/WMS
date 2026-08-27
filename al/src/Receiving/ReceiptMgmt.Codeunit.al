@@ -532,10 +532,18 @@ codeunit 72043 "DOPSWHS Receipt Mgmt"
         // Ağ gecikmesi/tekrar dokunma aynı belge için sahipsiz ikinci bir LP
         // üretmesin. Başlıkta halen açık LP varsa idempotent olarak onu dön.
         if (WhseReceiptHeader."DOPSWHS LP No." <> '') and
-           LP.Get(WhseReceiptHeader."DOPSWHS LP No.") and
-           (LP.Status = LP.Status::Open)
-        then
-            exit(LP."No.");
+           LP.Get(WhseReceiptHeader."DOPSWHS LP No.")
+        then begin
+            if LP.Status = LP.Status::Open then
+                exit(LP."No.");
+            // Operatör LP'yi yanlışlıkla/etiket almak için kapatıp aynı mal
+            // kabulde devam etmek isteyebilir. Yeni LP ve yeni numara serisi
+            // üretmek yerine belgenin mevcut Built LP'sini yeniden aç.
+            if LP.Status = LP.Status::Built then begin
+                LPMgt.Reopen(LP);
+                exit(LP."No.");
+            end;
+        end;
 
         EffectiveTemplateCode := TemplateCode;
         if EffectiveTemplateCode = '' then
@@ -567,14 +575,6 @@ codeunit 72043 "DOPSWHS Receipt Mgmt"
         // is best-effort output and must not reopen the LP when a printer is
         // unavailable. No mobile/API contract changes are required.
         LPMgt.Stop(LP, false, PrinterId);
-        // Bu alan geçmiş LP değil, terminalin o anda içine ürün ekleyeceği
-        // aktif LP işaretçisidir. Kapalı LP burada kalırsa aynı mal kabulde
-        // ikinci kez LP Başlat akışı eski Built LP'ye takılır. Kaynak ilişkisi
-        // kapatılan LP satırlarında korunur; yalnız aktif işaretçiyi temizle.
-        if WhseReceiptHeader."DOPSWHS LP No." = LpNo then begin
-            WhseReceiptHeader."DOPSWHS LP No." := '';
-            WhseReceiptHeader.Modify(true);
-        end;
         if PrintLabel then begin
             ClearLastError();
             if not TryPrintCombinedMteLabel(LP, PrinterId) then

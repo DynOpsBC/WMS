@@ -11,19 +11,18 @@ Kurulum: [docs/android-install-guide.md](../../docs/android-install-guide.md)
 
 **APK:** `BCWMS-BADE-1.14.54-RELEASE.apk`
 
-**versionCode:** 200054 · **BC paketi:** 1.14.0.65
+**versionCode:** 200054 · **BC paketi:** 1.14.0.66
 
 ### Mal kabul: LP kapatıldıktan sonra yeniden başlatma
 
-- `LP Kapat`, mal kabul başlığındaki aktif LP işaretçisini artık temizler.
-- Aynı belgede tekrar `LP Başlat` yeni ve açık bir LP oluşturur.
-- Kapatılan ilk LP `Built` durumunda ve kendi ürün satırlarıyla korunur.
-- İkinci LP mal kabul belgesinin yeni aktif LP'si olur; sonraki ürünler ona eklenir.
+- `LP Kapat`, mal kabul başlığındaki LP bağlantısını korur.
+- Aynı belgede tekrar `LP Başlat`, yeni LP/numara üretmeden mevcut kapalı LP'yi yeniden açar.
+- Mevcut LP'nin ürünleri korunur ve sonraki ürünler aynı LP'ye eklenir.
 
 ### Doğrulama
 
-- BCWMS AL `1.14.0.65`: derleme başarılı
-- `Start → Stop → Start` regresyon testi eklendi
+- BCWMS AL `1.14.0.66`: derleme başarılı
+- `Start → Stop → Start` aynı LP'yi yeniden açma senaryosu eklendi
 
 ---
 

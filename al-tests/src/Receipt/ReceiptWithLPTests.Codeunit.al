@@ -39,13 +39,12 @@ codeunit 72133 "DOPSWHS Receipt With LP Tests"
     end;
 
     [Test]
-    procedure StartStopStartCreatesANewActiveLp()
+    procedure StartStopStartReopensTheSameLp()
     var
         TestHelper: Codeunit "DOPSWHS Test Helper";
         WhseReceiptHeader: Record "Warehouse Receipt Header";
         WhseReceiptLine: Record "Warehouse Receipt Line";
         FirstLP: Record "DOPSWHS LP Header";
-        SecondLP: Record "DOPSWHS LP Header";
         ReceiptMgmt: Codeunit "DOPSWHS Receipt Mgmt";
         FirstLpNo: Code[20];
         SecondLpNo: Code[20];
@@ -56,16 +55,14 @@ codeunit 72133 "DOPSWHS Receipt With LP Tests"
         FirstLpNo := ReceiptMgmt.StartLP(WhseReceiptHeader, 'PALLET-EUR');
         ReceiptMgmt.StopLP(WhseReceiptHeader, FirstLpNo, false);
         WhseReceiptHeader.Get(WhseReceiptHeader."No.");
-        Assert.AreEqual('', WhseReceiptHeader."DOPSWHS LP No.", 'Closing an LP must clear the active receipt LP pointer.');
+        Assert.AreEqual(FirstLpNo, WhseReceiptHeader."DOPSWHS LP No.", 'Closing an LP must preserve the receipt LP pointer for reopening.');
 
         SecondLpNo := ReceiptMgmt.StartLP(WhseReceiptHeader, 'PALLET-EUR');
-        Assert.AreNotEqual(FirstLpNo, SecondLpNo, 'Restarting after close must create a new LP.');
+        Assert.AreEqual(FirstLpNo, SecondLpNo, 'Restarting after close must reopen the same LP.');
         FirstLP.Get(FirstLpNo);
-        SecondLP.Get(SecondLpNo);
-        Assert.AreEqual(Format(FirstLP.Status::Built), Format(FirstLP.Status), 'The first LP must stay closed.');
-        Assert.AreEqual(Format(SecondLP.Status::Open), Format(SecondLP.Status), 'The second LP must be open.');
+        Assert.AreEqual(Format(FirstLP.Status::Open), Format(FirstLP.Status), 'The receipt LP must be open again.');
         WhseReceiptHeader.Get(WhseReceiptHeader."No.");
-        Assert.AreEqual(SecondLpNo, WhseReceiptHeader."DOPSWHS LP No.", 'The receipt must point to the second active LP.');
+        Assert.AreEqual(SecondLpNo, WhseReceiptHeader."DOPSWHS LP No.", 'The receipt must still point to the reopened LP.');
     end;
 
     local procedure CreateReceipt(var Header: Record "Warehouse Receipt Header"; var Line: Record "Warehouse Receipt Line"; SourceNo: Code[20]; Qty: Decimal)
