@@ -16,6 +16,7 @@ codeunit 72252 "DOPSWHS Posting Smoke Test"
         Seed('1-MOVE', 10, 'Ad-Hoc Move (item reclass)');
         Seed('2-COUNT', 20, 'Inventory Count (phys. inv. post)');
         Seed('3-RECEIPT', 30, 'Warehouse Receipt post');
+        Seed('3B-RECEIPT-LP', 35, 'Warehouse Receipt + LP creates put-away');
         Seed('4-PUTAWAY', 40, 'Put-Away register');
         Seed('5-SHIPMENT', 50, 'Warehouse Shipment post');
         Seed('6-PICK', 60, 'Pick register');
@@ -100,6 +101,8 @@ codeunit 72252 "DOPSWHS Posting Smoke Test"
                 Ok := TryCount(Detail, PostedDoc);
             '3-RECEIPT':
                 Ok := TryReceipt(Detail, PostedDoc);
+            '3B-RECEIPT-LP':
+                Ok := TryReceiptWithLP(Detail, PostedDoc);
             '4-PUTAWAY':
                 Ok := TryPutAway(Detail, PostedDoc);
             '5-SHIPMENT':
@@ -352,6 +355,57 @@ codeunit 72252 "DOPSWHS Posting Smoke Test"
         PostedWhseRcptLine.FindFirst();
         PostedDoc := PostedWhseRcptLine."Posted Source No.";
         Detail := StrSubstNo('Posted whse receipt from PO %1 on %2.', PurchHeader."No.", WmsLoc);
+    end;
+
+    [TryFunction]
+    local procedure TryReceiptWithLP(var Detail: Text; var PostedDoc: Code[35])
+    var
+        ReceiptMgmt: Codeunit "DOPSWHS Receipt Mgmt";
+        PurchHeader: Record "Purchase Header";
+        WhseReceiptHeader: Record "Warehouse Receipt Header";
+        WhseReceiptLine: Record "Warehouse Receipt Line";
+        PostedWhseRcptLine: Record "Posted Whse. Receipt Line";
+        WhseActivityLine: Record "Warehouse Activity Line";
+        LP: Record "DOPSWHS LP Header";
+        LpNo: Code[20];
+        ReceiptNo: Code[20];
+        WmsLoc: Code[10];
+    begin
+        WmsLoc := WmsLocation();
+        CreatePurchOrder(PurchHeader, WmsLoc);
+        CreateWhseReceiptFromPurch(PurchHeader, WhseReceiptHeader);
+        ReceiptNo := WhseReceiptHeader."No.";
+
+        WhseReceiptLine.SetRange("No.", ReceiptNo);
+        WhseReceiptLine.FindFirst();
+        LpNo := ReceiptMgmt.StartLP(WhseReceiptHeader, 'PALLET-EUR');
+        ReceiptMgmt.ConfirmLine(
+            WhseReceiptLine, WhseReceiptLine."Qty. Outstanding", '', '', 0D, LpNo, WhseReceiptLine."Bin Code");
+
+        // Intentionally do not call StopLP: PostReceipt must close the active
+        // terminal LP and still create the standard put-away atomically.
+        ReceiptMgmt.PostReceipt(WhseReceiptHeader, false, false);
+
+        PostedWhseRcptLine.SetRange("Whse. Receipt No.", ReceiptNo);
+        PostedWhseRcptLine.FindFirst();
+        WhseActivityLine.SetRange("Activity Type", WhseActivityLine."Activity Type"::"Put-away");
+        WhseActivityLine.SetRange("Whse. Document Type", WhseActivityLine."Whse. Document Type"::Receipt);
+        WhseActivityLine.SetRange("Whse. Document No.", PostedWhseRcptLine."No.");
+        if not WhseActivityLine.FindFirst() then
+            Error('LP receipt %1 did not create a put-away.', ReceiptNo);
+        if WhseActivityLine."LP No." <> LpNo then
+            Error('Put-away %1 lost LP %2.', WhseActivityLine."No.", LpNo);
+
+        LP.Get(LpNo);
+        if LP.Status <> LP.Status::Assigned then
+            Error('LP %1 was not assigned after receipt posting.', LpNo);
+        if LP."Assigned Document Type" <> LP."Assigned Document Type"::WhsePutaway then
+            Error('LP %1 was assigned to %2 instead of the put-away.', LpNo, Format(LP."Assigned Document Type"));
+        if LP."Assigned Document No." <> WhseActivityLine."No." then
+            Error('LP %1 points to %2 instead of put-away %3.', LpNo, LP."Assigned Document No.", WhseActivityLine."No.");
+
+        PostedDoc := WhseActivityLine."No.";
+        Detail := StrSubstNo('LP receipt %1 created put-away %2 and assigned LP %3.', ReceiptNo, PostedDoc, LpNo);
     end;
 
     [TryFunction]

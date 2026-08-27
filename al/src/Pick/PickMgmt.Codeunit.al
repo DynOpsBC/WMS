@@ -280,8 +280,6 @@ codeunit 72046 "DOPSWHS Pick Mgmt"
 
     local procedure ConfirmPickLineInternal(var PickLine: Record "Warehouse Activity Line"; QtyToHandle: Decimal; LotNo: Code[50]; RequestingUserId: Code[50])
     var
-        CompanionLine: Record "Warehouse Activity Line";
-        WhseShipmentLine: Record "Warehouse Shipment Line";
     begin
         if PickLine."Activity Type" <> PickLine."Activity Type"::Pick then
             Error('Warehouse activity %1 must be a Pick.', PickLine."No.");
@@ -302,36 +300,53 @@ codeunit 72046 "DOPSWHS Pick Mgmt"
         PickLine.Validate("Lot No.", LotNo);
         PickLine.Modify(true);
 
-        // Directed pick'te aynı sevkiyat satırına bağlı Take ve Place satırları
-        // aynı lotu taşımalıdır. Terminal tek satır gösterir; BC tarafında eş
-        // satırları burada senkronlarız ki Register "Lot No. must have a value"
-        // hatası vermesin.
-        CompanionLine.SetRange("Activity Type", PickLine."Activity Type");
-        CompanionLine.SetRange("No.", PickLine."No.");
-        CompanionLine.SetRange("Whse. Document Type", PickLine."Whse. Document Type");
-        CompanionLine.SetRange("Whse. Document No.", PickLine."Whse. Document No.");
-        CompanionLine.SetRange("Whse. Document Line No.", PickLine."Whse. Document Line No.");
-        CompanionLine.SetRange("Item No.", PickLine."Item No.");
-        CompanionLine.SetRange("Variant Code", PickLine."Variant Code");
-        CompanionLine.SetFilter("Line No.", '<>%1', PickLine."Line No.");
-        if CompanionLine.FindSet(true) then
-            repeat
-                CompanionLine.Validate("Qty. to Handle", QtyToHandle);
-                CompanionLine.Validate("Lot No.", LotNo);
-                CompanionLine.Modify(true);
-            until CompanionLine.Next() = 0;
-
-        // Pick'te girilen lot bağlı Warehouse Shipment satırında da görünür.
-        if (PickLine."Whse. Document Type" = PickLine."Whse. Document Type"::Shipment) and
-           WhseShipmentLine.Get(PickLine."Whse. Document No.", PickLine."Whse. Document Line No.")
-        then begin
-            WhseShipmentLine."DOPSWHS Lot No." := LotNo;
-            WhseShipmentLine.Modify(true);
-        end;
+        // Warehouse Activity Line'ın standart Validate tetikleyicileri yalnız
+        // bu Take satırının gerçek Place eşini günceller. Aynı sevkiyat satırı
+        // için başka raftan oluşturulmuş Take satırlarına elle yaymak farklı
+        // lotları birbirinin üzerine yazıyordu. Sevkiyat özet alanını da açık
+        // Take satırlarının tamamına bakarak yalnız tek lot varsa doldur.
+        UpdateShipmentLineLotSummary(PickLine);
 
         // Satır onayı sahadaki EN SIK işlem; "bu satırı kim okuttu" sorusu
         // ancak burada kayıt altına alınırsa cevaplanabiliyor.
         Log('Pick.ConfirmLine', PickLine."No.", EffectiveOperator(PickLine."No.", RequestingUserId));
+    end;
+
+    local procedure UpdateShipmentLineLotSummary(PickLine: Record "Warehouse Activity Line")
+    var
+        RelatedTakeLine: Record "Warehouse Activity Line";
+        WhseShipmentLine: Record "Warehouse Shipment Line";
+        CandidateLotNo: Code[50];
+        MultipleLots: Boolean;
+    begin
+        if PickLine."Whse. Document Type" <> PickLine."Whse. Document Type"::Shipment then
+            exit;
+        if not WhseShipmentLine.Get(PickLine."Whse. Document No.", PickLine."Whse. Document Line No.") then
+            exit;
+
+        RelatedTakeLine.SetRange("Activity Type", PickLine."Activity Type");
+        RelatedTakeLine.SetRange("No.", PickLine."No.");
+        RelatedTakeLine.SetRange("Action Type", RelatedTakeLine."Action Type"::Take);
+        RelatedTakeLine.SetRange("Whse. Document Type", PickLine."Whse. Document Type");
+        RelatedTakeLine.SetRange("Whse. Document No.", PickLine."Whse. Document No.");
+        RelatedTakeLine.SetRange("Whse. Document Line No.", PickLine."Whse. Document Line No.");
+        RelatedTakeLine.SetFilter("Qty. to Handle", '>0');
+        RelatedTakeLine.SetFilter("Lot No.", '<>%1', '');
+        if RelatedTakeLine.FindSet() then
+            repeat
+                if CandidateLotNo = '' then
+                    CandidateLotNo := RelatedTakeLine."Lot No."
+                else
+                    if CandidateLotNo <> RelatedTakeLine."Lot No." then
+                        MultipleLots := true;
+            until (RelatedTakeLine.Next() = 0) or MultipleLots;
+
+        if MultipleLots then
+            Clear(CandidateLotNo);
+        if WhseShipmentLine."DOPSWHS Lot No." <> CandidateLotNo then begin
+            WhseShipmentLine."DOPSWHS Lot No." := CandidateLotNo;
+            WhseShipmentLine.Modify(true);
+        end;
     end;
 
     /// <summary>Lot takipli toplama satırlarında mobil lot seçimini zorunlu kılar.</summary>

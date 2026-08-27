@@ -332,8 +332,39 @@ codeunit 72047 "DOPSWHS Shipment Mgmt"
         if WhseShipmentLine.FindSet() then
             repeat
                 GetShipmentLineLot(WhseShipmentLine, LotNo);
-                EnsureShipmentLot(WhseShipmentLine, LotNo);
+                if LotNo <> '' then
+                    EnsureShipmentLot(WhseShipmentLine, LotNo)
+                else
+                    EnsureShipmentHasCompleteLotTracking(WhseShipmentLine);
             until WhseShipmentLine.Next() = 0;
+    end;
+
+    local procedure EnsureShipmentHasCompleteLotTracking(WhseShipmentLine: Record "Warehouse Shipment Line")
+    var
+        WhseItemTrackingLine: Record "Whse. Item Tracking Line";
+        TrackedQtyBase: Decimal;
+    begin
+        if (WhseShipmentLine."Qty. to Ship" <= 0) or (not ShipmentLineRequiresLot(WhseShipmentLine)) then
+            exit;
+
+        WhseItemTrackingLine.SetRange("Source Type", Database::"Warehouse Shipment Line");
+        WhseItemTrackingLine.SetRange("Source ID", WhseShipmentLine."No.");
+        WhseItemTrackingLine.SetRange("Source Ref. No.", WhseShipmentLine."Line No.");
+        WhseItemTrackingLine.SetRange("Item No.", WhseShipmentLine."Item No.");
+        WhseItemTrackingLine.SetRange("Variant Code", WhseShipmentLine."Variant Code");
+        WhseItemTrackingLine.SetFilter("Lot No.", '<>%1', '');
+        if WhseItemTrackingLine.FindSet() then
+            repeat
+                TrackedQtyBase += Abs(WhseItemTrackingLine."Quantity (Base)");
+            until WhseItemTrackingLine.Next() = 0;
+
+        if TrackedQtyBase < Abs(WhseShipmentLine."Qty. to Ship (Base)") then
+            Error(
+                '%1 ürününün %2 sevkiyat satırı birden fazla lot içeriyor ancak lot dağılımı eksik. Lotlanan (temel): %3, sevk edilecek (temel): %4. Önce ambar toplamayı tamamlayın.',
+                WhseShipmentLine."Item No.",
+                WhseShipmentLine."Line No.",
+                TrackedQtyBase,
+                Abs(WhseShipmentLine."Qty. to Ship (Base)"));
     end;
 
     local procedure EnsureShipmentLot(WhseShipmentLine: Record "Warehouse Shipment Line"; LotNo: Code[50])

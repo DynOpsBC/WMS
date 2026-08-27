@@ -35,6 +35,9 @@ codeunit 72043 "DOPSWHS Receipt Mgmt"
         LpNo: Code[20];
         ReceiptNo: Code[20];
         PostedNo: Code[20];
+        PutAwayNo: Code[20];
+        LocationCode: Code[10];
+        AssignedUserId: Code[50];
     begin
         if PrintReport then begin
             EnsureReceiptReportConfigured();
@@ -44,10 +47,22 @@ codeunit 72043 "DOPSWHS Receipt Mgmt"
         // needed to stamp the posted document and finish the LP afterwards.
         ReceiptNo := WhseReceiptHeader."No.";
         LpNo := WhseReceiptHeader."DOPSWHS LP No.";
+        LocationCode := WhseReceiptHeader."Location Code";
+        AssignedUserId := WhseReceiptHeader."Assigned User ID";
         Log('Receipt.Post', ReceiptNo, EffectiveOperator(OperatorUserId, WhseReceiptHeader."Assigned User ID"));
+        // A terminal operator can post without first tapping "LP Kapat". An
+        // open LP must be completed before the warehouse receipt disappears;
+        // otherwise it cannot be assigned to the resulting put-away.
+        EnsureReceiptLPReady(LpNo);
         WhseReceiptLine.SetRange("No.", ReceiptNo);
-        if WhseReceiptLine.FindFirst() then
+        if WhseReceiptLine.FindFirst() then begin
+            // Keep receipt posting, put-away verification and LP assignment in
+            // one transaction. If the required put-away cannot be produced,
+            // the API returns an error without leaving a half-posted receipt.
+            WhsePostReceipt.SetSuppressCommit(true);
+            WhsePostReceipt.SetHideValidationDialog(true);
             WhsePostReceipt.Run(WhseReceiptLine);
+        end;
 
         PostedWhseReceiptHeader.SetRange("Whse. Receipt No.", ReceiptNo);
         if PostedWhseReceiptHeader.FindLast() then
@@ -73,6 +88,14 @@ codeunit 72043 "DOPSWHS Receipt Mgmt"
         LpPropagation.StampPostedReceiptHeader(ReceiptNo, PostedNo);
         LpPropagation.StampPostedReceiptLines(ReceiptNo, PostedNo);
 
+        // Standard BC normally creates this activity while posting. Validate
+        // the result and retry through the official posted-receipt API when a
+        // tenant customization suppresses the first attempt. Never report a
+        // successful LP receipt while its required put-away is missing.
+        PutAwayNo := EnsurePutAwayCreated(PostedNo, LocationCode, AssignedUserId);
+        if (LpNo <> '') and (PutAwayNo <> '') then
+            StampPutAwayWithLP(PostedNo, LpNo);
+
         if PrintReport then begin
             ClearLastError();
             if not QueuePostedReceiptPrint(PostedNo, PrinterId) then
@@ -83,7 +106,98 @@ codeunit 72043 "DOPSWHS Receipt Mgmt"
         end;
 
         if LpNo <> '' then
-            AssignLP(LpNo, ReceiptNo);
+            if PutAwayNo <> '' then
+                AssignLP(LpNo, Enum::"DOPSWHS Assigned Doc Type"::WhsePutaway, PutAwayNo)
+            else
+                AssignLP(LpNo, Enum::"DOPSWHS Assigned Doc Type"::WhseReceipt, PostedNo);
+    end;
+
+    local procedure EnsureReceiptLPReady(LpNo: Code[20])
+    var
+        LP: Record "DOPSWHS LP Header";
+        LPMgt: Codeunit "DOPSWHS LP Management";
+    begin
+        if LpNo = '' then
+            exit;
+        if not LP.Get(LpNo) then
+            Error('%1 LP kaydı bulunamadığı için mal kabul tamamlanamadı.', LpNo);
+
+        if LP.Status = LP.Status::Open then
+            LPMgt.Stop(LP, false);
+
+        if LP.Status <> LP.Status::Built then
+            Error('%1 LP''si mal kabul için uygun durumda değil. Mevcut durum: %2.', LpNo, Format(LP.Status));
+    end;
+
+    local procedure EnsurePutAwayCreated(PostedReceiptNo: Code[20]; LocationCode: Code[10]; AssignedUserId: Code[50]): Code[20]
+    var
+        Location: Record Location;
+        PostedWhseReceiptLine: Record "Posted Whse. Receipt Line";
+        PutAwayNo: Code[20];
+    begin
+        if PostedReceiptNo = '' then
+            Error('Mal kabul kaydedildi ancak oluşan kayıtlı mal kabul belgesi bulunamadı. İşlem geri alındı; tekrar deneyin.');
+
+        if not Location.Get(LocationCode) then
+            exit('');
+        if not Location.RequirePutaway(LocationCode) then
+            exit('');
+        if Location."Use Put-away Worksheet" then
+            exit('');
+
+        PutAwayNo := FindPutAwayNo(PostedReceiptNo);
+        if PutAwayNo <> '' then
+            exit(PutAwayNo);
+
+        PostedWhseReceiptLine.SetRange("No.", PostedReceiptNo);
+        PostedWhseReceiptLine.SetFilter(Quantity, '>0');
+        PostedWhseReceiptLine.SetFilter(Status, '<>%1', PostedWhseReceiptLine.Status::"Completely Put Away");
+        if PostedWhseReceiptLine.IsEmpty() then
+            exit('');
+
+        PostedWhseReceiptLine.SetHideValidationDialog(true);
+        PostedWhseReceiptLine.CreatePutAwayDoc(PostedWhseReceiptLine, AssignedUserId);
+
+        PutAwayNo := FindPutAwayNo(PostedReceiptNo);
+        if PutAwayNo = '' then
+            Error(
+                '%1 kayıtlı mal kabulü oluştu ancak zorunlu yerleştirme belgesi üretilemedi. Lokasyonun yerleştirme şablonu ve hedef raf kapasitesini kontrol edin; işlem geri alındı.',
+                PostedReceiptNo);
+        exit(PutAwayNo);
+    end;
+
+    local procedure FindPutAwayNo(PostedReceiptNo: Code[20]): Code[20]
+    var
+        WhseActivityLine: Record "Warehouse Activity Line";
+    begin
+        WhseActivityLine.SetRange("Activity Type", WhseActivityLine."Activity Type"::"Put-away");
+        WhseActivityLine.SetRange("Whse. Document Type", WhseActivityLine."Whse. Document Type"::Receipt);
+        WhseActivityLine.SetRange("Whse. Document No.", PostedReceiptNo);
+        if WhseActivityLine.FindFirst() then
+            exit(WhseActivityLine."No.");
+        exit('');
+    end;
+
+    local procedure StampPutAwayWithLP(PostedReceiptNo: Code[20]; LpNo: Code[20])
+    var
+        WhseActivityLine: Record "Warehouse Activity Line";
+        LPLine: Record "DOPSWHS LP Line";
+    begin
+        WhseActivityLine.SetRange("Activity Type", WhseActivityLine."Activity Type"::"Put-away");
+        WhseActivityLine.SetRange("Whse. Document Type", WhseActivityLine."Whse. Document Type"::Receipt);
+        WhseActivityLine.SetRange("Whse. Document No.", PostedReceiptNo);
+        WhseActivityLine.SetRange("LP No.", '');
+        if WhseActivityLine.FindSet(true) then
+            repeat
+                LPLine.SetRange("LP No.", LpNo);
+                LPLine.SetRange("Item No.", WhseActivityLine."Item No.");
+                if not LPLine.IsEmpty() then begin
+                    // Direct assignment is intentional: validating one line
+                    // recursively updates companion activity lines.
+                    WhseActivityLine."LP No." := LpNo;
+                    WhseActivityLine.Modify(true);
+                end;
+            until WhseActivityLine.Next() = 0;
     end;
 
     local procedure EnsureRequiredSupplierLots(WhseReceiptHeader: Record "Warehouse Receipt Header")
@@ -648,7 +762,7 @@ codeunit 72043 "DOPSWHS Receipt Mgmt"
         exit(ItemTrackingCode.Get(Item."Item Tracking Code"));
     end;
 
-    local procedure AssignLP(LpNo: Code[20]; ReceiptNo: Code[20])
+    local procedure AssignLP(LpNo: Code[20]; DocType: Enum "DOPSWHS Assigned Doc Type"; DocNo: Code[20])
     var
         LP: Record "DOPSWHS LP Header";
         LPMgt: Codeunit "DOPSWHS LP Management";
@@ -656,7 +770,7 @@ codeunit 72043 "DOPSWHS Receipt Mgmt"
         if not LP.Get(LpNo) then
             exit;
         if LP.Status = LP.Status::Built then
-            LPMgt.Assign(LP, Enum::"DOPSWHS Assigned Doc Type"::WhseReceipt, ReceiptNo);
+            LPMgt.Assign(LP, DocType, DocNo);
     end;
 
     /// <summary>
