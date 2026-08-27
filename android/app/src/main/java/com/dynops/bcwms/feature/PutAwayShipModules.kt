@@ -20,6 +20,7 @@ import com.dynops.bcwms.BcApi
 import com.dynops.bcwms.scanner.BarcodeIntentResolver
 import com.dynops.bcwms.scanner.ScanField
 import com.dynops.bcwms.ui.*
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import org.json.JSONObject
 
@@ -406,7 +407,7 @@ private fun PutAwayDocument(no: String, onBack: () -> Unit) {
     if (showBulkBin) {
         BulkBinSheet(
             locationCode = h?.optString("locationCode") ?: "",
-            lineCount = lines.size,
+            movementCount = logicalPutAwayMovementCount(lines),
             onDismiss = { showBulkBin = false },
             onConfirm = { bin -> showBulkBin = false; bulkAssignBin(bin) },
         )
@@ -503,6 +504,14 @@ private fun groupPutAwayPairs(lines: List<JSONObject>): List<PutAwayPair> {
         PutAwayPair(take, place, place.optString("itemNo"), place.optString("description"))
     }
 }
+
+/**
+ * BC bir fiziksel yerleştirmeyi kaynak Take ve hedef Place olmak üzere iki
+ * satırla temsil eder. Operatöre gösterilen adet ham satır sayısı değil,
+ * gruplandırılmış depo hareketi sayısıdır.
+ */
+internal fun logicalPutAwayMovementCount(lines: List<JSONObject>): Int =
+    groupPutAwayPairs(lines).size
 
 /** Take/Place çiftini "nereden → nereye" tek kart olarak gösteren, tıklanabilir satır. */
 @OptIn(ExperimentalMaterial3Api::class)
@@ -841,10 +850,10 @@ private fun PutAwayGuidedSheet(
     }
 }
 
-/** Toplu bin sheet: bir bin okut/gir → belgedeki tüm satırlara uygula. */
+/** Toplu bin sheet: bir bin okut/gir → belgedeki tüm yerleştirmelere uygula. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun BulkBinSheet(locationCode: String, lineCount: Int, onDismiss: () -> Unit, onConfirm: (bin: String) -> Unit) {
+private fun BulkBinSheet(locationCode: String, movementCount: Int, onDismiss: () -> Unit, onConfirm: (bin: String) -> Unit) {
     var bin by remember { mutableStateOf("") }
     var showBinList by remember { mutableStateOf(false) }
     com.dynops.bcwms.ui.SheetScaffold(onDismiss = onDismiss, contentPadding = androidx.compose.foundation.layout.PaddingValues(20.dp)) {
@@ -859,7 +868,7 @@ private fun BulkBinSheet(locationCode: String, lineCount: Int, onDismiss: () -> 
             )
         } else {
         Text("Tümünü Bir Bine Yerleştir", fontWeight = FontWeight.Bold, fontSize = 18.sp)
-        Text("$lineCount satırın hepsi seçilen bine atanır.", fontSize = 12.sp, color = Color.Gray)
+        Text("$movementCount yerleştirmenin hepsi seçilen bine atanır.", fontSize = 12.sp, color = Color.Gray)
         Spacer(Modifier.height(12.dp))
         ScanField("Hedef Bin", bin, { bin = it }, modifier = Modifier.fillMaxWidth(), onScanned = {
             bin = BarcodeIntentResolver.resolve(it).value
@@ -868,11 +877,32 @@ private fun BulkBinSheet(locationCode: String, lineCount: Int, onDismiss: () -> 
         OutlinedButton(onClick = { showBinList = true }, modifier = Modifier.fillMaxWidth()) { Text("📍 Bin Listesinden Seç") }
         Spacer(Modifier.height(16.dp))
         Button(enabled = bin.isNotBlank(), modifier = Modifier.fillMaxWidth(), onClick = { onConfirm(bin.trim()) }) {
-            Text("Tümüne Uygula ($lineCount)")
+            Text("Tümüne Uygula ($movementCount)")
         }
         Spacer(Modifier.height(24.dp))
         }
     }
+}
+
+internal fun putAwayBinListPath(locationCode: String): String =
+    if (locationCode.isNotBlank()) {
+        "bins?\$filter=locationCode eq '${odataLiteral(locationCode)}'&\$orderby=code&\$top=200"
+    } else {
+        "bins?\$orderby=code&\$top=200"
+    }
+
+/**
+ * Bin kodu ilk listede bulunmasa bile BC'de lokasyon + tam kod ile aranır.
+ * Tam eşitlik, benzer adlı yanlış bir rafın seçilmesini engeller.
+ */
+internal fun putAwayExactBinPath(locationCode: String, binCode: String): String {
+    val safeBin = odataLiteral(binCode.trim())
+    val filter = if (locationCode.isNotBlank()) {
+        "locationCode eq '${odataLiteral(locationCode)}' and code eq '$safeBin'"
+    } else {
+        "code eq '$safeBin'"
+    }
+    return "bins?\$filter=$filter&\$orderby=code&\$top=1"
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -895,12 +925,17 @@ private fun BinListContent(locationCode: String, onSelect: ((String) -> Unit)?) 
     var loading by remember(locationCode) { mutableStateOf(false) }
     var status by remember(locationCode) { mutableStateOf("") }
     var search by remember { mutableStateOf("") }
+    var exactMatch by remember(locationCode) { mutableStateOf<JSONObject?>(null) }
+    var exactLoading by remember(locationCode) { mutableStateOf(false) }
+    var exactLookupComplete by remember(locationCode) { mutableStateOf(false) }
+    var exactLookupError by remember(locationCode) { mutableStateOf("") }
 
     fun loadBins() {
         scope.launch {
             loading = true
-            val filter = if (locationCode.isNotBlank()) "?\$filter=locationCode eq '${odataLiteral(locationCode)}'&\$orderby=code&\$top=200" else "?\$orderby=code&\$top=200"
-            val page = BcApi.getAllPages(context, "bins$filter")
+            // $top yalnızca sayfa boyutudur; getAllPages @odata.nextLink'leri
+            // takip ederek ilk 200 sonrasını da eksiksiz alır.
+            val page = BcApi.getAllPages(context, putAwayBinListPath(locationCode))
             bins = if (page.complete) page.rows else emptyList()
             status = if (page.complete) "TAMAM: ${bins.size} bin" else "HATA: Bin listesinin tamamı alınamadı. Yenileyin."
             loading = false
@@ -908,6 +943,35 @@ private fun BinListContent(locationCode: String, onSelect: ((String) -> Unit)?) 
     }
 
     LaunchedEffect(locationCode) { loadBins() }
+    val exactQuery = search.trim()
+    LaunchedEffect(locationCode, exactQuery) {
+        exactMatch = null
+        exactLookupComplete = false
+        exactLookupError = ""
+        exactLoading = false
+        if (exactQuery.isBlank()) return@LaunchedEffect
+
+        // Klavye/barkod okuyucu girişi tamamlanmadan her karakterde BC'ye gitme.
+        delay(250)
+        exactLoading = true
+        val page = BcApi.getAllPages(
+            context,
+            putAwayExactBinPath(locationCode, exactQuery),
+        )
+        exactLoading = false
+        exactLookupComplete = page.complete
+        if (!page.complete) {
+            exactLookupError = "HATA: Raf sunucuda doğrulanamadı. Bağlantıyı kontrol edip tekrar deneyin."
+        } else {
+            exactMatch = page.rows.firstOrNull {
+                it.optString("code").equals(exactQuery, ignoreCase = true) &&
+                    // Lokasyon zaten server-side OData filtresinde zorunlu. Bazı
+                    // eski bins API sürümleri locationCode alanını yanıta koymaz.
+                    (it.optString("locationCode").isBlank() || locationCode.isBlank() ||
+                        it.optString("locationCode").equals(locationCode, ignoreCase = true))
+            }
+        }
+    }
     OutlinedTextField(
         value = search,
         onValueChange = { search = it },
@@ -916,16 +980,39 @@ private fun BinListContent(locationCode: String, onSelect: ((String) -> Unit)?) 
         modifier = Modifier.fillMaxWidth(),
     )
     Spacer(Modifier.height(6.dp))
-    StatusText(if (loading) "Binler yükleniyor..." else status)
-    Spacer(Modifier.height(8.dp))
-    val shown = bins.filter {
-        val q = search.trim()
+    val localMatches = bins.filter {
+        val q = exactQuery
         q.isBlank() ||
             it.optString("code").contains(q, ignoreCase = true) ||
             it.optString("description").contains(q, ignoreCase = true) ||
             it.optString("zoneCode").contains(q, ignoreCase = true) ||
             it.optString("warehouseClassCode").contains(q, ignoreCase = true)
     }
+    // Server'dan bulunan tam eşleşmeyi, ilk liste sayfasında olmasa bile
+    // en üste ekle; aynı raf yerel listede varsa ikinci kez gösterme.
+    val shown = buildList {
+        exactMatch?.let { add(it) }
+        addAll(localMatches.filterNot { local ->
+            exactMatch?.let { exact ->
+                val localLocation = local.optString("locationCode")
+                val exactLocation = exact.optString("locationCode")
+                local.optString("code").equals(exact.optString("code"), ignoreCase = true) &&
+                    (localLocation.isBlank() || exactLocation.isBlank() ||
+                        localLocation.equals(exactLocation, ignoreCase = true))
+            } == true
+        })
+    }
+    val visibleStatus = when {
+        loading -> "Binler yükleniyor..."
+        exactLoading -> "Raf sunucuda aranıyor..."
+        exactLookupError.isNotBlank() -> exactLookupError
+        exactQuery.isNotBlank() && exactLookupComplete && shown.isEmpty() ->
+            "BOŞ: '$exactQuery' rafı ${if (locationCode.isBlank()) "bu ortamda" else "$locationCode lokasyonunda"} bulunamadı."
+        exactMatch != null -> "TAMAM: ${exactMatch!!.optString("code")} rafı sunucuda bulundu"
+        else -> status
+    }
+    StatusText(visibleStatus)
+    Spacer(Modifier.height(8.dp))
     LazyColumn(Modifier.heightIn(max = 360.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
         items(shown) { b ->
             val code = b.optString("code")
@@ -960,7 +1047,15 @@ private fun BinListContent(locationCode: String, onSelect: ((String) -> Unit)?) 
                 }
             }
         }
-        if (shown.isEmpty() && !loading) item { EmptyState("Uygun bin bulunamadı.") }
+        if (
+            shown.isEmpty() &&
+            !loading &&
+            !exactLoading &&
+            exactLookupError.isBlank() &&
+            (exactQuery.isBlank() || exactLookupComplete)
+        ) {
+            item { EmptyState("Uygun bin bulunamadı.") }
+        }
     }
 }
 

@@ -199,6 +199,35 @@ fun AdHocMoveModule() {
         }
     }
 
+    fun openLpWorkflowFromProductMode(no: String) {
+        val routedLpNo = no.trim()
+        if (routedLpNo.isBlank()) {
+            status = "HATA: LP barkodu boş. LP'yi yeniden okutun."
+            return
+        }
+        // Product form state must not leak into the LP operation. In particular,
+        // its target/quantity/lot must never trigger an additional adHoc request.
+        invalidateAvailableLots()
+        itemOrLp = ""
+        toBin = ""
+        qty = "1"
+        lpNo = routedLpNo
+        lpLines = emptyList()
+        lpLinesComplete = false
+        target = ""
+        targetIsLp = null
+        targetLpBin = ""
+        lpFlow = true
+        if (fromBin.isBlank()) {
+            status = "LP barkodu algılandı. Önce kaynak rafı okutun, ardından LP içeriğini getirin."
+            return
+        }
+        status = "LP barkodu algılandı — güvenli LP taşıma akışı açılıyor..."
+        // loadLp validates the scanned LP's current bin against fromBin and loads
+        // every LP line before transfer/moveToBin can be enabled.
+        loadLp(routedLpNo)
+    }
+
     // Hedef LP mi bin mi? LP bulunamadığında otomatik olarak "bin" kabul
     // edilmez; bin kaydı da sunucudan doğrulanır. Ağ/API hatası fail-closed'dur.
     fun resolveTarget(scanned: String) {
@@ -544,9 +573,22 @@ fun AdHocMoveModule() {
                 if (it != itemOrLp) invalidateAvailableLots()
                 itemOrLp = it
             }, modifier = Modifier.fillMaxWidth(), onScanned = {
-                val scanned = BarcodeIntentResolver.resolve(it).value
-                if (scanned != itemOrLp) invalidateAvailableLots()
-                itemOrLp = scanned
+                val decision = decideAdHocProductInput(it)
+                when (decision.route) {
+                    AdHocProductInputRoute.LicensePlateWorkflow ->
+                        openLpWorkflowFromProductMode(decision.value)
+
+                    AdHocProductInputRoute.ProductMutation -> {
+                        if (decision.value != itemOrLp) invalidateAvailableLots()
+                        itemOrLp = decision.value
+                    }
+
+                    AdHocProductInputRoute.Invalid -> {
+                        if (decision.value != itemOrLp) invalidateAvailableLots()
+                        itemOrLp = decision.value
+                        status = "HATA: Bu alanda ürün veya LP barkodu okutun."
+                    }
+                }
             })
             Spacer(Modifier.height(8.dp))
             ScanField("Hedef Bin", toBin, { toBin = it }, modifier = Modifier.fillMaxWidth(), onScanned = {
@@ -576,47 +618,57 @@ fun AdHocMoveModule() {
                 enabled = !busy && fromBin.isNotBlank() && toBin.isNotBlank() && itemOrLp.isNotBlank(),
                 modifier = Modifier.fillMaxWidth().height(52.dp),
                 onClick = {
-                    scope.launch {
-                        busy = true; status = "Hareket gönderiliyor..."
-                        // currentUserId: WMS yerel kullanıcısı yoksa AAD token'ının BC User
-                        // ID'sine düşer. getLocalUser tek başına, servis/admin test oturumunda
-                        // ve yalnız AAD ile girişte boş döndüğü için hareketi haksız yere
-                        // engelliyordu ("Bağlı" görünürken bile).
-                        val userId = BcApi.currentUserId(context).trim()
-                        if (userId.isBlank()) {
-                            busy = false
-                            status = "HATA: Kullanıcı kimliği çözülemedi (BC'ye ulaşılamıyor). " +
-                                "Bağlantıyı kontrol edip tekrar deneyin."
-                            return@launch
-                        }
-                        val resolved = BarcodeIntentResolver.resolve(itemOrLp)
-                        val isLp = resolved.kind == com.dynops.bcwms.scanner.BarcodeKind.Lp
-                        val lot = lotNoInput.trim()
-                        val body = JSONObject().apply {
-                            put("fromBin", fromBin.trim()); put("toBin", toBin.trim())
-                            // AL action param is "qty" (not "quantity"); send every param so OData binds them all.
-                            put("qty", qty.toDoubleOrNull() ?: 0.0)
-                            put("itemNo", if (isLp) "" else itemOrLp.trim())
-                            put("lpNo", if (isLp) itemOrLp.trim() else "")
-                            put("userId", userId)
-                            if (lot.isNotBlank()) put("lotNo", lot)
-                        }.toString()
-                        // adHoc is bound to the singleton Setup record (key '') via the movementOps API,
-                        // because a fresh bin-to-bin move has no existing movement document to bind to.
-                        // Lot girildiyse lot-tracking bağlayan adHocLot action'ı kullanılır.
-                        val r = BcApi.boundAction(context, "movementOps", "", if (lot.isBlank()) "adHoc" else "adHocLot", body)
-                        busy = false
-                        status = if (r.ok) "TAMAM: Hareket kaydedildi (HTTP ${r.httpCode})"
-                            else "HATA: ${BcApi.errorMessage(r.body)} (HTTP ${r.httpCode})" +
-                                if (lot.isNotBlank() && (r.httpCode == 404 || r.httpCode == 400))
-                                    " — lot desteği için BC publish gerekli olabilir" else ""
-                        if (r.ok) {
-                            lastMove = buildList {
-                                add("📍 ${fromBin.trim()} → 📍 ${toBin.trim()}")
-                                add("• ${itemOrLp.trim()} × ${qty.toDoubleOrNull()?.let { fmtq(it) } ?: qty}" +
-                                    if (lot.isNotBlank()) " · Lot $lot" else "")
+                    val decision = decideAdHocProductInput(itemOrLp)
+                    when (decision.route) {
+                        AdHocProductInputRoute.LicensePlateWorkflow ->
+                            openLpWorkflowFromProductMode(decision.value)
+
+                        AdHocProductInputRoute.Invalid ->
+                            status = "HATA: Hareket yapılmadı. Geçerli bir ürün barkodu okutun."
+
+                        AdHocProductInputRoute.ProductMutation -> scope.launch {
+                            busy = true; status = "Hareket gönderiliyor..."
+                            // currentUserId: WMS yerel kullanıcısı yoksa AAD token'ının BC User
+                            // ID'sine düşer. getLocalUser tek başına, servis/admin test oturumunda
+                            // ve yalnız AAD ile girişte boş döndüğü için hareketi haksız yere
+                            // engelliyordu ("Bağlı" görünürken bile).
+                            val userId = BcApi.currentUserId(context).trim()
+                            if (userId.isBlank()) {
+                                busy = false
+                                status = "HATA: Kullanıcı kimliği çözülemedi (BC'ye ulaşılamıyor). " +
+                                    "Bağlantıyı kontrol edip tekrar deneyin."
+                                return@launch
                             }
-                            itemOrLp = ""; qty = "1"; lotNoInput = ""
+                            val itemNo = decision.value
+                            val lot = lotNoInput.trim()
+                            val body = JSONObject().apply {
+                                put("fromBin", fromBin.trim()); put("toBin", toBin.trim())
+                                // AL action param is "qty" (not "quantity"); send every param so OData binds them all.
+                                put("qty", qty.toDoubleOrNull() ?: 0.0)
+                                put("itemNo", itemNo)
+                                // movementOps.adHoc still requires the legacy lpNo argument,
+                                // but Product mode never sends an LP through this contract.
+                                put("lpNo", "")
+                                put("userId", userId)
+                                if (lot.isNotBlank()) put("lotNo", lot)
+                            }.toString()
+                            // adHoc is bound to the singleton Setup record (key '') via the movementOps API,
+                            // because a fresh bin-to-bin move has no existing movement document to bind to.
+                            // Lot girildiyse lot-tracking bağlayan adHocLot action'ı kullanılır.
+                            val r = BcApi.boundAction(context, "movementOps", "", if (lot.isBlank()) "adHoc" else "adHocLot", body)
+                            busy = false
+                            status = if (r.ok) "TAMAM: Hareket kaydedildi (HTTP ${r.httpCode})"
+                                else "HATA: ${BcApi.errorMessage(r.body)} (HTTP ${r.httpCode})" +
+                                    if (lot.isNotBlank() && (r.httpCode == 404 || r.httpCode == 400))
+                                        " — lot desteği için BC publish gerekli olabilir" else ""
+                            if (r.ok) {
+                                lastMove = buildList {
+                                    add("📍 ${fromBin.trim()} → 📍 ${toBin.trim()}")
+                                    add("• $itemNo × ${qty.toDoubleOrNull()?.let { fmtq(it) } ?: qty}" +
+                                        if (lot.isNotBlank()) " · Lot $lot" else "")
+                                }
+                                itemOrLp = ""; qty = "1"; lotNoInput = ""
+                            }
                         }
                     }
                 }
