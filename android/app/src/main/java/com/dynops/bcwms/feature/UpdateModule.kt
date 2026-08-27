@@ -322,7 +322,10 @@ private fun fetchManifest(): UpdateManifest? {
         connectTimeout = 8_000
         readTimeout = 15_000
         requestMethod = "GET"
+        useCaches = false
         setRequestProperty("Accept", "application/json")
+        setRequestProperty("Cache-Control", "no-cache, no-store")
+        setRequestProperty("Pragma", "no-cache")
     }
     return try {
         if (conn.responseCode / 100 != 2) return null

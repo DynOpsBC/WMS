@@ -28,7 +28,10 @@ android {
     applicationId = "com.dynops.bcwms"
     minSdk = 26
     targetSdk = 35
-    versionCode = releaseVersionCodeOverride ?: 1448
+    // Saha APK'larından bazılarında CI tarafından 100000+ versionCode
+    // kullanıldı. Görünen sürüm adı eski olsa bile Android yalnız sayısal kodu
+    // karşılaştırdığı için semantik sürümleri 200000 bandında monoton tutuyoruz.
+    versionCode = releaseVersionCodeOverride ?: 200048
     versionName = releaseVersionNameOverride ?: "1.14.48"
     manifestPlaceholders["appLabel"] = "BCWMS"
     // Ücretsiz dağıtım kanalı: public GitHub Release içindeki sabit latest.json.
@@ -59,7 +62,7 @@ android {
     create("bade") {
       dimension = "tenant"
       applicationIdSuffix = ".bade"
-      versionCode = releaseVersionCodeOverride ?: 1448
+      versionCode = releaseVersionCodeOverride ?: 200048
       versionName = releaseVersionNameOverride ?: "1.14.48"
       versionNameSuffix = "-bade"
       manifestPlaceholders["appLabel"] = "BCWMS BADE"
