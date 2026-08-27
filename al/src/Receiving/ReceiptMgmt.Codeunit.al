@@ -50,6 +50,11 @@ codeunit 72043 "DOPSWHS Receipt Mgmt"
         LocationCode := WhseReceiptHeader."Location Code";
         AssignedUserId := WhseReceiptHeader."Assigned User ID";
         Log('Receipt.Post', ReceiptNo, EffectiveOperator(OperatorUserId, WhseReceiptHeader."Assigned User ID"));
+        // BADE'nin tenant özelleştirmesi post sırasında bu DateTime alanını
+        // zorunlu kılıyor. Alan başka bir PTE'ye ait olduğundan derleme-zamanı
+        // bağımlılığı kurmadan RecordRef ile bulup yalnız boşsa dolduruyoruz.
+        // Alanın olmadığı diğer müşterilerde işlem standart akışta devam eder.
+        EnsureActualReceiptDateTime(WhseReceiptHeader);
         // A terminal operator can post without first tapping "LP Kapat". An
         // open LP must be completed before the warehouse receipt disappears;
         // otherwise it cannot be assigned to the resulting put-away.
@@ -110,6 +115,31 @@ codeunit 72043 "DOPSWHS Receipt Mgmt"
                 AssignLP(LpNo, Enum::"DOPSWHS Assigned Doc Type"::WhsePutaway, PutAwayNo)
             else
                 AssignLP(LpNo, Enum::"DOPSWHS Assigned Doc Type"::WhseReceipt, PostedNo);
+    end;
+
+    local procedure EnsureActualReceiptDateTime(var WhseReceiptHeader: Record "Warehouse Receipt Header")
+    var
+        ReceiptRef: RecordRef;
+        CandidateField: FieldRef;
+        ExistingValue: DateTime;
+        FieldIndex: Integer;
+    begin
+        ReceiptRef.GetTable(WhseReceiptHeader);
+        for FieldIndex := 1 to ReceiptRef.FieldCount do begin
+            CandidateField := ReceiptRef.FieldIndex(FieldIndex);
+            if (CandidateField.Type = FieldType::DateTime) and
+               ((CandidateField.Name = 'Fiili Alış Tarihi - Saati') or
+                (CandidateField.Caption = 'Fiili Alış Tarihi - Saati'))
+            then begin
+                ExistingValue := CandidateField.Value;
+                if ExistingValue = 0DT then begin
+                    CandidateField.Value := CurrentDateTime();
+                    ReceiptRef.Modify(true);
+                    ReceiptRef.SetTable(WhseReceiptHeader);
+                end;
+                exit;
+            end;
+        end;
     end;
 
     local procedure EnsureReceiptLPReady(LpNo: Code[20])
