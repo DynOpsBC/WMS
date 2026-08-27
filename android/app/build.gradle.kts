@@ -28,8 +28,8 @@ android {
     applicationId = "com.dynops.bcwms"
     minSdk = 26
     targetSdk = 35
-    versionCode = releaseVersionCodeOverride ?: 1446
-    versionName = releaseVersionNameOverride ?: "1.14.46"
+    versionCode = releaseVersionCodeOverride ?: 1447
+    versionName = releaseVersionNameOverride ?: "1.14.47"
     manifestPlaceholders["appLabel"] = "BCWMS"
     // Ücretsiz dağıtım kanalı: public GitHub Release içindeki sabit latest.json.
     // APK aynı release'de tutulur; uygulamaya GitHub hesabı/token gömülmez.
@@ -59,8 +59,8 @@ android {
     create("bade") {
       dimension = "tenant"
       applicationIdSuffix = ".bade"
-      versionCode = releaseVersionCodeOverride ?: 1446
-      versionName = releaseVersionNameOverride ?: "1.14.46"
+      versionCode = releaseVersionCodeOverride ?: 1447
+      versionName = releaseVersionNameOverride ?: "1.14.47"
       versionNameSuffix = "-bade"
       manifestPlaceholders["appLabel"] = "BCWMS BADE"
       buildConfigField("String", "BC_CLIENT_ID", "\"3c4ba25a-89f4-41df-acf8-ebab8cb4809b\"")
