@@ -436,12 +436,48 @@ codeunit 72047 "DOPSWHS Shipment Mgmt"
         WhseShipmentLine.SetFilter("Qty. to Ship", '>0');
         if WhseShipmentLine.FindSet() then
             repeat
-                GetShipmentLineLot(WhseShipmentLine, LotNo);
-                if LotNo <> '' then
-                    EnsureShipmentLot(WhseShipmentLine, LotNo)
-                else
-                    EnsureShipmentHasCompleteLotTracking(WhseShipmentLine);
+                if HasRegisteredPickToShip(WhseShipmentLine) then
+                    // A registered warehouse pick is the authoritative lot/bin
+                    // allocation. After a partial pick, the remaining unregistered
+                    // tracking row can contain only one of the original lots; treating
+                    // that residual row as the lot for the whole shipment incorrectly
+                    // rejects valid allocations such as 250 (lot A) + 50 (lot B).
+                    // Microsoft's pick register has already validated the physical
+                    // stock and written the registered tracking quantities.
+                    ReconcileQtyToShipWithRegisteredPick(WhseShipmentLine)
+                else begin
+                    GetShipmentLineLot(WhseShipmentLine, LotNo);
+                    if LotNo <> '' then
+                        EnsureShipmentLot(WhseShipmentLine, LotNo)
+                    else
+                        EnsureShipmentHasCompleteLotTracking(WhseShipmentLine);
+                end;
             until WhseShipmentLine.Next() = 0;
+    end;
+
+    local procedure HasRegisteredPickToShip(WhseShipmentLine: Record "Warehouse Shipment Line"): Boolean
+    begin
+        exit(
+            (WhseShipmentLine."Qty. Picked (Base)" - WhseShipmentLine."Qty. Shipped (Base)") > 0);
+    end;
+
+    local procedure ReconcileQtyToShipWithRegisteredPick(var WhseShipmentLine: Record "Warehouse Shipment Line")
+    var
+        PickedNotShippedBase: Decimal;
+        PickedNotShipped: Decimal;
+    begin
+        PickedNotShippedBase :=
+            WhseShipmentLine."Qty. Picked (Base)" - WhseShipmentLine."Qty. Shipped (Base)";
+        if (PickedNotShippedBase <= 0) or
+           (Abs(WhseShipmentLine."Qty. to Ship (Base)") <= Abs(PickedNotShippedBase))
+        then
+            exit;
+
+        WhseShipmentLine.TestField("Qty. per Unit of Measure");
+        PickedNotShipped := Round(
+            PickedNotShippedBase / WhseShipmentLine."Qty. per Unit of Measure");
+        WhseShipmentLine.Validate("Qty. to Ship", PickedNotShipped);
+        WhseShipmentLine.Modify(true);
     end;
 
     local procedure EnsureShipmentHasCompleteLotTracking(WhseShipmentLine: Record "Warehouse Shipment Line")
