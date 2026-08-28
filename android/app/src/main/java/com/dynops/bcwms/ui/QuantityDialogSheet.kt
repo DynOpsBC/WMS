@@ -112,6 +112,7 @@ fun QuantityDialogSheet(
     val stockLotProbeReady = !autoDetectLotFromStock || !showLotSerial || itemNo.isBlank() || stockLotCount >= 0
     val normalizedExpiryDate = normalizeExpiryDate(expiryDateText)
     val expiryDateValid = expiryDateText.isBlank() || normalizedExpiryDate != null
+    val expiryDateNotPast = expiryDateIsTodayOrFuture(normalizedExpiryDate)
 
     fun qty(): Double = qtyText.toDoubleOrNull() ?: 0.0
     fun setQty(v: Double) { qtyText = formatQty(v.coerceAtLeast(0.0)) }
@@ -371,7 +372,7 @@ fun QuantityDialogSheet(
                     },
                     supportingText = { Text("GG.AA.YYYY") },
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                    isError = (expiryDateRequired && expiryDateText.isBlank()) || !expiryDateValid,
+                    isError = (expiryDateRequired && expiryDateText.isBlank()) || !expiryDateValid || !expiryDateNotPast,
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
                 )
@@ -384,6 +385,12 @@ fun QuantityDialogSheet(
                 } else if (!expiryDateValid) {
                     Text(
                         "Geçerli bir tarih girin (ör. 31.12.2027).",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                } else if (!expiryDateNotPast) {
+                    Text(
+                        "Geçmiş son kullanma tarihli ürün mal kabul edilemez.",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.error,
                     )
@@ -412,6 +419,7 @@ fun QuantityDialogSheet(
                         (!serialRequired || serial.isNotBlank()) &&
                         (!supplierLotRequired || (lot.isNotBlank() && supplierLot.isNotBlank())) &&
                         expiryDateValid &&
+                        expiryDateNotPast &&
                         (!expiryDateRequired || normalizedExpiryDate != null),
                     modifier = Modifier.weight(1f)
                 ) { Text("Onayla") }
@@ -462,6 +470,16 @@ internal fun normalizeExpiryDate(value: String): String? {
     } catch (_: DateTimeParseException) {
         null
     }
+}
+
+internal fun expiryDateIsTodayOrFuture(
+    normalizedValue: String?,
+    today: LocalDate = LocalDate.now(),
+): Boolean {
+    if (normalizedValue.isNullOrBlank()) return true
+    return runCatching {
+        !LocalDate.parse(normalizedValue, DateTimeFormatter.ISO_LOCAL_DATE).isBefore(today)
+    }.getOrDefault(false)
 }
 
 internal fun expiryDateForDisplay(value: String): String {

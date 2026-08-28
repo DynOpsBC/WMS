@@ -7,6 +7,21 @@ Kurulum: [docs/android-install-guide.md](../../docs/android-install-guide.md)
 
 ---
 
+## v1.14.64 — BADE + EMU — 2026-08-28
+
+**versionCode:** 200064 · **BC paketi:** 1.14.0.79
+
+**BADE SHA-256:** `650436e87ef2a4117569e947e72289790b198abcecc9856e7fb16f6dec7df284`
+
+**EMU SHA-256:** `a88318ba7bc3899d641a9548cf409e749791c731589e590c39c129b435498654`
+
+### Çok ürün, çok lot/LP ve geçmiş SKT
+
+- Bir yerleştirme satırını hazırlamak belgeyi hemen register etmez; yalnız seçilen satırlar kaydedilir ve kalan ürünler belgede kalır.
+- Aynı ürünün farklı lot, seri veya LP hareketleri ayrı yerleştirme kartları olarak gösterilir.
+- Mal kabul paletine farklı ürün veya lot eklenemez; operatör mevcut LP'yi kapatıp yeni LP başlatır.
+- Geçmiş son kullanma tarihi mobil onayda ve BC post işleminde engellenir.
+
 ## v1.14.63 — BADE + EMU — 2026-08-28
 
 **versionCode:** 200063 · **BC paketi:** 1.14.0.78

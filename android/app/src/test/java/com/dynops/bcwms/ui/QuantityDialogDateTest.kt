@@ -3,6 +3,7 @@ package com.dynops.bcwms.ui
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
+import java.time.LocalDate
 
 class QuantityDialogDateTest {
     @Test
@@ -34,5 +35,15 @@ class QuantityDialogDateTest {
     fun `BC ISO date is displayed in terminal format`() {
         assertEquals("31.12.2027", expiryDateForDisplay("2027-12-31"))
         assertEquals("", expiryDateForDisplay("0001-01-01"))
+    }
+
+    @Test
+    fun `expired receipt date is rejected while today and future remain valid`() {
+        val today = LocalDate.of(2026, 8, 28)
+
+        assertEquals(false, expiryDateIsTodayOrFuture("2026-08-27", today))
+        assertEquals(true, expiryDateIsTodayOrFuture("2026-08-28", today))
+        assertEquals(true, expiryDateIsTodayOrFuture("2027-01-01", today))
+        assertEquals(true, expiryDateIsTodayOrFuture(null, today))
     }
 }

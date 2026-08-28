@@ -73,6 +73,9 @@ codeunit 72043 "DOPSWHS Receipt Mgmt"
         // Information kartına yazıyordu. Hazırlanmış satırları da
         // yeniden giriş istemeden BADE takip kolonuna taşı.
         SyncSupplierLotsToReservations(WhseReceiptHeader);
+        // Mobil dışından veya eski bir istemciden yazılmış takip satırları da
+        // post sırasında geçmiş SKT ile stoğa girememelidir.
+        EnsureReceiptExpirationDatesNotPast(WhseReceiptHeader);
         // BADE ayrıca plaka ve sürücü kodunu zorunlu tutuyor. Bunlar operatör
         // girdisidir (e-irsaliye verisi), varsayılan atanamaz. BC'nin İngilizce
         // TestField hatası yerine terminalin gösterebileceği net mesajla erken dur.
@@ -657,6 +660,10 @@ codeunit 72043 "DOPSWHS Receipt Mgmt"
                 Error(
                     'Son kullanma tarihi zorunludur. %1 ürünü için el terminalinden son kullanma tarihini girin.',
                     WhseReceiptLine."Item No.");
+            if (ExpiryDate <> 0D) and (ExpiryDate < Today) then
+                Error(
+                    'Geçmiş son kullanma tarihli ürün mal kabul edilemez. Ürün: %1, SKT: %2.',
+                    WhseReceiptLine."Item No.", ExpiryDate);
             if RequiresSerialTracking(ItemTrackingCode) then begin
                 if SerialNo = '' then
                     SerialNo := LotSerialGen.GenerateSerialNo();
@@ -683,6 +690,7 @@ codeunit 72043 "DOPSWHS Receipt Mgmt"
         if LicensePlateNo <> '' then begin
             LP.Get(LicensePlateNo);
             BindLpToReceiptBin(LP, WhseReceiptLine);
+            EnsureReceiptLpIdentity(LP, WhseReceiptLine, LotNo, SerialNo);
             LPMgt.AddLine(LP, WhseReceiptLine."Item No.", WhseReceiptLine."Unit of Measure Code", QtyToReceive, LotNo, SerialNo, ExpiryDate);
             StampReceiptSourceOnLastLpLine(LicensePlateNo, WhseReceiptLine);
 
@@ -768,6 +776,51 @@ codeunit 72043 "DOPSWHS Receipt Mgmt"
             Error(
                 '%1 LP''si %2 gözündedir; %3 gözündeki mal kabul satırı aynı LP''ye eklenemez.',
                 LP."No.", LP."Bin Code", WhseReceiptLine."Bin Code");
+    end;
+
+    /// <summary>
+    /// Mal kabul paleti tek ürün + varyant + lot/seri kimliği taşır. Böylece
+    /// farklı ürün veya lotlar aynı aktif LP'ye sessizce karışmaz; operatör
+    /// mevcut LP'yi kapatıp sonraki fiziksel paleti başlatır.
+    /// </summary>
+    local procedure EnsureReceiptLpIdentity(LP: Record "DOPSWHS LP Header"; WhseReceiptLine: Record "Warehouse Receipt Line"; LotNo: Code[50]; SerialNo: Code[50])
+    var
+        LPLine: Record "DOPSWHS LP Line";
+    begin
+        LPLine.SetRange("LP No.", LP."No.");
+        LPLine.SetFilter(Quantity, '>0');
+        if LPLine.FindSet() then
+            repeat
+                if (LPLine."Item No." <> WhseReceiptLine."Item No.") or
+                   (LPLine."Variant Code" <> WhseReceiptLine."Variant Code") or
+                   (LPLine."Lot No." <> LotNo) or
+                   (LPLine."Serial No." <> SerialNo)
+                then
+                    Error(
+                        '%1 LP''si %2 ürünü / %3 lotu için açılmıştır. Farklı ürün veya lot için LP''yi kapatıp yeni LP başlatın.',
+                        LP."No.", LPLine."Item No.", LPLine."Lot No.");
+            until LPLine.Next() = 0;
+    end;
+
+    local procedure EnsureReceiptExpirationDatesNotPast(WhseReceiptHeader: Record "Warehouse Receipt Header")
+    var
+        WhseReceiptLine: Record "Warehouse Receipt Line";
+        LotNo: Code[50];
+        SerialNo: Code[50];
+        ExpiryDate: Date;
+    begin
+        WhseReceiptLine.SetRange("No.", WhseReceiptHeader."No.");
+        WhseReceiptLine.SetFilter("Qty. to Receive", '>0');
+        if WhseReceiptLine.FindSet() then
+            repeat
+                if ReceiptLineUsesExpirationDates(WhseReceiptLine) then begin
+                    GetItemTracking(WhseReceiptLine, LotNo, SerialNo, ExpiryDate);
+                    if (ExpiryDate <> 0D) and (ExpiryDate < Today) then
+                        Error(
+                            'Mal kabul kaydedilemez. %1 ürününün %2 lotu geçmiş son kullanma tarihlidir: %3.',
+                            WhseReceiptLine."Item No.", LotNo, ExpiryDate);
+                end;
+            until WhseReceiptLine.Next() = 0;
     end;
 
     [TryFunction]

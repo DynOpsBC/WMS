@@ -76,4 +76,55 @@ class PutAwayBinSelectionTest {
 
         assertEquals(2, logicalPutAwayMovementCount(pair(10) + pair(20)))
     }
+
+    @Test
+    fun `ayni urunun farkli lot ve LP satirlari ayri yerlestirme sayilir`() {
+        fun pair(lotNo: String, lpNo: String, baseLineNo: Int): List<JSONObject> =
+            listOf("Take", "Place").mapIndexed { index, action ->
+                JSONObject().apply {
+                    put("sourceNo", "PO-200")
+                    put("sourceLineNo", 10)
+                    put("whseDocumentNo", "PU-200")
+                    put("whseDocumentLineNo", 10)
+                    put("itemNo", "HM.00169")
+                    put("unitOfMeasureCode", "KG")
+                    put("lotNo", lotNo)
+                    put("lpNo", lpNo)
+                    put("actionType", action)
+                    put("lineNo", baseLineNo + index)
+                    put("qtyToHandle", if (lotNo == "H100795") 5 else 15)
+                }
+            }
+
+        val lines = pair("H100795", "LP000063", 10000) + pair("H100796", "LP000064", 20000)
+
+        assertEquals(2, logicalPutAwayMovementCount(lines))
+    }
+
+    @Test
+    fun `register only keeps staged pair positive and clears untouched rows`() {
+        fun pair(sourceLineNo: Int, baseLineNo: Int): List<JSONObject> =
+            listOf("Take", "Place").mapIndexed { index, action ->
+                JSONObject().apply {
+                    put("sourceNo", "PO-300")
+                    put("sourceLineNo", sourceLineNo)
+                    put("whseDocumentNo", "PU-300")
+                    put("whseDocumentLineNo", sourceLineNo)
+                    put("itemNo", "ITEM-$sourceLineNo")
+                    put("unitOfMeasureCode", "ADET")
+                    put("actionType", action)
+                    put("lineNo", baseLineNo + index)
+                    put("qtyToHandle", 10)
+                }
+            }
+        val first = pair(10, 10000)
+        val second = pair(20, 20000)
+
+        val plan = putAwayRegisterQuantityPlan(first + second, first.map { it.optInt("lineNo") }.toSet())
+
+        assertEquals(10.0, plan[10000] ?: -1.0, 0.0)
+        assertEquals(10.0, plan[10001] ?: -1.0, 0.0)
+        assertEquals(0.0, plan[20000] ?: -1.0, 0.0)
+        assertEquals(0.0, plan[20001] ?: -1.0, 0.0)
+    }
 }

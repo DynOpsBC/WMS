@@ -187,10 +187,12 @@ private fun PutAwayDocument(no: String, onBack: () -> Unit) {
             return false
         }
 
+        val desiredByLine = putAwayRegisterQuantityPlan(lines, stagedLineNos)
         val pendingWrites = lines.mapNotNull { ln ->
-            // Bu kayıt turunda okutulmayan/evrelenmeyen sunucu satırlarını
-            // sıfırlama. Kısmi yerleştirme yalnızca seçilen çiftleri yazar.
-            val desiredQty = qtyByPair[putAwayPairKey(ln)] ?: return@mapNotNull null
+            // BC yeni yerleştirme satırlarını Qty. to Handle dolu oluşturabilir.
+            // Okutulmayan çiftleri 0'a çekmezsek standart register onları da
+            // kaydeder ve operatör tek satır yapmasına rağmen belge kaybolur.
+            val desiredQty = desiredByLine[ln.optInt("lineNo")] ?: 0.0
             val currentQty = ln.optDouble("qtyToHandle", 0.0)
             if (kotlin.math.abs(currentQty - desiredQty) > 0.00001) ln to desiredQty else null
         }
@@ -437,9 +439,8 @@ private fun PutAwayDocument(no: String, onBack: () -> Unit) {
                     }
                     if (okCount == affected.size) {
                         stagedLineNos = stagedLineNos + affected.map { it.optInt("lineNo") }
-                        // Operatörün aynı işlem için ikinci kez "Kaydet" düğmesine
-                        // basmasını isteme: doğrulanan satırı hemen BC'ye kaydet/register et.
-                        registerPreparedLines()
+                        busy = false
+                        status = "TAMAM: Satır hazırlandı. Diğer satırları tamamlayın veya Yerleştirmeyi Kaydet'e basın."
                     } else {
                         busy = false
                         status = if (okCount > 0)
@@ -474,7 +475,29 @@ private fun putAwayPairKey(line: JSONObject): String {
         rawValue(line, "itemNo"),
         rawValue(line, "variantCode"),
         rawValue(line, "unitOfMeasureCode"),
+        rawValue(line, "lotNo"),
+        rawValue(line, "serialNo"),
+        rawValue(line, "lpNo"),
     ).joinToString("|")
+}
+
+/**
+ * Standart BC bütün açık satırlarda Qty. to Handle bırakabilir. Register öncesi
+ * yalnız operatörün doğruladığı Take/Place çiftleri pozitif kalmalı, diğerleri
+ * sıfırlanmalıdır; aksi halde tek okutma tüm belgeyi kapatır.
+ */
+internal fun putAwayRegisterQuantityPlan(
+    lines: List<JSONObject>,
+    stagedLineNos: Set<Int>,
+): Map<Int, Double> {
+    val stagedQtyByPair = mutableMapOf<String, Double>()
+    lines.filter { it.optInt("lineNo") in stagedLineNos }.forEach { line ->
+        val qty = line.optDouble("qtyToHandle", 0.0)
+        if (qty > 0) stagedQtyByPair[putAwayPairKey(line)] = qty
+    }
+    return lines.associate { line ->
+        line.optInt("lineNo") to (stagedQtyByPair[putAwayPairKey(line)] ?: 0.0)
+    }
 }
 
 private fun putAwayPairLines(seed: JSONObject, lines: List<JSONObject>): List<JSONObject> {

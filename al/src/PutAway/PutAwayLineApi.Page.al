@@ -39,6 +39,8 @@ page 72228 "DOPSWHS PutAway Line API"
                 field(qtyOutstanding; Rec."Qty. Outstanding") { Caption = 'qtyOutstanding'; Editable = false; }
                 field(qtyToHandle; Rec."Qty. to Handle") { Caption = 'qtyToHandle'; }
                 field(qtyHandled; Rec."Qty. Handled") { Caption = 'qtyHandled'; Editable = false; }
+                field(lotNo; Rec."Lot No.") { Caption = 'lotNo'; Editable = false; }
+                field(serialNo; Rec."Serial No.") { Caption = 'serialNo'; Editable = false; }
                 field(lpNo; Rec."LP No.") { Caption = 'lpNo'; }
                 field(targetLpNo; Rec."Target LP No.") { Caption = 'targetLpNo'; Editable = false; }
             }
