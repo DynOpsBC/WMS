@@ -82,8 +82,8 @@ android {
     create("emu") {
       dimension = "tenant"
       applicationIdSuffix = ".emu"
-      versionCode = releaseVersionCodeOverride ?: 200061
-      versionName = releaseVersionNameOverride ?: "1.14.61"
+      versionCode = releaseVersionCodeOverride ?: 200062
+      versionName = releaseVersionNameOverride ?: "1.14.62"
       versionNameSuffix = "-emu"
       manifestPlaceholders["appLabel"] = "BCWMS EMU"
       buildConfigField("String", "BC_CLIENT_ID", "\"9f9a9965-f358-4b0b-a89e-923f1d8b7a04\"")
@@ -102,7 +102,7 @@ android {
       buildConfigField(
         "String",
         "UPDATE_MANIFEST_URL",
-        "\"https://raw.githubusercontent.com/DynOpsBC/WMS/main/releases/android/emu/latest.json\"",
+        "\"https://github.com/DynOpsBC/WMS/releases/download/android-emu-channel/latest.json\"",
       )
     }
   }

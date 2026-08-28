@@ -7,6 +7,20 @@ Kurulum: [docs/android-install-guide.md](../../docs/android-install-guide.md)
 
 ---
 
+## v1.14.62-emu — 2026-08-28
+
+**APK:** `BCWMS-EMU-1.14.62-RELEASE.apk`
+
+**versionCode:** 200062
+
+**SHA-256:** `6a4c3dac1469548fc4873405a0240848208e72f897989e23ffb82a146b96966c`
+
+### EMU güncelleme bağlantısı
+
+- Güncelleme manifesti, bazı telefon ağlarında erişilemeyen `raw.githubusercontent.com` yerine sabit GitHub release kanalından okunur.
+- Bu sürüm bir kez elle kurulduktan sonra sonraki EMU güncellemeleri uygulama içinden alınabilir.
+- Pick ekranında kullanılmayacak lot satırı `0` miktarla onaylanabilir.
+
 ## v1.14.61-bade — 2026-08-28
 
 **APK:** `BCWMS-BADE-1.14.61-RELEASE.apk`
