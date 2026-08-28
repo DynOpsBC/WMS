@@ -1,7 +1,7 @@
 {
-  "versionCode": 200060,
-  "versionName": "1.14.60-emu",
-  "apkUrl": "https://github.com/DynOpsBC/WMS/releases/download/android-emu-v1.14.60/BCWMS-EMU-1.14.60-RELEASE.apk",
-  "sha256": "ae8d70ff08c4755895cafabe8b6abff26f30f715de53ea8ee16a2e7ccaa56de0",
-  "releaseNotes": "DKÇ/EMU sevkiyat toplamada kullanılmayacak bir lot satırı artık 0 miktarla onaylanabilir. Boş, negatif ve geçersiz miktarlar engellenmeye devam eder."
+  "versionCode": 200061,
+  "versionName": "1.14.61-emu",
+  "apkUrl": "https://github.com/DynOpsBC/WMS/releases/download/android-emu-v1.14.61/BCWMS-EMU-1.14.61-RELEASE.apk",
+  "sha256": "edaeea173cf7c9e739ea73194e5f4d180ac2e7cb16d8e72f8f4f474552a0714b",
+  "releaseNotes": "DKÇ/EMU sevkiyat toplamada kullanılmayacak bir lot satırı artık 0 miktarla onaylanabilir. Bu sürüm, 1.14.60 kurulumlarında güncelleme bildiriminin görünmesi için daha yüksek sürüm koduyla yayımlandı."
 }

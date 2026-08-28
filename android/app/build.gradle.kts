@@ -82,6 +82,8 @@ android {
     create("emu") {
       dimension = "tenant"
       applicationIdSuffix = ".emu"
+      versionCode = releaseVersionCodeOverride ?: 200061
+      versionName = releaseVersionNameOverride ?: "1.14.61"
       versionNameSuffix = "-emu"
       manifestPlaceholders["appLabel"] = "BCWMS EMU"
       buildConfigField("String", "BC_CLIENT_ID", "\"9f9a9965-f358-4b0b-a89e-923f1d8b7a04\"")
