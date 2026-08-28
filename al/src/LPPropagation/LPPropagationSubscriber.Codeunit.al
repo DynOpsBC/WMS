@@ -138,6 +138,176 @@ codeunit 72428 "DOPSWHS LP Propagation"
             until PostedLine.Next() = 0;
     end;
 
+    /// <summary>
+    /// Copies the receipt LP to the exact Item Ledger Entries created by warehouse receipt
+    /// posting. BC records that exact link in Whse. Item Entry Relation; using it avoids
+    /// guessing by item/lot when a receipt contains repeated lines.
+    /// </summary>
+    procedure StampPostedReceiptLedgerEntries(PostedReceiptNo: Code[20]; DefaultLpNo: Code[20])
+    var
+        PostedLine: Record "Posted Whse. Receipt Line";
+        WhseItemEntryRelation: Record "Whse. Item Entry Relation";
+        ItemLedgerEntry: Record "Item Ledger Entry";
+        LineLpNo: Code[20];
+    begin
+        if PostedReceiptNo = '' then
+            exit;
+
+        PostedLine.SetRange("No.", PostedReceiptNo);
+        if not PostedLine.FindSet() then
+            exit;
+        repeat
+            LineLpNo := PostedLine."LP No.";
+            if LineLpNo = '' then
+                LineLpNo := DefaultLpNo;
+            if LineLpNo <> '' then begin
+                StampPostedReceiptWarehouseEntries(PostedLine, LineLpNo);
+                WhseItemEntryRelation.Reset();
+                WhseItemEntryRelation.SetSourceFilter(
+                    Database::"Posted Whse. Receipt Line", 0,
+                    PostedLine."No.", PostedLine."Line No.", true);
+                if WhseItemEntryRelation.FindSet() then
+                    repeat
+                        if ItemLedgerEntry.Get(WhseItemEntryRelation."Item Entry No.") then
+                            StampItemLedgerEntry(ItemLedgerEntry, LineLpNo);
+                    until WhseItemEntryRelation.Next() = 0;
+            end;
+        until PostedLine.Next() = 0;
+    end;
+
+    /// <summary>
+    /// Repairs an older Item Ledger Entry whose LP was not propagated during posting.
+    /// First uses BC's exact warehouse/item relation; for legacy rows without that relation,
+    /// it accepts only an unambiguous posted receipt match.
+    /// </summary>
+    procedure BackfillItemLedgerEntryLp(var ItemLedgerEntry: Record "Item Ledger Entry"): Boolean
+    var
+        LpNo: Code[20];
+    begin
+        if ItemLedgerEntry."DOPSWHS LP No." <> '' then
+            exit(true);
+
+        LpNo := ResolvePostedReceiptLpForItemEntry(ItemLedgerEntry);
+        if LpNo = '' then
+            exit(false);
+
+        StampItemLedgerEntry(ItemLedgerEntry, LpNo);
+        StampRelatedReceiptWarehouseEntries(ItemLedgerEntry, LpNo);
+        exit(ItemLedgerEntry."DOPSWHS LP No." <> '');
+    end;
+
+    local procedure StampPostedReceiptWarehouseEntries(PostedLine: Record "Posted Whse. Receipt Line"; LpNo: Code[20])
+    var
+        WarehouseEntry: Record "Warehouse Entry";
+    begin
+        WarehouseEntry.SetRange("Whse. Document Type", WarehouseEntry."Whse. Document Type"::Receipt);
+        WarehouseEntry.SetRange("Whse. Document No.", PostedLine."No.");
+        WarehouseEntry.SetRange("Whse. Document Line No.", PostedLine."Line No.");
+        WarehouseEntry.SetRange("Item No.", PostedLine."Item No.");
+        WarehouseEntry.SetRange("Serial No.", PostedLine."Serial No.");
+        WarehouseEntry.SetRange("Lot No.", PostedLine."Lot No.");
+        WarehouseEntry.SetRange("DOPSWHS LP No.", '');
+        if WarehouseEntry.FindSet(true) then
+            repeat
+                WarehouseEntry."DOPSWHS LP No." := LpNo;
+                WarehouseEntry.Modify();
+            until WarehouseEntry.Next() = 0;
+    end;
+
+    local procedure StampRelatedReceiptWarehouseEntries(ItemLedgerEntry: Record "Item Ledger Entry"; LpNo: Code[20])
+    var
+        WhseItemEntryRelation: Record "Whse. Item Entry Relation";
+        PostedLine: Record "Posted Whse. Receipt Line";
+    begin
+        if WhseItemEntryRelation.Get(ItemLedgerEntry."Entry No.") then
+            if WhseItemEntryRelation."Source Type" = Database::"Posted Whse. Receipt Line" then
+                if PostedLine.Get(
+                     WhseItemEntryRelation."Source ID",
+                     WhseItemEntryRelation."Source Ref. No.")
+                then begin
+                    StampPostedReceiptWarehouseEntries(PostedLine, LpNo);
+                    exit;
+                end;
+
+        PostedLine.SetRange("Posted Source No.", ItemLedgerEntry."Document No.");
+        PostedLine.SetRange("Item No.", ItemLedgerEntry."Item No.");
+        PostedLine.SetRange("Location Code", ItemLedgerEntry."Location Code");
+        PostedLine.SetTrackingFilterFromItemLedgEntry(ItemLedgerEntry);
+        if PostedLine.FindSet() then
+            repeat
+                if (PostedLine."LP No." = LpNo) or (PostedLine."LP No." = '') then
+                    StampPostedReceiptWarehouseEntries(PostedLine, LpNo);
+            until PostedLine.Next() = 0;
+    end;
+
+    local procedure StampItemLedgerEntry(var ItemLedgerEntry: Record "Item Ledger Entry"; LpNo: Code[20])
+    var
+        ValueEntry: Record "Value Entry";
+    begin
+        if (LpNo = '') or (ItemLedgerEntry."DOPSWHS LP No." <> '') then
+            exit;
+
+        ItemLedgerEntry."DOPSWHS LP No." := LpNo;
+        ItemLedgerEntry.Modify();
+
+        ValueEntry.SetRange("Item Ledger Entry No.", ItemLedgerEntry."Entry No.");
+        ValueEntry.SetRange("DOPSWHS LP No.", '');
+        if ValueEntry.FindSet(true) then
+            repeat
+                ValueEntry."DOPSWHS LP No." := LpNo;
+                ValueEntry.Modify();
+            until ValueEntry.Next() = 0;
+    end;
+
+    local procedure ResolvePostedReceiptLpForItemEntry(ItemLedgerEntry: Record "Item Ledger Entry"): Code[20]
+    var
+        WhseItemEntryRelation: Record "Whse. Item Entry Relation";
+        PostedLine: Record "Posted Whse. Receipt Line";
+        PostedHeader: Record "Posted Whse. Receipt Header";
+        CandidateLpNo: Code[20];
+        LineLpNo: Code[20];
+    begin
+        // Preferred path: BC's exact relation from the ledger entry to the posted
+        // warehouse receipt line.
+        if WhseItemEntryRelation.Get(ItemLedgerEntry."Entry No.") then
+            if WhseItemEntryRelation."Source Type" = Database::"Posted Whse. Receipt Line" then
+                if PostedLine.Get(
+                     WhseItemEntryRelation."Source ID",
+                     WhseItemEntryRelation."Source Ref. No.")
+                then begin
+                    LineLpNo := PostedLine."LP No.";
+                    if (LineLpNo = '') and PostedHeader.Get(PostedLine."No.") then
+                        LineLpNo := PostedHeader."DOPSWHS LP No.";
+                    if LineLpNo <> '' then
+                        exit(LineLpNo);
+                end;
+
+        // Legacy fallback: posted purchase receipt number + item + location +
+        // tracking must resolve to one LP only. Ambiguous matches are not written.
+        if ItemLedgerEntry."Document No." = '' then
+            exit('');
+        PostedLine.Reset();
+        PostedLine.SetRange("Posted Source No.", ItemLedgerEntry."Document No.");
+        PostedLine.SetRange("Item No.", ItemLedgerEntry."Item No.");
+        PostedLine.SetRange("Location Code", ItemLedgerEntry."Location Code");
+        PostedLine.SetTrackingFilterFromItemLedgEntry(ItemLedgerEntry);
+        if not PostedLine.FindSet() then
+            exit('');
+        repeat
+            LineLpNo := PostedLine."LP No.";
+            if (LineLpNo = '') and PostedHeader.Get(PostedLine."No.") then
+                LineLpNo := PostedHeader."DOPSWHS LP No.";
+            if LineLpNo <> '' then begin
+                if CandidateLpNo = '' then
+                    CandidateLpNo := LineLpNo
+                else
+                    if CandidateLpNo <> LineLpNo then
+                        exit('');
+            end;
+        until PostedLine.Next() = 0;
+        exit(CandidateLpNo);
+    end;
+
     // =========================================================================
     // (2) BC integration event subscribers
     // =========================================================================

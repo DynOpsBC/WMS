@@ -21,4 +21,42 @@ pageextension 72313 "DOPSWHS Item Ledger Entries" extends "Item Ledger Entries"
             }
         }
     }
+
+    actions
+    {
+        addlast(Processing)
+        {
+            action("DOPSWHS Refresh LP No.")
+            {
+                ApplicationArea = All;
+                Caption = 'LP Bilgisini Yenile';
+                ToolTip = 'Seçili madde defteri girişlerinin LP bilgisini deftere nakledilmiş ambar alış kayıtlarından yeniden getirir.';
+                Image = RefreshLines;
+                Promoted = true;
+                PromotedCategory = Process;
+
+                trigger OnAction()
+                var
+                    SelectedItemLedgerEntry: Record "Item Ledger Entry";
+                    LpPropagation: Codeunit "DOPSWHS LP Propagation";
+                    UpdatedCount: Integer;
+                    NotFoundCount: Integer;
+                begin
+                    CurrPage.SetSelectionFilter(SelectedItemLedgerEntry);
+                    if SelectedItemLedgerEntry.FindSet(true) then
+                        repeat
+                            if LpPropagation.BackfillItemLedgerEntryLp(SelectedItemLedgerEntry) then
+                                UpdatedCount += 1
+                            else
+                                NotFoundCount += 1;
+                        until SelectedItemLedgerEntry.Next() = 0;
+
+                    CurrPage.Update(false);
+                    Message(
+                        '%1 kayıt için LP bilgisi doğrulandı/güncellendi. %2 kayıt için ilişkili LP bulunamadı.',
+                        UpdatedCount, NotFoundCount);
+                end;
+            }
+        }
+    }
 }

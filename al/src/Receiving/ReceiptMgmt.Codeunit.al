@@ -115,6 +115,11 @@ codeunit 72043 "DOPSWHS Receipt Mgmt"
         end;
         LpPropagation.StampPostedReceiptHeader(ReceiptNo, PostedNo);
         LpPropagation.StampPostedReceiptLines(ReceiptNo, PostedNo);
+        // The Item Jnl. event runs before the working warehouse receipt is fully
+        // traceable and can miss the LP. At this point BC has created its exact
+        // Posted Whse. Receipt Line -> Item Ledger Entry relations, so persist it
+        // deterministically onto Item/Value Ledger Entries.
+        LpPropagation.StampPostedReceiptLedgerEntries(PostedNo, LpNo);
 
         // Standard BC normally creates this activity while posting. Validate
         // the result and retry through the official posted-receipt API when a
