@@ -464,20 +464,31 @@ codeunit 72043 "DOPSWHS Receipt Mgmt"
         if PostedReceiptLine.Get(PostedReceiptNo, WhseActivityLine."Whse. Document Line No.") then
             if (PostedReceiptLine."LP No." <> '') and
                (PostedReceiptLine."Item No." = WhseActivityLine."Item No.") and
-               (PostedReceiptLine."Variant Code" = WhseActivityLine."Variant Code") and
-               (PostedReceiptLine."Lot No." = WhseActivityLine."Lot No.") and
-               (PostedReceiptLine."Serial No." = WhseActivityLine."Serial No.")
+               (PostedReceiptLine."Variant Code" = WhseActivityLine."Variant Code")
             then
                 exit(PostedReceiptLine."LP No.");
 
         // Tenant customizations can renumber activity document lines. Fall back
         // to the tracking identity, but only when it resolves to one physical LP.
+        CandidateLpNo := ResolveUniquePostedReceiptLp(PostedReceiptNo, WhseActivityLine, true);
+        if CandidateLpNo <> '' then
+            exit(CandidateLpNo);
+        exit(ResolveUniquePostedReceiptLp(PostedReceiptNo, WhseActivityLine, false));
+    end;
+
+    local procedure ResolveUniquePostedReceiptLp(PostedReceiptNo: Code[20]; WhseActivityLine: Record "Warehouse Activity Line"; MatchTracking: Boolean): Code[20]
+    var
+        PostedReceiptLine: Record "Posted Whse. Receipt Line";
+        CandidateLpNo: Code[20];
+    begin
         PostedReceiptLine.Reset();
         PostedReceiptLine.SetRange("No.", PostedReceiptNo);
         PostedReceiptLine.SetRange("Item No.", WhseActivityLine."Item No.");
         PostedReceiptLine.SetRange("Variant Code", WhseActivityLine."Variant Code");
-        PostedReceiptLine.SetRange("Lot No.", WhseActivityLine."Lot No.");
-        PostedReceiptLine.SetRange("Serial No.", WhseActivityLine."Serial No.");
+        if MatchTracking then begin
+            PostedReceiptLine.SetRange("Lot No.", WhseActivityLine."Lot No.");
+            PostedReceiptLine.SetRange("Serial No.", WhseActivityLine."Serial No.");
+        end;
         PostedReceiptLine.SetFilter("LP No.", '<>%1', '');
         if PostedReceiptLine.FindSet() then
             repeat

@@ -203,12 +203,25 @@ codeunit 72428 "DOPSWHS LP Propagation"
         if LpNo <> '' then
             exit(LpNo);
 
-        // Some tenants renumber posted receipt lines. Product + variant + tracking
-        // identity is a safe fallback only when every matching source row belongs
-        // to the same LP; ResolveReceiptLpNo deliberately rejects ambiguity.
-        exit(ResolveReceiptLpNo(
+        // Posted Whse. Receipt Line may not carry lot/serial even though the
+        // resulting Warehouse Entry does. Source line + product is still safe
+        // when every matching source LP row belongs to one physical LP.
+        LpNo := ResolveUniqueReceiptLp(
+            WhseReceiptNo, ReceiptLineNo, PostedLine."Item No.", PostedLine."Variant Code",
+            PostedLine."Lot No.", PostedLine."Serial No.", false);
+        if LpNo <> '' then
+            exit(LpNo);
+
+        // Some tenants also renumber posted receipt lines. Retry without the
+        // source-line filter, first with and then without tracking identity.
+        LpNo := ResolveReceiptLpNo(
             WhseReceiptNo, 0, PostedLine."Item No.", PostedLine."Variant Code",
-            PostedLine."Lot No.", PostedLine."Serial No."));
+            PostedLine."Lot No.", PostedLine."Serial No.");
+        if LpNo <> '' then
+            exit(LpNo);
+        exit(ResolveUniqueReceiptLp(
+            WhseReceiptNo, 0, PostedLine."Item No.", PostedLine."Variant Code",
+            PostedLine."Lot No.", PostedLine."Serial No.", false));
     end;
 
     /// <summary>
@@ -216,6 +229,13 @@ codeunit 72428 "DOPSWHS LP Propagation"
     /// If more than one LP matches the same identity, the result is intentionally blank.
     /// </summary>
     procedure ResolveReceiptLpNo(WhseReceiptNo: Code[20]; WhseReceiptLineNo: Integer; ItemNo: Code[20]; VariantCode: Code[10]; LotNo: Code[50]; SerialNo: Code[50]): Code[20]
+    begin
+        exit(ResolveUniqueReceiptLp(
+            WhseReceiptNo, WhseReceiptLineNo, ItemNo, VariantCode,
+            LotNo, SerialNo, true));
+    end;
+
+    local procedure ResolveUniqueReceiptLp(WhseReceiptNo: Code[20]; WhseReceiptLineNo: Integer; ItemNo: Code[20]; VariantCode: Code[10]; LotNo: Code[50]; SerialNo: Code[50]; MatchTracking: Boolean): Code[20]
     var
         LPLine: Record "DOPSWHS LP Line";
         CandidateLpNo: Code[20];
@@ -228,8 +248,10 @@ codeunit 72428 "DOPSWHS LP Propagation"
             LPLine.SetRange("Source Document Line No.", WhseReceiptLineNo);
         LPLine.SetRange("Item No.", ItemNo);
         LPLine.SetRange("Variant Code", VariantCode);
-        LPLine.SetRange("Lot No.", LotNo);
-        LPLine.SetRange("Serial No.", SerialNo);
+        if MatchTracking then begin
+            LPLine.SetRange("Lot No.", LotNo);
+            LPLine.SetRange("Serial No.", SerialNo);
+        end;
         LPLine.SetFilter(Quantity, '>0');
         if LPLine.FindSet() then
             repeat
@@ -300,8 +322,9 @@ codeunit 72428 "DOPSWHS LP Propagation"
         WarehouseEntry.SetRange("Whse. Document No.", PostedLine."No.");
         WarehouseEntry.SetRange("Whse. Document Line No.", PostedLine."Line No.");
         WarehouseEntry.SetRange("Item No.", PostedLine."Item No.");
-        WarehouseEntry.SetRange("Serial No.", PostedLine."Serial No.");
-        WarehouseEntry.SetRange("Lot No.", PostedLine."Lot No.");
+        // Posted receipt lines can have blank tracking while Warehouse Entry
+        // carries the real lot/serial. The posted line already resolved to one
+        // LP, so document line + item is the authoritative safe relation.
         if WarehouseEntry.FindSet(true) then
             repeat
                 if WarehouseEntry."DOPSWHS LP No." <> LpNo then begin

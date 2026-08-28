@@ -61,8 +61,10 @@ codeunit 72034 "DOPSWHS Upgrade"
             MigrateSupplierLotToDescription();
         if ModuleInfo.DataVersion() < Version.Create(1, 14, 0, 54) then
             RepairReceiptLpBins();
-        if ModuleInfo.DataVersion() < Version.Create(1, 14, 0, 78) then
+        if ModuleInfo.DataVersion() < Version.Create(1, 14, 0, 83) then begin
             RepairReceiptLpAssignments();
+            RepairReceiptLpCurrentBins();
+        end;
         AppProfileMgmt.SeedDefaults();          // seed DEFAULT app profile + install-user profile
         AppRoleSeed.Seed();                     // seed system roles + starter filter rules
         SetupWizard.SeedReportSelections();     // repair legacy empty/wrong document print routes
@@ -99,6 +101,66 @@ codeunit 72034 "DOPSWHS Upgrade"
             LpPropagation.StampPostedReceiptHeader(WhseReceiptNo, PostedReceiptNo);
             LpPropagation.StampPostedReceiptLedgerEntries(PostedReceiptNo, '');
         end;
+    end;
+
+    /// <summary>
+    /// After receipt/put-away entry LP fields are repaired, derive each physical
+    /// LP's current bin from the net warehouse-entry balance. Source receipt bins
+    /// net to zero after put-away; exactly one positive bin is therefore safe.
+    /// </summary>
+    local procedure RepairReceiptLpCurrentBins()
+    var
+        LP: Record "DOPSWHS LP Header";
+        LPLine: Record "DOPSWHS LP Line";
+        ProcessedLps: Dictionary of [Code[20], Boolean];
+        CurrentBinCode: Code[20];
+    begin
+        LPLine.SetRange("Source Document Type", LPLine."Source Document Type"::WhseReceipt);
+        LPLine.SetFilter(Quantity, '>0');
+        if LPLine.FindSet() then
+            repeat
+                if not ProcessedLps.ContainsKey(LPLine."LP No.") then begin
+                    ProcessedLps.Add(LPLine."LP No.", true);
+                    LP.Get(LPLine."LP No.");
+                    CurrentBinCode := ResolveWarehouseLpCurrentBin(LP."No.");
+                    if (CurrentBinCode <> '') and (LP."Bin Code" <> CurrentBinCode) then begin
+                        LP.Validate("Bin Code", CurrentBinCode);
+                        LP.Modify(true);
+                    end;
+                end;
+            until LPLine.Next() = 0;
+    end;
+
+    local procedure ResolveWarehouseLpCurrentBin(LpNo: Code[20]): Code[20]
+    var
+        WarehouseEntry: Record "Warehouse Entry";
+        QuantityByBin: Dictionary of [Code[20], Decimal];
+        ExistingQuantity: Decimal;
+        BinCode: Code[20];
+        CandidateBinCode: Code[20];
+    begin
+        WarehouseEntry.SetRange("DOPSWHS LP No.", LpNo);
+        WarehouseEntry.SetFilter("Bin Code", '<>%1', '');
+        if WarehouseEntry.FindSet() then
+            repeat
+                Clear(ExistingQuantity);
+                if QuantityByBin.Get(WarehouseEntry."Bin Code", ExistingQuantity) then
+                    QuantityByBin.Set(
+                        WarehouseEntry."Bin Code",
+                        ExistingQuantity + WarehouseEntry."Qty. (Base)")
+                else
+                    QuantityByBin.Add(WarehouseEntry."Bin Code", WarehouseEntry."Qty. (Base)");
+            until WarehouseEntry.Next() = 0;
+
+        foreach BinCode in QuantityByBin.Keys do begin
+            QuantityByBin.Get(BinCode, ExistingQuantity);
+            if ExistingQuantity > 0.00001 then begin
+                if CandidateBinCode <> '' then
+                    exit('');
+                CandidateBinCode := BinCode;
+            end;
+        end;
+        exit(CandidateBinCode);
     end;
 
     /// <summary>
