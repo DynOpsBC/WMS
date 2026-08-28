@@ -62,7 +62,7 @@ object WhsePickNavigation {
 enum class Screen(val title: String) {
     Home("Ana Menü"),
     Connection("Bağlantı Ayarları"),
-    LicensePlates("LP (Taşıma Kabı)"),
+    LicensePlates("Palet / LP"),
     ItemInquiry("Ürün Sorgu"),
     BinInquiry("Bin Sorgu"),
     WhseEntries("Ambar Hareketleri"),
@@ -295,7 +295,7 @@ private val HomeCategories = listOf(
         HomeTile(Screen.Shipping, WmsGlyph.SHIPPING, "Sevkiyat", "Belgeyi tamamla ve çıkışı kaydet"),
     )),
     HomeCategory("İç Operasyon", Color(0xFF2D9CDB), listOf(
-        HomeTile(Screen.LicensePlates, WmsGlyph.LICENSE_PLATE, "LP", "Palet ve taşıma kabı işlemleri"),
+        HomeTile(Screen.LicensePlates, WmsGlyph.LICENSE_PLATE, "Palet / LP", "Palet ve taşıma kabı işlemleri"),
         HomeTile(Screen.AdHocMove, WmsGlyph.AD_HOC, "Ad-Hoc Hareket", "Belgesiz raf veya LP hareketi"),
         HomeTile(Screen.DirectedMove, WmsGlyph.DIRECTED_MOVE, "Yönlendirilmiş", "Hazırlanmış taşıma emrini uygula"),
         HomeTile(Screen.Count, WmsGlyph.COUNT, "Sayım", "Hazır sayım belgesini tamamla"),

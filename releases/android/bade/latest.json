@@ -1,0 +1,7 @@
+{
+  "versionCode": 200063,
+  "versionName": "1.14.63-bade",
+  "apkUrl": "https://github.com/DynOpsBC/WMS/releases/download/android-v1.14.63/BCWMS-BADE-1.14.63-RELEASE.apk",
+  "sha256": "6daae310a5bc68e2694967f9ee238e2db47feea6781fd8456729a11cde90b512",
+  "releaseNotes": "BADE ve EMU artık aynı ortak sürümden yayınlanır. Ana menüde palet işlemleri Palet / LP adıyla açıkça gösterilir; çoklu LP/lot ve pick 0 miktar desteği korunur."
+}

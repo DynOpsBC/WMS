@@ -7,6 +7,20 @@ Kurulum: [docs/android-install-guide.md](../../docs/android-install-guide.md)
 
 ---
 
+## v1.14.63 — BADE + EMU — 2026-08-28
+
+**versionCode:** 200063 · **BC paketi:** 1.14.0.78
+
+**BADE SHA-256:** `6daae310a5bc68e2694967f9ee238e2db47feea6781fd8456729a11cde90b512`
+
+**EMU SHA-256:** `1b2408f966f3934cf5e465b28eb2c28676ab2b888cd5f17a416559d62877b49f`
+
+### Tek sürüm, iki müşteri paketi
+
+- BADE ve EMU aynı kaynak koddan, aynı sürüm numarasıyla birlikte üretilir.
+- Ana menüdeki `LP` adı `Palet / LP` olarak netleştirildi; ekran iki pakette de aynıdır.
+- Her müşteri kendi güvenli güncelleme kanalını kullanır, ancak iki kanal aynı yayında birlikte ilerletilir.
+
 ## v1.14.62-emu — 2026-08-28
 
 **APK:** `BCWMS-EMU-1.14.62-RELEASE.apk`

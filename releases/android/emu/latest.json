@@ -1,7 +1,7 @@
 {
-  "versionCode": 200062,
-  "versionName": "1.14.62-emu",
-  "apkUrl": "https://github.com/DynOpsBC/WMS/releases/download/android-emu-v1.14.62/BCWMS-EMU-1.14.62-RELEASE.apk",
-  "sha256": "6a4c3dac1469548fc4873405a0240848208e72f897989e23ffb82a146b96966c",
-  "releaseNotes": "EMU güncelleme kontrolü, bazı telefon ağlarında erişilemeyen raw.githubusercontent.com yerine GitHub release kanalını kullanır. Pick ekranında kullanılmayacak lot 0 miktarla onaylanabilir."
+  "versionCode": 200063,
+  "versionName": "1.14.63-emu",
+  "apkUrl": "https://github.com/DynOpsBC/WMS/releases/download/android-v1.14.63/BCWMS-EMU-1.14.63-RELEASE.apk",
+  "sha256": "1b2408f966f3934cf5e465b28eb2c28676ab2b888cd5f17a416559d62877b49f",
+  "releaseNotes": "BADE ve EMU artık aynı ortak sürümden yayınlanır. Ana menüde palet işlemleri Palet / LP adıyla açıkça gösterilir; pick ekranında 0 miktar desteği korunur."
 }

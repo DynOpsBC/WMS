@@ -1,0 +1,104 @@
+name: Android Customer Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Shared BADE/EMU version (for example 1.14.64)"
+        required: true
+        type: string
+      version_code:
+        description: "Shared monotonically increasing Android versionCode"
+        required: true
+        type: number
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: "platform-tools platforms;android-35 build-tools;35.0.0"
+
+      - name: Validate version inputs
+        env:
+          RELEASE_VERSION: ${{ inputs.version }}
+          RELEASE_VERSION_CODE: ${{ inputs.version_code }}
+        run: |
+          [[ "$RELEASE_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          [[ "$RELEASE_VERSION_CODE" =~ ^[0-9]+$ ]]
+
+      - name: Inject Android signing key
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+        run: |
+          test -n "$ANDROID_KEYSTORE_BASE64"
+          mkdir -p android/play/keystore
+          printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 -d > android/play/keystore/upload-keystore.jks
+          {
+            echo "storeFile=play/keystore/upload-keystore.jks"
+            echo "storePassword=$KEYSTORE_PASSWORD"
+            echo "keyAlias=$KEY_ALIAS"
+            echo "keyPassword=$KEY_PASSWORD"
+          } > android/play/keystore/keystore.properties
+
+      - name: Test and build BADE + EMU together
+        working-directory: android
+        env:
+          RELEASE_VERSION: ${{ inputs.version }}
+          RELEASE_VERSION_CODE: ${{ inputs.version_code }}
+        run: |
+          ./gradlew \
+            :app:testBadeDebugUnitTest :app:testEmuDebugUnitTest \
+            :app:assembleBadeRelease :app:assembleEmuRelease \
+            -PreleaseVersionCode="$RELEASE_VERSION_CODE" \
+            -PreleaseVersionName="$RELEASE_VERSION"
+
+      - name: Prepare both packages and manifests
+        env:
+          RELEASE_VERSION: ${{ inputs.version }}
+          RELEASE_VERSION_CODE: ${{ inputs.version_code }}
+          REPO: ${{ github.repository }}
+        run: |
+          mkdir -p dist/bade dist/emu
+          cp android/app/build/outputs/apk/bade/release/app-bade-release.apk "dist/BCWMS-BADE-${RELEASE_VERSION}-RELEASE.apk"
+          cp android/app/build/outputs/apk/emu/release/app-emu-release.apk "dist/BCWMS-EMU-${RELEASE_VERSION}-RELEASE.apk"
+          BADE_SHA=$(sha256sum "dist/BCWMS-BADE-${RELEASE_VERSION}-RELEASE.apk" | awk '{print $1}')
+          EMU_SHA=$(sha256sum "dist/BCWMS-EMU-${RELEASE_VERSION}-RELEASE.apk" | awk '{print $1}')
+          TAG="android-v${RELEASE_VERSION}"
+          jq -n --argjson vc "$RELEASE_VERSION_CODE" --arg vn "${RELEASE_VERSION}-bade" --arg repo "$REPO" --arg tag "$TAG" --arg sha "$BADE_SHA" '{versionCode:$vc,versionName:$vn,apkUrl:("https://github.com/"+$repo+"/releases/download/"+$tag+"/BCWMS-BADE-"+($vn|sub("-bade$";""))+"-RELEASE.apk"),sha256:$sha,releaseNotes:"BADE ve EMU ortak müşteri sürümü."}' > dist/bade/latest.json
+          jq -n --argjson vc "$RELEASE_VERSION_CODE" --arg vn "${RELEASE_VERSION}-emu" --arg repo "$REPO" --arg tag "$TAG" --arg sha "$EMU_SHA" '{versionCode:$vc,versionName:$vn,apkUrl:("https://github.com/"+$repo+"/releases/download/"+$tag+"/BCWMS-EMU-"+($vn|sub("-emu$";""))+"-RELEASE.apk"),sha256:$sha,releaseNotes:"BADE ve EMU ortak müşteri sürümü."}' > dist/emu/latest.json
+          cp dist/emu/latest.json dist/latest-emu.json
+
+      - name: Publish one shared GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: android-v${{ inputs.version }}
+          name: BCWMS Android v${{ inputs.version }} — BADE + EMU
+          make_latest: true
+          generate_release_notes: true
+          files: |
+            dist/BCWMS-BADE-${{ inputs.version }}-RELEASE.apk
+            dist/BCWMS-EMU-${{ inputs.version }}-RELEASE.apk
+            dist/bade/latest.json
+            dist/latest-emu.json
+
+      - name: Advance both stable update channels
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release view android-bade-channel >/dev/null 2>&1 || gh release create android-bade-channel --title "BCWMS BADE Update Channel" --notes "Stable BADE update manifest." --prerelease --target main
+          gh release view android-emu-channel >/dev/null 2>&1 || gh release create android-emu-channel --title "BCWMS EMU Update Channel" --notes "Stable EMU update manifest." --prerelease --target main
+          gh release upload android-bade-channel dist/bade/latest.json --clobber
+          gh release upload android-emu-channel dist/emu/latest.json --clobber

@@ -5,6 +5,10 @@ import java.io.FileInputStream
 // olarak verir. Lokal/emülatör derlemeleri aşağıdaki kaynak sürümünü kullanır.
 val releaseVersionCodeOverride = providers.gradleProperty("releaseVersionCode").orNull?.toIntOrNull()
 val releaseVersionNameOverride = providers.gradleProperty("releaseVersionName").orNull?.takeIf { it.isNotBlank() }
+// BADE ve EMU aynı kaynak koddan aynı anda yayınlanır. Müşteri flavor'larında
+// ayrı sürüm değeri tutmak bir paketin geride kalmasına neden oluyordu.
+val customerVersionCode = releaseVersionCodeOverride ?: 200063
+val customerVersionName = releaseVersionNameOverride ?: "1.14.63"
 
 plugins {
   alias(libs.plugins.android.application)
@@ -62,8 +66,8 @@ android {
     create("bade") {
       dimension = "tenant"
       applicationIdSuffix = ".bade"
-      versionCode = releaseVersionCodeOverride ?: 200061
-      versionName = releaseVersionNameOverride ?: "1.14.61"
+      versionCode = customerVersionCode
+      versionName = customerVersionName
       versionNameSuffix = "-bade"
       manifestPlaceholders["appLabel"] = "BCWMS BADE"
       buildConfigField("String", "BC_CLIENT_ID", "\"3c4ba25a-89f4-41df-acf8-ebab8cb4809b\"")
@@ -78,12 +82,17 @@ android {
       buildConfigField("String", "TENANT_LABEL", "\"Bade Natural\"")
       buildConfigField("String", "LOGIN_EMAIL_HINT", "\"dynops@badenatural.com\"")
       buildConfigField("String", "LOGIN_DEFAULT_EMAIL", "\"dynops@badenatural.com\"")
+      buildConfigField(
+        "String",
+        "UPDATE_MANIFEST_URL",
+        "\"https://github.com/DynOpsBC/WMS/releases/download/android-bade-channel/latest.json\"",
+      )
     }
     create("emu") {
       dimension = "tenant"
       applicationIdSuffix = ".emu"
-      versionCode = releaseVersionCodeOverride ?: 200062
-      versionName = releaseVersionNameOverride ?: "1.14.62"
+      versionCode = customerVersionCode
+      versionName = customerVersionName
       versionNameSuffix = "-emu"
       manifestPlaceholders["appLabel"] = "BCWMS EMU"
       buildConfigField("String", "BC_CLIENT_ID", "\"9f9a9965-f358-4b0b-a89e-923f1d8b7a04\"")
