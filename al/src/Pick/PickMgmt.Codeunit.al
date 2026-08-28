@@ -300,16 +300,52 @@ codeunit 72046 "DOPSWHS Pick Mgmt"
         PickLine.Validate("Lot No.", LotNo);
         PickLine.Modify(true);
 
-        // Warehouse Activity Line'ın standart Validate tetikleyicileri yalnız
-        // bu Take satırının gerçek Place eşini günceller. Aynı sevkiyat satırı
-        // için başka raftan oluşturulmuş Take satırlarına elle yaymak farklı
-        // lotları birbirinin üzerine yazıyordu. Sevkiyat özet alanını da açık
-        // Take satırlarının tamamına bakarak yalnız tek lot varsa doldur.
+        // Qty. to Handle doğrulaması Take satırını değiştirir ancak BC'nin
+        // standart tablosu eş Place satırını otomatik güncellemez. Kısmi
+        // toplamada Take=250, Place=300 kalırsa kayıt stoktan 250 düşüp sevkiyat
+        // gözüne 300 koyarak 50 birim hayali stok üretir. Aynı kaynak+lot
+        // çiftindeki Place satırını kesin olarak aynı miktara getir.
+        SyncRelatedPlaceLine(PickLine);
+
+        // Sevkiyat özet alanını açık Take satırlarının tamamına bakarak yalnız
+        // tek lot varsa doldur.
         UpdateShipmentLineLotSummary(PickLine);
 
         // Satır onayı sahadaki EN SIK işlem; "bu satırı kim okuttu" sorusu
         // ancak burada kayıt altına alınırsa cevaplanabiliyor.
         Log('Pick.ConfirmLine', PickLine."No.", EffectiveOperator(PickLine."No.", RequestingUserId));
+    end;
+
+    local procedure SyncRelatedPlaceLine(PickLine: Record "Warehouse Activity Line")
+    var
+        RelatedPlaceLine: Record "Warehouse Activity Line";
+    begin
+        if PickLine."Action Type" <> PickLine."Action Type"::Take then
+            exit;
+
+        RelatedPlaceLine.SetRange("Activity Type", PickLine."Activity Type");
+        RelatedPlaceLine.SetRange("No.", PickLine."No.");
+        RelatedPlaceLine.SetRange("Action Type", RelatedPlaceLine."Action Type"::Place);
+        RelatedPlaceLine.SetRange("Whse. Document Type", PickLine."Whse. Document Type");
+        RelatedPlaceLine.SetRange("Whse. Document No.", PickLine."Whse. Document No.");
+        RelatedPlaceLine.SetRange("Whse. Document Line No.", PickLine."Whse. Document Line No.");
+        RelatedPlaceLine.SetRange("Source Type", PickLine."Source Type");
+        RelatedPlaceLine.SetRange("Source Subtype", PickLine."Source Subtype");
+        RelatedPlaceLine.SetRange("Source No.", PickLine."Source No.");
+        RelatedPlaceLine.SetRange("Source Line No.", PickLine."Source Line No.");
+        RelatedPlaceLine.SetRange("Source Subline No.", PickLine."Source Subline No.");
+        RelatedPlaceLine.SetRange("Item No.", PickLine."Item No.");
+        RelatedPlaceLine.SetRange("Variant Code", PickLine."Variant Code");
+        RelatedPlaceLine.SetRange("Unit of Measure Code", PickLine."Unit of Measure Code");
+        RelatedPlaceLine.SetRange("Breakbulk No.", PickLine."Breakbulk No.");
+        RelatedPlaceLine.SetTrackingFilterFromWhseActivityLine(PickLine);
+        if not RelatedPlaceLine.FindFirst() then
+            Error(
+                '%1 toplamasındaki %2 lotlu %3 ürünü için eş sevkiyat gözü satırı bulunamadı. Pick kaydedilmedi; belgeyi yenileyip tekrar deneyin.',
+                PickLine."No.", PickLine."Lot No.", PickLine."Item No.");
+
+        RelatedPlaceLine.Validate("Qty. to Handle", PickLine."Qty. to Handle");
+        RelatedPlaceLine.Modify(true);
     end;
 
     local procedure UpdateShipmentLineLotSummary(PickLine: Record "Warehouse Activity Line")
@@ -464,6 +500,7 @@ codeunit 72046 "DOPSWHS Pick Mgmt"
         // Kaydeden operatör: belge sahibi (CheckOwnership hemen üstte doğruladı).
         Log('Pick.Register', Pick."No.", EffectiveOperator(Pick."No.", RequestingUserId));
         EnsurePickHasBins(Pick);
+        EnsureTakeAndPlaceQuantitiesBalanced(Pick);
         if Pick."DOPSWHS Pick Mode" = Pick."DOPSWHS Pick Mode"::Multi then
             EnsureAllMultiPickLinesScanned(Pick);
 
@@ -495,6 +532,33 @@ codeunit 72046 "DOPSWHS Pick Mgmt"
                     PickingHeader.Modify(true);
                 until PickingHeader.Next() = 0;
         end;
+    end;
+
+    local procedure EnsureTakeAndPlaceQuantitiesBalanced(Pick: Record "Warehouse Activity Header")
+    var
+        TakeLine: Record "Warehouse Activity Line";
+        PlaceLine: Record "Warehouse Activity Line";
+        TakeQtyBase: Decimal;
+        PlaceQtyBase: Decimal;
+    begin
+        TakeLine.SetRange("Activity Type", Pick.Type);
+        TakeLine.SetRange("No.", Pick."No.");
+        TakeLine.SetRange("Action Type", TakeLine."Action Type"::Take);
+        TakeLine.CalcSums("Qty. to Handle (Base)");
+        TakeQtyBase := TakeLine."Qty. to Handle (Base)";
+
+        PlaceLine.SetRange("Activity Type", Pick.Type);
+        PlaceLine.SetRange("No.", Pick."No.");
+        PlaceLine.SetRange("Action Type", PlaceLine."Action Type"::Place);
+        if PlaceLine.IsEmpty() then
+            exit;
+        PlaceLine.CalcSums("Qty. to Handle (Base)");
+        PlaceQtyBase := PlaceLine."Qty. to Handle (Base)";
+
+        if TakeQtyBase <> PlaceQtyBase then
+            Error(
+                '%1 toplamasında alınan miktar (%2) ile sevkiyat gözüne bırakılan miktar (%3) eşit değil. Stok bozulmaması için kayıt durduruldu; satırları yenileyip miktarı tekrar onaylayın.',
+                Pick."No.", TakeQtyBase, PlaceQtyBase);
     end;
 
     local procedure EnsurePickLineHasBin(PickLine: Record "Warehouse Activity Line"; QtyToHandle: Decimal)
