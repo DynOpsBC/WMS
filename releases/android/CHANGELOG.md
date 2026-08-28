@@ -7,6 +7,21 @@ Kurulum: [docs/android-install-guide.md](../../docs/android-install-guide.md)
 
 ---
 
+## v1.14.67 — BADE + EMU — 2026-08-28
+
+**versionCode:** 200067 · **BC paketi:** 1.14.0.85
+
+**BADE SHA-256:** `4984b94e99aa0d09dc0022e2b7b6d39c5eb2b1588847fd1a15ba6e856c160d1c`
+
+**EMU SHA-256:** `c6c93308b3126811e43dc7f9714d32a0f5c492dfbce771f1b9dd59cf185e916f`
+
+### LP bazlı yerleştirme
+
+- Toplu mal kabulde tek 1.000'lik yerleştirme yerine, kaynak LP dağıtımına göre her palet için ayrı Take/Place çifti oluşturulur.
+- Yerleştirme kartlarında LP numarası görünür ve LP etiketi okutularak doğru fiziksel palet doğrudan seçilebilir.
+- Her LP kendi miktarıyla ayrı rafa yerleştirilebilir; kayıt sonrası LP başlığı ve ambar hareketi hedef rafla güncellenir.
+- Toplu kabulün tek Madde Defter Girişi birden fazla LP içerdiği için LP alanı boş kalabilir; gerçek LP ayrımı yerleştirme ve LP hareketlerinde korunur.
+
 ## v1.14.66 — BADE + EMU — 2026-08-28
 
 **versionCode:** 200066 · **BC paketi:** 1.14.0.81

@@ -114,8 +114,10 @@ codeunit 72043 "DOPSWHS Receipt Mgmt"
         // tenant customization suppresses the first attempt. Never report a
         // successful LP receipt while its required put-away is missing.
         PutAwayNo := EnsurePutAwayCreated(PostedNo, LocationCode, AssignedUserId);
-        if PutAwayNo <> '' then
+        if PutAwayNo <> '' then begin
+            SplitPutAwayByReceiptLPs(ReceiptNo, PostedNo);
             StampPutAwayWithLP(PostedNo);
+        end;
 
         if PrintReport then begin
             ClearLastError();
@@ -453,6 +455,158 @@ codeunit 72043 "DOPSWHS Receipt Mgmt"
                     WhseActivityLine.Modify(true);
                 end;
             until WhseActivityLine.Next() = 0;
+    end;
+
+    /// <summary>
+    /// Standard BC creates one aggregated put-away pair for a posted receipt line. A bulk
+    /// receipt may represent many physical LPs on that same line, so split the Take/Place
+    /// pair into one pair per LP before the operator sees the document.
+    /// </summary>
+    procedure SplitPutAwayByReceiptLPs(ReceiptNo: Code[20]; PostedReceiptNo: Code[20])
+    var
+        PlaceLine: Record "Warehouse Activity Line";
+        PlaceLineNos: List of [Integer];
+        PlaceLineNo: Integer;
+    begin
+        PlaceLine.SetRange("Activity Type", PlaceLine."Activity Type"::"Put-away");
+        PlaceLine.SetRange("Whse. Document Type", PlaceLine."Whse. Document Type"::Receipt);
+        PlaceLine.SetRange("Whse. Document No.", PostedReceiptNo);
+        PlaceLine.SetRange("Action Type", PlaceLine."Action Type"::Place);
+        PlaceLine.SetRange("Breakbulk No.", 0);
+        if PlaceLine.FindSet() then
+            repeat
+                PlaceLineNos.Add(PlaceLine."Line No.");
+            until PlaceLine.Next() = 0;
+
+        foreach PlaceLineNo in PlaceLineNos do begin
+            PlaceLine.Reset();
+            if PlaceLine.Get(PlaceLine."Activity Type"::"Put-away", FindPutAwayNo(PostedReceiptNo), PlaceLineNo) then
+                if PlaceLine."LP No." = '' then
+                    SplitOnePutAwayPairByReceiptLPs(ReceiptNo, PostedReceiptNo, PlaceLine);
+        end;
+    end;
+
+    local procedure SplitOnePutAwayPairByReceiptLPs(ReceiptNo: Code[20]; PostedReceiptNo: Code[20]; var PlaceLine: Record "Warehouse Activity Line")
+    var
+        PostedReceiptLine: Record "Posted Whse. Receipt Line";
+        SourceLPLine: Record "DOPSWHS LP Line";
+        TakeLine: Record "Warehouse Activity Line";
+        OriginalPlaceLine: Record "Warehouse Activity Line";
+        OriginalTakeLine: Record "Warehouse Activity Line";
+        NewLine: Record "Warehouse Activity Line";
+        LPQuantities: Dictionary of [Code[20], Decimal];
+        LpNo: Code[20];
+        ExistingQty: Decimal;
+        LpQty: Decimal;
+        TotalLpQty: Decimal;
+        FirstLp: Boolean;
+        HasTakeLine: Boolean;
+        ReceiptLineNo: Integer;
+    begin
+        // Historical repair must not reshape a pallet that an operator has
+        // already started placing. New documents always enter with zero handled.
+        if PlaceLine."Qty. Handled" <> 0 then
+            exit;
+        if not PostedReceiptLine.Get(PostedReceiptNo, PlaceLine."Whse. Document Line No.") then
+            exit;
+
+        ReceiptLineNo := PostedReceiptLine."Whse Receipt Line No.";
+        if ReceiptLineNo = 0 then
+            ReceiptLineNo := PostedReceiptLine."Line No.";
+
+        SourceLPLine.SetRange("Source Document Type", SourceLPLine."Source Document Type"::WhseReceipt);
+        SourceLPLine.SetRange("Source Document No.", ReceiptNo);
+        SourceLPLine.SetRange("Source Document Line No.", ReceiptLineNo);
+        SourceLPLine.SetRange("Item No.", PlaceLine."Item No.");
+        SourceLPLine.SetRange("Variant Code", PlaceLine."Variant Code");
+        SourceLPLine.SetRange("Lot No.", PlaceLine."Lot No.");
+        SourceLPLine.SetRange("Serial No.", PlaceLine."Serial No.");
+        SourceLPLine.SetFilter(Quantity, '>0');
+        if SourceLPLine.FindSet() then
+            repeat
+                if (SourceLPLine."Unit of Measure" = '') or
+                   (SourceLPLine."Unit of Measure" = PlaceLine."Unit of Measure Code")
+                then begin
+                    if LPQuantities.Get(SourceLPLine."LP No.", ExistingQty) then
+                        LPQuantities.Set(SourceLPLine."LP No.", ExistingQty + SourceLPLine.Quantity)
+                    else
+                        LPQuantities.Add(SourceLPLine."LP No.", SourceLPLine.Quantity);
+                    TotalLpQty += SourceLPLine.Quantity;
+                end;
+            until SourceLPLine.Next() = 0;
+
+        if LPQuantities.Count() = 0 then
+            exit;
+        if Abs(TotalLpQty - PlaceLine.Quantity) > 0.00001 then
+            Error(
+                '%1 ürünü, lot %2 için LP toplamı (%3) yerleştirme miktarına (%4) eşit değil. İşlem geri alındı.',
+                PlaceLine."Item No.", PlaceLine."Lot No.", TotalLpQty, PlaceLine.Quantity);
+
+        FindRelatedPutAwayTakeLine(PlaceLine, TakeLine, HasTakeLine);
+        OriginalPlaceLine := PlaceLine;
+        if HasTakeLine then
+            OriginalTakeLine := TakeLine;
+
+        FirstLp := true;
+        foreach LpNo in LPQuantities.Keys do begin
+            LPQuantities.Get(LpNo, LpQty);
+            if FirstLp then begin
+                ApplyPutAwayLpQuantity(PlaceLine, LpNo, LpQty);
+                PlaceLine.Modify(true);
+                if HasTakeLine then begin
+                    ApplyPutAwayLpQuantity(TakeLine, LpNo, LpQty);
+                    TakeLine.Modify(true);
+                end;
+                FirstLp := false;
+            end else begin
+                InsertPutAwayLpLine(OriginalPlaceLine, LpNo, LpQty, NewLine);
+                if HasTakeLine then
+                    InsertPutAwayLpLine(OriginalTakeLine, LpNo, LpQty, NewLine);
+            end;
+        end;
+    end;
+
+    local procedure FindRelatedPutAwayTakeLine(PlaceLine: Record "Warehouse Activity Line"; var TakeLine: Record "Warehouse Activity Line"; var Found: Boolean)
+    begin
+        Clear(Found);
+        TakeLine.SetRange("Activity Type", PlaceLine."Activity Type");
+        TakeLine.SetRange("No.", PlaceLine."No.");
+        TakeLine.SetRange("Action Type", TakeLine."Action Type"::Take);
+        TakeLine.SetRange("Whse. Document Type", PlaceLine."Whse. Document Type");
+        TakeLine.SetRange("Whse. Document No.", PlaceLine."Whse. Document No.");
+        TakeLine.SetRange("Whse. Document Line No.", PlaceLine."Whse. Document Line No.");
+        TakeLine.SetRange("Item No.", PlaceLine."Item No.");
+        TakeLine.SetRange("Variant Code", PlaceLine."Variant Code");
+        TakeLine.SetRange("Lot No.", PlaceLine."Lot No.");
+        TakeLine.SetRange("Serial No.", PlaceLine."Serial No.");
+        TakeLine.SetRange("Breakbulk No.", PlaceLine."Breakbulk No.");
+        Found := TakeLine.FindFirst();
+    end;
+
+    local procedure ApplyPutAwayLpQuantity(var ActivityLine: Record "Warehouse Activity Line"; LpNo: Code[20]; Quantity: Decimal)
+    begin
+        ActivityLine.Validate(Quantity, Quantity);
+        ActivityLine."LP No." := LpNo;
+    end;
+
+    local procedure InsertPutAwayLpLine(TemplateLine: Record "Warehouse Activity Line"; LpNo: Code[20]; Quantity: Decimal; var NewLine: Record "Warehouse Activity Line")
+    begin
+        NewLine.Init();
+        NewLine.TransferFields(TemplateLine, false);
+        NewLine."Line No." := NextPutAwayLineNo(TemplateLine."Activity Type", TemplateLine."No.");
+        ApplyPutAwayLpQuantity(NewLine, LpNo, Quantity);
+        NewLine.Insert(true);
+    end;
+
+    local procedure NextPutAwayLineNo(ActivityType: Enum "Warehouse Activity Type"; ActivityNo: Code[20]): Integer
+    var
+        ActivityLine: Record "Warehouse Activity Line";
+    begin
+        ActivityLine.SetRange("Activity Type", ActivityType);
+        ActivityLine.SetRange("No.", ActivityNo);
+        if ActivityLine.FindLast() then
+            exit(ActivityLine."Line No." + 10000);
+        exit(10000);
     end;
 
     local procedure ResolvePutAwayLineLp(PostedReceiptNo: Code[20]; WhseActivityLine: Record "Warehouse Activity Line"): Code[20]

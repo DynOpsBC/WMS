@@ -1,7 +1,7 @@
 {
-  "versionCode": 200066,
-  "versionName": "1.14.66-bade",
-  "apkUrl": "https://github.com/DynOpsBC/WMS/releases/download/android-v1.14.66/BCWMS-BADE-1.14.66-RELEASE.apk",
-  "sha256": "9f193533fba9a17b6b24f9a2bad2f1ba41fdff25bec8d4db065077e3bd81e484",
-  "releaseNotes": "Mal kabul miktarı tek işlemde birden fazla LP'ye dağıtılabilir. Eşit dağıtım, son LP'ye kalan miktar, düzenlenebilir LP listesi, farklı lot grupları ve toplu etiket baskısı desteklenir."
+  "versionCode": 200067,
+  "versionName": "1.14.67-bade",
+  "apkUrl": "https://github.com/DynOpsBC/WMS/releases/download/android-v1.14.67/BCWMS-BADE-1.14.67-RELEASE.apk",
+  "sha256": "4984b94e99aa0d09dc0022e2b7b6d39c5eb2b1588847fd1a15ba6e856c160d1c",
+  "releaseNotes": "Toplu mal kabulde oluşan her LP, yerleştirmede kendi miktarıyla ayrı palet hareketi olarak gösterilir. LP etiketi okutularak doğru palet seçilir ve her LP ayrı rafa yerleştirilebilir."
 }

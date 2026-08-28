@@ -7,6 +7,8 @@ codeunit 72034 "DOPSWHS Upgrade"
         tabledata "DOPSWHS LP Line" = r,
         tabledata "Warehouse Receipt Line" = r,
         tabledata "Posted Whse. Receipt Line" = rm,
+        tabledata "Posted Whse. Receipt Header" = r,
+        tabledata "Warehouse Activity Line" = r,
         tabledata "Warehouse Entry" = rm,
         tabledata "Item Ledger Entry" = rm,
         tabledata "Value Entry" = rm;
@@ -65,6 +67,8 @@ codeunit 72034 "DOPSWHS Upgrade"
             RepairReceiptLpAssignments();
             RepairReceiptLpCurrentBins();
         end;
+        if ModuleInfo.DataVersion() < Version.Create(1, 14, 0, 85) then
+            RepairOpenPutAwaysByReceiptLps();
         AppProfileMgmt.SeedDefaults();          // seed DEFAULT app profile + install-user profile
         AppRoleSeed.Seed();                     // seed system roles + starter filter rules
         SetupWizard.SeedReportSelections();     // repair legacy empty/wrong document print routes
@@ -72,6 +76,48 @@ codeunit 72034 "DOPSWHS Upgrade"
         ScheduleLicenseVerify();                // seed/refresh the hourly /verify job
         PrintCleanup.ScheduleCleanupJob();      // seed daily print payload retention cleanup
         AzurePrintWorker.ScheduleWorkerJob();  // instant tasks use this as durable fallback/status pump
+    end;
+
+    /// <summary>
+    /// v1.14.0.84 and earlier created one aggregated put-away movement even when
+    /// the receipt had been distributed over several physical LPs. Reshape only
+    /// still-open, untouched receipt put-aways; failures are isolated per document
+    /// so one manually changed legacy activity cannot block the app upgrade.
+    /// </summary>
+    local procedure RepairOpenPutAwaysByReceiptLps()
+    var
+        ActivityLine: Record "Warehouse Activity Line";
+        PostedReceiptHeader: Record "Posted Whse. Receipt Header";
+        PostedReceipts: Dictionary of [Code[20], Boolean];
+        PostedReceiptNo: Code[20];
+    begin
+        ActivityLine.SetRange("Activity Type", ActivityLine."Activity Type"::"Put-away");
+        ActivityLine.SetRange("Whse. Document Type", ActivityLine."Whse. Document Type"::Receipt);
+        ActivityLine.SetRange("Action Type", ActivityLine."Action Type"::Place);
+        ActivityLine.SetRange("Qty. Handled", 0);
+        ActivityLine.SetRange("LP No.", '');
+        if ActivityLine.FindSet() then
+            repeat
+                if (ActivityLine."Whse. Document No." <> '') and
+                   (not PostedReceipts.ContainsKey(ActivityLine."Whse. Document No."))
+                then
+                    PostedReceipts.Add(ActivityLine."Whse. Document No.", true);
+            until ActivityLine.Next() = 0;
+
+        foreach PostedReceiptNo in PostedReceipts.Keys do
+            if PostedReceiptHeader.Get(PostedReceiptNo) then
+                if PostedReceiptHeader."Whse. Receipt No." <> '' then
+                    TrySplitOpenPutAway(
+                        PostedReceiptHeader."Whse. Receipt No.",
+                        PostedReceiptHeader."No.");
+    end;
+
+    [TryFunction]
+    local procedure TrySplitOpenPutAway(ReceiptNo: Code[20]; PostedReceiptNo: Code[20])
+    var
+        ReceiptMgmt: Codeunit "DOPSWHS Receipt Mgmt";
+    begin
+        ReceiptMgmt.SplitPutAwayByReceiptLPs(ReceiptNo, PostedReceiptNo);
     end;
 
     /// <summary>

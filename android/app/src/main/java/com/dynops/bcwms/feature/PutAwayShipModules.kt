@@ -18,6 +18,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.dynops.bcwms.BcApi
 import com.dynops.bcwms.scanner.BarcodeIntentResolver
+import com.dynops.bcwms.scanner.BarcodeKind
 import com.dynops.bcwms.scanner.ScanField
 import com.dynops.bcwms.ui.*
 import kotlinx.coroutines.delay
@@ -327,11 +328,29 @@ private fun PutAwayDocument(no: String, onBack: () -> Unit) {
     DocumentScanHandler(
         enabled = canMutate && guidedPair == null && !showBulkBin && !busy,
         lines = lines,
+        matchKeys = listOf("lpNo", "itemNo", "itemReference"),
         onSingleMatch = { line, _ -> scanFilter = ""; guidedPair = groupPutAwayPairs(putAwayPairLines(line, lines)).firstOrNull() },
-        onMultiMatch = { itemNo, _ -> scanFilter = itemNo; status = "TAMAM: '$itemNo' için birden fazla satır — birini seçin" },
+        onMultiMatch = { value, resolved ->
+            if (resolved.kind == BarcodeKind.Lp) {
+                val lpLine = lines.firstOrNull { it.optString("lpNo").equals(resolved.value, ignoreCase = true) }
+                if (lpLine != null) {
+                    scanFilter = ""
+                    guidedPair = groupPutAwayPairs(putAwayPairLines(lpLine, lines)).firstOrNull()
+                } else status = "⚠️ '${resolved.value}' bu yerleştirmede yok"
+            } else {
+                scanFilter = value
+                status = "TAMAM: '$value' için birden fazla satır — birini seçin"
+            }
+        },
         onNoMatch = { r -> status = "⚠️ '${r.itemNo ?: r.value}' bu belgede yok" },
     )
-    val displayLines = if (scanFilter.isBlank()) lines else lines.filter { matchLinesByBarcode(listOf(it), com.dynops.bcwms.scanner.BarcodeIntentResolver.resolve(scanFilter)).isNotEmpty() }
+    val displayLines = if (scanFilter.isBlank()) lines else lines.filter {
+        matchLinesByBarcode(
+            listOf(it),
+            com.dynops.bcwms.scanner.BarcodeIntentResolver.resolve(scanFilter),
+            listOf("lpNo", "itemNo", "itemReference"),
+        ).isNotEmpty()
+    }
     Column(Modifier.fillMaxSize()) {
         Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(12.dp)) {
             TextButton(onClick = onBack) { Text("‹ Belge Listesi") }
@@ -544,6 +563,7 @@ private fun PutAwayPairCard(pair: PutAwayPair, staged: Boolean, onClick: () -> U
     val done = staged || lineDone(place, LineModule.PUTAWAY)
     val sourceBin = pair.take?.optString("binCode")?.ifBlank { null } ?: "-"
     val targetBin = place.optString("binCode").ifBlank { "" }
+    val lpNo = place.optString("lpNo").trim()
     val toHandle = place.optDouble("qtyToHandle", 0.0)
     val outstanding = place.optDouble("qtyOutstanding", place.optDouble("quantity", 0.0))
     val uom = firstValue(place, "unitOfMeasureCode")
@@ -569,6 +589,8 @@ private fun PutAwayPairCard(pair: PutAwayPair, staged: Boolean, onClick: () -> U
                 "Miktar: ${fmtNum(if (toHandle > 0) toHandle else outstanding)} · Kalan: ${fmtNum(outstanding)} $uom".trim(),
                 fontSize = 12.sp, color = Color.Gray,
             )
+            if (lpNo.isNotBlank())
+                Text("LP: $lpNo", fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = Color(0xFF4F46E5))
         }
     }
 }
@@ -602,7 +624,7 @@ internal fun decidePutAwayTarget(
 }
 
 /** Bottom sheet: scan/enter target bin (with "Öner" = suggestBin) + qty. */
-private enum class PutAwayStep { SOURCE_BIN, ITEM, TARGET_BIN, QTY }
+private enum class PutAwayStep { LP, SOURCE_BIN, ITEM, TARGET_BIN, QTY }
 
 /**
  * Yönlendirilmiş yerleştirme: kaynak raf → ürün → hedef raf → miktar.
@@ -629,8 +651,10 @@ private fun PutAwayGuidedSheet(
     val expectedSource = pair.take?.optString("binCode").orEmpty().trim()
     val expectedTarget = place.optString("binCode").trim()
     val expectedItem = place.optString("itemNo").trim()
+    val expectedLp = place.optString("lpNo").trim()
 
     val steps = buildList {
+        if (expectedLp.isNotBlank()) add(PutAwayStep.LP)
         if (expectedSource.isNotBlank()) add(PutAwayStep.SOURCE_BIN)
         add(PutAwayStep.ITEM)
         add(PutAwayStep.TARGET_BIN)
@@ -666,6 +690,12 @@ private fun PutAwayGuidedSheet(
         return needle.isNotBlank() && needle.equals(expectedItem, ignoreCase = true)
     }
 
+    fun lpMatches(raw: String): Boolean {
+        val resolved = BarcodeIntentResolver.resolve(raw)
+        val needle = resolved.value.trim().ifBlank { raw.trim() }
+        return needle.equals(expectedLp, ignoreCase = true)
+    }
+
     suspend fun targetBinExists(binCode: String): Boolean? {
         val safeLocation = odataLiteral(locationCode)
         val safeBin = odataLiteral(binCode)
@@ -691,6 +721,9 @@ private fun PutAwayGuidedSheet(
         val v = raw.trim()
         if (v.isBlank()) return
         when (step) {
+            PutAwayStep.LP ->
+                if (lpMatches(v)) advance()
+                else error = "❌ Yanlış LP. Beklenen: $expectedLp · Okuttuğunuz: $v"
             PutAwayStep.SOURCE_BIN ->
                 if (binEquals(v, expectedSource)) advance()
                 else error = "❌ Yanlış raf. Beklenen: $expectedSource · Okuttuğunuz: $v"
@@ -757,16 +790,20 @@ private fun PutAwayGuidedSheet(
             Spacer(Modifier.height(14.dp))
 
             when (step) {
+                PutAwayStep.LP -> {
+                    Text("Palet/LP etiketini okutun", fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
+                    Text("Doğru fiziksel paleti yerleştirdiğinizi teyit eder. Beklenen: $expectedLp", fontSize = 12.sp, color = Color.Gray)
+                }
                 PutAwayStep.SOURCE_BIN -> {
-                    Text("1) Bulunduğunuz rafı okutun", fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
+                    Text("Bulunduğunuz rafı okutun", fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
                     Text("Doğru raftan aldığınızı teyit eder. Beklenen: $expectedSource", fontSize = 12.sp, color = Color.Gray)
                 }
                 PutAwayStep.ITEM -> {
-                    Text("2) Ürünü okutun", fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
+                    Text("Ürünü okutun", fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
                     Text("Doğru ürünü aldığınızı teyit eder. Beklenen: $expectedItem", fontSize = 12.sp, color = Color.Gray)
                 }
                 PutAwayStep.TARGET_BIN -> {
-                    Text("3) Koyacağınız rafı okutun", fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
+                    Text("Koyacağınız rafı okutun", fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
                     Text(
                         if (expectedTarget.isNotBlank())
                             "Önerilen: $expectedTarget · Aynı lokasyondaki başka bir rafı da seçebilirsiniz."
@@ -776,7 +813,7 @@ private fun PutAwayGuidedSheet(
                     )
                 }
                 PutAwayStep.QTY -> {
-                    Text("4) Miktarı onaylayın", fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
+                    Text("Miktarı onaylayın", fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
                     Text(
                         buildString {
                             append("Hedef raf: $targetBin")
@@ -799,7 +836,11 @@ private fun PutAwayGuidedSheet(
                 )
             } else {
                 ScanField(
-                    label = if (step == PutAwayStep.ITEM) "Ürün okut" else "Raf okut",
+                    label = when (step) {
+                        PutAwayStep.LP -> "LP okut"
+                        PutAwayStep.ITEM -> "Ürün okut"
+                        else -> "Raf okut"
+                    },
                     value = scan,
                     onValueChange = { scan = it },
                     modifier = Modifier.fillMaxWidth(),

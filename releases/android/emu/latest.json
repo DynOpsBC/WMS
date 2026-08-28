@@ -1,7 +1,7 @@
 {
-  "versionCode": 200066,
-  "versionName": "1.14.66-emu",
-  "apkUrl": "https://github.com/DynOpsBC/WMS/releases/download/android-v1.14.66/BCWMS-EMU-1.14.66-RELEASE.apk",
-  "sha256": "232cf3a8d42f1ce82ab5b24d362104e55327a26ca79f6a489d7c745d70742fd5",
-  "releaseNotes": "Mal kabul miktarı tek işlemde birden fazla LP'ye dağıtılabilir. Eşit dağıtım, son LP'ye kalan miktar, düzenlenebilir LP listesi, farklı lot grupları ve toplu etiket baskısı desteklenir; EMU Kutu ve Palet ekranı korunur."
+  "versionCode": 200067,
+  "versionName": "1.14.67-emu",
+  "apkUrl": "https://github.com/DynOpsBC/WMS/releases/download/android-v1.14.67/BCWMS-EMU-1.14.67-RELEASE.apk",
+  "sha256": "c6c93308b3126811e43dc7f9714d32a0f5c492dfbce771f1b9dd59cf185e916f",
+  "releaseNotes": "Toplu mal kabulde oluşan her LP, yerleştirmede kendi miktarıyla ayrı palet hareketi olarak gösterilir. LP etiketi okutularak doğru palet seçilir ve her LP ayrı rafa yerleştirilebilir; EMU Kutu ve Palet ekranı korunur."
 }
