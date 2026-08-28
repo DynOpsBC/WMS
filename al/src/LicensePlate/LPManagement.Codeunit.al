@@ -8,7 +8,10 @@ codeunit 72040 "DOPSWHS LP Management"
         tabledata Location = R,
         tabledata Bin = R,
         tabledata "Bin Content" = R,
-        tabledata "Warehouse Entry" = R;
+        tabledata "Warehouse Entry" = R,
+        tabledata "DOPSWHS LP Header" = RM,
+        tabledata "DOPSWHS LP Line" = RMD,
+        tabledata "DOPSWHS LP Movement Ledger" = I;
 
     procedure Build(TemplateCode: Code[20]; LocationCode: Code[10]; BinCode: Code[20]; var LP: Record "DOPSWHS LP Header")
     var
@@ -422,6 +425,76 @@ codeunit 72040 "DOPSWHS LP Management"
                 Unbuild(LP);
         end;
         OnAfterSplitForPartialUse(LP);
+    end;
+
+    /// <summary>
+    /// Reduces one exact LP line after a posted direct sales shipment. The quantity received
+    /// from the item ledger is always in the item's base unit; the LP line may use another UOM.
+    /// </summary>
+    procedure ConsumeLineForPostedSale(LpNo: Code[20]; LineNo: Integer; BaseQty: Decimal; PostedShipmentNo: Code[20])
+    var
+        LP: Record "DOPSWHS LP Header";
+        LPLine: Record "DOPSWHS LP Line";
+        RemainingLPLine: Record "DOPSWHS LP Line";
+        Item: Record Item;
+        ItemUoM: Record "Item Unit of Measure";
+        QtyPerUoM: Decimal;
+        QtyInLineUoM: Decimal;
+        RemainingQty: Decimal;
+        ItemNo: Code[20];
+        LotSerial: Code[50];
+    begin
+        if BaseQty <= 0 then
+            Error('LP kullanım miktarı sıfırdan büyük olmalıdır.');
+
+        LPLine.LockTable();
+        LP.Get(LpNo);
+        if not (LP.Status in [LP.Status::Open, LP.Status::Built, LP.Status::Assigned]) then
+            Error('%1 LP numarası satışta kullanılamaz. Güncel durum: %2.', LpNo, LP.Status);
+        LPLine.Get(LpNo, LineNo);
+
+        Item.Get(LPLine."Item No.");
+        QtyPerUoM := 1;
+        if (LPLine."Unit of Measure" <> '') and
+           (LPLine."Unit of Measure" <> Item."Base Unit of Measure")
+        then begin
+            if not ItemUoM.Get(LPLine."Item No.", LPLine."Unit of Measure") then
+                Error('%1 maddesinin %2 ölçü birimi bulunamadı.', LPLine."Item No.", LPLine."Unit of Measure");
+            QtyPerUoM := ItemUoM."Qty. per Unit of Measure";
+            if QtyPerUoM <= 0 then
+                Error('%1 maddesinin %2 ölçü birimi dönüşümü geçersizdir.', LPLine."Item No.", LPLine."Unit of Measure");
+        end;
+
+        QtyInLineUoM := Round(BaseQty / QtyPerUoM, 0.00001);
+        if QtyInLineUoM > (LPLine.Quantity + 0.00001) then
+            Error(
+                '%1 LP satırında yeterli miktar yoktur. Mevcut: %2 %3, sevk edilen: %4 %3.',
+                LpNo, LPLine.Quantity, LPLine."Unit of Measure", QtyInLineUoM);
+
+        ItemNo := LPLine."Item No.";
+        LotSerial := CopyStr(LPLine."Lot No." + LPLine."Serial No.", 1, MaxStrLen(LotSerial));
+        RemainingQty := Round(LPLine.Quantity - QtyInLineUoM, 0.00001);
+        if Abs(RemainingQty) < 0.00001 then
+            RemainingQty := 0;
+
+        if RemainingQty = 0 then
+            LPLine.Delete(true)
+        else begin
+            LPLine.Validate(Quantity, RemainingQty);
+            LPLine.Modify(true);
+        end;
+
+        WriteToLedger(
+            LP, LPActionItemRemoved(), LP."Bin Code", '', QtyInLineUoM,
+            ItemNo, LotSerial, CopyStr(PostedShipmentNo, 1, 40));
+
+        RemainingLPLine.SetRange("LP No.", LpNo);
+        if RemainingLPLine.IsEmpty() then begin
+            LP.Status := LP.Status::Used;
+            Clear(LP."Assigned Document Type");
+            LP."Assigned Document No." := '';
+            LP.Modify(true);
+        end;
     end;
 
     procedure WriteToLedger(var LP: Record "DOPSWHS LP Header"; Action: Enum "DOPSWHS LP Action"; FromBin: Code[20]; ToBin: Code[20]; Quantity: Decimal; ItemNo: Code[20]; LotSerial: Code[50]; RelatedDocument: Code[40])

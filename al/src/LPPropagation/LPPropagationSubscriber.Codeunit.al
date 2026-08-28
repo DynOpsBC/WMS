@@ -432,12 +432,24 @@ codeunit 72428 "DOPSWHS LP Propagation"
     /// Line onto each Posted Sales Shipment Line. Posted line carries
     /// (Order No., Order Line No.) which lets us trace back to Whse Shipment Line.</summary>
     [EventSubscriber(ObjectType::Codeunit, Codeunit::"Sales-Post", 'OnAfterPostSalesDoc', '', false, false)]
-    local procedure CarryLpOntoPostedSalesShipment(var SalesHeader: Record "Sales Header"; SalesShptHdrNo: Code[20])
+    local procedure CarryLpOntoPostedSalesShipment(
+        var SalesHeader: Record "Sales Header";
+        var GenJnlPostLine: Codeunit "Gen. Jnl.-Post Line";
+        SalesShptHdrNo: Code[20];
+        RetRcpHdrNo: Code[20];
+        SalesInvHdrNo: Code[20];
+        SalesCrMemoHdrNo: Code[20];
+        CommitIsSuppressed: Boolean;
+        InvtPickPutaway: Boolean;
+        var CustLedgerEntry: Record "Cust. Ledger Entry";
+        WhseShip: Boolean;
+        WhseReceiv: Boolean;
+        PreviewMode: Boolean)
     var
         PostedShptLine: Record "Sales Shipment Line";
         WhseShptLine: Record "Warehouse Shipment Line";
     begin
-        if SalesShptHdrNo = '' then
+        if (SalesShptHdrNo = '') or PreviewMode then
             exit;
         PostedShptLine.SetRange("Document No.", SalesShptHdrNo);
         if not PostedShptLine.FindSet(true) then
@@ -456,6 +468,122 @@ codeunit 72428 "DOPSWHS LP Propagation"
                 end;
             end;
         until PostedShptLine.Next() = 0;
+
+    end;
+
+    /// <summary>
+    /// Runs before Sales-Post commits so the inventory posting and LP reduction are atomic.
+    /// An ambiguous LP therefore stops the shipment without leaving inventory and LP out of sync.
+    /// </summary>
+    [EventSubscriber(ObjectType::Codeunit, Codeunit::"Sales-Post", 'OnAfterFinalizePostingOnBeforeCommit', '', false, false)]
+    local procedure ReconcileDirectSalesLpBeforeCommit(
+        var SalesHeader: Record "Sales Header";
+        var SalesShipmentHeader: Record "Sales Shipment Header";
+        var SalesInvoiceHeader: Record "Sales Invoice Header";
+        var SalesCrMemoHeader: Record "Sales Cr.Memo Header";
+        var ReturnReceiptHeader: Record "Return Receipt Header";
+        var GenJnlPostLine: Codeunit "Gen. Jnl.-Post Line";
+        var CommitIsSuppressed: Boolean;
+        var PreviewMode: Boolean;
+        WhseShip: Boolean;
+        WhseReceive: Boolean;
+        var EverythingInvoiced: Boolean)
+    begin
+        if PreviewMode or WhseShip or (SalesShipmentHeader."No." = '') then
+            exit;
+        ReconcileDirectSalesLp(SalesShipmentHeader."No.");
+    end;
+
+    /// <summary>
+    /// Direct sales posting bypasses warehouse shipment/pick documents. Reconcile the physical
+    /// LP from the posted item-ledger lot/serial identity so inventory and LP contents stay equal.
+    /// Warehouse shipments are excluded because their posted line already carries an explicit LP.
+    /// </summary>
+    local procedure ReconcileDirectSalesLp(SalesShptHdrNo: Code[20])
+    var
+        ItemLedgerEntry: Record "Item Ledger Entry";
+        PostedShptLine: Record "Sales Shipment Line";
+    begin
+        ItemLedgerEntry.SetRange("Document No.", SalesShptHdrNo);
+        ItemLedgerEntry.SetRange("Entry Type", ItemLedgerEntry."Entry Type"::Sale);
+        ItemLedgerEntry.SetFilter(Quantity, '<0');
+        if not ItemLedgerEntry.FindSet(true) then
+            exit;
+
+        repeat
+            if PostedShptLine.Get(SalesShptHdrNo, ItemLedgerEntry."Document Line No.") then
+                if PostedShptLine."DOPSWHS LP No." = '' then
+                    ReconcileDirectSalesEntry(ItemLedgerEntry);
+        until ItemLedgerEntry.Next() = 0;
+    end;
+
+    local procedure ReconcileDirectSalesEntry(var ItemLedgerEntry: Record "Item Ledger Entry")
+    var
+        LPHeader: Record "DOPSWHS LP Header";
+        LPLine: Record "DOPSWHS LP Line";
+        Item: Record Item;
+        ItemUoM: Record "Item Unit of Measure";
+        LPManagement: Codeunit "DOPSWHS LP Management";
+        RequiredBaseQty: Decimal;
+        AvailableBaseQty: Decimal;
+        QtyPerUoM: Decimal;
+        MatchingLineCount: Integer;
+        CandidateAvailableBaseQty: Decimal;
+        CandidateLPNo: Code[20];
+        CandidateLineNo: Integer;
+    begin
+        RequiredBaseQty := Abs(ItemLedgerEntry.Quantity);
+        if RequiredBaseQty = 0 then
+            exit;
+        Item.Get(ItemLedgerEntry."Item No.");
+
+        LPHeader.SetRange("Location Code", ItemLedgerEntry."Location Code");
+        LPHeader.SetFilter(Status, '%1|%2|%3', LPHeader.Status::Open, LPHeader.Status::Built, LPHeader.Status::Assigned);
+        if LPHeader.FindSet() then
+            repeat
+                LPLine.Reset();
+                LPLine.SetRange("LP No.", LPHeader."No.");
+                LPLine.SetRange("Item No.", ItemLedgerEntry."Item No.");
+                LPLine.SetRange("Variant Code", ItemLedgerEntry."Variant Code");
+                LPLine.SetRange("Lot No.", ItemLedgerEntry."Lot No.");
+                LPLine.SetRange("Serial No.", ItemLedgerEntry."Serial No.");
+                if LPLine.FindSet() then
+                    repeat
+                        QtyPerUoM := 1;
+                        if (LPLine."Unit of Measure" <> '') and
+                           (LPLine."Unit of Measure" <> Item."Base Unit of Measure")
+                        then begin
+                            if ItemUoM.Get(LPLine."Item No.", LPLine."Unit of Measure") then
+                                QtyPerUoM := ItemUoM."Qty. per Unit of Measure"
+                            else
+                                QtyPerUoM := 0;
+                        end;
+                        AvailableBaseQty := Round(LPLine.Quantity * QtyPerUoM, 0.00001);
+                        if (QtyPerUoM > 0) and (AvailableBaseQty > 0) then begin
+                            MatchingLineCount += 1;
+                            CandidateLPNo := LPLine."LP No.";
+                            CandidateLineNo := LPLine."Line No.";
+                            CandidateAvailableBaseQty := AvailableBaseQty;
+                        end;
+                    until LPLine.Next() = 0;
+            until LPHeader.Next() = 0;
+
+        // No matching active LP means this shipment came from loose stock.
+        if MatchingLineCount = 0 then
+            exit;
+        if MatchingLineCount > 1 then
+            Error(
+                '%1 maddesi, lot %2 için birden fazla LP eşleşti. Yanlış LP miktarının düşmemesi için sevkiyat durduruldu.',
+                ItemLedgerEntry."Item No.", ItemLedgerEntry."Lot No.");
+        if CandidateAvailableBaseQty + 0.00001 < RequiredBaseQty then
+            Error(
+                '%1 LP numarasında sevk için yeterli miktar yoktur. LP miktarı: %2, sevk miktarı: %3.',
+                CandidateLPNo, CandidateAvailableBaseQty, RequiredBaseQty);
+
+        LPManagement.ConsumeLineForPostedSale(
+            CandidateLPNo, CandidateLineNo, RequiredBaseQty, ItemLedgerEntry."Document No.");
+        ItemLedgerEntry."DOPSWHS LP No." := CandidateLPNo;
+        ItemLedgerEntry.Modify();
     end;
 
     /// <summary>After Purch-Post completes, copy the LP from the originating Whse Receipt Header
