@@ -107,6 +107,24 @@ page 72090 "DOPSWHS Receipt API"
         ReceiptMgmt.StopLP(Rec, lpNo, printLabel, printerId);
     end;
 
+    /// <summary>
+    /// Creates and closes every pallet for one receipt line in a single transaction.
+    /// distributionJson is a flat array: groupId, quantity, lotNo, supplierLotNo, expiryDate.
+    /// Blank lotNo is generated once per groupId for lot-tracked items.
+    /// </summary>
+    [ServiceEnabled]
+    procedure createBulkLPDistribution(lineNo: Integer; expectedQty: Decimal; distributionJson: Text; lpTemplateCode: Code[20]; printLabels: Boolean; printerId: Code[50]): Text
+    var
+        ReceiptMgmt: Codeunit "DOPSWHS Receipt Mgmt";
+        LegacyWI: Codeunit "DOPSWHS Legacy WI Publisher";
+        DocNo: Code[20];
+    begin
+        DocNo := Rec."No.";
+        LegacyWI.FireGetReceiptDocument(DocNo);
+        exit(ReceiptMgmt.CreateBulkLPDistribution(
+            Rec, lineNo, expectedQty, distributionJson, lpTemplateCode, printLabels, printerId));
+    end;
+
     [ServiceEnabled]
     procedure post(print: Boolean; invoice: Boolean)
     var

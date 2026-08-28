@@ -7,6 +7,22 @@ Kurulum: [docs/android-install-guide.md](../../docs/android-install-guide.md)
 
 ---
 
+## v1.14.66 — BADE + EMU — 2026-08-28
+
+**versionCode:** 200066 · **BC paketi:** 1.14.0.81
+
+**BADE SHA-256:** `9f193533fba9a17b6b24f9a2bad2f1ba41fdff25bec8d4db065077e3bd81e484`
+
+**EMU SHA-256:** `232cf3a8d42f1ce82ab5b24d362104e55327a26ca79f6a489d7c745d70742fd5`
+
+### Tek mal kabulde toplu LP dağıtımı
+
+- Kabul miktarı, `Toplu LP Dağıtımı` ekranından birden fazla LP'ye tek işlemde dağıtılır.
+- LP sayısı ve LP başına miktarla eşit dağıtım yapılabilir; kalan miktar isteğe bağlı olarak son LP'ye aktarılır.
+- Palet miktarları tek listeden düzenlenebilir ve LP toplamı kabul miktarına eşit değilse işlem engellenir.
+- Aynı mal kabulde farklı lot grupları tanımlanabilir; farklı lotlar aynı LP içinde birleştirilmez.
+- LP numaraları ardışık üretilir, aynı depo mal kabulüne bağlanır ve etiketleri toplu basılabilir.
+
 ## v1.14.65 — BADE + EMU — 2026-08-28
 
 **versionCode:** 200065 · **BC paketi:** 1.14.0.79

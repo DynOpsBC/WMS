@@ -177,6 +177,8 @@ private fun ReceiveDocument(no: String, onBack: () -> Unit) {
     var status by remember { mutableStateOf("") }
     var busy by remember { mutableStateOf(false) }
     var activeLp by remember { mutableStateOf<String?>(null) }
+    var bulkLpTarget by remember(no) { mutableStateOf<JSONObject?>(null) }
+    var showBulkLinePicker by remember(no) { mutableStateOf(false) }
     var printReceipt by remember(no) { mutableStateOf(false) }
     // TOPLU POST: satır onayı (PATCH receiptLines) belgeyi ASLA postlamaz —
     // yalnız "Qty. to Receive"/lot/seri/LP yazar. Post tek bir yerden, alttaki
@@ -428,6 +430,24 @@ private fun ReceiveDocument(no: String, onBack: () -> Unit) {
                 Text("Mal kabul belgesi yazdır", fontSize = 13.sp)
             }
         }
+        if (activeLp == null) {
+            BottomActionBar {
+                OutlinedButton(
+                    onClick = {
+                        val candidates = lines.filter { line ->
+                            (line.optDouble("quantity") - line.optDouble("qtyReceived")).coerceAtLeast(0.0) > 0.0
+                        }
+                        when (candidates.size) {
+                            0 -> status = "HATA: Toplu LP dağıtılacak açık mal kabul satırı yok."
+                            1 -> bulkLpTarget = candidates.first()
+                            else -> showBulkLinePicker = true
+                        }
+                    },
+                    enabled = !busy && canMutate,
+                    modifier = Modifier.fillMaxWidth(),
+                ) { Text("Toplu LP Dağıtımı") }
+            }
+        }
         BottomActionBar {
             OutlinedButton(onClick = {
                 scope.launch {
@@ -585,6 +605,70 @@ private fun ReceiveDocument(no: String, onBack: () -> Unit) {
                     }.toString(),
                     "Araç bilgisi kaydedildi",
                 )
+            },
+        )
+    }
+    if (showBulkLinePicker) {
+        BulkReceiptLinePicker(
+            lines = lines.filter { line ->
+                (line.optDouble("quantity") - line.optDouble("qtyReceived")).coerceAtLeast(0.0) > 0.0
+            },
+            onDismiss = { showBulkLinePicker = false },
+            onSelect = { selected ->
+                showBulkLinePicker = false
+                bulkLpTarget = selected
+            },
+        )
+    }
+    val bulkLine = bulkLpTarget
+    if (bulkLine != null) {
+        val outstanding = (bulkLine.optDouble("quantity") - bulkLine.optDouble("qtyReceived")).coerceAtLeast(0.0)
+        BulkReceiptLpSheet(
+            itemNo = bulkLine.optString("itemNo"),
+            uom = bulkLine.optString("unitOfMeasureCode"),
+            initialExpectedQty = outstanding,
+            initialLotNo = bulkLine.optString("lotNo"),
+            initialSupplierLotNo = bulkLine.optString("supplierLotNo"),
+            initialExpiryDate = bulkLine.optString("expiryDate"),
+            lotRequired = bulkLine.optBoolean("lotRequired"),
+            expiryEnabled = bulkLine.optBoolean("expirationDateEnabled"),
+            expiryRequired = bulkLine.optBoolean("expirationDateRequired"),
+            onDismiss = { bulkLpTarget = null },
+            onSubmit = { expectedQty, rows, printLabels ->
+                bulkLpTarget = null
+                scope.launch {
+                    busy = true
+                    status = "Toplu LP'ler oluşturuluyor..."
+                    val template = resolveLpTemplate(context, LpPurpose.PALLET)
+                    if (template == null) {
+                        busy = false
+                        status = "HATA: Uygun palet şablonu belirlenemedi."
+                        return@launch
+                    }
+                    val lineNo = bulkLine.optInt("lineNo")
+                    val result = BcApi.boundAction(
+                        context,
+                        "receipts",
+                        no,
+                        "createBulkLPDistribution",
+                        JSONObject().apply {
+                            put("lineNo", lineNo)
+                            put("expectedQty", expectedQty)
+                            put("distributionJson", bulkLpRowsJson(rows))
+                            put("lpTemplateCode", template)
+                            put("printLabels", printLabels)
+                            put("printerId", getDefaultPrinter(context))
+                        }.toString(),
+                    )
+                    busy = false
+                    status = if (result.ok)
+                        "TAMAM: ${rows.size} LP oluşturuldu; toplam ${fmtNum(expectedQty)} ${bulkLine.optString("unitOfMeasureCode")}."
+                    else QcErrorParser.friendlyStatus(BcApi.errorMessage(result.body), result.httpCode)
+                    if (result.ok) {
+                        touched = touched + lineNo
+                        reload()
+                    }
+                }
             },
         )
     }

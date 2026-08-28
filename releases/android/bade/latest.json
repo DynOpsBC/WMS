@@ -1,7 +1,7 @@
 {
-  "versionCode": 200065,
-  "versionName": "1.14.65-bade",
-  "apkUrl": "https://github.com/DynOpsBC/WMS/releases/download/android-v1.14.65/BCWMS-BADE-1.14.65-RELEASE.apk",
-  "sha256": "e5125c80478a659732801c9bfa312a95f8eab638927f9bbeb0a89f6e3383d615",
-  "releaseNotes": "LP menüsü yeniden LP adıyla gösterilir. EMU'ya özel Kutu ve Palet ekranı ayrı tutulur."
+  "versionCode": 200066,
+  "versionName": "1.14.66-bade",
+  "apkUrl": "https://github.com/DynOpsBC/WMS/releases/download/android-v1.14.66/BCWMS-BADE-1.14.66-RELEASE.apk",
+  "sha256": "9f193533fba9a17b6b24f9a2bad2f1ba41fdff25bec8d4db065077e3bd81e484",
+  "releaseNotes": "Mal kabul miktarı tek işlemde birden fazla LP'ye dağıtılabilir. Eşit dağıtım, son LP'ye kalan miktar, düzenlenebilir LP listesi, farklı lot grupları ve toplu etiket baskısı desteklenir."
 }
