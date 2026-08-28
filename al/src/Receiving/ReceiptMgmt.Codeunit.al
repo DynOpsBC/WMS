@@ -34,7 +34,6 @@ codeunit 72043 "DOPSWHS Receipt Mgmt"
     var
         WhseReceiptLine: Record "Warehouse Receipt Line";
         PostedWhseReceiptHeader: Record "Posted Whse. Receipt Header";
-        PostedWhseReceiptLine: Record "Posted Whse. Receipt Line";
         WhsePostReceipt: Codeunit "Whse.-Post Receipt";
         LpPropagation: Codeunit "DOPSWHS LP Propagation";
         PrintDispatcher: Codeunit "DOPSWHS Print Dispatcher";
@@ -81,7 +80,7 @@ codeunit 72043 "DOPSWHS Receipt Mgmt"
         // A terminal operator can post without first tapping "LP Kapat". An
         // open LP must be completed before the warehouse receipt disappears;
         // otherwise it cannot be assigned to the resulting put-away.
-        EnsureReceiptLPReady(LpNo);
+        EnsureReceiptLPsReady(ReceiptNo, LpNo);
         WhseReceiptLine.SetRange("No.", ReceiptNo);
         if WhseReceiptLine.FindFirst() then begin
             // Keep receipt posting, put-away verification and LP assignment in
@@ -96,38 +95,24 @@ codeunit 72043 "DOPSWHS Receipt Mgmt"
         if PostedWhseReceiptHeader.FindLast() then
             PostedNo := PostedWhseReceiptHeader."No.";
 
-        // The normal propagation helper reads the working header, but that
-        // row no longer exists after Whse.-Post Receipt. Stamp from the value
-        // captured above so the posted lines and the LP never lose the link.
-        if (PostedNo <> '') and (LpNo <> '') then begin
-            if PostedWhseReceiptHeader.Get(PostedNo) then
-                if PostedWhseReceiptHeader."DOPSWHS LP No." = '' then begin
-                    PostedWhseReceiptHeader."DOPSWHS LP No." := LpNo;
-                    PostedWhseReceiptHeader.Modify(true);
-                end;
-            PostedWhseReceiptLine.SetRange("No.", PostedNo);
-            PostedWhseReceiptLine.SetRange("LP No.", '');
-            if PostedWhseReceiptLine.FindSet(true) then
-                repeat
-                    PostedWhseReceiptLine."LP No." := LpNo;
-                    PostedWhseReceiptLine.Modify(true);
-                until PostedWhseReceiptLine.Next() = 0;
-        end;
-        LpPropagation.StampPostedReceiptHeader(ReceiptNo, PostedNo);
+        // Resolve every posted line from its source LP line. A header carries
+        // only one active LP and is therefore not a valid source for receipts
+        // containing multiple pallets/lots.
         LpPropagation.StampPostedReceiptLines(ReceiptNo, PostedNo);
+        LpPropagation.StampPostedReceiptHeader(ReceiptNo, PostedNo);
         // The Item Jnl. event runs before the working warehouse receipt is fully
         // traceable and can miss the LP. At this point BC has created its exact
         // Posted Whse. Receipt Line -> Item Ledger Entry relations, so persist it
         // deterministically onto Item/Value Ledger Entries.
-        LpPropagation.StampPostedReceiptLedgerEntries(PostedNo, LpNo);
+        LpPropagation.StampPostedReceiptLedgerEntries(PostedNo, '');
 
         // Standard BC normally creates this activity while posting. Validate
         // the result and retry through the official posted-receipt API when a
         // tenant customization suppresses the first attempt. Never report a
         // successful LP receipt while its required put-away is missing.
         PutAwayNo := EnsurePutAwayCreated(PostedNo, LocationCode, AssignedUserId);
-        if (LpNo <> '') and (PutAwayNo <> '') then
-            StampPutAwayWithLP(PostedNo, LpNo);
+        if PutAwayNo <> '' then
+            StampPutAwayWithLP(PostedNo);
 
         if PrintReport then begin
             ClearLastError();
@@ -138,11 +123,10 @@ codeunit 72043 "DOPSWHS Receipt Mgmt"
                     EffectiveOperator(OperatorUserId, WhseReceiptHeader."Assigned User ID"));
         end;
 
-        if LpNo <> '' then
-            if PutAwayNo <> '' then
-                AssignLP(LpNo, Enum::"DOPSWHS Assigned Doc Type"::WhsePutaway, PutAwayNo)
-            else
-                AssignLP(LpNo, Enum::"DOPSWHS Assigned Doc Type"::WhseReceipt, PostedNo);
+        if PutAwayNo <> '' then
+            AssignReceiptLPs(PostedNo, LpNo, Enum::"DOPSWHS Assigned Doc Type"::WhsePutaway, PutAwayNo)
+        else
+            AssignReceiptLPs(PostedNo, LpNo, Enum::"DOPSWHS Assigned Doc Type"::WhseReceipt, PostedNo);
     end;
 
     local procedure EnsureActualReceiptDateTime(var WhseReceiptHeader: Record "Warehouse Receipt Header")
@@ -364,6 +348,23 @@ codeunit 72043 "DOPSWHS Receipt Mgmt"
         exit(true);
     end;
 
+    local procedure EnsureReceiptLPsReady(ReceiptNo: Code[20]; HeaderLpNo: Code[20])
+    var
+        LPLine: Record "DOPSWHS LP Line";
+    begin
+        LPLine.SetRange("Source Document Type", LPLine."Source Document Type"::WhseReceipt);
+        LPLine.SetRange("Source Document No.", ReceiptNo);
+        LPLine.SetFilter(Quantity, '>0');
+        if LPLine.FindSet() then
+            repeat
+                EnsureReceiptLPReady(LPLine."LP No.");
+            until LPLine.Next() = 0;
+
+        // Legacy or empty active LPs may not have a source line yet.
+        if HeaderLpNo <> '' then
+            EnsureReceiptLPReady(HeaderLpNo);
+    end;
+
     local procedure EnsureReceiptLPReady(LpNo: Code[20])
     var
         LP: Record "DOPSWHS LP Header";
@@ -430,26 +431,34 @@ codeunit 72043 "DOPSWHS Receipt Mgmt"
         exit('');
     end;
 
-    local procedure StampPutAwayWithLP(PostedReceiptNo: Code[20]; LpNo: Code[20])
+    local procedure StampPutAwayWithLP(PostedReceiptNo: Code[20])
     var
+        PostedReceiptLine: Record "Posted Whse. Receipt Line";
         WhseActivityLine: Record "Warehouse Activity Line";
-        LPLine: Record "DOPSWHS LP Line";
     begin
-        WhseActivityLine.SetRange("Activity Type", WhseActivityLine."Activity Type"::"Put-away");
-        WhseActivityLine.SetRange("Whse. Document Type", WhseActivityLine."Whse. Document Type"::Receipt);
-        WhseActivityLine.SetRange("Whse. Document No.", PostedReceiptNo);
-        WhseActivityLine.SetRange("LP No.", '');
-        if WhseActivityLine.FindSet(true) then
+        PostedReceiptLine.SetRange("No.", PostedReceiptNo);
+        PostedReceiptLine.SetFilter("LP No.", '<>%1', '');
+        if PostedReceiptLine.FindSet() then
             repeat
-                LPLine.SetRange("LP No.", LpNo);
-                LPLine.SetRange("Item No.", WhseActivityLine."Item No.");
-                if not LPLine.IsEmpty() then begin
-                    // Direct assignment is intentional: validating one line
-                    // recursively updates companion activity lines.
-                    WhseActivityLine."LP No." := LpNo;
-                    WhseActivityLine.Modify(true);
-                end;
-            until WhseActivityLine.Next() = 0;
+                WhseActivityLine.Reset();
+                WhseActivityLine.SetRange("Activity Type", WhseActivityLine."Activity Type"::"Put-away");
+                WhseActivityLine.SetRange("Whse. Document Type", WhseActivityLine."Whse. Document Type"::Receipt);
+                WhseActivityLine.SetRange("Whse. Document No.", PostedReceiptNo);
+                WhseActivityLine.SetRange("Whse. Document Line No.", PostedReceiptLine."Line No.");
+                WhseActivityLine.SetRange("Item No.", PostedReceiptLine."Item No.");
+                WhseActivityLine.SetRange("Variant Code", PostedReceiptLine."Variant Code");
+                WhseActivityLine.SetRange("Lot No.", PostedReceiptLine."Lot No.");
+                WhseActivityLine.SetRange("Serial No.", PostedReceiptLine."Serial No.");
+                if WhseActivityLine.FindSet(true) then
+                    repeat
+                        if WhseActivityLine."LP No." <> PostedReceiptLine."LP No." then begin
+                            // Direct assignment is intentional: validating one
+                            // activity line recursively updates its companion.
+                            WhseActivityLine."LP No." := PostedReceiptLine."LP No.";
+                            WhseActivityLine.Modify(true);
+                        end;
+                    until WhseActivityLine.Next() = 0;
+            until PostedReceiptLine.Next() = 0;
     end;
 
     local procedure EnsureRequiredSupplierLots(WhseReceiptHeader: Record "Warehouse Receipt Header")
@@ -541,13 +550,9 @@ codeunit 72043 "DOPSWHS Receipt Mgmt"
         then begin
             if LP.Status = LP.Status::Open then
                 exit(LP."No.");
-            // Operatör LP'yi yanlışlıkla/etiket almak için kapatıp aynı mal
-            // kabulde devam etmek isteyebilir. Yeni LP ve yeni numara serisi
-            // üretmek yerine belgenin mevcut Built LP'sini yeniden aç.
-            if LP.Status = LP.Status::Built then begin
-                LPMgt.Reopen(LP);
-                exit(LP."No.");
-            end;
+            // Built means the pallet was physically closed. Starting again in
+            // the same receipt must create the next pallet, not reopen and mix
+            // the new lot/quantity into the previous LP.
         end;
 
         EffectiveTemplateCode := TemplateCode;
@@ -1158,6 +1163,25 @@ codeunit 72043 "DOPSWHS Receipt Mgmt"
         if Item."Item Tracking Code" = '' then
             exit(false);
         exit(ItemTrackingCode.Get(Item."Item Tracking Code"));
+    end;
+
+    local procedure AssignReceiptLPs(PostedReceiptNo: Code[20]; HeaderLpNo: Code[20]; DocType: Enum "DOPSWHS Assigned Doc Type"; DocNo: Code[20])
+    var
+        PostedReceiptLine: Record "Posted Whse. Receipt Line";
+    begin
+        PostedReceiptLine.SetRange("No.", PostedReceiptNo);
+        PostedReceiptLine.SetFilter("LP No.", '<>%1', '');
+        if PostedReceiptLine.FindSet() then
+            repeat
+                // Repeated LP numbers are harmless: AssignLP acts only while
+                // the pallet is Built, so the first matching line wins.
+                AssignLP(PostedReceiptLine."LP No.", DocType, DocNo);
+            until PostedReceiptLine.Next() = 0;
+
+        // Legacy receipts without line-level LP metadata still retain the
+        // active header LP and follow the previous single-pallet behavior.
+        if HeaderLpNo <> '' then
+            AssignLP(HeaderLpNo, DocType, DocNo);
     end;
 
     local procedure AssignLP(LpNo: Code[20]; DocType: Enum "DOPSWHS Assigned Doc Type"; DocNo: Code[20])

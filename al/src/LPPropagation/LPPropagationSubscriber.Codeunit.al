@@ -114,27 +114,41 @@ codeunit 72428 "DOPSWHS LP Propagation"
         PostedHeader.Modify(true);
     end;
 
-    /// <summary>Propagates the receipt header's LP onto every Posted Whse Receipt Line that
-    /// belongs to it (line-level field already exists at 72040 from the legacy extension).</summary>
+    /// <summary>
+    /// Stamps each posted receipt line from the exact LP line captured during receiving.
+    /// A receipt may contain several LPs for the same item, so the header LP must never be
+    /// copied blindly. Source receipt line + item + variant + lot + serial is the stable key.
+    /// </summary>
     procedure StampPostedReceiptLines(WhseReceiptNo: Code[20]; PostedReceiptNo: Code[20])
     var
-        SourceHeader: Record "Warehouse Receipt Header";
         PostedLine: Record "Posted Whse. Receipt Line";
-        HeaderLp: Code[20];
+        ResolvedLpNo: Code[20];
+        SingleReceiptLpNo: Code[20];
+        HasReceiptLpLines: Boolean;
     begin
         if PostedReceiptNo = '' then
             exit;
-        if WhseReceiptNo <> '' then
-            if SourceHeader.Get(WhseReceiptNo) then
-                HeaderLp := SourceHeader."DOPSWHS LP No.";
-        if HeaderLp = '' then
-            exit;
+        SingleReceiptLpNo := ResolveSingleReceiptLpNo(WhseReceiptNo);
+        HasReceiptLpLines := ReceiptHasLpLines(WhseReceiptNo);
         PostedLine.SetRange("No.", PostedReceiptNo);
-        PostedLine.SetFilter("LP No.", '%1', '');
         if PostedLine.FindSet(true) then
             repeat
-                PostedLine."LP No." := HeaderLp;
-                PostedLine.Modify(true);
+                ResolvedLpNo := ResolvePostedReceiptLineLp(WhseReceiptNo, PostedLine);
+                if ResolvedLpNo = '' then
+                    ResolvedLpNo := SingleReceiptLpNo;
+
+                if ResolvedLpNo <> '' then begin
+                    if PostedLine."LP No." <> ResolvedLpNo then begin
+                        PostedLine."LP No." := ResolvedLpNo;
+                        PostedLine.Modify(true);
+                    end;
+                end else
+                    // Multiple LPs exist but this line cannot be resolved uniquely.
+                    // Blank is safer than attaching stock to the wrong physical pallet.
+                    if HasReceiptLpLines and (PostedLine."LP No." <> '') then begin
+                        Clear(PostedLine."LP No.");
+                        PostedLine.Modify(true);
+                    end;
             until PostedLine.Next() = 0;
     end;
 
@@ -175,6 +189,78 @@ codeunit 72428 "DOPSWHS LP Propagation"
         until PostedLine.Next() = 0;
     end;
 
+    local procedure ResolvePostedReceiptLineLp(WhseReceiptNo: Code[20]; PostedLine: Record "Posted Whse. Receipt Line"): Code[20]
+    var
+        ReceiptLineNo: Integer;
+    begin
+        ReceiptLineNo := PostedLine."Whse Receipt Line No.";
+        if ReceiptLineNo = 0 then
+            ReceiptLineNo := PostedLine."Line No.";
+        exit(ResolveReceiptLpNo(
+            WhseReceiptNo, ReceiptLineNo, PostedLine."Item No.", PostedLine."Variant Code",
+            PostedLine."Lot No.", PostedLine."Serial No."));
+    end;
+
+    /// <summary>
+    /// Resolves one physical LP from the receipt-line identity captured on DOPSWHS LP Line.
+    /// If more than one LP matches the same identity, the result is intentionally blank.
+    /// </summary>
+    procedure ResolveReceiptLpNo(WhseReceiptNo: Code[20]; WhseReceiptLineNo: Integer; ItemNo: Code[20]; VariantCode: Code[10]; LotNo: Code[50]; SerialNo: Code[50]): Code[20]
+    var
+        LPLine: Record "DOPSWHS LP Line";
+        CandidateLpNo: Code[20];
+    begin
+        if WhseReceiptNo = '' then
+            exit('');
+        LPLine.SetRange("Source Document Type", LPLine."Source Document Type"::WhseReceipt);
+        LPLine.SetRange("Source Document No.", WhseReceiptNo);
+        if WhseReceiptLineNo <> 0 then
+            LPLine.SetRange("Source Document Line No.", WhseReceiptLineNo);
+        LPLine.SetRange("Item No.", ItemNo);
+        LPLine.SetRange("Variant Code", VariantCode);
+        LPLine.SetRange("Lot No.", LotNo);
+        LPLine.SetRange("Serial No.", SerialNo);
+        LPLine.SetFilter(Quantity, '>0');
+        if LPLine.FindSet() then
+            repeat
+                if CandidateLpNo = '' then
+                    CandidateLpNo := LPLine."LP No."
+                else
+                    if CandidateLpNo <> LPLine."LP No." then
+                        exit('');
+            until LPLine.Next() = 0;
+        exit(CandidateLpNo);
+    end;
+
+    local procedure ResolveSingleReceiptLpNo(WhseReceiptNo: Code[20]): Code[20]
+    var
+        LPLine: Record "DOPSWHS LP Line";
+        CandidateLpNo: Code[20];
+    begin
+        LPLine.SetRange("Source Document Type", LPLine."Source Document Type"::WhseReceipt);
+        LPLine.SetRange("Source Document No.", WhseReceiptNo);
+        LPLine.SetFilter(Quantity, '>0');
+        if LPLine.FindSet() then
+            repeat
+                if CandidateLpNo = '' then
+                    CandidateLpNo := LPLine."LP No."
+                else
+                    if CandidateLpNo <> LPLine."LP No." then
+                        exit('');
+            until LPLine.Next() = 0;
+        exit(CandidateLpNo);
+    end;
+
+    local procedure ReceiptHasLpLines(WhseReceiptNo: Code[20]): Boolean
+    var
+        LPLine: Record "DOPSWHS LP Line";
+    begin
+        LPLine.SetRange("Source Document Type", LPLine."Source Document Type"::WhseReceipt);
+        LPLine.SetRange("Source Document No.", WhseReceiptNo);
+        LPLine.SetFilter(Quantity, '>0');
+        exit(not LPLine.IsEmpty());
+    end;
+
     /// <summary>
     /// Repairs an older Item Ledger Entry whose LP was not propagated during posting.
     /// First uses BC's exact warehouse/item relation; for legacy rows without that relation,
@@ -206,11 +292,12 @@ codeunit 72428 "DOPSWHS LP Propagation"
         WarehouseEntry.SetRange("Item No.", PostedLine."Item No.");
         WarehouseEntry.SetRange("Serial No.", PostedLine."Serial No.");
         WarehouseEntry.SetRange("Lot No.", PostedLine."Lot No.");
-        WarehouseEntry.SetRange("DOPSWHS LP No.", '');
         if WarehouseEntry.FindSet(true) then
             repeat
-                WarehouseEntry."DOPSWHS LP No." := LpNo;
-                WarehouseEntry.Modify();
+                if WarehouseEntry."DOPSWHS LP No." <> LpNo then begin
+                    WarehouseEntry."DOPSWHS LP No." := LpNo;
+                    WarehouseEntry.Modify();
+                end;
             until WarehouseEntry.Next() = 0;
     end;
 
@@ -244,18 +331,19 @@ codeunit 72428 "DOPSWHS LP Propagation"
     var
         ValueEntry: Record "Value Entry";
     begin
-        if (LpNo = '') or (ItemLedgerEntry."DOPSWHS LP No." <> '') then
+        if (LpNo = '') or (ItemLedgerEntry."DOPSWHS LP No." = LpNo) then
             exit;
 
         ItemLedgerEntry."DOPSWHS LP No." := LpNo;
         ItemLedgerEntry.Modify();
 
         ValueEntry.SetRange("Item Ledger Entry No.", ItemLedgerEntry."Entry No.");
-        ValueEntry.SetRange("DOPSWHS LP No.", '');
         if ValueEntry.FindSet(true) then
             repeat
-                ValueEntry."DOPSWHS LP No." := LpNo;
-                ValueEntry.Modify();
+                if ValueEntry."DOPSWHS LP No." <> LpNo then begin
+                    ValueEntry."DOPSWHS LP No." := LpNo;
+                    ValueEntry.Modify();
+                end;
             until ValueEntry.Next() = 0;
     end;
 
@@ -387,9 +475,15 @@ codeunit 72428 "DOPSWHS LP Propagation"
         WhseRcptLine.SetRange("Source Type", Database::"Purchase Line");
         WhseRcptLine.SetRange("Source Subtype", PurchaseHeader."Document Type");
         WhseRcptLine.SetRange("Source No.", PurchaseHeader."No.");
-        if WhseRcptLine.FindFirst() then
-            if WhseRcptHdr.Get(WhseRcptLine."No.") then
-                HeaderLp := WhseRcptHdr."DOPSWHS LP No.";
+        if WhseRcptLine.FindFirst() then begin
+            HeaderLp := ResolveSingleReceiptLpNo(WhseRcptLine."No.");
+            // Legacy receipts created before LP source metadata existed can
+            // still use their single header LP. Never use it for a known
+            // multi-LP receipt because it would corrupt every posted line.
+            if (HeaderLp = '') and (not ReceiptHasLpLines(WhseRcptLine."No.")) then
+                if WhseRcptHdr.Get(WhseRcptLine."No.") then
+                    HeaderLp := WhseRcptHdr."DOPSWHS LP No.";
+        end;
         if HeaderLp = '' then
             exit;
         PostedRcptLine.SetRange("Document No.", PurchRcpHdrNo);
@@ -432,6 +526,7 @@ codeunit 72428 "DOPSWHS LP Propagation"
         WhseShipmentLine: Record "Warehouse Shipment Line";
         WhseReceiptHeader: Record "Warehouse Receipt Header";
         WhseReceiptLine: Record "Warehouse Receipt Line";
+        Lp: Code[20];
     begin
         if SourceNo = '' then
             exit('');
@@ -450,12 +545,18 @@ codeunit 72428 "DOPSWHS LP Propagation"
         if WhseShipmentLine.FindFirst() then
             exit(WhseShipmentLine."LP No.");
 
-        // Whse Receipt Header (inbound, when receipt-with-LP was scanned)
+        // Receipt LP source lines (inbound). Header LP is only a legacy
+        // fallback when no line-level source metadata exists.
         WhseReceiptLine.SetRange("Source No.", SourceNo);
         WhseReceiptLine.SetRange("Item No.", ItemNo);
-        if WhseReceiptLine.FindFirst() then
-            if WhseReceiptHeader.Get(WhseReceiptLine."No.") then
-                exit(WhseReceiptHeader."DOPSWHS LP No.");
+        if WhseReceiptLine.FindFirst() then begin
+            Lp := ResolveSingleReceiptLpNo(WhseReceiptLine."No.");
+            if Lp <> '' then
+                exit(Lp);
+            if not ReceiptHasLpLines(WhseReceiptLine."No.") then
+                if WhseReceiptHeader.Get(WhseReceiptLine."No.") then
+                    exit(WhseReceiptHeader."DOPSWHS LP No.");
+        end;
 
         exit('');
     end;
@@ -490,6 +591,7 @@ codeunit 72428 "DOPSWHS LP Propagation"
         WhseActivityLine: Record "Warehouse Activity Line";
         WhseShipmentLine: Record "Warehouse Shipment Line";
         WhseReceiptHeader: Record "Warehouse Receipt Header";
+        Lp: Code[20];
     begin
         // (a) Pick / Put-away / Movement: the working activity line (with its scanned LP) is still
         // present at OnBefore. Join on the shared source keys + item.
@@ -513,10 +615,22 @@ codeunit 72428 "DOPSWHS LP Propagation"
                 exit(WhseShipmentLine."LP No.");
         end;
 
-        // (c) Inbound: the LP lives on the (still-open) Warehouse Receipt Header.
-        if WhseEntry."Whse. Document Type" = WhseEntry."Whse. Document Type"::Receipt then
-            if WhseReceiptHeader.Get(WhseEntry."Whse. Document No.") then
-                exit(WhseReceiptHeader."DOPSWHS LP No.");
+        // (c) Inbound: resolve the physical LP by receipt line + lot/serial.
+        // This is the point that previously stamped the header's first LP on
+        // every lot and caused LP000063/H100795 to appear on H100796.
+        if WhseEntry."Whse. Document Type" = WhseEntry."Whse. Document Type"::Receipt then begin
+            Lp := ResolveReceiptLpNo(
+                WhseEntry."Whse. Document No.", WhseEntry."Whse. Document Line No.",
+                WhseEntry."Item No.", WhseEntry."Variant Code", WhseEntry."Lot No.", WhseEntry."Serial No.");
+            if Lp <> '' then
+                exit(Lp);
+            Lp := ResolveSingleReceiptLpNo(WhseEntry."Whse. Document No.");
+            if Lp <> '' then
+                exit(Lp);
+            if not ReceiptHasLpLines(WhseEntry."Whse. Document No.") then
+                if WhseReceiptHeader.Get(WhseEntry."Whse. Document No.") then
+                    exit(WhseReceiptHeader."DOPSWHS LP No.");
+        end;
 
         exit('');
     end;

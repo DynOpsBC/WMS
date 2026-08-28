@@ -62,8 +62,8 @@ android {
     create("bade") {
       dimension = "tenant"
       applicationIdSuffix = ".bade"
-      versionCode = releaseVersionCodeOverride ?: 200060
-      versionName = releaseVersionNameOverride ?: "1.14.60"
+      versionCode = releaseVersionCodeOverride ?: 200061
+      versionName = releaseVersionNameOverride ?: "1.14.61"
       versionNameSuffix = "-bade"
       manifestPlaceholders["appLabel"] = "BCWMS BADE"
       buildConfigField("String", "BC_CLIENT_ID", "\"3c4ba25a-89f4-41df-acf8-ebab8cb4809b\"")

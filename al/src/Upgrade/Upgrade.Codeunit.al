@@ -6,8 +6,10 @@ codeunit 72034 "DOPSWHS Upgrade"
         tabledata "DOPSWHS LP Header" = rm,
         tabledata "DOPSWHS LP Line" = r,
         tabledata "Warehouse Receipt Line" = r,
-        tabledata "Posted Whse. Receipt Line" = r,
-        tabledata "Warehouse Entry" = r;
+        tabledata "Posted Whse. Receipt Line" = rm,
+        tabledata "Warehouse Entry" = rm,
+        tabledata "Item Ledger Entry" = rm,
+        tabledata "Value Entry" = rm;
 
     trigger OnUpgradePerDatabase()
     var
@@ -59,6 +61,8 @@ codeunit 72034 "DOPSWHS Upgrade"
             MigrateSupplierLotToDescription();
         if ModuleInfo.DataVersion() < Version.Create(1, 14, 0, 54) then
             RepairReceiptLpBins();
+        if ModuleInfo.DataVersion() < Version.Create(1, 14, 0, 78) then
+            RepairReceiptLpAssignments();
         AppProfileMgmt.SeedDefaults();          // seed DEFAULT app profile + install-user profile
         AppRoleSeed.Seed();                     // seed system roles + starter filter rules
         SetupWizard.SeedReportSelections();     // repair legacy empty/wrong document print routes
@@ -66,6 +70,35 @@ codeunit 72034 "DOPSWHS Upgrade"
         ScheduleLicenseVerify();                // seed/refresh the hourly /verify job
         PrintCleanup.ScheduleCleanupJob();      // seed daily print payload retention cleanup
         AzurePrintWorker.ScheduleWorkerJob();  // instant tasks use this as durable fallback/status pump
+    end;
+
+    /// <summary>
+    /// Older builds copied the receipt header's first LP onto every posted
+    /// lot. Re-run the deterministic source-line + lot/serial resolver so
+    /// existing posted receipt, warehouse, item and value entries are repaired.
+    /// Ambiguous matches are never guessed.
+    /// </summary>
+    local procedure RepairReceiptLpAssignments()
+    var
+        PostedReceiptLine: Record "Posted Whse. Receipt Line";
+        LpPropagation: Codeunit "DOPSWHS LP Propagation";
+        ReceiptByPostedNo: Dictionary of [Code[20], Code[20]];
+        PostedReceiptNo: Code[20];
+        WhseReceiptNo: Code[20];
+    begin
+        PostedReceiptLine.SetFilter("Whse. Receipt No.", '<>%1', '');
+        if PostedReceiptLine.FindSet() then
+            repeat
+                if not ReceiptByPostedNo.ContainsKey(PostedReceiptLine."No.") then
+                    ReceiptByPostedNo.Add(PostedReceiptLine."No.", PostedReceiptLine."Whse. Receipt No.");
+            until PostedReceiptLine.Next() = 0;
+
+        foreach PostedReceiptNo in ReceiptByPostedNo.Keys do begin
+            ReceiptByPostedNo.Get(PostedReceiptNo, WhseReceiptNo);
+            LpPropagation.StampPostedReceiptLines(WhseReceiptNo, PostedReceiptNo);
+            LpPropagation.StampPostedReceiptHeader(WhseReceiptNo, PostedReceiptNo);
+            LpPropagation.StampPostedReceiptLedgerEntries(PostedReceiptNo, '');
+        end;
     end;
 
     /// <summary>

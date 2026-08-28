@@ -7,6 +7,21 @@ Kurulum: [docs/android-install-guide.md](../../docs/android-install-guide.md)
 
 ---
 
+## v1.14.61-bade — 2026-08-28
+
+**APK:** `BCWMS-BADE-1.14.61-RELEASE.apk`
+
+**versionCode:** 200061 · **BC paketi:** 1.14.0.78
+
+**SHA-256:** `563652d3a973d2cd3bfcc3509d1cfc9aeb462b85eed276a7a935917f1a6489d7`
+
+### Çoklu LP ve lot eşleşmesi
+
+- Mal kabulde her kayıtlı lot satırı artık başlıktaki ilk LP yerine kaynak satır, ürün, varyant, lot ve seri bilgisine göre kendi LP'siyle eşleştirilir.
+- `LP000063 → 5 KG / H100795` ve `LP000064 → 15 KG / H100796` ayrımı korunur; belirsiz eşleşmelerde yanlış LP yazılmaz.
+- Kapatılmış LP'den sonra aynı mal kabulde yeni LP başlatılır; önceki palet yeniden açılıp yeni lotla karıştırılmaz.
+- AL yükseltmesi eski kayıtlı mal kabul ve depo hareketlerindeki kanıtlanabilir yanlış LP damgalarını otomatik onarır.
+
 ## v1.14.60-bade — 2026-08-28
 
 **APK:** `BCWMS-BADE-1.14.60-RELEASE.apk`
