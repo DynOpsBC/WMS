@@ -1459,6 +1459,7 @@ private fun WhsePickDocument(no: String, onBack: () -> Unit) {
             initialQty = ql.optDouble("qtyOutstanding").takeIf { it > 0 } ?: ql.optDouble("quantity").takeIf { it > 0 } ?: 1.0,
             initialUom = ql.optString("unitOfMeasureCode"),
             initialLot = ql.optString("lotNo"),
+            allowZeroQuantity = true,
             showLotSerial = true,
             showSerial = false,
             lotRequired = ql.optBoolean("lotRequired", false),

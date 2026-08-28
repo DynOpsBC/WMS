@@ -7,6 +7,19 @@ Kurulum: [docs/android-install-guide.md](../../docs/android-install-guide.md)
 
 ---
 
+## v1.14.60-bade — 2026-08-28
+
+**APK:** `BCWMS-BADE-1.14.60-RELEASE.apk`
+
+**SHA-256:** `237821ca48acbba6c88375706e62b12e53bf7b686b91f0652bcbe93d8156b94b`
+
+**versionCode:** 200060 · **BC paketi:** 1.14.0.72
+
+### Pick satırında sıfır miktar
+
+- Sevkiyat toplamada kullanılmayacak bir lot satırı `0` miktarla onaylanabilir ve satırın işlenecek miktarı sıfırlanır.
+- Boş, negatif veya geçersiz miktarlar engellenmeye devam eder; diğer miktar girişlerinin mevcut kuralları değişmez.
+
 ## v1.14.59-bade — 2026-08-28
 
 **APK:** `BCWMS-BADE-1.14.59-RELEASE.apk`

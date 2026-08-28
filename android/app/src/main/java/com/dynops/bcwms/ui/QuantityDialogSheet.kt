@@ -61,6 +61,7 @@ fun QuantityDialogSheet(
     showAvailableLotLookup: Boolean = false,
     serialRequired: Boolean = false,
     quantityExactlyOne: Boolean = false,
+    allowZeroQuantity: Boolean = false,
     // Stoktaki lotları açılışta yoklar: lot bulunursa alan zorunlu sayılır ve
     // seçim listesi görünür. BC'deki lotRequired alanı yayınlanmamış olsa bile
     // lot takipli üründe boş lotla sevk edilmesini engeller.
@@ -404,8 +405,7 @@ fun QuantityDialogSheet(
                             )
                         )
                     },
-                    enabled = qty() > 0 &&
-                        (!quantityExactlyOne || qty() == 1.0) &&
+                    enabled = validQuantityInput(qtyText, allowZeroQuantity, quantityExactlyOne) &&
                         stockLotProbeReady &&
                         (!uomRequired || uom.isNotBlank()) &&
                         (!effectiveLotRequired || lot.isNotBlank()) &&
@@ -418,6 +418,17 @@ fun QuantityDialogSheet(
             }
             Spacer(Modifier.height(24.dp))
     }
+}
+
+internal fun validQuantityInput(
+    value: String,
+    allowZeroQuantity: Boolean,
+    quantityExactlyOne: Boolean,
+): Boolean {
+    val quantity = value.toDoubleOrNull() ?: return false
+    if (!quantity.isFinite() || quantity < 0.0) return false
+    if (quantityExactlyOne) return quantity == 1.0
+    return allowZeroQuantity || quantity > 0.0
 }
 
 private val TurkishDateFormatter: DateTimeFormatter =
