@@ -684,6 +684,15 @@ codeunit 72043 "DOPSWHS Receipt Mgmt"
                     WhseReceiptHeader.Modify(true);
                 end;
         end;
+
+        // "Lot No Ata" ile ayrılan numara, satırın takip kaydı ve varsa LP
+        // satırı tamamen başarıyla yazıldıktan sonra artık bekleyen değildir.
+        // Bu noktadan önce oluşacak herhangi bir Error tüm transaction'ı geri
+        // alır; böylece aynı lot tekrar açılan miktar ekranında korunur.
+        if WhseReceiptLine."DOPSWHS Pending Lot No." <> '' then begin
+            Clear(WhseReceiptLine."DOPSWHS Pending Lot No.");
+            WhseReceiptLine.Modify(true);
+        end;
     end;
 
     local procedure StampReceiptSourceOnLastLpLine(LpNo: Code[20]; WhseReceiptLine: Record "Warehouse Receipt Line")
@@ -764,6 +773,8 @@ codeunit 72043 "DOPSWHS Receipt Mgmt"
     /// serisinden yeni bir iç lot üretir. Satırı okumak veya miktarı açmak bu
     /// metodu çağırmaz. Var olan BC item-tracking lotu varsa aynen döndürülür.
     /// Takip kaydı miktar/SKT/tedarikçi lotu birlikte onaylanana kadar yazılmaz.
+    /// Üretilen numara ise satırda bekleyen lot olarak tutulur; ekran kapanır
+    /// veya sonraki işlem hata verirse aynı numara yeniden döndürülür.
     /// </summary>
     procedure AssignInboundLotNo(WhseReceiptLine: Record "Warehouse Receipt Line"): Text
     var
@@ -790,6 +801,8 @@ codeunit 72043 "DOPSWHS Receipt Mgmt"
             Error(
                 '%1 ürünü için Lot Nos. numara serisi tanımlı değildir. Ürün kartındaki Lot Nos. alanını kontrol edin.',
                 WhseReceiptLine."Item No.");
+        WhseReceiptLine."DOPSWHS Pending Lot No." := LotNo;
+        WhseReceiptLine.Modify(true);
         exit(LotNo);
     end;
 
@@ -1063,27 +1076,31 @@ codeunit 72043 "DOPSWHS Receipt Mgmt"
             LotNo := ReservationEntry."Lot No.";
             SerialNo := ReservationEntry."Serial No.";
             ExpiryDate := ReservationEntry."Expiration Date";
-            exit;
+        end else begin
+            ReservationEntry.Reset();
+            SetSourceReservationFilters(ReservationEntry, WhseReceiptLine);
+            ReservationEntry.SetFilter("Serial No.", '<>%1', '');
+            if ReservationEntry.FindFirst() then begin
+                LotNo := ReservationEntry."Lot No.";
+                SerialNo := ReservationEntry."Serial No.";
+                ExpiryDate := ReservationEntry."Expiration Date";
+            end else begin
+                WhseItemTrkgLine.SetRange("Source Type", Database::"Warehouse Receipt Line");
+                WhseItemTrkgLine.SetRange("Source ID", WhseReceiptLine."No.");
+                WhseItemTrkgLine.SetRange("Source Ref. No.", WhseReceiptLine."Line No.");
+                if WhseItemTrkgLine.FindFirst() then begin
+                    LotNo := WhseItemTrkgLine."Lot No.";
+                    SerialNo := WhseItemTrkgLine."Serial No.";
+                    ExpiryDate := WhseItemTrkgLine."Expiration Date";
+                end;
+            end;
         end;
 
-        ReservationEntry.Reset();
-        SetSourceReservationFilters(ReservationEntry, WhseReceiptLine);
-        ReservationEntry.SetFilter("Serial No.", '<>%1', '');
-        if ReservationEntry.FindFirst() then begin
-            LotNo := ReservationEntry."Lot No.";
-            SerialNo := ReservationEntry."Serial No.";
-            ExpiryDate := ReservationEntry."Expiration Date";
-            exit;
-        end;
-
-        WhseItemTrkgLine.SetRange("Source Type", Database::"Warehouse Receipt Line");
-        WhseItemTrkgLine.SetRange("Source ID", WhseReceiptLine."No.");
-        WhseItemTrkgLine.SetRange("Source Ref. No.", WhseReceiptLine."Line No.");
-        if not WhseItemTrkgLine.FindFirst() then
-            exit;
-        LotNo := WhseItemTrkgLine."Lot No.";
-        SerialNo := WhseItemTrkgLine."Serial No.";
-        ExpiryDate := WhseItemTrkgLine."Expiration Date";
+        // Gerçek takip kaydı henüz oluşmadıysa, operatörün daha önce ayırdığı
+        // lotu döndür. Bu sayede miktar penceresini kapatıp açmak veya başarısız
+        // bir kayıttan sonra tekrar "Lot No Ata" demek yeni seri tüketmez.
+        if LotNo = '' then
+            LotNo := WhseReceiptLine."DOPSWHS Pending Lot No.";
     end;
 
     local procedure DeleteSourceReservationTracking(WhseReceiptLine: Record "Warehouse Receipt Line")
