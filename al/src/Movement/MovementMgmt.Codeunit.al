@@ -13,7 +13,8 @@ codeunit 72045 "DOPSWHS Movement Mgmt"
         tabledata "Warehouse Journal Batch" = RIMD,
         tabledata "Warehouse Journal Line" = RIMD,
         tabledata "Reservation Entry" = RIMD,
-        tabledata "Whse. Item Tracking Line" = RIMD;
+        tabledata "Whse. Item Tracking Line" = RIMD,
+        tabledata "DOPSWHS LP Header" = RM;
 
     procedure EnsureDeviceJournalBatch(UserId: Code[50]): Code[10]
     var
@@ -184,6 +185,7 @@ codeunit 72045 "DOPSWHS Movement Mgmt"
         Operator: Code[50];
         PutAwayLpNo: Code[20];
         PutAwayTargetBin: Code[20];
+        PutAwayDestinations: Dictionary of [Code[20], Code[20]];
     begin
         if OperatorUserId <> '' then
             Operator := OperatorUserId
@@ -212,54 +214,102 @@ codeunit 72045 "DOPSWHS Movement Mgmt"
         // bin while the LP remains attached to the receipt bin and Bin Contents
         // shows Quantity in Active LPs as zero.
         if WhseActivityHeader.Type = WhseActivityHeader.Type::"Put-away" then
-            ResolvePutAwayLpDestination(WhseActivityHeader, PutAwayLpNo, PutAwayTargetBin);
+            CollectPutAwayLpDestinations(WhseActivityHeader, PutAwayDestinations);
 
         WhseActivityLine.SetRange("Activity Type", WhseActivityHeader.Type);
         WhseActivityLine.SetRange("No.", WhseActivityHeader."No.");
         if WhseActivityLine.FindFirst() then begin
             WhseActivityRegister.Run(WhseActivityLine);
-            if (PutAwayLpNo <> '') and (PutAwayTargetBin <> '') then
-                MoveLpHeaderToBin(PutAwayLpNo, WhseActivityHeader."Location Code", PutAwayTargetBin);
+            foreach PutAwayLpNo in PutAwayDestinations.Keys do begin
+                PutAwayDestinations.Get(PutAwayLpNo, PutAwayTargetBin);
+                FinalizePutAwayLp(
+                    PutAwayLpNo, WhseActivityHeader."No.",
+                    WhseActivityHeader."Location Code", PutAwayTargetBin);
+            end;
         end;
     end;
 
-    local procedure ResolvePutAwayLpDestination(WhseActivityHeader: Record "Warehouse Activity Header"; var LpNo: Code[20]; var TargetBinCode: Code[20])
+    /// <summary>
+    /// Preserves every LP destination before standard registration deletes the activity lines.
+    /// One put-away may contain many products and many LPs; treating the whole document as one
+    /// LP caused every LP header to remain in the receipt bin as soon as a second LP was present.
+    /// </summary>
+    local procedure CollectPutAwayLpDestinations(WhseActivityHeader: Record "Warehouse Activity Header"; var Destinations: Dictionary of [Code[20], Code[20]])
     var
         ActivityLine: Record "Warehouse Activity Line";
+        ExistingTargetBin: Code[20];
     begin
-        Clear(LpNo);
-        Clear(TargetBinCode);
+        Clear(Destinations);
         ActivityLine.SetRange("Activity Type", WhseActivityHeader.Type);
         ActivityLine.SetRange("No.", WhseActivityHeader."No.");
         ActivityLine.SetRange("Action Type", ActivityLine."Action Type"::Place);
         ActivityLine.SetFilter("LP No.", '<>%1', '');
         if ActivityLine.FindSet() then
             repeat
-                if LpNo = '' then begin
-                    LpNo := ActivityLine."LP No.";
-                    TargetBinCode := ActivityLine."Bin Code";
-                end else
-                    if (LpNo <> ActivityLine."LP No.") or (TargetBinCode <> ActivityLine."Bin Code") then begin
-                        // A single LP cannot physically finish in two bins. Leave
-                        // its header untouched instead of recording a false bin.
-                        Clear(LpNo);
-                        Clear(TargetBinCode);
-                        exit;
-                    end;
+                if ActivityLine."Qty. to Handle" > 0 then begin
+                    ActivityLine.TestField("Bin Code");
+                    if Abs(ActivityLine."Qty. to Handle" - ActivityLine."Qty. Outstanding") > 0.00001 then
+                        Error(
+                            '%1 LP numarasındaki %2 ürünü kısmi taşınamaz. LP''nin tamamını yerleştirin veya ürünü ayrı LP''ye ayırın.',
+                            ActivityLine."LP No.", ActivityLine."Item No.");
+                    if Destinations.Get(ActivityLine."LP No.", ExistingTargetBin) then begin
+                        if ExistingTargetBin <> ActivityLine."Bin Code" then
+                            Error(
+                                '%1 LP numarası aynı yerleştirmede hem %2 hem %3 rafına konamaz. LP içindeki tüm ürünler için aynı hedef rafı seçin.',
+                                ActivityLine."LP No.", ExistingTargetBin, ActivityLine."Bin Code");
+                    end else
+                        Destinations.Add(ActivityLine."LP No.", ActivityLine."Bin Code");
+                end;
+            until ActivityLine.Next() = 0;
+
+        // A physical LP moves as one unit. When one product on that LP is selected,
+        // every other outstanding product on the same LP must be registered too.
+        ActivityLine.Reset();
+        ActivityLine.SetRange("Activity Type", WhseActivityHeader.Type);
+        ActivityLine.SetRange("No.", WhseActivityHeader."No.");
+        ActivityLine.SetRange("Action Type", ActivityLine."Action Type"::Place);
+        ActivityLine.SetFilter("LP No.", '<>%1', '');
+        ActivityLine.SetFilter("Qty. Outstanding", '>0');
+        if ActivityLine.FindSet() then
+            repeat
+                if Destinations.ContainsKey(ActivityLine."LP No.") and
+                   (ActivityLine."Qty. to Handle" <= 0)
+                then
+                    Error(
+                        '%1 LP numarasındaki tüm ürünleri birlikte yerleştirin. %2 ürünü henüz seçilmedi.',
+                        ActivityLine."LP No.", ActivityLine."Item No.");
             until ActivityLine.Next() = 0;
     end;
 
-    local procedure MoveLpHeaderToBin(LpNo: Code[20]; LocationCode: Code[10]; TargetBinCode: Code[20])
+    local procedure FinalizePutAwayLp(LpNo: Code[20]; PutAwayNo: Code[20]; LocationCode: Code[10]; TargetBinCode: Code[20])
     var
         LP: Record "DOPSWHS LP Header";
+        RemainingLine: Record "Warehouse Activity Line";
+        LPMgt: Codeunit "DOPSWHS LP Management";
+        SourceBinCode: Code[20];
     begin
         if not LP.Get(LpNo) then
             exit;
-        if (LP."Location Code" = LocationCode) and (LP."Bin Code" = TargetBinCode) then
-            exit;
-        LP.Validate("Location Code", LocationCode);
-        LP.Validate("Bin Code", TargetBinCode);
-        LP.Modify(true);
+        SourceBinCode := LP."Bin Code";
+        if (LP."Location Code" <> LocationCode) or (LP."Bin Code" <> TargetBinCode) then begin
+            LP.Validate("Location Code", LocationCode);
+            LP.Validate("Bin Code", TargetBinCode);
+            LP.Modify(true);
+            LPMgt.WriteToLedger(
+                LP, Enum::"DOPSWHS LP Action"::Moved,
+                SourceBinCode, TargetBinCode, 0, '', '', PutAwayNo);
+        end;
+
+        RemainingLine.SetRange("Activity Type", RemainingLine."Activity Type"::"Put-away");
+        RemainingLine.SetRange("No.", PutAwayNo);
+        RemainingLine.SetRange("LP No.", LpNo);
+        RemainingLine.SetFilter("Qty. Outstanding", '>0');
+        if RemainingLine.IsEmpty() and
+           (LP.Status = LP.Status::Assigned) and
+           (LP."Assigned Document Type" = LP."Assigned Document Type"::WhsePutaway) and
+           (LP."Assigned Document No." = PutAwayNo)
+        then
+            LPMgt.Release(LP);
     end;
 
     /// <summary>

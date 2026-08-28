@@ -436,32 +436,58 @@ codeunit 72043 "DOPSWHS Receipt Mgmt"
 
     local procedure StampPutAwayWithLP(PostedReceiptNo: Code[20])
     var
-        PostedReceiptLine: Record "Posted Whse. Receipt Line";
         WhseActivityLine: Record "Warehouse Activity Line";
+        ResolvedLpNo: Code[20];
     begin
+        WhseActivityLine.SetRange("Activity Type", WhseActivityLine."Activity Type"::"Put-away");
+        WhseActivityLine.SetRange("Whse. Document Type", WhseActivityLine."Whse. Document Type"::Receipt);
+        WhseActivityLine.SetRange("Whse. Document No.", PostedReceiptNo);
+        if WhseActivityLine.FindSet(true) then
+            repeat
+                ResolvedLpNo := ResolvePutAwayLineLp(PostedReceiptNo, WhseActivityLine);
+                if (ResolvedLpNo <> '') and (WhseActivityLine."LP No." <> ResolvedLpNo) then begin
+                    // Direct assignment is intentional: validating one activity
+                    // line recursively updates companions and may overwrite an
+                    // LP belonging to a different receipt line.
+                    WhseActivityLine."LP No." := ResolvedLpNo;
+                    WhseActivityLine.Modify(true);
+                end;
+            until WhseActivityLine.Next() = 0;
+    end;
+
+    local procedure ResolvePutAwayLineLp(PostedReceiptNo: Code[20]; WhseActivityLine: Record "Warehouse Activity Line"): Code[20]
+    var
+        PostedReceiptLine: Record "Posted Whse. Receipt Line";
+        CandidateLpNo: Code[20];
+    begin
+        // Normal path: the activity line points to the posted receipt line.
+        if PostedReceiptLine.Get(PostedReceiptNo, WhseActivityLine."Whse. Document Line No.") then
+            if (PostedReceiptLine."LP No." <> '') and
+               (PostedReceiptLine."Item No." = WhseActivityLine."Item No.") and
+               (PostedReceiptLine."Variant Code" = WhseActivityLine."Variant Code") and
+               (PostedReceiptLine."Lot No." = WhseActivityLine."Lot No.") and
+               (PostedReceiptLine."Serial No." = WhseActivityLine."Serial No.")
+            then
+                exit(PostedReceiptLine."LP No.");
+
+        // Tenant customizations can renumber activity document lines. Fall back
+        // to the tracking identity, but only when it resolves to one physical LP.
+        PostedReceiptLine.Reset();
         PostedReceiptLine.SetRange("No.", PostedReceiptNo);
+        PostedReceiptLine.SetRange("Item No.", WhseActivityLine."Item No.");
+        PostedReceiptLine.SetRange("Variant Code", WhseActivityLine."Variant Code");
+        PostedReceiptLine.SetRange("Lot No.", WhseActivityLine."Lot No.");
+        PostedReceiptLine.SetRange("Serial No.", WhseActivityLine."Serial No.");
         PostedReceiptLine.SetFilter("LP No.", '<>%1', '');
         if PostedReceiptLine.FindSet() then
             repeat
-                WhseActivityLine.Reset();
-                WhseActivityLine.SetRange("Activity Type", WhseActivityLine."Activity Type"::"Put-away");
-                WhseActivityLine.SetRange("Whse. Document Type", WhseActivityLine."Whse. Document Type"::Receipt);
-                WhseActivityLine.SetRange("Whse. Document No.", PostedReceiptNo);
-                WhseActivityLine.SetRange("Whse. Document Line No.", PostedReceiptLine."Line No.");
-                WhseActivityLine.SetRange("Item No.", PostedReceiptLine."Item No.");
-                WhseActivityLine.SetRange("Variant Code", PostedReceiptLine."Variant Code");
-                WhseActivityLine.SetRange("Lot No.", PostedReceiptLine."Lot No.");
-                WhseActivityLine.SetRange("Serial No.", PostedReceiptLine."Serial No.");
-                if WhseActivityLine.FindSet(true) then
-                    repeat
-                        if WhseActivityLine."LP No." <> PostedReceiptLine."LP No." then begin
-                            // Direct assignment is intentional: validating one
-                            // activity line recursively updates its companion.
-                            WhseActivityLine."LP No." := PostedReceiptLine."LP No.";
-                            WhseActivityLine.Modify(true);
-                        end;
-                    until WhseActivityLine.Next() = 0;
+                if CandidateLpNo = '' then
+                    CandidateLpNo := PostedReceiptLine."LP No."
+                else
+                    if CandidateLpNo <> PostedReceiptLine."LP No." then
+                        exit('');
             until PostedReceiptLine.Next() = 0;
+        exit(CandidateLpNo);
     end;
 
     local procedure EnsureRequiredSupplierLots(WhseReceiptHeader: Record "Warehouse Receipt Header")

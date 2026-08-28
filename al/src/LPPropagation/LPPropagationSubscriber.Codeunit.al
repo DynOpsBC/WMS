@@ -192,12 +192,22 @@ codeunit 72428 "DOPSWHS LP Propagation"
     local procedure ResolvePostedReceiptLineLp(WhseReceiptNo: Code[20]; PostedLine: Record "Posted Whse. Receipt Line"): Code[20]
     var
         ReceiptLineNo: Integer;
+        LpNo: Code[20];
     begin
         ReceiptLineNo := PostedLine."Whse Receipt Line No.";
         if ReceiptLineNo = 0 then
             ReceiptLineNo := PostedLine."Line No.";
-        exit(ResolveReceiptLpNo(
+        LpNo := ResolveReceiptLpNo(
             WhseReceiptNo, ReceiptLineNo, PostedLine."Item No.", PostedLine."Variant Code",
+            PostedLine."Lot No.", PostedLine."Serial No.");
+        if LpNo <> '' then
+            exit(LpNo);
+
+        // Some tenants renumber posted receipt lines. Product + variant + tracking
+        // identity is a safe fallback only when every matching source row belongs
+        // to the same LP; ResolveReceiptLpNo deliberately rejects ambiguity.
+        exit(ResolveReceiptLpNo(
+            WhseReceiptNo, 0, PostedLine."Item No.", PostedLine."Variant Code",
             PostedLine."Lot No.", PostedLine."Serial No."));
     end;
 
@@ -716,7 +726,6 @@ codeunit 72428 "DOPSWHS LP Propagation"
     /// </summary>
     local procedure ResolveLpForWhseEntry(WhseEntry: Record "Warehouse Entry"): Code[20]
     var
-        WhseActivityLine: Record "Warehouse Activity Line";
         WhseShipmentLine: Record "Warehouse Shipment Line";
         WhseReceiptHeader: Record "Warehouse Receipt Header";
         Lp: Code[20];
@@ -724,14 +733,11 @@ codeunit 72428 "DOPSWHS LP Propagation"
         // (a) Pick / Put-away / Movement: the working activity line (with its scanned LP) is still
         // present at OnBefore. Join on the shared source keys + item.
         if WhseEntry."Source No." <> '' then begin
-            WhseActivityLine.SetRange("Source Type", WhseEntry."Source Type");
-            WhseActivityLine.SetRange("Source Subtype", WhseEntry."Source Subtype");
-            WhseActivityLine.SetRange("Source No.", WhseEntry."Source No.");
-            WhseActivityLine.SetRange("Source Line No.", WhseEntry."Source Line No.");
-            WhseActivityLine.SetRange("Item No.", WhseEntry."Item No.");
-            WhseActivityLine.SetFilter("LP No.", '<>%1', '');
-            if WhseActivityLine.FindFirst() then
-                exit(WhseActivityLine."LP No.");
+            Lp := ResolveActivityLpForWhseEntry(WhseEntry, true);
+            if Lp = '' then
+                Lp := ResolveActivityLpForWhseEntry(WhseEntry, false);
+            if Lp <> '' then
+                exit(Lp);
         end;
 
         // (b) Outbound: the Warehouse Shipment Line carries the LP (keyed by whse document).
@@ -761,5 +767,32 @@ codeunit 72428 "DOPSWHS LP Propagation"
         end;
 
         exit('');
+    end;
+
+    local procedure ResolveActivityLpForWhseEntry(WhseEntry: Record "Warehouse Entry"; MatchSourceLine: Boolean): Code[20]
+    var
+        WhseActivityLine: Record "Warehouse Activity Line";
+        CandidateLpNo: Code[20];
+    begin
+        WhseActivityLine.SetRange("Source Type", WhseEntry."Source Type");
+        WhseActivityLine.SetRange("Source Subtype", WhseEntry."Source Subtype");
+        WhseActivityLine.SetRange("Source No.", WhseEntry."Source No.");
+        if MatchSourceLine and (WhseEntry."Source Line No." <> 0) then
+            WhseActivityLine.SetRange("Source Line No.", WhseEntry."Source Line No.");
+        WhseActivityLine.SetRange("Item No.", WhseEntry."Item No.");
+        WhseActivityLine.SetRange("Variant Code", WhseEntry."Variant Code");
+        WhseActivityLine.SetRange("Lot No.", WhseEntry."Lot No.");
+        WhseActivityLine.SetRange("Serial No.", WhseEntry."Serial No.");
+        WhseActivityLine.SetRange("Bin Code", WhseEntry."Bin Code");
+        WhseActivityLine.SetFilter("LP No.", '<>%1', '');
+        if WhseActivityLine.FindSet() then
+            repeat
+                if CandidateLpNo = '' then
+                    CandidateLpNo := WhseActivityLine."LP No."
+                else
+                    if CandidateLpNo <> WhseActivityLine."LP No." then
+                        exit('');
+            until WhseActivityLine.Next() = 0;
+        exit(CandidateLpNo);
     end;
 }
