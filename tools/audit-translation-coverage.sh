@@ -19,7 +19,15 @@ count_units() {
   grep -Eic '<trans-unit[[:space:]>]' "$file"
 }
 
-for file in "$base" "$tr" "$de"; do
+if [[ -f "$base" ]]; then
+  echo "PASS generated translation file present: $base"
+else
+  # *.g.xlf is compiler output and is intentionally excluded by al/.gitignore.
+  # CI's audit job does not run the AL compiler, so absence here is expected.
+  echo "SKIP generated translation file not present before compilation: $base"
+fi
+
+for file in "$tr" "$de"; do
   if [[ -f "$file" ]]; then
     echo "PASS translation file present: $file"
   else
@@ -33,16 +41,18 @@ tr_count="$(count_units "$tr")"
 de_count="$(count_units "$de")"
 echo "PASS translation counts source=$base_count tr-TR=$tr_count de-DE=$de_count"
 
-for locale in "tr-TR:$tr_count" "de-DE:$de_count"; do
-  name="${locale%%:*}"
-  count="${locale##*:}"
-  delta=$(( base_count - count ))
-  [[ "$delta" -lt 0 ]] && delta=$(( -delta ))
-  if [[ "$delta" -gt 0 ]]; then
-    echo "WARN translation delta for $name is $delta"
-  else
-    echo "PASS translation coverage for $name"
-  fi
-done
+if [[ -f "$base" ]]; then
+  for locale in "tr-TR:$tr_count" "de-DE:$de_count"; do
+    name="${locale%%:*}"
+    count="${locale##*:}"
+    delta=$(( base_count - count ))
+    [[ "$delta" -lt 0 ]] && delta=$(( -delta ))
+    if [[ "$delta" -gt 0 ]]; then
+      echo "WARN translation delta for $name is $delta"
+    else
+      echo "PASS translation coverage for $name"
+    fi
+  done
+fi
 
 exit "$status"
