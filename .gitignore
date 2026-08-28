@@ -42,6 +42,10 @@ web/.tmp-inject.js
 
 # Local design preview captures
 .snapshots/
+
+# Local UAT reports may contain customer-specific test data
+test-artifacts/bade-uat-2026-08-28/
+
 licensing-service/node_modules/
 licensing-service/dist/
 licensing-service/pnpm-lock.yaml
