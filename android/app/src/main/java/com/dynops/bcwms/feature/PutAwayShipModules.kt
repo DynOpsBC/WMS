@@ -109,6 +109,7 @@ private fun PutAwayDocument(no: String, onBack: () -> Unit) {
     var guidedPair by remember { mutableStateOf<PutAwayPair?>(null) }
     var scanFilter by remember { mutableStateOf("") }
     var showBulkBin by remember { mutableStateOf(false) }
+    var showBatchPlacement by remember { mutableStateOf(false) }
     var showBins by remember { mutableStateOf(false) }
     var stagedLineNos by remember(no) { mutableStateOf<Set<Int>>(emptySet()) }
 
@@ -321,12 +322,70 @@ private fun PutAwayDocument(no: String, onBack: () -> Unit) {
         }
     }
 
+    fun registerBatchAssignments(assignments: Map<String, String>) {
+        if (assignments.isEmpty()) {
+            status = "HATA: Önce hedef raf ve en az bir LP okutun."
+            return
+        }
+        scope.launch {
+            busy = true
+            status = "${assignments.size} LP yerleştirmeye hazırlanıyor..."
+            val allPairs = groupPutAwayPairs(lines)
+            val preparedLineNos = linkedSetOf<Int>()
+            var preparedLpCount = 0
+
+            for ((lpNo, targetBin) in assignments) {
+                val lpPairs = allPairs.filter { putAwayLpNo(it).equals(lpNo, ignoreCase = true) }
+                if (lpPairs.isEmpty()) {
+                    busy = false
+                    status = "HATA: $lpNo artık bu yerleştirmede bulunamadı. Belge yenileniyor."
+                    reload()
+                    return@launch
+                }
+
+                for (pair in lpPairs) {
+                    val qty = pair.place.optDouble("qtyOutstanding", 0.0)
+                        .takeIf { it > 0 }
+                        ?: pair.place.optDouble("quantity", 0.0)
+                    if (qty <= 0) continue
+                    val affected = putAwayPairLines(pair.place, lines)
+                    var pairPrepared = true
+                    for (line in affected) {
+                        if (!patchPutAwayLine(line, qty, targetBin)) {
+                            pairPrepared = false
+                            break
+                        }
+                        line.put("qtyToHandle", qty)
+                        if (isPutAwayPlaceLine(line)) line.put("binCode", targetBin)
+                        preparedLineNos.add(line.optInt("lineNo"))
+                    }
+                    if (!pairPrepared) {
+                        busy = false
+                        status = "HATA: $lpNo hazırlanamadı; hiçbir yerleştirme kaydedilmedi. Belge yenileniyor."
+                        reload()
+                        return@launch
+                    }
+                }
+                preparedLpCount++
+                status = "$preparedLpCount/${assignments.size} LP hazırlandı..."
+            }
+
+            stagedLineNos = stagedLineNos + preparedLineNos
+            if (!prepareRegisterLines()) {
+                busy = false
+                reload()
+                return@launch
+            }
+            registerPreparedLines()
+        }
+    }
+
     val h = header
     val assignedUserId = h?.optString("assignedUserId")?.trim().orEmpty()
     val canMutate = headerLoaded && linesComplete &&
         (adminTestSession || canMutateAssignedDocument(assignedUserId, myUserId))
     DocumentScanHandler(
-        enabled = canMutate && guidedPair == null && !showBulkBin && !busy,
+        enabled = canMutate && guidedPair == null && !showBulkBin && !showBatchPlacement && !busy,
         lines = lines,
         matchKeys = listOf("lpNo", "itemNo", "itemReference"),
         onSingleMatch = { line, _ -> scanFilter = ""; guidedPair = groupPutAwayPairs(putAwayPairLines(line, lines)).firstOrNull() },
@@ -389,7 +448,14 @@ private fun PutAwayDocument(no: String, onBack: () -> Unit) {
                 Spacer(Modifier.weight(1f))
                 TextButton(onClick = { showBins = true }) { Text("📍 Binler", fontSize = 12.sp) }
             }
-            Text("Bir yerleştirmeye dokunun → kaynak raf, ürün ve hedef raf okutularak doğrulanır.", fontSize = 12.sp, color = Color.Gray)
+            Text(
+                if (lines.any { it.optString("lpNo").isNotBlank() })
+                    "Hedef rafı okutun, ardından o rafa bırakacağınız LP'leri peş peşe okutun."
+                else
+                    "Bir yerleştirmeye dokunun; kaynak raf, ürün ve hedef raf doğrulanır.",
+                fontSize = 12.sp,
+                color = Color.Gray,
+            )
             if (scanFilter.isNotBlank()) { ScanFilterChip(scanFilter) { scanFilter = "" }; Spacer(Modifier.height(4.dp)) }
             Spacer(Modifier.height(8.dp))
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -409,7 +475,16 @@ private fun PutAwayDocument(no: String, onBack: () -> Unit) {
                     Text("👤 Bana Ata", fontWeight = FontWeight.Bold)
                 }
             } else {
-                OutlinedButton(onClick = { showBulkBin = true }, enabled = !busy && canMutate && lines.isNotEmpty(), modifier = Modifier.weight(1f).height(54.dp)) { Text("📦 Tümünü Bir Bine") }
+                val hasLpMovements = lines.any { it.optString("lpNo").isNotBlank() }
+                OutlinedButton(
+                    onClick = {
+                        if (hasLpMovements) showBatchPlacement = true else showBulkBin = true
+                    },
+                    enabled = !busy && canMutate && lines.isNotEmpty(),
+                    modifier = Modifier.weight(1f).height(54.dp),
+                ) {
+                    Text(if (hasLpMovements) "📍 Raf + LP Okut" else "📦 Tümünü Bir Bine")
+                }
                 val canRegister = canMutate && stagedLineNos.isNotEmpty()
                 Button(
                     onClick = { register() },
@@ -431,6 +506,17 @@ private fun PutAwayDocument(no: String, onBack: () -> Unit) {
             movementCount = logicalPutAwayMovementCount(lines),
             onDismiss = { showBulkBin = false },
             onConfirm = { bin -> showBulkBin = false; bulkAssignBin(bin) },
+        )
+    }
+    if (showBatchPlacement) {
+        BatchLpPutAwaySheet(
+            locationCode = h?.optString("locationCode") ?: "",
+            pairs = groupPutAwayPairs(lines),
+            onDismiss = { showBatchPlacement = false },
+            onComplete = { assignments ->
+                showBatchPlacement = false
+                registerBatchAssignments(assignments)
+            },
         )
     }
     if (showBins) {
@@ -537,6 +623,15 @@ private data class PutAwayPair(
     val description: String,
 )
 
+private fun putAwayLpNo(pair: PutAwayPair): String = pair.place.optString("lpNo").trim()
+
+private fun putAwayLpMatches(pair: PutAwayPair, scannedValue: String): Boolean {
+    val needle = scannedValue.trim()
+    if (needle.isBlank()) return false
+    return putAwayLpNo(pair).equals(needle, ignoreCase = true) ||
+        pair.place.optString("lpSscc").trim().equals(needle, ignoreCase = true)
+}
+
 private fun groupPutAwayPairs(lines: List<JSONObject>): List<PutAwayPair> {
     val byKey = LinkedHashMap<String, MutableList<JSONObject>>()
     for (ln in lines) byKey.getOrPut(putAwayPairKey(ln)) { mutableListOf() }.add(ln)
@@ -602,6 +697,163 @@ private fun BinPill(label: String, bin: String, accent: Color) {
         Surface(shape = RoundedCornerShape(8.dp), color = accent.copy(alpha = 0.12f)) {
             Text(bin, Modifier.padding(horizontal = 10.dp, vertical = 5.dp), fontSize = 15.sp, fontWeight = FontWeight.Bold, color = accent)
         }
+    }
+}
+
+/**
+ * Saha yerleştirme akışı: hedef raf bir kez okutulur, sonra o rafa giden LP'ler
+ * art arda okutulur. Yeni bir raf barkodu mevcut hedefi değiştirir; LP taraması
+ * yalnız yerel listeye eklenir ve tüm sunucu kayıtları Tamamla'da tek akışta yapılır.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun BatchLpPutAwaySheet(
+    locationCode: String,
+    pairs: List<PutAwayPair>,
+    onDismiss: () -> Unit,
+    onComplete: (Map<String, String>) -> Unit,
+) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var currentBin by remember { mutableStateOf("") }
+    var scan by remember { mutableStateOf("") }
+    var status by remember { mutableStateOf("Önce hedef rafı okutun.") }
+    var checkingBin by remember { mutableStateOf(false) }
+    var assignments by remember { mutableStateOf<Map<String, String>>(emptyMap()) }
+    val lpPairs = pairs.filter { putAwayLpNo(it).isNotBlank() }
+    val totalLpCount = lpPairs.map(::putAwayLpNo).distinctBy { it.uppercase() }.size
+
+    fun selectBin(raw: String) {
+        val candidate = BarcodeIntentResolver.resolve(raw).value.trim()
+        if (candidate.isBlank()) return
+        scope.launch {
+            checkingBin = true
+            status = "$candidate rafı kontrol ediliyor..."
+            val page = BcApi.getAllPages(context, putAwayExactBinPath(locationCode, candidate))
+            val found = page.rows.firstOrNull()
+            if (page.complete && found != null) {
+                currentBin = found.optString("code").ifBlank { candidate }
+                status = "TAMAM: Hedef raf $currentBin — LP'leri peş peşe okutun."
+            } else {
+                status = if (page.complete)
+                    "HATA: $candidate rafı $locationCode lokasyonunda bulunamadı."
+                else
+                    "HATA: Raf doğrulanamadı; bağlantıyı kontrol edip tekrar okutun."
+            }
+            scan = ""
+            checkingBin = false
+        }
+    }
+
+    fun scanLp(raw: String) {
+        val resolved = BarcodeIntentResolver.resolve(raw)
+        if (resolved.kind != BarcodeKind.Lp) {
+            selectBin(raw)
+            return
+        }
+        if (currentBin.isBlank()) {
+            status = "HATA: LP'den önce hedef rafı okutun."
+            scan = ""
+            return
+        }
+
+        val matchedPairs = lpPairs.filter { putAwayLpMatches(it, resolved.value) }
+        val lpNo = matchedPairs.firstOrNull()?.let(::putAwayLpNo).orEmpty()
+        if (lpNo.isBlank()) {
+            status = "HATA: ${resolved.value} bu yerleştirme belgesinde yok."
+            scan = ""
+            return
+        }
+
+        val qualityStatuses = matchedPairs.map {
+            it.place.optString("lpQualityStatus").trim().lowercase()
+        }
+        if (qualityStatuses.any { it == "inprogress" || it == "open" }) {
+            status = "HATA: $lpNo kalite onayı bekliyor; karantina gözünde kalmalı."
+            scan = ""
+            return
+        }
+        if (qualityStatuses.any { it == "failed" }) {
+            val quarantineBin = matchedPairs.firstNotNullOfOrNull {
+                it.place.optString("lpQualityBin").trim().takeIf(String::isNotBlank)
+            }.orEmpty()
+            if (quarantineBin.isBlank() || !currentBin.equals(quarantineBin, ignoreCase = true)) {
+                status = "HATA: $lpNo reddedildi; ${quarantineBin.ifBlank { "tanımlı ret gözüne" }} taşınmalı."
+                scan = ""
+                return
+            }
+        }
+
+        val oldBin = assignments[lpNo]
+        assignments = assignments + (lpNo to currentBin)
+        status = if (oldBin == null)
+            "TAMAM: $lpNo → $currentBin (${assignments.size}/$totalLpCount LP)"
+        else if (oldBin.equals(currentBin, ignoreCase = true))
+            "UYARI: $lpNo zaten $currentBin için okutuldu."
+        else
+            "TAMAM: $lpNo hedefi $oldBin yerine $currentBin olarak değiştirildi."
+        scan = ""
+    }
+
+    com.dynops.bcwms.ui.SheetScaffold(
+        onDismiss = onDismiss,
+        contentPadding = androidx.compose.foundation.layout.PaddingValues(20.dp),
+    ) {
+        Text("Raf Bazlı Toplu LP Yerleştirme", fontWeight = FontWeight.Bold, fontSize = 18.sp)
+        Text(
+            "Hedef rafı okutun, ardından bu rafa bırakacağınız LP'leri peş peşe okutun. Raf değişince yeni rafı okutmanız yeterli.",
+            fontSize = 12.sp,
+            color = Color.Gray,
+        )
+        Spacer(Modifier.height(12.dp))
+
+        Surface(
+            shape = RoundedCornerShape(12.dp),
+            color = if (currentBin.isBlank()) Color(0xFFEA580C).copy(alpha = 0.12f)
+            else Color(0xFF16A34A).copy(alpha = 0.12f),
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Column(Modifier.padding(14.dp)) {
+                Text("AKTİF HEDEF RAF", fontSize = 11.sp, color = Color.Gray)
+                Text(currentBin.ifBlank { "Önce raf okutun" }, fontSize = 22.sp, fontWeight = FontWeight.Bold)
+                Text("${assignments.size}/$totalLpCount LP hazır", fontSize = 12.sp, color = Color.Gray)
+            }
+        }
+
+        Spacer(Modifier.height(12.dp))
+        ScanField(
+            label = if (currentBin.isBlank()) "Hedef raf okut" else "LP veya yeni hedef raf okut",
+            value = scan,
+            onValueChange = { scan = it },
+            modifier = Modifier.fillMaxWidth(),
+            enabled = !checkingBin,
+            onScanned = { raw ->
+                val resolved = BarcodeIntentResolver.resolve(raw)
+                if (resolved.kind == BarcodeKind.Lp) scanLp(raw) else selectBin(raw)
+            },
+        )
+        Spacer(Modifier.height(8.dp))
+        StatusText(status)
+
+        if (assignments.isNotEmpty()) {
+            Spacer(Modifier.height(8.dp))
+            assignments.entries.toList().asReversed().take(6).forEach { (lpNo, bin) ->
+                Text("✓ $lpNo → $bin", fontSize = 13.sp, modifier = Modifier.padding(vertical = 2.dp))
+            }
+            if (assignments.size > 6)
+                Text("+ ${assignments.size - 6} LP daha", fontSize = 12.sp, color = Color.Gray)
+        }
+
+        Spacer(Modifier.height(16.dp))
+        Button(
+            enabled = assignments.isNotEmpty() && !checkingBin,
+            modifier = Modifier.fillMaxWidth().height(52.dp),
+            onClick = { onComplete(assignments) },
+        ) {
+            Text("✅ Okutulan ${assignments.size} LP'yi Yerleştir", fontWeight = FontWeight.Bold)
+        }
+        TextButton(onClick = onDismiss, modifier = Modifier.fillMaxWidth()) { Text("Vazgeç") }
+        Spacer(Modifier.height(20.dp))
     }
 }
 

@@ -9,6 +9,7 @@ page 72228 "DOPSWHS PutAway Line API"
     SourceTable = "Warehouse Activity Line";
     DelayedInsert = true;
     ODataKeyFields = "Activity Type", "No.", "Line No.";
+    Permissions = tabledata "DOPSWHS Quality Order" = r;
 
     layout
     {
@@ -42,6 +43,9 @@ page 72228 "DOPSWHS PutAway Line API"
                 field(lotNo; Rec."Lot No.") { Caption = 'lotNo'; Editable = false; }
                 field(serialNo; Rec."Serial No.") { Caption = 'serialNo'; Editable = false; }
                 field(lpNo; Rec."LP No.") { Caption = 'lpNo'; }
+                field(lpSscc; LpSscc) { Caption = 'lpSscc'; Editable = false; }
+                field(lpQualityStatus; LpQualityStatus) { Caption = 'lpQualityStatus'; Editable = false; }
+                field(lpQualityBin; LpQualityBin) { Caption = 'lpQualityBin'; Editable = false; }
                 field(targetLpNo; Rec."Target LP No.") { Caption = 'targetLpNo'; Editable = false; }
             }
         }
@@ -59,10 +63,49 @@ page 72228 "DOPSWHS PutAway Line API"
     trigger OnAfterGetRecord()
     var
         Item: Record Item;
+        LP: Record "DOPSWHS LP Header";
     begin
         Clear(ItemGtin);
+        Clear(LpSscc);
         if (Rec."Item No." <> '') and Item.Get(Rec."Item No.") then
             ItemGtin := Item.GTIN;
+        if (Rec."LP No." <> '') and LP.Get(Rec."LP No.") then
+            LpSscc := LP.SSCC;
+        LoadLpQuality();
+    end;
+
+    local procedure LoadLpQuality()
+    var
+        QualityOrder: Record "DOPSWHS Quality Order";
+    begin
+        Clear(LpQualityStatus);
+        Clear(LpQualityBin);
+        if Rec."LP No." = '' then
+            exit;
+
+        QualityOrder.SetRange("LP No.", Rec."LP No.");
+        if QualityOrder.FindSet() then
+            repeat
+                case QualityOrder.Status of
+                    QualityOrder.Status::Open,
+                    QualityOrder.Status::InProgress:
+                        begin
+                            LpQualityStatus := 'InProgress';
+                            exit;
+                        end;
+                    QualityOrder.Status::Failed:
+                        begin
+                            LpQualityStatus := 'Failed';
+                            LpQualityBin := QualityOrder."Quarantine Bin";
+                        end;
+                    QualityOrder.Status::Passed:
+                        if LpQualityStatus = '' then
+                            LpQualityStatus := 'Passed';
+                    QualityOrder.Status::Closed:
+                        if LpQualityStatus = '' then
+                            LpQualityStatus := 'Closed';
+                end;
+            until QualityOrder.Next() = 0;
     end;
 
     /// <summary>
@@ -87,6 +130,8 @@ page 72228 "DOPSWHS PutAway Line API"
         if qtyToHandle > Rec."Qty. Outstanding" then
             Error('Yerleştirme miktarı %1, kalan %2 miktarını aşamaz.', qtyToHandle, Rec."Qty. Outstanding");
 
+        VerifyQualityPlacement(targetBinCode);
+
         // Önerilen raftan farklı bir hedef başka zone'da olabilir. Yalnız Bin
         // Code'u doğrulamak, Place satırındaki eski öneri zone'unu korur ve BC
         // geçerli hedef rafı reddeder. Önce hedef binin gerçek zone'unu uygula;
@@ -97,6 +142,37 @@ page 72228 "DOPSWHS PutAway Line API"
         Rec.Modify(true);
     end;
 
+    local procedure VerifyQualityPlacement(TargetBinCode: Code[20])
+    var
+        QualityOrder: Record "DOPSWHS Quality Order";
+    begin
+        if Rec."LP No." = '' then
+            exit;
+
+        QualityOrder.SetRange("LP No.", Rec."LP No.");
+        if QualityOrder.FindSet() then
+            repeat
+                case QualityOrder.Status of
+                    QualityOrder.Status::Open,
+                    QualityOrder.Status::InProgress:
+                        Error(
+                            '%1 LP numarasının kalite kontrolü henüz tamamlanmadı. LP karantina gözünde kalmalıdır.',
+                            Rec."LP No.");
+                    QualityOrder.Status::Failed:
+                        begin
+                            QualityOrder.TestField("Quarantine Bin");
+                            if QualityOrder."Quarantine Bin" <> TargetBinCode then
+                                Error(
+                                    '%1 LP numarası kalite kontrolden reddedildi. Yalnız %2 ret/karantina gözüne yerleştirilebilir.',
+                                    Rec."LP No.", QualityOrder."Quarantine Bin");
+                        end;
+                end;
+            until QualityOrder.Next() = 0;
+    end;
+
     var
         ItemGtin: Code[14];
+        LpSscc: Code[18];
+        LpQualityStatus: Text[20];
+        LpQualityBin: Code[20];
 }

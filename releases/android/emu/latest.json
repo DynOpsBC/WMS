@@ -1,7 +1,7 @@
 {
-  "versionCode": 200067,
-  "versionName": "1.14.67-emu",
-  "apkUrl": "https://github.com/DynOpsBC/WMS/releases/download/android-v1.14.67/BCWMS-EMU-1.14.67-RELEASE.apk",
-  "sha256": "c6c93308b3126811e43dc7f9714d32a0f5c492dfbce771f1b9dd59cf185e916f",
-  "releaseNotes": "Toplu mal kabulde oluşan her LP, yerleştirmede kendi miktarıyla ayrı palet hareketi olarak gösterilir. LP etiketi okutularak doğru palet seçilir ve her LP ayrı rafa yerleştirilebilir; EMU Kutu ve Palet ekranı korunur."
+  "versionCode": 200068,
+  "versionName": "1.14.68-emu",
+  "apkUrl": "https://github.com/DynOpsBC/WMS/releases/download/android-v1.14.68/BCWMS-EMU-1.14.68-RELEASE.apk",
+  "sha256": "c940bf98d798fecb2221466b314a9f6a3559c9ac86962722e2d0fffbe06e69a4",
+  "releaseNotes": "Yerleştirmede önce hedef raf okutulur, ardından o rafa bırakılacak LP'ler peş peşe okutulur. Raf değişince yeni raf okutularak devam edilir; kalite bekleyen veya yanlış ret rafına yönlenen LP engellenir ve EMU Kutu ve Palet ekranı korunur."
 }

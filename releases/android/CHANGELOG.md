@@ -7,6 +7,21 @@ Kurulum: [docs/android-install-guide.md](../../docs/android-install-guide.md)
 
 ---
 
+## v1.14.68 — BADE + EMU — 2026-08-28
+
+**versionCode:** 200068 · **BC paketi:** 1.14.0.86
+
+**BADE SHA-256:** `9486e95fda9e9c1b157c974f8b0b1658962a58a6ef1e937b44d78dd74cdb9de8`
+
+**EMU SHA-256:** `c940bf98d798fecb2221466b314a9f6a3559c9ac86962722e2d0fffbe06e69a4`
+
+### Raf bazlı hızlı LP yerleştirme
+
+- Operatör hedef rafı bir kez okutup aynı rafa bırakacağı LP'leri art arda okutabilir.
+- Hedef değiştiğinde yeni raf barkodu okutularak farklı LP gruplarına aynı ekranda devam edilir.
+- Tamamla işleminde okutulan LP'ler kendi miktar, lot ve hedef raflarıyla birlikte kaydedilir.
+- Kalite bekleyen LP normal rafa konamaz; reddedilen LP yalnız tanımlı ret/karantina rafına yönlendirilir.
+
 ## v1.14.67 — BADE + EMU — 2026-08-28
 
 **versionCode:** 200067 · **BC paketi:** 1.14.0.85

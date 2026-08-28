@@ -1,7 +1,7 @@
 {
-  "versionCode": 200067,
-  "versionName": "1.14.67-bade",
-  "apkUrl": "https://github.com/DynOpsBC/WMS/releases/download/android-v1.14.67/BCWMS-BADE-1.14.67-RELEASE.apk",
-  "sha256": "4984b94e99aa0d09dc0022e2b7b6d39c5eb2b1588847fd1a15ba6e856c160d1c",
-  "releaseNotes": "Toplu mal kabulde oluşan her LP, yerleştirmede kendi miktarıyla ayrı palet hareketi olarak gösterilir. LP etiketi okutularak doğru palet seçilir ve her LP ayrı rafa yerleştirilebilir."
+  "versionCode": 200068,
+  "versionName": "1.14.68-bade",
+  "apkUrl": "https://github.com/DynOpsBC/WMS/releases/download/android-v1.14.68/BCWMS-BADE-1.14.68-RELEASE.apk",
+  "sha256": "9486e95fda9e9c1b157c974f8b0b1658962a58a6ef1e937b44d78dd74cdb9de8",
+  "releaseNotes": "Yerleştirmede önce hedef raf okutulur, ardından o rafa bırakılacak LP'ler peş peşe okutulur. Raf değişince yeni raf okutularak devam edilir; kalite bekleyen veya yanlış ret rafına yönlenen LP engellenir."
 }
