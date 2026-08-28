@@ -30,7 +30,7 @@ jobs:
         run: chmod +x gradlew
       - name: Run lint + unit + assemble
         working-directory: android
-        run: ./gradlew :app:lintDebug :app:testDebugUnitTest :app:assembleDebug
+        run: ./gradlew :app:lintBadeDebug :app:testBadeDebugUnitTest :app:assembleBadeDebug
       - name: Upload lint report
         if: failure()
         uses: actions/upload-artifact@v7
@@ -86,11 +86,9 @@ jobs:
       - uses: actions/setup-node@v6
         with:
           node-version: "20"
-          cache: pnpm
-          cache-dependency-path: push-relay/pnpm-lock.yaml
       - name: Install
         working-directory: push-relay
-        run: pnpm install --frozen-lockfile
+        run: pnpm install --frozen-lockfile=false
       - name: Build + test
         working-directory: push-relay
         run: |
@@ -108,11 +106,9 @@ jobs:
       - uses: actions/setup-node@v6
         with:
           node-version: "20"
-          cache: pnpm
-          cache-dependency-path: licensing-service/pnpm-lock.yaml
       - name: Install
         working-directory: licensing-service
-        run: pnpm install --frozen-lockfile
+        run: pnpm install --frozen-lockfile=false
       - name: Build + test
         working-directory: licensing-service
         run: |

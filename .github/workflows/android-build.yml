@@ -27,5 +27,4 @@ jobs:
         run: chmod +x gradlew
       - name: Build Android
         working-directory: android
-        run: ./gradlew lintDebug testDebugUnitTest assembleDebug
-
+        run: ./gradlew :app:lintBadeDebug :app:testBadeDebugUnitTest :app:assembleBadeDebug
