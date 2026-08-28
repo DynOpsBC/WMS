@@ -428,10 +428,19 @@ codeunit 72040 "DOPSWHS LP Management"
     end;
 
     /// <summary>
-    /// Reduces one exact LP line after a posted direct sales shipment. The quantity received
-    /// from the item ledger is always in the item's base unit; the LP line may use another UOM.
+    /// Backwards-compatible entry point retained for callers compiled against older versions.
     /// </summary>
     procedure ConsumeLineForPostedSale(LpNo: Code[20]; LineNo: Integer; BaseQty: Decimal; PostedShipmentNo: Code[20])
+    begin
+        ConsumeLineForShipment(LpNo, LineNo, BaseQty, PostedShipmentNo);
+    end;
+
+    /// <summary>
+    /// Reduces one exact LP line after a posted sales shipment. The quantity received
+    /// from the item ledger is always in the item's base unit; the LP line may use another UOM.
+    /// Works for both direct sales posting and warehouse shipment posting.
+    /// </summary>
+    procedure ConsumeLineForShipment(LpNo: Code[20]; LineNo: Integer; BaseQty: Decimal; PostedShipmentNo: Code[20])
     var
         LP: Record "DOPSWHS LP Header";
         LPLine: Record "DOPSWHS LP Line";
@@ -450,7 +459,7 @@ codeunit 72040 "DOPSWHS LP Management"
         LPLine.LockTable();
         LP.Get(LpNo);
         if not (LP.Status in [LP.Status::Open, LP.Status::Built, LP.Status::Assigned]) then
-            Error('%1 LP numarası satışta kullanılamaz. Güncel durum: %2.', LpNo, LP.Status);
+            Error('%1 LP numarası sevkiyatta kullanılamaz. Güncel durum: %2.', LpNo, LP.Status);
         LPLine.Get(LpNo, LineNo);
 
         Item.Get(LPLine."Item No.");
@@ -494,7 +503,16 @@ codeunit 72040 "DOPSWHS LP Management"
             Clear(LP."Assigned Document Type");
             LP."Assigned Document No." := '';
             LP.Modify(true);
-        end;
+        end else
+            // A posted shipment no longer has a live document to which the
+            // remaining physical LP can stay assigned. Release the remainder
+            // for the next movement instead of leaving a stale assignment.
+            if LP.Status = LP.Status::Assigned then begin
+                LP.Status := LP.Status::Built;
+                Clear(LP."Assigned Document Type");
+                LP."Assigned Document No." := '';
+                LP.Modify(true);
+            end;
     end;
 
     procedure WriteToLedger(var LP: Record "DOPSWHS LP Header"; Action: Enum "DOPSWHS LP Action"; FromBin: Code[20]; ToBin: Code[20]; Quantity: Decimal; ItemNo: Code[20]; LotSerial: Code[50]; RelatedDocument: Code[40])

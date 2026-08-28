@@ -509,7 +509,7 @@ codeunit 72428 "DOPSWHS LP Propagation"
     /// An ambiguous LP therefore stops the shipment without leaving inventory and LP out of sync.
     /// </summary>
     [EventSubscriber(ObjectType::Codeunit, Codeunit::"Sales-Post", 'OnAfterFinalizePostingOnBeforeCommit', '', false, false)]
-    local procedure ReconcileDirectSalesLpBeforeCommit(
+    local procedure ReconcileSalesLpBeforeCommit(
         var SalesHeader: Record "Sales Header";
         var SalesShipmentHeader: Record "Sales Shipment Header";
         var SalesInvoiceHeader: Record "Sales Invoice Header";
@@ -522,20 +522,22 @@ codeunit 72428 "DOPSWHS LP Propagation"
         WhseReceive: Boolean;
         var EverythingInvoiced: Boolean)
     begin
-        if PreviewMode or WhseShip or (SalesShipmentHeader."No." = '') then
+        if PreviewMode or (SalesShipmentHeader."No." = '') then
             exit;
-        ReconcileDirectSalesLp(SalesShipmentHeader."No.");
+        ReconcileSalesLp(SalesShipmentHeader."No.", WhseShip);
     end;
 
     /// <summary>
-    /// Direct sales posting bypasses warehouse shipment/pick documents. Reconcile the physical
-    /// LP from the posted item-ledger lot/serial identity so inventory and LP contents stay equal.
-    /// Warehouse shipments are excluded because their posted line already carries an explicit LP.
+    /// Reconciles the physical LP from the posted item-ledger lot/serial identity so inventory
+    /// and LP contents stay equal. Warehouse shipments prefer their explicitly selected LP;
+    /// direct sales fall back to an unambiguous active LP for the same item/lot/serial.
     /// </summary>
-    local procedure ReconcileDirectSalesLp(SalesShptHdrNo: Code[20])
+    local procedure ReconcileSalesLp(SalesShptHdrNo: Code[20]; WhseShip: Boolean)
     var
         ItemLedgerEntry: Record "Item Ledger Entry";
         PostedShptLine: Record "Sales Shipment Line";
+        PreferredLpNo: Code[20];
+        AmbiguousLp: Boolean;
     begin
         ItemLedgerEntry.SetRange("Document No.", SalesShptHdrNo);
         ItemLedgerEntry.SetRange("Entry Type", ItemLedgerEntry."Entry Type"::Sale);
@@ -544,13 +546,66 @@ codeunit 72428 "DOPSWHS LP Propagation"
             exit;
 
         repeat
-            if PostedShptLine.Get(SalesShptHdrNo, ItemLedgerEntry."Document Line No.") then
-                if PostedShptLine."DOPSWHS LP No." = '' then
-                    ReconcileDirectSalesEntry(ItemLedgerEntry);
+            if PostedShptLine.Get(SalesShptHdrNo, ItemLedgerEntry."Document Line No.") then begin
+                Clear(PreferredLpNo);
+                Clear(AmbiguousLp);
+                if WhseShip then begin
+                    // The ILE propagation event only knows order + item and can
+                    // be too broad when the same item is shipped from multiple
+                    // LPs. Resolve again from the exact order line and tracking
+                    // identity before changing any physical LP quantity.
+                    PreferredLpNo := ResolveWarehouseShipmentLp(PostedShptLine, ItemLedgerEntry, AmbiguousLp);
+                    if AmbiguousLp then
+                        Error(
+                            '%1 maddesi, lot %2 için sevkiyatta birden fazla LP seçilmiş. LP miktarları güvenli biçimde düşürülemedi.',
+                            ItemLedgerEntry."Item No.", ItemLedgerEntry."Lot No.");
+                    // A warehouse shipment that was not explicitly tied to an
+                    // LP remains loose stock. Never guess among active LPs.
+                    if PreferredLpNo <> '' then
+                        ReconcileSalesEntry(ItemLedgerEntry, PreferredLpNo, true);
+                end else begin
+                    if ItemLedgerEntry."DOPSWHS LP No." <> '' then
+                        PreferredLpNo := ItemLedgerEntry."DOPSWHS LP No."
+                    else
+                        PreferredLpNo := PostedShptLine."DOPSWHS LP No.";
+                    ReconcileSalesEntry(ItemLedgerEntry, PreferredLpNo, PreferredLpNo <> '');
+                end;
+            end;
         until ItemLedgerEntry.Next() = 0;
     end;
 
-    local procedure ReconcileDirectSalesEntry(var ItemLedgerEntry: Record "Item Ledger Entry")
+    local procedure ResolveWarehouseShipmentLp(PostedShptLine: Record "Sales Shipment Line"; ItemLedgerEntry: Record "Item Ledger Entry"; var Ambiguous: Boolean): Code[20]
+    var
+        WhseShptLine: Record "Warehouse Shipment Line";
+        CandidateLpNo: Code[20];
+    begin
+        Clear(Ambiguous);
+        WhseShptLine.SetRange("Source Type", Database::"Sales Line");
+        WhseShptLine.SetRange("Source No.", PostedShptLine."Order No.");
+        WhseShptLine.SetRange("Source Line No.", PostedShptLine."Order Line No.");
+        WhseShptLine.SetRange("Item No.", ItemLedgerEntry."Item No.");
+        WhseShptLine.SetRange("Variant Code", ItemLedgerEntry."Variant Code");
+        WhseShptLine.SetFilter("Qty. to Ship", '>0');
+        WhseShptLine.SetFilter("LP No.", '<>%1', '');
+        if WhseShptLine.FindSet() then
+            repeat
+                // A mobile lot override is authoritative when present. Blank
+                // means BC item tracking owns the split, so keep it eligible.
+                if (WhseShptLine."DOPSWHS Lot No." = '') or
+                   (WhseShptLine."DOPSWHS Lot No." = ItemLedgerEntry."Lot No.")
+                then
+                    if CandidateLpNo = '' then
+                        CandidateLpNo := WhseShptLine."LP No."
+                    else
+                        if CandidateLpNo <> WhseShptLine."LP No." then begin
+                            Ambiguous := true;
+                            exit('');
+                        end;
+            until WhseShptLine.Next() = 0;
+        exit(CandidateLpNo);
+    end;
+
+    local procedure ReconcileSalesEntry(var ItemLedgerEntry: Record "Item Ledger Entry"; PreferredLpNo: Code[20]; RequirePreferredLp: Boolean)
     var
         LPHeader: Record "DOPSWHS LP Header";
         LPLine: Record "DOPSWHS LP Line";
@@ -570,6 +625,8 @@ codeunit 72428 "DOPSWHS LP Propagation"
             exit;
         Item.Get(ItemLedgerEntry."Item No.");
 
+        if PreferredLpNo <> '' then
+            LPHeader.SetRange("No.", PreferredLpNo);
         LPHeader.SetRange("Location Code", ItemLedgerEntry."Location Code");
         LPHeader.SetFilter(Status, '%1|%2|%3', LPHeader.Status::Open, LPHeader.Status::Built, LPHeader.Status::Assigned);
         if LPHeader.FindSet() then
@@ -601,9 +658,13 @@ codeunit 72428 "DOPSWHS LP Propagation"
                     until LPLine.Next() = 0;
             until LPHeader.Next() = 0;
 
-        // No matching active LP means this shipment came from loose stock.
-        if MatchingLineCount = 0 then
+        // No matching active LP means a direct shipment came from loose stock.
+        if (MatchingLineCount = 0) and (not RequirePreferredLp) then
             exit;
+        if MatchingLineCount = 0 then
+            Error(
+                '%1 LP numarasında %2 maddesi, lot %3 için sevk edilebilir satır bulunamadı.',
+                PreferredLpNo, ItemLedgerEntry."Item No.", ItemLedgerEntry."Lot No.");
         if MatchingLineCount > 1 then
             Error(
                 '%1 maddesi, lot %2 için birden fazla LP eşleşti. Yanlış LP miktarının düşmemesi için sevkiyat durduruldu.',
@@ -613,10 +674,9 @@ codeunit 72428 "DOPSWHS LP Propagation"
                 '%1 LP numarasında sevk için yeterli miktar yoktur. LP miktarı: %2, sevk miktarı: %3.',
                 CandidateLPNo, CandidateAvailableBaseQty, RequiredBaseQty);
 
-        LPManagement.ConsumeLineForPostedSale(
+        LPManagement.ConsumeLineForShipment(
             CandidateLPNo, CandidateLineNo, RequiredBaseQty, ItemLedgerEntry."Document No.");
-        ItemLedgerEntry."DOPSWHS LP No." := CandidateLPNo;
-        ItemLedgerEntry.Modify();
+        StampItemLedgerEntry(ItemLedgerEntry, CandidateLPNo);
     end;
 
     /// <summary>After Purch-Post completes, copy the LP from the originating Whse Receipt Header

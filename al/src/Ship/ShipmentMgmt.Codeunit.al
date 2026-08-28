@@ -345,7 +345,6 @@ codeunit 72047 "DOPSWHS Shipment Mgmt"
                     PostedWhseShipmentLine."LP No." := LpNo;
                     PostedWhseShipmentLine.SSCC := Sscc;
                     PostedWhseShipmentLine.Modify(true);
-                    MarkLpUsed(LpNo);
                 end;
             until PostedWhseShipmentLine.Next() = 0;
 
@@ -598,16 +597,6 @@ codeunit 72047 "DOPSWHS Shipment Mgmt"
                 LpCount += 1;
                 EnsureLpSscc(LP."No.", Sscc);
             until LP.Next() = 0;
-    end;
-
-    local procedure MarkLpUsed(LpNo: Code[20])
-    var
-        LP: Record "DOPSWHS LP Header";
-    begin
-        if not LP.Get(LpNo) then
-            exit;
-        LP.Status := LP.Status::Used;
-        LP.Modify(true);
     end;
 
     [TryFunction]
