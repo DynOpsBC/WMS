@@ -62,7 +62,8 @@ object WhsePickNavigation {
 enum class Screen(val title: String) {
     Home("Ana Menü"),
     Connection("Bağlantı Ayarları"),
-    LicensePlates("Palet / LP"),
+    LicensePlates("LP (Taşıma Kabı)"),
+    HierarchicalLP("DKC Kutu ve Palet"),
     ItemInquiry("Ürün Sorgu"),
     BinInquiry("Bin Sorgu"),
     WhseEntries("Ambar Hareketleri"),
@@ -177,6 +178,7 @@ fun AppRoot() {
                 )
                 Screen.Connection -> LoginFlow(onConnected = { connected = it })
                 Screen.LicensePlates -> LicensePlateModule()
+                Screen.HierarchicalLP -> HierarchicalLpModule()
                 Screen.ItemInquiry -> ItemInquiryModule()
                 Screen.BinInquiry -> BinInquiryModule()
                 Screen.WhseEntries -> WhseEntriesModule()
@@ -215,18 +217,20 @@ internal fun isHomeTileEnabled(screen: Screen, connected: Boolean): Boolean =
     connected || screen == Screen.Connection || screen == Screen.Help
 
 /** Operatör ana menüsünde destek/test araçları gösterilmez; ekranlar koddan silinmez. */
-internal fun operatorHomeScreens(flavor: String): Set<Screen> =
+internal fun operatorHomeScreens(flavor: String): Set<Screen> {
     if (shouldForceProductionFlow(flavor)) {
-        Screen.entries.toSet() - setOf(
+        val hidden = mutableSetOf(
             Screen.Home,
             Screen.FieldSettings,
             Screen.SelfTest,
             Screen.TestCenter,
             Screen.PostingTest,
         )
-    } else {
-        Screen.entries.toSet() - Screen.Home
+        if (!flavor.equals("emu", ignoreCase = true)) hidden += Screen.HierarchicalLP
+        return Screen.entries.toSet() - hidden
     }
+    return Screen.entries.toSet() - setOf(Screen.Home, Screen.HierarchicalLP)
+}
 
 /** Tek dokunuşla klasik ve V2 operasyonlarını değiştirir. */
 @Composable
@@ -295,7 +299,8 @@ private val HomeCategories = listOf(
         HomeTile(Screen.Shipping, WmsGlyph.SHIPPING, "Sevkiyat", "Belgeyi tamamla ve çıkışı kaydet"),
     )),
     HomeCategory("İç Operasyon", Color(0xFF2D9CDB), listOf(
-        HomeTile(Screen.LicensePlates, WmsGlyph.LICENSE_PLATE, "Palet / LP", "Palet ve taşıma kabı işlemleri"),
+        HomeTile(Screen.LicensePlates, WmsGlyph.LICENSE_PLATE, "LP", "Palet ve taşıma kabı işlemleri"),
+        HomeTile(Screen.HierarchicalLP, WmsGlyph.LICENSE_PLATE, "Kutu ve Palet", "Ürün LP'lerini kutuya, kutuları palete bağla"),
         HomeTile(Screen.AdHocMove, WmsGlyph.AD_HOC, "Ad-Hoc Hareket", "Belgesiz raf veya LP hareketi"),
         HomeTile(Screen.DirectedMove, WmsGlyph.DIRECTED_MOVE, "Yönlendirilmiş", "Hazırlanmış taşıma emrini uygula"),
         HomeTile(Screen.Count, WmsGlyph.COUNT, "Sayım", "Hazır sayım belgesini tamamla"),

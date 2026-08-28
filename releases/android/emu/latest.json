@@ -1,7 +1,7 @@
 {
-  "versionCode": 200064,
-  "versionName": "1.14.64-emu",
-  "apkUrl": "https://github.com/DynOpsBC/WMS/releases/download/android-v1.14.64/BCWMS-EMU-1.14.64-RELEASE.apk",
-  "sha256": "a88318ba7bc3899d641a9548cf409e749791c731589e590c39c129b435498654",
-  "releaseNotes": "Çok ürünlü yerleştirmede tek satır diğer satırları kapatmaz. Farklı lot/LP hareketleri ayrı görünür ve geçmiş SKT ile mal kabul engellenir."
+  "versionCode": 200065,
+  "versionName": "1.14.65-emu",
+  "apkUrl": "https://github.com/DynOpsBC/WMS/releases/download/android-v1.14.65/BCWMS-EMU-1.14.65-RELEASE.apk",
+  "sha256": "d8a3efa42002113f38de7a740aaea43d3bc5be9e7196e1b5348966633c95582b",
+  "releaseNotes": "LP menüsü yeniden LP adıyla gösterilir. EMU'ya özel Kutu ve Palet ekranı; oluşturma, bağlama, ayırma, içerik, taşıma ve etiket işlemleriyle geri getirildi."
 }

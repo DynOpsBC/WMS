@@ -41,6 +41,7 @@ enum class WmsGlyph {
     PACKING,
     SHIPPING,
     LICENSE_PLATE,
+    HIERARCHICAL_LP,
     AD_HOC,
     DIRECTED_MOVE,
     COUNT,
@@ -74,6 +75,7 @@ fun glyphForScreen(screen: Screen): WmsGlyph = when (screen) {
     Screen.Packing -> WmsGlyph.PACKING
     Screen.Shipping -> WmsGlyph.SHIPPING
     Screen.LicensePlates -> WmsGlyph.LICENSE_PLATE
+    Screen.HierarchicalLP -> WmsGlyph.HIERARCHICAL_LP
     Screen.AdHocMove -> WmsGlyph.AD_HOC
     Screen.DirectedMove -> WmsGlyph.DIRECTED_MOVE
     Screen.Count -> WmsGlyph.COUNT
@@ -264,6 +266,14 @@ fun WmsIcon(
                 listOf(0.42f, 0.49f, 0.58f, 0.66f, 0.73f).forEachIndexed { i, x ->
                     drawLine(color, p(x, 0.32f), p(x, if (i % 2 == 0) 0.68f else 0.62f), strokeWidth * 0.55f, StrokeCap.Round)
                 }
+            }
+            WmsGlyph.HIERARCHICAL_LP -> {
+                // Ürün LP -> kutu -> palet: üç seviye ve aralarındaki bağ.
+                roundRect(0.12f, 0.58f, 0.30f, 0.24f)
+                roundRect(0.36f, 0.35f, 0.30f, 0.24f)
+                roundRect(0.60f, 0.12f, 0.28f, 0.24f)
+                line(0.34f, 0.60f, 0.43f, 0.53f)
+                line(0.58f, 0.37f, 0.67f, 0.30f)
             }
             WmsGlyph.AD_HOC -> {
                 roundRect(0.11f, 0.19f, 0.26f, 0.25f, fill = true); roundRect(0.63f, 0.56f, 0.26f, 0.25f, fill = true)

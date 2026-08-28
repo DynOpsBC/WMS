@@ -7,6 +7,21 @@ Kurulum: [docs/android-install-guide.md](../../docs/android-install-guide.md)
 
 ---
 
+## v1.14.65 — BADE + EMU — 2026-08-28
+
+**versionCode:** 200065 · **BC paketi:** 1.14.0.79
+
+**BADE SHA-256:** `e5125c80478a659732801c9bfa312a95f8eab638927f9bbeb0a89f6e3383d615`
+
+**EMU SHA-256:** `d8a3efa42002113f38de7a740aaea43d3bc5be9e7196e1b5348966633c95582b`
+
+### EMU Kutu ve Palet ekranı
+
+- Mevcut taşıma kabı menüsünün adı yeniden `LP` yapıldı.
+- EMU ana menüsüne ayrı `Kutu ve Palet` butonu geri getirildi.
+- Ürün LP → kutu → palet oluşturma, bağlama/ayırma, içerik görüntüleme, toplu taşıma ve hiyerarşi etiketi işlemleri yeniden kullanılabilir.
+- `Kutu ve Palet` butonu yalnız EMU paketinde görünür; BADE menüsü değişmez.
+
 ## v1.14.64 — BADE + EMU — 2026-08-28
 
 **versionCode:** 200064 · **BC paketi:** 1.14.0.79

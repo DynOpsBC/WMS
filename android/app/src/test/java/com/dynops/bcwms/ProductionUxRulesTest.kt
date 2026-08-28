@@ -25,6 +25,7 @@ class ProductionUxRulesTest {
         assertFalse(Screen.PostingTest in screens)
         assertFalse(Screen.SelfTest in screens)
         assertTrue(Screen.Printers in screens)
+        assertTrue(Screen.HierarchicalLP in screens)
     }
 
     @Test
@@ -48,6 +49,7 @@ class ProductionUxRulesTest {
         assertTrue(Screen.Printers in screens)
         assertTrue(Screen.Connection in screens)
         assertTrue(Screen.Help in screens)
+        assertFalse(Screen.HierarchicalLP in screens)
         assertFalse(Screen.TestCenter in screens)
         assertFalse(Screen.PostingTest in screens)
         assertFalse(Screen.SelfTest in screens)
