@@ -768,103 +768,115 @@ private fun CountV2Document(no: String, onBack: () -> Unit) {
         lines.none { it.optBoolean("recountRequired") } &&
         countDocumentIsMutable(h?.optString("status").orEmpty())
 
-    Column(Modifier.fillMaxSize().padding(12.dp)) {
-        TextButton(onClick = onBack, enabled = !busy) { Text("‹ Sayfa Listesi") }
-        DocHeaderCard(
-            title = "$no · Sayım V2",
-            subtitle = "Lokasyon: ${h?.optString("locationCode").orEmpty()} · ${h?.optString("status").orEmpty()}",
-        )
-        Spacer(Modifier.height(8.dp))
-        StatusText(status)
-        Spacer(Modifier.height(8.dp))
-
-        if (h != null && allowedSlots.isEmpty()) {
-            StatusText("Bu belge için $myUserId kullanıcısına sayıcı slotu atanmamış.")
-        } else if (allowedSlots.size > 1) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("Sayım turu", fontSize = 12.sp, color = Color.Gray)
-                Spacer(Modifier.width(8.dp))
-                allowedSlots.forEach { candidate ->
-                    FilterChip(
-                        selected = slot == candidate,
-                        onClick = { slot = candidate },
-                        enabled = !busy,
-                        label = { Text("$candidate") },
+    Column(Modifier.fillMaxSize()) {
+        // Tek kaydırma alanı: başlık ve okutma kontrolleri yukarı
+        // kaydığında otomatik oluşan satırlar terminal ekranının
+        // tamamına yakınını kullanır. Alt kayıt çubuğu listeyi
+        // kapatmadan sabit kalır.
+        LazyColumn(
+            modifier = Modifier.weight(1f).fillMaxWidth(),
+            contentPadding = PaddingValues(start = 12.dp, end = 12.dp, top = 8.dp, bottom = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            item {
+                Column {
+                    TextButton(onClick = onBack, enabled = !busy) { Text("‹ Sayfa Listesi") }
+                    DocHeaderCard(
+                        title = "$no · Sayım V2",
+                        subtitle = "Lokasyon: ${h?.optString("locationCode").orEmpty()} · ${h?.optString("status").orEmpty()}",
                     )
-                    Spacer(Modifier.width(4.dp))
+                    Spacer(Modifier.height(8.dp))
+                    StatusText(status)
+                    Spacer(Modifier.height(8.dp))
+
+                    if (h != null && allowedSlots.isEmpty()) {
+                        StatusText("Bu belge için $myUserId kullanıcısına sayıcı slotu atanmamış.")
+                    } else if (allowedSlots.size > 1) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text("Sayım turu", fontSize = 12.sp, color = Color.Gray)
+                            Spacer(Modifier.width(8.dp))
+                            allowedSlots.forEach { candidate ->
+                                FilterChip(
+                                    selected = slot == candidate,
+                                    onClick = { slot = candidate },
+                                    enabled = !busy,
+                                    label = { Text("$candidate") },
+                                )
+                                Spacer(Modifier.width(4.dp))
+                            }
+                        }
+                        Spacer(Modifier.height(8.dp))
+                    }
+
+                    if (!prepared) {
+                        if (busy) {
+                            LinearProgressIndicator(Modifier.fillMaxWidth())
+                        } else {
+                            Card(colors = CardDefaults.cardColors(containerColor = Color(0xFFFFE4E6))) {
+                                Text(
+                                    if (lines.isNotEmpty()) classicCountSheetV2Message(lines.size)
+                                    else "Bu belge henüz V2 için hazırlanmadı. Sayfa Listesi'ne dönüp Yeni V2 Sayımı Oluştur'u kullanın.",
+                                    Modifier.fillMaxWidth().padding(12.dp),
+                                    color = Color(0xFF9F1239),
+                                )
+                            }
+                        }
+                    } else {
+                        ScanField(
+                            label = "1. Raf adresini okut",
+                            value = binScan,
+                            onValueChange = { binScan = it },
+                            onScanned = { selectBin(it) },
+                            enabled = !busy && pendingRetry == null,
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                        if (activeBin.isNotBlank()) {
+                            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                                Text("📍 $activeBin", fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+                                TextButton(
+                                    onClick = { activeBin = ""; lastCompleted = null; lastBatch = emptyList(); lastCompletedLp = null; pendingRetry = null },
+                                    enabled = !busy,
+                                ) { Text("Rafı değiştir") }
+                            }
+                            ScanField(
+                                label = "2. LP / ürün / lot barkodunu okut",
+                                value = labelScan,
+                                onValueChange = { labelScan = it },
+                                onScanned = { scanLabel(it) },
+                                enabled = !busy && pendingRetry == null && slot in allowedSlots,
+                                modifier = Modifier.fillMaxWidth(),
+                            )
+                        }
+                    }
+
+                    pendingRetry?.let { pending ->
+                        Spacer(Modifier.height(8.dp))
+                        Button(
+                            onClick = { sendScan(pending) },
+                            enabled = !busy,
+                            modifier = Modifier.fillMaxWidth(),
+                        ) { Text("🔁 Aynı işlemi güvenle tekrar dene", fontWeight = FontWeight.Bold) }
+                    }
+                    if (lastCompleted != null || lastBatch.isNotEmpty() || lastCompletedLp != null) {
+                        Spacer(Modifier.height(6.dp))
+                        OutlinedButton(
+                            onClick = { undoLastScan() },
+                            enabled = !busy && pendingRetry == null,
+                            modifier = Modifier.fillMaxWidth(),
+                        ) { Text("↩ Son okutmayı geri al") }
+                    }
+
+                    Spacer(Modifier.height(10.dp))
+                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            if (prepared) "Otomatik oluşan satırlar (${lines.size})" else "Belgedeki klasik satırlar (${lines.size})",
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier.weight(1f),
+                        )
+                        TextButton(onClick = { reload("TAMAM: Satırlar yenilendi") }, enabled = !busy) { Text("Yenile") }
+                    }
                 }
             }
-            Spacer(Modifier.height(8.dp))
-        }
-
-        if (!prepared) {
-            if (busy) {
-                LinearProgressIndicator(Modifier.fillMaxWidth())
-            } else {
-                Card(colors = CardDefaults.cardColors(containerColor = Color(0xFFFFE4E6))) {
-                    Text(
-                        if (lines.isNotEmpty()) classicCountSheetV2Message(lines.size)
-                        else "Bu belge henüz V2 için hazırlanmadı. Sayfa Listesi'ne dönüp Yeni V2 Sayımı Oluştur'u kullanın.",
-                        Modifier.fillMaxWidth().padding(12.dp),
-                        color = Color(0xFF9F1239),
-                    )
-                }
-            }
-        } else {
-            ScanField(
-                label = "1. Raf adresini okut",
-                value = binScan,
-                onValueChange = { binScan = it },
-                onScanned = { selectBin(it) },
-                enabled = !busy && pendingRetry == null,
-                modifier = Modifier.fillMaxWidth(),
-            )
-            if (activeBin.isNotBlank()) {
-                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                    Text("📍 $activeBin", fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
-                    TextButton(
-                        onClick = { activeBin = ""; lastCompleted = null; lastBatch = emptyList(); lastCompletedLp = null; pendingRetry = null },
-                        enabled = !busy,
-                    ) { Text("Rafı değiştir") }
-                }
-                ScanField(
-                    label = "2. LP / ürün / lot barkodunu okut",
-                    value = labelScan,
-                    onValueChange = { labelScan = it },
-                    onScanned = { scanLabel(it) },
-                    enabled = !busy && pendingRetry == null && slot in allowedSlots,
-                    modifier = Modifier.fillMaxWidth(),
-                )
-            }
-        }
-
-        pendingRetry?.let { pending ->
-            Spacer(Modifier.height(8.dp))
-            Button(
-                onClick = { sendScan(pending) },
-                enabled = !busy,
-                modifier = Modifier.fillMaxWidth(),
-            ) { Text("🔁 Aynı işlemi güvenle tekrar dene", fontWeight = FontWeight.Bold) }
-        }
-        if (lastCompleted != null || lastBatch.isNotEmpty() || lastCompletedLp != null) {
-            Spacer(Modifier.height(6.dp))
-            OutlinedButton(
-                onClick = { undoLastScan() },
-                enabled = !busy && pendingRetry == null,
-                modifier = Modifier.fillMaxWidth(),
-            ) { Text("↩ Son okutmayı geri al") }
-        }
-
-        Spacer(Modifier.height(10.dp))
-        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Text(
-                if (prepared) "Otomatik oluşan satırlar (${lines.size})" else "Belgedeki klasik satırlar (${lines.size})",
-                fontWeight = FontWeight.Bold,
-                modifier = Modifier.weight(1f),
-            )
-            TextButton(onClick = { reload("TAMAM: Satırlar yenilendi") }, enabled = !busy) { Text("Yenile") }
-        }
-        LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             items(lines.sortedByDescending { it.optInt("lineNo") }) { line ->
                 val counted = isCountRecorded(
                     hasExplicitFlag = line.has("counted$slot"),
@@ -902,18 +914,21 @@ private fun CountV2Document(no: String, onBack: () -> Unit) {
                 EmptyState("Ekran boş. Rafı okutun, sonra LP / ürün / lot barkodunu okutun.")
             }
         }
-        Spacer(Modifier.height(8.dp))
-        Button(
-            onClick = { showPostConfirm = true },
-            enabled = canPost,
-            modifier = Modifier.fillMaxWidth().height(52.dp),
-        ) { Text("✅ Sayım V2'yi Kaydet", fontWeight = FontWeight.Bold) }
-        if (lines.isNotEmpty() && !allRequiredComplete) {
-            Text(
-                "Atanmış tüm sayıcıların bütün V2 satırlarını tamamlaması gerekir.",
-                fontSize = 11.sp,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
+        Surface(tonalElevation = 3.dp, shadowElevation = 4.dp) {
+            Column(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 10.dp)) {
+                Button(
+                    onClick = { showPostConfirm = true },
+                    enabled = canPost,
+                    modifier = Modifier.fillMaxWidth().height(52.dp),
+                ) { Text("✅ Sayım V2'yi Kaydet", fontWeight = FontWeight.Bold) }
+                if (lines.isNotEmpty() && !allRequiredComplete) {
+                    Text(
+                        "Atanmış tüm sayıcıların bütün V2 satırlarını tamamlaması gerekir.",
+                        fontSize = 11.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
         }
     }
 
