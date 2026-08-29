@@ -7,6 +7,23 @@ Kurulum: [docs/android-install-guide.md](../../docs/android-install-guide.md)
 
 ---
 
+## v1.14.69 — BADE + EMU — 2026-08-29
+
+**versionCode:** 200069 · **BC paketi:** 1.14.0.87
+
+**BADE SHA-256:** `80ee60064843155f754d70f8d28e091700ac54ce8941fe3c7678b1f3998756a1`
+
+**EMU SHA-256:** `b4c46192c8b7201e76bf1aac280a98b19f840d88dace6c09474aa560756d32e1`
+
+### Mal kabul, LP'li sevkiyat ve sayım kapanışı
+
+- Aynı mal kabulde ikinci kısmi dalga ve farklı lotlar yeni LP'lere dağıtılabilir; ekran yenilendiğinde hazırlanan LP miktarları korunur.
+- Çoklu LP kabulü, BC ambar ve madde defteri hareketlerinde her LP için ayrı miktar/lot kırılımı oluşturur.
+- Tek, grup ve yönlendirmeli pick ekranlarında kullanılmayacak lot `0` miktarla onaylanabilir; Take ve Place birlikte sıfırlanır.
+- LP'li sevkiyat, seçilen kaynak LP'yi satış commit edilmeden önce tam bir kez azaltır ve LP numarasını madde defteri girişine yazar.
+- Post yanıtı hata olsa bile sevkiyat kapanmışsa terminal işlemi başarılı kabul eder ve ikinci kez post etmez.
+- Yanlış raftaki LP sayıma alınmaz; sayım belgeleri ayrı journal batch'leriyle sorunsuz tamamlanır.
+
 ## v1.14.68 — BADE + EMU — 2026-08-28
 
 **versionCode:** 200068 · **BC paketi:** 1.14.0.86

@@ -25,6 +25,9 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import org.json.JSONObject
 
+internal fun shipmentPostCommitted(actionOk: Boolean, verificationHttpCode: Int?): Boolean =
+    actionOk || verificationHttpCode == 404
+
 /**
  * Put-Away — WI §10.2 parity.
  * Lookup -> Put-Away Document -> per-line suggest bin / set bin+qty -> Register.
@@ -1592,7 +1595,7 @@ private fun WhsePickDocument(no: String, onBack: () -> Unit) {
         }
     }
 
-    fun updateLine(line: JSONObject, qty: Double, lotNo: String) {
+    fun updateLine(line: JSONObject, qty: Double, lotNo: String, sourceLpNo: String = "") {
         if (!canMutateAssignedDocument(header?.optString("assignedUserId").orEmpty(), myUserId)) {
             status = documentOwnershipMessage(header?.optString("assignedUserId").orEmpty(), myUserId)
             return
@@ -1608,6 +1611,7 @@ private fun WhsePickDocument(no: String, onBack: () -> Unit) {
                 lineNo = lineNo,
                 qtyToHandle = qty,
                 lotNo = lotNo,
+                sourceLpNo = sourceLpNo,
             )
             busy = false
             inFlightLineNos = inFlightLineNos - lineNo
@@ -1778,6 +1782,8 @@ private fun WhsePickDocument(no: String, onBack: () -> Unit) {
             allowZeroQuantity = true,
             showLotSerial = true,
             showSerial = false,
+            showSourceLp = true,
+            initialSourceLp = ql.optString("licensePlateNo"),
             lotRequired = ql.optBoolean("lotRequired", false),
             showAvailableLotLookup = true,
             autoDetectLotFromStock = true,
@@ -1787,7 +1793,7 @@ private fun WhsePickDocument(no: String, onBack: () -> Unit) {
             onDismiss = { qtyLine = null },
             onConfirm = { res ->
                 qtyLine = null
-                updateLine(ql, res.quantity, res.lotNo)
+                updateLine(ql, res.quantity, res.lotNo, res.sourceLpNo)
             },
         )
     }
@@ -1816,8 +1822,10 @@ private fun WhsePickDocument(no: String, onBack: () -> Unit) {
             initialQty = gt.totalOutstanding.takeIf { it > 0 } ?: 1.0,
             initialUom = gt.lines.first().optString("unitOfMeasureCode"),
             initialLot = gt.lines.first().optString("lotNo"),
+            allowZeroQuantity = true,
             showLotSerial = true,
             showSerial = false,
+            showSourceLp = true,
             lotRequired = gt.lines.any { it.optBoolean("lotRequired", false) },
             showAvailableLotLookup = true,
             autoDetectLotFromStock = true,
@@ -1843,6 +1851,7 @@ private fun WhsePickDocument(no: String, onBack: () -> Unit) {
                             lineNo = ln.optInt("lineNo"),
                             qtyToHandle = q,
                             lotNo = res.lotNo,
+                            sourceLpNo = res.sourceLpNo,
                         )
                         if (r.ok) {
                             okCount++
@@ -2121,9 +2130,17 @@ private fun ShipDocument(no: String, onBack: () -> Unit, onPickCreated: (String)
                                 put("printerId", getDefaultPrinter(context, PRINTER_USAGE_DOCUMENT))
                             }.toString()
                             val r = BcApi.boundAction(context, "shipments", no, "postToPrinter", body)
+                            // BC bazı başarılı postlarda belgeyi silip cevabı geç
+                            // üretirken REF-* hatası döndürebiliyor. Hata sonrası
+                            // açık belge gerçekten yoksa işlem kaydedilmiştir.
+                            val verifyCode = if (!r.ok) {
+                                val safeNo = no.replace("'", "''")
+                                BcApi.get(context, "shipments('$safeNo')").httpCode
+                            } else null
+                            val committed = shipmentPostCommitted(r.ok, verifyCode)
                             busy = false
-                            status = if (r.ok) "TAMAM: Sevkiyat kaydedildi" else QcErrorParser.friendlyStatus(BcApi.errorMessage(r.body), r.httpCode)
-                            if (r.ok) reload()
+                            status = if (committed) "TAMAM: Sevkiyat kaydedildi" else QcErrorParser.friendlyStatus(BcApi.errorMessage(r.body), r.httpCode)
+                            if (committed) onBack()
                         }
                     },
                     enabled = !busy && com.dynops.bcwms.lib.ActionGuards.hasQuantity(lines, field = "qtyToShip"),
@@ -2148,6 +2165,8 @@ private fun ShipDocument(no: String, onBack: () -> Unit, onPickCreated: (String)
             initialLot = ql.optString("lotNo"),
             showLotSerial = true,
             showSerial = false,
+            showSourceLp = true,
+            initialSourceLp = ql.optString("licensePlateNo"),
             lotRequired = ql.optBoolean("lotRequired", false),
             showAvailableLotLookup = true,
             autoDetectLotFromStock = true,
@@ -2172,6 +2191,7 @@ private fun ShipDocument(no: String, onBack: () -> Unit, onPickCreated: (String)
                     val body = JSONObject().apply {
                         put("qtyToShip", res.quantity)
                         put("lotNo", res.lotNo)
+                        if (res.sourceLpNo.isNotBlank()) put("licensePlateNo", res.sourceLpNo)
                         val lineBin = rawValue(ql, "binCode")
                         if (lineBin.isNotBlank()) put("binCode", lineBin)
                     }.toString()

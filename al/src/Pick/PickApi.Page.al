@@ -127,13 +127,13 @@ page 72092 "DOPSWHS Pick API"
     /// doğrulayan tek yol budur (pickLines PATCH yolu kimlik taşımaz).
     /// </summary>
     [ServiceEnabled]
-    procedure confirmLine(lineNo: Integer; qtyToHandle: Decimal; lotNo: Code[50]; userId: Code[50])
+    procedure confirmLine(lineNo: Integer; qtyToHandle: Decimal; lotNo: Code[50]; sourceLpNo: Code[20]; userId: Code[50])
     var
         PickLine: Record "Warehouse Activity Line";
         PickMgmt: Codeunit "DOPSWHS Pick Mgmt";
     begin
         PickLine.Get(Rec.Type, Rec."No.", lineNo);
-        PickMgmt.ConfirmPickLineFor(PickLine, qtyToHandle, lotNo, userId);
+        PickMgmt.ConfirmPickLineFor(PickLine, qtyToHandle, lotNo, sourceLpNo, userId);
     end;
 
     [ServiceEnabled]

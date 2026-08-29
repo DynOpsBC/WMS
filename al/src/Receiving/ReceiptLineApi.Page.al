@@ -39,7 +39,7 @@ page 72227 "DOPSWHS Receipt Line API"
                 field(expiryDate; ExpiryDate) { Caption = 'expiryDate'; }
                 field(expirationDateEnabled; ExpirationDateEnabled) { Caption = 'expirationDateEnabled'; Editable = false; }
                 field(expirationDateRequired; ExpirationDateRequired) { Caption = 'expirationDateRequired'; Editable = false; }
-                field(licensePlateNo; LicensePlateNo) { Caption = 'licensePlateNo'; }
+                field(licensePlateNo; Rec."DOPSWHS LP No.") { Caption = 'licensePlateNo'; }
             }
         }
     }
@@ -81,7 +81,7 @@ page 72227 "DOPSWHS Receipt Line API"
     begin
         ReceiptMgmt.ConfirmLine(
             Rec, Rec."Qty. to Receive", LotNo, SerialNo, ExpiryDate,
-            LicensePlateNo, Rec."Bin Code", SupplierLotNo, '');
+            Rec."DOPSWHS LP No.", Rec."Bin Code", SupplierLotNo, '');
         exit(false);
     end;
 
@@ -103,6 +103,5 @@ page 72227 "DOPSWHS Receipt Line API"
         ExpiryDate: Date;
         ExpirationDateEnabled: Boolean;
         ExpirationDateRequired: Boolean;
-        LicensePlateNo: Code[20];
         ItemGtin: Code[14];
 }

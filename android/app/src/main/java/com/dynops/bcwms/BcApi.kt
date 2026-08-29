@@ -535,6 +535,7 @@ object BcApi {
         lineNo: Int,
         qtyToHandle: Double,
         lotNo: String = "",
+        sourceLpNo: String = "",
     ): ApiResult {
         val userId = currentUserId(context)
         if (userId.isBlank()) {
@@ -548,6 +549,7 @@ object BcApi {
             put("lineNo", lineNo)
             put("qtyToHandle", qtyToHandle)
             put("lotNo", lotNo)
+            put("sourceLpNo", sourceLpNo)
             put("userId", userId)
         }.toString()
         var result = boundAction(context, "picks", pickNo, "confirmLine", body)

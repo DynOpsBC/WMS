@@ -1,7 +1,7 @@
 {
-  "versionCode": 200068,
-  "versionName": "1.14.68-emu",
-  "apkUrl": "https://github.com/DynOpsBC/WMS/releases/download/android-v1.14.68/BCWMS-EMU-1.14.68-RELEASE.apk",
-  "sha256": "c940bf98d798fecb2221466b314a9f6a3559c9ac86962722e2d0fffbe06e69a4",
-  "releaseNotes": "Yerleştirmede önce hedef raf okutulur, ardından o rafa bırakılacak LP'ler peş peşe okutulur. Raf değişince yeni raf okutularak devam edilir; kalite bekleyen veya yanlış ret rafına yönlenen LP engellenir ve EMU Kutu ve Palet ekranı korunur."
+  "versionCode": 200069,
+  "versionName": "1.14.69-emu",
+  "apkUrl": "https://github.com/DynOpsBC/WMS/releases/download/android-v1.14.69/BCWMS-EMU-1.14.69-RELEASE.apk",
+  "sha256": "b4c46192c8b7201e76bf1aac280a98b19f840d88dace6c09474aa560756d32e1",
+  "releaseNotes": "BADE ile aynı mal kabul, pick, sevkiyat ve sayım düzeltmeleri bulunur; EMU'ya özel Kutu ve Palet ekranı korunur."
 }

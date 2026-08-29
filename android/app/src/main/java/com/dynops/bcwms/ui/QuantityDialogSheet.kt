@@ -33,6 +33,7 @@ data class QuantityResult(
     val serialNo: String,
     val supplierLotNo: String = "",
     val expiryDate: String = "",
+    val sourceLpNo: String = "",
 )
 
 /**
@@ -50,12 +51,14 @@ fun QuantityDialogSheet(
     initialSerial: String = "",
     initialSupplierLot: String = "",
     initialExpiryDate: String = "",
+    initialSourceLp: String = "",
     uomOptions: List<String> = emptyList(),
     uomRequired: Boolean = false,
     uomSelectionOnly: Boolean = false,
     showLotSerial: Boolean = true,
     showSerial: Boolean = showLotSerial,
     showSupplierLot: Boolean = false,
+    showSourceLp: Boolean = false,
     lotRequired: Boolean = false,
     lotSelectionOnly: Boolean = false,
     showAvailableLotLookup: Boolean = false,
@@ -82,6 +85,7 @@ fun QuantityDialogSheet(
     var lot by remember { mutableStateOf(initialLot) }
     var serial by remember { mutableStateOf(initialSerial) }
     var supplierLot by remember { mutableStateOf(initialSupplierLot) }
+    var sourceLp by remember { mutableStateOf(initialSourceLp) }
     var expiryDateInput by remember(initialExpiryDate) {
         val displayValue = expiryDateForDisplay(initialExpiryDate)
         mutableStateOf(TextFieldValue(displayValue, TextRange(displayValue.length)))
@@ -314,6 +318,19 @@ fun QuantityDialogSheet(
                     )
                 }
             }
+            if (showSourceLp) {
+                Spacer(Modifier.height(8.dp))
+                ScanField(
+                    label = "Kaynak LP (birden fazla LP varsa zorunlu)",
+                    value = sourceLp,
+                    onValueChange = { sourceLp = it },
+                    modifier = Modifier.fillMaxWidth(),
+                    onScanned = { scanned ->
+                        val resolved = BarcodeIntentResolver.resolve(scanned)
+                        sourceLp = resolved.value.trim().ifBlank { scanned.trim() }
+                    },
+                )
+            }
             if (showSupplierLot) {
                 Spacer(Modifier.height(8.dp))
                 ScanField(
@@ -409,6 +426,7 @@ fun QuantityDialogSheet(
                                 serialNo = serial.trim(),
                                 supplierLotNo = supplierLot.trim(),
                                 expiryDate = normalizedExpiryDate.orEmpty(),
+                                sourceLpNo = sourceLp.trim(),
                             )
                         )
                     },

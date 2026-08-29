@@ -7,5 +7,11 @@ tableextension 72431 "DOPSWHS Whse Rcpt Line Ext" extends "Warehouse Receipt Lin
             Caption = 'Pending Lot No.';
             DataClassification = CustomerContent;
         }
+        field(72432; "DOPSWHS LP No."; Code[20])
+        {
+            Caption = 'LP No.';
+            DataClassification = CustomerContent;
+            TableRelation = "DOPSWHS LP Header"."No.";
+        }
     }
 }

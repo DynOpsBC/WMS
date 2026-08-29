@@ -445,6 +445,7 @@ codeunit 72040 "DOPSWHS LP Management"
         LP: Record "DOPSWHS LP Header";
         LPLine: Record "DOPSWHS LP Line";
         RemainingLPLine: Record "DOPSWHS LP Line";
+        MovementLedger: Record "DOPSWHS LP Movement Ledger";
         Item: Record Item;
         ItemUoM: Record "Item Unit of Measure";
         QtyPerUoM: Decimal;
@@ -461,6 +462,18 @@ codeunit 72040 "DOPSWHS LP Management"
         if not (LP.Status in [LP.Status::Open, LP.Status::Built, LP.Status::Assigned]) then
             Error('%1 LP numarası sevkiyatta kullanılamaz. Güncel durum: %2.', LpNo, LP.Status);
         LPLine.Get(LpNo, LineNo);
+
+        // Reconciliation runs both from Sales-Post events and from the durable
+        // posted warehouse shipment relation. The ILE-qualified reference
+        // makes those two paths idempotent without suppressing two legitimate
+        // ledger entries from the same posted shipment.
+        if PostedShipmentNo <> '' then begin
+            MovementLedger.SetRange("LP No.", LpNo);
+            MovementLedger.SetRange(Action, MovementLedger.Action::ItemRemoved);
+            MovementLedger.SetRange("Related Document", PostedShipmentNo);
+            if not MovementLedger.IsEmpty() then
+                exit;
+        end;
 
         Item.Get(LPLine."Item No.");
         QtyPerUoM := 1;

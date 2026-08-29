@@ -65,6 +65,83 @@ codeunit 72428 "DOPSWHS LP Propagation"
         PostedHeader.Modify(true);
     end;
 
+    /// <summary>
+    /// Final, exact warehouse-shipment reconciliation. Sales-Post can clear or
+    /// delete the working Warehouse Shipment Line before its final events run,
+    /// so relying only on those events can leave the posted stock movement
+    /// without an LP. The posted warehouse line survives and BC records its
+    /// exact Item Ledger Entry relation; use that durable link to stamp the
+    /// ledger and consume the selected physical LP exactly once.
+    /// </summary>
+    procedure ReconcilePostedWarehouseShipment(PostedWhseShipmentNo: Code[20])
+    var
+        PostedWhseShipmentLine: Record "Posted Whse. Shipment Line";
+        WhseItemEntryRelation: Record "Whse. Item Entry Relation";
+        ItemLedgerEntry: Record "Item Ledger Entry";
+        RelatedEntryFound: Boolean;
+    begin
+        if PostedWhseShipmentNo = '' then
+            exit;
+
+        PostedWhseShipmentLine.SetRange("No.", PostedWhseShipmentNo);
+        PostedWhseShipmentLine.SetFilter("LP No.", '<>%1', '');
+        if not PostedWhseShipmentLine.FindSet() then
+            exit;
+        repeat
+            RelatedEntryFound := false;
+            WhseItemEntryRelation.Reset();
+            WhseItemEntryRelation.SetSourceFilter(
+                Database::"Posted Whse. Shipment Line", 0,
+                PostedWhseShipmentLine."No.", PostedWhseShipmentLine."Line No.", true);
+            if WhseItemEntryRelation.FindSet() then
+                repeat
+                    if ItemLedgerEntry.Get(WhseItemEntryRelation."Item Entry No.") then
+                        if (ItemLedgerEntry."Entry Type" = ItemLedgerEntry."Entry Type"::Sale) and
+                           (ItemLedgerEntry.Quantity < 0)
+                        then begin
+                            ReconcileSalesEntry(ItemLedgerEntry, PostedWhseShipmentLine."LP No.", true);
+                            StampSalesShipmentLine(ItemLedgerEntry, PostedWhseShipmentLine."LP No.", PostedWhseShipmentLine.SSCC);
+                            RelatedEntryFound := true;
+                        end;
+                until WhseItemEntryRelation.Next() = 0;
+
+            // Older BC versions may omit Whse. Item Entry Relation for a
+            // warehouse shipment. Accept the fallback only when the durable
+            // posted source/tracking identity resolves to exactly one sale.
+            if not RelatedEntryFound then begin
+                ItemLedgerEntry.Reset();
+                ItemLedgerEntry.SetRange("Document No.", PostedWhseShipmentLine."Posted Source No.");
+                ItemLedgerEntry.SetRange("Entry Type", ItemLedgerEntry."Entry Type"::Sale);
+                ItemLedgerEntry.SetRange("Item No.", PostedWhseShipmentLine."Item No.");
+                ItemLedgerEntry.SetRange("Variant Code", PostedWhseShipmentLine."Variant Code");
+                ItemLedgerEntry.SetRange("Location Code", PostedWhseShipmentLine."Location Code");
+                ItemLedgerEntry.SetFilter(Quantity, '<0');
+                if ItemLedgerEntry.Count() <> 1 then
+                    Error(
+                        '%1 kayıtlı ambar sevkiyat satırı için satış stok hareketi kesin olarak bulunamadı. LP %2 düşürülmedi.',
+                        PostedWhseShipmentLine."No.", PostedWhseShipmentLine."LP No.");
+                ItemLedgerEntry.FindFirst();
+                ReconcileSalesEntry(ItemLedgerEntry, PostedWhseShipmentLine."LP No.", true);
+                StampSalesShipmentLine(ItemLedgerEntry, PostedWhseShipmentLine."LP No.", PostedWhseShipmentLine.SSCC);
+            end;
+        until PostedWhseShipmentLine.Next() = 0;
+    end;
+
+    local procedure StampSalesShipmentLine(ItemLedgerEntry: Record "Item Ledger Entry"; LpNo: Code[20]; Sscc: Code[18])
+    var
+        SalesShipmentLine: Record "Sales Shipment Line";
+    begin
+        if not SalesShipmentLine.Get(ItemLedgerEntry."Document No.", ItemLedgerEntry."Document Line No.") then
+            exit;
+        if (SalesShipmentLine."DOPSWHS LP No." = LpNo) and
+           (SalesShipmentLine."DOPSWHS SSCC" = Sscc)
+        then
+            exit;
+        SalesShipmentLine."DOPSWHS LP No." := LpNo;
+        SalesShipmentLine."DOPSWHS SSCC" := Sscc;
+        SalesShipmentLine.Modify(true);
+    end;
+
     /// <summary>Sets the working Whse Shipment Header LP from any line that has one (mobile-side
     /// convenience — admins can see the carton attached to the shipment without drilling lines).</summary>
     procedure StampShipmentHeader(WhseShipmentNo: Code[20])
@@ -549,21 +626,18 @@ codeunit 72428 "DOPSWHS LP Propagation"
             if PostedShptLine.Get(SalesShptHdrNo, ItemLedgerEntry."Document Line No.") then begin
                 Clear(PreferredLpNo);
                 Clear(AmbiguousLp);
-                if WhseShip then begin
-                    // The ILE propagation event only knows order + item and can
-                    // be too broad when the same item is shipped from multiple
-                    // LPs. Resolve again from the exact order line and tracking
-                    // identity before changing any physical LP quantity.
-                    PreferredLpNo := ResolveWarehouseShipmentLp(PostedShptLine, ItemLedgerEntry, AmbiguousLp);
-                    if AmbiguousLp then
-                        Error(
-                            '%1 maddesi, lot %2 için sevkiyatta birden fazla LP seçilmiş. LP miktarları güvenli biçimde düşürülemedi.',
-                            ItemLedgerEntry."Item No.", ItemLedgerEntry."Lot No.");
-                    // A warehouse shipment that was not explicitly tied to an
-                    // LP remains loose stock. Never guess among active LPs.
-                    if PreferredLpNo <> '' then
-                        ReconcileSalesEntry(ItemLedgerEntry, PreferredLpNo, true);
-                end else begin
+                // Whse.-Post Shipment invokes Sales-Post through a path where
+                // WhseShip is false in some BC versions. Detect the actual
+                // Warehouse Shipment Line instead of trusting that advisory
+                // argument; this still runs before the inventory commit.
+                PreferredLpNo := ResolveWarehouseShipmentLp(PostedShptLine, ItemLedgerEntry, AmbiguousLp);
+                if AmbiguousLp then
+                    Error(
+                        '%1 maddesi, lot %2 için sevkiyatta birden fazla LP seçilmiş. LP miktarları güvenli biçimde düşürülemedi.',
+                        ItemLedgerEntry."Item No.", ItemLedgerEntry."Lot No.");
+                if PreferredLpNo <> '' then
+                    ReconcileSalesEntry(ItemLedgerEntry, PreferredLpNo, true)
+                else begin
                     if ItemLedgerEntry."DOPSWHS LP No." <> '' then
                         PreferredLpNo := ItemLedgerEntry."DOPSWHS LP No."
                     else
@@ -585,7 +659,10 @@ codeunit 72428 "DOPSWHS LP Propagation"
         WhseShptLine.SetRange("Source Line No.", PostedShptLine."Order Line No.");
         WhseShptLine.SetRange("Item No.", ItemLedgerEntry."Item No.");
         WhseShptLine.SetRange("Variant Code", ItemLedgerEntry."Variant Code");
-        WhseShptLine.SetFilter("Qty. to Ship", '>0');
+        // Sales-Post can clear Qty. to Ship before the before-commit event is
+        // raised. The warehouse line and its LP still identify the posted
+        // source exactly, so filtering on that transient quantity made a
+        // committed shipment skip LP consumption.
         WhseShptLine.SetFilter("LP No.", '<>%1', '');
         if WhseShptLine.FindSet() then
             repeat
@@ -619,6 +696,7 @@ codeunit 72428 "DOPSWHS LP Propagation"
         CandidateAvailableBaseQty: Decimal;
         CandidateLPNo: Code[20];
         CandidateLineNo: Integer;
+        ConsumptionReference: Code[40];
     begin
         RequiredBaseQty := Abs(ItemLedgerEntry.Quantity);
         if RequiredBaseQty = 0 then
@@ -674,8 +752,11 @@ codeunit 72428 "DOPSWHS LP Propagation"
                 '%1 LP numarasında sevk için yeterli miktar yoktur. LP miktarı: %2, sevk miktarı: %3.',
                 CandidateLPNo, CandidateAvailableBaseQty, RequiredBaseQty);
 
+        ConsumptionReference := CopyStr(
+            ItemLedgerEntry."Document No." + '#' + Format(ItemLedgerEntry."Entry No."),
+            1, MaxStrLen(ConsumptionReference));
         LPManagement.ConsumeLineForShipment(
-            CandidateLPNo, CandidateLineNo, RequiredBaseQty, ItemLedgerEntry."Document No.");
+            CandidateLPNo, CandidateLineNo, RequiredBaseQty, ConsumptionReference);
         StampItemLedgerEntry(ItemLedgerEntry, CandidateLPNo);
     end;
 

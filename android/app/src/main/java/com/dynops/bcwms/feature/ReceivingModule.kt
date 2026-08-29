@@ -32,6 +32,14 @@ internal fun resolvedActiveReceiptLp(
 ): String? = serverLpNo.trim().takeIf { serverLpOpen && it.isNotBlank() }
     ?: successfulStartLp?.trim()?.takeIf { it.isNotBlank() }
 
+internal fun restoredBulkReceiptLineNos(lines: List<JSONObject>): Set<Int> = lines
+    .asSequence()
+    .filter { it.optString("licensePlateNo").isNotBlank() }
+    .filter { it.optDouble("qtyToReceive", 0.0) > 0.0 }
+    .map { it.optInt("lineNo") }
+    .filter { it > 0 }
+    .toSet()
+
 /**
  * Mal Kabul (Receiving).
  *
@@ -229,6 +237,10 @@ private fun ReceiveDocument(no: String, onBack: () -> Unit) {
             }
             val page = BcApi.getAllPages(context, "receiptLines?\$filter=no eq '$no'&\$top=100")
             lines = page.rows
+            // Toplu LP dağıtımı artık her fiziksel LP'yi ayrı BC satırında
+            // saklar. Uygulama/terminal yeniden açılsa da sunucudaki LP'li ve
+            // miktarı hazır satırları yeniden onaylanmış kabul et.
+            touched = touched + restoredBulkReceiptLineNos(page.rows)
             linesComplete = page.complete
             if (!headerLoaded || !linesComplete) {
                 status = "HATA: Belgenin tüm satırları yüklenemedi. Yenileyip tekrar deneyin."

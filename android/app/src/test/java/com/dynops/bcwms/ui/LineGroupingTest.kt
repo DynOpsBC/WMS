@@ -3,6 +3,7 @@ package com.dynops.bcwms.ui
 import org.json.JSONObject
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class LineGroupingTest {
@@ -50,5 +51,17 @@ class LineGroupingTest {
 
         assertEquals("SER-2", result.group?.lines?.single()?.optString("serialNo"))
         assertNull(result.issue)
+    }
+
+    @Test
+    fun `zero pick clears every line in the selected lot group`() {
+        val first = line("ITEM-1", "LOT-A").put("lineNo", 10)
+        val second = line("ITEM-1", "LOT-A").put("lineNo", 20)
+        val group = groupLines(listOf(first, second)) { 5.0 }.single()
+
+        val plan = distributeQty(group, 0.0) { 5.0 }
+
+        assertEquals(listOf(10, 20), plan.map { it.first.getInt("lineNo") })
+        assertTrue(plan.all { it.second == 0.0 })
     }
 }

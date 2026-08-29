@@ -1,0 +1,131 @@
+<!doctype html>
+<html lang="tr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>BCWMS E-DefterSandbox Regresyon Sonuç Raporu · 29.08.2026</title>
+  <style>
+    :root{--ink:#172033;--muted:#667085;--line:#dfe5ef;--paper:#fff;--bg:#f4f7fb;--blue:#3757d5;--green:#137a50;--green-bg:#eaf8f1;--amber:#9a5b00;--amber-bg:#fff6df;--red:#b42318;--red-bg:#fff0ee;--navy:#182a59}
+    *{box-sizing:border-box} body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.55 Inter,ui-sans-serif,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+    main{width:min(1180px,calc(100% - 32px));margin:28px auto 64px}.hero{color:#fff;background:linear-gradient(135deg,#172858,#314fc2 70%,#657cf0);border-radius:24px;padding:34px;box-shadow:0 18px 50px #23346a2b}
+    h1{font-size:34px;line-height:1.12;margin:4px 0 12px}h2{font-size:23px;margin:0}h3{font-size:17px;margin:0 0 8px}.eyebrow{text-transform:uppercase;letter-spacing:.12em;font-weight:800;font-size:12px;opacity:.8}.hero p{max-width:850px;margin:0;color:#e9edff}
+    .decision{display:inline-flex;align-items:center;gap:9px;margin-top:20px;padding:9px 14px;border-radius:999px;background:#dff8e9;color:#08613d;font-weight:900}.dot{width:9px;height:9px;border-radius:50%;background:#10a867}
+    .metrics{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-top:18px}.metric{background:#ffffff18;border:1px solid #ffffff2d;border-radius:15px;padding:14px}.metric b{display:block;font-size:27px}.metric span{color:#dfe5ff;font-size:12px}
+    section{margin-top:18px;background:var(--paper);border:1px solid var(--line);border-radius:20px;padding:24px;box-shadow:0 8px 28px #20335a0c}.section-head{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;margin-bottom:16px}.sub{margin:4px 0 0;color:var(--muted)}
+    .grid{display:grid;grid-template-columns:repeat(3,1fr);gap:13px}.card{border:1px solid var(--line);border-radius:14px;padding:16px;background:#fbfcfe}.card p{margin:0;color:#4e5b70}.card b{color:var(--ink)}
+    .callout{border-radius:14px;padding:15px 17px;border:1px solid}.good{background:var(--green-bg);border-color:#b8e6ce;color:#075c3a}.warn{background:var(--amber-bg);border-color:#f3d896;color:#744400}.info{background:#eef3ff;border-color:#cbd6ff;color:#263e9d}
+    .table-wrap{overflow:auto;border:1px solid var(--line);border-radius:14px}table{width:100%;border-collapse:collapse;min-width:820px}th{background:#f2f5fa;color:#4b5870;text-align:left;font-size:12px;text-transform:uppercase;letter-spacing:.04em}th,td{padding:12px 13px;border-bottom:1px solid var(--line);vertical-align:top}tr:last-child td{border-bottom:0}td:first-child{font-weight:800;white-space:nowrap}
+    .status{display:inline-block;white-space:nowrap;border-radius:999px;padding:4px 9px;font-size:12px;font-weight:900}.pass{background:var(--green-bg);color:var(--green)}.fixed{background:#e9edff;color:#344ec0}.pending{background:var(--amber-bg);color:var(--amber)}
+    code,.mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace}.mono{background:#111a31;color:#eaf0ff;border-radius:12px;padding:14px;overflow:auto;font-size:12px}.flow{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-top:12px}.flow span{background:#f1f4fb;border:1px solid var(--line);border-radius:10px;padding:8px 11px;font-weight:700}.flow i{color:#7080a2}.two{display:grid;grid-template-columns:1fr 1fr;gap:13px}ul,ol{margin:8px 0 0;padding-left:21px}.small{font-size:12px;color:var(--muted)}a{color:var(--blue)}footer{text-align:center;color:var(--muted);font-size:12px;margin-top:20px}
+    @media(max-width:820px){.metrics,.grid,.two{grid-template-columns:1fr}.hero{padding:25px}h1{font-size:28px}}
+    @media print{body{background:#fff}main{width:100%;margin:0}.hero,section{box-shadow:none;break-inside:avoid}.hero{-webkit-print-color-adjust:exact;print-color-adjust:exact}}
+  </style>
+</head>
+<body>
+<main>
+  <header class="hero">
+    <div class="eyebrow">BCWMS · E-DefterSandbox · Sonuç Raporu</div>
+    <h1>Mal kabul, LP'li sevkiyat ve sayım regresyonu</h1>
+    <p>29 Ağustos 2026 tarihinde önceki UAT raporundaki gerçek hatalar düzeltildi; terminal, WMS API ve Business Central defter kayıtları birlikte yeniden kontrol edildi.</p>
+    <div class="decision"><span class="dot"></span>KONTROLLÜ GO · test edilen operasyonlar kullanıma hazır</div>
+    <div class="metrics">
+      <div class="metric"><b>7 / 7</b><span>Önceki FAIL kapandı</span></div>
+      <div class="metric"><b>0</b><span>Kalan bilinen FAIL</span></div>
+      <div class="metric"><b>300 / 300</b><span>BADE + EMU birim testi</span></div>
+      <div class="metric"><b>3</b><span>Son paket: BADE, EMU, AL</span></div>
+    </div>
+  </header>
+
+  <section>
+    <div class="section-head"><div><h2>Yönetici özeti</h2><p class="sub">Sonuç, yalnız gerçek gözlem veya tekrar çalıştırılan otomatik test varsa PASS olarak işaretlendi.</p></div></div>
+    <div class="grid">
+      <div class="card"><h3>Mal kabul</h3><p>Parçalı kabulün ikinci dalgası, ekran yenileme ve farklı lotlu çoklu LP kaydı geçti. BC hareketleri her LP için ayrı oluştu.</p></div>
+      <div class="card"><h3>Sevkiyat</h3><p>Kaynak LP pick satırında korundu. Satış commit edilmeden önce LP miktarı tam bir kez düştü ve ILE kaydı LP ile oluştu.</p></div>
+      <div class="card"><h3>Sayım</h3><p>Yanlış raftaki LP sunucuda reddedildi. Belgeye özel batch ile dengeli sayım 204 sonucu alıp Posted durumuna geçti.</p></div>
+    </div>
+    <div class="callout good" style="margin-top:14px"><b>Karar:</b> Önceki raporda FAIL olan uygulama akışları kapandı. Mal kabul → yerleştirme → pick/sevkiyat → sayım zinciri, aşağıdaki test edilen kapsam için kontrollü kullanıma alınabilir.</div>
+  </section>
+
+  <section>
+    <div class="section-head"><div><h2>Önceki hataların kapanış matrisi</h2><p class="sub">Kaynak rapor: BCWMS E-DefterSandbox UAT, 29.08.2026.</p></div></div>
+    <div class="table-wrap"><table>
+      <thead><tr><th>ID</th><th>Önceki hata</th><th>Yapılan düzeltme</th><th>Son kanıt</th><th>Durum</th></tr></thead>
+      <tbody>
+        <tr><td>REC-03</td><td>LP oluşturduktan sonra ekran yenilenince hazır miktar kayboluyordu.</td><td>Sunucudan dönen LP'li satırlar yeniden yüklenirken yerel hazır durum ve miktar geri kuruluyor.</td><td>RE000634 ikinci dalga öncesi/sonrası yeniden açıldı; LP000081 ve LP000082 satırları kaynak satır ve miktarlarıyla korundu.</td><td><span class="status pass">PASS</span></td></tr>
+        <tr><td>REC-04</td><td>Aynı receipt'te ikinci kısmi LP dalgası reddediliyordu.</td><td>Yalnız açık dalga çakışma kontrolüne alındı; daha önce post edilmiş LP'ler yeni dalgayı engellemiyor.</td><td>RE000634: ilk dalga 3+3 KG, ikinci dalga 2+3 KG ve iki farklı lotla post edildi.</td><td><span class="status pass">PASS</span></td></tr>
+        <tr><td>REC-06</td><td>Çoklu LP kabulü tek LP'siz stok hareketi oluşturuyordu.</td><td>Her LP için teknik receipt/purchase satırı ve birebir takip ilişkisi oluşturuldu.</td><td>ILE 12057 = LP000081 / +2; ILE 12058 = LP000082 / +3. WH 35707 ve 35708 aynı LP ayrımını taşıyor.</td><td><span class="status pass">PASS · BC</span></td></tr>
+        <tr><td>SHP-01</td><td>Satış stoğu düşürüyor, kaynak LP miktarını düşürmüyordu.</td><td>Pick isteğine kaynak LP eklendi; satışın commit öncesi olayı gerçek Warehouse Shipment Line'ı bularak LP'yi idempotent azaltıyor.</td><td>SAO.A100396 → SH000282 → PI001142: LP000082 1 KG → 0 KG; ILE 12063 = Sale -1 / LP000082.</td><td><span class="status pass">PASS · BC</span></td></tr>
+        <tr><td>SHP-02</td><td>Belge commit edildiği halde terminal hata gösterip tekrar post riski oluşturuyordu.</td><td>Hata yanıtından sonra sevkiyat yeniden sorgulanıyor; belge 404 ise commit edilmiş kabul ediliyor.</td><td>SH000282 post HTTP 400 sonrası GET 404; stok ve LP bir kez hareket etti. Android sonuç politikası testi iki pakette geçti.</td><td><span class="status pass">PASS</span></td></tr>
+        <tr><td>CNT-03</td><td>Yanlış rafta okutulan LP beklenmeyen stok olarak eklenebiliyordu.</td><td>LP'nin başlık rafı ile okutulan raf sunucuda karşılaştırılıyor; farklıysa mutasyon öncesi reddediliyor.</td><td>LP000078 / Y.G02.21 denemesi HTTP 400 aldı; sayım satırı ve stok hareketi oluşmadı.</td><td><span class="status pass">PASS</span></td></tr>
+        <tr><td>CNT-05</td><td>Ortak journal batch başka sayım satırlarıyla kirleniyor, dengeli belge post edilemiyordu.</td><td>Her sayıma ayrı 10 karakterlik batch kodu atanıyor; kapanış statüsü post sonrası güvenli yazılıyor.</td><td>CNT-20260828213948 post HTTP 204; belge durumu Posted.</td><td><span class="status pass">PASS</span></td></tr>
+      </tbody>
+    </table></div>
+  </section>
+
+  <section>
+    <div class="section-head"><div><h2>Mal kabul ve yerleştirme kanıtı</h2><p class="sub">Tek receipt içinde iki kısmi dalga ve iki farklı lot.</p></div></div>
+    <div class="two">
+      <div class="card"><h3>Birinci dalga</h3><ul><li>Belge: <b>RE000634</b> / PUO.A100651</li><li>LP000079: 3 KG, UAT-RC-829A</li><li>LP000080: 3 KG, UAT-RC-829A</li><li>Post sonrası receipt'te 5 KG açık kaldı.</li></ul></div>
+      <div class="card"><h3>İkinci dalga</h3><ul><li>LP000081: 2 KG, UAT-RC-829B, SKT 31.01.2027</li><li>LP000082: 3 KG, UAT-RC-829C, SKT 28.02.2027</li><li>Alış belgesi: <b>107704</b></li><li>Yerleştirme PU000595 ile LP'ler Y.G02.22'ye ayrı taşındı.</li></ul></div>
+    </div>
+    <div class="flow"><span>Tek mal kabul</span><i>→</i><span>1. kısmi LP dalgası</span><i>→</i><span>Ekran yenile</span><i>→</i><span>2. kısmi / iki lot</span><i>→</i><span>LP bazlı BC hareketi</span><i>→</i><span>LP bazlı yerleştirme</span></div>
+  </section>
+
+  <section>
+    <div class="section-head"><div><h2>Pick ve sevkiyat kanıtı</h2><p class="sub">Sıfır miktar, kesin kaynak LP ve commit sonrası doğrulama.</p></div></div>
+    <div class="grid">
+      <div class="card"><h3>0 miktar</h3><p>Take ve Place satırları 0'a birlikte çekildi; hareket oluşmadı. Son düzeltmeyle aynı kural tek satır, grup ve yönlendirmeli pick miktar pencerelerinde kullanılıyor.</p></div>
+      <div class="card"><h3>Kaynak LP</h3><p>Pick'in Take ve Place satırlarında lot <b>UAT-RC-829C</b> ve LP <b>LP000082</b> birlikte korundu; başka LP'ye tahmin yürütülmedi.</p></div>
+      <div class="card"><h3>Satış defteri</h3><p>ILE <b>12063</b>, miktar -1 ve LP000082 ile oluştu. Kaynak LP 1'den 0'a düştü ve boş LP satırı kapandı.</p></div>
+    </div>
+    <div class="callout info" style="margin-top:14px"><b>Sandbox e-irsaliye davranışı:</b> BC, E-IRSALIYE numara serisi nedeniyle HTTP 400 döndürdü; buna rağmen sevkiyat commit edilip kaynak kayboldu. Yeni akış LP'yi commit öncesinde düşürüyor ve terminal GET 404 sonucunu başarı kabul ederek ikinci postu engelliyor.</div>
+    <div class="mono" style="margin-top:12px">SANDBOX_SHIP_PASS order=SAO.A100396 shipment=SH000282 pick=PI001142 lp=LP000082 before=1.0 after=0.0 ile=12063</div>
+  </section>
+
+  <section>
+    <div class="section-head"><div><h2>Sayım kanıtı</h2><p class="sub">Yanlış raf fail-closed, doğru raf idempotent ve belgeye özel post.</p></div></div>
+    <div class="table-wrap"><table>
+      <thead><tr><th>Senaryo</th><th>Gerçek sonuç</th><th>Durum</th></tr></thead>
+      <tbody>
+        <tr><td>Doğru raf + LP</td><td>LP000078, Y.G02.22: sistem ve sayılan miktar eşit; fark 0.</td><td><span class="status pass">PASS</span></td></tr>
+        <tr><td>Aynı LP tekrar okutma</td><td>Tek satır ve aynı miktar korundu; miktar katlanmadı.</td><td><span class="status pass">PASS</span></td></tr>
+        <tr><td>Yanlış raf + LP</td><td>Y.G02.21 isteği sunucuda reddedildi; hedefte beklenmeyen stok oluşmadı.</td><td><span class="status pass">PASS</span></td></tr>
+        <tr><td>Dengeli belgeyi post et</td><td>CNT-20260828213948, HTTP 204 ve Posted.</td><td><span class="status pass">PASS</span></td></tr>
+      </tbody>
+    </table></div>
+  </section>
+
+  <section>
+    <div class="section-head"><div><h2>Otomatik testler ve paketler</h2><p class="sub">Kalıcı kaynak kod, geçici sandbox test aracı kaldırıldıktan sonra yeniden derlendi.</p></div></div>
+    <div class="two">
+      <div class="callout good"><b>Android BUILD SUCCESSFUL</b><br>BADE: 150 test, 0 failure, 0 error, 0 skipped.<br>EMU: 150 test, 0 failure, 0 error, 0 skipped.<br>BADE ve EMU release APK'ları ayrı applicationId/flavor ile oluşturuldu.</div>
+      <div class="callout good"><b>AL derleme başarılı</b><br>328 AL dosyası derlendi.<br>Paket: DynamicsOps_BCWMSApp 1.14.0.87.<br>Son paket E-DefterSandbox'a yüklenip gerçek sevkiyat testi onunla yapıldı.</div>
+    </div>
+    <div class="table-wrap" style="margin-top:14px"><table>
+      <thead><tr><th>Paket</th><th>Sürüm</th><th>SHA-256</th><th>Boyut</th></tr></thead>
+      <tbody>
+        <tr><td>BADE APK</td><td>1.14.69-bade</td><td><code>80ee60064843155f754d70f8d28e091700ac54ce8941fe3c7678b1f3998756a1</code></td><td>12,535,904 byte</td></tr>
+        <tr><td>EMU APK</td><td>1.14.69-emu</td><td><code>b4c46192c8b7201e76bf1aac280a98b19f840d88dace6c09474aa560756d32e1</code></td><td>12,535,908 byte</td></tr>
+        <tr><td>Business Central</td><td>1.14.0.87</td><td><code>ea6c107e58f3ef4f224f038708c3d8d3948e008afb608b970fa1927faac0296f</code></td><td>709,067 byte</td></tr>
+      </tbody>
+    </table></div>
+  </section>
+
+  <section>
+    <div class="section-head"><div><h2>Kapsam dışı kabul maddeleri</h2><p class="sub">Bunlar önceki FAIL değildir; bu turda uygun sandbox verisi veya aktif modül bulunmadığı için ayrı operasyon kabulüne bırakıldı.</p></div></div>
+    <div class="table-wrap"><table>
+      <thead><tr><th>Konu</th><th>Mevcut durum</th><th>Önerilen kabul adımı</th><th>Etiket</th></tr></thead>
+      <tbody>
+        <tr><td>Kalite onay / karantina / ret</td><td>E-DefterSandbox şirketinde kalite özelliği aktif değildi.</td><td>Modül açıldığında 8 onay, 1 inceleme, 1 ret senaryosunu işletme kullanıcısıyla kabul et.</td><td><span class="status pending">KABUL BEKLİYOR</span></td></tr>
+        <tr><td>Fiziksel toplu etiket baskısı</td><td>LP oluşturma ve print queue kodu derlendi; fiziksel yazıcı bu turda kullanılmadı.</td><td>Tek 10 LP dalgasında toplu baskı ve barkod okunabilirliğini kontrol et.</td><td><span class="status pending">KABUL BEKLİYOR</span></td></tr>
+        <tr><td>Tek sevk satırını birden fazla kaynak LP'den tamamlama</td><td>Kesin kaynak LP ve farklı lot satırı akışı var; aynı shipment satırında çok kaynak LP için izole fixture koşulmadı.</td><td>İki LP'den 1+1 miktar seçip iki LP ve iki ILE sonucunu ayrı doğrula.</td><td><span class="status pending">REGRESYON BEKLİYOR</span></td></tr>
+        <tr><td>LP'siz yeni mal kabul</td><td>Mevcut fixture LP'li/kısmi olduğu için yeni LP'siz belge post edilmedi.</td><td>Yeni bir siparişte tam ve parçalı LP'siz kabulü standart BC sonucu ile karşılaştır.</td><td><span class="status pending">REGRESYON BEKLİYOR</span></td></tr>
+      </tbody>
+    </table></div>
+    <p class="small">Not: Sandbox'ta hata yeniden üretirken oluşan LP test artıkları, temiz son testten önce mevcut kontrollü kısmi LP işlemiyle stok miktarına eşitlendi. Son PASS kanıtı yeni SAO.A100396 / SH000282 / PI001142 zincirinden alındı.</p>
+  </section>
+
+  <footer>BCWMS · E-DefterSandbox regresyon sonucu · 29.08.2026 · Rapor, kaynak kod ve test kayıtlarından otomatik/manuel olarak derlenmiştir.</footer>
+</main>
+</body>
+</html>

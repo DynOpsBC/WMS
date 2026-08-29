@@ -959,7 +959,7 @@ private fun GuidedPickDocument(no: String, flowMode: OutboundFlowMode? = null, o
     // ELOG: aynı üründen bu rafta birden çok açık satır varsa, girilen toplam
     // miktarı satırlara (outstanding'e göre) dağıt. Tek okutma → tek miktar girişi.
     /** Grup dağıtımı iyimser görünür; sunucu yazımları deadlock oluşmaması için seri gider. */
-    fun completeGroup(group: LineGroup, totalQty: Double, lotNo: String) {
+    fun completeGroup(group: LineGroup, totalQty: Double, lotNo: String, sourceLpNo: String = "") {
         if (!canSafelyMutateNow()) {
             status = if (!headerLoaded || !linesComplete)
                 "HATA: Toplama satırları eksik. Yenileyip tekrar deneyin."
@@ -985,7 +985,7 @@ private fun GuidedPickDocument(no: String, flowMode: OutboundFlowMode? = null, o
             var firstFailure: BcApi.ApiResult? = null
             for ((ln, q) in plan) {
                 val effectiveLot = lotNo.ifBlank { ln.optString("lotNo") }
-                val result = BcApi.confirmPickLine(context, no, ln.optInt("lineNo"), q, effectiveLot)
+                val result = BcApi.confirmPickLine(context, no, ln.optInt("lineNo"), q, effectiveLot, sourceLpNo)
                 if (result.ok) okCount++ else {
                     firstFailure = result
                     break
@@ -1431,8 +1431,10 @@ private fun GuidedPickDocument(no: String, flowMode: OutboundFlowMode? = null, o
             initialQty = qg.totalOutstanding.takeIf { it > 0 } ?: 1.0,
             initialUom = qg.lines.first().optString("unitOfMeasureCode"),
             initialLot = qg.lines.first().optString("lotNo"),
+            allowZeroQuantity = true,
             showLotSerial = true,
             showSerial = false,
+            showSourceLp = true,
             lotRequired = qg.lines.any { it.optBoolean("lotRequired", false) },
             showAvailableLotLookup = true,
             autoDetectLotFromStock = true,
@@ -1441,7 +1443,7 @@ private fun GuidedPickDocument(no: String, flowMode: OutboundFlowMode? = null, o
             onDismiss = { qtyGroup = null },
             onConfirm = { res ->
                 qtyGroup = null
-                completeGroup(qg, res.quantity, res.lotNo)
+                completeGroup(qg, res.quantity, res.lotNo, res.sourceLpNo)
             },
         )
     }
@@ -2073,9 +2075,11 @@ private fun PickDocument(no: String, onBack: () -> Unit) {
             initialQty = gt.totalOutstanding.takeIf { it > 0 } ?: 1.0,
             initialUom = gt.lines.first().optString("unitOfMeasureCode"),
             initialLot = gt.lines.first().optString("lotNo"),
+            allowZeroQuantity = true,
             // ELOG: lot no el terminalinden girilir; seri girişi pick'te kapalı.
             showLotSerial = true,
             showSerial = false,
+            showSourceLp = true,
             lotRequired = gt.lines.any { it.optBoolean("lotRequired", false) },
             showAvailableLotLookup = true,
             autoDetectLotFromStock = true,
@@ -2090,7 +2094,7 @@ private fun PickDocument(no: String, onBack: () -> Unit) {
                     var okCount = 0
                     var firstErr: String? = null
                     for ((ln, q) in plan) {
-                        val r = BcApi.confirmPickLine(context, no, ln.optInt("lineNo"), q, res.lotNo)
+                        val r = BcApi.confirmPickLine(context, no, ln.optInt("lineNo"), q, res.lotNo, res.sourceLpNo)
                         if (r.ok) okCount++ else {
                             if (firstErr == null) firstErr = BcApi.errorMessage(r.body)
                             break

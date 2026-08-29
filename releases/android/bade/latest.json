@@ -1,7 +1,7 @@
 {
-  "versionCode": 200068,
-  "versionName": "1.14.68-bade",
-  "apkUrl": "https://github.com/DynOpsBC/WMS/releases/download/android-v1.14.68/BCWMS-BADE-1.14.68-RELEASE.apk",
-  "sha256": "9486e95fda9e9c1b157c974f8b0b1658962a58a6ef1e937b44d78dd74cdb9de8",
-  "releaseNotes": "Yerleştirmede önce hedef raf okutulur, ardından o rafa bırakılacak LP'ler peş peşe okutulur. Raf değişince yeni raf okutularak devam edilir; kalite bekleyen veya yanlış ret rafına yönlenen LP engellenir."
+  "versionCode": 200069,
+  "versionName": "1.14.69-bade",
+  "apkUrl": "https://github.com/DynOpsBC/WMS/releases/download/android-v1.14.69/BCWMS-BADE-1.14.69-RELEASE.apk",
+  "sha256": "80ee60064843155f754d70f8d28e091700ac54ce8941fe3c7678b1f3998756a1",
+  "releaseNotes": "Parçalı ve çoklu LP mal kabulü BC hareketlerine LP bazında yazılır; pick'te 0 tüm modlarda kabul edilir; LP'li sevkiyat kaynak LP'yi otomatik düşürür ve commit edilmiş belge tekrar post edilmez."
 }

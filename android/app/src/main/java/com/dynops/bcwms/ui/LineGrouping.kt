@@ -108,9 +108,13 @@ fun groupLines(lines: List<JSONObject>, capacity: (JSONObject) -> Double): List<
 /**
  * Girilen [qty]'yi grubun satırlarına kapasite sırasıyla dağıtır. Her satır kendi
  * kapasitesi kadar dolar, kalan bir sonrakine geçer.
- * Döndürür: (satır, o satıra yazılacak miktar) — miktar 0'dan büyük olanlar.
+ * Sıfır, operatörün bu lot/gruptan hiç almayacağını açıkça
+ * kaydetmesi demektir; bu durumda gruptaki tüm satırlar 0 ile döner.
+ * Pozitif miktarda yalnız gerçekten pay alan satırlar döner.
  */
 fun distributeQty(group: LineGroup, qty: Double, capacity: (JSONObject) -> Double): List<Pair<JSONObject, Double>> {
+    if (qty == 0.0) return group.lines.map { it to 0.0 }
+    if (qty < 0.0 || !qty.isFinite()) return emptyList()
     var remaining = qty
     val out = mutableListOf<Pair<JSONObject, Double>>()
     for (ln in group.lines) {

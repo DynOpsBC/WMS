@@ -502,8 +502,8 @@ codeunit 72050 "DOPSWHS Count Mgmt"
     /// seri, birim, miktar) olduğu gibi sayılır; operatör hiçbir şey girmez.
     /// Aynı LP aynı rafta tekrar okutulursa miktar SET edilir (toplanmaz) ve
     /// ScanId tekrarı mevcut satır sayısını döndürür → idempotent. LP BC'de
-    /// başka rafta kayıtlıysa hata verilmez: sayım gerçeği kaydeder, satır bu
-    /// rafta "beklenmeyen stok" (sistem 0) olarak açılır ve fark kayıtta çıkar.
+    /// başka rafta kayıtlıysa yanlış raf sayımına izin verilmez; operatör önce
+    /// doğru rafı okutmalıdır.
     /// </summary>
     procedure ScanV2Lp(SheetNo: Code[20]; ScanId: Guid; LpNo: Code[20]; BinCode: Code[20]; CounterSlot: Integer) LinesCounted: Integer
     var
@@ -519,7 +519,6 @@ codeunit 72050 "DOPSWHS Count Mgmt"
         UomCode: Code[10];
         NextLineNo: Integer;
         FirstLineNo: Integer;
-        LpInThisBin: Boolean;
     begin
         if not (CounterSlot in [1, 2, 3]) then
             Error(CounterSlotErr);
@@ -551,14 +550,15 @@ codeunit 72050 "DOPSWHS Count Mgmt"
         if not (LPHeader.Status in [LPHeader.Status::Open, LPHeader.Status::Built, LPHeader.Status::Assigned]) then
             Error(LPStatusNotCountableErr, LpNo, Format(LPHeader.Status));
 
-        // Rafsız LP'ye okutulan raf yazılır (AttachLpToBin ile aynı); başka rafta
-        // kayıtlı LP taşınmaz, fark sayımda görünür.
+        if (LPHeader."Bin Code" <> '') and (LPHeader."Bin Code" <> BinCode) then
+            Error(LPCountBinMismatchErr, LpNo, LPHeader."Bin Code", BinCode);
+
+        // Rafsız LP'ye okutulan raf yazılır (AttachLpToBin ile aynı).
         if LPHeader."Bin Code" = '' then begin
             LPHeader.Validate("Bin Code", BinCode);
             LPHeader.Modify(true);
             LPMgt.WriteToLedger(LPHeader, Enum::"DOPSWHS LP Action"::Moved, '', BinCode, 0, '', '', SheetNo);
         end;
-        LpInThisBin := LPHeader."Bin Code" = BinCode;
 
         CountLine.LockTable();
         CountLine.SetRange("Sheet No.", SheetNo);
@@ -594,11 +594,8 @@ codeunit 72050 "DOPSWHS Count Mgmt"
                 CountLine."Lot No." := LPLine."Lot No.";
                 CountLine."Serial No." := LPLine."Serial No.";
                 CountLine."Unit of Measure Code" := UomCode;
-                if LpInThisBin then
-                    CountLine."System Qty" := LPLine.Quantity
-                else
-                    CountLine."System Qty" := 0;
-                CountLine."Unexpected Stock" := not LpInThisBin;
+                CountLine."System Qty" := LPLine.Quantity;
+                CountLine."Unexpected Stock" := false;
                 SetCountValue(CountLine, CounterSlot, LPLine.Quantity);
                 CountLine.Insert(true);
             end;
@@ -638,6 +635,7 @@ codeunit 72050 "DOPSWHS Count Mgmt"
         CountHeader.Get(SheetNo);
         if CountHeader.Status = CountHeader.Status::Posted then
             Error(CountAlreadyPostedErr, SheetNo);
+
         if not CountHeader."V2 Scan Mode" then
             Error(NotV2SheetErr, SheetNo);
 
@@ -948,10 +946,20 @@ codeunit 72050 "DOPSWHS Count Mgmt"
         Dimensions: Dictionary of [Text, Text];
         LineNo: Integer;
         CountDocumentNo: Code[20];
+        DedicatedBatchName: Code[10];
     begin
         CountHeader.Get(SheetNo);
         if CountHeader.Status = CountHeader.Status::Posted then
             Error(CountAlreadyPostedErr, SheetNo);
+
+        // Eski sürümlerde batch adı soldan kısaltıldığı için tüm CNT belgeleri
+        // aynı DOPS-CNT-C batch'ini paylaşıyordu. Kayıttan hemen önce belgeye
+        // özel adı yeniden üret; eski açık belgeler de güncellemeden yararlansın.
+        DedicatedBatchName := EnsurePhysInvBatch(SheetNo);
+        if CountHeader."Source Phys. Inv. Journal Batch" <> DedicatedBatchName then begin
+            CountHeader."Source Phys. Inv. Journal Batch" := DedicatedBatchName;
+            CountHeader.Modify(true);
+        end;
 
         EnsureAllRequiredCountsRecorded(SheetNo);
         EvaluateVariance(SheetNo);
@@ -1014,7 +1022,10 @@ codeunit 72050 "DOPSWHS Count Mgmt"
 
         CountHeader.Status := CountHeader.Status::Posted;
         CountHeader."Posted DateTime" := CurrentDateTime();
-        CountHeader.Modify(true);
+        // The table trigger deliberately prevents all changes after a sheet has
+        // become Posted. This is the trusted transition that makes it posted,
+        // so bypass the immutability guard for this single internal write.
+        CountHeader.Modify(false);
 
         Dimensions.Add('sheetNo', SheetNo);
         Session.LogMessage('AdvWMS.Count.SheetPosted', StrSubstNo('Count sheet %1 posted.', SheetNo), Verbosity::Normal, DataClassification::SystemMetadata, TelemetryScope::ExtensionPublisher, Dimensions);
@@ -1271,7 +1282,12 @@ codeunit 72050 "DOPSWHS Count Mgmt"
         ItemJournalBatch: Record "Item Journal Batch";
         BatchName: Code[10];
     begin
-        BatchName := CopyStr('DOPS-CNT-' + SheetNo, 1, MaxStrLen(BatchName));
+        // Son karakterler numara serisinin değişen bölümüdür. Önden kırpmak
+        // yerine son 9 karakteri kullanarak her sayım belgesine ayrı batch ver.
+        if StrLen(SheetNo) > 9 then
+            BatchName := CopyStr('C' + CopyStr(SheetNo, StrLen(SheetNo) - 8, 9), 1, MaxStrLen(BatchName))
+        else
+            BatchName := CopyStr('C' + SheetNo, 1, MaxStrLen(BatchName));
         if not ItemJournalTemplate.Get('PHYS. INV.') then begin
             ItemJournalTemplate.Init();
             ItemJournalTemplate.Name := 'PHYS. INV.';
@@ -1402,6 +1418,7 @@ codeunit 72050 "DOPSWHS Count Mgmt"
         LPNotFoundErr: Label '%1 LP numarası bulunamadı.', Comment = '%1 LP';
         LPLocationMismatchErr: Label '%1 LP numarası %2 lokasyonundadır; %3 lokasyonundaki bu sayıma bağlanamaz.', Comment = '%1 LP, %2 LP location, %3 count location';
         LPStatusNotCountableErr: Label '%1 LP numarasının durumu %2 olduğu için sayılamaz.', Comment = '%1 LP, %2 status';
+        LPCountBinMismatchErr: Label '%1 LP numarası sistemde %2 rafındadır; %3 rafında sayılamaz. Önce doğru rafı okutun.', Comment = '%1 LP, %2 current bin, %3 scanned bin';
         LPAlreadyInOtherBinErr: Label '%1 LP numarası sistemde %2 rafındadır; %3 rafına ilk atama yapılamaz. Önce fiziksel yerini doğrulayın.', Comment = '%1 LP, %2 current bin, %3 scanned bin';
         LPStockMissingInBinErr: Label '%1 LP içindeki %2 ürününden %3 adet için %4 rafında BC stoku bulunamadı.', Comment = '%1 LP, %2 item, %3 qty, %4 bin';
         LPStockInsufficientInBinErr: Label '%1 LP içindeki %2 ürününden %3 adet var; %4 rafındaki kullanılabilir BC stoku %5 adettir.', Comment = '%1 LP, %2 item, %3 LP qty, %4 bin, %5 available';

@@ -263,7 +263,7 @@ codeunit 72046 "DOPSWHS Pick Mgmt"
     /// </summary>
     procedure ConfirmPickLine(var PickLine: Record "Warehouse Activity Line"; QtyToHandle: Decimal; LotNo: Code[50])
     begin
-        ConfirmPickLineInternal(PickLine, QtyToHandle, LotNo, '');
+        ConfirmPickLineInternal(PickLine, QtyToHandle, LotNo, '', '');
     end;
 
     /// <summary>
@@ -275,11 +275,19 @@ codeunit 72046 "DOPSWHS Pick Mgmt"
     begin
         if RequestingUserId = '' then
             Error(RequestingUserRequiredErr);
-        ConfirmPickLineInternal(PickLine, QtyToHandle, LotNo, RequestingUserId);
+        ConfirmPickLineInternal(PickLine, QtyToHandle, LotNo, '', RequestingUserId);
     end;
 
-    local procedure ConfirmPickLineInternal(var PickLine: Record "Warehouse Activity Line"; QtyToHandle: Decimal; LotNo: Code[50]; RequestingUserId: Code[50])
+    procedure ConfirmPickLineFor(var PickLine: Record "Warehouse Activity Line"; QtyToHandle: Decimal; LotNo: Code[50]; SourceLpNo: Code[20]; RequestingUserId: Code[50])
+    begin
+        if RequestingUserId = '' then
+            Error(RequestingUserRequiredErr);
+        ConfirmPickLineInternal(PickLine, QtyToHandle, LotNo, SourceLpNo, RequestingUserId);
+    end;
+
+    local procedure ConfirmPickLineInternal(var PickLine: Record "Warehouse Activity Line"; QtyToHandle: Decimal; LotNo: Code[50]; SourceLpNo: Code[20]; RequestingUserId: Code[50])
     var
+        EffectiveLpNo: Code[20];
     begin
         if PickLine."Activity Type" <> PickLine."Activity Type"::Pick then
             Error('Warehouse activity %1 must be a Pick.', PickLine."No.");
@@ -298,6 +306,10 @@ codeunit 72046 "DOPSWHS Pick Mgmt"
         PickLine.Validate("Qty. to Handle", QtyToHandle);
         EnsurePickLot(PickLine, LotNo);
         PickLine.Validate("Lot No.", LotNo);
+        EffectiveLpNo := SourceLpNo;
+        if EffectiveLpNo = '' then
+            EffectiveLpNo := PickLine."LP No.";
+        PickLine."LP No." := ResolvePickSourceLp(PickLine, EffectiveLpNo);
         PickLine.Modify(true);
 
         // Qty. to Handle doğrulaması Take satırını değiştirir ancak BC'nin
@@ -310,6 +322,7 @@ codeunit 72046 "DOPSWHS Pick Mgmt"
         // Sevkiyat özet alanını açık Take satırlarının tamamına bakarak yalnız
         // tek lot varsa doldur.
         UpdateShipmentLineLotSummary(PickLine);
+        UpdateShipmentLineLpSummary(PickLine);
 
         // Satır onayı sahadaki EN SIK işlem; "bu satırı kim okuttu" sorusu
         // ancak burada kayıt altına alınırsa cevaplanabiliyor.
@@ -339,13 +352,89 @@ codeunit 72046 "DOPSWHS Pick Mgmt"
         RelatedPlaceLine.SetRange("Unit of Measure Code", PickLine."Unit of Measure Code");
         RelatedPlaceLine.SetRange("Breakbulk No.", PickLine."Breakbulk No.");
         RelatedPlaceLine.SetTrackingFilterFromWhseActivityLine(PickLine);
-        if not RelatedPlaceLine.FindFirst() then
-            Error(
-                '%1 toplamasındaki %2 lotlu %3 ürünü için eş sevkiyat gözü satırı bulunamadı. Pick kaydedilmedi; belgeyi yenileyip tekrar deneyin.',
-                PickLine."No.", PickLine."Lot No.", PickLine."Item No.");
+        if not RelatedPlaceLine.FindFirst() then begin
+            // A newly-created pick can be structurally paired while its Place
+            // line is still untracked. Clear only the tracking filters and
+            // accept the fallback when the structural identity is unique.
+            RelatedPlaceLine.SetRange("Lot No.");
+            RelatedPlaceLine.SetRange("Serial No.");
+            if RelatedPlaceLine.Count() <> 1 then
+                Error(
+                    '%1 toplamasındaki %2 lotlu %3 ürünü için eş sevkiyat gözü satırı bulunamadı. Pick kaydedilmedi; belgeyi yenileyip tekrar deneyin.',
+                    PickLine."No.", PickLine."Lot No.", PickLine."Item No.");
+            RelatedPlaceLine.FindFirst();
+        end;
 
         RelatedPlaceLine.Validate("Qty. to Handle", PickLine."Qty. to Handle");
+        if RelatedPlaceLine."Lot No." <> PickLine."Lot No." then
+            RelatedPlaceLine.Validate("Lot No.", PickLine."Lot No.");
+        if RelatedPlaceLine."Serial No." <> PickLine."Serial No." then
+            RelatedPlaceLine.Validate("Serial No.", PickLine."Serial No.");
+        RelatedPlaceLine."LP No." := PickLine."LP No.";
         RelatedPlaceLine.Modify(true);
+    end;
+
+    local procedure ResolvePickSourceLp(PickLine: Record "Warehouse Activity Line"; RequestedLpNo: Code[20]): Code[20]
+    var
+        LPHeader: Record "DOPSWHS LP Header";
+        LPLine: Record "DOPSWHS LP Line";
+        Item: Record Item;
+        ItemUom: Record "Item Unit of Measure";
+        CandidateLpNo: Code[20];
+        QtyPerUom: Decimal;
+        AvailableBaseQty: Decimal;
+        CandidateCount: Integer;
+    begin
+        if PickLine."Qty. to Handle (Base)" = 0 then
+            exit('');
+
+        Item.Get(PickLine."Item No.");
+        if RequestedLpNo <> '' then
+            LPHeader.SetRange("No.", RequestedLpNo);
+        LPHeader.SetRange("Location Code", PickLine."Location Code");
+        LPHeader.SetRange("Bin Code", PickLine."Bin Code");
+        LPHeader.SetFilter(Status, '%1|%2|%3', LPHeader.Status::Open, LPHeader.Status::Built, LPHeader.Status::Assigned);
+        if LPHeader.FindSet() then
+            repeat
+                LPLine.Reset();
+                LPLine.SetRange("LP No.", LPHeader."No.");
+                LPLine.SetRange("Item No.", PickLine."Item No.");
+                LPLine.SetRange("Variant Code", PickLine."Variant Code");
+                LPLine.SetRange("Lot No.", PickLine."Lot No.");
+                LPLine.SetRange("Serial No.", PickLine."Serial No.");
+                LPLine.SetFilter(Quantity, '>0');
+                if LPLine.FindSet() then
+                    repeat
+                        QtyPerUom := 1;
+                        if (LPLine."Unit of Measure" <> '') and
+                           (LPLine."Unit of Measure" <> Item."Base Unit of Measure")
+                        then
+                            if ItemUom.Get(LPLine."Item No.", LPLine."Unit of Measure") then
+                                QtyPerUom := ItemUom."Qty. per Unit of Measure"
+                            else
+                                QtyPerUom := 0;
+                        AvailableBaseQty := Round(LPLine.Quantity * QtyPerUom, 0.00001);
+                        if (QtyPerUom > 0) and
+                           (AvailableBaseQty + 0.00001 >= PickLine."Qty. to Handle (Base)")
+                        then begin
+                            CandidateCount += 1;
+                            CandidateLpNo := LPLine."LP No.";
+                        end;
+                    until LPLine.Next() = 0;
+            until LPHeader.Next() = 0;
+
+        if CandidateCount = 0 then begin
+            if RequestedLpNo <> '' then
+                Error(
+                    '%1 LP numarasında %2 ürünü, lot %3 için %4 miktar sevk edilebilir stok bulunamadı.',
+                    RequestedLpNo, PickLine."Item No.", PickLine."Lot No.", PickLine."Qty. to Handle");
+            exit('');
+        end;
+        if CandidateCount > 1 then
+            Error(
+                '%1 ürünü, lot %2 ve %3 rafı için birden fazla LP eşleşti. Yanlış paletin düşmemesi için kaynak LP numarasını okutun.',
+                PickLine."Item No.", PickLine."Lot No.", PickLine."Bin Code");
+        exit(CandidateLpNo);
     end;
 
     local procedure UpdateShipmentLineLotSummary(PickLine: Record "Warehouse Activity Line")
@@ -381,6 +470,43 @@ codeunit 72046 "DOPSWHS Pick Mgmt"
             Clear(CandidateLotNo);
         if WhseShipmentLine."DOPSWHS Lot No." <> CandidateLotNo then begin
             WhseShipmentLine."DOPSWHS Lot No." := CandidateLotNo;
+            WhseShipmentLine.Modify(true);
+        end;
+    end;
+
+    local procedure UpdateShipmentLineLpSummary(PickLine: Record "Warehouse Activity Line")
+    var
+        RelatedTakeLine: Record "Warehouse Activity Line";
+        WhseShipmentLine: Record "Warehouse Shipment Line";
+        CandidateLpNo: Code[20];
+        MultipleLps: Boolean;
+    begin
+        if PickLine."Whse. Document Type" <> PickLine."Whse. Document Type"::Shipment then
+            exit;
+        if not WhseShipmentLine.Get(PickLine."Whse. Document No.", PickLine."Whse. Document Line No.") then
+            exit;
+
+        RelatedTakeLine.SetRange("Activity Type", PickLine."Activity Type");
+        RelatedTakeLine.SetRange("No.", PickLine."No.");
+        RelatedTakeLine.SetRange("Action Type", RelatedTakeLine."Action Type"::Take);
+        RelatedTakeLine.SetRange("Whse. Document Type", PickLine."Whse. Document Type");
+        RelatedTakeLine.SetRange("Whse. Document No.", PickLine."Whse. Document No.");
+        RelatedTakeLine.SetRange("Whse. Document Line No.", PickLine."Whse. Document Line No.");
+        RelatedTakeLine.SetFilter("Qty. to Handle", '>0');
+        RelatedTakeLine.SetFilter("LP No.", '<>%1', '');
+        if RelatedTakeLine.FindSet() then
+            repeat
+                if CandidateLpNo = '' then
+                    CandidateLpNo := RelatedTakeLine."LP No."
+                else
+                    if CandidateLpNo <> RelatedTakeLine."LP No." then
+                        MultipleLps := true;
+            until (RelatedTakeLine.Next() = 0) or MultipleLps;
+
+        if MultipleLps then
+            Clear(CandidateLpNo);
+        if WhseShipmentLine."LP No." <> CandidateLpNo then begin
+            WhseShipmentLine."LP No." := CandidateLpNo;
             WhseShipmentLine.Modify(true);
         end;
     end;

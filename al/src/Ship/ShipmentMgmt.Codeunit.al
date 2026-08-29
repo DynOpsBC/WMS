@@ -293,6 +293,7 @@ codeunit 72047 "DOPSWHS Shipment Mgmt"
         WhseShipmentRelease: Codeunit "Whse.-Shipment Release";
         PrintDispatcher: Codeunit "DOPSWHS Print Dispatcher";
         Telemetry: Codeunit "DOPSWHS Telemetry";
+        LpPropagation: Codeunit "DOPSWHS LP Propagation";
         LineLp: Dictionary of [Integer, Code[20]];
         LineSscc: Dictionary of [Integer, Code[18]];
         LpNo: Code[20];
@@ -300,8 +301,13 @@ codeunit 72047 "DOPSWHS Shipment Mgmt"
         LineCount: Integer;
         LpCount: Integer;
         PostedNo: Code[20];
+        WhseShipmentNo: Code[20];
     begin
-        EnsureRequiredShipmentLots(WhseShipmentHeader."No.");
+        // Whse.-Post Shipment may clear the record variable passed to Run.
+        // Keep the durable source number before posting; every post-processing
+        // lookup must use this value, never the potentially cleared record.
+        WhseShipmentNo := WhseShipmentHeader."No.";
+        EnsureRequiredShipmentLots(WhseShipmentNo);
         if PrintPackingSlip then begin
             EnsureShipmentReportConfigured();
             PrintDispatcher.EnsureDocumentPrinter(PrinterId, Enum::"DOPSWHS IWX Report Usage"::PostedShipment);
@@ -314,7 +320,7 @@ codeunit 72047 "DOPSWHS Shipment Mgmt"
         end;
         WhseShipmentHeader.TestField(Status, WhseShipmentHeader.Status::Released);
 
-        WhseShipmentLine.SetRange("No.", WhseShipmentHeader."No.");
+        WhseShipmentLine.SetRange("No.", WhseShipmentNo);
         if WhseShipmentLine.FindSet(true) then
             repeat
                 LineCount += 1;
@@ -328,16 +334,16 @@ codeunit 72047 "DOPSWHS Shipment Mgmt"
                 end;
             until WhseShipmentLine.Next() = 0;
 
-        EnsureAssignedShipmentLpsHaveSscc(WhseShipmentHeader."No.", LpCount);
+        EnsureAssignedShipmentLpsHaveSscc(WhseShipmentNo, LpCount);
 
         if WhseShipmentLine.FindFirst() then
             WhsePostShipment.Run(WhseShipmentLine);
 
-        PostedWhseShipmentHeader.SetRange("Whse. Shipment No.", WhseShipmentHeader."No.");
+        PostedWhseShipmentHeader.SetRange("Whse. Shipment No.", WhseShipmentNo);
         if PostedWhseShipmentHeader.FindLast() then
             PostedNo := PostedWhseShipmentHeader."No.";
 
-        PostedWhseShipmentLine.SetRange("Whse. Shipment No.", WhseShipmentHeader."No.");
+        PostedWhseShipmentLine.SetRange("Whse. Shipment No.", WhseShipmentNo);
         if PostedWhseShipmentLine.FindSet(true) then
             repeat
                 if LineLp.Get(PostedWhseShipmentLine."Whse Shipment Line No.", LpNo) then begin
@@ -348,7 +354,13 @@ codeunit 72047 "DOPSWHS Shipment Mgmt"
                 end;
             until PostedWhseShipmentLine.Next() = 0;
 
-        StampHeaders(WhseShipmentHeader."No.", PostedNo);
+        // At this point the durable posted warehouse lines contain the exact
+        // LP selected by the operator. Reconcile through BC's exact posted-line
+        // to item-ledger relation before returning to the terminal.
+        if PostedNo <> '' then
+            LpPropagation.ReconcilePostedWarehouseShipment(PostedNo);
+
+        StampHeaders(WhseShipmentNo, PostedNo);
 
         if PrintPackingSlip then begin
             ClearLastError();
@@ -359,7 +371,7 @@ codeunit 72047 "DOPSWHS Shipment Mgmt"
                     WhseShipmentHeader."Assigned User ID");
         end;
 
-        LogShipmentPosted(WhseShipmentHeader."No.", LineCount, LpCount + LineLp.Count());
+        LogShipmentPosted(WhseShipmentNo, LineCount, LpCount + LineLp.Count());
     end;
 
     /// <summary>
