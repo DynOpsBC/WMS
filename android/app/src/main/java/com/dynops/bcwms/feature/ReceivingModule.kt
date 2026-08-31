@@ -14,7 +14,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.dynops.bcwms.BcApi
@@ -450,125 +449,146 @@ private fun ReceiveDocument(no: String, onBack: () -> Unit) {
             }
         }
 
-        // Yatay ekranda her aksiyon kendi şeridinde durunca satır listesine yer
-        // kalmıyordu; kısa pencerede yazdır kutusu ve toplu LP aynı şeride alınır.
-        val compactBars = LocalConfiguration.current.screenHeightDp < 460
-        if (!compactBars) {
-            BottomActionBar {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Checkbox(checked = printReceipt, onCheckedChange = { printReceipt = it })
-                    Text("Mal kabul belgesi yazdır", fontSize = 13.sp)
-                }
-            }
-        }
-        if (activeLp == null) {
-            BottomActionBar {
-                if (compactBars) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Checkbox(checked = printReceipt, onCheckedChange = { printReceipt = it })
-                        Text("Yazdır", fontSize = 13.sp)
-                    }
-                    Spacer(Modifier.width(8.dp))
-                }
-                OutlinedButton(
-                    onClick = {
-                        val candidates = lines.filter { line ->
-                            (line.optDouble("quantity") - line.optDouble("qtyReceived")).coerceAtLeast(0.0) > 0.0
-                        }
-                        when (candidates.size) {
-                            0 -> status = "HATA: Palet oluşturulacak açık mal kabul satırı yok."
-                            1 -> bulkLpTarget = candidates.first()
-                            else -> showBulkLinePicker = true
-                        }
-                    },
-                    enabled = !busy && canMutate,
-                    modifier = Modifier.weight(1f),
-                ) { Text("Palet LP Oluştur") }
-            }
-        } else if (compactBars) {
-            BottomActionBar {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Checkbox(checked = printReceipt, onCheckedChange = { printReceipt = it })
-                    Text("Mal kabul belgesi yazdır", fontSize = 13.sp)
-                }
-            }
-        }
+        // Alt aksiyonları tek yüzeyde ve iki satırda tut. Ayrı ayrı aksiyon
+        // şeritleri özellikle telefon ekranında belge satırlarını gereksiz yere
+        // daraltıyordu.
+        val canPost = canMutate && readyCount > 0 && postQty > 0.0
         BottomActionBar {
-            OutlinedButton(onClick = {
-                scope.launch {
-                    busy = true; status = "Atanıyor..."
-                    val me = BcApi.currentUserId(context)
-                    val r = if (me.isBlank()) BcApi.ApiResult(false, 0, "Kullanıcı çözülemedi")
-                        else BcApi.boundAction(context, "receipts", no, "assignToUser", JSONObject().apply { put("userId", me) }.toString())
-                    busy = false
-                    status = if (r.ok) "TAMAM: Bana atandı (HTTP ${r.httpCode})" else "HATA: ${BcApi.errorMessage(r.body)} (HTTP ${r.httpCode})"
-                    if (r.ok) reload()
-                }
-            }, enabled = !busy && headerLoaded && linesComplete && myUserId.isNotBlank() && !canMutate, modifier = Modifier.weight(1f)) { Text("Bana Ata") }
-            Button(onClick = { showScan = true }, enabled = !busy && canMutate, modifier = Modifier.weight(1f)) {
-                WmsActionLabel(WmsGlyph.SCAN, "Tara")
-            }
-            if (activeLp == null) {
-                OutlinedButton(onClick = {
-                    scope.launch {
-                        busy = true
-                        status = "Uygun palet şablonu belirleniyor..."
-                        val template = resolveLpTemplate(context, LpPurpose.PALLET)
-                        if (template == null) {
-                            status = "HATA: Uygun palet şablonu belirlenemedi. BC'de PALLET-EUR şablonunu kontrol edin."
-                            busy = false
-                            return@launch
-                        }
-                        val r = BcApi.boundAction(
-                            context, "receipts", no, "startLP",
-                            JSONObject().apply { put("lpTemplateCode", template) }.toString(),
-                        )
-                        val createdLp = if (r.ok) BcApi.scalarValue(r.body).trim() else ""
-                        status = when {
-                            !r.ok -> QcErrorParser.friendlyStatus(BcApi.errorMessage(r.body), r.httpCode)
-                            createdLp.isBlank() -> "HATA: LP oluşturuldu ancak numarası alınamadı. Belgeyi yenileyip kontrol edin."
-                            else -> "TAMAM: $createdLp başlatıldı"
-                        }
-                        if (createdLp.isNotBlank()) activeLp = createdLp
-                        busy = false
-                        // Başlık alanı API replikasında kısa süre gecikse
-                        // bile başarılı startLP yanıtını kaybetme.
-                        if (createdLp.isNotBlank()) reload(preserveActiveLp = createdLp)
-                    }
-                }, enabled = !busy && canMutate, modifier = Modifier.weight(1f)) { Text("LP Başlat") }
-            } else {
-                OutlinedButton(onClick = {
-                    val lp = activeLp!!
-                    action("stopLPToPrinter", JSONObject().apply {
-                        put("lpNo", lp)
-                        put("printLabel", true)
-                        put("printerId", getDefaultPrinter(context))
-                    }.toString(), "LP kapatıldı") { r ->
-                        if (r.ok) activeLp = null
-                    }
-                }, enabled = !busy && canMutate, modifier = Modifier.weight(1f)) { Text("LP Kapat") }
-            }
-        }
-        BottomActionBar {
-            // TOPLU POST: operatör istediği kadar satırı okutur/girer, belge
-            // ancak burada ve özet onayından sonra postalanır. En az bir satır
-            // işlenmeden buton açılmaz (yanlışlıkla boş belge postlanmasın).
-            val canPost = canMutate && readyCount > 0 && postQty > 0.0
-            Button(
-                // Araç bilgisi eksikse post BC'de zaten reddedilir; operatörü
-                // önce forma yönlendir, hatayı sonradan göstermek yerine.
-                onClick = { if (vehicleInfoMissing) showVehicle = true else showPostConfirm = true },
-                enabled = !busy && canPost,
-                modifier = Modifier.fillMaxWidth().height(com.dynops.bcwms.ui.wmsPrimaryButtonHeight()),
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(6.dp),
             ) {
-                Text(
-                    when {
-                        !canPost -> "Önce satırlara miktar girin"
-                        vehicleInfoMissing -> "Araç bilgisi gir → Kaydet"
-                        else -> "Kaydet (post) — $readyCount satır"
-                    },
-                    fontWeight = FontWeight.Bold,
-                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    Row(
+                        modifier = Modifier.weight(1f),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Checkbox(checked = printReceipt, onCheckedChange = { printReceipt = it })
+                        Text("Belgeyi yazdır", fontSize = 13.sp, maxLines = 1)
+                    }
+                    if (activeLp == null) {
+                        OutlinedButton(
+                            onClick = {
+                                val candidates = lines.filter { line ->
+                                    (line.optDouble("quantity") - line.optDouble("qtyReceived")).coerceAtLeast(0.0) > 0.0
+                                }
+                                when (candidates.size) {
+                                    0 -> status = "HATA: Palet oluşturulacak açık mal kabul satırı yok."
+                                    1 -> bulkLpTarget = candidates.first()
+                                    else -> showBulkLinePicker = true
+                                }
+                            },
+                            enabled = !busy && canMutate,
+                            modifier = Modifier.height(42.dp),
+                            contentPadding = PaddingValues(horizontal = 14.dp),
+                        ) { Text("Palet LP", maxLines = 1) }
+                    }
+                }
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    if (!canMutate) {
+                        Button(
+                            onClick = {
+                                scope.launch {
+                                    busy = true; status = "Atanıyor..."
+                                    val me = BcApi.currentUserId(context)
+                                    val r = if (me.isBlank()) BcApi.ApiResult(false, 0, "Kullanıcı çözülemedi")
+                                        else BcApi.boundAction(context, "receipts", no, "assignToUser", JSONObject().apply { put("userId", me) }.toString())
+                                    busy = false
+                                    status = if (r.ok) "TAMAM: Bana atandı (HTTP ${r.httpCode})" else "HATA: ${BcApi.errorMessage(r.body)} (HTTP ${r.httpCode})"
+                                    if (r.ok) reload()
+                                }
+                            },
+                            enabled = !busy && headerLoaded && linesComplete && myUserId.isNotBlank(),
+                            modifier = Modifier.weight(1f).height(46.dp),
+                        ) { Text("Bana Ata") }
+                    } else {
+                        Button(
+                            onClick = { showScan = true },
+                            enabled = !busy,
+                            modifier = Modifier.weight(0.9f).height(46.dp),
+                            contentPadding = PaddingValues(horizontal = 10.dp),
+                        ) { WmsActionLabel(WmsGlyph.SCAN, "Tara") }
+
+                        if (activeLp == null) {
+                            OutlinedButton(
+                                onClick = {
+                                    scope.launch {
+                                        busy = true
+                                        status = "Uygun palet şablonu belirleniyor..."
+                                        val template = resolveLpTemplate(context, LpPurpose.PALLET)
+                                        if (template == null) {
+                                            status = "HATA: Uygun palet şablonu belirlenemedi. BC'de PALLET-EUR şablonunu kontrol edin."
+                                            busy = false
+                                            return@launch
+                                        }
+                                        val r = BcApi.boundAction(
+                                            context, "receipts", no, "startLP",
+                                            JSONObject().apply { put("lpTemplateCode", template) }.toString(),
+                                        )
+                                        val createdLp = if (r.ok) BcApi.scalarValue(r.body).trim() else ""
+                                        status = when {
+                                            !r.ok -> QcErrorParser.friendlyStatus(BcApi.errorMessage(r.body), r.httpCode)
+                                            createdLp.isBlank() -> "HATA: LP oluşturuldu ancak numarası alınamadı. Belgeyi yenileyip kontrol edin."
+                                            else -> "TAMAM: $createdLp başlatıldı"
+                                        }
+                                        if (createdLp.isNotBlank()) activeLp = createdLp
+                                        busy = false
+                                        // Başlık alanı API replikasında kısa süre gecikse
+                                        // bile başarılı startLP yanıtını kaybetme.
+                                        if (createdLp.isNotBlank()) reload(preserveActiveLp = createdLp)
+                                    }
+                                },
+                                enabled = !busy,
+                                modifier = Modifier.weight(1f).height(46.dp),
+                                contentPadding = PaddingValues(horizontal = 8.dp),
+                            ) { Text("LP Başlat", maxLines = 1) }
+                        } else {
+                            OutlinedButton(
+                                onClick = {
+                                    val lp = activeLp!!
+                                    action("stopLPToPrinter", JSONObject().apply {
+                                        put("lpNo", lp)
+                                        put("printLabel", true)
+                                        put("printerId", getDefaultPrinter(context))
+                                    }.toString(), "LP kapatıldı") { r ->
+                                        if (r.ok) activeLp = null
+                                    }
+                                },
+                                enabled = !busy,
+                                modifier = Modifier.weight(1f).height(46.dp),
+                                contentPadding = PaddingValues(horizontal = 8.dp),
+                            ) { Text("LP Kapat", maxLines = 1) }
+                        }
+
+                        // TOPLU POST: operatör istediği kadar satırı okutur/girer,
+                        // belge ancak özet onayından sonra postalanır.
+                        Button(
+                            onClick = { if (vehicleInfoMissing) showVehicle = true else showPostConfirm = true },
+                            enabled = !busy && canPost,
+                            modifier = Modifier.weight(1.25f).height(46.dp),
+                            contentPadding = PaddingValues(horizontal = 8.dp),
+                        ) {
+                            Text(
+                                when {
+                                    !canPost -> "Önce miktar gir"
+                                    vehicleInfoMissing -> "Araç → Kaydet"
+                                    else -> "Kaydet · $readyCount"
+                                },
+                                fontWeight = FontWeight.Bold,
+                                maxLines = 1,
+                            )
+                        }
+                    }
+                }
             }
         }
     }
