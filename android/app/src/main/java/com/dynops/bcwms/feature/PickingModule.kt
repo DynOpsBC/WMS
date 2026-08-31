@@ -234,8 +234,11 @@ private fun V2PicksForFlow(flow: OutboundFlowMode) {
                 status = "HATA: Kullanıcı kimliği çözülemedi."
                 return@launch
             }
+            // Sevkiyattan "Pick Oluştur" ile üretilen belgelerde pickMode boş
+            // kalabiliyor; sunucuda katı eşitlik bu işleri HİÇBİR kuyrukta
+            // göstermiyordu. Mod ayrımı istemcide yapılır: boş mod, varsayılan
+            // akış olan Multi kuyruğunda listelenir.
             val filter = buildODataFilter(
-                "pickMode eq '${flow.apiValue}'",
                 ownerClause,
                 searchClause("no", search),
             )
@@ -243,7 +246,13 @@ private fun V2PicksForFlow(flow: OutboundFlowMode) {
                 context,
                 "picks?\$top=100&\$orderby=no desc&\$select=no,locationCode,assignedUserId,sourceNo,status,percentComplete,pickMode,mainLpNo$filter",
             )
-            rows = if (page.complete) page.rows else emptyList()
+            rows = if (page.complete) page.rows.filter { row ->
+                // BC modu OData kaçışıyla döndürebiliyor: boş mod "_x0020_"
+                // (kaçışlı boşluk) olarak geliyor ve düz karşılaştırmada tutmuyor.
+                val mode = BcEnum.decodeOData(row.optString("pickMode")).trim()
+                if (mode.isBlank()) flow == OutboundFlowMode.Multi
+                else mode.equals(flow.apiValue, ignoreCase = true)
+            } else emptyList()
             loading = false
             status = when {
                 !page.complete -> "HATA: Toplama kuyruğunun tamamı alınamadı. Yenileyin."
@@ -742,6 +751,8 @@ private fun friendlyDateTime(iso: String): String {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun GuidedPickDocument(no: String, flowMode: OutboundFlowMode? = null, onBack: () -> Unit) {
+    // Donanım Geri tuşu belge ekranından uygulamayı kapatmasın; listeye dönsün.
+    androidx.activity.compose.BackHandler { onBack() }
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var header by remember { mutableStateOf<JSONObject?>(null) }
@@ -1405,7 +1416,7 @@ private fun GuidedPickDocument(no: String, flowMode: OutboundFlowMode? = null, o
                 onClick = { registerPick() },
                 // Başkasının pick'i post edilemez — önce devralınmalı.
                 enabled = !busy && canRegisterAssignedPick(assignedTo, myUserId, allCollected, inFlightLines.size),
-                modifier = Modifier.weight(2f).height(54.dp),
+                modifier = Modifier.weight(2f).height(com.dynops.bcwms.ui.wmsPrimaryButtonHeight()),
             ) {
                 Text(
                     when {
@@ -1543,7 +1554,7 @@ private fun PickConfirmSheet(
         Spacer(Modifier.height(20.dp))
         Button(
             onClick = onConfirm,
-            modifier = Modifier.fillMaxWidth().height(54.dp),
+            modifier = Modifier.fillMaxWidth().height(com.dynops.bcwms.ui.wmsPrimaryButtonHeight()),
         ) { Text("Aldım, devam", fontWeight = FontWeight.Bold, fontSize = 16.sp) }
         Spacer(Modifier.height(8.dp))
         TextButton(onClick = onDismiss, modifier = Modifier.fillMaxWidth()) { Text("Vazgeç") }
@@ -1681,6 +1692,8 @@ private fun PickListCard(
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun PickDocument(no: String, onBack: () -> Unit) {
+    // Donanım Geri tuşu belge ekranından uygulamayı kapatmasın; listeye dönsün.
+    androidx.activity.compose.BackHandler { onBack() }
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var header by remember { mutableStateOf<JSONObject?>(null) }
@@ -1947,7 +1960,7 @@ private fun PickDocument(no: String, onBack: () -> Unit) {
             Button(
                 onClick = { registerForCurrentUser() },
                 enabled = !busy && canRegister,
-                modifier = Modifier.fillMaxWidth().height(54.dp),
+                modifier = Modifier.fillMaxWidth().height(com.dynops.bcwms.ui.wmsPrimaryButtonHeight()),
             ) {
                 Text(
                     if (canRegister) "✅ Toplamayı Kaydet" else "Önce satırlara miktar girin",

@@ -21,12 +21,15 @@ codeunit 72133 "DOPSWHS Receipt With LP Tests"
         WhseReceiptHeader.Get(WhseReceiptHeader."No.");
         Assert.AreEqual(LpNo, WhseReceiptHeader."DOPSWHS LP No.", 'Started LP must immediately be linked to the receipt header.');
         ReceiptMgmt.ConfirmLine(WhseReceiptLine, 10, '', '', 0D, LpNo, 'RECEIVE');
+        // Same PATCH is retried and then edited. The LP must mirror the final receipt quantity,
+        // not append 10 + 10 + 5 as three physical pallet rows.
         ReceiptMgmt.ConfirmLine(WhseReceiptLine, 10, '', '', 0D, LpNo, 'RECEIVE');
-        ReceiptMgmt.ConfirmLine(WhseReceiptLine, 10, '', '', 0D, LpNo, 'RECEIVE');
+        ReceiptMgmt.ConfirmLine(WhseReceiptLine, 5, '', '', 0D, LpNo, 'RECEIVE');
         LPLine.SetRange("LP No.", LpNo);
         LPLine.FindFirst();
         Assert.AreEqual(30, LPLine."Source Document Quantity", 'LP line must retain the total receipt-line quantity for MTE printing.');
-        Assert.AreEqual(10, LPLine.Quantity, 'LP line must retain this pallet scan quantity independently.');
+        Assert.AreEqual(5, LPLine.Quantity, 'LP line must mirror the latest receipt quantity.');
+        Assert.AreEqual(1, LPLine.Count(), 'Receipt retries must not create duplicate LP lines.');
         Assert.AreEqual(WhseReceiptLine."No.", LPLine."Source Document No.", 'LP line must retain its receipt reference.');
         ReceiptMgmt.StopLP(WhseReceiptHeader, LpNo, false);
         LP.Get(LpNo);

@@ -34,4 +34,21 @@ page 72232 "DOPSWHS Count Ops API"
     begin
         exit(CountMgmt.CreateV2Sheet(locationCode, userId));
     end;
+
+    /// <summary>
+    /// Klasik (satır üretimli) sayım sayfası açar. Terminalde yeni klasik sayfa
+    /// oluşturmanın hiçbir yolu yoktu; ofisin BC'de sayfa açmasını beklemek
+    /// gerekiyordu (UAT count-26). Sayıcılar boş bırakılabilir.
+    /// </summary>
+    [ServiceEnabled]
+    procedure createClassic(locationCode: Code[10]; counter1UserId: Code[50]; counter2UserId: Code[50]; counter3UserId: Code[50]): Code[20]
+    var
+        CountMgmt: Codeunit "DOPSWHS Count Mgmt";
+        Counters: array[3] of Code[50];
+    begin
+        Counters[1] := counter1UserId;
+        Counters[2] := counter2UserId;
+        Counters[3] := counter3UserId;
+        exit(CountMgmt.CreateSheet(locationCode, Enum::"DOPSWHS Count Mode"::Blind, Counters));
+    end;
 }

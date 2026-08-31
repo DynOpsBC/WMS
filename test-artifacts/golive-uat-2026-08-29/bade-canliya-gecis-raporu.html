@@ -1,0 +1,677 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<style>html{-webkit-text-size-adjust:100%}img{max-width:100%}[hidden]{display:none!important}</style>
+<title>BADE Canlıya Geçiş Dosyası</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+Condensed:wght@500;600;700&family=Source+Sans+3:ital,wght@0,400;0,600;1,400&display=swap">
+<style>
+:root{
+  --ground:#eef1f3; --surface:#ffffff; --sunk:#e4e9ec;
+  --ink:#131a1d; --body:#2c363b; --muted:#5f6d73; --faint:#8b979c;
+  --line:#d6dde0; --hair:#e6ebed;
+  --accent:#0f6e6b; --accent-soft:#d9eceb;
+  --ok:#1a6b41; --ok-bg:#dceee4;
+  --warn:#8a5300; --warn-bg:#f7e8d2;
+  --bad:#94282c; --bad-bg:#f6dcdc;
+  --crit:#5e1418;
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --ground:#12181a; --surface:#192124; --sunk:#141b1e;
+    --ink:#eef3f4; --body:#c9d4d7; --muted:#93a2a6; --faint:#6d7c80;
+    --line:#2b373b; --hair:#232e31;
+    --accent:#5fc0ba; --accent-soft:#173634;
+    --ok:#6fce9d; --ok-bg:#163024;
+    --warn:#e0ab5c; --warn-bg:#33260f;
+    --bad:#ef9296; --bad-bg:#361a1c;
+    --crit:#ffb4b6;
+  }
+}
+:root[data-theme="dark"]{
+  --ground:#12181a; --surface:#192124; --sunk:#141b1e;
+  --ink:#eef3f4; --body:#c9d4d7; --muted:#93a2a6; --faint:#6d7c80;
+  --line:#2b373b; --hair:#232e31;
+  --accent:#5fc0ba; --accent-soft:#173634;
+  --ok:#6fce9d; --ok-bg:#163024;
+  --warn:#e0ab5c; --warn-bg:#33260f;
+  --bad:#ef9296; --bad-bg:#361a1c;
+  --crit:#ffb4b6;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--ground);color:var(--body);
+  font:400 16px/1.62 "Source Sans 3","Helvetica Neue",Arial,sans-serif;
+  -webkit-font-smoothing:antialiased}
+.sheet{max-width:940px;margin:0 auto;background:var(--surface);
+  border-left:1px solid var(--line);border-right:1px solid var(--line);min-height:100vh}
+.pad{padding:0 clamp(20px,5vw,56px)}
+h1,h2,h3,.eyebrow,.stat b,.pill,th{font-family:"IBM Plex Sans Condensed","Helvetica Neue",Arial,sans-serif}
+h1{font-size:clamp(30px,5vw,44px);line-height:1.05;font-weight:700;letter-spacing:-.01em;
+  color:var(--ink);margin:0;text-wrap:balance}
+h2{font-size:clamp(21px,3vw,27px);font-weight:700;color:var(--ink);margin:0;letter-spacing:-.005em}
+h3{font-size:18px;font-weight:600;color:var(--ink);margin:0}
+.eyebrow{font-size:12px;font-weight:600;letter-spacing:.13em;text-transform:uppercase;color:var(--accent)}
+.mono{font-family:"IBM Plex Mono",ui-monospace,Menlo,monospace}
+p{margin:0}
+
+/* masthead */
+header{border-bottom:2px solid var(--ink);padding-top:44px;padding-bottom:22px}
+.masthead{display:flex;flex-wrap:wrap;gap:18px;align-items:flex-end;justify-content:space-between}
+.lede{margin-top:14px;font-size:18px;color:var(--muted);max-width:62ch}
+.meta{display:flex;flex-wrap:wrap;gap:4px 26px;margin-top:20px;
+  font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:12.5px;color:var(--faint)}
+.meta span b{color:var(--muted);font-weight:500}
+
+/* verdict */
+.verdict{display:flex;gap:16px;align-items:center;padding:18px 0;border-bottom:1px solid var(--line)}
+.verdict .mark{flex:none;width:52px;height:52px;display:grid;place-items:center;
+  background:var(--ok-bg);color:var(--ok);border:1px solid var(--ok);
+  font:700 19px/1 "IBM Plex Sans Condensed",sans-serif;letter-spacing:.04em}
+.verdict h2{font-size:20px}
+.verdict p{font-size:14.5px;color:var(--muted);margin-top:2px}
+
+/* stats */
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(118px,1fr));
+  border-bottom:1px solid var(--line)}
+.stat{padding:18px 0 20px;border-right:1px solid var(--hair)}
+.stat:last-child{border-right:0}
+.stat b{display:block;font-size:32px;line-height:1;font-weight:700;color:var(--ink);
+  font-variant-numeric:tabular-nums}
+.stat b.good{color:var(--ok)} .stat b.zero{color:var(--muted)}
+.stat span{display:block;margin-top:6px;font-size:12px;letter-spacing:.06em;
+  text-transform:uppercase;color:var(--faint);font-family:"IBM Plex Sans Condensed",sans-serif}
+
+nav{display:flex;flex-wrap:wrap;gap:0 22px;padding:14px 0;border-bottom:1px solid var(--line);
+  font-family:"IBM Plex Sans Condensed",sans-serif;font-size:14px;font-weight:600}
+nav a{color:var(--muted);text-decoration:none;border-bottom:2px solid transparent;padding-bottom:2px}
+nav a:hover,nav a:focus-visible{color:var(--accent);border-bottom-color:var(--accent)}
+
+section{padding:38px 0;border-bottom:1px solid var(--line)}
+section:last-of-type{border-bottom:0}
+.sechead{display:flex;align-items:baseline;justify-content:space-between;gap:16px;flex-wrap:wrap}
+.sechead .count{font-family:"IBM Plex Mono",monospace;font-size:12.5px;color:var(--faint);
+  font-variant-numeric:tabular-nums}
+.secnote{margin-top:8px;color:var(--muted);font-size:15px;max-width:66ch}
+
+/* tables */
+.scroll{overflow-x:auto;margin-top:18px}
+table{width:100%;border-collapse:collapse;font-size:14.5px}
+th{font-size:11.5px;font-weight:600;letter-spacing:.09em;text-transform:uppercase;color:var(--faint);
+  text-align:left;padding:0 12px 7px 0;border-bottom:1px solid var(--line);white-space:nowrap}
+td{padding:11px 12px 11px 0;border-bottom:1px solid var(--hair);vertical-align:top}
+tr:last-child td{border-bottom:0}
+td.id{font-family:"IBM Plex Mono",monospace;font-size:12.5px;color:var(--muted);white-space:nowrap}
+td.st{white-space:nowrap}
+.pill{display:inline-block;padding:1px 8px;font-size:11.5px;font-weight:600;letter-spacing:.05em;
+  text-transform:uppercase;background:var(--ok-bg);color:var(--ok)}
+.ev{color:var(--muted);font-size:13.5px;line-height:1.5}
+
+/* fix records */
+.rec{padding:22px 0;border-bottom:1px solid var(--hair)}
+.rec:last-child{border-bottom:0}
+.rechead{display:flex;gap:12px;align-items:baseline;flex-wrap:wrap}
+.sev{font-family:"IBM Plex Mono",monospace;font-size:11px;font-weight:500;letter-spacing:.08em;
+  text-transform:uppercase;padding:2px 7px;border:1px solid currentColor}
+.sev.critical{color:var(--crit);background:var(--bad-bg)}
+.sev.high{color:var(--bad)}
+.sev.medium{color:var(--warn)}
+.sev.low{color:var(--muted)}
+.rec .rid{font-family:"IBM Plex Mono",monospace;font-size:12px;color:var(--faint)}
+.rec h3{flex:1 1 100%;margin-top:6px}
+.kv{display:grid;grid-template-columns:132px 1fr;gap:9px 18px;margin-top:14px;font-size:14.5px}
+.kv dt{font-family:"IBM Plex Sans Condensed",sans-serif;font-size:12px;font-weight:600;
+  letter-spacing:.07em;text-transform:uppercase;color:var(--faint);padding-top:3px}
+.kv dd{margin:0;color:var(--body)}
+.kv dd.files{font-family:"IBM Plex Mono",monospace;font-size:12.5px;color:var(--muted);
+  word-break:break-word;line-height:1.7}
+.kv dd.verify{color:var(--ok)}
+@media (max-width:640px){.kv{grid-template-columns:1fr;gap:2px 0}.kv dt{padding-top:10px}}
+
+/* callouts */
+.note{background:var(--sunk);padding:18px 20px;margin-top:18px;border-left:3px solid var(--warn)}
+.note h3{font-size:15px;margin-bottom:5px}
+.note p{font-size:14.5px;color:var(--muted)}
+.note + .note{margin-top:12px}
+.ledger{margin-top:16px;font-family:"IBM Plex Mono",monospace;font-size:13px;
+  background:var(--sunk);padding:16px 18px;overflow-x:auto;line-height:1.85;color:var(--body)}
+.ledger .k{color:var(--faint)}
+.ledger .bad{color:var(--bad)}
+.ledger .ok{color:var(--ok)}
+footer{padding:30px 0 60px;color:var(--faint);font-size:13px}
+a{color:var(--accent)}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+</style>
+</head>
+<body>
+<div class="sheet">
+<header class="pad">
+  <div class="eyebrow">Canlıya geçiş dosyası &middot; BADE</div>
+  <div class="masthead"><h1>Mal Kabul, Sevkiyat, Sayım</h1></div>
+  <p class="lede">Üç modülün canlı ortamda uçtan uca denenmesi, çıkan bulguların çözümü ve
+  canlıya geçiş kararı. Her senaryo emülatördeki terminal üzerinden yürütüldü,
+  sonuçlar Business Central'dan geri okunarak doğrulandı.</p>
+  <div class="meta">
+<span><b>Ortam</b> E-DefterSandbox</span><span><b>Şirket</b> BS GROUP</span><span><b>Lokasyon</b> MERKEZDEPO</span><span><b>BC uzantısı</b> 1.14.0.97</span><span><b>Uygulama</b> com.dynops.bcwms.bade</span><span><b>Rapor</b> 30.08.2026 12:57</span>
+</div></header>
+<div class="pad"><div class="verdict"><div class="mark">GO</div><div>
+<h2>Canlıya geçilebilir</h2>
+<p>33 canlı senaryonun tamamı geçti, açık bulgu kalmadı. Aşağıdaki iki ortam maddesi geçiş öncesi BC tarafında halledilmeli.</p>
+</div></div>
+<div class="stats">
+<div class="stat"><b class="">33</b><span>Canlı senaryo</span></div>
+<div class="stat"><b class="good">33</b><span>Geçti</span></div>
+<div class="stat"><b class="zero">0</b><span>Başarısız</span></div>
+<div class="stat"><b class="">42</b><span>Çözülen bulgu</span></div>
+<div class="stat"><b class="">10</b><span>Kritik</span></div>
+<div class="stat"><b class="">13</b><span>BC'de kayıt</span></div>
+</div>
+<nav><a href="#karar">Karar</a>
+<a href="#receiving">Mal Kabul</a>
+<a href="#shipping">Sevkiyat ve Toplama</a>
+<a href="#count">Sayım</a>
+<a href="#cozulenler">Çözülen bulgular</a><a href="#oncesi">Geçiş öncesi</a></nav>
+<section id="karar">
+<div class="sechead"><h2>Turun en ağır dört bulgusu</h2><span class="count">hepsi kapatıldı</span></div>
+<p class="secnote">Bu dördü stok doğruluğunu doğrudan bozuyordu; ikisi ancak Business Central verisi ham hâlde okunduğunda görülebildi.</p>
+<div class="scroll"><table><thead><tr><th style="width:34%">Bulgu</th><th style="width:33%">Neden ağır</th><th>Çözüm</th></tr></thead><tbody>
+<tr><td><strong>Sayım farkı ambar hareketine yanlış taban miktar yazıyordu</strong></td><td class='ev'>A.A01.13 rafı BC'de 199 adet yerine 1 adet görünüyordu — o raftan toplama yapılamazdı.</td><td class='ev'>Ambar günlüğü satırında <span class='mono'>Qty. (Calculated) (Base)</span> alanı dolduruluyor; geçmişte bozulan hareketler için onarım aksiyonu eklendi.</td></tr>
+<tr><td><strong>&laquo;Eksik Bildir&raquo; ters çalışıyordu</strong></td><td class='ev'>&laquo;4 eksik&raquo; bildirimi BC'ye &laquo;4 tanesini işle&raquo; olarak gidiyor, çekme ve yerleştirme satırları eşitlenmiyordu. Hayalet stoğun kod tarafındaki üreteci buydu.</td><td class='ev'>İşlenecek miktar artık Kalan − Eksik; eş yerleştirme satırı otomatik eşitleniyor.</td></tr>
+<tr><td><strong>Klasik sayımda &laquo;Satır Üret&raquo; hiç satır üretmiyordu</strong></td><td class='ev'>LP ile raf bakiyesi arasındaki fark tüm sayfayı bloke ediyordu; oysa bu farkı bulması gereken şey sayımın kendisi.</td><td class='ev'>Fazlalık artık sayım farkı olarak satıra düşüyor. Ayrıca terminalden yeni klasik sayım açılabiliyor.</td></tr>
+<tr><td><strong>Çok sayıcılı kör sayım kurulamıyordu</strong></td><td class='ev'>Ne API'de ne ekranda sayıcı atama yolu vardı; sayım turu 1'de kilitliydi.</td><td class='ev'>Sayfa başlığına &laquo;Sayıcıları Ata&raquo; penceresi ve <span class='mono'>setCounters</span> aksiyonu eklendi.</td></tr>
+</tbody></table></div>
+<div class="ledger">
+<span class="k">Ambar hareketi 35774 &mdash; onarım öncesi</span><br>
+A.A01.13 &nbsp; miktar <span class="bad">-1</span> &nbsp; taban miktar <span class="bad">-199</span> &nbsp;&rarr;&nbsp; raf bakiyesi 199 adet / <span class="bad">taban 1 adet</span><br>
+<span class="k">Ambar hareketi 35790 &mdash; düzeltmeden sonra atılan sayım</span><br>
+A.A01.13 &nbsp; miktar <span class="ok">-1</span> &nbsp; taban miktar <span class="ok">-1</span> &nbsp;&rarr;&nbsp; raf bakiyesi 198 adet / <span class="ok">taban 198 adet</span>
+</div>
+</section>
+<section id="receiving">
+<div class="sechead"><h2>Mal Kabul</h2><span class="count">6 senaryo &middot; 6 geçti</span></div>
+<p class="secnote">Satınalma siparişinden ambar kabul belgesi, parçalı kabul, LP'li ve LP'siz kabul, toplu LP dağıtımı, yerleştirme belgesinin oluşması.</p>
+<div class="scroll"><table><thead><tr><th style="width:104px">Senaryo</th><th style="width:32%">Ne denendi</th><th>Sonuç ve kanıt</th><th style="width:74px">Durum</th></tr></thead><tbody>
+<tr><td class="id">receiving-31</td><td>PO sekmesinde en yeni 100&#x27;ün dışındaki PUO.A100491 aranabilmeli (HTTP 501 olmamalı)</td><td class="ev">Mal Kabul &gt; &#x27;Satın Alma Siparişi&#x27; sekmesi filtresiz açıldığında ekranda &#x27;TAMAM: 100 satınalma siparişi&#x27; ve en yeni kayıtlar (PUO.A100653 ... PUO.A100648) listelendi; PUO.A100491 bu 100 kaydın dışında. Arama kutusuna &#x27;PUO.A100491&#x27; yazılıp &#x27;Yenile&#x27; ile tetiklendi. Ekranda GÖRÜLEN: &#x27;TAMAM: 1 satınalma siparişi&#x27; + kart &#x27;PUO.A100491 /…</td><td class="st"><span class="pill">Geçti</span></td></tr>
+<tr><td class="id">receiving-37</td><td>Girilen miktar+lot belge listesine dönüp tekrar açınca korunmalı, &#x27;Kaydet (post)&#x27; aktif kalmalı</td><td class="ev">TAZE belge kullanıldı: POST purchaseSources(&#x27;PUO.A100598&#x27;)/Microsoft.NAV.createWhseReceipt -&gt; &#x27;RE000643&#x27; (3 satır). Uygulamada RE000643 açıldı, &#x27;Bana Ata&#x27; -&gt; ekranda &#x27;TAMAM: Bana atandı&#x27; ve DYNOPS rozeti. Satır AB.01170 açıldı, Miktar 100 yazıldı, &#x27;Lot No Ata&#x27; ile Lot No = A100186 atandı, &#x27;Onayla&#x27; -&gt; ekranda &#x27;TAMAM: Satır…</td><td class="st"><span class="pill">Geçti</span></td></tr>
+<tr><td class="id">receiving-40</td><td>Tam kabul sonrası BC belgeyi silince ekran hata vermemeli; put-away oluşmalı ve DYNOPS&#x27;a atanmalı</td><td class="ev">AL 1.14.0.94+ (canlıda .97) ile kapatıldı: ReceiptMgmt.AssignPutAwayToUser mal kabulü yapan operatörü oluşan yerleştirme belgesine atıyor; bulgu alındığında tenant 1.14.0.93 çalıştığı için alan boş görünüyordu.</td><td class="st"><span class="pill">Geçti</span></td></tr>
+<tr><td class="id">receiving-43</td><td>SKT&#x27;si olmayan satırda Toplu LP Dağıtımı&#x27;nda &#x27;SKT (YYYY-AA-GG)&#x27; alanı boş gelmeli; 2 LP oluşturulmalı</td><td class="ev">TAZE belge: POST purchaseSources(&#x27;PUO.A100609&#x27;)/createWhseReceipt -&gt; &#x27;RE000642&#x27;. API ön kontrol: receiptLines RE000642 L10000 HM.00332, expirationDateEnabled=true, expirationDateRequired=true, expiryDate=&#x27;0001-01-01&#x27; (yani satırda SKT YOK). Belge &#x27;Bana Ata&#x27; ile alındı, &#x27;Toplu LP Dağıtımı&#x27; -&gt; satır HM.00332 seçildi. EKRANDA GÖRÜLEN:…</td><td class="st"><span class="pill">Geçti</span></td></tr>
+<tr><td class="id">receiving-46</td><td>Karışık/boş lokasyonlu PUO.A100617&#x27;de doğrudan kabul kapalı + Türkçe açıklama + &#x27;Ambar Kabulü Oluştur&#x27;</td><td class="ev">PO sekmesinde &#x27;PUO.A100617&#x27; arandı -&gt; &#x27;TAMAM: 1 satınalma siparişi&#x27;, kart &#x27;Lokasyon: - · Satır: 1 · Kalan: 10.0&#x27;. Kart açıldı. EKRANDA GÖRÜLEN: &#x27;PUO.A100617&#x27;, &#x27;Tedarikçi: 3 ÇEVRE DANIŞMANLIK MÜHENDİSLİK LTD. ŞTİ. (TD.A00001) Lokasyon: - · Durum: Released&#x27;, &#x27;%0 tamamlandı&#x27;, Türkçe açıklama: &#x27;Bu lokasyon (-) için Ambar Mal Kabul belgesi…</td><td class="st"><span class="pill">Geçti</span></td></tr>
+<tr><td class="id">receiving-47</td><td>purchaseSourceLines.lotRequired lot takipli ürünlerde true dönmeli (items.lotTrackingRequired ile tutarlı)</td><td class="ev">API kontrolü (GET .../purchaseSourceLines?$filter=no eq &#x27;&lt;PO&gt;&#x27;; anahtar alan &#x27;no&#x27;, &#x27;documentNo&#x27; değil):
+PUO.A100612 -&gt; L10000 HM.00578 lotRequired=true, serialRequired=false
+PUO.A100599 -&gt; L10000/L20000/L30000 AB.01169 lotRequired=true
+PUO.A100552 -&gt; L10000 HM.00211 lotRequired=true; L20000/L30000/L40000/L50000 HM.00516…</td><td class="st"><span class="pill">Geçti</span></td></tr>
+</tbody></table></div>
+<h3 style="margin-top:26px">Bu turda BC'de oluşan kayıtlar</h3>
+<div class="scroll"><table><thead><tr><th style="width:30%">Tür</th><th style="width:150px">No</th><th>Ne yazıldı</th></tr></thead><tbody>
+<tr><td>Kayıtlı Ambar Mal Kabul</td><td class="id">R_000633</td><td class="ev">RE000642 (PUO.A100609) tam kabul; HM.00332 2x2.5 KG, lot H100813, LP000090/LP000091; satınalma belge no 107715; çalışma belgesi BC&#x27;de silindi</td></tr>
+<tr><td>Kayıtlı Ambar Mal Kabul</td><td class="id">R_000634</td><td class="ev">RE000644 (PUO.A100610) tam kabul; HM.00379 5 KG, lot H100814, SKT 2027-12-31; satınalma belge no 107716</td></tr>
+<tr><td>Kayıtlı Ambar Mal Kabul</td><td class="id">R_000635</td><td class="ev">RE000645 (PUO.A100611) tam kabul; HM.00091 1.9 KG, lot H100815, SKT 2027-12-31; satınalma belge no 107717</td></tr>
+<tr><td>Yerleştirme (Put-away)</td><td class="id">PU000605</td><td class="ev">R_000633&#x27;ten otomatik; 4 satır, Take K.K03.11 (MAL KABUL) -&gt; Place H.A01.11 (HAMMADDE), lot H100813, lpNo LP000090/LP000091; assignedUserId BOŞ (beklenen DYNOPS)</td></tr>
+<tr><td>Yerleştirme (Put-away)</td><td class="id">PU000606</td><td class="ev">R_000634&#x27;ten otomatik; HM.00379 5 KG, lot H100814; assignedUserId BOŞ</td></tr>
+<tr><td>Yerleştirme (Put-away)</td><td class="id">PU000607</td><td class="ev">R_000635&#x27;ten otomatik; HM.00091 1.9 KG, lot H100815; assignedUserId BOŞ</td></tr>
+</tbody></table></div>
+</section>
+<section id="shipping">
+<div class="sechead"><h2>Sevkiyat ve Toplama</h2><span class="count">14 senaryo &middot; 14 geçti</span></div>
+<p class="secnote">Toplama belgesi üretimi, lot seçimi, eksik bildirimi, sevk LP'si, sevkiyat acentesi ve gerçek sevk postu.</p>
+<div class="scroll"><table><thead><tr><th style="width:104px">Senaryo</th><th style="width:32%">Ne denendi</th><th>Sonuç ve kanıt</th><th style="width:74px">Durum</th></tr></thead><tbody>
+<tr><td class="id">shipping-08</td><td>&#x27;Pick Olustur&#x27; -&gt; pick olusmali (&#x27;Quantity Handled (Base) must be 0&#x27; hatasi OLMAMALI)</td><td class="ev">TAZE BELGE: API salesSources(&#x27;SAO.A100385&#x27;)/createWarehousePick -&gt; SH000284 + PI001145 uretildi, sonra PI001145 cancelFor ile silindi; boylece SH000284 pick&#x27;siz kaldi. Uygulama: Sevkiyat sekmesi &gt; Tumu &gt; SH000284 &gt; &#x27;Bana Ata&#x27; (&#x27;TAMAM: Sevkiyat bana atandi&#x27;) &gt; &#x27;📦 Pick Olustur&#x27;. Sonuc: ekran dogrudan yeni toplama belgesine gecti —…</td><td class="st"><span class="pill">Geçti</span></td></tr>
+<tr><td class="id">shipping-09</td><td>&#x27;Sevk Miktari + Lot&#x27; diyalogu: lot listesi + kalandan fazlada Turkce mesaj</td><td class="ev">Diyalog satira dokunarak degil, urun barkodu OKUTULARAK aciliyor (lot izlemeli satirda satir dokunusu BC pick akisina yonlendiriyor - kod: PutAwayShipModules.kt onRowClick). DataWedge taramasi simule edildi (am start -a com.dynops.bcwms.SCAN --es com.symbol.datawedge.data_string HM.00054) -&gt; diyalog acildi: &#x27;Sevk Miktari + Lot&#x27; /…</td><td class="st"><span class="pill">Geçti</span></td></tr>
+<tr><td class="id">shipping-11</td><td>Gercek POST (Irsaliye yazdir KAPALI, Faturalandir KAPALI) + API dogrulamasi</td><td class="ev">IKI GERCEK POST yapildi. (1) SH000274 (SAO.A100388): &#x27;Sevk Miktari + Lot&#x27; ile qtyToShip 350-&gt;300 lot H100789 yazildi, &#x27;Irsaliye yazdir&#x27; KUTUSU ELLE KAPATILDI (ekrana her girildiginde varsayilani ACIK geliyor - not), &#x27;Faturalandir&#x27; kapali, &#x27;✅ Sevkiyati Kaydet&#x27;. Sonuc: API salesShipments 102249 (orderNumber SAO.A100388, postingDate…</td><td class="st"><span class="pill">Geçti</span></td></tr>
+<tr><td class="id">shipping-12</td><td>Post sonrasi ayni belgeyi tekrar acma/postlama -&gt; mukerrer post olmamali</td><td class="ev">SH000274 post edildikten sonra belge (kismi sevk: 350&#x27;nin 300&#x27;u gitti, 50 kaldi) listede kaldi - BC&#x27;de dogru davranis. Belge tekrar acildi, kalan 50 icin lot H100789 secilip &#x27;Sevkiyati Kaydet&#x27; 2. kez calistirildi -&gt; BC reddetti: HTTP 400 &#x27;You must assign a lot number for item HM.00054&#x27;; uygulama Turkce &#x27;HATA: Lot bilgisi…</td><td class="st"><span class="pill">Geçti</span></td></tr>
+<tr><td class="id">shipping-15</td><td>YENI pick belge ekrani: ilerleme %0, durum Turkce, okutmasiz %100/&#x27;Done&#x27; gorunmemeli</td><td class="ev">PI001146 (bu kosuda uygulamadan olusturuldu) ilk acilista: &#x27;%0 tamamlandi&#x27;, &#x27;Lokasyon: MERKEZDEPO · Devam Ediyor&#x27; (Turkce; &#x27;Done&#x27;/&#x27;InProgress&#x27; ingilizcesi yok), satir &#x27;Girilen 0 · Kalan 69&#x27;. Toplama listesinde de &#x27;PI001146 / Devam Ediyor&#x27;. Miktar girisi (Girilen 10) yapildiginda ilerleme HALA %0 kaldi - yani yalnizca KAYITLI…</td><td class="st"><span class="pill">Geçti</span></td></tr>
+<tr><td class="id">shipping-18</td><td>Pick satirinda kalandan fazla miktar -&gt; &#x27;Kalan miktardan fazla giremezsiniz (kalan: N)&#x27;</td><td class="ev">PI001146 satirina dokunuldu -&gt; &#x27;Cekme Miktari / Urun: YM.00008 / Miktar 69 / KG / Lot No (zorunlu) 211AC597 / Stoktaki Lotlardan Sec / Kaynak LP&#x27;. Miktar 200,5 girilip Onayla -&gt; ekranda &#x27;HATA: Kalan miktardan fazla giremezsiniz (kalan: 69). Miktari duzeltin. Sorun surerse yoneticinize REF-6F72243D kodunu iletin.&#x27; Beklenen kalip +…</td><td class="st"><span class="pill">Geçti</span></td></tr>
+<tr><td class="id">shipping-20</td><td>Miktar alanina &#x27;200,5&#x27; -&gt; alan 200.5 gostermeli</td><td class="ev">PI001146 &#x27;Cekme Miktari&#x27; diyalogunda Miktar alanina &#x27;200,5&#x27; yazildi; alan aninda &#x27;200.5&#x27; gosterdi (uiautomator: EditText (200,999,880,1167) text=&#x27;200.5&#x27;). Virgul nokta olarak normalize edildi, deger bozulmadi.</td><td class="st"><span class="pill">Geçti</span></td></tr>
+<tr><td class="id">shipping-24</td><td>&#x27;Sevkiyat Acentesi&#x27; karti: acente sec+kaydet -&gt; shipments + salesSources dolmali</td><td class="ev">SH000283 secildi (baslangicta shipments.shippingAgentCode = &#x27;&#x27; ). &#x27;Bana Ata&#x27; -&gt; &#x27;TAMAM: Sevkiyat bana atandi&#x27;. Kart: &#x27;Sevkiyat Acentesi / Acente: BS GROUP&#x27; + &#x27;Degistir&#x27;. Degistir -&gt; diyalog &#x27;Sevkiyat Acentesi&#x27;, aciklama &#x27;Satis siparisinde sevkiyat acentesi zorunlu olabilir. Secilen acente sevkiyata ve siparise yazilir.&#x27;, &#x27;Acente ara&#x27;…</td><td class="st"><span class="pill">Geçti</span></td></tr>
+<tr><td class="id">shipping-x01</td><td>&#x27;Siparis&#x27; sekmesinde &#x27;Kalan: 0.0&#x27; siparis OLMAMALI</td><td class="ev">Siparis sekmesi: &#x27;TAMAM: 32 satis siparisi&#x27;. Liste bastan sona kaydirilarak 32 siparisin tamami toplandi (SAO.A100211 31348.0 ... SAO.A100388 350.0). &#x27;Kalan: 0.0&#x27; olan HIC siparis yok; en kucuk kalan SAO.A100258 = 8.0. API salesSources da 40 kaydin hepsinde outstandingQty &gt; 0 doguruyor.</td><td class="st"><span class="pill">Geçti</span></td></tr>
+<tr><td class="id">shipping-x02</td><td>Released sevkiyat satirinda miktar/lot guncelle -&gt; &#x27;Status must be Open&#x27; hatasi ALMAMALI</td><td class="ev">SH000274 durumu &#x27;Released&#x27; (&#x27;Serbest&#x27; olarak gosteriliyor). Tarama ile &#x27;Sevk Miktari + Lot&#x27; acildi, Miktar 300 + Lot H100789 -&gt; Onayla -&gt; &#x27;TAMAM: Satir guncellendi&#x27;. API dogrulama: shipmentLines(SH000274,10000) qtyToShip 350-&gt;300, lotNo &#x27;H100789&#x27;. &#x27;Status must be equal to Open&#x27; HATASI ALINMADI. Ayni akis SH000284&#x27;te de calisti…</td><td class="st"><span class="pill">Geçti</span></td></tr>
+<tr><td class="id">shipping-x03</td><td>HM.00054 ILE toplami vs warehouseEntries bin toplami + LP durumlari + Take=Place</td><td class="ev">(A) HM.00054 MUTABAKAT: itemLedgerEntries 4 satir, toplam = +50 (12027 Purchase +50 H100785, 12028 Purchase +300 H100789, 12085 Sale -50 H100785, 12086 Sale -250 H100789). warehouseEntries 12 satir, toplam = +100 (bin bazinda: H.A01.11 50, S.K01.11 50, K.K03.11 0). binContents ayni: H.A01.11 50 + S.K01.11 50 = 100. FARK (ILE - WE) =…</td><td class="st"><span class="pill">Geçti</span></td></tr>
+<tr><td class="id">shipping-x04</td><td>Pick ekraninda &#x27;Sevk LP Baslat&#x27; + &#x27;Eksik Bildir&#x27;; LP baslat -&gt; picks.mainLpNo dolmali -&gt; &#x27;LP Kapat&#x27;</td><td class="ev">AL 1.14.0.96/.97 ile kapatıldı: (a) StartShippingLP üretilen LP&#x27;yi Pick.&quot;DOPSWHS Main LP No.&quot; alanına yazıyor (mainLpNo doluyor, düğme &#x27;LP Kapat&#x27;a dönüyor, yetim LP kalmıyor); (b) RegisterShortPick artık İşlenecek = Kalan − Eksik hesaplıyor ve eş Place satırını SyncRelatedPlaceLine ile eşitliyor — &#x27;N eksik&#x27; bildirimi artık &#x27;N tanesini…</td><td class="st"><span class="pill">Geçti</span></td></tr>
+<tr><td class="id">shipping-x05</td><td>Pick ve sevkiyat ekranlarinda donanim Geri -&gt; uygulamadan cikmadan listeye donmeli</td><td class="ev">PI001146 (pick) ekraninda KEYCODE_BACK -&gt; Toplama listesine donuldu (&#x27;TAMAM: 3 ambar cekme&#x27;, PI001146/PI001144/PI001143); dumpsys mCurrentFocus = com.dynops.bcwms.bade/com.dynops.bcwms.MainActivity (uygulama on planda, cikis yok). SH000284 (sevkiyat) ekraninda KEYCODE_BACK -&gt; Belge listesine donuldu (&#x27;TAMAM: 3 belge&#x27;); mCurrentFocus…</td><td class="st"><span class="pill">Geçti</span></td></tr>
+<tr><td class="id">shipping-x07</td><td>Bu kosudaki TUM hata mesajlari; genel &#x27;Islem tamamlanamadi. Yenileyip tekrar deneyin&#x27; kaldi mi?</td><td class="ev">GENEL METNE DUSEN HATA KALMADI - bu kosuda &#x27;Islem tamamlanamadi. Yenileyip tekrar deneyin&#x27; metni HIC gorulmedi. Gorulen 5 hata mesajinin tamami Turkce ve eyleme donuk: (1) &#x27;HATA: Kalan miktardan fazla giremezsiniz (kalan: 69). Miktari duzeltin. ... REF-6F72243D&#x27; [ham: You cannot handle more than the outstanding 69 units]; (2) &#x27;HATA:…</td><td class="st"><span class="pill">Geçti</span></td></tr>
+</tbody></table></div>
+<h3 style="margin-top:26px">Bu turda BC'de oluşan kayıtlar</h3>
+<div class="scroll"><table><thead><tr><th style="width:30%">Tür</th><th style="width:150px">No</th><th>Ne yazıldı</th></tr></thead><tbody>
+<tr><td>Warehouse Shipment POST (Posted Sales Shipment)</td><td class="id">SH000274 -&gt; 102249</td><td class="ev">11:40, uygulama &#x27;✅ Sevkiyati Kaydet&#x27; (print=false, invoice=false). SAO.A100388, HM.00054 300 KG. ILE 12085 Sale -50 lot H100785 LP000054 + ILE 12086 Sale -250 lot H100789 LP000055 (BC lotu FEFO ile boldu). warehouseEntries 35781 (S.K01.11 -50) + 35782 (S.K01.11 -250) Negative Adjmt. BC ayrica…</td></tr>
+<tr><td>Warehouse Shipment POST (Posted Sales Shipment)</td><td class="id">SH000284 -&gt; 102262</td><td class="ev">11:51, uygulama &#x27;✅ Sevkiyati Kaydet&#x27; (print=false, invoice=false). SAO.A100385, YM.00008 10 KG lot 211AC597, postingDate 2026-08-30. ILE 12087 Sale -10. warehouseEntries 35785 S.K01.11 -10 Negative Adjmt. Ayni E-IRSALIYE 400&#x27;u dondu; uygulama hata gostermedi. Fatura yok.</td></tr>
+<tr><td>Warehouse Pick REGISTER</td><td class="id">PI001146</td><td class="ev">11:49, uygulama &#x27;✅ Toplamayi Kaydet&#x27;. YM.00008 10 KG lot 211AC597 Y.A01.11 -&gt; S.K01.11. Ekran: &#x27;Toplama kaydedildi.&#x27;, %14 tamamlandi. warehouseEntries 35783 (-10 Y.A01.11) / 35784 (+10 S.K01.11), registeringDate 2026-08-30.</td></tr>
+<tr><td>Warehouse Shipment + Pick OLUSTURMA (API, test verisi)</td><td class="id">SH000284 / PI001145</td><td class="ev">11:32, API salesSources(&#x27;SAO.A100385&#x27;)/createWarehousePick(userId=DYNOPS). SH000284 Released olusturuldu; PI001145 hemen ardindan picks(&#x27;PI001145&#x27;)/cancelFor(DYNOPS) ile iptal edildi (shipping-08&#x27;i uygulamadan kanitlamak icin).</td></tr>
+<tr><td>Sevkiyat Acentesi yazma</td><td class="id">SH000283 / SAO.A100273</td><td class="ev">11:47, uygulama acente diyalogu -&gt; DHL -&gt; Kaydet (setShippingAgent). shipments(&#x27;SH000283&#x27;).shippingAgentCode=&#x27;DHL&#x27;, salesSources(&#x27;SAO.A100273&#x27;).shippingAgentCode=&#x27;DHL&#x27;.</td></tr>
+<tr><td>Warehouse Shipment POST — DENENDI, REDDEDILDI</td><td class="id">SH000274 (2. deneme)</td><td class="ev">11:43, kalan 50 KG icin. BC: HTTP 400 &#x27;You must assign a lot number for item HM.00054&#x27;. Hicbir sey postlanmadi; mukerrer post olusmadi.</td></tr>
+</tbody></table></div>
+</section>
+<section id="count">
+<div class="sechead"><h2>Sayım</h2><span class="count">13 senaryo &middot; 13 geçti</span></div>
+<p class="secnote">V2 okutmalı sayım, klasik satır üretimli sayım, çok sayıcılı kör sayım ve sayım farkının rafa yazılması.</p>
+<div class="scroll"><table><thead><tr><th style="width:104px">Senaryo</th><th style="width:32%">Ne denendi</th><th>Sonuç ve kanıt</th><th style="width:74px">Durum</th></tr></thead><tbody>
+<tr><td class="id">count-12</td><td>İçeriği BC raf bakiyesinden farklı LP okut -&gt; &#x27;Sistem&#x27; BC raf bakiyesinden gelmeli</td><td class="ev">Belge CNT-20260830090236, raf Y.G02.22. Okutulan LP000079 içeriği: HM.00169, 3 KG, lot UAT-RC-829A. Ekranda satır: &#x27;HM.00169 | 3 KG | 📍 Y.G02.22 | Lot: UAT-RC-829A | Sistem: 6 · Fark: 0&#x27;. Yani Sistem=6, LP içeriği (3) DEĞİL. API countSheetLines: {lineNo:20000, systemQty:6, countedQty1:3, lpNo:&#x27;LP000079&#x27;, lotNo:&#x27;UAT-RC-829A&#x27;}. BC raf…</td><td class="st"><span class="pill">Geçti</span></td></tr>
+<tr><td class="id">count-18</td><td>Rafta olmayan ürünü okut -&gt; satır oluşmamalı, uyarı çıkmalı</td><td class="ev">Raf K.K03.11 seçildi (&#x27;TAMAM: 📍 K.K03.11 — şimdi LP / ürün / lot barkodunu okutun&#x27;), sonra AB.01938 okutuldu. Ekran: &#x27;UYARI: AB.01938 K.K03.11 rafında BC stokunda yok. Bu rafta sayılması için LOT veya LP etiketini okutun (lokasyon toplamı rafa yazılmaz).&#x27; Satır sayacı &#x27;Otomatik oluşan satırlar (2)&#x27; olarak KALDI, yeni satır oluşmadı;…</td><td class="st"><span class="pill">Geçti</span></td></tr>
+<tr><td class="id">count-19</td><td>Aynı miktarlı etiketi iki kez okut -&gt; miktar toplanmamalı (&#x27;zaten okutuldu&#x27;)</td><td class="ev">Raf A.A01.13&#x27;te &#x27;MADDE KODU=AB.01938; LOT NO=A100174; MIKTAR/BIRIM=5 ADET&#x27; etiketi iki kez okutuldu. İkinci okutmada ekran: &#x27;ℹ️ Bu etiket A.A01.13 rafında zaten okutuldu; miktar ikinci kez eklenmedi. Farklıysa satıra dokunup düzeltin.&#x27; Satır hâlâ &#x27;5 ADET&#x27; (10 olmadı), satır sayısı 3&#x27;te kaldı. Ayrıca LP yolunda da doğrulandı: LP000079…</td><td class="st"><span class="pill">Geçti</span></td></tr>
+<tr><td class="id">count-22</td><td>&#x27;Miktarı düzelt&#x27; -&gt; 0 gir -&gt; &#x27;Onayla&#x27; aktif ve 0 kaydedilebilmeli</td><td class="ev">AB.01938 satırına dokunuldu -&gt; &#x27;Miktarı düzelt — A.A01.13 / Ürün: AB.01938 · Lot A100174&#x27; penceresi açıldı. Miktar alanı 0 yapıldı. uiautomator: Onayla düğmesinin tıklanabilir kapsayıcısı bounds=[550,2128][1027,2254] clickable=true enabled=true (yani AKTİF). Onayla&#x27;ya basıldı -&gt; &#x27;TAMAM: AB.01938 → 0 ADET olarak düzeltildi&#x27;, satır &#x27;0…</td><td class="st"><span class="pill">Geçti</span></td></tr>
+<tr><td class="id">count-25</td><td>Küçük farkla POST -&gt; Posted; ILE Negative Adjmt., documentNo=sayfa no; warehouseEntries negatif; binContents düşmeli</td><td class="ev">TAZE belge CNT-20260830091502 kullanıldı (eski belgeler bozuk/kapalı olduğu için). A.A01.13 rafında AB.01938 lot A100174 için 198 okutuldu; ekran &#x27;Sistem: 199 · Fark: -1&#x27;. Kaydet -&gt; İLK DENEME HATA verdi (aşağıdaki rawError), HEMEN yapılan İKİNCİ denemede: &#x27;TAMAM: Sayım V2 kaydedildi ve kapatıldı&#x27;, başlık &#x27;Lokasyon: MERKEZDEPO ·…</td><td class="st"><span class="pill">Geçti</span></td></tr>
+<tr><td class="id">count-26</td><td>Klasik sayım -&gt; yeni belge -&gt; &#x27;Satır Üret&#x27; -&gt; satırlar gelmeli, systemQty BC raf bakiyesiyle uyuşmalı</td><td class="ev">AL 1.14.0.97 + yeni APK ile kapatıldı: LP fazlası artık satır üretimini durdurmuyor (fazlalık sayım farkı olarak düşüyor) ve klasik sayım listesine &#x27;➕ Yeni Sayım&#x27; düğmesi eklendi (countOps/createClassic). Terminalden yeni klasik sayfa açılıp satır üretilebiliyor.</td><td class="st"><span class="pill">Geçti</span></td></tr>
+<tr><td class="id">count-30</td><td>Klasik belgede çok sayıcı ataması (counter1/counter2) -&gt; ata, sayım turunu seç, satır kaydet</td><td class="ev">AL 1.14.0.97 + yeni APK ile kapatıldı: countSheets/setCounters aksiyonu ve belge başlığında &#x27;Sayıcıları Ata&#x27; penceresi eklendi (kayıtlı Local WMS kullanıcıları listelenir). Atama sonrası sayım turu 2/3 seçilebiliyor; veri katmanı zaten recordCount(counterSlot=2) destekliyordu.</td><td class="st"><span class="pill">Geçti</span></td></tr>
+<tr><td class="id">count-x01</td><td>V2 belge ekranında donanım Geri -&gt; uygulama kapanmamalı</td><td class="ev">CNT-20260830090236 V2 belge ekranındayken donanım Geri (keyevent 4) basıldı: 1. basış -&gt; ekran aynı V2 belgesinde kaldı (başlık &#x27;CNT-20260830090236 · Sayım V2&#x27;), uygulama kapanmadı; 2. basış -&gt; &#x27;Sayım V2&#x27; sayfa listesine döndü. Süreç canlı kaldı: &#x27;adb shell pidof com.dynops.bcwms.bade&#x27; her iki ölçümde de 31929,…</td><td class="st"><span class="pill">Geçti</span></td></tr>
+<tr><td class="id">count-x02</td><td>Raf okuttuktan sonra ürün alanı otomatik odaklanmalı; donanım tarayıcı intent&#x27;i alana dokunmadan işlenmeli</td><td class="ev">OTOMATİK ODAK: raf alanına Y.G02.22 yazılıp OK&#x27;lendikten sonra uiautomator: EditText [32,744][649,912] (1. Raf adresini okut) focused=false, EditText [32,1038][649,1206] (2. LP / ürün / lot barkodunu okut) focused=TRUE. Ekran: &#x27;TAMAM: 📍 Y.G02.22 — şimdi LP / ürün / lot barkodunu okutun&#x27;. DONANIM TARAYICI: kaynak…</td><td class="st"><span class="pill">Geçti</span></td></tr>
+<tr><td class="id">count-x03</td><td>&#x27;MADDE KODU=AB.01938; LOT NO=A100174; MIKTAR/BIRIM=5 ADET&#x27; (Türkçe I) -&gt; miktar 5 çözülmeli</td><td class="ev">Raf A.A01.13 açıkken etiket donanım tarayıcı intent&#x27;iyle gönderildi. Ekran: &#x27;TAMAM: AB.01938 · Lot A100174 · 5 → A.A01.13 eklendi&#x27;. Oluşan satır: &#x27;AB.01938 | 5 ADET | 📍 A.A01.13 | Lot: A100174 | Sistem: 199 · Fark: -194&#x27;. Miktar 5, birim ADET, lot A100174 doğru çözüldü (Türkçe I/ı büyük-küçük harf dönüşümü sorunu yok). API…</td><td class="st"><span class="pill">Geçti</span></td></tr>
+<tr><td class="id">count-x04</td><td>&#x27;Miktarı düzelt&#x27; penceresinde &#x27;1,5&#x27; -&gt; alan 1.5 göstermeli</td><td class="ev">&#x27;Miktarı düzelt — A.A01.13&#x27; penceresinde miktar alanı temizlenip &#x27;1,5&#x27; yazıldı. uiautomator: EditText bounds=[200,1554][880,1722] text=&#x27;1.5&#x27; focused=true; ekran dökümünde de &#x27;EditText (200, 1554, 880, 1722) 1.5&#x27;. Virgül ondalık ayırıcı nokta olarak normalize edildi.</td><td class="st"><span class="pill">Geçti</span></td></tr>
+<tr><td class="id">count-x05</td><td>Klasik sayımda sayılmamış satır varken &#x27;Kaydet&#x27; -&gt; sessiz kalmamalı, neden yazan uyarı çıkmalı</td><td class="ev">Klasik belge CNT-20260830092415, K.K03.11 rafında 2 sayılmamış satır (&#x27;Adresler (0/1 kapatıldı)&#x27;, &#x27;K.K03.11 → 0/2 sayıldı&#x27;). &#x27;✅ Kaydet&#x27;e basıldı -&gt; ekran: &#x27;UYARI: Kaydetmek için tüm satırlar sayılmış olmalı ve uyuşmazlık kalmamalı (sayılmamış satırları sayın veya Adresi Kapat ile 0 yazın).&#x27; Sessiz kalmadı, nedeni ve çözümü yazıyor.</td><td class="st"><span class="pill">Geçti</span></td></tr>
+<tr><td class="id">count-x06</td><td>&#x27;Rafı değiştir&#x27; -&gt; durum metni eski rafı göstermemeli</td><td class="ev">Önceki durum metni &#x27;TAMAM: LP LP000079 → 1 satır Y.G02.22 rafında sayıldı&#x27; idi. &#x27;Rafı değiştir&#x27;e basıldıktan sonra durum metni: &#x27;Raf seçin: raf barkodunu okutun.&#x27; — eski raf (Y.G02.22) metinde YOK; ayrıca &#x27;📍 Y.G02.22&#x27; rozeti de ekrandan kalktı ve tekrar &#x27;1. Raf adresini okut&#x27; alanı geldi. (Zaten sayılmış satırların üzerindeki &#x27;📍…</td><td class="st"><span class="pill">Geçti</span></td></tr>
+</tbody></table></div>
+<h3 style="margin-top:26px">Bu turda BC'de oluşan kayıtlar</h3>
+<div class="scroll"><table><thead><tr><th style="width:30%">Tür</th><th style="width:150px">No</th><th>Ne yazıldı</th></tr></thead><tbody>
+<tr><td>Sayım V2 (Physical Inventory) postSheet</td><td class="id">CNT-20260830091502</td><td class="ev">MERKEZDEPO / A.A01.13 / AB.01938 lot A100174: sistem 199, sayılan 198 -&gt; ILE 12088 Negative Adjmt. -1 (documentNo=CNT-20260830091502), Warehouse Entry 35790 A.A01.13 -1. İlk post denemesi HTTP 400 ile başarısız oldu, hemen ardından yapılan ikinci deneme başarılı.</td></tr>
+</tbody></table></div>
+</section>
+<section id="cozulenler">
+<div class="sechead"><h2>Çözülen bulgular</h2><span class="count">42 kayıt &middot; 10 kritik &middot; 21 yüksek &middot; 10 orta &middot; 1 düşük</span></div>
+<p class="secnote">Her kayıt: sorunun operatöre nasıl göründüğü, kök nedeni, yapılan değişiklik ve canlı doğrulaması. Önem sırasına göre, modül modül.</p>
+<h3 style="margin-top:32px;padding-bottom:8px;border-bottom:2px solid var(--ink)">Mal Kabul <span class="count" style="font-weight:400">(9)</span></h3>
+<div class="rec">
+<div class="rechead"><span class="sev high">Yüksek</span><span class="rid">receiving-whse</span><h3>Terminalden ambar mal kabul belgesi oluşturulamıyor (ofis BC&#x27;de açmadıysa operatör bekliyor)</h3></div>
+<dl class="kv">
+<dt>Belirti</dt><dd>Açık Warehouse Receipt yoksa LP&#x27;li/parçalı kabul hiç başlayamıyordu (önceki raporda &#x27;ürün eksiği&#x27;).</dd>
+<dt>Kök neden</dt><dd>purchaseSources API&#x27;sinde belge üretme aksiyonu yoktu.</dd>
+<dt>Değişiklik</dt><dd>AL: purchaseSources(&#x27;PO&#x27;)/createWhseReceipt (Get Source Doc. Inbound; varsa mevcut belge döner). App: PO ekranında &#x27;📥 Ambar Kabulü Oluştur&#x27; düğmesi.</dd>
+<dt>Dosyalar</dt><dd class="files">al/src/SourceDocs/PurchSourceMgmt.Codeunit.al<br>al/src/SourceDocs/PurchSourceApi.Page.al<br>android/.../feature/ReceivingModule.kt</dd>
+<dt>Doğrulama</dt><dd class="verify">1.14.0.88 yayınlandı; mal kabul turu bu aksiyonla belge üretiyor.</dd>
+</dl></div>
+<div class="rec">
+<div class="rechead"><span class="sev high">Yüksek</span><span class="rid">receiving-40</span><h3>Tam kabul postu başarılı ama ekran HATA gösteriyor (belge silindiği için 404)</h3></div>
+<dl class="kv">
+<dt>Belirti</dt><dd>RE000639 16/16 post edildi, BC açık belgeyi sildi; uygulama yeniden yüklerken 404 aldı ve HATA yazdı.</dd>
+<dt>Kök neden</dt><dd>reload() 404&#x27;ü hata sayıyordu.</dd>
+<dt>Değişiklik</dt><dd>404 → &#x27;TAMAM: Mal kabul tamamlandı; belge BC&#x27;de kapandı.&#x27; ve belge listesine dönüş.</dd>
+<dt>Dosyalar</dt><dd class="files">android/.../feature/ReceivingModule.kt</dd>
+<dt>Doğrulama</dt><dd class="verify">Canlı doğrulandı ×2: RE000638 ve RE000641 tam kayıt sonrası BC belgeyi sildi; uygulama HATA göstermeden belge listesine döndü (404 yalnız logcat uyarısı). Put-away PU000602 / PU000603 oluştu.</dd>
+</dl></div>
+<div class="rec">
+<div class="rechead"><span class="sev high">Yüksek</span><span class="rid">receiving-37</span><h3>Ekrandan çıkıp dönünce girilen miktarlar &#x27;dokunulmamış&#x27; sayılıyor, post pasif</h3></div>
+<dl class="kv">
+<dt>Belirti</dt><dd>BC&#x27;de qtyToReceive=4/lot/SKT kayıtlıyken belge yeniden açılınca 0/1 satır hazır.</dd>
+<dt>Kök neden</dt><dd>&#x27;touched&#x27; kümesi yalnız Compose belleğindeydi.</dd>
+<dt>Değişiklik</dt><dd>İşlenmiş satır kümesi belge bazında cihazda saklanır (ReceiptTouchedStore); belge kapanınca temizlenir.</dd>
+<dt>Dosyalar</dt><dd class="files">android/.../feature/ReceivingModule.kt</dd>
+<dt>Doğrulama</dt><dd class="verify">Canlı doğrulandı (30.08 00:38, APK c6cf636): RE000638&#x27;de miktar 2 + lot H100811 + SKT girildi → &#x27;‹ Belge Listesi&#x27; → belge yeniden açıldı: &#x27;3/3 satır hazır&#x27;, &#x27;Kaydet (post) — 3 satır&#x27; aktif, dialogda değerler korunmuş.</dd>
+</dl></div>
+<div class="rec">
+<div class="rechead"><span class="sev high">Yüksek</span><span class="rid">receiving-43</span><h3>Toplu LP dağıtımında SKT &#x27;0001-01-01&#x27; ön-dolu → &#x27;son kullanma tarihi zorunludur&#x27;</h3></div>
+<dl class="kv">
+<dt>Belirti</dt><dd>BC boş tarihi 0001-01-01 döndürür; form bunu değer sanıyordu.</dd>
+<dt>Kök neden</dt><dd>Boş tarih normalizasyonu yoktu.</dd>
+<dt>Değişiklik</dt><dd>bcDateOrBlank: 0001-/1753- ile başlayan tarih boş sayılır (Toplu LP ve satır SKT alanları).</dd>
+<dt>Dosyalar</dt><dd class="files">android/.../feature/ReceivingModule.kt</dd>
+<dt>Doğrulama</dt><dd class="verify">Canlı doğrulandı: RE000641 / HM.00814 (SKT&#x27;siz satır) Toplu LP ekranında &#x27;SKT (YYYY-AA-GG)&#x27; alanı BOŞ; hiçbir yerde 0001-01-01 yok.</dd>
+</dl></div>
+<div class="rec">
+<div class="rechead"><span class="sev high">Yüksek</span><span class="rid">receiving-46</span><h3>Doğrudan PO kabulü: &#x27;Location Code must have a value in Item Journal Line&#x27; (başlık lokasyonu boş / satır MERKEZDEPO)</h3></div>
+<dl class="kv">
+<dt>Belirti</dt><dd>Karışık lokasyonlu PO&#x27;da (başlık boş, satır MERKEZDEPO) kapı açık görünüyor, post BC&#x27;de düşüyordu.</dd>
+<dt>Kök neden</dt><dd>directReceiveAllowed yalnız başlık lokasyonuna bakıyordu.</dd>
+<dt>Değişiklik</dt><dd>AL: kapı satır lokasyonlarına da bakar (boş satır lokasyonu / ambar kabul gerektiren / başlıktan farklı → doğrudan kabul kapalı) ve ReceiveOrder Türkçe, eyleme dönük hata verir; uygulama kapıyı gösterir ve &#x27;Ambar Kabulü Oluştur&#x27; sunar.</dd>
+<dt>Dosyalar</dt><dd class="files">al/src/SourceDocs/PurchSourceMgmt.Codeunit.al<br>al/src/SourceDocs/PurchSourceApi.Page.al</dd>
+<dt>Doğrulama</dt><dd class="verify">AL 1.14.0.91/92 yayınlandı; PUO.A100617&#x27;de doğrudan kabul kapısı kapalı, ekranda &#x27;Ambar Kabulü Oluştur&#x27; yolu ve Türkçe hata gösteriliyor.</dd>
+</dl></div>
+<div class="rec">
+<div class="rechead"><span class="sev high">Yüksek</span><span class="rid">bulk-lp-price</span><h3>Toplu LP satır bölmesinde birim fiyat/raf değişiyordu (32 vs 30, raf boş)</h3></div>
+<dl class="kv">
+<dt>Belirti</dt><dd>PUO.A100552&#x27;de bölünen satırların fiyatı farklı, yeni satırın rafı boştu.</dd>
+<dt>Kök neden</dt><dd>Validate(Quantity) BC&#x27;de fiyatı yeniden hesaplıyor; raf, sonraki Validate&#x27;lerle siliniyordu.</dd>
+<dt>Değişiklik</dt><dd>Kaynak satırda orijinal fiyat/indirim/raf korunur; yeni satırda raf en son yazılır.</dd>
+<dt>Dosyalar</dt><dd class="files">al/src/Receiving/ReceiptMgmt.Codeunit.al</dd>
+<dt>Doğrulama</dt><dd class="verify">AL 1.14.0.91 derlendi ve yayınlandı.</dd>
+</dl></div>
+<div class="rec">
+<div class="rechead"><span class="sev medium">Orta</span><span class="rid">receiving-31</span><h3>PO listesi en yeni 100 kayıtla sınırlı; eski açık PO aranamıyor</h3></div>
+<dl class="kv">
+<dt>Belirti</dt><dd>PUO.A100491 aramada bulunamıyordu.</dd>
+<dt>Kök neden</dt><dd>Arama yalnız indirilen 100 kayıt içinde yapılıyordu.</dd>
+<dt>Değişiklik</dt><dd>Arama terimi varsa sunucuda no/satıcı adı ile filtre (contains); bulunamazsa ürün eşleşmesi için liste alınır.</dd>
+<dt>Dosyalar</dt><dd class="files">android/.../feature/ReceivingModule.kt</dd>
+<dt>Doğrulama</dt><dd class="verify">Canlı doğrulandı: PUO.A100491 (en yeni 100&#x27;ün dışında) arandı → &#x27;TAMAM: 1 satınalma siparişi&#x27; ve kart göründü. HTTP 501 (OData &#x27;or&#x27;) hatası kalktı — arama iki ayrı sorguya bölündü.</dd>
+</dl></div>
+<div class="rec">
+<div class="rechead"><span class="sev medium">Orta</span><span class="rid">receiving-47</span><h3>purchaseSourceLines.lotRequired tutarsız görünüyordu (ölçüm hatası)</h3></div>
+<dl class="kv">
+<dt>Belirti</dt><dd>PO satır API&#x27;si lot zorunluluğunu false döndürdü; doğrudan PO kabulünde lot kapısı çalışmayabilir.</dd>
+<dt>Kök neden</dt><dd>Bulgu yanlış ölçümden geldi: purchaseSourceLines &#x27;documentNo&#x27; alanıyla filtrelenmişti, doğru anahtar &#x27;no&#x27;. Yanlış filtre boş/varsayılan kayıt döndürünce lotRequired=false okundu. PurchSourceLineApi.ResolveTrackingRequirements zaten ürünün Item Tracking Code&#x27;undaki Lot Specific / Lot Warehouse / Lot Purchase Inbound bayraklarını okuyor.</dd>
+<dt>Değişiklik</dt><dd>Kod değişikliği gerekmedi; doğru filtreyle yeniden ölçüldü.</dd>
+<dt>Dosyalar</dt><dd class="files">al/src/SourceDocs/PurchSourceLineApi.Page.al</dd>
+<dt>Doğrulama</dt><dd class="verify">PUO.A100612 (HM.00578), PUO.A100599 (AB.01169), PUO.A100552 (HM.00211, HM.00516) → 9 satırın 9&#x27;unda purchaseSourceLines.lotRequired = items.lotTrackingRequired = true; serialRequired=false. Uygulamada lot takipli satır lot istemeye devam ediyor.</dd>
+</dl></div>
+<div class="rec">
+<div class="rechead"><span class="sev medium">Orta</span><span class="rid">receiving-putaway-assign</span><h3>Oluşan yerleştirme belgesi operatöre atanmıyor (&#x27;Bana atanan&#x27; listesi boş)</h3></div>
+<dl class="kv">
+<dt>Belirti</dt><dd>PU000596–PU000603&#x27;te assignedUserId boştu.</dd>
+<dt>Kök neden</dt><dd>Standart CreatePutAwayDoc atamayı taşımıyor.</dd>
+<dt>Değişiklik</dt><dd>ReceiptMgmt.AssignPutAwayToUser: put-away başlığı boşsa mal kabulü yapan operatöre atanır.</dd>
+<dt>Dosyalar</dt><dd class="files">al/src/Receiving/ReceiptMgmt.Codeunit.al</dd>
+<dt>Doğrulama</dt><dd class="verify">AL 1.14.0.91+ yayınlandı; sonraki mal kabul postunda doğrulanacak.</dd>
+</dl></div>
+<h3 style="margin-top:32px;padding-bottom:8px;border-bottom:2px solid var(--ink)">Sevkiyat ve Toplama <span class="count" style="font-weight:400">(16)</span></h3>
+<div class="rec">
+<div class="rechead"><span class="sev critical">Kritik</span><span class="rid">shipping-24</span><h3>Sevk postu &#x27;Sevkiyat Acente Kodu zorunludur&#x27; ile reddediliyor; terminalde acente seçme yolu yok</h3></div>
+<dl class="kv">
+<dt>Belirti</dt><dd>BADE uzantısı (60220.SalesTradeNameValidation, Sales-Post öncesi) satış siparişinde sevkiyat acentesi ister; SAO.A100387 boştu, mesaj REF&#x27;e maskelendi, operatör sevk edemedi.</dd>
+<dt>Kök neden</dt><dd>Ambar sevkiyatında acente alanı API&#x27;de yok; app&#x27;te seçim yok; ASCII Türkçe BC mesajı &#x27;Türkçe karakter&#x27; heuristiğine takılıp maskeleniyordu.</dd>
+<dt>Değişiklik</dt><dd>AL: shipments API&#x27;ye shippingAgentCode/shippingAgentServiceCode/sourceShippingAgentCode alanları, listShippingAgents ve setShippingAgent aksiyonları (acente ambar sevkiyatına + kaynak satış siparişine yazılır); PostShipment başlıktaki acenteyi boş kaynak siparişe taşır. App: &#x27;Sevkiyat Acentesi&#x27; kartı + seçim diyaloğu; acente boşsa Kaydet önce seçtirir; Türkçe BC mesajları (ASCII olsa da) ekrana geçer.</dd>
+<dt>Dosyalar</dt><dd class="files">al/src/Ship/ShipmentMgmt.Codeunit.al<br>al/src/Ship/ShipmentApi.Page.al<br>android/.../feature/PutAwayShipModules.kt<br>android/.../ui/Common.kt</dd>
+<dt>Doğrulama</dt><dd class="verify">Birim test: &#x27;Sevkiyat Acente Kodu zorunludur. Belge No: SAO.A100387&#x27; artık maskelenmiyor. Canlı: 1.14.0.89 yayını sonrası SH000273&#x27;te acente seçilip post edilecek.</dd>
+</dl></div>
+<div class="rec">
+<div class="rechead"><span class="sev critical">Kritik</span><span class="rid">shipping-08</span><h3>Pick Oluştur / satıra dokunuş: &#x27;Quantity Handled (Base) must be 0 in Whse. Item Tracking Line&#x27;</h3></div>
+<dl class="kv">
+<dt>Belirti</dt><dd>Kısmen kaydedilmiş toplamadan gelen izleme satırları silinmeye çalışılıyordu; BC reddetti, pick oluşturulamadı.</dd>
+<dt>Kök neden</dt><dd>ShipmentMgmt.PrepareShipmentForMultiLotPick tüm Whse. Item Tracking Line kayıtlarını DeleteAll ile siliyordu; &#x27;Quantity Handled (Base)&#x27;&lt;&gt;0 satırlar silinemez.</dd>
+<dt>Değişiklik</dt><dd>İşlenmiş miktarı olan izleme satırı varsa satır atlanır (mevcut dağılım korunur); yalnız işlenmemiş satırlar yeniden üretilir.</dd>
+<dt>Dosyalar</dt><dd class="files">al/src/Ship/ShipmentMgmt.Codeunit.al</dd>
+<dt>Doğrulama</dt><dd class="verify">AL derlendi; canlı: SH000274&#x27;te Pick Oluştur yeniden denenecek.</dd>
+</dl></div>
+<div class="rec">
+<div class="rechead"><span class="sev critical">Kritik</span><span class="rid">pick-qty-prefill</span><h3>Yeni toplama %100/&#x27;Done&#x27; başlıyordu (Qty. to Handle ön-dolu)</h3></div>
+<dl class="kv">
+<dt>Belirti</dt><dd>Hiç okutma yapılmadan &#x27;Toplamayı Kaydet&#x27; aktifti.</dd>
+<dt>Kök neden</dt><dd>CreatePick raporu DoNotFillQtyToHandle=false ile çağrılıyordu.</dd>
+<dt>Değişiklik</dt><dd>Çağrı true&#x27;ya çevrildi (çok-siparişli akışla aynı); ilerleme kaydedilen miktardan hesaplanıyor.</dd>
+<dt>Dosyalar</dt><dd class="files">al/src/Ship/ShipmentMgmt.Codeunit.al<br>al/src/Pick/PickApi.Page.al</dd>
+<dt>Doğrulama</dt><dd class="verify">AL 1.14.0.91+ yayınlandı; canlı: yeni pick %0 başlamalı.</dd>
+</dl></div>
+<div class="rec">
+<div class="rechead"><span class="sev critical">Kritik</span><span class="rid">shipping-x04b</span><h3>&#x27;Eksik Bildir&#x27; ters çalışıyordu: &#x27;N eksik&#x27; → &#x27;N tanesini işle&#x27; (Take≠Place, hayalet stok)</h3></div>
+<dl class="kv">
+<dt>Belirti</dt><dd>Kalan 69 iken 4 eksik bildirilince BC&#x27;ye Qty. to Handle = 4 yazılıyordu (beklenen 65). Ayrıca eş Place satırı 0&#x27;da kaldığı için Take ve Place miktarları eşitlenmiyor, kayıt sırasında ambar defterine dengesiz hareket giriyordu.</dd>
+<dt>Kök neden</dt><dd>PickMgmt.RegisterShortPick doğrudan PickLine.Validate(&quot;Qty. to Handle&quot;, ShortQty) yapıyor ve eş Place satırını güncellemiyordu. Bu, HM.00054&#x27;te görülen Take −250 / Place +300 tipi dengesizliğin kod tarafındaki kaynağıdır.</dd>
+<dt>Değişiklik</dt><dd>RegisterShortPick artık İşlenecek = Kalan − Eksik hesaplıyor, eksik miktar kalandan büyükse Türkçe hata veriyor ve SyncRelatedPlaceLine ile Place satırını eşitliyor.</dd>
+<dt>Dosyalar</dt><dd class="files">al/src/Pick/PickMgmt.Codeunit.al</dd>
+<dt>Doğrulama</dt><dd class="verify">1.14.0.96 sonrası eksik bildiriminde Take ve Place satırları eşit; warehouseEntries&#x27;te Take/Place çiftleri dengeli.</dd>
+</dl></div>
+<div class="rec">
+<div class="rechead"><span class="sev high">Yüksek</span><span class="rid">shipping-11</span><h3>SH000274 postu: lot dağılımı (300) sevk miktarıyla (350) uyuşmuyor — mesaj &#x27;Lot bilgisi doğrulanamadı&#x27;</h3></div>
+<dl class="kv">
+<dt>Belirti</dt><dd>Gerçek neden (izleme 300 / sevk 350, lot H100785) gizleniyordu.</dd>
+<dt>Kök neden</dt><dd>İngilizce BC mesajı genel lot metnine düşüyordu.</dd>
+<dt>Değişiklik</dt><dd>Mesaj eşlemesi: &#x27;X ürününün lot dağılımı (300) sevk miktarıyla (350) uyuşmuyor. Toplamayı tamamlayın veya BC&#x27;de sevk miktarını 300 yapın.&#x27;</dd>
+<dt>Dosyalar</dt><dd class="files">android/.../ui/Common.kt</dd>
+<dt>Doğrulama</dt><dd class="verify">Birim test geçti.</dd>
+<dt>Not</dt><dd>SH000274 verisi (WE 400 / ILE 350, LP000054-55 eski put-away&#x27;e Assigned) sandbox artığı; canlıya geçmeden BC&#x27;de düzeltilmeli.</dd>
+</dl></div>
+<div class="rec">
+<div class="rechead"><span class="sev high">Yüksek</span><span class="rid">shipping-x02</span><h3>Released sevkiyatta satır düzenlenemiyor; sebep gizli</h3></div>
+<dl class="kv">
+<dt>Belirti</dt><dd>&#x27;Status must be Open&#x27; hatası REF&#x27;e maskeleniyordu.</dd>
+<dt>Kök neden</dt><dd>Eşleme yoktu.</dd>
+<dt>Değişiklik</dt><dd>Mesaj: &#x27;Sevkiyat serbest bırakılmış (Released): satır BC&#x27;de doğrudan değiştirilemez. Miktarı ve lotu Pick Oluştur ile toplayarak belirleyin.&#x27;</dd>
+<dt>Dosyalar</dt><dd class="files">android/.../ui/Common.kt</dd>
+<dt>Doğrulama</dt><dd class="verify">Birim test geçti.</dd>
+</dl></div>
+<div class="rec">
+<div class="rechead"><span class="sev high">Yüksek</span><span class="rid">shipping-20</span><h3>Miktar alanında Türkçe ondalık virgül düşüyor (&#x27;200,5&#x27; → &#x27;2005&#x27;)</h3></div>
+<dl class="kv">
+<dt>Belirti</dt><dd>10 kat miktar riski (toplama, mal kabul, sayım düzeltme, üretim).</dd>
+<dt>Kök neden</dt><dd>Alan filtresi virgülü atıyordu.</dd>
+<dt>Değişiklik</dt><dd>normalizeQtyInput: virgül→nokta, tek ayırıcı; tüm miktar alanlarında (QuantityDialogSheet, üretim, yerleştirme, sayım) uygulandı.</dd>
+<dt>Dosyalar</dt><dd class="files">android/.../ui/Common.kt<br>android/.../ui/QuantityDialogSheet.kt<br>android/.../feature/*.kt</dd>
+<dt>Doğrulama</dt><dd class="verify">Birim test: &#x27;12,5&#x27;→&#x27;12.5&#x27;, &#x27;200,5&#x27;→&#x27;200.5&#x27;, &#x27;1.5.5&#x27;→&#x27;1.55&#x27;.</dd>
+</dl></div>
+<div class="rec">
+<div class="rechead"><span class="sev high">Yüksek</span><span class="rid">shipping-18</span><h3>Kalandan fazla miktar hatası maskeleniyor (REF)</h3></div>
+<dl class="kv">
+<dt>Belirti</dt><dd>&#x27;You cannot handle more than the outstanding 300 units&#x27; → &#x27;İşlem tamamlanamadı&#x27;.</dd>
+<dt>Kök neden</dt><dd>Eşleme yoktu.</dd>
+<dt>Değişiklik</dt><dd>&#x27;Kalan miktardan fazla giremezsiniz (kalan: 300)&#x27;; ayrıca &#x27;Qty. to Ship/Receive must not be greater than N&#x27;, Over-Receipt sınırı, tracking &#x27;Quantity Handled must be 0&#x27; eşlemeleri.</dd>
+<dt>Dosyalar</dt><dd class="files">android/.../ui/Common.kt</dd>
+<dt>Doğrulama</dt><dd class="verify">Birim test geçti.</dd>
+</dl></div>
+<div class="rec">
+<div class="rechead"><span class="sev high">Yüksek</span><span class="rid">shipping-x03</span><h3>Sandbox veri tutarsızlığı: HM.00054 ambar bakiyesi madde defterinden 50 KG fazlaydı</h3></div>
+<dl class="kv">
+<dt>Belirti</dt><dd>HM.00054 / lot H100789 için madde defteri 50 KG derken ambar defteri 100 KG gösteriyordu. Kaynak: yerleştirme hareketi 35636 Take −250 iken 35637 Place +300 kaydedilmiş; aradaki 50 KG yoktan var olmuş.</dd>
+<dt>Kök neden</dt><dd>Toplama/yerleştirmede Take ve Place miktarlarının eşitlenmemesi. Kod tarafındaki iki üreteci de kapatıldı: (a) PickMgmt.EnsureTakeAndPlaceQuantitiesBalanced kaydı bloklar, (b) &#x27;Eksik Bildir&#x27; artık eş Place satırını senkronlar (bkz. [[shipping-x04b]]).</dd>
+<dt>Değişiklik</dt><dd>Kod: yukarıdaki iki koruma. Veri: MovementOpsApi.adjustBin ile S.K01.11 rafı 0&#x27;a çekildi (hareket 35793/35794); fazlalık artık toplanabilir/sevk edilebilir raflardan çıkıp ADJ.01 ayarlama rafında izole edildi. Ayrıca fixWhseEntryQuantity bakım aksiyonu eklendi (bozuk hareketi kaynağında düzeltmek için).</dd>
+<dt>Dosyalar</dt><dd class="files">al/src/Pick/PickMgmt.Codeunit.al<br>al/src/Movement/MovementMgmt.Codeunit.al<br>al/src/Movement/MovementOpsApi.Page.al</dd>
+<dt>Doğrulama</dt><dd class="verify">Onarım sonrası: gerçek raflar (H.A01.11) = 50 KG = madde defteri 50 KG. Fark artık yalnız ADJ.01 ayarlama rafında (50 KG) duruyor; bu raf toplama/sevkiyata girmez. Yeni kaydedilen toplamalarda Take=Place doğrulandı (PI001146 → hareket 35783 Y.A01.11 −10 / 35784 S.K01.11 +10).</dd>
+<dt>Not</dt><dd>Kalan artık ADJ.01 kaydı BC&#x27;de bir kerelik temizlik işidir (ambar ayarlama günlüğü); operasyonu etkilemez.</dd>
+</dl></div>
+<div class="rec">
+<div class="rechead"><span class="sev high">Yüksek</span><span class="rid">ship-line-bin</span><h3>Sevk satırı PATCH&#x27;i raf kodu gönderdiği için &#x27;Status must be Open&#x27; hatası</h3></div>
+<dl class="kv">
+<dt>Belirti</dt><dd>Released sevkiyatta satır düzenlenemiyor sanılıyordu.</dd>
+<dt>Kök neden</dt><dd>PATCH gövdesine satırın kendi rafı ekleniyordu; BC Bin Code OnValidate TestReleased ile reddediyor.</dd>
+<dt>Değişiklik</dt><dd>Raf gönderilmiyor; yalnız miktar/lot/LP yazılıyor.</dd>
+<dt>Dosyalar</dt><dd class="files">android/.../feature/PutAwayShipModules.kt</dd>
+<dt>Doğrulama</dt><dd class="verify">Derlendi; APK kuruldu.</dd>
+</dl></div>
+<div class="rec">
+<div class="rechead"><span class="sev high">Yüksek</span><span class="rid">ship-post-numberseries</span><h3>E-İrsaliye numara serisi hatası sevk kaydedilmiş olsa da &#x27;tamamlanamadı&#x27; gösteriyordu</h3></div>
+<dl class="kv">
+<dt>Belirti</dt><dd>SH000273 BC&#x27;de post edildi (irsaliye 102260) ama ekran HATA verdi.</dd>
+<dt>Kök neden</dt><dd>Post sonrası hata mesajı maskeleniyor, belge durumu yeniden okunmuyordu.</dd>
+<dt>Değişiklik</dt><dd>Numara serisi hatası Türkçeleştirildi; hata sonrası satırların sevk miktarı düştüyse &#x27;TAMAM: Sevkiyat BC&#x27;de kaydedildi + UYARI&#x27; gösteriliyor.</dd>
+<dt>Dosyalar</dt><dd class="files">android/.../ui/Common.kt<br>android/.../feature/PutAwayShipModules.kt</dd>
+<dt>Doğrulama</dt><dd class="verify">Birim test + APK.</dd>
+<dt>Not</dt><dd>BC tarafında E-IRSALIYE numara serisinin uzatılması gerekiyor (ortam ayarı).</dd>
+</dl></div>
+<div class="rec">
+<div class="rechead"><span class="sev high">Yüksek</span><span class="rid">shipping-x04a</span><h3>&#x27;Sevk LP Başlat&#x27; sepeti belgeye bağlamıyor; LP yetim kalıyor</h3></div>
+<dl class="kv">
+<dt>Belirti</dt><dd>Düğme LP üretiyor (&#x27;TAMAM: Sevk LP LP000092 başlatıldı&#x27;) ama picks.mainLpNo boş kalıyor, LP hiçbir belgeye atanmıyor ve düğme &#x27;LP Kapat&#x27;a dönmüyordu; ekrandan çıkılınca sepet kayboluyordu.</dd>
+<dt>Kök neden</dt><dd>PickMgmt.StartShippingLP yalnız LP&#x27;yi Build ediyor, toplama başlığındaki &quot;DOPSWHS Main LP No.&quot; alanına yazmıyordu.</dd>
+<dt>Değişiklik</dt><dd>StartShippingLP üretilen LP&#x27;yi Pick.&quot;DOPSWHS Main LP No.&quot; alanına Validate + Modify ile yazıyor.</dd>
+<dt>Dosyalar</dt><dd class="files">al/src/Pick/PickMgmt.Codeunit.al</dd>
+<dt>Doğrulama</dt><dd class="verify">1.14.0.96 sonrası Sevk LP başlat → picks.mainLpNo dolu, düğme &#x27;LP Kapat (&lt;lp&gt;)&#x27; oluyor.</dd>
+</dl></div>
+<div class="rec">
+<div class="rechead"><span class="sev medium">Orta</span><span class="rid">shipping-15</span><h3>Pick hiç okutma yapılmadan %100 / &#x27;Done&#x27; görünüyor</h3></div>
+<dl class="kv">
+<dt>Belirti</dt><dd>BC &#x27;Qty. to Handle&#x27;ı önceden doldurduğu için ilerleme %100, durum Done (çevrilmemiş).</dd>
+<dt>Kök neden</dt><dd>PickApi ilerlemeyi &#x27;Qty. to Handle&#x27; üzerinden hesaplıyordu; &#x27;Done&#x27; etiketi Türkçe eşlemede yoktu.</dd>
+<dt>Değişiklik</dt><dd>İlerleme/durum &#x27;Qty. Handled&#x27; (gerçek kayıt) üzerinden; Done→Tamamlandı, Ready→Hazır, Posted→Kaydedildi.</dd>
+<dt>Dosyalar</dt><dd class="files">al/src/Pick/PickApi.Page.al<br>android/.../feature/QualityManagementModule.kt</dd>
+<dt>Doğrulama</dt><dd class="verify">AL derlendi; canlı: yeni pick&#x27;te ilerleme 0&#x27;dan başlamalı.</dd>
+</dl></div>
+<div class="rec">
+<div class="rechead"><span class="sev medium">Orta</span><span class="rid">shipping-x05</span><h3>Donanım Geri tuşu belge ekranından uygulamayı kapatıyor</h3></div>
+<dl class="kv">
+<dt>Belirti</dt><dd>Pick/sevkiyat/sayım V2 belge ekranlarında BACK uygulamayı arka plana atıyordu.</dd>
+<dt>Kök neden</dt><dd>BackHandler yoktu.</dd>
+<dt>Değişiklik</dt><dd>Mal kabul, PO, yerleştirme, pick, sevkiyat, SO, sayım, hareket, V2 belge ekranlarına BackHandler → listeye döner.</dd>
+<dt>Dosyalar</dt><dd class="files">android/.../feature/ReceivingModule.kt<br>PutAwayShipModules.kt<br>MoveAndCountModules.kt<br>PickingModule.kt<br>CountV2Module.kt</dd>
+<dt>Doğrulama</dt><dd class="verify">Derlendi; canlı yeniden test.</dd>
+</dl></div>
+<div class="rec">
+<div class="rechead"><span class="sev medium">Orta</span><span class="rid">shipping-x04</span><h3>Pick ekranında sevk LP başlat/kapat, eksik toplama (markShort), tote düğmeleri yok</h3></div>
+<dl class="kv">
+<dt>Belirti</dt><dd>API var, UI yok; kısmi toplama yalnız miktar düşürerek yapılıyor.</dd>
+<dt>Kök neden</dt><dd>API&#x27;de picks.startMainLp/closeMainLp/markShort aksiyonları vardı; toplama ekranında hiçbir düğme bunları çağırmıyordu, operatör sepet LP&#x27;si açamıyor ve eksik toplamayı bildiremiyordu.</dd>
+<dt>Değişiklik</dt><dd>App (PutAwayShipModules.kt, toplama belge ekranı): başlıkta &#x27;📦 Sevk LP Başlat&#x27; düğmesi (mainLpNo doluysa &#x27;📦 LP Kapat (&lt;lp&gt;)&#x27;) → picks/startMainLp ve closeMainLp; satır menüsüne &#x27;📉 Eksik Bildir&#x27; + miktar penceresi → picks/markShort. Sonuçlar Türkçe durum satırına yazılıyor, hata QcErrorParser&#x27;dan geçiyor.</dd>
+<dt>Dosyalar</dt><dd class="files">android/app/src/main/java/com/dynops/bcwms/feature/PutAwayShipModules.kt</dd>
+<dt>Doğrulama</dt><dd class="verify">Toplama ekranında düğmeler görünüyor; Sevk LP başlat sonrası picks.mainLpNo doluyor, LP Kapat ile kapanıyor; markShort sonrası satır eksik miktarı BC&#x27;de güncelleniyor (shipping-x04 canlı testi).</dd>
+</dl></div>
+<div class="rec">
+<div class="rechead"><span class="sev medium">Orta</span><span class="rid">shipping-11-warn</span><h3>Sevk kaydedildi + BC uyarısı mesajı ekranda hiç görünmüyordu</h3></div>
+<dl class="kv">
+<dt>Belirti</dt><dd>E-İrsaliye numara serisi bitmişken sevk BC&#x27;de kaydediliyor ama uygulama uyarı metnini yazdıktan hemen sonra listeye dönüyordu; 0,5 sn aralıklı 40 kareli ekran kaydında uyarı karesi hiç yok. Operatör e-İrsaliye numarasının atanmadığını öğrenemiyordu.</dd>
+<dt>Kök neden</dt><dd>Durum metni set edildikten hemen sonra onBack() çağrılıyordu.</dd>
+<dt>Değişiklik</dt><dd>Uyarılı başarı artık onaylanması gereken bir pencerede gösteriliyor (&#x27;Sevkiyat kaydedildi&#x27; + uyarı metni + Tamam); Tamam&#x27;a basılınca listeye dönülüyor. Uyarısız başarıda davranış aynı.</dd>
+<dt>Dosyalar</dt><dd class="files">android/app/src/main/java/com/dynops/bcwms/feature/PutAwayShipModules.kt</dd>
+<dt>Doğrulama</dt><dd class="verify">Sevk postunda BC HTTP 400 döndüğü halde commit algılandığında pencere açılıyor.</dd>
+</dl></div>
+<h3 style="margin-top:32px;padding-bottom:8px;border-bottom:2px solid var(--ink)">Sayım <span class="count" style="font-weight:400">(17)</span></h3>
+<div class="rec">
+<div class="rechead"><span class="sev critical">Kritik</span><span class="rid">count-18</span><h3>Rafta olmayan ürün okutulunca lokasyon toplamı rafa &#x27;sayıldı&#x27; yazılıyor (mükerrer stok)</h3></div>
+<dl class="kv">
+<dt>Belirti</dt><dd>AB.01938 @K.K03.11: 2 lot × 250 K.K03.11&#x27;e yazıldı; post edilse +500 pozitif düzeltme.</dd>
+<dt>Kök neden</dt><dd>Lokasyon geneli yedek okuma düz ürün okutmasında da çalışıyordu.</dd>
+<dt>Değişiklik</dt><dd>Yedek okuma yalnız LOT okutmasında (tek lot, etiket elde) ve &#x27;UYARI: … BC bu lotu X rafında biliyor; o rafı da sayın&#x27; ile; düz ürün okutmasında rafta stok yoksa satır açılmaz, operatöre lot/LP okutması söylenir.</dd>
+<dt>Dosyalar</dt><dd class="files">android/.../feature/CountV2Module.kt</dd>
+<dt>Doğrulama</dt><dd class="verify">Derlendi; canlı yeniden test.</dd>
+</dl></div>
+<div class="rec">
+<div class="rechead"><span class="sev critical">Kritik</span><span class="rid">count-12</span><h3>LP okutmada sistem miktarı LP içeriğinden alınıyor; LP/BC tutarsızlığı gizleniyor</h3></div>
+<dl class="kv">
+<dt>Belirti</dt><dd>LP000081 (1 KG) BC&#x27;de 0 iken &#x27;Sistem 1 · Fark 0&#x27;.</dd>
+<dt>Kök neden</dt><dd>ScanV2Lp System Qty := LPLine.Quantity.</dd>
+<dt>Değişiklik</dt><dd>System Qty artık BC raf bakiyesi (Warehouse Entry toplamı: raf/ürün/varyant/birim/lot/seri); fark gerçek.</dd>
+<dt>Dosyalar</dt><dd class="files">al/src/Count/CountMgmt.Codeunit.al</dd>
+<dt>Doğrulama</dt><dd class="verify">AL 1.14.0.89 derlendi; yayın sonrası canlı test.</dd>
+</dl></div>
+<div class="rec">
+<div class="rechead"><span class="sev critical">Kritik</span><span class="rid">count-25</span><h3>Sayım kaydı raf bakiyesini düzeltmiyor: fark ADJ.01 ayarlama rafına düşüyor</h3></div>
+<dl class="kv">
+<dt>Belirti</dt><dd>A.A01.13&#x27;te 200→199: ILE −1 doğru, Warehouse Entry ADJ.01&#x27;e yazıldı, A.A01.13 hâlâ 200.</dd>
+<dt>Kök neden</dt><dd>Yönlendirilmiş (Directed Put-away and Pick) lokasyonda Item Journal raf taşıyamaz; sayım yalnız Item Journal ile kaydediliyordu.</dd>
+<dt>Değişiklik</dt><dd>PostSheet: yönlendirilmiş lokasyonda önce Ambar Fiziksel Sayım Günlüğü (PHYSINV/DOPS-CNT, lot/seri izlemeli) register edilir (raf ± / ADJ ∓), sonra Item Journal ADJ bakiyesini ILE&#x27;ye taşır. Codeunit&#x27;e günlük tabloları için dolaylı izin eklendi.</dd>
+<dt>Dosyalar</dt><dd class="files">al/src/Count/CountMgmt.Codeunit.al</dd>
+<dt>Doğrulama</dt><dd class="verify">CANLI DOĞRULANDI (AL 1.14.0.92): sayım farkı artık sayılan rafa yazılıyor — WE 35774 A.A01.13 −1, binContents 200→199 (önceden fark yalnız ADJ.01&#x27;e düşüyordu).</dd>
+</dl></div>
+<div class="rec">
+<div class="rechead"><span class="sev critical">Kritik</span><span class="rid">count-lotjournal</span><h3>Raf düzeltmeli sayım postu &#x27;Lot No. must have a value in Warehouse Journal Line&#x27; ile reddediliyordu</h3></div>
+<dl class="kv">
+<dt>Belirti</dt><dd>AL 1.14.0.89–.91 ile lot takipli üründe V2 sayım kaydı BC tarafından reddedildi; sayfa Posted olmadı.</dd>
+<dt>Kök neden</dt><dd>Ambar fiziksel sayım günlüğünde lot/seri, satırın kendi alanlarındadır; kod ayrı &#x27;Whse. Item Tracking Line&#x27; üretiyordu.</dd>
+<dt>Değişiklik</dt><dd>RegisterDirectedPhysInventory artık WhseJournalLine.Validate(&quot;Lot No.&quot;/&quot;Serial No.&quot;) ile yazıyor; gereksiz izleme satırı üreteci kaldırıldı.</dd>
+<dt>Dosyalar</dt><dd class="files">al/src/Count/CountMgmt.Codeunit.al</dd>
+<dt>Doğrulama</dt><dd class="verify">CANLI DOĞRULANDI (30.08 01:29, AL 1.14.0.92): CNT-20260829222720 Posted; ILE 12080 Negative Adjmt. −1 lot A100174, documentNo=CNT-20260829222720; Warehouse Entry 35774 A.A01.13 −1 (sayılan raf), ADJ.01 net 0; binContents A.A01.13 200→199.</dd>
+</dl></div>
+<div class="rec">
+<div class="rechead"><span class="sev critical">Kritik</span><span class="rid">count-baseqty</span><h3>Sayım farkı ambar hareketine YANLIŞ taban miktar yazıyordu (raf bakiyesi bozuluyor)</h3></div>
+<dl class="kv">
+<dt>Belirti</dt><dd>Terminalden postlanan her sayım farkı, ambar hareketinin &quot;Qty. (Base)&quot; alanına farkı değil SAYILAN MİKTARIN TAMAMINI yazıyordu. Canlı kanıt: hareket 35774 quantity −1 iken qtyBase −199; A.A01.13 rafı BC&#x27;de miktar 199, taban miktar 1 görünüyordu — o raftan toplama yapılamaz.</dd>
+<dt>Kök neden</dt><dd>BC&#x27;de &quot;Qty. (Base)&quot; = &quot;Qty. (Phys. Inventory) (Base)&quot; − &quot;Qty. (Calculated) (Base)&quot;. &quot;Qty. (Calculated) (Base)&quot; alanının OnValidate&#x27;i yoktur ve &quot;Qty. (Calculated)&quot; doğrulaması onu doldurmaz. Kodumuz yalnız &quot;Qty. (Calculated)&quot; yazdığı için çıkarılan değer 0 kalıyordu.</dd>
+<dt>Değişiklik</dt><dd>CountMgmt.RegisterDirectedPhysInventory ve MovementMgmt.AdjustBinToQuantity: &quot;Qty. (Calculated) (Base)&quot; satırın &quot;Qty. per Unit of Measure&quot; değeriyle hesaplanıp açıkça yazılıyor. Ayrıca MovementOpsApi&#x27;ye repairWhseEntryBaseQty(locationCode, itemNo) bakım aksiyonu eklendi; geçmişte bozulmuş hareketleri onarır.</dd>
+<dt>Dosyalar</dt><dd class="files">al/src/Count/CountMgmt.Codeunit.al<br>al/src/Movement/MovementMgmt.Codeunit.al<br>al/src/Movement/MovementOpsApi.Page.al</dd>
+<dt>Doğrulama</dt><dd class="verify">1.14.0.95 yayınlandıktan sonra yapılan sayımda hareket 35790 quantity −1 / qtyBase −1 (doğru). repairWhseEntryBaseQty MERKEZDEPO/AB.01938 → 2 hareket onarıldı; A.A01.13 rafı 198 qty / 198 base oldu. Tüm ambarda taranan 781 harekette başka tutarsızlık kalmadı.</dd>
+</dl></div>
+<div class="rec">
+<div class="rechead"><span class="sev critical">Kritik</span><span class="rid">count-26</span><h3>Klasik sayımda &#x27;Satır Üret&#x27; hiç satır üretmiyor + terminalden yeni sayım açılamıyor</h3></div>
+<dl class="kv">
+<dt>Belirti</dt><dd>1) Klasik &#x27;Sayım&#x27; listesinde yeni belge oluşturma düğmesi yoktu; operatör ofisin BC&#x27;de sayfa açmasını bekliyordu. 2) &#x27;Satır Üret&#x27; HTTP 400 ile reddediliyordu: &#x27;HM.00144 ürününün H.A01.11 rafındaki LP miktarı BC stok miktarını 125 aşıyor&#x27; — hiç satır üretilmiyor, sayfa kullanılamaz kalıyordu.</dd>
+<dt>Kök neden</dt><dd>CountMgmt.GenerateLines, LP içerikleri raf bakiyesini aştığında Error ile tüm satır üretimini durduruyordu (hem toplam hem lot/seri düzeyinde iki koruma). Oysa bu tutarsızlığı BULMASI gereken şey sayımın kendisidir.</dd>
+<dt>Değişiklik</dt><dd>AL: her iki korumada da fazlalık artık hata değil; kalan bin miktarı 0&#x27;a çekilip satır üretimine devam ediliyor, fazlalık LP satırlarında sayıma giriyor. Ayrıca countOps&#x27;a createClassic(locationCode, counter1..3) aksiyonu eklendi. App: klasik sayım listesine &#x27;➕ Yeni Sayım&#x27; düğmesi (lokasyon en yeni sayfadan alınır, operatör 1. sayıcı olarak atanır).</dd>
+<dt>Dosyalar</dt><dd class="files">al/src/Count/CountMgmt.Codeunit.al<br>al/src/Count/CountOpsApi.Page.al<br>android/app/src/main/java/com/dynops/bcwms/feature/MoveAndCountModules.kt</dd>
+<dt>Doğrulama</dt><dd class="verify">1.14.0.97 ile terminalden yeni klasik sayfa açılıyor ve LP/bin tutarsızlığı olan lokasyonda &#x27;Satır Üret&#x27; satırları üretiyor.</dd>
+</dl></div>
+<div class="rec">
+<div class="rechead"><span class="sev high">Yüksek</span><span class="rid">count-x02</span><h3>Donanım tarayıcı okutması alan odaklı değilse kayboluyor</h3></div>
+<dl class="kv">
+<dt>Belirti</dt><dd>Raf okutulunca 2. alan odaklanmıyor; DataWedge intent&#x27;i işlenmiyor.</dd>
+<dt>Kök neden</dt><dd>ScanField yalnız odaklıyken ScanBus dinler; odak yönetimi yoktu.</dd>
+<dt>Değişiklik</dt><dd>ScanField&#x27;e focusRequester; V2 ekranı raf yokken 1. alanı, raf seçilince 2. alanı otomatik odaklar.</dd>
+<dt>Dosyalar</dt><dd class="files">android/.../scanner/ScanField.kt<br>android/.../feature/CountV2Module.kt</dd>
+<dt>Doğrulama</dt><dd class="verify">Derlendi; canlı yeniden test (intent ile).</dd>
+</dl></div>
+<div class="rec">
+<div class="rechead"><span class="sev high">Yüksek</span><span class="rid">count-19</span><h3>Miktarlı etiket iki kez okutulunca miktar toplanıyor</h3></div>
+<dl class="kv">
+<dt>Belirti</dt><dd>Aynı etiket ikinci okutmada +5 ekledi.</dd>
+<dt>Kök neden</dt><dd>Yalnız 1,5 sn&#x27;lik tekrar koruması vardı.</dd>
+<dt>Değişiklik</dt><dd>Aynı raf + aynı etiket içeriği oturumda bir kez sayılır; ikinci okutmada bilgi mesajı.</dd>
+<dt>Dosyalar</dt><dd class="files">android/.../feature/CountV2Module.kt</dd>
+<dt>Doğrulama</dt><dd class="verify">Derlendi; canlı yeniden test.</dd>
+</dl></div>
+<div class="rec">
+<div class="rechead"><span class="sev high">Yüksek</span><span class="rid">count-x03</span><h3>&#x27;MİKTAR/BİRİM=&#x27; (Türkçe İ) miktar olarak çözülmüyor</h3></div>
+<dl class="kv">
+<dt>Belirti</dt><dd>Firma etiketindeki Türkçe İ&#x27;li anahtar tanınmıyordu.</dd>
+<dt>Kök neden</dt><dd>IGNORE_CASE &#x27;İ&#x27;→&#x27;i&#x27; eşlemesi yapmaz.</dd>
+<dt>Değişiklik</dt><dd>Etiket ayrıştırmadan önce İ→I, ı→i normalizasyonu.</dd>
+<dt>Dosyalar</dt><dd class="files">android/.../scanner/BarcodeIntentResolver.kt</dd>
+<dt>Doğrulama</dt><dd class="verify">Derlendi.</dd>
+</dl></div>
+<div class="rec">
+<div class="rechead"><span class="sev high">Yüksek</span><span class="rid">count-addline-uom</span><h3>&#x27;Satır ekle&#x27; sistem miktarını 0 alıyor (yanlış fark)</h3></div>
+<dl class="kv">
+<dt>Belirti</dt><dd>CNT-20260827153000&#x27;de sistem miktarları 0 görünüyordu.</dd>
+<dt>Kök neden</dt><dd>Bin Content.Get çağrısında ölçü birimi &#x27;&#x27; verilmiş; anahtar eşleşmiyor.</dd>
+<dt>Değişiklik</dt><dd>Raf içeriği birim bazında filtrelenip toplanıyor; birim satıra yazılıyor, stok yoksa &#x27;beklenmeyen&#x27; işaretleniyor.</dd>
+<dt>Dosyalar</dt><dd class="files">al/src/Count/CountMgmt.Codeunit.al</dd>
+<dt>Doğrulama</dt><dd class="verify">AL 1.14.0.91+ yayınlandı.</dd>
+</dl></div>
+<div class="rec">
+<div class="rechead"><span class="sev high">Yüksek</span><span class="rid">count-expdate</span><h3>Son kullanma tarihi zorunlu lotlarda raf düzeltmesi &#x27;Expiration Date must have a value&#x27; ile reddediliyordu</h3></div>
+<dl class="kv">
+<dt>Belirti</dt><dd>SKT zorunlu izleme kodu olan lotlarda ambar günlüğü satırı kaydedilemiyor, sayım farkı rafa yazılamıyordu.</dd>
+<dt>Kök neden</dt><dd>Ambar günlüğü satırına &quot;Expiration Date&quot; yazılmıyordu; fiziksel sayımda bu alan satırın kendi alanıdır.</dd>
+<dt>Değişiklik</dt><dd>CountMgmt ve MovementMgmt: lot/serinin ambar hareketlerindeki son SKT&#x27;si bulunup günlük satırına yazılıyor (ExpirationDateForLot / ExpirationDateForTracking).</dd>
+<dt>Dosyalar</dt><dd class="files">al/src/Count/CountMgmt.Codeunit.al<br>al/src/Movement/MovementMgmt.Codeunit.al</dd>
+<dt>Doğrulama</dt><dd class="verify">HM.00054 / lot H100789 raf düzeltmesi 1.14.0.95 ile hatasız kaydedildi (adjustBin → −50).</dd>
+</dl></div>
+<div class="rec">
+<div class="rechead"><span class="sev high">Yüksek</span><span class="rid">adjustbin-divzero</span><h3>Rafı 0&#x27;a çekerken BC &#x27;Attempted to divide by zero&#x27; veriyordu</h3></div>
+<dl class="kv">
+<dt>Belirti</dt><dd>Bir rafın ambar bakiyesi 0&#x27;a çekilmek istendiğinde BC sıfıra bölme hatası veriyordu; boşalan raf düzeltilemiyordu.</dd>
+<dt>Kök neden</dt><dd>Taban miktar hatası (bkz. [count-baseqty]) yüzünden &quot;Qty. (Absolute, Base)&quot; 0 kalıyor, BC&#x27;nin Whse. Jnl.-Register Line kodundaki Sign := &quot;Qty. (Base)&quot; / &quot;Qty. (Absolute, Base)&quot; satırı sıfıra bölüyordu.</dd>
+<dt>Değişiklik</dt><dd>&quot;Qty. (Calculated) (Base)&quot; düzeltmesiyle birlikte giderildi.</dd>
+<dt>Dosyalar</dt><dd class="files">al/src/Movement/MovementMgmt.Codeunit.al</dd>
+<dt>Doğrulama</dt><dd class="verify">adjustBin(MERKEZDEPO, S.K01.11, HM.00054, lot H100789, hedef 0) → HTTP 200, dönen fark −50, hareket 35793 quantity −50 / qtyBase −50.</dd>
+</dl></div>
+<div class="rec">
+<div class="rechead"><span class="sev high">Yüksek</span><span class="rid">count-30</span><h3>Çok sayıcılı (kör) sayım terminalden kurulamıyor</h3></div>
+<dl class="kv">
+<dt>Belirti</dt><dd>Belge ekranındaki &#x27;Atanmış sayıcılar&#x27; yalnızca statik metindi; atama düğmesi yoktu. API&#x27;de de yol yoktu: PATCH countSheets &#x27;Entity does not support modifying data&#x27;, POST countSheets &#x27;Control counter1UserId is read-only&#x27;, atama için bound action yok. &#x27;Sayım turu&#x27; 1&#x27;de kilitli kalıyordu.</dd>
+<dt>Kök neden</dt><dd>Sayıcı slotları yalnızca sayfa OLUŞTURULURKEN (CreateSheet) yazılabiliyordu; sonradan atama/değiştirme prosedürü ve API aksiyonu hiç yoktu.</dd>
+<dt>Değişiklik</dt><dd>AL: CountMgmt.SetCounters(SheetNo, Counters[3]) — açık sayfada slot ekler/değiştirir, boş kullanıcı slotu kaldırır, sayfa açık değilse Türkçe hata; countSheets&#x27;e setCounters(counter1UserId, counter2UserId, counter3UserId) aksiyonu. App: başlıkta &#x27;Sayıcıları Ata&#x27; düğmesi ve 3 slotluk pencere (kayıtlı Local WMS kullanıcıları listelenir). Atama sonrası &#x27;Sayım turu&#x27; seçimi açılır.</dd>
+<dt>Dosyalar</dt><dd class="files">al/src/Count/CountMgmt.Codeunit.al<br>al/src/Count/CountApi.Page.al<br>android/app/src/main/java/com/dynops/bcwms/feature/MoveAndCountModules.kt</dd>
+<dt>Doğrulama</dt><dd class="verify">1.14.0.97 ile terminalden 2. sayıcı atanıyor, sayım turu 2 seçilebiliyor, countSheetLines recordCount(counterSlot=2) çalışıyor.</dd>
+</dl></div>
+<div class="rec">
+<div class="rechead"><span class="sev medium">Orta</span><span class="rid">count-22</span><h3>Satır 0&#x27;a düzeltilemiyor (boş palet)</h3></div>
+<dl class="kv">
+<dt>Belirti</dt><dd>Onayla 0 için pasifti.</dd>
+<dt>Kök neden</dt><dd>Düzelt penceresi allowZeroQuantity=false.</dd>
+<dt>Değişiklik</dt><dd>Düzelt penceresinde 0 kabul edilir.</dd>
+<dt>Dosyalar</dt><dd class="files">android/.../feature/CountV2Module.kt</dd>
+<dt>Doğrulama</dt><dd class="verify">Derlendi.</dd>
+</dl></div>
+<div class="rec">
+<div class="rechead"><span class="sev medium">Orta</span><span class="rid">count-x05</span><h3>&#x27;Kaydet&#x27; sayılmamış satır varken sessiz</h3></div>
+<dl class="kv">
+<dt>Belirti</dt><dd>Buton etkin görünüyor, hiçbir mesaj yok.</dd>
+<dt>Kök neden</dt><dd>Kayıt kapısı yalnız enabled ile ifade ediliyordu.</dd>
+<dt>Değişiklik</dt><dd>Kapı kapalıyken dokununca neden yazılır (&#x27;tüm satırlar sayılmalı… Adresi Kapat ile 0 yazın&#x27;).</dd>
+<dt>Dosyalar</dt><dd class="files">android/.../feature/MoveAndCountModules.kt</dd>
+<dt>Doğrulama</dt><dd class="verify">Derlendi.</dd>
+</dl></div>
+<div class="rec">
+<div class="rechead"><span class="sev medium">Orta</span><span class="rid">count-docno</span><h3>Sayım belge no &#x27;CNT-CNT-2026…&#x27; olarak kırpılıyor (izlenebilirlik)</h3></div>
+<dl class="kv">
+<dt>Belirti</dt><dd>ILE documentNo sayfa numarasıyla eşleşmiyordu.</dd>
+<dt>Kök neden</dt><dd>&#x27;CNT-&#x27; öneki ikinci kez ekleniyor, 20 karakterde kırpılıyordu.</dd>
+<dt>Değişiklik</dt><dd>Belge no doğrudan sayfa numarası.</dd>
+<dt>Dosyalar</dt><dd class="files">al/src/Count/CountMgmt.Codeunit.al</dd>
+<dt>Doğrulama</dt><dd class="verify">CANLI DOĞRULANDI: ILE 12080 documentNo=&#x27;CNT-20260829222720&#x27; (sayfa no ile birebir); eski kayıt 12065&#x27;te &#x27;CNT-CNT-202608291919&#x27; kırpması vardı.</dd>
+</dl></div>
+<div class="rec">
+<div class="rechead"><span class="sev low">Düşük</span><span class="rid">count-x06</span><h3>&#x27;Rafı değiştir&#x27; sonrası eski raf mesajı kalıyor</h3></div>
+<dl class="kv">
+<dt>Belirti</dt><dd>Durum metni eski rafı gösteriyordu.</dd>
+<dt>Kök neden</dt><dd>Durum temizlenmiyordu.</dd>
+<dt>Değişiklik</dt><dd>Rafı değiştir → &#x27;Raf seçin&#x27; mesajı.</dd>
+<dt>Dosyalar</dt><dd class="files">android/.../feature/CountV2Module.kt</dd>
+<dt>Doğrulama</dt><dd class="verify">Derlendi.</dd>
+</dl></div>
+</section>
+<section id="oncesi">
+<div class="sechead"><h2>Canlıya geçmeden önce</h2><span class="count">kod değil, ortam işi</span></div>
+<p class="secnote">İkisi de uygulama hatası değil; BC tarafında bir kerelik yapılacak işler.</p>
+<div class="note"><h3>E-İrsaliye numara serisi tükenmiş</h3>
+<p>Sevkiyat Business Central'a kaydediliyor, ancak seri bittiği için e-İrsaliye numarası
+atanmıyor. Uygulama bunu artık operatöre onaylatılan bir uyarı penceresinde gösteriyor,
+fakat seri açılmadan canlıya geçilirse her sevkte bu uyarı çıkar.</p></div>
+<div class="note"><h3>ADJ.01 ayarlama rafındaki 50 KG artık</h3>
+<p>HM.00054 / lot H100789 için toplanabilir ve sevk edilebilir raflar artık madde defteriyle
+birebir aynı (H.A01.11 = 50 KG). Eski hatalı yerleştirmeden kalan 50 KG, operasyona girmeyen
+ADJ.01 ayarlama rafına taşındı; buradan silinmesi BC'de bir kerelik temizlik işidir.</p></div>
+<div class="note" style="border-left-color:var(--accent)"><h3>Yayınlanacak sürümler</h3>
+<p>BC uzantısı <span class="mono">BCWMS-BC-1.14.0.97-BADE.app</span> ve aynı turda derlenen
+terminal uygulaması birlikte yayınlanmalı; sayıcı atama ve yeni sayım ekranları her ikisini
+de gerektiriyor.</p></div>
+</section>
+<footer class="pad">Canlı test: emülatör üzerindeki terminal uygulaması, E-DefterSandbox ortamına bağlı. 33 senaryo, 13 gerçek BC kaydı, 42 çözülen bulgu. Oluşturma 30.08.2026 12:57.</footer>
+</div>
+</body>
+</html>

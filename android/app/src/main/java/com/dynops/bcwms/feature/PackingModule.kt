@@ -292,7 +292,15 @@ private fun PackingQueue(flowMode: OutboundFlowMode?) {
                     }
                 }
             }
-            if (shownPicks.isEmpty() && !loading) item { EmptyState("Paketlenecek sepet yok.") }
+            if (shownPicks.isEmpty() && !loading) item {
+                // Arama/okutma sonucsuz kaldiginda "sepet yok" demek yaniltici:
+                // kuyrukta sepet var, aramaya uyan yok (UAT pk-01).
+                EmptyState(
+                    if (search.isNotBlank())
+                        "'${search.trim()}' ile eşleşen toplama sepeti yok. Alanı temizleyip listeye dönebilirsiniz."
+                    else "Paketlenecek sepet yok."
+                )
+            }
         }
     }
 }

@@ -163,7 +163,7 @@ fun QuantityDialogSheet(
                 ) { Text("−", fontSize = 22.sp) }
                 OutlinedTextField(
                     value = qtyText,
-                    onValueChange = { qtyText = it.filter { c -> c.isDigit() || c == '.' } },
+                    onValueChange = { qtyText = normalizeQtyInput(it) },
                     label = { Text("Miktar") },
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                     readOnly = quantityExactlyOne,

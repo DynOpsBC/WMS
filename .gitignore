@@ -9,6 +9,8 @@ al/.alpackages/
 al/.alcache/
 al/.netpackages/
 al/**/*.app
+# Derlenmis AL paketleri: surumler GitHub Release ile dagitilir.
+build/al/*.app
 al/rad.json
 al/**/*.g.xlf
 

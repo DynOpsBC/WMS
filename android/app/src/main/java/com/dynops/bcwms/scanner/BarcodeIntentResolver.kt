@@ -194,7 +194,10 @@ object BarcodeIntentResolver {
      * değil, QR'ın ham içeriği ayrıştırılır; bu yüzden yalnız açıkça adlandırılmış
      * alanlar kabul edilir ve serbest metinden yanlış miktar tahmini yapılmaz.
      */
-    private fun parseCustomItemLabel(raw: String): ResolvedBarcode? {
+    private fun parseCustomItemLabel(rawLabel: String): ResolvedBarcode? {
+        // Türkçe büyük İ (U+0130) ve ı, IGNORE_CASE ile 'i'/'I' olarak eşleşmez;
+        // "MİKTAR/BİRİM=" gibi anahtarlar için Latin karşılıklarına indirgenir.
+        val raw = rawLabel.replace('İ', 'I').replace('ı', 'i')
         val itemNo = CUSTOM_ITEM.find(raw)?.groupValues?.get(1)?.trim()?.trim('"', '\'')
             ?.takeIf { it.isNotBlank() }
         val lotNo = CUSTOM_LOT.find(raw)?.groupValues?.get(1)?.trim()?.trim('"', '\'')
@@ -212,7 +215,7 @@ object BarcodeIntentResolver {
             return ResolvedBarcode(
                 kind = BarcodeKind.Lot,
                 value = lotNo!!,
-                raw = raw,
+                raw = rawLabel,
                 lotNo = lotNo,
                 serialNo = serialNo,
                 quantity = quantity,
@@ -224,7 +227,7 @@ object BarcodeIntentResolver {
         return ResolvedBarcode(
             kind = BarcodeKind.Item,
             value = itemNo,
-            raw = raw,
+            raw = rawLabel,
             itemNo = itemNo,
             lotNo = lotNo,
             serialNo = serialNo,

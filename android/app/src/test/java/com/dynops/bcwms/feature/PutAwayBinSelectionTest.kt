@@ -7,21 +7,24 @@ import org.junit.Test
 
 class PutAwayBinSelectionTest {
     @Test
-    fun `ilk bin listesi sayfali ve sirali yuklenir`() {
+    fun `ilk bin listesi tum raflari sirali yukler`() {
+        // Depoda 600'den fazla raf olabiliyor; 200'lük sayfa Y bölgesinin
+        // tamamını listeden düşürüyordu.
         val path = putAwayBinListPath("MERKEZDEPO")
 
         assertEquals(
-            "bins?\$filter=locationCode eq 'MERKEZDEPO'&\$orderby=code&\$top=200",
+            "bins?\$filter=locationCode eq 'MERKEZDEPO'&\$orderby=code&\$top=1000",
             path,
         )
     }
 
     @Test
-    fun `tam bin aramasi lokasyon ve kodu server side filtreler`() {
-        val path = putAwayExactBinPath("MERKEZDEPO", "Y.G03.12")
+    fun `bin aramasi lokasyonu ve kismi kodu server side filtreler`() {
+        val path = putAwayExactBinPath("MERKEZDEPO", "Y.G03")
 
         assertEquals(
-            "bins?\$filter=locationCode eq 'MERKEZDEPO' and code eq 'Y.G03.12'&\$orderby=code&\$top=1",
+            "bins?\$filter=locationCode eq 'MERKEZDEPO' and " +
+                "(code eq 'Y.G03' or startswith(code,'Y.G03'))&\$orderby=code&\$top=50",
             path,
         )
     }
@@ -126,5 +129,18 @@ class PutAwayBinSelectionTest {
         assertEquals(10.0, plan[10001] ?: -1.0, 0.0)
         assertEquals(0.0, plan[20000] ?: -1.0, 0.0)
         assertEquals(0.0, plan[20001] ?: -1.0, 0.0)
+    }
+
+    @Test
+    fun `prepared line ids survive reload while removed rows are discarded`() {
+        val current = listOf(
+            JSONObject().put("lineNo", 10000),
+            JSONObject().put("lineNo", 10001),
+        )
+
+        assertEquals(
+            setOf(10000, 10001),
+            retainExistingPutAwayStagedLineNos(setOf(10000, 10001, 90000), current),
+        )
     }
 }

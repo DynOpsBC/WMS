@@ -47,6 +47,15 @@ page 72292 "DOPSWHS Purch Source API"
         FillCalculatedFields();
     end;
 
+    /// <summary>PO'dan ambar mal kabul belgesi üretir; varsa mevcut belge numarasını döner.</summary>
+    [ServiceEnabled]
+    procedure createWhseReceipt(): Code[20]
+    var
+        Mgmt: Codeunit "DOPSWHS Purch Source Mgmt";
+    begin
+        exit(Mgmt.CreateWhseReceipt(Rec."No."));
+    end;
+
     [ServiceEnabled]
     procedure receive(invoice: Boolean): Text
     var
@@ -85,8 +94,25 @@ page 72292 "DOPSWHS Purch Source API"
             PercentComplete := Round(ReceivedQty / TotalQty * 100, 1);
 
         if Rec."Location Code" = '' then begin
+            // Başlıksız (karışık) sipariş: kapıyı satır lokasyonlarına göre kur.
             RequiresWhseReceipt := false;
             DirectReceiveAllowed := true;
+            PL.Reset();
+            PL.SetRange("Document Type", PL."Document Type"::Order);
+            PL.SetRange("Document No.", Rec."No.");
+            PL.SetRange(Type, PL.Type::Item);
+            PL.SetFilter("Outstanding Quantity", '>0');
+            if PL.FindSet() then
+                repeat
+                    if PL."Location Code" = '' then
+                        DirectReceiveAllowed := false
+                    else
+                        if Loc.Get(PL."Location Code") and Loc."Require Receive" then begin
+                            RequiresWhseReceipt := true;
+                            DirectReceiveAllowed := false;
+                        end else
+                            DirectReceiveAllowed := false; // satır lokasyonu başlıktan farklı → BC reddeder
+                until PL.Next() = 0;
         end else if Loc.Get(Rec."Location Code") then begin
             RequiresWhseReceipt := Loc."Require Receive";
             DirectReceiveAllowed := not Loc."Require Receive";

@@ -191,7 +191,7 @@ page 72095 "DOPSWHS DynOps WMS RC"
         }
 
         // ============================================
-        // PROMOTED — header'da görünen ana action bar
+        // PROCESSING — RoleCenter action groups
         // ============================================
         area(Processing)
         {
@@ -204,9 +204,6 @@ page 72095 "DOPSWHS DynOps WMS RC"
                     ToolTip = 'Web tarayıcı veya mobil app için BCWMS giriş token''ı üretme adımları (az CLI, PowerShell, device-code). Komutları kopyala, çalıştır, çıkan token''ı uygulamaya yapıştır.';
                     ApplicationArea = All;
                     Image = EncryptionKeys;
-                    Promoted = true;
-                    PromotedCategory = Process;
-                    PromotedIsBig = true;
                     RunObject = page "DOPSWHS WMS Token Help";
                 }
             }
@@ -220,9 +217,6 @@ page 72095 "DOPSWHS DynOps WMS RC"
                     RunObject = page "DOPSWHS LP Card";
                     RunPageMode = Create;
                     Image = NewItem;
-                    Promoted = true;
-                    PromotedCategory = Process;
-                    PromotedIsBig = true;
                 }
                 action(NewCountSheetPromoted)
                 {
@@ -231,9 +225,6 @@ page 72095 "DOPSWHS DynOps WMS RC"
                     RunObject = page "DOPSWHS Count Sheet Card";
                     RunPageMode = Create;
                     Image = Inventory;
-                    Promoted = true;
-                    PromotedCategory = Process;
-                    PromotedIsBig = true;
                 }
                 action(QuickMovePromoted)
                 {
@@ -241,9 +232,6 @@ page 72095 "DOPSWHS DynOps WMS RC"
                     ApplicationArea = All;
                     RunObject = page "Item Reclass. Journal";
                     Image = TransferOrder;
-                    Promoted = true;
-                    PromotedCategory = Process;
-                    PromotedIsBig = true;
                 }
                 action(ItemInquiryPromoted)
                 {
@@ -251,8 +239,6 @@ page 72095 "DOPSWHS DynOps WMS RC"
                     ApplicationArea = All;
                     RunObject = page "Item List";
                     Image = Item;
-                    Promoted = true;
-                    PromotedCategory = Process;
                 }
                 action(BinInquiryPromoted)
                 {
@@ -260,8 +246,6 @@ page 72095 "DOPSWHS DynOps WMS RC"
                     ApplicationArea = All;
                     RunObject = page "Bin Contents List";
                     Image = Bin;
-                    Promoted = true;
-                    PromotedCategory = Process;
                 }
             }
             group(TestCenterActions)
@@ -273,9 +257,6 @@ page 72095 "DOPSWHS DynOps WMS RC"
                     ToolTip = '50 Test Case + 5 Environment + 3 User Group seed (idempotent).';
                     ApplicationArea = All;
                     Image = Setup;
-                    Promoted = true;
-                    PromotedCategory = Category5;
-                    PromotedIsBig = true;
                     RunObject = codeunit "DOPSWHS Test Catalog Seed";
                 }
                 action(SetupE2ETestData)
@@ -284,9 +265,6 @@ page 72095 "DOPSWHS DynOps WMS RC"
                     ToolTip = 'Cronus uzerinde eksik master data (test item, lot, prod, BOM) auto-create.';
                     ApplicationArea = All;
                     Image = TestDatabase;
-                    Promoted = true;
-                    PromotedCategory = Category5;
-                    PromotedIsBig = true;
                     RunObject = codeunit "DOPSWHS E2E Test Data";
                 }
                 action(OpenTestRunList)
@@ -294,9 +272,6 @@ page 72095 "DOPSWHS DynOps WMS RC"
                     Caption = 'Test Run List';
                     ApplicationArea = All;
                     Image = List;
-                    Promoted = true;
-                    PromotedCategory = Category5;
-                    PromotedIsBig = true;
                     RunObject = page "DOPSWHS Test Run List";
                 }
                 action(OpenTestCaseList)
@@ -304,8 +279,6 @@ page 72095 "DOPSWHS DynOps WMS RC"
                     Caption = 'Test Case Catalog';
                     ApplicationArea = All;
                     Image = ItemAttribute;
-                    Promoted = true;
-                    PromotedCategory = Category5;
                     RunObject = page "DOPSWHS Test Case List";
                 }
                 action(OpenEnvList)
@@ -313,8 +286,6 @@ page 72095 "DOPSWHS DynOps WMS RC"
                     Caption = 'Environments';
                     ApplicationArea = All;
                     Image = Setup;
-                    Promoted = true;
-                    PromotedCategory = Category5;
                     RunObject = page "DOPSWHS Test Environment List";
                 }
                 action(OpenGroupList)
@@ -322,8 +293,6 @@ page 72095 "DOPSWHS DynOps WMS RC"
                     Caption = 'User Groups';
                     ApplicationArea = All;
                     Image = UserGroup;
-                    Promoted = true;
-                    PromotedCategory = Category5;
                     RunObject = page "DOPSWHS Test User Group List";
                 }
             }
@@ -336,9 +305,6 @@ page 72095 "DOPSWHS DynOps WMS RC"
                     ToolTip = 'Tüm konfigürasyon tablolarını best-practice değerlerle doldur (idempotent).';
                     ApplicationArea = All;
                     Image = Setup;
-                    Promoted = true;
-                    PromotedCategory = Category5;
-                    PromotedIsBig = true;
                     RunObject = codeunit "DOPSWHS Demo Data Setup";
                 }
                 action(CreateDemoTransactionsRC)
@@ -347,9 +313,6 @@ page 72095 "DOPSWHS DynOps WMS RC"
                     ToolTip = '5 demo LP + 1 aktif Count Sheet oluştur. Setup tamamlandıktan sonra çalıştır.';
                     ApplicationArea = All;
                     Image = Inventory;
-                    Promoted = true;
-                    PromotedCategory = Category5;
-                    PromotedIsBig = true;
                     RunObject = codeunit "DOPSWHS Demo Transactions";
                 }
             }
@@ -362,8 +325,6 @@ page 72095 "DOPSWHS DynOps WMS RC"
                     ApplicationArea = All;
                     RunObject = page "DOPSWHS Setup";
                     Image = Setup;
-                    Promoted = true;
-                    PromotedCategory = Category4;
                 }
                 action(BarcodeRulesPromoted)
                 {
@@ -371,8 +332,6 @@ page 72095 "DOPSWHS DynOps WMS RC"
                     ApplicationArea = All;
                     RunObject = page "DOPSWHS Barcode Rule List";
                     Image = BarCode;
-                    Promoted = true;
-                    PromotedCategory = Category4;
                 }
                 action(DeviceConfigPromoted)
                 {
@@ -380,8 +339,6 @@ page 72095 "DOPSWHS DynOps WMS RC"
                     ApplicationArea = All;
                     RunObject = page "DOPSWHS Device Config List";
                     Image = Setup;
-                    Promoted = true;
-                    PromotedCategory = Category4;
                 }
                 action(LPTemplatesPromoted)
                 {
@@ -389,8 +346,6 @@ page 72095 "DOPSWHS DynOps WMS RC"
                     ApplicationArea = All;
                     RunObject = page "DOPSWHS LP Template List";
                     Image = Template;
-                    Promoted = true;
-                    PromotedCategory = Category4;
                 }
             }
         }

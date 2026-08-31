@@ -316,7 +316,7 @@ private fun ConsumeSheet(line: JSONObject, onDismiss: () -> Unit, onConfirm: (qt
             if (r.lotNo != null) lot = r.lotNo
         })
         Spacer(Modifier.height(8.dp))
-        OutlinedTextField(qty, { qty = it.filter { c -> c.isDigit() || c == '.' } }, label = { Text("Miktar") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+        OutlinedTextField(qty, { qty = normalizeQtyInput(it) }, label = { Text("Miktar") }, singleLine = true, modifier = Modifier.fillMaxWidth())
         Spacer(Modifier.height(8.dp))
         OutlinedTextField(bin, { bin = it }, label = { Text("Bin") }, singleLine = true, modifier = Modifier.fillMaxWidth())
         Spacer(Modifier.height(8.dp))
@@ -432,11 +432,11 @@ private fun OutputSheet(line: JSONObject, onDismiss: () -> Unit, onConfirm: (out
     com.dynops.bcwms.ui.SheetScaffold(onDismiss = onDismiss, contentPadding = androidx.compose.foundation.layout.PaddingValues(20.dp)) {
         Text("Çıktı Bildir — ${firstValue(line, "operationNo")}", fontWeight = FontWeight.Bold, fontSize = 18.sp)
         Spacer(Modifier.height(12.dp))
-        OutlinedTextField(outQty, { outQty = it.filter { c -> c.isDigit() || c == '.' } }, label = { Text("Çıktı Miktarı") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+        OutlinedTextField(outQty, { outQty = normalizeQtyInput(it) }, label = { Text("Çıktı Miktarı") }, singleLine = true, modifier = Modifier.fillMaxWidth())
         Spacer(Modifier.height(8.dp))
-        OutlinedTextField(scrapQty, { scrapQty = it.filter { c -> c.isDigit() || c == '.' } }, label = { Text("Fire") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+        OutlinedTextField(scrapQty, { scrapQty = normalizeQtyInput(it) }, label = { Text("Fire") }, singleLine = true, modifier = Modifier.fillMaxWidth())
         Spacer(Modifier.height(8.dp))
-        OutlinedTextField(runtime, { runtime = it.filter { c -> c.isDigit() || c == '.' } }, label = { Text("Çalışma Süresi (dk)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+        OutlinedTextField(runtime, { runtime = normalizeQtyInput(it) }, label = { Text("Çalışma Süresi (dk)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
         Spacer(Modifier.height(8.dp))
         OutlinedTextField(newLp, { newLp = it }, label = { Text("Yeni LP Şablonu (opsiyonel → output LP)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
         Spacer(Modifier.height(8.dp))
@@ -722,7 +722,7 @@ private fun AssemblyQuantitySheet(
         Spacer(Modifier.height(14.dp))
         OutlinedTextField(
             value = quantityText,
-            onValueChange = { quantityText = it.filter { c -> c.isDigit() || c == '.' } },
+            onValueChange = { quantityText = normalizeQtyInput(it) },
             label = { Text("Tüketilecek miktar") },
             supportingText = {
                 when {

@@ -70,6 +70,18 @@ page 72221 "DOPSWHS Count API"
     end;
 
     [ServiceEnabled]
+    procedure setCounters(counter1UserId: Code[50]; counter2UserId: Code[50]; counter3UserId: Code[50])
+    var
+        CountMgmt: Codeunit "DOPSWHS Count Mgmt";
+        Counters: array[3] of Code[50];
+    begin
+        Counters[1] := counter1UserId;
+        Counters[2] := counter2UserId;
+        Counters[3] := counter3UserId;
+        CountMgmt.SetCounters(Rec."No.", Counters);
+    end;
+
+    [ServiceEnabled]
     procedure generateLines(): Integer
     var
         CountMgmt: Codeunit "DOPSWHS Count Mgmt";

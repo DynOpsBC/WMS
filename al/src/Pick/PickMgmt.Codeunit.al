@@ -215,6 +215,11 @@ codeunit 72046 "DOPSWHS Pick Mgmt"
             EffectiveTemplateCode := 'PALLET-EUR';
 
         LPMgt.Build(EffectiveTemplateCode, Pick."Location Code", '', LP);
+        // Üretilen sepeti belgeye BAĞLA. Bağlanmazsa mainLpNo boş kalır,
+        // terminal düğmesi "LP Kapat"a dönmez ve LP hiçbir belgeye ait
+        // olmayan yetim kayıt olarak kalır (UAT shipping-x04).
+        Pick.Validate("DOPSWHS Main LP No.", LP."No.");
+        Pick.Modify(true);
         // Operatör: belgeyi üstlenmiş kullanıcı (uç nokta EnsurePickOperator ile
         // sahipliği zaten doğruluyor), servis hesabı değil.
         Log('Pick.StartShippingLP', Pick."No.", Pick."Assigned User ID");
@@ -242,6 +247,7 @@ codeunit 72046 "DOPSWHS Pick Mgmt"
     procedure RegisterShortPick(var PickLine: Record "Warehouse Activity Line"; ShortQty: Decimal; ReasonCode: Code[20])
     var
         Reason: Record "DOPSWHS Short Pick Reason";
+        PickableQty: Decimal;
     begin
         // Eksik toplama bildirimi de bir işlemdir: belge başkasındaysa/atanmamışsa reddet.
         CheckLineOwnership(PickLine, '');
@@ -250,8 +256,24 @@ codeunit 72046 "DOPSWHS Pick Mgmt"
         if ReasonCode <> '' then
             Reason.Get(ReasonCode);
 
-        PickLine.Validate("Qty. to Handle", ShortQty);
+        // ShortQty = BULUNAMAYAN miktar. Eskiden doğrudan "Qty. to Handle"
+        // yazılıyordu; yani "4 eksik" bildirimi "4 tanesini işle" oluyordu ve
+        // eş Place satırı güncellenmediği için Take<>Place kalıyordu — ambar
+        // hareketlerinde hayalet stok üreten durum bu (UAT shipping-x04).
+        if ShortQty > PickLine."Qty. Outstanding" then
+            Error(
+                'Eksik miktar (%1) kalan miktardan (%2) fazla olamaz.',
+                ShortQty, PickLine."Qty. Outstanding");
+        PickableQty := PickLine."Qty. Outstanding" - ShortQty;
+        // Eksik bildirimi = kalan miktar TOPLANMAYACAK demektir. Yalnız
+        // "Qty. to Handle" düşürülürse BC kaydı reddediyor ("Complete all items
+        // before posting ... still has N remaining") ve toplama kaydedilemiyor.
+        // Bu yüzden satırın miktarı da toplanan kadara çekilir.
+        PickLine.Validate(Quantity, PickLine."Qty. Handled" + PickableQty);
+        PickLine.Validate("Qty. to Handle", PickableQty);
         PickLine.Modify(true);
+        // Take satırı değiştiyse eş Place satırı da aynı miktara çekilir.
+        SyncRelatedShortPlaceLine(PickLine);
         // Eksik bildiren operatör = belgeyi üstlenen kullanıcı; uç nokta ayrı
         // kimlik taşımıyor, o yüzden atamadan okunur.
         Log('Pick.Short.' + ReasonCode, PickLine."No.", PickOperator(PickLine."No."));
@@ -327,6 +349,36 @@ codeunit 72046 "DOPSWHS Pick Mgmt"
         // Satır onayı sahadaki EN SIK işlem; "bu satırı kim okuttu" sorusu
         // ancak burada kayıt altına alınırsa cevaplanabiliyor.
         Log('Pick.ConfirmLine', PickLine."No.", EffectiveOperator(PickLine."No.", RequestingUserId));
+    end;
+
+    /// <summary>
+    /// Eksik bildiriminde eş Place satırını da küçültür: hem işlenecek miktar
+    /// hem satır miktarı Take satırıyla eşitlenir, aksi hâlde Take ve Place
+    /// dengesiz kalır (ambar defterinde hayalet stok kaynağı).
+    /// </summary>
+    local procedure SyncRelatedShortPlaceLine(PickLine: Record "Warehouse Activity Line")
+    var
+        RelatedPlaceLine: Record "Warehouse Activity Line";
+    begin
+        if PickLine."Action Type" <> PickLine."Action Type"::Take then
+            exit;
+        RelatedPlaceLine.SetRange("Activity Type", PickLine."Activity Type");
+        RelatedPlaceLine.SetRange("No.", PickLine."No.");
+        RelatedPlaceLine.SetRange("Action Type", RelatedPlaceLine."Action Type"::Place);
+        RelatedPlaceLine.SetRange("Whse. Document No.", PickLine."Whse. Document No.");
+        RelatedPlaceLine.SetRange("Whse. Document Line No.", PickLine."Whse. Document Line No.");
+        RelatedPlaceLine.SetRange("Item No.", PickLine."Item No.");
+        RelatedPlaceLine.SetRange("Variant Code", PickLine."Variant Code");
+        RelatedPlaceLine.SetRange("Unit of Measure Code", PickLine."Unit of Measure Code");
+        if not RelatedPlaceLine.FindSet() then
+            exit;
+        repeat
+            RelatedPlaceLine.Validate(Quantity, PickLine.Quantity);
+            RelatedPlaceLine.Validate("Qty. to Handle", PickLine."Qty. to Handle");
+            if RelatedPlaceLine."Lot No." <> PickLine."Lot No." then
+                RelatedPlaceLine.Validate("Lot No.", PickLine."Lot No.");
+            RelatedPlaceLine.Modify(true);
+        until RelatedPlaceLine.Next() = 0;
     end;
 
     local procedure SyncRelatedPlaceLine(PickLine: Record "Warehouse Activity Line")

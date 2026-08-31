@@ -106,6 +106,10 @@ codeunit 72047 "DOPSWHS Shipment Mgmt"
         // bins. Remove only shipment-level tracking copied from an earlier
         // single-lot choice. Source sales reservations are left untouched.
         PrepareShipmentForMultiLotPick(WhseShipmentHeader."No.");
+        // Kısmi posttan sonra satırın "Qty. to Ship" değeri 0'a düşebiliyor;
+        // bu durumda Create Pick raporu "Nothing to handle" der ve belge
+        // kilitlenir. Kalan miktarı olan satırlarda sevk miktarını geri aç.
+        ReopenQtyToShipForRemainder(WhseShipmentHeader."No.");
         WhseShipmentLine.FindFirst();
 
         // Microsoft raporu gerçek BC/Warehouse Employee hesabıyla çalışsın;
@@ -114,7 +118,9 @@ codeunit 72047 "DOPSWHS Shipment Mgmt"
         ReportUserId := CopyStr(UserId(), 1, MaxStrLen(ReportUserId));
         CreatePickReport.SetWhseShipmentLine(WhseShipmentLine, WhseShipmentHeader);
         CreatePickReport.SetHideValidationDialog(true);
-        CreatePickReport.Initialize(ReportUserId, Enum::"Whse. Activity Sorting Method"::"Shelf or Bin", false, false, false);
+        // DoNotFillQtyToHandle = true: "Qty. to Handle" boş başlar; el terminalinde
+        // raf/ürün okutulmadan satır tamamlanmış (%100/Done) görünmez.
+        CreatePickReport.Initialize(ReportUserId, Enum::"Whse. Activity Sorting Method"::"Shelf or Bin", false, true, false);
         CreatePickReport.UseRequestPage(false);
         CreatePickReport.RunModal();
 
@@ -129,6 +135,41 @@ codeunit 72047 "DOPSWHS Shipment Mgmt"
 
         StampShipmentLotsOnPick(WhseShipmentHeader."No.", PickNo);
         exit(PickNo);
+    end;
+
+    /// <summary>
+    /// Kalan miktarı olduğu hâlde "Qty. to Ship" değeri 0'a düşmüş satırlarda
+    /// sevk miktarını kalan miktara çeker. Kısmi post sonrası toplama belgesi
+    /// üretilemeyip sevkiyatın kilitlenmesini önler.
+    /// </summary>
+    local procedure ReopenQtyToShipForRemainder(ShipmentNo: Code[20])
+    var
+        WhseShipmentLine: Record "Warehouse Shipment Line";
+        Location: Record Location;
+        Remaining: Decimal;
+    begin
+        WhseShipmentLine.SetRange("No.", ShipmentNo);
+        if not WhseShipmentLine.FindFirst() then
+            exit;
+        // Toplama zorunlu lokasyonda "Qty. to Ship" TOPLANAN miktardan türer;
+        // elle açmak BC'de "Qty. to Ship must not be greater than 0" hatasına
+        // yol açar ve toplama belgesi hiç üretilemez. Orada dokunulmaz.
+        if Location.Get(WhseShipmentLine."Location Code") then
+            if Location."Require Pick" then
+                exit;
+        WhseShipmentLine.Reset();
+        WhseShipmentLine.SetRange("No.", ShipmentNo);
+        WhseShipmentLine.SetRange("Qty. to Ship", 0);
+        WhseShipmentLine.SetFilter("Qty. Outstanding", '>0');
+        if not WhseShipmentLine.FindSet() then
+            exit;
+        repeat
+            Remaining := WhseShipmentLine."Qty. Outstanding";
+            if Remaining > 0 then begin
+                WhseShipmentLine.Validate("Qty. to Ship", Remaining);
+                WhseShipmentLine.Modify(true);
+            end;
+        until WhseShipmentLine.Next() = 0;
     end;
 
     local procedure EnsurePickAssignedTo(PickNo: Code[20]; AssignToUserId: Code[50])
@@ -202,17 +243,48 @@ codeunit 72047 "DOPSWHS Shipment Mgmt"
                     WhseItemTrackingLine.SetRange("Source Type", Database::"Warehouse Shipment Line");
                     WhseItemTrackingLine.SetRange("Source ID", WhseShipmentLine."No.");
                     WhseItemTrackingLine.SetRange("Source Ref. No.", WhseShipmentLine."Line No.");
-                    if not WhseItemTrackingLine.IsEmpty() then
-                        WhseItemTrackingLine.DeleteAll(true);
+                    // Kısmen işlenmiş (kayıtlı toplamadan gelen) izleme satırları BC
+                    // tarafından silinemez ("Quantity Handled (Base) must be 0");
+                    // böyle bir satırda mevcut lot dağılımı korunur, Create Pick
+                    // kalan miktarı bu dağılımla toplar.
+                    WhseItemTrackingLine.SetFilter("Quantity Handled (Base)", '<>0');
+                    if WhseItemTrackingLine.IsEmpty() then begin
+                        WhseItemTrackingLine.SetRange("Quantity Handled (Base)");
+                        if not WhseItemTrackingLine.IsEmpty() then
+                            WhseItemTrackingLine.DeleteAll(true);
 
-                    if WhseShipmentLine."DOPSWHS Lot No." <> '' then begin
-                        Clear(WhseShipmentLine."DOPSWHS Lot No.");
-                        WhseShipmentLine.Modify(true);
+                        if WhseShipmentLine."DOPSWHS Lot No." <> '' then begin
+                            Clear(WhseShipmentLine."DOPSWHS Lot No.");
+                            WhseShipmentLine.Modify(true);
+                        end;
                     end;
-
+                    // İşlenmiş izleme satırı olsun olmasın, KALAN miktar için lot
+                    // dağılımı tamamlanır. Eskiden kısmen postlanmış bir sevkiyatta
+                    // bu adım tümüyle atlanıyordu: geriye yalnız tamamen işlenmiş
+                    // izleme satırı kalıyor, Create Pick "Nothing to handle" deyip
+                    // belge kilitleniyordu (kalan 50 KG hiç toplanamıyordu).
                     CreateAutomaticMultiLotTracking(WhseShipmentLine);
                 end;
             until WhseShipmentLine.Next() = 0;
+    end;
+
+    /// <summary>Sevk satırındaki henüz işlenmemiş ambar izleme miktarı (taban).</summary>
+    local procedure OpenTrackingQtyBase(WhseShipmentLine: Record "Warehouse Shipment Line"): Decimal
+    var
+        WhseItemTrackingLine: Record "Whse. Item Tracking Line";
+        OpenQtyBase: Decimal;
+    begin
+        WhseItemTrackingLine.SetRange("Source Type", Database::"Warehouse Shipment Line");
+        WhseItemTrackingLine.SetRange("Source ID", WhseShipmentLine."No.");
+        WhseItemTrackingLine.SetRange("Source Ref. No.", WhseShipmentLine."Line No.");
+        if WhseItemTrackingLine.FindSet() then
+            repeat
+                OpenQtyBase +=
+                    WhseItemTrackingLine."Quantity (Base)" - WhseItemTrackingLine."Quantity Handled (Base)";
+            until WhseItemTrackingLine.Next() = 0;
+        if OpenQtyBase < 0 then
+            exit(0);
+        exit(OpenQtyBase);
     end;
 
     local procedure CreateAutomaticMultiLotTracking(WhseShipmentLine: Record "Warehouse Shipment Line")
@@ -231,6 +303,10 @@ codeunit 72047 "DOPSWHS Shipment Mgmt"
         RemainingQtyBase :=
             WhseShipmentLine."Qty. (Base)" -
             (WhseShipmentLine."Qty. Picked (Base)" + WhseShipmentLine."Pick Qty. (Base)");
+        // Halihazırda açık (henüz işlenmemiş) izleme satırları kalanı zaten
+        // kapatıyorsa yeni satır eklenmez; bu sayede prosedür tekrar tekrar
+        // çağrılabilir ve miktar iki kez dağıtılmaz.
+        RemainingQtyBase -= OpenTrackingQtyBase(WhseShipmentLine);
         if RemainingQtyBase <= 0 then
             exit;
 
@@ -307,7 +383,9 @@ codeunit 72047 "DOPSWHS Shipment Mgmt"
         // Keep the durable source number before posting; every post-processing
         // lookup must use this value, never the potentially cleared record.
         WhseShipmentNo := WhseShipmentHeader."No.";
-        EnsureRequiredShipmentLots(WhseShipmentNo);
+        // Ambar sevkiyat başlığındaki acente, kaynak satış siparişinde boşsa
+        // oraya taşınır (BADE Sales-Post öncesi acente kodunu zorunlu tutar).
+        PropagateShippingAgentToSource(WhseShipmentNo, WhseShipmentHeader."Shipping Agent Code", WhseShipmentHeader."Shipping Agent Service Code", false);
         if PrintPackingSlip then begin
             EnsureShipmentReportConfigured();
             PrintDispatcher.EnsureDocumentPrinter(PrinterId, Enum::"DOPSWHS IWX Report Usage"::PostedShipment);
@@ -319,6 +397,11 @@ codeunit 72047 "DOPSWHS Shipment Mgmt"
             WhseShipmentHeader.Get(WhseShipmentHeader."No.");
         end;
         WhseShipmentHeader.TestField(Status, WhseShipmentHeader.Status::Released);
+        // Lot dağılımı mutabakatı SERBEST BIRAKMADAN SONRA yapılmalı: BC'nin
+        // release adımı "Qty. to Ship" değerini yeniden hesaplar (InitQtyToShip),
+        // önce mutabakat yapılırsa release bunu geri alıyor ve post "lot dağılımı
+        // (49) sevk miktarıyla (59) uyuşmuyor" hatasıyla düşüyordu.
+        EnsureRequiredShipmentLots(WhseShipmentNo);
 
         WhseShipmentLine.SetRange("No.", WhseShipmentNo);
         if WhseShipmentLine.FindSet(true) then
@@ -438,6 +521,77 @@ codeunit 72047 "DOPSWHS Shipment Mgmt"
         exit(LotNo <> '');
     end;
 
+    /// <summary>Terminal için sevkiyat acentesi listesi: JSON [{code,name}].</summary>
+    procedure ListShippingAgents(): Text
+    var
+        ShippingAgent: Record "Shipping Agent";
+        Agents: JsonArray;
+        Agent: JsonObject;
+        Result: Text;
+    begin
+        if ShippingAgent.FindSet() then
+            repeat
+                Clear(Agent);
+                Agent.Add('code', ShippingAgent.Code);
+                Agent.Add('name', ShippingAgent.Name);
+                Agents.Add(Agent);
+            until ShippingAgent.Next() = 0;
+        Agents.WriteTo(Result);
+        exit(Result);
+    end;
+
+    /// <summary>
+    /// Sevkiyat acentesini ambar sevkiyat başlığına ve kaynak satış
+    /// siparişlerine yazar. NEDEN: BADE, Sales-Post öncesi satış siparişinde
+    /// acente kodunu zorunlu tutuyor ("Sevkiyat Acente Kodu zorunludur");
+    /// terminalden sevk edilen belgede ofis bu alanı doldurmamış olabiliyor.
+    /// Serbest bırakılmış siparişte Validate durum kontrolüne takılabileceği
+    /// için satış başlığında alan doğrudan yazılır.
+    /// </summary>
+    procedure SetShippingAgent(var WhseShipmentHeader: Record "Warehouse Shipment Header"; AgentCode: Code[10]; ServiceCode: Code[10])
+    var
+        ShippingAgent: Record "Shipping Agent";
+    begin
+        if AgentCode = '' then
+            Error(ShippingAgentRequiredErr);
+        if not ShippingAgent.Get(AgentCode) then
+            Error(ShippingAgentNotFoundErr, AgentCode);
+        if WhseShipmentHeader."Shipping Agent Code" <> AgentCode then begin
+            WhseShipmentHeader.Validate("Shipping Agent Code", AgentCode);
+            WhseShipmentHeader.Modify(true);
+        end;
+        if (ServiceCode <> '') and (WhseShipmentHeader."Shipping Agent Service Code" <> ServiceCode) then begin
+            WhseShipmentHeader.Validate("Shipping Agent Service Code", ServiceCode);
+            WhseShipmentHeader.Modify(true);
+        end;
+        PropagateShippingAgentToSource(WhseShipmentHeader."No.", AgentCode, ServiceCode, true);
+    end;
+
+    local procedure PropagateShippingAgentToSource(WhseShipmentNo: Code[20]; AgentCode: Code[10]; ServiceCode: Code[10]; Overwrite: Boolean)
+    var
+        WhseShipmentLine: Record "Warehouse Shipment Line";
+        SalesHeader: Record "Sales Header";
+        Done: List of [Code[20]];
+    begin
+        if AgentCode = '' then
+            exit;
+        WhseShipmentLine.SetRange("No.", WhseShipmentNo);
+        WhseShipmentLine.SetRange("Source Type", Database::"Sales Line");
+        if WhseShipmentLine.FindSet() then
+            repeat
+                if not Done.Contains(WhseShipmentLine."Source No.") then begin
+                    Done.Add(WhseShipmentLine."Source No.");
+                    if SalesHeader.Get(SalesHeader."Document Type"::Order, WhseShipmentLine."Source No.") then
+                        if (SalesHeader."Shipping Agent Code" = '') or (Overwrite and (SalesHeader."Shipping Agent Code" <> AgentCode)) then begin
+                            SalesHeader."Shipping Agent Code" := AgentCode;
+                            if ServiceCode <> '' then
+                                SalesHeader."Shipping Agent Service Code" := ServiceCode;
+                            SalesHeader.Modify(true);
+                        end;
+                end;
+            until WhseShipmentLine.Next() = 0;
+    end;
+
     local procedure EnsureRequiredShipmentLots(ShipmentNo: Code[20])
     var
         WhseShipmentLine: Record "Warehouse Shipment Line";
@@ -447,16 +601,19 @@ codeunit 72047 "DOPSWHS Shipment Mgmt"
         WhseShipmentLine.SetFilter("Qty. to Ship", '>0');
         if WhseShipmentLine.FindSet() then
             repeat
-                if HasRegisteredPickToShip(WhseShipmentLine) then
-                    // A registered warehouse pick is the authoritative lot/bin
-                    // allocation. After a partial pick, the remaining unregistered
-                    // tracking row can contain only one of the original lots; treating
-                    // that residual row as the lot for the whole shipment incorrectly
-                    // rejects valid allocations such as 250 (lot A) + 50 (lot B).
-                    // Microsoft's pick register has already validated the physical
-                    // stock and written the registered tracking quantities.
-                    ReconcileQtyToShipWithRegisteredPick(WhseShipmentLine)
-                else begin
+                // Kayıtlı toplama varsa önce sevk miktarı toplanan miktara
+                // çekilir. ESKİDEN burada bitiyordu; lot izleme kaydı hiç
+                // yazılmadığı için post "You must assign a lot number" ile
+                // düşüyordu. Artık her iki adım da çalışır (UAT D-01/D-03).
+                if HasRegisteredPickToShip(WhseShipmentLine) then begin
+                    // Kayıtlı toplama lot/raf dağılımının TEK doğru kaynağıdır.
+                    // Buraya ek lot satırı yazmak, toplamanın yazdığı dağılımın
+                    // üstüne binip "izleme miktarı 130 olmalı 20" hatası üretir.
+                    ReconcileQtyToShipWithRegisteredPick(WhseShipmentLine);
+                    if not WhseShipmentLine.Get(WhseShipmentLine."No.", WhseShipmentLine."Line No.") then
+                        exit;
+                    EnsureShipmentHasCompleteLotTracking(WhseShipmentLine);
+                end else begin
                     GetShipmentLineLot(WhseShipmentLine, LotNo);
                     if LotNo <> '' then
                         EnsureShipmentLot(WhseShipmentLine, LotNo)
@@ -489,6 +646,23 @@ codeunit 72047 "DOPSWHS Shipment Mgmt"
             PickedNotShippedBase / WhseShipmentLine."Qty. per Unit of Measure");
         WhseShipmentLine.Validate("Qty. to Ship", PickedNotShipped);
         WhseShipmentLine.Modify(true);
+    end;
+
+    /// <summary>Sevk satırındaki toplam lotlu izleme miktarı (taban).</summary>
+    local procedure TrackedQtyBaseFor(WhseShipmentLine: Record "Warehouse Shipment Line"): Decimal
+    var
+        WhseItemTrackingLine: Record "Whse. Item Tracking Line";
+        Toplam: Decimal;
+    begin
+        WhseItemTrackingLine.SetRange("Source Type", Database::"Warehouse Shipment Line");
+        WhseItemTrackingLine.SetRange("Source ID", WhseShipmentLine."No.");
+        WhseItemTrackingLine.SetRange("Source Ref. No.", WhseShipmentLine."Line No.");
+        WhseItemTrackingLine.SetFilter("Lot No.", '<>%1', '');
+        if WhseItemTrackingLine.FindSet() then
+            repeat
+                Toplam += Abs(WhseItemTrackingLine."Quantity (Base)");
+            until WhseItemTrackingLine.Next() = 0;
+        exit(Toplam);
     end;
 
     local procedure EnsureShipmentHasCompleteLotTracking(WhseShipmentLine: Record "Warehouse Shipment Line")
@@ -549,6 +723,67 @@ codeunit 72047 "DOPSWHS Shipment Mgmt"
                 WhseShipmentLine."Location Code",
                 AvailableQtyBase,
                 WhseShipmentLine."Qty. to Ship (Base)");
+
+        // Lot yalnız DOĞRULANIYORDU; ambar izleme kaydına hiç yazılmıyordu ve
+        // BC postu "You must assign a lot number" ile reddediyordu. Seçilen lot
+        // sevk miktarı kadar izleme satırına yazılır (UAT D-01/D-03).
+        WriteShipmentLotTracking(WhseShipmentLine, LotNo);
+    end;
+
+    /// <summary>
+    /// Sevk satırı için tek lotluk ambar izleme kaydını oluşturur/günceller.
+    /// İşlenmiş (kayıtlı toplamadan gelen) satırlara dokunulmaz.
+    /// </summary>
+    local procedure WriteShipmentLotTracking(WhseShipmentLine: Record "Warehouse Shipment Line"; LotNo: Code[50])
+    var
+        WhseItemTrackingLine: Record "Whse. Item Tracking Line";
+        OpenLine: Record "Whse. Item Tracking Line";
+        EntryNo: Integer;
+        NeededQtyBase: Decimal;
+    begin
+        NeededQtyBase := WhseShipmentLine."Qty. to Ship (Base)";
+        if NeededQtyBase <= 0 then
+            exit;
+        // Satırda sevk miktarını zaten karşılayan izleme varsa dokunma.
+        if TrackedQtyBaseFor(WhseShipmentLine) >= NeededQtyBase then
+            exit;
+
+        OpenLine.SetRange("Source Type", Database::"Warehouse Shipment Line");
+        OpenLine.SetRange("Source ID", WhseShipmentLine."No.");
+        OpenLine.SetRange("Source Ref. No.", WhseShipmentLine."Line No.");
+        OpenLine.SetRange("Lot No.", LotNo);
+        OpenLine.SetFilter("Quantity Handled (Base)", '%1', 0);
+        if OpenLine.FindFirst() then begin
+            if OpenLine."Quantity (Base)" <> NeededQtyBase then begin
+                OpenLine.Validate("Quantity (Base)", NeededQtyBase);
+                OpenLine.Modify(true);
+            end;
+            exit;
+        end;
+
+        // Aynı satırda başka lota ait, henüz işlenmemiş satır varsa temizlenir:
+        // operatörün seçtiği lot geçerlidir.
+        OpenLine.Reset();
+        OpenLine.SetRange("Source Type", Database::"Warehouse Shipment Line");
+        OpenLine.SetRange("Source ID", WhseShipmentLine."No.");
+        OpenLine.SetRange("Source Ref. No.", WhseShipmentLine."Line No.");
+        OpenLine.SetFilter("Quantity Handled (Base)", '%1', 0);
+        if not OpenLine.IsEmpty() then
+            OpenLine.DeleteAll(true);
+
+        EntryNo := WhseItemTrackingLine.GetLastEntryNo();
+        WhseItemTrackingLine.Init();
+        WhseItemTrackingLine."Entry No." := EntryNo + 1;
+        WhseItemTrackingLine."Item No." := WhseShipmentLine."Item No.";
+        WhseItemTrackingLine."Variant Code" := WhseShipmentLine."Variant Code";
+        WhseItemTrackingLine."Location Code" := WhseShipmentLine."Location Code";
+        WhseItemTrackingLine."Source Type" := Database::"Warehouse Shipment Line";
+        WhseItemTrackingLine."Source ID" := WhseShipmentLine."No.";
+        WhseItemTrackingLine."Source Ref. No." := WhseShipmentLine."Line No.";
+        WhseItemTrackingLine."Qty. per Unit of Measure" := WhseShipmentLine."Qty. per Unit of Measure";
+        WhseItemTrackingLine.Validate("Lot No.", LotNo);
+        WhseItemTrackingLine.Validate("Quantity (Base)", NeededQtyBase);
+        WhseItemTrackingLine.Insert(true);
     end;
 
     local procedure StampHeaders(WhseShipmentNo: Code[20]; PostedShipmentNo: Code[20])
@@ -655,6 +890,8 @@ codeunit 72047 "DOPSWHS Shipment Mgmt"
 
     var
         NoShipmentLinesErr: Label 'Warehouse shipment %1 has no lines.', Comment = '%1 = Warehouse Shipment No.';
+        ShippingAgentRequiredErr: Label 'Sevkiyat acentesi seçin.';
+        ShippingAgentNotFoundErr: Label '%1 sevkiyat acentesi bulunamadı.', Comment = '%1 agent code';
         PickNotCreatedErr: Label 'No warehouse pick was created for shipment %1. Check bin content and available quantity.', Comment = '%1 = Warehouse Shipment No.';
 
     [BusinessEvent(false)]

@@ -14,6 +14,8 @@ codeunit 72045 "DOPSWHS Movement Mgmt"
         tabledata "Warehouse Journal Line" = RIMD,
         tabledata "Reservation Entry" = RIMD,
         tabledata "Whse. Item Tracking Line" = RIMD,
+        // Bakım onarımı ("Qty. (Base)" tutarsızlığı) ambar hareketini günceller.
+        tabledata "Warehouse Entry" = RMD,
         tabledata "DOPSWHS LP Header" = RM;
 
     procedure EnsureDeviceJournalBatch(UserId: Code[50]): Code[10]
@@ -191,6 +193,11 @@ codeunit 72045 "DOPSWHS Movement Mgmt"
             Operator := OperatorUserId
         else
             Operator := WhseActivityHeader."Assigned User ID";
+
+        // Alınan ve konan miktar eşit değilse kayıt durdurulur. Dengesiz kayıt
+        // ambar defterinde yoktan stok üretir (toplamada aynı koruma var; burada
+        // yerleştirme ve hareket belgeleri için de uygulanır).
+        EnsureActivityTakePlaceBalanced(WhseActivityHeader);
 
         CustomDimensions.Add('Category', 'Movement');
         Telemetry.AddUserDimensions(CustomDimensions, Operator);
@@ -550,6 +557,223 @@ codeunit 72045 "DOPSWHS Movement Mgmt"
         WhseItemTrackingLine.Insert();
     end;
 
+    /// <summary>
+    /// AMBAR-SEVİYESİ raf düzeltmesi: bir rafın (raf/ürün/varyant/birim/lot/seri)
+    /// ambar bakiyesini hedef miktara çeker. Madde defterine DOKUNMAZ — bu yüzden
+    /// yalnız ambar defteri ile madde defteri arasında oluşmuş sapmaları (ör. eski
+    /// bir hatalı toplama kaydının bıraktığı hayalet miktar) düzeltmek içindir.
+    /// Ambar Fiziksel Sayım Günlüğü ile register edilir; sayımın kullandığı
+    /// kanıtlanmış yolun aynısıdır. Yalnız API'den (yönetici) çağrılır.
+    /// </summary>
+    procedure AdjustBinToQuantity(LocationCode: Code[10]; BinCode: Code[20]; ItemNo: Code[20]; VariantCode: Code[10]; UomCode: Code[10]; LotNo: Code[50]; SerialNo: Code[50]; TargetQty: Decimal; Reference: Text[50]): Decimal
+    var
+        Location: Record Location;
+        Bin: Record Bin;
+        Item: Record Item;
+        WarehouseEntry: Record "Warehouse Entry";
+        WhseJournalTemplate: Record "Warehouse Journal Template";
+        WhseJournalBatch: Record "Warehouse Journal Batch";
+        WhseJournalLine: Record "Warehouse Journal Line";
+        StaleLine: Record "Warehouse Journal Line";
+        WhseJnlRegisterBatch: Codeunit "Whse. Jnl.-Register Batch";
+        UomMgt: Codeunit "Unit of Measure Management";
+        CurrentQty: Decimal;
+        ExpirationDate: Date;
+        EffectiveUom: Code[10];
+    begin
+        if not Location.Get(LocationCode) then
+            Error(BinAdjustLocationErr, LocationCode);
+        if not Bin.Get(LocationCode, BinCode) then
+            Error(BinAdjustBinErr, BinCode, LocationCode);
+        if not Item.Get(ItemNo) then
+            Error(BinAdjustItemErr, ItemNo);
+        if TargetQty < 0 then
+            Error(BinAdjustNegativeErr);
+
+        EffectiveUom := UomCode;
+        if EffectiveUom = '' then
+            EffectiveUom := Item."Base Unit of Measure";
+
+        WarehouseEntry.SetRange("Location Code", LocationCode);
+        WarehouseEntry.SetRange("Bin Code", BinCode);
+        WarehouseEntry.SetRange("Item No.", ItemNo);
+        WarehouseEntry.SetRange("Variant Code", VariantCode);
+        WarehouseEntry.SetRange("Unit of Measure Code", EffectiveUom);
+        WarehouseEntry.SetRange("Lot No.", LotNo);
+        WarehouseEntry.SetRange("Serial No.", SerialNo);
+        WarehouseEntry.CalcSums(Quantity);
+        CurrentQty := WarehouseEntry.Quantity;
+        if CurrentQty = TargetQty then
+            exit(0);
+
+        if not WhseJournalTemplate.Get(WhsePhysInvTemplateTok) then begin
+            WhseJournalTemplate.Init();
+            WhseJournalTemplate.Name := WhsePhysInvTemplateTok;
+            WhseJournalTemplate.Description := 'BCWMS ambar düzeltme';
+            WhseJournalTemplate.Validate(Type, WhseJournalTemplate.Type::"Physical Inventory");
+            WhseJournalTemplate.Insert(true);
+        end;
+        if not WhseJournalBatch.Get(WhsePhysInvTemplateTok, WhseAdjustBatchTok, LocationCode) then begin
+            WhseJournalBatch.Init();
+            WhseJournalBatch."Journal Template Name" := WhsePhysInvTemplateTok;
+            WhseJournalBatch.Name := WhseAdjustBatchTok;
+            WhseJournalBatch."Location Code" := LocationCode;
+            WhseJournalBatch.Description := 'BCWMS raf düzeltme';
+            WhseJournalBatch.Insert(true);
+        end;
+        StaleLine.SetRange("Journal Template Name", WhsePhysInvTemplateTok);
+        StaleLine.SetRange("Journal Batch Name", WhseAdjustBatchTok);
+        StaleLine.SetRange("Location Code", LocationCode);
+        if not StaleLine.IsEmpty() then
+            StaleLine.DeleteAll(true);
+
+        WhseJournalLine.Init();
+        WhseJournalLine.Validate("Journal Template Name", WhsePhysInvTemplateTok);
+        WhseJournalLine.Validate("Journal Batch Name", WhseAdjustBatchTok);
+        WhseJournalLine.Validate("Location Code", LocationCode);
+        WhseJournalLine."Line No." := 10000;
+        WhseJournalLine."Registering Date" := WorkDate();
+        WhseJournalLine."Whse. Document No." := CopyStr(Reference, 1, MaxStrLen(WhseJournalLine."Whse. Document No."));
+        WhseJournalLine.Validate("Item No.", ItemNo);
+        WhseJournalLine.Validate("Variant Code", VariantCode);
+        WhseJournalLine.Validate("Unit of Measure Code", EffectiveUom);
+        WhseJournalLine.Validate("Zone Code", Bin."Zone Code");
+        WhseJournalLine.Validate("Bin Code", BinCode);
+        WhseJournalLine.Validate("Phys. Inventory", true);
+        if LotNo <> '' then
+            WhseJournalLine.Validate("Lot No.", LotNo);
+        if SerialNo <> '' then
+            WhseJournalLine.Validate("Serial No.", SerialNo);
+        // BC "Qty. (Base)" hesabı: Qty. (Phys. Inventory) (Base) - Qty. (Calculated) (Base).
+        // "Qty. (Calculated) (Base)" alanının OnValidate'i yoktur; doldurulmazsa taban
+        // miktar fark yerine hedef miktar olur, hedef 0 iken de Qty. (Absolute, Base)
+        // sıfır kalıp BC'nin Sign hesabı sıfıra bölme hatası verir.
+        WhseJournalLine.Validate("Qty. (Calculated)", CurrentQty);
+        WhseJournalLine."Qty. (Calculated) (Base)" :=
+            Round(CurrentQty * WhseJournalLine."Qty. per Unit of Measure", UomMgt.QtyRndPrecision());
+        ExpirationDate := ExpirationDateForTracking(LocationCode, ItemNo, VariantCode, LotNo, SerialNo);
+        if ExpirationDate <> 0D then
+            WhseJournalLine."Expiration Date" := ExpirationDate;
+        WhseJournalLine.Validate("Qty. (Phys. Inventory)", TargetQty);
+        WhseJournalLine.Insert(true);
+
+        WhseJournalLine.Reset();
+        WhseJournalLine.SetRange("Journal Template Name", WhsePhysInvTemplateTok);
+        WhseJournalLine.SetRange("Journal Batch Name", WhseAdjustBatchTok);
+        WhseJournalLine.SetRange("Location Code", LocationCode);
+        WhseJournalLine.FindFirst();
+        WhseJnlRegisterBatch.SetSuppressCommit(true);
+        WhseJnlRegisterBatch.Run(WhseJournalLine);
+        exit(TargetQty - CurrentQty);
+    end;
+
+    /// <summary>
+    /// Bakım: taban miktarı ("Qty. (Base)") ile miktarı tutarsız kalmış ambar
+    /// hareketlerini onarır. 1.14.0.95 öncesi sayım/raf düzeltme kaydı
+    /// "Qty. (Calculated) (Base)" alanını doldurmadığı için BC farkın yerine
+    /// sayılan miktarın tamamını taban miktar olarak yazıyordu; bu da raf
+    /// bakiyesinin (Bin Content "Quantity (Base)") yanlış görünmesine yol
+    /// açıyor. Dönen değer onarılan hareket sayısıdır.
+    /// </summary>
+    procedure RepairWarehouseEntryBaseQty(LocationCode: Code[10]; ItemNo: Code[20]): Integer
+    var
+        WarehouseEntry: Record "Warehouse Entry";
+        ExpectedBase: Decimal;
+        Repaired: Integer;
+    begin
+        if LocationCode <> '' then
+            WarehouseEntry.SetRange("Location Code", LocationCode);
+        if ItemNo <> '' then
+            WarehouseEntry.SetRange("Item No.", ItemNo);
+        if not WarehouseEntry.FindSet() then
+            exit(0);
+        repeat
+            if WarehouseEntry."Qty. per Unit of Measure" <> 0 then begin
+                ExpectedBase := Round(WarehouseEntry.Quantity * WarehouseEntry."Qty. per Unit of Measure", 0.00001);
+                if WarehouseEntry."Qty. (Base)" <> ExpectedBase then begin
+                    WarehouseEntry."Qty. (Base)" := ExpectedBase;
+                    WarehouseEntry.Modify(false);
+                    Repaired += 1;
+                end;
+            end;
+        until WarehouseEntry.Next() = 0;
+        exit(Repaired);
+    end;
+
+    /// <summary>
+    /// Bakım: dengesiz kalmış TEK bir ambar hareketinin miktarını düzeltir
+    /// (ör. Take -250 / Place +300 gibi eşleşmeyen yerleştirme). NewQuantity = 0
+    /// verilirse hareket silinir. Madde defterine dokunmaz; ambar defteri ile
+    /// madde defteri arasındaki sapmayı kaynağından kapatmak içindir.
+    /// </summary>
+    procedure FixWarehouseEntryQuantity(EntryNo: Integer; NewQuantity: Decimal): Boolean
+    var
+        WarehouseEntry: Record "Warehouse Entry";
+    begin
+        if not WarehouseEntry.Get(EntryNo) then
+            Error(WhseEntryMissingErr, EntryNo);
+        if NewQuantity = 0 then begin
+            WarehouseEntry.Delete(false);
+            exit(true);
+        end;
+        if WarehouseEntry."Qty. per Unit of Measure" = 0 then
+            WarehouseEntry."Qty. per Unit of Measure" := 1;
+        WarehouseEntry.Quantity := NewQuantity;
+        WarehouseEntry."Qty. (Base)" := Round(NewQuantity * WarehouseEntry."Qty. per Unit of Measure", 0.00001);
+        WarehouseEntry.Modify(false);
+        exit(true);
+    end;
+
+    /// <summary>Lot/seri için ambar hareketlerinde kayıtlı son kullanma tarihi.</summary>
+    local procedure ExpirationDateForTracking(LocationCode: Code[10]; ItemNo: Code[20]; VariantCode: Code[10]; LotNo: Code[50]; SerialNo: Code[50]): Date
+    var
+        WarehouseEntry: Record "Warehouse Entry";
+    begin
+        if (LotNo = '') and (SerialNo = '') then
+            exit(0D);
+        WarehouseEntry.SetRange("Location Code", LocationCode);
+        WarehouseEntry.SetRange("Item No.", ItemNo);
+        WarehouseEntry.SetRange("Variant Code", VariantCode);
+        WarehouseEntry.SetRange("Lot No.", LotNo);
+        WarehouseEntry.SetRange("Serial No.", SerialNo);
+        WarehouseEntry.SetFilter("Expiration Date", '<>%1', 0D);
+        if WarehouseEntry.FindLast() then
+            exit(WarehouseEntry."Expiration Date");
+        exit(0D);
+    end;
+
+    /// <summary>
+    /// Ambar belgesinde "Al" ve "Koy" satırlarının işlenecek miktarları eşit mi?
+    /// Değilse kayıt engellenir: fark, ambar defterinde karşılığı olmayan stok
+    /// olarak kalır ve raf bakiyesini bozar.
+    /// </summary>
+    local procedure EnsureActivityTakePlaceBalanced(WhseActivityHeader: Record "Warehouse Activity Header")
+    var
+        TakeLine: Record "Warehouse Activity Line";
+        PlaceLine: Record "Warehouse Activity Line";
+        TakeQtyBase: Decimal;
+        PlaceQtyBase: Decimal;
+    begin
+        TakeLine.SetRange("Activity Type", WhseActivityHeader.Type);
+        TakeLine.SetRange("No.", WhseActivityHeader."No.");
+        TakeLine.SetRange("Action Type", TakeLine."Action Type"::Take);
+        if TakeLine.IsEmpty() then
+            exit;
+        TakeLine.CalcSums("Qty. to Handle (Base)");
+        TakeQtyBase := TakeLine."Qty. to Handle (Base)";
+
+        PlaceLine.SetRange("Activity Type", WhseActivityHeader.Type);
+        PlaceLine.SetRange("No.", WhseActivityHeader."No.");
+        PlaceLine.SetRange("Action Type", PlaceLine."Action Type"::Place);
+        if PlaceLine.IsEmpty() then
+            exit;
+        PlaceLine.CalcSums("Qty. to Handle (Base)");
+        PlaceQtyBase := PlaceLine."Qty. to Handle (Base)";
+
+        if TakeQtyBase <> PlaceQtyBase then
+            Error(ActivityUnbalancedErr, WhseActivityHeader."No.", TakeQtyBase, PlaceQtyBase);
+    end;
+
     local procedure EnsureWhseReclassTemplate(var WhseJournalTemplate: Record "Warehouse Journal Template")
     begin
         if WhseJournalTemplate.Get('RECLASS') then
@@ -706,4 +930,14 @@ codeunit 72045 "DOPSWHS Movement Mgmt"
         ItemJournalLine."Package No." := LpNo;
         ItemJournalLine.Insert(true);
     end;
+
+    var
+        WhsePhysInvTemplateTok: Label 'PHYSINV', Locked = true;
+        WhseAdjustBatchTok: Label 'DOPS-ADJ', Locked = true;
+        BinAdjustLocationErr: Label '%1 lokasyonu bulunamadı.', Comment = '%1 location';
+        BinAdjustBinErr: Label '%1 rafı %2 lokasyonunda bulunamadı.', Comment = '%1 bin, %2 location';
+        BinAdjustItemErr: Label '%1 ürünü bulunamadı.', Comment = '%1 item';
+        BinAdjustNegativeErr: Label 'Hedef raf miktarı negatif olamaz.';
+        ActivityUnbalancedErr: Label '%1 belgesinde alınan miktar (%2) ile konan miktar (%3) eşit değil. Stok bozulmaması için kayıt durduruldu; satırları yenileyip miktarı tekrar onaylayın.', Comment = '%1 doc no, %2 take qty, %3 place qty';
+        WhseEntryMissingErr: Label '%1 numaralı ambar hareketi bulunamadı.', Comment = '%1 entry no';
 }

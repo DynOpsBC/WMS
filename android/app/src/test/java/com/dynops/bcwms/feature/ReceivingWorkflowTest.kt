@@ -49,4 +49,21 @@ class ReceivingWorkflowTest {
         assertTrue(status.startsWith("HATA:"))
         assertTrue(status.contains("mal kabul kaydedilmedi"))
     }
+
+    @Test
+    fun `missing exclude action uses legacy patch fallback`() {
+        assertTrue(shouldFallbackReceiptExcludeAction(404, ""))
+        assertTrue(
+            shouldFallbackReceiptExcludeAction(
+                400,
+                "Could not find a property named 'excludeFromPost' on type 'Microsoft.NAV.receiptLine'",
+            ),
+        )
+    }
+
+    @Test
+    fun `business validation error does not bypass action with patch`() {
+        assertTrue(!shouldFallbackReceiptExcludeAction(400, "The warehouse receipt is locked by another user."))
+        assertTrue(!shouldFallbackReceiptExcludeAction(403, "Forbidden"))
+    }
 }

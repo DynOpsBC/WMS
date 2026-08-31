@@ -73,12 +73,20 @@ internal fun bcStatusLabelTr(status: String): String = when (status) {
     "Passed" -> "Geçti"
     "Failed" -> "Başarısız"
     "Released" -> "Serbest"
+    "Done" -> "Tamamlandı"
+    "Ready" -> "Hazır"
+    "Posted" -> "Kaydedildi"
     "Cancelled", "Canceled" -> "İptal"
     else -> status
 }
 
 /** Item/Warehouse Ledger Entry Type (wire) → operatöre gösterilen Türkçe etiket. */
-internal fun bcEntryTypeLabelTr(entryType: String): String = when (entryType) {
+// BC bazı uçlarda hareket tipini OData kaçışıyla döndürüyor
+// ("Negative_x0020_Adjmt_x002E_"); ham metin ekrana düşmemeli (UAT GN-14).
+internal fun bcEntryTypeLabelTr(rawEntryType: String): String =
+    bcEntryTypeLabelTrDecoded(BcEnum.decodeOData(rawEntryType).trim())
+
+private fun bcEntryTypeLabelTrDecoded(entryType: String): String = when (entryType) {
     "Purchase" -> "Satın Alma"
     "Sale" -> "Satış"
     "Positive Adjmt.", "Positive Adjmt" -> "Pozitif Düzeltme"

@@ -7,6 +7,51 @@ Kurulum: [docs/android-install-guide.md](../../docs/android-install-guide.md)
 
 ---
 
+## v1.14.70 — BADE + EMU — 2026-08-31
+
+**versionCode:** 200070 · **BC paketi:** 1.14.1.7
+
+### Canlıya geçiş turu (30.08 gecesi, E-DefterSandbox canlı UAT)
+
+**Mal Kabul**
+- Satın alma siparişi ekranına **📥 Ambar Kabulü Oluştur** eklendi; belge ofis BC'de açılmamışsa operatör terminalden üretir.
+- Girilen miktar/lot/SKT belge listesine çıkıp dönünce korunuyor (cihazda saklanan işlenmiş-satır kümesi).
+- Tam kayıt sonrası BC belgeyi sildiğinde ekran artık hata değil "belge kapandı" gösterip listeye dönüyor.
+- Toplu LP dağıtımında SKT alanı boş satırda `0001-01-01` yerine boş geliyor.
+- Doğrudan PO kabulü kapısı satır lokasyonlarına da bakıyor; karışık/boş lokasyonda Türkçe, eyleme dönük hata.
+- PO araması sunucu tarafında (iki ayrı sorgu) — en yeni 100 dışındaki eski siparişler de bulunuyor.
+- Oluşan yerleştirme belgesi mal kabulü yapan operatöre atanıyor; toplu LP satır bölmesinde birim fiyat ve raf korunuyor.
+
+**Sevkiyat + Toplama**
+- Sevkiyat ekranına **Sevkiyat Acentesi** kartı/diyaloğu; seçim hem ambar sevkiyatına hem kaynak satış siparişine yazılıyor (BADE zorunlu alanı).
+- Kısmen işlenmiş lot izleme satırları silinmiyor → "Pick Oluştur" hatası giderildi.
+- Yeni toplama %0 başlıyor (Qty. to Handle ön-doldurma kapatıldı); ilerleme gerçek kaydedilen miktardan.
+- Sevk satırı güncellemesi raf kodu göndermiyor ("Status must be Open" hatası kalktı).
+- Post sonrası numara serisi hatasında sevk gerçekten kaydedildiyse "kaydedildi + uyarı" gösteriliyor.
+
+**Sayım**
+- LP okutmada sistem miktarı BC raf bakiyesinden alınıyor (LP/BC tutarsızlığı artık "fark 0" görünmüyor).
+- Yönlendirilmiş lokasyonda sayım farkı **sayılan rafa** yazılıyor (ambar fiziksel sayım günlüğü; lot/seri satırın kendi alanlarında).
+- Rafta olmayan üründe lokasyon toplamı rafa yazılmıyor; lot okutmasında uyarı ile yazılıyor.
+- Aynı miktarlı etiket iki kez sayılmıyor; geri alınca yeniden okutulabiliyor. Satır 0'a düzeltilebiliyor.
+- Klasik sayımda "Kaydet" kapalıyken nedeni yazılıyor; sayım belge numarası kırpılmıyor (izlenebilirlik).
+- Türkçe `MİKTAR/BİRİM=` etiketi çözülüyor; raf seçilince ürün alanı otomatik odaklanıyor.
+
+**Genel**
+- Miktar alanlarında Türkçe ondalık virgül kabul ediliyor (`12,5` → 12.5).
+- Maskelenen BC hataları Türkçeleştirildi: kalan miktar aşımı, sevk/kabul miktarı, "Status must be Open", lot dağılımı uyuşmazlığı, numara serisi, "Nothing to handle", fazla kabul sınırı.
+- Tüm belge ekranlarında donanım Geri tuşu listeye dönüyor (uygulama kapanmıyor).
+
+**Fason İşlemler (yeni modül)**
+- Ana menüye **Fason İşlemler** eklendi: taşerona sevk ve referans numarasıyla teslim alma tek modülde.
+- Fasona sevk transfer belgesi üzerinden yürür; sevk edilen bileşenler ve e‑irsaliye çıkışı BC tarafında kuyruğa alınır.
+- Teslim almada üretim emri operasyonu ve satırı seçilerek gelen miktar kaydedilir.
+
+**LP (Taşıma Kabı)**
+- Satır eklemede kaynak raf LP'nin lokasyonunda değilse satır gönderilmeden "HATA ÖNLENDİ" ile durduruluyor.
+- Boş LP'de tamamlama düğmesi sessizce pasif kalmıyor; nedeni ekranda yazıyor (UAT lp‑04).
+- Bozma/silme yapılamayan durumlarda düğme kaybolmak yerine nedeni yazılıyor (Atandı / Kullanıldı / Bozuldu).
+
 ## v1.14.69 — BADE + EMU — 2026-08-29
 
 **versionCode:** 200069 · **BC paketi:** 1.14.0.87

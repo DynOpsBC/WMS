@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="tr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Fason İşlemler — Uygulama ve Test Raporu</title>
+  <style>
+    :root{--ink:#172033;--muted:#64748b;--line:#dbe3ee;--ok:#087f5b;--warn:#a15c00;--bad:#b42318;--blue:#2558c7;--bg:#f4f7fb}
+    *{box-sizing:border-box} body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.55 Inter,Arial,sans-serif}
+    main{max-width:1120px;margin:28px auto;padding:0 20px 50px}.hero,.card{background:#fff;border:1px solid var(--line);border-radius:16px;box-shadow:0 5px 22px #1720330b}
+    .hero{padding:28px 30px;border-top:6px solid var(--blue)}.card{padding:22px 24px;margin-top:18px}h1{margin:0 0 7px;font-size:30px}h2{margin:0 0 14px;font-size:20px}h3{font-size:15px;margin:18px 0 8px}.meta{color:var(--muted)}
+    .grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-top:20px}.metric{padding:14px;border:1px solid var(--line);border-radius:12px;background:#fbfdff}.metric b{display:block;font-size:20px}.metric span{color:var(--muted)}
+    table{width:100%;border-collapse:collapse}th,td{text-align:left;vertical-align:top;border-bottom:1px solid var(--line);padding:10px 8px}th{font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.04em}
+    .tag{display:inline-block;border-radius:999px;padding:3px 9px;font-size:11px;font-weight:800;white-space:nowrap}.ok{color:var(--ok);background:#e7f7f0}.warn{color:var(--warn);background:#fff4db}.bad{color:var(--bad);background:#feeceb}.info{color:var(--blue);background:#edf3ff}
+    code{background:#eef2f7;padding:2px 5px;border-radius:5px}ul,ol{padding-left:20px}.callout{border-left:4px solid var(--warn);background:#fff9ea;padding:13px 15px;border-radius:8px}.flow{display:flex;gap:8px;align-items:center;flex-wrap:wrap}.step{border:1px solid var(--line);border-radius:9px;padding:8px 11px;background:#fbfdff}.arrow{color:var(--muted);font-weight:bold}
+    @media(max-width:800px){.grid{grid-template-columns:1fr 1fr}.hero,.card{padding:18px}table{font-size:12px}}
+  </style>
+</head>
+<body><main>
+  <section class="hero">
+    <h1>Fason İşlemler</h1>
+    <div class="meta">Uygulama ve test raporu · 29 Ağustos 2026 · BADE E-DefterSandbox</div>
+    <p>El terminalinden mevcut fason üretim emri seçilerek veya barkodu okutularak ham maddenin ana stoktan fason lokasyonuna standart doğrudan transfer ve transfer irsaliyesi ile aktarılması.</p>
+    <div class="grid">
+      <div class="metric"><b>1.14.70</b><span>BADE APK</span></div>
+      <div class="metric"><b>1.14.0.90</b><span>BC AL uzantısı</span></div>
+      <div class="metric"><b>157 / 157</b><span>Android testi geçti</span></div>
+      <div class="metric"><b>4 / 4</b><span>AL statik denetimi geçti</span></div>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>1. Sonuç özeti</h2>
+    <table><thead><tr><th>Alan</th><th>Durum</th><th>Kanıt</th></tr></thead><tbody>
+      <tr><td>BADE ana menü</td><td><span class="tag ok">GEÇTİ</span></td><td><code>com.dynops.bcwms.bade</code> emülatöre kuruldu; “Fason İşlemler” kutusu render edildi.</td></tr>
+      <tr><td>Ekran açılışı</td><td><span class="tag ok">GEÇTİ</span></td><td>Emülatörde kutuya dokunuldu; “Fason emri / barkod” alanı ve yenileme ekranı açıldı.</td></tr>
+      <tr><td>Android derleme/test</td><td><span class="tag ok">GEÇTİ</span></td><td><code>testBadeDebugUnitTest assembleBadeDebug</code>: 157 test, 0 hata; APK 22 MB.</td></tr>
+      <tr><td>AL kaynak denetimleri</td><td><span class="tag ok">GEÇTİ</span></td><td>Prefix, permission, obsolete ve translation denetimleri çalıştı; yeni 72440–72443 nesneleri izin setlerinde eşlendi.</td></tr>
+      <tr><td>AL fason test paketi</td><td><span class="tag info">9 TEST EKLENDİ</span></td><td>Kalan miktar, pending uzlaştırma, işlem anahtarı çakışması, hedef lokasyon/bin, aynı lokasyon, toplam fazla sevk, zorunlu lot ve belirsiz rota senaryoları Windows/BC test runner için eklendi.</td></tr>
+      <tr><td>Sandbox gerçek stok postu</td><td><span class="tag warn">PUBLISH BEKLİYOR</span></td><td>Sandbox hâlen önceki BC uzantısında. Yeni <code>subcontractOrders</code> API’si için AL 1.14.0.90 publish edilmeden stok hareketi denenemez.</td></tr>
+    </tbody></table>
+  </section>
+
+  <section class="card">
+    <h2>2. Yapılan geliştirme</h2>
+    <div class="flow">
+      <span class="step">Fason üretim emri / barkod</span><span class="arrow">→</span>
+      <span class="step">Fason operasyon + firma</span><span class="arrow">→</span>
+      <span class="step">Malzeme ve miktar seçimi</span><span class="arrow">→</span>
+      <span class="step">Doğrudan transfer postu</span><span class="arrow">→</span>
+      <span class="step">Transfer irsaliyesi + stok izi</span>
+    </div>
+    <ul>
+      <li>Standart <b>Released Production Order → Prod. Order Routing Line → Work Center</b> zinciri kullanıldı; paralel bir fason emri yaratılmadı.</li>
+      <li>Yalnız <b>Subcontractor No.</b> atanmış iş merkezleri listeleniyor.</li>
+      <li>Hedef fason depo, iş merkezinin standart <b>Location Code</b> alanından geliyor. Boşsa, kaynakla aynıysa veya bin zorunlu lokasyonda <b>To-Production Bin Code</b> eksikse post duruyor.</li>
+      <li>Onayda standart <b>Direct Transfer</b> oluşturulup post ediliyor; kaynak stok düşüyor, hedef fason lokasyonu aynı işlemde artıyor ve kayıtlı transfer sevki oluşuyor.</li>
+      <li>Her malzeme hareketi üretim emri, operasyon, bileşen, firma, transfer emri, irsaliye, kullanıcı, tarih, LP, lot ve seri bilgileriyle audit tablosuna yazılıyor.</li>
+      <li>GUID işlem anahtarı ve transfer irsaliyesi uzlaştırması aynı terminal isteğinin timeout/tekrar durumunda iki kez stok düşmesini engelliyor.</li>
+    </ul>
+  </section>
+
+  <section class="card">
+    <h2>3. Senaryo kapsamı</h2>
+    <table><thead><tr><th>Senaryo</th><th>Uygulanan davranış</th><th>Durum</th></tr></thead><tbody>
+      <tr><td>Listeden fason emri seçme</td><td>Firma, iş merkezi, hedef lokasyon, operasyon ve kalan malzeme özeti listelenir.</td><td><span class="tag ok">KOD + UI</span></td></tr>
+      <tr><td>Üretim emri barkodu</td><td>Tek operasyon varsa doğrudan açılır; birden fazla fason operasyon varsa seçim listesi daraltılır.</td><td><span class="tag ok">KOD + UI</span></td></tr>
+      <tr><td>Tam kabul / tam sevk</td><td>Tüm kalan bileşenler varsayılan miktarla seçilir ve tek onayla post edilir.</td><td><span class="tag ok">KOD</span></td></tr>
+      <tr><td>Kısmi sevk</td><td>Satır miktarı düşürülebilir; sonraki girişte yalnız gönderilmemiş/harcanmamış bakiye gösterilir.</td><td><span class="tag ok">KOD</span></td></tr>
+      <tr><td>Tek / çok malzeme</td><td>Satır bazlı seçim ve miktar; aynı kaynak lokasyondaki satırlar tek transferde gruplanır.</td><td><span class="tag ok">KOD</span></td></tr>
+      <tr><td>Birden çok kaynak lokasyon</td><td>Terminal lokasyona göre ayrı post çağrıları üretir; başarı ve hata hangi grup içinse açıkça raporlanır.</td><td><span class="tag ok">KOD</span></td></tr>
+      <tr><td>LP’siz stok</td><td>Bin, lot ve seri gerekiyorsa doğrudan satıra girilerek transfer edilir.</td><td><span class="tag ok">KOD</span></td></tr>
+      <tr><td>Tek LP</td><td>LP içeriği, kaynak lokasyonu, ürün ve miktar BC’den doğrulanır.</td><td><span class="tag ok">KOD</span></td></tr>
+      <tr><td>Çok LP</td><td>Virgül/boşlukla çoklu LP okunur; istenen miktar LP satırlarına ve lot/serilere otomatik dağıtılır. Birleştirme/tekrar önleme Android birim testinde doğrulandı.</td><td><span class="tag ok">KOD + BİRİM TEST</span></td></tr>
+      <tr><td>Kısmi LP</td><td>Gönderilen miktar kaynak LP satırından azaltılır; tüm LP gönderildiyse LP fason lokasyonu ve hedef üretim binine taşınır.</td><td><span class="tag ok">KOD</span></td></tr>
+      <tr><td>Lot / seri takibi</td><td>Takip zorunluluğu kontrol edilir; standart Transfer Line outbound Surplus item-tracking kaydı yaratılır. Lotsuz takipli malzeme için AL testi eklendi.</td><td><span class="tag ok">KOD + AL TESTİ</span></td></tr>
+      <tr><td>Fazla gönderim</td><td>İstenen toplam, beklenen eksi önceki sevk ve tüketim kalanından büyükse post öncesi reddedilir.</td><td><span class="tag ok">KOD</span></td></tr>
+      <tr><td>Çift tıklama / timeout</td><td>Aynı idempotency anahtarı ikinci transfer yaratmaz; mevcut kayıtlı irsaliye döner.</td><td><span class="tag ok">KOD</span></td></tr>
+      <tr><td>Belirsiz rota bağlantısı</td><td>Birden fazla bağlantısız fason operasyon varsa yanlış malzeme göndermek yerine BC rota kurulumu istenir.</td><td><span class="tag ok">KOD</span></td></tr>
+      <tr><td>Salt okunur kullanıcı</td><td>Listeyi görebilir; sevk action’ı audit yazma izni yoksa başlamadan reddedilir.</td><td><span class="tag ok">KOD</span></td></tr>
+    </tbody></table>
+  </section>
+
+  <section class="card">
+    <h2>4. BC’ye giden kayıtlar</h2>
+    <table><thead><tr><th>BC kaydı</th><th>Kaynak</th><th>Amaç</th></tr></thead><tbody>
+      <tr><td>Transfer Header</td><td>Bileşen Location Code → Work Center Location Code</td><td>Standart lokasyonlar arası ana belge; Direct Transfer açıktır.</td></tr>
+      <tr><td>Transfer Line</td><td>Prod. Order Component</td><td>Ürün, UOM, miktar, kaynak bin ve iş merkezinin To-Production Bin bilgisi.</td></tr>
+      <tr><td>Reservation Entry</td><td>LP/lot/seri girişi</td><td>Transfer çıkışının negatif baz miktarlı, outbound Surplus item-tracking kaydı.</td></tr>
+      <tr><td>Transfer Shipment Header</td><td>Post edilen Transfer Order</td><td>Fason sevk irsaliyesi ve izlenebilir belge numarası.</td></tr>
+      <tr><td>DOPSWHS Subcontract Dispatch</td><td>Terminal action</td><td>Üretim emri-bileşen-operasyon-firma-transfer-LP/lot/seri audit izi ve tekrar koruması.</td></tr>
+      <tr><td>Item Ledger / Warehouse Entry</td><td>Standart transfer post codeunit’i</td><td>Kaynak düşüşü ve fason lokasyon artışı; özel kod doğrudan ledger yazmaz.</td></tr>
+    </tbody></table>
+  </section>
+
+  <section class="card">
+    <h2>5. Canlıya alma kapıları</h2>
+    <ol>
+      <li>Windows/CI AL toolchain ile <code>al/app.json 1.14.0.90</code> derlenmeli ve BADE sandbox’a publish edilmeli.</li>
+      <li>Fason iş merkezlerinde <b>Subcontractor No.</b>, <b>Location Code</b> ve bin zorunluysa <b>To-Production Bin Code</b> doğrulanmalı; Inventory Setup / Direct Transfer Posting seçeneği “Receipt and Shipment” olmalı.</li>
+      <li>Sandbox’ta bir test fason üretim emriyle şu dört gerçek post yapılmalı: tam LP’siz, kısmi LP’siz, tek LP lotlu, çok LP lotlu.</li>
+      <li>Her postta Transfer Shipment, kaynak/ hedef Item Ledger miktarları ve audit satırı aynı belge numarası üzerinden karşılaştırılmalı.</li>
+      <li>Bu kapılar geçmeden production publish yapılmamalı; geçtikten sonra aynı AL paketi ve BADE 1.14.70 release APK kullanılmalı.</li>
+    </ol>
+    <div class="callout"><b>Mevcut blok:</b> Android/BADE tarafı hazır ve emülatörde doğrulandı. Gerçek stok postunun tek eksiği yeni AL paketinin sandbox’a publish edilmesi; mevcut bağlı BADE uygulaması eski API’de olduğu için liste çağrısı bilinçli olarak hata veriyor.</div>
+  </section>
+</main></body></html>

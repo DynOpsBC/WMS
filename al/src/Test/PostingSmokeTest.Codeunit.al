@@ -55,6 +55,7 @@ codeunit 72252 "DOPSWHS Posting Smoke Test"
         RunOne('1-MOVE');
         RunOne('2-COUNT');
         RunOne('3-RECEIPT');
+        RunOne('3B-RECEIPT-LP');
         RunOne('4-PUTAWAY');
         RunOne('5-SHIPMENT');
         RunOne('6-PICK');

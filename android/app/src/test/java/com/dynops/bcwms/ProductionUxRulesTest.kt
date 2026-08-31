@@ -4,6 +4,7 @@ import com.dynops.bcwms.feature.allowAdminBypass
 import com.dynops.bcwms.ui.assignedToMeClause
 import com.dynops.bcwms.ui.canLoadAssignedOnlyList
 import com.dynops.bcwms.ui.operatorFacingApiError
+import com.dynops.bcwms.ui.normalizeQtyInput
 import com.dynops.bcwms.ui.operatorFacingStatus
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -46,12 +47,23 @@ class ProductionUxRulesTest {
         assertTrue(Screen.LicensePlates in screens)
         assertTrue(Screen.Count in screens)
         assertTrue(Screen.CountV2 in screens)
+        assertTrue(Screen.Subcontracting in screens)
         assertTrue(Screen.Printers in screens)
         assertTrue(Screen.Connection in screens)
         assertTrue(Screen.Help in screens)
         assertFalse(Screen.HierarchicalLP in screens)
         assertFalse(Screen.TestCenter in screens)
         assertFalse(Screen.PostingTest in screens)
+        assertFalse(Screen.SelfTest in screens)
+        assertFalse(Screen.FieldSettings in screens)
+    }
+
+    @Test
+    fun `BADE admin test session can expose posting harness in debug flow`() {
+        val screens = operatorHomeScreens("bade", includeAdminTestTools = true)
+
+        assertTrue(Screen.TestCenter in screens)
+        assertTrue(Screen.PostingTest in screens)
         assertFalse(Screen.SelfTest in screens)
         assertFalse(Screen.FieldSettings in screens)
     }
@@ -153,5 +165,29 @@ class ProductionUxRulesTest {
             assertTrue(raw, visible.contains("REF-"))
             assertFalse(raw, visible.contains(raw.removePrefix("HATA: "), ignoreCase = true))
         }
+    }
+
+    @Test
+    fun `quantity input accepts Turkish decimal comma and keeps a single separator`() {
+        assertEquals("12.5", normalizeQtyInput("12,5"))
+        assertEquals("200.5", normalizeQtyInput("200,5"))
+        assertEquals("1.55", normalizeQtyInput("1.5.5"))
+        assertEquals("100", normalizeQtyInput("1a0b0"))
+    }
+
+    @Test
+    fun `known English BC business errors become actionable Turkish text`() {
+        fun check(raw: String, expected: String) {
+            val v = operatorFacingApiError(raw, 400)
+            assertTrue("raw=<$raw> visible=<$v>", v.contains(expected))
+        }
+        check("You cannot handle more than the outstanding 300 units.  CorrelationId:  a1", "Kalan miktardan fazla giremezsiniz (kalan: 300)")
+        check("Qty. to Ship must not be greater than 350 units in Warehouse Shipment Line No.='SH1',Line No.='10000'.", "(350) fazla olamaz")
+        check("Status must be equal to 'Open'  in Warehouse Shipment Header: No.=SH1. Current value is 'Released'.", "serbest bırakılmış")
+        check("Qty. to Handle (Base) in the item tracking assigned to the document line for item HM.00054 is currently 300. It must be 350.", "HM.00054 ürününün lot dağılımı (300) sevk miktarıyla (350) uyuşmuyor")
+        // ASCII-only Turkish BADE rule text must reach the operator verbatim.
+        check("Sevkiyat Acente Kodu zorunludur. Belge No: SAO.A100387  CorrelationId:  dd707135", "HATA: Sevkiyat Acente Kodu zorunludur. Belge No: SAO.A100387")
+        check("You cannot assign new numbers from the number series E-IRSALIYE.  CorrelationId:  ea2bc9a8", "E-IRSALIYE numara serisi yeni numara veremiyor")
+        check("Nothing to handle. Try the \"Show Summary (Directed Put-away and Pick)\" option when creating pick to inspect the error.", "Toplanacak miktar yok")
     }
 }

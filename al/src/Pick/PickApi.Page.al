@@ -238,7 +238,10 @@ page 72092 "DOPSWHS Pick API"
                     DueDate := PickLine."Due Date";
                 end;
                 TotalQty += PickLine.Quantity;
-                HandledQty += PickLine."Qty. to Handle";
+                // BC yeni toplamada "Qty. to Handle" alanını önceden doldurur;
+                // ilerleme ve durum gerçekten kaydedilmiş (register) miktara bakmalı,
+                // yoksa hiç okutma yapılmamış belge %100 / Done görünür.
+                HandledQty += PickLine."Qty. Handled";
             until PickLine.Next() = 0;
 
         if TotalQty > 0 then begin

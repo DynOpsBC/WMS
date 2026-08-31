@@ -85,6 +85,22 @@ page 72227 "DOPSWHS Receipt Line API"
         exit(false);
     end;
 
+    /// <summary>
+    /// Bu satırı bu posttan ÇIKARIR: "Qty. to Receive" alanını doğrulama
+    /// zincirini tetiklemeden sıfırlar. Kısmi kabulde dokunulmayan satırların
+    /// miktarını normal yoldan (Validate) sıfırlamak, o satır lot/seri istiyorsa
+    /// "İç lot numarası zorunludur" hatasına takılıyor ve okutulan satır da
+    /// kaydedilemiyordu. Sıfırlamak stok hareketi yaratmaz; bu yüzden alan
+    /// doğrudan yazılır.
+    /// </summary>
+    [ServiceEnabled]
+    procedure excludeFromPost()
+    var
+        ReceiptMgmt: Codeunit "DOPSWHS Receipt Mgmt";
+    begin
+        ReceiptMgmt.ExcludeLineFromPost(Rec);
+    end;
+
     [ServiceEnabled]
     procedure assignLotNo(): Text
     var

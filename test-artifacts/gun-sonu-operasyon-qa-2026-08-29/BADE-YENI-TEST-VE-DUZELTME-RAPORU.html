@@ -1,0 +1,189 @@
+<!doctype html>
+<html lang="tr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>BADE Yeni Test ve Düzeltme Raporu · 29.08.2026</title>
+  <style>
+    :root{--ink:#172033;--muted:#667085;--line:#dfe5ef;--paper:#fff;--bg:#f4f7fb;--blue:#3451c6;--green:#087443;--green-bg:#eaf8f1;--amber:#8a5200;--amber-bg:#fff5d9;--red:#b42318;--red-bg:#fff0ee;--purple:#6941c6;--purple-bg:#f4f0ff}
+    *{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.55 Inter,ui-sans-serif,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+    main{width:min(1220px,calc(100% - 28px));margin:24px auto 64px}.hero{color:#fff;background:linear-gradient(135deg,#172858,#3448a8 64%,#6f43c1);border-radius:24px;padding:34px;box-shadow:0 18px 50px #23346a2b}
+    h1{font-size:34px;line-height:1.14;margin:5px 0 12px}h2{font-size:23px;margin:0}h3{font-size:17px;margin:0 0 7px}.eyebrow{text-transform:uppercase;letter-spacing:.12em;font-weight:800;font-size:12px;opacity:.84}.hero p{max-width:970px;margin:0;color:#eaf0ff}
+    .decision{display:inline-flex;margin-top:20px;padding:10px 15px;border-radius:999px;background:#fff0d5;color:#754400;font-weight:950}.metrics{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-top:18px}.metric{background:#ffffff16;border:1px solid #ffffff2b;border-radius:15px;padding:14px}.metric b{display:block;font-size:26px}.metric span{color:#e9edff;font-size:12px}
+    section{margin-top:18px;background:var(--paper);border:1px solid var(--line);border-radius:20px;padding:24px;box-shadow:0 8px 28px #20335a0c}.sub{margin:4px 0 16px;color:var(--muted)}
+    .grid{display:grid;grid-template-columns:repeat(3,1fr);gap:13px}.two{display:grid;grid-template-columns:1fr 1fr;gap:13px}.card{border:1px solid var(--line);border-radius:14px;padding:16px;background:#fbfcfe}.card p,.card ul{margin:0}.card ul{padding-left:20px}
+    .callout{border-radius:14px;padding:15px 17px;border:1px solid;margin-top:14px}.danger{background:var(--red-bg);border-color:#efb5ae;color:#86170f}.warn{background:var(--amber-bg);border-color:#efd28a;color:#704100}.good{background:var(--green-bg);border-color:#b7e3ca;color:#075a35}.note{background:#eef3ff;border-color:#cad5ff;color:#263e9d}
+    .table-wrap{overflow:auto;border:1px solid var(--line);border-radius:14px}table{width:100%;border-collapse:collapse;min-width:960px}th{background:#f2f5fa;color:#4b5870;text-align:left;font-size:12px;text-transform:uppercase;letter-spacing:.04em}th,td{padding:11px 12px;border-bottom:1px solid var(--line);vertical-align:top}tr:last-child td{border-bottom:0}td:first-child{font-weight:800;white-space:nowrap}
+    .status{display:inline-block;white-space:nowrap;border-radius:999px;padding:4px 9px;font-size:12px;font-weight:900}.pass{background:var(--green-bg);color:var(--green)}.fail{background:var(--red-bg);color:var(--red)}.pending{background:var(--amber-bg);color:var(--amber)}.fixed{background:var(--purple-bg);color:var(--purple)}.info{background:#f2f4f7;color:#475467}
+    code,.mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace}.mono{word-break:break-word}.shots{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}.shot{border:1px solid var(--line);border-radius:14px;overflow:hidden;background:#fff}.shot img{display:block;width:100%;height:300px;object-fit:contain;background:#eef1f6}.shot p{margin:0;padding:10px 12px;font-size:12px;color:var(--muted)}a{color:var(--blue)}ol,ul{margin:8px 0 0;padding-left:21px}.small{font-size:12px;color:var(--muted)}footer{text-align:center;color:var(--muted);font-size:12px;margin-top:20px}
+    @media(max-width:850px){.metrics,.grid,.two,.shots{grid-template-columns:1fr}.hero{padding:24px}h1{font-size:28px}.shot img{height:auto}}
+    @media print{body{background:#fff}main{width:100%;margin:0}.hero,section{box-shadow:none}.hero{-webkit-print-color-adjust:exact;print-color-adjust:exact}.shot{break-inside:avoid}}
+  </style>
+</head>
+<body>
+<main>
+  <header class="hero">
+    <div class="eyebrow">BCWMS · BADE · E-DefterSandbox · yeni bağımsız çalışma</div>
+    <h1>Mal kabul, yerleştirme, sevkiyat ve sayım — yeni test raporu</h1>
+    <p>Bu rapor 29.08.2026 saat 16:25 sonrası gelen AL derleme çıktısı, ardından yapılan kaynak düzeltmeleri, cache kullanılmadan yeniden çalıştırılan BADE testleri ve açık cihazdaki gerçek BADE ekran kontrolleriyle sıfırdan oluşturuldu. Önceki raporun PASS sonuçları kopyalanmadı.</p>
+    <div class="decision">GENEL KARAR: KOŞULLU NO-GO · BADE geçti; yeni AL paketi Windows'ta derlenip sandbox'a kurulmadan posting onayı verilemez</div>
+    <div class="metrics">
+      <div class="metric"><b>151 / 151</b><span>BADE unit test · 0 failure · 0 error</span></div>
+      <div class="metric"><b>4 / 4</b><span>Canlı BADE modülü açıldı ve veri okudu</span></div>
+      <div class="metric"><b>3 / 3</b><span>AL statik denetim scripti exit 0</span></div>
+      <div class="metric"><b>0</b><span>Yeni AL ile sandbox'ta tamamlanan post</span></div>
+    </div>
+  </header>
+
+  <section>
+    <h2>1. Net sonuç: ne geçti, ne henüz geçmedi?</h2>
+    <p class="sub">“Uygulama açılıyor” ile “BC posting zinciri doğru” ayrı kabul edildi.</p>
+    <div class="grid">
+      <div class="card"><h3>Geçti</h3><ul><li>BADE debug APK temizden derlendi.</li><li>151 testin tamamı geçti.</li><li>APK açık cihaza başarıyla kuruldu.</li><li>Mal Kabul, Yerleştirme, Sevkiyat ve Sayım BADE paketinde gerçek sandbox verisi okudu.</li><li>Prefix, obsolete ve permission denetimleri geçti.</li></ul></div>
+      <div class="card"><h3>Kodda düzeltildi</h3><ul><li>Parçalı/retry mal kabulde LP satırı çoğalması.</li><li>Sayım LP'sinin Warehouse Entry'ye yanlış alanla bağlanması.</li><li>“Tüm posting testleri” içinde LP'li receipt senaryosunun hiç çağrılmaması.</li><li>RoleCenter gelecekte hata olacak 45 property uyarısı.</li><li>İki implicit enum/option dönüşüm uyarısı.</li></ul></div>
+      <div class="card"><h3>Henüz tamamlanmadı</h3><ul><li>Yeni AL kaynaklarının Windows AL toolchain ile yeniden derlenmesi.</li><li>Yeni <code>.app</code> paketinin E-DefterSandbox'a kurulması.</li><li>Sandbox'ta 10 posting senaryosunun yeni paketle çalıştırılması.</li><li>LP/lot/defter alanlarının posted BC tablolarından tekrar okunması.</li></ul></div>
+    </div>
+    <div class="callout danger"><b>Canlıya geçiş engeli:</b> Sandbox'taki mevcut uzantı <code>postingTests</code> API'sini sunmuyor ve BADE çağrısı HTTP 404 dönüyor. Bu nedenle yeni kaynak kodun gerçek BC posting sonucunu bugün “PASS” olarak işaretlemek doğru olmaz.</div>
+  </section>
+
+  <section>
+    <h2>2. Kullanıcının gönderdiği derleme çıktısı ve yapılan düzeltme</h2>
+    <p class="sub">Çıktıdaki tek gerçek compiler error ile gelecekte error olacak uyarılar birlikte temizlendi.</p>
+    <div class="table-wrap"><table>
+      <thead><tr><th>Bulgu</th><th>Gönderilen sonuç</th><th>Yapılan işlem</th><th>Şimdiki durum</th></tr></thead>
+      <tbody>
+        <tr><td>AL0118</td><td><code>Warehouse Entry."Item Ledger Entry No."</code> BC sembolünde yok.</td><td>Hatalı post-sonrası arama kaldırıldı. LP, <code>Item Journal Line → Warehouse Journal Line → Warehouse Entry</code> zincirinde aynı posting satırı üzerinde taşınıyor.</td><td><span class="status fixed">KODDA DÜZELTİLDİ</span></td></tr>
+        <tr><td>AL0729</td><td>RoleCenter sayfasında <code>Promoted</code>, <code>PromotedCategory</code>, <code>PromotedIsBig</code> geçersiz; gelecekte error.</td><td>RoleCenter'daki 45 geçersiz property kaldırıldı; Processing action grupları korundu.</td><td><span class="status fixed">45 UYARI TEMİZLENDİ</span></td></tr>
+        <tr><td>AL0603</td><td>Hash Algorithm enum → option implicit dönüşümü.</td><td>GenerateHash çağrısında açık <code>Option MD5,SHA1,SHA256…</code> değişkeni kullanıldı.</td><td><span class="status fixed">DÜZELTİLDİ</span></td></tr>
+        <tr><td>AL0603</td><td>LP Status enum → integer implicit dönüşümü.</td><td>Kullanılmayan integer değişkeni ve ataması kaldırıldı.</td><td><span class="status fixed">DÜZELTİLDİ</span></td></tr>
+        <tr><td>Yeniden compile</td><td>Depo kuralı macOS'ta AL compile yapılmamasını söylüyor.</td><td>Kaynak ve Microsoft sembol zinciri incelendi; compiler çalıştırılmadı.</td><td><span class="status pending">WINDOWS'TA BEKLİYOR</span></td></tr>
+      </tbody>
+    </table></div>
+    <div class="callout note"><b>Neden yeni çözüm daha güvenli?</b> Aynı item/bin/lot/serial değerine sahip iki farklı LP olduğunda sonradan filtreleme yanlış LP'yi seçebilir. Yeni tasarım LP'yi BC'nin kendi posting satırı boyunca taşır; tahmine dayalı eşleştirme yapmaz.</div>
+  </section>
+
+  <section>
+    <h2>3. BADE terminal test sonucu</h2>
+    <p class="sub">Gradle cache sonucu kullanılmadı; görevler <code>--rerun-tasks</code> ile yeniden yürütüldü.</p>
+    <div class="table-wrap"><table>
+      <thead><tr><th>Kontrol</th><th>Komut / kanıt</th><th>Sonuç</th><th>Durum</th></tr></thead>
+      <tbody>
+        <tr><td>BADE unit</td><td><code>:app:testBadeDebugUnitTest --rerun-tasks</code></td><td>28 suite, 151 test, 0 failure, 0 error.</td><td><span class="status pass">PASS</span></td></tr>
+        <tr><td>BADE build</td><td><code>:app:assembleBadeDebug --rerun-tasks</code></td><td>62 actionable task, 62 executed; BUILD SUCCESSFUL.</td><td><span class="status pass">PASS</span></td></tr>
+        <tr><td>APK kimliği</td><td><code>aapt dump badging</code></td><td><code>com.dynops.bcwms.bade</code>, versionName <code>1.14.69-bade</code>, versionCode <code>200069</code>.</td><td><span class="status pass">PASS</span></td></tr>
+        <tr><td>APK hash</td><td>SHA-256</td><td><code>cdd6cb591a5864a24b967c0ff8ceab50d28a76cb3fd1b830bd49cab70a946715</code>, 23,312,949 byte.</td><td><span class="status info">KANIT</span></td></tr>
+        <tr><td>Cihaza kurulum</td><td><code>adb install -r</code></td><td><code>Performing Streamed Install · Success</code>.</td><td><span class="status pass">PASS</span></td></tr>
+        <tr><td>Paket izolasyonu</td><td>Her ekranın UI XML package değeri.</td><td>Dört operasyonda yalnız <code>com.dynops.bcwms.bade</code>. Yanlışlıkla öne gelen generic EMU ekranı sonuçlardan çıkarıldı.</td><td><span class="status pass">PASS · BADE ONLY</span></td></tr>
+      </tbody>
+    </table></div>
+    <div class="callout warn"><b>Build uyarısı:</b> Beş Android deprecation uyarısı var; test/build hatası değil. <code>menuAnchor()</code> overload'u ve <code>LocalLifecycleOwner</code> import'u sonraki teknik borç çalışmasına bırakıldı.</div>
+  </section>
+
+  <section>
+    <h2>4. BADE canlı ekran doğrulaması</h2>
+    <p class="sub">Şirket: BS GROUP ÜRETİM VE KİMYA SAN. TİC. · Ortam: E-DefterSandbox · durum: Bağlı.</p>
+    <div class="table-wrap"><table>
+      <thead><tr><th>Operasyon</th><th>Canlı BADE sonucu</th><th>Paket kanıtı</th><th>Durum</th></tr></thead>
+      <tbody>
+        <tr><td>Mal Kabul</td><td>“TAMAM: 1 belge”; RE000634, MERKEZDEPO, kaynak PUO.A100651, atanan DYNOPS.</td><td><code>com.dynops.bcwms.bade</code></td><td><span class="status pass">PASS · READ</span></td></tr>
+        <tr><td>Yerleştirme</td><td>“TAMAM: 7 belge”; PU000592, PU000590, PU000589, PU000588, PU000587, PU000578, PU000577.</td><td><code>com.dynops.bcwms.bade</code></td><td><span class="status pass">PASS · READ</span></td></tr>
+        <tr><td>Sevkiyat</td><td>“TAMAM: 1 ambar çekme”; PI001137, SAO.A100391, MERKEZDEPO, DYNOPS.</td><td><code>com.dynops.bcwms.bade</code></td><td><span class="status pass">PASS · READ</span></td></tr>
+        <tr><td>Sayım</td><td>“TAMAM: 15 sayfa”; Visible/Blind ile Open/In Progress/Posted durumları birlikte okundu.</td><td><code>com.dynops.bcwms.bade</code></td><td><span class="status pass">PASS · READ</span></td></tr>
+      </tbody>
+    </table></div>
+    <div class="callout good"><b>Bu bölümün anlamı:</b> BADE'nin doğru tenant/şirket üzerinde ilgili API listelerini açıp veri alabildiği kanıtlandı. Belgelerin bu turda post edildiği anlamına gelmez.</div>
+  </section>
+
+  <section>
+    <h2>5. İstenen senaryo matrisi</h2>
+    <p class="sub">LP'siz, tek LP, çok LP, parçalı ve retry senaryoları ayrı izleniyor.</p>
+    <div class="table-wrap"><table>
+      <thead><tr><th>ID</th><th>Senaryo</th><th>Yeni kanıt</th><th>Durum</th><th>Kalan doğrulama</th></tr></thead>
+      <tbody>
+        <tr><td>REC-01</td><td>LP'siz tam kabul</td><td>BADE listesi açıldı; posting smoke senaryosu kaynakta var.</td><td><span class="status pending">CANLI POST BEKLİYOR</span></td><td>Yeni AL paketiyle Posted Whse Receipt, Purch. Receipt, ILE, Value ve Warehouse Entry okunmalı.</td></tr>
+        <tr><td>REC-02</td><td>LP'siz parçalı kabul</td><td>Android preflight/reload/fail-closed testleri geçti.</td><td><span class="status pending">CANLI POST BEKLİYOR</span></td><td>10/30 ve 20/30 iki ayrı post.</td></tr>
+        <tr><td>REC-03</td><td>Tek LP + retry + miktar düzeltme</td><td>AL testinde aynı kaynak satır 10 → retry 10 → edit 5; tek LP line ve qty 5 bekleniyor. Kod source identity ile upsert ediyor.</td><td><span class="status fixed">KOD + TEST DÜZELTİLDİ</span></td><td>Windows AL test ve sandbox post.</td></tr>
+        <tr><td>REC-04</td><td>Çok LP / palet dağıtımı</td><td>BADE testleri: 10.000 → 10 eşit palet, remainder son palete, eşitsiz dağılım reddi; tamamı geçti.</td><td><span class="status pass">PASS · UNIT</span></td><td>En az 3 gerçek LP ile BC posted tablo doğrulaması.</td></tr>
+        <tr><td>REC-05</td><td>Çok LP + farklı lot</td><td>Farklı lotların ayrı JSON satırlarında kaldığı BADE testi geçti.</td><td><span class="status pass">PASS · UNIT</span></td><td>Reservation Entry, Lot No. Information ve ledger post kontrolü.</td></tr>
+        <tr><td>PUT-01</td><td>Mal kabul sonrası yerleştirme</td><td>BADE 7 açık belge okudu; doğru/alternatif/yanlış/boş raf için 4 policy testi geçti.</td><td><span class="status pass">PASS · READ + UNIT</span></td><td>Yeni LP'li receipt'ten oluşan put-away register edilmeli.</td></tr>
+        <tr><td>SHP-01</td><td>LP'siz sevkiyat</td><td>BADE PI001137'yi okudu; post sonucu helper testleri geçti.</td><td><span class="status pending">CANLI POST BEKLİYOR</span></td><td>Loose stock sevk ve ledger kontrolü.</td></tr>
+        <tr><td>SHP-02</td><td>Tek LP'den kısmi sevkiyat</td><td>LP partial-use quantity sınırı ve BC enum payload testleri geçti.</td><td><span class="status pass">PASS · UNIT</span></td><td>LP 10 → sevk 4 → kalan LP 6 canlı doğrulama.</td></tr>
+        <tr><td>SHP-03</td><td>Çok LP'li sevkiyat</td><td>Bu turda yeni outbound split kodu yazılmadı; mevcut modelde tek Warehouse Shipment Line tek LP tutuyor.</td><td><span class="status fail">AÇIK</span></td><td>LP bazında satır bölme/reconcile tasarımı ve AL regresyon testi.</td></tr>
+        <tr><td>CNT-01</td><td>Görünür/kör, sıfır, pozitif/negatif fark</td><td>20 klasik count + 5 Count V2 testi geçti; canlı BADE 15 sayfayı ve durumlarını okudu.</td><td><span class="status pass">PASS · UNIT + READ</span></td><td>Yeni paketle yeniden sayım ve post.</td></tr>
+        <tr><td>CNT-02</td><td>Lotlu/lotsuz/seri takipli sayım</td><td>Lotless guard, seçili lot, untracked stock ve barcode→lot testleri geçti.</td><td><span class="status pass">PASS · UNIT</span></td><td>BC item tracking/ILE sonucu.</td></tr>
+        <tr><td>CNT-03</td><td>Sayım LP'sinin BC defterlerine gitmesi</td><td>Item Journal Line ve Warehouse Journal Line'a LP alanı eklendi; posting subscriber Warehouse Entry insertinden önce LP'yi taşıyor.</td><td><span class="status fixed">KODDA DÜZELTİLDİ</span></td><td>Windows compile + sandbox post + ILE/Value/Warehouse Entry read-back.</td></tr>
+      </tbody>
+    </table></div>
+  </section>
+
+  <section>
+    <h2>6. BC'ye giden LP verisinin kod doğrulaması</h2>
+    <p class="sub">BC'ye erişmeden yapılan kısım kaynak ve Microsoft Base Application sembolü üzerinden doğrulandı.</p>
+    <div class="table-wrap"><table>
+      <thead><tr><th>Akış</th><th>Kaynak alan</th><th>Hedef alan</th><th>Uygulama şekli</th><th>Durum</th></tr></thead>
+      <tbody>
+        <tr><td>Sayım</td><td>Count Sheet Line · LP No.</td><td>Item Journal Line · DOPSWHS LP No.</td><td><code>PostSheet</code> journal satırını oluştururken doğrudan atıyor.</td><td><span class="status fixed">VAR</span></td></tr>
+        <tr><td>Sayım</td><td>Item Journal Line · DOPSWHS LP No.</td><td>Item Ledger Entry · DOPSWHS LP No.</td><td><code>OnAfterInsertItemLedgEntry</code> subscriber ve explicit Modify.</td><td><span class="status fixed">VAR</span></td></tr>
+        <tr><td>Sayım</td><td>Item Ledger Entry · DOPSWHS LP No.</td><td>Value Entry · DOPSWHS LP No.</td><td><code>OnAfterInsertValueEntry</code> subscriber ve explicit Modify.</td><td><span class="status fixed">VAR</span></td></tr>
+        <tr><td>Sayım</td><td>Item Journal Line · DOPSWHS LP No.</td><td>Warehouse Journal Line · DOPSWHS LP No.</td><td><code>WMS Management.OnAfterCreateWhseJnlLine</code> subscriber.</td><td><span class="status fixed">YENİ</span></td></tr>
+        <tr><td>Sayım</td><td>Warehouse Journal Line · DOPSWHS LP No.</td><td>Warehouse Entry · DOPSWHS LP No.</td><td><code>Whse. Jnl.-Register Line.OnBeforeInsertWhseEntry</code>; base Insert sırasında kalıcı.</td><td><span class="status fixed">YENİ</span></td></tr>
+        <tr><td>Mal kabul</td><td>Receipt source doc/line + LP</td><td>LP Line</td><td>Aynı source identity bulunursa modify; fazlalık duplicate satırlar silinir; miktar 0 ise satır kaldırılır.</td><td><span class="status fixed">YENİ</span></td></tr>
+        <tr><td>Posting suite</td><td><code>RunAll()</code></td><td><code>3B-RECEIPT-LP</code></td><td>Daha önce seed edilip hiç çalıştırılmayan senaryo artık çağrılıyor.</td><td><span class="status fixed">YENİ</span></td></tr>
+      </tbody>
+    </table></div>
+  </section>
+
+  <section>
+    <h2>7. Statik kalite kapıları</h2>
+    <div class="table-wrap"><table>
+      <thead><tr><th>Denetim</th><th>Sonuç</th><th>Not</th></tr></thead>
+      <tbody>
+        <tr><td><code>tools/audit-prefix.sh</code></td><td><span class="status pass">PASS · EXIT 0</span></td><td>Yeni Item/Warehouse Journal tableextension nesneleri dahil DOPSWHS prefix kontrolü geçti.</td></tr>
+        <tr><td><code>tools/audit-obsolete.sh</code></td><td><span class="status pass">PASS · EXIT 0</span></td><td>Obsolete metadata denetimi geçti.</td></tr>
+        <tr><td><code>tools/audit-permissions.sh</code></td><td><span class="status pass">PASS · EXIT 0</span></td><td>72432 ve 72433 Admin/User/View envanterine eklendi.</td></tr>
+        <tr><td><code>git diff --check</code></td><td><span class="status pass">PASS</span></td><td>Whitespace/patch format hatası yok.</td></tr>
+        <tr><td>AL compile</td><td><span class="status pending">PENDING</span></td><td>macOS'ta çalıştırılmadı; Windows AL toolchain zorunlu.</td></tr>
+      </tbody>
+    </table></div>
+  </section>
+
+  <section>
+    <h2>8. Ekran kanıtları — yalnız BADE</h2>
+    <p class="sub">Her UI XML dosyasında package değeri <code>com.dynops.bcwms.bade</code> olarak doğrulandı.</p>
+    <div class="shots">
+      <a class="shot" href="yeni-rapor-canli-dogrulama/01-bade-home.png"><img src="yeni-rapor-canli-dogrulama/01-bade-home.png" alt="BADE ana menü"><p>BADE ana menü · BS GROUP · E-DefterSandbox · bağlı</p></a>
+      <a class="shot" href="yeni-rapor-canli-dogrulama/03-mal-kabul.png"><img src="yeni-rapor-canli-dogrulama/03-mal-kabul.png" alt="BADE mal kabul"><p>Mal Kabul · 1 gerçek belge</p></a>
+      <a class="shot" href="yeni-rapor-canli-dogrulama/04-yerlestirme.png"><img src="yeni-rapor-canli-dogrulama/04-yerlestirme.png" alt="BADE yerleştirme"><p>Yerleştirme · 7 gerçek belge</p></a>
+      <a class="shot" href="yeni-rapor-canli-dogrulama/05-sevkiyat.png"><img src="yeni-rapor-canli-dogrulama/05-sevkiyat.png" alt="BADE sevkiyat"><p>Sevkiyat · PI001137</p></a>
+      <a class="shot" href="yeni-rapor-canli-dogrulama/06-sayim.png"><img src="yeni-rapor-canli-dogrulama/06-sayim.png" alt="BADE sayım"><p>Sayım · 15 sayfa · Visible/Blind ve durum çeşitleri</p></a>
+      <a class="shot" href="yeni-rapor-canli-dogrulama/02-bade-home-alt.png"><img src="yeni-rapor-canli-dogrulama/02-bade-home-alt.png" alt="BADE sayım menüsü"><p>Ana menü alt bölüm · Sayım ve Sayım V2 erişimi</p></a>
+    </div>
+  </section>
+
+  <section>
+    <h2>9. Bundan sonra adım adım</h2>
+    <ol>
+      <li><b>Windows AL compile:</b> Güncel kaynakla <code>.app</code> üret; error 0 olmalı. Warning'ler ayrı kaydedilmeli.</li>
+      <li><b>AL test compile/run:</b> ReceiptWithLP testi aynı satır 10 → retry 10 → edit 5 sonucunda tek LP Line / qty 5 vermeli.</li>
+      <li><b>Sandbox publish:</b> Yeni paket onaylı yöntemle E-DefterSandbox'a kurulmalı. Bu rapor turunda tenant uzantısı değiştirilmedi.</li>
+      <li><b>Posting suite:</b> MOVE, COUNT, RECEIPT, RECEIPT-LP, PUTAWAY, SHIPMENT, PICK, CONSUME, OUTPUT, ASSEMBLY toplam 10 senaryo çalıştırılmalı.</li>
+      <li><b>BC read-back:</b> Her belge için Posted Whse Receipt/Shipment, Purch/Sales Shipment Line, Item Ledger Entry, Value Entry ve Warehouse Entry alanları belge+satır+LP anahtarıyla okunmalı.</li>
+      <li><b>Kalan P0:</b> Aynı sevkiyat kaynak satırının birden çok LP'den karşılanması için outbound line split/reconcile çözülmeli.</li>
+      <li><b>Go kararı:</b> Windows compile ve 10/10 sandbox posting PASS olmadan canlıya geçilmemeli.</li>
+    </ol>
+    <div class="callout warn"><b>Bugünkü doğru ifade:</b> “BADE APK ve istemci testleri geçti; dört operasyonun canlı listesi çalışıyor; kritik mal kabul ve sayım LP kodları düzeltildi. Ancak yeni AL paketi sandbox'a kurulup posting testleri koşturulmadığı için tüm sistem henüz uçtan uca geçti denemez.”</div>
+  </section>
+
+  <section>
+    <h2>10. İzlenebilirlik</h2>
+    <div class="two">
+      <div class="card"><h3>Kaynak ve paket</h3><p>Repo tabanı: <code>118317b</code><br>AL app version: <code>1.14.0.87</code><br>BADE: <code>1.14.69-bade</code><br>APK SHA-256: <code>cdd6cb59…a946715</code></p></div>
+      <div class="card"><h3>Kanıt zamanı</h3><p>29.08.2026 · Europe/Istanbul<br>BADE build tamamlanma: 16:31:10<br>Rapor kanıt klasörü: <code>yeni-rapor-canli-dogrulama/</code></p></div>
+    </div>
+    <p class="small">Not: <code>al/.vscode/launch.json</code> çalışma öncesinde kirliydi ve bu rapor kapsamındaki düzeltme olarak değerlendirilmedi. Tenant'a uzantı yükleme/publish işlemi yapılmadı.</p>
+  </section>
+
+  <footer>BCWMS · BADE yeni test ve düzeltme raporu · 29.08.2026</footer>
+</main>
+</body>
+</html>

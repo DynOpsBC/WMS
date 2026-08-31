@@ -14,6 +14,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.dynops.bcwms.BcApi
@@ -175,6 +176,8 @@ private fun WhseReceiptTab() {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun ReceiveDocument(no: String, onBack: () -> Unit) {
+    // Donanım Geri tuşu belge ekranından uygulamayı kapatmasın; listeye dönsün.
+    androidx.activity.compose.BackHandler { onBack() }
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var header by remember { mutableStateOf<JSONObject?>(null) }
@@ -199,7 +202,9 @@ private fun ReceiveDocument(no: String, onBack: () -> Unit) {
     // oluşturulurken "Qty. to Receive" alanını kalan miktarla ÖNCEDEN doldurduğu
     // için tek başına miktar alanı "bu satır işlendi" demek değildir; renk kodu
     // ve post aktifliği bu kümeye bakar.
-    var touched by remember(no) { mutableStateOf(setOf<Int>()) }
+    var touched by remember(no) { mutableStateOf(ReceiptTouchedStore.load(context, no)) }
+    // Ekrandan çıkıp dönünce işlenmiş satırlar unutulmasın (cihazda saklanır).
+    LaunchedEffect(touched) { ReceiptTouchedStore.save(context, no, touched) }
 
     var showScan by remember { mutableStateOf(false) }
     var showQty by remember { mutableStateOf(false) }
@@ -224,6 +229,15 @@ private fun ReceiveDocument(no: String, onBack: () -> Unit) {
             header = null; lines = emptyList(); headerLoaded = false; linesComplete = false
             myUserId = BcApi.currentUserId(context).trim()
             val h = BcApi.get(context, "receipts('$no')")
+            if (h.httpCode == 404) {
+                // Tam kabul sonrası BC açık belgeyi siler; bu bir hata değil,
+                // belge tamamlanmıştır. Listeye dön.
+                busy = false
+                status = "TAMAM: Mal kabul tamamlandı; belge BC'de kapandı."
+                ReceiptTouchedStore.clear(context, no)
+                onBack()
+                return@launch
+            }
             header = if (h.ok) runCatching { JSONObject(h.body) }.getOrNull() else null
             headerLoaded = header != null
             // Açık LP sunucudan gelir: uygulama yeniden açılınca/başka terminalde
@@ -306,7 +320,7 @@ private fun ReceiveDocument(no: String, onBack: () -> Unit) {
             scanLot = line.optString("lotNo").ifBlank { r.lotNo ?: "" }
             scanSerial = line.optString("serialNo").ifBlank { r.serialNo ?: "" }
             scanSupplierLot = line.optString("supplierLotNo")
-            scanExpiryDate = line.optString("expiryDate")
+            scanExpiryDate = bcDateOrBlank(line.optString("expiryDate"))
             scanFilter = ""
             showQty = true
         },
@@ -429,35 +443,54 @@ private fun ReceiveDocument(no: String, onBack: () -> Unit) {
                         scannedItem = ln.optString("itemNo"); scannedLine = ln
                         scanLot = ln.optString("lotNo"); scanSerial = ln.optString("serialNo")
                         scanSupplierLot = ln.optString("supplierLotNo")
-                        scanExpiryDate = ln.optString("expiryDate")
+                        scanExpiryDate = bcDateOrBlank(ln.optString("expiryDate"))
                         showQty = true
                     } },
                 )
             }
         }
 
-        BottomActionBar {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Checkbox(checked = printReceipt, onCheckedChange = { printReceipt = it })
-                Text("Mal kabul belgesi yazdır", fontSize = 13.sp)
+        // Yatay ekranda her aksiyon kendi şeridinde durunca satır listesine yer
+        // kalmıyordu; kısa pencerede yazdır kutusu ve toplu LP aynı şeride alınır.
+        val compactBars = LocalConfiguration.current.screenHeightDp < 460
+        if (!compactBars) {
+            BottomActionBar {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Checkbox(checked = printReceipt, onCheckedChange = { printReceipt = it })
+                    Text("Mal kabul belgesi yazdır", fontSize = 13.sp)
+                }
             }
         }
         if (activeLp == null) {
             BottomActionBar {
+                if (compactBars) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Checkbox(checked = printReceipt, onCheckedChange = { printReceipt = it })
+                        Text("Yazdır", fontSize = 13.sp)
+                    }
+                    Spacer(Modifier.width(8.dp))
+                }
                 OutlinedButton(
                     onClick = {
                         val candidates = lines.filter { line ->
                             (line.optDouble("quantity") - line.optDouble("qtyReceived")).coerceAtLeast(0.0) > 0.0
                         }
                         when (candidates.size) {
-                            0 -> status = "HATA: Toplu LP dağıtılacak açık mal kabul satırı yok."
+                            0 -> status = "HATA: Palet oluşturulacak açık mal kabul satırı yok."
                             1 -> bulkLpTarget = candidates.first()
                             else -> showBulkLinePicker = true
                         }
                     },
                     enabled = !busy && canMutate,
-                    modifier = Modifier.fillMaxWidth(),
-                ) { Text("Toplu LP Dağıtımı") }
+                    modifier = Modifier.weight(1f),
+                ) { Text("Palet LP Oluştur") }
+            }
+        } else if (compactBars) {
+            BottomActionBar {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Checkbox(checked = printReceipt, onCheckedChange = { printReceipt = it })
+                    Text("Mal kabul belgesi yazdır", fontSize = 13.sp)
+                }
             }
         }
         BottomActionBar {
@@ -526,7 +559,7 @@ private fun ReceiveDocument(no: String, onBack: () -> Unit) {
                 // önce forma yönlendir, hatayı sonradan göstermek yerine.
                 onClick = { if (vehicleInfoMissing) showVehicle = true else showPostConfirm = true },
                 enabled = !busy && canPost,
-                modifier = Modifier.fillMaxWidth().height(54.dp),
+                modifier = Modifier.fillMaxWidth().height(com.dynops.bcwms.ui.wmsPrimaryButtonHeight()),
             ) {
                 Text(
                     when {
@@ -562,20 +595,34 @@ private fun ReceiveDocument(no: String, onBack: () -> Unit) {
                     // belgeyi yanlışlıkla kaydeder; seri ve fail-closed ilerle.
                     var preflightOk = true
                     var resetCount = 0
+                    var blockedLineNo: Int? = null
+                    var blockedReason: String? = null
                     for (line in lines.filter {
                         it.optInt("lineNo") !in touched && it.optDouble("qtyToReceive", 0.0) > 0.0
                     }) {
-                        val reset = BcApi.patch(
-                            context,
-                            "receiptLines(no='${no.replace("'", "''")}',lineNo=${line.optInt("lineNo")})",
-                            JSONObject().apply { put("qtyToReceive", 0) }.toString(),
-                        )
-                        if (!reset.ok) { preflightOk = false; break }
+                        val lineKey = "receiptLines(no='${no.replace("'", "''")}',lineNo=${line.optInt("lineNo")})"
+                        // Once dogrulama zincirini tetiklemeyen aksiyonu dene: lot/seri
+                        // isteyen satirlar PATCH ile sifirlanamiyor ve okutulan satir da
+                        // kaydedilemiyordu. Aksiyon eski surumde yoksa PATCH'e dus.
+                        var reset = BcApi.post(context, "$lineKey/Microsoft.NAV.excludeFromPost", "{}")
+                        if (!reset.ok && shouldFallbackReceiptExcludeAction(reset.httpCode, reset.body)) {
+                            reset = BcApi.patch(
+                                context,
+                                lineKey,
+                                JSONObject().apply { put("qtyToReceive", 0) }.toString(),
+                            )
+                        }
+                        if (!reset.ok) {
+                            preflightOk = false
+                            blockedLineNo = line.optInt("lineNo")
+                            blockedReason = QcErrorParser.friendlyStatus(BcApi.errorMessage(reset.body), reset.httpCode)
+                            break
+                        }
                         resetCount++
                     }
                     if (!preflightOk) {
                         busy = false
-                        status = receivingPreflightFailureStatus(resetCount)
+                        status = receivingPreflightFailureStatus(resetCount, blockedLineNo, blockedReason)
                         reload()
                         return@launch
                     }
@@ -638,10 +685,10 @@ private fun ReceiveDocument(no: String, onBack: () -> Unit) {
         BulkReceiptLpSheet(
             itemNo = bulkLine.optString("itemNo"),
             uom = bulkLine.optString("unitOfMeasureCode"),
-            initialExpectedQty = outstanding,
+            maxExpectedQty = outstanding,
             initialLotNo = bulkLine.optString("lotNo"),
             initialSupplierLotNo = bulkLine.optString("supplierLotNo"),
-            initialExpiryDate = bulkLine.optString("expiryDate"),
+            initialExpiryDate = bcDateOrBlank(bulkLine.optString("expiryDate")),
             lotRequired = bulkLine.optBoolean("lotRequired"),
             expiryEnabled = bulkLine.optBoolean("expirationDateEnabled"),
             expiryRequired = bulkLine.optBoolean("expirationDateRequired"),
@@ -650,7 +697,7 @@ private fun ReceiveDocument(no: String, onBack: () -> Unit) {
                 bulkLpTarget = null
                 scope.launch {
                     busy = true
-                    status = "Toplu LP'ler oluşturuluyor..."
+                    status = "Palet LP'leri oluşturuluyor..."
                     val template = resolveLpTemplate(context, LpPurpose.PALLET)
                     if (template == null) {
                         busy = false
@@ -689,7 +736,7 @@ private fun ReceiveDocument(no: String, onBack: () -> Unit) {
             scannedItem = item; scannedLine = line
             scanLot = line?.optString("lotNo") ?: ""; scanSerial = line?.optString("serialNo") ?: ""
             scanSupplierLot = line?.optString("supplierLotNo") ?: ""
-            scanExpiryDate = line?.optString("expiryDate") ?: ""
+            scanExpiryDate = bcDateOrBlank(line?.optString("expiryDate") ?: "")
             showScan = false; showQty = true
         }, lines = lines, matchKey = "itemNo")
     }
@@ -924,13 +971,33 @@ private fun PurchaseOrderTab() {
             loading = true; status = "Yükleniyor..."
             // PDF §3: belge no arama yoktu. Arama artık belge no + satıcı adı +
             // SATIRLARDAKİ ürün no'ya bakar ("1002" → 1002 içeren PO'lar).
-            val filter = if (releasedOnly) "&\$filter=status eq 'Released'" else ""
-            val page = BcApi.getAllPages(
-                context,
-                "purchaseSources?\$top=100&\$orderby=no desc$filter&\$select=no,vendorNo,vendorName,locationCode,expectedReceiptDate,status,lineCount,outstandingQty,percentComplete,requiresWhseReceipt,directReceiveAllowed"
-            )
-            val all = if (page.complete) page.rows else emptyList()
             val q = search.trim()
+            // Liste en yeni 100 siparişle sınırlı; aranan sipariş eski olabilir.
+            // Arama terimi belge no gibi görünüyorsa sunucuda no/satıcı adıyla filtrele.
+            // BC OData Query API'si farklı alanlarda 'or' kabul etmiyor (HTTP 501):
+            // önce belge no, bulunamazsa satıcı adı ile AYRI sorgu yapılır.
+            val sel = "&\$select=no,vendorNo,vendorName,locationCode,expectedReceiptDate,status,lineCount,outstandingQty,percentComplete,requiresWhseReceipt,directReceiveAllowed"
+            val statusClause = if (releasedOnly) "status eq 'Released'" else ""
+            fun filterOf(vararg extra: String): String {
+                val cs = (listOf(statusClause) + extra).filter { it.isNotBlank() }
+                return if (cs.isEmpty()) "" else "&\$filter=" + cs.joinToString(" and ")
+            }
+            val safeQ = q.replace("'", "''")
+            var page = BcApi.getAllPages(
+                context,
+                "purchaseSources?\$top=100&\$orderby=no desc${if (q.isBlank()) filterOf() else filterOf("contains(no,'$safeQ')")}$sel"
+            )
+            if (q.isNotBlank() && page.complete && page.rows.isEmpty()) {
+                page = BcApi.getAllPages(
+                    context,
+                    "purchaseSources?\$top=100&\$orderby=no desc${filterOf("contains(vendorName,'$safeQ')")}$sel"
+                )
+            }
+            if (q.isNotBlank() && page.complete && page.rows.isEmpty()) {
+                // Ürün no ile arama: sunucu filtresi belge/satıcı adında bulamadı; ürün eşleşmesi için listeyi al.
+                page = BcApi.getAllPages(context, "purchaseSources?\$top=100&\$orderby=no desc${filterOf()}$sel")
+            }
+            val all = if (page.complete) page.rows else emptyList()
             var itemHit = 0
             rows = if (q.isBlank()) all else {
                 val itemDocsSet = com.dynops.bcwms.ui.docsContainingItem(context, "purchaseSourceLines", q)
@@ -1024,6 +1091,8 @@ private fun PurchaseOrderTab() {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun ReceivePurchaseOrder(no: String, onBack: () -> Unit) {
+    // Donanım Geri tuşu belge ekranından uygulamayı kapatmasın; listeye dönsün.
+    androidx.activity.compose.BackHandler { onBack() }
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var header by remember { mutableStateOf<JSONObject?>(null) }
@@ -1040,7 +1109,9 @@ private fun ReceivePurchaseOrder(no: String, onBack: () -> Unit) {
     // yalnız alttaki butondan + özet onayından sonra çalışır.
     var showPostConfirm by remember(no) { mutableStateOf(false) }
     // Operatörün bu oturumda miktar girdiği PO satırları (Line No.).
-    var touched by remember(no) { mutableStateOf(setOf<Int>()) }
+    var touched by remember(no) { mutableStateOf(ReceiptTouchedStore.load(context, no)) }
+    // Ekrandan çıkıp dönünce işlenmiş satırlar unutulmasın (cihazda saklanır).
+    LaunchedEffect(touched) { ReceiptTouchedStore.save(context, no, touched) }
     // Ambar Mal Kabul'deki gibi konfigüre edilebilir kolonlar (kendi tercihi:
     // PO satırlarının alan adları farklı olduğu için ayrı kolon seti + ayrı anahtar).
     var columns by remember { mutableStateOf(ColumnPrefs.get(context, "purchaseOrder", GridColumns.purchaseOrder)) }
@@ -1132,6 +1203,25 @@ private fun ReceivePurchaseOrder(no: String, onBack: () -> Unit) {
                         fontSize = 12.sp,
                         color = Color(0xFF92400E),
                     )
+                    // Belgeyi ofis BC'de açmadıysa operatör bekliyordu: PO'dan
+                    // ambar mal kabul belgesini terminalden üret (Kaynak Belgeleri Al).
+                    OutlinedButton(
+                        onClick = {
+                            scope.launch {
+                                busy = true; status = "Ambar mal kabul belgesi oluşturuluyor..."
+                                val r = BcApi.boundAction(context, "purchaseSources", no, "createWhseReceipt")
+                                busy = false
+                                val created = if (r.ok) BcApi.scalarValue(r.body).trim() else ""
+                                status = when {
+                                    r.ok && created.isNotBlank() -> "TAMAM: $created ambar mal kabul belgesi hazır — 'Ambar Mal Kabul' sekmesinden açıp okutmaya başlayın."
+                                    r.ok -> "TAMAM: Belge oluşturuldu; 'Ambar Mal Kabul' sekmesini yenileyin."
+                                    else -> QcErrorParser.friendlyStatus(BcApi.errorMessage(r.body), r.httpCode)
+                                }
+                            }
+                        },
+                        enabled = !busy && headerLoaded,
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
+                    ) { Text("📥 Ambar Kabulü Oluştur") }
                 }
             }
             Spacer(Modifier.height(6.dp))
@@ -1178,7 +1268,7 @@ private fun ReceivePurchaseOrder(no: String, onBack: () -> Unit) {
             Button(
                 onClick = { showPostConfirm = true },
                 enabled = !busy && canPost,
-                modifier = Modifier.fillMaxWidth().height(54.dp),
+                modifier = Modifier.fillMaxWidth().height(com.dynops.bcwms.ui.wmsPrimaryButtonHeight()),
             ) {
                 Text(
                     when {
@@ -1455,4 +1545,28 @@ private fun VehicleInfoDialog(
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Vazgeç") } },
     )
+}
+
+/** BC boş tarihi OData'da '0001-01-01' olarak döner; formda boş sayılmalı. */
+internal fun bcDateOrBlank(value: String): String =
+    value.trim().takeIf { it.isNotBlank() && !it.startsWith("0001-") && !it.startsWith("1753-") }.orEmpty()
+
+/** Belgeye özel "işlenmiş satır" kümesi — cihazda saklanır, belge kapanınca silinir. */
+internal object ReceiptTouchedStore {
+    private const val PREFS = "bcwms_receipt_touched"
+    fun load(context: android.content.Context, no: String): Set<Int> =
+        runCatching {
+            context.getSharedPreferences(PREFS, android.content.Context.MODE_PRIVATE)
+                .getString("receipt:$no", "").orEmpty()
+                .split(',').mapNotNull { it.trim().toIntOrNull() }.toSet()
+        }.getOrDefault(emptySet())
+    fun save(context: android.content.Context, no: String, touched: Set<Int>) {
+        runCatching {
+            context.getSharedPreferences(PREFS, android.content.Context.MODE_PRIVATE).edit()
+                .putString("receipt:$no", touched.joinToString(",")).apply()
+        }
+    }
+    fun clear(context: android.content.Context, no: String) {
+        runCatching { context.getSharedPreferences(PREFS, android.content.Context.MODE_PRIVATE).edit().remove("receipt:$no").apply() }
+    }
 }

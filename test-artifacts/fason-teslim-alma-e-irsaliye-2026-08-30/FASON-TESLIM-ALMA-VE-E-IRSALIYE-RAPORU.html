@@ -1,0 +1,141 @@
+<!doctype html>
+<html lang="tr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Fason Teslim Alma ve E-İrsaliye — Uygulama/Test Raporu</title>
+  <style>
+    :root{--ink:#172033;--muted:#5d6678;--line:#dfe4ee;--blue:#4038d6;--ok:#137a4a;--warn:#a66000;--bad:#b42318;--bg:#f5f7fb}
+    *{box-sizing:border-box} body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+    main{max-width:1180px;margin:30px auto;padding:0 22px 60px}.hero,.card{background:white;border:1px solid var(--line);border-radius:16px;box-shadow:0 8px 26px rgba(18,28,55,.05)}
+    .hero{padding:28px 30px;border-top:6px solid var(--blue)}.card{padding:22px 24px;margin-top:18px}h1{font-size:30px;line-height:1.2;margin:0 0 8px}h2{font-size:21px;margin:0 0 14px}h3{font-size:17px;margin:20px 0 8px}p{margin:7px 0}.meta{color:var(--muted)}
+    .grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin-top:20px}.metric{padding:14px;border:1px solid var(--line);border-radius:12px;background:#fafbfe}.metric b{font-size:23px;display:block}.metric span{color:var(--muted);font-size:12px}
+    table{width:100%;border-collapse:collapse;font-size:13px}th,td{border:1px solid var(--line);padding:9px 10px;text-align:left;vertical-align:top}th{background:#f0f3f9}code{background:#eef1f7;padding:2px 5px;border-radius:5px}ul,ol{padding-left:22px}.tag{display:inline-block;padding:3px 8px;border-radius:999px;font-weight:700;font-size:11px;white-space:nowrap}.pass{background:#dff5e9;color:var(--ok)}.partial{background:#fff1d6;color:var(--warn)}.block{background:#fee4e2;color:var(--bad)}.info{background:#e7e5ff;color:var(--blue)}
+    .callout{border-left:4px solid var(--warn);background:#fff8eb;padding:13px 15px;margin:13px 0}.okcall{border-color:var(--ok);background:#edfaf3}.badcall{border-color:var(--bad);background:#fff0ef}.flow{display:flex;gap:8px;align-items:center;flex-wrap:wrap}.flow span{border:1px solid var(--line);border-radius:9px;padding:8px 10px;background:#fafbfe}.arrow{border:0!important;background:transparent!important;padding:0!important;color:var(--muted)}a{color:var(--blue)}
+    @media(max-width:800px){.grid{grid-template-columns:1fr 1fr}.hero,.card{padding:18px}table{display:block;overflow:auto}}
+  </style>
+</head>
+<body><main>
+  <section class="hero">
+    <h1>Fason Teslim Alma ve E‑İrsaliye</h1>
+    <p class="meta">Uygulama, kaynak kod doğrulama, BADE emülatör testi ve canlıya geçiş kapıları — 30.08.2026</p>
+    <div class="grid">
+      <div class="metric"><b>1.14.71-bade</b><span>Emülatöre kurulan APK</span></div>
+      <div class="metric"><b>160 / 160</b><span>BADE Android birim testi</span></div>
+      <div class="metric"><b>3 / 3</b><span>AL statik denetimi: prefix, izin, obsolete</span></div>
+      <div class="metric"><b>0</b><span>Bu turda gerçek yeni BC postu; AL henüz yayımlı değil</span></div>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>1. Net sonuç</h2>
+    <div class="callout okcall"><b>Tamamlanan:</b> Fasona sevk ile fason dönüş kabulü aynı BADE menüsünde iki ayrı sekme oldu. Dönüş kabulü standart BC fason satın alma kabulunu kullanıyor; parsiyel/tam kabul, fazla miktar, gelen irsaliye, bin, plaka-sürücü ve idempotency kontrolleri eklendi. Çıkış referansı transfer irsaliyesine ve kalıcı e‑İrsaliye kuyruğuna taşındı.</div>
+    <div class="callout badcall"><b>Henüz “canlıda geçti” denemez:</b> BC uygulaması 1.14.0.91 derlenip BADE E‑DefterSandbox’a yayımlanmadı. Bu nedenle emülatörde yeni <code>subcontractReceipts</code> endpoint’i bulunmuyor. Ayrıca gerçek e‑İrsaliye gönderimi için BADE’nin yasal sağlayıcı adaptörünün yeni entegrasyon olayına bağlanması gerekiyor.</div>
+    <p>Stok sevki ile yasal belge sonucu birbirinden ayrıldı: e‑İrsaliye adaptörü yoksa transfer postu geri alınmıyor fakat durum açıkça <code>WAITING_ADAPTER</code> oluyor; sistem yanlış bir “gönderildi” sonucu üretmiyor.</p>
+  </section>
+
+  <section class="card">
+    <h2>2. Ne geliştirildi?</h2>
+    <h3>Fason Teslim Alma / Mal Kabul</h3>
+    <ul>
+      <li>Gelen irsaliye, fason referansı, satın alma siparişi, üretim emri, tedarikçi referansı veya kayıtlı transfer irsaliyesiyle arama/barkod eşleştirme.</li>
+      <li>Ekranda üretim emri, operasyon, fason PO/satır, tedarikçi, mamul/yarı mamul, önce alınan miktar, açık miktar, lokasyon ve bin bilgisi.</li>
+      <li>Parsiyel kabulde operasyon açık kalır; yalnız açık miktarın tamamında <code>Finished</code> seçilebilir.</li>
+      <li>Onay, özel stok tablosu yazmak yerine standart <code>Purch.-Post</code> / ambar mal kabul akışını çalıştırır.</li>
+      <li>Standart BC üretim kodu fason satırı <code>Output</code> olarak üretim emrine post eder; <code>Finished</code> ilgili operasyonu kapatır.</li>
+      <li>Fatura bağlantısı için fason PO–üretim emri–operasyon ilişkisi ve terminal kabul denetim kaydı korunur. “Kapatma”, hizmet kabul miktarının kapanmasıdır; faturalama için belge bağlantısı silinmez.</li>
+    </ul>
+    <h3>Fason çıkış / transfer / e‑İrsaliye</h3>
+    <ul>
+      <li>Fason operasyonuna bağlı tek satın alma siparişi bulunursa ana referans PO numarası; yoksa üretim emri numarasıdır. Birden fazla PO eşleşmesi varsa sevk güvenli biçimde durur.</li>
+      <li>Aynı referans Transfer Header, kayıtlı Transfer Shipment, denetim hareketi ve e‑İrsaliye kuyruğuna yazılır.</li>
+      <li>Transfer postundan sonra kalıcı outbox otomatik oluşur ve arka plan görevi sağlayıcıya gönderimi dener.</li>
+      <li>Sağlayıcı sözleşmesi <code>OnSubmitSubcontractEDespatch</code> entegrasyon olayıdır; belgeye fason referansı, PO, üretim emri ve operasyon bilgileri verilir.</li>
+      <li><code>PENDING</code>, <code>WAITING_ADAPTER</code>, <code>ERROR</code>, <code>SUBMITTED</code> durumları; deneme sayısı, son hata ve sağlayıcı belge numarası saklanır. Tekrar gönderme idempotenttir.</li>
+    </ul>
+    <div class="flow"><span>Ana stok</span><span class="arrow">→</span><span>Transfer sevki</span><span class="arrow">→</span><span>Fason lokasyonu</span><span class="arrow">+</span><span>E‑İrsaliye outbox</span><span class="arrow">→</span><span>BADE sağlayıcı adaptörü</span></div>
+  </section>
+
+  <section class="card">
+    <h2>3. Senaryo test matrisi</h2>
+    <table>
+      <thead><tr><th>Alan</th><th>Senaryo</th><th>Kontrol</th><th>Sonuç</th></tr></thead>
+      <tbody>
+        <tr><td>Fason sevk</td><td>LP’siz satır</td><td>Boş LP ile miktar/bin payload’ı; stok ve takip doğrulaması sunucuda</td><td><span class="tag pass">KOD + UNIT PASS</span></td></tr>
+        <tr><td>Fason sevk</td><td>Tek LP</td><td>LP ürün/lot/seri miktarı okunur, yetersiz stokta post engellenir</td><td><span class="tag pass">KOD + UNIT PASS</span></td></tr>
+        <tr><td>Fason sevk</td><td>Çok LP</td><td>Virgül/boşlukla çoklu okutma, tekrar LP tekilleştirme, miktarı LP’lere dağıtma</td><td><span class="tag pass">KOD + UNIT PASS</span></td></tr>
+        <tr><td>Fason sevk</td><td>Parsiyel / fazla miktar</td><td>Kalan gönderilmemiş miktar aşımı ve aynı istekte toplu aşım engeli</td><td><span class="tag partial">AL TESTİ YAZILDI</span></td></tr>
+        <tr><td>Fason sevk</td><td>Lot / seri zorunlu</td><td>Takip koduna göre eksik lot/seri posttan önce reddedilir</td><td><span class="tag partial">AL TESTİ YAZILDI</span></td></tr>
+        <tr><td>Fason teslim</td><td>Referans/barkod arama</td><td>PO, üretim emri, giden referans, tedarikçi ve transfer irsaliyesi alanlarında eşleşme</td><td><span class="tag pass">ANDROID PASS</span></td></tr>
+        <tr><td>Fason teslim</td><td>Parsiyel kabul</td><td>Miktar 0’dan büyük ve açıktan küçük; operasyon kapatma otomatik kapanır</td><td><span class="tag pass">ANDROID PASS</span> <span class="tag partial">AL TESTİ YAZILDI</span></td></tr>
+        <tr><td>Fason teslim</td><td>Tam kabul</td><td>Açık miktarın tamamı; <code>Finished</code> ile standart fason operasyon kapanışı</td><td><span class="tag pass">ANDROID PASS</span> <span class="tag partial">BC UAT BEKLİYOR</span></td></tr>
+        <tr><td>Fason teslim</td><td>Fazla / sıfır / irsaliyesiz</td><td>Sunucu ve istemci doğrulamaları; stok postu başlamadan hata</td><td><span class="tag pass">ANDROID PASS</span> <span class="tag partial">AL TESTİ YAZILDI</span></td></tr>
+        <tr><td>Fason teslim</td><td>Doğrudan lokasyon</td><td>Yalnız seçilen PO satırının miktarı hazırlanır; <code>Purch.-Post</code> commit bastırılarak çalışır</td><td><span class="tag partial">BC UAT BEKLİYOR</span></td></tr>
+        <tr><td>Fason teslim</td><td>Require Receive / BADE</td><td>Ambar kabulü oluşturma, yalnız hedef satırı postlama, plaka+sürücü zorunluluğu</td><td><span class="tag partial">BC UAT BEKLİYOR</span></td></tr>
+        <tr><td>E‑İrsaliye</td><td>Outbox otomatik oluşum</td><td>Transfer shipment post olayı, referans kopyası, arka plan görevi</td><td><span class="tag partial">AL TESTİ YAZILDI</span></td></tr>
+        <tr><td>E‑İrsaliye</td><td>Adaptör yok</td><td><code>WAITING_ADAPTER</code>; stok sevki başarılı kalır, belge gönderildi sayılmaz</td><td><span class="tag partial">AL TESTİ YAZILDI</span></td></tr>
+        <tr><td>E‑İrsaliye</td><td>Gerçek sağlayıcı gönderimi</td><td>BADE sağlayıcı subscriber’ı ve test hesabı gerekli</td><td><span class="tag block">YAPILAMADI</span></td></tr>
+      </tbody>
+    </table>
+    <p class="meta">“AL testi yazıldı” satırları test kaynaklarının hazır olduğunu, bu Mac’te AL compiler/BC test runner olmadığı için çalıştırılmadığını ifade eder; geçmiş gibi gösterilmemiştir.</p>
+  </section>
+
+  <section class="card">
+    <h2>4. BADE emülatör kanıtı</h2>
+    <table>
+      <tbody>
+        <tr><th>Cihaz</th><td><code>emulator-5554</code>, Android arm64</td></tr>
+        <tr><th>Kurulum</th><td><span class="tag pass">PASS</span> <code>adb install -r</code> → Success</td></tr>
+        <tr><th>Paket</th><td><code>com.dynops.bcwms.bade</code> · versionCode <code>200071</code> · versionName <code>1.14.71-bade</code></td></tr>
+        <tr><th>Menü</th><td><span class="tag pass">PASS</span> Ana Menü → Fason İşlemler</td></tr>
+        <tr><th>Fasona Sevk</th><td><span class="tag pass">PASS</span> Canlı mevcut API’den 2 fason üretim emri listelendi</td></tr>
+        <tr><th>Fason Teslim Alma</th><td><span class="tag pass">UI PASS</span> Sekme, arama, barkod ve yenileme alanları açıldı; yayımlanmamış endpoint için güvenli hata gösterildi</td></tr>
+        <tr><th>Çökme kontrolü</th><td><span class="tag pass">PASS</span> Hata ekranından sonra BADE süreci çalışmaya devam etti</td></tr>
+        <tr><th>APK SHA‑256</th><td><code>44b199af9bea77049a3dd12bf32926c25f7eb9b63f16626c2dc7b5ba1693553e</code></td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section class="card">
+    <h2>5. Otomatik ve statik test özeti</h2>
+    <ul>
+      <li><span class="tag pass">PASS</span> BADE Kotlin/JVM: <b>160 test, 160 geçti, 0 hata, 0 atlandı.</b></li>
+      <li><span class="tag pass">PASS</span> Android BADE debug derleme ve APK paketleme.</li>
+      <li><span class="tag pass">PASS</span> AL nesne adı/prefix denetimi.</li>
+      <li><span class="tag pass">PASS</span> AL Admin/User/View permission mapping denetimi.</li>
+      <li><span class="tag pass">PASS</span> AL obsolete metadata denetimi.</li>
+      <li><span class="tag partial">UYARI</span> Çeviri kapsam denetiminde repoda önceden bulunan TR/DE farkı devam ediyor; fason işleyişini bloke etmiyor.</li>
+      <li><span class="tag partial">ÇALIŞTIRILMADI</span> 9 fason sevk + 7 yeni fason teslim/e‑İrsaliye AL testi, BC test runner’a yüklenmeyi bekliyor.</li>
+      <li><span class="tag partial">ÇALIŞTIRILMADI</span> Bu oturumda yerel masaüstü tarayıcı bağlantısı bulunmadığından HTML görsel turu yapılamadı; HTML ayrıştırması ve hedef dosya bağlantıları geçti.</li>
+    </ul>
+  </section>
+
+  <section class="card">
+    <h2>6. Canlıya geçmeden zorunlu adımlar</h2>
+    <ol>
+      <li>AL 1.14.0.91 paketini Windows/CI AL compiler ile derle; sıfır derleme hatası al.</li>
+      <li>Paketi önce BADE <b>E‑DefterSandbox</b> ortamına yayımla ve veri yükseltmesini tamamla.</li>
+      <li>BC test runner’da 16 fason AL testini çalıştır; tamamı geçmeden UAT’ye ilerleme.</li>
+      <li>Gerçek bir fason PO/üretim emrinde LP’siz, tek LP, çok LP, parsiyel sevk ve tam sevk yap; transfer sevki, iki lokasyon stoku ve referansı karşılaştır.</li>
+      <li>BADE e‑İrsaliye sağlayıcı uzantısında <code>OnSubmitSubcontractEDespatch</code> subscriber’ını geliştir/bağla; test sağlayıcısında belge numarası al ve outbox durumunu <code>SUBMITTED</code> doğrula.</li>
+      <li>Aynı referansla parsiyel fason dönüş kabulü yap; üretim operasyonunun açık kaldığını ve PO açık miktarının azaldığını doğrula.</li>
+      <li>Kalan miktarı tam kabul et; mamul/yarı mamul Item Ledger Entry, Capacity Ledger Entry, kayıtlı satın alma irsaliyesi ve operasyon <code>Finished</code> sonucunu doğrula.</li>
+      <li>Require Receive lokasyonda plaka/sürücü zorunluluğunu ve put-away sonucunu; doğrudan lokasyonda <code>Purch.-Post</code> sonucunu ayrı ayrı doğrula.</li>
+      <li>Hizmet faturasını aynı PO/üretim emri referansına bağlayıp fatura denetim zincirini mali işler ile onayla.</li>
+      <li>UAT kanıtları geçtikten sonra imzalı release BADE APK ve AL paketi için geri dönüş planıyla canlı yayın yap.</li>
+    </ol>
+  </section>
+
+  <section class="card">
+    <h2>7. İlgili çıktılar</h2>
+    <ul>
+      <li><a href="../../android/app/build/outputs/apk/bade/debug/app-bade-debug.apk">BADE debug APK 1.14.71</a></li>
+      <li><a href="../../android/app/build/reports/tests/testBadeDebugUnitTest/index.html">BADE birim test HTML sonucu</a></li>
+      <li><a href="../../al/src/Subcontract/SubcontractReceiptMgmt.Codeunit.al">Fason teslim alma yönetimi</a></li>
+      <li><a href="../../al/src/Subcontract/SubcontractReceiptApi.Page.al">Fason teslim alma API</a></li>
+      <li><a href="../../al/src/Subcontract/SubcontractEDespatchMgmt.Codeunit.al">E‑İrsaliye outbox ve sağlayıcı sözleşmesi</a></li>
+      <li><a href="../../android/app/src/main/java/com/dynops/bcwms/feature/SubcontractingModule.kt">BADE fason ekranları</a></li>
+    </ul>
+  </section>
+</main></body>
+</html>

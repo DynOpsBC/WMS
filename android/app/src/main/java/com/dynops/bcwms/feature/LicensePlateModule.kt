@@ -47,9 +47,14 @@ fun LicensePlateModule() {
             val page = BcApi.getAllPagesWithStandardFallback(context, "licensePlates?\$top=200&\$orderby=no desc&\$select=no,status,locationCode,binCode,templateCode,sscc$filter")
             loading = false
             rows = if (page.complete) page.rows else emptyList()
-            status = if (!page.complete) "HATA: LP listesinin tamamı alınamadı. Yenileyin."
-                else if (rows.isEmpty()) "BOŞ: LP kaydı yok"
-                else "TAMAM: ${rows.size} LP"
+            // Arama sonuçsuzken "LP kaydı yok" demek yanıltıcıydı: kullanıcı tüm
+            // LP'lerin silindiğini sanabiliyordu (UAT lp-01).
+            status = when {
+                !page.complete -> "HATA: LP listesinin tamamı alınamadı. Yenileyin."
+                rows.isEmpty() && search.isNotBlank() -> "BOŞ: '$search' ile eşleşen LP bulunamadı"
+                rows.isEmpty() -> "BOŞ: LP kaydı yok"
+                else -> "TAMAM: ${rows.size} LP"
+            }
         }
     }
     LaunchedEffect(Unit) { loadList() }
@@ -100,7 +105,12 @@ fun LicensePlateModule() {
                     }
                 }
             }
-            if (rows.isEmpty() && !loading) item { EmptyState("LP kaydı bulunamadı.") }
+            if (rows.isEmpty() && !loading) item {
+                EmptyState(
+                    if (search.isNotBlank()) "'$search' ile eşleşen LP bulunamadı."
+                    else "LP kaydı bulunamadı."
+                )
+            }
         }
     }
 }
@@ -449,12 +459,23 @@ private fun LpDocument(lpNo: String, onBack: () -> Unit) {
                                 put("printLabel", true)
                                 put("printerId", getDefaultPrinter(context))
                             }.toString()
-                            action("stopToPrinter", payload, "LP tamamlandı")
+                            if (lines.isEmpty()) {
+                                status = "EKSİK: Bu LP boş. Tamamlamadan önce içine en az bir ürün okutun."
+                            } else {
+                                action("stopToPrinter", payload, "LP tamamlandı")
+                            }
                         },
-                        enabled = !busy && lines.isNotEmpty(),
+                        // Boş LP'de düğme sessizce pasifti; neden tamamlanamadığı
+                        // hiçbir yerde yazmıyordu (UAT lp-04).
+                        enabled = !busy,
                         modifier = Modifier.fillMaxWidth().height(56.dp),
                         shape = RoundedCornerShape(14.dp),
-                    ) { WmsActionLabel(WmsGlyph.QUALITY, "LP'yi Tamamla") }
+                    ) {
+                        WmsActionLabel(
+                            WmsGlyph.QUALITY,
+                            if (lines.isEmpty()) "LP'yi Tamamla (önce içerik ekleyin)" else "LP'yi Tamamla",
+                        )
+                    }
                 }
 
                 if (canTransfer || canPartiallyUse) {
@@ -512,6 +533,22 @@ private fun LpDocument(lpNo: String, onBack: () -> Unit) {
                         shape = RoundedCornerShape(14.dp),
                         colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error),
                     ) { WmsActionLabel(WmsGlyph.WARNING, "LP'yi Boz") }
+                    // Bozma/silme yapılamıyorsa neden yapılamadığı hiç yazmıyordu;
+                    // düğme sessizce kayboluyordu (UAT lp-04).
+                    else -> Text(
+                        when {
+                            st.equals("Assigned", ignoreCase = true) ->
+                                "Bu LP bir belgeye atanmış; bozulamaz. Önce 'Serbest Bırak' ile belgeden çıkarın."
+                            st.equals("Used", ignoreCase = true) ->
+                                "Bu LP tüketilmiş (Kullanıldı); içeriği sevk edildiği için bozulamaz."
+                            st.equals("Unbuilt", ignoreCase = true) ->
+                                "Bu LP zaten bozulmuş durumda."
+                            else -> "Bu LP'nin durumu ($st) bozmaya uygun değil."
+                        },
+                        fontSize = 12.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
+                    )
                 }
             }
         }

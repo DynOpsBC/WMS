@@ -13,7 +13,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import org.json.JSONArray
 import org.json.JSONObject
-import kotlin.math.abs
 
 internal data class BulkReceiptLpRow(
     val groupId: String,
@@ -23,33 +22,13 @@ internal data class BulkReceiptLpRow(
     val expiryDate: String,
 )
 
-private data class BulkReceiptLotGroup(
+private data class ManualBulkLpDraft(
     val id: Int,
-    val totalQty: String,
-    val palletCount: String,
-    val perPalletQty: String,
-    val putRemainderOnLast: Boolean,
+    val quantity: String,
     val lotNo: String,
     val supplierLotNo: String,
     val expiryDate: String,
-    val palletQuantities: List<String>,
 )
-
-internal fun buildBulkLpQuantities(
-    totalQty: Double,
-    palletCount: Int,
-    perPalletQty: Double,
-    putRemainderOnLast: Boolean,
-): List<Double>? {
-    if (totalQty <= 0.0 || palletCount <= 0 || perPalletQty <= 0.0) return null
-    if (!putRemainderOnLast) {
-        if (abs(totalQty - palletCount * perPalletQty) > 0.00001) return null
-        return List(palletCount) { perPalletQty }
-    }
-    val last = totalQty - perPalletQty * (palletCount - 1)
-    if (last <= 0.0) return null
-    return List(palletCount) { index -> if (index == palletCount - 1) last else perPalletQty }
-}
 
 internal fun bulkLpRowsJson(rows: List<BulkReceiptLpRow>): String = JSONArray().apply {
     rows.forEach { row ->
@@ -63,12 +42,25 @@ internal fun bulkLpRowsJson(rows: List<BulkReceiptLpRow>): String = JSONArray().
     }
 }.toString()
 
+internal fun manualBulkLpValidation(
+    maxQty: Double,
+    rows: List<BulkReceiptLpRow>,
+    expiryRequired: Boolean,
+): String? {
+    if (maxQty <= 0.0) return "Bu satırda kabul edilecek açık miktar yok."
+    if (rows.isEmpty()) return "En az bir LP ekleyin."
+    if (rows.any { it.quantity <= 0.0 }) return "Her LP için sıfırdan büyük miktar girin."
+    if (rows.sumOf { it.quantity } - maxQty > 0.00001) return "LP toplamı açık miktarı aşamaz."
+    if (expiryRequired && rows.any { it.expiryDate.isBlank() }) return "Her LP için SKT girin."
+    return null
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun BulkReceiptLpSheet(
     itemNo: String,
     uom: String,
-    initialExpectedQty: Double,
+    maxExpectedQty: Double,
     initialLotNo: String,
     initialSupplierLotNo: String,
     initialExpiryDate: String,
@@ -79,119 +71,96 @@ internal fun BulkReceiptLpSheet(
     onSubmit: (expectedQty: Double, rows: List<BulkReceiptLpRow>, printLabels: Boolean) -> Unit,
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-    var expectedQty by remember { mutableStateOf(fmtBulkQty(initialExpectedQty)) }
     var printLabels by remember { mutableStateOf(true) }
-    var error by remember { mutableStateOf("") }
-    var nextGroupId by remember { mutableIntStateOf(2) }
-    var groups by remember {
+    var nextLpId by remember { mutableIntStateOf(2) }
+    var drafts by remember {
         mutableStateOf(
             listOf(
-                BulkReceiptLotGroup(
+                ManualBulkLpDraft(
                     id = 1,
-                    totalQty = fmtBulkQty(initialExpectedQty),
-                    palletCount = "1",
-                    perPalletQty = fmtBulkQty(initialExpectedQty),
-                    putRemainderOnLast = true,
+                    quantity = "",
                     lotNo = initialLotNo,
                     supplierLotNo = initialSupplierLotNo,
                     expiryDate = initialExpiryDate.take(10),
-                    palletQuantities = listOf(fmtBulkQty(initialExpectedQty)),
                 )
             )
         )
     }
 
-    fun updateGroup(id: Int, transform: (BulkReceiptLotGroup) -> BulkReceiptLotGroup) {
-        groups = groups.map { if (it.id == id) transform(it) else it }
-        error = ""
+    fun updateDraft(id: Int, transform: (ManualBulkLpDraft) -> ManualBulkLpDraft) {
+        drafts = drafts.map { if (it.id == id) transform(it) else it }
     }
 
-    fun generate(group: BulkReceiptLotGroup, equal: Boolean) {
-        val total = group.totalQty.toDoubleOrNull() ?: 0.0
-        val count = group.palletCount.toIntOrNull() ?: 0
-        val per = if (equal && count > 0) total / count else group.perPalletQty.toDoubleOrNull() ?: 0.0
-        val quantities = if (equal && total > 0 && count > 0) {
-            val values = MutableList(count) { per }
-            values[count - 1] = total - per * (count - 1)
-            values
-        } else buildBulkLpQuantities(total, count, per, group.putRemainderOnLast)
-        if (quantities == null) {
-            error = "Lot ${group.id}: toplam, LP sayısı ve LP başı miktar uyuşmuyor. Kalanı son LP'ye aktar seçeneğini açabilirsiniz."
-            return
-        }
-        updateGroup(group.id) {
-            it.copy(
-                perPalletQty = fmtBulkQty(per),
-                palletQuantities = quantities.map(::fmtBulkQty),
-            )
-        }
+    val rows = drafts.map { draft ->
+        BulkReceiptLpRow(
+            groupId = draft.id.toString(),
+            quantity = draft.quantity.toDoubleOrNull() ?: 0.0,
+            lotNo = draft.lotNo,
+            supplierLotNo = draft.supplierLotNo,
+            expiryDate = draft.expiryDate,
+        )
     }
-
-    val expected = expectedQty.toDoubleOrNull() ?: 0.0
-    val rows = groups.flatMap { group ->
-        group.palletQuantities.mapNotNull { text ->
-            text.toDoubleOrNull()?.takeIf { it > 0.0 }?.let { qty ->
-                BulkReceiptLpRow(
-                    groupId = group.id.toString(),
-                    quantity = qty,
-                    lotNo = group.lotNo,
-                    supplierLotNo = group.supplierLotNo,
-                    expiryDate = group.expiryDate,
-                )
-            }
-        }
-    }
-    val distributed = rows.sumOf { it.quantity }
-    val groupRowsComplete = groups.all { group ->
-        val count = group.palletCount.toIntOrNull() ?: 0
-        count > 0 && group.palletQuantities.size == count && group.palletQuantities.all { (it.toDoubleOrNull() ?: 0.0) > 0.0 }
-    }
-    val requiredFieldsComplete = groups.all {
-        (!expiryRequired || it.expiryDate.isNotBlank())
-    }
-    val canSubmit = expected > 0.0 && rows.isNotEmpty() && groupRowsComplete &&
-        requiredFieldsComplete && abs(distributed - expected) <= 0.00001
+    val enteredTotal = rows.sumOf { it.quantity }
+    val validationError = manualBulkLpValidation(maxExpectedQty, rows, expiryRequired)
+    val remaining = maxExpectedQty - enteredTotal
+    val canSubmit = validationError == null
 
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState) {
         Column(
             Modifier.fillMaxWidth().fillMaxHeight(0.94f)
                 .verticalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 8.dp)
         ) {
-            Text("Toplu LP Dağıtımı", fontSize = 21.sp, fontWeight = FontWeight.Bold)
-            Text("$itemNo · $uom", color = MaterialTheme.colorScheme.onSurfaceVariant)
-            Spacer(Modifier.height(10.dp))
-            OutlinedTextField(
-                value = expectedQty,
-                onValueChange = { expectedQty = numericText(it); error = "" },
-                label = { Text("Toplam kabul miktarı") },
-                singleLine = true,
+            Text("Palet LP'lerini Oluştur", fontSize = 21.sp, fontWeight = FontWeight.Bold)
+            Text("$itemNo · Açık: ${fmtBulkQty(maxExpectedQty)} $uom", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Spacer(Modifier.height(8.dp))
+            Surface(
+                color = MaterialTheme.colorScheme.secondaryContainer,
+                shape = RoundedCornerShape(10.dp),
                 modifier = Modifier.fillMaxWidth(),
-            )
+            ) {
+                Text(
+                    "Her paleti ekleyin ve miktarını siz girin. Sistem dağıtım yapmaz; yalnızca toplamı ve zorunlu alanları kontrol eder.",
+                    modifier = Modifier.padding(10.dp),
+                    fontSize = 13.sp,
+                )
+            }
             Spacer(Modifier.height(10.dp))
 
-            groups.forEachIndexed { groupIndex, group ->
+            drafts.forEachIndexed { index, draft ->
                 Card(
                     modifier = Modifier.fillMaxWidth().padding(bottom = 10.dp),
                     shape = RoundedCornerShape(12.dp),
                 ) {
                     Column(Modifier.padding(12.dp)) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text("Lot grubu ${groupIndex + 1}", fontWeight = FontWeight.Bold)
+                            Text("LP ${index + 1}", fontWeight = FontWeight.Bold)
                             Spacer(Modifier.weight(1f))
-                            if (groups.size > 1) TextButton(onClick = { groups = groups.filterNot { it.id == group.id } }) { Text("Sil") }
+                            if (drafts.size > 1) {
+                                TextButton(onClick = { drafts = drafts.filterNot { it.id == draft.id } }) {
+                                    Text("Kaldır")
+                                }
+                            }
                         }
+                        OutlinedTextField(
+                            value = draft.quantity,
+                            onValueChange = { value -> updateDraft(draft.id) { it.copy(quantity = numericText(value)) } },
+                            label = { Text("Miktar ($uom)") },
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth(),
+                        )
                         if (lotRequired) {
+                            Spacer(Modifier.height(6.dp))
                             OutlinedTextField(
-                                value = group.lotNo,
-                                onValueChange = { value -> updateGroup(group.id) { it.copy(lotNo = value) } },
-                                label = { Text("İç lot (boşsa sistem üretir)") },
+                                value = draft.lotNo,
+                                onValueChange = { value -> updateDraft(draft.id) { it.copy(lotNo = value) } },
+                                label = { Text("İç lot (boşsa BC üretir)") },
                                 singleLine = true,
                                 modifier = Modifier.fillMaxWidth(),
                             )
                             Spacer(Modifier.height(6.dp))
                             OutlinedTextField(
-                                value = group.supplierLotNo,
-                                onValueChange = { value -> updateGroup(group.id) { it.copy(supplierLotNo = value) } },
+                                value = draft.supplierLotNo,
+                                onValueChange = { value -> updateDraft(draft.id) { it.copy(supplierLotNo = value) } },
                                 label = { Text("Tedarikçi lotu (opsiyonel)") },
                                 singleLine = true,
                                 modifier = Modifier.fillMaxWidth(),
@@ -200,68 +169,12 @@ internal fun BulkReceiptLpSheet(
                         if (expiryEnabled) {
                             Spacer(Modifier.height(6.dp))
                             OutlinedTextField(
-                                value = group.expiryDate,
-                                onValueChange = { value -> updateGroup(group.id) { it.copy(expiryDate = value) } },
+                                value = draft.expiryDate,
+                                onValueChange = { value -> updateDraft(draft.id) { it.copy(expiryDate = value) } },
                                 label = { Text(if (expiryRequired) "SKT (YYYY-AA-GG)" else "SKT (opsiyonel)") },
                                 singleLine = true,
                                 modifier = Modifier.fillMaxWidth(),
                             )
-                        }
-                        Spacer(Modifier.height(6.dp))
-                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                            OutlinedTextField(
-                                value = group.totalQty,
-                                onValueChange = { value -> updateGroup(group.id) { it.copy(totalQty = numericText(value), palletQuantities = emptyList()) } },
-                                label = { Text("Lot toplamı") },
-                                singleLine = true,
-                                modifier = Modifier.weight(1f),
-                            )
-                            OutlinedTextField(
-                                value = group.palletCount,
-                                onValueChange = { value -> updateGroup(group.id) { it.copy(palletCount = value.filter(Char::isDigit), palletQuantities = emptyList()) } },
-                                label = { Text("LP sayısı") },
-                                singleLine = true,
-                                modifier = Modifier.weight(1f),
-                            )
-                        }
-                        Spacer(Modifier.height(6.dp))
-                        OutlinedTextField(
-                            value = group.perPalletQty,
-                            onValueChange = { value -> updateGroup(group.id) { it.copy(perPalletQty = numericText(value), palletQuantities = emptyList()) } },
-                            label = { Text("LP başına miktar") },
-                            singleLine = true,
-                            modifier = Modifier.fillMaxWidth(),
-                        )
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Checkbox(
-                                checked = group.putRemainderOnLast,
-                                onCheckedChange = { checked -> updateGroup(group.id) { it.copy(putRemainderOnLast = checked, palletQuantities = emptyList()) } },
-                            )
-                            Text("Kalan miktarı son LP'ye aktar", fontSize = 13.sp)
-                        }
-                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                            OutlinedButton(onClick = { generate(group, equal = true) }, modifier = Modifier.weight(1f)) { Text("Eşit dağıt") }
-                            Button(onClick = { generate(group, equal = false) }, modifier = Modifier.weight(1f)) { Text("Listeyi oluştur") }
-                        }
-
-                        if (group.palletQuantities.isNotEmpty()) {
-                            Spacer(Modifier.height(8.dp))
-                            Text("LP miktarları", fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
-                            group.palletQuantities.forEachIndexed { index, value ->
-                                OutlinedTextField(
-                                    value = value,
-                                    onValueChange = { newValue ->
-                                        updateGroup(group.id) {
-                                            val changed = it.palletQuantities.toMutableList()
-                                            changed[index] = numericText(newValue)
-                                            it.copy(palletQuantities = changed)
-                                        }
-                                    },
-                                    label = { Text("LP ${index + 1}") },
-                                    singleLine = true,
-                                    modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
-                                )
-                            }
                         }
                     }
                 }
@@ -269,39 +182,52 @@ internal fun BulkReceiptLpSheet(
 
             OutlinedButton(
                 onClick = {
-                    groups = groups + BulkReceiptLotGroup(
-                        id = nextGroupId++, totalQty = "", palletCount = "1", perPalletQty = "",
-                        putRemainderOnLast = true, lotNo = "", supplierLotNo = "", expiryDate = "",
-                        palletQuantities = emptyList(),
+                    drafts = drafts + ManualBulkLpDraft(
+                        id = nextLpId++,
+                        quantity = "",
+                        lotNo = "",
+                        supplierLotNo = "",
+                        expiryDate = "",
                     )
                 },
                 modifier = Modifier.fillMaxWidth(),
-            ) { Text("Farklı lot ekle") }
+            ) { Text("+ LP Ekle") }
 
             Spacer(Modifier.height(8.dp))
             Surface(
-                color = if (abs(distributed - expected) <= 0.00001 && expected > 0) MaterialTheme.colorScheme.primaryContainer
-                else MaterialTheme.colorScheme.errorContainer,
+                color = if (validationError == null) MaterialTheme.colorScheme.primaryContainer
+                else MaterialTheme.colorScheme.surfaceVariant,
                 shape = RoundedCornerShape(10.dp),
                 modifier = Modifier.fillMaxWidth(),
             ) {
                 Column(Modifier.padding(10.dp)) {
-                    Text("Kabul: ${fmtBulkQty(expected)} · LP toplamı: ${fmtBulkQty(distributed)}", fontWeight = FontWeight.Bold)
-                    Text("Fark: ${fmtBulkQty(expected - distributed)} · ${rows.size} LP", fontSize = 12.sp)
+                    Text("${drafts.size} LP · Girilen toplam: ${fmtBulkQty(enteredTotal)} $uom", fontWeight = FontWeight.Bold)
+                    Text(
+                        "Açık miktar: ${fmtBulkQty(maxExpectedQty)} · Kalan: ${fmtBulkQty(remaining)} $uom",
+                        fontSize = 12.sp,
+                        color = if (remaining < -0.00001) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    if (validationError != null) {
+                        Text(
+                            validationError,
+                            color = MaterialTheme.colorScheme.error,
+                            fontSize = 13.sp,
+                            modifier = Modifier.padding(top = 4.dp),
+                        )
+                    }
                 }
             }
-            if (error.isNotBlank()) Text(error, color = MaterialTheme.colorScheme.error, fontSize = 13.sp, modifier = Modifier.padding(top = 6.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Checkbox(checked = printLabels, onCheckedChange = { printLabels = it })
-                Text("Tüm LP / Madde Tanımlama etiketlerini yazdır", fontSize = 13.sp)
+                Text("LP / Madde Tanımlama etiketlerini yazdır", fontSize = 13.sp)
             }
             Row(Modifier.padding(bottom = 18.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutlinedButton(onClick = onDismiss, modifier = Modifier.weight(1f)) { Text("İptal") }
                 Button(
-                    onClick = { onSubmit(expected, rows, printLabels) },
+                    onClick = { onSubmit(enteredTotal, rows, printLabels) },
                     enabled = canSubmit,
                     modifier = Modifier.weight(1f),
-                ) { Text("LP'leri Oluştur") }
+                ) { Text("${drafts.size} LP Oluştur") }
             }
         }
     }
@@ -318,7 +244,7 @@ internal fun BulkReceiptLinePicker(
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Toplu LP için satır seç") },
+        title = { Text("Palet oluşturulacak satırı seç") },
         text = {
             Column(
                 Modifier.fillMaxWidth().heightIn(max = 430.dp).verticalScroll(rememberScrollState()),

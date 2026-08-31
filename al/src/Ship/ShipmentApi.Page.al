@@ -26,6 +26,9 @@ page 72093 "DOPSWHS Shipment API"
                 field(sourceNo; SourceNo) { Caption = 'sourceNo'; }
                 field(shipTo; ShipTo) { Caption = 'shipTo'; }
                 field(lineCount; LineCount) { Caption = 'lineCount'; }
+                field(shippingAgentCode; Rec."Shipping Agent Code") { Caption = 'shippingAgentCode'; }
+                field(shippingAgentServiceCode; Rec."Shipping Agent Service Code") { Caption = 'shippingAgentServiceCode'; }
+                field(sourceShippingAgentCode; SourceShippingAgentCode) { Caption = 'sourceShippingAgentCode'; }
                 part(lines; "DOPSWHS Shipment Line API")
                 {
                     Caption = 'lines';
@@ -107,9 +110,28 @@ page 72093 "DOPSWHS Shipment API"
         Rec := LockedShipment;
     end;
 
+    /// <summary>JSON [{code,name}] — Shipping Agent tablosu.</summary>
+    [ServiceEnabled]
+    procedure listShippingAgents(): Text
+    var
+        ShipmentMgmt: Codeunit "DOPSWHS Shipment Mgmt";
+    begin
+        exit(ShipmentMgmt.ListShippingAgents());
+    end;
+
+    /// <summary>Acenteyi ambar sevkiyatına ve kaynak satış siparişlerine yazar (BADE zorunlu alanı).</summary>
+    [ServiceEnabled]
+    procedure setShippingAgent(agentCode: Code[10]; serviceCode: Code[10])
+    var
+        ShipmentMgmt: Codeunit "DOPSWHS Shipment Mgmt";
+    begin
+        ShipmentMgmt.SetShippingAgent(Rec, agentCode, serviceCode);
+    end;
+
     var
         SourceNo: Code[20];
         ShipTo: Text[100];
+        SourceShippingAgentCode: Code[10];
         LineCount: Integer;
 
     local procedure FillCalculatedFields()
@@ -121,6 +143,7 @@ page 72093 "DOPSWHS Shipment API"
         Clear(SourceNo);
         Clear(ShipTo);
         Clear(LineCount);
+        Clear(SourceShippingAgentCode);
 
         WhseShipmentLine.SetRange("No.", Rec."No.");
         if WhseShipmentLine.FindSet() then
@@ -130,9 +153,10 @@ page 72093 "DOPSWHS Shipment API"
                     SourceNo := WhseShipmentLine."Source No.";
             until WhseShipmentLine.Next() = 0;
 
-        if SalesHeader.Get(SalesHeader."Document Type"::Order, SourceNo) then
-            ShipTo := SalesHeader."Ship-to Name"
-        else
+        if SalesHeader.Get(SalesHeader."Document Type"::Order, SourceNo) then begin
+            ShipTo := SalesHeader."Ship-to Name";
+            SourceShippingAgentCode := SalesHeader."Shipping Agent Code";
+        end else
             if TransferHeader.Get(SourceNo) then
                 ShipTo := TransferHeader."Transfer-to Name";
     end;

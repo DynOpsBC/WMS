@@ -47,6 +47,7 @@ enum class WmsGlyph {
     COUNT,
     COUNT_V2,
     PRODUCTION,
+    SUBCONTRACTING,
     ASSEMBLY,
     QUALITY,
     QUALITY_MANAGEMENT,
@@ -81,6 +82,7 @@ fun glyphForScreen(screen: Screen): WmsGlyph = when (screen) {
     Screen.Count -> WmsGlyph.COUNT
     Screen.CountV2 -> WmsGlyph.COUNT_V2
     Screen.Production -> WmsGlyph.PRODUCTION
+    Screen.Subcontracting -> WmsGlyph.SUBCONTRACTING
     Screen.Assembly -> WmsGlyph.ASSEMBLY
     Screen.Quality -> WmsGlyph.QUALITY
     Screen.QualityMgmt -> WmsGlyph.QUALITY_MANAGEMENT
@@ -321,6 +323,18 @@ fun WmsIcon(
                 }
                 drawPath(factory, soft); drawPath(factory, color, style = lineStroke)
                 thinLine(0.27f, 0.68f, 0.27f, 0.78f); thinLine(0.49f, 0.68f, 0.49f, 0.78f); thinLine(0.69f, 0.65f, 0.69f, 0.78f)
+            }
+            WmsGlyph.SUBCONTRACTING -> {
+                // Fabrikadan dış iş ortağına giden malzeme: iki depo ve izli yön oku.
+                roundRect(0.08f, 0.20f, 0.28f, 0.28f, fill = true)
+                roundRect(0.08f, 0.20f, 0.28f, 0.28f)
+                roundRect(0.64f, 0.52f, 0.28f, 0.28f, fill = true)
+                roundRect(0.64f, 0.52f, 0.28f, 0.28f)
+                line(0.38f, 0.35f, 0.76f, 0.35f)
+                line(0.76f, 0.35f, 0.66f, 0.25f)
+                line(0.76f, 0.35f, 0.66f, 0.45f)
+                thinLine(0.22f, 0.48f, 0.22f, 0.70f)
+                thinLine(0.22f, 0.70f, 0.60f, 0.70f)
             }
             WmsGlyph.ASSEMBLY -> {
                 drawCircle(soft, s * 0.19f, p(0.31f, 0.31f))

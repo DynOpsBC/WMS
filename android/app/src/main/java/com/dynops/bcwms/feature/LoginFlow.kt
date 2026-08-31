@@ -394,6 +394,24 @@ fun LoginFlow(onConnected: (Boolean) -> Unit) {
                     color = Color.Gray
                 )
                 Spacer(Modifier.height(12.dp))
+                // Bu ekranda yalnız ortam yazıyordu; hangi şirkete ve hangi
+                // kullanıcıyla bağlı olunduğu görünmüyordu (UAT GN-19).
+                if (BcApi.hasToken(context)) {
+                    var oturumKullanici by remember { mutableStateOf("") }
+                    LaunchedEffect(Unit) { oturumKullanici = BcApi.currentUserId(context).trim() }
+                    Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)) {
+                        Column(Modifier.fillMaxWidth().padding(12.dp)) {
+                            Text("Bağlantı bilgisi", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                            Text("Ortam: ${BcApi.getEnvironment(context).ifBlank { "-" }}", fontSize = 12.sp)
+                            Text("Şirket: ${BcApi.getCompanyName(context).ifBlank { "-" }}", fontSize = 12.sp)
+                            Text(
+                                "Kullanıcı: ${oturumKullanici.ifBlank { "henüz giriş yapılmadı" }}",
+                                fontSize = 12.sp,
+                            )
+                        }
+                    }
+                    Spacer(Modifier.height(12.dp))
+                }
                 if (!BcApi.hasToken(context)) {
                     Card(colors = CardDefaults.cardColors(containerColor = Color(0xFFFFF3E0))) {
                         Column(Modifier.fillMaxWidth().padding(12.dp)) {

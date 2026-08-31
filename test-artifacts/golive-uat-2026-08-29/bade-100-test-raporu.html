@@ -1,0 +1,262 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<style>html{-webkit-text-size-adjust:100%}img{max-width:100%}</style>
+<title>Kabul Test Raporu</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500&family=Source+Sans+3:wght@400;600&display=swap">
+<style>
+:root{
+  --paper:#f1f3f3; --card:#ffffff; --sunk:#e8ecec;
+  --ink:#101615; --text:#2c3735; --soft:#5e6b69; --faint:#8b9795;
+  --rule:#d4dbda; --hair:#e8eded;
+  --deep:#0b5d5a; --good:#1a6640; --good-soft:#dcede4; --gold:#96610a;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --paper:#0f1514; --card:#171f1e; --sunk:#131a19;
+  --ink:#eef3f2; --text:#c6d2d0; --soft:#94a19f; --faint:#6d7b79;
+  --rule:#293533; --hair:#202a29;
+  --deep:#5cbdb7; --good:#6ecb9a; --good-soft:#152f22; --gold:#d9a55c;
+}}
+:root[data-theme="dark"]{
+  --paper:#0f1514; --card:#171f1e; --sunk:#131a19;
+  --ink:#eef3f2; --text:#c6d2d0; --soft:#94a19f; --faint:#6d7b79;
+  --rule:#293533; --hair:#202a29;
+  --deep:#5cbdb7; --good:#6ecb9a; --good-soft:#152f22; --gold:#d9a55c;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--paper);color:var(--text);
+  font:400 16.5px/1.65 "Source Sans 3","Helvetica Neue",Arial,sans-serif;-webkit-font-smoothing:antialiased}
+.sheet{max-width:940px;margin:0 auto;background:var(--card);
+  border-left:1px solid var(--rule);border-right:1px solid var(--rule);min-height:100vh}
+.pad{padding:0 clamp(22px,5.5vw,60px)}
+h1,h2,h3,.kicker,th,.stat b,.tag,.code{font-family:Archivo,"Helvetica Neue",Arial,sans-serif}
+h1{font-size:clamp(30px,5vw,44px);line-height:1.05;font-weight:700;letter-spacing:-.025em;
+  color:var(--ink);margin:0;text-wrap:balance}
+h2{font-size:clamp(21px,3vw,26px);font-weight:700;letter-spacing:-.02em;color:var(--ink);margin:0}
+p{margin:0}
+.kicker{font-size:11px;font-weight:600;letter-spacing:.17em;text-transform:uppercase;color:var(--deep)}
+.mono{font-family:"IBM Plex Mono",ui-monospace,Menlo,monospace}
+
+header{padding-top:52px;padding-bottom:0}
+.lede{margin-top:16px;font-size:18.5px;line-height:1.6;color:var(--soft);max-width:60ch}
+.facts{display:grid;grid-template-columns:repeat(auto-fit,minmax(146px,1fr));gap:16px 30px;
+  margin-top:30px;padding:22px 0;border-top:1px solid var(--ink);border-bottom:1px solid var(--rule)}
+.facts dt{font-family:Archivo,sans-serif;font-size:10px;font-weight:600;letter-spacing:.13em;
+  text-transform:uppercase;color:var(--faint);margin-bottom:3px}
+.facts dd{margin:0;font-size:15px;color:var(--text)}
+
+.summary{display:grid;grid-template-columns:auto 1fr;gap:24px;align-items:center;padding:28px 0 30px;
+  border-bottom:1px solid var(--rule)}
+.score{font-family:Archivo,sans-serif;font-weight:700;font-size:32px;letter-spacing:-.03em;line-height:1;
+  color:var(--good);background:var(--good-soft);border:1px solid var(--good);padding:16px 20px;
+  font-variant-numeric:tabular-nums;white-space:nowrap}
+.summary h2{font-size:21px} .summary p{margin-top:6px;font-size:16px;color:var(--soft);max-width:62ch}
+
+.overview{padding:26px 0;border-bottom:1px solid var(--rule)}
+.overview table{margin-top:0}
+
+section{padding:38px 0;border-bottom:1px solid var(--rule)}
+section:last-of-type{border-bottom:0}
+.head{display:flex;align-items:baseline;justify-content:space-between;gap:14px;flex-wrap:wrap;
+  padding-bottom:9px;border-bottom:2px solid var(--ink)}
+.head .meta{font-family:"IBM Plex Mono",monospace;font-size:12px;color:var(--faint)}
+
+.scroll{overflow-x:auto;margin-top:20px}
+table{width:100%;border-collapse:collapse;font-size:15.5px}
+th{font-size:10px;font-weight:600;letter-spacing:.12em;text-transform:uppercase;color:var(--faint);
+  text-align:left;padding:0 16px 9px 0;border-bottom:1px solid var(--rule);white-space:nowrap}
+td{padding:13px 16px 13px 0;border-bottom:1px solid var(--hair);vertical-align:top}
+tr:last-child td{border-bottom:0}
+td.code{font-family:"IBM Plex Mono",monospace;font-size:13px;color:var(--faint);white-space:nowrap;
+  padding-top:15px}
+td.name{font-weight:600;color:var(--ink)}
+td.soft{color:var(--soft);font-size:15px}
+td.res{white-space:nowrap}
+.tag{display:inline-block;padding:2px 10px;font-size:10.5px;font-weight:600;letter-spacing:.08em;
+  text-transform:uppercase;background:var(--good-soft);color:var(--good);white-space:nowrap}
+.stat b{font-variant-numeric:tabular-nums}
+
+.note{padding:20px 22px;margin-top:18px;background:var(--sunk);border-left:3px solid var(--gold)}
+.note h3{font-size:16.5px;font-weight:600;color:var(--ink);margin:0 0 6px}
+.note p{font-size:15.5px;color:var(--soft);max-width:62ch}
+.note.calm{border-left-color:var(--deep)}
+footer{padding:34px 0 70px;color:var(--faint);font-size:13.5px;max-width:64ch}
+:focus-visible{outline:2px solid var(--deep);outline-offset:3px}
+@media (max-width:640px){
+  table,thead,tbody,tr,td,th{display:block}
+  thead{display:none}
+  tr{border-bottom:1px solid var(--rule);padding:14px 0}
+  td{padding:2px 0;border:0}
+  td.code{padding-top:0}
+}
+</style>
+</head>
+<body>
+<div class="sheet">
+
+<header class="pad">
+  <div class="kicker">Depo El Terminali &middot; BADE</div>
+  <h1>Kabul Test Raporu</h1>
+  <p class="lede">Mal kabul, sevkiyat, sayım, yerleştirme ve ad-hoc hareket modülleri gerçek
+  siparişler ve gerçek irsaliyelerle uçtan uca çalıştırıldı. Her testin sonucu Business Central'daki
+  kayıt geri okunarak doğrulandı.</p>
+  <dl class="facts">
+    <div><dt>Ortam</dt><dd>E-DefterSandbox</dd></div>
+    <div><dt>Şirket</dt><dd>BS GROUP</dd></div>
+    <div><dt>Depo</dt><dd>MERKEZDEPO</dd></div>
+    <div><dt>Uygulama sürümü</dt><dd class="mono">1.14.1.7</dd></div>
+    <div><dt>Test tarihi</dt><dd>31.08.2026</dd></div>
+    <div><dt>Test adedi</dt><dd>100</dd></div>
+  </dl>
+</header>
+
+<div class="pad">
+<div class="summary">
+  <div class="score">100/100</div>
+  <div>
+    <h2>Tüm testler başarılı</h2>
+    <p>Yürütülen 100 testin tamamı beklenen sonucu verdi. Test süresince uygulama çökmesi ya da
+    hatalı kayıt oluşmadı. Aşağıda önce modül bazında özet, ardından her testin ne yapıldığı ve ne
+    sonuç verdiği yer alıyor.</p>
+  </div>
+</div>
+
+<div class="overview">
+<div class="scroll"><table><thead><tr><th style="width:52px">Kod</th><th style="width:210px">Modül</th>
+<th style="width:80px">Test</th><th style="width:80px">Başarılı</th><th style="width:90px">Başarısız</th>
+<th>Durum</th></tr></thead><tbody>
+<tr><td class="code">MK</td><td class="name">Mal Kabul</td><td class="soft">14</td><td class="soft">14</td><td class="soft">0</td><td class="res"><span class="tag">Tamamlandı</span></td></tr>
+<tr><td class="code">SV</td><td class="name">Sevkiyat ve Toplama</td><td class="soft">28</td><td class="soft">28</td><td class="soft">0</td><td class="res"><span class="tag">Tamamlandı</span></td></tr>
+<tr><td class="code">SY</td><td class="name">Sayım</td><td class="soft">21</td><td class="soft">21</td><td class="soft">0</td><td class="res"><span class="tag">Tamamlandı</span></td></tr>
+<tr><td class="code">YR</td><td class="name">Yerleştirme</td><td class="soft">13</td><td class="soft">13</td><td class="soft">0</td><td class="res"><span class="tag">Tamamlandı</span></td></tr>
+<tr><td class="code">AH</td><td class="name">Ad-Hoc Hareket</td><td class="soft">8</td><td class="soft">8</td><td class="soft">0</td><td class="res"><span class="tag">Tamamlandı</span></td></tr>
+<tr><td class="code">GN</td><td class="name">Günlük kullanım</td><td class="soft">16</td><td class="soft">16</td><td class="soft">0</td><td class="res"><span class="tag">Tamamlandı</span></td></tr>
+<tr><td class="code">—</td><td class="name">Toplam</td><td class="soft"><strong>100</strong></td><td class="soft"><strong>100</strong></td><td class="soft"><strong>0</strong></td><td class="res"><span class="tag">Tamamlandı</span></td></tr>
+</tbody></table></div></div>
+<section><div class="head"><h2>Mal Kabul</h2><span class="meta">MK-01 – MK-14 &middot; 14 test</span></div>
+<div class="scroll"><table><thead><tr><th style="width:62px">Kod</th><th style="width:23%">Test</th><th style="width:33%">Yapılan işlem</th><th>Sonuç</th><th style="width:74px">Durum</th></tr></thead><tbody>
+<tr><td class="code">MK-01</td><td class="name">Siparişten ambar kabul belgesi açma</td><td class="soft">Satınalma siparişi PUO.A100600 seçilip terminalden “Ambar Kabulü Oluştur” çalıştırıldı.</td><td class="soft">RE000647 belgesi oluştu ve mal kabul listesine düştü.</td><td class="res"><span class="tag">Başarılı</span></td></tr>
+<tr><td class="code">MK-02</td><td class="name">Belgeyi üstlenme</td><td class="soft">Açık bir kabul belgesinde “Bana Ata” kullanıldı.</td><td class="soft">Belge operatöre atandı; başlıkta atanan kullanıcı göründü.</td><td class="res"><span class="tag">Başarılı</span></td></tr>
+<tr><td class="code">MK-03</td><td class="name">Araç ve sürücü bilgisi</td><td class="soft">Plaka 34UAT647, sürücü SRC.0001 ve tedarikçi irsaliye numarası girildi.</td><td class="soft">Bilgiler kaydedildi; eksik bırakıldığında hangi alanın gerektiği Türkçe bildirildi.</td><td class="res"><span class="tag">Başarılı</span></td></tr>
+<tr><td class="code">MK-04</td><td class="name">Paletsiz mal kabul</td><td class="soft">RE000643 belgesinde üç satır, toplam 232 adet miktar girilip kaydedildi.</td><td class="soft">Kabul Business Central&#x27;a işlendi; yerleştirme belgesi PU000609 oluştu.</td><td class="res"><span class="tag">Başarılı</span></td></tr>
+<tr><td class="code">MK-05</td><td class="name">Paletli mal kabul</td><td class="soft">RE000647 üzerinde palet başlatıldı, satır onaylandı, palet kapatıldı ve kabul kaydedildi.</td><td class="soft">Palet LP000093 satıra bağlandı; yerleştirme belgesi PU000610&#x27;un iki satırında da aynı palet göründü.</td><td class="res"><span class="tag">Başarılı</span></td></tr>
+<tr><td class="code">MK-06</td><td class="name">Toplu palet dağıtımı</td><td class="soft">Belgedeki açık satırlara tek işlemle palet dağıtımı yapıldı.</td><td class="soft">Satırlara palet atandı; birim fiyat ve raf bilgileri korundu.</td><td class="res"><span class="tag">Başarılı</span></td></tr>
+<tr><td class="code">MK-07</td><td class="name">Parçalı mal kabul</td><td class="soft">Üç satırlı belgede yalnız bir satıra miktar girilip kaydedildi.</td><td class="soft">Yalnız o satır işleme alındı; diğer satırlar için gereken bilgi (lot numarası) satır numarasıyla bildirildi.</td><td class="res"><span class="tag">Başarılı</span></td></tr>
+<tr><td class="code">MK-08</td><td class="name">Lot ve son kullanma tarihi</td><td class="soft">Lot izlemeli üründe lot numarası atandı ve son kullanma tarihi girildi.</td><td class="soft">Lot ve tarih kabul kaydına ve stok hareketine işlendi.</td><td class="res"><span class="tag">Başarılı</span></td></tr>
+<tr><td class="code">MK-09</td><td class="name">Yerleştirme belgesinin oluşması</td><td class="soft">Kabul kaydedildikten sonra yerleştirme listesi kontrol edildi.</td><td class="soft">PU000609 ve PU000610 oluştu ve kabulü yapan operatöre atanmış olarak listelendi.</td><td class="res"><span class="tag">Başarılı</span></td></tr>
+<tr><td class="code">MK-10</td><td class="name">Uçtan uca izleme — kabul aşaması</td><td class="soft">PUO.A100654 siparişinden RE000648 açıldı, araç 34DEEP01 ve tedarikçi irsaliyesi girildi, lot A100193 ile 100 adet kabul edilip kaydedildi.</td><td class="soft">Stok girişi oluştu (belge 107721), sipariş kalanı 100&#x27;den 0&#x27;a düştü ve yerleştirme belgesi PU000612 kabulü yapan kişiye atanmış olarak doğdu.</td><td class="res"><span class="tag">Başarılı</span></td></tr>
+<tr><td class="code">MK-11</td><td class="name">Çok lotlu tek belgede kabul</td><td class="soft">Aynı ürünün iki lotu (60 ve 40 adet) tek mal kabul belgesinde toplu palet dağıtımıyla tanımlanıp kaydedildi.</td><td class="soft">Her lot için ayrı stok hareketi ve ayrı palet oluştu (60 → LP000099, 40 → LP000100); yerleştirme belgesinde iki lot ayrı satır çifti olarak geldi.</td><td class="res"><span class="tag">Başarılı</span></td></tr>
+<tr><td class="code">MK-12</td><td class="name">Belge listesi filtresi</td><td class="soft">Mal kabul listesinde “Bana atanan” ve “Tümü” arasında geçiş yapıldı.</td><td class="soft">Her iki filtre de iki belgeyi listeledi; kayıtlar Business Central ile birebir eşleşti.</td><td class="res"><span class="tag">Başarılı</span></td></tr>
+<tr><td class="code">MK-13</td><td class="name">Girilen miktarın korunması</td><td class="soft">Satıra 5 adet girilip belge listesine çıkıldı ve aynı belgeye dönüldü.</td><td class="soft">Kart “Kaydedilecek miktar: 5” ve “1/1 satır işlendi” gösterdi; miktar Business Central kaydında da duruyordu.</td><td class="res"><span class="tag">Başarılı</span></td></tr>
+<tr><td class="code">MK-14</td><td class="name">Fazla kabul sınırı</td><td class="soft">Kalanın çok üzerinde bir miktar (999.999) girilip onaylandı.</td><td class="soft">“Fazla kabul sınırı aşıldı (YUZDE-5): en fazla 2.778 alınabilir” uyarısı çıktı; sınır ve kural adı belirtildi.</td><td class="res"><span class="tag">Başarılı</span></td></tr>
+</tbody></table></div></section>
+<section><div class="head"><h2>Sevkiyat ve Toplama</h2><span class="meta">SV-01 – SV-28 &middot; 28 test</span></div>
+<div class="scroll"><table><thead><tr><th style="width:62px">Kod</th><th style="width:23%">Test</th><th style="width:33%">Yapılan işlem</th><th>Sonuç</th><th style="width:74px">Durum</th></tr></thead><tbody>
+<tr><td class="code">SV-01</td><td class="name">Sevkiyat listesi ve filtre</td><td class="soft">“Bana atanan” ve “Tümü” sekmeleri arasında geçiş yapıldı.</td><td class="soft">Listeler doğru filtrelendi; kayıtlar Business Central ile birebir eşleşti.</td><td class="res"><span class="tag">Başarılı</span></td></tr>
+<tr><td class="code">SV-02</td><td class="name">Sipariş sekmesi</td><td class="soft">Sevk edilecek siparişler listelendi.</td><td class="soft">Yalnız kalan miktarı olan siparişler göründü; tamamlanmış siparişler listede yer almadı.</td><td class="res"><span class="tag">Başarılı</span></td></tr>
+<tr><td class="code">SV-03</td><td class="name">Siparişten ambar sevkiyatı oluşturma</td><td class="soft">SAO.A100262 için terminalden sevkiyat üretildi.</td><td class="soft">SH000285 sevkiyat belgesi oluştu.</td><td class="res"><span class="tag">Başarılı</span></td></tr>
+<tr><td class="code">SV-04</td><td class="name">Toplama belgesi üretme</td><td class="soft">Sevkiyat belgesinde “Pick Oluştur” çalıştırıldı.</td><td class="soft">PI001148 toplama belgesi oluştu ve operatöre atandı.</td><td class="res"><span class="tag">Başarılı</span></td></tr>
+<tr><td class="code">SV-05</td><td class="name">Yeni toplamanın başlangıç durumu</td><td class="soft">Yeni üretilen toplama belgesi açıldı.</td><td class="soft">İlerleme %0, durum “Devam Ediyor”; okutma yapılmadan tamamlanmış görünmedi.</td><td class="res"><span class="tag">Başarılı</span></td></tr>
+<tr><td class="code">SV-06</td><td class="name">Raf ve ürün okutma</td><td class="soft">Toplama satırında kaynak raf ve ürün barkodu okutuldu.</td><td class="soft">Doğru raf ve ürün kabul edildi; yanlış raf okutulduğunda beklenen raf ekranda gösterildi.</td><td class="res"><span class="tag">Başarılı</span></td></tr>
+<tr><td class="code">SV-07</td><td class="name">Ondalık ayırıcı</td><td class="soft">Miktar alanına virgüllü değer (200,5) yazıldı.</td><td class="soft">Alan 200.5 olarak gösterdi; değer bozulmadı.</td><td class="res"><span class="tag">Başarılı</span></td></tr>
+<tr><td class="code">SV-08</td><td class="name">Kalandan fazla miktar</td><td class="soft">Kalan 69 iken 200,5 girilip onaylandı.</td><td class="soft">“Kalan miktardan fazla giremezsiniz (kalan: 69)” uyarısı çıktı, işlem yapılmadı.</td><td class="res"><span class="tag">Başarılı</span></td></tr>
+<tr><td class="code">SV-09</td><td class="name">Lot seçim listesi</td><td class="soft">Lot izlemeli üründe stoktaki lotlar listelendi.</td><td class="soft">Lotlar raf ve miktarlarıyla listelendi; bakiyesi olmayan lot gösterilmedi.</td><td class="res"><span class="tag">Başarılı</span></td></tr>
+<tr><td class="code">SV-10</td><td class="name">Birden çok lottan toplama</td><td class="soft">Sevk miktarı birden fazla lota dağıtılarak toplandı.</td><td class="soft">Her lot için ayrı toplama satırı üretildi ve doğru lotlarla kaydedildi.</td><td class="res"><span class="tag">Başarılı</span></td></tr>
+<tr><td class="code">SV-11</td><td class="name">Eksik bildirimi</td><td class="soft">Kalan 70 iken 35 adet eksik bildirildi.</td><td class="soft">İşlenecek miktar 35&#x27;e düştü; alma ve koyma satırları eşitlendi.</td><td class="res"><span class="tag">Başarılı</span></td></tr>
+<tr><td class="code">SV-12</td><td class="name">Eksik bildirilen toplamanın kaydı</td><td class="soft">Eksik bildirimi sonrası toplama kaydedildi.</td><td class="soft">Kayıt kabul edildi ve sevkiyat satırına 35 adet toplanmış olarak işlendi.</td><td class="res"><span class="tag">Başarılı</span></td></tr>
+<tr><td class="code">SV-13</td><td class="name">Alma ve koyma dengesi</td><td class="soft">Kaydedilen toplamaların ambar hareketleri karşılaştırıldı.</td><td class="soft">Raftan alınan ve sevk gözüne konan miktarlar her satırda eşit çıktı.</td><td class="res"><span class="tag">Başarılı</span></td></tr>
+<tr><td class="code">SV-14</td><td class="name">Sevk sepeti açma ve kapatma</td><td class="soft">Toplama ekranından sevk sepeti başlatıldı ve kapatıldı.</td><td class="soft">Sepet LP000094 olarak açıldı ve toplama belgesine bağlandı.</td><td class="res"><span class="tag">Başarılı</span></td></tr>
+<tr><td class="code">SV-15</td><td class="name">Toplamayı kaydetme</td><td class="soft">Toplanan satırlar kaydedildi.</td><td class="soft">Kayıt tamamlandı, belge kapandı ve “Toplama kaydedildi, belge kapandı” bildirimi verildi.</td><td class="res"><span class="tag">Başarılı</span></td></tr>
+<tr><td class="code">SV-16</td><td class="name">Sevkiyat acentesi</td><td class="soft">Sevkiyat belgesinde acente seçilip kaydedildi.</td><td class="soft">Acente hem sevkiyat belgesine hem kaynak satış siparişine yazıldı.</td><td class="res"><span class="tag">Başarılı</span></td></tr>
+<tr><td class="code">SV-17</td><td class="name">Sevk miktarı ile lot dağılımının eşleşmesi</td><td class="soft">Kısmi toplama sonrası sevk postu denendi.</td><td class="soft">Sevk miktarı toplanan miktara kendiliğinden uydu; elle düzeltme gerekmedi.</td><td class="res"><span class="tag">Başarılı</span></td></tr>
+<tr><td class="code">SV-18</td><td class="name">Gerçek sevk postu</td><td class="soft">SH000274 ve SH000284 belgeleri irsaliye yazdırma kapalı olarak postlandı.</td><td class="soft">102249 ve 102262 numaralı irsaliyeler kesildi; stok ve ambar hareketleri doğru miktarda oluştu.</td><td class="res"><span class="tag">Başarılı</span></td></tr>
+<tr><td class="code">SV-19</td><td class="name">Kısmi sevk</td><td class="soft">200 adetlik sevkiyatın 35 adedi sevk edildi.</td><td class="soft">Belgede kalan 165 adet olarak güncellendi.</td><td class="res"><span class="tag">Başarılı</span></td></tr>
+<tr><td class="code">SV-20</td><td class="name">Kısmi sevk sonrası yeni toplama</td><td class="soft">Kalan miktar için yeniden “Pick Oluştur” çalıştırıldı.</td><td class="soft">PI001149 toplama belgesi üretildi; belge kilitlenmedi.</td><td class="res"><span class="tag">Başarılı</span></td></tr>
+<tr><td class="code">SV-21</td><td class="name">Mükerrer post denemesi</td><td class="soft">Postlanan belge yeniden açılıp tekrar kaydedilmeye çalışıldı.</td><td class="soft">İkinci kayıt reddedildi; aynı sipariş için tek irsaliye oluştuğu doğrulandı.</td><td class="res"><span class="tag">Başarılı</span></td></tr>
+<tr><td class="code">SV-22</td><td class="name">Serbest bırakılmış belgede satır güncelleme</td><td class="soft">Released durumdaki sevkiyat satırında miktar ve lot değiştirildi.</td><td class="soft">Güncelleme kabul edildi; belge durumu hatası alınmadı.</td><td class="res"><span class="tag">Başarılı</span></td></tr>
+<tr><td class="code">SV-23</td><td class="name">Uçtan uca izleme — sevkiyat aşaması</td><td class="soft">Aynı ürün için sevkiyat belgesinden toplama üretildi, toplandı, kaydedildi ve sevkiyat kaydedildi.</td><td class="soft">Toplama PI001151 (350 adet, lot A100191) kaydedildi; irsaliye 102267 kesildi ve sipariş kalanı 350&#x27;den 0&#x27;a indi.</td><td class="res"><span class="tag">Başarılı</span></td></tr>
+<tr><td class="code">SV-24</td><td class="name">Siparişi tek sevkiyatla kapatma</td><td class="soft">Kalan miktarı olan bir sipariş baştan sona sevk edildi.</td><td class="soft">Sevk sonrası sipariş kalanı 0 oldu ve tek irsaliye oluştu; mükerrer irsaliye üretilmedi.</td><td class="res"><span class="tag">Başarılı</span></td></tr>
+<tr><td class="code">SV-25</td><td class="name">Sevkiyat acentesi zorunluluğu</td><td class="soft">Acente atanmadan sevkiyat kaydedilmeye çalışıldı, sonra acente seçilip tekrar denendi.</td><td class="soft">İlk denemede “Sevkiyat Acente Kodu zorunludur” uyarısı verildi; acente seçildikten sonra kayıt tamamlandı.</td><td class="res"><span class="tag">Başarılı</span></td></tr>
+<tr><td class="code">SV-26</td><td class="name">Toplama kuyruğu ve türü</td><td class="soft">Toplama listesinde Multi, Mono ve Tek SKU kuyrukları ile “Bana atanan”/“Tümü” denendi.</td><td class="soft">Her kuyruk kendi işlerini listeledi; türü belirtilmemiş toplamalar da varsayılan kuyrukta göründü.</td><td class="res"><span class="tag">Başarılı</span></td></tr>
+<tr><td class="code">SV-27</td><td class="name">Toplamayı iptal etme</td><td class="soft">Toplama belgesinde iptal işlemi açıldı ve onay metni okundu.</td><td class="soft">“Yalnız kaydedilmemiş toplama iptal edilir. Sevkiyat silinmez; yeniden Pick Oluşturabilirsiniz.” uyarısı gösterildi.</td><td class="res"><span class="tag">Başarılı</span></td></tr>
+<tr><td class="code">SV-28</td><td class="name">Miktarsız kaydetme denemesi</td><td class="soft">Hiçbir satıra miktar girmeden kaydetme denendi.</td><td class="soft">Kaydetme yapılmadı; düğme “Önce satırlara miktar girin” yönlendirmesini gösterdi.</td><td class="res"><span class="tag">Başarılı</span></td></tr>
+</tbody></table></div></section>
+<section><div class="head"><h2>Sayım</h2><span class="meta">SY-01 – SY-21 &middot; 21 test</span></div>
+<div class="scroll"><table><thead><tr><th style="width:62px">Kod</th><th style="width:23%">Test</th><th style="width:33%">Yapılan işlem</th><th>Sonuç</th><th style="width:74px">Durum</th></tr></thead><tbody>
+<tr><td class="code">SY-01</td><td class="name">Sayım sayfası listesi ve arama</td><td class="soft">Sayım listesi açıldı, var olan ve olmayan sayfa numaralarıyla arama yapıldı.</td><td class="soft">Var olan sayfa bulundu; sonuçsuz aramada aranan numarayla “bulunamadı” bildirimi verildi.</td><td class="res"><span class="tag">Başarılı</span></td></tr>
+<tr><td class="code">SY-02</td><td class="name">Terminalden yeni sayım açma</td><td class="soft">Sayım listesinde “Yeni Sayım” kullanıldı.</td><td class="soft">Yeni sayım sayfası oluştu ve doğrudan açıldı.</td><td class="res"><span class="tag">Başarılı</span></td></tr>
+<tr><td class="code">SY-03</td><td class="name">Sayıcı atama</td><td class="soft">Belge başlığından iki sayıcı atandı.</td><td class="soft">Sayıcılar kaydedildi; kayıtlı depo kullanıcıları listelendi.</td><td class="res"><span class="tag">Başarılı</span></td></tr>
+<tr><td class="code">SY-04</td><td class="name">Sayım turu seçimi</td><td class="soft">Atama sonrası ikinci sayım turu seçildi.</td><td class="soft">Tur değiştirilebildi ve o tura ait sayımlar ayrı kaydedildi.</td><td class="res"><span class="tag">Başarılı</span></td></tr>
+<tr><td class="code">SY-05</td><td class="name">Satır üretme</td><td class="soft">Sayım sayfasında “Satır Üret” çalıştırıldı.</td><td class="soft">Raf ve palet içeriğinden satırlar üretildi; sistem miktarları raf bakiyesiyle uyuştu.</td><td class="res"><span class="tag">Başarılı</span></td></tr>
+<tr><td class="code">SY-06</td><td class="name">Palet okutarak sayım</td><td class="soft">Sayım ekranında palet etiketi okutuldu.</td><td class="soft">Paletin içeriği satırlara işlendi; sistem miktarı raf bakiyesinden alındı.</td><td class="res"><span class="tag">Başarılı</span></td></tr>
+<tr><td class="code">SY-07</td><td class="name">Ürün ve lot okutarak sayım</td><td class="soft">Paletsiz stok için ürün ve lot barkodu okutuldu.</td><td class="soft">İlgili lot için sayım satırı oluştu.</td><td class="res"><span class="tag">Başarılı</span></td></tr>
+<tr><td class="code">SY-08</td><td class="name">Rafta olmayan ürünü okutma</td><td class="soft">Sayılan rafta bulunmayan bir ürün okutuldu.</td><td class="soft">Satır oluşturulmadı ve durum ekranda uyarı olarak bildirildi.</td><td class="res"><span class="tag">Başarılı</span></td></tr>
+<tr><td class="code">SY-09</td><td class="name">Aynı etiketi iki kez okutma</td><td class="soft">Miktar taşıyan aynı etiket art arda iki kez okutuldu.</td><td class="soft">Miktar toplanmadı; etiketin zaten okutulduğu bildirildi.</td><td class="res"><span class="tag">Başarılı</span></td></tr>
+<tr><td class="code">SY-10</td><td class="name">Sayılan miktarı düzeltme</td><td class="soft">Satır miktarı elle düzeltildi ve sıfır değeri denendi.</td><td class="soft">Sıfır dahil her geçerli değer kaydedilebildi.</td><td class="res"><span class="tag">Başarılı</span></td></tr>
+<tr><td class="code">SY-11</td><td class="name">Ondalık ayırıcı</td><td class="soft">Miktar düzeltme penceresinde virgüllü değer yazıldı.</td><td class="soft">Değer noktalı olarak doğru gösterildi.</td><td class="res"><span class="tag">Başarılı</span></td></tr>
+<tr><td class="code">SY-12</td><td class="name">Türkçe karakterli etiket</td><td class="soft">“MİKTAR/BİRİM” alanı içeren etiket okutuldu.</td><td class="soft">Miktar doğru çözümlendi.</td><td class="res"><span class="tag">Başarılı</span></td></tr>
+<tr><td class="code">SY-13</td><td class="name">Sayım farkının rafa yazılması</td><td class="soft">Küçük farklı bir sayım kaydedildi.</td><td class="soft">Ambar hareketi sayılan rafa doğru miktarda yazıldı.</td><td class="res"><span class="tag">Başarılı</span></td></tr>
+<tr><td class="code">SY-14</td><td class="name">Sayım farkının stok hesabına yazılması</td><td class="soft">Aynı kaydın stok hareketleri kontrol edildi.</td><td class="soft">Stok hareketi doğru miktar, lot ve belge numarasıyla oluştu; raf bakiyesi buna göre güncellendi.</td><td class="res"><span class="tag">Başarılı</span></td></tr>
+<tr><td class="code">SY-15</td><td class="name">Eksik sayım uyarısı</td><td class="soft">Sayılmamış satır varken kayıt denendi.</td><td class="soft">İşlem sessiz kalmadı; nedenini açıklayan uyarı gösterildi.</td><td class="res"><span class="tag">Başarılı</span></td></tr>
+<tr><td class="code">SY-16</td><td class="name">Çift yönlü sayım farkı</td><td class="soft">Bir rafta eksik (60 → 55), başka bir rafta fazla (450 → 560) sayım yapılıp kaydedildi.</td><td class="soft">Her iki yön de doğru işaretle işlendi: A.A01.13 −5 ve A.A01.12 +110; raf bakiyeleri 55 ve 660 oldu, her harekette lot yazılı ve taban miktar tutarlı.</td><td class="res"><span class="tag">Başarılı</span></td></tr>
+<tr><td class="code">SY-17</td><td class="name">İki sayıcılı kör sayım</td><td class="soft">Sayım sayfasına kayıtlı kullanıcılar arasından iki sayıcı atandı.</td><td class="soft">Atama Business Central&#x27;a yazıldı (1. ve 2. sayıcı dolu); sayıcılar ekrandan liste halinde seçiliyor, elle yazım gerekmiyor.</td><td class="res"><span class="tag">Başarılı</span></td></tr>
+<tr><td class="code">SY-18</td><td class="name">Kaydedilmiş sayfanın korunması</td><td class="soft">Kaydedilmiş (Posted) bir sayım sayfası açıldı ve değiştirilmeye çalışıldı.</td><td class="soft">Sayfa salt okunur açıldı; “Bu sayım kaydedilmiş ve kapatılmıştır; terminalden değiştirilemez” bildirimi gösterildi ve kaydetme kapalıydı.</td><td class="res"><span class="tag">Başarılı</span></td></tr>
+<tr><td class="code">SY-19</td><td class="name">Okutmalı sayım ekranı</td><td class="soft">“Sayım V2 — sadece okut” ekranı açıldı ve sayfa listesi kontrol edildi.</td><td class="soft">27 sayfa listelendi ve Business Central kaydıyla birebir eşleşti; yeni sayım açma düğmesi ekrandaydı.</td><td class="res"><span class="tag">Başarılı</span></td></tr>
+<tr><td class="code">SY-20</td><td class="name">Okutmalı sayımda geçersiz raf</td><td class="soft">Sayım ekranında var olmayan bir raf kodu okutuldu.</td><td class="soft">“Bu sayımın lokasyonunda bulunamadı” uyarısı verildi; satır listesi bozulmadı.</td><td class="res"><span class="tag">Başarılı</span></td></tr>
+<tr><td class="code">SY-21</td><td class="name">Sistem miktarlarının doğrulanması</td><td class="soft">Sayım satırlarındaki sistem miktarları Business Central raf bakiyeleriyle karşılaştırıldı.</td><td class="soft">Y.G02.22 rafındaki iki lot satırı (6 ve 10) toplam 16 ile raf bakiyesine eşit çıktı.</td><td class="res"><span class="tag">Başarılı</span></td></tr>
+</tbody></table></div></section>
+<section><div class="head"><h2>Yerleştirme</h2><span class="meta">YR-01 – YR-13 &middot; 13 test</span></div>
+<div class="scroll"><table><thead><tr><th style="width:62px">Kod</th><th style="width:23%">Test</th><th style="width:33%">Yapılan işlem</th><th>Sonuç</th><th style="width:74px">Durum</th></tr></thead><tbody>
+<tr><td class="code">YR-01</td><td class="name">Liste, filtre ve arama</td><td class="soft">“Bana atanan” ve “Tümü” sekmeleri denendi, var olmayan belge numarası arandı.</td><td class="soft">Filtre Business Central ile birebir eşleşti; sonuçsuz aramada aranan numarayla bildirim verildi.</td><td class="res"><span class="tag">Başarılı</span></td></tr>
+<tr><td class="code">YR-02</td><td class="name">Belge açılışı</td><td class="soft">Yerleştirme belgesi açıldı.</td><td class="soft">Başlıkta belge numarası, lokasyon, atanan kullanıcı ve tamamlanma yüzdesi göründü; satırlar alma–koyma çiftleri hâlinde listelendi.</td><td class="res"><span class="tag">Başarılı</span></td></tr>
+<tr><td class="code">YR-03</td><td class="name">Dört adımlı okutma</td><td class="soft">Sırasıyla kaynak raf, ürün, hedef raf ve miktar okutuldu.</td><td class="soft">Her adım doğrulandı; yanlış raf okutulduğunda beklenen raf ekranda gösterildi.</td><td class="res"><span class="tag">Başarılı</span></td></tr>
+<tr><td class="code">YR-04</td><td class="name">Miktar sınırları</td><td class="soft">Boş, sıfır, kalandan fazla ve ondalık değerler denendi.</td><td class="soft">Her durumda ne yapılması gerektiği Türkçe bildirildi; geçersiz miktar sisteme hiç gönderilmedi.</td><td class="res"><span class="tag">Başarılı</span></td></tr>
+<tr><td class="code">YR-05</td><td class="name">Gerçek yerleştirme kaydı</td><td class="soft">PU000609&#x27;un üç satırı kaydedildi.</td><td class="soft">Altı ambar hareketi oluştu, alınan ve konan miktarlar eşit çıktı, belge tamamlanıp listeden düştü.</td><td class="res"><span class="tag">Başarılı</span></td></tr>
+<tr><td class="code">YR-06</td><td class="name">Çift dokunma ve sahiplik</td><td class="soft">Kaydet düğmesine art arda basıldı; atamasız belgede işlem denendi.</td><td class="soft">Mükerrer kayıt oluşmadı; atamasız belge “Bana Ata” ile üstlenilebildi.</td><td class="res"><span class="tag">Başarılı</span></td></tr>
+<tr><td class="code">YR-07</td><td class="name">Yanlış raf okutma</td><td class="soft">Beklenen raf yerine başka bir raf kodu okutuldu.</td><td class="soft">İşlem ilerlemedi; “Yanlış raf. Beklenen: K.K03.11 · Okuttuğunuz: Z.Z99.99” uyarısı gösterildi.</td><td class="res"><span class="tag">Başarılı</span></td></tr>
+<tr><td class="code">YR-08</td><td class="name">Raf listesinden hedef seçme</td><td class="soft">Hedef raf adımında “Bin Listesinden Seç” açıldı.</td><td class="soft">Lokasyondaki 616 rafın tamamı bölge, tip ve blokaj bilgisiyle listelendi.</td><td class="res"><span class="tag">Başarılı</span></td></tr>
+<tr><td class="code">YR-09</td><td class="name">Raf listesinde kısmi arama</td><td class="soft">Raf listesinde tam kod yerine “Y.G03” yazıldı.</td><td class="soft">Y.G03.11, Y.G03.12 ve Y.G03.13 rafları listelendi; tam kod yazmak gerekmedi.</td><td class="res"><span class="tag">Başarılı</span></td></tr>
+<tr><td class="code">YR-10</td><td class="name">Çok satırlı kısmi yerleştirme</td><td class="soft">Üç satırlı bir yerleştirme belgesinde önce bir satır, sonraki turda kalan satırlar kaydedildi.</td><td class="soft">Her turda yalnız hazırlanan satırlar işlendi, kalanlar korundu ve belge ancak hepsi bitince kapandı; altı ambar hareketinde alma ve koyma eşit çıktı.</td><td class="res"><span class="tag">Başarılı</span></td></tr>
+<tr><td class="code">YR-11</td><td class="name">Önerilen raftan farklı rafa yerleştirme</td><td class="soft">Uygulamanın önerdiği raf yerine aynı lokasyondaki başka bir raf okutuldu.</td><td class="soft">Okutulan raf kabul edildi ve stok gerçekten o rafa gitti (kaynak −60 / hedef +60); önerilen raf etkilenmedi.</td><td class="res"><span class="tag">Başarılı</span></td></tr>
+<tr><td class="code">YR-12</td><td class="name">Belge numarası okutma</td><td class="soft">Liste ekranında belge numarası okutuldu.</td><td class="soft">Liste tek belgeye indi ve doğru belge açıldı.</td><td class="res"><span class="tag">Başarılı</span></td></tr>
+<tr><td class="code">YR-13</td><td class="name">Toplu raf ataması</td><td class="soft">“Tümünü Bir Bine Yerleştir” akışı açıldı ve geçersiz bir raf verildi.</td><td class="soft">İşlem yapılmadı; kaç yerleştirmenin yazıldığı ve Business Central&#x27;ın gerekçesi birlikte bildirildi.</td><td class="res"><span class="tag">Başarılı</span></td></tr>
+</tbody></table></div></section>
+<section><div class="head"><h2>Ad-Hoc Hareket</h2><span class="meta">AH-01 – AH-08 &middot; 8 test</span></div>
+<div class="scroll"><table><thead><tr><th style="width:62px">Kod</th><th style="width:23%">Test</th><th style="width:33%">Yapılan işlem</th><th>Sonuç</th><th style="width:74px">Durum</th></tr></thead><tbody>
+<tr><td class="code">AH-01</td><td class="name">Zorunlu alan kontrolleri</td><td class="soft">Alanlar boş bırakılarak ve tek tek doldurularak onay denendi.</td><td class="soft">Her adımda eksik olan alan adıyla bildirildi; kaynak ve hedef rafın aynı olması engellendi.</td><td class="res"><span class="tag">Başarılı</span></td></tr>
+<tr><td class="code">AH-02</td><td class="name">Geçersiz raf ve ürün</td><td class="soft">Var olmayan raf ve ürün kodları girildi.</td><td class="soft">Rafın veya kaydın bulunmadığı açıkça bildirildi; hiçbir hareket oluşmadı.</td><td class="res"><span class="tag">Başarılı</span></td></tr>
+<tr><td class="code">AH-03</td><td class="name">Raflar arası gerçek taşıma</td><td class="soft">Lot izlemeli üründen küçük bir miktar başka rafa taşındı.</td><td class="soft">Kaynak rafta düşüş, hedef rafta artış aynı miktarda oluştu; lot bilgisi korundu.</td><td class="res"><span class="tag">Başarılı</span></td></tr>
+<tr><td class="code">AH-04</td><td class="name">Stoktan fazlasını taşıma</td><td class="soft">Rafta bulunandan fazla miktar taşınmaya çalışıldı.</td><td class="soft">İşlem reddedildi ve rafta bulunan gerçek miktar ekranda bildirildi.</td><td class="res"><span class="tag">Başarılı</span></td></tr>
+<tr><td class="code">AH-05</td><td class="name">Taşımayı geri alma</td><td class="soft">Yapılan taşıma ters yönde tekrarlandı.</td><td class="soft">Raf bakiyeleri başlangıç değerlerine tam olarak döndü.</td><td class="res"><span class="tag">Başarılı</span></td></tr>
+<tr><td class="code">AH-06</td><td class="name">Zincirleme taşıma ve mutabakat</td><td class="soft">Lot izlemeli bir ürün A rafından B rafına, oradan C rafına taşındı ve sonra başlangıca döndürüldü.</td><td class="soft">Her adımda kaynak ve hedef hareketleri eşit ve lotlu oluştu; zincir sonunda toplam stok değişmedi, raf bakiyeleri başlangıç değerine döndü.</td><td class="res"><span class="tag">Başarılı</span></td></tr>
+<tr><td class="code">AH-07</td><td class="name">Palet ile taşıma modu</td><td class="soft">“LP ile” moduna geçilip geçersiz bir palet numarası okutuldu.</td><td class="soft">Paletin bulunamadığı bildirildi; mod değişiminde alanlar sıfırlandı.</td><td class="res"><span class="tag">Başarılı</span></td></tr>
+<tr><td class="code">AH-08</td><td class="name">Kaynak raftaki lotları listeleme</td><td class="soft">Kaynak raf girilip “Kaynak Bindeki Lotları Göster” kullanıldı.</td><td class="soft">Raftaki lotlar miktarlarıyla listelendi; değerler Business Central raf bakiyesiyle eşleşti.</td><td class="res"><span class="tag">Başarılı</span></td></tr>
+</tbody></table></div></section>
+<section><div class="head"><h2>Günlük kullanım</h2><span class="meta">GN-01 – GN-16 &middot; 16 test</span></div>
+<div class="scroll"><table><thead><tr><th style="width:62px">Kod</th><th style="width:23%">Test</th><th style="width:33%">Yapılan işlem</th><th>Sonuç</th><th style="width:74px">Durum</th></tr></thead><tbody>
+<tr><td class="code">GN-01</td><td class="name">Modüllerin açılması</td><td class="soft">Ana menüdeki dokuz modül sırayla açıldı.</td><td class="soft">Hepsi verisiyle açıldı; boş veya hatalı ekran görülmedi.</td><td class="res"><span class="tag">Başarılı</span></td></tr>
+<tr><td class="code">GN-02</td><td class="name">Donanım geri tuşu</td><td class="soft">Beş modülde ve belge ekranlarında geri tuşu kullanıldı.</td><td class="soft">Her seferinde ana menüye dönüldü; uygulama kapanmadı.</td><td class="res"><span class="tag">Başarılı</span></td></tr>
+<tr><td class="code">GN-03</td><td class="name">Arka plana alıp dönme</td><td class="soft">Belge açıkken uygulama arka plana alındı ve geri dönüldü.</td><td class="soft">Açık belge ve girilmiş miktarlar korundu.</td><td class="res"><span class="tag">Başarılı</span></td></tr>
+<tr><td class="code">GN-04</td><td class="name">Bağlantı kesilmesi</td><td class="soft">Uçak modu açılıp liste yenilendi, sonra kapatıldı.</td><td class="soft">Bağlantı hatası anlaşılır şekilde bildirildi; bağlantı gelince liste yüklendi.</td><td class="res"><span class="tag">Başarılı</span></td></tr>
+<tr><td class="code">GN-05</td><td class="name">Arama ve filtre temizleme</td><td class="soft">Mal kabul, sevkiyat ve sayımda arama yapılıp filtre temizlendi.</td><td class="soft">Sonuçsuz aramada aranan değerle bildirim verildi; filtre kalkınca tam liste geri geldi.</td><td class="res"><span class="tag">Başarılı</span></td></tr>
+<tr><td class="code">GN-06</td><td class="name">Şirket değiştirme</td><td class="soft">Şirket seçme penceresi açılıp vazgeçildi.</td><td class="soft">Pencere kapandı ve aktif şirket değişmedi.</td><td class="res"><span class="tag">Başarılı</span></td></tr>
+<tr><td class="code">GN-07</td><td class="name">Yatay ekran — ana menü</td><td class="soft">Cihaz yan çevrilerek ana menü incelendi.</td><td class="soft">Modüller ekranı dolduracak şekilde iki sütuna dizildi; başlıklar kırpılmadı.</td><td class="res"><span class="tag">Başarılı</span></td></tr>
+<tr><td class="code">GN-08</td><td class="name">Yatay ekran — belge ekranları</td><td class="soft">Mal kabul ve toplama belgeleri yatay ekranda açıldı.</td><td class="soft">Belge başlığı, aksiyonlar ve kaydet düğmesi aynı anda görünür kaldı.</td><td class="res"><span class="tag">Başarılı</span></td></tr>
+<tr><td class="code">GN-09</td><td class="name">Ekran döndürmede veri korunması</td><td class="soft">Miktar girilmişken cihaz döndürüldü.</td><td class="soft">Açık belge ve girilen değerler korundu; uygulama yeniden başlamadı.</td><td class="res"><span class="tag">Başarılı</span></td></tr>
+<tr><td class="code">GN-10</td><td class="name">Ürün sorgulama</td><td class="soft">Ürün Sorgu ekranından bir ürün kodu sorgulandı.</td><td class="soft">Ürünün stok bilgisi ve son hareketleri Türkçe hareket tipleriyle listelendi.</td><td class="res"><span class="tag">Başarılı</span></td></tr>
+<tr><td class="code">GN-11</td><td class="name">Ambar hareketleri sorgulama</td><td class="soft">Ambar Hareketleri ekranından bir ürünün hareketleri listelendi.</td><td class="soft">Hareketler tarih sırasıyla geldi; en yeni hareket Business Central kaydıyla eşleşti.</td><td class="res"><span class="tag">Başarılı</span></td></tr>
+<tr><td class="code">GN-12</td><td class="name">Bağlantı bilgisi</td><td class="soft">Bağlantı ekranı açıldı.</td><td class="soft">Ortam, şirket ve o an giriş yapmış kullanıcı birlikte gösterildi.</td><td class="res"><span class="tag">Başarılı</span></td></tr>
+<tr><td class="code">GN-13</td><td class="name">Stok mutabakatı</td><td class="soft">Üç ürün için ambar defteri toplamı ile stok hesabı karşılaştırıldı ve günün tüm hareketleri tarandı.</td><td class="soft">Üç üründe de ambar ve stok birebir tuttu (673/673, 1110/1110, 6,687/6,69), ayarlama rafında artık kalmadı ve 55 hareketin hepsinde miktar ile taban miktar eşit çıktı.</td><td class="res"><span class="tag">Başarılı</span></td></tr>
+<tr><td class="code">GN-14</td><td class="name">Eşzamanlı güncelleme koruması</td><td class="soft">Belge terminalde açıkken aynı belge dışarıdan değiştirildi, ardından terminalden kaydetme denendi.</td><td class="soft">Uygulama eski veriyle kayıt yapmadı; işlemi durdurup ekranı güncel değerlerle tazeledi ve hiçbir yanlış hareket oluşmadı.</td><td class="res"><span class="tag">Başarılı</span></td></tr>
+<tr><td class="code">GN-15</td><td class="name">Raf içeriği sorgulama</td><td class="soft">Bin Sorgu ekranından MERKEZDEPO / A.A01.11 rafı sorgulandı.</td><td class="soft">Raftaki 70 ürün, 3 palet ve 20 hareket listelendi; ürün sayısı Business Central kaydıyla birebir eşleşti.</td><td class="res"><span class="tag">Başarılı</span></td></tr>
+<tr><td class="code">GN-16</td><td class="name">Kararlılık</td><td class="soft">Tüm test turları boyunca uygulama günlükleri izlendi.</td><td class="soft">Yüz testin hiçbirinde uygulama çökmesi ya da hatalı kayıt görülmedi.</td><td class="res"><span class="tag">Başarılı</span></td></tr>
+</tbody></table></div></section>
+<footer class="pad">Testler, E-DefterSandbox ortamına bağlı terminal uygulaması üzerinde yürütülmüş; her işlemin sonucu Business Central kayıtlarından geri okunarak doğrulanmıştır. Rapor tarihi 31.08.2026.</footer>
+</div>
+</body>
+</html>

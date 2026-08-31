@@ -124,6 +124,10 @@ codeunit 72043 "DOPSWHS Receipt Mgmt"
         if PutAwayNo <> '' then begin
             SplitPutAwayByReceiptLPs(ReceiptNo, PostedNo);
             StampPutAwayWithLP(PostedNo);
+            // LP satirlarini bolen/degistiren tenant subscriber'lari da calisip
+            // bittikten sonra belge sahipligini son kez dogrula. Atama sessizce
+            // kaybolursa mal kabul basarili donmemeli; ayni transaction geri alinmali.
+            EnsurePutAwayAssigned(PutAwayNo, AssignedUserId);
         end;
 
         if PrintReport then begin
@@ -422,8 +426,13 @@ codeunit 72043 "DOPSWHS Receipt Mgmt"
             exit('');
 
         PutAwayNo := FindPutAwayNo(PostedReceiptNo);
-        if PutAwayNo <> '' then
+        if PutAwayNo <> '' then begin
+            // BC yerleştirmeyi kendi postu sırasında ürettiyse burada erken
+            // çıkılıyordu ve operatör ataması hiç yapılmıyordu: belge "Atanan: —"
+            // kalıyor, terminalde "Bana atanan" listesinde görünmüyordu.
+            EnsurePutAwayAssigned(PutAwayNo, AssignedUserId);
             exit(PutAwayNo);
+        end;
 
         PostedWhseReceiptLine.SetRange("No.", PostedReceiptNo);
         PostedWhseReceiptLine.SetFilter(Quantity, '>0');
@@ -439,7 +448,65 @@ codeunit 72043 "DOPSWHS Receipt Mgmt"
             Error(
                 '%1 kayıtlı mal kabulü oluştu ancak zorunlu yerleştirme belgesi üretilemedi. Lokasyonun yerleştirme şablonu ve hedef raf kapasitesini kontrol edin; işlem geri alındı.',
                 PostedReceiptNo);
+        // Standart CreatePutAwayDoc "Assigned User ID"yi her zaman taşımıyor;
+        // mal kabulü yapan operatör yerleştirmede de sahibi olsun (terminalde
+        // "Bana atanan" listesi boş kalmasın).
+        EnsurePutAwayAssigned(PutAwayNo, AssignedUserId);
         exit(PutAwayNo);
+    end;
+
+    /// <summary>
+    /// Satırı posttan çıkarır: "Qty. to Receive" (ve taban miktarı) 0 yapılır,
+    /// satırın kendi doğrulama zinciri çalıştırılmadan. Kısmi mal kabulde
+    /// okutulmayan satırların lot/seri zorunluluğu yüzünden tüm postun
+    /// düşmesini önler.
+    /// </summary>
+    procedure ExcludeLineFromPost(var WhseReceiptLine: Record "Warehouse Receipt Line")
+    var
+        WhseItemTrackingLine: Record "Whse. Item Tracking Line";
+    begin
+        if WhseReceiptLine."Qty. to Receive" = 0 then
+            exit;
+        WhseReceiptLine."Qty. to Receive" := 0;
+        WhseReceiptLine."Qty. to Receive (Base)" := 0;
+        WhseReceiptLine.Modify(false);
+        // Satır posttan çıktıysa ona bağlı ambar izleme satırları da işlenmemeli.
+        WhseItemTrackingLine.SetRange("Source Type", Database::"Warehouse Receipt Line");
+        WhseItemTrackingLine.SetRange("Source ID", WhseReceiptLine."No.");
+        WhseItemTrackingLine.SetRange("Source Ref. No.", WhseReceiptLine."Line No.");
+        if WhseItemTrackingLine.FindSet() then
+            repeat
+                if WhseItemTrackingLine."Qty. to Handle (Base)" <> 0 then begin
+                    WhseItemTrackingLine."Qty. to Handle (Base)" := 0;
+                    WhseItemTrackingLine."Qty. to Handle" := 0;
+                    WhseItemTrackingLine.Modify(false);
+                end;
+            until WhseItemTrackingLine.Next() = 0;
+    end;
+
+    /// <summary>
+    /// Mal kabulden uretilen yerleştirmenin sahibi, mal kabul belgesinin sahibiyle
+    /// ayni olmalidir. Dogrudan atama, WMS yerel kullanicisinin Warehouse Employee
+    /// tablosunda bulunmadigi kurulumlari destekler. Yazim sonrasi tekrar okuyarak
+    /// subscriber kaynakli sessiz atama kaybini fail-safe hale getirir.
+    /// </summary>
+    procedure EnsurePutAwayAssigned(PutAwayNo: Code[20]; AssignedUserId: Code[50])
+    var
+        WhseActivityHeader: Record "Warehouse Activity Header";
+    begin
+        if (PutAwayNo = '') or (AssignedUserId = '') then
+            exit;
+        if not WhseActivityHeader.Get(WhseActivityHeader.Type::"Put-away", PutAwayNo) then
+            Error('%1 yerleştirme belgesinin başlığı bulunamadı. Mal kabul işlemi geri alındı.', PutAwayNo);
+        if WhseActivityHeader."Assigned User ID" = AssignedUserId then
+            exit;
+        WhseActivityHeader."Assigned User ID" := CopyStr(AssignedUserId, 1, MaxStrLen(WhseActivityHeader."Assigned User ID"));
+        WhseActivityHeader.Modify(true);
+        WhseActivityHeader.Get(WhseActivityHeader.Type::"Put-away", PutAwayNo);
+        if WhseActivityHeader."Assigned User ID" <> AssignedUserId then
+            Error(
+                '%1 yerleştirme belgesi %2 kullanıcısına atanamadı. Mal kabul işlemi geri alındı.',
+                PutAwayNo, AssignedUserId);
     end;
 
     local procedure FindPutAwayNo(PostedReceiptNo: Code[20]): Code[20]
@@ -1226,8 +1293,8 @@ codeunit 72043 "DOPSWHS Receipt Mgmt"
             LP.Get(LicensePlateNo);
             BindLpToReceiptBin(LP, WhseReceiptLine);
             EnsureReceiptLpIdentity(LP, WhseReceiptLine, LotNo, SerialNo);
-            LPMgt.AddLine(LP, WhseReceiptLine."Item No.", WhseReceiptLine."Unit of Measure Code", QtyToReceive, LotNo, SerialNo, ExpiryDate);
-            StampReceiptSourceOnLastLpLine(LicensePlateNo, WhseReceiptLine);
+            UpsertReceiptLpLine(
+                LP, WhseReceiptLine, QtyToReceive, LotNo, SerialNo, ExpiryDate, LPMgt);
 
             // Stamp the Whse Receipt Header with this LP so downstream posting can carry it
             // onto Posted Whse Receipt + Item Ledger Entry. Idempotent — only first LP wins.
@@ -1246,6 +1313,67 @@ codeunit 72043 "DOPSWHS Receipt Mgmt"
             Clear(WhseReceiptLine."DOPSWHS Pending Lot No.");
             WhseReceiptLine.Modify(true);
         end;
+    end;
+
+    /// <summary>
+    /// Keeps one physical LP row per warehouse-receipt source line. Mobile PATCH is retryable and
+    /// operators may reopen the quantity dialog; appending on every PATCH used to turn 10 -> 5 into
+    /// two LP rows totalling 15 while the receipt line itself correctly held 5.
+    /// </summary>
+    local procedure UpsertReceiptLpLine(var LP: Record "DOPSWHS LP Header"; WhseReceiptLine: Record "Warehouse Receipt Line"; QtyToReceive: Decimal; LotNo: Code[50]; SerialNo: Code[50]; ExpiryDate: Date; var LPMgt: Codeunit "DOPSWHS LP Management")
+    var
+        LPLine: Record "DOPSWHS LP Line";
+        DuplicateLPLine: Record "DOPSWHS LP Line";
+        KeptLineNo: Integer;
+    begin
+        // A receipt source line can move to another LP while it is still open. Remove the stale
+        // source binding first so the same inventory quantity is never carried by two LPs.
+        LPLine.SetRange("Source Document Type", LPLine."Source Document Type"::WhseReceipt);
+        LPLine.SetRange("Source Document No.", WhseReceiptLine."No.");
+        LPLine.SetRange("Source Document Line No.", WhseReceiptLine."Line No.");
+        LPLine.SetFilter("LP No.", '<>%1', LP."No.");
+        if not LPLine.IsEmpty() then
+            LPLine.DeleteAll(true);
+
+        LPLine.Reset();
+        LPLine.SetRange("LP No.", LP."No.");
+        LPLine.SetRange("Source Document Type", LPLine."Source Document Type"::WhseReceipt);
+        LPLine.SetRange("Source Document No.", WhseReceiptLine."No.");
+        LPLine.SetRange("Source Document Line No.", WhseReceiptLine."Line No.");
+        if QtyToReceive <= 0 then begin
+            if not LPLine.IsEmpty() then
+                LPLine.DeleteAll(true);
+            exit;
+        end;
+
+        if not LPLine.FindFirst() then begin
+            LPMgt.AddLine(
+                LP, WhseReceiptLine."Item No.", WhseReceiptLine."Unit of Measure Code",
+                QtyToReceive, LotNo, SerialNo, ExpiryDate);
+            StampReceiptSourceOnLastLpLine(LP."No.", WhseReceiptLine);
+            exit;
+        end;
+
+        KeptLineNo := LPLine."Line No.";
+        LPLine.Validate("Item No.", WhseReceiptLine."Item No.");
+        LPLine."Variant Code" := WhseReceiptLine."Variant Code";
+        LPLine."Unit of Measure" := WhseReceiptLine."Unit of Measure Code";
+        LPLine.Validate(Quantity, QtyToReceive);
+        LPLine."Lot No." := LotNo;
+        LPLine."Serial No." := SerialNo;
+        LPLine."Expiration Date" := ExpiryDate;
+        LPLine."Source Bin Code" := WhseReceiptLine."Bin Code";
+        LPLine."Source Document Quantity" := WhseReceiptLine.Quantity;
+        LPLine.Modify(true);
+
+        // Repair legacy duplicate rows deterministically on the first retry/edit.
+        DuplicateLPLine.SetRange("LP No.", LP."No.");
+        DuplicateLPLine.SetRange("Source Document Type", DuplicateLPLine."Source Document Type"::WhseReceipt);
+        DuplicateLPLine.SetRange("Source Document No.", WhseReceiptLine."No.");
+        DuplicateLPLine.SetRange("Source Document Line No.", WhseReceiptLine."Line No.");
+        DuplicateLPLine.SetFilter("Line No.", '<>%1', KeptLineNo);
+        if not DuplicateLPLine.IsEmpty() then
+            DuplicateLPLine.DeleteAll(true);
     end;
 
     local procedure StampReceiptSourceOnLastLpLine(LpNo: Code[20]; WhseReceiptLine: Record "Warehouse Receipt Line")
@@ -1326,14 +1454,20 @@ codeunit 72043 "DOPSWHS Receipt Mgmt"
         LPLine.SetFilter(Quantity, '>0');
         if LPLine.FindSet() then
             repeat
-                if (LPLine."Item No." <> WhseReceiptLine."Item No.") or
-                   (LPLine."Variant Code" <> WhseReceiptLine."Variant Code") or
-                   (LPLine."Lot No." <> LotNo) or
-                   (LPLine."Serial No." <> SerialNo)
+                // The current source row is an edit/retry and may legitimately change quantity or
+                // tracking while the LP is open. Other rows still enforce the single identity rule.
+                if not ((LPLine."Source Document Type" = LPLine."Source Document Type"::WhseReceipt) and
+                        (LPLine."Source Document No." = WhseReceiptLine."No.") and
+                        (LPLine."Source Document Line No." = WhseReceiptLine."Line No."))
                 then
-                    Error(
-                        '%1 LP''si %2 ürünü / %3 lotu için açılmıştır. Farklı ürün veya lot için LP''yi kapatıp yeni LP başlatın.',
-                        LP."No.", LPLine."Item No.", LPLine."Lot No.");
+                    if (LPLine."Item No." <> WhseReceiptLine."Item No.") or
+                       (LPLine."Variant Code" <> WhseReceiptLine."Variant Code") or
+                       (LPLine."Lot No." <> LotNo) or
+                       (LPLine."Serial No." <> SerialNo)
+                    then
+                        Error(
+                            '%1 LP''si %2 ürünü / %3 lotu için açılmıştır. Farklı ürün veya lot için LP''yi kapatıp yeni LP başlatın.',
+                            LP."No.", LPLine."Item No.", LPLine."Lot No.");
             until LPLine.Next() = 0;
     end;
 
@@ -1695,8 +1829,17 @@ codeunit 72043 "DOPSWHS Receipt Mgmt"
             PurchaseRelease.Reopen(PurchaseHeader);
         end;
 
+        // Miktar Validate'i BC'de fiyat/indirim yeniden hesaplatıyor; bölünen
+        // satırlar aynı siparişte farklı birim fiyata düşüyordu (32 vs 30).
+        // Orijinal fiyat ve indirim korunur.
         SourcePurchaseLine.Validate(Quantity, AnchorReceiptLine.Quantity);
         SourcePurchaseLine.Validate("Qty. to Receive", 0);
+        if SourcePurchaseLine."Direct Unit Cost" <> TemplatePurchaseLine."Direct Unit Cost" then
+            SourcePurchaseLine."Direct Unit Cost" := TemplatePurchaseLine."Direct Unit Cost";
+        if SourcePurchaseLine."Line Discount %" <> TemplatePurchaseLine."Line Discount %" then
+            SourcePurchaseLine."Line Discount %" := TemplatePurchaseLine."Line Discount %";
+        if (SourcePurchaseLine."Bin Code" = '') and (TemplatePurchaseLine."Bin Code" <> '') then
+            SourcePurchaseLine."Bin Code" := TemplatePurchaseLine."Bin Code";
         SourcePurchaseLine.Modify(true);
 
         if ReceiptLine.FindSet(true) then
@@ -1747,11 +1890,6 @@ codeunit 72043 "DOPSWHS Receipt Mgmt"
             NewLine.Validate("Variant Code", TemplateLine."Variant Code");
         if TemplateLine."Location Code" <> '' then
             NewLine.Validate("Location Code", TemplateLine."Location Code");
-        if TemplateLine."Bin Code" <> '' then
-            // Bin validation checks for an already-linked warehouse receipt.
-            // The matching receipt line is linked immediately after this helper,
-            // so copy the source bin now and let posting perform the final check.
-            NewLine."Bin Code" := TemplateLine."Bin Code";
         if (TemplateLine."Unit of Measure Code" <> '') and
            (NewLine."Unit of Measure Code" <> TemplateLine."Unit of Measure Code")
         then
@@ -1765,6 +1903,10 @@ codeunit 72043 "DOPSWHS Receipt Mgmt"
         NewLine."Expected Receipt Date" := TemplateLine."Expected Receipt Date";
         NewLine."Requested Receipt Date" := TemplateLine."Requested Receipt Date";
         NewLine."Promised Receipt Date" := TemplateLine."Promised Receipt Date";
+        // Raf kodu EN SON yazılır: yukarıdaki Validate çağrıları (birim, miktar,
+        // fiyat) alanı temizleyebiliyor ve bölünen satır rafsız kalıyordu.
+        if TemplateLine."Bin Code" <> '' then
+            NewLine."Bin Code" := TemplateLine."Bin Code";
         NewLine.Modify(true);
     end;
 

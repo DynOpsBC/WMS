@@ -112,12 +112,10 @@ codeunit 72065 "DOPSWHS Test Auto LP"
     var
         LP: Record "DOPSWHS LP Header";
         LocCode: Code[10];
-        BeforeStatus: Integer;
     begin
         LocCode := GetDefaultLocation();
         LPMgmt.Build('CARTON-S', LocCode, '', LP);
         LPMgmt.Stop(LP, false);
-        BeforeStatus := LP.Status;
         // CreateNewLP partial use simulate; gerçek line ekleme yapılmadığı için
         // basit Status doğrulaması yapıyoruz
         if LP.Status <> LP.Status::Built then

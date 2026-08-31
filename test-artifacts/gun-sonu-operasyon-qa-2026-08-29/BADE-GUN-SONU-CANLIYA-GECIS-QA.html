@@ -1,0 +1,199 @@
+<!doctype html>
+<html lang="tr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>BADE Gün Sonu Canlıya Geçiş QA · 29.08.2026</title>
+  <style>
+    :root{--ink:#172033;--muted:#667085;--line:#dfe5ef;--paper:#fff;--bg:#f4f7fb;--navy:#172858;--blue:#3451c6;--green:#087443;--green-bg:#eaf8f1;--amber:#8a5200;--amber-bg:#fff5d9;--red:#b42318;--red-bg:#fff0ee;--gray:#475467;--gray-bg:#f2f4f7}
+    *{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.55 Inter,ui-sans-serif,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+    main{width:min(1220px,calc(100% - 28px));margin:24px auto 64px}.hero{color:#fff;background:linear-gradient(135deg,#171f3d,#7f1d1d 72%,#b42318);border-radius:24px;padding:34px;box-shadow:0 18px 50px #23346a2b}
+    h1{font-size:34px;line-height:1.14;margin:5px 0 12px}h2{font-size:23px;margin:0}h3{font-size:17px;margin:0 0 7px}.eyebrow{text-transform:uppercase;letter-spacing:.12em;font-weight:800;font-size:12px;opacity:.84}.hero p{max-width:940px;margin:0;color:#ffeded}
+    .decision{display:inline-flex;margin-top:20px;padding:10px 15px;border-radius:999px;background:#ffe1dc;color:#8f130b;font-weight:950}.metrics{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-top:18px}.metric{background:#ffffff16;border:1px solid #ffffff2b;border-radius:15px;padding:14px}.metric b{display:block;font-size:26px}.metric span{color:#ffe6e3;font-size:12px}
+    section{margin-top:18px;background:var(--paper);border:1px solid var(--line);border-radius:20px;padding:24px;box-shadow:0 8px 28px #20335a0c}.sub{margin:4px 0 16px;color:var(--muted)}
+    .grid{display:grid;grid-template-columns:repeat(3,1fr);gap:13px}.two{display:grid;grid-template-columns:1fr 1fr;gap:13px}.card{border:1px solid var(--line);border-radius:14px;padding:16px;background:#fbfcfe}.card p,.card ul{margin:0}.card ul{padding-left:20px}
+    .callout{border-radius:14px;padding:15px 17px;border:1px solid;margin-top:14px}.danger{background:var(--red-bg);border-color:#efb5ae;color:#86170f}.warn{background:var(--amber-bg);border-color:#efd28a;color:#704100}.good{background:var(--green-bg);border-color:#b7e3ca;color:#075a35}.note{background:#eef3ff;border-color:#cad5ff;color:#263e9d}
+    .table-wrap{overflow:auto;border:1px solid var(--line);border-radius:14px}table{width:100%;border-collapse:collapse;min-width:980px}th{background:#f2f5fa;color:#4b5870;text-align:left;font-size:12px;text-transform:uppercase;letter-spacing:.04em}th,td{padding:11px 12px;border-bottom:1px solid var(--line);vertical-align:top}tr:last-child td{border-bottom:0}td:first-child{font-weight:800;white-space:nowrap}
+    .status{display:inline-block;white-space:nowrap;border-radius:999px;padding:4px 9px;font-size:12px;font-weight:900}.pass{background:var(--green-bg);color:var(--green)}.fail{background:var(--red-bg);color:var(--red)}.notrun{background:var(--amber-bg);color:var(--amber)}.review{background:#e9edff;color:#344ec0}.info{background:var(--gray-bg);color:var(--gray)}
+    code,.mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace}.mono{word-break:break-word}.shots{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}.shot{border:1px solid var(--line);border-radius:14px;overflow:hidden;background:#fff}.shot img{display:block;width:100%;height:250px;object-fit:contain;background:#eef1f6}.shot p{margin:0;padding:10px 12px;font-size:12px;color:var(--muted)}a{color:var(--blue)}ol,ul{margin:8px 0 0;padding-left:21px}.small{font-size:12px;color:var(--muted)}footer{text-align:center;color:var(--muted);font-size:12px;margin-top:20px}
+    @media(max-width:850px){.metrics,.grid,.two,.shots{grid-template-columns:1fr}.hero{padding:24px}h1{font-size:28px}.shot img{height:auto}}
+    @media print{body{background:#fff}main{width:100%;margin:0}.hero,section{box-shadow:none}.hero{-webkit-print-color-adjust:exact;print-color-adjust:exact}.shot{break-inside:avoid}}
+  </style>
+</head>
+<body>
+<main>
+  <header class="hero">
+    <div class="eyebrow">BCWMS · BADE · E-DefterSandbox · bağımsız tekrar inceleme</div>
+    <h1>Mal kabul, sevkiyat ve sayım canlıya geçiş raporu</h1>
+    <p>Bu rapor yalnız bu turda yeniden çalıştırılan testleri, BADE paketinde görülen ekranları ve kaynak koddan doğrulanan BC yazma zincirini içerir. Önceki rapordaki PASS ifadeleri otomatik olarak devralınmamıştır. Uygulama kaynak kodu değiştirilmemiştir.</p>
+    <div class="decision">KARAR: NO-GO · kritik senaryolar ve exact release APK doğrulanmadan canlıya alınmamalı</div>
+    <div class="metrics">
+      <div class="metric"><b>150 / 150</b><span>BADE birim testi, zorla yeniden çalıştı</span></div>
+      <div class="metric"><b>4</b><span>Kritik kod/paket blokajı</span></div>
+      <div class="metric"><b>0</b><span>Bu turda uçtan uca post edilen yeni belge</span></div>
+      <div class="metric"><b>85</b><span>BADE lint: 72 uyarı + 13 bilgi</span></div>
+    </div>
+  </header>
+
+  <section>
+    <h2>1. Yönetici özeti</h2>
+    <p class="sub">Yeşil birim test sonucu, gerçek depo operasyonunun geçtiği anlamına gelmiyor.</p>
+    <div class="grid">
+      <div class="card"><h3>Mal kabul</h3><p>Bağlı BADE oturumunda yalnız tamamlanmış RE000634 görüldü. Yeni LP'siz, tek LP'li, çok LP'li ve ikinci parçalı dalga bu turda post edilemedi. Kaynak kod incelemesinde tek LP satır güncellemesinin tekrar çağrıda LP miktarını çoğaltma riski ve çoklu LP'de Purchase Receipt Line LP boşluğu bulundu.</p></div>
+      <div class="card"><h3>Sevkiyat</h3><p>SH000277 ve PI001137 açıldı; 30 KG kalan ve H100792 lotu görüldü. Belge DYNOPS'a atanmış olduğundan Yönetici oturumunda miktar/post aksiyonu çalıştırılmadı. Aynı kaynak satırında birden fazla LP kod tarafından “ambiguous” kabul edilip post durduruluyor.</p></div>
+      <div class="card"><h3>Sayım</h3><p>V2 ve klasik/kör belgeler BADE ekranında ayrıştı. Mevcut V2 satırında sistem 1700, sayım 1650 ve fark -50 görüldü. Yanlış raf, tekrar LP okutma, sıfır sayım ve yeni post bu turda yeniden koşturulmadı.</p></div>
+    </div>
+    <div class="callout danger"><b>Canlı blokajı:</b> Exact release APK emülatörde çalıştırılamadı; bağlı BADE paketi Android Debug sertifikalı. Release APK DynOps sertifikalı olduğu için üzerine kurulum <span class="mono">INSTALL_FAILED_UPDATE_INCOMPATIBLE</span> ile reddedildi.</div>
+  </section>
+
+  <section>
+    <h2>2. Test edilen paket gerçekten neydi?</h2>
+    <p class="sub">Paket adı aynı olsa da imza ve APK dosyası aynı değil.</p>
+    <div class="table-wrap"><table>
+      <thead><tr><th>Kontrol</th><th>Bağlı emülatör</th><th>Yayımlanan BADE release</th><th>Sonuç</th></tr></thead>
+      <tbody>
+        <tr><td>Application ID</td><td><code>com.dynops.bcwms.bade</code></td><td><code>com.dynops.bcwms.bade</code></td><td><span class="status pass">AYNI</span></td></tr>
+        <tr><td>Sürüm</td><td>1.14.69-bade / versionCode 200069</td><td>1.14.69-bade / versionCode 200069</td><td><span class="status pass">AYNI</span></td></tr>
+        <tr><td>APK SHA-256</td><td><code>65e7da36…df459e</code></td><td><code>80ee6006…8756a1</code></td><td><span class="status fail">FARKLI</span></td></tr>
+        <tr><td>İmza</td><td>Android Debug · SHA-256 <code>b28316a8…e2204</code></td><td>CN=DynOps BCWMS · SHA-256 <code>ea7710af…1eb</code></td><td><span class="status fail">FARKLI</span></td></tr>
+        <tr><td>Üstüne kurulum</td><td colspan="2"><code>INSTALL_FAILED_UPDATE_INCOMPATIBLE: signatures do not match</code></td><td><span class="status fail">BLOCKED</span></td></tr>
+      </tbody>
+    </table></div>
+    <div class="callout warn"><b>Neden kaldırıp kurmadım?</b> Mevcut paketi kaldırmak bağlı E-DefterSandbox tokenını ve yerel uygulama verisini silebilir. Açık onay olmadan bu oturumu yok etmedim. Exact release testi için temiz ikinci emülatör veya yeniden giriş bilgisi gerekir.</div>
+  </section>
+
+  <section>
+    <h2>3. Terminalde çalıştırılan kontroller</h2>
+    <p class="sub">PASS yalnız yeniden çalıştırılan dar kapsam için kullanıldı; post yapılmayan senaryo PASS sayılmadı.</p>
+    <div class="table-wrap"><table>
+      <thead><tr><th>Alan</th><th>Kontrol</th><th>Gözlenen sonuç</th><th>Durum</th></tr></thead>
+      <tbody>
+        <tr><td>Android</td><td>BADE unit testleri, <code>--rerun-tasks</code></td><td>150 test, 0 failure, 0 error; 62/62 Gradle görevi yeniden yürüdü.</td><td><span class="status pass">PASS · UNIT</span></td></tr>
+        <tr><td>Android</td><td>BADE lint + debug assemble</td><td>Derleme başarılı. Lint: 72 Warning, 13 Information, Error/Fatal yok.</td><td><span class="status pass">PASS · BUILD</span></td></tr>
+        <tr><td>BADE bağlantı</td><td>Paket/şirket/ortam</td><td><code>com.dynops.bcwms.bade</code>, BS GROUP, E-DefterSandbox, “Bağlı — canlı bağlantı”.</td><td><span class="status pass">PASS · READ</span></td></tr>
+        <tr><td>Mal kabul</td><td>Ambar Mal Kabul listesi</td><td>1 belge: RE000634.</td><td><span class="status pass">PASS · READ</span></td></tr>
+        <tr><td>Mal kabul</td><td>RE000634 detay</td><td>%100 tamamlandı, açık miktar 0, 0/1 satır hazır, kaydedilecek miktar 0.</td><td><span class="status pass">PASS · READ</span></td></tr>
+        <tr><td>Satınalma</td><td>Satın Alma Siparişi listesi</td><td>100 kayıt yüklendi; görünür satırların kalan miktarı 0. Açık güvenli kabul fixture'ı yok.</td><td><span class="status notrun">VERİ YOK</span></td></tr>
+        <tr><td>Sevkiyat</td><td>Ambar sevkiyat listesi</td><td>SH000277, SH000274, SH000273 yüklendi.</td><td><span class="status pass">PASS · READ</span></td></tr>
+        <tr><td>Sevkiyat</td><td>SH000277 detay</td><td>HM.00313, 0 sevk, 30 KG kalan. Post düğmesi “Önce satırlara miktar girin”.</td><td><span class="status pass">PASS · READ</span></td></tr>
+        <tr><td>Pick</td><td>PI001137 detay</td><td>H.A01.11, HM.00313, lot H100792, 0 girilen / 30 kalan. Belge DYNOPS'a atanmış; Yönetici mutasyonu kapalı.</td><td><span class="status notrun">ATAMA BLOKAJI</span></td></tr>
+        <tr><td>Sayım</td><td>Liste ve durum ayrımı</td><td>15 belge; Visible/Blind ve Open/In Progress/Posted durumları görüldü.</td><td><span class="status pass">PASS · READ</span></td></tr>
+        <tr><td>Sayım</td><td>Posted belge koruması</td><td>“Kaydedilmiş ve kapatılmıştır; terminalden değiştirilemez.” Üç mutasyon düğmesinin parent node'u <code>enabled=false</code>.</td><td><span class="status pass">PASS · UI GUARD</span></td></tr>
+        <tr><td>Sayım V2</td><td>CNT-20260828091821 detay</td><td>AB.00005 / A.A01.11 / lot A100123; sistem 1700, sayım 1650, fark -50.</td><td><span class="status pass">PASS · READ</span></td></tr>
+        <tr><td>Kör sayım</td><td>CNT-20260827153000</td><td>5 klasik satır korundu; V2 ekranı “klasik sayımdan devam edin” uyarısı verdi.</td><td><span class="status pass">PASS · GUARD</span></td></tr>
+        <tr><td>BC/AL</td><td>Permission, prefix, obsolete audit</td><td>Üç script exit 0. Translation script exit 0 fakat 2466 kaynak birimine karşı tr/de dosyalarında yalnız 25 birim; 2441 eksik için WARN.</td><td><span class="status review">PASS + WARN</span></td></tr>
+      </tbody>
+    </table></div>
+  </section>
+
+  <section>
+    <h2>4. İstenen senaryo matrisi: ne yapıldı, ne yapılamadı?</h2>
+    <p class="sub">“NOT RUN” gerçek operasyon sonucu alınmadığını ifade eder; yeşil test sayısına eklenmedi.</p>
+    <div class="table-wrap"><table>
+      <thead><tr><th>ID</th><th>Senaryo</th><th>Bu turdaki kanıt</th><th>Durum</th><th>Canlı öncesi gereken</th></tr></thead>
+      <tbody>
+        <tr><td>REC-01</td><td>LP'siz tam mal kabul</td><td>Açık satınalma/mal kabul fixture'ı yok; post edilmedi.</td><td><span class="status notrun">NOT RUN</span></td><td>Yeni PO → qty → post → Posted Whse Receipt, Purch. Receipt, ILE, Value, Warehouse Entry karşılaştır.</td></tr>
+        <tr><td>REC-02</td><td>LP'siz parçalı kabul (örn. 10/30, sonra 20/30)</td><td>RE000634 tamamlanmış; yeni dalga açılamadı.</td><td><span class="status notrun">NOT RUN</span></td><td>İki ayrı post; açık miktar ve Qty. Received doğrula.</td></tr>
+        <tr><td>REC-03</td><td>Tek LP'li kabul</td><td>Kaynak yol mevcut; yeni belgeyle çalıştırılmadı. Tek satır tekrar PATCH riskli.</td><td><span class="status fail">KOD RİSKİ</span></td><td>Aynı satırı 10 → 5 düzenle; LP toplamının 5 kaldığını doğrula.</td></tr>
+        <tr><td>REC-04</td><td>Çok LP'li kabul</td><td>Toplu LP action ve teknik satır bölme kodu var; yeni post yok.</td><td><span class="status notrun">NOT RUN</span></td><td>En az 3 LP ve eşit olmayan dağılım; her BC tablosunda birebir LP doğrula.</td></tr>
+        <tr><td>REC-05</td><td>Çok LP + farklı lot + SKT + tedarikçi lotu</td><td>UI/payload ve AL reservation kodu mevcut; cihaz postu yok.</td><td><span class="status notrun">NOT RUN</span></td><td>3 LP / 3 lot / 3 SKT; Lot No. Info + Reservation + ledgers kontrolü.</td></tr>
+        <tr><td>REC-06</td><td>LP oluştur, yenile, kaldığı yerden devam et</td><td>Unit helper testi var; yeni bağlı belge üzerinde yapılmadı.</td><td><span class="status notrun">UNIT ONLY</span></td><td>LP başlat → satır gir → app öldür/aç → hazır satır ve LP korunmalı.</td></tr>
+        <tr><td>REC-07</td><td>Mal kabul sonrası LP bazlı yerleştirme</td><td>Bu turda yeni posted receipt/put-away oluşmadı.</td><td><span class="status notrun">NOT RUN</span></td><td>Her LP ayrı Take/Place satırı ve hedef rafla register edilmeli.</td></tr>
+        <tr><td>SHP-01</td><td>LP'siz sevkiyat</td><td>SH000277 açık; miktar/post yapılmadı.</td><td><span class="status notrun">NOT RUN</span></td><td>Loose stock seç, post et, LP alanlarının boş ve stok hareketinin doğru olduğunu doğrula.</td></tr>
+        <tr><td>SHP-02</td><td>Tek LP'den kısmi sevkiyat</td><td>PI001137 atanmış; miktar değişmedi.</td><td><span class="status notrun">NOT RUN</span></td><td>LP 10 → sevk 4 → LP 6; ILE -4 ve tek ItemRemoved kaydı.</td></tr>
+        <tr><td>SHP-03</td><td>Aynı kaynak satırını iki/çok LP'den tamamlama</td><td>Bir Warehouse Shipment Line yalnız tek <code>LP No.</code> tutuyor; birden fazla LP çözülürse kod postu durduruyor.</td><td><span class="status fail">DESTEKLENMİYOR</span></td><td>Satırı LP bazında bölüp her posted line/ILE ile eşleştiren tasarım ve regresyon testi.</td></tr>
+        <tr><td>SHP-04</td><td>Çok lotlu sevkiyat</td><td>Çok lot seçimi pick akışına yönleniyor; bu turda post edilmedi.</td><td><span class="status notrun">NOT RUN</span></td><td>2 lot, iki pick satırı, tek/çok LP kombinasyonlarını ayrı çalıştır.</td></tr>
+        <tr><td>SHP-05</td><td>Post cevap hatası + belge 404 doğrulaması</td><td>Yalnız 3 helper unit testi; gerçek yeni post yok.</td><td><span class="status notrun">UNIT ONLY</span></td><td>Commit/timeout simülasyonu; posted doc + ILE + LP ledger ile sonuç doğrula.</td></tr>
+        <tr><td>CNT-01</td><td>Klasik görünür sayım</td><td>Liste var; satır girme/post yok.</td><td><span class="status notrun">NOT RUN</span></td><td>Sistem=sayım, pozitif fark, negatif fark, sıfır sayım.</td></tr>
+        <tr><td>CNT-02</td><td>Kör sayım ve yeniden sayım</td><td>5 satırlı kör belge görüldü; mutasyon yok.</td><td><span class="status notrun">READ ONLY</span></td><td>2/3 sayıcı uyumsuzluğu → Recount Required → tekrar say → post.</td></tr>
+        <tr><td>CNT-03</td><td>V2 ürün/lot QR</td><td>Mevcut satır ve -50 fark okundu; yeni scan yapılmadı.</td><td><span class="status notrun">READ ONLY</span></td><td>Yeni ScanId ile ekle, retry et, miktarın ikiye katlanmadığını doğrula.</td></tr>
+        <tr><td>CNT-04</td><td>V2 doğru raf/yanlış raf LP</td><td>Bu turda yeniden okutulmadı.</td><td><span class="status notrun">NOT RUN</span></td><td>Doğru raf PASS; yanlış raf 400 ve sıfır mutasyon.</td></tr>
+        <tr><td>CNT-05</td><td>Çok LP + loose stok aynı ürün/lot/raf</td><td>Unit veya cihaz E2E testi yok.</td><td><span class="status notrun">NOT RUN</span></td><td>2 LP + loose satır; toplam fark ve phys. inventory journal/ILE sonucu.</td></tr>
+        <tr><td>CNT-06</td><td>Sayım postu ve BC defterleri</td><td>Mevcut Posted belge yalnız okundu; yeni post yok.</td><td><span class="status notrun">NOT RUN</span></td><td>Count Sheet → Phys. Inv. Journal → ILE/Warehouse Entry → LP line eşitliği.</td></tr>
+      </tbody>
+    </table></div>
+  </section>
+
+  <section>
+    <h2>5. Kaynak koddan bulunan kritik açıklar</h2>
+    <p class="sub">Bunlar test verisi eksikliği değil; mevcut kod davranışından çıkan somut bulgulardır.</p>
+    <div class="table-wrap"><table>
+      <thead><tr><th>Öncelik</th><th>Bulgu</th><th>Kod kanıtı</th><th>Olası sonuç</th></tr></thead>
+      <tbody>
+        <tr><td>P0</td><td>Exact release APK test edilmedi</td><td>Kurulu APK Android Debug imzalı; release DynOps imzalı ve update incompatible.</td><td>Test edilen cihaz davranışı canlıya verilecek byte dizisini kanıtlamıyor.</td></tr>
+        <tr><td>P0</td><td>Tek LP'li receipt PATCH idempotent değil</td><td><code>ReceiptMgmt.ConfirmLine</code> her PATCH'te <code>LPMgt.AddLine</code> çağırıyor; <code>AddLine</code> her seferinde yeni LP Line insert ediyor. Eski miktarı bulup güncelleme/silme yok.</td><td>Kullanıcı 10'u 5'e düzeltirse veya istek tekrar edilirse LP içeriği 15 olabilir; BC receipt miktarı 5 kalabilir.</td></tr>
+        <tr><td>P0</td><td>Çoklu LP sevkiyat aynı kaynak satırında desteklenmiyor</td><td><code>Warehouse Shipment Line."LP No."</code> tek değer. <code>ResolveWarehouseShipmentLp</code> farklı LP görünce <code>Ambiguous := true</code>; post hata ile duruyor.</td><td>Bir sipariş satırını iki paletten sevk etme canlıda bloke olur.</td></tr>
+        <tr><td>P0</td><td>Çoklu LP mal kabulü Purch. Rcpt. Line'a taşınmıyor</td><td><code>CarryLpOntoPostedPurchRcpt</code> yalnız <code>ResolveSingleReceiptLpNo</code> doluysa alan yazar; receipt'te çok LP varsa boş dönüp tüm Purch. Rcpt. Line yazımını atlıyor.</td><td>Posted Whse Receipt/ILE/Warehouse Entry LP'li olsa bile satınalma alış satırı LP'siz kalır; BC rapor/join beklentisi bozulur.</td></tr>
+        <tr><td>P1</td><td>Sayım LP kimliği phys. inventory ledger'a açıkça taşınmıyor</td><td><code>CountMgmt.PostSheet</code> Item Journal Line'a item/location/bin/lot/serial yazar; LP alanı veya post sonrası ILE LP reconcile yok. LP Line miktarı ayrı güncellenir.</td><td>Count Sheet LP'yi bilir, fakat oluşan ILE/Value/Warehouse hareketinde LP izi boş kalabilir.</td></tr>
+        <tr><td>P1</td><td>AL testleri canlı güvence sağlamıyor</td><td>macOS'ta AL suite çalıştırılamadı. <code>CountPostTests</code> içindeki <code>Assert.IsTrue(ItemJournalLine.Count() &gt;= 0)</code> her zaman doğrudur. Bulk receipt ve multi-LP shipment için AL testi yok.</td><td>“AL testleri var” ifadesi bu kritik zincirlerin doğrulandığı anlamına gelmiyor.</td></tr>
+        <tr><td>P2</td><td>Android 150 test E2E değil</td><td><code>src/androidTest</code> altında test yok. Receipt/ship/count testleri çoğunlukla saf helper, JSON dağıtım ve UI guard fonksiyonlarını test ediyor.</td><td>HTTP payload, OData PATCH, BC action, gerçek Compose tıklaması ve post sonucu kapsam dışı.</td></tr>
+      </tbody>
+    </table></div>
+  </section>
+
+  <section>
+    <h2>6. BC'ye hangi veri gidiyor? Kod zinciri</h2>
+    <p class="sub">“VAR” yalnız kaynak kodda açık yazım olduğu anlamına gelir; bu turda canlı BC tablosundan tekrar okunmadı.</p>
+    <div class="table-wrap"><table>
+      <thead><tr><th>Akış</th><th>BC tablo/alan</th><th>Kod durumu</th><th>Not</th></tr></thead>
+      <tbody>
+        <tr><td>Mal kabul</td><td>Warehouse Receipt Line · Qty. to Receive / DOPSWHS LP No. / Bin</td><td><span class="status review">VAR</span></td><td>Android PATCH → Receipt Line API → ConfirmLine.</td></tr>
+        <tr><td>Mal kabul</td><td>Reservation Entry · lot/seri/SKT/tedarikçi lotu</td><td><span class="status review">VAR</span></td><td>Takipli üründe PersistItemTracking.</td></tr>
+        <tr><td>Mal kabul</td><td>LP Header / LP Line / LP Movement Ledger</td><td><span class="status review">VAR</span></td><td>Tekrar PATCH'te duplicate LP Line riski var.</td></tr>
+        <tr><td>Mal kabul</td><td>Posted Whse. Receipt Line · LP No.</td><td><span class="status review">VAR · SATIR</span></td><td>Source receipt line + item + lot/seri ile çözülüyor.</td></tr>
+        <tr><td>Mal kabul</td><td>Posted Whse. Receipt Header · DOPSWHS LP No.</td><td><span class="status info">İLK LP</span></td><td>Çok LP'li belgede başlık yalnız ilk LP'yi gösterebilir.</td></tr>
+        <tr><td>Mal kabul</td><td>Warehouse Entry / Item Ledger Entry / Value Entry · DOPSWHS LP No.</td><td><span class="status review">VAR · SATIR</span></td><td>Posted receipt relation üzerinden damgalanıyor.</td></tr>
+        <tr><td>Mal kabul</td><td>Purch. Rcpt. Line · DOPSWHS LP No.</td><td><span class="status fail">ÇOK LP'DE YOK</span></td><td>Yalnız receipt genelinde tek LP varsa yazılıyor.</td></tr>
+        <tr><td>Sevkiyat</td><td>Warehouse Shipment Line · Qty. to Ship / LP No. / SSCC / lot</td><td><span class="status review">VAR · TEK LP</span></td><td>Bir satır bir LP taşıyor.</td></tr>
+        <tr><td>Sevkiyat</td><td>Posted Whse. Shipment Line/Header</td><td><span class="status review">VAR</span></td><td>Satır LP/SSCC; başlık ilk LP.</td></tr>
+        <tr><td>Sevkiyat</td><td>Sales Shipment Line / ILE / Value Entry · LP</td><td><span class="status review">VAR · TEK LP</span></td><td>Before-commit reconcile LP miktarını düşürüyor; çok LP belirsizliğinde post duruyor.</td></tr>
+        <tr><td>Sayım</td><td>DOPSWHS Count Sheet Header/Line</td><td><span class="status review">VAR</span></td><td>LP, LP line, lot, seri, 3 sayaç miktarı/flag, varyans tutuluyor.</td></tr>
+        <tr><td>Sayım</td><td>Phys. Inventory Item Journal</td><td><span class="status review">VAR</span></td><td>Item/location/bin/UOM/lot/seri + calculated/physical qty yazılıyor.</td></tr>
+        <tr><td>Sayım</td><td>ILE/Value/Warehouse Entry · LP izi</td><td><span class="status fail">AÇIK ZİNCİR YOK</span></td><td>Count postunda LP'yi ledger'a damgalayan açık kod bulunmadı.</td></tr>
+      </tbody>
+    </table></div>
+  </section>
+
+  <section>
+    <h2>7. Ekran kanıtları</h2>
+    <p class="sub">Bu görseller bağlı, debug-imzalı BADE paketinden alınmıştır; exact release kanıtı değildir.</p>
+    <div class="shots">
+      <a class="shot" href="screenshots/00-current.png"><img src="screenshots/00-current.png" alt="BADE ana menü"><p>BADE ana menü · E-DefterSandbox · bağlı</p></a>
+      <a class="shot" href="screenshots/02-receipt-detail.png"><img src="screenshots/02-receipt-detail.png" alt="Mal kabul detayı"><p>RE000634 · %100 tamamlandı · açık miktar 0</p></a>
+      <a class="shot" href="screenshots/04-bade-purchase-orders.png"><img src="screenshots/04-bade-purchase-orders.png" alt="Satın alma siparişleri"><p>100 satınalma siparişi · görünür kayıtlar kalan 0</p></a>
+      <a class="shot" href="screenshots/06-bade-whse-shipments.png"><img src="screenshots/06-bade-whse-shipments.png" alt="Sevkiyat listesi"><p>3 ambar sevkiyatı</p></a>
+      <a class="shot" href="screenshots/07-bade-shipment-detail.png"><img src="screenshots/07-bade-shipment-detail.png" alt="Sevkiyat detayı"><p>SH000277 · 0 sevk / 30 KG kalan</p></a>
+      <a class="shot" href="screenshots/09-bade-pick-qty.png"><img src="screenshots/09-bade-pick-qty.png" alt="Pick detayı"><p>PI001137 · H100792 · DYNOPS ataması</p></a>
+      <a class="shot" href="screenshots/11-bade-count-list.png"><img src="screenshots/11-bade-count-list.png" alt="Sayım listesi"><p>Visible/Blind ve durum çeşitleri</p></a>
+      <a class="shot" href="screenshots/16-bade-count-v2-detail.png"><img src="screenshots/16-bade-count-v2-detail.png" alt="Sayım V2 detayı"><p>AB.00005 · sistem 1700 / sayım 1650 / fark -50</p></a>
+      <a class="shot" href="screenshots/17-bade-count-blind.png"><img src="screenshots/17-bade-count-blind.png" alt="Kör sayım"><p>Klasik kör sayım satırlarını V2'de değiştirmeme koruması</p></a>
+    </div>
+  </section>
+
+  <section>
+    <h2>8. Adım adım çözüm sırası</h2>
+    <p class="sub">Bu turda kod değiştirilmedi. Sonraki çalışma için önerilen sıra:</p>
+    <ol>
+      <li><b>Temiz BADE release ortamı:</b> Ayrı emülatöre DynOps imzalı 1.14.69 release APK kur, E-DefterSandbox bağlantısını yeniden yap ve APK hash'ini kanıtla.</li>
+      <li><b>Fixture üret:</b> Bir PO'da en az 60 birim; LP'siz ve LP'li dalgalar için ayrı satır/lot. Bir SO'da aynı item/lotu en az iki LP'ye dağıt.</li>
+      <li><b>Önce test ekle:</b> Receipt PATCH idempotency, bulk receipt → Purch. Rcpt. Line mapping, multi-LP shipment split/reconcile, count LP → ledger mapping.</li>
+      <li><b>P0 kod düzeltmeleri:</b> Receipt LP satırını source identity ile upsert et; outbound satırını LP bazında böl; Purch. Rcpt. Line'ı exact source line ile damgala.</li>
+      <li><b>BADE cihaz E2E:</b> REC-01…07, SHP-01…05, CNT-01…06 matrisi; her posttan sonra BC tablolarını aynı belge/line/LP anahtarıyla oku.</li>
+      <li><b>Go/No-Go:</b> P0 açık 0, kritik NOT RUN 0, exact release hash doğru, BC ledger zinciri ekran görüntüsü/CSV ile kanıtlıysa canlıya al.</li>
+    </ol>
+    <div class="callout danger"><b>Bugünkü karar:</b> Birim testler yeşil olsa da exact release, yeni mal kabul postu, LP'li sevkiyat postu ve yeni sayım postu tamamlanmadı. Çoklu LP alanlarında iki somut kod boşluğu bulundu. Canlıya geçiş onayı verilmemelidir.</div>
+  </section>
+
+  <section>
+    <h2>9. İzlenebilirlik</h2>
+    <div class="two">
+      <div class="card"><h3>Kaynak</h3><p>Repo commit: <code>118317b</code><br>AL kaynak sürümü: <code>1.14.0.87</code><br>BADE artifact: <code>1.14.69-bade</code><br>Rapor tarihi: 29.08.2026 · Europe/Istanbul</p></div>
+      <div class="card"><h3>Değişiklik sınırı</h3><p>Uygulama/AL kaynak kodu değiştirilmedi. Yalnız bu HTML, ekran görüntüsü ve UI XML test kanıtları <code>test-artifacts/gun-sonu-operasyon-qa-2026-08-29/</code> altında oluşturuldu.</p></div>
+    </div>
+    <p class="small">Önemli: Bu rapor mevcut ekran verisini okumakla kod davranışını birbirinden ayırır. “VAR” işareti kaynak kodda yazma zinciri görüldüğünü, “PASS · READ” sunucudan ekran verisi geldiğini, “NOT RUN” ise gerçek mutasyon/post yapılmadığını belirtir.</p>
+  </section>
+
+  <footer>BCWMS · BADE gün sonu operasyon QA · 29.08.2026 · bağımsız tekrar inceleme</footer>
+</main>
+</body>
+</html>

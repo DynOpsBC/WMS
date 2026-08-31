@@ -218,15 +218,106 @@ fun operatorSafeBcMessage(raw: String): String? {
         stripped.contains("güncel BC", ignoreCase = true) ||
         stripped.contains("uzantısını yayın", ignoreCase = true)
     if (technical) return null
-    // Operatör metni Türkçedir; Türkçe karakter yoksa kaynağı bilinmeyen bir
-    // İngilizce mesajdır ve maskelenmeye devam eder.
-    if (!Regex("""[çğıöşüÇĞİÖŞÜ]""").containsMatchIn(stripped)) return null
+    // Operatör metni Türkçedir. Türkçe karakter ya da yaygın Türkçe iş kuralı
+    // sözcükleri yoksa kaynağı bilinmeyen bir İngilizce mesajdır ve maskelenir.
+    // ("Sevkiyat Acente Kodu zorunludur. Belge No: X" gibi ASCII Türkçe
+    // mesajlar da geçmeli.)
+    val turkish = Regex("""[çğıöşüÇĞİÖŞÜ]""").containsMatchIn(stripped) ||
+        Regex("""\b(zorunlu|zorunludur|gerekli|lütfen|belge|sipariş|kayıt|raf|sevk|kabul|kod|seçin|girin|bulunamadı|tamamla|kontrol)\w*""", RegexOption.IGNORE_CASE).containsMatchIn(stripped)
+    if (!turkish) return null
     return stripped
+}
+
+/**
+ * Miktar alanı: Türkçe klavyede ondalık ayırıcı virgüldür. Virgül noktaya
+ * çevrilir, rakam ve tek nokta dışındaki her şey atılır. Aksi halde "12,5"
+ * "125" olur (10 kat miktar riski).
+ */
+fun normalizeQtyInput(raw: String): String {
+    val cleaned = raw.replace(',', '.').filter { it.isDigit() || it == '.' }
+    val first = cleaned.indexOf('.')
+    if (first < 0) return cleaned
+    return cleaned.substring(0, first + 1) + cleaned.substring(first + 1).replace(".", "")
+}
+
+/** Sık görülen İngilizce BC iş kuralı hataları → eyleme dönük Türkçe metin (null = eşleşme yok). */
+fun operatorKnownBcError(raw: String): String? {
+    Regex("""cannot handle more than the outstanding\s+(\d+(?:[.,]\d+)?)""", RegexOption.IGNORE_CASE).find(raw)?.let {
+        return "Kalan miktardan fazla giremezsiniz (kalan: ${it.groupValues[1]}). Miktarı düzeltin."
+    }
+    Regex("""Qty\. to Ship must not be greater than\s+(\d+(?:[.,]\d+)?)""", RegexOption.IGNORE_CASE).find(raw)?.let {
+        return "Sevk miktarı kalan miktardan (${it.groupValues[1]}) fazla olamaz."
+    }
+    Regex("""Qty\. to Receive must not be greater than\s+(\d+(?:[.,]\d+)?)""", RegexOption.IGNORE_CASE).find(raw)?.let {
+        return "Alınan miktar kalan miktardan (${it.groupValues[1]}) fazla olamaz."
+    }
+    if (Regex("""Status must be equal to 'Open'\s+in Warehouse Shipment Header""", RegexOption.IGNORE_CASE).containsMatchIn(raw))
+        return "Sevkiyat serbest bırakılmış (Released): satır miktarı/lotu BC'de doğrudan değiştirilemez. Miktarı ve lotu Pick Oluştur ile toplayarak belirleyin."
+    if (Regex("""Status must be equal to 'Open'\s+in Warehouse Receipt Header""", RegexOption.IGNORE_CASE).containsMatchIn(raw))
+        return "Mal kabul belgesi serbest bırakılmış; satır BC'de doğrudan değiştirilemez. Belgeyi BC'de yeniden açın."
+    Regex("""Qty\. to Handle \(Base\) in the item tracking assigned to the document line for item\s+(\S+)\s+is currently\s+(\d+(?:[.,]\d+)?)\. It must be\s+(\d+(?:[.,]\d+)?)""", RegexOption.IGNORE_CASE).find(raw)?.let {
+        val (item, cur, need) = it.destructured
+        return "$item ürününün lot dağılımı ($cur) sevk miktarıyla ($need) uyuşmuyor. Toplamayı (pick) tamamlayıp kaydedin veya BC'de sevk miktarını $cur yapın."
+    }
+    Regex("""cannot assign new numbers from the number series\s+(\S+?)\.?(\s|$)""", RegexOption.IGNORE_CASE).find(raw)?.let {
+        return "${it.groupValues[1]} numara serisi yeni numara veremiyor (seri tükenmiş veya kapalı). İşlem BC'de kaydedilmiş olabilir; belgeyi yenileyip kontrol edin ve numara serisini uzatması için yöneticiye bildirin."
+    }
+    // Ad-Hoc harekette olmayan raf: BC "Cannot determine a location for bin X" der,
+    // bu da genel REF mesajina dusuyordu; operator rafin yanlis oldugunu anlamiyordu.
+    Regex("""Cannot determine a location for bin\s+(\S+?)[.\s]""", RegexOption.IGNORE_CASE).find(raw)?.let {
+        return "${it.groupValues[1]} rafı depoda kayıtlı değil. Raf etiketini yeniden okutun veya raf listesinden seçin."
+    }
+    // Ad-Hoc hedef raf kontrolü ayrı bir metin döndürüyor: "Target bin X does
+    // not exist in location Y" (UAT fx-04c).
+    Regex("""(?:Target|Source|From|To)\s+bin\s+(\S+?)\s+does not exist in location\s+(\S+?)[.\s]""", RegexOption.IGNORE_CASE).find(raw)?.let {
+        val (bin, loc) = it.destructured
+        return "$bin rafı $loc lokasyonunda yok. Raf etiketini yeniden okutun veya raf listesinden seçin."
+    }
+    // Stoktan fazla tasima: gercek raf bakiyesini yaz.
+    Regex("""Tracking quantity\s+([\d.,]*\d)\s+exceeds available bin quantity\s+([\d.,]*\d)""", RegexOption.IGNORE_CASE).find(raw)?.let {
+        val (istenen, mevcut) = it.destructured
+        return "Rafta yeterli stok yok: bu raf/lot için $mevcut var, $istenen istediniz. Miktarı düşürün ya da başka raftan alın."
+    }
+    Regex("""do not match the available bin content""", RegexOption.IGNORE_CASE).find(raw)?.let {
+        return "Girilen miktar bu rafın bakiyesiyle uyuşmuyor. 'Kaynak Bindeki Lotları Göster' ile raftaki lot ve miktarları kontrol edin."
+    }
+    // Olmayan urun/kayit: BC'nin "does not exist" kalibi.
+    Regex("""The\s+(.+?)\s+does not exist[^.]*\.\s*Identification fields and values:\s*(.+?)(\.|$)""", RegexOption.IGNORE_CASE).find(raw)?.let {
+        val (tur, deger) = it.destructured
+        return "$tur kaydı bulunamadı ($deger). Okuttuğunuz kodu kontrol edin."
+    }
+    // BC "Qty. to Ship must not be greater than 0" derken satirda kalan miktar
+    // gorunuyordu; eski ceviri "kalan miktardan (0) fazla olamaz" diyerek
+    // operatoru yaniltiyordu. Gercek sebep: satira sevk miktari girilmemis.
+    Regex("""Qty\. to Ship must not be greater than\s*0(\D|$)""", RegexOption.IGNORE_CASE).find(raw)?.let {
+        return "Bu depoda sevk miktarı toplamadan gelir; elle girilemez. Önce 'Pick Oluştur' ile toplama yapıp kaydedin, sonra sevkiyatı kaydedin."
+    }
+    Regex("""is already being packed""", RegexOption.IGNORE_CASE).find(raw)?.let {
+        return "Bu siparişte açık bir paketleme var. Paketlemeyi tamamlayın ya da kapatın, sonra sevkiyatı tekrar deneyin."
+    }
+    if (raw.contains("Nothing to handle", ignoreCase = true))
+        return "Toplanacak miktar yok: stok zaten sevk rafında ya da uygun rafta bulunamadı. BC'de raf içeriğini ve mevcut toplama belgelerini kontrol edin."
+    // "... contains a value (X) that cannot be found in the related table (Y)"
+    // Local WMS User için daha özel bir kural yukarıda; burası diğer tablolar.
+    Regex("""contains a value \(([^)]*)\) that cannot be found in the related table \(([^)]*)\)""", RegexOption.IGNORE_CASE).find(raw)?.let {
+        val (deger, tablo) = it.destructured
+        if (!tablo.contains("Local WMS User", ignoreCase = true))
+            return "$deger, $tablo listesinde tanımlı değil. Listeden kayıtlı bir değer seçin."
+    }
+    if (raw.contains("Quantity Handled (Base) must be equal to '0'", ignoreCase = true) && raw.contains("Whse. Item Tracking Line", ignoreCase = true))
+        return "Bu satırda kısmen kaydedilmiş lot izleme var; açık toplamayı tamamlayıp kaydedin, sonra tekrar deneyin."
+    Regex("""Over-Receipt Code - (\S+), allows you to receive up to\s+(\d+(?:[.,]\d+)?)""", RegexOption.IGNORE_CASE).find(raw)?.let {
+        return "Fazla kabul sınırı aşıldı (${it.groupValues[1]}): en fazla ${it.groupValues[2]} alınabilir."
+    }
+    return null
 }
 
 /** Raw BC/transport errors never belong on the warehouse terminal. */
 fun operatorFacingApiError(raw: String, httpCode: Int = 0): String {
     operatorSafeBcMessage(raw)?.let {
+        return "HATA: $it Sorun sürerse yöneticinize ${operatorSupportReference(raw, httpCode)} kodunu iletin."
+    }
+    operatorKnownBcError(raw)?.let {
         return "HATA: $it Sorun sürerse yöneticinize ${operatorSupportReference(raw, httpCode)} kodunu iletin."
     }
     // BC TestField: "<Alan> must have a value in <Tablo>: No.=X. It cannot be
@@ -348,12 +439,21 @@ fun DocHeaderCard(title: String, subtitle: String, badge: String? = null, percen
 /** Bottom action bar: a row of buttons pinned under content. */
 @Composable
 fun BottomActionBar(content: @Composable RowScope.() -> Unit) {
+    // Yatay ekranda (kısa pencere) aksiyon şeritleri üst üste binince satır
+    // listesine yer kalmıyor ve alttaki kaydet düğmesi kırpılıyordu; kısa
+    // pencerede dikey boşluk yarıya iner.
+    val compact = androidx.compose.ui.platform.LocalConfiguration.current.screenHeightDp < 460
     Surface(tonalElevation = 3.dp, shadowElevation = 8.dp) {
         Row(
-            Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 10.dp),
+            Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = if (compact) 4.dp else 10.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalAlignment = Alignment.CenterVertically,
             content = content
         )
     }
 }
+
+/** Yatay/kısa pencerede belge ekranlarındaki büyük düğmelerin yüksekliği. */
+@Composable
+fun wmsPrimaryButtonHeight(): androidx.compose.ui.unit.Dp =
+    if (androidx.compose.ui.platform.LocalConfiguration.current.screenHeightDp < 460) 44.dp else 54.dp

@@ -1,6 +1,18 @@
 codeunit 72050 "DOPSWHS Count Mgmt"
 {
     Access = Public;
+    // Sayım kaydı stok/ambar günlüklerine yazar; terminal kullanıcısının
+    // lisansı bu tablolara doğrudan izin vermeyebilir (dolaylı izin).
+    Permissions =
+        tabledata "Item Journal Template" = RIMD,
+        tabledata "Item Journal Batch" = RIMD,
+        tabledata "Item Journal Line" = RIMD,
+        tabledata "Warehouse Journal Template" = RIMD,
+        tabledata "Warehouse Journal Batch" = RIMD,
+        tabledata "Warehouse Journal Line" = RIMD,
+        tabledata "Whse. Item Tracking Line" = RIMD,
+        tabledata "Reservation Entry" = RIMD,
+        tabledata "Warehouse Entry" = RM;
 
     procedure CreateSheet(LocationCode: Code[10]; CountMode: Enum "DOPSWHS Count Mode"; var Counters: array[3] of Code[50]): Code[20]
     var
@@ -35,6 +47,43 @@ codeunit 72050 "DOPSWHS Count Mgmt"
         Dimensions.Add('locationCode', LocationCode);
         Session.LogMessage('AdvWMS.Count.SheetCreated', StrSubstNo('Count sheet %1 created.', CountHeader."No."), Verbosity::Normal, DataClassification::SystemMetadata, TelemetryScope::ExtensionPublisher, Dimensions);
         exit(CountHeader."No.");
+    end;
+
+    /// <summary>
+    /// Açık bir sayım sayfasına sayıcı atar/değiştirir (slot 1-3). Boş kullanıcı
+    /// o slottaki atamayı kaldırır. Terminalden çok sayıcılı (kör) sayım
+    /// kurulabilsin diye eklendi (UAT count-30).
+    /// </summary>
+    procedure SetCounters(SheetNo: Code[20]; var Counters: array[3] of Code[50])
+    var
+        CountHeader: Record "DOPSWHS Count Sheet Header";
+        Counter: Record "DOPSWHS Count Counter";
+        Slot: Integer;
+    begin
+        CountHeader.Get(SheetNo);
+        if CountHeader.Status <> CountHeader.Status::Open then
+            Error(CounterSheetNotOpenErr, SheetNo);
+        for Slot := 1 to 3 do begin
+            Counter.Reset();
+            Counter.SetRange("Sheet No.", SheetNo);
+            Counter.SetRange("Counter Slot", Slot);
+            if Counters[Slot] = '' then begin
+                if not Counter.IsEmpty() then
+                    Counter.DeleteAll(true);
+            end else
+                if Counter.FindFirst() then begin
+                    if Counter."User ID" <> Counters[Slot] then begin
+                        Counter.Validate("User ID", Counters[Slot]);
+                        Counter.Modify(true);
+                    end;
+                end else begin
+                    Counter.Init();
+                    Counter."Sheet No." := SheetNo;
+                    Counter."Counter Slot" := Slot;
+                    Counter.Validate("User ID", Counters[Slot]);
+                    Counter.Insert(true);
+                end;
+        end;
     end;
 
     /// <summary>
@@ -165,8 +214,13 @@ codeunit 72050 "DOPSWHS Count Mgmt"
                 ResidualQty := BinContent.Quantity;
                 if AllocatedQty.ContainsKey(AllocationKey) then
                     ResidualQty -= AllocatedQty.Get(AllocationKey);
+                // LP içerikleri BC raf bakiyesini aşıyorsa bu, sayımın BULMASI
+                // gereken bir tutarsızlıktır; satır üretimini komple durdurmak
+                // sayfayı hiç açılamaz hale getiriyordu (UAT count-26). Fazlalık
+                // LP satırlarında zaten sayılacağı için kalan bin miktarı 0'a
+                // çekilir ve sayfa üretilmeye devam eder.
                 if ResidualQty < 0 then
-                    Error(LPExceedsInventoryErr, BinContent."Item No.", BinContent."Bin Code", -ResidualQty);
+                    ResidualQty := 0;
 
                 // Bin Content miktarı lot/seri kırılımı taşımaz. Warehouse Entry
                 // bakiyesini aynı madde/raf/UOM için gruplayarak her lotu ayrı
@@ -210,8 +264,10 @@ codeunit 72050 "DOPSWHS Count Mgmt"
                         LotNo, SerialNo);
                     if AllocatedTrackingQty.ContainsKey(AllocationKey) then
                         LooseTrackingQty -= AllocatedTrackingQty.Get(AllocationKey);
+                    // Aynı gerekçe: lot/seri düzeyindeki LP fazlası da sayımın
+                    // bulacağı bir tutarsızlıktır, satır üretimini durdurmaz.
                     if LooseTrackingQty < 0 then
-                        Error(TrackedLPExceedsInventoryErr, BinContent."Item No.", BinContent."Bin Code", LotNo, SerialNo, -LooseTrackingQty);
+                        LooseTrackingQty := 0;
                     if LooseTrackingQty > 0 then begin
                         CreateLooseCountLine(
                             CountLine, SheetNo, NextLineNo,
@@ -327,8 +383,14 @@ codeunit 72050 "DOPSWHS Count Mgmt"
         CountLine: Record "DOPSWHS Count Sheet Line";
         BinContent: Record "Bin Content";
         Item: Record Item;
+        WarehouseEntry: Record "Warehouse Entry";
+        LotQty: Dictionary of [Text, Decimal];
+        LotKeys: List of [Text];
+        TrackingKey: Text;
         NextLineNo: Integer;
         OnHand: Decimal;
+        LotOnHand: Decimal;
+        UomCode: Code[10];
     begin
         CountHeader.Get(SheetNo);
         CountLine.SetRange("Sheet No.", SheetNo);
@@ -337,26 +399,86 @@ codeunit 72050 "DOPSWHS Count Mgmt"
         if CountLine.FindFirst() then
             exit(CountLine."Line No.");
 
-        if BinContent.Get(CountHeader."Location Code", BinCode, ItemNo, VariantCode, '') then begin
-            BinContent.CalcFields(Quantity);
-            OnHand := BinContent.Quantity;
-        end;
+        // Bin Content birincil anahtarı ölçü birimi içerir; '' ile Get asla
+        // eşleşmez, sistem miktarı 0 kalır ve sayım farkı yanlış çıkardı.
+        // Tüm birimlerdeki raf içeriği toplanır.
+        BinContent.SetRange("Location Code", CountHeader."Location Code");
+        BinContent.SetRange("Bin Code", BinCode);
+        BinContent.SetRange("Item No.", ItemNo);
+        BinContent.SetRange("Variant Code", VariantCode);
+        if BinContent.FindSet() then
+            repeat
+                BinContent.CalcFields(Quantity);
+                OnHand += BinContent.Quantity;
+                if UomCode = '' then
+                    UomCode := BinContent."Unit of Measure Code";
+            until BinContent.Next() = 0;
+
+        if UomCode = '' then
+            if Item.Get(ItemNo) then
+                UomCode := Item."Base Unit of Measure";
 
         CountLine.Reset();
         CountLine.SetRange("Sheet No.", SheetNo);
         if CountLine.FindLast() then
             NextLineNo := CountLine."Line No.";
-        NextLineNo += 10000;
 
+        // Lot/seri izlemeli üründe satır LOT BAZINDA üretilmeli. Tek lotsuz
+        // satır, kayıt sırasında BC tarafından "Lot No. must have a value"
+        // ile reddediliyor ve sayım hiç postlanamıyordu.
+        WarehouseEntry.SetRange("Location Code", CountHeader."Location Code");
+        WarehouseEntry.SetRange("Bin Code", BinCode);
+        WarehouseEntry.SetRange("Item No.", ItemNo);
+        WarehouseEntry.SetRange("Variant Code", VariantCode);
+        WarehouseEntry.SetFilter("Lot No.", '<>%1', '');
+        if WarehouseEntry.FindSet() then
+            repeat
+                TrackingKey := WarehouseEntry."Lot No." + '|' + WarehouseEntry."Serial No.";
+                if not LotQty.ContainsKey(TrackingKey) then begin
+                    LotQty.Add(TrackingKey, 0);
+                    LotKeys.Add(TrackingKey);
+                end;
+                LotQty.Set(TrackingKey, LotQty.Get(TrackingKey) + WarehouseEntry.Quantity);
+            until WarehouseEntry.Next() = 0;
+
+        if LotKeys.Count() > 0 then begin
+            foreach TrackingKey in LotKeys do begin
+                LotOnHand := LotQty.Get(TrackingKey);
+                if LotOnHand <> 0 then begin
+                    NextLineNo += 10000;
+                    CountLine.Init();
+                    CountLine."Sheet No." := SheetNo;
+                    CountLine."Line No." := NextLineNo;
+                    CountLine."Item No." := ItemNo;
+                    CountLine."Variant Code" := VariantCode;
+                    CountLine."Bin Code" := BinCode;
+                    CountLine."Unit of Measure Code" := UomCode;
+                    CountLine."Lot No." := CopyStr(TrackingKey, 1, StrPos(TrackingKey, '|') - 1);
+                    CountLine."Serial No." := CopyStr(TrackingKey, StrPos(TrackingKey, '|') + 1);
+                    CountLine."System Qty" := LotOnHand;
+                    CountLine."Unexpected Stock" := LotOnHand <= 0;
+                    CountLine.Insert(true);
+                end;
+            end;
+            CountLine.Reset();
+            CountLine.SetRange("Sheet No.", SheetNo);
+            CountLine.SetRange("Item No.", ItemNo);
+            CountLine.SetRange("Bin Code", BinCode);
+            if CountLine.FindFirst() then
+                exit(CountLine."Line No.");
+            exit(NextLineNo);
+        end;
+
+        NextLineNo += 10000;
         CountLine.Init();
         CountLine."Sheet No." := SheetNo;
         CountLine."Line No." := NextLineNo;
         CountLine."Item No." := ItemNo;
         CountLine."Variant Code" := VariantCode;
         CountLine."Bin Code" := BinCode;
-        if Item.Get(ItemNo) then
-            CountLine."Unit of Measure Code" := Item."Base Unit of Measure";
+        CountLine."Unit of Measure Code" := UomCode;
         CountLine."System Qty" := OnHand;
+        CountLine."Unexpected Stock" := OnHand <= 0;
         CountLine.Insert(true);
         exit(NextLineNo);
     end;
@@ -594,8 +716,10 @@ codeunit 72050 "DOPSWHS Count Mgmt"
                 CountLine."Lot No." := LPLine."Lot No.";
                 CountLine."Serial No." := LPLine."Serial No.";
                 CountLine."Unit of Measure Code" := UomCode;
-                CountLine."System Qty" := LPLine.Quantity;
-                CountLine."Unexpected Stock" := false;
+                // Sistem miktarı LP içeriği DEĞİL, BC'nin bu raftaki bakiyesidir;
+                // aksi halde LP/BC tutarsızlığı "fark 0" görünür ve kayıt stoku düzeltmez.
+                CountLine."System Qty" := BinBalance(CountHeader."Location Code", BinCode, LPLine."Item No.", LPLine."Variant Code", UomCode, LPLine."Lot No.", LPLine."Serial No.");
+                CountLine."Unexpected Stock" := CountLine."System Qty" <= 0;
                 SetCountValue(CountLine, CounterSlot, LPLine.Quantity);
                 CountLine.Insert(true);
             end;
@@ -972,7 +1096,10 @@ codeunit 72050 "DOPSWHS Count Mgmt"
             Error(RecountRequiredErr, SheetNo);
         end;
 
-        CountDocumentNo := CopyStr('CNT-' + SheetNo, 1, MaxStrLen(CountDocumentNo));
+        // Belge no izlenebilir olmalı: sayfa no zaten 'CNT-…' ile başlıyor;
+        // ikinci bir önek 20 karakter sınırında son haneleri kırpıyordu
+        // (CNT-CNT-202608291919 → farklı sayfalar çakışabilir).
+        CountDocumentNo := CopyStr(SheetNo, 1, MaxStrLen(CountDocumentNo));
         Clear(ItemJournalLine);
         ItemJournalLine.SetRange("Journal Template Name", 'PHYS. INV.');
         ItemJournalLine.SetRange("Journal Batch Name", CountHeader."Source Phys. Inv. Journal Batch");
@@ -1003,11 +1130,18 @@ codeunit 72050 "DOPSWHS Count Mgmt"
                 ItemJournalLine.Validate("Phys. Inventory", true);
                 ItemJournalLine.Validate("Qty. (Calculated)", CountLine."System Qty");
                 ItemJournalLine.Validate("Qty. (Phys. Inventory)", GetWinningQty(CountLine, SheetNo));
+                ItemJournalLine."DOPSWHS LP No." := CountLine."LP No.";
                 ItemJournalLine.Insert(true);
                 AddItemTracking(ItemJournalLine, CountLine."Lot No.", CountLine."Serial No.");
             until CountLine.Next() = 0;
 
         EnsureLicensePlateReferencesExist(SheetNo);
+
+        // Yönlendirilmiş (Directed Put-away and Pick) lokasyonda Item Journal
+        // raf taşıyamaz: fark yalnız ayarlama rafına (ADJ) yazılır, sayılan raf
+        // düzelmez. BC standardı: önce Ambar Fiziksel Sayım Günlüğü register
+        // (raf ± / ADJ ∓), ardından Item Journal ile ADJ bakiyesi ILE'ye taşınır.
+        RegisterDirectedPhysInventory(SheetNo, CountHeader, CountDocumentNo);
 
         ItemJournalLine.Reset();
         ItemJournalLine.SetRange("Journal Template Name", 'PHYS. INV.');
@@ -1029,6 +1163,148 @@ codeunit 72050 "DOPSWHS Count Mgmt"
 
         Dimensions.Add('sheetNo', SheetNo);
         Session.LogMessage('AdvWMS.Count.SheetPosted', StrSubstNo('Count sheet %1 posted.', SheetNo), Verbosity::Normal, DataClassification::SystemMetadata, TelemetryScope::ExtensionPublisher, Dimensions);
+    end;
+
+    /// <summary>BC'nin raf bakiyesi (Warehouse Entry toplamı) — sayım "sistem" miktarı.</summary>
+    local procedure BinBalance(LocationCode: Code[10]; BinCode: Code[20]; ItemNo: Code[20]; VariantCode: Code[10]; UomCode: Code[10]; LotNo: Code[50]; SerialNo: Code[50]): Decimal
+    var
+        WarehouseEntry: Record "Warehouse Entry";
+    begin
+        WarehouseEntry.SetRange("Location Code", LocationCode);
+        WarehouseEntry.SetRange("Bin Code", BinCode);
+        WarehouseEntry.SetRange("Item No.", ItemNo);
+        WarehouseEntry.SetRange("Variant Code", VariantCode);
+        if UomCode <> '' then
+            WarehouseEntry.SetRange("Unit of Measure Code", UomCode);
+        WarehouseEntry.SetRange("Lot No.", LotNo);
+        WarehouseEntry.SetRange("Serial No.", SerialNo);
+        WarehouseEntry.CalcSums(Quantity);
+        exit(WarehouseEntry.Quantity);
+    end;
+
+    /// <summary>
+    /// Yönlendirilmiş lokasyonda sayım farklarını Ambar Fiziksel Sayım
+    /// Günlüğü ile rafa yazar (Whse. Jnl.-Register Batch). Fark 0 olan satır
+    /// için günlük satırı üretilmez. Yönlendirilmiş olmayan lokasyonda no-op:
+    /// orada Item Journal raf kodunu doğrudan taşır.
+    /// </summary>
+    local procedure RegisterDirectedPhysInventory(SheetNo: Code[20]; CountHeader: Record "DOPSWHS Count Sheet Header"; CountDocumentNo: Code[20])
+    var
+        Location: Record Location;
+        CountLine: Record "DOPSWHS Count Sheet Line";
+        Bin: Record Bin;
+        WhseJournalTemplate: Record "Warehouse Journal Template";
+        WhseJournalBatch: Record "Warehouse Journal Batch";
+        WhseJournalLine: Record "Warehouse Journal Line";
+        StaleLine: Record "Warehouse Journal Line";
+        WhseJnlRegisterBatch: Codeunit "Whse. Jnl.-Register Batch";
+        UomMgt: Codeunit "Unit of Measure Management";
+        WinningQty: Decimal;
+        LineNo: Integer;
+        Created: Boolean;
+    begin
+        if not Location.Get(CountHeader."Location Code") then
+            exit;
+        if not Location."Directed Put-away and Pick" then
+            exit;
+
+        if not WhseJournalTemplate.Get(WhsePhysInvTemplateTok) then begin
+            WhseJournalTemplate.Init();
+            WhseJournalTemplate.Name := WhsePhysInvTemplateTok;
+            WhseJournalTemplate.Description := 'BCWMS sayım (fiziksel envanter)';
+            WhseJournalTemplate.Validate(Type, WhseJournalTemplate.Type::"Physical Inventory");
+            WhseJournalTemplate.Insert(true);
+        end;
+        if not WhseJournalBatch.Get(WhsePhysInvTemplateTok, WhsePhysInvBatchTok, CountHeader."Location Code") then begin
+            WhseJournalBatch.Init();
+            WhseJournalBatch."Journal Template Name" := WhsePhysInvTemplateTok;
+            WhseJournalBatch.Name := WhsePhysInvBatchTok;
+            WhseJournalBatch."Location Code" := CountHeader."Location Code";
+            WhseJournalBatch.Description := 'BCWMS terminal sayımı';
+            WhseJournalBatch.Insert(true);
+        end;
+        // Önceki başarısız denemeden kalan satırlar bu kaydı düşürmesin.
+        StaleLine.SetRange("Journal Template Name", WhsePhysInvTemplateTok);
+        StaleLine.SetRange("Journal Batch Name", WhsePhysInvBatchTok);
+        StaleLine.SetRange("Location Code", CountHeader."Location Code");
+        if not StaleLine.IsEmpty() then
+            StaleLine.DeleteAll(true);
+
+        CountLine.SetRange("Sheet No.", SheetNo);
+        if CountLine.FindSet() then
+            repeat
+                WinningQty := GetWinningQty(CountLine, SheetNo);
+                if (WinningQty <> CountLine."System Qty") and (CountLine."Bin Code" <> '') then begin
+                    Bin.Get(CountHeader."Location Code", CountLine."Bin Code");
+                    LineNo += 10000;
+                    WhseJournalLine.Init();
+                    WhseJournalLine.Validate("Journal Template Name", WhsePhysInvTemplateTok);
+                    WhseJournalLine.Validate("Journal Batch Name", WhsePhysInvBatchTok);
+                    WhseJournalLine.Validate("Location Code", CountHeader."Location Code");
+                    WhseJournalLine."Line No." := LineNo;
+                    WhseJournalLine."Registering Date" := WorkDate();
+                    WhseJournalLine."Whse. Document No." := CountDocumentNo;
+                    WhseJournalLine.Validate("Item No.", CountLine."Item No.");
+                    WhseJournalLine.Validate("Variant Code", CountLine."Variant Code");
+                    if CountLine."Unit of Measure Code" <> '' then
+                        WhseJournalLine.Validate("Unit of Measure Code", CountLine."Unit of Measure Code");
+                    WhseJournalLine.Validate("Zone Code", Bin."Zone Code");
+                    WhseJournalLine.Validate("Bin Code", CountLine."Bin Code");
+                    WhseJournalLine.Validate("Phys. Inventory", true);
+                    // Ambar günlüğünde lot/seri satırın KENDİ alanlarındadır
+                    // (fiziksel sayımda ayrı izleme satırı kullanılmaz); boş
+                    // bırakılırsa BC "Lot No. must have a value" ile reddeder.
+                    if CountLine."Lot No." <> '' then
+                        WhseJournalLine.Validate("Lot No.", CountLine."Lot No.");
+                    if CountLine."Serial No." <> '' then
+                        WhseJournalLine.Validate("Serial No.", CountLine."Serial No.");
+                    // BC "Qty. (Base)" hesabı: Qty. (Phys. Inventory) (Base) - Qty. (Calculated) (Base).
+                    // "Qty. (Calculated) (Base)" alanının OnValidate'i yoktur ve "Qty. (Calculated)"
+                    // doğrulaması onu doldurmaz; boş bırakılırsa ambar hareketine fark yerine
+                    // sayılan miktarın tamamı taban miktar olarak yazılır (raf bakiyesi bozulur).
+                    WhseJournalLine.Validate("Qty. (Calculated)", CountLine."System Qty");
+                    WhseJournalLine."Qty. (Calculated) (Base)" :=
+                        Round(CountLine."System Qty" * WhseJournalLine."Qty. per Unit of Measure", UomMgt.QtyRndPrecision());
+                    if ExpirationDateForLot(CountHeader."Location Code", CountLine."Item No.", CountLine."Variant Code", CountLine."Lot No.", CountLine."Serial No.") <> 0D then
+                        WhseJournalLine."Expiration Date" :=
+                            ExpirationDateForLot(CountHeader."Location Code", CountLine."Item No.", CountLine."Variant Code", CountLine."Lot No.", CountLine."Serial No.");
+                    WhseJournalLine.Validate("Qty. (Phys. Inventory)", WinningQty);
+                    WhseJournalLine.Insert(true);
+                    Created := true;
+                end;
+            until CountLine.Next() = 0;
+
+        if not Created then
+            exit;
+        WhseJournalLine.Reset();
+        WhseJournalLine.SetRange("Journal Template Name", WhsePhysInvTemplateTok);
+        WhseJournalLine.SetRange("Journal Batch Name", WhsePhysInvBatchTok);
+        WhseJournalLine.SetRange("Location Code", CountHeader."Location Code");
+        WhseJournalLine.FindFirst();
+        WhseJnlRegisterBatch.SetSuppressCommit(true);
+        WhseJnlRegisterBatch.Run(WhseJournalLine);
+    end;
+
+    /// <summary>
+    /// Lot/seri için ambar hareketlerinde kayıtlı son kullanma tarihini bulur.
+    /// Son kullanma tarihi zorunlu izleme kodlarında ambar günlüğü satırı bu
+    /// tarih olmadan kaydedilemez ("Expiration Date must have a value").
+    /// </summary>
+    local procedure ExpirationDateForLot(LocationCode: Code[10]; ItemNo: Code[20]; VariantCode: Code[10]; LotNo: Code[50]; SerialNo: Code[50]): Date
+    var
+        WarehouseEntry: Record "Warehouse Entry";
+    begin
+        if (LotNo = '') and (SerialNo = '') then
+            exit(0D);
+        WarehouseEntry.SetRange("Location Code", LocationCode);
+        WarehouseEntry.SetRange("Item No.", ItemNo);
+        WarehouseEntry.SetRange("Variant Code", VariantCode);
+        WarehouseEntry.SetRange("Lot No.", LotNo);
+        WarehouseEntry.SetRange("Serial No.", SerialNo);
+        WarehouseEntry.SetFilter("Expiration Date", '<>%1', 0D);
+        if WarehouseEntry.FindLast() then
+            exit(WarehouseEntry."Expiration Date");
+        exit(0D);
     end;
 
     local procedure EnsureLicensePlateReferencesExist(SheetNo: Code[20])
@@ -1411,6 +1687,7 @@ codeunit 72050 "DOPSWHS Count Mgmt"
     end;
 
     var
+        CounterSheetNotOpenErr: Label '%1 sayım sayfası açık değil; sayıcı ataması yapılamaz.', Comment = '%1 sheet no';
         LPExceedsInventoryErr: Label '%1 ürününün %2 rafındaki LP miktarı BC stok miktarını %3 aşıyor. Sayım satırları üretilmeden önce LP/bin tutarsızlığını düzeltin.', Comment = '%1 item, %2 bin, %3 excess qty';
         LPLineMissingErr: Label '%1 LP numarasının %2 satırı artık bulunamadı. Sayım satırlarını yeniden üretin.', Comment = '%1 LP, %2 line';
         BinRequiredErr: Label 'Önce raf/bin barkodunu okutun.';
@@ -1441,6 +1718,8 @@ codeunit 72050 "DOPSWHS Count Mgmt"
         V2LotRequiredErr: Label '%1 ürünü lot takiplidir; QR içinde lot numarası bulunmalıdır.', Comment = '%1 item no';
         V2SerialRequiredErr: Label '%1 ürünü seri takiplidir; QR içinde seri numarası bulunmalıdır.', Comment = '%1 item no';
         V2ScanIdConflictErr: Label '%1 okutma kimliği başka bir sayım belgesinde kullanılmıştır.', Comment = '%1 scan guid';
+        WhsePhysInvTemplateTok: Label 'PHYSINV', Locked = true;
+        WhsePhysInvBatchTok: Label 'DOPS-CNT', Locked = true;
 
         V2ScanNotFoundErr: Label '%1 okutması bulunamadığı için geri alınamadı.', Comment = '%1 scan guid';
         V2UndoCountMissingErr: Label '%1 okutmasının sayım değeri bulunamadığı için geri alınamadı.', Comment = '%1 scan guid';

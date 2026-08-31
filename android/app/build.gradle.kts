@@ -7,8 +7,8 @@ val releaseVersionCodeOverride = providers.gradleProperty("releaseVersionCode").
 val releaseVersionNameOverride = providers.gradleProperty("releaseVersionName").orNull?.takeIf { it.isNotBlank() }
 // BADE ve EMU aynı kaynak koddan aynı anda yayınlanır. Müşteri flavor'larında
 // ayrı sürüm değeri tutmak bir paketin geride kalmasına neden oluyordu.
-val customerVersionCode = releaseVersionCodeOverride ?: 200069
-val customerVersionName = releaseVersionNameOverride ?: "1.14.69"
+val customerVersionCode = releaseVersionCodeOverride ?: 200071
+val customerVersionName = releaseVersionNameOverride ?: "1.14.71"
 
 plugins {
   alias(libs.plugins.android.application)

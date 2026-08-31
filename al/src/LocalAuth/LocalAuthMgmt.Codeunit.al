@@ -150,11 +150,11 @@ codeunit 72285 "DOPSWHS Local Auth Mgmt"
     local procedure ComputeHash(Salt: Text; PlainPassword: Text): Text
     var
         CryptMgt: Codeunit "Cryptography Management";
+        HashAlgorithmType: Option MD5,SHA1,SHA256,SHA384,SHA512;
         ToHash: Text;
     begin
         ToHash := Salt + ':' + PlainPassword;
-        // BC 24 Cryptography Management.GenerateHash uses Enum "Hash Algorithm"
-        exit(LowerCase(CryptMgt.GenerateHash(ToHash, Enum::"Hash Algorithm"::SHA256)));
+        exit(LowerCase(CryptMgt.GenerateHash(ToHash, HashAlgorithmType::SHA256)));
     end;
 
     local procedure EscapeJson(Value: Text): Text

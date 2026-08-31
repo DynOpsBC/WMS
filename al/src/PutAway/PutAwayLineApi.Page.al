@@ -140,6 +140,39 @@ page 72228 "DOPSWHS PutAway Line API"
         Rec.Validate("Bin Code", targetBinCode);
         Rec.Validate("Qty. to Handle", qtyToHandle);
         Rec.Modify(true);
+        // Eş "Al" satırı da aynı miktara çekilmeli. Yalnız "Koy" satırı
+        // güncellenirse alınan ve konan miktar farklı kalır; aradaki fark
+        // ambar defterinde yoktan stok olarak görünür.
+        SyncRelatedTakeLine(Rec, qtyToHandle);
+    end;
+
+    /// <summary>Yerleştirmede "Koy" satırının eş "Al" satırını aynı miktara çeker.</summary>
+    local procedure SyncRelatedTakeLine(PlaceLine: Record "Warehouse Activity Line"; QtyToHandle: Decimal)
+    var
+        TakeLine: Record "Warehouse Activity Line";
+    begin
+        TakeLine.SetRange("Activity Type", PlaceLine."Activity Type");
+        TakeLine.SetRange("No.", PlaceLine."No.");
+        TakeLine.SetRange("Action Type", TakeLine."Action Type"::Take);
+        TakeLine.SetRange("Whse. Document Type", PlaceLine."Whse. Document Type");
+        TakeLine.SetRange("Whse. Document No.", PlaceLine."Whse. Document No.");
+        TakeLine.SetRange("Whse. Document Line No.", PlaceLine."Whse. Document Line No.");
+        TakeLine.SetRange("Item No.", PlaceLine."Item No.");
+        TakeLine.SetRange("Variant Code", PlaceLine."Variant Code");
+        TakeLine.SetRange("Unit of Measure Code", PlaceLine."Unit of Measure Code");
+        TakeLine.SetRange("Lot No.", PlaceLine."Lot No.");
+        TakeLine.SetRange("Serial No.", PlaceLine."Serial No.");
+        if not TakeLine.FindFirst() then begin
+            TakeLine.SetRange("Lot No.");
+            TakeLine.SetRange("Serial No.");
+            if TakeLine.Count() <> 1 then
+                exit;
+            TakeLine.FindFirst();
+        end;
+        if TakeLine."Qty. to Handle" = QtyToHandle then
+            exit;
+        TakeLine.Validate("Qty. to Handle", QtyToHandle);
+        TakeLine.Modify(true);
     end;
 
     local procedure VerifyQualityPlacement(TargetBinCode: Code[20])

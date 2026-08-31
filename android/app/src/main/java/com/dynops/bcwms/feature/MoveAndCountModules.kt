@@ -1,6 +1,7 @@
 package com.dynops.bcwms.feature
 
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
@@ -595,7 +596,7 @@ fun AdHocMoveModule() {
                 toBin = BarcodeIntentResolver.resolve(it).value
             })
             Spacer(Modifier.height(8.dp))
-            OutlinedTextField(qty, { qty = it.filter { c -> c.isDigit() || c == '.' } }, label = { Text("Miktar") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+            OutlinedTextField(qty, { qty = normalizeQtyInput(it) }, label = { Text("Miktar") }, singleLine = true, modifier = Modifier.fillMaxWidth())
             Spacer(Modifier.height(8.dp))
             // Lot izlemeli ürünler için ("You must assign a lot number" hatası).
             ScanField("Lot No (lot izlemeli üründe)", lotNoInput, { lotNoInput = it }, modifier = Modifier.fillMaxWidth(), onScanned = {
@@ -614,10 +615,25 @@ fun AdHocMoveModule() {
                 )
             }
             Spacer(Modifier.height(16.dp))
+            // Eskiden düğme eksik alan varken PASİF idi: operatör basıyor, hiçbir
+            // şey olmuyor ve neyin eksik olduğunu göremiyordu (UAT ah-01).
             Button(
-                enabled = !busy && fromBin.isNotBlank() && toBin.isNotBlank() && itemOrLp.isNotBlank(),
+                enabled = !busy,
                 modifier = Modifier.fillMaxWidth().height(52.dp),
                 onClick = {
+                    val eksik = when {
+                        fromBin.isBlank() -> "Kaynak rafı okutun."
+                        itemOrLp.isBlank() -> "Taşınacak ürünü ya da LP'yi okutun."
+                        toBin.isBlank() -> "Hedef rafı okutun."
+                        (qty.toDoubleOrNull() ?: 0.0) <= 0.0 -> "Miktar sıfırdan büyük olmalı."
+                        fromBin.trim().equals(toBin.trim(), true) ->
+                            "Kaynak ve hedef raf aynı olamaz (${fromBin.trim()})."
+                        else -> ""
+                    }
+                    if (eksik.isNotBlank()) {
+                        status = "EKSİK: $eksik"
+                        return@Button
+                    }
                     val decision = decideAdHocProductInput(itemOrLp)
                     when (decision.route) {
                         AdHocProductInputRoute.LicensePlateWorkflow ->
@@ -730,9 +746,14 @@ fun CountModule() {
             val page = BcApi.getAllPages(context, "countSheets?\$top=100&\$orderby=createdDateTime desc&\$select=no,locationCode,mode,status,createdDateTime$filter")
             loading = false
             rows = if (page.complete) page.rows else emptyList()
-            status = if (!page.complete) "HATA: Sayım listesinin tamamı alınamadı. Yenileyin."
-                else if (rows.isEmpty()) "BOŞ: Sayım sayfası yok"
-                else "TAMAM: ${rows.size} sayfa"
+            // Arama sonuçsuzken "sayfa yok" demek yanıltıcıydı: sayfalar var,
+            // aramaya uyan yok (UAT).
+            status = when {
+                !page.complete -> "HATA: Sayım listesinin tamamı alınamadı. Yenileyin."
+                rows.isEmpty() && search.isNotBlank() -> "BOŞ: '${search.trim()}' ile eşleşen sayım sayfası bulunamadı"
+                rows.isEmpty() -> "BOŞ: Sayım sayfası yok"
+                else -> "TAMAM: ${rows.size} sayfa"
+            }
         }
     }
     LaunchedEffect(Unit) { load() }
@@ -752,7 +773,39 @@ fun CountModule() {
     val shownRows = itemDocs?.let { f -> rows.filter { firstValue(it, "no", "batchName") in f.second } } ?: rows
 
     Column(Modifier.fillMaxSize().padding(12.dp)) {
-        Button(onClick = { load() }, enabled = !loading) { WmsRefreshLabel(loading) }
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Button(onClick = { load() }, enabled = !loading, modifier = Modifier.weight(1f)) { WmsRefreshLabel(loading) }
+            // Terminalden yeni klasik sayım açmanın yolu yoktu; operatör ofisin
+            // BC'de sayfa açmasını bekliyordu (UAT count-26).
+            Button(
+                onClick = {
+                    scope.launch {
+                        loading = true; status = "Yeni sayım sayfası oluşturuluyor..."
+                        // Lokasyon: mevcut sayfalardan en yenisininki (V2 ekranıyla aynı mantık).
+                        val loc = rows.firstNotNullOfOrNull {
+                            it.optString("locationCode").trim().takeIf { c -> c.isNotBlank() && c != "null" }
+                        }.orEmpty()
+                        val body = JSONObject().apply {
+                            put("locationCode", loc)
+                            put("counter1UserId", BcApi.currentUserId(context).trim())
+                            put("counter2UserId", "")
+                            put("counter3UserId", "")
+                        }.toString()
+                        val r = BcApi.boundAction(context, "countOps", "", "createClassic", body)
+                        loading = false
+                        if (r.ok) {
+                            val sheetNo = BcApi.scalarValue(r.body).trim()
+                            status = "TAMAM: $sheetNo oluşturuldu"
+                            if (sheetNo.isNotBlank()) selected = sheetNo else load()
+                        } else {
+                            status = QcErrorParser.friendlyStatus(BcApi.errorMessage(r.body), r.httpCode)
+                        }
+                    }
+                },
+                enabled = !loading,
+                modifier = Modifier.weight(1f),
+            ) { Text("➕ Yeni Sayım", fontSize = 13.sp) }
+        }
         Spacer(Modifier.height(8.dp))
         com.dynops.bcwms.ui.DocSearchBar(value = search, onValueChange = { search = it }, onSearch = { load() }, label = "Sayım no ile ara")
         Spacer(Modifier.height(6.dp))
@@ -771,7 +824,12 @@ fun CountModule() {
                     }
                 }
             }
-            if (rows.isEmpty() && !loading) item { EmptyState("Sayım sayfası yok.") }
+            if (rows.isEmpty() && !loading) item {
+                EmptyState(
+                    if (search.isNotBlank()) "'${search.trim()}' ile eşleşen sayım sayfası bulunamadı."
+                    else "Sayım sayfası yok."
+                )
+            }
         }
     }
 }
@@ -779,6 +837,8 @@ fun CountModule() {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun CountDocument(no: String, onBack: () -> Unit) {
+    // Donanım Geri tuşu belge ekranından uygulamayı kapatmasın; listeye dönsün.
+    androidx.activity.compose.BackHandler { onBack() }
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var header by remember { mutableStateOf<JSONObject?>(null) }
@@ -797,6 +857,9 @@ private fun CountDocument(no: String, onBack: () -> Unit) {
     var showRecountConfirm by remember(no) { mutableStateOf(false) }
     var myUserId by remember(no) { mutableStateOf("") }
     var adminTestSession by remember(no) { mutableStateOf(false) }
+    // Çok sayıcılı (kör) sayım için slot ataması — terminalde hiç yolu yoktu (UAT count-30).
+    var showCounterDialog by remember(no) { mutableStateOf(false) }
+    var localUserList by remember { mutableStateOf<List<String>>(emptyList()) }
 
     fun counterAssignments(h: JSONObject?): List<CountSlotAssignment> = listOf(
         CountSlotAssignment(1, h?.optString("counter1UserId").orEmpty()),
@@ -962,7 +1025,12 @@ private fun CountDocument(no: String, onBack: () -> Unit) {
                     .filter { it.userId.isNotBlank() }
                     .joinToString(" · ") { "${it.slot}: ${it.userId}" }
                     .ifBlank { "1: Eski belge varsayılanı" }
-                Text("Atanmış sayıcılar: $assignmentText", fontSize = 12.sp, color = Color.Gray)
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    Text("Atanmış sayıcılar: $assignmentText", fontSize = 12.sp, color = Color.Gray, modifier = Modifier.weight(1f))
+                    if (!documentStatus.equals("Posted", ignoreCase = true)) {
+                        TextButton(onClick = { showCounterDialog = true }) { Text("Sayıcıları Ata", fontSize = 12.sp) }
+                    }
+                }
             }
             if (documentStatus.equals("Posted", ignoreCase = true)) {
                 Spacer(Modifier.height(8.dp))
@@ -1043,7 +1111,14 @@ private fun CountDocument(no: String, onBack: () -> Unit) {
             // Generate lines from bin content when the sheet is empty (the count flow needs lines).
             OutlinedButton(onClick = { action("generateLines", "Satırlar üretildi") }, enabled = !isV2Document && availableActions.canGenerateLines, modifier = Modifier.weight(1f).height(52.dp)) { Text("➕ Satır Üret") }
             OutlinedButton(onClick = { showRecountConfirm = true }, enabled = !isV2Document && availableActions.canStartRecount, modifier = Modifier.weight(1f).height(52.dp)) { Text("⟳ Yeniden Say") }
-            Button(onClick = { showPostConfirm = true }, enabled = !isV2Document && availableActions.canPost, modifier = Modifier.weight(1f).height(52.dp)) { Text("✅ Kaydet", fontWeight = FontWeight.Bold) }
+            Button(
+                onClick = {
+                    if (availableActions.canPost) showPostConfirm = true
+                    else status = "UYARI: Kaydetmek için tüm satırlar sayılmış olmalı ve uyuşmazlık kalmamalı (sayılmamış satırları sayın veya 'Adresi Kapat' ile 0 yazın)."
+                },
+                enabled = !isV2Document && (availableActions.canPost || (linesComplete && lines.isNotEmpty())),
+                modifier = Modifier.weight(1f).height(52.dp),
+            ) { Text("✅ Kaydet", fontWeight = FontWeight.Bold) }
         }
     }
 
@@ -1068,6 +1143,89 @@ private fun CountDocument(no: String, onBack: () -> Unit) {
                 if (r.ok) reload()
             }
         })
+    }
+    if (showCounterDialog) {
+        val current = counterAssignments(header)
+        var c1 by remember(no, showCounterDialog) { mutableStateOf(current.getOrNull(0)?.userId.orEmpty()) }
+        var c2 by remember(no, showCounterDialog) { mutableStateOf(current.getOrNull(1)?.userId.orEmpty()) }
+        var c3 by remember(no, showCounterDialog) { mutableStateOf(current.getOrNull(2)?.userId.orEmpty()) }
+        LaunchedEffect(showCounterDialog) {
+            if (localUserList.isEmpty()) {
+                val page = runCatching {
+                    BcApi.getAllPages(context, "localUsers?\$top=200&\$select=username,disabled")
+                }.getOrNull()
+                if (page != null && page.complete) {
+                    localUserList = page.rows
+                        .filter { !it.optBoolean("disabled", false) }
+                        .map { it.optString("username").trim() }
+                        .filter { it.isNotBlank() }
+                        .distinct()
+                }
+            }
+        }
+        AlertDialog(
+            onDismissRequest = { if (!busy) showCounterDialog = false },
+            title = { Text("Sayıcıları ata") },
+            text = {
+                Column {
+                    Text(
+                        "Kör sayımda her sayıcı kendi turunu bağımsız sayar. Atanmayan slot boş kalır.",
+                        fontSize = 12.sp,
+                        color = Color.Gray,
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    // Kullanıcı adı elle yazılınca küçük bir yazım farkı (ör. ADMIN
+                    // yerine ADMİN) BC'den ham İngilizce hataya dönüyordu. Artık
+                    // kayıtlı kullanıcılar listeden seçiliyor.
+                    listOf(
+                        Triple("1. sayıcı", c1, { v: String -> c1 = v }),
+                        Triple("2. sayıcı", c2, { v: String -> c2 = v }),
+                        Triple("3. sayıcı", c3, { v: String -> c3 = v }),
+                    ).forEach { (etiket, secili, ata) ->
+                        Text(etiket, fontSize = 12.sp, color = Color.Gray)
+                        Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            FilterChip(selected = secili.isBlank(), onClick = { ata("") }, label = { Text("Atanmadı", fontSize = 12.sp) })
+                            localUserList.forEach { kullanici ->
+                                FilterChip(
+                                    selected = secili.equals(kullanici, true),
+                                    onClick = { ata(kullanici) },
+                                    label = { Text(kullanici, fontSize = 12.sp) },
+                                )
+                            }
+                        }
+                        Spacer(Modifier.height(8.dp))
+                    }
+                    if (localUserList.isEmpty()) {
+                        Text(
+                            "Kayıtlı depo kullanıcısı bulunamadı. Yöneticinizin Local WMS User tanımlaması gerekiyor.",
+                            fontSize = 12.sp, color = Color.Gray,
+                        )
+                    }
+                }
+            },
+            confirmButton = {
+                Button(
+                    enabled = !busy,
+                    onClick = {
+                        scope.launch {
+                            busy = true; status = "Sayıcılar kaydediliyor..."
+                            val body = JSONObject()
+                                .put("counter1UserId", c1)
+                                .put("counter2UserId", c2)
+                                .put("counter3UserId", c3)
+                                .toString()
+                            val r = BcApi.boundAction(context, "countSheets", no, "setCounters", body)
+                            busy = false
+                            showCounterDialog = false
+                            status = if (r.ok) "TAMAM: Sayıcılar güncellendi"
+                                else QcErrorParser.friendlyStatus(BcApi.errorMessage(r.body), r.httpCode)
+                            if (r.ok) reload()
+                        }
+                    },
+                ) { Text("Kaydet") }
+            },
+            dismissButton = { TextButton(onClick = { showCounterDialog = false }) { Text("Vazgeç") } },
+        )
     }
     if (showPostConfirm) {
         AlertDialog(
@@ -2675,6 +2833,8 @@ fun DirectedMoveModule() {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun MovementDocument(no: String, onBack: () -> Unit) {
+    // Donanım Geri tuşu belge ekranından uygulamayı kapatmasın; listeye dönsün.
+    androidx.activity.compose.BackHandler { onBack() }
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var header by remember { mutableStateOf<JSONObject?>(null) }
@@ -2869,7 +3029,7 @@ private fun MovementDocument(no: String, onBack: () -> Unit) {
                     }
                 },
                 enabled = !busy && canRegister,
-                modifier = Modifier.fillMaxWidth().height(54.dp),
+                modifier = Modifier.fillMaxWidth().height(com.dynops.bcwms.ui.wmsPrimaryButtonHeight()),
             ) { Text(if (canRegister) "✅ Hareketi Kaydet" else "Önce miktar ve takip bilgisi girin", fontWeight = FontWeight.Bold) }
         }
     }

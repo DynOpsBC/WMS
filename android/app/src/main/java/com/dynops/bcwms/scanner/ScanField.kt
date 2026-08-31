@@ -4,6 +4,7 @@ import android.Manifest
 import android.content.pm.PackageManager
 import android.util.Log
 import androidx.activity.compose.BackHandler
+import androidx.compose.ui.focus.focusRequester
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.camera.core.CameraSelector
@@ -47,6 +48,8 @@ fun ScanField(
     modifier: Modifier = Modifier,
     onScanned: ((String) -> Unit)? = null,
     enabled: Boolean = true,
+    focusRequester: androidx.compose.ui.focus.FocusRequester? = null,
+    updateValueOnScan: Boolean = true,
 ) {
     val context = LocalContext.current
     var hasCameraPermission by remember {
@@ -56,6 +59,8 @@ fun ScanField(
         )
     }
     var scanning by remember { mutableStateOf(false) }
+    // OK boş alanda basıldığında gösterilen ipucu.
+    var emptyHint by remember { mutableStateOf(false) }
     var cameraError by remember { mutableStateOf<String?>(null) }
     // Hardware scanner (Zebra DataWedge) routing — sadece focuslu alan, ScanBus
     // event'lerini dinler. Bu sayede aynı ekranda birden fazla ScanField olsa
@@ -66,7 +71,7 @@ fun ScanField(
         if (!isFocused || !enabled) return@LaunchedEffect
         ScanBus.events.collect { event ->
             val raw = event.raw
-            onValueChange(raw)
+            if (updateValueOnScan) onValueChange(raw)
             onScanned?.invoke(raw)
         }
     }
@@ -97,14 +102,21 @@ fun ScanField(
                 keyboardActions = KeyboardActions(onDone = {
                     if (value.isNotBlank()) onScanned?.invoke(value.trim())
                 }),
-                modifier = Modifier.weight(1f),
+                // Ekran akışı alanı programatik odaklayabilsin (sadece-okut sayım):
+                // donanım tarayıcı yalnız odaklı alana yazar.
+                modifier = if (focusRequester != null) Modifier.weight(1f).focusRequester(focusRequester) else Modifier.weight(1f),
             )
             Spacer(Modifier.width(8.dp))
             // Elle giriş için "OK" — yazıp bas, hemen işlensin (Enter'a alternatif).
             if (onScanned != null) {
+                // OK, alan boşken pasifti: operatör basıyor, hiçbir şey olmuyor
+                // ve nedenini göremiyordu. Artık basılabiliyor ve ne beklendiğini
+                // söylüyor (UAT: aynı sessizlik yerleştirme, ad-hoc ve paketlemede).
                 FilledTonalButton(
-                    enabled = enabled && value.isNotBlank(),
-                    onClick = { onScanned.invoke(value.trim()) },
+                    enabled = enabled,
+                    onClick = {
+                        if (value.isBlank()) emptyHint = true else { emptyHint = false; onScanned.invoke(value.trim()) }
+                    },
                 ) { Text("OK") }
                 Spacer(Modifier.width(6.dp))
             }
@@ -123,6 +135,13 @@ fun ScanField(
                 )
             }
         }
+        if (emptyHint) {
+            Text(
+                "Önce okutun ya da elle yazın: $label",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.error,
+            )
+        }
         cameraError?.let {
             Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
         }
@@ -132,7 +151,7 @@ fun ScanField(
                 onError = { cameraError = "Kamera açılamadı — elle giriş yapın."; scanning = false },
                 onBarcode = { code ->
                     scanning = false
-                    onValueChange(code)
+                    if (updateValueOnScan) onValueChange(code)
                     onScanned?.invoke(code)
                 }
             )

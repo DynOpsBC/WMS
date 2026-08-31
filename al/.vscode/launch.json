@@ -1,6 +1,7 @@
 {
   "version": "0.2.0",
   "configurations": [
+    
     {
       "name": "Sandbox - ICT (fast publish)",
       "type": "al",
@@ -12,7 +13,7 @@
       "authentication": "AAD",
       "schemaUpdateMode": "Synchronize",
       "startupObjectType": "Page",
-      "startupObjectId": 72061,
+      //"startupObjectId": 72061,
       "dependencyPublishingOption": "Default",
       "launchBrowser": false
     },

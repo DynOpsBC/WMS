@@ -517,7 +517,9 @@ codeunit 72428 "DOPSWHS LP Propagation"
     begin
         if ItemLedgerEntry."DOPSWHS LP No." <> '' then
             exit;
-        Lp := ResolveLpForItemJnlLine(ItemJournalLine);
+        Lp := ItemJournalLine."DOPSWHS LP No.";
+        if Lp = '' then
+            Lp := ResolveLpForItemJnlLine(ItemJournalLine);
         if Lp = '' then
             exit;
         ItemLedgerEntry."DOPSWHS LP No." := Lp;
@@ -867,6 +869,19 @@ codeunit 72428 "DOPSWHS LP Propagation"
     // (A) Warehouse Entry stamping — covers Pick/Put-away/Movement register-time
     // =========================================================================
 
+    /// <summary>
+    /// Carries the exact physical-inventory LP onto the warehouse journal line before BC registers
+    /// it. Keeping the LP on the same posting line avoids ambiguous item/bin/lot matching when two
+    /// LPs contain identical stock dimensions.
+    /// </summary>
+    [EventSubscriber(ObjectType::Codeunit, Codeunit::"WMS Management", 'OnAfterCreateWhseJnlLine', '', false, false)]
+    local procedure CarryCountLpOntoWhseJnlLine(var WhseJournalLine: Record "Warehouse Journal Line"; ItemJournalLine: Record "Item Journal Line"; ToTransfer: Boolean)
+    begin
+        if ItemJournalLine."DOPSWHS LP No." = '' then
+            exit;
+        WhseJournalLine."DOPSWHS LP No." := ItemJournalLine."DOPSWHS LP No.";
+    end;
+
     /// <summary>Stamps the LP onto each Warehouse Entry as it is registered (bin movements from
     /// pick/put-away/movement). Uses the OnBefore event so the assignment is persisted by the base
     /// Insert(true) with no Modify. The originating Warehouse Activity Line (carrying the scanned
@@ -878,7 +893,9 @@ codeunit 72428 "DOPSWHS LP Propagation"
     begin
         if WarehouseEntry."DOPSWHS LP No." <> '' then
             exit;
-        Lp := ResolveLpForWhseEntry(WarehouseEntry);
+        Lp := WarehouseJournalLine."DOPSWHS LP No.";
+        if Lp = '' then
+            Lp := ResolveLpForWhseEntry(WarehouseEntry);
         if Lp = '' then
             exit;
         WarehouseEntry."DOPSWHS LP No." := Lp;

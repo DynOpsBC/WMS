@@ -43,17 +43,30 @@ fun PutAwayModule() {
     var status by remember { mutableStateOf("") }
     var loading by remember { mutableStateOf(false) }
     var search by remember { mutableStateOf("") }
+    // Diğer modüllerdeki gibi "Bana atanan / Tümü" ayrımı; operatör kendi işini
+    // 20 belgelik listede aramak zorunda kalmasın (UAT pa-01).
+    var mineOnly by remember { mutableStateOf(true) }
+    var myUser by remember { mutableStateOf("") }
 
     fun load() {
         scope.launch {
             loading = true; status = "Yükleniyor..."
+            if (myUser.isBlank()) myUser = BcApi.currentUserId(context).trim()
             val filter = com.dynops.bcwms.ui.buildODataFilter(com.dynops.bcwms.ui.searchClause("no", search))
             val page = BcApi.getAllPages(context, "putAways?\$top=100&\$orderby=no desc&\$select=no,locationCode,assignedUserId,status$filter")
             loading = false
             rows = if (page.complete) page.rows else emptyList()
-            status = if (!page.complete) "HATA: Yerleştirme listesinin tamamı alınamadı. Yenileyin."
-                else if (rows.isEmpty()) "BOŞ: Açık yerleştirme belgesi yok"
-                else "TAMAM: ${rows.size} belge"
+            val shown = if (mineOnly && myUser.isNotBlank())
+                rows.count { it.optString("assignedUserId").trim().equals(myUser, true) } else rows.size
+            status = when {
+                !page.complete -> "HATA: Yerleştirme listesinin tamamı alınamadı. Yenileyin."
+                // Arama sonuçsuzsa "hiç belge yok" demek yanıltıcı: belgeler var,
+                // aramaya uyan yok (UAT pa-01).
+                rows.isEmpty() && search.isNotBlank() -> "BOŞ: '$search' ile eşleşen yerleştirme belgesi bulunamadı"
+                rows.isEmpty() -> "BOŞ: Açık yerleştirme belgesi yok"
+                shown == 0 && mineOnly -> "BOŞ: Üzerinize atanmış yerleştirme yok — 'Tümü' ile bakabilirsiniz (${rows.size} açık belge)"
+                else -> "TAMAM: $shown belge"
+            }
         }
     }
     LaunchedEffect(Unit) { load() }
@@ -72,10 +85,16 @@ fun PutAwayModule() {
     ) { item, docs ->
         when { docs.isEmpty() -> status = "⚠️ '$item' açık yerleştirmede yok"; docs.size == 1 -> selected = docs.first(); else -> { itemDocs = item to docs; status = "TAMAM: '$item' → ${docs.size} belge" } }
     }
-    val shownRows = itemDocs?.let { f -> rows.filter { it.optString("no") in f.second } } ?: rows
+    val scoped = if (mineOnly && myUser.isNotBlank())
+        rows.filter { it.optString("assignedUserId").trim().equals(myUser, true) } else rows
+    val shownRows = itemDocs?.let { f -> scoped.filter { it.optString("no") in f.second } } ?: scoped
 
     Column(Modifier.fillMaxSize().padding(12.dp)) {
-        Button(onClick = { load() }, enabled = !loading) { WmsRefreshLabel(loading) }
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Button(onClick = { load() }, enabled = !loading, modifier = Modifier.weight(1f)) { WmsRefreshLabel(loading) }
+            FilterChip(selected = mineOnly, onClick = { mineOnly = true; load() }, label = { Text("Bana atanan", fontSize = 12.sp) })
+            FilterChip(selected = !mineOnly, onClick = { mineOnly = false; load() }, label = { Text("Tümü", fontSize = 12.sp) })
+        }
         Spacer(Modifier.height(8.dp))
         com.dynops.bcwms.ui.DocSearchBar(value = search, onValueChange = { search = it }, onSearch = { load() })
         Spacer(Modifier.height(4.dp))
@@ -91,7 +110,15 @@ fun PutAwayModule() {
                     onClick = { selected = d.optString("no") },
                 )
             }
-            if (rows.isEmpty() && !loading) item { EmptyState("Açık yerleştirme belgesi yok.") }
+            if (shownRows.isEmpty() && !loading) item {
+                EmptyState(
+                    when {
+                        search.isNotBlank() -> "'$search' ile eşleşen yerleştirme belgesi bulunamadı."
+                        mineOnly && rows.isNotEmpty() -> "Üzerinize atanmış yerleştirme yok. 'Tümü' sekmesinden açık belgeleri görebilirsiniz."
+                        else -> "Açık yerleştirme belgesi yok."
+                    }
+                )
+            }
         }
     }
 }
@@ -99,6 +126,8 @@ fun PutAwayModule() {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun PutAwayDocument(no: String, onBack: () -> Unit) {
+    // Donanım Geri tuşu belge ekranından uygulamayı kapatmasın; listeye dönsün.
+    androidx.activity.compose.BackHandler { onBack() }
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var header by remember { mutableStateOf<JSONObject?>(null) }
@@ -114,7 +143,11 @@ private fun PutAwayDocument(no: String, onBack: () -> Unit) {
     var showBulkBin by remember { mutableStateOf(false) }
     var showBatchPlacement by remember { mutableStateOf(false) }
     var showBins by remember { mutableStateOf(false) }
-    var stagedLineNos by remember(no) { mutableStateOf<Set<Int>>(emptySet()) }
+    // Hedef raf/miktar BC'ye yazildiktan sonra belge ekranindan cikilabilir.
+    // Hangi satirlarin operatorce hazirlandigi yalniz RAM'de kalirsa geri
+    // donuste kart yesil gorunmesine ragmen Kaydet "Once dokunun" diyordu.
+    var stagedLineNos by remember(no) { mutableStateOf(PutAwayStagedStore.load(context, no)) }
+    LaunchedEffect(no, stagedLineNos) { PutAwayStagedStore.save(context, no, stagedLineNos) }
 
     fun reload() {
         scope.launch {
@@ -128,6 +161,9 @@ private fun PutAwayDocument(no: String, onBack: () -> Unit) {
             val page = BcApi.getAllPages(context, "putAwayLines?\$filter=no eq '$no'&\$top=100")
             lines = page.rows
             linesComplete = page.complete
+            if (page.complete) {
+                stagedLineNos = retainExistingPutAwayStagedLineNos(stagedLineNos, lines)
+            }
             if (!headerLoaded || !linesComplete) status = "HATA: Belgenin tüm satırları yüklenemedi. Yenileyip tekrar deneyin."
             busy = false
         }
@@ -317,10 +353,19 @@ private fun PutAwayDocument(no: String, onBack: () -> Unit) {
             }
             if (allOk) stagedLineNos = lines.map { it.optInt("lineNo") }.toSet()
             busy = false
-            status = if (allOk) "TAMAM: $okCount/${lines.size} satır → $bin"
-                else if (okCount > 0)
-                    "UYARI: $okCount/${lines.size} satır yazıldı; kalan satırlar başarısız. Belge yenilendi, kayıt işlemi yapılmadı."
-                else "HATA: Toplu bin ataması tamamlanamadı. Belge yenilendi, kayıt işlemi yapılmadı."
+            // Ekranda yerleştirmeler alma-koyma çifti olarak sayıldığı için ham
+            // satır sayısı (2) kartlardaki sayıyla (1) çelişiyordu; ayrıca BC'nin
+            // gerçek gerekçesi genel cümleyle eziliyordu (UAT YR-11).
+            val toplam = logicalPutAwayMovementCount(lines)
+            val yazilan = if (allOk) toplam else logicalPutAwayMovementCount(lines.take(okCount))
+            val sebep = status.removePrefix("HATA:").trim()
+            status = when {
+                allOk -> "TAMAM: $toplam yerleştirme → $bin"
+                okCount > 0 -> "UYARI: $toplam yerleştirmenin $yazilan tanesi yazıldı. " +
+                    (if (sebep.isNotBlank()) "Sebep: $sebep " else "") + "Kayıt yapılmadı, belge yenilendi."
+                else -> "HATA: Toplu raf ataması yapılamadı. " +
+                    (if (sebep.isNotBlank()) "Sebep: $sebep " else "") + "Belge yenilendi."
+            }
             reload()
         }
     }
@@ -416,9 +461,18 @@ private fun PutAwayDocument(no: String, onBack: () -> Unit) {
     Column(Modifier.fillMaxSize()) {
         Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(12.dp)) {
             TextButton(onClick = onBack) { Text("‹ Belge Listesi") }
+            // Başlıkta atanan kullanıcı ve ilerleme yoktu; operatör belgenin
+            // kimde olduğunu ve ne kadarının bittiğini göremiyordu (UAT pa-02).
+            val doneQty = lines.filter { it.optString("actionType").equals("Place", true) }
+                .sumOf { it.optDouble("qtyHandled", 0.0) }
+            val totalQty = lines.filter { it.optString("actionType").equals("Place", true) }
+                .sumOf { it.optDouble("quantity", 0.0) }
+            val pct = if (totalQty > 0) (doneQty / totalQty * 100).toInt() else 0
             DocHeaderCard(
                 title = no,
-                subtitle = "Lokasyon: ${h?.optString("locationCode") ?: ""} · ${firstValue(h ?: JSONObject(), "status")}",
+                subtitle = "Lokasyon: ${h?.optString("locationCode") ?: ""} · ${firstValue(h ?: JSONObject(), "status")}" +
+                    (assignedUserId.takeIf { it.isNotBlank() }?.let { " · Atanan: $it" } ?: " · Atanmamış") +
+                    if (headerLoaded) " · %$pct tamamlandı" else "",
             )
             Spacer(Modifier.height(6.dp))
             StatusText(status)
@@ -469,11 +523,13 @@ private fun PutAwayDocument(no: String, onBack: () -> Unit) {
             }
         }
         BottomActionBar {
-            if (!adminTestSession && headerLoaded && assignedUserId.isBlank()) {
+            // Atamasız belge admin oturumunda da sahipsiz kalmamalı: "Bana Ata"
+            // her durumda görünür (UAT pa-06).
+            if (headerLoaded && assignedUserId.isBlank()) {
                 Button(
                     onClick = { assignToMe() },
                     enabled = !busy && linesComplete && myUserId.isNotBlank(),
-                    modifier = Modifier.fillMaxWidth().height(54.dp),
+                    modifier = Modifier.fillMaxWidth().height(com.dynops.bcwms.ui.wmsPrimaryButtonHeight()),
                 ) {
                     Text("👤 Bana Ata", fontWeight = FontWeight.Bold)
                 }
@@ -484,15 +540,21 @@ private fun PutAwayDocument(no: String, onBack: () -> Unit) {
                         if (hasLpMovements) showBatchPlacement = true else showBulkBin = true
                     },
                     enabled = !busy && canMutate && lines.isNotEmpty(),
-                    modifier = Modifier.weight(1f).height(54.dp),
+                    modifier = Modifier.weight(1f).height(com.dynops.bcwms.ui.wmsPrimaryButtonHeight()),
                 ) {
                     Text(if (hasLpMovements) "📍 Raf + LP Okut" else "📦 Tümünü Bir Bine")
                 }
-                val canRegister = canMutate && stagedLineNos.isNotEmpty()
+                // Hazırlanan miktar BC'ye yazılıyor; ekrandan çıkıp dönünce
+                // oturum hafızası sıfırlanıyor ve düğme pasifleşiyordu — BC'de
+                // bekleyen iş kaydedilemez hâle geliyordu (UAT pa-05).
+                val serverStaged = lines.any {
+                    it.optString("actionType").equals("Place", true) && it.optDouble("qtyToHandle", 0.0) > 0.0
+                }
+                val canRegister = canMutate && (stagedLineNos.isNotEmpty() || serverStaged)
                 Button(
                     onClick = { register() },
                     enabled = !busy && canRegister,
-                    modifier = Modifier.weight(1f).height(54.dp),
+                    modifier = Modifier.weight(1f).height(com.dynops.bcwms.ui.wmsPrimaryButtonHeight()),
                 ) {
                     Text(
                         if (canRegister) "✅ Yerleştirmeyi Kaydet" else "Önce dokunun",
@@ -547,13 +609,22 @@ private fun PutAwayDocument(no: String, onBack: () -> Unit) {
                     }
                     if (okCount == affected.size) {
                         stagedLineNos = stagedLineNos + affected.map { it.optInt("lineNo") }
+                        // Kart eski hazırlanan miktarı göstermeye devam ediyordu;
+                        // satırlar BC'den tazelenip yeni değer hemen yansıtılır.
+                        val fresh = BcApi.getAllPages(context, "putAwayLines?\$filter=no eq '$no'&\$top=200")
+                        if (fresh.complete) lines = fresh.rows
                         busy = false
                         status = "TAMAM: Satır hazırlandı. Diğer satırları tamamlayın veya Yerleştirmeyi Kaydet'e basın."
                     } else {
                         busy = false
+                        // patchPutAwayLine BC'nin gerçek gerekçesini status'e yazmıştı;
+                        // burada genel bir cümleyle ezilmemeli (UAT pa-03).
+                        val sebep = status.removePrefix("HATA:").trim()
                         status = if (okCount > 0)
-                            "UYARI: $okCount/${affected.size} satır yazıldı; kalan satırlar başarısız. Belge yenilendi."
-                        else "HATA: Satırlar güncellenemedi. Belge yenilendi."
+                            "UYARI: $okCount/${affected.size} satır yazıldı; kalanı başarısız. " +
+                                (if (sebep.isNotBlank()) "Sebep: $sebep " else "") + "Belge yenilendi."
+                        else "HATA: Satır güncellenemedi. " +
+                            (if (sebep.isNotBlank()) "Sebep: $sebep " else "") + "Belge yenilendi."
                         reload()
                     }
                 }
@@ -608,6 +679,38 @@ internal fun putAwayRegisterQuantityPlan(
     }
 }
 
+/** Belge kismi kaydedildiyse artik bulunmayan eski satir kimliklerini unut. */
+internal fun retainExistingPutAwayStagedLineNos(
+    stagedLineNos: Set<Int>,
+    lines: List<JSONObject>,
+): Set<Int> {
+    val existing = lines.mapTo(mutableSetOf()) { it.optInt("lineNo") }
+    return stagedLineNos.intersect(existing)
+}
+
+/** Belgeye ozel hazirlanmis yerleştirme satirlari; uygulama/ekran gecisinde korunur. */
+internal object PutAwayStagedStore {
+    private const val PREFS = "bcwms_putaway_staged"
+
+    fun load(context: android.content.Context, no: String): Set<Int> =
+        runCatching {
+            context.getSharedPreferences(PREFS, android.content.Context.MODE_PRIVATE)
+                .getString("putaway:$no", "").orEmpty()
+                .split(',')
+                .mapNotNull { it.trim().toIntOrNull() }
+                .toSet()
+        }.getOrDefault(emptySet())
+
+    fun save(context: android.content.Context, no: String, stagedLineNos: Set<Int>) {
+        runCatching {
+            val editor = context.getSharedPreferences(PREFS, android.content.Context.MODE_PRIVATE).edit()
+            if (stagedLineNos.isEmpty()) editor.remove("putaway:$no")
+            else editor.putString("putaway:$no", stagedLineNos.joinToString(","))
+            editor.apply()
+        }
+    }
+}
+
 private fun putAwayPairLines(seed: JSONObject, lines: List<JSONObject>): List<JSONObject> {
     val key = putAwayPairKey(seed)
     val matched = lines.filter { putAwayPairKey(it) == key }
@@ -658,7 +761,9 @@ internal fun logicalPutAwayMovementCount(lines: List<JSONObject>): Int =
 @Composable
 private fun PutAwayPairCard(pair: PutAwayPair, staged: Boolean, onClick: () -> Unit) {
     val place = pair.place
-    val done = staged || lineDone(place, LineModule.PUTAWAY)
+    // Kart, BC'de bekleyen hazırlığı da "hazır" saymalı: aksi hâlde ekrandan
+    // çıkıp dönen operatör satırı hazırlanmamış sanıyor (UAT pa-05).
+    val done = staged || lineDone(place, LineModule.PUTAWAY) || place.optDouble("qtyToHandle", 0.0) > 0.0
     val sourceBin = pair.take?.optString("binCode")?.ifBlank { null } ?: "-"
     val targetBin = place.optString("binCode").ifBlank { "" }
     val lpNo = place.optString("lpNo").trim()
@@ -684,7 +789,10 @@ private fun PutAwayPairCard(pair: PutAwayPair, staged: Boolean, onClick: () -> U
             }
             Spacer(Modifier.height(8.dp))
             Text(
-                "Miktar: ${fmtNum(if (toHandle > 0) toHandle else outstanding)} · Kalan: ${fmtNum(outstanding)} $uom".trim(),
+                // Hazırlanan miktar ayrı yazılır; eskiden "Miktar" alanına
+                // yazılıp kalanla karışıyordu (UAT pa-05).
+                (if (toHandle > 0) "Hazırlanan: ${fmtNum(toHandle)} · Kalan: ${fmtNum(outstanding)} $uom"
+                 else "Miktar: ${fmtNum(outstanding)} · Kalan: ${fmtNum(outstanding)} $uom").trim(),
                 fontSize = 12.sp, color = Color.Gray,
             )
             if (lpNo.isNotBlank())
@@ -1084,7 +1192,7 @@ private fun PutAwayGuidedSheet(
             if (step == PutAwayStep.QTY) {
                 OutlinedTextField(
                     qty,
-                    { qty = it.filter { c -> c.isDigit() || c == '.' } },
+                    { qty = normalizeQtyInput(it) },
                     label = { Text("Miktar") },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
@@ -1157,10 +1265,26 @@ private fun PutAwayGuidedSheet(
 
             Spacer(Modifier.height(16.dp))
             if (step == PutAwayStep.QTY) {
+                // Düğme eskiden boş/0 miktarda PASİF idi: operatör basıyor,
+                // hiçbir şey olmuyor ve neden olmadığını göremiyordu. Artık
+                // basılabiliyor ve eksik olan şeyi Türkçe söylüyor (UAT pa-03).
                 Button(
-                    enabled = targetBin.isNotBlank() && (qty.toDoubleOrNull() ?: 0.0) > 0,
+                    enabled = true,
                     modifier = Modifier.fillMaxWidth(),
-                    onClick = { onConfirm(targetBin, qty.toDoubleOrNull() ?: 0.0) },
+                    onClick = {
+                        val entered = qty.toDoubleOrNull()
+                        val kalan = if (outstanding.isNaN()) null else outstanding
+                        error = when {
+                            targetBin.isBlank() -> "Önce koyacağınız rafı okutun."
+                            qty.isBlank() -> "Miktar girin."
+                            entered == null -> "Miktar sayı olmalı. Örnek: 12 veya 12.5"
+                            entered <= 0 -> "Miktar sıfırdan büyük olmalı."
+                            kalan != null && entered > kalan ->
+                                "Kalan miktardan fazla giremezsiniz (kalan: ${fmtNum(kalan)})."
+                            else -> ""
+                        }
+                        if (error.isBlank()) onConfirm(targetBin, entered ?: 0.0)
+                    },
                 ) { Text("✅ Yerleştirmeyi Onayla", fontWeight = FontWeight.Bold) }
             }
             TextButton(onClick = onDismiss, modifier = Modifier.fillMaxWidth()) { Text("Vazgeç") }
@@ -1205,9 +1329,9 @@ private fun BulkBinSheet(locationCode: String, movementCount: Int, onDismiss: ()
 
 internal fun putAwayBinListPath(locationCode: String): String =
     if (locationCode.isNotBlank()) {
-        "bins?\$filter=locationCode eq '${odataLiteral(locationCode)}'&\$orderby=code&\$top=200"
+        "bins?\$filter=locationCode eq '${odataLiteral(locationCode)}'&\$orderby=code&\$top=1000"
     } else {
-        "bins?\$orderby=code&\$top=200"
+        "bins?\$orderby=code&\$top=1000"
     }
 
 /**
@@ -1216,12 +1340,16 @@ internal fun putAwayBinListPath(locationCode: String): String =
  */
 internal fun putAwayExactBinPath(locationCode: String, binCode: String): String {
     val safeBin = odataLiteral(binCode.trim())
+    // Tam eşitlik yanında KISMİ kod da aranır: operatör "Y.G03" yazdığında
+    // Y.G03.13 bulunabilmeli. Depoda yüzlerce raf olabildiği için yalnız yerel
+    // listeye bakmak yetmiyordu.
+    val match = "(code eq '$safeBin' or startswith(code,'$safeBin'))"
     val filter = if (locationCode.isNotBlank()) {
-        "locationCode eq '${odataLiteral(locationCode)}' and code eq '$safeBin'"
+        "locationCode eq '${odataLiteral(locationCode)}' and $match"
     } else {
-        "code eq '$safeBin'"
+        match
     }
-    return "bins?\$filter=$filter&\$orderby=code&\$top=1"
+    return "bins?\$filter=$filter&\$orderby=code&\$top=50"
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -1248,6 +1376,8 @@ private fun BinListContent(locationCode: String, onSelect: ((String) -> Unit)?) 
     var exactLoading by remember(locationCode) { mutableStateOf(false) }
     var exactLookupComplete by remember(locationCode) { mutableStateOf(false) }
     var exactLookupError by remember(locationCode) { mutableStateOf("") }
+    // Sunucudan gelen kısmi eşleşmeler (yerel sayfada olmayan raflar).
+    var serverMatches by remember(locationCode) { mutableStateOf<List<JSONObject>>(emptyList()) }
 
     fun loadBins() {
         scope.launch {
@@ -1265,6 +1395,7 @@ private fun BinListContent(locationCode: String, onSelect: ((String) -> Unit)?) 
     val exactQuery = search.trim()
     LaunchedEffect(locationCode, exactQuery) {
         exactMatch = null
+        serverMatches = emptyList()
         exactLookupComplete = false
         exactLookupError = ""
         exactLoading = false
@@ -1282,6 +1413,7 @@ private fun BinListContent(locationCode: String, onSelect: ((String) -> Unit)?) 
         if (!page.complete) {
             exactLookupError = "HATA: Raf sunucuda doğrulanamadı. Bağlantıyı kontrol edip tekrar deneyin."
         } else {
+            serverMatches = page.rows
             exactMatch = page.rows.firstOrNull {
                 it.optString("code").equals(exactQuery, ignoreCase = true) &&
                     // Lokasyon zaten server-side OData filtresinde zorunlu. Bazı
@@ -1311,6 +1443,11 @@ private fun BinListContent(locationCode: String, onSelect: ((String) -> Unit)?) 
     // en üste ekle; aynı raf yerel listede varsa ikinci kez gösterme.
     val shown = buildList {
         exactMatch?.let { add(it) }
+        // Sunucudan gelen kısmi eşleşmeleri de göster (yerel sayfada olmayabilir).
+        addAll(serverMatches.filterNot { sm ->
+            sm.optString("code").equals(exactMatch?.optString("code").orEmpty(), ignoreCase = true) ||
+                localMatches.any { it.optString("code").equals(sm.optString("code"), ignoreCase = true) }
+        })
         addAll(localMatches.filterNot { local ->
             exactMatch?.let { exact ->
                 val localLocation = local.optString("locationCode")
@@ -1537,6 +1674,8 @@ private fun WhsePickTab(initialPickNo: String? = null, onInitialPickConsumed: ()
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun WhsePickDocument(no: String, onBack: () -> Unit) {
+    // Donanım Geri tuşu belge ekranından uygulamayı kapatmasın; listeye dönsün.
+    androidx.activity.compose.BackHandler { onBack() }
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var header by remember { mutableStateOf<JSONObject?>(null) }
@@ -1563,6 +1702,8 @@ private fun WhsePickDocument(no: String, onBack: () -> Unit) {
     var myUserId by remember { mutableStateOf("") }
     var inFlightLineNos by remember(no) { mutableStateOf<Set<Int>>(emptySet()) }
     var showCancelConfirm by remember { mutableStateOf(false) }
+    // Sevk LP (toplama sepeti) ve eksik bildirimi — API'de vardı, ekranda yoktu (UAT shipping-x04).
+    var shortLine by remember(no) { mutableStateOf<JSONObject?>(null) }
 
     fun reload() {
         scope.launch {
@@ -1572,6 +1713,15 @@ private fun WhsePickDocument(no: String, onBack: () -> Unit) {
             val h = BcApi.get(context, "picks('$no')")
             header = if (h.ok) runCatching { JSONObject(h.body) }.getOrNull() else null
             headerLoaded = header != null
+            // Toplama kaydedilince BC belgeyi siler; 404 bir yükleme hatası değil,
+            // "iş bitti" demektir. Eskiden bunun yerine "satırlar yüklenemedi"
+            // hatası gösteriliyordu (kullanıcı başarılı kaydı hata sanıyordu).
+            if (!h.ok && h.httpCode == 404) {
+                busy = false
+                status = "TAMAM: Toplama kaydedildi, belge kapandı."
+                onBack()
+                return@launch
+            }
             val page = BcApi.getAllPages(context, "pickLines?\$filter=no eq '$no'&\$top=100")
             lines = page.rows
             linesComplete = page.complete
@@ -1743,9 +1893,47 @@ private fun WhsePickDocument(no: String, onBack: () -> Unit) {
             }
         }
         BottomActionBar {
+            val mainLp = h?.optString("mainLpNo").orEmpty()
+            OutlinedButton(
+                onClick = {
+                    scope.launch {
+                        busy = true
+                        if (mainLp.isBlank()) {
+                            status = "Sevk LP başlatılıyor..."
+                            val tpl = resolveLpTemplate(context, LpPurpose.PALLET)
+                            if (tpl == null) { busy = false; status = "HATA: Uygun sepet/palet şablonu bulunamadı."; return@launch }
+                            val r = BcApi.boundAction(context, "picks", no, "startShippingLP", JSONObject().apply { put("lpTemplateCode", tpl) }.toString())
+                            busy = false
+                            status = if (r.ok) "TAMAM: Sevk LP ${BcApi.scalarValue(r.body).trim()} başlatıldı"
+                                else QcErrorParser.friendlyStatus(BcApi.errorMessage(r.body), r.httpCode)
+                        } else {
+                            status = "Sevk LP kapatılıyor..."
+                            val r = BcApi.boundAction(context, "picks", no, "stopShippingLP", JSONObject().apply { put("lpNo", mainLp); put("printLabel", false) }.toString())
+                            busy = false
+                            status = if (r.ok) "TAMAM: Sevk LP $mainLp kapatıldı" else QcErrorParser.friendlyStatus(BcApi.errorMessage(r.body), r.httpCode)
+                        }
+                        reload()
+                    }
+                },
+                enabled = !busy && canMutate,
+                modifier = Modifier.weight(1f).height(48.dp),
+            ) { Text(if (mainLp.isBlank()) "📦 Sevk LP Başlat" else "📦 LP Kapat ($mainLp)", fontSize = 13.sp) }
+            OutlinedButton(
+                onClick = {
+                    val open = lines.filter { it.optDouble("qtyOutstanding", 0.0) > 0.0 }
+                    when {
+                        open.isEmpty() -> status = "ℹ️ Eksik bildirilecek açık satır yok."
+                        else -> shortLine = open.first()
+                    }
+                },
+                enabled = !busy && canMutate,
+                modifier = Modifier.weight(1f).height(48.dp),
+            ) { Text("📉 Eksik Bildir", fontSize = 13.sp) }
+        }
+        BottomActionBar {
             // "Bana Ata" kilitliyken de açık: devralma tek çıkış yolu. BC tarafı
             // (ClaimPick) belge başkasındaysa zaten reddeder, o hata gösterilir.
-            OutlinedButton(onClick = { action("assignToMe", "{}", "Bana atandı") }, enabled = !busy && headerLoaded && linesComplete && myUserId.isNotBlank() && !canMutate, modifier = Modifier.weight(1f).height(54.dp)) {
+            OutlinedButton(onClick = { action("assignToMe", "{}", "Bana atandı") }, enabled = !busy && headerLoaded && linesComplete && myUserId.isNotBlank() && !canMutate, modifier = Modifier.weight(1f).height(com.dynops.bcwms.ui.wmsPrimaryButtonHeight())) {
                 Text("Bana Ata")
             }
             val canRegister = canRegisterAssignedPick(assignedTo, myUserId, readyToRegister, inFlightLineNos.size) && headerLoaded && linesComplete
@@ -1757,7 +1945,7 @@ private fun WhsePickDocument(no: String, onBack: () -> Unit) {
                     status = if (r.ok) "Toplama kaydedildi." else QcErrorParser.friendlyStatus(BcApi.errorMessage(r.body), r.httpCode)
                     if (r.ok) reload()
                 }
-            }, enabled = !busy && canRegister, modifier = Modifier.weight(1f).height(54.dp)) {
+            }, enabled = !busy && canRegister, modifier = Modifier.weight(1f).height(com.dynops.bcwms.ui.wmsPrimaryButtonHeight())) {
                 Text(
                     when {
                         !canMutate -> "Belge salt okunur"
@@ -1769,6 +1957,35 @@ private fun WhsePickDocument(no: String, onBack: () -> Unit) {
                 )
             }
         }
+    }
+
+    shortLine?.let { sl ->
+        QuantityDialogSheet(
+            title = "Eksik Bildir — ${sl.optString("binCode")}",
+            itemNo = sl.optString("itemNo"),
+            initialQty = sl.optDouble("qtyOutstanding").takeIf { it > 0 } ?: 1.0,
+            initialUom = sl.optString("unitOfMeasureCode"),
+            showLotSerial = false,
+            onDismiss = { shortLine = null },
+            onConfirm = { res ->
+                shortLine = null
+                scope.launch {
+                    busy = true; status = "Eksik miktar bildiriliyor..."
+                    val r = BcApi.boundAction(
+                        context, "picks", no, "markShort",
+                        JSONObject().apply {
+                            put("lineNo", sl.optInt("lineNo"))
+                            put("qty", res.quantity)
+                            put("reasonCode", "")
+                        }.toString(),
+                    )
+                    busy = false
+                    status = if (r.ok) "TAMAM: ${sl.optString("itemNo")} için ${res.quantity} eksik bildirildi"
+                        else QcErrorParser.friendlyStatus(BcApi.errorMessage(r.body), r.httpCode)
+                    if (r.ok) reload()
+                }
+            },
+        )
     }
 
     val ql = qtyLine
@@ -1960,6 +2177,8 @@ private fun WhseShipmentTab(onPickCreated: (String) -> Unit) {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun ShipDocument(no: String, onBack: () -> Unit, onPickCreated: (String) -> Unit) {
+    // Donanım Geri tuşu belge ekranından uygulamayı kapatmasın; listeye dönsün.
+    androidx.activity.compose.BackHandler { onBack() }
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var header by remember { mutableStateOf<JSONObject?>(null) }
@@ -1968,13 +2187,23 @@ private fun ShipDocument(no: String, onBack: () -> Unit, onPickCreated: (String)
     var busy by remember { mutableStateOf(false) }
     var printSlip by remember { mutableStateOf(true) }
     var invoice by remember { mutableStateOf(false) }
+    // Sevk BC'de kaydedildi ama BC bir uyarı döndürdü (ör. e-İrsaliye numara
+    // serisi bitti). Eskiden mesaj yazılıp hemen onBack() çalıştığı için
+    // operatör uyarıyı hiç görmüyordu (UAT shipping-11).
+    var postWarning by remember { mutableStateOf<String?>(null) }
     var qtyLine by remember { mutableStateOf<JSONObject?>(null) }
+    // Toplama üretilemezse elle miktar/lot girilecek satır.
+    var pendingLotLine by remember(no) { mutableStateOf<JSONObject?>(null) }
     var scanFilter by remember { mutableStateOf("") }
     var columns by remember { mutableStateOf(ColumnPrefs.get(context, "shipment", GridColumns.shipment)) }
     var showColumns by remember { mutableStateOf(false) }
     var headerLoaded by remember(no) { mutableStateOf(false) }
     var linesComplete by remember(no) { mutableStateOf(false) }
     var myUserId by remember(no) { mutableStateOf("") }
+    // BADE: satış siparişinde sevkiyat acentesi zorunlu (Sales-Post öncesi
+    // kontrol). Terminal acenteyi seçip başlığa + kaynak siparişe yazar.
+    var showAgent by remember(no) { mutableStateOf(false) }
+    var agentSkipped by remember(no) { mutableStateOf(false) }
 
     fun reload() {
         scope.launch {
@@ -2004,8 +2233,12 @@ private fun ShipDocument(no: String, onBack: () -> Unit, onPickCreated: (String)
     val assignedUserId = h?.optString("assignedUserId").orEmpty()
     val canMutate = headerLoaded && linesComplete &&
         canMutateAssignedDocument(assignedUserId, myUserId)
+    val shippingAgent = h?.optString("shippingAgentCode")?.trim().orEmpty()
+    val sourceShippingAgent = h?.optString("sourceShippingAgentCode")?.trim().orEmpty()
+    val agentMissing = headerLoaded && shippingAgent.isBlank() && sourceShippingAgent.isBlank() && !agentSkipped
 
-    fun openPickForMultipleLots() {
+    fun openPickForMultipleLots(fallbackLine: JSONObject? = null) {
+        pendingLotLine = fallbackLine
         if (!canMutate) {
             status = documentOwnershipMessage(assignedUserId, myUserId)
             return
@@ -2026,8 +2259,16 @@ private fun ShipDocument(no: String, onBack: () -> Unit, onPickCreated: (String)
                 status = "TAMAM: Ambar Toplama $pickNo açıldı"
                 onPickCreated(pickNo)
             } else {
+                // Toplama üretilemediğinde operatörün başka yolu kalmıyordu.
+                // Miktar + lot penceresi doğrudan açılır ki satır elle sevk
+                // edilebilsin (UAT D-01/D-03).
+                pendingLotLine?.let { satir ->
+                    qtyLine = satir
+                    pendingLotLine = null
+                }
                 status = if (r.ok) "HATA: Toplama numarası alınamadı"
-                    else QcErrorParser.friendlyStatus(BcApi.errorMessage(r.body), r.httpCode)
+                    else QcErrorParser.friendlyStatus(BcApi.errorMessage(r.body), r.httpCode) +
+                        " Miktar ve lotu elle girmek için pencereyi kullanabilirsiniz."
             }
         }
     }
@@ -2045,8 +2286,17 @@ private fun ShipDocument(no: String, onBack: () -> Unit, onPickCreated: (String)
             TextButton(onClick = onBack) { Text("‹ Belge Listesi") }
             DocHeaderCard(
                 title = no,
-                subtitle = "Sevk: ${firstValue(h ?: JSONObject(), "shipTo")} · ${firstValue(h ?: JSONObject(), "status")} · 👤 Atanan Kullanıcı: ${assignedUserId.ifBlank { "Atanmamış" }}",
+                subtitle = "Sevk: ${firstValue(h ?: JSONObject(), "shipTo")} · ${bcStatusLabelTr(firstValue(h ?: JSONObject(), "status"))} · 👤 Atanan Kullanıcı: ${assignedUserId.ifBlank { "Atanmamış" }}",
             )
+            if (headerLoaded && h?.has("shippingAgentCode") == true) {
+                Spacer(Modifier.height(6.dp))
+                ShippingAgentCard(
+                    agentCode = shippingAgent.ifBlank { sourceShippingAgent },
+                    missing = agentMissing,
+                    enabled = canMutate && !busy,
+                    onEdit = { showAgent = true },
+                )
+            }
             if (!canMutate && !busy) {
                 Spacer(Modifier.height(6.dp))
                 StatusText(documentOwnershipMessage(assignedUserId, myUserId))
@@ -2079,7 +2329,7 @@ private fun ShipDocument(no: String, onBack: () -> Unit, onPickCreated: (String)
                         // route tracked items to BC's pick flow where Take lines
                         // can be split safely per lot/bin.
                         if (it.optBoolean("lotRequired", false))
-                            openPickForMultipleLots()
+                            openPickForMultipleLots(fallbackLine = it)
                         else
                             qtyLine = it
                     }
@@ -2112,16 +2362,18 @@ private fun ShipDocument(no: String, onBack: () -> Unit, onPickCreated: (String)
                         }
                     },
                     enabled = !busy && headerLoaded && linesComplete && myUserId.isNotBlank(),
-                    modifier = Modifier.fillMaxWidth().height(54.dp),
+                    modifier = Modifier.fillMaxWidth().height(com.dynops.bcwms.ui.wmsPrimaryButtonHeight()),
                 ) { Text("👤 Bana Ata", fontWeight = FontWeight.Bold) }
             } else {
                 OutlinedButton(
                     onClick = { openPickForMultipleLots() },
                     enabled = !busy && lines.isNotEmpty(),
-                    modifier = Modifier.weight(1f).height(54.dp),
+                    modifier = Modifier.weight(1f).height(com.dynops.bcwms.ui.wmsPrimaryButtonHeight()),
                 ) { Text("📦 Pick Oluştur", fontWeight = FontWeight.Bold) }
                 Button(
-                    onClick = {
+                    onClick = onClick@{
+                        // Acente boşsa BC (BADE) postu reddeder; önce seçtir.
+                        if (agentMissing) { showAgent = true; return@onClick }
                         scope.launch {
                             busy = true; status = "Sevk kaydı..."
                             val body = JSONObject().apply {
@@ -2137,14 +2389,35 @@ private fun ShipDocument(no: String, onBack: () -> Unit, onPickCreated: (String)
                                 val safeNo = no.replace("'", "''")
                                 BcApi.get(context, "shipments('$safeNo')").httpCode
                             } else null
-                            val committed = shipmentPostCommitted(r.ok, verifyCode)
+                            var committed = shipmentPostCommitted(r.ok, verifyCode)
+                            var postedDespiteError = false
+                            if (!committed && !r.ok && verifyCode == 200) {
+                                // BC sevki commit edip sonra (ör. BADE e-İrsaliye numara serisi)
+                                // hata döndürebiliyor: belge duruyorsa satırların sevk miktarı
+                                // düştü mü diye bak; düştüyse sevk gerçekleşmiştir.
+                                val after = BcApi.getAllPages(context, "shipmentLines?\$filter=no eq '${no.replace("'", "''")}'&\$orderby=lineNo")
+                                if (after.complete) {
+                                    val before = lines.associateBy { it.optInt("lineNo") }
+                                    postedDespiteError = after.rows.any { l ->
+                                        val b = before[l.optInt("lineNo")] ?: return@any false
+                                        l.optDouble("qtyOutstanding", -1.0) >= 0 && l.optDouble("qtyOutstanding", 0.0) < b.optDouble("qtyOutstanding", 0.0)
+                                    }
+                                    if (postedDespiteError) committed = true
+                                }
+                            }
                             busy = false
-                            status = if (committed) "TAMAM: Sevkiyat kaydedildi" else QcErrorParser.friendlyStatus(BcApi.errorMessage(r.body), r.httpCode)
-                            if (committed) onBack()
+                            status = when {
+                                committed && postedDespiteError -> "TAMAM: Sevkiyat BC'de kaydedildi. UYARI: " + QcErrorParser.friendlyStatus(BcApi.errorMessage(r.body), r.httpCode).removePrefix("HATA: ")
+                                committed -> "TAMAM: Sevkiyat kaydedildi"
+                                else -> QcErrorParser.friendlyStatus(BcApi.errorMessage(r.body), r.httpCode)
+                            }
+                            if (committed) {
+                                if (postedDespiteError) postWarning = status else onBack()
+                            }
                         }
                     },
                     enabled = !busy && com.dynops.bcwms.lib.ActionGuards.hasQuantity(lines, field = "qtyToShip"),
-                    modifier = Modifier.weight(1f).height(54.dp),
+                    modifier = Modifier.weight(1f).height(com.dynops.bcwms.ui.wmsPrimaryButtonHeight()),
                 ) {
                     Text(
                         if (com.dynops.bcwms.lib.ActionGuards.hasQuantity(lines, field = "qtyToShip")) "✅ Sevkiyatı Kaydet" else "Önce satırlara miktar girin",
@@ -2192,8 +2465,6 @@ private fun ShipDocument(no: String, onBack: () -> Unit, onPickCreated: (String)
                         put("qtyToShip", res.quantity)
                         put("lotNo", res.lotNo)
                         if (res.sourceLpNo.isNotBlank()) put("licensePlateNo", res.sourceLpNo)
-                        val lineBin = rawValue(ql, "binCode")
-                        if (lineBin.isNotBlank()) put("binCode", lineBin)
                     }.toString()
                     val lineNo = ql.optInt("lineNo")
                     val r = BcApi.patch(context, "shipmentLines(no='$no',lineNo=$lineNo)", body)
@@ -2204,6 +2475,41 @@ private fun ShipDocument(no: String, onBack: () -> Unit, onPickCreated: (String)
             }
         )
     }
+    if (showAgent) {
+        ShippingAgentDialog(
+            current = shippingAgent.ifBlank { sourceShippingAgent },
+            loadAgents = {
+                val r = BcApi.boundAction(context, "shipments", no, "listShippingAgents")
+                if (r.ok) parseVehicleDrivers(BcApi.scalarValue(r.body)) else null
+            },
+            onDismiss = { showAgent = false },
+            onSkip = { showAgent = false; agentSkipped = true },
+            onSave = { code ->
+                showAgent = false
+                scope.launch {
+                    busy = true; status = "Sevkiyat acentesi kaydediliyor..."
+                    val r = BcApi.boundAction(
+                        context, "shipments", no, "setShippingAgent",
+                        JSONObject().apply { put("agentCode", code); put("serviceCode", "") }.toString(),
+                    )
+                    busy = false
+                    status = if (r.ok) "TAMAM: Sevkiyat acentesi $code kaydedildi" else QcErrorParser.friendlyStatus(BcApi.errorMessage(r.body), r.httpCode)
+                    if (r.ok) reload()
+                }
+            },
+        )
+    }
+    postWarning?.let { warn ->
+        AlertDialog(
+            onDismissRequest = { postWarning = null; onBack() },
+            title = { Text("Sevkiyat kaydedildi") },
+            text = { Text(warn.removePrefix("TAMAM: ")) },
+            confirmButton = {
+                Button(onClick = { postWarning = null; onBack() }) { Text("Tamam") }
+            },
+        )
+    }
+
     if (showColumns) {
         ChooseColumnsSheet(GridColumns.shipment, columns, onDismiss = { showColumns = false }) { c -> columns = c; ColumnPrefs.save(context, "shipment", c); showColumns = false }
     }
@@ -2237,9 +2543,11 @@ private fun SalesOrderTab() {
                 "salesSources?\$top=100&\$orderby=shipmentDate desc$filter&\$select=no,customerNo,customerName,shipToName,locationCode,shipmentDate,status,lineCount,outstandingQty,percentComplete,requiresWhseShipment,directShipAllowed"
             )
             loading = false
-            rows = if (page.complete) page.rows else emptyList()
+            // Kalan miktarı olmayan siparişler sevk edilemez; listede yer kaplayıp
+            // operatörü yanıltıyordu (canlı UAT shipping-x01).
+            rows = if (page.complete) page.rows.filter { it.optDouble("outstandingQty", 0.0) > 0.0 } else emptyList()
             status = if (!page.complete) "HATA: Satış siparişi listesinin tamamı alınamadı. Yenileyin."
-                else if (rows.isEmpty()) "BOŞ: ${if (releasedOnly) "serbest bırakılmış" else "açık"} satış siparişi yok"
+                else if (rows.isEmpty()) "BOŞ: sevk edilecek ${if (releasedOnly) "serbest bırakılmış" else "açık"} satış siparişi yok"
                 else "TAMAM: ${rows.size} satış siparişi"
         }
     }
@@ -2308,6 +2616,8 @@ private fun SalesOrderTab() {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun ShipSalesOrder(no: String, onBack: () -> Unit) {
+    // Donanım Geri tuşu belge ekranından uygulamayı kapatmasın; listeye dönsün.
+    androidx.activity.compose.BackHandler { onBack() }
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var header by remember { mutableStateOf<JSONObject?>(null) }
@@ -2432,7 +2742,7 @@ private fun ShipSalesOrder(no: String, onBack: () -> Unit) {
             Button(
                 onClick = { showShipConfirm = true },
                 enabled = !busy && directAllowed && stagedLines.isNotEmpty(),
-                modifier = Modifier.fillMaxWidth().height(54.dp),
+                modifier = Modifier.fillMaxWidth().height(com.dynops.bcwms.ui.wmsPrimaryButtonHeight()),
             ) {
                 Text(
                     when {
@@ -2542,3 +2852,86 @@ private fun ShipSalesOrder(no: String, onBack: () -> Unit) {
 }
 
 private fun fmtNum(v: Double): String = if (v == v.toLong().toDouble()) v.toLong().toString() else v.toString()
+
+@Composable
+private fun ShippingAgentCard(agentCode: String, missing: Boolean, enabled: Boolean, onEdit: () -> Unit) {
+    val palette = bcwmsStatus()
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(12.dp),
+        colors = CardDefaults.cardColors(containerColor = if (missing) palette.warning.copy(alpha = 0.18f) else MaterialTheme.colorScheme.surface),
+        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+    ) {
+        Row(Modifier.padding(horizontal = 14.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text("Sevkiyat Acentesi", fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+                Text(
+                    if (missing) "Seçilmedi — sevk kaydından önce seçin (siparişte zorunlu olabilir)" else "Acente: ${agentCode.ifBlank { "-" }}",
+                    fontSize = 12.sp,
+                    color = if (missing) palette.danger else Color.Gray,
+                )
+            }
+            TextButton(onClick = onEdit, enabled = enabled) { Text(if (missing) "Seç" else "Değiştir") }
+        }
+    }
+}
+
+@Composable
+private fun ShippingAgentDialog(
+    current: String,
+    loadAgents: suspend () -> List<Pair<String, String>>?,
+    onDismiss: () -> Unit,
+    onSkip: () -> Unit,
+    onSave: (String) -> Unit,
+) {
+    var selected by remember { mutableStateOf(current) }
+    var query by remember { mutableStateOf("") }
+    var agents by remember { mutableStateOf<List<Pair<String, String>>?>(null) }
+    var loadError by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) {
+        val a = loadAgents()
+        loadError = a == null
+        agents = a ?: emptyList()
+    }
+    val shown = (agents ?: emptyList()).filter {
+        query.isBlank() || it.first.contains(query, ignoreCase = true) || it.second.contains(query, ignoreCase = true)
+    }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Sevkiyat Acentesi") },
+        text = {
+            Column(Modifier.fillMaxWidth()) {
+                Text("Satış siparişinde sevkiyat acentesi zorunlu olabilir. Seçilen acente sevkiyata ve siparişe yazılır.", fontSize = 12.sp, color = Color.Gray)
+                Spacer(Modifier.height(6.dp))
+                OutlinedTextField(value = query, onValueChange = { query = it }, label = { Text("Acente ara") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                Spacer(Modifier.height(4.dp))
+                when {
+                    agents == null -> Text("Acenteler yükleniyor...", fontSize = 12.sp, color = Color.Gray)
+                    loadError -> Text("HATA: Acente listesi alınamadı. Yenileyip tekrar deneyin.", fontSize = 12.sp, color = bcwmsStatus().danger)
+                    shown.isEmpty() -> Text("Eşleşen acente yok. BC'de Sevkiyat Acenteleri listesini kontrol edin.", fontSize = 12.sp, color = Color.Gray)
+                    else -> LazyColumn(Modifier.fillMaxWidth().heightIn(max = 240.dp)) {
+                        items(shown) { (code, name) ->
+                            Row(
+                                Modifier.fillMaxWidth().clickable { selected = code }.padding(vertical = 2.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                RadioButton(selected = selected == code, onClick = { selected = code })
+                                Column {
+                                    Text(name.ifBlank { code }, fontSize = 14.sp)
+                                    if (name.isNotBlank()) Text(code, fontSize = 11.sp, color = Color.Gray)
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = { Button(onClick = { onSave(selected) }, enabled = selected.isNotBlank()) { Text("Kaydet") } },
+        dismissButton = {
+            Row {
+                TextButton(onClick = onSkip) { Text("Acentesiz devam") }
+                TextButton(onClick = onDismiss) { Text("Vazgeç") }
+            }
+        },
+    )
+}

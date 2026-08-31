@@ -22,6 +22,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.dynops.bcwms.feature.*
@@ -76,6 +78,7 @@ enum class Screen(val title: String) {
     PutAway("Yerleştirme"),
     Shipping("Sevkiyat"),
     Production("Üretim"),
+    Subcontracting("Fason İşlemler"),
     Assembly("Montaj"),
     DirectedMove("Yönlendirilmiş Hareket"),
     Quality("Kalite Denetimi"),
@@ -139,6 +142,13 @@ fun AppRoot() {
         return
     }
 
+    // Depoda geri tuşu refleksle kullanılıyor: modül listesindeyken uygulamayı
+    // kapatmak yerine Ana Menü'ye dönmeli. Ana Menü'de geri, sistemin normal
+    // davranışına (uygulamadan çıkış) bırakılır (UAT gen-01).
+    androidx.activity.compose.BackHandler(enabled = screen != Screen.Home) {
+        screen = Screen.Home
+    }
+
     Scaffold(
         topBar = {
             TopAppBar(
@@ -191,6 +201,7 @@ fun AppRoot() {
                 Screen.PutAway -> PutAwayModule()
                 Screen.Shipping -> ShippingModule()
                 Screen.Production -> ProductionModule()
+                Screen.Subcontracting -> SubcontractingModule()
                 Screen.Assembly -> AssemblyModule()
                 Screen.DirectedMove -> DirectedMoveModule()
                 Screen.Quality -> QualityModule()
@@ -217,7 +228,7 @@ internal fun isHomeTileEnabled(screen: Screen, connected: Boolean): Boolean =
     connected || screen == Screen.Connection || screen == Screen.Help
 
 /** Operatör ana menüsünde destek/test araçları gösterilmez; ekranlar koddan silinmez. */
-internal fun operatorHomeScreens(flavor: String): Set<Screen> {
+internal fun operatorHomeScreens(flavor: String, includeAdminTestTools: Boolean = false): Set<Screen> {
     if (shouldForceProductionFlow(flavor)) {
         val hidden = mutableSetOf(
             Screen.Home,
@@ -226,6 +237,10 @@ internal fun operatorHomeScreens(flavor: String): Set<Screen> {
             Screen.TestCenter,
             Screen.PostingTest,
         )
+        if (includeAdminTestTools) {
+            hidden.remove(Screen.TestCenter)
+            hidden.remove(Screen.PostingTest)
+        }
         if (!flavor.equals("emu", ignoreCase = true)) hidden += Screen.HierarchicalLP
         return Screen.entries.toSet() - hidden
     }
@@ -308,6 +323,7 @@ private val HomeCategories = listOf(
     )),
     HomeCategory("Üretim", Color(0xFFE2873B), listOf(
         HomeTile(Screen.Production, WmsGlyph.PRODUCTION, "Üretim", "Tüketim ve üretim çıkışı kaydet"),
+        HomeTile(Screen.Subcontracting, WmsGlyph.SUBCONTRACTING, "Fason İşlemler", "Fasona sevk ve referansla teslim alma"),
         HomeTile(Screen.Assembly, WmsGlyph.ASSEMBLY, "Montaj", "Montaj emrinin sarf ve çıktıları"),
     )),
     HomeCategory("Kalite", Color(0xFF14B8A6), listOf(
@@ -367,11 +383,27 @@ private fun HomeScreen(
         accessible = BcApi.getAccessibleCompanies(context)
         discovering = false
     }
-    val visibleScreens = operatorHomeScreens(flavor)
+    // Production release menus stay unchanged. A debug BADE build in the explicit admin-test
+    // session can expose the real BC posting harness without creating a second EMU-only APK.
+    val visibleScreens = operatorHomeScreens(
+        flavor,
+        includeAdminTestTools = BuildConfig.DEBUG && BcApi.isAdminTestSession(context),
+    )
     val visibleCategories = HomeCategories.mapNotNull { category ->
         category.copy(tiles = category.tiles.filter { it.screen in visibleScreens })
             .takeIf { it.tiles.isNotEmpty() }
     }
+
+    // Yatay ekranda (ve tablette) iki sütunluk dizilim ekranın yarısını boş
+    // bırakıp menüyü uzun bir şeride çeviriyordu. Sütun sayısı ve kutu boyu
+    // pencereye göre hesaplanıyor; alan daraldıkça portre düzenine döner.
+    val cfg = LocalConfiguration.current
+    // Yatayda kutuları genişletmek işe yaramıyor (kategoriler 2-3 kutuluk, sağ
+    // taraf boş kalıyor). Bunun yerine KATEGORİLER yan yana iki kolona diziliyor;
+    // kutu düzeni her kolonda ikişerli kalıyor, dikey kaydırma yarıya iniyor.
+    val homeColumns = 2
+    val homeSideBySide = cfg.screenWidthDp >= 600
+    val homeTileHeight = if (cfg.screenHeightDp < 420) 104.dp else 116.dp
 
     Column(
         Modifier
@@ -418,9 +450,24 @@ private fun HomeScreen(
             Spacer(Modifier.height(16.dp))
         }
 
-        visibleCategories.forEachIndexed { index, category ->
-            CategorySection(category, connected, onNavigate)
-            if (index != visibleCategories.lastIndex) Spacer(Modifier.height(18.dp))
+        if (homeSideBySide) {
+            val left = visibleCategories.filterIndexed { i, _ -> i % 2 == 0 }
+            val right = visibleCategories.filterIndexed { i, _ -> i % 2 == 1 }
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(20.dp)) {
+                listOf(left, right).forEach { column ->
+                    Column(Modifier.weight(1f)) {
+                        column.forEachIndexed { index, category ->
+                            CategorySection(category, connected, onNavigate, homeColumns, homeTileHeight)
+                            if (index != column.lastIndex) Spacer(Modifier.height(18.dp))
+                        }
+                    }
+                }
+            }
+        } else {
+            visibleCategories.forEachIndexed { index, category ->
+                CategorySection(category, connected, onNavigate, homeColumns, homeTileHeight)
+                if (index != visibleCategories.lastIndex) Spacer(Modifier.height(18.dp))
+            }
         }
         Spacer(Modifier.height(22.dp))
         HelpButton(onClick = { onNavigate(Screen.Help) })
@@ -629,12 +676,24 @@ private fun CompanySwitcherSheet(
                 fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
+        // Vazgeçme yolu yalnız donanım geri tuşuydu; yanlışlıkla satıra dokunan
+        // operatör şirketi değiştiriyordu (UAT gen-04).
+        Spacer(Modifier.height(12.dp))
+        OutlinedButton(onClick = onDismiss, modifier = Modifier.fillMaxWidth()) {
+            Text("Vazgeç — şirketi değiştirme")
+        }
         Spacer(Modifier.height(16.dp))
     }
 }
 
 @Composable
-private fun CategorySection(category: HomeCategory, connected: Boolean, onNavigate: (Screen) -> Unit) {
+private fun CategorySection(
+    category: HomeCategory,
+    connected: Boolean,
+    onNavigate: (Screen) -> Unit,
+    columns: Int = 2,
+    tileHeight: Dp = 116.dp,
+) {
     Column {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Box(Modifier.size(width = 4.dp, height = 18.dp).clip(RoundedCornerShape(3.dp)).background(category.accent))
@@ -647,7 +706,7 @@ private fun CategorySection(category: HomeCategory, connected: Boolean, onNaviga
             )
         }
         Spacer(Modifier.height(10.dp))
-        val rows = category.tiles.chunked(2)
+        val rows = category.tiles.chunked(columns)
         rows.forEachIndexed { index, rowTiles ->
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 rowTiles.forEach { tile ->
@@ -656,10 +715,13 @@ private fun CategorySection(category: HomeCategory, connected: Boolean, onNaviga
                         accent = category.accent,
                         enabled = isHomeTileEnabled(tile.screen, connected),
                         modifier = Modifier.weight(1f),
+                        tileHeight = tileHeight,
                         onNavigate = onNavigate,
                     )
                 }
-                if (rowTiles.size == 1) Spacer(Modifier.weight(1f))
+                // Son satır eksikse kalan sütunlar boş bırakılır ki kutular
+                // satır boyunca gerilmesin.
+                repeat(columns - rowTiles.size) { Spacer(Modifier.weight(1f)) }
             }
             if (index != rows.lastIndex) Spacer(Modifier.height(12.dp))
         }
@@ -672,7 +734,8 @@ private fun HomeTileCard(
     accent: Color,
     enabled: Boolean,
     modifier: Modifier,
-    onNavigate: (Screen) -> Unit
+    onNavigate: (Screen) -> Unit,
+    tileHeight: Dp = 116.dp,
 ) {
     Card(
         onClick = { onNavigate(tile.screen) },
@@ -681,7 +744,7 @@ private fun HomeTileCard(
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         elevation = CardDefaults.cardElevation(defaultElevation = 1.dp, pressedElevation = 6.dp),
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.32f)),
-        modifier = modifier.height(116.dp).alpha(if (enabled) 1f else 0.42f)
+        modifier = modifier.height(tileHeight).alpha(if (enabled) 1f else 0.42f)
     ) {
         Column(
             Modifier.fillMaxSize().padding(12.dp),
