@@ -11,6 +11,10 @@ Kurulum: [docs/android-install-guide.md](../../docs/android-install-guide.md)
 
 **versionCode:** 200070 · **BC paketi:** 1.14.1.7
 
+**BADE SHA-256:** `58ad6d910b913e4995489361a057f9b8773649bec9e7108ff362977f09e50d71`
+
+**EMU SHA-256:** `fcbb9a6cf5d2b7af09cc72c14d052c1ed5c1508a0b09036ad51b1b01849a31c9`
+
 ### Canlıya geçiş turu (30.08 gecesi, E-DefterSandbox canlı UAT)
 
 **Mal Kabul**
