@@ -7,6 +7,22 @@ Kurulum: [docs/android-install-guide.md](../../docs/android-install-guide.md)
 
 ---
 
+## v1.14.71 — BADE + EMU — 2026-08-31
+
+**versionCode:** 200071 · **BC paketi:** 1.14.1.7
+
+**BADE SHA-256:** `c93c1b4940156a1605d0455303d2cc20be4236aca8cbf761cd68a4d4ce82a95c`
+
+**EMU SHA-256:** `bfdda2ad8ddd3338cb21fa901ef3fdfc644063fcdb57f1cd31d576192fed2b76`
+
+### Mal kabul · toplu palet LP dağıtımı
+
+- Palet LP oluşturma ekranına toplam kabul miktarı ve palet sayısı alanları eklendi.
+- **Eşit Böl** işlemi toplamı beş ondalık hassasiyetle LP'lere dağıtır; yuvarlama farkını son LP'ye vererek toplamı korur.
+- Otomatik oluşturulan her LP'nin miktar, iç lot, tedarikçi lotu ve SKT bilgisi ayrı ayrı düzenlenebilir.
+- SKT girişi `GG.AA.YYYY` biçimine geçirildi; noktalar otomatik eklenir ve takvimden tarih seçilebilir.
+- Geçmiş SKT hem terminal doğrulamasında hem BC kayıt katmanında reddedilir.
+
 ## v1.14.70 — BADE + EMU — 2026-08-31
 
 **versionCode:** 200070 · **BC paketi:** 1.14.1.7

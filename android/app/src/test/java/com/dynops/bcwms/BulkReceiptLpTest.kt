@@ -2,11 +2,13 @@ package com.dynops.bcwms
 
 import com.dynops.bcwms.feature.BulkReceiptLpRow
 import com.dynops.bcwms.feature.bulkLpRowsJson
+import com.dynops.bcwms.feature.equalBulkLpQuantities
 import com.dynops.bcwms.feature.manualBulkLpValidation
 import org.json.JSONArray
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
+import java.time.LocalDate
 
 class BulkReceiptLpTest {
     @Test
@@ -39,6 +41,19 @@ class BulkReceiptLpTest {
         val json = JSONArray(bulkLpRowsJson(rows))
         assertEquals(3.0, json.getJSONObject(0).getDouble("quantity"), 0.00001)
         assertEquals(7.0, json.getJSONObject(1).getDouble("quantity"), 0.00001)
+    }
+
+    @Test
+    fun `equal distribution fills every pallet and preserves exact total`() {
+        val quantities = equalBulkLpQuantities(10.0, 3)
+
+        assertEquals(listOf(3.33333, 3.33333, 3.33334), quantities)
+        assertEquals(10.0, quantities.sum(), 0.000001)
+    }
+
+    @Test
+    fun `equal distribution supports whole pallet quantities`() {
+        assertEquals(listOf(25.0, 25.0, 25.0, 25.0), equalBulkLpQuantities(100.0, 4))
     }
 
     @Test
@@ -76,5 +91,58 @@ class BulkReceiptLpTest {
         )
 
         assertEquals("Her LP için SKT girin.", manualBulkLpValidation(10.0, rows, expiryRequired = true))
+    }
+
+    @Test
+    fun `pallet total must match entered receipt quantity`() {
+        val rows = listOf(
+            BulkReceiptLpRow("1", 4.0, "", "", ""),
+            BulkReceiptLpRow("2", 4.0, "", "", ""),
+        )
+
+        assertEquals(
+            "LP toplamı kabul miktarına eşit olmalıdır.",
+            manualBulkLpValidation(10.0, rows, expiryRequired = false, expectedQty = 10.0),
+        )
+    }
+
+    @Test
+    fun `turkish display expiry is serialized as BC iso date`() {
+        val json = JSONArray(
+            bulkLpRowsJson(listOf(BulkReceiptLpRow("1", 5.0, "LOT-A", "", "31.12.2027")))
+        )
+
+        assertEquals("2027-12-31", json.getJSONObject(0).getString("expiryDate"))
+    }
+
+    @Test
+    fun `past expiry is rejected for bulk receipt pallets`() {
+        val rows = listOf(BulkReceiptLpRow("1", 5.0, "LOT-A", "", "27.08.2026"))
+
+        assertEquals(
+            "Geçmiş SKT'li ürün mal kabul edilemez.",
+            manualBulkLpValidation(
+                5.0,
+                rows,
+                expiryRequired = true,
+                expectedQty = 5.0,
+                today = LocalDate.of(2026, 8, 28),
+            ),
+        )
+    }
+
+    @Test
+    fun `today expiry is accepted for bulk receipt pallets`() {
+        val rows = listOf(BulkReceiptLpRow("1", 5.0, "LOT-A", "", "28.08.2026"))
+
+        assertNull(
+            manualBulkLpValidation(
+                5.0,
+                rows,
+                expiryRequired = true,
+                expectedQty = 5.0,
+                today = LocalDate.of(2026, 8, 28),
+            )
+        )
     }
 }
