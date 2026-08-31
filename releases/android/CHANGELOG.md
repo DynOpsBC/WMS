@@ -7,6 +7,20 @@ Kurulum: [docs/android-install-guide.md](../../docs/android-install-guide.md)
 
 ---
 
+## v1.14.72 — BADE + EMU — 2026-08-31
+
+**versionCode:** 200072 · **BC paketi:** 1.14.1.7
+
+**BADE SHA-256:** `d5871e4e2c749c141f61aa9ef9d5ea1be39f28e4c1f856f9220fcdd8c004c0d0`
+
+**EMU SHA-256:** `2f23285ef39442aa6b23b2ec00e16c08cb4658a0a294e22371a4dbaea18557a9`
+
+### Mal kabul · kompakt işlem paneli
+
+- Belge altındaki dört ayrı işlem şeridi tek, iki satırlı kompakt panelde birleştirildi.
+- Yazdırma, Palet LP, Tara, LP Başlat/Kapat ve Kaydet işlevleri korunurken satır listesine daha fazla ekran alanı bırakıldı.
+- Belge kullanıcıya atanmışsa pasif **Bana Ata** düğmesi artık yer kaplamıyor; atanması gereken belgede tek ana işlem olarak gösteriliyor.
+
 ## v1.14.71 — BADE + EMU — 2026-08-31
 
 **versionCode:** 200071 · **BC paketi:** 1.14.1.7
