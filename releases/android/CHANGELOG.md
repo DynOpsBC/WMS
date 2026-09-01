@@ -7,6 +7,22 @@ Kurulum: [docs/android-install-guide.md](../../docs/android-install-guide.md)
 
 ---
 
+## v1.14.73 — BADE + EMU — 2026-09-01
+
+**versionCode:** 200073 · **BC paketi:** 1.14.1.8
+
+**BADE SHA-256:** `4400018b65ca212f9ecf5488a945a23bcdd9ced7bc62768a60a595e33f52f52b`
+
+**EMU SHA-256:** `fa7c646341d8379a26c4f7161d5cb9032bd730dd6b9804afcc74eb94774ee199`
+
+### Toplu LP · sayım onayı · sorgulama
+
+- Tek işlemde 1–200 LP oluşturma, ortak miktarı tüm LP'lere uygulama ve miktarları ayrı ayrı düzenleme eklendi.
+- LP toplu seçimi ve malzeme/LP etiketi toplu yazdırma akışı eklendi.
+- Klasik Sayım ve Sayım V2'ye lokasyon alanı filtresi eklendi; alan dışındaki raflar engellendi.
+- Sayım turunu kaydetme stok hareketinden ayrıldı; stok yalnız **Onayla ve Stoklara İşle** adımıyla değişir.
+- Ürün sorgulama ekranı ürün numarasının yanında LP numarasıyla da arama yapar.
+
 ## v1.14.72 — BADE + EMU — 2026-08-31
 
 **versionCode:** 200072 · **BC paketi:** 1.14.1.7
