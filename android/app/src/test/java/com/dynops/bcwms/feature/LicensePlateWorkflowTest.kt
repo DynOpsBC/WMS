@@ -74,6 +74,23 @@ class LicensePlateWorkflowTest {
     }
 
     @Test
+    fun `empty unlocated LP can receive its first bin`() {
+        assertTrue(canAssignLicensePlateBin("Open", 0, ""))
+        assertTrue(canAssignLicensePlateBin("Built", 0, ""))
+        assertFalse(canAssignLicensePlateBin("Open", 1, ""))
+        assertFalse(canAssignLicensePlateBin("Open", 0, "A-01"))
+        assertFalse(canAssignLicensePlateBin("Assigned", 0, ""))
+    }
+
+    @Test
+    fun `legacy initial bin fallback only accepts missing bin validation`() {
+        assertTrue(shouldPatchInitialBinForLegacyServer(400, "Bin Code must have a value in LP Header"))
+        assertTrue(shouldPatchInitialBinForLegacyServer(422, "Bin Code zorunludur"))
+        assertFalse(shouldPatchInitialBinForLegacyServer(500, "Bin Code must have a value"))
+        assertFalse(shouldPatchInitialBinForLegacyServer(400, "Target bin does not exist"))
+    }
+
+    @Test
     fun `transfer and partial use require a built LP with contents`() {
         assertTrue(canTransferLicensePlate("Built", 1))
         assertTrue(canPartiallyUseLicensePlate("Built", 1))

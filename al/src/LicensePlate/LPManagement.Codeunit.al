@@ -213,9 +213,25 @@ codeunit 72040 "DOPSWHS LP Management"
         if not (LP.Status in [LP.Status::Open, LP.Status::Built]) then
             Error('%1 LP numarası %2 durumundayken taşınamaz. Önce belge atamasını kaldırın.', LP."No.", LP.Status);
         LP.TestField("Location Code");
-        LP.TestField("Bin Code");
         if TargetBinCode = '' then
             Error('%1 LP numarasını taşımak için hedef raf zorunludur.', LP."No.");
+
+        // Toplu üretimde LP fiziksel bir rafa yerleştirilmeden hazırlanabilir.
+        // İlk raf atamasında taşınacak stok bulunmadığı için depo hareketi
+        // üretme; yalnız boş LP başlığını ve hareket izini atomik güncelle.
+        if LP."Bin Code" = '' then begin
+            if not TargetBin.Get(LP."Location Code", TargetBinCode) then
+                Error('%1 hedef rafı %2 lokasyonunda bulunamadı.', TargetBinCode, LP."Location Code");
+            LPLine.SetRange("LP No.", LP."No.");
+            if not LPLine.IsEmpty() then
+                Error('%1 LP numarasında satır bulunduğu için ilk raf ataması yapılamaz.', LP."No.");
+
+            LogMutation('LP.AssignInitialBin');
+            LP.Validate("Bin Code", TargetBinCode);
+            LP.Modify(true);
+            WriteToLedger(LP, LPActionTransferOut(), '', TargetBinCode, 0, '', '', 'BIN-ASSIGN');
+            exit;
+        end;
 
         SourceBinCode := LP."Bin Code";
         if SourceBinCode = TargetBinCode then

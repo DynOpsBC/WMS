@@ -1,8 +1,10 @@
 package com.dynops.bcwms.feature
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import org.json.JSONObject
 
 class BulkLpBuildWorkflowTest {
     @Test
@@ -21,5 +23,16 @@ class BulkLpBuildWorkflowTest {
         assertTrue(commonLpQuantityDrafts(0, "1").isEmpty())
         assertTrue(commonLpQuantityDrafts(201, "1").isEmpty())
         assertEquals(200, commonLpQuantityDrafts(200, "1").size)
+    }
+
+    @Test
+    fun `bulk LP creation does not require a bin`() {
+        val rows = commonLpQuantityDrafts(3, "0")
+        val payload = JSONObject(bulkLpBuildPayload("MERKEZDEPO", "", rows))
+
+        assertTrue(rows.isNotEmpty())
+        assertFalse(rows.any { it.quantity.toDouble() < 0.0 })
+        assertEquals("MERKEZDEPO", payload.getString("locationCode"))
+        assertEquals("", payload.getString("binCode"))
     }
 }

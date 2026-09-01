@@ -34,6 +34,19 @@ internal fun lpLotIsRequired(trackingRequiresLot: Boolean, availableLotCount: In
 internal fun canEditLicensePlate(status: String): Boolean =
     status.equals("Open", ignoreCase = true)
 
+internal fun canAssignLicensePlateBin(status: String, lineCount: Int, binCode: String): Boolean =
+    binCode.isBlank() && lineCount == 0 && (
+        status.equals("Open", ignoreCase = true) || status.equals("Built", ignoreCase = true)
+    )
+
+internal fun shouldPatchInitialBinForLegacyServer(httpCode: Int, error: String): Boolean =
+    httpCode in 400..499 && error.contains("Bin Code", ignoreCase = true) && (
+        error.contains("must have a value", ignoreCase = true) ||
+            error.contains("zorunlu", ignoreCase = true) ||
+            error.contains("empty", ignoreCase = true) ||
+            error.contains("boş", ignoreCase = true)
+        )
+
 internal fun canTransferLicensePlate(status: String, lineCount: Int): Boolean =
     status.equals("Built", ignoreCase = true) && lineCount > 0
 

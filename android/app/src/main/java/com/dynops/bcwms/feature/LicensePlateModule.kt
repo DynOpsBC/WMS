@@ -78,7 +78,7 @@ fun LicensePlateModule() {
             onDismiss = { showBulkBuild = false },
             onBuilt = { created ->
                 showBulkBuild = false
-                status = "TAMAM: ${created.size} boş LP oluşturuldu; ürünleri LP detaylarından ekleyebilirsiniz."
+                status = "TAMAM: ${created.size} boş LP oluşturuldu; LP detayından depo gözü atayabilirsiniz."
                 loadList()
             },
         )
@@ -151,7 +151,11 @@ fun LicensePlateModule() {
                             Text(lp.optString("no"), fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
                             StatusBadge(lp.optString("status"))
                         }
-                        Text("${lp.optString("templateCode")} · ${lp.optString("locationCode")}/${lp.optString("binCode")}", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text(
+                            "${lp.optString("templateCode")} · ${lp.optString("locationCode")}/${lp.optString("binCode").ifBlank { "Depo gözü atanmadı" }}",
+                            fontSize = 12.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
                         if (lp.optDouble("plannedQuantity", 0.0) > 0.0)
                             Text("Planlanan miktar: ${lp.optDouble("plannedQuantity")}", fontSize = 11.sp, color = MaterialTheme.colorScheme.primary)
                         if (lp.optString("sscc").isNotBlank())
@@ -318,6 +322,7 @@ private fun LpDocument(lpNo: String, onBack: () -> Unit) {
     var selectedLineItem by remember { mutableStateOf<LpItemSelection?>(null) }
     var showTransfer by remember { mutableStateOf(false) }
     var showPartial by remember { mutableStateOf(false) }
+    var showAssignBin by remember { mutableStateOf(false) }
     var showUnbuildConfirm by remember { mutableStateOf(false) }
     var showDeleteConfirm by remember { mutableStateOf(false) }
 
@@ -373,6 +378,8 @@ private fun LpDocument(lpNo: String, onBack: () -> Unit) {
     val canTransfer = headerLoaded && linesComplete && canTransferLicensePlate(st, lines.size)
     val canPartiallyUse = headerLoaded && linesComplete && canPartiallyUseLicensePlate(st, lines.size)
     val canDelete = headerLoaded && linesComplete && canDeleteLicensePlate(st, lines.size)
+    val lpBinCode = h?.optString("binCode").orEmpty()
+    val canAssignBin = headerLoaded && linesComplete && canAssignLicensePlateBin(st, lines.size, lpBinCode)
     val canUnbuild = headerLoaded && linesComplete &&
         (st.equals("Open", ignoreCase = true) || st.equals("Built", ignoreCase = true)) && !canDelete
 
@@ -438,7 +445,7 @@ private fun LpDocument(lpNo: String, onBack: () -> Unit) {
             val isTote = h?.optBoolean("reusable") == true
             DocHeaderCard(
                 title = lpNo,
-                subtitle = "${h?.optString("templateCode") ?: ""}${if (isTote) " · ♻ Tote" else ""} · ${h?.optString("locationCode") ?: ""}/${h?.optString("binCode") ?: ""}" +
+                subtitle = "${h?.optString("templateCode") ?: ""}${if (isTote) " · ♻ Tote" else ""} · ${h?.optString("locationCode") ?: ""}/${lpBinCode.ifBlank { "Depo gözü atanmadı" }}" +
                     (h?.optDouble("plannedQuantity", 0.0)?.takeIf { it > 0.0 }?.let { "\nPlanlanan miktar: $it" } ?: "") +
                     (h?.optString("sscc")?.takeIf { it.isNotBlank() }?.let { "\nSSCC: $it" } ?: ""),
                 badge = lpStatusLabel(st)
@@ -501,13 +508,26 @@ private fun LpDocument(lpNo: String, onBack: () -> Unit) {
                 // Açık LP'de önce ürün eklenir, iş bitince tek ve belirgin ana
                 // eylemle tamamlanır. Geçersiz eylemler dar gri düğme olarak
                 // gösterilmez; yalnız kullanılabilen seçenekler görünür.
+                if (canAssignBin) {
+                    Button(
+                        onClick = { showAssignBin = true },
+                        enabled = !busy,
+                        modifier = Modifier.fillMaxWidth().height(54.dp),
+                        shape = RoundedCornerShape(14.dp),
+                    ) { WmsActionLabel(WmsGlyph.BIN_SEARCH, "Depo Gözü Ata") }
+                }
                 if (canEdit) {
                     OutlinedButton(
                         onClick = { showAddLine = true },
-                        enabled = !busy,
+                        enabled = !busy && lpBinCode.isNotBlank(),
                         modifier = Modifier.fillMaxWidth().height(52.dp),
                         shape = RoundedCornerShape(14.dp),
-                    ) { WmsActionLabel(WmsGlyph.LICENSE_PLATE, "Satır Ekle") }
+                    ) {
+                        WmsActionLabel(
+                            WmsGlyph.LICENSE_PLATE,
+                            if (lpBinCode.isBlank()) "Satır Ekle (önce depo gözü atayın)" else "Satır Ekle",
+                        )
+                    }
                     Button(
                         onClick = {
                             val payload = JSONObject().apply {
@@ -607,6 +627,49 @@ private fun LpDocument(lpNo: String, onBack: () -> Unit) {
                 }
             }
         }
+    }
+
+    if (showAssignBin) {
+        AssignLpBinSheet(
+            locationCode = h?.optString("locationCode").orEmpty(),
+            onDismiss = { showAssignBin = false },
+            onConfirm = { targetBin ->
+                showAssignBin = false
+                scope.launch {
+                    busy = true
+                    val userId = BcApi.currentUserId(context).trim()
+                    if (userId.isBlank()) {
+                        busy = false
+                        status = "HATA: Kullanıcı kimliği doğrulanamadı. Yeniden giriş yapın."
+                        return@launch
+                    }
+                    val body = JSONObject().apply {
+                        put("targetBinCode", targetBin.trim())
+                        put("userId", userId)
+                    }.toString()
+                    var result = BcApi.boundAction(context, "licensePlates", lpNo, "moveToBin", body)
+                    val initialError = BcApi.errorMessage(result.body)
+                    // Eski BC uzantısı moveToBin içinde mevcut Bin Code'u zorunlu
+                    // tutuyordu. Ekran yalnız satırsız + konumsuz LP'de açıldığı
+                    // için bu özel durumda ilk atamayı doğrudan başlığa kaydet.
+                    if (!result.ok && shouldPatchInitialBinForLegacyServer(result.httpCode, initialError)) {
+                        val safeLpNo = lpNo.replace("'", "''")
+                        result = BcApi.patch(
+                            context,
+                            "licensePlates('$safeLpNo')",
+                            JSONObject().put("binCode", targetBin.trim()).toString(),
+                        )
+                    }
+                    busy = false
+                    status = if (result.ok) {
+                        "TAMAM: $lpNo depo gözü ${targetBin.trim()} olarak atandı"
+                    } else {
+                        QcErrorParser.friendlyStatus(BcApi.errorMessage(result.body), result.httpCode)
+                    }
+                    if (result.ok) reload()
+                }
+            },
+        )
     }
 
     if (showUnbuildConfirm) {
@@ -728,6 +791,39 @@ private fun LpDocument(lpNo: String, onBack: () -> Unit) {
             val label = lpPartialActions.firstOrNull { it.apiValue == mode }?.label ?: "Kısmi kullanım"
             action("usePartial", JSONObject().apply { put("action", mode); put("qty", qty); put("lineNo", lineNo) }.toString(), "$label tamamlandı")
         })
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun AssignLpBinSheet(
+    locationCode: String,
+    onDismiss: () -> Unit,
+    onConfirm: (String) -> Unit,
+) {
+    var targetBin by remember { mutableStateOf("") }
+
+    SheetScaffold(onDismiss = onDismiss, contentPadding = PaddingValues(20.dp)) {
+        Text("Depo Gözü Ata", fontWeight = FontWeight.Bold, fontSize = 18.sp)
+        Text(
+            "$locationCode lokasyonundaki hedef depo gözünü okutun.",
+            fontSize = 12.sp,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Spacer(Modifier.height(12.dp))
+        ScanField(
+            "Depo Gözü (Bin)",
+            targetBin,
+            { targetBin = it.uppercase() },
+            modifier = Modifier.fillMaxWidth(),
+        )
+        Spacer(Modifier.height(16.dp))
+        Button(
+            onClick = { onConfirm(targetBin.trim()) },
+            enabled = targetBin.isNotBlank(),
+            modifier = Modifier.fillMaxWidth().height(50.dp),
+        ) { Text("Depo Gözünü Ata") }
+        Spacer(Modifier.height(24.dp))
     }
 }
 

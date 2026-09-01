@@ -24,6 +24,15 @@ internal fun commonLpQuantityDrafts(count: Int, quantity: String): List<BulkLpBu
     if (count !in 1..200) emptyList()
     else List(count) { index -> BulkLpBuildDraft(index + 1, quantity) }
 
+internal fun bulkLpBuildPayload(locationCode: String, binCode: String, drafts: List<BulkLpBuildDraft>): String =
+    JSONObject().apply {
+        put("locationCode", locationCode.trim())
+        put("binCode", binCode.trim())
+        put("quantitiesJson", JSONArray().apply {
+            drafts.forEach { put(it.quantity.toDoubleOrNull() ?: 0.0) }
+        }.toString())
+    }.toString()
+
 private fun lpQuantityText(value: String): String {
     var decimalSeen = false
     return buildString {
@@ -96,7 +105,12 @@ internal fun BulkLpBuildSheet(
             Spacer(Modifier.height(8.dp))
             ScanField("Lokasyon", location, { location = it.uppercase() }, modifier = Modifier.fillMaxWidth())
             Spacer(Modifier.height(8.dp))
-            ScanField("Depo Gözü (Bin)", bin, { bin = it.uppercase() }, modifier = Modifier.fillMaxWidth())
+            ScanField("Depo Gözü (Bin) — İsteğe bağlı", bin, { bin = it.uppercase() }, modifier = Modifier.fillMaxWidth())
+            Text(
+                "Boş bırakırsanız depo gözünü daha sonra LP detayından atayabilirsiniz.",
+                fontSize = 11.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
             Spacer(Modifier.height(8.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutlinedTextField(
@@ -142,31 +156,26 @@ internal fun BulkLpBuildSheet(
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(bottom = 18.dp)) {
                 OutlinedButton(onClick = onDismiss, enabled = !busy, modifier = Modifier.weight(1f)) { Text("Vazgeç") }
                 Button(
-                    enabled = !busy && template.isNotBlank() && location.isNotBlank() && bin.isNotBlank() && validDrafts,
+                    enabled = !busy && template.isNotBlank() && location.isNotBlank() && validDrafts,
                     modifier = Modifier.weight(1f),
                     onClick = {
                         scope.launch {
                             busy = true
                             status = "$lpCount LP oluşturuluyor..."
                             val safeLocation = location.trim().replace("'", "''")
-                            val safeBin = bin.trim().replace("'", "''")
-                            val binPage = BcApi.getAllPages(
-                                context,
-                                "bins?\$filter=locationCode eq '$safeLocation' and code eq '$safeBin'&\$select=code&\$top=1",
-                            )
-                            if (!binPage.complete || binPage.rows.isEmpty()) {
-                                busy = false
-                                status = "HATA: Lokasyon ve depo gözü eşleşmiyor."
-                                return@launch
+                            if (bin.isNotBlank()) {
+                                val safeBin = bin.trim().replace("'", "''")
+                                val binPage = BcApi.getAllPages(
+                                    context,
+                                    "bins?\$filter=locationCode eq '$safeLocation' and code eq '$safeBin'&\$select=code&\$top=1",
+                                )
+                                if (!binPage.complete || binPage.rows.isEmpty()) {
+                                    busy = false
+                                    status = "HATA: Lokasyon ve depo gözü eşleşmiyor."
+                                    return@launch
+                                }
                             }
-                            val quantities = JSONArray().apply {
-                                drafts.forEach { put(it.quantity.toDoubleOrNull() ?: 0.0) }
-                            }.toString()
-                            val body = JSONObject().apply {
-                                put("locationCode", location.trim())
-                                put("binCode", bin.trim())
-                                put("quantitiesJson", quantities)
-                            }.toString()
+                            val body = bulkLpBuildPayload(location, bin, drafts)
                             val result = BcApi.boundAction(context, "licensePlateTemplates", template.trim(), "buildBulk", body)
                             busy = false
                             if (result.ok) {
