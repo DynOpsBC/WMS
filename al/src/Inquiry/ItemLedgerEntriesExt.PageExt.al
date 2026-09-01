@@ -30,7 +30,7 @@ pageextension 72313 "DOPSWHS Item Ledger Entries" extends "Item Ledger Entries"
             {
                 ApplicationArea = All;
                 Caption = 'LP Bilgisini Yenile';
-                ToolTip = 'Seçili madde defteri girişlerinin LP bilgisini deftere nakledilmiş ambar alış kayıtlarından yeniden getirir.';
+                ToolTip = 'Seçili madde defteri girişlerinin LP bilgisini deftere nakledilmiş ambar kayıtlarından veya sonradan oluşturulmuş tek ve kesin LP eşleşmesinden yeniden getirir.';
                 Image = RefreshLines;
                 Promoted = true;
                 PromotedCategory = Process;

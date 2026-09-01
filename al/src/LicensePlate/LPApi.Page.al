@@ -34,6 +34,7 @@ page 72088 "DOPSWHS LP API"
                 field(notes; Rec.Notes) { Caption = 'notes'; }
                 field(lineCount; Rec."Line Count") { Caption = 'lineCount'; Editable = false; }
                 field(totalQuantity; Rec."Total Quantity") { Caption = 'totalQuantity'; Editable = false; }
+                field(plannedQuantity; Rec."Planned Quantity") { Caption = 'plannedQuantity'; }
             }
             part(lines; "DOPSWHS LP Line API")
             {
@@ -154,6 +155,14 @@ page 72088 "DOPSWHS LP API"
         Dispatcher: Codeunit "DOPSWHS Print Dispatcher";
     begin
         Dispatcher.PrintLPLabel(Rec, printerId, copies);
+    end;
+
+    [ServiceEnabled]
+    procedure printPalletLabels(printerId: Code[50]; copies: Integer)
+    var
+        Dispatcher: Codeunit "DOPSWHS Print Dispatcher";
+    begin
+        Dispatcher.PrintPalletItemLabels(Rec, printerId, copies);
     end;
 
     [ServiceEnabled]

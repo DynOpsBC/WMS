@@ -37,6 +37,8 @@ page 72482 "DOPSWHS Count Counter Part"
                     ApplicationArea = All;
                     Editable = false;
                 }
+                field(Completed; Rec.Completed) { ApplicationArea = All; Editable = false; }
+                field("Completed DateTime"; Rec."Completed DateTime") { ApplicationArea = All; Editable = false; }
             }
         }
     }

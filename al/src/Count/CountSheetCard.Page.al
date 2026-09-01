@@ -15,6 +15,7 @@ page 72075 "DOPSWHS Count Sheet Card"
                 Caption = 'General';
                 field("No."; Rec."No.") { ApplicationArea = All; Editable = HeaderEditable; }
                 field("Location Code"; Rec."Location Code") { ApplicationArea = All; Editable = HeaderEditable; }
+                field("Zone Filter"; Rec."Zone Filter") { ApplicationArea = All; Editable = HeaderEditable; }
                 field(Mode; Rec.Mode) { ApplicationArea = All; Editable = HeaderEditable; }
                 field(Status; Rec.Status) { ApplicationArea = All; Editable = HeaderEditable; }
                 field("V2 Scan Mode"; Rec."V2 Scan Mode") { ApplicationArea = All; }

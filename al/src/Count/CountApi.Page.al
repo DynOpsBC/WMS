@@ -24,9 +24,13 @@ page 72221 "DOPSWHS Count API"
                 field(status; Rec.Status) { Caption = 'status'; }
                 field(createdDateTime; Rec."Created DateTime") { Caption = 'createdDateTime'; }
                 field(v2ScanMode; Rec."V2 Scan Mode") { Caption = 'v2ScanMode'; }
+                field(zoneFilter; Rec."Zone Filter") { Caption = 'zoneFilter'; Editable = false; }
                 field(counter1UserId; Counter1UserId) { Caption = 'counter1UserId'; Editable = false; }
                 field(counter2UserId; Counter2UserId) { Caption = 'counter2UserId'; Editable = false; }
                 field(counter3UserId; Counter3UserId) { Caption = 'counter3UserId'; Editable = false; }
+                field(counter1Completed; Counter1Completed) { Caption = 'counter1Completed'; Editable = false; }
+                field(counter2Completed; Counter2Completed) { Caption = 'counter2Completed'; Editable = false; }
+                field(counter3Completed; Counter3Completed) { Caption = 'counter3Completed'; Editable = false; }
                 part(lines; "DOPSWHS Count Sheet Line API")
                 {
                     Caption = 'lines';
@@ -55,16 +59,28 @@ page 72221 "DOPSWHS Count API"
         Clear(Counter1UserId);
         Clear(Counter2UserId);
         Clear(Counter3UserId);
+        Clear(Counter1Completed);
+        Clear(Counter2Completed);
+        Clear(Counter3Completed);
         Counter.SetRange("Sheet No.", Rec."No.");
         if Counter.FindSet() then
             repeat
                 case Counter."Counter Slot" of
                     1:
-                        Counter1UserId := Counter."User ID";
+                        begin
+                            Counter1UserId := Counter."User ID";
+                            Counter1Completed := Counter.Completed;
+                        end;
                     2:
-                        Counter2UserId := Counter."User ID";
+                        begin
+                            Counter2UserId := Counter."User ID";
+                            Counter2Completed := Counter.Completed;
+                        end;
                     3:
-                        Counter3UserId := Counter."User ID";
+                        begin
+                            Counter3UserId := Counter."User ID";
+                            Counter3Completed := Counter.Completed;
+                        end;
                 end;
             until Counter.Next() = 0;
     end;
@@ -174,6 +190,14 @@ page 72221 "DOPSWHS Count API"
     end;
 
     [ServiceEnabled]
+    procedure completeCounter(counterSlot: Integer)
+    var
+        CountMgmt: Codeunit "DOPSWHS Count Mgmt";
+    begin
+        CountMgmt.CompleteCounter(Rec."No.", counterSlot);
+    end;
+
+    [ServiceEnabled]
     procedure postSheet()
     var
         CountMgmt: Codeunit "DOPSWHS Count Mgmt";
@@ -186,4 +210,7 @@ page 72221 "DOPSWHS Count API"
         Counter1UserId: Code[50];
         Counter2UserId: Code[50];
         Counter3UserId: Code[50];
+        Counter1Completed: Boolean;
+        Counter2Completed: Boolean;
+        Counter3Completed: Boolean;
 }

@@ -92,8 +92,15 @@ codeunit 72050 "DOPSWHS Count Mgmt"
     /// sheet and then leaving it half-converted if a second request fails.
     /// </summary>
     procedure CreateV2Sheet(LocationCode: Code[10]; OperatorUserId: Code[50]): Code[20]
+    begin
+        exit(CreateV2SheetFiltered(LocationCode, '', OperatorUserId));
+    end;
+
+    procedure CreateV2SheetFiltered(LocationCode: Code[10]; ZoneCode: Code[10]; OperatorUserId: Code[50]): Code[20]
     var
         Location: Record Location;
+        Zone: Record Zone;
+        CountHeader: Record "DOPSWHS Count Sheet Header";
         LocalUser: Record "DOPSWHS Local User";
         Counters: array[3] of Code[50];
         SheetNo: Code[20];
@@ -102,6 +109,8 @@ codeunit 72050 "DOPSWHS Count Mgmt"
             Error('Sayım V2 oluşturmak için lokasyon zorunludur.');
         if not Location.Get(LocationCode) then
             Error('%1 lokasyonu bulunamadı.', LocationCode);
+        if (ZoneCode <> '') and (not Zone.Get(LocationCode, ZoneCode)) then
+            Error('%1 alanı %2 lokasyonunda bulunamadı.', ZoneCode, LocationCode);
         if OperatorUserId = '' then
             Error('Sayım V2 oluşturmak için terminal kullanıcı kimliği zorunludur. Yeniden giriş yapın.');
         // Sayıcı ataması ZORUNLU DEĞİL: sayıcısız belgede slot 1 herkese
@@ -115,6 +124,11 @@ codeunit 72050 "DOPSWHS Count Mgmt"
             if not LocalUser.Disabled then
                 Counters[1] := OperatorUserId;
         SheetNo := CreateSheet(LocationCode, Enum::"DOPSWHS Count Mode"::Visible, Counters);
+        if ZoneCode <> '' then begin
+            CountHeader.Get(SheetNo);
+            CountHeader.Validate("Zone Filter", ZoneCode);
+            CountHeader.Modify(true);
+        end;
         PrepareV2(SheetNo);
         exit(SheetNo);
     end;
@@ -131,6 +145,7 @@ codeunit 72050 "DOPSWHS Count Mgmt"
         BinContent: Record "Bin Content";
         LPHeader: Record "DOPSWHS LP Header";
         LPLine: Record "DOPSWHS LP Line";
+        Bin: Record Bin;
         Item: Record Item;
         WarehouseEntry: Record "Warehouse Entry";
         AllocatedQty: Dictionary of [Text, Decimal];
@@ -147,6 +162,7 @@ codeunit 72050 "DOPSWHS Count Mgmt"
         TotalTrackedLooseQty: Decimal;
         UntrackedLooseQty: Decimal;
         NextLineNo: Integer;
+        LPInScope: Boolean;
     begin
         CountHeader.Get(SheetNo);
         if CountHeader.Status = CountHeader.Status::Posted then
@@ -164,13 +180,17 @@ codeunit 72050 "DOPSWHS Count Mgmt"
         LPHeader.SetFilter(Status, '%1|%2|%3', LPHeader.Status::Open, LPHeader.Status::Built, LPHeader.Status::Assigned);
         if LPHeader.FindSet() then
             repeat
+                LPInScope := false;
+                if LPHeader."Bin Code" <> '' then
+                    if Bin.Get(CountHeader."Location Code", LPHeader."Bin Code") then
+                        LPInScope := (CountHeader."Zone Filter" = '') or (Bin."Zone Code" = CountHeader."Zone Filter");
                 LPLine.SetRange("LP No.", LPHeader."No.");
                 LPLine.SetFilter("Item No.", '<>%1', '');
                 // Rafı henüz belli olmayan LP sayımın tamamını durdurmaz. Bu LP,
                 // terminalde önce raf sonra LP okutulduğunda AttachLpToBin ile
                 // ilgili rafa bağlanır ve satırları o anda sayım sayfasına eklenir.
                 // Boş/test LP'ler de böylece bütün deponun sayımını engellemez.
-                if (LPHeader."Bin Code" <> '') and LPLine.FindSet() then
+                if LPInScope and LPLine.FindSet() then
                     repeat
                         UomCode := LPLine."Unit of Measure";
                         if (UomCode = '') and Item.Get(LPLine."Item No.") then
@@ -204,6 +224,8 @@ codeunit 72050 "DOPSWHS Count Mgmt"
         // LP'ye bağlı olmayan stok ayrıca sayılır. Aynı stok hem LP satırında hem
         // bin satırında iki kez oluşmasın diye LP miktarı bin içeriğinden düşülür.
         BinContent.SetRange("Location Code", CountHeader."Location Code");
+        if CountHeader."Zone Filter" <> '' then
+            BinContent.SetRange("Zone Code", CountHeader."Zone Filter");
         if BinContent.FindSet() then
             repeat
                 BinContent.CalcFields(Quantity);
@@ -316,6 +338,7 @@ codeunit 72050 "DOPSWHS Count Mgmt"
             Error(BinRequiredErr);
         if not Bin.Get(CountHeader."Location Code", BinCode) then
             Error(BinNotInLocationErr, BinCode, CountHeader."Location Code");
+        EnsureBinInCountScope(CountHeader, Bin);
         if not LPHeader.Get(LpNo) then
             Error(LPNotFoundErr, LpNo);
         if LPHeader."Location Code" <> CountHeader."Location Code" then
@@ -543,6 +566,7 @@ codeunit 72050 "DOPSWHS Count Mgmt"
         CountHeader.Get(SheetNo);
         if not Bin.Get(CountHeader."Location Code", BinCode) then
             Error(BinNotInLocationErr, BinCode, CountHeader."Location Code");
+        EnsureBinInCountScope(CountHeader, Bin);
 
         Item.Get(ItemNo);
         if VariantCode <> '' then
@@ -661,6 +685,8 @@ codeunit 72050 "DOPSWHS Count Mgmt"
             Error(BinRequiredErr);
         if not Bin.Get(CountHeader."Location Code", BinCode) then
             Error(BinNotInLocationErr, BinCode, CountHeader."Location Code");
+        EnsureBinInCountScope(CountHeader, Bin);
+        EnsureCounterSlotOpen(SheetNo, CounterSlot);
         Counter.SetRange("Sheet No.", SheetNo);
         if not Counter.IsEmpty() then
             if not Counter.Get(SheetNo, CounterSlot) then
@@ -756,6 +782,7 @@ codeunit 72050 "DOPSWHS Count Mgmt"
     begin
         if not (CounterSlot in [1, 2, 3]) then
             Error(CounterSlotErr);
+        EnsureCounterSlotOpen(SheetNo, CounterSlot);
         CountHeader.Get(SheetNo);
         if CountHeader.Status = CountHeader.Status::Posted then
             Error(CountAlreadyPostedErr, SheetNo);
@@ -812,6 +839,7 @@ codeunit 72050 "DOPSWHS Count Mgmt"
         ScanEvent.LockTable();
         if not ScanEvent.Get(ScanId) then
             Error(V2ScanNotFoundErr, ScanId);
+        EnsureCounterSlotOpen(SheetNo, ScanEvent."Counter Slot");
         if ScanEvent."Sheet No." <> SheetNo then
             Error(V2ScanIdConflictErr, ScanId);
         if ScanEvent.Reversed then
@@ -875,6 +903,7 @@ codeunit 72050 "DOPSWHS Count Mgmt"
             Error(UnexpectedQtyPositiveErr);
         if not (CounterSlot in [1, 2, 3]) then
             Error(CounterSlotErr);
+        EnsureCounterSlotOpen(SheetNo, CounterSlot);
         if not Bin.Get(CountHeader."Location Code", BinCode) then
             Error(BinNotInLocationErr, BinCode, CountHeader."Location Code");
         Item.Get(ItemNo);
@@ -942,6 +971,7 @@ codeunit 72050 "DOPSWHS Count Mgmt"
             Error(CountAlreadyPostedErr, SheetNo);
         if not (CounterSlot in [1, 2, 3]) then
             Error(CounterSlotErr);
+        EnsureCounterSlotOpen(SheetNo, CounterSlot);
         if not Bin.Get(CountHeader."Location Code", BinCode) then
             Error(BinNotInLocationErr, BinCode, CountHeader."Location Code");
         if not LPHeader.Get(LpNo) then
@@ -998,6 +1028,7 @@ codeunit 72050 "DOPSWHS Count Mgmt"
     var
         CountHeader: Record "DOPSWHS Count Sheet Header";
         CountLine: Record "DOPSWHS Count Sheet Line";
+        Counter: Record "DOPSWHS Count Counter";
     begin
         CountHeader.Get(SheetNo);
         if CountHeader.Status = CountHeader.Status::Posted then
@@ -1017,8 +1048,47 @@ codeunit 72050 "DOPSWHS Count Mgmt"
                 CountLine.Modify(true);
             until CountLine.Next() = 0;
 
+        Counter.SetRange("Sheet No.", SheetNo);
+        if Counter.FindSet(true) then
+            repeat
+                Counter.Completed := false;
+                Counter."Completed DateTime" := 0DT;
+                Counter.Modify(true);
+            until Counter.Next() = 0;
+
         CountHeader.Status := CountHeader.Status::InProgress;
         CountHeader.Modify(true);
+    end;
+
+    procedure CompleteCounter(SheetNo: Code[20]; CounterSlot: Integer)
+    var
+        CountHeader: Record "DOPSWHS Count Sheet Header";
+        CountLine: Record "DOPSWHS Count Sheet Line";
+        Counter: Record "DOPSWHS Count Counter";
+    begin
+        if not (CounterSlot in [1, 2, 3]) then
+            Error(CounterSlotErr);
+        CountHeader.Get(SheetNo);
+        if CountHeader.Status = CountHeader.Status::Posted then
+            Error(CountAlreadyPostedErr, SheetNo);
+
+        CountLine.SetRange("Sheet No.", SheetNo);
+        if not CountLine.FindSet() then
+            Error('Boş sayım turu kaydedilemez.');
+        repeat
+            if not IsSlotCounted(CountLine, CounterSlot) then
+                Error(CountLineNotRecordedErr, CountLine."Line No.", CounterSlot);
+        until CountLine.Next() = 0;
+
+        if not Counter.Get(SheetNo, CounterSlot) then begin
+            Counter.Init();
+            Counter."Sheet No." := SheetNo;
+            Counter."Counter Slot" := CounterSlot;
+            Counter.Insert(true);
+        end;
+        Counter.Completed := true;
+        Counter."Completed DateTime" := CurrentDateTime();
+        Counter.Modify(true);
     end;
 
     procedure RecordCount(SheetNo: Code[20]; LineNo: Integer; CounterSlot: Integer; Qty: Decimal)
@@ -1029,6 +1099,7 @@ codeunit 72050 "DOPSWHS Count Mgmt"
     begin
         if not (CounterSlot in [1, 2, 3]) then
             Error(CounterSlotErr);
+        EnsureCounterSlotOpen(SheetNo, CounterSlot);
         if Qty < 0 then
             Error(CountQtyNegativeErr);
 
@@ -1075,6 +1146,8 @@ codeunit 72050 "DOPSWHS Count Mgmt"
         CountHeader.Get(SheetNo);
         if CountHeader.Status = CountHeader.Status::Posted then
             Error(CountAlreadyPostedErr, SheetNo);
+        if CountHeader."V2 Scan Mode" then
+            EnsureAllCountersCompleted(SheetNo);
 
         // Eski sürümlerde batch adı soldan kısaltıldığı için tüm CNT belgeleri
         // aynı DOPS-CNT-C batch'ini paylaşıyordu. Kayıttan hemen önce belgeye
@@ -1418,6 +1491,34 @@ codeunit 72050 "DOPSWHS Count Mgmt"
         exit(false);
     end;
 
+    local procedure EnsureCounterSlotOpen(SheetNo: Code[20]; CounterSlot: Integer)
+    var
+        Counter: Record "DOPSWHS Count Counter";
+    begin
+        if Counter.Get(SheetNo, CounterSlot) then
+            if Counter.Completed then
+                Error(CounterAlreadyCompletedErr, CounterSlot, SheetNo);
+    end;
+
+    local procedure EnsureAllCountersCompleted(SheetNo: Code[20])
+    var
+        Counter: Record "DOPSWHS Count Counter";
+    begin
+        Counter.SetRange("Sheet No.", SheetNo);
+        if not Counter.FindSet() then
+            Error(NoCompletedCounterErr, SheetNo);
+        repeat
+            if not Counter.Completed then
+                Error(CounterNotCompletedErr, Counter."Counter Slot", SheetNo);
+        until Counter.Next() = 0;
+    end;
+
+    local procedure EnsureBinInCountScope(CountHeader: Record "DOPSWHS Count Sheet Header"; Bin: Record Bin)
+    begin
+        if (CountHeader."Zone Filter" <> '') and (Bin."Zone Code" <> CountHeader."Zone Filter") then
+            Error(BinOutsideZoneFilterErr, Bin.Code, CountHeader."Zone Filter");
+    end;
+
     local procedure EnsureAllRequiredCountsRecorded(SheetNo: Code[20])
     var
         CountLine: Record "DOPSWHS Count Sheet Line";
@@ -1703,6 +1804,10 @@ codeunit 72050 "DOPSWHS Count Mgmt"
         TrackedLPExceedsInventoryErr: Label '%1 ürününün %2 rafındaki lot/seri bakiyesinden LP miktarı fazladır (Lot: %3, Seri: %4, fark: %5). LP ve BC izleme kayıtlarını düzeltin.', Comment = '%1 item, %2 bin, %3 lot, %4 serial, %5 excess';
         TrackingBreakdownExceedsInventoryErr: Label '%1 ürününün %2 rafındaki lot/seri toplamı (%3), kullanılabilir raf stokunu (%4) aşıyor. BC izleme kayıtlarını düzeltin.', Comment = '%1 item, %2 bin, %3 tracked qty, %4 residual qty';
         CounterSlotErr: Label 'Sayıcı slotu 1, 2 veya 3 olmalıdır.';
+        CounterAlreadyCompletedErr: Label '%1 sayıcı turu %2 sayım belgesinde kaydedilip kilitlenmiştir.', Comment = '%1 counter slot, %2 sheet no';
+        CounterNotCompletedErr: Label '%1 sayıcı turu %2 sayım belgesinde henüz kaydedilmedi.', Comment = '%1 counter slot, %2 sheet no';
+        NoCompletedCounterErr: Label '%1 sayım belgesinde kaydedilmiş bir sayıcı turu yoktur.', Comment = '%1 sheet no';
+        BinOutsideZoneFilterErr: Label '%1 rafı bu sayımın %2 alan filtresinin dışındadır.', Comment = '%1 bin, %2 zone';
         CountQtyNegativeErr: Label 'Sayım miktarı negatif olamaz.';
         CountAlreadyPostedErr: Label '%1 sayım belgesi daha önce kaydedildi; kapalı belge değiştirilemez.', Comment = '%1 count sheet no';
         CounterNotAssignedErr: Label '%1 sayıcı slotu %2 sayım belgesine atanmamıştır.', Comment = '%1 counter slot, %2 count sheet no';

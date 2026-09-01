@@ -34,7 +34,7 @@ fun ItemInquiryModule() {
     var item by remember { mutableStateOf<JSONObject?>(null) }
     var lpLines by remember { mutableStateOf<List<JSONObject>>(emptyList()) }
     var ledger by remember { mutableStateOf<List<JSONObject>>(emptyList()) }
-    var status by remember { mutableStateOf("Ürün No. tarayın/girin.") }
+    var status by remember { mutableStateOf("Ürün No. veya LP No. tarayın/girin.") }
     var loading by remember { mutableStateOf(false) }
 
     fun load() {
@@ -43,21 +43,27 @@ fun ItemInquiryModule() {
             loading = true; status = "Sorgulanıyor..."
             item = null; lpLines = emptyList(); ledger = emptyList()
             val q = query.trim()
-            val r = BcApi.getWithStandardFallback(context, "items?\$filter=no eq '$q'&\$top=1", "items?\$filter=number eq '$q'&\$top=1")
+            val safeQ = q.replace("'", "''")
+            val byLp = BcApi.getAllPages(context, "licensePlateLines?\$filter=lpNo eq '$safeQ'&\$top=200")
+            val resolvedItemNo = if (byLp.complete && byLp.rows.isNotEmpty()) byLp.rows.first().optString("itemNo") else q
+            val safeItemNo = resolvedItemNo.replace("'", "''")
+            val r = BcApi.getWithStandardFallback(context, "items?\$filter=no eq '$safeItemNo'&\$top=1", "items?\$filter=number eq '$safeItemNo'&\$top=1")
             if (r.ok) {
                 val list = BcApi.parseValueArray(r.body)
                 item = list.firstOrNull()
             }
             // on-hand by LP: lines for this item across license plates
-            val lpPage = BcApi.getAllPages(context, "licensePlateLines?\$filter=itemNo eq '$q'&\$top=50")
+            val lpPage = if (byLp.complete && byLp.rows.isNotEmpty()) byLp
+                else BcApi.getAllPages(context, "licensePlateLines?\$filter=itemNo eq '$safeItemNo'&\$top=50")
             if (lpPage.complete) lpLines = lpPage.rows
             // Son Hareketler (Item Ledger) — WI "Recent Transactions" pariteti.
-            val le = BcApi.get(context, "itemLedgerEntries?\$filter=itemNo eq '$q'&\$orderby=postingDate desc,entryNo desc&\$top=20")
+            val le = BcApi.get(context, "itemLedgerEntries?\$filter=itemNo eq '$safeItemNo'&\$orderby=postingDate desc,entryNo desc&\$top=20")
             if (le.ok) ledger = BcApi.parseValueArray(le.body)
             loading = false
             status = when {
                 !lpPage.complete -> "HATA: Ürünün LP kayıtlarının tamamı alınamadı. Yenileyin."
-                item == null -> "BOŞ: '$q' için ürün bulunamadı."
+                item == null -> "BOŞ: '$q' için ürün veya LP bulunamadı."
+                byLp.rows.isNotEmpty() -> "TAMAM: $q LP içeriği · ${lpLines.size} satır · ${ledger.size} ürün hareketi."
                 else -> "TAMAM: ürün bulundu · ${lpLines.size} LP · ${ledger.size} hareket."
             }
         }
@@ -78,8 +84,9 @@ fun ItemInquiryModule() {
 
     val palette = bcwmsStatus()
     Column(Modifier.fillMaxSize().padding(12.dp)) {
-        ScanField("Ürün No", query, { query = it }, modifier = Modifier.fillMaxWidth(), onScanned = {
-            query = BarcodeIntentResolver.resolve(it).itemNo ?: it
+        ScanField("Ürün No / LP No", query, { query = it }, modifier = Modifier.fillMaxWidth(), onScanned = {
+            val resolved = BarcodeIntentResolver.resolve(it)
+            query = resolved.itemNo ?: resolved.value
         })
         Spacer(Modifier.height(8.dp))
         Button(onClick = { load() }, enabled = !loading, modifier = Modifier.fillMaxWidth()) {

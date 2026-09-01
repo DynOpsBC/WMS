@@ -38,13 +38,15 @@ fun LicensePlateModule() {
     var status by remember { mutableStateOf("") }
     var loading by remember { mutableStateOf(false) }
     var showBuild by remember { mutableStateOf(false) }
+    var showBulkBuild by remember { mutableStateOf(false) }
+    var selectedForPrint by remember { mutableStateOf<Set<String>>(emptySet()) }
     var search by remember { mutableStateOf("") }
 
     fun loadList() {
         scope.launch {
             loading = true; status = "Yükleniyor..."
             val filter = com.dynops.bcwms.ui.buildODataFilter(com.dynops.bcwms.ui.searchClause("no", search))
-            val page = BcApi.getAllPagesWithStandardFallback(context, "licensePlates?\$top=200&\$orderby=no desc&\$select=no,status,locationCode,binCode,templateCode,sscc$filter")
+            val page = BcApi.getAllPagesWithStandardFallback(context, "licensePlates?\$top=200&\$orderby=no desc&\$select=no,status,locationCode,binCode,templateCode,sscc,lineCount,totalQuantity,plannedQuantity$filter")
             loading = false
             rows = if (page.complete) page.rows else emptyList()
             // Arama sonuçsuzken "LP kaydı yok" demek yanıltıcıydı: kullanıcı tüm
@@ -71,13 +73,56 @@ fun LicensePlateModule() {
             onBuilt = { newNo -> showBuild = false; loadList(); selected = newNo }
         )
     }
+    if (showBulkBuild) {
+        BulkLpBuildSheet(
+            onDismiss = { showBulkBuild = false },
+            onBuilt = { created ->
+                showBulkBuild = false
+                status = "TAMAM: ${created.size} boş LP oluşturuldu; ürünleri LP detaylarından ekleyebilirsiniz."
+                loadList()
+            },
+        )
+    }
+
+    fun printSelected() {
+        if (selectedForPrint.isEmpty() || loading) return
+        scope.launch {
+            loading = true
+            var failures = 0
+            val printerId = getDefaultPrinter(context)
+            selectedForPrint.forEach { no ->
+                val row = rows.firstOrNull { it.optString("no") == no }
+                val payload = JSONObject().apply { put("printerId", printerId); put("copies", 1) }.toString()
+                val result = BcApi.boundAction(
+                    context,
+                    "licensePlates",
+                    no,
+                    if ((row?.optInt("lineCount") ?: 0) > 0) "printPalletLabels" else "printDocument",
+                    payload,
+                )
+                if (!result.ok) failures += 1
+            }
+            loading = false
+            status = if (failures == 0) "TAMAM: ${selectedForPrint.size} LP etiketi yazdırma kuyruğuna alındı"
+            else "UYARI: $failures LP etiketi yazdırılamadı"
+            if (failures == 0) selectedForPrint = emptySet()
+        }
+    }
 
     Column(Modifier.fillMaxSize().padding(12.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Button(onClick = { loadList() }, enabled = !loading) { WmsRefreshLabel(loading) }
-            Spacer(Modifier.width(8.dp))
             Button(onClick = { showBuild = true }, enabled = !loading) {
                 WmsActionLabel(WmsGlyph.LICENSE_PLATE, "LP Oluştur")
+            }
+        }
+        Spacer(Modifier.height(6.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            OutlinedButton(onClick = { showBulkBuild = true }, enabled = !loading, modifier = Modifier.weight(1f)) {
+                Text("Toplu LP Oluştur")
+            }
+            OutlinedButton(onClick = { printSelected() }, enabled = !loading && selectedForPrint.isNotEmpty(), modifier = Modifier.weight(1f)) {
+                Text("Seçilenleri Yazdır (${selectedForPrint.size})")
             }
         }
         Spacer(Modifier.height(8.dp))
@@ -95,11 +140,20 @@ fun LicensePlateModule() {
                     border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
                 ) {
                     Column(Modifier.padding(14.dp)) {
-                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                            Text(lp.optString("no"), fontWeight = FontWeight.Bold)
+                        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                            Checkbox(
+                                checked = lp.optString("no") in selectedForPrint,
+                                onCheckedChange = { checked ->
+                                    val no = lp.optString("no")
+                                    selectedForPrint = if (checked) selectedForPrint + no else selectedForPrint - no
+                                },
+                            )
+                            Text(lp.optString("no"), fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
                             StatusBadge(lp.optString("status"))
                         }
                         Text("${lp.optString("templateCode")} · ${lp.optString("locationCode")}/${lp.optString("binCode")}", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        if (lp.optDouble("plannedQuantity", 0.0) > 0.0)
+                            Text("Planlanan miktar: ${lp.optDouble("plannedQuantity")}", fontSize = 11.sp, color = MaterialTheme.colorScheme.primary)
                         if (lp.optString("sscc").isNotBlank())
                             Text("SSCC: ${lp.optString("sscc")}", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
@@ -385,6 +439,7 @@ private fun LpDocument(lpNo: String, onBack: () -> Unit) {
             DocHeaderCard(
                 title = lpNo,
                 subtitle = "${h?.optString("templateCode") ?: ""}${if (isTote) " · ♻ Tote" else ""} · ${h?.optString("locationCode") ?: ""}/${h?.optString("binCode") ?: ""}" +
+                    (h?.optDouble("plannedQuantity", 0.0)?.takeIf { it > 0.0 }?.let { "\nPlanlanan miktar: $it" } ?: "") +
                     (h?.optString("sscc")?.takeIf { it.isNotBlank() }?.let { "\nSSCC: $it" } ?: ""),
                 badge = lpStatusLabel(st)
             )
@@ -626,6 +681,7 @@ private fun LpDocument(lpNo: String, onBack: () -> Unit) {
         QuantityDialogSheet(
             title = "Satır Ekle",
             itemNo = scannedItem,
+            initialQty = h?.optDouble("plannedQuantity", 0.0)?.takeIf { it > 0.0 } ?: 1.0,
             initialUom = selection?.initialUom.orEmpty(),
             initialLot = selection?.initialLotNo.orEmpty(),
             uomOptions = selection?.uomOptions.orEmpty(),

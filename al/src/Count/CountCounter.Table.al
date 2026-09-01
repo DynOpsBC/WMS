@@ -17,6 +17,8 @@ table 72018 "DOPSWHS Count Counter"
             var
                 LocalUser: Record "DOPSWHS Local User";
             begin
+                Completed := false;
+                "Completed DateTime" := 0DT;
                 if "User ID" = '' then begin
                     "Assigned DateTime" := 0DT;
                     exit;
@@ -31,6 +33,8 @@ table 72018 "DOPSWHS Count Counter"
             end;
         }
         field(20; "Assigned DateTime"; DateTime) { Caption = 'Assigned DateTime'; DataClassification = CustomerContent; }
+        field(30; Completed; Boolean) { Caption = 'Completed'; DataClassification = CustomerContent; Editable = false; }
+        field(31; "Completed DateTime"; DateTime) { Caption = 'Completed DateTime'; DataClassification = CustomerContent; Editable = false; }
     }
 
     keys

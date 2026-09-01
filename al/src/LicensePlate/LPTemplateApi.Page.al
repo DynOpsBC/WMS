@@ -53,4 +53,37 @@ page 72280 "DOPSWHS LP Template API"
         LPMgt.Build(Rec.Code, locationCode, binCode, CreatedLP);
         exit(CreatedLP."No.");
     end;
+
+    [ServiceEnabled]
+    procedure buildBulk(locationCode: Code[10]; binCode: Code[20]; quantitiesJson: Text): Text
+    var
+        LPMgt: Codeunit "DOPSWHS LP Management";
+        CreatedLP: Record "DOPSWHS LP Header";
+        Quantities: JsonArray;
+        QuantityToken: JsonToken;
+        Result: JsonArray;
+        ResultObject: JsonObject;
+        PlannedQuantity: Decimal;
+    begin
+        if not Quantities.ReadFrom(quantitiesJson) then
+            Error('Toplu LP miktar listesi geçerli JSON değildir.');
+        if (Quantities.Count() < 1) or (Quantities.Count() > 200) then
+            Error('Bir işlemde 1 ile 200 arasında LP oluşturabilirsiniz.');
+
+        foreach QuantityToken in Quantities do begin
+            Evaluate(PlannedQuantity, Format(QuantityToken.AsValue()));
+            if PlannedQuantity < 0 then
+                Error('LP planlanan miktarı negatif olamaz.');
+            LPMgt.Build(Rec.Code, locationCode, binCode, CreatedLP);
+            CreatedLP."Planned Quantity" := PlannedQuantity;
+            CreatedLP.Modify(true);
+
+            Clear(ResultObject);
+            ResultObject.Add('no', CreatedLP."No.");
+            ResultObject.Add('plannedQuantity', PlannedQuantity);
+            Result.Add(ResultObject);
+        end;
+        Result.WriteTo(quantitiesJson);
+        exit(quantitiesJson);
+    end;
 }

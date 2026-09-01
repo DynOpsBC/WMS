@@ -46,6 +46,7 @@ private data class CompletedCountV2Scan(
 /** LP okutması: LP içeriği sunucuda satırlara açıldı; geri alma LP bazında yapılır. */
 private data class CompletedCountV2Lp(val lpNo: String, val binCode: String)
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CountV2Module() {
     val context = LocalContext.current
@@ -58,6 +59,9 @@ fun CountV2Module() {
     var backendReady by remember { mutableStateOf(false) }
     var showCreate by remember { mutableStateOf(false) }
     var newLocation by remember { mutableStateOf("") }
+    var newZone by remember { mutableStateOf("") }
+    var zones by remember { mutableStateOf<List<String>>(emptyList()) }
+    var zoneExpanded by remember { mutableStateOf(false) }
     var creating by remember { mutableStateOf(false) }
     val visibleRows = remember(rows, search) {
         val query = search.trim()
@@ -65,7 +69,19 @@ fun CountV2Module() {
         else rows.filter { sheet ->
             sheet.optString("no").contains(query, ignoreCase = true) ||
                 sheet.optString("locationCode").contains(query, ignoreCase = true) ||
+                sheet.optString("zoneFilter").contains(query, ignoreCase = true) ||
                 sheet.optString("status").contains(query, ignoreCase = true)
+        }
+    }
+
+    fun loadZones() {
+        val location = newLocation.trim()
+        if (location.isBlank()) { zones = emptyList(); newZone = ""; return }
+        scope.launch {
+            val safe = location.replace("'", "''")
+            val page = BcApi.getAllPages(context, "bins?\$filter=locationCode eq '$safe'&\$select=zoneCode&\$top=1000")
+            zones = if (page.complete) page.rows.map { it.optString("zoneCode") }.filter(String::isNotBlank).distinct().sorted() else emptyList()
+            if (newZone.isNotBlank() && newZone !in zones) newZone = ""
         }
     }
 
@@ -114,13 +130,20 @@ fun CountV2Module() {
             val actionBody = JSONObject().apply {
                 put("locationCode", location)
                 put("userId", userId)
+                if (newZone.isNotBlank()) put("zoneCode", newZone.trim())
             }.toString()
-            var result = BcApi.boundAction(context, "countOps", "", "createV2", actionBody)
+            var result = BcApi.boundAction(
+                context,
+                "countOps",
+                "",
+                if (newZone.isBlank()) "createV2" else "createV2Filtered",
+                actionBody,
+            )
 
             // AL 1.14.0.52 ile geriye uyumluluk: yeni atomik createV2 aksiyonu
             // henüz yayınlanmamışsa boş başlığı mevcut Count API üzerinden
             // oluştur. Belge ekranı idempotent prepareV2 çağrısıyla V2'ye geçirir.
-            if (result.httpCode == 404 || result.httpCode == 405) {
+            if ((result.httpCode == 404 || result.httpCode == 405) && newZone.isBlank()) {
                 val legacyBody = JSONObject().apply {
                     put("locationCode", location)
                     put("mode", "Visible")
@@ -176,7 +199,7 @@ fun CountV2Module() {
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Button(onClick = { load() }, enabled = !loading) { WmsRefreshLabel(loading) }
             Button(
-                onClick = { showCreate = true },
+                onClick = { showCreate = true; loadZones() },
                 enabled = backendReady && !loading && !creating,
             ) { Text(if (creating) "Oluşturuluyor..." else "➕ Yeni V2 Sayımı") }
         }
@@ -209,7 +232,9 @@ fun CountV2Module() {
                             )
                         }
                         Text(
-                            "Lokasyon: ${sheet.optString("locationCode")} · ${sheet.optString("status")}",
+                            "Lokasyon: ${sheet.optString("locationCode")}" +
+                                sheet.optString("zoneFilter").takeIf(String::isNotBlank)?.let { " · Alan: $it" }.orEmpty() +
+                                " · ${sheet.optString("status")}",
                             fontSize = 12.sp,
                             color = Color.Gray,
                         )
@@ -237,12 +262,29 @@ fun CountV2Module() {
                     Spacer(Modifier.height(10.dp))
                     OutlinedTextField(
                         value = newLocation,
-                        onValueChange = { newLocation = it.uppercase() },
+                        onValueChange = { newLocation = it.uppercase(); newZone = "" },
                         label = { Text("Lokasyon Kodu") },
                         singleLine = true,
                         enabled = !creating,
                         modifier = Modifier.fillMaxWidth(),
                     )
+                    TextButton(onClick = { loadZones() }, enabled = newLocation.isNotBlank() && !creating) { Text("Alanları Getir") }
+                    ExposedDropdownMenuBox(expanded = zoneExpanded, onExpandedChange = { zoneExpanded = !zoneExpanded }) {
+                        OutlinedTextField(
+                            value = newZone,
+                            onValueChange = {},
+                            readOnly = true,
+                            label = { Text("Alan filtresi (opsiyonel)") },
+                            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(zoneExpanded) },
+                            modifier = Modifier.fillMaxWidth().menuAnchor(),
+                        )
+                        ExposedDropdownMenu(expanded = zoneExpanded, onDismissRequest = { zoneExpanded = false }) {
+                            DropdownMenuItem(text = { Text("Tüm alanlar") }, onClick = { newZone = ""; zoneExpanded = false })
+                            zones.forEach { zone ->
+                                DropdownMenuItem(text = { Text(zone) }, onClick = { newZone = zone; zoneExpanded = false })
+                            }
+                        }
+                    }
                     Text(
                         "Boş V2 belgesi otomatik oluşturulur; klasik satır üretmeniz gerekmez.",
                         fontSize = 12.sp,
@@ -398,15 +440,17 @@ private fun CountV2Document(no: String, onBack: () -> Unit) {
             status = "$value rafı doğrulanıyor..."
             val safeBin = value.replace("'", "''")
             val safeLocation = header?.optString("locationCode").orEmpty().replace("'", "''")
+            val safeZone = header?.optString("zoneFilter").orEmpty().replace("'", "''")
             val filters = buildList {
                 add("code eq '$safeBin'")
                 if (safeLocation.isNotBlank()) add("locationCode eq '$safeLocation'")
+                if (safeZone.isNotBlank()) add("zoneCode eq '$safeZone'")
             }.joinToString(" and ")
-            val result = BcApi.get(context, "bins?\$filter=$filters&\$select=code,locationCode&\$top=1")
+            val result = BcApi.get(context, "bins?\$filter=$filters&\$select=code,locationCode,zoneCode&\$top=1")
             val row = if (result.ok) BcApi.parseValueArray(result.body).firstOrNull() else null
             busy = false
             if (row == null) {
-                status = "HATA: $value rafı bu sayımın lokasyonunda bulunamadı"
+                status = "HATA: $value rafı bu sayımın lokasyon/alan filtresinde bulunamadı"
             } else {
                 activeBin = row.optString("code").ifBlank { value }
                 labelScan = ""
@@ -753,15 +797,29 @@ private fun CountV2Document(no: String, onBack: () -> Unit) {
     fun postSheet() {
         scope.launch {
             busy = true
-            status = "Sayım V2 BC'ye kaydediliyor..."
+            status = "Sayım onaylanıyor ve stok hareketleri oluşturuluyor..."
             val result = BcApi.boundActionLongRunning(context, "countSheets", no, "postSheet", "{}")
             busy = false
             showPostConfirm = false
-            if (result.ok) reload("TAMAM: Sayım V2 kaydedildi ve kapatıldı")
+            if (result.ok) reload("TAMAM: Sayım onaylandı; stok farkları işlendi ve belge kapatıldı")
             else {
                 status = "HATA: ${BcApi.errorMessage(result.body)} (HTTP ${result.httpCode})"
                 reload()
             }
+        }
+    }
+
+    fun completeCounter() {
+        scope.launch {
+            busy = true
+            status = "$slot. sayım turu kaydedilip kilitleniyor..."
+            val body = JSONObject().apply { put("counterSlot", slot) }.toString()
+            val result = BcApi.boundAction(context, "countSheets", no, "completeCounter", body)
+            busy = false
+            if (result.ok) {
+                loadDocument()
+                status = "TAMAM: $slot. sayım turu kaydedildi; stok hareketi oluşturulmadı"
+            } else status = "HATA: ${BcApi.errorMessage(result.body)} (HTTP ${result.httpCode})"
         }
     }
 
@@ -777,8 +835,19 @@ private fun CountV2Document(no: String, onBack: () -> Unit) {
             )
         })
     }
+    val currentSlotLinesComplete = allRequiredCountLinesExplicitlyCompleted(lines.map { line ->
+        CountSlotLineState(
+            hasExplicitFlag = line.has("counted$slot"),
+            explicitlyCounted = line.optBoolean("counted$slot"),
+            quantity = line.optDouble("countedQty$slot", Double.NaN),
+        )
+    })
+    val currentSlotSaved = h?.optBoolean("counter${slot}Completed", false) == true
+    val allRequiredSaved = requiredSlots.all { h?.optBoolean("counter${it}Completed", false) == true }
+    val canSave = prepared && linesComplete && lines.isNotEmpty() && !busy && slot in allowedSlots &&
+        currentSlotLinesComplete && !currentSlotSaved && countDocumentIsMutable(h?.optString("status").orEmpty())
     val canPost = prepared && linesComplete && lines.isNotEmpty() && !busy &&
-        slot in allowedSlots && allRequiredComplete &&
+        allRequiredComplete && allRequiredSaved &&
         lines.none { it.optBoolean("recountRequired") } &&
         countDocumentIsMutable(h?.optString("status").orEmpty())
 
@@ -797,7 +866,9 @@ private fun CountV2Document(no: String, onBack: () -> Unit) {
                     TextButton(onClick = onBack, enabled = !busy) { Text("‹ Sayfa Listesi") }
                     DocHeaderCard(
                         title = "$no · Sayım V2",
-                        subtitle = "Lokasyon: ${h?.optString("locationCode").orEmpty()} · ${h?.optString("status").orEmpty()}",
+                        subtitle = "Lokasyon: ${h?.optString("locationCode").orEmpty()}" +
+                            h?.optString("zoneFilter").orEmpty().takeIf(String::isNotBlank)?.let { " · Alan: $it" }.orEmpty() +
+                            " · ${h?.optString("status").orEmpty()}",
                     )
                     Spacer(Modifier.height(8.dp))
                     StatusText(status)
@@ -814,7 +885,7 @@ private fun CountV2Document(no: String, onBack: () -> Unit) {
                                     selected = slot == candidate,
                                     onClick = { slot = candidate },
                                     enabled = !busy,
-                                    label = { Text("$candidate") },
+                                    label = { Text("$candidate${if (h?.optBoolean("counter${candidate}Completed", false) == true) " ✓" else ""}") },
                                 )
                                 Spacer(Modifier.width(4.dp))
                             }
@@ -841,7 +912,7 @@ private fun CountV2Document(no: String, onBack: () -> Unit) {
                             value = binScan,
                             onValueChange = { binScan = it },
                             onScanned = { selectBin(it) },
-                            enabled = !busy && pendingRetry == null,
+                            enabled = !busy && pendingRetry == null && !currentSlotSaved,
                             modifier = Modifier.fillMaxWidth(),
                             focusRequester = binFocus,
                         )
@@ -865,7 +936,7 @@ private fun CountV2Document(no: String, onBack: () -> Unit) {
                                 value = labelScan,
                                 onValueChange = { labelScan = it },
                                 onScanned = { scanLabel(it) },
-                                enabled = !busy && pendingRetry == null && slot in allowedSlots,
+                                enabled = !busy && pendingRetry == null && slot in allowedSlots && !currentSlotSaved,
                                 modifier = Modifier.fillMaxWidth(),
                                 focusRequester = labelFocus,
                             )
@@ -907,7 +978,7 @@ private fun CountV2Document(no: String, onBack: () -> Unit) {
                     quantity = line.optDouble("countedQty$slot", 0.0),
                 )
                 Card(
-                    Modifier.fillMaxWidth().clickable(enabled = prepared && !busy) { adjustLine = line },
+                    Modifier.fillMaxWidth().clickable(enabled = prepared && !busy && !currentSlotSaved) { adjustLine = line },
                     shape = RoundedCornerShape(10.dp),
                 ) {
                     Column(Modifier.padding(12.dp)) {
@@ -940,16 +1011,24 @@ private fun CountV2Document(no: String, onBack: () -> Unit) {
         Surface(tonalElevation = 3.dp, shadowElevation = 4.dp) {
             Column(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 10.dp)) {
                 Button(
+                    onClick = { completeCounter() },
+                    enabled = canSave,
+                    modifier = Modifier.fillMaxWidth().height(52.dp),
+                ) { Text(if (currentSlotSaved) "✓ Sayım Turu Kaydedildi" else "✅ Sayım Turunu Kaydet", fontWeight = FontWeight.Bold) }
+                Spacer(Modifier.height(6.dp))
+                OutlinedButton(
                     onClick = { showPostConfirm = true },
                     enabled = canPost,
-                    modifier = Modifier.fillMaxWidth().height(52.dp),
-                ) { Text("✅ Sayım V2'yi Kaydet", fontWeight = FontWeight.Bold) }
-                if (lines.isNotEmpty() && !allRequiredComplete) {
+                    modifier = Modifier.fillMaxWidth().height(48.dp),
+                ) { Text("Onayla ve Stoklara İşle") }
+                if (lines.isNotEmpty() && !currentSlotLinesComplete) {
                     Text(
-                        "Atanmış tüm sayıcıların bütün V2 satırlarını tamamlaması gerekir.",
+                        "Bu sayım turundaki bütün satırları tamamlayın.",
                         fontSize = 11.sp,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
+                } else if (!allRequiredSaved) {
+                    Text("Stok hareketinden önce atanmış bütün sayıcı turları kaydedilmelidir.", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
         }
@@ -977,10 +1056,10 @@ private fun CountV2Document(no: String, onBack: () -> Unit) {
     if (showPostConfirm) {
         AlertDialog(
             onDismissRequest = { if (!busy) showPostConfirm = false },
-            title = { Text("Sayım V2 kaydedilsin mi?") },
-            text = { Text("${lines.size} QR satırı Business Central fiziksel sayımına kaydedilecek. İşlemden sonra belge kapanabilir.") },
+            title = { Text("Sayım stoklara işlensin mi?") },
+            text = { Text("${lines.size} sayım satırının farkları pozitif/negatif stok hareketi olarak kaydedilecek ve belge kapanacak.") },
             confirmButton = {
-                TextButton(onClick = { postSheet() }, enabled = canPost) { Text("Kaydet") }
+                TextButton(onClick = { postSheet() }, enabled = canPost) { Text("Onayla ve İşle") }
             },
             dismissButton = {
                 TextButton(onClick = { showPostConfirm = false }, enabled = !busy) { Text("Vazgeç") }

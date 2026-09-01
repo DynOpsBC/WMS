@@ -163,4 +163,14 @@ class CountWorkflowTest {
         assertFalse(overflow.partial || overflow.complete)
         assertFalse(empty.partial || empty.complete)
     }
+
+    @Test
+    fun `classic count retries without assignment when local wms user is unavailable`() {
+        assertTrue(
+            shouldRetryClassicCountWithoutCounter(
+                "The field User ID of table Count Counter contains a value that cannot be found in the related table (Local WMS User)."
+            )
+        )
+        assertFalse(shouldRetryClassicCountWithoutCounter("Location MERKEZDEPO does not exist."))
+    }
 }

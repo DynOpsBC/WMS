@@ -44,6 +44,12 @@ table 72010 "DOPSWHS LP Header"
             CalcFormula = sum("DOPSWHS LP Line".Quantity where("LP No." = field("No.")));
             Editable = false;
         }
+        field(122; "Planned Quantity"; Decimal)
+        {
+            Caption = 'Planned Quantity';
+            DataClassification = CustomerContent;
+            MinValue = 0;
+        }
     }
 
     keys

@@ -31,6 +31,12 @@ table 72016 "DOPSWHS Count Sheet Header"
             DataClassification = CustomerContent;
             Editable = false;
         }
+        field(80; "Zone Filter"; Code[10])
+        {
+            Caption = 'Zone Filter';
+            DataClassification = CustomerContent;
+            TableRelation = Zone.Code where("Location Code" = field("Location Code"));
+        }
     }
 
     keys
