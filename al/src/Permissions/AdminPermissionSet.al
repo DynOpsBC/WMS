@@ -215,6 +215,7 @@ permissionset 72094 "DOPSWHS-ADMIN"
         codeunit "DOPSWHS Movement Mgmt" = X,
         codeunit "DOPSWHS Pick Mgmt" = X,
         codeunit "DOPSWHS Shipment Mgmt" = X, // 72047
+        codeunit "DOPSWHS LP Pick Preference" = X,
         codeunit "DOPSWHS Prod Mgmt" = X,
         codeunit "DOPSWHS Assembly Mgmt" = X,
         codeunit "DOPSWHS Count Mgmt" = X,

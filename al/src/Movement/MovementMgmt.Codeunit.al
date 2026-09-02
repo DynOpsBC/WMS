@@ -129,7 +129,7 @@ codeunit 72045 "DOPSWHS Movement Mgmt"
         // seviyesinde hareket OLMAZ. Doğru araç: Warehouse Reclass Journal
         // (Movement) — bin'den bin'e, ILE'ye dokunmadan.
         if Location."Directed Put-away and Pick" then begin
-            RegisterWhseMove(LocationCode, FromBinCode, ToBinCode, ItemNo, Qty, UserId, LotNo, SerialNo);
+            RegisterWhseMove(LocationCode, FromBinCode, ToBinCode, ItemNo, LpNo, Qty, UserId, LotNo, SerialNo);
             CustomDimensions.Add('Category', 'Movement');
             // Hareketi yapan operatör terminalden parametre olarak geliyor
             // (UserId parametresi). Paylaşımlı BC hesabı ile ayırt edilemezdi;
@@ -473,7 +473,7 @@ codeunit 72045 "DOPSWHS Movement Mgmt"
 
     // ---- Yönlendirilmiş lokasyon: Warehouse Reclass Journal (bin-to-bin) ----
 
-    local procedure RegisterWhseMove(LocationCode: Code[10]; FromBinCode: Code[20]; ToBinCode: Code[20]; ItemNo: Code[20]; Qty: Decimal; UserId: Code[50]; LotNo: Code[50]; SerialNo: Code[50])
+    local procedure RegisterWhseMove(LocationCode: Code[10]; FromBinCode: Code[20]; ToBinCode: Code[20]; ItemNo: Code[20]; LpNo: Code[20]; Qty: Decimal; UserId: Code[50]; LotNo: Code[50]; SerialNo: Code[50])
     var
         Item: Record Item;
         FromBin: Record Bin;
@@ -511,6 +511,12 @@ codeunit 72045 "DOPSWHS Movement Mgmt"
         WhseJournalLine.Validate("To Zone Code", ToBin."Zone Code");
         WhseJournalLine.Validate("To Bin Code", ToBinCode);
         WhseJournalLine.Validate(Quantity, Qty);
+        // The ad-hoc LP move has no Warehouse Activity Line from which the
+        // propagation subscriber can infer an LP. Carry the exact LP on the
+        // posting line so both generated Warehouse Entries keep their source
+        // pallet. Without this, the stock moves correctly but Ambar
+        // Hareketleri shows the movement without an LP number.
+        WhseJournalLine."DOPSWHS LP No." := LpNo;
         WhseJournalLine.Insert(true);
 
         // Saha hatası (17 Tem): "Item tracking lines ... must account for the
@@ -927,6 +933,9 @@ codeunit 72045 "DOPSWHS Movement Mgmt"
         ItemJournalLine.Validate("Bin Code", FromBinCode);
         ItemJournalLine.Validate("New Bin Code", ToBinCode);
         ItemJournalLine.Validate(Quantity, Qty);
+        // Non-directed locations post through Item Journal instead of the
+        // Warehouse Journal. Preserve the same explicit LP context there too.
+        ItemJournalLine."DOPSWHS LP No." := LpNo;
         ItemJournalLine."Package No." := LpNo;
         ItemJournalLine.Insert(true);
     end;

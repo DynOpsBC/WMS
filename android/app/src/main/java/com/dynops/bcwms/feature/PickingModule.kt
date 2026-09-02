@@ -1712,7 +1712,7 @@ private fun PickDocument(no: String, onBack: () -> Unit) {
     // sırala → toplayıcı depoda tek yönde, gereksiz gidip-gelmeden yürür.
     // ELOG isteği: varsayılan AÇIK.
     var sortByBin by remember { mutableStateOf(true) }
-    var columns by remember { mutableStateOf(ColumnPrefs.get(context, "pick", GridColumns.pick)) }
+    var columns by remember { mutableStateOf(ColumnPrefs.get(context, "pickLpQtyV2", GridColumns.pick)) }
     var showColumns by remember { mutableStateOf(false) }
     var actionLine by remember { mutableStateOf<JSONObject?>(null) }
     var showTote by remember { mutableStateOf(false) }
@@ -2122,7 +2122,7 @@ private fun PickDocument(no: String, onBack: () -> Unit) {
         )
     }
     if (showColumns) {
-        ChooseColumnsSheet(GridColumns.pick, columns, onDismiss = { showColumns = false }) { c -> columns = c; ColumnPrefs.save(context, "pick", c); showColumns = false }
+        ChooseColumnsSheet(GridColumns.pick, columns, onDismiss = { showColumns = false }) { c -> columns = c; ColumnPrefs.save(context, "pickLpQtyV2", c); showColumns = false }
     }
     if (showTote) {
         ToteScanSheet(

@@ -190,4 +190,18 @@ class ProductionUxRulesTest {
         check("You cannot assign new numbers from the number series E-IRSALIYE.  CorrelationId:  ea2bc9a8", "E-IRSALIYE numara serisi yeni numara veremiyor")
         check("Nothing to handle. Try the \"Show Summary (Directed Put-away and Pick)\" option when creating pick to inspect the error.", "Toplanacak miktar yok")
     }
+
+    @Test
+    fun `printer setup errors name the missing device selection`() {
+        fun check(raw: String, expected: String) {
+            val v = operatorFacingApiError(raw, 400)
+            assertTrue("$raw -> $v", v.contains(expected))
+            assertFalse(v.contains("Yazıcı ayarı tamamlanamadı"))
+        }
+        check("No WMS bridge printer is mapped for LP label printing. Configure Device Printer Mapping or pass a Printer Code.  CorrelationId:  aa-bb.", "etiket yazıcısı seçilmemiş")
+        check("No PDF document printer is selected for LP QR printing.", "belge yazıcısı seçilmemiş")
+        check("Printer ZEBRA-01 is not registered.  CorrelationId:  aa-bb.", "Seçili yazıcı (ZEBRA-01) BC'de kayıtlı değil")
+        check("Mapped printer PDF-02 is inactive.", "Seçili yazıcı (PDF-02) pasif")
+        check("The LP label job was saved but Azure dispatch failed: Printer ZEBRA-01 has no Station ID.", "yazıcı ajanına iletilemedi")
+    }
 }

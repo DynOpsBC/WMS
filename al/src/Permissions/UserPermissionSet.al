@@ -136,6 +136,7 @@ permissionset 72095 "DOPSWHS-USER"
         codeunit "DOPSWHS Movement Mgmt" = X,
         codeunit "DOPSWHS Pick Mgmt" = X,
         codeunit "DOPSWHS Shipment Mgmt" = X,
+        codeunit "DOPSWHS LP Pick Preference" = X,
         codeunit "DOPSWHS Prod Mgmt" = X,
         codeunit "DOPSWHS Assembly Mgmt" = X,
         codeunit "DOPSWHS Count Mgmt" = X,

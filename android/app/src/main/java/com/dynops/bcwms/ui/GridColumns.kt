@@ -81,18 +81,19 @@ object GridColumns {
     )
 
     val pick = listOf(
-        GridColumn("bin", "Bin", true, 92) { nz(it, "binCode") },
-        GridColumn("itemNo", "Ürün No.", true, 104) { nz(it, "itemNo") },
+        // Kaynak raf, ürün ve miktarlar dar el terminalinin ilk ekranına sığar.
+        GridColumn("bin", "Bin", true, 78) { nz(it, "binCode") },
+        GridColumn("itemNo", "Ürün No.", true, 92) { nz(it, "itemNo") },
+        GridColumn("outstanding", "Kalan", true, 66) { fmtCol(it.optDouble("qtyOutstanding", 0.0)) },
+        GridColumn("toHandle", "Girilen", true, 66) { fmtCol(it.optDouble("qtyToHandle", 0.0)) },
+        GridColumn("lp", "Kaynak LP", true, 104) { nz(it, "licensePlateNo") },
         GridColumn("lotNo", "Lot No.", true, 96) { nz(it, "lotNo") },
         GridColumn("description", "Açıklama", false, 170) { nz(it, "description") },
-        GridColumn("toHandle", "Girilen", true, 72) { fmtCol(it.optDouble("qtyToHandle", 0.0)) },
-        GridColumn("outstanding", "Kalan", true, 68) { fmtCol(it.optDouble("qtyOutstanding", 0.0)) },
         GridColumn("handled", "Alınan", false, 66) { fmtCol(it.optDouble("qtyHandled", 0.0)) },
         GridColumn("quantity", "Toplam", false, 72) { fmtCol(it.optDouble("quantity", 0.0)) },
         GridColumn("uom", "UOM", true, 62) { nz(it, "unitOfMeasureCode") },
         GridColumn("gtin", "GTIN", true, 116) { nz(it, "gtin") },
         GridColumn("variant", "Varyant", false, 84) { nz(it, "variantCode") },
-        GridColumn("lp", "LP", false, 110) { nz(it, "licensePlateNo") },
         GridColumn("lineNo", "Satır", false, 60) { it.optInt("lineNo").toString() },
     )
 

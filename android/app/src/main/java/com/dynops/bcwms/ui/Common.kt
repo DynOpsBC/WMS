@@ -309,6 +309,20 @@ fun operatorKnownBcError(raw: String): String? {
     Regex("""Over-Receipt Code - (\S+), allows you to receive up to\s+(\d+(?:[.,]\d+)?)""", RegexOption.IGNORE_CASE).find(raw)?.let {
         return "Fazla kabul sınırı aşıldı (${it.groupValues[1]}): en fazla ${it.groupValues[2]} alınabilir."
     }
+    // Yazıcı hataları: genel "Yazıcı ayarı tamamlanamadı" metni hangi ayarın
+    // eksik olduğunu söylemiyordu (BADE toplu LP baskısı, 2 Eyl 2026).
+    if (Regex("""No WMS bridge printer is mapped for .+? label printing""", RegexOption.IGNORE_CASE).containsMatchIn(raw))
+        return "Bu cihaz için etiket yazıcısı seçilmemiş. Yazıcılar ekranında etiket (ZPL) yazıcısının 'Etiket' düğmesine basın."
+    if (raw.contains("No PDF document printer is selected", ignoreCase = true))
+        return "Bu cihaz için belge yazıcısı seçilmemiş. Yazıcılar ekranında PDF yazıcısının 'Belge' düğmesine basın."
+    Regex("""(?:Mapped\s+)?printer\s+(\S+?)\s+is not registered""", RegexOption.IGNORE_CASE).find(raw)?.let {
+        return "Seçili yazıcı (${it.groupValues[1]}) BC'de kayıtlı değil. Yazıcılar ekranını yenileyip yazıcıyı yeniden seçin."
+    }
+    Regex("""(?:Mapped\s+)?printer\s+(\S+?)\s+is inactive""", RegexOption.IGNORE_CASE).find(raw)?.let {
+        return "Seçili yazıcı (${it.groupValues[1]}) pasif. Yazıcılar ekranından aktif bir yazıcı seçin."
+    }
+    if (raw.contains("job was saved but Azure dispatch failed", ignoreCase = true))
+        return "Baskı işi kaydedildi ama yazıcı ajanına iletilemedi. Windows yazıcı ajanının açık ve bağlı olduğunu kontrol edip Yazıcılar ekranını yenileyin."
     return null
 }
 

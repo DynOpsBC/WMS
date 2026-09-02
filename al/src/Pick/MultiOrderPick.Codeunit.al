@@ -262,6 +262,7 @@ codeunit 72338 "DOPSWHS Multi Order Pick"
         WhseActivityLine: Record "Warehouse Activity Line";
         PickHeader: Record "Warehouse Activity Header";
         CreatePick: Report "Whse.-Shipment - Create Pick";
+        LPPickPreference: Codeunit "DOPSWHS LP Pick Preference";
         PickNo: Code[20];
     begin
         WhseShptLine.SetRange("No.", WhseShptHeader."No.");
@@ -279,7 +280,10 @@ codeunit 72338 "DOPSWHS Multi Order Pick"
         // aşağıda WMS kullanıcı kimliğini doğrudan başlığa yazarız.
         CreatePick.Initialize('', Enum::"Whse. Activity Sorting Method"::"Shelf or Bin", false, true, false);
         CreatePick.UseRequestPage(false);
+        LPPickPreference.Configure(WhseShptHeader."No.");
+        BindSubscription(LPPickPreference);
         CreatePick.RunModal();
+        UnbindSubscription(LPPickPreference);
 
         WhseActivityLine.SetRange("Activity Type", WhseActivityLine."Activity Type"::Pick);
         WhseActivityLine.SetRange("Whse. Document Type", WhseActivityLine."Whse. Document Type"::Shipment);
@@ -288,6 +292,7 @@ codeunit 72338 "DOPSWHS Multi Order Pick"
             Error(PickNotCreatedErr, WhseShptHeader."No.");
         PickNo := WhseActivityLine."No.";
 
+        LPPickPreference.StampPickLines(PickNo);
         EnsurePickHasSourceBins(PickNo, WhseShptHeader."Location Code");
 
         // Yerel WMS kullanıcısını pick başlığına yaz; terminalde "Bana atanan"

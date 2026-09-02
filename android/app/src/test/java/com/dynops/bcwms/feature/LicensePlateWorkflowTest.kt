@@ -15,6 +15,18 @@ class LicensePlateWorkflowTest {
     }
 
     @Test
+    fun `bulk print follows the device printer selection`() {
+        assertEquals(LpPrintRoute("printLabel", "ZPL01"), bulkLpPrintRoute(0, "ZPL01", "PDF01"))
+        assertEquals(LpPrintRoute("printPalletLabels", "ZPL01"), bulkLpPrintRoute(2, "ZPL01", ""))
+        // Only a PDF document printer is selected: same route as the single
+        // "QR Etiketini Yazdır" button on the LP card.
+        assertEquals(LpPrintRoute("printDocument", "PDF01"), bulkLpPrintRoute(0, "", "PDF01"))
+        assertEquals(LpPrintRoute("printDocument", "PDF01"), bulkLpPrintRoute(3, " ", "PDF01"))
+        // Nothing selected on the device: let BC's device printer mapping decide.
+        assertEquals(LpPrintRoute("printLabel", ""), bulkLpPrintRoute(0, "", ""))
+    }
+
+    @Test
     fun `empty open or unbuilt LP can be deleted`() {
         assertTrue(canDeleteLicensePlate("Open", 0))
         assertTrue(canDeleteLicensePlate("Unbuilt", 0))

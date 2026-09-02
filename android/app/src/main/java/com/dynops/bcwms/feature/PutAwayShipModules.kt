@@ -1688,7 +1688,7 @@ private fun WhsePickDocument(no: String, onBack: () -> Unit) {
     var scanFilter by remember { mutableStateOf("") }
     var sortByBin by remember { mutableStateOf(true) }
     // v2: Lot No. varsayılan olarak Item No.'nun yanında görünür.
-    var columns by remember { mutableStateOf(ColumnPrefs.get(context, "shippingPickLotV2", GridColumns.pick)) }
+    var columns by remember { mutableStateOf(ColumnPrefs.get(context, "shippingPickLpQtyV3", GridColumns.pick)) }
     var showColumns by remember { mutableStateOf(false) }
     // ELOG müşteri isteği: bin+item aynı olan satırları tek satırda göster,
     // girilen miktarı alt satırlara dağıt (bkz. LineGrouping/LineGroupCards).
@@ -2087,7 +2087,7 @@ private fun WhsePickDocument(no: String, onBack: () -> Unit) {
         )
     }
     if (showColumns) {
-        ChooseColumnsSheet(GridColumns.pick, columns, onDismiss = { showColumns = false }) { c -> columns = c; ColumnPrefs.save(context, "shippingPickLotV2", c); showColumns = false }
+        ChooseColumnsSheet(GridColumns.pick, columns, onDismiss = { showColumns = false }) { c -> columns = c; ColumnPrefs.save(context, "shippingPickLpQtyV3", c); showColumns = false }
     }
 }
 

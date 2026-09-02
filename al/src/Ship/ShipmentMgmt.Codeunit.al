@@ -81,6 +81,7 @@ codeunit 72047 "DOPSWHS Shipment Mgmt"
         WhseActivityLine: Record "Warehouse Activity Line";
         WhseShipmentRelease: Codeunit "Whse.-Shipment Release";
         CreatePickReport: Report "Whse.-Shipment - Create Pick";
+        LPPickPreference: Codeunit "DOPSWHS LP Pick Preference";
         PickNo: Code[20];
         ReportUserId: Code[50];
     begin
@@ -122,7 +123,10 @@ codeunit 72047 "DOPSWHS Shipment Mgmt"
         // raf/ürün okutulmadan satır tamamlanmış (%100/Done) görünmez.
         CreatePickReport.Initialize(ReportUserId, Enum::"Whse. Activity Sorting Method"::"Shelf or Bin", false, true, false);
         CreatePickReport.UseRequestPage(false);
+        LPPickPreference.Configure(WhseShipmentHeader."No.");
+        BindSubscription(LPPickPreference);
         CreatePickReport.RunModal();
+        UnbindSubscription(LPPickPreference);
 
         WhseActivityLine.SetRange("Activity Type", WhseActivityLine."Activity Type"::Pick);
         WhseActivityLine.SetRange("Whse. Document Type", WhseActivityLine."Whse. Document Type"::Shipment);
@@ -131,6 +135,7 @@ codeunit 72047 "DOPSWHS Shipment Mgmt"
             Error(PickNotCreatedErr, WhseShipmentHeader."No.");
         PickNo := WhseActivityLine."No.";
 
+        LPPickPreference.StampPickLines(PickNo);
         EnsurePickAssignedTo(PickNo, AssignToUserId);
 
         StampShipmentLotsOnPick(WhseShipmentHeader."No.", PickNo);

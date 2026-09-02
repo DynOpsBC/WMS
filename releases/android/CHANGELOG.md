@@ -7,6 +7,34 @@ Kurulum: [docs/android-install-guide.md](../../docs/android-install-guide.md)
 
 ---
 
+## v1.14.78 — BADE — 2026-09-02
+
+**versionCode:** 200078 · **BC paketi:** 1.14.1.10
+
+**BADE SHA-256:** `cc5f81fe01eda32143f1f358bc7391d47241665e6d674a922ebf055a39654443`
+
+### LP hareket izi · satış pick · toplu yazdırma
+
+- LP ile raflar arasında taşınan stokta LP numarası Warehouse Journal üzerinden her iki ambar hareketine de aktarılıyor.
+- 1.14.1.9 öncesindeki LP'siz hareketler, LP hareket defterinde tek ve kesin eşleşme bulunduğunda Ambar Hareketleri ekranında LP numarasıyla gösteriliyor.
+- Satış pick oluşturma, siparişin tamamını karşılayabilen tamamlanmış LP stoklarını standart raf stoklarına tercih ediyor; kaynak LP pick satırına yazılıyor.
+- Pick ekranında Kalan/Girilen miktarları ilk görünümde gösteriliyor.
+- 1.14.77'de hazırlanan toplu LP yazdırma yazıcı-yönlendirme ve açıklayıcı hata düzeltmeleri dahil edildi.
+
+## v1.14.77 — BADE + EMU — 2026-09-02
+
+**versionCode:** 200077 · **BC paketi:** 1.14.1.9
+
+**BADE SHA-256:** _CI çıktısından eklenecek_
+
+**EMU SHA-256:** _CI çıktısından eklenecek_
+
+### LP · toplu yazdırma yazıcı seçimi
+
+- "Seçilenleri Yazdır" artık LP kartındaki tekli "QR Etiketini Yazdır" ile aynı yazıcıya gidiyor: cihazda ZPL etiket yazıcısı seçiliyse etiket, yalnız PDF belge yazıcısı seçiliyse LP QR belgesi. (1.14.76'da toplu baskı her zaman ZPL etiket yazıcısı istiyor, belge yazıcısı olan sahada "Yazıcı ayarı tamamlanamadı" veriyordu.)
+- Yazıcı hataları gerçek nedenini söylüyor: etiket/belge yazıcısı seçilmemiş, seçili yazıcı BC'de kayıtlı değil veya pasif, iş kaydedildi ama ajana iletilemedi.
+- Yazıcılar ekranı, telefonda kayıtlı olup listede artık bulunmayan yazıcı kodunu uyarıyor.
+
 ## v1.14.76 — BADE + EMU — 2026-09-02
 
 **versionCode:** 200076 · **BC paketi:** 1.14.1.9

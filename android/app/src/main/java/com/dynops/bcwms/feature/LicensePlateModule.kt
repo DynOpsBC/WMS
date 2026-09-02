@@ -90,10 +90,12 @@ fun LicensePlateModule() {
         scope.launch {
             loading = true
             val failures = linkedMapOf<String, String>()
-            val printerId = getDefaultPrinter(context)
+            val labelPrinter = getDefaultPrinter(context, PRINTER_USAGE_LABEL)
+            val documentPrinter = getDefaultPrinter(context, PRINTER_USAGE_DOCUMENT)
             requested.forEach { no ->
                 val row = rows.firstOrNull { it.optString("no") == no }
-                val payload = JSONObject().apply { put("printerId", printerId); put("copies", 1) }.toString()
+                val route = bulkLpPrintRoute(row?.optInt("lineCount") ?: 0, labelPrinter, documentPrinter)
+                val payload = JSONObject().apply { put("printerId", route.printerCode); put("copies", 1) }.toString()
                 // Azure Direct, işi kalıcı kuyruğa yazdıktan sonra fiziksel ajan
                 // sonucunu bekleyebilir. Kısa okutma timeout'u işi oluşturduğu
                 // halde telefonda başarısız gösterip yeniden baskıya yol açıyordu.
@@ -101,7 +103,7 @@ fun LicensePlateModule() {
                     context,
                     "licensePlates",
                     no,
-                    bulkLpPrintAction(row?.optInt("lineCount") ?: 0),
+                    route.action,
                     payload,
                 )
                 if (!result.ok) {

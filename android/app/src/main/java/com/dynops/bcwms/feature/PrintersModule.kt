@@ -75,8 +75,17 @@ fun PrintersModule() {
             val page = BcApi.getAllPages(context, "printers?\$top=100&\$orderby=code")
             loading = false
             rows = if (page.complete) page.rows else emptyList()
+            // Ajan yazıcıyı yeni kodla yeniden eşitlediğinde telefonda kayıtlı
+            // eski kod sessizce geçersiz kalıyor ve her baskı BC'den
+            // "Printer X is not registered" ile dönüyordu.
+            val codes = rows.map { it.optString("code") }.toSet()
+            val stale = listOfNotNull(
+                defaultLabelCode.takeIf { it.isNotBlank() && it !in codes }?.let { "etiket ($it)" },
+                defaultDocumentCode.takeIf { it.isNotBlank() && it !in codes }?.let { "belge ($it)" },
+            )
             status = if (!page.complete) "HATA: Yazıcı listesinin tamamı alınamadı. Windows yazıcı ajanının bağlantısını kontrol edin."
                 else if (rows.isEmpty()) "Henüz eşitlenmiş yazıcı yok. Windows ajanında Yazıcıları Yenile ve Buluta Eşitle'yi çalıştırın."
+                else if (stale.isNotEmpty()) "UYARI: Kayıtlı ${stale.joinToString(" ve ")} yazıcısı listede yok. Aşağıdan yeniden seçin."
                 else "TAMAM: ${rows.size} yazıcı hazır"
         }
     }

@@ -3,6 +3,22 @@ package com.dynops.bcwms.feature
 internal fun bulkLpPrintAction(lineCount: Int): String =
     if (lineCount > 0) "printPalletLabels" else "printLabel"
 
+internal data class LpPrintRoute(val action: String, val printerCode: String)
+
+/**
+ * Toplu baskı, LP kartındaki tekli "QR Etiketini Yazdır" düğmesiyle aynı
+ * yazıcıya gitmeli. Cihazda ZPL etiket yazıcısı seçiliyse etiket aksiyonları;
+ * yalnız PDF belge yazıcısı seçiliyse LP QR belgesi (BADE'de tekli baskı
+ * çalışırken toplu baskının "Yazıcı ayarı tamamlanamadı" demesinin nedeni
+ * buydu). İkisi de seçili değilse BC'deki cihaz-yazıcı eşlemesi denensin diye
+ * etiket aksiyonu boş yazıcı koduyla çağrılır.
+ */
+internal fun bulkLpPrintRoute(lineCount: Int, labelPrinter: String, documentPrinter: String): LpPrintRoute = when {
+    labelPrinter.isNotBlank() -> LpPrintRoute(bulkLpPrintAction(lineCount), labelPrinter.trim())
+    documentPrinter.isNotBlank() -> LpPrintRoute("printDocument", documentPrinter.trim())
+    else -> LpPrintRoute(bulkLpPrintAction(lineCount), "")
+}
+
 internal fun canDeleteLicensePlate(status: String, lineCount: Int): Boolean =
     lineCount == 0 && (
         status.equals("Open", ignoreCase = true) ||
