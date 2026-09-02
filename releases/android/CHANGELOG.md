@@ -7,6 +7,35 @@ Kurulum: [docs/android-install-guide.md](../../docs/android-install-guide.md)
 
 ---
 
+## v1.14.76 — BADE + EMU — 2026-09-02
+
+**versionCode:** 200076 · **BC paketi:** 1.14.1.9
+
+**BADE SHA-256:** `3070947e2db66fa71abb767a85abb83b01fe5a6b44aa651de92d7c923eb92124`
+
+**EMU SHA-256:** `d4561731de2f689187a5cd84a4e83a4293df37e2c784fad9643fc8041c702476`
+
+### Ürün Sorgu · okutulan LP özeti
+
+- LP numarasıyla sorgulamada okutulan LP, toplam adedi ve lot bilgisi doğrudan ürün kartında gösteriliyor.
+- LP satır kartları daha yüksek, büyük yazılı ve miktarı ayrı vurgulanmış düzene geçirildi.
+
+## v1.14.75 — BADE + EMU — 2026-09-02
+
+**versionCode:** 200075 · **BC paketi:** 1.14.1.9
+
+**BADE SHA-256:** `124b97715d202cd72bff0b4227b5333d08b3b75385bb11a52843281c96b3a812`
+
+**EMU SHA-256:** `bed2386379c3ce826a472c4ef43a04a57cbdcad25704f53a8e6fe0f82eb90f93`
+
+### LP toplu yazdırma · lokasyon seçimi
+
+- Satırsız/toplu oluşturulmuş LP'ler artık PDF belge aksiyonuna değil, ZPL LP etiketi aksiyonuna gönderiliyor.
+- Azure Direct yanıtı için uzun işlem süresi kullanılıyor; kuyruğa kabul edilmiş baskının telefonda zaman aşımı hatası görünmesi önleniyor.
+- Kısmi baskı hatasında sunucu mesajı ve ilk başarısız LP gösteriliyor; yalnız başarısız LP'ler seçili bırakılıyor.
+- Toplu LP oluşturmadaki lokasyon alanı, Business Central'daki mevcut lokasyonları gösteren salt-okunur seçim listesine çevrildi.
+- Lokasyon değiştirildiğinde önceki depo gözü temizleniyor; lokasyon listesi eksik yüklenirse oluşturma güvenli biçimde devre dışı kalıyor.
+
 ## v1.14.73 — BADE + EMU — 2026-09-01
 
 **versionCode:** 200073 · **BC paketi:** 1.14.1.8

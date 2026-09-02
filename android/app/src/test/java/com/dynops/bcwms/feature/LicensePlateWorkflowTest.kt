@@ -7,6 +7,14 @@ import org.junit.Test
 
 class LicensePlateWorkflowTest {
     @Test
+    fun `bulk print sends empty LP to the ZPL LP label action`() {
+        assertEquals("printLabel", bulkLpPrintAction(0))
+        assertEquals("printLabel", bulkLpPrintAction(-1))
+        assertEquals("printPalletLabels", bulkLpPrintAction(1))
+        assertEquals("printPalletLabels", bulkLpPrintAction(4))
+    }
+
+    @Test
     fun `empty open or unbuilt LP can be deleted`() {
         assertTrue(canDeleteLicensePlate("Open", 0))
         assertTrue(canDeleteLicensePlate("Unbuilt", 0))

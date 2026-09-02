@@ -86,26 +86,40 @@ fun LicensePlateModule() {
 
     fun printSelected() {
         if (selectedForPrint.isEmpty() || loading) return
+        val requested = selectedForPrint.toList()
         scope.launch {
             loading = true
-            var failures = 0
+            val failures = linkedMapOf<String, String>()
             val printerId = getDefaultPrinter(context)
-            selectedForPrint.forEach { no ->
+            requested.forEach { no ->
                 val row = rows.firstOrNull { it.optString("no") == no }
                 val payload = JSONObject().apply { put("printerId", printerId); put("copies", 1) }.toString()
-                val result = BcApi.boundAction(
+                // Azure Direct, işi kalıcı kuyruğa yazdıktan sonra fiziksel ajan
+                // sonucunu bekleyebilir. Kısa okutma timeout'u işi oluşturduğu
+                // halde telefonda başarısız gösterip yeniden baskıya yol açıyordu.
+                val result = BcApi.boundActionLongRunning(
                     context,
                     "licensePlates",
                     no,
-                    if ((row?.optInt("lineCount") ?: 0) > 0) "printPalletLabels" else "printDocument",
+                    bulkLpPrintAction(row?.optInt("lineCount") ?: 0),
                     payload,
                 )
-                if (!result.ok) failures += 1
+                if (!result.ok) {
+                    val serverError = BcApi.errorMessage(result.body)
+                    failures[no] = QcErrorParser.friendlyStatus(serverError, result.httpCode)
+                        .removePrefix("HATA: ")
+                }
             }
             loading = false
-            status = if (failures == 0) "TAMAM: ${selectedForPrint.size} LP etiketi yazdırma kuyruğuna alındı"
-            else "UYARI: $failures LP etiketi yazdırılamadı"
-            if (failures == 0) selectedForPrint = emptySet()
+            status = if (failures.isEmpty()) {
+                "TAMAM: ${requested.size} LP etiketi yazdırma kuyruğuna alındı"
+            } else {
+                val firstFailure = failures.entries.first()
+                "UYARI: ${failures.size} LP etiketi yazdırılamadı. ${firstFailure.key}: ${firstFailure.value}"
+            }
+            // Kısmi başarıda yalnız başarısız LP'leri seçili bırak. Operatör
+            // yeniden denediğinde başarıyla kuyruğa alınan etiketler çift basılmaz.
+            selectedForPrint = failures.keys.toSet()
         }
     }
 
@@ -143,6 +157,7 @@ fun LicensePlateModule() {
                         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                             Checkbox(
                                 checked = lp.optString("no") in selectedForPrint,
+                                enabled = !loading,
                                 onCheckedChange = { checked ->
                                     val no = lp.optString("no")
                                     selectedForPrint = if (checked) selectedForPrint + no else selectedForPrint - no

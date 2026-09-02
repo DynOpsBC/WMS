@@ -20,6 +20,30 @@ import org.json.JSONObject
 
 internal data class BulkLpBuildDraft(val id: Int, val quantity: String)
 
+internal data class BulkLpLocationOption(val code: String, val displayName: String) {
+    val label: String
+        get() = if (displayName.isBlank() || displayName.equals(code, ignoreCase = true)) code
+        else "$code · $displayName"
+}
+
+internal fun bulkLpLocationOptions(rows: List<JSONObject>): List<BulkLpLocationOption> =
+    rows.mapNotNull { row ->
+        val code = row.optString("code").trim()
+        if (code.isBlank()) null
+        else BulkLpLocationOption(
+            code = code,
+            displayName = row.optString("displayName").ifBlank { row.optString("name") }.trim(),
+        )
+    }
+        .distinctBy { it.code.uppercase() }
+        .sortedBy { it.code.uppercase() }
+
+internal fun validBulkLpLocationSelection(
+    locationCode: String,
+    locationsComplete: Boolean,
+    locations: List<BulkLpLocationOption>,
+): Boolean = locationsComplete && locations.any { it.code.equals(locationCode.trim(), ignoreCase = true) }
+
 internal fun commonLpQuantityDrafts(count: Int, quantity: String): List<BulkLpBuildDraft> =
     if (count !in 1..200) emptyList()
     else List(count) { index -> BulkLpBuildDraft(index + 1, quantity) }
@@ -61,6 +85,10 @@ internal fun BulkLpBuildSheet(
     var drafts by remember { mutableStateOf(commonLpQuantityDrafts(10, "")) }
     var templates by remember { mutableStateOf<List<String>>(emptyList()) }
     var templateExpanded by remember { mutableStateOf(false) }
+    var locations by remember { mutableStateOf<List<BulkLpLocationOption>>(emptyList()) }
+    var locationsComplete by remember { mutableStateOf(false) }
+    var locationsLoading by remember { mutableStateOf(true) }
+    var locationExpanded by remember { mutableStateOf(false) }
     var busy by remember { mutableStateOf(false) }
     var status by remember { mutableStateOf("") }
 
@@ -68,6 +96,20 @@ internal fun BulkLpBuildSheet(
         val page = BcApi.getAllPages(context, "licensePlateTemplates?\$top=50&\$select=code,description")
         if (page.complete) templates = page.rows.map { it.optString("code") }.filter(String::isNotBlank)
         else status = "HATA: LP şablonları alınamadı."
+
+        val locationPage = BcApi.getAllPagesWithStandardFallback(
+            context,
+            "locations?\$orderby=code&\$select=code,displayName&\$top=200",
+        )
+        locations = if (locationPage.complete) bulkLpLocationOptions(locationPage.rows) else emptyList()
+        locationsComplete = locationPage.complete
+        locationsLoading = false
+        when {
+            !locationsComplete ->
+                status = "HATA: Lokasyonlar alınamadı. Bağlantıyı kontrol edip ekranı yeniden açın."
+            locations.isEmpty() ->
+                status = "HATA: Bu şirkette tanımlı lokasyon bulunamadı."
+        }
     }
 
     val lpCount = lpCountText.toIntOrNull() ?: 0
@@ -75,6 +117,7 @@ internal fun BulkLpBuildSheet(
         val qty = it.quantity.toDoubleOrNull() ?: 0.0
         qty.isFinite() && qty >= 0.0
     }
+    val validLocation = validBulkLpLocationSelection(location, locationsComplete, locations)
 
     ModalBottomSheet(onDismissRequest = onDismiss) {
         Column(
@@ -103,7 +146,36 @@ internal fun BulkLpBuildSheet(
                 }
             }
             Spacer(Modifier.height(8.dp))
-            ScanField("Lokasyon", location, { location = it.uppercase() }, modifier = Modifier.fillMaxWidth())
+            ExposedDropdownMenuBox(
+                expanded = locationExpanded,
+                onExpandedChange = {
+                    if (!busy && locationsComplete && locations.isNotEmpty()) locationExpanded = !locationExpanded
+                },
+            ) {
+                val selectedLocation = locations.firstOrNull { it.code.equals(location, ignoreCase = true) }
+                OutlinedTextField(
+                    value = selectedLocation?.label.orEmpty(),
+                    onValueChange = {},
+                    readOnly = true,
+                    enabled = !busy && locationsComplete && locations.isNotEmpty(),
+                    label = { Text(if (locationsLoading) "Lokasyonlar yükleniyor" else "Lokasyon Seçin") },
+                    trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(locationExpanded) },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth().menuAnchor(),
+                )
+                ExposedDropdownMenu(expanded = locationExpanded, onDismissRequest = { locationExpanded = false }) {
+                    locations.forEach { option ->
+                        DropdownMenuItem(
+                            text = { Text(option.label) },
+                            onClick = {
+                                if (!option.code.equals(location, ignoreCase = true)) bin = ""
+                                location = option.code
+                                locationExpanded = false
+                            },
+                        )
+                    }
+                }
+            }
             Spacer(Modifier.height(8.dp))
             ScanField("Depo Gözü (Bin) — İsteğe bağlı", bin, { bin = it.uppercase() }, modifier = Modifier.fillMaxWidth())
             Text(
@@ -156,7 +228,7 @@ internal fun BulkLpBuildSheet(
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(bottom = 18.dp)) {
                 OutlinedButton(onClick = onDismiss, enabled = !busy, modifier = Modifier.weight(1f)) { Text("Vazgeç") }
                 Button(
-                    enabled = !busy && template.isNotBlank() && location.isNotBlank() && validDrafts,
+                    enabled = !busy && template.isNotBlank() && validLocation && validDrafts,
                     modifier = Modifier.weight(1f),
                     onClick = {
                         scope.launch {

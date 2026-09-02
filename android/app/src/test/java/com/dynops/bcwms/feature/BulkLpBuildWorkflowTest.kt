@@ -8,6 +8,24 @@ import org.json.JSONObject
 
 class BulkLpBuildWorkflowTest {
     @Test
+    fun `location choices are normalized deduplicated and sorted`() {
+        val options = bulkLpLocationOptions(
+            listOf(
+                JSONObject().put("code", " ZONE-B ").put("displayName", "İkinci Depo"),
+                JSONObject().put("code", "").put("displayName", "Geçersiz"),
+                JSONObject().put("code", "merkezdepo").put("displayName", "Merkez Depo"),
+                JSONObject().put("code", "MERKEZDEPO").put("displayName", "Tekrar"),
+            ),
+        )
+
+        assertEquals(listOf("merkezdepo", "ZONE-B"), options.map { it.code })
+        assertEquals("merkezdepo · Merkez Depo", options.first().label)
+        assertTrue(validBulkLpLocationSelection("MERKEZDEPO", true, options))
+        assertFalse(validBulkLpLocationSelection("BILINMEYEN", true, options))
+        assertFalse(validBulkLpLocationSelection("MERKEZDEPO", false, options))
+    }
+
+    @Test
     fun `common quantity is assigned to every LP and rows stay independent`() {
         val rows = commonLpQuantityDrafts(10, "100")
 

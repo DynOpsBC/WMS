@@ -22,6 +22,28 @@ import com.dynops.bcwms.ui.*
 import kotlinx.coroutines.launch
 import org.json.JSONObject
 
+internal data class QueriedLpSummary(
+    val lpNo: String,
+    val quantity: Double,
+    val lotNos: List<String>,
+)
+
+internal fun queriedLpSummary(lpNo: String, lines: List<JSONObject>): QueriedLpSummary? {
+    val normalizedLpNo = lpNo.trim()
+    if (normalizedLpNo.isBlank()) return null
+    val matchingLines = lines.filter {
+        it.optString("lpNo").trim().equals(normalizedLpNo, ignoreCase = true)
+    }
+    if (matchingLines.isEmpty()) return null
+    return QueriedLpSummary(
+        lpNo = matchingLines.first().optString("lpNo").trim().ifBlank { normalizedLpNo },
+        quantity = matchingLines.sumOf { it.optDouble("quantity", 0.0) },
+        lotNos = matchingLines.mapNotNull { line ->
+            line.optString("lotNo").trim().takeIf { it.isNotBlank() }
+        }.distinctBy { it.lowercase() },
+    )
+}
+
 /** Item Inquiry — item card + LP lines that contain the item (on-hand by LP). */
 @Composable
 fun ItemInquiryModule() {
@@ -34,6 +56,7 @@ fun ItemInquiryModule() {
     var item by remember { mutableStateOf<JSONObject?>(null) }
     var lpLines by remember { mutableStateOf<List<JSONObject>>(emptyList()) }
     var ledger by remember { mutableStateOf<List<JSONObject>>(emptyList()) }
+    var queriedLpNo by remember { mutableStateOf("") }
     var status by remember { mutableStateOf("Ürün No. veya LP No. tarayın/girin.") }
     var loading by remember { mutableStateOf(false) }
 
@@ -41,10 +64,13 @@ fun ItemInquiryModule() {
         if (query.trim().isBlank()) return
         scope.launch {
             loading = true; status = "Sorgulanıyor..."
-            item = null; lpLines = emptyList(); ledger = emptyList()
+            item = null; lpLines = emptyList(); ledger = emptyList(); queriedLpNo = ""
             val q = query.trim()
             val safeQ = q.replace("'", "''")
             val byLp = BcApi.getAllPages(context, "licensePlateLines?\$filter=lpNo eq '$safeQ'&\$top=200")
+            if (byLp.complete && byLp.rows.isNotEmpty()) {
+                queriedLpNo = byLp.rows.first().optString("lpNo").trim().ifBlank { q }
+            }
             val resolvedItemNo = if (byLp.complete && byLp.rows.isNotEmpty()) byLp.rows.first().optString("itemNo") else q
             val safeItemNo = resolvedItemNo.replace("'", "''")
             val r = BcApi.getWithStandardFallback(context, "items?\$filter=no eq '$safeItemNo'&\$top=1", "items?\$filter=number eq '$safeItemNo'&\$top=1")
@@ -83,6 +109,7 @@ fun ItemInquiryModule() {
     }
 
     val palette = bcwmsStatus()
+    val itemUom = item?.let { firstValue(it, "baseUnitOfMeasure", "baseUoM") }.orEmpty()
     Column(Modifier.fillMaxSize().padding(12.dp)) {
         ScanField("Ürün No / LP No", query, { query = it }, modifier = Modifier.fillMaxWidth(), onScanned = {
             val resolved = BarcodeIntentResolver.resolve(it)
@@ -102,9 +129,10 @@ fun ItemInquiryModule() {
             val qtyOnSo = it.optDouble("quantityOnSalesOrder", 0.0)
             val qtyOnProd = it.optDouble("quantityOnProdOrder", 0.0)
             val reserved = it.optDouble("reservedQtyOnInventory", 0.0)
-            val uom = firstValue(it, "baseUnitOfMeasure", "baseUoM")
+            val uom = itemUom
             val available = (if (inventory.isNaN()) 0.0 else inventory) - reserved
             val totalOnLp = lpLines.sumOf { l -> l.optDouble("quantity") }
+            val scannedLp = queriedLpSummary(queriedLpNo, lpLines)
             Card(
                 Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(16.dp),
@@ -123,6 +151,33 @@ fun ItemInquiryModule() {
                     }
                     Text(firstValue(it, "description", "displayName"), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurface)
                     Spacer(Modifier.height(10.dp))
+                    scannedLp?.let { lp ->
+                        Surface(
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(12.dp),
+                            color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.72f),
+                        ) {
+                            Column(Modifier.padding(horizontal = 12.dp, vertical = 10.dp)) {
+                                Text(
+                                    "Okutulan LP",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSecondaryContainer,
+                                )
+                                Text(
+                                    "${lp.lpNo} · Adet: ${fmtItemQty(lp.quantity)}",
+                                    style = MaterialTheme.typography.titleSmall,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onSecondaryContainer,
+                                )
+                                Text(
+                                    "Lot: ${lp.lotNos.joinToString(" · ").ifBlank { "-" }}",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSecondaryContainer,
+                                )
+                            }
+                        }
+                        Spacer(Modifier.height(10.dp))
+                    }
                     // Stock block — PDF Item Inquiry §1 critical fix.
                     if (!inventory.isNaN()) {
                         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -151,14 +206,40 @@ fun ItemInquiryModule() {
         // sıkıştırıp LP/hareket satırlarını kesiyordu (yatay mod / küçük ekran).
         LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             items(lpLines) { ln ->
-                Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp)) {
-                    Column(Modifier.padding(12.dp)) {
-                        Text("${ln.optString("lpNo")} × ${fmtItemQty(ln.optDouble("quantity"))}", fontWeight = FontWeight.Medium, color = MaterialTheme.colorScheme.onSurface)
-                        val extra = listOfNotNull(
-                            ln.optString("lotNo").takeIf { it.isNotBlank() }?.let { "Lot $it" },
-                            ln.optString("serialNo").takeIf { it.isNotBlank() }?.let { "Seri $it" }
-                        ).joinToString(" · ")
-                        if (extra.isNotBlank()) Text(extra, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Card(Modifier.fillMaxWidth().heightIn(min = 82.dp), shape = RoundedCornerShape(12.dp)) {
+                    Row(
+                        Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 14.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Column(Modifier.weight(1f)) {
+                            Text(
+                                ln.optString("lpNo"),
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onSurface,
+                            )
+                            val extra = listOfNotNull(
+                                ln.optString("lotNo").takeIf { it.isNotBlank() }?.let { "Lot $it" },
+                                ln.optString("serialNo").takeIf { it.isNotBlank() }?.let { "Seri $it" },
+                            ).joinToString(" · ")
+                            if (extra.isNotBlank()) {
+                                Text(extra, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                        }
+                        Spacer(Modifier.width(12.dp))
+                        Column(horizontalAlignment = Alignment.End) {
+                            Text(
+                                fmtItemQty(ln.optDouble("quantity")),
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.primary,
+                            )
+                            Text(
+                                itemUom.ifBlank { "ADET" },
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
                     }
                 }
             }

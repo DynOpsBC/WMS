@@ -1,5 +1,8 @@
 package com.dynops.bcwms.feature
 
+internal fun bulkLpPrintAction(lineCount: Int): String =
+    if (lineCount > 0) "printPalletLabels" else "printLabel"
+
 internal fun canDeleteLicensePlate(status: String, lineCount: Int): Boolean =
     lineCount == 0 && (
         status.equals("Open", ignoreCase = true) ||
