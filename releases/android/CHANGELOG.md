@@ -7,13 +7,11 @@ Kurulum: [docs/android-install-guide.md](../../docs/android-install-guide.md)
 
 ---
 
-## v1.14.78 — BADE + EMU — 2026-09-02
+## v1.14.78 — BADE — 2026-09-02
 
 **versionCode:** 200078 · **BC paketi:** 1.14.1.10
 
-**BADE SHA-256:** `48f40abe24a88e7075e9791a45c40fc3be9e421dce4d8ee566b4e30d7bcc78c5`
-
-**EMU SHA-256:** `1edbd5e2b76f3b0cf0b02c5eaafb32bf33954b5f77911145b7ff35ee9171e68e`
+**BADE SHA-256:** `cc5f81fe01eda32143f1f358bc7391d47241665e6d674a922ebf055a39654443`
 
 ### LP hareket izi · satış pick · toplu yazdırma
 
