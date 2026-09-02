@@ -3,6 +3,7 @@ using BCWMS.PrintAgent.Core.Configuration;
 using BCWMS.PrintAgent.Core.Contracts;
 using BCWMS.PrintAgent.Windows.Printing;
 using BCWMS.PrintAgent.Windows.Configuration;
+using BCWMS.PrintAgent.Windows.Infrastructure;
 
 namespace BCWMS.PrintAgent.Windows.App;
 
@@ -35,7 +36,7 @@ internal sealed class DashboardForm : Form
     public DashboardForm(AgentController controller)
     {
         _controller = controller;
-        Text = "BCWMS Print Agent";
+        Text = AgentProduct.DisplayName;
         MinimumSize = new Size(760, 620);
         Size = new Size(900, 720);
         StartPosition = FormStartPosition.CenterScreen;
@@ -253,7 +254,7 @@ internal sealed class DashboardForm : Form
         };
         await _controller.SaveAndRestartAsync(settings, _printers, _lifetime.Token);
         LoadSettings(_controller.Settings);
-        MessageBox.Show(this, "Ayarlar DPAPI ile korundu ve agent Azure kuyruğunu dinlemeye başladı.", "BCWMS Print Agent", MessageBoxButtons.OK, MessageBoxIcon.Information);
+        MessageBox.Show(this, "Ayarlar DPAPI ile korundu ve agent Azure kuyruğunu dinlemeye başladı.", AgentProduct.DisplayName, MessageBoxButtons.OK, MessageBoxIcon.Information);
     }
 
     private async Task ImportRuntimeSecretsAsync()
@@ -279,7 +280,7 @@ internal sealed class DashboardForm : Form
         _blobSas.Text = imported.BlobReadSas;
         _blobSasExpiry = imported.BlobSasExpiresAtUtc;
         UpdateSasExpiry();
-        MessageBox.Show(this, "Azure runtime ayarları forma aktarıldı. Dosya değiştirilmedi. Yazıcıları seçip 'Ayarları Kaydet ve Bağlan' düğmesine basın.", "BCWMS Print Agent", MessageBoxButtons.OK, MessageBoxIcon.Information);
+        MessageBox.Show(this, "Azure runtime ayarları forma aktarıldı. Dosya değiştirilmedi. Yazıcıları seçip 'Ayarları Kaydet ve Bağlan' düğmesine basın.", AgentProduct.DisplayName, MessageBoxButtons.OK, MessageBoxIcon.Information);
     }
 
     private async Task ReviewUncertainPrintsAsync()
@@ -287,7 +288,7 @@ internal sealed class DashboardForm : Form
         var entries = await _controller.GetUncertainPrintsAsync(_lifetime.Token);
         if (entries.Count == 0)
         {
-            MessageBox.Show(this, "İncelenmesi gereken InProgress baskı intent'i yok.", "BCWMS Print Agent", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            MessageBox.Show(this, "İncelenmesi gereken InProgress baskı intent'i yok.", AgentProduct.DisplayName, MessageBoxButtons.OK, MessageBoxIcon.Information);
             return;
         }
 
@@ -337,7 +338,7 @@ internal sealed class DashboardForm : Form
         catch (Exception ex)
         {
             _controller.Logger.Error("İşlem başarısız", ex);
-            MessageBox.Show(this, ex.Message, "BCWMS Print Agent", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            MessageBox.Show(this, ex.Message, AgentProduct.DisplayName, MessageBoxButtons.OK, MessageBoxIcon.Error);
         }
         finally
         {

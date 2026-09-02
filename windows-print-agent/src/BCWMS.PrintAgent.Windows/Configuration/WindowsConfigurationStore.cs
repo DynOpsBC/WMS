@@ -2,13 +2,14 @@ using System.Security.Cryptography;
 using System.Text;
 using BCWMS.PrintAgent.Core.Configuration;
 using BCWMS.PrintAgent.Core.Contracts;
+using BCWMS.PrintAgent.Windows.Infrastructure;
 
 namespace BCWMS.PrintAgent.Windows.Configuration;
 
 internal sealed class WindowsConfigurationStore
 {
     private static readonly byte[] Magic = "BCWMSCFG1\0"u8.ToArray();
-    private static readonly byte[] Entropy = SHA256.HashData(Encoding.UTF8.GetBytes("DynOps.BCWMS.PrintAgent.Settings.v1"));
+    private static readonly byte[] Entropy = SHA256.HashData(Encoding.UTF8.GetBytes(AgentProduct.DpapiEntropy));
     private readonly string _path;
 
     public WindowsConfigurationStore(string path) => _path = path;

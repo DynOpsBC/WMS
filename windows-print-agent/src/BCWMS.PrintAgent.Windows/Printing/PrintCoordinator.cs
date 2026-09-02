@@ -42,7 +42,7 @@ internal sealed class PrintCoordinator
             try
             {
                 await beforePhysicalPrintAsync(cancellationToken).ConfigureAwait(false);
-                await IsolatedPrintWorker.PrintAsync(path, job.PrinterName, $"BCWMS-{job.JobId}", job.Format, job.Copies, cancellationToken).ConfigureAwait(false);
+                await IsolatedPrintWorker.PrintAsync(path, job.PrinterName, $"{AgentProduct.PrintJobPrefix}-{job.JobId}", job.Format, job.Copies, cancellationToken).ConfigureAwait(false);
             }
             finally
             {
@@ -71,7 +71,7 @@ internal sealed class PrintCoordinator
             await _printGate.WaitAsync(cancellationToken).ConfigureAwait(false);
             try
             {
-                await IsolatedPrintWorker.PrintAsync(path, _settings.LabelPrinterName, "BCWMS-LOCAL-TEST", _settings.LabelFormat, 1, cancellationToken).ConfigureAwait(false);
+                await IsolatedPrintWorker.PrintAsync(path, _settings.LabelPrinterName, $"{AgentProduct.PrintJobPrefix}-LOCAL-TEST", _settings.LabelFormat, 1, cancellationToken).ConfigureAwait(false);
             }
             finally
             {
@@ -100,7 +100,7 @@ internal sealed class PrintCoordinator
             await _printGate.WaitAsync(cancellationToken).ConfigureAwait(false);
             try
             {
-                await IsolatedPrintWorker.PrintAsync(path, _settings.DocumentPrinterName, "BCWMS-LOCAL-TEST", PrintFormat.PDF, 1, cancellationToken).ConfigureAwait(false);
+                await IsolatedPrintWorker.PrintAsync(path, _settings.DocumentPrinterName, $"{AgentProduct.PrintJobPrefix}-LOCAL-TEST", PrintFormat.PDF, 1, cancellationToken).ConfigureAwait(false);
             }
             finally
             {

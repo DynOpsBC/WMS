@@ -23,7 +23,7 @@ internal sealed class TrayApplicationContext : ApplicationContext
         _trayIcon = new NotifyIcon
         {
             Icon = SystemIcons.Application,
-            Text = "BCWMS Print Agent",
+            Text = AgentProduct.DisplayName,
             ContextMenuStrip = menu,
             Visible = true
         };
@@ -49,7 +49,7 @@ internal sealed class TrayApplicationContext : ApplicationContext
         }
         else
         {
-            _trayIcon.ShowBalloonTip(2500, "BCWMS Print Agent", "Azure yazdırma kuyruğu dinleniyor.", ToolTipIcon.Info);
+            _trayIcon.ShowBalloonTip(2500, AgentProduct.DisplayName, "Azure yazdırma kuyruğu dinleniyor.", ToolTipIcon.Info);
         }
     }
 
@@ -64,18 +64,18 @@ internal sealed class TrayApplicationContext : ApplicationContext
         try
         {
             await _controller.SyncSnapshotAsync();
-            _trayIcon.ShowBalloonTip(2000, "BCWMS Print Agent", "Yazıcılar buluta eşitlendi.", ToolTipIcon.Info);
+            _trayIcon.ShowBalloonTip(2000, AgentProduct.DisplayName, "Yazıcılar buluta eşitlendi.", ToolTipIcon.Info);
         }
         catch (Exception ex)
         {
             _controller.Logger.Error("Tepsi eşitleme işlemi başarısız", ex);
-            _trayIcon.ShowBalloonTip(3000, "BCWMS Print Agent", ex.Message, ToolTipIcon.Error);
+            _trayIcon.ShowBalloonTip(3000, AgentProduct.DisplayName, ex.Message, ToolTipIcon.Error);
         }
     }
 
     private void UpdateTrayText()
     {
-        var text = $"BCWMS Print Agent - {_controller.StateMessage}";
+        var text = $"{AgentProduct.DisplayName} - {_controller.StateMessage}";
         _trayIcon.Text = text.Length <= 63 ? text : text[..63];
     }
 
@@ -113,7 +113,7 @@ internal sealed class TrayApplicationContext : ApplicationContext
         catch (Exception ex)
         {
             _controller.Logger.Error("Agent kapanışı tamamlanamadı", ex);
-            MessageBox.Show(ex.Message, "BCWMS Print Agent - Kapanış Hatası", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            MessageBox.Show(ex.Message, $"{AgentProduct.DisplayName} - Kapanış Hatası", MessageBoxButtons.OK, MessageBoxIcon.Error);
         }
         finally
         {

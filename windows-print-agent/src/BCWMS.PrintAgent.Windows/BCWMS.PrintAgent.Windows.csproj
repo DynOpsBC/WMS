@@ -5,7 +5,9 @@
     <SupportedOSPlatformVersion>10.0.14393.0</SupportedOSPlatformVersion>
     <UseWindowsForms>true</UseWindowsForms>
     <EnableWindowsTargeting>true</EnableWindowsTargeting>
-    <AssemblyName>BCWMS.PrintAgent</AssemblyName>
+    <AssemblyName Condition="'$(ProductFlavor)' != 'DKCProduction'">BCWMS.PrintAgent</AssemblyName>
+    <AssemblyName Condition="'$(ProductFlavor)' == 'DKCProduction'">DKCProduction.PrintAgent</AssemblyName>
+    <DefineConstants Condition="'$(ProductFlavor)' == 'DKCProduction'">$(DefineConstants);DKC_PRODUCTION</DefineConstants>
     <RootNamespace>BCWMS.PrintAgent.Windows</RootNamespace>
     <Version>1.0.0</Version>
     <RuntimeIdentifiers>win-x64</RuntimeIdentifiers>

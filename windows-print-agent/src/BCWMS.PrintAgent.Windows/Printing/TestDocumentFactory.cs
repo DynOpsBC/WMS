@@ -1,13 +1,14 @@
 using System.Globalization;
 using System.Text;
 using BCWMS.PrintAgent.Core.Contracts;
+using BCWMS.PrintAgent.Windows.Infrastructure;
 
 namespace BCWMS.PrintAgent.Windows.Printing;
 
 internal static class TestDocumentFactory
 {
     public static byte[] CreateZpl(string stationId) => Encoding.ASCII.GetBytes(
-        $"^XA^CI28^PW600^LL320^FO30,30^A0N,36,36^FDBCWMS PRINT TEST^FS^FO30,85^A0N,24,24^FDStation: {Ascii(stationId)}^FS^FO30,125^A0N,24,24^FD{DateTimeOffset.Now:yyyy-MM-dd HH:mm:ss}^FS^FO30,180^GB540,2,2^FS^FO30,210^A0N,26,26^FDOK^FS^XZ");
+        $"^XA^CI28^PW600^LL320^FO30,30^A0N,36,36^FD{AgentProduct.PrintJobPrefix} PRINT TEST^FS^FO30,85^A0N,24,24^FDStation: {Ascii(stationId)}^FS^FO30,125^A0N,24,24^FD{DateTimeOffset.Now:yyyy-MM-dd HH:mm:ss}^FS^FO30,180^GB540,2,2^FS^FO30,210^A0N,26,26^FDOK^FS^XZ");
 
     public static byte[] CreateRaw(PrintFormat format, string stationId)
     {
@@ -16,7 +17,7 @@ internal static class TestDocumentFactory
             return CreateZpl(stationId);
         }
 
-        var text = Encoding.ASCII.GetBytes($"BCWMS PRINT TEST\nStation: {Ascii(stationId)}\n{DateTimeOffset.Now:yyyy-MM-dd HH:mm:ss}\n\n");
+        var text = Encoding.ASCII.GetBytes($"{AgentProduct.PrintJobPrefix} PRINT TEST\nStation: {Ascii(stationId)}\n{DateTimeOffset.Now:yyyy-MM-dd HH:mm:ss}\n\n");
         if (format == PrintFormat.ESCPOS)
         {
             return new byte[] { 0x1B, 0x40 }
@@ -30,7 +31,7 @@ internal static class TestDocumentFactory
 
     public static byte[] CreatePdf(string stationId)
     {
-        var text = $"BCWMS PRINT TEST  Station: {EscapePdf(stationId)}  {DateTimeOffset.Now:yyyy-MM-dd HH:mm:ss}";
+        var text = $"{AgentProduct.PrintJobPrefix} PRINT TEST  Station: {EscapePdf(stationId)}  {DateTimeOffset.Now:yyyy-MM-dd HH:mm:ss}";
         var stream = $"BT /F1 18 Tf 50 760 Td ({text}) Tj ET";
         var objects = new[]
         {
@@ -42,7 +43,7 @@ internal static class TestDocumentFactory
         };
 
         using var output = new MemoryStream();
-        Write(output, "%PDF-1.4\n%BCWMS\n");
+        Write(output, $"%PDF-1.4\n%{AgentProduct.PrintJobPrefix}\n");
         var offsets = new List<long> { 0 };
         for (var index = 0; index < objects.Length; index++)
         {

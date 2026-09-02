@@ -8,7 +8,7 @@ internal static partial class AgentPaths
     public static string DataDirectory { get; } = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
         "DynOps",
-        "BCWMS Print Agent");
+        AgentProduct.DataFolderName);
 
     public static string ConfigPath => Path.Combine(DataDirectory, "agent.config.dpapi");
     public static string JournalPath => Path.Combine(DataDirectory, "completed-jobs.json");
