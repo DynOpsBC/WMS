@@ -21,7 +21,7 @@ table 72012 "DOPSWHS LP Movement Ledger"
         field(100; "Related Document"; Code[40]) { Caption = 'Related Document'; DataClassification = CustomerContent; }
     }
 
-    keys { key(PK; "Entry No.") { Clustered = true; } key(LP; "LP No.", DateTime) { } }
+    keys { key(PK; "Entry No.") { Clustered = true; } key(LP; "LP No.", DateTime) { } key(RelatedDoc; "Related Document", Action) { } }
 
     trigger OnModify()
     begin

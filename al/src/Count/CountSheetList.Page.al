@@ -18,6 +18,7 @@ page 72074 "DOPSWHS Count Sheet List"
                 field("Zone Filter"; Rec."Zone Filter") { ApplicationArea = All; }
                 field(Mode; Rec.Mode) { ApplicationArea = All; }
                 field(Status; Rec.Status) { ApplicationArea = All; }
+                field("V2 Scan Mode"; Rec."V2 Scan Mode") { ApplicationArea = All; Editable = false; }
                 field("Created DateTime"; Rec."Created DateTime") { ApplicationArea = All; }
             }
         }
@@ -71,6 +72,31 @@ page 72074 "DOPSWHS Count Sheet List"
                     Message('%1 sayım satırı oluşturuldu.', LinesCreated);
                 end;
             }
+            action(ConvertToV2)
+            {
+                Caption = 'V2 Sayımına Çevir';
+                ToolTip = 'Satırı olmayan açık belgeyi Sayım V2 (terminalde yalnız barkod okutarak sayım) moduna alır. Terminaldeki Sayım V2 listesinde görünür.';
+                ApplicationArea = All;
+                Image = BarCode;
+                trigger OnAction()
+                var
+                    CountMgmt: Codeunit "DOPSWHS Count Mgmt";
+                begin
+                    if Rec."No." = '' then
+                        exit; // boş liste: seçili belge yok
+                    if Rec."V2 Scan Mode" then begin
+                        Message(AlreadyV2Msg, Rec."No.");
+                        exit;
+                    end;
+                    CountMgmt.PrepareV2(Rec."No.");
+                    CurrPage.Update(false);
+                    Message(ConvertedToV2Msg, Rec."No.");
+                end;
+            }
         }
     }
+
+    var
+        AlreadyV2Msg: Label '%1 sayım belgesi zaten Sayım V2 modunda.', Comment = '%1 count sheet no';
+        ConvertedToV2Msg: Label '%1 sayım belgesi Sayım V2 moduna alındı.', Comment = '%1 count sheet no';
 }

@@ -29,7 +29,15 @@ table 72016 "DOPSWHS Count Sheet Header"
         {
             Caption = 'V2 Scan Mode';
             DataClassification = CustomerContent;
-            Editable = false;
+
+            trigger OnValidate()
+            var
+                CountMgmt: Codeunit "DOPSWHS Count Mgmt";
+            begin
+                // BC'de elle değiştirilebilir (BADE 2 Eyl 2026): kurallar
+                // CountMgmt'te, PrepareV2 (terminal) ile aynı denetimler.
+                CountMgmt.ValidateV2ScanModeChange(Rec, "V2 Scan Mode");
+            end;
         }
         field(80; "Zone Filter"; Code[10])
         {

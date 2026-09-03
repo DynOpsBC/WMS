@@ -1,5 +1,6 @@
 package com.dynops.bcwms.feature
 
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -172,5 +173,149 @@ class CountWorkflowTest {
             )
         )
         assertFalse(shouldRetryClassicCountWithoutCounter("Location MERKEZDEPO does not exist."))
+    }
+
+    @Test
+    fun `older AL package without terminalPostAllowed keeps posting enabled`() {
+        assertTrue(terminalCountPostAllowed(hasFlag = false, flag = false))
+        assertTrue(terminalCountPostAllowed(hasFlag = false, flag = true))
+    }
+
+    @Test
+    fun `explicit terminalPostAllowed flag is authoritative`() {
+        assertTrue(terminalCountPostAllowed(hasFlag = true, flag = true))
+        assertFalse(terminalCountPostAllowed(hasFlag = true, flag = false))
+    }
+
+    @Test
+    fun `classic primary button saves the round before anything else`() {
+        val state = classicCountPrimaryButtonState(
+            interactive = true,
+            activeSlotSaved = false,
+            allRequiredSaved = false,
+            canPost = false,
+            terminalPostAllowed = false,
+        )
+        assertEquals("✅ Turu Kaydet", state.label)
+        assertTrue(state.enabled)
+        assertFalse(state.opensPostConfirm)
+    }
+
+    @Test
+    fun `classic primary button posts after save when terminal posting is allowed`() {
+        val ready = classicCountPrimaryButtonState(
+            interactive = true,
+            activeSlotSaved = true,
+            allRequiredSaved = true,
+            canPost = true,
+            terminalPostAllowed = true,
+        )
+        assertEquals("Stoklara İşle", ready.label)
+        assertTrue(ready.enabled)
+        assertTrue(ready.opensPostConfirm)
+
+        val waitingForOthers = classicCountPrimaryButtonState(
+            interactive = true,
+            activeSlotSaved = true,
+            allRequiredSaved = false,
+            canPost = true,
+            terminalPostAllowed = true,
+        )
+        assertTrue(waitingForOthers.enabled)
+        assertFalse(waitingForOthers.opensPostConfirm)
+
+        val busy = classicCountPrimaryButtonState(
+            interactive = false,
+            activeSlotSaved = true,
+            allRequiredSaved = true,
+            canPost = true,
+            terminalPostAllowed = true,
+        )
+        assertFalse(busy.enabled)
+        assertFalse(busy.opensPostConfirm)
+    }
+
+    @Test
+    fun `classic primary button never opens post confirmation when terminal posting is disabled`() {
+        val state = classicCountPrimaryButtonState(
+            interactive = true,
+            activeSlotSaved = true,
+            allRequiredSaved = true,
+            canPost = true,
+            terminalPostAllowed = false,
+        )
+        assertEquals("✓ Tur Kaydedildi", state.label)
+        assertFalse(state.enabled)
+        assertFalse(state.opensPostConfirm)
+    }
+
+    @Test
+    fun `round saved message explains BC posting only when terminal posting is disabled`() {
+        val allowed = countRoundSavedMessage(slot = 2, terminalPostAllowed = true)
+        val disabled = countRoundSavedMessage(slot = 2, terminalPostAllowed = false)
+
+        assertTrue(allowed.startsWith("TAMAM: 2. sayım turu kaydedildi"))
+        assertFalse(allowed.contains(COUNT_POSTED_IN_BC_NOTE))
+        assertTrue(disabled.startsWith("TAMAM: 2. sayım turu kaydedildi"))
+        assertTrue(disabled.contains(COUNT_POSTED_IN_BC_NOTE))
+        assertFalse(disabled.contains("REF-"))
+    }
+
+    @Test
+    fun `BC posting note appears once the round is saved and is not duplicated`() {
+        assertTrue(showsCountPostedInBcNote(terminalPostAllowed = false, activeSlotSaved = true, documentStatus = "InProgress", currentStatusText = ""))
+        assertTrue(showsCountPostedInBcNote(terminalPostAllowed = false, activeSlotSaved = true, documentStatus = "InProgress", currentStatusText = "TAMAM: Satırlar yenilendi"))
+        assertFalse(showsCountPostedInBcNote(terminalPostAllowed = false, activeSlotSaved = false, documentStatus = "InProgress", currentStatusText = ""))
+        assertFalse(showsCountPostedInBcNote(terminalPostAllowed = true, activeSlotSaved = true, documentStatus = "InProgress", currentStatusText = ""))
+        assertFalse(showsCountPostedInBcNote(terminalPostAllowed = false, activeSlotSaved = true, documentStatus = "Posted", currentStatusText = ""))
+        assertFalse(
+            showsCountPostedInBcNote(
+                terminalPostAllowed = false,
+                activeSlotSaved = true,
+                documentStatus = "InProgress",
+                currentStatusText = countRoundSavedMessage(1, terminalPostAllowed = false),
+            )
+        )
+    }
+
+    @Test
+    fun `counted LP numbers for labels are trimmed, de-duplicated and keep line order`() {
+        assertEquals(
+            listOf("LP-002", "LP-001"),
+            countedLpNosForLabels(listOf(" LP-002 ", "", "LP-001", "LP-002", "   ")),
+        )
+        assertTrue(countedLpNosForLabels(emptyList()).isEmpty())
+        assertTrue(countedLpNosForLabels(listOf("", " ")).isEmpty())
+    }
+
+    @Test
+    fun `counted LP label reprint is offered only on a posted sheet with LP lines`() {
+        assertTrue(showsCountedLpLabelReprint("Posted", 1))
+        assertTrue(showsCountedLpLabelReprint("posted", 3))
+        assertFalse(showsCountedLpLabelReprint("Posted", 0))
+        assertFalse(showsCountedLpLabelReprint("InProgress", 2))
+        assertFalse(showsCountedLpLabelReprint("Open", 2))
+        assertFalse(showsCountedLpLabelReprint("", 2))
+    }
+
+    @Test
+    fun `LP label print status keeps the terminal post wording and stays operator safe`() {
+        assertEquals(
+            "TAMAM: Sayım kaydedildi; 3 LP etiketi güncel miktarla yazdırıldı",
+            countedLpLabelPrintStatus(afterPost = true, lpCount = 3, printFailures = 0),
+        )
+        assertEquals(
+            "UYARI: Sayım kaydedildi; 1 LP etiketi yazdırılamadı",
+            countedLpLabelPrintStatus(afterPost = true, lpCount = 3, printFailures = 1),
+        )
+        assertEquals(
+            "TAMAM: 2 LP etiketi güncel miktarla yazdırıldı",
+            countedLpLabelPrintStatus(afterPost = false, lpCount = 2, printFailures = 0),
+        )
+        assertEquals(
+            "UYARI: 2 LP etiketi yazdırılamadı",
+            countedLpLabelPrintStatus(afterPost = false, lpCount = 2, printFailures = 2),
+        )
+        assertFalse(countedLpLabelPrintStatus(afterPost = false, lpCount = 2, printFailures = 2).contains("REF-"))
     }
 }

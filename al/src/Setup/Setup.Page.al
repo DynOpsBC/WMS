@@ -69,6 +69,11 @@ page 72061 "DOPSWHS Setup"
                     ApplicationArea = All;
                     ToolTip = 'Ayarlanırsa, mal kabulde seri boş bırakılınca otomatik seri numarası üretilir. Boş = elle giriş.';
                 }
+                field("Terminal Count Posting"; Rec."Terminal Count Posting")
+                {
+                    ApplicationArea = All;
+                    ToolTip = 'Kapalı (varsayılan): sayım belgeleri stoklara yalnız Business Central''den işlenir (Sayım Belgesi → Post); el terminalindeki "Onayla ve Stoklara İşle" reddedilir. Açık: terminal kullanıcısı da sayımı onaylayıp stoklara işleyebilir.';
+                }
             }
             group(License)
             {

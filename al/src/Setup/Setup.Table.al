@@ -298,6 +298,19 @@ table 72000 "DOPSWHS Setup"
             DataClassification = SystemMetadata;
             Editable = false;
         }
+        field(420; "Terminal Count Posting"; Boolean)
+        {
+            // BADE saha kararı (2 Eyl 2026): sayım stoklara yalnız Business
+            // Central'den işlenir. Kapalıyken el terminalindeki "Onayla ve
+            // Stoklara İşle" (countSheets/postSheet) reddedilir; BC Count Sheet
+            // kartındaki Post eylemi bu ayardan bağımsız çalışır.
+            // Varsayılan her şirkette KAPALI (yükseltmede de açılmaz; kullanıcı
+            // kararı, 3 Eyl 2026). Terminalden işleme istenen şirkette kurulum
+            // kartından açılır.
+            Caption = 'Terminal Count Posting';
+            DataClassification = CustomerContent;
+            InitValue = false;
+        }
     }
 
     keys

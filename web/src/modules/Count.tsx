@@ -4,6 +4,19 @@ import { DocHeader, EmptyState, Modal, NumberField, Pill, StatusText } from "../
 
 type Row = Record<string, any>;
 
+/**
+ * Mirrors terminalCountPostAllowed in the Android CountWorkflow.kt: the countSheets header exposes the
+ * read-only `terminalPostAllowed` flag (DOPSWHS Setup "Terminal Count Posting"); an AL package that
+ * predates the field keeps posting allowed, so the button never disappears on older tenants.
+ */
+export function terminalCountPostAllowed(header: Row | null | undefined): boolean {
+  const flag = header?.terminalPostAllowed;
+  return flag === undefined ? true : Boolean(flag);
+}
+
+/** Operatöre gösterilen bilgi: sayım onayı ve stok hareketi terminalde değil Business Central'de yapılır. */
+export const COUNT_POSTED_IN_BC_NOTE = "Sayım Business Central'de onaylanıp stoklara işlenir.";
+
 export function Count() {
   const [rows, setRows] = useState<Row[]>([]);
   const [status, setStatus] = useState("");
@@ -90,6 +103,7 @@ function CountDocument({ no, onBack }: { no: string; onBack: () => void }) {
   const mode = String(header?.mode ?? "");
   const blind = mode === "Blind";
   const sheetStatus = String(header?.status ?? "");
+  const postAllowed = terminalCountPostAllowed(header);
 
   function fmt(n: number) {
     return Number(n).toLocaleString("tr-TR");
@@ -146,9 +160,13 @@ function CountDocument({ no, onBack }: { no: string; onBack: () => void }) {
         <button className="outline" disabled={busy} onClick={() => action("startRecount", "Recount başlatıldı")}>
           ⟳ Recount
         </button>
-        <button className="primary big" disabled={busy} onClick={() => action("postSheet", "Sayım post edildi")}>
-          ✅ Post
-        </button>
+        {postAllowed ? (
+          <button className="primary big" disabled={busy} onClick={() => action("postSheet", "Sayım post edildi")}>
+            ✅ Post
+          </button>
+        ) : (
+          <div className="card-meta">{COUNT_POSTED_IN_BC_NOTE}</div>
+        )}
       </div>
       {countLine && (
         <CountEntryModal

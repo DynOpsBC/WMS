@@ -357,6 +357,13 @@ private fun CountV2Document(no: String, onBack: () -> Unit) {
         adminTestSession = adminTestSession,
     )
 
+    // Başlık $select olmadan okunur; terminalPostAllowed alanı AL paketi
+    // yayınladığında aynı cevapta gelir, eski paketlerde hiç gelmez (= izinli).
+    fun terminalPostAllowed(h: JSONObject?): Boolean = terminalCountPostAllowed(
+        hasFlag = h?.has("terminalPostAllowed") == true,
+        flag = h?.optBoolean("terminalPostAllowed", false) == true,
+    )
+
     suspend fun loadDocument(): Boolean {
         val safeNo = no.replace("'", "''")
         val headerResult = BcApi.get(context, "countSheets('$safeNo')")
@@ -795,6 +802,11 @@ private fun CountV2Document(no: String, onBack: () -> Unit) {
     }
 
     fun postSheet() {
+        if (!terminalPostAllowed(header)) {
+            showPostConfirm = false
+            status = COUNT_POSTED_IN_BC_NOTE
+            return
+        }
         scope.launch {
             busy = true
             status = "Sayım onaylanıyor ve stok hareketleri oluşturuluyor..."
@@ -818,7 +830,7 @@ private fun CountV2Document(no: String, onBack: () -> Unit) {
             busy = false
             if (result.ok) {
                 loadDocument()
-                status = "TAMAM: $slot. sayım turu kaydedildi; stok hareketi oluşturulmadı"
+                status = countRoundSavedMessage(slot, terminalPostAllowed(header))
             } else status = "HATA: ${BcApi.errorMessage(result.body)} (HTTP ${result.httpCode})"
         }
     }
@@ -844,9 +856,12 @@ private fun CountV2Document(no: String, onBack: () -> Unit) {
     })
     val currentSlotSaved = h?.optBoolean("counter${slot}Completed", false) == true
     val allRequiredSaved = requiredSlots.all { h?.optBoolean("counter${it}Completed", false) == true }
+    // Başlık yüklenmeden düğme hiç çizilmez (null başlık = izinli sayılmaz); yüklenen
+    // eski AL paketi başlığında bayrak yoksa "izinli" kuralı korunur.
+    val postAllowed = countV2PostButtonVisible(headerLoaded = h != null, terminalPostAllowed = terminalPostAllowed(h))
     val canSave = prepared && linesComplete && lines.isNotEmpty() && !busy && slot in allowedSlots &&
         currentSlotLinesComplete && !currentSlotSaved && countDocumentIsMutable(h?.optString("status").orEmpty())
-    val canPost = prepared && linesComplete && lines.isNotEmpty() && !busy &&
+    val canPost = postAllowed && prepared && linesComplete && lines.isNotEmpty() && !busy &&
         allRequiredComplete && allRequiredSaved &&
         lines.none { it.optBoolean("recountRequired") } &&
         countDocumentIsMutable(h?.optString("status").orEmpty())
@@ -1015,20 +1030,29 @@ private fun CountV2Document(no: String, onBack: () -> Unit) {
                     enabled = canSave,
                     modifier = Modifier.fillMaxWidth().height(52.dp),
                 ) { Text(if (currentSlotSaved) "✓ Sayım Turu Kaydedildi" else "✅ Sayım Turunu Kaydet", fontWeight = FontWeight.Bold) }
-                Spacer(Modifier.height(6.dp))
-                OutlinedButton(
-                    onClick = { showPostConfirm = true },
-                    enabled = canPost,
-                    modifier = Modifier.fillMaxWidth().height(48.dp),
-                ) { Text("Onayla ve Stoklara İşle") }
-                if (lines.isNotEmpty() && !currentSlotLinesComplete) {
-                    Text(
+                if (postAllowed) {
+                    Spacer(Modifier.height(6.dp))
+                    OutlinedButton(
+                        onClick = { showPostConfirm = true },
+                        enabled = canPost,
+                        modifier = Modifier.fillMaxWidth().height(48.dp),
+                    ) { Text("Onayla ve Stoklara İşle") }
+                }
+                when {
+                    lines.isNotEmpty() && !currentSlotLinesComplete -> Text(
                         "Bu sayım turundaki bütün satırları tamamlayın.",
                         fontSize = 11.sp,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
-                } else if (!allRequiredSaved) {
-                    Text("Stok hareketinden önce atanmış bütün sayıcı turları kaydedilmelidir.", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    // Terminalden işleme kapalı: düğme yerine nerede işleneceğini söyle.
+                    showsCountPostedInBcNote(postAllowed, currentSlotSaved, h?.optString("status").orEmpty(), status) -> Text(
+                        COUNT_POSTED_IN_BC_NOTE,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    postAllowed && !allRequiredSaved ->
+                        Text("Stok hareketinden önce atanmış bütün sayıcı turları kaydedilmelidir.", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
         }
@@ -1053,7 +1077,7 @@ private fun CountV2Document(no: String, onBack: () -> Unit) {
         )
     }
 
-    if (showPostConfirm) {
+    if (showPostConfirm && postAllowed) {
         AlertDialog(
             onDismissRequest = { if (!busy) showPostConfirm = false },
             title = { Text("Sayım stoklara işlensin mi?") },

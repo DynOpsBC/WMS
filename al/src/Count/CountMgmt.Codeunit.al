@@ -513,7 +513,6 @@ codeunit 72050 "DOPSWHS Count Mgmt"
     procedure PrepareV2(SheetNo: Code[20])
     var
         CountHeader: Record "DOPSWHS Count Sheet Header";
-        CountLine: Record "DOPSWHS Count Sheet Line";
     begin
         CountHeader.Get(SheetNo);
         if CountHeader.Status = CountHeader.Status::Posted then
@@ -521,12 +520,68 @@ codeunit 72050 "DOPSWHS Count Mgmt"
         if CountHeader."V2 Scan Mode" then
             exit;
 
-        CountLine.SetRange("Sheet No.", SheetNo);
-        if not CountLine.IsEmpty() then
-            Error(V2RequiresEmptySheetErr, SheetNo);
-
+        // Aynı kurallar BC'deki alan OnValidate'inde de uygulanır; burada
+        // doğrudan atama yapılır (OnValidate tetiklenmez) ve belge kaydedilir.
+        ValidateV2ScanModeChange(CountHeader, true);
         CountHeader."V2 Scan Mode" := true;
         CountHeader.Modify(true);
+    end;
+
+    /// <summary>
+    /// "V2 Scan Mode" değişikliğinin kuralları (tablo 72016 alan 70 OnValidate ve
+    /// PrepareV2 ortak kullanır). BC'de alan artık elle değiştirilebilir (BADE,
+    /// 2 Eyl 2026): kapalı belgede değişiklik yasak; V2'ye geçiş yalnız satırsız
+    /// belgede; V2'den çıkış yalnız satırsız VE okutmasız belgede. Değer zaten
+    /// veritabanındaki ile aynıysa denetim yapılmaz (yeniden Validate güvenli).
+    /// </summary>
+    procedure ValidateV2ScanModeChange(var CountHeader: Record "DOPSWHS Count Sheet Header"; NewValue: Boolean)
+    var
+        StoredHeader: Record "DOPSWHS Count Sheet Header";
+        CountLine: Record "DOPSWHS Count Sheet Line";
+        ScanEvent: Record "DOPSWHS Count V2 Scan";
+    begin
+        if CountHeader."No." = '' then
+            exit; // henüz eklenmemiş yeni belge: satırı/okutması olamaz
+        if StoredHeader.Get(CountHeader."No.") and (StoredHeader."V2 Scan Mode" = NewValue) then
+            exit;
+        if CountHeader.Status = CountHeader.Status::Posted then
+            Error(CountAlreadyPostedErr, CountHeader."No.");
+
+        CountLine.SetRange("Sheet No.", CountHeader."No.");
+        if not CountLine.IsEmpty() then
+            if NewValue then
+                Error(V2RequiresEmptySheetErr, CountHeader."No.")
+            else
+                Error(V2OffRequiresEmptySheetErr, CountHeader."No.");
+
+        if not NewValue then begin
+            // Geri alınmış (Reversed) okutmalar sayımı etkilemez; yalnız etkin
+            // okutmalar V2'den klasiğe dönüşü engeller.
+            ScanEvent.SetRange("Sheet No.", CountHeader."No.");
+            ScanEvent.SetRange(Reversed, false);
+            if not ScanEvent.IsEmpty() then
+                Error(V2OffScansExistErr, CountHeader."No.");
+        end;
+    end;
+
+    /// <summary>
+    /// Terminalden sayım onayı/stoklara işleme (countSheets/postSheet) kurulumda
+    /// "Terminal Count Posting" açık değilse reddedilir. BC Count Sheet kartındaki
+    /// Post eylemi bu ayardan bağımsızdır (BADE saha kararı, 2 Eyl 2026).
+    /// </summary>
+    procedure TerminalCountPostingAllowed(): Boolean
+    var
+        Setup: Record "DOPSWHS Setup";
+    begin
+        if not Setup.Get('') then
+            exit(false);
+        exit(Setup."Terminal Count Posting");
+    end;
+
+    procedure AssertTerminalCountPostingAllowed()
+    begin
+        if not TerminalCountPostingAllowed() then
+            Error(TerminalCountPostingDisabledErr);
     end;
 
     /// <summary>
@@ -1819,6 +1874,9 @@ codeunit 72050 "DOPSWHS Count Mgmt"
         V2SheetCannotGenerateErr: Label '%1 sayım belgesi Sayım V2 ile başlatıldı; klasik satır üretme işlemi kullanılamaz.', Comment = '%1 count sheet no';
         V2RequiresEmptySheetErr: Label '%1 sayım belgesinde klasik sayım satırları var. Sayım V2 için satır üretilmemiş boş bir belge seçin.', Comment = '%1 count sheet no';
         NotV2SheetErr: Label '%1 sayım belgesi Sayım V2 modunda değildir.', Comment = '%1 count sheet no';
+        V2OffRequiresEmptySheetErr: Label '%1 sayım belgesinde sayım satırları var; Sayım V2 modu yalnız satırı olmayan açık belgede kapatılabilir.', Comment = '%1 count sheet no';
+        V2OffScansExistErr: Label '%1 sayım belgesinde Sayım V2 okutmaları var; V2 modu kapatılamaz. Klasik sayım için yeni bir belge açın.', Comment = '%1 count sheet no';
+        TerminalCountPostingDisabledErr: Label 'Sayım stoklara yalnız Business Central''den işlenir (Sayım Belgesi → Post). Terminalden onay kapalı; açmak için DOPSWHS Kurulum → Terminal Count Posting.';
         V2QtyPositiveErr: Label 'Sayım V2 QR miktarı sıfırdan büyük olmalıdır.';
         V2LotRequiredErr: Label '%1 ürünü lot takiplidir; QR içinde lot numarası bulunmalıdır.', Comment = '%1 item no';
         V2SerialRequiredErr: Label '%1 ürünü seri takiplidir; QR içinde seri numarası bulunmalıdır.', Comment = '%1 item no';

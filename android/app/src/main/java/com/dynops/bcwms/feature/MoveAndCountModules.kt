@@ -952,6 +952,13 @@ private fun CountDocument(no: String, onBack: () -> Unit) {
         adminTestSession = adminTestSession,
     )
 
+    // Başlık countSheets('no') ile $select'siz okunur; terminalPostAllowed alanı
+    // AL paketi yayınladığında aynı cevapta gelir, eski paketlerde hiç gelmez (= izinli).
+    fun terminalPostAllowed(h: JSONObject?): Boolean = terminalCountPostAllowed(
+        hasFlag = h?.has("terminalPostAllowed") == true,
+        flag = h?.optBoolean("terminalPostAllowed", false) == true,
+    )
+
     fun reload() {
         scope.launch {
             busy = true
@@ -1005,7 +1012,41 @@ private fun CountDocument(no: String, onBack: () -> Unit) {
         }
     }
 
+    // Sayılan LP'lerin palet etiketleri: PostSheet kazanan sayım miktarını LP
+    // satırlarına yazar (ApplyWinningCountsToLicensePlates); etiket yeni miktarla basılır.
+    suspend fun printCountedLpLabels(lpNos: List<String>): Int {
+        val printerId = getDefaultPrinter(context)
+        var printFailures = 0
+        lpNos.forEach { lpNo ->
+            val body = JSONObject().apply { put("printerId", printerId); put("copies", 1) }.toString()
+            val pr = BcApi.boundAction(context, "licensePlates", lpNo, "printPalletLabels", body)
+            if (!pr.ok) printFailures += 1
+        }
+        return printFailures
+    }
+
+    // Kaydedilmiş (Posted) belgede etiketleri yeniden basar: sayım BC'den işlendiğinde
+    // terminalin post sonrası etiket döngüsü hiç çalışmaz, paletler eski miktarla kalır.
+    fun reprintCountedLpLabels() {
+        val lpNos = countedLpNosForLabels(lines.map { it.optString("lpNo") })
+        if (lpNos.isEmpty()) {
+            status = "Bu sayımda LP'li satır yok; basılacak etiket bulunamadı."
+            return
+        }
+        scope.launch {
+            busy = true; status = "${lpNos.size} LP etiketi güncel miktarla yazdırılıyor..."
+            val printFailures = printCountedLpLabels(lpNos)
+            busy = false
+            status = countedLpLabelPrintStatus(afterPost = false, lpCount = lpNos.size, printFailures = printFailures)
+        }
+    }
+
     fun postSheetAndPrintLpLabels() {
+        if (!terminalPostAllowed(header)) {
+            showPostConfirm = false
+            status = COUNT_POSTED_IN_BC_NOTE
+            return
+        }
         val requiredSlots = configuredSlots(header)
         val allAssignedSlotsComplete = requiredSlots.all { requiredSlot ->
             allRequiredCountLinesExplicitlyCompleted(lines.map { line ->
@@ -1036,7 +1077,7 @@ private fun CountDocument(no: String, onBack: () -> Unit) {
                 "Atanmış tüm sayıcılar bütün satırları, sıfır olanlar dahil, tamamlamadan kayıt yapılamaz."
             return
         }
-        val countedLpNos = lines.map { it.optString("lpNo") }.filter { it.isNotBlank() }.distinct()
+        val lpNos = countedLpNosForLabels(lines.map { it.optString("lpNo") })
         scope.launch {
             busy = true; status = "Sayım BC'ye kaydediliyor..."
             val r = BcApi.boundActionLongRunning(context, "countSheets", no, "postSheet", "{}")
@@ -1047,19 +1088,10 @@ private fun CountDocument(no: String, onBack: () -> Unit) {
                 return@launch
             }
 
-            val printerId = getDefaultPrinter(context)
-            var printFailures = 0
-            countedLpNos.forEach { lpNo ->
-                val body = JSONObject().apply { put("printerId", printerId); put("copies", 1) }.toString()
-                val pr = BcApi.boundAction(context, "licensePlates", lpNo, "printPalletLabels", body)
-                if (!pr.ok) printFailures += 1
-            }
+            val printFailures = printCountedLpLabels(lpNos)
             reload()
             busy = false
-            status = if (printFailures == 0)
-                "TAMAM: Sayım kaydedildi; ${countedLpNos.size} LP etiketi güncel miktarla yazdırıldı"
-            else
-                "UYARI: Sayım kaydedildi; $printFailures LP etiketi yazdırılamadı"
+            status = countedLpLabelPrintStatus(afterPost = true, lpCount = lpNos.size, printFailures = printFailures)
         }
     }
 
@@ -1070,7 +1102,7 @@ private fun CountDocument(no: String, onBack: () -> Unit) {
             val body = JSONObject().apply { put("counterSlot", slot) }.toString()
             val r = BcApi.boundAction(context, "countSheets", no, "completeCounter", body)
             busy = false
-            status = if (r.ok) "TAMAM: $slot. sayım turu kaydedildi; stok hareketi oluşturulmadı"
+            status = if (r.ok) countRoundSavedMessage(slot, terminalPostAllowed(header))
             else "HATA: ${BcApi.errorMessage(r.body)} (HTTP ${r.httpCode})"
             if (r.ok) reload()
         }
@@ -1098,8 +1130,10 @@ private fun CountDocument(no: String, onBack: () -> Unit) {
     val activeSlotSaved = h?.optBoolean("counter${slot}Completed", false) == true
     val allRequiredSaved = requiredSlots.all { h?.optBoolean("counter${it}Completed", false) == true }
     val documentStatus = h?.optString("status").orEmpty()
+    val postAllowed = terminalPostAllowed(h)
     val isV2Document = h?.optBoolean("v2ScanMode", false) == true
     val recountLines = lines.filter { it.optBoolean("recountRequired") }
+    val countedLpCount = countedLpNosForLabels(lines.map { it.optString("lpNo") }).size
     val availableActions = countDocumentActions(
         lineCount = lines.size,
         busy = busy,
@@ -1136,9 +1170,22 @@ private fun CountDocument(no: String, onBack: () -> Unit) {
             if (documentStatus.equals("Posted", ignoreCase = true)) {
                 Spacer(Modifier.height(8.dp))
                 StatusText("Bu sayım kaydedilmiş ve kapatılmıştır; terminalden değiştirilemez.")
+                if (showsCountedLpLabelReprint(documentStatus, countedLpCount)) {
+                    // BC'den işlenen sayımda etiketler basılmamıştır; güncel miktarla yeniden bas.
+                    Spacer(Modifier.height(8.dp))
+                    OutlinedButton(
+                        onClick = { reprintCountedLpLabels() },
+                        enabled = !busy && linesComplete,
+                        modifier = Modifier.fillMaxWidth().height(48.dp),
+                    ) { Text("Sayılan LP etiketlerini yazdır") }
+                }
             } else if (h != null && allowedSlots.isEmpty()) {
                 Spacer(Modifier.height(8.dp))
                 StatusText("Bu sayımda $myUserId kullanıcısına atanmış sayıcı slotu yok. BC'deki Count Counters bölümünü kontrol edin.")
+            } else if (showsCountPostedInBcNote(postAllowed, activeSlotSaved, documentStatus, status)) {
+                // Terminalden işleme kapalı: tur kilitlendi, onay ve stok hareketi BC'de yapılır.
+                Spacer(Modifier.height(8.dp))
+                StatusText(COUNT_POSTED_IN_BC_NOTE)
             }
             if (isV2Document) {
                 Spacer(Modifier.height(8.dp))
@@ -1212,18 +1259,27 @@ private fun CountDocument(no: String, onBack: () -> Unit) {
             // Generate lines from bin content when the sheet is empty (the count flow needs lines).
             OutlinedButton(onClick = { action("generateLines", "Satırlar üretildi") }, enabled = !isV2Document && availableActions.canGenerateLines, modifier = Modifier.weight(1f).height(52.dp)) { Text("➕ Satır Üret") }
             OutlinedButton(onClick = { showRecountConfirm = true }, enabled = !isV2Document && availableActions.canStartRecount, modifier = Modifier.weight(1f).height(52.dp)) { Text("⟳ Yeniden Say") }
+            val primary = classicCountPrimaryButtonState(
+                interactive = !isV2Document && linesComplete && lines.isNotEmpty() && !busy,
+                activeSlotSaved = activeSlotSaved,
+                allRequiredSaved = allRequiredSaved,
+                canPost = availableActions.canPost,
+                terminalPostAllowed = postAllowed,
+            )
             Button(
                 onClick = {
                     when {
                         !activeSlotSaved && activeSlotComplete -> completeCounter()
-                        activeSlotSaved && allRequiredSaved && availableActions.canPost -> showPostConfirm = true
+                        primary.opensPostConfirm -> showPostConfirm = true
                         !activeSlotComplete -> status = "UYARI: Sayım turunu kaydetmek için tüm satırlar sayılmış olmalı."
+                        // Terminalden işleme kapalıyken düğme kilitlidir (classicCountPrimaryButtonState);
+                        // buraya yalnız izinli ve tur kaydedilmiş durumda gelinir.
                         else -> status = "UYARI: Stoklara işlemeden önce atanmış bütün sayıcı turları kaydedilmelidir."
                     }
                 },
-                enabled = !isV2Document && linesComplete && lines.isNotEmpty() && !busy,
+                enabled = primary.enabled,
                 modifier = Modifier.weight(1f).height(52.dp),
-            ) { Text(if (activeSlotSaved) "Stoklara İşle" else "✅ Turu Kaydet", fontWeight = FontWeight.Bold, fontSize = 12.sp) }
+            ) { Text(primary.label, fontWeight = FontWeight.Bold, fontSize = 12.sp) }
         }
     }
 
@@ -1332,7 +1388,7 @@ private fun CountDocument(no: String, onBack: () -> Unit) {
             dismissButton = { TextButton(onClick = { showCounterDialog = false }) { Text("Vazgeç") } },
         )
     }
-    if (showPostConfirm) {
+    if (showPostConfirm && postAllowed) {
         AlertDialog(
             onDismissRequest = { if (!busy) showPostConfirm = false },
             title = { Text("Sayımı stoklara işle") },

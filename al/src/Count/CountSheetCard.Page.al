@@ -18,7 +18,12 @@ page 72075 "DOPSWHS Count Sheet Card"
                 field("Zone Filter"; Rec."Zone Filter") { ApplicationArea = All; Editable = HeaderEditable; }
                 field(Mode; Rec.Mode) { ApplicationArea = All; Editable = HeaderEditable; }
                 field(Status; Rec.Status) { ApplicationArea = All; Editable = HeaderEditable; }
-                field("V2 Scan Mode"; Rec."V2 Scan Mode") { ApplicationArea = All; }
+                field("V2 Scan Mode"; Rec."V2 Scan Mode")
+                {
+                    ApplicationArea = All;
+                    Editable = HeaderEditable;
+                    ToolTip = 'Terminalde yalnız barkod okutarak sayım (Sayım V2). Satırı olmayan açık belgede değiştirilebilir.';
+                }
             }
             group(Progress)
             {

@@ -27,7 +27,10 @@ codeunit 72428 "DOPSWHS LP Propagation"
         tabledata "Posted Whse. Shipment Header" = RM,
         tabledata "Posted Whse. Shipment Line" = RM,
         tabledata "Warehouse Receipt Header" = RM,
-        tabledata "Warehouse Shipment Header" = RM;
+        tabledata "Warehouse Shipment Header" = RM,
+        tabledata "Warehouse Shipment Line" = R,
+        tabledata "Registered Whse. Activity Line" = R,
+        tabledata "Whse. Item Entry Relation" = R;
 
     // =========================================================================
     // (1) Synchronous helpers — invoked from DOPSWHS Receipt/Shipment Mgmt
@@ -66,19 +69,21 @@ codeunit 72428 "DOPSWHS LP Propagation"
     end;
 
     /// <summary>
-    /// Final, exact warehouse-shipment reconciliation. Sales-Post can clear or
-    /// delete the working Warehouse Shipment Line before its final events run,
-    /// so relying only on those events can leave the posted stock movement
-    /// without an LP. The posted warehouse line survives and BC records its
-    /// exact Item Ledger Entry relation; use that durable link to stamp the
-    /// ledger and consume the selected physical LP exactly once.
+    /// Final, exact warehouse-shipment reconciliation for posted lines that carry
+    /// an operator-selected LP. Sales-Post deletes a fully shipped working line
+    /// before its before-commit event; the posted warehouse line survives and
+    /// names the sales shipment it produced ("Posted Source No."). BC writes
+    /// Whse. Item Entry Relation only for receipts, so the sale entries are
+    /// resolved through that posted source document: every negative Sale entry
+    /// of the same sales line (one per lot/serial split) is reconciled against
+    /// the line's LP. ReconcileSalesEntry is idempotent per entry, so an entry
+    /// the before-commit event already handled is only re-stamped, never
+    /// consumed twice.
     /// </summary>
     procedure ReconcilePostedWarehouseShipment(PostedWhseShipmentNo: Code[20])
     var
         PostedWhseShipmentLine: Record "Posted Whse. Shipment Line";
-        WhseItemEntryRelation: Record "Whse. Item Entry Relation";
         ItemLedgerEntry: Record "Item Ledger Entry";
-        RelatedEntryFound: Boolean;
     begin
         if PostedWhseShipmentNo = '' then
             exit;
@@ -88,43 +93,46 @@ codeunit 72428 "DOPSWHS LP Propagation"
         if not PostedWhseShipmentLine.FindSet() then
             exit;
         repeat
-            RelatedEntryFound := false;
-            WhseItemEntryRelation.Reset();
-            WhseItemEntryRelation.SetSourceFilter(
-                Database::"Posted Whse. Shipment Line", 0,
-                PostedWhseShipmentLine."No.", PostedWhseShipmentLine."Line No.", true);
-            if WhseItemEntryRelation.FindSet() then
-                repeat
-                    if ItemLedgerEntry.Get(WhseItemEntryRelation."Item Entry No.") then
-                        if (ItemLedgerEntry."Entry Type" = ItemLedgerEntry."Entry Type"::Sale) and
-                           (ItemLedgerEntry.Quantity < 0)
-                        then begin
-                            ReconcileSalesEntry(ItemLedgerEntry, PostedWhseShipmentLine."LP No.", true);
-                            StampSalesShipmentLine(ItemLedgerEntry, PostedWhseShipmentLine."LP No.", PostedWhseShipmentLine.SSCC);
-                            RelatedEntryFound := true;
-                        end;
-                until WhseItemEntryRelation.Next() = 0;
-
-            // Older BC versions may omit Whse. Item Entry Relation for a
-            // warehouse shipment. Accept the fallback only when the durable
-            // posted source/tracking identity resolves to exactly one sale.
-            if not RelatedEntryFound then begin
-                ItemLedgerEntry.Reset();
-                ItemLedgerEntry.SetRange("Document No.", PostedWhseShipmentLine."Posted Source No.");
-                ItemLedgerEntry.SetRange("Entry Type", ItemLedgerEntry."Entry Type"::Sale);
-                ItemLedgerEntry.SetRange("Item No.", PostedWhseShipmentLine."Item No.");
-                ItemLedgerEntry.SetRange("Variant Code", PostedWhseShipmentLine."Variant Code");
-                ItemLedgerEntry.SetRange("Location Code", PostedWhseShipmentLine."Location Code");
-                ItemLedgerEntry.SetFilter(Quantity, '<0');
-                if ItemLedgerEntry.Count() <> 1 then
-                    Error(
-                        '%1 kayıtlı ambar sevkiyat satırı için satış stok hareketi kesin olarak bulunamadı. LP %2 düşürülmedi.',
-                        PostedWhseShipmentLine."No.", PostedWhseShipmentLine."LP No.");
-                ItemLedgerEntry.FindFirst();
+            if not FindPostedSourceSaleEntries(PostedWhseShipmentLine, ItemLedgerEntry) then
+                Error(
+                    '%1 kayıtlı ambar sevkiyat satırı için satış stok hareketi bulunamadı. LP %2 düşürülmedi.',
+                    PostedWhseShipmentLine."No.", PostedWhseShipmentLine."LP No.");
+            repeat
                 ReconcileSalesEntry(ItemLedgerEntry, PostedWhseShipmentLine."LP No.", true);
                 StampSalesShipmentLine(ItemLedgerEntry, PostedWhseShipmentLine."LP No.", PostedWhseShipmentLine.SSCC);
-            end;
+            until ItemLedgerEntry.Next() = 0;
         until PostedWhseShipmentLine.Next() = 0;
+    end;
+
+    /// <summary>
+    /// Negative Sale entries of the sales shipment a posted warehouse line
+    /// produced. Sales-Post keeps the sales line number on the posted shipment
+    /// line and on the item ledger entry, so the source line pins the entries
+    /// when the same item ships on several lines; the line filter is dropped
+    /// only when it matches nothing.
+    /// </summary>
+    local procedure FindPostedSourceSaleEntries(PostedWhseShipmentLine: Record "Posted Whse. Shipment Line"; var ItemLedgerEntry: Record "Item Ledger Entry"): Boolean
+    begin
+        ItemLedgerEntry.Reset();
+        ItemLedgerEntry.SetCurrentKey("Document No.", "Document Type", "Document Line No.");
+        ItemLedgerEntry.SetRange("Document No.", PostedWhseShipmentLine."Posted Source No.");
+        ItemLedgerEntry.SetRange("Document Type", ItemLedgerEntry."Document Type"::"Sales Shipment");
+        ItemLedgerEntry.SetRange("Entry Type", ItemLedgerEntry."Entry Type"::Sale);
+        ItemLedgerEntry.SetRange("Item No.", PostedWhseShipmentLine."Item No.");
+        ItemLedgerEntry.SetRange("Variant Code", PostedWhseShipmentLine."Variant Code");
+        ItemLedgerEntry.SetRange("Location Code", PostedWhseShipmentLine."Location Code");
+        ItemLedgerEntry.SetFilter(Quantity, '<0');
+        ItemLedgerEntry.SetRange("Document Line No.", PostedWhseShipmentLine."Source Line No.");
+        if ItemLedgerEntry.FindSet(true) then
+            exit(true);
+        // Standard BC always keeps the sales line number on the shipment line
+        // and its ledger entries. Accept the unfiltered set only when it is
+        // unambiguous; binding another line's entries to this LP would consume
+        // the wrong pallet on the strict path.
+        ItemLedgerEntry.SetRange("Document Line No.");
+        if ItemLedgerEntry.Count() <> 1 then
+            exit(false);
+        exit(ItemLedgerEntry.FindSet(true));
     end;
 
     local procedure StampSalesShipmentLine(ItemLedgerEntry: Record "Item Ledger Entry"; LpNo: Code[20]; Sscc: Code[18])
@@ -614,6 +622,26 @@ codeunit 72428 "DOPSWHS LP Propagation"
     end;
 
     /// <summary>
+    /// Whse.-Post Shipment builds the posted line with TransferFields, which
+    /// copies by field NUMBER: the operator LP on Warehouse Shipment Line (field
+    /// 72406) never reached Posted Whse. Shipment Line (field 72405). Copy it
+    /// before the insert so the posted line is the durable record of the
+    /// explicit LP: Sales-Post deletes a fully shipped working line before its
+    /// before-commit event, and ReconcilePostedWarehouseShipment / Shipment Mgmt
+    /// write the same value afterwards.
+    /// </summary>
+    [EventSubscriber(ObjectType::Codeunit, Codeunit::"Whse.-Post Shipment", 'OnCreatePostedShptLineOnBeforePostedWhseShptLineInsert', '', false, false)]
+    local procedure CarryLpOntoPostedWhseShptLine(var PostedWhseShptLine: Record "Posted Whse. Shipment Line"; WhseShptLine: Record "Warehouse Shipment Line")
+    begin
+        if PostedWhseShptLine."LP No." <> '' then
+            exit;
+        if WhseShptLine."LP No." = '' then
+            exit;
+        PostedWhseShptLine."LP No." := WhseShptLine."LP No.";
+        PostedWhseShptLine.SSCC := WhseShptLine.SSCC;
+    end;
+
+    /// <summary>
     /// Runs before Sales-Post commits so the inventory posting and LP reduction are atomic.
     /// An ambiguous LP therefore stops the shipment without leaving inventory and LP out of sync.
     /// </summary>
@@ -638,14 +666,18 @@ codeunit 72428 "DOPSWHS LP Propagation"
 
     /// <summary>
     /// Reconciles the physical LP from the posted item-ledger lot/serial identity so inventory
-    /// and LP contents stay equal. Warehouse shipments prefer their explicitly selected LP;
-    /// direct sales fall back to an unambiguous active LP for the same item/lot/serial.
+    /// and LP contents stay equal. A warehouse shipment line with an explicitly selected LP
+    /// (read from the posted warehouse line of this posting, else the working line) keeps
+    /// the strict path: that LP must cover the quantity. Every other sale is reconciled from
+    /// the registered pick that physically moved the stock: deterministic split across
+    /// pallets, never an error.
     /// </summary>
     local procedure ReconcileSalesLp(SalesShptHdrNo: Code[20]; WhseShip: Boolean)
     var
         ItemLedgerEntry: Record "Item Ledger Entry";
         PostedShptLine: Record "Sales Shipment Line";
         PreferredLpNo: Code[20];
+        HintLpNo: Code[20];
         AmbiguousLp: Boolean;
     begin
         ItemLedgerEntry.SetRange("Document No.", SalesShptHdrNo);
@@ -670,22 +702,41 @@ codeunit 72428 "DOPSWHS LP Propagation"
                 if PreferredLpNo <> '' then
                     ReconcileSalesEntry(ItemLedgerEntry, PreferredLpNo, true)
                 else begin
-                    if ItemLedgerEntry."DOPSWHS LP No." <> '' then
-                        PreferredLpNo := ItemLedgerEntry."DOPSWHS LP No."
-                    else
-                        PreferredLpNo := PostedShptLine."DOPSWHS LP No.";
-                    ReconcileSalesEntry(ItemLedgerEntry, PreferredLpNo, PreferredLpNo <> '');
+                    // No operator-selected LP on the shipment line. An LP stamped
+                    // earlier (item-journal heuristic or posted line) is only a
+                    // preference: the registered pick decides which pallet(s)
+                    // were physically taken.
+                    HintLpNo := ItemLedgerEntry."DOPSWHS LP No.";
+                    if HintLpNo = '' then
+                        HintLpNo := PostedShptLine."DOPSWHS LP No.";
+                    ReconcileSalesEntryFromPick(ItemLedgerEntry, PostedShptLine, HintLpNo);
                 end;
             end;
         until ItemLedgerEntry.Next() = 0;
     end;
 
+    /// <summary>
+    /// The operator-selected LP of the warehouse shipment line this entry came
+    /// from. The posted warehouse line of THIS posting is checked first: it is
+    /// created while the sales line posts (before FinalizePosting) and carries
+    /// the LP since CarryLpOntoPostedWhseShptLine, whereas Sales-Post deletes a
+    /// fully shipped working line before the before-commit event. Working lines
+    /// remain the fallback for partially shipped lines.
+    /// </summary>
     local procedure ResolveWarehouseShipmentLp(PostedShptLine: Record "Sales Shipment Line"; ItemLedgerEntry: Record "Item Ledger Entry"; var Ambiguous: Boolean): Code[20]
     var
+        PostedWhseShptLine: Record "Posted Whse. Shipment Line";
         WhseShptLine: Record "Warehouse Shipment Line";
         CandidateLpNo: Code[20];
     begin
         Clear(Ambiguous);
+        // The posted warehouse line of THIS posting is authoritative, blank
+        // included: the working-line fallback below is not scoped to one
+        // warehouse shipment, so a sales line split over two shipments would
+        // otherwise consume the other shipment's pallet on the strict path.
+        if FindPostedWhseShptLine(ItemLedgerEntry, PostedShptLine, PostedWhseShptLine) then
+            exit(PostedWhseShptLine."LP No.");
+
         WhseShptLine.SetRange("Source Type", Database::"Sales Line");
         WhseShptLine.SetRange("Source No.", PostedShptLine."Order No.");
         WhseShptLine.SetRange("Source Line No.", PostedShptLine."Order Line No.");
@@ -714,6 +765,33 @@ codeunit 72428 "DOPSWHS LP Propagation"
         exit(CandidateLpNo);
     end;
 
+    /// <summary>
+    /// Posted warehouse shipment line created for this sales line in the
+    /// posting that produced the ledger entry ("Posted Source No." is the sales
+    /// shipment no.). Whse.-Post Shipment posts one warehouse shipment at a time
+    /// and a sales line appears once per warehouse shipment, so at most one line
+    /// matches.
+    /// </summary>
+    local procedure FindPostedWhseShptLine(ItemLedgerEntry: Record "Item Ledger Entry"; PostedShptLine: Record "Sales Shipment Line"; var PostedWhseShptLine: Record "Posted Whse. Shipment Line"): Boolean
+    begin
+        if PostedShptLine."Order No." = '' then
+            exit(false);
+        PostedWhseShptLine.Reset();
+        PostedWhseShptLine.SetCurrentKey("Posted Source No.", "Posting Date");
+        PostedWhseShptLine.SetRange("Posted Source No.", ItemLedgerEntry."Document No.");
+        PostedWhseShptLine.SetRange("Source Type", Database::"Sales Line");
+        PostedWhseShptLine.SetRange("Source No.", PostedShptLine."Order No.");
+        PostedWhseShptLine.SetRange("Source Line No.", PostedShptLine."Order Line No.");
+        PostedWhseShptLine.SetRange("Item No.", ItemLedgerEntry."Item No.");
+        PostedWhseShptLine.SetRange("Variant Code", ItemLedgerEntry."Variant Code");
+        exit(PostedWhseShptLine.FindFirst());
+    end;
+
+    /// <summary>
+    /// Strict path for an explicitly selected LP: that LP must hold exactly one
+    /// matching line with enough quantity, otherwise posting stops. Idempotent per
+    /// ledger entry across the Sales-Post event and the posted-shipment relation.
+    /// </summary>
     local procedure ReconcileSalesEntry(var ItemLedgerEntry: Record "Item Ledger Entry"; PreferredLpNo: Code[20]; RequirePreferredLp: Boolean)
     var
         LPHeader: Record "DOPSWHS LP Header";
@@ -725,6 +803,8 @@ codeunit 72428 "DOPSWHS LP Propagation"
         AvailableBaseQty: Decimal;
         QtyPerUoM: Decimal;
         MatchingLineCount: Integer;
+        MatchingLpCount: Integer;
+        TotalAvailableBaseQty: Decimal;
         CandidateAvailableBaseQty: Decimal;
         CandidateLPNo: Code[20];
         CandidateLineNo: Integer;
@@ -732,6 +812,14 @@ codeunit 72428 "DOPSWHS LP Propagation"
     begin
         RequiredBaseQty := Abs(ItemLedgerEntry.Quantity);
         if RequiredBaseQty = 0 then
+            exit;
+        // The same ledger entry is reached from the Sales-Post before-commit
+        // event and from ReconcilePostedWarehouseShipment. Whichever ran first
+        // already removed this entry's stock from an LP (possibly several in the
+        // pick-guided path); a second pass must neither consume again nor fail
+        // on the now-reduced LP.
+        ConsumptionReference := BuildConsumptionReference(ItemLedgerEntry);
+        if EntryAlreadyReconciled(ConsumptionReference) then
             exit;
         Item.Get(ItemLedgerEntry."Item No.");
 
@@ -761,9 +849,14 @@ codeunit 72428 "DOPSWHS LP Propagation"
                         AvailableBaseQty := Round(LPLine.Quantity * QtyPerUoM, 0.00001);
                         if (QtyPerUoM > 0) and (AvailableBaseQty > 0) then begin
                             MatchingLineCount += 1;
+                            if CandidateLPNo <> LPLine."LP No." then begin
+                                MatchingLpCount += 1;
+                                TotalAvailableBaseQty := 0;
+                            end;
                             CandidateLPNo := LPLine."LP No.";
                             CandidateLineNo := LPLine."Line No.";
                             CandidateAvailableBaseQty := AvailableBaseQty;
+                            TotalAvailableBaseQty += AvailableBaseQty;
                         end;
                     until LPLine.Next() = 0;
             until LPHeader.Next() = 0;
@@ -775,21 +868,747 @@ codeunit 72428 "DOPSWHS LP Propagation"
             Error(
                 '%1 LP numarasında %2 maddesi, lot %3 için sevk edilebilir satır bulunamadı.',
                 PreferredLpNo, ItemLedgerEntry."Item No.", ItemLedgerEntry."Lot No.");
-        if MatchingLineCount > 1 then
+        // Several matching lines on ONE pallet are not ambiguous: LP Management
+        // never merges lines, so the same item+lot can sit on two lines (two
+        // receipts, or PCS and BOX). Consume them in line order. Only lines
+        // spread over different pallets stop the shipment.
+        if MatchingLpCount > 1 then
             Error(
                 '%1 maddesi, lot %2 için birden fazla LP eşleşti. Yanlış LP miktarının düşmemesi için sevkiyat durduruldu.',
                 ItemLedgerEntry."Item No.", ItemLedgerEntry."Lot No.");
-        if CandidateAvailableBaseQty + 0.00001 < RequiredBaseQty then
+        if TotalAvailableBaseQty + QtyTolerance() < RequiredBaseQty then
             Error(
                 '%1 LP numarasında sevk için yeterli miktar yoktur. LP miktarı: %2, sevk miktarı: %3.',
-                CandidateLPNo, CandidateAvailableBaseQty, RequiredBaseQty);
+                CandidateLPNo, TotalAvailableBaseQty, RequiredBaseQty);
 
+        if MatchingLineCount = 1 then
+            LPManagement.ConsumeLineForShipment(
+                CandidateLPNo, CandidateLineNo, RequiredBaseQty, ConsumptionReference)
+        else
+            ConsumeStrictLpLines(
+                ItemLedgerEntry, CandidateLPNo, Item, RequiredBaseQty, ConsumptionReference);
+        StampItemLedgerEntry(ItemLedgerEntry, CandidateLPNo);
+    end;
+
+    /// <summary>
+    /// Consumes the required base quantity from the lines of ONE pallet in line
+    /// order. LP Management treats LP + reference as "already consumed", so each
+    /// line gets its own ordinal suffix on the shared ILE reference.
+    /// </summary>
+    local procedure ConsumeStrictLpLines(ItemLedgerEntry: Record "Item Ledger Entry"; LpNo: Code[20]; Item: Record Item; RequiredBaseQty: Decimal; ConsumptionReference: Code[40])
+    var
+        LPLine: Record "DOPSWHS LP Line";
+        ItemUoM: Record "Item Unit of Measure";
+        LPManagement: Codeunit "DOPSWHS LP Management";
+        LinesConsumedPerLp: Dictionary of [Code[20], Integer];
+        QtyPerUoM: Decimal;
+        AvailableBaseQty: Decimal;
+        QtyToConsume: Decimal;
+        RemainingBaseQty: Decimal;
+    begin
+        RemainingBaseQty := RequiredBaseQty;
+        LPLine.SetRange("LP No.", LpNo);
+        LPLine.SetRange("Item No.", ItemLedgerEntry."Item No.");
+        LPLine.SetRange("Variant Code", ItemLedgerEntry."Variant Code");
+        LPLine.SetRange("Lot No.", ItemLedgerEntry."Lot No.");
+        LPLine.SetRange("Serial No.", ItemLedgerEntry."Serial No.");
+        if not LPLine.FindSet() then
+            exit;
+        repeat
+            QtyPerUoM := 1;
+            if (LPLine."Unit of Measure" <> '') and (LPLine."Unit of Measure" <> Item."Base Unit of Measure") then
+                if ItemUoM.Get(LPLine."Item No.", LPLine."Unit of Measure") then
+                    QtyPerUoM := ItemUoM."Qty. per Unit of Measure"
+                else
+                    QtyPerUoM := 0;
+            AvailableBaseQty := Round(LPLine.Quantity * QtyPerUoM, 0.00001);
+            if (QtyPerUoM > 0) and (AvailableBaseQty > 0) then begin
+                QtyToConsume := AvailableBaseQty;
+                if QtyToConsume > RemainingBaseQty then
+                    QtyToConsume := RemainingBaseQty;
+                if QtyToConsume > QtyTolerance() then begin
+                    LPManagement.ConsumeLineForShipment(
+                        LpNo, LPLine."Line No.", QtyToConsume,
+                        LineConsumptionReference(ConsumptionReference, LpNo, LinesConsumedPerLp));
+                    RemainingBaseQty -= QtyToConsume;
+                end;
+            end;
+        until (LPLine.Next() = 0) or (RemainingBaseQty <= QtyTolerance());
+    end;
+
+    // -------------------------------------------------------------------------
+    // Pick-guided (non-explicit) sales reconciliation
+    // -------------------------------------------------------------------------
+
+    /// <summary>
+    /// Reconciles a sale that carried no explicitly selected LP. The registered
+    /// pick Take lines of the posted warehouse shipment line (netted for
+    /// breakbulk, minus what earlier postings of the same line already shipped)
+    /// say which pallet or bin each base quantity physically left. Candidates
+    /// are the active LP lines at the ledger location holding the same
+    /// item/variant/lot/serial, minus LPs reserved for another document.
+    /// With pick evidence:
+    ///   1. each Take line in registration order, up to its picked base quantity:
+    ///      the LP it names, then the LPs standing in its bin (LP No./Line No.);
+    ///   2. what a Take bin could not explain, from the hint LP (an LP stamped
+    ///      earlier) when it stands in that bin, then from the other LPs of that
+    ///      bin - never more than the bin's unexplained quantity, never a pallet
+    ///      outside the picked bins;
+    ///   3. only if nothing at all was consumed and exactly one LP line at the
+    ///      location matches, that line (LP bin stale after a BC-side move).
+    /// Without pick evidence (ship-only locations, inventory picks): the hint LP
+    /// when it is a candidate, else the single matching LP line, else nothing.
+    /// Quantity that no evidence explains stays loose stock; this path never
+    /// raises. Several LPs may be reduced for one ledger entry; each reduction
+    /// is written to the LP Movement Ledger under the same ILE-qualified
+    /// reference (a per-LP ordinal is appended for a second line of the same
+    /// LP, because LP Management treats LP + reference as "already consumed").
+    /// The entry is stamped with the first consumed LP; when nothing was
+    /// consumed an earlier heuristic stamp is cleared so the ledger never
+    /// claims an LP that was not reduced.
+    /// </summary>
+    local procedure ReconcileSalesEntryFromPick(var ItemLedgerEntry: Record "Item Ledger Entry"; PostedShptLine: Record "Sales Shipment Line"; HintLpNo: Code[20])
+    var
+        TempPickTake: Record "Registered Whse. Activity Line" temporary;
+        TempCandidate: Record "DOPSWHS LP Line" temporary;
+        LinesConsumedPerLp: Dictionary of [Code[20], Integer];
+        UnmetByBin: Dictionary of [Code[20], Decimal];
+        TakeBins: List of [Code[20]];
+        ConsumptionReference: Code[40];
+        WhseShipmentNo: Code[20];
+        FirstConsumedLpNo: Code[20];
+        RemainingBaseQty: Decimal;
+        TakeBaseQty: Decimal;
+        ConsumedBaseQty: Decimal;
+    begin
+        RemainingBaseQty := Abs(ItemLedgerEntry.Quantity);
+        if RemainingBaseQty = 0 then
+            exit;
+        ConsumptionReference := BuildConsumptionReference(ItemLedgerEntry);
+        if EntryAlreadyReconciled(ConsumptionReference) then
+            exit;
+
+        CollectRegisteredPickTakes(ItemLedgerEntry, PostedShptLine, TempPickTake, WhseShipmentNo);
+        BuildSalesLpCandidates(ItemLedgerEntry, TempPickTake, HintLpNo, WhseShipmentNo, TempCandidate);
+
+        if TempCandidate.IsEmpty() then begin
+            // The sale came from loose stock, or from pallets that cannot be
+            // identified safely. Reducing a guessed pallet would be worse than none.
+            ClearItemLedgerEntryLp(ItemLedgerEntry);
+            exit;
+        end;
+
+        if TempPickTake.IsEmpty() then
+            ConsumeWithoutPickEvidence(
+                TempCandidate, HintLpNo, RemainingBaseQty,
+                ConsumptionReference, LinesConsumedPerLp, FirstConsumedLpNo)
+        else begin
+            // 1. Follow the registered pick: what was physically taken, and from where.
+            if TempPickTake.FindSet() then
+                repeat
+                    TakeBaseQty := TempPickTake."Qty. (Base)";
+                    if TakeBaseQty > RemainingBaseQty then
+                        TakeBaseQty := RemainingBaseQty;
+                    if TakeBaseQty > QtyTolerance() then begin
+                        ConsumedBaseQty := 0;
+                        if TempPickTake."LP No." <> '' then
+                            ConsumedBaseQty := ConsumeSalesCandidates(
+                                TempCandidate, TempPickTake."LP No.", '', TakeBaseQty,
+                                ConsumptionReference, LinesConsumedPerLp, FirstConsumedLpNo);
+                        // A Take without LP, or naming an LP that does not hold this
+                        // lot (mis-scan, cross-line copy): the pallet standing in the
+                        // Take bin is the physical source.
+                        if (TakeBaseQty - ConsumedBaseQty > QtyTolerance()) and (TempPickTake."Bin Code" <> '') then
+                            ConsumedBaseQty += ConsumeSalesCandidates(
+                                TempCandidate, '', TempPickTake."Bin Code", TakeBaseQty - ConsumedBaseQty,
+                                ConsumptionReference, LinesConsumedPerLp, FirstConsumedLpNo);
+                        RemainingBaseQty -= ConsumedBaseQty;
+                        AddUnmetBinQty(UnmetByBin, TakeBins, TempPickTake."Bin Code", TakeBaseQty - ConsumedBaseQty);
+                    end;
+                until (TempPickTake.Next() = 0) or (RemainingBaseQty <= QtyTolerance());
+
+            // 2. The unexplained part of each Take bin: hint LP first, then the
+            //    other LPs of that bin. A pallet outside the picked bins is never
+            //    touched, whatever the remainder.
+            if (RemainingBaseQty > QtyTolerance()) and (HintLpNo <> '') then
+                RemainingBaseQty -= ConsumeWithinTakeBins(
+                    TempCandidate, HintLpNo, UnmetByBin, TakeBins, RemainingBaseQty,
+                    ConsumptionReference, LinesConsumedPerLp, FirstConsumedLpNo);
+            if RemainingBaseQty > QtyTolerance() then
+                RemainingBaseQty -= ConsumeWithinTakeBins(
+                    TempCandidate, '', UnmetByBin, TakeBins, RemainingBaseQty,
+                    ConsumptionReference, LinesConsumedPerLp, FirstConsumedLpNo);
+
+            // 3. No pallet found where the pick says the stock was (LP bin stale
+            //    after a BC-side movement): only an unambiguous single LP line at
+            //    the location may stand in.
+            if (FirstConsumedLpNo = '') and (RemainingBaseQty > QtyTolerance()) then
+                ConsumeSingleCandidateLine(
+                    TempCandidate, RemainingBaseQty,
+                    ConsumptionReference, LinesConsumedPerLp, FirstConsumedLpNo);
+        end;
+
+        // The ledger entry carries one LP. When the sale spanned several pallets the
+        // first consumed LP (pick order, then LP No.) is stamped; the LP Movement
+        // Ledger holds the exact per-LP split under the same reference.
+        if FirstConsumedLpNo <> '' then
+            StampItemLedgerEntry(ItemLedgerEntry, FirstConsumedLpNo)
+        else
+            ClearItemLedgerEntryLp(ItemLedgerEntry);
+    end;
+
+    /// <summary>
+    /// No registered pick explains the sale (ship-only location, inventory pick,
+    /// pick registered without bins). The former location-wide rule applies
+    /// without its error: the hint LP when it is a candidate, else the single
+    /// matching LP line; several matching pallets stay untouched rather than
+    /// guessed by LP No.
+    /// </summary>
+    local procedure ConsumeWithoutPickEvidence(var TempCandidate: Record "DOPSWHS LP Line" temporary; HintLpNo: Code[20]; RemainingBaseQty: Decimal; ConsumptionReference: Code[40]; var LinesConsumedPerLp: Dictionary of [Code[20], Integer]; var FirstConsumedLpNo: Code[20])
+    begin
+        if HintLpNo <> '' then begin
+            TempCandidate.Reset();
+            TempCandidate.SetRange("LP No.", HintLpNo);
+            if not TempCandidate.IsEmpty() then begin
+                ConsumeSalesCandidates(
+                    TempCandidate, HintLpNo, '', RemainingBaseQty,
+                    ConsumptionReference, LinesConsumedPerLp, FirstConsumedLpNo);
+                exit;
+            end;
+        end;
+        ConsumeSingleCandidateLine(
+            TempCandidate, RemainingBaseQty,
+            ConsumptionReference, LinesConsumedPerLp, FirstConsumedLpNo);
+    end;
+
+    /// <summary>
+    /// Consumes from the only candidate line that still has stock; does nothing
+    /// when none or several remain.
+    /// </summary>
+    local procedure ConsumeSingleCandidateLine(var TempCandidate: Record "DOPSWHS LP Line" temporary; MaxBaseQty: Decimal; ConsumptionReference: Code[40]; var LinesConsumedPerLp: Dictionary of [Code[20], Integer]; var FirstConsumedLpNo: Code[20])
+    var
+        SingleLpNo: Code[20];
+        LineCount: Integer;
+    begin
+        TempCandidate.Reset();
+        TempCandidate.SetFilter(Quantity, '>%1', QtyTolerance());
+        if TempCandidate.FindSet() then
+            repeat
+                LineCount += 1;
+                SingleLpNo := TempCandidate."LP No.";
+            until (TempCandidate.Next() = 0) or (LineCount > 1);
+        TempCandidate.Reset();
+        if LineCount <> 1 then
+            exit;
+        ConsumeSalesCandidates(
+            TempCandidate, SingleLpNo, '', MaxBaseQty,
+            ConsumptionReference, LinesConsumedPerLp, FirstConsumedLpNo);
+    end;
+
+    /// <summary>
+    /// Consumes up to MaxBaseQty from the candidate buffer, optionally restricted
+    /// to one LP and/or to the LPs standing in one bin, in LP No. / Line No.
+    /// order. Returns the base quantity actually consumed and keeps the buffer
+    /// quantities current.
+    /// </summary>
+    local procedure ConsumeSalesCandidates(var TempCandidate: Record "DOPSWHS LP Line" temporary; LpNoFilter: Code[20]; BinCodeFilter: Code[20]; MaxBaseQty: Decimal; ConsumptionReference: Code[40]; var LinesConsumedPerLp: Dictionary of [Code[20], Integer]; var FirstConsumedLpNo: Code[20]) ConsumedBaseQty: Decimal
+    var
+        LPManagement: Codeunit "DOPSWHS LP Management";
+        QtyToConsume: Decimal;
+        TakeBaseQty: Decimal;
+    begin
+        QtyToConsume := MaxBaseQty;
+        if QtyToConsume <= QtyTolerance() then
+            exit(0);
+        TempCandidate.Reset();
+        if LpNoFilter <> '' then
+            TempCandidate.SetRange("LP No.", LpNoFilter);
+        if BinCodeFilter <> '' then
+            TempCandidate.SetRange("Source Bin Code", BinCodeFilter);
+        if not TempCandidate.FindSet(true) then begin
+            TempCandidate.Reset();
+            exit(0);
+        end;
+        repeat
+            if TempCandidate.Quantity > QtyTolerance() then begin
+                TakeBaseQty := TempCandidate.Quantity;
+                if TakeBaseQty > QtyToConsume then
+                    TakeBaseQty := QtyToConsume;
+                TakeBaseQty := Round(TakeBaseQty, 0.00001);
+                if TakeBaseQty > 0 then begin
+                    LPManagement.ConsumeLineForShipment(
+                        TempCandidate."LP No.", TempCandidate."Line No.", TakeBaseQty,
+                        LineConsumptionReference(ConsumptionReference, TempCandidate."LP No.", LinesConsumedPerLp));
+                    TempCandidate.Quantity -= TakeBaseQty;
+                    TempCandidate.Modify();
+                    QtyToConsume -= TakeBaseQty;
+                    ConsumedBaseQty += TakeBaseQty;
+                    if FirstConsumedLpNo = '' then
+                        FirstConsumedLpNo := TempCandidate."LP No.";
+                end;
+            end;
+        until (TempCandidate.Next() = 0) or (QtyToConsume <= QtyTolerance());
+        TempCandidate.Reset();
+        exit(ConsumedBaseQty);
+    end;
+
+    /// <summary>
+    /// Consumes the unexplained quantity of each Take bin (registration order),
+    /// optionally only from one LP, never more per bin than the pick left
+    /// unexplained there. Keeps the per-bin bookkeeping current.
+    /// </summary>
+    local procedure ConsumeWithinTakeBins(var TempCandidate: Record "DOPSWHS LP Line" temporary; LpNoFilter: Code[20]; var UnmetByBin: Dictionary of [Code[20], Decimal]; TakeBins: List of [Code[20]]; MaxBaseQty: Decimal; ConsumptionReference: Code[40]; var LinesConsumedPerLp: Dictionary of [Code[20], Integer]; var FirstConsumedLpNo: Code[20]) ConsumedBaseQty: Decimal
+    var
+        BinCode: Code[20];
+        UnmetBaseQty: Decimal;
+        BoundBaseQty: Decimal;
+        TakenBaseQty: Decimal;
+        QtyToConsume: Decimal;
+    begin
+        QtyToConsume := MaxBaseQty;
+        foreach BinCode in TakeBins do
+            if QtyToConsume > QtyTolerance() then begin
+                UnmetByBin.Get(BinCode, UnmetBaseQty);
+                if UnmetBaseQty > QtyTolerance() then begin
+                    BoundBaseQty := UnmetBaseQty;
+                    if BoundBaseQty > QtyToConsume then
+                        BoundBaseQty := QtyToConsume;
+                    TakenBaseQty := ConsumeSalesCandidates(
+                        TempCandidate, LpNoFilter, BinCode, BoundBaseQty,
+                        ConsumptionReference, LinesConsumedPerLp, FirstConsumedLpNo);
+                    UnmetByBin.Set(BinCode, UnmetBaseQty - TakenBaseQty);
+                    QtyToConsume -= TakenBaseQty;
+                    ConsumedBaseQty += TakenBaseQty;
+                end;
+            end;
+        exit(ConsumedBaseQty);
+    end;
+
+    local procedure AddUnmetBinQty(var UnmetByBin: Dictionary of [Code[20], Decimal]; var TakeBins: List of [Code[20]]; BinCode: Code[20]; UnmetBaseQty: Decimal)
+    var
+        ExistingBaseQty: Decimal;
+    begin
+        if (BinCode = '') or (UnmetBaseQty <= QtyTolerance()) then
+            exit;
+        if UnmetByBin.Get(BinCode, ExistingBaseQty) then
+            UnmetByBin.Set(BinCode, ExistingBaseQty + UnmetBaseQty)
+        else begin
+            UnmetByBin.Add(BinCode, UnmetBaseQty);
+            TakeBins.Add(BinCode);
+        end;
+    end;
+
+    /// <summary>
+    /// Registered pick Take lines that moved this ledger entry's stock, in
+    /// registration order, netted for breakbulk and reduced by what earlier
+    /// postings of the same warehouse shipment line (or earlier entries of the
+    /// same posting) already shipped from the front of that order. The
+    /// warehouse shipment line comes from the posted warehouse line of this
+    /// posting (Sales-Post inserts it during line posting, before FinalizePosting;
+    /// BC never writes Whse. Item Entry Relation for a shipment), else from a
+    /// still-open partially shipped working line; only when neither exists are
+    /// the picks resolved through the sales source line. Returns the warehouse
+    /// shipment no. so an LP assigned to that shipment qualifies as a candidate.
+    /// </summary>
+    local procedure CollectRegisteredPickTakes(ItemLedgerEntry: Record "Item Ledger Entry"; PostedShptLine: Record "Sales Shipment Line"; var TempPickTake: Record "Registered Whse. Activity Line" temporary; var WhseShipmentNo: Code[20])
+    var
+        PostedWhseShptLine: Record "Posted Whse. Shipment Line";
+        WhseShptLine: Record "Warehouse Shipment Line";
+        RegdWhseActivityLine: Record "Registered Whse. Activity Line";
+        WhseShipmentLineNo: Integer;
+        CurrentPostedNo: Code[20];
+        AlreadyShippedBase: Decimal;
+        TakesCarryTracking: Boolean;
+    begin
+        TempPickTake.Reset();
+        TempPickTake.DeleteAll();
+        Clear(WhseShipmentNo);
+        if PostedShptLine."Order No." = '' then
+            exit;
+
+        if FindPostedWhseShptLine(ItemLedgerEntry, PostedShptLine, PostedWhseShptLine) then begin
+            WhseShipmentNo := PostedWhseShptLine."Whse. Shipment No.";
+            WhseShipmentLineNo := PostedWhseShptLine."Whse Shipment Line No.";
+            CurrentPostedNo := PostedWhseShptLine."No.";
+        end else begin
+            WhseShptLine.SetRange("Source Type", Database::"Sales Line");
+            WhseShptLine.SetRange("Source No.", PostedShptLine."Order No.");
+            WhseShptLine.SetRange("Source Line No.", PostedShptLine."Order Line No.");
+            WhseShptLine.SetRange("Item No.", ItemLedgerEntry."Item No.");
+            WhseShptLine.SetRange("Variant Code", ItemLedgerEntry."Variant Code");
+            if WhseShptLine.FindFirst() then begin
+                WhseShipmentNo := WhseShptLine."No.";
+                WhseShipmentLineNo := WhseShptLine."Line No.";
+            end;
+        end;
+
+        if WhseShipmentNo <> '' then begin
+            RegdWhseActivityLine.SetRange("Whse. Document Type", RegdWhseActivityLine."Whse. Document Type"::Shipment);
+            RegdWhseActivityLine.SetRange("Whse. Document No.", WhseShipmentNo);
+            RegdWhseActivityLine.SetRange("Whse. Document Line No.", WhseShipmentLineNo);
+            TakesCarryTracking := CollectPickTakes(ItemLedgerEntry, RegdWhseActivityLine, TempPickTake);
+            if TempPickTake.IsEmpty() then
+                exit;
+            AlreadyShippedBase := ShippedBaseThroughWhseShipmentLine(
+                ItemLedgerEntry, WhseShipmentNo, WhseShipmentLineNo, CurrentPostedNo, TakesCarryTracking);
+        end else begin
+            // Last resort: every registered shipment pick of the sales line at
+            // this location, across all its warehouse shipments; the offset
+            // below is then measured across all its sales shipments too.
+            RegdWhseActivityLine.SetRange("Source Type", Database::"Sales Line");
+            RegdWhseActivityLine.SetRange("Source No.", PostedShptLine."Order No.");
+            RegdWhseActivityLine.SetRange("Source Line No.", PostedShptLine."Order Line No.");
+            RegdWhseActivityLine.SetRange("Whse. Document Type", RegdWhseActivityLine."Whse. Document Type"::Shipment);
+            RegdWhseActivityLine.SetRange("Location Code", ItemLedgerEntry."Location Code");
+            TakesCarryTracking := CollectPickTakes(ItemLedgerEntry, RegdWhseActivityLine, TempPickTake);
+            if TempPickTake.IsEmpty() then
+                exit;
+            AlreadyShippedBase := ShippedBaseForSalesLine(ItemLedgerEntry, PostedShptLine, TakesCarryTracking);
+        end;
+        AlreadyShippedBase += ShippedBaseEarlierInThisDocument(ItemLedgerEntry, TakesCarryTracking);
+        SkipShippedPickTakes(TempPickTake, AlreadyShippedBase);
+    end;
+
+    /// <summary>
+    /// Copies the registered Take lines of the filtered activity lines that
+    /// match the entry's item/variant and tracking. Items tracked only at ledger
+    /// level (no warehouse lot/serial tracking) register their pick lines with
+    /// blank tracking; those lines still say which pallet and bin the stock
+    /// left. Returns true when the copied Take lines carry the entry's
+    /// lot/serial, false when the blank-tracking fallback (or nothing) applied.
+    /// </summary>
+    local procedure CollectPickTakes(ItemLedgerEntry: Record "Item Ledger Entry"; var RegdWhseActivityLine: Record "Registered Whse. Activity Line"; var TempPickTake: Record "Registered Whse. Activity Line" temporary): Boolean
+    begin
+        RegdWhseActivityLine.SetRange("Activity Type", RegdWhseActivityLine."Activity Type"::Pick);
+        RegdWhseActivityLine.SetRange("Item No.", ItemLedgerEntry."Item No.");
+        RegdWhseActivityLine.SetRange("Variant Code", ItemLedgerEntry."Variant Code");
+        if ItemLedgerEntry."Lot No." <> '' then
+            RegdWhseActivityLine.SetRange("Lot No.", ItemLedgerEntry."Lot No.");
+        if ItemLedgerEntry."Serial No." <> '' then
+            RegdWhseActivityLine.SetRange("Serial No.", ItemLedgerEntry."Serial No.");
+        if CopyPickTakes(RegdWhseActivityLine, TempPickTake) then
+            exit((ItemLedgerEntry."Lot No." <> '') or (ItemLedgerEntry."Serial No." <> ''));
+        if (ItemLedgerEntry."Lot No." = '') and (ItemLedgerEntry."Serial No." = '') then
+            exit(false);
+        RegdWhseActivityLine.SetRange("Lot No.", '');
+        RegdWhseActivityLine.SetRange("Serial No.", '');
+        CopyPickTakes(RegdWhseActivityLine, TempPickTake);
+        exit(false);
+    end;
+
+    /// <summary>
+    /// Copies the Take lines and nets breakbulk: Whse.-Activity-Register also
+    /// registers the breakbulk pair (Take 1 PALLET from bin X, Place its base
+    /// quantity back into bin X) and Registered Whse. Activity Line has no
+    /// Breakbulk No. Every Place into a Take bin is netted against that bin's
+    /// Take lines so the buffer holds what physically left each bin; the real
+    /// Place goes to the shipment bin, never to a Take bin.
+    /// </summary>
+    local procedure CopyPickTakes(var RegdWhseActivityLine: Record "Registered Whse. Activity Line"; var TempPickTake: Record "Registered Whse. Activity Line" temporary): Boolean
+    begin
+        RegdWhseActivityLine.SetRange("Action Type", RegdWhseActivityLine."Action Type"::Take);
+        if not RegdWhseActivityLine.FindSet() then
+            exit(false);
+        repeat
+            TempPickTake := RegdWhseActivityLine;
+            TempPickTake.Insert();
+        until RegdWhseActivityLine.Next() = 0;
+
+        RegdWhseActivityLine.SetRange("Action Type", RegdWhseActivityLine."Action Type"::Place);
+        if RegdWhseActivityLine.FindSet() then
+            repeat
+                NetBreakbulkPlace(TempPickTake, RegdWhseActivityLine."Bin Code", RegdWhseActivityLine."Qty. (Base)");
+            until RegdWhseActivityLine.Next() = 0;
+        RegdWhseActivityLine.SetRange("Action Type", RegdWhseActivityLine."Action Type"::Take);
+        exit(true);
+    end;
+
+    local procedure NetBreakbulkPlace(var TempPickTake: Record "Registered Whse. Activity Line" temporary; BinCode: Code[20]; PlaceBaseQty: Decimal)
+    begin
+        if (BinCode = '') or (PlaceBaseQty <= QtyTolerance()) then
+            exit;
+        TempPickTake.Reset();
+        TempPickTake.SetRange("Bin Code", BinCode);
+        if TempPickTake.FindSet() then
+            repeat
+                if TempPickTake."Qty. (Base)" <= PlaceBaseQty + QtyTolerance() then begin
+                    PlaceBaseQty -= TempPickTake."Qty. (Base)";
+                    TempPickTake.Delete();
+                end else begin
+                    TempPickTake."Qty. (Base)" -= PlaceBaseQty;
+                    TempPickTake.Modify();
+                    PlaceBaseQty := 0;
+                end;
+            until (TempPickTake.Next() = 0) or (PlaceBaseQty <= QtyTolerance());
+        TempPickTake.Reset();
+    end;
+
+    /// <summary>
+    /// Removes the base quantity earlier postings already shipped from the front
+    /// of the registration-ordered Take buffer: stock leaves the shipment bin in
+    /// the order it was picked into it, so a partial shipment consumed the first
+    /// Take lines and this posting continues where it stopped.
+    /// </summary>
+    local procedure SkipShippedPickTakes(var TempPickTake: Record "Registered Whse. Activity Line" temporary; SkipBaseQty: Decimal)
+    begin
+        if SkipBaseQty <= QtyTolerance() then
+            exit;
+        TempPickTake.Reset();
+        if not TempPickTake.FindSet() then
+            exit;
+        repeat
+            if TempPickTake."Qty. (Base)" <= SkipBaseQty + QtyTolerance() then begin
+                SkipBaseQty -= TempPickTake."Qty. (Base)";
+                TempPickTake.Delete();
+            end else begin
+                TempPickTake."Qty. (Base)" -= SkipBaseQty;
+                TempPickTake.Modify();
+                SkipBaseQty := 0;
+            end;
+        until (TempPickTake.Next() = 0) or (SkipBaseQty <= QtyTolerance());
+    end;
+
+    /// <summary>
+    /// Base quantity earlier postings of the same warehouse shipment line shipped
+    /// for this entry's item (and tracking, when the Take lines carry it): the
+    /// Sale entries of the other posted warehouse lines' sales shipments.
+    /// </summary>
+    local procedure ShippedBaseThroughWhseShipmentLine(ItemLedgerEntry: Record "Item Ledger Entry"; WhseShipmentNo: Code[20]; WhseShipmentLineNo: Integer; CurrentPostedNo: Code[20]; MatchTracking: Boolean) ShippedBaseQty: Decimal
+    var
+        PostedWhseShptLine: Record "Posted Whse. Shipment Line";
+    begin
+        PostedWhseShptLine.SetCurrentKey("Whse. Shipment No.", "Whse Shipment Line No.");
+        PostedWhseShptLine.SetRange("Whse. Shipment No.", WhseShipmentNo);
+        PostedWhseShptLine.SetRange("Whse Shipment Line No.", WhseShipmentLineNo);
+        if CurrentPostedNo <> '' then
+            PostedWhseShptLine.SetFilter("No.", '<>%1', CurrentPostedNo);
+        if PostedWhseShptLine.FindSet() then
+            repeat
+                ShippedBaseQty += SaleEntriesBaseQty(
+                    ItemLedgerEntry, PostedWhseShptLine."Posted Source No.", PostedWhseShptLine."Source Line No.", 0, MatchTracking);
+            until PostedWhseShptLine.Next() = 0;
+        exit(ShippedBaseQty);
+    end;
+
+    /// <summary>Base quantity the other sales shipments of the same order line shipped for this entry's item (and tracking).</summary>
+    local procedure ShippedBaseForSalesLine(ItemLedgerEntry: Record "Item Ledger Entry"; PostedShptLine: Record "Sales Shipment Line"; MatchTracking: Boolean) ShippedBaseQty: Decimal
+    var
+        SalesShptLine: Record "Sales Shipment Line";
+    begin
+        SalesShptLine.SetCurrentKey("Order No.", "Order Line No.", "Posting Date");
+        SalesShptLine.SetRange("Order No.", PostedShptLine."Order No.");
+        SalesShptLine.SetRange("Order Line No.", PostedShptLine."Order Line No.");
+        SalesShptLine.SetFilter("Document No.", '<>%1', ItemLedgerEntry."Document No.");
+        if SalesShptLine.FindSet() then
+            repeat
+                ShippedBaseQty += SaleEntriesBaseQty(
+                    ItemLedgerEntry, SalesShptLine."Document No.", SalesShptLine."Line No.", 0, MatchTracking);
+            until SalesShptLine.Next() = 0;
+        exit(ShippedBaseQty);
+    end;
+
+    /// <summary>
+    /// Base quantity the earlier Sale entries of the same document line consumed
+    /// in this posting (a line can produce several entries for one lot when the
+    /// reservation is split), so a second entry continues where the first stopped.
+    /// </summary>
+    local procedure ShippedBaseEarlierInThisDocument(ItemLedgerEntry: Record "Item Ledger Entry"; MatchTracking: Boolean): Decimal
+    begin
+        exit(SaleEntriesBaseQty(
+            ItemLedgerEntry, ItemLedgerEntry."Document No.", ItemLedgerEntry."Document Line No.",
+            ItemLedgerEntry."Entry No.", MatchTracking));
+    end;
+
+    local procedure SaleEntriesBaseQty(ItemLedgerEntry: Record "Item Ledger Entry"; DocumentNo: Code[20]; DocumentLineNo: Integer; BeforeEntryNo: Integer; MatchTracking: Boolean) BaseQty: Decimal
+    var
+        SaleEntry: Record "Item Ledger Entry";
+    begin
+        if DocumentNo = '' then
+            exit(0);
+        SaleEntry.SetCurrentKey("Document No.", "Document Type", "Document Line No.");
+        SaleEntry.SetRange("Document No.", DocumentNo);
+        SaleEntry.SetRange("Document Type", SaleEntry."Document Type"::"Sales Shipment");
+        SaleEntry.SetRange("Document Line No.", DocumentLineNo);
+        SaleEntry.SetRange("Entry Type", SaleEntry."Entry Type"::Sale);
+        SaleEntry.SetRange("Item No.", ItemLedgerEntry."Item No.");
+        SaleEntry.SetRange("Variant Code", ItemLedgerEntry."Variant Code");
+        if MatchTracking then begin
+            SaleEntry.SetRange("Lot No.", ItemLedgerEntry."Lot No.");
+            SaleEntry.SetRange("Serial No.", ItemLedgerEntry."Serial No.");
+        end;
+        if BeforeEntryNo <> 0 then
+            SaleEntry.SetFilter("Entry No.", '<%1', BeforeEntryNo);
+        SaleEntry.SetFilter(Quantity, '<0');
+        if SaleEntry.FindSet() then
+            repeat
+                BaseQty += Abs(SaleEntry.Quantity);
+            until SaleEntry.Next() = 0;
+        exit(BaseQty);
+    end;
+
+    /// <summary>
+    /// Fills a temporary LP Line buffer with the consumable lines of active LPs at
+    /// the ledger location that hold the same item/variant/lot/serial. In the
+    /// buffer, Quantity is the available BASE quantity and "Source Bin Code" is
+    /// the LP's bin; the primary key (LP No., Line No.) gives the deterministic
+    /// order. The pick evidence bounds the consumption, not the buffer, with one
+    /// exception: an LP reserved for another document (Status Assigned, elsewhere
+    /// than this shipment or one of its registered picks) is left out unless a
+    /// Take line names it or it is the hint LP. Every other flow of the app
+    /// refuses such an LP, and consuming it would strip the other document's
+    /// assignment.
+    /// </summary>
+    local procedure BuildSalesLpCandidates(ItemLedgerEntry: Record "Item Ledger Entry"; var TempPickTake: Record "Registered Whse. Activity Line" temporary; HintLpNo: Code[20]; WhseShipmentNo: Code[20]; var TempCandidate: Record "DOPSWHS LP Line" temporary)
+    var
+        LPHeader: Record "DOPSWHS LP Header";
+        LPLine: Record "DOPSWHS LP Line";
+        Item: Record Item;
+        ItemUoM: Record "Item Unit of Measure";
+        PickedLpNos: List of [Code[20]];
+        PickActivityNos: List of [Code[20]];
+        QtyPerUoM: Decimal;
+        AvailableBaseQty: Decimal;
+    begin
+        TempCandidate.Reset();
+        TempCandidate.DeleteAll();
+        if not Item.Get(ItemLedgerEntry."Item No.") then
+            exit;
+
+        if TempPickTake.FindSet() then
+            repeat
+                if (TempPickTake."LP No." <> '') and (not PickedLpNos.Contains(TempPickTake."LP No.")) then
+                    PickedLpNos.Add(TempPickTake."LP No.");
+                // Whse.-Activity-Register keeps the source pick no. on the
+                // registered line; the registered no. is accepted as well.
+                if (TempPickTake."Whse. Activity No." <> '') and (not PickActivityNos.Contains(TempPickTake."Whse. Activity No.")) then
+                    PickActivityNos.Add(TempPickTake."Whse. Activity No.");
+                if (TempPickTake."No." <> '') and (not PickActivityNos.Contains(TempPickTake."No.")) then
+                    PickActivityNos.Add(TempPickTake."No.");
+            until TempPickTake.Next() = 0;
+
+        LPHeader.SetRange("Location Code", ItemLedgerEntry."Location Code");
+        LPHeader.SetFilter(Status, '%1|%2|%3', LPHeader.Status::Open, LPHeader.Status::Built, LPHeader.Status::Assigned);
+        if not LPHeader.FindSet() then
+            exit;
+        repeat
+            if LpMayBeConsumed(LPHeader, HintLpNo, WhseShipmentNo, PickedLpNos, PickActivityNos) then begin
+                LPLine.Reset();
+                LPLine.SetRange("LP No.", LPHeader."No.");
+                LPLine.SetRange("Item No.", ItemLedgerEntry."Item No.");
+                LPLine.SetRange("Variant Code", ItemLedgerEntry."Variant Code");
+                LPLine.SetRange("Lot No.", ItemLedgerEntry."Lot No.");
+                LPLine.SetRange("Serial No.", ItemLedgerEntry."Serial No.");
+                if LPLine.FindSet() then
+                    repeat
+                        QtyPerUoM := 1;
+                        if (LPLine."Unit of Measure" <> '') and
+                           (LPLine."Unit of Measure" <> Item."Base Unit of Measure")
+                        then begin
+                            if ItemUoM.Get(LPLine."Item No.", LPLine."Unit of Measure") then
+                                QtyPerUoM := ItemUoM."Qty. per Unit of Measure"
+                            else
+                                QtyPerUoM := 0;
+                        end;
+                        AvailableBaseQty := Round(LPLine.Quantity * QtyPerUoM, 0.00001);
+                        if (QtyPerUoM > 0) and (AvailableBaseQty > 0) then begin
+                            TempCandidate := LPLine;
+                            TempCandidate.Quantity := AvailableBaseQty;
+                            TempCandidate."Source Bin Code" := LPHeader."Bin Code";
+                            TempCandidate.Insert();
+                        end;
+                    until LPLine.Next() = 0;
+            end;
+        until LPHeader.Next() = 0;
+    end;
+
+    local procedure LpMayBeConsumed(LPHeader: Record "DOPSWHS LP Header"; HintLpNo: Code[20]; WhseShipmentNo: Code[20]; PickedLpNos: List of [Code[20]]; PickActivityNos: List of [Code[20]]): Boolean
+    begin
+        if PickedLpNos.Contains(LPHeader."No.") or (LPHeader."No." = HintLpNo) then
+            exit(true);
+        if (LPHeader.Status <> LPHeader.Status::Assigned) or (LPHeader."Assigned Document No." = '') then
+            exit(true);
+        case LPHeader."Assigned Document Type" of
+            LPHeader."Assigned Document Type"::WhseShipment:
+                exit(LPHeader."Assigned Document No." = WhseShipmentNo);
+            LPHeader."Assigned Document Type"::WhsePick:
+                exit(PickActivityNos.Contains(LPHeader."Assigned Document No."));
+        end;
+        exit(false);
+    end;
+
+    /// <summary>
+    /// Removes a heuristic LP stamp (item-journal resolution) from an entry whose
+    /// stock was not taken from any LP, together with its value entries, so the
+    /// ledger never claims a pallet that was not reduced.
+    /// </summary>
+    local procedure ClearItemLedgerEntryLp(var ItemLedgerEntry: Record "Item Ledger Entry")
+    var
+        ValueEntry: Record "Value Entry";
+    begin
+        if ItemLedgerEntry."DOPSWHS LP No." = '' then
+            exit;
+        ItemLedgerEntry."DOPSWHS LP No." := '';
+        ItemLedgerEntry.Modify();
+
+        ValueEntry.SetRange("Item Ledger Entry No.", ItemLedgerEntry."Entry No.");
+        ValueEntry.SetFilter("DOPSWHS LP No.", '<>%1', '');
+        if ValueEntry.FindSet(true) then
+            repeat
+                ValueEntry."DOPSWHS LP No." := '';
+                ValueEntry.Modify();
+            until ValueEntry.Next() = 0;
+    end;
+
+    /// <summary>Movement-ledger reference that identifies one item ledger entry:
+    /// posted document no. + '#' + entry no. Shared by both reconciliation paths.</summary>
+    local procedure BuildConsumptionReference(ItemLedgerEntry: Record "Item Ledger Entry"): Code[40]
+    var
+        ConsumptionReference: Code[40];
+    begin
         ConsumptionReference := CopyStr(
             ItemLedgerEntry."Document No." + '#' + Format(ItemLedgerEntry."Entry No."),
             1, MaxStrLen(ConsumptionReference));
-        LPManagement.ConsumeLineForShipment(
-            CandidateLPNo, CandidateLineNo, RequiredBaseQty, ConsumptionReference);
-        StampItemLedgerEntry(ItemLedgerEntry, CandidateLPNo);
+        exit(ConsumptionReference);
+    end;
+
+    /// <summary>
+    /// Reference for one consumed LP line. LP Management treats LP No. + reference
+    /// as "already consumed", so a second line of the same LP within one entry gets
+    /// an ordinal suffix; the first line keeps the plain entry reference.
+    /// </summary>
+    local procedure LineConsumptionReference(ConsumptionReference: Code[40]; LpNo: Code[20]; var LinesConsumedPerLp: Dictionary of [Code[20], Integer]): Code[40]
+    var
+        LineReference: Code[40];
+        Ordinal: Integer;
+    begin
+        if LinesConsumedPerLp.Get(LpNo, Ordinal) then begin
+            Ordinal += 1;
+            LinesConsumedPerLp.Set(LpNo, Ordinal);
+        end else begin
+            Ordinal := 1;
+            LinesConsumedPerLp.Add(LpNo, Ordinal);
+        end;
+        if Ordinal = 1 then
+            exit(ConsumptionReference);
+        LineReference := CopyStr(ConsumptionReference + '/' + Format(Ordinal), 1, MaxStrLen(LineReference));
+        exit(LineReference);
+    end;
+
+    /// <summary>True when any LP was already reduced for this ledger entry reference.</summary>
+    local procedure EntryAlreadyReconciled(ConsumptionReference: Code[40]): Boolean
+    var
+        MovementLedger: Record "DOPSWHS LP Movement Ledger";
+    begin
+        if ConsumptionReference = '' then
+            exit(false);
+        MovementLedger.SetRange(Action, MovementLedger.Action::ItemRemoved);
+        MovementLedger.SetRange("Related Document", ConsumptionReference);
+        exit(not MovementLedger.IsEmpty());
+    end;
+
+    local procedure QtyTolerance(): Decimal
+    begin
+        exit(0.00001);
     end;
 
     /// <summary>After Purch-Post completes, copy the LP from the originating Whse Receipt Header

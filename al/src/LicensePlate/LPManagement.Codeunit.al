@@ -446,7 +446,7 @@ codeunit 72040 "DOPSWHS LP Management"
     /// <summary>
     /// Backwards-compatible entry point retained for callers compiled against older versions.
     /// </summary>
-    procedure ConsumeLineForPostedSale(LpNo: Code[20]; LineNo: Integer; BaseQty: Decimal; PostedShipmentNo: Code[20])
+    procedure ConsumeLineForPostedSale(LpNo: Code[20]; LineNo: Integer; BaseQty: Decimal; PostedShipmentNo: Code[40])
     begin
         ConsumeLineForShipment(LpNo, LineNo, BaseQty, PostedShipmentNo);
     end;
@@ -455,8 +455,12 @@ codeunit 72040 "DOPSWHS LP Management"
     /// Reduces one exact LP line after a posted sales shipment. The quantity received
     /// from the item ledger is always in the item's base unit; the LP line may use another UOM.
     /// Works for both direct sales posting and warehouse shipment posting.
+    /// PostedShipmentNo is the movement-ledger reference (Code[40] like "Related
+    /// Document"): LP Propagation passes "&lt;posted shipment no.&gt;#&lt;entry no.&gt;"
+    /// plus a per-LP line ordinal, which exceeds 20 characters; a narrower
+    /// parameter raised an English runtime error inside Sales-Post.
     /// </summary>
-    procedure ConsumeLineForShipment(LpNo: Code[20]; LineNo: Integer; BaseQty: Decimal; PostedShipmentNo: Code[20])
+    procedure ConsumeLineForShipment(LpNo: Code[20]; LineNo: Integer; BaseQty: Decimal; PostedShipmentNo: Code[40])
     var
         LP: Record "DOPSWHS LP Header";
         LPLine: Record "DOPSWHS LP Line";

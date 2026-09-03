@@ -23,7 +23,9 @@ page 72221 "DOPSWHS Count API"
                 field(mode; Rec.Mode) { Caption = 'mode'; }
                 field(status; Rec.Status) { Caption = 'status'; }
                 field(createdDateTime; Rec."Created DateTime") { Caption = 'createdDateTime'; }
-                field(v2ScanMode; Rec."V2 Scan Mode") { Caption = 'v2ScanMode'; }
+                // V2 modu yalnız prepareV2 / countOps.createV2 / BC kartı ile değişir;
+                // API POST gövdesindeki v2ScanMode yok sayılır.
+                field(v2ScanMode; Rec."V2 Scan Mode") { Caption = 'v2ScanMode'; Editable = false; }
                 field(zoneFilter; Rec."Zone Filter") { Caption = 'zoneFilter'; Editable = false; }
                 field(counter1UserId; Counter1UserId) { Caption = 'counter1UserId'; Editable = false; }
                 field(counter2UserId; Counter2UserId) { Caption = 'counter2UserId'; Editable = false; }
@@ -31,6 +33,9 @@ page 72221 "DOPSWHS Count API"
                 field(counter1Completed; Counter1Completed) { Caption = 'counter1Completed'; Editable = false; }
                 field(counter2Completed; Counter2Completed) { Caption = 'counter2Completed'; Editable = false; }
                 field(counter3Completed; Counter3Completed) { Caption = 'counter3Completed'; Editable = false; }
+                // Terminal bu bayrağa göre "Onayla ve Stoklara İşle" düğmesini
+                // gizler; postSheet sunucu tarafında da aynı ayarı denetler.
+                field(terminalPostAllowed; TerminalPostAllowed) { Caption = 'terminalPostAllowed'; Editable = false; }
                 part(lines; "DOPSWHS Count Sheet Line API")
                 {
                     Caption = 'lines';
@@ -55,7 +60,9 @@ page 72221 "DOPSWHS Count API"
     trigger OnAfterGetRecord()
     var
         Counter: Record "DOPSWHS Count Counter";
+        CountMgmt: Codeunit "DOPSWHS Count Mgmt";
     begin
+        TerminalPostAllowed := CountMgmt.TerminalCountPostingAllowed();
         Clear(Counter1UserId);
         Clear(Counter2UserId);
         Clear(Counter3UserId);
@@ -202,6 +209,9 @@ page 72221 "DOPSWHS Count API"
     var
         CountMgmt: Codeunit "DOPSWHS Count Mgmt";
     begin
+        // Terminalden stoklara işleme kurulumda açıkça izin verilmedikçe
+        // kapalıdır; BC Count Sheet kartındaki Post eylemi etkilenmez.
+        CountMgmt.AssertTerminalCountPostingAllowed();
         CountMgmt.PostSheet(Rec."No.");
     end;
 
@@ -213,4 +223,5 @@ page 72221 "DOPSWHS Count API"
         Counter1Completed: Boolean;
         Counter2Completed: Boolean;
         Counter3Completed: Boolean;
+        TerminalPostAllowed: Boolean;
 }

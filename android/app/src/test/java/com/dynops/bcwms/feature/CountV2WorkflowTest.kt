@@ -1,6 +1,7 @@
 package com.dynops.bcwms.feature
 
 import com.dynops.bcwms.scanner.BarcodeIntentResolver
+import org.json.JSONObject
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -59,5 +60,55 @@ class CountV2WorkflowTest {
         assertTrue(message.contains("Sayım ekranından devam edin"))
         assertTrue(message.contains("Yeni V2 Sayımı Oluştur"))
         assertFalse(message.contains("REF-"))
+    }
+
+    /**
+     * Mirrors the CountV2Document / CountDocument call-site idiom: the header comes from
+     * countSheets('no') without $select, so the flag is either present (new AL) or absent (old AL).
+     */
+    private fun headerAllowsTerminalPost(headerJson: String): Boolean {
+        val header = JSONObject(headerJson)
+        return terminalCountPostAllowed(
+            hasFlag = header.has("terminalPostAllowed"),
+            flag = header.optBoolean("terminalPostAllowed", false),
+        )
+    }
+
+    @Test
+    fun `V2 header without the flag keeps the post button for older AL packages`() {
+        assertTrue(headerAllowsTerminalPost("""{"no":"CS00001","status":"InProgress","v2ScanMode":true}"""))
+    }
+
+    @Test
+    fun `V2 header flag hides the post button when BC setup disables terminal posting`() {
+        assertFalse(headerAllowsTerminalPost("""{"no":"CS00001","v2ScanMode":true,"terminalPostAllowed":false}"""))
+        assertTrue(headerAllowsTerminalPost("""{"no":"CS00001","v2ScanMode":true,"terminalPostAllowed":true}"""))
+    }
+
+    @Test
+    fun `V2 post button waits for the header and then follows the terminal posting flag`() {
+        assertFalse(countV2PostButtonVisible(headerLoaded = false, terminalPostAllowed = true))
+        assertFalse(countV2PostButtonVisible(headerLoaded = true, terminalPostAllowed = false))
+        assertTrue(countV2PostButtonVisible(headerLoaded = true, terminalPostAllowed = true))
+        // Older AL package: a loaded header without the flag keeps the button.
+        assertTrue(
+            countV2PostButtonVisible(
+                headerLoaded = true,
+                terminalPostAllowed = headerAllowsTerminalPost("""{"no":"CS00001","v2ScanMode":true}"""),
+            )
+        )
+        assertFalse(
+            countV2PostButtonVisible(
+                headerLoaded = true,
+                terminalPostAllowed = headerAllowsTerminalPost("""{"no":"CS00001","terminalPostAllowed":false}"""),
+            )
+        )
+    }
+
+    @Test
+    fun `BC posting note is operator safe Turkish`() {
+        assertTrue(COUNT_POSTED_IN_BC_NOTE.contains("Business Central"))
+        assertTrue(COUNT_POSTED_IN_BC_NOTE.contains("stoklara işlenir"))
+        assertFalse(COUNT_POSTED_IN_BC_NOTE.contains("REF-"))
     }
 }

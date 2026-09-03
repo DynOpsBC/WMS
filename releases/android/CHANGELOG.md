@@ -7,6 +7,18 @@ Kurulum: [docs/android-install-guide.md](../../docs/android-install-guide.md)
 
 ---
 
+## v1.14.79 — BADE — 2026-09-03
+
+**versionCode:** 200079 · **BC paketi:** 1.14.1.11
+
+**BADE SHA-256:** `0bb0bfb4545b9950eb7c90ac47131d6343652c2d019bd85d2fa2e37e8d40a330`
+
+### Sayım yalnız BC'den işlenir · V2 modu BC'de · çoklu LP sevkiyat
+
+- Terminalden "Onayla ve Stoklara İşle" kaldırıldı. Sayım stoklara yalnız Business Central'daki Count Sheet → Post ile işlenir. Sunucu tarafında da kapalı: DOPSWHS Kurulum → "Terminal Count Posting" (varsayılan kapalı, istenirse açılır).
+- Count Sheet kartında "V2 Scan Mode" artık BC'den açılıp kapatılabiliyor (satırı olmayan, kapatılmamış belgede); listede "V2 Sayımına Çevir" eylemi eklendi.
+- Aynı madde+lot birden fazla LP'de olduğunda satış sevkiyatı artık "birden fazla LP eşleşti" ile durmuyor: kayıtlı pick satırlarının raf/LP bilgisine göre doğru paletler deterministik sırayla düşürülür; açıkça seçilmiş LP yolu değişmedi. Pick satırındaki LP numarası kayıtlı pick satırına taşınıyor.
+
 ## v1.14.78 — BADE — 2026-09-02
 
 **versionCode:** 200078 · **BC paketi:** 1.14.1.10
