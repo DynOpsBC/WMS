@@ -50,7 +50,10 @@ test-artifacts/bade-uat-2026-08-28/
 
 licensing-service/node_modules/
 licensing-service/dist/
-licensing-service/pnpm-lock.yaml
+# licensing-service/pnpm-lock.yaml is committed on purpose: test-full.yml installs it
+# with --frozen-lockfile and caches on that exact path, so ignoring it kept the
+# "Licensing service" CI job permanently red. The portal/push-relay lockfiles below are
+# still ignored and their jobs still fail the same way — same fix when someone owns them.
 customer-portal/node_modules/
 customer-portal/dist/
 customer-portal/api/node_modules/
