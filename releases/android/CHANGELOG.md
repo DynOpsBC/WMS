@@ -7,6 +7,18 @@ Kurulum: [docs/android-install-guide.md](../../docs/android-install-guide.md)
 
 ---
 
+## v1.14.80 — BADE — 2026-09-03
+
+**versionCode:** 200080 · **BC paketi:** 1.14.1.12
+
+**BADE SHA-256:** `e4770c9ab27fa68ccc158371c930032c0761f02cf1bf80a748f368490cbb73f6`
+
+### Toplamada kaynak palet seçimi · stok hareketinde tüm paletler
+
+- "Pick Oluştur" artık hangi paletten toplanacağını soruyor. Aday paletler numara, raf, lot ve mevcut miktarla listeleniyor; siparişin tamamını karşılayan palete "Tamamını karşılar" etiketi konuyor. "Sistem seçsin" seçeneği eski davranışı sürdürür.
+- Seçilen palet toplama satırına yazılıyor, stok o paletten düşüyor.
+- Birden fazla paletten toplanan satışlarda stok hareketi artık tüm paletleri gösteriyor (yeni "LP No.leri" alanı, Business Central madde defter girişleri ekranında görünür). Tek palette eski davranış korunuyor.
+
 ## v1.14.79 — BADE — 2026-09-03
 
 **versionCode:** 200079 · **BC paketi:** 1.14.1.11

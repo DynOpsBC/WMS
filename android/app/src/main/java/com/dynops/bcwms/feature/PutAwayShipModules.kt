@@ -2204,6 +2204,9 @@ private fun ShipDocument(no: String, onBack: () -> Unit, onPickCreated: (String)
     // kontrol). Terminal acenteyi seçip başlığa + kaynak siparişe yazar.
     var showAgent by remember(no) { mutableStateOf(false) }
     var agentSkipped by remember(no) { mutableStateOf(false) }
+    // Toplama hangi paletten üretilsin? Sunucu birden çok aday döndürürse
+    // operatör seçer (saha: LP000023 istenip LP000024'ten toplanması).
+    var pickLpOptions by remember(no) { mutableStateOf<List<PickSourceOption>>(emptyList()) }
 
     fun reload() {
         scope.launch {
@@ -2237,6 +2240,62 @@ private fun ShipDocument(no: String, onBack: () -> Unit, onPickCreated: (String)
     val sourceShippingAgent = h?.optString("sourceShippingAgentCode")?.trim().orEmpty()
     val agentMissing = headerLoaded && shippingAgent.isBlank() && sourceShippingAgent.isBlank() && !agentSkipped
 
+    /**
+     * Toplama cevabını tek yerde değerlendir: hem "sistem seçsin" (createPickFor)
+     * hem de "şu paletten" (createPickFromLp) aynı durum mesajlarını, aynı busy
+     * bayrağını ve aynı elle-giriş kaçış yolunu kullansın.
+     */
+    fun applyPickResult(r: BcApi.ApiResult) {
+        val pickNo = if (r.ok) BcApi.scalarValue(r.body) else ""
+        if (r.ok && pickNo.isNotBlank()) {
+            status = "TAMAM: Ambar Toplama $pickNo açıldı"
+            onPickCreated(pickNo)
+        } else {
+            // Toplama üretilemediğinde operatörün başka yolu kalmıyordu.
+            // Miktar + lot penceresi doğrudan açılır ki satır elle sevk
+            // edilebilsin (UAT D-01/D-03).
+            pendingLotLine?.let { satir ->
+                qtyLine = satir
+                pendingLotLine = null
+            }
+            status = if (r.ok) "HATA: Toplama numarası alınamadı"
+                else QcErrorParser.friendlyStatus(BcApi.errorMessage(r.body), r.httpCode) +
+                    " Miktar ve lotu elle girmek için pencereyi kullanabilirsiniz."
+        }
+    }
+
+    /** BC'nin kendi raf sıralamasına bırakılan eski (ve yedek) yol. */
+    suspend fun createPickSystemChoice(): BcApi.ApiResult =
+        BcApi.boundAction(
+            context,
+            "shipments",
+            no,
+            "createPickFor",
+            JSONObject().apply { put("userId", myUserId) }.toString(),
+        )
+
+    fun createPickFromLp(lpNo: String) {
+        scope.launch {
+            busy = true
+            status = "$lpNo paletinden ambar toplama açılıyor..."
+            var r = BcApi.boundAction(
+                context,
+                "shipments",
+                no,
+                "createPickFromLp",
+                JSONObject().apply { put("userId", myUserId); put("lpNo", lpNo) }.toString(),
+            )
+            // Eski BC paketinde bu action yok: operatöre hata göstermeden
+            // sistemin kendi seçimine dön.
+            if (!r.ok && shouldFallbackToLegacyCreatePick(r.httpCode, r.body)) {
+                status = "Çoklu lot/raf için ambar toplama açılıyor..."
+                r = createPickSystemChoice()
+            }
+            busy = false
+            applyPickResult(r)
+        }
+    }
+
     fun openPickForMultipleLots(fallbackLine: JSONObject? = null) {
         pendingLotLine = fallbackLine
         if (!canMutate) {
@@ -2245,31 +2304,28 @@ private fun ShipDocument(no: String, onBack: () -> Unit, onPickCreated: (String)
         }
         scope.launch {
             busy = true
-            status = "Çoklu lot/raf için ambar toplama açılıyor..."
-            val r = BcApi.boundAction(
-                context,
-                "shipments",
-                no,
-                "createPickFor",
-                JSONObject().apply { put("userId", myUserId) }.toString(),
-            )
-            val pickNo = if (r.ok) BcApi.scalarValue(r.body) else ""
-            busy = false
-            if (r.ok && pickNo.isNotBlank()) {
-                status = "TAMAM: Ambar Toplama $pickNo açıldı"
-                onPickCreated(pickNo)
-            } else {
-                // Toplama üretilemediğinde operatörün başka yolu kalmıyordu.
-                // Miktar + lot penceresi doğrudan açılır ki satır elle sevk
-                // edilebilsin (UAT D-01/D-03).
-                pendingLotLine?.let { satir ->
-                    qtyLine = satir
-                    pendingLotLine = null
-                }
-                status = if (r.ok) "HATA: Toplama numarası alınamadı"
-                    else QcErrorParser.friendlyStatus(BcApi.errorMessage(r.body), r.httpCode) +
-                        " Miktar ve lotu elle girmek için pencereyi kullanabilirsiniz."
+            status = "Kaynak paletler kontrol ediliyor..."
+            // Önce aday paletleri sor. Eski paket bu action'ı tanımıyorsa sessizce
+            // eski davranışa düşülür (aşağıdaki shouldFallbackToLegacyCreatePick).
+            val opts = BcApi.boundAction(context, "shipments", no, "pickSourceOptions")
+            val options = if (opts.ok) parsePickSourceOptions(BcApi.scalarValue(opts.body)) else emptyList()
+            if (opts.ok && pickLpChoiceNeeded(options.size)) {
+                busy = false
+                status = "${options.size} aday palet bulundu — birini seçin"
+                pickLpOptions = options
+                return@launch
             }
+            if (opts.ok && options.size == 1) {
+                // Tek aday: sormaya gerek yok, doğrudan o paletten üret.
+                busy = false
+                createPickFromLp(options.first().lpNo)
+                return@launch
+            }
+            // Aday yok ya da sunucu action'ı tanımıyor: eski yol.
+            status = "Çoklu lot/raf için ambar toplama açılıyor..."
+            val r = createPickSystemChoice()
+            busy = false
+            applyPickResult(r)
         }
     }
 
@@ -2473,6 +2529,26 @@ private fun ShipDocument(no: String, onBack: () -> Unit, onPickCreated: (String)
                     if (r.ok) reload()
                 }
             }
+        )
+    }
+    if (pickLpOptions.isNotEmpty()) {
+        PickSourceLpDialog(
+            options = pickLpOptions,
+            onDismiss = { pickLpOptions = emptyList(); status = "" },
+            onSystemChoice = {
+                pickLpOptions = emptyList()
+                scope.launch {
+                    busy = true
+                    status = "Çoklu lot/raf için ambar toplama açılıyor..."
+                    val r = createPickSystemChoice()
+                    busy = false
+                    applyPickResult(r)
+                }
+            },
+            onSelect = { lpNo ->
+                pickLpOptions = emptyList()
+                createPickFromLp(lpNo)
+            },
         )
     }
     if (showAgent) {
@@ -2933,5 +3009,64 @@ private fun ShippingAgentDialog(
                 TextButton(onClick = onDismiss) { Text("Vazgeç") }
             }
         },
+    )
+}
+
+/**
+ * "Hangi paletten toplansın?" — sunucunun döndürdüğü aday paletler.
+ * Operatör LP'ye dokununca yalnız o paletten toplama üretilir; "Sistem seçsin"
+ * eski (BC raf sıralamasına dayalı) davranışı korur.
+ */
+@Composable
+private fun PickSourceLpDialog(
+    options: List<PickSourceOption>,
+    onDismiss: () -> Unit,
+    onSystemChoice: () -> Unit,
+    onSelect: (String) -> Unit,
+) {
+    val palette = bcwmsStatus()
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Hangi paletten toplansın?") },
+        text = {
+            Column(Modifier.fillMaxWidth()) {
+                Text(
+                    "Sevkiyat için uygun paletler aşağıda. Birine dokunun; toplama yalnız o paletten üretilir.",
+                    fontSize = 12.sp,
+                    color = Color.Gray,
+                )
+                Spacer(Modifier.height(6.dp))
+                LazyColumn(Modifier.fillMaxWidth().heightIn(max = 300.dp)) {
+                    items(options) { opt ->
+                        Column(
+                            Modifier.fillMaxWidth()
+                                .clickable { onSelect(opt.lpNo) }
+                                .padding(vertical = 8.dp),
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text(opt.lpNo, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                                if (opt.coversFullDemand) {
+                                    Spacer(Modifier.width(8.dp))
+                                    Text(
+                                        "Tamamını karşılar",
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.Medium,
+                                        color = palette.success,
+                                    )
+                                }
+                            }
+                            Text(pickSourceSubtitle(opt), fontSize = 12.sp, color = Color.Gray)
+                        }
+                        HorizontalDivider()
+                    }
+                }
+                Spacer(Modifier.height(6.dp))
+                OutlinedButton(onClick = onSystemChoice, modifier = Modifier.fillMaxWidth()) {
+                    Text("🤖 Sistem seçsin")
+                }
+            }
+        },
+        confirmButton = {},
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Vazgeç") } },
     )
 }

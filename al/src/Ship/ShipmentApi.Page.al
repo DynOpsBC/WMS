@@ -88,6 +88,22 @@ page 72093 "DOPSWHS Shipment API"
     end;
 
     [ServiceEnabled]
+    procedure pickSourceOptions(): Text
+    var
+        ShipmentMgmt: Codeunit "DOPSWHS Shipment Mgmt";
+    begin
+        exit(ShipmentMgmt.ListPickSourceOptions(Rec));
+    end;
+
+    [ServiceEnabled]
+    procedure createPickFromLp(userId: Code[50]; lpNo: Code[20]): Code[20]
+    var
+        ShipmentMgmt: Codeunit "DOPSWHS Shipment Mgmt";
+    begin
+        exit(ShipmentMgmt.CreatePickFromLp(Rec, userId, lpNo));
+    end;
+
+    [ServiceEnabled]
     procedure assignToUser(userId: Code[50])
     var
         LockedShipment: Record "Warehouse Shipment Header";

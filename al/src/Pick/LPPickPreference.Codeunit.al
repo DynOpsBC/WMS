@@ -7,7 +7,29 @@ codeunit 72439 "DOPSWHS LP Pick Preference"
     procedure Configure(ShipmentNo: Code[20])
     begin
         ConfiguredShipmentNo := ShipmentNo;
+        ForcedLpNo := '';
+        ForcedLpBinCode := '';
         Clear(PreferredFilterByItem);
+    end;
+
+    /// <summary>
+    /// Operatörün seçtiği paleti zorlar. Configure'dan SONRA çağrılır.
+    /// Bu modda raf süzgeci, palet tüm talebi karşılasa da karşılamasa da
+    /// yalnız seçilen paletin rafına daraltılır; BC kalanı gerekirse başka
+    /// raftan toplar ama önce bu palet kullanılır. StampPickLines de üretilen
+    /// Take satırlarına bu paleti damgalar.
+    /// </summary>
+    procedure ConfigureForcedLp(ShipmentNo: Code[20]; LpNo: Code[20])
+    var
+        LP: Record "DOPSWHS LP Header";
+    begin
+        Configure(ShipmentNo);
+        if LpNo = '' then
+            exit;
+        if not LP.Get(LpNo) then
+            Error(ForcedLpNotFoundErr, LpNo);
+        ForcedLpNo := LP."No.";
+        ForcedLpBinCode := LP."Bin Code";
     end;
 
     procedure StampPickLines(PickNo: Code[20])
@@ -23,7 +45,17 @@ codeunit 72439 "DOPSWHS LP Pick Preference"
         PickLine.SetFilter("Item No.", '<>%1', '');
         if PickLine.FindSet(true) then
             repeat
-                LPNo := FindUniqueSourceLP(PickLine);
+                // Zorlanmış palet modunda, o paletin rafından gelen Take
+                // satırları doğrudan seçilen paletle damgalanır; rafta birden
+                // fazla palet durduğu için FindUniqueSourceLP boş dönse bile
+                // operatörün seçimi kaybolmaz.
+                if (ForcedLpNo <> '') and (ForcedLpBinCode <> '') and
+                   (PickLine."Bin Code" = ForcedLpBinCode) and
+                   LpHoldsPickLineItem(ForcedLpNo, PickLine)
+                then
+                    LPNo := ForcedLpNo
+                else
+                    LPNo := FindUniqueSourceLP(PickLine);
                 if (LPNo <> '') and (PickLine."LP No." <> LPNo) then begin
                     // Validate would copy the LP to every same-item line and
                     // could mix different pallets/lots.
@@ -44,6 +76,13 @@ codeunit 72439 "DOPSWHS LP Pick Preference"
             exit;
         if not GetPreferredBinFilter(LocationCode, ItemNo, VariantCode, ToBinCode, PreferredFilter) then
             exit;
+        // Zorlanmış palet modunda (temel ambar) raf süzgeci yalnız paletin
+        // tüm talebi karşıladığı durumda daraltılır; yetmiyorsa daraltmak
+        // toplamanın hiç üretilememesine yol açar. Seçim o durumda da
+        // StampPickLines ile damgalanır.
+        if ForcedLpNo <> '' then
+            if not ForcedLpCoversDemand(LocationCode, ItemNo, VariantCode) then
+                exit;
         if BinCodeFilterText = '' then
             BinCodeFilterText := CopyStr(PreferredFilter, 1, MaxStrLen(BinCodeFilterText))
         else
@@ -69,14 +108,82 @@ codeunit 72439 "DOPSWHS LP Pick Preference"
             exit;
         TempBinContent.SetFilter("Bin Code", PreferredFilter);
         Result := TempBinContent.FindFirst();
-        if Result then
-            IsHandled := true
-        else begin
+        if not Result then begin
             // Reservation/tracking can invalidate an LP candidate. Fall back to
             // standard BC instead of producing an incomplete pick.
             TempBinContent.Reset();
             TempBinContent.DeleteAll();
+            exit;
         end;
+
+        // Zorlanmış palet modunda seçilen raf tüm miktarı karşılamıyorsa
+        // buffer'ı o rafa kilitlemek eksik toplama üretir. Bu yüzden yalnız
+        // raf TAMAMEN yeterliyse aday listesi daraltılır; yetmiyorsa BC'nin
+        // tam aday listesi korunur (seçilen raf zaten içinde) ve kalan miktar
+        // standart sıralamayla tamamlanır.
+        if ForcedLpNo <> '' then
+            if BinFilterAvailableQtyBase(TempBinContent, PreferredFilter) + QtyTolerance() < TotalQtytoPickBase then begin
+                TempBinContent.Reset();
+                exit;
+            end;
+        IsHandled := true;
+    end;
+
+    /// <summary>Süzgeçteki rafların toplanabilir taban miktarı.</summary>
+    local procedure BinFilterAvailableQtyBase(var TempBinContent: Record "Bin Content" temporary; PreferredFilter: Text) AvailableQtyBase: Decimal
+    var
+        BinContent: Record "Bin Content";
+    begin
+        TempBinContent.SetFilter("Bin Code", PreferredFilter);
+        if TempBinContent.FindSet() then
+            repeat
+                if BinContent.Get(
+                    TempBinContent."Location Code", TempBinContent."Bin Code",
+                    TempBinContent."Item No.", TempBinContent."Variant Code",
+                    TempBinContent."Unit of Measure Code")
+                then
+                    AvailableQtyBase += BinContent.CalcQtyAvailToPick(0);
+            until TempBinContent.Next() = 0;
+        exit(AvailableQtyBase);
+    end;
+
+    local procedure QtyTolerance(): Decimal
+    begin
+        exit(0.00001);
+    end;
+
+    /// <summary>Seçilen paletin rafı bu ürün için sevkiyatın açık talebini
+    /// tek başına karşılıyor mu?</summary>
+    local procedure ForcedLpCoversDemand(LocationCode: Code[10]; ItemNo: Code[20]; VariantCode: Code[10]): Boolean
+    var
+        BinContent: Record "Bin Content";
+        WhseShipmentLine: Record "Warehouse Shipment Line";
+        RequiredQtyBase: Decimal;
+        AvailableQtyBase: Decimal;
+    begin
+        if ForcedLpBinCode = '' then
+            exit(false);
+        WhseShipmentLine.SetRange("No.", ConfiguredShipmentNo);
+        WhseShipmentLine.SetRange("Location Code", LocationCode);
+        WhseShipmentLine.SetRange("Item No.", ItemNo);
+        WhseShipmentLine.SetRange("Variant Code", VariantCode);
+        WhseShipmentLine.SetFilter("Qty. Outstanding (Base)", '>0');
+        if WhseShipmentLine.FindSet() then
+            repeat
+                RequiredQtyBase += WhseShipmentLine."Qty. Outstanding (Base)";
+            until WhseShipmentLine.Next() = 0;
+        if RequiredQtyBase <= 0 then
+            exit(false);
+
+        BinContent.SetRange("Location Code", LocationCode);
+        BinContent.SetRange("Bin Code", ForcedLpBinCode);
+        BinContent.SetRange("Item No.", ItemNo);
+        BinContent.SetRange("Variant Code", VariantCode);
+        if BinContent.FindSet() then
+            repeat
+                AvailableQtyBase += BinContent.CalcQtyAvailToPick(0);
+            until BinContent.Next() = 0;
+        exit(AvailableQtyBase + QtyTolerance() >= RequiredQtyBase);
     end;
 
     local procedure GetPreferredBinFilter(LocationCode: Code[10]; ItemNo: Code[20]; VariantCode: Code[10]; ToBinCode: Code[20]; var PreferredFilter: Text): Boolean
@@ -127,6 +234,19 @@ codeunit 72439 "DOPSWHS LP Pick Preference"
             exit('');
         if not Item.Get(ItemNo) then
             exit('');
+
+        // Operatör paleti seçtiyse tam talebi karşılama şartı UYGULANMAZ:
+        // seçilen paletin rafı tek aday olur, kalan miktarı BC standart
+        // sıralamasıyla başka raftan tamamlar.
+        if ForcedLpNo <> '' then begin
+            if ForcedLpBinCode = '' then
+                exit('');
+            if (ToBinCode <> '') and (ForcedLpBinCode = ToBinCode) then
+                exit('');
+            if not LpHoldsItem(ForcedLpNo, ItemNo, VariantCode) then
+                exit('');
+            exit(ForcedLpBinCode);
+        end;
 
         LP.SetRange("Location Code", LocationCode);
         LP.SetRange(Status, LP.Status::Built);
@@ -230,6 +350,32 @@ codeunit 72439 "DOPSWHS LP Pick Preference"
         exit(CandidateLPNo);
     end;
 
+    local procedure LpHoldsItem(LpNo: Code[20]; ItemNo: Code[20]; VariantCode: Code[10]): Boolean
+    var
+        LPLine: Record "DOPSWHS LP Line";
+    begin
+        LPLine.SetRange("LP No.", LpNo);
+        LPLine.SetRange("Item No.", ItemNo);
+        LPLine.SetRange("Variant Code", VariantCode);
+        LPLine.SetFilter(Quantity, '>0');
+        exit(not LPLine.IsEmpty());
+    end;
+
+    local procedure LpHoldsPickLineItem(LpNo: Code[20]; PickLine: Record "Warehouse Activity Line"): Boolean
+    var
+        LPLine: Record "DOPSWHS LP Line";
+    begin
+        LPLine.SetRange("LP No.", LpNo);
+        LPLine.SetRange("Item No.", PickLine."Item No.");
+        LPLine.SetRange("Variant Code", PickLine."Variant Code");
+        if PickLine."Lot No." <> '' then
+            LPLine.SetRange("Lot No.", PickLine."Lot No.");
+        if PickLine."Serial No." <> '' then
+            LPLine.SetRange("Serial No.", PickLine."Serial No.");
+        LPLine.SetFilter(Quantity, '>0');
+        exit(not LPLine.IsEmpty());
+    end;
+
     local procedure Minimum(LeftValue: Decimal; RightValue: Decimal): Decimal
     begin
         if LeftValue < RightValue then
@@ -239,5 +385,8 @@ codeunit 72439 "DOPSWHS LP Pick Preference"
 
     var
         ConfiguredShipmentNo: Code[20];
+        ForcedLpNo: Code[20];
+        ForcedLpBinCode: Code[20];
         PreferredFilterByItem: Dictionary of [Text, Text];
+        ForcedLpNotFoundErr: Label '%1 numaralı taşıma kabı (LP) bulunamadı.', Comment = '%1 = LP No.';
 }

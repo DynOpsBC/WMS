@@ -1,7 +1,22 @@
 package com.dynops.bcwms.feature
 
+internal const val BULK_LP_PRINT_CONCURRENCY = 3
+
 internal fun bulkLpPrintAction(lineCount: Int): String =
     if (lineCount > 0) "printPalletLabels" else "printLabel"
+
+/**
+ * Business Central limits concurrent requests per user. Small ordered batches
+ * remove the one-request-at-a-time bottleneck without flooding the tenant or
+ * allowing an unbounded selection to occupy every HTTP connection.
+ */
+internal fun bulkLpPrintBatches(
+    lpNos: List<String>,
+    maxParallel: Int = BULK_LP_PRINT_CONCURRENCY,
+): List<List<String>> {
+    require(maxParallel > 0) { "maxParallel must be positive" }
+    return lpNos.chunked(maxParallel)
+}
 
 internal data class LpPrintRoute(val action: String, val printerCode: String)
 

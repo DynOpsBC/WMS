@@ -19,6 +19,13 @@ pageextension 72313 "DOPSWHS Item Ledger Entries" extends "Item Ledger Entries"
                         Page.Run(Page::"DOPSWHS LP Card", LPHeader);
                 end;
             }
+            field("DOPSWHS LP Nos."; Rec."DOPSWHS LP Nos.")
+            {
+                ApplicationArea = All;
+                Caption = 'LP No.leri';
+                ToolTip = 'Bu madde defteri girişi birden fazla taşıma kabından (LP) toplandıysa, tüketilen tüm kapları tüketim sırasıyla gösterir. Tek kaptan toplanan girişlerde boştur; o kap "LP No." alanındadır.';
+                Editable = false;
+            }
         }
     }
 

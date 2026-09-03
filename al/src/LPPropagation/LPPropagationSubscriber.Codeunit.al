@@ -984,6 +984,7 @@ codeunit 72428 "DOPSWHS LP Propagation"
         RemainingBaseQty := Abs(ItemLedgerEntry.Quantity);
         if RemainingBaseQty = 0 then
             exit;
+        Clear(ConsumedLpNos);
         ConsumptionReference := BuildConsumptionReference(ItemLedgerEntry);
         if EntryAlreadyReconciled(ConsumptionReference) then
             exit;
@@ -1051,10 +1052,57 @@ codeunit 72428 "DOPSWHS LP Propagation"
         // The ledger entry carries one LP. When the sale spanned several pallets the
         // first consumed LP (pick order, then LP No.) is stamped; the LP Movement
         // Ledger holds the exact per-LP split under the same reference.
-        if FirstConsumedLpNo <> '' then
-            StampItemLedgerEntry(ItemLedgerEntry, FirstConsumedLpNo)
-        else
+        if FirstConsumedLpNo <> '' then begin
+            StampItemLedgerEntry(ItemLedgerEntry, FirstConsumedLpNo);
+            // BADE saha bildirimi: iki paletten toplanan sevkiyat kaydında
+            // yalnız tek palet görünüyordu. Birden fazla palet tüketildiyse
+            // hepsi tüketim sırasıyla "LP No.leri" alanına yazılır.
+            StampItemLedgerEntryLpList(ItemLedgerEntry);
+        end else
             ClearItemLedgerEntryLp(ItemLedgerEntry);
+    end;
+
+    /// <summary>
+    /// Bu madde defteri girişi için tüketilen paletleri "DOPSWHS LP Nos."
+    /// alanına yazar. KURAL: alan yalnız BİRDEN FAZLA farklı palet
+    /// tüketildiğinde doldurulur; tek palette boş bırakılır çünkü tek palet
+    /// zaten TableRelation'lı "DOPSWHS LP No." alanında görünür.
+    /// </summary>
+    local procedure StampItemLedgerEntryLpList(var ItemLedgerEntry: Record "Item Ledger Entry")
+    var
+        LpNo: Code[20];
+        LpListText: Text;
+        NewValue: Text[250];
+    begin
+        if ConsumedLpNos.Count() <= 1 then begin
+            if ItemLedgerEntry."DOPSWHS LP Nos." <> '' then begin
+                ItemLedgerEntry."DOPSWHS LP Nos." := '';
+                ItemLedgerEntry.Modify();
+            end;
+            exit;
+        end;
+
+        foreach LpNo in ConsumedLpNos do begin
+            if LpListText <> '' then
+                LpListText += ', ';
+            LpListText += LpNo;
+        end;
+        NewValue := CopyStr(LpListText, 1, MaxStrLen(NewValue));
+        if ItemLedgerEntry."DOPSWHS LP Nos." = NewValue then
+            exit;
+        ItemLedgerEntry."DOPSWHS LP Nos." := NewValue;
+        ItemLedgerEntry.Modify();
+    end;
+
+    /// <summary>Aynı paletin ikinci kez eklenmesini engelleyerek tüketim
+    /// sırasını korur.</summary>
+    local procedure TrackConsumedLp(LpNo: Code[20])
+    begin
+        if LpNo = '' then
+            exit;
+        if ConsumedLpNos.Contains(LpNo) then
+            exit;
+        ConsumedLpNos.Add(LpNo);
     end;
 
     /// <summary>
@@ -1145,6 +1193,9 @@ codeunit 72428 "DOPSWHS LP Propagation"
                     ConsumedBaseQty += TakeBaseQty;
                     if FirstConsumedLpNo = '' then
                         FirstConsumedLpNo := TempCandidate."LP No.";
+                    // Tek çıkış noktası: her fiilî LP azaltması burada geçer,
+                    // bu yüzden tüketim sırası da burada birikir.
+                    TrackConsumedLp(TempCandidate."LP No.");
                 end;
             end;
         until (TempCandidate.Next() = 0) or (QtyToConsume <= QtyTolerance());
@@ -1545,9 +1596,10 @@ codeunit 72428 "DOPSWHS LP Propagation"
     var
         ValueEntry: Record "Value Entry";
     begin
-        if ItemLedgerEntry."DOPSWHS LP No." = '' then
+        if (ItemLedgerEntry."DOPSWHS LP No." = '') and (ItemLedgerEntry."DOPSWHS LP Nos." = '') then
             exit;
         ItemLedgerEntry."DOPSWHS LP No." := '';
+        ItemLedgerEntry."DOPSWHS LP Nos." := '';
         ItemLedgerEntry.Modify();
 
         ValueEntry.SetRange("Item Ledger Entry No.", ItemLedgerEntry."Entry No.");
@@ -1825,4 +1877,11 @@ codeunit 72428 "DOPSWHS LP Propagation"
             until WhseActivityLine.Next() = 0;
         exit(CandidateLpNo);
     end;
+
+    var
+        // Bir madde defteri girişi mutabakatı boyunca fiilen azaltılan
+        // paletler, tüketim sırasıyla. ReconcileSalesEntryFromPick başında
+        // temizlenir; ConsumeSalesCandidates içindeki tek azaltma noktasında
+        // doldurulur.
+        ConsumedLpNos: List of [Code[20]];
 }

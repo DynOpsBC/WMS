@@ -63,7 +63,7 @@ codeunit 72047 "DOPSWHS Shipment Mgmt"
 
     procedure CreatePick(var WhseShipmentHeader: Record "Warehouse Shipment Header"): Code[20]
     begin
-        exit(CreatePickForUser(WhseShipmentHeader, CopyStr(UserId(), 1, MaxStrLen(WhseShipmentHeader."Assigned User ID"))));
+        exit(CreatePickForUser(WhseShipmentHeader, CopyStr(UserId(), 1, MaxStrLen(WhseShipmentHeader."Assigned User ID")), ''));
     end;
 
     procedure CreatePickFor(var WhseShipmentHeader: Record "Warehouse Shipment Header"; RequestingUserId: Code[50]): Code[20]
@@ -72,10 +72,79 @@ codeunit 72047 "DOPSWHS Shipment Mgmt"
             Error('WMS kullanıcı kimliği boş olamaz. Terminal oturumunu yenileyin.');
         if WhseShipmentHeader."Assigned User ID" <> RequestingUserId then
             Error('Sevkiyat belgesi %1 bu kullanıcıya atanmış değil.', WhseShipmentHeader."No.");
-        exit(CreatePickForUser(WhseShipmentHeader, RequestingUserId));
+        exit(CreatePickForUser(WhseShipmentHeader, RequestingUserId, ''));
     end;
 
-    local procedure CreatePickForUser(var WhseShipmentHeader: Record "Warehouse Shipment Header"; AssignToUserId: Code[50]): Code[20]
+    /// <summary>
+    /// Operatörün SEÇTİĞİ paletten toplama oluşturur. CreatePickFor ile aynı
+    /// kurallar geçerlidir; ek olarak seçilen palet doğrulanır ve raf tercihi
+    /// o palete zorlanır. Palet tüm miktarı karşılamıyorsa BC kalanı başka
+    /// raftan tamamlar; bu kabul edilebilir.
+    /// </summary>
+    procedure CreatePickFromLp(var WhseShipmentHeader: Record "Warehouse Shipment Header"; RequestingUserId: Code[50]; LpNo: Code[20]): Code[20]
+    begin
+        if RequestingUserId = '' then
+            Error('WMS kullanıcı kimliği boş olamaz. Terminal oturumunu yenileyin.');
+        if WhseShipmentHeader."Assigned User ID" <> RequestingUserId then
+            Error('Sevkiyat belgesi %1 bu kullanıcıya atanmış değil.', WhseShipmentHeader."No.");
+        if LpNo <> '' then
+            ValidateForcedPickLp(WhseShipmentHeader, LpNo);
+        exit(CreatePickForUser(WhseShipmentHeader, RequestingUserId, LpNo));
+    end;
+
+    /// <summary>
+    /// Seçilen paletin toplama için gerçekten kullanılabilir olduğunu
+    /// doğrular. Her hata paleti adıyla anar; terminal mesajı doğrudan
+    /// operatöre gösterir.
+    /// </summary>
+    /// <summary>
+    /// Create Pick raporunu hata durumunda da geri dönebilecek şekilde çalıştırır;
+    /// çağıran abonelik çözümünü (UnbindSubscription) garantiler.
+    /// </summary>
+    [TryFunction]
+    local procedure TryRunCreatePick(var CreatePickReport: Report "Whse.-Shipment - Create Pick")
+    begin
+        CreatePickReport.RunModal();
+    end;
+
+    local procedure ValidateForcedPickLp(WhseShipmentHeader: Record "Warehouse Shipment Header"; LpNo: Code[20])
+    var
+        LP: Record "DOPSWHS LP Header";
+        LPLine: Record "DOPSWHS LP Line";
+        WhseShipmentLine: Record "Warehouse Shipment Line";
+        HasMatchingItem: Boolean;
+    begin
+        if not LP.Get(LpNo) then
+            Error(LpNotFoundErr, LpNo);
+        if not (LP.Status in [LP.Status::Open, LP.Status::Built, LP.Status::Assigned]) then
+            Error(LpNotActiveErr, LpNo, Format(LP.Status));
+        if (LP."Assigned Document No." <> '') and (LP."Assigned Document No." <> WhseShipmentHeader."No.") then
+            Error(LpAssignedElsewhereErr, LpNo, LP."Assigned Document No.");
+        if LP."Location Code" <> WhseShipmentHeader."Location Code" then
+            Error(LpOtherLocationErr, LpNo, LP."Location Code", WhseShipmentHeader."Location Code");
+        if LP."Bin Code" = '' then
+            Error(LpNoBinErr, LpNo);
+
+        WhseShipmentLine.SetRange("No.", WhseShipmentHeader."No.");
+        WhseShipmentLine.SetFilter("Qty. Outstanding (Base)", '>0');
+        if WhseShipmentLine.FindSet() then
+            repeat
+                LPLine.Reset();
+                LPLine.SetRange("LP No.", LpNo);
+                LPLine.SetRange("Item No.", WhseShipmentLine."Item No.");
+                LPLine.SetRange("Variant Code", WhseShipmentLine."Variant Code");
+                if WhseShipmentLine."DOPSWHS Lot No." <> '' then
+                    LPLine.SetRange("Lot No.", WhseShipmentLine."DOPSWHS Lot No.");
+                LPLine.SetFilter(Quantity, '>0');
+                if not LPLine.IsEmpty() then
+                    HasMatchingItem := true;
+            until (WhseShipmentLine.Next() = 0) or HasMatchingItem;
+
+        if not HasMatchingItem then
+            Error(LpHasNoShipmentItemErr, LpNo, WhseShipmentHeader."No.");
+    end;
+
+    local procedure CreatePickForUser(var WhseShipmentHeader: Record "Warehouse Shipment Header"; AssignToUserId: Code[50]; ForcedLpNo: Code[20]): Code[20]
     var
         WhseShipmentLine: Record "Warehouse Shipment Line";
         WhseActivityLine: Record "Warehouse Activity Line";
@@ -123,9 +192,19 @@ codeunit 72047 "DOPSWHS Shipment Mgmt"
         // raf/ürün okutulmadan satır tamamlanmış (%100/Done) görünmez.
         CreatePickReport.Initialize(ReportUserId, Enum::"Whse. Activity Sorting Method"::"Shelf or Bin", false, true, false);
         CreatePickReport.UseRequestPage(false);
-        LPPickPreference.Configure(WhseShipmentHeader."No.");
+        if ForcedLpNo <> '' then
+            LPPickPreference.ConfigureForcedLp(WhseShipmentHeader."No.", ForcedLpNo)
+        else
+            LPPickPreference.Configure(WhseShipmentHeader."No.");
         BindSubscription(LPPickPreference);
-        CreatePickReport.RunModal();
+        // Rapor hata verse bile abonelik MUTLAKA çözülmeli; aksi hâlde bir
+        // sonraki toplama yanlış paletle üretilir. ClearLastError + rethrow
+        // deseni UnbindSubscription'ı garantiler.
+        ClearLastError();
+        if not TryRunCreatePick(CreatePickReport) then begin
+            UnbindSubscription(LPPickPreference);
+            Error(GetLastErrorText());
+        end;
         UnbindSubscription(LPPickPreference);
 
         WhseActivityLine.SetRange("Activity Type", WhseActivityLine."Activity Type"::Pick);
@@ -526,6 +605,188 @@ codeunit 72047 "DOPSWHS Shipment Mgmt"
         exit(LotNo <> '');
     end;
 
+    /// <summary>
+    /// Terminalin "kaynak paleti seç" ekranına aday palet listesini JSON dizi
+    /// metni olarak döndürür. Aday: sevkiyat lokasyonundaki AKTİF (Open/Built/
+    /// Assigned, başka belgeye atanmamış) ve sevkiyatın açık satırlarındaki
+    /// ürünü — satır lot sabitliyorsa o lotu — bulunduran paletler.
+    /// Sıralama: önce talebi tek başına karşılayanlar, sonra kullanılabilir
+    /// miktar (azalan), sonra LP No. Aday yoksa boş dizi döner; ASLA hata
+    /// vermez.
+    /// </summary>
+    procedure ListPickSourceOptions(WhseShipmentHeader: Record "Warehouse Shipment Header"): Text
+    var
+        TempOption: Record "DOPSWHS LP Line" temporary;
+        Item: Record Item;
+        Options: JsonArray;
+        Option: JsonObject;
+        Result: Text;
+    begin
+        CollectPickSourceOptions(WhseShipmentHeader, TempOption);
+
+        // Sıralama alanları geçici kayda gömüldü: "Line Weight kg" = 0/1
+        // (talebi karşılayan önce), "Source Document Quantity" = kullanılabilir
+        // miktar. Azalan sıralama için negatiflenip anahtar üzerinden okunur.
+        TempOption.Reset();
+        TempOption.SetCurrentKey("Line Weight kg", "Source Document Quantity", "LP No.");
+        TempOption.Ascending(true);
+        if TempOption.FindSet() then
+            repeat
+                Clear(Option);
+                Option.Add('lpNo', TempOption."LP No.");
+                Option.Add('binCode', TempOption."Source Bin Code");
+                Option.Add('itemNo', TempOption."Item No.");
+                if Item.Get(TempOption."Item No.") then
+                    Option.Add('itemDescription', Item.Description)
+                else
+                    Option.Add('itemDescription', '');
+                Option.Add('lotNo', TempOption."Lot No.");
+                Option.Add('availableQtyBase', -TempOption."Source Document Quantity");
+                Option.Add('uom', TempOption."Unit of Measure");
+                Option.Add('coversFullDemand', TempOption."Line Weight kg" = 0);
+                Options.Add(Option);
+            until TempOption.Next() = 0;
+
+        Options.WriteTo(Result);
+        exit(Result);
+    end;
+
+    local procedure CollectPickSourceOptions(WhseShipmentHeader: Record "Warehouse Shipment Header"; var TempOption: Record "DOPSWHS LP Line" temporary)
+    var
+        WhseShipmentLine: Record "Warehouse Shipment Line";
+        LP: Record "DOPSWHS LP Header";
+        LPLine: Record "DOPSWHS LP Line";
+        Item: Record Item;
+        DemandByKey: Dictionary of [Text, Decimal];
+        DemandKey: Text;
+        RequiredQtyBase: Decimal;
+        AvailableQtyBase: Decimal;
+        EntryNo: Integer;
+    begin
+        TempOption.Reset();
+        TempOption.DeleteAll();
+        if WhseShipmentHeader."Location Code" = '' then
+            exit;
+
+        // Ürün+varyant başına açık talep (taban) — coversFullDemand için.
+        WhseShipmentLine.SetRange("No.", WhseShipmentHeader."No.");
+        WhseShipmentLine.SetFilter("Qty. Outstanding (Base)", '>0');
+        if not WhseShipmentLine.FindSet() then
+            exit;
+        repeat
+            DemandKey := WhseShipmentLine."Item No." + '|' + WhseShipmentLine."Variant Code";
+            if DemandByKey.Get(DemandKey, RequiredQtyBase) then
+                DemandByKey.Set(DemandKey, RequiredQtyBase + WhseShipmentLine."Qty. Outstanding (Base)")
+            else
+                DemandByKey.Add(DemandKey, WhseShipmentLine."Qty. Outstanding (Base)");
+        until WhseShipmentLine.Next() = 0;
+
+        LP.SetRange("Location Code", WhseShipmentHeader."Location Code");
+        LP.SetFilter(Status, '%1|%2|%3', LP.Status::Open, LP.Status::Built, LP.Status::Assigned);
+        LP.SetFilter("Bin Code", '<>%1', '');
+        if not LP.FindSet() then
+            exit;
+        repeat
+            // Başka bir belgeye ayrılmış palet operatöre teklif edilmez.
+            if (LP."Assigned Document No." = '') or (LP."Assigned Document No." = WhseShipmentHeader."No.") then begin
+                WhseShipmentLine.Reset();
+                WhseShipmentLine.SetRange("No.", WhseShipmentHeader."No.");
+                WhseShipmentLine.SetFilter("Qty. Outstanding (Base)", '>0');
+                if WhseShipmentLine.FindSet() then
+                    repeat
+                        LPLine.Reset();
+                        LPLine.SetRange("LP No.", LP."No.");
+                        LPLine.SetRange("Item No.", WhseShipmentLine."Item No.");
+                        LPLine.SetRange("Variant Code", WhseShipmentLine."Variant Code");
+                        if WhseShipmentLine."DOPSWHS Lot No." <> '' then
+                            LPLine.SetRange("Lot No.", WhseShipmentLine."DOPSWHS Lot No.");
+                        LPLine.SetFilter(Quantity, '>0');
+                        if LPLine.FindSet() then
+                            repeat
+                                if not OptionAlreadyListed(TempOption, LP."No.", LPLine."Item No.", LPLine."Variant Code", LPLine."Lot No.") then begin
+                                    AvailableQtyBase :=
+                                        LpLineAvailableQtyBase(LP, LPLine, WhseShipmentHeader."Location Code");
+                                    if AvailableQtyBase > 0 then begin
+                                        DemandByKey.Get(
+                                            LPLine."Item No." + '|' + LPLine."Variant Code", RequiredQtyBase);
+                                        EntryNo += 1;
+                                        TempOption.Init();
+                                        TempOption."LP No." := LP."No.";
+                                        TempOption."Line No." := EntryNo;
+                                        TempOption."Item No." := LPLine."Item No.";
+                                        TempOption."Variant Code" := LPLine."Variant Code";
+                                        TempOption."Lot No." := LPLine."Lot No.";
+                                        TempOption."Unit of Measure" := LPLine."Unit of Measure";
+                                        TempOption."Source Bin Code" := LP."Bin Code";
+                                        // Sıralama taşıyıcıları (bkz. ListPickSourceOptions).
+                                        TempOption."Source Document Quantity" := -AvailableQtyBase;
+                                        if (RequiredQtyBase > 0) and (AvailableQtyBase >= RequiredQtyBase) then
+                                            TempOption."Line Weight kg" := 0
+                                        else
+                                            TempOption."Line Weight kg" := 1;
+                                        TempOption.Insert();
+                                    end;
+                                end;
+                            until LPLine.Next() = 0;
+                    until WhseShipmentLine.Next() = 0;
+            end;
+        until LP.Next() = 0;
+    end;
+
+    local procedure OptionAlreadyListed(var TempOption: Record "DOPSWHS LP Line" temporary; LpNo: Code[20]; ItemNo: Code[20]; VariantCode: Code[10]; LotNo: Code[50]): Boolean
+    var
+        Existing: Record "DOPSWHS LP Line" temporary;
+    begin
+        Existing.Copy(TempOption, true);
+        Existing.Reset();
+        Existing.SetRange("LP No.", LpNo);
+        Existing.SetRange("Item No.", ItemNo);
+        Existing.SetRange("Variant Code", VariantCode);
+        Existing.SetRange("Lot No.", LotNo);
+        exit(not Existing.IsEmpty());
+    end;
+
+    /// <summary>
+    /// Paletin bu ürün/lot için fiilen toplanabilir taban miktarı: palet
+    /// satırının taban miktarı ile rafın CalcQtyAvailToPick değerinin küçüğü
+    /// (BuildPreferredBinFilter ile aynı ölçüt).
+    /// </summary>
+    local procedure LpLineAvailableQtyBase(LP: Record "DOPSWHS LP Header"; LPLine: Record "DOPSWHS LP Line"; LocationCode: Code[10]): Decimal
+    var
+        BinContent: Record "Bin Content";
+        Item: Record Item;
+        ItemUOM: Record "Item Unit of Measure";
+        QtyPerUOM: Decimal;
+        LpQtyBase: Decimal;
+        BinAvailableQtyBase: Decimal;
+    begin
+        if not Item.Get(LPLine."Item No.") then
+            exit(0);
+        QtyPerUOM := 1;
+        if (LPLine."Unit of Measure" <> '') and (LPLine."Unit of Measure" <> Item."Base Unit of Measure") then
+            if ItemUOM.Get(LPLine."Item No.", LPLine."Unit of Measure") then
+                QtyPerUOM := ItemUOM."Qty. per Unit of Measure"
+            else
+                exit(0);
+        LpQtyBase := LPLine.Quantity * QtyPerUOM;
+        if LpQtyBase <= 0 then
+            exit(0);
+
+        BinContent.SetRange("Location Code", LocationCode);
+        BinContent.SetRange("Bin Code", LP."Bin Code");
+        BinContent.SetRange("Item No.", LPLine."Item No.");
+        BinContent.SetRange("Variant Code", LPLine."Variant Code");
+        if BinContent.FindSet() then
+            repeat
+                BinAvailableQtyBase += BinContent.CalcQtyAvailToPick(0);
+            until BinContent.Next() = 0;
+        if BinAvailableQtyBase <= 0 then
+            exit(0);
+        if LpQtyBase < BinAvailableQtyBase then
+            exit(LpQtyBase);
+        exit(BinAvailableQtyBase);
+    end;
+
     /// <summary>Terminal için sevkiyat acentesi listesi: JSON [{code,name}].</summary>
     procedure ListShippingAgents(): Text
     var
@@ -898,6 +1159,12 @@ codeunit 72047 "DOPSWHS Shipment Mgmt"
         ShippingAgentRequiredErr: Label 'Sevkiyat acentesi seçin.';
         ShippingAgentNotFoundErr: Label '%1 sevkiyat acentesi bulunamadı.', Comment = '%1 agent code';
         PickNotCreatedErr: Label 'No warehouse pick was created for shipment %1. Check bin content and available quantity.', Comment = '%1 = Warehouse Shipment No.';
+        LpNotFoundErr: Label '%1 numaralı taşıma kabı (LP) bulunamadı. Listeyi yenileyin.', Comment = '%1 = LP No.';
+        LpNotActiveErr: Label '%1 numaralı taşıma kabı toplamaya uygun değil. Durumu: %2.', Comment = '%1 = LP No., %2 = status';
+        LpAssignedElsewhereErr: Label '%1 numaralı taşıma kabı %2 belgesine atanmış.', Comment = '%1 = LP No., %2 = document no.';
+        LpOtherLocationErr: Label '%1 numaralı taşıma kabı %2 lokasyonunda; sevkiyat %3 lokasyonundan yapılıyor.', Comment = '%1 = LP No., %2 = LP location, %3 = shipment location';
+        LpNoBinErr: Label '%1 numaralı taşıma kabının rafı boş. Önce kabı bir rafa yerleştirin.', Comment = '%1 = LP No.';
+        LpHasNoShipmentItemErr: Label '%1 numaralı taşıma kabı, %2 sevkiyatının açık satırlarındaki üründen (veya istenen lottan) bulundurmuyor.', Comment = '%1 = LP No., %2 = shipment no.';
 
     [BusinessEvent(false)]
     local procedure OnBeforeShipSales(SalesOrderNo: Code[20])

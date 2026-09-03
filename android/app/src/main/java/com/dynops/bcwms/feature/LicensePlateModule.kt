@@ -19,6 +19,8 @@ import com.dynops.bcwms.BcApi
 import com.dynops.bcwms.scanner.BarcodeIntentResolver
 import com.dynops.bcwms.scanner.ScanField
 import com.dynops.bcwms.ui.*
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.launch
 import org.json.JSONObject
 
@@ -92,25 +94,44 @@ fun LicensePlateModule() {
             val failures = linkedMapOf<String, String>()
             val labelPrinter = getDefaultPrinter(context, PRINTER_USAGE_LABEL)
             val documentPrinter = getDefaultPrinter(context, PRINTER_USAGE_DOCUMENT)
-            requested.forEach { no ->
-                val row = rows.firstOrNull { it.optString("no") == no }
-                val route = bulkLpPrintRoute(row?.optInt("lineCount") ?: 0, labelPrinter, documentPrinter)
-                val payload = JSONObject().apply { put("printerId", route.printerCode); put("copies", 1) }.toString()
-                // Azure Direct, işi kalıcı kuyruğa yazdıktan sonra fiziksel ajan
-                // sonucunu bekleyebilir. Kısa okutma timeout'u işi oluşturduğu
-                // halde telefonda başarısız gösterip yeniden baskıya yol açıyordu.
-                val result = BcApi.boundActionLongRunning(
-                    context,
-                    "licensePlates",
-                    no,
-                    route.action,
-                    payload,
-                )
-                if (!result.ok) {
-                    val serverError = BcApi.errorMessage(result.body)
-                    failures[no] = QcErrorParser.friendlyStatus(serverError, result.httpCode)
-                        .removePrefix("HATA: ")
+            var completed = 0
+            bulkLpPrintBatches(requested).forEach { batch ->
+                status = "Yazdırma kuyruğu hazırlanıyor: $completed/${requested.size}"
+                // Her istek farklı bir LP'yi işler. En fazla üç çağrıyı paralel
+                // çalıştırarak BC ve yazıcı köprüsünü aşırı yüklemeden seri HTTP
+                // bekleme süresini azaltırız. Batch sonuçları seçim sırasıyla
+                // işlendiği için hata özeti ve yeniden-deneme davranışı değişmez.
+                val results = batch.map { no ->
+                    val row = rows.firstOrNull { it.optString("no") == no }
+                    val route = bulkLpPrintRoute(row?.optInt("lineCount") ?: 0, labelPrinter, documentPrinter)
+                    async {
+                        val payload = JSONObject().apply {
+                            put("printerId", route.printerCode)
+                            put("copies", 1)
+                        }.toString()
+                        // Azure Direct, işi kalıcı kuyruğa yazdıktan sonra fiziksel
+                        // ajan sonucunu bekleyebilir. Uzun timeout çift baskıya yol
+                        // açan erken yeniden denemeleri önlemeye devam eder.
+                        val result = BcApi.boundActionLongRunning(
+                            context,
+                            "licensePlates",
+                            no,
+                            route.action,
+                            payload,
+                        )
+                        val error = if (result.ok) null else {
+                            val serverError = BcApi.errorMessage(result.body)
+                            QcErrorParser.friendlyStatus(serverError, result.httpCode)
+                                .removePrefix("HATA: ")
+                        }
+                        no to error
+                    }
                 }
+                    .awaitAll()
+                results.forEach { (no, error) ->
+                    if (error != null) failures[no] = error
+                }
+                completed += batch.size
             }
             loading = false
             status = if (failures.isEmpty()) {

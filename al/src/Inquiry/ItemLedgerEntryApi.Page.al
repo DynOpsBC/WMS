@@ -31,6 +31,7 @@ page 72214 "DOPSWHS Item Ledger Entry API"
                 field(lotNo; Rec."Lot No.") { Caption = 'lotNo'; }
                 field(serialNo; Rec."Serial No.") { Caption = 'serialNo'; }
                 field(lpNo; Rec."DOPSWHS LP No.") { Caption = 'lpNo'; }
+                field(lpNos; Rec."DOPSWHS LP Nos.") { Caption = 'lpNos'; }
             }
         }
     }

@@ -7,6 +7,25 @@ import org.junit.Test
 
 class LicensePlateWorkflowTest {
     @Test
+    fun `bulk print uses small ordered batches`() {
+        val lpNos = listOf("LP1", "LP2", "LP3", "LP4", "LP5", "LP6", "LP7")
+
+        assertEquals(
+            listOf(
+                listOf("LP1", "LP2", "LP3"),
+                listOf("LP4", "LP5", "LP6"),
+                listOf("LP7"),
+            ),
+            bulkLpPrintBatches(lpNos),
+        )
+    }
+
+    @Test(expected = IllegalArgumentException::class)
+    fun `bulk print rejects an invalid concurrency limit`() {
+        bulkLpPrintBatches(listOf("LP1"), maxParallel = 0)
+    }
+
+    @Test
     fun `bulk print sends empty LP to the ZPL LP label action`() {
         assertEquals("printLabel", bulkLpPrintAction(0))
         assertEquals("printLabel", bulkLpPrintAction(-1))
