@@ -155,6 +155,11 @@ fun StatusText(status: String) {
  */
 fun operatorFacingStatus(raw: String): String {
     if (raw.isBlank()) return raw
+    // Mal kabul akışı teknik metni önceden temizleyip eyleme dönük bir neden
+    // ekler. StatusText aynı metni ikinci kez süzüp yalnız REF koduna
+    // çevirmemeli; aksi halde gerçek hata nedeni sahada kayboluyordu.
+    if (raw.startsWith("HATA: Mal kabul kaydedilmedi. Neden:", ignoreCase = true))
+        return raw
     val englishBcValidation = Regex(
         """\b(required|must|cannot|already|not\s+found|no\s+longer|nothing\s+to|not\s+allowed|unable\s+to|failed\s+to)\b""",
         RegexOption.IGNORE_CASE,

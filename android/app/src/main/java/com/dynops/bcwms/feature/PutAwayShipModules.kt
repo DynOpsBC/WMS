@@ -1894,9 +1894,9 @@ private fun WhsePickDocument(no: String, onBack: () -> Unit) {
             Spacer(Modifier.height(6.dp))
             Text(
                 if (h?.optString("mainLpNo").orEmpty().isBlank())
-                    "Farklı kaynak LP'leri tek sevk paletinde birleştirecekseniz miktar girmeden önce Hedef LP Oluştur'a basın; mevcut LP'leri olduğu gibi sevk edecekseniz kullanmayın."
+                    "Yeni Sevk Paleti: Birden fazla kaynak LP'den topladığınız ürünleri yeni tek bir sevk LP'sinde birleştirir. Kaynak LP'lerde yalnız kalan miktar kalır. Tam LP'leri olduğu gibi sevk edecekseniz kullanmayın."
                 else
-                    "Hedef sevk paleti hazır; kaydettiğiniz miktarlar kaynak LP'lerden bu palete aktarılacak.",
+                    "Yeni sevk paleti hazır. Girdiğiniz miktarlar kaynak LP'lerden bu LP'ye aktarılacak; kaynak LP'lerde kalan miktar korunacak.",
                 fontSize = 11.sp,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -1905,7 +1905,7 @@ private fun WhsePickDocument(no: String, onBack: () -> Unit) {
             val mainLp = h?.optString("mainLpNo").orEmpty()
             Column(Modifier.weight(1f)) {
                 Text(
-                    if (mainLp.isBlank()) "Farklı LP'leri tek palette birleştirir" else "Toplanan ürünlerin hedef paleti",
+                    if (mainLp.isBlank()) "Kısmi miktarları yeni LP'de birleştir" else "Yeni sevk LP'sini tamamla",
                     fontSize = 10.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -1932,7 +1932,7 @@ private fun WhsePickDocument(no: String, onBack: () -> Unit) {
                     },
                     enabled = !busy && canMutate,
                     modifier = Modifier.fillMaxWidth().height(48.dp),
-                ) { Text(if (mainLp.isBlank()) "📦 Hedef LP Oluştur" else "📦 Hedef LP Kapat", fontSize = 13.sp) }
+                ) { Text(if (mainLp.isBlank()) "📦 Yeni Sevk LP" else "📦 Sevk LP'yi Kapat", fontSize = 13.sp) }
             }
             Column(Modifier.weight(1f)) {
                 Text("Açık satır için miktar bildirir", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)

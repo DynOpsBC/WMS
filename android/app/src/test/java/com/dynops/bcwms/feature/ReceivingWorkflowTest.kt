@@ -92,11 +92,12 @@ class ReceivingWorkflowTest {
             "Warehouse handling is required for this item. CorrelationId: 12345678-1234-1234-1234-123456789012.",
             400,
         )
+        val renderedStatus = com.dynops.bcwms.ui.operatorFacingStatus(status)
 
-        assertTrue(status.contains("Mal kabul kaydedilmedi"))
-        assertTrue(status.contains("Warehouse handling is required for this item"))
-        assertFalse(status.contains("CorrelationId"))
-        assertFalse(status.contains("REF-"))
+        assertTrue(renderedStatus.contains("Mal kabul kaydedilmedi"))
+        assertTrue(renderedStatus.contains("Warehouse handling is required for this item"))
+        assertFalse(renderedStatus.contains("CorrelationId"))
+        assertFalse(renderedStatus.contains("REF-"))
     }
 
     @Test

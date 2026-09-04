@@ -298,6 +298,7 @@ internal fun ledgerBulkLpFriendlyError(raw: String, httpCode: Int = 0): String =
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun BulkLpBuildSheet(
+    singleLpMode: Boolean = false,
     onDismiss: () -> Unit,
     onBuilt: (LedgerBulkLpBuildResult) -> Unit,
 ) {
@@ -311,7 +312,9 @@ internal fun BulkLpBuildSheet(
     var templates by remember { mutableStateOf<List<String>>(emptyList()) }
     var templateExpanded by remember { mutableStateOf(false) }
     var bin by remember { mutableStateOf("") }
-    var lpCountText by remember { mutableStateOf(DEFAULT_LEDGER_LP_COUNT) }
+    var lpCountText by remember(singleLpMode) {
+        mutableStateOf(if (singleLpMode) "1" else DEFAULT_LEDGER_LP_COUNT)
+    }
     var quantityText by remember { mutableStateOf(DEFAULT_LEDGER_LP_QUANTITY) }
     var printLabels by remember { mutableStateOf(true) }
     var busy by remember { mutableStateOf(false) }
@@ -362,7 +365,7 @@ internal fun BulkLpBuildSheet(
         template = ""
         templateExpanded = false
         bin = ""
-        lpCountText = DEFAULT_LEDGER_LP_COUNT
+        lpCountText = if (singleLpMode) "1" else DEFAULT_LEDGER_LP_COUNT
         quantityText = DEFAULT_LEDGER_LP_QUANTITY
         printLabels = true
         completed = false
@@ -586,7 +589,11 @@ internal fun BulkLpBuildSheet(
     }
 
     com.dynops.bcwms.ui.SheetScaffold(onDismiss = { if (!busy) finish() }) {
-        Text("Mevcut Stoktan LP Oluştur", fontSize = 21.sp, fontWeight = FontWeight.Bold)
+        Text(
+            if (singleLpMode) "Stoktan Tekli LP Oluştur" else "Mevcut Stoktan LP Oluştur",
+            fontSize = 21.sp,
+            fontWeight = FontWeight.Bold,
+        )
         Text(
             "LP'ler oluşturulur; stok miktarı ve stok hareketi değişmez.",
             fontSize = 12.sp,
@@ -655,7 +662,7 @@ internal fun BulkLpBuildSheet(
                             template = ""
                             templateExpanded = false
                             bin = ""
-                            lpCountText = DEFAULT_LEDGER_LP_COUNT
+                            lpCountText = if (singleLpMode) "1" else DEFAULT_LEDGER_LP_COUNT
                             quantityText = DEFAULT_LEDGER_LP_QUANTITY
                             printLabels = true
                         }
@@ -754,7 +761,7 @@ internal fun BulkLpBuildSheet(
                     label = { Text("LP adedi") },
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                     singleLine = true,
-                    enabled = inputsEnabled,
+                    enabled = inputsEnabled && !singleLpMode,
                     modifier = Modifier.weight(1f),
                 )
                 OutlinedTextField(

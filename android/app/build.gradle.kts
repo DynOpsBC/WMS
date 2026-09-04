@@ -35,8 +35,8 @@ android {
     // Saha APK'larından bazılarında CI tarafından 100000+ versionCode
     // kullanıldı. Görünen sürüm adı eski olsa bile Android yalnız sayısal kodu
     // karşılaştırdığı için semantik sürümleri 200000 bandında monoton tutuyoruz.
-    versionCode = releaseVersionCodeOverride ?: 200060
-    versionName = releaseVersionNameOverride ?: "1.14.60"
+    versionCode = releaseVersionCodeOverride ?: 200096
+    versionName = releaseVersionNameOverride ?: "1.14.96"
     manifestPlaceholders["appLabel"] = "BCWMS"
     // Ücretsiz dağıtım kanalı: public GitHub Release içindeki sabit latest.json.
     // APK aynı release'de tutulur; uygulamaya GitHub hesabı/token gömülmez.

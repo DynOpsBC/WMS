@@ -491,8 +491,15 @@ codeunit 72428 "DOPSWHS LP Propagation"
     procedure BackfillItemLedgerEntryLp(var ItemLedgerEntry: Record "Item Ledger Entry"): Boolean
     var
         LpNo: Code[20];
+        LPManagement: Codeunit "DOPSWHS LP Management";
     begin
-        if ItemLedgerEntry."DOPSWHS LP No." <> '' then
+        // Yeni akışta her LP satırı kesin kaynak giriş numarasını taşır. Tek
+        // LP kadar birden fazla LP'yi de önce bu kesin bağdan geri yükle.
+        LPManagement.RefreshItemLedgerEntryLpReferences(ItemLedgerEntry."Entry No.");
+        ItemLedgerEntry.Get(ItemLedgerEntry."Entry No.");
+        if (ItemLedgerEntry."DOPSWHS LP No." <> '') or
+           (ItemLedgerEntry."DOPSWHS LP Nos." <> '')
+        then
             exit(true);
 
         LpNo := ResolvePostedReceiptLpForItemEntry(ItemLedgerEntry);

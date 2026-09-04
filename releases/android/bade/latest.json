@@ -1,7 +1,7 @@
 {
-  "versionCode": 200095,
-  "versionName": "1.14.95-bade",
-  "apkUrl": "https://github.com/DynOpsBC/WMS/releases/download/android-v1.14.95/BCWMS-BADE-1.14.95-RELEASE.apk",
-  "sha256": "cf8a0b5253e348c6ac96146cd179b6024e705ad6c18e82320eda5a61bb1148be",
-  "releaseNotes": "LP'li mal kabul standart BC postundan ayrıldı: boş başlayan LP başarılı LP + Kaydet işleminden sonra gerçek Madde Defter Girişine bağlanır, stok satırı ve miktarı değiştirilmez. Ürünsüz genel seçenek artık Boş Taşıyıcı olarak açıkça gösterilir."
+  "versionCode": 200096,
+  "versionName": "1.14.96-bade",
+  "apkUrl": "https://github.com/DynOpsBC/WMS/releases/download/android-v1.14.96/BCWMS-BADE-1.14.96-RELEASE.apk",
+  "sha256": "e40713158b694d24e881fda76222339848c07c49516af5e5aa9a3d49424ab8b3",
+  "releaseNotes": "Çok raflı stok raf seçmeden LP'lere dağıtılır ve LP gerçek hedef rafına atanır. Tekli stok LP'si seçilen Madde Defter Girişine bağlanır. Toplu LP tamamlama hatası giderildi; sevk LP yönlendirmeleri ve hata mesajları sadeleştirildi."
 }

@@ -39,8 +39,8 @@ fun LicensePlateModule() {
     var rows by remember { mutableStateOf<List<JSONObject>>(emptyList()) }
     var status by remember { mutableStateOf("") }
     var loading by remember { mutableStateOf(false) }
-    var showBuild by remember { mutableStateOf(false) }
     var showBulkBuild by remember { mutableStateOf(false) }
+    var showSingleBuild by remember { mutableStateOf(false) }
     var selectedForPrint by remember { mutableStateOf<Set<String>>(emptySet()) }
     var palletLabelRetryNos by remember { mutableStateOf<Set<String>>(emptySet()) }
     var search by remember { mutableStateOf("") }
@@ -71,12 +71,6 @@ fun LicensePlateModule() {
         return
     }
 
-    if (showBuild) {
-        LpBuildSheet(
-            onDismiss = { showBuild = false },
-            onBuilt = { newNo -> showBuild = false; loadList(); selected = newNo }
-        )
-    }
     if (showBulkBuild) {
         BulkLpBuildSheet(
             onDismiss = { showBulkBuild = false },
@@ -102,6 +96,19 @@ fun LicensePlateModule() {
                             "Yalnız başarısız LP'ler seçildi; Seçilenleri Yazdır ile tekrar deneyin."
                 }
                 loadList(completionStatus)
+            },
+        )
+    }
+    if (showSingleBuild) {
+        BulkLpBuildSheet(
+            singleLpMode = true,
+            onDismiss = { showSingleBuild = false },
+            onBuilt = { result ->
+                showSingleBuild = false
+                selectedForPrint = result.failedPrintLpNos.toSet()
+                palletLabelRetryNos = result.failedPrintLpNos.toSet()
+                search = ""
+                loadList("TAMAM: Tekli LP seçtiğiniz stok kaydına bağlandı.")
             },
         )
     }
@@ -182,8 +189,8 @@ fun LicensePlateModule() {
         }
         Spacer(Modifier.height(6.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            OutlinedButton(onClick = { showBuild = true }, enabled = !loading, modifier = Modifier.weight(1f)) {
-                Text("Boş Taşıyıcı (ürünsüz)")
+            OutlinedButton(onClick = { showSingleBuild = true }, enabled = !loading, modifier = Modifier.weight(1f)) {
+                Text("Tekli LP Oluştur")
             }
             OutlinedButton(onClick = { printSelected() }, enabled = !loading && selectedForPrint.isNotEmpty(), modifier = Modifier.weight(1f)) {
                 Text("Seçilenleri Yazdır (${selectedForPrint.size})")
