@@ -110,7 +110,7 @@ page 72090 "DOPSWHS Receipt API"
     /// <summary>
     /// Creates and closes every pallet for one receipt line in a single transaction.
     /// distributionJson is a flat array: groupId, quantity, lotNo, supplierLotNo, expiryDate.
-    /// Blank lotNo is generated once per groupId for lot-tracked items.
+    /// Every pallet uses one common tracking identity; a blank lotNo is generated once.
     /// </summary>
     [ServiceEnabled]
     procedure createBulkLPDistribution(lineNo: Integer; expectedQty: Decimal; distributionJson: Text; lpTemplateCode: Code[20]; printLabels: Boolean; printerId: Code[50]): Text

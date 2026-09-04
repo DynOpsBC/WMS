@@ -244,22 +244,55 @@ codeunit 72428 "DOPSWHS LP Propagation"
     /// </summary>
     procedure StampPostedReceiptLedgerEntries(PostedReceiptNo: Code[20]; DefaultLpNo: Code[20])
     var
+        PostedHeader: Record "Posted Whse. Receipt Header";
         PostedLine: Record "Posted Whse. Receipt Line";
         WhseItemEntryRelation: Record "Whse. Item Entry Relation";
         ItemLedgerEntry: Record "Item Ledger Entry";
         LineLpNo: Code[20];
+        LineLpNos: Text[250];
+        WhseReceiptNo: Code[20];
+        ReceiptLineNo: Integer;
+        CurrentLpCount: Integer;
     begin
         if PostedReceiptNo = '' then
             exit;
+        if PostedHeader.Get(PostedReceiptNo) then
+            WhseReceiptNo := PostedHeader."Whse. Receipt No.";
 
         PostedLine.SetRange("No.", PostedReceiptNo);
         if not PostedLine.FindSet() then
             exit;
         repeat
+            Clear(LineLpNos);
+            ReceiptLineNo := PostedLine."Whse Receipt Line No.";
+            if ReceiptLineNo = 0 then
+                ReceiptLineNo := PostedLine."Line No.";
+            LineLpNos := ResolveReceiptLpNosText(
+                WhseReceiptNo, ReceiptLineNo,
+                PostedLine."Item No.", PostedLine."Variant Code", CurrentLpCount);
+
             LineLpNo := PostedLine."LP No.";
-            if LineLpNo = '' then
+            if CurrentLpCount = 1 then
+                LineLpNo := CopyStr(LineLpNos, 1, MaxStrLen(LineLpNo))
+            else
+                if LineLpNo = '' then
                 LineLpNo := DefaultLpNo;
-            if LineLpNo <> '' then begin
+
+            // Birden fazla fiziksel LP tek standart stok hareketine bağlıdır.
+            // Bu durumda başlıktaki ilk LP'yi bütün harekete yazmak yerine LP
+            // listesini yalnız özel liste alanında sakla.
+            if CurrentLpCount > 1 then begin
+                WhseItemEntryRelation.Reset();
+                WhseItemEntryRelation.SetSourceFilter(
+                    Database::"Posted Whse. Receipt Line", 0,
+                    PostedLine."No.", PostedLine."Line No.", true);
+                if WhseItemEntryRelation.FindSet() then
+                    repeat
+                        if ItemLedgerEntry.Get(WhseItemEntryRelation."Item Entry No.") then
+                            StampInboundItemLedgerEntryLpList(ItemLedgerEntry, LineLpNos);
+                    until WhseItemEntryRelation.Next() = 0;
+            end else
+                if LineLpNo <> '' then begin
                 StampPostedReceiptWarehouseEntries(PostedLine, LineLpNo);
                 WhseItemEntryRelation.Reset();
                 WhseItemEntryRelation.SetSourceFilter(
@@ -270,8 +303,48 @@ codeunit 72428 "DOPSWHS LP Propagation"
                         if ItemLedgerEntry.Get(WhseItemEntryRelation."Item Entry No.") then
                             StampItemLedgerEntry(ItemLedgerEntry, LineLpNo);
                     until WhseItemEntryRelation.Next() = 0;
-            end;
+                end;
         until PostedLine.Next() = 0;
+    end;
+
+    local procedure ResolveReceiptLpNosText(WhseReceiptNo: Code[20]; WhseReceiptLineNo: Integer; ItemNo: Code[20]; VariantCode: Code[10]; var LpCount: Integer): Text[250]
+    var
+        LPLine: Record "DOPSWHS LP Line";
+        LPHeader: Record "DOPSWHS LP Header";
+        SeenLpNos: Dictionary of [Code[20], Boolean];
+        LpListText: Text;
+        Result: Text[250];
+    begin
+        Clear(LpCount);
+        if WhseReceiptNo = '' then
+            exit('');
+        LPLine.SetRange("Source Document Type", LPLine."Source Document Type"::WhseReceipt);
+        LPLine.SetRange("Source Document No.", WhseReceiptNo);
+        LPLine.SetRange("Source Document Line No.", WhseReceiptLineNo);
+        LPLine.SetRange("Item No.", ItemNo);
+        LPLine.SetRange("Variant Code", VariantCode);
+        LPLine.SetFilter(Quantity, '>0');
+        if LPLine.FindSet() then
+            repeat
+                if LPHeader.Get(LPLine."LP No.") and (LPHeader.Status = LPHeader.Status::Built) then
+                    if not SeenLpNos.ContainsKey(LPLine."LP No.") then begin
+                        SeenLpNos.Add(LPLine."LP No.", true);
+                        if LpListText <> '' then
+                            LpListText += ', ';
+                        LpListText += LPLine."LP No.";
+                    end;
+            until LPLine.Next() = 0;
+        LpCount := SeenLpNos.Count();
+        Result := CopyStr(LpListText, 1, MaxStrLen(Result));
+        exit(Result);
+    end;
+
+    local procedure StampInboundItemLedgerEntryLpList(var ItemLedgerEntry: Record "Item Ledger Entry"; LpNos: Text[250])
+    begin
+        if ItemLedgerEntry."DOPSWHS LP Nos." = LpNos then
+            exit;
+        ItemLedgerEntry."DOPSWHS LP Nos." := LpNos;
+        ItemLedgerEntry.Modify();
     end;
 
     local procedure ResolvePostedReceiptLineLp(WhseReceiptNo: Code[20]; PostedLine: Record "Posted Whse. Receipt Line"): Code[20]

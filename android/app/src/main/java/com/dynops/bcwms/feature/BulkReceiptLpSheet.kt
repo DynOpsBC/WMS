@@ -38,10 +38,23 @@ internal data class BulkReceiptLpRow(
 private data class ManualBulkLpDraft(
     val id: Int,
     val quantity: String,
-    val lotNo: String,
-    val supplierLotNo: String,
-    val expiryDate: String,
 )
+
+private const val COMMON_RECEIPT_LOT_GROUP = "RECEIPT"
+
+internal fun withCommonBulkReceiptTracking(
+    rows: List<BulkReceiptLpRow>,
+    lotNo: String,
+    supplierLotNo: String,
+    expiryDate: String,
+): List<BulkReceiptLpRow> = rows.map { row ->
+    row.copy(
+        groupId = COMMON_RECEIPT_LOT_GROUP,
+        lotNo = lotNo,
+        supplierLotNo = supplierLotNo,
+        expiryDate = expiryDate,
+    )
+}
 
 internal fun bulkLpRowsJson(rows: List<BulkReceiptLpRow>): String = JSONArray().apply {
     rows.forEach { row ->
@@ -98,10 +111,10 @@ internal fun manualBulkLpValidation(
     if (rowTotal - maxQty > 0.00001) return "LP toplamı açık miktarı aşamaz."
     if (expectedQty != null && abs(rowTotal - expectedQty) > 0.00001)
         return "LP toplamı kabul miktarına eşit olmalıdır."
-    if (expiryRequired && rows.any { it.expiryDate.isBlank() }) return "Her LP için SKT girin."
+    if (expiryRequired && rows.any { it.expiryDate.isBlank() }) return "Bu mal kabul için SKT girin."
     val enteredExpiryDates = rows.filter { it.expiryDate.isNotBlank() }
     if (enteredExpiryDates.any { normalizedBulkExpiryDate(it.expiryDate) == null })
-        return "Her LP için geçerli bir SKT girin."
+        return "Geçerli bir SKT girin."
     if (enteredExpiryDates.any {
             !expiryDateIsTodayOrFuture(normalizedBulkExpiryDate(it.expiryDate), today)
         }) return "Geçmiş SKT'li ürün mal kabul edilemez."
@@ -128,15 +141,17 @@ internal fun BulkReceiptLpSheet(
     var nextLpId by remember { mutableIntStateOf(2) }
     var receiptQtyText by remember(maxExpectedQty) { mutableStateOf(fmtBulkQty(maxExpectedQty)) }
     var palletCountText by remember { mutableStateOf("1") }
+    var commonLotNo by remember(initialLotNo) { mutableStateOf(initialLotNo) }
+    var commonSupplierLotNo by remember(initialSupplierLotNo) { mutableStateOf(initialSupplierLotNo) }
+    var commonExpiryDate by remember(initialExpiryDate) {
+        mutableStateOf(expiryDateForDisplay(initialExpiryDate))
+    }
     var drafts by remember {
         mutableStateOf(
             listOf(
                 ManualBulkLpDraft(
                     id = 1,
                     quantity = "",
-                    lotNo = initialLotNo,
-                    supplierLotNo = initialSupplierLotNo,
-                    expiryDate = expiryDateForDisplay(initialExpiryDate),
                 )
             )
         )
@@ -146,15 +161,20 @@ internal fun BulkReceiptLpSheet(
         drafts = drafts.map { if (it.id == id) transform(it) else it }
     }
 
-    val rows = drafts.map { draft ->
-        BulkReceiptLpRow(
-            groupId = draft.id.toString(),
-            quantity = draft.quantity.toDoubleOrNull() ?: 0.0,
-            lotNo = draft.lotNo,
-            supplierLotNo = draft.supplierLotNo,
-            expiryDate = draft.expiryDate,
-        )
-    }
+    val rows = withCommonBulkReceiptTracking(
+        rows = drafts.map { draft ->
+            BulkReceiptLpRow(
+                groupId = COMMON_RECEIPT_LOT_GROUP,
+                quantity = draft.quantity.toDoubleOrNull() ?: 0.0,
+                lotNo = "",
+                supplierLotNo = "",
+                expiryDate = "",
+            )
+        },
+        lotNo = commonLotNo,
+        supplierLotNo = commonSupplierLotNo,
+        expiryDate = commonExpiryDate,
+    )
     val expectedQty = receiptQtyText.toDoubleOrNull() ?: 0.0
     val palletCount = palletCountText.toIntOrNull() ?: 0
     val enteredTotal = rows.sumOf { it.quantity }
@@ -216,17 +236,12 @@ internal fun BulkReceiptLpSheet(
             Button(
                 onClick = {
                     val quantities = equalBulkLpQuantities(expectedQty, palletCount)
-                    val common = drafts.firstOrNull()
                     val previous = drafts
                     drafts = quantities.mapIndexed { index, quantity ->
                         val existing = previous.getOrNull(index)
                         ManualBulkLpDraft(
                             id = existing?.id ?: nextLpId++,
                             quantity = fmtBulkQty(quantity),
-                            lotNo = existing?.lotNo ?: common?.lotNo.orEmpty().ifBlank { initialLotNo },
-                            supplierLotNo = existing?.supplierLotNo ?: common?.supplierLotNo.orEmpty().ifBlank { initialSupplierLotNo },
-                            expiryDate = existing?.expiryDate ?: common?.expiryDate.orEmpty()
-                                .ifBlank { expiryDateForDisplay(initialExpiryDate) },
                         )
                     }
                 },
@@ -235,6 +250,40 @@ internal fun BulkReceiptLpSheet(
                 modifier = Modifier.fillMaxWidth(),
             ) { Text("Eşit Böl ve $palletCount LP Hazırla") }
             Spacer(Modifier.height(12.dp))
+
+            if (lotRequired) {
+                Text("Ortak Lot Bilgisi", fontWeight = FontWeight.Bold)
+                Text(
+                    "Bu mal kabulde oluşturulan bütün LP'lerde aynı lot kullanılacak.",
+                    fontSize = 12.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Spacer(Modifier.height(6.dp))
+                OutlinedTextField(
+                    value = commonLotNo,
+                    onValueChange = { commonLotNo = it },
+                    label = { Text("İç lot (boşsa sistem üretir)") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                Spacer(Modifier.height(6.dp))
+                OutlinedTextField(
+                    value = commonSupplierLotNo,
+                    onValueChange = { commonSupplierLotNo = it },
+                    label = { Text("Tedarikçi lotu (isteğe bağlı)") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
+            if (expiryEnabled) {
+                Spacer(Modifier.height(6.dp))
+                BulkExpiryDateField(
+                    value = commonExpiryDate,
+                    required = expiryRequired,
+                    onValueChange = { commonExpiryDate = it },
+                )
+            }
+            if (lotRequired || expiryEnabled) Spacer(Modifier.height(12.dp))
 
             drafts.forEachIndexed { index, draft ->
                 Card(
@@ -262,45 +311,15 @@ internal fun BulkReceiptLpSheet(
                             singleLine = true,
                             modifier = Modifier.fillMaxWidth(),
                         )
-                        if (lotRequired) {
-                            Spacer(Modifier.height(6.dp))
-                            OutlinedTextField(
-                                value = draft.lotNo,
-                                onValueChange = { value -> updateDraft(draft.id) { it.copy(lotNo = value) } },
-                                label = { Text("İç lot (boşsa BC üretir)") },
-                                singleLine = true,
-                                modifier = Modifier.fillMaxWidth(),
-                            )
-                            Spacer(Modifier.height(6.dp))
-                            OutlinedTextField(
-                                value = draft.supplierLotNo,
-                                onValueChange = { value -> updateDraft(draft.id) { it.copy(supplierLotNo = value) } },
-                                label = { Text("Tedarikçi lotu (opsiyonel)") },
-                                singleLine = true,
-                                modifier = Modifier.fillMaxWidth(),
-                            )
-                        }
-                        if (expiryEnabled) {
-                            Spacer(Modifier.height(6.dp))
-                            BulkExpiryDateField(
-                                value = draft.expiryDate,
-                                required = expiryRequired,
-                                onValueChange = { value -> updateDraft(draft.id) { it.copy(expiryDate = value) } },
-                            )
-                        }
                     }
                 }
             }
 
             OutlinedButton(
                 onClick = {
-                    val common = drafts.firstOrNull()
                     val expandedDrafts = drafts + ManualBulkLpDraft(
                         id = nextLpId++,
                         quantity = "",
-                        lotNo = common?.lotNo.orEmpty().ifBlank { initialLotNo },
-                        supplierLotNo = common?.supplierLotNo.orEmpty().ifBlank { initialSupplierLotNo },
-                        expiryDate = common?.expiryDate.orEmpty().ifBlank { expiryDateForDisplay(initialExpiryDate) },
                     )
                     drafts = expandedDrafts
                     palletCountText = expandedDrafts.size.toString()

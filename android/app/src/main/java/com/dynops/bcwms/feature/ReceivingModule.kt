@@ -34,11 +34,16 @@ internal fun resolvedActiveReceiptLp(
 
 internal fun restoredBulkReceiptLineNos(lines: List<JSONObject>): Set<Int> = lines
     .asSequence()
-    .filter { it.optString("licensePlateNo").isNotBlank() }
+    .filter {
+        it.optString("licensePlateNo").isNotBlank() || it.optInt("bulkLpCount", 0) > 0
+    }
     .filter { it.optDouble("qtyToReceive", 0.0) > 0.0 }
     .map { it.optInt("lineNo") }
     .filter { it > 0 }
     .toSet()
+
+internal fun bulkReceiptKeepsSingleLedgerEntrySupported(lines: List<JSONObject>): Boolean =
+    lines.isNotEmpty() && lines.all { it.has("bulkLpCount") }
 
 /**
  * Mal Kabul (Receiving).
@@ -250,9 +255,9 @@ private fun ReceiveDocument(no: String, onBack: () -> Unit) {
             }
             val page = BcApi.getAllPages(context, "receiptLines?\$filter=no eq '$no'&\$top=100")
             lines = page.rows
-            // Toplu LP dağıtımı artık her fiziksel LP'yi ayrı BC satırında
-            // saklar. Uygulama/terminal yeniden açılsa da sunucudaki LP'li ve
-            // miktarı hazır satırları yeniden onaylanmış kabul et.
+            // Toplu LP dağıtımı belge satırını bölmeden LP kayıtlarını ayrı
+            // saklar. Uygulama/terminal yeniden açılsa da sunucuda LP'leri
+            // hazırlanmış olan kaynak satırı yeniden onaylanmış kabul et.
             touched = touched + restoredBulkReceiptLineNos(page.rows)
             linesComplete = page.complete
             if (!headerLoaded || !linesComplete) {
@@ -473,6 +478,11 @@ private fun ReceiveDocument(no: String, onBack: () -> Unit) {
                     if (activeLp == null) {
                         OutlinedButton(
                             onClick = {
+                                if (!bulkReceiptKeepsSingleLedgerEntrySupported(lines)) {
+                                    status = "HATA: Palet LP için Business Central güncellemesi gerekli. " +
+                                        "BC paketi 1.14.1.18 yüklenmeden bu işlem yapılamaz."
+                                    return@OutlinedButton
+                                }
                                 val candidates = lines.filter { line ->
                                     (line.optDouble("quantity") - line.optDouble("qtyReceived")).coerceAtLeast(0.0) > 0.0
                                 }

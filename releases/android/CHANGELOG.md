@@ -7,6 +7,20 @@ Kurulum: [docs/android-install-guide.md](../../docs/android-install-guide.md)
 
 ---
 
+## v1.14.87 — BADE — 2026-09-04
+
+**versionCode:** 200087 · **BC paketi:** 1.14.1.18
+
+**BADE SHA-256:** `5dd05ab5885c34d962d32d76c2a88bfd81c10dbca81687d4ad79174ddcaf50bc`
+
+### Toplu paletli mal kabulde tek stok hareketi
+
+- 100 adetlik tek satın alma ve mal kabul satırı 2 × 50 LP oluşturulsa da bölünmez; Madde Defter Girişi tek satır 100 adet kalır.
+- Fiziksel palet miktarları bağımsız LP kayıtlarında korunur; yerleştirme satırları palet bazında hazırlanabilir.
+- Aynı mal kabul satırındaki bütün LP'ler tek ortak iç lot, tedarikçi lotu ve son kullanma tarihi kullanır; iç lot boş bırakılırsa yalnız bir kez üretilir.
+- Birden fazla LP numarası tek Madde Defter Girişinin “İlgili LP No.ları” alanına birlikte yazılır.
+- BC paketi 1.14.1.18 yüklü değilse terminal eski satır bölme davranışını çağırmadan Palet LP işlemini güvenli biçimde durdurur.
+
 ## v1.14.86 — BADE — 2026-09-04
 
 **versionCode:** 200086 · **BC paketi:** 1.14.1.17

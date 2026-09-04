@@ -68,6 +68,51 @@ codeunit 72133 "DOPSWHS Receipt With LP Tests"
         Assert.AreEqual(SecondLpNo, WhseReceiptHeader."DOPSWHS LP No.", 'The receipt must still point to the reopened LP.');
     end;
 
+    [Test]
+    procedure BulkReceiptCountsOnlyCurrentBuiltPalletsOnTheSingleSourceLine()
+    var
+        WhseReceiptHeader: Record "Warehouse Receipt Header";
+        WhseReceiptLine: Record "Warehouse Receipt Line";
+        ReceiptMgmt: Codeunit "DOPSWHS Receipt Mgmt";
+    begin
+        CreateReceipt(WhseReceiptHeader, WhseReceiptLine, 'PO-BULK-ONE-LINE', 100);
+        CreateReceiptLP('LP-BULK-01', WhseReceiptLine, 50, true);
+        CreateReceiptLP('LP-BULK-02', WhseReceiptLine, 50, true);
+        // Önceki kısmi kabulden kalan atanmış LP yeni dalgaya katılmamalı.
+        CreateReceiptLP('LP-BULK-OLD', WhseReceiptLine, 25, false);
+
+        Assert.AreEqual(
+            2,
+            ReceiptMgmt.BulkLpCountForReceiptLine(WhseReceiptLine),
+            'Two physical LPs must stay attached to one unchanged receipt line.');
+    end;
+
+    local procedure CreateReceiptLP(LpNo: Code[20]; ReceiptLine: Record "Warehouse Receipt Line"; Qty: Decimal; IsCurrent: Boolean)
+    var
+        LP: Record "DOPSWHS LP Header";
+        LPLine: Record "DOPSWHS LP Line";
+    begin
+        LP.Init();
+        LP."No." := LpNo;
+        if IsCurrent then
+            LP.Status := LP.Status::Built
+        else
+            LP.Status := LP.Status::Assigned;
+        LP.Insert();
+
+        LPLine.Init();
+        LPLine."LP No." := LpNo;
+        LPLine."Line No." := 10000;
+        LPLine."Item No." := ReceiptLine."Item No.";
+        LPLine."Variant Code" := ReceiptLine."Variant Code";
+        LPLine."Unit of Measure" := ReceiptLine."Unit of Measure Code";
+        LPLine.Quantity := Qty;
+        LPLine."Source Document Type" := LPLine."Source Document Type"::WhseReceipt;
+        LPLine."Source Document No." := ReceiptLine."No.";
+        LPLine."Source Document Line No." := ReceiptLine."Line No.";
+        LPLine.Insert();
+    end;
+
     local procedure CreateReceipt(var Header: Record "Warehouse Receipt Header"; var Line: Record "Warehouse Receipt Line"; SourceNo: Code[20]; Qty: Decimal)
     begin
         Header.Init();

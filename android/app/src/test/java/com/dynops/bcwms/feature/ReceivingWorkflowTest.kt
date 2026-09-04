@@ -1,12 +1,22 @@
 package com.dynops.bcwms.feature
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.json.JSONObject
 
 class ReceivingWorkflowTest {
+    @Test
+    fun `bulk receipt is blocked until single ledger entry server contract exists`() {
+        val oldServerRows = listOf(JSONObject().put("lineNo", 10000))
+        val safeServerRows = listOf(JSONObject().put("lineNo", 10000).put("bulkLpCount", 0))
+
+        assertFalse(bulkReceiptKeepsSingleLedgerEntrySupported(oldServerRows))
+        assertTrue(bulkReceiptKeepsSingleLedgerEntrySupported(safeServerRows))
+    }
+
     @Test
     fun `successful LP start survives an immediately stale receipt reload`() {
         assertEquals("LP000041", resolvedActiveReceiptLp("", false, "LP000041"))
@@ -26,7 +36,7 @@ class ReceivingWorkflowTest {
     fun `bulk LP receipt lines are restored as ready after reload`() {
         val rows = listOf(
             JSONObject().put("lineNo", 10000).put("licensePlateNo", "LP000101").put("qtyToReceive", 100.0),
-            JSONObject().put("lineNo", 20000).put("licensePlateNo", "LP000102").put("qtyToReceive", 100.0),
+            JSONObject().put("lineNo", 20000).put("licensePlateNo", "").put("bulkLpCount", 2).put("qtyToReceive", 100.0),
             JSONObject().put("lineNo", 30000).put("licensePlateNo", "").put("qtyToReceive", 100.0),
         )
 

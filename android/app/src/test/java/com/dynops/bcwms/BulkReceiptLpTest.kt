@@ -4,6 +4,7 @@ import com.dynops.bcwms.feature.BulkReceiptLpRow
 import com.dynops.bcwms.feature.bulkLpRowsJson
 import com.dynops.bcwms.feature.equalBulkLpQuantities
 import com.dynops.bcwms.feature.manualBulkLpValidation
+import com.dynops.bcwms.feature.withCommonBulkReceiptTracking
 import org.json.JSONArray
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
@@ -12,17 +13,25 @@ import java.time.LocalDate
 
 class BulkReceiptLpTest {
     @Test
-    fun `different lots stay in different json rows`() {
+    fun `all pallets use one common receipt lot and expiry`() {
+        val commonRows = withCommonBulkReceiptTracking(
+            rows = listOf(
+                BulkReceiptLpRow("1", 5.0, "OLD-A", "", ""),
+                BulkReceiptLpRow("2", 5.0, "OLD-B", "", ""),
+            ),
+            lotNo = "LOT-A",
+            supplierLotNo = "SUP-A",
+            expiryDate = "2027-01-01",
+        )
         val json = JSONArray(
-            bulkLpRowsJson(
-                listOf(
-                    BulkReceiptLpRow("1", 5.0, "LOT-A", "SUP-A", "2027-01-01"),
-                    BulkReceiptLpRow("2", 5.0, "LOT-B", "SUP-B", "2027-02-01"),
-                )
-            )
+            bulkLpRowsJson(commonRows)
         )
         assertEquals("LOT-A", json.getJSONObject(0).getString("lotNo"))
-        assertEquals("LOT-B", json.getJSONObject(1).getString("lotNo"))
+        assertEquals("LOT-A", json.getJSONObject(1).getString("lotNo"))
+        assertEquals("SUP-A", json.getJSONObject(1).getString("supplierLotNo"))
+        assertEquals("2027-01-01", json.getJSONObject(1).getString("expiryDate"))
+        assertEquals("RECEIPT", json.getJSONObject(0).getString("groupId"))
+        assertEquals("RECEIPT", json.getJSONObject(1).getString("groupId"))
     }
 
     @Test
@@ -84,13 +93,13 @@ class BulkReceiptLpTest {
     }
 
     @Test
-    fun `expiry is checked separately for every manual pallet`() {
+    fun `missing common expiry blocks the pallet set`() {
         val rows = listOf(
             BulkReceiptLpRow("1", 5.0, "", "", "2027-01-01"),
             BulkReceiptLpRow("2", 5.0, "", "", ""),
         )
 
-        assertEquals("Her LP için SKT girin.", manualBulkLpValidation(10.0, rows, expiryRequired = true))
+        assertEquals("Bu mal kabul için SKT girin.", manualBulkLpValidation(10.0, rows, expiryRequired = true))
     }
 
     @Test
