@@ -448,45 +448,62 @@ codeunit 72046 "DOPSWHS Pick Mgmt"
         LPHeader.SetFilter(Status, '%1|%2|%3', LPHeader.Status::Open, LPHeader.Status::Built, LPHeader.Status::Assigned);
         if LPHeader.FindSet() then
             repeat
-                LPLine.Reset();
-                LPLine.SetRange("LP No.", LPHeader."No.");
-                LPLine.SetRange("Item No.", PickLine."Item No.");
-                LPLine.SetRange("Variant Code", PickLine."Variant Code");
-                LPLine.SetRange("Lot No.", PickLine."Lot No.");
-                LPLine.SetRange("Serial No.", PickLine."Serial No.");
-                LPLine.SetFilter(Quantity, '>0');
-                if LPLine.FindSet() then
-                    repeat
-                        QtyPerUom := 1;
-                        if (LPLine."Unit of Measure" <> '') and
-                           (LPLine."Unit of Measure" <> Item."Base Unit of Measure")
-                        then
-                            if ItemUom.Get(LPLine."Item No.", LPLine."Unit of Measure") then
-                                QtyPerUom := ItemUom."Qty. per Unit of Measure"
-                            else
-                                QtyPerUom := 0;
-                        AvailableBaseQty := Round(LPLine.Quantity * QtyPerUom, 0.00001);
-                        if (QtyPerUom > 0) and
-                           (AvailableBaseQty + 0.00001 >= PickLine."Qty. to Handle (Base)")
-                        then begin
-                            CandidateCount += 1;
-                            CandidateLpNo := LPLine."LP No.";
-                        end;
-                    until LPLine.Next() = 0;
+                if PickSourceLpAssignmentMatches(LPHeader, PickLine) then begin
+                    AvailableBaseQty := 0;
+                    LPLine.Reset();
+                    LPLine.SetRange("LP No.", LPHeader."No.");
+                    LPLine.SetRange("Item No.", PickLine."Item No.");
+                    LPLine.SetRange("Variant Code", PickLine."Variant Code");
+                    LPLine.SetRange("Lot No.", PickLine."Lot No.");
+                    LPLine.SetRange("Serial No.", PickLine."Serial No.");
+                    LPLine.SetFilter(Quantity, '>0');
+                    if LPLine.FindSet() then
+                        repeat
+                            QtyPerUom := 1;
+                            if (LPLine."Unit of Measure" <> '') and
+                               (LPLine."Unit of Measure" <> Item."Base Unit of Measure")
+                            then
+                                if ItemUom.Get(LPLine."Item No.", LPLine."Unit of Measure") then
+                                    QtyPerUom := ItemUom."Qty. per Unit of Measure"
+                                else
+                                    QtyPerUom := 0;
+                            if QtyPerUom > 0 then
+                                AvailableBaseQty += Round(LPLine.Quantity * QtyPerUom, 0.00001);
+                        until LPLine.Next() = 0;
+
+                    // A manually scanned LP only selects where allocation starts;
+                    // it no longer has to hold the entire Take-line quantity.
+                    if (RequestedLpNo <> '') and (AvailableBaseQty > 0.00001) then
+                        exit(LPHeader."No.");
+                    if AvailableBaseQty + 0.00001 >= PickLine."Qty. to Handle (Base)" then begin
+                        CandidateCount += 1;
+                        CandidateLpNo := LPHeader."No.";
+                    end;
+                end;
             until LPHeader.Next() = 0;
 
-        if CandidateCount = 0 then begin
-            if RequestedLpNo <> '' then
-                Error(
-                    '%1 LP numarasında %2 ürünü, lot %3 için %4 miktar sevk edilebilir stok bulunamadı.',
-                    RequestedLpNo, PickLine."Item No.", PickLine."Lot No.", PickLine."Qty. to Handle");
-            exit('');
-        end;
-        if CandidateCount > 1 then
+        if RequestedLpNo <> '' then
             Error(
-                '%1 ürünü, lot %2 ve %3 rafı için birden fazla LP eşleşti. Yanlış paletin düşmemesi için kaynak LP numarasını okutun.',
-                PickLine."Item No.", PickLine."Lot No.", PickLine."Bin Code");
-        exit(CandidateLpNo);
+                '%1 LP numarasında %2 ürünü, lot %3 için sevk edilebilir stok bulunamadı.',
+                RequestedLpNo, PickLine."Item No.", PickLine."Lot No.");
+
+        // One full-cover LP can be stamped as an optimization. If none or more
+        // than one can cover the line, keep the source blank: registration will
+        // deterministically allocate the quantity across all LPs in the Take bin.
+        if CandidateCount = 1 then
+            exit(CandidateLpNo);
+        exit('');
+    end;
+
+    local procedure PickSourceLpAssignmentMatches(LPHeader: Record "DOPSWHS LP Header"; PickLine: Record "Warehouse Activity Line"): Boolean
+    begin
+        if LPHeader.Status <> LPHeader.Status::Assigned then
+            exit(true);
+        exit(
+            ((LPHeader."Assigned Document Type" = LPHeader."Assigned Document Type"::WhsePick) and
+             (LPHeader."Assigned Document No." = PickLine."No.")) or
+            ((LPHeader."Assigned Document Type" = LPHeader."Assigned Document Type"::WhseShipment) and
+             (LPHeader."Assigned Document No." = PickLine."Whse. Document No.")));
     end;
 
     local procedure UpdateShipmentLineLotSummary(PickLine: Record "Warehouse Activity Line")
@@ -740,10 +757,10 @@ codeunit 72046 "DOPSWHS Pick Mgmt"
             exit;
         repeat
             FindRelatedPlaceLineForShippingLp(PickLine, PlaceLine);
-            LPMgt.TransferPickedQuantity(
+            LPMgt.TransferPickedQuantityFromAvailableLps(
                 PickLine."LP No.", ShippingLP."No.", Pick."No.", PickLine."Line No.",
                 PickLine."Whse. Document No.", PickLine."Item No.", PickLine."Variant Code", PickLine."Unit of Measure Code",
-                PickLine."Qty. to Handle", PickLine."Qty. to Handle (Base)",
+                PickLine."Qty. to Handle (Base)",
                 PickLine."Lot No.", PickLine."Serial No.", PickLine."Bin Code", PlaceLine."Bin Code");
 
             PickLine."Target LP No." := ShippingLP."No.";

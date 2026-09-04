@@ -25,6 +25,18 @@ class ShipmentWorkflowTest {
         assertTrue(pickLpChoiceNeeded(7))
     }
 
+    @Test
+    fun `several partial pallets require a combined pick`() {
+        val partials = parsePickSourceOptions(
+            """[{"lpNo":"LP1","coversFullDemand":false},{"lpNo":"LP2","coversFullDemand":false}]"""
+        )
+        val oneFull = partials + partials.first().copy(lpNo = "LP3", coversFullDemand = true)
+
+        assertTrue(combinedLpPickRequired(partials))
+        assertFalse(combinedLpPickRequired(oneFull))
+        assertFalse(combinedLpPickRequired(partials.take(1)))
+    }
+
     // ---- shouldFallbackToLegacyCreatePick ----
 
     @Test
@@ -78,6 +90,22 @@ class ShipmentWorkflowTest {
         assertTrue(first.coversFullDemand)
         assertEquals("LP000024", opts[1].lpNo)
         assertFalse(opts[1].coversFullDemand)
+    }
+
+    @Test
+    fun `source pallets are sorted by natural warehouse bin order then lp number`() {
+        val opts = parsePickSourceOptions(
+            """
+            [
+              {"lpNo":"LP20","binCode":"A-10"},
+              {"lpNo":"LP02","binCode":"A-2"},
+              {"lpNo":"LP01","binCode":"A-2"},
+              {"lpNo":"LP99","binCode":""}
+            ]
+            """.trimIndent()
+        )
+
+        assertEquals(listOf("LP01", "LP02", "LP20", "LP99"), opts.map { it.lpNo })
     }
 
     @Test

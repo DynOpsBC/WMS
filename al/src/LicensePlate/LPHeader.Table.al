@@ -50,6 +50,25 @@ table 72010 "DOPSWHS LP Header"
             DataClassification = CustomerContent;
             MinValue = 0;
         }
+        field(123; "Bulk Build Request ID"; Guid)
+        {
+            Caption = 'Bulk Build Request ID';
+            DataClassification = SystemMetadata;
+            Editable = false;
+        }
+        field(124; "Bulk Source ILE No."; Integer)
+        {
+            Caption = 'Bulk Source Item Ledger Entry No.';
+            DataClassification = CustomerContent;
+            Editable = false;
+            TableRelation = "Item Ledger Entry"."Entry No.";
+        }
+        field(125; "Bulk Source Bin Code"; Code[20])
+        {
+            Caption = 'Bulk Source Bin Code';
+            DataClassification = CustomerContent;
+            Editable = false;
+        }
     }
 
     keys
@@ -59,6 +78,7 @@ table 72010 "DOPSWHS LP Header"
         key(Parent; "Parent LP No.") { }
         key(SSCCKey; SSCC) { }
         key(AssignedDoc; "Assigned Document Type", "Assigned Document No.") { }
+        key(BulkBuildRequest; "Bulk Build Request ID") { }
     }
 
     trigger OnInsert()

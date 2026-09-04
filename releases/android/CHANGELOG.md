@@ -7,6 +7,33 @@ Kurulum: [docs/android-install-guide.md](../../docs/android-install-guide.md)
 
 ---
 
+## v1.14.84 — BADE — 2026-09-04
+
+**versionCode:** 200084 · **BC paketi:** 1.14.1.16
+
+**BADE SHA-256:** `4e7486dd09bc3ac2bfc2542fb1c56979dd7c1d740bd8e28f779950531719f0b3`
+
+### Raf sıralı çoklu LP toplama ve gerçek sevk LP'si
+
+- Tek paletin yetmediği sevkiyatta uygun paletler raf kodu sırasıyla birlikte kullanılır; terminal artık tek LP seçme zorunluluğu göstermez.
+- Toplama kaydedilirken miktar kaynak LP'ler arasında bölünür, kullanılan miktarlar yeni sevk LP'sinde birleşir ve son kaynak LP yalnız alınmayan bakiyeyi korur.
+- Sevkiyat yeni sevk LP'sinden düşer; kaynak paletin kalan miktarı ikinci kez tüketilmez. Başka belgeye ayrılmış LP stoku serbest stok sayılmaz.
+- Standart Ambar Toplama ve stok hareket satırları çoğaltılmaz; LP içerik aktarımı aynı kayıt işlemi içinde atomik yapılır.
+
+## v1.14.83 — BADE — 2026-09-04
+
+**versionCode:** 200083 · **BC paketi:** 1.14.1.15
+
+**BADE SHA-256:** `794e52b39ac43f8eb8207156d5940d4904c9669fe4295e2820f4c8c58eeed41c`
+
+### Tek Madde Defter Girişinden güvenli çoklu LP ve sayım
+
+- 1.000 adetlik tek Madde Defter Girişi ve tek Ambar Girişi değiştirilmeden, aynı kaynağa bağlı 10 × 100 gibi ayrı LP kayıtları ve her LP için ayrı etiket oluşturulur.
+- Etikette toplam mal kabul miktarı ile palet miktarı ayrı gösterilir; Madde Defter Girişleri bölünmez ve aynı raftaki LP hazırlığı depo hareketi üretmez.
+- Ağ cevabı kaybolursa aynı işlem kimliğiyle güvenli tekrar yapılır; ikinci LP seti veya çift etiket kuyruğu oluşturulmaz.
+- Sayım V2 her LP'nin kendi miktarını kullanır. 10 × 100 okutma toplamı 1.000 kalır; sıfır farkta stok günlüğü ve yeni Madde Defter Girişi oluşmaz.
+- Eski, kaynağı bilinmeyen LP kayıtları yeniden tahsis edilmez; güvenli olmayan eski sayım snapshot'ı stoklara işlenmeden durdurulur.
+
 ## v1.14.82 — BADE — 2026-09-04
 
 **versionCode:** 200082 · **BC paketi:** 1.14.1.14

@@ -149,6 +149,92 @@ codeunit 72114 "DOPSWHS LP Transfer Tests"
     end;
 
     [Test]
+    procedure PickSplitCombinesSeveralSourceLpsIntoShippingLp()
+    var
+        SourceLP1: Record "DOPSWHS LP Header";
+        SourceLP2: Record "DOPSWHS LP Header";
+        SourceLP3: Record "DOPSWHS LP Header";
+        ShippingLP: Record "DOPSWHS LP Header";
+        SourceLine: Record "DOPSWHS LP Line";
+        LPMgt: Codeunit "DOPSWHS LP Management";
+        Assert: Codeunit "Library Assert";
+        SourceLpCount: Integer;
+    begin
+        Seed();
+        BuildLPWithLine(SourceLP1, 1000, SourceLine);
+        Clear(SourceLine);
+        BuildLPWithLine(SourceLP2, 1000, SourceLine);
+        Clear(SourceLine);
+        BuildLPWithLine(SourceLP3, 2000, SourceLine);
+        LPMgt.Build('CARTON-S', 'BLUE', '', ShippingLP);
+
+        SourceLpCount := LPMgt.TransferPickedQuantityFromAvailableLps(
+            '', ShippingLP."No.", 'PICK-MULTI', 10000, 'SHIP-MULTI',
+            'ITEMY', '', 'PCS', 3500, '', '', 'PICK', 'STAGE');
+
+        Assert.AreEqual(3, SourceLpCount, 'The pick must be allocated over all three required source LPs.');
+        Assert.AreEqual(0, GetLPQty(SourceLP1."No."), 'The first LP in order must be emptied.');
+        Assert.AreEqual(0, GetLPQty(SourceLP2."No."), 'The second LP in order must be emptied.');
+        Assert.AreEqual(500, GetLPQty(SourceLP3."No."), 'Only the required quantity must leave the final LP.');
+        Assert.AreEqual(3500, GetLPQty(ShippingLP."No."), 'The new shipping LP must contain the complete picked quantity.');
+    end;
+
+    [Test]
+    procedure PickSplitUsesScannedLpFirstThenCompletesFromOthers()
+    var
+        SourceLP1: Record "DOPSWHS LP Header";
+        SourceLP2: Record "DOPSWHS LP Header";
+        PreferredLP: Record "DOPSWHS LP Header";
+        ShippingLP: Record "DOPSWHS LP Header";
+        SourceLine: Record "DOPSWHS LP Line";
+        LPMgt: Codeunit "DOPSWHS LP Management";
+        Assert: Codeunit "Library Assert";
+    begin
+        Seed();
+        BuildLPWithLine(SourceLP1, 1000, SourceLine);
+        Clear(SourceLine);
+        BuildLPWithLine(SourceLP2, 1000, SourceLine);
+        Clear(SourceLine);
+        BuildLPWithLine(PreferredLP, 2000, SourceLine);
+        LPMgt.Build('CARTON-S', 'BLUE', '', ShippingLP);
+
+        LPMgt.TransferPickedQuantityFromAvailableLps(
+            PreferredLP."No.", ShippingLP."No.", 'PICK-PREFERRED', 10000, 'SHIP-PREFERRED',
+            'ITEMY', '', 'PCS', 3500, '', '', 'PICK', 'STAGE');
+
+        Assert.AreEqual(0, GetLPQty(PreferredLP."No."), 'The scanned LP must be consumed first even when it cannot cover the order.');
+        Assert.AreEqual(0, GetLPQty(SourceLP1."No."), 'The remainder must continue in deterministic LP order.');
+        Assert.AreEqual(500, GetLPQty(SourceLP2."No."), 'The last source LP must keep its unpicked remainder.');
+        Assert.AreEqual(3500, GetLPQty(ShippingLP."No."), 'All allocations must be combined in the shipping LP.');
+    end;
+
+    [Test]
+    procedure PickSplitSkipsLpAssignedToAnotherDocument()
+    var
+        OtherDocumentLP: Record "DOPSWHS LP Header";
+        AvailableLP: Record "DOPSWHS LP Header";
+        ShippingLP: Record "DOPSWHS LP Header";
+        SourceLine: Record "DOPSWHS LP Line";
+        LPMgt: Codeunit "DOPSWHS LP Management";
+        Assert: Codeunit "Library Assert";
+    begin
+        Seed();
+        BuildLPWithLine(OtherDocumentLP, 1000, SourceLine);
+        LPMgt.Assign(OtherDocumentLP, Enum::"DOPSWHS Assigned Doc Type"::WhseShipment, 'SHIP-OTHER');
+        Clear(SourceLine);
+        BuildLPWithLine(AvailableLP, 1000, SourceLine);
+        LPMgt.Build('CARTON-S', 'BLUE', '', ShippingLP);
+
+        LPMgt.TransferPickedQuantityFromAvailableLps(
+            '', ShippingLP."No.", 'PICK-OURS', 10000, 'SHIP-OURS',
+            'ITEMY', '', 'PCS', 800, '', '', 'PICK', 'STAGE');
+
+        Assert.AreEqual(1000, GetLPQty(OtherDocumentLP."No."), 'Stock reserved for another document must not be touched.');
+        Assert.AreEqual(200, GetLPQty(AvailableLP."No."), 'The eligible LP must supply the pick.');
+        Assert.AreEqual(800, GetLPQty(ShippingLP."No."), 'The shipping LP must receive the selected quantity.');
+    end;
+
+    [Test]
     procedure EmptyBuiltLpMoveUpdatesHeaderBin()
     var
         LP: Record "DOPSWHS LP Header";
@@ -220,11 +306,14 @@ codeunit 72114 "DOPSWHS LP Transfer Tests"
     local procedure GetLPQty(LPNo: Code[20]): Decimal
     var
         LPLine: Record "DOPSWHS LP Line";
+        TotalQty: Decimal;
     begin
         LPLine.SetRange("LP No.", LPNo);
-        if LPLine.FindFirst() then
-            exit(LPLine.Quantity);
-        exit(0);
+        if LPLine.FindSet() then
+            repeat
+                TotalQty += LPLine.Quantity;
+            until LPLine.Next() = 0;
+        exit(TotalQty);
     end;
 
     local procedure CountLines(LPNo: Code[20]): Integer
@@ -242,7 +331,7 @@ codeunit 72114 "DOPSWHS LP Transfer Tests"
         Setup: Record "DOPSWHS Setup";
     begin
         Helper.ResetSetup();
-        SeedNoSeries('LP', 'LP04001'); SeedNoSeries('SSCC', '6000000001');
+        SeedNoSeries('LP', 'LP04001', 'LP04999'); SeedNoSeries('SSCC', '6000000001', '6000009999');
         Setup := Helper.EnsureSetup();
         Setup."LP No. Series" := 'LP'; Setup."SSCC No. Series" := 'SSCC'; Setup.Modify(true);
         SeedItem('ITEMY', 'PCS');
@@ -251,12 +340,12 @@ codeunit 72114 "DOPSWHS LP Transfer Tests"
         SetupWizard.SeedDefaultLPTemplates();
     end;
 
-    local procedure SeedNoSeries(Code: Code[20]; StartNo: Code[20])
+    local procedure SeedNoSeries(Code: Code[20]; StartNo: Code[20]; EndNo: Code[20])
     var
         NoSeries: Record "No. Series"; NoSeriesLine: Record "No. Series Line";
     begin
         if not NoSeries.Get(Code) then begin NoSeries.Init(); NoSeries.Code := Code; NoSeries.Insert(true); end;
-        if not NoSeriesLine.Get(Code, 10000) then begin NoSeriesLine.Init(); NoSeriesLine."Series Code" := Code; NoSeriesLine."Line No." := 10000; NoSeriesLine."Starting No." := StartNo; NoSeriesLine."Ending No." := IncStr(StartNo); NoSeriesLine.Insert(true); end;
+        if not NoSeriesLine.Get(Code, 10000) then begin NoSeriesLine.Init(); NoSeriesLine."Series Code" := Code; NoSeriesLine."Line No." := 10000; NoSeriesLine."Starting No." := StartNo; NoSeriesLine."Ending No." := EndNo; NoSeriesLine.Insert(true); end;
     end;
 
     local procedure SeedItem(ItemNo: Code[20]; UoM: Code[10])

@@ -42,9 +42,10 @@ fun LicensePlateModule() {
     var showBuild by remember { mutableStateOf(false) }
     var showBulkBuild by remember { mutableStateOf(false) }
     var selectedForPrint by remember { mutableStateOf<Set<String>>(emptySet()) }
+    var palletLabelRetryNos by remember { mutableStateOf<Set<String>>(emptySet()) }
     var search by remember { mutableStateOf("") }
 
-    fun loadList() {
+    fun loadList(statusAfterLoad: String? = null) {
         scope.launch {
             loading = true; status = "Yükleniyor..."
             val filter = com.dynops.bcwms.ui.buildODataFilter(com.dynops.bcwms.ui.searchClause("no", search))
@@ -57,6 +58,7 @@ fun LicensePlateModule() {
                 !page.complete -> "HATA: LP listesinin tamamı alınamadı. Yenileyin."
                 rows.isEmpty() && search.isNotBlank() -> "BOŞ: '$search' ile eşleşen LP bulunamadı"
                 rows.isEmpty() -> "BOŞ: LP kaydı yok"
+                statusAfterLoad != null -> statusAfterLoad
                 else -> "TAMAM: ${rows.size} LP"
             }
         }
@@ -78,10 +80,28 @@ fun LicensePlateModule() {
     if (showBulkBuild) {
         BulkLpBuildSheet(
             onDismiss = { showBulkBuild = false },
-            onBuilt = { created ->
+            onBuilt = { result ->
                 showBulkBuild = false
-                status = "TAMAM: ${created.size} LP mevcut stoktan oluşturuldu."
-                loadList()
+                val failedPrints = result.failedPrintLpNos.toSet()
+                // İlk baskıda başarılı olan LP'leri yeniden seçmeyiz. Yalnız
+                // sunucunun başarısız bildirdiği MTE/LP etiketleri güvenli tekrar
+                // için seçili ve aynı pallet-label rotasında kalır.
+                selectedForPrint = failedPrints
+                palletLabelRetryNos = failedPrints
+                search = ""
+                val completionStatus = when {
+                    result.replayed && result.printSkippedOnReplay ->
+                        "UYARI: Daha önce oluşturulan ${result.createdLpNos.size} LP güvenle doğrulandı. " +
+                            "Çift baskıyı önlemek için etiketler tekrar kuyruğa alınmadı; fiziksel etiketleri kontrol edip yalnız eksikleri seçin."
+                    result.replayed ->
+                        "TAMAM: Daha önce oluşturulan ${result.createdLpNos.size} LP aynı işlem kimliğiyle güvenle doğrulandı."
+                    failedPrints.isEmpty() ->
+                        "TAMAM: ${result.createdLpNos.size} LP mevcut stoktan oluşturuldu."
+                    else ->
+                        "UYARI: ${result.createdLpNos.size} LP oluşturuldu; ${failedPrints.size} etiket gönderilemedi. " +
+                            "Yalnız başarısız LP'ler seçildi; Seçilenleri Yazdır ile tekrar deneyin."
+                }
+                loadList(completionStatus)
             },
         )
     }
@@ -103,7 +123,13 @@ fun LicensePlateModule() {
                 // işlendiği için hata özeti ve yeniden-deneme davranışı değişmez.
                 val results = batch.map { no ->
                     val row = rows.firstOrNull { it.optString("no") == no }
-                    val route = bulkLpPrintRoute(row?.optInt("lineCount") ?: 0, labelPrinter, documentPrinter)
+                    val route = if (no in palletLabelRetryNos) {
+                        // İlk toplu oluşturma çağrısıyla aynı malzeme/LP ZPL
+                        // etiketini yeniden üret; PDF belge rotasına düşme.
+                        LpPrintRoute("printPalletLabels", labelPrinter.trim())
+                    } else {
+                        bulkLpPrintRoute(row?.optInt("lineCount") ?: 0, labelPrinter, documentPrinter)
+                    }
                     async {
                         val payload = JSONObject().apply {
                             put("printerId", route.printerCode)
@@ -143,6 +169,7 @@ fun LicensePlateModule() {
             // Kısmi başarıda yalnız başarısız LP'leri seçili bırak. Operatör
             // yeniden denediğinde başarıyla kuyruğa alınan etiketler çift basılmaz.
             selectedForPrint = failures.keys.toSet()
+            palletLabelRetryNos = palletLabelRetryNos.intersect(failures.keys)
         }
     }
 

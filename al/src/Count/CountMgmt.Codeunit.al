@@ -779,9 +779,15 @@ codeunit 72050 "DOPSWHS Count Mgmt"
             CountLine.SetRange("LP No.", LpNo);
             CountLine.SetRange("LP Line No.", LPLine."Line No.");
             CountLine.SetRange("Bin Code", BinCode);
-            if CountLine.FindFirst() then
-                SetCountValueAndModify(CountLine, CounterSlot, LPLine.Quantity)
-            else begin
+            if CountLine.FindFirst() then begin
+                // V2 LP satırının sistem miktarı, rafın toplu bakiyesi değil
+                // bu LP satırının kayıtlı içeriğidir. Tam raf bakiyesini her LP'ye
+                // kopyalamak aynı stoğu LP sayısı kadar çoğaltır. Mevcut satırı da
+                // yenileyerek hatalı snapshot ile oluşmuş açık sayımları düzeltiriz.
+                CountLine."System Qty" := LPLine.Quantity;
+                CountLine."Unexpected Stock" := false;
+                SetCountValueAndModify(CountLine, CounterSlot, LPLine.Quantity);
+            end else begin
                 UomCode := LPLine."Unit of Measure";
                 if (UomCode = '') and Item.Get(LPLine."Item No.") then
                     UomCode := Item."Base Unit of Measure";
@@ -797,10 +803,12 @@ codeunit 72050 "DOPSWHS Count Mgmt"
                 CountLine."Lot No." := LPLine."Lot No.";
                 CountLine."Serial No." := LPLine."Serial No.";
                 CountLine."Unit of Measure Code" := UomCode;
-                // Sistem miktarı LP içeriği DEĞİL, BC'nin bu raftaki bakiyesidir;
-                // aksi halde LP/BC tutarsızlığı "fark 0" görünür ve kayıt stoku düzeltmez.
-                CountLine."System Qty" := BinBalance(CountHeader."Location Code", BinCode, LPLine."Item No.", LPLine."Variant Code", UomCode, LPLine."Lot No.", LPLine."Serial No.");
-                CountLine."Unexpected Stock" := CountLine."System Qty" <= 0;
+                // Raf bakiyesi bu madde/izleme kombinasyonundaki bütün LP'lerin
+                // toplamıdır; her LP satırına yazılırsa sistem stoku katlanır.
+                // Klasik GenerateLines ve AttachLpToBin ile aynı semantik:
+                // her LP yalnız kendi kayıtlı miktarını snapshot eder.
+                CountLine."System Qty" := LPLine.Quantity;
+                CountLine."Unexpected Stock" := false;
                 SetCountValue(CountLine, CounterSlot, LPLine.Quantity);
                 CountLine.Insert(true);
             end;
@@ -1194,6 +1202,7 @@ codeunit 72050 "DOPSWHS Count Mgmt"
         ItemJournalLine: Record "Item Journal Line";
         ItemJnlPostBatch: Codeunit "Item Jnl.-Post Batch";
         Dimensions: Dictionary of [Text, Text];
+        WinningQty: Decimal;
         LineNo: Integer;
         CountDocumentNo: Code[20];
         DedicatedBatchName: Code[10];
@@ -1201,8 +1210,13 @@ codeunit 72050 "DOPSWHS Count Mgmt"
         CountHeader.Get(SheetNo);
         if CountHeader.Status = CountHeader.Status::Posted then
             Error(CountAlreadyPostedErr, SheetNo);
-        if CountHeader."V2 Scan Mode" then
+        if CountHeader."V2 Scan Mode" then begin
             EnsureAllCountersCompleted(SheetNo);
+            // Eski sürüm, aynı raf bakiyesini her LP satırına kopyalayabiliyordu.
+            // Böyle bir açık belgeyi sessizce post etmek çoklu negatif stok
+            // hareketi üretir; LP yeniden okutulup snapshot düzeltilene kadar durdur.
+            EnsureV2LpSystemSnapshotsAreSafe(SheetNo);
+        end;
 
         // Eski sürümlerde batch adı soldan kısaltıldığı için tüm CNT belgeleri
         // aynı DOPS-CNT-C batch'ini paylaşıyordu. Kayıttan hemen önce belgeye
@@ -1241,26 +1255,32 @@ codeunit 72050 "DOPSWHS Count Mgmt"
         CountLine.SetRange("Sheet No.", SheetNo);
         if CountLine.FindSet() then
             repeat
-                LineNo += 10000;
-                ItemJournalLine.Init();
-                ItemJournalLine.Validate("Journal Template Name", 'PHYS. INV.');
-                ItemJournalLine.Validate("Journal Batch Name", CountHeader."Source Phys. Inv. Journal Batch");
-                ItemJournalLine."Line No." := LineNo;
-                ItemJournalLine.Validate("Posting Date", Today());
-                ItemJournalLine."Document No." := CountDocumentNo;
-                ItemJournalLine.Validate("Item No.", CountLine."Item No.");
-                ItemJournalLine.Validate("Location Code", CountHeader."Location Code");
-                ItemJournalLine.Validate("Variant Code", CountLine."Variant Code");
-                ItemJournalLine.Validate("Bin Code", CountLine."Bin Code");
-                if CountLine."Unit of Measure Code" <> '' then
-                    ItemJournalLine.Validate("Unit of Measure Code", CountLine."Unit of Measure Code");
-                // Phys. inventory line: BC derives entry type + quantity from calculated vs counted.
-                ItemJournalLine.Validate("Phys. Inventory", true);
-                ItemJournalLine.Validate("Qty. (Calculated)", CountLine."System Qty");
-                ItemJournalLine.Validate("Qty. (Phys. Inventory)", GetWinningQty(CountLine, SheetNo));
-                ItemJournalLine."DOPSWHS LP No." := CountLine."LP No.";
-                ItemJournalLine.Insert(true);
-                AddItemTracking(ItemJournalLine, CountLine."Lot No.", CountLine."Serial No.");
+                WinningQty := GetWinningQty(CountLine, SheetNo);
+                // Matching physical and system quantities need no inventory
+                // journal line. In particular, 10 matching LP rows must never
+                // be sent to the posting engine as ten zero-value operations.
+                if WinningQty <> CountLine."System Qty" then begin
+                    LineNo += 10000;
+                    ItemJournalLine.Init();
+                    ItemJournalLine.Validate("Journal Template Name", 'PHYS. INV.');
+                    ItemJournalLine.Validate("Journal Batch Name", CountHeader."Source Phys. Inv. Journal Batch");
+                    ItemJournalLine."Line No." := LineNo;
+                    ItemJournalLine.Validate("Posting Date", Today());
+                    ItemJournalLine."Document No." := CountDocumentNo;
+                    ItemJournalLine.Validate("Item No.", CountLine."Item No.");
+                    ItemJournalLine.Validate("Location Code", CountHeader."Location Code");
+                    ItemJournalLine.Validate("Variant Code", CountLine."Variant Code");
+                    ItemJournalLine.Validate("Bin Code", CountLine."Bin Code");
+                    if CountLine."Unit of Measure Code" <> '' then
+                        ItemJournalLine.Validate("Unit of Measure Code", CountLine."Unit of Measure Code");
+                    // Phys. inventory line: BC derives entry type + quantity from calculated vs counted.
+                    ItemJournalLine.Validate("Phys. Inventory", true);
+                    ItemJournalLine.Validate("Qty. (Calculated)", CountLine."System Qty");
+                    ItemJournalLine.Validate("Qty. (Phys. Inventory)", WinningQty);
+                    ItemJournalLine."DOPSWHS LP No." := CountLine."LP No.";
+                    ItemJournalLine.Insert(true);
+                    AddItemTracking(ItemJournalLine, CountLine."Lot No.", CountLine."Serial No.");
+                end;
             until CountLine.Next() = 0;
 
         EnsureLicensePlateReferencesExist(SheetNo);
@@ -1291,23 +1311,6 @@ codeunit 72050 "DOPSWHS Count Mgmt"
 
         Dimensions.Add('sheetNo', SheetNo);
         Session.LogMessage('AdvWMS.Count.SheetPosted', StrSubstNo('Count sheet %1 posted.', SheetNo), Verbosity::Normal, DataClassification::SystemMetadata, TelemetryScope::ExtensionPublisher, Dimensions);
-    end;
-
-    /// <summary>BC'nin raf bakiyesi (Warehouse Entry toplamı) — sayım "sistem" miktarı.</summary>
-    local procedure BinBalance(LocationCode: Code[10]; BinCode: Code[20]; ItemNo: Code[20]; VariantCode: Code[10]; UomCode: Code[10]; LotNo: Code[50]; SerialNo: Code[50]): Decimal
-    var
-        WarehouseEntry: Record "Warehouse Entry";
-    begin
-        WarehouseEntry.SetRange("Location Code", LocationCode);
-        WarehouseEntry.SetRange("Bin Code", BinCode);
-        WarehouseEntry.SetRange("Item No.", ItemNo);
-        WarehouseEntry.SetRange("Variant Code", VariantCode);
-        if UomCode <> '' then
-            WarehouseEntry.SetRange("Unit of Measure Code", UomCode);
-        WarehouseEntry.SetRange("Lot No.", LotNo);
-        WarehouseEntry.SetRange("Serial No.", SerialNo);
-        WarehouseEntry.CalcSums(Quantity);
-        exit(WarehouseEntry.Quantity);
     end;
 
     /// <summary>
@@ -1446,6 +1449,32 @@ codeunit 72050 "DOPSWHS Count Mgmt"
             repeat
                 if not LPLine.Get(CountLine."LP No.", CountLine."LP Line No.") then
                     Error(LPLineMissingErr, CountLine."LP No.", CountLine."LP Line No.");
+            until CountLine.Next() = 0;
+    end;
+
+    local procedure EnsureV2LpSystemSnapshotsAreSafe(SheetNo: Code[20])
+    var
+        CountLine: Record "DOPSWHS Count Sheet Line";
+        LPHeader: Record "DOPSWHS LP Header";
+        LPLine: Record "DOPSWHS LP Line";
+    begin
+        CountLine.SetRange("Sheet No.", SheetNo);
+        CountLine.SetFilter("LP No.", '<>%1', '');
+        if CountLine.FindSet() then
+            repeat
+                if not LPLine.Get(CountLine."LP No.", CountLine."LP Line No.") then
+                    Error(LPLineMissingErr, CountLine."LP No.", CountLine."LP Line No.");
+                LPHeader.Get(CountLine."LP No.");
+
+                // AddUnexpectedLp intentionally has System Qty = 0 in a bin
+                // different from the LP's registered bin. Only normal LP lines
+                // in their registered bin must carry the LP-line snapshot.
+                if CountLine."Bin Code" = LPHeader."Bin Code" then
+                    if (CountLine."System Qty" <> LPLine.Quantity) or CountLine."Unexpected Stock" then
+                        Error(
+                            V2LpSystemSnapshotUnsafeErr,
+                            SheetNo, CountLine."LP No.", CountLine."LP Line No.",
+                            CountLine."System Qty", LPLine.Quantity);
             until CountLine.Next() = 0;
     end;
 
@@ -1881,6 +1910,7 @@ codeunit 72050 "DOPSWHS Count Mgmt"
         V2LotRequiredErr: Label '%1 ürünü lot takiplidir; QR içinde lot numarası bulunmalıdır.', Comment = '%1 item no';
         V2SerialRequiredErr: Label '%1 ürünü seri takiplidir; QR içinde seri numarası bulunmalıdır.', Comment = '%1 item no';
         V2ScanIdConflictErr: Label '%1 okutma kimliği başka bir sayım belgesinde kullanılmıştır.', Comment = '%1 scan guid';
+        V2LpSystemSnapshotUnsafeErr: Label '%1 sayım belgesindeki %2 LP numarasının %3 satırında güvenli olmayan sistem miktarı var (sayım: %4, LP: %5). Önce Sayımı Yeniden Başlat eylemini çalıştırıp LP''yi yeniden okutun veya yeni sayım belgesi oluşturun.', Comment = '%1 sheet no, %2 LP no, %3 LP line no, %4 count system qty, %5 LP line qty';
         WhsePhysInvTemplateTok: Label 'PHYSINV', Locked = true;
         WhsePhysInvBatchTok: Label 'DOPS-CNT', Locked = true;
 

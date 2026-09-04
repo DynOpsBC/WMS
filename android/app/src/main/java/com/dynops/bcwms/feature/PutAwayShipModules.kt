@@ -1815,7 +1815,7 @@ private fun WhsePickDocument(no: String, onBack: () -> Unit) {
     )
     val binLines = if (binFilter.isBlank()) takeLines else takeLines.filter { it.optString("binCode").equals(binFilter, ignoreCase = true) }
     val filteredLines = if (scanFilter.isBlank()) binLines else binLines.filter { matchLinesByBarcode(listOf(it), com.dynops.bcwms.scanner.BarcodeIntentResolver.resolve(scanFilter)).isNotEmpty() }
-    val displayLines = if (sortByBin) filteredLines.sortedBy { it.optString("binCode") } else filteredLines
+    val displayLines = if (sortByBin) filteredLines.sortedWith(compareBy(warehouseBinCodeComparator) { it.optString("binCode") }) else filteredLines
     val displayGroups = if (merge) groupLines(displayLines, ::pickLineCapacity) else emptyList()
 
     Column(Modifier.fillMaxSize()) {
@@ -1904,7 +1904,7 @@ private fun WhsePickDocument(no: String, onBack: () -> Unit) {
                             if (tpl == null) { busy = false; status = "HATA: Uygun sepet/palet şablonu bulunamadı."; return@launch }
                             val r = BcApi.boundAction(context, "picks", no, "startShippingLP", JSONObject().apply { put("lpTemplateCode", tpl) }.toString())
                             busy = false
-                            status = if (r.ok) "TAMAM: Sevk LP ${BcApi.scalarValue(r.body).trim()} başlatıldı"
+                            status = if (r.ok) "TAMAM: Sevk LP ${BcApi.scalarValue(r.body).trim()} başlatıldı; ürünler Toplamayı Kaydet sırasında kaynak LP'lerden aktarılacak."
                                 else QcErrorParser.friendlyStatus(BcApi.errorMessage(r.body), r.httpCode)
                         } else {
                             status = "Sevk LP kapatılıyor..."
@@ -2277,7 +2277,7 @@ private fun ShipDocument(no: String, onBack: () -> Unit, onPickCreated: (String)
     fun createPickFromLp(lpNo: String) {
         scope.launch {
             busy = true
-            status = "$lpNo paletinden ambar toplama açılıyor..."
+            status = "$lpNo paleti öncelikli ambar toplama açılıyor..."
             var r = BcApi.boundAction(
                 context,
                 "shipments",
@@ -2311,7 +2311,10 @@ private fun ShipDocument(no: String, onBack: () -> Unit, onPickCreated: (String)
             val options = if (opts.ok) parsePickSourceOptions(BcApi.scalarValue(opts.body)) else emptyList()
             if (opts.ok && pickLpChoiceNeeded(options.size)) {
                 busy = false
-                status = "${options.size} aday palet bulundu — birini seçin"
+                status = if (combinedLpPickRequired(options))
+                    "Tek palet yeterli değil — ${options.size} palet raf sırasıyla birlikte kullanılacak"
+                else
+                    "${options.size} aday palet bulundu — başlangıç paletini seçebilir veya raf sırasını kullanabilirsiniz"
                 pickLpOptions = options
                 return@launch
             }
@@ -3014,8 +3017,8 @@ private fun ShippingAgentDialog(
 
 /**
  * "Hangi paletten toplansın?" — sunucunun döndürdüğü aday paletler.
- * Operatör LP'ye dokununca yalnız o paletten toplama üretilir; "Sistem seçsin"
- * eski (BC raf sıralamasına dayalı) davranışı korur.
+ * Bir palete dokunmak o raftaki öncelikli LP'yi seçer; yetmeyen miktar diğer
+ * uygun paletlerden tamamlanır. Otomatik seçim raf kodu sırasını kullanır.
  */
 @Composable
 private fun PickSourceLpDialog(
@@ -3025,13 +3028,17 @@ private fun PickSourceLpDialog(
     onSelect: (String) -> Unit,
 ) {
     val palette = bcwmsStatus()
+    val combinedRequired = combinedLpPickRequired(options)
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Hangi paletten toplansın?") },
+        title = { Text(if (combinedRequired) "Birden fazla paletten topla" else "Hangi paletten başlansın?") },
         text = {
             Column(Modifier.fillMaxWidth()) {
                 Text(
-                    "Sevkiyat için uygun paletler aşağıda. Birine dokunun; toplama yalnız o paletten üretilir.",
+                    if (combinedRequired)
+                        "Tek palet sevkiyat miktarını karşılamıyor. Aşağıdaki düğmeyle sistem paletleri raf kodu sırasıyla kullanır; son paletten yalnız gereken miktarı alır."
+                    else
+                        "Bir palete dokunursanız o raftaki LP öncelikli olur; toplama raf kodu sırasını korur ve kalan miktarı diğer uygun paletlerden tamamlar.",
                     fontSize = 12.sp,
                     color = Color.Gray,
                 )
@@ -3040,7 +3047,7 @@ private fun PickSourceLpDialog(
                     items(options) { opt ->
                         Column(
                             Modifier.fillMaxWidth()
-                                .clickable { onSelect(opt.lpNo) }
+                                .clickable(enabled = !combinedRequired) { onSelect(opt.lpNo) }
                                 .padding(vertical = 8.dp),
                         ) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -3062,7 +3069,7 @@ private fun PickSourceLpDialog(
                 }
                 Spacer(Modifier.height(6.dp))
                 OutlinedButton(onClick = onSystemChoice, modifier = Modifier.fillMaxWidth()) {
-                    Text("🤖 Sistem seçsin")
+                    Text(if (combinedRequired) "🧭 Raf sırasıyla çoklu topla" else "🧭 Raf sırasına göre topla")
                 }
             }
         },

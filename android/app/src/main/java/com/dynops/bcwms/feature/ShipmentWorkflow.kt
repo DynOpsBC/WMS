@@ -9,8 +9,9 @@ import org.json.JSONObject
  * Saha sorunu (Merve, BADE/MERKEZDEPO): "Pick Oluştur"a basınca BC hangi paletten
  * toplanacağına kendi karar veriyordu; operatör LP000023'ten sevk etmek isterken
  * toplama LP000024'ten üretiliyordu. Sunucu tarafı artık aday paletleri
- * `pickSourceOptions` ile listeliyor ve `createPickFromLp` ile tek paletten
- * toplama üretiyor; buradaki saf fonksiyonlar o cevabı yorumlar.
+ * `pickSourceOptions` ile listeliyor. Bir palet seçilirse kendi rafındaki LP
+ * dağıtımında öncelik alır; kalan miktar raf sırasındaki uygun paletlerden tamamlanır.
+ * Buradaki saf fonksiyonlar o cevabı yorumlar ve raf sırasını sabitler.
  */
 
 /** `pickSourceOptions` cevabındaki tek bir palet adayı. */
@@ -31,6 +32,45 @@ internal data class PickSourceOption(
  * basmasın).
  */
 internal fun pickLpChoiceNeeded(optionCount: Int): Boolean = optionCount >= 2
+
+/** Tek bir aday LP sipariş talebinin tamamını karşılayamıyorsa çoklu LP gerekir. */
+internal fun combinedLpPickRequired(options: List<PickSourceOption>): Boolean =
+    options.size >= 2 && options.none(PickSourceOption::coversFullDemand)
+
+/**
+ * Depo yürüme sırası: sayı bloklarını sayısal karşılaştırır (A-2 < A-10), boş
+ * rafı sona bırakır. Pick ekranları ve kaynak-LP penceresi aynı sırayı kullanır.
+ */
+internal val warehouseBinCodeComparator: Comparator<String> = Comparator { a, b ->
+    if (a.isBlank() != b.isBlank()) return@Comparator if (a.isBlank()) 1 else -1
+    val na = a.length
+    val nb = b.length
+    var i = 0
+    var j = 0
+    while (i < na && j < nb) {
+        val ca = a[i]
+        val cb = b[j]
+        if (ca.isDigit() && cb.isDigit()) {
+            var si = i
+            while (si < na && a[si].isDigit()) si++
+            var sj = j
+            while (sj < nb && b[sj].isDigit()) sj++
+            val da = a.substring(i, si).trimStart('0')
+            val db = b.substring(j, sj).trimStart('0')
+            if (da.length != db.length) return@Comparator da.length - db.length
+            val c = da.compareTo(db)
+            if (c != 0) return@Comparator c
+            i = si
+            j = sj
+        } else {
+            val c = ca.uppercaseChar().compareTo(cb.uppercaseChar())
+            if (c != 0) return@Comparator c
+            i++
+            j++
+        }
+    }
+    (na - i) - (nb - j)
+}
 
 /**
  * Eski BC paketinde `pickSourceOptions` / `createPickFromLp` bound action'ları
@@ -90,7 +130,10 @@ internal fun parsePickSourceOptions(json: String): List<PickSourceOption> {
             )
         )
     }
-    return out
+    return out.sortedWith { left, right ->
+        val byBin = warehouseBinCodeComparator.compare(left.binCode, right.binCode)
+        if (byBin != 0) byBin else left.lpNo.compareTo(right.lpNo, ignoreCase = true)
+    }
 }
 
 /** Depo ekranında 1000.0 yerine 1000 görünsün. */

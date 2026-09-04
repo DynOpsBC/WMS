@@ -1075,7 +1075,7 @@ private fun GuidedPickDocument(no: String, flowMode: OutboundFlowMode? = null, o
 
     val takeLines = lines.filter { !it.optString("actionType").equals("Place", ignoreCase = true) }
     val outstanding = takeLines.filterNot(::isComplete)
-    val currentBin = outstanding.sortedWith(compareBy(binWalkComparator) { it.optString("binCode") })
+    val currentBin = outstanding.sortedWith(compareBy(warehouseBinCodeComparator) { it.optString("binCode") })
         .firstOrNull()?.optString("binCode")
     val activeLines = takeLines.filter { it.optString("binCode").equals(currentBin, ignoreCase = true) }
     val allCollected = headerLoaded && linesComplete && takeLines.isNotEmpty() && outstanding.isEmpty()
@@ -1576,31 +1576,6 @@ private fun pickQty(value: Double): String =
 // Depo yürüme yolu sıralaması: bin kodunu doğal (natural) sırayla karşılaştır.
 // Kod içindeki sayı blokları sayısal, harf blokları harf-harf kıyaslanır; böylece
 // "A-2" < "A-10" olur (düz String kıyasında A-10 < A-2 olurdu). Boş bin en sona.
-private val binWalkComparator: Comparator<String> = Comparator { a, b ->
-    if (a.isBlank() != b.isBlank()) return@Comparator if (a.isBlank()) 1 else -1
-    val na = a.length; val nb = b.length
-    var i = 0; var j = 0
-    while (i < na && j < nb) {
-        val ca = a[i]; val cb = b[j]
-        if (ca.isDigit() && cb.isDigit()) {
-            var si = i; while (si < na && a[si].isDigit()) si++
-            var sj = j; while (sj < nb && b[sj].isDigit()) sj++
-            // Baştaki sıfırları atlayarak sayısal büyüklüğü kıyasla.
-            val da = a.substring(i, si).trimStart('0')
-            val db = b.substring(j, sj).trimStart('0')
-            if (da.length != db.length) return@Comparator da.length - db.length
-            val c = da.compareTo(db)
-            if (c != 0) return@Comparator c
-            i = si; j = sj
-        } else {
-            val c = ca.uppercaseChar().compareTo(cb.uppercaseChar())
-            if (c != 0) return@Comparator c
-            i++; j++
-        }
-    }
-    (na - i) - (nb - j)
-}
-
 private val PickAccent = Color(0xFF6C5CE7) // Ana menü "Giden" kategorisiyle aynı vurgu.
 private val PendingOrange = Color(0xFFE65100)
 // Başkasına atanmış işlerin rozeti — turuncudan (boşta) ayrışsın diye kırmızı.
@@ -1844,7 +1819,7 @@ private fun PickDocument(no: String, onBack: () -> Unit) {
     val filteredLines = if (scanFilter.isBlank()) binLines else binLines.filter { matchLinesByBarcode(listOf(it), com.dynops.bcwms.scanner.BarcodeIntentResolver.resolve(scanFilter)).isNotEmpty() }
     // En küçükten en büyüğe yürüme yolu: bin kodunu sayısal-akıllı sırala
     // (A-2 < A-10, düz alfabetik sıralamanın aksine).
-    val displayLines = if (sortByBin) filteredLines.sortedWith(compareBy(binWalkComparator) { it.optString("binCode") }) else filteredLines
+    val displayLines = if (sortByBin) filteredLines.sortedWith(compareBy(warehouseBinCodeComparator) { it.optString("binCode") }) else filteredLines
     val displayGroups = if (merge) groupLines(displayLines, ::pickLineCapacity) else emptyList()
     Column(Modifier.fillMaxSize()) {
         Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(12.dp)) {
@@ -1925,7 +1900,7 @@ private fun PickDocument(no: String, onBack: () -> Unit) {
                         status = when {
                             !r.ok -> QcErrorParser.friendlyStatus(BcApi.errorMessage(r.body), r.httpCode)
                             createdLp.isBlank() -> "HATA: LP oluşturuldu ancak numarası alınamadı. Belgeyi yenileyip kontrol edin."
-                            else -> "TAMAM: $createdLp başlatıldı"
+                            else -> "TAMAM: $createdLp başlatıldı; ürünler Toplamayı Kaydet sırasında kaynak LP'lerden aktarılacak."
                         }
                         if (createdLp.isNotBlank()) shipLp = createdLp
                         busy = false
