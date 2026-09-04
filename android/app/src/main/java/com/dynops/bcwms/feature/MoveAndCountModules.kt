@@ -37,10 +37,43 @@ internal fun directedMovementReadyToRegister(lines: List<JSONObject>): Boolean {
             it.optDouble("qtyToHandle", 0.0) > 0.0
     }
     return stagedTakeLines.isNotEmpty() && stagedTakeLines.all {
+        rawValue(it, "licensePlateNo", "lpNo").isNotBlank() &&
+            it.optInt("sourceLpLineNo", 0) > 0 &&
         (!it.optBoolean("lotRequired", false) || rawValue(it, "lotNo").isNotBlank()) &&
             (!it.optBoolean("serialRequired", false) || rawValue(it, "serialNo").isNotBlank())
     }
 }
+
+internal fun directedMovementSourceBinMatches(expectedBin: String, scannedBin: String): Boolean =
+    expectedBin.trim().isNotBlank() && expectedBin.trim().equals(scannedBin.trim(), ignoreCase = true)
+
+internal fun directedMovementLpLineMatches(
+    lpLine: JSONObject,
+    movementLine: JSONObject,
+): Boolean {
+    val expectedLot = rawValue(movementLine, "lotNo")
+    val expectedSerial = rawValue(movementLine, "serialNo")
+    val movementUom = rawValue(movementLine, "unitOfMeasureCode")
+    val lpUom = rawValue(lpLine, "unitOfMeasure", "unitOfMeasureCode")
+    return rawValue(lpLine, "itemNo").equals(rawValue(movementLine, "itemNo"), ignoreCase = true) &&
+        rawValue(lpLine, "variantCode").equals(rawValue(movementLine, "variantCode"), ignoreCase = true) &&
+        (movementUom.isBlank() || lpUom.isBlank() || movementUom.equals(lpUom, ignoreCase = true)) &&
+        (expectedLot.isBlank() || rawValue(lpLine, "lotNo").equals(expectedLot, ignoreCase = true)) &&
+        (expectedSerial.isBlank() || rawValue(lpLine, "serialNo").equals(expectedSerial, ignoreCase = true)) &&
+        lpLine.optDouble("quantity", 0.0) > 0.0
+}
+
+private data class DirectedMovementLpSelection(
+    val lpNo: String,
+    val lpLineNo: Int,
+    val binCode: String,
+    val itemNo: String,
+    val variantCode: String,
+    val unitOfMeasure: String,
+    val quantity: Double,
+    val lotNo: String,
+    val serialNo: String,
+)
 
 private val directedMovementStockError = Regex(
     """must not be less than ([0-9.,]+).*Bin Code='([^']+)'.*Item No.='([^']+)'""",
@@ -3009,6 +3042,12 @@ private fun MovementDocument(no: String, onBack: () -> Unit) {
     var status by remember { mutableStateOf("") }
     var busy by remember { mutableStateOf(false) }
     var qtyLine by remember { mutableStateOf<JSONObject?>(null) }
+    var sourceBinInput by remember { mutableStateOf("") }
+    var verifiedSourceBin by remember { mutableStateOf("") }
+    var sourceLpInput by remember { mutableStateOf("") }
+    var sourceLpSelection by remember { mutableStateOf<DirectedMovementLpSelection?>(null) }
+    var verificationMessage by remember { mutableStateOf("") }
+    var lpLookupBusy by remember { mutableStateOf(false) }
     var headerLoaded by remember(no) { mutableStateOf(false) }
     var linesComplete by remember(no) { mutableStateOf(false) }
     var myUserId by remember(no) { mutableStateOf("") }
@@ -3027,6 +3066,21 @@ private fun MovementDocument(no: String, onBack: () -> Unit) {
         return false
     }
 
+    fun resetVerification() {
+        sourceBinInput = ""
+        verifiedSourceBin = ""
+        sourceLpInput = ""
+        sourceLpSelection = null
+        verificationMessage = ""
+        lpLookupBusy = false
+    }
+
+    fun openVerification(line: JSONObject) {
+        if (!requireMutationAccess()) return
+        resetVerification()
+        qtyLine = line
+    }
+
     fun reload(afterRegisterAttempt: Boolean = false) {
         scope.launch {
             val previousStatus = status
@@ -3036,6 +3090,7 @@ private fun MovementDocument(no: String, onBack: () -> Unit) {
             headerLoaded = false
             linesComplete = false
             qtyLine = null
+            resetVerification()
             val safeNo = no.replace("'", "''")
             val (h, l, me) = coroutineScope {
                 val headerRequest = async { BcApi.get(context, "movements('$safeNo')") }
@@ -3072,14 +3127,164 @@ private fun MovementDocument(no: String, onBack: () -> Unit) {
     }
     LaunchedEffect(no) { reload() }
 
-    suspend fun patchLine(ln: JSONObject, qty: Double, lotNo: String, serialNo: String): Boolean {
+    suspend fun patchLineFromLp(
+        ln: JSONObject,
+        qty: Double,
+        selection: DirectedMovementLpSelection,
+    ): Boolean {
         if (!requireMutationAccess()) return false
-        val body = directedMovementConfirmBody(ln.optInt("lineNo"), qty, lotNo, serialNo, myUserId)
+        val body = directedMovementLpConfirmBody(
+            lineNo = ln.optInt("lineNo"),
+            qty = qty,
+            sourceBinCode = verifiedSourceBin,
+            sourceLpNo = selection.lpNo,
+            sourceLpLineNo = selection.lpLineNo,
+            lotNo = selection.lotNo,
+            serialNo = selection.serialNo,
+            userId = myUserId,
+        )
         // Sunucu Take + Place eşini birlikte günceller; tek satır PATCH'i
         // companion satırı sıfırda bırakıp register butonunu kilitliyordu.
-        val r = BcApi.boundAction(context, "movements", no, "confirmLine", body)
+        val r = BcApi.boundAction(context, "movements", no, "confirmLineFromLp", body)
         if (!r.ok) status = "HATA: ${BcApi.errorMessage(r.body)} (HTTP ${r.httpCode})"
         return r.ok
+    }
+
+    fun verifySourceBin(raw: String) {
+        val expected = rawValue(qtyLine ?: JSONObject(), "binCode")
+        val resolved = BarcodeIntentResolver.resolve(raw)
+        val scanned = resolved.value.trim().ifBlank { raw.trim() }
+        sourceBinInput = scanned
+        sourceLpInput = ""
+        sourceLpSelection = null
+        if (directedMovementSourceBinMatches(expected, scanned)) {
+            verifiedSourceBin = expected
+            verificationMessage = "TAMAM: Kaynak raf doğrulandı — şimdi LP'yi okutun."
+        } else {
+            verifiedSourceBin = ""
+            verificationMessage = "HATA: Yanlış raf. Beklenen $expected, okutulan $scanned."
+        }
+    }
+
+    fun verifySourceLp(raw: String) {
+        val movementLine = qtyLine ?: return
+        if (verifiedSourceBin.isBlank()) {
+            verificationMessage = "HATA: Önce ${rawValue(movementLine, "binCode")} kaynak rafını okutun."
+            return
+        }
+        val resolved = BarcodeIntentResolver.resolve(raw)
+        val scanned = resolved.value.trim().ifBlank { raw.trim() }
+        sourceLpInput = scanned
+        sourceLpSelection = null
+        scope.launch {
+            lpLookupBusy = true
+            verificationMessage = "$scanned LP içeriği doğrulanıyor..."
+            fun safe(value: String) = value.replace("'", "''")
+
+            var headerResult = BcApi.get(context, "licensePlates('${safe(scanned)}')")
+            var lpHeader = if (headerResult.ok) runCatching { JSONObject(headerResult.body) }.getOrNull() else null
+            if (lpHeader == null) {
+                headerResult = BcApi.get(
+                    context,
+                    "licensePlates?\$filter=sscc eq '${safe(scanned)}'&\$top=1&\$select=no,locationCode,binCode,status,sscc,assignedDocumentType,assignedDocumentNo",
+                )
+                if (headerResult.ok) lpHeader = BcApi.parseValueArray(headerResult.body).firstOrNull()
+            }
+            if (lpHeader == null) {
+                lpLookupBusy = false
+                verificationMessage = "HATA: $scanned LP kaydı bulunamadı."
+                return@launch
+            }
+
+            val actualLpNo = rawValue(lpHeader, "no").ifBlank { scanned }
+            val lpLocation = rawValue(lpHeader, "locationCode")
+            val lpBin = rawValue(lpHeader, "binCode")
+            val expectedLocation = rawValue(movementLine, "locationCode")
+                .ifBlank { header?.let { rawValue(it, "locationCode") }.orEmpty() }
+            val lpStatus = BcEnum.decodeOData(rawValue(lpHeader, "status"))
+            val assignedType = BcEnum.decodeOData(rawValue(lpHeader, "assignedDocumentType"))
+            val assignedNo = rawValue(lpHeader, "assignedDocumentNo")
+            val assignmentAllowed = !lpStatus.equals("Assigned", true) ||
+                (assignedType.equals("WhseMovement", true) && assignedNo.equals(no, true))
+            val locationMatches = expectedLocation.isBlank() || lpLocation.equals(expectedLocation, true)
+
+            when {
+                !lpStatus.equals("Built", true) && !lpStatus.equals("Assigned", true) -> {
+                    lpLookupBusy = false
+                    verificationMessage = "HATA: $actualLpNo LP harekete uygun değil. Durumu: $lpStatus."
+                    return@launch
+                }
+                !assignmentAllowed -> {
+                    lpLookupBusy = false
+                    verificationMessage = "HATA: $actualLpNo LP başka bir belgeye atanmış: $assignedNo."
+                    return@launch
+                }
+                !locationMatches -> {
+                    lpLookupBusy = false
+                    verificationMessage = "HATA: $actualLpNo LP $lpLocation lokasyonunda; hareket $expectedLocation lokasyonunda."
+                    return@launch
+                }
+                !directedMovementSourceBinMatches(verifiedSourceBin, lpBin) -> {
+                    lpLookupBusy = false
+                    verificationMessage = "HATA: $actualLpNo LP $lpBin rafında kayıtlı; beklenen raf $verifiedSourceBin."
+                    return@launch
+                }
+            }
+
+            val lpPage = BcApi.getAllPages(
+                context,
+                "licensePlateLines?\$filter=lpNo eq '${safe(actualLpNo)}'&\$orderby=lineNo&\$top=200",
+            )
+            if (!lpPage.complete) {
+                lpLookupBusy = false
+                verificationMessage = "HATA: $actualLpNo LP içeriğinin tamamı alınamadı. Yenileyip tekrar deneyin."
+                return@launch
+            }
+            val matchingLines = lpPage.rows.filter { directedMovementLpLineMatches(it, movementLine) }
+            if (matchingLines.isEmpty()) {
+                val contents = lpPage.rows.filter { it.optDouble("quantity", 0.0) > 0.0 }
+                    .joinToString(limit = 4) {
+                        val lot = rawValue(it, "lotNo").takeIf(String::isNotBlank)?.let { value -> " / Lot $value" }.orEmpty()
+                        "${rawValue(it, "itemNo")}$lot"
+                    }
+                    .ifBlank { "boş" }
+                lpLookupBusy = false
+                verificationMessage = "HATA: Hareket ${rawValue(movementLine, "itemNo")} maddesini istiyor; $actualLpNo içeriği: $contents."
+                return@launch
+            }
+            val trackingGroups = matchingLines.groupBy {
+                rawValue(it, "lotNo").uppercase() + "|" + rawValue(it, "serialNo").uppercase()
+            }
+            if (trackingGroups.size > 1) {
+                val lots = matchingLines.map { rawValue(it, "lotNo").ifBlank { "lotsuz" } }.distinct().joinToString()
+                lpLookupBusy = false
+                verificationMessage = "HATA: $actualLpNo içinde bu madde için birden fazla lot var: $lots. Tek lotlu LP seçin."
+                return@launch
+            }
+            val requiredQty = movementLine.optDouble("qtyOutstanding", movementLine.optDouble("quantity"))
+            val selectedLine = matchingLines.firstOrNull { it.optDouble("quantity", 0.0) + 0.00001 >= requiredQty }
+            if (selectedLine == null) {
+                val available = matchingLines.sumOf { it.optDouble("quantity", 0.0) }
+                lpLookupBusy = false
+                verificationMessage = "HATA: $actualLpNo içinde ${fmtq(available)} var; hareket ${fmtq(requiredQty)} istiyor."
+                return@launch
+            }
+
+            sourceLpInput = actualLpNo
+            sourceLpSelection = DirectedMovementLpSelection(
+                lpNo = actualLpNo,
+                lpLineNo = selectedLine.optInt("lineNo"),
+                binCode = lpBin,
+                itemNo = rawValue(selectedLine, "itemNo"),
+                variantCode = rawValue(selectedLine, "variantCode"),
+                unitOfMeasure = rawValue(selectedLine, "unitOfMeasure", "unitOfMeasureCode"),
+                quantity = selectedLine.optDouble("quantity", 0.0),
+                lotNo = rawValue(selectedLine, "lotNo"),
+                serialNo = rawValue(selectedLine, "serialNo"),
+            )
+            lpLookupBusy = false
+            verificationMessage = "TAMAM: LP, madde ve lot eşleşti. Bilgileri kontrol edip Al satırını onaylayın."
+        }
     }
 
     // Barkod yalnızca tek bir Take satırını belirliyorsa miktar/lot
@@ -3096,7 +3301,7 @@ private fun MovementDocument(no: String, onBack: () -> Unit) {
                 status = "HATA: $itemNo için birden fazla Al satırı var. Lot/rafı doğrulamak için ilgili Al satırına dokunun."
             else -> {
                 status = ""
-                qtyLine = targets.single()
+                openVerification(targets.single())
             }
         }
     }
@@ -3123,7 +3328,7 @@ private fun MovementDocument(no: String, onBack: () -> Unit) {
             StatusText(status)
             Spacer(Modifier.height(6.dp))
             Text(
-                if (canMutate()) "Satırlar (${lines.size}) — ürünü okutun ya da satıra dokunup miktar girin"
+                if (canMutate()) "Satırlar (${lines.size}) — Al satırına dokunun; kaynak rafı ve LP'yi doğrulayın"
                 else "Satırlar (${lines.size}) — işlem için belgeyi üzerinize alın",
                 fontSize = 12.sp,
                 color = Color.Gray,
@@ -3136,7 +3341,7 @@ private fun MovementDocument(no: String, onBack: () -> Unit) {
                     val qty = ln.optDouble("quantity", 0.0)
                     val done = ln.optDouble("qtyHandled", 0.0) >= qty && qty > 0
                     Card(
-                        onClick = { qtyLine = ln },
+                        onClick = { openVerification(ln) },
                         enabled = !busy && canMutate() && take,
                         modifier = Modifier.fillMaxWidth(),
                         shape = RoundedCornerShape(10.dp),
@@ -3158,7 +3363,8 @@ private fun MovementDocument(no: String, onBack: () -> Unit) {
                             }
                             Text(
                                 "📍 ${ln.optString("binCode")} · ${firstValue(ln, "description")}" +
-                                    (rawValue(ln, "lotNo").takeIf { it.isNotBlank() }?.let { " · Lot $it" } ?: ""),
+                                    (rawValue(ln, "lotNo").takeIf { it.isNotBlank() }?.let { " · Lot $it" } ?: "") +
+                                    (rawValue(ln, "licensePlateNo", "lpNo").takeIf { it.isNotBlank() }?.let { " · LP $it" } ?: ""),
                                 fontSize = 11.sp, color = Color.Gray,
                             )
                         }
@@ -3197,38 +3403,170 @@ private fun MovementDocument(no: String, onBack: () -> Unit) {
                 },
                 enabled = !busy && canRegister,
                 modifier = Modifier.fillMaxWidth().height(com.dynops.bcwms.ui.wmsPrimaryButtonHeight()),
-            ) { Text(if (canRegister) "✅ Hareketi Kaydet" else "Önce miktar ve takip bilgisi girin", fontWeight = FontWeight.Bold) }
+            ) { Text(if (canRegister) "✅ Hareketi Kaydet" else "Önce raf ve LP doğrulaması yapın", fontWeight = FontWeight.Bold) }
         }
     }
 
     val ql = qtyLine.takeIf { canMutate() && !busy }
     if (ql != null) {
-        QuantityDialogSheet(
-            title = "Miktar (${if (ql.optString("actionType").equals("Take", true)) "Al" else "Bırak"} · 📍 ${ql.optString("binCode")})",
-            itemNo = ql.optString("itemNo"),
-            initialQty = ql.optDouble("qtyOutstanding", ql.optDouble("quantity")),
-            initialUom = ql.optString("unitOfMeasureCode"),
-            initialLot = ql.optString("lotNo"),
-            initialSerial = ql.optString("serialNo"),
-            showLotSerial = true,
-            showSerial = ql.optBoolean("serialRequired", false),
-            lotRequired = ql.optBoolean("lotRequired", false),
-            serialRequired = ql.optBoolean("serialRequired", false),
-            showAvailableLotLookup = true,
-            autoDetectLotFromStock = true,
-            locationCode = rawValue(ql, "locationCode").ifBlank { header?.optString("locationCode").orEmpty() },
-            binCode = rawValue(ql, "binCode"),
-            variantCode = ql.optString("variantCode"),
-            onDismiss = { qtyLine = null },
-            onConfirm = { res ->
+        val targetBin = lines.firstOrNull {
+            BcEnum.decodeOData(rawValue(it, "actionType")).equals("Place", true) &&
+                rawValue(it, "itemNo").equals(rawValue(ql, "itemNo"), true) &&
+                rawValue(it, "variantCode").equals(rawValue(ql, "variantCode"), true)
+        }?.let { rawValue(it, "binCode") }.orEmpty()
+        DirectedMovementVerificationSheet(
+            line = ql,
+            targetBin = targetBin,
+            sourceBinInput = sourceBinInput,
+            verifiedSourceBin = verifiedSourceBin,
+            sourceLpInput = sourceLpInput,
+            selection = sourceLpSelection,
+            message = verificationMessage,
+            busy = lpLookupBusy,
+            onSourceBinChange = {
+                sourceBinInput = it
+                verifiedSourceBin = ""
+                sourceLpInput = ""
+                sourceLpSelection = null
+            },
+            onSourceBinScanned = { verifySourceBin(it) },
+            onSourceLpChange = {
+                sourceLpInput = it
+                sourceLpSelection = null
+            },
+            onSourceLpScanned = { verifySourceLp(it) },
+            onDismiss = {
                 qtyLine = null
-                scope.launch {
-                    busy = true
-                    if (patchLine(ql, res.quantity, res.lotNo, res.serialNo)) { status = "TAMAM: Satır güncellendi"; reload() }
-                    busy = false
+                resetVerification()
+            },
+            onConfirm = {
+                sourceLpSelection?.let { selection ->
+                    val quantity = ql.optDouble("qtyOutstanding", ql.optDouble("quantity"))
+                    scope.launch {
+                        busy = true
+                        if (patchLineFromLp(ql, quantity, selection)) {
+                            status = "TAMAM: ${selection.lpNo} LP doğrulandı; Al/Bırak miktarı ${fmtq(quantity)} olarak hazırlandı."
+                            qtyLine = null
+                            resetVerification()
+                            reload()
+                        }
+                        busy = false
+                    }
                 }
             },
         )
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun DirectedMovementVerificationSheet(
+    line: JSONObject,
+    targetBin: String,
+    sourceBinInput: String,
+    verifiedSourceBin: String,
+    sourceLpInput: String,
+    selection: DirectedMovementLpSelection?,
+    message: String,
+    busy: Boolean,
+    onSourceBinChange: (String) -> Unit,
+    onSourceBinScanned: (String) -> Unit,
+    onSourceLpChange: (String) -> Unit,
+    onSourceLpScanned: (String) -> Unit,
+    onDismiss: () -> Unit,
+    onConfirm: () -> Unit,
+) {
+    val expectedBin = rawValue(line, "binCode")
+    val requestedQty = line.optDouble("qtyOutstanding", line.optDouble("quantity"))
+    val requestedLot = rawValue(line, "lotNo")
+    val statusColors = bcwmsStatus()
+    SheetScaffold(onDismiss = { if (!busy) onDismiss() }, contentPadding = PaddingValues(20.dp)) {
+        Text("Yönlendirilmiş Al Doğrulaması", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+        Spacer(Modifier.height(8.dp))
+        Card(
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text("Taşınacak madde: ${rawValue(line, "itemNo")}", fontWeight = FontWeight.Bold)
+                Text(firstValue(line, "description"), style = MaterialTheme.typography.bodySmall)
+                Text("Miktar: ${fmtq(requestedQty)} ${rawValue(line, "unitOfMeasureCode")}")
+                Text("Kaynak raf: $expectedBin", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.SemiBold)
+                if (targetBin.isNotBlank()) Text("Hedef raf: $targetBin")
+                if (requestedLot.isNotBlank()) Text("İstenen lot: $requestedLot")
+            }
+        }
+
+        Spacer(Modifier.height(14.dp))
+        Text("1) Kaynak rafı okutun", fontWeight = FontWeight.Bold)
+        ScanField(
+            label = "Beklenen raf: $expectedBin",
+            value = sourceBinInput,
+            onValueChange = onSourceBinChange,
+            onScanned = onSourceBinScanned,
+            enabled = !busy,
+            modifier = Modifier.fillMaxWidth(),
+        )
+        if (verifiedSourceBin.isNotBlank()) {
+            Text("✓ $verifiedSourceBin doğru raf", color = statusColors.success, fontWeight = FontWeight.SemiBold)
+        }
+
+        Spacer(Modifier.height(14.dp))
+        Text("2) Bu raftan alınacak LP'yi okutun", fontWeight = FontWeight.Bold)
+        ScanField(
+            label = "Kaynak LP",
+            value = sourceLpInput,
+            onValueChange = onSourceLpChange,
+            onScanned = onSourceLpScanned,
+            enabled = verifiedSourceBin.isNotBlank() && !busy,
+            modifier = Modifier.fillMaxWidth(),
+        )
+        if (busy) {
+            Spacer(Modifier.height(8.dp))
+            LinearProgressIndicator(Modifier.fillMaxWidth())
+        }
+
+        selection?.let { selected ->
+            Spacer(Modifier.height(12.dp))
+            Card(
+                colors = CardDefaults.cardColors(containerColor = statusColors.success.copy(alpha = 0.10f)),
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                    Text("✓ LP doğrulandı: ${selected.lpNo}", fontWeight = FontWeight.Bold, color = statusColors.success)
+                    Text("Madde: ${selected.itemNo}", fontWeight = FontWeight.SemiBold)
+                    Text("Lot: ${selected.lotNo.ifBlank { "Lotsuz" }}")
+                    if (selected.serialNo.isNotBlank()) Text("Seri: ${selected.serialNo}")
+                    Text("LP miktarı: ${fmtq(selected.quantity)} ${selected.unitOfMeasure}")
+                    Text("Raf: ${selected.binCode}")
+                }
+            }
+        }
+
+        if (message.isNotBlank()) {
+            Spacer(Modifier.height(10.dp))
+            Text(
+                operatorFacingStatus(message),
+                color = if (message.startsWith("HATA:")) statusColors.danger else statusColors.success,
+                fontWeight = FontWeight.SemiBold,
+                style = MaterialTheme.typography.bodySmall,
+            )
+        }
+
+        Spacer(Modifier.height(18.dp))
+        Button(
+            onClick = onConfirm,
+            enabled = selection != null && verifiedSourceBin.isNotBlank() && !busy,
+            modifier = Modifier.fillMaxWidth().height(wmsPrimaryButtonHeight()),
+        ) {
+            Text("✓ LP ile Al Satırını Onayla", fontWeight = FontWeight.Bold)
+        }
+        Spacer(Modifier.height(8.dp))
+        OutlinedButton(
+            onClick = onDismiss,
+            enabled = !busy,
+            modifier = Modifier.fillMaxWidth(),
+        ) { Text("Vazgeç") }
     }
 }
 
@@ -3242,6 +3580,27 @@ internal fun directedMovementConfirmBody(
     JSONObject().apply {
         put("lineNo", lineNo)
         put("qtyToHandle", qty)
+        put("lotNo", lotNo)
+        put("serialNo", serialNo)
+        put("userId", userId)
+    }.toString()
+
+internal fun directedMovementLpConfirmBody(
+    lineNo: Int,
+    qty: Double,
+    sourceBinCode: String,
+    sourceLpNo: String,
+    sourceLpLineNo: Int,
+    lotNo: String,
+    serialNo: String,
+    userId: String,
+): String =
+    JSONObject().apply {
+        put("lineNo", lineNo)
+        put("qtyToHandle", qty)
+        put("sourceBinCode", sourceBinCode)
+        put("sourceLpNo", sourceLpNo)
+        put("sourceLpLineNo", sourceLpLineNo)
         put("lotNo", lotNo)
         put("serialNo", serialNo)
         put("userId", userId)

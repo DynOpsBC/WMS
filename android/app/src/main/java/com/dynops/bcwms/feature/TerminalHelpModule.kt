@@ -230,9 +230,10 @@ internal val TerminalHelpTopics = listOf(
         listOf(
             "Ekranda “Tümü” sekmesinden belgeyi bulun.",
             "Belge boştaysa “Üzerime Al”a basın.",
-            "Belgeyi açın, “Al” satırındaki rafı ve ürünü okutun.",
-            "Lot/seri ve miktarı girin. Karşılığı olan “Yerleştir” satırı kendiliğinden hazırlanır.",
-            "Hedef rafı okutun. İki satırın da aynı miktarı gösterdiğine bakın.",
+            "Belgeyi açıp ilgili “Al” satırına dokunun.",
+            "Önce ekranda yazan kaynak rafı, ardından o raftan alınacak LP’yi okutun.",
+            "LP’deki madde, lot ve miktarın hareket talebiyle eşleştiğini ekrandan kontrol edip onaylayın.",
+            "Karşılığı olan “Bırak” satırı aynı miktarla kendiliğinden hazırlanır.",
             "Hepsi hazır olunca “Hareketi Kaydet”e bir kez basın.",
         ),
         "Kayıt sırasında bekleyin. Belge listeden kaybolduysa işlem tamamlanmıştır, tekrar basmayın.",

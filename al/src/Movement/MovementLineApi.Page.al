@@ -41,6 +41,7 @@ page 72350 "DOPSWHS Movement Line API"
                 field(serialRequired; SerialRequired) { Caption = 'serialRequired'; Editable = false; }
                 field(locationCode; Rec."Location Code") { Caption = 'locationCode'; Editable = false; }
                 field(licensePlateNo; Rec."LP No.") { Caption = 'licensePlateNo'; }
+                field(sourceLpLineNo; Rec."DOPSWHS Source LP Line No.") { Caption = 'sourceLpLineNo'; Editable = false; }
             }
         }
     }

@@ -7,6 +7,19 @@ Kurulum: [docs/android-install-guide.md](../../docs/android-install-guide.md)
 
 ---
 
+## v1.14.85 — BADE — 2026-09-04
+
+**versionCode:** 200085 · **BC paketi:** 1.14.1.17
+
+**BADE SHA-256:** `28381823acfa4c97807032d065729ccf50c78e7f2bbbe8ee9327f3c300f31fdb`
+
+### Yönlendirilmiş harekette zorunlu raf ve kaynak LP doğrulaması
+
+- “Al” satırına dokununca önce satırdaki kaynak raf, ardından o raftan alınacak LP okutulur; yanlış rafla işleme devam edilemez.
+- LP’nin lokasyonu, rafı, durumu, belge ataması, maddesi, varyantı, lotu/serisi ve yeterli miktarı hem terminalde hem Business Central’da doğrulanır.
+- Doğrulama ekranı taşınacak maddeyi, miktarı, kaynak/hedef rafı ve seçilen LP’nin madde-lot-miktar içeriğini birlikte gösterir.
+- Hareket kaydedilince standart Ambar Hareketi değişmeden kalır; yalnız alınan miktar kaynak LP içeriğinden aynı kayıt işlemi içinde düşer. Madde Defter Girişi oluşturulmaz veya bölünmez.
+
 ## v1.14.84 — BADE — 2026-09-04
 
 **versionCode:** 200084 · **BC paketi:** 1.14.1.16

@@ -71,6 +71,23 @@ page 72220 "DOPSWHS Movement API"
         MovementMgmt.ConfirmDirectedLineFor(MovementLine, qtyToHandle, lotNo, serialNo, userId);
     end;
 
+    /// <summary>
+    /// Terminalin raf + kaynak LP doğrulamalı hareket yolu. Eski confirmLine
+    /// imzası geriye dönük uyumluluk için korunur; yeni istemci fiziksel kaynak
+    /// rafı ve LP satırını bu uçla sunucuda atomik olarak doğrular.
+    /// </summary>
+    [ServiceEnabled]
+    procedure confirmLineFromLp(lineNo: Integer; qtyToHandle: Decimal; sourceBinCode: Code[20]; sourceLpNo: Code[20]; sourceLpLineNo: Integer; lotNo: Code[50]; serialNo: Code[50]; userId: Code[50])
+    var
+        MovementLine: Record "Warehouse Activity Line";
+        MovementMgmt: Codeunit "DOPSWHS Movement Mgmt";
+    begin
+        MovementLine.Get(Rec.Type, Rec."No.", lineNo);
+        MovementMgmt.ConfirmDirectedLineFromLpFor(
+            MovementLine, qtyToHandle, sourceBinCode, sourceLpNo,
+            sourceLpLineNo, lotNo, serialNo, userId);
+    end;
+
     // Paylaşımlı BC lisansı: belge, oturumdaki WMS kullanıcısına atanır
     // (pick'teki reassign deseninin movement karşılığı).
     [ServiceEnabled]

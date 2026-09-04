@@ -1026,6 +1026,17 @@ codeunit 72040 "DOPSWHS LP Management"
     end;
 
     /// <summary>
+    /// A directed warehouse movement can take part of an LP and place that
+    /// quantity as loose stock in the target bin. Reuse the same exact-line,
+    /// base-UOM and idempotency rules as shipment consumption; the standard
+    /// warehouse activity remains the sole writer of Warehouse Entries.
+    /// </summary>
+    procedure ConsumeLineForWarehouseMovement(LpNo: Code[20]; LineNo: Integer; BaseQty: Decimal; MovementReference: Code[40])
+    begin
+        ConsumeLineForShipment(LpNo, LineNo, BaseQty, MovementReference);
+    end;
+
+    /// <summary>
     /// Reduces one exact LP line after a posted sales shipment. The quantity received
     /// from the item ledger is always in the item's base unit; the LP line may use another UOM.
     /// Works for both direct sales posting and warehouse shipment posting.

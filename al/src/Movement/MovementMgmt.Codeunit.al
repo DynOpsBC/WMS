@@ -16,7 +16,8 @@ codeunit 72045 "DOPSWHS Movement Mgmt"
         tabledata "Whse. Item Tracking Line" = RIMD,
         // Bakım onarımı ("Qty. (Base)" tutarsızlığı) ambar hareketini günceller.
         tabledata "Warehouse Entry" = RMD,
-        tabledata "DOPSWHS LP Header" = RM;
+        tabledata "DOPSWHS LP Header" = RM,
+        tabledata "DOPSWHS LP Line" = R;
 
     procedure EnsureDeviceJournalBatch(UserId: Code[50]): Code[10]
     var
@@ -197,6 +198,13 @@ codeunit 72045 "DOPSWHS Movement Mgmt"
         PutAwayLpNo: Code[20];
         PutAwayTargetBin: Code[20];
         PutAwayDestinations: Dictionary of [Code[20], Code[20]];
+        DirectedLpNos: List of [Code[20]];
+        DirectedLpLineNos: List of [Integer];
+        DirectedMovementLineNos: List of [Integer];
+        DirectedBaseQuantities: List of [Decimal];
+        DirectedIndex: Integer;
+        DirectedReference: Code[40];
+        LPMgt: Codeunit "DOPSWHS LP Management";
     begin
         if OperatorUserId <> '' then
             Operator := OperatorUserId
@@ -231,6 +239,10 @@ codeunit 72045 "DOPSWHS Movement Mgmt"
         // shows Quantity in Active LPs as zero.
         if WhseActivityHeader.Type = WhseActivityHeader.Type::"Put-away" then
             CollectPutAwayLpDestinations(WhseActivityHeader, PutAwayDestinations);
+        if WhseActivityHeader.Type = WhseActivityHeader.Type::Movement then
+            CollectDirectedLpConsumption(
+                WhseActivityHeader, DirectedLpNos, DirectedLpLineNos,
+                DirectedMovementLineNos, DirectedBaseQuantities);
 
         WhseActivityLine.SetRange("Activity Type", WhseActivityHeader.Type);
         WhseActivityLine.SetRange("No.", WhseActivityHeader."No.");
@@ -242,7 +254,50 @@ codeunit 72045 "DOPSWHS Movement Mgmt"
                     PutAwayLpNo, WhseActivityHeader."No.",
                     WhseActivityHeader."Location Code", PutAwayTargetBin);
             end;
+            for DirectedIndex := 1 to DirectedLpNos.Count() do begin
+                DirectedReference := CopyStr(
+                    'MOVE:' + WhseActivityHeader."No." + ':' +
+                    Format(DirectedMovementLineNos.Get(DirectedIndex)),
+                    1, MaxStrLen(DirectedReference));
+                LPMgt.ConsumeLineForWarehouseMovement(
+                    DirectedLpNos.Get(DirectedIndex),
+                    DirectedLpLineNos.Get(DirectedIndex),
+                    DirectedBaseQuantities.Get(DirectedIndex),
+                    DirectedReference);
+            end;
         end;
+    end;
+
+    /// <summary>
+    /// Snapshot exact LP quantities before standard movement registration
+    /// deletes its activity lines. Only lines confirmed through the guarded
+    /// raf + LP endpoint carry Source LP Line No.; legacy/desktop movements
+    /// therefore keep their existing behavior.
+    /// </summary>
+    local procedure CollectDirectedLpConsumption(WhseActivityHeader: Record "Warehouse Activity Header"; var LpNos: List of [Code[20]]; var LpLineNos: List of [Integer]; var MovementLineNos: List of [Integer]; var BaseQuantities: List of [Decimal])
+    var
+        ActivityLine: Record "Warehouse Activity Line";
+    begin
+        ActivityLine.SetRange("Activity Type", WhseActivityHeader.Type);
+        ActivityLine.SetRange("No.", WhseActivityHeader."No.");
+        ActivityLine.SetRange("Action Type", ActivityLine."Action Type"::Take);
+        ActivityLine.SetFilter("Qty. to Handle (Base)", '>0');
+        ActivityLine.SetFilter("LP No.", '<>%1', '');
+        if ActivityLine.FindSet() then
+            repeat
+                if ActivityLine."DOPSWHS Source LP Line No." <= 0 then
+                    Error(
+                        '%1 hareketinin %2 Al satırında kaynak LP içeriği doğrulanmadı. Terminalde önce rafı, sonra LP''yi okutun.',
+                        ActivityLine."No.", ActivityLine."Line No.");
+                ValidateDirectedSourceLp(
+                    ActivityLine, ActivityLine."Bin Code", ActivityLine."LP No.",
+                    ActivityLine."DOPSWHS Source LP Line No.", ActivityLine."Lot No.",
+                    ActivityLine."Serial No.");
+                LpNos.Add(ActivityLine."LP No.");
+                LpLineNos.Add(ActivityLine."DOPSWHS Source LP Line No.");
+                MovementLineNos.Add(ActivityLine."Line No.");
+                BaseQuantities.Add(ActivityLine."Qty. to Handle (Base)");
+            until ActivityLine.Next() = 0;
     end;
 
     /// <summary>
@@ -360,9 +415,38 @@ codeunit 72045 "DOPSWHS Movement Mgmt"
     /// row leaves its companion at zero and prevents warehouse registration.
     /// </summary>
     procedure ConfirmDirectedLineFor(var WhseActivityLine: Record "Warehouse Activity Line"; QtyToHandle: Decimal; LotNo: Code[50]; SerialNo: Code[50]; RequestingUserId: Code[50])
+    begin
+        ConfirmDirectedLineInternal(
+            WhseActivityLine, QtyToHandle, LotNo, SerialNo,
+            '', '', 0, RequestingUserId);
+    end;
+
+    /// <summary>
+    /// Confirms a directed-movement Take line only after the physical source
+    /// bin and one exact LP content line have been identified. The legacy
+    /// confirmation entry point remains available for older clients.
+    /// </summary>
+    procedure ConfirmDirectedLineFromLpFor(var WhseActivityLine: Record "Warehouse Activity Line"; QtyToHandle: Decimal; SourceBinCode: Code[20]; SourceLpNo: Code[20]; SourceLpLineNo: Integer; LotNo: Code[50]; SerialNo: Code[50]; RequestingUserId: Code[50])
+    begin
+        if SourceBinCode = '' then
+            Error('Kaynak raf barkodu zorunludur. Önce %1 rafını okutun.', WhseActivityLine."Bin Code");
+        if SourceLpNo = '' then
+            Error('Kaynak LP barkodu zorunludur.');
+        if SourceLpLineNo <= 0 then
+            Error('%1 LP numarasında doğrulanmış bir içerik satırı seçilmedi.', SourceLpNo);
+
+        ConfirmDirectedLineInternal(
+            WhseActivityLine, QtyToHandle, LotNo, SerialNo,
+            SourceBinCode, SourceLpNo, SourceLpLineNo, RequestingUserId);
+    end;
+
+    local procedure ConfirmDirectedLineInternal(var WhseActivityLine: Record "Warehouse Activity Line"; QtyToHandle: Decimal; LotNo: Code[50]; SerialNo: Code[50]; SourceBinCode: Code[20]; SourceLpNo: Code[20]; SourceLpLineNo: Integer; RequestingUserId: Code[50])
     var
         WhseActivityHeader: Record "Warehouse Activity Header";
         CompanionLine: Record "Warehouse Activity Line";
+        SourceLP: Record "DOPSWHS LP Header";
+        LPMgt: Codeunit "DOPSWHS LP Management";
+        PreviousLpNo: Code[20];
     begin
         if RequestingUserId = '' then
             Error('WMS kullanıcı kimliği boş olamaz. Terminal oturumunu yenileyin.');
@@ -382,6 +466,10 @@ codeunit 72045 "DOPSWHS Movement Mgmt"
             Error('Hareket satırı %1 artık bulunamıyor. Belgeyi yenileyin.', WhseActivityLine."Line No.");
         if (QtyToHandle <= 0) or (QtyToHandle > WhseActivityLine."Qty. Outstanding") then
             Error('%1 satırı için hareket miktarı 0 ile %2 arasında olmalıdır.', WhseActivityLine."Line No.", WhseActivityLine."Qty. Outstanding");
+
+        // Validate first so Qty. to Handle (Base), used by the LP capacity
+        // check, is calculated with standard Business Central UOM rules.
+        WhseActivityLine.Validate("Qty. to Handle", QtyToHandle);
 
         CompanionLine.SetRange("Activity Type", WhseActivityLine."Activity Type");
         CompanionLine.SetRange("No.", WhseActivityLine."No.");
@@ -406,14 +494,161 @@ codeunit 72045 "DOPSWHS Movement Mgmt"
         CompanionLine.FindFirst();
 
         EnsureDirectedMovementTracking(WhseActivityLine, QtyToHandle, LotNo, SerialNo);
+        PreviousLpNo := WhseActivityLine."LP No.";
+        if SourceLpNo <> '' then begin
+            ValidateDirectedSourceLp(
+                WhseActivityLine, SourceBinCode, SourceLpNo, SourceLpLineNo,
+                LotNo, SerialNo);
+            SourceLP.Get(SourceLpNo);
+            if SourceLP.Status = SourceLP.Status::Built then
+                LPMgt.Assign(
+                    SourceLP, Enum::"DOPSWHS Assigned Doc Type"::WhseMovement,
+                    WhseActivityLine."No.");
+        end;
+
         WhseActivityLine.Validate("Lot No.", LotNo);
         WhseActivityLine.Validate("Serial No.", SerialNo);
-        WhseActivityLine.Validate("Qty. to Handle", QtyToHandle);
+        if SourceLpNo <> '' then begin
+            WhseActivityLine."LP No." := SourceLpNo;
+            WhseActivityLine."DOPSWHS Source LP Line No." := SourceLpLineNo;
+        end;
         WhseActivityLine.Modify(true);
         CompanionLine.Validate("Lot No.", LotNo);
         CompanionLine.Validate("Serial No.", SerialNo);
         CompanionLine.Validate("Qty. to Handle", QtyToHandle);
+        if SourceLpNo <> '' then begin
+            CompanionLine."LP No." := SourceLpNo;
+            CompanionLine."DOPSWHS Source LP Line No." := SourceLpLineNo;
+        end;
         CompanionLine.Modify(true);
+
+        if (SourceLpNo <> '') and (PreviousLpNo <> '') and (PreviousLpNo <> SourceLpNo) then
+            ReleasePreviousDirectedLpIfUnused(
+                WhseActivityLine."No.", WhseActivityLine."Line No.", PreviousLpNo);
+    end;
+
+    local procedure ValidateDirectedSourceLp(WhseActivityLine: Record "Warehouse Activity Line"; SourceBinCode: Code[20]; SourceLpNo: Code[20]; SourceLpLineNo: Integer; LotNo: Code[50]; SerialNo: Code[50])
+    var
+        SourceLP: Record "DOPSWHS LP Header";
+        SourceLPLine: Record "DOPSWHS LP Line";
+        OtherActivityLine: Record "Warehouse Activity Line";
+        Item: Record Item;
+        ItemUoM: Record "Item Unit of Measure";
+        EffectiveUoM: Code[10];
+        QtyPerUoM: Decimal;
+        AvailableBaseQty: Decimal;
+        SelectedBaseQty: Decimal;
+    begin
+        if WhseActivityLine."Action Type" <> WhseActivityLine."Action Type"::Take then
+            Error('LP doğrulaması yalnız Al satırında yapılabilir.');
+        if SourceBinCode <> WhseActivityLine."Bin Code" then
+            Error(
+                'Yanlış kaynak raf okutuldu. Beklenen: %1, okutulan: %2.',
+                WhseActivityLine."Bin Code", SourceBinCode);
+        if not SourceLP.Get(SourceLpNo) then
+            Error('%1 kaynak LP numarası bulunamadı.', SourceLpNo);
+        if not (SourceLP.Status in [SourceLP.Status::Built, SourceLP.Status::Assigned]) then
+            Error(
+                '%1 LP numarası harekete uygun değil. Güncel durum: %2.',
+                SourceLpNo, SourceLP.Status);
+        if (SourceLP.Status = SourceLP.Status::Assigned) and
+           ((SourceLP."Assigned Document Type" <> SourceLP."Assigned Document Type"::WhseMovement) or
+            (SourceLP."Assigned Document No." <> WhseActivityLine."No."))
+        then
+            Error(
+                '%1 LP numarası başka bir belgeye atanmış: %2.',
+                SourceLpNo, SourceLP."Assigned Document No.");
+        if SourceLP."Location Code" <> WhseActivityLine."Location Code" then
+            Error(
+                '%1 LP numarası %2 lokasyonunda; hareket satırı %3 lokasyonundadır.',
+                SourceLpNo, SourceLP."Location Code", WhseActivityLine."Location Code");
+        if SourceLP."Bin Code" <> SourceBinCode then
+            Error(
+                '%1 LP numarası %2 rafında kayıtlı; okutulan kaynak raf %3.',
+                SourceLpNo, SourceLP."Bin Code", SourceBinCode);
+        if not SourceLPLine.Get(SourceLpNo, SourceLpLineNo) then
+            Error('%1 LP numarasının %2 içerik satırı bulunamadı.', SourceLpNo, SourceLpLineNo);
+        if SourceLPLine."Item No." <> WhseActivityLine."Item No." then
+            Error(
+                'Yanlış LP: hareket %1 maddesini istiyor, %2 LP satırında %3 var.',
+                WhseActivityLine."Item No.", SourceLpNo, SourceLPLine."Item No.");
+        if SourceLPLine."Variant Code" <> WhseActivityLine."Variant Code" then
+            Error(
+                'Yanlış varyant: hareket %1, %2 LP satırı %3 varyantını içeriyor.',
+                WhseActivityLine."Variant Code", SourceLpNo, SourceLPLine."Variant Code");
+        if SourceLPLine."Lot No." <> LotNo then
+            Error(
+                'Yanlış lot: %1 LP satırındaki lot %2, doğrulanan lot %3.',
+                SourceLpNo, SourceLPLine."Lot No.", LotNo);
+        if SourceLPLine."Serial No." <> SerialNo then
+            Error(
+                'Yanlış seri: %1 LP satırındaki seri %2, doğrulanan seri %3.',
+                SourceLpNo, SourceLPLine."Serial No.", SerialNo);
+        if (WhseActivityLine."Lot No." <> '') and
+           (WhseActivityLine."Lot No." <> SourceLPLine."Lot No.")
+        then
+            Error(
+                'Yanlış LP: hareket satırındaki lot %1, %2 LP numarasındaki lot %3.',
+                WhseActivityLine."Lot No.", SourceLpNo, SourceLPLine."Lot No.");
+        if (WhseActivityLine."Serial No." <> '') and
+           (WhseActivityLine."Serial No." <> SourceLPLine."Serial No.")
+        then
+            Error(
+                'Yanlış LP: hareket satırındaki seri %1, %2 LP numarasındaki seri %3.',
+                WhseActivityLine."Serial No.", SourceLpNo, SourceLPLine."Serial No.");
+
+        Item.Get(SourceLPLine."Item No.");
+        EffectiveUoM := SourceLPLine."Unit of Measure";
+        if EffectiveUoM = '' then
+            EffectiveUoM := Item."Base Unit of Measure";
+        QtyPerUoM := 1;
+        if EffectiveUoM <> Item."Base Unit of Measure" then begin
+            if not ItemUoM.Get(SourceLPLine."Item No.", EffectiveUoM) then
+                Error('%1 maddesinin %2 ölçü birimi bulunamadı.', SourceLPLine."Item No.", EffectiveUoM);
+            QtyPerUoM := ItemUoM."Qty. per Unit of Measure";
+            if QtyPerUoM <= 0 then
+                Error('%1 maddesinin %2 ölçü birimi dönüşümü geçersizdir.', SourceLPLine."Item No.", EffectiveUoM);
+        end;
+        AvailableBaseQty := Round(SourceLPLine.Quantity * QtyPerUoM, 0.00001);
+        SelectedBaseQty := WhseActivityLine."Qty. to Handle (Base)";
+        OtherActivityLine.SetRange("Activity Type", WhseActivityLine."Activity Type");
+        OtherActivityLine.SetRange("No.", WhseActivityLine."No.");
+        OtherActivityLine.SetRange("Action Type", OtherActivityLine."Action Type"::Take);
+        OtherActivityLine.SetRange("LP No.", SourceLpNo);
+        OtherActivityLine.SetRange("DOPSWHS Source LP Line No.", SourceLpLineNo);
+        OtherActivityLine.SetFilter("Line No.", '<>%1', WhseActivityLine."Line No.");
+        OtherActivityLine.SetFilter("Qty. to Handle (Base)", '>0');
+        if OtherActivityLine.FindSet() then
+            repeat
+                SelectedBaseQty += OtherActivityLine."Qty. to Handle (Base)";
+            until OtherActivityLine.Next() = 0;
+        if AvailableBaseQty + 0.00001 < SelectedBaseQty then
+            Error(
+                '%1 LP numarasında %2 maddesi ve %3 lotu için yeterli miktar yok. LP: %4, bu harekette seçilen: %5.',
+                SourceLpNo, SourceLPLine."Item No.", SourceLPLine."Lot No.",
+                AvailableBaseQty, SelectedBaseQty);
+    end;
+
+    local procedure ReleasePreviousDirectedLpIfUnused(MovementNo: Code[20]; CurrentLineNo: Integer; PreviousLpNo: Code[20])
+    var
+        OtherLine: Record "Warehouse Activity Line";
+        PreviousLP: Record "DOPSWHS LP Header";
+        LPMgt: Codeunit "DOPSWHS LP Management";
+    begin
+        OtherLine.SetRange("Activity Type", OtherLine."Activity Type"::Movement);
+        OtherLine.SetRange("No.", MovementNo);
+        OtherLine.SetRange("Action Type", OtherLine."Action Type"::Take);
+        OtherLine.SetRange("LP No.", PreviousLpNo);
+        OtherLine.SetFilter("Line No.", '<>%1', CurrentLineNo);
+        OtherLine.SetFilter("Qty. to Handle", '>0');
+        if not OtherLine.IsEmpty() then
+            exit;
+        if PreviousLP.Get(PreviousLpNo) and
+           (PreviousLP.Status = PreviousLP.Status::Assigned) and
+           (PreviousLP."Assigned Document Type" = PreviousLP."Assigned Document Type"::WhseMovement) and
+           (PreviousLP."Assigned Document No." = MovementNo)
+        then
+            LPMgt.Release(PreviousLP);
     end;
 
     local procedure EnsureDirectedMovementTracking(WhseActivityLine: Record "Warehouse Activity Line"; QtyToHandle: Decimal; LotNo: Code[50]; SerialNo: Code[50])

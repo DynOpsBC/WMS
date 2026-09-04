@@ -52,7 +52,60 @@ class DirectedMovementPolicyTest {
 
         assertEquals(false, directedMovementReadyToRegister(listOf(take)))
         take.put("lotNo", "LOT-A")
+        assertEquals(false, directedMovementReadyToRegister(listOf(take)))
+        take.put("licensePlateNo", "LP0001")
+        take.put("sourceLpLineNo", 10000)
         assertEquals(true, directedMovementReadyToRegister(listOf(take)))
+    }
+
+    @Test
+    fun `source bin must match before LP can be confirmed`() {
+        assertEquals(true, directedMovementSourceBinMatches("M.A01.11", "m.a01.11"))
+        assertEquals(false, directedMovementSourceBinMatches("M.A01.11", "S.K01.11"))
+    }
+
+    @Test
+    fun `LP content must match movement item variant and existing lot`() {
+        val movement = line(10000, "Take", "MM.00295").apply {
+            put("variantCode", "")
+            put("unitOfMeasureCode", "ADET")
+            put("lotNo", "LOT-A")
+        }
+        val matching = JSONObject().apply {
+            put("itemNo", "MM.00295")
+            put("variantCode", "")
+            put("unitOfMeasure", "ADET")
+            put("lotNo", "LOT-A")
+            put("quantity", 15.0)
+        }
+        val wrongItem = JSONObject(matching.toString()).put("itemNo", "MM.00296")
+        val wrongLot = JSONObject(matching.toString()).put("lotNo", "LOT-B")
+
+        assertEquals(true, directedMovementLpLineMatches(matching, movement))
+        assertEquals(false, directedMovementLpLineMatches(wrongItem, movement))
+        assertEquals(false, directedMovementLpLineMatches(wrongLot, movement))
+    }
+
+    @Test
+    fun `LP confirmation sends exact physical source evidence`() {
+        val body = JSONObject(
+            directedMovementLpConfirmBody(
+                lineNo = 10000,
+                qty = 15.0,
+                sourceBinCode = "M.A01.11",
+                sourceLpNo = "LP00042",
+                sourceLpLineNo = 20000,
+                lotNo = "LOT-A",
+                serialNo = "",
+                userId = "DYNOPS",
+            ),
+        )
+
+        assertEquals("M.A01.11", body.getString("sourceBinCode"))
+        assertEquals("LP00042", body.getString("sourceLpNo"))
+        assertEquals(20000, body.getInt("sourceLpLineNo"))
+        assertEquals("LOT-A", body.getString("lotNo"))
+        assertEquals(15.0, body.getDouble("qtyToHandle"), 0.0)
     }
 
     @Test

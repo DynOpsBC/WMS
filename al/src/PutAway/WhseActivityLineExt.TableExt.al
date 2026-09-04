@@ -19,6 +19,13 @@ tableextension 72403 "DOPSWHS Whse Activity Line" extends "Warehouse Activity Li
             DataClassification = CustomerContent;
             TableRelation = "DOPSWHS LP Header"."No.";
         }
+        field(72405; "DOPSWHS Source LP Line No."; Integer)
+        {
+            Caption = 'Source LP Line No.';
+            DataClassification = CustomerContent;
+            Editable = false;
+            TableRelation = "DOPSWHS LP Line"."Line No." where("LP No." = field("LP No."));
+        }
     }
 
     local procedure FillActivityLinesFromLP()
