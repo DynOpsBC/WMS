@@ -69,6 +69,19 @@ table 72010 "DOPSWHS LP Header"
             DataClassification = CustomerContent;
             Editable = false;
         }
+        field(126; "Pending Receipt No."; Code[20])
+        {
+            Caption = 'Pending Warehouse Receipt No.';
+            DataClassification = CustomerContent;
+            Editable = false;
+            TableRelation = "Warehouse Receipt Header"."No.";
+        }
+        field(127; "Pending Receipt Line No."; Integer)
+        {
+            Caption = 'Pending Warehouse Receipt Line No.';
+            DataClassification = CustomerContent;
+            Editable = false;
+        }
     }
 
     keys
@@ -79,6 +92,7 @@ table 72010 "DOPSWHS LP Header"
         key(SSCCKey; SSCC) { }
         key(AssignedDoc; "Assigned Document Type", "Assigned Document No.") { }
         key(BulkBuildRequest; "Bulk Build Request ID") { }
+        key(PendingReceipt; "Pending Receipt No.", "Pending Receipt Line No.") { }
     }
 
     trigger OnInsert()

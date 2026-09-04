@@ -3,7 +3,7 @@ codeunit 72133 "DOPSWHS Receipt With LP Tests"
     Subtype = Test;
 
     [Test]
-    procedure StartScanStopPostKeepsLpOnPostedLine()
+    procedure ReceiptLpContentIsCreatedOnlyBySuccessfulPost()
     var
         TestHelper: Codeunit "DOPSWHS Test Helper";
         WhseReceiptHeader: Record "Warehouse Receipt Header";
@@ -21,28 +21,37 @@ codeunit 72133 "DOPSWHS Receipt With LP Tests"
         WhseReceiptHeader.Get(WhseReceiptHeader."No.");
         Assert.AreEqual(LpNo, WhseReceiptHeader."DOPSWHS LP No.", 'Started LP must immediately be linked to the receipt header.');
         ReceiptMgmt.ConfirmLine(WhseReceiptLine, 10, '', '', 0D, LpNo, 'RECEIVE');
-        // Same PATCH is retried and then edited. The LP must mirror the final receipt quantity,
-        // not append 10 + 10 + 5 as three physical pallet rows.
+        // Same PATCH is retried and then edited. Before posting, the LP must
+        // remain an empty draft carrying only the final planned quantity.
         ReceiptMgmt.ConfirmLine(WhseReceiptLine, 10, '', '', 0D, LpNo, 'RECEIVE');
         ReceiptMgmt.ConfirmLine(WhseReceiptLine, 5, '', '', 0D, LpNo, 'RECEIVE');
         LPLine.SetRange("LP No.", LpNo);
-        LPLine.FindFirst();
-        Assert.AreEqual(30, LPLine."Source Document Quantity", 'LP line must retain the total receipt-line quantity for MTE printing.');
-        Assert.AreEqual(5, LPLine.Quantity, 'LP line must mirror the latest receipt quantity.');
-        Assert.AreEqual(1, LPLine.Count(), 'Receipt retries must not create duplicate LP lines.');
-        Assert.AreEqual(WhseReceiptLine."No.", LPLine."Source Document No.", 'LP line must retain its receipt reference.');
-        ReceiptMgmt.StopLP(WhseReceiptHeader, LpNo, false);
+        Assert.IsTrue(LPLine.IsEmpty(), 'Confirming a draft receipt must not put item, lot or quantity inside the LP.');
         LP.Get(LpNo);
-        Assert.AreEqual(Format(LP.Status::Built), Format(LP.Status), 'Stopped LP must be built.');
+        Assert.AreEqual(5, LP."Planned Quantity", 'The empty draft LP must retain only its final planned quantity.');
+        Assert.AreEqual(WhseReceiptLine."No.", LP."Pending Receipt No.", 'The empty LP must remain linked to its pending receipt.');
+        asserterror ReceiptMgmt.StopLP(WhseReceiptHeader, LpNo, false);
+        Assert.ExpectedError('Mal Kabulü Kaydet');
+
         ReceiptMgmt.PostReceipt(WhseReceiptHeader, false, false);
 
+        LPLine.Reset();
+        LPLine.SetRange("LP No.", LpNo);
+        LPLine.FindFirst();
+        Assert.AreEqual(30, LPLine."Source Document Quantity", 'Posted LP line must retain the total receipt-line quantity for MTE printing.');
+        Assert.AreEqual(5, LPLine.Quantity, 'Successful posting must materialize the final receipt quantity once.');
+        Assert.AreEqual(1, LPLine.Count(), 'Successful posting must create exactly one physical LP line.');
+        Assert.AreEqual(WhseReceiptLine."No.", LPLine."Source Document No.", 'Posted LP line must retain its receipt reference.');
+        LP.Get(LpNo);
+        Assert.AreEqual(Format(LP.Status::Built), Format(LP.Status), 'Successful posting must close the materialized LP.');
+        Assert.AreEqual('', LP."Pending Receipt No.", 'A posted LP must no longer be pending.');
         PostedWhseReceiptLine.SetRange("Whse. Receipt No.", WhseReceiptHeader."No.");
         PostedWhseReceiptLine.FindFirst();
         Assert.AreEqual(LpNo, PostedWhseReceiptLine."LP No.", 'Posted receipt line must keep LP No.');
     end;
 
     [Test]
-    procedure StartStopStartReopensTheSameLp()
+    procedure StartAfterClosingEmptyLpCreatesNextLp()
     var
         TestHelper: Codeunit "DOPSWHS Test Helper";
         WhseReceiptHeader: Record "Warehouse Receipt Header";
@@ -61,11 +70,11 @@ codeunit 72133 "DOPSWHS Receipt With LP Tests"
         Assert.AreEqual(FirstLpNo, WhseReceiptHeader."DOPSWHS LP No.", 'Closing an LP must preserve the receipt LP pointer for reopening.');
 
         SecondLpNo := ReceiptMgmt.StartLP(WhseReceiptHeader, 'PALLET-EUR');
-        Assert.AreEqual(FirstLpNo, SecondLpNo, 'Restarting after close must reopen the same LP.');
+        Assert.AreNotEqual(FirstLpNo, SecondLpNo, 'Starting after a physically closed LP must create the next LP.');
         FirstLP.Get(FirstLpNo);
-        Assert.AreEqual(Format(FirstLP.Status::Open), Format(FirstLP.Status), 'The receipt LP must be open again.');
+        Assert.AreEqual(Format(FirstLP.Status::Built), Format(FirstLP.Status), 'The physically closed LP must stay built.');
         WhseReceiptHeader.Get(WhseReceiptHeader."No.");
-        Assert.AreEqual(SecondLpNo, WhseReceiptHeader."DOPSWHS LP No.", 'The receipt must still point to the reopened LP.');
+        Assert.AreEqual(SecondLpNo, WhseReceiptHeader."DOPSWHS LP No.", 'The receipt must point to the newly opened LP.');
     end;
 
     [Test]
@@ -105,6 +114,34 @@ codeunit 72133 "DOPSWHS Receipt With LP Tests"
         Assert.AreEqual(Format(LP.Status::Unbuilt), Format(LP.Status), 'Cancelled receipt LP must be unbuilt.');
         LPLine.SetRange("LP No.", LP."No.");
         Assert.IsTrue(LPLine.IsEmpty(), 'Cancelled receipt must not leave quantity inside its LP.');
+    end;
+
+    [Test]
+    procedure CancelledReceiptClearsItsEmptyPendingLp()
+    var
+        WhseReceiptHeader: Record "Warehouse Receipt Header";
+        WhseReceiptLine: Record "Warehouse Receipt Line";
+        LP: Record "DOPSWHS LP Header";
+        LPLine: Record "DOPSWHS LP Line";
+        ReceiptMgmt: Codeunit "DOPSWHS Receipt Mgmt";
+    begin
+        CreateReceipt(WhseReceiptHeader, WhseReceiptLine, 'PO-CANCEL-DRAFT', 50);
+        LP.Init();
+        LP."No." := 'LP-CANCEL-DRAFT';
+        LP.Status := LP.Status::Open;
+        LP."Planned Quantity" := 50;
+        LP."Pending Receipt No." := WhseReceiptHeader."No.";
+        LP."Pending Receipt Line No." := WhseReceiptLine."Line No.";
+        LP.Insert();
+
+        ReceiptMgmt.CleanupCanceledReceiptLPs(WhseReceiptHeader."No.");
+
+        LP.Get('LP-CANCEL-DRAFT');
+        Assert.AreEqual(Format(LP.Status::Unbuilt), Format(LP.Status), 'Cancelled draft LP must be unbuilt.');
+        Assert.AreEqual(0, LP."Planned Quantity", 'Cancelled draft LP must not retain a planned stock quantity.');
+        Assert.AreEqual('', LP."Pending Receipt No.", 'Cancelled draft LP must not retain a receipt reference.');
+        LPLine.SetRange("LP No.", LP."No.");
+        Assert.IsTrue(LPLine.IsEmpty(), 'Cancelled draft LP must remain empty.');
     end;
 
     [Test]

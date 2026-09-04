@@ -108,7 +108,8 @@ page 72090 "DOPSWHS Receipt API"
     end;
 
     /// <summary>
-    /// Creates and closes every pallet for one receipt line in a single transaction.
+    /// Creates empty pallet drafts for one receipt line. Product, tracking and quantity are
+    /// written into the pallets only by the successful postAndCloseLP transaction.
     /// distributionJson is a flat array: groupId, quantity, lotNo, supplierLotNo, expiryDate.
     /// Every pallet uses one common tracking identity; a blank lotNo is generated once.
     /// </summary>

@@ -660,7 +660,8 @@ private fun ReceiveDocument(no: String, onBack: () -> Unit) {
                     )
                     busy = false
                     status = if (r.ok) "TAMAM: Mal kabul kaydedildi."
-                        else QcErrorParser.friendlyStatus(BcApi.errorMessage(r.body), r.httpCode)
+                        else missingReceiptPostBackendStatus(r.httpCode, r.body)
+                            ?: QcErrorParser.friendlyStatus(BcApi.errorMessage(r.body), r.httpCode)
                     if (r.ok) { touched = emptySet(); reload() }
                 }
             },
@@ -717,11 +718,11 @@ private fun ReceiveDocument(no: String, onBack: () -> Unit) {
             expiryEnabled = bulkLine.optBoolean("expirationDateEnabled"),
             expiryRequired = bulkLine.optBoolean("expirationDateRequired"),
             onDismiss = { bulkLpTarget = null },
-            onSubmit = { expectedQty, rows, printLabels ->
+            onSubmit = { expectedQty, rows ->
                 bulkLpTarget = null
                 scope.launch {
                     busy = true
-                    status = "Palet LP'leri oluşturuluyor..."
+                    status = "Boş palet LP taslakları hazırlanıyor..."
                     val template = resolveLpTemplate(context, LpPurpose.PALLET)
                     if (template == null) {
                         busy = false
@@ -739,13 +740,13 @@ private fun ReceiveDocument(no: String, onBack: () -> Unit) {
                             put("expectedQty", expectedQty)
                             put("distributionJson", bulkLpRowsJson(rows))
                             put("lpTemplateCode", template)
-                            put("printLabels", printLabels)
+                            put("printLabels", true)
                             put("printerId", getDefaultPrinter(context))
                         }.toString(),
                     )
                     busy = false
                     status = if (result.ok)
-                        "TAMAM: ${rows.size} LP oluşturuldu; toplam ${fmtNum(expectedQty)} ${bulkLine.optString("unitOfMeasureCode")}."
+                        "TAMAM: ${rows.size} boş LP hazırlandı. Ürün, lot ve toplam ${fmtNum(expectedQty)} ${bulkLine.optString("unitOfMeasureCode")} miktar Kaydet'e basınca LP'lere yazılacak."
                     else QcErrorParser.friendlyStatus(BcApi.errorMessage(result.body), result.httpCode)
                     if (result.ok) {
                         touched = touched + lineNo

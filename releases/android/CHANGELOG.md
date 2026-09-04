@@ -7,6 +7,20 @@ Kurulum: [docs/android-install-guide.md](../../docs/android-install-guide.md)
 
 ---
 
+## v1.14.89 — BADE — 2026-09-04
+
+**versionCode:** 200089 · **BC paketi:** 1.14.1.20
+
+**BADE SHA-256:** `77a3a3feb9d9d3f7de76b4531eb5bb10793fb07dee7181da2613ec71722bbe83`
+
+### LP içeriğini yalnız başarılı mal kabulde oluşturma
+
+- “Palet LP” ve satır onayı artık LP içine ürün, lot veya miktar yazmaz; yalnız boş LP taslağı ile planlanan dağılımı hazırlar.
+- Ürün, ortak lot ve palet miktarları “Mal kabulü kaydet” başarıyla tamamlanırken LP'lere tek transaction içinde yazılır ve LP'ler kapatılır.
+- Mal kabul kaydı hata verirse LP içeriği oluşmaz; belge iptal edilirse boş LP taslakları ve bekleyen miktarlar temizlenir.
+- Satın alma siparişi, ambar mal kabulü ve Madde Defter Girişi palet sayısına göre bölünmez; tek toplam satır korunur.
+- Terminal, gerekli sunucu aksiyonu eski BC paketinde yoksa genel REF kodu yerine BC 1.14.1.20 paketinin kurulması gerektiğini açıkça gösterir.
+
 ## v1.14.88 — BADE — 2026-09-04
 
 **versionCode:** 200088 · **BC paketi:** 1.14.1.19

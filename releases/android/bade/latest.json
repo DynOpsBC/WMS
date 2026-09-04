@@ -1,7 +1,7 @@
 {
-  "versionCode": 200088,
-  "versionName": "1.14.88-bade",
-  "apkUrl": "https://github.com/DynOpsBC/WMS/releases/download/android-v1.14.88/BCWMS-BADE-1.14.88-RELEASE.apk",
-  "sha256": "a9f248d3a57a527252a59ae583fa5604cce6506b8c931d5e501b961d9b98b0eb",
-  "releaseNotes": "Mal kabulde LP kapatma ve kayıt tek güvenli işlem oldu; iptal edilen belgenin bekleyen LP içeriği temizlenir. Yönlendirilmiş harekette LP numarası ve miktarı kaynak raftan hedef rafa birlikte taşınır."
+  "versionCode": 200089,
+  "versionName": "1.14.89-bade",
+  "apkUrl": "https://github.com/DynOpsBC/WMS/releases/download/android-v1.14.89/BCWMS-BADE-1.14.89-RELEASE.apk",
+  "sha256": "77a3a3feb9d9d3f7de76b4531eb5bb10793fb07dee7181da2613ec71722bbe83",
+  "releaseNotes": "Palet LP aşamasında yalnız boş LP taslakları hazırlanır; ürün, lot ve miktar LP içine ancak Mal kabulü kaydet başarıyla tamamlanınca yazılır. Hata veya iptalde LP içeriği oluşmaz; Madde Defter Girişi tek toplam satır kalır."
 }

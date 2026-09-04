@@ -76,4 +76,13 @@ class ReceivingWorkflowTest {
         assertTrue(!shouldFallbackReceiptExcludeAction(400, "The warehouse receipt is locked by another user."))
         assertTrue(!shouldFallbackReceiptExcludeAction(403, "Forbidden"))
     }
+
+    @Test
+    fun `missing atomic receipt action names required BC package`() {
+        val status = missingReceiptPostBackendStatus(404, "No HTTP resource was found")
+
+        assertTrue(status.orEmpty().contains("1.14.1.20"))
+        assertTrue(status.orEmpty().contains("belge ve LP kaydedilmedi"))
+        assertNull(missingReceiptPostBackendStatus(400, "Posting date is required"))
+    }
 }

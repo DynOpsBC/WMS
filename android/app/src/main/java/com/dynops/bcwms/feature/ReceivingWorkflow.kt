@@ -18,6 +18,25 @@ internal fun shouldFallbackReceiptExcludeAction(httpCode: Int, responseBody: Str
     ).any(body::contains)
 }
 
+/**
+ * Mal kabulü ve LP içeriğini tek transaction'da kaydeden sunucu aksiyonu eski
+ * BC paketlerinde yoktur. Bu durumda genel REF kodu yerine kurulması gereken
+ * paketi açıkça söyle; eski iki-adımlı akışa dönmek stoklu taslak LP bırakır.
+ */
+internal fun missingReceiptPostBackendStatus(httpCode: Int, responseBody: String): String? {
+    val body = responseBody.lowercase()
+    val missingHttpAction = httpCode == 404 || httpCode == 405 || httpCode == 501 ||
+        (httpCode == 400 && listOf(
+            "could not find",
+            "not found",
+            "no http resource",
+            "unknown action",
+            "does not exist",
+        ).any(body::contains))
+    if (!missingHttpAction) return null
+    return "HATA: Mal kabul kaydı için BCWMS BC paketi 1.14.1.20 kurulmalı; belge ve LP kaydedilmedi."
+}
+
 internal fun receivingPreflightFailureStatus(resetCount: Int): String =
     receivingPreflightFailureStatus(resetCount, null, null)
 

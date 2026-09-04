@@ -134,10 +134,9 @@ internal fun BulkReceiptLpSheet(
     expiryEnabled: Boolean,
     expiryRequired: Boolean,
     onDismiss: () -> Unit,
-    onSubmit: (expectedQty: Double, rows: List<BulkReceiptLpRow>, printLabels: Boolean) -> Unit,
+    onSubmit: (expectedQty: Double, rows: List<BulkReceiptLpRow>) -> Unit,
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-    var printLabels by remember { mutableStateOf(true) }
     var nextLpId by remember { mutableIntStateOf(2) }
     var receiptQtyText by remember(maxExpectedQty) { mutableStateOf(fmtBulkQty(maxExpectedQty)) }
     var palletCountText by remember { mutableStateOf("1") }
@@ -201,7 +200,7 @@ internal fun BulkReceiptLpSheet(
                 modifier = Modifier.fillMaxWidth(),
             ) {
                 Text(
-                    "Kabul miktarını ve palet sayısını girip Eşit Böl'e dokunun. Sistem tüm LP'leri doldurur; isterseniz her satırı ayrı ayrı değiştirebilirsiniz.",
+                    "Kabul miktarını ve palet sayısını girip Eşit Böl'e dokunun. Burada yalnız boş LP taslakları hazırlanır; ürün, lot ve miktar Mal Kabulü Kaydet başarılı olunca LP'lere yazılır.",
                     modifier = Modifier.padding(10.dp),
                     fontSize = 13.sp,
                 )
@@ -351,17 +350,19 @@ internal fun BulkReceiptLpSheet(
                     }
                 }
             }
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Checkbox(checked = printLabels, onCheckedChange = { printLabels = it })
-                Text("LP / Madde Tanımlama etiketlerini yazdır", fontSize = 13.sp)
-            }
+            Text(
+                "LP etiketleri mal kabul başarıyla kaydedildikten sonra yazdırılır.",
+                fontSize = 13.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(vertical = 8.dp),
+            )
             Row(Modifier.padding(bottom = 18.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutlinedButton(onClick = onDismiss, modifier = Modifier.weight(1f)) { Text("İptal") }
                 Button(
-                    onClick = { onSubmit(expectedQty, rows, printLabels) },
+                    onClick = { onSubmit(expectedQty, rows) },
                     enabled = canSubmit,
                     modifier = Modifier.weight(1f),
-                ) { Text("${drafts.size} LP Oluştur") }
+                ) { Text("${drafts.size} LP Taslağı Hazırla") }
             }
         }
     }
