@@ -7,6 +7,20 @@ Kurulum: [docs/android-install-guide.md](../../docs/android-install-guide.md)
 
 ---
 
+## v1.14.88 — BADE — 2026-09-04
+
+**versionCode:** 200088 · **BC paketi:** 1.14.1.19
+
+**BADE SHA-256:** `a9f248d3a57a527252a59ae583fa5604cce6506b8c931d5e501b961d9b98b0eb`
+
+### Güvenli mal kabul ve LP'li yönlendirilmiş hareket
+
+- “LP Kapat” ve “Mal kabulü kaydet” tek işlem oldu; kayıt başarısızsa LP kapanmaz, başarılıysa LP kapanıp etiketi hazırlanır.
+- Kaydedilmeden iptal edilen mal kabul belgesine ait açık/tamamlanmış LP içeriği temizlenir; kayıtlı veya başka belgeye bağlı LP'lere dokunulmaz.
+- Yönlendirilmiş harekette okutulan LP artık kaynak raftan hedef rafa aynı LP numarası ve miktarıyla taşınır; her iki ambar hareketi LP numarasını gösterir.
+- Bir LP'nin yalnız bir kısmı taşınmak istenirse işlem durur ve önce LP'nin bölünmesi istenir; LP ile raf miktarı birbirinden kopamaz.
+- Toplu mal kabulde satın alma, ambar mal kabulü ve Madde Defter Girişi tek toplam satır olarak korunmaya devam eder.
+
 ## v1.14.87 — BADE — 2026-09-04
 
 **versionCode:** 200087 · **BC paketi:** 1.14.1.18

@@ -87,6 +87,46 @@ codeunit 72133 "DOPSWHS Receipt With LP Tests"
             'Two physical LPs must stay attached to one unchanged receipt line.');
     end;
 
+    [Test]
+    procedure CancelledReceiptRemovesItsUnpostedLpQuantity()
+    var
+        WhseReceiptHeader: Record "Warehouse Receipt Header";
+        WhseReceiptLine: Record "Warehouse Receipt Line";
+        LP: Record "DOPSWHS LP Header";
+        LPLine: Record "DOPSWHS LP Line";
+        ReceiptMgmt: Codeunit "DOPSWHS Receipt Mgmt";
+    begin
+        CreateReceipt(WhseReceiptHeader, WhseReceiptLine, 'PO-CANCEL-LP', 50);
+        CreateReceiptLP('LP-CANCEL-01', WhseReceiptLine, 50, true);
+
+        ReceiptMgmt.CleanupCanceledReceiptLPs(WhseReceiptHeader."No.");
+
+        LP.Get('LP-CANCEL-01');
+        Assert.AreEqual(Format(LP.Status::Unbuilt), Format(LP.Status), 'Cancelled receipt LP must be unbuilt.');
+        LPLine.SetRange("LP No.", LP."No.");
+        Assert.IsTrue(LPLine.IsEmpty(), 'Cancelled receipt must not leave quantity inside its LP.');
+    end;
+
+    [Test]
+    procedure CancelledReceiptNeverChangesAssignedLp()
+    var
+        WhseReceiptHeader: Record "Warehouse Receipt Header";
+        WhseReceiptLine: Record "Warehouse Receipt Line";
+        LP: Record "DOPSWHS LP Header";
+        LPLine: Record "DOPSWHS LP Line";
+        ReceiptMgmt: Codeunit "DOPSWHS Receipt Mgmt";
+    begin
+        CreateReceipt(WhseReceiptHeader, WhseReceiptLine, 'PO-CANCEL-SAFE', 50);
+        CreateReceiptLP('LP-CANCEL-02', WhseReceiptLine, 50, false);
+
+        ReceiptMgmt.CleanupCanceledReceiptLPs(WhseReceiptHeader."No.");
+
+        LP.Get('LP-CANCEL-02');
+        Assert.AreEqual(Format(LP.Status::Assigned), Format(LP.Status), 'Posted or assigned LP must never be changed by receipt cancellation.');
+        LPLine.SetRange("LP No.", LP."No.");
+        Assert.IsFalse(LPLine.IsEmpty(), 'Assigned LP quantity must remain intact.');
+    end;
+
     local procedure CreateReceiptLP(LpNo: Code[20]; ReceiptLine: Record "Warehouse Receipt Line"; Qty: Decimal; IsCurrent: Boolean)
     var
         LP: Record "DOPSWHS LP Header";

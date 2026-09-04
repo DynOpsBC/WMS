@@ -198,13 +198,9 @@ codeunit 72045 "DOPSWHS Movement Mgmt"
         PutAwayLpNo: Code[20];
         PutAwayTargetBin: Code[20];
         PutAwayDestinations: Dictionary of [Code[20], Code[20]];
-        DirectedLpNos: List of [Code[20]];
-        DirectedLpLineNos: List of [Integer];
-        DirectedMovementLineNos: List of [Integer];
-        DirectedBaseQuantities: List of [Decimal];
-        DirectedIndex: Integer;
-        DirectedReference: Code[40];
-        LPMgt: Codeunit "DOPSWHS LP Management";
+        DirectedLpDestinations: Dictionary of [Code[20], Code[20]];
+        DirectedLpNo: Code[20];
+        DirectedTargetBin: Code[20];
     begin
         if OperatorUserId <> '' then
             Operator := OperatorUserId
@@ -240,9 +236,7 @@ codeunit 72045 "DOPSWHS Movement Mgmt"
         if WhseActivityHeader.Type = WhseActivityHeader.Type::"Put-away" then
             CollectPutAwayLpDestinations(WhseActivityHeader, PutAwayDestinations);
         if WhseActivityHeader.Type = WhseActivityHeader.Type::Movement then
-            CollectDirectedLpConsumption(
-                WhseActivityHeader, DirectedLpNos, DirectedLpLineNos,
-                DirectedMovementLineNos, DirectedBaseQuantities);
+            CollectDirectedLpDestinations(WhseActivityHeader, DirectedLpDestinations);
 
         WhseActivityLine.SetRange("Activity Type", WhseActivityHeader.Type);
         WhseActivityLine.SetRange("No.", WhseActivityHeader."No.");
@@ -254,30 +248,38 @@ codeunit 72045 "DOPSWHS Movement Mgmt"
                     PutAwayLpNo, WhseActivityHeader."No.",
                     WhseActivityHeader."Location Code", PutAwayTargetBin);
             end;
-            for DirectedIndex := 1 to DirectedLpNos.Count() do begin
-                DirectedReference := CopyStr(
-                    'MOVE:' + WhseActivityHeader."No." + ':' +
-                    Format(DirectedMovementLineNos.Get(DirectedIndex)),
-                    1, MaxStrLen(DirectedReference));
-                LPMgt.ConsumeLineForWarehouseMovement(
-                    DirectedLpNos.Get(DirectedIndex),
-                    DirectedLpLineNos.Get(DirectedIndex),
-                    DirectedBaseQuantities.Get(DirectedIndex),
-                    DirectedReference);
+            foreach DirectedLpNo in DirectedLpDestinations.Keys do begin
+                DirectedLpDestinations.Get(DirectedLpNo, DirectedTargetBin);
+                FinalizeDirectedLp(
+                    DirectedLpNo, WhseActivityHeader."No.",
+                    WhseActivityHeader."Location Code", DirectedTargetBin);
             end;
         end;
     end;
 
     /// <summary>
-    /// Snapshot exact LP quantities before standard movement registration
-    /// deletes its activity lines. Only lines confirmed through the guarded
-    /// raf + LP endpoint carry Source LP Line No.; legacy/desktop movements
-    /// therefore keep their existing behavior.
+    /// A physical LP can only have one bin. Validate that every content line is
+    /// moved in full and preserve its single destination before standard
+    /// registration deletes the activity lines. Partial stock must first be
+    /// split to another LP; silently consuming LP metadata would leave the
+    /// pallet in the source bin while BC stock moved elsewhere.
     /// </summary>
-    local procedure CollectDirectedLpConsumption(WhseActivityHeader: Record "Warehouse Activity Header"; var LpNos: List of [Code[20]]; var LpLineNos: List of [Integer]; var MovementLineNos: List of [Integer]; var BaseQuantities: List of [Decimal])
+    local procedure CollectDirectedLpDestinations(WhseActivityHeader: Record "Warehouse Activity Header"; var Destinations: Dictionary of [Code[20], Code[20]])
     var
         ActivityLine: Record "Warehouse Activity Line";
+        PlaceLine: Record "Warehouse Activity Line";
+        LPLine: Record "DOPSWHS LP Line";
+        SelectedByLpLine: Dictionary of [Text, Decimal];
+        PlacedByLpLine: Dictionary of [Text, Decimal];
+        SelectedQty: Decimal;
+        PlacedQty: Decimal;
+        ExistingQty: Decimal;
+        ExpectedQty: Decimal;
+        ExistingTargetBin: Code[20];
+        LpNo: Code[20];
+        SelectionKey: Text;
     begin
+        Clear(Destinations);
         ActivityLine.SetRange("Activity Type", WhseActivityHeader.Type);
         ActivityLine.SetRange("No.", WhseActivityHeader."No.");
         ActivityLine.SetRange("Action Type", ActivityLine."Action Type"::Take);
@@ -293,11 +295,122 @@ codeunit 72045 "DOPSWHS Movement Mgmt"
                     ActivityLine, ActivityLine."Bin Code", ActivityLine."LP No.",
                     ActivityLine."DOPSWHS Source LP Line No.", ActivityLine."Lot No.",
                     ActivityLine."Serial No.");
-                LpNos.Add(ActivityLine."LP No.");
-                LpLineNos.Add(ActivityLine."DOPSWHS Source LP Line No.");
-                MovementLineNos.Add(ActivityLine."Line No.");
-                BaseQuantities.Add(ActivityLine."Qty. to Handle (Base)");
+
+                SelectionKey := DirectedLpLineKey(ActivityLine."LP No.", ActivityLine."DOPSWHS Source LP Line No.");
+                if SelectedByLpLine.Get(SelectionKey, ExistingQty) then
+                    SelectedByLpLine.Set(SelectionKey, ExistingQty + ActivityLine."Qty. to Handle (Base)")
+                else
+                    SelectedByLpLine.Add(SelectionKey, ActivityLine."Qty. to Handle (Base)");
+
             until ActivityLine.Next() = 0;
+
+        PlaceLine.SetRange("Activity Type", WhseActivityHeader.Type);
+        PlaceLine.SetRange("No.", WhseActivityHeader."No.");
+        PlaceLine.SetRange("Action Type", PlaceLine."Action Type"::Place);
+        PlaceLine.SetFilter("Qty. to Handle (Base)", '>0');
+        PlaceLine.SetFilter("LP No.", '<>%1', '');
+        if PlaceLine.FindSet() then
+            repeat
+                SelectionKey := DirectedLpLineKey(PlaceLine."LP No.", PlaceLine."DOPSWHS Source LP Line No.");
+                if SelectedByLpLine.ContainsKey(SelectionKey) then begin
+                    PlaceLine.TestField("Bin Code");
+                    if Destinations.Get(PlaceLine."LP No.", ExistingTargetBin) then begin
+                        if ExistingTargetBin <> PlaceLine."Bin Code" then
+                            Error(
+                                '%1 LP numarası aynı harekette iki farklı rafa taşınamaz: %2 ve %3.',
+                                PlaceLine."LP No.", ExistingTargetBin, PlaceLine."Bin Code");
+                    end else
+                        Destinations.Add(PlaceLine."LP No.", PlaceLine."Bin Code");
+                    if PlacedByLpLine.Get(SelectionKey, PlacedQty) then
+                        PlacedByLpLine.Set(SelectionKey, PlacedQty + PlaceLine."Qty. to Handle (Base)")
+                    else
+                        PlacedByLpLine.Add(SelectionKey, PlaceLine."Qty. to Handle (Base)");
+                end;
+            until PlaceLine.Next() = 0;
+
+        foreach SelectionKey in SelectedByLpLine.Keys do
+            if not PlacedByLpLine.ContainsKey(SelectionKey) then
+                Error('LP için hedef raf bulunamadı. Hareket satırını yeniden okutun.');
+
+        foreach LpNo in Destinations.Keys do begin
+            LPLine.SetRange("LP No.", LpNo);
+            LPLine.SetFilter(Quantity, '>0');
+            if not LPLine.FindSet() then
+                Error('%1 LP numarasının taşınacak içeriği bulunamadı.', LpNo);
+            repeat
+                SelectionKey := DirectedLpLineKey(LpNo, LPLine."Line No.");
+                SelectedQty := 0;
+                SelectedByLpLine.Get(SelectionKey, SelectedQty);
+                PlacedQty := 0;
+                PlacedByLpLine.Get(SelectionKey, PlacedQty);
+                ExpectedQty := LpLineBaseQuantity(LPLine);
+                if Abs(SelectedQty - ExpectedQty) > QtyTolerance() then
+                    Error(
+                        '%1 LP numarasının tamamını taşıyın. LP içeriği %2, seçilen %3. Kısmi taşıma için önce LP''yi bölün.',
+                        LpNo, ExpectedQty, SelectedQty);
+                if Abs(PlacedQty - SelectedQty) > QtyTolerance() then
+                    Error(
+                        '%1 LP numarasının alınan ve bırakılan miktarı eşit değil. Alınan %2, bırakılan %3.',
+                        LpNo, SelectedQty, PlacedQty);
+            until LPLine.Next() = 0;
+        end;
+    end;
+
+    local procedure DirectedLpLineKey(LpNo: Code[20]; LpLineNo: Integer): Text
+    begin
+        exit(LpNo + '|' + Format(LpLineNo));
+    end;
+
+    local procedure QtyTolerance(): Decimal
+    begin
+        exit(0.00001);
+    end;
+
+    local procedure LpLineBaseQuantity(LPLine: Record "DOPSWHS LP Line"): Decimal
+    var
+        Item: Record Item;
+        ItemUoM: Record "Item Unit of Measure";
+        EffectiveUoM: Code[10];
+        QtyPerUoM: Decimal;
+    begin
+        Item.Get(LPLine."Item No.");
+        EffectiveUoM := LPLine."Unit of Measure";
+        if EffectiveUoM = '' then
+            EffectiveUoM := Item."Base Unit of Measure";
+        QtyPerUoM := 1;
+        if EffectiveUoM <> Item."Base Unit of Measure" then begin
+            if not ItemUoM.Get(LPLine."Item No.", EffectiveUoM) then
+                Error('%1 maddesinin %2 ölçü birimi bulunamadı.', LPLine."Item No.", EffectiveUoM);
+            QtyPerUoM := ItemUoM."Qty. per Unit of Measure";
+            if QtyPerUoM <= 0 then
+                Error('%1 maddesinin %2 ölçü birimi dönüşümü geçersizdir.', LPLine."Item No.", EffectiveUoM);
+        end;
+        exit(Round(LPLine.Quantity * QtyPerUoM, 0.00001));
+    end;
+
+    local procedure FinalizeDirectedLp(LpNo: Code[20]; MovementNo: Code[20]; LocationCode: Code[10]; TargetBinCode: Code[20])
+    var
+        LP: Record "DOPSWHS LP Header";
+        LPMgt: Codeunit "DOPSWHS LP Management";
+        SourceBinCode: Code[20];
+    begin
+        if not LP.Get(LpNo) then
+            Error('%1 LP kaydı hareket sonrasında bulunamadı.', LpNo);
+        SourceBinCode := LP."Bin Code";
+        LP.Validate("Location Code", LocationCode);
+        LP.Validate("Bin Code", TargetBinCode);
+        if (LP.Status = LP.Status::Assigned) and
+           (LP."Assigned Document Type" = LP."Assigned Document Type"::WhseMovement) and
+           (LP."Assigned Document No." = MovementNo)
+        then begin
+            LP.Status := LP.Status::Built;
+            Clear(LP."Assigned Document Type");
+            LP."Assigned Document No." := '';
+        end;
+        LP.Modify(true);
+        LPMgt.WriteToLedger(
+            LP, Enum::"DOPSWHS LP Action"::Moved,
+            SourceBinCode, TargetBinCode, 0, '', '', MovementNo);
     end;
 
     /// <summary>

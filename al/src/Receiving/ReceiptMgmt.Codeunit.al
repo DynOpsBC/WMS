@@ -12,7 +12,9 @@ codeunit 72043 "DOPSWHS Receipt Mgmt"
         tabledata "Posted Whse. Receipt Header" = rm,
         tabledata "Posted Whse. Receipt Line" = rm,
         tabledata "Warehouse Activity Header" = rim,
-        tabledata "Warehouse Activity Line" = rim;
+        tabledata "Warehouse Activity Line" = rim,
+        tabledata "DOPSWHS LP Header" = rm,
+        tabledata "DOPSWHS LP Line" = rmd;
 
     /// <summary>Geriye dönük imza: operatör kimliği belgenin atamasından okunur.</summary>
     procedure PostReceipt(var WhseReceiptHeader: Record "Warehouse Receipt Header"; PrintReport: Boolean; Invoice: Boolean)
@@ -32,6 +34,11 @@ codeunit 72043 "DOPSWHS Receipt Mgmt"
     end;
 
     procedure PostReceipt(var WhseReceiptHeader: Record "Warehouse Receipt Header"; PrintReport: Boolean; Invoice: Boolean; OperatorUserId: Code[50]; PrinterId: Code[50])
+    begin
+        PostReceiptAndCloseLP(WhseReceiptHeader, PrintReport, Invoice, OperatorUserId, PrinterId, false, '');
+    end;
+
+    procedure PostReceiptAndCloseLP(var WhseReceiptHeader: Record "Warehouse Receipt Header"; PrintReport: Boolean; Invoice: Boolean; OperatorUserId: Code[50]; PrinterId: Code[50]; PrintLpLabels: Boolean; LpPrinterId: Code[50])
     var
         WhseReceiptLine: Record "Warehouse Receipt Line";
         PostedWhseReceiptHeader: Record "Posted Whse. Receipt Header";
@@ -45,6 +52,9 @@ codeunit 72043 "DOPSWHS Receipt Mgmt"
         PutAwayNo: Code[20];
         LocationCode: Code[10];
         AssignedUserId: Code[50];
+        ClosedLpNos: List of [Code[20]];
+        ClosedLpNo: Code[20];
+        ClosedLP: Record "DOPSWHS LP Header";
     begin
         if PrintReport then begin
             EnsureReceiptReportConfigured();
@@ -88,7 +98,12 @@ codeunit 72043 "DOPSWHS Receipt Mgmt"
         // A terminal operator can post without first tapping "LP Kapat". An
         // open LP must be completed before the warehouse receipt disappears;
         // otherwise it cannot be assigned to the resulting put-away.
-        EnsureReceiptLPsReady(ReceiptNo, LpNo);
+        EnsureReceiptLPsReady(ReceiptNo, LpNo, ClosedLpNos);
+        // This distinguishes the standard posting deletion from an operator
+        // cancelling the document. A posting error rolls this flag and every
+        // LP status change back as one transaction.
+        WhseReceiptHeader."DOPSWHS Posting In Progress" := true;
+        WhseReceiptHeader.Modify(true);
         WhseReceiptLine.SetRange("No.", ReceiptNo);
         if WhseReceiptLine.FindFirst() then begin
             // Keep receipt posting, put-away verification and LP assignment in
@@ -97,6 +112,13 @@ codeunit 72043 "DOPSWHS Receipt Mgmt"
             WhsePostReceipt.SetSuppressCommit(true);
             WhsePostReceipt.SetHideValidationDialog(true);
             WhsePostReceipt.Run(WhseReceiptLine);
+        end;
+
+        // Partial posting may keep the working header. It must remain
+        // cancellable after this successful wave.
+        if WhseReceiptHeader.Get(ReceiptNo) then begin
+            WhseReceiptHeader."DOPSWHS Posting In Progress" := false;
+            WhseReceiptHeader.Modify(true);
         end;
 
         PostedWhseReceiptHeader.SetRange("Whse. Receipt No.", ReceiptNo);
@@ -141,6 +163,20 @@ codeunit 72043 "DOPSWHS Receipt Mgmt"
             AssignReceiptLPs(ReceiptNo, PostedNo, LpNo, Enum::"DOPSWHS Assigned Doc Type"::WhsePutaway, PutAwayNo)
         else
             AssignReceiptLPs(ReceiptNo, PostedNo, LpNo, Enum::"DOPSWHS Assigned Doc Type"::WhseReceipt, PostedNo);
+
+        // Label output is deliberately last. The LP is closed and assigned
+        // only if receipt posting succeeded; a cancelled/failed receipt can no
+        // longer leave a labelled pallet carrying unposted stock.
+        if PrintLpLabels then
+            foreach ClosedLpNo in ClosedLpNos do
+                if ClosedLP.Get(ClosedLpNo) then begin
+                    ClearLastError();
+                    if not TryPrintCombinedMteLabel(ClosedLP, LpPrinterId) then
+                        Telemetry.LogWarning(
+                            'Print.ReceiptLpLabelsFailed',
+                            CopyStr(StrSubstNo('%1 LP etiketi yazdırılamadı: %2', ClosedLpNo, GetLastErrorText()), 1, 250),
+                            EffectiveOperator(OperatorUserId, AssignedUserId));
+                end;
     end;
 
     local procedure EnsureActualReceiptDateTime(var WhseReceiptHeader: Record "Warehouse Receipt Header")
@@ -362,7 +398,7 @@ codeunit 72043 "DOPSWHS Receipt Mgmt"
         exit(true);
     end;
 
-    local procedure EnsureReceiptLPsReady(ReceiptNo: Code[20]; HeaderLpNo: Code[20])
+    local procedure EnsureReceiptLPsReady(ReceiptNo: Code[20]; HeaderLpNo: Code[20]; var ClosedLpNos: List of [Code[20]])
     var
         WhseReceiptLine: Record "Warehouse Receipt Line";
         HeaderLP: Record "DOPSWHS LP Header";
@@ -377,7 +413,7 @@ codeunit 72043 "DOPSWHS Receipt Mgmt"
         if WhseReceiptLine.FindSet() then
             repeat
                 if not CheckedLPs.ContainsKey(WhseReceiptLine."DOPSWHS LP No.") then begin
-                    EnsureReceiptLPReady(WhseReceiptLine."DOPSWHS LP No.");
+                    EnsureReceiptLPReady(WhseReceiptLine."DOPSWHS LP No.", ClosedLpNos);
                     CheckedLPs.Add(WhseReceiptLine."DOPSWHS LP No.", true);
                 end;
             until WhseReceiptLine.Next() = 0;
@@ -387,10 +423,10 @@ codeunit 72043 "DOPSWHS Receipt Mgmt"
         if (HeaderLpNo <> '') and (not CheckedLPs.ContainsKey(HeaderLpNo)) then
             if HeaderLP.Get(HeaderLpNo) then
                 if HeaderLP.Status in [HeaderLP.Status::Open, HeaderLP.Status::Built] then
-                    EnsureReceiptLPReady(HeaderLpNo);
+                    EnsureReceiptLPReady(HeaderLpNo, ClosedLpNos);
     end;
 
-    local procedure EnsureReceiptLPReady(LpNo: Code[20])
+    local procedure EnsureReceiptLPReady(LpNo: Code[20]; var ClosedLpNos: List of [Code[20]])
     var
         LP: Record "DOPSWHS LP Header";
         LPMgt: Codeunit "DOPSWHS LP Management";
@@ -400,11 +436,54 @@ codeunit 72043 "DOPSWHS Receipt Mgmt"
         if not LP.Get(LpNo) then
             Error('%1 LP kaydı bulunamadığı için mal kabul tamamlanamadı.', LpNo);
 
-        if LP.Status = LP.Status::Open then
+        if LP.Status = LP.Status::Open then begin
             LPMgt.Stop(LP, false);
+            ClosedLpNos.Add(LpNo);
+        end;
 
         if LP.Status <> LP.Status::Built then
             Error('%1 LP''si mal kabul için uygun durumda değil. Mevcut durum: %2.', LpNo, Format(LP.Status));
+    end;
+
+    /// <summary>
+    /// Removes only unposted LP contents owned completely by a cancelled
+    /// warehouse receipt. Assigned/consumed LPs and mixed-document LPs are
+    /// never touched, so posted stock history cannot be damaged by deletion.
+    /// </summary>
+    procedure CleanupCanceledReceiptLPs(ReceiptNo: Code[20])
+    var
+        ReceiptLPLine: Record "DOPSWHS LP Line";
+        OtherLPLine: Record "DOPSWHS LP Line";
+        LP: Record "DOPSWHS LP Header";
+        LPMgt: Codeunit "DOPSWHS LP Management";
+        LpNos: Dictionary of [Code[20], Boolean];
+        LpNo: Code[20];
+        HasOtherSource: Boolean;
+    begin
+        if ReceiptNo = '' then
+            exit;
+        ReceiptLPLine.SetRange("Source Document Type", ReceiptLPLine."Source Document Type"::WhseReceipt);
+        ReceiptLPLine.SetRange("Source Document No.", ReceiptNo);
+        if ReceiptLPLine.FindSet() then
+            repeat
+                if not LpNos.ContainsKey(ReceiptLPLine."LP No.") then
+                    LpNos.Add(ReceiptLPLine."LP No.", true);
+            until ReceiptLPLine.Next() = 0;
+
+        foreach LpNo in LpNos.Keys do
+            if LP.Get(LpNo) and (LP.Status in [LP.Status::Open, LP.Status::Built]) then begin
+                OtherLPLine.SetRange("LP No.", LpNo);
+                HasOtherSource := false;
+                if OtherLPLine.FindSet() then
+                    repeat
+                        if (OtherLPLine."Source Document Type" <> OtherLPLine."Source Document Type"::WhseReceipt) or
+                           (OtherLPLine."Source Document No." <> ReceiptNo)
+                        then
+                            HasOtherSource := true;
+                    until (OtherLPLine.Next() = 0) or HasOtherSource;
+                if not HasOtherSource then
+                    LPMgt.Unbuild(LP);
+            end;
     end;
 
     local procedure EnsurePutAwayCreated(PostedReceiptNo: Code[20]; LocationCode: Code[10]; AssignedUserId: Code[50]): Code[20]

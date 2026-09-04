@@ -562,21 +562,13 @@ private fun ReceiveDocument(no: String, onBack: () -> Unit) {
                                 contentPadding = PaddingValues(horizontal = 8.dp),
                             ) { Text("LP Başlat", maxLines = 1) }
                         } else {
-                            OutlinedButton(
-                                onClick = {
-                                    val lp = activeLp!!
-                                    action("stopLPToPrinter", JSONObject().apply {
-                                        put("lpNo", lp)
-                                        put("printLabel", true)
-                                        put("printerId", getDefaultPrinter(context))
-                                    }.toString(), "LP kapatıldı") { r ->
-                                        if (r.ok) activeLp = null
-                                    }
-                                },
-                                enabled = !busy,
-                                modifier = Modifier.weight(1f).height(46.dp),
-                                contentPadding = PaddingValues(horizontal = 8.dp),
-                            ) { Text("LP Kapat", maxLines = 1) }
+                            Text(
+                                "LP: $activeLp",
+                                modifier = Modifier.weight(1f),
+                                maxLines = 1,
+                                color = MaterialTheme.colorScheme.primary,
+                                fontWeight = FontWeight.SemiBold,
+                            )
                         }
 
                         // TOPLU POST: operatör istediği kadar satırı okutur/girer,
@@ -591,6 +583,7 @@ private fun ReceiveDocument(no: String, onBack: () -> Unit) {
                                 when {
                                     !canPost -> "Önce miktar gir"
                                     vehicleInfoMissing -> "Araç → Kaydet"
+                                    activeLp != null -> "LP + Kaydet"
                                     else -> "Kaydet · $readyCount"
                                 },
                                 fontWeight = FontWeight.Bold,
@@ -605,12 +598,12 @@ private fun ReceiveDocument(no: String, onBack: () -> Unit) {
 
     if (showPostConfirm) {
         PostConfirmDialog(
-            title = "Mal kabulü kaydet",
+            title = if (activeLp != null) "LP’yi kapat ve mal kabulü kaydet" else "Mal kabulü kaydet",
             readyCount = readyCount,
             postLineCount = postLines.size,
             totalLineCount = lines.size,
             totalQty = postQty,
-            confirmLabel = "Kaydet",
+            confirmLabel = if (activeLp != null) "LP’yi Kapat ve Kaydet" else "Kaydet",
             onDismiss = { showPostConfirm = false },
             onConfirm = {
                 showPostConfirm = false
@@ -657,11 +650,12 @@ private fun ReceiveDocument(no: String, onBack: () -> Unit) {
                         return@launch
                     }
                     val r = BcApi.boundAction(
-                        context, "receipts", no, "postToPrinter",
+                        context, "receipts", no, "postAndCloseLP",
                         JSONObject().apply {
                             put("print", printReceipt)
                             put("invoice", false)
                             put("printerId", getDefaultPrinter(context, PRINTER_USAGE_DOCUMENT))
+                            put("lpPrinterId", getDefaultPrinter(context, PRINTER_USAGE_LABEL))
                         }.toString(),
                     )
                     busy = false

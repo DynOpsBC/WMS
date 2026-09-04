@@ -1856,6 +1856,19 @@ codeunit 72428 "DOPSWHS LP Propagation"
         WhseJournalLine."DOPSWHS LP No." := ItemJournalLine."DOPSWHS LP No.";
     end;
 
+    /// <summary>
+    /// The standard directed activity register creates its warehouse journal
+    /// line after the scanned activity line. Copy the exact LP at that boundary
+    /// so both the negative source and positive destination Warehouse Entries
+    /// retain the physical pallet number.
+    /// </summary>
+    [EventSubscriber(ObjectType::Codeunit, Codeunit::"Whse.-Activity-Register", 'OnBeforeWhseJnlRegisterLine', '', false, false)]
+    local procedure CarryActivityLpOntoWhseJnlLine(var WarehouseJournalLine: Record "Warehouse Journal Line"; WarehouseActivityLine: Record "Warehouse Activity Line")
+    begin
+        if WarehouseActivityLine."LP No." <> '' then
+            WarehouseJournalLine."DOPSWHS LP No." := WarehouseActivityLine."LP No.";
+    end;
+
     /// <summary>Stamps the LP onto each Warehouse Entry as it is registered (bin movements from
     /// pick/put-away/movement). Uses the OnBefore event so the assignment is persisted by the base
     /// Insert(true) with no Modify. The originating Warehouse Activity Line (carrying the scanned

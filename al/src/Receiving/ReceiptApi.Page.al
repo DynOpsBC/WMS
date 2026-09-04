@@ -149,6 +149,18 @@ page 72090 "DOPSWHS Receipt API"
         ReceiptMgmt.PostReceipt(Rec, print, invoice, '', printerId);
     end;
 
+    [ServiceEnabled]
+    procedure postAndCloseLP(print: Boolean; invoice: Boolean; printerId: Code[50]; lpPrinterId: Code[50])
+    var
+        ReceiptMgmt: Codeunit "DOPSWHS Receipt Mgmt";
+        LegacyWI: Codeunit "DOPSWHS Legacy WI Publisher";
+        DocNo: Code[20];
+    begin
+        DocNo := Rec."No.";
+        LegacyWI.FireGetReceiptDocument(DocNo);
+        ReceiptMgmt.PostReceiptAndCloseLP(Rec, print, invoice, '', printerId, true, lpPrinterId);
+    end;
+
     /// <summary>
     /// BADE gibi tenant'larda mal kabul postu plaka + sürücü ister. Terminal bu
     /// aksiyonla başlığı doldurur; alanlar yoksa BC anlaşılır hata döner.
