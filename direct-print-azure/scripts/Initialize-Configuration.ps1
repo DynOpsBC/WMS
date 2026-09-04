@@ -11,8 +11,10 @@ param(
 
     [string] $SubscriptionId,
 
-    [ValidateRange(1, 365)]
-    [int] $BlobSasValidityDays = 90,
+    # Up to ~3 years: the agent runs unattended on a shop-floor PC, and a short
+    # SAS means re-visiting every machine when it expires.
+    [ValidateRange(1, 1095)]
+    [int] $BlobSasValidityDays = 1095,
 
     [string] $OutputDirectory
 )

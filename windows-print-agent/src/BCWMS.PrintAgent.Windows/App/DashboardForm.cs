@@ -48,8 +48,52 @@ internal sealed class DashboardForm : Form
 
         _controller.StateChanged += ControllerOnStateChanged;
         _controller.Logger.LineWritten += LoggerOnLineWritten;
-        Shown += async (_, _) => await RunUiActionAsync(RefreshPrintersAsync);
+        Shown += async (_, _) =>
+        {
+            await RunUiActionAsync(AutoImportRuntimeSecretsAsync);
+            await RunUiActionAsync(RefreshPrintersAsync);
+        };
         FormClosing += OnFormClosing;
+    }
+
+    /// <summary>
+    /// On first launch (no station configured yet), silently import the
+    /// installer-provisioned secrets file if it is present next to the
+    /// executable, so the operator never has to browse for it manually.
+    /// Only auto-fills empty fields; never overwrites an existing setup.
+    /// </summary>
+    private async Task AutoImportRuntimeSecretsAsync()
+    {
+        if (!string.IsNullOrWhiteSpace(_controller.Settings.StationId))
+        {
+            return;
+        }
+
+        var candidatePath = Path.Combine(AppContext.BaseDirectory, "print-agent.runtime.secrets.json");
+        if (!File.Exists(candidatePath))
+        {
+            return;
+        }
+
+        try
+        {
+            var imported = await RuntimeSecretsImporter.ImportAsync(candidatePath, _lifetime.Token);
+            _station.Text = imported.StationId;
+            _jobsConnection.Text = imported.JobsListenConnectionString;
+            _statusConnection.Text = imported.StatusSendConnectionString;
+            _storageAccount.Text = imported.StorageAccount;
+            _blobEndpoint.Text = imported.BlobEndpoint;
+            _blobSas.Text = imported.BlobReadSas;
+            _blobSasExpiry = imported.BlobSasExpiresAtUtc;
+            UpdateSasExpiry();
+            _controller.Logger.Info("Kurulum paketindeki print-agent.runtime.secrets.json otomatik içe aktarıldı.");
+        }
+        catch (Exception exception) when (exception is InvalidDataException or IOException or UnauthorizedAccessException)
+        {
+            // Fall through to manual "İçe Aktar" — the installer file may be
+            // stale or partially written; never block the app on it.
+            _controller.Logger.Error($"Otomatik içe aktarma başarısız, elle 'İçe Aktar' kullanın: {exception.Message}");
+        }
     }
 
     public void ShowAndActivate(bool showSettings = false)
