@@ -7,6 +7,17 @@ Kurulum: [docs/android-install-guide.md](../../docs/android-install-guide.md)
 
 ---
 
+## v1.14.94 — BADE — 2026-09-04
+
+**versionCode:** 200094 · **BC paketi:** 1.14.1.24
+
+### Toplu LP oluşturmayı tamamlayan işlem kaydı düzeltmesi
+
+- Raf boş bırakılarak hazırlanan çok raflı LP planının son adımda “Toplu LP işlem kaydı değiştirilemez” hatasıyla geri alınması düzeltildi.
+- Toplu işlemin değişmez kaynak ve miktar bilgileri korunur; yalnız izin verilen “tamamlandı” geçişi veritabanındaki asıl kayıtla doğrulanır.
+- 100.000 adet için 10 × 10.000 LP planı, yeterli LP'siz stok bulunan raflara otomatik dağıtılarak tek işlemde tamamlanabilir.
+- Her LP tek bir rafa bağlanır; Madde Defter Girişi satırı, miktarı ve stok hareketleri değiştirilmez.
+
 ## v1.14.93 — BADE — 2026-09-04
 
 **versionCode:** 200093 · **BC paketi:** 1.14.1.23

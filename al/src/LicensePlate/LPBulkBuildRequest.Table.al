@@ -86,19 +86,25 @@ table 72008 "DOPSWHS LP Bulk Request"
     end;
 
     trigger OnModify()
+    var
+        StoredRequest: Record "DOPSWHS LP Bulk Request";
     begin
         // The only legal transition is the same transaction marking a fully
-        // created batch complete. Its identity and plan remain immutable.
-        if xRec.Completed or (not Completed) or
-           ("Request ID" <> xRec."Request ID") or
-           ("Source ILE No." <> xRec."Source ILE No.") or
-           ("Template Code" <> xRec."Template Code") or
-           ("Location Code" <> xRec."Location Code") or
-           ("Bin Code" <> xRec."Bin Code") or
-           ("LP Count" <> xRec."LP Count") or
-           ("Quantity per LP" <> xRec."Quantity per LP") or
-           ("Created At" <> xRec."Created At") or
-           ("Created By" <> xRec."Created By")
+        // created batch complete. Read the persisted row instead of xRec;
+        // xRec can contain the already-mutated value when Modify is called
+        // from an API transaction, incorrectly rejecting false -> true.
+        if not StoredRequest.Get("Request ID") then
+            Error('Toplu LP işlem kaydı bulunamadı.');
+        if StoredRequest.Completed or (not Completed) or
+           ("Request ID" <> StoredRequest."Request ID") or
+           ("Source ILE No." <> StoredRequest."Source ILE No.") or
+           ("Template Code" <> StoredRequest."Template Code") or
+           ("Location Code" <> StoredRequest."Location Code") or
+           ("Bin Code" <> StoredRequest."Bin Code") or
+           ("LP Count" <> StoredRequest."LP Count") or
+           ("Quantity per LP" <> StoredRequest."Quantity per LP") or
+           ("Created At" <> StoredRequest."Created At") or
+           ("Created By" <> StoredRequest."Created By")
         then
             Error('Toplu LP işlem kaydı değiştirilemez.');
     end;
