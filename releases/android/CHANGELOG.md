@@ -7,6 +7,28 @@ Kurulum: [docs/android-install-guide.md](../../docs/android-install-guide.md)
 
 ---
 
+## v1.14.92 — BADE — 2026-09-04
+
+**versionCode:** 200092 · **BC paketi:** 1.14.1.22
+
+### Raf kodu sıralı sevkiyat ve anlaşılır hedef LP
+
+- “Raf sırasına göre topla” artık yalnız listeyi sıralamaz; kaynak miktarı gerçek raf kodu sırasından başlayarak ayırır ve ihtiyacı karşılayan en küçük palet grubunda durur.
+- 5.880 adetlik örnekte A.A01.11 rafındaki LP tek başına yeterliyse sonraki raflara geçilmez.
+- Toplama ekranındaki “Sevk LP Başlat” adı “Hedef LP Oluştur” olarak değiştirildi ve ne zaman kullanılacağı ekranda açıklandı.
+- Geçmiş stoktan LP oluştururken raf boş bırakılırsa her LP, stok miktarının tamamının bulunduğu gerçek rafa otomatik bağlanır; madde ve ambar defteri değiştirilmez.
+
+## v1.14.91 — BADE — 2026-09-04
+
+**versionCode:** 200091 · **BC paketi:** 1.14.1.21
+
+### Geçmiş stokları farklı raflardan otomatik LP'leme
+
+- Raf alanı artık isteğe bağlıdır; boş bırakıldığında aynı ürün ve lotun LP'ye atanmamış stoku raf kodu sırasıyla bulunur.
+- Her LP, miktarının tamamının bulunduğu kendi rafına bağlanır; tek LP iki rafa bölünmez ve raflar arasında stok taşınmaz.
+- Madde Defter Girişi, ambar miktarı ve geçmiş stok hareketleri değiştirilmeden yalnız LP kayıtları oluşturulur.
+- Belirli bir raf okutulursa önceki tek-raf davranışı aynen devam eder.
+
 ## v1.14.90 — BADE — 2026-09-04
 
 **versionCode:** 200090 · **BC paketi:** 1.14.1.20

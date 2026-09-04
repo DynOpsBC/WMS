@@ -1878,6 +1878,15 @@ private fun PickDocument(no: String, onBack: () -> Unit) {
                     onRowClick = { if (!busy) actionLine = it },
                 )
             }
+            Spacer(Modifier.height(6.dp))
+            Text(
+                if (shipLp == null)
+                    "Farklı kaynak LP'leri tek sevk paletinde birleştirecekseniz miktar girmeden önce Hedef LP Oluştur'a basın; mevcut LP'leri olduğu gibi sevk edecekseniz kullanmayın."
+                else
+                    "Hedef sevk paleti hazır; kaydettiğiniz miktarlar kaynak LP'lerden bu palete aktarılacak.",
+                fontSize = 11.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
         }
 
         BottomActionBar {
@@ -1906,7 +1915,7 @@ private fun PickDocument(no: String, onBack: () -> Unit) {
                         busy = false
                         if (createdLp.isNotBlank()) reload()
                     }
-                }, enabled = !busy, modifier = Modifier.weight(1f)) { Text("LP Başlat") }
+                }, enabled = !busy, modifier = Modifier.weight(1f)) { Text("Hedef LP Oluştur") }
                 OutlinedButton(onClick = { showTote = true }, enabled = !busy, modifier = Modifier.weight(1f)) { Text("🧺 Tote") }
             } else {
                 OutlinedButton(onClick = {
@@ -1918,7 +1927,7 @@ private fun PickDocument(no: String, onBack: () -> Unit) {
                     }.toString(), "Shipping LP kapandı") { r ->
                         if (r.ok) shipLp = null
                     }
-                }, enabled = !busy, modifier = Modifier.weight(1f)) { Text("Sevk LP Kapat") }
+                }, enabled = !busy, modifier = Modifier.weight(1f)) { Text("Hedef LP Kapat") }
             }
             OutlinedButton(onClick = {
                 // Paylaşımlı BC lisansı: atama oturumdaki WMS kullanıcısına yazılır.

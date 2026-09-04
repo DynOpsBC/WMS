@@ -211,7 +211,9 @@ internal fun pendingLedgerBulkLpRequestFromJson(raw: String): PendingLedgerBulkL
     require(body.getInt("lpCount") == request.expectedCount)
     require(body.getBoolean("printLabels") == request.printLabels)
     require(body.getString("templateCode").isNotBlank())
-    require(body.getString("binCode").isNotBlank())
+    // Blank bin means the server will distribute complete LPs across the
+    // matching loose-stock bins. Explicit-bin requests remain supported.
+    body.getString("binCode")
     require(body.getDouble("quantityPerLp").let { it.isFinite() && it > 0.0 })
     request
 }.getOrNull()
@@ -276,6 +278,10 @@ internal fun ledgerBulkLpFriendlyError(raw: String, httpCode: Int = 0): String =
     raw.contains("LP'ye ayrılabilir miktar", ignoreCase = true) ->
         "HATA: Bu stok kaydında seçtiğiniz toplam kadar kullanılabilir ürün yok. " +
             "LP adedini veya LP başı miktarı azaltın."
+
+    raw.contains("raflara dağılmış", ignoreCase = true) ->
+        "HATA: Raflardaki stok toplamı yeterli görünse de seçtiğiniz LP miktarıyla tam paletlere ayrılamıyor. " +
+            "LP başı miktarı azaltın veya belirli bir raf okutarak o raftaki stoğu ayrı işlemde LP'leyin."
 
     raw.contains("kullanılabilir miktar yoktur", ignoreCase = true) ->
         "HATA: Bu stok kaydında LP yapılabilecek ürün kalmamış. Başka bir stok kaydı seçin."
@@ -435,7 +441,7 @@ internal fun BulkLpBuildSheet(
         val shouldPrint = printLabels
         val printerId = getDefaultPrinter(context, PRINTER_USAGE_LABEL)
         if (requestToReplay == null &&
-            (sourceEntry == null || count == null || perLp == null || templateCode.isBlank() || binCode.isBlank())
+            (sourceEntry == null || count == null || perLp == null || templateCode.isBlank())
         ) return
 
         busy = true
@@ -445,21 +451,23 @@ internal fun BulkLpBuildSheet(
                 requestToReplay
             } else {
                 status = "LP'ler oluşturuluyor${if (shouldPrint) " ve etiketleniyor" else ""}..."
-                val safeLocation = sourceEntry!!.optString("locationCode").replace("'", "''")
-                val safeBin = binCode.trim().replace("'", "''")
-                val binPage = BcApi.getAllPages(
-                    context,
-                    "bins?\$filter=locationCode eq '$safeLocation' and code eq '$safeBin'&\$select=code&\$top=1",
-                )
-                if (!binPage.complete || binPage.rows.isEmpty()) {
-                    busy = false
-                    status = "HATA: Okuttuğunuz raf bu depoya ait değil. Doğru raf etiketini okutun."
-                    return@launch
+                if (binCode.isNotBlank()) {
+                    val safeLocation = sourceEntry!!.optString("locationCode").replace("'", "''")
+                    val safeBin = binCode.trim().replace("'", "''")
+                    val binPage = BcApi.getAllPages(
+                        context,
+                        "bins?\$filter=locationCode eq '$safeLocation' and code eq '$safeBin'&\$select=code&\$top=1",
+                    )
+                    if (!binPage.complete || binPage.rows.isEmpty()) {
+                        busy = false
+                        status = "HATA: Okuttuğunuz raf bu depoya ait değil. Doğru raf etiketini okutun."
+                        return@launch
+                    }
                 }
 
                 val requestId = UUID.randomUUID().toString()
                 PendingLedgerBulkLpRequest(
-                    entryNo = sourceEntry.optInt("entryNo"),
+                    entryNo = sourceEntry!!.optInt("entryNo"),
                     expectedCount = count!!,
                     printLabels = shouldPrint,
                     requestId = requestId,
@@ -726,14 +734,15 @@ internal fun BulkLpBuildSheet(
             )
             Spacer(Modifier.height(8.dp))
             ScanField(
-                "Ürünün Bulunduğu Raf",
+                "Raf (isteğe bağlı)",
                 bin,
                 { bin = it.uppercase() },
                 modifier = Modifier.fillMaxWidth(),
                 enabled = inputsEnabled,
             )
             Text(
-                "Ürünün ve seçilen lotun gerçekten bulunduğu raf etiketini okutun.",
+                "Boş bırakırsanız sistem aynı ürün ve lotun bulunduğu raflara LP'leri otomatik dağıtır. " +
+                    "Tek raf kullanmak isterseniz raf etiketini okutun.",
                 fontSize = 11.sp,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -786,7 +795,7 @@ internal fun BulkLpBuildSheet(
             ) { Text(if (busy) "Kontrol ediliyor..." else "Önceki İşlemi Kontrol Et") }
         } else {
             Button(
-                enabled = inputsEnabled && entry != null && template.isNotBlank() && bin.isNotBlank() && planValid,
+                enabled = inputsEnabled && entry != null && template.isNotBlank() && planValid,
                 modifier = Modifier.fillMaxWidth(),
                 onClick = { submitBulkLp() },
             ) { Text(if (busy) "İşleniyor..." else "LP'leri Oluştur") }

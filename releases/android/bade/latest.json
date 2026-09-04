@@ -1,7 +1,7 @@
 {
-  "versionCode": 200090,
-  "versionName": "1.14.90-bade",
-  "apkUrl": "https://github.com/DynOpsBC/WMS/releases/download/android-v1.14.90/BCWMS-BADE-1.14.90-RELEASE.apk",
-  "sha256": "2944c6fd9a9f19e70b5d117a4a8d21f800462d0eff8da16b8c46942408e1a38a",
-  "releaseNotes": "Mal kabul Kaydet hatası artık yalnız REF kodu göstermez; BC'nin gerçek nedeni teknik eklerden temizlenerek aynı kutuda açıklanır. Başarısız kayıtta belge ve LP içeriği oluşturulmaz."
+  "versionCode": 200092,
+  "versionName": "1.14.92-bade",
+  "apkUrl": "https://github.com/DynOpsBC/WMS/releases/download/android-v1.14.92/BCWMS-BADE-1.14.92-RELEASE.apk",
+  "sha256": "75f7baedb28a8ab0df0cfdc189ce4832ff32e965eb33aaf1be3e9e4469cea0e2",
+  "releaseNotes": "Raf sırasına göre toplama artık kaynağı gerçek raf kodu sırasından ayırır. Sevk LP düğmesi Hedef LP Oluştur olarak açıklığa kavuşturuldu. Geçmiş stok LP'lerinde raf boş bırakılırsa LP'ler gerçek stok raflarına otomatik dağıtılır; defter hareketleri değişmez."
 }

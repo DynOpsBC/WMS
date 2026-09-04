@@ -1891,44 +1891,63 @@ private fun WhsePickDocument(no: String, onBack: () -> Unit) {
                     onRowClick = { if (canMutate && !busy) qtyLine = it },
                 )
             }
+            Spacer(Modifier.height(6.dp))
+            Text(
+                if (h?.optString("mainLpNo").orEmpty().isBlank())
+                    "Farklı kaynak LP'leri tek sevk paletinde birleştirecekseniz miktar girmeden önce Hedef LP Oluştur'a basın; mevcut LP'leri olduğu gibi sevk edecekseniz kullanmayın."
+                else
+                    "Hedef sevk paleti hazır; kaydettiğiniz miktarlar kaynak LP'lerden bu palete aktarılacak.",
+                fontSize = 11.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
         }
         BottomActionBar {
             val mainLp = h?.optString("mainLpNo").orEmpty()
-            OutlinedButton(
-                onClick = {
-                    scope.launch {
-                        busy = true
-                        if (mainLp.isBlank()) {
-                            status = "Sevk LP başlatılıyor..."
-                            val tpl = resolveLpTemplate(context, LpPurpose.PALLET)
-                            if (tpl == null) { busy = false; status = "HATA: Uygun sepet/palet şablonu bulunamadı."; return@launch }
-                            val r = BcApi.boundAction(context, "picks", no, "startShippingLP", JSONObject().apply { put("lpTemplateCode", tpl) }.toString())
-                            busy = false
-                            status = if (r.ok) "TAMAM: Sevk LP ${BcApi.scalarValue(r.body).trim()} başlatıldı; ürünler Toplamayı Kaydet sırasında kaynak LP'lerden aktarılacak."
-                                else QcErrorParser.friendlyStatus(BcApi.errorMessage(r.body), r.httpCode)
-                        } else {
-                            status = "Sevk LP kapatılıyor..."
-                            val r = BcApi.boundAction(context, "picks", no, "stopShippingLP", JSONObject().apply { put("lpNo", mainLp); put("printLabel", false) }.toString())
-                            busy = false
-                            status = if (r.ok) "TAMAM: Sevk LP $mainLp kapatıldı" else QcErrorParser.friendlyStatus(BcApi.errorMessage(r.body), r.httpCode)
+            Column(Modifier.weight(1f)) {
+                Text(
+                    if (mainLp.isBlank()) "Farklı LP'leri tek palette birleştirir" else "Toplanan ürünlerin hedef paleti",
+                    fontSize = 10.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                OutlinedButton(
+                    onClick = {
+                        scope.launch {
+                            busy = true
+                            if (mainLp.isBlank()) {
+                                status = "Yeni hedef sevk LP oluşturuluyor..."
+                                val tpl = resolveLpTemplate(context, LpPurpose.PALLET)
+                                if (tpl == null) { busy = false; status = "HATA: Uygun sepet/palet şablonu bulunamadı."; return@launch }
+                                val r = BcApi.boundAction(context, "picks", no, "startShippingLP", JSONObject().apply { put("lpTemplateCode", tpl) }.toString())
+                                busy = false
+                                status = if (r.ok) "TAMAM: Hedef Sevk LP ${BcApi.scalarValue(r.body).trim()} oluşturuldu; ürünler Toplamayı Kaydet sırasında kaynak LP'lerden aktarılacak."
+                                    else QcErrorParser.friendlyStatus(BcApi.errorMessage(r.body), r.httpCode)
+                            } else {
+                                status = "Hedef sevk LP kapatılıyor..."
+                                val r = BcApi.boundAction(context, "picks", no, "stopShippingLP", JSONObject().apply { put("lpNo", mainLp); put("printLabel", false) }.toString())
+                                busy = false
+                                status = if (r.ok) "TAMAM: Hedef Sevk LP $mainLp kapatıldı" else QcErrorParser.friendlyStatus(BcApi.errorMessage(r.body), r.httpCode)
+                            }
+                            reload()
                         }
-                        reload()
-                    }
-                },
-                enabled = !busy && canMutate,
-                modifier = Modifier.weight(1f).height(48.dp),
-            ) { Text(if (mainLp.isBlank()) "📦 Sevk LP Başlat" else "📦 LP Kapat ($mainLp)", fontSize = 13.sp) }
-            OutlinedButton(
-                onClick = {
-                    val open = lines.filter { it.optDouble("qtyOutstanding", 0.0) > 0.0 }
-                    when {
-                        open.isEmpty() -> status = "ℹ️ Eksik bildirilecek açık satır yok."
-                        else -> shortLine = open.first()
-                    }
-                },
-                enabled = !busy && canMutate,
-                modifier = Modifier.weight(1f).height(48.dp),
-            ) { Text("📉 Eksik Bildir", fontSize = 13.sp) }
+                    },
+                    enabled = !busy && canMutate,
+                    modifier = Modifier.fillMaxWidth().height(48.dp),
+                ) { Text(if (mainLp.isBlank()) "📦 Hedef LP Oluştur" else "📦 Hedef LP Kapat", fontSize = 13.sp) }
+            }
+            Column(Modifier.weight(1f)) {
+                Text("Açık satır için miktar bildirir", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                OutlinedButton(
+                    onClick = {
+                        val open = lines.filter { it.optDouble("qtyOutstanding", 0.0) > 0.0 }
+                        when {
+                            open.isEmpty() -> status = "ℹ️ Eksik bildirilecek açık satır yok."
+                            else -> shortLine = open.first()
+                        }
+                    },
+                    enabled = !busy && canMutate,
+                    modifier = Modifier.fillMaxWidth().height(48.dp),
+                ) { Text("📉 Eksik Bildir", fontSize = 13.sp) }
+            }
         }
         BottomActionBar {
             // "Bana Ata" kilitliyken de açık: devralma tek çıkış yolu. BC tarafı

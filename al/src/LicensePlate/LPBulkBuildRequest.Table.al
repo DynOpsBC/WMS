@@ -30,7 +30,7 @@ table 72008 "DOPSWHS LP Bulk Request"
         }
         field(40; "Bin Code"; Code[20])
         {
-            Caption = 'Bin Code';
+            Caption = 'Bin Code (blank = automatic)';
             DataClassification = CustomerContent;
             TableRelation = Bin.Code where("Location Code" = field("Location Code"));
         }
@@ -78,7 +78,6 @@ table 72008 "DOPSWHS LP Bulk Request"
         TestField("Source ILE No.");
         TestField("Template Code");
         TestField("Location Code");
-        TestField("Bin Code");
         TestField("LP Count");
         if "Quantity per LP" <= 0 then
             Error('LP başına miktar sıfırdan büyük olmalıdır.');

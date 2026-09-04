@@ -35,6 +35,24 @@ class BulkLpBuildWorkflowTest {
     }
 
     @Test
+    fun `blank bin requests automatic distribution across stock bins`() {
+        val requestId = "d2881548-a77f-43ef-ae09-b277671f7e22"
+        val payload = JSONObject(
+            ledgerBulkLpPayload("PALET", "", 10, 100.0, "ZPL01", false, requestId),
+        )
+        val pending = PendingLedgerBulkLpRequest(
+            entryNo = 4066,
+            expectedCount = 10,
+            printLabels = false,
+            requestId = requestId,
+            body = payload.toString(),
+        )
+
+        assertEquals("", payload.getString("binCode"))
+        assertEquals(pending, pendingLedgerBulkLpRequestFromJson(pendingLedgerBulkLpRequestJson(pending)))
+    }
+
+    @Test
     fun `ledger bulk creation only uses the idempotent action`() {
         assertEquals("createLicensePlatesIdempotent", LEDGER_BULK_LP_CREATE_ACTION)
     }
@@ -215,6 +233,14 @@ class BulkLpBuildWorkflowTest {
         assertEquals(
             "HATA: Seri numaralı ürünlerde her LP yalnızca 1 adet olabilir.",
             ledgerBulkLpFriendlyError("Seri takipli X maddesi yalnız 1 adetlik tek LP olarak oluşturulabilir.", 400),
+        )
+        assertEquals(
+            "HATA: Raflardaki stok toplamı yeterli görünse de seçtiğiniz LP miktarıyla tam paletlere ayrılamıyor. " +
+                "LP başı miktarı azaltın veya belirli bir raf okutarak o raftaki stoğu ayrı işlemde LP'leyin.",
+            ledgerBulkLpFriendlyError(
+                "AB.00118 ürününün raflara dağılmış LP'ye atanmamış stoku 1000 adettir ancak 100 adetlik 10 tam LP oluşturulamadı.",
+                400,
+            ),
         )
     }
 

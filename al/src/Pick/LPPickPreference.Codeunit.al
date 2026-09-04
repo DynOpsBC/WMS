@@ -107,6 +107,10 @@ codeunit 72439 "DOPSWHS LP Pick Preference"
         if not Result then
             exit;
         TempBinContent.SetFilter("Bin Code", PreferredFilter);
+        // GetBinContent normally leaves the temporary buffer in bin-ranking
+        // order.  The terminal promise is explicitly bin CODE order.
+        TempBinContent.SetCurrentKey("Location Code", "Bin Code", "Item No.", "Variant Code", "Unit of Measure Code");
+        TempBinContent.Ascending(true);
         Result := TempBinContent.FindFirst();
         if not Result then begin
             // Reservation/tracking can invalidate an LP candidate. Fall back to
@@ -127,6 +131,19 @@ codeunit 72439 "DOPSWHS LP Pick Preference"
                 exit;
             end;
         IsHandled := true;
+    end;
+
+    [EventSubscriber(ObjectType::Codeunit, Codeunit::"Create Pick", 'OnBeforeFindBWPickBin', '', false, false)]
+    local procedure SortBasicWarehousePickBinsByCode(var BinContent: Record "Bin Content"; var IsSetCurrentKeyHandled: Boolean)
+    begin
+        if ConfiguredShipmentNo = '' then
+            exit;
+        // Standard basic-warehouse picking can use bin ranking/default first.
+        // Override only while this manual subscriber is bound for a DOPSWHS
+        // shipment, so source quantity is consumed from the lowest bin code.
+        BinContent.SetCurrentKey("Location Code", "Bin Code", "Item No.", "Variant Code", "Unit of Measure Code");
+        BinContent.Ascending(true);
+        IsSetCurrentKeyHandled := true;
     end;
 
     /// <summary>Süzgeçteki rafların toplanabilir taban miktarı.</summary>
@@ -207,6 +224,7 @@ codeunit 72439 "DOPSWHS LP Pick Preference"
         LP: Record "DOPSWHS LP Header";
         LPLine: Record "DOPSWHS LP Line";
         BinContent: Record "Bin Content";
+        Bin: Record Bin;
         Item: Record Item;
         ItemUOM: Record "Item Unit of Measure";
         LPQtyByBin: Dictionary of [Text, Decimal];
@@ -280,11 +298,23 @@ codeunit 72439 "DOPSWHS LP Pick Preference"
                     until LPLine.Next() = 0;
             until LP.Next() = 0;
 
-        foreach BinCodeText in LPQtyByBin.Keys() do begin
+        // Dictionary key order is undefined.  Passing every eligible bin to
+        // Create Pick therefore let BC choose any combination (for example
+        // 1,880 from A.A01.12 + 4,000 from A.A02.11 although A.A01.11 alone
+        // held 5,880).  Walk the real Bin table by code and stop as soon as
+        // the shipment demand is covered.  The report is then physically
+        // unable to skip an earlier eligible LP bin for a later one.
+        Bin.SetRange("Location Code", LocationCode);
+        if ToBinCode <> '' then
+            Bin.SetFilter(Code, '<>%1', ToBinCode);
+        if Bin.FindSet() then
+            repeat
+                BinCodeText := Bin.Code;
+                if LPQtyByBin.ContainsKey(BinCodeText) then begin
             Clear(AvailableQtyBase);
             BinContent.Reset();
             BinContent.SetRange("Location Code", LocationCode);
-            BinContent.SetRange("Bin Code", CopyStr(BinCodeText, 1, MaxStrLen(BinContent."Bin Code")));
+                    BinContent.SetRange("Bin Code", Bin.Code);
             BinContent.SetRange("Item No.", ItemNo);
             BinContent.SetRange("Variant Code", VariantCode);
             if BinContent.FindSet() then
@@ -301,9 +331,10 @@ codeunit 72439 "DOPSWHS LP Pick Preference"
                     exit('');
                 EligibleTotalBase += EligibleQtyBase;
             end;
-        end;
+                end;
+            until (Bin.Next() = 0) or (EligibleTotalBase + QtyTolerance() >= RequiredQtyBase);
         // Do not prefer LP bins unless they cover the full shipment demand.
-        if EligibleTotalBase < RequiredQtyBase then
+        if EligibleTotalBase + QtyTolerance() < RequiredQtyBase then
             exit('');
         exit(FilterText);
     end;
