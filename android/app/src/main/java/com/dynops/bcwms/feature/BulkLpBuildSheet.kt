@@ -14,6 +14,7 @@ import androidx.compose.ui.unit.sp
 import com.dynops.bcwms.BcApi
 import com.dynops.bcwms.scanner.ScanField
 import com.dynops.bcwms.ui.StatusText
+import com.dynops.bcwms.ui.operatorFacingApiError
 import kotlinx.coroutines.launch
 import org.json.JSONArray
 import org.json.JSONObject
@@ -265,6 +266,29 @@ private fun lpQuantityText(value: String): String {
 private fun formatLpQuantity(value: Double): String =
     if (value == value.toLong().toDouble()) value.toLong().toString() else value.toString()
 
+/** Converts stock-allocation errors into a short instruction the operator can act on. */
+internal fun ledgerBulkLpFriendlyError(raw: String, httpCode: Int = 0): String = when {
+    raw.contains("izlemeli serbest stoku yetersizdir", ignoreCase = true) ||
+        raw.contains("LP'ye atanmamış serbest stoku yetersizdir", ignoreCase = true) ->
+        "HATA: Seçtiğiniz ürün veya lot bu rafta yeterli miktarda yok. " +
+            "Ürünün gerçekten bulunduğu rafı okutun. Ürün zaten bir LP içindeyse yeni LP oluşturmayın."
+
+    raw.contains("LP'ye ayrılabilir miktar", ignoreCase = true) ->
+        "HATA: Bu stok kaydında seçtiğiniz toplam kadar kullanılabilir ürün yok. " +
+            "LP adedini veya LP başı miktarı azaltın."
+
+    raw.contains("kullanılabilir miktar yoktur", ignoreCase = true) ->
+        "HATA: Bu stok kaydında LP yapılabilecek ürün kalmamış. Başka bir stok kaydı seçin."
+
+    raw.contains("seri takipli", ignoreCase = true) ->
+        "HATA: Seri numaralı ürünlerde her LP yalnızca 1 adet olabilir."
+
+    raw.contains("varyantlı stok için toplu LP oluşturma desteklenmiyor", ignoreCase = true) ->
+        "HATA: Varyantlı ürünler bu ekrandan toplu LP'ye ayrılamıyor."
+
+    else -> operatorFacingApiError(raw, httpCode)
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun BulkLpBuildSheet(
@@ -289,11 +313,11 @@ internal fun BulkLpBuildSheet(
         mutableStateOf(
             when {
                 restoredPending.blockedByUnreadableRecord ->
-                    "HATA: Önceki güvenli toplu LP isteğinin cihaz kaydı okunamadı. " +
-                        "Mükerrer LP oluşturmamak için yeni işlem engellendi; uygulama yöneticinize başvurun."
+                    "HATA: Önceki LP oluşturma denemesinin sonucu kontrol edilemiyor. " +
+                        "Yeni LP oluşturmayın; yöneticinizden işlemi kontrol etmesini isteyin."
                 restoredPending.request != null ->
-                    "UYARI: Son toplu LP isteğinin sonucu uygulama kapanmadan önce doğrulanamamış. " +
-                        "Aynı işlem kimliğiyle güvenli tekrar düğmesini kullanın."
+                    "UYARI: Önceki LP oluşturma denemesinin sonucu alınamadı. " +
+                        "Yeni işlem başlatmayın; aşağıdaki Önceki İşlemi Kontrol Et düğmesine basın."
                 else -> ""
             },
         )
@@ -348,13 +372,13 @@ internal fun BulkLpBuildSheet(
     fun findLedgerEntries() {
         val value = lookup.trim()
         if (value.isBlank()) {
-            status = "HATA: Madde numarası veya Madde Defter Giriş No girin."
+            status = "HATA: Ürün numarası veya stok kayıt numarası girin."
             return
         }
         scope.launch {
             busy = true
             selectedEntry = null
-            status = "Madde Defter Girişleri aranıyor..."
+            status = "Stok kayıtları aranıyor..."
             val filter = itemLedgerLookupFilter(value)
             var usingLegacyQuantityFallback = false
             var page = BcApi.getAllPages(context, itemLedgerLookupPath(filter, includeLpAllocationFields = true))
@@ -379,11 +403,11 @@ internal fun BulkLpBuildSheet(
                 )
             } else emptyList()
             status = when {
-                !page.complete -> "HATA: Madde Defter Girişlerinin tamamı alınamadı."
-                entries.isEmpty() -> "BOŞ: Kullanılabilir miktarı olan giriş bulunamadı."
+                !page.complete -> "HATA: Stok kayıtları alınamadı. Bağlantıyı kontrol edip tekrar deneyin."
+                entries.isEmpty() -> "BOŞ: LP yapılabilecek miktarı olan stok bulunamadı."
                 usingLegacyQuantityFallback ->
-                    "${entries.size} uygun giriş bulundu; kaynağı seçin. Eski BC paketi nedeniyle LP'ye ayrılabilir miktar ham kalan miktardan gösteriliyor."
-                else -> "${entries.size} uygun giriş bulundu; kaynağı seçin."
+                    "${entries.size} stok kaydı bulundu. Kullanacağınız kaydı seçin."
+                else -> "${entries.size} stok kaydı bulundu. Kullanacağınız kaydı seçin."
             }
         }
     }
@@ -417,7 +441,7 @@ internal fun BulkLpBuildSheet(
         busy = true
         scope.launch {
             val operation = if (requestToReplay != null) {
-                status = "Aynı işlem kimliğiyle sonuç güvenle doğrulanıyor..."
+                status = "Önceki işlem kontrol ediliyor..."
                 requestToReplay
             } else {
                 status = "LP'ler oluşturuluyor${if (shouldPrint) " ve etiketleniyor" else ""}..."
@@ -429,7 +453,7 @@ internal fun BulkLpBuildSheet(
                 )
                 if (!binPage.complete || binPage.rows.isEmpty()) {
                     busy = false
-                    status = "HATA: Lokasyon ve stok rafı eşleşmiyor."
+                    status = "HATA: Okuttuğunuz raf bu depoya ait değil. Doğru raf etiketini okutun."
                     return@launch
                 }
 
@@ -454,8 +478,8 @@ internal fun BulkLpBuildSheet(
                 busy = false
                 pendingRequest = if (requestToReplay == null) null else operation
                 uncertainOutcome = requestToReplay != null
-                status = "HATA: Güvenli işlem kimliği cihazda saklanamadı; sunucuya LP isteği gönderilmedi. " +
-                    "Cihaz depolamasını kontrol edip tekrar deneyin."
+                status = "HATA: İşlem bilgisi cihazda kaydedilemedi ve LP oluşturulmadı. " +
+                    "Uygulamayı kapatmadan tekrar deneyin; sorun sürerse yöneticinize bildirin."
                 return@launch
             }
             pendingRequest = operation
@@ -471,16 +495,16 @@ internal fun BulkLpBuildSheet(
             if (!result.ok) {
                 if (BcApi.isAmbiguousMutationFailure(result)) {
                     uncertainOutcome = true
-                    status = "UYARI: Sunucu cevabı alınamadı; LP'ler oluşturulmuş olabilir. " +
-                        "Yeni işlem göndermeyin. Aynı işlem kimliğiyle güvenli tekrar düğmesini kullanın."
+                    status = "UYARI: LP'lerin oluşup oluşmadığı kontrol edilemedi. " +
+                        "Yeni işlem başlatmayın; Önceki İşlemi Kontrol Et düğmesine basın."
                 } else {
                     PendingLedgerBulkLpStore.clear(context)
                     pendingRequest = null
                     uncertainOutcome = false
                     status = if (result.httpCode == 404 || result.httpCode == 405) {
-                        "HATA: Güvenli toplu LP servisi BC'ye henüz yayımlanmamış. Güncel AL paketini yayınlayın; eski servise dönüş yapılmadı."
+                        "HATA: Bu özellik BC tarafında henüz hazır değil. Yöneticinizden sistemi güncellemesini isteyin."
                     } else {
-                        "HATA: ${BcApi.errorMessage(result.body)} (HTTP ${result.httpCode})"
+                        ledgerBulkLpFriendlyError(BcApi.errorMessage(result.body), result.httpCode)
                     }
                 }
                 return@launch
@@ -488,8 +512,8 @@ internal fun BulkLpBuildSheet(
 
             val response = runCatching { JSONObject(BcApi.scalarValue(result.body)) }.getOrNull()
             if (response == null) {
-                status = "UYARI: Sunucu başarılı yanıt verdi ancak LP sonuçları okunamadı. " +
-                    "Yeni işlem göndermeyin; aynı işlem kimliğiyle güvenli tekrar düğmesini kullanın."
+                status = "UYARI: LP'lerin oluşup oluşmadığı kontrol edilemedi. " +
+                    "Yeni işlem başlatmayın; Önceki İşlemi Kontrol Et düğmesine basın."
                 uncertainOutcome = true
                 return@launch
             }
@@ -497,8 +521,8 @@ internal fun BulkLpBuildSheet(
             createdLpNos = List(array.length()) { index -> array.optString(index).trim() }.filter(String::isNotBlank)
             val created = response.optInt("createdCount")
             if (!validLedgerBulkLpResponse(operation.expectedCount, created, createdLpNos)) {
-                status = "UYARI: Sunucu $created LP bildirdi; yanıtta ${createdLpNos.size}/${operation.expectedCount} LP numarası var ancak liste doğrulanamadı. " +
-                    "Yeni işlem göndermeyin; aynı işlem kimliğiyle güvenli tekrar düğmesini kullanın."
+                status = "UYARI: Oluşan LP listesi eksik görünüyor. " +
+                    "Yeni işlem başlatmayın; Önceki İşlemi Kontrol Et düğmesine basın."
                 uncertainOutcome = true
                 return@launch
             }
@@ -509,8 +533,8 @@ internal fun BulkLpBuildSheet(
             failedPrintLpNos = List(failedArray.length()) { index -> failedArray.optString(index).trim() }
                 .filter(String::isNotBlank)
             if (!validFailedPrintLpResponse(failed, createdLpNos, failedPrintLpNos)) {
-                status = "UYARI: $created LP oluşturuldu ancak başarısız etiketlerin LP listesi doğrulanamadı. " +
-                    "Yeni işlem veya toplu baskı göndermeyin; aynı işlem kimliğiyle güvenli tekrar düğmesini kullanın."
+                status = "UYARI: LP'ler oluştu ancak bazı etiketlerin durumu kontrol edilemedi. " +
+                    "Yeni işlem başlatmayın; Önceki İşlemi Kontrol Et düğmesine basın."
                 uncertainOutcome = true
                 return@launch
             }
@@ -523,8 +547,8 @@ internal fun BulkLpBuildSheet(
                 printSkippedOnReplay = responsePrintSkipped,
             )
             if (replayState == LedgerBulkLpReplayState.Invalid) {
-                status = "UYARI: LP sonucu alındı ancak tekrar/baskı durumu doğrulanamadı. " +
-                    "Yeni işlem göndermeyin; LP listesini ve yazdırma kuyruğunu kontrol edin."
+                status = "UYARI: Etiketlerin durumu kontrol edilemedi. " +
+                    "LP listesini ve yazdırma sırasını kontrol edin."
                 uncertainOutcome = true
                 return@launch
             }
@@ -536,10 +560,10 @@ internal fun BulkLpBuildSheet(
             uncertainOutcome = false
             status = when (replayState) {
                 LedgerBulkLpReplayState.ReplayedWithPrintSkipped ->
-                    "TAMAM: Daha önce oluşturulan $created LP aynı işlem kimliğiyle doğrulandı. " +
-                        "Çift baskıyı önlemek için etiketler yeniden kuyruğa alınmadı; fiziksel etiketleri kontrol edip yalnız eksikleri listeden seçin."
+                    "TAMAM: Daha önce oluşturulan $created LP bulundu. " +
+                        "Aynı etiketi iki kez basmamak için etiketler yeniden gönderilmedi. Yalnızca eksik etiketleri LP listesinden yazdırın."
                 LedgerBulkLpReplayState.Replayed ->
-                    "TAMAM: Daha önce oluşturulan $created LP aynı işlem kimliğiyle güvenle doğrulandı."
+                    "TAMAM: Daha önce oluşturulan $created LP bulundu."
                 LedgerBulkLpReplayState.FirstExecution -> when {
                     operation.printLabels && failed > 0 ->
                         "UYARI: $created LP oluşturuldu; $printed etiket kuyruğa alındı, $failed etiket gönderilemedi. " +
@@ -556,7 +580,7 @@ internal fun BulkLpBuildSheet(
     com.dynops.bcwms.ui.SheetScaffold(onDismiss = { if (!busy) finish() }) {
         Text("Mevcut Stoktan Toplu LP", fontSize = 21.sp, fontWeight = FontWeight.Bold)
         Text(
-            "Madde Defter Girişi tek satır kalır; LP'ler ayrı kayıtlarda aynı girişe bağlanır.",
+            "LP'ler oluşturulur; stok miktarı ve stok hareketi değişmez.",
             fontSize = 12.sp,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
@@ -585,7 +609,7 @@ internal fun BulkLpBuildSheet(
         }
 
         ScanField(
-            "Madde No / Madde Defter Giriş No",
+            "Ürün No / Stok Kayıt No",
             lookup,
             { raw ->
                 val nextLookup = raw.trimStart()
@@ -602,15 +626,15 @@ internal fun BulkLpBuildSheet(
             onClick = { findLedgerEntries() },
             enabled = !busy && !uncertainOutcome && lookup.isNotBlank(),
             modifier = Modifier.fillMaxWidth(),
-        ) { Text(if (busy) "Aranıyor..." else "Girişleri Getir") }
+        ) { Text(if (busy) "Aranıyor..." else "Stokları Getir") }
 
         if (entries.isNotEmpty()) {
             Spacer(Modifier.height(10.dp))
-            Text("Kaynak Madde Defter Girişi", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+            Text("Kullanılacak Stok Kaydı", fontWeight = FontWeight.Bold, fontSize = 13.sp)
             if (entries.size > LEDGER_ENTRY_DISPLAY_LIMIT) {
                 Text(
-                    "Toplam ${entries.size} giriş bulundu; en yeni $LEDGER_ENTRY_DISPLAY_LIMIT giriş gösteriliyor. " +
-                        "Daha eski bir kayıt için Madde Defter Giriş No ile arayın.",
+                        "Çok fazla kayıt bulundu; yalnızca en yeni $LEDGER_ENTRY_DISPLAY_LIMIT kayıt gösteriliyor. " +
+                            "Daha eski bir kayıt için stok kayıt numarasıyla arayın.",
                     fontSize = 11.sp,
                     color = MaterialTheme.colorScheme.tertiary,
                 )
@@ -645,14 +669,14 @@ internal fun BulkLpBuildSheet(
                         Text("#${row.optInt("entryNo")} · ${row.optString("itemNo")}", fontWeight = FontWeight.Bold)
                         val rowAllocatableQuantity = ledgerLpAllocatableQuantity(row)
                         Text(
-                            "LP'ye ayrılabilir: ${formatLpQuantity(rowAllocatableQuantity)} " +
+                            "LP yapılabilecek: ${formatLpQuantity(rowAllocatableQuantity)} " +
                                 "${row.optString("baseUnitOfMeasure")} · ${row.optString("locationCode")}",
                             fontSize = 12.sp,
                         )
                         val detail = listOfNotNull(
                             row.optDouble("allocatedLpQuantity", 0.0)
                                 .takeIf { row.has("allocatedLpQuantity") && it > 0.0 }
-                                ?.let { "LP'lere ayrılmış ${formatLpQuantity(it)}" },
+                                ?.let { "Daha önce LP yapılan ${formatLpQuantity(it)}" },
                             row.optString("postingDate").takeIf(String::isNotBlank)?.let { "Tarih $it" },
                             row.optString("lotNo").takeIf(String::isNotBlank)?.let { "Lot $it" },
                             row.optString("serialNo").takeIf(String::isNotBlank)?.let { "Seri $it" },
@@ -702,11 +726,16 @@ internal fun BulkLpBuildSheet(
             )
             Spacer(Modifier.height(8.dp))
             ScanField(
-                "Stok Rafı (Bin)",
+                "Ürünün Bulunduğu Raf",
                 bin,
                 { bin = it.uppercase() },
                 modifier = Modifier.fillMaxWidth(),
                 enabled = inputsEnabled,
+            )
+            Text(
+                "Ürünün ve seçilen lotun gerçekten bulunduğu raf etiketini okutun.",
+                fontSize = 11.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             Spacer(Modifier.height(8.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -731,8 +760,8 @@ internal fun BulkLpBuildSheet(
                 )
             }
             Text(
-                "Toplam: ${formatLpQuantity(requestedQuantity)} / ${formatLpQuantity(allocatableQuantity)} " +
-                    entry.optString("baseUnitOfMeasure"),
+                "Oluşturulacak: ${formatLpQuantity(requestedQuantity)} · Kullanılabilir: " +
+                    "${formatLpQuantity(allocatableQuantity)} ${entry.optString("baseUnitOfMeasure")}",
                 fontSize = 12.sp,
                 color = if (requestedQuantity > allocatableQuantity) MaterialTheme.colorScheme.error
                 else MaterialTheme.colorScheme.onSurfaceVariant,
@@ -754,7 +783,7 @@ internal fun BulkLpBuildSheet(
                 enabled = !busy,
                 modifier = Modifier.fillMaxWidth(),
                 onClick = { pendingRequest?.let { submitBulkLp(it) } },
-            ) { Text(if (busy) "Doğrulanıyor..." else "Aynı İşlem Kimliğiyle Güvenle Tekrar Dene") }
+            ) { Text(if (busy) "Kontrol ediliyor..." else "Önceki İşlemi Kontrol Et") }
         } else {
             Button(
                 enabled = inputsEnabled && entry != null && template.isNotBlank() && bin.isNotBlank() && planValid,

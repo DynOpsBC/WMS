@@ -186,6 +186,39 @@ class BulkLpBuildWorkflowTest {
     }
 
     @Test
+    fun `tracked stock error tells operator to scan the actual bin`() {
+        val raw = "AB.00118 ürününün A.B01.17 rafındaki izlemeli serbest stoku yetersizdir " +
+            "(lot A101298, seri ). İzlemeli stok: 0, aktif LP miktarı: 0, istenen: 98.392."
+
+        val visible = ledgerBulkLpFriendlyError(raw, 400)
+
+        assertEquals(
+            "HATA: Seçtiğiniz ürün veya lot bu rafta yeterli miktarda yok. " +
+                "Ürünün gerçekten bulunduğu rafı okutun. Ürün zaten bir LP içindeyse yeni LP oluşturmayın.",
+            visible,
+        )
+        assertFalse(visible.contains("izlemeli"))
+        assertFalse(visible.contains("aktif LP miktarı"))
+        assertFalse(visible.contains("HTTP"))
+    }
+
+    @Test
+    fun `allocation errors give a simple corrective action`() {
+        assertEquals(
+            "HATA: Bu stok kaydında seçtiğiniz toplam kadar kullanılabilir ürün yok. " +
+                "LP adedini veya LP başı miktarı azaltın.",
+            ledgerBulkLpFriendlyError(
+                "3843 numaralı Madde Defter Girişinde LP'ye ayrılabilir miktar 80, istenen miktar 100'tür.",
+                400,
+            ),
+        )
+        assertEquals(
+            "HATA: Seri numaralı ürünlerde her LP yalnızca 1 adet olabilir.",
+            ledgerBulkLpFriendlyError("Seri takipli X maddesi yalnız 1 adetlik tek LP olarak oluşturulabilir.", 400),
+        )
+    }
+
+    @Test
     fun `bulk LP creation does not require a bin`() {
         val rows = commonLpQuantityDrafts(3, "0")
         val payload = JSONObject(bulkLpBuildPayload("MERKEZDEPO", "", rows))

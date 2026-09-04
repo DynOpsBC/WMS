@@ -7,6 +7,18 @@ Kurulum: [docs/android-install-guide.md](../../docs/android-install-guide.md)
 
 ---
 
+## v1.14.86 — BADE — 2026-09-04
+
+**versionCode:** 200086 · **BC paketi:** 1.14.1.17
+
+**BADE SHA-256:** `e12eaa7c40e2116efe3682b379942aaf8988293c64be0b713db0135ca5537dd0`
+
+### Toplu LP ekranında sade operatör dili
+
+- Teknik stok hata metinleri kaldırıldı; yanlış raf, yetersiz miktar ve mevcut LP stoku için doğrudan yapılacak işlem gösterilir.
+- “Madde Defter Girişi” ve “Bin” gibi alan adları operatör dilinde “stok kaydı” ve “ürünün bulunduğu raf” olarak sadeleştirildi.
+- Ağ cevabı alınamayan güvenli tekrar akışı, yeni LP oluşturmadan önce “Önceki İşlemi Kontrol Et” düğmesiyle anlaşılır hale getirildi.
+
 ## v1.14.85 — BADE — 2026-09-04
 
 **versionCode:** 200085 · **BC paketi:** 1.14.1.17
