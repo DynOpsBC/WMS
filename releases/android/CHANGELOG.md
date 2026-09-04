@@ -7,6 +7,17 @@ Kurulum: [docs/android-install-guide.md](../../docs/android-install-guide.md)
 
 ---
 
+## v1.14.93 — BADE — 2026-09-04
+
+**versionCode:** 200093 · **BC paketi:** 1.14.1.23
+
+### Tekli LP'yi kaynak madde defter girişine bağlama
+
+- Mevcut stoktan tek LP oluşturulduğunda LP artık seçilen kaynak Madde Defter Girişi numarasını saklar ve aynı satırın LP No. alanında görünür.
+- Bir giriş birden fazla LP'ye bölünürse Madde Defter Girişi yine tek satır kalır; LP'ler yalnız “LP No.ları” alanında listelenir, miktar ve stok hareketi değiştirilmez.
+- Önceden oluşturulmuş ve kaynak girişi bilinen LP'ler “LP Bilgisini Yenile” işlemiyle geriye dönük bağlanabilir.
+- Terminalde “Stoktan LP Oluştur” ile kaynak girişe bağlı LP, “Boş LP Oluştur” ile ilişkisiz boş taşıyıcı oluşturma seçenekleri ayrıldı.
+
 ## v1.14.92 — BADE — 2026-09-04
 
 **versionCode:** 200092 · **BC paketi:** 1.14.1.22

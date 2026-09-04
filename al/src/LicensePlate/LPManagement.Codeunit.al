@@ -5,7 +5,7 @@ codeunit 72040 "DOPSWHS LP Management"
         tabledata Item = R,
         tabledata "Item Unit of Measure" = R,
         tabledata "Item Tracking Code" = R,
-        tabledata "Item Ledger Entry" = R,
+        tabledata "Item Ledger Entry" = RM,
         tabledata Location = R,
         tabledata Bin = R,
         tabledata "Bin Content" = R,
@@ -181,6 +181,9 @@ codeunit 72040 "DOPSWHS LP Management"
                 RequestId, ItemLedgerEntryNo, TemplateCode, BinCode, LpCount,
                 QuantityPerLp, CreatedLpNos)
             then begin
+                // A request created by an older package may already have the
+                // exact LP-line source link but no visible ILE LP reference.
+                RefreshItemLedgerEntryLpReferences(ItemLedgerEntryNo);
                 Replayed := true;
                 exit;
             end;
@@ -234,12 +237,13 @@ codeunit 72040 "DOPSWHS LP Management"
         for Index := 1 to LpCount do begin
             SourceBinCode := SourceBinCodes.Get(Index);
             Build(TemplateCode, ItemLedgerEntry."Location Code", SourceBinCode, LPHeader);
-            if UseIdempotency then begin
+            if UseIdempotency then
                 LPHeader."Bulk Build Request ID" := RequestId;
-                LPHeader."Bulk Source ILE No." := ItemLedgerEntryNo;
-                LPHeader."Bulk Source Bin Code" := SourceBinCode;
-                LPHeader.Modify(true);
-            end;
+            // Source identity belongs on every stock-derived LP, including a
+            // one-LP request and the legacy non-idempotent API action.
+            LPHeader."Bulk Source ILE No." := ItemLedgerEntryNo;
+            LPHeader."Bulk Source Bin Code" := SourceBinCode;
+            LPHeader.Modify(true);
             AddLineFromBin(
                 LPHeader,
                 ItemLedgerEntry."Item No.",
@@ -276,6 +280,11 @@ codeunit 72040 "DOPSWHS LP Management"
             EnsureLooseStockAvailable(
                 ItemLedgerEntry."Location Code", SourceBinCode, ItemLedgerEntry."Item No.",
                 ItemLedgerEntry."Lot No.", ItemLedgerEntry."Serial No.", 0);
+
+        // Keep the standard Item Ledger Entry as exactly one unchanged stock
+        // movement.  Only our reference fields are refreshed: one active LP
+        // is shown in "LP No."; several LPs are shown in "LP No.leri".
+        RefreshItemLedgerEntryLpReferences(ItemLedgerEntryNo);
 
         if UseIdempotency then
             CompleteBulkBuildRequest(RequestId);
@@ -1341,6 +1350,50 @@ codeunit 72040 "DOPSWHS LP Management"
         if AllocatableQuantity < 0 then
             exit(0);
         exit(AllocatableQuantity);
+    end;
+
+    local procedure RefreshItemLedgerEntryLpReferences(ItemLedgerEntryNo: Integer)
+    var
+        ItemLedgerEntry: Record "Item Ledger Entry";
+        LPHeader: Record "DOPSWHS LP Header";
+        LPLine: Record "DOPSWHS LP Line";
+        SeenLpNos: Dictionary of [Code[20], Boolean];
+        LpNo: Code[20];
+        LpNosText: Text;
+        NewLpNo: Code[20];
+        NewLpNos: Text[250];
+    begin
+        ItemLedgerEntry.Get(ItemLedgerEntryNo);
+        LPLine.SetRange("Source Item Ledger Entry No.", ItemLedgerEntryNo);
+        LPLine.SetFilter(Quantity, '>0');
+        if LPLine.FindSet() then
+            repeat
+                if LPHeader.Get(LPLine."LP No.") then
+                    if LPHeader.Status in [LPHeader.Status::Open, LPHeader.Status::Built, LPHeader.Status::Assigned] then
+                        if not SeenLpNos.ContainsKey(LPHeader."No.") then
+                            SeenLpNos.Add(LPHeader."No.", true);
+            until LPLine.Next() = 0;
+
+        if SeenLpNos.Count() = 1 then
+            foreach LpNo in SeenLpNos.Keys() do
+                NewLpNo := LpNo
+        else
+            if SeenLpNos.Count() > 1 then begin
+                foreach LpNo in SeenLpNos.Keys() do begin
+                    if LpNosText <> '' then
+                        LpNosText += ', ';
+                    LpNosText += LpNo;
+                end;
+                NewLpNos := CopyStr(LpNosText, 1, MaxStrLen(NewLpNos));
+            end;
+
+        if (ItemLedgerEntry."DOPSWHS LP No." = NewLpNo) and
+           (ItemLedgerEntry."DOPSWHS LP Nos." = NewLpNos)
+        then
+            exit;
+        ItemLedgerEntry."DOPSWHS LP No." := NewLpNo;
+        ItemLedgerEntry."DOPSWHS LP Nos." := NewLpNos;
+        ItemLedgerEntry.Modify(false);
     end;
 
     local procedure LoadExistingBulkBuildRequest(RequestId: Guid; ItemLedgerEntryNo: Integer; TemplateCode: Code[20]; BinCode: Code[20]; LpCount: Integer; QuantityPerLp: Decimal; var CreatedLpNos: List of [Code[20]]): Boolean

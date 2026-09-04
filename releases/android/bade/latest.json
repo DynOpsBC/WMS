@@ -1,7 +1,7 @@
 {
-  "versionCode": 200092,
-  "versionName": "1.14.92-bade",
-  "apkUrl": "https://github.com/DynOpsBC/WMS/releases/download/android-v1.14.92/BCWMS-BADE-1.14.92-RELEASE.apk",
-  "sha256": "75f7baedb28a8ab0df0cfdc189ce4832ff32e965eb33aaf1be3e9e4469cea0e2",
-  "releaseNotes": "Raf sırasına göre toplama artık kaynağı gerçek raf kodu sırasından ayırır. Sevk LP düğmesi Hedef LP Oluştur olarak açıklığa kavuşturuldu. Geçmiş stok LP'lerinde raf boş bırakılırsa LP'ler gerçek stok raflarına otomatik dağıtılır; defter hareketleri değişmez."
+  "versionCode": 200093,
+  "versionName": "1.14.93-bade",
+  "apkUrl": "https://github.com/DynOpsBC/WMS/releases/download/android-v1.14.93/BCWMS-BADE-1.14.93-RELEASE.apk",
+  "sha256": "c72ccd8e5a209d08bf5619e1d0326962b7ae10356d6e9e9e62ff174c90247a7f",
+  "releaseNotes": "Stoktan oluşturulan tekli LP seçilen kaynak Madde Defter Girişiyle bağlanır. Birden fazla LP oluşturulsa da defter girişi tek satır kalır ve yalnız LP referansları güncellenir. Stoktan LP Oluştur ile Boş LP Oluştur seçenekleri ayrıldı."
 }

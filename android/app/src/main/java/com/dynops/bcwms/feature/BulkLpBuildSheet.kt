@@ -586,7 +586,7 @@ internal fun BulkLpBuildSheet(
     }
 
     com.dynops.bcwms.ui.SheetScaffold(onDismiss = { if (!busy) finish() }) {
-        Text("Mevcut Stoktan Toplu LP", fontSize = 21.sp, fontWeight = FontWeight.Bold)
+        Text("Mevcut Stoktan LP Oluştur", fontSize = 21.sp, fontWeight = FontWeight.Bold)
         Text(
             "LP'ler oluşturulur; stok miktarı ve stok hareketi değişmez.",
             fontSize = 12.sp,

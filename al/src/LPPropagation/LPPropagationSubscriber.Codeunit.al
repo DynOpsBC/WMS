@@ -482,6 +482,27 @@ codeunit 72428 "DOPSWHS LP Propagation"
     begin
         if ItemLedgerEntry.Quantity <= 0 then
             exit('');
+
+        // Stock-derived LPs carry the exact source entry number.  Prefer that
+        // identity before the legacy item/lot/location guess so an already
+        // created single LP can be repaired with "LP Bilgisini Yenile" even
+        // when the same item and lot also exist in other entries.
+        LPLine.SetRange("Source Item Ledger Entry No.", ItemLedgerEntry."Entry No.");
+        LPLine.SetFilter(Quantity, '>0');
+        if LPLine.FindSet() then
+            repeat
+                if LPHeader.Get(LPLine."LP No.") then
+                    if LPHeader.Status in [LPHeader.Status::Open, LPHeader.Status::Built, LPHeader.Status::Assigned] then
+                        if CandidateLpNo = '' then
+                            CandidateLpNo := LPLine."LP No."
+                        else
+                            if CandidateLpNo <> LPLine."LP No." then
+                                exit('');
+            until LPLine.Next() = 0;
+        if CandidateLpNo <> '' then
+            exit(CandidateLpNo);
+
+        LPLine.Reset();
         LPLine.SetRange("Item No.", ItemLedgerEntry."Item No.");
         LPLine.SetRange("Variant Code", ItemLedgerEntry."Variant Code");
         LPLine.SetRange("Lot No.", ItemLedgerEntry."Lot No.");

@@ -176,14 +176,14 @@ fun LicensePlateModule() {
     Column(Modifier.fillMaxSize().padding(12.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Button(onClick = { loadList() }, enabled = !loading) { WmsRefreshLabel(loading) }
-            Button(onClick = { showBuild = true }, enabled = !loading) {
-                WmsActionLabel(WmsGlyph.LICENSE_PLATE, "LP Oluştur")
+            Button(onClick = { showBulkBuild = true }, enabled = !loading) {
+                WmsActionLabel(WmsGlyph.LICENSE_PLATE, "Stoktan LP Oluştur")
             }
         }
         Spacer(Modifier.height(6.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            OutlinedButton(onClick = { showBulkBuild = true }, enabled = !loading, modifier = Modifier.weight(1f)) {
-                Text("Stoktan Toplu LP")
+            OutlinedButton(onClick = { showBuild = true }, enabled = !loading, modifier = Modifier.weight(1f)) {
+                Text("Boş LP Oluştur")
             }
             OutlinedButton(onClick = { printSelected() }, enabled = !loading && selectedForPrint.isNotEmpty(), modifier = Modifier.weight(1f)) {
                 Text("Seçilenleri Yazdır (${selectedForPrint.size})")
