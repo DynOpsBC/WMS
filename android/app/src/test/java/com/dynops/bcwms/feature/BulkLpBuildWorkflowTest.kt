@@ -197,10 +197,10 @@ class BulkLpBuildWorkflowTest {
     }
 
     @Test
-    fun `bulk LP count is capped at two hundred`() {
+    fun `bulk LP count is capped at the same one hundred limit as BC`() {
         assertTrue(commonLpQuantityDrafts(0, "1").isEmpty())
-        assertTrue(commonLpQuantityDrafts(201, "1").isEmpty())
-        assertEquals(200, commonLpQuantityDrafts(200, "1").size)
+        assertTrue(commonLpQuantityDrafts(101, "1").isEmpty())
+        assertEquals(100, commonLpQuantityDrafts(100, "1").size)
     }
 
     @Test

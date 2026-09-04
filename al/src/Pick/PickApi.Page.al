@@ -31,7 +31,7 @@ page 72092 "DOPSWHS Pick API"
                 field(vehicleNo; Rec."DOPSWHS Vehicle No.") { Caption = 'vehicleNo'; Editable = false; }
                 // Ana sepet: terminal toplamaya başlarken PATCH'ler; ekrandan
                 // çıkıp girince kaybolmasın diye kalıcı. Paketleme de okur.
-                field(mainLpNo; Rec."DOPSWHS Main LP No.") { Caption = 'mainLpNo'; }
+                field(mainLpNo; Rec."DOPSWHS Main LP No.") { Caption = 'mainLpNo'; Editable = false; }
                 field(sourceNo; SourceNo) { Caption = 'sourceNo'; }
                 field(status; StatusText) { Caption = 'status'; }
                 field(dueDate; DueDate) { Caption = 'dueDate'; }

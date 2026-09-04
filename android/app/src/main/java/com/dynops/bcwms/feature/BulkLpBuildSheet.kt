@@ -80,7 +80,7 @@ internal fun validBulkLpLocationSelection(
 ): Boolean = locationsComplete && locations.any { it.code.equals(locationCode.trim(), ignoreCase = true) }
 
 internal fun commonLpQuantityDrafts(count: Int, quantity: String): List<BulkLpBuildDraft> =
-    if (count !in 1..200) emptyList()
+    if (count !in 1..100) emptyList()
     else List(count) { index -> BulkLpBuildDraft(index + 1, quantity) }
 
 internal fun bulkLpBuildPayload(locationCode: String, binCode: String, drafts: List<BulkLpBuildDraft>): String =
@@ -595,7 +595,7 @@ internal fun BulkLpBuildSheet(
             fontWeight = FontWeight.Bold,
         )
         Text(
-            "LP'ler oluşturulur; stok miktarı ve stok hareketi değişmez.",
+            "Toplam stok değişmez. Ürün birden fazla raftaysa sistem LP'yi doldurmak için gerekli raf hareketini birlikte kaydeder.",
             fontSize = 12.sp,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
@@ -748,8 +748,8 @@ internal fun BulkLpBuildSheet(
                 enabled = inputsEnabled,
             )
             Text(
-                "Boş bırakırsanız sistem aynı ürün ve lotun bulunduğu raflara LP'leri otomatik dağıtır. " +
-                    "Tek raf kullanmak isterseniz raf etiketini okutun.",
+                "Boş bırakırsanız sistem aynı ürün ve lotun bulunduğu rafları kod sırasıyla kullanır ve her LP'yi gerçek hedef rafına kaydeder. " +
+                    "Yalnız tek raftaki stoğu kullanmak isterseniz raf etiketini okutun.",
                 fontSize = 11.sp,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -782,6 +782,13 @@ internal fun BulkLpBuildSheet(
                 color = if (requestedQuantity > allocatableQuantity) MaterialTheme.colorScheme.error
                 else MaterialTheme.colorScheme.onSurfaceVariant,
             )
+            if (lpCount != null && lpCount !in 1..100) {
+                Text(
+                    "Tek işlemde en fazla 100 LP oluşturabilirsiniz.",
+                    fontSize = 12.sp,
+                    color = MaterialTheme.colorScheme.error,
+                )
+            }
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Checkbox(
                     checked = printLabels,
@@ -805,7 +812,7 @@ internal fun BulkLpBuildSheet(
                 enabled = inputsEnabled && entry != null && template.isNotBlank() && planValid,
                 modifier = Modifier.fillMaxWidth(),
                 onClick = { submitBulkLp() },
-            ) { Text(if (busy) "İşleniyor..." else "LP'leri Oluştur") }
+            ) { Text(if (busy) "İşleniyor..." else if (singleLpMode) "Tekli LP'yi Oluştur" else "LP'leri Oluştur") }
         }
         Spacer(Modifier.height(24.dp))
     }

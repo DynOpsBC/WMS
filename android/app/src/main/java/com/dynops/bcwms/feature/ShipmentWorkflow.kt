@@ -136,6 +136,10 @@ internal fun parsePickSourceOptions(json: String): List<PickSourceOption> {
     }
 }
 
+/** A successful endpoint must return an actual JSON array, including an empty array. */
+internal fun validPickSourceOptionsPayload(json: String): Boolean =
+    runCatching { JSONArray(json.trim()); true }.getOrDefault(false)
+
 /** Depo ekranında 1000.0 yerine 1000 görünsün. */
 internal fun formatPickQty(value: Double): String =
     if (value == value.toLong().toDouble()) value.toLong().toString()

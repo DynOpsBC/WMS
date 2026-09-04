@@ -134,6 +134,15 @@ class ShipmentWorkflowTest {
     }
 
     @Test
+    fun `successful source option response must be a real array`() {
+        assertTrue(validPickSourceOptionsPayload("[]"))
+        assertTrue(validPickSourceOptionsPayload(sample))
+        assertFalse(validPickSourceOptionsPayload(""))
+        assertFalse(validPickSourceOptionsPayload("not json"))
+        assertFalse(validPickSourceOptionsPayload("{\"value\":[]}"))
+    }
+
+    @Test
     fun `missing optional fields default without throwing`() {
         val opts = parsePickSourceOptions("""[{"lpNo":"LP000030"}]""")
 

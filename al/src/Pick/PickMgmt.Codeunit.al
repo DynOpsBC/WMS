@@ -210,6 +210,17 @@ codeunit 72046 "DOPSWHS Pick Mgmt"
         EffectiveTemplateCode: Code[20];
     begin
         EnsurePick(Pick);
+        // Ağ yanıtı kaybolup terminal aynı isteği tekrar gönderirse ikinci bir
+        // boş sevk LP'si üretme. Başlığı kilit altında yenileyip mevcut hedefi
+        // aynen döndür; böylece pick üzerinde tek bir hedef LP kalır.
+        Pick.LockTable();
+        Pick.Get(Pick.Type::Pick, Pick."No.");
+        if Pick."DOPSWHS Main LP No." <> '' then begin
+            if not LP.Get(Pick."DOPSWHS Main LP No.") then
+                Error('Toplama %1 üzerindeki sevk LP %2 bulunamadı.', Pick."No.", Pick."DOPSWHS Main LP No.");
+            ValidateLPForPick(LP, Pick, true);
+            exit(LP."No.");
+        end;
         EffectiveTemplateCode := TemplateCode;
         if EffectiveTemplateCode = '' then
             EffectiveTemplateCode := 'PALLET-EUR';
@@ -237,8 +248,15 @@ codeunit 72046 "DOPSWHS Pick Mgmt"
         LPMgt: Codeunit "DOPSWHS LP Management";
     begin
         EnsurePick(Pick);
+        Pick.LockTable();
+        Pick.Get(Pick.Type::Pick, Pick."No.");
+        if Pick."DOPSWHS Main LP No." <> LpNo then
+            Error('%1 LP numarası %2 toplamasının hedef sevk LP''si değildir.', LpNo, Pick."No.");
         LP.Get(LpNo);
-        ValidateLPForPick(LP, Pick, false);
+        ValidateLPForPick(LP, Pick, true);
+        // Başarılı cevabı alamayan terminalin güvenli tekrarına izin ver.
+        if LP.Status = LP.Status::Built then
+            exit(LP.SSCC);
         LPMgt.Stop(LP, PrintLabel, PrinterId);
         Log('Pick.StopShippingLP', Pick."No.", Pick."Assigned User ID");
         exit(LP.SSCC);
@@ -654,6 +672,7 @@ codeunit 72046 "DOPSWHS Pick Mgmt"
             Error(PickCancelHandledErr, LockedPick."No.");
 
         PickNo := LockedPick."No.";
+        CleanupUnusedMainShippingLp(LockedPick);
         LockedPick.Delete(true);
 
         // Özel toplama grubu bu standart pick'e bağlıysa tekrar oluşturulabilsin.
@@ -718,6 +737,7 @@ codeunit 72046 "DOPSWHS Pick Mgmt"
         PickLine.SetRange("No.", Pick."No.");
         if PickLine.FindFirst() then begin
             MovePickedContentsToMainLp(Pick);
+            CompleteMainShippingLp(Pick);
             PreparePackingOrders(Pick);
             WhseActivityRegister.Run(PickLine);
             PickingHeader.SetRange("Warehouse Pick No.", PickNo);
@@ -728,6 +748,65 @@ codeunit 72046 "DOPSWHS Pick Mgmt"
                     PickingHeader.Modify(true);
                 until PickingHeader.Next() = 0;
         end;
+    end;
+
+    /// <summary>
+    /// Hedef sevk LP'si Toplamayı Kaydet işleminin aynı transaction'ında
+    /// tamamlanır. Operatörün ayrıca boş LP'yi önceden kapatması gerekmez;
+    /// kayıt başarısız olursa içerik ve LP durumu birlikte geri alınır.
+    /// </summary>
+    local procedure CompleteMainShippingLp(Pick: Record "Warehouse Activity Header")
+    var
+        LP: Record "DOPSWHS LP Header";
+        PickLine: Record "Warehouse Activity Line";
+        WhseShipmentLine: Record "Warehouse Shipment Line";
+        LPMgt: Codeunit "DOPSWHS LP Management";
+    begin
+        if Pick."DOPSWHS Main LP No." = '' then
+            exit;
+        LP.Get(Pick."DOPSWHS Main LP No.");
+        if LP.Status = LP.Status::Open then
+            LPMgt.Stop(LP, false)
+        else
+            if LP.Status <> LP.Status::Built then
+                Error('%1 hedef sevk LP''si tamamlanamaz. Mevcut durum: %2.', LP."No.", LP.Status);
+
+        // İçerik aktarılırken LP henüz açık olduğundan SSCC boş olabilir.
+        // Kapatıldıktan sonra ilgili bütün sevkiyat satırlarına kesin değeri yaz.
+        PickLine.SetRange("Activity Type", Pick.Type);
+        PickLine.SetRange("No.", Pick."No.");
+        PickLine.SetRange("Action Type", PickLine."Action Type"::Take);
+        PickLine.SetRange("Whse. Document Type", PickLine."Whse. Document Type"::Shipment);
+        if PickLine.FindSet() then
+            repeat
+                if WhseShipmentLine.Get(PickLine."Whse. Document No.", PickLine."Whse. Document Line No.") then
+                    if (WhseShipmentLine."LP No." <> LP."No.") or (WhseShipmentLine.SSCC <> LP.SSCC) then begin
+                        WhseShipmentLine."LP No." := LP."No.";
+                        WhseShipmentLine.SSCC := LP.SSCC;
+                        WhseShipmentLine.Modify(true);
+                    end;
+            until PickLine.Next() = 0;
+    end;
+
+    /// <summary>
+    /// Kaydedilmeden iptal edilen pick'in boş hedef LP'sini aktif bırakmaz.
+    /// İçerik varsa veri kaybetmemek için iptali açık hatayla durdurur.
+    /// </summary>
+    local procedure CleanupUnusedMainShippingLp(Pick: Record "Warehouse Activity Header")
+    var
+        LP: Record "DOPSWHS LP Header";
+        LPLine: Record "DOPSWHS LP Line";
+        LPMgt: Codeunit "DOPSWHS LP Management";
+    begin
+        if Pick."DOPSWHS Main LP No." = '' then
+            exit;
+        if not LP.Get(Pick."DOPSWHS Main LP No.") then
+            exit;
+        LPLine.SetRange("LP No.", LP."No.");
+        if not LPLine.IsEmpty() then
+            Error('%1 sevk LP''sinde ürün bulunduğu için toplama iptal edilemez.', LP."No.");
+        if LP.Status in [LP.Status::Open, LP.Status::Built] then
+            LPMgt.Unbuild(LP);
     end;
 
     /// <summary>

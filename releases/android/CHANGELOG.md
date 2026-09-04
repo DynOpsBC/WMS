@@ -7,6 +7,18 @@ Kurulum: [docs/android-install-guide.md](../../docs/android-install-guide.md)
 
 ---
 
+## v1.14.97 — BADE — 2026-09-05
+
+**versionCode:** 200097 · **BC paketi:** 1.14.1.27
+
+### LP işlemlerini güvenli ve tek adımlı tamamlama
+
+- Hedef sevk LP'nin içeriği artık “Toplamayı Kaydet” sırasında kaynak LP'lerden aktarılır; LP aynı işlemde kapatılır ve SSCC bilgisi sevkiyat satırına yazılır.
+- Aynı isteğin yeniden gönderilmesi mükerrer hedef LP oluşturmaz; pick iptal edilirse içi boş hedef LP aktif bırakılmaz.
+- Kaynak palet servisi gerçek bir hata veya geçersiz yanıt döndürürse sistem yanlış paletlerle sessizce devam etmez.
+- Toplu LP ekranı sunucudaki 100 LP sınırıyla eşitlendi ve çok raflı dağıtım açıklamaları sadeleştirildi.
+- BADE sürümünün yerel varsayılanı güncellendi; ek derleme parametresi olmadan da doğru APK sürümü üretilir.
+
 ## v1.14.95 — BADE — 2026-09-04
 
 **versionCode:** 200095 · **BC paketi:** 1.14.1.25

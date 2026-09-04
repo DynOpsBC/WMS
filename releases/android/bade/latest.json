@@ -1,7 +1,7 @@
 {
-  "versionCode": 200096,
-  "versionName": "1.14.96-bade",
-  "apkUrl": "https://github.com/DynOpsBC/WMS/releases/download/android-v1.14.96/BCWMS-BADE-1.14.96-RELEASE.apk",
-  "sha256": "e40713158b694d24e881fda76222339848c07c49516af5e5aa9a3d49424ab8b3",
-  "releaseNotes": "Çok raflı stok raf seçmeden LP'lere dağıtılır ve LP gerçek hedef rafına atanır. Tekli stok LP'si seçilen Madde Defter Girişine bağlanır. Toplu LP tamamlama hatası giderildi; sevk LP yönlendirmeleri ve hata mesajları sadeleştirildi."
+  "versionCode": 200097,
+  "versionName": "1.14.97-bade",
+  "apkUrl": "https://github.com/DynOpsBC/WMS/releases/download/android-v1.14.97/BCWMS-BADE-1.14.97-RELEASE.apk",
+  "sha256": "7f59c1de61900e7060f2d241e8ca3d80f34a19353c1dab365568ea8bbe04b8f6",
+  "releaseNotes": "Hedef sevk LP içeriği Toplamayı Kaydet sırasında aktarılır, LP aynı işlemde kapatılır ve tekrar denemeler mükerrer LP oluşturmaz. Pick iptalinde boş hedef LP aktif kalmaz. Kaynak palet yanıtı hatalıysa yanlış paletlerle devam edilmez. Toplu LP sınırı ve BADE yerel sürüm numarası düzeltildi."
 }

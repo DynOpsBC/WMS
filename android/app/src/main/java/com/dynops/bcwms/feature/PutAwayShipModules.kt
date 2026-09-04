@@ -1905,7 +1905,7 @@ private fun WhsePickDocument(no: String, onBack: () -> Unit) {
             val mainLp = h?.optString("mainLpNo").orEmpty()
             Column(Modifier.weight(1f)) {
                 Text(
-                    if (mainLp.isBlank()) "Kısmi miktarları yeni LP'de birleştir" else "Yeni sevk LP'sini tamamla",
+                    if (mainLp.isBlank()) "Kısmi miktarları yeni LP'de birleştir" else "Toplamayı Kaydet ile içeriği aktarılır",
                     fontSize = 10.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -1922,17 +1922,15 @@ private fun WhsePickDocument(no: String, onBack: () -> Unit) {
                                 status = if (r.ok) "TAMAM: Hedef Sevk LP ${BcApi.scalarValue(r.body).trim()} oluşturuldu; ürünler Toplamayı Kaydet sırasında kaynak LP'lerden aktarılacak."
                                     else QcErrorParser.friendlyStatus(BcApi.errorMessage(r.body), r.httpCode)
                             } else {
-                                status = "Hedef sevk LP kapatılıyor..."
-                                val r = BcApi.boundAction(context, "picks", no, "stopShippingLP", JSONObject().apply { put("lpNo", mainLp); put("printLabel", false) }.toString())
                                 busy = false
-                                status = if (r.ok) "TAMAM: Hedef Sevk LP $mainLp kapatıldı" else QcErrorParser.friendlyStatus(BcApi.errorMessage(r.body), r.httpCode)
+                                status = "TAMAM: $mainLp hedef sevk LP hazır. Miktarları girip Toplamayı Kaydet'e basın; içerik o anda aktarılacak."
                             }
                             reload()
                         }
                     },
                     enabled = !busy && canMutate,
                     modifier = Modifier.fillMaxWidth().height(48.dp),
-                ) { Text(if (mainLp.isBlank()) "📦 Yeni Sevk LP" else "📦 Sevk LP'yi Kapat", fontSize = 13.sp) }
+                ) { Text(if (mainLp.isBlank()) "📦 Yeni Sevk LP" else "📦 Sevk LP Hazır", fontSize = 13.sp) }
             }
             Column(Modifier.weight(1f)) {
                 Text("Açık satır için miktar bildirir", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -2327,7 +2325,18 @@ private fun ShipDocument(no: String, onBack: () -> Unit, onPickCreated: (String)
             // Önce aday paletleri sor. Eski paket bu action'ı tanımıyorsa sessizce
             // eski davranışa düşülür (aşağıdaki shouldFallbackToLegacyCreatePick).
             val opts = BcApi.boundAction(context, "shipments", no, "pickSourceOptions")
-            val options = if (opts.ok) parsePickSourceOptions(BcApi.scalarValue(opts.body)) else emptyList()
+            if (!opts.ok && !shouldFallbackToLegacyCreatePick(opts.httpCode, opts.body)) {
+                busy = false
+                status = QcErrorParser.friendlyStatus(BcApi.errorMessage(opts.body), opts.httpCode)
+                return@launch
+            }
+            val rawOptions = if (opts.ok) BcApi.scalarValue(opts.body) else "[]"
+            if (opts.ok && !validPickSourceOptionsPayload(rawOptions)) {
+                busy = false
+                status = "HATA: Kaynak palet listesi eksik geldi. Yanlış raftan toplama açılmadı; yenileyip tekrar deneyin."
+                return@launch
+            }
+            val options = parsePickSourceOptions(rawOptions)
             if (opts.ok && pickLpChoiceNeeded(options.size)) {
                 busy = false
                 status = if (combinedLpPickRequired(options))
