@@ -7,6 +7,16 @@ Kurulum: [docs/android-install-guide.md](../../docs/android-install-guide.md)
 
 ---
 
+## v1.14.90 — BADE — 2026-09-04
+
+**versionCode:** 200090 · **BC paketi:** 1.14.1.20
+
+### Mal kabul kayıt hatasının gerçek nedenini gösterme
+
+- “Kaydet” sırasında BC'nin reddettiği iş kuralı artık yalnız REF koduyla gizlenmez; teknik ekler temizlenerek gerçek neden aynı hata kutusunda gösterilir.
+- Sipariş ve mal kabul lokasyonu uyuşmazlığı sade Türkçe yönlendirmeye çevrilir.
+- Başarısız kayıtta mal kabul ve LP içeriği yine oluşturulmaz; bu değişiklik yalnız hata açıklamasını iyileştirir.
+
 ## v1.14.89 — BADE — 2026-09-04
 
 **versionCode:** 200089 · **BC paketi:** 1.14.1.20

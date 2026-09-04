@@ -85,4 +85,29 @@ class ReceivingWorkflowTest {
         assertTrue(status.orEmpty().contains("belge ve LP kaydedilmedi"))
         assertNull(missingReceiptPostBackendStatus(400, "Posting date is required"))
     }
+
+    @Test
+    fun `receipt post exposes actionable unknown BC validation instead of only ref`() {
+        val status = receiptPostFailureStatus(
+            "Warehouse handling is required for this item. CorrelationId: 12345678-1234-1234-1234-123456789012.",
+            400,
+        )
+
+        assertTrue(status.contains("Mal kabul kaydedilmedi"))
+        assertTrue(status.contains("Warehouse handling is required for this item"))
+        assertFalse(status.contains("CorrelationId"))
+        assertFalse(status.contains("REF-"))
+    }
+
+    @Test
+    fun `receipt post translates purchase and receipt location mismatch`() {
+        val status = receiptPostFailureStatus(
+            "Location Code must be equal to '' in Purchase Line: No.=X. Current value is 'MERKEZDEPO'.",
+            400,
+        )
+
+        assertTrue(status.contains("lokasyonu uyuşmuyor"))
+        assertTrue(status.contains("beklenen: boş"))
+        assertTrue(status.contains("mevcut: MERKEZDEPO"))
+    }
 }

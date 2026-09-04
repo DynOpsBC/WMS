@@ -661,7 +661,7 @@ private fun ReceiveDocument(no: String, onBack: () -> Unit) {
                     busy = false
                     status = if (r.ok) "TAMAM: Mal kabul kaydedildi."
                         else missingReceiptPostBackendStatus(r.httpCode, r.body)
-                            ?: QcErrorParser.friendlyStatus(BcApi.errorMessage(r.body), r.httpCode)
+                            ?: receiptPostFailureStatus(BcApi.errorMessage(r.body), r.httpCode)
                     if (r.ok) { touched = emptySet(); reload() }
                 }
             },

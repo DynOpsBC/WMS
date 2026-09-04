@@ -1,5 +1,7 @@
 package com.dynops.bcwms.feature
 
+import com.dynops.bcwms.ui.operatorFacingApiError
+
 /**
  * Eski BC uzantisinda bound action gercekten yoksa PATCH uyumluluk yoluna dus.
  * Her 400 yanitinda fallback yapmak; yetki, kilit veya is kurali hatasini farkli
@@ -35,6 +37,53 @@ internal fun missingReceiptPostBackendStatus(httpCode: Int, responseBody: String
         ).any(body::contains))
     if (!missingHttpAction) return null
     return "HATA: Mal kabul kaydı için BCWMS BC paketi 1.14.1.20 kurulmalı; belge ve LP kaydedilmedi."
+}
+
+/**
+ * Mal kabul postunda genel REF mesaji tek basina desteklenebilir degil. Bilinen
+ * hatalari normal operator cevirisinden gecir; bilinmeyen BC dogrulamasinda ise
+ * teknik ekleri temizleyip yalniz eyleme donuk ilk mesaji goster.
+ */
+internal fun receiptPostFailureStatus(raw: String, httpCode: Int): String {
+    val normal = operatorFacingApiError(raw, httpCode)
+    if (!normal.contains("İşlem tamamlanamadı", ignoreCase = true) &&
+        !normal.contains("Islem tamamlanamadi", ignoreCase = true)
+    ) return normal
+
+    val reason = receiptPostReason(raw) ?: return normal
+    return "HATA: Mal kabul kaydedilmedi. Neden: $reason"
+}
+
+private fun receiptPostReason(raw: String): String? {
+    val cleaned = raw
+        .replace(Regex("""\s*CorrelationId:\s*[0-9a-fA-F-]+\.?""", RegexOption.IGNORE_CASE), "")
+        .replace(Regex("""\s*Internal_ServerError\s*""", RegexOption.IGNORE_CASE), " ")
+        .replace(Regex("""\s*Bad Request\s*""", RegexOption.IGNORE_CASE), " ")
+        .replace(Regex("""\s{2,}"""), " ")
+        .trim()
+        .removePrefix("HATA:")
+        .trim()
+    if (cleaned.isBlank() || cleaned.startsWith("{")) return null
+
+    Regex(
+        """Location Code must be equal to '([^']*)'.*Current value is '([^']*)'""",
+        RegexOption.IGNORE_CASE,
+    ).find(cleaned)?.let {
+        val expected = it.groupValues[1].ifBlank { "boş" }
+        val current = it.groupValues[2].ifBlank { "boş" }
+        return "Sipariş ve mal kabul lokasyonu uyuşmuyor (beklenen: $expected, mevcut: $current). BC'de sipariş satırının lokasyonunu düzeltin."
+    }
+    if (cleaned.contains("Location Code must have a value", ignoreCase = true))
+        return "Sipariş satırında lokasyon boş. BC'de satır lokasyonunu doldurun."
+
+    return cleaned
+        .lineSequence()
+        .firstOrNull { it.isNotBlank() }
+        ?.substringBefore(" Stack trace", missingDelimiterValue = cleaned)
+        ?.substringBefore(" at Microsoft.", missingDelimiterValue = cleaned)
+        ?.take(320)
+        ?.trim()
+        ?.takeIf { it.isNotBlank() }
 }
 
 internal fun receivingPreflightFailureStatus(resetCount: Int): String =
