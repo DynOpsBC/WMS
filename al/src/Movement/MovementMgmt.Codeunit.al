@@ -92,6 +92,7 @@ codeunit 72045 "DOPSWHS Movement Mgmt"
         ItemJournalTemplate: Record "Item Journal Template";
         ItemJournalLine: Record "Item Journal Line";
         ItemJnlPostBatch: Codeunit "Item Jnl.-Post Batch";
+        LPMgt: Codeunit "DOPSWHS LP Management";
         Telemetry: Codeunit "DOPSWHS Telemetry";
         CustomDimensions: Dictionary of [Text, Text];
         BatchName: Code[10];
@@ -123,6 +124,14 @@ codeunit 72045 "DOPSWHS Movement Mgmt"
         end;
         if (SerialNo <> '') and (Qty <> 1) then
             Error('%1 seri numarası tek bir temel birimi temsil eder; hareket miktarı 1 olmalıdır.', SerialNo);
+
+        // Ürün bazlı ad-hoc hareket hangi fiziksel LP'nin seçildiğini söylemez.
+        // Bu nedenle yalnız LP'ye atanmamış serbest stok taşınabilir. Aksi halde
+        // BC raf miktarını düşürürken LP başlığı kaynak rafta kalır ve palet
+        // kendiliğinden bölünmüş gibi tutarsız bir görünüm oluşur.
+        if LpNo = '' then
+            LPMgt.EnsureLooseStockAvailable(
+                LocationCode, FromBinCode, ItemNo, LotNo, SerialNo, Qty);
 
         // Yönlendirilmiş (Directed Put-away and Pick) lokasyonda Item Journal
         // bin taşıyamaz — post adjustment bin'den (W-99-...) geçer ve raf

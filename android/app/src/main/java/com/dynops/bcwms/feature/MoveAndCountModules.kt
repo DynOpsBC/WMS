@@ -561,6 +561,12 @@ fun AdHocMoveModule() {
                 }
             }
         } else {
+            Text(
+                "Bu mod yalnız LP'ye atanmamış serbest stoku taşır. Rafta LP varsa “LP ile” modundan taşıyacağınız LP'yi seçin; sistem LP'yi otomatik bölmez.",
+                fontSize = 12.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Spacer(Modifier.height(8.dp))
             ScanField("Kaynak Bin", fromBin, {
                 if (it != fromBin) invalidateAvailableLots()
                 fromBin = it

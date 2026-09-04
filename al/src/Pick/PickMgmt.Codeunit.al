@@ -700,6 +700,7 @@ codeunit 72046 "DOPSWHS Pick Mgmt"
         PickLine.SetRange("Activity Type", Pick.Type);
         PickLine.SetRange("No.", Pick."No.");
         if PickLine.FindFirst() then begin
+            MovePickedContentsToMainLp(Pick);
             PreparePackingOrders(Pick);
             WhseActivityRegister.Run(PickLine);
             PickingHeader.SetRange("Warehouse Pick No.", PickNo);
@@ -710,6 +711,84 @@ codeunit 72046 "DOPSWHS Pick Mgmt"
                     PickingHeader.Modify(true);
                 until PickingHeader.Next() = 0;
         end;
+    end;
+
+    /// <summary>
+    /// A shipping LP is the physical result of picking, not an empty label. For
+    /// every handled Take line, split the quantity from its source LP into the
+    /// main/shipping LP (or add it from loose stock), then make the shipment line
+    /// point to that LP. Shipment posting will therefore consume the new LP while
+    /// the source pallet keeps only its unpicked remainder.
+    /// </summary>
+    local procedure MovePickedContentsToMainLp(Pick: Record "Warehouse Activity Header")
+    var
+        PickLine: Record "Warehouse Activity Line";
+        PlaceLine: Record "Warehouse Activity Line";
+        ShippingLP: Record "DOPSWHS LP Header";
+        WhseShipmentLine: Record "Warehouse Shipment Line";
+        LPMgt: Codeunit "DOPSWHS LP Management";
+    begin
+        if Pick."DOPSWHS Main LP No." = '' then
+            exit;
+        ShippingLP.Get(Pick."DOPSWHS Main LP No.");
+
+        PickLine.SetRange("Activity Type", Pick.Type);
+        PickLine.SetRange("No.", Pick."No.");
+        PickLine.SetRange("Action Type", PickLine."Action Type"::Take);
+        PickLine.SetFilter("Qty. to Handle (Base)", '>0');
+        if not PickLine.FindSet(true) then
+            exit;
+        repeat
+            FindRelatedPlaceLineForShippingLp(PickLine, PlaceLine);
+            LPMgt.TransferPickedQuantity(
+                PickLine."LP No.", ShippingLP."No.", Pick."No.", PickLine."Line No.",
+                PickLine."Whse. Document No.", PickLine."Item No.", PickLine."Variant Code", PickLine."Unit of Measure Code",
+                PickLine."Qty. to Handle", PickLine."Qty. to Handle (Base)",
+                PickLine."Lot No.", PickLine."Serial No.", PickLine."Bin Code", PlaceLine."Bin Code");
+
+            PickLine."Target LP No." := ShippingLP."No.";
+            PickLine.Modify(true);
+            PlaceLine."LP No." := ShippingLP."No.";
+            PlaceLine."Target LP No." := ShippingLP."No.";
+            PlaceLine.Modify(true);
+
+            if (PickLine."Whse. Document Type" = PickLine."Whse. Document Type"::Shipment) and
+               WhseShipmentLine.Get(PickLine."Whse. Document No.", PickLine."Whse. Document Line No.")
+            then begin
+                WhseShipmentLine."LP No." := ShippingLP."No.";
+                WhseShipmentLine.SSCC := ShippingLP.SSCC;
+                WhseShipmentLine.Modify(true);
+            end;
+        until PickLine.Next() = 0;
+    end;
+
+    local procedure FindRelatedPlaceLineForShippingLp(PickLine: Record "Warehouse Activity Line"; var PlaceLine: Record "Warehouse Activity Line")
+    begin
+        PlaceLine.Reset();
+        PlaceLine.SetRange("Activity Type", PickLine."Activity Type");
+        PlaceLine.SetRange("No.", PickLine."No.");
+        PlaceLine.SetRange("Action Type", PlaceLine."Action Type"::Place);
+        PlaceLine.SetRange("Whse. Document Type", PickLine."Whse. Document Type");
+        PlaceLine.SetRange("Whse. Document No.", PickLine."Whse. Document No.");
+        PlaceLine.SetRange("Whse. Document Line No.", PickLine."Whse. Document Line No.");
+        PlaceLine.SetRange("Source No.", PickLine."Source No.");
+        PlaceLine.SetRange("Source Line No.", PickLine."Source Line No.");
+        PlaceLine.SetRange("Source Subline No.", PickLine."Source Subline No.");
+        PlaceLine.SetRange("Item No.", PickLine."Item No.");
+        PlaceLine.SetRange("Variant Code", PickLine."Variant Code");
+        PlaceLine.SetRange("Unit of Measure Code", PickLine."Unit of Measure Code");
+        PlaceLine.SetRange("Breakbulk No.", PickLine."Breakbulk No.");
+        PlaceLine.SetTrackingFilterFromWhseActivityLine(PickLine);
+        if PlaceLine.FindFirst() then
+            exit;
+
+        PlaceLine.SetRange("Lot No.");
+        PlaceLine.SetRange("Serial No.");
+        if PlaceLine.Count() <> 1 then
+            Error(
+                '%1 toplamasındaki %2 satırı için sevk LP hedef satırı bulunamadı.',
+                PickLine."No.", PickLine."Line No.");
+        PlaceLine.FindFirst();
     end;
 
     local procedure EnsureTakeAndPlaceQuantitiesBalanced(Pick: Record "Warehouse Activity Header")

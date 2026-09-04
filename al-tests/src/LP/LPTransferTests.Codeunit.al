@@ -113,6 +113,42 @@ codeunit 72114 "DOPSWHS LP Transfer Tests"
     end;
 
     [Test]
+    procedure PickSplitMovesOnlyShippedQtyIntoNewLp()
+    var
+        SourceLP: Record "DOPSWHS LP Header";
+        ShippingLP: Record "DOPSWHS LP Header";
+        ShippingLine: Record "DOPSWHS LP Line";
+        SourceLine: Record "DOPSWHS LP Line";
+        LPMgt: Codeunit "DOPSWHS LP Management";
+        Assert: Codeunit "Library Assert";
+    begin
+        Seed();
+        BuildLPWithLine(SourceLP, 10, SourceLine);
+        LPMgt.Assign(SourceLP, Enum::"DOPSWHS Assigned Doc Type"::WhseShipment, 'SHIP-1');
+        LPMgt.Build('CARTON-S', 'BLUE', '', ShippingLP);
+
+        LPMgt.TransferPickedQuantity(
+            SourceLP."No.", ShippingLP."No.", 'PICK-1', 10000, 'SHIP-1',
+            'ITEMY', '', 'PCS', 4, 4, '', '', 'PICK', 'STAGE');
+
+        ShippingLP.Get(ShippingLP."No.");
+        SourceLP.Get(SourceLP."No.");
+        Assert.AreEqual(6, GetLPQty(SourceLP."No."), 'The source LP must keep the unpicked remainder.');
+        Assert.AreEqual(SourceLP.Status::Built, SourceLP.Status, 'The source LP remainder must be released for later work.');
+        Assert.AreEqual(4, GetLPQty(ShippingLP."No."), 'The shipping LP must receive only the picked quantity.');
+        Assert.AreEqual('STAGE', ShippingLP."Bin Code", 'The shipping LP must follow the pick Place bin.');
+
+        ShippingLine.SetRange("LP No.", ShippingLP."No.");
+        ShippingLine.FindFirst();
+        LPMgt.ConsumeLineForShipment(ShippingLP."No.", ShippingLine."Line No.", 4, 'POSTED-SHIP-1');
+
+        ShippingLP.Get(ShippingLP."No.");
+        Assert.AreEqual(0, GetLPQty(ShippingLP."No."), 'Shipment posting must consume the new shipping LP.');
+        Assert.AreEqual(6, GetLPQty(SourceLP."No."), 'Shipment posting must not consume the source LP a second time.');
+        Assert.AreEqual(ShippingLP.Status::Used, ShippingLP.Status, 'The fully shipped LP must become used.');
+    end;
+
+    [Test]
     procedure EmptyBuiltLpMoveUpdatesHeaderBin()
     var
         LP: Record "DOPSWHS LP Header";

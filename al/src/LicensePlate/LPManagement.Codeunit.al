@@ -459,6 +459,169 @@ codeunit 72040 "DOPSWHS LP Management"
         OnAfterTransfer(SourceLP, TargetLP);
     end;
 
+    /// <summary>
+    /// Moves the quantity physically picked from a source LP into the shipping LP.
+    /// The standard warehouse pick posts the real bin movement; this procedure only
+    /// keeps the two LP contents in step with that movement, so it must run in the
+    /// same transaction as pick registration.
+    /// </summary>
+    procedure TransferPickedQuantity(SourceLpNo: Code[20]; TargetLpNo: Code[20]; PickNo: Code[20]; PickLineNo: Integer; WhseDocumentNo: Code[20]; ItemNo: Code[20]; VariantCode: Code[10]; PickUom: Code[10]; PickQty: Decimal; PickQtyBase: Decimal; LotNo: Code[50]; SerialNo: Code[50]; SourceBinCode: Code[20]; TargetBinCode: Code[20])
+    var
+        SourceLP: Record "DOPSWHS LP Header";
+        TargetLP: Record "DOPSWHS LP Header";
+        SourceLine: Record "DOPSWHS LP Line";
+        TargetLine: Record "DOPSWHS LP Line";
+        TargetBin: Record Bin;
+        Item: Record Item;
+        ItemUoM: Record "Item Unit of Measure";
+        QtyPerUoM: Decimal;
+        AvailableBaseQty: Decimal;
+        TransferBaseQty: Decimal;
+        TransferQty: Decimal;
+        RemainingBaseQty: Decimal;
+        RelatedDocument: Code[40];
+    begin
+        if TargetLpNo = '' then
+            Error('Sevk LP numarası zorunludur.');
+        if PickQtyBase <= 0 then
+            exit;
+
+        TargetLP.LockTable();
+        TargetLP.Get(TargetLpNo);
+        if not (TargetLP.Status in [TargetLP.Status::Open, TargetLP.Status::Built, TargetLP.Status::Assigned]) then
+            Error('%1 sevk LP numarası aktif değildir. Mevcut durum: %2.', TargetLP."No.", TargetLP.Status);
+        if (TargetLP.Status = TargetLP.Status::Assigned) and
+           ((TargetLP."Assigned Document Type" <> TargetLP."Assigned Document Type"::WhsePick) or
+            (TargetLP."Assigned Document No." <> PickNo))
+        then
+            Error('%1 sevk LP numarası başka bir belgeye atanmıştır.', TargetLP."No.");
+        TargetLP.TestField("Location Code");
+        if TargetBinCode = '' then
+            Error('%1 sevk LP numarası için hedef raf bulunamadı.', TargetLP."No.");
+        if not TargetBin.Get(TargetLP."Location Code", TargetBinCode) then
+            Error('%1 hedef rafı %2 lokasyonunda bulunamadı.', TargetBinCode, TargetLP."Location Code");
+        if TargetLP."Bin Code" = '' then begin
+            TargetLP.Validate("Bin Code", TargetBinCode);
+            TargetLP.Modify(true);
+        end else
+            if TargetLP."Bin Code" <> TargetBinCode then
+                Error(
+                    '%1 sevk LP numarası %2 rafındadır; aynı LP %3 rafına da yerleştirilemez.',
+                    TargetLP."No.", TargetLP."Bin Code", TargetBinCode);
+
+        RelatedDocument := CopyStr('PICK:' + PickNo + ':' + Format(PickLineNo), 1, MaxStrLen(RelatedDocument));
+
+        // Loose stock has no source LP to split. It still has to be recorded in
+        // the shipping LP so shipment posting consumes the container actually sent.
+        if SourceLpNo = '' then begin
+            TargetLine.Init();
+            TargetLine."LP No." := TargetLP."No.";
+            TargetLine.Validate("Item No.", ItemNo);
+            TargetLine."Variant Code" := VariantCode;
+            TargetLine."Unit of Measure" := PickUom;
+            TargetLine.Validate(Quantity, PickQty);
+            TargetLine."Lot No." := LotNo;
+            TargetLine."Serial No." := SerialNo;
+            TargetLine."Source Bin Code" := SourceBinCode;
+            TargetLine."Source Document Type" := TargetLine."Source Document Type"::WhsePick;
+            TargetLine."Source Document No." := PickNo;
+            TargetLine."Source Document Line No." := PickLineNo;
+            TargetLine."Source Document Quantity" := PickQty;
+            TargetLine.Insert(true);
+            WriteToLedger(TargetLP, LPActionTransferIn(), SourceBinCode, TargetBinCode, PickQty, ItemNo, LotNo + SerialNo, RelatedDocument);
+            exit;
+        end;
+
+        if SourceLpNo = TargetLpNo then
+            Error('Kaynak LP ile sevk LP aynı olamaz: %1.', SourceLpNo);
+        SourceLP.Get(SourceLpNo);
+        if not (SourceLP.Status in [SourceLP.Status::Open, SourceLP.Status::Built, SourceLP.Status::Assigned]) then
+            Error('%1 kaynak LP numarası aktif değildir. Mevcut durum: %2.', SourceLP."No.", SourceLP.Status);
+        if (SourceLP.Status = SourceLP.Status::Assigned) and
+           not (((SourceLP."Assigned Document Type" = SourceLP."Assigned Document Type"::WhsePick) and
+                 (SourceLP."Assigned Document No." = PickNo)) or
+                ((SourceLP."Assigned Document Type" = SourceLP."Assigned Document Type"::WhseShipment) and
+                 (SourceLP."Assigned Document No." = WhseDocumentNo)))
+        then
+            Error('%1 kaynak LP numarası başka bir belgeye atanmıştır.', SourceLP."No.");
+        if SourceLP."Location Code" <> TargetLP."Location Code" then
+            Error(
+                'Kaynak LP %1 ile sevk LP %2 aynı lokasyonda olmalıdır.',
+                SourceLP."No.", TargetLP."No.");
+        if SourceLP."Bin Code" <> SourceBinCode then
+            Error(
+                '%1 kaynak LP numarası artık %2 rafındadır; pick satırındaki %3 rafından bölünemez.',
+                SourceLP."No.", SourceLP."Bin Code", SourceBinCode);
+
+        Item.Get(ItemNo);
+        RemainingBaseQty := PickQtyBase;
+        SourceLine.SetRange("LP No.", SourceLP."No.");
+        SourceLine.SetRange("Item No.", ItemNo);
+        SourceLine.SetRange("Variant Code", VariantCode);
+        SourceLine.SetRange("Lot No.", LotNo);
+        SourceLine.SetRange("Serial No.", SerialNo);
+        SourceLine.SetFilter(Quantity, '>0');
+        if SourceLine.FindSet(true) then
+            repeat
+                QtyPerUoM := 1;
+                if (SourceLine."Unit of Measure" <> '') and
+                   (SourceLine."Unit of Measure" <> Item."Base Unit of Measure")
+                then begin
+                    if not ItemUoM.Get(ItemNo, SourceLine."Unit of Measure") then
+                        Error('%1 maddesinin %2 ölçü birimi bulunamadı.', ItemNo, SourceLine."Unit of Measure");
+                    QtyPerUoM := ItemUoM."Qty. per Unit of Measure";
+                    if QtyPerUoM <= 0 then
+                        Error('%1 maddesinin %2 ölçü birimi dönüşümü geçersizdir.', ItemNo, SourceLine."Unit of Measure");
+                end;
+
+                AvailableBaseQty := Round(SourceLine.Quantity * QtyPerUoM, 0.00001);
+                TransferBaseQty := AvailableBaseQty;
+                if TransferBaseQty > RemainingBaseQty then
+                    TransferBaseQty := RemainingBaseQty;
+                TransferQty := Round(TransferBaseQty / QtyPerUoM, 0.00001);
+                if TransferQty > 0 then begin
+                    TargetLine.Init();
+                    TargetLine."LP No." := TargetLP."No.";
+                    TargetLine.Validate("Item No.", SourceLine."Item No.");
+                    TargetLine."Variant Code" := SourceLine."Variant Code";
+                    TargetLine."Unit of Measure" := SourceLine."Unit of Measure";
+                    TargetLine.Validate(Quantity, TransferQty);
+                    TargetLine."Lot No." := SourceLine."Lot No.";
+                    TargetLine."Serial No." := SourceLine."Serial No.";
+                    TargetLine."Package No." := SourceLine."Package No.";
+                    TargetLine."Expiration Date" := SourceLine."Expiration Date";
+                    TargetLine."Source Bin Code" := SourceLP."Bin Code";
+                    TargetLine."Source Document Type" := TargetLine."Source Document Type"::WhsePick;
+                        TargetLine."Source Document No." := PickNo;
+                        TargetLine."Source Document Line No." := PickLineNo;
+                        TargetLine."Source Document Quantity" := TransferQty;
+                        TargetLine."Source Item Ledger Entry No." := SourceLine."Source Item Ledger Entry No.";
+                        TargetLine.Insert(true);
+
+                    SourceLine.Validate(Quantity, Round(SourceLine.Quantity - TransferQty, 0.00001));
+                    if SourceLine.Quantity = 0 then
+                        SourceLine.Delete(true)
+                    else
+                        SourceLine.Modify(true);
+
+                    WriteToLedger(SourceLP, LPActionTransferOut(), SourceBinCode, TargetBinCode, TransferQty, ItemNo, LotNo + SerialNo, RelatedDocument);
+                    WriteToLedger(TargetLP, LPActionTransferIn(), SourceBinCode, TargetBinCode, TransferQty, ItemNo, LotNo + SerialNo, RelatedDocument);
+                    RemainingBaseQty := Round(RemainingBaseQty - TransferBaseQty, 0.00001);
+                end;
+            until (SourceLine.Next() = 0) or (RemainingBaseQty <= 0.00001);
+
+        if RemainingBaseQty > 0.00001 then
+            Error(
+                '%1 kaynak LP numarasında %2 ürünü ve lot %3 için toplanan %4 miktar bulunamadı.',
+                SourceLP."No.", ItemNo, LotNo, PickQty);
+
+        // The shipment now owns the newly created shipping LP. Any remainder on
+        // the source pallet must be free for the next operation instead of
+        // staying reserved to the pick/shipment that already removed its share.
+        if SourceLP.Status = SourceLP.Status::Assigned then
+            Release(SourceLP);
+    end;
+
     procedure Unbuild(var LP: Record "DOPSWHS LP Header")
     var
         LPLine: Record "DOPSWHS LP Line";
@@ -654,7 +817,12 @@ codeunit 72040 "DOPSWHS LP Management"
         Ledger.Insert(true);
     end;
 
-    local procedure EnsureLooseStockAvailable(LocationCode: Code[10]; BinCode: Code[20]; ItemNo: Code[20]; LotNo: Code[50]; SerialNo: Code[50]; RequiredBaseQty: Decimal)
+    /// <summary>
+    /// Verifies that a quantity belongs to loose bin stock rather than an active LP.
+    /// Product-based ad-hoc moves call this before posting so an unspecified pallet
+    /// can never be split implicitly. Explicit LP moves use MoveToBin instead.
+    /// </summary>
+    procedure EnsureLooseStockAvailable(LocationCode: Code[10]; BinCode: Code[20]; ItemNo: Code[20]; LotNo: Code[50]; SerialNo: Code[50]; RequiredBaseQty: Decimal)
     var
         BinContent: Record "Bin Content";
         WarehouseEntry: Record "Warehouse Entry";
@@ -723,12 +891,12 @@ codeunit 72040 "DOPSWHS LP Management"
            ((TrackedQtyBase - AllocatedTrackedQtyBase) < RequiredBaseQty)
         then
             Error(
-                'Insufficient unassigned tracked stock for item %1 in bin %2 (lot %3, serial %4). Tracked stock: %5, already assigned: %6, requested: %7.',
+                '%1 ürününün %2 rafındaki izlemeli serbest stoku yetersizdir (lot %3, seri %4). İzlemeli stok: %5, aktif LP miktarı: %6, istenen: %7. LP içindeki stok kendiliğinden bölünemez; ilgili LP''yi açıkça seçin.',
                 ItemNo, BinCode, LotNo, SerialNo, TrackedQtyBase, AllocatedTrackedQtyBase, RequiredBaseQty);
 
         if (BinQtyBase - AllocatedQtyBase) < RequiredBaseQty then
             Error(
-                'Insufficient unassigned stock for item %1 in bin %2. Bin stock: %3, already assigned to active LPs: %4, requested: %5.',
+                '%1 ürününün %2 rafındaki LP''ye atanmamış serbest stoku yetersizdir. Raf stoku: %3, aktif LP miktarı: %4, istenen: %5. LP içindeki stok kendiliğinden bölünemez; terminalde "LP ile" modunu kullanıp taşınacak LP''yi seçin.',
                 ItemNo, BinCode, BinQtyBase, AllocatedQtyBase, RequiredBaseQty);
     end;
 
