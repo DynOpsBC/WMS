@@ -7,6 +7,18 @@ Kurulum: [docs/android-install-guide.md](../../docs/android-install-guide.md)
 
 ---
 
+## v1.14.82 — BADE — 2026-09-04
+
+**versionCode:** 200082 · **BC paketi:** 1.14.1.14
+
+**BADE SHA-256:** `e76645ff09ad70196c67e81a0aff65da4c9db5d4a6a9b2edc5e92a7bdb559b5c`
+
+### Ad-hoc harekette LP bütünlüğü · bekleyen sevkiyat ve yazıcı düzeltmeleri
+
+- “Ürün ile” ad-hoc hareket artık yalnız LP'ye atanmamış serbest raf stokunu taşıyabilir; aktif LP içindeki miktar seçimsiz olarak başka rafa taşınıp LP'yi kendiliğinden bölemez.
+- LP stoku taşınacaksa terminal açık bir hata mesajıyla “LP ile” moduna yönlendirir; seçilen LP tüm içeriği ve başlığıyla atomik taşınır.
+- Bekleyen sevkiyat/toplama LP aktarımı ile yazıcı ajanı ilk kurulum iyileştirmeleri de bu sürüme dahil edildi.
+
 ## v1.14.81 — BADE — 2026-09-04
 
 **versionCode:** 200081 · **BC paketi:** 1.14.1.13

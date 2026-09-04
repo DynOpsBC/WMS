@@ -66,3 +66,8 @@ licensing-service/package-lock.json
 # (27 APK = 805 MB, .git 512 MB'a cikmisti). Yayinlanan surumler GitHub
 # Releases'e yuklenir. Bilerek eklemek gerekirse: git add -f <dosya>
 releases/**/*.apk
+
+# GitHub Release hazırlama çıktıları yerelde tutulur; yayınlanan dosyalar release
+# asset'idir. Aynı AL paketinin .app kopyası repoda sürümlü olarak ayrıca bulunur.
+build/release-*/
+releases/al/*.zip
