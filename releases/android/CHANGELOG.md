@@ -7,6 +7,18 @@ Kurulum: [docs/android-install-guide.md](../../docs/android-install-guide.md)
 
 ---
 
+## v1.14.95 — BADE — 2026-09-04
+
+**versionCode:** 200095 · **BC paketi:** 1.14.1.25
+
+### LP'li mal kabulü standart defter kaydından ayırma
+
+- Boş başlayan mal kabul LP'sinin ürün ve miktarı “LP + Kaydet” öncesinde yalnız taslak olarak tutulur; başarılı kayıttan sonra gerçek Madde Defter Girişine bağlanır.
+- Satın alma Madde Defter Girişine LP referansı, standart BC postu devam ederken değil post tamamlandıktan sonra kesin kayıt ilişkisi üzerinden yazılır.
+- Bu sayede LP bilgisi standart mal kabul kaydıyla çakışmaz; defter satırı ve miktarı değiştirilmez.
+- LP satırına gerçek kaynak Madde Defter Girişi numarası da kaydedilir; “LP Bilgisini Yenile” işlemi kesin bağlantıyı kullanabilir.
+- Ürün içermeyen genel seçenek “Boş Taşıyıcı (ürünsüz)” olarak adlandırıldı; ancak mal kabulde kullanılan boş LP kayıt başarılı olduğunda ürüne ve stok girişine bağlanır.
+
 ## v1.14.94 — BADE — 2026-09-04
 
 **versionCode:** 200094 · **BC paketi:** 1.14.1.24

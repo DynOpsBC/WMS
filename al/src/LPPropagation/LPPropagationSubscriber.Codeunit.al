@@ -30,7 +30,8 @@ codeunit 72428 "DOPSWHS LP Propagation"
         tabledata "Warehouse Shipment Header" = RM,
         tabledata "Warehouse Shipment Line" = R,
         tabledata "Registered Whse. Activity Line" = R,
-        tabledata "Whse. Item Entry Relation" = R;
+        tabledata "Whse. Item Entry Relation" = R,
+        tabledata "DOPSWHS LP Line" = RM;
 
     // =========================================================================
     // (1) Synchronous helpers — invoked from DOPSWHS Receipt/Shipment Mgmt
@@ -288,8 +289,13 @@ codeunit 72428 "DOPSWHS LP Propagation"
                     PostedLine."No.", PostedLine."Line No.", true);
                 if WhseItemEntryRelation.FindSet() then
                     repeat
-                        if ItemLedgerEntry.Get(WhseItemEntryRelation."Item Entry No.") then
+                        if ItemLedgerEntry.Get(WhseItemEntryRelation."Item Entry No.") then begin
+                            StampReceiptLpSourceEntry(
+                                WhseReceiptNo, ReceiptLineNo,
+                                PostedLine."Item No.", PostedLine."Variant Code",
+                                ItemLedgerEntry."Entry No.");
                             StampInboundItemLedgerEntryLpList(ItemLedgerEntry, LineLpNos);
+                        end;
                     until WhseItemEntryRelation.Next() = 0;
             end else
                 if LineLpNo <> '' then begin
@@ -300,11 +306,37 @@ codeunit 72428 "DOPSWHS LP Propagation"
                     PostedLine."No.", PostedLine."Line No.", true);
                 if WhseItemEntryRelation.FindSet() then
                     repeat
-                        if ItemLedgerEntry.Get(WhseItemEntryRelation."Item Entry No.") then
+                        if ItemLedgerEntry.Get(WhseItemEntryRelation."Item Entry No.") then begin
+                            StampReceiptLpSourceEntry(
+                                WhseReceiptNo, ReceiptLineNo,
+                                PostedLine."Item No.", PostedLine."Variant Code",
+                                ItemLedgerEntry."Entry No.");
                             StampItemLedgerEntry(ItemLedgerEntry, LineLpNo);
+                        end;
                     until WhseItemEntryRelation.Next() = 0;
                 end;
         until PostedLine.Next() = 0;
+    end;
+
+    local procedure StampReceiptLpSourceEntry(WhseReceiptNo: Code[20]; WhseReceiptLineNo: Integer; ItemNo: Code[20]; VariantCode: Code[10]; ItemLedgerEntryNo: Integer)
+    var
+        LPLine: Record "DOPSWHS LP Line";
+    begin
+        if (WhseReceiptNo = '') or (ItemLedgerEntryNo = 0) then
+            exit;
+        LPLine.SetRange("Source Document Type", LPLine."Source Document Type"::WhseReceipt);
+        LPLine.SetRange("Source Document No.", WhseReceiptNo);
+        LPLine.SetRange("Source Document Line No.", WhseReceiptLineNo);
+        LPLine.SetRange("Item No.", ItemNo);
+        LPLine.SetRange("Variant Code", VariantCode);
+        LPLine.SetFilter(Quantity, '>0');
+        if LPLine.FindSet(true) then
+            repeat
+                if LPLine."Source Item Ledger Entry No." <> ItemLedgerEntryNo then begin
+                    LPLine."Source Item Ledger Entry No." := ItemLedgerEntryNo;
+                    LPLine.Modify(false);
+                end;
+            until LPLine.Next() = 0;
     end;
 
     local procedure ResolveReceiptLpNosText(WhseReceiptNo: Code[20]; WhseReceiptLineNo: Integer; ItemNo: Code[20]; VariantCode: Code[10]; var LpCount: Integer): Text[250]
@@ -648,6 +680,13 @@ codeunit 72428 "DOPSWHS LP Propagation"
         Lp: Code[20];
     begin
         if ItemLedgerEntry."DOPSWHS LP No." <> '' then
+            exit;
+        // Warehouse receipt posting must remain a standard BC inventory
+        // transaction.  Updating a newly inserted purchase entry from this
+        // event can collide with tenant posting subscribers. Receipt Mgmt
+        // stamps the exact LP(s) immediately after posting through the posted
+        // receipt -> item entry relation, in the same outer transaction.
+        if ItemLedgerEntry."Entry Type" = ItemLedgerEntry."Entry Type"::Purchase then
             exit;
         Lp := ItemJournalLine."DOPSWHS LP No.";
         if Lp = '' then

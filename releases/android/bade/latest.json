@@ -1,7 +1,7 @@
 {
-  "versionCode": 200094,
-  "versionName": "1.14.94-bade",
-  "apkUrl": "https://github.com/DynOpsBC/WMS/releases/download/android-v1.14.94/BCWMS-BADE-1.14.94-RELEASE.apk",
-  "sha256": "c9ff49f776cc6eb4e164cc949dd91b039f98af6bf65bf62ae9f3f9d52da86caf",
-  "releaseNotes": "Raf boşken çok raflı toplu LP oluşturmanın son adımda geri alınmasına neden olan işlem kaydı kontrolü düzeltildi. 100.000 adetlik stok 10 x 10.000 LP olarak uygun raflara dağıtılabilir; defter satırı ve stok miktarı değişmez."
+  "versionCode": 200095,
+  "versionName": "1.14.95-bade",
+  "apkUrl": "https://github.com/DynOpsBC/WMS/releases/download/android-v1.14.95/BCWMS-BADE-1.14.95-RELEASE.apk",
+  "sha256": "cf8a0b5253e348c6ac96146cd179b6024e705ad6c18e82320eda5a61bb1148be",
+  "releaseNotes": "LP'li mal kabul standart BC postundan ayrıldı: boş başlayan LP başarılı LP + Kaydet işleminden sonra gerçek Madde Defter Girişine bağlanır, stok satırı ve miktarı değiştirilmez. Ürünsüz genel seçenek artık Boş Taşıyıcı olarak açıkça gösterilir."
 }

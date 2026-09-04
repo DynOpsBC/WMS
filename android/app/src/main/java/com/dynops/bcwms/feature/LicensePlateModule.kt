@@ -183,7 +183,7 @@ fun LicensePlateModule() {
         Spacer(Modifier.height(6.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             OutlinedButton(onClick = { showBuild = true }, enabled = !loading, modifier = Modifier.weight(1f)) {
-                Text("Boş LP Oluştur")
+                Text("Boş Taşıyıcı (ürünsüz)")
             }
             OutlinedButton(onClick = { printSelected() }, enabled = !loading && selectedForPrint.isNotEmpty(), modifier = Modifier.weight(1f)) {
                 Text("Seçilenleri Yazdır (${selectedForPrint.size})")
