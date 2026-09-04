@@ -92,6 +92,7 @@ permissionset 72096 "DOPSWHS-VIEW"
         page "DOPSWHS LP API" = X,
         page "DOPSWHS LP Line API" = X,
         page "DOPSWHS LP Line ListPart" = X,
+        page "DOPSWHS Active LP Contents" = X,
         page "DOPSWHS LP Template API" = X,
         page "DOPSWHS Receipt API" = X,
         page "DOPSWHS Receipt Line API" = X,

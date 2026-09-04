@@ -28,6 +28,9 @@ page 72214 "DOPSWHS Item Ledger Entry API"
                 field(documentNo; Rec."Document No.") { Caption = 'documentNo'; }
                 field(locationCode; Rec."Location Code") { Caption = 'locationCode'; }
                 field(quantity; Rec.Quantity) { Caption = 'quantity'; }
+                field(remainingQuantity; Rec."Remaining Quantity") { Caption = 'remainingQuantity'; }
+                field(baseUnitOfMeasure; BaseUnitOfMeasure) { Caption = 'baseUnitOfMeasure'; }
+                field(variantCode; Rec."Variant Code") { Caption = 'variantCode'; }
                 field(lotNo; Rec."Lot No.") { Caption = 'lotNo'; }
                 field(serialNo; Rec."Serial No.") { Caption = 'serialNo'; }
                 field(lpNo; Rec."DOPSWHS LP No.") { Caption = 'lpNo'; }
@@ -35,4 +38,64 @@ page 72214 "DOPSWHS Item Ledger Entry API"
             }
         }
     }
+
+    trigger OnAfterGetRecord()
+    var
+        Item: Record Item;
+    begin
+        BaseUnitOfMeasure := '';
+        if Item.Get(Rec."Item No.") then
+            BaseUnitOfMeasure := Item."Base Unit of Measure";
+    end;
+
+    [ServiceEnabled]
+    procedure createLicensePlates(templateCode: Code[20]; binCode: Code[20]; lpCount: Integer; quantityPerLp: Decimal; printerId: Code[50]; printLabels: Boolean): Text
+    var
+        LP: Record "DOPSWHS LP Header";
+        LPMgt: Codeunit "DOPSWHS LP Management";
+        CreatedLpNos: List of [Code[20]];
+        LpNo: Code[20];
+        ResultObject: JsonObject;
+        LpArray: JsonArray;
+        ResultText: Text;
+        PrintedCount: Integer;
+        PrintFailureCount: Integer;
+    begin
+        LPMgt.BuildManyFromItemLedgerEntry(Rec."Entry No.", templateCode, binCode, lpCount, quantityPerLp, CreatedLpNos);
+
+        // Creation is the inventory operation. Commit it before best-effort
+        // printing so an offline printer never removes the new LP records.
+        if printLabels then begin
+            Commit();
+            foreach LpNo in CreatedLpNos do begin
+                LP.Get(LpNo);
+                ClearLastError();
+                if TryPrintPalletItemLabel(LP, printerId) then
+                    PrintedCount += 1
+                else
+                    PrintFailureCount += 1;
+            end;
+        end;
+
+        foreach LpNo in CreatedLpNos do
+            LpArray.Add(LpNo);
+        ResultObject.Add('createdLpNos', LpArray);
+        ResultObject.Add('createdCount', CreatedLpNos.Count());
+        ResultObject.Add('printedCount', PrintedCount);
+        ResultObject.Add('printFailureCount', PrintFailureCount);
+        ResultObject.Add('sourceItemLedgerEntryNo', Rec."Entry No.");
+        ResultObject.WriteTo(ResultText);
+        exit(ResultText);
+    end;
+
+    [TryFunction]
+    local procedure TryPrintPalletItemLabel(var LP: Record "DOPSWHS LP Header"; PrinterId: Code[50])
+    var
+        Dispatcher: Codeunit "DOPSWHS Print Dispatcher";
+    begin
+        Dispatcher.PrintPalletItemLabels(LP, PrinterId, 1);
+    end;
+
+    var
+        BaseUnitOfMeasure: Code[10];
 }

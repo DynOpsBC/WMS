@@ -7,6 +7,19 @@ Kurulum: [docs/android-install-guide.md](../../docs/android-install-guide.md)
 
 ---
 
+## v1.14.81 — BADE — 2026-09-04
+
+**versionCode:** 200081 · **BC paketi:** 1.14.1.13
+
+**BADE SHA-256:** `8efd0a297ae8915ef4a9d8cc20edf339972fa55292d7cf21261af8cb002ea555`
+
+### Madde Defterinden toplu LP · güncel kısmi LP dağılımı
+
+- Bir Madde Defter Girişi tek satır olarak korunur; aynı kaynaktan örneğin 10 × 100 miktarlı 10 ayrı LP oluşturulur.
+- Oluşturulan her LP için ayrı malzeme/LP etiketi yazdırılır; yazıcı hatası LP oluşumunu geri almaz.
+- Kaynak girişin kalan miktarı ve raftaki atanmamış stok aşılırsa işlem engellenir; seri takipli kayıt bölünmez.
+- Kısmi işlem sonrası tarihsel Ambar Girişi değiştirilmez. Depo Gözü İçeriği'ndeki “Güncel LP Miktarı” veya Ambar Girişleri'ndeki güncel LP alanı 15 + 1.905 gibi gerçek LP dağılımını ayrı satırlarda açar.
+
 ## v1.14.80 — BADE — 2026-09-03
 
 **versionCode:** 200080 · **BC paketi:** 1.14.1.12

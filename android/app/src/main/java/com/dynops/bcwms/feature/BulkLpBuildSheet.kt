@@ -1,11 +1,10 @@
 package com.dynops.bcwms.feature
 
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
@@ -18,6 +17,8 @@ import kotlinx.coroutines.launch
 import org.json.JSONArray
 import org.json.JSONObject
 
+// Older clients/tests still use this empty-LP payload contract. The active
+// BADE screen below uses the ledger-based contract.
 internal data class BulkLpBuildDraft(val id: Int, val quantity: String)
 
 internal data class BulkLpLocationOption(val code: String, val displayName: String) {
@@ -34,9 +35,7 @@ internal fun bulkLpLocationOptions(rows: List<JSONObject>): List<BulkLpLocationO
             code = code,
             displayName = row.optString("displayName").ifBlank { row.optString("name") }.trim(),
         )
-    }
-        .distinctBy { it.code.uppercase() }
-        .sortedBy { it.code.uppercase() }
+    }.distinctBy { it.code.uppercase() }.sortedBy { it.code.uppercase() }
 
 internal fun validBulkLpLocationSelection(
     locationCode: String,
@@ -57,17 +56,51 @@ internal fun bulkLpBuildPayload(locationCode: String, binCode: String, drafts: L
         }.toString())
     }.toString()
 
+internal fun validLedgerBulkLpPlan(
+    lpCount: Int?,
+    quantityPerLp: Double?,
+    remainingQuantity: Double,
+    serialNo: String,
+): Boolean {
+    if (lpCount == null || lpCount !in 1..100) return false
+    if (quantityPerLp == null || !quantityPerLp.isFinite() || quantityPerLp <= 0.0) return false
+    if (lpCount * quantityPerLp > remainingQuantity) return false
+    return serialNo.isBlank() || (lpCount == 1 && quantityPerLp == 1.0)
+}
+
+internal fun ledgerBulkLpPayload(
+    templateCode: String,
+    binCode: String,
+    lpCount: Int,
+    quantityPerLp: Double,
+    printerId: String,
+    printLabels: Boolean,
+): String = JSONObject().apply {
+    put("templateCode", templateCode.trim())
+    put("binCode", binCode.trim())
+    put("lpCount", lpCount)
+    put("quantityPerLp", quantityPerLp)
+    put("printerId", printerId.trim())
+    put("printLabels", printLabels)
+}.toString()
+
 private fun lpQuantityText(value: String): String {
     var decimalSeen = false
     return buildString {
         value.replace(',', '.').forEach { char ->
             when {
                 char.isDigit() -> append(char)
-                char == '.' && !decimalSeen -> { append(char); decimalSeen = true }
+                char == '.' && !decimalSeen -> {
+                    append(char)
+                    decimalSeen = true
+                }
             }
         }
     }
 }
+
+private fun formatLpQuantity(value: Double): String =
+    if (value == value.toLong().toDouble()) value.toLong().toString() else value.toString()
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -77,64 +110,155 @@ internal fun BulkLpBuildSheet(
 ) {
     val context = androidx.compose.ui.platform.LocalContext.current
     val scope = rememberCoroutineScope()
+    var lookup by remember { mutableStateOf("") }
+    var entries by remember { mutableStateOf<List<JSONObject>>(emptyList()) }
+    var selectedEntry by remember { mutableStateOf<JSONObject?>(null) }
     var template by remember { mutableStateOf("") }
-    var location by remember { mutableStateOf("") }
-    var bin by remember { mutableStateOf("") }
-    var lpCountText by remember { mutableStateOf("10") }
-    var commonQty by remember { mutableStateOf("") }
-    var drafts by remember { mutableStateOf(commonLpQuantityDrafts(10, "")) }
     var templates by remember { mutableStateOf<List<String>>(emptyList()) }
     var templateExpanded by remember { mutableStateOf(false) }
-    var locations by remember { mutableStateOf<List<BulkLpLocationOption>>(emptyList()) }
-    var locationsComplete by remember { mutableStateOf(false) }
-    var locationsLoading by remember { mutableStateOf(true) }
-    var locationExpanded by remember { mutableStateOf(false) }
+    var bin by remember { mutableStateOf("") }
+    var lpCountText by remember { mutableStateOf("10") }
+    var quantityText by remember { mutableStateOf("100") }
+    var printLabels by remember { mutableStateOf(true) }
     var busy by remember { mutableStateOf(false) }
     var status by remember { mutableStateOf("") }
+    var completed by remember { mutableStateOf(false) }
+    var createdLpNos by remember { mutableStateOf<List<String>>(emptyList()) }
 
     LaunchedEffect(Unit) {
         val page = BcApi.getAllPages(context, "licensePlateTemplates?\$top=50&\$select=code,description")
-        if (page.complete) templates = page.rows.map { it.optString("code") }.filter(String::isNotBlank)
-        else status = "HATA: LP şablonları alınamadı."
-
-        val locationPage = BcApi.getAllPagesWithStandardFallback(
-            context,
-            "locations?\$orderby=code&\$select=code,displayName&\$top=200",
-        )
-        locations = if (locationPage.complete) bulkLpLocationOptions(locationPage.rows) else emptyList()
-        locationsComplete = locationPage.complete
-        locationsLoading = false
-        when {
-            !locationsComplete ->
-                status = "HATA: Lokasyonlar alınamadı. Bağlantıyı kontrol edip ekranı yeniden açın."
-            locations.isEmpty() ->
-                status = "HATA: Bu şirkette tanımlı lokasyon bulunamadı."
+        templates = if (page.complete) {
+            page.rows.map { it.optString("code") }.filter(String::isNotBlank)
+        } else {
+            status = "HATA: LP şablonları alınamadı."
+            emptyList()
         }
     }
 
-    val lpCount = lpCountText.toIntOrNull() ?: 0
-    val validDrafts = drafts.size == lpCount && drafts.isNotEmpty() && drafts.all {
-        val qty = it.quantity.toDoubleOrNull() ?: 0.0
-        qty.isFinite() && qty >= 0.0
+    fun finish() {
+        if (completed) onBuilt(createdLpNos) else onDismiss()
     }
-    val validLocation = validBulkLpLocationSelection(location, locationsComplete, locations)
 
-    ModalBottomSheet(onDismissRequest = onDismiss) {
-        Column(
-            Modifier.fillMaxWidth().fillMaxHeight(0.95f)
-                .verticalScroll(rememberScrollState())
-                .padding(horizontal = 16.dp, vertical = 8.dp)
-        ) {
-            Text("Toplu LP Oluştur", fontSize = 21.sp, fontWeight = FontWeight.Bold)
-            Text("Ortak miktarı tüm LP'lere dağıtın; sonra her satırı ayrı ayrı değiştirebilirsiniz.", fontSize = 12.sp)
+    fun findLedgerEntries() {
+        val value = lookup.trim()
+        if (value.isBlank()) {
+            status = "HATA: Madde numarası veya Madde Defter Giriş No girin."
+            return
+        }
+        scope.launch {
+            busy = true
+            selectedEntry = null
+            status = "Madde Defter Girişleri aranıyor..."
+            val filter = value.toIntOrNull()?.let { "entryNo eq $it" }
+                ?: "itemNo eq '${value.replace("'", "''")}'"
+            val page = BcApi.getAllPages(
+                context,
+                "itemLedgerEntries?\$filter=$filter&\$orderby=entryNo desc&\$top=100&" +
+                    "\$select=entryNo,itemNo,postingDate,documentNo,locationCode,quantity,remainingQuantity," +
+                    "baseUnitOfMeasure,variantCode,lotNo,serialNo",
+            )
+            busy = false
+            entries = if (page.complete) page.rows.filter { it.optDouble("remainingQuantity") > 0.0 }
+            else emptyList()
+            status = when {
+                !page.complete -> "HATA: Madde Defter Girişlerinin tamamı alınamadı."
+                entries.isEmpty() -> "BOŞ: Kullanılabilir miktarı olan giriş bulunamadı."
+                else -> "${entries.size} uygun giriş bulundu; kaynağı seçin."
+            }
+        }
+    }
+
+    val entry = selectedEntry
+    val lpCount = lpCountText.toIntOrNull()
+    val quantityPerLp = quantityText.toDoubleOrNull()
+    val remainingQuantity = entry?.optDouble("remainingQuantity") ?: 0.0
+    val requestedQuantity = (lpCount ?: 0) * (quantityPerLp ?: 0.0)
+    val planValid = validLedgerBulkLpPlan(
+        lpCount,
+        quantityPerLp,
+        remainingQuantity,
+        entry?.optString("serialNo").orEmpty(),
+    )
+
+    com.dynops.bcwms.ui.SheetScaffold(onDismiss = { if (!busy) finish() }) {
+        Text("Mevcut Stoktan Toplu LP", fontSize = 21.sp, fontWeight = FontWeight.Bold)
+        Text(
+            "Madde Defter Girişi tek satır kalır; LP'ler ayrı kayıtlarda aynı girişe bağlanır.",
+            fontSize = 12.sp,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Spacer(Modifier.height(10.dp))
+
+        if (completed) {
+            StatusText(status)
+            Spacer(Modifier.height(12.dp))
+            Button(onClick = { onBuilt(createdLpNos) }, modifier = Modifier.fillMaxWidth()) {
+                Text("LP Listesine Dön")
+            }
+            Spacer(Modifier.height(24.dp))
+            return@SheetScaffold
+        }
+
+        ScanField(
+            "Madde No / Madde Defter Giriş No",
+            lookup,
+            { lookup = it.trimStart() },
+            modifier = Modifier.fillMaxWidth(),
+        )
+        Spacer(Modifier.height(8.dp))
+        OutlinedButton(
+            onClick = { findLedgerEntries() },
+            enabled = !busy && lookup.isNotBlank(),
+            modifier = Modifier.fillMaxWidth(),
+        ) { Text(if (busy) "Aranıyor..." else "Girişleri Getir") }
+
+        if (entries.isNotEmpty()) {
             Spacer(Modifier.height(10.dp))
+            Text("Kaynak Madde Defter Girişi", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+            entries.take(20).forEach { row ->
+                val selected = selectedEntry?.optInt("entryNo") == row.optInt("entryNo")
+                Card(
+                    onClick = { selectedEntry = row; status = "" },
+                    modifier = Modifier.fillMaxWidth().padding(vertical = 3.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = if (selected) MaterialTheme.colorScheme.primaryContainer
+                        else MaterialTheme.colorScheme.surface,
+                    ),
+                    border = androidx.compose.foundation.BorderStroke(
+                        1.dp,
+                        if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant,
+                    ),
+                ) {
+                    Column(Modifier.padding(12.dp)) {
+                        Text("#${row.optInt("entryNo")} · ${row.optString("itemNo")}", fontWeight = FontWeight.Bold)
+                        Text(
+                            "Kalan: ${formatLpQuantity(row.optDouble("remainingQuantity"))} " +
+                                "${row.optString("baseUnitOfMeasure")} · ${row.optString("locationCode")}",
+                            fontSize = 12.sp,
+                        )
+                        val detail = listOfNotNull(
+                            row.optString("lotNo").takeIf(String::isNotBlank)?.let { "Lot $it" },
+                            row.optString("serialNo").takeIf(String::isNotBlank)?.let { "Seri $it" },
+                            row.optString("documentNo").takeIf(String::isNotBlank)?.let { "Belge $it" },
+                        ).joinToString(" · ")
+                        if (detail.isNotBlank())
+                            Text(detail, fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                }
+            }
+        }
 
-            ExposedDropdownMenuBox(expanded = templateExpanded, onExpandedChange = { templateExpanded = !templateExpanded }) {
+        if (entry != null) {
+            Spacer(Modifier.height(12.dp))
+            ExposedDropdownMenuBox(
+                expanded = templateExpanded,
+                onExpandedChange = { templateExpanded = !templateExpanded },
+            ) {
                 OutlinedTextField(
                     value = template,
                     onValueChange = { template = it },
                     readOnly = templates.isNotEmpty(),
-                    label = { Text("Şablon Kodu") },
+                    label = { Text("LP Şablonu") },
                     trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(templateExpanded) },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth().menuAnchor(),
@@ -146,43 +270,16 @@ internal fun BulkLpBuildSheet(
                 }
             }
             Spacer(Modifier.height(8.dp))
-            ExposedDropdownMenuBox(
-                expanded = locationExpanded,
-                onExpandedChange = {
-                    if (!busy && locationsComplete && locations.isNotEmpty()) locationExpanded = !locationExpanded
-                },
-            ) {
-                val selectedLocation = locations.firstOrNull { it.code.equals(location, ignoreCase = true) }
-                OutlinedTextField(
-                    value = selectedLocation?.label.orEmpty(),
-                    onValueChange = {},
-                    readOnly = true,
-                    enabled = !busy && locationsComplete && locations.isNotEmpty(),
-                    label = { Text(if (locationsLoading) "Lokasyonlar yükleniyor" else "Lokasyon Seçin") },
-                    trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(locationExpanded) },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth().menuAnchor(),
-                )
-                ExposedDropdownMenu(expanded = locationExpanded, onDismissRequest = { locationExpanded = false }) {
-                    locations.forEach { option ->
-                        DropdownMenuItem(
-                            text = { Text(option.label) },
-                            onClick = {
-                                if (!option.code.equals(location, ignoreCase = true)) bin = ""
-                                location = option.code
-                                locationExpanded = false
-                            },
-                        )
-                    }
-                }
-            }
-            Spacer(Modifier.height(8.dp))
-            ScanField("Depo Gözü (Bin) — İsteğe bağlı", bin, { bin = it.uppercase() }, modifier = Modifier.fillMaxWidth())
-            Text(
-                "Boş bırakırsanız depo gözünü daha sonra LP detayından atayabilirsiniz.",
-                fontSize = 11.sp,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            OutlinedTextField(
+                value = entry.optString("locationCode"),
+                onValueChange = {},
+                readOnly = true,
+                label = { Text("Lokasyon") },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth(),
             )
+            Spacer(Modifier.height(8.dp))
+            ScanField("Stok Rafı (Bin)", bin, { bin = it.uppercase() }, modifier = Modifier.fillMaxWidth())
             Spacer(Modifier.height(8.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutlinedTextField(
@@ -194,79 +291,98 @@ internal fun BulkLpBuildSheet(
                     modifier = Modifier.weight(1f),
                 )
                 OutlinedTextField(
-                    value = commonQty,
-                    onValueChange = { commonQty = lpQuantityText(it) },
-                    label = { Text("Ortak miktar") },
-                    supportingText = { Text("Boş = 0") },
+                    value = quantityText,
+                    onValueChange = { quantityText = lpQuantityText(it) },
+                    label = { Text("LP başı miktar") },
+                    suffix = { Text(entry.optString("baseUnitOfMeasure")) },
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                     singleLine = true,
                     modifier = Modifier.weight(1f),
                 )
             }
-            Button(
-                onClick = { drafts = commonLpQuantityDrafts(lpCount, commonQty.ifBlank { "0" }) },
-                enabled = lpCount in 1..200,
-                modifier = Modifier.fillMaxWidth(),
-            ) { Text("Miktarı $lpCount LP'ye Uygula") }
-            Spacer(Modifier.height(10.dp))
-
-            drafts.forEachIndexed { index, draft ->
-                OutlinedTextField(
-                    value = draft.quantity,
-                    onValueChange = { value ->
-                        drafts = drafts.map { if (it.id == draft.id) it.copy(quantity = lpQuantityText(value)) else it }
-                    },
-                    label = { Text("LP ${index + 1} planlanan miktar") },
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth().padding(bottom = 6.dp),
-                )
-            }
-
-            if (status.isNotBlank()) StatusText(status)
-            Spacer(Modifier.height(8.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(bottom = 18.dp)) {
-                OutlinedButton(onClick = onDismiss, enabled = !busy, modifier = Modifier.weight(1f)) { Text("Vazgeç") }
-                Button(
-                    enabled = !busy && template.isNotBlank() && validLocation && validDrafts,
-                    modifier = Modifier.weight(1f),
-                    onClick = {
-                        scope.launch {
-                            busy = true
-                            status = "$lpCount LP oluşturuluyor..."
-                            val safeLocation = location.trim().replace("'", "''")
-                            if (bin.isNotBlank()) {
-                                val safeBin = bin.trim().replace("'", "''")
-                                val binPage = BcApi.getAllPages(
-                                    context,
-                                    "bins?\$filter=locationCode eq '$safeLocation' and code eq '$safeBin'&\$select=code&\$top=1",
-                                )
-                                if (!binPage.complete || binPage.rows.isEmpty()) {
-                                    busy = false
-                                    status = "HATA: Lokasyon ve depo gözü eşleşmiyor."
-                                    return@launch
-                                }
-                            }
-                            val body = bulkLpBuildPayload(location, bin, drafts)
-                            val result = BcApi.boundAction(context, "licensePlateTemplates", template.trim(), "buildBulk", body)
-                            busy = false
-                            if (result.ok) {
-                                val raw = BcApi.scalarValue(result.body).trim()
-                                val created = runCatching {
-                                    val array = JSONArray(raw)
-                                    List(array.length()) { i -> array.getJSONObject(i).optString("no") }.filter(String::isNotBlank)
-                                }.getOrDefault(emptyList())
-                                if (created.size == drafts.size) onBuilt(created)
-                                else status = "HATA: LP'ler oluşturuldu ancak numara listesi eksik döndü; listeyi yenileyin."
-                            } else {
-                                status = if (result.httpCode == 404 || result.httpCode == 405)
-                                    "HATA: Toplu LP servisi BC'ye henüz yayımlanmamış. Güncel AL paketini yayınlayın."
-                                else "HATA: ${BcApi.errorMessage(result.body)} (HTTP ${result.httpCode})"
-                            }
-                        }
-                    },
-                ) { Text(if (busy) "Oluşturuluyor" else "$lpCount LP Oluştur") }
+            Text(
+                "Toplam: ${formatLpQuantity(requestedQuantity)} / ${formatLpQuantity(remainingQuantity)} " +
+                    entry.optString("baseUnitOfMeasure"),
+                fontSize = 12.sp,
+                color = if (requestedQuantity > remainingQuantity) MaterialTheme.colorScheme.error
+                else MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Checkbox(checked = printLabels, onCheckedChange = { printLabels = it })
+                Text("Her LP için ayrı etiket yazdır")
             }
         }
+
+        if (status.isNotBlank()) StatusText(status)
+        Spacer(Modifier.height(8.dp))
+        Button(
+            enabled = !busy && entry != null && template.isNotBlank() && bin.isNotBlank() && planValid,
+            modifier = Modifier.fillMaxWidth(),
+            onClick = {
+                val sourceEntry = entry ?: return@Button
+                val count = lpCount ?: return@Button
+                val perLp = quantityPerLp ?: return@Button
+                scope.launch {
+                    busy = true
+                    status = "LP'ler oluşturuluyor${if (printLabels) " ve etiketleniyor" else ""}..."
+                    val safeLocation = sourceEntry.optString("locationCode").replace("'", "''")
+                    val safeBin = bin.trim().replace("'", "''")
+                    val binPage = BcApi.getAllPages(
+                        context,
+                        "bins?\$filter=locationCode eq '$safeLocation' and code eq '$safeBin'&\$select=code&\$top=1",
+                    )
+                    if (!binPage.complete || binPage.rows.isEmpty()) {
+                        busy = false
+                        status = "HATA: Lokasyon ve stok rafı eşleşmiyor."
+                        return@launch
+                    }
+                    val body = ledgerBulkLpPayload(
+                        template,
+                        bin,
+                        count,
+                        perLp,
+                        getDefaultPrinter(context, PRINTER_USAGE_LABEL),
+                        printLabels,
+                    )
+                    val result = BcApi.boundActionLongRunning(
+                        context,
+                        "itemLedgerEntries",
+                        "entryNo=${sourceEntry.optInt("entryNo")}",
+                        "createLicensePlates",
+                        body,
+                    )
+                    busy = false
+                    if (!result.ok) {
+                        status = if (result.httpCode == 404 || result.httpCode == 405) {
+                            "HATA: Mevcut stoktan toplu LP servisi BC'ye henüz yayımlanmamış. Güncel AL paketini yayınlayın."
+                        } else {
+                            "HATA: ${BcApi.errorMessage(result.body)} (HTTP ${result.httpCode})"
+                        }
+                        return@launch
+                    }
+
+                    val response = runCatching { JSONObject(BcApi.scalarValue(result.body)) }.getOrNull()
+                    if (response == null) {
+                        status = "UYARI: İşlem tamamlandı ancak LP numaraları okunamadı. LP listesini yenileyip kontrol edin."
+                        completed = true
+                        return@launch
+                    }
+                    val array = response.optJSONArray("createdLpNos") ?: JSONArray()
+                    createdLpNos = List(array.length()) { index -> array.optString(index) }.filter(String::isNotBlank)
+                    val created = response.optInt("createdCount")
+                    val printed = response.optInt("printedCount")
+                    val failed = response.optInt("printFailureCount")
+                    status = when {
+                        printLabels && failed > 0 ->
+                            "UYARI: $created LP oluşturuldu; $printed etiket kuyruğa alındı, $failed etiket gönderilemedi. " +
+                                "LP listesinden yeniden yazdırabilirsiniz."
+                        printLabels -> "TAMAM: $created LP oluşturuldu ve her LP için ayrı etiket kuyruğa alındı."
+                        else -> "TAMAM: $created LP oluşturuldu."
+                    }
+                    completed = true
+                }
+            },
+        ) { Text(if (busy) "İşleniyor..." else "LP'leri Oluştur") }
+        Spacer(Modifier.height(24.dp))
     }
 }

@@ -80,7 +80,7 @@ fun LicensePlateModule() {
             onDismiss = { showBulkBuild = false },
             onBuilt = { created ->
                 showBulkBuild = false
-                status = "TAMAM: ${created.size} boş LP oluşturuldu; LP detayından depo gözü atayabilirsiniz."
+                status = "TAMAM: ${created.size} LP mevcut stoktan oluşturuldu."
                 loadList()
             },
         )
@@ -156,7 +156,7 @@ fun LicensePlateModule() {
         Spacer(Modifier.height(6.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             OutlinedButton(onClick = { showBulkBuild = true }, enabled = !loading, modifier = Modifier.weight(1f)) {
-                Text("Toplu LP Oluştur")
+                Text("Stoktan Toplu LP")
             }
             OutlinedButton(onClick = { printSelected() }, enabled = !loading && selectedForPrint.isNotEmpty(), modifier = Modifier.weight(1f)) {
                 Text("Seçilenleri Yazdır (${selectedForPrint.size})")

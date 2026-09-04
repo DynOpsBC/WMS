@@ -9,17 +9,29 @@ pageextension 72301 "DOPSWHS Bin Card Ext" extends "Bin Contents"
             field(DOPSWHSLPNos; ActiveLpNos)
             {
                 ApplicationArea = All;
-                Caption = 'Active LP Nos.';
+                Caption = 'Güncel LP No.ları';
                 Editable = false;
-                ToolTip = 'Shows the active license plates that contain this item in this location/bin.';
+                DrillDown = true;
+                ToolTip = 'Bu raf ve maddedeki güncel LP dağılımını gösterir. Ambar girişleri hareket geçmişidir; LP bölünmesi burada görünür.';
+
+                trigger OnDrillDown()
+                begin
+                    OpenActiveLPContents();
+                end;
             }
             field(DOPSWHSLPQuantity; ActiveLpQuantity)
             {
                 ApplicationArea = All;
-                Caption = 'Quantity in Active LPs';
+                Caption = 'Güncel LP Miktarı';
                 DecimalPlaces = 0 : 5;
                 Editable = false;
-                ToolTip = 'Shows how much of the bin content quantity is represented by active LP lines.';
+                DrillDown = true;
+                ToolTip = 'Tıklayarak toplam miktarın güncel LP bazında nasıl dağıldığını açın.';
+
+                trigger OnDrillDown()
+                begin
+                    OpenActiveLPContents();
+                end;
             }
         }
         addlast(FactBoxes)
@@ -40,6 +52,15 @@ pageextension 72301 "DOPSWHS Bin Card Ext" extends "Bin Contents"
         BinContentSubscriber.GetActiveLPItemInfo(
             Rec."Location Code", Rec."Bin Code", Rec."Item No.", Rec."Variant Code", Rec."Unit of Measure Code",
             ActiveLpNos, ActiveLpQuantity);
+    end;
+
+    local procedure OpenActiveLPContents()
+    var
+        ActiveLPContents: Page "DOPSWHS Active LP Contents";
+    begin
+        ActiveLPContents.LoadFromBin(
+            Rec."Location Code", Rec."Bin Code", Rec."Item No.", Rec."Variant Code", Rec."Unit of Measure Code");
+        ActiveLPContents.RunModal();
     end;
 
     var

@@ -8,6 +8,29 @@ import org.json.JSONObject
 
 class BulkLpBuildWorkflowTest {
     @Test
+    fun `one ledger row can be allocated to ten LP records`() {
+        assertTrue(validLedgerBulkLpPlan(10, 100.0, 1000.0, ""))
+        assertFalse(validLedgerBulkLpPlan(11, 100.0, 1000.0, ""))
+        assertFalse(validLedgerBulkLpPlan(0, 100.0, 1000.0, ""))
+    }
+
+    @Test
+    fun `serial tracked ledger row cannot be split`() {
+        assertTrue(validLedgerBulkLpPlan(1, 1.0, 1.0, "SER-1"))
+        assertFalse(validLedgerBulkLpPlan(2, 1.0, 2.0, "SER-1"))
+    }
+
+    @Test
+    fun `ledger bulk payload requests one separate label per LP`() {
+        val payload = JSONObject(ledgerBulkLpPayload("PALET", "A-01", 10, 100.0, "ZPL01", true))
+
+        assertEquals("PALET", payload.getString("templateCode"))
+        assertEquals(10, payload.getInt("lpCount"))
+        assertEquals(100.0, payload.getDouble("quantityPerLp"), 0.0)
+        assertTrue(payload.getBoolean("printLabels"))
+    }
+
+    @Test
     fun `location choices are normalized deduplicated and sorted`() {
         val options = bulkLpLocationOptions(
             listOf(

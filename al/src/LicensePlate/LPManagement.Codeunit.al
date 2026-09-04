@@ -5,6 +5,7 @@ codeunit 72040 "DOPSWHS LP Management"
         tabledata Item = R,
         tabledata "Item Unit of Measure" = R,
         tabledata "Item Tracking Code" = R,
+        tabledata "Item Ledger Entry" = R,
         tabledata Location = R,
         tabledata Bin = R,
         tabledata "Bin Content" = R,
@@ -101,6 +102,84 @@ codeunit 72040 "DOPSWHS LP Management"
         LPLine.Insert(true);
         WriteToLedger(LP, LPActionItemAdded(), '', LP."Bin Code", Qty, ItemNo, LotNo + SerialNo, '');
         OnAfterAddLine(LP, LPLine);
+    end;
+
+    /// <summary>
+    /// Creates multiple physical LPs from one existing Item Ledger Entry.
+    /// The ledger entry remains one unchanged row; each LP line only keeps its
+    /// Entry No. as a source reference.
+    /// </summary>
+    procedure BuildManyFromItemLedgerEntry(ItemLedgerEntryNo: Integer; TemplateCode: Code[20]; BinCode: Code[20]; LpCount: Integer; QuantityPerLp: Decimal; var CreatedLpNos: List of [Code[20]])
+    var
+        ItemLedgerEntry: Record "Item Ledger Entry";
+        Item: Record Item;
+        LPHeader: Record "DOPSWHS LP Header";
+        LPLine: Record "DOPSWHS LP Line";
+        AllocatedQuantity: Decimal;
+        RequestedQuantity: Decimal;
+        AvailableQuantity: Decimal;
+        Index: Integer;
+    begin
+        if LpCount <= 0 then
+            Error('Oluşturulacak LP adedi sıfırdan büyük olmalıdır.');
+        if LpCount > 100 then
+            Error('Tek işlemde en fazla 100 LP oluşturulabilir.');
+        if QuantityPerLp <= 0 then
+            Error('LP başına miktar sıfırdan büyük olmalıdır.');
+
+        ItemLedgerEntry.Get(ItemLedgerEntryNo);
+        if ItemLedgerEntry."Remaining Quantity" <= 0 then
+            Error('%1 numaralı Madde Defter Girişinde kullanılabilir miktar yoktur.', ItemLedgerEntryNo);
+        if ItemLedgerEntry."Location Code" = '' then
+            Error('%1 numaralı Madde Defter Girişinde lokasyon kodu yoktur.', ItemLedgerEntryNo);
+        if ItemLedgerEntry."Variant Code" <> '' then
+            Error(
+                '%1 numaralı Madde Defter Girişi %2 varyantını içeriyor. Varyantlı stok için toplu LP oluşturma desteklenmiyor.',
+                ItemLedgerEntryNo, ItemLedgerEntry."Variant Code");
+
+        Item.Get(ItemLedgerEntry."Item No.");
+        if (ItemLedgerEntry."Serial No." <> '') and ((LpCount <> 1) or (QuantityPerLp <> 1)) then
+            Error('Seri takipli %1 maddesi yalnız 1 adetlik tek LP olarak oluşturulabilir.', ItemLedgerEntry."Item No.");
+
+        // Both tables stay locked until every LP line is inserted. Two
+        // terminals therefore cannot allocate the same loose quantity.
+        LPHeader.LockTable();
+        LPLine.LockTable();
+        AllocatedQuantity := AllocatedQuantityForItemLedgerEntry(ItemLedgerEntryNo);
+        AvailableQuantity := ItemLedgerEntry."Remaining Quantity" - AllocatedQuantity;
+        RequestedQuantity := LpCount * QuantityPerLp;
+        if RequestedQuantity > AvailableQuantity then
+            Error(
+                '%1 numaralı Madde Defter Girişinde LP''ye ayrılabilir miktar %2, istenen miktar %3''tür.',
+                ItemLedgerEntryNo, AvailableQuantity, RequestedQuantity);
+
+        for Index := 1 to LpCount do begin
+            Build(TemplateCode, ItemLedgerEntry."Location Code", BinCode, LPHeader);
+            AddLineFromBin(
+                LPHeader,
+                ItemLedgerEntry."Item No.",
+                Item."Base Unit of Measure",
+                QuantityPerLp,
+                ItemLedgerEntry."Lot No.",
+                ItemLedgerEntry."Serial No.",
+                BinCode,
+                CopyStr(UserId(), 1, 50));
+
+            LPLine.Reset();
+            LPLine.SetRange("LP No.", LPHeader."No.");
+            if not LPLine.FindLast() then
+                Error('%1 LP satırı oluşturulamadı.', LPHeader."No.");
+            LPLine."Source Document No." := ItemLedgerEntry."Document No.";
+            LPLine."Source Document Line No." := ItemLedgerEntryNo;
+            LPLine."Source Document Quantity" := ItemLedgerEntry.Quantity;
+            LPLine."Source Item Ledger Entry No." := ItemLedgerEntryNo;
+            LPLine.Modify(true);
+
+            LPHeader."Planned Quantity" := QuantityPerLp;
+            LPHeader.Modify(true);
+            Stop(LPHeader, false);
+            CreatedLpNos.Add(LPHeader."No.");
+        end;
     end;
 
     /// <summary>
@@ -365,6 +444,7 @@ codeunit 72040 "DOPSWHS LP Management"
             TargetLine."Source Document No." := SourceLine."Source Document No.";
             TargetLine."Source Document Line No." := SourceLine."Source Document Line No.";
             TargetLine."Source Document Quantity" := SourceLine."Source Document Quantity";
+            TargetLine."Source Item Ledger Entry No." := SourceLine."Source Item Ledger Entry No.";
             TargetLine.Insert(true);
 
             SourceLine.Validate(Quantity, SourceLine.Quantity - TransferQty);
@@ -419,15 +499,21 @@ codeunit 72040 "DOPSWHS LP Management"
                         Lines.Add(LineNo);
                         Quantities.Add(LineNo, ExcessQty);
                         Transfer(LP, NewLP, Lines, Quantities);
+                        NewLP."Planned Quantity" := ExcessQty;
+                        NewLP.Modify(true);
                     end;
                     LPLine.Get(LP."No.", LineNo);
                     LPLine.Validate(Quantity, Qty);
                     LPLine.Modify(true);
+                    LP."Planned Quantity" := Qty;
+                    LP.Modify(true);
                 end;
             Action::RemoveExcess:
                 begin
                     LPLine.Validate(Quantity, Qty);
                     LPLine.Modify(true);
+                    LP."Planned Quantity" := Qty;
+                    LP.Modify(true);
                 end;
             Action::RemoveUsedPortion:
                 begin
@@ -436,6 +522,8 @@ codeunit 72040 "DOPSWHS LP Management"
                         LPLine.Delete(true)
                     else
                         LPLine.Modify(true);
+                    LP."Planned Quantity" := LPLine.Quantity;
+                    LP.Modify(true);
                 end;
             Action::Unbuild:
                 Unbuild(LP);
@@ -642,6 +730,22 @@ codeunit 72040 "DOPSWHS LP Management"
             Error(
                 'Insufficient unassigned stock for item %1 in bin %2. Bin stock: %3, already assigned to active LPs: %4, requested: %5.',
                 ItemNo, BinCode, BinQtyBase, AllocatedQtyBase, RequiredBaseQty);
+    end;
+
+    local procedure AllocatedQuantityForItemLedgerEntry(ItemLedgerEntryNo: Integer): Decimal
+    var
+        LPHeader: Record "DOPSWHS LP Header";
+        LPLine: Record "DOPSWHS LP Line";
+        AllocatedQuantity: Decimal;
+    begin
+        LPLine.SetRange("Source Item Ledger Entry No.", ItemLedgerEntryNo);
+        if LPLine.FindSet() then
+            repeat
+                if LPHeader.Get(LPLine."LP No.") then
+                    if LPHeader.Status in [LPHeader.Status::Open, LPHeader.Status::Built, LPHeader.Status::Assigned] then
+                        AllocatedQuantity += LPLine.Quantity;
+            until LPLine.Next() = 0;
+        exit(AllocatedQuantity);
     end;
 
     local procedure RequireStatus(var LP: Record "DOPSWHS LP Header"; RequiredStatus: Enum "DOPSWHS LP Status")

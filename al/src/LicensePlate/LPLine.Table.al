@@ -58,6 +58,12 @@ table 72011 "DOPSWHS LP Line"
             DataClassification = CustomerContent;
             DecimalPlaces = 0 : 5;
         }
+        field(64; "Source Item Ledger Entry No."; Integer)
+        {
+            Caption = 'Source Item Ledger Entry No.';
+            DataClassification = CustomerContent;
+            TableRelation = "Item Ledger Entry"."Entry No.";
+        }
         field(90; "Line Weight kg"; Decimal) { Caption = 'Line Weight kg'; DataClassification = CustomerContent; Editable = false; }
     }
 
@@ -66,6 +72,7 @@ table 72011 "DOPSWHS LP Line"
         key(PK; "LP No.", "Line No.") { Clustered = true; }
         key(Item; "Item No.") { }
         key(Child; "Child LP No.") { }
+        key(SourceItemLedgerEntry; "Source Item Ledger Entry No.") { }
     }
 
     trigger OnInsert()
