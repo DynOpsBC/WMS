@@ -3,6 +3,25 @@ codeunit 72135 "DOPSWHS SSCC On Post Tests"
     Subtype = Test;
 
     [Test]
+    procedure LongLpDoesNotOverwriteOrOverflowPostedSscc()
+    var
+        SourceLine: Record "Warehouse Shipment Line" temporary;
+        PostedLine: Record "Posted Whse. Shipment Line" temporary;
+        Assert: Codeunit Assert;
+    begin
+        SourceLine."No." := 'SSCC-TRANSFER';
+        SourceLine."Line No." := 10000;
+        SourceLine."LP No." := 'LP123456789012345678';
+        SourceLine.SSCC := '123456789012345678';
+
+        // Standard posting executes this before the LP propagation event.
+        // A 19-character LP used to overflow the 18-character SSCC field.
+        PostedLine.TransferFields(SourceLine);
+
+        Assert.AreEqual(SourceLine.SSCC, PostedLine.SSCC, 'SSCC must come from the source SSCC field, not from its LP number.');
+    end;
+
+    [Test]
     procedure MissingSsccIsGeneratedAndCopiedToPostedLine()
     var
         WhseShipmentHeader: Record "Warehouse Shipment Header";

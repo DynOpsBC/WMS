@@ -3,6 +3,24 @@ codeunit 72133 "DOPSWHS Receipt With LP Tests"
     Subtype = Test;
 
     [Test]
+    procedure PostingFlagDoesNotConflictWithPostedHeaderTransfer()
+    var
+        ReceiptHeader: Record "Warehouse Receipt Header" temporary;
+        PostedHeader: Record "Posted Whse. Receipt Header" temporary;
+    begin
+        ReceiptHeader."No." := 'LP-TRANSFER-TEST';
+        ReceiptHeader."DOPSWHS LP No." := 'LP-TEST';
+        ReceiptHeader."DOPSWHS Posting In Progress" := true;
+
+        // Reproduce the standard posting call, including extension fields.
+        // This used to fail: source 72423 Boolean -> destination 72423 Code.
+        PostedHeader.TransferFields(ReceiptHeader);
+
+        Assert.AreEqual(ReceiptHeader."No.", PostedHeader."No.", 'Standard receipt header transfer must complete while the posting guard is set.');
+        Assert.AreEqual('', PostedHeader."DOPSWHS LP No.", 'The posting Boolean must not be copied into the LP reference. LP propagation assigns that reference separately.');
+    end;
+
+    [Test]
     procedure ReceiptLpContentIsCreatedOnlyBySuccessfulPost()
     var
         TestHelper: Codeunit "DOPSWHS Test Helper";
@@ -162,6 +180,69 @@ codeunit 72133 "DOPSWHS Receipt With LP Tests"
         Assert.AreEqual(Format(LP.Status::Assigned), Format(LP.Status), 'Posted or assigned LP must never be changed by receipt cancellation.');
         LPLine.SetRange("LP No.", LP."No.");
         Assert.IsFalse(LPLine.IsEmpty(), 'Assigned LP quantity must remain intact.');
+    end;
+
+    [Test]
+    procedure PendingReceiptLpCannotBeEditedOutsideReceipt()
+    var
+        LP: Record "DOPSWHS LP Header";
+        LPLine: Record "DOPSWHS LP Line";
+        LPMgt: Codeunit "DOPSWHS LP Management";
+    begin
+        LP.Init();
+        LP."No." := 'LP-PENDING-GUARD';
+        LP.Status := LP.Status::Open;
+        LP."Pending Receipt No." := 'RE-PENDING-GUARD';
+        LP."Pending Receipt Line No." := 10000;
+        LP."Planned Quantity" := 50;
+        LP.Insert();
+
+        asserterror LPMgt.AddLineFromBin(LP, 'ITEM', 'PCS', 50, '', '', 'BIN', 'TEST');
+        Assert.ExpectedError('mal kabulünü bekliyor');
+        asserterror LPMgt.Stop(LP, false);
+        Assert.ExpectedError('mal kabulünü bekliyor');
+        asserterror LPMgt.MoveToBin(LP, 'OTHER-BIN', 'TEST');
+        Assert.ExpectedError('mal kabulünü bekliyor');
+        asserterror LPMgt.Unbuild(LP);
+        Assert.ExpectedError('mal kabulünü bekliyor');
+        asserterror LP.Delete(true);
+        Assert.ExpectedError('mal kabulünü bekliyor');
+
+        LP.Get('LP-PENDING-GUARD');
+        Assert.AreEqual(50, LP."Planned Quantity", 'Blocked external actions must preserve the receipt plan.');
+        LPLine.SetRange("LP No.", LP."No.");
+        Assert.IsTrue(LPLine.IsEmpty(), 'A pending receipt LP must stay empty.');
+    end;
+
+    [Test]
+    procedure ReconfirmBulkRowPreservesEachPalletQuantity()
+    var
+        Header: Record "Warehouse Receipt Header";
+        Line: Record "Warehouse Receipt Line";
+        LP: Record "DOPSWHS LP Header";
+        ReceiptMgmt: Codeunit "DOPSWHS Receipt Mgmt";
+        Index: Integer;
+    begin
+        CreateReceipt(Header, Line, 'PO-BULK-RECONFIRM', 100);
+        for Index := 1 to 2 do begin
+            Clear(LP);
+            LP."No." := 'LP-RECONFIRM-' + Format(Index);
+            LP.Status := LP.Status::Open;
+            LP."Pending Receipt No." := Line."No.";
+            LP."Pending Receipt Line No." := Line."Line No.";
+            LP."Planned Quantity" := 50;
+            LP.Insert();
+        end;
+
+        ReceiptMgmt.ConfirmLine(Line, 100, '', '', 0D, 'LP-RECONFIRM-1', 'RECEIVE');
+
+        LP.Get('LP-RECONFIRM-1');
+        Assert.AreEqual(50, LP."Planned Quantity", 'Reconfirming the total must preserve the first pallet allocation.');
+        LP.Get('LP-RECONFIRM-2');
+        Assert.AreEqual(50, LP."Planned Quantity", 'Reconfirming the total must preserve the second pallet allocation.');
+        Assert.AreEqual('', Line."DOPSWHS LP No.", 'A bulk source row must not point exclusively at the first pallet.');
+        asserterror ReceiptMgmt.ConfirmLine(Line, 90, '', '', 0D, 'LP-RECONFIRM-1', 'RECEIVE');
+        Assert.ExpectedError('palet toplamıyla aynı olmalıdır');
     end;
 
     local procedure CreateReceiptLP(LpNo: Code[20]; ReceiptLine: Record "Warehouse Receipt Line"; Qty: Decimal; IsCurrent: Boolean)

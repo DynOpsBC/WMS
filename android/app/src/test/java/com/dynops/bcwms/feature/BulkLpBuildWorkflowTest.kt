@@ -110,11 +110,13 @@ class BulkLpBuildWorkflowTest {
     }
 
     @Test
-    fun `numeric lookup searches both ledger entry and item number`() {
+    fun `numeric lookup searches entry and numeric item separately for BC OData`() {
         assertEquals(
-            "(entryNo eq 1000 or itemNo eq '1000')",
-            itemLedgerLookupFilter(" 1000 "),
+            listOf("entryNo eq 1000", "itemNo eq '1000'"),
+            itemLedgerLookupFilters(" 1000 "),
         )
+        assertTrue(itemLedgerLookupFilters("8338").none { it.contains(" or ") })
+        assertEquals(listOf("itemNo eq 'AB.00005'"), itemLedgerLookupFilters("AB.00005"))
         assertEquals("itemNo eq 'AB.00005'", itemLedgerLookupFilter("AB.00005"))
         assertEquals("itemNo eq 'O''RING'", itemLedgerLookupFilter("O'RING"))
     }

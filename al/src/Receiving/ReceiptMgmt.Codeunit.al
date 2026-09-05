@@ -1322,8 +1322,21 @@ codeunit 72043 "DOPSWHS Receipt Mgmt"
         ExistingLotNo: Code[50];
         ExistingSerialNo: Code[50];
         ExistingExpiryDate: Date;
+        PendingLP: Record "DOPSWHS LP Header";
     begin
         Log('Receipt.ConfirmLine', WhseReceiptLine."No.", EffectiveOperator(OperatorUserId, ReceiptOperator(WhseReceiptLine."No.")));
+        // The header points at the first pallet even for a bulk 50 + 50 plan.
+        // Reconfirming the 100-unit source row must not overwrite that first
+        // pallet with 100 and leave a second 50-unit draft behind.
+        PendingLP.LockTable();
+        PendingLP.SetRange("Pending Receipt No.", WhseReceiptLine."No.");
+        PendingLP.SetRange("Pending Receipt Line No.", WhseReceiptLine."Line No.");
+        if PendingLP.Count() > 1 then begin
+            PendingLP.CalcSums("Planned Quantity");
+            if Abs(PendingLP."Planned Quantity" - QtyToReceive) > 0.00001 then
+                Error('Bu satır için paletlere toplam %1 adet ayrıldı. Kabul miktarı palet toplamıyla aynı olmalıdır.', PendingLP."Planned Quantity");
+            Clear(LicensePlateNo);
+        end;
         Item.Get(WhseReceiptLine."Item No.");
         // Mevcut BC takip bilgisi korunur. İç lot yalnız terminaldeki açık
         // "Lot No Ata" komutuyla üretilir; ConfirmLine boş lotu tamamlamaz.

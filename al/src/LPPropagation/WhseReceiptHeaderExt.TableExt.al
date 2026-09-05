@@ -8,7 +8,18 @@ tableextension 72422 "DOPSWHS Whse Rcpt Hdr Ext" extends "Warehouse Receipt Head
             DataClassification = CustomerContent;
             TableRelation = "DOPSWHS LP Header"."No.";
         }
-        field(72423; "DOPSWHS Posting In Progress"; Boolean)
+        // 72423 is Code[20] on Posted Whse. Receipt Header. Standard
+        // TransferFields matches by ID and cannot copy a Boolean into it.
+        // Keep the installed column obsolete so upgrades need no ForceSync.
+        field(72423; "DOPSWHS Posting Legacy"; Boolean)
+        {
+            Caption = 'WMS Posting In Progress (Legacy)';
+            DataClassification = SystemMetadata;
+            ObsoleteState = Removed;
+            ObsoleteReason = 'Field 72423 conflicts with the posted receipt LP field. Replaced by 72435.';
+            ObsoleteTag = '1.14.1.28';
+        }
+        field(72435; "DOPSWHS Posting In Progress"; Boolean)
         {
             Caption = 'WMS Posting In Progress';
             DataClassification = SystemMetadata;

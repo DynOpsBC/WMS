@@ -131,6 +131,8 @@ table 72010 "DOPSWHS LP Header"
     var
         LPLine: Record "DOPSWHS LP Line";
     begin
+        if "Pending Receipt No." <> '' then
+            Error('%1 LP''si %2 mal kabulünü bekliyor. Önce ilgili mal kabul belgesinden işlemi iptal edin.', "No.", "Pending Receipt No.");
         if not (Status in [Status::Open, Status::Unbuilt]) then
             Error('Yalnız açık veya bozulmuş LP silinebilir.');
 

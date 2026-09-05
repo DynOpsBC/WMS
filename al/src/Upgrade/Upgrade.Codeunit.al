@@ -8,6 +8,7 @@ codeunit 72034 "DOPSWHS Upgrade"
         tabledata "Warehouse Receipt Line" = r,
         tabledata "Posted Whse. Receipt Line" = rm,
         tabledata "Posted Whse. Receipt Header" = r,
+        tabledata "Posted Whse. Shipment Line" = rm,
         tabledata "Warehouse Activity Line" = r,
         tabledata "Warehouse Entry" = rm,
         tabledata "Item Ledger Entry" = rm,
@@ -69,6 +70,8 @@ codeunit 72034 "DOPSWHS Upgrade"
         end;
         if ModuleInfo.DataVersion() < Version.Create(1, 14, 0, 85) then
             RepairOpenPutAwaysByReceiptLps();
+        if ModuleInfo.DataVersion() < Version.Create(1, 14, 1, 29) then
+            MigratePostedShipmentSscc();
         AppProfileMgmt.SeedDefaults();          // seed DEFAULT app profile + install-user profile
         AppRoleSeed.Seed();                     // seed system roles + starter filter rules
         SetupWizard.SeedReportSelections();     // repair legacy empty/wrong document print routes
@@ -76,6 +79,21 @@ codeunit 72034 "DOPSWHS Upgrade"
         ScheduleLicenseVerify();                // seed/refresh the hourly /verify job
         PrintCleanup.ScheduleCleanupJob();      // seed daily print payload retention cleanup
         AzurePrintWorker.ScheduleWorkerJob();  // instant tasks use this as durable fallback/status pump
+    end;
+
+    local procedure MigratePostedShipmentSscc()
+    var
+        PostedLine: Record "Posted Whse. Shipment Line";
+    begin
+        PostedLine.SetRange(SSCC, '');
+#pragma warning disable AL0432
+        PostedLine.SetFilter("DOPSWHS Legacy SSCC", '<>%1', '');
+        if PostedLine.FindSet(true) then
+            repeat
+                PostedLine.SSCC := CopyStr(PostedLine."DOPSWHS Legacy SSCC", 1, MaxStrLen(PostedLine.SSCC));
+                PostedLine.Modify(false);
+            until PostedLine.Next() = 0;
+#pragma warning restore AL0432
     end;
 
     /// <summary>

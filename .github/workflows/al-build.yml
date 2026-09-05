@@ -30,6 +30,8 @@ jobs:
         run: bash tools/audit-translation-coverage.sh
       - name: audit-obsolete
         run: bash tools/audit-obsolete.sh
+      - name: audit-posting-field-compatibility
+        run: python3 tools/audit-transfer-fields.py
 
   package:
     name: AL package (placeholder)

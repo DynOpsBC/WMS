@@ -7,6 +7,17 @@ Kurulum: [docs/android-install-guide.md](../../docs/android-install-guide.md)
 
 ---
 
+## v1.14.98 — BADE kabul testi adayı — 2026-09-05
+
+**versionCode:** 200098 · **BC paketi:** 1.14.1.29
+
+- Simülatörde tekrar üretilen mal kabul hatasının nedeni düzeltildi: standart kayıt sırasında aynı alan numarasındaki Boolean ve LP kodu çakışıyordu.
+- Benzer sevkiyat LP/SSCC alan çakışması giderildi; önceki SSCC verisi yükseltmede korunur.
+- Mal kabul bekleyen LP'lerin ayrı LP ekranından doldurulması, taşınması veya silinmesi engellendi.
+- 50 + 50 palet planındaki toplam 100 adet yeniden onaylandığında ilk paletin miktarının 100'e dönüşmesi önlendi.
+- Sayısal stok kayıt numarası aramasındaki BC sorgu hatası düzeltildi. 8338 numaralı 100.000 adetlik kayıt simülatörde başarıyla getirildi.
+- Android 243 birim testi ve APK derlemesi geçti; BC uygulaması derlendi. **BC kurulumu sonrası başarılı mal kabul, LP bağlantıları ve uçtan uca sevkiyat testi henüz tamamlanmadı.** Otomatik güncelleme kanalı bu adaya geçirilmedi.
+
 ## v1.14.97 — BADE — 2026-09-05
 
 **versionCode:** 200097 · **BC paketi:** 1.14.1.27

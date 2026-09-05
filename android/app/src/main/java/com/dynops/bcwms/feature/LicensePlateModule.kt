@@ -446,13 +446,15 @@ private fun LpDocument(lpNo: String, onBack: () -> Unit) {
     val h = header
     val headerLoaded = h != null
     val st = h?.optString("status") ?: ""
-    val canEdit = headerLoaded && linesComplete && canEditLicensePlate(st)
-    val canTransfer = headerLoaded && linesComplete && canTransferLicensePlate(st, lines.size)
-    val canPartiallyUse = headerLoaded && linesComplete && canPartiallyUseLicensePlate(st, lines.size)
-    val canDelete = headerLoaded && linesComplete && canDeleteLicensePlate(st, lines.size)
+    val pendingReceiptNo = h?.optString("pendingReceiptNo").orEmpty().takeUnless { it == "null" }.orEmpty()
+    val awaitingReceipt = pendingReceiptNo.isNotBlank()
+    val canEdit = headerLoaded && linesComplete && !awaitingReceipt && canEditLicensePlate(st)
+    val canTransfer = headerLoaded && linesComplete && !awaitingReceipt && canTransferLicensePlate(st, lines.size)
+    val canPartiallyUse = headerLoaded && linesComplete && !awaitingReceipt && canPartiallyUseLicensePlate(st, lines.size)
+    val canDelete = headerLoaded && linesComplete && !awaitingReceipt && canDeleteLicensePlate(st, lines.size)
     val lpBinCode = h?.optString("binCode").orEmpty()
-    val canAssignBin = headerLoaded && linesComplete && canAssignLicensePlateBin(st, lines.size, lpBinCode)
-    val canUnbuild = headerLoaded && linesComplete &&
+    val canAssignBin = headerLoaded && linesComplete && !awaitingReceipt && canAssignLicensePlateBin(st, lines.size, lpBinCode)
+    val canUnbuild = headerLoaded && linesComplete && !awaitingReceipt &&
         (st.equals("Open", ignoreCase = true) || st.equals("Built", ignoreCase = true)) && !canDelete
 
     fun addLineFromSourceBin(res: com.dynops.bcwms.ui.QuantityResult, scannedBin: String) {
@@ -564,7 +566,10 @@ private fun LpDocument(lpNo: String, onBack: () -> Unit) {
                         }
                     }
                 }
-                if (lines.isEmpty() && !busy) EmptyState("Henüz satır yok. Satır Ekle düğmesiyle ürün ekleyin.")
+                if (lines.isEmpty() && !busy) EmptyState(
+                    if (awaitingReceipt) "$pendingReceiptNo mal kabulü henüz kaydedilmedi. Ürün, lot ve miktar LP + Kaydet başarılı olduğunda burada oluşacak."
+                    else "Henüz satır yok. Satır Ekle düğmesiyle ürün ekleyin."
+                )
             }
         }
 
@@ -684,6 +689,7 @@ private fun LpDocument(lpNo: String, onBack: () -> Unit) {
                     // düğme sessizce kayboluyordu (UAT lp-04).
                     else -> Text(
                         when {
+                            awaitingReceipt -> "Bu LP mal kabul için ayrıldı. Değişiklik veya iptal işlemini $pendingReceiptNo belgesinden yapın."
                             st.equals("Assigned", ignoreCase = true) ->
                                 "Bu LP bir belgeye atanmış; bozulamaz. Önce 'Serbest Bırak' ile belgeden çıkarın."
                             st.equals("Used", ignoreCase = true) ->

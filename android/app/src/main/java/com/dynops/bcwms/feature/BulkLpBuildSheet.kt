@@ -111,8 +111,17 @@ internal fun itemLedgerLookupFilter(rawLookup: String): String {
     return if (entryNo == null) {
         "itemNo eq '$safeValue'"
     } else {
-        "(entryNo eq $entryNo or itemNo eq '$safeValue')"
+        "entryNo eq $entryNo"
     }
+}
+
+internal fun itemLedgerLookupFilters(rawLookup: String): List<String> {
+    val value = rawLookup.trim()
+    val primary = itemLedgerLookupFilter(value)
+    // BC rejects OR across different fields (HTTP 501). Numeric item codes
+    // remain searchable using a separate query, merged by entry number.
+    return if (value.toIntOrNull() == null) listOf(primary)
+    else listOf(primary, "itemNo eq '${value.replace("'", "''")}'")
 }
 
 internal fun itemLedgerLookupPath(filter: String, includeLpAllocationFields: Boolean): String {
@@ -388,22 +397,31 @@ internal fun BulkLpBuildSheet(
             busy = true
             selectedEntry = null
             status = "Stok kayıtları aranıyor..."
-            val filter = itemLedgerLookupFilter(value)
             var usingLegacyQuantityFallback = false
-            var page = BcApi.getAllPages(context, itemLedgerLookupPath(filter, includeLpAllocationFields = true))
-            // 1.14.1.14 ve öncesinde yeni allocation alanları metadata'da yoktur;
-            // bilinmeyen $select alanı BC'den 400 döndürür. Eski pakette salt-okunur
-            // sorguyu ham Remaining Quantity ile çalıştırmaya devam et.
-            if (!page.complete && page.error?.httpCode == 400) {
-                usingLegacyQuantityFallback = true
-                page = BcApi.getAllPages(context, itemLedgerLookupPath(filter, includeLpAllocationFields = false))
+            var complete = true
+            val foundRows = mutableListOf<JSONObject>()
+            for (filter in itemLedgerLookupFilters(value)) {
+                var page = BcApi.getAllPages(context, itemLedgerLookupPath(filter, includeLpAllocationFields = true))
+                // 1.14.1.14 ve öncesinde yeni allocation alanları metadata'da yoktur;
+                // bilinmeyen $select alanı BC'den 400 döndürür. Eski pakette salt-okunur
+                // sorguyu ham Remaining Quantity ile çalıştırmaya devam et.
+                if (!page.complete && page.error?.httpCode == 400) {
+                    usingLegacyQuantityFallback = true
+                    page = BcApi.getAllPages(context, itemLedgerLookupPath(filter, includeLpAllocationFields = false))
+                }
+                if (!page.complete) {
+                    complete = false
+                    break
+                }
+                foundRows += page.rows
             }
             busy = false
             // Operatör istek sürerken arama değerini değiştirdiyse eski sorgunun
             // sonucu yeni değer altında gösterilmemeli/seçilememeli.
             if (lookup.trim() != value) return@launch
-            entries = if (page.complete) {
-                val availableRows = page.rows.filter { ledgerLpAllocatableQuantity(it) > 0.0 }
+            entries = if (complete) {
+                val availableRows = foundRows.distinctBy { it.optInt("entryNo") }
+                    .filter { ledgerLpAllocatableQuantity(it) > 0.0 }
                 val exactEntryNo = value.toIntOrNull()
                 if (exactEntryNo == null) availableRows
                 else availableRows.sortedWith(
@@ -412,7 +430,7 @@ internal fun BulkLpBuildSheet(
                 )
             } else emptyList()
             status = when {
-                !page.complete -> "HATA: Stok kayıtları alınamadı. Bağlantıyı kontrol edip tekrar deneyin."
+                !complete -> "HATA: Stok kayıtları alınamadı. Bağlantıyı kontrol edip tekrar deneyin."
                 entries.isEmpty() -> "BOŞ: LP yapılabilecek miktarı olan stok bulunamadı."
                 usingLegacyQuantityFallback ->
                     "${entries.size} stok kaydı bulundu. Kullanacağınız kaydı seçin."

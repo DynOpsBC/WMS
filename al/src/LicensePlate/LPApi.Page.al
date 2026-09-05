@@ -35,6 +35,8 @@ page 72088 "DOPSWHS LP API"
                 field(lineCount; Rec."Line Count") { Caption = 'lineCount'; Editable = false; }
                 field(totalQuantity; Rec."Total Quantity") { Caption = 'totalQuantity'; Editable = false; }
                 field(plannedQuantity; Rec."Planned Quantity") { Caption = 'plannedQuantity'; }
+                field(pendingReceiptNo; Rec."Pending Receipt No.") { Caption = 'pendingReceiptNo'; Editable = false; }
+                field(pendingReceiptLineNo; Rec."Pending Receipt Line No.") { Caption = 'pendingReceiptLineNo'; Editable = false; }
             }
             part(lines; "DOPSWHS LP Line API")
             {
@@ -76,6 +78,13 @@ page 72088 "DOPSWHS LP API"
         Reusable := false;
         if (Rec."LP Template Code" <> '') and Template.Get(Rec."LP Template Code") then
             Reusable := Template.Reusable;
+    end;
+
+    trigger OnModifyRecord(): Boolean
+    begin
+        if Rec."Pending Receipt No." <> '' then
+            Error('%1 LP''si %2 mal kabulünü bekliyor. Değişiklikleri Mal Kabul ekranından yapın.', Rec."No.", Rec."Pending Receipt No.");
+        exit(true);
     end;
 
     var

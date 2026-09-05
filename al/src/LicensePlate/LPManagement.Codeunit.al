@@ -62,6 +62,7 @@ codeunit 72040 "DOPSWHS LP Management"
         Dispatcher: Codeunit "DOPSWHS Print Dispatcher";
         Generator: Codeunit "DOPSWHS SSCC Generator";
     begin
+        EnsureNotPendingReceipt(LP);
         OnBeforeStop(LP, PrintLabel);
         RequireStatus(LP, LP.Status::Open);
         LogMutation('LP.Stop');
@@ -373,6 +374,7 @@ codeunit 72040 "DOPSWHS LP Management"
     begin
         LP.LockTable();
         LP.Get(LP."No.");
+        EnsureNotPendingReceipt(LP);
         OnBeforeAddLine(LP, ItemNo, UoM, Qty);
         RequireStatus(LP, LP.Status::Open);
         if ItemNo = '' then
@@ -458,6 +460,7 @@ codeunit 72040 "DOPSWHS LP Management"
         LP.LockTable();
         LP.Get(LP."No.");
 
+        EnsureNotPendingReceipt(LP);
         if OperatorUserId = '' then
             Error('%1 LP numarasını taşımak için operatör kullanıcı kimliği zorunludur.', LP."No.");
         if not (LP.Status in [LP.Status::Open, LP.Status::Built]) then
@@ -544,6 +547,7 @@ codeunit 72040 "DOPSWHS LP Management"
 
     procedure Assign(var LP: Record "DOPSWHS LP Header"; DocType: Enum "DOPSWHS Assigned Doc Type"; DocNo: Code[20])
     begin
+        EnsureNotPendingReceipt(LP);
         OnBeforeAssign(LP, DocType, DocNo);
         RequireStatus(LP, LP.Status::Built);
         LogMutation('LP.Assign');
@@ -575,6 +579,8 @@ codeunit 72040 "DOPSWHS LP Management"
         LineNo: Integer;
         TransferQty: Decimal;
     begin
+        EnsureNotPendingReceipt(SourceLP);
+        EnsureNotPendingReceipt(TargetLP);
         OnBeforeTransfer(SourceLP, TargetLP);
         if SourceLP."No." = TargetLP."No." then
             Error('Kaynak ve hedef LP aynı olamaz: %1.', SourceLP."No.");
@@ -1039,6 +1045,7 @@ codeunit 72040 "DOPSWHS LP Management"
     var
         LPLine: Record "DOPSWHS LP Line";
     begin
+        EnsureNotPendingReceipt(LP);
         OnBeforeUnbuild(LP);
         if not (LP.Status in [LP.Status::Built, LP.Status::Open]) then
             Error('Yalnız açık veya tamamlanmış LP bozulabilir.');
@@ -1543,6 +1550,12 @@ codeunit 72040 "DOPSWHS LP Management"
                         '%1 rafında miktarı %2 olan eski/boş %3 LP kaydı bulundu. Aynı stoka ikinci LP etiketi üretmemek için önce bu LP''yi doğrulayın, içeriğini tamamlayın veya kontrollü olarak kaldırın.',
                         BinCode, LPHeader."Planned Quantity", LPHeader."No.");
             until LPHeader.Next() = 0;
+    end;
+
+    local procedure EnsureNotPendingReceipt(LP: Record "DOPSWHS LP Header")
+    begin
+        if LP."Pending Receipt No." <> '' then
+            Error('%1 LP''si %2 mal kabulünü bekliyor. Ürün ve miktar için Mal Kabul ekranındaki LP + Kaydet işlemini kullanın.', LP."No.", LP."Pending Receipt No.");
     end;
 
     local procedure RequireStatus(var LP: Record "DOPSWHS LP Header"; RequiredStatus: Enum "DOPSWHS LP Status")
