@@ -1,0 +1,341 @@
+{
+  "checked": [
+    {
+      "file": "android/app/src/main/java/com/dynops/bcwms/feature/PackingModule.kt",
+      "entity": "packOps",
+      "action": "startPickPackingWithPrinter"
+    },
+    {
+      "file": "android/app/src/main/java/com/dynops/bcwms/feature/PackingModule.kt",
+      "entity": "packOps",
+      "action": "scanItemForOrder"
+    },
+    {
+      "file": "android/app/src/main/java/com/dynops/bcwms/feature/PackingModule.kt",
+      "entity": "packOps",
+      "action": "setBoxForOrder"
+    },
+    {
+      "file": "android/app/src/main/java/com/dynops/bcwms/feature/PutAwayShipModules.kt",
+      "entity": "putAwayLines",
+      "action": "setPlacement"
+    },
+    {
+      "file": "android/app/src/main/java/com/dynops/bcwms/feature/PutAwayShipModules.kt",
+      "entity": "putAways",
+      "action": "register"
+    },
+    {
+      "file": "android/app/src/main/java/com/dynops/bcwms/feature/PutAwayShipModules.kt",
+      "entity": "putAways",
+      "action": "assignToMe"
+    },
+    {
+      "file": "android/app/src/main/java/com/dynops/bcwms/feature/PutAwayShipModules.kt",
+      "entity": "picks",
+      "action": "startShippingLP"
+    },
+    {
+      "file": "android/app/src/main/java/com/dynops/bcwms/feature/PutAwayShipModules.kt",
+      "entity": "picks",
+      "action": "markShort"
+    },
+    {
+      "file": "android/app/src/main/java/com/dynops/bcwms/feature/PutAwayShipModules.kt",
+      "entity": "shipments",
+      "action": "createPickFor"
+    },
+    {
+      "file": "android/app/src/main/java/com/dynops/bcwms/feature/PutAwayShipModules.kt",
+      "entity": "shipments",
+      "action": "createPickFromLp"
+    },
+    {
+      "file": "android/app/src/main/java/com/dynops/bcwms/feature/PutAwayShipModules.kt",
+      "entity": "shipments",
+      "action": "pickSourceOptions"
+    },
+    {
+      "file": "android/app/src/main/java/com/dynops/bcwms/feature/PutAwayShipModules.kt",
+      "entity": "shipments",
+      "action": "assignToUser"
+    },
+    {
+      "file": "android/app/src/main/java/com/dynops/bcwms/feature/PutAwayShipModules.kt",
+      "entity": "shipments",
+      "action": "postToPrinter"
+    },
+    {
+      "file": "android/app/src/main/java/com/dynops/bcwms/feature/PutAwayShipModules.kt",
+      "entity": "shipments",
+      "action": "listShippingAgents"
+    },
+    {
+      "file": "android/app/src/main/java/com/dynops/bcwms/feature/PutAwayShipModules.kt",
+      "entity": "shipments",
+      "action": "setShippingAgent"
+    },
+    {
+      "file": "android/app/src/main/java/com/dynops/bcwms/feature/PutAwayShipModules.kt",
+      "entity": "salesSources",
+      "action": "ship"
+    },
+    {
+      "file": "android/app/src/main/java/com/dynops/bcwms/feature/PrintersModule.kt",
+      "entity": "printers",
+      "action": "printBarcodeTest"
+    },
+    {
+      "file": "android/app/src/main/java/com/dynops/bcwms/feature/PrintersModule.kt",
+      "entity": "printers",
+      "action": "testPrint"
+    },
+    {
+      "file": "android/app/src/main/java/com/dynops/bcwms/feature/InquiryModules.kt",
+      "entity": "items",
+      "action": "printLabel"
+    },
+    {
+      "file": "android/app/src/main/java/com/dynops/bcwms/feature/InquiryModules.kt",
+      "entity": "bins",
+      "action": "printLabel"
+    },
+    {
+      "file": "android/app/src/main/java/com/dynops/bcwms/feature/LicensePlateModule.kt",
+      "entity": "licensePlates",
+      "action": "addLineFromBin"
+    },
+    {
+      "file": "android/app/src/main/java/com/dynops/bcwms/feature/LicensePlateModule.kt",
+      "entity": "licensePlates",
+      "action": "moveToBin"
+    },
+    {
+      "file": "android/app/src/main/java/com/dynops/bcwms/feature/QualityModule.kt",
+      "entity": "qualityOrders",
+      "action": "pass"
+    },
+    {
+      "file": "android/app/src/main/java/com/dynops/bcwms/feature/QualityModule.kt",
+      "entity": "qualityOrders",
+      "action": "fail"
+    },
+    {
+      "file": "android/app/src/main/java/com/dynops/bcwms/feature/MoveAndCountModules.kt",
+      "entity": "licensePlates",
+      "action": "transfer"
+    },
+    {
+      "file": "android/app/src/main/java/com/dynops/bcwms/feature/MoveAndCountModules.kt",
+      "entity": "licensePlates",
+      "action": "moveToBin"
+    },
+    {
+      "file": "android/app/src/main/java/com/dynops/bcwms/feature/MoveAndCountModules.kt",
+      "entity": "licensePlates",
+      "action": "printPalletLabels"
+    },
+    {
+      "file": "android/app/src/main/java/com/dynops/bcwms/feature/MoveAndCountModules.kt",
+      "entity": "countSheets",
+      "action": "postSheet"
+    },
+    {
+      "file": "android/app/src/main/java/com/dynops/bcwms/feature/MoveAndCountModules.kt",
+      "entity": "countSheets",
+      "action": "completeCounter"
+    },
+    {
+      "file": "android/app/src/main/java/com/dynops/bcwms/feature/MoveAndCountModules.kt",
+      "entity": "countSheets",
+      "action": "setCounters"
+    },
+    {
+      "file": "android/app/src/main/java/com/dynops/bcwms/feature/MoveAndCountModules.kt",
+      "entity": "licensePlates",
+      "action": "printLabel"
+    },
+    {
+      "file": "android/app/src/main/java/com/dynops/bcwms/feature/MoveAndCountModules.kt",
+      "entity": "countSheets",
+      "action": "attachLpToBin"
+    },
+    {
+      "file": "android/app/src/main/java/com/dynops/bcwms/feature/MoveAndCountModules.kt",
+      "entity": "countSheets",
+      "action": "addUnexpectedItem"
+    },
+    {
+      "file": "android/app/src/main/java/com/dynops/bcwms/feature/MoveAndCountModules.kt",
+      "entity": "countSheets",
+      "action": "addUnexpectedLp"
+    },
+    {
+      "file": "android/app/src/main/java/com/dynops/bcwms/feature/MoveAndCountModules.kt",
+      "entity": "movements",
+      "action": "assignTo"
+    },
+    {
+      "file": "android/app/src/main/java/com/dynops/bcwms/feature/MoveAndCountModules.kt",
+      "entity": "movements",
+      "action": "confirmLineFromLp"
+    },
+    {
+      "file": "android/app/src/main/java/com/dynops/bcwms/feature/MoveAndCountModules.kt",
+      "entity": "movements",
+      "action": "registerFor"
+    },
+    {
+      "file": "android/app/src/main/java/com/dynops/bcwms/feature/ReceivingModule.kt",
+      "entity": "receipts",
+      "action": "assignToUser"
+    },
+    {
+      "file": "android/app/src/main/java/com/dynops/bcwms/feature/ReceivingModule.kt",
+      "entity": "receipts",
+      "action": "startLP"
+    },
+    {
+      "file": "android/app/src/main/java/com/dynops/bcwms/feature/ReceivingModule.kt",
+      "entity": "receipts",
+      "action": "postAndCloseLP"
+    },
+    {
+      "file": "android/app/src/main/java/com/dynops/bcwms/feature/ReceivingModule.kt",
+      "entity": "receipts",
+      "action": "listVehicleDrivers"
+    },
+    {
+      "file": "android/app/src/main/java/com/dynops/bcwms/feature/ReceivingModule.kt",
+      "entity": "receipts",
+      "action": "createBulkLPDistribution"
+    },
+    {
+      "file": "android/app/src/main/java/com/dynops/bcwms/feature/ReceivingModule.kt",
+      "entity": "purchaseSources",
+      "action": "createWhseReceipt"
+    },
+    {
+      "file": "android/app/src/main/java/com/dynops/bcwms/feature/ReceivingModule.kt",
+      "entity": "purchaseSources",
+      "action": "receive"
+    },
+    {
+      "file": "android/app/src/main/java/com/dynops/bcwms/feature/PostingTestModule.kt",
+      "entity": "postingTests",
+      "action": "runAll"
+    },
+    {
+      "file": "android/app/src/main/java/com/dynops/bcwms/feature/PickingModule.kt",
+      "entity": "picks",
+      "action": "reassign"
+    },
+    {
+      "file": "android/app/src/main/java/com/dynops/bcwms/feature/PickingModule.kt",
+      "entity": "picks",
+      "action": "reassign"
+    },
+    {
+      "file": "android/app/src/main/java/com/dynops/bcwms/feature/PickingModule.kt",
+      "entity": "picks",
+      "action": "reassign"
+    },
+    {
+      "file": "android/app/src/main/java/com/dynops/bcwms/feature/PickingModule.kt",
+      "entity": "picks",
+      "action": "startShippingLP"
+    },
+    {
+      "file": "android/app/src/main/java/com/dynops/bcwms/feature/PickingModule.kt",
+      "entity": "picks",
+      "action": "toteForOrder"
+    },
+    {
+      "file": "android/app/src/main/java/com/dynops/bcwms/feature/PickingModule.kt",
+      "entity": "picks",
+      "action": "startShippingLP"
+    },
+    {
+      "file": "android/app/src/main/java/com/dynops/bcwms/feature/PickingModule.kt",
+      "entity": "picks",
+      "action": "assignTote"
+    },
+    {
+      "file": "android/app/src/main/java/com/dynops/bcwms/feature/CountV2Module.kt",
+      "entity": "countSheets",
+      "action": "prepareV2"
+    },
+    {
+      "file": "android/app/src/main/java/com/dynops/bcwms/feature/CountV2Module.kt",
+      "entity": "countSheets",
+      "action": "prepareV2Bin"
+    },
+    {
+      "file": "android/app/src/main/java/com/dynops/bcwms/feature/CountV2Module.kt",
+      "entity": "countSheets",
+      "action": "scanV2Label"
+    },
+    {
+      "file": "android/app/src/main/java/com/dynops/bcwms/feature/CountV2Module.kt",
+      "entity": "countSheets",
+      "action": "scanV2Lp"
+    },
+    {
+      "file": "android/app/src/main/java/com/dynops/bcwms/feature/CountV2Module.kt",
+      "entity": "countSheetLines",
+      "action": "recordCount"
+    },
+    {
+      "file": "android/app/src/main/java/com/dynops/bcwms/feature/CountV2Module.kt",
+      "entity": "countSheets",
+      "action": "undoV2Lp"
+    },
+    {
+      "file": "android/app/src/main/java/com/dynops/bcwms/feature/CountV2Module.kt",
+      "entity": "countSheets",
+      "action": "undoV2Scan"
+    },
+    {
+      "file": "android/app/src/main/java/com/dynops/bcwms/feature/CountV2Module.kt",
+      "entity": "countSheets",
+      "action": "postSheet"
+    },
+    {
+      "file": "android/app/src/main/java/com/dynops/bcwms/feature/CountV2Module.kt",
+      "entity": "countSheets",
+      "action": "completeCounter"
+    },
+    {
+      "file": "android/app/src/main/java/com/dynops/bcwms/feature/CountV2Module.kt",
+      "entity": "countSheets",
+      "action": "completeV2Bin"
+    },
+    {
+      "file": "android/app/src/main/java/com/dynops/bcwms/feature/HierarchicalLpModule.kt",
+      "entity": "licensePlateTemplates",
+      "action": "build"
+    },
+    {
+      "file": "android/app/src/main/java/com/dynops/bcwms/feature/HierarchicalLpModule.kt",
+      "entity": "licensePlates",
+      "action": "getHierarchy"
+    },
+    {
+      "file": "android/app/src/main/java/com/dynops/bcwms/feature/HierarchicalLpModule.kt",
+      "entity": "licensePlates",
+      "action": "moveHierarchy"
+    }
+  ],
+  "missing": [
+    {
+      "file": "android/app/src/main/java/com/dynops/bcwms/feature/HierarchicalLpModule.kt",
+      "entity": "licensePlates",
+      "action": "getHierarchy"
+    },
+    {
+      "file": "android/app/src/main/java/com/dynops/bcwms/feature/HierarchicalLpModule.kt",
+      "entity": "licensePlates",
+      "action": "moveHierarchy"
+    }
+  ]
+}

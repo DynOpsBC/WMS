@@ -1,0 +1,7 @@
+
+ RUN  v2.1.9 /Users/kaanodabas/Desktop/EL_TERMINAL/WMS/web
+
+include: src/**/*.{test,spec}.{ts,tsx}
+exclude:  node_modules/**, tests/**, dist/**
+No test files found, exiting with code 0
+

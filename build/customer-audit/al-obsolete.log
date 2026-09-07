@@ -1,0 +1,4 @@
+PASS al/src/LPPropagation/WhseReceiptHeaderExt.TableExt.al obsolete metadata complete
+PASS al/src/Receiving/LotNoInformationExt.TableExt.al obsolete metadata complete
+PASS al/src/Ship/PostedWhseShipmentLineExt.TableExt.al obsolete metadata complete
+PASS obsolete audit complete

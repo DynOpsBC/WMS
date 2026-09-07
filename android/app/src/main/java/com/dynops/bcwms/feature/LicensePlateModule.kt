@@ -1,5 +1,7 @@
 package com.dynops.bcwms.feature
 
+import com.dynops.bcwms.ui.toFiniteDoubleOrNull
+
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.lazy.LazyColumn
@@ -44,6 +46,8 @@ fun LicensePlateModule() {
     var selectedForPrint by remember { mutableStateOf<Set<String>>(emptySet()) }
     var palletLabelRetryNos by remember { mutableStateOf<Set<String>>(emptySet()) }
     var search by remember { mutableStateOf("") }
+    var lastCreatedLpNos by remember { mutableStateOf<Set<String>>(emptySet()) }
+    var showLastCreatedOnly by remember { mutableStateOf(false) }
 
     fun loadList(statusAfterLoad: String? = null) {
         scope.launch {
@@ -71,45 +75,24 @@ fun LicensePlateModule() {
         return
     }
 
-    if (showBulkBuild) {
-        BulkLpBuildSheet(
-            onDismiss = { showBulkBuild = false },
-            onBuilt = { result ->
-                showBulkBuild = false
-                val failedPrints = result.failedPrintLpNos.toSet()
-                // İlk baskıda başarılı olan LP'leri yeniden seçmeyiz. Yalnız
-                // sunucunun başarısız bildirdiği MTE/LP etiketleri güvenli tekrar
-                // için seçili ve aynı pallet-label rotasında kalır.
-                selectedForPrint = failedPrints
-                palletLabelRetryNos = failedPrints
-                search = ""
-                val completionStatus = when {
-                    result.replayed && result.printSkippedOnReplay ->
-                        "UYARI: Daha önce oluşturulan ${result.createdLpNos.size} LP güvenle doğrulandı. " +
-                            "Çift baskıyı önlemek için etiketler tekrar kuyruğa alınmadı; fiziksel etiketleri kontrol edip yalnız eksikleri seçin."
-                    result.replayed ->
-                        "TAMAM: Daha önce oluşturulan ${result.createdLpNos.size} LP aynı işlem kimliğiyle güvenle doğrulandı."
-                    failedPrints.isEmpty() ->
-                        "TAMAM: ${result.createdLpNos.size} LP mevcut stoktan oluşturuldu."
-                    else ->
-                        "UYARI: ${result.createdLpNos.size} LP oluşturuldu; ${failedPrints.size} etiket gönderilemedi. " +
-                            "Yalnız başarısız LP'ler seçildi; Seçilenleri Yazdır ile tekrar deneyin."
-                }
-                loadList(completionStatus)
-            },
-        )
+    fun onStockLpBuilt(result: LedgerBulkLpBuildResult) {
+        showBulkBuild = false
+        showSingleBuild = false
+        selectedForPrint = ledgerLpPrintSelection(result)
+        // Keep the original stock-label route for this batch, including manual
+        // selection after a replay with an unknown physical print outcome.
+        palletLabelRetryNos = palletLabelRetryNos + result.createdLpNos
+        lastCreatedLpNos = result.createdLpNos.toSet()
+        showLastCreatedOnly = true
+        search = ""
+        loadList(ledgerLpCompletionStatus(result))
     }
-    if (showSingleBuild) {
+
+    if (showBulkBuild || showSingleBuild) {
         BulkLpBuildSheet(
-            singleLpMode = true,
-            onDismiss = { showSingleBuild = false },
-            onBuilt = { result ->
-                showSingleBuild = false
-                selectedForPrint = result.failedPrintLpNos.toSet()
-                palletLabelRetryNos = result.failedPrintLpNos.toSet()
-                search = ""
-                loadList("TAMAM: Tekli LP seçtiğiniz stok kaydına bağlandı.")
-            },
+            singleLpMode = showSingleBuild,
+            onDismiss = { showBulkBuild = false; showSingleBuild = false },
+            onBuilt = ::onStockLpBuilt,
         )
     }
 
@@ -176,7 +159,6 @@ fun LicensePlateModule() {
             // Kısmi başarıda yalnız başarısız LP'leri seçili bırak. Operatör
             // yeniden denediğinde başarıyla kuyruğa alınan etiketler çift basılmaz.
             selectedForPrint = failures.keys.toSet()
-            palletLabelRetryNos = palletLabelRetryNos.intersect(failures.keys)
         }
     }
 
@@ -201,8 +183,21 @@ fun LicensePlateModule() {
         Spacer(Modifier.height(4.dp))
         StatusText(status)
         Spacer(Modifier.height(8.dp))
+        if (lastCreatedLpNos.isNotEmpty()) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Checkbox(
+                    checked = showLastCreatedOnly,
+                    enabled = !loading,
+                    onCheckedChange = {
+                        showLastCreatedOnly = it
+                        if (it) selectedForPrint = selectedForPrint.intersect(lastCreatedLpNos)
+                    },
+                )
+                Text("Son oluşturulan LP'ler (${lastCreatedLpNos.size})", fontSize = 12.sp)
+            }
+        }
         LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            items(rows) { lp ->
+            items(if (showLastCreatedOnly) rows.filter { it.optString("no") in lastCreatedLpNos } else rows) { lp ->
                 Card(
                     onClick = { selected = lp.optString("no") },
                     modifier = Modifier.fillMaxWidth(),
@@ -268,110 +263,6 @@ private fun StatusBadge(status: String) {
     }
     Surface(color = bg, shape = RoundedCornerShape(50)) {
         Text(lpStatusLabel(status), Modifier.padding(horizontal = 10.dp, vertical = 5.dp), color = fg, fontSize = 11.sp, fontWeight = FontWeight.Bold)
-    }
-}
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun LpBuildSheet(onDismiss: () -> Unit, onBuilt: (String) -> Unit) {
-    val context = LocalContext.current
-    val scope = rememberCoroutineScope()
-    // Müşteri/şirket özel varsayılanları kullanma. Yanlış lokasyonda sessiz LP
-    // oluşmasını önlemek için üç değer de operatör seçimi/okutmasıyla gelir.
-    var template by remember { mutableStateOf("") }
-    var location by remember { mutableStateOf("") }
-    var bin by remember { mutableStateOf("") }
-    var busy by remember { mutableStateOf(false) }
-    var err by remember { mutableStateOf("") }
-    // PDF LP §5: Template alanı serbest text idi — operatör "CARTON-S"
-    // yerine "CARTONS" yazıp sessizce yanlış kayıt yaratıyordu. Dropdown
-    // ile mevcut template'lerden seçtirilir.
-    var templates by remember { mutableStateOf<List<String>>(emptyList()) }
-    LaunchedEffect(Unit) {
-        val page = BcApi.getAllPages(context, "licensePlateTemplates?\$top=50&\$select=code,description")
-        templates = if (page.complete) {
-            page.rows.map { it.optString("code") }.filter { it.isNotBlank() }
-        } else {
-            err = "HATA: LP şablonlarının tamamı alınamadı. Yenileyip tekrar deneyin."
-            emptyList()
-        }
-    }
-    var templateExpanded by remember { mutableStateOf(false) }
-
-    com.dynops.bcwms.ui.SheetScaffold(onDismiss = onDismiss, contentPadding = androidx.compose.foundation.layout.PaddingValues(20.dp)) {
-        Text("Yeni LP Oluştur", fontWeight = FontWeight.Bold, fontSize = 18.sp)
-        Spacer(Modifier.height(12.dp))
-        ExposedDropdownMenuBox(expanded = templateExpanded, onExpandedChange = { templateExpanded = !templateExpanded }) {
-            OutlinedTextField(
-                value = template,
-                onValueChange = { template = it },
-                readOnly = templates.isNotEmpty(),
-                label = { Text("Şablon Kodu") },
-                trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = templateExpanded) },
-                singleLine = true,
-                modifier = Modifier.fillMaxWidth().menuAnchor(),
-            )
-            if (templates.isNotEmpty()) {
-                ExposedDropdownMenu(expanded = templateExpanded, onDismissRequest = { templateExpanded = false }) {
-                    templates.forEach { code ->
-                        DropdownMenuItem(text = { Text(code) }, onClick = { template = code; templateExpanded = false })
-                    }
-                }
-            }
-        }
-        Spacer(Modifier.height(8.dp))
-        ScanField("Lokasyon", location, { location = it }, modifier = Modifier.fillMaxWidth())
-        Spacer(Modifier.height(8.dp))
-        ScanField("Bin", bin, { bin = it }, modifier = Modifier.fillMaxWidth())
-        if (err.isNotBlank()) { Spacer(Modifier.height(8.dp)); StatusText(err) }
-        Spacer(Modifier.height(16.dp))
-        Button(
-            enabled = !busy && template.isNotBlank() && location.isNotBlank() && bin.isNotBlank(),
-            modifier = Modifier.fillMaxWidth().height(50.dp),
-            onClick = {
-                scope.launch {
-                    busy = true; err = ""
-                    val safeTemplate = template.trim().replace("'", "''")
-                    val safeLocation = location.trim().replace("'", "''")
-                    val safeBin = bin.trim().replace("'", "''")
-                    val templateExists = BcApi.get(context, "licensePlateTemplates?\$filter=code eq '$safeTemplate'&\$top=1")
-                    val binExists = BcApi.get(context, "bins?\$filter=locationCode eq '$safeLocation' and code eq '$safeBin'&\$top=1")
-                    if (!templateExists.ok || BcApi.parseValueArray(templateExists.body).isEmpty()) {
-                        busy = false; err = "HATA: Geçerli bir LP şablonu seçin."
-                        return@launch
-                    }
-                    if (!binExists.ok || BcApi.parseValueArray(binExists.body).isEmpty()) {
-                        busy = false; err = "HATA: Lokasyon ve raf eşleşmiyor. Değerleri kontrol edin."
-                        return@launch
-                    }
-                    val body = JSONObject().apply {
-                        put("locationCode", location.trim())
-                        put("binCode", bin.trim())
-                    }.toString()
-                    val r = BcApi.boundAction(
-                        context,
-                        "licensePlateTemplates",
-                        template.trim(),
-                        "build",
-                        body,
-                    )
-                    busy = false
-                    if (r.ok) {
-                        val no = BcApi.scalarValue(r.body).trim()
-                        if (no.isNotBlank()) onBuilt(no)
-                        else err = "HATA: Business Central LP numarası döndürmedi."
-                    } else {
-                        val serverError = BcApi.errorMessage(r.body)
-                        err = if (serverError.contains("LP No. Series", ignoreCase = true))
-                            "HATA: LP numara serisi tanımlı değil. Advanced WMS kurulumunu tamamlayın."
-                        else if (r.httpCode == 404 || r.httpCode == 405)
-                            "HATA: LP Build servisi henüz Business Central'a yayımlanmamış. Güncel AL uzantısını yayımlayın."
-                        else QcErrorParser.friendlyStatus(serverError, r.httpCode)
-                    }
-                }
-            }
-        ) { Text(if (busy) "Oluşturuluyor..." else "Oluştur") }
-        Spacer(Modifier.height(24.dp))
     }
 }
 
@@ -557,6 +448,7 @@ private fun LpDocument(lpNo: String, onBack: () -> Unit) {
                                     fontWeight = FontWeight.Bold,
                                 )
                             val extra = listOfNotNull(
+                                ln.optInt("sourceItemLedgerEntryNo").takeIf { it > 0 }?.let { "Kaynak giriş: #$it" },
                                 ln.optString("sourceBinCode").takeIf { it.isNotBlank() && it != "null" }?.let { "Kaynak raf: $it" },
                                 ln.optString("lotNo").takeIf { it.isNotBlank() }?.let { "Lot $it" },
                                 ln.optString("serialNo").takeIf { it.isNotBlank() }?.let { "Seri $it" },
@@ -1168,7 +1060,7 @@ private fun PartialUseSheet(
     var lineExpanded by remember { mutableStateOf(false) }
     val selectedLine = lines.firstOrNull { it.optInt("lineNo") == selectedLineNo }
     val maximumQuantity = selectedLine?.optDouble("quantity") ?: 0.0
-    val parsedQuantity = qty.toDoubleOrNull()
+    val parsedQuantity = qty.toFiniteDoubleOrNull()
     com.dynops.bcwms.ui.SheetScaffold(onDismiss = onDismiss, contentPadding = androidx.compose.foundation.layout.PaddingValues(20.dp)) {
         Text("Kısmi Kullanım", fontWeight = FontWeight.Bold, fontSize = 18.sp)
         Spacer(Modifier.height(8.dp))

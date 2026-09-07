@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.dynops.bcwms.ui.LineGroupingTest" tests="5" skipped="0" failures="0" errors="0" timestamp="2026-09-06T00:44:33.984Z" hostname="192.168.1.8" time="0.002">
+  <properties/>
+  <testcase name="scanned lot selects its exact group instead of first item group" classname="com.dynops.bcwms.ui.LineGroupingTest" time="0.001"/>
+  <testcase name="serial disambiguates groups sharing a lot" classname="com.dynops.bcwms.ui.LineGroupingTest" time="0.001"/>
+  <testcase name="zero pick clears every line in the selected lot group" classname="com.dynops.bcwms.ui.LineGroupingTest" time="0.0"/>
+  <testcase name="unknown tracking value fails closed" classname="com.dynops.bcwms.ui.LineGroupingTest" time="0.0"/>
+  <testcase name="untracked scan is rejected when item has multiple tracked groups" classname="com.dynops.bcwms.ui.LineGroupingTest" time="0.0"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

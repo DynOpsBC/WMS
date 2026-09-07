@@ -1,5 +1,7 @@
 package com.dynops.bcwms.feature
 
+import com.dynops.bcwms.ui.toFiniteDoubleOrNull
+
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.lazy.LazyColumn
@@ -324,8 +326,8 @@ private fun ConsumeSheet(line: JSONObject, onDismiss: () -> Unit, onConfirm: (qt
         Spacer(Modifier.height(8.dp))
         OutlinedTextField(serial, { serial = it }, label = { Text("Seri No (opsiyonel)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
         Spacer(Modifier.height(16.dp))
-        Button(modifier = Modifier.fillMaxWidth(), enabled = (qty.toDoubleOrNull() ?: 0.0) > 0, onClick = {
-            onConfirm(qty.toDoubleOrNull() ?: 0.0, lp.trim(), lot.trim(), serial.trim(), bin.trim())
+        Button(modifier = Modifier.fillMaxWidth(), enabled = (qty.toFiniteDoubleOrNull() ?: 0.0) > 0, onClick = {
+            onConfirm(qty.toFiniteDoubleOrNull() ?: 0.0, lp.trim(), lot.trim(), serial.trim(), bin.trim())
         }) { Text("Sarfiyatı Onayla") }
         Spacer(Modifier.height(24.dp))
     }
@@ -442,8 +444,8 @@ private fun OutputSheet(line: JSONObject, onDismiss: () -> Unit, onConfirm: (out
         Spacer(Modifier.height(8.dp))
         OutlinedTextField(bin, { bin = it }, label = { Text("Çıktı Bin'i (opsiyonel)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
         Spacer(Modifier.height(16.dp))
-        Button(modifier = Modifier.fillMaxWidth(), enabled = (outQty.toDoubleOrNull() ?: 0.0) > 0, onClick = {
-            onConfirm(outQty.toDoubleOrNull() ?: 0.0, scrapQty.toDoubleOrNull() ?: 0.0, runtime.toDoubleOrNull() ?: 0.0, newLp.trim(), bin.trim())
+        Button(modifier = Modifier.fillMaxWidth(), enabled = (outQty.toFiniteDoubleOrNull() ?: 0.0) > 0, onClick = {
+            onConfirm(outQty.toFiniteDoubleOrNull() ?: 0.0, scrapQty.toFiniteDoubleOrNull() ?: 0.0, runtime.toFiniteDoubleOrNull() ?: 0.0, newLp.trim(), bin.trim())
         }) { Text("Çıktıyı Bildir") }
         Spacer(Modifier.height(24.dp))
     }
@@ -709,7 +711,7 @@ private fun AssemblyQuantitySheet(
         .takeIf { it.isFinite() && it >= 0.0 && it <= remaining }
         ?: remaining
     var quantityText by remember(line.optInt("lineNo")) { mutableStateOf(fmt(initial)) }
-    val quantity = quantityText.toDoubleOrNull()
+    val quantity = quantityText.toFiniteDoubleOrNull()
     val valid = quantity != null && quantity.isFinite() && quantity >= 0.0 && quantity <= remaining
 
     SheetScaffold(onDismiss = onDismiss) {

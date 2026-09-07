@@ -1,0 +1,3025 @@
+diff --git a/al-tests/src/Count/CountV2Tests.Codeunit.al b/al-tests/src/Count/CountV2Tests.Codeunit.al
+index c3f788e..7e85fd0 100644
+--- a/al-tests/src/Count/CountV2Tests.Codeunit.al
++++ b/al-tests/src/Count/CountV2Tests.Codeunit.al
+@@ -2,6 +2,158 @@ codeunit 72142 "DOPSWHS Count V2 Tests"
+ {
+     Subtype = Test;
+ 
++    [Test]
++    procedure UndoKeepsTheBinPendingAndRejectsReplayOfReversedScan()
++    var
++        Line: Record "DOPSWHS Count Sheet Line";
++        CountMgmt: Codeunit "DOPSWHS Count Mgmt";
++        Counters: array[3] of Code[50];
++        SheetNo: Code[20];
++        ScanId: Guid;
++        LineNo: Integer;
++    begin
++        EnsureItemLocationAndBin('CV2-UNDO', 'CV2PCS', 'CV2UNDO', 'A1');
++        SheetNo := CountMgmt.CreateSheet('CV2UNDO', Enum::"DOPSWHS Count Mode"::Visible, Counters);
++        ScanId := CreateGuid();
++        LineNo := CountMgmt.ScanV2Label(SheetNo, ScanId, 'CV2-UNDO', '', 'A1', 'CV2PCS', '', '', 5, 1);
++        CountMgmt.UndoV2Scan(SheetNo, ScanId);
++        Assert.IsTrue(Line.Get(SheetNo, LineNo), 'Undo must retain the bin in count scope.');
++        Assert.IsFalse(Line."Counted 1", 'Undo is an unfinished count, not an explicit zero.');
++        asserterror CountMgmt.CompleteCounter(SheetNo, 1);
++        asserterror CountMgmt.ScanV2Label(SheetNo, ScanId, 'CV2-UNDO', '', 'A1', 'CV2PCS', '', '', 5, 1);
++        CountMgmt.CompleteV2Bin(SheetNo, 'A1', 1);
++        CountMgmt.CompleteCounter(SheetNo, 1);
++    end;
++
++    [Test]
++    procedure ScanIdentityCannotBeReusedForAnotherCounterOrQuantity()
++    var
++        Line: Record "DOPSWHS Count Sheet Line";
++        CountMgmt: Codeunit "DOPSWHS Count Mgmt";
++        Counters: array[3] of Code[50];
++        SheetNo: Code[20];
++        ScanId: Guid;
++        LineNo: Integer;
++    begin
++        EnsureItemLocationAndBin('CV2-RETRY', 'CV2PCS', 'CV2RETRY', 'A1');
++        SheetNo := CountMgmt.CreateSheet('CV2RETRY', Enum::"DOPSWHS Count Mode"::Visible, Counters);
++        ScanId := CreateGuid();
++        LineNo := CountMgmt.ScanV2Label(SheetNo, ScanId, 'CV2-RETRY', '', 'A1', 'CV2PCS', '', '', 5, 1);
++        asserterror CountMgmt.ScanV2Label(SheetNo, ScanId, 'CV2-RETRY', '', 'A1', 'CV2PCS', '', '', 5, 2);
++        asserterror CountMgmt.ScanV2Label(SheetNo, ScanId, 'CV2-RETRY', '', 'A1', 'CV2PCS', '', '', 6, 1);
++        CountMgmt.ScanV2Label(SheetNo, ScanId, 'CV2-RETRY', '', 'A1', 'CV2PCS', '', '', 5, 1);
++        Line.Get(SheetNo, LineNo);
++        Assert.AreEqual(5, Line."Counted Qty 1", 'An identical retry must not add quantity twice.');
++        Assert.IsFalse(Line."Counted 2", 'A changed counter must not consume the original operation identity.');
++    end;
++
++    [Test]
++    procedure RecountInvalidatesOldEventsWithoutSkippingNewCounts()
++    var
++        Line: Record "DOPSWHS Count Sheet Line";
++        CountMgmt: Codeunit "DOPSWHS Count Mgmt";
++        Counters: array[3] of Code[50];
++        SheetNo: Code[20];
++        OldScanId: Guid;
++        LineNo: Integer;
++    begin
++        EnsureItemLocationAndBin('CV2-AGAIN', 'CV2PCS', 'CV2AGAIN', 'A1');
++        SheetNo := CountMgmt.CreateSheet('CV2AGAIN', Enum::"DOPSWHS Count Mode"::Visible, Counters);
++        OldScanId := CreateGuid();
++        LineNo := CountMgmt.ScanV2Label(SheetNo, OldScanId, 'CV2-AGAIN', '', 'A1', 'CV2PCS', '', '', 5, 1);
++        CountMgmt.StartRecount(SheetNo);
++        asserterror CountMgmt.ScanV2Label(SheetNo, OldScanId, 'CV2-AGAIN', '', 'A1', 'CV2PCS', '', '', 5, 1);
++        CountMgmt.ScanV2Label(SheetNo, CreateGuid(), 'CV2-AGAIN', '', 'A1', 'CV2PCS', '', '', 3, 1);
++        Line.Get(SheetNo, LineNo);
++        Assert.AreEqual(3, Line."Counted Qty 1", 'Only the new recount event contributes to this round.');
++    end;
++
++    [Test]
++    procedure FinishBinZerosOnlyUncountedLinesForCurrentCounter()
++    var
++        Line: Record "DOPSWHS Count Sheet Line";
++        CountMgmt: Codeunit "DOPSWHS Count Mgmt";
++        Counters: array[3] of Code[50];
++        SheetNo: Code[20];
++    begin
++        EnsureItemLocationAndBin('CV2-ZERO', 'CV2PCS', 'CV2ZERO', 'A1');
++        InsertBuiltLp('CV2-ZERO-LP', 'CV2-ZERO', 'CV2PCS', 'CV2ZERO', 'A1', 5);
++        SheetNo := CountMgmt.CreateSheet('CV2ZERO', Enum::"DOPSWHS Count Mode"::Visible, Counters);
++        CountMgmt.PrepareV2Bin(SheetNo, 'A1');
++        CountMgmt.CompleteV2Bin(SheetNo, 'A1', 1);
++        CountMgmt.CompleteV2Bin(SheetNo, 'A1', 1);
++        Line.SetRange("Sheet No.", SheetNo);
++        Assert.AreEqual(1, Line.Count(), 'Finishing twice must not duplicate expected stock.');
++        Line.FindFirst();
++        Assert.IsTrue(Line."Counted 1", 'Explicitly finishing the bin confirms missing stock as zero.');
++        Assert.AreEqual(0, Line."Counted Qty 1", 'Missing item must be zero for this counter.');
++        Assert.IsFalse(Line."Counted 2", 'Another counter must remain uncounted.');
++        Assert.IsFalse(Line."Counted 3", 'Another counter must remain uncounted.');
++        Assert.AreEqual(5, Line."System Qty", 'System snapshot must not be changed.');
++    end;
++
++    [Test]
++    procedure FinishBinPreservesAlreadyRecordedQuantity()
++    var
++        Line: Record "DOPSWHS Count Sheet Line";
++        CountMgmt: Codeunit "DOPSWHS Count Mgmt";
++        Counters: array[3] of Code[50];
++        SheetNo: Code[20];
++    begin
++        EnsureItemLocationAndBin('CV2-KEEP', 'CV2PCS', 'CV2KEEP', 'A1');
++        InsertBuiltLp('CV2-KEEP-LP', 'CV2-KEEP', 'CV2PCS', 'CV2KEEP', 'A1', 5);
++        SheetNo := CountMgmt.CreateSheet('CV2KEEP', Enum::"DOPSWHS Count Mode"::Visible, Counters);
++        CountMgmt.PrepareV2Bin(SheetNo, 'A1');
++        Line.SetRange("Sheet No.", SheetNo);
++        Line.FindFirst();
++        CountMgmt.RecordCount(SheetNo, Line."Line No.", 1, 3);
++        CountMgmt.CompleteV2Bin(SheetNo, 'A1', 1);
++        Line.FindFirst();
++        Assert.AreEqual(3, Line."Counted Qty 1", 'Finishing must preserve a physical count already entered.');
++    end;
++
++    [Test]
++    procedure UnexpectedItemSeedsSourceWithoutCountingOrMovingIt()
++    var
++        Line: Record "DOPSWHS Count Sheet Line";
++        Entry: Record "Warehouse Entry";
++        BinContent: Record "Bin Content";
++        CountMgmt: Codeunit "DOPSWHS Count Mgmt";
++        Counters: array[3] of Code[50];
++        SheetNo: Code[20];
++        EntryNo: Integer;
++    begin
++        EnsureItemLocationAndBin('CV2-MOVE', 'CV2PCS', 'CV2MOVE', 'A1');
++        EnsureItemLocationAndBin('CV2-MOVE', 'CV2PCS', 'CV2MOVE', 'A2');
++        EntryNo := InsertWarehouseBalance('CV2-MOVE', 'CV2PCS', 'CV2MOVE', 'A2', 5);
++        BinContent.Init();
++        BinContent."Location Code" := 'CV2MOVE';
++        BinContent."Bin Code" := 'A2';
++        BinContent."Item No." := 'CV2-MOVE';
++        BinContent."Unit of Measure Code" := 'CV2PCS';
++        BinContent."Qty. per Unit of Measure" := 1;
++        BinContent.Insert(true);
++        SheetNo := CountMgmt.CreateSheet('CV2MOVE', Enum::"DOPSWHS Count Mode"::Visible, Counters);
++        CountMgmt.ScanV2Label(SheetNo, CreateGuid(), 'CV2-MOVE', '', 'A1', 'CV2PCS', '', '', 5, 1);
++        CountMgmt.CompleteV2Bin(SheetNo, 'A1', 1);
++        Line.SetRange("Sheet No.", SheetNo);
++        Line.SetRange("Bin Code", 'A2');
++        Assert.IsTrue(Line.FindFirst(), 'Source bin must be visible as a pending count.');
++        Assert.IsFalse(Line."Counted 1", 'Finding stock elsewhere must not automatically zero the source.');
++        asserterror CountMgmt.CompleteCounter(SheetNo, 1);
++        Entry.Get(EntryNo);
++        Assert.AreEqual(5, Entry.Quantity, 'Scanning/finishing must not deduct source stock.');
++        CountMgmt.CompleteV2Bin(SheetNo, 'A2', 1);
++        CountMgmt.CompleteCounter(SheetNo, 1);
++        CountMgmt.EvaluateVariance(SheetNo);
++        Line.Reset();
++        Line.SetRange("Sheet No.", SheetNo);
++        Line.CalcSums(Variance);
++        Assert.AreEqual(0, Line.Variance, 'Equal opposite bin differences must balance only after both bins were counted.');
++        Entry.Get(EntryNo);
++        Assert.AreEqual(5, Entry.Quantity, 'Review must not post any stock adjustment.');
++    end;
++
+     [Test]
+     procedure PrepareV2MarksEmptySheetAndIsIdempotent()
+     var
+@@ -163,7 +315,8 @@ codeunit 72142 "DOPSWHS Count V2 Tests"
+         CountLine.FindFirst();
+         CountLine."System Qty" := 1000;
+         CountLine.Modify(true);
+-        CountMgmt.CompleteCounter(SheetNo, 1);
++        asserterror CountMgmt.CompleteCounter(SheetNo, 1);
++        Assert.ExpectedError('güvenli olmayan sistem miktarı');
+ 
+         asserterror CountMgmt.PostSheet(SheetNo);
+         Assert.ExpectedError('güvenli olmayan sistem miktarı');
+diff --git a/al/app.json b/al/app.json
+index 6d1e66d..37a3b34 100644
+--- a/al/app.json
++++ b/al/app.json
+@@ -2,7 +2,7 @@
+   "id": "984e25aa-07c2-4401-babc-88f975303a52",
+   "publisher": "DynamicsOps",
+   "name": "BCWMSApp",
+-  "version": "1.14.1.29",
++  "version": "1.14.1.31",
+   "brief": "Advanced Warehouse Management System for Business Central SaaS",
+   "description": "Advanced warehouse management foundation for Business Central SaaS.",
+   "privacyStatement": "https://dynops.com/privacy",
+diff --git a/al/src/Count/CountApi.Page.al b/al/src/Count/CountApi.Page.al
+index 8b10c0d..3537941 100644
+--- a/al/src/Count/CountApi.Page.al
++++ b/al/src/Count/CountApi.Page.al
+@@ -26,6 +26,7 @@ page 72221 "DOPSWHS Count API"
+                 // V2 modu yalnız prepareV2 / countOps.createV2 / BC kartı ile değişir;
+                 // API POST gövdesindeki v2ScanMode yok sayılır.
+                 field(v2ScanMode; Rec."V2 Scan Mode") { Caption = 'v2ScanMode'; Editable = false; }
++                field(binReviewSupported; BinReviewSupported) { Caption = 'binReviewSupported'; Editable = false; }
+                 field(zoneFilter; Rec."Zone Filter") { Caption = 'zoneFilter'; Editable = false; }
+                 field(counter1UserId; Counter1UserId) { Caption = 'counter1UserId'; Editable = false; }
+                 field(counter2UserId; Counter2UserId) { Caption = 'counter2UserId'; Editable = false; }
+@@ -63,6 +64,7 @@ page 72221 "DOPSWHS Count API"
+         CountMgmt: Codeunit "DOPSWHS Count Mgmt";
+     begin
+         TerminalPostAllowed := CountMgmt.TerminalCountPostingAllowed();
++        BinReviewSupported := true;
+         Clear(Counter1UserId);
+         Clear(Counter2UserId);
+         Clear(Counter3UserId);
+@@ -92,6 +94,22 @@ page 72221 "DOPSWHS Count API"
+             until Counter.Next() = 0;
+     end;
+ 
++    [ServiceEnabled]
++    procedure prepareV2Bin(binCode: Code[20])
++    var
++        CountMgmt: Codeunit "DOPSWHS Count Mgmt";
++    begin
++        CountMgmt.PrepareV2Bin(Rec."No.", binCode);
++    end;
++
++    [ServiceEnabled]
++    procedure completeV2Bin(binCode: Code[20]; counterSlot: Integer)
++    var
++        CountMgmt: Codeunit "DOPSWHS Count Mgmt";
++    begin
++        CountMgmt.CompleteV2Bin(Rec."No.", binCode, counterSlot);
++    end;
++
+     [ServiceEnabled]
+     procedure setCounters(counter1UserId: Code[50]; counter2UserId: Code[50]; counter3UserId: Code[50])
+     var
+@@ -217,6 +235,7 @@ page 72221 "DOPSWHS Count API"
+ 
+ 
+     var
++        BinReviewSupported: Boolean;
+         Counter1UserId: Code[50];
+         Counter2UserId: Code[50];
+         Counter3UserId: Code[50];
+diff --git a/al/src/Count/CountMgmt.Codeunit.al b/al/src/Count/CountMgmt.Codeunit.al
+index 24e0ddc..27e6e14 100644
+--- a/al/src/Count/CountMgmt.Codeunit.al
++++ b/al/src/Count/CountMgmt.Codeunit.al
+@@ -142,6 +142,21 @@ codeunit 72050 "DOPSWHS Count Mgmt"
+     var
+         CountHeader: Record "DOPSWHS Count Sheet Header";
+         CountLine: Record "DOPSWHS Count Sheet Line";
++    begin
++        CountHeader.Get(SheetNo);
++        if CountHeader.Status = CountHeader.Status::Posted then
++            Error(CountAlreadyPostedErr, SheetNo);
++        if CountHeader."V2 Scan Mode" then
++            Error(V2SheetCannotGenerateErr, SheetNo);
++        CountLine.SetRange("Sheet No.", SheetNo);
++        CountLine.DeleteAll(true);
++        exit(BuildBinSnapshot(SheetNo, '', CountLine));
++    end;
++
++    // Shared snapshot builder: V2 uses a temporary buffer and never deletes scans.
++    local procedure BuildBinSnapshot(SheetNo: Code[20]; BinCode: Code[20]; var CountLine: Record "DOPSWHS Count Sheet Line") LinesCreated: Integer
++    var
++        CountHeader: Record "DOPSWHS Count Sheet Header";
+         BinContent: Record "Bin Content";
+         LPHeader: Record "DOPSWHS LP Header";
+         LPLine: Record "DOPSWHS LP Line";
+@@ -167,16 +182,12 @@ codeunit 72050 "DOPSWHS Count Mgmt"
+         CountHeader.Get(SheetNo);
+         if CountHeader.Status = CountHeader.Status::Posted then
+             Error(CountAlreadyPostedErr, SheetNo);
+-        if CountHeader."V2 Scan Mode" then
+-            Error(V2SheetCannotGenerateErr, SheetNo);
+-
+-        CountLine.SetRange("Sheet No.", SheetNo);
+-        CountLine.DeleteAll(true);
+-
+         // Önce palet/kap (LP) içerikleri ayrı satırlar olarak snapshot edilir.
+         // Böylece depocu LP barkodunu okutup doğrudan o paletteki miktarı sayar.
+         NextLineNo := 0;
+         LPHeader.SetRange("Location Code", CountHeader."Location Code");
++        if BinCode <> '' then
++            LPHeader.SetRange("Bin Code", BinCode);
+         LPHeader.SetFilter(Status, '%1|%2|%3', LPHeader.Status::Open, LPHeader.Status::Built, LPHeader.Status::Assigned);
+         if LPHeader.FindSet() then
+             repeat
+@@ -224,6 +235,8 @@ codeunit 72050 "DOPSWHS Count Mgmt"
+         // LP'ye bağlı olmayan stok ayrıca sayılır. Aynı stok hem LP satırında hem
+         // bin satırında iki kez oluşmasın diye LP miktarı bin içeriğinden düşülür.
+         BinContent.SetRange("Location Code", CountHeader."Location Code");
++        if BinCode <> '' then
++            BinContent.SetRange("Bin Code", BinCode);
+         if CountHeader."Zone Filter" <> '' then
+             BinContent.SetRange("Zone Code", CountHeader."Zone Filter");
+         if BinContent.FindSet() then
+@@ -594,6 +607,8 @@ codeunit 72050 "DOPSWHS Count Mgmt"
+         CountLine: Record "DOPSWHS Count Sheet Line";
+         ScanEvent: Record "DOPSWHS Count V2 Scan";
+         WarehouseEntry: Record "Warehouse Entry";
++        LPHeader: Record "DOPSWHS LP Header";
++        LPLine: Record "DOPSWHS LP Line";
+         Item: Record Item;
+         ItemVariant: Record "Item Variant";
+         ItemUom: Record "Item Unit of Measure";
+@@ -614,6 +629,16 @@ codeunit 72050 "DOPSWHS Count Mgmt"
+         if ScanEvent.Get(ScanId) then begin
+             if ScanEvent."Sheet No." <> SheetNo then
+                 Error(V2ScanIdConflictErr, ScanId);
++            if ScanEvent.Reversed then
++                Error('Bu okutma geri alındı veya yeniden sayım başlatıldı. Rafı ve etiketi yeniden okutun.');
++            if (ScanEvent."Counter Slot" <> CounterSlot) or (ScanEvent.Quantity <> Qty) then
++                Error(V2ScanIdConflictErr, ScanId);
++            CountLine.Get(SheetNo, ScanEvent."Line No.");
++            if (CountLine."Item No." <> ItemNo) or (CountLine."Variant Code" <> VariantCode) or
++               (CountLine."Bin Code" <> BinCode) or (CountLine."Lot No." <> LotNo) or
++               (CountLine."Serial No." <> SerialNo) or (CountLine."LP No." <> '') or
++               ((UomCode <> '') and (CountLine."Unit of Measure Code" <> UomCode)) then
++                Error(V2ScanIdConflictErr, ScanId);
+             exit(ScanEvent."Line No.");
+         end;
+ 
+@@ -659,6 +684,27 @@ codeunit 72050 "DOPSWHS Count Mgmt"
+                     SystemQty += WarehouseEntry.Quantity;
+                 until WarehouseEntry.Next() = 0;
+ 
++            // Loose labels must not snapshot the stock already represented by LP lines.
++            LPHeader.SetRange("Location Code", CountHeader."Location Code");
++            LPHeader.SetRange("Bin Code", BinCode);
++            LPHeader.SetFilter(Status, '%1|%2|%3', LPHeader.Status::Open, LPHeader.Status::Built, LPHeader.Status::Assigned);
++            if LPHeader.FindSet() then
++                repeat
++                    LPLine.SetRange("LP No.", LPHeader."No.");
++                    LPLine.SetRange("Item No.", ItemNo);
++                    LPLine.SetRange("Variant Code", VariantCode);
++                    LPLine.SetRange("Lot No.", LotNo);
++                    LPLine.SetRange("Serial No.", SerialNo);
++                    if LPLine.FindSet() then
++                        repeat
++                            if (LPLine."Unit of Measure" = UomCode) or
++                               ((LPLine."Unit of Measure" = '') and (Item."Base Unit of Measure" = UomCode)) then
++                                SystemQty -= LPLine.Quantity;
++                        until LPLine.Next() = 0;
++                until LPHeader.Next() = 0;
++            if SystemQty < 0 then
++                SystemQty := 0;
++
+             CountLine.Reset();
+             CountLine.SetRange("Sheet No.", SheetNo);
+             if CountLine.FindLast() then
+@@ -728,6 +774,13 @@ codeunit 72050 "DOPSWHS Count Mgmt"
+         if ScanEvent.Get(ScanId) then begin
+             if ScanEvent."Sheet No." <> SheetNo then
+                 Error(V2ScanIdConflictErr, ScanId);
++            if ScanEvent.Reversed then
++                Error('Bu okutma geri alındı veya yeniden sayım başlatıldı. Rafı ve LP etiketini yeniden okutun.');
++            if (ScanEvent."Counter Slot" <> CounterSlot) or (ScanEvent.Quantity <> 0) then
++                Error(V2ScanIdConflictErr, ScanId);
++            CountLine.Get(SheetNo, ScanEvent."Line No.");
++            if (CountLine."LP No." <> LpNo) or (CountLine."Bin Code" <> BinCode) then
++                Error(V2ScanIdConflictErr, ScanId);
+             CountLine.SetRange("Sheet No.", SheetNo);
+             CountLine.SetRange("LP No.", LpNo);
+             CountLine.SetRange("Bin Code", BinCode);
+@@ -842,6 +895,7 @@ codeunit 72050 "DOPSWHS Count Mgmt"
+     var
+         CountHeader: Record "DOPSWHS Count Sheet Header";
+         CountLine: Record "DOPSWHS Count Sheet Line";
++        ScanEvent: Record "DOPSWHS Count V2 Scan";
+     begin
+         if not (CounterSlot in [1, 2, 3]) then
+             Error(CounterSlotErr);
+@@ -860,6 +914,11 @@ codeunit 72050 "DOPSWHS Count Mgmt"
+         if CountLine.FindSet(true) then
+             repeat
+                 RemoveSlotCount(CountLine, CounterSlot, SheetNo);
++                ScanEvent.SetRange("Sheet No.", SheetNo);
++                ScanEvent.SetRange("Line No.", CountLine."Line No.");
++                ScanEvent.SetRange("Counter Slot", CounterSlot);
++                ScanEvent.SetRange(Quantity, 0);
++                ScanEvent.ModifyAll(Reversed, true);
+                 LinesReverted += 1;
+             until CountLine.Next() = 0;
+     end;
+@@ -929,19 +988,12 @@ codeunit 72050 "DOPSWHS Count Mgmt"
+     end;
+ 
+     local procedure RemoveSlotCount(var CountLine: Record "DOPSWHS Count Sheet Line"; CounterSlot: Integer; SheetNo: Code[20])
+-    var
+-        OtherSlot: Integer;
+-        OtherCounted: Boolean;
+     begin
+         ClearCountValue(CountLine, CounterSlot);
+-        for OtherSlot := 1 to 3 do
+-            if (OtherSlot <> CounterSlot) and IsSlotCounted(CountLine, OtherSlot) then
+-                OtherCounted := true;
+-        if OtherCounted then begin
+-            EvaluateLineVariance(CountLine, SheetNo);
+-            CountLine.Modify(true);
+-        end else
+-            CountLine.Delete(true);
++        // Retain the expected stock and bin scope. Deleting the last scan line
++        // could make an unfinished bin disappear from the posting checks.
++        EvaluateLineVariance(CountLine, SheetNo);
++        CountLine.Modify(true);
+     end;
+ 
+     /// <summary>
+@@ -1092,6 +1144,7 @@ codeunit 72050 "DOPSWHS Count Mgmt"
+         CountHeader: Record "DOPSWHS Count Sheet Header";
+         CountLine: Record "DOPSWHS Count Sheet Line";
+         Counter: Record "DOPSWHS Count Counter";
++        ScanEvent: Record "DOPSWHS Count V2 Scan";
+     begin
+         CountHeader.Get(SheetNo);
+         if CountHeader.Status = CountHeader.Status::Posted then
+@@ -1119,10 +1172,198 @@ codeunit 72050 "DOPSWHS Count Mgmt"
+                 Counter.Modify(true);
+             until Counter.Next() = 0;
+ 
++        ScanEvent.SetRange("Sheet No.", SheetNo);
++        ScanEvent.ModifyAll(Reversed, true);
+         CountHeader.Status := CountHeader.Status::InProgress;
+         CountHeader.Modify(true);
+     end;
+ 
++    procedure PrepareV2Bin(SheetNo: Code[20]; BinCode: Code[20])
++    begin
++        MergeV2BinSnapshot(SheetNo, BinCode, false);
++    end;
++
++    procedure ValidateBinReview(SheetNo: Code[20])
++    begin
++        EnsureV2BinCoverage(SheetNo, true);
++        EnsureAllRequiredCountsRecorded(SheetNo);
++    end;
++
++    procedure CompleteV2Bin(SheetNo: Code[20]; BinCode: Code[20]; CounterSlot: Integer)
++    var
++        CountLine: Record "DOPSWHS Count Sheet Line";
++        Counter: Record "DOPSWHS Count Counter";
++    begin
++        if not (CounterSlot in [1, 2, 3]) then
++            Error(CounterSlotErr);
++        EnsureCounterSlotOpen(SheetNo, CounterSlot);
++        Counter.SetRange("Sheet No.", SheetNo);
++        if not Counter.IsEmpty() then
++            if not Counter.Get(SheetNo, CounterSlot) then
++                Error(CounterNotAssignedErr, CounterSlot, SheetNo);
++        MergeV2BinSnapshot(SheetNo, BinCode, false);
++        CountLine.SetRange("Sheet No.", SheetNo);
++        CountLine.SetRange("Bin Code", BinCode);
++        if CountLine.FindSet(true) then
++            repeat
++                if not IsSlotCounted(CountLine, CounterSlot) then
++                    RecordCount(SheetNo, CountLine."Line No.", CounterSlot, 0);
++            until CountLine.Next() = 0;
++        // Related bins are only seeded, never counted or deducted automatically.
++        EnsureV2BinCoverage(SheetNo, false);
++    end;
++
++    local procedure MergeV2BinSnapshot(SheetNo: Code[20]; BinCode: Code[20]; ValidateOnly: Boolean)
++    var
++        Header: Record "DOPSWHS Count Sheet Header";
++        Snapshot: Record "DOPSWHS Count Sheet Line" temporary;
++        Line: Record "DOPSWHS Count Sheet Line";
++        LastLine: Record "DOPSWHS Count Sheet Line";
++        Bin: Record Bin;
++        Counter: Record "DOPSWHS Count Counter";
++        NextLineNo: Integer;
++        ScopeExpanded: Boolean;
++    begin
++        Header.LockTable();
++        Header.Get(SheetNo);
++        PrepareV2(SheetNo);
++        Header.Get(SheetNo);
++        if BinCode = '' then
++            Error(BinRequiredErr);
++        Bin.Get(Header."Location Code", BinCode);
++        EnsureBinInCountScope(Header, Bin);
++        BuildBinSnapshot(SheetNo, BinCode, Snapshot);
++        Line.LockTable();
++        LastLine.SetRange("Sheet No.", SheetNo);
++        if LastLine.FindLast() then
++            NextLineNo := LastLine."Line No.";
++        if Snapshot.FindSet() then
++            repeat
++                Line.Reset();
++                Line.SetRange("Sheet No.", SheetNo);
++                Line.SetRange("Bin Code", BinCode);
++                Line.SetRange("Item No.", Snapshot."Item No.");
++                Line.SetRange("Variant Code", Snapshot."Variant Code");
++                Line.SetRange("Unit of Measure Code", Snapshot."Unit of Measure Code");
++                Line.SetRange("Lot No.", Snapshot."Lot No.");
++                Line.SetRange("Serial No.", Snapshot."Serial No.");
++                Line.SetRange("LP No.", Snapshot."LP No.");
++                Line.SetRange("LP Line No.", Snapshot."LP Line No.");
++                if not Line.FindFirst() then begin
++                    if ValidateOnly then
++                        Error('Raf %1 için eksik sayım satırları var. Rafı açıp sayımı tamamlayın.', BinCode);
++                    // Adding scope after a round is saved must not leave that round
++                    // falsely complete. Reopen it without discarding recorded counts.
++                    if not ScopeExpanded then begin
++                        Counter.SetRange("Sheet No.", SheetNo);
++                        Counter.ModifyAll(Completed, false, true);
++                        Counter.ModifyAll("Completed DateTime", 0DT, true);
++                        ScopeExpanded := true;
++                    end;
++                    NextLineNo += 10000;
++                    Line := Snapshot;
++                    Line."Line No." := NextLineNo;
++                    Line.Insert(true);
++                end else
++                    if Line."System Qty" <> Snapshot."System Qty" then
++                        Error('Raf %1 madde %2 için kayıtlı stok sayım başladıktan sonra değişmiş veya LP dağılımı uyuşmuyor. Sayımı kontrol edip yeni belge açın.', BinCode, Line."Item No.");
++            until Snapshot.Next() = 0;
++        // Also detect stock that disappeared completely since the snapshot. It
++        // must not be deducted a second time by this count's eventual posting.
++        Line.Reset();
++        Line.SetRange("Sheet No.", SheetNo);
++        Line.SetRange("Bin Code", BinCode);
++        Line.SetFilter("System Qty", '<>%1', 0);
++        if Line.FindSet() then
++            repeat
++                Snapshot.Reset();
++                Snapshot.SetRange("Item No.", Line."Item No.");
++                Snapshot.SetRange("Variant Code", Line."Variant Code");
++                Snapshot.SetRange("Unit of Measure Code", Line."Unit of Measure Code");
++                Snapshot.SetRange("Lot No.", Line."Lot No.");
++                Snapshot.SetRange("Serial No.", Line."Serial No.");
++                Snapshot.SetRange("LP No.", Line."LP No.");
++                Snapshot.SetRange("LP Line No.", Line."LP Line No.");
++                if Snapshot.IsEmpty() then
++                    Error('Raf %1 madde %2 için sayımdaki sistem stoku artık mevcut değil. Yeni sayım belgesi açın.', BinCode, Line."Item No.");
++            until Line.Next() = 0;
++    end;
++
++    local procedure EnsureV2BinCoverage(SheetNo: Code[20]; ValidateOnly: Boolean)
++    var
++        Header: Record "DOPSWHS Count Sheet Header";
++        Line: Record "DOPSWHS Count Sheet Line";
++        RequiredSource: Record "DOPSWHS Count Sheet Line" temporary;
++        Entry: Record "Warehouse Entry";
++        Balances: Dictionary of [Code[20], Decimal];
++        Bins: List of [Code[20]];
++        RelatedBin: Code[20];
++        Slot: Integer;
++        RequiredLineNo: Integer;
++        HasSurplus: Boolean;
++    begin
++        Header.Get(SheetNo);
++        if not Header."V2 Scan Mode" then
++            exit;
++        EnsureV2LpSystemSnapshotsAreSafe(SheetNo);
++        Line.SetRange("Sheet No.", SheetNo);
++        if Line.FindSet() then
++            repeat
++                if not Bins.Contains(Line."Bin Code") then
++                    Bins.Add(Line."Bin Code");
++                HasSurplus := false;
++                for Slot := 1 to 3 do
++                    if IsSlotCounted(Line, Slot) and (CountedQtyForSlot(Line, Slot) > Line."System Qty") then
++                        HasSurplus := true;
++                if HasSurplus then begin
++                    Clear(Balances);
++                    Entry.Reset();
++                    Entry.SetRange("Location Code", Header."Location Code");
++                    Entry.SetFilter("Bin Code", '<>%1&<>%2', Line."Bin Code", '');
++                    Entry.SetRange("Item No.", Line."Item No.");
++                    Entry.SetRange("Variant Code", Line."Variant Code");
++                    Entry.SetRange("Unit of Measure Code", Line."Unit of Measure Code");
++                    Entry.SetRange("Lot No.", Line."Lot No.");
++                    Entry.SetRange("Serial No.", Line."Serial No.");
++                    if Entry.FindSet() then
++                        repeat
++                            if Balances.ContainsKey(Entry."Bin Code") then
++                                Balances.Set(Entry."Bin Code", Balances.Get(Entry."Bin Code") + Entry.Quantity)
++                            else
++                                Balances.Add(Entry."Bin Code", Entry.Quantity);
++                        until Entry.Next() = 0;
++                    foreach RelatedBin in Balances.Keys() do
++                        if Balances.Get(RelatedBin) > 0 then begin
++                            if not Bins.Contains(RelatedBin) then
++                                Bins.Add(RelatedBin);
++                            RequiredLineNo += 1;
++                            RequiredSource := Line;
++                            RequiredSource."Line No." := RequiredLineNo;
++                            RequiredSource."Bin Code" := RelatedBin;
++                            RequiredSource.Insert(false);
++                        end;
++                end;
++            until Line.Next() = 0;
++        foreach RelatedBin in Bins do
++            MergeV2BinSnapshot(SheetNo, RelatedBin, ValidateOnly);
++        // Inconsistent Bin Content data must not silently hide a positive
++        // warehouse balance in the related bin from the required count.
++        if RequiredSource.FindSet() then
++            repeat
++                Line.Reset();
++                Line.SetRange("Sheet No.", SheetNo);
++                Line.SetRange("Bin Code", RequiredSource."Bin Code");
++                Line.SetRange("Item No.", RequiredSource."Item No.");
++                Line.SetRange("Variant Code", RequiredSource."Variant Code");
++                Line.SetRange("Unit of Measure Code", RequiredSource."Unit of Measure Code");
++                Line.SetRange("Lot No.", RequiredSource."Lot No.");
++                Line.SetRange("Serial No.", RequiredSource."Serial No.");
++                Line.SetFilter("System Qty", '>%1', 0);
++                if Line.IsEmpty() then
++                    Error('Raf %1 madde %2 stok dağılımı eksik. Business Central raf içeriğini kontrol edin; diğer rafın sayımı atlanamaz.', RequiredSource."Bin Code", RequiredSource."Item No.");
++            until RequiredSource.Next() = 0;
++    end;
++
+     procedure CompleteCounter(SheetNo: Code[20]; CounterSlot: Integer)
+     var
+         CountHeader: Record "DOPSWHS Count Sheet Header";
+@@ -1135,6 +1376,7 @@ codeunit 72050 "DOPSWHS Count Mgmt"
+         if CountHeader.Status = CountHeader.Status::Posted then
+             Error(CountAlreadyPostedErr, SheetNo);
+ 
++        EnsureV2BinCoverage(SheetNo, true);
+         CountLine.SetRange("Sheet No.", SheetNo);
+         if not CountLine.FindSet() then
+             Error('Boş sayım turu kaydedilemez.');
+@@ -1207,10 +1449,13 @@ codeunit 72050 "DOPSWHS Count Mgmt"
+         CountDocumentNo: Code[20];
+         DedicatedBatchName: Code[10];
+     begin
++        // Scope expansion and posting serialize on the same document header.
++        CountHeader.LockTable();
+         CountHeader.Get(SheetNo);
+         if CountHeader.Status = CountHeader.Status::Posted then
+             Error(CountAlreadyPostedErr, SheetNo);
+         if CountHeader."V2 Scan Mode" then begin
++            EnsureV2BinCoverage(SheetNo, true);
+             EnsureAllCountersCompleted(SheetNo);
+             // Eski sürüm, aynı raf bakiyesini her LP satırına kopyalayabiliyordu.
+             // Böyle bir açık belgeyi sessizce post etmek çoklu negatif stok
+diff --git a/al/src/Count/CountSheetCard.Page.al b/al/src/Count/CountSheetCard.Page.al
+index 3aa5813..f634d39 100644
+--- a/al/src/Count/CountSheetCard.Page.al
++++ b/al/src/Count/CountSheetCard.Page.al
+@@ -100,7 +100,14 @@ page 72075 "DOPSWHS Count Sheet Card"
+                 trigger OnAction()
+                 var
+                     CountMgmt: Codeunit "DOPSWHS Count Mgmt";
++                    CountLine: Record "DOPSWHS Count Sheet Line";
+                 begin
++                    CountMgmt.ValidateBinReview(Rec."No.");
++                    CountMgmt.EvaluateVariance(Rec."No.");
++                    CountLine.SetRange("Sheet No.", Rec."No.");
++                    Page.RunModal(Page::"DOPSWHS Count Bin Review", CountLine);
++                    if not Confirm('İncelediğiniz raf farkları stoklara işlensin mi?', false) then
++                        exit;
+                     CountMgmt.PostSheet(Rec."No.");
+                     CurrPage.Update(false);
+                 end;
+diff --git a/al/src/Count/CountSheetLine.Table.al b/al/src/Count/CountSheetLine.Table.al
+index 49444ce..4095395 100644
+--- a/al/src/Count/CountSheetLine.Table.al
++++ b/al/src/Count/CountSheetLine.Table.al
+@@ -41,6 +41,7 @@ table 72017 "DOPSWHS Count Sheet Line"
+         key(ItemBin; "Item No.", "Variant Code", "Bin Code") { }
+         key(LicensePlate; "LP No.", "LP Line No.") { }
+         key(Recount; "Recount Required") { }
++        key(BinReview; "Sheet No.", "Item No.", "Variant Code", "Lot No.", "Serial No.", "Unit of Measure Code", "Bin Code") { }
+     }
+ 
+     trigger OnInsert()
+diff --git a/al/src/Permissions/AdminPermissionSet.al b/al/src/Permissions/AdminPermissionSet.al
+index 735d335..f930cc8 100644
+--- a/al/src/Permissions/AdminPermissionSet.al
++++ b/al/src/Permissions/AdminPermissionSet.al
+@@ -128,6 +128,7 @@ permissionset 72094 "DOPSWHS-ADMIN"
+         page "DOPSWHS Count Sheet Line Part" = X,
+         page "DOPSWHS Count Counter Part" = X,
+         page "DOPSWHS Count Variance Review" = X,
++        page "DOPSWHS Count Bin Review" = X,
+         page "DOPSWHS Warehouse Manager RC" = X,
+         page "DOPSWHS Warehouse Manager Act" = X,
+         page "DOPSWHS DynOps WMS RC" = X,
+diff --git a/al/src/Permissions/UserPermissionSet.al b/al/src/Permissions/UserPermissionSet.al
+index 177b9cd..1157b76 100644
+--- a/al/src/Permissions/UserPermissionSet.al
++++ b/al/src/Permissions/UserPermissionSet.al
+@@ -120,6 +120,7 @@ permissionset 72095 "DOPSWHS-USER"
+         page "DOPSWHS Count Sheet Line Part" = X,
+         page "DOPSWHS Count Counter Part" = X,
+         page "DOPSWHS Count Variance Review" = X,
++        page "DOPSWHS Count Bin Review" = X,
+         page "DOPSWHS Count API" = X,
+         page "DOPSWHS Count Ops API" = X,
+         page "DOPSWHS Count Sheet Line API" = X,
+diff --git a/al/src/Permissions/ViewPermissionSet.al b/al/src/Permissions/ViewPermissionSet.al
+index 1363c20..a4573c2 100644
+--- a/al/src/Permissions/ViewPermissionSet.al
++++ b/al/src/Permissions/ViewPermissionSet.al
+@@ -128,6 +128,7 @@ permissionset 72096 "DOPSWHS-VIEW"
+         page "DOPSWHS Count Sheet Line Part" = X,
+         page "DOPSWHS Count Counter Part" = X,
+         page "DOPSWHS Count Variance Review" = X,
++        page "DOPSWHS Count Bin Review" = X,
+         page "DOPSWHS Count API" = X,
+         page "DOPSWHS Count Sheet Line API" = X,
+         page "DOPSWHS Supplier Lot API" = X,
+diff --git a/android/app/build.gradle.kts b/android/app/build.gradle.kts
+index 172cf04..2dd2b6c 100644
+--- a/android/app/build.gradle.kts
++++ b/android/app/build.gradle.kts
+@@ -7,8 +7,8 @@ val releaseVersionCodeOverride = providers.gradleProperty("releaseVersionCode").
+ val releaseVersionNameOverride = providers.gradleProperty("releaseVersionName").orNull?.takeIf { it.isNotBlank() }
+ // BADE ve EMU aynı kaynak koddan aynı anda yayınlanır. Müşteri flavor'larında
+ // ayrı sürüm değeri tutmak bir paketin geride kalmasına neden oluyordu.
+-val customerVersionCode = releaseVersionCodeOverride ?: 200098
+-val customerVersionName = releaseVersionNameOverride ?: "1.14.98"
++val customerVersionCode = releaseVersionCodeOverride ?: 200103
++val customerVersionName = releaseVersionNameOverride ?: "1.14.103"
+ 
+ plugins {
+   alias(libs.plugins.android.application)
+@@ -35,8 +35,8 @@ android {
+     // Saha APK'larından bazılarında CI tarafından 100000+ versionCode
+     // kullanıldı. Görünen sürüm adı eski olsa bile Android yalnız sayısal kodu
+     // karşılaştırdığı için semantik sürümleri 200000 bandında monoton tutuyoruz.
+-    versionCode = releaseVersionCodeOverride ?: 200098
+-    versionName = releaseVersionNameOverride ?: "1.14.98"
++    versionCode = releaseVersionCodeOverride ?: 200103
++    versionName = releaseVersionNameOverride ?: "1.14.103"
+     manifestPlaceholders["appLabel"] = "BCWMS"
+     // Ücretsiz dağıtım kanalı: public GitHub Release içindeki sabit latest.json.
+     // APK aynı release'de tutulur; uygulamaya GitHub hesabı/token gömülmez.
+@@ -147,12 +147,8 @@ android {
+   }
+ 
+   lint {
+-    // CI'da lint'i bloklamayacak hale getir; rapor html olarak hala üretilir.
+-    // Lokalde "./gradlew lintDebug" zaten çalıştırılabilir, hatalar görünür.
+-    abortOnError = false
+-    checkReleaseBuilds = false
+-    // Manifest'te MSAL gibi opsiyonel auth class'ı kalırsa MissingClass bloklamasın.
+-    disable += setOf("MissingClass")
++    abortOnError = true
++    checkReleaseBuilds = true
+   }
+ }
+ 
+@@ -179,6 +175,7 @@ dependencies {
+   implementation("androidx.lifecycle:lifecycle-runtime-compose:2.8.7")
+   implementation("androidx.core:core:1.13.1")
+   testImplementation(libs.junit)
++  testImplementation("com.squareup.okhttp3:mockwebserver:4.12.0")
+   // Android's org.json classes are stubs in local JVM tests. Use the reference
+   // implementation so pagination payload parsing is exercised for real.
+   testImplementation("org.json:json:20240303")
+diff --git a/android/app/src/main/java/com/dynops/bcwms/BcApi.kt b/android/app/src/main/java/com/dynops/bcwms/BcApi.kt
+index 9e95802..f122c11 100644
+--- a/android/app/src/main/java/com/dynops/bcwms/BcApi.kt
++++ b/android/app/src/main/java/com/dynops/bcwms/BcApi.kt
+@@ -3,13 +3,17 @@ package com.dynops.bcwms
+ import android.content.Context
+ import android.util.Log
+ import kotlinx.coroutines.Dispatchers
++import kotlinx.coroutines.CancellationException
+ import kotlinx.coroutines.async
+ import kotlinx.coroutines.awaitAll
+ import kotlinx.coroutines.delay
+ import kotlinx.coroutines.withContext
+ import okhttp3.MediaType.Companion.toMediaType
+ import okhttp3.OkHttpClient
++import okhttp3.HttpUrl.Companion.toHttpUrl
+ import okhttp3.Request
++import okhttp3.RequestBody
++import okio.BufferedSink
+ import okhttp3.RequestBody.Companion.toRequestBody
+ import org.json.JSONArray
+ import org.json.JSONObject
+@@ -426,8 +430,10 @@ object BcApi {
+ 
+     /** Read-only metadata probe used to prevent a newer APK from calling count actions that the
+      * currently published AL extension does not yet expose. */
++    suspend fun getCustomApiMetadata(context: Context): ApiResult = get(context, customApiMetadataUrl(context))
++
+     suspend fun getCountCapabilities(context: Context): CountCapabilities {
+-        val result = get(context, customApiMetadataUrl(context))
++        val result = getCustomApiMetadata(context)
+         if (!result.ok)
+             return CountCapabilities(false, false, false, false, false, false, false, result.httpCode)
+         return parseCountCapabilities(result.body, result.httpCode)
+@@ -463,13 +469,19 @@ object BcApi {
+     )
+ 
+     internal fun odataNextLink(body: String): String? = runCatching {
+-        JSONObject(body).optString("@odata.nextLink").trim().takeIf { it.isNotBlank() }
++        (JSONObject(body).opt("@odata.nextLink") as? String)?.trim()?.takeIf { it.isNotBlank() }
+     }.getOrNull()
+ 
+     suspend fun getAllPages(
+         context: Context,
+         path: String,
+         maxPages: Int = 100,
++    ): PagedItemsResult = collectODataPages(path, maxPages) { get(context, it) }
++
++    internal suspend fun collectODataPages(
++        path: String,
++        maxPages: Int = 100,
++        fetch: suspend (String) -> ApiResult,
+     ): PagedItemsResult {
+         val rows = mutableListOf<JSONObject>()
+         val visited = mutableSetOf<String>()
+@@ -478,10 +490,13 @@ object BcApi {
+             if (!visited.add(next)) {
+                 return PagedItemsResult(rows, complete = false, error = ApiResult(false, -1, "Tekrarlanan sayfa bağlantısı"))
+             }
+-            val response = get(context, next)
++            val response = fetch(next)
+             if (!response.ok) return PagedItemsResult(rows, complete = false, error = response)
+             val page = runCatching {
+-                val array = JSONObject(response.body).getJSONArray("value")
++                val payload = JSONObject(response.body)
++                val link = payload.opt("@odata.nextLink")
++                require(link == null || link == JSONObject.NULL || link is String) { "Geçersiz sayfa bağlantısı" }
++                val array = payload.getJSONArray("value")
+                 (0 until array.length()).map { array.getJSONObject(it) }
+             }.getOrElse {
+                 return PagedItemsResult(rows, complete = false, error = ApiResult(false, -1, "Geçersiz sayfa yanıtı"))
+@@ -664,7 +679,7 @@ object BcApi {
+     }
+ 
+     private val longRunningClient: OkHttpClient by lazy {
+-        httpClient.newBuilder()
++        mutationClient.newBuilder()
+             .connectTimeout(15, TimeUnit.SECONDS)
+             .readTimeout(90, TimeUnit.SECONDS)
+             .writeTimeout(30, TimeUnit.SECONDS)
+@@ -674,29 +689,54 @@ object BcApi {
+ 
+     private val jsonMediaType = "application/json; charset=utf-8".toMediaType()
+ 
++    private val mutationClient: OkHttpClient by lazy { withoutAutomaticMutationReplay(httpClient) }
++
++    internal fun withoutAutomaticMutationReplay(client: OkHttpClient): OkHttpClient = client.newBuilder()
++        .retryOnConnectionFailure(false)
++        .followRedirects(false)
++        .followSslRedirects(false)
++        .build()
++
++    internal fun mutationRequestBody(body: RequestBody): RequestBody = object : RequestBody() {
++        override fun contentType() = body.contentType()
++        override fun contentLength() = body.contentLength()
++        override fun writeTo(sink: BufferedSink) = body.writeTo(sink)
++        // Also stops HTTP 503 Retry-After follow-ups after the server read the
++        // mutation. Explicit retries reuse the application operation ID.
++        override fun isOneShot() = true
++    }
++
++    internal fun authenticatedBcUrl(base: String, path: String): String {
++        val raw = if (path.startsWith("http", ignoreCase = true)) path else "$base/$path"
++        val url = raw.replace(" ", "%20").replace("'", "%27").toHttpUrl()
++        require(url.isHttps && url.host == "api.businesscentral.dynamics.com" && url.port == 443 &&
++            url.username.isEmpty() && url.password.isEmpty()) { "Geçersiz Business Central bağlantısı" }
++        return url.toString()
++    }
++
+     private suspend fun request(
+         context: Context,
+         method: String,
+         path: String,
+         jsonBody: String?,
+-        client: OkHttpClient = httpClient,
++        client: OkHttpClient = if (method == "GET" || method == "HEAD") httpClient else mutationClient,
+     ): ApiResult =
+         withContext(Dispatchers.IO) {
+-            ensureFreshToken(context)
+-            val token = getToken(context)
+-            if (token.isBlank()) return@withContext ApiResult(false, 0, "Token yok — Bağlantı Ayarları ekranından token girin")
+             try {
+-                val rawUrl = if (path.startsWith("http")) path else "${customApiBase(context)}/$path"
+-                val url = rawUrl.replace(" ", "%20").replace("'", "%27")
++                ensureFreshToken(context)
++                val token = getToken(context)
++                if (token.isBlank()) return@withContext ApiResult(false, 0, "Token yok — Bağlantı Ayarları ekranından token girin")
++                val url = authenticatedBcUrl(customApiBase(context), path)
+                 // OkHttp sends real PATCH/DELETE verbs. Android's HttpURLConnection cannot do PATCH, and
+                 // BC's API endpoint ignores the X-HTTP-Method-Override fallback → POST-tunneled PATCH lands
+                 // as a literal POST to a keyed entity and is rejected with HTTP 405 on line updates.
+-                val requestBody = when {
++                val rawBody = when {
+                     jsonBody != null -> jsonBody.toRequestBody(jsonMediaType)
+                     // OkHttp requires a (possibly empty) body for POST/PATCH/PUT.
+-                    method == "POST" || method == "PATCH" || method == "PUT" -> ByteArray(0).toRequestBody(jsonMediaType)
++                    method == "POST" || method == "PATCH" || method == "PUT" || method == "DELETE" -> ByteArray(0).toRequestBody(jsonMediaType)
+                     else -> null
+                 }
++                val requestBody = rawBody?.let { if (method == "GET" || method == "HEAD") it else mutationRequestBody(it) }
+                 val builder = Request.Builder()
+                     .url(url)
+                     .method(method, requestBody)
+@@ -730,6 +770,8 @@ object BcApi {
+                         logFailure(method, path, ApiResult(r2.code in 200..299, r2.code, b2))
+                     }
+                 }
++            } catch (e: CancellationException) {
++                throw e
+             } catch (e: Exception) {
+                 logFailure(method, path, ApiResult(false, -1, "Hata: ${e.message}"))
+             }
+@@ -791,6 +833,7 @@ object BcApi {
+     /** True when a mutating request may have reached BC despite the failed response. */
+     internal fun isAmbiguousMutationFailure(result: ApiResult): Boolean =
+         result.httpCode == -1 ||
++            result.httpCode in 300..399 ||
+             result.httpCode == 408 ||
+             result.httpCode == 425 ||
+             result.httpCode == 429 ||
+diff --git a/android/app/src/main/java/com/dynops/bcwms/feature/BulkLpBuildSheet.kt b/android/app/src/main/java/com/dynops/bcwms/feature/BulkLpBuildSheet.kt
+index 799634f..cf855d3 100644
+--- a/android/app/src/main/java/com/dynops/bcwms/feature/BulkLpBuildSheet.kt
++++ b/android/app/src/main/java/com/dynops/bcwms/feature/BulkLpBuildSheet.kt
+@@ -1,5 +1,7 @@
+ package com.dynops.bcwms.feature
+ 
++import com.dynops.bcwms.ui.toFiniteDoubleOrNull
++
+ import android.content.Context
+ import androidx.compose.foundation.layout.*
+ import androidx.compose.foundation.text.KeyboardOptions
+@@ -29,6 +31,8 @@ internal data class LedgerBulkLpBuildResult(
+     val failedPrintLpNos: List<String>,
+     val replayed: Boolean,
+     val printSkippedOnReplay: Boolean,
++    val printLabelsRequested: Boolean,
++    val sourceEntryNo: Int,
+ )
+ 
+ internal data class PendingLedgerBulkLpRequest(
+@@ -88,7 +92,7 @@ internal fun bulkLpBuildPayload(locationCode: String, binCode: String, drafts: L
+         put("locationCode", locationCode.trim())
+         put("binCode", binCode.trim())
+         put("quantitiesJson", JSONArray().apply {
+-            drafts.forEach { put(it.quantity.toDoubleOrNull() ?: 0.0) }
++            drafts.forEach { put(it.quantity.toFiniteDoubleOrNull() ?: 0.0) }
+         }.toString())
+     }.toString()
+ 
+@@ -118,10 +122,14 @@ internal fun itemLedgerLookupFilter(rawLookup: String): String {
+ internal fun itemLedgerLookupFilters(rawLookup: String): List<String> {
+     val value = rawLookup.trim()
+     val primary = itemLedgerLookupFilter(value)
+-    // BC rejects OR across different fields (HTTP 501). Numeric item codes
+-    // remain searchable using a separate query, merged by entry number.
+-    return if (value.toIntOrNull() == null) listOf(primary)
+-    else listOf(primary, "itemNo eq '${value.replace("'", "''")}'")
++    // BC rejects OR across different fields (HTTP 501). Search each field
++    // separately and merge by entry number, including numeric lot numbers.
++    val safeValue = value.replace("'", "''")
++    return buildList {
++        add(primary)
++        if (value.toIntOrNull() != null) add("itemNo eq '$safeValue'")
++        add("lotNo eq '$safeValue'")
++    }
+ }
+ 
+ internal fun itemLedgerLookupPath(filter: String, includeLpAllocationFields: Boolean): String {
+@@ -149,6 +157,47 @@ internal fun validLedgerBulkLpResponse(
+         createdLpNos.all(String::isNotBlank) &&
+         createdLpNos.distinctBy(String::uppercase).size == expectedCount
+ 
++/** Read back the actual LP lines; a successful create response alone is not a source link. */
++internal fun ledgerLpSourceLinksMatch(
++    entryNo: Int,
++    createdLpNos: List<String>,
++    lines: List<JSONObject>,
++    complete: Boolean,
++): Boolean {
++    if (!complete || entryNo <= 0 || createdLpNos.isEmpty() || lines.isEmpty()) return false
++    val expected = createdLpNos.map { it.trim().uppercase() }.toSet()
++    val actual = lines.map { it.optString("lpNo").trim().uppercase() }.toSet()
++    return expected == actual && lines.all {
++        it.optInt("sourceItemLedgerEntryNo") == entryNo && it.optDouble("quantity", 0.0) > 0.0
++    }
++}
++
++/** ILE display fields must also reflect the allocation, not just the LP-side link. */
++internal fun ledgerLpEntryReferenceMatches(
++    entryNo: Int,
++    createdLpNos: List<String>,
++    entries: List<JSONObject>,
++    complete: Boolean,
++): Boolean {
++    if (!complete || createdLpNos.isEmpty() || entries.size != 1) return false
++    val entry = entries.single()
++    if (entry.optInt("entryNo") != entryNo) return false
++    val lpNo = entry.optString("lpNo").trim().uppercase()
++    val lpNos = entry.optString("lpNos").uppercase()
++    val references = (listOf(lpNo) + lpNos.split(',')).map(String::trim).filter(String::isNotBlank).toSet()
++    if (references.isEmpty()) return false
++    // BC's summary is Text[250]. Full identity verification is performed on
++    // all LP lines above; a truncated display cannot list every allocated LP.
++    if (lpNos.length >= 250) return true
++    return createdLpNos.all { it.trim().uppercase() in references }
++}
++
++internal fun ledgerLpSourceLookupPath(lpNos: List<String>): String {
++    require(lpNos.isNotEmpty())
++    val filter = lpNos.joinToString(" or ") { "lpNo eq '${it.replace("'", "''")}'" }
++    return "licensePlateLines?\$filter=($filter)&\$select=lpNo,sourceItemLedgerEntryNo,quantity&\$top=200"
++}
++
+ internal fun validFailedPrintLpResponse(
+     expectedFailureCount: Int,
+     createdLpNos: List<String>,
+@@ -349,6 +398,13 @@ internal fun BulkLpBuildSheet(
+     var replayed by remember { mutableStateOf(false) }
+     var printSkippedOnReplay by remember { mutableStateOf(false) }
+     var pendingRequest by remember { mutableStateOf(restoredPending.request) }
++    var completedPrintLabelsRequested by remember { mutableStateOf(false) }
++    var completedSourceEntryNo by remember { mutableStateOf(0) }
++
++    fun buildResult() = LedgerBulkLpBuildResult(
++        createdLpNos, failedPrintLpNos, replayed, printSkippedOnReplay,
++        completedPrintLabelsRequested, completedSourceEntryNo,
++    )
+ 
+     LaunchedEffect(Unit) {
+         val page = BcApi.getAllPages(context, "licensePlateTemplates?\$top=50&\$select=code,description")
+@@ -362,7 +418,7 @@ internal fun BulkLpBuildSheet(
+ 
+     fun finish() {
+         if (completed) {
+-            onBuilt(LedgerBulkLpBuildResult(createdLpNos, failedPrintLpNos, replayed, printSkippedOnReplay))
++            onBuilt(buildResult())
+         } else {
+             onDismiss()
+         }
+@@ -390,7 +446,7 @@ internal fun BulkLpBuildSheet(
+     fun findLedgerEntries() {
+         val value = lookup.trim()
+         if (value.isBlank()) {
+-            status = "HATA: Ürün numarası veya stok kayıt numarası girin."
++            status = "HATA: Ürün numarası, stok kayıt numarası veya lot numarası girin."
+             return
+         }
+         scope.launch {
+@@ -441,7 +497,7 @@ internal fun BulkLpBuildSheet(
+ 
+     val entry = selectedEntry
+     val lpCount = lpCountText.toIntOrNull()
+-    val quantityPerLp = quantityText.toDoubleOrNull()
++    val quantityPerLp = quantityText.toFiniteDoubleOrNull()
+     val allocatableQuantity = entry?.let(::ledgerLpAllocatableQuantity) ?: 0.0
+     val requestedQuantity = (lpCount ?: 0) * (quantityPerLp ?: 0.0)
+     val planValid = validLedgerBulkLpPlan(
+@@ -582,6 +638,42 @@ internal fun BulkLpBuildSheet(
+                 return@launch
+             }
+ 
++            // The old single-LP path returned an LP number without linking an
++            // ILE. Do not report success until the persisted lines prove the link.
++            busy = true
++            status = "LP kaynak giriş bağlantısı kontrol ediliyor..."
++            val sourceLines = mutableListOf<JSONObject>()
++            var sourceReadComplete = response.optInt("sourceItemLedgerEntryNo") == operation.entryNo
++            if (sourceReadComplete) {
++                for (batch in createdLpNos.chunked(20)) {
++                    val page = BcApi.getAllPages(context, ledgerLpSourceLookupPath(batch))
++                    if (!page.complete) {
++                        sourceReadComplete = false
++                        break
++                    }
++                    sourceLines += page.rows
++                }
++            }
++            val linesLinked = ledgerLpSourceLinksMatch(operation.entryNo, createdLpNos, sourceLines, sourceReadComplete)
++            var entryLinked = false
++            if (linesLinked) {
++                val sourcePage = BcApi.getAllPages(
++                    context,
++                    "itemLedgerEntries?\$filter=entryNo eq ${operation.entryNo}&\$select=entryNo,lpNo,lpNos&\$top=1",
++                )
++                entryLinked = ledgerLpEntryReferenceMatches(
++                    operation.entryNo, createdLpNos, sourcePage.rows, sourcePage.complete,
++                )
++            }
++            busy = false
++            if (!linesLinked || !entryLinked) {
++                uncertainOutcome = true
++                status = "UYARI: LP oluşturuldu ancak #${operation.entryNo} kaynak giriş bağlantısı doğrulanamadı. " +
++                    "Yeni LP oluşturmayın; Önceki İşlemi Kontrol Et düğmesine basın. " +
++                    "Sorun devam ederse bu LP numaralarını yöneticinize iletin: ${createdLpNos.joinToString()}."
++                return@launch
++            }
++
+             replayed = responseReplayed
+             printSkippedOnReplay = responsePrintSkipped
+             PendingLedgerBulkLpStore.clear(context)
+@@ -602,6 +694,8 @@ internal fun BulkLpBuildSheet(
+                 }
+                 LedgerBulkLpReplayState.Invalid -> error("Invalid replay state handled above")
+             }
++            completedPrintLabelsRequested = operation.printLabels
++            completedSourceEntryNo = operation.entryNo
+             completed = true
+         }
+     }
+@@ -613,7 +707,7 @@ internal fun BulkLpBuildSheet(
+             fontWeight = FontWeight.Bold,
+         )
+         Text(
+-            "Toplam stok değişmez. Ürün birden fazla raftaysa sistem LP'yi doldurmak için gerekli raf hareketini birlikte kaydeder.",
++            "LP, seçtiğiniz kaynak madde defter girişine bağlanır. Toplam stok değişmez. Ürün birden fazla raftaysa sistem LP'yi doldurmak için gerekli raf hareketini birlikte kaydeder.",
+             fontSize = 12.sp,
+             color = MaterialTheme.colorScheme.onSurfaceVariant,
+         )
+@@ -622,27 +716,29 @@ internal fun BulkLpBuildSheet(
+         if (completed) {
+             StatusText(status)
+             Spacer(Modifier.height(12.dp))
+-            Button(
+-                onClick = {
+-                    onBuilt(
+-                        LedgerBulkLpBuildResult(
+-                            createdLpNos,
+-                            failedPrintLpNos,
+-                            replayed,
+-                            printSkippedOnReplay,
+-                        ),
+-                    )
+-                },
+-                modifier = Modifier.fillMaxWidth(),
+-            ) {
+-                Text("LP Listesine Dön")
++            Text("Kaynak giriş: #$completedSourceEntryNo", fontWeight = FontWeight.Bold)
++            Text("Oluşan LP'ler", fontWeight = FontWeight.Bold)
++            createdLpNos.forEach { no ->
++                Text(no, fontSize = 13.sp)
++            }
++            Spacer(Modifier.height(12.dp))
++            val readyToPrint = ledgerLpPrintSelection(buildResult())
++            if (readyToPrint.isNotEmpty()) {
++                Text(
++                    "Listeye döndüğünüzde ${readyToPrint.size} LP seçili gelecek. " +
++                        "Etiket almak için Seçilenleri Yazdır düğmesine basın.",
++                    fontSize = 12.sp,
++                )
++            }
++            Button(onClick = { onBuilt(buildResult()) }, modifier = Modifier.fillMaxWidth()) {
++                Text(if (readyToPrint.isEmpty()) "LP Listesine Dön" else "Etiket Seçimine Geç (${readyToPrint.size})")
+             }
+             Spacer(Modifier.height(24.dp))
+             return@SheetScaffold
+         }
+ 
+         ScanField(
+-            "Ürün No / Stok Kayıt No",
++            "Ürün No / Stok Kayıt No / Lot No",
+             lookup,
+             { raw ->
+                 val nextLookup = raw.trimStart()
+diff --git a/android/app/src/main/java/com/dynops/bcwms/feature/BulkReceiptLpSheet.kt b/android/app/src/main/java/com/dynops/bcwms/feature/BulkReceiptLpSheet.kt
+index 9a8fd0b..fb7f923 100644
+--- a/android/app/src/main/java/com/dynops/bcwms/feature/BulkReceiptLpSheet.kt
++++ b/android/app/src/main/java/com/dynops/bcwms/feature/BulkReceiptLpSheet.kt
+@@ -1,5 +1,7 @@
+ package com.dynops.bcwms.feature
+ 
++import com.dynops.bcwms.ui.toFiniteDoubleOrNull
++
+ import androidx.compose.foundation.layout.*
+ import androidx.compose.foundation.text.KeyboardOptions
+ import androidx.compose.foundation.rememberScrollState
+@@ -164,7 +166,7 @@ internal fun BulkReceiptLpSheet(
+         rows = drafts.map { draft ->
+             BulkReceiptLpRow(
+                 groupId = COMMON_RECEIPT_LOT_GROUP,
+-                quantity = draft.quantity.toDoubleOrNull() ?: 0.0,
++                quantity = draft.quantity.toFiniteDoubleOrNull() ?: 0.0,
+                 lotNo = "",
+                 supplierLotNo = "",
+                 expiryDate = "",
+@@ -174,7 +176,7 @@ internal fun BulkReceiptLpSheet(
+         supplierLotNo = commonSupplierLotNo,
+         expiryDate = commonExpiryDate,
+     )
+-    val expectedQty = receiptQtyText.toDoubleOrNull() ?: 0.0
++    val expectedQty = receiptQtyText.toFiniteDoubleOrNull() ?: 0.0
+     val palletCount = palletCountText.toIntOrNull() ?: 0
+     val enteredTotal = rows.sumOf { it.quantity }
+     val validationError = manualBulkLpValidation(
+diff --git a/android/app/src/main/java/com/dynops/bcwms/feature/CountV2Module.kt b/android/app/src/main/java/com/dynops/bcwms/feature/CountV2Module.kt
+index 68150b8..b22677e 100644
+--- a/android/app/src/main/java/com/dynops/bcwms/feature/CountV2Module.kt
++++ b/android/app/src/main/java/com/dynops/bcwms/feature/CountV2Module.kt
+@@ -17,6 +17,8 @@ import com.dynops.bcwms.BcApi
+ import com.dynops.bcwms.scanner.BarcodeIntentResolver
+ import com.dynops.bcwms.scanner.BarcodeKind
+ import androidx.compose.foundation.clickable
++import androidx.compose.foundation.rememberScrollState
++import androidx.compose.foundation.verticalScroll
+ import com.dynops.bcwms.scanner.ScanField
+ import com.dynops.bcwms.ui.DocHeaderCard
+ import com.dynops.bcwms.ui.DocSearchBar
+@@ -31,12 +33,6 @@ import kotlinx.coroutines.launch
+ import org.json.JSONObject
+ import java.util.UUID
+ 
+-private data class PendingCountV2Scan(
+-    val scanId: String,
+-    val binCode: String,
+-    val label: CountV2Label,
+-)
+-
+ private data class CompletedCountV2Scan(
+     val scanId: String,
+     val binCode: String,
+@@ -44,7 +40,27 @@ private data class CompletedCountV2Scan(
+ )
+ 
+ /** LP okutması: LP içeriği sunucuda satırlara açıldı; geri alma LP bazında yapılır. */
+-private data class CompletedCountV2Lp(val lpNo: String, val binCode: String)
++private data class CompletedCountV2Lp(val lpNo: String, val binCode: String, val counterSlot: Int)
++
++private object PendingCountV2Store {
++    private fun prefs(context: android.content.Context) = context.getSharedPreferences("bcwms_pending_count_v2", android.content.Context.MODE_PRIVATE)
++    private fun key(context: android.content.Context, sheetNo: String): String =
++        org.json.JSONArray(listOf(BcApi.getTenant(context), BcApi.getEnvironment(context), BcApi.getCompanyId(context), sheetNo)).toString()
++
++    fun load(context: android.content.Context, sheetNo: String): Result<PendingCountV2Scan?> = runCatching {
++        prefs(context).getString(key(context, sheetNo), null)?.let(PendingCountV2Scan::fromStoredJson)
++    }
++
++    fun save(context: android.content.Context, sheetNo: String, pending: PendingCountV2Scan): Boolean = runCatching {
++        val existing = load(context, sheetNo).getOrThrow()
++        if (existing != null && existing != pending) return@runCatching false
++        prefs(context).edit().putString(key(context, sheetNo), pending.storedJson()).commit()
++    }.getOrDefault(false)
++
++    fun clear(context: android.content.Context, sheetNo: String): Boolean = runCatching {
++        prefs(context).edit().remove(key(context, sheetNo)).commit()
++    }.getOrDefault(false)
++}
+ 
+ @OptIn(ExperimentalMaterial3Api::class)
+ @Composable
+@@ -326,6 +342,7 @@ private fun CountV2Document(no: String, onBack: () -> Unit) {
+     var previousRaw by remember(no) { mutableStateOf("") }
+     var previousAt by remember(no) { mutableLongStateOf(0L) }
+     var pendingRetry by remember(no) { mutableStateOf<PendingCountV2Scan?>(null) }
++    var pendingRestoreFailed by remember(no) { mutableStateOf(false) }
+     var lastCompleted by remember(no) { mutableStateOf<CompletedCountV2Scan?>(null) }
+     // Ürün/lot okutması raf stokundaki her lot için ayrı okutma üretir; geri alma hepsini kapsar.
+     var lastBatch by remember(no) { mutableStateOf<List<CompletedCountV2Scan>>(emptyList()) }
+@@ -339,6 +356,8 @@ private fun CountV2Document(no: String, onBack: () -> Unit) {
+     // Aynı raf + aynı miktarlı etiket (ham içerik) bu oturumda bir kez sayılır.
+     var scannedQtyLabels by remember(no) { mutableStateOf(setOf<String>()) }
+     var showPostConfirm by remember(no) { mutableStateOf(false) }
++    var showFinishBin by remember(no) { mutableStateOf(false) }
++    var unexpectedLabel by remember(no) { mutableStateOf<CountV2Label?>(null) }
+ 
+     fun assignments(h: JSONObject?): List<CountSlotAssignment> = listOf(
+         CountSlotAssignment(1, h?.optString("counter1UserId").orEmpty()),
+@@ -434,14 +453,30 @@ private fun CountV2Document(no: String, onBack: () -> Unit) {
+             }
+             loadDocument()
+         }
+-        status = if (prepared) "TAMAM: V2 hazır — önce rafı, sonra LP / ürün / lot barkodunu okutun" else status
++        val restored = PendingCountV2Store.load(context, no)
++        pendingRestoreFailed = restored.isFailure
++        pendingRetry = restored.getOrNull()
++        pendingRetry?.let { pending ->
++            activeBin = pending.binCode
++            if (pending.counterSlot in operatorSlots(header)) slot = pending.counterSlot
++        }
++        status = when {
++            pendingRestoreFailed -> "HATA: Cihazdaki bekleyen sayım işlemi okunamadı · yeni işlem başlatmadan destek isteyin"
++            pendingRetry != null -> "UYARI: Önceki okutmanın sonucu bekleniyor · aynı işlem kimliğiyle tekrar kontrol edin"
++            prepared -> "TAMAM: V2 hazır — önce rafı, sonra LP / ürün / lot barkodunu okutun"
++            else -> status
++        }
+         busy = false
+     }
+ 
+     fun selectBin(raw: String) {
+         val value = BarcodeIntentResolver.resolve(raw).value.trim().ifBlank { raw.trim() }
+         binScan = ""
+-        if (value.isBlank() || !prepared || busy) return
++        if (value.isBlank() || !prepared || busy || pendingRetry != null || pendingRestoreFailed) return
++        if (header?.optBoolean("binReviewSupported", false) != true) {
++            status = "Raf tamamlama için Business Central sayım güncellemesi gerekli."
++            return
++        }
+         scope.launch {
+             busy = true
+             status = "$value rafı doğrulanıyor..."
+@@ -455,10 +490,17 @@ private fun CountV2Document(no: String, onBack: () -> Unit) {
+             }.joinToString(" and ")
+             val result = BcApi.get(context, "bins?\$filter=$filters&\$select=code,locationCode,zoneCode&\$top=1")
+             val row = if (result.ok) BcApi.parseValueArray(result.body).firstOrNull() else null
+-            busy = false
+             if (row == null) {
+                 status = "HATA: $value rafı bu sayımın lokasyon/alan filtresinde bulunamadı"
+             } else {
++                val bin = row.optString("code").ifBlank { value }
++                val prepare = BcApi.boundAction(context, "countSheets", no, "prepareV2Bin", JSONObject().put("binCode", bin).toString())
++                if (!prepare.ok) {
++                    status = "HATA: ${BcApi.errorMessage(prepare.body)}"
++                    busy = false
++                    return@launch
++                }
++                if (!loadDocument()) { busy = false; return@launch }
+                 activeBin = row.optString("code").ifBlank { value }
+                 labelScan = ""
+                 previousRaw = ""
+@@ -469,25 +511,30 @@ private fun CountV2Document(no: String, onBack: () -> Unit) {
+                 lastCompletedLp = null
+                 status = "TAMAM: 📍 $activeBin — şimdi LP / ürün / lot barkodunu okutun"
+             }
++            busy = false
+         }
+     }
+ 
+     suspend fun postScan(pending: PendingCountV2Scan, reloadAfter: Boolean = true): Boolean {
++        if (pending.counterSlot !in operatorSlots(header)) {
++            status = "HATA: Bekleyen işlem ${pending.counterSlot} sayıcısına ait · bu sayıcıyla giriş yapın"
++            return false
++        }
++        if (!PendingCountV2Store.save(context, no, pending)) {
++            status = "HATA: Okutma cihazda güvenle saklanamadı · işlem gönderilmedi"
++            pendingRestoreFailed = true
++            return false
++        }
+         pendingRetry = null
+         status = "${pending.label.itemNo} · ${formatCountV2Qty(pending.label.quantity)} kaydediliyor..."
+-        val body = JSONObject().apply {
+-            put("scanId", pending.scanId)
+-            put("itemNo", pending.label.itemNo)
+-            put("variantCode", pending.label.variantCode)
+-            put("binCode", pending.binCode)
+-            put("unitOfMeasureCode", pending.label.unitOfMeasureCode)
+-            put("lotNo", pending.label.lotNo)
+-            put("serialNo", pending.label.serialNo)
+-            put("qty", pending.label.quantity)
+-            put("counterSlot", slot)
+-        }.toString()
++        val body = pending.payload()
+         val result = BcApi.boundAction(context, "countSheets", no, "scanV2Label", body)
+         if (result.ok) {
++            if (!PendingCountV2Store.clear(context, no)) {
++                pendingRetry = pending
++                status = "UYARI: Sayım kaydedildi · cihazdaki bekleyen işlem temizlenemedi · aynı işlemi tekrar kontrol edin"
++                return false
++            }
+             lastCompleted = CompletedCountV2Scan(pending.scanId, pending.binCode, pending.label)
+             lastBatch = emptyList()
+             lastCompletedLp = null
+@@ -503,6 +550,8 @@ private fun CountV2Document(no: String, onBack: () -> Unit) {
+             pendingRetry = pending
+             status = "UYARI: Sunucu cevabı alınamadı; kayıt ulaşmış olabilir. Aynı işlem kimliğiyle güvenli tekrar deneyin — QR'ı yeniden okutmayın."
+         } else {
++            pendingRestoreFailed = !PendingCountV2Store.clear(context, no)
++            scannedQtyLabels = scannedQtyLabels - "${pending.binCode}|${pending.label.raw.trim()}"
+             status = "HATA: ${BcApi.errorMessage(result.body)} (HTTP ${result.httpCode})" +
+                 if (result.httpCode == 404 || result.httpCode == 405) " — güncel BCWMS AL paketini yayınlayın" else ""
+         }
+@@ -510,6 +559,7 @@ private fun CountV2Document(no: String, onBack: () -> Unit) {
+     }
+ 
+     fun sendScan(pending: PendingCountV2Scan) {
++        if (busy || pendingRestoreFailed) return
+         scope.launch {
+             busy = true
+             postScan(pending)
+@@ -538,7 +588,7 @@ private fun CountV2Document(no: String, onBack: () -> Unit) {
+                     val n = BcApi.scalarValue(result.body).toIntOrNull() ?: 0
+                     lastCompleted = null
+                     lastBatch = emptyList()
+-                    lastCompletedLp = CompletedCountV2Lp(lpNo, activeBin)
++                    lastCompletedLp = CompletedCountV2Lp(lpNo, activeBin, slot)
+                     labelScan = ""
+                     reload("TAMAM: LP $lpNo → $n satır $activeBin rafında sayıldı")
+                 }
+@@ -602,9 +652,7 @@ private fun CountV2Document(no: String, onBack: () -> Unit) {
+                     }
+                 }
+             }
+-            // Rafta yoksa lotun/ürünün LOKASYONDAKİ BC miktarı alınır: "QR'da
+-            // tanımlı miktar neyse o" — operatör asla miktar girmez, pencere açılmaz.
+-            // Satır bu rafta açılır; BC başka rafta biliyorsa fark kayıtta çıkar.
++            // Another bin can resolve the label identity, never the physical quantity.
+             var fromOtherBin = false
+             // Yalnız LOT okutmasında (tek lot, fiziksel etiket elde) lokasyon
+             // genelinden yedek okuma yapılır. Düz ürün okutmasında lokasyon
+@@ -619,7 +667,7 @@ private fun CountV2Document(no: String, onBack: () -> Unit) {
+                 if (!locPage.complete) complete = false
+                 rows = if (locPage.complete) locPage.rows
+                     .filter { it.optDouble("quantityBase", 0.0) > 0.0 }
+-                    .groupBy { Triple(it.optString("itemNo"), it.optString("lotNo"), it.optString("unitOfMeasureCode")) }
++                    .groupBy { row -> listOf("itemNo", "variantCode", "lotNo", "serialNo", "unitOfMeasureCode").map { row.optString(it) } }
+                     .map { (_, group) ->
+                         JSONObject(group.first().toString()).apply {
+                             put("quantity", group.sumOf { it.optDouble("quantity", 0.0) })
+@@ -630,6 +678,17 @@ private fun CountV2Document(no: String, onBack: () -> Unit) {
+                 fromOtherBin = rows.isNotEmpty()
+             }
+             if (rows.isEmpty()) {
++                if (complete && candidate.itemNo.isNotBlank()) {
++                    val item = BcApi.get(context, "items?\$filter=no eq '${safe(candidate.itemNo)}'&\$top=1")
++                    val itemRow = if (item.ok) BcApi.parseValueArray(item.body).firstOrNull() else null
++                    if (itemRow != null) {
++                        unexpectedLabel = CountV2Label(candidate.itemNo, "", itemRow.optString("baseUnitOfMeasure"),
++                            candidate.lotNo, candidate.serialNo, 1.0, candidate.raw)
++                        busy = false
++                        status = "Bu rafta fiziksel olarak bulduğunuz miktarı girin"
++                        return@launch
++                    }
++                }
+                 busy = false
+                 status = when {
+                     !complete -> "HATA: Stok okunamadı. Yenileyip tekrar okutun."
+@@ -638,6 +697,18 @@ private fun CountV2Document(no: String, onBack: () -> Unit) {
+                 }
+                 return@launch
+             }
++            if (fromOtherBin) {
++                busy = false
++                if (rows.size != 1) {
++                    status = "Etiket birden fazla stok kaydıyla eşleşiyor · ürün ve lot içeren etiketi okutun"
++                    return@launch
++                }
++                val row = rows.single()
++                unexpectedLabel = CountV2Label(row.optString("itemNo"), row.optString("variantCode"),
++                    row.optString("unitOfMeasureCode"), row.optString("lotNo"), row.optString("serialNo"), 1.0, candidate.raw)
++                status = "Ürün başka rafta kayıtlı · burada bulduğunuz miktarı girin"
++                return@launch
++            }
+             val batch = mutableListOf<CompletedCountV2Scan>()
+             var skipped = 0
+             var total = 0.0
+@@ -645,25 +716,39 @@ private fun CountV2Document(no: String, onBack: () -> Unit) {
+                 val itemNo = row.optString("itemNo").ifBlank { candidate.itemNo }
+                 val lotNo = row.optString("lotNo")
+                 val uom = row.optString("unitOfMeasureCode")
+-                val qty = row.optDouble("quantity", 0.0).takeIf { it > 0.0 } ?: row.optDouble("quantityBase", 0.0)
++                val variantCode = row.optString("variantCode")
++                val serialNo = row.optString("serialNo")
++                val expected = lines.filter { it.optString("binCode") == activeBin &&
++                    it.optString("itemNo") == itemNo && it.optString("lotNo") == lotNo &&
++                    it.optString("variantCode") == variantCode && it.optString("serialNo") == serialNo && it.optString("unitOfMeasureCode") == uom }
++                if (expected.any { it.optString("lpNo").isNotBlank() } && expected.none { it.optString("lpNo").isBlank() }) {
++                    busy = false
++                    status = "Bu stok LP içinde kayıtlı · LP etiketini okutun"
++                    if (batch.isNotEmpty()) { lastBatch = batch.toList(); reload() }
++                    return@launch
++                }
++                val qty = expected.filter { it.optString("lpNo").isBlank() }.sumOf { it.optDouble("systemQty", 0.0) }
++                    .takeIf { it > 0.0 } ?: (row.optDouble("quantity", 0.0).takeIf { it > 0.0 } ?: row.optDouble("quantityBase", 0.0))
+                 // Aynı raf/ürün/lot bu sayıcı için zaten sayıldıysa ikinci okutma
+                 // miktarı toplamasın; düzeltme satıra dokunarak yapılır.
+                 val already = lines.any { l ->
+                     l.optString("binCode") == activeBin && l.optString("itemNo") == itemNo &&
+-                        l.optString("lotNo") == lotNo && l.optString("unitOfMeasureCode") == uom &&
++                    l.optString("lotNo") == lotNo && l.optString("unitOfMeasureCode") == uom &&
++                        l.optString("variantCode") == variantCode && l.optString("serialNo") == serialNo &&
+                         l.optString("lpNo").isBlank() &&
+                         isCountRecorded(l.has("counted$slot"), l.optBoolean("counted$slot"), l.optDouble("countedQty$slot", 0.0))
+                 }
+                 if (already) { skipped++; continue }
+                 val pending = PendingCountV2Scan(
+                     scanId = UUID.randomUUID().toString(),
++                    counterSlot = slot,
+                     binCode = activeBin,
+                     label = CountV2Label(
+                         itemNo = itemNo,
+-                        variantCode = row.optString("variantCode"),
++                        variantCode = variantCode,
+                         unitOfMeasureCode = uom,
+                         lotNo = lotNo,
+-                        serialNo = "",
++                        serialNo = serialNo,
+                         quantity = qty,
+                         raw = candidate.raw,
+                     ),
+@@ -696,7 +781,8 @@ private fun CountV2Document(no: String, onBack: () -> Unit) {
+     }
+ 
+     fun recordLineCount(line: JSONObject, qty: Double) {
+-        if (qty < 0.0) { status = "HATA: Sayım miktarı negatif olamaz."; return }
++        if (busy || pendingRetry != null || pendingRestoreFailed) return
++        if (!qty.isFinite() || qty < 0.0) { status = "HATA: Geçerli bir sayım miktarı girin."; return }
+         scope.launch {
+             busy = true
+             status = "${line.optString("itemNo")} → ${formatCountV2Qty(qty)} kaydediliyor..."
+@@ -717,7 +803,7 @@ private fun CountV2Document(no: String, onBack: () -> Unit) {
+             status = "HATA: Önce raf barkodunu okutun."
+             return
+         }
+-        if (!prepared || busy || pendingRetry != null) return
++        if (!prepared || busy || pendingRetry != null || pendingRestoreFailed) return
+         val now = System.currentTimeMillis()
+         if (isRapidCountV2Duplicate(previousRaw, previousAt, raw, now)) {
+             status = "ℹ️ Aynı tarayıcı olayı ikinci kez geldi; mükerrer miktar eklenmedi."
+@@ -750,6 +836,7 @@ private fun CountV2Document(no: String, onBack: () -> Unit) {
+                 sendScan(
+                     PendingCountV2Scan(
+                         scanId = UUID.randomUUID().toString(),
++                        counterSlot = slot,
+                         binCode = activeBin,
+                         label = validation.label,
+                     )
+@@ -764,7 +851,7 @@ private fun CountV2Document(no: String, onBack: () -> Unit) {
+                 busy = true
+                 status = "${lp.lpNo} LP okutması geri alınıyor..."
+                 val body = JSONObject().apply {
+-                    put("lpNo", lp.lpNo); put("binCode", lp.binCode); put("counterSlot", slot)
++                    put("lpNo", lp.lpNo); put("binCode", lp.binCode); put("counterSlot", lp.counterSlot)
+                 }.toString()
+                 val r = BcApi.boundAction(context, "countSheets", no, "undoV2Lp", body)
+                 busy = false
+@@ -835,6 +922,22 @@ private fun CountV2Document(no: String, onBack: () -> Unit) {
+         }
+     }
+ 
++    fun finishBin() {
++        scope.launch {
++            busy = true
++            val bin = activeBin
++            val result = BcApi.boundAction(context, "countSheets", no, "completeV2Bin",
++                JSONObject().put("binCode", bin).put("counterSlot", slot).toString())
++            showFinishBin = false
++            if (result.ok) {
++                activeBin = ""
++                lastCompleted = null; lastBatch = emptyList(); lastCompletedLp = null
++                if (loadDocument()) status = "TAMAM: $bin tamamlandı · sayılmayanlar $slot sayımında 0 · bekleyen rafları da sayın"
++            } else status = "HATA: ${BcApi.errorMessage(result.body)}"
++            busy = false
++        }
++    }
++
+     val h = header
+     val allowedSlots = operatorSlots(h)
+     val requiredSlots = configuredSlots(h)
+@@ -856,12 +959,15 @@ private fun CountV2Document(no: String, onBack: () -> Unit) {
+     })
+     val currentSlotSaved = h?.optBoolean("counter${slot}Completed", false) == true
+     val allRequiredSaved = requiredSlots.all { h?.optBoolean("counter${it}Completed", false) == true }
++    val binReviewSupported = h?.optBoolean("binReviewSupported", false) == true
++    val varianceGroups = countV2VarianceGroups(lines, slot, allRequiredSaved)
++    val varianceReview = countV2VarianceReviewText(varianceGroups)
+     // Başlık yüklenmeden düğme hiç çizilmez (null başlık = izinli sayılmaz); yüklenen
+     // eski AL paketi başlığında bayrak yoksa "izinli" kuralı korunur.
+     val postAllowed = countV2PostButtonVisible(headerLoaded = h != null, terminalPostAllowed = terminalPostAllowed(h))
+-    val canSave = prepared && linesComplete && lines.isNotEmpty() && !busy && slot in allowedSlots &&
++    val canSave = !pendingRestoreFailed && pendingRetry == null && binReviewSupported && prepared && linesComplete && lines.isNotEmpty() && !busy && slot in allowedSlots &&
+         currentSlotLinesComplete && !currentSlotSaved && countDocumentIsMutable(h?.optString("status").orEmpty())
+-    val canPost = postAllowed && prepared && linesComplete && lines.isNotEmpty() && !busy &&
++    val canPost = !pendingRestoreFailed && pendingRetry == null && binReviewSupported && postAllowed && prepared && linesComplete && lines.isNotEmpty() && !busy &&
+         allRequiredComplete && allRequiredSaved &&
+         lines.none { it.optBoolean("recountRequired") } &&
+         countDocumentIsMutable(h?.optString("status").orEmpty())
+@@ -887,6 +993,7 @@ private fun CountV2Document(no: String, onBack: () -> Unit) {
+                     )
+                     Spacer(Modifier.height(8.dp))
+                     StatusText(status)
++                    if (prepared && !binReviewSupported) Text("Raf tamamlama için Business Central sayım güncellemesi gerekli.")
+                     Spacer(Modifier.height(8.dp))
+ 
+                     if (h != null && allowedSlots.isEmpty()) {
+@@ -898,8 +1005,12 @@ private fun CountV2Document(no: String, onBack: () -> Unit) {
+                             allowedSlots.forEach { candidate ->
+                                 FilterChip(
+                                     selected = slot == candidate,
+-                                    onClick = { slot = candidate },
+-                                    enabled = !busy,
++                                    onClick = {
++                                        slot = candidate
++                                        lastCompleted = null; lastBatch = emptyList(); lastCompletedLp = null
++                                        scannedQtyLabels = emptySet(); previousRaw = ""; previousAt = 0L
++                                    },
++                                    enabled = !busy && pendingRetry == null && !pendingRestoreFailed,
+                                     label = { Text("$candidate${if (h?.optBoolean("counter${candidate}Completed", false) == true) " ✓" else ""}") },
+                                 )
+                                 Spacer(Modifier.width(4.dp))
+@@ -927,7 +1038,7 @@ private fun CountV2Document(no: String, onBack: () -> Unit) {
+                             value = binScan,
+                             onValueChange = { binScan = it },
+                             onScanned = { selectBin(it) },
+-                            enabled = !busy && pendingRetry == null && !currentSlotSaved,
++                            enabled = !busy && pendingRetry == null && !pendingRestoreFailed && !currentSlotSaved,
+                             modifier = Modifier.fillMaxWidth(),
+                             focusRequester = binFocus,
+                         )
+@@ -943,7 +1054,7 @@ private fun CountV2Document(no: String, onBack: () -> Unit) {
+                                         activeBin = ""; lastCompleted = null; lastBatch = emptyList(); lastCompletedLp = null; pendingRetry = null
+                                         status = "Raf seçin: raf barkodunu okutun."
+                                     },
+-                                    enabled = !busy,
++                                    enabled = !busy && pendingRetry == null && !pendingRestoreFailed,
+                                 ) { Text("Rafı değiştir") }
+                             }
+                             ScanField(
+@@ -951,10 +1062,15 @@ private fun CountV2Document(no: String, onBack: () -> Unit) {
+                                 value = labelScan,
+                                 onValueChange = { labelScan = it },
+                                 onScanned = { scanLabel(it) },
+-                                enabled = !busy && pendingRetry == null && slot in allowedSlots && !currentSlotSaved,
++                                enabled = !busy && pendingRetry == null && !pendingRestoreFailed && slot in allowedSlots && !currentSlotSaved,
+                                 modifier = Modifier.fillMaxWidth(),
+                                 focusRequester = labelFocus,
+                             )
++                            OutlinedButton(
++                                onClick = { showFinishBin = true },
++                                enabled = binReviewSupported && !busy && pendingRetry == null && !pendingRestoreFailed && slot in allowedSlots && !currentSlotSaved,
++                                modifier = Modifier.fillMaxWidth(),
++                            ) { Text("Rafı bitir · sayılmayanları 0 yaz") }
+                         }
+                     }
+ 
+@@ -970,12 +1086,17 @@ private fun CountV2Document(no: String, onBack: () -> Unit) {
+                         Spacer(Modifier.height(6.dp))
+                         OutlinedButton(
+                             onClick = { undoLastScan() },
+-                            enabled = !busy && pendingRetry == null,
++                            enabled = !busy && pendingRetry == null && !pendingRestoreFailed && !currentSlotSaved,
+                             modifier = Modifier.fillMaxWidth(),
+                         ) { Text("↩ Son okutmayı geri al") }
+                     }
+ 
+                     Spacer(Modifier.height(10.dp))
++                    if (binReviewSupported && lines.isNotEmpty()) {
++                        Text("Raf farkları · $slot sayımı", fontWeight = FontWeight.Bold)
++                        Text(varianceReview, fontSize = 12.sp)
++                        Text("Diğer raftan otomatik düşülmez · stok farkları onaydan sonra işlenir", fontSize = 11.sp)
++                    }
+                     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                         Text(
+                             if (prepared) "Otomatik oluşan satırlar (${lines.size})" else "Belgedeki klasik satırlar (${lines.size})",
+@@ -993,7 +1114,7 @@ private fun CountV2Document(no: String, onBack: () -> Unit) {
+                     quantity = line.optDouble("countedQty$slot", 0.0),
+                 )
+                 Card(
+-                    Modifier.fillMaxWidth().clickable(enabled = prepared && !busy && !currentSlotSaved) { adjustLine = line },
++                    Modifier.fillMaxWidth().clickable(enabled = prepared && !busy && !currentSlotSaved && pendingRetry == null && !pendingRestoreFailed) { adjustLine = line },
+                     shape = RoundedCornerShape(10.dp),
+                 ) {
+                     Column(Modifier.padding(12.dp)) {
+@@ -1063,8 +1184,8 @@ private fun CountV2Document(no: String, onBack: () -> Unit) {
+             title = "Miktarı düzelt — ${line.optString("binCode")}",
+             itemNo = line.optString("itemNo") +
+                 line.optString("lotNo").takeIf { it.isNotBlank() }?.let { " · Lot $it" }.orEmpty(),
+-            initialQty = line.optDouble("countedQty$slot", 0.0).takeIf { it > 0.0 }
+-                ?: line.optDouble("systemQty", 0.0).coerceAtLeast(0.0),
++            initialQty = if (line.optBoolean("counted$slot")) line.optDouble("countedQty$slot", 0.0)
++                else line.optDouble("systemQty", 0.0).coerceAtLeast(0.0),
+             initialUom = line.optString("unitOfMeasureCode"),
+             showLotSerial = false,
+             // Boş palet / eksik ürün: fiziksel 0 geçerli bir sayımdır.
+@@ -1081,7 +1202,10 @@ private fun CountV2Document(no: String, onBack: () -> Unit) {
+         AlertDialog(
+             onDismissRequest = { if (!busy) showPostConfirm = false },
+             title = { Text("Sayım stoklara işlensin mi?") },
+-            text = { Text("${lines.size} sayım satırının farkları pozitif/negatif stok hareketi olarak kaydedilecek ve belge kapanacak.") },
++            text = { Column(Modifier.verticalScroll(rememberScrollState())) {
++                Text(varianceReview)
++                Text("Bu farklar stoklara işlenecek ve belge kapanacak.")
++            } },
+             confirmButton = {
+                 TextButton(onClick = { postSheet() }, enabled = canPost) { Text("Onayla ve İşle") }
+             },
+@@ -1090,6 +1214,30 @@ private fun CountV2Document(no: String, onBack: () -> Unit) {
+             },
+         )
+     }
++    if (showFinishBin) AlertDialog(
++        onDismissRequest = { if (!busy) showFinishBin = false },
++        title = { Text("$activeBin sayımı tamamlandı mı?") },
++        text = { Text("Bu rafta saymadığınız kayıtlı ürünler yalnız sizin $slot sayımınıza 0 yazılacak · diğer rafların miktarı değişmeyecek") },
++        confirmButton = { TextButton(onClick = { finishBin() }, enabled = !busy) { Text("Rafı bitir") } },
++        dismissButton = { TextButton(onClick = { showFinishBin = false }, enabled = !busy) { Text("Devam et") } },
++    )
++    unexpectedLabel?.let { label ->
++        QuantityDialogSheet(
++            title = "Bu rafta bulduğunuz miktar — $activeBin",
++            itemNo = label.itemNo,
++            initialQty = 1.0,
++            initialUom = label.unitOfMeasureCode,
++            initialLot = label.lotNo,
++            initialSerial = label.serialNo,
++            showLotSerial = true,
++            onDismiss = { unexpectedLabel = null },
++            onConfirm = { result ->
++                unexpectedLabel = null
++                sendScan(PendingCountV2Scan(UUID.randomUUID().toString(), activeBin,
++                    label.copy(quantity = result.quantity, unitOfMeasureCode = result.uom, lotNo = result.lotNo, serialNo = result.serialNo), slot))
++            },
++        )
++    }
+ }
+ 
+ private fun formatCountV2Qty(value: Double): String =
+diff --git a/android/app/src/main/java/com/dynops/bcwms/feature/CountV2Workflow.kt b/android/app/src/main/java/com/dynops/bcwms/feature/CountV2Workflow.kt
+index 995c925..5713ed8 100644
+--- a/android/app/src/main/java/com/dynops/bcwms/feature/CountV2Workflow.kt
++++ b/android/app/src/main/java/com/dynops/bcwms/feature/CountV2Workflow.kt
+@@ -2,6 +2,39 @@ package com.dynops.bcwms.feature
+ 
+ import com.dynops.bcwms.scanner.BarcodeKind
+ import com.dynops.bcwms.scanner.ResolvedBarcode
++import org.json.JSONObject
++import kotlin.math.abs
++import java.util.UUID
++
++internal data class PendingCountV2Scan(
++    val scanId: String,
++    val binCode: String,
++    val label: CountV2Label,
++    val counterSlot: Int,
++) {
++    fun payload(): String = JSONObject().apply {
++        put("scanId", scanId); put("binCode", binCode); put("counterSlot", counterSlot)
++        put("itemNo", label.itemNo); put("variantCode", label.variantCode)
++        put("unitOfMeasureCode", label.unitOfMeasureCode); put("lotNo", label.lotNo)
++        put("serialNo", label.serialNo); put("qty", label.quantity)
++    }.toString()
++
++    fun storedJson(): String = JSONObject(payload()).put("raw", label.raw).toString()
++
++    companion object {
++        fun fromStoredJson(value: String): PendingCountV2Scan {
++            val row = JSONObject(value)
++            val id = row.getString("scanId").also { UUID.fromString(it) }
++            val bin = row.getString("binCode").also { require(it.isNotBlank()) }
++            val slot = row.getInt("counterSlot").also { require(it in 1..3) }
++            val item = row.getString("itemNo").also { require(it.isNotBlank()) }
++            val qty = row.getDouble("qty").also { require(it.isFinite() && it > 0) }
++            return PendingCountV2Scan(id, bin, CountV2Label(item, row.getString("variantCode"),
++                row.getString("unitOfMeasureCode"), row.getString("lotNo"), row.getString("serialNo"),
++                qty, row.getString("raw")), slot)
++        }
++    }
++}
+ 
+ /** Sunucuya tek, atomik Sayım V2 okutması olarak gönderilen kesin etiket bilgisi. */
+ internal data class CountV2Label(
+@@ -98,3 +131,54 @@ internal fun classicCountSheetV2Message(lineCount: Int): String =
+     "Bu belge klasik sayım için hazırlanmış ve $lineCount hazır satır içeriyor. " +
+         "Mevcut satırlar silinmedi. Bu belgeyle ana menüdeki Sayım ekranından devam edin " +
+         "veya Sayfa Listesi'ne dönüp Yeni V2 Sayımı Oluştur'a basın."
++
++internal data class CountV2BinVariance(val bin: String, val difference: Double, val complete: Boolean)
++
++internal data class CountV2VarianceGroup(
++    val item: String,
++    val variant: String,
++    val lot: String,
++    val serial: String,
++    val uom: String,
++    val bins: List<CountV2BinVariance>,
++) {
++    val complete: Boolean get() = bins.all { it.complete }
++    val net: Double get() = bins.sumOf { it.difference }
++    val possibleBinMismatch: Boolean get() = complete && abs(net) < 0.00001 &&
++        bins.any { it.difference > 0.00001 } && bins.any { it.difference < -0.00001 }
++}
++
++/** Never net different lots, variants, serials or units; uncounted is not zero. */
++internal fun countV2VarianceGroups(lines: List<JSONObject>, slot: Int, useWinningVariance: Boolean): List<CountV2VarianceGroup> =
++    lines.groupBy { line -> listOf("itemNo", "variantCode", "lotNo", "serialNo", "unitOfMeasureCode").map { line.optString(it) } }
++        .map { (key, itemLines) ->
++            CountV2VarianceGroup(key[0], key[1], key[2], key[3], key[4],
++                itemLines.groupBy { it.optString("binCode") }.toSortedMap().map { (bin, binLines) ->
++                    CountV2BinVariance(bin, binLines.sumOf {
++                        if (useWinningVariance) it.optDouble("variance", Double.NaN)
++                        else it.optDouble("countedQty$slot", Double.NaN) - it.optDouble("systemQty", Double.NaN)
++                    }, binLines.all {
++                        it.optBoolean("counted$slot", false) &&
++                            it.optDouble("countedQty$slot", Double.NaN).isFinite() &&
++                            it.optDouble("systemQty", Double.NaN).isFinite() &&
++                            (!useWinningVariance || (!it.optBoolean("recountRequired", false) && it.optDouble("variance", Double.NaN).isFinite()))
++                    })
++                })
++        }.filter { group -> !group.complete || group.bins.any { abs(it.difference) > 0.00001 } }
++        .sortedWith(compareBy({ it.item }, { it.variant }, { it.lot }, { it.serial }, { it.uom }))
++
++internal fun countV2VarianceReviewText(groups: List<CountV2VarianceGroup>): String =
++    groups.joinToString("\n\n") { group ->
++        val identity = listOf(group.item, group.variant, group.lot.takeIf { it.isNotBlank() }?.let { "lot $it" }.orEmpty(),
++            group.serial, group.uom).filter { it.isNotBlank() }.joinToString(" · ")
++        fun qty(value: Double): String = if (value == value.toLong().toDouble()) value.toLong().toString() else value.toString()
++        val bins = group.bins.joinToString(" · ") {
++            "${it.bin}: " + if (it.complete) (if (it.difference > 0) "+" else "") + qty(it.difference) else "sayım bekliyor"
++        }
++        val result = when {
++            !group.complete -> "İlgili rafların sayımı tamamlanmalı"
++            group.possibleBinMismatch -> "Olası raf farkı · toplam stok farkı 0"
++            else -> "Toplam stok farkı ${qty(group.net)}"
++        }
++        "$identity\n$bins\n$result"
++    }.ifBlank { "Sayılmış satırlarda stok farkı yok" }
+diff --git a/android/app/src/main/java/com/dynops/bcwms/feature/HierarchicalLpModule.kt b/android/app/src/main/java/com/dynops/bcwms/feature/HierarchicalLpModule.kt
+index 25727ad..36f13d2 100644
+--- a/android/app/src/main/java/com/dynops/bcwms/feature/HierarchicalLpModule.kt
++++ b/android/app/src/main/java/com/dynops/bcwms/feature/HierarchicalLpModule.kt
+@@ -47,7 +47,16 @@ fun HierarchicalLpModule() {
+     fun checkSetup() {
+         scope.launch {
+             busy = true
+-            val setup = BcApi.get(context, "movementOps('')?\$select=hierarchicalLpEnabled")
++            enabled = false
++            templatesReady = false
++            val metadata = BcApi.getCustomApiMetadata(context)
++            if (!metadata.ok || !hierarchicalLpApiAvailable(metadata.body)) {
++                status = if (metadata.ok) "Bu şirkette kutu ve palet için gereken DKC özelliği yüklü değil."
++                    else "Business Central bağlantısı doğrulanamadı · bağlantıyı kontrol edip tekrar deneyin."
++                busy = false
++                return@launch
++            }
++            val setup = BcApi.get(context, "movementOps('')")
+             enabled = setup.ok && runCatching {
+                 JSONObject(setup.body).optBoolean("hierarchicalLpEnabled") ||
+                     BcApi.parseValueArray(setup.body).firstOrNull()?.optBoolean("hierarchicalLpEnabled") == true
+@@ -88,6 +97,7 @@ fun HierarchicalLpModule() {
+             items(HierarchicalLpOperation.entries) { item ->
+                 FilterChip(
+                     selected = operation == item,
++                    enabled = !busy,
+                     onClick = { operation = item; status = item.hint },
+                     label = { Text(item.label) },
+                 )
+diff --git a/android/app/src/main/java/com/dynops/bcwms/feature/LicensePlateModule.kt b/android/app/src/main/java/com/dynops/bcwms/feature/LicensePlateModule.kt
+index 226d0e9..3294acf 100644
+--- a/android/app/src/main/java/com/dynops/bcwms/feature/LicensePlateModule.kt
++++ b/android/app/src/main/java/com/dynops/bcwms/feature/LicensePlateModule.kt
+@@ -1,5 +1,7 @@
+ package com.dynops.bcwms.feature
+ 
++import com.dynops.bcwms.ui.toFiniteDoubleOrNull
++
+ import androidx.compose.foundation.layout.*
+ import androidx.compose.foundation.rememberScrollState
+ import androidx.compose.foundation.lazy.LazyColumn
+@@ -44,6 +46,8 @@ fun LicensePlateModule() {
+     var selectedForPrint by remember { mutableStateOf<Set<String>>(emptySet()) }
+     var palletLabelRetryNos by remember { mutableStateOf<Set<String>>(emptySet()) }
+     var search by remember { mutableStateOf("") }
++    var lastCreatedLpNos by remember { mutableStateOf<Set<String>>(emptySet()) }
++    var showLastCreatedOnly by remember { mutableStateOf(false) }
+ 
+     fun loadList(statusAfterLoad: String? = null) {
+         scope.launch {
+@@ -71,45 +75,24 @@ fun LicensePlateModule() {
+         return
+     }
+ 
+-    if (showBulkBuild) {
+-        BulkLpBuildSheet(
+-            onDismiss = { showBulkBuild = false },
+-            onBuilt = { result ->
+-                showBulkBuild = false
+-                val failedPrints = result.failedPrintLpNos.toSet()
+-                // İlk baskıda başarılı olan LP'leri yeniden seçmeyiz. Yalnız
+-                // sunucunun başarısız bildirdiği MTE/LP etiketleri güvenli tekrar
+-                // için seçili ve aynı pallet-label rotasında kalır.
+-                selectedForPrint = failedPrints
+-                palletLabelRetryNos = failedPrints
+-                search = ""
+-                val completionStatus = when {
+-                    result.replayed && result.printSkippedOnReplay ->
+-                        "UYARI: Daha önce oluşturulan ${result.createdLpNos.size} LP güvenle doğrulandı. " +
+-                            "Çift baskıyı önlemek için etiketler tekrar kuyruğa alınmadı; fiziksel etiketleri kontrol edip yalnız eksikleri seçin."
+-                    result.replayed ->
+-                        "TAMAM: Daha önce oluşturulan ${result.createdLpNos.size} LP aynı işlem kimliğiyle güvenle doğrulandı."
+-                    failedPrints.isEmpty() ->
+-                        "TAMAM: ${result.createdLpNos.size} LP mevcut stoktan oluşturuldu."
+-                    else ->
+-                        "UYARI: ${result.createdLpNos.size} LP oluşturuldu; ${failedPrints.size} etiket gönderilemedi. " +
+-                            "Yalnız başarısız LP'ler seçildi; Seçilenleri Yazdır ile tekrar deneyin."
+-                }
+-                loadList(completionStatus)
+-            },
+-        )
++    fun onStockLpBuilt(result: LedgerBulkLpBuildResult) {
++        showBulkBuild = false
++        showSingleBuild = false
++        selectedForPrint = ledgerLpPrintSelection(result)
++        // Keep the original stock-label route for this batch, including manual
++        // selection after a replay with an unknown physical print outcome.
++        palletLabelRetryNos = palletLabelRetryNos + result.createdLpNos
++        lastCreatedLpNos = result.createdLpNos.toSet()
++        showLastCreatedOnly = true
++        search = ""
++        loadList(ledgerLpCompletionStatus(result))
+     }
+-    if (showSingleBuild) {
++
++    if (showBulkBuild || showSingleBuild) {
+         BulkLpBuildSheet(
+-            singleLpMode = true,
+-            onDismiss = { showSingleBuild = false },
+-            onBuilt = { result ->
+-                showSingleBuild = false
+-                selectedForPrint = result.failedPrintLpNos.toSet()
+-                palletLabelRetryNos = result.failedPrintLpNos.toSet()
+-                search = ""
+-                loadList("TAMAM: Tekli LP seçtiğiniz stok kaydına bağlandı.")
+-            },
++            singleLpMode = showSingleBuild,
++            onDismiss = { showBulkBuild = false; showSingleBuild = false },
++            onBuilt = ::onStockLpBuilt,
+         )
+     }
+ 
+@@ -176,7 +159,6 @@ fun LicensePlateModule() {
+             // Kısmi başarıda yalnız başarısız LP'leri seçili bırak. Operatör
+             // yeniden denediğinde başarıyla kuyruğa alınan etiketler çift basılmaz.
+             selectedForPrint = failures.keys.toSet()
+-            palletLabelRetryNos = palletLabelRetryNos.intersect(failures.keys)
+         }
+     }
+ 
+@@ -201,8 +183,21 @@ fun LicensePlateModule() {
+         Spacer(Modifier.height(4.dp))
+         StatusText(status)
+         Spacer(Modifier.height(8.dp))
++        if (lastCreatedLpNos.isNotEmpty()) {
++            Row(verticalAlignment = Alignment.CenterVertically) {
++                Checkbox(
++                    checked = showLastCreatedOnly,
++                    enabled = !loading,
++                    onCheckedChange = {
++                        showLastCreatedOnly = it
++                        if (it) selectedForPrint = selectedForPrint.intersect(lastCreatedLpNos)
++                    },
++                )
++                Text("Son oluşturulan LP'ler (${lastCreatedLpNos.size})", fontSize = 12.sp)
++            }
++        }
+         LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+-            items(rows) { lp ->
++            items(if (showLastCreatedOnly) rows.filter { it.optString("no") in lastCreatedLpNos } else rows) { lp ->
+                 Card(
+                     onClick = { selected = lp.optString("no") },
+                     modifier = Modifier.fillMaxWidth(),
+@@ -271,110 +266,6 @@ private fun StatusBadge(status: String) {
+     }
+ }
+ 
+-@OptIn(ExperimentalMaterial3Api::class)
+-@Composable
+-private fun LpBuildSheet(onDismiss: () -> Unit, onBuilt: (String) -> Unit) {
+-    val context = LocalContext.current
+-    val scope = rememberCoroutineScope()
+-    // Müşteri/şirket özel varsayılanları kullanma. Yanlış lokasyonda sessiz LP
+-    // oluşmasını önlemek için üç değer de operatör seçimi/okutmasıyla gelir.
+-    var template by remember { mutableStateOf("") }
+-    var location by remember { mutableStateOf("") }
+-    var bin by remember { mutableStateOf("") }
+-    var busy by remember { mutableStateOf(false) }
+-    var err by remember { mutableStateOf("") }
+-    // PDF LP §5: Template alanı serbest text idi — operatör "CARTON-S"
+-    // yerine "CARTONS" yazıp sessizce yanlış kayıt yaratıyordu. Dropdown
+-    // ile mevcut template'lerden seçtirilir.
+-    var templates by remember { mutableStateOf<List<String>>(emptyList()) }
+-    LaunchedEffect(Unit) {
+-        val page = BcApi.getAllPages(context, "licensePlateTemplates?\$top=50&\$select=code,description")
+-        templates = if (page.complete) {
+-            page.rows.map { it.optString("code") }.filter { it.isNotBlank() }
+-        } else {
+-            err = "HATA: LP şablonlarının tamamı alınamadı. Yenileyip tekrar deneyin."
+-            emptyList()
+-        }
+-    }
+-    var templateExpanded by remember { mutableStateOf(false) }
+-
+-    com.dynops.bcwms.ui.SheetScaffold(onDismiss = onDismiss, contentPadding = androidx.compose.foundation.layout.PaddingValues(20.dp)) {
+-        Text("Yeni LP Oluştur", fontWeight = FontWeight.Bold, fontSize = 18.sp)
+-        Spacer(Modifier.height(12.dp))
+-        ExposedDropdownMenuBox(expanded = templateExpanded, onExpandedChange = { templateExpanded = !templateExpanded }) {
+-            OutlinedTextField(
+-                value = template,
+-                onValueChange = { template = it },
+-                readOnly = templates.isNotEmpty(),
+-                label = { Text("Şablon Kodu") },
+-                trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = templateExpanded) },
+-                singleLine = true,
+-                modifier = Modifier.fillMaxWidth().menuAnchor(),
+-            )
+-            if (templates.isNotEmpty()) {
+-                ExposedDropdownMenu(expanded = templateExpanded, onDismissRequest = { templateExpanded = false }) {
+-                    templates.forEach { code ->
+-                        DropdownMenuItem(text = { Text(code) }, onClick = { template = code; templateExpanded = false })
+-                    }
+-                }
+-            }
+-        }
+-        Spacer(Modifier.height(8.dp))
+-        ScanField("Lokasyon", location, { location = it }, modifier = Modifier.fillMaxWidth())
+-        Spacer(Modifier.height(8.dp))
+-        ScanField("Bin", bin, { bin = it }, modifier = Modifier.fillMaxWidth())
+-        if (err.isNotBlank()) { Spacer(Modifier.height(8.dp)); StatusText(err) }
+-        Spacer(Modifier.height(16.dp))
+-        Button(
+-            enabled = !busy && template.isNotBlank() && location.isNotBlank() && bin.isNotBlank(),
+-            modifier = Modifier.fillMaxWidth().height(50.dp),
+-            onClick = {
+-                scope.launch {
+-                    busy = true; err = ""
+-                    val safeTemplate = template.trim().replace("'", "''")
+-                    val safeLocation = location.trim().replace("'", "''")
+-                    val safeBin = bin.trim().replace("'", "''")
+-                    val templateExists = BcApi.get(context, "licensePlateTemplates?\$filter=code eq '$safeTemplate'&\$top=1")
+-                    val binExists = BcApi.get(context, "bins?\$filter=locationCode eq '$safeLocation' and code eq '$safeBin'&\$top=1")
+-                    if (!templateExists.ok || BcApi.parseValueArray(templateExists.body).isEmpty()) {
+-                        busy = false; err = "HATA: Geçerli bir LP şablonu seçin."
+-                        return@launch
+-                    }
+-                    if (!binExists.ok || BcApi.parseValueArray(binExists.body).isEmpty()) {
+-                        busy = false; err = "HATA: Lokasyon ve raf eşleşmiyor. Değerleri kontrol edin."
+-                        return@launch
+-                    }
+-                    val body = JSONObject().apply {
+-                        put("locationCode", location.trim())
+-                        put("binCode", bin.trim())
+-                    }.toString()
+-                    val r = BcApi.boundAction(
+-                        context,
+-                        "licensePlateTemplates",
+-                        template.trim(),
+-                        "build",
+-                        body,
+-                    )
+-                    busy = false
+-                    if (r.ok) {
+-                        val no = BcApi.scalarValue(r.body).trim()
+-                        if (no.isNotBlank()) onBuilt(no)
+-                        else err = "HATA: Business Central LP numarası döndürmedi."
+-                    } else {
+-                        val serverError = BcApi.errorMessage(r.body)
+-                        err = if (serverError.contains("LP No. Series", ignoreCase = true))
+-                            "HATA: LP numara serisi tanımlı değil. Advanced WMS kurulumunu tamamlayın."
+-                        else if (r.httpCode == 404 || r.httpCode == 405)
+-                            "HATA: LP Build servisi henüz Business Central'a yayımlanmamış. Güncel AL uzantısını yayımlayın."
+-                        else QcErrorParser.friendlyStatus(serverError, r.httpCode)
+-                    }
+-                }
+-            }
+-        ) { Text(if (busy) "Oluşturuluyor..." else "Oluştur") }
+-        Spacer(Modifier.height(24.dp))
+-    }
+-}
+-
+ @OptIn(ExperimentalMaterial3Api::class)
+ @Composable
+ private fun LpDocument(lpNo: String, onBack: () -> Unit) {
+@@ -557,6 +448,7 @@ private fun LpDocument(lpNo: String, onBack: () -> Unit) {
+                                     fontWeight = FontWeight.Bold,
+                                 )
+                             val extra = listOfNotNull(
++                                ln.optInt("sourceItemLedgerEntryNo").takeIf { it > 0 }?.let { "Kaynak giriş: #$it" },
+                                 ln.optString("sourceBinCode").takeIf { it.isNotBlank() && it != "null" }?.let { "Kaynak raf: $it" },
+                                 ln.optString("lotNo").takeIf { it.isNotBlank() }?.let { "Lot $it" },
+                                 ln.optString("serialNo").takeIf { it.isNotBlank() }?.let { "Seri $it" },
+@@ -1168,7 +1060,7 @@ private fun PartialUseSheet(
+     var lineExpanded by remember { mutableStateOf(false) }
+     val selectedLine = lines.firstOrNull { it.optInt("lineNo") == selectedLineNo }
+     val maximumQuantity = selectedLine?.optDouble("quantity") ?: 0.0
+-    val parsedQuantity = qty.toDoubleOrNull()
++    val parsedQuantity = qty.toFiniteDoubleOrNull()
+     com.dynops.bcwms.ui.SheetScaffold(onDismiss = onDismiss, contentPadding = androidx.compose.foundation.layout.PaddingValues(20.dp)) {
+         Text("Kısmi Kullanım", fontWeight = FontWeight.Bold, fontSize = 18.sp)
+         Spacer(Modifier.height(8.dp))
+diff --git a/android/app/src/main/java/com/dynops/bcwms/feature/LicensePlateWorkflow.kt b/android/app/src/main/java/com/dynops/bcwms/feature/LicensePlateWorkflow.kt
+index 15d7e44..d14de51 100644
+--- a/android/app/src/main/java/com/dynops/bcwms/feature/LicensePlateWorkflow.kt
++++ b/android/app/src/main/java/com/dynops/bcwms/feature/LicensePlateWorkflow.kt
+@@ -113,3 +113,28 @@ internal val lpPartialActions = listOf(
+         help = "Girilen miktar mevcut satırdan düşülür.",
+     ),
+ )
++
++/** Never automatically reprint labels whose first print outcome is unknown. */
++internal fun ledgerLpPrintSelection(result: LedgerBulkLpBuildResult): Set<String> = when {
++    !result.printLabelsRequested -> result.createdLpNos.toSet()
++    result.replayed -> emptySet()
++    else -> result.failedPrintLpNos.toSet()
++}
++
++internal fun ledgerLpCompletionStatus(result: LedgerBulkLpBuildResult): String {
++    val count = result.createdLpNos.size
++    val source = "Kaynak giriş: #${result.sourceEntryNo}."
++    return when {
++        result.printSkippedOnReplay ->
++            "UYARI: Daha önce oluşturulan $count LP doğrulandı. $source " +
++                "Etiketler yeniden gönderilmedi; fiziksel etiketleri kontrol edip yalnız eksikleri seçin."
++        !result.printLabelsRequested ->
++            "TAMAM: $count LP kaynak girişine bağlı. $source " +
++                "Etiketler henüz yazdırılmadı; LP'ler seçili, Seçilenleri Yazdır düğmesine basın."
++        result.failedPrintLpNos.isNotEmpty() ->
++            "UYARI: $count LP kaynak girişine bağlı. $source " +
++                "${result.failedPrintLpNos.size} etiket gönderilemedi. Yalnız başarısız LP'ler seçili; Seçilenleri Yazdır ile tekrar deneyin."
++        else ->
++            "TAMAM: $count LP kaynak girişine bağlı ve etiketleri kuyruğa alındı. $source"
++    }
++}
+diff --git a/android/app/src/main/java/com/dynops/bcwms/feature/MoveAndCountModules.kt b/android/app/src/main/java/com/dynops/bcwms/feature/MoveAndCountModules.kt
+index 41dcf7b..442b725 100644
+--- a/android/app/src/main/java/com/dynops/bcwms/feature/MoveAndCountModules.kt
++++ b/android/app/src/main/java/com/dynops/bcwms/feature/MoveAndCountModules.kt
+@@ -1,5 +1,7 @@
+ package com.dynops.bcwms.feature
+ 
++import com.dynops.bcwms.ui.toFiniteDoubleOrNull
++
+ import androidx.compose.foundation.layout.*
+ import androidx.compose.foundation.horizontalScroll
+ import androidx.compose.foundation.lazy.LazyColumn
+@@ -664,7 +666,7 @@ fun AdHocMoveModule() {
+                         fromBin.isBlank() -> "Kaynak rafı okutun."
+                         itemOrLp.isBlank() -> "Taşınacak ürünü ya da LP'yi okutun."
+                         toBin.isBlank() -> "Hedef rafı okutun."
+-                        (qty.toDoubleOrNull() ?: 0.0) <= 0.0 -> "Miktar sıfırdan büyük olmalı."
++                        (qty.toFiniteDoubleOrNull() ?: 0.0) <= 0.0 -> "Miktar sıfırdan büyük olmalı."
+                         fromBin.trim().equals(toBin.trim(), true) ->
+                             "Kaynak ve hedef raf aynı olamaz (${fromBin.trim()})."
+                         else -> ""
+@@ -699,7 +701,7 @@ fun AdHocMoveModule() {
+                             val body = JSONObject().apply {
+                                 put("fromBin", fromBin.trim()); put("toBin", toBin.trim())
+                                 // AL action param is "qty" (not "quantity"); send every param so OData binds them all.
+-                                put("qty", qty.toDoubleOrNull() ?: 0.0)
++                                put("qty", qty.toFiniteDoubleOrNull() ?: 0.0)
+                                 put("itemNo", itemNo)
+                                 // movementOps.adHoc still requires the legacy lpNo argument,
+                                 // but Product mode never sends an LP through this contract.
+@@ -719,7 +721,7 @@ fun AdHocMoveModule() {
+                             if (r.ok) {
+                                 lastMove = buildList {
+                                     add("📍 ${fromBin.trim()} → 📍 ${toBin.trim()}")
+-                                    add("• $itemNo × ${qty.toDoubleOrNull()?.let { fmtq(it) } ?: qty}" +
++                                    add("• $itemNo × ${qty.toFiniteDoubleOrNull()?.let { fmtq(it) } ?: qty}" +
+                                         if (lot.isNotBlank()) " · Lot $lot" else "")
+                                 }
+                                 itemOrLp = ""; qty = "1"; lotNoInput = ""
+@@ -2437,10 +2439,10 @@ private fun CountByBinPane(
+                 Button(
+                     onClick = {
+                         val t = sc
+-                        val q = manualQty.toDoubleOrNull()
++                        val q = manualQty.toFiniteDoubleOrNull()
+                         if (q != null) { scanned = null; commitTarget(t, manualQty = q) }
+                     },
+-                    enabled = !busy && manualQty.toDoubleOrNull() != null,
++                    enabled = !busy && manualQty.toFiniteDoubleOrNull() != null,
+                     modifier = Modifier.fillMaxWidth().height(52.dp),
+                 ) { Text("✅ Sayılan miktarla $activeBin adresine kaydet", fontWeight = FontWeight.Bold) }
+             } else {
+@@ -2638,7 +2640,7 @@ private fun UnexpectedStockSheet(
+     var lotNo by remember(draft) { mutableStateOf(draft.lotNo) }
+     var serialNo by remember(draft) { mutableStateOf(draft.serialNo) }
+     var qty by remember(draft) { mutableStateOf(draft.suggestedQty?.let(::fmtq).orEmpty()) }
+-    val parsedQty = qty.toDoubleOrNull()
++    val parsedQty = qty.toFiniteDoubleOrNull()
+ 
+     com.dynops.bcwms.ui.SheetScaffold(
+         onDismiss = { if (!busy) onDismiss() },
+@@ -2908,7 +2910,7 @@ private fun CountEntrySheet(
+             modifier = Modifier.fillMaxWidth(),
+         )
+         Spacer(Modifier.height(16.dp))
+-        val parsedQty = qty.toDoubleOrNull()
++        val parsedQty = qty.toFiniteDoubleOrNull()
+         Button(
+             modifier = Modifier.fillMaxWidth(),
+             enabled = parsedQty != null && lotProbeFinished && lotProbeSucceeded && !needsLotSelection,
+diff --git a/android/app/src/main/java/com/dynops/bcwms/feature/PickingModule.kt b/android/app/src/main/java/com/dynops/bcwms/feature/PickingModule.kt
+index 0f305b7..cf4dd34 100644
+--- a/android/app/src/main/java/com/dynops/bcwms/feature/PickingModule.kt
++++ b/android/app/src/main/java/com/dynops/bcwms/feature/PickingModule.kt
+@@ -1,5 +1,7 @@
+ package com.dynops.bcwms.feature
+ 
++import com.dynops.bcwms.ui.toFiniteDoubleOrNull
++
+ import androidx.compose.foundation.BorderStroke
+ import androidx.compose.foundation.background
+ import androidx.compose.foundation.layout.*
+@@ -2314,7 +2316,7 @@ private fun ShortPickSheet(line: JSONObject?, onDismiss: () -> Unit, onConfirm:
+             reasons.forEach { FilterChip(selected = it == reason, onClick = { reason = it }, label = { Text(reasonLabel(it)) }) }
+         }
+         Spacer(Modifier.height(16.dp))
+-        Button(modifier = Modifier.fillMaxWidth(), onClick = { onConfirm(qty.toDoubleOrNull() ?: 0.0, reason) }) { Text("Eksik İşle") }
++        Button(modifier = Modifier.fillMaxWidth(), onClick = { onConfirm(qty.toFiniteDoubleOrNull() ?: 0.0, reason) }) { Text("Eksik İşle") }
+         Spacer(Modifier.height(24.dp))
+     }
+ }
+diff --git a/android/app/src/main/java/com/dynops/bcwms/feature/ProductionAssemblyModules.kt b/android/app/src/main/java/com/dynops/bcwms/feature/ProductionAssemblyModules.kt
+index 7809563..15d8261 100644
+--- a/android/app/src/main/java/com/dynops/bcwms/feature/ProductionAssemblyModules.kt
++++ b/android/app/src/main/java/com/dynops/bcwms/feature/ProductionAssemblyModules.kt
+@@ -1,5 +1,7 @@
+ package com.dynops.bcwms.feature
+ 
++import com.dynops.bcwms.ui.toFiniteDoubleOrNull
++
+ import androidx.compose.foundation.layout.*
+ import androidx.compose.foundation.rememberScrollState
+ import androidx.compose.foundation.lazy.LazyColumn
+@@ -324,8 +326,8 @@ private fun ConsumeSheet(line: JSONObject, onDismiss: () -> Unit, onConfirm: (qt
+         Spacer(Modifier.height(8.dp))
+         OutlinedTextField(serial, { serial = it }, label = { Text("Seri No (opsiyonel)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+         Spacer(Modifier.height(16.dp))
+-        Button(modifier = Modifier.fillMaxWidth(), enabled = (qty.toDoubleOrNull() ?: 0.0) > 0, onClick = {
+-            onConfirm(qty.toDoubleOrNull() ?: 0.0, lp.trim(), lot.trim(), serial.trim(), bin.trim())
++        Button(modifier = Modifier.fillMaxWidth(), enabled = (qty.toFiniteDoubleOrNull() ?: 0.0) > 0, onClick = {
++            onConfirm(qty.toFiniteDoubleOrNull() ?: 0.0, lp.trim(), lot.trim(), serial.trim(), bin.trim())
+         }) { Text("Sarfiyatı Onayla") }
+         Spacer(Modifier.height(24.dp))
+     }
+@@ -442,8 +444,8 @@ private fun OutputSheet(line: JSONObject, onDismiss: () -> Unit, onConfirm: (out
+         Spacer(Modifier.height(8.dp))
+         OutlinedTextField(bin, { bin = it }, label = { Text("Çıktı Bin'i (opsiyonel)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+         Spacer(Modifier.height(16.dp))
+-        Button(modifier = Modifier.fillMaxWidth(), enabled = (outQty.toDoubleOrNull() ?: 0.0) > 0, onClick = {
+-            onConfirm(outQty.toDoubleOrNull() ?: 0.0, scrapQty.toDoubleOrNull() ?: 0.0, runtime.toDoubleOrNull() ?: 0.0, newLp.trim(), bin.trim())
++        Button(modifier = Modifier.fillMaxWidth(), enabled = (outQty.toFiniteDoubleOrNull() ?: 0.0) > 0, onClick = {
++            onConfirm(outQty.toFiniteDoubleOrNull() ?: 0.0, scrapQty.toFiniteDoubleOrNull() ?: 0.0, runtime.toFiniteDoubleOrNull() ?: 0.0, newLp.trim(), bin.trim())
+         }) { Text("Çıktıyı Bildir") }
+         Spacer(Modifier.height(24.dp))
+     }
+@@ -709,7 +711,7 @@ private fun AssemblyQuantitySheet(
+         .takeIf { it.isFinite() && it >= 0.0 && it <= remaining }
+         ?: remaining
+     var quantityText by remember(line.optInt("lineNo")) { mutableStateOf(fmt(initial)) }
+-    val quantity = quantityText.toDoubleOrNull()
++    val quantity = quantityText.toFiniteDoubleOrNull()
+     val valid = quantity != null && quantity.isFinite() && quantity >= 0.0 && quantity <= remaining
+ 
+     SheetScaffold(onDismiss = onDismiss) {
+diff --git a/android/app/src/main/java/com/dynops/bcwms/feature/PutAwayShipModules.kt b/android/app/src/main/java/com/dynops/bcwms/feature/PutAwayShipModules.kt
+index ded51bf..a9fd093 100644
+--- a/android/app/src/main/java/com/dynops/bcwms/feature/PutAwayShipModules.kt
++++ b/android/app/src/main/java/com/dynops/bcwms/feature/PutAwayShipModules.kt
+@@ -1,5 +1,7 @@
+ package com.dynops.bcwms.feature
+ 
++import com.dynops.bcwms.ui.toFiniteDoubleOrNull
++
+ import androidx.compose.foundation.clickable
+ import androidx.compose.foundation.layout.*
+ import androidx.compose.foundation.rememberScrollState
+@@ -1235,7 +1237,7 @@ private fun PutAwayGuidedSheet(
+                             hint = "Bin öneriliyor..."
+                             val body = JSONObject().apply {
+                                 put("itemNo", expectedItem)
+-                                put("qty", qty.toDoubleOrNull() ?: 0.0)
++                                put("qty", qty.toFiniteDoubleOrNull() ?: 0.0)
+                                 put("locationCode", locationCode)
+                             }.toString()
+                             val r = BcApi.post(context, "putAways('${place.optString("no")}')/Microsoft.NAV.suggestBin", body)
+@@ -1272,7 +1274,7 @@ private fun PutAwayGuidedSheet(
+                     enabled = true,
+                     modifier = Modifier.fillMaxWidth(),
+                     onClick = {
+-                        val entered = qty.toDoubleOrNull()
++                        val entered = qty.toFiniteDoubleOrNull()
+                         val kalan = if (outstanding.isNaN()) null else outstanding
+                         error = when {
+                             targetBin.isBlank() -> "Önce koyacağınız rafı okutun."
+diff --git a/android/app/src/main/java/com/dynops/bcwms/feature/SubcontractingModule.kt b/android/app/src/main/java/com/dynops/bcwms/feature/SubcontractingModule.kt
+index 09e498d..55c81e6 100644
+--- a/android/app/src/main/java/com/dynops/bcwms/feature/SubcontractingModule.kt
++++ b/android/app/src/main/java/com/dynops/bcwms/feature/SubcontractingModule.kt
+@@ -1,5 +1,7 @@
+ package com.dynops.bcwms.feature
+ 
++import com.dynops.bcwms.ui.toFiniteDoubleOrNull
++
+ import androidx.compose.foundation.layout.*
+ import androidx.compose.foundation.lazy.LazyColumn
+ import androidx.compose.foundation.lazy.items
+@@ -536,7 +538,7 @@ private fun SubcontractReceiptDetail(line: JSONObject, onBack: () -> Unit) {
+     var busy by remember { mutableStateOf(false) }
+     var status by remember { mutableStateOf("") }
+     val idempotencyKey = remember(subcontractReceiptKey(line)) { UUID.randomUUID().toString() }
+-    val enteredQty = quantity.replace(',', '.').toDoubleOrNull() ?: 0.0
++    val enteredQty = quantity.replace(',', '.').toFiniteDoubleOrNull() ?: 0.0
+     val fullReceipt = canFinishSubcontractOperation(enteredQty, maxQty)
+     val valid = enteredQty > 0.0 && enteredQty <= maxQty && vendorShipmentNo.trim().isNotBlank()
+ 
+@@ -611,7 +613,7 @@ private fun SubcontractReceiptDetail(line: JSONObject, onBack: () -> Unit) {
+                 value = quantity,
+                 onValueChange = {
+                     quantity = normalizeQtyInput(it)
+-                    val parsed = normalizeQtyInput(it).toDoubleOrNull() ?: 0.0
++                    val parsed = normalizeQtyInput(it).toFiniteDoubleOrNull() ?: 0.0
+                     if (!canFinishSubcontractOperation(parsed, maxQty)) finishOperation = false
+                 },
+                 label = { Text("Kabul miktarı (en çok ${fmtSub(maxQty)})") }, singleLine = true,
+@@ -740,7 +742,7 @@ private fun SubcontractOperationDetail(operation: JSONObject, onBack: () -> Unit
+                 val payloadLines = JSONArray()
+                 for (line in lines) {
+                     val key = componentKey(line)
+-                    val requestedQty = quantities[key]?.replace(',', '.')?.toDoubleOrNull() ?: 0.0
++                    val requestedQty = quantities[key]?.replace(',', '.')?.toFiniteDoubleOrNull() ?: 0.0
+                     val enteredLps = lpNos[key].orEmpty().split(Regex("[,;\\s]+"))
+                         .map(String::trim).filter(String::isNotBlank).distinct()
+                     fun addAllocation(qty: Double, lpNo: String, lotNo: String, serialNo: String, fromBin: String) {
+@@ -929,7 +931,7 @@ private fun SubcontractOperationDetail(operation: JSONObject, onBack: () -> Unit
+         }
+         Spacer(Modifier.height(10.dp))
+         val invalidQuantity = chosen.any { line ->
+-            val qty = quantities[componentKey(line)]?.replace(',', '.')?.toDoubleOrNull() ?: 0.0
++            val qty = quantities[componentKey(line)]?.replace(',', '.')?.toFiniteDoubleOrNull() ?: 0.0
+             qty <= 0.0 || qty > line.optDouble("remainingDispatchQuantity")
+         }
+         Button(
+diff --git a/android/app/src/test/java/com/dynops/bcwms/BcApiPaginationTest.kt b/android/app/src/test/java/com/dynops/bcwms/BcApiPaginationTest.kt
+index e46350b..56b6cda 100644
+--- a/android/app/src/test/java/com/dynops/bcwms/BcApiPaginationTest.kt
++++ b/android/app/src/test/java/com/dynops/bcwms/BcApiPaginationTest.kt
+@@ -4,8 +4,50 @@ import org.junit.Assert.assertEquals
+ import org.junit.Assert.assertNull
+ import org.junit.Assert.assertSame
+ import org.junit.Test
++import kotlinx.coroutines.runBlocking
+ 
+ class BcApiPaginationTest {
++    @Test
++    fun `every page is required before a document can be declared complete`() = runBlocking {
++        val visited = mutableListOf<String>()
++        val result = BcApi.collectODataPages("first") { path ->
++            visited += path
++            if (path == "first") BcApi.ApiResult(true, 200, """{"value":[{"lineNo":1}],"@odata.nextLink":"second"}""")
++            else BcApi.ApiResult(true, 200, """{"value":[{"lineNo":2}],"@odata.nextLink":null}""")
++        }
++        assertEquals(listOf("first", "second"), visited)
++        assertEquals(true, result.complete)
++        assertEquals(2, result.rows.size)
++    }
++
++    @Test
++    fun `partial data after a failed page never enables posting`() = runBlocking {
++        val result = BcApi.collectODataPages("first") { path ->
++            if (path == "first") BcApi.ApiResult(true, 200, """{"value":[{"lineNo":1}],"@odata.nextLink":"second"}""")
++            else BcApi.ApiResult(false, 503, "offline")
++        }
++        assertEquals(false, result.complete)
++        assertEquals(1, result.rows.size)
++        assertEquals(503, result.error?.httpCode)
++    }
++
++    @Test
++    fun `cyclic malformed and truncated pages fail closed`() = runBlocking {
++        for (body in listOf("""{"value":[],"@odata.nextLink":"first"}""",
++            """{"value":[],"@odata.nextLink":123}""", """{"value":[null]}""", """{"unexpected":[]}""")) {
++            val result = BcApi.collectODataPages("first", maxPages = 3) { BcApi.ApiResult(true, 200, body) }
++            assertEquals(body, false, result.complete)
++        }
++    }
++
++    @Test
++    fun `page limit cannot mark a partially read document complete`() = runBlocking {
++        val result = BcApi.collectODataPages("first", maxPages = 1) {
++            BcApi.ApiResult(true, 200, """{"value":[],"@odata.nextLink":"second"}""")
++        }
++        assertEquals(false, result.complete)
++    }
++
+     @Test
+     fun `odata next link is returned exactly for the following page`() {
+         val url = "https://api.example.test/lines?%24skiptoken=abc"
+@@ -60,7 +102,7 @@ class BcApiPaginationTest {
+ 
+     @Test
+     fun `mutation validation errors are definite but transport failures are ambiguous`() {
+-        listOf(-1, 408, 425, 429, 500, 503).forEach { code ->
++        listOf(-1, 301, 307, 308, 408, 425, 429, 500, 503).forEach { code ->
+             assertEquals(true, BcApi.isAmbiguousMutationFailure(BcApi.ApiResult(false, code, "")))
+         }
+         listOf(400, 401, 403, 404, 405, 409, 422).forEach { code ->
+diff --git a/android/app/src/test/java/com/dynops/bcwms/feature/BulkLpBuildWorkflowTest.kt b/android/app/src/test/java/com/dynops/bcwms/feature/BulkLpBuildWorkflowTest.kt
+index 7a23297..5de8631 100644
+--- a/android/app/src/test/java/com/dynops/bcwms/feature/BulkLpBuildWorkflowTest.kt
++++ b/android/app/src/test/java/com/dynops/bcwms/feature/BulkLpBuildWorkflowTest.kt
+@@ -7,6 +7,101 @@ import org.junit.Test
+ import org.json.JSONObject
+ 
+ class BulkLpBuildWorkflowTest {
++    private fun completedBuild(
++        printRequested: Boolean = true,
++        failed: List<String> = emptyList(),
++        replayed: Boolean = false,
++        single: Boolean = false,
++    ) = LedgerBulkLpBuildResult(
++        createdLpNos = if (single) listOf("LP1") else listOf("LP1", "LP2"),
++        failedPrintLpNos = failed,
++        replayed = replayed,
++        printSkippedOnReplay = replayed && printRequested,
++        printLabelsRequested = printRequested,
++        sourceEntryNo = 1234,
++    )
++
++    @Test
++    fun `source entry must show the LP reference before success is reported`() {
++        val entry = JSONObject().put("entryNo", 1234).put("lpNo", "LP1").put("lpNos", "")
++        assertTrue(ledgerLpEntryReferenceMatches(1234, listOf("LP1"), listOf(entry), true))
++        assertFalse(ledgerLpEntryReferenceMatches(1234, listOf("LP2"), listOf(entry), true))
++        assertFalse(ledgerLpEntryReferenceMatches(1234, listOf("LP1"), listOf(entry), false))
++        assertFalse(ledgerLpEntryReferenceMatches(5678, listOf("LP1"), listOf(entry), true))
++        entry.put("lpNo", "")
++        assertFalse(ledgerLpEntryReferenceMatches(1234, listOf("LP1"), listOf(entry), true))
++        entry.put("lpNos", "LP1, LP2")
++        assertTrue(ledgerLpEntryReferenceMatches(1234, listOf("LP1", "LP2"), listOf(entry), true))
++        assertFalse(ledgerLpEntryReferenceMatches(1234, listOf("LP3"), listOf(entry), true))
++    }
++
++    @Test
++    fun `truncated ILE display is allowed after exact LP line links are verified`() {
++        val summary = (1..40).joinToString(", ") { "LP000$it" }.take(250)
++        val entry = JSONObject().put("entryNo", 1234).put("lpNo", "").put("lpNos", summary)
++        assertTrue(ledgerLpEntryReferenceMatches(1234, listOf("LP00040"), listOf(entry), true))
++        assertFalse(ledgerLpEntryReferenceMatches(1234, listOf("LP00040"), emptyList(), true))
++    }
++
++    @Test
++    fun `single LP requires a persisted link to the selected item ledger entry`() {
++        val linked = JSONObject().put("lpNo", "LP1").put("sourceItemLedgerEntryNo", 1234).put("quantity", 100)
++        assertTrue(ledgerLpSourceLinksMatch(1234, listOf("LP1"), listOf(linked), true))
++        assertFalse(ledgerLpSourceLinksMatch(5678, listOf("LP1"), listOf(linked), true))
++        assertFalse(ledgerLpSourceLinksMatch(1234, listOf("LP1"), listOf(linked), false))
++        assertFalse(ledgerLpSourceLinksMatch(1234, listOf("LP1"), emptyList(), true))
++        linked.remove("sourceItemLedgerEntryNo")
++        assertFalse(ledgerLpSourceLinksMatch(1234, listOf("LP1"), listOf(linked), true))
++    }
++
++    @Test
++    fun `all bulk LPs and all split bin lines must reference the selected source`() {
++        fun line(no: String, source: Int = 1234) = JSONObject()
++            .put("lpNo", no).put("sourceItemLedgerEntryNo", source).put("quantity", 50)
++        val lpNos = listOf("LP1", "LP2")
++        assertTrue(ledgerLpSourceLinksMatch(1234, lpNos, listOf(line("LP1"), line("LP1"), line("LP2")), true))
++        assertFalse(ledgerLpSourceLinksMatch(1234, lpNos, listOf(line("LP1")), true))
++        assertFalse(ledgerLpSourceLinksMatch(1234, lpNos, listOf(line("LP1"), line("LP2", 99)), true))
++        assertFalse(ledgerLpSourceLinksMatch(1234, lpNos, listOf(line("LP1"), line("LP2"), line("LP3")), true))
++    }
++
++    @Test
++    fun `source verification lookup escapes LP numbers and only filters one field`() {
++        val path = ledgerLpSourceLookupPath(listOf("LP1", "LP'2"))
++        assertTrue(path.contains("lpNo eq 'LP1' or lpNo eq 'LP''2'"))
++        assertTrue(path.contains("sourceItemLedgerEntryNo"))
++    }
++
++    @Test
++    fun `unprinted single and bulk LPs are selected for later label printing`() {
++        assertEquals(setOf("LP1", "LP2"), ledgerLpPrintSelection(completedBuild(printRequested = false)))
++        assertEquals(setOf("LP1"), ledgerLpPrintSelection(completedBuild(printRequested = false, single = true)))
++        assertEquals(setOf("LP1", "LP2"), ledgerLpPrintSelection(completedBuild(printRequested = false, replayed = true)))
++    }
++
++    @Test
++    fun `successful labels and uncertain replay labels are not automatically reprinted`() {
++        assertTrue(ledgerLpPrintSelection(completedBuild()).isEmpty())
++        assertEquals(setOf("LP2"), ledgerLpPrintSelection(completedBuild(failed = listOf("LP2"))))
++        assertTrue(ledgerLpPrintSelection(completedBuild(replayed = true)).isEmpty())
++    }
++
++    @Test
++    fun `single LP print failure remains visible with its source entry`() {
++        val status = ledgerLpCompletionStatus(completedBuild(failed = listOf("LP1"), single = true))
++        assertTrue(status.startsWith("UYARI:"))
++        assertTrue(status.contains("#1234"))
++        assertTrue(status.contains("1 etiket gönderilemedi"))
++        assertTrue(status.contains("Seçilenleri Yazdır"))
++    }
++
++    @Test
++    fun `completion distinguishes unprinted labels queued labels and replay`() {
++        assertTrue(ledgerLpCompletionStatus(completedBuild(printRequested = false)).contains("henüz yazdırılmadı"))
++        assertTrue(ledgerLpCompletionStatus(completedBuild()).contains("kuyruğa alındı"))
++        assertTrue(ledgerLpCompletionStatus(completedBuild(replayed = true)).contains("yalnız eksikleri seçin"))
++    }
++
+     @Test
+     fun `one ledger row can be allocated to ten LP records`() {
+         assertTrue(validLedgerBulkLpPlan(10, 100.0, 1000.0, ""))
+@@ -112,15 +207,28 @@ class BulkLpBuildWorkflowTest {
+     @Test
+     fun `numeric lookup searches entry and numeric item separately for BC OData`() {
+         assertEquals(
+-            listOf("entryNo eq 1000", "itemNo eq '1000'"),
++            listOf("entryNo eq 1000", "itemNo eq '1000'", "lotNo eq '1000'"),
+             itemLedgerLookupFilters(" 1000 "),
+         )
+         assertTrue(itemLedgerLookupFilters("8338").none { it.contains(" or ") })
+-        assertEquals(listOf("itemNo eq 'AB.00005'"), itemLedgerLookupFilters("AB.00005"))
++        assertEquals(listOf("itemNo eq 'AB.00005'", "lotNo eq 'AB.00005'"), itemLedgerLookupFilters("AB.00005"))
+         assertEquals("itemNo eq 'AB.00005'", itemLedgerLookupFilter("AB.00005"))
+         assertEquals("itemNo eq 'O''RING'", itemLedgerLookupFilter("O'RING"))
+     }
+ 
++    @Test
++    fun `lot lookup trims and escapes input without mixing OData fields`() {
++        assertEquals(
++            listOf("itemNo eq 'LOT''79'", "lotNo eq 'LOT''79'"),
++            itemLedgerLookupFilters(" LOT'79 "),
++        )
++        assertEquals(
++            listOf("entryNo eq 79", "itemNo eq '00079'", "lotNo eq '00079'"),
++            itemLedgerLookupFilters("00079"),
++        )
++        assertTrue(itemLedgerLookupFilters("LOT79").none { it.contains(" or ") })
++    }
++
+     @Test
+     fun `ledger lookup requests LP allocation fields with a legacy fallback path`() {
+         val filter = itemLedgerLookupFilter("1000")
+diff --git a/android/app/src/test/java/com/dynops/bcwms/feature/CountV2WorkflowTest.kt b/android/app/src/test/java/com/dynops/bcwms/feature/CountV2WorkflowTest.kt
+index f29d5d4..f3c8eac 100644
+--- a/android/app/src/test/java/com/dynops/bcwms/feature/CountV2WorkflowTest.kt
++++ b/android/app/src/test/java/com/dynops/bcwms/feature/CountV2WorkflowTest.kt
+@@ -8,6 +8,91 @@ import org.junit.Assert.assertTrue
+ import org.junit.Test
+ 
+ class CountV2WorkflowTest {
++    @Test
++    fun `persisted retry retains original counter bin quantity and scan identity`() {
++        val pending = PendingCountV2Scan("cab4ecca-1528-49df-a905-0f6df019989c", "A1",
++            CountV2Label("ITEM", "RED", "ADET", "LOT", "SN", 5.0, "raw barcode"), 2)
++        val restored = PendingCountV2Scan.fromStoredJson(pending.storedJson())
++        assertEquals(pending, restored)
++        val body = JSONObject(restored.payload())
++        assertEquals(2, body.getInt("counterSlot"))
++        assertEquals("A1", body.getString("binCode"))
++        assertEquals(pending.scanId, body.getString("scanId"))
++        assertEquals(5.0, body.getDouble("qty"), 0.0)
++    }
++
++    @Test
++    fun `corrupt pending operation cannot silently become a fresh count`() {
++        for (value in listOf("{}", "not json", """{"scanId":"invalid"}""")) {
++            assertTrue(runCatching { PendingCountV2Scan.fromStoredJson(value) }.isFailure)
++        }
++    }
++
++    private fun reviewLine(bin: String, system: Double, counted: Double, complete: Boolean = true, lot: String = "L1", uom: String = "ADET"): JSONObject =
++        JSONObject().put("itemNo", "E").put("binCode", bin).put("systemQty", system)
++            .put("countedQty1", counted).put("counted1", complete).put("lotNo", lot).put("unitOfMeasureCode", uom)
++            .put("variance", counted - system)
++
++    @Test
++    fun `uncounted source bin is pending instead of a zero shortage`() {
++        val groups = countV2VarianceGroups(listOf(reviewLine("A1", 0.0, 5.0), reviewLine("A2", 5.0, 0.0, false)), 1, false)
++        assertFalse(groups.single().complete)
++        assertFalse(groups.single().possibleBinMismatch)
++        assertTrue(countV2VarianceReviewText(groups).contains("A2: sayım bekliyor"))
++        assertFalse(countV2VarianceReviewText(groups).contains("Toplam stok farkı"))
++    }
++
++    @Test
++    fun `explicit zero source and matching destination suggest bin difference`() {
++        val group = countV2VarianceGroups(listOf(reviewLine("A1", 0.0, 5.0), reviewLine("A2", 5.0, 0.0)), 1, false).single()
++        assertTrue(group.possibleBinMismatch)
++        assertEquals(0.0, group.net, 0.0)
++        assertTrue(countV2VarianceReviewText(listOf(group)).contains("A2: -5"))
++    }
++
++    @Test
++    fun `stock still present in source stays a real surplus`() {
++        val group = countV2VarianceGroups(listOf(reviewLine("A1", 0.0, 5.0), reviewLine("A2", 5.0, 5.0)), 1, false).single()
++        assertFalse(group.possibleBinMismatch)
++        assertEquals(5.0, group.net, 0.0)
++    }
++
++    @Test
++    fun `different lots and units cannot offset each other`() {
++        val groups = countV2VarianceGroups(listOf(reviewLine("A1", 0.0, 5.0),
++            reviewLine("A2", 5.0, 0.0, lot = "L2"), reviewLine("A3", 5.0, 0.0, uom = "KOLI")), 1, false)
++        assertEquals(3, groups.size)
++        assertTrue(groups.none { it.possibleBinMismatch })
++    }
++
++    @Test
++    fun `different variants and serials cannot offset each other`() {
++        val groups = countV2VarianceGroups(listOf(reviewLine("A1", 0.0, 5.0).put("variantCode", "RED"),
++            reviewLine("A2", 5.0, 0.0).put("variantCode", "BLUE"),
++            reviewLine("A3", 5.0, 0.0).put("serialNo", "SN1")), 1, false)
++        assertEquals(3, groups.size)
++    }
++
++    @Test
++    fun `final review uses server winning variance instead of one counters quantity`() {
++        val groups = countV2VarianceGroups(listOf(reviewLine("A1", 5.0, 2.0).put("variance", -1.0)), 1, true)
++        assertEquals(-1.0, groups.single().net, 0.0)
++    }
++
++    @Test
++    fun `missing counted flag cannot be treated as a completed zero`() {
++        val row = reviewLine("A2", 5.0, 0.0).apply { remove("counted1") }
++        assertFalse(countV2VarianceGroups(listOf(row), 1, false).single().complete)
++    }
++
++    @Test
++    fun `disagreeing counters cannot produce a final balanced bin conclusion`() {
++        val row = reviewLine("A1", 5.0, 0.0).put("recountRequired", true)
++        val group = countV2VarianceGroups(listOf(row), 1, true).single()
++        assertFalse(group.complete)
++        assertFalse(group.possibleBinMismatch)
++    }
++
+     @Test
+     fun `item lot quantity QR becomes an automatic count`() {
+         val result = validateCountV2Label(
+diff --git a/tools/run-all-tests.sh b/tools/run-all-tests.sh
+index 982e43b..5edbfbf 100755
+--- a/tools/run-all-tests.sh
++++ b/tools/run-all-tests.sh
+@@ -3,12 +3,12 @@
+ # Çalıştırma: ./tools/run-all-tests.sh [--quick]
+ #   --quick: typecheck + build only, unit tests'i atla
+ #
+-# Çıktı: her subsystem için PASS/FAIL satırı, log /tmp/bcwms-tests/ altında.
+-# Exit kodu: ilk başarısız subsystem'in kodu, ya da hepsi başarılıysa 0.
++# Çıktı: her subsystem için PASS/FAIL/SKIP satırı, log build/test-reports altında.
++# Exit kodu: son başarısız subsystem'in kodu, ya da başarısız adım yoksa 0.
+ 
+ set -u
+ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+-LOG_DIR="/tmp/bcwms-tests"
++LOG_DIR="${BCWMS_TEST_LOG_DIR:-$ROOT/build/test-reports}"
+ mkdir -p "$LOG_DIR"
+ 
+ QUICK=0
+@@ -39,19 +39,28 @@ run() {
+ # ---------------------------------------------------------------------------
+ # 1) Android (gradle)
+ # ---------------------------------------------------------------------------
+-if [[ -d "$ROOT/android" ]] && command -v ./android/gradlew >/dev/null 2>&1; then
++if [[ -x "$ROOT/android/gradlew" ]]; then
+   # iCloud sync zaman zaman " 2.dex/.class" duplicate'leri yaratır — clean.
+   find "$ROOT/android/app/build" \( -name "* 2.dex" -o -name "* 2.class" -o -name "* 2.jar" \) -delete 2>/dev/null || true
+ 
+   JAVA_HOME_OPT="${JAVA_HOME:-$HOME/.local/jdk/jdk-21.0.11+10/Contents/Home}"
+   ANDROID_SDK_OPT="${ANDROID_HOME:-$HOME/Library/Android/sdk}"
+   if [[ -d "$ANDROID_SDK_OPT" ]] && [[ -d "$JAVA_HOME_OPT" ]]; then
++    ANDROID_TASKS=()
++    for flavor in Bade Dynops Emu; do
++      if [[ "$QUICK" -eq 0 ]]; then
++        ANDROID_TASKS+=(":app:lint${flavor}Debug" ":app:test${flavor}DebugUnitTest")
++      fi
++      ANDROID_TASKS+=(":app:assemble${flavor}Debug")
++    done
+     if [[ "$QUICK" -eq 1 ]]; then
+       run "android assembleDebug" env JAVA_HOME="$JAVA_HOME_OPT" ANDROID_HOME="$ANDROID_SDK_OPT" \
+-        bash -c "cd android && ./gradlew :app:assembleDebug"
++        bash -c 'cd android && ./gradlew "$@"' _ "${ANDROID_TASKS[@]}" --no-daemon --max-workers=1 \
++        -Pkotlin.compiler.execution.strategy=in-process '-Dorg.gradle.jvmargs=-Xmx3g -XX:+UseG1GC'
+     else
+       run "android lint+unit+assemble" env JAVA_HOME="$JAVA_HOME_OPT" ANDROID_HOME="$ANDROID_SDK_OPT" \
+-        bash -c "cd android && ./gradlew :app:lintDebug :app:testDebugUnitTest :app:assembleDebug"
++        bash -c 'cd android && ./gradlew "$@"' _ "${ANDROID_TASKS[@]}" --no-daemon --max-workers=1 \
++        -Pkotlin.compiler.execution.strategy=in-process '-Dorg.gradle.jvmargs=-Xmx3g -XX:+UseG1GC'
+     fi
+   else
+     RESULTS+=("$(yellow '⏭ SKIP') android  (no Android SDK / JDK21 at $ANDROID_SDK_OPT)")
+@@ -102,6 +111,11 @@ if [[ -f "$ROOT/customer-portal/package.json" ]]; then
+   run "customer-portal build"     bash -c "cd customer-portal && pnpm build"
+ fi
+ 
++if [[ -f "$ROOT/customer-portal/api/package.json" ]]; then
++  run "customer-portal-api build" bash -c "cd customer-portal/api && pnpm build"
++  [[ "$QUICK" -eq 0 ]] && run "customer-portal-api test" bash -c "cd customer-portal/api && pnpm test"
++fi
++
+ # ---------------------------------------------------------------------------
+ # Summary
+ # ---------------------------------------------------------------------------
+diff --git a/web/tests/selfTest.spec.ts b/web/tests/selfTest.spec.ts
+index 61ca18f..d424332 100644
+--- a/web/tests/selfTest.spec.ts
++++ b/web/tests/selfTest.spec.ts
+@@ -18,7 +18,7 @@ test("self-test panel renders 10 checks and runs without crashing", async ({ pag
+ 
+   // Tüm BC isteklerini başarısız döndür — token testi pass, diğerleri fail.
+   // Bu, panelin tüm hata yollarını rendering durdurmadan ele aldığını gösterir.
+-  await page.route("**/businesscentral.dynamics.com/**", async (route) => {
++  await page.route("https://**/*", async (route) => {
+     await route.fulfill({ status: 401, contentType: "application/json", body: '{"error":"unauthorized"}' });
+   });
+ 
+diff --git a/al/src/Count/CountBinReview.Page.al b/al/src/Count/CountBinReview.Page.al
+new file mode 100644
+index 0000000..c53da14
+--- /dev/null
++++ b/al/src/Count/CountBinReview.Page.al
+@@ -0,0 +1,50 @@
++page 72060 "DOPSWHS Count Bin Review"
++{
++    Caption = 'Raf Farklarını İncele';
++    PageType = List;
++    SourceTable = "DOPSWHS Count Sheet Line";
++    SourceTableView = sorting("Sheet No.", "Item No.", "Variant Code", "Lot No.", "Serial No.", "Unit of Measure Code", "Bin Code");
++    Editable = false;
++    ApplicationArea = All;
++
++    layout
++    {
++        area(Content)
++        {
++            repeater(Lines)
++            {
++                field("Item No."; Rec."Item No.") { ApplicationArea = All; }
++                field("Variant Code"; Rec."Variant Code") { ApplicationArea = All; }
++                field("Lot No."; Rec."Lot No.") { ApplicationArea = All; }
++                field("Serial No."; Rec."Serial No.") { ApplicationArea = All; }
++                field("Unit of Measure Code"; Rec."Unit of Measure Code") { ApplicationArea = All; }
++                field("Bin Code"; Rec."Bin Code") { ApplicationArea = All; }
++                field("LP No."; Rec."LP No.") { ApplicationArea = All; }
++                field("System Qty"; Rec."System Qty") { ApplicationArea = All; }
++                field("Counted Qty 1"; Rec."Counted Qty 1") { ApplicationArea = All; }
++                field("Counted Qty 2"; Rec."Counted Qty 2") { ApplicationArea = All; }
++                field("Counted Qty 3"; Rec."Counted Qty 3") { ApplicationArea = All; }
++                field(Variance; Rec.Variance) { ApplicationArea = All; }
++                field(NetVariance; NetVariance) { Caption = 'Raflar Toplamı Stok Farkı'; ApplicationArea = All; }
++                field("Recount Required"; Rec."Recount Required") { ApplicationArea = All; }
++            }
++        }
++    }
++
++    trigger OnAfterGetRecord()
++    var
++        Line: Record "DOPSWHS Count Sheet Line";
++    begin
++        Line.SetRange("Sheet No.", Rec."Sheet No.");
++        Line.SetRange("Item No.", Rec."Item No.");
++        Line.SetRange("Variant Code", Rec."Variant Code");
++        Line.SetRange("Lot No.", Rec."Lot No.");
++        Line.SetRange("Serial No.", Rec."Serial No.");
++        Line.SetRange("Unit of Measure Code", Rec."Unit of Measure Code");
++        Line.CalcSums(Variance);
++        NetVariance := Line.Variance;
++    end;
++
++    var
++        NetVariance: Decimal;
++}
+diff --git a/android/app/src/main/java/com/dynops/bcwms/feature/HierarchicalLpWorkflow.kt b/android/app/src/main/java/com/dynops/bcwms/feature/HierarchicalLpWorkflow.kt
+new file mode 100644
+index 0000000..66b9a13
+--- /dev/null
++++ b/android/app/src/main/java/com/dynops/bcwms/feature/HierarchicalLpWorkflow.kt
+@@ -0,0 +1,8 @@
++package com.dynops.bcwms.feature
++
++/** This optional customer extension is not part of the common WMS AL package. */
++internal fun hierarchicalLpApiAvailable(metadata: String): Boolean {
++    val actions = Regex("""<(?:\w+:)?Action\b[^>]*\bName=["']([^"']+)["']""")
++        .findAll(metadata).map { it.groupValues[1].lowercase() }.toSet()
++    return actions.containsAll(setOf("attachchild", "detachchild", "gethierarchy", "movehierarchy", "completeandprint", "reprinthierarchylabel"))
++}
+diff --git a/android/app/src/main/java/com/dynops/bcwms/ui/NumericInput.kt b/android/app/src/main/java/com/dynops/bcwms/ui/NumericInput.kt
+new file mode 100644
+index 0000000..1689928
+--- /dev/null
++++ b/android/app/src/main/java/com/dynops/bcwms/ui/NumericInput.kt
+@@ -0,0 +1,4 @@
++package com.dynops.bcwms.ui
++
++/** JSON/BC quantities cannot represent NaN or infinity, including exponent overflow. */
++internal fun String.toFiniteDoubleOrNull(): Double? = toDoubleOrNull()?.takeIf { it.isFinite() }
+diff --git a/android/app/src/test/java/com/dynops/bcwms/BcMutationTransportTest.kt b/android/app/src/test/java/com/dynops/bcwms/BcMutationTransportTest.kt
+new file mode 100644
+index 0000000..4644a97
+--- /dev/null
++++ b/android/app/src/test/java/com/dynops/bcwms/BcMutationTransportTest.kt
+@@ -0,0 +1,71 @@
++package com.dynops.bcwms
++
++import okhttp3.OkHttpClient
++import okhttp3.Request
++import okhttp3.RequestBody.Companion.toRequestBody
++import okhttp3.mockwebserver.MockResponse
++import okhttp3.mockwebserver.MockWebServer
++import okhttp3.mockwebserver.SocketPolicy
++import org.junit.Assert.*
++import org.junit.Test
++import java.util.concurrent.TimeUnit
++
++class BcMutationTransportTest {
++    private fun client() = BcApi.withoutAutomaticMutationReplay(OkHttpClient.Builder()
++        .readTimeout(2, TimeUnit.SECONDS).callTimeout(3, TimeUnit.SECONDS).build())
++
++    @Test
++    fun `post is not silently repeated when 503 requests immediate retry`() {
++        MockWebServer().use { server ->
++            server.enqueue(MockResponse().setResponseCode(503).setHeader("Retry-After", "0"))
++            server.enqueue(MockResponse().setResponseCode(200).setBody("duplicate would be written"))
++            val client = client()
++            try {
++                val request = Request.Builder().url(server.url("/post"))
++                    .post(BcApi.mutationRequestBody("{}".toRequestBody())).build()
++                client.newCall(request).execute().use { assertEquals(503, it.code) }
++                assertEquals(1, server.requestCount)
++            } finally { client.connectionPool.evictAll(); client.dispatcher.executorService.shutdown() }
++        }
++    }
++
++    @Test
++    fun `lost response after server reads post does not write a second time`() {
++        MockWebServer().use { server ->
++            server.enqueue(MockResponse().setSocketPolicy(SocketPolicy.DISCONNECT_AFTER_REQUEST))
++            server.enqueue(MockResponse().setBody("duplicate"))
++            val client = client()
++            try {
++                val request = Request.Builder().url(server.url("/createLP"))
++                    .post(BcApi.mutationRequestBody("{}".toRequestBody())).build()
++                assertTrue(runCatching { client.newCall(request).execute().close() }.isFailure)
++                assertEquals(1, server.requestCount)
++            } finally { client.connectionPool.evictAll(); client.dispatcher.executorService.shutdown() }
++        }
++    }
++
++    @Test
++    fun `mutation redirects cannot move a write to another endpoint`() {
++        MockWebServer().use { server ->
++            server.enqueue(MockResponse().setResponseCode(307).setHeader("Location", server.url("/other")))
++            server.enqueue(MockResponse().setBody("unexpected write"))
++            val client = client()
++            try {
++                val request = Request.Builder().url(server.url("/post"))
++                    .post(BcApi.mutationRequestBody("{}".toRequestBody())).build()
++                client.newCall(request).execute().use { assertEquals(307, it.code) }
++                assertEquals(1, server.requestCount)
++            } finally { client.connectionPool.evictAll(); client.dispatcher.executorService.shutdown() }
++        }
++    }
++
++    @Test
++    fun `BC authentication cannot be forwarded to arbitrary page links`() {
++        val base = "https://api.businesscentral.dynamics.com/v2.0/tenant/env/api/companies('company')"
++        for (path in listOf("https://evil.example/next", "http://api.businesscentral.dynamics.com/next",
++            "https://api.businesscentral.dynamics.com.evil.example/next", "https://user@api.businesscentral.dynamics.com/next")) {
++            assertTrue(path, runCatching { BcApi.authenticatedBcUrl(base, path) }.isFailure)
++        }
++        assertTrue(BcApi.authenticatedBcUrl(base, "countSheets('CNT 1')").contains("CNT%201"))
++    }
++}
+diff --git a/android/app/src/test/java/com/dynops/bcwms/feature/HierarchicalLpWorkflowTest.kt b/android/app/src/test/java/com/dynops/bcwms/feature/HierarchicalLpWorkflowTest.kt
+new file mode 100644
+index 0000000..8af65a0
+--- /dev/null
++++ b/android/app/src/test/java/com/dynops/bcwms/feature/HierarchicalLpWorkflowTest.kt
+@@ -0,0 +1,25 @@
++package com.dynops.bcwms.feature
++
++import org.junit.Assert.*
++import org.junit.Test
++
++class HierarchicalLpWorkflowTest {
++    private val actions = listOf("attachChild", "detachChild", "getHierarchy", "moveHierarchy", "completeAndPrint", "reprintHierarchyLabel")
++
++    @Test
++    fun `common or partially upgraded BC package cannot enable unsupported hierarchy writes`() {
++        assertFalse(hierarchicalLpApiAvailable("<Schema><Action Name=\"nest\"/></Schema>"))
++        assertFalse(hierarchicalLpApiAvailable(actions.dropLast(1).joinToString("") { "<Action Name=\"$it\"/>" }))
++    }
++
++    @Test
++    fun `matching action names in properties or an error response are not capabilities`() {
++        assertFalse(hierarchicalLpApiAvailable(actions.joinToString(" ")))
++        assertFalse(hierarchicalLpApiAvailable(actions.joinToString("") { "<Property Name=\"$it\"/>" }))
++    }
++
++    @Test
++    fun `complete customer extension enables hierarchy operations`() {
++        assertTrue(hierarchicalLpApiAvailable(actions.joinToString("") { "<edm:Action IsBound=\"true\" Name=\"$it\"/>" }))
++    }
++}
+diff --git a/android/app/src/test/java/com/dynops/bcwms/ui/NumericInputTest.kt b/android/app/src/test/java/com/dynops/bcwms/ui/NumericInputTest.kt
+new file mode 100644
+index 0000000..ab59a5a
+--- /dev/null
++++ b/android/app/src/test/java/com/dynops/bcwms/ui/NumericInputTest.kt
+@@ -0,0 +1,21 @@
++package com.dynops.bcwms.ui
++
++import org.junit.Assert.*
++import org.junit.Test
++
++class NumericInputTest {
++    @Test
++    fun `non finite and overflowing quantities cannot reach JSON write requests`() {
++        for (value in listOf("NaN", "Infinity", "-Infinity", "1e309", "-1e309", "", "abc")) {
++            assertNull(value, value.toFiniteDoubleOrNull())
++        }
++    }
++
++    @Test
++    fun `finite values retain existing zero and sign semantics for caller validation`() {
++        assertEquals(0.0, "0".toFiniteDoubleOrNull()!!, 0.0)
++        assertEquals(1.25, "1.25".toFiniteDoubleOrNull()!!, 0.0)
++        assertEquals(-5.0, "-5".toFiniteDoubleOrNull()!!, 0.0)
++        assertEquals(1000.0, "1e3".toFiniteDoubleOrNull()!!, 0.0)
++    }
++}
+diff --git a/docs/count-bin-review-1.14.102.md b/docs/count-bin-review-1.14.102.md
+new file mode 100644
+index 0000000..e3bc134
+--- /dev/null
++++ b/docs/count-bin-review-1.14.102.md
+@@ -0,0 +1,35 @@
++# Sayım V2 raf tamamlama ve fark incelemesi
++
++Android 1.14.102 / versionCode 200102 ve BC kaynak sürümü 1.14.1.30 birlikte gerekir.
++
++## Davranış
++
++- Raf açıldığında BC stokları sayım satırlarına eklenir; henüz sayılmayan satırların sayıldı bayrağı kapalıdır.
++- **Rafı bitir** onayında yalnız o raftaki henüz sayılmamış satırlar, seçili sayıcının turunda açıkça 0 sayılır. Girilmiş miktarlar ve diğer sayıcıların değerleri korunur. Tekrar denemek satır veya miktar çoğaltmaz.
++- Sayılan miktar kayıtlı miktarı aşıyorsa aynı ürün, varyant, lot, seri ve birimde stok bulunan diğer raflar sayılmayı bekleyen satırlarla kapsama alınır. Diğer raf otomatik sıfırlanmaz ve stoktan düşülmez.
++- Diğer rafın bütün bekleyen satırları tamamlanmadan tur kaydı ve stoklara işleme sunucuda engellenir. İlgili raf belge alan filtresinin dışındaysa işlem durur; iki rafı da kapsayan sayım gerekir.
++- Raf farkları ürün, varyant, lot, seri ve birim bazında birlikte gösterilir. Toplamın sıfır olması yalnız **olası raf farkı** olarak adlandırılır; otomatik transfer yapılmaz.
++- Diğer rafta bulunan lotun sistem miktarı, fiziksel sayım miktarı olarak kopyalanmaz; operatör bulduğu miktarı girer.
++- Terminal stoklara işleme yetkisi mevcut BC ayarına bağlıdır. Yetkili terminalde son onay penceresi farkları gösterir. BC sayım kartında da raf farkları inceleme sayfası açılır ve ardından ayrı stok işleme onayı istenir.
++- LP satırları ve kalan paletsiz stok ayrı miktarlarla hazırlanır. Yanlış raftaki LP okutmasına ilişkin mevcut engel korunur; bu değişiklik LP taşıma akışı oluşturmaz.
++- Sayım sırasında stok miktarı veya LP dağılımı değişirse mevcut sistem miktarı sessizce yenilenmez; uyumsuz sayımın işlenmesi durdurulur.
++- Eski BC paketinde `binReviewSupported` bulunmaz; yeni Android raf tamamlama ve tur kaydını güncelleme mesajıyla engeller.
++
++## Sandbox kabul testi
++
++1. A1 rafına X ve Z, A2 rafına E ürünü için 5 adet stok hazırlayın.
++2. Yeni V2 sayımında A1 açın; X sayın, Z saymayın ve A1 üzerinde E ürününden fiziksel olarak bulunan 5 adedi girin.
++3. A1 için **Rafı bitir** onaylayın. X miktarı korunmalı; Z yalnız mevcut sayıcıda açıkça 0 olmalı; A2 satırları **henüz sayılmadı** görünmeli.
++4. Bu noktada tur kaydı reddedilmeli; madde defter girişleri ve ambar hareketleri değişmemeli.
++5. A2 gerçekten boşsa **Rafı bitir** ile E miktarını 0 onaylayın. İncelemede A1 +5, A2 −5, toplam 0 ve olası raf farkı görünmeli.
++6. Ayrı bir sayımda A2 üzerinde E hâlâ 5 ise A2 miktarını 5 sayın. İncelemede toplam +5 görünmeli; otomatik düşüm yapılmamalı.
++7. Farklı lot, seri, varyant veya birim kayıtlarının birbirini mahsup etmediğini doğrulayın.
++8. Atanmış tüm sayıcı turlarını kaydedin. BC inceleme ve onay adımından sonra fiziksel stok düzeltmelerini kontrol edin; onaydan önce stok değişmemeli.
++
++## Doğrulama sınırı
++
++Android birim testleri ve derleme yerelde çalıştırılır; sonuçlar `build/count-bin-review/` altında saklanır. AL regresyon testleri `al-tests/src/Count/CountV2Tests.Codeunit.al` içine eklenmiştir.
++
++AL derlemesi ve sandbox testleri bu macOS ortamında çalıştırılmadı. `CLAUDE.md` Windows AL araçlarını gerektirir; mevcut GitHub AL paketleme işi yalnız placeholder içerir. Windows üzerinde uygulama ve test paketlerini derleyip sayım testlerini çalıştırmadan BC 1.14.1.30 paketini dağıtmayın. Mevcut çeviri denetimi de kaynak ile tr/de dosyaları arasında önceden var olan kapsama uyarıları veriyor.
++
++Canlı BC ortamına veya Android kararlı güncelleme kanalına bu çalışma kapsamında dağıtım yapılmadı.
+diff --git a/docs/customer-audit-1.14.103.md b/docs/customer-audit-1.14.103.md
+new file mode 100644
+index 0000000..61960c3
+--- /dev/null
++++ b/docs/customer-audit-1.14.103.md
+@@ -0,0 +1,44 @@
++# Müşteri öncesi hata kontrolü — 1.14.103
++
++Bu çalışma Android uygulamasını, ortak BC istek katmanını, son sayım/LP değişikliklerini ve web/servis testlerini kapsar. Sıfır hata garantisi veya canlı ortam kabulü değildir. Android 1.14.103 ve BC kaynak sürümü 1.14.1.31 birlikte değerlendirilmelidir.
++
++## Bulunan ve düzeltilen sorunlar
++
++| Sorun | Değişiklik | Doğrulama |
++| --- | --- | --- |
++| Bekleyen okutma, ekranda son seçilen sayıcıyla tekrar gönderilebiliyordu | İstek kimliği, raf, miktar ve sayıcı birlikte yakalanır ve cihazda saklanır; sonuç belirsizken diğer sayım işlemleri kilitlenir | İsteğin saklanıp geri yüklenmesi ve bozuk kayıt testleri |
++| Uygulama kapanınca belirsiz okutmanın işlem kimliği kaybolabiliyordu | Göndermeden önce kalıcı kayıt; yeniden açılışta aynı kimlikle kontrol; kesin sonuçta temizleme | İstek verisi geri yükleme testi; BC idempotency test kaynakları |
++| Sunucunun reddettiği etiket cihazda hâlâ okutulmuş sayılabiliyordu | Kesin hata yanıtında etiket tekrar okutulabilir; belirsiz yanıtta yeni işlem başlatılmaz | Sayım hata akışının kod incelemesi |
++| Geri alma, beklenen sayım satırını ve son satırsa raf kapsamını silebiliyordu | Satır korunur, yalnız ilgili sayıcının sayıldı bayrağı temizlenir | AL regresyon testi eklendi; Windows çalıştırması bekliyor |
++| Eski okutma kimliği farklı sayıcı/miktarla veya yeniden sayım başladıktan sonra kabul edilebiliyordu | BC, tekrar isteğinin içeriğini doğrular; geri alınmış ve eski tur olaylarını reddeder | AL regresyon testleri eklendi; Windows çalıştırması bekliyor |
++| Bağlantı kesintisi veya 503 yanıtında HTTP katmanı stok yazma isteğini görünmeden tekrar gönderebiliyordu | Yazma isteklerinde otomatik tekrar/yönlendirme kapalı; işlem gövdesi otomatik yeniden gönderilemez | Gerçek yerel HTTP sunucusuyla 503, yanıt kopması ve yönlendirme testleri |
++| Sayfalama bağlantısındaki null/bozuk değerler yanlış işlenebiliyordu | Null son sayfa olarak kabul edilir; bozuk, döngüsel ve eksik sayfalar tamamlanmış sayılmaz | Çok sayfalı sonuç, hata, döngü ve sınır testleri |
++| Mutlak veri bağlantıları erişim belirtecini farklı bir adrese taşıyabiliyordu | Kimlik doğrulamalı çağrılar yalnız HTTPS Business Central API adresine gider | Host, protokol ve kullanıcı bilgisi içeren URL testleri |
++| Bazı miktar alanları NaN, Infinity veya taşan üs değerlerini kabul ederek JSON oluştururken uygulamayı kapatabiliyordu | Sekiz işlem modülündeki 26 sayı okuması yalnız sonlu değerleri kabul eder | Sonlu sayı, sıfır, negatif ve taşma testleri |
++| Android genel test komutu müşteri sürümleri ayrıldığı için belirsiz görev adına düşüyordu | Bade, Dynops ve Emu görevleri açıkça seçilir; tek işçi ve geçici Gradle süreci kullanılır | Düzeltilmiş test görevleriyle doğrulama |
++| Android lint hataları dağıtımı durdurmuyordu | Hatalarda derleme durur, release denetimi açık, MissingClass bastırması kaldırıldı | Yapılandırma düzeltildi; son lint disk koruması nedeniyle tamamlanamadı |
++| DKC özel LP ekranı ortak BC paketinde olmayan işlemlere dayanıyordu | Özel paketin bütün gerekli işlemleri metadata üzerinden doğrulanmadan ekran etkinleşmez | Eksik, kısmi ve tam özellik sözleşmesi testleri |
++
++## Çalıştırılan kontroller
++
++Kesin sonuçlar ve derleme günlükleri `build/customer-audit/` altında tutulur. Son doğrulama durumu `build/customer-audit/validation.txt` dosyasına yazılır; kaynak değişikliklerinin yedeği `build/customer-audit/source-snapshot/` altındadır. Bu rapor yeni bir APK yayımlandığı anlamına gelmez.
++
++- Android Bade, Dynops ve Emu sürümlerinin her birinde 276 birim testi geçti; toplam 828 çalıştırmada hata veya atlanan test yok. Bunlar üç sürümde aynı ortak test paketinin çalıştırılmasıdır; 828 farklı senaryo anlamına gelmez.
++- Web, push relay, lisans servisi, müşteri portalı ve portal API derlemeleri geçti.
++- Push relay 10, lisans servisi 12, portal API 7 test geçti.
++- Web'in mevcut üç tarayıcı testine ek olarak 17 menünün boş veri ve bağlantı kesintisindeki dolaşımı test edildi; toplam beş Playwright testi geçti. Bu testlerde gerçek BC ve müşteri kimlik bilgileri kullanılmadı.
++- Web kaynak dizininde Vitest birim testi bulunmadığı için bu adım ayrıca test kapsamı olarak sayılmadı.
++- Android/AL kaynak karşılaştırmasında 65 sabit işlem çağrısı incelendi; 63 işlem ortak BC paketinde mevcut, iki DKC hiyerarşi işlemi ayrı paket gerektiriyor. Dinamik çağrıların tamamının doğrulandığı iddia edilmez.
++- AL için isim, izin, eski nesne metadatası ve dokuz posting yolunda alan uyumu denetimleri geçti. Mevcut tr/de çeviri dosyalarının kapsama eksikleri sürmektedir.
++
++## Tamamlanamayan derleme ve canlı kabul
++
++- Son Android lint çalışması, boş disk alanı 350 MiB altına düştüğü için otomatik durduruldu. Önceki sürümün lint raporları bu kaynak için başarı sayılmaz. Yeni imzalı 1.14.103 APK üretilmedi; mevcut eski APK dosyaları yeniden adlandırılmadı.
++- macOS üzerinde AL derlenmedi; depo kuralı Windows AL araçlarını gerektiriyor. Eklenen AL testleri çalıştırılmış test sayısına dahil değildir.
++- Müşterinin BC ortam bağlantısı ve kullandığı terminal sürümü soruldu; ortam doğrulaması için bu bilgiler ve erişim gerekiyor.
++- Daha önce bildirilen LP79 kaydının mevcut madde defter girişi bağlantısı bu erişim olmadan okunamadı veya onarılamadı.
++- İzole Android emülatörü, gereken veri bölümü için disk alanı yetersiz olduğundan açılamadı; cihaz üstünde çalışma testi yapılmış sayılmaz.
++- Gerçek terminal, donanım barkod okuyucu ve fiziksel etiket yazıcısı ile uçtan uca kabul yapılmadı.
++- Canlı BC, kararlı APK kanalı ve müşteri verileri değiştirilmedi. 1.14.103 kaynak değişiklikleri doğrulama adayıdır; tamamlanmamış BC/cihaz kabulünü geçmiş saymayın.
++
++Geçici tarayıcı ve bu denetimde kurulan servis bağımlılıkları disk baskısını azaltmak için temizlendi; test kaynakları ve sonuç günlükleri korundu. Bu çalışmanın Gradle ve test tarayıcısı süreçlerinin kapalı olduğu kontrol edildi. Android ara derleme önbellekleri temizlendi; kaynaklar, mevcut APK dosyaları ve test raporları korundu. Bilgisayarın genel disk doluluğu devam ediyor; kullanıcının diğer uygulamaları veya dosyaları temizlenmedi.
+diff --git a/web/tests/navigationFailures.spec.ts b/web/tests/navigationFailures.spec.ts
+new file mode 100644
+index 0000000..e606332
+--- /dev/null
++++ b/web/tests/navigationFailures.spec.ts
+@@ -0,0 +1,31 @@
++import { expect, test } from "@playwright/test";
++
++// Exercise every workstation module with a controlled BC outage; no customer
++// credentials or inventory writes are used by this regression suite.
++for (const mode of ["empty", "offline"] as const) {
++  test(`all menu modules remain usable with ${mode} BC responses`, async ({ page }) => {
++    const errors: string[] = [];
++    page.on("pageerror", (error) => errors.push(error.message));
++    await page.addInitScript(() => localStorage.setItem("bcwms.token", "test-token-not-real"));
++    await page.route("https://**/*", async (route) => {
++      if (mode === "offline") return route.abort("internetdisconnected");
++      return route.fulfill({ status: 200, contentType: "application/json", body: '{"value":[]}' });
++    });
++    await page.goto("/");
++    const labels = await page.locator(".tiles .tile .label").allTextContents();
++    expect(labels.length).toBe(17);
++    for (const label of labels) {
++      await page.locator(".tiles .tile").filter({ has: page.getByText(label, { exact: true }) }).click();
++      await expect(page.getByRole("button", { name: "‹ Menü", exact: true })).toBeVisible();
++      await expect(page.locator("main.content")).not.toBeEmpty();
++      // Let each module's asynchronous initial request settle, then verify the
++      // shell and back navigation survive rejected/empty data as well.
++      await expect.poll(() => page.locator("main.content").innerText()).not.toBe("");
++      await page.getByRole("button", { name: "‹ Menü", exact: true }).click();
++      await expect(page.locator(".tiles .tile")).toHaveCount(17);
++    }
++    expect(errors).toEqual([]);
++    await page.getByRole("button", { name: "Çıkış", exact: true }).click();
++    await expect(page.locator(".tiles")).toHaveCount(0);
++  });
++}

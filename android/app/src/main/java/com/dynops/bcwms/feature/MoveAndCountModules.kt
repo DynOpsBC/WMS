@@ -1,5 +1,7 @@
 package com.dynops.bcwms.feature
 
+import com.dynops.bcwms.ui.toFiniteDoubleOrNull
+
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.lazy.LazyColumn
@@ -664,7 +666,7 @@ fun AdHocMoveModule() {
                         fromBin.isBlank() -> "Kaynak rafı okutun."
                         itemOrLp.isBlank() -> "Taşınacak ürünü ya da LP'yi okutun."
                         toBin.isBlank() -> "Hedef rafı okutun."
-                        (qty.toDoubleOrNull() ?: 0.0) <= 0.0 -> "Miktar sıfırdan büyük olmalı."
+                        (qty.toFiniteDoubleOrNull() ?: 0.0) <= 0.0 -> "Miktar sıfırdan büyük olmalı."
                         fromBin.trim().equals(toBin.trim(), true) ->
                             "Kaynak ve hedef raf aynı olamaz (${fromBin.trim()})."
                         else -> ""
@@ -699,7 +701,7 @@ fun AdHocMoveModule() {
                             val body = JSONObject().apply {
                                 put("fromBin", fromBin.trim()); put("toBin", toBin.trim())
                                 // AL action param is "qty" (not "quantity"); send every param so OData binds them all.
-                                put("qty", qty.toDoubleOrNull() ?: 0.0)
+                                put("qty", qty.toFiniteDoubleOrNull() ?: 0.0)
                                 put("itemNo", itemNo)
                                 // movementOps.adHoc still requires the legacy lpNo argument,
                                 // but Product mode never sends an LP through this contract.
@@ -719,7 +721,7 @@ fun AdHocMoveModule() {
                             if (r.ok) {
                                 lastMove = buildList {
                                     add("📍 ${fromBin.trim()} → 📍 ${toBin.trim()}")
-                                    add("• $itemNo × ${qty.toDoubleOrNull()?.let { fmtq(it) } ?: qty}" +
+                                    add("• $itemNo × ${qty.toFiniteDoubleOrNull()?.let { fmtq(it) } ?: qty}" +
                                         if (lot.isNotBlank()) " · Lot $lot" else "")
                                 }
                                 itemOrLp = ""; qty = "1"; lotNoInput = ""
@@ -2437,10 +2439,10 @@ private fun CountByBinPane(
                 Button(
                     onClick = {
                         val t = sc
-                        val q = manualQty.toDoubleOrNull()
+                        val q = manualQty.toFiniteDoubleOrNull()
                         if (q != null) { scanned = null; commitTarget(t, manualQty = q) }
                     },
-                    enabled = !busy && manualQty.toDoubleOrNull() != null,
+                    enabled = !busy && manualQty.toFiniteDoubleOrNull() != null,
                     modifier = Modifier.fillMaxWidth().height(52.dp),
                 ) { Text("✅ Sayılan miktarla $activeBin adresine kaydet", fontWeight = FontWeight.Bold) }
             } else {
@@ -2638,7 +2640,7 @@ private fun UnexpectedStockSheet(
     var lotNo by remember(draft) { mutableStateOf(draft.lotNo) }
     var serialNo by remember(draft) { mutableStateOf(draft.serialNo) }
     var qty by remember(draft) { mutableStateOf(draft.suggestedQty?.let(::fmtq).orEmpty()) }
-    val parsedQty = qty.toDoubleOrNull()
+    val parsedQty = qty.toFiniteDoubleOrNull()
 
     com.dynops.bcwms.ui.SheetScaffold(
         onDismiss = { if (!busy) onDismiss() },
@@ -2908,7 +2910,7 @@ private fun CountEntrySheet(
             modifier = Modifier.fillMaxWidth(),
         )
         Spacer(Modifier.height(16.dp))
-        val parsedQty = qty.toDoubleOrNull()
+        val parsedQty = qty.toFiniteDoubleOrNull()
         Button(
             modifier = Modifier.fillMaxWidth(),
             enabled = parsedQty != null && lotProbeFinished && lotProbeSucceeded && !needsLotSelection,

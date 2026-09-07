@@ -1,0 +1,24 @@
+Customer audit candidate source: Android 1.14.103, BC AL 1.14.1.31
+Completed local audit: 2026-09-06T03:48:53.702004+03:00
+No commit, push, publication, live BC change or customer-data mutation performed.
+No new signed 1.14.103 APK produced. Existing APK files are older artifacts.
+
+Android Bade final source debug unit tests: {'tests': 276, 'failures': 0, 'errors': 0, 'skipped': 0}
+Android Dynops final source debug unit tests: {'tests': 276, 'failures': 0, 'errors': 0, 'skipped': 0}
+Android Emu final source debug unit tests: {'tests': 276, 'failures': 0, 'errors': 0, 'skipped': 0}
+828 test executions = same 276 tests in three flavors, not 828 unique scenarios.
+Final Android strict lint: INCOMPLETE; disk watchdog stopped Gradle at <350 MiB free (exit 143).
+Signed release build: NOT COMPLETED; disk constrained.
+Push relay: 10 passed
+Licensing service: 12 passed
+Customer portal API: 7 passed
+Playwright browser: 5 passed, including 17 menus with empty/offline data
+Web/portal typechecks and web + four service/portal builds: passed
+AL prefix/permission/obsolete/TransferFields static checks: passed
+AL compilation and AL test execution: NOT RUN; Windows tooling required by CLAUDE.md
+BC customer sandbox/LP79 read-back: NOT RUN; customer environment/access not established
+Android emulator/device smoke: NOT RUN; isolated emulator failed disk-space prerequisite
+Physical scanner/label printing: NOT RUN
+git diff --check and test runner shell syntax: passed
+Own Gradle/test browser processes stopped; generated caches cleaned; reports preserved.
+Customer acceptance: INCOMPLETE

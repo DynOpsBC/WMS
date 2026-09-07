@@ -1,0 +1,22 @@
+
+> @dynops/bcwms-push-relay@1.0.0 test /Users/kaanodabas/Desktop/EL_TERMINAL/WMS/push-relay
+> node --test --import tsx/esm shared/__tests__/*.test.ts
+
+✔ signature — fresh nonce passes (1.347375ms)
+✔ signature — replay with same nonce is rejected (0.172083ms)
+✔ signature — different printer with same nonce is allowed (0.153459ms)
+✔ signature — clock skew >5min is rejected (0.105125ms)
+✔ signature — missing nonce is rejected (0.100417ms)
+✔ signature — tampered body invalidates signature (0.102375ms)
+✔ signature — tampered job path is rejected (0.097833ms)
+✔ signature — tampered printer query is rejected (0.168417ms)
+✔ canonical request preserves Go-encoded query bytes (0.141291ms)
+✔ Go/relay canonical HMAC golden vector (0.143792ms)
+ℹ tests 10
+ℹ suites 0
+ℹ pass 10
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 681.753875

@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.dynops.bcwms.feature.PutAwayBinSelectionTest" tests="8" skipped="0" failures="0" errors="0" timestamp="2026-09-06T00:29:46.265Z" hostname="192.168.1.8" time="0.053">
+  <properties/>
+  <testcase name="take ve place satirlari tek mantiksal yerlestirme sayilir" classname="com.dynops.bcwms.feature.PutAwayBinSelectionTest" time="0.038"/>
+  <testcase name="bin aramasi lokasyonu ve kismi kodu server side filtreler" classname="com.dynops.bcwms.feature.PutAwayBinSelectionTest" time="0.001"/>
+  <testcase name="prepared line ids survive reload while removed rows are discarded" classname="com.dynops.bcwms.feature.PutAwayBinSelectionTest" time="0.001"/>
+  <testcase name="ilk bin listesi tum raflari sirali yukler" classname="com.dynops.bcwms.feature.PutAwayBinSelectionTest" time="0.002"/>
+  <testcase name="register only keeps staged pair positive and clears untouched rows" classname="com.dynops.bcwms.feature.PutAwayBinSelectionTest" time="0.003"/>
+  <testcase name="tam bin aramasi odata tirnaklarini guvenli kacirir" classname="com.dynops.bcwms.feature.PutAwayBinSelectionTest" time="0.0"/>
+  <testcase name="ayni urunun farkli lot ve LP satirlari ayri yerlestirme sayilir" classname="com.dynops.bcwms.feature.PutAwayBinSelectionTest" time="0.005"/>
+  <testcase name="farkli kaynak satirlari ayri yerlestirme sayilir" classname="com.dynops.bcwms.feature.PutAwayBinSelectionTest" time="0.0"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

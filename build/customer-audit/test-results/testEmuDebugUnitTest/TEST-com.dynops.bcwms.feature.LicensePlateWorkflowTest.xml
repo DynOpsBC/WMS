@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.dynops.bcwms.feature.LicensePlateWorkflowTest" tests="18" skipped="0" failures="0" errors="0" timestamp="2026-09-06T00:44:33.927Z" hostname="192.168.1.8" time="0.001">
+  <properties/>
+  <testcase name="partial use validates selected line and quantity bounds" classname="com.dynops.bcwms.feature.LicensePlateWorkflowTest" time="0.0"/>
+  <testcase name="empty unlocated LP can receive its first bin" classname="com.dynops.bcwms.feature.LicensePlateWorkflowTest" time="0.0"/>
+  <testcase name="only an open LP can be edited and stopped" classname="com.dynops.bcwms.feature.LicensePlateWorkflowTest" time="0.0"/>
+  <testcase name="bulk print follows the device printer selection" classname="com.dynops.bcwms.feature.LicensePlateWorkflowTest" time="0.0"/>
+  <testcase name="bulk print rejects an invalid concurrency limit" classname="com.dynops.bcwms.feature.LicensePlateWorkflowTest" time="0.0"/>
+  <testcase name="bulk print uses small ordered batches" classname="com.dynops.bcwms.feature.LicensePlateWorkflowTest" time="0.0"/>
+  <testcase name="source bin lookup fails closed until every OData page is loaded" classname="com.dynops.bcwms.feature.LicensePlateWorkflowTest" time="0.0"/>
+  <testcase name="lot is required when tracking stock or scanned lot exists" classname="com.dynops.bcwms.feature.LicensePlateWorkflowTest" time="0.0"/>
+  <testcase name="empty open or unbuilt LP can be deleted" classname="com.dynops.bcwms.feature.LicensePlateWorkflowTest" time="0.0"/>
+  <testcase name="legacy initial bin fallback only accepts missing bin validation" classname="com.dynops.bcwms.feature.LicensePlateWorkflowTest" time="0.0"/>
+  <testcase name="transfer and partial use require a built LP with contents" classname="com.dynops.bcwms.feature.LicensePlateWorkflowTest" time="0.0"/>
+  <testcase name="bulk print sends empty LP to the ZPL LP label action" classname="com.dynops.bcwms.feature.LicensePlateWorkflowTest" time="0.0"/>
+  <testcase name="serial tracked LP line accepts exactly one base unit" classname="com.dynops.bcwms.feature.LicensePlateWorkflowTest" time="0.0"/>
+  <testcase name="LP with contents or operational status cannot be deleted" classname="com.dynops.bcwms.feature.LicensePlateWorkflowTest" time="0.0"/>
+  <testcase name="partial use sends Business Central enum values" classname="com.dynops.bcwms.feature.LicensePlateWorkflowTest" time="0.0"/>
+  <testcase name="LP UOM choices are valid unique configured values with base first" classname="com.dynops.bcwms.feature.LicensePlateWorkflowTest" time="0.0"/>
+  <testcase name="source bin must belong to the LP location" classname="com.dynops.bcwms.feature.LicensePlateWorkflowTest" time="0.0"/>
+  <testcase name="destroyed LP is excluded from active bin contents" classname="com.dynops.bcwms.feature.LicensePlateWorkflowTest" time="0.0"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

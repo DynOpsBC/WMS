@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.dynops.bcwms.feature.ShipmentPostOutcomeTest" tests="3" skipped="0" failures="0" errors="0" timestamp="2026-09-06T00:23:45.414Z" hostname="192.168.1.8" time="0.0">
+  <properties/>
+  <testcase name="existing open document preserves original post failure" classname="com.dynops.bcwms.feature.ShipmentPostOutcomeTest" time="0.0"/>
+  <testcase name="successful action is committed" classname="com.dynops.bcwms.feature.ShipmentPostOutcomeTest" time="0.0"/>
+  <testcase name="missing open document after action error means post committed" classname="com.dynops.bcwms.feature.ShipmentPostOutcomeTest" time="0.0"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

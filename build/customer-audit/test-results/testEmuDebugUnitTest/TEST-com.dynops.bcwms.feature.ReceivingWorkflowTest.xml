@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.dynops.bcwms.feature.ReceivingWorkflowTest" tests="12" skipped="0" failures="0" errors="0" timestamp="2026-09-06T00:44:33.948Z" hostname="192.168.1.8" time="0.009">
+  <properties/>
+  <testcase name="preflight failure reports partial reset and requires reconciliation" classname="com.dynops.bcwms.feature.ReceivingWorkflowTest" time="0.001"/>
+  <testcase name="normal reload clears a closed LP" classname="com.dynops.bcwms.feature.ReceivingWorkflowTest" time="0.004"/>
+  <testcase name="bulk receipt is blocked until single ledger entry server contract exists" classname="com.dynops.bcwms.feature.ReceivingWorkflowTest" time="0.0"/>
+  <testcase name="bulk LP receipt lines are restored as ready after reload" classname="com.dynops.bcwms.feature.ReceivingWorkflowTest" time="0.001"/>
+  <testcase name="preflight failure without writes remains fail closed" classname="com.dynops.bcwms.feature.ReceivingWorkflowTest" time="0.0"/>
+  <testcase name="missing atomic receipt action names required BC package" classname="com.dynops.bcwms.feature.ReceivingWorkflowTest" time="0.0"/>
+  <testcase name="server active LP wins after receipt reload" classname="com.dynops.bcwms.feature.ReceivingWorkflowTest" time="0.0"/>
+  <testcase name="business validation error does not bypass action with patch" classname="com.dynops.bcwms.feature.ReceivingWorkflowTest" time="0.0"/>
+  <testcase name="missing exclude action uses legacy patch fallback" classname="com.dynops.bcwms.feature.ReceivingWorkflowTest" time="0.0"/>
+  <testcase name="receipt post translates purchase and receipt location mismatch" classname="com.dynops.bcwms.feature.ReceivingWorkflowTest" time="0.001"/>
+  <testcase name="receipt post exposes actionable unknown BC validation instead of only ref" classname="com.dynops.bcwms.feature.ReceivingWorkflowTest" time="0.001"/>
+  <testcase name="successful LP start survives an immediately stale receipt reload" classname="com.dynops.bcwms.feature.ReceivingWorkflowTest" time="0.0"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

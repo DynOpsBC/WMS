@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.dynops.bcwms.feature.PackingWorkflowTest" tests="7" skipped="0" failures="0" errors="0" timestamp="2026-09-06T00:29:46.236Z" hostname="192.168.1.8" time="0.008">
+  <properties/>
+  <testcase name="same item after debounce or a different item is accepted" classname="com.dynops.bcwms.feature.PackingWorkflowTest" time="0.007"/>
+  <testcase name="same box barcode cannot be assigned to another order" classname="com.dynops.bcwms.feature.PackingWorkflowTest" time="0.001"/>
+  <testcase name="transient packing failure offers a retryable connection message" classname="com.dynops.bcwms.feature.PackingWorkflowTest" time="0.0"/>
+  <testcase name="same hardware scan inside debounce window is ignored" classname="com.dynops.bcwms.feature.PackingWorkflowTest" time="0.0"/>
+  <testcase name="blank packing scan is rejected" classname="com.dynops.bcwms.feature.PackingWorkflowTest" time="0.0"/>
+  <testcase name="missing packing endpoint tells the operator to contact support" classname="com.dynops.bcwms.feature.PackingWorkflowTest" time="0.0"/>
+  <testcase name="box close waits for all optimistic item writes" classname="com.dynops.bcwms.feature.PackingWorkflowTest" time="0.0"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

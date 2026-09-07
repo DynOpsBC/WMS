@@ -1,0 +1,19 @@
+
+> @dynops/bcwms-customer-portal-api@1.0.0 test /Users/kaanodabas/Desktop/EL_TERMINAL/WMS/customer-portal/api
+> node --test --import tsx/esm test/*.test.ts
+
+✔ requireTenantOwner — throws 401 when header missing (0.736666ms)
+✔ requireTenantOwner — throws 401 when tid claim missing (0.17425ms)
+✔ requireTenantOwner — throws 401 when tid malformed (contains shell metachars) (0.153333ms)
+✔ requireTenantOwner — throws 403 on tenant mismatch (0.135958ms)
+✔ requireTenantOwner — succeeds for matching tid (case-insensitive) (0.097584ms)
+✔ readPrincipal — returns null when header missing (0.053459ms)
+✔ readPrincipal — returns null when header is not valid base64 JSON (0.087791ms)
+ℹ tests 7
+ℹ suites 0
+ℹ pass 7
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 623.183417

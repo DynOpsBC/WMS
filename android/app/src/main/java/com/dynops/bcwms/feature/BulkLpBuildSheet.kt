@@ -1,5 +1,7 @@
 package com.dynops.bcwms.feature
 
+import com.dynops.bcwms.ui.toFiniteDoubleOrNull
+
 import android.content.Context
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.text.KeyboardOptions
@@ -29,6 +31,8 @@ internal data class LedgerBulkLpBuildResult(
     val failedPrintLpNos: List<String>,
     val replayed: Boolean,
     val printSkippedOnReplay: Boolean,
+    val printLabelsRequested: Boolean,
+    val sourceEntryNo: Int,
 )
 
 internal data class PendingLedgerBulkLpRequest(
@@ -88,7 +92,7 @@ internal fun bulkLpBuildPayload(locationCode: String, binCode: String, drafts: L
         put("locationCode", locationCode.trim())
         put("binCode", binCode.trim())
         put("quantitiesJson", JSONArray().apply {
-            drafts.forEach { put(it.quantity.toDoubleOrNull() ?: 0.0) }
+            drafts.forEach { put(it.quantity.toFiniteDoubleOrNull() ?: 0.0) }
         }.toString())
     }.toString()
 
@@ -118,10 +122,14 @@ internal fun itemLedgerLookupFilter(rawLookup: String): String {
 internal fun itemLedgerLookupFilters(rawLookup: String): List<String> {
     val value = rawLookup.trim()
     val primary = itemLedgerLookupFilter(value)
-    // BC rejects OR across different fields (HTTP 501). Numeric item codes
-    // remain searchable using a separate query, merged by entry number.
-    return if (value.toIntOrNull() == null) listOf(primary)
-    else listOf(primary, "itemNo eq '${value.replace("'", "''")}'")
+    // BC rejects OR across different fields (HTTP 501). Search each field
+    // separately and merge by entry number, including numeric lot numbers.
+    val safeValue = value.replace("'", "''")
+    return buildList {
+        add(primary)
+        if (value.toIntOrNull() != null) add("itemNo eq '$safeValue'")
+        add("lotNo eq '$safeValue'")
+    }
 }
 
 internal fun itemLedgerLookupPath(filter: String, includeLpAllocationFields: Boolean): String {
@@ -148,6 +156,47 @@ internal fun validLedgerBulkLpResponse(
         createdLpNos.size == expectedCount &&
         createdLpNos.all(String::isNotBlank) &&
         createdLpNos.distinctBy(String::uppercase).size == expectedCount
+
+/** Read back the actual LP lines; a successful create response alone is not a source link. */
+internal fun ledgerLpSourceLinksMatch(
+    entryNo: Int,
+    createdLpNos: List<String>,
+    lines: List<JSONObject>,
+    complete: Boolean,
+): Boolean {
+    if (!complete || entryNo <= 0 || createdLpNos.isEmpty() || lines.isEmpty()) return false
+    val expected = createdLpNos.map { it.trim().uppercase() }.toSet()
+    val actual = lines.map { it.optString("lpNo").trim().uppercase() }.toSet()
+    return expected == actual && lines.all {
+        it.optInt("sourceItemLedgerEntryNo") == entryNo && it.optDouble("quantity", 0.0) > 0.0
+    }
+}
+
+/** ILE display fields must also reflect the allocation, not just the LP-side link. */
+internal fun ledgerLpEntryReferenceMatches(
+    entryNo: Int,
+    createdLpNos: List<String>,
+    entries: List<JSONObject>,
+    complete: Boolean,
+): Boolean {
+    if (!complete || createdLpNos.isEmpty() || entries.size != 1) return false
+    val entry = entries.single()
+    if (entry.optInt("entryNo") != entryNo) return false
+    val lpNo = entry.optString("lpNo").trim().uppercase()
+    val lpNos = entry.optString("lpNos").uppercase()
+    val references = (listOf(lpNo) + lpNos.split(',')).map(String::trim).filter(String::isNotBlank).toSet()
+    if (references.isEmpty()) return false
+    // BC's summary is Text[250]. Full identity verification is performed on
+    // all LP lines above; a truncated display cannot list every allocated LP.
+    if (lpNos.length >= 250) return true
+    return createdLpNos.all { it.trim().uppercase() in references }
+}
+
+internal fun ledgerLpSourceLookupPath(lpNos: List<String>): String {
+    require(lpNos.isNotEmpty())
+    val filter = lpNos.joinToString(" or ") { "lpNo eq '${it.replace("'", "''")}'" }
+    return "licensePlateLines?\$filter=($filter)&\$select=lpNo,sourceItemLedgerEntryNo,quantity&\$top=200"
+}
 
 internal fun validFailedPrintLpResponse(
     expectedFailureCount: Int,
@@ -349,6 +398,13 @@ internal fun BulkLpBuildSheet(
     var replayed by remember { mutableStateOf(false) }
     var printSkippedOnReplay by remember { mutableStateOf(false) }
     var pendingRequest by remember { mutableStateOf(restoredPending.request) }
+    var completedPrintLabelsRequested by remember { mutableStateOf(false) }
+    var completedSourceEntryNo by remember { mutableStateOf(0) }
+
+    fun buildResult() = LedgerBulkLpBuildResult(
+        createdLpNos, failedPrintLpNos, replayed, printSkippedOnReplay,
+        completedPrintLabelsRequested, completedSourceEntryNo,
+    )
 
     LaunchedEffect(Unit) {
         val page = BcApi.getAllPages(context, "licensePlateTemplates?\$top=50&\$select=code,description")
@@ -362,7 +418,7 @@ internal fun BulkLpBuildSheet(
 
     fun finish() {
         if (completed) {
-            onBuilt(LedgerBulkLpBuildResult(createdLpNos, failedPrintLpNos, replayed, printSkippedOnReplay))
+            onBuilt(buildResult())
         } else {
             onDismiss()
         }
@@ -390,7 +446,7 @@ internal fun BulkLpBuildSheet(
     fun findLedgerEntries() {
         val value = lookup.trim()
         if (value.isBlank()) {
-            status = "HATA: Ürün numarası veya stok kayıt numarası girin."
+            status = "HATA: Ürün numarası, stok kayıt numarası veya lot numarası girin."
             return
         }
         scope.launch {
@@ -441,7 +497,7 @@ internal fun BulkLpBuildSheet(
 
     val entry = selectedEntry
     val lpCount = lpCountText.toIntOrNull()
-    val quantityPerLp = quantityText.toDoubleOrNull()
+    val quantityPerLp = quantityText.toFiniteDoubleOrNull()
     val allocatableQuantity = entry?.let(::ledgerLpAllocatableQuantity) ?: 0.0
     val requestedQuantity = (lpCount ?: 0) * (quantityPerLp ?: 0.0)
     val planValid = validLedgerBulkLpPlan(
@@ -582,6 +638,42 @@ internal fun BulkLpBuildSheet(
                 return@launch
             }
 
+            // The old single-LP path returned an LP number without linking an
+            // ILE. Do not report success until the persisted lines prove the link.
+            busy = true
+            status = "LP kaynak giriş bağlantısı kontrol ediliyor..."
+            val sourceLines = mutableListOf<JSONObject>()
+            var sourceReadComplete = response.optInt("sourceItemLedgerEntryNo") == operation.entryNo
+            if (sourceReadComplete) {
+                for (batch in createdLpNos.chunked(20)) {
+                    val page = BcApi.getAllPages(context, ledgerLpSourceLookupPath(batch))
+                    if (!page.complete) {
+                        sourceReadComplete = false
+                        break
+                    }
+                    sourceLines += page.rows
+                }
+            }
+            val linesLinked = ledgerLpSourceLinksMatch(operation.entryNo, createdLpNos, sourceLines, sourceReadComplete)
+            var entryLinked = false
+            if (linesLinked) {
+                val sourcePage = BcApi.getAllPages(
+                    context,
+                    "itemLedgerEntries?\$filter=entryNo eq ${operation.entryNo}&\$select=entryNo,lpNo,lpNos&\$top=1",
+                )
+                entryLinked = ledgerLpEntryReferenceMatches(
+                    operation.entryNo, createdLpNos, sourcePage.rows, sourcePage.complete,
+                )
+            }
+            busy = false
+            if (!linesLinked || !entryLinked) {
+                uncertainOutcome = true
+                status = "UYARI: LP oluşturuldu ancak #${operation.entryNo} kaynak giriş bağlantısı doğrulanamadı. " +
+                    "Yeni LP oluşturmayın; Önceki İşlemi Kontrol Et düğmesine basın. " +
+                    "Sorun devam ederse bu LP numaralarını yöneticinize iletin: ${createdLpNos.joinToString()}."
+                return@launch
+            }
+
             replayed = responseReplayed
             printSkippedOnReplay = responsePrintSkipped
             PendingLedgerBulkLpStore.clear(context)
@@ -602,6 +694,8 @@ internal fun BulkLpBuildSheet(
                 }
                 LedgerBulkLpReplayState.Invalid -> error("Invalid replay state handled above")
             }
+            completedPrintLabelsRequested = operation.printLabels
+            completedSourceEntryNo = operation.entryNo
             completed = true
         }
     }
@@ -613,7 +707,7 @@ internal fun BulkLpBuildSheet(
             fontWeight = FontWeight.Bold,
         )
         Text(
-            "Toplam stok değişmez. Ürün birden fazla raftaysa sistem LP'yi doldurmak için gerekli raf hareketini birlikte kaydeder.",
+            "LP, seçtiğiniz kaynak madde defter girişine bağlanır. Toplam stok değişmez. Ürün birden fazla raftaysa sistem LP'yi doldurmak için gerekli raf hareketini birlikte kaydeder.",
             fontSize = 12.sp,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
@@ -622,27 +716,29 @@ internal fun BulkLpBuildSheet(
         if (completed) {
             StatusText(status)
             Spacer(Modifier.height(12.dp))
-            Button(
-                onClick = {
-                    onBuilt(
-                        LedgerBulkLpBuildResult(
-                            createdLpNos,
-                            failedPrintLpNos,
-                            replayed,
-                            printSkippedOnReplay,
-                        ),
-                    )
-                },
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                Text("LP Listesine Dön")
+            Text("Kaynak giriş: #$completedSourceEntryNo", fontWeight = FontWeight.Bold)
+            Text("Oluşan LP'ler", fontWeight = FontWeight.Bold)
+            createdLpNos.forEach { no ->
+                Text(no, fontSize = 13.sp)
+            }
+            Spacer(Modifier.height(12.dp))
+            val readyToPrint = ledgerLpPrintSelection(buildResult())
+            if (readyToPrint.isNotEmpty()) {
+                Text(
+                    "Listeye döndüğünüzde ${readyToPrint.size} LP seçili gelecek. " +
+                        "Etiket almak için Seçilenleri Yazdır düğmesine basın.",
+                    fontSize = 12.sp,
+                )
+            }
+            Button(onClick = { onBuilt(buildResult()) }, modifier = Modifier.fillMaxWidth()) {
+                Text(if (readyToPrint.isEmpty()) "LP Listesine Dön" else "Etiket Seçimine Geç (${readyToPrint.size})")
             }
             Spacer(Modifier.height(24.dp))
             return@SheetScaffold
         }
 
         ScanField(
-            "Ürün No / Stok Kayıt No",
+            "Ürün No / Stok Kayıt No / Lot No",
             lookup,
             { raw ->
                 val nextLookup = raw.trimStart()

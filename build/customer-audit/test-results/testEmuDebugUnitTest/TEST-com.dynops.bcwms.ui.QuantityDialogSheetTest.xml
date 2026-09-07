@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.dynops.bcwms.ui.QuantityDialogSheetTest" tests="3" skipped="0" failures="0" errors="0" timestamp="2026-09-06T00:44:33.991Z" hostname="192.168.1.8" time="0.0">
+  <properties/>
+  <testcase name="exactly one rule is not weakened by zero support" classname="com.dynops.bcwms.ui.QuantityDialogSheetTest" time="0.0"/>
+  <testcase name="empty invalid and negative quantities remain blocked" classname="com.dynops.bcwms.ui.QuantityDialogSheetTest" time="0.0"/>
+  <testcase name="pick quantity can explicitly allow zero" classname="com.dynops.bcwms.ui.QuantityDialogSheetTest" time="0.0"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

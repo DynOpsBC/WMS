@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.dynops.bcwms.BulkReceiptLpTest" tests="13" skipped="0" failures="0" errors="0" timestamp="2026-09-06T00:44:33.773Z" hostname="192.168.1.8" time="0.01">
+  <properties/>
+  <testcase name="manual pallet quantities are accepted without redistribution" classname="com.dynops.bcwms.BulkReceiptLpTest" time="0.007"/>
+  <testcase name="manual pallet total cannot exceed outstanding quantity" classname="com.dynops.bcwms.BulkReceiptLpTest" time="0.001"/>
+  <testcase name="past expiry is rejected for bulk receipt pallets" classname="com.dynops.bcwms.BulkReceiptLpTest" time="0.0"/>
+  <testcase name="today expiry is accepted for bulk receipt pallets" classname="com.dynops.bcwms.BulkReceiptLpTest" time="0.0"/>
+  <testcase name="missing common expiry blocks the pallet set" classname="com.dynops.bcwms.BulkReceiptLpTest" time="0.0"/>
+  <testcase name="equal distribution supports whole pallet quantities" classname="com.dynops.bcwms.BulkReceiptLpTest" time="0.001"/>
+  <testcase name="at least one manual pallet is required" classname="com.dynops.bcwms.BulkReceiptLpTest" time="0.0"/>
+  <testcase name="every manual pallet requires a positive quantity" classname="com.dynops.bcwms.BulkReceiptLpTest" time="0.0"/>
+  <testcase name="partial manual pallet total is allowed" classname="com.dynops.bcwms.BulkReceiptLpTest" time="0.0"/>
+  <testcase name="all pallets use one common receipt lot and expiry" classname="com.dynops.bcwms.BulkReceiptLpTest" time="0.0"/>
+  <testcase name="turkish display expiry is serialized as BC iso date" classname="com.dynops.bcwms.BulkReceiptLpTest" time="0.0"/>
+  <testcase name="equal distribution fills every pallet and preserves exact total" classname="com.dynops.bcwms.BulkReceiptLpTest" time="0.0"/>
+  <testcase name="pallet total must match entered receipt quantity" classname="com.dynops.bcwms.BulkReceiptLpTest" time="0.0"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

@@ -113,3 +113,28 @@ internal val lpPartialActions = listOf(
         help = "Girilen miktar mevcut satırdan düşülür.",
     ),
 )
+
+/** Never automatically reprint labels whose first print outcome is unknown. */
+internal fun ledgerLpPrintSelection(result: LedgerBulkLpBuildResult): Set<String> = when {
+    !result.printLabelsRequested -> result.createdLpNos.toSet()
+    result.replayed -> emptySet()
+    else -> result.failedPrintLpNos.toSet()
+}
+
+internal fun ledgerLpCompletionStatus(result: LedgerBulkLpBuildResult): String {
+    val count = result.createdLpNos.size
+    val source = "Kaynak giriş: #${result.sourceEntryNo}."
+    return when {
+        result.printSkippedOnReplay ->
+            "UYARI: Daha önce oluşturulan $count LP doğrulandı. $source " +
+                "Etiketler yeniden gönderilmedi; fiziksel etiketleri kontrol edip yalnız eksikleri seçin."
+        !result.printLabelsRequested ->
+            "TAMAM: $count LP kaynak girişine bağlı. $source " +
+                "Etiketler henüz yazdırılmadı; LP'ler seçili, Seçilenleri Yazdır düğmesine basın."
+        result.failedPrintLpNos.isNotEmpty() ->
+            "UYARI: $count LP kaynak girişine bağlı. $source " +
+                "${result.failedPrintLpNos.size} etiket gönderilemedi. Yalnız başarısız LP'ler seçili; Seçilenleri Yazdır ile tekrar deneyin."
+        else ->
+            "TAMAM: $count LP kaynak girişine bağlı ve etiketleri kuyruğa alındı. $source"
+    }
+}

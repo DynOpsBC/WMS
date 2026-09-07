@@ -1,5 +1,7 @@
 package com.dynops.bcwms.feature
 
+import com.dynops.bcwms.ui.toFiniteDoubleOrNull
+
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.rememberScrollState
@@ -164,7 +166,7 @@ internal fun BulkReceiptLpSheet(
         rows = drafts.map { draft ->
             BulkReceiptLpRow(
                 groupId = COMMON_RECEIPT_LOT_GROUP,
-                quantity = draft.quantity.toDoubleOrNull() ?: 0.0,
+                quantity = draft.quantity.toFiniteDoubleOrNull() ?: 0.0,
                 lotNo = "",
                 supplierLotNo = "",
                 expiryDate = "",
@@ -174,7 +176,7 @@ internal fun BulkReceiptLpSheet(
         supplierLotNo = commonSupplierLotNo,
         expiryDate = commonExpiryDate,
     )
-    val expectedQty = receiptQtyText.toDoubleOrNull() ?: 0.0
+    val expectedQty = receiptQtyText.toFiniteDoubleOrNull() ?: 0.0
     val palletCount = palletCountText.toIntOrNull() ?: 0
     val enteredTotal = rows.sumOf { it.quantity }
     val validationError = manualBulkLpValidation(

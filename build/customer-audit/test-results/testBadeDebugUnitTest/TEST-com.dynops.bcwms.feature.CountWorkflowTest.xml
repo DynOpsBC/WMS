@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.dynops.bcwms.feature.CountWorkflowTest" tests="31" skipped="0" failures="0" errors="0" timestamp="2026-09-06T00:23:45.214Z" hostname="192.168.1.8" time="0.036">
+  <properties/>
+  <testcase name="explicit zero completes the active counter slot" classname="com.dynops.bcwms.feature.CountWorkflowTest" time="0.004"/>
+  <testcase name="explicit false is not confused with a zero count" classname="com.dynops.bcwms.feature.CountWorkflowTest" time="0.0"/>
+  <testcase name="classic primary button never opens post confirmation when terminal posting is disabled" classname="com.dynops.bcwms.feature.CountWorkflowTest" time="0.001"/>
+  <testcase name="classic count retries without assignment when local wms user is unavailable" classname="com.dynops.bcwms.feature.CountWorkflowTest" time="0.018"/>
+  <testcase name="empty complete sheet can generate but cannot post" classname="com.dynops.bcwms.feature.CountWorkflowTest" time="0.0"/>
+  <testcase name="posted sheet and unassigned operator cannot mutate counts" classname="com.dynops.bcwms.feature.CountWorkflowTest" time="0.0"/>
+  <testcase name="loaded sheet can recount and post but cannot regenerate" classname="com.dynops.bcwms.feature.CountWorkflowTest" time="0.001"/>
+  <testcase name="lotless count is blocked when positive lot balances exist" classname="com.dynops.bcwms.feature.CountWorkflowTest" time="0.0"/>
+  <testcase name="selected lot line accepts its own count quantity" classname="com.dynops.bcwms.feature.CountWorkflowTest" time="0.0"/>
+  <testcase name="explicit terminalPostAllowed flag is authoritative" classname="com.dynops.bcwms.feature.CountWorkflowTest" time="0.0"/>
+  <testcase name="sequential write progress distinguishes partial persistence from completion" classname="com.dynops.bcwms.feature.CountWorkflowTest" time="0.001"/>
+  <testcase name="classic primary button saves the round before anything else" classname="com.dynops.bcwms.feature.CountWorkflowTest" time="0.0"/>
+  <testcase name="confirmed item outside the bin keeps unexpected stock flow" classname="com.dynops.bcwms.feature.CountWorkflowTest" time="0.0"/>
+  <testcase name="legacy nonzero count remains recognized without flag" classname="com.dynops.bcwms.feature.CountWorkflowTest" time="0.0"/>
+  <testcase name="untracked stock remains countable" classname="com.dynops.bcwms.feature.CountWorkflowTest" time="0.001"/>
+  <testcase name="plain barcode matching an active count lot is resolved as lot" classname="com.dynops.bcwms.feature.CountWorkflowTest" time="0.0"/>
+  <testcase name="recount mismatch blocks posting but still permits a new recount" classname="com.dynops.bcwms.feature.CountWorkflowTest" time="0.0"/>
+  <testcase name="plain barcode not found as an item is resolved through BC lot lookup" classname="com.dynops.bcwms.feature.CountWorkflowTest" time="0.0"/>
+  <testcase name="operator sees only their BC assigned count slot" classname="com.dynops.bcwms.feature.CountWorkflowTest" time="0.001"/>
+  <testcase name="one incomplete line blocks the whole count document" classname="com.dynops.bcwms.feature.CountWorkflowTest" time="0.0"/>
+  <testcase name="BC posting note appears once the round is saved and is not duplicated" classname="com.dynops.bcwms.feature.CountWorkflowTest" time="0.001"/>
+  <testcase name="partial failed or busy load blocks every destructive count action" classname="com.dynops.bcwms.feature.CountWorkflowTest" time="0.0"/>
+  <testcase name="counted LP label reprint is offered only on a posted sheet with LP lines" classname="com.dynops.bcwms.feature.CountWorkflowTest" time="0.0"/>
+  <testcase name="counted LP numbers for labels are trimmed, de-duplicated and keep line order" classname="com.dynops.bcwms.feature.CountWorkflowTest" time="0.0"/>
+  <testcase name="round saved message explains BC posting only when terminal posting is disabled" classname="com.dynops.bcwms.feature.CountWorkflowTest" time="0.0"/>
+  <testcase name="missing active slot flag blocks posting even when legacy quantity is nonzero" classname="com.dynops.bcwms.feature.CountWorkflowTest" time="0.0"/>
+  <testcase name="LP label print status keeps the terminal post wording and stays operator safe" classname="com.dynops.bcwms.feature.CountWorkflowTest" time="0.005"/>
+  <testcase name="older AL package without terminalPostAllowed keeps posting enabled" classname="com.dynops.bcwms.feature.CountWorkflowTest" time="0.0"/>
+  <testcase name="sequential write progress clamps invalid counters fail closed" classname="com.dynops.bcwms.feature.CountWorkflowTest" time="0.0"/>
+  <testcase name="explicit counted flag preserves a physical zero count" classname="com.dynops.bcwms.feature.CountWorkflowTest" time="0.0"/>
+  <testcase name="classic primary button posts after save when terminal posting is allowed" classname="com.dynops.bcwms.feature.CountWorkflowTest" time="0.0"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

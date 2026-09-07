@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.dynops.bcwms.feature.ShipmentWorkflowTest" tests="17" skipped="0" failures="0" errors="0" timestamp="2026-09-06T00:23:45.418Z" hostname="192.168.1.8" time="0.015">
+  <properties/>
+  <testcase name="missing action on an older BC package falls back silently" classname="com.dynops.bcwms.feature.ShipmentWorkflowTest" time="0.002"/>
+  <testcase name="no options means the server decides without asking" classname="com.dynops.bcwms.feature.ShipmentWorkflowTest" time="0.0"/>
+  <testcase name="an options payload wrapped in value is still read" classname="com.dynops.bcwms.feature.ShipmentWorkflowTest" time="0.005"/>
+  <testcase name="subtitle shows bin lot quantity and item" classname="com.dynops.bcwms.feature.ShipmentWorkflowTest" time="0.001"/>
+  <testcase name="fractional quantities keep one meaningful decimal in any locale" classname="com.dynops.bcwms.feature.ShipmentWorkflowTest" time="0.005"/>
+  <testcase name="whole quantities lose a pointless decimal tail" classname="com.dynops.bcwms.feature.ShipmentWorkflowTest" time="0.0"/>
+  <testcase name="several partial pallets require a combined pick" classname="com.dynops.bcwms.feature.ShipmentWorkflowTest" time="0.0"/>
+  <testcase name="a single candidate pallet needs no dialog" classname="com.dynops.bcwms.feature.ShipmentWorkflowTest" time="0.0"/>
+  <testcase name="parses the server array into options in order" classname="com.dynops.bcwms.feature.ShipmentWorkflowTest" time="0.0"/>
+  <testcase name="blank malformed or empty payloads yield no options so the system decides" classname="com.dynops.bcwms.feature.ShipmentWorkflowTest" time="0.0"/>
+  <testcase name="entries without an LP number are dropped" classname="com.dynops.bcwms.feature.ShipmentWorkflowTest" time="0.0"/>
+  <testcase name="two or more candidate pallets are an operator choice" classname="com.dynops.bcwms.feature.ShipmentWorkflowTest" time="0.0"/>
+  <testcase name="successful source option response must be a real array" classname="com.dynops.bcwms.feature.ShipmentWorkflowTest" time="0.0"/>
+  <testcase name="real business errors are never masked as an older server" classname="com.dynops.bcwms.feature.ShipmentWorkflowTest" time="0.0"/>
+  <testcase name="missing optional fields default without throwing" classname="com.dynops.bcwms.feature.ShipmentWorkflowTest" time="0.0"/>
+  <testcase name="subtitle skips empty fields without leaving dangling separators" classname="com.dynops.bcwms.feature.ShipmentWorkflowTest" time="0.001"/>
+  <testcase name="source pallets are sorted by natural warehouse bin order then lp number" classname="com.dynops.bcwms.feature.ShipmentWorkflowTest" time="0.0"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

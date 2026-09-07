@@ -1,0 +1,22 @@
+Recreating /Users/kaanodabas/Desktop/EL_TERMINAL/WMS/customer-portal/node_modules
+Lockfile is up to date, resolution step is skipped
+Progress: resolved 1, reused 0, downloaded 0, added 0
+Packages: +69
++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+Progress: resolved 69, reused 48, downloaded 17, added 64
+Progress: resolved 69, reused 48, downloaded 21, added 69, done
+
+dependencies:
++ @azure/msal-browser 3.30.0
++ @azure/msal-react 2.2.0
++ react 19.2.8
++ react-dom 19.2.8
+
+devDependencies:
++ @types/react 19.2.18
++ @types/react-dom 19.2.5
++ @vitejs/plugin-react 4.7.0
++ typescript 5.6.3
++ vite 5.4.21
+
+Done in 2s

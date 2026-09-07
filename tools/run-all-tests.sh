@@ -3,12 +3,12 @@
 # Çalıştırma: ./tools/run-all-tests.sh [--quick]
 #   --quick: typecheck + build only, unit tests'i atla
 #
-# Çıktı: her subsystem için PASS/FAIL satırı, log /tmp/bcwms-tests/ altında.
-# Exit kodu: ilk başarısız subsystem'in kodu, ya da hepsi başarılıysa 0.
+# Çıktı: her subsystem için PASS/FAIL/SKIP satırı, log build/test-reports altında.
+# Exit kodu: son başarısız subsystem'in kodu, ya da başarısız adım yoksa 0.
 
 set -u
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-LOG_DIR="/tmp/bcwms-tests"
+LOG_DIR="${BCWMS_TEST_LOG_DIR:-$ROOT/build/test-reports}"
 mkdir -p "$LOG_DIR"
 
 QUICK=0
@@ -39,19 +39,28 @@ run() {
 # ---------------------------------------------------------------------------
 # 1) Android (gradle)
 # ---------------------------------------------------------------------------
-if [[ -d "$ROOT/android" ]] && command -v ./android/gradlew >/dev/null 2>&1; then
+if [[ -x "$ROOT/android/gradlew" ]]; then
   # iCloud sync zaman zaman " 2.dex/.class" duplicate'leri yaratır — clean.
   find "$ROOT/android/app/build" \( -name "* 2.dex" -o -name "* 2.class" -o -name "* 2.jar" \) -delete 2>/dev/null || true
 
   JAVA_HOME_OPT="${JAVA_HOME:-$HOME/.local/jdk/jdk-21.0.11+10/Contents/Home}"
   ANDROID_SDK_OPT="${ANDROID_HOME:-$HOME/Library/Android/sdk}"
   if [[ -d "$ANDROID_SDK_OPT" ]] && [[ -d "$JAVA_HOME_OPT" ]]; then
+    ANDROID_TASKS=()
+    for flavor in Bade Dynops Emu; do
+      if [[ "$QUICK" -eq 0 ]]; then
+        ANDROID_TASKS+=(":app:lint${flavor}Debug" ":app:test${flavor}DebugUnitTest")
+      fi
+      ANDROID_TASKS+=(":app:assemble${flavor}Debug")
+    done
     if [[ "$QUICK" -eq 1 ]]; then
       run "android assembleDebug" env JAVA_HOME="$JAVA_HOME_OPT" ANDROID_HOME="$ANDROID_SDK_OPT" \
-        bash -c "cd android && ./gradlew :app:assembleDebug"
+        bash -c 'cd android && ./gradlew "$@"' _ "${ANDROID_TASKS[@]}" --no-daemon --max-workers=1 \
+        -Pkotlin.compiler.execution.strategy=in-process '-Dorg.gradle.jvmargs=-Xmx3g -XX:+UseG1GC'
     else
       run "android lint+unit+assemble" env JAVA_HOME="$JAVA_HOME_OPT" ANDROID_HOME="$ANDROID_SDK_OPT" \
-        bash -c "cd android && ./gradlew :app:lintDebug :app:testDebugUnitTest :app:assembleDebug"
+        bash -c 'cd android && ./gradlew "$@"' _ "${ANDROID_TASKS[@]}" --no-daemon --max-workers=1 \
+        -Pkotlin.compiler.execution.strategy=in-process '-Dorg.gradle.jvmargs=-Xmx3g -XX:+UseG1GC'
     fi
   else
     RESULTS+=("$(yellow '⏭ SKIP') android  (no Android SDK / JDK21 at $ANDROID_SDK_OPT)")
@@ -100,6 +109,11 @@ fi
 if [[ -f "$ROOT/customer-portal/package.json" ]]; then
   run "customer-portal typecheck" bash -c "cd customer-portal && pnpm typecheck"
   run "customer-portal build"     bash -c "cd customer-portal && pnpm build"
+fi
+
+if [[ -f "$ROOT/customer-portal/api/package.json" ]]; then
+  run "customer-portal-api build" bash -c "cd customer-portal/api && pnpm build"
+  [[ "$QUICK" -eq 0 ]] && run "customer-portal-api test" bash -c "cd customer-portal/api && pnpm test"
 fi
 
 # ---------------------------------------------------------------------------

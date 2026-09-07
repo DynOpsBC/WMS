@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.dynops.bcwms.ProductionUxRulesTest" tests="16" skipped="0" failures="0" errors="0" timestamp="2026-09-06T00:23:44.985Z" hostname="192.168.1.8" time="0.079">
+  <properties/>
+  <testcase name="BADE cannot bypass local operator authentication with service token" classname="com.dynops.bcwms.ProductionUxRulesTest" time="0.006"/>
+  <testcase name="emu customer home hides technical test screens" classname="com.dynops.bcwms.ProductionUxRulesTest" time="0.014"/>
+  <testcase name="offline home only allows connection setup" classname="com.dynops.bcwms.ProductionUxRulesTest" time="0.001"/>
+  <testcase name="printer setup errors name the missing device selection" classname="com.dynops.bcwms.ProductionUxRulesTest" time="0.024"/>
+  <testcase name="operator status hides transport and deployment details" classname="com.dynops.bcwms.ProductionUxRulesTest" time="0.003"/>
+  <testcase name="known English BC business errors become actionable Turkish text" classname="com.dynops.bcwms.ProductionUxRulesTest" time="0.013"/>
+  <testcase name="Turkish BCWMS AL errors reach the operator without the correlation tail" classname="com.dynops.bcwms.ProductionUxRulesTest" time="0.003"/>
+  <testcase name="BADE operator menu hides support and destructive test tools" classname="com.dynops.bcwms.ProductionUxRulesTest" time="0.0"/>
+  <testcase name="common English AL validations never reach the operator" classname="com.dynops.bcwms.ProductionUxRulesTest" time="0.004"/>
+  <testcase name="BADE admin test session can expose posting harness in debug flow" classname="com.dynops.bcwms.ProductionUxRulesTest" time="0.0"/>
+  <testcase name="BADE always uses the production operation flow" classname="com.dynops.bcwms.ProductionUxRulesTest" time="0.001"/>
+  <testcase name="assigned-only filtering fails closed when identity is unresolved" classname="com.dynops.bcwms.ProductionUxRulesTest" time="0.002"/>
+  <testcase name="quantity input accepts Turkish decimal comma and keeps a single separator" classname="com.dynops.bcwms.ProductionUxRulesTest" time="0.0"/>
+  <testcase name="operator missing from Local WMS Users is explained instead of masked" classname="com.dynops.bcwms.ProductionUxRulesTest" time="0.004"/>
+  <testcase name="missing mandatory BC header field names the field for the operator" classname="com.dynops.bcwms.ProductionUxRulesTest" time="0.001"/>
+  <testcase name="raw Business Central errors become Turkish support references" classname="com.dynops.bcwms.ProductionUxRulesTest" time="0.001"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

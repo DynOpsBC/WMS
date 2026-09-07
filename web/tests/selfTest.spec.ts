@@ -18,7 +18,7 @@ test("self-test panel renders 10 checks and runs without crashing", async ({ pag
 
   // Tüm BC isteklerini başarısız döndür — token testi pass, diğerleri fail.
   // Bu, panelin tüm hata yollarını rendering durdurmadan ele aldığını gösterir.
-  await page.route("**/businesscentral.dynamics.com/**", async (route) => {
+  await page.route("https://**/*", async (route) => {
     await route.fulfill({ status: 401, contentType: "application/json", body: '{"error":"unauthorized"}' });
   });
 

@@ -3,13 +3,17 @@ package com.dynops.bcwms
 import android.content.Context
 import android.util.Log
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
+import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.Request
+import okhttp3.RequestBody
+import okio.BufferedSink
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONArray
 import org.json.JSONObject
@@ -426,8 +430,10 @@ object BcApi {
 
     /** Read-only metadata probe used to prevent a newer APK from calling count actions that the
      * currently published AL extension does not yet expose. */
+    suspend fun getCustomApiMetadata(context: Context): ApiResult = get(context, customApiMetadataUrl(context))
+
     suspend fun getCountCapabilities(context: Context): CountCapabilities {
-        val result = get(context, customApiMetadataUrl(context))
+        val result = getCustomApiMetadata(context)
         if (!result.ok)
             return CountCapabilities(false, false, false, false, false, false, false, result.httpCode)
         return parseCountCapabilities(result.body, result.httpCode)
@@ -463,13 +469,19 @@ object BcApi {
     )
 
     internal fun odataNextLink(body: String): String? = runCatching {
-        JSONObject(body).optString("@odata.nextLink").trim().takeIf { it.isNotBlank() }
+        (JSONObject(body).opt("@odata.nextLink") as? String)?.trim()?.takeIf { it.isNotBlank() }
     }.getOrNull()
 
     suspend fun getAllPages(
         context: Context,
         path: String,
         maxPages: Int = 100,
+    ): PagedItemsResult = collectODataPages(path, maxPages) { get(context, it) }
+
+    internal suspend fun collectODataPages(
+        path: String,
+        maxPages: Int = 100,
+        fetch: suspend (String) -> ApiResult,
     ): PagedItemsResult {
         val rows = mutableListOf<JSONObject>()
         val visited = mutableSetOf<String>()
@@ -478,10 +490,13 @@ object BcApi {
             if (!visited.add(next)) {
                 return PagedItemsResult(rows, complete = false, error = ApiResult(false, -1, "Tekrarlanan sayfa bağlantısı"))
             }
-            val response = get(context, next)
+            val response = fetch(next)
             if (!response.ok) return PagedItemsResult(rows, complete = false, error = response)
             val page = runCatching {
-                val array = JSONObject(response.body).getJSONArray("value")
+                val payload = JSONObject(response.body)
+                val link = payload.opt("@odata.nextLink")
+                require(link == null || link == JSONObject.NULL || link is String) { "Geçersiz sayfa bağlantısı" }
+                val array = payload.getJSONArray("value")
                 (0 until array.length()).map { array.getJSONObject(it) }
             }.getOrElse {
                 return PagedItemsResult(rows, complete = false, error = ApiResult(false, -1, "Geçersiz sayfa yanıtı"))
@@ -664,7 +679,7 @@ object BcApi {
     }
 
     private val longRunningClient: OkHttpClient by lazy {
-        httpClient.newBuilder()
+        mutationClient.newBuilder()
             .connectTimeout(15, TimeUnit.SECONDS)
             .readTimeout(90, TimeUnit.SECONDS)
             .writeTimeout(30, TimeUnit.SECONDS)
@@ -674,29 +689,54 @@ object BcApi {
 
     private val jsonMediaType = "application/json; charset=utf-8".toMediaType()
 
+    private val mutationClient: OkHttpClient by lazy { withoutAutomaticMutationReplay(httpClient) }
+
+    internal fun withoutAutomaticMutationReplay(client: OkHttpClient): OkHttpClient = client.newBuilder()
+        .retryOnConnectionFailure(false)
+        .followRedirects(false)
+        .followSslRedirects(false)
+        .build()
+
+    internal fun mutationRequestBody(body: RequestBody): RequestBody = object : RequestBody() {
+        override fun contentType() = body.contentType()
+        override fun contentLength() = body.contentLength()
+        override fun writeTo(sink: BufferedSink) = body.writeTo(sink)
+        // Also stops HTTP 503 Retry-After follow-ups after the server read the
+        // mutation. Explicit retries reuse the application operation ID.
+        override fun isOneShot() = true
+    }
+
+    internal fun authenticatedBcUrl(base: String, path: String): String {
+        val raw = if (path.startsWith("http", ignoreCase = true)) path else "$base/$path"
+        val url = raw.replace(" ", "%20").replace("'", "%27").toHttpUrl()
+        require(url.isHttps && url.host == "api.businesscentral.dynamics.com" && url.port == 443 &&
+            url.username.isEmpty() && url.password.isEmpty()) { "Geçersiz Business Central bağlantısı" }
+        return url.toString()
+    }
+
     private suspend fun request(
         context: Context,
         method: String,
         path: String,
         jsonBody: String?,
-        client: OkHttpClient = httpClient,
+        client: OkHttpClient = if (method == "GET" || method == "HEAD") httpClient else mutationClient,
     ): ApiResult =
         withContext(Dispatchers.IO) {
-            ensureFreshToken(context)
-            val token = getToken(context)
-            if (token.isBlank()) return@withContext ApiResult(false, 0, "Token yok — Bağlantı Ayarları ekranından token girin")
             try {
-                val rawUrl = if (path.startsWith("http")) path else "${customApiBase(context)}/$path"
-                val url = rawUrl.replace(" ", "%20").replace("'", "%27")
+                ensureFreshToken(context)
+                val token = getToken(context)
+                if (token.isBlank()) return@withContext ApiResult(false, 0, "Token yok — Bağlantı Ayarları ekranından token girin")
+                val url = authenticatedBcUrl(customApiBase(context), path)
                 // OkHttp sends real PATCH/DELETE verbs. Android's HttpURLConnection cannot do PATCH, and
                 // BC's API endpoint ignores the X-HTTP-Method-Override fallback → POST-tunneled PATCH lands
                 // as a literal POST to a keyed entity and is rejected with HTTP 405 on line updates.
-                val requestBody = when {
+                val rawBody = when {
                     jsonBody != null -> jsonBody.toRequestBody(jsonMediaType)
                     // OkHttp requires a (possibly empty) body for POST/PATCH/PUT.
-                    method == "POST" || method == "PATCH" || method == "PUT" -> ByteArray(0).toRequestBody(jsonMediaType)
+                    method == "POST" || method == "PATCH" || method == "PUT" || method == "DELETE" -> ByteArray(0).toRequestBody(jsonMediaType)
                     else -> null
                 }
+                val requestBody = rawBody?.let { if (method == "GET" || method == "HEAD") it else mutationRequestBody(it) }
                 val builder = Request.Builder()
                     .url(url)
                     .method(method, requestBody)
@@ -730,6 +770,8 @@ object BcApi {
                         logFailure(method, path, ApiResult(r2.code in 200..299, r2.code, b2))
                     }
                 }
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 logFailure(method, path, ApiResult(false, -1, "Hata: ${e.message}"))
             }
@@ -791,6 +833,7 @@ object BcApi {
     /** True when a mutating request may have reached BC despite the failed response. */
     internal fun isAmbiguousMutationFailure(result: ApiResult): Boolean =
         result.httpCode == -1 ||
+            result.httpCode in 300..399 ||
             result.httpCode == 408 ||
             result.httpCode == 425 ||
             result.httpCode == 429 ||

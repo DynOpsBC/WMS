@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.dynops.bcwms.feature.SubcontractingModuleTest" tests="10" skipped="0" failures="0" errors="0" timestamp="2026-09-06T00:23:45.435Z" hostname="192.168.1.8" time="0.018">
+  <properties/>
+  <testcase name="component identity separates production and component lines" classname="com.dynops.bcwms.feature.SubcontractingModuleTest" time="0.007"/>
+  <testcase name="multiple LP scans append once and stay comma separated" classname="com.dynops.bcwms.feature.SubcontractingModuleTest" time="0.001"/>
+  <testcase name="receipt search includes item supplier and every document reference" classname="com.dynops.bcwms.feature.SubcontractingModuleTest" time="0.0"/>
+  <testcase name="dispatch list groups operation lines under production order" classname="com.dynops.bcwms.feature.SubcontractingModuleTest" time="0.0"/>
+  <testcase name="receipt identity and bound action escape every purchase key" classname="com.dynops.bcwms.feature.SubcontractingModuleTest" time="0.004"/>
+  <testcase name="operation identity contains every BC composite key field" classname="com.dynops.bcwms.feature.SubcontractingModuleTest" time="0.0"/>
+  <testcase name="return barcode matches outbound purchase production and supplier references" classname="com.dynops.bcwms.feature.SubcontractingModuleTest" time="0.0"/>
+  <testcase name="bound action key escapes production order apostrophe" classname="com.dynops.bcwms.feature.SubcontractingModuleTest" time="0.006"/>
+  <testcase name="receipt list groups product lines under outbound reference" classname="com.dynops.bcwms.feature.SubcontractingModuleTest" time="0.0"/>
+  <testcase name="operation can close only on exact full receipt" classname="com.dynops.bcwms.feature.SubcontractingModuleTest" time="0.0"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

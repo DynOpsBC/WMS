@@ -128,6 +128,7 @@ permissionset 72094 "DOPSWHS-ADMIN"
         page "DOPSWHS Count Sheet Line Part" = X,
         page "DOPSWHS Count Counter Part" = X,
         page "DOPSWHS Count Variance Review" = X,
+        page "DOPSWHS Count Bin Review" = X,
         page "DOPSWHS Warehouse Manager RC" = X,
         page "DOPSWHS Warehouse Manager Act" = X,
         page "DOPSWHS DynOps WMS RC" = X,

@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.dynops.bcwms.ui.QuantityDialogDateTest" tests="6" skipped="0" failures="0" errors="0" timestamp="2026-09-06T00:44:33.988Z" hostname="192.168.1.8" time="0.001">
+  <properties/>
+  <testcase name="expired receipt date is rejected while today and future remain valid" classname="com.dynops.bcwms.ui.QuantityDialogDateTest" time="0.0"/>
+  <testcase name="invalid calendar date is rejected" classname="com.dynops.bcwms.ui.QuantityDialogDateTest" time="0.001"/>
+  <testcase name="eight expiry digits are formatted while typing" classname="com.dynops.bcwms.ui.QuantityDialogDateTest" time="0.0"/>
+  <testcase name="pasted expiry date is normalized and limited to eight digits" classname="com.dynops.bcwms.ui.QuantityDialogDateTest" time="0.0"/>
+  <testcase name="turkish expiry input is converted to BC ISO date" classname="com.dynops.bcwms.ui.QuantityDialogDateTest" time="0.0"/>
+  <testcase name="BC ISO date is displayed in terminal format" classname="com.dynops.bcwms.ui.QuantityDialogDateTest" time="0.0"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

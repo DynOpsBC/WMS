@@ -1,0 +1,66 @@
+[
+  {
+    "check": "web-install",
+    "exitCode": 0
+  },
+  {
+    "check": "web-typecheck",
+    "exitCode": 0
+  },
+  {
+    "check": "web-build",
+    "exitCode": 0
+  },
+  {
+    "check": "web-unit",
+    "exitCode": 0
+  },
+  {
+    "check": "push-relay-install",
+    "exitCode": 0
+  },
+  {
+    "check": "push-relay-build",
+    "exitCode": 0
+  },
+  {
+    "check": "push-relay-unit",
+    "exitCode": 0
+  },
+  {
+    "check": "licensing-service-install",
+    "exitCode": 0
+  },
+  {
+    "check": "licensing-service-build",
+    "exitCode": 0
+  },
+  {
+    "check": "licensing-service-unit",
+    "exitCode": 0
+  },
+  {
+    "check": "customer-portal-install",
+    "exitCode": 0
+  },
+  {
+    "check": "customer-portal-typecheck",
+    "exitCode": 0
+  },
+  {
+    "check": "customer-portal-build",
+    "exitCode": 0
+  },
+  {
+    "check": "customer-portal-api-install",
+    "exitCode": 0
+  },
+  {
+    "check": "customer-portal-api-build",
+    "exitCode": 0
+  },
+  {
+    "check": "customer-portal-api-unit",
+    "exitCode": 0
+  }
+]

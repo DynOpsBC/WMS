@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.dynops.bcwms.scanner.BarcodeIntentResolverTest" tests="6" skipped="0" failures="0" errors="0" timestamp="2026-09-06T00:44:33.980Z" hostname="192.168.1.8" time="0.001">
+  <properties/>
+  <testcase name="lot only field is classified as lot" classname="com.dynops.bcwms.scanner.BarcodeIntentResolverTest" time="0.0"/>
+  <testcase name="custom V2 fields include serial variant and unit" classname="com.dynops.bcwms.scanner.BarcodeIntentResolverTest" time="0.0"/>
+  <testcase name="Bade item label fields and Turkish thousands quantity are read" classname="com.dynops.bcwms.scanner.BarcodeIntentResolverTest" time="0.001"/>
+  <testcase name="GS1 AI 30 quantity is read from item label" classname="com.dynops.bcwms.scanner.BarcodeIntentResolverTest" time="0.0"/>
+  <testcase name="custom item label without quantity leaves quantity empty" classname="com.dynops.bcwms.scanner.BarcodeIntentResolverTest" time="0.0"/>
+  <testcase name="JSON style item label is read" classname="com.dynops.bcwms.scanner.BarcodeIntentResolverTest" time="0.0"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

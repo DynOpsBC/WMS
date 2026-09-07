@@ -1,0 +1,16 @@
+[WebServer] (node:37150) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+[WebServer] (node:37153) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+
+Running 5 tests using 1 worker
+
+(node:37160) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  1 [chromium] › tests/lpBrowser.spec.ts:3:1 › LP Browser renders tree, emits NestLp, and shows print menu (1.5s)
+  ✓  2 [chromium] › tests/navigationFailures.spec.ts:6:3 › all menu modules remain usable with empty BC responses (3.7s)
+  ✓  3 [chromium] › tests/navigationFailures.spec.ts:6:3 › all menu modules remain usable with offline BC responses (3.4s)
+  ✓  4 [chromium] › tests/pickBoard.spec.ts:6:1 › pick board renders bridge data and reflects setData updates (670ms)
+  ✓  5 [chromium] › tests/selfTest.spec.ts:7:1 › self-test panel renders 10 checks and runs without crashing (985ms)
+
+  5 passed (16.0s)

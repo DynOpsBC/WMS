@@ -4,8 +4,50 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertSame
 import org.junit.Test
+import kotlinx.coroutines.runBlocking
 
 class BcApiPaginationTest {
+    @Test
+    fun `every page is required before a document can be declared complete`() = runBlocking {
+        val visited = mutableListOf<String>()
+        val result = BcApi.collectODataPages("first") { path ->
+            visited += path
+            if (path == "first") BcApi.ApiResult(true, 200, """{"value":[{"lineNo":1}],"@odata.nextLink":"second"}""")
+            else BcApi.ApiResult(true, 200, """{"value":[{"lineNo":2}],"@odata.nextLink":null}""")
+        }
+        assertEquals(listOf("first", "second"), visited)
+        assertEquals(true, result.complete)
+        assertEquals(2, result.rows.size)
+    }
+
+    @Test
+    fun `partial data after a failed page never enables posting`() = runBlocking {
+        val result = BcApi.collectODataPages("first") { path ->
+            if (path == "first") BcApi.ApiResult(true, 200, """{"value":[{"lineNo":1}],"@odata.nextLink":"second"}""")
+            else BcApi.ApiResult(false, 503, "offline")
+        }
+        assertEquals(false, result.complete)
+        assertEquals(1, result.rows.size)
+        assertEquals(503, result.error?.httpCode)
+    }
+
+    @Test
+    fun `cyclic malformed and truncated pages fail closed`() = runBlocking {
+        for (body in listOf("""{"value":[],"@odata.nextLink":"first"}""",
+            """{"value":[],"@odata.nextLink":123}""", """{"value":[null]}""", """{"unexpected":[]}""")) {
+            val result = BcApi.collectODataPages("first", maxPages = 3) { BcApi.ApiResult(true, 200, body) }
+            assertEquals(body, false, result.complete)
+        }
+    }
+
+    @Test
+    fun `page limit cannot mark a partially read document complete`() = runBlocking {
+        val result = BcApi.collectODataPages("first", maxPages = 1) {
+            BcApi.ApiResult(true, 200, """{"value":[],"@odata.nextLink":"second"}""")
+        }
+        assertEquals(false, result.complete)
+    }
+
     @Test
     fun `odata next link is returned exactly for the following page`() {
         val url = "https://api.example.test/lines?%24skiptoken=abc"
@@ -60,7 +102,7 @@ class BcApiPaginationTest {
 
     @Test
     fun `mutation validation errors are definite but transport failures are ambiguous`() {
-        listOf(-1, 408, 425, 429, 500, 503).forEach { code ->
+        listOf(-1, 301, 307, 308, 408, 425, 429, 500, 503).forEach { code ->
             assertEquals(true, BcApi.isAmbiguousMutationFailure(BcApi.ApiResult(false, code, "")))
         }
         listOf(400, 401, 403, 404, 405, 409, 422).forEach { code ->

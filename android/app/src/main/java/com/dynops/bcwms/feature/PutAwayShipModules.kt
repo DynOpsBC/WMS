@@ -1,5 +1,7 @@
 package com.dynops.bcwms.feature
 
+import com.dynops.bcwms.ui.toFiniteDoubleOrNull
+
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -1235,7 +1237,7 @@ private fun PutAwayGuidedSheet(
                             hint = "Bin öneriliyor..."
                             val body = JSONObject().apply {
                                 put("itemNo", expectedItem)
-                                put("qty", qty.toDoubleOrNull() ?: 0.0)
+                                put("qty", qty.toFiniteDoubleOrNull() ?: 0.0)
                                 put("locationCode", locationCode)
                             }.toString()
                             val r = BcApi.post(context, "putAways('${place.optString("no")}')/Microsoft.NAV.suggestBin", body)
@@ -1272,7 +1274,7 @@ private fun PutAwayGuidedSheet(
                     enabled = true,
                     modifier = Modifier.fillMaxWidth(),
                     onClick = {
-                        val entered = qty.toDoubleOrNull()
+                        val entered = qty.toFiniteDoubleOrNull()
                         val kalan = if (outstanding.isNaN()) null else outstanding
                         error = when {
                             targetBin.isBlank() -> "Önce koyacağınız rafı okutun."

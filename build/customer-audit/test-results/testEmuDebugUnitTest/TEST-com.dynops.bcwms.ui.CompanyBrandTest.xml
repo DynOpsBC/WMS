@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.dynops.bcwms.ui.CompanyBrandTest" tests="3" skipped="0" failures="0" errors="0" timestamp="2026-09-06T00:44:33.983Z" hostname="192.168.1.8" time="0.001">
+  <properties/>
+  <testcase name="emu flavor never inherits customer logos" classname="com.dynops.bcwms.ui.CompanyBrandTest" time="0.0"/>
+  <testcase name="bade flavor keeps its brand before a company is resolved" classname="com.dynops.bcwms.ui.CompanyBrandTest" time="0.0"/>
+  <testcase name="known Business Central company names select their own brands" classname="com.dynops.bcwms.ui.CompanyBrandTest" time="0.001"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

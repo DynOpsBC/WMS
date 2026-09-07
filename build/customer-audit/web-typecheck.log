@@ -1,0 +1,4 @@
+
+> @dynops/bcwms-web@1.0.0 typecheck /Users/kaanodabas/Desktop/EL_TERMINAL/WMS/web
+> tsc --noEmit
+

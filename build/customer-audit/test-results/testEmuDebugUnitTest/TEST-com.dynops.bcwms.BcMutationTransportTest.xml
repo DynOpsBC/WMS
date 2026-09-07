@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.dynops.bcwms.BcMutationTransportTest" tests="4" skipped="0" failures="0" errors="0" timestamp="2026-09-06T00:44:33.541Z" hostname="192.168.1.8" time="0.23">
+  <properties/>
+  <testcase name="mutation redirects cannot move a write to another endpoint" classname="com.dynops.bcwms.BcMutationTransportTest" time="0.21"/>
+  <testcase name="post is not silently repeated when 503 requests immediate retry" classname="com.dynops.bcwms.BcMutationTransportTest" time="0.004"/>
+  <testcase name="lost response after server reads post does not write a second time" classname="com.dynops.bcwms.BcMutationTransportTest" time="0.014"/>
+  <testcase name="BC authentication cannot be forwarded to arbitrary page links" classname="com.dynops.bcwms.BcMutationTransportTest" time="0.002"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[Eyl 06, 2026 3:44:33 ÖÖ okhttp3.mockwebserver.MockWebServer$SocketHandler handle
+WARNING: MockWebServer[56919] connection from /127.0.0.1 didn't make a request
+]]></system-err>
+</testsuite>

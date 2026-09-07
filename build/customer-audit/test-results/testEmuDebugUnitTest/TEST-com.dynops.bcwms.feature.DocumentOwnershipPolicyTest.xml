@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.dynops.bcwms.feature.DocumentOwnershipPolicyTest" tests="1" skipped="0" failures="0" errors="0" timestamp="2026-09-06T00:44:33.918Z" hostname="192.168.1.8" time="0.0">
+  <properties/>
+  <testcase name="document mutation requires resolved matching owner" classname="com.dynops.bcwms.feature.DocumentOwnershipPolicyTest" time="0.0"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

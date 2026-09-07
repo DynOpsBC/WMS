@@ -1,0 +1,24 @@
+
+> @dynops/bcwms-licensing-service@1.0.0 test /Users/kaanodabas/Desktop/EL_TERMINAL/WMS/licensing-service
+> node --test --import tsx/esm test/*.test.ts
+
+✔ sign + verify round trip — valid (3.334333ms)
+✔ verify — tenant mismatch (0.87325ms)
+✔ verify — expired (0.751542ms)
+✔ sign — rejects validUntil <= iat (0.3225ms)
+✔ verify — bad signature (0.762083ms)
+✔ verify — malformed (0.097041ms)
+✔ issue — rejects when admin token missing (1.71375ms)
+✔ issue — rejects malformed body (0.14825ms)
+✔ issue — rejects unknown tier (0.100958ms)
+✔ issue — rejects past validUntil (0.087416ms)
+✔ issue — successful issue returns signed JWT + record + claims verify (3.891459ms)
+✔ issue — replaceActive supersedes prior records (1.876666ms)
+ℹ tests 12
+ℹ suites 0
+ℹ pass 12
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 1086.144083

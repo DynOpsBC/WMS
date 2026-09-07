@@ -100,7 +100,14 @@ page 72075 "DOPSWHS Count Sheet Card"
                 trigger OnAction()
                 var
                     CountMgmt: Codeunit "DOPSWHS Count Mgmt";
+                    CountLine: Record "DOPSWHS Count Sheet Line";
                 begin
+                    CountMgmt.ValidateBinReview(Rec."No.");
+                    CountMgmt.EvaluateVariance(Rec."No.");
+                    CountLine.SetRange("Sheet No.", Rec."No.");
+                    Page.RunModal(Page::"DOPSWHS Count Bin Review", CountLine);
+                    if not Confirm('İncelediğiniz raf farkları stoklara işlensin mi?', false) then
+                        exit;
                     CountMgmt.PostSheet(Rec."No.");
                     CurrPage.Update(false);
                 end;

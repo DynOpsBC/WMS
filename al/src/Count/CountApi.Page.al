@@ -26,6 +26,7 @@ page 72221 "DOPSWHS Count API"
                 // V2 modu yalnız prepareV2 / countOps.createV2 / BC kartı ile değişir;
                 // API POST gövdesindeki v2ScanMode yok sayılır.
                 field(v2ScanMode; Rec."V2 Scan Mode") { Caption = 'v2ScanMode'; Editable = false; }
+                field(binReviewSupported; BinReviewSupported) { Caption = 'binReviewSupported'; Editable = false; }
                 field(zoneFilter; Rec."Zone Filter") { Caption = 'zoneFilter'; Editable = false; }
                 field(counter1UserId; Counter1UserId) { Caption = 'counter1UserId'; Editable = false; }
                 field(counter2UserId; Counter2UserId) { Caption = 'counter2UserId'; Editable = false; }
@@ -63,6 +64,7 @@ page 72221 "DOPSWHS Count API"
         CountMgmt: Codeunit "DOPSWHS Count Mgmt";
     begin
         TerminalPostAllowed := CountMgmt.TerminalCountPostingAllowed();
+        BinReviewSupported := true;
         Clear(Counter1UserId);
         Clear(Counter2UserId);
         Clear(Counter3UserId);
@@ -90,6 +92,22 @@ page 72221 "DOPSWHS Count API"
                         end;
                 end;
             until Counter.Next() = 0;
+    end;
+
+    [ServiceEnabled]
+    procedure prepareV2Bin(binCode: Code[20])
+    var
+        CountMgmt: Codeunit "DOPSWHS Count Mgmt";
+    begin
+        CountMgmt.PrepareV2Bin(Rec."No.", binCode);
+    end;
+
+    [ServiceEnabled]
+    procedure completeV2Bin(binCode: Code[20]; counterSlot: Integer)
+    var
+        CountMgmt: Codeunit "DOPSWHS Count Mgmt";
+    begin
+        CountMgmt.CompleteV2Bin(Rec."No.", binCode, counterSlot);
     end;
 
     [ServiceEnabled]
@@ -217,6 +235,7 @@ page 72221 "DOPSWHS Count API"
 
 
     var
+        BinReviewSupported: Boolean;
         Counter1UserId: Code[50];
         Counter2UserId: Code[50];
         Counter3UserId: Code[50];

@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.dynops.bcwms.feature.PutAwayTargetPolicyTest" tests="4" skipped="0" failures="0" errors="0" timestamp="2026-09-06T00:44:33.947Z" hostname="192.168.1.8" time="0.001">
+  <properties/>
+  <testcase name="lokasyonda bulunmayan raf reddedilir" classname="com.dynops.bcwms.feature.PutAwayTargetPolicyTest" time="0.0"/>
+  <testcase name="onerilen raf lokasyonda varsa kabul edilir" classname="com.dynops.bcwms.feature.PutAwayTargetPolicyTest" time="0.0"/>
+  <testcase name="oneriden farkli fakat lokasyonda bulunan raf kabul edilir" classname="com.dynops.bcwms.feature.PutAwayTargetPolicyTest" time="0.0"/>
+  <testcase name="bos hedef raf reddedilir" classname="com.dynops.bcwms.feature.PutAwayTargetPolicyTest" time="0.0"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

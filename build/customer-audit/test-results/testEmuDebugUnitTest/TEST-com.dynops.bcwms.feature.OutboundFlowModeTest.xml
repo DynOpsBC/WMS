@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.dynops.bcwms.feature.OutboundFlowModeTest" tests="3" skipped="0" failures="0" errors="0" timestamp="2026-09-06T00:44:33.932Z" hostname="192.168.1.8" time="0.0">
+  <properties/>
+  <testcase name="unknown modes are not silently classified" classname="com.dynops.bcwms.feature.OutboundFlowModeTest" time="0.0"/>
+  <testcase name="user facing names are accepted case insensitively" classname="com.dynops.bcwms.feature.OutboundFlowModeTest" time="0.0"/>
+  <testcase name="legacy BC enum values map to V2 operation names" classname="com.dynops.bcwms.feature.OutboundFlowModeTest" time="0.0"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

@@ -1,0 +1,108 @@
+To honour the JVM settings for this build a single-use Daemon process will be forked. For more on this, please refer to https://docs.gradle.org/8.13/userguide/gradle_daemon.html#sec:disabling_the_daemon in the Gradle documentation.
+Daemon will be stopped at the end of the build 
+> Task :app:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :app:preBuild UP-TO-DATE
+> Task :app:preBadeDebugBuild UP-TO-DATE
+> Task :app:generateBadeDebugBuildConfig
+> Task :core-design:preBuild UP-TO-DATE
+> Task :core-design:preDebugBuild UP-TO-DATE
+> Task :core-design:writeDebugAarMetadata UP-TO-DATE
+> Task :app:checkBadeDebugAarMetadata UP-TO-DATE
+> Task :app:generateBadeDebugResValues UP-TO-DATE
+> Task :core-design:generateDebugResValues UP-TO-DATE
+> Task :core-design:generateDebugResources UP-TO-DATE
+> Task :core-design:packageDebugResources UP-TO-DATE
+> Task :app:mapBadeDebugSourceSetPaths UP-TO-DATE
+> Task :app:generateBadeDebugResources UP-TO-DATE
+> Task :app:mergeBadeDebugResources UP-TO-DATE
+> Task :app:packageBadeDebugResources UP-TO-DATE
+> Task :app:parseBadeDebugLocalResources UP-TO-DATE
+> Task :app:createBadeDebugCompatibleScreenManifests
+> Task :app:extractDeepLinksBadeDebug UP-TO-DATE
+> Task :core-design:extractDeepLinksDebug UP-TO-DATE
+> Task :core-design:processDebugManifest UP-TO-DATE
+> Task :app:processBadeDebugMainManifest
+> Task :app:processBadeDebugManifest
+> Task :app:processBadeDebugManifestForPackage
+> Task :core-design:compileDebugLibraryResources UP-TO-DATE
+> Task :core-design:parseDebugLocalResources UP-TO-DATE
+> Task :core-design:generateDebugRFile UP-TO-DATE
+> Task :app:processBadeDebugResources
+> Task :core-design:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :core-design:compileDebugKotlin UP-TO-DATE
+> Task :core-design:javaPreCompileDebug UP-TO-DATE
+> Task :core-design:compileDebugJavaWithJavac NO-SOURCE
+> Task :core-design:bundleLibCompileToJarDebug UP-TO-DATE
+> Task :app:compileBadeDebugKotlin
+w: file:///Users/kaanodabas/Desktop/EL_TERMINAL/WMS/android/app/src/main/java/com/dynops/bcwms/feature/BulkLpBuildSheet.kt:835:56 'fun Modifier.menuAnchor(): Modifier' is deprecated. Use overload that takes MenuAnchorType and enabled parameters.
+w: file:///Users/kaanodabas/Desktop/EL_TERMINAL/WMS/android/app/src/main/java/com/dynops/bcwms/feature/CountV2Module.kt:295:64 'fun Modifier.menuAnchor(): Modifier' is deprecated. Use overload that takes MenuAnchorType and enabled parameters.
+w: file:///Users/kaanodabas/Desktop/EL_TERMINAL/WMS/android/app/src/main/java/com/dynops/bcwms/feature/LicensePlateModule.kt:1074:52 'fun Modifier.menuAnchor(): Modifier' is deprecated. Use overload that takes MenuAnchorType and enabled parameters.
+w: file:///Users/kaanodabas/Desktop/EL_TERMINAL/WMS/android/app/src/main/java/com/dynops/bcwms/feature/LicensePlateModule.kt:1096:52 'fun Modifier.menuAnchor(): Modifier' is deprecated. Use overload that takes MenuAnchorType and enabled parameters.
+w: file:///Users/kaanodabas/Desktop/EL_TERMINAL/WMS/android/app/src/main/java/com/dynops/bcwms/feature/MoveAndCountModules.kt:931:64 'fun Modifier.menuAnchor(): Modifier' is deprecated. Use overload that takes MenuAnchorType and enabled parameters.
+w: file:///Users/kaanodabas/Desktop/EL_TERMINAL/WMS/android/app/src/main/java/com/dynops/bcwms/scanner/ScanField.kt:169:26 'val LocalLifecycleOwner: ProvidableCompositionLocal<LifecycleOwner>' is deprecated. Moved to lifecycle-runtime-compose library in androidx.lifecycle.compose package.
+w: file:///Users/kaanodabas/Desktop/EL_TERMINAL/WMS/android/app/src/main/java/com/dynops/bcwms/ui/QuantityDialogSheet.kt:205:45 'fun Modifier.menuAnchor(): Modifier' is deprecated. Use overload that takes MenuAnchorType and enabled parameters.
+
+> Task :app:javaPreCompileBadeDebug UP-TO-DATE
+> Task :app:compileBadeDebugJavaWithJavac
+> Task :app:bundleBadeDebugClassesToRuntimeJar
+> Task :app:bundleBadeDebugClassesToCompileJar
+> Task :app:compileBadeDebugUnitTestKotlin
+> Task :app:preBadeDebugUnitTestBuild UP-TO-DATE
+> Task :app:javaPreCompileBadeDebugUnitTest UP-TO-DATE
+> Task :app:compileBadeDebugUnitTestJavaWithJavac NO-SOURCE
+> Task :app:processBadeDebugJavaRes
+> Task :app:processBadeDebugUnitTestJavaRes UP-TO-DATE
+> Task :core-design:bundleLibRuntimeToJarDebug UP-TO-DATE
+> Task :core-design:processDebugJavaRes UP-TO-DATE
+> Task :app:testBadeDebugUnitTest
+> Task :app:preDynopsDebugBuild UP-TO-DATE
+> Task :app:generateDynopsDebugBuildConfig
+> Task :app:checkDynopsDebugAarMetadata UP-TO-DATE
+> Task :app:generateDynopsDebugResValues UP-TO-DATE
+> Task :app:mapDynopsDebugSourceSetPaths UP-TO-DATE
+> Task :app:generateDynopsDebugResources UP-TO-DATE
+> Task :app:mergeDynopsDebugResources UP-TO-DATE
+> Task :app:packageDynopsDebugResources UP-TO-DATE
+> Task :app:parseDynopsDebugLocalResources UP-TO-DATE
+> Task :app:createDynopsDebugCompatibleScreenManifests
+> Task :app:extractDeepLinksDynopsDebug UP-TO-DATE
+> Task :app:processDynopsDebugMainManifest
+> Task :app:processDynopsDebugManifest
+> Task :app:processDynopsDebugManifestForPackage
+> Task :app:processDynopsDebugResources
+> Task :app:compileDynopsDebugKotlin
+w: file:///Users/kaanodabas/Desktop/EL_TERMINAL/WMS/android/app/src/main/java/com/dynops/bcwms/feature/BulkLpBuildSheet.kt:835:56 'fun Modifier.menuAnchor(): Modifier' is deprecated. Use overload that takes MenuAnchorType and enabled parameters.
+w: file:///Users/kaanodabas/Desktop/EL_TERMINAL/WMS/android/app/src/main/java/com/dynops/bcwms/feature/CountV2Module.kt:295:64 'fun Modifier.menuAnchor(): Modifier' is deprecated. Use overload that takes MenuAnchorType and enabled parameters.
+w: file:///Users/kaanodabas/Desktop/EL_TERMINAL/WMS/android/app/src/main/java/com/dynops/bcwms/feature/LicensePlateModule.kt:1074:52 'fun Modifier.menuAnchor(): Modifier' is deprecated. Use overload that takes MenuAnchorType and enabled parameters.
+w: file:///Users/kaanodabas/Desktop/EL_TERMINAL/WMS/android/app/src/main/java/com/dynops/bcwms/feature/LicensePlateModule.kt:1096:52 'fun Modifier.menuAnchor(): Modifier' is deprecated. Use overload that takes MenuAnchorType and enabled parameters.
+w: file:///Users/kaanodabas/Desktop/EL_TERMINAL/WMS/android/app/src/main/java/com/dynops/bcwms/feature/MoveAndCountModules.kt:931:64 'fun Modifier.menuAnchor(): Modifier' is deprecated. Use overload that takes MenuAnchorType and enabled parameters.
+w: file:///Users/kaanodabas/Desktop/EL_TERMINAL/WMS/android/app/src/main/java/com/dynops/bcwms/scanner/ScanField.kt:169:26 'val LocalLifecycleOwner: ProvidableCompositionLocal<LifecycleOwner>' is deprecated. Moved to lifecycle-runtime-compose library in androidx.lifecycle.compose package.
+w: file:///Users/kaanodabas/Desktop/EL_TERMINAL/WMS/android/app/src/main/java/com/dynops/bcwms/ui/QuantityDialogSheet.kt:205:45 'fun Modifier.menuAnchor(): Modifier' is deprecated. Use overload that takes MenuAnchorType and enabled parameters.
+
+> Task :app:javaPreCompileDynopsDebug UP-TO-DATE
+> Task :app:compileDynopsDebugJavaWithJavac
+> Task :app:bundleDynopsDebugClassesToRuntimeJar
+> Task :app:bundleDynopsDebugClassesToCompileJar
+> Task :app:compileDynopsDebugUnitTestKotlin
+> Task :app:preDynopsDebugUnitTestBuild UP-TO-DATE
+> Task :app:javaPreCompileDynopsDebugUnitTest UP-TO-DATE
+> Task :app:compileDynopsDebugUnitTestJavaWithJavac NO-SOURCE
+> Task :app:processDynopsDebugJavaRes
+> Task :app:processDynopsDebugUnitTestJavaRes UP-TO-DATE
+> Task :app:testDynopsDebugUnitTest
+> Task :app:preEmuDebugBuild UP-TO-DATE
+> Task :app:generateEmuDebugBuildConfig
+> Task :app:checkEmuDebugAarMetadata UP-TO-DATE
+> Task :app:generateEmuDebugResValues UP-TO-DATE
+> Task :app:mapEmuDebugSourceSetPaths UP-TO-DATE
+> Task :app:generateEmuDebugResources UP-TO-DATE
+> Task :app:mergeEmuDebugResources UP-TO-DATE
+> Task :app:packageEmuDebugResources UP-TO-DATE
+> Task :app:parseEmuDebugLocalResources UP-TO-DATE
+> Task :app:createEmuDebugCompatibleScreenManifests
+> Task :app:extractDeepLinksEmuDebug UP-TO-DATE
+> Task :app:processEmuDebugMainManifest
+> Task :app:processEmuDebugManifest
+> Task :app:processEmuDebugManifestForPackage
+> Task :app:processEmuDebugResources
+> Task :app:compileEmuDebugKotlin

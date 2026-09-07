@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.dynops.bcwms.feature.AdHocMovementWorkflowTest" tests="4" skipped="0" failures="0" errors="0" timestamp="2026-09-06T00:29:45.417Z" hostname="192.168.1.8" time="0.011">
+  <properties/>
+  <testcase name="LP code in Product mode is routed to atomic LP workflow" classname="com.dynops.bcwms.feature.AdHocMovementWorkflowTest" time="0.009"/>
+  <testcase name="item barcode remains on movementOps product contract" classname="com.dynops.bcwms.feature.AdHocMovementWorkflowTest" time="0.001"/>
+  <testcase name="SSCC in Product mode is routed to atomic LP workflow" classname="com.dynops.bcwms.feature.AdHocMovementWorkflowTest" time="0.0"/>
+  <testcase name="non item and non LP barcode cannot create product mutation" classname="com.dynops.bcwms.feature.AdHocMovementWorkflowTest" time="0.001"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

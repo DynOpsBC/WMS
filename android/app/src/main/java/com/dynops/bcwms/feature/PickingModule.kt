@@ -1,5 +1,7 @@
 package com.dynops.bcwms.feature
 
+import com.dynops.bcwms.ui.toFiniteDoubleOrNull
+
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
@@ -2314,7 +2316,7 @@ private fun ShortPickSheet(line: JSONObject?, onDismiss: () -> Unit, onConfirm: 
             reasons.forEach { FilterChip(selected = it == reason, onClick = { reason = it }, label = { Text(reasonLabel(it)) }) }
         }
         Spacer(Modifier.height(16.dp))
-        Button(modifier = Modifier.fillMaxWidth(), onClick = { onConfirm(qty.toDoubleOrNull() ?: 0.0, reason) }) { Text("Eksik İşle") }
+        Button(modifier = Modifier.fillMaxWidth(), onClick = { onConfirm(qty.toFiniteDoubleOrNull() ?: 0.0, reason) }) { Text("Eksik İşle") }
         Spacer(Modifier.height(24.dp))
     }
 }

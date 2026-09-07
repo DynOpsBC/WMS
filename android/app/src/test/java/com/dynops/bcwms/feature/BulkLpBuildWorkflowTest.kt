@@ -7,6 +7,101 @@ import org.junit.Test
 import org.json.JSONObject
 
 class BulkLpBuildWorkflowTest {
+    private fun completedBuild(
+        printRequested: Boolean = true,
+        failed: List<String> = emptyList(),
+        replayed: Boolean = false,
+        single: Boolean = false,
+    ) = LedgerBulkLpBuildResult(
+        createdLpNos = if (single) listOf("LP1") else listOf("LP1", "LP2"),
+        failedPrintLpNos = failed,
+        replayed = replayed,
+        printSkippedOnReplay = replayed && printRequested,
+        printLabelsRequested = printRequested,
+        sourceEntryNo = 1234,
+    )
+
+    @Test
+    fun `source entry must show the LP reference before success is reported`() {
+        val entry = JSONObject().put("entryNo", 1234).put("lpNo", "LP1").put("lpNos", "")
+        assertTrue(ledgerLpEntryReferenceMatches(1234, listOf("LP1"), listOf(entry), true))
+        assertFalse(ledgerLpEntryReferenceMatches(1234, listOf("LP2"), listOf(entry), true))
+        assertFalse(ledgerLpEntryReferenceMatches(1234, listOf("LP1"), listOf(entry), false))
+        assertFalse(ledgerLpEntryReferenceMatches(5678, listOf("LP1"), listOf(entry), true))
+        entry.put("lpNo", "")
+        assertFalse(ledgerLpEntryReferenceMatches(1234, listOf("LP1"), listOf(entry), true))
+        entry.put("lpNos", "LP1, LP2")
+        assertTrue(ledgerLpEntryReferenceMatches(1234, listOf("LP1", "LP2"), listOf(entry), true))
+        assertFalse(ledgerLpEntryReferenceMatches(1234, listOf("LP3"), listOf(entry), true))
+    }
+
+    @Test
+    fun `truncated ILE display is allowed after exact LP line links are verified`() {
+        val summary = (1..40).joinToString(", ") { "LP000$it" }.take(250)
+        val entry = JSONObject().put("entryNo", 1234).put("lpNo", "").put("lpNos", summary)
+        assertTrue(ledgerLpEntryReferenceMatches(1234, listOf("LP00040"), listOf(entry), true))
+        assertFalse(ledgerLpEntryReferenceMatches(1234, listOf("LP00040"), emptyList(), true))
+    }
+
+    @Test
+    fun `single LP requires a persisted link to the selected item ledger entry`() {
+        val linked = JSONObject().put("lpNo", "LP1").put("sourceItemLedgerEntryNo", 1234).put("quantity", 100)
+        assertTrue(ledgerLpSourceLinksMatch(1234, listOf("LP1"), listOf(linked), true))
+        assertFalse(ledgerLpSourceLinksMatch(5678, listOf("LP1"), listOf(linked), true))
+        assertFalse(ledgerLpSourceLinksMatch(1234, listOf("LP1"), listOf(linked), false))
+        assertFalse(ledgerLpSourceLinksMatch(1234, listOf("LP1"), emptyList(), true))
+        linked.remove("sourceItemLedgerEntryNo")
+        assertFalse(ledgerLpSourceLinksMatch(1234, listOf("LP1"), listOf(linked), true))
+    }
+
+    @Test
+    fun `all bulk LPs and all split bin lines must reference the selected source`() {
+        fun line(no: String, source: Int = 1234) = JSONObject()
+            .put("lpNo", no).put("sourceItemLedgerEntryNo", source).put("quantity", 50)
+        val lpNos = listOf("LP1", "LP2")
+        assertTrue(ledgerLpSourceLinksMatch(1234, lpNos, listOf(line("LP1"), line("LP1"), line("LP2")), true))
+        assertFalse(ledgerLpSourceLinksMatch(1234, lpNos, listOf(line("LP1")), true))
+        assertFalse(ledgerLpSourceLinksMatch(1234, lpNos, listOf(line("LP1"), line("LP2", 99)), true))
+        assertFalse(ledgerLpSourceLinksMatch(1234, lpNos, listOf(line("LP1"), line("LP2"), line("LP3")), true))
+    }
+
+    @Test
+    fun `source verification lookup escapes LP numbers and only filters one field`() {
+        val path = ledgerLpSourceLookupPath(listOf("LP1", "LP'2"))
+        assertTrue(path.contains("lpNo eq 'LP1' or lpNo eq 'LP''2'"))
+        assertTrue(path.contains("sourceItemLedgerEntryNo"))
+    }
+
+    @Test
+    fun `unprinted single and bulk LPs are selected for later label printing`() {
+        assertEquals(setOf("LP1", "LP2"), ledgerLpPrintSelection(completedBuild(printRequested = false)))
+        assertEquals(setOf("LP1"), ledgerLpPrintSelection(completedBuild(printRequested = false, single = true)))
+        assertEquals(setOf("LP1", "LP2"), ledgerLpPrintSelection(completedBuild(printRequested = false, replayed = true)))
+    }
+
+    @Test
+    fun `successful labels and uncertain replay labels are not automatically reprinted`() {
+        assertTrue(ledgerLpPrintSelection(completedBuild()).isEmpty())
+        assertEquals(setOf("LP2"), ledgerLpPrintSelection(completedBuild(failed = listOf("LP2"))))
+        assertTrue(ledgerLpPrintSelection(completedBuild(replayed = true)).isEmpty())
+    }
+
+    @Test
+    fun `single LP print failure remains visible with its source entry`() {
+        val status = ledgerLpCompletionStatus(completedBuild(failed = listOf("LP1"), single = true))
+        assertTrue(status.startsWith("UYARI:"))
+        assertTrue(status.contains("#1234"))
+        assertTrue(status.contains("1 etiket gönderilemedi"))
+        assertTrue(status.contains("Seçilenleri Yazdır"))
+    }
+
+    @Test
+    fun `completion distinguishes unprinted labels queued labels and replay`() {
+        assertTrue(ledgerLpCompletionStatus(completedBuild(printRequested = false)).contains("henüz yazdırılmadı"))
+        assertTrue(ledgerLpCompletionStatus(completedBuild()).contains("kuyruğa alındı"))
+        assertTrue(ledgerLpCompletionStatus(completedBuild(replayed = true)).contains("yalnız eksikleri seçin"))
+    }
+
     @Test
     fun `one ledger row can be allocated to ten LP records`() {
         assertTrue(validLedgerBulkLpPlan(10, 100.0, 1000.0, ""))
@@ -112,13 +207,26 @@ class BulkLpBuildWorkflowTest {
     @Test
     fun `numeric lookup searches entry and numeric item separately for BC OData`() {
         assertEquals(
-            listOf("entryNo eq 1000", "itemNo eq '1000'"),
+            listOf("entryNo eq 1000", "itemNo eq '1000'", "lotNo eq '1000'"),
             itemLedgerLookupFilters(" 1000 "),
         )
         assertTrue(itemLedgerLookupFilters("8338").none { it.contains(" or ") })
-        assertEquals(listOf("itemNo eq 'AB.00005'"), itemLedgerLookupFilters("AB.00005"))
+        assertEquals(listOf("itemNo eq 'AB.00005'", "lotNo eq 'AB.00005'"), itemLedgerLookupFilters("AB.00005"))
         assertEquals("itemNo eq 'AB.00005'", itemLedgerLookupFilter("AB.00005"))
         assertEquals("itemNo eq 'O''RING'", itemLedgerLookupFilter("O'RING"))
+    }
+
+    @Test
+    fun `lot lookup trims and escapes input without mixing OData fields`() {
+        assertEquals(
+            listOf("itemNo eq 'LOT''79'", "lotNo eq 'LOT''79'"),
+            itemLedgerLookupFilters(" LOT'79 "),
+        )
+        assertEquals(
+            listOf("entryNo eq 79", "itemNo eq '00079'", "lotNo eq '00079'"),
+            itemLedgerLookupFilters("00079"),
+        )
+        assertTrue(itemLedgerLookupFilters("LOT79").none { it.contains(" or ") })
     }
 
     @Test

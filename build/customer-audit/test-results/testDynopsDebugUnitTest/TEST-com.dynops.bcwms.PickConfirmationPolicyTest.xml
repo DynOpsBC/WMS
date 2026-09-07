@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.dynops.bcwms.PickConfirmationPolicyTest" tests="8" skipped="0" failures="0" errors="0" timestamp="2026-09-06T00:29:44.793Z" hostname="192.168.1.8" time="0.104">
+  <properties/>
+  <testcase name="only active LP statuses can be used as a picking container" classname="com.dynops.bcwms.PickConfirmationPolicyTest" time="0.101"/>
+  <testcase name="conflicts throttles and server errors are retried" classname="com.dynops.bcwms.PickConfirmationPolicyTest" time="0.0"/>
+  <testcase name="multi pick still requires every line" classname="com.dynops.bcwms.PickConfirmationPolicyTest" time="0.0"/>
+  <testcase name="normal pick can register a partial collected quantity" classname="com.dynops.bcwms.PickConfirmationPolicyTest" time="0.0"/>
+  <testcase name="validation and missing records are not retried" classname="com.dynops.bcwms.PickConfirmationPolicyTest" time="0.0"/>
+  <testcase name="deadlock response is retried even when status is generic" classname="com.dynops.bcwms.PickConfirmationPolicyTest" time="0.001"/>
+  <testcase name="assigned pick mutations fail closed until local identity is verified" classname="com.dynops.bcwms.PickConfirmationPolicyTest" time="0.002"/>
+  <testcase name="pick register waits for every line write" classname="com.dynops.bcwms.PickConfirmationPolicyTest" time="0.0"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

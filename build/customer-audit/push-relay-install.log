@@ -1,0 +1,27 @@
+Progress: resolved 1, reused 0, downloaded 0, added 0
+Progress: resolved 24, reused 2, downloaded 14, added 0
+Progress: resolved 88, reused 7, downloaded 43, added 0
+Progress: resolved 132, reused 11, downloaded 80, added 0
+Progress: resolved 179, reused 12, downloaded 125, added 0
+Progress: resolved 231, reused 21, downloaded 173, added 0
+ WARN  2 deprecated subdependencies found: node-domexception@1.0.0, uuid@9.0.1
+Packages: +213
+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+Progress: resolved 238, reused 21, downloaded 186, added 109
+Progress: resolved 238, reused 21, downloaded 190, added 211
+Progress: resolved 238, reused 21, downloaded 192, added 213, done
+
+dependencies:
++ @azure/data-tables 13.3.2
++ @azure/functions 4.16.2
++ @azure/identity 4.13.2
++ @azure/web-pubsub 1.2.0
++ axios 1.20.0
++ firebase-admin 13.10.0 (14.3.0 is available)
+
+devDependencies:
++ @types/node 22.20.1 (26.4.1 is available)
++ tsx 4.23.13
++ typescript 5.6.3 (7.0.2 is available)
+
+Done in 8s

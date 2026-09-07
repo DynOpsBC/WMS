@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.dynops.bcwms.feature.AssemblyWorkflowTest" tests="6" skipped="0" failures="0" errors="0" timestamp="2026-09-06T00:29:45.435Z" hostname="192.168.1.8" time="0.004">
+  <properties/>
+  <testcase name="already completed component does not require staging" classname="com.dynops.bcwms.feature.AssemblyWorkflowTest" time="0.001"/>
+  <testcase name="quantity above remaining is not business valid" classname="com.dynops.bcwms.feature.AssemblyWorkflowTest" time="0.0"/>
+  <testcase name="partial page header failure and busy state all fail closed" classname="com.dynops.bcwms.feature.AssemblyWorkflowTest" time="0.002"/>
+  <testcase name="explicit zero is valid for one line when document has a positive staged quantity" classname="com.dynops.bcwms.feature.AssemblyWorkflowTest" time="0.0"/>
+  <testcase name="all zero assembly is blocked even when every line was touched" classname="com.dynops.bcwms.feature.AssemblyWorkflowTest" time="0.0"/>
+  <testcase name="all remaining component lines must be explicitly staged" classname="com.dynops.bcwms.feature.AssemblyWorkflowTest" time="0.0"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

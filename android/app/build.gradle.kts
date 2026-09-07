@@ -7,8 +7,8 @@ val releaseVersionCodeOverride = providers.gradleProperty("releaseVersionCode").
 val releaseVersionNameOverride = providers.gradleProperty("releaseVersionName").orNull?.takeIf { it.isNotBlank() }
 // BADE ve EMU aynı kaynak koddan aynı anda yayınlanır. Müşteri flavor'larında
 // ayrı sürüm değeri tutmak bir paketin geride kalmasına neden oluyordu.
-val customerVersionCode = releaseVersionCodeOverride ?: 200098
-val customerVersionName = releaseVersionNameOverride ?: "1.14.98"
+val customerVersionCode = releaseVersionCodeOverride ?: 200103
+val customerVersionName = releaseVersionNameOverride ?: "1.14.103"
 
 plugins {
   alias(libs.plugins.android.application)
@@ -35,8 +35,8 @@ android {
     // Saha APK'larından bazılarında CI tarafından 100000+ versionCode
     // kullanıldı. Görünen sürüm adı eski olsa bile Android yalnız sayısal kodu
     // karşılaştırdığı için semantik sürümleri 200000 bandında monoton tutuyoruz.
-    versionCode = releaseVersionCodeOverride ?: 200098
-    versionName = releaseVersionNameOverride ?: "1.14.98"
+    versionCode = releaseVersionCodeOverride ?: 200103
+    versionName = releaseVersionNameOverride ?: "1.14.103"
     manifestPlaceholders["appLabel"] = "BCWMS"
     // Ücretsiz dağıtım kanalı: public GitHub Release içindeki sabit latest.json.
     // APK aynı release'de tutulur; uygulamaya GitHub hesabı/token gömülmez.
@@ -147,12 +147,8 @@ android {
   }
 
   lint {
-    // CI'da lint'i bloklamayacak hale getir; rapor html olarak hala üretilir.
-    // Lokalde "./gradlew lintDebug" zaten çalıştırılabilir, hatalar görünür.
-    abortOnError = false
-    checkReleaseBuilds = false
-    // Manifest'te MSAL gibi opsiyonel auth class'ı kalırsa MissingClass bloklamasın.
-    disable += setOf("MissingClass")
+    abortOnError = true
+    checkReleaseBuilds = true
   }
 }
 
@@ -179,6 +175,7 @@ dependencies {
   implementation("androidx.lifecycle:lifecycle-runtime-compose:2.8.7")
   implementation("androidx.core:core:1.13.1")
   testImplementation(libs.junit)
+  testImplementation("com.squareup.okhttp3:mockwebserver:4.12.0")
   // Android's org.json classes are stubs in local JVM tests. Use the reference
   // implementation so pagination payload parsing is exercised for real.
   testImplementation("org.json:json:20240303")

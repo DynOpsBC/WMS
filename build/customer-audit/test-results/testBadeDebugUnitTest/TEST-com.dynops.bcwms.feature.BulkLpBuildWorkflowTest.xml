@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.dynops.bcwms.feature.BulkLpBuildWorkflowTest" tests="29" skipped="0" failures="0" errors="0" timestamp="2026-09-06T00:23:45.092Z" hostname="192.168.1.8" time="0.061">
+  <properties/>
+  <testcase name="all bulk LPs and all split bin lines must reference the selected source" classname="com.dynops.bcwms.feature.BulkLpBuildWorkflowTest" time="0.009"/>
+  <testcase name="single LP print failure remains visible with its source entry" classname="com.dynops.bcwms.feature.BulkLpBuildWorkflowTest" time="0.014"/>
+  <testcase name="source verification lookup escapes LP numbers and only filters one field" classname="com.dynops.bcwms.feature.BulkLpBuildWorkflowTest" time="0.001"/>
+  <testcase name="contradictory replay and print flags are rejected" classname="com.dynops.bcwms.feature.BulkLpBuildWorkflowTest" time="0.001"/>
+  <testcase name="allocatable quantity uses server allocation and falls back for an older BC package" classname="com.dynops.bcwms.feature.BulkLpBuildWorkflowTest" time="0.0"/>
+  <testcase name="source entry must show the LP reference before success is reported" classname="com.dynops.bcwms.feature.BulkLpBuildWorkflowTest" time="0.0"/>
+  <testcase name="ledger bulk response must contain every unique created LP number" classname="com.dynops.bcwms.feature.BulkLpBuildWorkflowTest" time="0.0"/>
+  <testcase name="serial tracked ledger row cannot be split" classname="com.dynops.bcwms.feature.BulkLpBuildWorkflowTest" time="0.0"/>
+  <testcase name="lot lookup trims and escapes input without mixing OData fields" classname="com.dynops.bcwms.feature.BulkLpBuildWorkflowTest" time="0.0"/>
+  <testcase name="completion distinguishes unprinted labels queued labels and replay" classname="com.dynops.bcwms.feature.BulkLpBuildWorkflowTest" time="0.001"/>
+  <testcase name="blank bin requests automatic distribution across stock bins" classname="com.dynops.bcwms.feature.BulkLpBuildWorkflowTest" time="0.001"/>
+  <testcase name="bulk LP creation does not require a bin" classname="com.dynops.bcwms.feature.BulkLpBuildWorkflowTest" time="0.002"/>
+  <testcase name="ledger lookup requests LP allocation fields with a legacy fallback path" classname="com.dynops.bcwms.feature.BulkLpBuildWorkflowTest" time="0.0"/>
+  <testcase name="bulk LP count is capped at the same one hundred limit as BC" classname="com.dynops.bcwms.feature.BulkLpBuildWorkflowTest" time="0.001"/>
+  <testcase name="pending idempotent request survives serialization with the same UUID and body" classname="com.dynops.bcwms.feature.BulkLpBuildWorkflowTest" time="0.0"/>
+  <testcase name="unprinted single and bulk LPs are selected for later label printing" classname="com.dynops.bcwms.feature.BulkLpBuildWorkflowTest" time="0.001"/>
+  <testcase name="numeric lookup searches entry and numeric item separately for BC OData" classname="com.dynops.bcwms.feature.BulkLpBuildWorkflowTest" time="0.0"/>
+  <testcase name="ledger bulk creation only uses the idempotent action" classname="com.dynops.bcwms.feature.BulkLpBuildWorkflowTest" time="0.0"/>
+  <testcase name="ledger bulk payload requests one separate label per LP" classname="com.dynops.bcwms.feature.BulkLpBuildWorkflowTest" time="0.0"/>
+  <testcase name="location choices are normalized deduplicated and sorted" classname="com.dynops.bcwms.feature.BulkLpBuildWorkflowTest" time="0.002"/>
+  <testcase name="single LP requires a persisted link to the selected item ledger entry" classname="com.dynops.bcwms.feature.BulkLpBuildWorkflowTest" time="0.0"/>
+  <testcase name="one ledger row can be allocated to ten LP records" classname="com.dynops.bcwms.feature.BulkLpBuildWorkflowTest" time="0.0"/>
+  <testcase name="only failed print LP numbers from the created set are accepted for retry" classname="com.dynops.bcwms.feature.BulkLpBuildWorkflowTest" time="0.012"/>
+  <testcase name="successful labels and uncertain replay labels are not automatically reprinted" classname="com.dynops.bcwms.feature.BulkLpBuildWorkflowTest" time="0.0"/>
+  <testcase name="tracked stock error tells operator to scan the actual bin" classname="com.dynops.bcwms.feature.BulkLpBuildWorkflowTest" time="0.001"/>
+  <testcase name="common quantity is assigned to every LP and rows stay independent" classname="com.dynops.bcwms.feature.BulkLpBuildWorkflowTest" time="0.0"/>
+  <testcase name="truncated ILE display is allowed after exact LP line links are verified" classname="com.dynops.bcwms.feature.BulkLpBuildWorkflowTest" time="0.004"/>
+  <testcase name="ledger bulk replay state distinguishes deliberately skipped printing" classname="com.dynops.bcwms.feature.BulkLpBuildWorkflowTest" time="0.0"/>
+  <testcase name="allocation errors give a simple corrective action" classname="com.dynops.bcwms.feature.BulkLpBuildWorkflowTest" time="0.001"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

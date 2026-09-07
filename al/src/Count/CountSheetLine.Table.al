@@ -41,6 +41,7 @@ table 72017 "DOPSWHS Count Sheet Line"
         key(ItemBin; "Item No.", "Variant Code", "Bin Code") { }
         key(LicensePlate; "LP No.", "LP Line No.") { }
         key(Recount; "Recount Required") { }
+        key(BinReview; "Sheet No.", "Item No.", "Variant Code", "Lot No.", "Serial No.", "Unit of Measure Code", "Bin Code") { }
     }
 
     trigger OnInsert()

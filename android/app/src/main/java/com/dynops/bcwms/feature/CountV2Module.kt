@@ -17,6 +17,8 @@ import com.dynops.bcwms.BcApi
 import com.dynops.bcwms.scanner.BarcodeIntentResolver
 import com.dynops.bcwms.scanner.BarcodeKind
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import com.dynops.bcwms.scanner.ScanField
 import com.dynops.bcwms.ui.DocHeaderCard
 import com.dynops.bcwms.ui.DocSearchBar
@@ -31,12 +33,6 @@ import kotlinx.coroutines.launch
 import org.json.JSONObject
 import java.util.UUID
 
-private data class PendingCountV2Scan(
-    val scanId: String,
-    val binCode: String,
-    val label: CountV2Label,
-)
-
 private data class CompletedCountV2Scan(
     val scanId: String,
     val binCode: String,
@@ -44,7 +40,27 @@ private data class CompletedCountV2Scan(
 )
 
 /** LP okutması: LP içeriği sunucuda satırlara açıldı; geri alma LP bazında yapılır. */
-private data class CompletedCountV2Lp(val lpNo: String, val binCode: String)
+private data class CompletedCountV2Lp(val lpNo: String, val binCode: String, val counterSlot: Int)
+
+private object PendingCountV2Store {
+    private fun prefs(context: android.content.Context) = context.getSharedPreferences("bcwms_pending_count_v2", android.content.Context.MODE_PRIVATE)
+    private fun key(context: android.content.Context, sheetNo: String): String =
+        org.json.JSONArray(listOf(BcApi.getTenant(context), BcApi.getEnvironment(context), BcApi.getCompanyId(context), sheetNo)).toString()
+
+    fun load(context: android.content.Context, sheetNo: String): Result<PendingCountV2Scan?> = runCatching {
+        prefs(context).getString(key(context, sheetNo), null)?.let(PendingCountV2Scan::fromStoredJson)
+    }
+
+    fun save(context: android.content.Context, sheetNo: String, pending: PendingCountV2Scan): Boolean = runCatching {
+        val existing = load(context, sheetNo).getOrThrow()
+        if (existing != null && existing != pending) return@runCatching false
+        prefs(context).edit().putString(key(context, sheetNo), pending.storedJson()).commit()
+    }.getOrDefault(false)
+
+    fun clear(context: android.content.Context, sheetNo: String): Boolean = runCatching {
+        prefs(context).edit().remove(key(context, sheetNo)).commit()
+    }.getOrDefault(false)
+}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -326,6 +342,7 @@ private fun CountV2Document(no: String, onBack: () -> Unit) {
     var previousRaw by remember(no) { mutableStateOf("") }
     var previousAt by remember(no) { mutableLongStateOf(0L) }
     var pendingRetry by remember(no) { mutableStateOf<PendingCountV2Scan?>(null) }
+    var pendingRestoreFailed by remember(no) { mutableStateOf(false) }
     var lastCompleted by remember(no) { mutableStateOf<CompletedCountV2Scan?>(null) }
     // Ürün/lot okutması raf stokundaki her lot için ayrı okutma üretir; geri alma hepsini kapsar.
     var lastBatch by remember(no) { mutableStateOf<List<CompletedCountV2Scan>>(emptyList()) }
@@ -339,6 +356,8 @@ private fun CountV2Document(no: String, onBack: () -> Unit) {
     // Aynı raf + aynı miktarlı etiket (ham içerik) bu oturumda bir kez sayılır.
     var scannedQtyLabels by remember(no) { mutableStateOf(setOf<String>()) }
     var showPostConfirm by remember(no) { mutableStateOf(false) }
+    var showFinishBin by remember(no) { mutableStateOf(false) }
+    var unexpectedLabel by remember(no) { mutableStateOf<CountV2Label?>(null) }
 
     fun assignments(h: JSONObject?): List<CountSlotAssignment> = listOf(
         CountSlotAssignment(1, h?.optString("counter1UserId").orEmpty()),
@@ -434,14 +453,30 @@ private fun CountV2Document(no: String, onBack: () -> Unit) {
             }
             loadDocument()
         }
-        status = if (prepared) "TAMAM: V2 hazır — önce rafı, sonra LP / ürün / lot barkodunu okutun" else status
+        val restored = PendingCountV2Store.load(context, no)
+        pendingRestoreFailed = restored.isFailure
+        pendingRetry = restored.getOrNull()
+        pendingRetry?.let { pending ->
+            activeBin = pending.binCode
+            if (pending.counterSlot in operatorSlots(header)) slot = pending.counterSlot
+        }
+        status = when {
+            pendingRestoreFailed -> "HATA: Cihazdaki bekleyen sayım işlemi okunamadı · yeni işlem başlatmadan destek isteyin"
+            pendingRetry != null -> "UYARI: Önceki okutmanın sonucu bekleniyor · aynı işlem kimliğiyle tekrar kontrol edin"
+            prepared -> "TAMAM: V2 hazır — önce rafı, sonra LP / ürün / lot barkodunu okutun"
+            else -> status
+        }
         busy = false
     }
 
     fun selectBin(raw: String) {
         val value = BarcodeIntentResolver.resolve(raw).value.trim().ifBlank { raw.trim() }
         binScan = ""
-        if (value.isBlank() || !prepared || busy) return
+        if (value.isBlank() || !prepared || busy || pendingRetry != null || pendingRestoreFailed) return
+        if (header?.optBoolean("binReviewSupported", false) != true) {
+            status = "Raf tamamlama için Business Central sayım güncellemesi gerekli."
+            return
+        }
         scope.launch {
             busy = true
             status = "$value rafı doğrulanıyor..."
@@ -455,10 +490,17 @@ private fun CountV2Document(no: String, onBack: () -> Unit) {
             }.joinToString(" and ")
             val result = BcApi.get(context, "bins?\$filter=$filters&\$select=code,locationCode,zoneCode&\$top=1")
             val row = if (result.ok) BcApi.parseValueArray(result.body).firstOrNull() else null
-            busy = false
             if (row == null) {
                 status = "HATA: $value rafı bu sayımın lokasyon/alan filtresinde bulunamadı"
             } else {
+                val bin = row.optString("code").ifBlank { value }
+                val prepare = BcApi.boundAction(context, "countSheets", no, "prepareV2Bin", JSONObject().put("binCode", bin).toString())
+                if (!prepare.ok) {
+                    status = "HATA: ${BcApi.errorMessage(prepare.body)}"
+                    busy = false
+                    return@launch
+                }
+                if (!loadDocument()) { busy = false; return@launch }
                 activeBin = row.optString("code").ifBlank { value }
                 labelScan = ""
                 previousRaw = ""
@@ -469,25 +511,30 @@ private fun CountV2Document(no: String, onBack: () -> Unit) {
                 lastCompletedLp = null
                 status = "TAMAM: 📍 $activeBin — şimdi LP / ürün / lot barkodunu okutun"
             }
+            busy = false
         }
     }
 
     suspend fun postScan(pending: PendingCountV2Scan, reloadAfter: Boolean = true): Boolean {
+        if (pending.counterSlot !in operatorSlots(header)) {
+            status = "HATA: Bekleyen işlem ${pending.counterSlot} sayıcısına ait · bu sayıcıyla giriş yapın"
+            return false
+        }
+        if (!PendingCountV2Store.save(context, no, pending)) {
+            status = "HATA: Okutma cihazda güvenle saklanamadı · işlem gönderilmedi"
+            pendingRestoreFailed = true
+            return false
+        }
         pendingRetry = null
         status = "${pending.label.itemNo} · ${formatCountV2Qty(pending.label.quantity)} kaydediliyor..."
-        val body = JSONObject().apply {
-            put("scanId", pending.scanId)
-            put("itemNo", pending.label.itemNo)
-            put("variantCode", pending.label.variantCode)
-            put("binCode", pending.binCode)
-            put("unitOfMeasureCode", pending.label.unitOfMeasureCode)
-            put("lotNo", pending.label.lotNo)
-            put("serialNo", pending.label.serialNo)
-            put("qty", pending.label.quantity)
-            put("counterSlot", slot)
-        }.toString()
+        val body = pending.payload()
         val result = BcApi.boundAction(context, "countSheets", no, "scanV2Label", body)
         if (result.ok) {
+            if (!PendingCountV2Store.clear(context, no)) {
+                pendingRetry = pending
+                status = "UYARI: Sayım kaydedildi · cihazdaki bekleyen işlem temizlenemedi · aynı işlemi tekrar kontrol edin"
+                return false
+            }
             lastCompleted = CompletedCountV2Scan(pending.scanId, pending.binCode, pending.label)
             lastBatch = emptyList()
             lastCompletedLp = null
@@ -503,6 +550,8 @@ private fun CountV2Document(no: String, onBack: () -> Unit) {
             pendingRetry = pending
             status = "UYARI: Sunucu cevabı alınamadı; kayıt ulaşmış olabilir. Aynı işlem kimliğiyle güvenli tekrar deneyin — QR'ı yeniden okutmayın."
         } else {
+            pendingRestoreFailed = !PendingCountV2Store.clear(context, no)
+            scannedQtyLabels = scannedQtyLabels - "${pending.binCode}|${pending.label.raw.trim()}"
             status = "HATA: ${BcApi.errorMessage(result.body)} (HTTP ${result.httpCode})" +
                 if (result.httpCode == 404 || result.httpCode == 405) " — güncel BCWMS AL paketini yayınlayın" else ""
         }
@@ -510,6 +559,7 @@ private fun CountV2Document(no: String, onBack: () -> Unit) {
     }
 
     fun sendScan(pending: PendingCountV2Scan) {
+        if (busy || pendingRestoreFailed) return
         scope.launch {
             busy = true
             postScan(pending)
@@ -538,7 +588,7 @@ private fun CountV2Document(no: String, onBack: () -> Unit) {
                     val n = BcApi.scalarValue(result.body).toIntOrNull() ?: 0
                     lastCompleted = null
                     lastBatch = emptyList()
-                    lastCompletedLp = CompletedCountV2Lp(lpNo, activeBin)
+                    lastCompletedLp = CompletedCountV2Lp(lpNo, activeBin, slot)
                     labelScan = ""
                     reload("TAMAM: LP $lpNo → $n satır $activeBin rafında sayıldı")
                 }
@@ -602,9 +652,7 @@ private fun CountV2Document(no: String, onBack: () -> Unit) {
                     }
                 }
             }
-            // Rafta yoksa lotun/ürünün LOKASYONDAKİ BC miktarı alınır: "QR'da
-            // tanımlı miktar neyse o" — operatör asla miktar girmez, pencere açılmaz.
-            // Satır bu rafta açılır; BC başka rafta biliyorsa fark kayıtta çıkar.
+            // Another bin can resolve the label identity, never the physical quantity.
             var fromOtherBin = false
             // Yalnız LOT okutmasında (tek lot, fiziksel etiket elde) lokasyon
             // genelinden yedek okuma yapılır. Düz ürün okutmasında lokasyon
@@ -619,7 +667,7 @@ private fun CountV2Document(no: String, onBack: () -> Unit) {
                 if (!locPage.complete) complete = false
                 rows = if (locPage.complete) locPage.rows
                     .filter { it.optDouble("quantityBase", 0.0) > 0.0 }
-                    .groupBy { Triple(it.optString("itemNo"), it.optString("lotNo"), it.optString("unitOfMeasureCode")) }
+                    .groupBy { row -> listOf("itemNo", "variantCode", "lotNo", "serialNo", "unitOfMeasureCode").map { row.optString(it) } }
                     .map { (_, group) ->
                         JSONObject(group.first().toString()).apply {
                             put("quantity", group.sumOf { it.optDouble("quantity", 0.0) })
@@ -630,12 +678,35 @@ private fun CountV2Document(no: String, onBack: () -> Unit) {
                 fromOtherBin = rows.isNotEmpty()
             }
             if (rows.isEmpty()) {
+                if (complete && candidate.itemNo.isNotBlank()) {
+                    val item = BcApi.get(context, "items?\$filter=no eq '${safe(candidate.itemNo)}'&\$top=1")
+                    val itemRow = if (item.ok) BcApi.parseValueArray(item.body).firstOrNull() else null
+                    if (itemRow != null) {
+                        unexpectedLabel = CountV2Label(candidate.itemNo, "", itemRow.optString("baseUnitOfMeasure"),
+                            candidate.lotNo, candidate.serialNo, 1.0, candidate.raw)
+                        busy = false
+                        status = "Bu rafta fiziksel olarak bulduğunuz miktarı girin"
+                        return@launch
+                    }
+                }
                 busy = false
                 status = when {
                     !complete -> "HATA: Stok okunamadı. Yenileyip tekrar okutun."
                     candidate.lotNo.isNotBlank() -> "HATA: ${candidate.lotNo} lotu $loc lokasyonunda BC stokunda yok. LP okutun veya BC'de kontrol edin."
                     else -> "UYARI: ${candidate.itemNo} $activeBin rafında BC stokunda yok. Bu rafta sayılması için LOT veya LP etiketini okutun (lokasyon toplamı rafa yazılmaz)."
                 }
+                return@launch
+            }
+            if (fromOtherBin) {
+                busy = false
+                if (rows.size != 1) {
+                    status = "Etiket birden fazla stok kaydıyla eşleşiyor · ürün ve lot içeren etiketi okutun"
+                    return@launch
+                }
+                val row = rows.single()
+                unexpectedLabel = CountV2Label(row.optString("itemNo"), row.optString("variantCode"),
+                    row.optString("unitOfMeasureCode"), row.optString("lotNo"), row.optString("serialNo"), 1.0, candidate.raw)
+                status = "Ürün başka rafta kayıtlı · burada bulduğunuz miktarı girin"
                 return@launch
             }
             val batch = mutableListOf<CompletedCountV2Scan>()
@@ -645,25 +716,39 @@ private fun CountV2Document(no: String, onBack: () -> Unit) {
                 val itemNo = row.optString("itemNo").ifBlank { candidate.itemNo }
                 val lotNo = row.optString("lotNo")
                 val uom = row.optString("unitOfMeasureCode")
-                val qty = row.optDouble("quantity", 0.0).takeIf { it > 0.0 } ?: row.optDouble("quantityBase", 0.0)
+                val variantCode = row.optString("variantCode")
+                val serialNo = row.optString("serialNo")
+                val expected = lines.filter { it.optString("binCode") == activeBin &&
+                    it.optString("itemNo") == itemNo && it.optString("lotNo") == lotNo &&
+                    it.optString("variantCode") == variantCode && it.optString("serialNo") == serialNo && it.optString("unitOfMeasureCode") == uom }
+                if (expected.any { it.optString("lpNo").isNotBlank() } && expected.none { it.optString("lpNo").isBlank() }) {
+                    busy = false
+                    status = "Bu stok LP içinde kayıtlı · LP etiketini okutun"
+                    if (batch.isNotEmpty()) { lastBatch = batch.toList(); reload() }
+                    return@launch
+                }
+                val qty = expected.filter { it.optString("lpNo").isBlank() }.sumOf { it.optDouble("systemQty", 0.0) }
+                    .takeIf { it > 0.0 } ?: (row.optDouble("quantity", 0.0).takeIf { it > 0.0 } ?: row.optDouble("quantityBase", 0.0))
                 // Aynı raf/ürün/lot bu sayıcı için zaten sayıldıysa ikinci okutma
                 // miktarı toplamasın; düzeltme satıra dokunarak yapılır.
                 val already = lines.any { l ->
                     l.optString("binCode") == activeBin && l.optString("itemNo") == itemNo &&
-                        l.optString("lotNo") == lotNo && l.optString("unitOfMeasureCode") == uom &&
+                    l.optString("lotNo") == lotNo && l.optString("unitOfMeasureCode") == uom &&
+                        l.optString("variantCode") == variantCode && l.optString("serialNo") == serialNo &&
                         l.optString("lpNo").isBlank() &&
                         isCountRecorded(l.has("counted$slot"), l.optBoolean("counted$slot"), l.optDouble("countedQty$slot", 0.0))
                 }
                 if (already) { skipped++; continue }
                 val pending = PendingCountV2Scan(
                     scanId = UUID.randomUUID().toString(),
+                    counterSlot = slot,
                     binCode = activeBin,
                     label = CountV2Label(
                         itemNo = itemNo,
-                        variantCode = row.optString("variantCode"),
+                        variantCode = variantCode,
                         unitOfMeasureCode = uom,
                         lotNo = lotNo,
-                        serialNo = "",
+                        serialNo = serialNo,
                         quantity = qty,
                         raw = candidate.raw,
                     ),
@@ -696,7 +781,8 @@ private fun CountV2Document(no: String, onBack: () -> Unit) {
     }
 
     fun recordLineCount(line: JSONObject, qty: Double) {
-        if (qty < 0.0) { status = "HATA: Sayım miktarı negatif olamaz."; return }
+        if (busy || pendingRetry != null || pendingRestoreFailed) return
+        if (!qty.isFinite() || qty < 0.0) { status = "HATA: Geçerli bir sayım miktarı girin."; return }
         scope.launch {
             busy = true
             status = "${line.optString("itemNo")} → ${formatCountV2Qty(qty)} kaydediliyor..."
@@ -717,7 +803,7 @@ private fun CountV2Document(no: String, onBack: () -> Unit) {
             status = "HATA: Önce raf barkodunu okutun."
             return
         }
-        if (!prepared || busy || pendingRetry != null) return
+        if (!prepared || busy || pendingRetry != null || pendingRestoreFailed) return
         val now = System.currentTimeMillis()
         if (isRapidCountV2Duplicate(previousRaw, previousAt, raw, now)) {
             status = "ℹ️ Aynı tarayıcı olayı ikinci kez geldi; mükerrer miktar eklenmedi."
@@ -750,6 +836,7 @@ private fun CountV2Document(no: String, onBack: () -> Unit) {
                 sendScan(
                     PendingCountV2Scan(
                         scanId = UUID.randomUUID().toString(),
+                        counterSlot = slot,
                         binCode = activeBin,
                         label = validation.label,
                     )
@@ -764,7 +851,7 @@ private fun CountV2Document(no: String, onBack: () -> Unit) {
                 busy = true
                 status = "${lp.lpNo} LP okutması geri alınıyor..."
                 val body = JSONObject().apply {
-                    put("lpNo", lp.lpNo); put("binCode", lp.binCode); put("counterSlot", slot)
+                    put("lpNo", lp.lpNo); put("binCode", lp.binCode); put("counterSlot", lp.counterSlot)
                 }.toString()
                 val r = BcApi.boundAction(context, "countSheets", no, "undoV2Lp", body)
                 busy = false
@@ -835,6 +922,22 @@ private fun CountV2Document(no: String, onBack: () -> Unit) {
         }
     }
 
+    fun finishBin() {
+        scope.launch {
+            busy = true
+            val bin = activeBin
+            val result = BcApi.boundAction(context, "countSheets", no, "completeV2Bin",
+                JSONObject().put("binCode", bin).put("counterSlot", slot).toString())
+            showFinishBin = false
+            if (result.ok) {
+                activeBin = ""
+                lastCompleted = null; lastBatch = emptyList(); lastCompletedLp = null
+                if (loadDocument()) status = "TAMAM: $bin tamamlandı · sayılmayanlar $slot sayımında 0 · bekleyen rafları da sayın"
+            } else status = "HATA: ${BcApi.errorMessage(result.body)}"
+            busy = false
+        }
+    }
+
     val h = header
     val allowedSlots = operatorSlots(h)
     val requiredSlots = configuredSlots(h)
@@ -856,12 +959,15 @@ private fun CountV2Document(no: String, onBack: () -> Unit) {
     })
     val currentSlotSaved = h?.optBoolean("counter${slot}Completed", false) == true
     val allRequiredSaved = requiredSlots.all { h?.optBoolean("counter${it}Completed", false) == true }
+    val binReviewSupported = h?.optBoolean("binReviewSupported", false) == true
+    val varianceGroups = countV2VarianceGroups(lines, slot, allRequiredSaved)
+    val varianceReview = countV2VarianceReviewText(varianceGroups)
     // Başlık yüklenmeden düğme hiç çizilmez (null başlık = izinli sayılmaz); yüklenen
     // eski AL paketi başlığında bayrak yoksa "izinli" kuralı korunur.
     val postAllowed = countV2PostButtonVisible(headerLoaded = h != null, terminalPostAllowed = terminalPostAllowed(h))
-    val canSave = prepared && linesComplete && lines.isNotEmpty() && !busy && slot in allowedSlots &&
+    val canSave = !pendingRestoreFailed && pendingRetry == null && binReviewSupported && prepared && linesComplete && lines.isNotEmpty() && !busy && slot in allowedSlots &&
         currentSlotLinesComplete && !currentSlotSaved && countDocumentIsMutable(h?.optString("status").orEmpty())
-    val canPost = postAllowed && prepared && linesComplete && lines.isNotEmpty() && !busy &&
+    val canPost = !pendingRestoreFailed && pendingRetry == null && binReviewSupported && postAllowed && prepared && linesComplete && lines.isNotEmpty() && !busy &&
         allRequiredComplete && allRequiredSaved &&
         lines.none { it.optBoolean("recountRequired") } &&
         countDocumentIsMutable(h?.optString("status").orEmpty())
@@ -887,6 +993,7 @@ private fun CountV2Document(no: String, onBack: () -> Unit) {
                     )
                     Spacer(Modifier.height(8.dp))
                     StatusText(status)
+                    if (prepared && !binReviewSupported) Text("Raf tamamlama için Business Central sayım güncellemesi gerekli.")
                     Spacer(Modifier.height(8.dp))
 
                     if (h != null && allowedSlots.isEmpty()) {
@@ -898,8 +1005,12 @@ private fun CountV2Document(no: String, onBack: () -> Unit) {
                             allowedSlots.forEach { candidate ->
                                 FilterChip(
                                     selected = slot == candidate,
-                                    onClick = { slot = candidate },
-                                    enabled = !busy,
+                                    onClick = {
+                                        slot = candidate
+                                        lastCompleted = null; lastBatch = emptyList(); lastCompletedLp = null
+                                        scannedQtyLabels = emptySet(); previousRaw = ""; previousAt = 0L
+                                    },
+                                    enabled = !busy && pendingRetry == null && !pendingRestoreFailed,
                                     label = { Text("$candidate${if (h?.optBoolean("counter${candidate}Completed", false) == true) " ✓" else ""}") },
                                 )
                                 Spacer(Modifier.width(4.dp))
@@ -927,7 +1038,7 @@ private fun CountV2Document(no: String, onBack: () -> Unit) {
                             value = binScan,
                             onValueChange = { binScan = it },
                             onScanned = { selectBin(it) },
-                            enabled = !busy && pendingRetry == null && !currentSlotSaved,
+                            enabled = !busy && pendingRetry == null && !pendingRestoreFailed && !currentSlotSaved,
                             modifier = Modifier.fillMaxWidth(),
                             focusRequester = binFocus,
                         )
@@ -943,7 +1054,7 @@ private fun CountV2Document(no: String, onBack: () -> Unit) {
                                         activeBin = ""; lastCompleted = null; lastBatch = emptyList(); lastCompletedLp = null; pendingRetry = null
                                         status = "Raf seçin: raf barkodunu okutun."
                                     },
-                                    enabled = !busy,
+                                    enabled = !busy && pendingRetry == null && !pendingRestoreFailed,
                                 ) { Text("Rafı değiştir") }
                             }
                             ScanField(
@@ -951,10 +1062,15 @@ private fun CountV2Document(no: String, onBack: () -> Unit) {
                                 value = labelScan,
                                 onValueChange = { labelScan = it },
                                 onScanned = { scanLabel(it) },
-                                enabled = !busy && pendingRetry == null && slot in allowedSlots && !currentSlotSaved,
+                                enabled = !busy && pendingRetry == null && !pendingRestoreFailed && slot in allowedSlots && !currentSlotSaved,
                                 modifier = Modifier.fillMaxWidth(),
                                 focusRequester = labelFocus,
                             )
+                            OutlinedButton(
+                                onClick = { showFinishBin = true },
+                                enabled = binReviewSupported && !busy && pendingRetry == null && !pendingRestoreFailed && slot in allowedSlots && !currentSlotSaved,
+                                modifier = Modifier.fillMaxWidth(),
+                            ) { Text("Rafı bitir · sayılmayanları 0 yaz") }
                         }
                     }
 
@@ -970,12 +1086,17 @@ private fun CountV2Document(no: String, onBack: () -> Unit) {
                         Spacer(Modifier.height(6.dp))
                         OutlinedButton(
                             onClick = { undoLastScan() },
-                            enabled = !busy && pendingRetry == null,
+                            enabled = !busy && pendingRetry == null && !pendingRestoreFailed && !currentSlotSaved,
                             modifier = Modifier.fillMaxWidth(),
                         ) { Text("↩ Son okutmayı geri al") }
                     }
 
                     Spacer(Modifier.height(10.dp))
+                    if (binReviewSupported && lines.isNotEmpty()) {
+                        Text("Raf farkları · $slot sayımı", fontWeight = FontWeight.Bold)
+                        Text(varianceReview, fontSize = 12.sp)
+                        Text("Diğer raftan otomatik düşülmez · stok farkları onaydan sonra işlenir", fontSize = 11.sp)
+                    }
                     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                         Text(
                             if (prepared) "Otomatik oluşan satırlar (${lines.size})" else "Belgedeki klasik satırlar (${lines.size})",
@@ -993,7 +1114,7 @@ private fun CountV2Document(no: String, onBack: () -> Unit) {
                     quantity = line.optDouble("countedQty$slot", 0.0),
                 )
                 Card(
-                    Modifier.fillMaxWidth().clickable(enabled = prepared && !busy && !currentSlotSaved) { adjustLine = line },
+                    Modifier.fillMaxWidth().clickable(enabled = prepared && !busy && !currentSlotSaved && pendingRetry == null && !pendingRestoreFailed) { adjustLine = line },
                     shape = RoundedCornerShape(10.dp),
                 ) {
                     Column(Modifier.padding(12.dp)) {
@@ -1063,8 +1184,8 @@ private fun CountV2Document(no: String, onBack: () -> Unit) {
             title = "Miktarı düzelt — ${line.optString("binCode")}",
             itemNo = line.optString("itemNo") +
                 line.optString("lotNo").takeIf { it.isNotBlank() }?.let { " · Lot $it" }.orEmpty(),
-            initialQty = line.optDouble("countedQty$slot", 0.0).takeIf { it > 0.0 }
-                ?: line.optDouble("systemQty", 0.0).coerceAtLeast(0.0),
+            initialQty = if (line.optBoolean("counted$slot")) line.optDouble("countedQty$slot", 0.0)
+                else line.optDouble("systemQty", 0.0).coerceAtLeast(0.0),
             initialUom = line.optString("unitOfMeasureCode"),
             showLotSerial = false,
             // Boş palet / eksik ürün: fiziksel 0 geçerli bir sayımdır.
@@ -1081,12 +1202,39 @@ private fun CountV2Document(no: String, onBack: () -> Unit) {
         AlertDialog(
             onDismissRequest = { if (!busy) showPostConfirm = false },
             title = { Text("Sayım stoklara işlensin mi?") },
-            text = { Text("${lines.size} sayım satırının farkları pozitif/negatif stok hareketi olarak kaydedilecek ve belge kapanacak.") },
+            text = { Column(Modifier.verticalScroll(rememberScrollState())) {
+                Text(varianceReview)
+                Text("Bu farklar stoklara işlenecek ve belge kapanacak.")
+            } },
             confirmButton = {
                 TextButton(onClick = { postSheet() }, enabled = canPost) { Text("Onayla ve İşle") }
             },
             dismissButton = {
                 TextButton(onClick = { showPostConfirm = false }, enabled = !busy) { Text("Vazgeç") }
+            },
+        )
+    }
+    if (showFinishBin) AlertDialog(
+        onDismissRequest = { if (!busy) showFinishBin = false },
+        title = { Text("$activeBin sayımı tamamlandı mı?") },
+        text = { Text("Bu rafta saymadığınız kayıtlı ürünler yalnız sizin $slot sayımınıza 0 yazılacak · diğer rafların miktarı değişmeyecek") },
+        confirmButton = { TextButton(onClick = { finishBin() }, enabled = !busy) { Text("Rafı bitir") } },
+        dismissButton = { TextButton(onClick = { showFinishBin = false }, enabled = !busy) { Text("Devam et") } },
+    )
+    unexpectedLabel?.let { label ->
+        QuantityDialogSheet(
+            title = "Bu rafta bulduğunuz miktar — $activeBin",
+            itemNo = label.itemNo,
+            initialQty = 1.0,
+            initialUom = label.unitOfMeasureCode,
+            initialLot = label.lotNo,
+            initialSerial = label.serialNo,
+            showLotSerial = true,
+            onDismiss = { unexpectedLabel = null },
+            onConfirm = { result ->
+                unexpectedLabel = null
+                sendScan(PendingCountV2Scan(UUID.randomUUID().toString(), activeBin,
+                    label.copy(quantity = result.quantity, unitOfMeasureCode = result.uom, lotNo = result.lotNo, serialNo = result.serialNo), slot))
             },
         )
     }

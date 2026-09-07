@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.dynops.bcwms.CountCapabilitiesTest" tests="2" skipped="0" failures="0" errors="0" timestamp="2026-09-06T00:29:44.789Z" hostname="192.168.1.8" time="0.002">
+  <properties/>
+  <testcase name="legacy metadata blocks protected count operations" classname="com.dynops.bcwms.CountCapabilitiesTest" time="0.001"/>
+  <testcase name="current metadata enables all protected count operations" classname="com.dynops.bcwms.CountCapabilitiesTest" time="0.001"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

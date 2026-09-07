@@ -1,5 +1,7 @@
 package com.dynops.bcwms.feature
 
+import com.dynops.bcwms.ui.toFiniteDoubleOrNull
+
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -536,7 +538,7 @@ private fun SubcontractReceiptDetail(line: JSONObject, onBack: () -> Unit) {
     var busy by remember { mutableStateOf(false) }
     var status by remember { mutableStateOf("") }
     val idempotencyKey = remember(subcontractReceiptKey(line)) { UUID.randomUUID().toString() }
-    val enteredQty = quantity.replace(',', '.').toDoubleOrNull() ?: 0.0
+    val enteredQty = quantity.replace(',', '.').toFiniteDoubleOrNull() ?: 0.0
     val fullReceipt = canFinishSubcontractOperation(enteredQty, maxQty)
     val valid = enteredQty > 0.0 && enteredQty <= maxQty && vendorShipmentNo.trim().isNotBlank()
 
@@ -611,7 +613,7 @@ private fun SubcontractReceiptDetail(line: JSONObject, onBack: () -> Unit) {
                 value = quantity,
                 onValueChange = {
                     quantity = normalizeQtyInput(it)
-                    val parsed = normalizeQtyInput(it).toDoubleOrNull() ?: 0.0
+                    val parsed = normalizeQtyInput(it).toFiniteDoubleOrNull() ?: 0.0
                     if (!canFinishSubcontractOperation(parsed, maxQty)) finishOperation = false
                 },
                 label = { Text("Kabul miktarı (en çok ${fmtSub(maxQty)})") }, singleLine = true,
@@ -740,7 +742,7 @@ private fun SubcontractOperationDetail(operation: JSONObject, onBack: () -> Unit
                 val payloadLines = JSONArray()
                 for (line in lines) {
                     val key = componentKey(line)
-                    val requestedQty = quantities[key]?.replace(',', '.')?.toDoubleOrNull() ?: 0.0
+                    val requestedQty = quantities[key]?.replace(',', '.')?.toFiniteDoubleOrNull() ?: 0.0
                     val enteredLps = lpNos[key].orEmpty().split(Regex("[,;\\s]+"))
                         .map(String::trim).filter(String::isNotBlank).distinct()
                     fun addAllocation(qty: Double, lpNo: String, lotNo: String, serialNo: String, fromBin: String) {
@@ -929,7 +931,7 @@ private fun SubcontractOperationDetail(operation: JSONObject, onBack: () -> Unit
         }
         Spacer(Modifier.height(10.dp))
         val invalidQuantity = chosen.any { line ->
-            val qty = quantities[componentKey(line)]?.replace(',', '.')?.toDoubleOrNull() ?: 0.0
+            val qty = quantities[componentKey(line)]?.replace(',', '.')?.toFiniteDoubleOrNull() ?: 0.0
             qty <= 0.0 || qty > line.optDouble("remainingDispatchQuantity")
         }
         Button(

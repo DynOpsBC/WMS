@@ -3,6 +3,158 @@ codeunit 72142 "DOPSWHS Count V2 Tests"
     Subtype = Test;
 
     [Test]
+    procedure UndoKeepsTheBinPendingAndRejectsReplayOfReversedScan()
+    var
+        Line: Record "DOPSWHS Count Sheet Line";
+        CountMgmt: Codeunit "DOPSWHS Count Mgmt";
+        Counters: array[3] of Code[50];
+        SheetNo: Code[20];
+        ScanId: Guid;
+        LineNo: Integer;
+    begin
+        EnsureItemLocationAndBin('CV2-UNDO', 'CV2PCS', 'CV2UNDO', 'A1');
+        SheetNo := CountMgmt.CreateSheet('CV2UNDO', Enum::"DOPSWHS Count Mode"::Visible, Counters);
+        ScanId := CreateGuid();
+        LineNo := CountMgmt.ScanV2Label(SheetNo, ScanId, 'CV2-UNDO', '', 'A1', 'CV2PCS', '', '', 5, 1);
+        CountMgmt.UndoV2Scan(SheetNo, ScanId);
+        Assert.IsTrue(Line.Get(SheetNo, LineNo), 'Undo must retain the bin in count scope.');
+        Assert.IsFalse(Line."Counted 1", 'Undo is an unfinished count, not an explicit zero.');
+        asserterror CountMgmt.CompleteCounter(SheetNo, 1);
+        asserterror CountMgmt.ScanV2Label(SheetNo, ScanId, 'CV2-UNDO', '', 'A1', 'CV2PCS', '', '', 5, 1);
+        CountMgmt.CompleteV2Bin(SheetNo, 'A1', 1);
+        CountMgmt.CompleteCounter(SheetNo, 1);
+    end;
+
+    [Test]
+    procedure ScanIdentityCannotBeReusedForAnotherCounterOrQuantity()
+    var
+        Line: Record "DOPSWHS Count Sheet Line";
+        CountMgmt: Codeunit "DOPSWHS Count Mgmt";
+        Counters: array[3] of Code[50];
+        SheetNo: Code[20];
+        ScanId: Guid;
+        LineNo: Integer;
+    begin
+        EnsureItemLocationAndBin('CV2-RETRY', 'CV2PCS', 'CV2RETRY', 'A1');
+        SheetNo := CountMgmt.CreateSheet('CV2RETRY', Enum::"DOPSWHS Count Mode"::Visible, Counters);
+        ScanId := CreateGuid();
+        LineNo := CountMgmt.ScanV2Label(SheetNo, ScanId, 'CV2-RETRY', '', 'A1', 'CV2PCS', '', '', 5, 1);
+        asserterror CountMgmt.ScanV2Label(SheetNo, ScanId, 'CV2-RETRY', '', 'A1', 'CV2PCS', '', '', 5, 2);
+        asserterror CountMgmt.ScanV2Label(SheetNo, ScanId, 'CV2-RETRY', '', 'A1', 'CV2PCS', '', '', 6, 1);
+        CountMgmt.ScanV2Label(SheetNo, ScanId, 'CV2-RETRY', '', 'A1', 'CV2PCS', '', '', 5, 1);
+        Line.Get(SheetNo, LineNo);
+        Assert.AreEqual(5, Line."Counted Qty 1", 'An identical retry must not add quantity twice.');
+        Assert.IsFalse(Line."Counted 2", 'A changed counter must not consume the original operation identity.');
+    end;
+
+    [Test]
+    procedure RecountInvalidatesOldEventsWithoutSkippingNewCounts()
+    var
+        Line: Record "DOPSWHS Count Sheet Line";
+        CountMgmt: Codeunit "DOPSWHS Count Mgmt";
+        Counters: array[3] of Code[50];
+        SheetNo: Code[20];
+        OldScanId: Guid;
+        LineNo: Integer;
+    begin
+        EnsureItemLocationAndBin('CV2-AGAIN', 'CV2PCS', 'CV2AGAIN', 'A1');
+        SheetNo := CountMgmt.CreateSheet('CV2AGAIN', Enum::"DOPSWHS Count Mode"::Visible, Counters);
+        OldScanId := CreateGuid();
+        LineNo := CountMgmt.ScanV2Label(SheetNo, OldScanId, 'CV2-AGAIN', '', 'A1', 'CV2PCS', '', '', 5, 1);
+        CountMgmt.StartRecount(SheetNo);
+        asserterror CountMgmt.ScanV2Label(SheetNo, OldScanId, 'CV2-AGAIN', '', 'A1', 'CV2PCS', '', '', 5, 1);
+        CountMgmt.ScanV2Label(SheetNo, CreateGuid(), 'CV2-AGAIN', '', 'A1', 'CV2PCS', '', '', 3, 1);
+        Line.Get(SheetNo, LineNo);
+        Assert.AreEqual(3, Line."Counted Qty 1", 'Only the new recount event contributes to this round.');
+    end;
+
+    [Test]
+    procedure FinishBinZerosOnlyUncountedLinesForCurrentCounter()
+    var
+        Line: Record "DOPSWHS Count Sheet Line";
+        CountMgmt: Codeunit "DOPSWHS Count Mgmt";
+        Counters: array[3] of Code[50];
+        SheetNo: Code[20];
+    begin
+        EnsureItemLocationAndBin('CV2-ZERO', 'CV2PCS', 'CV2ZERO', 'A1');
+        InsertBuiltLp('CV2-ZERO-LP', 'CV2-ZERO', 'CV2PCS', 'CV2ZERO', 'A1', 5);
+        SheetNo := CountMgmt.CreateSheet('CV2ZERO', Enum::"DOPSWHS Count Mode"::Visible, Counters);
+        CountMgmt.PrepareV2Bin(SheetNo, 'A1');
+        CountMgmt.CompleteV2Bin(SheetNo, 'A1', 1);
+        CountMgmt.CompleteV2Bin(SheetNo, 'A1', 1);
+        Line.SetRange("Sheet No.", SheetNo);
+        Assert.AreEqual(1, Line.Count(), 'Finishing twice must not duplicate expected stock.');
+        Line.FindFirst();
+        Assert.IsTrue(Line."Counted 1", 'Explicitly finishing the bin confirms missing stock as zero.');
+        Assert.AreEqual(0, Line."Counted Qty 1", 'Missing item must be zero for this counter.');
+        Assert.IsFalse(Line."Counted 2", 'Another counter must remain uncounted.');
+        Assert.IsFalse(Line."Counted 3", 'Another counter must remain uncounted.');
+        Assert.AreEqual(5, Line."System Qty", 'System snapshot must not be changed.');
+    end;
+
+    [Test]
+    procedure FinishBinPreservesAlreadyRecordedQuantity()
+    var
+        Line: Record "DOPSWHS Count Sheet Line";
+        CountMgmt: Codeunit "DOPSWHS Count Mgmt";
+        Counters: array[3] of Code[50];
+        SheetNo: Code[20];
+    begin
+        EnsureItemLocationAndBin('CV2-KEEP', 'CV2PCS', 'CV2KEEP', 'A1');
+        InsertBuiltLp('CV2-KEEP-LP', 'CV2-KEEP', 'CV2PCS', 'CV2KEEP', 'A1', 5);
+        SheetNo := CountMgmt.CreateSheet('CV2KEEP', Enum::"DOPSWHS Count Mode"::Visible, Counters);
+        CountMgmt.PrepareV2Bin(SheetNo, 'A1');
+        Line.SetRange("Sheet No.", SheetNo);
+        Line.FindFirst();
+        CountMgmt.RecordCount(SheetNo, Line."Line No.", 1, 3);
+        CountMgmt.CompleteV2Bin(SheetNo, 'A1', 1);
+        Line.FindFirst();
+        Assert.AreEqual(3, Line."Counted Qty 1", 'Finishing must preserve a physical count already entered.');
+    end;
+
+    [Test]
+    procedure UnexpectedItemSeedsSourceWithoutCountingOrMovingIt()
+    var
+        Line: Record "DOPSWHS Count Sheet Line";
+        Entry: Record "Warehouse Entry";
+        BinContent: Record "Bin Content";
+        CountMgmt: Codeunit "DOPSWHS Count Mgmt";
+        Counters: array[3] of Code[50];
+        SheetNo: Code[20];
+        EntryNo: Integer;
+    begin
+        EnsureItemLocationAndBin('CV2-MOVE', 'CV2PCS', 'CV2MOVE', 'A1');
+        EnsureItemLocationAndBin('CV2-MOVE', 'CV2PCS', 'CV2MOVE', 'A2');
+        EntryNo := InsertWarehouseBalance('CV2-MOVE', 'CV2PCS', 'CV2MOVE', 'A2', 5);
+        BinContent.Init();
+        BinContent."Location Code" := 'CV2MOVE';
+        BinContent."Bin Code" := 'A2';
+        BinContent."Item No." := 'CV2-MOVE';
+        BinContent."Unit of Measure Code" := 'CV2PCS';
+        BinContent."Qty. per Unit of Measure" := 1;
+        BinContent.Insert(true);
+        SheetNo := CountMgmt.CreateSheet('CV2MOVE', Enum::"DOPSWHS Count Mode"::Visible, Counters);
+        CountMgmt.ScanV2Label(SheetNo, CreateGuid(), 'CV2-MOVE', '', 'A1', 'CV2PCS', '', '', 5, 1);
+        CountMgmt.CompleteV2Bin(SheetNo, 'A1', 1);
+        Line.SetRange("Sheet No.", SheetNo);
+        Line.SetRange("Bin Code", 'A2');
+        Assert.IsTrue(Line.FindFirst(), 'Source bin must be visible as a pending count.');
+        Assert.IsFalse(Line."Counted 1", 'Finding stock elsewhere must not automatically zero the source.');
+        asserterror CountMgmt.CompleteCounter(SheetNo, 1);
+        Entry.Get(EntryNo);
+        Assert.AreEqual(5, Entry.Quantity, 'Scanning/finishing must not deduct source stock.');
+        CountMgmt.CompleteV2Bin(SheetNo, 'A2', 1);
+        CountMgmt.CompleteCounter(SheetNo, 1);
+        CountMgmt.EvaluateVariance(SheetNo);
+        Line.Reset();
+        Line.SetRange("Sheet No.", SheetNo);
+        Line.CalcSums(Variance);
+        Assert.AreEqual(0, Line.Variance, 'Equal opposite bin differences must balance only after both bins were counted.');
+        Entry.Get(EntryNo);
+        Assert.AreEqual(5, Entry.Quantity, 'Review must not post any stock adjustment.');
+    end;
+
+    [Test]
     procedure PrepareV2MarksEmptySheetAndIsIdempotent()
     var
         CountHeader: Record "DOPSWHS Count Sheet Header";
@@ -163,7 +315,8 @@ codeunit 72142 "DOPSWHS Count V2 Tests"
         CountLine.FindFirst();
         CountLine."System Qty" := 1000;
         CountLine.Modify(true);
-        CountMgmt.CompleteCounter(SheetNo, 1);
+        asserterror CountMgmt.CompleteCounter(SheetNo, 1);
+        Assert.ExpectedError('güvenli olmayan sistem miktarı');
 
         asserterror CountMgmt.PostSheet(SheetNo);
         Assert.ExpectedError('güvenli olmayan sistem miktarı');

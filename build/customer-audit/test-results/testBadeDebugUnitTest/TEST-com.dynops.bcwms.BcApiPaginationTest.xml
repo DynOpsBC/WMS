@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.dynops.bcwms.BcApiPaginationTest" tests="12" skipped="0" failures="0" errors="0" timestamp="2026-09-06T00:23:44.030Z" hostname="192.168.1.8" time="0.393">
+  <properties/>
+  <testcase name="cyclic malformed and truncated pages fail closed" classname="com.dynops.bcwms.BcApiPaginationTest" time="0.368"/>
+  <testcase name="partial data after a failed page never enables posting" classname="com.dynops.bcwms.BcApiPaginationTest" time="0.003"/>
+  <testcase name="connection probe accepts legacy LP endpoint when local user endpoint is absent" classname="com.dynops.bcwms.BcApiPaginationTest" time="0.0"/>
+  <testcase name="connection failure explains missing BC package" classname="com.dynops.bcwms.BcApiPaginationTest" time="0.001"/>
+  <testcase name="connection probe accepts local user endpoint without depending on LP data" classname="com.dynops.bcwms.BcApiPaginationTest" time="0.0"/>
+  <testcase name="mutation validation errors are definite but transport failures are ambiguous" classname="com.dynops.bcwms.BcApiPaginationTest" time="0.001"/>
+  <testcase name="last page and malformed response have no next link" classname="com.dynops.bcwms.BcApiPaginationTest" time="0.001"/>
+  <testcase name="odata next link is returned exactly for the following page" classname="com.dynops.bcwms.BcApiPaginationTest" time="0.009"/>
+  <testcase name="every page is required before a document can be declared complete" classname="com.dynops.bcwms.BcApiPaginationTest" time="0.005"/>
+  <testcase name="connection does not retry authentication and permission failures" classname="com.dynops.bcwms.BcApiPaginationTest" time="0.0"/>
+  <testcase name="connection retries temporary route and server failures" classname="com.dynops.bcwms.BcApiPaginationTest" time="0.0"/>
+  <testcase name="page limit cannot mark a partially read document complete" classname="com.dynops.bcwms.BcApiPaginationTest" time="0.001"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

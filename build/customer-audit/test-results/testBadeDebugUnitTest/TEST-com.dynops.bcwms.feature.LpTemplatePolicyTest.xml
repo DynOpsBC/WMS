@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.dynops.bcwms.feature.LpTemplatePolicyTest" tests="5" skipped="0" failures="0" errors="0" timestamp="2026-09-06T00:23:45.302Z" hostname="192.168.1.8" time="0.012">
+  <properties/>
+  <testcase name="single template is safe default" classname="com.dynops.bcwms.feature.LpTemplatePolicyTest" time="0.003"/>
+  <testcase name="purpose selects explicit company template without hardcoded code" classname="com.dynops.bcwms.feature.LpTemplatePolicyTest" time="0.008"/>
+  <testcase name="standard small carton wins when multiple carton templates exist" classname="com.dynops.bcwms.feature.LpTemplatePolicyTest" time="0.001"/>
+  <testcase name="ambiguous templates fail closed" classname="com.dynops.bcwms.feature.LpTemplatePolicyTest" time="0.0"/>
+  <testcase name="standard receiving pallet wins when multiple pallet templates exist" classname="com.dynops.bcwms.feature.LpTemplatePolicyTest" time="0.0"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

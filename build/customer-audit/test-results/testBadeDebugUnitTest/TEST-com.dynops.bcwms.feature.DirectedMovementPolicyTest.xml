@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.dynops.bcwms.feature.DirectedMovementPolicyTest" tests="8" skipped="0" failures="0" errors="0" timestamp="2026-09-06T00:23:45.256Z" hostname="192.168.1.8" time="0.004">
+  <properties/>
+  <testcase name="item scan selects only the take row" classname="com.dynops.bcwms.feature.DirectedMovementPolicyTest" time="0.0"/>
+  <testcase name="lot tracked movement cannot register before lot is selected" classname="com.dynops.bcwms.feature.DirectedMovementPolicyTest" time="0.001"/>
+  <testcase name="source bin must match before LP can be confirmed" classname="com.dynops.bcwms.feature.DirectedMovementPolicyTest" time="0.0"/>
+  <testcase name="LP content must match movement item variant and existing lot" classname="com.dynops.bcwms.feature.DirectedMovementPolicyTest" time="0.001"/>
+  <testcase name="confirmation sends selected lot to server" classname="com.dynops.bcwms.feature.DirectedMovementPolicyTest" time="0.0"/>
+  <testcase name="warehouse stock registration error names the actionable bin and item" classname="com.dynops.bcwms.feature.DirectedMovementPolicyTest" time="0.001"/>
+  <testcase name="LP confirmation sends exact physical source evidence" classname="com.dynops.bcwms.feature.DirectedMovementPolicyTest" time="0.0"/>
+  <testcase name="item scan keeps multiple take rows separate for manual lot selection" classname="com.dynops.bcwms.feature.DirectedMovementPolicyTest" time="0.0"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

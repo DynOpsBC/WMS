@@ -128,6 +128,7 @@ permissionset 72096 "DOPSWHS-VIEW"
         page "DOPSWHS Count Sheet Line Part" = X,
         page "DOPSWHS Count Counter Part" = X,
         page "DOPSWHS Count Variance Review" = X,
+        page "DOPSWHS Count Bin Review" = X,
         page "DOPSWHS Count API" = X,
         page "DOPSWHS Count Sheet Line API" = X,
         page "DOPSWHS Supplier Lot API" = X,

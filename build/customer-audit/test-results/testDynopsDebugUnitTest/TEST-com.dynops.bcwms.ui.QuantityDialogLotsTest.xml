@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.dynops.bcwms.ui.QuantityDialogLotsTest" tests="1" skipped="0" failures="0" errors="0" timestamp="2026-09-06T00:29:46.584Z" hostname="192.168.1.8" time="0.002">
+  <properties/>
+  <testcase name="available lots query does not send unsupported order by" classname="com.dynops.bcwms.ui.QuantityDialogLotsTest" time="0.002"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

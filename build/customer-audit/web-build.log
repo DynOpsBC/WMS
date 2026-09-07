@@ -1,0 +1,22 @@
+vite v5.4.21 building for production...
+transforming...
+✓ 191 modules transformed.
+rendering chunks...
+computing gzip size...
+../build/customer-audit/web-controladdin/src/lpBrowser/index.html                 0.54 kB │ gzip:  0.30 kB
+../build/customer-audit/web-controladdin/src/opsConsole/index.html                0.55 kB │ gzip:  0.31 kB
+../build/customer-audit/web-controladdin/src/pickBoard/index.html                 0.62 kB │ gzip:  0.33 kB
+../build/customer-audit/web-controladdin/index.html                               0.88 kB │ gzip:  0.45 kB
+../build/customer-audit/web-controladdin/lpBrowser.css                            3.80 kB │ gzip:  1.38 kB
+../build/customer-audit/web-controladdin/opsConsole.css                           5.08 kB │ gzip:  1.61 kB
+../build/customer-audit/web-controladdin/pickBoard2.css                           6.54 kB │ gzip:  1.95 kB
+../build/customer-audit/web-controladdin/pickBoard.css                           15.21 kB │ gzip:  3.58 kB
+../build/customer-audit/web-controladdin/assets/pwa-register-stub-CMf0MpMK.js     0.11 kB │ gzip:  0.13 kB │ map:   0.62 kB
+../build/customer-audit/web-controladdin/assets/ControlAddInBridge-BLg6S7yu.js    1.78 kB │ gzip:  0.72 kB │ map:   5.63 kB
+../build/customer-audit/web-controladdin/pickBoard.js                             7.03 kB │ gzip:  2.58 kB │ map:  20.53 kB
+../build/customer-audit/web-controladdin/lpBrowser.js                             7.32 kB │ gzip:  3.05 kB │ map:  25.88 kB
+../build/customer-audit/web-controladdin/opsConsole.js                            9.66 kB │ gzip:  3.29 kB │ map:  28.85 kB
+../build/customer-audit/web-controladdin/assets/index-DEO9Ik9Z.js                48.68 kB │ gzip: 13.11 kB │ map: 235.60 kB
+../build/customer-audit/web-controladdin/assets/main.js                         102.53 kB │ gzip: 24.46 kB │ map: 291.01 kB
+../build/customer-audit/web-controladdin/assets/client-B7Kdl_ue.js              193.46 kB │ gzip: 60.47 kB │ map: 911.90 kB
+✓ built in 860ms

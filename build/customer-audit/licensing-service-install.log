@@ -1,0 +1,21 @@
+Progress: resolved 1, reused 0, downloaded 0, added 0
+Progress: resolved 7, reused 5, downloaded 0, added 0
+Progress: resolved 90, reused 59, downloaded 4, added 0
+Packages: +70
+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+Progress: resolved 95, reused 64, downloaded 6, added 69
+Progress: resolved 95, reused 64, downloaded 6, added 70, done
+
+dependencies:
++ @azure/data-tables 13.3.2
++ @azure/functions 4.16.2
++ @azure/identity 4.13.2
++ @azure/keyvault-keys 4.10.2
++ @azure/keyvault-secrets 4.11.2
+
+devDependencies:
++ @types/node 22.20.1 (26.4.1 is available)
++ tsx 4.23.13
++ typescript 5.9.3 (7.0.2 is available)
+
+Done in 3.7s

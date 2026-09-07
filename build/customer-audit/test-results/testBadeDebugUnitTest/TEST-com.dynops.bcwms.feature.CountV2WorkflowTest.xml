@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.dynops.bcwms.feature.CountV2WorkflowTest" tests="19" skipped="0" failures="0" errors="0" timestamp="2026-09-06T00:23:45.159Z" hostname="192.168.1.8" time="0.033">
+  <properties/>
+  <testcase name="stock still present in source stays a real surplus" classname="com.dynops.bcwms.feature.CountV2WorkflowTest" time="0.006"/>
+  <testcase name="final review uses server winning variance instead of one counters quantity" classname="com.dynops.bcwms.feature.CountV2WorkflowTest" time="0.0"/>
+  <testcase name="uncounted source bin is pending instead of a zero shortage" classname="com.dynops.bcwms.feature.CountV2WorkflowTest" time="0.005"/>
+  <testcase name="classic sheet message explains both safe choices without a technical reference" classname="com.dynops.bcwms.feature.CountV2WorkflowTest" time="0.001"/>
+  <testcase name="V2 rejects item barcode without explicit quantity" classname="com.dynops.bcwms.feature.CountV2WorkflowTest" time="0.001"/>
+  <testcase name="item without quantity becomes a manual entry candidate, labels with quantity do not" classname="com.dynops.bcwms.feature.CountV2WorkflowTest" time="0.011"/>
+  <testcase name="V2 header flag hides the post button when BC setup disables terminal posting" classname="com.dynops.bcwms.feature.CountV2WorkflowTest" time="0.001"/>
+  <testcase name="V2 post button waits for the header and then follows the terminal posting flag" classname="com.dynops.bcwms.feature.CountV2WorkflowTest" time="0.0"/>
+  <testcase name="different variants and serials cannot offset each other" classname="com.dynops.bcwms.feature.CountV2WorkflowTest" time="0.001"/>
+  <testcase name="explicit zero source and matching destination suggest bin difference" classname="com.dynops.bcwms.feature.CountV2WorkflowTest" time="0.0"/>
+  <testcase name="item lot quantity QR becomes an automatic count" classname="com.dynops.bcwms.feature.CountV2WorkflowTest" time="0.001"/>
+  <testcase name="corrupt pending operation cannot silently become a fresh count" classname="com.dynops.bcwms.feature.CountV2WorkflowTest" time="0.002"/>
+  <testcase name="BC posting note is operator safe Turkish" classname="com.dynops.bcwms.feature.CountV2WorkflowTest" time="0.0"/>
+  <testcase name="missing counted flag cannot be treated as a completed zero" classname="com.dynops.bcwms.feature.CountV2WorkflowTest" time="0.0"/>
+  <testcase name="rapid duplicate is blocked but intentional later scan is allowed" classname="com.dynops.bcwms.feature.CountV2WorkflowTest" time="0.0"/>
+  <testcase name="V2 header without the flag keeps the post button for older AL packages" classname="com.dynops.bcwms.feature.CountV2WorkflowTest" time="0.0"/>
+  <testcase name="different lots and units cannot offset each other" classname="com.dynops.bcwms.feature.CountV2WorkflowTest" time="0.0"/>
+  <testcase name="disagreeing counters cannot produce a final balanced bin conclusion" classname="com.dynops.bcwms.feature.CountV2WorkflowTest" time="0.0"/>
+  <testcase name="persisted retry retains original counter bin quantity and scan identity" classname="com.dynops.bcwms.feature.CountV2WorkflowTest" time="0.0"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

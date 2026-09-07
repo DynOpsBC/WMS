@@ -47,7 +47,16 @@ fun HierarchicalLpModule() {
     fun checkSetup() {
         scope.launch {
             busy = true
-            val setup = BcApi.get(context, "movementOps('')?\$select=hierarchicalLpEnabled")
+            enabled = false
+            templatesReady = false
+            val metadata = BcApi.getCustomApiMetadata(context)
+            if (!metadata.ok || !hierarchicalLpApiAvailable(metadata.body)) {
+                status = if (metadata.ok) "Bu şirkette kutu ve palet için gereken DKC özelliği yüklü değil."
+                    else "Business Central bağlantısı doğrulanamadı · bağlantıyı kontrol edip tekrar deneyin."
+                busy = false
+                return@launch
+            }
+            val setup = BcApi.get(context, "movementOps('')")
             enabled = setup.ok && runCatching {
                 JSONObject(setup.body).optBoolean("hierarchicalLpEnabled") ||
                     BcApi.parseValueArray(setup.body).firstOrNull()?.optBoolean("hierarchicalLpEnabled") == true
@@ -88,6 +97,7 @@ fun HierarchicalLpModule() {
             items(HierarchicalLpOperation.entries) { item ->
                 FilterChip(
                     selected = operation == item,
+                    enabled = !busy,
                     onClick = { operation = item; status = item.hint },
                     label = { Text(item.label) },
                 )
