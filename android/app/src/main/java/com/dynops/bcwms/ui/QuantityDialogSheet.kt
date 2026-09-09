@@ -59,6 +59,10 @@ fun QuantityDialogSheet(
     showSerial: Boolean = showLotSerial,
     showSupplierLot: Boolean = false,
     showSourceLp: Boolean = false,
+    // Kaynak palet okutmadan onaylanamaz. Sunucudaki "LP Scan Required"
+    // ayarı açıkken toplama ekranı bunu true geçer; varsayılan false olduğu
+    // için diğer çağrı yerlerinin davranışı değişmez.
+    sourceLpRequired: Boolean = false,
     lotRequired: Boolean = false,
     lotSelectionOnly: Boolean = false,
     showAvailableLotLookup: Boolean = false,
@@ -321,7 +325,8 @@ fun QuantityDialogSheet(
             if (showSourceLp) {
                 Spacer(Modifier.height(8.dp))
                 ScanField(
-                    label = "Kaynak LP (birden fazla LP varsa zorunlu)",
+                    label = if (sourceLpRequired) "Kaynak LP (zorunlu — paletin QR kodunu okutun)"
+                    else "Kaynak LP (birden fazla LP varsa zorunlu)",
                     value = sourceLp,
                     onValueChange = { sourceLp = it },
                     modifier = Modifier.fillMaxWidth(),
@@ -432,6 +437,7 @@ fun QuantityDialogSheet(
                     },
                     enabled = validQuantityInput(qtyText, allowZeroQuantity, quantityExactlyOne) &&
                         stockLotProbeReady &&
+                        (!sourceLpRequired || sourceLp.isNotBlank()) &&
                         (!uomRequired || uom.isNotBlank()) &&
                         (!effectiveLotRequired || lot.isNotBlank()) &&
                         (!serialRequired || serial.isNotBlank()) &&

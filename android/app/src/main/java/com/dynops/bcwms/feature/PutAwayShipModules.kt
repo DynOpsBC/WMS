@@ -145,6 +145,11 @@ private fun PutAwayDocument(no: String, onBack: () -> Unit) {
     var showBulkBin by remember { mutableStateOf(false) }
     var showBatchPlacement by remember { mutableStateOf(false) }
     var showBins by remember { mutableStateOf(false) }
+    // Sunucudaki LP okutma zorunluluğu ve yeni ucun yayındaki BC paketinde
+    // bulunup bulunmadığı. İkisi de false ise ekran bu paketten önceki gibi
+    // davranır; yeni APK eski sunucuya asla tanımadığı bir action göndermez.
+    var lpScanRequired by remember { mutableStateOf(false) }
+    var lpPlacementSupported by remember { mutableStateOf(false) }
     // Hedef raf/miktar BC'ye yazildiktan sonra belge ekranindan cikilabilir.
     // Hangi satirlarin operatorce hazirlandigi yalniz RAM'de kalirsa geri
     // donuste kart yesil gorunmesine ragmen Kaydet "Once dokunun" diyordu.
@@ -157,6 +162,8 @@ private fun PutAwayDocument(no: String, onBack: () -> Unit) {
             header = null; lines = emptyList(); headerLoaded = false; linesComplete = false
             myUserId = BcApi.currentUserId(context).trim()
             adminTestSession = BcApi.isAdminTestSession(context)
+            lpPlacementSupported = BcApi.getLpScanCapabilities(context).putAwayPlacementFromLp
+            lpScanRequired = lpPlacementSupported && BcApi.lpScanRequired(context)
             val h = BcApi.get(context, "putAways('$no')")
             header = if (h.ok) runCatching { JSONObject(h.body) }.getOrNull() else null
             headerLoaded = header != null
@@ -172,7 +179,12 @@ private fun PutAwayDocument(no: String, onBack: () -> Unit) {
     }
     LaunchedEffect(no) { reload() }
 
-    suspend fun patchPutAwayLine(line: JSONObject, qty: Double, targetBin: String? = null): Boolean {
+    suspend fun patchPutAwayLine(
+        line: JSONObject,
+        qty: Double,
+        targetBin: String? = null,
+        sourceLpNo: String = "",
+    ): Boolean {
         if (!adminTestSession && !canMutateAssignedDocument(header?.optString("assignedUserId").orEmpty(), myUserId)) {
             status = documentOwnershipMessage(header?.optString("assignedUserId").orEmpty(), myUserId)
             return false
@@ -189,7 +201,12 @@ private fun PutAwayDocument(no: String, onBack: () -> Unit) {
                 put("qtyToHandle", qty)
             }
         }.toString()
-        val r = if (placeWithTarget) {
+        val r = if (placeWithTarget && sourceLpNo.isNotBlank() && lpPlacementSupported) {
+            // Okutulan palet sunucuya taşınır: madde, varyant, lot, seri ve
+            // kaynak raf orada satırla karşılaştırılır. Uymayan palette satır
+            // hiç değişmez; doğrulama cihazda değil BC'de kesinleşir.
+            BcApi.setPutAwayPlacementFromLp(context, compositeKey, targetBin!!, qty, sourceLpNo)
+        } else if (placeWithTarget) {
             // Hedef raf değişikliği BC tarafında Validate + Modify ile atomik
             // uygulanır; böylece register önerilen eski rafa geri dönemez.
             BcApi.boundAction(context, "putAwayLines", compositeKey, "setPlacement", body)
@@ -401,7 +418,7 @@ private fun PutAwayDocument(no: String, onBack: () -> Unit) {
                     val affected = putAwayPairLines(pair.place, lines)
                     var pairPrepared = true
                     for (line in affected) {
-                        if (!patchPutAwayLine(line, qty, targetBin)) {
+                        if (!patchPutAwayLine(line, qty, targetBin, lpNo)) {
                             pairPrepared = false
                             break
                         }
@@ -537,14 +554,24 @@ private fun PutAwayDocument(no: String, onBack: () -> Unit) {
                 }
             } else {
                 val hasLpMovements = lines.any { it.optString("lpNo").isNotBlank() }
+                // Zorunluluk açıkken paletsiz toplu yerleştirme sunucuda
+                // reddedilir. Operatörü hep hata verecek bir düğmeye
+                // yönlendirmek yerine, satır satır palet okutmaya bırak.
+                val bulkPlacementAllowed = hasLpMovements || !lpScanRequired
                 OutlinedButton(
                     onClick = {
                         if (hasLpMovements) showBatchPlacement = true else showBulkBin = true
                     },
-                    enabled = !busy && canMutate && lines.isNotEmpty(),
+                    enabled = !busy && canMutate && lines.isNotEmpty() && bulkPlacementAllowed,
                     modifier = Modifier.weight(1f).height(com.dynops.bcwms.ui.wmsPrimaryButtonHeight()),
                 ) {
-                    Text(if (hasLpMovements) "📍 Raf + LP Okut" else "📦 Tümünü Bir Bine")
+                    Text(
+                        when {
+                            !bulkPlacementAllowed -> "📦 Satırdan palet okutun"
+                            hasLpMovements -> "📍 Raf + LP Okut"
+                            else -> "📦 Tümünü Bir Bine"
+                        },
+                    )
                 }
                 // Hazırlanan miktar BC'ye yazılıyor; ekrandan çıkıp dönünce
                 // oturum hafızası sıfırlanıyor ve düğme pasifleşiyordu — BC'de
@@ -598,8 +625,9 @@ private fun PutAwayDocument(no: String, onBack: () -> Unit) {
         PutAwayGuidedSheet(
             pair = gp,
             locationCode = h?.optString("locationCode") ?: "",
+            lpScanRequired = lpScanRequired,
             onDismiss = { guidedPair = null },
-            onConfirm = { bin, qty ->
+            onConfirm = { bin, qty, sourceLpNo ->
                 guidedPair = null
                 if (!canMutate) { status = documentOwnershipMessage(assignedUserId, myUserId); return@PutAwayGuidedSheet }
                 scope.launch {
@@ -607,7 +635,7 @@ private fun PutAwayDocument(no: String, onBack: () -> Unit) {
                     var okCount = 0
                     val affected = putAwayPairLines(gp.place, lines)
                     for (ln in affected) {
-                        if (patchPutAwayLine(ln, qty, bin)) okCount++ else break
+                        if (patchPutAwayLine(ln, qty, bin, sourceLpNo)) okCount++ else break
                     }
                     if (okCount == affected.size) {
                         stagedLineNos = stagedLineNos + affected.map { it.optInt("lineNo") }
@@ -1006,8 +1034,9 @@ private enum class PutAwayStep { LP, SOURCE_BIN, ITEM, TARGET_BIN, QTY }
 private fun PutAwayGuidedSheet(
     pair: PutAwayPair,
     locationCode: String,
+    lpScanRequired: Boolean = false,
     onDismiss: () -> Unit,
-    onConfirm: (bin: String, qty: Double) -> Unit,
+    onConfirm: (bin: String, qty: Double, sourceLpNo: String) -> Unit,
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -1018,14 +1047,19 @@ private fun PutAwayGuidedSheet(
     val expectedItem = place.optString("itemNo").trim()
     val expectedLp = place.optString("lpNo").trim()
 
+    // BADE: paletin üzerinde ürün barkodu yok, yalnız LP numarası taşıyan
+    // Madde Tanımlama Etiketi QR'ı var. Zorunluluk açıkken ürün okutma adımı
+    // hiç gösterilmez; doğrulamayı okutulan paletin içeriği üstlenir ve son
+    // kararı sunucu verir.
     val steps = buildList {
-        if (expectedLp.isNotBlank()) add(PutAwayStep.LP)
+        if (lpScanRequired || expectedLp.isNotBlank()) add(PutAwayStep.LP)
         if (expectedSource.isNotBlank()) add(PutAwayStep.SOURCE_BIN)
-        add(PutAwayStep.ITEM)
+        if (!lpScanRequired) add(PutAwayStep.ITEM)
         add(PutAwayStep.TARGET_BIN)
         add(PutAwayStep.QTY)
     }
     var step by remember(place.optInt("lineNo")) { mutableStateOf(steps.first()) }
+    var scannedLp by remember(place.optInt("lineNo")) { mutableStateOf("") }
     var scan by remember { mutableStateOf("") }
     var error by remember { mutableStateOf("") }
     var targetBin by remember { mutableStateOf("") }
@@ -1055,9 +1089,19 @@ private fun PutAwayGuidedSheet(
         return needle.isNotBlank() && needle.equals(expectedItem, ignoreCase = true)
     }
 
+    fun scannedLpValue(raw: String): String =
+        BarcodeIntentResolver.resolve(raw).value.trim().ifBlank { raw.trim() }
+
+    /**
+     * Satıra mal kabulden bir LP damgalanmışsa cihazda erken eleme yapılır.
+     * Damga yoksa okutulan palet olduğu gibi kabul edilir ve madde/lot/raf
+     * karşılaştırmasını sunucu yapar — cihazda karşılaştıracak bir beklenen
+     * değer yokken operatörü haksız yere durdurmamak için.
+     */
     fun lpMatches(raw: String): Boolean {
-        val resolved = BarcodeIntentResolver.resolve(raw)
-        val needle = resolved.value.trim().ifBlank { raw.trim() }
+        val needle = scannedLpValue(raw)
+        if (needle.isBlank()) return false
+        if (expectedLp.isBlank()) return true
         return needle.equals(expectedLp, ignoreCase = true)
     }
 
@@ -1087,8 +1131,14 @@ private fun PutAwayGuidedSheet(
         if (v.isBlank()) return
         when (step) {
             PutAwayStep.LP ->
-                if (lpMatches(v)) advance()
-                else error = "❌ Yanlış LP. Beklenen: $expectedLp · Okuttuğunuz: $v"
+                if (lpMatches(v)) {
+                    scannedLp = scannedLpValue(v)
+                    advance()
+                } else error =
+                    if (expectedLp.isNotBlank())
+                        "❌ Yanlış LP. Beklenen: $expectedLp · Okuttuğunuz: $v"
+                    else
+                        "❌ Palet okunamadı. Etiketi tekrar okutun."
             PutAwayStep.SOURCE_BIN ->
                 if (binEquals(v, expectedSource)) advance()
                 else error = "❌ Yanlış raf. Beklenen: $expectedSource · Okuttuğunuz: $v"
@@ -1157,7 +1207,14 @@ private fun PutAwayGuidedSheet(
             when (step) {
                 PutAwayStep.LP -> {
                     Text("Palet/LP etiketini okutun", fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
-                    Text("Doğru fiziksel paleti yerleştirdiğinizi teyit eder. Beklenen: $expectedLp", fontSize = 12.sp, color = Color.Gray)
+                    Text(
+                        if (expectedLp.isNotBlank())
+                            "Doğru fiziksel paleti yerleştirdiğinizi teyit eder. Beklenen: $expectedLp"
+                        else
+                            "Paletin QR kodunu okutun. İçindeki ürün ve lot, yerleştirme satırıyla " +
+                                "karşılaştırılır; uymayan palet kabul edilmez.",
+                        fontSize = 12.sp, color = Color.Gray,
+                    )
                 }
                 PutAwayStep.SOURCE_BIN -> {
                     Text("Bulunduğunuz rafı okutun", fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
@@ -1285,7 +1342,9 @@ private fun PutAwayGuidedSheet(
                                 "Kalan miktardan fazla giremezsiniz (kalan: ${fmtNum(kalan)})."
                             else -> ""
                         }
-                        if (error.isBlank()) onConfirm(targetBin, entered ?: 0.0)
+                        if (error.isBlank() && lpScanRequired && scannedLp.isBlank())
+                            error = "Önce paletin QR kodunu okutun."
+                        if (error.isBlank()) onConfirm(targetBin, entered ?: 0.0, scannedLp)
                     },
                 ) { Text("✅ Yerleştirmeyi Onayla", fontWeight = FontWeight.Bold) }
             }

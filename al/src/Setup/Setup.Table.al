@@ -311,6 +311,19 @@ table 72000 "DOPSWHS Setup"
             DataClassification = CustomerContent;
             InitValue = false;
         }
+        field(430; "LP Scan Required"; Boolean)
+        {
+            // BADE saha kararı (9 Eyl 2026): toplama ve yerleştirmede fiziksel
+            // doğrulama LP okutmasıyla yapılır. Açıkken kaynak LP okutulmadan
+            // toplama satırı onaylanamaz ve yerleştirme LP'siz tamamlanamaz;
+            // okutulan LP'nin madde/varyant/lot/raf bilgisi satırla karşılaştırılır.
+            // Varsayılan KAPALI: yükseltme mevcut kurulumların davranışını
+            // değiştirmez ve sahada bir sorun çıkarsa bu kutu kapatılarak eski
+            // akışa tek adımda dönülür (yeni paket yayınlamaya gerek yoktur).
+            Caption = 'LP Scan Required';
+            DataClassification = CustomerContent;
+            InitValue = false;
+        }
     }
 
     keys

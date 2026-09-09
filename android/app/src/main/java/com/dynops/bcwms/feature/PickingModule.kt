@@ -764,6 +764,11 @@ private fun GuidedPickDocument(no: String, flowMode: OutboundFlowMode? = null, o
     var status by remember { mutableStateOf("") }
     var busy by remember { mutableStateOf(false) }
     var binVerified by remember { mutableStateOf(false) }
+    // Sunucudaki LP okutma zorunluluğu ve yeni uçların yayındaki BC paketinde
+    // bulunup bulunmadığı. Yeni APK eski sunucuya tanımadığı bir action
+    // göndermez; ikisi de false ise ekran bu paketten önceki gibi davranır.
+    var lpScanRequired by remember { mutableStateOf(false) }
+    var lpSourcesSupported by remember { mutableStateOf(false) }
     // ELOG: "ürüne dokunma, direkt okut" — görünür okut alanının metni.
     var scanInput by remember { mutableStateOf("") }
     // ELOG ana LP (toplama kabı): her pick için 1 sepet. Okutulmadan/oluşturulmadan
@@ -938,7 +943,7 @@ private fun GuidedPickDocument(no: String, flowMode: OutboundFlowMode? = null, o
      * işaretlenir ve ekran açık kalır (operatör beklemeden sonrakine geçer).
      * BC yazımı arka planda gider; hata olursa yerel işaret geri alınır.
      */
-    fun completeLine(line: JSONObject, lotNo: String = "") {
+    fun completeLine(line: JSONObject, lotNo: String = "", sourceLpNo: String = "") {
         if (!canSafelyMutateNow()) {
             status = if (!headerLoaded || !linesComplete)
                 "HATA: Toplama satırları eksik. Yenileyip tekrar deneyin."
@@ -959,7 +964,7 @@ private fun GuidedPickDocument(no: String, flowMode: OutboundFlowMode? = null, o
         // 2) BC'ye arka planda yaz.
         scope.launch {
             val effectiveLot = lotNo.ifBlank { line.optString("lotNo") }
-            val r = BcApi.confirmPickLine(context, no, lineNo, qty, effectiveLot)
+            val r = BcApi.confirmPickLine(context, no, lineNo, qty, effectiveLot, sourceLpNo)
             if (!r.ok) {
                 // Geri al + gerçek durumu tazele.
                 status = QcErrorParser.friendlyStatus(BcApi.errorMessage(r.body), r.httpCode)
@@ -1074,6 +1079,13 @@ private fun GuidedPickDocument(no: String, flowMode: OutboundFlowMode? = null, o
 
     LaunchedEffect(no) { busy = true; reloadNow(); busy = false }
     LaunchedEffect(Unit) { myUserId = BcApi.currentUserId(context) }
+    LaunchedEffect(Unit) {
+        val caps = BcApi.getLpScanCapabilities(context)
+        lpSourcesSupported = caps.pickLineSources
+        // Zorunluluk yalnız sunucu hem ayarı hem yeni ucu destekliyorsa
+        // uygulanır: eski BC paketine yeni akış dayatmak operatörü kilitlerdi.
+        lpScanRequired = caps.pickLineSources && BcApi.lpScanRequired(context)
+    }
 
     val takeLines = lines.filter { !it.optString("actionType").equals("Place", ignoreCase = true) }
     val outstanding = takeLines.filterNot(::isComplete)
@@ -1448,6 +1460,8 @@ private fun GuidedPickDocument(no: String, flowMode: OutboundFlowMode? = null, o
             showLotSerial = true,
             showSerial = false,
             showSourceLp = true,
+            // Zorunluluk açıkken miktar dağıtım ekranı da paletsiz kapanmaz.
+            sourceLpRequired = lpScanRequired,
             lotRequired = qg.lines.any { it.optBoolean("lotRequired", false) },
             showAvailableLotLookup = true,
             autoDetectLotFromStock = true,
@@ -1466,12 +1480,15 @@ private fun GuidedPickDocument(no: String, flowMode: OutboundFlowMode? = null, o
     if (cg != null) {
         PickConfirmSheet(
             group = cg.first,
+            pickNo = no,
+            lpScanRequired = lpScanRequired,
+            lpSourcesSupported = lpSourcesSupported,
             onDismiss = { confirmGroup = null },
-            onConfirm = {
+            onConfirm = { sourceLpNo ->
                 val g = cg.first
                 val lot = cg.second
                 confirmGroup = null
-                completeLine(g.lines.first(), lot)
+                completeLine(g.lines.first(), lot, sourceLpNo)
             },
         )
     }
@@ -1501,24 +1518,103 @@ private fun V2PickFlowBanner(flow: OutboundFlowMode) {
     }
 }
 
+/** Sunucudan gelen aday kaynak palet (bkz. picks/pickLineSources). */
+internal data class PickSource(
+    val lpNo: String,
+    val binCode: String,
+    val lotNo: String,
+    val availableBaseQty: Double,
+)
+
+internal fun parsePickLineSources(scalarJson: String): List<PickSource> = runCatching {
+    val arr = JSONObject(scalarJson).optJSONArray("sources")
+    val out = mutableListOf<PickSource>()
+    if (arr != null) {
+        for (i in 0 until arr.length()) {
+            val o = arr.optJSONObject(i) ?: continue
+            val lp = o.optString("lpNo").trim()
+            if (lp.isBlank()) continue
+            out.add(
+                PickSource(
+                    lpNo = lp,
+                    binCode = o.optString("binCode").trim(),
+                    lotNo = o.optString("lotNo").trim(),
+                    availableBaseQty = o.optDouble("availableBaseQty", 0.0),
+                ),
+            )
+        }
+    }
+    out.toList()
+}.getOrDefault(emptyList())
+
+/**
+ * Okutulan paleti BC'nin verdiği aday listesine karşı eler. Liste boşsa (uç
+ * yayınlanmamış veya sorgu başarısız) cihaz karar veremez; palet kabul edilir
+ * ve son sözü sunucudaki doğrulama söyler.
+ */
+internal fun matchPickSource(sources: List<PickSource>, scanned: String): PickSource? {
+    val needle = scanned.trim()
+    if (needle.isBlank()) return null
+    return sources.firstOrNull { it.lpNo.equals(needle, ignoreCase = true) }
+}
+
 /**
  * Okutulan ürün için onay kartı: sepete kaç adet konacağı büyük puntoyla,
- * hangi siparişe gittiği ve raf bilgisiyle birlikte. Operatör miktarı görmeden
- * satır kapanmasın diye eklendi.
+ * hangi siparişe gittiği ve raf bilgisiyle birlikte.
+ *
+ * LP okutma zorunluysa kart bir OKUTMA ADIMINA dönüşür: kaynak raf, toplanacak
+ * palet ve lot gösterilir, operatör paletin QR kodunu okutmadan satır
+ * kapanmaz. Paletin tamamı alınacağında ayrıca miktar girilmez — miktar zaten
+ * satırın kalanıdır; kısmi alım gerektiğinde operatör miktar dağıtım
+ * ekranından ilerler.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun PickConfirmSheet(
     group: LineGroup,
+    pickNo: String,
+    lpScanRequired: Boolean,
+    lpSourcesSupported: Boolean,
     onDismiss: () -> Unit,
-    onConfirm: () -> Unit,
+    onConfirm: (sourceLpNo: String) -> Unit,
 ) {
+    val context = LocalContext.current
     val line = group.lines.first()
     val qty = group.totalOutstanding.takeIf { it > 0 } ?: line.optDouble("quantity", 1.0)
     val uom = line.optString("unitOfMeasureCode")
     val bin = firstValue(line, "binCode")
     val orderNo = firstValue(line, "sourceNo")
     val lot = line.optString("lotNo")
+    val expectedLp = line.optString("licensePlateNo").trim()
+
+    var sources by remember(line.optInt("lineNo")) { mutableStateOf<List<PickSource>>(emptyList()) }
+    var sourcesLoaded by remember(line.optInt("lineNo")) { mutableStateOf(false) }
+    var scan by remember(line.optInt("lineNo")) { mutableStateOf("") }
+    var scannedLp by remember(line.optInt("lineNo")) { mutableStateOf("") }
+    var error by remember(line.optInt("lineNo")) { mutableStateOf("") }
+
+    LaunchedEffect(line.optInt("lineNo"), lpScanRequired, lpSourcesSupported) {
+        if (!lpScanRequired || !lpSourcesSupported) { sourcesLoaded = true; return@LaunchedEffect }
+        val r = BcApi.pickLineSources(context, pickNo, line.optInt("lineNo"))
+        sources = if (r.ok) parsePickLineSources(BcApi.scalarValue(r.body)) else emptyList()
+        sourcesLoaded = true
+    }
+
+    fun submitScan(raw: String) {
+        val value = com.dynops.bcwms.scanner.BarcodeIntentResolver.resolve(raw).value.trim()
+            .ifBlank { raw.trim() }
+        if (value.isBlank()) return
+        // Aday listesi geldiyse yanlış paleti sunucuya hiç göndermeden burada
+        // durdur. Liste boşsa eleme yapılmaz; doğrulamayı BC yapar.
+        if (sources.isNotEmpty() && matchPickSource(sources, value) == null) {
+            error = "❌ $value bu satır için uygun bir palet değil. Aşağıdaki paletlerden birini okutun."
+            scan = ""
+            return
+        }
+        scannedLp = value
+        error = ""
+        scan = ""
+    }
 
     com.dynops.bcwms.ui.SheetScaffold(onDismiss = onDismiss) {
         Text(group.itemNo, fontWeight = FontWeight.Bold, fontSize = 20.sp)
@@ -1552,12 +1648,99 @@ private fun PickConfirmSheet(
         if (bin.isNotBlank()) ConfirmRow("Raf", bin)
         if (orderNo.isNotBlank()) ConfirmRow("Sipariş", orderNo)
         if (lot.isNotBlank()) ConfirmRow("Lot", lot)
+        if (expectedLp.isNotBlank()) ConfirmRow("Palet", expectedLp)
+
+        if (lpScanRequired) {
+            Spacer(Modifier.height(14.dp))
+            if (sources.isNotEmpty()) {
+                Text(
+                    if (sources.size == 1) "Bu satırın paleti:" else "Sırayla okutulacak paletler:",
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                sources.take(6).forEach { src ->
+                    val picked = src.lpNo.equals(scannedLp, ignoreCase = true)
+                    Text(
+                        (if (picked) "✅ " else "• ") + src.lpNo +
+                            " · ${src.binCode}" +
+                            (if (src.lotNo.isNotBlank()) " · lot ${src.lotNo}" else "") +
+                            " · ${pickQty(src.availableBaseQty)}",
+                        fontSize = 13.sp,
+                        modifier = Modifier.padding(vertical = 2.dp),
+                    )
+                }
+                if (sources.size > 6)
+                    Text("+ ${sources.size - 6} palet daha", fontSize = 12.sp, color = Color.Gray)
+                Spacer(Modifier.height(8.dp))
+            } else if (sourcesLoaded) {
+                Text(
+                    "Aday palet listesi alınamadı. Paleti okutun; doğrulamayı Business Central yapacak.",
+                    fontSize = 12.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Spacer(Modifier.height(8.dp))
+            }
+
+            if (scannedLp.isBlank()) {
+                com.dynops.bcwms.scanner.ScanField(
+                    label = "📦 Palet / LP okut",
+                    value = scan,
+                    onValueChange = { scan = it },
+                    modifier = Modifier.fillMaxWidth(),
+                    onScanned = { submitScan(it) },
+                )
+                Spacer(Modifier.height(6.dp))
+                Button(
+                    onClick = { submitScan(scan) },
+                    enabled = scan.isNotBlank(),
+                    modifier = Modifier.fillMaxWidth(),
+                ) { Text("Doğrula") }
+            } else {
+                Surface(
+                    shape = RoundedCornerShape(10.dp),
+                    color = Color(0xFF16A34A).copy(alpha = 0.12f),
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text(
+                        "✅ Palet doğrulandı: $scannedLp",
+                        Modifier.fillMaxWidth().padding(12.dp),
+                        fontWeight = FontWeight.SemiBold,
+                        fontSize = 14.sp,
+                    )
+                }
+                Spacer(Modifier.height(4.dp))
+                TextButton(onClick = { scannedLp = ""; error = "" }, modifier = Modifier.fillMaxWidth()) {
+                    Text("Başka palet okut")
+                }
+            }
+
+            if (error.isNotBlank()) {
+                Spacer(Modifier.height(8.dp))
+                Surface(shape = RoundedCornerShape(10.dp), color = Color(0xFFDC2626).copy(alpha = 0.12f)) {
+                    Text(
+                        error,
+                        Modifier.fillMaxWidth().padding(12.dp),
+                        color = Color(0xFFB91C1C),
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                }
+            }
+        }
 
         Spacer(Modifier.height(20.dp))
         Button(
-            onClick = onConfirm,
+            onClick = { onConfirm(scannedLp) },
+            enabled = !lpScanRequired || scannedLp.isNotBlank(),
             modifier = Modifier.fillMaxWidth().height(com.dynops.bcwms.ui.wmsPrimaryButtonHeight()),
-        ) { Text("Aldım, devam", fontWeight = FontWeight.Bold, fontSize = 16.sp) }
+        ) {
+            Text(
+                if (lpScanRequired && scannedLp.isBlank()) "Önce paleti okutun" else "Aldım, devam",
+                fontWeight = FontWeight.Bold,
+                fontSize = 16.sp,
+            )
+        }
         Spacer(Modifier.height(8.dp))
         TextButton(onClick = onDismiss, modifier = Modifier.fillMaxWidth()) { Text("Vazgeç") }
         Spacer(Modifier.height(8.dp))

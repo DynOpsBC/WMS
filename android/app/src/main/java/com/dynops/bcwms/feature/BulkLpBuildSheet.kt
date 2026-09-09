@@ -41,7 +41,41 @@ internal data class PendingLedgerBulkLpRequest(
     val printLabels: Boolean,
     val requestId: String,
     val body: String,
+    // Tekrar denemede İLK çağrının ucu kullanılmalıdır. İki uç aynı işlem
+    // kimliğini paylaşır ama gövdeleri farklıdır; uç adını saklamak, cihaz
+    // yeniden açıldığında yanlış uca replay göndermeyi imkânsız kılar.
+    val action: String = LEDGER_BULK_LP_CREATE_ACTION,
 )
+
+/**
+ * Operatörün girdiği "LP başı miktar"dan üretilen palet planı.
+ * 10.350 adet / 1.000 kapasite -> 10 tam palet + 350'lik bir artık palet.
+ */
+internal data class LedgerLpPlan(
+    val fullCount: Int,
+    val quantityPerLp: Double,
+    val lastQuantity: Double,
+) {
+    val totalLpCount: Int get() = fullCount + if (lastQuantity > 0.0) 1 else 0
+    val totalQuantity: Double get() = fullCount * quantityPerLp + lastQuantity
+}
+
+/**
+ * LP'lenebilir kalan miktarı verilen palet kapasitesine böler. Kapasite ya da
+ * kalan miktar geçersizse null döner; çağıran hiçbir plan göstermez.
+ * Kalan miktar kapasiteden küçükse tek bir artık palet oluşur.
+ */
+internal fun planLedgerLps(allocatableQuantity: Double, quantityPerLp: Double?): LedgerLpPlan? {
+    if (quantityPerLp == null || !quantityPerLp.isFinite() || quantityPerLp <= 0.0) return null
+    if (!allocatableQuantity.isFinite() || allocatableQuantity <= 0.0) return null
+    val tolerance = 0.00001
+    val fullCount = Math.floor(allocatableQuantity / quantityPerLp + tolerance).toInt()
+    if (fullCount < 0) return null
+    val remainder = allocatableQuantity - fullCount * quantityPerLp
+    val lastQuantity = if (remainder > tolerance) Math.round(remainder * 100000.0) / 100000.0 else 0.0
+    if (fullCount == 0 && lastQuantity <= 0.0) return null
+    return LedgerLpPlan(fullCount, quantityPerLp, lastQuantity)
+}
 
 internal enum class LedgerBulkLpReplayState {
     FirstExecution,
@@ -54,6 +88,7 @@ private const val DEFAULT_LEDGER_LP_COUNT = "10"
 private const val DEFAULT_LEDGER_LP_QUANTITY = "100"
 private const val LEDGER_ENTRY_DISPLAY_LIMIT = 50
 internal const val LEDGER_BULK_LP_CREATE_ACTION = "createLicensePlatesIdempotent"
+internal const val LEDGER_BULK_LP_PLAN_ACTION = "createLicensePlatesFromPlanIdempotent"
 private const val LEDGER_BULK_LP_PENDING_PREFS = "bcwms_bulk_lp_pending"
 
 private data class PendingLedgerBulkLpRestore(
@@ -101,11 +136,18 @@ internal fun validLedgerBulkLpPlan(
     quantityPerLp: Double?,
     allocatableQuantity: Double,
     serialNo: String,
+    quantityLastLp: Double = 0.0,
 ): Boolean {
     if (lpCount == null || lpCount !in 1..100) return false
     if (quantityPerLp == null || !quantityPerLp.isFinite() || quantityPerLp <= 0.0) return false
-    if (lpCount * quantityPerLp > allocatableQuantity) return false
-    return serialNo.isBlank() || (lpCount == 1 && quantityPerLp == 1.0)
+    if (!quantityLastLp.isFinite() || quantityLastLp < 0.0) return false
+    val totalLpCount = lpCount + if (quantityLastLp > 0.0) 1 else 0
+    if (totalLpCount !in 1..100) return false
+    // Otomatik hesaplanan artık palet toplamı kullanılabilir miktara TAM
+    // eşitleyebilir; ondalık gösterimden gelen milyarda bir fark yüzünden
+    // geçerli bir plan reddedilmemeli.
+    if (lpCount * quantityPerLp + quantityLastLp > allocatableQuantity + 0.00001) return false
+    return serialNo.isBlank() || (totalLpCount == 1 && quantityPerLp == 1.0 && quantityLastLp == 0.0)
 }
 
 internal fun itemLedgerLookupFilter(rawLookup: String): String {
@@ -232,11 +274,15 @@ internal fun ledgerBulkLpPayload(
     printerId: String,
     printLabels: Boolean,
     requestId: String,
+    quantityLastLp: Double = 0.0,
 ): String = JSONObject().apply {
     put("templateCode", templateCode.trim())
     put("binCode", binCode.trim())
     put("lpCount", lpCount)
     put("quantityPerLp", quantityPerLp)
+    // Artık palet yalnız yeni uçta anlamlıdır; sıfırken alan hiç gönderilmez ve
+    // gövde eski uçla birebir aynı kalır.
+    if (quantityLastLp > 0.0) put("quantityLastLp", quantityLastLp)
     put("printerId", printerId.trim())
     put("printLabels", printLabels)
     put("requestId", requestId)
@@ -249,6 +295,7 @@ internal fun pendingLedgerBulkLpRequestJson(request: PendingLedgerBulkLpRequest)
         put("printLabels", request.printLabels)
         put("requestId", request.requestId)
         put("body", request.body)
+        put("action", request.action)
     }.toString()
 
 internal fun pendingLedgerBulkLpRequestFromJson(raw: String): PendingLedgerBulkLpRequest? = runCatching {
@@ -259,6 +306,7 @@ internal fun pendingLedgerBulkLpRequestFromJson(raw: String): PendingLedgerBulkL
         printLabels = json.getBoolean("printLabels"),
         requestId = json.getString("requestId"),
         body = json.getString("body"),
+        action = json.optString("action").trim().ifBlank { LEDGER_BULK_LP_CREATE_ACTION },
     )
     val canonicalRequestId = UUID.fromString(request.requestId).toString()
     val body = JSONObject(request.body)
@@ -266,7 +314,12 @@ internal fun pendingLedgerBulkLpRequestFromJson(raw: String): PendingLedgerBulkL
     require(request.expectedCount in 1..100)
     require(canonicalRequestId.equals(request.requestId, ignoreCase = true))
     require(body.getString("requestId").equals(request.requestId, ignoreCase = true))
-    require(body.getInt("lpCount") == request.expectedCount)
+    require(request.action == LEDGER_BULK_LP_CREATE_ACTION || request.action == LEDGER_BULK_LP_PLAN_ACTION)
+    val storedLastQty = body.optDouble("quantityLastLp", 0.0)
+    require(storedLastQty.isFinite() && storedLastQty >= 0.0)
+    // Artık palet varsa toplam palet adedi tam palet sayısından bir fazladır.
+    require(body.getInt("lpCount") + (if (storedLastQty > 0.0) 1 else 0) == request.expectedCount)
+    require(storedLastQty == 0.0 || request.action == LEDGER_BULK_LP_PLAN_ACTION)
     require(body.getBoolean("printLabels") == request.printLabels)
     require(body.getString("templateCode").isNotBlank())
     // Blank bin means the server will distribute complete LPs across the
@@ -375,6 +428,10 @@ internal fun BulkLpBuildSheet(
     }
     var quantityText by remember { mutableStateOf(DEFAULT_LEDGER_LP_QUANTITY) }
     var printLabels by remember { mutableStateOf(true) }
+    // Artık palet ucu yayındaki BC paketinde var mı? Yoksa ekran yalnız tam
+    // paletler önerir ve eski uca gider; yeni APK eski sunucuya tanımadığı bir
+    // action göndermez.
+    var planSupported by remember { mutableStateOf(false) }
     var busy by remember { mutableStateOf(false) }
     var status by remember {
         mutableStateOf(
@@ -407,6 +464,7 @@ internal fun BulkLpBuildSheet(
     )
 
     LaunchedEffect(Unit) {
+        planSupported = BcApi.getLpScanCapabilities(context).bulkLpPlan
         val page = BcApi.getAllPages(context, "licensePlateTemplates?\$top=50&\$select=code,description")
         templates = if (page.complete) {
             page.rows.map { it.optString("code") }.filter(String::isNotBlank)
@@ -499,20 +557,41 @@ internal fun BulkLpBuildSheet(
     val lpCount = lpCountText.toIntOrNull()
     val quantityPerLp = quantityText.toFiniteDoubleOrNull()
     val allocatableQuantity = entry?.let(::ledgerLpAllocatableQuantity) ?: 0.0
-    val requestedQuantity = (lpCount ?: 0) * (quantityPerLp ?: 0.0)
+    // Müşteri isteği: operatör yalnız palet kapasitesini girer, tam palet
+    // adedini ve son paletteki artığı sistem hesaplar.
+    val autoPlan = if (singleLpMode) null else planLedgerLps(allocatableQuantity, quantityPerLp)
+    // Artık palet yalnız operatör TÜM kalan miktarı paletlerken eklenir. Adedi
+    // elle düşürdüyse bilerek bir kısmını paletliyor demektir; ona istemediği
+    // bir palet daha üretilmez.
+    val remainderQuantity =
+        if (planSupported && autoPlan != null && lpCount == autoPlan.fullCount) autoPlan.lastQuantity else 0.0
+    val totalLpCount = (lpCount ?: 0) + if (remainderQuantity > 0.0) 1 else 0
+    val requestedQuantity = (lpCount ?: 0) * (quantityPerLp ?: 0.0) + remainderQuantity
     val planValid = validLedgerBulkLpPlan(
         lpCount,
         quantityPerLp,
         allocatableQuantity,
         entry?.optString("serialNo").orEmpty(),
+        remainderQuantity,
     )
     val inputsEnabled = !busy && !uncertainOutcome
+
+    // Palet kapasitesi ya da seçili stok kaydı değiştiğinde tam palet adedini
+    // otomatik doldur. Alan düzenlenebilir kalır: operatör daha az palet
+    // yapmak isterse adedi elle düşürebilir.
+    LaunchedEffect(autoPlan?.fullCount, autoPlan?.quantityPerLp, singleLpMode) {
+        val suggested = autoPlan?.fullCount ?: return@LaunchedEffect
+        if (suggested > 0) lpCountText = suggested.toString()
+    }
 
     fun submitBulkLp(requestToReplay: PendingLedgerBulkLpRequest? = null) {
         if (busy) return
         val sourceEntry = entry
         val count = lpCount
         val perLp = quantityPerLp
+        // Ekranda gösterilen planla gönderilen plan aynı olmalı: artık palet
+        // burada tekrar hesaplanmaz, ekrandaki değer taşınır.
+        val lastQty = remainderQuantity
         val templateCode = template
         val binCode = bin
         val shouldPrint = printLabels
@@ -545,7 +624,9 @@ internal fun BulkLpBuildSheet(
                 val requestId = UUID.randomUUID().toString()
                 PendingLedgerBulkLpRequest(
                     entryNo = sourceEntry!!.optInt("entryNo"),
-                    expectedCount = count!!,
+                    // Beklenen kayıt sayısı artık paleti de kapsar; sunucudan
+                    // dönen createdCount bununla karşılaştırılır.
+                    expectedCount = count!! + if (lastQty > 0.0) 1 else 0,
                     printLabels = shouldPrint,
                     requestId = requestId,
                     body = ledgerBulkLpPayload(
@@ -556,7 +637,9 @@ internal fun BulkLpBuildSheet(
                         printerId,
                         shouldPrint,
                         requestId,
+                        lastQty,
                     ),
+                    action = if (lastQty > 0.0) LEDGER_BULK_LP_PLAN_ACTION else LEDGER_BULK_LP_CREATE_ACTION,
                 )
             }
             if (!PendingLedgerBulkLpStore.save(context, operation)) {
@@ -573,7 +656,9 @@ internal fun BulkLpBuildSheet(
                 context,
                 "itemLedgerEntries",
                 "entryNo=${operation.entryNo}",
-                LEDGER_BULK_LP_CREATE_ACTION,
+                // Tekrar denemede ilk çağrının ucu kullanılır; aynı işlem
+                // kimliği farklı bir uca gitmez.
+                operation.action,
                 operation.body,
             )
             busy = false
@@ -889,12 +974,28 @@ internal fun BulkLpBuildSheet(
                     modifier = Modifier.weight(1f),
                 )
             }
+            val uomLabel = entry.optString("baseUnitOfMeasure")
             Text(
-                "Oluşturulacak: ${formatLpQuantity(requestedQuantity)} · Kullanılabilir: " +
-                    "${formatLpQuantity(allocatableQuantity)} ${entry.optString("baseUnitOfMeasure")}",
+                buildString {
+                    append("Plan: ")
+                    append("${lpCount ?: 0} × ${formatLpQuantity(quantityPerLp ?: 0.0)}")
+                    if (remainderQuantity > 0.0)
+                        append(" + 1 × ${formatLpQuantity(remainderQuantity)}")
+                    append(" = ${formatLpQuantity(requestedQuantity)} $uomLabel")
+                    append(" ($totalLpCount LP)")
+                },
+                fontSize = 13.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = if (requestedQuantity > allocatableQuantity + 0.00001) MaterialTheme.colorScheme.error
+                else MaterialTheme.colorScheme.onSurface,
+            )
+            Text(
+                "LP'lenebilir kalan: ${formatLpQuantity(allocatableQuantity)} $uomLabel" +
+                    (if (!planSupported && autoPlan != null && autoPlan.lastQuantity > 0.0)
+                        " · Artık palet için BC güncellemesi gerekiyor; şimdilik yalnız tam paletler oluşturulur."
+                    else ""),
                 fontSize = 12.sp,
-                color = if (requestedQuantity > allocatableQuantity) MaterialTheme.colorScheme.error
-                else MaterialTheme.colorScheme.onSurfaceVariant,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             if (lpCount != null && lpCount !in 1..100) {
                 Text(

@@ -7,6 +7,42 @@ Kurulum: [docs/android-install-guide.md](../../docs/android-install-guide.md)
 
 ---
 
+## v1.14.104 — BADE — LP okutmalı toplama ve yerleştirme — 2026-09-09
+
+**versionCode:** 200104 · **BC paketi:** 1.14.1.32
+
+> Bu sürümün tamamı, BC kurulum kartındaki **LP Scan Required** anahtarına bağlıdır.
+> Anahtar kapalıyken (varsayılan) ekranlar bir önceki sürümdeki gibi çalışır.
+> Anahtar yalnız BC paketi 1.14.1.32 yayınlandıktan SONRA açılmalıdır.
+
+### Toplamada palet okutma
+
+- Ürün okutulduktan sonra açılan onay kartı bir okutma adımına dönüştü: kaynak raf, toplanacak palet, lot ve miktar gösterilir; paletin QR kodu okutulmadan satır kapanmaz.
+- Okutulan paletin maddesi, varyantı, lotu, serisi, lokasyonu ve rafı Business Central'da toplama satırıyla karşılaştırılır. Uymayan palette satır hiç değişmez ve hata paletin gerçekte ne taşıdığını yazar.
+- Bir satır birden çok palete yayılıyorsa terminal paletleri raf ve palet numarası sırasıyla listeler; operatör sıradaki palete yönlendirilir.
+- Palet tek lot taşıyorsa lot bilgisi paletten okunur; operatörden ayrıca lot seçmesi istenmez.
+- Aynı üründen birden çok satır olan miktar dağıtım ekranı da paletsiz kapanmaz.
+
+### Yerleştirmede palet okutma
+
+- Zorunluluk açıkken ürün okutma adımı kaldırıldı: palette ürün barkodu yoktur, doğrulamayı paletin içeriği yapar.
+- Okutulan paletin madde ve lot bilgisi yerleştirme satırıyla Business Central'da karşılaştırılır; doğrulama artık cihazda değil sunucuda kesinleşir.
+- Raf bazlı toplu LP yerleştirme de aynı sunucu doğrulamasından geçer.
+- Paletsiz "tümünü bir bine" yolu, zorunluluk açıkken kapalıdır; operatör satır satır palet okutur.
+
+### Stoktan toplu LP oluşturma
+
+- Operatör yalnız palet kapasitesini girer; tam palet adedi ve son paletteki artık miktar otomatik hesaplanır (10.350 adet / 1.000 kapasite → 10 × 1.000 + 1 × 350).
+- Plan ekranda "10 × 1.000 + 1 × 350 = 10.350 (11 LP)" olarak gösterilir; LP adedi elle düşürülebilir, o zaman artık palet oluşturulmaz.
+- Tam paletler ve artık palet tek işlemde, tek işlem kimliğiyle oluşturulur; yarısı yazılıp yarısı kopmaz.
+- Daha önce LP'lenmiş miktarın tekrar LP'lenmesi zaten engelleniyordu; ekran yalnız LP'lenebilir kalan miktar üzerinden çalışmaya devam eder.
+
+### Uyumluluk
+
+- Terminal, yeni uçların yayındaki BC paketinde bulunup bulunmadığını açılışta yoklar. Uçlar yoksa ilgili ekran eski akışa döner ve tanınmayan bir işlem çağrılmaz.
+- LP etiketi (Madde Tanımlama Etiketi ZPL çıktısı) değiştirilmedi.
+- Gerçek el terminali ve fiziksel okuyucu ile uçtan uca kabul yapılmamıştır.
+
 ## v1.14.98 — BADE kabul testi adayı — 2026-09-05
 
 **versionCode:** 200098 · **BC paketi:** 1.14.1.29

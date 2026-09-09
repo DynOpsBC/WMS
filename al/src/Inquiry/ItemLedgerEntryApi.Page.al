@@ -77,6 +77,26 @@ page 72214 "DOPSWHS Item Ledger Entry API"
         exit(FinishBulkLpCreation(CreatedLpNos, printLabels, printerId, Replayed));
     end;
 
+    /// <summary>
+    /// Tam paletler + tek artık palet. Operatör yalnız "LP başına miktar"
+    /// girer; terminal tam palet adedini ve artık miktarı hesaplayıp buraya
+    /// gönderir, sunucu toplamı LP''lenebilir kalan miktara karşı doğrular.
+    /// quantityLastLp = 0 gönderildiğinde davranış
+    /// createLicensePlatesIdempotent ile birebir aynıdır.
+    /// </summary>
+    [ServiceEnabled]
+    procedure createLicensePlatesFromPlanIdempotent(templateCode: Code[20]; binCode: Code[20]; lpCount: Integer; quantityPerLp: Decimal; quantityLastLp: Decimal; printerId: Code[50]; printLabels: Boolean; requestId: Guid): Text
+    var
+        LPMgt: Codeunit "DOPSWHS LP Management";
+        CreatedLpNos: List of [Code[20]];
+        Replayed: Boolean;
+    begin
+        LPMgt.BuildManyFromItemLedgerEntryPlanIdempotent(
+            Rec."Entry No.", templateCode, binCode, lpCount, quantityPerLp, quantityLastLp,
+            requestId, CreatedLpNos, Replayed);
+        exit(FinishBulkLpCreation(CreatedLpNos, printLabels, printerId, Replayed));
+    end;
+
     local procedure FinishBulkLpCreation(var CreatedLpNos: List of [Code[20]]; PrintLabels: Boolean; PrinterId: Code[50]; Replayed: Boolean): Text
     var
         LP: Record "DOPSWHS LP Header";
