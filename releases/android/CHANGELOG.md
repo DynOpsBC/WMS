@@ -7,13 +7,13 @@ Kurulum: [docs/android-install-guide.md](../../docs/android-install-guide.md)
 
 ---
 
-## v1.14.104 — BADE — LP okutmalı toplama ve yerleştirme — 2026-09-09
+## v1.14.106 — BADE + EMU — LP okutmalı toplama/yerleştirme ve PDF etiket — 2026-09-10
 
-**versionCode:** 200104 · **BC paketi:** 1.14.1.32
+**versionCode:** 200106 · **BC paketi:** 1.14.1.34
 
-> Bu sürümün tamamı, BC kurulum kartındaki **LP Scan Required** anahtarına bağlıdır.
+> Aşağıdaki BADE toplama/yerleştirme/toplu LP bölümlerinin tamamı, BC kurulum kartındaki **LP Scan Required** anahtarına bağlıdır.
 > Anahtar kapalıyken (varsayılan) ekranlar bir önceki sürümdeki gibi çalışır.
-> Anahtar yalnız BC paketi 1.14.1.32 yayınlandıktan SONRA açılmalıdır.
+> Anahtar yalnız BC paketi 1.14.1.34 yayınlandıktan SONRA açılmalıdır.
 
 ### Toplamada palet okutma
 
@@ -42,6 +42,17 @@ Kurulum: [docs/android-install-guide.md](../../docs/android-install-guide.md)
 - Terminal, yeni uçların yayındaki BC paketinde bulunup bulunmadığını açılışta yoklar. Uçlar yoksa ilgili ekran eski akışa döner ve tanınmayan bir işlem çağrılmaz.
 - LP etiketi (Madde Tanımlama Etiketi ZPL çıktısı) değiştirilmedi.
 - Gerçek el terminali ve fiziksel okuyucu ile uçtan uca kabul yapılmamıştır.
+
+### EMU: Ürün/Raf Sorgu etiketleri PDF yazıcıya
+
+- Ürün Sorgu ve Raf Sorgu etiket baskısı, seçili etiket (ZPL) yazıcısı pasif ya da silinmişse belge yazıcısına PDF olarak gönderilir; yazıcı durumu BC'den doğrulanır.
+- Yazıcılar ekranına "Etiket seçimini kaldır" düğmesi eklendi; etiket seçimi yokken Ürün/Raf etiketleri doğrudan belge yazıcısına gider.
+- BC tarafında Barcode Print Test raporu başlık ve açıklama alır ("URUN ETIKETI", "RAF ETIKETI"); PDF yazıcıda PrintItemLabel/PrintBinLabel aynı rapordan geçer.
+- Bu bölüm EMU 1.14.105 deneme APK'sında (android-emu-channel) yayımlanmıştı; bu sürümde BADE ile aynı kaynak tabanında birleştirildi.
+
+### CI
+
+- Müşteri yayın iş akışı eksik imza secret'larını adıyla raporlar ve APK imza parmak izini kanal güncellenmeden önce doğrular (ANDROID_SIGNING_CERT_SHA256 repository variable).
 
 ## v1.14.98 — BADE kabul testi adayı — 2026-09-05
 

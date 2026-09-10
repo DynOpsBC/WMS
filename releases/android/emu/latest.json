@@ -1,7 +1,7 @@
 {
-  "versionCode": 200105,
-  "versionName": "1.14.105-emu",
-  "apkUrl": "https://github.com/DynOpsBC/WMS/releases/download/android-emu-channel/BCWMS-EMU-1.14.105-PASIF-YAZICI-PDF-DEBUG.apk",
-  "sha256": "60d3fc03eb0623ca3d829991866231336091128e757d3e15f8148599310ec039",
-  "releaseNotes": "Ürün/Raf Sorgu, seçili etiket yazıcısı pasif veya silinmişse belge yazıcısına PDF gönderir. Pasif/eski etiket seçimini kaldırma düğmesi eklendi. Yazıcılar ekranından Epson'u Belge seçin. BCWMS 1.14.1.33 veya üzeri BC uzantısı gereklidir."
+  "versionCode": 200106,
+  "versionName": "1.14.106-emu",
+  "apkUrl": "https://github.com/DynOpsBC/WMS/releases/download/android-v1.14.106/BCWMS-EMU-1.14.106-RELEASE.apk",
+  "sha256": "cbf3bed8861061c942da0dc86719ef7a512664481670e42fda1c71fe8eb3364d",
+  "releaseNotes": "Ürün/Raf Sorgu etiketleri pasif etiket yazıcısında belge yazıcısına PDF gider (1.14.105 ile aynı). BADE ile ortak LP okutma altyapısı dahil; LP Scan Required anahtarı varsayılan kapalıdır. BCWMS 1.14.1.34 BC uzantısı gereklidir."
 }
