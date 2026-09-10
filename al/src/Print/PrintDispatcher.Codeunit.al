@@ -392,27 +392,137 @@ codeunit 72051 "DOPSWHS Print Dispatcher"
         PrintNode.SendPrintJob(Queue, Copies);
     end;
 
+    /// <summary>
+    /// 4x2" (812x406 dots, 203 dpi) item label: header band, large item number,
+    /// two-line description, base unit, Code128 + QR. Both barcodes carry the bare
+    /// item number, which the terminal resolves as an item by default.
+    /// </summary>
     local procedure BuildItemZpl(var Item: Record Item): Text
     var
         ZplEncoder: Codeunit "DOPSWHS ZPL Encoder";
+        NoFont: Integer;
     begin
+        NoFont := FitFontSize(Item."No.", 560, 72);
         exit(
             '^XA^CI28^PW812^LL406' +
-            '^FO40,30^A0N,40,40^FH_^FD' + ZplEncoder.EncodeFieldData(Item."No.") + '^FS' +
-            '^FO40,80^A0N,28,28^FH_^FD' + ZplEncoder.EncodeFieldData(CopyStr(Item.Description, 1, 42)) + '^FS' +
-            '^FO40,130^BY2^BCN,110,Y,N,N^FH_^FD' + ZplEncoder.EncodeFieldData(Item."No.") + '^FS' +
+            '^FO0,0^GB812,52,52^FS' +
+            '^FO24,10^A0N,32,32^FR^FH_^FDÜRÜN ETİKETİ^FS' +
+            '^FO470,12^A0N,26,26^FR^FH_^FB318,1,0,R^FD' + ZplEncoder.EncodeFieldData(CopyStr(CompanyProperty.DisplayName(), 1, 22)) + '^FS' +
+            '^FO24,66^A0N,' + Format(NoFont) + ',' + Format(NoFont) + '^FH_^FD' + ZplEncoder.EncodeFieldData(Item."No.") + '^FS' +
+            '^FO24,148^A0N,30,30^FH_^FD' + ZplEncoder.EncodeFieldData(DescriptionLine(Item.Description, 1, 33)) + '^FS' +
+            '^FO24,184^A0N,30,30^FH_^FD' + ZplEncoder.EncodeFieldData(DescriptionLine(Item.Description, 2, 33)) + '^FS' +
+            '^FO24,222^A0N,24,24^FH_^FDBİRİM: ' + ZplEncoder.EncodeFieldData(Item."Base Unit of Measure") +
+                ItemGtinText(Item) + '^FS' +
+            '^FO24,258^BY' + Format(BarcodeModuleWidth(Item."No.")) + '^BCN,100,Y,N,N^FH_^FD' + ZplEncoder.EncodeFieldData(Item."No.") + '^FS' +
+            '^FO604,66^BQN,2,7^FH_^FDLA,' + ZplEncoder.EncodeFieldData(Item."No.") + '^FS' +
+            '^FO604,320^A0N,22,22^FH_^FDQR = ÜRÜN NO^FS' +
             '^XZ');
     end;
 
-    local procedure BuildBinZpl(var Bin: Record Bin): Text
+    local procedure ItemGtinText(var Item: Record Item): Text
     var
         ZplEncoder: Codeunit "DOPSWHS ZPL Encoder";
     begin
+        if Item.GTIN = '' then
+            exit('');
+        exit('   GTIN: ' + ZplEncoder.EncodeFieldData(Item.GTIN));
+    end;
+
+    /// <summary>
+    /// 4x2" bin label meant to be read from the aisle: the bin code fills the
+    /// left column at the largest size that fits, followed by zone / bin type /
+    /// description, Code128 + QR. Barcodes carry the bare bin code.
+    /// </summary>
+    local procedure BuildBinZpl(var Bin: Record Bin): Text
+    var
+        ZplEncoder: Codeunit "DOPSWHS ZPL Encoder";
+        InfoText: Text;
+        CodeFont: Integer;
+    begin
+        CodeFont := FitFontSize(Bin.Code, 560, 110);
+        if Bin."Zone Code" <> '' then
+            InfoText := 'BÖLGE: ' + Bin."Zone Code";
+        if Bin."Bin Type Code" <> '' then
+            InfoText := AppendLabelPart(InfoText, 'TİP: ' + Bin."Bin Type Code");
+        if Bin.Description <> '' then
+            InfoText := AppendLabelPart(InfoText, Bin.Description);
         exit(
             '^XA^CI28^PW812^LL406' +
-            '^FO40,30^A0N,40,40^FH_^FD' + ZplEncoder.EncodeFieldData(Bin."Location Code" + ' / ' + Bin.Code) + '^FS' +
-            '^FO40,90^BY2^BCN,120,Y,N,N^FH_^FD' + ZplEncoder.EncodeFieldData(Bin.Code) + '^FS' +
+            '^FO0,0^GB812,52,52^FS' +
+            '^FO24,10^A0N,32,32^FR^FH_^FDRAF ETİKETİ^FS' +
+            '^FO470,12^A0N,26,26^FR^FH_^FB318,1,0,R^FD' + ZplEncoder.EncodeFieldData(Bin."Location Code") + '^FS' +
+            '^FO24,' + Format(62 + (110 - CodeFont) div 2) + '^A0N,' + Format(CodeFont + 10) + ',' + Format(CodeFont) + '^FH_^FD' + ZplEncoder.EncodeFieldData(Bin.Code) + '^FS' +
+            '^FO24,190^A0N,26,26^FH_^FB560,1,0,L^FD' + ZplEncoder.EncodeFieldData(CopyStr(InfoText, 1, 44)) + '^FS' +
+            '^FO24,236^BY' + Format(BarcodeModuleWidth(Bin.Code)) + '^BCN,110,Y,N,N^FH_^FD' + ZplEncoder.EncodeFieldData(Bin.Code) + '^FS' +
+            '^FO604,180^BQN,2,7^FH_^FDLA,' + ZplEncoder.EncodeFieldData(Bin.Code) + '^FS' +
             '^XZ');
+    end;
+
+    local procedure AppendLabelPart(Existing: Text; Part: Text): Text
+    begin
+        if Existing = '' then
+            exit(Part);
+        exit(Existing + '   ' + Part);
+    end;
+
+    /// <summary>
+    /// Code128 module width so the bar pattern stays inside the 560-dot left
+    /// column: ~ (11 x chars + 35) x module dots.
+    /// </summary>
+    local procedure BarcodeModuleWidth(Data: Text): Integer
+    begin
+        if StrLen(Data) <= 10 then
+            exit(3);
+        if StrLen(Data) <= 22 then
+            exit(2);
+        exit(1);
+    end;
+
+    /// <summary>
+    /// Word-wraps Description into two lines of at most MaxChars and returns the
+    /// requested line. ^FB would overprint a third line onto the second, so the
+    /// split is done here and the remainder is cut.
+    /// </summary>
+    local procedure DescriptionLine(Description: Text; LineNo: Integer; MaxChars: Integer): Text
+    var
+        FirstLine: Text;
+        Rest: Text;
+        BreakAt: Integer;
+    begin
+        Description := DelChr(Description, '<>', ' ');
+        if StrLen(Description) <= MaxChars then begin
+            if LineNo = 1 then
+                exit(Description);
+            exit('');
+        end;
+        BreakAt := MaxChars + 1;
+        while (BreakAt > 1) and (Description[BreakAt] <> ' ') do
+            BreakAt -= 1;
+        if BreakAt <= MaxChars div 2 then
+            BreakAt := MaxChars + 1;
+        FirstLine := DelChr(CopyStr(Description, 1, BreakAt - 1), '>', ' ');
+        Rest := DelChr(CopyStr(Description, BreakAt), '<', ' ');
+        if LineNo = 1 then
+            exit(FirstLine);
+        exit(CopyStr(Rest, 1, MaxChars));
+    end;
+
+    /// <summary>
+    /// Largest Zebra font 0 size (dots) at which Value still fits MaxWidth.
+    /// Font 0 glyphs average ~0.55 x the point size in width.
+    /// </summary>
+    local procedure FitFontSize(Value: Text; MaxWidth: Integer; Preferred: Integer): Integer
+    var
+        Size: Integer;
+    begin
+        if StrLen(Value) = 0 then
+            exit(Preferred);
+        Size := MaxWidth div StrLen(Value) * 100 div 55;
+        if Size > Preferred then
+            Size := Preferred;
+        if Size < 24 then
+            Size := 24;
+        exit(Size);
     end;
 
     /// <summary>
