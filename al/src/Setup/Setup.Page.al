@@ -74,6 +74,11 @@ page 72061 "DOPSWHS Setup"
                     ApplicationArea = All;
                     ToolTip = 'Kapalı (varsayılan): sayım belgeleri stoklara yalnız Business Central''den işlenir (Sayım Belgesi → Post); el terminalindeki "Onayla ve Stoklara İşle" reddedilir. Açık: terminal kullanıcısı da sayımı onaylayıp stoklara işleyebilir.';
                 }
+                field("LP Scan Required"; Rec."LP Scan Required")
+                {
+                    ApplicationArea = All;
+                    ToolTip = 'Kapalı (varsayılan): toplama satırı kaynak LP okutulmadan da onaylanabilir, yerleştirmede ürün barkodu okutulur. Açık: toplamada kaynak LP okutmak zorunludur ve yerleştirme LP okutmasıyla doğrulanır; okutulan LP''nin maddesi, varyantı, lotu ve rafı satırla uyuşmazsa işlem reddedilir.';
+                }
             }
             group(License)
             {

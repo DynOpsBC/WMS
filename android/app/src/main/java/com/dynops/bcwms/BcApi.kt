@@ -65,6 +65,15 @@ object BcApi {
     private const val KEY_BC_USER = "bc_user_id"
     private const val KEY_TENANT = "bc_tenant_id"
     private const val KEY_LOGIN_EMAIL = "login_email"
+    private const val KEY_LP_SCAN_REQUIRED = "lp_scan_required"
+    private const val KEY_LP_SCAN_CHECKED_AT = "lp_scan_required_checked_at"
+
+    /**
+     * Sunucudaki "LP Scan Required" ayarı kısa ömürlü olarak saklanır. Ayar
+     * BC'de kapatıldığında terminalin yeniden giriş beklemeden eski akışa
+     * dönmesi gerekir; her satırda sorgulamak ise gereksiz tur oluştururdu.
+     */
+    private const val LP_SCAN_POLICY_TTL_MS = 5L * 60L * 1000L
 
     private fun prefs(context: Context) = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
 
@@ -302,6 +311,8 @@ object BcApi {
             .remove(KEY_TENANT).remove(KEY_ENV).remove(KEY_COMPANY_ID).remove(KEY_COMPANY_NAME)
             .remove(KEY_ADMIN_TEST_SESSION)
             .remove(KEY_ACCESSIBLE_COMPANIES)
+            .remove(KEY_LP_SCAN_REQUIRED)
+            .remove(KEY_LP_SCAN_CHECKED_AT)
             .apply()
     }
 
@@ -452,6 +463,103 @@ object BcApi {
             v2UndoAction = metadata.contains("undoV2Scan", ignoreCase = true),
             httpCode = httpCode,
         )
+    }
+
+    /**
+     * Yeni LP okutma uçlarının yayındaki BC paketinde var olup olmadığı.
+     * Sayım modülündeki yetenek yoklamasının aynısı: yeni APK, henüz
+     * yayınlanmamış bir action'ı çağırıp operatöre anlamsız 4xx göstermez,
+     * o akış için eski davranışa döner.
+     */
+    data class LpScanCapabilities(
+        val metadataLoaded: Boolean,
+        val pickLineSources: Boolean,
+        val putAwayPlacementFromLp: Boolean,
+        val bulkLpPlan: Boolean,
+        val httpCode: Int,
+    )
+
+    suspend fun getLpScanCapabilities(context: Context): LpScanCapabilities {
+        val result = getCustomApiMetadata(context)
+        if (!result.ok) return LpScanCapabilities(false, false, false, false, result.httpCode)
+        return parseLpScanCapabilities(result.body, result.httpCode)
+    }
+
+    internal fun parseLpScanCapabilities(metadata: String, httpCode: Int = 200): LpScanCapabilities =
+        LpScanCapabilities(
+            metadataLoaded = true,
+            pickLineSources = metadata.contains("pickLineSources", ignoreCase = true),
+            putAwayPlacementFromLp = metadata.contains("setPlacementFromLp", ignoreCase = true),
+            bulkLpPlan = metadata.contains("createLicensePlatesFromPlanIdempotent", ignoreCase = true),
+            httpCode = httpCode,
+        )
+
+    /**
+     * Kurulum kartındaki "LP Scan Required" ayarı. Sunucu asıl otoritedir; bu
+     * değer yalnız ekranı şekillendirir (LP adımını zorunlu kılmak, ürün
+     * okutma adımını gizlemek). Ulaşılamazsa veya alan eski pakette yoksa
+     * false döner ve bu paketten önceki akış aynen sürer.
+     */
+    suspend fun lpScanRequired(context: Context): Boolean {
+        val now = System.currentTimeMillis()
+        val checkedAt = prefs(context).getLong(KEY_LP_SCAN_CHECKED_AT, 0L)
+        val cached = prefs(context).getString(KEY_LP_SCAN_REQUIRED, null)
+        if (cached != null && checkedAt > 0L && now - checkedAt in 0 until LP_SCAN_POLICY_TTL_MS)
+            return cached == "1"
+        val r = boundAction(context, "appUserProfiles", "DEFAULT", "resolveCurrent")
+        if (!r.ok) return cached == "1"
+        val required = try {
+            JSONObject(scalarValue(r.body)).optBoolean("lpScanRequired", false)
+        } catch (e: Exception) {
+            false
+        }
+        prefs(context).edit()
+            .putString(KEY_LP_SCAN_REQUIRED, if (required) "1" else "0")
+            .putLong(KEY_LP_SCAN_CHECKED_AT, now)
+            .apply()
+        return required
+    }
+
+    /**
+     * Bir toplama satırı için okutulabilecek kaynak paletler. Terminal bunu
+     * operatöre "sıradaki palet" olarak gösterir ve okutulan paleti sunucuya
+     * gitmeden önce eler.
+     */
+    suspend fun pickLineSources(context: Context, pickNo: String, lineNo: Int): ApiResult =
+        boundAction(
+            context, "picks", pickNo, "pickLineSources",
+            JSONObject().apply { put("lineNo", lineNo) }.toString(),
+        )
+
+    /**
+     * LP okutmalı yerleştirme. Paletin madde/lot/raf doğrulaması sunucuda
+     * yapılır; uymayan palet reddedilir ve satır hiç değişmez.
+     */
+    suspend fun setPutAwayPlacementFromLp(
+        context: Context,
+        compositeKey: String,
+        targetBinCode: String,
+        qtyToHandle: Double,
+        sourceLpNo: String,
+    ): ApiResult {
+        val userId = currentUserId(context)
+        if (userId.isBlank()) {
+            return ApiResult(
+                ok = false,
+                httpCode = HttpURLConnection.HTTP_UNAUTHORIZED,
+                body = """{"error":{"message":"Depo kullanıcısı belirlenemedi. Yeniden giriş yapın."}}""",
+            )
+        }
+        val body = JSONObject().apply {
+            put("targetBinCode", targetBinCode)
+            put("qtyToHandle", qtyToHandle)
+            put("sourceLpNo", sourceLpNo)
+            put("userId", userId)
+        }.toString()
+        // Bileşik anahtar çağıran tarafından üretilir: satırın kendi
+        // activityType/no/lineNo değerleriyle kurulan, mevcut setPlacement
+        // yolunda saha koşullarında doğrulanmış biçim kullanılır.
+        return boundAction(context, "putAwayLines", compositeKey, "setPlacementFromLp", body)
     }
 
     suspend fun get(context: Context, path: String): ApiResult = request(context, "GET", path, null)

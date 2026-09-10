@@ -327,7 +327,10 @@ codeunit 72046 "DOPSWHS Pick Mgmt"
 
     local procedure ConfirmPickLineInternal(var PickLine: Record "Warehouse Activity Line"; QtyToHandle: Decimal; LotNo: Code[50]; SourceLpNo: Code[20]; RequestingUserId: Code[50])
     var
+        MatchedLPLine: Record "DOPSWHS LP Line";
+        LPVerification: Codeunit "DOPSWHS LP Verification";
         EffectiveLpNo: Code[20];
+        EffectiveLotNo: Code[50];
     begin
         if PickLine."Activity Type" <> PickLine."Activity Type"::Pick then
             Error('Warehouse activity %1 must be a Pick.', PickLine."No.");
@@ -343,9 +346,37 @@ codeunit 72046 "DOPSWHS Pick Mgmt"
         // oluşur; operatöre düşürmek yerine sunucuda kesin olarak reddedilir.
         EnsurePickLineHasBin(PickLine, QtyToHandle);
 
+        // Zorunluluk OPERATÖRÜN OKUTTUĞU palete bakar. Satıra Create Pick
+        // sırasında damgalanmış öneri (PickLine."LP No.") fiziksel bir kanıt
+        // değildir; onu okutma yerine saymak kontrolü tamamen boşa çıkarırdı.
+        LPVerification.RequireScannedLp(PickLine, SourceLpNo, QtyToHandle);
+
         PickLine.Validate("Qty. to Handle", QtyToHandle);
-        EnsurePickLot(PickLine, LotNo);
-        PickLine.Validate("Lot No.", LotNo);
+
+        EffectiveLotNo := LotNo;
+        // Palet tek madde/lot taşıdığında lot bilgisi paletin kendisinden
+        // gelir; operatörden ayrıca lot okutması istenmez.
+        if (EffectiveLotNo = '') and (SourceLpNo <> '') and PickLineRequiresLot(PickLine) then
+            LPVerification.SingleLotForItem(
+                SourceLpNo, PickLine."Item No.", PickLine."Variant Code", EffectiveLotNo);
+        EnsurePickLot(PickLine, EffectiveLotNo);
+        PickLine.Validate("Lot No.", EffectiveLotNo);
+
+        // Okutulan paletin içeriği satırla birebir karşılaştırılır: madde,
+        // varyant, lot, seri, lokasyon ve raf. Uymayan palette satır hiç
+        // değişmez. Okutma yoksa (zorunluluk kapalı) bu paketten önceki
+        // davranış aynen sürer.
+        //
+        // Paletin satırın TAMAMINI karşılaması ARANMAZ. Bir toplama satırı
+        // birden çok palete yayılabilir; okutulan palet yalnız tahsisin
+        // nereden başladığını belirler (bkz. ResolvePickSourceLp) ve kalan
+        // miktar kayıt sırasında aynı raftaki diğer paletlerden deterministik
+        // olarak tamamlanır. Burada tam kapsama şartı koymak, müşterinin
+        // istediği çok paletli toplamayı imkânsız kılardı.
+        if SourceLpNo <> '' then
+            LPVerification.VerifyScannedLp(
+                SourceLpNo, PickLine, EffectiveLotNo, PickLine."Serial No.", true, MatchedLPLine);
+
         EffectiveLpNo := SourceLpNo;
         if EffectiveLpNo = '' then
             EffectiveLpNo := PickLine."LP No.";
@@ -511,6 +542,93 @@ codeunit 72046 "DOPSWHS Pick Mgmt"
         if CandidateCount = 1 then
             exit(CandidateLpNo);
         exit('');
+    end;
+
+    /// <summary>
+    /// Bir toplama satırı için okutulabilecek kaynak paletleri, raf ve palet
+    /// numarası sırasıyla döndürür. Terminal bu listeyi operatöre "sıradaki
+    /// palet" olarak gösterir ve okutulan paleti sunucuya gitmeden önce
+    /// karşılaştırır. Salt-okunur; hiçbir kaydı değiştirmez.
+    /// Satırda lot damgalıysa yalnız o lot, damgalı değilse paletlerin
+    /// taşıdığı lotlar olduğu gibi listelenir.
+    /// </summary>
+    procedure ListPickLineSources(PickLine: Record "Warehouse Activity Line"): Text
+    var
+        LPHeader: Record "DOPSWHS LP Header";
+        LPLine: Record "DOPSWHS LP Line";
+        LPVerification: Codeunit "DOPSWHS LP Verification";
+        Result: JsonObject;
+        Sources: JsonArray;
+        Source: JsonObject;
+        SeenLots: Dictionary of [Text, Boolean];
+        LotKey: Text;
+        ResultText: Text;
+        AvailableQty: Decimal;
+    begin
+        Result.Add('activityNo', PickLine."No.");
+        Result.Add('lineNo', PickLine."Line No.");
+        Result.Add('itemNo', PickLine."Item No.");
+        Result.Add('variantCode', PickLine."Variant Code");
+        Result.Add('locationCode', PickLine."Location Code");
+        Result.Add('binCode', PickLine."Bin Code");
+        Result.Add('lotNo', PickLine."Lot No.");
+        Result.Add('lotRequired', PickLineRequiresLot(PickLine));
+        Result.Add('unitOfMeasureCode', PickLine."Unit of Measure Code");
+        Result.Add('outstandingBaseQty', PickLine."Qty. Outstanding (Base)");
+        Result.Add('scanRequired', LPVerification.ScanRequired());
+
+        if (PickLine."Item No." <> '') and (PickLine."Location Code" <> '') and (PickLine."Bin Code" <> '') then begin
+            // Adaylar zaten TEK rafta; birincil anahtar (LP No.) sırası hem
+            // deterministik hem de ResolvePickSourceLp'nin tarama sırasıyla
+            // aynıdır. Tabloda lokasyon+raf anahtarı yoktur.
+            LPHeader.SetRange("Location Code", PickLine."Location Code");
+            LPHeader.SetRange("Bin Code", PickLine."Bin Code");
+            LPHeader.SetFilter(
+                Status, '%1|%2|%3', LPHeader.Status::Open, LPHeader.Status::Built, LPHeader.Status::Assigned);
+            if LPHeader.FindSet() then
+                repeat
+                    if PickSourceLpAssignmentMatches(LPHeader, PickLine) then begin
+                        Clear(SeenLots);
+                        LPLine.Reset();
+                        LPLine.SetRange("LP No.", LPHeader."No.");
+                        LPLine.SetRange("Item No.", PickLine."Item No.");
+                        LPLine.SetRange("Variant Code", PickLine."Variant Code");
+                        if PickLine."Lot No." <> '' then
+                            LPLine.SetRange("Lot No.", PickLine."Lot No.");
+                        if PickLine."Serial No." <> '' then
+                            LPLine.SetRange("Serial No.", PickLine."Serial No.");
+                        LPLine.SetFilter(Quantity, '>0');
+                        if LPLine.FindSet() then
+                            repeat
+                                // Aynı palette aynı lot birden çok satırda
+                                // durabilir (farklı raflardan toplanmış palet).
+                                // Operatöre palet+lot başına TEK satır göster.
+                                LotKey := LPLine."Lot No." + '|' + LPLine."Serial No.";
+                                if not SeenLots.ContainsKey(LotKey) then begin
+                                    SeenLots.Add(LotKey, true);
+                                    AvailableQty :=
+                                        LPVerification.AvailableBaseQtyInLp(
+                                            LPHeader."No.", PickLine."Item No.", PickLine."Variant Code",
+                                            LPLine."Lot No.", LPLine."Serial No.");
+                                    if AvailableQty > 0 then begin
+                                        Clear(Source);
+                                        Source.Add('lpNo', LPHeader."No.");
+                                        Source.Add('binCode', LPHeader."Bin Code");
+                                        Source.Add('lotNo', LPLine."Lot No.");
+                                        Source.Add('serialNo', LPLine."Serial No.");
+                                        Source.Add('expirationDate', Format(LPLine."Expiration Date", 0, 9));
+                                        Source.Add('availableBaseQty', AvailableQty);
+                                        Sources.Add(Source);
+                                    end;
+                                end;
+                            until LPLine.Next() = 0;
+                    end;
+                until LPHeader.Next() = 0;
+        end;
+
+        Result.Add('sources', Sources);
+        Result.WriteTo(ResultText);
+        exit(ResultText);
     end;
 
     local procedure PickSourceLpAssignmentMatches(LPHeader: Record "DOPSWHS LP Header"; PickLine: Record "Warehouse Activity Line"): Boolean

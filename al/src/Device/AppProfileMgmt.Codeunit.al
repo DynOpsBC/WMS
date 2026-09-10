@@ -93,6 +93,10 @@ codeunit 72265 "DOPSWHS App Profile Mgmt"
         Json.Append(StrSubstNo('"hideTestTools":%1,', BoolTxt(Profile."Hide Test Tools")));
         Json.Append(StrSubstNo('"hideAdminTools":%1,', BoolTxt(Profile."Hide Admin Tools")));
         Json.Append(StrSubstNo('"maxListRows":%1,', Profile."Max List Rows"));
+        // Sunucu tarafındaki LP okutma zorunluluğu. Terminal bu bayrağı
+        // okuyup ekranı ona göre kurar; alan yoksa (eski BC paketi) istemci
+        // false varsayar ve bu paketten önceki akış aynen sürer.
+        Json.Append(StrSubstNo('"lpScanRequired":%1,', BoolTxt(LpScanRequiredFromSetup())));
         Json.Append('"visibleModules":[');
         AppendVisibleModules(Json, Profile."Config Code");
         Json.Append('],');
@@ -127,6 +131,14 @@ codeunit 72265 "DOPSWHS App Profile Mgmt"
                 Json.Append(StrSubstNo('{"module":"%1","menuItem":"%2","sort":%3}',
                     Format(DeviceMenu."Application Module"), Esc(DeviceMenu."Menu Item"), DeviceMenu."Sort Order"));
             until DeviceMenu.Next() = 0;
+    end;
+
+    local procedure LpScanRequiredFromSetup(): Boolean
+    var
+        Setup: Record "DOPSWHS Setup";
+    begin
+        if Setup.Get('') then exit(Setup."LP Scan Required");
+        exit(false);
     end;
 
     local procedure DefaultLocationFromSetup(): Code[10]

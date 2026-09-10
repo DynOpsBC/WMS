@@ -137,6 +137,7 @@ permissionset 72096 "DOPSWHS-VIEW"
         codeunit "DOPSWHS GS1 AI Parser" = X,
         codeunit "DOPSWHS Bin Content Subscriber" = X,
         codeunit "DOPSWHS LP Series Setup" = X,
+        codeunit "DOPSWHS LP Verification" = X, // 72216
         codeunit "DOPSWHS SSCC Generator" = X,
         codeunit "DOPSWHS Receipt Mgmt" = X,
         codeunit "DOPSWHS Directed PutAway" = X,

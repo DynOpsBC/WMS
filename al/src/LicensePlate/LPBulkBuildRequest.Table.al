@@ -47,6 +47,16 @@ table 72008 "DOPSWHS LP Bulk Request"
             DecimalPlaces = 0 : 5;
             MinValue = 0;
         }
+        field(65; "Quantity Last LP"; Decimal)
+        {
+            // Artık palet: "10.350 adet / 1.000 kapasite" isteğinde 10 tam
+            // palet + 350'lik bir palet üretilir. 0 = artık palet yok (bu
+            // paketten önceki davranış ve eski uçların gönderdiği değer).
+            Caption = 'Quantity in Last LP';
+            DataClassification = CustomerContent;
+            DecimalPlaces = 0 : 5;
+            MinValue = 0;
+        }
         field(70; Completed; Boolean)
         {
             Caption = 'Completed';
@@ -81,6 +91,8 @@ table 72008 "DOPSWHS LP Bulk Request"
         TestField("LP Count");
         if "Quantity per LP" <= 0 then
             Error('LP başına miktar sıfırdan büyük olmalıdır.');
+        if "Quantity Last LP" < 0 then
+            Error('Artık paletin miktarı negatif olamaz.');
         "Created At" := CurrentDateTime();
         "Created By" := CopyStr(UserId(), 1, MaxStrLen("Created By"));
     end;
@@ -103,6 +115,7 @@ table 72008 "DOPSWHS LP Bulk Request"
            ("Bin Code" <> StoredRequest."Bin Code") or
            ("LP Count" <> StoredRequest."LP Count") or
            ("Quantity per LP" <> StoredRequest."Quantity per LP") or
+           ("Quantity Last LP" <> StoredRequest."Quantity Last LP") or
            ("Created At" <> StoredRequest."Created At") or
            ("Created By" <> StoredRequest."Created By")
         then

@@ -118,7 +118,7 @@ codeunit 72040 "DOPSWHS LP Management"
         Replayed: Boolean;
     begin
         BuildManyFromItemLedgerEntryCore(
-            ItemLedgerEntryNo, TemplateCode, BinCode, LpCount, QuantityPerLp,
+            ItemLedgerEntryNo, TemplateCode, BinCode, LpCount, QuantityPerLp, 0,
             EmptyRequestId, false, CreatedLpNos, Replayed);
     end;
 
@@ -132,12 +132,29 @@ codeunit 72040 "DOPSWHS LP Management"
         if IsNullGuid(RequestId) then
             Error('Toplu LP işlem kimliği zorunludur.');
         BuildManyFromItemLedgerEntryCore(
-            ItemLedgerEntryNo, TemplateCode, BinCode, LpCount, QuantityPerLp,
+            ItemLedgerEntryNo, TemplateCode, BinCode, LpCount, QuantityPerLp, 0,
+            RequestId, true, CreatedLpNos, Replayed);
+    end;
+
+    /// <summary>
+    /// Tam paletler + tek artık palet. "10.350 adet / 1.000 palet kapasitesi"
+    /// isteği 10x1.000 + 1x350 olarak TEK işlemde ve tek idempotency kimliğiyle
+    /// üretilir; iki ayrı çağrının yarısı yazılıp yarısı kopmaz.
+    /// QuantityLastLp = 0 ise davranış BuildManyFromItemLedgerEntryIdempotent
+    /// ile birebir aynıdır.
+    /// </summary>
+    [CommitBehavior(CommitBehavior::Error)]
+    procedure BuildManyFromItemLedgerEntryPlanIdempotent(ItemLedgerEntryNo: Integer; TemplateCode: Code[20]; BinCode: Code[20]; LpCount: Integer; QuantityPerLp: Decimal; QuantityLastLp: Decimal; RequestId: Guid; var CreatedLpNos: List of [Code[20]]; var Replayed: Boolean)
+    begin
+        if IsNullGuid(RequestId) then
+            Error('Toplu LP işlem kimliği zorunludur.');
+        BuildManyFromItemLedgerEntryCore(
+            ItemLedgerEntryNo, TemplateCode, BinCode, LpCount, QuantityPerLp, QuantityLastLp,
             RequestId, true, CreatedLpNos, Replayed);
     end;
 
     [CommitBehavior(CommitBehavior::Error)]
-    local procedure BuildManyFromItemLedgerEntryCore(ItemLedgerEntryNo: Integer; TemplateCode: Code[20]; BinCode: Code[20]; LpCount: Integer; QuantityPerLp: Decimal; RequestId: Guid; UseIdempotency: Boolean; var CreatedLpNos: List of [Code[20]]; var Replayed: Boolean)
+    local procedure BuildManyFromItemLedgerEntryCore(ItemLedgerEntryNo: Integer; TemplateCode: Code[20]; BinCode: Code[20]; LpCount: Integer; QuantityPerLp: Decimal; QuantityLastLp: Decimal; RequestId: Guid; UseIdempotency: Boolean; var CreatedLpNos: List of [Code[20]]; var Replayed: Boolean)
     var
         ItemLedgerEntry: Record "Item Ledger Entry";
         Item: Record Item;
@@ -150,12 +167,26 @@ codeunit 72040 "DOPSWHS LP Management"
         SourceBinCode: Code[20];
         CheckedBinCodes: List of [Code[20]];
         Index: Integer;
+        TotalLpCount: Integer;
     begin
         Clear(CreatedLpNos);
         Replayed := false;
-        if LpCount <= 0 then
+        if QuantityLastLp < 0 then
+            Error('Artık paletin miktarı negatif olamaz.');
+        // Yalnız artık palet istendiyse (örn. 350 adet / 1.000 kapasite) bunu
+        // "1 tam palet" olarak normalleştir. İşlem kaydı her zaman pozitif bir
+        // "LP başına miktar" taşır ve tek bir plan biçimi saklanır.
+        if (LpCount <= 0) and (QuantityLastLp > 0) then begin
+            LpCount := 1;
+            QuantityPerLp := QuantityLastLp;
+            QuantityLastLp := 0;
+        end;
+        TotalLpCount := LpCount;
+        if QuantityLastLp > 0 then
+            TotalLpCount += 1;
+        if TotalLpCount <= 0 then
             Error('Oluşturulacak LP adedi sıfırdan büyük olmalıdır.');
-        if LpCount > 100 then
+        if TotalLpCount > 100 then
             Error('Tek işlemde en fazla 100 LP oluşturulabilir.');
         if QuantityPerLp <= 0 then
             Error('LP başına miktar sıfırdan büyük olmalıdır.');
@@ -181,7 +212,7 @@ codeunit 72040 "DOPSWHS LP Management"
         if UseIdempotency then
             if LoadExistingBulkBuildRequest(
                 RequestId, ItemLedgerEntryNo, TemplateCode, BinCode, LpCount,
-                QuantityPerLp, CreatedLpNos)
+                QuantityPerLp, QuantityLastLp, TotalLpCount, CreatedLpNos)
             then begin
                 // A request created by an older package may already have the
                 // exact LP-line source link but no visible ILE LP reference.
@@ -193,12 +224,12 @@ codeunit 72040 "DOPSWHS LP Management"
         if ItemLedgerEntry."Remaining Quantity" <= 0 then
             Error('%1 numaralı Madde Defter Girişinde kullanılabilir miktar yoktur.', ItemLedgerEntryNo);
         Item.Get(ItemLedgerEntry."Item No.");
-        if (ItemLedgerEntry."Serial No." <> '') and ((LpCount <> 1) or (QuantityPerLp <> 1)) then
+        if (ItemLedgerEntry."Serial No." <> '') and ((TotalLpCount <> 1) or (QuantityPerLp <> 1)) then
             Error('Seri takipli %1 maddesi yalnız 1 adetlik tek LP olarak oluşturulabilir.', ItemLedgerEntry."Item No.");
 
         AllocatedQuantity := AllocatedQuantityForItemLedgerEntry(ItemLedgerEntryNo);
         AvailableQuantity := ItemLedgerEntry."Remaining Quantity" - AllocatedQuantity;
-        RequestedQuantity := LpCount * QuantityPerLp;
+        RequestedQuantity := LpCount * QuantityPerLp + QuantityLastLp;
         if RequestedQuantity > AvailableQuantity then
             Error(
                 '%1 numaralı Madde Defter Girişinde LP''ye ayrılabilir miktar %2, istenen miktar %3''tür.',
@@ -226,11 +257,20 @@ codeunit 72040 "DOPSWHS LP Management"
         if UseIdempotency then
             InsertBulkBuildRequest(
                 RequestId, ItemLedgerEntryNo, TemplateCode,
-                ItemLedgerEntry."Location Code", BinCode, LpCount, QuantityPerLp);
+                ItemLedgerEntry."Location Code", BinCode, LpCount, QuantityPerLp, QuantityLastLp);
 
         for Index := 1 to LpCount do begin
             BuildOneFromItemLedgerEntry(
                 ItemLedgerEntry, Item, TemplateCode, BinCode, QuantityPerLp,
+                RequestId, UseIdempotency, CheckedBinCodes, LPHeader);
+            CreatedLpNos.Add(LPHeader."No.");
+        end;
+
+        // Artık palet en sona konur: operatörün ekranda gördüğü "10x1.000 +
+        // 1x350" sırası LP numaralarına da aynen yansısın.
+        if QuantityLastLp > 0 then begin
+            BuildOneFromItemLedgerEntry(
+                ItemLedgerEntry, Item, TemplateCode, BinCode, QuantityLastLp,
                 RequestId, UseIdempotency, CheckedBinCodes, LPHeader);
             CreatedLpNos.Add(LPHeader."No.");
         end;
@@ -1455,7 +1495,7 @@ codeunit 72040 "DOPSWHS LP Management"
         ItemLedgerEntry.Modify(false);
     end;
 
-    local procedure LoadExistingBulkBuildRequest(RequestId: Guid; ItemLedgerEntryNo: Integer; TemplateCode: Code[20]; BinCode: Code[20]; LpCount: Integer; QuantityPerLp: Decimal; var CreatedLpNos: List of [Code[20]]): Boolean
+    local procedure LoadExistingBulkBuildRequest(RequestId: Guid; ItemLedgerEntryNo: Integer; TemplateCode: Code[20]; BinCode: Code[20]; LpCount: Integer; QuantityPerLp: Decimal; QuantityLastLp: Decimal; ExpectedLpCount: Integer; var CreatedLpNos: List of [Code[20]]): Boolean
     var
         BulkRequest: Record "DOPSWHS LP Bulk Request";
         LPHeader: Record "DOPSWHS LP Header";
@@ -1469,7 +1509,8 @@ codeunit 72040 "DOPSWHS LP Management"
            (BulkRequest."Template Code" <> TemplateCode) or
            (BulkRequest."Bin Code" <> BinCode) or
            (BulkRequest."LP Count" <> LpCount) or
-           (BulkRequest."Quantity per LP" <> QuantityPerLp)
+           (BulkRequest."Quantity per LP" <> QuantityPerLp) or
+           (BulkRequest."Quantity Last LP" <> QuantityLastLp)
         then
             Error(
                 '%1 toplu LP işlem kimliği farklı bir plan için daha önce kullanılmıştır. LP listesini yenileyin.',
@@ -1498,14 +1539,14 @@ codeunit 72040 "DOPSWHS LP Management"
             CreatedLpNos.Add(LPHeader."No.");
         until LPHeader.Next() = 0;
 
-        if ExistingCount <> LpCount then
+        if ExistingCount <> ExpectedLpCount then
             Error(
                 '%1 toplu LP işlemi %2 LP istemiştir ancak %3 kayıt bulundu. Yeniden oluşturmayın; kayıtları kontrol edin.',
-                Format(RequestId), LpCount, ExistingCount);
+                Format(RequestId), ExpectedLpCount, ExistingCount);
         exit(true);
     end;
 
-    local procedure InsertBulkBuildRequest(RequestId: Guid; ItemLedgerEntryNo: Integer; TemplateCode: Code[20]; LocationCode: Code[10]; BinCode: Code[20]; LpCount: Integer; QuantityPerLp: Decimal)
+    local procedure InsertBulkBuildRequest(RequestId: Guid; ItemLedgerEntryNo: Integer; TemplateCode: Code[20]; LocationCode: Code[10]; BinCode: Code[20]; LpCount: Integer; QuantityPerLp: Decimal; QuantityLastLp: Decimal)
     var
         BulkRequest: Record "DOPSWHS LP Bulk Request";
     begin
@@ -1517,6 +1558,7 @@ codeunit 72040 "DOPSWHS LP Management"
         BulkRequest."Bin Code" := BinCode;
         BulkRequest."LP Count" := LpCount;
         BulkRequest."Quantity per LP" := QuantityPerLp;
+        BulkRequest."Quantity Last LP" := QuantityLastLp;
         BulkRequest.Insert(true);
     end;
 

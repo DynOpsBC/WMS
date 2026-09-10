@@ -136,6 +136,22 @@ page 72092 "DOPSWHS Pick API"
         PickMgmt.ConfirmPickLineFor(PickLine, qtyToHandle, lotNo, sourceLpNo, userId);
     end;
 
+    /// <summary>
+    /// Bu satır için okutulabilecek kaynak paletler (raf + palet + lot +
+    /// paletteki miktar). Terminal, operatörü sıradaki palete yönlendirmek ve
+    /// okutulan paleti sunucuya gitmeden önce elemek için kullanır.
+    /// Salt-okunur; belge sahipliği aranmaz çünkü hiçbir kaydı değiştirmez.
+    /// </summary>
+    [ServiceEnabled]
+    procedure pickLineSources(lineNo: Integer): Text
+    var
+        PickLine: Record "Warehouse Activity Line";
+        PickMgmt: Codeunit "DOPSWHS Pick Mgmt";
+    begin
+        PickLine.Get(Rec.Type, Rec."No.", lineNo);
+        exit(PickMgmt.ListPickLineSources(PickLine));
+    end;
+
     [ServiceEnabled]
     procedure register()
     var

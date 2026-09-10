@@ -43,9 +43,27 @@ jobs:
           KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
           KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
         run: |
-          test -n "$ANDROID_KEYSTORE_BASE64"
+          # Eksik secret'ta bu adım eskiden çıplak "exit code 1" veriyordu ve
+          # nedeni loglara hiç yazılmıyordu. Hangi secret'ın eksik olduğunu
+          # açıkça söyle: yayın hattı en sık burada duruyor.
+          missing=""
+          [[ -n "$ANDROID_KEYSTORE_BASE64" ]] || missing="$missing ANDROID_KEYSTORE_BASE64"
+          [[ -n "$KEYSTORE_PASSWORD" ]] || missing="$missing ANDROID_KEYSTORE_PASSWORD"
+          [[ -n "$KEY_PASSWORD" ]] || missing="$missing ANDROID_KEY_PASSWORD"
+          [[ -n "$KEY_ALIAS" ]] || missing="$missing ANDROID_KEY_ALIAS"
+          if [[ -n "$missing" ]]; then
+            echo "::error::Android imza secret'ları tanımlı değil:$missing. Settings -> Secrets and variables -> Actions altında repository secret olarak ekleyin. Anahtar olmadan imzalı APK üretilemez ve mevcut uygulamanın üzerine kurulamaz."
+            exit 1
+          fi
           mkdir -p android/play/keystore
-          printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 -d > android/play/keystore/upload-keystore.jks
+          if ! printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 -d > android/play/keystore/upload-keystore.jks; then
+            echo "::error::ANDROID_KEYSTORE_BASE64 base64 olarak çözülemedi. Secret'ı 'base64 -w0 anahtar.jks' çıktısıyla yeniden oluşturun."
+            exit 1
+          fi
+          if [[ ! -s android/play/keystore/upload-keystore.jks ]]; then
+            echo "::error::Çözülen imza anahtarı boş. ANDROID_KEYSTORE_BASE64 secret'ını kontrol edin."
+            exit 1
+          fi
           {
             echo "storeFile=play/keystore/upload-keystore.jks"
             echo "storePassword=$KEYSTORE_PASSWORD"
@@ -64,6 +82,41 @@ jobs:
             :app:assembleBadeRelease :app:assembleEmuRelease \
             -PreleaseVersionCode="$RELEASE_VERSION_CODE" \
             -PreleaseVersionName="$RELEASE_VERSION"
+
+      # Cihazda önden deneme yapılamadığı için imza kontrolü burada, kanal
+      # güncellenmeden ÖNCE yapılır. Yanlış anahtarla imzalanan APK mevcut
+      # uygulamanın üzerine kurulamaz; Android "signatures do not match" der ve
+      # bütün terminaller güncellemede takılır. Beklenen parmak izi repository
+      # variable olarak tanımlıysa uyuşmazlık yayını durdurur.
+      - name: Verify signing certificate
+        env:
+          EXPECTED_CERT_SHA256: ${{ vars.ANDROID_SIGNING_CERT_SHA256 }}
+          RELEASE_VERSION: ${{ inputs.version }}
+        run: |
+          APKSIGNER="$ANDROID_HOME/build-tools/35.0.0/apksigner"
+          if [[ ! -x "$APKSIGNER" ]]; then
+            echo "::error::apksigner bulunamadı: $APKSIGNER"
+            exit 1
+          fi
+          APK=android/app/build/outputs/apk/bade/release/app-bade-release.apk
+          ACTUAL=$("$APKSIGNER" verify --print-certs "$APK" \
+            | grep -i 'certificate SHA-256 digest' | head -1 \
+            | sed 's/.*digest: *//' | tr -d ' :' | tr 'A-F' 'a-f')
+          if [[ -z "$ACTUAL" ]]; then
+            echo "::error::APK imza sertifikası okunamadı. APK imzasız üretilmiş olabilir."
+            exit 1
+          fi
+          echo "BADE $RELEASE_VERSION imza sertifikası SHA-256: $ACTUAL"
+          EXPECTED=$(printf '%s' "$EXPECTED_CERT_SHA256" | tr -d ' :' | tr 'A-F' 'a-f')
+          if [[ -z "$EXPECTED" ]]; then
+            echo "::warning::ANDROID_SIGNING_CERT_SHA256 repository variable tanımlı değil, imza karşılaştırması yapılmadı. Yukarıdaki değeri variable olarak kaydedin; sonraki yayınlarda yanlış anahtar otomatik yakalanır."
+            exit 0
+          fi
+          if [[ "$ACTUAL" != "$EXPECTED" ]]; then
+            echo "::error::İmza anahtarı beklenenden farklı. Beklenen $EXPECTED, üretilen $ACTUAL. Bu APK sahadaki uygulamanın üzerine KURULAMAZ; yayın durduruldu. ANDROID_KEYSTORE_BASE64 secret'ının doğru anahtarı taşıdığını kontrol edin."
+            exit 1
+          fi
+          echo "İmza anahtarı sahadaki uygulamayla aynı."
 
       - name: Prepare both packages and manifests
         env:
