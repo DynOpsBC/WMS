@@ -7,6 +7,20 @@ Kurulum: [docs/android-install-guide.md](../../docs/android-install-guide.md)
 
 ---
 
+## v1.14.107 — BADE + EMU — Yeni ürün, raf ve LP etiketleri — 2026-09-10
+
+**versionCode:** 200107 · **BC paketi:** 1.14.1.35
+
+### Etiket tasarımları (BC tarafı, ZPL 4x2" / 100x50 mm, 203 dpi)
+
+- Ürün, raf ve palet/LP etiketleri ortak iskeletle yeniden tasarlandı: siyah başlık bandı, solda büyük kod + Code128, sağda QR. Örnekler ve not: `docs/labels/README.md`.
+- Ürün etiketi: madde no sığacak en büyük puntoda, açıklama iki satır, BİRİM ve varsa GTIN. Barkod/QR madde numarası.
+- Raf etiketi: bin kodu koridordan okunacak büyüklükte; BÖLGE / TİP / açıklama; barkod/QR bin kodu.
+- LP etiketi: LP no, ilk ürün satırı, LOT ve "+N diğer satır", palet miktarı, tarih/ağırlık/boyut/oluşturan. Code128 SSCC (varsa) / LP no, QR her zaman LP no. Boş LP'de "BOŞ TAŞIYICI".
+- Uzun kodlarda punto ve Code128 modül genişliği otomatik seçilir; 18 haneli SSCC sol sütunda kalır.
+- Madde Tanımlama Etiketi (MTE) değiştirilmedi.
+- Android tarafında kod değişikliği yok; APK yalnız sürüm numarası için yeniden üretildi. Fiziksel yazıcıda basılmadı (Labelary önizlemesi).
+
 ## v1.14.106 — BADE + EMU — LP okutmalı toplama/yerleştirme ve PDF etiket — 2026-09-10
 
 **versionCode:** 200106 · **BC paketi:** 1.14.1.34

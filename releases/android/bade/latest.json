@@ -1,7 +1,7 @@
 {
-  "versionCode": 200106,
-  "versionName": "1.14.106-bade",
-  "apkUrl": "https://github.com/DynOpsBC/WMS/releases/download/android-v1.14.106/BCWMS-BADE-1.14.106-RELEASE.apk",
-  "sha256": "b978a35cee53827f04c691484df759734f97dbf3d57bbbdc7ecbd68cffab8f9c",
-  "releaseNotes": "LP Scan Required anahtarı açıkken toplama ve yerleştirmede okutulan palet BC'de satırla doğrulanır; çok paletli satırlarda sıradaki palet gösterilir; stoktan toplu LP'de artık palet otomatik hesaplanır. Anahtar varsayılan kapalıdır; BC 1.14.1.34 yayınlanmadan açmayın."
+  "versionCode": 200107,
+  "versionName": "1.14.107-bade",
+  "apkUrl": "https://github.com/DynOpsBC/WMS/releases/download/android-v1.14.107/BCWMS-BADE-1.14.107-RELEASE.apk",
+  "sha256": "553839323e2b08ce128a4f1338752e3371ea51bfe5913046b374158ea684c413",
+  "releaseNotes": "Yeni ürün, raf ve palet/LP etiket tasarımları (BC 1.14.1.35 gerekir). LP Scan Required anahtarı varsayılan kapalıdır; BC paketi yayınlanmadan açmayın."
 }

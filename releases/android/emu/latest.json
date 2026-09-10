@@ -1,7 +1,7 @@
 {
-  "versionCode": 200106,
-  "versionName": "1.14.106-emu",
-  "apkUrl": "https://github.com/DynOpsBC/WMS/releases/download/android-v1.14.106/BCWMS-EMU-1.14.106-RELEASE.apk",
-  "sha256": "cbf3bed8861061c942da0dc86719ef7a512664481670e42fda1c71fe8eb3364d",
-  "releaseNotes": "Ürün/Raf Sorgu etiketleri pasif etiket yazıcısında belge yazıcısına PDF gider (1.14.105 ile aynı). BADE ile ortak LP okutma altyapısı dahil; LP Scan Required anahtarı varsayılan kapalıdır. BCWMS 1.14.1.34 BC uzantısı gereklidir."
+  "versionCode": 200107,
+  "versionName": "1.14.107-emu",
+  "apkUrl": "https://github.com/DynOpsBC/WMS/releases/download/android-v1.14.107/BCWMS-EMU-1.14.107-RELEASE.apk",
+  "sha256": "969ecef52aecdc92e81140675cfefc904c49443983b3a28d16b1836c4d247d9b",
+  "releaseNotes": "Yeni ürün, raf ve palet/LP etiket tasarımları ve Ürün/Raf Sorgu PDF etiket yedeği. BCWMS 1.14.1.35 BC uzantısı gereklidir."
 }
