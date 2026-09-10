@@ -83,7 +83,14 @@ codeunit 72051 "DOPSWHS Print Dispatcher"
     end;
 
     procedure PrintItemLabel(var Item: Record Item; PrinterId: Code[50]; Copies: Integer)
+    var
+        Printer: Record "DOPSWHS Printer";
     begin
+        if Printer.Get(PrinterId) then
+            if Printer."Format" = Printer."Format"::PDF then begin
+                PrintBarcodeDocument(PrinterId, Item."No.", Copies, Item."No.", 'URUN ETIKETI', Item.Description + ' | ' + Item."Base Unit of Measure");
+                exit;
+            end;
         EnqueueZpl(Item."No.", BuildItemZpl(Item), PrinterId, Copies, Enum::"DOPSWHS IWX Report Usage"::Item, 'Item');
     end;
 
@@ -192,7 +199,14 @@ codeunit 72051 "DOPSWHS Print Dispatcher"
     end;
 
     procedure PrintBinLabel(var Bin: Record Bin; PrinterId: Code[50]; Copies: Integer)
+    var
+        Printer: Record "DOPSWHS Printer";
     begin
+        if Printer.Get(PrinterId) then
+            if Printer."Format" = Printer."Format"::PDF then begin
+                PrintBarcodeDocument(PrinterId, Bin."Code", Copies, Bin."Code", 'RAF ETIKETI', Bin."Location Code" + ' | ' + Bin.Description);
+                exit;
+            end;
         EnqueueZpl(Bin."Code", BuildBinZpl(Bin), PrinterId, Copies, Enum::"DOPSWHS IWX Report Usage"::Bin, 'Bin');
     end;
 
@@ -203,6 +217,11 @@ codeunit 72051 "DOPSWHS Print Dispatcher"
     /// value reached Business Central from the scanner.
     /// </summary>
     procedure PrintBarcodeTest(PrinterId: Code[50]; BarcodeValue: Text; Copies: Integer): Integer
+    begin
+        exit(PrintBarcodeDocument(PrinterId, BarcodeValue, Copies, 'BARCODE-TEST', 'OKUTULAN BARKOD', 'BCWMS terminal baskı testi'));
+    end;
+
+    local procedure PrintBarcodeDocument(PrinterId: Code[50]; BarcodeValue: Text; Copies: Integer; SourceDoc: Code[50]; Heading: Text; Description: Text): Integer
     var
         BarcodeReport: Report "DOPSWHS Barcode Print Test";
         TempBlob: Codeunit "Temp Blob";
@@ -236,6 +255,7 @@ codeunit 72051 "DOPSWHS Print Dispatcher"
 
         EnsureDocumentPrinter(PrinterId, Enum::"DOPSWHS IWX Report Usage"::Receipt);
         BarcodeReport.SetBarcodeValue(CleanValue);
+        BarcodeReport.SetLabelContent(Heading, Description);
         TempBlob.CreateOutStream(PdfOutStream);
         if not BarcodeReport.SaveAs('', ReportFormat::Pdf, PdfOutStream) then
             Error('The scanned barcode test PDF could not be rendered.');
@@ -245,7 +265,7 @@ codeunit 72051 "DOPSWHS Print Dispatcher"
         TempBlob.CreateInStream(PdfInStream);
         if Setup."Print Channel" = Setup."Print Channel"::AzureDirect then
             JobId := SelfHosted.EnqueueStreamForImmediateDispatch(
-                'BARCODE-TEST',
+                SourceDoc,
                 Report::"DOPSWHS Barcode Print Test",
                 CopyStr(PrinterId, 1, 20),
                 Enum::"DOPSWHS Print Format"::PDF,
@@ -253,7 +273,7 @@ codeunit 72051 "DOPSWHS Print Dispatcher"
                 Copies,
                 '')
         else
-            JobId := EnqueuePdf('BARCODE-TEST', Report::"DOPSWHS Barcode Print Test", PrinterId, Copies, Enum::"DOPSWHS IWX Report Usage"::Receipt, PdfInStream);
+            JobId := EnqueuePdf(SourceDoc, Report::"DOPSWHS Barcode Print Test", PrinterId, Copies, Enum::"DOPSWHS IWX Report Usage"::Receipt, PdfInStream);
 
         // This is an explicit terminal test action. Commit its durable audit row
         // and dispatch it in the same request so the operator does not have to

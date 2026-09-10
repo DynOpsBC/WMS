@@ -53,6 +53,22 @@ fun setDefaultPrinter(context: Context, code: String, usage: String = PRINTER_US
         .edit().putString(PREF_NAMESPACE + usage, code).apply()
 }
 
+internal suspend fun resolveInquiryPrinter(context: Context): Result<String> = runCatching {
+    val label = getDefaultPrinter(context)
+    val document = getDefaultPrinter(context, PRINTER_USAGE_DOCUMENT)
+    if (label.isBlank()) return@runCatching document
+    val escaped = label.replace("'", "''")
+    val response = BcApi.get(context, "printers?\$filter=code eq '$escaped'&\$top=1")
+    check(response.ok) { "Yazıcı durumu doğrulanamadı: ${BcApi.errorMessage(response.body)}" }
+    // An unavailable API is not evidence of an inactive printer. Only use the
+    // document fallback after a successful response confirms missing/inactive.
+    val data = JSONObject(response.body).getJSONArray("value")
+    val printer = if (data.length() == 0) null else data.getJSONObject(0)
+    val available = printer != null && printer.getBoolean("active") && printer.getString("format") == "ZPL"
+    check(available || document.isNotBlank()) { "Etiket yazıcısı pasif veya bulunamadı. Yazıcılar ekranından bir Belge yazıcısı seçin." }
+    inquiryLabelPrinter(label, document, available)
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun PrintersModule() {
@@ -98,12 +114,19 @@ fun PrintersModule() {
             Text("Yazıcılar", fontWeight = FontWeight.Bold, fontSize = 18.sp)
         }
         Text(
-            "Windows ajanının buluta eşitlediği yazıcılardan bu cihaz için etiket ve belge varsayılanını seçin.",
+            "Etiket ve belge yazıcısını seçin. Etiket seçimi yoksa Ürün/Raf Sorgu etiketleri belge yazıcısına PDF olarak gönderilir.",
             fontSize = 12.sp, color = Color.Gray
         )
         Spacer(Modifier.height(8.dp))
         Row(verticalAlignment = Alignment.CenterVertically) {
             Button(onClick = { load() }, enabled = !loading) { WmsRefreshLabel(loading) }
+        }
+        if (defaultLabelCode.isNotBlank()) {
+            TextButton(onClick = {
+                setDefaultPrinter(context, "", PRINTER_USAGE_LABEL)
+                defaultLabelCode = ""
+                status = "Etiket seçimi kaldırıldı. Ürün/Raf Sorgu için Belge yazıcısı kullanılacak."
+            }) { Text("Etiket seçimini kaldır") }
         }
         Spacer(Modifier.height(6.dp))
         StatusText(status)
@@ -241,11 +264,12 @@ fun PrintersModule() {
                         Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                             OutlinedButton(
                                 onClick = {
-                                    setDefaultPrinter(context, code, PRINTER_USAGE_LABEL)
-                                    defaultLabelCode = code
+                                    val selected = if (isLabelDefault) "" else code
+                                    setDefaultPrinter(context, selected, PRINTER_USAGE_LABEL)
+                                    defaultLabelCode = selected
                                 },
-                                enabled = active && format == "ZPL",
-                            ) { Text(if (isLabelDefault) "✓ Etiket" else "Etiket", fontSize = 12.sp) }
+                                enabled = isLabelDefault || (active && format == "ZPL"),
+                            ) { Text(if (isLabelDefault) "Etiket seçimini kaldır" else "Etiket", fontSize = 12.sp) }
                             OutlinedButton(
                                 onClick = {
                                     setDefaultPrinter(context, code, PRINTER_USAGE_DOCUMENT)

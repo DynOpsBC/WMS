@@ -21,7 +21,7 @@
               <Paragraph>
                 <TextRuns>
                   <TextRun>
-                    <Value>OKUTULAN BARKOD</Value>
+                    <Value>=Fields!LabelHeading.Value</Value>
                     <Style>
                       <FontFamily>Arial</FontFamily>
                       <FontSize>18pt</FontSize>
@@ -115,7 +115,7 @@
               <Paragraph>
                 <TextRuns>
                   <TextRun>
-                    <Value>="BCWMS terminal baskı testi · " &amp; Fields!PrintedAt.Value</Value>
+                    <Value>=Fields!LabelDescription.Value &amp; " · " &amp; Fields!PrintedAt.Value</Value>
                     <Style>
                       <FontFamily>Arial</FontFamily>
                       <FontSize>10pt</FontSize>
@@ -165,6 +165,12 @@
         </Field>
         <Field Name="PrintedAt">
           <DataField>PrintedAt</DataField>
+        </Field>
+        <Field Name="LabelHeading">
+          <DataField>LabelHeading</DataField>
+        </Field>
+        <Field Name="LabelDescription">
+          <DataField>LabelDescription</DataField>
         </Field>
       </Fields>
       <Query>

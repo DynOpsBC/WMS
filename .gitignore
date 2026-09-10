@@ -36,6 +36,14 @@ push-relay/dist/
 .env
 .env.*
 !.env.example
+**/*.runtime.secrets.json
+
+# Customer print bundles contain short-lived Azure credentials and must remain
+# local delivery artifacts rather than repository content.
+releases/customer/EMU-WMS-SAND0708-BC-AZURE-CONFIG/
+releases/customer/EMU-WMS-SAND0708-Yazici-Tek-Tik-Kurulum/
+releases/customer/EMU-WMS-SAND0708-Yazici-Tek-Tik-Kurulum.zip
+releases/customer/EMU-WMS-SAND0708-Yazici-Tek-Tik-Kurulum.sha256.txt
 
 
 # Screenshots from MCP test runs

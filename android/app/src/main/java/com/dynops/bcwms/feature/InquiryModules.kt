@@ -99,8 +99,12 @@ fun ItemInquiryModule() {
         val no = item?.let { rawValue(it, "no", "number") }?.takeIf { it.isNotBlank() } ?: return
         scope.launch {
             status = "🖨 Etiket yazdırılıyor..."
+            val printer = resolveInquiryPrinter(context).getOrElse {
+                status = "HATA: ${it.message}"
+                return@launch
+            }
             val payload = JSONObject().apply {
-                put("printerId", getDefaultPrinter(context))
+                put("printerId", printer)
                 put("copies", 1)
             }.toString()
             val r = BcApi.boundAction(context, "items", no, "printLabel", payload)
@@ -310,9 +314,13 @@ fun BinInquiryModule() {
         if (loc.isBlank() || code.isBlank()) return
         scope.launch {
             status = "🖨 Bin etiketi yazdırılıyor..."
+            val printer = resolveInquiryPrinter(context).getOrElse {
+                status = "HATA: ${it.message}"
+                return@launch
+            }
             val key = "locationCode='${loc.replace("'", "''")}',code='${code.replace("'", "''")}'"
             val payload = JSONObject().apply {
-                put("printerId", getDefaultPrinter(context))
+                put("printerId", printer)
                 put("copies", 1)
             }.toString()
             val r = BcApi.boundAction(context, "bins", key, "printLabel", payload)

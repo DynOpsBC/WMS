@@ -12,6 +12,8 @@ report 72373 "DOPSWHS Barcode Print Test"
             column(EncodedBarcode; EncodedBarcode) { }
             column(BarcodeValue; BarcodeValue) { }
             column(PrintedAt; Format(CurrentDateTime())) { }
+            column(LabelHeading; LabelHeading) { }
+            column(LabelDescription; LabelDescription) { }
 
             trigger OnPreDataItem()
             var
@@ -30,9 +32,18 @@ report 72373 "DOPSWHS Barcode Print Test"
     procedure SetBarcodeValue(Value: Text)
     begin
         BarcodeValue := CopyStr(Value, 1, MaxStrLen(BarcodeValue));
+        SetLabelContent('OKUTULAN BARKOD', 'BCWMS terminal baskı testi');
+    end;
+
+    procedure SetLabelContent(Heading: Text; Description: Text)
+    begin
+        LabelHeading := Heading;
+        LabelDescription := Description;
     end;
 
     var
         BarcodeValue: Text[100];
         EncodedBarcode: Text;
+        LabelHeading: Text;
+        LabelDescription: Text;
 }
