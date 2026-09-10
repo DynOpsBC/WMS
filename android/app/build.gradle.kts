@@ -7,8 +7,8 @@ val releaseVersionCodeOverride = providers.gradleProperty("releaseVersionCode").
 val releaseVersionNameOverride = providers.gradleProperty("releaseVersionName").orNull?.takeIf { it.isNotBlank() }
 // BADE ve EMU aynı kaynak koddan aynı anda yayınlanır. Müşteri flavor'larında
 // ayrı sürüm değeri tutmak bir paketin geride kalmasına neden oluyordu.
-val customerVersionCode = releaseVersionCodeOverride ?: 200107
-val customerVersionName = releaseVersionNameOverride ?: "1.14.107"
+val customerVersionCode = releaseVersionCodeOverride ?: 200108
+val customerVersionName = releaseVersionNameOverride ?: "1.14.108"
 
 plugins {
   alias(libs.plugins.android.application)
@@ -35,8 +35,8 @@ android {
     // Saha APK'larından bazılarında CI tarafından 100000+ versionCode
     // kullanıldı. Görünen sürüm adı eski olsa bile Android yalnız sayısal kodu
     // karşılaştırdığı için semantik sürümleri 200000 bandında monoton tutuyoruz.
-    versionCode = releaseVersionCodeOverride ?: 200107
-    versionName = releaseVersionNameOverride ?: "1.14.107"
+    versionCode = releaseVersionCodeOverride ?: 200108
+    versionName = releaseVersionNameOverride ?: "1.14.108"
     manifestPlaceholders["appLabel"] = "BCWMS"
     // Ücretsiz dağıtım kanalı: public GitHub Release içindeki sabit latest.json.
     // APK aynı release'de tutulur; uygulamaya GitHub hesabı/token gömülmez.
@@ -102,7 +102,10 @@ android {
       // şirketlerden seçilir. Ortak CRONUS kimliğine sessizce düşülmez.
       buildConfigField("String", "BC_DEFAULT_COMPANY_ID", "\"\"")
       buildConfigField("String", "BC_DEFAULT_COMPANY_NAME", "\"My Company\"")
-      buildConfigField("boolean", "BC_ALLOW_PRODUCTION", "false")
+      // EMU is also used against the DKÇ production environment. Keep the
+      // explicit environment/company selection, but do not reject Production
+      // before the authenticated BC discovery request is sent.
+      buildConfigField("boolean", "BC_ALLOW_PRODUCTION", "true")
       buildConfigField("String", "TENANT_LABEL", "\"DKÇ / EMU\"")
       buildConfigField("String", "LOGIN_EMAIL_HINT", "\"deniz@atesci.com\"")
       buildConfigField("String", "LOGIN_DEFAULT_EMAIL", "\"deniz@atesci.com\"")
