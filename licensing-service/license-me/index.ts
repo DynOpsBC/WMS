@@ -35,9 +35,13 @@ export default async function licenseMe(
     }
   }
 
+  // Optional product filter. Without it a tenant holding both a WMS and a BCTraining
+  // license would get whichever expires last, which is the wrong answer for one of them.
+  const product = request.query.get("product") ?? undefined;
+
   let records;
   try {
-    records = await listActiveByTenant(tenantId);
+    records = await listActiveByTenant(tenantId, product);
   } catch (err) {
     return { status: 400, jsonBody: { ok: false, error: (err as Error).message } };
   }
