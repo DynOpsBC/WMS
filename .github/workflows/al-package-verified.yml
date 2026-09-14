@@ -18,9 +18,9 @@ jobs:
       - name: Install Microsoft AL compiler
         shell: pwsh
         run: |
-          dotnet tool install --global Microsoft.Dynamics.BusinessCentral.Development.Tools
+          dotnet tool install --global Microsoft.Dynamics.BusinessCentral.Development.Tools --version 18.0.41.39415
           if ($LASTEXITCODE -ne 0) { throw 'AL compiler installation failed' }
-          al version
+          al --version
       - name: Download Microsoft BC 28 symbols
         shell: pwsh
         run: |

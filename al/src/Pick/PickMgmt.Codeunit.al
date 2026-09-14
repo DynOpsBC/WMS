@@ -867,6 +867,8 @@ codeunit 72046 "DOPSWHS Pick Mgmt"
 
         PickLine.SetRange("Activity Type", Pick.Type);
         PickLine.SetRange("No.", Pick."No.");
+        if (PalletPlan <> '') and PickLine.IsEmpty() then
+            Error('Toplama satırları artık bulunamıyor. Belgeyi yenileyin.');
         if PickLine.FindFirst() then begin
             MovePickedContentsToMainLp(Pick, PalletPlan);
             CompleteMainShippingLp(Pick);
@@ -1031,9 +1033,8 @@ codeunit 72046 "DOPSWHS Pick Mgmt"
         end;
     end;
 
-    local procedure TransferScannedPickLine(Pick: Record "Warehouse Activity Header"; PickLine: Record "Warehouse Activity Line"; ShippingLP: Record "DOPSWHS LP Header"; PlaceLine: Record "Warehouse Activity Line"; PlanText: Text)
+    procedure ValidateScannedPickPlan(PickLine: Record "Warehouse Activity Line"; PlanText: Text)
     var
-        LPMgt: Codeunit "DOPSWHS LP Management";
         Plan: JsonObject;
         Step: JsonObject;
         Steps: JsonArray;
@@ -1043,10 +1044,12 @@ codeunit 72046 "DOPSWHS Pick Mgmt"
         SourceLpNo: Code[20];
         BaseQty: Decimal;
         TotalBaseQty: Decimal;
-        PickQty: Decimal;
         ExpectedIdentity: Text;
     begin
         Plan.ReadFrom(PlanText);
+        Plan.Get('lineNo', Value);
+        if Value.AsValue().AsInteger() <> PickLine."Line No." then
+            Error('Palet planı başka bir toplama satırına ait.');
         ExpectedIdentity := UpperCase(
             PickLine."No." + '|' + PickLine."Item No." + '|' + PickLine."Variant Code" + '|' +
             PickLine."Location Code" + '|' + PickLine."Bin Code" + '|' + PickLine."Serial No." + '|' +
@@ -1089,6 +1092,24 @@ codeunit 72046 "DOPSWHS Pick Mgmt"
         if Abs(TotalBaseQty - PickLine."Qty. to Handle (Base)") > 0.00001 then
             Error('%1 satırında okutulan palet miktarları satırın miktarını karşılamıyor.', PickLine."Line No.");
 
+    end;
+
+    local procedure TransferScannedPickLine(Pick: Record "Warehouse Activity Header"; PickLine: Record "Warehouse Activity Line"; ShippingLP: Record "DOPSWHS LP Header"; PlaceLine: Record "Warehouse Activity Line"; PlanText: Text)
+    var
+        LPMgt: Codeunit "DOPSWHS LP Management";
+        Plan: JsonObject;
+        Step: JsonObject;
+        Steps: JsonArray;
+        Token: JsonToken;
+        Value: JsonToken;
+        SourceLpNo: Code[20];
+        BaseQty: Decimal;
+        PickQty: Decimal;
+    begin
+        ValidateScannedPickPlan(PickLine, PlanText);
+        Plan.ReadFrom(PlanText);
+        Plan.Get('steps', Value);
+        Steps := Value.AsArray();
         foreach Token in Steps do begin
             Step := Token.AsObject();
             Step.Get('lpNo', Value);
