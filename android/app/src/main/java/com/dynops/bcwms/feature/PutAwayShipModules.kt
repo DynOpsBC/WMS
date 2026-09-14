@@ -145,10 +145,9 @@ private fun PutAwayDocument(no: String, onBack: () -> Unit) {
     var showBulkBin by remember { mutableStateOf(false) }
     var showBatchPlacement by remember { mutableStateOf(false) }
     var showBins by remember { mutableStateOf(false) }
-    // Sunucudaki LP okutma zorunluluğu ve yeni ucun yayındaki BC paketinde
-    // bulunup bulunmadığı. İkisi de false ise ekran bu paketten önceki gibi
-    // davranır; yeni APK eski sunucuya asla tanımadığı bir action göndermez.
-    var lpScanRequired by remember { mutableStateOf(false) }
+    // BADE'de palet doğrulaması her zaman zorunludur. Servis yoklaması
+    // başarısız olursa doğrulamasız yerleştirmeye geri dönülmez.
+    var lpScanRequired by remember { mutableStateOf(requiresPalletWorkflow(com.dynops.bcwms.BuildConfig.FLAVOR)) }
     var lpPlacementSupported by remember { mutableStateOf(false) }
     // Hedef raf/miktar BC'ye yazildiktan sonra belge ekranindan cikilabilir.
     // Hangi satirlarin operatorce hazirlandigi yalniz RAM'de kalirsa geri
@@ -163,7 +162,7 @@ private fun PutAwayDocument(no: String, onBack: () -> Unit) {
             myUserId = BcApi.currentUserId(context).trim()
             adminTestSession = BcApi.isAdminTestSession(context)
             lpPlacementSupported = BcApi.getLpScanCapabilities(context).putAwayPlacementFromLp
-            lpScanRequired = lpPlacementSupported && BcApi.lpScanRequired(context)
+            lpScanRequired = BcApi.lpScanRequired(context)
             val h = BcApi.get(context, "putAways('$no')")
             header = if (h.ok) runCatching { JSONObject(h.body) }.getOrNull() else null
             headerLoaded = header != null
@@ -193,6 +192,11 @@ private fun PutAwayDocument(no: String, onBack: () -> Unit) {
         val actType = BcEnum.decodeOData(rawValue(line, "activityType")).ifBlank { BcEnum.WhseActivityType.PUT_AWAY }
         val compositeKey = "activityType='$actType',no='$no',lineNo=$lineNo"
         val placeWithTarget = targetBin != null && isPutAwayPlaceLine(line)
+        if (placeWithTarget && qty > 0 && lpScanRequired && (sourceLpNo.isBlank() || !lpPlacementSupported)) {
+            status = if (sourceLpNo.isBlank()) "HATA: Önce kaynak paletin QR kodunu okutun."
+                else "HATA: Palet doğrulama servisine ulaşılamadı. Belgeyi yenileyip tekrar deneyin."
+            return false
+        }
         val body = JSONObject().apply {
             if (placeWithTarget) {
                 put("targetBinCode", targetBin)
@@ -527,6 +531,8 @@ private fun PutAwayDocument(no: String, onBack: () -> Unit) {
             Text(
                 if (lines.any { it.optString("lpNo").isNotBlank() })
                     "Hedef rafı okutun, ardından o rafa bırakacağınız LP'leri peş peşe okutun."
+                else if (lpScanRequired)
+                    "Bir yerleştirmeye dokunun; palet, kaynak raf ve hedef raf doğrulanır."
                 else
                     "Bir yerleştirmeye dokunun; kaynak raf, ürün ve hedef raf doğrulanır.",
                 fontSize = 12.sp,
@@ -963,11 +969,12 @@ private fun BatchLpPutAwaySheet(
 
         Spacer(Modifier.height(12.dp))
         ScanField(
-            label = if (currentBin.isBlank()) "Hedef raf okut" else "LP veya yeni hedef raf okut",
+            label = if (currentBin.isBlank()) "Hedef raf okut veya yaz" else "LP veya yeni hedef raf okut / yaz",
             value = scan,
             onValueChange = { scan = it },
             modifier = Modifier.fillMaxWidth(),
             enabled = !checkingBin,
+            scanOnly = false,
             onScanned = { raw ->
                 val resolved = BarcodeIntentResolver.resolve(raw)
                 if (resolved.kind == BarcodeKind.Lp) scanLp(raw) else selectBin(raw)
@@ -1017,7 +1024,15 @@ internal fun decidePutAwayTarget(
 }
 
 /** Bottom sheet: scan/enter target bin (with "Öner" = suggestBin) + qty. */
-private enum class PutAwayStep { LP, SOURCE_BIN, ITEM, TARGET_BIN, QTY }
+internal enum class PutAwayStep { LP, SOURCE_BIN, ITEM, TARGET_BIN, QTY }
+
+internal fun putAwayScanSteps(lpScanRequired: Boolean, expectedLp: String, expectedSource: String): List<PutAwayStep> = buildList {
+    if (lpScanRequired || expectedLp.isNotBlank()) add(PutAwayStep.LP)
+    if (expectedSource.isNotBlank()) add(PutAwayStep.SOURCE_BIN)
+    if (!lpScanRequired) add(PutAwayStep.ITEM)
+    add(PutAwayStep.TARGET_BIN)
+    add(PutAwayStep.QTY)
+}
 
 /**
  * Yönlendirilmiş yerleştirme: kaynak raf → ürün → hedef raf → miktar.
@@ -1051,13 +1066,7 @@ private fun PutAwayGuidedSheet(
     // Madde Tanımlama Etiketi QR'ı var. Zorunluluk açıkken ürün okutma adımı
     // hiç gösterilmez; doğrulamayı okutulan paletin içeriği üstlenir ve son
     // kararı sunucu verir.
-    val steps = buildList {
-        if (lpScanRequired || expectedLp.isNotBlank()) add(PutAwayStep.LP)
-        if (expectedSource.isNotBlank()) add(PutAwayStep.SOURCE_BIN)
-        if (!lpScanRequired) add(PutAwayStep.ITEM)
-        add(PutAwayStep.TARGET_BIN)
-        add(PutAwayStep.QTY)
-    }
+    val steps = putAwayScanSteps(lpScanRequired, expectedLp, expectedSource)
     var step by remember(place.optInt("lineNo")) { mutableStateOf(steps.first()) }
     var scannedLp by remember(place.optInt("lineNo")) { mutableStateOf("") }
     var scan by remember { mutableStateOf("") }
@@ -1206,7 +1215,7 @@ private fun PutAwayGuidedSheet(
 
             when (step) {
                 PutAwayStep.LP -> {
-                    Text("Palet/LP etiketini okutun", fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
+                    Text("Palet/LP etiketini okutun veya LP numarasını yazın", fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
                     Text(
                         if (expectedLp.isNotBlank())
                             "Doğru fiziksel paleti yerleştirdiğinizi teyit eder. Beklenen: $expectedLp"
@@ -1259,13 +1268,14 @@ private fun PutAwayGuidedSheet(
             } else {
                 ScanField(
                     label = when (step) {
-                        PutAwayStep.LP -> "LP okut"
+                        PutAwayStep.LP -> "LP okut veya yaz"
                         PutAwayStep.ITEM -> "Ürün okut"
                         else -> "Raf okut"
                     },
                     value = scan,
                     onValueChange = { scan = it },
                     modifier = Modifier.fillMaxWidth(),
+                    scanOnly = false,
                     onScanned = { submit(it) },
                 )
                 Spacer(Modifier.height(6.dp))
@@ -1745,6 +1755,7 @@ private fun WhsePickDocument(no: String, onBack: () -> Unit) {
     var linesComplete by remember { mutableStateOf(false) }
     var status by remember { mutableStateOf("") }
     var busy by remember { mutableStateOf(false) }
+    var lpScanRequired by remember { mutableStateOf(requiresPalletWorkflow(com.dynops.bcwms.BuildConfig.FLAVOR)) }
     var qtyLine by remember { mutableStateOf<JSONObject?>(null) }
     var scanFilter by remember { mutableStateOf("") }
     var sortByBin by remember { mutableStateOf(true) }
@@ -1770,6 +1781,7 @@ private fun WhsePickDocument(no: String, onBack: () -> Unit) {
         scope.launch {
             busy = true
             header = null; lines = emptyList(); headerLoaded = false; linesComplete = false
+            lpScanRequired = BcApi.lpScanRequired(context)
             myUserId = BcApi.currentUserId(context).trim()
             val h = BcApi.get(context, "picks('$no')")
             header = if (h.ok) runCatching { JSONObject(h.body) }.getOrNull() else null
@@ -1932,7 +1944,22 @@ private fun WhsePickDocument(no: String, onBack: () -> Unit) {
             }
             if (binFilter.isNotBlank()) { ScanFilterChip("📍 Raf $binFilter") { binFilter = "" }; Spacer(Modifier.height(4.dp)) }
             if (scanFilter.isNotBlank()) { ScanFilterChip(scanFilter) { scanFilter = "" }; Spacer(Modifier.height(4.dp)) }
-            if (merge) {
+            if (lpScanRequired) {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    val sourceGroups = if (merge) displayGroups else groupLines(displayLines, ::pickLineCapacity)
+                        .flatMap { g -> g.lines.map { groupLines(listOf(it), ::pickLineCapacity).single() } }
+                    sourceGroups.forEach { g ->
+                        Card(onClick = { if (!busy && canMutate) groupTarget = g }, modifier = Modifier.fillMaxWidth()) {
+                            Column(Modifier.padding(12.dp)) {
+                                Text(g.itemNo, fontWeight = FontWeight.Bold)
+                                Text(g.description)
+                                g.lines.forEach { PickSourceDetails(no, it) }
+                                Text("Paletleri okutmak için dokunun", fontSize = 12.sp)
+                            }
+                        }
+                    }
+                }
+            } else if (merge) {
                 LineGroupCards(
                     groups = displayGroups,
                     staged = { it.optDouble("qtyToHandle", 0.0) },
@@ -2067,7 +2094,13 @@ private fun WhsePickDocument(no: String, onBack: () -> Unit) {
     }
 
     val ql = qtyLine
-    if (ql != null) {
+    if (ql != null && lpScanRequired) {
+        PalletPickSheet(no, groupLines(listOf(ql), ::pickLineCapacity).single(),
+            onDismiss = { qtyLine = null },
+            onFinished = { message -> qtyLine = null; status = message; reload() },
+        )
+    }
+    if (ql != null && !lpScanRequired) {
         QuantityDialogSheet(
             title = "Çekme Miktarı",
             itemNo = ql.optString("itemNo"),
@@ -2110,11 +2143,18 @@ private fun WhsePickDocument(no: String, onBack: () -> Unit) {
         )
     }
     val gt = groupTarget
-    if (gt != null) {
+    if (gt != null && lpScanRequired) {
+        PalletPickSheet(no, gt,
+            onDismiss = { groupTarget = null },
+            onFinished = { message -> groupTarget = null; status = message; reload() },
+        )
+    }
+    if (gt != null && !lpScanRequired) {
         QuantityDialogSheet(
             title = "Çekme Miktarı (${gt.count} satıra dağıtılır)",
             itemNo = gt.itemNo,
             initialQty = gt.totalOutstanding.takeIf { it > 0 } ?: 1.0,
+            maximumQuantity = gt.totalOutstanding,
             initialUom = gt.lines.first().optString("unitOfMeasureCode"),
             initialLot = gt.lines.first().optString("lotNo"),
             allowZeroQuantity = true,
@@ -2132,6 +2172,10 @@ private fun WhsePickDocument(no: String, onBack: () -> Unit) {
                 groupTarget = null
                 if (!canMutate) { status = documentOwnershipMessage(assignedTo, myUserId); return@QuantityDialogSheet }
                 val planLineNos = distributeQty(gt, res.quantity, ::pickLineCapacity).map { it.first.optInt("lineNo") }.toSet()
+                if (planLineNos.isEmpty()) {
+                    status = "HATA: Miktar satırların kalanını aşıyor. Belgeyi yenileyin."
+                    return@QuantityDialogSheet
+                }
                 if (planLineNos.any { it in inFlightLineNos }) return@QuantityDialogSheet
                 inFlightLineNos = inFlightLineNos + planLineNos
                 scope.launch {
@@ -2146,7 +2190,7 @@ private fun WhsePickDocument(no: String, onBack: () -> Unit) {
                             lineNo = ln.optInt("lineNo"),
                             qtyToHandle = q,
                             lotNo = res.lotNo,
-                            sourceLpNo = res.sourceLpNo,
+                            sourceLpNo = if (q > 0) res.sourceLpNo else "",
                         )
                         if (r.ok) {
                             okCount++

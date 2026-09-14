@@ -105,6 +105,10 @@ fun UpdateChecker() {
     var manifest by remember { mutableStateOf<UpdateManifest?>(null) }
 
     LaunchedEffect(Unit) {
+        // Debug builds use a developer-specific signing key and a distinct
+        // applicationId. They must never offer the stable release APK as an
+        // in-place update.
+        if (!BuildConfig.IN_APP_UPDATES_ENABLED) return@LaunchedEffect
         if (!isUpdateCheckEnabled(context)) return@LaunchedEffect
         while (true) {
             if (manifest == null) {
@@ -157,17 +161,23 @@ fun AppUpdateCard() {
         Column(Modifier.fillMaxWidth().padding(16.dp)) {
             Text("Sürüm ve Güncelleme", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
             Text(
-                "✓ Uzaktan güncelleme etkin",
+                if (BuildConfig.IN_APP_UPDATES_ENABLED) {
+                    "✓ Uzaktan güncelleme etkin"
+                } else {
+                    "Geliştirici sürümü — otomatik güncelleme kapalı"
+                },
                 style = MaterialTheme.typography.bodySmall,
-                color = statusColors.success,
+                color = if (BuildConfig.IN_APP_UPDATES_ENABLED) statusColors.success else statusColors.warning,
                 fontWeight = FontWeight.SemiBold,
             )
-            Text(
-                "⚡ Hızlı indirme etkin",
-                style = MaterialTheme.typography.bodySmall,
-                color = statusColors.success,
-                fontWeight = FontWeight.SemiBold,
-            )
+            if (BuildConfig.IN_APP_UPDATES_ENABLED) {
+                Text(
+                    "⚡ Hızlı indirme etkin",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = statusColors.success,
+                    fontWeight = FontWeight.SemiBold,
+                )
+            }
             Text(
                 "✓ ${BuildConfig.VERSION_NAME} sürümü kurulu",
                 style = MaterialTheme.typography.bodySmall,
@@ -192,7 +202,7 @@ fun AppUpdateCard() {
             }
             Spacer(Modifier.height(12.dp))
             Button(
-                enabled = !checking,
+                enabled = BuildConfig.IN_APP_UPDATES_ENABLED && !checking,
                 onClick = {
                     scope.launch {
                         checking = true

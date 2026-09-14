@@ -69,6 +69,7 @@ fun QuantityDialogSheet(
     serialRequired: Boolean = false,
     quantityExactlyOne: Boolean = false,
     allowZeroQuantity: Boolean = false,
+    maximumQuantity: Double? = null,
     // Stoktaki lotları açılışta yoklar: lot bulunursa alan zorunlu sayılır ve
     // seçim listesi görünür. BC'deki lotRequired alanı yayınlanmamış olsa bile
     // lot takipli üründe boş lotla sevk edilmesini engeller.
@@ -106,14 +107,23 @@ fun QuantityDialogSheet(
     LaunchedEffect(selectableUoms, initialUom) {
         if (uom.isBlank()) uom = selectableUoms.firstOrNull().orEmpty()
     }
-    // -1 = henüz bilinmiyor / sorgulanamadı, 0 = stokta lot yok, >0 = lot var.
+    // -2 = loading, -1 = lookup failed, 0 = no lots, >0 = lots available.
+    // Keep loading and completion in one observed state: a failed lookup must
+    // invalidate the same UI scope even though the number of lots is unknown.
     var stockLotCount by remember(itemNo, locationCode, binCode, variantCode) { mutableStateOf(-1) }
+    val stockLotLoading = stockLotCount == -2
+    var stockLotReload by remember { mutableStateOf(0) }
     val probeContext = LocalContext.current
     val actionScope = rememberCoroutineScope()
-    LaunchedEffect(autoDetectLotFromStock, showLotSerial, itemNo, locationCode, binCode, variantCode) {
+    LaunchedEffect(autoDetectLotFromStock, showLotSerial, itemNo, locationCode, binCode, variantCode, stockLotReload) {
         if (!autoDetectLotFromStock || !showLotSerial || itemNo.isBlank()) return@LaunchedEffect
-        stockLotCount = fetchAvailableLots(probeContext, itemNo, locationCode, binCode, variantCode)
-            .getOrNull()?.size ?: -1
+        stockLotCount = -2
+        try {
+            stockLotCount = fetchAvailableLots(probeContext, itemNo, locationCode, binCode, variantCode)
+                .getOrNull()?.size ?: -1
+        } finally {
+            if (stockLotCount == -2) stockLotCount = -1
+        }
     }
     val effectiveLotRequired = lotRequired || stockLotCount > 0
     val lotLookupVisible = showAvailableLotLookup || stockLotCount > 0
@@ -180,6 +190,10 @@ fun QuantityDialogSheet(
                 ) { Text("+", fontSize = 22.sp) }
             }
             Spacer(Modifier.height(10.dp))
+            if (maximumQuantity != null && qty() > maximumQuantity) {
+                Text("Miktar kalan ${formatQty(maximumQuantity)} $initialUom değerini aşamaz.",
+                    color = MaterialTheme.colorScheme.error)
+            }
             Button(
                 onClick = { setQty(qty() + 1) },
                 enabled = !quantityExactlyOne,
@@ -316,10 +330,14 @@ fun QuantityDialogSheet(
                 }
                 if (!stockLotProbeReady) {
                     Text(
-                        "Stoktaki lotlar doğrulanamadı. Bağlantıyı kontrol edip bu ekranı yeniden açın.",
+                        if (stockLotLoading) "Stoktaki lotlar kontrol ediliyor…"
+                        else "Stoktaki lotlar doğrulanamadı. Bağlantıyı kontrol edip yeniden deneyin.",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.error,
                     )
+                    TextButton(onClick = { stockLotReload++ }, enabled = !stockLotLoading) {
+                        Text("Lotları yeniden kontrol et")
+                    }
                 }
             }
             if (showSourceLp) {
@@ -435,7 +453,7 @@ fun QuantityDialogSheet(
                             )
                         )
                     },
-                    enabled = validQuantityInput(qtyText, allowZeroQuantity, quantityExactlyOne) &&
+                    enabled = validQuantityInput(qtyText, allowZeroQuantity, quantityExactlyOne, maximumQuantity) &&
                         stockLotProbeReady &&
                         (!sourceLpRequired || sourceLp.isNotBlank()) &&
                         (!uomRequired || uom.isNotBlank()) &&
@@ -456,9 +474,11 @@ internal fun validQuantityInput(
     value: String,
     allowZeroQuantity: Boolean,
     quantityExactlyOne: Boolean,
+    maximumQuantity: Double? = null,
 ): Boolean {
     val quantity = value.toDoubleOrNull() ?: return false
     if (!quantity.isFinite() || quantity < 0.0) return false
+    if (maximumQuantity != null && (!maximumQuantity.isFinite() || quantity > maximumQuantity)) return false
     if (quantityExactlyOne) return quantity == 1.0
     return allowZeroQuantity || quantity > 0.0
 }

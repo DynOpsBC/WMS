@@ -831,6 +831,7 @@ private fun ReceiveDocument(no: String, onBack: () -> Unit) {
             title = "İade Miktarı (${gt.count} satıra dağıtılır)",
             itemNo = gt.itemNo,
             initialQty = gt.totalOutstanding.takeIf { it > 0 } ?: 1.0,
+            maximumQuantity = gt.totalOutstanding,
             initialUom = gt.lines.first().optString("unitOfMeasureCode"),
             initialLot = gt.lines.first().optString("lotNo"),
             initialSerial = gt.lines.first().optString("serialNo"),
@@ -856,6 +857,11 @@ private fun ReceiveDocument(no: String, onBack: () -> Unit) {
                 scope.launch {
                     busy = true; status = "Grup dağıtılıyor..."
                     val plan = distributeQty(gt, res.quantity, capReceipt)
+                    if (plan.isEmpty()) {
+                        busy = false
+                        status = "HATA: Miktar satırların kalanını aşıyor. Belgeyi yenileyin."
+                        return@launch
+                    }
                     var okCount = 0
                     val okLines = mutableSetOf<Int>()
                     var firstError = ""

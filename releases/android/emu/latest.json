@@ -1,7 +1,7 @@
 {
-  "versionCode": 200107,
-  "versionName": "1.14.107-emu",
-  "apkUrl": "https://github.com/DynOpsBC/WMS/releases/download/android-v1.14.107/BCWMS-EMU-1.14.107-RELEASE.apk",
-  "sha256": "969ecef52aecdc92e81140675cfefc904c49443983b3a28d16b1836c4d247d9b",
-  "releaseNotes": "Yeni ürün, raf ve palet/LP etiket tasarımları ve Ürün/Raf Sorgu PDF etiket yedeği. BCWMS 1.14.1.35 BC uzantısı gereklidir."
+  "versionCode": 200106,
+  "versionName": "1.14.106-emu",
+  "apkUrl": "https://github.com/DynOpsBC/WMS/releases/download/android-emu-button-recovery/BCWMS-EMU-1.14.106-GECIS.apk",
+  "sha256": "8c80f3a63787520083aabfc0fd40cecd2c65fda052d35c229d6ccea26d1f0363",
+  "releaseNotes": "1.14.105 için imza uyumlu geçiş. İndir & yükle ile kurun. Uygulama açılınca Güncellemeyi Kontrol Et düğmesine tekrar basarak 1.14.110 sürümünü yükleyin. Uygulamayı kaldırmayın."
 }

@@ -23,6 +23,8 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -50,6 +52,7 @@ fun ScanField(
     enabled: Boolean = true,
     focusRequester: androidx.compose.ui.focus.FocusRequester? = null,
     updateValueOnScan: Boolean = true,
+    scanOnly: Boolean = false,
 ) {
     val context = LocalContext.current
     var hasCameraPermission by remember {
@@ -62,6 +65,16 @@ fun ScanField(
     // OK boş alanda basıldığında gösterilen ipucu.
     var emptyHint by remember { mutableStateOf(false) }
     var cameraError by remember { mutableStateOf<String?>(null) }
+    // A focused collector outlives recompositions (bin/slot/document changes).
+    // Resolve the current callbacks and input policy at delivery time.
+    val deliverScan by rememberUpdatedState<(String) -> Unit>({ raw ->
+        if (enabled && raw.isNotBlank()) {
+            scanning = false
+            emptyHint = false
+            if (updateValueOnScan) onValueChange(raw)
+            onScanned?.invoke(raw)
+        }
+    })
     // Hardware scanner (Zebra DataWedge) routing — sadece focuslu alan, ScanBus
     // event'lerini dinler. Bu sayede aynı ekranda birden fazla ScanField olsa
     // bile sarı tetik basışı sadece kullanıcının seçtiği alana yazar.
@@ -70,9 +83,7 @@ fun ScanField(
     LaunchedEffect(isFocused, enabled) {
         if (!isFocused || !enabled) return@LaunchedEffect
         ScanBus.events.collect { event ->
-            val raw = event.raw
-            if (updateValueOnScan) onValueChange(raw)
-            onScanned?.invoke(raw)
+            deliverScan(event.raw)
         }
     }
 
@@ -80,12 +91,14 @@ fun ScanField(
         ActivityResultContracts.RequestPermission()
     ) { granted ->
         hasCameraPermission = granted
-        if (granted) scanning = true else cameraError = "Kamera izni reddedildi — elle giriş yapın."
+        if (granted) scanning = enabled else cameraError = if (scanOnly)
+            "Kamera izni reddedildi — donanım tarayıcıyı kullanın." else "Kamera izni reddedildi — elle giriş yapın."
     }
 
     // Kamera önizlemesi ekrana gömülü olduğu için sistem geri tuşu önce yalnızca
     // önizlemeyi kapatmalı; aksi halde operatör belge ekranından tamamen çıkıyordu.
     BackHandler(enabled = scanning) { scanning = false }
+    LaunchedEffect(enabled) { if (!enabled) scanning = false }
 
     Column(modifier) {
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -100,15 +113,18 @@ fun ScanField(
                 // gerçek cihazda yazıp Enter'a basınca donanım taraması gibi işlenir).
                 keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
                 keyboardActions = KeyboardActions(onDone = {
-                    if (value.isNotBlank()) onScanned?.invoke(value.trim())
+                    if (enabled && !scanOnly) {
+                        if (value.isBlank()) emptyHint = true else { emptyHint = false; onScanned?.invoke(value.trim()) }
+                    }
                 }),
+                readOnly = scanOnly,
                 // Ekran akışı alanı programatik odaklayabilsin (sadece-okut sayım):
                 // donanım tarayıcı yalnız odaklı alana yazar.
                 modifier = if (focusRequester != null) Modifier.weight(1f).focusRequester(focusRequester) else Modifier.weight(1f),
             )
             Spacer(Modifier.width(8.dp))
             // Elle giriş için "OK" — yazıp bas, hemen işlensin (Enter'a alternatif).
-            if (onScanned != null) {
+            if (onScanned != null && !scanOnly) {
                 // OK, alan boşken pasifti: operatör basıyor, hiçbir şey olmuyor
                 // ve nedenini göremiyordu. Artık basılabiliyor ve ne beklendiğini
                 // söylüyor (UAT: aynı sessizlik yerleştirme, ad-hoc ve paketlemede).
@@ -122,6 +138,7 @@ fun ScanField(
             }
             FilledTonalButton(
                 enabled = enabled,
+                modifier = Modifier.semantics { contentDescription = if (scanning) "Kamerayı kapat" else "Kamera ile okut" },
                 onClick = {
                     cameraError = null
                     if (hasCameraPermission) scanning = !scanning
@@ -145,14 +162,16 @@ fun ScanField(
         cameraError?.let {
             Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
         }
-        if (scanning && hasCameraPermission) {
+        if (enabled && scanning && hasCameraPermission) {
             CameraBarcodePreview(
                 modifier = Modifier.fillMaxWidth().height(220.dp).padding(top = 8.dp),
-                onError = { cameraError = "Kamera açılamadı — elle giriş yapın."; scanning = false },
-                onBarcode = { code ->
+                onError = {
+                    cameraError = if (scanOnly) "Kamera açılamadı — donanım tarayıcıyı kullanın."
+                        else "Kamera açılamadı — elle giriş yapın."
                     scanning = false
-                    if (updateValueOnScan) onValueChange(code)
-                    onScanned?.invoke(code)
+                },
+                onBarcode = { code ->
+                    if (scanning) deliverScan(code)
                 }
             )
         }
@@ -168,10 +187,24 @@ private fun CameraBarcodePreview(
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
     val analysisExecutor = remember { Executors.newSingleThreadExecutor() }
+    val scanner = remember { BarcodeScanning.getClient() }
+    val disposed = remember { java.util.concurrent.atomic.AtomicBoolean(false) }
+    var cameraProvider by remember { mutableStateOf<ProcessCameraProvider?>(null) }
+    var boundPreview by remember { mutableStateOf<Preview?>(null) }
+    var boundAnalysis by remember { mutableStateOf<ImageAnalysis?>(null) }
+    val currentOnBarcode by rememberUpdatedState(onBarcode)
+    val currentOnError by rememberUpdatedState(onError)
     var delivered by remember { mutableStateOf(false) }
 
     DisposableEffect(Unit) {
-        onDispose { analysisExecutor.shutdown() }
+        onDispose {
+            disposed.set(true)
+            boundAnalysis?.clearAnalyzer()
+            val useCases = listOfNotNull(boundPreview, boundAnalysis).toTypedArray()
+            if (useCases.isNotEmpty()) cameraProvider?.unbind(*useCases)
+            scanner.close()
+            analysisExecutor.shutdown()
+        }
     }
 
     AndroidView(
@@ -180,37 +213,49 @@ private fun CameraBarcodePreview(
             val previewView = PreviewView(ctx)
             val providerFuture = ProcessCameraProvider.getInstance(ctx)
             providerFuture.addListener({
+                if (disposed.get()) return@addListener
                 try {
                     val provider = providerFuture.get()
+                    cameraProvider = provider
                     val preview = Preview.Builder().build().also {
                         it.setSurfaceProvider(previewView.surfaceProvider)
                     }
-                    val scanner = BarcodeScanning.getClient()
                     val analysis = ImageAnalysis.Builder()
                         .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
                         .build()
                     analysis.setAnalyzer(analysisExecutor) { proxy ->
                         @Suppress("UnsafeOptInUsageError")
                         val media = proxy.image
-                        if (media == null || delivered) { proxy.close(); return@setAnalyzer }
+                        if (media == null || delivered || disposed.get()) { proxy.close(); return@setAnalyzer }
                         val input = InputImage.fromMediaImage(media, proxy.imageInfo.rotationDegrees)
-                        scanner.process(input)
+                        try {
+                            scanner.process(input)
                             .addOnSuccessListener { codes ->
                                 val raw = codes.firstOrNull()?.rawValue
-                                if (!raw.isNullOrBlank() && !delivered) {
+                                if (!raw.isNullOrBlank() && !delivered && !disposed.get()) {
                                     delivered = true
-                                    onBarcode(raw)
+                                    currentOnBarcode(raw)
                                 }
                             }
                             .addOnCompleteListener { proxy.close() }
+                        } catch (e: Exception) {
+                            proxy.close()
+                            if (!disposed.get()) {
+                                Log.e("ScanField", "camera analysis failed", e)
+                                ContextCompat.getMainExecutor(ctx).execute {
+                                    if (!disposed.get()) currentOnError()
+                                }
+                            }
+                        }
                     }
-                    provider.unbindAll()
+                    boundPreview = preview
+                    boundAnalysis = analysis
                     provider.bindToLifecycle(
                         lifecycleOwner, CameraSelector.DEFAULT_BACK_CAMERA, preview, analysis
                     )
                 } catch (e: Exception) {
                     Log.e("ScanField", "camera bind failed", e)
-                    onError()
+                    if (!disposed.get()) currentOnError()
                 }
             }, ContextCompat.getMainExecutor(ctx))
             previewView

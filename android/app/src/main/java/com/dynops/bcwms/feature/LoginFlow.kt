@@ -912,7 +912,7 @@ private fun TokenPasteFallback(onConnected: (Boolean) -> Unit) {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun ForgotPasswordSheet(username: String, onDismiss: () -> Unit) {
-    ModalBottomSheet(onDismissRequest = onDismiss) {
+    com.dynops.bcwms.ui.SheetScaffold(onDismiss = onDismiss, contentPadding = PaddingValues(0.dp)) {
         Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp).padding(bottom = 28.dp)) {
             Text("Şifremi unuttum", fontWeight = FontWeight.Bold, fontSize = 18.sp)
             Spacer(Modifier.height(6.dp))

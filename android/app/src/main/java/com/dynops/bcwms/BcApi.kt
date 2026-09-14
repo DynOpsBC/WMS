@@ -477,7 +477,14 @@ object BcApi {
         val putAwayPlacementFromLp: Boolean,
         val bulkLpPlan: Boolean,
         val httpCode: Int,
+        val registerScannedPick: Boolean = false,
     )
+
+    internal fun pickRegistrationAction(capabilities: LpScanCapabilities): String? = when {
+        !capabilities.metadataLoaded -> null
+        capabilities.registerScannedPick -> "registerScannedFor"
+        else -> "registerFor"
+    }
 
     suspend fun getLpScanCapabilities(context: Context): LpScanCapabilities {
         val result = getCustomApiMetadata(context)
@@ -492,15 +499,19 @@ object BcApi {
             putAwayPlacementFromLp = metadata.contains("setPlacementFromLp", ignoreCase = true),
             bulkLpPlan = metadata.contains("createLicensePlatesFromPlanIdempotent", ignoreCase = true),
             httpCode = httpCode,
+            registerScannedPick = Regex("""<(?:(?:\w+):)?Action\b[^>]*\bName\s*=\s*["']registerScannedFor["']""").containsMatchIn(metadata),
         )
 
     /**
      * Kurulum kartındaki "LP Scan Required" ayarı. Sunucu asıl otoritedir; bu
      * değer yalnız ekranı şekillendirir (LP adımını zorunlu kılmak, ürün
      * okutma adımını gizlemek). Ulaşılamazsa veya alan eski pakette yoksa
-     * false döner ve bu paketten önceki akış aynen sürer.
+     * BADE dışındaki sürümlerde false döner. BADE kabul kriteri ayardan
+     * bağımsız olarak her zaman palet doğrulamasını zorunlu tutar.
      */
     suspend fun lpScanRequired(context: Context): Boolean {
+        // BADE acceptance rule is mandatory even when setup/metadata is unavailable.
+        if (com.dynops.bcwms.feature.requiresPalletWorkflow(BuildConfig.FLAVOR)) return true
         val now = System.currentTimeMillis()
         val checkedAt = prefs(context).getLong(KEY_LP_SCAN_CHECKED_AT, 0L)
         val cached = prefs(context).getString(KEY_LP_SCAN_REQUIRED, null)
@@ -692,6 +703,16 @@ object BcApi {
      * istemci kullanılır, belirsiz yanıtta ikinci kez post edilmez.
      */
     suspend fun registerPick(context: Context, pickNo: String): ApiResult {
+        var scannedPlans: List<com.dynops.bcwms.feature.PalletPickPlan>? = null
+        if (com.dynops.bcwms.feature.requiresPalletWorkflow(BuildConfig.FLAVOR)) {
+            try {
+                scannedPlans = com.dynops.bcwms.feature.PalletPickVerification.requireVerifiedDocument(context, pickNo)
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                return ApiResult(false, 400, JSONObject().put("error", JSONObject().put("message", e.message ?: "Palet doğrulaması gerekli.")).toString())
+            }
+        }
         val userId = currentUserId(context)
         if (userId.isBlank()) {
             return ApiResult(
@@ -700,8 +721,21 @@ object BcApi {
                 body = """{"error":{"message":"Depo kullanıcısı belirlenemedi. Yeniden giriş yapın."}}""",
             )
         }
-        val body = JSONObject().apply { put("userId", userId) }.toString()
-        return boundActionLongRunning(context, "picks", pickNo, "registerFor", body)
+        val registrationCapabilities = if (scannedPlans != null) getLpScanCapabilities(context) else null
+        val registrationAction = if (registrationCapabilities == null) "registerFor" else pickRegistrationAction(registrationCapabilities)
+        if (registrationAction == null) {
+            return ApiResult(false, 503, JSONObject().put("error", JSONObject().put("message",
+                "Palet kayıt desteği doğrulanamadı. Bağlantıyı kontrol edip tekrar deneyin; kayıt gönderilmedi.")).toString())
+        }
+        val exactRegistration = registrationAction == "registerScannedFor"
+        val body = JSONObject().apply {
+            put("userId", userId)
+            if (exactRegistration) put("palletPlan", com.dynops.bcwms.feature.scannedPalletRegistrationJson(requireNotNull(scannedPlans)))
+        }.toString()
+        // Existing BC packages keep their existing action. Once the matching BC
+        // extension advertises the new action, send every scanned LP/quantity.
+        // Never retry or fall back after a possibly successful posting request.
+        return boundActionLongRunning(context, "picks", pickNo, registrationAction, body)
     }
 
     /**

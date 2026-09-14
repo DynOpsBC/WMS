@@ -172,6 +172,15 @@ page 72092 "DOPSWHS Pick API"
         PickMgmt.RegisterPickFor(Rec, userId);
     end;
 
+    /// <summary>Register exactly the scanned LP quantities in one transaction.</summary>
+    [ServiceEnabled]
+    procedure registerScannedFor(userId: Code[50]; palletPlan: Text)
+    var
+        PickMgmt: Codeunit "DOPSWHS Pick Mgmt";
+    begin
+        PickMgmt.RegisterScannedPickFor(Rec, userId, palletPlan);
+    end;
+
     /// <summary>
     /// Genel DELETE yerine kontrollü iptal: yalnız atanmış operatör ve henüz
     /// hareket kaydetmemiş açık pick için çalışır.

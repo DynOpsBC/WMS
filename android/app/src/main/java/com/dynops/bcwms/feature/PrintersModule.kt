@@ -102,7 +102,7 @@ fun PrintersModule() {
             status = if (!page.complete) "HATA: Yazıcı listesinin tamamı alınamadı. Windows yazıcı ajanının bağlantısını kontrol edin."
                 else if (rows.isEmpty()) "Henüz eşitlenmiş yazıcı yok. Windows ajanında Yazıcıları Yenile ve Buluta Eşitle'yi çalıştırın."
                 else if (stale.isNotEmpty()) "UYARI: Kayıtlı ${stale.joinToString(" ve ")} yazıcısı listede yok. Aşağıdan yeniden seçin."
-                else "TAMAM: ${rows.size} yazıcı hazır"
+                else printerReadinessMessage(rows)
         }
     }
     LaunchedEffect(Unit) { load() }
@@ -294,4 +294,10 @@ fun PrintersModule() {
             }
         }
     }
+}
+
+internal fun printerReadinessMessage(rows: List<org.json.JSONObject>): String {
+    val activeCount = rows.count { it.optBoolean("active", true) }
+    return if (activeCount == 0) "UYARI: ${rows.size} kayıtlı yazıcı var ancak aktif yazıcı yok. Yazıcı ayarlarını kontrol edin."
+    else "TAMAM: $activeCount aktif yazıcı listelendi · ${rows.size - activeCount} pasif."
 }

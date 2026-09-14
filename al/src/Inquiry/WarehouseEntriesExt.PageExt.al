@@ -25,7 +25,7 @@ pageextension 72314 "DOPSWHS Warehouse Entries" extends "Warehouse Entries"
                 Caption = 'Güncel LP No.ları';
                 Editable = false;
                 DrillDown = true;
-                ToolTip = 'Aynı raftaki bu maddenin güncel LP dağılımını gösterir.';
+                ToolTip = 'Bu satırla aynı lokasyon, raf, madde, varyant, ölçü birimi, lot ve seri için güncel LP dağılımıdır. Hareket geçmişini göstermez; boş lot yalnız lotsuz stokla eşleşir.';
 
                 trigger OnDrillDown()
                 begin
@@ -39,7 +39,7 @@ pageextension 72314 "DOPSWHS Warehouse Entries" extends "Warehouse Entries"
                 DecimalPlaces = 0 : 5;
                 Editable = false;
                 DrillDown = true;
-                ToolTip = 'Tıklayarak güncel LP miktarlarını ayrı satırlarda açın.';
+                ToolTip = 'Bu satırın madde, lot ve seri bilgisine uyan aynı raftaki güncel LP miktarıdır; tarihsel hareket miktarı değildir. Ayrıntı için tıklayın.';
 
                 trigger OnDrillDown()
                 begin
@@ -53,8 +53,9 @@ pageextension 72314 "DOPSWHS Warehouse Entries" extends "Warehouse Entries"
     var
         BinContentSubscriber: Codeunit "DOPSWHS Bin Content Subscriber";
     begin
-        BinContentSubscriber.GetActiveLPItemInfo(
+        BinContentSubscriber.GetActiveLPTrackingInfo(
             Rec."Location Code", Rec."Bin Code", Rec."Item No.", Rec."Variant Code", Rec."Unit of Measure Code",
+            Rec."Lot No.", Rec."Serial No.",
             CurrentActiveLpNos, CurrentActiveLpQuantity);
     end;
 
@@ -62,8 +63,7 @@ pageextension 72314 "DOPSWHS Warehouse Entries" extends "Warehouse Entries"
     var
         ActiveLPContents: Page "DOPSWHS Active LP Contents";
     begin
-        ActiveLPContents.LoadFromBin(
-            Rec."Location Code", Rec."Bin Code", Rec."Item No.", Rec."Variant Code", Rec."Unit of Measure Code");
+        ActiveLPContents.LoadFromWarehouseEntry(Rec);
         ActiveLPContents.RunModal();
     end;
 

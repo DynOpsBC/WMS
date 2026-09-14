@@ -4,6 +4,13 @@ import org.junit.Assert.assertEquals
 import org.junit.Test
 
 class InquiryPrintWorkflowTest {
+    @Test fun `inactive printers are not described as ready`() {
+        val inactive = org.json.JSONObject().put("active", false)
+        val active = org.json.JSONObject().put("active", true)
+        org.junit.Assert.assertTrue(printerReadinessMessage(listOf(inactive)).startsWith("UYARI:"))
+        org.junit.Assert.assertTrue(printerReadinessMessage(listOf(inactive, active)).contains("1 aktif"))
+        org.junit.Assert.assertTrue(printerReadinessMessage(listOf(inactive, active)).contains("1 pasif"))
+    }
     @Test fun `inactive selected label falls back to document`() {
         assertEquals("PDF01", inquiryLabelPrinter("ZPL01", "PDF01", labelAvailable = false))
     }

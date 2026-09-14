@@ -24,6 +24,18 @@ codeunit 72039 "DOPSWHS Bin Content Subscriber"
     /// part of that stock belongs to which LP.
     /// </summary>
     procedure GetActiveLPItemInfo(LocationCode: Code[10]; BinCode: Code[20]; ItemNo: Code[20]; VariantCode: Code[10]; UomCode: Code[10]; var LpNos: Text[250]; var LPQuantity: Decimal)
+    begin
+        GetActiveLPItemInfoInternal(LocationCode, BinCode, ItemNo, VariantCode, UomCode, '', '', false, LpNos, LPQuantity);
+    end;
+
+    // Warehouse entries carry exact tracking values. Blank means untracked,
+    // not every lot/serial in the bin. Bin Contents keeps its aggregate view.
+    procedure GetActiveLPTrackingInfo(LocationCode: Code[10]; BinCode: Code[20]; ItemNo: Code[20]; VariantCode: Code[10]; UomCode: Code[10]; LotNo: Code[50]; SerialNo: Code[50]; var LpNos: Text[250]; var LPQuantity: Decimal)
+    begin
+        GetActiveLPItemInfoInternal(LocationCode, BinCode, ItemNo, VariantCode, UomCode, LotNo, SerialNo, true, LpNos, LPQuantity);
+    end;
+
+    local procedure GetActiveLPItemInfoInternal(LocationCode: Code[10]; BinCode: Code[20]; ItemNo: Code[20]; VariantCode: Code[10]; UomCode: Code[10]; LotNo: Code[50]; SerialNo: Code[50]; MatchTracking: Boolean; var LpNos: Text[250]; var LPQuantity: Decimal)
     var
         LP: Record "DOPSWHS LP Header";
         LPLine: Record "DOPSWHS LP Line";
@@ -38,10 +50,7 @@ codeunit 72039 "DOPSWHS Bin Content Subscriber"
             repeat
                 LPLine.Reset();
                 LPLine.SetRange("LP No.", LP."No.");
-                LPLine.SetRange("Item No.", ItemNo);
-                LPLine.SetRange("Variant Code", VariantCode);
-                if UomCode <> '' then
-                    LPLine.SetRange("Unit of Measure", UomCode);
+                FilterActiveLPItemLines(LPLine, ItemNo, VariantCode, UomCode, LotNo, SerialNo, MatchTracking);
                 if LPLine.FindSet() then begin
                     Separator := '';
                     if LpNos <> '' then
@@ -52,6 +61,24 @@ codeunit 72039 "DOPSWHS Bin Content Subscriber"
                     until LPLine.Next() = 0;
                 end;
             until LP.Next() = 0;
+    end;
+
+    // Shared by the summary and its drill-down so quantities and LP lists
+    // use the same scope. Preserve the caller's LP/header selection.
+    procedure FilterActiveLPItemLines(var LPLine: Record "DOPSWHS LP Line"; ItemNo: Code[20]; VariantCode: Code[10]; UomCode: Code[10]; LotNo: Code[50]; SerialNo: Code[50]; MatchTracking: Boolean)
+    begin
+        LPLine.SetRange("Item No.", ItemNo);
+        LPLine.SetRange("Variant Code", VariantCode);
+        LPLine.SetRange("Unit of Measure");
+        if UomCode <> '' then
+            LPLine.SetRange("Unit of Measure", UomCode);
+        LPLine.SetFilter(Quantity, '>0');
+        LPLine.SetRange("Lot No.");
+        LPLine.SetRange("Serial No.");
+        if MatchTracking then begin
+            LPLine.SetRange("Lot No.", LotNo);
+            LPLine.SetRange("Serial No.", SerialNo);
+        end;
     end;
 
     procedure GetLPContentSummary(LPNo: Code[20]): Text[250]

@@ -1,3 +1,6 @@
 play-service-account.json
 keystore/upload-keystore.jks
 keystore/keystore.properties
+
+# Signing key material stays local; release CI injects its key from secrets.
+keystore/*.jks
