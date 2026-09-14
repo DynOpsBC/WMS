@@ -1,0 +1,7 @@
+{
+  "versionCode": 200110,
+  "versionName": "1.14.110-emu",
+  "apkUrl": "https://github.com/DynOpsBC/WMS/releases/download/android-emu-legacy-v1.14.110/BCWMS-EMU-1.14.110-UYUMLU.apk",
+  "sha256": "071a911529367f7093f94453b5b95d2f0dcd29d67192376db6e6794d72f6ae60",
+  "releaseNotes": "EMU 1.14.110 eski imzalı cihazlarla uyumlu güncelleme. Uygulamayı kaldırmadan kurun. Ortak terminal düzeltmeleri; EMU mevcut BC ayarını kullanır. BC lot filtresi ayrıca BC paketi gerektirir; çoklu palet BC kayıt kontrolü henüz tamamlanmadı."
+}
