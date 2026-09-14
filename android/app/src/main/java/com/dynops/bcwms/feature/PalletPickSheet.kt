@@ -20,8 +20,8 @@ import org.json.JSONObject
 
 /** All picking entry points share this sheet. No line is optimistically closed:
  * every planned pallet must be scanned and BC must accept the confirmation.
- * Existing BC confirmLine uses the first LP as the starting preference and then
- * consumes the other LPs in server order, which is also the order used here.
+ * The registration path sends all scanned LPs to BC packages supporting
+ * registerScannedFor; older packages retain their existing allocation behavior.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable

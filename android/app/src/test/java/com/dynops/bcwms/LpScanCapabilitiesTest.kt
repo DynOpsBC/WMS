@@ -10,6 +10,13 @@ import org.junit.Test
  * önceki akışa döner.
  */
 class LpScanCapabilitiesTest {
+    @org.junit.Test fun exactRegistrationRequiresTheActualAction() {
+        org.junit.Assert.assertTrue(BcApi.parseLpScanCapabilities("""<Action Name="registerScannedFor" IsBound="true"/>""").registerScannedPick)
+        org.junit.Assert.assertTrue(BcApi.parseLpScanCapabilities("""<edm:Action Name='registerScannedFor'/>""").registerScannedPick)
+        org.junit.Assert.assertFalse(BcApi.parseLpScanCapabilities("""<Action Name="registerScannedForPreview"/>""").registerScannedPick)
+        org.junit.Assert.assertFalse(BcApi.parseLpScanCapabilities("""<Property Name="registerScannedFor"/>""").registerScannedPick)
+        org.junit.Assert.assertFalse(BcApi.parseLpScanCapabilities("""<Action Name="registerFor"/>""").registerScannedPick)
+    }
 
     private val currentMetadata = """
         <Action Name="pickLineSources" />

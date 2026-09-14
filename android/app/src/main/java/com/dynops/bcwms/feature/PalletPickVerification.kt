@@ -80,7 +80,7 @@ internal object PalletPickVerification {
         prefs(context).edit().remove(key(context, pickNo, lineNo)).apply()
     }
 
-    suspend fun requireVerifiedDocument(context: Context, pickNo: String) {
+    suspend fun requireVerifiedDocument(context: Context, pickNo: String): List<PalletPickPlan> {
         val plans = loadDocumentPalletPlans(context, pickNo)
         check(plans.isNotEmpty()) { "Kaydedilecek doğrulanmış toplama satırı yok." }
         for (plan in plans) {
@@ -89,5 +89,27 @@ internal object PalletPickVerification {
                 "${plan.lineNo} satırındaki paletler doğrulanmamış veya stok planı değişmiş. Satırı açıp paletleri yeniden okutun."
             }
         }
+        return plans
     }
+}
+
+/** Wire contract for BC registerScannedFor. Base amounts use BC's five-decimal
+ * precision so binary floating-point artifacts cannot reject a valid plan. */
+internal fun scannedPalletRegistrationJson(plans: List<PalletPickPlan>): String {
+    require(plans.isNotEmpty() && plans.map { it.lineNo }.distinct().size == plans.size)
+    return JSONArray().apply {
+        plans.forEach { plan ->
+            require(plan.quantity.isFinite() && plan.quantity > 0 && plan.steps.isNotEmpty())
+            require(plan.steps.all { it.lpNo.isNotBlank() && it.baseQuantity.isFinite() && it.baseQuantity > 0 })
+            val json = JSONObject(palletPlanJson(plan))
+            val steps = json.getJSONArray("steps")
+            plan.steps.forEachIndexed { index, step ->
+                require(step.lpNo.isNotBlank() && step.baseQuantity.isFinite() && step.baseQuantity > 0)
+                val base = java.math.BigDecimal.valueOf(step.baseQuantity).setScale(5, java.math.RoundingMode.HALF_UP)
+                require(base.signum() > 0)
+                steps.getJSONObject(index).put("baseQuantity", base)
+            }
+            put(json)
+        }
+    }.toString()
 }

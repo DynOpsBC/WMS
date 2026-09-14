@@ -575,6 +575,7 @@ codeunit 72046 "DOPSWHS Pick Mgmt"
         Result.Add('lotRequired', PickLineRequiresLot(PickLine));
         Result.Add('unitOfMeasureCode', PickLine."Unit of Measure Code");
         Result.Add('outstandingBaseQty', PickLine."Qty. Outstanding (Base)");
+        Result.Add('outstandingQty', PickLine."Qty. Outstanding");
         Result.Add('scanRequired', LPVerification.ScanRequired());
 
         if (PickLine."Item No." <> '') and (PickLine."Location Code" <> '') and (PickLine."Bin Code" <> '') then begin
@@ -746,7 +747,7 @@ codeunit 72046 "DOPSWHS Pick Mgmt"
 
     procedure RegisterPick(var Pick: Record "Warehouse Activity Header")
     begin
-        RegisterPickInternal(Pick, '');
+        RegisterPickInternal(Pick, '', '');
     end;
 
     /// <summary>
@@ -758,7 +759,19 @@ codeunit 72046 "DOPSWHS Pick Mgmt"
     begin
         if RequestingUserId = '' then
             Error(RequestingUserRequiredErr);
-        RegisterPickInternal(Pick, RequestingUserId);
+        RegisterPickInternal(Pick, RequestingUserId, '');
+    end;
+
+    // Do not permit an explicit COMMIT in a subscriber to leave LP metadata
+    // moved when standard warehouse registration subsequently fails.
+    [CommitBehavior(CommitBehavior::Error)]
+    procedure RegisterScannedPickFor(var Pick: Record "Warehouse Activity Header"; RequestingUserId: Code[50]; PalletPlan: Text)
+    begin
+        if RequestingUserId = '' then
+            Error(RequestingUserRequiredErr);
+        if PalletPlan = '' then
+            Error('Okutulan palet planı boş olamaz. Paletleri yeniden okutun.');
+        RegisterPickInternal(Pick, RequestingUserId, PalletPlan);
     end;
 
     /// <summary>
@@ -805,7 +818,7 @@ codeunit 72046 "DOPSWHS Pick Mgmt"
         Clear(Pick);
     end;
 
-    local procedure RegisterPickInternal(var Pick: Record "Warehouse Activity Header"; RequestingUserId: Code[50])
+    local procedure RegisterPickInternal(var Pick: Record "Warehouse Activity Header"; RequestingUserId: Code[50]; PalletPlan: Text)
     var
         PickLine: Record "Warehouse Activity Line";
         PickingHeader: Record "DOPSWHS Picking Order Header";
@@ -823,6 +836,7 @@ codeunit 72046 "DOPSWHS Pick Mgmt"
         if not LockedPick.Get(LockedPick.Type::Pick, Pick."No.") then
             Error(PickGoneErr, Pick."No.");
         Pick := LockedPick;
+        PickLine.LockTable();
         // Kaydetme de bir işlemdir: atanmamış ya da başkasındaki belge kaydedilemez.
         if RequestingUserId = '' then
             CheckOwnership(Pick."No.", Pick."Assigned User ID")
@@ -854,9 +868,10 @@ codeunit 72046 "DOPSWHS Pick Mgmt"
         PickLine.SetRange("Activity Type", Pick.Type);
         PickLine.SetRange("No.", Pick."No.");
         if PickLine.FindFirst() then begin
-            MovePickedContentsToMainLp(Pick);
+            MovePickedContentsToMainLp(Pick, PalletPlan);
             CompleteMainShippingLp(Pick);
             PreparePackingOrders(Pick);
+            WhseActivityRegister.SetSuppressCommit(true);
             WhseActivityRegister.Run(PickLine);
             PickingHeader.SetRange("Warehouse Pick No.", PickNo);
             if PickingHeader.FindSet(true) then
@@ -934,31 +949,47 @@ codeunit 72046 "DOPSWHS Pick Mgmt"
     /// point to that LP. Shipment posting will therefore consume the new LP while
     /// the source pallet keeps only its unpicked remainder.
     /// </summary>
-    local procedure MovePickedContentsToMainLp(Pick: Record "Warehouse Activity Header")
+    local procedure MovePickedContentsToMainLp(Pick: Record "Warehouse Activity Header"; PalletPlan: Text)
     var
         PickLine: Record "Warehouse Activity Line";
         PlaceLine: Record "Warehouse Activity Line";
         ShippingLP: Record "DOPSWHS LP Header";
         WhseShipmentLine: Record "Warehouse Shipment Line";
         LPMgt: Codeunit "DOPSWHS LP Management";
+        Plans: Dictionary of [Integer, Text];
+        PlanText: Text;
     begin
-        if Pick."DOPSWHS Main LP No." = '' then
+        if Pick."DOPSWHS Main LP No." = '' then begin
+            if PalletPlan <> '' then
+                Error('Sevk paleti bulunamadı. Toplamanın sevk LP bilgisini yenileyin.');
             exit;
+        end;
         ShippingLP.Get(Pick."DOPSWHS Main LP No.");
 
         PickLine.SetRange("Activity Type", Pick.Type);
         PickLine.SetRange("No.", Pick."No.");
         PickLine.SetRange("Action Type", PickLine."Action Type"::Take);
         PickLine.SetFilter("Qty. to Handle (Base)", '>0');
+        if PalletPlan <> '' then begin
+            ParseScannedPickPlans(PalletPlan, Plans);
+            if Plans.Count() <> PickLine.Count() then
+                Error('Toplama satırları değişmiş. Bütün açık satırların paletlerini yeniden doğrulayın.');
+        end;
         if not PickLine.FindSet(true) then
             exit;
         repeat
             FindRelatedPlaceLineForShippingLp(PickLine, PlaceLine);
-            LPMgt.TransferPickedQuantityFromAvailableLps(
-                PickLine."LP No.", ShippingLP."No.", Pick."No.", PickLine."Line No.",
-                PickLine."Whse. Document No.", PickLine."Item No.", PickLine."Variant Code", PickLine."Unit of Measure Code",
-                PickLine."Qty. to Handle (Base)",
-                PickLine."Lot No.", PickLine."Serial No.", PickLine."Bin Code", PlaceLine."Bin Code");
+            if PalletPlan <> '' then begin
+                if not Plans.Get(PickLine."Line No.", PlanText) then
+                    Error('%1 satırının palet doğrulaması eksik.', PickLine."Line No.");
+                TransferScannedPickLine(Pick, PickLine, ShippingLP, PlaceLine, PlanText);
+            end else begin
+                LPMgt.TransferPickedQuantityFromAvailableLps(
+                    PickLine."LP No.", ShippingLP."No.", Pick."No.", PickLine."Line No.",
+                    PickLine."Whse. Document No.", PickLine."Item No.", PickLine."Variant Code", PickLine."Unit of Measure Code",
+                    PickLine."Qty. to Handle (Base)",
+                    PickLine."Lot No.", PickLine."Serial No.", PickLine."Bin Code", PlaceLine."Bin Code");
+            end;
 
             PickLine."Target LP No." := ShippingLP."No.";
             PickLine.Modify(true);
@@ -974,6 +1005,112 @@ codeunit 72046 "DOPSWHS Pick Mgmt"
                 WhseShipmentLine.Modify(true);
             end;
         until PickLine.Next() = 0;
+    end;
+
+    local procedure ParseScannedPickPlans(PalletPlan: Text; var Plans: Dictionary of [Integer, Text])
+    var
+        Lines: JsonArray;
+        Token: JsonToken;
+        Plan: JsonObject;
+        Value: JsonToken;
+        LineNo: Integer;
+        PlanText: Text;
+    begin
+        if not Lines.ReadFrom(PalletPlan) then
+            Error('Palet planı okunamadı. Belgeyi yenileyin.');
+        if Lines.Count() = 0 then
+            Error('Kaydedilecek doğrulanmış palet satırı yok.');
+        foreach Token in Lines do begin
+            Plan := Token.AsObject();
+            Plan.Get('lineNo', Value);
+            LineNo := Value.AsValue().AsInteger();
+            if (LineNo <= 0) or Plans.ContainsKey(LineNo) then
+                Error('Palet planında geçersiz veya tekrarlı satır var: %1.', LineNo);
+            Plan.WriteTo(PlanText);
+            Plans.Add(LineNo, PlanText);
+        end;
+    end;
+
+    local procedure TransferScannedPickLine(Pick: Record "Warehouse Activity Header"; PickLine: Record "Warehouse Activity Line"; ShippingLP: Record "DOPSWHS LP Header"; PlaceLine: Record "Warehouse Activity Line"; PlanText: Text)
+    var
+        LPMgt: Codeunit "DOPSWHS LP Management";
+        Plan: JsonObject;
+        Step: JsonObject;
+        Steps: JsonArray;
+        Token: JsonToken;
+        Value: JsonToken;
+        SeenLPs: Dictionary of [Code[20], Boolean];
+        SourceLpNo: Code[20];
+        BaseQty: Decimal;
+        TotalBaseQty: Decimal;
+        PickQty: Decimal;
+        ExpectedIdentity: Text;
+    begin
+        Plan.ReadFrom(PlanText);
+        ExpectedIdentity := UpperCase(
+            PickLine."No." + '|' + PickLine."Item No." + '|' + PickLine."Variant Code" + '|' +
+            PickLine."Location Code" + '|' + PickLine."Bin Code" + '|' + PickLine."Serial No." + '|' +
+            PickLine."Unit of Measure Code");
+        RequirePlanText(Plan, 'identity', ExpectedIdentity);
+        RequirePlanText(Plan, 'lotNo', PickLine."Lot No.");
+        Plan.Get('quantity', Value);
+        if Abs(Value.AsValue().AsDecimal() - PickLine."Qty. to Handle") > 0.00001 then
+            Error('%1 satırının miktarı değişmiş. Paletleri yeniden okutun.', PickLine."Line No.");
+        Plan.Get('steps', Value);
+        Steps := Value.AsArray();
+        if Steps.Count() = 0 then
+            Error('%1 satırında okutulmuş palet yok.', PickLine."Line No.");
+        if PickLine."Qty. to Handle (Base)" <= 0 then
+            Error('%1 satırının temel miktarı geçersiz.', PickLine."Line No.");
+
+        // Validate all amounts before moving this line. TransferPickedQuantity
+        // then locks and checks each exact LP; it never substitutes other LPs
+        // or loose stock. Any later failure rolls back every prior transfer.
+        foreach Token in Steps do begin
+            Step := Token.AsObject();
+            RequirePlanText(Step, 'binCode', PickLine."Bin Code");
+            RequirePlanText(Step, 'lotNo', PickLine."Lot No.");
+            RequirePlanText(Step, 'serialNo', PickLine."Serial No.");
+            Step.Get('lpNo', Value);
+            if (StrLen(Value.AsValue().AsText()) > MaxStrLen(SourceLpNo)) or
+               (Value.AsValue().AsText() = '')
+            then
+                Error('Palet numarası geçersiz. Paletleri yeniden okutun.');
+            SourceLpNo := Value.AsValue().AsText();
+            if SeenLPs.ContainsKey(SourceLpNo) then
+                Error('%1 paleti aynı satırda tekrar ediyor.', SourceLpNo);
+            SeenLPs.Add(SourceLpNo, true);
+            Step.Get('baseQuantity', Value);
+            BaseQty := Value.AsValue().AsDecimal();
+            if (BaseQty <= 0) or (Round(BaseQty, 0.00001) <> BaseQty) then
+                Error('%1 paletinin miktarı geçersiz.', SourceLpNo);
+            TotalBaseQty += BaseQty;
+        end;
+        if Abs(TotalBaseQty - PickLine."Qty. to Handle (Base)") > 0.00001 then
+            Error('%1 satırında okutulan palet miktarları satırın miktarını karşılamıyor.', PickLine."Line No.");
+
+        foreach Token in Steps do begin
+            Step := Token.AsObject();
+            Step.Get('lpNo', Value);
+            SourceLpNo := Value.AsValue().AsText();
+            Step.Get('baseQuantity', Value);
+            BaseQty := Value.AsValue().AsDecimal();
+            PickQty := Round(BaseQty * PickLine."Qty. to Handle" / PickLine."Qty. to Handle (Base)", 0.00001);
+            LPMgt.TransferPickedQuantity(
+                SourceLpNo, ShippingLP."No.", Pick."No.", PickLine."Line No.", PickLine."Whse. Document No.",
+                PickLine."Item No.", PickLine."Variant Code", PickLine."Unit of Measure Code", PickQty, BaseQty,
+                PickLine."Lot No.", PickLine."Serial No.", PickLine."Bin Code", PlaceLine."Bin Code");
+        end;
+    end;
+
+    local procedure RequirePlanText(Plan: JsonObject; FieldName: Text; Expected: Text)
+    var
+        Value: JsonToken;
+    begin
+        if not Plan.Get(FieldName, Value) then
+            Error('Palet planında %1 bilgisi eksik. Yeniden okutun.', FieldName);
+        if UpperCase(Value.AsValue().AsText()) <> UpperCase(Expected) then
+            Error('Palet planının %1 bilgisi değişmiş. Belgeyi yenileyip yeniden okutun.', FieldName);
     end;
 
     local procedure FindRelatedPlaceLineForShippingLp(PickLine: Record "Warehouse Activity Line"; var PlaceLine: Record "Warehouse Activity Line")
