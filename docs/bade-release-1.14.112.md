@@ -30,7 +30,9 @@ Terminal yeni action'ı `$metadata` içinde görürse bu yolu kullanır. Henüz 
 - İmzalı release APK derlendi; emülatörde 1.14.98 üstüne veri silmeden kuruldu ve ana menü açıldı. Oturum korundu. Bu yalnız kurulum/açılış kontrolüdür.
 - Yeni regresyonlar: eski ölçü birimi/kalan miktar, tam palet listesinin gönderilmesi, miktar hassasiyeti, geçersiz planlar ve eski/yeni sunucu yeteneğinin ayırt edilmesi.
 - BC plan doğrulaması için 5 AL test senaryosu eklendi; BC üzerinde henüz çalıştırılmadı.
-- GitHub Windows AL derlemesi ayrı `AL verified package` işidir. Eski `AL Build` işindeki placeholder sonucu derleme kanıtı sayılmaz.
+- BC 1.14.1.36, Microsoft BC 28.1.49838.54681 sembolleriyle Windows üzerinde derlendi: [başarılı AL verified package çalışması](https://github.com/DynOpsBC/WMS/actions/runs/34904590354). AL kaynakları bu çalışmanın `c39d533` commitinden beri aynı. Eski `AL Build` işindeki placeholder sonucu derleme kanıtı sayılmaz.
+
+İmza anahtarı dosyası Git takibinden çıkarıldı; yeni anahtar dosyaları ignore ediliyor. Önceki commitlerdeki kopyalar silinmiş değildir. Mevcut cihazların güncellenebilmesi için bu APK aynı sertifikayla imzalandı; kontrollü anahtar geçişi ayrı takip gerektirir.
 
 İmzalı APK, lint ve Windows paket derlemesinin nihai sonuçları GitHub yayınının varlıkları/CI çalışmasında kayıtlıdır. Fiziksel Zebra, yazıcı, çoklu terminal yarışı ve gerçek mal kabul → yerleştirme → toplama → sevkiyat kabul testi hâlâ gereklidir. Önceki [teslim incelemesindeki](bade-delivery-audit-2026-09-15.md) yönetici test girişi değerlendirmesi de açıktır.
 
