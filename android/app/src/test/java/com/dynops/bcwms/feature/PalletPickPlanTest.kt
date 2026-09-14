@@ -77,6 +77,20 @@ class PalletPickPlanTest {
         assertThrows(Exception::class.java) { buildPalletPickPlan(line(), 10.0, "not json") }
     }
 
+    @Test fun `different lot pallet reports expected source without allowing confirmation`() {
+        val row = line().put("itemNo", "AB.01091").put("lotNo", "A103309")
+        val data = response().put("itemNo", "AB.01091").put("lotNo", "A103309")
+        val sources = data.getJSONArray("sources")
+        for (i in 0 until sources.length()) sources.getJSONObject(i).put("lotNo", "A102116")
+        val error = assertThrows(IllegalArgumentException::class.java) {
+            buildPalletPickPlan(row, 15.0, data.toString())
+        }
+        assertTrue(error.message.orEmpty().contains("AB.01091"))
+        assertTrue(error.message.orEmpty().contains("Lot: A103309"))
+        assertTrue(error.message.orEmpty().contains("Raf: A-01"))
+        assertTrue(error.message.orEmpty().contains("Farklı lotlu palet bu satırda toplanamaz"))
+    }
+
     @Test fun `zero negative nonfinite and excess quantities are rejected`() {
         listOf(0.0, -1.0, Double.NaN, Double.POSITIVE_INFINITY, 16.0).forEach { reject(qty = it) }
         reject(data = response().put("outstandingBaseQty", 0))

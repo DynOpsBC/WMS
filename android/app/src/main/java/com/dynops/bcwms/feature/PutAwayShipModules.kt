@@ -969,12 +969,12 @@ private fun BatchLpPutAwaySheet(
 
         Spacer(Modifier.height(12.dp))
         ScanField(
-            label = if (currentBin.isBlank()) "Hedef raf okut" else "LP veya yeni hedef raf okut",
+            label = if (currentBin.isBlank()) "Hedef raf okut veya yaz" else "LP veya yeni hedef raf okut / yaz",
             value = scan,
             onValueChange = { scan = it },
             modifier = Modifier.fillMaxWidth(),
             enabled = !checkingBin,
-            scanOnly = requiresPalletWorkflow(com.dynops.bcwms.BuildConfig.FLAVOR),
+            scanOnly = false,
             onScanned = { raw ->
                 val resolved = BarcodeIntentResolver.resolve(raw)
                 if (resolved.kind == BarcodeKind.Lp) scanLp(raw) else selectBin(raw)
@@ -1215,7 +1215,7 @@ private fun PutAwayGuidedSheet(
 
             when (step) {
                 PutAwayStep.LP -> {
-                    Text("Palet/LP etiketini okutun", fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
+                    Text("Palet/LP etiketini okutun veya LP numarasını yazın", fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
                     Text(
                         if (expectedLp.isNotBlank())
                             "Doğru fiziksel paleti yerleştirdiğinizi teyit eder. Beklenen: $expectedLp"
@@ -1268,14 +1268,14 @@ private fun PutAwayGuidedSheet(
             } else {
                 ScanField(
                     label = when (step) {
-                        PutAwayStep.LP -> "LP okut"
+                        PutAwayStep.LP -> "LP okut veya yaz"
                         PutAwayStep.ITEM -> "Ürün okut"
                         else -> "Raf okut"
                     },
                     value = scan,
                     onValueChange = { scan = it },
                     modifier = Modifier.fillMaxWidth(),
-                    scanOnly = lpScanRequired && step == PutAwayStep.LP,
+                    scanOnly = false,
                     onScanned = { submit(it) },
                 )
                 Spacer(Modifier.height(6.dp))

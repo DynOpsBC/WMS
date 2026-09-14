@@ -1,5 +1,7 @@
 import java.util.Properties
 import java.io.FileInputStream
+import java.security.KeyStore
+import java.security.MessageDigest
 
 // GitHub release işi monoton versionCode ve etiket sürümünü Gradle property
 // olarak verir. Lokal/emülatör derlemeleri aşağıdaki kaynak sürümünü kullanır.
@@ -126,9 +128,17 @@ android {
 
   buildTypes {
     debug {
+      // Debug APK'lari saha uygulamasinin ustune kurulmamali. Android debug
+      // anahtari gelistirici makinesine ozeldir; release anahtariyla imzali
+      // guncellemelerle uyusmaz. Ayri applicationId iki paketi kesin olarak
+      // ayirir ve yanlis debug dagitiminin stabil uygulamayi kilitlemesini onler.
+      applicationIdSuffix = ".debug"
+      versionNameSuffix = "-debug"
+      buildConfigField("boolean", "IN_APP_UPDATES_ENABLED", "false")
       isMinifyEnabled = false
     }
     release {
+      buildConfigField("boolean", "IN_APP_UPDATES_ENABLED", "true")
       isMinifyEnabled = true
       isShrinkResources = true
       proguardFiles(
@@ -149,9 +159,43 @@ android {
     }
   }
 
+  // Existing field installations of 1.14.105 use this historical certificate.
+  // Opt in explicitly; never substitute another developer's debug keystore.
+  if (providers.gradleProperty("legacyEmuUpdates").orNull == "true") {
+    val legacyStore = file(providers.gradleProperty("legacyEmuKeystore").get())
+    val keyStore = KeyStore.getInstance("JKS")
+    legacyStore.inputStream().use { keyStore.load(it, "android".toCharArray()) }
+    val fingerprint = MessageDigest.getInstance("SHA-256")
+      .digest(keyStore.getCertificate("androiddebugkey").encoded)
+      .joinToString("") { "%02x".format(it) }
+    require(fingerprint == "b28316a8ba08c9241392fe881bd9f55eaa6b3c330970003197bbe54fe25e2204") {
+      "Legacy EMU certificate does not match the installed 1.14.105 APK"
+    }
+    val legacySigning = signingConfigs.create("legacyEmu") {
+      storeFile = legacyStore
+      storePassword = "android"
+      keyAlias = "androiddebugkey"
+      keyPassword = "android"
+    }
+    buildTypes.create("legacyRelease") {
+      initWith(buildTypes.getByName("release"))
+      matchingFallbacks += "release"
+      signingConfig = legacySigning
+      isDebuggable = false
+      buildConfigField("String", "UPDATE_MANIFEST_URL",
+        "\"https://github.com/DynOpsBC/WMS/releases/download/android-emu-legacy-channel/latest.json\"")
+    }
+  }
+
   lint {
     abortOnError = true
     checkReleaseBuilds = true
+  }
+}
+
+androidComponents {
+  beforeVariants(selector().withBuildType("legacyRelease")) { variant ->
+    variant.enable = variant.productFlavors.any { it.second == "emu" }
   }
 }
 
