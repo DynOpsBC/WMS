@@ -27,3 +27,14 @@ Before deployment, transmit and persist the full pallet/quantity allocation in B
 - The repository AL package workflow currently contains a placeholder, so its completion does not establish AL compilation success.
 
 The accepted bulk LP capacity/count/remainder calculation is unchanged. Existing unrelated Android build, updater and release-workflow edits are outside this commit.
+
+## Publication — 14 September 2026
+
+At the user's explicit request after disclosure of the unresolved BC limitation, Android 1.14.110-bade (200110) was published to the BADE update channel. This publication does not resolve the blocker or establish production test approval.
+
+- Release: https://github.com/DynOpsBC/WMS/releases/tag/android-v1.14.110
+- BADE channel now serves versionCode 200110. Its public APK download and SHA-256 were verified.
+- EMU channel was checked before and after and is unchanged.
+- No BC package was published or installed. The lot-filter AL changes still require a separate compiled BC extension.
+- No actual terminal installation was performed.
+- Release assets include the local Android build/updater patch needed to reproduce the published APK alongside source commit db5d48b.
