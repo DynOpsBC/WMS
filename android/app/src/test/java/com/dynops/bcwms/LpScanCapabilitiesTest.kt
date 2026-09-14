@@ -10,6 +10,14 @@ import org.junit.Test
  * önceki akışa döner.
  */
 class LpScanCapabilitiesTest {
+    @org.junit.Test fun metadataFailureNeverDowngradesToLegacyPosting() {
+        val old = BcApi.parseLpScanCapabilities("""<Action Name="registerFor"/>""")
+        val current = BcApi.parseLpScanCapabilities("""<Action Name="registerScannedFor"/>""")
+        org.junit.Assert.assertEquals("registerFor", BcApi.pickRegistrationAction(old))
+        org.junit.Assert.assertEquals("registerScannedFor", BcApi.pickRegistrationAction(current))
+        org.junit.Assert.assertNull(BcApi.pickRegistrationAction(current.copy(metadataLoaded = false, httpCode = 503)))
+        org.junit.Assert.assertNull(BcApi.pickRegistrationAction(old.copy(metadataLoaded = false, httpCode = 401)))
+    }
     @org.junit.Test fun exactRegistrationRequiresTheActualAction() {
         org.junit.Assert.assertTrue(BcApi.parseLpScanCapabilities("""<Action Name="registerScannedFor" IsBound="true"/>""").registerScannedPick)
         org.junit.Assert.assertTrue(BcApi.parseLpScanCapabilities("""<edm:Action Name='registerScannedFor'/>""").registerScannedPick)

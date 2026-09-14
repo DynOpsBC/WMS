@@ -480,6 +480,12 @@ object BcApi {
         val registerScannedPick: Boolean = false,
     )
 
+    internal fun pickRegistrationAction(capabilities: LpScanCapabilities): String? = when {
+        !capabilities.metadataLoaded -> null
+        capabilities.registerScannedPick -> "registerScannedFor"
+        else -> "registerFor"
+    }
+
     suspend fun getLpScanCapabilities(context: Context): LpScanCapabilities {
         val result = getCustomApiMetadata(context)
         if (!result.ok) return LpScanCapabilities(false, false, false, false, result.httpCode)
@@ -715,7 +721,13 @@ object BcApi {
                 body = """{"error":{"message":"Depo kullanıcısı belirlenemedi. Yeniden giriş yapın."}}""",
             )
         }
-        val exactRegistration = scannedPlans != null && getLpScanCapabilities(context).registerScannedPick
+        val registrationCapabilities = if (scannedPlans != null) getLpScanCapabilities(context) else null
+        val registrationAction = if (registrationCapabilities == null) "registerFor" else pickRegistrationAction(registrationCapabilities)
+        if (registrationAction == null) {
+            return ApiResult(false, 503, JSONObject().put("error", JSONObject().put("message",
+                "Palet kayıt desteği doğrulanamadı. Bağlantıyı kontrol edip tekrar deneyin; kayıt gönderilmedi.")).toString())
+        }
+        val exactRegistration = registrationAction == "registerScannedFor"
         val body = JSONObject().apply {
             put("userId", userId)
             if (exactRegistration) put("palletPlan", com.dynops.bcwms.feature.scannedPalletRegistrationJson(requireNotNull(scannedPlans)))
@@ -723,7 +735,7 @@ object BcApi {
         // Existing BC packages keep their existing action. Once the matching BC
         // extension advertises the new action, send every scanned LP/quantity.
         // Never retry or fall back after a possibly successful posting request.
-        return boundActionLongRunning(context, "picks", pickNo, if (exactRegistration) "registerScannedFor" else "registerFor", body)
+        return boundActionLongRunning(context, "picks", pickNo, registrationAction, body)
     }
 
     /**

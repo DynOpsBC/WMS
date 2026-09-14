@@ -17,14 +17,14 @@ Bu sürüm, yayımlanmış 1.14.111 kaynağına (`c14aa69`) dayanır. Android ve
 
 Yeni `registerScannedFor(userId, palletPlan)` action'ı bütün okutulan LP ve temel miktarlarını alır. Sunucuda belge sahibi, satır kimliği, depo/raf, lot/seri, ölçü birimi, miktar toplamı, eksik ve tekrarlı satır/paletler kontrol edilir. Tam olarak belirtilen LP miktarları aktarılır; eksik miktar başka paletten veya serbest stoktan tamamlanmaz. Aynı işlemde standart ambar kaydı yapılır. Standart kayıt için `SetSuppressCommit(true)` kullanılır, yeni action kapsamındaki beklenmeyen açık COMMIT hata verir.
 
-Terminal yeni action'ı `$metadata` içinde görürse bu yolu kullanır. Henüz güncellenmemiş BC paketlerinde mevcut `registerFor` akışı korunur. Yeni action çağrıldıktan sonra hata/zaman aşımında eski action'a dönüş veya otomatik kayıt tekrarı yoktur.
+Terminal yeni action'ı `$metadata` içinde görürse bu yolu kullanır. Henüz güncellenmemiş BC paketlerinde mevcut `registerFor` akışı korunur. Metadata sorgusu başarısızsa kayıt hiç gönderilmez; eski yola sessiz düşülmez. Yeni action çağrıldıktan sonra hata/zaman aşımında eski action'a dönüş veya otomatik kayıt tekrarı yoktur.
 
 **Android güncellemesi tek başına eski BC paketindeki çoklu palet yarışını kapatmaz.** BC 1.14.1.36 kurulmadan mevcut sunucu tahsis davranışı devam eder. Bu yayında canlı BC kurulumu veya stok hareketi yapılmadı. Başarılı derleme de gerçek BC kabul testi yerine geçmez.
 
 ## Doğrulama
 
-- BADE: 336 JVM testi, 0 hata/atlanan.
-- EMU: aynı 336 JVM testi, 0 hata/atlanan.
+- BADE: 337 JVM testi, 0 hata/atlanan.
+- EMU: aynı 337 JVM testi, 0 hata/atlanan.
 - BADE: 26 emülatör testi, 0 hata/atlanan (18 bağlantısız ekran, 5 barkod, 3 pencere).
 - BADE/EMU lint: her birinde 0 hata, 77 uyarı (ayrıca 18 bilgi notu).
 - İmzalı release APK derlendi; emülatörde 1.14.98 üstüne veri silmeden kuruldu ve ana menü açıldı. Oturum korundu. Bu yalnız kurulum/açılış kontrolüdür.
