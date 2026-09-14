@@ -498,9 +498,12 @@ object BcApi {
      * Kurulum kartındaki "LP Scan Required" ayarı. Sunucu asıl otoritedir; bu
      * değer yalnız ekranı şekillendirir (LP adımını zorunlu kılmak, ürün
      * okutma adımını gizlemek). Ulaşılamazsa veya alan eski pakette yoksa
-     * false döner ve bu paketten önceki akış aynen sürer.
+     * BADE dışındaki sürümlerde false döner. BADE kabul kriteri ayardan
+     * bağımsız olarak her zaman palet doğrulamasını zorunlu tutar.
      */
     suspend fun lpScanRequired(context: Context): Boolean {
+        // BADE acceptance rule is mandatory even when setup/metadata is unavailable.
+        if (com.dynops.bcwms.feature.requiresPalletWorkflow(BuildConfig.FLAVOR)) return true
         val now = System.currentTimeMillis()
         val checkedAt = prefs(context).getLong(KEY_LP_SCAN_CHECKED_AT, 0L)
         val cached = prefs(context).getString(KEY_LP_SCAN_REQUIRED, null)
@@ -692,6 +695,15 @@ object BcApi {
      * istemci kullanılır, belirsiz yanıtta ikinci kez post edilmez.
      */
     suspend fun registerPick(context: Context, pickNo: String): ApiResult {
+        if (com.dynops.bcwms.feature.requiresPalletWorkflow(BuildConfig.FLAVOR)) {
+            try {
+                com.dynops.bcwms.feature.PalletPickVerification.requireVerifiedDocument(context, pickNo)
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                return ApiResult(false, 400, JSONObject().put("error", JSONObject().put("message", e.message ?: "Palet doğrulaması gerekli.")).toString())
+            }
+        }
         val userId = currentUserId(context)
         if (userId.isBlank()) {
             return ApiResult(

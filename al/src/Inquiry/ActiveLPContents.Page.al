@@ -57,9 +57,23 @@ page 72485 "DOPSWHS Active LP Contents"
     end;
 
     procedure LoadFromBin(LocationCode: Code[10]; BinCode: Code[20]; ItemNo: Code[20]; VariantCode: Code[10]; UomCode: Code[10])
+    begin
+        LoadFromBinInternal(LocationCode, BinCode, ItemNo, VariantCode, UomCode, '', '', false);
+    end;
+
+    procedure LoadFromWarehouseEntry(WarehouseEntry: Record "Warehouse Entry")
+    begin
+        LoadFromBinInternal(
+            WarehouseEntry."Location Code", WarehouseEntry."Bin Code", WarehouseEntry."Item No.",
+            WarehouseEntry."Variant Code", WarehouseEntry."Unit of Measure Code",
+            WarehouseEntry."Lot No.", WarehouseEntry."Serial No.", true);
+    end;
+
+    local procedure LoadFromBinInternal(LocationCode: Code[10]; BinCode: Code[20]; ItemNo: Code[20]; VariantCode: Code[10]; UomCode: Code[10]; LotNo: Code[50]; SerialNo: Code[50]; MatchTracking: Boolean)
     var
         LPHeader: Record "DOPSWHS LP Header";
         SourceLine: Record "DOPSWHS LP Line";
+        BinContentSubscriber: Codeunit "DOPSWHS Bin Content Subscriber";
     begin
         Rec.Reset();
         Rec.DeleteAll();
@@ -70,10 +84,7 @@ page 72485 "DOPSWHS Active LP Contents"
             repeat
                 SourceLine.Reset();
                 SourceLine.SetRange("LP No.", LPHeader."No.");
-                SourceLine.SetRange("Item No.", ItemNo);
-                SourceLine.SetRange("Variant Code", VariantCode);
-                if UomCode <> '' then
-                    SourceLine.SetRange("Unit of Measure", UomCode);
+                BinContentSubscriber.FilterActiveLPItemLines(SourceLine, ItemNo, VariantCode, UomCode, LotNo, SerialNo, MatchTracking);
                 if SourceLine.FindSet() then
                     repeat
                         Rec := SourceLine;

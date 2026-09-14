@@ -767,7 +767,7 @@ private fun GuidedPickDocument(no: String, flowMode: OutboundFlowMode? = null, o
     // Sunucudaki LP okutma zorunluluğu ve yeni uçların yayındaki BC paketinde
     // bulunup bulunmadığı. Yeni APK eski sunucuya tanımadığı bir action
     // göndermez; ikisi de false ise ekran bu paketten önceki gibi davranır.
-    var lpScanRequired by remember { mutableStateOf(false) }
+    var lpScanRequired by remember { mutableStateOf(requiresPalletWorkflow(BuildConfig.FLAVOR)) }
     var lpSourcesSupported by remember { mutableStateOf(false) }
     // ELOG: "ürüne dokunma, direkt okut" — görünür okut alanının metni.
     var scanInput by remember { mutableStateOf("") }
@@ -1082,9 +1082,8 @@ private fun GuidedPickDocument(no: String, flowMode: OutboundFlowMode? = null, o
     LaunchedEffect(Unit) {
         val caps = BcApi.getLpScanCapabilities(context)
         lpSourcesSupported = caps.pickLineSources
-        // Zorunluluk yalnız sunucu hem ayarı hem yeni ucu destekliyorsa
-        // uygulanır: eski BC paketine yeni akış dayatmak operatörü kilitlerdi.
-        lpScanRequired = caps.pickLineSources && BcApi.lpScanRequired(context)
+        // Missing metadata must not turn mandatory physical verification off.
+        lpScanRequired = BcApi.lpScanRequired(context)
     }
 
     val takeLines = lines.filter { !it.optString("actionType").equals("Place", ignoreCase = true) }
@@ -1305,6 +1304,15 @@ private fun GuidedPickDocument(no: String, flowMode: OutboundFlowMode? = null, o
                         Column(Modifier.padding(18.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                             Text("✅ TÜM SİPARİŞLER TOPLANDI", color = Color(0xFF2E7D32), fontWeight = FontWeight.Bold, fontSize = 18.sp)
                             Text("Pick'i post ederek paketleme kuyruğuna bırakın.", color = Color(0xFF2E7D32), fontSize = 12.sp)
+                            if (lpScanRequired) {
+                                Text("Kayıttan önce okutulan paletler kontrol edilir.", fontSize = 12.sp)
+                                groupLines(takeLines, ::pickLineCapacity).forEach { group ->
+                                    OutlinedButton(
+                                        enabled = !busy,
+                                        onClick = { confirmGroup = group to group.lines.first().optString("lotNo") },
+                                    ) { Text("${group.itemNo} · ${group.binCode} · Paletleri yeniden doğrula") }
+                                }
+                            }
                         }
                     }
                 }
@@ -1343,7 +1351,7 @@ private fun GuidedPickDocument(no: String, flowMode: OutboundFlowMode? = null, o
                     // ELOG: dokunmadan direkt okut. Sadece barkod okutarak toplanır —
                     // manuel/"elle" giriş yok, yanlış ürün karışmasın diye kaldırıldı.
                     com.dynops.bcwms.scanner.ScanField(
-                        label = "📷 Ürün okut",
+                        label = if (lpScanRequired) "Ürün okut veya aşağıdaki satıra dokun" else "📷 Ürün okut",
                         value = scanInput,
                         onValueChange = { scanInput = it },
                         modifier = Modifier.fillMaxWidth(),
@@ -1365,8 +1373,8 @@ private fun GuidedPickDocument(no: String, flowMode: OutboundFlowMode? = null, o
                     // ELOG: satırları ÜRÜNE göre grupla (item+bin+varyant+lot/seri) —
                     // aynı ürün N farklı siparişte varsa TEK kart, büyük toplam miktar,
                     // altında hangi siparişlere ait olduğu küçük gri yazıyla listelenir.
-                    // Kartlar sadece bilgi amaçlıdır — toplama SADECE barkod okutarak
-                    // yapılır, dokunarak tamamlama/elle giriş yolu yok.
+                    // BADE'de karta dokunmak zorunlu palet okutma ekranını açar;
+                    // dokunma tek başına satırı tamamlamaz.
                     val itemGroups = groupLines(activeLines, ::pickLineCapacity)
                     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         itemGroups.forEach { group ->
@@ -1374,6 +1382,12 @@ private fun GuidedPickDocument(no: String, flowMode: OutboundFlowMode? = null, o
                             val doneCount = group.lines.count(::isComplete)
                             val orderNos = group.lines.map { rawValue(it, "sourceNo").ifBlank { "—" } }.distinct()
                             Card(
+                                onClick = {
+                                    if (lpScanRequired && canMutate && !busy && qtyGroup == null && confirmGroup == null) {
+                                        val openGroup = groupLines(group.lines.filterNot(::isComplete).ifEmpty { group.lines }, ::pickLineCapacity).first()
+                                        confirmGroup = openGroup to openGroup.lines.first().optString("lotNo")
+                                    }
+                                },
                                 // ELOG: henüz toplanmamış (bekleyen) satırlar hafif kırmızı/pembe
                                 // zeminde belirginleşsin; toplananlar yeşile döner.
                                 colors = CardDefaults.cardColors(containerColor = if (done) Color(0xFFE8F5E9) else Color(0xFFFFF0F0)),
@@ -1386,6 +1400,10 @@ private fun GuidedPickDocument(no: String, flowMode: OutboundFlowMode? = null, o
                                     Column(Modifier.weight(1f)) {
                                         Text(group.itemNo, fontWeight = FontWeight.Bold)
                                         Text(group.description, fontSize = 12.sp, color = Color.Gray)
+                                        if (lpScanRequired) {
+                                            group.lines.forEach { PickSourceDetails(no, it) }
+                                            if (!done) Text("Paletleri okutmak için dokunun", fontSize = 12.sp)
+                                        }
                                         if (group.binCode.isNotBlank()) {
                                             Spacer(Modifier.height(2.dp))
                                             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -1429,7 +1447,7 @@ private fun GuidedPickDocument(no: String, flowMode: OutboundFlowMode? = null, o
             Button(
                 onClick = { registerPick() },
                 // Başkasının pick'i post edilemez — önce devralınmalı.
-                enabled = !busy && canRegisterAssignedPick(assignedTo, myUserId, allCollected, inFlightLines.size),
+                enabled = !busy && qtyGroup == null && confirmGroup == null && canRegisterAssignedPick(assignedTo, myUserId, allCollected, inFlightLines.size),
                 modifier = Modifier.weight(2f).height(com.dynops.bcwms.ui.wmsPrimaryButtonHeight()),
             ) {
                 Text(
@@ -1449,7 +1467,13 @@ private fun GuidedPickDocument(no: String, flowMode: OutboundFlowMode? = null, o
     // ELOG miktar popup'ı: aynı ürün bu rafta çok satır/siparişte → "istenen 4"
     // göster, operatör miktarı girsin, satırlara dağıt.
     val qg = qtyGroup
-    if (qg != null) {
+    if (qg != null && lpScanRequired) {
+        PalletPickSheet(no, qg,
+            onDismiss = { qtyGroup = null },
+            onFinished = { message -> qtyGroup = null; status = message; reload() },
+        )
+    }
+    if (qg != null && !lpScanRequired) {
         QuantityDialogSheet(
             title = "${qg.itemNo} — ${qg.count} siparişe dağıtılır",
             itemNo = qg.itemNo,
@@ -1477,7 +1501,13 @@ private fun GuidedPickDocument(no: String, flowMode: OutboundFlowMode? = null, o
 
     // Tek satırlı ürün okutuldu → sepete KAÇ ADET koyacağını göster, onaylat.
     val cg = confirmGroup
-    if (cg != null) {
+    if (cg != null && lpScanRequired) {
+        PalletPickSheet(no, cg.first,
+            onDismiss = { confirmGroup = null },
+            onFinished = { message -> confirmGroup = null; status = message; reload() },
+        )
+    }
+    if (cg != null && !lpScanRequired) {
         PickConfirmSheet(
             group = cg.first,
             pickNo = no,

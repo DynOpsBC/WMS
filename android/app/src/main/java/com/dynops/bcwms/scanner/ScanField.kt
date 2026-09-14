@@ -50,6 +50,7 @@ fun ScanField(
     enabled: Boolean = true,
     focusRequester: androidx.compose.ui.focus.FocusRequester? = null,
     updateValueOnScan: Boolean = true,
+    scanOnly: Boolean = false,
 ) {
     val context = LocalContext.current
     var hasCameraPermission by remember {
@@ -80,7 +81,8 @@ fun ScanField(
         ActivityResultContracts.RequestPermission()
     ) { granted ->
         hasCameraPermission = granted
-        if (granted) scanning = true else cameraError = "Kamera izni reddedildi — elle giriş yapın."
+        if (granted) scanning = true else cameraError = if (scanOnly)
+            "Kamera izni reddedildi — donanım tarayıcıyı kullanın." else "Kamera izni reddedildi — elle giriş yapın."
     }
 
     // Kamera önizlemesi ekrana gömülü olduğu için sistem geri tuşu önce yalnızca
@@ -100,15 +102,16 @@ fun ScanField(
                 // gerçek cihazda yazıp Enter'a basınca donanım taraması gibi işlenir).
                 keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
                 keyboardActions = KeyboardActions(onDone = {
-                    if (value.isNotBlank()) onScanned?.invoke(value.trim())
+                    if (!scanOnly && value.isNotBlank()) onScanned?.invoke(value.trim())
                 }),
+                readOnly = scanOnly,
                 // Ekran akışı alanı programatik odaklayabilsin (sadece-okut sayım):
                 // donanım tarayıcı yalnız odaklı alana yazar.
                 modifier = if (focusRequester != null) Modifier.weight(1f).focusRequester(focusRequester) else Modifier.weight(1f),
             )
             Spacer(Modifier.width(8.dp))
             // Elle giriş için "OK" — yazıp bas, hemen işlensin (Enter'a alternatif).
-            if (onScanned != null) {
+            if (onScanned != null && !scanOnly) {
                 // OK, alan boşken pasifti: operatör basıyor, hiçbir şey olmuyor
                 // ve nedenini göremiyordu. Artık basılabiliyor ve ne beklendiğini
                 // söylüyor (UAT: aynı sessizlik yerleştirme, ad-hoc ve paketlemede).
@@ -148,7 +151,11 @@ fun ScanField(
         if (scanning && hasCameraPermission) {
             CameraBarcodePreview(
                 modifier = Modifier.fillMaxWidth().height(220.dp).padding(top = 8.dp),
-                onError = { cameraError = "Kamera açılamadı — elle giriş yapın."; scanning = false },
+                onError = {
+                    cameraError = if (scanOnly) "Kamera açılamadı — donanım tarayıcıyı kullanın."
+                        else "Kamera açılamadı — elle giriş yapın."
+                    scanning = false
+                },
                 onBarcode = { code ->
                     scanning = false
                     if (updateValueOnScan) onValueChange(code)

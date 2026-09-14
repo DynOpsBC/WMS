@@ -69,6 +69,124 @@ codeunit 72110 "DOPSWHS Bin Rollup Tests"
         Assert.AreEqual(100, Rollup.CalculateNestedLPQuantity('BLUE', 'X', 'ITEMY'), 'Scenario D: leaf quantities should not multiply by container count.');
     end;
 
+    [Test]
+    procedure ActiveWarehouseLpSummaryMatchesExactLot()
+    var
+        Rollup: Codeunit "DOPSWHS Bin Content Subscriber";
+        Assert: Codeunit "Library Assert";
+        LpNos: Text[250];
+        Qty: Decimal;
+    begin
+        SeedTrackingSummary();
+        Rollup.GetActiveLPTrackingInfo('LPTEST', 'TRACKING', 'ITEM-LPLOT', '', 'PCS', 'LOT-A', '', LpNos, Qty);
+        Assert.AreEqual('TEST-LP-A', LpNos, 'Only the LP of LOT-A must appear, once even when it has multiple matching lines.');
+        Assert.AreEqual(5, Qty, 'LOT-B, serial-tracked, empty and nonpositive stock must not enter the LOT-A quantity.');
+        Rollup.GetActiveLPTrackingInfo('LPTEST', 'TRACKING', 'ITEM-LPLOT', '', 'PCS', 'LOT-B', '', LpNos, Qty);
+        Assert.AreEqual('TEST-LP-B', LpNos, 'A different warehouse lot must have its own current LP list.');
+        Assert.AreEqual(7, Qty, 'LOT-B quantity must not include LOT-A.');
+    end;
+
+    [Test]
+    procedure BlankWarehouseLotDoesNotMatchEveryLot()
+    var
+        Rollup: Codeunit "DOPSWHS Bin Content Subscriber";
+        Assert: Codeunit "Library Assert";
+        LpNos: Text[250];
+        Qty: Decimal;
+    begin
+        SeedTrackingSummary();
+        Rollup.GetActiveLPTrackingInfo('LPTEST', 'TRACKING', 'ITEM-LPLOT', '', 'PCS', '', '', LpNos, Qty);
+        Assert.AreEqual('TEST-LP-EMPTY', LpNos, 'Blank historical tracking must only match current untracked stock.');
+        Assert.AreEqual(3, Qty, 'Blank lot is an exact value, not a wildcard.');
+    end;
+
+    [Test]
+    procedure WarehouseSerialAndMissingMatchesAreIsolated()
+    var
+        Rollup: Codeunit "DOPSWHS Bin Content Subscriber";
+        Assert: Codeunit "Library Assert";
+        LpNos: Text[250];
+        Qty: Decimal;
+    begin
+        SeedTrackingSummary();
+        Rollup.GetActiveLPTrackingInfo('LPTEST', 'TRACKING', 'ITEM-LPLOT', '', 'PCS', 'LOT-A', 'S1', LpNos, Qty);
+        Assert.AreEqual('TEST-LP-SERIAL', LpNos, 'Only the exact lot and serial may match.');
+        Assert.AreEqual(2, Qty, 'Other serials must not contribute quantity.');
+        Rollup.GetActiveLPTrackingInfo('LPTEST', 'TRACKING', 'ITEM-LPLOT', '', 'PCS', 'MISSING', '', LpNos, Qty);
+        Assert.AreEqual('', LpNos, 'No match must clear the previous row LP list.');
+        Assert.AreEqual(0, Qty, 'No match must clear the previous row quantity.');
+    end;
+
+    [Test]
+    procedure BinContentStillAggregatesAllLots()
+    var
+        Rollup: Codeunit "DOPSWHS Bin Content Subscriber";
+        Assert: Codeunit "Library Assert";
+        LpNos: Text[250];
+        Qty: Decimal;
+    begin
+        SeedTrackingSummary();
+        Rollup.GetActiveLPItemInfo('LPTEST', 'TRACKING', 'ITEM-LPLOT', '', 'PCS', LpNos, Qty);
+        Assert.AreEqual(17, Qty, 'Bin Contents has no lot dimension and must still total all positive item stock.');
+        Assert.IsTrue(StrPos(LpNos, 'TEST-LP-A') > 0, 'LOT-A must remain in the bin overview.');
+        Assert.IsTrue(StrPos(LpNos, 'TEST-LP-B') > 0, 'LOT-B must remain in the bin overview.');
+        Assert.IsTrue(StrPos(LpNos, 'TEST-LP-ZERO') = 0, 'An empty LP must not be shown as current stock.');
+    end;
+
+    [Test]
+    procedure DrillDownFilterUsesSameExactTrackingScope()
+    var
+        SourceLine: Record "DOPSWHS LP Line";
+        Rollup: Codeunit "DOPSWHS Bin Content Subscriber";
+        Assert: Codeunit "Library Assert";
+    begin
+        SeedTrackingSummary();
+        SourceLine.SetFilter("LP No.", 'TEST-LP-*');
+        Rollup.FilterActiveLPItemLines(SourceLine, 'ITEM-LPLOT', '', 'PCS', 'LOT-A', '', true);
+        Assert.AreEqual(2, SourceLine.Count(), 'Only the two positive LOT-A/unserialized lines may appear in drill-down.');
+        SourceLine.CalcSums(Quantity);
+        Assert.AreEqual(5, SourceLine.Quantity, 'Drill-down must agree with the summary quantity.');
+        Rollup.FilterActiveLPItemLines(SourceLine, 'ITEM-LPLOT', '', 'PCS', '', '', false);
+        SourceLine.CalcSums(Quantity);
+        Assert.AreEqual(17, SourceLine.Quantity, 'Switching to bin overview must remove previous tracking filters.');
+    end;
+
+    local procedure SeedTrackingSummary()
+    begin
+        AddTrackingSummaryLine('TEST-LP-A', 10000, 'LOT-A', '', 4);
+        AddTrackingSummaryLine('TEST-LP-A', 20000, 'LOT-A', '', 1);
+        AddTrackingSummaryLine('TEST-LP-B', 10000, 'LOT-B', '', 7);
+        AddTrackingSummaryLine('TEST-LP-EMPTY', 10000, '', '', 3);
+        AddTrackingSummaryLine('TEST-LP-SERIAL', 10000, 'LOT-A', 'S1', 2);
+        AddTrackingSummaryLine('TEST-LP-ZERO', 10000, 'LOT-A', '', 0);
+        AddTrackingSummaryLine('TEST-LP-NEGATIVE', 10000, 'LOT-A', '', -1);
+    end;
+
+    local procedure AddTrackingSummaryLine(LpNo: Code[20]; LineNo: Integer; LotNo: Code[50]; SerialNo: Code[50]; Qty: Decimal)
+    var
+        LP: Record "DOPSWHS LP Header";
+        LPLine: Record "DOPSWHS LP Line";
+    begin
+        // Isolated test fixtures: no production workflow, posting or history writes.
+        if not LP.Get(LpNo) then begin
+            LP.Init();
+            LP."No." := LpNo;
+            LP."Location Code" := 'LPTEST';
+            LP."Bin Code" := 'TRACKING';
+            LP.Status := LP.Status::Built;
+            LP.Insert(false);
+        end;
+        LPLine.Init();
+        LPLine."LP No." := LpNo;
+        LPLine."Line No." := LineNo;
+        LPLine."Item No." := 'ITEM-LPLOT';
+        LPLine."Unit of Measure" := 'PCS';
+        LPLine."Lot No." := LotNo;
+        LPLine."Serial No." := SerialNo;
+        LPLine.Quantity := Qty;
+        LPLine.Insert(false);
+    end;
+
     local procedure CreateBuiltLP(var LP: Record "DOPSWHS LP Header"; TemplateCode: Code[20]; Qty: Decimal)
     var
         LPMgt: Codeunit "DOPSWHS LP Management";
