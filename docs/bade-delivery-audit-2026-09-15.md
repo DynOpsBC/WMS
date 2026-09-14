@@ -1,5 +1,7 @@
 # BADE teslim öncesi inceleme — 15 Eylül 2026
 
+**Devam çalışması:** GitHub yayını ve BC kayıt protokolü için [1.14.112 notlarına](bade-release-1.14.112.md) bakın. Aşağıdaki rapor ilk incelemenin zamanındaki durumu kaydeder.
+
 **Karar: koşulsuz teslim için hazır değil.** Android tarafındaki aşağıdaki düzeltmeler hazırlandı. Çoklu paletin BC kayıt anında doğrulanması ve gerçek ortam kabul testi açık. Bu inceleme yeni bir yayın yapmadı; müşterideki 1.14.111 bu düzeltmeleri içermez.
 
 ## İncelenen kaynak ve kapsam
