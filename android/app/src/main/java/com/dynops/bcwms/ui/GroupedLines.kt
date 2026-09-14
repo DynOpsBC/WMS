@@ -44,10 +44,13 @@ fun LineGroupCards(
                     Text("${donePrefix(done)}${g.itemNo} — ${g.description}", fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
                     Text(
                         buildList {
+                            val location = firstValue(g.lines.first(), "locationCode")
+                            val uom = firstValue(g.lines.first(), "unitOfMeasureCode")
+                            if (location.isNotBlank()) add("Depo $location")
                             if (g.binCode.isNotBlank()) add("Bin ${g.binCode}")
                             add("${g.count} satır")
-                            add("Kalan: ${fmtGrp(g.totalOutstanding)}")
-                            if (stagedSum > 0) add("Girilen: ${fmtGrp(stagedSum)}")
+                            add("Kalan: ${fmtGrp(g.totalOutstanding)} $uom")
+                            if (stagedSum > 0) add("Girilen: ${fmtGrp(stagedSum)} $uom")
                         }.joinToString(" · "),
                         fontSize = 12.sp,
                         color = Color.Gray,

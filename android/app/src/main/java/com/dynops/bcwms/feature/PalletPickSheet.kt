@@ -53,7 +53,9 @@ internal fun PalletPickSheet(
             "Miktar 0 ile ${fmtNum(group.totalOutstanding)} arasında olmalı."
         }
         if (qty == 0.0) return emptyList()
-        return loadDocumentPalletPlans(context, pickNo, distributeQty(group, qty, ::pickLineCapacity))
+        val requested = distributeQty(group, qty, ::pickLineCapacity)
+        require(requested.isNotEmpty()) { "Miktar satırların kalanını aşıyor. Belgeyi yenileyin." }
+        return loadDocumentPalletPlans(context, pickNo, requested)
     }
 
     LaunchedEffect(key, quantity, reloadKey) {
@@ -163,20 +165,28 @@ internal fun PalletPickSheet(
                 scope.launch {
                     var accepted = 0
                     var attempted = false
+                    var requestedCount = group.lines.size
                     try {
                         // A stock or candidate change invalidates the physical scan plan.
                         val fresh = loadPlans()
                         check(fresh.size == plans.size && fresh.zip(plans).all { (a, b) -> samePalletPickPlan(a, b) }) {
                             "Palet stokları değişti. Listeyi yenileyip paletleri yeniden okutun."
                         }
-                        if (qty == 0.0) {
-                            for (line in group.lines) {
+                        val requested = distributeQty(group, requireNotNull(qty) { "Miktar geçersiz." }, ::pickLineCapacity)
+                        check(requested.isNotEmpty()) { "Miktar satırların kalanını aşıyor. Belgeyi yenileyin." }
+                        requestedCount = requested.size
+                        // Clear the remainder before staging the smaller positive total.
+                        // Otherwise old amounts on later group lines can still be posted.
+                        for ((line, amount) in requested) {
+                            if (amount == 0.0) {
                                 attempted = true
                                 val result = BcApi.confirmPickLine(context, pickNo, line.optInt("lineNo"), 0.0, line.optString("lotNo"))
                                 check(result.ok) { BcApi.errorMessage(result.body) }
                                 PalletPickVerification.clear(context, pickNo, line.optInt("lineNo"))
                                 accepted++
                             }
+                        }
+                        if (qty == 0.0) {
                             onFinished("TAMAM: $accepted satırın girilen miktarı sıfırlandı.")
                             return@launch
                         }
@@ -194,7 +204,7 @@ internal fun PalletPickSheet(
                         if (attempted) {
                             // Refresh the document even after an uncertain response. Never
                             // replay a partially successful group from this stale dialog.
-                            onFinished("HATA: $accepted/${plans.size} satır onaylandı. ${e.message}. Belgeyi kontrol edin.")
+                            onFinished("HATA: $accepted/$requestedCount satır onaylandı. ${e.message}. Belgeyi kontrol edin.")
                         } else {
                             plans = emptyList(); scannedCount = 0
                             error = e.message ?: "Doğrulama başarısız. Yenileyin."

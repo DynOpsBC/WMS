@@ -985,7 +985,10 @@ private fun GuidedPickDocument(no: String, flowMode: OutboundFlowMode? = null, o
             return
         }
         val plan = distributeQty(group, totalQty, ::pickLineCapacity)
-        if (plan.isEmpty()) return
+        if (plan.isEmpty()) {
+            status = "HATA: Miktar satırların kalanını aşıyor. Belgeyi yenileyin."
+            return
+        }
 
         // 1) Anında yerel tamamlama.
         val planned = plan.associate { (ln, q) -> ln.optInt("lineNo") to q }
@@ -1003,7 +1006,7 @@ private fun GuidedPickDocument(no: String, flowMode: OutboundFlowMode? = null, o
             var firstFailure: BcApi.ApiResult? = null
             for ((ln, q) in plan) {
                 val effectiveLot = lotNo.ifBlank { ln.optString("lotNo") }
-                val result = BcApi.confirmPickLine(context, no, ln.optInt("lineNo"), q, effectiveLot, sourceLpNo)
+                val result = BcApi.confirmPickLine(context, no, ln.optInt("lineNo"), q, effectiveLot, if (q > 0) sourceLpNo else "")
                 if (result.ok) okCount++ else {
                     firstFailure = result
                     break
@@ -1034,7 +1037,7 @@ private fun GuidedPickDocument(no: String, flowMode: OutboundFlowMode? = null, o
             selection.issue == ScannedGroupIssue.TrackingMismatch ->
                 status = "HATA: Okutulan lot/seri bu ürünün açık toplama satırıyla eşleşmiyor."
             selection.issue == ScannedGroupIssue.Ambiguous ->
-                status = "HATA: Bu ürün birden fazla lot/seri satırında. Lot veya seri barkodunu okutun."
+                status = "HATA: Bu ürün birden fazla raf, lot, seri veya ölçü birimi satırında. İlgili satırı seçin."
             group == null -> status = "HATA: Toplama satırı seçilemedi. Yenileyip tekrar deneyin."
             // Çok satır → miktar dağıtım dialogu (operatör toplamı girer).
             group.count > 1 -> qtyGroup = group
@@ -1478,6 +1481,7 @@ private fun GuidedPickDocument(no: String, flowMode: OutboundFlowMode? = null, o
             title = "${qg.itemNo} — ${qg.count} siparişe dağıtılır",
             itemNo = qg.itemNo,
             initialQty = qg.totalOutstanding.takeIf { it > 0 } ?: 1.0,
+            maximumQuantity = qg.totalOutstanding,
             initialUom = qg.lines.first().optString("unitOfMeasureCode"),
             initialLot = qg.lines.first().optString("lotNo"),
             allowZeroQuantity = true,
@@ -2285,6 +2289,7 @@ private fun PickDocument(no: String, onBack: () -> Unit) {
             title = "Toplama Miktarı (${gt.count} satıra dağıtılır)",
             itemNo = gt.itemNo,
             initialQty = gt.totalOutstanding.takeIf { it > 0 } ?: 1.0,
+            maximumQuantity = gt.totalOutstanding,
             initialUom = gt.lines.first().optString("unitOfMeasureCode"),
             initialLot = gt.lines.first().optString("lotNo"),
             allowZeroQuantity = true,
@@ -2303,10 +2308,15 @@ private fun PickDocument(no: String, onBack: () -> Unit) {
                 scope.launch {
                     busy = true; status = "Grup dağıtılıyor..."
                     val plan = distributeQty(gt, res.quantity, ::pickLineCapacity)
+                    if (plan.isEmpty()) {
+                        busy = false
+                        status = "HATA: Miktar satırların kalanını aşıyor. Belgeyi yenileyin."
+                        return@launch
+                    }
                     var okCount = 0
                     var firstErr: String? = null
                     for ((ln, q) in plan) {
-                        val r = BcApi.confirmPickLine(context, no, ln.optInt("lineNo"), q, res.lotNo, res.sourceLpNo)
+                        val r = BcApi.confirmPickLine(context, no, ln.optInt("lineNo"), q, res.lotNo, if (q > 0) res.sourceLpNo else "")
                         if (r.ok) okCount++ else {
                             if (firstErr == null) firstErr = BcApi.errorMessage(r.body)
                             break

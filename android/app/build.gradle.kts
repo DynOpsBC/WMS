@@ -34,6 +34,7 @@ android {
     applicationId = "com.dynops.bcwms"
     minSdk = 26
     targetSdk = 35
+    testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     // Saha APK'larından bazılarında CI tarafından 100000+ versionCode
     // kullanıldı. Görünen sürüm adı eski olsa bile Android yalnız sayısal kodu
     // karşılaştırdığı için semantik sürümleri 200000 bandında monoton tutuyoruz.
@@ -226,6 +227,11 @@ dependencies {
   // Android's org.json classes are stubs in local JVM tests. Use the reference
   // implementation so pagination payload parsing is exercised for real.
   testImplementation("org.json:json:20240303")
+  androidTestImplementation(platform(libs.androidx.compose.bom))
+  androidTestImplementation("androidx.compose.ui:ui-test-junit4")
+  androidTestImplementation("androidx.test:runner:1.7.0")
+  androidTestImplementation("androidx.test.espresso:espresso-core:3.7.0")
+  debugImplementation("androidx.compose.ui:ui-test-manifest")
 }
 
 // Closed-track Play publishing block is read by gradle-play-publisher only when

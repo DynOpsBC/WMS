@@ -5,6 +5,13 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class QuantityDialogSheetTest {
+    @Test fun `group quantity cannot exceed available stock or use an invalid limit`() {
+        assertTrue(validQuantityInput("5", false, false, 5.0))
+        assertFalse(validQuantityInput("5.1", false, false, 5.0))
+        assertTrue(validQuantityInput("0", true, false, 0.0))
+        assertFalse(validQuantityInput("1", true, true, 0.0))
+        assertFalse(validQuantityInput("1", false, false, Double.NaN))
+    }
     @Test
     fun `pick quantity can explicitly allow zero`() {
         assertTrue(validQuantityInput("0", allowZeroQuantity = true, quantityExactlyOne = false))
