@@ -1,7 +1,7 @@
 {
-  "versionCode": 200110,
-  "versionName": "1.14.110-bade",
-  "apkUrl": "https://github.com/DynOpsBC/WMS/releases/download/android-v1.14.110/BCWMS-BADE-1.14.110-RELEASE.apk",
-  "sha256": "953f31144a4769066c11aeb55f685e384224a7b2bbdf78fd013cbca0a7a49c5a",
-  "releaseNotes": "BADE: kaynak raf/palet/lot/miktar kartları, zorunlu palet QR doğrulaması ve sıralı çoklu palet toplama. Yerleştirmede ürün okutma kaldırıldı. BC palet doğrulama servisleri gereklidir. Çoklu paletlerin kayıt anında yalnız okutulan paletlerden tüketilmesi kontrolü henüz tamamlanmadı."
+  "versionCode": 200112,
+  "versionName": "1.14.112-bade",
+  "apkUrl": "https://github.com/DynOpsBC/WMS/releases/download/android-v1.14.112/BCWMS-BADE-1.14.112-RELEASE.apk",
+  "sha256": "21e122b6f3cb1f3c8cfbd65c1aa7f27abba16e01453f2d9405264144c2d7db53",
+  "releaseNotes": "Barkodun güncel rafla işlenmesi, satır gruplama ve miktar azaltma düzeltildi. Lot tekrar deneme ve küçük ekran erişimi iyileştirildi. Yeni BC paketiyle tam palet tahsisli kayıt desteklenir; eski BC paketinde mevcut kayıt davranışı sürer."
 }
