@@ -141,7 +141,8 @@ internal fun ScannerTextField(
                             editor = this
                         }
                     },
-                    update = { it.isEnabled = enabled; it.setTextColor(textColor) },
+                    // The label is a workflow step ("1. raf" → "2. palet"); keep the native description in sync.
+                    update = { it.isEnabled = enabled; it.setTextColor(textColor); it.contentDescription = label },
                 )
             },
         )

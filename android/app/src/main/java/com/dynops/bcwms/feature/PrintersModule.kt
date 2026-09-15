@@ -223,7 +223,7 @@ fun PrintersModule() {
             items(rows) { row ->
                 val code = row.optString("code")
                 val desc = row.optString("description")
-                val format = row.optString("format")
+                val format = row.optString("format").trim().uppercase()
                 val handle = row.optString("printerHandle").ifBlank { row.optString("hostname") }
                 val active = row.optBoolean("active", true)
                 val agentStatus = row.optString("agentStatus")
@@ -264,18 +264,28 @@ fun PrintersModule() {
                         Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                             OutlinedButton(
                                 onClick = {
-                                    val selected = if (isLabelDefault) "" else code
-                                    setDefaultPrinter(context, selected, PRINTER_USAGE_LABEL)
-                                    defaultLabelCode = selected
+                                    val issue = labelPrinterSelectionIssue(active, format)
+                                    if (issue == null) {
+                                        setDefaultPrinter(context, code, PRINTER_USAGE_LABEL)
+                                        defaultLabelCode = code
+                                        status = "TAMAM: $code etiket yazıcısı olarak seçildi."
+                                    } else {
+                                        status = "UYARI: $code seçilemedi. $issue"
+                                    }
                                 },
-                                enabled = isLabelDefault || (active && format == "ZPL"),
-                            ) { Text(if (isLabelDefault) "Etiket seçimini kaldır" else "Etiket", fontSize = 12.sp) }
+                            ) { Text(if (isLabelDefault) "✓ Etiket" else "Etiket", fontSize = 12.sp) }
                             OutlinedButton(
                                 onClick = {
-                                    setDefaultPrinter(context, code, PRINTER_USAGE_DOCUMENT)
-                                    defaultDocumentCode = code
+                                    if (active && format == "PDF") {
+                                        setDefaultPrinter(context, code, PRINTER_USAGE_DOCUMENT)
+                                        defaultDocumentCode = code
+                                        status = "TAMAM: $code belge yazıcısı olarak seçildi."
+                                    } else {
+                                        val reason = if (!active) "Yazıcı pasif."
+                                        else "Belge seçimi yalnızca PDF yazıcılarda kullanılabilir; bu yazıcının formatı $format."
+                                        status = "UYARI: $code seçilemedi. $reason"
+                                    }
                                 },
-                                enabled = active && format == "PDF",
                             ) { Text(if (isDocumentDefault) "✓ Belge" else "Belge", fontSize = 12.sp) }
                         }
                         if (!productionCustomer) {
@@ -300,4 +310,11 @@ internal fun printerReadinessMessage(rows: List<org.json.JSONObject>): String {
     val activeCount = rows.count { it.optBoolean("active", true) }
     return if (activeCount == 0) "UYARI: ${rows.size} kayıtlı yazıcı var ancak aktif yazıcı yok. Yazıcı ayarlarını kontrol edin."
     else "TAMAM: $activeCount aktif yazıcı listelendi · ${rows.size - activeCount} pasif."
+}
+
+internal fun labelPrinterSelectionIssue(active: Boolean, format: String): String? = when {
+    !active -> "Yazıcı pasif. Windows yazıcı ajanında etkinleştirip listeyi yenileyin."
+    format.trim().uppercase() != "ZPL" ->
+        "Etiket seçimi yalnızca ZPL yazıcılarda kullanılabilir; bu yazıcının formatı ${format.ifBlank { "bilinmiyor" }}."
+    else -> null
 }

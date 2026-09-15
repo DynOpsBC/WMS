@@ -595,7 +595,7 @@ internal fun BulkLpBuildSheet(
         val templateCode = template
         val binCode = bin
         val shouldPrint = printLabels
-        val printerId = getDefaultPrinter(context, PRINTER_USAGE_LABEL)
+        val printerId = getDefaultPrinter(context, PRINTER_USAGE_DOCUMENT)
         if (requestToReplay == null &&
             (sourceEntry == null || count == null || perLp == null || templateCode.isBlank())
         ) return

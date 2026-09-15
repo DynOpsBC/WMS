@@ -4,6 +4,20 @@ import org.junit.Assert.assertEquals
 import org.junit.Test
 
 class InquiryPrintWorkflowTest {
+    @Test fun `active ZPL printer can be selected for labels`() {
+        assertEquals(null, labelPrinterSelectionIssue(active = true, format = "ZPL"))
+        assertEquals(null, labelPrinterSelectionIssue(active = true, format = " zpl "))
+    }
+
+    @Test fun `label selection explains inactive and incompatible printers`() {
+        org.junit.Assert.assertTrue(
+            labelPrinterSelectionIssue(active = false, format = "ZPL")!!.contains("pasif"),
+        )
+        org.junit.Assert.assertTrue(
+            labelPrinterSelectionIssue(active = true, format = "PDF")!!.contains("yalnızca ZPL"),
+        )
+    }
+
     @Test fun `inactive printers are not described as ready`() {
         val inactive = org.json.JSONObject().put("active", false)
         val active = org.json.JSONObject().put("active", true)

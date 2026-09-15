@@ -1,5 +1,7 @@
 package com.dynops.bcwms.feature
 
+import com.dynops.bcwms.scanner.BarcodeKind
+import com.dynops.bcwms.scanner.ResolvedBarcode
 import org.json.JSONObject
 import java.util.Locale
 import kotlin.math.abs
@@ -132,6 +134,25 @@ internal fun samePalletPickPlan(a: PalletPickPlan, b: PalletPickPlan): Boolean =
 
 internal fun acceptsPalletStep(steps: List<PalletPickStep>, scannedCount: Int, value: String): Boolean =
     steps.getOrNull(scannedCount)?.lpNo?.equals(value.trim(), true) == true
+
+/** The physical source address must be proven before any pallet can be accepted.
+ * Bin labels carry the raw bin code; a "B-" prefixed bin barcode is accepted too.
+ */
+internal fun acceptsSourceBin(expectedBinCode: String, scanned: String): Boolean {
+    val expected = expectedBinCode.trim()
+    val value = scanned.trim()
+    if (expected.isBlank() || value.isBlank()) return false
+    if (expected.equals(value, ignoreCase = true)) return true
+    return !expected.startsWith("B-", ignoreCase = true) &&
+        value.startsWith("B-", ignoreCase = true) && expected.equals(value.drop(2), ignoreCase = true)
+}
+
+/** Explains a rejected source-bin scan; an LP scanned too early gets its own hint. */
+internal fun sourceBinScanError(expectedBinCode: String, scanned: ResolvedBarcode): String =
+    if (scanned.kind == BarcodeKind.Lp)
+        "${scanned.value} bir palet etiketi. Önce bulunduğunuz $expectedBinCode rafının etiketini okutun, sonra paleti."
+    else
+        "Yanlış raf: ${scanned.value}. Bu toplama için önce $expectedBinCode rafını okutun."
 
 internal fun palletScansComplete(steps: List<PalletPickStep>, scannedCount: Int): Boolean =
     steps.isNotEmpty() && scannedCount == steps.size

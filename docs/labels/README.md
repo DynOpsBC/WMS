@@ -48,7 +48,13 @@ SSCC'li örnek: ![LP SSCC](lp-etiketi-sscc.png)
 - Raf: terminal **Raf Sorgu → Etiket Yazdır** (`bins(...)/printLabel`).
 - LP: LP kartı / terminal LP ekranı **Etiket Yazdır** (`PrintLPLabel`).
 
-Madde Tanımlama Etiketi (MTE, `BuildPalletItemZpl`) bilerek değiştirilmedi; BADE sahasında basılan mevcut etiket odur.
+Madde Tanımlama Etiketi (MTE), `DOPSWHS MTE LP Report` ile BC'den alınan onaylı
+10×8 cm RDLC düzeninde PDF üretilir. Her LP ayrı rapor satırı/sayfasıdır; madde,
+lot, miktar ve QR verisi o LP'nin güncel kayıtlarından doldurulur. Terminalde bu
+çıktı **Belge** olarak seçilmiş, PDF biçimli Windows yazıcı rotasına gönderilir.
+
+Madde Defteri Girişleri'ndeki **Tüm LP MTE Etiketleri** işlemi, seçili girişlere
+bağlı bütün LP'leri tek raporda açar; yalnız ilk LP ile sınırlı değildir.
 
 ## Önizleme
 

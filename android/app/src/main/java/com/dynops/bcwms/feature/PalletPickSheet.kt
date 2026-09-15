@@ -36,6 +36,7 @@ internal fun PalletPickSheet(
     val key = "$pickNo|${group.key}|${group.lines.map { it.optInt("lineNo") }}"
     var quantity by remember(key) { mutableStateOf(fmtNum(group.totalOutstanding)) }
     var plans by remember(key) { mutableStateOf<List<PalletPickPlan>>(emptyList()) }
+    var sourceBinVerified by remember(key) { mutableStateOf(false) }
     var scannedCount by remember(key) { mutableStateOf(0) }
     var scan by remember(key) { mutableStateOf("") }
     var error by remember(key) { mutableStateOf("") }
@@ -46,7 +47,7 @@ internal fun PalletPickSheet(
     val steps = palletScanSteps(plans)
     val qty = quantity.replace(',', '.').toDoubleOrNull()
     val uom = group.lines.first().optString("unitOfMeasureCode")
-    val canConfirm = qty == 0.0 || palletScansComplete(steps, scannedCount)
+    val canConfirm = qty == 0.0 || (sourceBinVerified && palletScansComplete(steps, scannedCount))
 
     suspend fun loadPlans(): List<PalletPickPlan> {
         require(qty != null && qty.isFinite() && qty >= 0 && qty <= group.totalOutstanding + 0.00001) {
@@ -58,33 +59,56 @@ internal fun PalletPickSheet(
         return loadDocumentPalletPlans(context, pickNo, requested)
     }
 
+    // The verified source bin belongs to the group, not to one candidate list:
+    // it survives quantity edits, list refreshes and a rejected confirmation.
     LaunchedEffect(key, quantity, reloadKey) {
         plans = emptyList(); scannedCount = 0; scan = ""; error = ""; scanMessage = ""; loading = true
         try {
             plans = loadPlans()
+            loading = false
         } catch (e: CancellationException) {
+            // A superseded reload must not clear `loading`: the replacement run
+            // owns it. Doing so in a finally block re-enabled pallet scanning
+            // while the new lookup was still in flight, so the scan was judged
+            // against an empty list and the stale message survived the reload.
             throw e
         } catch (e: Exception) {
             error = e.message ?: "Paletler doğrulanamadı. Yenileyin."
-        } finally {
             loading = false
         }
     }
 
     fun submitScan(raw: String) {
-        if (loading || submitting) return
+        if (submitting) return
         val resolved = BarcodeIntentResolver.resolve(raw)
-        if (resolved.value.isBlank()) return
+        val value = resolved.value.trim().ifBlank { raw.trim() }
+        if (value.isBlank()) return
         scan = ""
-        if (steps.isEmpty()) {
+        if (!sourceBinVerified) {
+            if (!acceptsSourceBin(group.binCode, value)) {
+                error = sourceBinScanError(group.binCode, resolved)
+                scanMessage = ""
+                return
+            }
+            sourceBinVerified = true
+            error = ""
+            scanMessage = "Raf doğrulandı: ${group.binCode}. Şimdi sıradaki paletin LP etiketini okutun."
+            return
+        }
+        if (loading) {
+            scanMessage = "Palet listesi henüz yükleniyor. Liste gelince $value paletini tekrar okutun."
+            return
+        }
+        // Read the current candidate list, never a snapshot captured by an older composition.
+        val currentSteps = palletScanSteps(plans)
+        if (currentSteps.isEmpty()) {
             scanMessage = if (qty == 0.0) "Miktar sıfır. Palet toplamak için önce toplanacak miktarı girin."
-            else "${resolved.value} okutuldu; kaynak paletler doğrulanamadığı için onaylanmadı. " +
-                "Aşağıdaki sorunu giderip palet listesini yenileyin ve tekrar okutun."
+            else "$value okutuldu ama palet listesi hazır değil. Yukarıdaki BC hatasını giderip listeyi yenileyin."
             return
         }
         scanMessage = ""
-        if (!acceptsPalletStep(steps, scannedCount, resolved.value)) {
-            error = steps.getOrNull(scannedCount)?.let {
+        if (!acceptsPalletStep(currentSteps, scannedCount, value)) {
+            error = currentSteps.getOrNull(scannedCount)?.let {
                 "Yanlış veya tekrar okutulan palet. Sıradaki: ${it.lpNo} · Raf: ${it.binCode} · Lot: ${it.lotNo.ifBlank { "—" }}"
             } ?: "Tüm paletler okutuldu. Satırları onaylayın."
         } else {
@@ -119,8 +143,16 @@ internal fun PalletPickSheet(
             LinearProgressIndicator(Modifier.fillMaxWidth().padding(vertical = 12.dp))
             Text("Kaynak paletler kontrol ediliyor…")
         }
+        Card(Modifier.fillMaxWidth().padding(top = 12.dp)) {
+            Column(Modifier.padding(14.dp)) {
+                Text(if (sourceBinVerified) "RAF DOĞRULANDI" else "1. KAYNAK RAFI OKUT", fontWeight = FontWeight.Bold)
+                Text(group.binCode, fontSize = 24.sp, fontWeight = FontWeight.Bold)
+                Text(if (sourceBinVerified) "✓ Doğru raftasınız. LP okutma adımına geçebilirsiniz."
+                    else "Paleti okutmadan önce fiziksel raf etiketini doğrulayın.")
+            }
+        }
         val current = steps.getOrNull(scannedCount)
-        if (current != null) {
+        if (sourceBinVerified && current != null) {
             Card(Modifier.fillMaxWidth().padding(vertical = 12.dp)) {
                 Column(Modifier.padding(14.dp)) {
                     Text("SIRADAKİ PALET · ${scannedCount + 1}/${steps.size}", fontWeight = FontWeight.Bold)
@@ -133,20 +165,25 @@ internal fun PalletPickSheet(
         // Keep the scanner available even when the candidate lookup fails.
         // A scan without a valid plan reports the blocker and never confirms stock.
         ScanField(
-            label = "Paletin QR kodunu okut",
+            label = if (sourceBinVerified) "2. Paletin QR kodunu okut" else "1. Kaynak rafın kodunu okut",
             value = scan,
             onValueChange = { scan = it },
             onScanned = { currentSubmitScan(it) },
             focusRequester = scanFocus,
             updateValueOnScan = false,
             scanOnly = true,
-            enabled = !loading && !submitting,
+            // The bin can be proven while candidates load; a pallet scanned during
+            // loading gets an explicit "still loading" message instead of silence.
+            enabled = !submitting,
             modifier = Modifier.fillMaxWidth(),
         )
-        Text("Terminalin tarama tuşuyla paletin QR kodunu okutun. Kod alanda beklerse Okunan Paleti Doğrula'ya basın. Kamera simgesini de kullanabilirsiniz.",
+        Text(if (sourceBinVerified)
+            "Terminalin tarama tuşuyla paletin QR kodunu okutun. Kod alanda beklerse Okunan Paleti Doğrula'ya basın."
+        else
+            "Önce ekranda yazan kaynak rafın etiketini okutun. Yanlış rafta LP kabul edilmez.",
             style = MaterialTheme.typography.bodySmall)
         LaunchedEffect(loading, submitting, sheetState.currentValue) {
-            if (!loading && !submitting && sheetState.currentValue == SheetValue.Expanded) scanFocus.requestFocus()
+            if (!submitting && sheetState.currentValue == SheetValue.Expanded) scanFocus.requestFocus()
         }
         if (scanMessage.isNotBlank()) Text(scanMessage, modifier = Modifier.padding(vertical = 8.dp))
         if (steps.isNotEmpty()) {

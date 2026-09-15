@@ -99,7 +99,7 @@ internal fun ReceiptMteSheet(receiptNo: String, onDismiss: () -> Unit) {
                     scope.launch {
                         busy = true
                         val failures = linkedMapOf<String, String>()
-                        val route = mtePrintRoute(getDefaultPrinter(context, PRINTER_USAGE_LABEL))
+                        val route = mtePrintRoute(getDefaultPrinter(context, PRINTER_USAGE_DOCUMENT))
                         requested.forEachIndexed { index, lpNo ->
                             status = "MTE gönderiliyor: ${index + 1}/${requested.size}"
                             // A draft or emptied LP must not produce a misleading successful reprint.

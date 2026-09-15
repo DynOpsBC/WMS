@@ -1,7 +1,7 @@
 {
-  "versionCode": 200114,
-  "versionName": "1.14.114-bade",
-  "apkUrl": "https://github.com/DynOpsBC/WMS/releases/download/android-v1.14.114/BCWMS-BADE-1.14.114-RELEASE.apk",
-  "sha256": "6c03f525f2e3ff9386fe93b453ae72d7850cf65136862e975590de8256e25ed6",
-  "releaseNotes": "Toplamada palet okuyucunun klavye/metin çıkışı desteklendi. Palet penceresi açılınca okutma alanı odaklanır. Enter göndermeyen okuyucular için Okunan Paleti Doğrula düğmesi eklendi. LP ve mal kabul MTE özellikleri dahildir."
+  "versionCode": 200115,
+  "versionName": "1.14.115-bade",
+  "apkUrl": "https://github.com/DynOpsBC/WMS/releases/download/android-v1.14.115/BCWMS-BADE-1.14.115-RELEASE.apk",
+  "sha256": "662f4976e976c56f808b4f63feb921a179476fccb752f968b580274b88776b9c",
+  "releaseNotes": "Toplamada önce kaynak raf, sonra palet okutulur; yanlış raf ve erken okutulan LP açık uyarı verir. Miktar değişince palet listesi yüklenirken okutulan LP artık yanlış reddedilmiyor. BC 1.14.1.37 ile MTE, onaylı RDLC düzeninde PDF olarak ve her LP ayrı sayfa basılır."
 }

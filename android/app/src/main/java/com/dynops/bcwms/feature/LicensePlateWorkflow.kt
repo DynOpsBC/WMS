@@ -21,19 +21,19 @@ internal fun bulkLpPrintBatches(
 internal data class LpPrintRoute(val action: String, val printerCode: String)
 
 /**
- * İçerikli LP her zaman MTE ister. PDF QR belgesine sessizce düşmek ürün,
- * lot ve miktar bilgilerini kaybettirir. Etiket yazıcısı seçilmemişse BC'nin
- * cihaz-yazıcı eşlemesi kullanılır. Boş taşıyıcı için QR yolu korunur.
+ * İçerikli LP her zaman hazır RDLC MTE belgesini ister. Bu çıktı PDF olduğu
+ * için Windows sürücülü belge yazıcısına gider. Belge yazıcısı seçilmemişse
+ * BC'nin cihaz-yazıcı eşlemesi kullanılır. Boş taşıyıcı için ZPL yolu korunur.
  */
 internal fun bulkLpPrintRoute(lineCount: Int, labelPrinter: String, documentPrinter: String): LpPrintRoute = when {
-    lineCount > 0 -> mtePrintRoute(labelPrinter)
+    lineCount > 0 -> mtePrintRoute(documentPrinter)
     labelPrinter.isNotBlank() -> LpPrintRoute(bulkLpPrintAction(lineCount), labelPrinter.trim())
     documentPrinter.isNotBlank() -> LpPrintRoute("printDocument", documentPrinter.trim())
     else -> LpPrintRoute(bulkLpPrintAction(lineCount), "")
 }
 
-internal fun mtePrintRoute(labelPrinter: String): LpPrintRoute =
-    LpPrintRoute("printPalletLabels", labelPrinter.trim())
+internal fun mtePrintRoute(documentPrinter: String): LpPrintRoute =
+    LpPrintRoute("printPalletLabels", documentPrinter.trim())
 
 internal fun canPrintMte(linesComplete: Boolean, lineCount: Int, pendingReceiptNo: String): Boolean =
     linesComplete && lineCount > 0 && pendingReceiptNo.isBlank()

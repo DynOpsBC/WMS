@@ -6,6 +6,25 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class PalletPickPlanTest {
+
+    @Test
+    fun `source bin must match before pallet scan`() {
+        assertTrue(acceptsSourceBin("A.TOPLAM", " a.toplam "))
+        assertTrue(acceptsSourceBin("A.TOPLAM", "B-A.TOPLAM"))
+        assertTrue(acceptsSourceBin("B-01", "B-01"))
+        assertFalse(acceptsSourceBin("A.TOPLAM", "A1"))
+        assertFalse(acceptsSourceBin("A.TOPLAM", "LP000013"))
+        assertFalse(acceptsSourceBin("", "A.TOPLAM"))
+        assertFalse(acceptsSourceBin("A.TOPLAM", ""))
+    }
+
+    @Test
+    fun `pallet scanned before the bin is explained as an order problem`() {
+        val lp = sourceBinScanError("A.TOPLAM", com.dynops.bcwms.scanner.BarcodeIntentResolver.resolve("LP000013"))
+        assertTrue(lp, lp.startsWith("LP000013 bir palet etiketi.") && lp.contains("A.TOPLAM"))
+        val other = sourceBinScanError("A.TOPLAM", com.dynops.bcwms.scanner.BarcodeIntentResolver.resolve("A.E08.11"))
+        assertEquals("Yanlış raf: A.E08.11. Bu toplama için önce A.TOPLAM rafını okutun.", other)
+    }
     @Test fun `source lookup from a changed UOM or quantity snapshot is rejected`() {
         reject(data = response().put("unitOfMeasureCode", "ADET"))
         reject(data = response().put("outstandingQty", 10))

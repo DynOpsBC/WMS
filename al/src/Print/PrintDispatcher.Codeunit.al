@@ -95,37 +95,26 @@ codeunit 72051 "DOPSWHS Print Dispatcher"
     end;
 
     /// <summary>
-    /// Prints one material-identification label for every item line on an LP.
-    /// The same physical LP printer is used so the existing mobile request and
-    /// printer selection remain unchanged.
+    /// Renders the approved 10 x 8 cm material-identification RDLC for one LP.
+    /// MTE is a PDF document, so the selected/mapped document printer must use
+    /// the Windows driver for the physical label printer.
     /// </summary>
     procedure PrintPalletItemLabels(var LP: Record "DOPSWHS LP Header"; PrinterId: Code[50]; Copies: Integer)
     var
-        LPLine: Record "DOPSWHS LP Line";
-        LabelLine: Record "DOPSWHS LP Line";
-        PrintedGroups: Dictionary of [Text, Boolean];
-        GroupKey: Text;
+        SourceRecord: RecordRef;
     begin
-        LPLine.SetRange("LP No.", LP."No.");
-        LPLine.SetFilter("Item No.", '<>%1', '');
-        if LPLine.FindSet() then
-            repeat
-                GroupKey := PalletItemGroupKey(LPLine);
-                if not PrintedGroups.ContainsKey(GroupKey) then begin
-                    PrintedGroups.Add(GroupKey, true);
-                    LabelLine := LPLine;
-                    LabelLine.Quantity := PalletItemGroupQuantity(LPLine);
-                    EnqueueZpl(
-                        LP."No.",
-                        BuildPalletItemZpl(LP, LabelLine),
-                        PrinterId,
-                        Copies,
-                        Enum::"DOPSWHS IWX Report Usage"::LpLabel,
-                        'LP material identification');
-                end;
-            until LPLine.Next() = 0;
+        LP.SetRecFilter();
+        SourceRecord.GetTable(LP);
+        PrintReport(
+            LP."No.",
+            Report::"DOPSWHS MTE LP Report",
+            PrinterId,
+            Copies,
+            Enum::"DOPSWHS IWX Report Usage"::Receipt,
+            SourceRecord);
     end;
 
+    [Obsolete('MTE printing uses DOPSWHS MTE LP Report. Kept only for extension compatibility.', '1.15')]
     procedure BuildPalletItemZpl(var LP: Record "DOPSWHS LP Header"; var LPLine: Record "DOPSWHS LP Line"): Text
     var
         Item: Record Item;
@@ -148,8 +137,6 @@ codeunit 72051 "DOPSWHS Print Dispatcher"
         if LPLine."Lot No." <> '' then
             LotText := 'LOT: ' + LPLine."Lot No.";
 
-        // A pallet-bound MTE is the single physical label for both identities:
-        // scan the LP when present, otherwise preserve the lot/item fallback.
         QrData := LP."No.";
         if QrData = '' then
             QrData := LPLine."Lot No.";
@@ -167,35 +154,6 @@ codeunit 72051 "DOPSWHS Print Dispatcher"
             '^FO35,282^A0N,36,36^FH_^FD' + ZplEncoder.EncodeFieldData(CopyStr(PalletText, 1, 42)) + '^FS' +
             '^FO610,58^BQN,2,5^FH_^FDLA,' + ZplEncoder.EncodeFieldData(QrData) + '^FS' +
             '^XZ');
-    end;
-
-    local procedure PalletItemGroupKey(LPLine: Record "DOPSWHS LP Line"): Text
-    begin
-        exit(
-            LPLine."Item No." + '|' + LPLine."Variant Code" + '|' + LPLine."Unit of Measure" + '|' +
-            LPLine."Lot No." + '|' + LPLine."Serial No." + '|' + Format(LPLine."Source Document Type") + '|' +
-            LPLine."Source Document No." + '|' + Format(LPLine."Source Document Line No."));
-    end;
-
-    local procedure PalletItemGroupQuantity(LPLine: Record "DOPSWHS LP Line"): Decimal
-    var
-        GroupLine: Record "DOPSWHS LP Line";
-        GroupQuantity: Decimal;
-    begin
-        GroupLine.SetRange("LP No.", LPLine."LP No.");
-        GroupLine.SetRange("Item No.", LPLine."Item No.");
-        GroupLine.SetRange("Variant Code", LPLine."Variant Code");
-        GroupLine.SetRange("Unit of Measure", LPLine."Unit of Measure");
-        GroupLine.SetRange("Lot No.", LPLine."Lot No.");
-        GroupLine.SetRange("Serial No.", LPLine."Serial No.");
-        GroupLine.SetRange("Source Document Type", LPLine."Source Document Type");
-        GroupLine.SetRange("Source Document No.", LPLine."Source Document No.");
-        GroupLine.SetRange("Source Document Line No.", LPLine."Source Document Line No.");
-        if GroupLine.FindSet() then
-            repeat
-                GroupQuantity += GroupLine.Quantity;
-            until GroupLine.Next() = 0;
-        exit(GroupQuantity);
     end;
 
     procedure PrintBinLabel(var Bin: Record Bin; PrinterId: Code[50]; Copies: Integer)

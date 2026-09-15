@@ -75,16 +75,29 @@ class TerminalDialogTest {
             PalletPickSheet("PI-AUDIT", groupLines(listOf(row), ::pickLineCapacity).single(), {}, {})
         } }
         waitForText("Toplama satırlarının tamamı alınamadı.")
-        compose.onNodeWithText("Paletin QR kodunu okut").performScrollTo().assertIsDisplayed().assertIsFocused()
+        // Step 1: the source bin must be proven first; a pallet scanned too early is refused.
+        compose.onNodeWithText("1. Kaynak rafın kodunu okut").performScrollTo().assertIsDisplayed().assertIsFocused()
         compose.waitForIdle()
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         instrumentation.sendStringSync("LP000005")
         instrumentation.sendKeyDownUpSync(android.view.KeyEvent.KEYCODE_ENTER)
-        waitForText("LP000005 okutuldu;")
+        waitForText("LP000005 bir palet etiketi.")
+        compose.onNodeWithText("Okutulan Paletleri Onayla").performScrollTo().assertIsNotEnabled()
+        instrumentation.sendStringSync("A-02")
+        instrumentation.sendKeyDownUpSync(android.view.KeyEvent.KEYCODE_ENTER)
+        waitForText("Yanlış raf: A-02.")
+        instrumentation.sendStringSync("A-01")
+        instrumentation.sendKeyDownUpSync(android.view.KeyEvent.KEYCODE_ENTER)
+        waitForText("Raf doğrulandı: A-01.")
+        // Step 2: without a candidate list the pallet scan reports the blocker and never confirms.
+        compose.onNodeWithText("2. Paletin QR kodunu okut").performScrollTo().assertIsDisplayed().assertIsFocused()
+        instrumentation.sendStringSync("LP000005")
+        instrumentation.sendKeyDownUpSync(android.view.KeyEvent.KEYCODE_ENTER)
+        waitForText("LP000005 okutuldu ama palet listesi hazır değil.")
         compose.waitUntil(5000) {
             var keyboardVisible = true
             androidx.test.espresso.Espresso.onView(
-                androidx.test.espresso.matcher.ViewMatchers.withContentDescription("Paletin QR kodunu okut"),
+                androidx.test.espresso.matcher.ViewMatchers.withContentDescription("2. Paletin QR kodunu okut"),
             ).check { view, error ->
                 if (error != null) throw error
                 val insets = androidx.core.view.ViewCompat.getRootWindowInsets(view)
@@ -93,7 +106,7 @@ class TerminalDialogTest {
             }
             !keyboardVisible
         }
-        compose.onNodeWithText("LP000005 okutuldu;", substring = true).performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("LP000005 okutuldu ama palet listesi hazır değil.", substring = true).performScrollTo().assertIsDisplayed()
         compose.onNodeWithText("Okutulan Paletleri Onayla").performScrollTo().assertIsNotEnabled()
         evidence("pallet-failure")
     }

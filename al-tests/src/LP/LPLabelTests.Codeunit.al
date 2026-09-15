@@ -56,7 +56,9 @@ codeunit 72141 "DOPSWHS LP Label Tests"
         LPLine."Lot No." := 'A100171';
         LPLine."Source Document Quantity" := 500;
 
+#pragma warning disable AL0432
         Zpl := Dispatcher.BuildPalletItemZpl(LP, LPLine);
+#pragma warning restore AL0432
 
         Assert.IsTrue(StrPos(Zpl, 'TOPLAM MAL KABUL: 500 ADET') > 0, 'MTE must keep the total receipt quantity.');
         Assert.IsTrue(StrPos(Zpl, 'PALET MIKTARI: 250 ADET') > 0, 'MTE must show the quantity assigned to this LP.');
@@ -78,11 +80,16 @@ codeunit 72141 "DOPSWHS LP Label Tests"
         LPLine."Item No." := 'AB.01939';
         LPLine."Lot No." := 'A100171';
 
+#pragma warning disable AL0432
         Zpl := Dispatcher.BuildPalletItemZpl(LP, LPLine);
+#pragma warning restore AL0432
         Assert.IsTrue(StrPos(Zpl, '^FDLA,A100171^FS') > 0, 'An LP-free MTE QR must identify the lot when present.');
 
         LPLine."Lot No." := '';
+#pragma warning disable AL0432
         Zpl := Dispatcher.BuildPalletItemZpl(LP, LPLine);
+#pragma warning restore AL0432
         Assert.IsTrue(StrPos(Zpl, '^FDLA,AB.01939^FS') > 0, 'An LP-free MTE QR must fall back to the item number.');
     end;
+
 }

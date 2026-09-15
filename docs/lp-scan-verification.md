@@ -5,8 +5,8 @@ Etiketi'nin **LP numarası taşıyan QR kodudur**. Operatör ürün barkodu
 okutamadığı için "doğru ürünü aldım/koydum" kanıtı yalnızca okutulan paletin
 **içeriğinin** ambar aktivitesi satırıyla karşılaştırılmasıyla üretilebilir.
 
-Etiketin kendisi değişmedi: `DOPSWHS Print Dispatcher.BuildPalletItemZpl`
-aynen korunur.
+Etiket, `DOPSWHS MTE LP Report` içindeki onaylı 10×8 cm RDLC düzeninden PDF
+olarak üretilir. QR içeriği her sayfada ilgili LP numarasıdır.
 
 ## Açma/kapama anahtarı
 
@@ -68,6 +68,23 @@ modülündeki mevcut yetenek yoklama deseninin aynısıdır.
 
 Ayar 5 dakikalık bir önbellekle tutulur: BC'de kapatıldığında terminal yeniden
 giriş beklemeden eski akışa döner.
+
+### Palet okutma sırası (1.14.115)
+
+Palet penceresi iki adımlıdır ve sıra atlanamaz:
+
+1. **Kaynak raf** — satırın rafının etiketi okutulur (`A.TOPLAM` gibi düz raf
+   kodu; `B-` önekli raf barkodu da kabul edilir). Yanlış raf ya da erken
+   okutulan LP açık bir uyarıyla reddedilir; doğrulanan raf miktar değişse veya
+   liste yenilense de geçerli kalır.
+2. **Paletler** — sunucunun döndürdüğü palet listesi sırayla okutulur. Liste
+   yüklenirken okutulan LP sessizce düşmez, "liste yükleniyor" mesajı verir.
+
+Palet listesi her zaman okutma anındaki güncel listeden okunur. 1.14.114'te
+miktar değişince iptal edilen eski yükleme `loading` bayrağını erken kapatıyor,
+yeni liste gelmeden okutulan LP boş listeye karşı değerlendirilip "kaynak
+paletler doğrulanamadığı için onaylanmadı" mesajı liste geldikten sonra da
+ekranda kalıyordu.
 
 ## Toplu LP planı
 
