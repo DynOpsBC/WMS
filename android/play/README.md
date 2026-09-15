@@ -21,6 +21,32 @@ Sonra:
 ./gradlew :app:publishReleaseBundle -PwithPlayPublisher
 ```
 
+## Saha paketi kuralı
+
+- Terminallere yalnız `assembleBadeRelease` / `assembleEmuRelease` çıktısı verilir.
+- Debug APK'lar `.debug` applicationId kullanır, stabil uygulamanın üstüne kurulmaz
+  ve uygulama içinden release güncellemesi istemez.
+- Tüm release APK'ları aynı BCWMS sertifikasıyla imzalanır. Yayın hattı BADE ve
+  EMU sertifika parmak izlerini sabit değerle doğrular; farklı imzada yayını keser.
+- `1.14.105-emu` tarihî debug sertifikasıyla kurulu cihazlar kaldırılmadan
+  `emuLegacyRelease` paketiyle güncellenir. Bu paket release optimizasyonlarını
+  kullanır, debug erişimini kapatır, uygulama kimliğini ve eski imzayı korur.
+  İlk uyumlu APK doğrudan kurulur; sonraki güncellemeler
+  `android-emu-legacy-channel/latest.json` kanalından gelir. Ana EMU kanalına
+  bu imzalı APK konulmaz; orada farklı release imzasıyla çalışan cihazlar vardır.
+
+Eski EMU cihazları için derleme (anahtar yolu dışarıdan verilir, sertifika
+parmak izi Gradle tarafından zorunlu doğrulanır):
+
+```sh
+./gradlew :app:assembleEmuLegacyRelease \
+  -PlegacyEmuUpdates=true -PlegacyEmuKeystore=/secure/path/debug.keystore \
+  -PreleaseVersionCode=200109 -PreleaseVersionName=1.14.109
+```
+
+Sonraki yayınlarda sürüm kodu artırılmalı; aynı tarihî anahtar ve aynı kanal
+korunmalıdır. APK/hash/manifest doğrulanmadan kanal güncellenmemelidir.
+
 Build sırasında `withPlayPublisher` property'si verilmezse plugin
 yüklenmez ve Play credentials gerekmez (yerel dev için ideal).
 

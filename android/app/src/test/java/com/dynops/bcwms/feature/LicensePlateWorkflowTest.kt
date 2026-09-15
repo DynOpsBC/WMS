@@ -37,12 +37,27 @@ class LicensePlateWorkflowTest {
     fun `bulk print follows the device printer selection`() {
         assertEquals(LpPrintRoute("printLabel", "ZPL01"), bulkLpPrintRoute(0, "ZPL01", "PDF01"))
         assertEquals(LpPrintRoute("printPalletLabels", "ZPL01"), bulkLpPrintRoute(2, "ZPL01", ""))
-        // Only a PDF document printer is selected: same route as the single
-        // "QR Etiketini Yazdır" button on the LP card.
+        // A PDF QR document is suitable only for an empty carrier. Filled LPs
+        // must retain the MTE route, using BC's label-printer mapping if needed.
         assertEquals(LpPrintRoute("printDocument", "PDF01"), bulkLpPrintRoute(0, "", "PDF01"))
-        assertEquals(LpPrintRoute("printDocument", "PDF01"), bulkLpPrintRoute(3, " ", "PDF01"))
+        assertEquals(LpPrintRoute("printPalletLabels", ""), bulkLpPrintRoute(3, " ", "PDF01"))
         // Nothing selected on the device: let BC's device printer mapping decide.
         assertEquals(LpPrintRoute("printLabel", ""), bulkLpPrintRoute(0, "", ""))
+    }
+
+    @Test
+    fun `MTE cannot be requested for an unloaded empty or pending receipt LP`() {
+        assertTrue(canPrintMte(true, 2, ""))
+        assertFalse(canPrintMte(false, 2, ""))
+        assertFalse(canPrintMte(true, 0, ""))
+        assertFalse(canPrintMte(true, 2, "REC001"))
+    }
+
+    @Test
+    fun `single MTE and filled LP batch use the same label printer action`() {
+        assertEquals(LpPrintRoute("printPalletLabels", "ZPL01"), mtePrintRoute(" ZPL01 "))
+        assertEquals(mtePrintRoute(" ZPL01 "), bulkLpPrintRoute(2, " ZPL01 ", "PDF01"))
+        assertEquals(mtePrintRoute(""), bulkLpPrintRoute(2, "", "PDF01"))
     }
 
     @Test

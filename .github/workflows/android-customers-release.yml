@@ -86,37 +86,37 @@ jobs:
       # Cihazda önden deneme yapılamadığı için imza kontrolü burada, kanal
       # güncellenmeden ÖNCE yapılır. Yanlış anahtarla imzalanan APK mevcut
       # uygulamanın üzerine kurulamaz; Android "signatures do not match" der ve
-      # bütün terminaller güncellemede takılır. Beklenen parmak izi repository
-      # variable olarak tanımlıysa uyuşmazlık yayını durdurur.
+      # bütün terminaller güncellemede takılır. Sabit release sertifikası parmak
+      # iziyle uyuşmayan BADE veya EMU paketi kanala çıkmadan yayın durdurulur.
       - name: Verify signing certificate
         env:
-          EXPECTED_CERT_SHA256: ${{ vars.ANDROID_SIGNING_CERT_SHA256 }}
           RELEASE_VERSION: ${{ inputs.version }}
         run: |
           APKSIGNER="$ANDROID_HOME/build-tools/35.0.0/apksigner"
+          # Public certificate fingerprint of the one permanent BCWMS release
+          # key. Pin it in source so a missing/mistyped repository variable can
+          # never silently publish an incompatible update.
+          EXPECTED="ea7710af652faf6beff836d64327159b021c0561297cf9ae60987d26592b81eb"
           if [[ ! -x "$APKSIGNER" ]]; then
             echo "::error::apksigner bulunamadı: $APKSIGNER"
             exit 1
           fi
-          APK=android/app/build/outputs/apk/bade/release/app-bade-release.apk
-          ACTUAL=$("$APKSIGNER" verify --print-certs "$APK" \
-            | grep -i 'certificate SHA-256 digest' | head -1 \
-            | sed 's/.*digest: *//' | tr -d ' :' | tr 'A-F' 'a-f')
-          if [[ -z "$ACTUAL" ]]; then
-            echo "::error::APK imza sertifikası okunamadı. APK imzasız üretilmiş olabilir."
-            exit 1
-          fi
-          echo "BADE $RELEASE_VERSION imza sertifikası SHA-256: $ACTUAL"
-          EXPECTED=$(printf '%s' "$EXPECTED_CERT_SHA256" | tr -d ' :' | tr 'A-F' 'a-f')
-          if [[ -z "$EXPECTED" ]]; then
-            echo "::warning::ANDROID_SIGNING_CERT_SHA256 repository variable tanımlı değil, imza karşılaştırması yapılmadı. Yukarıdaki değeri variable olarak kaydedin; sonraki yayınlarda yanlış anahtar otomatik yakalanır."
-            exit 0
-          fi
-          if [[ "$ACTUAL" != "$EXPECTED" ]]; then
-            echo "::error::İmza anahtarı beklenenden farklı. Beklenen $EXPECTED, üretilen $ACTUAL. Bu APK sahadaki uygulamanın üzerine KURULAMAZ; yayın durduruldu. ANDROID_KEYSTORE_BASE64 secret'ının doğru anahtarı taşıdığını kontrol edin."
-            exit 1
-          fi
-          echo "İmza anahtarı sahadaki uygulamayla aynı."
+          for FLAVOR in bade emu; do
+            APK="android/app/build/outputs/apk/$FLAVOR/release/app-$FLAVOR-release.apk"
+            ACTUAL=$("$APKSIGNER" verify --print-certs "$APK" \
+              | grep -i 'certificate SHA-256 digest' | head -1 \
+              | sed 's/.*digest: *//' | tr -d ' :' | tr 'A-F' 'a-f')
+            if [[ -z "$ACTUAL" ]]; then
+              echo "::error::$FLAVOR APK imza sertifikası okunamadı. APK imzasız üretilmiş olabilir."
+              exit 1
+            fi
+            echo "$FLAVOR $RELEASE_VERSION imza sertifikası SHA-256: $ACTUAL"
+            if [[ "$ACTUAL" != "$EXPECTED" ]]; then
+              echo "::error::$FLAVOR imzası sabit BCWMS release sertifikasıyla eşleşmiyor. Bu APK sahadaki uygulamanın üzerine kurulamaz; yayın durduruldu."
+              exit 1
+            fi
+          done
+          echo "BADE ve EMU imzaları sabit saha anahtarıyla aynı."
 
       - name: Prepare both packages and manifests
         env:

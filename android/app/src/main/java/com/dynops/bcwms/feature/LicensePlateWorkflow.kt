@@ -21,18 +21,22 @@ internal fun bulkLpPrintBatches(
 internal data class LpPrintRoute(val action: String, val printerCode: String)
 
 /**
- * Toplu baskı, LP kartındaki tekli "QR Etiketini Yazdır" düğmesiyle aynı
- * yazıcıya gitmeli. Cihazda ZPL etiket yazıcısı seçiliyse etiket aksiyonları;
- * yalnız PDF belge yazıcısı seçiliyse LP QR belgesi (BADE'de tekli baskı
- * çalışırken toplu baskının "Yazıcı ayarı tamamlanamadı" demesinin nedeni
- * buydu). İkisi de seçili değilse BC'deki cihaz-yazıcı eşlemesi denensin diye
- * etiket aksiyonu boş yazıcı koduyla çağrılır.
+ * İçerikli LP her zaman MTE ister. PDF QR belgesine sessizce düşmek ürün,
+ * lot ve miktar bilgilerini kaybettirir. Etiket yazıcısı seçilmemişse BC'nin
+ * cihaz-yazıcı eşlemesi kullanılır. Boş taşıyıcı için QR yolu korunur.
  */
 internal fun bulkLpPrintRoute(lineCount: Int, labelPrinter: String, documentPrinter: String): LpPrintRoute = when {
+    lineCount > 0 -> mtePrintRoute(labelPrinter)
     labelPrinter.isNotBlank() -> LpPrintRoute(bulkLpPrintAction(lineCount), labelPrinter.trim())
     documentPrinter.isNotBlank() -> LpPrintRoute("printDocument", documentPrinter.trim())
     else -> LpPrintRoute(bulkLpPrintAction(lineCount), "")
 }
+
+internal fun mtePrintRoute(labelPrinter: String): LpPrintRoute =
+    LpPrintRoute("printPalletLabels", labelPrinter.trim())
+
+internal fun canPrintMte(linesComplete: Boolean, lineCount: Int, pendingReceiptNo: String): Boolean =
+    linesComplete && lineCount > 0 && pendingReceiptNo.isBlank()
 
 internal fun canDeleteLicensePlate(status: String, lineCount: Int): Boolean =
     lineCount == 0 && (

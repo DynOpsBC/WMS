@@ -63,7 +63,13 @@ internal fun buildPalletPickPlan(
             (expectedLot.isBlank() || it.pickText("lotNo").equals(expectedLot, true)) &&
             (expectedSerial.isBlank() || it.pickText("serialNo").equals(expectedSerial, true))
     }
-    require(candidates.isNotEmpty()) { "Bu ürün/lot/raf için uygun palet bulunamadı. BC kaydını kontrol edin." }
+    require(candidates.isNotEmpty()) {
+        "Uygun kaynak palet bulunamadı. Beklenen ürün: ${line.pickText("itemNo")} · " +
+            "Depo: ${line.pickText("locationCode")} · Raf: ${line.pickText("binCode")} · " +
+            "Lot: ${expectedLot.ifBlank { "Paletten doğrulanacak" }}. " +
+            "LP içeriğindeki ürün, lot ve rafı bu satırla karşılaştırın. Farklı lotlu palet bu satırda toplanamaz; " +
+            "o palet sevk edilecekse BC'deki toplama satırının lotunu ve stok uygunluğunu kontrol edin."
+    }
     val lots = candidates.map { it.pickText("lotNo") }.distinctBy { it.uppercase(Locale.ROOT) }
     require(expectedLot.isNotBlank() || lots.size == 1) {
         "Birden fazla lot var. BC'de toplama satırını lotlara ayırıp belgeyi yenileyin."

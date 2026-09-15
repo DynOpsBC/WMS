@@ -39,6 +39,7 @@ internal fun PalletPickSheet(
     var scannedCount by remember(key) { mutableStateOf(0) }
     var scan by remember(key) { mutableStateOf("") }
     var error by remember(key) { mutableStateOf("") }
+    var scanMessage by remember(key) { mutableStateOf("") }
     var loading by remember(key) { mutableStateOf(false) }
     var submitting by remember(key) { mutableStateOf(false) }
     var reloadKey by remember(key) { mutableStateOf(0) }
@@ -56,7 +57,7 @@ internal fun PalletPickSheet(
     }
 
     LaunchedEffect(key, quantity, reloadKey) {
-        plans = emptyList(); scannedCount = 0; scan = ""; error = ""; loading = true
+        plans = emptyList(); scannedCount = 0; scan = ""; error = ""; scanMessage = ""; loading = true
         try {
             plans = loadPlans()
         } catch (e: CancellationException) {
@@ -69,8 +70,17 @@ internal fun PalletPickSheet(
     }
 
     fun submitScan(raw: String) {
-        if (loading || submitting || steps.isEmpty()) return
+        if (loading || submitting) return
         val resolved = BarcodeIntentResolver.resolve(raw)
+        if (resolved.value.isBlank()) return
+        scan = ""
+        if (steps.isEmpty()) {
+            scanMessage = if (qty == 0.0) "Miktar sıfır. Palet toplamak için önce toplanacak miktarı girin."
+            else "${resolved.value} okutuldu; kaynak paletler doğrulanamadığı için onaylanmadı. " +
+                "Aşağıdaki sorunu giderip palet listesini yenileyin ve tekrar okutun."
+            return
+        }
+        scanMessage = ""
         if (!acceptsPalletStep(steps, scannedCount, resolved.value)) {
             error = steps.getOrNull(scannedCount)?.let {
                 "Yanlış veya tekrar okutulan palet. Sıradaki: ${it.lpNo} · Raf: ${it.binCode} · Lot: ${it.lotNo.ifBlank { "—" }}"
@@ -79,7 +89,6 @@ internal fun PalletPickSheet(
             scannedCount++
             error = ""
         }
-        scan = ""
     }
 
     val currentSubmitScan by rememberUpdatedState<(String) -> Unit>(::submitScan)
@@ -96,7 +105,7 @@ internal fun PalletPickSheet(
             value = quantity,
             onValueChange = {
                 quantity = it
-                plans = emptyList(); scannedCount = 0; loading = true
+                plans = emptyList(); scannedCount = 0; scanMessage = ""; loading = true
             },
             enabled = !submitting,
             label = { Text("Toplanacak miktar ($uom)") },
@@ -118,18 +127,26 @@ internal fun PalletPickSheet(
                     Text("Bu paletten al: ${fmtNum(current.quantity)} $uom", fontSize = 20.sp, fontWeight = FontWeight.Bold)
                 }
             }
-            ScanField(
-                label = "Paletin QR kodunu okut",
-                value = scan,
-                onValueChange = { scan = it },
-                onScanned = { currentSubmitScan(it) },
-                focusRequester = scanFocus,
-                scanOnly = true,
-                enabled = !loading && !submitting,
-                modifier = Modifier.fillMaxWidth(),
-            )
-            LaunchedEffect(loading) { if (!loading) scanFocus.requestFocus() }
         }
+        // Keep the scanner available even when the candidate lookup fails.
+        // A scan without a valid plan reports the blocker and never confirms stock.
+        ScanField(
+            label = "Paletin QR kodunu okut",
+            value = scan,
+            onValueChange = { scan = it },
+            onScanned = { currentSubmitScan(it) },
+            focusRequester = scanFocus,
+            updateValueOnScan = false,
+            scanOnly = true,
+            enabled = !loading && !submitting,
+            modifier = Modifier.fillMaxWidth(),
+        )
+        Text("Bu alana dokunup terminalin tarama tuşuyla paletin QR kodunu okutun. Kamera simgesini de kullanabilirsiniz.",
+            style = MaterialTheme.typography.bodySmall)
+        LaunchedEffect(loading, submitting) {
+            if (!loading && !submitting) scanFocus.requestFocus()
+        }
+        if (scanMessage.isNotBlank()) Text(scanMessage, modifier = Modifier.padding(vertical = 8.dp))
         if (steps.isNotEmpty()) {
             Text("${scannedCount}/${steps.size} palet adımı doğrulandı", Modifier.padding(vertical = 8.dp))
             steps.forEachIndexed { index, step ->
