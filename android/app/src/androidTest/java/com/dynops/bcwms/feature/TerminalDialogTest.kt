@@ -96,4 +96,20 @@ class TerminalDialogTest {
         compose.onNodeWithText("Onayla").performScrollTo().assertIsNotEnabled()
         evidence("lot-retry")
     }
+
+    @Test fun receiptMteLookupFailureKeepsPrintingDisabledAndAllowsLeavingPostedReceipt() {
+        var dismissed = false
+        compose.setContent { MaterialTheme {
+            ReceiptMteSheet("MTE-TEST-RECEIPT", onDismiss = { dismissed = true })
+        } }
+        waitForText("LP listesi tamamlanamadı.")
+        compose.onNodeWithText("Mal kabul kaydedildi · MTE").assertIsDisplayed()
+        compose.onNodeWithText("Seçilen MTE'leri Yazdır (0)").assertIsDisplayed().assertIsNotEnabled()
+        compose.onNodeWithText("Yenile").assertIsDisplayed().assertIsEnabled().performClick()
+        waitForText("LP listesi tamamlanamadı.")
+        compose.onNodeWithText("Seçilen MTE'leri Yazdır (0)").assertIsNotEnabled()
+        evidence("receipt-mte-failure")
+        compose.onNodeWithText("Devam Et").assertIsDisplayed().assertIsEnabled().performClick()
+        compose.runOnIdle { org.junit.Assert.assertTrue(dismissed) }
+    }
 }

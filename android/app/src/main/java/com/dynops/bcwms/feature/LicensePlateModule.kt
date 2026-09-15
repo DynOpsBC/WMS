@@ -116,7 +116,7 @@ fun LicensePlateModule() {
                     val route = if (no in palletLabelRetryNos) {
                         // İlk toplu oluşturma çağrısıyla aynı malzeme/LP ZPL
                         // etiketini yeniden üret; PDF belge rotasına düşme.
-                        LpPrintRoute("printPalletLabels", labelPrinter.trim())
+                        mtePrintRoute(labelPrinter)
                     } else {
                         bulkLpPrintRoute(row?.optInt("lineCount") ?: 0, labelPrinter, documentPrinter)
                     }
@@ -327,7 +327,11 @@ private fun LpDocument(lpNo: String, onBack: () -> Unit) {
         }
         scope.launch {
             busy = true; status = "İşlem yapılıyor..."
-            val r = BcApi.boundAction(context, "licensePlates", lpNo, name, body)
+            val r = if (name == "printPalletLabels") {
+                BcApi.boundActionLongRunning(context, "licensePlates", lpNo, name, body)
+            } else {
+                BcApi.boundAction(context, "licensePlates", lpNo, name, body)
+            }
             busy = false
             status = if (r.ok) "TAMAM: $okMsg" else QcErrorParser.friendlyStatus(BcApi.errorMessage(r.body), r.httpCode)
             if (r.ok) reload()
@@ -545,6 +549,26 @@ private fun LpDocument(lpNo: String, onBack: () -> Unit) {
 
                 OutlinedButton(
                     onClick = {
+                        val route = mtePrintRoute(getDefaultPrinter(context, PRINTER_USAGE_LABEL))
+                        action(
+                            route.action,
+                            JSONObject().apply {
+                                put("printerId", route.printerCode)
+                                put("copies", 1)
+                            }.toString(),
+                            "MTE yazdırma isteği gönderildi. Fiziksel etiketi kontrol edin.",
+                        )
+                    },
+                    enabled = !busy && headerLoaded && canPrintMte(linesComplete, lines.size, pendingReceiptNo),
+                    modifier = Modifier.fillMaxWidth().height(50.dp),
+                    shape = RoundedCornerShape(14.dp),
+                ) { WmsActionLabel(WmsGlyph.PRINTER, "MTE Yazdır") }
+                if (awaitingReceipt) {
+                    Text("MTE, mal kabul kaydedildikten sonra yazdırılabilir.", style = MaterialTheme.typography.bodySmall)
+                }
+
+                OutlinedButton(
+                    onClick = {
                         val defaultPrinter = getDefaultPrinter(context, PRINTER_USAGE_DOCUMENT)
                         val payload = JSONObject().apply {
                             put("printerId", defaultPrinter)
@@ -560,7 +584,7 @@ private fun LpDocument(lpNo: String, onBack: () -> Unit) {
                     enabled = !busy && headerLoaded,
                     modifier = Modifier.fillMaxWidth().height(50.dp),
                     shape = RoundedCornerShape(14.dp),
-                ) { WmsActionLabel(WmsGlyph.PRINTER, "QR Etiketini Yazdır") }
+                ) { WmsActionLabel(WmsGlyph.PRINTER, "LP QR Belgesini Yazdır") }
 
                 when {
                     canDelete -> OutlinedButton(

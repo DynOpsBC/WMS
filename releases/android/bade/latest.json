@@ -1,7 +1,7 @@
 {
-  "versionCode": 200112,
-  "versionName": "1.14.112-bade",
-  "apkUrl": "https://github.com/DynOpsBC/WMS/releases/download/android-v1.14.112/BCWMS-BADE-1.14.112-RELEASE.apk",
-  "sha256": "21e122b6f3cb1f3c8cfbd65c1aa7f27abba16e01453f2d9405264144c2d7db53",
-  "releaseNotes": "Barkodun güncel rafla işlenmesi, satır gruplama ve miktar azaltma düzeltildi. Lot tekrar deneme ve küçük ekran erişimi iyileştirildi. Yeni BC paketiyle tam palet tahsisli kayıt desteklenir; eski BC paketinde mevcut kayıt davranışı sürer."
+  "versionCode": 200113,
+  "versionName": "1.14.113-bade",
+  "apkUrl": "https://github.com/DynOpsBC/WMS/releases/download/android-v1.14.113/BCWMS-BADE-1.14.113-RELEASE.apk",
+  "sha256": "68dab2a21efd30616197b832049f87ba86af03e6b9b38653768cd6c20d007c06",
+  "releaseNotes": "LP kartına MTE Yazdır düğmesi eklendi. Mal kabul kaydedildikten sonra eksik MTE etiketlerini LP seçerek yazdırma ekranı açılır. Ürün içeren LP baskısı MTE etiket yazıcısına yönlendirilir."
 }

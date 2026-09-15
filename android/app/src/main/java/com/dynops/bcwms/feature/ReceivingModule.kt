@@ -195,6 +195,7 @@ private fun ReceiveDocument(no: String, onBack: () -> Unit) {
     var bulkLpTarget by remember(no) { mutableStateOf<JSONObject?>(null) }
     var showBulkLinePicker by remember(no) { mutableStateOf(false) }
     var printReceipt by remember(no) { mutableStateOf(false) }
+    var showReceiptMte by remember(no) { mutableStateOf(false) }
     // TOPLU POST: satır onayı (PATCH receiptLines) belgeyi ASLA postlamaz —
     // yalnız "Qty. to Receive"/lot/seri/LP yazar. Post tek bir yerden, alttaki
     // butondan ve özet onayından sonra çalışır.
@@ -662,10 +663,19 @@ private fun ReceiveDocument(no: String, onBack: () -> Unit) {
                     status = if (r.ok) "TAMAM: Mal kabul kaydedildi."
                         else missingReceiptPostBackendStatus(r.httpCode, r.body)
                             ?: receiptPostFailureStatus(BcApi.errorMessage(r.body), r.httpCode)
-                    if (r.ok) { touched = emptySet(); reload() }
+                    if (r.ok) {
+                        touched = emptySet()
+                        // Keep the successful receipt visible until labels have been checked.
+                        // Reloading immediately navigates away when BC deletes a fully posted receipt.
+                        showReceiptMte = true
+                    }
                 }
             },
         )
+    }
+
+    if (showReceiptMte) {
+        ReceiptMteSheet(receiptNo = no, onDismiss = { showReceiptMte = false; reload() })
     }
 
     if (showVehicle) {
