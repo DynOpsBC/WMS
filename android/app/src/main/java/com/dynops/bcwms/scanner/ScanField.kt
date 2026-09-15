@@ -80,8 +80,9 @@ fun ScanField(
     // bile sarı tetik basışı sadece kullanıcının seçtiği alana yazar.
     val interactionSource = remember { MutableInteractionSource() }
     val isFocused by interactionSource.collectIsFocusedAsState()
-    LaunchedEffect(isFocused, enabled) {
-        if (!isFocused || !enabled) return@LaunchedEffect
+    val windowFocused = androidx.compose.ui.platform.LocalWindowInfo.current.isWindowFocused
+    LaunchedEffect(isFocused, enabled, windowFocused) {
+        if (!isFocused || !enabled || !windowFocused) return@LaunchedEffect
         ScanBus.events.collect { event ->
             deliverScan(event.raw)
         }
@@ -102,7 +103,18 @@ fun ScanField(
 
     Column(modifier) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            OutlinedTextField(
+            if (scanOnly) {
+                Column(Modifier.weight(1f)) {
+                    ScannerTextField(
+                        label = label,
+                        enabled = enabled,
+                        focusRequester = focusRequester ?: remember { androidx.compose.ui.focus.FocusRequester() },
+                        interactionSource = interactionSource,
+                        modifier = Modifier.fillMaxWidth(),
+                        onScanned = { deliverScan(it) },
+                    )
+                }
+            } else OutlinedTextField(
                 value = value,
                 onValueChange = onValueChange,
                 label = { Text(label) },
@@ -117,7 +129,6 @@ fun ScanField(
                         if (value.isBlank()) emptyHint = true else { emptyHint = false; onScanned?.invoke(value.trim()) }
                     }
                 }),
-                readOnly = scanOnly,
                 // Ekran akışı alanı programatik odaklayabilsin (sadece-okut sayım):
                 // donanım tarayıcı yalnız odaklı alana yazar.
                 modifier = if (focusRequester != null) Modifier.weight(1f).focusRequester(focusRequester) else Modifier.weight(1f),

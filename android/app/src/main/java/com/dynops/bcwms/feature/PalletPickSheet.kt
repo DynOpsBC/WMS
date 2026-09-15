@@ -143,10 +143,10 @@ internal fun PalletPickSheet(
             enabled = !loading && !submitting,
             modifier = Modifier.fillMaxWidth(),
         )
-        Text("Bu alana dokunup terminalin tarama tuşuyla paletin QR kodunu okutun. Kamera simgesini de kullanabilirsiniz.",
+        Text("Terminalin tarama tuşuyla paletin QR kodunu okutun. Kod alanda beklerse Okunan Paleti Doğrula'ya basın. Kamera simgesini de kullanabilirsiniz.",
             style = MaterialTheme.typography.bodySmall)
-        LaunchedEffect(loading, submitting) {
-            if (!loading && !submitting) scanFocus.requestFocus()
+        LaunchedEffect(loading, submitting, sheetState.currentValue) {
+            if (!loading && !submitting && sheetState.currentValue == SheetValue.Expanded) scanFocus.requestFocus()
         }
         if (scanMessage.isNotBlank()) Text(scanMessage, modifier = Modifier.padding(vertical = 8.dp))
         if (steps.isNotEmpty()) {

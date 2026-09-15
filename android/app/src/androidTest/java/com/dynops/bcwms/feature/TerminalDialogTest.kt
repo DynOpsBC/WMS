@@ -75,10 +75,24 @@ class TerminalDialogTest {
             PalletPickSheet("PI-AUDIT", groupLines(listOf(row), ::pickLineCapacity).single(), {}, {})
         } }
         waitForText("Toplama satırlarının tamamı alınamadı.")
-        compose.onNodeWithText("Paletin QR kodunu okut").performScrollTo().assertIsDisplayed().assertIsEnabled().performClick().assertIsFocused()
+        compose.onNodeWithText("Paletin QR kodunu okut").performScrollTo().assertIsDisplayed().assertIsFocused()
         compose.waitForIdle()
-        compose.runOnIdle { ScanBus.emit(ScanEvent("LP000005", "")) }
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        instrumentation.sendStringSync("LP000005")
+        instrumentation.sendKeyDownUpSync(android.view.KeyEvent.KEYCODE_ENTER)
         waitForText("LP000005 okutuldu;")
+        compose.waitUntil(5000) {
+            var keyboardVisible = true
+            androidx.test.espresso.Espresso.onView(
+                androidx.test.espresso.matcher.ViewMatchers.withContentDescription("Paletin QR kodunu okut"),
+            ).check { view, error ->
+                if (error != null) throw error
+                val insets = androidx.core.view.ViewCompat.getRootWindowInsets(view)
+                org.junit.Assert.assertNotNull(insets)
+                keyboardVisible = insets!!.isVisible(androidx.core.view.WindowInsetsCompat.Type.ime())
+            }
+            !keyboardVisible
+        }
         compose.onNodeWithText("LP000005 okutuldu;", substring = true).performScrollTo().assertIsDisplayed()
         compose.onNodeWithText("Okutulan Paletleri Onayla").performScrollTo().assertIsNotEnabled()
         evidence("pallet-failure")

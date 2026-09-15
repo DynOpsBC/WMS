@@ -1,7 +1,7 @@
 {
-  "versionCode": 200113,
-  "versionName": "1.14.113-bade",
-  "apkUrl": "https://github.com/DynOpsBC/WMS/releases/download/android-v1.14.113/BCWMS-BADE-1.14.113-RELEASE.apk",
-  "sha256": "68dab2a21efd30616197b832049f87ba86af03e6b9b38653768cd6c20d007c06",
-  "releaseNotes": "LP kartına MTE Yazdır düğmesi eklendi. Mal kabul kaydedildikten sonra eksik MTE etiketlerini LP seçerek yazdırma ekranı açılır. Ürün içeren LP baskısı MTE etiket yazıcısına yönlendirilir."
+  "versionCode": 200114,
+  "versionName": "1.14.114-bade",
+  "apkUrl": "https://github.com/DynOpsBC/WMS/releases/download/android-v1.14.114/BCWMS-BADE-1.14.114-RELEASE.apk",
+  "sha256": "6c03f525f2e3ff9386fe93b453ae72d7850cf65136862e975590de8256e25ed6",
+  "releaseNotes": "Toplamada palet okuyucunun klavye/metin çıkışı desteklendi. Palet penceresi açılınca okutma alanı odaklanır. Enter göndermeyen okuyucular için Okunan Paleti Doğrula düğmesi eklendi. LP ve mal kabul MTE özellikleri dahildir."
 }
