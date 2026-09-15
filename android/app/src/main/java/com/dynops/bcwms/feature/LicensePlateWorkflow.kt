@@ -21,19 +21,24 @@ internal fun bulkLpPrintBatches(
 internal data class LpPrintRoute(val action: String, val printerCode: String)
 
 /**
- * İçerikli LP her zaman hazır RDLC MTE belgesini ister. Bu çıktı PDF olduğu
- * için Windows sürücülü belge yazıcısına gider. Belge yazıcısı seçilmemişse
- * BC'nin cihaz-yazıcı eşlemesi kullanılır. Boş taşıyıcı için ZPL yolu korunur.
+ * İçerikli LP her zaman MTE ister. MTE cihazın etiket (ZPL) yazıcısına gider;
+ * BC yalnız seçili yazıcı PDF belge yazıcısıysa onaylı RDLC PDF'ini üretir.
+ * Etiket yazıcısı seçilmemişse belge yazıcısı, o da yoksa BC'nin cihaz-yazıcı
+ * eşlemesi kullanılır. Boş taşıyıcı için ZPL/QR belge yolu korunur.
  */
 internal fun bulkLpPrintRoute(lineCount: Int, labelPrinter: String, documentPrinter: String): LpPrintRoute = when {
-    lineCount > 0 -> mtePrintRoute(documentPrinter)
+    lineCount > 0 -> mtePrintRoute(labelPrinter, documentPrinter)
     labelPrinter.isNotBlank() -> LpPrintRoute(bulkLpPrintAction(lineCount), labelPrinter.trim())
     documentPrinter.isNotBlank() -> LpPrintRoute("printDocument", documentPrinter.trim())
     else -> LpPrintRoute(bulkLpPrintAction(lineCount), "")
 }
 
-internal fun mtePrintRoute(documentPrinter: String): LpPrintRoute =
-    LpPrintRoute("printPalletLabels", documentPrinter.trim())
+/** Sahadaki 4x2" ZPL MTE önce etiket yazıcısını kullanır; BC formatı yazıcıdan çözer. */
+internal fun mtePrinterCode(labelPrinter: String, documentPrinter: String): String =
+    labelPrinter.trim().ifBlank { documentPrinter.trim() }
+
+internal fun mtePrintRoute(labelPrinter: String, documentPrinter: String): LpPrintRoute =
+    LpPrintRoute("printPalletLabels", mtePrinterCode(labelPrinter, documentPrinter))
 
 internal fun canPrintMte(linesComplete: Boolean, lineCount: Int, pendingReceiptNo: String): Boolean =
     linesComplete && lineCount > 0 && pendingReceiptNo.isBlank()

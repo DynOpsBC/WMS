@@ -1056,7 +1056,7 @@ private fun CountDocument(no: String, onBack: () -> Unit) {
     // Sayılan LP'lerin palet etiketleri: PostSheet kazanan sayım miktarını LP
     // satırlarına yazar (ApplyWinningCountsToLicensePlates); etiket yeni miktarla basılır.
     suspend fun printCountedLpLabels(lpNos: List<String>): Int {
-        val printerId = getDefaultPrinter(context, PRINTER_USAGE_DOCUMENT)
+        val printerId = getMtePrinter(context)
         var printFailures = 0
         lpNos.forEach { lpNo ->
             val body = JSONObject().apply { put("printerId", printerId); put("copies", 1) }.toString()

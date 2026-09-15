@@ -656,7 +656,7 @@ private fun ReceiveDocument(no: String, onBack: () -> Unit) {
                             put("print", printReceipt)
                             put("invoice", false)
                             put("printerId", getDefaultPrinter(context, PRINTER_USAGE_DOCUMENT))
-                            put("lpPrinterId", getDefaultPrinter(context, PRINTER_USAGE_DOCUMENT))
+                            put("lpPrinterId", getMtePrinter(context))
                         }.toString(),
                     )
                     busy = false

@@ -53,6 +53,10 @@ fun setDefaultPrinter(context: Context, code: String, usage: String = PRINTER_US
         .edit().putString(PREF_NAMESPACE + usage, code).apply()
 }
 
+/** MTE / LP material labels: the device's label printer, else its document printer, else BC mapping. */
+fun getMtePrinter(context: Context): String =
+    mtePrinterCode(getDefaultPrinter(context, PRINTER_USAGE_LABEL), getDefaultPrinter(context, PRINTER_USAGE_DOCUMENT))
+
 internal suspend fun resolveInquiryPrinter(context: Context): Result<String> = runCatching {
     val label = getDefaultPrinter(context)
     val document = getDefaultPrinter(context, PRINTER_USAGE_DOCUMENT)

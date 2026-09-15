@@ -48,10 +48,20 @@ SSCC'li örnek: ![LP SSCC](lp-etiketi-sscc.png)
 - Raf: terminal **Raf Sorgu → Etiket Yazdır** (`bins(...)/printLabel`).
 - LP: LP kartı / terminal LP ekranı **Etiket Yazdır** (`PrintLPLabel`).
 
-Madde Tanımlama Etiketi (MTE), `DOPSWHS MTE LP Report` ile BC'den alınan onaylı
-10×8 cm RDLC düzeninde PDF üretilir. Her LP ayrı rapor satırı/sayfasıdır; madde,
-lot, miktar ve QR verisi o LP'nin güncel kayıtlarından doldurulur. Terminalde bu
-çıktı **Belge** olarak seçilmiş, PDF biçimli Windows yazıcı rotasına gönderilir.
+Madde Tanımlama Etiketi (MTE) için formatı **yazıcı belirler** (`PrintPalletItemLabels`):
+
+- **ZPL etiket yazıcısı** (sahadaki Zebra, 4×2 inç rulo): `BuildPalletItemZpl`
+  ile ürün grubu başına bir ZPL MTE. Terminal MTE'yi önce cihazın **Etiket**
+  yazıcısına gönderir; bu, 1.14.1.36'ya kadar sahada basılan etiketin aynısıdır.
+- **PDF belge yazıcısı**: `DOPSWHS MTE LP Report` ile onaylı 10×8 cm RDLC
+  düzeninde PDF. Her LP ayrı sayfadır; madde, lot, miktar ve QR o LP'nin güncel
+  kayıtlarından doldurulur. Bu yol yalnız cihazda Etiket yazıcısı seçili
+  değilken Belge yazıcısı PDF ise (veya BC cihaz eşlemesi PDF yazıcı verirse)
+  kullanılır ve yazıcıda 10×8 cm etiket takılı olmasını gerektirir.
+
+1.14.1.37 MTE'yi yalnız PDF yoluna almıştı; sahada Belge yazıcısı tanımlı
+olmadığı için terminalde "Yazıcı ayarı tamamlanamadı" hatası çıktı (15 Eyl
+2026). 1.14.1.38 ile ZPL yolu geri geldi.
 
 Madde Defteri Girişleri'ndeki **Tüm LP MTE Etiketleri** işlemi, seçili girişlere
 bağlı bütün LP'leri tek raporda açar; yalnız ilk LP ile sınırlı değildir.

@@ -318,8 +318,14 @@ fun operatorKnownBcError(raw: String): String? {
     // eksik olduğunu söylemiyordu (BADE toplu LP baskısı, 2 Eyl 2026).
     if (Regex("""No WMS bridge printer is mapped for .+? label printing""", RegexOption.IGNORE_CASE).containsMatchIn(raw))
         return "Bu cihaz için etiket yazıcısı seçilmemiş. Yazıcılar ekranında etiket (ZPL) yazıcısının 'Etiket' düğmesine basın."
-    if (raw.contains("No PDF document printer is selected", ignoreCase = true))
+    if (raw.contains("No PDF document printer is selected", ignoreCase = true) ||
+        Regex("""No WMS bridge printer is mapped for \w+\. (?:Select a document printer|Configure Device Printer Mapping)""", RegexOption.IGNORE_CASE).containsMatchIn(raw))
         return "Bu cihaz için belge yazıcısı seçilmemiş. Yazıcılar ekranında PDF yazıcısının 'Belge' düğmesine basın."
+    // BADE 15 Eyl 2026: MTE PDF'i ZPL etiket yazıcısına yönlenince BC'nin
+    // "requires a PDF printer" hatası operatöre genel yazıcı metniyle gidiyordu.
+    Regex("""Printer\s+(\S+?)\s+is configured for\s+(\S+?)\..*requires a PDF printer""", RegexOption.IGNORE_CASE).find(raw)?.let {
+        return "Bu çıktı PDF belge yazıcısı gerektirir; seçili yazıcı (${it.groupValues[1]}) ${it.groupValues[2]} etiket yazıcısı. Yazıcılar ekranında PDF yazıcısının 'Belge' düğmesine basın."
+    }
     Regex("""(?:Mapped\s+)?printer\s+(\S+?)\s+is not registered""", RegexOption.IGNORE_CASE).find(raw)?.let {
         return "Seçili yazıcı (${it.groupValues[1]}) BC'de kayıtlı değil. Yazıcılar ekranını yenileyip yazıcıyı yeniden seçin."
     }

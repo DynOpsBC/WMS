@@ -5,8 +5,10 @@ Etiketi'nin **LP numarası taşıyan QR kodudur**. Operatör ürün barkodu
 okutamadığı için "doğru ürünü aldım/koydum" kanıtı yalnızca okutulan paletin
 **içeriğinin** ambar aktivitesi satırıyla karşılaştırılmasıyla üretilebilir.
 
-Etiket, `DOPSWHS MTE LP Report` içindeki onaylı 10×8 cm RDLC düzeninden PDF
-olarak üretilir. QR içeriği her sayfada ilgili LP numarasıdır.
+Etiket, terminalin ZPL etiket yazıcısında `BuildPalletItemZpl` (4×2 inç), PDF
+belge yazıcısında ise `DOPSWHS MTE LP Report` içindeki onaylı 10×8 cm RDLC
+düzeni ile üretilir; iki yolda da QR içeriği ilgili LP numarasıdır
+(bkz. `docs/labels/README.md`).
 
 ## Açma/kapama anahtarı
 

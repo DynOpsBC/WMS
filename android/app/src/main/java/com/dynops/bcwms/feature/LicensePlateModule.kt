@@ -114,9 +114,9 @@ fun LicensePlateModule() {
                 val results = batch.map { no ->
                     val row = rows.firstOrNull { it.optString("no") == no }
                     val route = if (no in palletLabelRetryNos) {
-                        // İlk toplu oluşturma çağrısıyla aynı hazır MTE PDF'ini
-                        // belge yazıcısından yeniden üret.
-                        mtePrintRoute(documentPrinter)
+                        // İlk toplu oluşturma çağrısıyla aynı MTE'yi aynı
+                        // yazıcıdan yeniden üret (ZPL yazıcıda ZPL, PDF yazıcıda RDLC).
+                        mtePrintRoute(labelPrinter, documentPrinter)
                     } else {
                         bulkLpPrintRoute(row?.optInt("lineCount") ?: 0, labelPrinter, documentPrinter)
                     }
@@ -505,7 +505,7 @@ private fun LpDocument(lpNo: String, onBack: () -> Unit) {
                         onClick = {
                             val payload = JSONObject().apply {
                                 put("printLabel", true)
-                                put("printerId", getDefaultPrinter(context, PRINTER_USAGE_DOCUMENT))
+                                put("printerId", getMtePrinter(context))
                             }.toString()
                             if (lines.isEmpty()) {
                                 status = "EKSİK: Bu LP boş. Tamamlamadan önce içine en az bir ürün okutun."
@@ -549,7 +549,7 @@ private fun LpDocument(lpNo: String, onBack: () -> Unit) {
 
                 OutlinedButton(
                     onClick = {
-                        val route = mtePrintRoute(getDefaultPrinter(context, PRINTER_USAGE_DOCUMENT))
+                        val route = mtePrintRoute(getDefaultPrinter(context, PRINTER_USAGE_LABEL), getDefaultPrinter(context, PRINTER_USAGE_DOCUMENT))
                         action(
                             route.action,
                             JSONObject().apply {

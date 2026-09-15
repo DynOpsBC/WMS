@@ -36,13 +36,16 @@ class LicensePlateWorkflowTest {
     @Test
     fun `bulk print follows the device printer selection`() {
         assertEquals(LpPrintRoute("printLabel", "ZPL01"), bulkLpPrintRoute(0, "ZPL01", "PDF01"))
-        assertEquals(LpPrintRoute("printPalletLabels", ""), bulkLpPrintRoute(2, "ZPL01", ""))
-        // A PDF QR document is suitable only for an empty carrier. Filled LPs
-        // use the approved MTE PDF through the document-printer route.
+        // Filled LPs are MTE: the field's ZPL label printer first. BC renders the
+        // approved RDLC PDF only when the resolved printer is a PDF printer.
+        assertEquals(LpPrintRoute("printPalletLabels", "ZPL01"), bulkLpPrintRoute(2, "ZPL01", ""))
+        assertEquals(LpPrintRoute("printPalletLabels", "ZPL01"), bulkLpPrintRoute(2, "ZPL01", "PDF01"))
+        // A PDF QR document is suitable only for an empty carrier.
         assertEquals(LpPrintRoute("printDocument", "PDF01"), bulkLpPrintRoute(0, "", "PDF01"))
         assertEquals(LpPrintRoute("printPalletLabels", "PDF01"), bulkLpPrintRoute(3, " ", "PDF01"))
         // Nothing selected on the device: let BC's device printer mapping decide.
         assertEquals(LpPrintRoute("printLabel", ""), bulkLpPrintRoute(0, "", ""))
+        assertEquals(LpPrintRoute("printPalletLabels", ""), bulkLpPrintRoute(2, "", ""))
     }
 
     @Test
@@ -54,10 +57,14 @@ class LicensePlateWorkflowTest {
     }
 
     @Test
-    fun `single MTE and filled LP batch use the document printer action`() {
-        assertEquals(LpPrintRoute("printPalletLabels", "PDF01"), mtePrintRoute(" PDF01 "))
-        assertEquals(mtePrintRoute(" PDF01 "), bulkLpPrintRoute(2, " ZPL01 ", "PDF01"))
-        assertEquals(mtePrintRoute(""), bulkLpPrintRoute(2, "ZPL01", ""))
+    fun `single MTE and filled LP batch prefer the label printer and fall back to the document printer`() {
+        assertEquals("ZPL01", mtePrinterCode(" ZPL01 ", "PDF01"))
+        assertEquals("PDF01", mtePrinterCode(" ", " PDF01 "))
+        assertEquals("", mtePrinterCode("", ""))
+        assertEquals(LpPrintRoute("printPalletLabels", "ZPL01"), mtePrintRoute(" ZPL01 ", "PDF01"))
+        assertEquals(LpPrintRoute("printPalletLabels", "PDF01"), mtePrintRoute("", " PDF01 "))
+        assertEquals(mtePrintRoute(" ZPL01 ", "PDF01"), bulkLpPrintRoute(2, " ZPL01 ", "PDF01"))
+        assertEquals(mtePrintRoute("", "PDF01"), bulkLpPrintRoute(2, "", "PDF01"))
     }
 
     @Test

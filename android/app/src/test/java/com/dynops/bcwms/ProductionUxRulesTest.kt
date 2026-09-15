@@ -200,6 +200,10 @@ class ProductionUxRulesTest {
         }
         check("No WMS bridge printer is mapped for LP label printing. Configure Device Printer Mapping or pass a Printer Code.  CorrelationId:  aa-bb.", "etiket yazıcısı seçilmemiş")
         check("No PDF document printer is selected for LP QR printing.", "belge yazıcısı seçilmemiş")
+        // BADE 15 Eyl 2026: MTE PDF route without a document printer / onto the ZPL printer.
+        check("No WMS bridge printer is mapped for Receipt. Select a document printer or configure Device Printer Mapping.", "belge yazıcısı seçilmemiş")
+        check("No WMS bridge printer is mapped for Receipt. Configure Device Printer Mapping or pass a Printer Code.", "belge yazıcısı seçilmemiş")
+        check("Printer P2CC342466B9F4561 is configured for ZPL. Receipt document printing requires a PDF printer.  CorrelationId:  aa-bb.", "seçili yazıcı (P2CC342466B9F4561) ZPL etiket yazıcısı")
         check("Printer ZEBRA-01 is not registered.  CorrelationId:  aa-bb.", "Seçili yazıcı (ZEBRA-01) BC'de kayıtlı değil")
         check("Mapped printer PDF-02 is inactive.", "Seçili yazıcı (PDF-02) pasif")
         check("The LP label job was saved but Azure dispatch failed: Printer ZEBRA-01 has no Station ID.", "yazıcı ajanına iletilemedi")

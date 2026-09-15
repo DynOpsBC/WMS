@@ -95,16 +95,71 @@ codeunit 72051 "DOPSWHS Print Dispatcher"
     end;
 
     /// <summary>
-    /// Renders the approved 10 x 8 cm material-identification RDLC for one LP.
-    /// MTE is a PDF document, so the selected/mapped document printer must use
-    /// the Windows driver for the physical label printer.
+    /// Prints the material-identification label(s) (MTE) of one LP. The printer
+    /// decides the format: a ZPL label printer (the field's 4 x 2 inch stock)
+    /// gets one ZPL MTE per item group, exactly as before 1.14.1.37; a PDF
+    /// document printer gets the approved 10 x 8 cm RDLC report through the
+    /// Windows driver route. A missing document printer therefore never blocks
+    /// the label printer that the terminals already use.
     /// </summary>
     procedure PrintPalletItemLabels(var LP: Record "DOPSWHS LP Header"; PrinterId: Code[50]; Copies: Integer)
     var
+        TargetPrinter: Code[50];
+    begin
+        TargetPrinter := ResolvePalletItemLabelPrinter(PrinterId);
+        if PrinterIsPdf(TargetPrinter) then
+            PrintPalletItemReport(LP, TargetPrinter, Copies)
+        else
+            PrintPalletItemZplLabels(LP, TargetPrinter, Copies);
+    end;
+
+    /// <summary>
+    /// Explicit printer wins. Without one, the device's label mapping is tried
+    /// first, then its document mapping. Empty lets the ZPL route raise its
+    /// own "no label printer mapped" error, which the terminal explains.
+    /// </summary>
+    local procedure ResolvePalletItemLabelPrinter(PrinterId: Code[50]): Code[50]
+    var
+        Setup: Record "DOPSWHS Setup";
+        SelfHosted: Codeunit "DOPSWHS Self-Host Print Client";
+        ResolvedCode: Code[20];
+        EffectiveCopies: Integer;
+    begin
+        if PrinterId <> '' then
+            exit(PrinterId);
+        if not Setup.Get('') then
+            exit('');
+        if not (Setup."Print Channel" in [Setup."Print Channel"::SelfHosted, Setup."Print Channel"::AzureDirect]) then
+            exit('');
+        if SelfHosted.ResolvePrinterAndCopies(CopyStr(UserId(), 1, 50), Enum::"DOPSWHS IWX Report Usage"::LpLabel, 0, ResolvedCode, EffectiveCopies) then
+            exit(ResolvedCode);
+        if SelfHosted.ResolvePrinterAndCopies(CopyStr(UserId(), 1, 50), Enum::"DOPSWHS IWX Report Usage"::Receipt, 0, ResolvedCode, EffectiveCopies) then
+            exit(ResolvedCode);
+        exit('');
+    end;
+
+    local procedure PrinterIsPdf(PrinterId: Code[50]): Boolean
+    var
+        Printer: Record "DOPSWHS Printer";
+    begin
+        if (PrinterId = '') or (StrLen(PrinterId) > MaxStrLen(Printer.Code)) then
+            exit(false);
+        if not Printer.Get(CopyStr(PrinterId, 1, MaxStrLen(Printer.Code))) then
+            exit(false);
+        exit(Printer."Format" = Printer."Format"::PDF);
+    end;
+
+    /// <summary>
+    /// The approved 10 x 8 cm MTE RDLC (one page per LP) as a PDF document.
+    /// </summary>
+    local procedure PrintPalletItemReport(var LP: Record "DOPSWHS LP Header"; PrinterId: Code[50]; Copies: Integer)
+    var
+        ReportLP: Record "DOPSWHS LP Header";
         SourceRecord: RecordRef;
     begin
-        LP.SetRecFilter();
-        SourceRecord.GetTable(LP);
+        ReportLP := LP;
+        ReportLP.SetRecFilter();
+        SourceRecord.GetTable(ReportLP);
         PrintReport(
             LP."No.",
             Report::"DOPSWHS MTE LP Report",
@@ -114,7 +169,66 @@ codeunit 72051 "DOPSWHS Print Dispatcher"
             SourceRecord);
     end;
 
-    [Obsolete('MTE printing uses DOPSWHS MTE LP Report. Kept only for extension compatibility.', '1.15')]
+    /// <summary>
+    /// One ZPL material-identification label for every item group on the LP.
+    /// This is the label the BADE terminals print on their ZPL label printer.
+    /// </summary>
+    local procedure PrintPalletItemZplLabels(var LP: Record "DOPSWHS LP Header"; PrinterId: Code[50]; Copies: Integer)
+    var
+        LPLine: Record "DOPSWHS LP Line";
+        LabelLine: Record "DOPSWHS LP Line";
+        PrintedGroups: Dictionary of [Text, Boolean];
+        GroupKey: Text;
+    begin
+        LPLine.SetRange("LP No.", LP."No.");
+        LPLine.SetFilter("Item No.", '<>%1', '');
+        if LPLine.FindSet() then
+            repeat
+                GroupKey := PalletItemGroupKey(LPLine);
+                if not PrintedGroups.ContainsKey(GroupKey) then begin
+                    PrintedGroups.Add(GroupKey, true);
+                    LabelLine := LPLine;
+                    LabelLine.Quantity := PalletItemGroupQuantity(LPLine);
+                    EnqueueZpl(
+                        LP."No.",
+                        BuildPalletItemZpl(LP, LabelLine),
+                        PrinterId,
+                        Copies,
+                        Enum::"DOPSWHS IWX Report Usage"::LpLabel,
+                        'LP material identification');
+                end;
+            until LPLine.Next() = 0;
+    end;
+
+    local procedure PalletItemGroupKey(LPLine: Record "DOPSWHS LP Line"): Text
+    begin
+        exit(
+            LPLine."Item No." + '|' + LPLine."Variant Code" + '|' + LPLine."Unit of Measure" + '|' +
+            LPLine."Lot No." + '|' + LPLine."Serial No." + '|' + Format(LPLine."Source Document Type") + '|' +
+            LPLine."Source Document No." + '|' + Format(LPLine."Source Document Line No."));
+    end;
+
+    local procedure PalletItemGroupQuantity(LPLine: Record "DOPSWHS LP Line"): Decimal
+    var
+        GroupLine: Record "DOPSWHS LP Line";
+        GroupQuantity: Decimal;
+    begin
+        GroupLine.SetRange("LP No.", LPLine."LP No.");
+        GroupLine.SetRange("Item No.", LPLine."Item No.");
+        GroupLine.SetRange("Variant Code", LPLine."Variant Code");
+        GroupLine.SetRange("Unit of Measure", LPLine."Unit of Measure");
+        GroupLine.SetRange("Lot No.", LPLine."Lot No.");
+        GroupLine.SetRange("Serial No.", LPLine."Serial No.");
+        GroupLine.SetRange("Source Document Type", LPLine."Source Document Type");
+        GroupLine.SetRange("Source Document No.", LPLine."Source Document No.");
+        GroupLine.SetRange("Source Document Line No.", LPLine."Source Document Line No.");
+        if GroupLine.FindSet() then
+            repeat
+                GroupQuantity += GroupLine.Quantity;
+            until GroupLine.Next() = 0;
+        exit(GroupQuantity);
+    end;
+
     procedure BuildPalletItemZpl(var LP: Record "DOPSWHS LP Header"; var LPLine: Record "DOPSWHS LP Line"): Text
     var
         Item: Record Item;
