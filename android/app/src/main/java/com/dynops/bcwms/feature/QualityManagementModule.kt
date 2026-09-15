@@ -295,7 +295,7 @@ private fun SetTestValueSheet(onDismiss: () -> Unit, onConfirm: (code: String, v
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     var code by remember { mutableStateOf("") }
     var value by remember { mutableStateOf("") }
-    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState) {
+    com.dynops.bcwms.ui.SheetScaffold(onDismiss = onDismiss, sheetState = sheetState, contentPadding = PaddingValues(0.dp)) {
         Column(Modifier.fillMaxWidth().padding(20.dp)) {
             Text("Test Değeri Gir", fontWeight = FontWeight.Bold, fontSize = 18.sp)
             Spacer(Modifier.height(12.dp))
@@ -317,7 +317,7 @@ private fun SetTestValueSheet(onDismiss: () -> Unit, onConfirm: (code: String, v
 @Composable
 private fun FinishSheet(onDismiss: () -> Unit, onConfirm: () -> Unit) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState) {
+    com.dynops.bcwms.ui.SheetScaffold(onDismiss = onDismiss, sheetState = sheetState, contentPadding = PaddingValues(0.dp)) {
         Column(Modifier.fillMaxWidth().padding(20.dp)) {
             Text("Denetimi Bitir", fontWeight = FontWeight.Bold, fontSize = 18.sp)
             Spacer(Modifier.height(8.dp))

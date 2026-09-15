@@ -35,6 +35,7 @@ page 72229 "DOPSWHS Pick Line API"
                 field(qtyToHandle; Rec."Qty. to Handle") { Caption = 'qtyToHandle'; Editable = false; }
                 field(qtyHandled; Rec."Qty. Handled") { Caption = 'qtyHandled'; Editable = false; }
                 field(binCode; Rec."Bin Code") { Caption = 'binCode'; Editable = false; }
+                field(serialNo; Rec."Serial No.") { Caption = 'serialNo'; Editable = false; }
                 field(lotNo; Rec."Lot No.") { Caption = 'lotNo'; Editable = false; }
                 field(lotRequired; LotRequired) { Caption = 'lotRequired'; Editable = false; }
                 field(locationCode; Rec."Location Code") { Caption = 'locationCode'; Editable = false; }

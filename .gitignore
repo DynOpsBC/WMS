@@ -79,3 +79,6 @@ releases/**/*.apk
 # asset'idir. Aynı AL paketinin .app kopyası repoda sürümlü olarak ayrıca bulunur.
 build/release-*/
 releases/al/*.zip
+
+# Local build logs, screenshots and release staging; packages are GitHub assets.
+/output/

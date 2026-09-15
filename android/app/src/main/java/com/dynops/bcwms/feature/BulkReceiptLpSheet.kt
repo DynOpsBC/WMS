@@ -191,7 +191,7 @@ internal fun BulkReceiptLpSheet(
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState) {
         Column(
             Modifier.fillMaxWidth().fillMaxHeight(0.94f)
-                .verticalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 8.dp)
+                .verticalScroll(rememberScrollState()).imePadding().padding(horizontal = 16.dp, vertical = 8.dp)
         ) {
             Text("Palet LP'lerini Oluştur", fontSize = 21.sp, fontWeight = FontWeight.Bold)
             Text("$itemNo · Açık: ${fmtBulkQty(maxExpectedQty)} $uom", color = MaterialTheme.colorScheme.onSurfaceVariant)

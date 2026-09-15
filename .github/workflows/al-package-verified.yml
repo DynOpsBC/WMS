@@ -1,0 +1,50 @@
+name: AL verified package
+on:
+  workflow_dispatch:
+  push:
+    branches: ['audit/bade-delivery-20260915']
+    paths: ['al/**', '.github/workflows/al-package-verified.yml']
+permissions:
+  contents: read
+jobs:
+  compile:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+      - name: Install Microsoft AL compiler
+        shell: pwsh
+        run: |
+          dotnet tool install --global Microsoft.Dynamics.BusinessCentral.Development.Tools --version 18.0.41.39415
+          if ($LASTEXITCODE -ne 0) { throw 'AL compiler installation failed' }
+          al --version
+      - name: Download Microsoft BC 28 symbols
+        shell: pwsh
+        run: |
+          Install-Module BcContainerHelper -Scope CurrentUser -Force
+          Import-Module BcContainerHelper
+          $artifactUrl = Get-BCArtifactUrl -type Sandbox -version '28.1' -country w1 -select Latest
+          if (-not $artifactUrl) { throw 'No BC 28.1 artifact found' }
+          $paths = Download-Artifacts -artifactUrl $artifactUrl -includePlatform
+          New-Item al/.alpackages -ItemType Directory -Force | Out-Null
+          foreach ($path in $paths) {
+            Get-ChildItem $path -Recurse -Filter '*.app' | Copy-Item -Destination al/.alpackages -Force
+          }
+          $artifactUrl | Set-Content bc-symbol-version.txt
+      - name: Compile extension
+        shell: pwsh
+        run: |
+          New-Item dist -ItemType Directory -Force | Out-Null
+          al compile -- /project:al /packagecachepath:al/.alpackages /out:dist/BCWMSApp-1.14.1.36.app /errorsonlyinconsole
+          if ($LASTEXITCODE -ne 0) { throw 'AL compilation failed' }
+          if (-not (Test-Path dist/BCWMSApp-1.14.1.36.app)) { throw 'AL package was not produced' }
+          Get-FileHash dist/BCWMSApp-1.14.1.36.app -Algorithm SHA256 | Format-List | Out-File dist/package-sha256.txt
+          Copy-Item bc-symbol-version.txt dist/
+      - uses: actions/upload-artifact@v7
+        with:
+          name: bcwms-al-verified-package
+          path: dist/
+          if-no-files-found: error

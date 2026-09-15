@@ -37,3 +37,7 @@ Kullanıcının yayın talebiyle BADE Android 1.14.111-bade (200111) güncelleme
 - Genel indirme URL'sinden APK indirilip SHA-256 kontrol edildi; BADE güncelleme kanalı 200111 olarak doğrulandı.
 - EMU ve eski imzalı EMU kanalları önce/sonra aynı kaldı. BC paketi yayınlanmadı; gerçek terminal kurulumu yapılmadı.
 - Yerel yayın kanıtı: `output/bade-putaway-1.14.111/publication-verification.json`.
+
+## Çalışma ağacı eşitlemesi — 15 Eylül 2026
+
+Yereldeki değişiklikler commit edildi ve yayımlanan `release/bade-1.14.114-scanner` dalı bu çalışma ağacına birleştirildi. Android uygulama ve AL kaynakları 1.14.114 yayın dalıyla aynıdır. Ek olarak yayın iş akışında BADE/EMU imza sertifikası zorunlu doğrulanır. Derleme çıktıları `output/` altında yerelde saklanır; dağıtım paketleri GitHub Releases üzerindedir. BC ortamına kurulum yapılmadı.

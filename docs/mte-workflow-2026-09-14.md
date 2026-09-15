@@ -30,3 +30,7 @@ The MTE changes were applied on top of the published 1.14.112 baseline in `WMS-a
 - Public APK download SHA-256: `68dab2a21efd30616197b832049f87ba86af03e6b9b38653768cd6c20d007c06`.
 - Release evidence: `../WMS-audit-bade-delivery/output/release-1.14.113/`.
 - Real BC receipt posting and physical printer output still require on-site verification; no AL or Windows agent change was made for this feature.
+
+## Çalışma ağacı eşitlemesi — 15 Eylül 2026
+
+Yereldeki değişiklikler commit edildi ve yayımlanan `release/bade-1.14.114-scanner` dalı bu çalışma ağacına birleştirildi. Android uygulama ve AL kaynakları 1.14.114 yayın dalıyla aynıdır. Ek olarak yayın iş akışında BADE/EMU imza sertifikası zorunlu doğrulanır. Derleme çıktıları `output/` altında yerelde saklanır; dağıtım paketleri GitHub Releases üzerindedir. BC ortamına kurulum yapılmadı.

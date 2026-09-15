@@ -2154,6 +2154,7 @@ private fun WhsePickDocument(no: String, onBack: () -> Unit) {
             title = "Çekme Miktarı (${gt.count} satıra dağıtılır)",
             itemNo = gt.itemNo,
             initialQty = gt.totalOutstanding.takeIf { it > 0 } ?: 1.0,
+            maximumQuantity = gt.totalOutstanding,
             initialUom = gt.lines.first().optString("unitOfMeasureCode"),
             initialLot = gt.lines.first().optString("lotNo"),
             allowZeroQuantity = true,
@@ -2171,6 +2172,10 @@ private fun WhsePickDocument(no: String, onBack: () -> Unit) {
                 groupTarget = null
                 if (!canMutate) { status = documentOwnershipMessage(assignedTo, myUserId); return@QuantityDialogSheet }
                 val planLineNos = distributeQty(gt, res.quantity, ::pickLineCapacity).map { it.first.optInt("lineNo") }.toSet()
+                if (planLineNos.isEmpty()) {
+                    status = "HATA: Miktar satırların kalanını aşıyor. Belgeyi yenileyin."
+                    return@QuantityDialogSheet
+                }
                 if (planLineNos.any { it in inFlightLineNos }) return@QuantityDialogSheet
                 inFlightLineNos = inFlightLineNos + planLineNos
                 scope.launch {
@@ -2185,7 +2190,7 @@ private fun WhsePickDocument(no: String, onBack: () -> Unit) {
                             lineNo = ln.optInt("lineNo"),
                             qtyToHandle = q,
                             lotNo = res.lotNo,
-                            sourceLpNo = res.sourceLpNo,
+                            sourceLpNo = if (q > 0) res.sourceLpNo else "",
                         )
                         if (r.ok) {
                             okCount++

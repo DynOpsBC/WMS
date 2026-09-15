@@ -7,6 +7,45 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class LineGroupingTest {
+    @Test fun `same product and lot in different warehouses are separate groups`() {
+        val a = line("ITEM-1", "LOT-A").put("locationCode", "DEPO-A")
+        val b = line("ITEM-1", "LOT-A").put("locationCode", "DEPO-B")
+        assertEquals(2, groups(a, b).size)
+    }
+
+    @Test fun `boxes and pieces cannot be summed into one quantity dialog`() {
+        val a = line("ITEM-1", "LOT-A").put("unitOfMeasureCode", "ADET")
+        val b = line("ITEM-1", "LOT-A").put("unitOfMeasureCode", "KOLI")
+        assertEquals(2, groups(a, b).size)
+    }
+
+    @Test fun `completed line cannot consume quantity intended for the next open line`() {
+        val a = line("ITEM-1").put("qtyOutstanding", 0.0)
+        val b = line("ITEM-1").put("qtyOutstanding", 10.0)
+        val group = groupLines(listOf(a, b), ::pickLineCapacity).single()
+        val plan = distributeQty(group, 5.0, ::pickLineCapacity)
+        assertEquals(0.0, plan.filter { it.first === a }.sumOf { it.second }, 0.00001)
+        assertEquals(5.0, plan.filter { it.first === b }.sumOf { it.second }, 0.00001)
+    }
+
+    @Test fun `reducing group total explicitly clears previously staged remainder`() {
+        val a = line("ITEM-1").put("qtyOutstanding", 10).put("qtyToHandle", 10)
+        val b = line("ITEM-1").put("qtyOutstanding", 10).put("qtyToHandle", 10)
+        val group = groupLines(listOf(a, b), ::pickLineCapacity).single()
+        val plan = distributeQty(group, 5.0, ::pickLineCapacity)
+        val staged = group.lines.associateWith { it.getDouble("qtyToHandle") }.toMutableMap()
+        plan.forEach { (row, qty) -> staged[row] = qty }
+        assertEquals(5.0, staged.values.sum(), 0.00001)
+        assertEquals(0.0, staged.getValue(b), 0.00001)
+    }
+
+    @Test fun `quantity exceeding total capacity is not silently truncated`() {
+        val group = groupLines(listOf(line("ITEM-1"))) { 5.0 }.single()
+        assertTrue(distributeQty(group, 6.0) { 5.0 }.isEmpty())
+        assertTrue(distributeQty(group, 1.0) { Double.NaN }.isEmpty())
+        assertTrue(distributeQty(group, 1.0) { Double.POSITIVE_INFINITY }.isEmpty())
+    }
+
     private fun line(item: String, lot: String = "", serial: String = "") = JSONObject().apply {
         put("itemNo", item)
         put("binCode", "A-01")

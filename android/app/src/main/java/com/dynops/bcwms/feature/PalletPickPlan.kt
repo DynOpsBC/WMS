@@ -53,7 +53,19 @@ internal fun buildPalletPickPlan(
         "Satırın kalan miktarı veya ölçü birimi doğrulanamadı. Belgeyi yenileyin."
     }
     require(quantity <= outstanding + PICK_TOLERANCE) { "Miktar satırın kalanını aşamaz." }
+    if (data.has("unitOfMeasureCode")) {
+        require(data.pickText("unitOfMeasureCode").equals(line.pickText("unitOfMeasureCode"), true)) {
+            "Satırın ölçü birimi değişmiş. Belgeyi yenileyin."
+        }
+    }
+    if (data.has("outstandingQty")) {
+        val sourceOutstanding = data.getDouble("outstandingQty")
+        require(sourceOutstanding.isFinite() && abs(sourceOutstanding - outstanding) <= PICK_TOLERANCE) {
+            "Satırın kalan miktarı değişmiş. Belgeyi yenileyin."
+        }
+    }
     val factor = baseOutstanding / outstanding
+    require(factor.isFinite() && factor > 0 && (quantity * factor).isFinite()) { "Ölçü birimi dönüşümü geçersiz." }
     val expectedLot = line.pickText("lotNo")
     val expectedSerial = line.pickText("serialNo")
     require(data.pickText("lotNo").equals(expectedLot, true)) { "Satırın lotu değişmiş. Belgeyi yenileyin." }

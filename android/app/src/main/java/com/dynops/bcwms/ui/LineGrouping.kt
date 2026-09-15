@@ -6,7 +6,7 @@ import org.json.JSONObject
  * İade satır birleştirme — müşteri isteği: aynı ürün farklı belgelerden/satırlardan
  * gelince (ör. 10 farklı siparişten aynı iade), depocu tek okutmada hepsini alsın.
  *
- * Birleştirme anahtarı: **Lokasyon/Bin + Ürün + Varyant**. Lot/Seri FARKLI ise
+ * Birleştirme anahtarı: **Lokasyon/Bin + Ürün + Varyant + Ölçü Birimi**. Lot/Seri FARKLI ise
  * ayrık kalır (yanlış birleşmesin). Kullanıcı grup üzerinde bir miktar girince,
  * bu miktar grubun alt satırlarına outstanding'e göre dağıtılır ([distributeQty]).
  */
@@ -88,7 +88,7 @@ fun groupLines(lines: List<JSONObject>, capacity: (JSONObject) -> Double): List<
         // Lot/seri dolu ise anahtara ekle → farklı lot/seri birleşmez.
         val lot = s(ln, "lotNo")
         val serial = s(ln, "serialNo")
-        val key = listOf(item, bin, variant, lot, serial).joinToString("|")
+        val key = listOf(s(ln, "locationCode"), item, bin, variant, lot, serial, s(ln, "unitOfMeasureCode")).joinToString("|")
         order.getOrPut(key) { mutableListOf() }.add(ln)
     }
     return order.map { (key, group) ->
@@ -110,18 +110,20 @@ fun groupLines(lines: List<JSONObject>, capacity: (JSONObject) -> Double): List<
  * kapasitesi kadar dolar, kalan bir sonrakine geçer.
  * Sıfır, operatörün bu lot/gruptan hiç almayacağını açıkça
  * kaydetmesi demektir; bu durumda gruptaki tüm satırlar 0 ile döner.
- * Pozitif miktarda yalnız gerçekten pay alan satırlar döner.
+ * Azaltılan toplamın eski satır miktarlarını bırakmaması için pay almayan
+ * satırlar da sıfırla döner. Kapasitesi bitmiş satıra yeni miktar yazılmaz.
  */
 fun distributeQty(group: LineGroup, qty: Double, capacity: (JSONObject) -> Double): List<Pair<JSONObject, Double>> {
     if (qty == 0.0) return group.lines.map { it to 0.0 }
     if (qty < 0.0 || !qty.isFinite()) return emptyList()
+    val capacities = group.lines.map { capacity(it).takeIf { value -> value.isFinite() && value > 0.0 } ?: 0.0 }
+    if (qty > capacities.sum() + 0.00001) return emptyList()
     var remaining = qty
     val out = mutableListOf<Pair<JSONObject, Double>>()
-    for (ln in group.lines) {
-        if (remaining <= 0.0) break
-        val cap = capacity(ln).takeIf { it > 0 } ?: remaining
-        val take = minOf(cap, remaining)
-        if (take > 0) { out.add(ln to take); remaining -= take }
+    for ((index, ln) in group.lines.withIndex()) {
+        val take = minOf(capacities[index], remaining.coerceAtLeast(0.0))
+        out.add(ln to take)
+        remaining -= take
     }
     return out
 }

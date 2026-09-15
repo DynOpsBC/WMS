@@ -1,7 +1,7 @@
 {
-  "versionCode": 200110,
-  "versionName": "1.14.110-bade",
-  "apkUrl": "https://github.com/DynOpsBC/WMS/releases/download/android-v1.14.110/BCWMS-BADE-1.14.110-RELEASE.apk",
-  "sha256": "953f31144a4769066c11aeb55f685e384224a7b2bbdf78fd013cbca0a7a49c5a",
-  "releaseNotes": "BADE: kaynak raf/palet/lot/miktar kartları, zorunlu palet QR doğrulaması ve sıralı çoklu palet toplama. Yerleştirmede ürün okutma kaldırıldı. BC palet doğrulama servisleri gereklidir. Çoklu paletlerin kayıt anında yalnız okutulan paletlerden tüketilmesi kontrolü henüz tamamlanmadı."
+  "versionCode": 200114,
+  "versionName": "1.14.114-bade",
+  "apkUrl": "https://github.com/DynOpsBC/WMS/releases/download/android-v1.14.114/BCWMS-BADE-1.14.114-RELEASE.apk",
+  "sha256": "6c03f525f2e3ff9386fe93b453ae72d7850cf65136862e975590de8256e25ed6",
+  "releaseNotes": "Toplamada palet okuyucunun klavye/metin çıkışı desteklendi. Palet penceresi açılınca okutma alanı odaklanır. Enter göndermeyen okuyucular için Okunan Paleti Doğrula düğmesi eklendi. LP ve mal kabul MTE özellikleri dahildir."
 }

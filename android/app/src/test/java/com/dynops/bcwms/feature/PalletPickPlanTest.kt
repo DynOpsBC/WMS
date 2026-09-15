@@ -6,6 +6,35 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class PalletPickPlanTest {
+    @Test fun `source lookup from a changed UOM or quantity snapshot is rejected`() {
+        reject(data = response().put("unitOfMeasureCode", "ADET"))
+        reject(data = response().put("outstandingQty", 10))
+    }
+
+    @Test fun `registration transmits every scanned pallet and rounds binary artifacts`() {
+        val plan = buildPalletPickPlan(line(), 15.0, response().toString())
+        val json = JSONArray(scannedPalletRegistrationJson(listOf(plan)))
+        assertEquals(1, json.length())
+        val entry = json.getJSONObject(0)
+        assertEquals(plan.identity, entry.getString("identity"))
+        val steps = entry.getJSONArray("steps")
+        assertEquals(2, steps.length())
+        assertEquals("LP0001", steps.getJSONObject(0).getString("lpNo"))
+        assertEquals("LP0002", steps.getJSONObject(1).getString("lpNo"))
+        assertEquals(150.0, (0 until steps.length()).sumOf { steps.getJSONObject(it).getDouble("baseQuantity") }, 0.00001)
+        val rounded = plan.copy(steps = listOf(plan.steps.first().copy(baseQuantity = 0.1 + 0.2)))
+        assertEquals(0.3, JSONArray(scannedPalletRegistrationJson(listOf(rounded)))
+            .getJSONObject(0).getJSONArray("steps").getJSONObject(0).getDouble("baseQuantity"), 0.0)
+    }
+
+    @Test fun `empty duplicate or invalid registration plans cannot be sent`() {
+        val plan = buildPalletPickPlan(line(), 15.0, response().toString())
+        for (plans in listOf(emptyList(), listOf(plan, plan), listOf(plan.copy(steps = emptyList())),
+            listOf(plan.copy(steps = listOf(plan.steps.first().copy(baseQuantity = Double.NaN)))))) {
+            assertThrows(IllegalArgumentException::class.java) { scannedPalletRegistrationJson(plans) }
+        }
+    }
+
     private fun line(no: Int = 10000) = JSONObject("""{
         "no":"PI001", "lineNo":$no, "itemNo":"ITEM", "variantCode":"", "locationCode":"BADE",
         "binCode":"A-01", "lotNo":"LOT-A", "serialNo":"", "unitOfMeasureCode":"KOLI", "qtyOutstanding":15
