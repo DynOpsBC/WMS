@@ -14,6 +14,18 @@ codeunit 72034 "DOPSWHS Upgrade"
         tabledata "Item Ledger Entry" = rm,
         tabledata "Value Entry" = rm;
 
+    /// <summary>
+    /// Refuses to upgrade a company that carries another customer's edition
+    /// (BADE tenant with an EMU package or vice versa). Business Central rolls
+    /// the whole upgrade back, so the previous package stays installed.
+    /// </summary>
+    trigger OnCheckPreconditionsPerCompany()
+    var
+        Edition: Codeunit "DOPSWHS Edition";
+    begin
+        Edition.AssertCompatible();
+    end;
+
     trigger OnUpgradePerDatabase()
     var
         ModuleInfo: ModuleInfo;
@@ -42,12 +54,14 @@ codeunit 72034 "DOPSWHS Upgrade"
         SetupWizard: Codeunit "DOPSWHS Setup Wizard";
         PrintCleanup: Codeunit "DOPSWHS Print Queue Cleanup";
         AzurePrintWorker: Codeunit "DOPSWHS Azure Print Worker";
+        Edition: Codeunit "DOPSWHS Edition";
         ModuleInfo: ModuleInfo;
     begin
         if not Setup.Get('') then begin
             Setup.Init();
             Setup.Insert(true);
         end;
+        Edition.Stamp(Setup);
         if not Cue.Get('') then begin
             Cue.Init();
             Cue.Insert(true);
