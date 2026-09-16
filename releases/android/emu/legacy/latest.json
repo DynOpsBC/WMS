@@ -1,7 +1,7 @@
 {
-  "versionCode": 200110,
-  "versionName": "1.14.110-emu",
-  "apkUrl": "https://github.com/DynOpsBC/WMS/releases/download/android-emu-legacy-v1.14.110/BCWMS-EMU-1.14.110-UYUMLU.apk",
-  "sha256": "071a911529367f7093f94453b5b95d2f0dcd29d67192376db6e6794d72f6ae60",
-  "releaseNotes": "EMU 1.14.110 eski imzalı cihazlarla uyumlu güncelleme. Uygulamayı kaldırmadan kurun. Ortak terminal düzeltmeleri; EMU mevcut BC ayarını kullanır. BC lot filtresi ayrıca BC paketi gerektirir; çoklu palet BC kayıt kontrolü henüz tamamlanmadı."
+  "versionCode": 200118,
+  "versionName": "1.14.118-emu",
+  "apkUrl": "https://github.com/DynOpsBC/WMS/releases/download/android-emu-legacy-v1.14.118/BCWMS-EMU-1.14.118-UYUMLU.apk",
+  "sha256": "6527263cdf7829ed347d0662dcac8d4ed273086868432991e84a0e22e452e34e",
+  "releaseNotes": "Ürün/Raf Sorgu etiketi seçili etiket yazıcısına gider. BC 1.14.2.1 ile etiketler Kurulum'daki rulo ölçüsüne (80x40 mm) göre basılır. Eski imzalı cihazlar için uyumlu paket."
 }
