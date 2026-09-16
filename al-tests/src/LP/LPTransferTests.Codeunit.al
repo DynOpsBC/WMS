@@ -23,6 +23,36 @@ codeunit 72114 "DOPSWHS LP Transfer Tests"
     end;
 
     [Test]
+    procedure FullTransferMovesEveryLineOfAMultiLineLp()
+    var
+        SourceLP: Record "DOPSWHS LP Header";
+        TargetLP: Record "DOPSWHS LP Header";
+        Line: Record "DOPSWHS LP Line";
+        Lines: List of [Integer];
+        QtyByLine: Dictionary of [Integer, Decimal];
+        LPMgt: Codeunit "DOPSWHS LP Management";
+        Assert: Codeunit "Library Assert";
+    begin
+        // 16 Eyl 2026: the second line reused the first target "Line No." and the
+        // whole transfer failed with "record already exists".
+        Seed();
+        LPMgt.Build('CARTON-S', 'BLUE', 'PICK', SourceLP);
+        LPMgt.AddLine(SourceLP, 'ITEMY', 'PCS', 10, 'LOT-A', '', 0D);
+        LPMgt.AddLine(SourceLP, 'ITEMY', 'PCS', 5, 'LOT-B', '', 0D);
+        LPMgt.Stop(SourceLP, false);
+        BuildEmptyBuiltLP(TargetLP);
+        Line.SetRange("LP No.", SourceLP."No.");
+        Line.FindSet();
+        repeat
+            Lines.Add(Line."Line No.");
+        until Line.Next() = 0;
+        LPMgt.Transfer(SourceLP, TargetLP, Lines, QtyByLine);
+        Assert.AreEqual(0, CountLines(SourceLP."No."), 'Source should have no remaining lines.');
+        Assert.AreEqual(2, CountLines(TargetLP."No."), 'Target must receive both lines.');
+        Assert.AreEqual(15, GetLPQty(TargetLP."No."), 'Target should receive the full quantity of both lines.');
+    end;
+
+    [Test]
     procedure PartialLineTransferMovesSubsetOfQuantity()
     var
         SourceLP: Record "DOPSWHS LP Header";

@@ -646,6 +646,10 @@ codeunit 72040 "DOPSWHS LP Management"
             if (TransferQty <= 0) or (TransferQty > SourceLine.Quantity) then
                 Error('%1 satırı için transfer miktarı geçersizdir.', LineNo);
 
+            // Init() keeps the primary key: without Clear the second line of a
+            // multi-line transfer reused the first "Line No." and the whole
+            // transfer rolled back with "record already exists" (16 Eyl 2026).
+            Clear(TargetLine);
             TargetLine.Init();
             TargetLine."LP No." := TargetLP."No.";
             TargetLine.Validate("Item No.", SourceLine."Item No.");
@@ -731,6 +735,10 @@ codeunit 72040 "DOPSWHS LP Management"
         // Loose stock has no source LP to split. It still has to be recorded in
         // the shipping LP so shipment posting consumes the container actually sent.
         if SourceLpNo = '' then begin
+            // Init() keeps the primary key: without Clear the second line of a
+            // multi-line transfer reused the first "Line No." and the whole
+            // transfer rolled back with "record already exists" (16 Eyl 2026).
+            Clear(TargetLine);
             TargetLine.Init();
             TargetLine."LP No." := TargetLP."No.";
             TargetLine.Validate("Item No.", ItemNo);
@@ -797,6 +805,7 @@ codeunit 72040 "DOPSWHS LP Management"
                     TransferBaseQty := RemainingBaseQty;
                 TransferQty := Round(TransferBaseQty / QtyPerUoM, 0.00001);
                 if TransferQty > 0 then begin
+                    Clear(TargetLine);
                     TargetLine.Init();
                     TargetLine."LP No." := TargetLP."No.";
                     TargetLine.Validate("Item No.", SourceLine."Item No.");

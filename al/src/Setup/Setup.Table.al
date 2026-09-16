@@ -351,6 +351,16 @@ table 72000 "DOPSWHS Setup"
             DecimalPlaces = 0 : 1;
             MinValue = 0;
         }
+        field(470; "Installed Edition"; Code[10])
+        {
+            // Stamped by install/upgrade with codeunit "DOPSWHS Edition".Current()
+            // (BASE / BADE / EMU). The upgrade codeunit refuses a package of another
+            // edition, so a customer tenant can no longer be "upgraded" with the
+            // other customer's build (same app id, higher version). 16 Eyl 2026.
+            Caption = 'Installed Edition';
+            DataClassification = SystemMetadata;
+            Editable = false;
+        }
     }
 
     keys
