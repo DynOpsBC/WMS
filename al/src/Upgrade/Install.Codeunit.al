@@ -21,11 +21,13 @@ codeunit 72033 "DOPSWHS Install"
         License: Codeunit "DOPSWHS License Mgmt";
         PrintCleanup: Codeunit "DOPSWHS Print Queue Cleanup";
         AzurePrintWorker: Codeunit "DOPSWHS Azure Print Worker";
+        Edition: Codeunit "DOPSWHS Edition";
     begin
         if not Setup.Get('') then begin
             Setup.Init();
             Setup.Insert(true);
         end;
+        Edition.Stamp(Setup);
         if not Cue.Get('') then begin
             Cue.Init();
             Cue.Insert(true);

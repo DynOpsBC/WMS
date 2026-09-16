@@ -14,6 +14,12 @@ page 72061 "DOPSWHS Setup"
         {
             group(General)
             {
+                field("Installed Edition"; Rec."Installed Edition")
+                {
+                    ApplicationArea = All;
+                    Editable = false;
+                    ToolTip = 'Bu ortama kurulu BCWMS müşteri sürümü (BASE / BADE / EMU). Paket yüklerken bu değerle eşleşmeyen sürüm reddedilir.';
+                }
                 field("LP No. Series"; Rec."LP No. Series")
                 {
                     ApplicationArea = All;
