@@ -1,6 +1,6 @@
 # EMU / DKÇ 1.14.118 — Etiketler rulo ölçüsüne göre (80x40 mm), sorgu etiketi yazıcı düzeltmesi
 
-Android sürümü: **1.14.118-emu**, versionCode **200118**. BC paketi: **BCWMSApp 1.14.2.3** (EMU dalı 1.14.2.x).
+Android sürümü: **1.14.118-emu**, versionCode **200118**. BC paketi: **BCWMSApp 1.14.2.4** (EMU dalı 1.14.2.x).
 Dal: `customer/emu`. BADE dalına ve yayınlarına dokunulmadı.
 
 ## Neden
@@ -62,10 +62,14 @@ verilmez"). Alan artık ana şemada; 1.14.2.2 BADE 1.14.1.39/40 üzerine yüklen
 
 ## Kurulum sırası
 
-1. BC: `BCWMSApp-1.14.2.3.zip` içindeki .app'i DKÇ ortamına yükleyin (1.14.2.0 üzerine).
+1. BC: `BCWMSApp-1.14.2.4.zip` içindeki .app'i DKÇ ortamına yükleyin (1.14.2.0 üzerine).
 2. Kurulum → Etiket Rulosu: 80 / 40 (ya da gerçek ölçü).
 3. Terminal: `BCWMS-EMU-1.14.118-RELEASE.apk` (kanal ilerletilince uygulama içi güncelleme).
 
 ## BC 1.14.2.3 (16 Eyl, 16:05)
 
 Ürün etiketinde QR altındaki "QR = ÜRÜN NO" yazısı kaldırıldı; QR biraz daha büyük basılabiliyor. Başka değişiklik yok.
+
+## BC 1.14.2.4 (16 Eyl, 16:10)
+
+BC sayfalarından etiket basma: **Bin List → Raf Etiketi Yazdır** ve **Item List → Ürün Etiketi Yazdır** (codeunit 72325). Aktif ZPL yazıcılar arasından seçim yapılır (tek yazıcı varsa sorulmaz); çıktı terminaldeki Raf/Ürün Sorgu etiketiyle aynıdır ve yazıcının istasyonuna gider.
