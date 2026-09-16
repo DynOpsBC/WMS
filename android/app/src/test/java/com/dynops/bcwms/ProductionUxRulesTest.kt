@@ -145,6 +145,17 @@ class ProductionUxRulesTest {
     }
 
     @Test
+    fun `license guard errors tell the operator that the license lapsed`() {
+        val v = operatorFacingApiError("License is not active (Expired). Verification failed (expired)  CorrelationId:  aa-bb.", 400)
+        assertTrue(v, v.startsWith("HATA: BCWMS lisansı aktif değil (Expired): Verification failed (expired). Yöneticiniz BC Kurulum"))
+        assertFalse(v.contains("CorrelationId"))
+        val tier = operatorFacingApiError("Feature PrintBridge requires the Advanced tier. Current license: Essentials.", 400)
+        assertTrue(tier, tier.contains("PrintBridge için Advanced paketi gerekir (mevcut: Essentials)"))
+        val seats = operatorFacingApiError("License seat limit reached (5 of 5). Upgrade the license or remove inactive devices.", 400)
+        assertTrue(seats, seats.contains("cihaz sınırı doldu (5/5)"))
+    }
+
+    @Test
     fun `missing LP or overlong value errors name the record and value`() {
         val lp = operatorFacingApiError(
             "The DOPSWHS LP Header does not exist. Identification fields and values: No.='LP00099'  CorrelationId:  aa-bb.",

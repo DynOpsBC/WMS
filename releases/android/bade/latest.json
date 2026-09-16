@@ -2,6 +2,6 @@
   "versionCode": 200121,
   "versionName": "1.14.121-bade",
   "apkUrl": "https://github.com/DynOpsBC/WMS/releases/download/android-v1.14.121/BCWMS-BADE-1.14.121-RELEASE.apk",
-  "sha256": "d9bbe9e4483c6284c916f5c2ac268aff47c340158cdc177f52803da9224631a4",
-  "releaseNotes": "Boşalan LP Kullanıldı olur; tam palet Hedef LP açmadan sevk edilir; sevk LP satırında Kaynak LP; Ürün Sorgu LP'de Raf/Alan; Lot No Ata lotu kilitli; mal kabul etiketi Kurulum ayarıyla Etiket Yazdır ile basılır. BC 1.14.1.42 gerekir."
+  "sha256": "bde51815ebd693fc126e24ef1cf40b56af0cafa9827718bebb0873395e2a71ea",
+  "releaseNotes": "Boşalan LP Kullanıldı olur; tam palet Hedef LP açmadan sevk edilir; sevk LP satırında Kaynak LP; Ürün Sorgu LP'de Raf/Alan; Lot No Ata lotu kilitli; mal kabul etiketi Kurulum ayarıyla Etiket Yazdır ile basılır. BC 1.14.1.42 gerekir. Lisans hataları ekranda açık Türkçe."
 }

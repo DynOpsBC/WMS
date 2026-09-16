@@ -110,8 +110,11 @@ codeunit 72082 "DOPSWHS License Mgmt"
         Setup: Record "DOPSWHS Setup";
         Tier: Enum "DOPSWHS License Tier";
         Required: Enum "DOPSWHS License Tier";
-        ErrFeatureBlockedLbl: Label 'Feature %1 requires the %2 tier. Current license: %3.', Comment = '%1=feature, %2=required tier, %3=current tier';
-        ErrLicenseInactiveLbl: Label 'License is not active (%1). %2', Comment = '%1=status, %2=message';
+        // BADE 16 Eyl 2026: these errors stop every print/bridge action; the
+        // terminal masked the English text as a REF code and nobody saw that
+        // the license had lapsed. Operator-facing Turkish with the next step.
+        ErrFeatureBlockedLbl: Label 'BCWMS lisansı bu özelliği kapsamıyor: %1 için %2 paketi gerekir (mevcut: %3). Yöneticiniz lisans paketini yükseltmeli.', Comment = '%1=feature, %2=required tier, %3=current tier';
+        ErrLicenseInactiveLbl: Label 'BCWMS lisansı aktif değil (%1): %2 Yöneticiniz BC Kurulum kartında Lisans bölümünden "Şimdi Doğrula" çalıştırmalı; süresi dolmuşsa DynamicsOps lisansı yenilemeli.', Comment = '%1=status, %2=message';
     begin
         EnsureRecentVerify();
         if not Setup.Get('') then exit;

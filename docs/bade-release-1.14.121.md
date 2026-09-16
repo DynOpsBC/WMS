@@ -78,3 +78,12 @@ isteniyorsa ILE yerine Satış İrsaliyesi Satırları ya da Posted Whse. Shipme
 ## Dosyalar
 
 `output/release-bade-1.14.121/`: `BCWMS-BADE-1.14.121-RELEASE.apk`, `BCWMSApp-1.14.1.42.zip`, `latest.json`, `SHA256SUMS.txt`.
+
+## Ek (16 Eyl 15:50): lisans hatası artık açık yazılır
+
+Merve'nin LP000026 fotoğrafları (Seçilenleri Yazdır ve MTE Yazdır, ikisi de REF) MTE'ye özgü olmadığını gösterdi:
+tüm baskı yolları Azure'a çıkmadan `License Mgmt.GuardFeature(PrintBridge)` adımında kesiliyor olabilir. Eski metin
+("License is not active (Expired). Verification failed (expired)") İngilizce olduğu için REF'e dönüşüyordu.
+BC 1.14.1.42: lisans hataları Türkçe ve yönlendirici ("BCWMS lisansı aktif değil (…): … Kurulum → Lisans → Şimdi Doğrula").
+Terminal 1.14.121: eski BC metinleri de aynı Türkçe mesaja eşlenir (aktif değil / paket yetersiz / cihaz sınırı).
+Sahada ilk kontrol: BC → BCWMS Kurulum → Lisans bölümü → Lisans Durumu ve Durum Mesajı.

@@ -264,6 +264,18 @@ fun operatorReportRenderError(raw: String): String? {
 
 /** Sık görülen İngilizce BC iş kuralı hataları → eyleme dönük Türkçe metin (null = eşleşme yok). */
 fun operatorKnownBcError(raw: String): String? {
+    // BADE 16 Eyl 2026: lisans süresi dolunca tüm baskı yolları bu İngilizce
+    // metinle düşüyordu ve ekranda yalnız REF kodu kalıyordu.
+    Regex("""License is not active \((\w+)\)\.?\s*(.*?)\s*(?:CorrelationId|$)""", RegexOption.IGNORE_CASE).find(raw)?.let {
+        val detail = it.groupValues[2].trim().trimEnd('.')
+        return "BCWMS lisansı aktif değil (${it.groupValues[1]})${if (detail.isNotBlank()) ": $detail" else ""}. Yöneticiniz BC Kurulum → Lisans → Şimdi Doğrula çalıştırmalı; süresi dolmuşsa DynamicsOps lisansı yenilemeli."
+    }
+    Regex("""Feature (\w+) requires the (\w+) tier\. Current license: (\w+)""", RegexOption.IGNORE_CASE).find(raw)?.let {
+        return "BCWMS lisansı bu özelliği kapsamıyor: ${it.groupValues[1]} için ${it.groupValues[2]} paketi gerekir (mevcut: ${it.groupValues[3]}). Yöneticiniz lisans paketini yükseltmeli."
+    }
+    Regex("""License seat limit reached \((\d+) of (\d+)\)""", RegexOption.IGNORE_CASE).find(raw)?.let {
+        return "BCWMS lisans cihaz sınırı doldu (${it.groupValues[1]}/${it.groupValues[2]}). Yöneticiniz pasif cihazları kaldırmalı ya da lisansı büyütmeli."
+    }
     Regex("""You do not have the following permissions on (\w+) (.+?): (\w+)""", RegexOption.IGNORE_CASE).find(raw)?.let {
         val (objType, objName, perm) = it.destructured
         return "Terminal kullanıcısının BC'de '$objName' ($objType) nesnesi için $perm yetkisi yok. Yöneticiniz ilgili yetki setini (ör. müşteri raporu uzantısı) BC kullanıcısına eklemeli."
