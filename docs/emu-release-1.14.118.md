@@ -1,6 +1,6 @@
 # EMU / DKÇ 1.14.118 — Etiketler rulo ölçüsüne göre (80x40 mm), sorgu etiketi yazıcı düzeltmesi
 
-Android sürümü: **1.14.118-emu**, versionCode **200118**. BC paketi: **BCWMSApp 1.14.2.1** (EMU dalı 1.14.2.x).
+Android sürümü: **1.14.118-emu**, versionCode **200118**. BC paketi: **BCWMSApp 1.14.2.2** (EMU dalı 1.14.2.x).
 Dal: `customer/emu`. BADE dalına ve yayınlarına dokunulmadı.
 
 ## Neden
@@ -44,6 +44,13 @@ DKÇ'deki Zebra ZD230'a takılı rulo 80 x 40 mm; bütün terminal etiketleri 4x
    aralığını öğrensin.
 3. Rulo 80x40 değilse Kurulum'daki iki değeri gerçek ölçüyle değiştirin.
 
+## BC 1.14.2.2 (16 Eyl, 15:50) — DKC Production'a yüklenebilir sürüm
+
+DKC Production'a yanlışlıkla BADE paketi yüklenmişti; onun Kurulum tablosundaki "MTE Report ID"
+alanı EMU paketinde olmadığı için BC 1.14.2.1 yükseltmesini reddetti ("Alanların kaldırılmasına izin
+verilmez"). Alan artık ana şemada; 1.14.2.2 BADE 1.14.1.39/40 üzerine yüklenir. Kurulum kartına
+"Allow Edition Change" eklendi: ortamda BADE damgası varsa önce bunu işaretleyin.
+
 ## Kurulum emniyeti ve genel düzeltmeler (14:15)
 
 - Kurulum kartında **Installed Edition** (= EMU). BADE paketi (1.14.1.x) bu ortama yüklenemez; EMU
@@ -55,6 +62,6 @@ DKÇ'deki Zebra ZD230'a takılı rulo 80 x 40 mm; bütün terminal etiketleri 4x
 
 ## Kurulum sırası
 
-1. BC: `BCWMSApp-1.14.2.1.zip` içindeki .app'i DKÇ ortamına yükleyin (1.14.2.0 üzerine).
+1. BC: `BCWMSApp-1.14.2.2.zip` içindeki .app'i DKÇ ortamına yükleyin (1.14.2.0 üzerine).
 2. Kurulum → Etiket Rulosu: 80 / 40 (ya da gerçek ölçü).
 3. Terminal: `BCWMS-EMU-1.14.118-RELEASE.apk` (kanal ilerletilince uygulama içi güncelleme).
