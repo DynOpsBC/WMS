@@ -343,6 +343,14 @@ table 72000 "DOPSWHS Setup"
             DataClassification = SystemMetadata;
             Editable = false;
         }
+        field(480; "Allow Edition Change"; Boolean)
+        {
+            // Escape hatch for the edition guard: an admin ticks this before
+            // deliberately moving a company to another edition (e.g. a tenant
+            // that received the wrong customer package). Cleared by the stamp.
+            Caption = 'Allow Edition Change';
+            DataClassification = SystemMetadata;
+        }
     }
 
     keys

@@ -20,6 +20,11 @@ page 72061 "DOPSWHS Setup"
                     Editable = false;
                     ToolTip = 'Bu ortama kurulu BCWMS müşteri sürümü (BASE / BADE / EMU). Paket yüklerken bu değerle eşleşmeyen sürüm reddedilir.';
                 }
+                field("Allow Edition Change"; Rec."Allow Edition Change")
+                {
+                    ApplicationArea = All;
+                    ToolTip = 'Bilinçli olarak başka bir müşteri sürümüne geçilecekse (yanlış paket yüklenmiş ortamı düzeltmek gibi) yükseltmeden önce işaretleyin. Yükseltme tamamlanınca kendiliğinden kapanır.';
+                }
                 field("LP No. Series"; Rec."LP No. Series")
                 {
                     ApplicationArea = All;
