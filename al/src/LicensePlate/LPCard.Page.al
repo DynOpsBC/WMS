@@ -59,4 +59,32 @@ page 72069 "DOPSWHS LP Card"
             }
         }
     }
+
+    actions
+    {
+        area(Processing)
+        {
+            action(PrintMteTerminalPath)
+            {
+                // BADE 16 Eyl 2026: the terminal masks BC errors behind a REF
+                // code. This runs the very same MTE path the terminal uses
+                // (device printer mapping of the current user, built-in or
+                // customer report / ZPL) so the admin sees the raw BC error here.
+                ApplicationArea = All;
+                Caption = 'MTE Yazdır (terminal yolu)';
+                ToolTip = 'Terminalin "MTE Yazdır" ile çalıştırdığı baskı yolunu bu kullanıcının yazıcı eşlemesiyle çalıştırır. Terminalde REF kodu görünen hata burada tam metniyle görünür.';
+                Image = Print;
+                Promoted = true;
+                PromotedCategory = Process;
+
+                trigger OnAction()
+                var
+                    Dispatcher: Codeunit "DOPSWHS Print Dispatcher";
+                begin
+                    Dispatcher.PrintPalletItemLabelsWithOptions(Rec, '', 1, '');
+                    Message('MTE baskı isteği gönderildi: %1', Rec."No.");
+                end;
+            }
+        }
+    }
 }
