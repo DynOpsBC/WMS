@@ -114,6 +114,27 @@ internal fun countV2ManualCandidate(resolved: ResolvedBarcode): CountV2ManualCan
     )
 }
 
+/**
+ * BADE (16 Eyl 2026, Merve): BC'de bu rafta olmayan ürün için, ürünün BC'de
+ * kayıtlı olduğu diğer rafları operatöre söyler. Kayıtta (Kurulum "Count
+ * Relocates Found Stock" açıksa) stok o raflardan buraya taşınır.
+ */
+internal fun unexpectedStockHint(activeBin: String, otherBinRows: List<JSONObject>): String {
+    val others = otherBinRows
+        .filter { it.optDouble("quantity", 0.0) > 0.0 && !it.optString("binCode").equals(activeBin, ignoreCase = true) }
+        .groupBy { it.optString("binCode") }
+        .map { (bin, rows) -> bin to rows.sumOf { it.optDouble("quantity", 0.0) } }
+        .sortedByDescending { it.second }
+    if (others.isEmpty())
+        return "Bu ürün BC'de bu lokasyonun hiçbir rafında kayıtlı değil. Bulduğunuz miktarı girin; kayıtta artı sayım farkı olur."
+    val shown = others.take(3).joinToString(", ") { (bin, qty) -> "$bin (${formatCountV2Quantity(qty)})" }
+    val more = if (others.size > 3) " +${others.size - 3} raf" else ""
+    return "BC'de $shown$more rafında kayıtlı. Burada bulduğunuz miktarı girin; kayıtta stok o raftan bu rafa taşınır."
+}
+
+internal fun formatCountV2Quantity(value: Double): String =
+    if (value.isFinite() && value == value.toLong().toDouble()) value.toLong().toString() else value.toString()
+
 /** Donanım/kamera aynı decode olayını art arda yayarsa miktarın iki kez eklenmesini önler. */
 internal fun isRapidCountV2Duplicate(
     previousRaw: String,

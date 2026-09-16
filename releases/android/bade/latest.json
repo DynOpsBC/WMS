@@ -1,7 +1,7 @@
 {
-  "versionCode": 200121,
-  "versionName": "1.14.121-bade",
-  "apkUrl": "https://github.com/DynOpsBC/WMS/releases/download/android-v1.14.121/BCWMS-BADE-1.14.121-RELEASE.apk",
-  "sha256": "bde51815ebd693fc126e24ef1cf40b56af0cafa9827718bebb0873395e2a71ea",
-  "releaseNotes": "Boşalan LP Kullanıldı olur; tam palet Hedef LP açmadan sevk edilir; sevk LP satırında Kaynak LP; Ürün Sorgu LP'de Raf/Alan; Lot No Ata lotu kilitli; mal kabul etiketi Kurulum ayarıyla Etiket Yazdır ile basılır. BC 1.14.1.42 gerekir. Lisans hataları ekranda açık Türkçe."
+  "versionCode": 200122,
+  "versionName": "1.14.122-bade",
+  "apkUrl": "https://github.com/DynOpsBC/WMS/releases/download/android-v1.14.122/BCWMS-BADE-1.14.122-RELEASE.apk",
+  "sha256": "7e48d58f8be4429f5510ac926ba1765d293cb7bf0f1691d8a066be57dd436932",
+  "releaseNotes": "Sayım: BC'de o rafta olmayan ürün okutulduğunda ürünün kayıtlı olduğu raflar gösterilir; Kurulum 'Count Relocates Found Stock' açıksa kayıtta stok o raftan bu rafa taşınır. BC 1.14.1.47 gerekir."
 }

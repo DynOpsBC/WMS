@@ -1499,6 +1499,12 @@ codeunit 72040 "DOPSWHS LP Management"
 
     end;
 
+    /// <summary>Loose (non-LP, non-allocated) base quantity of an item/lot in a bin.</summary>
+    procedure LooseBaseQtyAvailable(LocationCode: Code[10]; BinCode: Code[20]; ItemNo: Code[20]; LotNo: Code[50]; SerialNo: Code[50]): Decimal
+    begin
+        exit(LooseStockAvailableInBin(LocationCode, BinCode, ItemNo, LotNo, SerialNo));
+    end;
+
     local procedure LooseStockAvailableInBin(LocationCode: Code[10]; BinCode: Code[20]; ItemNo: Code[20]; LotNo: Code[50]; SerialNo: Code[50]): Decimal
     var
         BinQtyBase: Decimal;

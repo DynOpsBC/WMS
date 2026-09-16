@@ -80,6 +80,11 @@ page 72061 "DOPSWHS Setup"
                     ApplicationArea = All;
                     ToolTip = 'Ayarlanırsa, mal kabulde seri boş bırakılınca otomatik seri numarası üretilir. Boş = elle giriş.';
                 }
+                field("Count Relocates Found Stock"; Rec."Count Relocates Found Stock")
+                {
+                    ApplicationArea = All;
+                    ToolTip = 'Açık: sayımda BC''de o rafta kayıtlı olmayan bir ürün bulunursa kayıt sırasında stok, BC''nin tuttuğu (sayım kapsamı dışındaki) raflardan bu rafa taşınır; yalnız kalan fark artı düzeltme olur. Kapalı (varsayılan): bulunan miktar artı düzeltme olur, eski raf değişmez.';
+                }
                 field("Terminal Count Posting"; Rec."Terminal Count Posting")
                 {
                     ApplicationArea = All;

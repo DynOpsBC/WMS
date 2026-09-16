@@ -26,7 +26,7 @@ codeunit 72320 "DOPSWHS MTE Zpl Builder"
         tabledata Employee = R,
         tabledata "Company Information" = R;
 
-    // 100 x 80 mm at 203 dpi.
+    // 100 x 150 mm at 203 dpi (4 x 6 inch standard warehouse label).
     var
         LabelWidth: Integer;
         LabelHeight: Integer;
@@ -62,7 +62,7 @@ codeunit 72320 "DOPSWHS MTE Zpl Builder"
         CompanyText: Text;
     begin
         LabelWidth := 812;
-        LabelHeight := 640;
+        LabelHeight := 1218;
         if (OptionsJson <> '') and not Options.ReadFrom(OptionsJson) then
             Clear(Options);
 
@@ -115,42 +115,43 @@ codeunit 72320 "DOPSWHS MTE Zpl Builder"
         // Frame and header
         // ------------------------------------------------------------------
         Zpl := '^XA^CI28^PW' + Format(LabelWidth) + '^LL' + Format(LabelHeight) +
-            Box(6, 6, 800, 628, 3) +
-            Text(16, 24, 26, 26, 240, 0, CompanyText) +
-            Text(250, 20, 34, 30, 550, 1, 'MADDE TANIMLAMA ETİKETİ') +
-            Line(6, 68, 800, 3);
+            Box(6, 6, 800, 1206, 3) +
+            Text(16, 32, 28, 26, 240, 0, CompanyText) +
+            Text(250, 26, 38, 34, 550, 1, 'MADDE TANIMLAMA ETİKETİ') +
+            Line(6, 90, 800, 3);
 
         // ------------------------------------------------------------------
         // Rows (column A labels 200 wide, B values 220, C labels 170, D values 210)
         // ------------------------------------------------------------------
-        Zpl += Row4(70, 'MADDE KODU', ItemNo, 'MADDE KATEGORİSİ', UY(CategoryText)) +
-            Row2(104, 'MADDE ADI', UY(ItemName)) +
-            Row2(138, 'INCI ADI', UY(InciName)) +
-            Row2(172, 'TEDARİKÇİ ADI', UY(VendorName)) +
-            Row2(206, 'TEDARİKÇİ LOTU', UY(SupplierLot)) +
-            Row4(240, 'ÜRETİM TARİHİ', UY(ProductionDate), 'LOT NO', UY(LotNo)) +
-            Row4(274, 'SON KULLANMA TARİHİ', UY(ExpirationDate), 'MİKTAR/BİRİM', QtyText) +
-            // Left half rows 8..15 beside the decision/QR block.
-            RowLeft(308, 34, 'DEPOLAMA KOŞULU', UY(StorageText)) +
-            RowLeft(342, 34, 'DEPO GİRİŞ TARİHİ', UY(ReceiptDate)) +
-            RowLeft(376, 34, 'DEPO GİRİŞ NO.', UY(ReceiptNo)) +
-            RowLeft(410, 34, 'GİRİŞ YAPAN', UY(InspectorText)) +
-            Cell(6, 444, 420, 34, 18, 18, 1, 'KALİTE KONTROL ONAYI') +
-            RowLeft(478, 34, 'KONTROL EDEN', UY(QcName)) +
-            RowLeft(512, 34, 'TARİH', UY(QcDate)) +
-            RowLeft(546, 50, 'İMZA', '');
+        Zpl += Row4(92, 58, 'MADDE KODU', ItemNo, 'MADDE KATEGORİSİ', UY(CategoryText)) +
+            Row2(150, 58, 'MADDE ADI', UY(ItemName)) +
+            Row2(208, 58, 'INCI ADI', UY(InciName)) +
+            Row2(266, 58, 'TEDARİKÇİ ADI', UY(VendorName)) +
+            Row2(324, 58, 'TEDARİKÇİ LOTU', UY(SupplierLot)) +
+            Row4(382, 58, 'ÜRETİM TARİHİ', UY(ProductionDate), 'LOT NO', UY(LotNo)) +
+            Row4(440, 58, 'SON KULLANMA TARİHİ', UY(ExpirationDate), 'MİKTAR/BİRİM', QtyText) +
+            // Left half rows 8..15 beside the decision/QR block (Y: 498..1146).
+            RowLeft(498, 64, 'DEPOLAMA KOŞULU', UY(StorageText)) +
+            RowLeft(562, 64, 'DEPO GİRİŞ TARİHİ', UY(ReceiptDate)) +
+            RowLeft(626, 64, 'DEPO GİRİŞ NO.', UY(ReceiptNo)) +
+            RowLeft(690, 64, 'GİRİŞ YAPAN', UY(InspectorText)) +
+            Cell(6, 754, 420, 64, 24, 24, 1, 'KALİTE KONTROL ONAYI') +
+            RowLeft(818, 64, 'KONTROL EDEN', UY(QcName)) +
+            RowLeft(882, 64, 'TARİH', UY(QcDate)) +
+            RowLeft(946, 200, 'İMZA', '');
 
-        // Decision boxes and QR (x 426..806, y 308..596).
-        Zpl += Cell(426, 308, 130, 96, 22, 22, 1, 'KABUL') +
-            Cell(426, 404, 130, 96, 22, 22, 1, 'RED') +
-            Cell(426, 500, 130, 96, 20, 20, 1, 'KARANTİNA') +
-            Box(556, 308, 250, 288, 2) +
-            Qr(586, 322, 7, QrData) +
-            Text(556, 560, 24, 24, 250, 1, QrData);
+        // Decision boxes (x 426..556, y 498..1146) and QR (x 556..806, y 498..1146).
+        Zpl += Cell(426, 498, 130, 216, 32, 32, 1, 'KABUL') +
+            Cell(426, 714, 130, 216, 32, 32, 1, 'RED') +
+            Cell(426, 930, 130, 216, 26, 26, 1, 'KARANTİNA') +
+            Box(556, 498, 250, 648, 2) +
+            Text(556, 570, 28, 26, 250, 1, 'PALET / LP NO') +
+            Qr(565, 640, 8, QrData) +
+            Text(556, 940, 36, 34, 250, 1, QrData);
 
-        // Footer
-        Zpl += Cell(6, 596, 420, 38, 16, 16, 0, 'DOKÜMAN NO. / REVİZYON NO. / REVİZYON TARİHİ') +
-            Cell(426, 596, 380, 38, 18, 18, 1, UY(DocumentNo) + ' / ' + UY(RevisionNo) + ' / ' + UY(RevisionDate)) +
+        // Footer (Y: 1146..1212)
+        Zpl += Cell(6, 1146, 420, 66, 18, 18, 0, 'DOKÜMAN NO. / REVİZYON NO. / REVİZYON TARİHİ') +
+            Cell(426, 1146, 380, 66, 22, 22, 1, UY(DocumentNo) + ' / ' + UY(RevisionNo) + ' / ' + UY(RevisionDate)) +
             '^XZ';
         exit(Zpl);
     end;
@@ -395,27 +396,27 @@ codeunit 72320 "DOPSWHS MTE Zpl Builder"
     // ZPL primitives
     // ------------------------------------------------------------------
 
-    local procedure Row4(Y: Integer; LabelA: Text; ValueB: Text; LabelC: Text; ValueD: Text): Text
+    local procedure Row4(Y: Integer; Height: Integer; LabelA: Text; ValueB: Text; LabelC: Text; ValueD: Text): Text
     begin
         exit(
-            Cell(6, Y, 200, 34, 18, 16, 0, LabelA) +
-            Cell(206, Y, 220, 34, 20, 20, 0, ValueB) +
-            Cell(426, Y, 170, 34, 18, 16, 0, LabelC) +
-            Cell(596, Y, 210, 34, 20, 20, 0, ValueD));
+            Cell(6, Y, 200, Height, 22, 20, 0, LabelA) +
+            Cell(206, Y, 220, Height, 24, 22, 0, ValueB) +
+            Cell(426, Y, 170, Height, 22, 20, 0, LabelC) +
+            Cell(596, Y, 210, Height, 24, 22, 0, ValueD));
     end;
 
-    local procedure Row2(Y: Integer; LabelA: Text; Value: Text): Text
+    local procedure Row2(Y: Integer; Height: Integer; LabelA: Text; Value: Text): Text
     begin
         exit(
-            Cell(6, Y, 200, 34, 18, 16, 0, LabelA) +
-            Cell(206, Y, 600, 34, 20, 20, 0, Value));
+            Cell(6, Y, 200, Height, 22, 20, 0, LabelA) +
+            Cell(206, Y, 600, Height, 24, 22, 0, Value));
     end;
 
     local procedure RowLeft(Y: Integer; Height: Integer; LabelA: Text; Value: Text): Text
     begin
         exit(
-            Cell(6, Y, 200, Height, 18, 16, 0, LabelA) +
-            Cell(206, Y, 220, Height, 20, 20, 0, Value));
+            Cell(6, Y, 200, Height, 22, 20, 0, LabelA) +
+            Cell(206, Y, 220, Height, 24, 22, 0, Value));
     end;
 
     /// <summary>Boxed cell with one line of text, vertically centred; Align 1 = centred.</summary>

@@ -196,4 +196,18 @@ class CountV2WorkflowTest {
         assertTrue(COUNT_POSTED_IN_BC_NOTE.contains("stoklara işlenir"))
         assertFalse(COUNT_POSTED_IN_BC_NOTE.contains("REF-"))
     }
+
+    @Test
+    fun `unexpected stock hint names the bins where BC keeps the item`() {
+        val rows = listOf(
+            JSONObject().put("binCode", "A.B01.01").put("quantity", 500.0),
+            JSONObject().put("binCode", "A.B02.03").put("quantity", 20.0),
+            JSONObject().put("binCode", "K.K03.11").put("quantity", 0.0),
+        )
+        val hint = unexpectedStockHint("K.K03.11", rows)
+        assertTrue(hint, hint.startsWith("BC'de A.B01.01 (500), A.B02.03 (20) rafında kayıtlı."))
+        assertTrue(hint.contains("bu rafa taşınır"))
+        val none = unexpectedStockHint("K.K03.11", emptyList())
+        assertTrue(none, none.contains("hiçbir rafında kayıtlı değil"))
+    }
 }

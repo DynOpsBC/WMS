@@ -1486,6 +1486,11 @@ codeunit 72050 "DOPSWHS Count Mgmt"
         // Belge no izlenebilir olmalı: sayfa no zaten 'CNT-…' ile başlıyor;
         // ikinci bir önek 20 karakter sınırında son haneleri kırpıyordu
         // (CNT-CNT-202608291919 → farklı sayfalar çakışabilir).
+        // BADE (16 Eyl 2026): stock found where BC has none is first moved in
+        // from the bins BC still keeps it (outside this count), so a partial
+        // count relocates instead of duplicating. Setup switch, default off.
+        RelocateFoundStock(SheetNo, CountHeader);
+
         CountDocumentNo := CopyStr(SheetNo, 1, MaxStrLen(CountDocumentNo));
         Clear(ItemJournalLine);
         ItemJournalLine.SetRange("Journal Template Name", 'PHYS. INV.');
@@ -1564,6 +1569,159 @@ codeunit 72050 "DOPSWHS Count Mgmt"
     /// için günlük satırı üretilmez. Yönlendirilmiş olmayan lokasyonda no-op:
     /// orada Item Journal raf kodunu doğrudan taşır.
     /// </summary>
+    /// <summary>
+    /// BADE (16 Eyl 2026, Merve): a line with "Unexpected Stock" (BC had none in
+    /// that bin) is covered first by moving loose stock from the bins where BC
+    /// still records the same item/lot and that are NOT counted in this sheet.
+    /// The count line's System Qty grows by the moved quantity, so the phys.
+    /// inventory posting only books the remainder as a positive variance.
+    /// Moves run through the ad-hoc movement path (whse reclass on directed
+    /// locations, item reclass otherwise) inside the same transaction.
+    /// </summary>
+    local procedure RelocateFoundStock(SheetNo: Code[20]; CountHeader: Record "DOPSWHS Count Sheet Header")
+    var
+        Setup: Record "DOPSWHS Setup";
+        Location: Record Location;
+        CountLine: Record "DOPSWHS Count Sheet Line";
+        Item: Record Item;
+        ItemUom: Record "Item Unit of Measure";
+        MovementMgmt: Codeunit "DOPSWHS Movement Mgmt";
+        LPMgt: Codeunit "DOPSWHS LP Management";
+        SourceBins: List of [Code[20]];
+        SourceBin: Code[20];
+        QtyPerUoM: Decimal;
+        NeededBase: Decimal;
+        AvailableBase: Decimal;
+        MoveBase: Decimal;
+        MovedBase: Decimal;
+        MovedQty: Decimal;
+        Dimensions: Dictionary of [Text, Text];
+    begin
+        if not Setup.Get('') then
+            exit;
+        if not Setup."Count Relocates Found Stock" then
+            exit;
+        if not Location.Get(CountHeader."Location Code") then
+            exit;
+        if not Location."Bin Mandatory" then
+            exit;
+
+        CountLine.SetRange("Sheet No.", SheetNo);
+        CountLine.SetRange("Unexpected Stock", true);
+        CountLine.SetRange("LP No.", '');
+        CountLine.SetRange("Variant Code", '');
+        if not CountLine.FindSet(true) then
+            exit;
+        repeat
+            NeededBase := GetWinningQty(CountLine, SheetNo) - CountLine."System Qty";
+            if (NeededBase > 0) and (CountLine."Bin Code" <> '') and Item.Get(CountLine."Item No.") then begin
+                QtyPerUoM := 1;
+                if (CountLine."Unit of Measure Code" <> '') and (CountLine."Unit of Measure Code" <> Item."Base Unit of Measure") then
+                    if ItemUom.Get(CountLine."Item No.", CountLine."Unit of Measure Code") and (ItemUom."Qty. per Unit of Measure" > 0) then
+                        QtyPerUoM := ItemUom."Qty. per Unit of Measure";
+                NeededBase := Round(NeededBase * QtyPerUoM, 0.00001);
+                CollectRelocationSourceBins(SheetNo, CountHeader."Location Code", CountLine, SourceBins);
+                MovedBase := 0;
+                foreach SourceBin in SourceBins do
+                    if NeededBase > 0.00001 then begin
+                        AvailableBase := LPMgt.LooseBaseQtyAvailable(CountHeader."Location Code", SourceBin, CountLine."Item No.", CountLine."Lot No.", CountLine."Serial No.");
+                        MoveBase := AvailableBase;
+                        if MoveBase > NeededBase then
+                            MoveBase := NeededBase;
+                        if (CountLine."Serial No." <> '') and (MoveBase > 1) then
+                            MoveBase := 1;
+                        if MoveBase > 0.00001 then begin
+                            MovementMgmt.AdHocMoveTrackedAtLocation(
+                                CountHeader."Location Code", SourceBin, CountLine."Bin Code", CountLine."Item No.", '',
+                                MoveBase, CopyStr(UserId(), 1, 50), CountLine."Lot No.", CountLine."Serial No.");
+                            NeededBase := Round(NeededBase - MoveBase, 0.00001);
+                            MovedBase += MoveBase;
+                            if CountLine."Moved From Bin" = '' then
+                                CountLine."Moved From Bin" := SourceBin
+                            else
+                                if CountLine."Moved From Bin" <> SourceBin then
+                                    CountLine."Moved From Bin" := MultiBinTok;
+                        end;
+                    end;
+                if MovedBase > 0 then begin
+                    MovedQty := Round(MovedBase / QtyPerUoM, 0.00001);
+                    CountLine."Moved Qty" += MovedQty;
+                    CountLine."System Qty" += MovedQty;
+                    CountLine.Variance := GetWinningQty(CountLine, SheetNo) - CountLine."System Qty";
+                    CountLine.Modify(true);
+                    Clear(Dimensions);
+                    Dimensions.Add('sheetNo', SheetNo);
+                    Dimensions.Add('lineNo', Format(CountLine."Line No."));
+                    Session.LogMessage('AdvWMS.Count.FoundStockRelocated',
+                        StrSubstNo('Sheet %1 line %2: %3 x %4 moved into %5 from %6.', SheetNo, CountLine."Line No.", MovedQty, CountLine."Item No.", CountLine."Bin Code", CountLine."Moved From Bin"),
+                        Verbosity::Normal, DataClassification::SystemMetadata, TelemetryScope::ExtensionPublisher, Dimensions);
+                end;
+            end;
+        until CountLine.Next() = 0;
+    end;
+
+    /// <summary>
+    /// Bins of the location that hold the same item/lot/serial (warehouse entry
+    /// balance > 0), excluding the found bin and every bin that has a count line
+    /// for the same item/lot in this sheet (those are counted; the physical
+    /// inventory posting balances them). Largest balance first.
+    /// </summary>
+    local procedure CollectRelocationSourceBins(SheetNo: Code[20]; LocationCode: Code[10]; CountLine: Record "DOPSWHS Count Sheet Line"; var SourceBins: List of [Code[20]])
+    var
+        WarehouseEntry: Record "Warehouse Entry";
+        CountedLine: Record "DOPSWHS Count Sheet Line";
+        Balances: Dictionary of [Code[20], Decimal];
+        BinCode: Code[20];
+        BestBin: Code[20];
+        Qty: Decimal;
+        BestQty: Decimal;
+    begin
+        Clear(SourceBins);
+        WarehouseEntry.SetCurrentKey("Item No.", "Bin Code", "Location Code", "Variant Code", "Unit of Measure Code", "Lot No.", "Serial No.", "Entry Type", "Dedicated");
+        WarehouseEntry.SetRange("Location Code", LocationCode);
+        WarehouseEntry.SetRange("Item No.", CountLine."Item No.");
+        WarehouseEntry.SetRange("Variant Code", CountLine."Variant Code");
+        WarehouseEntry.SetRange("Lot No.", CountLine."Lot No.");
+        WarehouseEntry.SetRange("Serial No.", CountLine."Serial No.");
+        WarehouseEntry.SetFilter("Bin Code", '<>%1&<>%2', '', CountLine."Bin Code");
+        if WarehouseEntry.FindSet() then
+            repeat
+                Qty := 0;
+                if Balances.Get(WarehouseEntry."Bin Code", Qty) then
+                    Balances.Set(WarehouseEntry."Bin Code", Qty + WarehouseEntry."Qty. (Base)")
+                else
+                    Balances.Add(WarehouseEntry."Bin Code", WarehouseEntry."Qty. (Base)");
+            until WarehouseEntry.Next() = 0;
+
+        // Bins counted in this sheet for the same item/lot stay with the physical inventory.
+        CountedLine.SetRange("Sheet No.", SheetNo);
+        CountedLine.SetRange("Item No.", CountLine."Item No.");
+        CountedLine.SetRange("Variant Code", CountLine."Variant Code");
+        CountedLine.SetRange("Lot No.", CountLine."Lot No.");
+        CountedLine.SetRange("Serial No.", CountLine."Serial No.");
+        if CountedLine.FindSet() then
+            repeat
+                if Balances.ContainsKey(CountedLine."Bin Code") then
+                    Balances.Remove(CountedLine."Bin Code");
+            until CountedLine.Next() = 0;
+
+        while Balances.Count() > 0 do begin
+            BestQty := 0;
+            BestBin := '';
+            foreach BinCode in Balances.Keys() do begin
+                Balances.Get(BinCode, Qty);
+                if Qty > BestQty then begin
+                    BestQty := Qty;
+                    BestBin := BinCode;
+                end;
+            end;
+            if BestBin = '' then
+                exit;
+            SourceBins.Add(BestBin);
+            Balances.Remove(BestBin);
+        end;
+    end;
+
     local procedure RegisterDirectedPhysInventory(SheetNo: Code[20]; CountHeader: Record "DOPSWHS Count Sheet Header"; CountDocumentNo: Code[20])
     var
         Location: Record Location;
@@ -2157,6 +2315,7 @@ codeunit 72050 "DOPSWHS Count Mgmt"
         V2ScanIdConflictErr: Label '%1 okutma kimliği başka bir sayım belgesinde kullanılmıştır.', Comment = '%1 scan guid';
         V2LpSystemSnapshotUnsafeErr: Label '%1 sayım belgesindeki %2 LP numarasının %3 satırında güvenli olmayan sistem miktarı var (sayım: %4, LP: %5). Önce Sayımı Yeniden Başlat eylemini çalıştırıp LP''yi yeniden okutun veya yeni sayım belgesi oluşturun.', Comment = '%1 sheet no, %2 LP no, %3 LP line no, %4 count system qty, %5 LP line qty';
         WhsePhysInvTemplateTok: Label 'PHYSINV', Locked = true;
+        MultiBinTok: Label 'MULTI', Locked = true;
         WhsePhysInvBatchTok: Label 'DOPS-CNT', Locked = true;
 
         V2ScanNotFoundErr: Label '%1 okutması bulunamadığı için geri alınamadı.', Comment = '%1 scan guid';

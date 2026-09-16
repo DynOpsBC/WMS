@@ -33,6 +33,9 @@ table 72017 "DOPSWHS Count Sheet Line"
         field(120; "Counted 1"; Boolean) { Caption = 'Counted 1'; DataClassification = CustomerContent; Editable = false; }
         field(130; "Counted 2"; Boolean) { Caption = 'Counted 2'; DataClassification = CustomerContent; Editable = false; }
         field(140; "Counted 3"; Boolean) { Caption = 'Counted 3'; DataClassification = CustomerContent; Editable = false; }
+        // BADE (16 Eyl 2026): kayıtta bu rafa taşınan miktar ve kaynağı (Count Relocates Found Stock).
+        field(150; "Moved From Bin"; Code[20]) { Caption = 'Moved From Bin'; DataClassification = CustomerContent; Editable = false; }
+        field(151; "Moved Qty"; Decimal) { Caption = 'Moved Qty'; DataClassification = CustomerContent; Editable = false; DecimalPlaces = 0 : 5; }
     }
 
     keys

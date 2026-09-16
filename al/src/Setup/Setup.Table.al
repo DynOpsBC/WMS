@@ -324,6 +324,17 @@ table 72000 "DOPSWHS Setup"
             DataClassification = CustomerContent;
             InitValue = false;
         }
+        field(500; "Count Relocates Found Stock"; Boolean)
+        {
+            // BADE (16 Eyl 2026, Merve): sayımda BC'de o rafta olmayan bir ürün
+            // bulunduğunda kayıt, stoğu BC'nin hâlâ tuttuğu (sayım kapsamı
+            // dışındaki) raflardan bu rafa taşır; yalnız kalan fark artı
+            // düzeltme olur. Kapalıyken (varsayılan) eski davranış: bulunan
+            // miktar artı düzeltme, eski raf değişmez (kısmi sayımda mükerrer).
+            Caption = 'Count Relocates Found Stock';
+            DataClassification = CustomerContent;
+            InitValue = false;
+        }
         field(490; "Manual Receipt Label Print"; Boolean)
         {
             // BADE (16 Eyl 2026): mal kabul kaydedilince MTE/LP etiketleri

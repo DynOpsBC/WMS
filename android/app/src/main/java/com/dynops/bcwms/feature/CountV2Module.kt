@@ -682,10 +682,17 @@ private fun CountV2Document(no: String, onBack: () -> Unit) {
                     val item = BcApi.get(context, "items?\$filter=no eq '${safe(candidate.itemNo)}'&\$top=1")
                     val itemRow = if (item.ok) BcApi.parseValueArray(item.body).firstOrNull() else null
                     if (itemRow != null) {
+                        // BADE (16 Eyl 2026): ürün BC'de başka rafta kayıtlıysa operatör
+                        // bunu görsün; kayıtta stok oradan bu rafa taşınır.
+                        val otherBins = BcApi.getAllPages(
+                            context,
+                            "binContents?\$filter=locationCode eq '${safe(loc)}' and itemNo eq '${safe(candidate.itemNo)}'&\$top=50",
+                        )
                         unexpectedLabel = CountV2Label(candidate.itemNo, "", itemRow.optString("baseUnitOfMeasure"),
                             candidate.lotNo, candidate.serialNo, 1.0, candidate.raw)
                         busy = false
-                        status = "Bu rafta fiziksel olarak bulduğunuz miktarı girin"
+                        status = if (otherBins.complete) unexpectedStockHint(activeBin, otherBins.rows)
+                            else "Bu rafta fiziksel olarak bulduğunuz miktarı girin"
                         return@launch
                     }
                 }
@@ -693,7 +700,7 @@ private fun CountV2Document(no: String, onBack: () -> Unit) {
                 status = when {
                     !complete -> "HATA: Stok okunamadı. Yenileyip tekrar okutun."
                     candidate.lotNo.isNotBlank() -> "HATA: ${candidate.lotNo} lotu $loc lokasyonunda BC stokunda yok. LP okutun veya BC'de kontrol edin."
-                    else -> "UYARI: ${candidate.itemNo} $activeBin rafında BC stokunda yok. Bu rafta sayılması için LOT veya LP etiketini okutun (lokasyon toplamı rafa yazılmaz)."
+                    else -> "HATA: '${candidate.itemNo}' BC'de madde numarası olarak bulunamadı. Ürünün BCWMS etiketini (madde no) ya da LP/lot etiketini okutun; barkod GTIN ise BC'de madde referansı tanımlı olmalı."
                 }
                 return@launch
             }

@@ -44,6 +44,8 @@ page 72481 "DOPSWHS Count Sheet Line Part"
                 field(Variance; Rec.Variance) { ApplicationArea = All; StyleExpr = VarianceStyle; }
                 field("Recount Required"; Rec."Recount Required") { ApplicationArea = All; StyleExpr = VarianceStyle; }
                 field("Unexpected Stock"; Rec."Unexpected Stock") { ApplicationArea = All; StyleExpr = VarianceStyle; }
+                field("Moved From Bin"; Rec."Moved From Bin") { ApplicationArea = All; ToolTip = 'Kayıtta bulunan stoğun taşındığı kaynak raf (Count Relocates Found Stock).'; }
+                field("Moved Qty"; Rec."Moved Qty") { ApplicationArea = All; ToolTip = 'Kayıtta bu rafa taşınan miktar.'; }
                 field("Line No."; Rec."Line No.") { ApplicationArea = All; Visible = false; }
             }
         }
