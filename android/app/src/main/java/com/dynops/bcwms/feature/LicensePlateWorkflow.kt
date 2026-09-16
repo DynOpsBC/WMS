@@ -40,6 +40,52 @@ internal fun mtePrinterCode(labelPrinter: String, documentPrinter: String): Stri
 internal fun mtePrintRoute(labelPrinter: String, documentPrinter: String): LpPrintRoute =
     LpPrintRoute("printPalletLabels", mtePrinterCode(labelPrinter, documentPrinter))
 
+/** Extra MTE fields the operator fills before printing (BADE report 60150 request page). */
+internal data class MteOptions(
+    val inspectorEmployeeNo: String = "",
+    val supplierLotNo: String = "",
+    val qcEmployeeNo: String = "",
+    val qcApprovalDate: String = "",
+    val documentNo: String = "",
+    val revisionNo: String = "",
+    val revisionDate: String = "",
+)
+
+/** JSON with only the filled fields; dates already normalised to yyyy-MM-dd. */
+internal fun mteOptionsJson(options: MteOptions): String {
+    val json = org.json.JSONObject()
+    fun put(key: String, value: String) { if (value.isNotBlank()) json.put(key, value.trim()) }
+    put("inspectorEmployeeNo", options.inspectorEmployeeNo)
+    put("supplierLotNo", options.supplierLotNo)
+    put("qcEmployeeNo", options.qcEmployeeNo)
+    put("qcApprovalDate", options.qcApprovalDate)
+    put("documentNo", options.documentNo)
+    put("revisionNo", options.revisionNo)
+    put("revisionDate", options.revisionDate)
+    return json.toString()
+}
+
+/** Accepts dd.MM.yyyy, dd/MM/yyyy or yyyy-MM-dd; returns yyyy-MM-dd, "" for blank, null when invalid. */
+internal fun normalizeMteDate(input: String): String? {
+    val value = input.trim()
+    if (value.isEmpty()) return ""
+    Regex("""^(\d{4})-(\d{2})-(\d{2})$""").matchEntire(value)?.let { return value }
+    Regex("""^(\d{1,2})[./](\d{1,2})[./](\d{4})$""").matchEntire(value)?.let { m ->
+        val (d, mo, y) = m.destructured
+        val day = d.toInt(); val month = mo.toInt()
+        if (day !in 1..31 || month !in 1..12) return null
+        return "%s-%02d-%02d".format(y, month, day)
+    }
+    return null
+}
+
+/**
+ * The customer MTE is a PDF report: it needs the device's document printer;
+ * without one BC falls back to the ZPL MTE on the label printer.
+ */
+internal fun mteReportPrinterCode(labelPrinter: String, documentPrinter: String): String =
+    documentPrinter.trim().ifBlank { labelPrinter.trim() }
+
 internal fun canPrintMte(linesComplete: Boolean, lineCount: Int, pendingReceiptNo: String): Boolean =
     linesComplete && lineCount > 0 && pendingReceiptNo.isBlank()
 
@@ -146,4 +192,23 @@ internal fun ledgerLpCompletionStatus(result: LedgerBulkLpBuildResult): String {
         else ->
             "TAMAM: $count LP kaynak girişine bağlı ve etiketleri kuyruğa alındı. $source"
     }
+}
+
+/**
+ * printMte exists from BCWMS 1.14.1.39 on. Older BC builds answer the bound action with
+ * 404 (no such resource) or a 400 naming the action; then the label is still printed via
+ * printPalletLabels, only without the operator's extra fields.
+ */
+internal fun mteFallbackToLegacy(httpCode: Int, error: String): Boolean =
+    httpCode == 404 ||
+        error.contains("printMte", ignoreCase = true) ||
+        error.contains("No HTTP resource was found", ignoreCase = true)
+
+/** printPalletLabels takes only printerId + copies; drop optionsJson from the printMte body. */
+internal fun legacyMteBody(body: String): String {
+    val src = runCatching { org.json.JSONObject(body) }.getOrDefault(org.json.JSONObject())
+    return org.json.JSONObject().apply {
+        put("printerId", src.optString("printerId"))
+        put("copies", src.optInt("copies", 1).coerceAtLeast(1))
+    }.toString()
 }

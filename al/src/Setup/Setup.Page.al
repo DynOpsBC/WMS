@@ -79,6 +79,11 @@ page 72061 "DOPSWHS Setup"
                     ApplicationArea = All;
                     ToolTip = 'Kapalı (varsayılan): toplama satırı kaynak LP okutulmadan da onaylanabilir, yerleştirmede ürün barkodu okutulur. Açık: toplamada kaynak LP okutmak zorunludur ve yerleştirme LP okutmasıyla doğrulanır; okutulan LP''nin maddesi, varyantı, lotu ve rafı satırla uyuşmazsa işlem reddedilir.';
                 }
+                field("MTE Report ID"; Rec."MTE Report ID")
+                {
+                    ApplicationArea = All;
+                    ToolTip = 'Terminaldeki MTE Yazdır bu raporu çalıştırır (BADE: 60150 Madde Tanımlama Etiketi; BC''de seçili düzen kullanılır). 0 = BCWMS''in kendi MTE raporu. PDF çıktı belge yazıcısına gider; ZPL yazıcıda kısa ZPL MTE basılır.';
+                }
             }
             group(License)
             {

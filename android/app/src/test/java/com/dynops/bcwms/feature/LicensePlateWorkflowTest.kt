@@ -49,6 +49,33 @@ class LicensePlateWorkflowTest {
     }
 
     @Test
+    fun `MTE dates are normalised to the XML format`() {
+        assertEquals("", normalizeMteDate("  "))
+        assertEquals("2026-09-16", normalizeMteDate("16.09.2026"))
+        assertEquals("2026-09-16", normalizeMteDate("16/9/2026"))
+        assertEquals("2026-09-16", normalizeMteDate("2026-09-16"))
+        assertEquals(null, normalizeMteDate("31.13.2026"))
+        assertEquals(null, normalizeMteDate("dün"))
+    }
+
+    @Test
+    fun `MTE options json carries only filled fields`() {
+        val json = org.json.JSONObject(mteOptionsJson(MteOptions(inspectorEmployeeNo = " E001 ", qcApprovalDate = "2026-09-16", documentNo = "DOK-1")))
+        assertEquals("E001", json.getString("inspectorEmployeeNo"))
+        assertEquals("2026-09-16", json.getString("qcApprovalDate"))
+        assertEquals("DOK-1", json.getString("documentNo"))
+        assertFalse(json.has("supplierLotNo"))
+        assertEquals("{}", mteOptionsJson(MteOptions()))
+    }
+
+    @Test
+    fun `customer MTE report prefers the document printer`() {
+        assertEquals("PDF01", mteReportPrinterCode("ZPL01", " PDF01 "))
+        assertEquals("ZPL01", mteReportPrinterCode("ZPL01", ""))
+        assertEquals("", mteReportPrinterCode("", ""))
+    }
+
+    @Test
     fun `MTE cannot be requested for an unloaded empty or pending receipt LP`() {
         assertTrue(canPrintMte(true, 2, ""))
         assertFalse(canPrintMte(false, 2, ""))
@@ -173,5 +200,24 @@ class LicensePlateWorkflowTest {
             listOf("CreateNewLP", "RemoveExcess", "RemoveUsedPortion"),
             lpPartialActions.map { it.apiValue },
         )
+    }
+
+    @Test
+    fun `printMte falls back to the legacy action only when BC does not know it`() {
+        assertTrue(mteFallbackToLegacy(404, ""))
+        assertTrue(mteFallbackToLegacy(400, "Action 'Microsoft.NAV.printMte' not found"))
+        assertTrue(mteFallbackToLegacy(400, "No HTTP resource was found that matches the request URI"))
+        assertFalse(mteFallbackToLegacy(400, "Yazıcı bulunamadı"))
+        assertFalse(mteFallbackToLegacy(500, "No WMS bridge printer is mapped for LP label printing"))
+    }
+
+    @Test
+    fun `legacy MTE body keeps printer and copies and drops the options`() {
+        val body = legacyMteBody("""{"printerId":"ZD230","copies":2,"optionsJson":"{\"tedarikciLotu\":\"X\"}"}""")
+        val o = org.json.JSONObject(body)
+        assertEquals("ZD230", o.getString("printerId"))
+        assertEquals(2, o.getInt("copies"))
+        assertFalse(o.has("optionsJson"))
+        assertEquals(1, org.json.JSONObject(legacyMteBody("not json")).getInt("copies"))
     }
 }

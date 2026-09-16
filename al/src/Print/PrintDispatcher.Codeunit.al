@@ -103,14 +103,25 @@ codeunit 72051 "DOPSWHS Print Dispatcher"
     /// the label printer that the terminals already use.
     /// </summary>
     procedure PrintPalletItemLabels(var LP: Record "DOPSWHS LP Header"; PrinterId: Code[50]; Copies: Integer)
+    begin
+        PrintPalletItemLabelsWithOptions(LP, PrinterId, Copies, '');
+    end;
+
+    /// <summary>
+    /// OptionsJson (terminal "MTE Yazdır" ekranı): inspectorEmployeeNo,
+    /// supplierLotNo, qcEmployeeNo, qcApprovalDate (yyyy-MM-dd), documentNo,
+    /// revisionNo, revisionDate (yyyy-MM-dd). Used only by the customer report
+    /// route; the ZPL label has no room for them.
+    /// </summary>
+    procedure PrintPalletItemLabelsWithOptions(var LP: Record "DOPSWHS LP Header"; PrinterId: Code[50]; Copies: Integer; OptionsJson: Text)
     var
         TargetPrinter: Code[50];
     begin
         TargetPrinter := ResolvePalletItemLabelPrinter(PrinterId);
         if PrinterIsPdf(TargetPrinter) then
-            PrintPalletItemReport(LP, TargetPrinter, Copies)
+            PrintPalletItemReport(LP, TargetPrinter, Copies, OptionsJson)
         else
-            PrintPalletItemZplLabels(LP, TargetPrinter, Copies);
+            PrintPalletItemZplLabels(LP, TargetPrinter, Copies, OptionsJson);
     end;
 
     /// <summary>
@@ -152,11 +163,29 @@ codeunit 72051 "DOPSWHS Print Dispatcher"
     /// <summary>
     /// The approved 10 x 8 cm MTE RDLC (one page per LP) as a PDF document.
     /// </summary>
-    local procedure PrintPalletItemReport(var LP: Record "DOPSWHS LP Header"; PrinterId: Code[50]; Copies: Integer)
+    local procedure PrintPalletItemReport(var LP: Record "DOPSWHS LP Header"; PrinterId: Code[50]; Copies: Integer; OptionsJson: Text)
     var
         ReportLP: Record "DOPSWHS LP Header";
         SourceRecord: RecordRef;
+        CustomerReportId: Integer;
     begin
+        // BADE: the customer's own MTE report (Setup "MTE Report ID", e.g.
+        // BadeProduction 60150) runs on the pallet's source item ledger
+        // entries with the operator's extra fields. Its BC-selected layout is
+        // what the customer already prints from the client.
+        if ResolveCustomerMteReport(CustomerReportId) then begin
+            if not CollectLpSourceEntries(LP, SourceRecord) then
+                Error(MteNoSourceEntryErr, LP."No.");
+            PrintReportWithParameters(
+                LP."No.",
+                CustomerReportId,
+                BuildMteParameters(CustomerReportId, LP, OptionsJson),
+                PrinterId,
+                Copies,
+                Enum::"DOPSWHS IWX Report Usage"::Receipt,
+                SourceRecord);
+            exit;
+        end;
         ReportLP := LP;
         ReportLP.SetRecFilter();
         SourceRecord.GetTable(ReportLP);
@@ -169,11 +198,135 @@ codeunit 72051 "DOPSWHS Print Dispatcher"
             SourceRecord);
     end;
 
+    local procedure ResolveCustomerMteReport(var ReportId: Integer): Boolean
+    var
+        Setup: Record "DOPSWHS Setup";
+        AllObjWithCaption: Record AllObjWithCaption;
+    begin
+        Clear(ReportId);
+        if not Setup.Get('') then
+            exit(false);
+        if Setup."MTE Report ID" = 0 then
+            exit(false);
+        if not AllObjWithCaption.Get(AllObjWithCaption."Object Type"::Report, Setup."MTE Report ID") then
+            exit(false);
+        ReportId := Setup."MTE Report ID";
+        exit(true);
+    end;
+
+    /// <summary>
+    /// The item ledger entries the pallet was received on: the LP lines' source
+    /// entries, else the entries stamped with this LP number.
+    /// </summary>
+    local procedure CollectLpSourceEntries(var LP: Record "DOPSWHS LP Header"; var SourceRecord: RecordRef): Boolean
+    var
+        LPLine: Record "DOPSWHS LP Line";
+        ItemLedgerEntry: Record "Item Ledger Entry";
+        EntryNos: List of [Integer];
+        EntryNo: Integer;
+        FilterText: Text;
+    begin
+        LPLine.SetRange("LP No.", LP."No.");
+        LPLine.SetFilter("Source Item Ledger Entry No.", '<>0');
+        if LPLine.FindSet() then
+            repeat
+                if not EntryNos.Contains(LPLine."Source Item Ledger Entry No.") then
+                    EntryNos.Add(LPLine."Source Item Ledger Entry No.");
+            until LPLine.Next() = 0;
+        if EntryNos.Count() = 0 then begin
+            ItemLedgerEntry.SetRange("DOPSWHS LP No.", LP."No.");
+            if ItemLedgerEntry.FindSet() then
+                repeat
+                    EntryNos.Add(ItemLedgerEntry."Entry No.");
+                until ItemLedgerEntry.Next() = 0;
+        end;
+        if EntryNos.Count() = 0 then
+            exit(false);
+        foreach EntryNo in EntryNos do begin
+            if FilterText <> '' then
+                FilterText += '|';
+            FilterText += Format(EntryNo);
+        end;
+        ItemLedgerEntry.Reset();
+        ItemLedgerEntry.SetFilter("Entry No.", FilterText);
+        SourceRecord.GetTable(ItemLedgerEntry);
+        exit(true);
+    end;
+
+    /// <summary>
+    /// Request-page values for the customer report as BC's ReportParameters
+    /// XML. Control names follow BadeProduction report 60150; dates use the XML
+    /// (yyyy-MM-dd) format the request page stores.
+    /// </summary>
+    local procedure BuildMteParameters(ReportId: Integer; var LP: Record "DOPSWHS LP Header"; OptionsJson: Text): Text
+    var
+        Options: JsonObject;
+        Xml: Text;
+    begin
+        if (OptionsJson <> '') and not Options.ReadFrom(OptionsJson) then
+            Error(MteOptionsInvalidErr);
+        Xml := '<?xml version="1.0" standalone="yes"?>' +
+            '<ReportParameters id="' + Format(ReportId) + '"><Options>' +
+            XmlField('LpNoFilterReq', LP."No.") +
+            XmlField('InspectorEmployeeNo', JsonText(Options, 'inspectorEmployeeNo')) +
+            XmlField('TedarikciLotu', JsonText(Options, 'supplierLotNo')) +
+            XmlField('QualityControlEmployeeNo', JsonText(Options, 'qcEmployeeNo')) +
+            XmlField('QualityControlApprovalDate', JsonDateText(Options, 'qcApprovalDate')) +
+            XmlField('DokumanNoReq', JsonText(Options, 'documentNo')) +
+            XmlField('RevizyonNo', JsonText(Options, 'revisionNo')) +
+            XmlField('RevizyonTarihi', JsonDateText(Options, 'revisionDate')) +
+            '</Options><DataItems></DataItems></ReportParameters>';
+        exit(Xml);
+    end;
+
+    local procedure XmlField(Name: Text; Value: Text): Text
+    begin
+        if Value = '' then
+            exit('');
+        exit('<Field name="' + Name + '">' + XmlEscape(Value) + '</Field>');
+    end;
+
+    local procedure XmlEscape(Value: Text): Text
+    begin
+        Value := Value.Replace('&', '&amp;');
+        Value := Value.Replace('<', '&lt;');
+        Value := Value.Replace('>', '&gt;');
+        Value := Value.Replace('"', '&quot;');
+        exit(Value);
+    end;
+
+    local procedure JsonText(var Options: JsonObject; KeyName: Text): Text
+    var
+        Token: JsonToken;
+    begin
+        if not Options.Get(KeyName, Token) then
+            exit('');
+        if Token.AsValue().IsNull() then
+            exit('');
+        exit(Token.AsValue().AsText().Trim());
+    end;
+
+    /// <summary>Accepts yyyy-MM-dd or dd.MM.yyyy from the terminal; emits the XML date.</summary>
+    local procedure JsonDateText(var Options: JsonObject; KeyName: Text): Text
+    var
+        Value: Text;
+        DateValue: Date;
+    begin
+        Value := JsonText(Options, KeyName);
+        if Value = '' then
+            exit('');
+        if Evaluate(DateValue, Value, 9) then
+            exit(Format(DateValue, 0, 9));
+        if Evaluate(DateValue, Value) then
+            exit(Format(DateValue, 0, 9));
+        Error(MteDateInvalidErr, Value);
+    end;
+
     /// <summary>
     /// One ZPL material-identification label for every item group on the LP.
     /// This is the label the BADE terminals print on their ZPL label printer.
     /// </summary>
-    local procedure PrintPalletItemZplLabels(var LP: Record "DOPSWHS LP Header"; PrinterId: Code[50]; Copies: Integer)
+    local procedure PrintPalletItemZplLabels(var LP: Record "DOPSWHS LP Header"; PrinterId: Code[50]; Copies: Integer; OptionsJson: Text)
     var
         LPLine: Record "DOPSWHS LP Line";
         LabelLine: Record "DOPSWHS LP Line";
@@ -191,7 +344,7 @@ codeunit 72051 "DOPSWHS Print Dispatcher"
                     LabelLine.Quantity := PalletItemGroupQuantity(LPLine);
                     EnqueueZpl(
                         LP."No.",
-                        BuildPalletItemZpl(LP, LabelLine),
+                        BuildPalletItemZplWithOptions(LP, LabelLine, OptionsJson),
                         PrinterId,
                         Copies,
                         Enum::"DOPSWHS IWX Report Usage"::LpLabel,
@@ -229,45 +382,20 @@ codeunit 72051 "DOPSWHS Print Dispatcher"
         exit(GroupQuantity);
     end;
 
+    /// <summary>
+    /// BADE MTE as ZPL: the customer's report layout on the 10 x 8 cm Zebra
+    /// stock (codeunit "DOPSWHS MTE Zpl Builder"). Kept for callers and tests.
+    /// </summary>
     procedure BuildPalletItemZpl(var LP: Record "DOPSWHS LP Header"; var LPLine: Record "DOPSWHS LP Line"): Text
-    var
-        Item: Record Item;
-        ZplEncoder: Codeunit "DOPSWHS ZPL Encoder";
-        DescriptionText: Text;
-        TotalQuantity: Decimal;
-        QrData: Text;
-        TotalText: Text;
-        PalletText: Text;
-        LotText: Text;
     begin
-        if Item.Get(LPLine."Item No.") then
-            DescriptionText := Item.Description;
-        TotalQuantity := LPLine."Source Document Quantity";
-        if TotalQuantity = 0 then
-            TotalQuantity := LPLine.Quantity;
+        exit(BuildPalletItemZplWithOptions(LP, LPLine, ''));
+    end;
 
-        TotalText := StrSubstNo('TOPLAM MAL KABUL: %1 %2', TotalQuantity, LPLine."Unit of Measure");
-        PalletText := StrSubstNo('PALET MIKTARI: %1 %2', LPLine.Quantity, LPLine."Unit of Measure");
-        if LPLine."Lot No." <> '' then
-            LotText := 'LOT: ' + LPLine."Lot No.";
-
-        QrData := LP."No.";
-        if QrData = '' then
-            QrData := LPLine."Lot No.";
-        if QrData = '' then
-            QrData := LPLine."Item No.";
-
-        exit(
-            '^XA^CI28^PW812^LL406' +
-            '^FO35,18^A0N,28,28^FH_^FDMADDE TANIMLAMA ETIKETI^FS' +
-            '^FO35,62^A0N,28,28^FH_^FDMADDE: ' + ZplEncoder.EncodeFieldData(CopyStr(LPLine."Item No.", 1, 18)) + '^FS' +
-            '^FO35,104^A0N,21,21^FH_^FD' + ZplEncoder.EncodeFieldData(CopyStr(DescriptionText, 1, 24)) + '^FS' +
-            '^FO35,142^A0N,24,24^FH_^FD' + ZplEncoder.EncodeFieldData(CopyStr(LotText, 1, 20)) + '^FS' +
-            '^FO35,182^A0N,24,24^FH_^FDLP: ' + ZplEncoder.EncodeFieldData(LP."No.") + '^FS' +
-            '^FO35,232^A0N,26,26^FH_^FD' + ZplEncoder.EncodeFieldData(CopyStr(TotalText, 1, 48)) + '^FS' +
-            '^FO35,282^A0N,36,36^FH_^FD' + ZplEncoder.EncodeFieldData(CopyStr(PalletText, 1, 42)) + '^FS' +
-            '^FO610,58^BQN,2,5^FH_^FDLA,' + ZplEncoder.EncodeFieldData(QrData) + '^FS' +
-            '^XZ');
+    procedure BuildPalletItemZplWithOptions(var LP: Record "DOPSWHS LP Header"; var LPLine: Record "DOPSWHS LP Line"; OptionsJson: Text): Text
+    var
+        Builder: Codeunit "DOPSWHS MTE Zpl Builder";
+    begin
+        exit(Builder.Build(LP, LPLine, OptionsJson));
     end;
 
     procedure PrintBinLabel(var Bin: Record Bin; PrinterId: Code[50]; Copies: Integer)
@@ -603,6 +731,11 @@ codeunit 72051 "DOPSWHS Print Dispatcher"
     /// mandatory so a report can never accidentally print every record.
     /// </summary>
     procedure PrintReport(SourceDoc: Code[50]; ReportId: Integer; PrinterId: Code[50]; Copies: Integer; Usage: Enum "DOPSWHS IWX Report Usage"; SourceRecord: RecordRef): Integer
+    begin
+        exit(PrintReportWithParameters(SourceDoc, ReportId, '', PrinterId, Copies, Usage, SourceRecord));
+    end;
+
+    procedure PrintReportWithParameters(SourceDoc: Code[50]; ReportId: Integer; Parameters: Text; PrinterId: Code[50]; Copies: Integer; Usage: Enum "DOPSWHS IWX Report Usage"; SourceRecord: RecordRef): Integer
     var
         TempBlob: Codeunit "Temp Blob";
         PdfInStream: InStream;
@@ -618,7 +751,7 @@ codeunit 72051 "DOPSWHS Print Dispatcher"
         EnsureDocumentPrinter(PrinterId, Usage);
 
         TempBlob.CreateOutStream(PdfOutStream);
-        if not Report.SaveAs(ReportId, '', ReportFormat::Pdf, PdfOutStream, SourceRecord) then
+        if not Report.SaveAs(ReportId, Parameters, ReportFormat::Pdf, PdfOutStream, SourceRecord) then
             Error('Report %1 could not be rendered as PDF.', ReportId);
         if not TempBlob.HasValue() then
             Error('Report %1 produced an empty PDF.', ReportId);
@@ -812,4 +945,9 @@ codeunit 72051 "DOPSWHS Print Dispatcher"
             exit('');
         exit(ResolvedCode);
     end;
+
+    var
+        MteNoSourceEntryErr: Label '%1 paletinin kaynak madde defteri girişi yok; müşteri MTE raporu için palet önce mal kabulle kaydedilmiş olmalı.', Comment = '%1 LP no';
+        MteOptionsInvalidErr: Label 'MTE ek alanları okunamadı (geçersiz JSON).';
+        MteDateInvalidErr: Label 'MTE tarih alanı geçersiz: %1 (gg.aa.yyyy veya yyyy-aa-gg girin).', Comment = '%1 value';
 }

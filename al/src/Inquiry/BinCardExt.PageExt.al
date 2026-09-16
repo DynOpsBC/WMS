@@ -12,7 +12,7 @@ pageextension 72301 "DOPSWHS Bin Card Ext" extends "Bin Contents"
                 Caption = 'Güncel LP No.ları';
                 Editable = false;
                 DrillDown = true;
-                ToolTip = 'Bu raf ve maddedeki güncel LP dağılımını gösterir. Ambar girişleri hareket geçmişidir; LP bölünmesi burada görünür.';
+                ToolTip = 'Bu raf ve maddedeki güncel LP dağılımını gösterir. Değer satır yüklendiği anda hesaplanır; terminalden yapılan transfer sonrası F5 ile yenileyin veya tıklayıp güncel dağılımı açın.';
 
                 trigger OnDrillDown()
                 begin
@@ -61,6 +61,10 @@ pageextension 72301 "DOPSWHS Bin Card Ext" extends "Bin Contents"
         ActiveLPContents.LoadFromBin(
             Rec."Location Code", Rec."Bin Code", Rec."Item No.", Rec."Variant Code", Rec."Unit of Measure Code");
         ActiveLPContents.RunModal();
+        // The summary is a page variable computed when the row was fetched; the
+        // drill-down reads live data. Re-fetch the row so both agree after a
+        // transfer done elsewhere (terminal) without waiting for F5.
+        CurrPage.Update(false);
     end;
 
     var

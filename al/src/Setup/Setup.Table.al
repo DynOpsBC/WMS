@@ -324,6 +324,15 @@ table 72000 "DOPSWHS Setup"
             DataClassification = CustomerContent;
             InitValue = false;
         }
+        field(460; "MTE Report ID"; Integer)
+        {
+            // BADE (16 Eyl 2026): the terminal MTE runs the customer's own
+            // "Madde Tanımlama Etiketi" report (BadeProduction 60150, with the
+            // layout selected in BC) instead of the built-in copy. 0 = built-in.
+            Caption = 'MTE Report ID';
+            DataClassification = CustomerContent;
+            TableRelation = AllObjWithCaption."Object ID" where("Object Type" = const(Report));
+        }
     }
 
     keys

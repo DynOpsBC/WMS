@@ -10,6 +10,7 @@ page 72088 "DOPSWHS LP API"
     DelayedInsert = true;
     DeleteAllowed = true;
     ODataKeyFields = "No.";
+    Permissions = tabledata Employee = R;
 
     layout
     {
@@ -265,6 +266,40 @@ page 72088 "DOPSWHS LP API"
         Dispatcher: Codeunit "DOPSWHS Print Dispatcher";
     begin
         Dispatcher.PrintPalletItemLabels(LP, PrinterId, 1);
+    end;
+
+    /// <summary>BADE: MTE with the operator's extra fields (Giriş Yapan, tedarikçi lotu, KK onayı, doküman/revizyon).</summary>
+    [ServiceEnabled]
+    procedure printMte(printerId: Code[50]; copies: Integer; optionsJson: Text)
+    var
+        Dispatcher: Codeunit "DOPSWHS Print Dispatcher";
+    begin
+        Dispatcher.PrintPalletItemLabelsWithOptions(Rec, printerId, copies, optionsJson);
+    end;
+
+    /// <summary>JSON [{no,name}] of active employees for the MTE extra-field pickers.</summary>
+    [ServiceEnabled]
+    procedure listEmployees(): Text
+    var
+        Employee: Record Employee;
+        Result: JsonArray;
+        Entry: JsonObject;
+        ResultText: Text;
+        NameText: Text;
+    begin
+        Employee.SetRange(Status, Employee.Status::Active);
+        if Employee.FindSet() then
+            repeat
+                Clear(Entry);
+                NameText := (Employee."First Name" + ' ' + Employee."Last Name").Trim();
+                if NameText = '' then
+                    NameText := Employee."Search Name";
+                Entry.Add('no', Employee."No.");
+                Entry.Add('name', NameText);
+                Result.Add(Entry);
+            until Employee.Next() = 0;
+        Result.WriteTo(ResultText);
+        exit(ResultText);
     end;
 
     local procedure ParseLines(LinesJson: Text; var Lines: List of [Integer]; var Quantities: Dictionary of [Integer, Decimal])

@@ -285,6 +285,7 @@ private fun LpDocument(lpNo: String, onBack: () -> Unit) {
     var selectedLineItem by remember { mutableStateOf<LpItemSelection?>(null) }
     var showTransfer by remember { mutableStateOf(false) }
     var showPartial by remember { mutableStateOf(false) }
+    var showMteOptions by remember { mutableStateOf(false) }
     var showAssignBin by remember { mutableStateOf(false) }
     var showUnbuildConfirm by remember { mutableStateOf(false) }
     var showDeleteConfirm by remember { mutableStateOf(false) }
@@ -327,13 +328,20 @@ private fun LpDocument(lpNo: String, onBack: () -> Unit) {
         }
         scope.launch {
             busy = true; status = "İşlem yapılıyor..."
-            val r = if (name == "printPalletLabels") {
+            var r = if (name == "printPalletLabels" || name == "printMte") {
                 BcApi.boundActionLongRunning(context, "licensePlates", lpNo, name, body)
             } else {
                 BcApi.boundAction(context, "licensePlates", lpNo, name, body)
             }
+            var okNote = ""
+            if (name == "printMte" && !r.ok && mteFallbackToLegacy(r.httpCode, BcApi.errorMessage(r.body))) {
+                // BC 1.14.1.38 ve öncesi printMte aksiyonunu tanımaz: etiket yine çıksın diye
+                // ek alanlar olmadan eski MTE yoluna düşülür (terminal BC'den önce güncellenirse).
+                r = BcApi.boundActionLongRunning(context, "licensePlates", lpNo, "printPalletLabels", legacyMteBody(body))
+                okNote = " (BC sürümü eski: ek alanlar basılmadı, BCWMS 1.14.1.39 yükleyin.)"
+            }
             busy = false
-            status = if (r.ok) "TAMAM: $okMsg" else QcErrorParser.friendlyStatus(BcApi.errorMessage(r.body), r.httpCode)
+            status = if (r.ok) "TAMAM: $okMsg$okNote" else QcErrorParser.friendlyStatus(BcApi.errorMessage(r.body), r.httpCode)
             if (r.ok) reload()
         }
     }
@@ -548,17 +556,10 @@ private fun LpDocument(lpNo: String, onBack: () -> Unit) {
                 }
 
                 OutlinedButton(
-                    onClick = {
-                        val route = mtePrintRoute(getDefaultPrinter(context, PRINTER_USAGE_LABEL), getDefaultPrinter(context, PRINTER_USAGE_DOCUMENT))
-                        action(
-                            route.action,
-                            JSONObject().apply {
-                                put("printerId", route.printerCode)
-                                put("copies", 1)
-                            }.toString(),
-                            "MTE yazdırma isteği gönderildi. Fiziksel etiketi kontrol edin.",
-                        )
-                    },
+                    // BADE (16 Eyl 2026): önce ek alanlar (Giriş Yapan, tedarikçi lotu,
+                    // KK onayı, doküman/revizyon) sorulur, sonra müşterinin kendi MTE
+                    // raporu belge yazıcısından basılır.
+                    onClick = { showMteOptions = true },
                     enabled = !busy && headerLoaded && canPrintMte(linesComplete, lines.size, pendingReceiptNo),
                     modifier = Modifier.fillMaxWidth().height(50.dp),
                     shape = RoundedCornerShape(14.dp),
@@ -768,6 +769,24 @@ private fun LpDocument(lpNo: String, onBack: () -> Unit) {
             }
         )
     }
+    if (showMteOptions) {
+        MteOptionsSheet(
+            lpNo = lpNo,
+            onDismiss = { showMteOptions = false },
+            onConfirm = { options ->
+                showMteOptions = false
+                action(
+                    "printMte",
+                    JSONObject().apply {
+                        put("printerId", mteReportPrinterCode(getDefaultPrinter(context, PRINTER_USAGE_LABEL), getDefaultPrinter(context, PRINTER_USAGE_DOCUMENT)))
+                        put("copies", 1)
+                        put("optionsJson", mteOptionsJson(options))
+                    }.toString(),
+                    "MTE yazdırma isteği gönderildi. Fiziksel etiketi kontrol edin.",
+                )
+            },
+        )
+    }
     if (showTransfer) {
         TransferSheet(onDismiss = { showTransfer = false }, onConfirm = { target ->
             showTransfer = false
@@ -785,6 +804,94 @@ private fun LpDocument(lpNo: String, onBack: () -> Unit) {
             val label = lpPartialActions.firstOrNull { it.apiValue == mode }?.label ?: "Kısmi kullanım"
             action("usePartial", JSONObject().apply { put("action", mode); put("qty", qty); put("lineNo", lineNo) }.toString(), "$label tamamlandı")
         })
+    }
+}
+
+/** BADE: extra MTE fields (report 60150 request page) collected on the terminal before printing. */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun MteOptionsSheet(
+    lpNo: String,
+    onDismiss: () -> Unit,
+    onConfirm: (MteOptions) -> Unit,
+) {
+    val context = LocalContext.current
+    var employees by remember { mutableStateOf<List<Pair<String, String>>>(emptyList()) }
+    var inspector by remember { mutableStateOf("") }
+    var supplierLot by remember { mutableStateOf("") }
+    var qcEmployee by remember { mutableStateOf("") }
+    var qcDate by remember { mutableStateOf("") }
+    var documentNo by remember { mutableStateOf("") }
+    var revisionNo by remember { mutableStateOf("") }
+    var revisionDate by remember { mutableStateOf("") }
+    var error by remember { mutableStateOf("") }
+    var inspectorMenu by remember { mutableStateOf(false) }
+    var qcMenu by remember { mutableStateOf(false) }
+
+    LaunchedEffect(lpNo) {
+        val r = BcApi.boundAction(context, "licensePlates", lpNo, "listEmployees", "{}")
+        if (r.ok) {
+            employees = runCatching {
+                val arr = org.json.JSONArray(BcApi.scalarValue(r.body))
+                (0 until arr.length()).map { i -> arr.getJSONObject(i).optString("no") to arr.getJSONObject(i).optString("name") }
+            }.getOrDefault(emptyList())
+        }
+    }
+
+    @Composable
+    fun employeePicker(label: String, value: String, expanded: Boolean, onExpand: (Boolean) -> Unit, onPick: (String) -> Unit) {
+        Box(Modifier.fillMaxWidth()) {
+            OutlinedTextField(
+                value = value,
+                onValueChange = { onPick(it.uppercase()) },
+                label = { Text(label) },
+                singleLine = true,
+                trailingIcon = if (employees.isNotEmpty()) ({ TextButton(onClick = { onExpand(true) }) { Text("Seç") } }) else null,
+                modifier = Modifier.fillMaxWidth(),
+            )
+            DropdownMenu(expanded = expanded, onDismissRequest = { onExpand(false) }) {
+                DropdownMenuItem(text = { Text("— boş —") }, onClick = { onPick(""); onExpand(false) })
+                employees.forEach { (no, name) ->
+                    DropdownMenuItem(text = { Text("$no · $name") }, onClick = { onPick(no); onExpand(false) })
+                }
+            }
+        }
+    }
+
+    SheetScaffold(onDismiss = onDismiss, contentPadding = PaddingValues(20.dp)) {
+        Text("MTE Yazdır · Ek Bilgiler", fontWeight = FontWeight.Bold, fontSize = 18.sp)
+        Text(
+            "Boş bırakılan alanlar etikette U.Y olarak çıkar. Tarihler gg.aa.yyyy.",
+            fontSize = 12.sp,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Spacer(Modifier.height(10.dp))
+        Text("Etiket Ek Bilgiler", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+        employeePicker("Giriş Yapan (çalışan no)", inspector, inspectorMenu, { inspectorMenu = it }) { inspector = it }
+        OutlinedTextField(value = supplierLot, onValueChange = { supplierLot = it }, label = { Text("Tedarikçi Lotu") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+        employeePicker("Kalite Kontrol Onayı - İsim (çalışan no)", qcEmployee, qcMenu, { qcMenu = it }) { qcEmployee = it }
+        OutlinedTextField(value = qcDate, onValueChange = { qcDate = it }, label = { Text("Kalite Kontrol Onayı - Tarih") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+        Spacer(Modifier.height(8.dp))
+        Text("Doküman Bilgileri", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+        OutlinedTextField(value = documentNo, onValueChange = { documentNo = it }, label = { Text("Doküman No.") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+        OutlinedTextField(value = revisionNo, onValueChange = { revisionNo = it }, label = { Text("Revizyon No.") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+        OutlinedTextField(value = revisionDate, onValueChange = { revisionDate = it }, label = { Text("Revizyon Tarihi") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+        if (error.isNotBlank()) Text(error, color = MaterialTheme.colorScheme.error, fontSize = 12.sp)
+        Spacer(Modifier.height(14.dp))
+        Button(
+            onClick = {
+                val qc = normalizeMteDate(qcDate)
+                val rev = normalizeMteDate(revisionDate)
+                if (qc == null || rev == null) {
+                    error = "Tarih biçimi geçersiz. gg.aa.yyyy girin."
+                    return@Button
+                }
+                onConfirm(MteOptions(inspector, supplierLot, qcEmployee, qc, documentNo, revisionNo, rev))
+            },
+            modifier = Modifier.fillMaxWidth().height(50.dp),
+        ) { Text("MTE Yazdır") }
+        TextButton(onClick = { onConfirm(MteOptions()) }, modifier = Modifier.fillMaxWidth()) { Text("Alanları boş bırak, yazdır") }
+        Spacer(Modifier.height(24.dp))
     }
 }
 

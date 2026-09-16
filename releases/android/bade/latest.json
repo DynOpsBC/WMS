@@ -1,7 +1,7 @@
 {
-  "versionCode": 200116,
-  "versionName": "1.14.116-bade",
-  "apkUrl": "https://github.com/DynOpsBC/WMS/releases/download/android-v1.14.116/BCWMS-BADE-1.14.116-RELEASE.apk",
-  "sha256": "cfc81f870e5505c71b824703393b22f7530f1c5ebee8380d21fdf3c6cba3107b",
-  "releaseNotes": "Terminalden MTE yazdırma geri geldi: MTE cihazın etiket (ZPL) yazıcısına gönderilir; BC 1.14.1.38 yazıcı ZPL ise eski ZPL MTE, PDF belge yazıcısıysa onaylı RDLC raporunu basar. Yazıcı hataları açık Türkçe yazılır. 1.14.115 toplama düzeltmeleri dahildir. BC 1.14.1.38 yüklenmesi gerekir."
+  "versionCode": 200119,
+  "versionName": "1.14.119-bade",
+  "apkUrl": "https://github.com/DynOpsBC/WMS/releases/download/android-v1.14.119/BCWMS-BADE-1.14.119-RELEASE.apk",
+  "sha256": "21bc34202fd66e6f76f6d581936367b5d8c69b4cb3c71da58175e4d38b266601",
+  "releaseNotes": "MTE Yazdır ek alan ekranı (Giriş Yapan, tedarikçi lotu, KK onayı, doküman/revizyon); Ürün/Raf Sorgu etiketi seçili etiket yazıcısına gider, belge yazıcısına düşmez. BC 1.14.1.39 + BadeProduction 1.3.3.13 gerekir."
 }
