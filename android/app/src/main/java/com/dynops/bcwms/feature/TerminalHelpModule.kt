@@ -39,6 +39,9 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.material3.TextButton
+import androidx.compose.ui.platform.LocalContext
+import com.dynops.bcwms.ApiErrorLog
 import com.dynops.bcwms.Screen
 import com.dynops.bcwms.ui.WmsGlyph
 import com.dynops.bcwms.ui.WmsIcon
@@ -413,6 +416,7 @@ fun TerminalHelpModule(connected: Boolean, onNavigate: (Screen) -> Unit) {
                 }
             }
         }
+        item { RecentApiErrorsCard() }
         items(visibleTopics, key = { it.id }) { topic ->
             HelpTopicCard(
                 topic = topic,
@@ -525,6 +529,57 @@ private fun HelpTopicCard(
                     ) {
                         Text(if (connected || target == Screen.Connection) "${target.title} Ekranını Aç" else "Önce Bağlantı Kurun")
                     }
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Yönetici için: ekranda görülen REF-… kodunun karşılığı olan ham BC hatası.
+ * BADE LP000025 (16 Eyl 2026) — kod logcat olmadan çözülemiyordu. Kapalı
+ * başlar; operatör açmadıkça teknik metin görünmez.
+ */
+@Composable
+private fun RecentApiErrorsCard() {
+    val context = LocalContext.current
+    var expanded by remember { mutableStateOf(false) }
+    var version by remember { mutableStateOf(0) }
+    val entries = remember(expanded, version) { if (expanded) ApiErrorLog.entries(context) else emptyList() }
+    Card(
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Column(Modifier.padding(14.dp)) {
+            Row(
+                Modifier.fillMaxWidth().clickable { expanded = !expanded },
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(Modifier.weight(1f)) {
+                    Text("Son hata kayıtları (yönetici)", fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                    Text(
+                        "Ekrandaki REF-… kodunun BC'den gelen tam açıklaması. Yöneticinize bu listeyi gösterin.",
+                        fontSize = 12.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                Text(if (expanded) "Kapat" else "Aç", color = MaterialTheme.colorScheme.primary, fontSize = 13.sp)
+            }
+            if (expanded) {
+                Spacer(Modifier.height(8.dp))
+                if (entries.isEmpty()) {
+                    Text("Bu cihazda kayıtlı hata yok.", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                } else {
+                    entries.forEach { e ->
+                        Column(Modifier.fillMaxWidth().padding(vertical = 6.dp)) {
+                            Text("${e.ref} · ${e.timeLabel} · HTTP ${e.httpCode}", fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                            Text("${e.method} ${e.path}", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text(e.message, fontSize = 12.sp)
+                        }
+                    }
+                    TextButton(onClick = { ApiErrorLog.clear(context); version++ }) { Text("Kayıtları temizle") }
                 }
             }
         }

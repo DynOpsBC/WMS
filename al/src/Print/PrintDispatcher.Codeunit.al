@@ -458,7 +458,7 @@ codeunit 72051 "DOPSWHS Print Dispatcher"
         BarcodeReport.SetLabelContent(Heading, Description);
         TempBlob.CreateOutStream(PdfOutStream);
         if not BarcodeReport.SaveAs('', ReportFormat::Pdf, PdfOutStream) then
-            Error('The scanned barcode test PDF could not be rendered.');
+            Error('The scanned barcode test PDF could not be rendered: %1', LastRenderError());
         if not TempBlob.HasValue() then
             Error('The scanned barcode test produced an empty PDF.');
         Setup.Get('');
@@ -520,8 +520,10 @@ codeunit 72051 "DOPSWHS Print Dispatcher"
         LP.SetRecFilter();
         LpQrReport.SetTableView(LP);
         TempBlob.CreateOutStream(PdfOutStream);
+        // BADE 16 Eyl 2026: the boolean SaveAs swallows the report's own error
+        // (permission, layout, data); the terminal only saw a REF code. Surface it.
         if not LpQrReport.SaveAs('', ReportFormat::Pdf, PdfOutStream) then
-            Error('The LP QR PDF could not be rendered.');
+            Error(LpQrRenderFailedErr, LP."No.", LastRenderError());
         if not TempBlob.HasValue() then
             Error('The LP QR report produced an empty PDF.');
 
@@ -751,8 +753,12 @@ codeunit 72051 "DOPSWHS Print Dispatcher"
         EnsureDocumentPrinter(PrinterId, Usage);
 
         TempBlob.CreateOutStream(PdfOutStream);
+        // BADE 16 Eyl 2026 (LP000025 MTE): the boolean SaveAs swallows the
+        // report's own error (missing Execute permission on the customer report,
+        // report Error(), layout/data failure) and the terminal only showed a
+        // REF code. Carry the real message so the operator/admin can act.
         if not Report.SaveAs(ReportId, Parameters, ReportFormat::Pdf, PdfOutStream, SourceRecord) then
-            Error('Report %1 could not be rendered as PDF.', ReportId);
+            Error(ReportRenderFailedErr, ReportId, ReportCaption(ReportId), LastRenderError());
         if not TempBlob.HasValue() then
             Error('Report %1 produced an empty PDF.', ReportId);
         TempBlob.CreateInStream(PdfInStream);
@@ -946,8 +952,32 @@ codeunit 72051 "DOPSWHS Print Dispatcher"
         exit(ResolvedCode);
     end;
 
+    /// <summary>The message behind a failed Report.SaveAs (BC clears it on success).</summary>
+    local procedure LastRenderError(): Text
+    var
+        LastError: Text;
+    begin
+        LastError := GetLastErrorText();
+        ClearLastError();
+        if LastError = '' then
+            exit(RenderErrorUnknownTxt);
+        exit(LastError);
+    end;
+
+    local procedure ReportCaption(ReportId: Integer): Text
+    var
+        AllObjWithCaption: Record AllObjWithCaption;
+    begin
+        if AllObjWithCaption.Get(AllObjWithCaption."Object Type"::Report, ReportId) then
+            exit(AllObjWithCaption."Object Caption");
+        exit('');
+    end;
+
     var
         MteNoSourceEntryErr: Label '%1 paletinin kaynak madde defteri girişi yok; müşteri MTE raporu için palet önce mal kabulle kaydedilmiş olmalı.', Comment = '%1 LP no';
         MteOptionsInvalidErr: Label 'MTE ek alanları okunamadı (geçersiz JSON).';
         MteDateInvalidErr: Label 'MTE tarih alanı geçersiz: %1 (gg.aa.yyyy veya yyyy-aa-gg girin).', Comment = '%1 value';
+        ReportRenderFailedErr: Label '%1 %2 raporu PDF olarak oluşturulamadı. BC hatası: %3', Comment = '%1 report id, %2 report caption, %3 BC error text';
+        LpQrRenderFailedErr: Label '%1 LP QR belgesi oluşturulamadı. BC hatası: %2', Comment = '%1 LP no, %2 BC error text';
+        RenderErrorUnknownTxt: Label 'ayrıntı alınamadı', Comment = 'shown when GetLastErrorText is empty';
 }

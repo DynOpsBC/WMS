@@ -124,7 +124,10 @@ page 72088 "DOPSWHS LP API"
         Lines: List of [Integer];
         Quantities: Dictionary of [Integer, Decimal];
     begin
-        TargetLP.Get(targetLpNo);
+        // A typo in the target LP surfaced as the English "record does not
+        // exist" text, which the terminal masks to a REF code (BADE 16 Eyl 2026).
+        if not TargetLP.Get(targetLpNo) then
+            Error(TargetLpMissingErr, targetLpNo);
         ParseLines(linesJson, Lines, Quantities);
         // Boş linesJson = "tüm içerik": önceden sessizce hiçbir satır
         // taşınmıyordu (boş liste boş döngü) — tüm satırlarla doldur.
@@ -189,7 +192,8 @@ page 72088 "DOPSWHS LP API"
         ParentLP: Record "DOPSWHS LP Header";
         NestManager: Codeunit "DOPSWHS LP Nest Manager";
     begin
-        ParentLP.Get(parentLpNo);
+        if not ParentLP.Get(parentLpNo) then
+            Error(TargetLpMissingErr, parentLpNo);
         NestManager.Nest(Rec, ParentLP);
     end;
 
@@ -301,6 +305,9 @@ page 72088 "DOPSWHS LP API"
         Result.WriteTo(ResultText);
         exit(ResultText);
     end;
+
+    var
+        TargetLpMissingErr: Label '%1 numaralı LP bulunamadı. LP numarasını kontrol edip tekrar deneyin.', Comment = '%1 LP no';
 
     local procedure ParseLines(LinesJson: Text; var Lines: List of [Integer]; var Quantities: Dictionary of [Integer, Decimal])
     var

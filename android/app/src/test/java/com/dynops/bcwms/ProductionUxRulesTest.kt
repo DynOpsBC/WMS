@@ -4,6 +4,7 @@ import com.dynops.bcwms.feature.allowAdminBypass
 import com.dynops.bcwms.ui.assignedToMeClause
 import com.dynops.bcwms.ui.canLoadAssignedOnlyList
 import com.dynops.bcwms.ui.operatorFacingApiError
+import com.dynops.bcwms.ui.operatorSupportReference
 import com.dynops.bcwms.ui.normalizeQtyInput
 import com.dynops.bcwms.ui.operatorFacingStatus
 import org.junit.Assert.assertEquals
@@ -101,10 +102,62 @@ class ProductionUxRulesTest {
     fun `raw Business Central errors become Turkish support references`() {
         val visible = operatorFacingApiError("The Item does not exist. Identification fields: No.=X", 404)
 
-        assertTrue(visible.startsWith("HATA: İşlem tamamlanamadı."))
+        // 16 Eyl 2026: "does not exist" artık kaydın adıyla açıklanır, REF kodu kalır.
+        assertTrue(visible, visible.startsWith("HATA: Ürün kaydı bulunamadı (No.=X)."))
         assertTrue(visible.contains("REF-"))
         assertFalse(visible.contains("Identification"))
         assertFalse(visible.contains("404"))
+    }
+
+    @Test
+    fun `on-device error log resolves the REF code shown to the operator and stays bounded`() {
+        ApiErrorLog.clear(null)
+        val raw = "Report 60150 could not be rendered as PDF.  CorrelationId:  aa-bb."
+        val entry = ApiErrorLog.record(null, "POST", "licensePlates('LP000025')/Microsoft.NAV.printMte", 400, raw)
+        val shown = operatorFacingApiError(raw, 400)
+        assertTrue(shown, shown.contains(entry.ref))
+        assertEquals(operatorSupportReference(raw, 400), entry.ref)
+        assertEquals(raw.trim(), ApiErrorLog.entries(null).first().message)
+        repeat(ApiErrorLog.MAX_ENTRIES + 5) { i -> ApiErrorLog.record(null, "GET", "x/$i", 500, "e$i") }
+        assertEquals(ApiErrorLog.MAX_ENTRIES, ApiErrorLog.entries(null).size)
+        assertEquals("e${ApiErrorLog.MAX_ENTRIES + 4}", ApiErrorLog.entries(null).first().message)
+        ApiErrorLog.clear(null)
+    }
+
+    @Test
+    fun `report render failures from BC carry the real cause to the operator`() {
+        // BADE 16 Eyl 2026: LP000025 MTE Yazdır yalnız REF-534F3BFA gösteriyordu.
+        val permission = operatorFacingApiError(
+            "60150 Madde Tanımlama Etiketi raporu PDF olarak oluşturulamadı. BC hatası: You do not have the following permissions on Report Madde Tanımlama Etiketi: Execute.  CorrelationId:  aa-bb.",
+            400,
+        )
+        assertTrue(permission, permission.startsWith("HATA: 60150 Madde Tanımlama Etiketi raporu PDF olarak oluşturulamadı. Neden: Terminal kullanıcısının BC'de 'Madde Tanımlama Etiketi' (Report) nesnesi için Execute yetkisi yok."))
+        assertFalse(permission.contains("CorrelationId"))
+
+        val reportRule = operatorFacingApiError(
+            "60150 Madde Tanımlama Etiketi raporu PDF olarak oluşturulamadı. BC hatası: Etiket basılacak kayıt bulunamadı. Filtre/selection kontrol edin.  CorrelationId:  aa-bb.",
+            400,
+        )
+        assertTrue(reportRule, reportRule.contains("Neden: Etiket basılacak kayıt bulunamadı. Filtre/selection kontrol edin."))
+
+        val qr = operatorFacingApiError("LP000025 LP QR belgesi oluşturulamadı. BC hatası: The report layout is missing.", 400)
+        assertTrue(qr, qr.contains("LP000025 LP QR belgesi oluşturulamadı. Neden: The report layout is missing."))
+    }
+
+    @Test
+    fun `missing LP or overlong value errors name the record and value`() {
+        val lp = operatorFacingApiError(
+            "The DOPSWHS LP Header does not exist. Identification fields and values: No.='LP00099'  CorrelationId:  aa-bb.",
+            400,
+        )
+        assertTrue(lp, lp.startsWith("HATA: LP kaydı bulunamadı (No.='LP00099'). Numarayı kontrol edip tekrar deneyin."))
+        val tooLong = operatorFacingApiError(
+            "The length of the string is 60, but it must be less than or equal to 50 characters. Value: ABCDEFGHIJ  CorrelationId:  aa-bb.",
+            400,
+        )
+        assertTrue(tooLong, tooLong.contains("Girilen değer çok uzun (60 karakter, en fazla 50): ABCDEFGHIJ"))
+        val perm = operatorFacingApiError("You do not have the following permissions on TableData Employee: Read.", 400)
+        assertTrue(perm, perm.contains("'Employee' (TableData) nesnesi için Read yetkisi yok"))
     }
 
     @Test

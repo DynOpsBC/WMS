@@ -245,8 +245,36 @@ fun normalizeQtyInput(raw: String): String {
     return cleaned.substring(0, first + 1) + cleaned.substring(first + 1).replace(".", "")
 }
 
+/**
+ * BADE 16 Eyl 2026 (LP000025 MTE Yazdır): BC rapor/belge üretim hatasının gerçek
+ * nedenini Türkçe önekle döndürür ("… raporu PDF olarak oluşturulamadı. BC hatası: …").
+ * İç metin İngilizce olabilir; biliniyorsa çevrilir, bilinmiyorsa aynen gösterilir —
+ * yalnız REF kodu operatörü ve yöneticiyi kilitliyordu. operatorSafeBcMessage'dan
+ * önce çalışır; aksi halde İngilizce iç metin olduğu gibi geçiyordu.
+ */
+fun operatorReportRenderError(raw: String): String? {
+    val m = Regex(
+        """(.+?raporu PDF olarak oluşturulamadı|.+?LP QR belgesi oluşturulamadı)\.\s*BC hatası:\s*(.+)$""",
+        RegexOption.DOT_MATCHES_ALL,
+    ).find(stripBcNoise(raw)) ?: return null
+    val inner = m.groupValues[2].trim()
+    val innerTr = operatorKnownBcError(inner) ?: operatorSafeBcMessage(inner) ?: inner
+    return "${m.groupValues[1].trim()}. Neden: $innerTr"
+}
+
 /** Sık görülen İngilizce BC iş kuralı hataları → eyleme dönük Türkçe metin (null = eşleşme yok). */
 fun operatorKnownBcError(raw: String): String? {
+    Regex("""You do not have the following permissions on (\w+) (.+?): (\w+)""", RegexOption.IGNORE_CASE).find(raw)?.let {
+        val (objType, objName, perm) = it.destructured
+        return "Terminal kullanıcısının BC'de '$objName' ($objType) nesnesi için $perm yetkisi yok. Yöneticiniz ilgili yetki setini (ör. müşteri raporu uzantısı) BC kullanıcısına eklemeli."
+    }
+    Regex("""(?:The )?(.+?) does not exist\. Identification fields(?: and values)?:\s*(.+?)\s*(?:CorrelationId|$)""", RegexOption.IGNORE_CASE).find(raw)?.let {
+        val table = operatorRecordCaption(it.groupValues[1].trim())
+        return "$table kaydı bulunamadı (${it.groupValues[2].trim().trimEnd('.')}). Numarayı kontrol edip tekrar deneyin."
+    }
+    Regex("""The length of the string is (\d+), but it must be less than or equal to (\d+) characters\.\s*Value:\s*(.+?)\s*(?:CorrelationId|$)""", RegexOption.IGNORE_CASE).find(raw)?.let {
+        return "Girilen değer çok uzun (${it.groupValues[1]} karakter, en fazla ${it.groupValues[2]}): ${it.groupValues[3].trim()}. Kısaltıp tekrar deneyin."
+    }
     Regex("""cannot handle more than the outstanding\s+(\d+(?:[.,]\d+)?)""", RegexOption.IGNORE_CASE).find(raw)?.let {
         return "Kalan miktardan fazla giremezsiniz (kalan: ${it.groupValues[1]}). Miktarı düzeltin."
     }
@@ -339,6 +367,9 @@ fun operatorKnownBcError(raw: String): String? {
 
 /** Raw BC/transport errors never belong on the warehouse terminal. */
 fun operatorFacingApiError(raw: String, httpCode: Int = 0): String {
+    operatorReportRenderError(raw)?.let {
+        return "HATA: $it Sorun sürerse yöneticinize ${operatorSupportReference(raw, httpCode)} kodunu iletin."
+    }
     operatorSafeBcMessage(raw)?.let {
         return "HATA: $it Sorun sürerse yöneticinize ${operatorSupportReference(raw, httpCode)} kodunu iletin."
     }
@@ -374,7 +405,31 @@ fun operatorFacingApiError(raw: String, httpCode: Int = 0): String {
             "Miktar kaydedilemedi. Değeri kontrol edip tekrar deneyin."
         else -> "İşlem tamamlanamadı. Yenileyip tekrar deneyin."
     }
+    // Ham İngilizce metin operatöre gitmez; REF kodu Yardım ekranındaki
+    // "Son hata kayıtları" listesinden gerçek BC metnine çözülür (16 Eyl 2026).
     return "HATA: $action Sorun sürerse yöneticinize ${operatorSupportReference(raw, httpCode)} kodunu iletin."
+}
+
+/** BC ham metninden CorrelationId/HTTP eklerini atar; kısa, tek satır. */
+fun stripBcNoise(raw: String): String = raw
+    .replace(Regex("""\s*CorrelationId:\s*[0-9a-fA-F-]+\.?""", RegexOption.IGNORE_CASE), "")
+    .replace(Regex("""\s*\(HTTP\s*\d+\)""", RegexOption.IGNORE_CASE), "")
+    .replace(Regex("""\s{2,}"""), " ")
+    .trim()
+
+private fun operatorRecordCaption(table: String): String = when (table.lowercase()) {
+    "dopswhs lp header", "lp header" -> "LP"
+    "dopswhs lp line", "lp line" -> "LP satırı"
+    "item" -> "Ürün"
+    "bin" -> "Raf"
+    "bin content" -> "Raf içeriği"
+    "location" -> "Lokasyon"
+    "lot no. information" -> "Lot bilgisi"
+    "employee" -> "Çalışan"
+    "warehouse receipt header" -> "Mal kabul belgesi"
+    "warehouse shipment header" -> "Sevkiyat belgesi"
+    "warehouse activity header" -> "Ambar aktivite belgesi"
+    else -> table
 }
 
 private fun operatorFieldCaption(field: String): String = when (field.lowercase()) {
