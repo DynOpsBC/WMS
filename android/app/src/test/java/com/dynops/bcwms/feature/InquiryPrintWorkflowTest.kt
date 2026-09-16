@@ -1,6 +1,7 @@
 package com.dynops.bcwms.feature
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class InquiryPrintWorkflowTest {
@@ -26,11 +27,16 @@ class InquiryPrintWorkflowTest {
         org.junit.Assert.assertTrue(printerReadinessMessage(listOf(inactive, active)).contains("1 pasif"))
     }
     @Test fun `inactive selected label falls back to document`() {
-        assertEquals("PDF01", inquiryLabelPrinter("ZPL01", "PDF01", labelAvailable = false))
+        // 16 Eyl 2026: the operator's label selection wins; an unavailable BC
+        // record only warns, it no longer re-routes the job to a document printer.
+        assertEquals("ZPL01", inquiryLabelPrinter("ZPL01", "PDF01", labelAvailable = false))
+        assertTrue(inquiryLabelWarning("ZPL01", labelAvailable = false).contains("ZPL01"))
+        assertEquals("", inquiryLabelWarning("ZPL01", labelAvailable = true))
+        assertEquals("", inquiryLabelWarning("", labelAvailable = false))
     }
 
     @Test fun `unavailable label is not reused without a document printer`() {
-        assertEquals("", inquiryLabelPrinter("ZPL01", "", labelAvailable = false))
+        assertEquals("ZPL01", inquiryLabelPrinter("ZPL01", "", labelAvailable = false))
     }
     @Test fun `label printer takes priority when both are selected`() {
         assertEquals("ZPL01", inquiryLabelPrinter("ZPL01", "PDF01"))

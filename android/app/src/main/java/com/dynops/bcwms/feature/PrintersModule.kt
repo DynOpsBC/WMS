@@ -57,20 +57,26 @@ fun setDefaultPrinter(context: Context, code: String, usage: String = PRINTER_US
 fun getMtePrinter(context: Context): String =
     mtePrinterCode(getDefaultPrinter(context, PRINTER_USAGE_LABEL), getDefaultPrinter(context, PRINTER_USAGE_DOCUMENT))
 
-internal suspend fun resolveInquiryPrinter(context: Context): Result<String> = runCatching {
+internal data class InquiryPrinterChoice(val printerCode: String, val warning: String)
+
+/**
+ * The device's label printer is used as selected; its BC record is only checked
+ * to warn the operator. Falls back to the document printer when no label
+ * printer is selected, and to BC's device mapping when neither is.
+ */
+internal suspend fun resolveInquiryPrinter(context: Context): Result<InquiryPrinterChoice> = runCatching {
     val label = getDefaultPrinter(context)
     val document = getDefaultPrinter(context, PRINTER_USAGE_DOCUMENT)
-    if (label.isBlank()) return@runCatching document
+    if (label.isBlank()) return@runCatching InquiryPrinterChoice(document, "")
     val escaped = label.replace("'", "''")
     val response = BcApi.get(context, "printers?\$filter=code eq '$escaped'&\$top=1")
-    check(response.ok) { "Yazıcı durumu doğrulanamadı: ${BcApi.errorMessage(response.body)}" }
-    // An unavailable API is not evidence of an inactive printer. Only use the
-    // document fallback after a successful response confirms missing/inactive.
-    val data = JSONObject(response.body).getJSONArray("value")
-    val printer = if (data.length() == 0) null else data.getJSONObject(0)
-    val available = printer != null && printer.getBoolean("active") && printer.getString("format") == "ZPL"
-    check(available || document.isNotBlank()) { "Etiket yazıcısı pasif veya bulunamadı. Yazıcılar ekranından bir Belge yazıcısı seçin." }
-    inquiryLabelPrinter(label, document, available)
+    // An unavailable API is not evidence of an inactive printer: print anyway.
+    val available = if (!response.ok) true else runCatching {
+        val data = JSONObject(response.body).getJSONArray("value")
+        val printer = if (data.length() == 0) null else data.getJSONObject(0)
+        printer != null && printer.optBoolean("active", true) && printer.optString("format").equals("ZPL", true)
+    }.getOrDefault(true)
+    InquiryPrinterChoice(inquiryLabelPrinter(label, document), inquiryLabelWarning(label, available))
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
