@@ -529,7 +529,8 @@ codeunit 72051 "DOPSWHS Print Dispatcher"
         NoFont: Integer;
     begin
         Canvas.Init();
-        Zpl := Canvas.Frame('ÜRÜN ETİKETİ', CompanyProperty.DisplayName(), Item."No.", 'QR = ÜRÜN NO', X, ColumnWidth, Y);
+        // DKÇ (16 Eyl 2026): no caption under the item QR.
+        Zpl := Canvas.Frame('ÜRÜN ETİKETİ', CompanyProperty.DisplayName(), Item."No.", '', X, ColumnWidth, Y);
         NoFont := Canvas.FitFont(Item."No.", ColumnWidth, Canvas.BigFont(), 28);
         Zpl += Canvas.Write(X, Y, NoFont, ColumnWidth, Item."No.");
         Y += NoFont + 8;

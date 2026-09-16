@@ -323,8 +323,12 @@ codeunit 72321 "DOPSWHS Label Canvas"
         EnsureInit();
         // Zebra (and Labelary) draw the QR symbol about 10 dots below the ^FO origin.
         QrMax := Width * 30 div 100;
-        if Height - BandDots - 8 - QrOffset() - 6 - SmallSize - MarginDots < QrMax then
-            QrMax := Height - BandDots - 8 - QrOffset() - 6 - SmallSize - MarginDots;
+        if QrCaption = '' then begin
+            if Height - BandDots - 8 - QrOffset() - MarginDots < QrMax then
+                QrMax := Height - BandDots - 8 - QrOffset() - MarginDots;
+        end else
+            if Height - BandDots - 8 - QrOffset() - 6 - SmallSize - MarginDots < QrMax then
+                QrMax := Height - BandDots - 8 - QrOffset() - 6 - SmallSize - MarginDots;
         Magnification := QrMagnification(QrData, QrMax);
         Side := QrModules(QrData) * Magnification;
         QrX := Width - MarginDots - Side;
