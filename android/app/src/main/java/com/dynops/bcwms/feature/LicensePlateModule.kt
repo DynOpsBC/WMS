@@ -113,7 +113,11 @@ fun LicensePlateModule() {
                 // işlendiği için hata özeti ve yeniden-deneme davranışı değişmez.
                 val results = batch.map { no ->
                     val row = rows.firstOrNull { it.optString("no") == no }
-                    val route = if (no in palletLabelRetryNos) {
+                    val templateLabels = usesTemplateLpLabels(com.dynops.bcwms.BuildConfig.FLAVOR)
+                    val route = if (templateLabels) {
+                        // EMU/DKÇ: her LP kendi şablon tasarımıyla (palet/koli/kutu/çuval) basılır.
+                        lpListPrintRoute(true, row?.optInt("lineCount") ?: 0, labelPrinter, documentPrinter)
+                    } else if (no in palletLabelRetryNos) {
                         // İlk toplu oluşturma çağrısıyla aynı MTE'yi aynı
                         // yazıcıdan yeniden üret (ZPL yazıcıda ZPL, PDF yazıcıda RDLC).
                         mtePrintRoute(labelPrinter, documentPrinter)
@@ -285,6 +289,7 @@ private fun LpDocument(lpNo: String, onBack: () -> Unit) {
     var selectedLineItem by remember { mutableStateOf<LpItemSelection?>(null) }
     var showTransfer by remember { mutableStateOf(false) }
     var showPartial by remember { mutableStateOf(false) }
+    var showPullDocument by remember { mutableStateOf(false) }
     var showAssignBin by remember { mutableStateOf(false) }
     var showUnbuildConfirm by remember { mutableStateOf(false) }
     var showDeleteConfirm by remember { mutableStateOf(false) }
@@ -547,22 +552,65 @@ private fun LpDocument(lpNo: String, onBack: () -> Unit) {
                     }
                 }
 
-                OutlinedButton(
-                    onClick = {
-                        val route = mtePrintRoute(getDefaultPrinter(context, PRINTER_USAGE_LABEL), getDefaultPrinter(context, PRINTER_USAGE_DOCUMENT))
-                        action(
-                            route.action,
-                            JSONObject().apply {
-                                put("printerId", route.printerCode)
-                                put("copies", 1)
-                            }.toString(),
-                            "MTE yazdırma isteği gönderildi. Fiziksel etiketi kontrol edin.",
-                        )
-                    },
-                    enabled = !busy && headerLoaded && canPrintMte(linesComplete, lines.size, pendingReceiptNo),
-                    modifier = Modifier.fillMaxWidth().height(50.dp),
-                    shape = RoundedCornerShape(14.dp),
-                ) { WmsActionLabel(WmsGlyph.PRINTER, "MTE Yazdır") }
+                val templateLabels = usesTemplateLpLabels(com.dynops.bcwms.BuildConfig.FLAVOR)
+                if (templateLabels) {
+                    // EMU/DKÇ: tek "Etiket Yazdır" — BC, LP şablonunun tasarımını
+                    // (palet/koli/kutu/çuval, içerik listesi) ve kopya sayısını uygular.
+                    OutlinedButton(
+                        onClick = {
+                            action(
+                                "printLabel",
+                                JSONObject().apply {
+                                    put("printerId", getMtePrinter(context))
+                                    put("copies", 0)
+                                }.toString(),
+                                "Etiket yazıcıya gönderildi (şablon tasarımı ve kopya sayısı BC'den).",
+                                requiresCompleteLines = false,
+                            )
+                        },
+                        enabled = !busy && headerLoaded,
+                        modifier = Modifier.fillMaxWidth().height(50.dp),
+                        shape = RoundedCornerShape(14.dp),
+                    ) { WmsActionLabel(WmsGlyph.PRINTER, "Etiket Yazdır") }
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        OutlinedButton(
+                            onClick = { showPullDocument = true },
+                            enabled = !busy && headerLoaded && canPullFromDocument(st, pendingReceiptNo),
+                            modifier = Modifier.weight(1f).height(50.dp),
+                            shape = RoundedCornerShape(14.dp),
+                        ) { WmsActionLabel(WmsGlyph.ENTRIES, "Belgeden Doldur") }
+                        OutlinedButton(
+                            onClick = {
+                                action(
+                                    "printPackingList",
+                                    JSONObject().apply { put("printerId", getDefaultPrinter(context, PRINTER_USAGE_DOCUMENT)) }.toString(),
+                                    "Paketleme listesi belge yazıcısına gönderildi.",
+                                    requiresCompleteLines = false,
+                                )
+                            },
+                            enabled = !busy && headerLoaded && lines.isNotEmpty(),
+                            modifier = Modifier.weight(1f).height(50.dp),
+                            shape = RoundedCornerShape(14.dp),
+                        ) { WmsActionLabel(WmsGlyph.PRINTER, "Paketleme Listesi") }
+                    }
+                } else {
+                    OutlinedButton(
+                        onClick = {
+                            val route = mtePrintRoute(getDefaultPrinter(context, PRINTER_USAGE_LABEL), getDefaultPrinter(context, PRINTER_USAGE_DOCUMENT))
+                            action(
+                                route.action,
+                                JSONObject().apply {
+                                    put("printerId", route.printerCode)
+                                    put("copies", 1)
+                                }.toString(),
+                                "MTE yazdırma isteği gönderildi. Fiziksel etiketi kontrol edin.",
+                            )
+                        },
+                        enabled = !busy && headerLoaded && canPrintMte(linesComplete, lines.size, pendingReceiptNo),
+                        modifier = Modifier.fillMaxWidth().height(50.dp),
+                        shape = RoundedCornerShape(14.dp),
+                    ) { WmsActionLabel(WmsGlyph.PRINTER, "MTE Yazdır") }
+                }
                 if (awaitingReceipt) {
                     Text("MTE, mal kabul kaydedildikten sonra yazdırılabilir.", style = MaterialTheme.typography.bodySmall)
                 }
@@ -768,6 +816,23 @@ private fun LpDocument(lpNo: String, onBack: () -> Unit) {
             }
         )
     }
+    if (showPullDocument) {
+        PullDocumentSheet(
+            onDismiss = { showPullDocument = false },
+            onConfirm = { type, docNo ->
+                showPullDocument = false
+                action(
+                    "pullFromDocument",
+                    JSONObject().apply {
+                        put("docType", type.enumName)
+                        put("docNo", docNo)
+                    }.toString(),
+                    "$docNo belgesinin satırları LP'ye çekildi; müşteri/sevk bilgisi LP'ye yazıldı.",
+                    requiresCompleteLines = false,
+                )
+            },
+        )
+    }
     if (showTransfer) {
         TransferSheet(onDismiss = { showTransfer = false }, onConfirm = { target ->
             showTransfer = false
@@ -785,6 +850,57 @@ private fun LpDocument(lpNo: String, onBack: () -> Unit) {
             val label = lpPartialActions.firstOrNull { it.apiValue == mode }?.label ?: "Kısmi kullanım"
             action("usePartial", JSONObject().apply { put("action", mode); put("qty", qty); put("lineNo", lineNo) }.toString(), "$label tamamlandı")
         })
+    }
+}
+
+/** EMU/DKÇ: pick a document type (or scan its barcode) and pull its lines into the open LP. */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun PullDocumentSheet(
+    onDismiss: () -> Unit,
+    onConfirm: (PullDocumentType, String) -> Unit,
+) {
+    var selected by remember { mutableStateOf(PULL_DOCUMENT_TYPES.first()) }
+    var docNo by remember { mutableStateOf("") }
+    var expanded by remember { mutableStateOf(false) }
+
+    SheetScaffold(onDismiss = onDismiss, contentPadding = PaddingValues(20.dp)) {
+        Text("Belgeden Doldur", fontWeight = FontWeight.Bold, fontSize = 18.sp)
+        Text(
+            "Belgenin madde satırları lot/seri dağılımıyla bu LP'ye kopyalanır; müşteri, sevk adresi ve sevkiyat yöntemi LP'ye yazılır. Belge barkodu okutulursa tür kendiliğinden seçilir.",
+            fontSize = 12.sp,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Spacer(Modifier.height(12.dp))
+        Box(Modifier.fillMaxWidth()) {
+            OutlinedButton(onClick = { expanded = true }, modifier = Modifier.fillMaxWidth().height(50.dp)) {
+                Text("Belge türü: ${selected.title}")
+            }
+            DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+                PULL_DOCUMENT_TYPES.forEach { type ->
+                    DropdownMenuItem(text = { Text(type.title) }, onClick = { selected = type; expanded = false })
+                }
+            }
+        }
+        Spacer(Modifier.height(8.dp))
+        ScanField(
+            "Belge No.",
+            docNo,
+            { docNo = it.uppercase() },
+            modifier = Modifier.fillMaxWidth(),
+            onScanned = { raw ->
+                val resolved = BarcodeIntentResolver.resolve(raw)
+                pullDocumentTypeForBarcode(resolved.docType)?.let { selected = it }
+                docNo = resolved.value.trim().uppercase()
+            },
+        )
+        Spacer(Modifier.height(16.dp))
+        Button(
+            onClick = { onConfirm(selected, docNo.trim()) },
+            enabled = docNo.isNotBlank(),
+            modifier = Modifier.fillMaxWidth().height(50.dp),
+        ) { Text("Satırları Çek") }
+        Spacer(Modifier.height(24.dp))
     }
 }
 

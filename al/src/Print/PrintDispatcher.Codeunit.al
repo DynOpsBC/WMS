@@ -16,9 +16,25 @@ codeunit 72051 "DOPSWHS Print Dispatcher"
         Zpl: Text;
         ResolvedPrinter: Code[20];
         JobId: Integer;
+        Builder: Codeunit "DOPSWHS LP Label Builder";
+        ReportLP: Record "DOPSWHS LP Header";
+        SourceRecord: RecordRef;
+        TemplateReportId: Integer;
     begin
+        // EMU/DKÇ (15 Eyl 2026): the LP template decides copies and design. A
+        // template routed to an RDLC report prints as a PDF document; every
+        // other design is ZPL built by the label builder.
+        if Copies <= 0 then
+            Copies := Builder.ResolveCopies(LP);
         if Copies > 10 then
             Error('A print job cannot exceed 10 copies.');
+        if Builder.UsesReportLayout(LP, TemplateReportId) then begin
+            ReportLP := LP;
+            ReportLP.SetRecFilter();
+            SourceRecord.GetTable(ReportLP);
+            PrintReport(LP."No.", TemplateReportId, PrinterId, Copies, Enum::"DOPSWHS IWX Report Usage"::Receipt, SourceRecord);
+            exit;
+        end;
         Setup.Get('');
         Zpl := LabelReport.BuildZpl(LP);
 
@@ -229,16 +245,28 @@ codeunit 72051 "DOPSWHS Print Dispatcher"
         exit(GroupQuantity);
     end;
 
+    /// <summary>
+    /// Pallet item label, one per item group on the pallet: item, description,
+    /// lot, received total and pallet quantity; QR and Code128 carry the LP No.
+    /// Laid out on the configured label canvas (Setup label size).
+    /// </summary>
     procedure BuildPalletItemZpl(var LP: Record "DOPSWHS LP Header"; var LPLine: Record "DOPSWHS LP Line"): Text
     var
         Item: Record Item;
-        ZplEncoder: Codeunit "DOPSWHS ZPL Encoder";
+        Canvas: Codeunit "DOPSWHS Label Canvas";
+        Lines: List of [Text];
         DescriptionText: Text;
         TotalQuantity: Decimal;
         QrData: Text;
         TotalText: Text;
         PalletText: Text;
         LotText: Text;
+        Zpl: Text;
+        X: Integer;
+        ColumnWidth: Integer;
+        Y: Integer;
+        NoFont: Integer;
+        Bars: Integer;
     begin
         if Item.Get(LPLine."Item No.") then
             DescriptionText := Item.Description;
@@ -247,7 +275,7 @@ codeunit 72051 "DOPSWHS Print Dispatcher"
             TotalQuantity := LPLine.Quantity;
 
         TotalText := StrSubstNo('TOPLAM MAL KABUL: %1 %2', TotalQuantity, LPLine."Unit of Measure");
-        PalletText := StrSubstNo('PALET MIKTARI: %1 %2', LPLine.Quantity, LPLine."Unit of Measure");
+        PalletText := StrSubstNo('PALET MİKTARI: %1 %2', LPLine.Quantity, LPLine."Unit of Measure");
         if LPLine."Lot No." <> '' then
             LotText := 'LOT: ' + LPLine."Lot No.";
 
@@ -257,17 +285,30 @@ codeunit 72051 "DOPSWHS Print Dispatcher"
         if QrData = '' then
             QrData := LPLine."Item No.";
 
-        exit(
-            '^XA^CI28^PW812^LL406' +
-            '^FO35,18^A0N,28,28^FH_^FDMADDE TANIMLAMA ETIKETI^FS' +
-            '^FO35,62^A0N,28,28^FH_^FDMADDE: ' + ZplEncoder.EncodeFieldData(CopyStr(LPLine."Item No.", 1, 18)) + '^FS' +
-            '^FO35,104^A0N,21,21^FH_^FD' + ZplEncoder.EncodeFieldData(CopyStr(DescriptionText, 1, 24)) + '^FS' +
-            '^FO35,142^A0N,24,24^FH_^FD' + ZplEncoder.EncodeFieldData(CopyStr(LotText, 1, 20)) + '^FS' +
-            '^FO35,182^A0N,24,24^FH_^FDLP: ' + ZplEncoder.EncodeFieldData(LP."No.") + '^FS' +
-            '^FO35,232^A0N,26,26^FH_^FD' + ZplEncoder.EncodeFieldData(CopyStr(TotalText, 1, 48)) + '^FS' +
-            '^FO35,282^A0N,36,36^FH_^FD' + ZplEncoder.EncodeFieldData(CopyStr(PalletText, 1, 42)) + '^FS' +
-            '^FO610,58^BQN,2,5^FH_^FDLA,' + ZplEncoder.EncodeFieldData(QrData) + '^FS' +
-            '^XZ');
+        Canvas.Init();
+        Zpl := Canvas.Frame('MADDE TANIMLAMA ETİKETİ', LP."No.", QrData, 'QR = LP NO', X, ColumnWidth, Y);
+        NoFont := Canvas.FitFont(LPLine."Item No.", ColumnWidth, Canvas.BigFont() - 8, 28);
+        Zpl += Canvas.Write(X, Y, NoFont, ColumnWidth, LPLine."Item No.");
+        Y += NoFont + 6;
+        Canvas.WrapText(DescriptionText, Canvas.MaxChars(ColumnWidth, Canvas.NormalFont()), 1, Lines);
+        if Lines.Count() > 0 then begin
+            Zpl += Canvas.Write(X, Y, Canvas.NormalFont(), ColumnWidth, Lines.Get(1));
+            Y += Canvas.Pitch() - 2;
+        end;
+        if LotText <> '' then begin
+            Zpl += Canvas.Write(X, Y, Canvas.NormalFont(), ColumnWidth, CopyStr(LotText, 1, Canvas.MaxChars(ColumnWidth, Canvas.NormalFont())));
+            Y += Canvas.Pitch() - 2;
+        end;
+        Zpl += Canvas.Write(X, Y, Canvas.SmallFont(), ColumnWidth, CopyStr(TotalText, 1, Canvas.MaxChars(ColumnWidth, Canvas.SmallFont())));
+        Y += Canvas.SmallFont() + 6;
+        Zpl += Canvas.Write(X, Y, Canvas.QtyFont(), ColumnWidth, CopyStr(PalletText, 1, Canvas.MaxChars(ColumnWidth, Canvas.QtyFont())));
+        Y += Canvas.QtyFont() + 8;
+        if LP."No." <> '' then begin
+            Bars := Canvas.LabelHeight() - Canvas.Margin() - Y;
+            if Bars >= 30 then
+                Zpl += Canvas.Code128(X, Y, Bars, LP."No.", ColumnWidth, false);
+        end;
+        exit(Zpl + Canvas.Finish());
     end;
 
     procedure PrintBinLabel(var Bin: Record Bin; PrinterId: Code[50]; Copies: Integer)
@@ -469,65 +510,83 @@ codeunit 72051 "DOPSWHS Print Dispatcher"
     /// two-line description, base unit, Code128 + QR. Both barcodes carry the bare
     /// item number, which the terminal resolves as an item by default.
     /// </summary>
-    local procedure BuildItemZpl(var Item: Record Item): Text
+    /// <summary>
+    /// Item label: item no. at the largest size that fits the text column,
+    /// description on up to two lines, unit and GTIN, Code128 + QR carrying the
+    /// bare item no. Laid out on the configured label canvas (Setup label size,
+    /// 80x40 mm at DKÇ) so nothing is cut off on the right or at the bottom.
+    /// </summary>
+    procedure BuildItemZpl(var Item: Record Item): Text
     var
-        ZplEncoder: Codeunit "DOPSWHS ZPL Encoder";
+        Canvas: Codeunit "DOPSWHS Label Canvas";
+        Lines: List of [Text];
+        Line: Text;
+        UnitText: Text;
+        Zpl: Text;
+        X: Integer;
+        ColumnWidth: Integer;
+        Y: Integer;
         NoFont: Integer;
     begin
-        NoFont := FitFontSize(Item."No.", 560, 72);
-        exit(
-            '^XA^CI28^PW812^LL406' +
-            '^FO0,0^GB812,52,52^FS' +
-            '^FO24,10^A0N,32,32^FR^FH_^FDÜRÜN ETİKETİ^FS' +
-            '^FO470,12^A0N,26,26^FR^FH_^FB318,1,0,R^FD' + ZplEncoder.EncodeFieldData(CopyStr(CompanyProperty.DisplayName(), 1, 22)) + '^FS' +
-            '^FO24,66^A0N,' + Format(NoFont) + ',' + Format(NoFont) + '^FH_^FD' + ZplEncoder.EncodeFieldData(Item."No.") + '^FS' +
-            '^FO24,148^A0N,30,30^FH_^FD' + ZplEncoder.EncodeFieldData(DescriptionLine(Item.Description, 1, 33)) + '^FS' +
-            '^FO24,184^A0N,30,30^FH_^FD' + ZplEncoder.EncodeFieldData(DescriptionLine(Item.Description, 2, 33)) + '^FS' +
-            '^FO24,222^A0N,24,24^FH_^FDBİRİM: ' + ZplEncoder.EncodeFieldData(Item."Base Unit of Measure") +
-                ItemGtinText(Item) + '^FS' +
-            '^FO24,258^BY' + Format(BarcodeModuleWidth(Item."No.")) + '^BCN,100,Y,N,N^FH_^FD' + ZplEncoder.EncodeFieldData(Item."No.") + '^FS' +
-            '^FO604,66^BQN,2,7^FH_^FDLA,' + ZplEncoder.EncodeFieldData(Item."No.") + '^FS' +
-            '^FO604,320^A0N,22,22^FH_^FDQR = ÜRÜN NO^FS' +
-            '^XZ');
-    end;
-
-    local procedure ItemGtinText(var Item: Record Item): Text
-    var
-        ZplEncoder: Codeunit "DOPSWHS ZPL Encoder";
-    begin
-        if Item.GTIN = '' then
-            exit('');
-        exit('   GTIN: ' + ZplEncoder.EncodeFieldData(Item.GTIN));
+        Canvas.Init();
+        Zpl := Canvas.Frame('ÜRÜN ETİKETİ', CompanyProperty.DisplayName(), Item."No.", 'QR = ÜRÜN NO', X, ColumnWidth, Y);
+        NoFont := Canvas.FitFont(Item."No.", ColumnWidth, Canvas.BigFont(), 28);
+        Zpl += Canvas.Write(X, Y, NoFont, ColumnWidth, Item."No.");
+        Y += NoFont + 8;
+        Canvas.WrapText(Item.Description, Canvas.MaxChars(ColumnWidth, Canvas.NormalFont()), 2, Lines);
+        foreach Line in Lines do begin
+            Zpl += Canvas.Write(X, Y, Canvas.NormalFont(), ColumnWidth, Line);
+            Y += Canvas.Pitch();
+        end;
+        UnitText := 'BİRİM: ' + Item."Base Unit of Measure";
+        if Item.GTIN <> '' then
+            UnitText += '   GTIN: ' + Item.GTIN;
+        Zpl += Canvas.Write(X, Y, Canvas.SmallFont(), ColumnWidth, CopyStr(UnitText, 1, Canvas.MaxChars(ColumnWidth, Canvas.SmallFont())));
+        Y += Canvas.SmallFont() + 8;
+        Zpl += Canvas.Code128(X, Y, Canvas.BarHeightToBottom(Y, true), Item."No.", ColumnWidth, true);
+        exit(Zpl + Canvas.Finish());
     end;
 
     /// <summary>
-    /// 4x2" bin label meant to be read from the aisle: the bin code fills the
-    /// left column at the largest size that fits, followed by zone / bin type /
-    /// description, Code128 + QR. Barcodes carry the bare bin code.
+    /// Bin label read from the aisle: the bin code at the largest size that
+    /// fits the text column, zone / bin type / description, Code128 + QR
+    /// carrying the bare bin code. Laid out on the configured label canvas.
     /// </summary>
-    local procedure BuildBinZpl(var Bin: Record Bin): Text
+    procedure BuildBinZpl(var Bin: Record Bin): Text
     var
-        ZplEncoder: Codeunit "DOPSWHS ZPL Encoder";
+        Canvas: Codeunit "DOPSWHS Label Canvas";
         InfoText: Text;
+        Zpl: Text;
+        X: Integer;
+        ColumnWidth: Integer;
+        Y: Integer;
         CodeFont: Integer;
+        CodeMax: Integer;
     begin
-        CodeFont := FitFontSize(Bin.Code, 560, 110);
         if Bin."Zone Code" <> '' then
             InfoText := 'BÖLGE: ' + Bin."Zone Code";
         if Bin."Bin Type Code" <> '' then
             InfoText := AppendLabelPart(InfoText, 'TİP: ' + Bin."Bin Type Code");
         if Bin.Description <> '' then
             InfoText := AppendLabelPart(InfoText, Bin.Description);
-        exit(
-            '^XA^CI28^PW812^LL406' +
-            '^FO0,0^GB812,52,52^FS' +
-            '^FO24,10^A0N,32,32^FR^FH_^FDRAF ETİKETİ^FS' +
-            '^FO470,12^A0N,26,26^FR^FH_^FB318,1,0,R^FD' + ZplEncoder.EncodeFieldData(Bin."Location Code") + '^FS' +
-            '^FO24,' + Format(62 + (110 - CodeFont) div 2) + '^A0N,' + Format(CodeFont + 10) + ',' + Format(CodeFont) + '^FH_^FD' + ZplEncoder.EncodeFieldData(Bin.Code) + '^FS' +
-            '^FO24,190^A0N,26,26^FH_^FB560,1,0,L^FD' + ZplEncoder.EncodeFieldData(CopyStr(InfoText, 1, 44)) + '^FS' +
-            '^FO24,236^BY' + Format(BarcodeModuleWidth(Bin.Code)) + '^BCN,110,Y,N,N^FH_^FD' + ZplEncoder.EncodeFieldData(Bin.Code) + '^FS' +
-            '^FO604,180^BQN,2,7^FH_^FDLA,' + ZplEncoder.EncodeFieldData(Bin.Code) + '^FS' +
-            '^XZ');
+
+        Canvas.Init();
+        Zpl := Canvas.Frame('RAF ETİKETİ', Bin."Location Code", Bin.Code, 'QR = RAF KODU', X, ColumnWidth, Y);
+        CodeMax := Canvas.LabelHeight() * 32 div 100;
+        if CodeMax < 60 then
+            CodeMax := 60;
+        if CodeMax > 120 then
+            CodeMax := 120;
+        CodeFont := Canvas.FitFont(Bin.Code, ColumnWidth, CodeMax, 36);
+        Zpl += Canvas.WriteSized(X, Y, CodeFont + CodeFont div 10, CodeFont, ColumnWidth, Bin.Code);
+        Y += CodeFont + CodeFont div 10 + 6;
+        if InfoText <> '' then begin
+            Zpl += Canvas.Write(X, Y, Canvas.NormalFont(), ColumnWidth, CopyStr(InfoText, 1, Canvas.MaxChars(ColumnWidth, Canvas.NormalFont())));
+            Y += Canvas.Pitch();
+        end;
+        Y += 2;
+        Zpl += Canvas.Code128(X, Y, Canvas.BarHeightToBottom(Y, true), Bin.Code, ColumnWidth, true);
+        exit(Zpl + Canvas.Finish());
     end;
 
     local procedure AppendLabelPart(Existing: Text; Part: Text): Text
@@ -535,66 +594,6 @@ codeunit 72051 "DOPSWHS Print Dispatcher"
         if Existing = '' then
             exit(Part);
         exit(Existing + '   ' + Part);
-    end;
-
-    /// <summary>
-    /// Code128 module width so the bar pattern stays inside the 560-dot left
-    /// column: ~ (11 x chars + 35) x module dots.
-    /// </summary>
-    local procedure BarcodeModuleWidth(Data: Text): Integer
-    begin
-        if StrLen(Data) <= 10 then
-            exit(3);
-        if StrLen(Data) <= 22 then
-            exit(2);
-        exit(1);
-    end;
-
-    /// <summary>
-    /// Word-wraps Description into two lines of at most MaxChars and returns the
-    /// requested line. ^FB would overprint a third line onto the second, so the
-    /// split is done here and the remainder is cut.
-    /// </summary>
-    local procedure DescriptionLine(Description: Text; LineNo: Integer; MaxChars: Integer): Text
-    var
-        FirstLine: Text;
-        Rest: Text;
-        BreakAt: Integer;
-    begin
-        Description := DelChr(Description, '<>', ' ');
-        if StrLen(Description) <= MaxChars then begin
-            if LineNo = 1 then
-                exit(Description);
-            exit('');
-        end;
-        BreakAt := MaxChars + 1;
-        while (BreakAt > 1) and (Description[BreakAt] <> ' ') do
-            BreakAt -= 1;
-        if BreakAt <= MaxChars div 2 then
-            BreakAt := MaxChars + 1;
-        FirstLine := DelChr(CopyStr(Description, 1, BreakAt - 1), '>', ' ');
-        Rest := DelChr(CopyStr(Description, BreakAt), '<', ' ');
-        if LineNo = 1 then
-            exit(FirstLine);
-        exit(CopyStr(Rest, 1, MaxChars));
-    end;
-
-    /// <summary>
-    /// Largest Zebra font 0 size (dots) at which Value still fits MaxWidth.
-    /// Font 0 glyphs average ~0.55 x the point size in width.
-    /// </summary>
-    local procedure FitFontSize(Value: Text; MaxWidth: Integer; Preferred: Integer): Integer
-    var
-        Size: Integer;
-    begin
-        if StrLen(Value) = 0 then
-            exit(Preferred);
-        Size := MaxWidth div StrLen(Value) * 100 div 55;
-        if Size > Preferred then
-            Size := Preferred;
-        if Size < 24 then
-            Size := 24;
-        exit(Size);
     end;
 
     /// <summary>

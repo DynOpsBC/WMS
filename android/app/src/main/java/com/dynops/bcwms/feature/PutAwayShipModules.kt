@@ -2506,6 +2506,22 @@ private fun ShipDocument(no: String, onBack: () -> Unit, onPickCreated: (String)
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text("Satırlar (${displayLines.size}/${lines.size})", fontWeight = FontWeight.Bold, fontSize = 14.sp)
                 Spacer(Modifier.weight(1f))
+                if (usesTemplateLpLabels(com.dynops.bcwms.BuildConfig.FLAVOR)) {
+                    // EMU/DKÇ: palet → koli → kutu paketleme listesi, belge yazıcısına PDF.
+                    TextButton(
+                        onClick = {
+                            scope.launch {
+                                busy = true; status = "Paketleme listesi hazırlanıyor..."
+                                val body = JSONObject().apply { put("printerId", getDefaultPrinter(context, PRINTER_USAGE_DOCUMENT)) }.toString()
+                                val r = BcApi.boundAction(context, "shipments", no, "printPackingList", body)
+                                busy = false
+                                status = if (r.ok) "TAMAM: Paketleme listesi belge yazıcısına gönderildi"
+                                    else QcErrorParser.friendlyStatus(BcApi.errorMessage(r.body), r.httpCode)
+                            }
+                        },
+                        enabled = !busy && lines.isNotEmpty(),
+                    ) { WmsActionLabel(WmsGlyph.PRINTER, "Paketleme Listesi") }
+                }
                 TextButton(onClick = { showColumns = true }) { WmsActionLabel(WmsGlyph.FIELD_SETTINGS, "Kolonlar") }
             }
             if (scanFilter.isNotBlank()) { ScanFilterChip(scanFilter) { scanFilter = "" }; Spacer(Modifier.height(4.dp)) }

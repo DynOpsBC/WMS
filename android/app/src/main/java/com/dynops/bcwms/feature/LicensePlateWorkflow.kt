@@ -40,6 +40,58 @@ internal fun mtePrinterCode(labelPrinter: String, documentPrinter: String): Stri
 internal fun mtePrintRoute(labelPrinter: String, documentPrinter: String): LpPrintRoute =
     LpPrintRoute("printPalletLabels", mtePrinterCode(labelPrinter, documentPrinter))
 
+/** EMU/DKÇ (15 Eyl 2026): LP labels follow the LP template design; BADE keeps its MTE flow. */
+internal fun usesTemplateLpLabels(flavor: String): Boolean = !flavor.equals("bade", ignoreCase = true)
+
+/**
+ * List / bulk print: with template labels every LP (filled or empty) prints its
+ * template label (BC picks pallet/carton/box/sack and the copies); otherwise
+ * the BADE MTE / QR document routing.
+ */
+internal fun lpListPrintRoute(templateLabels: Boolean, lineCount: Int, labelPrinter: String, documentPrinter: String): LpPrintRoute =
+    if (templateLabels) LpPrintRoute("printLabel", mtePrinterCode(labelPrinter, documentPrinter))
+    else bulkLpPrintRoute(lineCount, labelPrinter, documentPrinter)
+
+internal data class PullDocumentType(val enumName: String, val title: String)
+
+/** Document types the terminal can pull LP lines from (BC enum "DOPSWHS Assigned Doc Type"). */
+internal val PULL_DOCUMENT_TYPES: List<PullDocumentType> = listOf(
+    PullDocumentType("SalesOrder", "Satış Siparişi"),
+    PullDocumentType("PurchaseOrder", "Satınalma Siparişi"),
+    PullDocumentType("TransferOrder", "Transfer Siparişi"),
+    PullDocumentType("WhseReceipt", "Ambar Mal Kabul"),
+    PullDocumentType("WhseShipment", "Ambar Sevkiyat"),
+    PullDocumentType("WhsePick", "Toplama Belgesi"),
+    PullDocumentType("WhsePutaway", "Yerleştirme Belgesi"),
+    PullDocumentType("WhseMovement", "Ambar Hareketi"),
+    PullDocumentType("PostedSalesShipment", "Kayıtlı Satış Sevki"),
+    PullDocumentType("PostedPurchaseReceipt", "Kayıtlı Alış İrsaliyesi"),
+    PullDocumentType("PostedWhseReceipt", "Kayıtlı Ambar Mal Kabul"),
+    PullDocumentType("PostedWhseShipment", "Kayıtlı Ambar Sevkiyat"),
+    PullDocumentType("PostedTransferShipment", "Kayıtlı Transfer Sevki"),
+    PullDocumentType("PostedTransferReceipt", "Kayıtlı Transfer Alımı"),
+)
+
+/** A scanned document barcode (RE…, SH…, PI…, %S%…, %PO%…) selects the matching pull type. */
+internal fun pullDocumentTypeForBarcode(docType: String?): PullDocumentType? {
+    val enumName = when (docType) {
+        "receipt" -> "WhseReceipt"
+        "shipment" -> "WhseShipment"
+        "pick" -> "WhsePick"
+        "putaway" -> "WhsePutaway"
+        "movement" -> "WhseMovement"
+        "salesOrder" -> "SalesOrder"
+        "purchaseOrder" -> "PurchaseOrder"
+        "transferOrder" -> "TransferOrder"
+        else -> return null
+    }
+    return PULL_DOCUMENT_TYPES.firstOrNull { it.enumName == enumName }
+}
+
+/** Lines can only be pulled into an open LP that is not reserved by a receipt. */
+internal fun canPullFromDocument(status: String, pendingReceiptNo: String): Boolean =
+    status.equals("Open", ignoreCase = true) && pendingReceiptNo.isBlank()
+
 internal fun canPrintMte(linesComplete: Boolean, lineCount: Int, pendingReceiptNo: String): Boolean =
     linesComplete && lineCount > 0 && pendingReceiptNo.isBlank()
 

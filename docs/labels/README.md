@@ -74,3 +74,33 @@ bağlı bütün LP'leri tek raporda açar; yalnız ilk LP ile sınırlı değild
 curl -s -H 'Accept: image/png' -X POST --data-binary @urun-etiketi.zpl \
   http://api.labelary.com/v1/printers/8dpmm/labels/4x2/0/ -o urun-etiketi.png
 ```
+
+## EMU / DKÇ: etiket ölçüsü Kurulum'dan (customer/emu, 16 Eyl 2026)
+
+DKÇ'deki Zebra ZD230'a takılı rulo **80 x 40 mm**; buradaki 4x2" tasarımlar o ruloda sağdan ve alttan
+kesiliyordu. EMU dalında bütün ZPL etiketler **DOPSWHS Setup → Etiket Rulosu (ZPL)** alanlarındaki ölçüye
+göre yerleştirilir (`Label Width (mm)` / `Label Height (mm)`, boş = 80x40). Ölçüyü codeunit 72321
+`DOPSWHS Label Canvas` okur; bant yüksekliği, punto boyları, QR büyütmesi, barkod yüksekliği ve satır
+sığdırma o ölçüden türetilir. Rulo değişince yalnız iki değer güncellenir, paket gerekmez.
+
+Aynı iskelet her tasarımda: siyah başlık bandı (tür + depo/şirket), solda metin sütunu ve Code128,
+sağda sığan en büyük QR ve altında ne taşıdığı.
+
+| Önizleme (80x40) | Tasarım | Kaynak |
+|---|---|---|
+| ![Ürün](emu/urun.png) | Ürün etiketi (kısa madde no) | `Print Dispatcher.BuildItemZpl` |
+| ![Ürün uzun](emu/urun-uzun.png) | Ürün etiketi (uzun no, GTIN, 2 satır açıklama) | aynı |
+| ![Raf](emu/raf.png) | Raf etiketi | `Print Dispatcher.BuildBinZpl` |
+| ![Raf uzun](emu/raf-uzun.png) | Raf etiketi (uzun raf kodu) | aynı |
+| ![LP](emu/lp-standart.png) | Standart LP | `LP Label Builder.BuildStandardZpl` |
+| ![Palet içerikli](emu/palet-icerikli.png) | Palet, içerik listeli, SSCC | `BuildPalletZpl` |
+| ![Palet özet](emu/palet-ozet.png) | Palet, yalnız özet | `BuildPalletZpl` |
+| ![Koli](emu/koli.png) | Koli (üst palet) | `BuildInnerContainerZpl` |
+| ![Kutu](emu/kutu.png) | Kutu (üst kap) | `BuildInnerContainerZpl` |
+| ![Çuval](emu/cuval.png) | Çuval (net miktar) | `BuildSackZpl` |
+| ![MTE](emu/mte.png) | Palet madde etiketi | `Print Dispatcher.BuildPalletItemZpl` |
+
+Önizleme üretimi: `*.zpl` dosyaları Labelary'de 80x40 mm için `3.15x1.57` boyutuyla render edilir
+(`.../8dpmm/labels/3.15x1.57/0/`). LP etiketi şablonun **Kap Türü / Etiket Tasarımı** alanına göre
+üretilir; "Etikette İçerik Listelensin" açıkken iç katmanlar listelenir (40 mm etikette en çok 2 satır,
+fazlası "+N satır daha"). Ayrıntı: `docs/emu-lp-labels-and-rules.md`, sürüm notu `docs/emu-release-1.14.118.md`.

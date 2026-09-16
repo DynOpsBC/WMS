@@ -144,6 +144,24 @@ page 72093 "DOPSWHS Shipment API"
         ShipmentMgmt.SetShippingAgent(Rec, agentCode, serviceCode);
     end;
 
+    /// <summary>EMU/DKÇ: palet → koli → kutu paketleme listesini belge yazıcısına PDF olarak gönderir; iş no döner.</summary>
+    [ServiceEnabled]
+    procedure printPackingList(printerId: Code[50]): Integer
+    var
+        ShipmentMgmt: Codeunit "DOPSWHS Shipment Mgmt";
+    begin
+        exit(ShipmentMgmt.PrintPackingList(false, Rec."No.", printerId));
+    end;
+
+    /// <summary>Konteyner ve mühür numarasını sevkiyata yazar (paketleme listesi başlığı).</summary>
+    [ServiceEnabled]
+    procedure setContainer(containerNo: Code[30]; sealNo: Code[30])
+    begin
+        Rec."DOPSWHS Container No." := containerNo;
+        Rec."DOPSWHS Seal No." := sealNo;
+        Rec.Modify(true);
+    end;
+
     var
         SourceNo: Code[20];
         ShipTo: Text[100];

@@ -537,8 +537,45 @@ codeunit 72047 "DOPSWHS Shipment Mgmt"
                     CopyStr(StrSubstNo('Shipment %1 posted, but its print job could not be queued: %2', PostedNo, GetLastErrorText()), 1, 250),
                     WhseShipmentHeader."Assigned User ID");
         end;
+        // EMU/DKÇ (15 Eyl 2026): pallet/carton/box packing list next to the
+        // posted shipment print. Best effort like the print above.
+        if PackingListWanted(PostedNo) then begin
+            ClearLastError();
+            if not QueuePackingListPrint(PostedNo, PrinterId) then
+                Telemetry.LogWarning(
+                    'Print.PackingListFailed',
+                    CopyStr(StrSubstNo('Shipment %1 posted, but its packing list could not be queued: %2', PostedNo, GetLastErrorText()), 1, 250),
+                    WhseShipmentHeader."Assigned User ID");
+        end;
 
         LogShipmentPosted(WhseShipmentNo, LineCount, LpCount + LineLp.Count());
+    end;
+
+    /// <summary>Packing list PDF for an open or posted warehouse shipment; returns the print job id.</summary>
+    procedure PrintPackingList(Posted: Boolean; ShipmentNo: Code[20]; PrinterId: Code[50]): Integer
+    var
+        PackingList: Codeunit "DOPSWHS Packing List Mgt.";
+    begin
+        exit(PackingList.PrintForShipment(Posted, ShipmentNo, PrinterId));
+    end;
+
+    local procedure PackingListWanted(PostedNo: Code[20]): Boolean
+    var
+        Setup: Record "DOPSWHS Setup";
+    begin
+        if PostedNo = '' then
+            exit(false);
+        if not Setup.Get('') then
+            exit(false);
+        exit(Setup."Auto Print Packing List");
+    end;
+
+    [TryFunction]
+    local procedure QueuePackingListPrint(PostedNo: Code[20]; PrinterId: Code[50])
+    var
+        PackingList: Codeunit "DOPSWHS Packing List Mgt.";
+    begin
+        PackingList.PrintForShipment(true, PostedNo, PrinterId);
     end;
 
     /// <summary>

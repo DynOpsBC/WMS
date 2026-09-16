@@ -324,6 +324,33 @@ table 72000 "DOPSWHS Setup"
             DataClassification = CustomerContent;
             InitValue = false;
         }
+        field(440; "Auto Print Packing List"; Boolean)
+        {
+            // EMU/DKÇ (15 Eyl 2026): after a warehouse shipment is posted from
+            // the terminal, the pallet/carton/box packing list is queued to the
+            // document printer next to the posted shipment print.
+            Caption = 'Auto Print Packing List';
+            DataClassification = CustomerContent;
+            InitValue = false;
+        }
+        field(450; "Label Width (mm)"; Decimal)
+        {
+            // EMU/DKÇ (16 Eyl 2026): size of the label roll in the ZPL printer.
+            // Every terminal label (item, bin, LP designs) is laid out on this
+            // canvas (codeunit "DOPSWHS Label Canvas"). 0 = 80 mm, the roll found
+            // in DKÇ's Zebra ZD230; the old designs assumed 4x2" and were cut off.
+            Caption = 'Label Width (mm)';
+            DataClassification = CustomerContent;
+            DecimalPlaces = 0 : 1;
+            MinValue = 0;
+        }
+        field(451; "Label Height (mm)"; Decimal)
+        {
+            Caption = 'Label Height (mm)';
+            DataClassification = CustomerContent;
+            DecimalPlaces = 0 : 1;
+            MinValue = 0;
+        }
     }
 
     keys

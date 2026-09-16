@@ -33,6 +33,10 @@ page 72280 "DOPSWHS LP Template API"
                 field(defaultHeightCm; Rec."Default Height cm") { Caption = 'defaultHeightCm'; }
                 field(maxWeightKg; Rec."Max Weight kg") { Caption = 'maxWeightKg'; }
                 field(labelReportId; Rec."Label Report ID") { Caption = 'labelReportId'; }
+                field(containerKind; Rec."Container Kind") { Caption = 'containerKind'; }
+                field(labelDesign; Rec."Label Design") { Caption = 'labelDesign'; }
+                field(labelIncludesContents; Rec."Label Includes Contents") { Caption = 'labelIncludesContents'; }
+                field(labelCopies; Rec."Label Copies") { Caption = 'labelCopies'; }
                 field(noSeries; Rec."No. Series") { Caption = 'noSeries'; }
                 field(allowMixedItems; Rec."Allow Mixed Items") { Caption = 'allowMixedItems'; }
                 field(allowMixedLots; Rec."Allow Mixed Lots") { Caption = 'allowMixedLots'; }

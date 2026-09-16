@@ -31,6 +31,32 @@ table 72013 "DOPSWHS LP Template"
             Caption = 'Reusable (Tote)';
             DataClassification = CustomerContent;
         }
+        // EMU/DKÇ (15 Eyl 2026): one "Print label" per LP; the template decides
+        // the design (pallet / carton / box / sack), whether the label lists the
+        // contents (inner layers) and how many copies come out.
+        field(80; "Container Kind"; Enum "DOPSWHS LP Container Kind")
+        {
+            Caption = 'Container Kind';
+            DataClassification = CustomerContent;
+        }
+        field(81; "Label Design"; Enum "DOPSWHS LP Label Design")
+        {
+            Caption = 'Label Design';
+            DataClassification = CustomerContent;
+        }
+        field(82; "Label Includes Contents"; Boolean)
+        {
+            Caption = 'Label Includes Contents';
+            DataClassification = CustomerContent;
+        }
+        field(83; "Label Copies"; Integer)
+        {
+            Caption = 'Label Copies';
+            DataClassification = CustomerContent;
+            InitValue = 1;
+            MinValue = 0;
+            MaxValue = 10;
+        }
     }
 
     keys { key(PK; "Code") { Clustered = true; } }

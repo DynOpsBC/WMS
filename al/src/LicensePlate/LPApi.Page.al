@@ -32,6 +32,19 @@ page 72088 "DOPSWHS LP API"
                 field(widthCm; Rec."Width cm") { Caption = 'widthCm'; }
                 field(heightCm; Rec."Height cm") { Caption = 'heightCm'; }
                 field(notes; Rec.Notes) { Caption = 'notes'; }
+                field(sourceDocumentType; Rec."Source Document Type") { Caption = 'sourceDocumentType'; Editable = false; }
+                field(sourceDocumentNo; Rec."Source Document No.") { Caption = 'sourceDocumentNo'; Editable = false; }
+                field(partnerNo; Rec."Partner No.") { Caption = 'partnerNo'; Editable = false; }
+                field(partnerName; Rec."Partner Name") { Caption = 'partnerName'; Editable = false; }
+                field(shipToName; Rec."Ship-to Name") { Caption = 'shipToName'; Editable = false; }
+                field(shipToCity; Rec."Ship-to City") { Caption = 'shipToCity'; Editable = false; }
+                field(shipmentMethodCode; Rec."Shipment Method Code") { Caption = 'shipmentMethodCode'; }
+                field(shippingAgentCode; Rec."Shipping Agent Code") { Caption = 'shippingAgentCode'; }
+                field(externalDocumentNo; Rec."External Document No.") { Caption = 'externalDocumentNo'; }
+                field(containerNo; Rec."Container No.") { Caption = 'containerNo'; }
+                field(sealNo; Rec."Seal No.") { Caption = 'sealNo'; }
+                field(tareWeightKg; Rec."Tare Weight kg") { Caption = 'tareWeightKg'; }
+                field(containerKind; ContainerKind) { Caption = 'containerKind'; Editable = false; }
                 field(lineCount; Rec."Line Count") { Caption = 'lineCount'; Editable = false; }
                 field(totalQuantity; Rec."Total Quantity") { Caption = 'totalQuantity'; Editable = false; }
                 field(plannedQuantity; Rec."Planned Quantity") { Caption = 'plannedQuantity'; }
@@ -72,10 +85,12 @@ page 72088 "DOPSWHS LP API"
 
     trigger OnAfterGetRecord()
     var
+        LabelBuilder: Codeunit "DOPSWHS LP Label Builder";
         Template: Record "DOPSWHS LP Template";
     begin
         Rec.CalcFields("Line Count", "Total Quantity");
         Reusable := false;
+        ContainerKind := LabelBuilder.ContainerKindCaption(Rec."No.");
         if (Rec."LP Template Code" <> '') and Template.Get(Rec."LP Template Code") then
             Reusable := Template.Reusable;
     end;
@@ -89,6 +104,7 @@ page 72088 "DOPSWHS LP API"
 
     var
         Reusable: Boolean;
+        ContainerKind: Text;
 
     [ServiceEnabled]
     procedure release()
@@ -265,6 +281,33 @@ page 72088 "DOPSWHS LP API"
         Dispatcher: Codeunit "DOPSWHS Print Dispatcher";
     begin
         Dispatcher.PrintPalletItemLabels(LP, PrinterId, 1);
+    end;
+
+    /// <summary>EMU/DKÇ: copies the document's item lines into this open LP; returns the line count.</summary>
+    [ServiceEnabled]
+    procedure pullFromDocument(docType: Enum "DOPSWHS Assigned Doc Type"; docNo: Code[20]): Integer
+    var
+        DocumentLink: Codeunit "DOPSWHS LP Document Link";
+    begin
+        exit(DocumentLink.PullFromDocument(Rec, docType, docNo));
+    end;
+
+    /// <summary>Re-reads partner / ship-to / shipping data from the LP's source document.</summary>
+    [ServiceEnabled]
+    procedure refreshDocumentSnapshot()
+    var
+        DocumentLink: Codeunit "DOPSWHS LP Document Link";
+    begin
+        DocumentLink.RefreshSnapshot(Rec);
+    end;
+
+    /// <summary>Packing list (pallet → carton → box hierarchy) of this LP as a PDF on the document printer.</summary>
+    [ServiceEnabled]
+    procedure printPackingList(printerId: Code[50]): Integer
+    var
+        PackingList: Codeunit "DOPSWHS Packing List Mgt.";
+    begin
+        exit(PackingList.PrintForLp(Rec."No.", printerId));
     end;
 
     local procedure ParseLines(LinesJson: Text; var Lines: List of [Integer]; var Quantities: Dictionary of [Integer, Decimal])

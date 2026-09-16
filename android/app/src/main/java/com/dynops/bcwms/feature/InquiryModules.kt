@@ -99,16 +99,17 @@ fun ItemInquiryModule() {
         val no = item?.let { rawValue(it, "no", "number") }?.takeIf { it.isNotBlank() } ?: return
         scope.launch {
             status = "🖨 Etiket yazdırılıyor..."
-            val printer = resolveInquiryPrinter(context).getOrElse {
+            val choice = resolveInquiryPrinter(context).getOrElse {
                 status = "HATA: ${it.message}"
                 return@launch
             }
             val payload = JSONObject().apply {
-                put("printerId", printer)
+                put("printerId", choice.printerCode)
                 put("copies", 1)
             }.toString()
             val r = BcApi.boundAction(context, "items", no, "printLabel", payload)
-            status = if (r.ok) "🟢 Ürün etiketi kuyruğa alındı ($no)." else "🔴 Yazdırma: ${BcApi.errorMessage(r.body)} (HTTP ${r.httpCode})"
+            status = if (r.ok) ("🟢 Ürün etiketi kuyruğa alındı ($no)." + if (choice.warning.isBlank()) "" else " ${choice.warning}")
+                else "🔴 Yazdırma: ${BcApi.errorMessage(r.body)} (HTTP ${r.httpCode})"
         }
     }
 
@@ -314,17 +315,18 @@ fun BinInquiryModule() {
         if (loc.isBlank() || code.isBlank()) return
         scope.launch {
             status = "🖨 Bin etiketi yazdırılıyor..."
-            val printer = resolveInquiryPrinter(context).getOrElse {
+            val choice = resolveInquiryPrinter(context).getOrElse {
                 status = "HATA: ${it.message}"
                 return@launch
             }
             val key = "locationCode='${loc.replace("'", "''")}',code='${code.replace("'", "''")}'"
             val payload = JSONObject().apply {
-                put("printerId", printer)
+                put("printerId", choice.printerCode)
                 put("copies", 1)
             }.toString()
             val r = BcApi.boundAction(context, "bins", key, "printLabel", payload)
-            status = if (r.ok) "🟢 Bin etiketi kuyruğa alındı ($loc/$code)." else "🔴 Yazdırma: ${BcApi.errorMessage(r.body)} (HTTP ${r.httpCode})"
+            status = if (r.ok) ("🟢 Bin etiketi kuyruğa alındı ($loc/$code)." + if (choice.warning.isBlank()) "" else " ${choice.warning}")
+                else "🔴 Yazdırma: ${BcApi.errorMessage(r.body)} (HTTP ${r.httpCode})"
         }
     }
 

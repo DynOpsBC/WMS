@@ -79,6 +79,26 @@ page 72061 "DOPSWHS Setup"
                     ApplicationArea = All;
                     ToolTip = 'Kapalı (varsayılan): toplama satırı kaynak LP okutulmadan da onaylanabilir, yerleştirmede ürün barkodu okutulur. Açık: toplamada kaynak LP okutmak zorunludur ve yerleştirme LP okutmasıyla doğrulanır; okutulan LP''nin maddesi, varyantı, lotu ve rafı satırla uyuşmazsa işlem reddedilir.';
                 }
+                field("Auto Print Packing List"; Rec."Auto Print Packing List")
+                {
+                    ApplicationArea = All;
+                    ToolTip = 'Açık: terminalden sevkiyat kaydedilince palet/koli/kutu paketleme listesi de belge yazıcısına gönderilir.';
+                }
+            }
+            group(LabelStock)
+            {
+                Caption = 'Etiket Rulosu (ZPL)';
+                InstructionalText = 'Zebra etiket yazıcısındaki rulonun etiket ölçüsü. Ürün, raf ve LP etiketleri bu ölçüye göre yerleştirilir; boş bırakılırsa 80 x 40 mm kabul edilir.';
+                field("Label Width (mm)"; Rec."Label Width (mm)")
+                {
+                    ApplicationArea = All;
+                    ToolTip = 'Etiketin genişliği (mm). Boş/0 = 80 mm. Yaygın rulolar: 80x40, 100x50 (4x2 inç), 100x80, 100x100.';
+                }
+                field("Label Height (mm)"; Rec."Label Height (mm)")
+                {
+                    ApplicationArea = All;
+                    ToolTip = 'Etiketin yüksekliği (mm). Boş/0 = 40 mm. Yazıcıdaki rulo değişince yalnız bu iki değer güncellenir; yeni paket gerekmez.';
+                }
             }
             group(License)
             {
@@ -273,6 +293,30 @@ page 72061 "DOPSWHS Setup"
                         CurrPage.Update(false);
                         Message('License verification complete.');
                     end;
+                }
+            }
+            group(LicensePlateRules)
+            {
+                Caption = 'License Plates';
+                action(LpAutoRulesAction)
+                {
+                    Caption = 'LP Auto Rules';
+                    ApplicationArea = All;
+                    Image = Setup;
+                    Promoted = true;
+                    PromotedCategory = Process;
+                    ToolTip = 'Lokasyon ve belge türüne göre otomatik LP açma / kayıtta kapatma ve etiket kuralları.';
+                    RunObject = page "DOPSWHS LP Auto Rules";
+                }
+                action(LpTemplatesAction)
+                {
+                    Caption = 'LP Templates';
+                    ApplicationArea = All;
+                    Image = Template;
+                    Promoted = true;
+                    PromotedCategory = Process;
+                    ToolTip = 'Kap türü, etiket tasarımı ve kopya sayısı şablonda tanımlanır.';
+                    RunObject = page "DOPSWHS LP Template List";
                 }
             }
             group(PrinterBridge)

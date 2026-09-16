@@ -49,6 +49,42 @@ class LicensePlateWorkflowTest {
     }
 
     @Test
+    fun `template labels are used by every flavor except BADE`() {
+        assertTrue(usesTemplateLpLabels("emu"))
+        assertTrue(usesTemplateLpLabels("dynops"))
+        assertFalse(usesTemplateLpLabels("bade"))
+        assertFalse(usesTemplateLpLabels("BADE"))
+    }
+
+    @Test
+    fun `template label route prints the LP label on the label printer with document fallback`() {
+        assertEquals(LpPrintRoute("printLabel", "ZPL01"), lpListPrintRoute(true, 3, " ZPL01 ", "PDF01"))
+        assertEquals(LpPrintRoute("printLabel", "ZPL01"), lpListPrintRoute(true, 0, "ZPL01", ""))
+        assertEquals(LpPrintRoute("printLabel", "PDF01"), lpListPrintRoute(true, 2, "", "PDF01"))
+        assertEquals(LpPrintRoute("printLabel", ""), lpListPrintRoute(true, 2, "", ""))
+        assertEquals(bulkLpPrintRoute(3, "ZPL01", "PDF01"), lpListPrintRoute(false, 3, "ZPL01", "PDF01"))
+    }
+
+    @Test
+    fun `document barcode selects the pull document type`() {
+        assertEquals("WhseReceipt", pullDocumentTypeForBarcode("receipt")?.enumName)
+        assertEquals("WhseShipment", pullDocumentTypeForBarcode("shipment")?.enumName)
+        assertEquals("WhsePick", pullDocumentTypeForBarcode("pick")?.enumName)
+        assertEquals("SalesOrder", pullDocumentTypeForBarcode("salesOrder")?.enumName)
+        assertEquals("PurchaseOrder", pullDocumentTypeForBarcode("purchaseOrder")?.enumName)
+        assertEquals(null, pullDocumentTypeForBarcode("assembly"))
+        assertEquals(null, pullDocumentTypeForBarcode(null))
+        assertEquals(PULL_DOCUMENT_TYPES.size, PULL_DOCUMENT_TYPES.map { it.enumName }.distinct().size)
+    }
+
+    @Test
+    fun `only an open LP outside a receipt can pull a document`() {
+        assertTrue(canPullFromDocument("Open", ""))
+        assertFalse(canPullFromDocument("Built", ""))
+        assertFalse(canPullFromDocument("Open", "RE000624"))
+    }
+
+    @Test
     fun `MTE cannot be requested for an unloaded empty or pending receipt LP`() {
         assertTrue(canPrintMte(true, 2, ""))
         assertFalse(canPrintMte(false, 2, ""))
