@@ -28,6 +28,8 @@ page 72072 "DOPSWHS LP Movement Ledger"
                 field("Device ID"; Rec."Device ID") { ApplicationArea = All; }
                 field(DateTime; Rec.DateTime) { ApplicationArea = All; }
                 field("Related Document"; Rec."Related Document") { ApplicationArea = All; }
+                field("Source LP No."; Rec."Source LP No.") { ApplicationArea = All; ToolTip = 'Miktarın alındığı palet (transfer ve toplama).'; }
+                field("Target LP No."; Rec."Target LP No.") { ApplicationArea = All; ToolTip = 'Miktarın aktarıldığı palet (transfer ve toplama).'; }
             }
         }
     }

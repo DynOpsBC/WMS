@@ -2100,7 +2100,8 @@ private fun PickDocument(no: String, onBack: () -> Unit) {
             Spacer(Modifier.height(6.dp))
             Text(
                 if (shipLp == null)
-                    "Farklı kaynak LP'leri tek sevk paletinde birleştirecekseniz miktar girmeden önce Hedef LP Oluştur'a basın; mevcut LP'leri olduğu gibi sevk edecekseniz kullanmayın."
+                    "Paletlerin tamamı sevk edilecekse Hedef LP oluşturmayın: kaydettiğinizde okutulan palet olduğu gibi sevk LP'si olur. " +
+                        "Bir paletin yalnız bir kısmı toplanacak ya da paletler birleştirilecekse miktar girmeden önce Hedef LP Oluştur'a basın."
                 else
                     "Hedef sevk paleti hazır; kaydettiğiniz miktarlar kaynak LP'lerden bu palete aktarılacak.",
                 fontSize = 11.sp,

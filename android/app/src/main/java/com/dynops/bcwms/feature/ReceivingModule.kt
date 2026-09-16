@@ -196,6 +196,7 @@ private fun ReceiveDocument(no: String, onBack: () -> Unit) {
     var showBulkLinePicker by remember(no) { mutableStateOf(false) }
     var printReceipt by remember(no) { mutableStateOf(false) }
     var showReceiptMte by remember(no) { mutableStateOf(false) }
+    var manualLabelPrint by remember(no) { mutableStateOf(false) }
     // TOPLU POST: satır onayı (PATCH receiptLines) belgeyi ASLA postlamaz —
     // yalnız "Qty. to Receive"/lot/seri/LP yazar. Post tek bir yerden, alttaki
     // butondan ve özet onayından sonra çalışır.
@@ -659,10 +660,15 @@ private fun ReceiveDocument(no: String, onBack: () -> Unit) {
                             put("lpPrinterId", getMtePrinter(context))
                         }.toString(),
                     )
+                    // BADE (16 Eyl 2026): Kurulum "Manual Receipt Label Print" açıksa
+                    // etiket basılmadı; kayıt sonrası ekranda Etiket Yazdır ile basılır.
+                    if (r.ok) manualLabelPrint = BcApi.manualReceiptLabelPrint(context)
                     busy = false
-                    status = if (r.ok) "TAMAM: Mal kabul kaydedildi."
-                        else missingReceiptPostBackendStatus(r.httpCode, r.body)
-                            ?: receiptPostFailureStatus(BcApi.errorMessage(r.body), r.httpCode)
+                    status = if (r.ok) {
+                        if (manualLabelPrint) "TAMAM: Mal kabul kaydedildi. Etiketler basılmadı; Etiket Yazdır ile basın."
+                        else "TAMAM: Mal kabul kaydedildi."
+                    } else missingReceiptPostBackendStatus(r.httpCode, r.body)
+                        ?: receiptPostFailureStatus(BcApi.errorMessage(r.body), r.httpCode)
                     if (r.ok) {
                         touched = emptySet()
                         // Keep the successful receipt visible until labels have been checked.
@@ -675,7 +681,7 @@ private fun ReceiveDocument(no: String, onBack: () -> Unit) {
     }
 
     if (showReceiptMte) {
-        ReceiptMteSheet(receiptNo = no, onDismiss = { showReceiptMte = false; reload() })
+        ReceiptMteSheet(receiptNo = no, manualPrint = manualLabelPrint, onDismiss = { showReceiptMte = false; reload() })
     }
 
     if (showVehicle) {

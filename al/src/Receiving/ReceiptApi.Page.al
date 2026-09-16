@@ -153,13 +153,20 @@ page 72090 "DOPSWHS Receipt API"
     [ServiceEnabled]
     procedure postAndCloseLP(print: Boolean; invoice: Boolean; printerId: Code[50]; lpPrinterId: Code[50])
     var
+        Setup: Record "DOPSWHS Setup";
         ReceiptMgmt: Codeunit "DOPSWHS Receipt Mgmt";
         LegacyWI: Codeunit "DOPSWHS Legacy WI Publisher";
         DocNo: Code[20];
+        PrintLpLabels: Boolean;
     begin
         DocNo := Rec."No.";
         LegacyWI.FireGetReceiptDocument(DocNo);
-        ReceiptMgmt.PostReceiptAndCloseLP(Rec, print, invoice, '', printerId, true, lpPrinterId);
+        // BADE (16 Eyl 2026): Kurulum "Manual Receipt Label Print" açıkken
+        // etiket kayıtla basılmaz; operatör kayıt sonrası "Etiket Yazdır" der.
+        PrintLpLabels := true;
+        if Setup.Get('') then
+            PrintLpLabels := not Setup."Manual Receipt Label Print";
+        ReceiptMgmt.PostReceiptAndCloseLP(Rec, print, invoice, '', printerId, PrintLpLabels, lpPrinterId);
     end;
 
     /// <summary>

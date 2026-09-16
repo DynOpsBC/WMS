@@ -1181,6 +1181,11 @@ codeunit 72043 "DOPSWHS Receipt Mgmt"
 
             if LotRequired then begin
                 if RowIndex = 1 then begin
+                    // BADE (16 Eyl 2026): "Lot No Ata" ile ayrılan numara varsa o
+                    // kullanılır ve değiştirilemez; yeni numara yakılmaz.
+                    if LotNo = '' then
+                        LotNo := WhseReceiptLine."DOPSWHS Pending Lot No.";
+                    EnsurePendingLotUnchanged(WhseReceiptLine, LotNo);
                     if LotNo = '' then begin
                         LotNo := LotSerialGen.GenerateLotNoForItem(WhseReceiptLine."Item No.");
                         if LotNo = '' then
@@ -1338,6 +1343,7 @@ codeunit 72043 "DOPSWHS Receipt Mgmt"
             Clear(LicensePlateNo);
         end;
         Item.Get(WhseReceiptLine."Item No.");
+        EnsurePendingLotUnchanged(WhseReceiptLine, LotNo);
         // Mevcut BC takip bilgisi korunur. İç lot yalnız terminaldeki açık
         // "Lot No Ata" komutuyla üretilir; ConfirmLine boş lotu tamamlamaz.
         // Seri numarası için mevcut geriye uyumlu otomatik üretim korunur.
@@ -1548,6 +1554,20 @@ codeunit 72043 "DOPSWHS Receipt Mgmt"
     /// Üretilen numara ise satırda bekleyen lot olarak tutulur; ekran kapanır
     /// veya sonraki işlem hata verirse aynı numara yeniden döndürülür.
     /// </summary>
+    /// <summary>
+    /// BADE (16 Eyl 2026): the number reserved with "Lot No Ata" is the lot of
+    /// this receipt line. A different lot sent by the terminal (edited field,
+    /// lookup selection, older app) is refused so the auto-assigned lot cannot be
+    /// overwritten by hand.
+    /// </summary>
+    procedure EnsurePendingLotUnchanged(WhseReceiptLine: Record "Warehouse Receipt Line"; LotNo: Code[50])
+    begin
+        if WhseReceiptLine."DOPSWHS Pending Lot No." = '' then
+            exit;
+        if (LotNo <> '') and (LotNo <> WhseReceiptLine."DOPSWHS Pending Lot No.") then
+            Error(PendingLotLockedErr, WhseReceiptLine."DOPSWHS Pending Lot No.", LotNo, WhseReceiptLine."Line No.");
+    end;
+
     procedure AssignInboundLotNo(WhseReceiptLine: Record "Warehouse Receipt Line"): Text
     var
         Item: Record Item;
@@ -2214,6 +2234,7 @@ codeunit 72043 "DOPSWHS Receipt Mgmt"
     var
         // Telemetri mesajları çevrilmez (Locked): log sorguları dile göre değişmemeli.
         AssignLogTxt: Label '%1 -> %2', Locked = true;
+        PendingLotLockedErr: Label '"Lot No Ata" ile atanan %1 lot numarası değiştirilemez (gönderilen: %2, satır %3). Otomatik lot numarasıyla kaydedin.', Comment = '%1 = atanan lot, %2 = gönderilen lot, %3 = satır no';
         NoOperatorTxt: Label '(none)', Locked = true;
         VehicleInfoLogTxt: Label '%1 plate=%2 driver=%3', Locked = true;
         VehiclePlateFieldTok: Label 'Vehicle Plate No', Locked = true;

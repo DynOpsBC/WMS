@@ -324,6 +324,16 @@ table 72000 "DOPSWHS Setup"
             DataClassification = CustomerContent;
             InitValue = false;
         }
+        field(490; "Manual Receipt Label Print"; Boolean)
+        {
+            // BADE (16 Eyl 2026): mal kabul kaydedilince MTE/LP etiketleri
+            // kendiliğinden basılmasın; operatör kayıt sonrası ekranda
+            // "Etiket Yazdır" ile bassın. Varsayılan KAPALI = eski davranış
+            // (kayıtla birlikte otomatik baskı) korunur.
+            Caption = 'Manual Receipt Label Print';
+            DataClassification = CustomerContent;
+            InitValue = false;
+        }
         field(460; "MTE Report ID"; Integer)
         {
             // BADE (16 Eyl 2026): the terminal MTE runs the customer's own

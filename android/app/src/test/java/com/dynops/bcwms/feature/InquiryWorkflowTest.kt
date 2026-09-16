@@ -37,4 +37,17 @@ class InquiryWorkflowTest {
 
         assertNull(queriedLpSummary("ITEM-1", lines))
     }
+
+    @Test
+    fun `LP placement label shows location, bin and zone when known`() {
+        assertEquals("", lpPlacementLabel(null))
+        assertEquals("Raf: MERKEZDEPO/M.A01.11 · Alan: A01", lpPlacementLabel(LpPlacement("MERKEZDEPO", "M.A01.11", "A01")))
+        assertEquals("Raf: MERKEZDEPO/M.A01.11", lpPlacementLabel(LpPlacement("MERKEZDEPO", "M.A01.11", "")))
+        assertEquals("Raf: MERKEZDEPO", lpPlacementLabel(LpPlacement("MERKEZDEPO", "", "")))
+    }
+
+    @Test
+    fun `OData or-filter escapes quotes in LP numbers`() {
+        assertEquals("no eq 'LP1' or no eq 'O''NEIL'", odataOrFilter(listOf("LP1", "O'NEIL")) { "no eq '$it'" })
+    }
 }

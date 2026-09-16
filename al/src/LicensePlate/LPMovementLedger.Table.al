@@ -19,6 +19,10 @@ table 72012 "DOPSWHS LP Movement Ledger"
         field(80; "Device ID"; Code[50]) { Caption = 'Device ID'; DataClassification = CustomerContent; }
         field(90; DateTime; DateTime) { Caption = 'DateTime'; DataClassification = CustomerContent; }
         field(100; "Related Document"; Code[40]) { Caption = 'Related Document'; DataClassification = CustomerContent; }
+        // BADE (16 Eyl 2026): transfer rows name both pallets so the shipping
+        // LP's history shows where each quantity came from.
+        field(110; "Source LP No."; Code[20]) { Caption = 'Source LP No.'; DataClassification = CustomerContent; TableRelation = "DOPSWHS LP Header"; }
+        field(111; "Target LP No."; Code[20]) { Caption = 'Target LP No.'; DataClassification = CustomerContent; TableRelation = "DOPSWHS LP Header"; }
     }
 
     keys { key(PK; "Entry No.") { Clustered = true; } key(LP; "LP No.", DateTime) { } key(RelatedDoc; "Related Document", Action) { } }

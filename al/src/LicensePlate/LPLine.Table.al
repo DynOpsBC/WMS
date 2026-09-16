@@ -64,6 +64,14 @@ table 72011 "DOPSWHS LP Line"
             DataClassification = CustomerContent;
             TableRelation = "Item Ledger Entry"."Entry No.";
         }
+        field(65; "Source LP No."; Code[20])
+        {
+            // BADE (16 Eyl 2026): a shipping LP line remembers the pallet it was
+            // picked from; before, only the pick reference was kept on the ledger.
+            Caption = 'Source LP No.';
+            DataClassification = CustomerContent;
+            TableRelation = "DOPSWHS LP Header";
+        }
         field(90; "Line Weight kg"; Decimal) { Caption = 'Line Weight kg'; DataClassification = CustomerContent; Editable = false; }
     }
 

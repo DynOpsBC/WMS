@@ -66,6 +66,7 @@ object BcApi {
     private const val KEY_TENANT = "bc_tenant_id"
     private const val KEY_LOGIN_EMAIL = "login_email"
     private const val KEY_LP_SCAN_REQUIRED = "lp_scan_required"
+    private const val KEY_MANUAL_RECEIPT_LABELS = "manual_receipt_label_print"
     private const val KEY_LP_SCAN_CHECKED_AT = "lp_scan_required_checked_at"
 
     /**
@@ -509,6 +510,24 @@ object BcApi {
      * BADE dışındaki sürümlerde false döner. BADE kabul kriteri ayardan
      * bağımsız olarak her zaman palet doğrulamasını zorunlu tutar.
      */
+    /**
+     * Kurulum "Manual Receipt Label Print" (BADE, 16 Eyl 2026): açıkken mal kabul
+     * kaydı etiket basmaz; operatör kayıt sonrası ekranda "Etiket Yazdır" der.
+     * Ulaşılamazsa son bilinen değer, o da yoksa false (otomatik baskı) döner.
+     */
+    suspend fun manualReceiptLabelPrint(context: Context): Boolean {
+        val cached = prefs(context).getString(KEY_MANUAL_RECEIPT_LABELS, null)
+        val r = boundAction(context, "appUserProfiles", "DEFAULT", "resolveCurrent")
+        if (!r.ok) return cached == "1"
+        val manual = try {
+            JSONObject(scalarValue(r.body)).optBoolean("manualReceiptLabelPrint", false)
+        } catch (e: Exception) {
+            return cached == "1"
+        }
+        prefs(context).edit().putString(KEY_MANUAL_RECEIPT_LABELS, if (manual) "1" else "0").apply()
+        return manual
+    }
+
     suspend fun lpScanRequired(context: Context): Boolean {
         // BADE acceptance rule is mandatory even when setup/metadata is unavailable.
         if (com.dynops.bcwms.feature.requiresPalletWorkflow(BuildConfig.FLAVOR)) return true

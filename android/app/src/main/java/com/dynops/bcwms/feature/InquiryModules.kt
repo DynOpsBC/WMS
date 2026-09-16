@@ -44,6 +44,41 @@ internal fun queriedLpSummary(lpNo: String, lines: List<JSONObject>): QueriedLpS
     )
 }
 
+/** BADE (16 Eyl 2026): LP ile sorguda paletin bulunduğu lokasyon/raf ve alan (zone) kodu. */
+internal data class LpPlacement(val locationCode: String, val binCode: String, val zoneCode: String)
+
+internal fun lpPlacementLabel(p: LpPlacement?): String {
+    if (p == null) return ""
+    val place = listOf(p.locationCode.trim(), p.binCode.trim()).filter { it.isNotBlank() }.joinToString("/")
+    return listOfNotNull(
+        place.takeIf { it.isNotBlank() }?.let { "Raf: $it" },
+        p.zoneCode.trim().takeIf { it.isNotBlank() }?.let { "Alan: $it" },
+    ).joinToString(" · ")
+}
+
+internal fun odataOrFilter(values: List<String>, build: (String) -> String): String =
+    values.joinToString(" or ") { build(it.replace("'", "''")) }
+
+/** LP başlıklarından lokasyon/raf, raf kaydından alan kodu; eksik veri boş kalır, ekran kırılmaz. */
+internal suspend fun loadLpPlacements(context: android.content.Context, lpNos: List<String>): Map<String, LpPlacement> {
+    val keys = lpNos.map { it.trim() }.filter { it.isNotBlank() }.distinct().take(25)
+    if (keys.isEmpty()) return emptyMap()
+    val heads = BcApi.getAllPages(context, "licensePlates?\$filter=${odataOrFilter(keys) { "no eq '$it'" }}&\$select=no,locationCode,binCode&\$top=50")
+    if (!heads.complete) return emptyMap()
+    val placements = heads.rows.associate { h ->
+        h.optString("no").trim() to LpPlacement(h.optString("locationCode").trim(), h.optString("binCode").trim(), "")
+    }
+    val binKeys = placements.values.filter { it.binCode.isNotBlank() }.map { it.locationCode to it.binCode }.distinct()
+    if (binKeys.isEmpty()) return placements
+    val binFilter = binKeys.joinToString(" or ") { (loc, bin) ->
+        "(locationCode eq '${loc.replace("'", "''")}' and code eq '${bin.replace("'", "''")}')"
+    }
+    val bins = BcApi.getAllPages(context, "bins?\$filter=$binFilter&\$select=locationCode,code,zoneCode&\$top=50")
+    if (!bins.complete) return placements
+    val zones = bins.rows.associate { (it.optString("locationCode").trim() to it.optString("code").trim()) to it.optString("zoneCode").trim() }
+    return placements.mapValues { (_, p) -> p.copy(zoneCode = zones[p.locationCode to p.binCode].orEmpty()) }
+}
+
 /** Item Inquiry — item card + LP lines that contain the item (on-hand by LP). */
 @Composable
 fun ItemInquiryModule() {
@@ -57,6 +92,7 @@ fun ItemInquiryModule() {
     var lpLines by remember { mutableStateOf<List<JSONObject>>(emptyList()) }
     var ledger by remember { mutableStateOf<List<JSONObject>>(emptyList()) }
     var queriedLpNo by remember { mutableStateOf("") }
+    var lpPlacement by remember { mutableStateOf<Map<String, LpPlacement>>(emptyMap()) }
     var status by remember { mutableStateOf("Ürün No. veya LP No. tarayın/girin.") }
     var loading by remember { mutableStateOf(false) }
 
@@ -64,7 +100,7 @@ fun ItemInquiryModule() {
         if (query.trim().isBlank()) return
         scope.launch {
             loading = true; status = "Sorgulanıyor..."
-            item = null; lpLines = emptyList(); ledger = emptyList(); queriedLpNo = ""
+            item = null; lpLines = emptyList(); ledger = emptyList(); queriedLpNo = ""; lpPlacement = emptyMap()
             val q = query.trim()
             val safeQ = q.replace("'", "''")
             val byLp = BcApi.getAllPages(context, "licensePlateLines?\$filter=lpNo eq '$safeQ'&\$top=200")
@@ -82,6 +118,8 @@ fun ItemInquiryModule() {
             val lpPage = if (byLp.complete && byLp.rows.isNotEmpty()) byLp
                 else BcApi.getAllPages(context, "licensePlateLines?\$filter=itemNo eq '$safeItemNo'&\$top=50")
             if (lpPage.complete) lpLines = lpPage.rows
+            // BADE (16 Eyl 2026): LP ile sorguda Alan Kodu ve Raf/Depo Gözü de gelsin.
+            lpPlacement = loadLpPlacements(context, lpLines.map { it.optString("lpNo") })
             // Son Hareketler (Item Ledger) — WI "Recent Transactions" pariteti.
             val le = BcApi.get(context, "itemLedgerEntries?\$filter=itemNo eq '$safeItemNo'&\$orderby=postingDate desc,entryNo desc&\$top=20")
             if (le.ok) ledger = BcApi.parseValueArray(le.body)
@@ -179,6 +217,13 @@ fun ItemInquiryModule() {
                                     style = MaterialTheme.typography.bodyMedium,
                                     color = MaterialTheme.colorScheme.onSecondaryContainer,
                                 )
+                                lpPlacementLabel(lpPlacement[lp.lpNo]).takeIf { it.isNotBlank() }?.let { place ->
+                                    Text(
+                                        place,
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = MaterialTheme.colorScheme.onSecondaryContainer,
+                                    )
+                                }
                             }
                         }
                         Spacer(Modifier.height(10.dp))
@@ -226,6 +271,7 @@ fun ItemInquiryModule() {
                             val extra = listOfNotNull(
                                 ln.optString("lotNo").takeIf { it.isNotBlank() }?.let { "Lot $it" },
                                 ln.optString("serialNo").takeIf { it.isNotBlank() }?.let { "Seri $it" },
+                                lpPlacementLabel(lpPlacement[ln.optString("lpNo").trim()]).takeIf { it.isNotBlank() },
                             ).joinToString(" · ")
                             if (extra.isNotBlank()) {
                                 Text(extra, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)

@@ -90,6 +90,11 @@ page 72061 "DOPSWHS Setup"
                     ApplicationArea = All;
                     ToolTip = 'Kapalı (varsayılan): toplama satırı kaynak LP okutulmadan da onaylanabilir, yerleştirmede ürün barkodu okutulur. Açık: toplamada kaynak LP okutmak zorunludur ve yerleştirme LP okutmasıyla doğrulanır; okutulan LP''nin maddesi, varyantı, lotu ve rafı satırla uyuşmazsa işlem reddedilir.';
                 }
+                field("Manual Receipt Label Print"; Rec."Manual Receipt Label Print")
+                {
+                    ApplicationArea = All;
+                    ToolTip = 'Kapalı (varsayılan): mal kabul kaydedilince palet MTE etiketleri otomatik basılır. Açık: etiket basılmaz; operatör kayıt sonrası açılan ekranda paletleri seçip "Etiket Yazdır" der.';
+                }
                 field("MTE Report ID"; Rec."MTE Report ID")
                 {
                     ApplicationArea = All;

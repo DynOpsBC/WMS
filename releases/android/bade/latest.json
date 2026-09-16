@@ -1,7 +1,7 @@
 {
-  "versionCode": 200120,
-  "versionName": "1.14.120-bade",
-  "apkUrl": "https://github.com/DynOpsBC/WMS/releases/download/android-v1.14.120/BCWMS-BADE-1.14.120-RELEASE.apk",
-  "sha256": "17049aa46dc2db419dd3d232276094539a5cd4b3f6f1163d89c888120906c765",
-  "releaseNotes": "LP kartı hataları: MTE/LP QR rapor hatasının gerçek nedeni ekranda; bulunamayan LP, yetki ve uzunluk hataları Türkçe; Yardım → Son hata kayıtları ile REF kodu cihazda çözülür. BC 1.14.1.41 önerilir (1.14.1.40 ile de çalışır)."
+  "versionCode": 200121,
+  "versionName": "1.14.121-bade",
+  "apkUrl": "https://github.com/DynOpsBC/WMS/releases/download/android-v1.14.121/BCWMS-BADE-1.14.121-RELEASE.apk",
+  "sha256": "d9bbe9e4483c6284c916f5c2ac268aff47c340158cdc177f52803da9224631a4",
+  "releaseNotes": "Boşalan LP Kullanıldı olur; tam palet Hedef LP açmadan sevk edilir; sevk LP satırında Kaynak LP; Ürün Sorgu LP'de Raf/Alan; Lot No Ata lotu kilitli; mal kabul etiketi Kurulum ayarıyla Etiket Yazdır ile basılır. BC 1.14.1.42 gerekir."
 }

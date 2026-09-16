@@ -22,6 +22,7 @@ page 72483 "DOPSWHS LP Line ListPart"
                 field("Package No."; Rec."Package No.") { ApplicationArea = All; }
                 field("Child LP No."; Rec."Child LP No.") { ApplicationArea = All; }
                 field("Expiration Date"; Rec."Expiration Date") { ApplicationArea = All; }
+                field("Source LP No."; Rec."Source LP No.") { ApplicationArea = All; ToolTip = 'Bu satırın toplandığı/aktarıldığı kaynak palet.'; }
             }
         }
     }

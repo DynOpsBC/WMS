@@ -25,10 +25,15 @@ internal fun receiptMteLpNos(receiptNo: String, lines: List<JSONObject>): List<S
     .distinct()
     .sorted()
 
-/** Posting already requested labels. Reprinting is explicit, with no initial selection. */
+/**
+ * Auto mode: posting already requested labels; reprinting is explicit, with no
+ * initial selection. Manual mode (BADE, 16 Eyl 2026 — Kurulum "Manual Receipt
+ * Label Print"): posting printed nothing, so every pallet starts selected and
+ * the operator prints with "Etiket Yazdır".
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-internal fun ReceiptMteSheet(receiptNo: String, onDismiss: () -> Unit) {
+internal fun ReceiptMteSheet(receiptNo: String, manualPrint: Boolean = false, onDismiss: () -> Unit) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var lpNos by remember(receiptNo) { mutableStateOf<List<String>>(emptyList()) }
@@ -36,6 +41,7 @@ internal fun ReceiptMteSheet(receiptNo: String, onDismiss: () -> Unit) {
     var busy by remember { mutableStateOf(false) }
     var loaded by remember { mutableStateOf(false) }
     var status by remember { mutableStateOf("") }
+    var preselected by remember(receiptNo) { mutableStateOf(false) }
 
     fun load() {
         scope.launch {
@@ -49,10 +55,12 @@ internal fun ReceiptMteSheet(receiptNo: String, onDismiss: () -> Unit) {
             )
             loaded = page.complete
             lpNos = if (page.complete) receiptMteLpNos(receiptNo, page.rows) else emptyList()
-            selected = selected.intersect(lpNos.toSet())
+            selected = if (manualPrint && !preselected && page.complete) lpNos.toSet() else selected.intersect(lpNos.toSet())
+            if (page.complete) preselected = true
             status = when {
                 !page.complete -> "HATA: LP listesi tamamlanamadı. Yenileyin; mal kabulü tekrar kaydetmeyin."
                 lpNos.isEmpty() -> "Bu mal kabule bağlı ürün içeren LP bulunamadı. MTE için LP oluşturulmuş olmalı."
+                manualPrint -> "${lpNos.size} LP bulundu. Etiket Yazdır ile seçili paletlerin etiketi basılır."
                 else -> "${lpNos.size} LP bulundu. Yalnız etiketi eksik olanları seçin."
             }
             busy = false
@@ -71,11 +79,15 @@ internal fun ReceiptMteSheet(receiptNo: String, onDismiss: () -> Unit) {
             Modifier.fillMaxWidth().padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
-            Text("Mal kabul kaydedildi · MTE", style = MaterialTheme.typography.titleLarge)
+            Text(if (manualPrint) "Mal kabul kaydedildi · Etiket Yazdır" else "Mal kabul kaydedildi · MTE", style = MaterialTheme.typography.titleLarge)
             Text("Belge: $receiptNo")
             Text(
-                "Kayıt sırasında etiket basımı istendi. Çıktıları kontrol edin; " +
-                    "yalnız eksikleri yeniden yazdırın. Liste bu belgenin önceki kısmi kabullerine ait LP'leri de içerebilir.",
+                if (manualPrint)
+                    "Etiketler kayıtla birlikte basılmadı. Basılacak paletler seçili; Etiket Yazdır'a basın. " +
+                        "Liste bu belgenin önceki kısmi kabullerine ait LP'leri de içerebilir."
+                else
+                    "Kayıt sırasında etiket basımı istendi. Çıktıları kontrol edin; " +
+                        "yalnız eksikleri yeniden yazdırın. Liste bu belgenin önceki kısmi kabullerine ait LP'leri de içerebilir.",
                 style = MaterialTheme.typography.bodySmall,
             )
             StatusText(status)
@@ -131,7 +143,7 @@ internal fun ReceiptMteSheet(receiptNo: String, onDismiss: () -> Unit) {
                         busy = false
                     }
                 },
-            ) { Text("Seçilen MTE'leri Yazdır (${selected.size})") }
+            ) { Text(if (manualPrint) "Etiket Yazdır (${selected.size})" else "Seçilen MTE'leri Yazdır (${selected.size})") }
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                 TextButton(onClick = { load() }, enabled = !busy) { Text("Yenile") }
                 TextButton(onClick = onDismiss, enabled = !busy) { Text("Devam Et") }

@@ -666,6 +666,7 @@ codeunit 72040 "DOPSWHS LP Management"
             TargetLine."Source Document Line No." := SourceLine."Source Document Line No.";
             TargetLine."Source Document Quantity" := SourceLine."Source Document Quantity";
             TargetLine."Source Item Ledger Entry No." := SourceLine."Source Item Ledger Entry No.";
+            TargetLine."Source LP No." := SourceLP."No.";
             TargetLine.Insert(true);
 
             SourceLine.Validate(Quantity, SourceLine.Quantity - TransferQty);
@@ -674,9 +675,12 @@ codeunit 72040 "DOPSWHS LP Management"
             else
                 SourceLine.Modify(true);
 
-            WriteToLedger(SourceLP, LPActionTransferOut(), SourceLP."Bin Code", TargetLP."Bin Code", TransferQty, SourceLine."Item No.", SourceLine."Lot No.", TargetLP."No.");
-            WriteToLedger(TargetLP, LPActionTransferIn(), SourceLP."Bin Code", TargetLP."Bin Code", TransferQty, SourceLine."Item No.", SourceLine."Lot No.", SourceLP."No.");
+            WriteTransferToLedger(SourceLP, LPActionTransferOut(), SourceLP."Bin Code", TargetLP."Bin Code", TransferQty, SourceLine."Item No.", SourceLine."Lot No.", TargetLP."No.", SourceLP."No.", TargetLP."No.");
+            WriteTransferToLedger(TargetLP, LPActionTransferIn(), SourceLP."Bin Code", TargetLP."Bin Code", TransferQty, SourceLine."Item No.", SourceLine."Lot No.", SourceLP."No.", SourceLP."No.", TargetLP."No.");
         end;
+        // BADE (16 Eyl 2026): a pallet emptied by transfer is consumed, not a
+        // reusable "Built" shell.
+        MarkUsedIfEmptied(SourceLP);
         OnAfterTransfer(SourceLP, TargetLP);
     end;
 
@@ -753,7 +757,7 @@ codeunit 72040 "DOPSWHS LP Management"
             TargetLine."Source Document Line No." := PickLineNo;
             TargetLine."Source Document Quantity" := PickQty;
             TargetLine.Insert(true);
-            WriteToLedger(TargetLP, LPActionTransferIn(), SourceBinCode, TargetBinCode, PickQty, ItemNo, LotNo + SerialNo, RelatedDocument);
+            WriteTransferToLedger(TargetLP, LPActionTransferIn(), SourceBinCode, TargetBinCode, PickQty, ItemNo, LotNo + SerialNo, RelatedDocument, '', TargetLP."No.");
             exit;
         end;
 
@@ -822,6 +826,7 @@ codeunit 72040 "DOPSWHS LP Management"
                         TargetLine."Source Document Line No." := PickLineNo;
                         TargetLine."Source Document Quantity" := TransferQty;
                         TargetLine."Source Item Ledger Entry No." := SourceLine."Source Item Ledger Entry No.";
+                        TargetLine."Source LP No." := SourceLP."No.";
                         TargetLine.Insert(true);
 
                     SourceLine.Validate(Quantity, Round(SourceLine.Quantity - TransferQty, 0.00001));
@@ -830,8 +835,8 @@ codeunit 72040 "DOPSWHS LP Management"
                     else
                         SourceLine.Modify(true);
 
-                    WriteToLedger(SourceLP, LPActionTransferOut(), SourceBinCode, TargetBinCode, TransferQty, ItemNo, LotNo + SerialNo, RelatedDocument);
-                    WriteToLedger(TargetLP, LPActionTransferIn(), SourceBinCode, TargetBinCode, TransferQty, ItemNo, LotNo + SerialNo, RelatedDocument);
+                    WriteTransferToLedger(SourceLP, LPActionTransferOut(), SourceBinCode, TargetBinCode, TransferQty, ItemNo, LotNo + SerialNo, RelatedDocument, SourceLP."No.", TargetLP."No.");
+                    WriteTransferToLedger(TargetLP, LPActionTransferIn(), SourceBinCode, TargetBinCode, TransferQty, ItemNo, LotNo + SerialNo, RelatedDocument, SourceLP."No.", TargetLP."No.");
                     RemainingBaseQty := Round(RemainingBaseQty - TransferBaseQty, 0.00001);
                 end;
             until (SourceLine.Next() = 0) or (RemainingBaseQty <= 0.00001);
@@ -841,6 +846,11 @@ codeunit 72040 "DOPSWHS LP Management"
                 '%1 kaynak LP numarasında %2 ürünü ve lot %3 için toplanan %4 miktar bulunamadı.',
                 SourceLP."No.", ItemNo, LotNo, PickQty);
 
+        // BADE (16 Eyl 2026): a pallet whose whole content was picked is consumed.
+        // Leaving it "Built" with zero lines made the empty pallet scannable as a
+        // new target and the operator could not tell it from a live one.
+        if MarkUsedIfEmptied(SourceLP) then
+            exit;
         // The shipment now owns the newly created shipping LP. Any remainder on
         // the source pallet must be free for the next operation instead of
         // staying reserved to the pick/shipment that already removed its share.
@@ -1156,6 +1166,7 @@ codeunit 72040 "DOPSWHS LP Management"
                         LPLine.Modify(true);
                     LP."Planned Quantity" := LPLine.Quantity;
                     LP.Modify(true);
+                    MarkUsedIfEmptied(LP);
                 end;
             Action::Unbuild:
                 Unbuild(LP);
@@ -1280,10 +1291,22 @@ codeunit 72040 "DOPSWHS LP Management"
     end;
 
     procedure WriteToLedger(var LP: Record "DOPSWHS LP Header"; Action: Enum "DOPSWHS LP Action"; FromBin: Code[20]; ToBin: Code[20]; Quantity: Decimal; ItemNo: Code[20]; LotSerial: Code[50]; RelatedDocument: Code[40])
+    begin
+        WriteTransferToLedger(LP, Action, FromBin, ToBin, Quantity, ItemNo, LotSerial, RelatedDocument, '', '');
+    end;
+
+    /// <summary>
+    /// Ledger row that also names the pallets on both sides of a transfer, so the
+    /// shipping LP's history shows which source pallet each quantity came from
+    /// (BADE, 16 Eyl 2026).
+    /// </summary>
+    procedure WriteTransferToLedger(var LP: Record "DOPSWHS LP Header"; Action: Enum "DOPSWHS LP Action"; FromBin: Code[20]; ToBin: Code[20]; Quantity: Decimal; ItemNo: Code[20]; LotSerial: Code[50]; RelatedDocument: Code[40]; SourceLpNo: Code[20]; TargetLpNo: Code[20])
     var
         Ledger: Record "DOPSWHS LP Movement Ledger";
     begin
         Ledger.Init();
+        Ledger."Source LP No." := SourceLpNo;
+        Ledger."Target LP No." := TargetLpNo;
         Ledger."LP No." := LP."No.";
         Ledger.Action := Action;
         Ledger."From Bin" := FromBin;
@@ -1295,6 +1318,89 @@ codeunit 72040 "DOPSWHS LP Management"
         Ledger.DateTime := CurrentDateTime();
         Ledger."Related Document" := RelatedDocument;
         Ledger.Insert(true);
+    end;
+
+    /// <summary>
+    /// BADE (16 Eyl 2026): an LP whose last line has just been removed is
+    /// consumed. Status Used blocks every reuse path (pick target, main basket,
+    /// transfer, receiving); the empty pallet can no longer be scanned as new.
+    /// Returns true when the status was changed.
+    /// </summary>
+    procedure MarkUsedIfEmptied(var LP: Record "DOPSWHS LP Header"): Boolean
+    var
+        LPLine: Record "DOPSWHS LP Line";
+    begin
+        if not (LP.Status in [LP.Status::Open, LP.Status::Built, LP.Status::Assigned]) then
+            exit(false);
+        LPLine.SetRange("LP No.", LP."No.");
+        if not LPLine.IsEmpty() then
+            exit(false);
+        LogMutation('LP.UsedWhenEmptied');
+        LP.Status := LP.Status::Used;
+        Clear(LP."Assigned Document Type");
+        LP."Assigned Document No." := '';
+        LP.Modify(true);
+        WriteToLedger(LP, LPActionItemRemoved(), LP."Bin Code", '', 0, '', '', 'EMPTIED');
+        exit(true);
+    end;
+
+    /// <summary>Whole content of an LP in base units (all items, all lines).</summary>
+    procedure TotalBaseQuantity(LpNo: Code[20]) TotalBaseQty: Decimal
+    var
+        LPLine: Record "DOPSWHS LP Line";
+        Item: Record Item;
+        QtyPerUoM: Decimal;
+    begin
+        LPLine.SetRange("LP No.", LpNo);
+        LPLine.SetFilter("Item No.", '<>%1', '');
+        if LPLine.FindSet() then
+            repeat
+                QtyPerUoM := 1;
+                if Item.Get(LPLine."Item No.") and (LPLine."Unit of Measure" <> '') and (LPLine."Unit of Measure" <> Item."Base Unit of Measure") then
+                    QtyPerUoM := QtyPerUnitOfMeasure(LPLine."Item No.", LPLine."Unit of Measure");
+                TotalBaseQty += Round(LPLine.Quantity * QtyPerUoM, 0.00001);
+            until LPLine.Next() = 0;
+    end;
+
+    /// <summary>
+    /// BADE (16 Eyl 2026): a pallet picked in full travels as the shipping LP
+    /// itself. No content is split; the pallet is assigned to the pick and moved
+    /// to the Place bin, so shipment posting consumes it like a built ship LP.
+    /// </summary>
+    procedure ShipLpDirectly(var LP: Record "DOPSWHS LP Header"; PickNo: Code[20]; WhseDocumentNo: Code[20]; SourceBinCode: Code[20]; TargetBinCode: Code[20])
+    var
+        TargetBin: Record Bin;
+        RelatedDocument: Code[40];
+    begin
+        EnsureNotPendingReceipt(LP);
+        if not (LP.Status in [LP.Status::Open, LP.Status::Built, LP.Status::Assigned]) then
+            Error('%1 paleti aktif değildir. Mevcut durum: %2.', LP."No.", LP.Status);
+        if (LP.Status = LP.Status::Assigned) and
+           not (((LP."Assigned Document Type" = LP."Assigned Document Type"::WhsePick) and (LP."Assigned Document No." = PickNo)) or
+                ((LP."Assigned Document Type" = LP."Assigned Document Type"::WhseShipment) and (LP."Assigned Document No." = WhseDocumentNo)))
+        then
+            Error('%1 paleti başka bir belgeye atanmıştır.', LP."No.");
+        LP.TestField("Location Code");
+        if LP."Bin Code" <> SourceBinCode then
+            Error('%1 paleti artık %2 rafındadır; toplama satırındaki %3 rafından sevk edilemez.', LP."No.", LP."Bin Code", SourceBinCode);
+        if TargetBinCode = '' then
+            Error('%1 paleti için sevk rafı bulunamadı.', LP."No.");
+        if not TargetBin.Get(LP."Location Code", TargetBinCode) then
+            Error('%1 hedef rafı %2 lokasyonunda bulunamadı.', TargetBinCode, LP."Location Code");
+        LogMutation('LP.ShipDirect');
+        RelatedDocument := CopyStr('PICK:' + PickNo, 1, MaxStrLen(RelatedDocument));
+        if LP."Bin Code" <> TargetBinCode then begin
+            LP.Validate("Bin Code", TargetBinCode);
+            LP.Modify(true);
+            WriteToLedger(LP, LPActionMoved(), SourceBinCode, TargetBinCode, 0, '', '', RelatedDocument);
+        end;
+        if not ((LP.Status = LP.Status::Assigned) and (LP."Assigned Document Type" = LP."Assigned Document Type"::WhsePick) and (LP."Assigned Document No." = PickNo)) then begin
+            LP.Status := LP.Status::Assigned;
+            LP."Assigned Document Type" := LP."Assigned Document Type"::WhsePick;
+            LP."Assigned Document No." := PickNo;
+            LP.Modify(true);
+            WriteToLedger(LP, LPActionAssigned(), TargetBinCode, TargetBinCode, 0, '', '', RelatedDocument);
+        end;
     end;
 
     /// <summary>
@@ -1623,6 +1729,7 @@ codeunit 72040 "DOPSWHS LP Management"
     end;
 
     local procedure LPActionBuilt(): Enum "DOPSWHS LP Action" begin exit(Enum::"DOPSWHS LP Action"::Built); end;
+    local procedure LPActionMoved(): Enum "DOPSWHS LP Action" begin exit(Enum::"DOPSWHS LP Action"::Moved); end;
     local procedure LPActionAssigned(): Enum "DOPSWHS LP Action" begin exit(Enum::"DOPSWHS LP Action"::Assigned); end;
     local procedure LPActionReleased(): Enum "DOPSWHS LP Action" begin exit(Enum::"DOPSWHS LP Action"::Released); end;
     local procedure LPActionTransferIn(): Enum "DOPSWHS LP Action" begin exit(Enum::"DOPSWHS LP Action"::TransferIn); end;

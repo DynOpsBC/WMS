@@ -962,8 +962,11 @@ codeunit 72046 "DOPSWHS Pick Mgmt"
         PlanText: Text;
     begin
         if Pick."DOPSWHS Main LP No." = '' then begin
+            // BADE (16 Eyl 2026): no "Hedef LP" is needed when every scanned
+            // pallet is picked in full; the pallets themselves become the
+            // shipping LPs. Partial pallets still require a shipping LP.
             if PalletPlan <> '' then
-                Error('Sevk paleti bulunamadı. Toplamanın sevk LP bilgisini yenileyin.');
+                ShipScannedPalletsDirectly(Pick, PalletPlan);
             exit;
         end;
         ShippingLP.Get(Pick."DOPSWHS Main LP No.");
@@ -1007,6 +1010,148 @@ codeunit 72046 "DOPSWHS Pick Mgmt"
                 WhseShipmentLine.Modify(true);
             end;
         until PickLine.Next() = 0;
+    end;
+
+    /// <summary>
+    /// BADE (16 Eyl 2026): registers a scanned-pallet pick without a shipping LP.
+    /// Allowed only when every scanned pallet is taken in full (its whole content
+    /// equals the planned base quantity across all lines); each pallet is then
+    /// assigned to the pick and moved to the Place bin as the shipping LP, and the
+    /// pick/shipment lines are stamped with it. A partially picked pallet stops
+    /// the registration with the instruction to open a "Hedef LP" first.
+    /// </summary>
+    local procedure ShipScannedPalletsDirectly(Pick: Record "Warehouse Activity Header"; PalletPlan: Text)
+    var
+        PickLine: Record "Warehouse Activity Line";
+        PlaceLine: Record "Warehouse Activity Line";
+        WhseShipmentLine: Record "Warehouse Shipment Line";
+        LP: Record "DOPSWHS LP Header";
+        LPMgt: Codeunit "DOPSWHS LP Management";
+        Plans: Dictionary of [Integer, Text];
+        PlannedBaseByLp: Dictionary of [Code[20], Decimal];
+        TakeBinByLp: Dictionary of [Code[20], Code[20]];
+        PlaceBinByLp: Dictionary of [Code[20], Code[20]];
+        WhseDocByLp: Dictionary of [Code[20], Code[20]];
+        Partial: TextBuilder;
+        LpNo: Code[20];
+        TakeBin: Code[20];
+        PlaceBin: Code[20];
+        WhseDocNo: Code[20];
+        PlanText: Text;
+        Planned: Decimal;
+    begin
+        ParseScannedPickPlans(PalletPlan, Plans);
+        PickLine.SetRange("Activity Type", Pick.Type);
+        PickLine.SetRange("No.", Pick."No.");
+        PickLine.SetRange("Action Type", PickLine."Action Type"::Take);
+        PickLine.SetFilter("Qty. to Handle (Base)", '>0');
+        if Plans.Count() <> PickLine.Count() then
+            Error('Toplama satırları değişmiş. Bütün açık satırların paletlerini yeniden doğrulayın.');
+        if not PickLine.FindSet() then
+            exit;
+        repeat
+            if not Plans.Get(PickLine."Line No.", PlanText) then
+                Error('%1 satırının palet doğrulaması eksik.', PickLine."Line No.");
+            ValidateScannedPickPlan(PickLine, PlanText);
+            FindRelatedPlaceLineForShippingLp(PickLine, PlaceLine);
+            AccumulatePlannedPalletQuantities(PlanText, PickLine."Bin Code", PlaceLine."Bin Code", PickLine."Whse. Document No.", PlannedBaseByLp, TakeBinByLp, PlaceBinByLp, WhseDocByLp);
+        until PickLine.Next() = 0;
+
+        foreach LpNo in PlannedBaseByLp.Keys() do begin
+            PlannedBaseByLp.Get(LpNo, Planned);
+            if Abs(LPMgt.TotalBaseQuantity(LpNo) - Planned) > 0.00001 then begin
+                if Partial.Length() > 0 then
+                    Partial.Append(', ');
+                Partial.Append(LpNo);
+            end;
+        end;
+        if Partial.Length() > 0 then
+            Error(PartialPalletNeedsShipLpErr, Partial.ToText());
+
+        foreach LpNo in PlannedBaseByLp.Keys() do begin
+            LP.Get(LpNo);
+            TakeBinByLp.Get(LpNo, TakeBin);
+            PlaceBinByLp.Get(LpNo, PlaceBin);
+            WhseDocByLp.Get(LpNo, WhseDocNo);
+            LPMgt.ShipLpDirectly(LP, Pick."No.", WhseDocNo, TakeBin, PlaceBin);
+        end;
+
+        // Stamp the document lines with the pallet(s) that now travel as shipping LPs.
+        if PickLine.FindSet(true) then
+            repeat
+                Plans.Get(PickLine."Line No.", PlanText);
+                LpNo := FirstPlannedPalletNo(PlanText);
+                FindRelatedPlaceLineForShippingLp(PickLine, PlaceLine);
+                PickLine."Target LP No." := LpNo;
+                PickLine.Modify(true);
+                PlaceLine."LP No." := LpNo;
+                PlaceLine."Target LP No." := LpNo;
+                PlaceLine.Modify(true);
+                if (PickLine."Whse. Document Type" = PickLine."Whse. Document Type"::Shipment) and
+                   WhseShipmentLine.Get(PickLine."Whse. Document No.", PickLine."Whse. Document Line No.") and
+                   LP.Get(LpNo)
+                then begin
+                    WhseShipmentLine."LP No." := LP."No.";
+                    WhseShipmentLine.SSCC := LP.SSCC;
+                    WhseShipmentLine.Modify(true);
+                end;
+            until PickLine.Next() = 0;
+    end;
+
+    local procedure AccumulatePlannedPalletQuantities(PlanText: Text; TakeBin: Code[20]; PlaceBin: Code[20]; WhseDocNo: Code[20]; var PlannedBaseByLp: Dictionary of [Code[20], Decimal]; var TakeBinByLp: Dictionary of [Code[20], Code[20]]; var PlaceBinByLp: Dictionary of [Code[20], Code[20]]; var WhseDocByLp: Dictionary of [Code[20], Code[20]])
+    var
+        Plan: JsonObject;
+        Step: JsonObject;
+        Steps: JsonArray;
+        Token: JsonToken;
+        Value: JsonToken;
+        LpNo: Code[20];
+        Planned: Decimal;
+        KnownBin: Code[20];
+    begin
+        Plan.ReadFrom(PlanText);
+        Plan.Get('steps', Value);
+        Steps := Value.AsArray();
+        foreach Token in Steps do begin
+            Step := Token.AsObject();
+            Step.Get('lpNo', Value);
+            LpNo := CopyStr(Value.AsValue().AsText(), 1, MaxStrLen(LpNo));
+            Step.Get('baseQuantity', Value);
+            Planned := 0;
+            if PlannedBaseByLp.Get(LpNo, Planned) then
+                PlannedBaseByLp.Set(LpNo, Planned + Value.AsValue().AsDecimal())
+            else
+                PlannedBaseByLp.Add(LpNo, Value.AsValue().AsDecimal());
+            if TakeBinByLp.Get(LpNo, KnownBin) then begin
+                if KnownBin <> TakeBin then
+                    Error('%1 paleti iki farklı raftan (%2, %3) toplanıyor; paletleri yeniden okutun.', LpNo, KnownBin, TakeBin);
+            end else
+                TakeBinByLp.Add(LpNo, TakeBin);
+            if PlaceBinByLp.Get(LpNo, KnownBin) then begin
+                if KnownBin <> PlaceBin then
+                    Error('%1 paleti iki farklı sevk rafına (%2, %3) gidiyor; tam palet sevki için önce Hedef LP oluşturun.', LpNo, KnownBin, PlaceBin);
+            end else
+                PlaceBinByLp.Add(LpNo, PlaceBin);
+            if not WhseDocByLp.ContainsKey(LpNo) then
+                WhseDocByLp.Add(LpNo, WhseDocNo);
+        end;
+    end;
+
+    local procedure FirstPlannedPalletNo(PlanText: Text): Code[20]
+    var
+        Plan: JsonObject;
+        Steps: JsonArray;
+        Token: JsonToken;
+        Value: JsonToken;
+    begin
+        Plan.ReadFrom(PlanText);
+        Plan.Get('steps', Value);
+        Steps := Value.AsArray();
+        foreach Token in Steps do begin
+            Token.AsObject().Get('lpNo', Value);
+            exit(CopyStr(Value.AsValue().AsText(), 1, 20));
+        end;
+        exit('');
     end;
 
     local procedure ParseScannedPickPlans(PalletPlan: Text; var Plans: Dictionary of [Integer, Text])
@@ -1563,6 +1708,7 @@ codeunit 72046 "DOPSWHS Pick Mgmt"
 
     var
         SourceOrderRequiredErr: Label 'Source order no. is required to assign a tote.';
+        PartialPalletNeedsShipLpErr: Label 'Palet(ler) kısmen toplanıyor: %1. Kısmi toplamada önce "Hedef LP Oluştur" ile sevk paleti açın; yalnız tamamı toplanan paletler olduğu gibi sevk edilir.', Comment = '%1 = LP numaraları';
         ToteBusyErr: Label 'Tote %1 is still in use by another pick. Complete or release it first.', Comment = '%1 = LP No.';
         PickTakenErr: Label 'Toplama %1 şu anda %2 kullanıcısında. Üzerinize alamazsınız; devir için depo sorumlusundan yeniden atama isteyin.', Comment = '%1 = Pick No., %2 = operatör';
         PickOwnedByOtherErr: Label 'Toplama %1 %2 kullanıcısında. Bu belgede işlem yapamazsınız.', Comment = '%1 = Pick No., %2 = operatör';

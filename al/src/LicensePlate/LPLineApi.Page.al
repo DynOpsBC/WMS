@@ -36,6 +36,7 @@ page 72089 "DOPSWHS LP Line API"
                 field(sourceDocumentLineNo; Rec."Source Document Line No.") { Caption = 'sourceDocumentLineNo'; }
                 field(sourceDocumentQuantity; Rec."Source Document Quantity") { Caption = 'sourceDocumentQuantity'; }
                 field(sourceItemLedgerEntryNo; Rec."Source Item Ledger Entry No.") { Caption = 'sourceItemLedgerEntryNo'; }
+                field(sourceLpNo; Rec."Source LP No.") { Caption = 'sourceLpNo'; }
             }
         }
     }
