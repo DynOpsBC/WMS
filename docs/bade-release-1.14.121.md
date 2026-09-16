@@ -87,3 +87,14 @@ tüm baskı yolları Azure'a çıkmadan `License Mgmt.GuardFeature(PrintBridge)`
 BC 1.14.1.42: lisans hataları Türkçe ve yönlendirici ("BCWMS lisansı aktif değil (…): … Kurulum → Lisans → Şimdi Doğrula").
 Terminal 1.14.121: eski BC metinleri de aynı Türkçe mesaja eşlenir (aktif değil / paket yetersiz / cihaz sınırı).
 Sahada ilk kontrol: BC → BCWMS Kurulum → Lisans bölümü → Lisans Durumu ve Durum Mesajı.
+
+## KÖK NEDEN BULUNDU ve DÜZELTİLDİ (16 Eyl 16:07) — terminal MTE / Seçilenleri Yazdır REF hatası
+
+BC LP kartındaki yeni "MTE Yazdır (terminal yolu)" düğmesi ham hatayı verdi:
+`Cannot call SetAscending on field Posting Date because it is not part of the current sorting.`
+(`DOPSWHS MTE Zpl Builder`.ResolveProductionDate). 1.14.1.39 ile gelen 10×8 ZPL MTE üreticisi üretim tarihini ararken
+sıralama anahtarında olmayan bir alanda `SetAscending` çağırıyordu; lot takipli her palette çalışma zamanı hatası → etiket
+yazıcısına giden her MTE (LP kartı "MTE Yazdır", LP listesi "Seçilenleri Yazdır", mal kabul sonrası MTE) düşüyordu.
+Terminal İngilizce metni REF koduna çevirdiği için 14:07'den beri neden görünmüyordu. Düzeltme: `SetCurrentKey("Item No.",
+"Posting Date")` + varsayılan artan sıralama. **BC 1.14.1.42 (bu paket) yüklenince MTE tekrar basılır; terminal güncellemesi
+gerekmez.**
