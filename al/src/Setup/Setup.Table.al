@@ -324,6 +324,15 @@ table 72000 "DOPSWHS Setup"
             DataClassification = CustomerContent;
             InitValue = false;
         }
+        field(460; "MTE Report ID"; Integer)
+        {
+            // BADE (16 Eyl 2026): the terminal MTE runs the customer's own
+            // "Madde Tanımlama Etiketi" report (BadeProduction 60150, with the
+            // layout selected in BC) instead of the built-in copy. 0 = built-in.
+            Caption = 'MTE Report ID';
+            DataClassification = CustomerContent;
+            TableRelation = AllObjWithCaption."Object ID" where("Object Type" = const(Report));
+        }
         field(470; "Installed Edition"; Code[10])
         {
             // Stamped by install/upgrade with codeunit "DOPSWHS Edition".Current()
@@ -333,6 +342,14 @@ table 72000 "DOPSWHS Setup"
             Caption = 'Installed Edition';
             DataClassification = SystemMetadata;
             Editable = false;
+        }
+        field(480; "Allow Edition Change"; Boolean)
+        {
+            // Escape hatch for the edition guard: an admin ticks this before
+            // deliberately moving a company to another edition (e.g. a tenant
+            // that received the wrong customer package). Cleared by the stamp.
+            Caption = 'Allow Edition Change';
+            DataClassification = SystemMetadata;
         }
     }
 
