@@ -79,9 +79,17 @@ page 72069 "DOPSWHS LP Card"
 
                 trigger OnAction()
                 var
+                    Printer: Record "DOPSWHS Printer";
                     Dispatcher: Codeunit "DOPSWHS Print Dispatcher";
                 begin
-                    Dispatcher.PrintPalletItemLabelsWithOptions(Rec, '', 1, '');
+                    // The BC user usually has no device printer mapping (the
+                    // terminal sends its own printer code), so let the admin
+                    // pick the printer explicitly; Cancel = mapping of this user.
+                    Printer.SetRange(Active, true);
+                    if Page.RunModal(Page::"DOPSWHS Printer List", Printer) = Action::LookupOK then
+                        Dispatcher.PrintPalletItemLabelsWithOptions(Rec, Printer.Code, 1, '')
+                    else
+                        Dispatcher.PrintPalletItemLabelsWithOptions(Rec, '', 1, '');
                     Message('MTE baskı isteği gönderildi: %1', Rec."No.");
                 end;
             }
