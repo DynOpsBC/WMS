@@ -250,12 +250,16 @@ codeunit 72320 "DOPSWHS MTE Zpl Builder"
             exit(DateText(ItemLedgerEntry."Posting Date"));
         if LPLine."Lot No." = '' then
             exit('');
-        OutputEntry.SetCurrentKey("Item No.");
+        // BADE 16 Eyl 2026 (LP000025/26 "MTE Yazdır" REF hatası): SetAscending
+        // on a field outside the current sort key throws "Cannot call
+        // SetAscending on field Posting Date because it is not part of the
+        // current sorting" and killed every ZPL MTE. Sort by posting date
+        // explicitly (ascending is the default) and take the first entry.
+        OutputEntry.SetCurrentKey("Item No.", "Posting Date");
         OutputEntry.SetRange("Item No.", LPLine."Item No.");
         OutputEntry.SetRange("Variant Code", LPLine."Variant Code");
         OutputEntry.SetRange("Lot No.", LPLine."Lot No.");
         OutputEntry.SetRange("Entry Type", OutputEntry."Entry Type"::Output);
-        OutputEntry.SetAscending("Posting Date", true);
         if OutputEntry.FindFirst() then
             exit(DateText(OutputEntry."Posting Date"));
         exit('');
