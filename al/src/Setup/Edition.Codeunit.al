@@ -12,7 +12,7 @@ codeunit 72322 "DOPSWHS Edition"
     Permissions = tabledata "DOPSWHS Setup" = RM;
 
     var
-        WrongEditionErr: Label 'Bu ortamda BCWMS %1 sürümü kurulu; %2 paketi yüklenemez (şirket: %3). Her müşterinin kendi paketi vardır: BASE 1.14.0.x, BADE 1.14.1.x, EMU/DKÇ 1.14.2.x.', Comment = '%1 installed edition, %2 edition of this package, %3 company name';
+        WrongEditionErr: Label 'Bu ortamda BCWMS %1 sürümü kurulu; %2 paketi yüklenemez (şirket: %3). Her müşterinin kendi paketi vardır: BASE 1.14.0.x, BADE 1.14.1.x, EMU/DKÇ 1.14.2.x. Bilinçli geçiş için Kurulum kartında "Allow Edition Change" işaretleyip yeniden deneyin.', Comment = '%1 installed edition, %2 edition of this package, %3 company name';
 
     /// <summary>Edition compiled into this package.</summary>
     procedure Current(): Code[10]
@@ -37,19 +37,23 @@ codeunit 72322 "DOPSWHS Edition"
     /// </summary>
     procedure AssertCompatible()
     var
+        Setup: Record "DOPSWHS Setup";
         InstalledEdition: Code[10];
     begin
         InstalledEdition := Installed();
         if (InstalledEdition = '') or (InstalledEdition = 'BASE') or (InstalledEdition = Current()) then
+            exit;
+        if Setup.Get('') and Setup."Allow Edition Change" then
             exit;
         Error(WrongEditionErr, InstalledEdition, Current(), CompanyName());
     end;
 
     procedure Stamp(var Setup: Record "DOPSWHS Setup")
     begin
-        if Setup."Installed Edition" = Current() then
+        if (Setup."Installed Edition" = Current()) and not Setup."Allow Edition Change" then
             exit;
         Setup."Installed Edition" := Current();
+        Setup."Allow Edition Change" := false;
         Setup.Modify();
     end;
 }
