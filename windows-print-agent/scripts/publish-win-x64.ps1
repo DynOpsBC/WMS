@@ -66,6 +66,8 @@ foreach ($requiredFile in $requiredFiles) {
 }
 
 Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'install.ps1') -Destination $installerRoot
+Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'kur-tek-tik.ps1') -Destination $installerRoot
+Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'KUR.cmd') -Destination $packageRoot
 Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'uninstall.ps1') -Destination $installerRoot
 Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'enable-autostart.ps1') -Destination $installerRoot
 Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'disable-autostart.ps1') -Destination $installerRoot
