@@ -121,7 +121,7 @@ $hashes = Get-ChildItem -LiteralPath $packageRoot -File -Recurse | Sort-Object F
 [ordered]@{
     schemaVersion = 1
     productId = 'DynOps.BCWMS.PrintAgent'
-    productVersion = '1.0.0'
+    productVersion = '1.1.0'
     runtime = 'win-x64'
     selfContained = $true
     authenticodeSigned = $authenticodeSigned
