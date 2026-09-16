@@ -49,6 +49,12 @@ Terminal BC'den önce güncellenirse "MTE Yazdır" artık hata vermez: BC `print
 (1.14.1.38 ve öncesi) uygulama ek alanlar olmadan eski `printPalletLabels` yoluna düşer ve ekranda
 "BC sürümü eski, BCWMS 1.14.1.39 yükleyin" notu gösterir.
 
+## BC 1.14.1.40 (16 Eyl, 14:15) — kurulum emniyeti
+
+Kurulum kartına **Installed Edition** (= BADE) eklendi. Başka müşterinin paketi (EMU 1.14.2.x) bu ortama
+yüklenmeye çalışılırsa yükseltme hata verir ve BC eski paketi kurulu bırakır. Bunun dışında 1.14.1.39 ile
+aynı. Yüklenecek dosya: `BCWMSApp-1.14.1.40.zip` (1.14.1.39 yüklendiyse üstüne yüklenir).
+
 ## Kurulum sırası
 
 1. BadeProduction 1.3.3.13'ü yükle.
