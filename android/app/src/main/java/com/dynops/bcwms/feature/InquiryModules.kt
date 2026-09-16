@@ -284,6 +284,37 @@ fun BinInquiryModule() {
     var whseEntries by remember { mutableStateOf<List<JSONObject>>(emptyList()) }
     var status by remember { mutableStateOf("Lokasyon + Bin girin.") }
     var loading by remember { mutableStateOf(false) }
+    // 16 Eyl 2026 (DKÇ): the operator could not guess the location/bin codes,
+    // so both are offered as lookups from BC (locations API, bins API). Typing
+    // and scanning still work; the lists are a convenience on top.
+    var locations by remember { mutableStateOf<List<Pair<String, String>>>(emptyList()) }
+    var binChoices by remember { mutableStateOf<List<Pair<String, String>>>(emptyList()) }
+    var showLocationPicker by remember { mutableStateOf(false) }
+    var showBinPicker by remember { mutableStateOf(false) }
+    var pickerLoading by remember { mutableStateOf(false) }
+
+    LaunchedEffect(Unit) {
+        val r = BcApi.get(context, "locations?\$top=200&\$orderby=code")
+        if (r.ok) {
+            locations = BcApi.parseValueArray(r.body)
+                .filter { !it.optBoolean("useAsInTransit", false) }
+                .map { it.optString("code") to it.optString("name") }
+            if (location.isBlank() && locations.size == 1) location = locations.first().first
+        }
+    }
+
+    fun openBinPicker() {
+        val loc = location.trim()
+        if (loc.isBlank()) { status = "Önce lokasyon seçin."; return }
+        scope.launch {
+            pickerLoading = true
+            val page = BcApi.getAllPages(context, "bins?\$filter=locationCode eq '${loc.replace("'", "''")}'&\$orderby=code&\$top=500")
+            pickerLoading = false
+            if (!page.complete && page.rows.isEmpty()) { status = "HATA: Raf listesi alınamadı."; return@launch }
+            binChoices = page.rows.map { it.optString("code") to listOfNotNull(it.optString("zoneCode").takeIf { z -> z.isNotBlank() }?.let { z -> "Bölge $z" }, it.optString("description").takeIf { d -> d.isNotBlank() }).joinToString(" · ") }
+            if (binChoices.isEmpty()) status = "BOŞ: '$loc' lokasyonunda raf yok." else showBinPicker = true
+        }
+    }
 
     fun load() {
         if (location.trim().isBlank() || binCode.trim().isBlank()) return
@@ -332,14 +363,40 @@ fun BinInquiryModule() {
 
     val palette = bcwmsStatus()
     Column(Modifier.fillMaxSize().padding(12.dp)) {
-        ScanField("Lokasyon", location, { location = it }, modifier = Modifier.fillMaxWidth())
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            ScanField("Lokasyon", location, { location = it }, modifier = Modifier.weight(1f))
+            if (locations.isNotEmpty()) {
+                Spacer(Modifier.width(8.dp))
+                OutlinedButton(onClick = { showLocationPicker = true }) { Text("Seç") }
+            }
+        }
         Spacer(Modifier.height(8.dp))
-        ScanField("Bin", binCode, { binCode = it }, modifier = Modifier.fillMaxWidth(), onScanned = {
-            binCode = BarcodeIntentResolver.resolve(it).value
-        })
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            ScanField("Bin", binCode, { binCode = it }, modifier = Modifier.weight(1f), onScanned = {
+                binCode = BarcodeIntentResolver.resolve(it).value
+            })
+            Spacer(Modifier.width(8.dp))
+            OutlinedButton(onClick = { openBinPicker() }, enabled = !pickerLoading) { Text(if (pickerLoading) "..." else "Raf listesi") }
+        }
         Spacer(Modifier.height(8.dp))
         Button(onClick = { load() }, enabled = !loading, modifier = Modifier.fillMaxWidth()) {
             Text(if (loading) "..." else "🔎 Sorgula", fontWeight = FontWeight.Bold)
+        }
+        if (showLocationPicker) {
+            InquiryPickerDialog(
+                title = "Lokasyon seç",
+                items = locations,
+                onDismiss = { showLocationPicker = false },
+                onPick = { code -> location = code; binCode = ""; showLocationPicker = false },
+            )
+        }
+        if (showBinPicker) {
+            InquiryPickerDialog(
+                title = "Raf seç · ${location.trim()}",
+                items = binChoices,
+                onDismiss = { showBinPicker = false },
+                onPick = { code -> binCode = code; showBinPicker = false; load() },
+            )
         }
         Spacer(Modifier.height(8.dp))
         StatusText(status)
@@ -616,4 +673,53 @@ fun WhseEntriesModule() {
             if (rows.isEmpty() && !loading) item { EmptyState("Kayıt yok. Filtreyi değiştirin ya da 🔄 ile yenileyin.") }
         }
     }
+}
+
+
+/**
+ * Searchable code list for the inquiry screens: type part of the code or
+ * name to filter, tap a row to pick it.
+ */
+@Composable
+internal fun InquiryPickerDialog(
+    title: String,
+    items: List<Pair<String, String>>,
+    onDismiss: () -> Unit,
+    onPick: (String) -> Unit,
+) {
+    var query by remember { mutableStateOf("") }
+    val visible = remember(query, items) {
+        val q = query.trim()
+        if (q.isBlank()) items else items.filter { it.first.contains(q, ignoreCase = true) || it.second.contains(q, ignoreCase = true) }
+    }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(title) },
+        text = {
+            Column(Modifier.fillMaxWidth().heightIn(max = 420.dp)) {
+                OutlinedTextField(
+                    value = query,
+                    onValueChange = { query = it },
+                    singleLine = true,
+                    label = { Text("Ara") },
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                Spacer(Modifier.height(8.dp))
+                Text("${visible.size} kayıt", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                LazyColumn(Modifier.fillMaxWidth().weight(1f, fill = false)) {
+                    items(visible, key = { it.first }) { entry ->
+                        Column(
+                            Modifier.fillMaxWidth().clickable { onPick(entry.first) }.padding(vertical = 10.dp, horizontal = 4.dp),
+                        ) {
+                            Text(entry.first, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
+                            if (entry.second.isNotBlank()) Text(entry.second, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                        HorizontalDivider()
+                    }
+                }
+            }
+        },
+        confirmButton = {},
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Kapat") } },
+    )
 }

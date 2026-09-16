@@ -20,17 +20,36 @@ public static class JobRoutingPolicy
             throw new PermanentJobException($"Job label format {job.Format} does not match configured format {settings.LabelFormat}.");
         }
 
-        var expectedId = pdf ? settings.DocumentPrinterId : settings.LabelPrinterId;
-        var expectedName = pdf ? settings.DocumentPrinterName : settings.LabelPrinterName;
-        if (string.IsNullOrWhiteSpace(expectedId) || string.IsNullOrWhiteSpace(expectedName))
+        if (pdf)
         {
-            throw new PermanentJobException(pdf ? "Document printer is not configured." : "Label printer is not configured.");
+            if (string.IsNullOrWhiteSpace(settings.DocumentPrinterId) || string.IsNullOrWhiteSpace(settings.DocumentPrinterName))
+            {
+                throw new PermanentJobException("Document printer is not configured.");
+            }
+
+            if (!Matches(job, settings.DocumentPrinterId, settings.DocumentPrinterName))
+            {
+                throw new PermanentJobException("Job printerId/printerName does not match the local printer allowlist.");
+            }
+
+            return;
         }
 
-        if (!string.Equals(job.PrinterId, expectedId, StringComparison.Ordinal) ||
-            !string.Equals(job.PrinterName, expectedName, StringComparison.OrdinalIgnoreCase))
+        // Any enabled label printer may be addressed; the job names the exact
+        // Windows queue, so several Zebras can hang off one station.
+        var labelPrinters = settings.EffectiveLabelPrinters();
+        if (labelPrinters.Count == 0)
+        {
+            throw new PermanentJobException("Label printer is not configured.");
+        }
+
+        if (!labelPrinters.Any(printer => Matches(job, printer.PrinterId, printer.PrinterName)))
         {
             throw new PermanentJobException("Job printerId/printerName does not match the local printer allowlist.");
         }
     }
+
+    private static bool Matches(PrintJobV1 job, string printerId, string printerName) =>
+        string.Equals(job.PrinterId, printerId, StringComparison.Ordinal) &&
+        string.Equals(job.PrinterName, printerName, StringComparison.OrdinalIgnoreCase);
 }

@@ -14,7 +14,7 @@ internal sealed class DashboardForm : Form
     private readonly Label _stationHeader = new();
     private readonly TextBox _station = new();
     private readonly TextBox _agentId = new();
-    private readonly ComboBox _labelPrinter = new();
+    private readonly CheckedListBox _labelPrinters = new() { CheckOnClick = true, IntegralHeight = false };
     private readonly ComboBox _documentPrinter = new();
     private readonly TextBox _labelPrinterId = new() { ReadOnly = true };
     private readonly TextBox _documentPrinterId = new() { ReadOnly = true };
@@ -164,12 +164,11 @@ internal sealed class DashboardForm : Form
         AddRow(layout, 1, "Agent ID", _agentId, "Bu kurulum için otomatik ve kalıcı GUID");
         _agentId.ReadOnly = true;
 
-        ConfigurePrinterCombo(_labelPrinter);
         ConfigurePrinterCombo(_documentPrinter);
-        _labelPrinter.SelectedIndexChanged += (_, _) => PreviewPrinterIds();
+        _labelPrinters.ItemCheck += (_, _) => BeginInvoke(new Action(PreviewPrinterIds));
         _documentPrinter.SelectedIndexChanged += (_, _) => PreviewPrinterIds();
-        AddRow(layout, 2, "Etiket yazıcısı", _labelPrinter, "ZPL / ESC-POS / RAW işlerinin hedefi");
-        AddRow(layout, 3, "Etiket Printer ID", _labelPrinterId, "BC Code[20] güvenli kalıcı logical ID");
+        AddRow(layout, 2, "Etiket yazıcıları", _labelPrinters, "İşaretli her yazıcı ZPL / ESC-POS / RAW etiket işi alır; birden fazla seçilebilir", 132);
+        AddRow(layout, 3, "Etiket Printer ID", _labelPrinterId, "İşaretli yazıcıların BC Code[20] kalıcı ID'leri");
         AddRow(layout, 4, "Belge yazıcısı", _documentPrinter, "PDF işlerinin hedefi");
         AddRow(layout, 5, "Belge Printer ID", _documentPrinterId, "BC Code[20] güvenli kalıcı logical ID");
 
@@ -262,17 +261,22 @@ internal sealed class DashboardForm : Form
         _blobSas.Text = settings.BlobReadSas;
         _blobSasExpiry = settings.BlobSasExpiresAtUtc;
         UpdateSasExpiry();
-        _labelPrinterId.Text = settings.LabelPrinterId;
+        _labelPrinterId.Text = string.Join(", ", settings.EffectiveLabelPrinters().Select(static printer => printer.PrinterId));
         _documentPrinterId.Text = settings.DocumentPrinterId;
         _labelFormat.SelectedItem = settings.LabelFormat;
     }
 
     private async Task RefreshPrintersAsync()
     {
-        var labelName = SelectedName(_labelPrinter) ?? _controller.Settings.LabelPrinterName;
+        var labelNames = CheckedLabelNames();
+        if (labelNames.Count == 0)
+        {
+            labelNames = _controller.Settings.EffectiveLabelPrinters().Select(static printer => printer.PrinterName).ToList();
+        }
+
         var documentName = SelectedName(_documentPrinter) ?? _controller.Settings.DocumentPrinterName;
         _printers = await _controller.DiscoverPrintersAsync(_lifetime.Token);
-        FillPrinterCombo(_labelPrinter, labelName);
+        FillLabelPrinterList(labelNames);
         FillPrinterCombo(_documentPrinter, documentName);
         _controller.Logger.Info($"Windows'ta {_printers.Count} yazıcı bulundu.");
     }
@@ -290,7 +294,8 @@ internal sealed class DashboardForm : Form
             BlobEndpoint = _blobEndpoint.Text.Trim(),
             BlobReadSas = _blobSas.Text.Trim(),
             BlobSasExpiresAtUtc = _blobSasExpiry,
-            LabelPrinterName = SelectedName(_labelPrinter) ?? string.Empty,
+            LabelPrinters = CheckedLabelNames().Select(static name => new LabelPrinterSetting { PrinterId = string.Empty, PrinterName = name }).ToList(),
+            LabelPrinterName = CheckedLabelNames().FirstOrDefault() ?? string.Empty,
             DocumentPrinterName = SelectedName(_documentPrinter) ?? string.Empty,
             LabelFormat = _labelFormat.SelectedItem is PrintFormat format ? format : PrintFormat.ZPL,
             LabelTransport = LabelTransport.WindowsRaw
@@ -472,9 +477,42 @@ internal sealed class DashboardForm : Form
     private static string? SelectedName(ComboBox combo) =>
         combo.SelectedItem is PrinterChoice choice && !string.IsNullOrWhiteSpace(choice.Name) ? choice.Name : null;
 
+    /// <summary>Discovered printers as check items; previously chosen names stay checked even when offline.</summary>
+    private void FillLabelPrinterList(IReadOnlyCollection<string> checkedNames)
+    {
+        _labelPrinters.BeginUpdate();
+        try
+        {
+            _labelPrinters.Items.Clear();
+            foreach (var printer in _printers)
+            {
+                var isChecked = checkedNames.Any(name => string.Equals(name, printer.Name, StringComparison.OrdinalIgnoreCase));
+                _labelPrinters.Items.Add(new PrinterChoice(printer.Name, printer.Status, printer.IsDefault), isChecked);
+            }
+
+            foreach (var name in checkedNames.Where(name => !_printers.Any(printer => string.Equals(printer.Name, name, StringComparison.OrdinalIgnoreCase))))
+            {
+                _labelPrinters.Items.Add(new PrinterChoice(name, "Offline / bulunamadı", false), true);
+            }
+        }
+        finally
+        {
+            _labelPrinters.EndUpdate();
+        }
+
+        PreviewPrinterIds();
+    }
+
+    private List<string> CheckedLabelNames() =>
+        _labelPrinters.CheckedItems.Cast<PrinterChoice>()
+            .Select(static choice => choice.Name)
+            .Where(static name => !string.IsNullOrWhiteSpace(name))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
     private void PreviewPrinterIds()
     {
-        _labelPrinterId.Text = PreviewId(SelectedName(_labelPrinter));
+        _labelPrinterId.Text = string.Join(", ", CheckedLabelNames().Select(PreviewId));
         _documentPrinterId.Text = PreviewId(SelectedName(_documentPrinter));
     }
 
@@ -505,9 +543,9 @@ internal sealed class DashboardForm : Form
         return table;
     }
 
-    private static void AddRow(TableLayoutPanel table, int row, string label, Control input, string hint)
+    private static void AddRow(TableLayoutPanel table, int row, string label, Control input, string hint, int height = 47)
     {
-        table.RowStyles.Add(new RowStyle(SizeType.Absolute, 47));
+        table.RowStyles.Add(new RowStyle(SizeType.Absolute, height));
         table.Controls.Add(new Label { Text = label, AutoSize = true, Anchor = AnchorStyles.Left, Font = new Font(table.Font, FontStyle.Bold) }, 0, row);
         input.Dock = DockStyle.Fill;
         input.Margin = new Padding(3, 7, 8, 7);
