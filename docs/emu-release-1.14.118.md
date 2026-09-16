@@ -44,6 +44,15 @@ DKÇ'deki Zebra ZD230'a takılı rulo 80 x 40 mm; bütün terminal etiketleri 4x
    aralığını öğrensin.
 3. Rulo 80x40 değilse Kurulum'daki iki değeri gerçek ölçüyle değiştirin.
 
+## Kurulum emniyeti ve genel düzeltmeler (14:15)
+
+- Kurulum kartında **Installed Edition** (= EMU). BADE paketi (1.14.1.x) bu ortama yüklenemez; EMU
+  paketi de BADE ortamına yüklenirse yükseltme hata verip geri alınır (codeunit 72322).
+- Çok satırlı LP transferindeki "record already exists" hatası düzeltildi (LPManagement).
+- Raf Kartı'nda LP drill-down'dan dönünce liste yenilenir.
+- Ürün etiketi kısa madde no'lar için de (ör. "1") sığdırılır; eski imzalı terminaller için ayrı
+  APK gerekir (bkz. docs/emu-update-2026-09-14.md).
+
 ## Kurulum sırası
 
 1. BC: `BCWMSApp-1.14.2.1.zip` içindeki .app'i DKÇ ortamına yükleyin (1.14.2.0 üzerine).

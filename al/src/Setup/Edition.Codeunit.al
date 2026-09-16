@@ -17,7 +17,7 @@ codeunit 72322 "DOPSWHS Edition"
     /// <summary>Edition compiled into this package.</summary>
     procedure Current(): Code[10]
     begin
-        exit('BASE');
+        exit('EMU');
     end;
 
     /// <summary>Edition stamped on the company's Setup record ('' before the 16 Sep 2026 packages).</summary>
