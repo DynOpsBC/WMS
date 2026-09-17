@@ -1,7 +1,7 @@
 {
-  "versionCode": 200130,
-  "versionName": "1.14.130-emu",
-  "apkUrl": "https://github.com/DynOpsBC/WMS/releases/download/android-v1.14.130-emu/BCWMS-EMU-1.14.130-UYUMLU.apk",
-  "sha256": "e66fa6478bda80b63eef3c2b2e2439e7372df86b4abff2a7b6b1ebbdc5e302a7",
-  "releaseNotes": "Etiket ekranı yenilendi: lokasyon, alan ve raf dokunmalı seçim satırı; tek okutma alanı; OK düğmesi kalktı. BC 1.14.2.9 ile çalışır."
+  "versionCode": 200131,
+  "versionName": "1.14.131-emu",
+  "apkUrl": "https://github.com/DynOpsBC/WMS/releases/download/android-v1.14.131-emu/BCWMS-EMU-1.14.131-UYUMLU.apk",
+  "sha256": "42c64c2ca3876ebe56d7c054d4a97aae56f22e834ae221d40d45a1c3f53edc5f",
+  "releaseNotes": "DKÇ logosu giriş ve ana ekranda. BC 1.14.2.9 ile çalışır."
 }
