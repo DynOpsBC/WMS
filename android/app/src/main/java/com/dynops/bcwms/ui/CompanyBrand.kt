@@ -50,6 +50,12 @@ enum class CompanyBrand(
         secondary = Color(0xFFA4203B),
         logoRes = R.drawable.logo_pim_grup,
     ),
+    DKC(
+        shortName = "DKÇ",
+        primary = Color(0xFF1F1F1F),
+        secondary = Color(0xFF5A5A5A),
+        logoRes = R.drawable.logo_dkc,
+    ),
     DEFAULT(
         shortName = "WMS",
         primary = Color(0xFF6C5CE7),
@@ -66,8 +72,9 @@ fun resolveCompanyBrand(companyName: String, flavor: String = ""): CompanyBrand 
     val normalized = normalizedCompanyName(companyName)
     return when {
         // EMU/DKÇ ayrı müşteri paketidir; önceki kurulumdan taşınmış bir şirket
-        // adı olsa dahi BADE/BS/PİM görseli göstermez, genel WMS kimliğini kullanır.
-        flavor.equals("emu", ignoreCase = true) -> CompanyBrand.DEFAULT
+        // adı olsa dahi BADE/BS/PİM görseli göstermez, DKÇ kimliğini kullanır.
+        flavor.equals("emu", ignoreCase = true) -> CompanyBrand.DKC
+        "DKC" in normalized || "DKÇ" in normalized -> CompanyBrand.DKC
         "BADE" in normalized -> CompanyBrand.BADE
         "PIM" in normalized -> CompanyBrand.PIM
         "BS GROUP" in normalized || "BSGROUP" in normalized || "BS GRUP" in normalized -> CompanyBrand.BS

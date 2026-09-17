@@ -19,8 +19,10 @@ class CompanyBrandTest {
 
     @Test
     fun `emu flavor never inherits customer logos`() {
-        assertEquals(CompanyBrand.DEFAULT, resolveCompanyBrand("", "emu"))
-        assertEquals(CompanyBrand.DEFAULT, resolveCompanyBrand("BADE NATURAL", "emu"))
-        assertEquals(CompanyBrand.DEFAULT, resolveCompanyBrand("BS GROUP", "emu"))
+        // 17 Eyl 2026: EMU is DKÇ — its own wordmark, never BADE/BS/PİM.
+        assertEquals(CompanyBrand.DKC, resolveCompanyBrand("", "emu"))
+        assertEquals(CompanyBrand.DKC, resolveCompanyBrand("BADE NATURAL", "emu"))
+        assertEquals(CompanyBrand.DKC, resolveCompanyBrand("BS GROUP", "emu"))
+        assertEquals(CompanyBrand.DKC, resolveCompanyBrand("DKÇ Metal", "dynops"))
     }
 }

@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- DKÇ wordmark (17 Eyl 2026), redrawn as vector from the customer's logo:
+     black "D" chevron, grey chevron band, heavy DKC letters. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="140dp"
+    android:height="40dp"
+    android:viewportWidth="1400"
+    android:viewportHeight="400">
+    <!-- black D chevron with cut-out -->
+    <path
+        android:fillColor="#000000"
+        android:fillType="evenOdd"
+        android:pathData="M35,20 L260,20 L355,188 L260,355 L35,355 Z M110,95 L215,95 L280,188 L215,280 L110,280 Z" />
+    <!-- grey chevron band -->
+    <path
+        android:fillColor="#5A5A5A"
+        android:pathData="M290,20 L490,20 L580,188 L490,355 L290,355 L325,280 L445,280 L505,188 L445,95 L325,95 Z" />
+    <!-- D -->
+    <path
+        android:fillColor="#000000"
+        android:fillType="evenOdd"
+        android:pathData="M685,65 L800,65 C875,65 920,115 920,180 C920,245 875,295 800,295 L685,295 Z M760,135 L795,135 C825,135 845,155 845,180 C845,205 825,225 795,225 L760,225 Z" />
+    <!-- K -->
+    <path
+        android:fillColor="#000000"
+        android:pathData="M940,65 L1015,65 L1015,155 L1080,65 L1165,65 L1070,180 L1170,295 L1085,295 L1015,210 L1015,295 L940,295 Z" />
+    <!-- C -->
+    <path
+        android:fillColor="#000000"
+        android:pathData="M1365,120 L1305,150 C1290,135 1275,128 1255,128 C1225,128 1205,150 1205,180 C1205,210 1225,232 1255,232 C1275,232 1290,225 1305,210 L1365,240 C1340,275 1300,297 1252,297 C1185,297 1130,245 1130,180 C1130,115 1185,63 1252,63 C1300,63 1340,85 1365,120 Z" />
+</vector>
