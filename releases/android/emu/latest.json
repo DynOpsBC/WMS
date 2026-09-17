@@ -1,7 +1,7 @@
 {
-  "versionCode": 200127,
-  "versionName": "1.14.127-emu",
-  "apkUrl": "https://github.com/DynOpsBC/WMS/releases/download/android-v1.14.127-emu/BCWMS-EMU-1.14.127-RELEASE.apk",
-  "sha256": "9e3d161ddc281e7c8b21d5fc00fecbae87ccde70da1c09d37f3b0f9f822915c0",
-  "releaseNotes": "Raf etiketi sadeleşti: QR altındaki yazı ve TİP satırı kaldırıldı, bölge kodu büyük ve kalın, barkod ortalanmış ve düzgün. BC 1.14.2.8 gerekir."
+  "versionCode": 200128,
+  "versionName": "1.14.128-emu",
+  "apkUrl": "https://github.com/DynOpsBC/WMS/releases/download/android-v1.14.128-emu/BCWMS-EMU-1.14.128-RELEASE.apk",
+  "sha256": "a7506473a02e5a2a4b4b6e4970573bbb0b0b4b0e75e7fe2aec8cdb62d5eeb9a3",
+  "releaseNotes": "Raf etiketinde barkodun altındaki kod yazısı kaldırıldı, çubuklar kalınlaştı. Yeni: sadece alanın kendi QR etiketi (raf girmeden). BC 1.14.2.9 gerekir."
 }
