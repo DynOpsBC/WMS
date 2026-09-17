@@ -1,7 +1,7 @@
 {
-  "versionCode": 200129,
-  "versionName": "1.14.129-emu",
-  "apkUrl": "https://github.com/DynOpsBC/WMS/releases/download/android-v1.14.129-emu/BCWMS-EMU-1.14.129-RELEASE.apk",
-  "sha256": "385b330021aefc86cb6d120daba14905bc9efe95051eead8735b5bad4c8500ce",
-  "releaseNotes": "Sade arayüz: giriş ekranı yalnız isim listesi ve şifre, kurulum/yönetici yolları Gelişmiş altında. Yazıcı seçilmemiş cihaz ana ekranda uyarır ve başka yazıcıya basmaz. Etiket ekranlarındaki açıklama metinleri kaldırıldı. BC 1.14.2.9 ile çalışır."
+  "versionCode": 200130,
+  "versionName": "1.14.130-emu",
+  "apkUrl": "https://github.com/DynOpsBC/WMS/releases/download/android-v1.14.130-emu/BCWMS-EMU-1.14.130-RELEASE.apk",
+  "sha256": "010ded391fe70a0557cfe1e1b12198650168f2154572f8d0010015f4261da588",
+  "releaseNotes": "Etiket ekranı yenilendi: lokasyon, alan ve raf dokunmalı seçim satırı; tek okutma alanı; OK düğmesi kalktı. BC 1.14.2.9 ile çalışır."
 }
