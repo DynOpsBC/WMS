@@ -34,6 +34,14 @@ The Azure entities are deliberately fixed:
   whose only permission is `r`; account SAS tokens are rejected.
 
 
+## Yazıcı görünen adları (1.1.1, 17 Eylül 2026)
+
+Yazıcılar sekmesindeki **Görünen adlar** tablosunda işaretli her etiket yazıcısına ve belge
+yazıcısına operatörün tanıyacağı bir ad verilir (örn. "Mal Kabul Zebra"). Ad, Buluta Eşitle ile
+`printerSnapshot.displayName` olarak gider; Business Central yazıcı kaydının açıklaması olur ve el
+terminalleri yazıcıyı bu adla gösterir. Boş bırakılırsa Windows yazıcı adı kullanılır. Eski BC
+sürümleri alanı yok sayar.
+
 ## Birden fazla etiket yazıcısı (1.1.0, 16 Eylül 2026)
 
 Bir istasyon (bir PC) artık birden fazla etiket yazıcısına iş alabilir. "Yazıcılar" sekmesinde

@@ -193,7 +193,13 @@ fun AppRoot() {
         }
     ) { padding ->
         CompositionLocalProvider(LocalNavigator provides { target -> screen = target }) {
-        Box(Modifier.padding(padding).fillMaxSize()) {
+        Column(Modifier.padding(padding).fillMaxSize()) {
+            // BADE (17 Eyl 2026): the label printer this terminal prints to is
+            // always visible on operational screens; tapping opens Yazıcılar.
+            if (forceProductionFlow && connected && screen !in setOf(Screen.Home, Screen.Connection, Screen.Printers, Screen.Help)) {
+                com.dynops.bcwms.feature.LabelPrinterBar(onOpenPrinters = { screen = Screen.Printers })
+            }
+        Box(Modifier.weight(1f).fillMaxSize()) {
             when (screen) {
                 Screen.Home -> HomeScreen(
                     connected = connected,
@@ -232,6 +238,7 @@ fun AppRoot() {
                 Screen.Help -> TerminalHelpModule(connected = connected, onNavigate = { screen = it })
             }
             UpdateChecker()
+        }
         }
         }
     }

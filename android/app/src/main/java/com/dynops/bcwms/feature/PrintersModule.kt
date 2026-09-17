@@ -94,6 +94,14 @@ fun PrintersModule() {
     var scannedBarcode by rememberSaveable { mutableStateOf("") }
     var barcodePrintBusy by remember { mutableStateOf(false) }
     val productionCustomer = shouldForceProductionFlow(BuildConfig.FLAVOR)
+    // BADE (17 Eyl 2026): "yazıcılar kısmı çok kötü, basitleştir" — the
+    // customer terminal shows its two bound printers; the classic list is
+    // one tap away behind "Değiştir".
+    var showFullList by rememberSaveable { mutableStateOf(false) }
+    if (productionCustomer && !showFullList) {
+        TerminalPrintersScreen(onChange = { showFullList = true })
+        return
+    }
 
     fun load() {
         scope.launch {

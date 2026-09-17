@@ -212,6 +212,7 @@ codeunit 72375 "DOPSWHS Azure Print Status"
         Printer: Record "DOPSWHS Printer";
         PrinterCode: Code[20];
         PrinterName: Text;
+        DisplayName: Text;
         StatusText: Text;
         FormatText: Text;
         IsNew: Boolean;
@@ -219,6 +220,9 @@ codeunit 72375 "DOPSWHS Azure Print Status"
         ValidatePrinterId(PrinterIdText);
         PrinterCode := CopyStr(PrinterIdText, 1, MaxStrLen(PrinterCode));
         PrinterName := RequireText(PrinterObject, 'printerName');
+        // Agent 1.1.1+ (BADE, 17 Eyl 2026): operator-facing name typed in the
+        // agent panel. Older agents send none; the Windows name stays.
+        DisplayName := DelChr(OptionalText(PrinterObject, 'displayName'), '<>', ' ');
         if StrLen(PrinterName) > MaxStrLen(Printer."Printer Handle") then
             Error('Printer name for %1 exceeds %2 characters.', PrinterCode, MaxStrLen(Printer."Printer Handle"));
         StatusText := LowerCase(RequireText(PrinterObject, 'status'));
@@ -243,7 +247,10 @@ codeunit 72375 "DOPSWHS Azure Print Status"
                 exit(true);
         end;
 
-        Printer.Description := CopyStr(PrinterName, 1, MaxStrLen(Printer.Description));
+        if DisplayName <> '' then
+            Printer.Description := CopyStr(DisplayName, 1, MaxStrLen(Printer.Description))
+        else
+            Printer.Description := CopyStr(PrinterName, 1, MaxStrLen(Printer.Description));
         Printer."Printer Handle" := CopyStr(PrinterName, 1, MaxStrLen(Printer."Printer Handle"));
         FormatText := RequireText(PrinterObject, 'format');
         if FormatText <> UpperCase(FormatText) then

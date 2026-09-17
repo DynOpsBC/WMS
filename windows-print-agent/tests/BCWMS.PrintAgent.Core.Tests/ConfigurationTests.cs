@@ -117,6 +117,27 @@ public sealed class ConfigurationTests
         Assert.Empty((ValidSettings() with { LabelPrinterName = string.Empty, LabelPrinterId = string.Empty, DocumentPrinterName = "PDF", DocumentPrinterId = "P00000000000000BB", PrinterIdsByName = new Dictionary<string, string> { ["PDF"] = "P00000000000000BB" } }).EffectiveLabelPrinters());
     }
 
+    [Fact]
+    public void DisplayNames_AreOptionalAndBounded()
+    {
+        var named = MultiPrinterSettings() with
+        {
+            LabelPrinters =
+            [
+                new LabelPrinterSetting { PrinterId = "P0123456789ABCDEF", PrinterName = "Zebra ZD220", DisplayName = "Mal Kabul Zebra" },
+                new LabelPrinterSetting { PrinterId = "PFEDCBA9876543210", PrinterName = "Zebra ZD230" }
+            ]
+        };
+        Assert.DoesNotContain(AgentSettingsValidator.Validate(named), error => error.Contains("görünen ad", StringComparison.Ordinal));
+        Assert.Equal("Mal Kabul Zebra", named.EffectiveLabelPrinters()[0].DisplayName);
+        Assert.Equal(string.Empty, named.EffectiveLabelPrinters()[1].DisplayName);
+        Assert.Empty(ValidSettings().EffectiveLabelPrinters()[0].DisplayName);
+
+        var tooLong = named with { DocumentPrinterDisplayName = new string('x', 101) };
+        Assert.Contains(AgentSettingsValidator.Validate(tooLong), error => error.Contains("görünen ad", StringComparison.Ordinal));
+        Assert.False(AgentSettingsValidator.IsValidDisplayName("Sevk\u0007iyat"));
+    }
+
     private static AgentSettings MultiPrinterSettings() => ValidSettings() with
     {
         LabelPrinters =
