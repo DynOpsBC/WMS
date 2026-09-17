@@ -527,12 +527,17 @@ codeunit 72051 "DOPSWHS Print Dispatcher"
         ColumnWidth: Integer;
         Y: Integer;
         NoFont: Integer;
+        NoWidth: Integer;
     begin
         Canvas.Init();
         // DKÇ (16 Eyl 2026): no caption under the item QR.
         Zpl := Canvas.Frame('ÜRÜN ETİKETİ', CompanyProperty.DisplayName(), Item."No.", '', X, ColumnWidth, Y);
-        NoFont := Canvas.FitFont(Item."No.", ColumnWidth, Canvas.BigFont(), 28);
-        Zpl += Canvas.Write(X, Y, NoFont, ColumnWidth, Item."No.");
+        // DKÇ (17 Eyl 2026): "ürün no çok büyük, uzunsa sığmıyor". Smaller
+        // preferred size, measured glyph widths; if even the small font is too
+        // wide the glyphs are condensed so the number never overprints.
+        NoFont := Canvas.FitFontMeasured(Item."No.", ColumnWidth, Canvas.ItemNoFont(), Canvas.SmallFont());
+        NoWidth := Canvas.FitFontMeasured(Item."No.", ColumnWidth, NoFont, 10);
+        Zpl += Canvas.WriteSized(X, Y, NoFont, NoWidth, ColumnWidth, Item."No.");
         Y += NoFont + 8;
         Canvas.WrapText(Item.Description, Canvas.MaxChars(ColumnWidth, Canvas.NormalFont()), 2, Lines);
         foreach Line in Lines do begin

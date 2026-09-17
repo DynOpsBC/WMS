@@ -21,6 +21,7 @@ codeunit 72321 "DOPSWHS Label Canvas"
         NormalSize: Integer;
         SmallSize: Integer;
         BigSize: Integer;
+        ItemNoSize: Integer;
         QtySize: Integer;
         PitchDots: Integer;
         ContentLines: Integer;
@@ -64,6 +65,9 @@ codeunit 72321 "DOPSWHS Label Canvas"
         NormalSize := Clamp(Height div 14, 20, 28);
         SmallSize := NormalSize - 4;
         BigSize := Clamp(Height * 18 div 100, 44, 76);
+        // DKÇ (17 Eyl 2026): "ürün no çok büyük, uzunsa sığmıyor". The item
+        // number no longer uses BigSize (57 dots on 80x40); 32 dots on 80x40.
+        ItemNoSize := Clamp(Height * 10 div 100, 28, 44);
         QtySize := Clamp(Height div 9, 30, 44);
         PitchDots := NormalSize + 6;
         if Height < 380 then
@@ -124,6 +128,13 @@ codeunit 72321 "DOPSWHS Label Canvas"
         exit(BigSize);
     end;
 
+    /// <summary>Preferred item number size on the item label (smaller than BigFont).</summary>
+    procedure ItemNoFont(): Integer
+    begin
+        EnsureInit();
+        exit(ItemNoSize);
+    end;
+
     procedure QtyFont(): Integer
     begin
         EnsureInit();
@@ -165,6 +176,68 @@ codeunit 72321 "DOPSWHS Label Canvas"
         if StrLen(Value) = 0 then
             exit(Preferred);
         exit(Clamp(MaxWidth * 100 div (StrLen(Value) * 55), Minimum, Preferred));
+    end;
+
+    /// <summary>
+    /// Printed width in dots of Value in Zebra font 0 at the given font width.
+    /// Glyph advances were measured on Labelary (8 dpmm, ^A0N,100,100) on
+    /// 17 Eyl 2026: digits 48, most capitals 50-61, I 28, M 76, W 82, '-' 91
+    /// per 100. The flat 0.55 estimate (FitFont) under-sizes capitals such as
+    /// K, M, W and made long item numbers overprint the end of the line.
+    /// </summary>
+    procedure MeasuredWidth(Value: Text; FontWidth: Integer): Integer
+    begin
+        exit(GlyphUnits(Value) * FontWidth div 100);
+    end;
+
+    /// <summary>Largest font size between Minimum and Preferred at which Value measurably fits MaxWidth.</summary>
+    procedure FitFontMeasured(Value: Text; MaxWidth: Integer; Preferred: Integer; Minimum: Integer): Integer
+    var
+        Units: Integer;
+    begin
+        Units := GlyphUnits(Value);
+        if Units <= 0 then
+            exit(Preferred);
+        exit(Clamp(MaxWidth * 100 div Units, Minimum, Preferred));
+    end;
+
+    local procedure GlyphUnits(Value: Text): Integer
+    var
+        Index: Integer;
+        Units: Integer;
+    begin
+        for Index := 1 to StrLen(Value) do
+            Units += GlyphUnit(CopyStr(Value, Index, 1));
+        exit(Units);
+    end;
+
+    local procedure GlyphUnit(Ch: Text): Integer
+    begin
+        case true of
+            StrPos('Iİijlıft', Ch) > 0:
+                exit(28);
+            StrPos(' .,/:;()!|''', Ch) > 0:
+                exit(30);
+            StrPos('Jacksvxyzrçş?', Ch) > 0:
+                exit(46);
+            StrPos('0123456789eoö*#"', Ch) > 0:
+                exit(48);
+            StrPos('EFLTZbdghnpquğü_', Ch) > 0:
+                exit(50);
+            StrPos('ABCKPSVXYÇŞ', Ch) > 0:
+                exit(56);
+            StrPos('DGOQRĞÖ', Ch) > 0:
+                exit(59);
+            StrPos('HNUÜ&', Ch) > 0:
+                exit(61);
+            StrPos('Mmw', Ch) > 0:
+                exit(76);
+            StrPos('W', Ch) > 0:
+                exit(82);
+            StrPos('-+%=@~', Ch) > 0:
+                exit(91);
+        end;
+        exit(60);
     end;
 
     /// <summary>Word-wraps Value into at most MaxLines lines of MaxChars; the remainder is dropped.</summary>

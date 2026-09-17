@@ -89,8 +89,8 @@ fun PrintersModule() {
     var rows by remember { mutableStateOf<List<JSONObject>>(emptyList()) }
     var status by remember { mutableStateOf("") }
     var loading by remember { mutableStateOf(false) }
-    var defaultLabelCode by remember { mutableStateOf(getDefaultPrinter(context, PRINTER_USAGE_LABEL)) }
-    var defaultDocumentCode by remember { mutableStateOf(getDefaultPrinter(context, PRINTER_USAGE_DOCUMENT)) }
+    val defaultLabelCode = rememberPrinterPreference("bcwms.printer.$PRINTER_USAGE_LABEL")
+    val defaultDocumentCode = rememberPrinterPreference("bcwms.printer.$PRINTER_USAGE_DOCUMENT")
     var scannedBarcode by rememberSaveable { mutableStateOf("") }
     var barcodePrintBusy by remember { mutableStateOf(false) }
     val productionCustomer = shouldForceProductionFlow(BuildConfig.FLAVOR)
@@ -134,7 +134,6 @@ fun PrintersModule() {
         if (defaultLabelCode.isNotBlank()) {
             TextButton(onClick = {
                 setDefaultPrinter(context, "", PRINTER_USAGE_LABEL)
-                defaultLabelCode = ""
                 status = "Etiket seçimi kaldırıldı. Ürün/Raf Sorgu için Belge yazıcısı kullanılacak."
             }) { Text("Etiket seçimini kaldır") }
         }
@@ -142,6 +141,7 @@ fun PrintersModule() {
         StatusText(status)
         Spacer(Modifier.height(8.dp))
         LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            item { DevicePrinterSettings() }
             if (!productionCustomer) item {
                 Card(
                     shape = RoundedCornerShape(12.dp),
@@ -269,7 +269,7 @@ fun PrintersModule() {
                             fontSize = 12.sp,
                             color = Color.Gray,
                         )
-                        if (!productionCustomer && stationId.isNotBlank()) Text(stationId, fontSize = 11.sp, color = Color.Gray)
+                        if (stationId.isNotBlank()) Text("Bilgisayar / istasyon: $stationId", fontSize = 11.sp, color = Color.Gray)
                         Spacer(Modifier.height(8.dp))
                         Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                             OutlinedButton(
@@ -277,8 +277,7 @@ fun PrintersModule() {
                                     val issue = labelPrinterSelectionIssue(active, format)
                                     if (issue == null) {
                                         setDefaultPrinter(context, code, PRINTER_USAGE_LABEL)
-                                        defaultLabelCode = code
-                                        status = "TAMAM: $code etiket yazıcısı olarak seçildi."
+                                        status = "TAMAM: Bu cihazın etiket yazıcısı $code olarak kaydedildi."
                                     } else {
                                         status = "UYARI: $code seçilemedi. $issue"
                                     }
@@ -288,8 +287,7 @@ fun PrintersModule() {
                                 onClick = {
                                     if (active && format == "PDF") {
                                         setDefaultPrinter(context, code, PRINTER_USAGE_DOCUMENT)
-                                        defaultDocumentCode = code
-                                        status = "TAMAM: $code belge yazıcısı olarak seçildi."
+                                        status = "TAMAM: Bu cihazın belge yazıcısı $code olarak kaydedildi."
                                     } else {
                                         val reason = if (!active) "Yazıcı pasif."
                                         else "Belge seçimi yalnızca PDF yazıcılarda kullanılabilir; bu yazıcının formatı $format."

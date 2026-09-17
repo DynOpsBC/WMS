@@ -149,6 +149,35 @@ codeunit 72499 "DOPSWHS Label Canvas Tests"
         AssertInsideCanvas(Zpl, 640, 320, 'bin');
     end;
 
+    [Test]
+    procedure MeasuredWidthsKeepLongItemNumbersInsideTheColumn()
+    var
+        Setup: Record "DOPSWHS Setup";
+        Item: Record Item;
+        Canvas: Codeunit "DOPSWHS Label Canvas";
+        Dispatcher: Codeunit "DOPSWHS Print Dispatcher";
+        Assert: Codeunit "Library Assert";
+        Zpl: Text;
+        LongNo: Code[20];
+    begin
+        // DKÇ 17 Eyl 2026: "ürün no çok büyük, uzunsa sığmıyor".
+        Canvas.InitSize(80, 40);
+        Assert.AreEqual(1268, Canvas.MeasuredWidth('MKW-WM2026-KRM-00154', 100), 'Measured units of a wide 20-char item no.');
+        Assert.AreEqual(480, Canvas.MeasuredWidth('0123456789', 100), 'Digits are 48 units.');
+        Assert.AreEqual(32, Canvas.ItemNoFont(), 'Item no preferred size on 80x40 mm.');
+        Assert.AreEqual(32, Canvas.FitFontMeasured('1', 417, Canvas.ItemNoFont(), Canvas.SmallFont()), 'Short item no stays at the preferred size.');
+        Assert.AreEqual(Canvas.SmallFont(), Canvas.FitFontMeasured('WWWWWWWWWWWWWWWWWWWW', 200, Canvas.ItemNoFont(), Canvas.SmallFont()), 'Never below the minimum.');
+
+        SetLabelSize(Setup, 0, 0);
+        LongNo := 'MKW-WM2026-KRM-00154';
+        SeedItem(LongNo, 'M193 FMJ KIVIRMA İÇ BASKI ZIMBASI BURCU');
+        Item.Get(LongNo);
+        Zpl := Dispatcher.BuildItemZpl(Item);
+        Assert.IsTrue(StrPos(Zpl, '^A0N,32,') > 0, 'Long item no is printed at 32 dots high.');
+        Assert.IsTrue(StrPos(Zpl, '^A0N,57,57') = 0, 'The old 57-dot item no size is gone.');
+        AssertInsideCanvas(Zpl, 640, 320, 'long item no');
+    end;
+
     /// <summary>Every ^FO origin must lie inside the label; a design that grew past the canvas is caught here.</summary>
     local procedure AssertInsideCanvas(Zpl: Text; Width: Integer; Height: Integer; Context: Text)
     var

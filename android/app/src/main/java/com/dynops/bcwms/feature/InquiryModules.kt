@@ -60,12 +60,15 @@ fun ItemInquiryModule(labelsOnly: Boolean = false) {
     var queriedLpNo by remember { mutableStateOf("") }
     var status by remember { mutableStateOf("Ürün No. veya LP No. tarayın/girin.") }
     var loading by remember { mutableStateOf(false) }
+    var labelCopies by rememberSaveable { mutableStateOf("1") }
+    var printing by remember { mutableStateOf(false) }
 
     fun load() {
         if (query.trim().isBlank()) return
         scope.launch {
             loading = true; status = "Sorgulanıyor..."
             item = null; lpLines = emptyList(); ledger = emptyList(); queriedLpNo = ""
+            labelCopies = "1"
             val q = query.trim()
             val safeQ = q.replace("'", "''")
             val byLp = BcApi.getAllPages(context, "licensePlateLines?\$filter=lpNo eq '$safeQ'&\$top=200")
@@ -102,26 +105,46 @@ fun ItemInquiryModule(labelsOnly: Boolean = false) {
     }
 
     fun printItemLabel() {
+        if (printing) return
         val no = item?.let { rawValue(it, "no", "number") }?.takeIf { it.isNotBlank() } ?: return
+        val total = parseLabelCopies(labelCopies) ?: run {
+            status = "HATA: Etiket adedi 1 ile $LABEL_COPIES_MAX arasında olmalı."
+            return
+        }
         scope.launch {
-            status = "🖨 Etiket yazdırılıyor..."
-            val choice = resolveInquiryPrinter(context).getOrElse {
-                status = "HATA: ${it.message}"
-                return@launch
+            printing = true
+            try {
+                status = "🖨 $total adet ürün etiketi yazdırılıyor..."
+                val choice = resolveInquiryPrinter(context).getOrElse {
+                    status = "HATA: ${it.message}"
+                    return@launch
+                }
+                var sent = 0
+                for (copies in labelCopyBatches(total)) {
+                    val payload = JSONObject().apply {
+                        put("printerId", choice.printerCode)
+                        put("copies", copies)
+                    }.toString()
+                    val r = BcApi.boundAction(context, "items", no, "printLabel", payload)
+                    if (!r.ok) {
+                        status = "🔴 Yazdırma: ${BcApi.errorMessage(r.body)} (HTTP ${r.httpCode})" +
+                            if (sent > 0) " · $total etiketin $sent adedi kuyruğa alınmıştı." else ""
+                        return@launch
+                    }
+                    sent += copies
+                }
+                status = "🟢 $total adet ürün etiketi ${choice.printerCode.ifBlank { "BC varsayılanı" }} kuyruğuna alındı ($no)." +
+                    if (choice.warning.isBlank()) "" else " ${choice.warning}"
+            } finally {
+                printing = false
             }
-            val payload = JSONObject().apply {
-                put("printerId", choice.printerCode)
-                put("copies", 1)
-            }.toString()
-            val r = BcApi.boundAction(context, "items", no, "printLabel", payload)
-            status = if (r.ok) ("🟢 Ürün etiketi kuyruğa alındı ($no)." + if (choice.warning.isBlank()) "" else " ${choice.warning}")
-                else "🔴 Yazdırma: ${BcApi.errorMessage(r.body)} (HTTP ${r.httpCode})"
         }
     }
 
     val palette = bcwmsStatus()
     val itemUom = item?.let { firstValue(it, "baseUnitOfMeasure", "baseUoM") }.orEmpty()
-    Column(Modifier.fillMaxSize().padding(12.dp)) {
+    LazyColumn(Modifier.fillMaxSize().padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+      item {
         ScanField("Ürün No / LP No", query, { query = it; item = null }, modifier = Modifier.fillMaxWidth(), enabled = !loading, onScanned = {
             val resolved = BarcodeIntentResolver.resolve(it)
             query = resolved.itemNo ?: resolved.value
@@ -206,8 +229,17 @@ fun ItemInquiryModule(labelsOnly: Boolean = false) {
                 }
             }
             Spacer(Modifier.height(8.dp))
-            OutlinedButton(onClick = { printItemLabel() }, modifier = Modifier.fillMaxWidth().height(48.dp)) {
-                WmsActionLabel(WmsGlyph.PRINTER, "Ürün Etiketi Bas")
+            PrinterDestinationCard(inquiryFallback = true)
+            Spacer(Modifier.height(6.dp))
+            LabelCopiesField(labelCopies, { labelCopies = it }, enabled = !printing)
+            Spacer(Modifier.height(6.dp))
+            val itemCopies = parseLabelCopies(labelCopies)
+            OutlinedButton(
+                onClick = { printItemLabel() },
+                enabled = !printing && itemCopies != null,
+                modifier = Modifier.fillMaxWidth().height(48.dp),
+            ) {
+                WmsActionLabel(WmsGlyph.PRINTER, if (printing) "Gönderiliyor..." else "Ürün Etiketi Bas · ${itemCopies ?: "-"} adet")
             }
             Spacer(Modifier.height(12.dp))
             if (!labelsOnly) Text("LP'lerde (${lpLines.size})", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
@@ -215,7 +247,7 @@ fun ItemInquiryModule(labelsOnly: Boolean = false) {
         }
         // weight(1f): üstteki sabit ürün kartı listeyi sıfır yüksekliğe
         // sıkıştırıp LP/hareket satırlarını kesiyordu (yatay mod / küçük ekran).
-        LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+      }
             items(lpLines) { ln ->
                 Card(Modifier.fillMaxWidth().heightIn(min = 82.dp), shape = RoundedCornerShape(12.dp)) {
                     Row(
@@ -272,7 +304,6 @@ fun ItemInquiryModule(labelsOnly: Boolean = false) {
                     }
                 }
             }
-        }
     }
 }
 
@@ -299,16 +330,31 @@ fun BinInquiryModule(labelsOnly: Boolean = false) {
     var showLocationPicker by remember { mutableStateOf(false) }
     var showBinPicker by remember { mutableStateOf(false) }
     var pickerLoading by remember { mutableStateOf(false) }
+    var locationsLoading by remember { mutableStateOf(false) }
+    var labelCopies by rememberSaveable { mutableStateOf("1") }
+    var printing by remember { mutableStateOf(false) }
 
-    LaunchedEffect(Unit) {
-        val page = BcApi.getAllPages(context, "locations?\$top=200&\$orderby=code")
+    // DKÇ (17 Eyl 2026): "lokasyonlar bulunamadı". The BCWMS locations API
+    // only exists from BC 1.14.2.5; with an older extension the list failed.
+    // A 404 now falls back to the standard BC API (code, displayName).
+    suspend fun loadLocations() {
+        locationsLoading = true
+        val page = try {
+            BcApi.getAllPagesWithStandardFallback(context, "locations?\$top=200&\$orderby=code")
+        } finally {
+            locationsLoading = false
+        }
         if (page.complete) {
-            locations = page.rows
-                .filter { !it.optBoolean("useAsInTransit", false) }
-                .map { it.optString("code") to it.optString("name") }
+            locations = inquiryLocationChoices(page.rows)
             if (location.isBlank() && locations.size == 1) location = locations.first().first
-        } else status = "HATA: Lokasyon listesi alınamadı. Lokasyon kodunu elle girebilirsiniz."
+            if (locations.isEmpty()) status = "BOŞ: BC'de seçilebilir lokasyon yok. Lokasyon kodunu elle girin."
+        } else {
+            val code = page.error?.httpCode?.takeIf { it > 0 }?.let { " (HTTP $it)" }.orEmpty()
+            status = "HATA: Lokasyon listesi alınamadı$code. Lokasyon kodunu elle girin veya Seç ile yeniden deneyin."
+        }
     }
+
+    LaunchedEffect(Unit) { loadLocations() }
 
     fun openBinPicker() {
         val loc = location.trim()
@@ -328,6 +374,7 @@ fun BinInquiryModule(labelsOnly: Boolean = false) {
         scope.launch {
             loading = true; status = "Yükleniyor..."
             bin = null; contents = emptyList(); lps = emptyList(); whseEntries = emptyList()
+            labelCopies = "1"
             val loc = location.trim().replace("'", "''"); val code = binCode.trim().replace("'", "''")
             val b = BcApi.get(context, "bins?\$filter=locationCode eq '$loc' and code eq '$code'&\$top=1")
             if (b.ok) bin = BcApi.parseValueArray(b.body).firstOrNull()
@@ -353,23 +400,42 @@ fun BinInquiryModule(labelsOnly: Boolean = false) {
     }
 
     fun printBinLabel() {
+        if (printing) return
         val b = bin ?: return
         val loc = rawValue(b, "locationCode"); val code = rawValue(b, "code")
         if (loc.isBlank() || code.isBlank()) return
+        val total = parseLabelCopies(labelCopies) ?: run {
+            status = "HATA: Etiket adedi 1 ile $LABEL_COPIES_MAX arasında olmalı."
+            return
+        }
         scope.launch {
-            status = "🖨 Bin etiketi yazdırılıyor..."
-            val choice = resolveInquiryPrinter(context).getOrElse {
-                status = "HATA: ${it.message}"
-                return@launch
+            printing = true
+            try {
+                status = "🖨 $total adet bin etiketi yazdırılıyor..."
+                val choice = resolveInquiryPrinter(context).getOrElse {
+                    status = "HATA: ${it.message}"
+                    return@launch
+                }
+                val key = "locationCode='${loc.replace("'", "''")}',code='${code.replace("'", "''")}'"
+                var sent = 0
+                for (copies in labelCopyBatches(total)) {
+                    val payload = JSONObject().apply {
+                        put("printerId", choice.printerCode)
+                        put("copies", copies)
+                    }.toString()
+                    val r = BcApi.boundAction(context, "bins", key, "printLabel", payload)
+                    if (!r.ok) {
+                        status = "🔴 Yazdırma: ${BcApi.errorMessage(r.body)} (HTTP ${r.httpCode})" +
+                            if (sent > 0) " · $total etiketin $sent adedi kuyruğa alınmıştı." else ""
+                        return@launch
+                    }
+                    sent += copies
+                }
+                status = "🟢 $total adet bin etiketi ${choice.printerCode.ifBlank { "BC varsayılanı" }} kuyruğuna alındı ($loc/$code)." +
+                    if (choice.warning.isBlank()) "" else " ${choice.warning}"
+            } finally {
+                printing = false
             }
-            val key = "locationCode='${loc.replace("'", "''")}',code='${code.replace("'", "''")}'"
-            val payload = JSONObject().apply {
-                put("printerId", choice.printerCode)
-                put("copies", 1)
-            }.toString()
-            val r = BcApi.boundAction(context, "bins", key, "printLabel", payload)
-            status = if (r.ok) ("🟢 Bin etiketi kuyruğa alındı ($loc/$code)." + if (choice.warning.isBlank()) "" else " ${choice.warning}")
-                else "🔴 Yazdırma: ${BcApi.errorMessage(r.body)} (HTTP ${r.httpCode})"
         }
     }
 
@@ -381,10 +447,14 @@ fun BinInquiryModule(labelsOnly: Boolean = false) {
         Spacer(Modifier.height(8.dp))
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             ScanField("Lokasyon", location, { location = it; binCode = ""; bin = null; contents = emptyList(); lps = emptyList(); whseEntries = emptyList() }, modifier = Modifier.weight(1f), enabled = !loading && !pickerLoading)
-            if (locations.isNotEmpty()) {
-                Spacer(Modifier.width(8.dp))
-                OutlinedButton(onClick = { showLocationPicker = true }, enabled = !loading && !pickerLoading) { Text("Seç") }
-            }
+            Spacer(Modifier.width(8.dp))
+            OutlinedButton(
+                onClick = {
+                    if (locations.isNotEmpty()) showLocationPicker = true
+                    else scope.launch { loadLocations(); if (locations.isNotEmpty()) showLocationPicker = true }
+                },
+                enabled = !loading && !pickerLoading && !locationsLoading,
+            ) { Text(if (locationsLoading) "..." else "Seç") }
         }
         Spacer(Modifier.height(8.dp))
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
@@ -461,13 +531,33 @@ fun BinInquiryModule(labelsOnly: Boolean = false) {
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
-            Button(onClick = {
-                if (documentOutput) {
-                    runCatching { printBinDocument(context, b) }
-                        .onFailure { status = "HATA: Belge açılamadı: ${it.message}" }
-                } else printBinLabel()
-            }, modifier = Modifier.fillMaxWidth().height(48.dp)) {
-                WmsActionLabel(WmsGlyph.PRINTER, if (documentOutput) "Belge Al" else "Etiket Bas")
+            val binCopies = parseLabelCopies(labelCopies)
+            if (documentOutput) {
+                Text("Hedef ve kopya sayısı Android yazdırma ekranında seçilir. PDF olarak da kaydedebilirsiniz.", style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.SemiBold)
+            } else {
+                PrinterDestinationCard(inquiryFallback = true)
+                Spacer(Modifier.height(6.dp))
+                LabelCopiesField(labelCopies, { labelCopies = it }, enabled = !printing)
+                Spacer(Modifier.height(6.dp))
+            }
+            Button(
+                onClick = {
+                    if (documentOutput) {
+                        runCatching { printBinDocument(context, b) }
+                            .onFailure { status = "HATA: Belge açılamadı: ${it.message}" }
+                    } else printBinLabel()
+                },
+                enabled = documentOutput || (!printing && binCopies != null),
+                modifier = Modifier.fillMaxWidth().height(48.dp),
+            ) {
+                WmsActionLabel(
+                    WmsGlyph.PRINTER,
+                    when {
+                        documentOutput -> "Belge Al"
+                        printing -> "Gönderiliyor..."
+                        else -> "Etiket Bas · ${binCopies ?: "-"} adet"
+                    },
+                )
             }
             Spacer(Modifier.height(8.dp))
         }

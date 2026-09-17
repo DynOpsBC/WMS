@@ -150,6 +150,9 @@ fun AppRoot() {
         screen = Screen.Home
     }
 
+    var showDevicePrinters by remember { mutableStateOf(false) }
+    if (showDevicePrinters) DevicePrintersDialog { showDevicePrinters = false }
+
     Scaffold(
         topBar = {
             TopAppBar(
@@ -173,6 +176,7 @@ fun AppRoot() {
                             },
                         )
                     }
+                    TextButton(onClick = { showDevicePrinters = true }) { Text("Yazıcı") }
                     ConnectionBadge(connected) { screen = Screen.Connection }
                 }
             )
