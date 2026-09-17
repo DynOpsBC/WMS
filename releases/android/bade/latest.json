@@ -1,7 +1,7 @@
 {
-  "versionCode": 200122,
-  "versionName": "1.14.122-bade",
-  "apkUrl": "https://github.com/DynOpsBC/WMS/releases/download/android-v1.14.122/BCWMS-BADE-1.14.122-RELEASE.apk",
-  "sha256": "7e48d58f8be4429f5510ac926ba1765d293cb7bf0f1691d8a066be57dd436932",
-  "releaseNotes": "Sayım: BC'de o rafta olmayan ürün okutulduğunda ürünün kayıtlı olduğu raflar gösterilir; Kurulum 'Count Relocates Found Stock' açıksa kayıtta stok o raftan bu rafa taşınır. BC 1.14.1.47 gerekir."
+  "versionCode": 200123,
+  "versionName": "1.14.123-bade",
+  "apkUrl": "https://github.com/DynOpsBC/WMS/releases/download/android-v1.14.123/BCWMS-BADE-1.14.123-RELEASE.apk",
+  "sha256": "c7007c14812aecc361eb92cca31369d2358afbc253e6ed86000324f8dbe5681f",
+  "releaseNotes": "BC'den açılan Sayım V2 belgesi terminalde tek dokunuşla Sayım V2'de açılır. MTE etiketi: dış çerçeve, 3 mm kenar boşluğu, QR altında LP numarası (BC 1.14.1.50)."
 }
