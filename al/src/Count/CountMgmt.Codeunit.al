@@ -1332,8 +1332,14 @@ codeunit 72050 "DOPSWHS Count Mgmt"
                             else
                                 Balances.Add(Entry."Bin Code", Entry.Quantity);
                         until Entry.Next() = 0;
+                    // BADE (17 Eyl 2026): a related bin outside the sheet's zone
+                    // filter cannot be counted here; it used to raise
+                    // BinOutsideZoneFilterErr and block finishing the bin. It is
+                    // skipped instead — with "Count Relocates Found Stock" it is
+                    // a relocation source at posting, otherwise the surplus posts
+                    // here and that zone's own count deducts it there.
                     foreach RelatedBin in Balances.Keys() do
-                        if Balances.Get(RelatedBin) > 0 then begin
+                        if (Balances.Get(RelatedBin) > 0) and RelatedBinInCountScope(Header, RelatedBin) then begin
                             if not Bins.Contains(RelatedBin) then
                                 Bins.Add(RelatedBin);
                             RequiredLineNo += 1;
@@ -1362,6 +1368,17 @@ codeunit 72050 "DOPSWHS Count Mgmt"
                 if Line.IsEmpty() then
                     Error('Raf %1 madde %2 stok dağılımı eksik. Business Central raf içeriğini kontrol edin; diğer rafın sayımı atlanamaz.', RequiredSource."Bin Code", RequiredSource."Item No.");
             until RequiredSource.Next() = 0;
+    end;
+
+    local procedure RelatedBinInCountScope(CountHeader: Record "DOPSWHS Count Sheet Header"; BinCode: Code[20]): Boolean
+    var
+        Bin: Record Bin;
+    begin
+        if CountHeader."Zone Filter" = '' then
+            exit(true);
+        if not Bin.Get(CountHeader."Location Code", BinCode) then
+            exit(false);
+        exit(Bin."Zone Code" = CountHeader."Zone Filter");
     end;
 
     procedure CompleteCounter(SheetNo: Code[20]; CounterSlot: Integer)
@@ -1564,38 +1581,30 @@ codeunit 72050 "DOPSWHS Count Mgmt"
     end;
 
     /// <summary>
-    /// Yönlendirilmiş lokasyonda sayım farklarını Ambar Fiziksel Sayım
-    /// Günlüğü ile rafa yazar (Whse. Jnl.-Register Batch). Fark 0 olan satır
-    /// için günlük satırı üretilmez. Yönlendirilmiş olmayan lokasyonda no-op:
-    /// orada Item Journal raf kodunu doğrudan taşır.
-    /// </summary>
-    /// <summary>
-    /// BADE (16 Eyl 2026, Merve): a line with "Unexpected Stock" (BC had none in
-    /// that bin) is covered first by moving loose stock from the bins where BC
-    /// still records the same item/lot and that are NOT counted in this sheet.
-    /// The count line's System Qty grows by the moved quantity, so the phys.
-    /// inventory posting only books the remainder as a positive variance.
+    /// BADE (16–17 Eyl 2026, Merve): stock found where BC keeps none (or more
+    /// than BC keeps) is treated as MOVED, not as new stock, when Setup
+    /// "Count Relocates Found Stock" is on. For every loose surplus line
+    /// (counted > system, no LP) the surplus is covered in this order:
+    ///  1. counted lines of the same sheet for the same item/lot/serial in
+    ///     other bins whose count is BELOW system — typically the seeded source
+    ///     bin the operator confirmed empty. The pair becomes one bin move
+    ///     instead of a negative + a positive adjustment, so the original
+    ///     purchase/production entries stay the only inventory entries.
+    ///  2. bins outside this sheet where BC still records the item/lot (zone
+    ///     counts, bins never opened), largest balance first.
     /// Moves run through the ad-hoc movement path (whse reclass on directed
-    /// locations, item reclass otherwise) inside the same transaction.
+    /// locations, item reclass otherwise) inside the posting transaction and
+    /// only ever move loose (non-LP) stock. Both lines' System Qty follow the
+    /// move, so the phys. inventory posting books only what is really left.
+    /// Whatever cannot be covered posts as a positive variance as before.
+    /// Variant lines and LP lines are not part of this step.
     /// </summary>
     local procedure RelocateFoundStock(SheetNo: Code[20]; CountHeader: Record "DOPSWHS Count Sheet Header")
     var
         Setup: Record "DOPSWHS Setup";
         Location: Record Location;
-        CountLine: Record "DOPSWHS Count Sheet Line";
-        Item: Record Item;
-        ItemUom: Record "Item Unit of Measure";
-        MovementMgmt: Codeunit "DOPSWHS Movement Mgmt";
-        LPMgt: Codeunit "DOPSWHS LP Management";
-        SourceBins: List of [Code[20]];
-        SourceBin: Code[20];
-        QtyPerUoM: Decimal;
-        NeededBase: Decimal;
-        AvailableBase: Decimal;
-        MoveBase: Decimal;
-        MovedBase: Decimal;
-        MovedQty: Decimal;
-        Dimensions: Dictionary of [Text, Text];
+        Plan: Dictionary of [Text, Decimal];
+        PlanKey: Text;
     begin
         if not Setup.Get('') then
             exit;
@@ -1606,65 +1615,204 @@ codeunit 72050 "DOPSWHS Count Mgmt"
         if not Location."Bin Mandatory" then
             exit;
 
-        CountLine.SetRange("Sheet No.", SheetNo);
-        CountLine.SetRange("Unexpected Stock", true);
-        CountLine.SetRange("LP No.", '');
-        CountLine.SetRange("Variant Code", '');
-        if not CountLine.FindSet(true) then
+        PlanFoundStockRelocations(SheetNo, CountHeader, Plan);
+        foreach PlanKey in Plan.Keys() do
+            ExecuteFoundStockRelocation(SheetNo, CountHeader, PlanKey, Plan.Get(PlanKey));
+    end;
+
+    /// <summary>
+    /// Builds the relocation plan without touching stock (testable seam).
+    /// Key = "&lt;surplus line no&gt;|&lt;source line no or 0&gt;|&lt;source bin&gt;",
+    /// value = base quantity to move from the source bin into the surplus
+    /// line's bin. Source line no 0 = bin not counted in this sheet.
+    /// </summary>
+    procedure PlanFoundStockRelocations(SheetNo: Code[20]; CountHeader: Record "DOPSWHS Count Sheet Header"; var Plan: Dictionary of [Text, Decimal])
+    var
+        SurplusLine: Record "DOPSWHS Count Sheet Line";
+        SourceLine: Record "DOPSWHS Count Sheet Line";
+        LPMgt: Codeunit "DOPSWHS LP Management";
+        ReservedByLine: Dictionary of [Integer, Decimal];
+        ReservedByBin: Dictionary of [Code[20], Decimal];
+        SourceBins: List of [Code[20]];
+        SourceBin: Code[20];
+        NeededBase: Decimal;
+        ShortfallBase: Decimal;
+        AvailableBase: Decimal;
+        MoveBase: Decimal;
+    begin
+        Clear(Plan);
+        SurplusLine.SetRange("Sheet No.", SheetNo);
+        SurplusLine.SetRange("LP No.", '');
+        SurplusLine.SetRange("Variant Code", '');
+        SurplusLine.SetFilter("Bin Code", '<>%1', '');
+        if not SurplusLine.FindSet() then
             exit;
         repeat
-            NeededBase := GetWinningQty(CountLine, SheetNo) - CountLine."System Qty";
-            if (NeededBase > 0) and (CountLine."Bin Code" <> '') and Item.Get(CountLine."Item No.") then begin
-                QtyPerUoM := 1;
-                if (CountLine."Unit of Measure Code" <> '') and (CountLine."Unit of Measure Code" <> Item."Base Unit of Measure") then
-                    if ItemUom.Get(CountLine."Item No.", CountLine."Unit of Measure Code") and (ItemUom."Qty. per Unit of Measure" > 0) then
-                        QtyPerUoM := ItemUom."Qty. per Unit of Measure";
-                NeededBase := Round(NeededBase * QtyPerUoM, 0.00001);
-                CollectRelocationSourceBins(SheetNo, CountHeader."Location Code", CountLine, SourceBins);
-                MovedBase := 0;
-                foreach SourceBin in SourceBins do
-                    if NeededBase > 0.00001 then begin
-                        AvailableBase := LPMgt.LooseBaseQtyAvailable(CountHeader."Location Code", SourceBin, CountLine."Item No.", CountLine."Lot No.", CountLine."Serial No.");
-                        MoveBase := AvailableBase;
-                        if MoveBase > NeededBase then
-                            MoveBase := NeededBase;
-                        if (CountLine."Serial No." <> '') and (MoveBase > 1) then
-                            MoveBase := 1;
-                        if MoveBase > 0.00001 then begin
-                            MovementMgmt.AdHocMoveTrackedAtLocation(
-                                CountHeader."Location Code", SourceBin, CountLine."Bin Code", CountLine."Item No.", '',
-                                MoveBase, CopyStr(UserId(), 1, 50), CountLine."Lot No.", CountLine."Serial No.");
-                            NeededBase := Round(NeededBase - MoveBase, 0.00001);
-                            MovedBase += MoveBase;
-                            if CountLine."Moved From Bin" = '' then
-                                CountLine."Moved From Bin" := SourceBin
-                            else
-                                if CountLine."Moved From Bin" <> SourceBin then
-                                    CountLine."Moved From Bin" := MultiBinTok;
+            NeededBase := ToBaseQty(SurplusLine, GetWinningQty(SurplusLine, SheetNo) - SurplusLine."System Qty");
+            if NeededBase > 0.00001 then begin
+                // 1. Counted shortfalls of the same item/lot in this sheet.
+                SourceLine.Reset();
+                SourceLine.SetRange("Sheet No.", SheetNo);
+                SourceLine.SetRange("Item No.", SurplusLine."Item No.");
+                SourceLine.SetRange("Variant Code", '');
+                SourceLine.SetRange("Lot No.", SurplusLine."Lot No.");
+                SourceLine.SetRange("Serial No.", SurplusLine."Serial No.");
+                SourceLine.SetRange("LP No.", '');
+                SourceLine.SetFilter("Bin Code", '<>%1&<>%2', '', SurplusLine."Bin Code");
+                if SourceLine.FindSet() then
+                    repeat
+                        if NeededBase > 0.00001 then begin
+                            ShortfallBase := ToBaseQty(SourceLine, SourceLine."System Qty" - GetWinningQty(SourceLine, SheetNo))
+                                - ReservedQty(ReservedByLine, SourceLine."Line No.");
+                            AvailableBase :=
+                                LPMgt.LooseBaseQtyAvailable(CountHeader."Location Code", SourceLine."Bin Code", SurplusLine."Item No.", SurplusLine."Lot No.", SurplusLine."Serial No.")
+                                - ReservedBinQty(ReservedByBin, SourceLine."Bin Code");
+                            MoveBase := PlannedMoveQty(SurplusLine, NeededBase, ShortfallBase, AvailableBase);
+                            if MoveBase > 0.00001 then begin
+                                Plan.Add(RelocationPlanKey(SurplusLine."Line No.", SourceLine."Line No.", SourceLine."Bin Code"), MoveBase);
+                                NeededBase := Round(NeededBase - MoveBase, 0.00001);
+                                ReservedByLine.Set(SourceLine."Line No.", ReservedQty(ReservedByLine, SourceLine."Line No.") + MoveBase);
+                                ReservedByBin.Set(SourceLine."Bin Code", ReservedBinQty(ReservedByBin, SourceLine."Bin Code") + MoveBase);
+                            end;
                         end;
-                    end;
-                if MovedBase > 0 then begin
-                    MovedQty := Round(MovedBase / QtyPerUoM, 0.00001);
-                    CountLine."Moved Qty" += MovedQty;
-                    CountLine."System Qty" += MovedQty;
-                    CountLine.Variance := GetWinningQty(CountLine, SheetNo) - CountLine."System Qty";
-                    CountLine.Modify(true);
-                    Clear(Dimensions);
-                    Dimensions.Add('sheetNo', SheetNo);
-                    Dimensions.Add('lineNo', Format(CountLine."Line No."));
-                    Session.LogMessage('AdvWMS.Count.FoundStockRelocated',
-                        StrSubstNo('Sheet %1 line %2: %3 x %4 moved into %5 from %6.', SheetNo, CountLine."Line No.", MovedQty, CountLine."Item No.", CountLine."Bin Code", CountLine."Moved From Bin"),
-                        Verbosity::Normal, DataClassification::SystemMetadata, TelemetryScope::ExtensionPublisher, Dimensions);
+                    until SourceLine.Next() = 0;
+
+                // 2. Bins BC still records the item/lot in and that this sheet does not count.
+                if NeededBase > 0.00001 then begin
+                    CollectRelocationSourceBins(SheetNo, CountHeader."Location Code", SurplusLine, SourceBins);
+                    foreach SourceBin in SourceBins do
+                        if NeededBase > 0.00001 then begin
+                            AvailableBase :=
+                                LPMgt.LooseBaseQtyAvailable(CountHeader."Location Code", SourceBin, SurplusLine."Item No.", SurplusLine."Lot No.", SurplusLine."Serial No.")
+                                - ReservedBinQty(ReservedByBin, SourceBin);
+                            MoveBase := PlannedMoveQty(SurplusLine, NeededBase, AvailableBase, AvailableBase);
+                            if MoveBase > 0.00001 then begin
+                                Plan.Add(RelocationPlanKey(SurplusLine."Line No.", 0, SourceBin), MoveBase);
+                                NeededBase := Round(NeededBase - MoveBase, 0.00001);
+                                ReservedByBin.Set(SourceBin, ReservedBinQty(ReservedByBin, SourceBin) + MoveBase);
+                            end;
+                        end;
                 end;
             end;
-        until CountLine.Next() = 0;
+        until SurplusLine.Next() = 0;
+    end;
+
+    procedure RelocationPlanKey(SurplusLineNo: Integer; SourceLineNo: Integer; SourceBin: Code[20]): Text
+    begin
+        exit(Format(SurplusLineNo) + '|' + Format(SourceLineNo) + '|' + SourceBin);
+    end;
+
+    local procedure PlannedMoveQty(SurplusLine: Record "DOPSWHS Count Sheet Line"; NeededBase: Decimal; ShortfallBase: Decimal; AvailableBase: Decimal): Decimal
+    var
+        MoveBase: Decimal;
+    begin
+        MoveBase := NeededBase;
+        if ShortfallBase < MoveBase then
+            MoveBase := ShortfallBase;
+        if AvailableBase < MoveBase then
+            MoveBase := AvailableBase;
+        if (SurplusLine."Serial No." <> '') and (MoveBase > 1) then
+            MoveBase := 1;
+        if MoveBase < 0 then
+            MoveBase := 0;
+        exit(Round(MoveBase, 0.00001));
+    end;
+
+    local procedure ReservedQty(var Reserved: Dictionary of [Integer, Decimal]; LineNo: Integer): Decimal
+    var
+        Qty: Decimal;
+    begin
+        if Reserved.Get(LineNo, Qty) then
+            exit(Qty);
+        exit(0);
+    end;
+
+    local procedure ReservedBinQty(var Reserved: Dictionary of [Code[20], Decimal]; BinCode: Code[20]): Decimal
+    var
+        Qty: Decimal;
+    begin
+        if Reserved.Get(BinCode, Qty) then
+            exit(Qty);
+        exit(0);
+    end;
+
+    local procedure QtyPerUnitOfMeasure(CountLine: Record "DOPSWHS Count Sheet Line"): Decimal
+    var
+        Item: Record Item;
+        ItemUom: Record "Item Unit of Measure";
+    begin
+        if (CountLine."Unit of Measure Code" = '') or not Item.Get(CountLine."Item No.") then
+            exit(1);
+        if CountLine."Unit of Measure Code" = Item."Base Unit of Measure" then
+            exit(1);
+        if ItemUom.Get(CountLine."Item No.", CountLine."Unit of Measure Code") and (ItemUom."Qty. per Unit of Measure" > 0) then
+            exit(ItemUom."Qty. per Unit of Measure");
+        exit(1);
+    end;
+
+    local procedure ToBaseQty(CountLine: Record "DOPSWHS Count Sheet Line"; Qty: Decimal): Decimal
+    begin
+        exit(Round(Qty * QtyPerUnitOfMeasure(CountLine), 0.00001));
+    end;
+
+    local procedure FromBaseQty(CountLine: Record "DOPSWHS Count Sheet Line"; QtyBase: Decimal): Decimal
+    begin
+        exit(Round(QtyBase / QtyPerUnitOfMeasure(CountLine), 0.00001));
+    end;
+
+    local procedure ExecuteFoundStockRelocation(SheetNo: Code[20]; CountHeader: Record "DOPSWHS Count Sheet Header"; PlanKey: Text; MoveBase: Decimal)
+    var
+        SurplusLine: Record "DOPSWHS Count Sheet Line";
+        SourceLine: Record "DOPSWHS Count Sheet Line";
+        MovementMgmt: Codeunit "DOPSWHS Movement Mgmt";
+        Parts: List of [Text];
+        Dimensions: Dictionary of [Text, Text];
+        SurplusLineNo: Integer;
+        SourceLineNo: Integer;
+        SourceBin: Code[20];
+        MovedQty: Decimal;
+    begin
+        Parts := PlanKey.Split('|');
+        Evaluate(SurplusLineNo, Parts.Get(1));
+        Evaluate(SourceLineNo, Parts.Get(2));
+        SourceBin := CopyStr(Parts.Get(3), 1, MaxStrLen(SourceBin));
+        SurplusLine.Get(SheetNo, SurplusLineNo);
+
+        MovementMgmt.AdHocMoveTrackedAtLocation(
+            CountHeader."Location Code", SourceBin, SurplusLine."Bin Code", SurplusLine."Item No.", '',
+            MoveBase, CopyStr(UserId(), 1, 50), SurplusLine."Lot No.", SurplusLine."Serial No.");
+
+        MovedQty := FromBaseQty(SurplusLine, MoveBase);
+        SurplusLine."System Qty" += MovedQty;
+        SurplusLine."Moved Qty" += MovedQty;
+        if SurplusLine."Moved From Bin" = '' then
+            SurplusLine."Moved From Bin" := SourceBin
+        else
+            if SurplusLine."Moved From Bin" <> SourceBin then
+                SurplusLine."Moved From Bin" := MultiBinTok;
+        SurplusLine.Variance := GetWinningQty(SurplusLine, SheetNo) - SurplusLine."System Qty";
+        SurplusLine.Modify(true);
+
+        if SourceLineNo <> 0 then begin
+            SourceLine.Get(SheetNo, SourceLineNo);
+            SourceLine."System Qty" := Round(SourceLine."System Qty" - FromBaseQty(SourceLine, MoveBase), 0.00001);
+            SourceLine.Variance := GetWinningQty(SourceLine, SheetNo) - SourceLine."System Qty";
+            SourceLine.Modify(true);
+        end;
+
+        Dimensions.Add('sheetNo', SheetNo);
+        Dimensions.Add('lineNo', Format(SurplusLineNo));
+        Dimensions.Add('sourceLineNo', Format(SourceLineNo));
+        Session.LogMessage('AdvWMS.Count.FoundStockRelocated',
+            StrSubstNo('Sheet %1 line %2: %3 x %4 moved into %5 from %6.', SheetNo, SurplusLineNo, MovedQty, SurplusLine."Item No.", SurplusLine."Bin Code", SourceBin),
+            Verbosity::Normal, DataClassification::SystemMetadata, TelemetryScope::ExtensionPublisher, Dimensions);
     end;
 
     /// <summary>
     /// Bins of the location that hold the same item/lot/serial (warehouse entry
     /// balance > 0), excluding the found bin and every bin that has a count line
-    /// for the same item/lot in this sheet (those are counted; the physical
-    /// inventory posting balances them). Largest balance first.
+    /// for the same item/lot in this sheet (those are paired as counted
+    /// shortfalls or balanced by the physical inventory). Largest balance first.
     /// </summary>
     local procedure CollectRelocationSourceBins(SheetNo: Code[20]; LocationCode: Code[10]; CountLine: Record "DOPSWHS Count Sheet Line"; var SourceBins: List of [Code[20]])
     var
@@ -1721,6 +1869,13 @@ codeunit 72050 "DOPSWHS Count Mgmt"
             Balances.Remove(BestBin);
         end;
     end;
+
+    /// <summary>
+    /// Yönlendirilmiş lokasyonda sayım farklarını Ambar Fiziksel Sayım
+    /// Günlüğü ile rafa yazar (Whse. Jnl.-Register Batch). Fark 0 olan satır
+    /// için günlük satırı üretilmez. Yönlendirilmiş olmayan lokasyonda no-op:
+    /// orada Item Journal raf kodunu doğrudan taşır.
+    /// </summary>
 
     local procedure RegisterDirectedPhysInventory(SheetNo: Code[20]; CountHeader: Record "DOPSWHS Count Sheet Header"; CountDocumentNo: Code[20])
     var

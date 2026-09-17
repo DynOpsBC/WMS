@@ -83,7 +83,7 @@ page 72061 "DOPSWHS Setup"
                 field("Count Relocates Found Stock"; Rec."Count Relocates Found Stock")
                 {
                     ApplicationArea = All;
-                    ToolTip = 'Açık: sayımda BC''de o rafta kayıtlı olmayan bir ürün bulunursa kayıt sırasında stok, BC''nin tuttuğu (sayım kapsamı dışındaki) raflardan bu rafa taşınır; yalnız kalan fark artı düzeltme olur. Kapalı (varsayılan): bulunan miktar artı düzeltme olur, eski raf değişmez.';
+                    ToolTip = 'Açık: sayımda bir rafta BC''nin bilmediği (fazla) ürün bulunursa kayıt sırasında stok taşınır: önce aynı sayımda eksik sayılan raftan (sistem bu rafı da saydırır; orada yoksa eksi+artı yerine tek raf taşıması olur), sonra sayım dışındaki raflardan. Yalnız LP''siz serbest stok taşınır; kalan fark artı düzeltme olur. Kapalı (varsayılan): eksik raf eksi, bulunan raf artı düzeltme olur.';
                 }
                 field("Terminal Count Posting"; Rec."Terminal Count Posting")
                 {

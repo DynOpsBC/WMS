@@ -326,11 +326,13 @@ table 72000 "DOPSWHS Setup"
         }
         field(500; "Count Relocates Found Stock"; Boolean)
         {
-            // BADE (16 Eyl 2026, Merve): sayımda BC'de o rafta olmayan bir ürün
-            // bulunduğunda kayıt, stoğu BC'nin hâlâ tuttuğu (sayım kapsamı
-            // dışındaki) raflardan bu rafa taşır; yalnız kalan fark artı
-            // düzeltme olur. Kapalıyken (varsayılan) eski davranış: bulunan
-            // miktar artı düzeltme, eski raf değişmez (kısmi sayımda mükerrer).
+            // BADE (16–17 Eyl 2026, Merve): sayımda bir rafta BC'nin bilmediği
+            // (fazla) ürün bulunduğunda kayıt, stoğu taşır: önce aynı fişte
+            // eksik sayılan raftan (kapsam kuralı o rafı da saydırır; eksi+artı
+            // yerine tek raf taşıması), sonra fiş dışındaki raflardan
+            // (Count Mgmt.PlanFoundStockRelocations). Yalnız LP'siz serbest stok;
+            // kalan fark artı düzeltme. Kapalıyken (varsayılan): eksik raf eksi,
+            // bulunan raf artı düzeltme (satınalma girişi + artı giriş yan yana).
             Caption = 'Count Relocates Found Stock';
             DataClassification = CustomerContent;
             InitValue = false;

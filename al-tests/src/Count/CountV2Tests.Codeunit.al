@@ -399,6 +399,127 @@ codeunit 72142 "DOPSWHS Count V2 Tests"
         asserterror Counter.Modify(true);
     end;
 
+    [Test]
+    procedure ZoneCountSkipsRelatedBinOutsideZoneFilter()
+    var
+        Line: Record "DOPSWHS Count Sheet Line";
+        CountMgmt: Codeunit "DOPSWHS Count Mgmt";
+        SheetNo: Code[20];
+    begin
+        // BADE 17 Eyl 2026: stock found in zone Z1 that BC keeps in zone Z2.
+        // Finishing the Z1 bin used to fail with BinOutsideZoneFilterErr because
+        // the coverage rule tried to seed the Z2 bin into a Z1-only sheet.
+        EnsureItemLocationAndBin('CV2-ZONE', 'CV2PCS', 'CV2ZONE', 'Z1-A1');
+        EnsureItemLocationAndBin('CV2-ZONE', 'CV2PCS', 'CV2ZONE', 'Z2-B1');
+        EnsureZone('CV2ZONE', 'Z1', 'Z1-A1');
+        EnsureZone('CV2ZONE', 'Z2', 'Z2-B1');
+        InsertWarehouseBalance('CV2-ZONE', 'CV2PCS', 'CV2ZONE', 'Z2-B1', 5);
+        InsertBinContent('CV2-ZONE', 'CV2PCS', 'CV2ZONE', 'Z2-B1');
+        SheetNo := CountMgmt.CreateV2SheetFiltered('CV2ZONE', 'Z1', 'CV2-OPERATOR');
+        CountMgmt.ScanV2Label(SheetNo, CreateGuid(), 'CV2-ZONE', '', 'Z1-A1', 'CV2PCS', '', '', 5, 1);
+
+        CountMgmt.CompleteV2Bin(SheetNo, 'Z1-A1', 1);
+
+        Line.SetRange("Sheet No.", SheetNo);
+        Line.SetRange("Bin Code", 'Z2-B1');
+        Assert.IsTrue(Line.IsEmpty(), 'A bin outside the zone filter must not be seeded into the zone count.');
+        CountMgmt.CompleteCounter(SheetNo, 1);
+    end;
+
+    [Test]
+    procedure RelocationPlanPairsSurplusWithCountedShortfall()
+    var
+        CountHeader: Record "DOPSWHS Count Sheet Header";
+        Line: Record "DOPSWHS Count Sheet Line";
+        CountMgmt: Codeunit "DOPSWHS Count Mgmt";
+        Plan: Dictionary of [Text, Decimal];
+        Counters: array[3] of Code[50];
+        SheetNo: Code[20];
+        PlanKey: Text;
+    begin
+        // Merve (17 Eyl 2026): "hem pozitif girişi oldu hem satınalma girişi oldu".
+        // Found 5 in A1, BC keeps 5 in A2, operator confirms A2 empty: the plan
+        // must be ONE move A2 -> A1 (no negative + positive adjustment pair).
+        EnsureItemLocationAndBin('CV2-RELOC', 'CV2PCS', 'CV2RELOC', 'A1');
+        EnsureItemLocationAndBin('CV2-RELOC', 'CV2PCS', 'CV2RELOC', 'A2');
+        InsertWarehouseBalance('CV2-RELOC', 'CV2PCS', 'CV2RELOC', 'A2', 5);
+        InsertBinContent('CV2-RELOC', 'CV2PCS', 'CV2RELOC', 'A2');
+        SheetNo := CountMgmt.CreateSheet('CV2RELOC', Enum::"DOPSWHS Count Mode"::Visible, Counters);
+        CountMgmt.ScanV2Label(SheetNo, CreateGuid(), 'CV2-RELOC', '', 'A1', 'CV2PCS', '', '', 5, 1);
+        CountMgmt.CompleteV2Bin(SheetNo, 'A1', 1);
+        CountMgmt.CompleteV2Bin(SheetNo, 'A2', 1);
+        CountHeader.Get(SheetNo);
+
+        CountMgmt.PlanFoundStockRelocations(SheetNo, CountHeader, Plan);
+
+        PlanKey := CountMgmt.RelocationPlanKey(LineNoForBin(SheetNo, 'A1'), LineNoForBin(SheetNo, 'A2'), 'A2');
+        Assert.AreEqual(1, Plan.Count(), 'Exactly one move must be planned.');
+        Assert.IsTrue(Plan.ContainsKey(PlanKey), 'The counted-empty source bin must be paired with the surplus line.');
+        Assert.AreEqual(5, Plan.Get(PlanKey), 'The whole shortfall must move into the found bin.');
+        Line.Get(SheetNo, LineNoForBin(SheetNo, 'A2'));
+        Assert.AreEqual(5, Line."System Qty", 'Planning must not change count lines.');
+    end;
+
+    [Test]
+    procedure RelocationPlanMovesOnlyTheShortfallWhenSourceStillHoldsPart()
+    var
+        CountHeader: Record "DOPSWHS Count Sheet Header";
+        CountMgmt: Codeunit "DOPSWHS Count Mgmt";
+        Plan: Dictionary of [Text, Decimal];
+        Counters: array[3] of Code[50];
+        SheetNo: Code[20];
+        PlanKey: Text;
+    begin
+        // BC keeps 5 in A2; operator finds 2 still in A2 and 5 in A1.
+        // Only the 3 missing in A2 may move; the other 2 of A1 are a real surplus.
+        EnsureItemLocationAndBin('CV2-PART', 'CV2PCS', 'CV2PART', 'A1');
+        EnsureItemLocationAndBin('CV2-PART', 'CV2PCS', 'CV2PART', 'A2');
+        InsertWarehouseBalance('CV2-PART', 'CV2PCS', 'CV2PART', 'A2', 5);
+        InsertBinContent('CV2-PART', 'CV2PCS', 'CV2PART', 'A2');
+        SheetNo := CountMgmt.CreateSheet('CV2PART', Enum::"DOPSWHS Count Mode"::Visible, Counters);
+        CountMgmt.ScanV2Label(SheetNo, CreateGuid(), 'CV2-PART', '', 'A1', 'CV2PCS', '', '', 5, 1);
+        CountMgmt.CompleteV2Bin(SheetNo, 'A1', 1);
+        CountMgmt.RecordCount(SheetNo, LineNoForBin(SheetNo, 'A2'), 1, 2);
+        CountMgmt.CompleteV2Bin(SheetNo, 'A2', 1);
+        CountHeader.Get(SheetNo);
+
+        CountMgmt.PlanFoundStockRelocations(SheetNo, CountHeader, Plan);
+
+        PlanKey := CountMgmt.RelocationPlanKey(LineNoForBin(SheetNo, 'A1'), LineNoForBin(SheetNo, 'A2'), 'A2');
+        Assert.IsTrue(Plan.ContainsKey(PlanKey), 'Source bin with a partial shortfall must still be paired.');
+        Assert.AreEqual(3, Plan.Get(PlanKey), 'Only the quantity missing in the source bin may move.');
+    end;
+
+    [Test]
+    procedure RelocationPlanUsesUncountedBinOutsideZoneFilter()
+    var
+        CountHeader: Record "DOPSWHS Count Sheet Header";
+        CountMgmt: Codeunit "DOPSWHS Count Mgmt";
+        Plan: Dictionary of [Text, Decimal];
+        SheetNo: Code[20];
+        PlanKey: Text;
+    begin
+        // Zone count Z1 finds 5; BC keeps them in zone Z2 (not counted here):
+        // the plan pulls from the uncounted bin (source line no 0).
+        EnsureItemLocationAndBin('CV2-ZREL', 'CV2PCS', 'CV2ZREL', 'Z1-A1');
+        EnsureItemLocationAndBin('CV2-ZREL', 'CV2PCS', 'CV2ZREL', 'Z2-B1');
+        EnsureZone('CV2ZREL', 'Z1', 'Z1-A1');
+        EnsureZone('CV2ZREL', 'Z2', 'Z2-B1');
+        InsertWarehouseBalance('CV2-ZREL', 'CV2PCS', 'CV2ZREL', 'Z2-B1', 5);
+        InsertBinContent('CV2-ZREL', 'CV2PCS', 'CV2ZREL', 'Z2-B1');
+        SheetNo := CountMgmt.CreateV2SheetFiltered('CV2ZREL', 'Z1', 'CV2-OPERATOR');
+        CountMgmt.ScanV2Label(SheetNo, CreateGuid(), 'CV2-ZREL', '', 'Z1-A1', 'CV2PCS', '', '', 5, 1);
+        CountMgmt.CompleteV2Bin(SheetNo, 'Z1-A1', 1);
+        CountHeader.Get(SheetNo);
+
+        CountMgmt.PlanFoundStockRelocations(SheetNo, CountHeader, Plan);
+
+        PlanKey := CountMgmt.RelocationPlanKey(LineNoForBin(SheetNo, 'Z1-A1'), 0, 'Z2-B1');
+        Assert.AreEqual(1, Plan.Count(), 'Exactly one move must be planned.');
+        Assert.IsTrue(Plan.ContainsKey(PlanKey), 'The uncounted bin of the other zone must be the source.');
+        Assert.AreEqual(5, Plan.Get(PlanKey), 'The full found quantity must come from the other zone.');
+    end;
+
     local procedure EnsureItemLocationAndBin(ItemNo: Code[20]; UomCode: Code[10]; LocationCode: Code[10]; BinCode: Code[20])
     var
         Item: Record Item;
@@ -499,6 +620,47 @@ codeunit 72142 "DOPSWHS Count V2 Tests"
         LPLine."Unit of Measure" := UomCode;
         LPLine.Quantity := Qty;
         LPLine.Insert(true);
+    end;
+
+    local procedure EnsureZone(LocationCode: Code[10]; ZoneCode: Code[10]; BinCode: Code[20])
+    var
+        Zone: Record Zone;
+        Bin: Record Bin;
+    begin
+        if not Zone.Get(LocationCode, ZoneCode) then begin
+            Zone.Init();
+            Zone."Location Code" := LocationCode;
+            Zone.Code := ZoneCode;
+            Zone.Insert(true);
+        end;
+        Bin.Get(LocationCode, BinCode);
+        Bin."Zone Code" := ZoneCode;
+        Bin.Modify(true);
+    end;
+
+    local procedure InsertBinContent(ItemNo: Code[20]; UomCode: Code[10]; LocationCode: Code[10]; BinCode: Code[20])
+    var
+        BinContent: Record "Bin Content";
+    begin
+        if BinContent.Get(LocationCode, BinCode, ItemNo, '', UomCode) then
+            exit;
+        BinContent.Init();
+        BinContent."Location Code" := LocationCode;
+        BinContent."Bin Code" := BinCode;
+        BinContent."Item No." := ItemNo;
+        BinContent."Unit of Measure Code" := UomCode;
+        BinContent."Qty. per Unit of Measure" := 1;
+        BinContent.Insert(true);
+    end;
+
+    local procedure LineNoForBin(SheetNo: Code[20]; BinCode: Code[20]): Integer
+    var
+        CountLine: Record "DOPSWHS Count Sheet Line";
+    begin
+        CountLine.SetRange("Sheet No.", SheetNo);
+        CountLine.SetRange("Bin Code", BinCode);
+        CountLine.FindFirst();
+        exit(CountLine."Line No.");
     end;
 
     local procedure CountLinesForSheet(SheetNo: Code[20]): Integer
