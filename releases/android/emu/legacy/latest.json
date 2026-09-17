@@ -1,7 +1,7 @@
 {
-  "versionCode": 200125,
-  "versionName": "1.14.125-emu",
-  "apkUrl": "https://github.com/DynOpsBC/WMS/releases/download/android-v1.14.125-emu/BCWMS-EMU-1.14.125-UYUMLU.apk",
-  "sha256": "5234b992047ec9c969a8a559efdd04b6e9349baee2e60e79e0b6e55de76c9211",
-  "releaseNotes": "Etiket ve belge yazıcısı kartı sadeleşti: yalnız yazıcı adı, sorun varsa tek uyarı satırı. Adet, lokasyon listesi ve ürün no düzeltmeleri 1.14.124'teki gibi."
+  "versionCode": 200126,
+  "versionName": "1.14.126-emu",
+  "apkUrl": "https://github.com/DynOpsBC/WMS/releases/download/android-v1.14.126-emu/BCWMS-EMU-1.14.126-UYUMLU.apk",
+  "sha256": "8c1360a4515e8625d322cf60b5707baf78f48274da194ba28557bcc4b67179a6",
+  "releaseNotes": "Lokasyon → alan seçip o alandaki tüm rafların etiketini topluca alın: her rafa bir tam A4 sayfa (üstte alan adı, ortada büyük raf kodu, QR + barkod) veya etiket yazıcısına toplu baskı. BC 1.14.2.7 gerekir (alan listesi)."
 }
