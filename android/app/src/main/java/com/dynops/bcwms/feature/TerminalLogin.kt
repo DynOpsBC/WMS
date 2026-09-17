@@ -162,6 +162,7 @@ internal fun TerminalOperatorLogin(onConnected: (Boolean) -> Unit, onConnectionS
     var terminals by remember { mutableStateOf<List<JSONObject>>(emptyList()) }
     var users by remember { mutableStateOf<List<JSONObject>>(emptyList()) }
     var selectedUser by remember { mutableStateOf<JSONObject?>(null) }
+    var adminPicker by remember { mutableStateOf(false) }
     var pin by remember { mutableStateOf("") }
     var busy by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf("") }
@@ -174,6 +175,7 @@ internal fun TerminalOperatorLogin(onConnected: (Boolean) -> Unit, onConnectionS
         error = ""
         users = emptyList()
         selectedUser = null
+        adminPicker = false
         pin = ""
         try {
             val terminalPage = api.terminals()
@@ -201,17 +203,24 @@ internal fun TerminalOperatorLogin(onConnected: (Boolean) -> Unit, onConnectionS
         } finally { busy = false }
     }
 
-    androidx.activity.compose.BackHandler(enabled = selectedUser != null) {
-        if (!busy) { selectedUser = null; pin = ""; error = "" }
+    androidx.activity.compose.BackHandler(enabled = selectedUser != null || adminPicker) {
+        if (!busy) { selectedUser = null; adminPicker = false; pin = ""; error = "" }
     }
 
-    Column(Modifier.fillMaxSize().imePadding().padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+    Column(Modifier.fillMaxSize().safeDrawingPadding().imePadding().padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             CompanyLogo(brand = resolveCompanyBrand(BcApi.getCompanyName(context), BuildConfig.FLAVOR), height = 32.dp)
             Column {
                 Text("Depo girişi", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
                 Text("BADE · WMS", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
+        }
+        if (selectedUser == null) Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+            TextButton(onClick = { revision++ }, enabled = !busy) { Text("Yenile") }
+            if (terminal.isNotBlank()) TextButton(onClick = {
+                TerminalSession.select(context, "")
+                terminal = ""
+            }, enabled = !busy) { Text("Terminal değiştir") }
         }
         if (selectedUser == null) BadeConnectionSummary(BcApi.getEnvironment(context), BcApi.getCompanyName(context), !busy, onConnectionSettings)
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -222,7 +231,7 @@ internal fun TerminalOperatorLogin(onConnected: (Boolean) -> Unit, onConnectionS
                 }
             }
         }
-        Text(if (terminal.isBlank()) "Bu cihazın terminalini seçin" else if (selectedUser == null) "Kim işlem yapacak?" else "PIN ile devam edin",
+        Text(if (terminal.isBlank()) "Bu cihazın terminalini seçin" else if (adminPicker && selectedUser == null) "Yönetici seçin" else if (selectedUser == null) "Kim işlem yapacak?" else "PIN ile devam edin",
             style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
         if (terminal.isNotBlank()) Text(terminal, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
         if (busy) LinearProgressIndicator(Modifier.fillMaxWidth())
@@ -240,7 +249,15 @@ internal fun TerminalOperatorLogin(onConnected: (Boolean) -> Unit, onConnectionS
                     }
                     if (loaded && terminals.isEmpty()) item { Text("BC’de önce terminal oluşturun.") }
                 } else {
-                    items(users, key = { it.optString("username") }) { row ->
+                    val managers = users.filter { it.optBoolean("terminalAdmin") }
+                    if (!adminPicker) item(key = "manager-entry") {
+                        TerminalChoiceCard(title = "Yönetici girişi", subtitle = if (loaded && managers.isEmpty()) "BC’de yönetici oluşturun" else "",
+                            mark = "Y", enabled = !busy && managers.isNotEmpty(), onClick = {
+                                pin = ""; error = ""
+                                if (managers.size == 1) selectedUser = managers.first() else adminPicker = true
+                            })
+                    }
+                    items(if (adminPicker) managers else users.filterNot { it.optBoolean("terminalAdmin") }, key = { it.optString("username") }) { row ->
                         TerminalChoiceCard(title = terminalOperatorLabel(row), subtitle = "",
                             mark = row.optString("displayName").take(1).uppercase().ifBlank { "K" }, enabled = !busy,
                             onClick = { selectedUser = row; pin = ""; error = "" })
@@ -250,7 +267,7 @@ internal fun TerminalOperatorLogin(onConnected: (Boolean) -> Unit, onConnectionS
             }
         } else {
             Column(Modifier.weight(1f).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            Text(terminalOperatorLabel(selectedUser!!), style = MaterialTheme.typography.titleLarge)
+            Text(if (selectedUser!!.optBoolean("terminalAdmin")) "Yönetici girişi" else terminalOperatorLabel(selectedUser!!), style = MaterialTheme.typography.titleLarge)
             OutlinedTextField(
                 value = pin,
                 onValueChange = { value -> if (value.length <= 4 && value.all { it in '0'..'9' }) pin = value },
@@ -294,16 +311,10 @@ internal fun TerminalOperatorLogin(onConnected: (Boolean) -> Unit, onConnectionS
             }, enabled = !busy && validTerminalPin(pin), modifier = Modifier.fillMaxWidth().height(52.dp)) {
                 Text("Giriş yap")
             }
-            TextButton(onClick = { selectedUser = null; pin = ""; error = "" }, enabled = !busy) { Text("Başka kullanıcı seç") }
+            TextButton(onClick = { selectedUser = null; adminPicker = false; pin = ""; error = "" }, enabled = !busy) { Text("Başka kullanıcı seç") }
             }
         }
-        if (selectedUser == null) Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-            TextButton(onClick = { revision++ }, enabled = !busy) { Text("Yenile") }
-            if (terminal.isNotBlank()) TextButton(onClick = {
-                TerminalSession.select(context, "")
-                terminal = ""
-            }, enabled = !busy) { Text("Terminal değiştir") }
-        }
+
 
     }
 }

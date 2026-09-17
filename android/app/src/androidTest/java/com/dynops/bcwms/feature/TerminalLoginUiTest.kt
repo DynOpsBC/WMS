@@ -97,8 +97,8 @@ class TerminalLoginUiTest {
         TerminalSession.select(context, "TERMİNAL-2")
         var signedIn = false
         compose.setContent { MaterialTheme { TerminalOperatorLogin({ signedIn = it }, {}, gateway) } }
-        waitFor("Depo Sorumlusu · Yönetici")
-        compose.onNodeWithText("Depo Sorumlusu · Yönetici").performClick()
+        waitFor("Yönetici girişi")
+        compose.onNodeWithText("Yönetici girişi").performClick()
         compose.onNodeWithText("4 haneli PIN").performTextReplacement("0017")
         compose.onNodeWithText("Giriş yap").performScrollTo().performClick()
         compose.waitUntil(10000) { signedIn }
