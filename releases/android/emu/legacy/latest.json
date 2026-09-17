@@ -1,7 +1,7 @@
 {
-  "versionCode": 200123,
-  "versionName": "1.14.123-emu",
-  "apkUrl": "https://github.com/DynOpsBC/WMS/releases/download/android-v1.14.123-emu/BCWMS-EMU-1.14.123-UYUMLU.apk",
-  "sha256": "2819fb05076d03cfb37ad6987a30bcda1f7bab80efc6911e7e05f6fbdb94606e",
-  "releaseNotes": "Etiket Çıkar: ürün/bin etiketleri, Etiket veya Belge seçimi, A3 yatay PDF ve kolay raf arama."
+  "versionCode": 200124,
+  "versionName": "1.14.124-emu",
+  "apkUrl": "https://github.com/DynOpsBC/WMS/releases/download/android-v1.14.124-emu/BCWMS-EMU-1.14.124-UYUMLU.apk",
+  "sha256": "4b15d253c623b504b007cdcfc03e2aba81a13a1d80ea48ef4d14d75aa396f1e0",
+  "releaseNotes": "Etiket adedi (1-99), cihazın yazıcı hedefi görünür, lokasyon listesi eski BC ile de gelir. Ürün no etikete sığar (BC 1.14.2.6)."
 }
