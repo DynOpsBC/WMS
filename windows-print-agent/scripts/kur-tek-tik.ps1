@@ -6,6 +6,7 @@
 #>
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
+try { [Console]::OutputEncoding = [Text.Encoding]::UTF8 } catch { }
 
 $installerDir = $PSScriptRoot
 $packageRoot = Split-Path -Parent $installerDir
@@ -29,8 +30,10 @@ try {
 
     Write-Host '  Dosyalar kuruluyor (bütünlük doğrulanıyor)...'
     & (Join-Path $installerDir 'install.ps1') -DoNotStart
-    if ($LASTEXITCODE -ne 0 -and $null -ne $LASTEXITCODE) {
-        throw "Kurulum betiği hata verdi (çıkış kodu $LASTEXITCODE)."
+    # install.ps1 bir betik: $LASTEXITCODE yalniz yerel exe'lerden sonra set
+    # edilir; StrictMode altinda okumak hata verir (BADE, 17 Eyl). $? yeterli.
+    if (-not $?) {
+        throw 'Kurulum betigi hata verdi.'
     }
 
     Write-Host '  Otomatik başlatma ayarlanıyor...'
