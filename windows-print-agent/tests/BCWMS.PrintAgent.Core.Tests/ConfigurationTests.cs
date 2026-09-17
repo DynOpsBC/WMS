@@ -64,6 +64,73 @@ public sealed class ConfigurationTests
         Assert.Throws<PermanentJobException>(() => JobRoutingPolicy.Validate(job, settings));
     }
 
+    [Fact]
+    public void Routing_AcceptsAnyEnabledLabelPrinter()
+    {
+        var settings = MultiPrinterSettings();
+        Assert.Empty(AgentSettingsValidator.Validate(settings));
+
+        var label = ContractTests.ValidJob() with { Format = PrintFormat.ZPL, BlobName = "jobs/CONTOSO.CRONUS.MAIN.PACK01/11111111-2222-3333-4444-555555555555.zpl" };
+        var second = label with { PrinterName = "Zebra ZD230", PrinterId = "PFEDCBA9876543210" };
+        JobRoutingPolicy.Validate(second, settings);
+        var first = label with { PrinterName = "zebra zd220", PrinterId = "P0123456789ABCDEF" };
+        JobRoutingPolicy.Validate(first, settings);
+
+        var unknown = label with { PrinterName = "Zebra GK420", PrinterId = "P00000000000000AA" };
+        Assert.Throws<PermanentJobException>(() => JobRoutingPolicy.Validate(unknown, settings));
+        var wrongIdForName = label with { PrinterName = "Zebra ZD230", PrinterId = "P0123456789ABCDEF" };
+        Assert.Throws<PermanentJobException>(() => JobRoutingPolicy.Validate(wrongIdForName, settings));
+    }
+
+    [Fact]
+    public void Validation_RejectsDuplicateLabelPrinters()
+    {
+        var settings = MultiPrinterSettings() with
+        {
+            LabelPrinters =
+            [
+                new LabelPrinterSetting { PrinterId = "P0123456789ABCDEF", PrinterName = "Zebra ZD220" },
+                new LabelPrinterSetting { PrinterId = "P0123456789ABCDEF", PrinterName = "zebra zd220" }
+            ]
+        };
+        Assert.Contains(AgentSettingsValidator.Validate(settings), error => error.Contains("birden fazla kez", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void Validation_RejectsLabelPrinterThatIsAlsoTheDocumentPrinter()
+    {
+        var settings = MultiPrinterSettings() with
+        {
+            DocumentPrinterId = "PFEDCBA9876543210",
+            DocumentPrinterName = "Zebra ZD230"
+        };
+        Assert.Contains(AgentSettingsValidator.Validate(settings), error => error.Contains("farklı Windows yazıcı", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void LegacySingleSelection_IsTheEffectiveLabelPrinter()
+    {
+        var printers = ValidSettings().EffectiveLabelPrinters();
+        var printer = Assert.Single(printers);
+        Assert.Equal("Zebra ZD220", printer.PrinterName);
+        Assert.Equal("P0123456789ABCDEF", printer.PrinterId);
+        Assert.Empty((ValidSettings() with { LabelPrinterName = string.Empty, LabelPrinterId = string.Empty, DocumentPrinterName = "PDF", DocumentPrinterId = "P00000000000000BB", PrinterIdsByName = new Dictionary<string, string> { ["PDF"] = "P00000000000000BB" } }).EffectiveLabelPrinters());
+    }
+
+    private static AgentSettings MultiPrinterSettings() => ValidSettings() with
+    {
+        LabelPrinters =
+        [
+            new LabelPrinterSetting { PrinterId = "P0123456789ABCDEF", PrinterName = "Zebra ZD220" },
+            new LabelPrinterSetting { PrinterId = "PFEDCBA9876543210", PrinterName = "Zebra ZD230" }
+        ],
+        PrinterIdsByName = new Dictionary<string, string>
+        {
+            ["Zebra ZD220"] = "P0123456789ABCDEF",
+            ["Zebra ZD230"] = "PFEDCBA9876543210"
+        }
+    };
+
     [Theory]
     [InlineData(283.4645669, 425.1968504, 394, 591, false)] // 100 x 150 mm
     [InlineData(595.2755906, 841.8897638, 827, 1169, false)] // A4

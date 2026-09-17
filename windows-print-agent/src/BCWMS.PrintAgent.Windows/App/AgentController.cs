@@ -72,8 +72,18 @@ internal sealed class AgentController : IAsyncDisposable
     {
         var canonicalStationId = StationId.NormalizeValue(settings.StationId);
         var segments = canonicalStationId.Split('.');
+        var labelNames = settings.LabelPrinters
+            .Select(static printer => printer.PrinterName)
+            .Where(static name => !string.IsNullOrWhiteSpace(name))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+        if (labelNames.Count == 0 && !string.IsNullOrWhiteSpace(settings.LabelPrinterName))
+        {
+            labelNames.Add(settings.LabelPrinterName);
+        }
+
         var mappings = PrinterIdentity.EnsureMappings(settings.PrinterIdsByName, printers.Select(static printer => printer.Name));
-        mappings = PrinterIdentity.EnsureMappings(mappings, new[] { settings.LabelPrinterName, settings.DocumentPrinterName });
+        mappings = PrinterIdentity.EnsureMappings(mappings, labelNames.Append(settings.DocumentPrinterName));
         settings = settings with
         {
             StationId = canonicalStationId,
@@ -81,7 +91,9 @@ internal sealed class AgentController : IAsyncDisposable
             CompanyId = segments.Length > 1 ? segments[1] : string.Empty,
             BlobReadSas = settings.BlobReadSas.Trim().TrimStart('?'),
             BlobEndpoint = settings.BlobEndpoint.Trim().TrimEnd('/'),
-            LabelPrinterId = GetId(mappings, settings.LabelPrinterName),
+            LabelPrinters = labelNames.Select(name => new LabelPrinterSetting { PrinterId = mappings[name], PrinterName = name }).ToList(),
+            LabelPrinterName = labelNames.Count > 0 ? labelNames[0] : string.Empty,
+            LabelPrinterId = labelNames.Count > 0 ? mappings[labelNames[0]] : string.Empty,
             DocumentPrinterId = GetId(mappings, settings.DocumentPrinterName),
             PrinterIdsByName = mappings
         };

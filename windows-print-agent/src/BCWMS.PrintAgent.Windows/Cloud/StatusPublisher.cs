@@ -42,7 +42,10 @@ internal sealed class StatusPublisher : IAsyncDisposable
         var installed = await _discovery.DiscoverAsync(cancellationToken).ConfigureAwait(false);
         var byName = installed.ToDictionary(static printer => printer.Name, StringComparer.OrdinalIgnoreCase);
         var rows = new List<PrinterSnapshotItemV1>();
-        AddSelectedPrinter(rows, byName, _settings.LabelPrinterId, _settings.LabelPrinterName, _settings.LabelFormat, receiverHealthy);
+        foreach (var labelPrinter in _settings.EffectiveLabelPrinters())
+        {
+            AddSelectedPrinter(rows, byName, labelPrinter.PrinterId, labelPrinter.PrinterName, _settings.LabelFormat, receiverHealthy);
+        }
         AddSelectedPrinter(rows, byName, _settings.DocumentPrinterId, _settings.DocumentPrinterName, PrintFormat.PDF, receiverHealthy);
 
         var selection = new PrinterSelectionV1

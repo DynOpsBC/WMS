@@ -33,6 +33,17 @@ The Azure entities are deliberately fixed:
 - Blob container-scope (`sr=c`) stored policy `agent-read`, or a container SAS
   whose only permission is `r`; account SAS tokens are rejected.
 
+
+## Birden fazla etiket yazıcısı (1.1.0, 16 Eylül 2026)
+
+Bir istasyon (bir PC) artık birden fazla etiket yazıcısına iş alabilir. "Yazıcılar" sekmesinde
+**Etiket yazıcıları** listesinden kullanılacak her Windows yazıcısı işaretlenir; hepsi aynı etiket
+formatını (ZPL / ESC-POS / RAW) kullanır, belge (PDF) yazıcısı ayrı seçilir. Her işaretli yazıcı
+"Buluta Eşitle" ile Business Central'a kendi Printer ID'siyle kaydolur; terminal veya BC hangi
+yazıcıyı seçtiyse iş o Windows kuyruğuna basılır (`JobRoutingPolicy` işaretli listeyi izin listesi
+olarak kullanır). 1.0 ayar dosyaları değişmeden çalışır: tek seçili yazıcı listenin ilk elemanı sayılır.
+"Etiket Testi" işaretli her yazıcıya bir test etiketi gönderir.
+
 ## Day-to-day UI
 
 The **Yazıcılar** tab provides:
