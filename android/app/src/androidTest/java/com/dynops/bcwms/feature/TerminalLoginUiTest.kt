@@ -38,9 +38,14 @@ class TerminalLoginUiTest {
     }
     @Before fun prepare() {
         check(!BcApi.hasToken(context)) { "Use an offline debug app for UI tests." }
-        TerminalSession.select(context, "")
+        resetTerminalForTest()
     }
-    @After fun clearSession() { TerminalSession.select(context, "") }
+    @After fun clearSession() { resetTerminalForTest() }
+    private fun resetTerminalForTest() {
+        TerminalSession.signOut(context)
+        context.getSharedPreferences("bcwms_prefs", android.content.Context.MODE_PRIVATE)
+            .edit().remove("wms_terminal." + TerminalSession.scope(context)).commit()
+    }
     private fun waitFor(text: String) {
         compose.waitUntil(10000) { compose.onAllNodesWithText(text).fetchSemanticsNodes().isNotEmpty() }
     }
@@ -54,6 +59,39 @@ class TerminalLoginUiTest {
             java.io.FileInputStream(it.fileDescriptor).use { input -> input.readBytes() }
         }
     }
+    @Test fun terminalReplacementRequiresManagerPinAndKeepsOldTerminalUntilApproved() {
+        TerminalSession.select(context, "TERMİNAL-1")
+        compose.setContent { MaterialTheme { TerminalOperatorLogin({}, {}, gateway) } }
+        waitFor("Merve Demirci")
+        compose.onNodeWithText("Terminal değiştir").performClick()
+        waitFor("TERMİNAL-2")
+        compose.onNodeWithText("TERMİNAL-2").performClick()
+        waitFor("Yönetici PIN’i")
+        assertEquals("TERMİNAL-1", TerminalSession.code(context))
+        compose.onNodeWithText("Yönetici PIN’i").performTextReplacement("9999")
+        compose.onNodeWithText("Onayla ve değiştir").performClick()
+        waitFor("PIN hatalı.")
+        assertEquals("TERMİNAL-1", TerminalSession.code(context))
+        compose.onNodeWithText("Yönetici PIN’i").performTextReplacement("0017")
+        compose.onNodeWithText("Onayla ve değiştir").performClick()
+        compose.waitUntil(10000) { TerminalSession.code(context) == "TERMİNAL-2" }
+        assertFalse(BcApi.hasLocalUser(context))
+        waitFor("Merve Demirci")
+    }
+
+    @Test fun cancellingTerminalReplacementRetainsSelectionAndCannotResetIt() {
+        TerminalSession.select(context, "TERMİNAL-1")
+        assertFalse(TerminalSession.select(context, ""))
+        assertFalse(TerminalSession.select(context, "TERMİNAL-2"))
+        compose.setContent { MaterialTheme { TerminalOperatorLogin({}, {}, gateway) } }
+        waitFor("Merve Demirci")
+        compose.onNodeWithText("Terminal değiştir").performClick()
+        waitFor("TERMİNAL-2")
+        compose.onNodeWithText("Vazgeç").performClick()
+        assertEquals("TERMİNAL-1", TerminalSession.code(context))
+        waitFor("Merve Demirci")
+    }
+
     @Test fun selectTerminalRejectWrongPinThenSignInWithKeyboardOpen() {
         var signedIn = false
         compose.setContent { MaterialTheme { TerminalOperatorLogin({ signedIn = it }, {}, gateway) } }

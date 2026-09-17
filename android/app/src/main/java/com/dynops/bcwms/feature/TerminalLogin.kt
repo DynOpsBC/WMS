@@ -91,9 +91,11 @@ internal object TerminalSession {
     )
     private fun key(context: Context) = "wms_terminal." + scope(context)
     fun code(context: Context): String = prefs(context).getString(key(context), "").orEmpty()
-    fun select(context: Context, code: String) {
+    fun select(context: Context, code: String, managerProfile: JSONObject? = null): Boolean {
+        if (!terminalSelectionAllowed(code(context), code, managerProfile)) return false
         signOut(context)
         prefs(context).edit().putString(key(context), code).apply()
+        return true
     }
     fun signOut(context: Context) { BcApi.clearLocalUser(context) }
 
@@ -168,6 +170,7 @@ internal fun TerminalOperatorLogin(onConnected: (Boolean) -> Unit, onConnectionS
     var error by remember { mutableStateOf("") }
     var revision by remember { mutableIntStateOf(0) }
     var loaded by remember { mutableStateOf(false) }
+    var changingTerminal by remember { mutableStateOf(false) }
 
     LaunchedEffect(terminal, revision) {
         busy = true
@@ -219,8 +222,7 @@ internal fun TerminalOperatorLogin(onConnected: (Boolean) -> Unit, onConnectionS
         if (selectedUser == null) Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
             TextButton(onClick = { revision++ }, enabled = !busy) { Text("Yenile") }
             if (terminal.isNotBlank()) TextButton(onClick = {
-                TerminalSession.select(context, "")
-                terminal = ""
+                changingTerminal = true
             }, enabled = !busy) { Text("Terminal değiştir") }
         }
         if (selectedUser == null) BadeConnectionSummary(BcApi.getEnvironment(context), BcApi.getCompanyName(context), !busy, onConnectionSettings)
@@ -244,8 +246,8 @@ internal fun TerminalOperatorLogin(onConnected: (Boolean) -> Unit, onConnectionS
                         TerminalChoiceCard(title = row.optString("code"),
                             subtitle = row.optString("labelPrinterCode").takeIf { it.isNotBlank() }?.let { "Etiket yazıcısı: $it" }.orEmpty(),
                             mark = "T", enabled = !busy, onClick = {
-                                terminal = row.optString("code")
-                                TerminalSession.select(context, terminal)
+                                val selected = row.optString("code")
+                                if (TerminalSession.select(context, selected)) terminal = selected
                             })
                     }
                     if (loaded && terminals.isEmpty()) item { Text("BC’de önce terminal oluşturun.") }
@@ -318,6 +320,17 @@ internal fun TerminalOperatorLogin(onConnected: (Boolean) -> Unit, onConnectionS
 
 
     }
+    if (changingTerminal) TerminalChangeDialog(
+        gateway = api,
+        onDismiss = { changingTerminal = false },
+        onChanged = {
+            changingTerminal = false
+            terminal = TerminalSession.code(context)
+            selectedUser = null
+            pin = ""
+            revision++
+        },
+    )
 }
 
 /** Display over the existing content so remembered document/quantity/step state stays mounted. */
