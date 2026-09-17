@@ -145,7 +145,12 @@ codeunit 72499 "DOPSWHS Label Canvas Tests"
         end;
         Zpl := Dispatcher.BuildBinZpl(Bin);
         Assert.IsTrue(StrPos(Zpl, '^FDLA,K.K03.11.UST^FS') > 0, 'Bin QR carries the bin code.');
-        Assert.IsTrue(StrPos(Zpl, 'BÖLGE: K') > 0, 'Zone is printed.');
+        // DKÇ 17 Eyl: no "QR = RAF KODU" caption, no bin type, the zone alone
+        // and in a larger font than the description line.
+        Assert.IsTrue(StrPos(Zpl, '^FDK^FS') > 0, 'Zone code is printed on its own.');
+        Assert.AreEqual(0, StrPos(Zpl, 'QR = RAF KODU'), 'The QR caption is gone.');
+        Assert.AreEqual(0, StrPos(Zpl, 'TİP:'), 'The bin type is gone.');
+        Assert.AreEqual(0, StrPos(Zpl, 'BÖLGE:'), 'The zone needs no prefix any more.');
         AssertInsideCanvas(Zpl, 640, 320, 'bin');
     end;
 

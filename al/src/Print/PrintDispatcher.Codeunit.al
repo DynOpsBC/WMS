@@ -568,16 +568,16 @@ codeunit 72051 "DOPSWHS Print Dispatcher"
         Y: Integer;
         CodeFont: Integer;
         CodeMax: Integer;
+        ZoneFont: Integer;
     begin
-        if Bin."Zone Code" <> '' then
-            InfoText := 'BÖLGE: ' + Bin."Zone Code";
-        if Bin."Bin Type Code" <> '' then
-            InfoText := AppendLabelPart(InfoText, 'TİP: ' + Bin."Bin Type Code");
-        if Bin.Description <> '' then
-            InfoText := AppendLabelPart(InfoText, Bin.Description);
+        // DKÇ (17 Eyl 2026): "tip yazısını kaldır, bölge kodu daha büyük kalın
+        // fontlu yazılsın". The bin type is warehouse setup, not something the
+        // operator reads off the rack; the zone is what identifies the aisle.
+        InfoText := Bin.Description;
 
         Canvas.Init();
-        Zpl := Canvas.Frame('RAF ETİKETİ', Bin."Location Code", Bin.Code, 'QR = RAF KODU', X, ColumnWidth, Y);
+        // DKÇ (17 Eyl 2026): "qr altındaki QR = RAF KODU yazısını kaldır".
+        Zpl := Canvas.Frame('RAF ETİKETİ', Bin."Location Code", Bin.Code, '', X, ColumnWidth, Y);
         CodeMax := Canvas.LabelHeight() * 32 div 100;
         if CodeMax < 60 then
             CodeMax := 60;
@@ -586,6 +586,11 @@ codeunit 72051 "DOPSWHS Print Dispatcher"
         CodeFont := Canvas.FitFont(Bin.Code, ColumnWidth, CodeMax, 36);
         Zpl += Canvas.WriteSized(X, Y, CodeFont + CodeFont div 10, CodeFont, ColumnWidth, Bin.Code);
         Y += CodeFont + CodeFont div 10 + 6;
+        if Bin."Zone Code" <> '' then begin
+            ZoneFont := Canvas.FitFont(Bin."Zone Code", ColumnWidth, Canvas.QtyFont(), Canvas.NormalFont());
+            Zpl += Canvas.WriteSized(X, Y, ZoneFont, ZoneFont, ColumnWidth, Bin."Zone Code");
+            Y += ZoneFont + 6;
+        end;
         if InfoText <> '' then begin
             Zpl += Canvas.Write(X, Y, Canvas.NormalFont(), ColumnWidth, CopyStr(InfoText, 1, Canvas.MaxChars(ColumnWidth, Canvas.NormalFont())));
             Y += Canvas.Pitch();

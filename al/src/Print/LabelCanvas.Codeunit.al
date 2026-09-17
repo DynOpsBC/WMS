@@ -356,17 +356,42 @@ codeunit 72321 "DOPSWHS Label Canvas"
         ZplEncoder: Codeunit "DOPSWHS ZPL Encoder";
         Zpl: Text;
         Modules: Integer;
+        ModuleWidth: Integer;
+        BarWidth: Integer;
     begin
         EnsureInit();
         if IsDigits(Data) then
             Modules := 11 * ((StrLen(Data) + 1) div 2 + 1) + 35
         else
             Modules := 11 * StrLen(Data) + 35;
-        Zpl := '^FO' + Format(X) + ',' + Format(Y) + '^BY' + Format(Clamp(MaxWidth div Modules, 1, 4)) +
+        // DKÇ (17 Eyl 2026): "barkodlar full sütunu doldurmasın". A short code
+        // may grow past the 4-dot cap so the symbol is not lost on the label,
+        // but it stops at three quarters of the column and is centred there.
+        ModuleWidth := Clamp(MaxWidth * 75 div 100 div Modules, 1, 8);
+        // DKÇ (17 Eyl 2026): "barkod daha düzenli yazılsın, bozuk olmasın".
+        // The symbol is left-aligned at its natural width, so a code that does
+        // not divide the column evenly used to leave a ragged gap on the right
+        // and the bars looked uneven. Centring the exact symbol width in the
+        // column keeps the quiet zones equal on both sides.
+        BarWidth := Modules * ModuleWidth;
+        if BarWidth < MaxWidth then
+            X += (MaxWidth - BarWidth) div 2;
+        Zpl := '^FO' + Format(X) + ',' + Format(Y) + '^BY' + Format(ModuleWidth) +
             '^BCN,' + Format(BarHeight) + ',N,N,N,A^FH_^FD' + ZplEncoder.EncodeFieldData(Data) + '^FS';
         if Human then
-            Zpl += Write(X, Y + BarHeight + 4, SmallSize, MaxWidth, Data);
+            Zpl += WriteCentred(X, Y + BarHeight + 4, SmallSize, BarWidth, Data);
         exit(Zpl);
+    end;
+
+    /// <summary>One line of text centred in BoxWidth; nothing is emitted for an empty value.</summary>
+    procedure WriteCentred(X: Integer; Y: Integer; Font: Integer; BoxWidth: Integer; Value: Text): Text
+    var
+        ZplEncoder: Codeunit "DOPSWHS ZPL Encoder";
+    begin
+        if Value = '' then
+            exit('');
+        exit('^FO' + Format(X) + ',' + Format(Y) + '^A0N,' + Format(Font) + ',' + Format(Font) +
+            '^FH_^FB' + Format(BoxWidth) + ',1,0,C^FD' + ZplEncoder.EncodeFieldData(Value) + '^FS');
     end;
 
     procedure Qr(X: Integer; Y: Integer; Magnification: Integer; Data: Text): Text
