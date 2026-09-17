@@ -244,7 +244,14 @@ fun AppRoot() {
     ) { padding ->
         CompositionLocalProvider(LocalNavigator provides { target -> screen = target }) {
         Box(Modifier.padding(padding).fillMaxSize()) {
-            when (screen) {
+            // Guard rendering as well as the menu: restored screens, help links and
+            // cross-module navigation must never mount a restricted module.
+            if (!canOpenOperationalScreen(context, screen)) {
+                Column(Modifier.padding(24.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                    Text("Bu bölüm Production ortamında yalnızca Yönetici erişimine açıktır.")
+                    Button(onClick = { screen = Screen.Home }) { Text("Ana Menüye Dön") }
+                }
+            } else when (screen) {
                 Screen.Home -> HomeScreen(
                     connected = connected,
                     flavor = BuildConfig.FLAVOR,
@@ -475,7 +482,7 @@ private fun HomeScreen(
         includeAdminTestTools = BuildConfig.DEBUG && BcApi.isAdminTestSession(context),
     )
     val visibleCategories = HomeCategories.mapNotNull { category ->
-        category.copy(tiles = category.tiles.filter { it.screen in visibleScreens })
+        category.copy(tiles = category.tiles.filter { it.screen in visibleScreens && canOpenOperationalScreen(context, it.screen) })
             .takeIf { it.tiles.isNotEmpty() }
     }
 
