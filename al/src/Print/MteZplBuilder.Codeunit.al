@@ -1,12 +1,19 @@
 /// <summary>
-/// BADE (16 Eyl 2026): the terminal's ZPL "Madde Tanımlama Etiketi" drawn as
-/// the customer's report layout (BadeProduction report 60150) on the 10 x 8 cm
-/// Zebra stock: boxed table with the same rows, KABUL / RED / KARANTİNA cells,
-/// QR (LP number), and the operator's extra fields (Giriş Yapan, tedarikçi
-/// lotu, kalite kontrol onayı, doküman / revizyon). Data is resolved the way
-/// the report resolves it (parent category, INCI name, receipt vendor,
-/// warehouse class, posted receipt number) without a compile dependency on
-/// the customer extension.
+/// BADE (16–17 Eyl 2026): the terminal's ZPL "Madde Tanımlama Etiketi" drawn as
+/// the customer's report layout (BadeProduction report 60150): boxed table
+/// with the same rows, KABUL / RED / KARANTİNA cells, QR (LP number), and the
+/// operator's extra fields (Giriş Yapan, tedarikçi lotu, kalite kontrol onayı,
+/// doküman / revizyon). Data is resolved the way the report resolves it
+/// (parent category, INCI name, receipt vendor, warehouse class, posted
+/// receipt number) without a compile dependency on the customer extension.
+///
+/// Orientation (17 Eyl 2026, "MTE yatay çıkmalı"): the stock is 100 x 150 mm
+/// (4 x 6 inch) fed portrait through a 4-inch Zebra, but the label must read
+/// LANDSCAPE (15 cm wide, 10 cm tall). The layout is therefore designed on a
+/// 1218 x 812 landscape canvas and every primitive rotates it 90° clockwise
+/// onto the 812 x 1218 portrait stock (^A0R text): canvas (x, y, w, h) ->
+/// stock (812 - y - h, x, h, w). The operator turns the label a quarter turn
+/// counter-clockwise to read it.
 /// </summary>
 codeunit 72320 "DOPSWHS MTE Zpl Builder"
 {
@@ -26,10 +33,13 @@ codeunit 72320 "DOPSWHS MTE Zpl Builder"
         tabledata Employee = R,
         tabledata "Company Information" = R;
 
-    // 100 x 150 mm at 203 dpi (4 x 6 inch standard warehouse label).
     var
+        // Physical stock: 100 x 150 mm at 203 dpi (4 x 6 inch), fed portrait.
         LabelWidth: Integer;
         LabelHeight: Integer;
+        // Design canvas: the same label seen landscape (150 x 100 mm).
+        CanvasWidth: Integer;
+        CanvasHeight: Integer;
         Unknown: Label 'U.Y', Locked = true;
 
     procedure Build(var LP: Record "DOPSWHS LP Header"; var LPLine: Record "DOPSWHS LP Line"; OptionsJson: Text): Text
@@ -63,6 +73,8 @@ codeunit 72320 "DOPSWHS MTE Zpl Builder"
     begin
         LabelWidth := 812;
         LabelHeight := 1218;
+        CanvasWidth := 1218;
+        CanvasHeight := 812;
         if (OptionsJson <> '') and not Options.ReadFrom(OptionsJson) then
             Clear(Options);
 
@@ -112,46 +124,51 @@ codeunit 72320 "DOPSWHS MTE Zpl Builder"
             QrData := LPLine."Item No.";
 
         // ------------------------------------------------------------------
-        // Frame and header
+        // ------------------------------------------------------------------
+        // BADE (17 Eyl 2026, Merve): outer frame around the whole label, a
+        // 3 mm margin so nothing prints edge to edge ("sıfıra sıfır"), and the
+        // LP number under the QR. Landscape canvas 1218 x 812; see summary.
+        // Frame 24..1194 x 24..788; header 24..78; table 78..756; footer to 788.
+        // Columns A 272 | B 296 | C 306 | D 296.
         // ------------------------------------------------------------------
         Zpl := '^XA^CI28^PW' + Format(LabelWidth) + '^LL' + Format(LabelHeight) +
-            Box(6, 6, 800, 1206, 3) +
-            Text(16, 32, 28, 26, 240, 0, CompanyText) +
-            Text(250, 26, 38, 34, 550, 1, 'MADDE TANIMLAMA ETİKETİ') +
-            Line(6, 90, 800, 3);
+            Box(24, 24, 1170, 764, 3) +
+            Text(38, 34, 34, 30, 250, 0, CompanyText) +
+            Text(24, 32, 40, 36, 1170, 1, 'MADDE TANIMLAMA ETİKETİ') +
+            Line(24, 78, 1170, 3);
 
-        // ------------------------------------------------------------------
-        // Rows (column A labels 200 wide, B values 220, C labels 170, D values 210)
-        // ------------------------------------------------------------------
-        Zpl += Row4(92, 58, 'MADDE KODU', ItemNo, 'MADDE KATEGORİSİ', UY(CategoryText)) +
-            Row2(150, 58, 'MADDE ADI', UY(ItemName)) +
-            Row2(208, 58, 'INCI ADI', UY(InciName)) +
-            Row2(266, 58, 'TEDARİKÇİ ADI', UY(VendorName)) +
-            Row2(324, 58, 'TEDARİKÇİ LOTU', UY(SupplierLot)) +
-            Row4(382, 58, 'ÜRETİM TARİHİ', UY(ProductionDate), 'LOT NO', UY(LotNo)) +
-            Row4(440, 58, 'SON KULLANMA TARİHİ', UY(ExpirationDate), 'MİKTAR/BİRİM', QtyText) +
-            // Left half rows 8..15 beside the decision/QR block (Y: 498..1146).
-            RowLeft(498, 64, 'DEPOLAMA KOŞULU', UY(StorageText)) +
-            RowLeft(562, 64, 'DEPO GİRİŞ TARİHİ', UY(ReceiptDate)) +
-            RowLeft(626, 64, 'DEPO GİRİŞ NO.', UY(ReceiptNo)) +
-            RowLeft(690, 64, 'GİRİŞ YAPAN', UY(InspectorText)) +
-            Cell(6, 754, 420, 64, 24, 24, 1, 'KALİTE KONTROL ONAYI') +
-            RowLeft(818, 64, 'KONTROL EDEN', UY(QcName)) +
-            RowLeft(882, 64, 'TARİH', UY(QcDate)) +
-            RowLeft(946, 200, 'İMZA', '');
+        // Upper rows, same order as report 60150.
+        Zpl += Row4(78, 43, 'MADDE KODU', ItemNo, 'MADDE KATEGORİSİ', UY(CategoryText)) +
+            Row2(121, 43, 'MADDE ADI', UY(ItemName)) +
+            Row2(164, 43, 'INCI ADI', UY(InciName)) +
+            Row2(207, 43, 'TEDARİKÇİ ADI', UY(VendorName)) +
+            Row2(250, 43, 'TEDARİKÇİ LOTU', UY(SupplierLot)) +
+            Row4(293, 43, 'ÜRETİM TARİHİ', UY(ProductionDate), 'LOT NO', UY(LotNo)) +
+            Row4(336, 43, 'SON KULLANMA TARİHİ', UY(ExpirationDate), 'MİKTAR/BİRİM', QtyText);
 
-        // Decision boxes (x 426..556, y 498..1146) and QR (x 556..806, y 498..1146).
-        Zpl += Cell(426, 498, 130, 216, 32, 32, 1, 'KABUL') +
-            Cell(426, 714, 130, 216, 32, 32, 1, 'RED') +
-            Cell(426, 930, 130, 216, 26, 26, 1, 'KARANTİNA') +
-            Box(556, 498, 250, 648, 2) +
-            Text(556, 570, 28, 26, 250, 1, 'PALET / LP NO') +
-            Qr(565, 640, 8, QrData) +
-            Text(556, 940, 36, 34, 250, 1, QrData);
+        // Lower block (Y 379..756): left rows A 272 | B 296, decision column
+        // 216, QR column 386 — the report narrows the decision column here.
+        Zpl += RowLeft(379, 42, 'DEPOLAMA KOŞULU', UY(StorageText)) +
+            RowLeft(421, 43, 'DEPO GİRİŞ TARİHİ', UY(ReceiptDate)) +
+            RowLeft(464, 42, 'DEPO GİRİŞ NO.', UY(ReceiptNo)) +
+            RowLeft(506, 49, 'GİRİŞ YAPAN', UY(InspectorText)) +
+            Cell(24, 555, 568, 35, 24, 22, 1, 'KALİTE KONTROL ONAYI') +
+            RowLeft(590, 42, 'KONTROL EDEN', UY(QcName)) +
+            RowLeft(632, 42, 'TARİH', UY(QcDate)) +
+            RowLeft(674, 82, 'İMZA', '');
 
-        // Footer (Y: 1146..1212)
-        Zpl += Cell(6, 1146, 420, 66, 18, 18, 0, 'DOKÜMAN NO. / REVİZYON NO. / REVİZYON TARİHİ') +
-            Cell(426, 1146, 380, 66, 22, 22, 1, UY(DocumentNo) + ' / ' + UY(RevisionNo) + ' / ' + UY(RevisionDate)) +
+        // Decision cells span the row groups; QR with the LP number under it
+        // (Merve, 17 Eyl: "qr altında lp nosu").
+        Zpl += Cell(592, 379, 216, 85, 30, 28, 1, 'KABUL') +
+            Cell(592, 464, 216, 132, 30, 28, 1, 'RED') +
+            Cell(592, 596, 216, 160, 28, 26, 1, 'KARANTİNA') +
+            Box(808, 379, 386, 377, 2) +
+            Qr(896, 433, 10, QrData) +
+            Text(808, 661, 40, 36, 386, 1, QrData);
+
+        // Footer (Y 756..788)
+        Zpl += Cell(24, 756, 568, 32, 22, 20, 0, 'DOKÜMAN NO. / REVİZYON NO. / REVİZYON TARİHİ') +
+            Cell(592, 756, 602, 32, 22, 20, 1, UY(DocumentNo) + ' / ' + UY(RevisionNo) + ' / ' + UY(RevisionDate)) +
             '^XZ';
         exit(Zpl);
     end;
@@ -393,33 +410,35 @@ codeunit 72320 "DOPSWHS MTE Zpl Builder"
     end;
 
     // ------------------------------------------------------------------
-    // ZPL primitives
+    // ZPL primitives — all take LANDSCAPE canvas coordinates (1218 x 812) and
+    // rotate them 90° clockwise onto the portrait stock (812 x 1218):
+    // canvas (x, y, w, h) -> stock (LabelWidth - y - h, x, h, w), text ^A0R.
     // ------------------------------------------------------------------
 
     local procedure Row4(Y: Integer; Height: Integer; LabelA: Text; ValueB: Text; LabelC: Text; ValueD: Text): Text
     begin
         exit(
-            Cell(6, Y, 200, Height, 22, 20, 0, LabelA) +
-            Cell(206, Y, 220, Height, 24, 22, 0, ValueB) +
-            Cell(426, Y, 170, Height, 22, 20, 0, LabelC) +
-            Cell(596, Y, 210, Height, 24, 22, 0, ValueD));
+            Cell(24, Y, 272, Height, 26, 24, 1, LabelA) +
+            Cell(296, Y, 296, Height, 26, 22, 1, ValueB) +
+            Cell(592, Y, 306, Height, 26, 24, 1, LabelC) +
+            Cell(898, Y, 296, Height, 26, 22, 1, ValueD));
     end;
 
     local procedure Row2(Y: Integer; Height: Integer; LabelA: Text; Value: Text): Text
     begin
         exit(
-            Cell(6, Y, 200, Height, 22, 20, 0, LabelA) +
-            Cell(206, Y, 600, Height, 24, 22, 0, Value));
+            Cell(24, Y, 272, Height, 26, 24, 1, LabelA) +
+            Cell(296, Y, 898, Height, 26, 22, 1, Value));
     end;
 
     local procedure RowLeft(Y: Integer; Height: Integer; LabelA: Text; Value: Text): Text
     begin
         exit(
-            Cell(6, Y, 200, Height, 22, 20, 0, LabelA) +
-            Cell(206, Y, 220, Height, 24, 22, 0, Value));
+            Cell(24, Y, 272, Height, 24, 22, 1, LabelA) +
+            Cell(296, Y, 296, Height, 24, 20, 1, Value));
     end;
 
-    /// <summary>Boxed cell with one line of text, vertically centred; Align 1 = centred.</summary>
+    /// <summary>Boxed cell with one line of text, vertically centred; Align 1 = centred (the report centres every cell).</summary>
     local procedure Cell(X: Integer; Y: Integer; Width: Integer; Height: Integer; FontHeight: Integer; FontWidth: Integer; Align: Integer; Value: Text): Text
     var
         TextY: Integer;
@@ -428,6 +447,12 @@ codeunit 72320 "DOPSWHS MTE Zpl Builder"
         exit(Box(X, Y, Width, Height, 2) + Text(X + 6, TextY, FontHeight, FontWidth, Width - 12, Align, Value));
     end;
 
+    /// <summary>
+    /// One line of text. ^FB with a single line OVERPRINTS overflow on the same
+    /// line (17 Eyl photo: "MADDE KATEGORİSİ", "SON KULLANMA TARİHİ" garbled,
+    /// "KARANTİN-" hyphenated), so the font width is narrowed until the text
+    /// fits the box (font 0 glyphs average ~0.55 x the width parameter).
+    /// </summary>
     local procedure Text(X: Integer; Y: Integer; FontHeight: Integer; FontWidth: Integer; BoxWidth: Integer; Align: Integer; Value: Text): Text
     var
         ZplEncoder: Codeunit "DOPSWHS ZPL Encoder";
@@ -438,25 +463,42 @@ codeunit 72320 "DOPSWHS MTE Zpl Builder"
         AlignCode := 'L';
         if Align = 1 then
             AlignCode := 'C';
+        FontWidth := FitFontWidth(Value, FontWidth, BoxWidth);
         exit(
-            '^FO' + Format(X) + ',' + Format(Y) + '^A0N,' + Format(FontHeight) + ',' + Format(FontWidth) +
+            '^FO' + Format(LabelWidth - Y - FontHeight) + ',' + Format(X) + '^A0R,' + Format(FontHeight) + ',' + Format(FontWidth) +
             '^FH_^FB' + Format(BoxWidth) + ',1,0,' + AlignCode + '^FD' + ZplEncoder.EncodeFieldData(Value) + '^FS');
+    end;
+
+    /// <summary>Largest font width (dots, min 12) at which Value fits MaxWidth on one line.</summary>
+    local procedure FitFontWidth(Value: Text; FontWidth: Integer; MaxWidth: Integer): Integer
+    var
+        Width: Integer;
+    begin
+        if StrLen(Value) = 0 then
+            exit(FontWidth);
+        if StrLen(Value) * FontWidth * 55 div 100 <= MaxWidth then
+            exit(FontWidth);
+        Width := MaxWidth * 100 div (55 * StrLen(Value));
+        if Width < 12 then
+            Width := 12;
+        exit(Width);
     end;
 
     local procedure Box(X: Integer; Y: Integer; Width: Integer; Height: Integer; Thickness: Integer): Text
     begin
-        exit('^FO' + Format(X) + ',' + Format(Y) + '^GB' + Format(Width) + ',' + Format(Height) + ',' + Format(Thickness) + '^FS');
+        exit('^FO' + Format(LabelWidth - Y - Height) + ',' + Format(X) + '^GB' + Format(Height) + ',' + Format(Width) + ',' + Format(Thickness) + '^FS');
     end;
 
     local procedure Line(X: Integer; Y: Integer; Width: Integer; Thickness: Integer): Text
     begin
-        exit('^FO' + Format(X) + ',' + Format(Y) + '^GB' + Format(Width) + ',' + Format(Thickness) + ',' + Format(Thickness) + '^FS');
+        exit(Box(X, Y, Width, Thickness, Thickness));
     end;
 
     local procedure Qr(X: Integer; Y: Integer; Magnification: Integer; Data: Text): Text
     var
         ZplEncoder: Codeunit "DOPSWHS ZPL Encoder";
     begin
-        exit('^FO' + Format(X) + ',' + Format(Y) + '^BQN,2,' + Format(Magnification) + '^FH_^FDLA,' + ZplEncoder.EncodeFieldData(Data) + '^FS');
+        // Symbol size = modules x magnification (version 1 = 21 modules = 147 dots at 7).
+        exit('^FO' + Format(LabelWidth - Y - 21 * Magnification) + ',' + Format(X) + '^BQN,2,' + Format(Magnification) + '^FH_^FDLA,' + ZplEncoder.EncodeFieldData(Data) + '^FS');
     end;
 }

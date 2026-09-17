@@ -61,6 +61,21 @@ object WhsePickNavigation {
     fun consume(): String? = pendingPickNo.also { pendingPickNo = null }
 }
 
+/**
+ * BADE (17 Eyl 2026, Merve): a sheet created in BC with "V2 Scan Mode" on can
+ * only be counted on the Sayım V2 screen. Opening it from the classic Sayım
+ * screen used to end at a note; now that note carries the sheet over.
+ */
+object CountV2Handoff {
+    private var pendingSheetNo: String? = null
+
+    fun request(sheetNo: String) {
+        pendingSheetNo = sheetNo.takeIf { it.isNotBlank() }
+    }
+
+    fun consume(): String? = pendingSheetNo.also { pendingSheetNo = null }
+}
+
 enum class Screen(val title: String) {
     Home("Ana Menü"),
     Connection("Bağlantı Ayarları"),
@@ -196,7 +211,10 @@ fun AppRoot() {
                 Screen.Picking -> key(v2Enabled) { PickingModule(v2Enabled = v2Enabled) }
                 Screen.Packing -> key(v2Enabled) { PackingModule(v2Enabled = v2Enabled) }
                 Screen.AdHocMove -> AdHocMoveModule()
-                Screen.Count -> CountModule()
+                Screen.Count -> CountModule(onOpenCountV2 = { sheetNo ->
+                    CountV2Handoff.request(sheetNo)
+                    screen = Screen.CountV2
+                })
                 Screen.CountV2 -> CountV2Module()
                 Screen.PutAway -> PutAwayModule()
                 Screen.Shipping -> ShippingModule()

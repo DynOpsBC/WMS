@@ -191,7 +191,11 @@ fun CountV2Module() {
         }
     }
 
-    LaunchedEffect(Unit) { load() }
+    // Klasik Sayım ekranından "Sayım V2'de Aç" ile gelen belge doğrudan açılır.
+    LaunchedEffect(Unit) {
+        com.dynops.bcwms.CountV2Handoff.consume()?.let { selected = it }
+        load()
+    }
     selected?.let { no ->
         CountV2Document(no = no, onBack = { selected = null; load() })
         return
