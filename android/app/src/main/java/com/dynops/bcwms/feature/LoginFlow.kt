@@ -250,9 +250,20 @@ fun LoginFlow(onConnected: (Boolean) -> Unit) {
         }
     }
 
+    LaunchedEffect(Unit) {
+        if (BuildConfig.FLAVOR == "bade" && BcApi.hasToken(context)) {
+            step = Step.SelectEnvCompany
+            busy = true
+            lastToken = BcApi.getToken(context)
+            envList = runCatching { BcApi.discoverEnvironments(lastToken) }.getOrDefault(emptyList())
+            selectedEnv = envList.firstOrNull { it.environment == BcApi.getEnvironment(context) }
+            busy = false
+        }
+    }
+
     // WMS giriş adımına gelince kayıtlı operatörleri çek (token varsa).
     LaunchedEffect(step) {
-        if (step != Step.LocalUser || localUsers.isNotEmpty() || !BcApi.hasToken(context)) return@LaunchedEffect
+        if (BuildConfig.FLAVOR == "bade" || step != Step.LocalUser || localUsers.isNotEmpty() || !BcApi.hasToken(context)) return@LaunchedEffect
         usersLoading = true
         // Sade sorgu: $select/$orderby bazı BC sürümlerinde bu entity'de hata
         // veriyor ve liste sessizce boş kalıyordu. Önce sade dene, olmazsa
@@ -299,21 +310,23 @@ fun LoginFlow(onConnected: (Boolean) -> Unit) {
             CompanyLogo(brand = loginBrand, height = 28.dp)
             Spacer(Modifier.width(12.dp))
             Column {
-                Text("WMS Girişi", fontWeight = FontWeight.Bold, fontSize = 20.sp)
-                Text("Hızlı ve güvenli depo erişimi", fontSize = 12.sp, color = Color.Gray)
+                Text(if (BuildConfig.FLAVOR == "bade") "Bağlantı kurulumu" else "WMS Girişi", fontWeight = FontWeight.Bold, fontSize = 20.sp)
+                Text(if (BuildConfig.FLAVOR == "bade") "Ortam ve şirket seçimi" else "Hızlı ve güvenli depo erişimi", fontSize = 12.sp, color = Color.Gray)
             }
         }
         Spacer(Modifier.height(20.dp))
 
-        AppUpdateCard()
-        Spacer(Modifier.height(20.dp))
+        if (BuildConfig.FLAVOR != "bade") {
+            AppUpdateCard()
+            Spacer(Modifier.height(20.dp))
+        }
 
         when (step) {
             Step.Email -> {
                 Text("Bu terminali bir kez bağlayın", fontWeight = FontWeight.Bold, fontSize = 18.sp)
                 Spacer(Modifier.height(4.dp))
                 Text(
-                    "İlk bağlantıdan sonra güvenli oturum cihazda hatırlanır; her açılışta e-posta girmeniz gerekmez.",
+                    if (BuildConfig.FLAVOR == "bade") "Microsoft hesabıyla bağlanın, ardından ortam ve şirketi seçin." else "İlk bağlantıdan sonra güvenli oturum cihazda hatırlanır; her açılışta e-posta girmeniz gerekmez.",
                     fontSize = 12.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -382,6 +395,7 @@ fun LoginFlow(onConnected: (Boolean) -> Unit) {
                     textAlign = TextAlign.Center,
                     modifier = Modifier.fillMaxWidth().padding(top = 5.dp),
                 )
+                if (BuildConfig.FLAVOR != "bade") {
                 Spacer(Modifier.height(20.dp))
                 HorizontalDivider()
                 Spacer(Modifier.height(16.dp))
@@ -396,6 +410,7 @@ fun LoginFlow(onConnected: (Boolean) -> Unit) {
                     fontSize = 10.sp,
                     color = Color.Gray
                 )
+                }
             }
 
             Step.LocalUser -> {
@@ -778,14 +793,27 @@ fun LoginFlow(onConnected: (Boolean) -> Unit) {
             }
 
             Step.SelectEnvCompany -> {
-                Text("Ortam seçin", fontWeight = FontWeight.Medium)
+                if (BuildConfig.FLAVOR == "bade") {
+                    Surface(shape = RoundedCornerShape(12.dp), color = MaterialTheme.colorScheme.primaryContainer) {
+                        Column(Modifier.fillMaxWidth().padding(16.dp)) {
+                            Text("Şu an seçili ortam", style = MaterialTheme.typography.labelMedium)
+                            Text(BcApi.getEnvironment(context).ifBlank { "Henüz seçilmedi" }, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                            Text(BcApi.getCompanyName(context), style = MaterialTheme.typography.bodyMedium)
+                        }
+                    }
+                    Spacer(Modifier.height(20.dp))
+                    Text("1. Ortamı seçin", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                    Text("Sandbox: test ortamı · Production: canlı ortam", style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    if (busy) LinearProgressIndicator(Modifier.fillMaxWidth().padding(top = 8.dp))
+                } else Text("Ortam seçin", fontWeight = FontWeight.Medium)
                 Spacer(Modifier.height(6.dp))
                 // Otomatik keşif her müşterinin ortam adını bilemez (BADE =
                 // "Production" vb.) — kullanıcı ortam adını elle yoklayabilir.
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     OutlinedTextField(
                         value = manualEnv, onValueChange = { manualEnv = it },
-                    label = { Text("Ortam adı (ör. ${BuildConfig.BC_DEFAULT_ENVIRONMENT})") },
+                    label = { Text(if (BuildConfig.FLAVOR == "bade") "Ortam adıyla ara" else "Ortam adı (ör. ${BuildConfig.BC_DEFAULT_ENVIRONMENT})") },
                         singleLine = true, modifier = Modifier.weight(1f),
                     )
                     Spacer(Modifier.width(8.dp))
@@ -809,26 +837,28 @@ fun LoginFlow(onConnected: (Boolean) -> Unit) {
                 envList.forEach { ec ->
                     val sel = ec.environment == selectedEnv?.environment
                     Card(
-                        onClick = { selectedEnv = ec },
+                        onClick = { if (!busy) selectedEnv = ec },
                         modifier = Modifier.fillMaxWidth().padding(vertical = 3.dp),
                         colors = CardDefaults.cardColors(containerColor = if (sel) Color(0xFFD1C4E9) else Color(0xFFF5F5F5))
                     ) {
                         Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                            RadioButton(selected = sel, onClick = { selectedEnv = ec })
+                            RadioButton(selected = sel, enabled = !busy, onClick = { selectedEnv = ec })
                             Text("${ec.environment} (${ec.companies.size} şirket)", fontWeight = FontWeight.Medium)
                         }
                     }
                 }
                 Spacer(Modifier.height(12.dp))
-                Text("Şirket seçin", fontWeight = FontWeight.Medium)
+                Text(if (BuildConfig.FLAVOR == "bade") "2. Şirketi seçip bağlanın" else "Şirket seçin", fontWeight = FontWeight.Bold)
                 Spacer(Modifier.height(6.dp))
                 selectedEnv?.companies?.forEach { c ->
                     Card(
                         onClick = {
+                            if (busy) return@Card
+                            val environmentToConnect = selectedEnv ?: return@Card
                             scope.launch {
                                 finishConnection(false)
                                 busy = true; status = "Bağlanılıyor: ${c.displayName}..."
-                                BcApi.setEnvironment(context, selectedEnv!!.environment)
+                                BcApi.setEnvironment(context, environmentToConnect.environment)
                                 BcApi.setCompany(context, c.id, c.displayName)
                                 val r = BcApi.testConnection(context)
                                 busy = false
@@ -838,7 +868,7 @@ fun LoginFlow(onConnected: (Boolean) -> Unit) {
                                     // şirketleri şimdi hesapla/sakla. WMS kullanıcı girişi yapılırsa
                                     // orada kullanıcı-bazlı daha dar listeyle üzerine yazılır.
                                     val wmsCompanies = runCatching {
-                                        BcApi.probeWmsCompanies(context, selectedEnv!!.environment, selectedEnv!!.companies)
+                                        BcApi.probeWmsCompanies(context, environmentToConnect.environment, environmentToConnect.companies)
                                     }.getOrDefault(emptyList())
                                     BcApi.saveAccessibleCompanies(
                                         context,
@@ -847,7 +877,7 @@ fun LoginFlow(onConnected: (Boolean) -> Unit) {
                                     // Paylaşımlı BC lisansı: ortam bağlantısı servis hesabıyla
                                     // yapıldı; oturum ancak WMS operatörü kendi kullanıcı adı +
                                     // şifresiyle doğrulanınca açılır (BC → WMS Users / Local User).
-                                    status = "🟢 Ortam bağlandı: ${selectedEnv!!.environment} / ${c.displayName} — şimdi WMS kullanıcınızla giriş yapın"
+                                    status = "🟢 Ortam bağlandı: ${environmentToConnect.environment} / ${c.displayName} — şimdi WMS kullanıcınızla giriş yapın"
                                     step = Step.LocalUser
                                     if (BuildConfig.FLAVOR == "bade") connectionSetup = false
                                 } else { status = "🔴 ${BcApi.connectionFailureMessage(r)}"; finishConnection(false) }
@@ -857,7 +887,7 @@ fun LoginFlow(onConnected: (Boolean) -> Unit) {
                     ) {
                         Column(Modifier.padding(12.dp)) {
                             Text(c.displayName, fontWeight = FontWeight.Medium)
-                            Text("Seçmek için dokunun →", fontSize = 11.sp, color = Color(0xFF6A1B9A))
+                            Text(if (BuildConfig.FLAVOR == "bade") "Bu şirketle devam et →" else "Seçmek için dokunun →", fontSize = 11.sp, color = Color(0xFF6A1B9A))
                         }
                     }
                 }
@@ -865,7 +895,7 @@ fun LoginFlow(onConnected: (Boolean) -> Unit) {
                 // yanlışlıkla açan operatör ekranda kilitli kalıyordu.
                 if (BcApi.hasToken(context)) {
                     Spacer(Modifier.height(8.dp))
-                    TextButton(onClick = { step = Step.LocalUser; status = "" }) {
+                    TextButton(onClick = { if (BuildConfig.FLAVOR == "bade") connectionSetup = false else step = Step.LocalUser; status = "" }, enabled = !busy) {
                         Text("‹ Vazgeç (WMS girişine dön)", fontSize = 12.sp)
                     }
                 }

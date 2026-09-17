@@ -58,6 +58,7 @@ class TerminalLoginUiTest {
         var signedIn = false
         compose.setContent { MaterialTheme { TerminalOperatorLogin({ signedIn = it }, {}, gateway) } }
         waitFor("TERMİNAL-1")
+        evidence("terminal-selection")
         compose.onNodeWithText("TERMİNAL-1").performClick()
         waitFor("Merve Demirci")
         evidence("terminal-users")

@@ -2,6 +2,12 @@ package com.dynops.bcwms.feature
 
 import android.content.Context
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.text.font.FontWeight
+import com.dynops.bcwms.BuildConfig
+import com.dynops.bcwms.ui.CompanyLogo
+import com.dynops.bcwms.ui.resolveCompanyBrand
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.lazy.LazyColumn
@@ -183,28 +189,44 @@ internal fun TerminalOperatorLogin(onConnected: (Boolean) -> Unit, onConnectionS
     }
 
     Column(Modifier.fillMaxSize().imePadding().padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        Text(if (terminal.isBlank()) "Terminal seçin" else terminal, style = MaterialTheme.typography.headlineSmall)
-        if (terminal.isNotBlank()) Text("Kullanıcınızı seçip PIN girin.")
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            CompanyLogo(brand = resolveCompanyBrand(BcApi.getCompanyName(context), BuildConfig.FLAVOR), height = 32.dp)
+            Column {
+                Text("Depo girişi", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                Text("BADE · WMS", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        }
+        if (selectedUser == null) BadeConnectionSummary(BcApi.getEnvironment(context), BcApi.getCompanyName(context), !busy, onConnectionSettings)
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            listOf("Terminal", "Kullanıcı", "PIN").forEachIndexed { index, label ->
+                val active = index == (if (terminal.isBlank()) 0 else if (selectedUser == null) 1 else 2)
+                Surface(shape = RoundedCornerShape(8.dp), color = if (active) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant) {
+                    Text("${index + 1}  $label", Modifier.padding(horizontal = 10.dp, vertical = 7.dp), style = MaterialTheme.typography.labelMedium)
+                }
+            }
+        }
+        Text(if (terminal.isBlank()) "Bu cihazın terminalini seçin" else if (selectedUser == null) "Kim işlem yapacak?" else "PIN ile devam edin",
+            style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+        if (terminal.isNotBlank()) Text(terminal, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
         if (busy) LinearProgressIndicator(Modifier.fillMaxWidth())
         if (error.isNotBlank()) Text(error, color = MaterialTheme.colorScheme.error)
         if (selectedUser == null) {
             LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 if (terminal.isBlank()) {
                     items(terminals, key = { it.optString("code") }) { row ->
-                        FilledTonalButton(onClick = {
-                            terminal = row.optString("code")
-                            TerminalSession.select(context, terminal)
-                        }, enabled = !busy, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp)) {
-                            Text(row.optString("code"))
-                        }
+                        TerminalChoiceCard(title = row.optString("code"),
+                            subtitle = row.optString("labelPrinterCode").takeIf { it.isNotBlank() }?.let { "Etiket yazıcısı: $it" }.orEmpty(),
+                            mark = "T", enabled = !busy, onClick = {
+                                terminal = row.optString("code")
+                                TerminalSession.select(context, terminal)
+                            })
                     }
                     if (loaded && terminals.isEmpty()) item { Text("BC’de önce terminal oluşturun.") }
                 } else {
                     items(users, key = { it.optString("username") }) { row ->
-                        FilledTonalButton(onClick = { selectedUser = row; pin = ""; error = "" },
-                            enabled = !busy, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp)) {
-                            Text(terminalOperatorLabel(row))
-                        }
+                        TerminalChoiceCard(title = terminalOperatorLabel(row), subtitle = "",
+                            mark = row.optString("displayName").take(1).uppercase().ifBlank { "K" }, enabled = !busy,
+                            onClick = { selectedUser = row; pin = ""; error = "" })
                     }
                     if (loaded && users.isEmpty()) item { Text("Bu terminale BC’den kullanıcı ekleyin.") }
                 }
@@ -258,12 +280,14 @@ internal fun TerminalOperatorLogin(onConnected: (Boolean) -> Unit, onConnectionS
             TextButton(onClick = { selectedUser = null; pin = ""; error = "" }, enabled = !busy) { Text("Başka kullanıcı seç") }
             }
         }
-        if (selectedUser == null) TextButton(onClick = { revision++ }, enabled = !busy) { Text("Yenile") }
-        if (terminal.isNotBlank()) TextButton(onClick = {
-            TerminalSession.select(context, "")
-            terminal = ""
-        }, enabled = !busy) { Text("Terminal değiştir") }
-        TextButton(onClick = onConnectionSettings, enabled = !busy) { Text("Bağlantı ayarları") }
+        if (selectedUser == null) Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+            TextButton(onClick = { revision++ }, enabled = !busy) { Text("Yenile") }
+            if (terminal.isNotBlank()) TextButton(onClick = {
+                TerminalSession.select(context, "")
+                terminal = ""
+            }, enabled = !busy) { Text("Terminal değiştir") }
+        }
+
     }
 }
 
@@ -287,6 +311,35 @@ internal fun TerminalReauthenticationDialog(
                     if (ok) onVerified(previousOperator != BcApi.getLocalUser(context))
                 }, onConnectionSettings = onConnectionSettings, gateway = gateway)
             }
+        }
+    }
+}
+
+@Composable
+internal fun BadeConnectionSummary(environment: String, company: String, enabled: Boolean, onChange: () -> Unit) {
+    OutlinedCard(Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp)) {
+        Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Text("SEÇİLİ ORTAM", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(environment.ifBlank { "Ortam seçilmedi" }, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+            if (company.isNotBlank()) Text(company, style = MaterialTheme.typography.bodySmall)
+            OutlinedButton(onClick = onChange, enabled = enabled, modifier = Modifier.fillMaxWidth()) { Text("Ortamı değiştir") }
+        }
+    }
+}
+
+@Composable
+private fun TerminalChoiceCard(title: String, subtitle: String, mark: String, enabled: Boolean, onClick: () -> Unit) {
+    OutlinedCard(onClick = onClick, enabled = enabled, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(14.dp)) {
+        Row(Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+            Surface(shape = RoundedCornerShape(10.dp), color = MaterialTheme.colorScheme.primaryContainer) {
+                Box(Modifier.size(42.dp), contentAlignment = Alignment.Center) { Text(mark, fontWeight = FontWeight.Bold) }
+            }
+            Column(Modifier.weight(1f)) {
+                Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                if (subtitle.isNotBlank()) Text(subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            Text("›", style = MaterialTheme.typography.headlineSmall, color = MaterialTheme.colorScheme.primary)
         }
     }
 }

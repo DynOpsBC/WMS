@@ -1,6 +1,6 @@
 # Bade — terminal ve çalışan girişi
 
-Android: **1.14.127-bade** (200127). BC: **1.14.1.53**.
+Android: **1.14.128-bade** (200128). BC: **1.14.1.53**.
 
 ## BC kurulumu
 
@@ -76,3 +76,7 @@ Aktif çalışan adı tüm ekranların üstünde gösterilir. Mal kabul, toplama
 Gerçek PIN penceresini kullanan izole emülatör test ekranında belge `TEST-001`, miktar `12.5` ve `Raf doğrulama` adımıyla yanlış PIN, ardından doğru PIN denenir; belge yeniden oluşturulmadan değerlerin korunduğu doğrulanır. Ayrı senaryo farklı çalışanın eski belgeye dönmediğini doğrular. Bu, canlı BC üzerinde bir mal kabul kaydetme testi değildir.
 
 Süre 30 dakika olarak korundu. Bu davranış uygulama açıkken PIN kilidi içindir; Android uygulama sürecini sonlandırırsa kaydedilmemiş bütün alanların geri gelmesi garanti edilmez. Daha önce sunucuya gönderilmiş bir işlem geri alınmaz, başarısız istekler PIN girişinden sonra otomatik tekrarlanmaz.
+
+## 1.14.128 giriş ekranı
+
+Terminal ve çalışan seçimi logolu, sola hizalı kartlarla düzenlendi. Seçili ortam/şirket ve Ortamı değiştir düğmesi girişte üstte görünür. Düğme Bade’de eski kullanıcı/şifre sayfasına uğramadan ortam ve şirket seçimine açılır. Ortam ekranında mevcut bağlantı ayrı kartta, ortam ve şirket seçimi iki adımda gösterilir. PIN ekranında bağlantı kartı gizlenir; klavye açıkken giriş alanı kaydırılabilir. Şirket bağlantısı kurulurken ortam değişimi engellenir ve seçilen ortam işlem başında sabitlenir. BC paketi yine 1.14.1.53’tür.
