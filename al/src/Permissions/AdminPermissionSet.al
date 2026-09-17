@@ -6,6 +6,13 @@ permissionset 72094 "DOPSWHS-ADMIN"
     Caption = 'Advanced WMS Admin';
 
     Permissions =
+        table "DOPSWHS WMS Terminal" = X,
+        tabledata "DOPSWHS WMS Terminal" = RIMD,
+        page "DOPSWHS Terminal API" = X,
+        page "DOPSWHS Terminal Card" = X,
+        page "DOPSWHS Terminal User Part" = X,
+        page "DOPSWHS Create PIN User" = X,
+        page "DOPSWHS Terminal Users" = X,
         tabledata "DOPSWHS Setup" = RIMD,
         tabledata "DOPSWHS Device Configuration" = RIMD,
         tabledata "DOPSWHS Device Menu" = RIMD,

@@ -39,10 +39,9 @@ data class LocalUserOption(val username: String, val displayName: String)
 
 /**
  * Kurulum ve saha testi sırasında BC servis hesabıyla yönetici geçişi gerekir.
- * Tüm uygulama flavor'larında kart görünür; operatör girişleri yine Local WMS
- * Users üzerinden yapılmaya devam eder.
+ * Bade kullanıcıları terminal/PIN akışını kullanır; servis hesabıyla atlama kapalıdır.
  */
-internal fun allowAdminBypass(flavor: String): Boolean = true
+internal fun allowAdminBypass(flavor: String): Boolean = !flavor.equals("bade", ignoreCase = true)
 
 /**
  * Email-based sign-in: email → device-code (browser) → environment + company selection → connect.
@@ -53,9 +52,19 @@ fun LoginFlow(onConnected: (Boolean) -> Unit) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
 
+    var connectionSetup by remember { mutableStateOf(!BcApi.hasToken(context)) }
+    if (BuildConfig.FLAVOR == "bade" && BcApi.hasToken(context) && !connectionSetup) {
+        TerminalOperatorLogin(onConnected = onConnected, onConnectionSettings = { connectionSetup = true })
+        return
+    }
+
     // Paylaşımlı BC lisansı modeli: BC servis hesabı + ortam zaten bağlıysa
     // ekran doğrudan WMS operatör girişinden başlar (vardiya/kullanıcı değişimi
     // de "Bağlı" rozetine dokunup buradan yapılır).
+    val finishConnection: (Boolean) -> Unit = { success ->
+        if (success && BuildConfig.FLAVOR == "bade") connectionSetup = false
+        onConnected(success)
+    }
     var step by remember { mutableStateOf(if (BcApi.hasToken(context)) Step.LocalUser else Step.Email) }
     var email by remember {
         mutableStateOf(BcApi.getLoginEmail(context, BuildConfig.LOGIN_DEFAULT_EMAIL))
@@ -96,10 +105,10 @@ fun LoginFlow(onConnected: (Boolean) -> Unit) {
             if (result.ok) {
                 BcApi.startAdminTestSession(context)
                 status = "Yönetici olarak bağlandı."
-                onConnected(true)
+                finishConnection(true)
             } else {
                 status = "🔴 ${BcApi.connectionFailureMessage(result)}"
-                onConnected(false)
+                finishConnection(false)
             }
         }
     }
@@ -194,7 +203,7 @@ fun LoginFlow(onConnected: (Boolean) -> Unit) {
                     loginCompanies = finalList
                     step = Step.SelectCompanyAfterLogin
                 } else
-                    onConnected(true)
+                    finishConnection(true)
             } else {
                 val msg = BcApi.errorMessage(r.body).ifBlank { "HTTP ${r.httpCode}" }
                 status = "🔴 ${if (msg.contains("Invalid username")) "Kullanıcı adı veya şifre hatalı." else msg}"
@@ -283,6 +292,9 @@ fun LoginFlow(onConnected: (Boolean) -> Unit) {
 
     val loginBrand = resolveCompanyBrand(BcApi.getCompanyName(context), BuildConfig.FLAVOR)
     Column(Modifier.fillMaxSize().padding(20.dp).verticalScroll(rememberScrollState())) {
+        if (BuildConfig.FLAVOR == "bade" && BcApi.hasToken(context)) {
+            TextButton(onClick = { connectionSetup = false }) { Text("Terminal girişine dön") }
+        }
         Row(verticalAlignment = Alignment.CenterVertically) {
             CompanyLogo(brand = loginBrand, height = 28.dp)
             Spacer(Modifier.width(12.dp))
@@ -686,7 +698,7 @@ fun LoginFlow(onConnected: (Boolean) -> Unit) {
                     val isActive = c.id.equals(activeId, ignoreCase = true)
                     Card(
                         onClick = {
-                            onConnected(false)
+                            finishConnection(false)
                             scope.launch {
                                 busy = true
                                 status = "${c.displayName} doğrulanıyor..."
@@ -695,10 +707,10 @@ fun LoginFlow(onConnected: (Boolean) -> Unit) {
                                 busy = false
                                 if (result.ok) {
                                     status = "🟢 ${c.displayName} şirketine bağlandı."
-                                    onConnected(true)
+                                    finishConnection(true)
                                 } else {
                                     status = "🔴 ${BcApi.connectionFailureMessage(result)}"
-                                    onConnected(false)
+                                    finishConnection(false)
                                 }
                             }
                         },
@@ -814,7 +826,7 @@ fun LoginFlow(onConnected: (Boolean) -> Unit) {
                     Card(
                         onClick = {
                             scope.launch {
-                                onConnected(false)
+                                finishConnection(false)
                                 busy = true; status = "Bağlanılıyor: ${c.displayName}..."
                                 BcApi.setEnvironment(context, selectedEnv!!.environment)
                                 BcApi.setCompany(context, c.id, c.displayName)
@@ -837,7 +849,8 @@ fun LoginFlow(onConnected: (Boolean) -> Unit) {
                                     // şifresiyle doğrulanınca açılır (BC → WMS Users / Local User).
                                     status = "🟢 Ortam bağlandı: ${selectedEnv!!.environment} / ${c.displayName} — şimdi WMS kullanıcınızla giriş yapın"
                                     step = Step.LocalUser
-                                } else { status = "🔴 ${BcApi.connectionFailureMessage(r)}"; onConnected(false) }
+                                    if (BuildConfig.FLAVOR == "bade") connectionSetup = false
+                                } else { status = "🔴 ${BcApi.connectionFailureMessage(r)}"; finishConnection(false) }
                             }
                         },
                         modifier = Modifier.fillMaxWidth().padding(vertical = 3.dp), shape = RoundedCornerShape(10.dp)
@@ -868,7 +881,7 @@ fun LoginFlow(onConnected: (Boolean) -> Unit) {
         // yalnızca geliştirme varyantlarında gösterilir.
         if (!shouldForceProductionFlow(BuildConfig.FLAVOR)) {
             TextButton(onClick = { showAdvanced = !showAdvanced }) { Text(if (showAdvanced) "Token girişini gizle" else "Gelişmiş: token ile giriş") }
-            if (showAdvanced) TokenPasteFallback(onConnected = onConnected)
+            if (showAdvanced) TokenPasteFallback(onConnected = finishConnection)
         }
     }
 }

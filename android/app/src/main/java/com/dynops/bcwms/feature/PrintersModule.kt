@@ -43,14 +43,20 @@ private const val PREF_NAMESPACE = "bcwms.printer."
 const val PRINTER_USAGE_LABEL = "LpLabel"
 const val PRINTER_USAGE_DOCUMENT = "Document"
 
+private fun printerPreferenceKey(context: Context, usage: String): String {
+    val terminal = TerminalSession.code(context)
+    if (terminal.isBlank()) return PREF_NAMESPACE + usage
+    return PREF_NAMESPACE + terminalPreferenceScope(BcApi.getTenant(context), BcApi.getEnvironment(context), BcApi.getCompanyId(context)) + ":" + terminal + ":" + usage
+}
+
 fun getDefaultPrinter(context: Context, usage: String = PRINTER_USAGE_LABEL): String {
     return context.getSharedPreferences("bcwms_prefs", Context.MODE_PRIVATE)
-        .getString(PREF_NAMESPACE + usage, "") ?: ""
+        .getString(printerPreferenceKey(context, usage), "") ?: ""
 }
 
 fun setDefaultPrinter(context: Context, code: String, usage: String = PRINTER_USAGE_LABEL) {
     context.getSharedPreferences("bcwms_prefs", Context.MODE_PRIVATE)
-        .edit().putString(PREF_NAMESPACE + usage, code).apply()
+        .edit().putString(printerPreferenceKey(context, usage), code).apply()
 }
 
 /** MTE / LP material labels: the device's label printer, else its document printer, else BC mapping. */
@@ -94,6 +100,7 @@ fun PrintersModule() {
     var scannedBarcode by rememberSaveable { mutableStateOf("") }
     var barcodePrintBusy by remember { mutableStateOf(false) }
     val productionCustomer = shouldForceProductionFlow(BuildConfig.FLAVOR)
+    val terminalManaged = BuildConfig.FLAVOR == "bade" && TerminalSession.code(context).isNotBlank()
 
     fun load() {
         scope.launch {
@@ -124,14 +131,18 @@ fun PrintersModule() {
             Text("Yazıcılar", fontWeight = FontWeight.Bold, fontSize = 18.sp)
         }
         Text(
-            "Etiket ve belge yazıcısını seçin. Etiket seçimi yoksa Ürün/Raf Sorgu etiketleri belge yazıcısına PDF olarak gönderilir.",
+            if (terminalManaged) TerminalSession.code(context) else "Bu terminalin yazıcısını seçin.",
             fontSize = 12.sp, color = Color.Gray
         )
+        if (terminalManaged) {
+            Text("Etiket: ${defaultLabelCode.ifBlank { "Seçilmemiş" }}", fontWeight = FontWeight.Medium)
+            Text("Belge: ${defaultDocumentCode.ifBlank { "Seçilmemiş" }}", fontWeight = FontWeight.Medium)
+        }
         Spacer(Modifier.height(8.dp))
         Row(verticalAlignment = Alignment.CenterVertically) {
             Button(onClick = { load() }, enabled = !loading) { WmsRefreshLabel(loading) }
         }
-        if (defaultLabelCode.isNotBlank()) {
+        if (defaultLabelCode.isNotBlank() && !terminalManaged) {
             TextButton(onClick = {
                 setDefaultPrinter(context, "", PRINTER_USAGE_LABEL)
                 defaultLabelCode = ""
@@ -271,7 +282,7 @@ fun PrintersModule() {
                         )
                         if (!productionCustomer && stationId.isNotBlank()) Text(stationId, fontSize = 11.sp, color = Color.Gray)
                         Spacer(Modifier.height(8.dp))
-                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        if (!terminalManaged) Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                             OutlinedButton(
                                 onClick = {
                                     val issue = labelPrinterSelectionIssue(active, format)

@@ -26,6 +26,7 @@ page 72092 "DOPSWHS Pick API"
                 // PATCH ile başkasının üstündeki toplama sessizce devralınabilirdi —
                 // eş zamanlılık kontrollerinin tamamı atlanmış olurdu.
                 field(assignedUserId; Rec."Assigned User ID") { Caption = 'assignedUserId'; Editable = false; }
+                field(assignedUserName; AssignedUserName) { Caption = 'assignedUserName'; Editable = false; }
                 field(pickMode; Rec."DOPSWHS Pick Mode") { Caption = 'pickMode'; Editable = false; }
                 // ELOG: araç bilgisini sorumlu masadan girer; terminal salt-okunur gösterir.
                 field(vehicleNo; Rec."DOPSWHS Vehicle No.") { Caption = 'vehicleNo'; Editable = false; }
@@ -58,7 +59,13 @@ page 72092 "DOPSWHS Pick API"
     end;
 
     trigger OnAfterGetRecord()
+    var
+        LocalUser: Record "DOPSWHS Local User";
     begin
+        AssignedUserName := Rec."Assigned User ID";
+        if StrLen(Rec."Assigned User ID") <= MaxStrLen(LocalUser.Username) then
+            if LocalUser.Get(CopyStr(Rec."Assigned User ID", 1, MaxStrLen(LocalUser.Username))) then
+                AssignedUserName := LocalUser."Display Name";
         FillCalculatedFields();
     end;
 
@@ -286,4 +293,6 @@ page 72092 "DOPSWHS Pick API"
             else
                 StatusText := 'Open';
     end;
+    var
+        AssignedUserName: Text[100];
 }

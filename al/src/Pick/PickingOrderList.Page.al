@@ -347,7 +347,7 @@ page 72357 "DOPSWHS Picking Order List"
                         if Rec.Status = Rec.Status::Completed then
                             Error(CompletedNotAssignableErr);
                         LocalUser.SetRange(Disabled, false);
-                        if Page.RunModal(Page::"DOPSWHS Local User List", LocalUser) <> Action::LookupOK then
+                        if Page.RunModal(Page::"DOPSWHS Terminal Users", LocalUser) <> Action::LookupOK then
                             exit;
 
                         // Grup başkasındaysa bu bir DEVİR'dir: yanlışlıkla iş elinden

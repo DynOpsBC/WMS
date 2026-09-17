@@ -71,7 +71,7 @@ class ProductionUxRulesTest {
 
     @Test
     fun `BADE cannot bypass local operator authentication with service token`() {
-        assertTrue(allowAdminBypass("bade"))
+        assertFalse(allowAdminBypass("bade"))
         assertTrue(allowAdminBypass("dynops"))
         assertTrue(allowAdminBypass("customer"))
     }

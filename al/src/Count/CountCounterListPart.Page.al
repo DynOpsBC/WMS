@@ -24,7 +24,7 @@ page 72482 "DOPSWHS Count Counter Part"
                         LocalUser: Record "DOPSWHS Local User";
                     begin
                         LocalUser.SetRange(Disabled, false);
-                        if Page.RunModal(Page::"DOPSWHS Local User List", LocalUser) <> Action::LookupOK then
+                        if Page.RunModal(Page::"DOPSWHS Terminal Users", LocalUser) <> Action::LookupOK then
                             exit(true);
 
                         Rec.Validate("User ID", LocalUser.Username);

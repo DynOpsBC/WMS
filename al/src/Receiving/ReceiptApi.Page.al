@@ -19,6 +19,7 @@ page 72090 "DOPSWHS Receipt API"
                 field(no; Rec."No.") { Caption = 'no'; }
                 field(locationCode; Rec."Location Code") { Caption = 'locationCode'; }
                 field(assignedUserId; Rec."Assigned User ID") { Caption = 'assignedUserId'; }
+                field(assignedUserName; AssignedUserName) { Caption = 'assignedUserName'; Editable = false; }
                 field(sourceNo; SourceNo) { Caption = 'sourceNo'; }
                 field(sourceType; SourceType) { Caption = 'sourceType'; }
                 field(vendorSourceName; VendorSourceName) { Caption = 'vendorSourceName'; }
@@ -53,7 +54,13 @@ page 72090 "DOPSWHS Receipt API"
     end;
 
     trigger OnAfterGetRecord()
+    var
+        LocalUser: Record "DOPSWHS Local User";
     begin
+        AssignedUserName := Rec."Assigned User ID";
+        if StrLen(Rec."Assigned User ID") <= MaxStrLen(LocalUser.Username) then
+            if LocalUser.Get(CopyStr(Rec."Assigned User ID", 1, MaxStrLen(LocalUser.Username))) then
+                AssignedUserName := LocalUser."Display Name";
         FillCalculatedFields();
     end;
 
@@ -264,4 +271,6 @@ page 72090 "DOPSWHS Receipt API"
         if TotalQty <> 0 then
             PercentComplete := Round(HandledQty / TotalQty * 100, 1);
     end;
+    var
+        AssignedUserName: Text[100];
 }

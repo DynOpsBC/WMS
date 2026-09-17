@@ -246,7 +246,7 @@ private fun V2PicksForFlow(flow: OutboundFlowMode) {
             )
             val page = BcApi.getAllPagesWithStandardFallback(
                 context,
-                "picks?\$top=100&\$orderby=no desc&\$select=no,locationCode,assignedUserId,sourceNo,status,percentComplete,pickMode,mainLpNo$filter",
+                "picks?\$top=100&\$orderby=no desc&\$select=no,locationCode,assignedUserId,assignedUserName,sourceNo,status,percentComplete,pickMode,mainLpNo$filter",
             )
             rows = if (page.complete) page.rows.filter { row ->
                 // BC modu OData kaçışıyla döndürebiliyor: boş mod "_x0020_"
@@ -380,7 +380,7 @@ private fun ActivePicksTab() {
                 return@launch
             }
             val combined = buildODataFilter(scopeClause, searchClause("no", search))
-            val page = BcApi.getAllPagesWithStandardFallback(context, "picks?\$top=100&\$orderby=no desc&\$select=no,locationCode,assignedUserId,vehicleNo,sourceNo,status,percentComplete$combined")
+            val page = BcApi.getAllPagesWithStandardFallback(context, "picks?\$top=100&\$orderby=no desc&\$select=no,locationCode,assignedUserId,assignedUserName,vehicleNo,sourceNo,status,percentComplete$combined")
             loading = false
             rows = if (page.complete) page.rows else emptyList()
             status = when {
@@ -1097,6 +1097,7 @@ private fun GuidedPickDocument(no: String, flowMode: OutboundFlowMode? = null, o
     val allCollected = headerLoaded && linesComplete && takeLines.isNotEmpty() && outstanding.isEmpty()
     val orderCount = takeLines.map { rawValue(it, "sourceNo").ifBlank { "—" } }.distinct().size
     val assignedTo = header?.optString("assignedUserId").orEmpty()
+    val assignedName = header?.optString("assignedUserName").orEmpty().ifBlank { assignedTo }
     val notAssigned = headerLoaded && assignedTo.isBlank()
     // Belge başkasına atanmış: liste ekranındaki uyarıya rağmen açıldıysa burada
     // toplama kilitli kalır — iki kişinin aynı pick'i toplaması miktarları bozar.
@@ -1161,7 +1162,7 @@ private fun GuidedPickDocument(no: String, flowMode: OutboundFlowMode? = null, o
                 title = no,
                 subtitle = "📦 $orderCount sipariş · 🧾 $doneCount/${takeLines.size} ürün" +
                     "\nLokasyon: ${header?.optString("locationCode").orEmpty()}" +
-                    (if (!notAssigned) " · 👤 Atanan Kullanıcı: $assignedTo" else "") +
+                    (if (!notAssigned) " · 👤 Atanan Kullanıcı: $assignedName" else "") +
                     (if (mainLp.isNotBlank()) "\n📦 Ana sepet: $mainLp" else ""),
                 percent = if (takeLines.isEmpty()) 0 else ((doneCount * 100.0) / takeLines.size).toInt(),
             )
@@ -1215,7 +1216,7 @@ private fun GuidedPickDocument(no: String, flowMode: OutboundFlowMode? = null, o
                         modifier = Modifier.fillMaxWidth(),
                     ) {
                         Column(Modifier.fillMaxWidth().padding(20.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                            Text("Bu toplama $assignedTo kullanıcısında", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = OtherUserRed)
+                            Text("Bu toplama $assignedName kullanıcısında", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = OtherUserRed)
                             Spacer(Modifier.height(4.dp))
                             Text(
                                 "Salt görüntüleme. Aynı pick'i iki kişi toplarsa miktarlar çakışır. " +

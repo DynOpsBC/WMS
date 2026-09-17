@@ -109,10 +109,11 @@ page 72082 "DOPSWHS Receiving Queue"
 
     local procedure PickUser(): Code[50]
     var
-        User: Record User;
+        User: Record "DOPSWHS Local User";
     begin
-        if Page.RunModal(Page::"User Lookup", User) = Action::LookupOK then
-            exit(User."User Name");
+        User.SetRange(Disabled, false);
+        if Page.RunModal(Page::"DOPSWHS Terminal Users", User) = Action::LookupOK then
+            exit(User.Username);
         exit('');
     end;
 }

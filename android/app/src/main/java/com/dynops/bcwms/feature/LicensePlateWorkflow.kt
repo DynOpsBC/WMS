@@ -46,9 +46,6 @@ internal data class MteOptions(
     val supplierLotNo: String = "",
     val qcEmployeeNo: String = "",
     val qcApprovalDate: String = "",
-    val documentNo: String = "",
-    val revisionNo: String = "",
-    val revisionDate: String = "",
 )
 
 /** JSON with only the filled fields; dates already normalised to yyyy-MM-dd. */
@@ -59,9 +56,6 @@ internal fun mteOptionsJson(options: MteOptions): String {
     put("supplierLotNo", options.supplierLotNo)
     put("qcEmployeeNo", options.qcEmployeeNo)
     put("qcApprovalDate", options.qcApprovalDate)
-    put("documentNo", options.documentNo)
-    put("revisionNo", options.revisionNo)
-    put("revisionDate", options.revisionDate)
     return json.toString()
 }
 

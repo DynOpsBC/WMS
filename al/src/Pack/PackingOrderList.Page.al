@@ -192,7 +192,7 @@ page 72361 "DOPSWHS Packing Order List"
                         if Rec.Status = Rec.Status::Completed then
                             Error('Tamamlanmış sipariş yeniden atanamaz.');
                         LocalUser.SetRange(Disabled, false);
-                        if Page.RunModal(Page::"DOPSWHS Local User List", LocalUser) <> Action::LookupOK then
+                        if Page.RunModal(Page::"DOPSWHS Terminal Users", LocalUser) <> Action::LookupOK then
                             exit;
                         Rec."Started By User" := LocalUser.Username;
                         if Rec.Status = Rec.Status::Ready then

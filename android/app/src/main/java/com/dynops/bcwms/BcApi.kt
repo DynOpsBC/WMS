@@ -311,6 +311,7 @@ object BcApi {
             .remove(KEY_TOKEN).remove(KEY_REFRESH).remove(KEY_BC_USER)
             .remove(KEY_TENANT).remove(KEY_ENV).remove(KEY_COMPANY_ID).remove(KEY_COMPANY_NAME)
             .remove(KEY_ADMIN_TEST_SESSION)
+            .remove(KEY_LOCAL_USER).remove(KEY_LOCAL_PROFILE)
             .remove(KEY_ACCESSIBLE_COMPANIES)
             .remove(KEY_LP_SCAN_REQUIRED)
             .remove(KEY_LP_SCAN_CHECKED_AT)
@@ -410,6 +411,8 @@ object BcApi {
      * unreachable; callers should then fall back to an unfiltered list.
      */
     suspend fun currentUserId(context: Context): String {
+        // A PIN timeout locks writes, but must not erase ownership during an in-flight reload.
+        if (BuildConfig.FLAVOR == "bade") return if (com.dynops.bcwms.feature.TerminalSession.hasSelectedIdentity(context)) getLocalUser(context) else ""
         val local = getLocalUser(context)
         if (local.isNotBlank()) return local
         val cached = prefs(context).getString(KEY_BC_USER, "") ?: ""
@@ -884,6 +887,18 @@ object BcApi {
     ): ApiResult =
         withContext(Dispatchers.IO) {
             try {
+                val operatorAtStart = getLocalUser(context)
+                fun sessionAllowsRequest(): Boolean = BuildConfig.FLAVOR != "bade" ||
+                    com.dynops.bcwms.feature.terminalSessionRequestAllowed(method, path,
+                        com.dynops.bcwms.feature.TerminalSession.authenticated(context) &&
+                            getLocalUser(context) == operatorAtStart)
+                if (BuildConfig.FLAVOR == "bade") {
+                    if (!com.dynops.bcwms.feature.terminalSessionRequestAllowed(method, path,
+                            com.dynops.bcwms.feature.TerminalSession.authenticated(context)))
+                        return@withContext ApiResult(false, 401, "Oturum süresi doldu. Kullanıcınızı seçip PIN girin.")
+                    val issue = com.dynops.bcwms.feature.terminalPrintRequestIssue(jsonBody)
+                    if (issue != null) return@withContext ApiResult(false, 0, issue)
+                }
                 ensureFreshToken(context)
                 val token = getToken(context)
                 if (token.isBlank()) return@withContext ApiResult(false, 0, "Token yok — Bağlantı Ayarları ekranından token girin")
@@ -912,6 +927,7 @@ object BcApi {
                 }
                 // BC requires If-Match for PATCH/DELETE; "*" skips optimistic-concurrency check.
                 if (method == "PATCH" || method == "DELETE") builder.header("If-Match", "*")
+                if (!sessionAllowsRequest()) return@withContext ApiResult(false, 401, "Kullanıcı doğrulaması gerekli. İşlemi yeniden başlatın.")
                 client.newCall(builder.build()).execute().use { resp ->
                     val code = resp.code
                     val body = resp.body?.string().let { if (it.isNullOrEmpty()) "(no body)" else it }
@@ -926,6 +942,7 @@ object BcApi {
                     saveRefreshToken(context, refreshed.second)
                     saveTokenExpiry(context, refreshed.third)
                     val retry = builder.header("Authorization", "Bearer ${refreshed.first}").build()
+                    if (!sessionAllowsRequest()) return@use ApiResult(false, 401, "Kullanıcı doğrulaması gerekli. İşlemi yeniden başlatın.")
                     client.newCall(retry).execute().use { r2 ->
                         val b2 = r2.body?.string().let { if (it.isNullOrEmpty()) "(no body)" else it }
                         logFailure(context, method, path, ApiResult(r2.code in 200..299, r2.code, b2))

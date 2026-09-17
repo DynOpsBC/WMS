@@ -1,56 +1,52 @@
 page 72285 "DOPSWHS Local User List"
 {
     PageType = List;
-    SourceTable = "DOPSWHS Local User";
-    Caption = 'Local WMS Users (e-postasız operatörler)';
+    SourceTable = "DOPSWHS WMS Terminal";
+    Caption = 'WMS Terminaller ve Kullanıcılar';
+    AdditionalSearchTerms = 'Local WMS Users,terminal,kullanıcı';
     ApplicationArea = All;
     UsageCategory = Lists;
-    CardPageId = "DOPSWHS Local User Card";
-
+    CardPageId = "DOPSWHS Terminal Card";
     layout
     {
         area(Content)
         {
-            repeater(Group)
+            repeater(Terminals)
             {
-                field("Username"; Rec.Username) { ApplicationArea = All; }
-                field("Display Name"; Rec."Display Name") { ApplicationArea = All; }
-                field("Default Location Code"; Rec."Default Location Code") { ApplicationArea = All; }
-                field("Disabled"; Rec.Disabled) { ApplicationArea = All; }
-                field("Last Login DateTime"; Rec."Last Login DateTime") { ApplicationArea = All; }
-                field("Failed Login Count"; Rec."Failed Login Count") { ApplicationArea = All; }
-                field("Created DateTime"; Rec."Created DateTime") { ApplicationArea = All; Visible = false; }
+                field(Code; Rec.Code) { ApplicationArea = All; }
+                field("Label Printer Code"; Rec."Label Printer Code") { ApplicationArea = All; }
+                field("Document Printer Code"; Rec."Document Printer Code") { ApplicationArea = All; }
+                field(Disabled; Rec.Disabled) { ApplicationArea = All; }
             }
         }
     }
-
     actions
     {
         area(Processing)
         {
-            action(SeedDemo)
+            action(CreateManager)
             {
-                Caption = 'Seed Demo Operators';
-                Image = SuggestLines;
+                Caption = 'Yönetici Oluştur';
                 ApplicationArea = All;
+                Image = New;
                 Promoted = true;
                 PromotedCategory = Process;
-                ToolTip = '4 demo yerel kullanıcı oluşturur (wms-op-01, wms-op-02, wms-receiver, wms-shipper) varsayılan şifre "wms1234" ile.';
-
                 trigger OnAction()
                 var
-                    AuthMgt: Codeunit "DOPSWHS Local Auth Mgmt";
-                    Setup: Record "DOPSWHS Setup";
-                    DefaultLoc: Code[10];
+                    UserDialog: Page "DOPSWHS Create PIN User";
                 begin
-                    if Setup.Get('') then DefaultLoc := Setup."Default Location Code";
-                    AuthMgt.Register('wms-op-01',    'Picker Operator 01',   'wms1234', DefaultLoc, '');
-                    AuthMgt.Register('wms-op-02',    'Picker Operator 02',   'wms1234', DefaultLoc, '');
-                    AuthMgt.Register('wms-receiver', 'Receiving Operator',   'wms1234', DefaultLoc, '');
-                    AuthMgt.Register('wms-shipper',  'Shipping Operator',    'wms1234', DefaultLoc, '');
-                    CurrPage.Update();
-                    Message('4 demo yerel kullanıcı oluşturuldu (şifre: wms1234). Roller için "WMS App Roles" sayfasında her birine PICKER/RECEIVER/SHIPPER atayın.');
+                    UserDialog.SetManager();
+                    if UserDialog.RunModal() = Action::OK then
+                        UserDialog.CreateUser();
                 end;
+            }
+            action(ExistingUsers)
+            {
+                Caption = 'Mevcut Kullanıcılar';
+                ApplicationArea = All;
+                Image = Users;
+                RunObject = page "DOPSWHS Terminal Users";
+                ToolTip = 'Mevcut kullanıcıları bir terminale atayın; kullanıcı kodları ve geçmiş işlemleri korunur.';
             }
         }
     }

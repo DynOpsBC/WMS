@@ -1002,9 +1002,17 @@ codeunit 72043 "DOPSWHS Receipt Mgmt"
     /// Atanan kullanıcı log mesajına yazılır ki devir zinciri okunabilsin.
     /// </summary>
     procedure AssignUser(var WhseReceiptHeader: Record "Warehouse Receipt Header"; AssignedUserId: Code[50]; PerformedByUserId: Code[50])
+    var
+        LocalUser: Record "DOPSWHS Local User";
     begin
         Log('Receipt.AssignUser', StrSubstNo(AssignLogTxt, WhseReceiptHeader."No.", OperatorOrNone(AssignedUserId)), PerformedByUserId);
-        WhseReceiptHeader.Validate("Assigned User ID", AssignedUserId);
+        // WMS employees have their own identity, independent of the shared BC connection.
+        if (StrLen(AssignedUserId) <= MaxStrLen(LocalUser.Username)) and
+           LocalUser.Get(CopyStr(AssignedUserId, 1, MaxStrLen(LocalUser.Username))) then begin
+            LocalUser.TestField(Disabled, false);
+            WhseReceiptHeader."Assigned User ID" := AssignedUserId;
+        end else
+            WhseReceiptHeader.Validate("Assigned User ID", AssignedUserId);
         WhseReceiptHeader.Modify(true);
     end;
 

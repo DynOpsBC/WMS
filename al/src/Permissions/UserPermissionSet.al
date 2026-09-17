@@ -6,6 +6,10 @@ permissionset 72095 "DOPSWHS-USER"
     Caption = 'Advanced WMS User';
 
     Permissions =
+        table "DOPSWHS WMS Terminal" = X,
+        tabledata "DOPSWHS WMS Terminal" = R,
+        page "DOPSWHS Terminal API" = X,
+        page "DOPSWHS Local User API" = X,
         tabledata "DOPSWHS Setup" = R,
         tabledata "DOPSWHS Device Configuration" = R,
         tabledata "DOPSWHS Device Menu" = R,
@@ -165,7 +169,7 @@ permissionset 72095 "DOPSWHS-USER"
         tabledata "DOPSWHS Demo E2E Result" = RIM,
         tabledata "DOPSWHS Demo E2E Cue" = R,
         codeunit "DOPSWHS Local Auth Mgmt" = X,
-        tabledata "DOPSWHS Local User" = R,
+        tabledata "DOPSWHS Local User" = Rm,
         page "DOPSWHS Local User List" = X,
         codeunit "DOPSWHS Purch Source Mgmt" = X,
         codeunit "DOPSWHS Sales Source Mgmt" = X,

@@ -823,9 +823,6 @@ private fun MteOptionsSheet(
     var supplierLot by remember { mutableStateOf("") }
     var qcEmployee by remember { mutableStateOf("") }
     var qcDate by remember { mutableStateOf("") }
-    var documentNo by remember { mutableStateOf("") }
-    var revisionNo by remember { mutableStateOf("") }
-    var revisionDate by remember { mutableStateOf("") }
     var error by remember { mutableStateOf("") }
     var inspectorMenu by remember { mutableStateOf(false) }
     var qcMenu by remember { mutableStateOf(false) }
@@ -873,22 +870,16 @@ private fun MteOptionsSheet(
         OutlinedTextField(value = supplierLot, onValueChange = { supplierLot = it }, label = { Text("Tedarikçi Lotu") }, singleLine = true, modifier = Modifier.fillMaxWidth())
         employeePicker("Kalite Kontrol Onayı - İsim (çalışan no)", qcEmployee, qcMenu, { qcMenu = it }) { qcEmployee = it }
         OutlinedTextField(value = qcDate, onValueChange = { qcDate = it }, label = { Text("Kalite Kontrol Onayı - Tarih") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-        Spacer(Modifier.height(8.dp))
-        Text("Doküman Bilgileri", fontWeight = FontWeight.Bold, fontSize = 13.sp)
-        OutlinedTextField(value = documentNo, onValueChange = { documentNo = it }, label = { Text("Doküman No.") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-        OutlinedTextField(value = revisionNo, onValueChange = { revisionNo = it }, label = { Text("Revizyon No.") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-        OutlinedTextField(value = revisionDate, onValueChange = { revisionDate = it }, label = { Text("Revizyon Tarihi") }, singleLine = true, modifier = Modifier.fillMaxWidth())
         if (error.isNotBlank()) Text(error, color = MaterialTheme.colorScheme.error, fontSize = 12.sp)
         Spacer(Modifier.height(14.dp))
         Button(
             onClick = {
                 val qc = normalizeMteDate(qcDate)
-                val rev = normalizeMteDate(revisionDate)
-                if (qc == null || rev == null) {
+                if (qc == null) {
                     error = "Tarih biçimi geçersiz. gg.aa.yyyy girin."
                     return@Button
                 }
-                onConfirm(MteOptions(inspector, supplierLot, qcEmployee, qc, documentNo, revisionNo, rev))
+                onConfirm(MteOptions(inspector, supplierLot, qcEmployee, qc))
             },
             modifier = Modifier.fillMaxWidth().height(50.dp),
         ) { Text("MTE Yazdır") }

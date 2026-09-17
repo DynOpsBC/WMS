@@ -122,6 +122,7 @@ fun AppRoot() {
     // doğrulanana kadar operasyonlar kapalı kalır.
     var connected by remember { mutableStateOf(false) }
     var booting by remember { mutableStateOf(true) }
+    var sessionEpoch by remember { mutableIntStateOf(0) }
     // V2 yerel bir özellik anahtarıdır: sunucu verisini değiştirmez ve klasik
     // ekranları silmez. Operatör aynı cihazda son seçimini korur.
     var v2Enabled by rememberSaveable {
@@ -143,6 +144,9 @@ fun AppRoot() {
             // BADE must not inherit the historical shared CRONUS company UUID.
             BcApi.ensurePreferredCompany(context)
             connected = BcApi.testConnection(context).ok
+            if (connected && BuildConfig.FLAVOR == "bade" && TerminalSession.authenticated(context)) {
+                connected = TerminalSession.resume(context)
+            }
         }
         // Marka açılışı görülebilsin ama operatörü gereksiz yere bekletmesin.
         val remaining = 850L - (android.os.SystemClock.elapsedRealtime() - startedAt)
@@ -157,6 +161,28 @@ fun AppRoot() {
         return
     }
 
+    var terminalAuthenticated by remember { mutableStateOf(connected && TerminalSession.authenticated(context)) }
+    var openedOperator by remember { mutableStateOf("") }
+    LaunchedEffect(sessionEpoch, connected, screen) {
+        do {
+            terminalAuthenticated = connected && TerminalSession.authenticated(context)
+            if (BuildConfig.FLAVOR != "bade") break
+            delay(500)
+        } while (true)
+    }
+    if (BuildConfig.FLAVOR == "bade" && terminalAuthenticated && openedOperator.isBlank()) {
+        openedOperator = BcApi.getLocalUser(context)
+    }
+    if (BuildConfig.FLAVOR == "bade" && !terminalAuthenticated && openedOperator.isBlank()) {
+        LoginFlow(onConnected = {
+            connected = it
+            sessionEpoch++
+            terminalAuthenticated = TerminalSession.authenticated(context)
+            if (it) screen = Screen.Home
+        })
+        return
+    }
+
     // Depoda geri tuşu refleksle kullanılıyor: modül listesindeyken uygulamayı
     // kapatmak yerine Ana Menü'ye dönmeli. Ana Menü'de geri, sistemin normal
     // davranışına (uygulamadan çıkış) bırakılır (UAT gen-01).
@@ -166,6 +192,7 @@ fun AppRoot() {
 
     Scaffold(
         topBar = {
+            Column {
             TopAppBar(
                 title = { Text(screen.title) },
                 navigationIcon = {
@@ -187,9 +214,29 @@ fun AppRoot() {
                             },
                         )
                     }
-                    ConnectionBadge(connected) { screen = Screen.Connection }
+                    if (BuildConfig.FLAVOR == "bade" && screen == Screen.Home) {
+                        TextButton(onClick = {
+                            TerminalSession.signOut(context)
+                            openedOperator = ""
+                            terminalAuthenticated = false
+                            connected = false
+                            screen = Screen.Connection
+                        }) { Text("Kullanıcı çıkışı") }
+                    } else if (BuildConfig.FLAVOR != "bade") {
+                        ConnectionBadge(connected) { screen = Screen.Connection }
+                    }
                 }
             )
+            if (BuildConfig.FLAVOR == "bade") {
+                Surface(color = MaterialTheme.colorScheme.primaryContainer, modifier = Modifier.fillMaxWidth()) {
+                    Column(Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
+                        Text("Aktif kullanıcı · ${TerminalSession.code(context)}", style = MaterialTheme.typography.labelMedium)
+                        Text(BcApi.getOperatorDisplayName(context), style = MaterialTheme.typography.titleLarge,
+                            fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)
+                    }
+                }
+            }
+            }
         }
     ) { padding ->
         CompositionLocalProvider(LocalNavigator provides { target -> screen = target }) {
@@ -201,7 +248,7 @@ fun AppRoot() {
                     onConnectionChanged = { connected = it },
                     onNavigate = { screen = it },
                 )
-                Screen.Connection -> LoginFlow(onConnected = { connected = it })
+                Screen.Connection -> LoginFlow(onConnected = { connected = it; sessionEpoch++; if (it) screen = Screen.Home })
                 Screen.LicensePlates -> LicensePlateModule()
                 Screen.HierarchicalLP -> HierarchicalLpModule()
                 Screen.ItemInquiry -> ItemInquiryModule()
@@ -234,6 +281,23 @@ fun AppRoot() {
             UpdateChecker()
         }
         }
+    }
+    if (BuildConfig.FLAVOR == "bade" && !terminalAuthenticated && openedOperator.isNotBlank()) {
+        TerminalReauthenticationDialog(
+            previousOperator = openedOperator,
+            onVerified = { changed ->
+                if (changed) screen = Screen.Home
+                openedOperator = BcApi.getLocalUser(context)
+                connected = true
+                terminalAuthenticated = true
+                sessionEpoch++
+            },
+            onConnectionSettings = {
+                TerminalSession.signOut(context)
+                openedOperator = ""
+                screen = Screen.Connection
+            },
+        )
     }
 }
 
@@ -434,7 +498,7 @@ private fun HomeScreen(
             env = BcApi.getEnvironment(context),
             company = companyName,
             brand = companyBrand,
-            operatorName = operatorName,
+            operatorName = if (flavor == "bade") "${TerminalSession.code(context)} · $operatorName" else operatorName,
             connected = connected,
             canSwitch = accessible.size > 1,
             onSwitchClick = { showSwitcher = true },
@@ -522,7 +586,7 @@ private fun HomeHeader(
                 Spacer(Modifier.width(12.dp))
                 Column(Modifier.weight(1f)) {
                     Text(
-                        if (operatorName.isBlank()) "Hoş geldiniz" else "Hoş geldin, $operatorName",
+                        if (operatorName.isBlank()) "Hoş geldiniz" else operatorName,
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold,
                         color = Color.White
@@ -557,7 +621,7 @@ private fun HomeHeader(
                         Box(Modifier.size(8.dp).clip(CircleShape).background(statusColor))
                         Spacer(Modifier.width(6.dp))
                         Text(
-                            if (connected) "Bağlı — canlı bağlantı" else "Bağlı değil",
+                            if (connected) "Bağlı" else "Bağlı değil",
                             style = MaterialTheme.typography.labelMedium,
                             fontWeight = FontWeight.SemiBold,
                             color = Color.White

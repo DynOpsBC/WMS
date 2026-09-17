@@ -107,7 +107,7 @@ private fun WhseReceiptTab() {
             val filter = com.dynops.bcwms.ui.buildODataFilter(
                 com.dynops.bcwms.ui.assignedToMeClause(myUser, enabled = !showAll),
             )
-            val page = BcApi.getAllPagesWithStandardFallback(context, "receipts?\$top=100&\$orderby=no desc&\$select=no,locationCode,assignedUserId,sourceNo,vendorSourceName,dueDate,percentComplete$filter")
+            val page = BcApi.getAllPagesWithStandardFallback(context, "receipts?\$top=100&\$orderby=no desc&\$select=no,locationCode,assignedUserId,assignedUserName,sourceNo,vendorSourceName,dueDate,percentComplete$filter")
             val all = if (page.complete) page.rows else emptyList()
             val q = search.trim()
             var itemHit = 0
@@ -167,7 +167,7 @@ private fun WhseReceiptTab() {
             items(shownRows) { d ->
                 OperationDocumentCard(
                     title = d.optString("no"),
-                    metadata = "Lokasyon: ${firstValue(d, "locationCode")}  ·  Kaynak: ${firstValue(d, "sourceNo")}\nAtanan: ${rawValue(d, "assignedUserId").ifBlank { "Atanmamış" }}",
+                    metadata = "Lokasyon: ${firstValue(d, "locationCode")}  ·  Kaynak: ${firstValue(d, "sourceNo")}\nAtanan: ${rawValue(d, "assignedUserName", "assignedUserId").ifBlank { "Atanmamış" }}",
                     progressPercent = d.optInt("percentComplete"),
                     onClick = { selected = d.optString("no") },
                 )
@@ -368,7 +368,7 @@ private fun ReceiveDocument(no: String, onBack: () -> Unit) {
                 title = no,
                 subtitle = "Lokasyon: ${h?.optString("locationCode") ?: ""} · Kaynak: ${h?.optString("sourceNo") ?: "-"}" +
                     (activeLp?.let { "\nAktif LP: $it" } ?: ""),
-                badge = rawValue(h ?: JSONObject(), "assignedUserId").ifBlank { "Atanmadı" },
+                badge = rawValue(h ?: JSONObject(), "assignedUserName", "assignedUserId").ifBlank { "Atanmadı" },
                 percent = h?.optDouble("percentComplete")?.toInt() ?: 0
             )
             if (vehicleInfoRequired) {

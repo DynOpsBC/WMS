@@ -80,7 +80,7 @@ pageextension 72311 "DOPSWHS Whse Pick Header Ext" extends "Warehouse Pick"
                         // seçilen BC kullanıcısı terminaldeki operatörle eşleşmediği
                         // için atama terminalde görünmüyordu.
                         LocalUser.SetRange(Disabled, false);
-                        if Page.RunModal(Page::"DOPSWHS Local User List", LocalUser) <> Action::LookupOK then
+                        if Page.RunModal(Page::"DOPSWHS Terminal Users", LocalUser) <> Action::LookupOK then
                             exit;
 
                         // Belge başkasındaysa bu bir ZORLA DEVİR: operatör toplamanın

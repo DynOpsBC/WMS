@@ -17,6 +17,8 @@ page 72284 "DOPSWHS Local User API"
         {
             repeater(Group)
             {
+                field(terminalAdmin; Rec."Terminal Admin") { Caption = 'terminalAdmin'; Editable = false; }
+                field(terminalCode; Rec."Terminal Code") { Caption = 'terminalCode'; }
                 field(username; Rec.Username) { Caption = 'username'; }
                 field(displayName; Rec."Display Name") { Caption = 'displayName'; }
                 field(defaultLocationCode; Rec."Default Location Code") { Caption = 'defaultLocationCode'; }
@@ -39,6 +41,8 @@ page 72284 "DOPSWHS Local User API"
     var
         AuthMgt: Codeunit "DOPSWHS Local Auth Mgmt";
     begin
+        if (Rec."Terminal Code" <> '') or Rec."Terminal Admin" then
+            Error('Bu kullanıcı terminal seçimi ve PIN ile giriş yapmalı.');
         if AuthMgt.Verify(Rec.Username, password) then
             exit(AuthMgt.ResolveProfileJson(Rec.Username))
         else

@@ -60,10 +60,12 @@ class LicensePlateWorkflowTest {
 
     @Test
     fun `MTE options json carries only filled fields`() {
-        val json = org.json.JSONObject(mteOptionsJson(MteOptions(inspectorEmployeeNo = " E001 ", qcApprovalDate = "2026-09-16", documentNo = "DOK-1")))
+        val json = org.json.JSONObject(mteOptionsJson(MteOptions(inspectorEmployeeNo = " E001 ", qcApprovalDate = "2026-09-16")))
         assertEquals("E001", json.getString("inspectorEmployeeNo"))
         assertEquals("2026-09-16", json.getString("qcApprovalDate"))
-        assertEquals("DOK-1", json.getString("documentNo"))
+        assertFalse(json.has("documentNo"))
+        assertFalse(json.has("revisionNo"))
+        assertFalse(json.has("revisionDate"))
         assertFalse(json.has("supplierLotNo"))
         assertEquals("{}", mteOptionsJson(MteOptions()))
     }
