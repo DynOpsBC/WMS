@@ -394,6 +394,43 @@ fun BinInquiryModule(labelsOnly: Boolean = false) {
             else "TAMAM: '$z' alanında ${zoneBins.size} raf. Etiketleri topluca alabilirsiniz."
     }
 
+    /** DKÇ (17 Eyl 2026): sadece alanın kendi QR etiketi, raf girmeden. */
+    fun printZoneOwnLabel() {
+        if (printing) return
+        val loc = location.trim(); val z = zone.trim()
+        if (loc.isBlank() || z.isBlank()) return
+        val total = parseLabelCopies(labelCopies) ?: run {
+            status = "HATA: Etiket adedi 1 ile $LABEL_COPIES_MAX arasında olmalı."
+            return
+        }
+        scope.launch {
+            printing = true
+            try {
+                status = "🖨 $z alan etiketi yazdırılıyor..."
+                val choice = resolveInquiryPrinter(context).getOrElse {
+                    status = "HATA: ${it.message}"
+                    return@launch
+                }
+                val key = "locationCode='${loc.replace("'", "''")}',code='${z.replace("'", "''")}'"
+                for (copies in labelCopyBatches(total)) {
+                    val payload = JSONObject().apply {
+                        put("printerId", choice.printerCode)
+                        put("copies", copies)
+                    }.toString()
+                    val r = BcApi.boundAction(context, "zones", key, "printLabel", payload)
+                    if (!r.ok) {
+                        status = "🔴 Alan etiketi: ${BcApi.errorMessage(r.body)} (HTTP ${r.httpCode})" +
+                            if (r.httpCode == 404) " · BC 1.14.2.9 gerekir." else ""
+                        return@launch
+                    }
+                }
+                status = "🟢 $z alan etiketi × $total ${choice.printerCode.ifBlank { "BC varsayılanı" }} kuyruğuna alındı."
+            } finally {
+                printing = false
+            }
+        }
+    }
+
     fun printZoneLabels() {
         if (printing || zoneBins.isEmpty()) return
         val total = parseLabelCopies(labelCopies) ?: run {
@@ -574,6 +611,12 @@ fun BinInquiryModule(labelsOnly: Boolean = false) {
                     )
                     Spacer(Modifier.height(8.dp))
                     LabelCopiesField(labelCopies, { labelCopies = it }, enabled = !printing)
+                    Spacer(Modifier.height(8.dp))
+                    OutlinedButton(
+                        onClick = { printZoneOwnLabel() },
+                        enabled = !printing && parseLabelCopies(labelCopies) != null,
+                        modifier = Modifier.fillMaxWidth().height(48.dp),
+                    ) { Text("Sadece alan etiketi ($zone)") }
                     Spacer(Modifier.height(8.dp))
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         OutlinedButton(

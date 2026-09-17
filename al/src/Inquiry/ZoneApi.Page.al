@@ -34,4 +34,12 @@ page 72327 "DOPSWHS Zone API"
             }
         }
     }
+
+    [ServiceEnabled]
+    procedure printLabel(printerId: Code[50]; copies: Integer)
+    var
+        Dispatcher: Codeunit "DOPSWHS Print Dispatcher";
+    begin
+        Dispatcher.PrintZoneLabel(Rec, printerId, copies);
+    end;
 }

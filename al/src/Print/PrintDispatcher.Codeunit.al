@@ -596,8 +596,57 @@ codeunit 72051 "DOPSWHS Print Dispatcher"
             Y += Canvas.Pitch();
         end;
         Y += 2;
-        Zpl += Canvas.Code128(X, Y, Canvas.BarHeightToBottom(Y, true), Bin.Code, ColumnWidth, true);
+        // DKÇ (17 Eyl 2026): "barkodun altındaki yazı kalksın". The bin code is
+        // already the largest text on the label, so repeating it under the bars
+        // only costs height that the bars themselves can use.
+        Zpl += Canvas.Code128(X, Y, Canvas.BarHeightToBottom(Y, false), Bin.Code, ColumnWidth, false);
         exit(Zpl + Canvas.Finish());
+    end;
+
+    /// <summary>
+    /// DKÇ (17 Eyl 2026): "sadece akıllı dolabın kodunu alıcam, bin/raf
+    /// girmeden, alan QR'ı yani". Zone label: the zone code as the largest
+    /// text, its description under it, QR + Code128 carrying the zone code.
+    /// </summary>
+    procedure BuildZoneZpl(var Zone: Record Zone): Text
+    var
+        Canvas: Codeunit "DOPSWHS Label Canvas";
+        Zpl: Text;
+        X: Integer;
+        ColumnWidth: Integer;
+        Y: Integer;
+        CodeFont: Integer;
+        CodeMax: Integer;
+    begin
+        Canvas.Init();
+        Zpl := Canvas.Frame('ALAN ETİKETİ', Zone."Location Code", Zone.Code, '', X, ColumnWidth, Y);
+        CodeMax := Canvas.LabelHeight() * 32 div 100;
+        if CodeMax < 60 then
+            CodeMax := 60;
+        if CodeMax > 120 then
+            CodeMax := 120;
+        CodeFont := Canvas.FitFont(Zone.Code, ColumnWidth, CodeMax, 36);
+        Zpl += Canvas.WriteSized(X, Y, CodeFont + CodeFont div 10, CodeFont, ColumnWidth, Zone.Code);
+        Y += CodeFont + CodeFont div 10 + 6;
+        if Zone.Description <> '' then begin
+            Zpl += Canvas.Write(X, Y, Canvas.NormalFont(), ColumnWidth, CopyStr(Zone.Description, 1, Canvas.MaxChars(ColumnWidth, Canvas.NormalFont())));
+            Y += Canvas.Pitch();
+        end;
+        Y += 2;
+        Zpl += Canvas.Code128(X, Y, Canvas.BarHeightToBottom(Y, false), Zone.Code, ColumnWidth, false);
+        exit(Zpl + Canvas.Finish());
+    end;
+
+    procedure PrintZoneLabel(var Zone: Record Zone; PrinterId: Code[50]; Copies: Integer)
+    var
+        Printer: Record "DOPSWHS Printer";
+    begin
+        if Printer.Get(PrinterId) then
+            if Printer."Format" = Printer."Format"::PDF then begin
+                PrintBarcodeDocument(PrinterId, Zone.Code, Copies, Zone.Code, 'ALAN ETIKETI', Zone."Location Code" + ' | ' + Zone.Description);
+                exit;
+            end;
+        EnqueueZpl(Zone.Code, BuildZoneZpl(Zone), PrinterId, Copies, Enum::"DOPSWHS IWX Report Usage"::Bin, 'Zone');
     end;
 
     local procedure AppendLabelPart(Existing: Text; Part: Text): Text

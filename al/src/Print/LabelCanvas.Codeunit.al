@@ -364,10 +364,10 @@ codeunit 72321 "DOPSWHS Label Canvas"
             Modules := 11 * ((StrLen(Data) + 1) div 2 + 1) + 35
         else
             Modules := 11 * StrLen(Data) + 35;
-        // DKÇ (17 Eyl 2026): "barkodlar full sütunu doldurmasın". A short code
-        // may grow past the 4-dot cap so the symbol is not lost on the label,
-        // but it stops at three quarters of the column and is centred there.
-        ModuleWidth := Clamp(MaxWidth * 75 div 100 div Modules, 1, 8);
+        // DKÇ (17 Eyl 2026): "barkod çok ince oldu, kalınlığını arttır" —
+        // yet "full sütunu doldurmasın". The bars grow up to 85% of the column
+        // (module width 2 dots at the very least) and the symbol is centred.
+        ModuleWidth := Clamp(MaxWidth * 85 div 100 div Modules, 2, 10);
         // DKÇ (17 Eyl 2026): "barkod daha düzenli yazılsın, bozuk olmasın".
         // The symbol is left-aligned at its natural width, so a code that does
         // not divide the column evenly used to leave a ragged gap on the right
