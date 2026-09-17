@@ -43,7 +43,7 @@ class TerminalLoginTest {
         assertFalse(authorizedTerminalUser(user, "OTHER", "TERM-2"))
     }
     @Test fun `operator list includes active managers and escapes the terminal code`() {
-        assertEquals("localUsers?\$filter=(terminalCode eq 'T%27%27%201' or terminalAdmin eq true) and disabled eq false", terminalUsersPath("T' 1"))
+        assertEquals("localUsers?\$filter=terminalCode eq 'T%27%27%201' and disabled eq false", terminalUsersPath("T' 1"))
         assertEquals("Merve · Yönetici", terminalOperatorLabel(JSONObject().put("displayName", "Merve").put("terminalAdmin", true)))
     }
     @Test fun `terminal print cannot silently use shared service account default`() {
@@ -67,5 +67,30 @@ class TerminalLoginTest {
         assertTrue(terminalSessionRequestAllowed("POST", terminalLoginPath("T1"), false))
         assertTrue(terminalSessionRequestAllowed("GET", terminalUsersPath("T1"), false))
         assertTrue(terminalSessionRequestAllowed("POST", "receipts('R1')/Microsoft.NAV.post", true))
+    }
+
+    @Test fun `BC compatible queries merge terminal employees with managers without duplicates`() = kotlinx.coroutines.runBlocking {
+        fun user(id: String, terminal: String, admin: Boolean = false, disabled: Boolean = false) =
+            JSONObject().put("username", id).put("displayName", id).put("terminalCode", terminal)
+                .put("terminalAdmin", admin).put("disabled", disabled)
+        val paths = mutableListOf<String>()
+        val manager = user("M1", "T1", true)
+        val result = loadTerminalUsers("T1") { path ->
+            paths += path
+            assertFalse(path.contains(" or "))
+            when (path) {
+                terminalUsersPath("T1") -> listOf(user("U1", "T1"), manager, user("OTHER", "T2"), user("OFF", "T1", disabled = true))
+                TERMINAL_ADMINS_PATH -> listOf(manager, user("M2", "", true))
+                else -> error("Unexpected query")
+            }
+        }
+        assertEquals(listOf(terminalUsersPath("T1"), TERMINAL_ADMINS_PATH), paths)
+        assertEquals(setOf("U1", "M1", "M2"), result!!.map { it.optString("username") }.toSet())
+        assertEquals(3, result.size)
+    }
+    @Test fun `incomplete manager or employee listing is not shown as an empty user list`() = kotlinx.coroutines.runBlocking {
+        assertNull(loadTerminalUsers("T1") { path -> if (path == TERMINAL_ADMINS_PATH) null else emptyList() })
+        assertNull(loadTerminalUsers("T1") { null })
+        assertEquals(emptyList<JSONObject>(), loadTerminalUsers("") { error("No request for blank terminal") })
     }
 }

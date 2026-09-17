@@ -4,6 +4,8 @@ page 72324 "DOPSWHS Terminal Users"
     SourceTable = "DOPSWHS Local User";
     Caption = 'WMS Kullanıcıları';
     ApplicationArea = All;
+    UsageCategory = Lists;
+    AdditionalSearchTerms = 'WMS kullanıcıları,yöneticiler';
     InsertAllowed = false;
     DeleteAllowed = false;
     CardPageId = "DOPSWHS Local User Card";

@@ -21,6 +21,12 @@ page 72321 "DOPSWHS Terminal Card"
                 ApplicationArea = All;
                 SubPageLink = "Terminal Code" = field(Code);
             }
+            part(Managers; "DOPSWHS Terminal User Part")
+            {
+                Caption = 'Yöneticiler (Tüm Terminaller)';
+                ApplicationArea = All;
+                SubPageLink = "Terminal Admin" = const(true);
+            }
         }
     }
     actions
@@ -45,6 +51,7 @@ page 72321 "DOPSWHS Terminal Card"
                     if Dialog.RunModal() = Action::OK then
                         Dialog.CreateUser();
                     CurrPage.Update(false);
+                    CurrPage.Users.Page.Update(false);
                 end;
             }
         }

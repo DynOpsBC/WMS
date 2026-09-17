@@ -1,6 +1,6 @@
 # Bade — terminal ve çalışan girişi
 
-Android: **1.14.128-bade** (200128). BC: **1.14.1.53**.
+Android: **1.14.129-bade** (200129). BC: **1.14.1.54**.
 
 ## BC kurulumu
 
@@ -12,7 +12,7 @@ Android: **1.14.128-bade** (200128). BC: **1.14.1.53**.
 Kullanıcı kimliği sistem tarafından oluşturulur; PIN düz metin saklanmaz veya API'de gösterilmez.
 Aynı terminalde aynı görünen adla ikinci kayıt oluşturulamaz. Kullanıcılar terminale özeldir.
 
-Mevcut kullanıcılar silinmez. **Mevcut Kullanıcılar** ile kaydı açın, terminal atayın ve yeni
+Mevcut kullanıcılar silinmez. **Tüm Kullanıcılar** ile kaydı açın, terminal atayın ve yeni
 4 haneli PIN belirleyin. Kullanıcı kodu ve geçmiş işlemleri korunur. PIN sıfırlamak için aynı
 karttaki **Yeni 4 Haneli PIN** alanını kullanın. Devre Dışı seçimi yeni girişi engeller.
 
@@ -80,3 +80,9 @@ Süre 30 dakika olarak korundu. Bu davranış uygulama açıkken PIN kilidi içi
 ## 1.14.128 giriş ekranı
 
 Terminal ve çalışan seçimi logolu, sola hizalı kartlarla düzenlendi. Seçili ortam/şirket ve Ortamı değiştir düğmesi girişte üstte görünür. Düğme Bade’de eski kullanıcı/şifre sayfasına uğramadan ortam ve şirket seçimine açılır. Ortam ekranında mevcut bağlantı ayrı kartta, ortam ve şirket seçimi iki adımda gösterilir. PIN ekranında bağlantı kartı gizlenir; klavye açıkken giriş alanı kaydırılabilir. Şirket bağlantısı kurulurken ortam değişimi engellenir ve seçilen ortam işlem başında sabitlenir. BC paketi yine 1.14.1.53’tür.
+
+## 1.14.129 / BC 1.14.1.54 — görünmeyen kullanıcılar
+
+Terminal kullanıcı sorgusundaki `terminalCode ... or terminalAdmin ...` ifadesi kaldırıldı: Business Central farklı alanlar arasında OR filtresini desteklemiyor (https://learn.microsoft.com/en-us/dynamics365/business-central/dev-itpro/webservices/odata-known-limitations). Terminal çalışanları ve yöneticiler iki ayrı, tam sayfalanmış sorgudan birleştirilir; aynı kullanıcı iki kez gösterilmez, pasif/başka terminale ait sıradan kullanıcılar elenir. İki sorgudan biri tamamlanmazsa eksik liste girişe açılmaz. Aynı yükleme oturum yenilemede de kullanılır.
+
+BC'de Yöneticiler düğmesi eklendi; yönetici oluşturulunca yönetici listesi açılır. Terminal kartında Yöneticiler (Tüm Terminaller) bölümü bulunur. Tüm Kullanıcılar ekranı BC aramasından da açılabilir. Mevcut kayıtları silmek veya yeniden oluşturmak gerekmez. APK sorgu düzeltmesi BC 1.14.1.53 ile de çalışır; yönetici görünürlüğü için BC 1.14.1.54 yüklenir.

@@ -36,13 +36,29 @@ page 72285 "DOPSWHS Local User List"
                     UserDialog: Page "DOPSWHS Create PIN User";
                 begin
                     UserDialog.SetManager();
-                    if UserDialog.RunModal() = Action::OK then
+                    if UserDialog.RunModal() = Action::OK then begin
                         UserDialog.CreateUser();
+                        ShowManagers();
+                    end;
+                end;
+            }
+            action(Managers)
+            {
+                Caption = 'Yöneticiler';
+                ApplicationArea = All;
+                Image = Users;
+                Promoted = true;
+                PromotedCategory = Process;
+                trigger OnAction()
+                begin
+                    ShowManagers();
                 end;
             }
             action(ExistingUsers)
             {
-                Caption = 'Mevcut Kullanıcılar';
+                Caption = 'Tüm Kullanıcılar';
+                Promoted = true;
+                PromotedCategory = Process;
                 ApplicationArea = All;
                 Image = Users;
                 RunObject = page "DOPSWHS Terminal Users";
@@ -50,4 +66,11 @@ page 72285 "DOPSWHS Local User List"
             }
         }
     }
+    local procedure ShowManagers()
+    var
+        LocalUser: Record "DOPSWHS Local User";
+    begin
+        LocalUser.SetRange("Terminal Admin", true);
+        Page.Run(Page::"DOPSWHS Terminal Users", LocalUser);
+    end;
 }

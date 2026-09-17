@@ -1,7 +1,7 @@
 {
-  "versionCode": 200128,
-  "versionName": "1.14.128-bade",
-  "apkUrl": "https://github.com/DynOpsBC/WMS/releases/download/android-v1.14.128-bade/BCWMS-BADE-1.14.128-RELEASE.apk",
-  "sha256": "f22fddb382c372afb0de6b05c062a22a714bae06fd2329eec3c692c87d04ee8f",
-  "releaseNotes": "Terminal ve kullanıcı seçimi yenilendi. Seçili ortam üstte görünür; Ortamı değiştir doğrudan ortam/şirket seçimine açılır. PIN ekranı sadeleştirildi. BC 1.14.1.53 gereklidir; bu paket yüklüyse tekrar yüklemeyin."
+  "versionCode": 200129,
+  "versionName": "1.14.129-bade",
+  "apkUrl": "https://github.com/DynOpsBC/WMS/releases/download/android-v1.14.129-bade/BCWMS-BADE-1.14.129-RELEASE.apk",
+  "sha256": "eb4fa722f00e77c84bc7e6d2582c741d15be1adbf53dcd638d5a4894b8382416",
+  "releaseNotes": "Terminalde görünmeyen kullanıcı/yönetici listesi düzeltildi. BC 1.14.1.54: Yöneticiler ve Tüm Kullanıcılar listeleri, terminal kartında yöneticiler bölümü. Mevcut kullanıcıları yeniden oluşturmayın."
 }

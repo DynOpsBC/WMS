@@ -47,7 +47,23 @@ internal fun terminalPrintRequestIssue(body: String?): String? {
 
 internal fun terminalUsersPath(terminal: String): String {
     val escaped = java.net.URLEncoder.encode(terminal.replace("'", "''"), "UTF-8").replace("+", "%20")
-    return "localUsers?\$filter=(terminalCode eq '$escaped' or terminalAdmin eq true) and disabled eq false"
+    return "localUsers?\$filter=terminalCode eq '$escaped' and disabled eq false"
+}
+
+internal const val TERMINAL_ADMINS_PATH = "localUsers?\$filter=terminalAdmin eq true and disabled eq false"
+
+/** BC does not support OR across distinct fields. Both complete lists are required. */
+internal suspend fun loadTerminalUsers(
+    terminal: String,
+    fetch: suspend (String) -> List<JSONObject>?,
+): List<JSONObject>? {
+    if (terminal.isBlank()) return emptyList()
+    val employees = fetch(terminalUsersPath(terminal)) ?: return null
+    val managers = fetch(TERMINAL_ADMINS_PATH) ?: return null
+    return (employees + managers)
+        .filter { authorizedTerminalUser(it, it.optString("username"), terminal) }
+        .distinctBy { it.optString("username") }
+        .sortedBy { it.optString("displayName") }
 }
 
 internal fun authorizedTerminalUser(user: JSONObject, username: String, terminal: String): Boolean =
@@ -90,9 +106,8 @@ internal object TerminalSession {
         if (!terminals.complete) return false
         val terminalRow = terminals.rows.firstOrNull { it.optString("code") == terminal }
         if (terminalRow == null) { signOut(context); return false }
-        val users = BcApi.getAllPages(context, terminalUsersPath(terminal))
-        if (!users.complete) return false
-        val user = users.rows.firstOrNull { authorizedTerminalUser(it, username, terminal) }
+        val users = BcTerminalLoginGateway(context).users(terminal) ?: return false
+        val user = users.firstOrNull { authorizedTerminalUser(it, username, terminal) }
         if (user == null) { signOut(context); return false }
         val profile = JSONObject(BcApi.getLocalProfileJson(context))
             .put("displayName", user.optString("displayName"))
@@ -127,7 +142,9 @@ private class BcTerminalLoginGateway(private val context: Context) : TerminalLog
     override suspend fun terminals(): List<JSONObject>? =
         BcApi.getAllPages(context, "wmsTerminals?\$filter=disabled eq false").let { if (it.complete) it.rows else null }
     override suspend fun users(terminal: String): List<JSONObject>? =
-        BcApi.getAllPages(context, terminalUsersPath(terminal)).let { if (it.complete) it.rows else null }
+        loadTerminalUsers(terminal) { path ->
+            BcApi.getAllPages(context, path).let { if (it.complete) it.rows else null }
+        }
     override suspend fun login(terminal: String, username: String, pin: String): String? {
         val response = BcApi.post(context, terminalLoginPath(terminal),
             JSONObject().put("username", username).put("pin", pin).toString())
