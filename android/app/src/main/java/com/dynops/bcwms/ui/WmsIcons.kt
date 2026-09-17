@@ -57,6 +57,7 @@ enum class WmsGlyph {
     FIELD_SETTINGS,
     HEALTH,
     PRINTER,
+    LABEL,
     TEST,
     POSTING,
     CONNECTION,
@@ -88,6 +89,7 @@ fun glyphForScreen(screen: Screen): WmsGlyph = when (screen) {
     Screen.QualityMgmt -> WmsGlyph.QUALITY_MANAGEMENT
     Screen.ItemInquiry -> WmsGlyph.ITEM_SEARCH
     Screen.BinInquiry -> WmsGlyph.BIN_SEARCH
+    Screen.Labels -> WmsGlyph.LABEL
     Screen.WhseEntries -> WmsGlyph.ENTRIES
     Screen.FieldSettings -> WmsGlyph.FIELD_SETTINGS
     Screen.SelfTest -> WmsGlyph.HEALTH
@@ -404,6 +406,12 @@ fun WmsIcon(
                 drawPath(heart, soft); drawPath(heart, color, style = lineStroke)
                 val pulse = Path().apply { moveTo(p(0.23f, 0.52f).x, p(0.23f, 0.52f).y); lineTo(p(0.39f, 0.52f).x, p(0.39f, 0.52f).y); lineTo(p(0.46f, 0.39f).x, p(0.46f, 0.39f).y); lineTo(p(0.56f, 0.64f).x, p(0.56f, 0.64f).y); lineTo(p(0.64f, 0.52f).x, p(0.64f, 0.52f).y); lineTo(p(0.77f, 0.52f).x, p(0.77f, 0.52f).y) }
                 drawPath(pulse, color, style = thin)
+            }
+            WmsGlyph.LABEL -> {
+                roundRect(0.12f, 0.20f, 0.76f, 0.60f, fill = true)
+                roundRect(0.12f, 0.20f, 0.76f, 0.60f)
+                for (x in listOf(0.26f, 0.34f, 0.45f, 0.51f, 0.62f, 0.73f)) line(x, 0.34f, x, 0.60f)
+                line(0.27f, 0.69f, 0.72f, 0.69f)
             }
             WmsGlyph.PRINTER -> {
                 roundRect(0.24f, 0.12f, 0.52f, 0.28f, fill = true); roundRect(0.24f, 0.12f, 0.52f, 0.28f)

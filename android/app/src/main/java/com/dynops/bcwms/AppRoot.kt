@@ -68,6 +68,7 @@ enum class Screen(val title: String) {
     HierarchicalLP("DKC Kutu ve Palet"),
     ItemInquiry("Ürün Sorgu"),
     BinInquiry("Bin Sorgu"),
+    Labels("Etiket Çıkar"),
     WhseEntries("Ambar Hareketleri"),
     Receiving("Mal Kabul"),
     Picking("Toplama"),
@@ -191,6 +192,7 @@ fun AppRoot() {
                 Screen.HierarchicalLP -> HierarchicalLpModule()
                 Screen.ItemInquiry -> ItemInquiryModule()
                 Screen.BinInquiry -> BinInquiryModule()
+                Screen.Labels -> LabelsModule()
                 Screen.WhseEntries -> WhseEntriesModule()
                 Screen.Receiving -> ReceivingModule()
                 Screen.Picking -> key(v2Enabled) { PickingModule(v2Enabled = v2Enabled) }
@@ -332,6 +334,7 @@ private val HomeCategories = listOf(
     )),
     HomeCategory("Sorgu", Color(0xFF9B59B6), listOf(
         HomeTile(Screen.ItemInquiry, WmsGlyph.ITEM_SEARCH, "Ürün Sorgu", "Ürünün raf, lot ve miktarını bul"),
+        HomeTile(Screen.Labels, WmsGlyph.LABEL, "Etiket Çıkar", "Ürün etiketi · Bin etiketi · A3 belge"),
         HomeTile(Screen.BinInquiry, WmsGlyph.BIN_SEARCH, "Bin Sorgu", "Bir rafın mevcut içeriğini gör"),
         HomeTile(Screen.WhseEntries, WmsGlyph.ENTRIES, "Ambar Hareketleri", "Geçmiş stok hareketlerini incele"),
     )),

@@ -7,6 +7,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -46,7 +47,7 @@ internal fun queriedLpSummary(lpNo: String, lines: List<JSONObject>): QueriedLpS
 
 /** Item Inquiry — item card + LP lines that contain the item (on-hand by LP). */
 @Composable
-fun ItemInquiryModule() {
+fun ItemInquiryModule(labelsOnly: Boolean = false) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     // PDF Item Inquiry §1: hardcoded "1004" preset removed — start empty so
@@ -77,6 +78,11 @@ fun ItemInquiryModule() {
             if (r.ok) {
                 val list = BcApi.parseValueArray(r.body)
                 item = list.firstOrNull()
+            }
+            if (labelsOnly) {
+                loading = false
+                status = if (!r.ok) "HATA: Ürün alınamadı (HTTP ${r.httpCode})." else if (item == null) "BOŞ: Ürün bulunamadı." else "TAMAM: Ürün etiketi hazır."
+                return@launch
             }
             // on-hand by LP: lines for this item across license plates
             val lpPage = if (byLp.complete && byLp.rows.isNotEmpty()) byLp
@@ -116,7 +122,7 @@ fun ItemInquiryModule() {
     val palette = bcwmsStatus()
     val itemUom = item?.let { firstValue(it, "baseUnitOfMeasure", "baseUoM") }.orEmpty()
     Column(Modifier.fillMaxSize().padding(12.dp)) {
-        ScanField("Ürün No / LP No", query, { query = it }, modifier = Modifier.fillMaxWidth(), onScanned = {
+        ScanField("Ürün No / LP No", query, { query = it; item = null }, modifier = Modifier.fillMaxWidth(), enabled = !loading, onScanned = {
             val resolved = BarcodeIntentResolver.resolve(it)
             query = resolved.itemNo ?: resolved.value
         })
@@ -196,7 +202,7 @@ fun ItemInquiryModule() {
                     Spacer(Modifier.height(8.dp))
                     Text("Temel UOM: $uom", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     Text("Kategori: ${firstValue(it, "itemCategoryCode")} · LP Şablonu: ${firstValue(it, "defaultLpTemplateCode")}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    Text("LP'lerdeki toplam: ${fmtItemQty(totalOnLp)} $uom", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    if (!labelsOnly) Text("LP'lerdeki toplam: ${fmtItemQty(totalOnLp)} $uom", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
             Spacer(Modifier.height(8.dp))
@@ -204,7 +210,7 @@ fun ItemInquiryModule() {
                 WmsActionLabel(WmsGlyph.PRINTER, "Ürün Etiketi Bas")
             }
             Spacer(Modifier.height(12.dp))
-            Text("LP'lerde (${lpLines.size})", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
+            if (!labelsOnly) Text("LP'lerde (${lpLines.size})", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
             Spacer(Modifier.height(6.dp))
         }
         // weight(1f): üstteki sabit ürün kartı listeyi sıfır yüksekliğe
@@ -272,9 +278,10 @@ fun ItemInquiryModule() {
 
 /** Bin Inquiry — bin card + real bin contents (item × qty) + LPs in the bin. */
 @Composable
-fun BinInquiryModule() {
+fun BinInquiryModule(labelsOnly: Boolean = false) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
+    var documentOutput by rememberSaveable { mutableStateOf(false) }
     // PDF Bin Inquiry §2: hardcoded SILVER/S-1-01 preset removed.
     var location by remember { mutableStateOf("") }
     var binCode by remember { mutableStateOf("") }
@@ -294,13 +301,13 @@ fun BinInquiryModule() {
     var pickerLoading by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
-        val r = BcApi.get(context, "locations?\$top=200&\$orderby=code")
-        if (r.ok) {
-            locations = BcApi.parseValueArray(r.body)
+        val page = BcApi.getAllPages(context, "locations?\$top=200&\$orderby=code")
+        if (page.complete) {
+            locations = page.rows
                 .filter { !it.optBoolean("useAsInTransit", false) }
                 .map { it.optString("code") to it.optString("name") }
             if (location.isBlank() && locations.size == 1) location = locations.first().first
-        }
+        } else status = "HATA: Lokasyon listesi alınamadı. Lokasyon kodunu elle girebilirsiniz."
     }
 
     fun openBinPicker() {
@@ -310,7 +317,7 @@ fun BinInquiryModule() {
             pickerLoading = true
             val page = BcApi.getAllPages(context, "bins?\$filter=locationCode eq '${loc.replace("'", "''")}'&\$orderby=code&\$top=500")
             pickerLoading = false
-            if (!page.complete && page.rows.isEmpty()) { status = "HATA: Raf listesi alınamadı."; return@launch }
+            if (!page.complete) { status = "HATA: Raf listesi alınamadı."; return@launch }
             binChoices = page.rows.map { it.optString("code") to listOfNotNull(it.optString("zoneCode").takeIf { z -> z.isNotBlank() }?.let { z -> "Bölge $z" }, it.optString("description").takeIf { d -> d.isNotBlank() }).joinToString(" · ") }
             if (binChoices.isEmpty()) status = "BOŞ: '$loc' lokasyonunda raf yok." else showBinPicker = true
         }
@@ -321,9 +328,14 @@ fun BinInquiryModule() {
         scope.launch {
             loading = true; status = "Yükleniyor..."
             bin = null; contents = emptyList(); lps = emptyList(); whseEntries = emptyList()
-            val loc = location.trim(); val code = binCode.trim()
+            val loc = location.trim().replace("'", "''"); val code = binCode.trim().replace("'", "''")
             val b = BcApi.get(context, "bins?\$filter=locationCode eq '$loc' and code eq '$code'&\$top=1")
             if (b.ok) bin = BcApi.parseValueArray(b.body).firstOrNull()
+            if (labelsOnly) {
+                loading = false
+                status = if (!b.ok) "HATA: Raf alınamadı (HTTP ${b.httpCode})." else if (bin == null) "BOŞ: Raf bulunamadı." else "TAMAM: Etiket hazır."
+                return@launch
+            }
             // PDF Bin Inquiry §2 critical fix: now also fetch the real item
             // quantities from the new BinContent API page (T7302 Bin Content).
             val contentsPage = BcApi.getAllPages(context, "binContents?\$filter=locationCode eq '$loc' and binCode eq '$code'&\$top=100")
@@ -362,32 +374,37 @@ fun BinInquiryModule() {
     }
 
     val palette = bcwmsStatus()
-    Column(Modifier.fillMaxSize().padding(12.dp)) {
+    LazyColumn(Modifier.fillMaxSize().padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+      item {
+        Text(if (labelsOnly) "Raf etiketinizi hazırlayın" else "Rafı bulun, içeriğini görün", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+        Text("Lokasyon seçin, rafı listeden bulun veya kodunu tarayın.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Spacer(Modifier.height(8.dp))
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            ScanField("Lokasyon", location, { location = it }, modifier = Modifier.weight(1f))
+            ScanField("Lokasyon", location, { location = it; binCode = ""; bin = null; contents = emptyList(); lps = emptyList(); whseEntries = emptyList() }, modifier = Modifier.weight(1f), enabled = !loading && !pickerLoading)
             if (locations.isNotEmpty()) {
                 Spacer(Modifier.width(8.dp))
-                OutlinedButton(onClick = { showLocationPicker = true }) { Text("Seç") }
+                OutlinedButton(onClick = { showLocationPicker = true }, enabled = !loading && !pickerLoading) { Text("Seç") }
             }
         }
         Spacer(Modifier.height(8.dp))
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            ScanField("Bin", binCode, { binCode = it }, modifier = Modifier.weight(1f), onScanned = {
+            ScanField("Bin / Raf kodu", binCode, { binCode = it; bin = null; contents = emptyList(); lps = emptyList(); whseEntries = emptyList() }, modifier = Modifier.weight(1f), enabled = !loading && !pickerLoading, onScanned = {
                 binCode = BarcodeIntentResolver.resolve(it).value
+                bin = null; load()
             })
             Spacer(Modifier.width(8.dp))
-            OutlinedButton(onClick = { openBinPicker() }, enabled = !pickerLoading) { Text(if (pickerLoading) "..." else "Raf listesi") }
+            OutlinedButton(onClick = { openBinPicker() }, enabled = !pickerLoading && !loading && location.isNotBlank()) { Text(if (pickerLoading) "..." else "Raf bul") }
         }
         Spacer(Modifier.height(8.dp))
-        Button(onClick = { load() }, enabled = !loading, modifier = Modifier.fillMaxWidth()) {
-            Text(if (loading) "..." else "🔎 Sorgula", fontWeight = FontWeight.Bold)
+        Button(onClick = { load() }, enabled = !loading && !pickerLoading && location.isNotBlank() && binCode.isNotBlank(), modifier = Modifier.fillMaxWidth()) {
+            Text(if (loading) "..." else if (labelsOnly) "Etiketi Hazırla" else "🔎 Sorgula", fontWeight = FontWeight.Bold)
         }
         if (showLocationPicker) {
             InquiryPickerDialog(
                 title = "Lokasyon seç",
                 items = locations,
                 onDismiss = { showLocationPicker = false },
-                onPick = { code -> location = code; binCode = ""; showLocationPicker = false },
+                onPick = { code -> location = code; binCode = ""; bin = null; contents = emptyList(); lps = emptyList(); whseEntries = emptyList(); showLocationPicker = false },
             )
         }
         if (showBinPicker) {
@@ -423,12 +440,38 @@ fun BinInquiryModule() {
                 }
             }
             Spacer(Modifier.height(8.dp))
-            OutlinedButton(onClick = { printBinLabel() }, modifier = Modifier.fillMaxWidth().height(48.dp)) {
-                WmsActionLabel(WmsGlyph.PRINTER, "Bin Etiketi Bas")
+            Text("Çıktı türü", style = MaterialTheme.typography.labelLarge)
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                FilterChip(
+                    selected = !documentOutput,
+                    onClick = { documentOutput = false },
+                    label = { Text("Etiket") },
+                    modifier = Modifier.weight(1f),
+                )
+                FilterChip(
+                    selected = documentOutput,
+                    onClick = { documentOutput = true },
+                    label = { Text("Belge (A3 PDF)") },
+                    modifier = Modifier.weight(1f),
+                )
+            }
+            Text(
+                if (documentOutput) "A3 yatay belgeyi PDF kaydet veya yazdır."
+                else "Mevcut tasarımla etiket yazıcısına gönder.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Button(onClick = {
+                if (documentOutput) {
+                    runCatching { printBinDocument(context, b) }
+                        .onFailure { status = "HATA: Belge açılamadı: ${it.message}" }
+                } else printBinLabel()
+            }, modifier = Modifier.fillMaxWidth().height(48.dp)) {
+                WmsActionLabel(WmsGlyph.PRINTER, if (documentOutput) "Belge Al" else "Etiket Bas")
             }
             Spacer(Modifier.height(8.dp))
         }
-        LazyColumn(verticalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.weight(1f)) {
+      }
             if (contents.isNotEmpty()) {
                 item {
                     Text("Bin İçeriği (${contents.size})", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface, modifier = Modifier.padding(vertical = 4.dp))
@@ -466,7 +509,7 @@ fun BinInquiryModule() {
                 }
                 item { Spacer(Modifier.height(8.dp)) }
             }
-            item {
+            if (!labelsOnly) item {
                 Text("LP'ler (${lps.size})", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface, modifier = Modifier.padding(vertical = 4.dp))
             }
             items(lps) { lp ->
@@ -485,7 +528,7 @@ fun BinInquiryModule() {
                     }
                 }
             }
-            if (lps.isEmpty() && !loading) item { EmptyState("Bu bin'de LP yok.") }
+            if (bin != null && lps.isEmpty() && !loading && !labelsOnly) item { EmptyState("Bu bin'de LP yok.") }
             if (whseEntries.isNotEmpty()) {
                 item {
                     Text("Ambar Kayıtları (${whseEntries.size})", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface, modifier = Modifier.padding(top = 10.dp, bottom = 4.dp))
@@ -503,7 +546,6 @@ fun BinInquiryModule() {
                     }
                 }
             }
-        }
     }
 }
 
@@ -701,10 +743,11 @@ internal fun InquiryPickerDialog(
                     value = query,
                     onValueChange = { query = it },
                     singleLine = true,
-                    label = { Text("Ara") },
+                    label = { Text("Kod, bölge veya açıklama ara") },
                     modifier = Modifier.fillMaxWidth(),
                 )
                 Spacer(Modifier.height(8.dp))
+                if (visible.isEmpty()) Text("Eşleşen kayıt yok. Aramayı değiştirin.")
                 Text("${visible.size} kayıt", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 LazyColumn(Modifier.fillMaxWidth().weight(1f, fill = false)) {
                     items(visible, key = { it.first }) { entry ->
