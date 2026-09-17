@@ -1,7 +1,7 @@
 {
-  "versionCode": 200129,
-  "versionName": "1.14.129-bade",
-  "apkUrl": "https://github.com/DynOpsBC/WMS/releases/download/android-v1.14.129-bade/BCWMS-BADE-1.14.129-RELEASE.apk",
-  "sha256": "6b86f7b31599e97f98bbcf8f173a576c7210d804206db7c6472e96db5143b72b",
-  "releaseNotes": "Yenile ve Terminal değiştir üstte. Yönetici girişi ayrı seçenek. Görünmeyen kullanıcı/yönetici sorgusu düzeltildi. BC 1.14.1.54 yönetici listelerini ekler; mevcut kullanıcıları yeniden oluşturmayın."
+  "versionCode": 200130,
+  "versionName": "1.14.130-bade",
+  "apkUrl": "https://github.com/DynOpsBC/WMS/releases/download/android-v1.14.130-bade/BCWMS-BADE-1.14.130-RELEASE.apk",
+  "sha256": "e85c2e5871726a548f664779b9de78f859226d8697298c10d87872e178553a1c",
+  "releaseNotes": "BC bağlantısı ve kullanıcı girişi olmadan uygulama güncellemesi. İlk bağlantı, terminal seçimi ve PIN ekranlarına Uygulamayı güncelle düğmesi eklendi; otomatik kontrol girişten önce çalışır. Eski sürümde güncelleme ekranına erişemiyorsanız APK’yı bir kez dosyadan yükleyin."
 }

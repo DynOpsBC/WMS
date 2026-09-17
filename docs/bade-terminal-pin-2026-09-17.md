@@ -1,6 +1,6 @@
 # Bade — terminal ve çalışan girişi
 
-Android: **1.14.129-bade** (200129). BC: **1.14.1.54**.
+Android: **1.14.130-bade** (200130). BC: **1.14.1.54**.
 
 ## BC kurulumu
 
@@ -88,3 +88,7 @@ Terminal kullanıcı sorgusundaki `terminalCode ... or terminalAdmin ...` ifades
 BC'de Yöneticiler düğmesi eklendi; yönetici oluşturulunca yönetici listesi açılır. Terminal kartında Yöneticiler (Tüm Terminaller) bölümü bulunur. Tüm Kullanıcılar ekranı BC aramasından da açılabilir. Mevcut kayıtları silmek veya yeniden oluşturmak gerekmez. APK sorgu düzeltmesi BC 1.14.1.53 ile de çalışır; yönetici görünürlüğü için BC 1.14.1.54 yüklenir.
 
 1.14.129 son düzenleme: Yenile / Terminal değiştir üst bölüme taşındı ve sistem gezinme alanı için güvenli boşluk eklendi. Yönetici ana giriş seçeneği isim yerine Yönetici girişi olarak gösterilir. Tek yönetici varsa doğrudan PIN; birden çok yönetici varsa hesap seçimi yapılır. Kullanıcının talebiyle bu son UI değişiklikleri için test çalıştırılmadı; yalnız APK derlendi.
+
+## 1.14.130 — BC bağlantısı olmadan güncelleme
+
+Bade otomatik güncelleme kontrolü BC bağlantısı ve çalışan giriş kapısının önüne taşındı. İlk bağlantı, terminal/kullanıcı seçimi ve PIN ekranlarında Uygulamayı güncelle düğmesi bağımsız güncelleme penceresini açar. Bu akış yalnız halka açık GitHub manifesti/APK indirmesini kullanır; BC belirteci veya PIN istemez. İnternet gerekir. Önceki sürümde güncelleme ekranına ulaşılamıyorsa 1.14.130 APK’sı bir kez Dosyalar uygulamasından mevcut kurulumun üzerine yüklenmelidir. Kullanıcının önceki talebine uygun olarak bu son değişiklik için test çalıştırılmadan derleme yapılmıştır.

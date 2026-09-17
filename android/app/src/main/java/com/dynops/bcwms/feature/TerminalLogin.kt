@@ -215,6 +215,7 @@ internal fun TerminalOperatorLogin(onConnected: (Boolean) -> Unit, onConnectionS
                 Text("BADE · WMS", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
+        AppUpdateEntry()
         if (selectedUser == null) Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
             TextButton(onClick = { revision++ }, enabled = !busy) { Text("Yenile") }
             if (terminal.isNotBlank()) TextButton(onClick = {

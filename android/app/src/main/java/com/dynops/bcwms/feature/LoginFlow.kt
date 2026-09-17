@@ -302,7 +302,8 @@ fun LoginFlow(onConnected: (Boolean) -> Unit) {
     }
 
     val loginBrand = resolveCompanyBrand(BcApi.getCompanyName(context), BuildConfig.FLAVOR)
-    Column(Modifier.fillMaxSize().padding(20.dp).verticalScroll(rememberScrollState())) {
+    Column(Modifier.fillMaxSize().safeDrawingPadding().padding(20.dp).verticalScroll(rememberScrollState())) {
+        if (BuildConfig.FLAVOR == "bade") AppUpdateEntry()
         if (BuildConfig.FLAVOR == "bade" && BcApi.hasToken(context)) {
             TextButton(onClick = { connectionSetup = false }) { Text("Terminal girişine dön") }
         }

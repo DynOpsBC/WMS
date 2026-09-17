@@ -154,6 +154,9 @@ fun AppRoot() {
         booting = false
     }
 
+    // The public APK channel must remain available even when BC or PIN login is unavailable.
+    if (BuildConfig.FLAVOR == "bade") UpdateChecker()
+
     if (booting) {
         WmsSplashScreen(
             resolveCompanyBrand(BcApi.getCompanyName(context), BuildConfig.FLAVOR),
@@ -278,7 +281,7 @@ fun AppRoot() {
                 Screen.FieldSettings -> FieldSettingsModule()
                 Screen.Help -> TerminalHelpModule(connected = connected, onNavigate = { screen = it })
             }
-            UpdateChecker()
+            if (BuildConfig.FLAVOR != "bade") UpdateChecker()
         }
         }
     }
