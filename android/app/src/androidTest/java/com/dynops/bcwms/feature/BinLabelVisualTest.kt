@@ -17,8 +17,9 @@ class BinLabelVisualTest {
     @Test fun documentAndLookupRender() {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val bitmap = Bitmap.createBitmap(1120, 770, Bitmap.Config.ARGB_8888)
-        drawBinLabel(Canvas(bitmap), JSONObject().put("code", "A.B04.13").put("locationCode", "DKC")
-            .put("zoneCode", "DEPO-01").put("binTypeCode", "PICK").put("description", "Hammadde / Ürün rafı"))
+        drawBinLabel(Canvas(bitmap), JSONObject().put("code", "A1").put("locationCode", "WMS")
+            .put("zoneCode", "AKILLI DOL").put("zoneDescription", "AKILLI DOLAP SİSTEMİ")
+            .put("binTypeCode", "PUTPICK").put("description", "Akıllı dolap gözü"))
         File(context.getExternalFilesDir(null), "bin-a3-preview.png").outputStream().use {
             bitmap.compress(Bitmap.CompressFormat.PNG, 100, it)
         }

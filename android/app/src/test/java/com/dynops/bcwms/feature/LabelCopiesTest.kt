@@ -26,6 +26,19 @@ class LabelCopiesTest {
         assertNull(parseLabelCopies("3,5"))
     }
 
+    @Test fun `zones keep their description and bins sort the way the aisle runs`() {
+        val zones = inquiryZoneChoices(listOf(
+            JSONObject().put("code", "HAMMADDE").put("description", "HAMMADDE"),
+            JSONObject().put("code", "AKILLI DOL").put("description", "AKILLI DOLAP SİSTEMİ"),
+            JSONObject().put("code", "").put("description", "Kodsuz"),
+            JSONObject().put("code", "akilli dol").put("description", "Tekrar"),
+        ))
+        assertEquals(listOf("AKILLI DOL" to "AKILLI DOLAP SİSTEMİ", "HAMMADDE" to "HAMMADDE"), zones)
+
+        val bins = sortedBinCodes(listOf("A10", "A2", "A100", "A1", "B1").map { JSONObject().put("code", it) })
+        assertEquals(listOf("A1", "A2", "A10", "A100", "B1"), bins.map { it.optString("code") })
+    }
+
     @Test fun `locations come from the BCWMS API or the standard API`() {
         val bcwms = listOf(
             JSONObject().put("code", "DKC").put("name", "DKÇ Merkez").put("useAsInTransit", false),

@@ -333,6 +333,12 @@ fun BinInquiryModule(labelsOnly: Boolean = false) {
     var locationsLoading by remember { mutableStateOf(false) }
     var labelCopies by rememberSaveable { mutableStateOf("1") }
     var printing by remember { mutableStateOf(false) }
+    // DKÇ (17 Eyl 2026): lokasyon → alan → o alandaki bütün rafların etiketi.
+    var zones by remember { mutableStateOf<List<Pair<String, String>>>(emptyList()) }
+    var zone by rememberSaveable { mutableStateOf("") }
+    var zoneBins by remember { mutableStateOf<List<JSONObject>>(emptyList()) }
+    var showZonePicker by remember { mutableStateOf(false) }
+    var zoneLoading by remember { mutableStateOf(false) }
 
     // DKÇ (17 Eyl 2026): "lokasyonlar bulunamadı". The BCWMS locations API
     // only exists from BC 1.14.2.5; with an older extension the list failed.
@@ -355,6 +361,80 @@ fun BinInquiryModule(labelsOnly: Boolean = false) {
     }
 
     LaunchedEffect(Unit) { loadLocations() }
+
+    suspend fun loadZones() {
+        val loc = location.trim()
+        if (loc.isBlank()) { zones = emptyList(); return }
+        zoneLoading = true
+        val safeLoc = loc.replace("'", "''")
+        val page = BcApi.getAllPages(context, "zones?\$filter=locationCode eq '$safeLoc'&\$orderby=code&\$top=200")
+        zones = if (page.complete) inquiryZoneChoices(page.rows) else {
+            // BC 1.14.2.7 öncesi: alan listesi yok, raflardan türet (açıklamasız).
+            val fallback = BcApi.getAllPages(context, "bins?\$filter=locationCode eq '$safeLoc'&\$select=zoneCode&\$top=1000")
+            if (fallback.complete) inquiryZoneChoices(fallback.rows.map { JSONObject().put("code", it.optString("zoneCode")) })
+            else emptyList()
+        }
+        zoneLoading = false
+    }
+
+    suspend fun loadZoneBins() {
+        val loc = location.trim(); val z = zone.trim()
+        zoneBins = emptyList()
+        if (loc.isBlank() || z.isBlank()) return
+        zoneLoading = true
+        val page = BcApi.getAllPages(
+            context,
+            "bins?\$filter=locationCode eq '${loc.replace("'", "''")}' and zoneCode eq '${z.replace("'", "''")}'&\$orderby=code&\$top=1000",
+        )
+        zoneLoading = false
+        if (!page.complete) { status = "HATA: Alanın rafları alınamadı. Yenileyin."; return }
+        val description = zones.firstOrNull { it.first.equals(z, ignoreCase = true) }?.second.orEmpty()
+        zoneBins = sortedBinCodes(page.rows).map { row -> JSONObject(row.toString()).put("zoneDescription", description) }
+        status = if (zoneBins.isEmpty()) "BOŞ: '$z' alanında raf yok."
+            else "TAMAM: '$z' alanında ${zoneBins.size} raf. Etiketleri topluca alabilirsiniz."
+    }
+
+    fun printZoneLabels() {
+        if (printing || zoneBins.isEmpty()) return
+        val total = parseLabelCopies(labelCopies) ?: run {
+            status = "HATA: Etiket adedi 1 ile $LABEL_COPIES_MAX arasında olmalı."
+            return
+        }
+        scope.launch {
+            printing = true
+            try {
+                val choice = resolveInquiryPrinter(context).getOrElse {
+                    status = "HATA: ${it.message}"
+                    return@launch
+                }
+                var done = 0
+                for (row in zoneBins) {
+                    val loc = row.optString("locationCode"); val code = row.optString("code")
+                    status = "🖨 ${zoneBins.size} raf · $code (${done + 1}.)"
+                    val key = "locationCode='${loc.replace("'", "''")}',code='${code.replace("'", "''")}'"
+                    for (copies in labelCopyBatches(total)) {
+                        val payload = JSONObject().apply {
+                            put("printerId", choice.printerCode)
+                            put("copies", copies)
+                        }.toString()
+                        val r = BcApi.boundAction(context, "bins", key, "printLabel", payload)
+                        if (!r.ok) {
+                            status = "🔴 $code rafında durdu: ${BcApi.errorMessage(r.body)} (HTTP ${r.httpCode})" +
+                                if (done > 0) " · $done raf kuyruğa alınmıştı." else ""
+                            return@launch
+                        }
+                    }
+                    done++
+                }
+                status = "🟢 ${zoneBins.size} raf × $total etiket ${choice.printerCode.ifBlank { "BC varsayılanı" }} kuyruğuna alındı."
+            } finally {
+                printing = false
+            }
+        }
+    }
+
+    LaunchedEffect(location) { zone = ""; zoneBins = emptyList(); loadZones() }
+    LaunchedEffect(zone) { loadZoneBins() }
 
     fun openBinPicker() {
         val loc = location.trim()
@@ -455,6 +535,68 @@ fun BinInquiryModule(labelsOnly: Boolean = false) {
                 },
                 enabled = !loading && !pickerLoading && !locationsLoading,
             ) { Text(if (locationsLoading) "..." else "Seç") }
+        }
+        Spacer(Modifier.height(8.dp))
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text("Alan (bölge)", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(
+                    zone.ifBlank { "Seçilmedi" } + (zones.firstOrNull { it.first == zone }?.second?.takeIf(String::isNotBlank)?.let { " · $it" } ?: ""),
+                    fontWeight = FontWeight.Bold,
+                )
+            }
+            if (zone.isNotBlank()) {
+                TextButton(onClick = { zone = "" }, enabled = !printing) { Text("Temizle") }
+            }
+            OutlinedButton(
+                onClick = { if (zones.isNotEmpty()) showZonePicker = true else scope.launch { loadZones(); if (zones.isNotEmpty()) showZonePicker = true } },
+                enabled = !loading && !printing && !zoneLoading && location.isNotBlank(),
+            ) { Text(if (zoneLoading) "..." else "Alan seç") }
+        }
+        if (showZonePicker) {
+            InquiryPickerDialog(
+                title = "Alan seç · ${location.trim()}",
+                items = zones,
+                onDismiss = { showZonePicker = false },
+                onPick = { code -> zone = code; showZonePicker = false },
+            )
+        }
+        if (zoneBins.isNotEmpty()) {
+            Spacer(Modifier.height(8.dp))
+            Card(Modifier.fillMaxWidth()) {
+                Column(Modifier.padding(12.dp)) {
+                    Text("$zone alanı · ${zoneBins.size} raf", fontWeight = FontWeight.Bold)
+                    Text(
+                        zoneBins.take(6).joinToString(" · ") { it.optString("code") } +
+                            if (zoneBins.size > 6) " · +${zoneBins.size - 6}" else "",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    LabelCopiesField(labelCopies, { labelCopies = it }, enabled = !printing)
+                    Spacer(Modifier.height(8.dp))
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        OutlinedButton(
+                            onClick = {
+                                runCatching { printBinDocuments(context, zoneBins, "Raf-${location.trim()}-$zone") }
+                                    .onFailure { status = "HATA: Belge açılamadı: ${it.message}" }
+                            },
+                            enabled = !printing,
+                            modifier = Modifier.weight(1f).height(48.dp),
+                        ) { Text("A4 · ${zoneBins.size} sayfa") }
+                        Button(
+                            onClick = { printZoneLabels() },
+                            enabled = !printing && parseLabelCopies(labelCopies) != null,
+                            modifier = Modifier.weight(1f).height(48.dp),
+                        ) { Text(if (printing) "Gönderiliyor..." else "Etiket yazıcısına") }
+                    }
+                    if (!printing) Text(
+                        "A4: her rafa bir tam sayfa, Android yazdırma ekranından PDF kaydedilebilir.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
         }
         Spacer(Modifier.height(8.dp))
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {

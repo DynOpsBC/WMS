@@ -41,6 +41,7 @@ permissionset 72094 "DOPSWHS-ADMIN"
         tabledata Item = R,
         tabledata Location = R,
         tabledata Bin = R,
+        tabledata Zone = R,
         tabledata "Assembly Header" = RIM,
         tabledata "Assembly Line" = RIM,
         tabledata "Warehouse Activity Header" = RIM,

@@ -84,3 +84,25 @@ internal fun LabelCopiesField(
         )
     }
 }
+
+/**
+ * DKÇ (17 Eyl 2026): "konumlardan alanlara, alandan o alanın gözlerini QR
+ * alıcam". Zones of a location for the label flow. The zones API arrived with
+ * BC 1.14.2.7; older extensions fall back to the distinct zone codes of the
+ * bins API, which carries no description.
+ */
+internal fun inquiryZoneChoices(rows: List<JSONObject>): List<Pair<String, String>> =
+    rows.map { it.optString("code").trim() to it.optString("description").trim() }
+        .filter { it.first.isNotBlank() }
+        .distinctBy { it.first.uppercase() }
+        .sortedBy { it.first.uppercase() }
+
+/** A1, A2, A10 — not A1, A10, A2: digits inside a bin code sort numerically. */
+internal fun sortedBinCodes(rows: List<JSONObject>): List<JSONObject> =
+    rows.sortedWith(compareBy({ binSortKey(it.optString("code")) }, { it.optString("code").uppercase() }))
+
+private fun binSortKey(code: String): String =
+    Regex("\\d+|\\D+").findAll(code.uppercase()).joinToString("") { part ->
+        val value = part.value
+        if (value.first().isDigit()) value.padStart(9, '0') else value
+    }

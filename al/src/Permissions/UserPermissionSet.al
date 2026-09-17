@@ -40,6 +40,7 @@ permissionset 72095 "DOPSWHS-USER"
         tabledata Item = R,
         tabledata Location = R,
         tabledata Bin = R,
+        tabledata Zone = R,
         tabledata "Item Unit of Measure" = R,
         tabledata "Item Variant" = R,
         tabledata "Item Tracking Code" = R,

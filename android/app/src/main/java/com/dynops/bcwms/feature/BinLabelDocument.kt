@@ -20,44 +20,62 @@ internal fun binLabelMatrix(code: String, format: BarcodeFormat) = MultiFormatWr
     code, format, 0, 0, mapOf(EncodeHintType.CHARACTER_SET to "UTF-8", EncodeHintType.MARGIN to 12),
 )
 
-/** A single vector page, scaled to the printable area; defaults to ISO A3 landscape. */
-internal fun printBinDocument(context: Context, bin: JSONObject) {
-    val code = bin.optString("code")
-    require(code.isNotBlank()) { "Raf kodu boş." }
-    val snapshot = JSONObject(bin.toString())
-    val name = "Bin-${bin.optString("locationCode")}-${code}".replace(Regex("[^\\p{L}\\p{N}._-]"), "_")
+/** Prints one bin per full A4 page (DKÇ, 17 Eyl 2026: an area's bins in one go). */
+internal fun printBinDocument(context: Context, bin: JSONObject) =
+    printBinDocuments(context, listOf(bin), "Bin-${bin.optString("locationCode")}-${bin.optString("code")}")
+
+/**
+ * One vector page per bin, each scaled to the printable area of an A4 sheet in
+ * landscape. The operator hangs the sheet as it is; nothing is cut.
+ */
+internal fun printBinDocuments(context: Context, bins: List<JSONObject>, documentName: String) {
+    require(bins.isNotEmpty()) { "Yazdırılacak raf yok." }
+    val snapshots = bins.map { JSONObject(it.toString()) }
+    require(snapshots.all { it.optString("code").isNotBlank() }) { "Raf kodu boş." }
+    val name = documentName.replace(Regex("[^\\p{L}\\p{N}._-]"), "_").ifBlank { "Raf-Etiketleri" }
     val manager = context.getSystemService(Context.PRINT_SERVICE) as PrintManager
     manager.print(name, object : PrintDocumentAdapter() {
-        private var attributes = PrintAttributes.Builder().setMediaSize(PrintAttributes.MediaSize.ISO_A3.asLandscape()).build()
+        private var attributes = PrintAttributes.Builder().setMediaSize(PrintAttributes.MediaSize.ISO_A4.asLandscape()).build()
         override fun onLayout(oldAttributes: PrintAttributes?, newAttributes: PrintAttributes, cancellationSignal: CancellationSignal, callback: LayoutResultCallback, extras: Bundle?) {
             if (cancellationSignal.isCanceled) { callback.onLayoutCancelled(); return }
             attributes = newAttributes
-            callback.onLayoutFinished(PrintDocumentInfo.Builder("$name.pdf").setContentType(PrintDocumentInfo.CONTENT_TYPE_DOCUMENT).setPageCount(1).build(), oldAttributes != newAttributes)
+            callback.onLayoutFinished(
+                PrintDocumentInfo.Builder("$name.pdf")
+                    .setContentType(PrintDocumentInfo.CONTENT_TYPE_DOCUMENT)
+                    .setPageCount(snapshots.size)
+                    .build(),
+                oldAttributes != newAttributes,
+            )
         }
         override fun onWrite(pages: Array<out PageRange>, destination: ParcelFileDescriptor, cancellationSignal: CancellationSignal, callback: WriteResultCallback) {
             if (cancellationSignal.isCanceled) { callback.onWriteCancelled(); return }
-            if (pages.none { it.start <= 0 && it.end >= 0 }) { callback.onWriteFinished(emptyArray()); return }
+            val wanted = snapshots.indices.filter { index -> pages.any { it.start <= index && it.end >= index } }
+            if (wanted.isEmpty()) { callback.onWriteFinished(emptyArray()); return }
             try {
                 val document = PrintedPdfDocument(context, attributes)
                 try {
-                    val page = document.startPage(0)
-                    val rect = page.info.contentRect
-                    val canvas = page.canvas
-                    canvas.save()
-                    canvas.translate(rect.left.toFloat(), rect.top.toFloat())
-                    val scale = minOf(rect.width() / 1120f, rect.height() / 770f)
-                    canvas.translate((rect.width() - 1120f * scale) / 2, (rect.height() - 770f * scale) / 2)
-                    canvas.scale(scale, scale)
-                    drawBinLabel(canvas, snapshot)
-                    canvas.restore()
-                    document.finishPage(page)
+                    for ((written, index) in wanted.withIndex()) {
+                        if (cancellationSignal.isCanceled) { callback.onWriteCancelled(); return }
+                        val page = document.startPage(written)
+                        val rect = page.info.contentRect
+                        val canvas = page.canvas
+                        canvas.save()
+                        canvas.translate(rect.left.toFloat(), rect.top.toFloat())
+                        val scale = minOf(rect.width() / 1120f, rect.height() / 770f)
+                        canvas.translate((rect.width() - 1120f * scale) / 2, (rect.height() - 770f * scale) / 2)
+                        canvas.scale(scale, scale)
+                        drawBinLabel(canvas, snapshots[index])
+                        canvas.restore()
+                        document.finishPage(page)
+                    }
                     if (cancellationSignal.isCanceled) { callback.onWriteCancelled(); return }
                     FileOutputStream(destination.fileDescriptor).use { document.writeTo(it) }
                 } finally { document.close() }
-                if (cancellationSignal.isCanceled) callback.onWriteCancelled() else callback.onWriteFinished(arrayOf(PageRange(0, 0)))
-            } catch (e: Exception) { callback.onWriteFailed("Bin belgesi oluşturulamadı: ${e.message}") }
+                if (cancellationSignal.isCanceled) callback.onWriteCancelled()
+                else callback.onWriteFinished(wanted.map { PageRange(it, it) }.toTypedArray())
+            } catch (e: Exception) { callback.onWriteFailed("Raf belgesi oluşturulamadı: ${e.message}") }
         }
-    }, PrintAttributes.Builder().setMediaSize(PrintAttributes.MediaSize.ISO_A3.asLandscape()).setColorMode(PrintAttributes.COLOR_MODE_MONOCHROME).setMinMargins(PrintAttributes.Margins.NO_MARGINS).build())
+    }, PrintAttributes.Builder().setMediaSize(PrintAttributes.MediaSize.ISO_A4.asLandscape()).setColorMode(PrintAttributes.COLOR_MODE_MONOCHROME).setMinMargins(PrintAttributes.Margins.NO_MARGINS).build())
 }
 
 internal fun drawBinLabel(canvas: Canvas, bin: JSONObject) {
@@ -75,11 +93,18 @@ internal fun drawBinLabel(canvas: Canvas, bin: JSONObject) {
     paint.style = Paint.Style.FILL
     canvas.drawRect(24f, 24f, 1096f, 115f, paint)
     paint.color = Color.WHITE
-    text("RAF ETİKETİ", 48f, 84f, 40f, 590f, true)
+    // DKÇ 17 Eyl: the area must be readable from the aisle, so its name (not
+    // just the code) fills the band and the bin code stays the largest text.
+    val zoneName = bin.optString("zoneDescription").ifBlank { bin.optString("zoneCode") }
+    text(zoneName.ifBlank { "RAF ETİKETİ" }, 48f, 84f, 40f, 590f, true)
     text(bin.optString("locationCode"), 720f, 84f, 36f, 348f, true)
     paint.color = Color.BLACK
     text(code, 48f, 295f, 135f, 735f, true)
-    text("BÖLGE: ${bin.optString("zoneCode").ifBlank { "—" }}  ·  TİP: ${bin.optString("binTypeCode").ifBlank { "—" }}", 48f, 367f, 28f, 730f)
+    val zoneLine = listOfNotNull(
+        bin.optString("zoneCode").takeIf(String::isNotBlank)?.let { "ALAN: $it" },
+        bin.optString("binTypeCode").takeIf(String::isNotBlank)?.let { "TİP: $it" },
+    ).joinToString("  ·  ")
+    text(zoneLine, 48f, 367f, 28f, 730f)
     text(bin.optString("description"), 48f, 420f, 30f, 730f)
     fun matrix(format: BarcodeFormat, x: Float, y: Float, width: Float, height: Float) {
         val bits = binLabelMatrix(code, format)
