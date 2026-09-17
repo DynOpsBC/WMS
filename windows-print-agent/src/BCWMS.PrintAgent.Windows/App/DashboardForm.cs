@@ -78,11 +78,6 @@ internal sealed class DashboardForm : Form
     /// </summary>
     private async Task AutoImportRuntimeSecretsAsync()
     {
-        if (!string.IsNullOrWhiteSpace(_controller.Settings.StationId))
-        {
-            return;
-        }
-
         var candidatePath = Path.Combine(AppContext.BaseDirectory, "print-agent.runtime.secrets.json");
         if (!File.Exists(candidatePath))
         {
@@ -92,6 +87,43 @@ internal sealed class DashboardForm : Form
         try
         {
             var imported = await RuntimeSecretsImporter.ImportAsync(candidatePath, _lifetime.Token);
+            var current = _controller.Settings;
+            var configured = !string.IsNullOrWhiteSpace(current.StationId);
+
+            // BADE (17 Eyl 2026): an upgrade package carries renewed credentials
+            // for the SAME station. Take them over silently and reconnect;
+            // printers and names stay as they are. A file for another station
+            // is never applied on top of a working setup.
+            if (configured)
+            {
+                if (!string.Equals(current.StationId, imported.StationId, StringComparison.OrdinalIgnoreCase))
+                {
+                    _controller.Logger.Warning($"Paketteki ayar dosyası başka istasyona ait ({imported.StationId}); mevcut kurulum ({current.StationId}) korunuyor.");
+                    return;
+                }
+
+                var newer = imported.BlobSasExpiresAtUtc is { } incoming &&
+                    (current.BlobSasExpiresAtUtc is not { } existing || incoming > existing);
+                if (!newer)
+                {
+                    return;
+                }
+
+                var renewed = current with
+                {
+                    JobsListenConnectionString = imported.JobsListenConnectionString,
+                    StatusSendConnectionString = imported.StatusSendConnectionString,
+                    StorageAccount = imported.StorageAccount,
+                    BlobEndpoint = imported.BlobEndpoint,
+                    BlobReadSas = imported.BlobReadSas,
+                    BlobSasExpiresAtUtc = imported.BlobSasExpiresAtUtc
+                };
+                await _controller.SaveAndRestartAsync(renewed, _printers, _lifetime.Token);
+                LoadSettings(_controller.Settings);
+                _controller.Logger.Info($"Yenilenen Azure ayarları otomatik alındı (SAS bitişi {imported.BlobSasExpiresAtUtc:yyyy-MM-dd}); yazıcı ayarları korundu.");
+                return;
+            }
+
             _station.Text = imported.StationId;
             _jobsConnection.Text = imported.JobsListenConnectionString;
             _statusConnection.Text = imported.StatusSendConnectionString;
@@ -102,7 +134,7 @@ internal sealed class DashboardForm : Form
             UpdateSasExpiry();
             _controller.Logger.Info("Kurulum paketindeki print-agent.runtime.secrets.json otomatik içe aktarıldı.");
         }
-        catch (Exception exception) when (exception is InvalidDataException or IOException or UnauthorizedAccessException)
+        catch (Exception exception) when (exception is InvalidDataException or IOException or UnauthorizedAccessException or InvalidOperationException or ArgumentException)
         {
             // Fall through to manual "İçe Aktar" — the installer file may be
             // stale or partially written; never block the app on it.

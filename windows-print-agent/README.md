@@ -34,6 +34,13 @@ The Azure entities are deliberately fixed:
   whose only permission is `r`; account SAS tokens are rejected.
 
 
+## Yenilenen ayarların otomatik alınması (1.1.1)
+
+Kurulum paketi ajanın yanına `print-agent.runtime.secrets.json` koyuyorsa: istasyon henüz ayarlı değilse
+alanlar dolar (ilk kurulum); istasyon ayarlıysa ve dosya AYNI istasyona ait, SAS bitişi daha ileri tarihliyse
+Azure bağlantı bilgileri sessizce alınıp kaydedilir ve ajan yeniden bağlanır — yazıcı seçimleri ve adları
+korunur. Başka istasyonun dosyası mevcut kuruluma uygulanmaz.
+
 ## Yazıcı görünen adları (1.1.1, 17 Eylül 2026)
 
 Yazıcılar sekmesindeki **Görünen adlar** tablosunda işaretli her etiket yazıcısına ve belge
