@@ -53,6 +53,7 @@ fun ScanField(
     focusRequester: androidx.compose.ui.focus.FocusRequester? = null,
     updateValueOnScan: Boolean = true,
     scanOnly: Boolean = false,
+    okButton: Boolean = true,
 ) {
     val context = LocalContext.current
     var hasCameraPermission by remember {
@@ -135,7 +136,7 @@ fun ScanField(
             )
             Spacer(Modifier.width(8.dp))
             // Elle giriş için "OK" — yazıp bas, hemen işlensin (Enter'a alternatif).
-            if (onScanned != null && !scanOnly) {
+            if (onScanned != null && !scanOnly && okButton) {
                 // OK, alan boşken pasifti: operatör basıyor, hiçbir şey olmuyor
                 // ve nedenini göremiyordu. Artık basılabiliyor ve ne beklendiğini
                 // söylüyor (UAT: aynı sessizlik yerleştirme, ad-hoc ve paketlemede).
@@ -147,9 +148,9 @@ fun ScanField(
                 ) { Text("OK") }
                 Spacer(Modifier.width(6.dp))
             }
-            FilledTonalButton(
+            FilledTonalIconButton(
                 enabled = enabled,
-                modifier = Modifier.semantics { contentDescription = if (scanning) "Kamerayı kapat" else "Kamera ile okut" },
+                modifier = Modifier.size(48.dp).semantics { contentDescription = if (scanning) "Kamerayı kapat" else "Kamera ile okut" },
                 onClick = {
                     cameraError = null
                     if (hasCameraPermission) scanning = !scanning

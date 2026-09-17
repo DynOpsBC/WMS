@@ -9,8 +9,8 @@ val releaseVersionCodeOverride = providers.gradleProperty("releaseVersionCode").
 val releaseVersionNameOverride = providers.gradleProperty("releaseVersionName").orNull?.takeIf { it.isNotBlank() }
 // BADE ve EMU aynı kaynak koddan aynı anda yayınlanır. Müşteri flavor'larında
 // ayrı sürüm değeri tutmak bir paketin geride kalmasına neden oluyordu.
-val customerVersionCode = releaseVersionCodeOverride ?: 200129
-val customerVersionName = releaseVersionNameOverride ?: "1.14.129"
+val customerVersionCode = releaseVersionCodeOverride ?: 200130
+val customerVersionName = releaseVersionNameOverride ?: "1.14.130"
 
 plugins {
   alias(libs.plugins.android.application)
@@ -38,8 +38,8 @@ android {
     // Saha APK'larından bazılarında CI tarafından 100000+ versionCode
     // kullanıldı. Görünen sürüm adı eski olsa bile Android yalnız sayısal kodu
     // karşılaştırdığı için semantik sürümleri 200000 bandında monoton tutuyoruz.
-    versionCode = releaseVersionCodeOverride ?: 200129
-    versionName = releaseVersionNameOverride ?: "1.14.129"
+    versionCode = releaseVersionCodeOverride ?: 200130
+    versionName = releaseVersionNameOverride ?: "1.14.130"
     manifestPlaceholders["appLabel"] = "BCWMS"
     // Ücretsiz dağıtım kanalı: public GitHub Release içindeki sabit latest.json.
     // APK aynı release'de tutulur; uygulamaya GitHub hesabı/token gömülmez.

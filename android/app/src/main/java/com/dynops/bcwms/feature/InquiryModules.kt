@@ -145,13 +145,14 @@ fun ItemInquiryModule(labelsOnly: Boolean = false) {
     val itemUom = item?.let { firstValue(it, "baseUnitOfMeasure", "baseUoM") }.orEmpty()
     LazyColumn(Modifier.fillMaxSize().padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
       item {
-        ScanField("Ürün No / LP No", query, { query = it; item = null }, modifier = Modifier.fillMaxWidth(), enabled = !loading, onScanned = {
+        ScanField("Ürün No / LP No", query, { query = it; item = null }, modifier = Modifier.fillMaxWidth(), enabled = !loading, okButton = false, onScanned = {
             val resolved = BarcodeIntentResolver.resolve(it)
             query = resolved.itemNo ?: resolved.value
+            load()
         })
         Spacer(Modifier.height(8.dp))
-        Button(onClick = { load() }, enabled = !loading, modifier = Modifier.fillMaxWidth()) {
-            Text(if (loading) "..." else "🔎 Sorgula", fontWeight = FontWeight.Bold)
+        Button(onClick = { load() }, enabled = !loading && query.isNotBlank(), modifier = Modifier.fillMaxWidth().height(48.dp)) {
+            Text(if (loading) "..." else "Sorgula", fontWeight = FontWeight.Bold)
         }
         Spacer(Modifier.height(8.dp))
         StatusText(status)
@@ -328,6 +329,7 @@ fun BinInquiryModule(labelsOnly: Boolean = false) {
     var locations by remember { mutableStateOf<List<Pair<String, String>>>(emptyList()) }
     var binChoices by remember { mutableStateOf<List<Pair<String, String>>>(emptyList()) }
     var showLocationPicker by remember { mutableStateOf(false) }
+    var manualLocation by remember { mutableStateOf(false) }
     var showBinPicker by remember { mutableStateOf(false) }
     var pickerLoading by remember { mutableStateOf(false) }
     var locationsLoading by remember { mutableStateOf(false) }
@@ -561,34 +563,40 @@ fun BinInquiryModule(labelsOnly: Boolean = false) {
       item {
         Text(if (labelsOnly) "Raf Etiketi" else "Raf Sorgu", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
         Spacer(Modifier.height(8.dp))
-        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            ScanField("Lokasyon", location, { location = it; binCode = ""; bin = null; contents = emptyList(); lps = emptyList(); whseEntries = emptyList() }, modifier = Modifier.weight(1f), enabled = !loading && !pickerLoading)
-            Spacer(Modifier.width(8.dp))
-            OutlinedButton(
-                onClick = {
-                    if (locations.isNotEmpty()) showLocationPicker = true
-                    else scope.launch { loadLocations(); if (locations.isNotEmpty()) showLocationPicker = true }
-                },
-                enabled = !loading && !pickerLoading && !locationsLoading,
-            ) { Text(if (locationsLoading) "..." else "Seç") }
+        // DKÇ (17 Eyl 2026): "kare kare kutular, göze hitap etmiyor". Location
+        // and area are tap-to-pick rows; only the bin code is typed or scanned.
+        SelectorRow(
+            label = "Lokasyon",
+            value = location.trim(),
+            hint = locations.firstOrNull { it.first == location.trim() }?.second.orEmpty(),
+            placeholder = if (locationsLoading) "Yükleniyor..." else "Seçin",
+            enabled = !loading && !pickerLoading && !locationsLoading && !printing,
+            onClick = {
+                if (locations.isNotEmpty()) showLocationPicker = true
+                else scope.launch { loadLocations(); if (locations.isNotEmpty()) showLocationPicker = true else manualLocation = true }
+            },
+        )
+        if (manualLocation) {
+            Spacer(Modifier.height(6.dp))
+            OutlinedTextField(
+                value = location,
+                onValueChange = { location = it; binCode = ""; bin = null; contents = emptyList(); lps = emptyList(); whseEntries = emptyList() },
+                label = { Text("Lokasyon kodu") },
+                singleLine = true,
+                enabled = !loading && !pickerLoading,
+                modifier = Modifier.fillMaxWidth(),
+            )
         }
-        Spacer(Modifier.height(8.dp))
-        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Column(Modifier.weight(1f)) {
-                Text("Alan (bölge)", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                Text(
-                    zone.ifBlank { "Seçilmedi" } + (zones.firstOrNull { it.first == zone }?.second?.takeIf(String::isNotBlank)?.let { " · $it" } ?: ""),
-                    fontWeight = FontWeight.Bold,
-                )
-            }
-            if (zone.isNotBlank()) {
-                TextButton(onClick = { zone = "" }, enabled = !printing) { Text("Temizle") }
-            }
-            OutlinedButton(
-                onClick = { if (zones.isNotEmpty()) showZonePicker = true else scope.launch { loadZones(); if (zones.isNotEmpty()) showZonePicker = true } },
-                enabled = !loading && !printing && !zoneLoading && location.isNotBlank(),
-            ) { Text(if (zoneLoading) "..." else "Alan seç") }
-        }
+        Spacer(Modifier.height(6.dp))
+        SelectorRow(
+            label = "Alan",
+            value = zone,
+            hint = zones.firstOrNull { it.first == zone }?.second.orEmpty(),
+            placeholder = if (zoneLoading) "Yükleniyor..." else if (location.isBlank()) "Önce lokasyon" else "Seçin",
+            enabled = !loading && !printing && !zoneLoading && location.isNotBlank(),
+            onClick = { if (zones.isNotEmpty()) showZonePicker = true else scope.launch { loadZones(); if (zones.isNotEmpty()) showZonePicker = true } },
+            onClear = if (zone.isNotBlank()) ({ zone = "" }) else null,
+        )
         if (showZonePicker) {
             InquiryPickerDialog(
                 title = "Alan seç · ${location.trim()}",
@@ -601,7 +609,7 @@ fun BinInquiryModule(labelsOnly: Boolean = false) {
             Spacer(Modifier.height(8.dp))
             Card(Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(12.dp)) {
-                    Text("$zone alanı · ${zoneBins.size} raf", fontWeight = FontWeight.Bold)
+                    Text("${zoneBins.size} raf", fontWeight = FontWeight.Bold)
                     Text(
                         zoneBins.take(6).joinToString(" · ") { it.optString("code") } +
                             if (zoneBins.size > 6) " · +${zoneBins.size - 6}" else "",
@@ -610,12 +618,6 @@ fun BinInquiryModule(labelsOnly: Boolean = false) {
                     )
                     Spacer(Modifier.height(8.dp))
                     LabelCopiesField(labelCopies, { labelCopies = it }, enabled = !printing)
-                    Spacer(Modifier.height(8.dp))
-                    OutlinedButton(
-                        onClick = { printZoneOwnLabel() },
-                        enabled = !printing && parseLabelCopies(labelCopies) != null,
-                        modifier = Modifier.fillMaxWidth().height(48.dp),
-                    ) { Text("Sadece alan etiketi ($zone)") }
                     Spacer(Modifier.height(8.dp))
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         OutlinedButton(
@@ -630,30 +632,49 @@ fun BinInquiryModule(labelsOnly: Boolean = false) {
                             onClick = { printZoneLabels() },
                             enabled = !printing && parseLabelCopies(labelCopies) != null,
                             modifier = Modifier.weight(1f).height(48.dp),
-                        ) { Text(if (printing) "Gönderiliyor..." else "Etiket yazıcısına") }
+                        ) { Text(if (printing) "Gönderiliyor..." else "Etiket yazıcısı") }
                     }
+                    TextButton(
+                        onClick = { printZoneOwnLabel() },
+                        enabled = !printing && parseLabelCopies(labelCopies) != null,
+                        modifier = Modifier.fillMaxWidth(),
+                    ) { Text("Sadece alan etiketi") }
                 }
             }
         }
-        Spacer(Modifier.height(8.dp))
-        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            ScanField("Bin / Raf kodu", binCode, { binCode = it; bin = null; contents = emptyList(); lps = emptyList(); whseEntries = emptyList() }, modifier = Modifier.weight(1f), enabled = !loading && !pickerLoading, onScanned = {
+        Spacer(Modifier.height(10.dp))
+        SelectorRow(
+            label = "Raf",
+            value = binCode.trim(),
+            hint = "",
+            placeholder = if (pickerLoading) "Yükleniyor..." else if (location.isBlank()) "Önce lokasyon" else "Listeden seçin veya aşağıya okutun",
+            enabled = !pickerLoading && !loading && location.isNotBlank(),
+            onClick = { openBinPicker() },
+            onClear = if (binCode.isNotBlank()) ({ binCode = ""; bin = null; contents = emptyList(); lps = emptyList(); whseEntries = emptyList() }) else null,
+        )
+        Spacer(Modifier.height(6.dp))
+        ScanField(
+            "Raf kodu okut",
+            binCode,
+            { binCode = it; bin = null; contents = emptyList(); lps = emptyList(); whseEntries = emptyList() },
+            modifier = Modifier.fillMaxWidth(),
+            enabled = !loading && !pickerLoading,
+            okButton = false,
+            onScanned = {
                 binCode = BarcodeIntentResolver.resolve(it).value
                 bin = null; load()
-            })
-            Spacer(Modifier.width(8.dp))
-            OutlinedButton(onClick = { openBinPicker() }, enabled = !pickerLoading && !loading && location.isNotBlank()) { Text(if (pickerLoading) "..." else "Raf bul") }
-        }
+            },
+        )
         Spacer(Modifier.height(8.dp))
-        Button(onClick = { load() }, enabled = !loading && !pickerLoading && location.isNotBlank() && binCode.isNotBlank(), modifier = Modifier.fillMaxWidth()) {
-            Text(if (loading) "..." else if (labelsOnly) "Etiketi Hazırla" else "🔎 Sorgula", fontWeight = FontWeight.Bold)
+        Button(onClick = { load() }, enabled = !loading && !pickerLoading && location.isNotBlank() && binCode.isNotBlank(), modifier = Modifier.fillMaxWidth().height(48.dp)) {
+            Text(if (loading) "..." else if (labelsOnly) "Etiketi Hazırla" else "Sorgula", fontWeight = FontWeight.Bold)
         }
         if (showLocationPicker) {
             InquiryPickerDialog(
                 title = "Lokasyon seç",
                 items = locations,
                 onDismiss = { showLocationPicker = false },
-                onPick = { code -> location = code; binCode = ""; bin = null; contents = emptyList(); lps = emptyList(); whseEntries = emptyList(); showLocationPicker = false },
+                onPick = { code -> location = code; manualLocation = false; binCode = ""; bin = null; contents = emptyList(); lps = emptyList(); whseEntries = emptyList(); showLocationPicker = false },
             )
         }
         if (showBinPicker) {
@@ -983,6 +1004,45 @@ fun WhseEntriesModule() {
  * Searchable code list for the inquiry screens: type part of the code or
  * name to filter, tap a row to pick it.
  */
+/** One tappable line: small label, chosen value in bold, chevron; optional clear. */
+@Composable
+internal fun SelectorRow(
+    label: String,
+    value: String,
+    hint: String,
+    placeholder: String,
+    enabled: Boolean,
+    onClick: () -> Unit,
+    onClear: (() -> Unit)? = null,
+) {
+    Surface(
+        onClick = onClick,
+        enabled = enabled,
+        shape = RoundedCornerShape(12.dp),
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = if (enabled) 0.6f else 0.3f),
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Row(Modifier.padding(horizontal = 14.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text(label, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(
+                    value.ifBlank { placeholder },
+                    fontWeight = if (value.isBlank()) FontWeight.Normal else FontWeight.Bold,
+                    fontSize = 16.sp,
+                    color = if (value.isBlank()) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurface,
+                    maxLines = 1,
+                )
+                if (value.isNotBlank() && hint.isNotBlank()) Text(hint, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
+            }
+            if (onClear != null) {
+                TextButton(onClick = onClear, enabled = enabled) { Text("Temizle", fontSize = 12.sp) }
+            } else {
+                Text("›", fontSize = 22.sp, color = MaterialTheme.colorScheme.primary)
+            }
+        }
+    }
+}
+
 @Composable
 internal fun InquiryPickerDialog(
     title: String,
