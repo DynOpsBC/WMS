@@ -24,6 +24,10 @@ class DevicePrintersVisualTest {
             compose.setContent { MaterialTheme { DevicePrintersDialog {} } }
             compose.onNodeWithText("DEPO-ZEBRA").assertExists()
             compose.onNodeWithText("OFIS-LASER").assertExists()
+            // DKÇ 17 Eyl: kart sadeleşti — istasyon/konum/durum satırları burada yok.
+            compose.onAllNodesWithText("Bilgisayar / istasyon:", substring = true).assertCountEquals(0)
+            compose.onAllNodesWithText("Son haberleşme", substring = true).assertCountEquals(0)
+            compose.onAllNodesWithText("BC kaydı aktif", substring = true).assertCountEquals(0)
             compose.runOnIdle { setDefaultPrinter(context, "PAKETLEME-ZEBRA") }
             compose.onNodeWithText("PAKETLEME-ZEBRA").assertExists()
             compose.onNodeWithText("OFIS-LASER").assertExists()

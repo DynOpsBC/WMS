@@ -10,6 +10,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -58,13 +59,11 @@ internal fun DevicePrinterSettings() {
     var draft by remember { mutableStateOf(name) }
     Text("Bu cihazın yazıcıları", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
     TextButton(onClick = { draft = name; editing = true }) { Text("$name · Adı değiştir") }
-    Text("Seçimler yalnızca bu terminalde kaydedilir. Başka cihazların yazıcısı değişmez.", style = MaterialTheme.typography.bodySmall)
+    Text("Seçimler yalnızca bu terminalde kaydedilir.", style = MaterialTheme.typography.bodySmall)
     Spacer(Modifier.height(8.dp))
     PrinterDestinationCard(PRINTER_USAGE_LABEL)
     Spacer(Modifier.height(8.dp))
     PrinterDestinationCard(PRINTER_USAGE_DOCUMENT)
-    Spacer(Modifier.height(8.dp))
-    Text("Terminal → seçilen yazıcı → yazıcıya bağlı bilgisayar. A3 PDF çıktısında hedef, Android yazdırma ekranında ayrıca seçilir.", style = MaterialTheme.typography.bodySmall)
     if (editing) AlertDialog(
         onDismissRequest = { editing = false },
         title = { Text("Cihaz adı") },
@@ -110,38 +109,39 @@ internal fun PrinterDestinationCard(usage: String = PRINTER_USAGE_LABEL, inquiry
         } finally { loading = false }
     }
     val row = rows.firstOrNull { it.optString("code") == effective }
+    // DKÇ (17 Eyl 2026): "etiket yazıcısı çok detaylı bilgiler yazıyor".
+    // Baskıdan önce operatörün tek ihtiyacı hangi yazıcıya gittiğidir; istasyon,
+    // konum, BC kaydı, ajan durumu ve son haberleşme yalnız Yazıcılar ekranında
+    // kalır. Burada sadece bir uyarı satırı gösterilir, o da bir sorun varsa.
+    val warning = when {
+        loading || error.isNotBlank() -> ""
+        complete && effective.isNotBlank() && row == null -> "Bu yazıcı listede yok, yeniden seçin."
+        row != null && !row.optBoolean("active", true) -> "Yazıcı kaydı pasif."
+        inquiryFallback && selected.isBlank() && document.isNotBlank() -> "Etiket yazıcısı seçilmedi, belge yazıcısına gider."
+        inquiryFallback && selected.isBlank() -> "Yazıcı seçilmedi; hedefi BC belirler."
+        else -> ""
+    }
     Card(Modifier.fillMaxWidth()) {
-        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            Text(if (usage == PRINTER_USAGE_LABEL) "Etiket yazıcısı" else "Belge yazıcısı", style = MaterialTheme.typography.labelLarge)
-            Text(effective.ifBlank { "Bu cihazda seçilmedi" }, fontWeight = FontWeight.Bold)
-            if (row != null) {
-                Text(row.optString("description").ifBlank { row.optString("printerHandle") }, style = MaterialTheme.typography.bodySmall)
-                Text("Bilgisayar / istasyon: ${row.optString("stationId").ifBlank { "Bildirilmemiş" }}", style = MaterialTheme.typography.bodySmall)
-                Text("Konum: ${row.optString("locationCode").ifBlank { "Bildirilmemiş" }}", style = MaterialTheme.typography.bodySmall)
-                Text(if (row.optBoolean("active", true)) "BC kaydı aktif" else "Yazıcı kaydı pasif", style = MaterialTheme.typography.bodySmall)
-                val reportedStatus = when (row.optString("agentStatus").lowercase()) {
-                    "online" -> "Çevrimiçi"
-                    "offline" -> "Çevrimdışı"
-                    "printing" -> "Yazdırıyor"
-                    "error" -> "Hata"
-                    else -> "Bilinmiyor"
-                }
-                Text("Son bildirilen durum: $reportedStatus", style = MaterialTheme.typography.bodySmall)
-                val lastSeen = runCatching {
-                    java.time.Instant.parse(row.optString("lastSeenAt")).atZone(java.time.ZoneId.systemDefault())
-                        .takeIf { it.year > 2000 }?.format(java.time.format.DateTimeFormatter.ofPattern("dd.MM.yyyy HH:mm"))
-                }.getOrNull()
-                Text("Son haberleşme: ${lastSeen ?: "Bildirilmemiş"}", style = MaterialTheme.typography.bodySmall)
+        Row(
+            Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(Modifier.weight(1f)) {
+                Text(
+                    if (usage == PRINTER_USAGE_LABEL) "Etiket yazıcısı" else "Belge yazıcısı",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Text(effective.ifBlank { "Seçilmedi" }, fontWeight = FontWeight.Bold)
+                if (warning.isNotBlank()) Text(
+                    warning,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error,
+                )
             }
-            if (inquiryFallback && selected.isBlank()) Text(
-                if (document.isNotBlank()) "Etiket seçilmediği için bu baskı belge yazıcısına gider."
-                else "Hedef BC ayarlarından belirlenir; burada doğrulanamıyor. Yazıcı seçebilirsiniz.",
-                style = MaterialTheme.typography.bodySmall,
-            )
-            if (loading) Text("Yazıcı bilgisi kontrol ediliyor…", style = MaterialTheme.typography.bodySmall)
-            else if (error.isNotBlank()) Text(error, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
-            else if (complete && effective.isNotBlank() && row == null) Text("Seçili yazıcı listede yok. Yeniden seçin.", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
-            TextButton(onClick = { query = ""; open = true; generation++ }) { Text(if (selected.isBlank()) "Yazıcı seç" else "Değiştir") }
+            TextButton(onClick = { query = ""; open = true; generation++ }) {
+                Text(if (selected.isBlank()) "Seç" else "Değiştir")
+            }
         }
     }
     if (open) AlertDialog(onDismissRequest = { open = false }, title = {
@@ -161,8 +161,16 @@ internal fun PrinterDestinationCard(usage: String = PRINTER_USAGE_LABEL, inquiry
                     }) {
                         Column(Modifier.fillMaxWidth()) {
                             Text((if (selected == printer.optString("code")) "✓ " else "") + printer.optString("code"), fontWeight = FontWeight.Bold)
-                            Text(printer.optString("description"), style = MaterialTheme.typography.bodySmall)
-                            Text("${printer.optString("stationId").ifBlank { "İstasyon bildirilmemiş" }} · ${printer.optString("locationCode").ifBlank { "Konum bildirilmemiş" }}", style = MaterialTheme.typography.bodySmall)
+                            // Seçim ekranında yer bilgisi kalır: aynı isimli iki
+                            // yazıcı yalnız istasyon/konumla ayırt edilebiliyor.
+                            Text(
+                                listOfNotNull(
+                                    printer.optString("description").takeIf(String::isNotBlank),
+                                    printer.optString("stationId").takeIf(String::isNotBlank),
+                                    printer.optString("locationCode").takeIf(String::isNotBlank),
+                                ).joinToString(" · ").ifBlank { "Bilgi yok" },
+                                style = MaterialTheme.typography.bodySmall,
+                            )
                         }
                     }
                     HorizontalDivider()
