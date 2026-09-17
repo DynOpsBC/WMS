@@ -45,6 +45,14 @@ data class LocalUserOption(val username: String, val displayName: String)
 internal fun allowAdminBypass(flavor: String): Boolean = true
 
 /**
+ * DKÇ (17 Eyl 2026): operators must not see an "admin, no password" card at
+ * the top of their own list. Customer builds keep the admin route, but under
+ * "Gelişmiş" at the bottom of the screen.
+ */
+internal fun showAdminShortcutCard(flavor: String): Boolean =
+    allowAdminBypass(flavor) && !com.dynops.bcwms.shouldForceProductionFlow(flavor)
+
+/**
  * Email-based sign-in: email → device-code (browser) → environment + company selection → connect.
  * No token paste required. Token-paste remains available as an "advanced" fallback.
  */
@@ -288,7 +296,6 @@ fun LoginFlow(onConnected: (Boolean) -> Unit) {
             Spacer(Modifier.width(12.dp))
             Column {
                 Text("WMS Girişi", fontWeight = FontWeight.Bold, fontSize = 20.sp)
-                Text("Hızlı ve güvenli depo erişimi", fontSize = 12.sp, color = Color.Gray)
             }
         }
         Spacer(Modifier.height(20.dp))
@@ -298,13 +305,8 @@ fun LoginFlow(onConnected: (Boolean) -> Unit) {
 
         when (step) {
             Step.Email -> {
-                Text("Bu terminali bir kez bağlayın", fontWeight = FontWeight.Bold, fontSize = 18.sp)
-                Spacer(Modifier.height(4.dp))
-                Text(
-                    "İlk bağlantıdan sonra güvenli oturum cihazda hatırlanır; her açılışta e-posta girmeniz gerekmez.",
-                    fontSize = 12.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
+                Text("Cihaz kurulumu", fontWeight = FontWeight.Bold, fontSize = 18.sp)
+                Text("Bir kez yapılır, cihaz hatırlar.", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Spacer(Modifier.height(14.dp))
                 if (editEmail) {
                     OutlinedTextField(
@@ -348,7 +350,6 @@ fun LoginFlow(onConnected: (Boolean) -> Unit) {
                     label = { Text("Microsoft hesabı şifresi") },
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
                     visualTransformation = PasswordVisualTransformation(),
-                    supportingText = { Text("Şifre kaydedilmez; yalnız ilk bağlantı için kullanılır.") },
                     singleLine = true, modifier = Modifier.fillMaxWidth()
                 )
                 Spacer(Modifier.height(12.dp))
@@ -356,20 +357,13 @@ fun LoginFlow(onConnected: (Boolean) -> Unit) {
                     onClick = { startPasswordSignIn() },
                     enabled = !busy && email.isNotBlank() && password.isNotBlank(),
                     modifier = Modifier.fillMaxWidth().height(52.dp)
-                ) { Text(if (busy) "Bağlanıyor…" else "Bağlan ve Bu Cihazı Hatırla", fontWeight = FontWeight.Bold) }
+                ) { Text(if (busy) "Bağlanıyor…" else "Bağlan", fontWeight = FontWeight.Bold) }
                 Spacer(Modifier.height(10.dp))
                 OutlinedButton(
                     onClick = { startSignIn() },
                     enabled = !busy && email.isNotBlank(),
                     modifier = Modifier.fillMaxWidth().height(48.dp)
                 ) { Text("Tarayıcıda Microsoft ile Giriş", fontSize = 13.sp) }
-                Text(
-                    "MFA açıksa bu seçeneği kullanın. Kod yalnız ilk cihaz kurulumunda istenir.",
-                    fontSize = 10.sp,
-                    color = Color.Gray,
-                    textAlign = TextAlign.Center,
-                    modifier = Modifier.fillMaxWidth().padding(top = 5.dp),
-                )
                 Spacer(Modifier.height(20.dp))
                 HorizontalDivider()
                 Spacer(Modifier.height(16.dp))
@@ -377,51 +371,27 @@ fun LoginFlow(onConnected: (Boolean) -> Unit) {
                     onClick = { step = Step.LocalUser; status = "" },
                     enabled = !busy,
                     modifier = Modifier.fillMaxWidth().height(48.dp)
-                ) { Text("Bu Cihaz Zaten Kurulu — Depo Girişi", fontSize = 13.sp) }
-                Spacer(Modifier.height(4.dp))
-                Text(
-                    "Servis bağlantısı daha önce yapıldıysa operatörünüzü seçin.",
-                    fontSize = 10.sp,
-                    color = Color.Gray
-                )
+                ) { Text("Depo Girişi", fontSize = 13.sp) }
             }
 
             Step.LocalUser -> {
-                Text("Depo çalışanı girişi", fontWeight = FontWeight.Medium)
-                Text(
-                    "Kullanıcınızı seçin ve şifrenizi girin.",
-                    fontSize = 11.sp,
-                    color = Color.Gray
+                var showAdvanced by remember { mutableStateOf(false) }
+                Text("Depo Girişi", fontWeight = FontWeight.Bold, fontSize = 18.sp)
+                // DKÇ (17 Eyl 2026): one quiet line instead of a "Bağlantı bilgisi" card.
+                if (BcApi.hasToken(context)) Text(
+                    listOf(BcApi.getCompanyName(context), BcApi.getEnvironment(context)).filter(String::isNotBlank).joinToString(" · "),
+                    fontSize = 12.sp,
+                    color = Color.Gray,
                 )
                 Spacer(Modifier.height(12.dp))
-                // Bu ekranda yalnız ortam yazıyordu; hangi şirkete ve hangi
-                // kullanıcıyla bağlı olunduğu görünmüyordu (UAT GN-19).
-                if (BcApi.hasToken(context)) {
-                    var oturumKullanici by remember { mutableStateOf("") }
-                    LaunchedEffect(Unit) { oturumKullanici = BcApi.currentUserId(context).trim() }
-                    Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)) {
-                        Column(Modifier.fillMaxWidth().padding(12.dp)) {
-                            Text("Bağlantı bilgisi", fontWeight = FontWeight.Bold, fontSize = 13.sp)
-                            Text("Ortam: ${BcApi.getEnvironment(context).ifBlank { "-" }}", fontSize = 12.sp)
-                            Text("Şirket: ${BcApi.getCompanyName(context).ifBlank { "-" }}", fontSize = 12.sp)
-                            Text(
-                                "Kullanıcı: ${oturumKullanici.ifBlank { "henüz giriş yapılmadı" }}",
-                                fontSize = 12.sp,
-                            )
-                        }
-                    }
-                    Spacer(Modifier.height(12.dp))
-                }
                 if (!BcApi.hasToken(context)) {
                     Card(colors = CardDefaults.cardColors(containerColor = Color(0xFFFFF3E0))) {
-                        Column(Modifier.fillMaxWidth().padding(12.dp)) {
-                            Text("Bu cihaz henüz kurulmamış", fontWeight = FontWeight.Bold, fontSize = 13.sp)
-                            Text(
-                                "Bağlantı kurulumu için yöneticinizle iletişime geçin veya aşağıdaki gelişmiş ayarları açın.",
-                                fontSize = 11.sp,
-                                color = Color(0xFF6D4C41)
-                            )
-                        }
+                        Text(
+                            "Bu cihaz henüz kurulmamış. Yöneticiniz kurulumu yapmalı.",
+                            Modifier.fillMaxWidth().padding(12.dp),
+                            fontSize = 12.sp,
+                            color = Color(0xFF6D4C41),
+                        )
                     }
                     Spacer(Modifier.height(12.dp))
                 }
@@ -438,11 +408,11 @@ fun LoginFlow(onConnected: (Boolean) -> Unit) {
                             Spacer(Modifier.height(8.dp))
                         }
                         localUsers.isNotEmpty() -> {
-                            Text("Kullanıcınızı seçin", fontSize = 12.sp, fontWeight = FontWeight.Medium, color = Color.Gray)
+                            Text("Adınıza dokunun", fontSize = 12.sp, fontWeight = FontWeight.Medium, color = Color.Gray)
                             Spacer(Modifier.height(8.dp))
 
                             // Kurulum/saha testi için servis hesabıyla yönetici geçişi.
-                            if (allowAdminBypass(BuildConfig.FLAVOR)) Card(
+                            if (showAdminShortcutCard(BuildConfig.FLAVOR)) Card(
                                 onClick = { startVerifiedAdminSession() },
                                 enabled = !busy,
                                 colors = CardDefaults.cardColors(containerColor = Color(0xFFFFF3E0)),
@@ -526,7 +496,7 @@ fun LoginFlow(onConnected: (Boolean) -> Unit) {
                             }
                             Spacer(Modifier.height(4.dp))
                             TextButton(onClick = { manualUserEntry = true }) {
-                                Text("Listede yokum — elle yazayım", fontSize = 12.sp)
+                                Text("Listede yokum", fontSize = 12.sp)
                             }
                         }
                         // Liste boş/çekilemedi: nedenini göster + yönetici yolu
@@ -641,12 +611,21 @@ fun LoginFlow(onConnected: (Boolean) -> Unit) {
                         modifier = Modifier.align(Alignment.CenterHorizontally),
                     ) { Text("Şifremi unuttum", fontSize = 12.sp, color = Color(0xFF6C5CE7)) }
                 }
-                Spacer(Modifier.height(4.dp))
-                TextButton(onClick = { step = Step.Email; status = ""; manualUserEntry = false }) { Text("‹ Geri (e-posta girişine dön)") }
+                Spacer(Modifier.height(12.dp))
+                // DKÇ (17 Eyl 2026): setup routes (device connection, environment,
+                // admin session) live under one small "Gelişmiş" toggle so the
+                // operator screen is just the name list and the password.
+                TextButton(onClick = { showAdvanced = !showAdvanced }) {
+                    Text(if (showAdvanced) "Gelişmiş ▴" else "Gelişmiş ▾", fontSize = 12.sp, color = Color.Gray)
+                }
+                if (showAdvanced) TextButton(onClick = { step = Step.Email; status = ""; manualUserEntry = false }) { Text("Cihaz bağlantısı", fontSize = 12.sp) }
+                if (showAdvanced && !showAdminShortcutCard(BuildConfig.FLAVOR) && allowAdminBypass(BuildConfig.FLAVOR)) {
+                    TextButton(onClick = { startVerifiedAdminSession() }, enabled = !busy) { Text("Yönetici girişi", fontSize = 12.sp) }
+                }
                 // Ortam (sandbox) değiştirmek için eskiden baştan e-posta girişi
                 // yapmak gerekiyordu — oysa AAD token'ı zaten kayıtlı. Kayıtlı
                 // token'la ortamları doğrudan yeniden keşfedip seçiciye geçiyoruz.
-                if (BcApi.hasToken(context)) {
+                if (showAdvanced && BcApi.hasToken(context)) {
                     TextButton(
                         enabled = !busy,
                         onClick = {
@@ -666,7 +645,7 @@ fun LoginFlow(onConnected: (Boolean) -> Unit) {
                                 else ""
                             }
                         },
-                    ) { Text("Ortam / sandbox değiştir (${BcApi.getEnvironment(context)})", fontSize = 12.sp) }
+                    ) { Text("Ortam değiştir (${BcApi.getEnvironment(context)})", fontSize = 12.sp) }
                 }
                 // Not: yönetici girişi artık kullanıcı listesinin başındaki
                 // "Yönetici (demo sürüm)" kartından yapılıyor.

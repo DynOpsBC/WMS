@@ -73,6 +73,11 @@ class ProductionUxRulesTest {
         assertTrue(allowAdminBypass("bade"))
         assertTrue(allowAdminBypass("dynops"))
         assertTrue(allowAdminBypass("customer"))
+        // DKÇ 17 Eyl: customer builds keep the admin route but not as a card
+        // above the operators' own names.
+        assertFalse(com.dynops.bcwms.feature.showAdminShortcutCard("emu"))
+        assertFalse(com.dynops.bcwms.feature.showAdminShortcutCard("bade"))
+        assertTrue(com.dynops.bcwms.feature.showAdminShortcutCard("dynops"))
     }
 
     @Test

@@ -456,6 +456,13 @@ private fun HomeScreen(
             NotConnectedCard()
             Spacer(Modifier.height(16.dp))
         }
+        // DKÇ (17 Eyl 2026): every terminal must have its own printer; say so
+        // on the home screen instead of failing at the first label.
+        val homeLabelPrinter = com.dynops.bcwms.feature.rememberPrinterPreference("bcwms.printer.${com.dynops.bcwms.feature.PRINTER_USAGE_LABEL}")
+        if (connected && shouldForceProductionFlow(flavor) && homeLabelPrinter.isBlank()) {
+            NoPrinterCard(onSelect = { onNavigate(Screen.Printers) })
+            Spacer(Modifier.height(16.dp))
+        }
 
         if (homeSideBySide) {
             val left = visibleCategories.filterIndexed { i, _ -> i % 2 == 0 }
@@ -602,6 +609,28 @@ private fun HelpButton(
         WmsIcon(WmsGlyph.HELP, MaterialTheme.colorScheme.primary, Modifier.size(20.dp))
         Spacer(Modifier.width(9.dp))
         Text("Terminali Nasıl Kullanırım?", fontWeight = FontWeight.Bold)
+    }
+}
+
+@Composable
+private fun NoPrinterCard(onSelect: () -> Unit) {
+    val warn = bcwmsStatus().warning
+    Card(
+        onClick = onSelect,
+        colors = CardDefaults.cardColors(containerColor = warn.copy(alpha = 0.12f)),
+        shape = RoundedCornerShape(14.dp),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
+            WmsIcon(WmsGlyph.PRINTER, warn, Modifier.size(23.dp))
+            Spacer(Modifier.width(10.dp))
+            Text(
+                "Bu cihaz için yazıcı seçilmedi. Seçmek için dokunun.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurface,
+                modifier = Modifier.weight(1f),
+            )
+        }
     }
 }
 

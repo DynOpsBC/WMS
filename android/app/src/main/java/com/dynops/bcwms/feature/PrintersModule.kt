@@ -67,6 +67,11 @@ internal data class InquiryPrinterChoice(val printerCode: String, val warning: S
 internal suspend fun resolveInquiryPrinter(context: Context): Result<InquiryPrinterChoice> = runCatching {
     val label = getDefaultPrinter(context)
     val document = getDefaultPrinter(context, PRINTER_USAGE_DOCUMENT)
+    // DKÇ (17 Eyl 2026): several terminals share one BC account, so BC's
+    // device mapping cannot tell them apart. A terminal without its own
+    // printer must stop here instead of printing on someone else's.
+    if (label.isBlank() && document.isBlank() && shouldForceProductionFlow(BuildConfig.FLAVOR))
+        error("Bu cihaz için yazıcı seçilmedi. Üstteki Yazıcı düğmesinden seçin.")
     if (label.isBlank()) return@runCatching InquiryPrinterChoice(document, "")
     val escaped = label.replace("'", "''")
     val response = BcApi.get(context, "printers?\$filter=code eq '$escaped'&\$top=1")
@@ -123,10 +128,7 @@ fun PrintersModule() {
             Spacer(Modifier.width(8.dp))
             Text("Yazıcılar", fontWeight = FontWeight.Bold, fontSize = 18.sp)
         }
-        Text(
-            "Etiket ve belge yazıcısını seçin. Etiket seçimi yoksa Ürün/Raf Sorgu etiketleri belge yazıcısına PDF olarak gönderilir.",
-            fontSize = 12.sp, color = Color.Gray
-        )
+        Text("Bu cihazın etiket ve belge yazıcısı.", fontSize = 12.sp, color = Color.Gray)
         Spacer(Modifier.height(8.dp))
         Row(verticalAlignment = Alignment.CenterVertically) {
             Button(onClick = { load() }, enabled = !loading) { WmsRefreshLabel(loading) }

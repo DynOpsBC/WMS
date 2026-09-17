@@ -559,8 +559,7 @@ fun BinInquiryModule(labelsOnly: Boolean = false) {
     val palette = bcwmsStatus()
     LazyColumn(Modifier.fillMaxSize().padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
       item {
-        Text(if (labelsOnly) "Raf etiketinizi hazırlayın" else "Rafı bulun, içeriğini görün", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-        Text("Lokasyon seçin, rafı listeden bulun veya kodunu tarayın.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(if (labelsOnly) "Raf Etiketi" else "Raf Sorgu", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
         Spacer(Modifier.height(8.dp))
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             ScanField("Lokasyon", location, { location = it; binCode = ""; bin = null; contents = emptyList(); lps = emptyList(); whseEntries = emptyList() }, modifier = Modifier.weight(1f), enabled = !loading && !pickerLoading)
@@ -633,11 +632,6 @@ fun BinInquiryModule(labelsOnly: Boolean = false) {
                             modifier = Modifier.weight(1f).height(48.dp),
                         ) { Text(if (printing) "Gönderiliyor..." else "Etiket yazıcısına") }
                     }
-                    if (!printing) Text(
-                        "A4: her rafa bir tam sayfa, Android yazdırma ekranından PDF kaydedilebilir.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
                 }
             }
         }
@@ -706,20 +700,12 @@ fun BinInquiryModule(labelsOnly: Boolean = false) {
                 FilterChip(
                     selected = documentOutput,
                     onClick = { documentOutput = true },
-                    label = { Text("Belge (A3 PDF)") },
+                    label = { Text("A4 sayfa") },
                     modifier = Modifier.weight(1f),
                 )
             }
-            Text(
-                if (documentOutput) "A3 yatay belgeyi PDF kaydet veya yazdır."
-                else "Mevcut tasarımla etiket yazıcısına gönder.",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
             val binCopies = parseLabelCopies(labelCopies)
-            if (documentOutput) {
-                Text("Hedef ve kopya sayısı Android yazdırma ekranında seçilir. PDF olarak da kaydedebilirsiniz.", style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.SemiBold)
-            } else {
+            if (!documentOutput) {
                 PrinterDestinationCard(inquiryFallback = true)
                 Spacer(Modifier.height(6.dp))
                 LabelCopiesField(labelCopies, { labelCopies = it }, enabled = !printing)
