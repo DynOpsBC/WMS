@@ -1,7 +1,7 @@
 {
-  "versionCode": 200124,
-  "versionName": "1.14.124-emu",
-  "apkUrl": "https://github.com/DynOpsBC/WMS/releases/download/android-v1.14.124-emu/BCWMS-EMU-1.14.124-RELEASE.apk",
-  "sha256": "81839d75cdbbd03725b29de91b4a2ea073ce3eeaef9f22081a7f081bc35d535d",
-  "releaseNotes": "Etiket adedi (1-99), cihazın yazıcı hedefi görünür, lokasyon listesi eski BC ile de gelir. Ürün no etikete sığar (BC 1.14.2.6)."
+  "versionCode": 200125,
+  "versionName": "1.14.125-emu",
+  "apkUrl": "https://github.com/DynOpsBC/WMS/releases/download/android-v1.14.125-emu/BCWMS-EMU-1.14.125-RELEASE.apk",
+  "sha256": "17f39600282faa23a5c8b54db5751b2640e43150be54a20222e8349b59bfe355",
+  "releaseNotes": "Etiket ve belge yazıcısı kartı sadeleşti: yalnız yazıcı adı, sorun varsa tek uyarı satırı. Adet, lokasyon listesi ve ürün no düzeltmeleri 1.14.124'teki gibi."
 }
