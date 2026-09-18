@@ -6,6 +6,12 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class ProductionAccessTest {
+    @Test fun `BADE discovers Production while retaining its sandbox default`() {
+        assertTrue(BuildConfig.BC_ALLOW_PRODUCTION)
+        assertTrue("Production" in BcApi.KNOWN_ENVIRONMENTS)
+        assertEquals("E-DefterSandbox", BcApi.DEFAULT_ENVIRONMENT)
+    }
+
     private val restricted = setOf(
         Screen.Receiving, Screen.PutAway, Screen.Shipping,
         Screen.Packing, Screen.Picking, Screen.Production,

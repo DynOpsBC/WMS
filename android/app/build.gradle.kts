@@ -81,7 +81,9 @@ android {
       // token acquisition, then persisted for all subsequent requests.
       buildConfigField("String", "BC_DEFAULT_COMPANY_ID", "\"\"")
       buildConfigField("String", "BC_DEFAULT_COMPANY_NAME", "\"BADE NATURAL DOĞAL YAŞAM ÜRÜNLERİ SAN. TİC. A.Ş.\"")
-      buildConfigField("boolean", "BC_ALLOW_PRODUCTION", "false")
+      // Allow explicit Production discovery; BADE module access remains manager-gated.
+      // Keep Sandbox as the default until the operator selects an environment.
+      buildConfigField("boolean", "BC_ALLOW_PRODUCTION", "true")
       buildConfigField("String", "TENANT_LABEL", "\"Bade Natural\"")
       buildConfigField("String", "LOGIN_EMAIL_HINT", "\"dynops@badenatural.com\"")
       buildConfigField("String", "LOGIN_DEFAULT_EMAIL", "\"dynops@badenatural.com\"")
