@@ -126,14 +126,21 @@ internal fun LabelPrinterBar(onOpenPrinters: () -> Unit) {
             )
             if (!missing) {
                 Spacer(Modifier.width(8.dp))
-                Text(
-                    binding.title,
-                    fontSize = 14.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onSurface,
-                    maxLines = 1,
-                    modifier = Modifier.weight(1f),
-                )
+                Column(Modifier.weight(1f)) {
+                    Text(
+                        binding.name.ifBlank { binding.code },
+                        fontSize = 18.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        maxLines = 1,
+                    )
+                    if (binding.code.isNotBlank() && binding.name.isNotBlank()) Text(
+                        binding.code,
+                        fontSize = 10.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                    )
+                }
             } else {
                 Spacer(Modifier.weight(1f))
             }
@@ -216,10 +223,15 @@ private fun PrinterBindingCard(title: String, binding: PrinterBinding, onTest: (
             Column(Modifier.weight(1f)) {
                 Text(title, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Text(
-                    if (binding.isSet) binding.title else "Seçilmedi",
-                    fontSize = 18.sp,
+                    if (binding.isSet) binding.name.ifBlank { binding.code } else "Seçilmedi",
+                    fontSize = 22.sp,
                     fontWeight = FontWeight.Bold,
                     color = if (binding.isSet) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.error,
+                )
+                if (binding.isSet && binding.name.isNotBlank()) Text(
+                    binding.code,
+                    fontSize = 11.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 if (binding.isSet) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
@@ -230,8 +242,7 @@ private fun PrinterBindingCard(title: String, binding: PrinterBinding, onTest: (
                                 true -> "Çevrimiçi"
                                 false -> "Çevrimdışı"
                                 null -> "Durum bilinmiyor"
-                            } + (if (binding.lastSeen.isNotBlank()) " · $binding.lastSeen" else "") +
-                                (if (binding.name.isNotBlank() && binding.title != binding.code) " · ${binding.code}" else ""),
+                            } + (if (binding.lastSeen.isNotBlank()) " · $binding.lastSeen" else ""),
                             fontSize = 12.sp,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )

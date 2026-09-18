@@ -258,7 +258,10 @@ fun PrintersModule() {
                 }, shape = RoundedCornerShape(12.dp)) {
                     Column(Modifier.padding(12.dp)) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text(desc.ifBlank { code }, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+                            Column(Modifier.weight(1f)) {
+                                Text(desc.ifBlank { code }, fontWeight = FontWeight.Bold, fontSize = 20.sp, maxLines = 1)
+                                if (desc.isNotBlank()) Text(code, fontSize = 10.sp, color = Color.Gray, maxLines = 1)
+                            }
                             Spacer(Modifier.width(8.dp))
                             if (isLabelDefault) InfoPill("Etiket")
                             if (isDocumentDefault) {
@@ -279,8 +282,8 @@ fun PrintersModule() {
                             }
                         }
                         Text(
-                            if (productionCustomer) "$desc · ${if (format == "ZPL") "Etiket yazıcısı" else "Belge yazıcısı"}"
-                            else "$desc · $format · ${handle.ifBlank { "-" }}",
+                            if (productionCustomer) (if (format == "ZPL") "Etiket yazıcısı" else "Belge yazıcısı")
+                            else "$format · ${handle.ifBlank { "-" }}",
                             fontSize = 12.sp,
                             color = Color.Gray,
                         )
