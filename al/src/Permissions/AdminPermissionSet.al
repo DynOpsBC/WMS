@@ -6,6 +6,12 @@ permissionset 72094 "DOPSWHS-ADMIN"
     Caption = 'Advanced WMS Admin';
 
     Permissions =
+        table "DOPSWHS Print Environment" = X,
+        tabledata "DOPSWHS Print Environment" = R,
+        table "DOPSWHS Environment Printer" = X,
+        tabledata "DOPSWHS Environment Printer" = R,
+        table "DOPSWHS Environment Print Job" = X,
+        codeunit "DOPSWHS Print Environment" = X,
         table "DOPSWHS WMS Terminal" = X,
         tabledata "DOPSWHS WMS Terminal" = RIMD,
         page "DOPSWHS Terminal API" = X,

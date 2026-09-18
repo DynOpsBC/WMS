@@ -278,7 +278,7 @@ table 72000 "DOPSWHS Setup"
         {
             Caption = 'Company Route ID';
             DataClassification = CustomerContent;
-            ToolTip = 'Second segment of every canonical station ID. Use one dedicated Azure deployment/status queue per Business Central company.';
+            ToolTip = 'Second segment of the station ID. With environment sharing enabled this is the shared deployment route, not the Business Central company name. Different BC environments require separate Azure deployments.';
 
             trigger OnValidate()
             begin
@@ -295,6 +295,12 @@ table 72000 "DOPSWHS Setup"
         field(410; "Azure Expiry Warning At"; DateTime)
         {
             Caption = 'Blob SAS Expiry Warning At';
+            DataClassification = SystemMetadata;
+            Editable = false;
+        }
+        field(520; "Environment Print Linked"; Boolean)
+        {
+            Caption = 'Environment Print Linked';
             DataClassification = SystemMetadata;
             Editable = false;
         }

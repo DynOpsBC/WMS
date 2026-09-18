@@ -46,6 +46,7 @@ codeunit 72372 "DOPSWHS Azure Print Bridge"
         ConfigCompanyRouteId: Text;
         BlobSasExpiresAt: DateTime;
     begin
+        PrintEnvironment.EnsureCanConfigure();
         if not Root.ReadFrom(ConfigStream) then
             Error('The selected business-central.runtime.secrets.json file is not valid JSON.');
         if not Root.Get('schemaVersion', SchemaToken) or not SchemaToken.IsValue() or
@@ -110,10 +111,11 @@ codeunit 72372 "DOPSWHS Azure Print Bridge"
         StoreSecret(BlobUploadSasKeyLbl, BlobUploadSas);
         StoreSecret(JobsSharedKeyKeyLbl, JobsKey);
         StoreSecret(StatusSharedKeyKeyLbl, StatusKey);
-        ValidateConfiguration(true);
         Setup.Get('');
         Setup.Validate("Print Channel", Setup."Print Channel"::AzureDirect);
         Setup.Modify(true);
+        PrintEnvironment.PublishSetup();
+        ValidateConfiguration(true);
         AzurePrintWorker.ScheduleWorkerJob();
     end;
 
@@ -122,6 +124,7 @@ codeunit 72372 "DOPSWHS Azure Print Bridge"
     var
         Setup: Record "DOPSWHS Setup";
     begin
+        PrintEnvironment.EnsureCanConfigure();
         if (BlobUploadSas = '') and not HasSecret(BlobUploadSasKeyLbl) then
             Error('The Blob create/write SAS token has not been configured.');
         if (JobsSharedKey = '') and not HasSecret(JobsSharedKeyKeyLbl) then
@@ -152,12 +155,14 @@ codeunit 72372 "DOPSWHS Azure Print Bridge"
             Setup."Azure Expiry Warning At" := 0DT;
             Setup.Modify(true);
         end;
+        PrintEnvironment.PublishSetup();
     end;
 
     procedure ClearSecrets()
     var
         Setup: Record "DOPSWHS Setup";
     begin
+        PrintEnvironment.EnsureCanConfigure();
         DeleteSecret(BlobUploadSasKeyLbl);
         DeleteSecret(JobsSharedKeyKeyLbl);
         DeleteSecret(StatusSharedKeyKeyLbl);
@@ -166,6 +171,7 @@ codeunit 72372 "DOPSWHS Azure Print Bridge"
             Setup."Azure Expiry Warning At" := 0DT;
             Setup.Modify(true);
         end;
+        PrintEnvironment.PublishSetup();
     end;
 
     procedure BlobSecretIsSet(): Boolean
@@ -187,6 +193,7 @@ codeunit 72372 "DOPSWHS Azure Print Bridge"
     var
         Setup: Record "DOPSWHS Setup";
     begin
+        PrintEnvironment.SyncCompany();
         if not Setup.Get('') then
             Error('Advanced WMS Setup must be configured.');
         Setup.TestField("Azure SB Namespace");
@@ -347,6 +354,7 @@ codeunit 72372 "DOPSWHS Azure Print Bridge"
         if IsNullGuid(Queue.SystemId) then
             Error('The print queue row must be inserted before Azure dispatch is scheduled.');
         Queue."Cloud Job ID" := Queue.SystemId;
+        PrintEnvironment.RegisterJob(Queue."Cloud Job ID");
         Queue."Blob Name" := CopyStr(BuildBlobName(Queue), 1, MaxStrLen(Queue."Blob Name"));
         Queue.Modify(true);
         Log(Queue."Job ID", 'AzureQueued', StrSubstNo('Azure Direct job %1 queued for station %2.', CloudJobId(Queue), Queue."Station ID"));
@@ -1282,6 +1290,42 @@ codeunit 72372 "DOPSWHS Azure Print Bridge"
         exit(7 * OneDay());
     end;
 
+    local procedure SecretScope(): DataScope
+    begin
+        if PrintEnvironment.IsEnabled() then
+            exit(DataScope::Module);
+        exit(DataScope::Company);
+    end;
+
+    [NonDebuggable]
+    procedure CopySecretsToEnvironment()
+    var
+        Auth: Codeunit "DOPSWHS Local Auth Mgmt";
+    begin
+        Auth.EnsureCanManageLocalUsers();
+        if PrintEnvironment.IsEnabled() then
+            Error('Environment credentials are already configured.');
+        CopyCompanySecret(BlobUploadSasKeyLbl);
+        CopyCompanySecret(JobsSharedKeyKeyLbl);
+        CopyCompanySecret(StatusSharedKeyKeyLbl);
+    end;
+
+    [NonDebuggable]
+    local procedure CopyCompanySecret(StorageKey: Text)
+    var
+        Value: Text;
+    begin
+        if not IsolatedStorage.Get(StorageKey, DataScope::Company, Value) or (Value = '') then
+            Error('Import the company Azure print JSON before enabling environment sharing.');
+        if EncryptionEnabled() then begin
+            if not IsolatedStorage.SetEncrypted(StorageKey, Value, DataScope::Module) then
+                Error('Could not store the environment print credential.');
+        end else
+            if not IsolatedStorage.Set(StorageKey, Value, DataScope::Module) then
+                Error('Could not store the environment print credential.');
+        Clear(Value);
+    end;
+
     [NonDebuggable]
     local procedure StoreSecret(StorageKey: Text; Value: Text)
     begin
@@ -1290,29 +1334,29 @@ codeunit 72372 "DOPSWHS Azure Print Bridge"
         if StorageKey = BlobUploadSasKeyLbl then
             ValidateBlobUploadSas(Value);
         if EncryptionEnabled() then begin
-            if not IsolatedStorage.SetEncrypted(StorageKey, Value, DataScope::Company) then
+            if not IsolatedStorage.SetEncrypted(StorageKey, Value, SecretScope()) then
                 Error('Business Central could not store an Azure credential securely.');
         end else
-            if not IsolatedStorage.Set(StorageKey, Value, DataScope::Company) then
+            if not IsolatedStorage.Set(StorageKey, Value, SecretScope()) then
                 Error('Business Central could not store an Azure credential in Isolated Storage.');
     end;
 
     local procedure HasSecret(StorageKey: Text): Boolean
     begin
-        exit(IsolatedStorage.Contains(StorageKey, DataScope::Company));
+        exit(IsolatedStorage.Contains(StorageKey, SecretScope()));
     end;
 
     local procedure DeleteSecret(StorageKey: Text)
     begin
-        if IsolatedStorage.Contains(StorageKey, DataScope::Company) then
-            IsolatedStorage.Delete(StorageKey, DataScope::Company);
+        if IsolatedStorage.Contains(StorageKey, SecretScope()) then
+            IsolatedStorage.Delete(StorageKey, SecretScope());
     end;
 
     [NonDebuggable]
     local procedure GetRequiredSecret(StorageKey: Text; var Value: SecretText; Description: Text)
     begin
         Clear(Value);
-        if not IsolatedStorage.Get(StorageKey, DataScope::Company, Value) then
+        if not IsolatedStorage.Get(StorageKey, SecretScope(), Value) then
             Error('%1 is not configured in Isolated Storage.', Description);
         if Value.IsEmpty() then
             Error('%1 is empty in Isolated Storage.', Description);
@@ -1325,13 +1369,14 @@ codeunit 72372 "DOPSWHS Azure Print Bridge"
     local procedure GetRequiredLegacyTextSecret(StorageKey: Text; var Value: Text; Description: Text)
     begin
         Clear(Value);
-        if not IsolatedStorage.Get(StorageKey, DataScope::Company, Value) then
+        if not IsolatedStorage.Get(StorageKey, SecretScope(), Value) then
             Error('%1 is not configured in Isolated Storage.', Description);
         if Value = '' then
             Error('%1 is empty in Isolated Storage.', Description);
     end;
 
     var
+        PrintEnvironment: Codeunit "DOPSWHS Print Environment";
         BlobUploadSasKeyLbl: Label 'DOPSWHS.AzurePrint.BlobUploadSas', Locked = true;
         JobsSharedKeyKeyLbl: Label 'DOPSWHS.AzurePrint.JobsSharedKey', Locked = true;
         StatusSharedKeyKeyLbl: Label 'DOPSWHS.AzurePrint.StatusSharedKey', Locked = true;

@@ -11,16 +11,26 @@ codeunit 72375 "DOPSWHS Azure Print Status"
     var
         Processed: Integer;
     begin
+        PrintEnvironment.SyncCompany();
+        if not PrintEnvironment.IsStatusOwner() then begin
+            PrintEnvironment.ApplyCompanyResults(20);
+            exit;
+        end;
         if MaxMessages <= 0 then
             MaxMessages := 20;
         // Keep consuming durable agent results even if the independent Blob
         // upload credential has expired and new dispatches are blocked.
         AzureBridge.ValidateStatusConfiguration();
         while Processed < MaxMessages do begin
-            if not ReceiveOne() then
+            if not ReceiveOne() then begin
+                PrintEnvironment.ApplyCompanyResults(20);
+                PrintEnvironment.PublishPrinters();
                 exit;
+            end;
             Processed += 1;
         end;
+        PrintEnvironment.ApplyCompanyResults(20);
+        PrintEnvironment.PublishPrinters();
     end;
 
     procedure MarkStalePrinters(MaxPrinters: Integer): Integer
@@ -126,7 +136,7 @@ codeunit 72375 "DOPSWHS Azure Print Status"
             'heartbeat':
                 ProcessHeartbeat(Root);
             'jobresult':
-                ProcessJobResult(Root);
+                ProcessJobResult(Root, true);
             else
                 Error('Unsupported printer-status message type %1.', MessageType);
         end;
@@ -297,7 +307,20 @@ codeunit 72375 "DOPSWHS Azure Print Status"
             until Printer.Next() = 0;
     end;
 
-    local procedure ProcessJobResult(Root: JsonObject)
+    procedure ApplyStoredResult(Body: Text)
+    var
+        Root: JsonObject;
+    begin
+        if not Root.ReadFrom(Body) then
+            Error('Stored printer result is not valid JSON.');
+        RequireSchemaV1(Root);
+        ValidateOwnedMessage(Root);
+        if LowerCase(RequireText(Root, 'messageType')) <> 'jobresult' then
+            Error('Stored printer result must be a jobresult.');
+        ProcessJobResult(Root, false);
+    end;
+
+    local procedure ProcessJobResult(Root: JsonObject; DeferSharedResult: Boolean)
     var
         Queue: Record "DOPSWHS Print Job Queue";
         Printer: Record "DOPSWHS Printer";
@@ -338,6 +361,10 @@ codeunit 72375 "DOPSWHS Azure Print Status"
         Attempt := RequireInteger(Root, 'attempt');
         if (Attempt < 1) or (Attempt > 10) then
             Error('JobResult attempt must be between 1 and 10.');
+
+        if DeferSharedResult then
+            if PrintEnvironment.CaptureResult(Root) then
+                exit;
 
         Queue.SetRange("Cloud Job ID", JobGuid);
         if not Queue.FindFirst() then begin
@@ -759,5 +786,6 @@ codeunit 72375 "DOPSWHS Azure Print Status"
     end;
 
     var
+        PrintEnvironment: Codeunit "DOPSWHS Print Environment";
         AzureBridge: Codeunit "DOPSWHS Azure Print Bridge";
 }

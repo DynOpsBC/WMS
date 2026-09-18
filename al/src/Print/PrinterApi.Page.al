@@ -43,6 +43,13 @@ page 72289 "DOPSWHS Printer API"
         }
     }
 
+    trigger OnOpenPage()
+    var
+        PrintEnvironment: Codeunit "DOPSWHS Print Environment";
+    begin
+        PrintEnvironment.SyncCompany();
+    end;
+
     [ServiceEnabled]
     procedure generateToken(): Text
     var

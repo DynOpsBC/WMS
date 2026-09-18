@@ -165,6 +165,13 @@ page 72061 "DOPSWHS Setup"
             group(AzureDirectPrint)
             {
                 Caption = 'Azure Direct Print';
+                field(EnvironmentPrintEnabled; EnvironmentPrintEnabled)
+                {
+                    Caption = 'Ortam Bazlı Ortak Yazıcılar';
+                    ApplicationArea = All;
+                    Editable = false;
+                    ToolTip = 'Bu BC ortamındaki şirketler aynı Azure bağlantısını ve yazıcıları kullanır. Baskı işleri ve terminal seçimleri şirket bazında kalır.';
+                }
                 field(HttpClientInstruction; HttpClientInstruction)
                 {
                     Caption = 'Required Extension Setting';
@@ -323,6 +330,23 @@ page 72061 "DOPSWHS Setup"
                     PromotedCategory = Process;
                     ToolTip = 'Map each device/user to a default printer per usage.';
                     RunObject = page "DOPSWHS Device Printer Map";
+                }
+                action(EnableEnvironmentPrinting)
+                {
+                    Caption = 'Yazıcıları Bu Ortamda Ortak Kullan';
+                    ApplicationArea = All;
+                    Image = Setup;
+                    AccessByPermission = tabledata "DOPSWHS Setup" = D;
+                    ToolTip = 'İçe aktarılan Azure bağlantısını ve yazıcıları bu BC ortamındaki tüm şirketlerde kullanılabilir yapar. Mevcut Print Agent kurulumu korunur.';
+
+                    trigger OnAction()
+                    begin
+                        PrintEnvironment.Enable();
+                        EnvironmentPrintEnabled := PrintEnvironment.IsEnabled();
+                        Rec.Get('');
+                        CurrPage.Update(false);
+                        Message('Bu ortamdaki şirketler ortak Azure bağlantısını ve yazıcıları kullanacak. Diğer şirketlerde Yazıcılar sayfasını veya terminal yazıcı listesini açmanız yeterlidir. Azure durum kuyruğunu bu şirketin WMS yazdırma görevi okuyacak.');
+                    end;
                 }
                 action(ImportAzureRuntimeConfig)
                 {
@@ -489,6 +513,8 @@ page 72061 "DOPSWHS Setup"
 
     trigger OnOpenPage()
     begin
+        PrintEnvironment.SyncCompany();
+        EnvironmentPrintEnabled := PrintEnvironment.IsEnabled();
         if not Rec.Get('') then begin
             Rec.Init();
             Rec.Insert(true);
@@ -505,6 +531,8 @@ page 72061 "DOPSWHS Setup"
     end;
 
     var
+        PrintEnvironment: Codeunit "DOPSWHS Print Environment";
+        EnvironmentPrintEnabled: Boolean;
         LicenseStyle: Text;
         BlobUploadSecretSet: Boolean;
         JobsSecretSet: Boolean;

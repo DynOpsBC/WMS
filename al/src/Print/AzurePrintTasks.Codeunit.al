@@ -34,8 +34,10 @@ codeunit 72374 "DOPSWHS Azure Print Worker"
     var
         Setup: Record "DOPSWHS Setup";
         AzureBridge: Codeunit "DOPSWHS Azure Print Bridge";
+        PrintEnvironment: Codeunit "DOPSWHS Print Environment";
         ErrorText: Text;
     begin
+        PrintEnvironment.SyncCompany();
         if not Setup.Get('') then
             exit;
         if Setup."Print Channel" <> Setup."Print Channel"::AzureDirect then
@@ -91,9 +93,11 @@ codeunit 72374 "DOPSWHS Azure Print Worker"
     var
         AzureBridge: Codeunit "DOPSWHS Azure Print Bridge";
         StatusSync: Codeunit "DOPSWHS Azure Print Status";
+        PrintEnvironment: Codeunit "DOPSWHS Print Environment";
     begin
         AzureBridge.MarkStaleDispatched(100);
         StatusSync.MarkStalePrinters(100);
+        PrintEnvironment.PublishPrinters();
     end;
 
     procedure ScheduleWorkerJob()

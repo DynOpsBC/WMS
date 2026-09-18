@@ -19,6 +19,7 @@ codeunit 72051 "DOPSWHS Print Dispatcher"
     begin
         if Copies > 10 then
             Error('A print job cannot exceed 10 copies.');
+        PrintEnvironment.SyncCompany();
         Setup.Get('');
         Zpl := LabelReport.BuildZpl(LP);
 
@@ -138,6 +139,7 @@ codeunit 72051 "DOPSWHS Print Dispatcher"
     begin
         if PrinterId <> '' then
             exit(PrinterId);
+        PrintEnvironment.SyncCompany();
         if not Setup.Get('') then
             exit('');
         if not (Setup."Print Channel" in [Setup."Print Channel"::SelfHosted, Setup."Print Channel"::AzureDirect]) then
@@ -204,6 +206,7 @@ codeunit 72051 "DOPSWHS Print Dispatcher"
         AllObjWithCaption: Record AllObjWithCaption;
     begin
         Clear(ReportId);
+        PrintEnvironment.SyncCompany();
         if not Setup.Get('') then
             exit(false);
         if Setup."MTE Report ID" = 0 then
@@ -461,6 +464,7 @@ codeunit 72051 "DOPSWHS Print Dispatcher"
             Error('The scanned barcode test PDF could not be rendered: %1', LastRenderError());
         if not TempBlob.HasValue() then
             Error('The scanned barcode test produced an empty PDF.');
+        PrintEnvironment.SyncCompany();
         Setup.Get('');
         TempBlob.CreateInStream(PdfInStream);
         if Setup."Print Channel" = Setup."Print Channel"::AzureDirect then
@@ -527,6 +531,7 @@ codeunit 72051 "DOPSWHS Print Dispatcher"
         if not TempBlob.HasValue() then
             Error('The LP QR report produced an empty PDF.');
 
+        PrintEnvironment.SyncCompany();
         Setup.Get('');
         TempBlob.CreateInStream(PdfInStream);
         if Setup."Print Channel" = Setup."Print Channel"::AzureDirect then
@@ -565,6 +570,7 @@ codeunit 72051 "DOPSWHS Print Dispatcher"
     begin
         if Copies > 10 then
             Error('A print job cannot exceed 10 copies.');
+        PrintEnvironment.SyncCompany();
         Setup.Get('');
 
         if Setup."Print Channel" in [Setup."Print Channel"::SelfHosted, Setup."Print Channel"::AzureDirect] then begin
@@ -773,6 +779,7 @@ codeunit 72051 "DOPSWHS Print Dispatcher"
         ResolvedPrinter: Code[20];
         EffectiveCopies: Integer;
     begin
+        PrintEnvironment.SyncCompany();
         if not Setup.Get('') then
             Error('Advanced WMS Setup must be configured before document printing.');
         case Setup."Print Channel" of
@@ -804,6 +811,7 @@ codeunit 72051 "DOPSWHS Print Dispatcher"
         AzureBridge: Codeunit "DOPSWHS Azure Print Bridge";
         ResolvedPrinter: Code[20];
     begin
+        PrintEnvironment.SyncCompany();
         if not Setup.Get('') then
             exit(false);
         case Setup."Print Channel" of
@@ -844,6 +852,7 @@ codeunit 72051 "DOPSWHS Print Dispatcher"
         SelfHosted: Codeunit "DOPSWHS Self-Host Print Client";
         ResolvedPrinter: Code[20];
     begin
+        PrintEnvironment.SyncCompany();
         Setup.Get('');
         case Setup."Print Channel" of
             Setup."Print Channel"::SelfHosted,
@@ -975,6 +984,7 @@ codeunit 72051 "DOPSWHS Print Dispatcher"
 
     var
         MteNoSourceEntryErr: Label '%1 paletinin kaynak madde defteri girişi yok; müşteri MTE raporu için palet önce mal kabulle kaydedilmiş olmalı.', Comment = '%1 LP no';
+        PrintEnvironment: Codeunit "DOPSWHS Print Environment";
         MteOptionsInvalidErr: Label 'MTE ek alanları okunamadı (geçersiz JSON).';
         MteDateInvalidErr: Label 'MTE tarih alanı geçersiz: %1 (gg.aa.yyyy veya yyyy-aa-gg girin).', Comment = '%1 value';
         ReportRenderFailedErr: Label '%1 %2 raporu PDF olarak oluşturulamadı. BC hatası: %3', Comment = '%1 report id, %2 report caption, %3 BC error text';

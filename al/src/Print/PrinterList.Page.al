@@ -61,7 +61,9 @@ page 72296 "DOPSWHS Printer List"
     trigger OnOpenPage()
     var
         Setup: Record "DOPSWHS Setup";
+        PrintEnvironment: Codeunit "DOPSWHS Print Environment";
     begin
+        PrintEnvironment.SyncCompany();
         IsAzureDirect := Setup.Get('') and (Setup."Print Channel" = Setup."Print Channel"::AzureDirect);
     end;
 

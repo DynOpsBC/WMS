@@ -47,7 +47,9 @@ codeunit 72081 "DOPSWHS Self-Host Print Client"
         QueueOutStream: OutStream;
         PayloadSha256: Text[64];
         IsAzureDirect: Boolean;
+        PrintEnvironment: Codeunit "DOPSWHS Print Environment";
     begin
+        PrintEnvironment.SyncCompany();
         if not Printer.Get(PrinterCode) then
             Error('Printer %1 is not registered.', PrinterCode);
         if not Printer.Active then
