@@ -12,6 +12,7 @@ table 72379 "DOPSWHS Environment Print Job"
         field(4; "Result Pending"; Boolean) { Caption = 'Result Pending'; }
         field(5; "Result Applied"; Boolean) { Caption = 'Result Applied'; }
         field(6; Created; DateTime) { Caption = 'Created'; }
+        field(7; "Last Error"; Text[250]) { Caption = 'Last Error'; }
     }
     keys
     {
@@ -19,4 +20,3 @@ table 72379 "DOPSWHS Environment Print Job"
         key(Pending; "Company Name", "Result Pending") { }
     }
 }
-

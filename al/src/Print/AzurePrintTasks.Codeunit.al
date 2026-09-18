@@ -98,6 +98,7 @@ codeunit 72374 "DOPSWHS Azure Print Worker"
         AzureBridge.MarkStaleDispatched(100);
         StatusSync.MarkStalePrinters(100);
         PrintEnvironment.PublishPrinters();
+        PrintEnvironment.CleanupAppliedResults();
     end;
 
     procedure ScheduleWorkerJob()

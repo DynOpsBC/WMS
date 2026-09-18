@@ -11,6 +11,11 @@
   "url": "https://dynops.com",
   "logo": "",
   "dependencies": [],
+  "internalsVisibleTo": [{
+    "id": "6ea7421a-2108-4672-96e0-8b8567b88ad7",
+    "name": "BCWMSApp Print Tests",
+    "publisher": "DynamicsOps"
+  }],
   "screenshots": [],
   "platform": "24.0.0.0",
   "application": "24.0.0.0",

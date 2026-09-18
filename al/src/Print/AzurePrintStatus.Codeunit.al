@@ -136,7 +136,7 @@ codeunit 72375 "DOPSWHS Azure Print Status"
             'heartbeat':
                 ProcessHeartbeat(Root);
             'jobresult':
-                ProcessJobResult(Root, true);
+                ProcessJobResult(Root, true, false);
             else
                 Error('Unsupported printer-status message type %1.', MessageType);
         end;
@@ -308,6 +308,19 @@ codeunit 72375 "DOPSWHS Azure Print Status"
     end;
 
     procedure ApplyStoredResult(Body: Text)
+    begin
+        ProcessStoredResult(Body, false);
+    end;
+
+    [TryFunction]
+    procedure TryValidateStoredResult(Body: Text)
+    begin
+        // Validation-only path: a malformed/mismatched result cannot write
+        // partial state or block unrelated companies' durable results.
+        ProcessStoredResult(Body, true);
+    end;
+
+    local procedure ProcessStoredResult(Body: Text; ValidateOnly: Boolean)
     var
         Root: JsonObject;
     begin
@@ -317,10 +330,10 @@ codeunit 72375 "DOPSWHS Azure Print Status"
         ValidateOwnedMessage(Root);
         if LowerCase(RequireText(Root, 'messageType')) <> 'jobresult' then
             Error('Stored printer result must be a jobresult.');
-        ProcessJobResult(Root, false);
+        ProcessJobResult(Root, false, ValidateOnly);
     end;
 
-    local procedure ProcessJobResult(Root: JsonObject; DeferSharedResult: Boolean)
+    local procedure ProcessJobResult(Root: JsonObject; DeferSharedResult: Boolean; ValidateOnly: Boolean)
     var
         Queue: Record "DOPSWHS Print Job Queue";
         Printer: Record "DOPSWHS Printer";
@@ -368,6 +381,8 @@ codeunit 72375 "DOPSWHS Azure Print Status"
 
         Queue.SetRange("Cloud Job ID", JobGuid);
         if not Queue.FindFirst() then begin
+            if ValidateOnly then
+                Error('The originating company print job no longer exists.');
             // Azure-only smoke tests and results arriving after BC retention do
             // not have a local queue row. The complete v1 envelope and route
             // ownership were validated above, so settle the orphan instead of
@@ -401,6 +416,9 @@ codeunit 72375 "DOPSWHS Azure Print Status"
             exit;
         if Queue.Status <> Queue.Status::Dispatched then
             Error('JobResult %1 arrived while the job was in state %2.', JobIdText, Queue.Status);
+
+        if ValidateOnly then
+            exit;
 
         Queue."Agent ID" := AgentId;
         Queue."Claimed At" := CompletedAt;

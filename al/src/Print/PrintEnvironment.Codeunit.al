@@ -266,6 +266,8 @@ codeunit 72377 "DOPSWHS Print Environment"
         Body: Text;
         Processed: Integer;
     begin
+        if MaxResults <= 0 then
+            MaxResults := 20;
         if not IsEnabled() then
             exit;
         Route.SetRange("Result Pending", true);
@@ -279,14 +281,41 @@ codeunit 72377 "DOPSWHS Print Environment"
                     Input.ReadText(Body);
                     // Full job/printer/station/format validation still occurs
                     // in the originating company's normal processing context.
-                    Status.ApplyStoredResult(Body);
-                    Route."Company Name" := CopyStr(CompanyName(), 1, MaxStrLen(Route."Company Name"));
-                    Route."Result Pending" := false;
-                    Route."Result Applied" := true;
-                    Clear(Route."Result Body");
+                    if Status.TryValidateStoredResult(Body) then begin
+                        Status.ApplyStoredResult(Body);
+                        Route."Company Name" := CopyStr(CompanyName(), 1, MaxStrLen(Route."Company Name"));
+                        Route."Result Pending" := false;
+                        Route."Result Applied" := true;
+                        Route."Last Error" := '';
+                        Clear(Route."Result Body");
+                    end else begin
+                        Route."Last Error" := CopyStr(GetLastErrorText(), 1, MaxStrLen(Route."Last Error"));
+                        ClearLastError();
+                    end;
                     Route.Modify();
                     Processed += 1;
                 end;
             until (Route.Next() = 0) or (Processed >= MaxResults);
+    end;
+
+    procedure CleanupAppliedResults()
+    var
+        Route: Record "DOPSWHS Environment Print Job";
+        Deleted: Integer;
+        Retention: Duration;
+    begin
+        if not IsEnabled() or not IsStatusOwner() then
+            exit;
+        // Keep idempotency tombstones longer than the queue's seven-day TTL.
+        // Unapplied results are deliberately retained for recovery.
+        Route.SetRange("Result Applied", true);
+        Retention := 24 * 60 * 60 * 1000;
+        Retention := 30 * Retention;
+        Route.SetFilter(Created, '<%1', CurrentDateTime() - Retention);
+        if Route.FindSet(true) then
+            repeat
+                Route.Delete();
+                Deleted += 1;
+            until (Route.Next() = 0) or (Deleted >= 100);
     end;
 }

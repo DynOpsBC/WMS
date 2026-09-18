@@ -38,13 +38,27 @@ jobs:
         shell: pwsh
         run: |
           New-Item dist -ItemType Directory -Force | Out-Null
-          al compile -- /project:al /packagecachepath:al/.alpackages /out:dist/BCWMSApp-1.14.1.38.app /errorsonlyinconsole
+          $version = (Get-Content al/app.json -Raw | ConvertFrom-Json).version
+          $package = "dist/BCWMSApp-$version.app"
+          al compile -- /project:al /packagecachepath:al/.alpackages /out:$package /errorsonlyinconsole
           if ($LASTEXITCODE -ne 0) { throw 'AL compilation failed' }
-          if (-not (Test-Path dist/BCWMSApp-1.14.1.38.app)) { throw 'AL package was not produced' }
-          Get-FileHash dist/BCWMSApp-1.14.1.38.app -Algorithm SHA256 | Format-List | Out-File dist/package-sha256.txt
+          if (-not (Test-Path $package)) { throw 'AL package was not produced' }
+          Get-FileHash $package -Algorithm SHA256 | Format-List | Out-File dist/package-sha256.txt
           Copy-Item bc-symbol-version.txt dist/
+          Copy-Item $package al/.alpackages/
+      - name: Compile environment printer regression tests
+        shell: pwsh
+        run: |
+          New-Item test-dist -ItemType Directory -Force | Out-Null
+          al compile -- /project:al-print-tests /packagecachepath:al/.alpackages /out:test-dist/BCWMSApp-Print-Tests.app /errorsonlyinconsole
+          if ($LASTEXITCODE -ne 0) { throw 'Print regression test compilation failed' }
       - uses: actions/upload-artifact@v7
         with:
           name: bcwms-al-verified-package
           path: dist/
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v7
+        with:
+          name: bcwms-print-regression-test-package
+          path: test-dist/
           if-no-files-found: error

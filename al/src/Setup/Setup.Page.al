@@ -165,6 +165,7 @@ page 72061 "DOPSWHS Setup"
             group(AzureDirectPrint)
             {
                 Caption = 'Azure Direct Print';
+                Editable = not EnvironmentPrintEnabled;
                 field(EnvironmentPrintEnabled; EnvironmentPrintEnabled)
                 {
                     Caption = 'Ortam Bazlı Ortak Yazıcılar';
@@ -357,7 +358,7 @@ page 72061 "DOPSWHS Setup"
                     PromotedCategory = Process;
                     PromotedIsBig = true;
                     AccessByPermission = tabledata "DOPSWHS Setup" = D;
-                    ToolTip = 'Imports schemaVersion 1 business-central.runtime.secrets.json. Credentials are extracted into company-scoped Isolated Storage and are never written to a table. Enable Allow HttpClient Requests for this extension first.';
+                    ToolTip = 'Imports schemaVersion 1 business-central.runtime.secrets.json. With environment sharing enabled the connection applies to every company in this BC environment. Credentials stay in Isolated Storage. Enable Allow HttpClient Requests first.';
 
                     trigger OnAction()
                     var
@@ -378,7 +379,7 @@ page 72061 "DOPSWHS Setup"
                     ApplicationArea = All;
                     Image = EncryptionKeys;
                     AccessByPermission = tabledata "DOPSWHS Setup" = D;
-                    ToolTip = 'Stores or rotates Azure credentials in company-scoped Isolated Storage. A new Blob SAS requires its expiry date from the deployment output.';
+                    ToolTip = 'Stores or rotates Azure credentials in Isolated Storage. With environment sharing enabled the new credentials apply to all companies in this BC environment. A new Blob SAS requires its expiry date.';
 
                     trigger OnAction()
                     var
