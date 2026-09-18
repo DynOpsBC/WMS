@@ -24,10 +24,26 @@ public sealed record LabelPrinterSetting
 {
     public required string PrinterId { get; init; }
     public required string PrinterName { get; init; }
+    /// <summary>
+    /// Operator-facing name (BADE, 17 Eyl 2026: "yazıcılara isim verebilelim"),
+    /// published to Business Central as the printer description so terminals
+    /// show "Mal Kabul Zebra" instead of the Windows driver name. Empty = the
+    /// Windows printer name.
+    /// </summary>
+    public string DisplayName { get; init; } = string.Empty;
 }
 
 public static class AgentSettingsExtensions
 {
+    /// <summary>Assign stable IDs without discarding operator-facing metadata.</summary>
+    public static IReadOnlyList<LabelPrinterSetting> BindLabelPrinterIds(
+        this AgentSettings settings, IReadOnlyDictionary<string, string> mappings) =>
+        settings.EffectiveLabelPrinters()
+            .Where(static printer => !string.IsNullOrWhiteSpace(printer.PrinterName))
+            .DistinctBy(static printer => printer.PrinterName, StringComparer.OrdinalIgnoreCase)
+            .Select(printer => printer with { PrinterId = mappings[printer.PrinterName] })
+            .ToList();
+
     /// <summary>
     /// Label printers that accept jobs: the multi-printer list when present,
     /// otherwise the legacy single selection (settings saved by agent 1.0).
@@ -68,6 +84,8 @@ public sealed record AgentSettings
     public IReadOnlyList<LabelPrinterSetting> LabelPrinters { get; init; } = [];
     public string DocumentPrinterId { get; init; } = string.Empty;
     public string DocumentPrinterName { get; init; } = string.Empty;
+    /// <summary>Operator-facing name of the document printer; empty = Windows name.</summary>
+    public string DocumentPrinterDisplayName { get; init; } = string.Empty;
     public LabelTransport LabelTransport { get; init; } = LabelTransport.WindowsRaw;
     public PrintFormat LabelFormat { get; init; } = PrintFormat.ZPL;
     public int MaxDeliveryAttempts { get; init; } = 5;
@@ -90,6 +108,11 @@ public sealed record AgentSettings
 
 public static class AgentSettingsValidator
 {
+    /// <summary>BC "DOPSWHS Printer".Description is Text[100]; no control characters.</summary>
+    public static bool IsValidDisplayName(string? displayName) =>
+        string.IsNullOrEmpty(displayName) ||
+        (displayName.Trim().Length <= 100 && !displayName.Any(static ch => char.IsControl(ch)));
+
     public static IReadOnlyList<string> Validate(AgentSettings settings)
     {
         var errors = new List<string>();
@@ -173,6 +196,15 @@ public static class AgentSettingsValidator
             labelPrinters.Any(printer => string.Equals(printer.PrinterName, settings.DocumentPrinterName, StringComparison.OrdinalIgnoreCase)))
         {
             errors.Add("Etiket ve belge için farklı Windows yazıcı kuyrukları seçilmelidir.");
+        }
+
+        foreach (var displayName in labelPrinters.Select(static printer => printer.DisplayName).Append(settings.DocumentPrinterDisplayName))
+        {
+            if (!IsValidDisplayName(displayName))
+            {
+                errors.Add("Yazıcı görünen adı en fazla 100 karakter olmalı ve kontrol karakteri içermemelidir.");
+                break;
+            }
         }
 
         if (settings.LabelTransport != LabelTransport.WindowsRaw)

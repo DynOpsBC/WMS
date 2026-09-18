@@ -94,11 +94,20 @@ fun PrintersModule() {
     var rows by remember { mutableStateOf<List<JSONObject>>(emptyList()) }
     var status by remember { mutableStateOf("") }
     var loading by remember { mutableStateOf(false) }
+    var nameLabelBusy by remember { mutableStateOf(false) }
     val defaultLabelCode = rememberPrinterPreference("bcwms.printer.$PRINTER_USAGE_LABEL")
     val defaultDocumentCode = rememberPrinterPreference("bcwms.printer.$PRINTER_USAGE_DOCUMENT")
     var scannedBarcode by rememberSaveable { mutableStateOf("") }
     var barcodePrintBusy by remember { mutableStateOf(false) }
     val productionCustomer = shouldForceProductionFlow(BuildConfig.FLAVOR)
+    // BADE (17 Eyl 2026): "yazıcılar kısmı çok kötü, basitleştir" — the
+    // customer terminal shows its two bound printers; the classic list is
+    // one tap away behind "Değiştir".
+    var showFullList by rememberSaveable { mutableStateOf(false) }
+    if (productionCustomer && !showFullList) {
+        TerminalPrintersScreen(onChange = { showFullList = true })
+        return
+    }
 
     fun load() {
         scope.launch {
@@ -242,10 +251,14 @@ fun PrintersModule() {
                 val stationId = row.optString("stationId")
                 val isLabelDefault = defaultLabelCode == code
                 val isDocumentDefault = defaultDocumentCode == code
-                Card(shape = RoundedCornerShape(12.dp)) {
+                Card(modifier = Modifier.fillMaxWidth().clickable(enabled = active && format in setOf("ZPL", "PDF")) {
+                    val usage = if (format == "PDF") PRINTER_USAGE_DOCUMENT else PRINTER_USAGE_LABEL
+                    setDefaultPrinter(context, code, usage)
+                    status = "TAMAM: ${desc.ifBlank { code }} seçildi."
+                }, shape = RoundedCornerShape(12.dp)) {
                     Column(Modifier.padding(12.dp)) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text(code, fontWeight = FontWeight.Bold)
+                            Text(desc.ifBlank { code }, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
                             Spacer(Modifier.width(8.dp))
                             if (isLabelDefault) InfoPill("Etiket")
                             if (isDocumentDefault) {
@@ -298,6 +311,20 @@ fun PrintersModule() {
                                 },
                             ) { Text(if (isDocumentDefault) "✓ Belge" else "Belge", fontSize = 12.sp) }
                         }
+                        if (isLabelDefault || isDocumentDefault) TextButton(onClick = {
+                            setDefaultPrinter(context, "", if (format == "PDF") PRINTER_USAGE_DOCUMENT else PRINTER_USAGE_LABEL)
+                            status = "Yazıcı seçimi kaldırıldı."
+                        }) { Text("Seçimi kaldır") }
+                        if (format == "ZPL") OutlinedButton(enabled = active && !nameLabelBusy, onClick = {
+                            nameLabelBusy = true
+                            scope.launch {
+                                try {
+                                    val result = BcApi.boundAction(context, "printers", code, "printNameLabel", "{}")
+                                    status = if (result.ok) "Yazıcı ad etiketi ${desc.ifBlank { code }} yazıcısının kuyruğuna eklendi."
+                                        else "HATA: ${BcApi.errorMessage(result.body)}"
+                                } finally { nameLabelBusy = false }
+                            }
+                        }) { Text("Yazıcı ad etiketi çıkar") }
                         if (!productionCustomer) {
                             Spacer(Modifier.height(6.dp))
                             Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {

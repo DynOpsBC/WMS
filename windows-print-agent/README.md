@@ -44,6 +44,15 @@ yazıcıyı seçtiyse iş o Windows kuyruğuna basılır (`JobRoutingPolicy` iş
 olarak kullanır). 1.0 ayar dosyaları değişmeden çalışır: tek seçili yazıcı listenin ilk elemanı sayılır.
 "Etiket Testi" işaretli her yazıcıya bir test etiketi gönderir.
 
+## DKÇ: yazıcı adları (1.1.1)
+
+Yazıcılar sekmesinde seçilen her etiket/belge yazıcısına **Görünen ad** verilebilir
+(ör. Mal Kabul, Sevkiyat, Depo). Ayarları Kaydet ve Bağlan → Buluta Eşitle.
+BC 1.14.2.10 bu adı terminalde gösterir; Windows kuyruğu ve Printer ID değişmez.
+Her terminalde Yazıcılar → Değiştir ile kendi etiket yazıcısını seçin.
+Bir PC'deki tüm yazıcılar aynı istasyonda, ayrı Printer ID'leriyle çalışır.
+Boş görünen ad Windows yazıcı adına döner. Mevcut cihaz seçimleri korunur.
+
 ## Day-to-day UI
 
 The **Yazıcılar** tab provides:
@@ -101,7 +110,10 @@ Prerequisites:
 The ZIP is self-contained; no .NET runtime installation is required.
 
 1. Extract `BCWMS-Print-Agent-win-x64.zip` without changing its structure.
-2. Run the following in normal (non-administrator) PowerShell:
+2. Double-click `BCWMS-Print-Agent-win-x64\installer\install.cmd`.
+   This automatically bypasses the Windows PowerShell Execution Policy.
+
+   **Alternatively**, run the following in normal (non-administrator) PowerShell:
 
    ```powershell
    Set-ExecutionPolicy -Scope Process Bypass

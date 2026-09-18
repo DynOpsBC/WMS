@@ -91,6 +91,8 @@ public sealed record PrinterSnapshotItemV1
 {
     public required string PrinterId { get; init; }
     public required string PrinterName { get; init; }
+    /// <summary>Optional operator-facing name; BC stores it as the printer description.</summary>
+    public string? DisplayName { get; init; }
     public required PrintFormat Format { get; init; }
     public required string Status { get; init; }
     public required bool IsDefault { get; init; }

@@ -326,7 +326,9 @@ private fun UpdatePromptDialog(
 }
 
 private fun fetchManifest(): UpdateManifest? {
-    val manifestUrl = URL(UPDATE_MANIFEST_URL)
+    // GitHub can cache an old release-asset redirect despite no-cache headers.
+    val separator = if (UPDATE_MANIFEST_URL.contains('?')) "&" else "?"
+    val manifestUrl = URL("$UPDATE_MANIFEST_URL${separator}check=${System.currentTimeMillis()}")
     require(manifestUrl.protocol == "https") { "manifest must be served over HTTPS" }
     val conn = (manifestUrl.openConnection() as HttpURLConnection).apply {
         connectTimeout = 8_000

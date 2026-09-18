@@ -132,7 +132,7 @@ internal fun PrinterDestinationCard(usage: String = PRINTER_USAGE_LABEL, inquiry
                     style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
-                Text(effective.ifBlank { "Seçilmedi" }, fontWeight = FontWeight.Bold)
+                Text(printerBindingFrom(effective, row).title.ifBlank { "Seçilmedi" }, fontWeight = FontWeight.Bold)
                 if (warning.isNotBlank()) Text(
                     warning,
                     style = MaterialTheme.typography.bodySmall,
@@ -160,7 +160,7 @@ internal fun PrinterDestinationCard(usage: String = PRINTER_USAGE_LABEL, inquiry
                         setDefaultPrinter(context, printer.optString("code"), usage); open = false
                     }) {
                         Column(Modifier.fillMaxWidth()) {
-                            Text((if (selected == printer.optString("code")) "✓ " else "") + printer.optString("code"), fontWeight = FontWeight.Bold)
+                            Text((if (selected == printer.optString("code")) "✓ " else "") + printerBindingFrom(printer.optString("code"), printer).title, fontWeight = FontWeight.Bold)
                             // Seçim ekranında yer bilgisi kalır: aynı isimli iki
                             // yazıcı yalnız istasyon/konumla ayırt edilebiliyor.
                             Text(
@@ -177,5 +177,8 @@ internal fun PrinterDestinationCard(usage: String = PRINTER_USAGE_LABEL, inquiry
                 }
             }
         }
-    }, confirmButton = { TextButton(onClick = { open = false }) { Text("Kapat") } })
+    }, confirmButton = { TextButton(onClick = { open = false }) { Text("Kapat") } },
+        dismissButton = { if (selected.isNotBlank()) TextButton(onClick = {
+            setDefaultPrinter(context, "", usage); open = false
+        }) { Text("Seçimi kaldır") } })
 }

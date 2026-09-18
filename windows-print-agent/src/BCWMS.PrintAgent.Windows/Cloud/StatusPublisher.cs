@@ -44,9 +44,9 @@ internal sealed class StatusPublisher : IAsyncDisposable
         var rows = new List<PrinterSnapshotItemV1>();
         foreach (var labelPrinter in _settings.EffectiveLabelPrinters())
         {
-            AddSelectedPrinter(rows, byName, labelPrinter.PrinterId, labelPrinter.PrinterName, _settings.LabelFormat, receiverHealthy);
+            AddSelectedPrinter(rows, byName, labelPrinter.PrinterId, labelPrinter.PrinterName, labelPrinter.DisplayName, _settings.LabelFormat, receiverHealthy);
         }
-        AddSelectedPrinter(rows, byName, _settings.DocumentPrinterId, _settings.DocumentPrinterName, PrintFormat.PDF, receiverHealthy);
+        AddSelectedPrinter(rows, byName, _settings.DocumentPrinterId, _settings.DocumentPrinterName, _settings.DocumentPrinterDisplayName, PrintFormat.PDF, receiverHealthy);
 
         var selection = new PrinterSelectionV1
         {
@@ -107,6 +107,7 @@ internal sealed class StatusPublisher : IAsyncDisposable
         IReadOnlyDictionary<string, DiscoveredPrinter> installed,
         string printerId,
         string printerName,
+        string displayName,
         PrintFormat format,
         bool receiverHealthy)
     {
@@ -120,6 +121,7 @@ internal sealed class StatusPublisher : IAsyncDisposable
         {
             PrinterId = printerId,
             PrinterName = printerName,
+            DisplayName = string.IsNullOrWhiteSpace(displayName) ? null : displayName.Trim(),
             Format = format,
             Status = receiverHealthy && exists ? printer!.Status : "Offline",
             IsDefault = exists && printer!.IsDefault
