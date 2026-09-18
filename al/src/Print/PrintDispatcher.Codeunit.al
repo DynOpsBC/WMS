@@ -471,8 +471,12 @@ codeunit 72051 "DOPSWHS Print Dispatcher"
         Queue: Record "DOPSWHS Print Job Queue";
         PrintNode: Codeunit "DOPSWHS PrintNode Client";
         SelfHosted: Codeunit "DOPSWHS Self-Host Print Client";
+        AzureBridge: Codeunit "DOPSWHS Azure Print Bridge";
+        TempBlob: Codeunit "Temp Blob";
+        ZplInStream: InStream;
         OutStream: OutStream;
         ResolvedPrinter: Code[20];
+        JobId: Integer;
     begin
         if Copies > 10 then
             Error('A print job cannot exceed 10 copies.');
@@ -483,7 +487,23 @@ codeunit 72051 "DOPSWHS Print Dispatcher"
             ResolvedPrinter := ResolveSelfHostedPrinter(PrinterId, Usage, Copies);
             if ResolvedPrinter = '' then
                 Error('No WMS bridge printer is mapped for %1 label printing. Configure Device Printer Mapping or pass a Printer Code.', LabelName);
-            SelfHosted.Enqueue(SourceDoc, ResolvedPrinter, Enum::"DOPSWHS Print Format"::ZPL, Zpl, Copies);
+            if Setup."Print Channel" = Setup."Print Channel"::AzureDirect then begin
+                TempBlob.CreateOutStream(OutStream, TextEncoding::UTF8);
+                OutStream.WriteText(Zpl);
+                TempBlob.CreateInStream(ZplInStream);
+                JobId := SelfHosted.EnqueueStreamForImmediateDispatch(
+                    SourceDoc, 0, ResolvedPrinter, Enum::"DOPSWHS Print Format"::ZPL,
+                    ZplInStream, Copies, '');
+                // Explicit terminal actions go to Service Bus in this request;
+                // the one-minute worker remains only as the recovery path.
+                Commit();
+                AzureBridge.DispatchJob(JobId);
+                Commit();
+                Queue.Get(JobId);
+                if Queue.Status in [Queue.Status::Queued, Queue.Status::Failed] then
+                    Error('The %1 label job was saved but Azure dispatch failed: %2', LabelName, Queue."Last Error");
+            end else
+                SelfHosted.Enqueue(SourceDoc, ResolvedPrinter, Enum::"DOPSWHS Print Format"::ZPL, Zpl, Copies);
             exit;
         end;
         if Setup."Print Channel" <> Setup."Print Channel"::PrintNode then

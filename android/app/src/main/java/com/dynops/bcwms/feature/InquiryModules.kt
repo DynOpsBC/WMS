@@ -20,6 +20,8 @@ import com.dynops.bcwms.BcApi
 import com.dynops.bcwms.scanner.BarcodeIntentResolver
 import com.dynops.bcwms.scanner.ScanField
 import com.dynops.bcwms.ui.*
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.delay
 import org.json.JSONObject
@@ -46,11 +48,20 @@ internal fun queriedLpSummary(lpNo: String, lines: List<JSONObject>): QueriedLpS
     )
 }
 
-internal fun itemLookupPath(value: String): String {
+internal fun itemLookupPaths(value: String): List<String> {
     val safe = value.trim().replace("'", "''")
-    return "items?\$filter=contains(no,'$safe') or contains(description,'$safe')" +
-        "&\$select=no,description,baseUnitOfMeasure&\$orderby=no&\$top=12"
+    val suffix = "&\$select=no,description,baseUnitOfMeasure&\$orderby=no&\$top=25"
+    return listOf(
+        "items?\$filter=contains(no,'$safe')$suffix",
+        "items?\$filter=contains(description,'$safe')$suffix",
+    )
 }
+
+internal fun mergeItemLookupRows(pages: List<List<JSONObject>>): List<JSONObject> =
+    pages.flatten()
+        .distinctBy { firstValue(it, "no", "number").trim().uppercase() }
+        .sortedBy { firstValue(it, "no", "number").trim().uppercase() }
+        .take(25)
 
 /** Item Inquiry — item card + LP lines that contain the item (on-hand by LP). */
 @Composable
@@ -74,15 +85,19 @@ fun ItemInquiryModule(labelsOnly: Boolean = false) {
 
     LaunchedEffect(query) {
         val needle = query.trim()
-        if (needle.length < 2 || loading) {
+        if (needle.isEmpty() || loading) {
             suggestions = emptyList()
             suggestionsLoading = false
             return@LaunchedEffect
         }
         delay(250)
         suggestionsLoading = true
-        val page = runCatching { BcApi.getAllPages(context, itemLookupPath(needle)) }.getOrNull()
-        suggestions = if (page?.complete == true) page.rows else emptyList()
+        val pages = itemLookupPaths(needle).map { path ->
+            async { runCatching { BcApi.getAllPages(context, path) }.getOrNull() }
+        }.awaitAll()
+        suggestions = mergeItemLookupRows(
+            pages.filter { it?.complete == true }.map { requireNotNull(it).rows },
+        )
         suggestionsLoading = false
     }
 
@@ -179,6 +194,14 @@ fun ItemInquiryModule(labelsOnly: Boolean = false) {
         if (suggestionsLoading) {
             Spacer(Modifier.height(6.dp))
             LinearProgressIndicator(Modifier.fillMaxWidth())
+        }
+        if (suggestions.isNotEmpty()) {
+            Text(
+                "Eşleşen ürünler (${suggestions.size})",
+                modifier = Modifier.padding(top = 8.dp),
+                fontWeight = FontWeight.Bold,
+                fontSize = 13.sp,
+            )
         }
         suggestions.forEach { suggestion ->
             val no = firstValue(suggestion, "no", "number")
