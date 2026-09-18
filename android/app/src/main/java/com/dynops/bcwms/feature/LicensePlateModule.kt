@@ -334,7 +334,7 @@ private fun LpDocument(lpNo: String, onBack: () -> Unit) {
                 BcApi.boundAction(context, "licensePlates", lpNo, name, body)
             }
             var okNote = ""
-            if (name == "printMte" && !r.ok && mteFallbackToLegacy(r.httpCode, BcApi.errorMessage(r.body))) {
+            if (com.dynops.bcwms.BuildConfig.FLAVOR != "bade" && name == "printMte" && !r.ok && mteFallbackToLegacy(r.httpCode, BcApi.errorMessage(r.body))) {
                 // BC 1.14.1.38 ve öncesi printMte aksiyonunu tanımaz: etiket yine çıksın diye
                 // ek alanlar olmadan eski MTE yoluna düşülür (terminal BC'den önce güncellenirse).
                 r = BcApi.boundActionLongRunning(context, "licensePlates", lpNo, "printPalletLabels", legacyMteBody(body))
@@ -818,6 +818,7 @@ private fun MteOptionsSheet(
     onConfirm: (MteOptions) -> Unit,
 ) {
     val context = LocalContext.current
+    val companyScope = remember { TerminalSession.scope(context) }
     var employees by remember { mutableStateOf<List<Pair<String, String>>>(emptyList()) }
     var inspector by remember { mutableStateOf("") }
     var supplierLot by remember { mutableStateOf("") }
@@ -826,6 +827,13 @@ private fun MteOptionsSheet(
     var error by remember { mutableStateOf("") }
     var inspectorMenu by remember { mutableStateOf(false) }
     var qcMenu by remember { mutableStateOf(false) }
+
+    fun submit(options: MteOptions) {
+        val resolved = runCatching { mteOptionsForCurrentOperator(context, options, employees, companyScope) }
+        resolved.onSuccess(onConfirm).onFailure {
+            error = it.message ?: "Giriş yapan kullanıcı doğrulanamadı."
+        }
+    }
 
     LaunchedEffect(lpNo) {
         val r = BcApi.boundAction(context, "licensePlates", lpNo, "listEmployees", "{}")
@@ -860,7 +868,7 @@ private fun MteOptionsSheet(
     SheetScaffold(onDismiss = onDismiss, contentPadding = PaddingValues(20.dp)) {
         Text("MTE Yazdır · Ek Bilgiler", fontWeight = FontWeight.Bold, fontSize = 18.sp)
         Text(
-            "Boş bırakılan alanlar etikette U.Y olarak çıkar. Tarihler gg.aa.yyyy.",
+            MTE_EMPTY_FIELDS_HINT,
             fontSize = 12.sp,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
@@ -879,11 +887,11 @@ private fun MteOptionsSheet(
                     error = "Tarih biçimi geçersiz. gg.aa.yyyy girin."
                     return@Button
                 }
-                onConfirm(MteOptions(inspector, supplierLot, qcEmployee, qc))
+                submit(MteOptions(inspector, supplierLot, qcEmployee, qc))
             },
             modifier = Modifier.fillMaxWidth().height(50.dp),
         ) { Text("MTE Yazdır") }
-        TextButton(onClick = { onConfirm(MteOptions()) }, modifier = Modifier.fillMaxWidth()) { Text("Alanları boş bırak, yazdır") }
+        TextButton(onClick = { submit(mteOptionsWithoutExtraFields(inspector)) }, modifier = Modifier.fillMaxWidth()) { Text(MTE_EMPTY_FIELDS_BUTTON) }
         Spacer(Modifier.height(24.dp))
     }
 }
