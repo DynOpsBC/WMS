@@ -15,11 +15,20 @@ page 72324 "DOPSWHS Terminal Users"
         {
             repeater(Users)
             {
-                field("Display Name"; Rec."Display Name") { Caption = 'Ad Soyad'; ApplicationArea = All; }
+                field("Display Name"; Rec."Display Name") { Caption = 'Ad Soyad'; ApplicationArea = All; Editable = CanManageUsers; }
                 field("Terminal Admin"; Rec."Terminal Admin") { ApplicationArea = All; Editable = false; }
-                field("Terminal Code"; Rec."Terminal Code") { ApplicationArea = All; }
-                field(Disabled; Rec.Disabled) { Caption = 'Devre Dışı'; ApplicationArea = All; }
+                field("Terminal Code"; Rec."Terminal Code") { ApplicationArea = All; Editable = CanManageUsers; }
+                field(Disabled; Rec.Disabled) { Caption = 'Devre Dışı'; ApplicationArea = All; Editable = CanManageUsers; }
             }
         }
     }
+    trigger OnOpenPage()
+    var
+        AuthMgt: Codeunit "DOPSWHS Local Auth Mgmt";
+    begin
+        CanManageUsers := AuthMgt.CanManageLocalUsers();
+    end;
+
+    var
+        CanManageUsers: Boolean;
 }

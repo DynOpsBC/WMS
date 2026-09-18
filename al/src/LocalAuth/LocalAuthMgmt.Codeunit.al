@@ -6,6 +6,21 @@ codeunit 72285 "DOPSWHS Local Auth Mgmt"
     Access = Public;
     Permissions = tabledata "DOPSWHS Local User" = m;
 
+    procedure CanManageLocalUsers(): Boolean
+    begin
+        case UpperCase(UserId()) of
+            'UMUT', 'DYNOPS', 'BC_SUPPORT':
+                exit(true);
+        end;
+        exit(false);
+    end;
+
+    procedure EnsureCanManageLocalUsers()
+    begin
+        if not CanManageLocalUsers() then
+            Error('WMS kullanıcılarını yalnız UMUT, DYNOPS veya BC_SUPPORT hesabı yönetebilir.');
+    end;
+
     /// <summary>Yeni bir yerel kullanıcı oluşturur ya da mevcut olanı günceller (idempotent).
     /// Şifre düz metinde verilir, salt + hash hesaplanır.</summary>
     procedure Register(Username: Code[20]; DisplayName: Text[100]; PlainPassword: Text; DefaultLocation: Code[10]; DefaultBin: Code[20])
@@ -14,6 +29,7 @@ codeunit 72285 "DOPSWHS Local Auth Mgmt"
         Salt: Text;
         Hash: Text;
     begin
+        EnsureCanManageLocalUsers();
         if Username = '' then
             Error('Kullanıcı adı boş olamaz.');
         if StrLen(PlainPassword) < 4 then
@@ -60,6 +76,7 @@ codeunit 72285 "DOPSWHS Local Auth Mgmt"
         Salt: Text;
         Hash: Text;
     begin
+        EnsureCanManageLocalUsers();
         if not LocalUser.Get(Username) then
             Error('Kullanıcı bulunamadı: %1', Username);
         if StrLen(NewPlainPassword) < 4 then
@@ -159,6 +176,7 @@ codeunit 72285 "DOPSWHS Local Auth Mgmt"
         LocalUser: Record "DOPSWHS Local User";
         NewUsername: Code[20];
     begin
+        EnsureCanManageLocalUsers();
         Terminal.Get(TerminalCode);
         Terminal.TestField(Disabled, false);
         ValidatePin(Pin);
@@ -182,6 +200,7 @@ codeunit 72285 "DOPSWHS Local Auth Mgmt"
         LocalUser: Record "DOPSWHS Local User";
         NewUsername: Code[20];
     begin
+        EnsureCanManageLocalUsers();
         ValidatePin(Pin);
         if DisplayName.Trim() = '' then
             Error('Ad soyad girin.');

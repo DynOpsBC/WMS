@@ -55,14 +55,52 @@ table 72284 "DOPSWHS Local User"
     }
 
     trigger OnInsert()
+    var
+        AuthMgt: Codeunit "DOPSWHS Local Auth Mgmt";
     begin
+        AuthMgt.EnsureCanManageLocalUsers();
         if "Created DateTime" = 0DT then "Created DateTime" := CurrentDateTime();
         if "Created By" = '' then "Created By" := CopyStr(UserId(), 1, 50);
         "Last Modified DateTime" := CurrentDateTime();
     end;
 
     trigger OnModify()
+    var
+        AuthMgt: Codeunit "DOPSWHS Local Auth Mgmt";
     begin
+        if ProtectedUserFieldsChanged() then
+            AuthMgt.EnsureCanManageLocalUsers();
         "Last Modified DateTime" := CurrentDateTime();
+    end;
+
+    trigger OnDelete()
+    var
+        AuthMgt: Codeunit "DOPSWHS Local Auth Mgmt";
+    begin
+        AuthMgt.EnsureCanManageLocalUsers();
+    end;
+
+    trigger OnRename()
+    var
+        AuthMgt: Codeunit "DOPSWHS Local Auth Mgmt";
+    begin
+        AuthMgt.EnsureCanManageLocalUsers();
+    end;
+
+    local procedure ProtectedUserFieldsChanged(): Boolean
+    begin
+        exit((Username <> xRec.Username) or
+            ("Display Name" <> xRec."Display Name") or
+            ("Password Hash" <> xRec."Password Hash") or
+            ("Password Salt" <> xRec."Password Salt") or
+            ("Default Location Code" <> xRec."Default Location Code") or
+            ("Default Bin Code" <> xRec."Default Bin Code") or
+            (Locale <> xRec.Locale) or
+            ("Hide Test Tools" <> xRec."Hide Test Tools") or
+            ("Hide Admin Tools" <> xRec."Hide Admin Tools") or
+            (Disabled <> xRec.Disabled) or
+            ("Terminal Code" <> xRec."Terminal Code") or
+            ("PIN Login" <> xRec."PIN Login") or
+            ("Terminal Admin" <> xRec."Terminal Admin"));
     end;
 }

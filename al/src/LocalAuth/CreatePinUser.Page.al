@@ -16,6 +16,7 @@ page 72323 "DOPSWHS Create PIN User"
     }
     trigger OnOpenPage()
     begin
+        Auth.EnsureCanManageLocalUsers();
         if Manager then
             CurrPage.Caption('Yönetici Oluştur');
     end;

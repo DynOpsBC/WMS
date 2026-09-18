@@ -31,6 +31,7 @@ page 72285 "DOPSWHS Local User List"
                 Image = New;
                 Promoted = true;
                 PromotedCategory = Process;
+                Enabled = CanManageUsers;
                 trigger OnAction()
                 var
                     UserDialog: Page "DOPSWHS Create PIN User";
@@ -66,6 +67,16 @@ page 72285 "DOPSWHS Local User List"
             }
         }
     }
+    trigger OnOpenPage()
+    var
+        AuthMgt: Codeunit "DOPSWHS Local Auth Mgmt";
+    begin
+        CanManageUsers := AuthMgt.CanManageLocalUsers();
+    end;
+
+    var
+        CanManageUsers: Boolean;
+
     local procedure ShowManagers()
     var
         LocalUser: Record "DOPSWHS Local User";
