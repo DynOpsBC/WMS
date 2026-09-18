@@ -416,7 +416,7 @@ codeunit 72040 "DOPSWHS LP Management"
         LP.Get(LP."No.");
         EnsureNotPendingReceipt(LP);
         OnBeforeAddLine(LP, ItemNo, UoM, Qty);
-        RequireStatus(LP, LP.Status::Open);
+        RequireLineAppendStatus(LP);
         if ItemNo = '' then
             Error('Madde numarası zorunludur.');
         if Qty <= 0 then
@@ -1725,6 +1725,14 @@ codeunit 72040 "DOPSWHS LP Management"
     begin
         if LP.Status <> RequiredStatus then
             Error('%1 LP numarasının durumu %2 olmalıdır. Güncel durum: %3.', LP."No.", RequiredStatus, LP.Status);
+    end;
+
+    local procedure RequireLineAppendStatus(var LP: Record "DOPSWHS LP Header")
+    begin
+        if not (LP.Status in [LP.Status::Open, LP.Status::Built]) then
+            Error(
+                '%1 LP numarasına yalnız Açık veya Oluşturuldu durumundayken ürün/lot satırı eklenebilir. Güncel durum: %2.',
+                LP."No.", LP.Status);
     end;
 
     local procedure LogMutation(EventName: Text)

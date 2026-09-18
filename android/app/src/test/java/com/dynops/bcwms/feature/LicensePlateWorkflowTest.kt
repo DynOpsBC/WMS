@@ -164,6 +164,15 @@ class LicensePlateWorkflowTest {
     }
 
     @Test
+    fun `open and built LP can receive another product or lot line`() {
+        assertTrue(canAppendLicensePlateLine("Open"))
+        assertTrue(canAppendLicensePlateLine("Built"))
+        assertFalse(canAppendLicensePlateLine("Assigned"))
+        assertFalse(canAppendLicensePlateLine("Used"))
+        assertFalse(canAppendLicensePlateLine("Unbuilt"))
+    }
+
+    @Test
     fun `empty unlocated LP can receive its first bin`() {
         assertTrue(canAssignLicensePlateBin("Open", 0, ""))
         assertTrue(canAssignLicensePlateBin("Built", 0, ""))

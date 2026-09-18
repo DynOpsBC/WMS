@@ -117,6 +117,14 @@ internal fun lpLotIsRequired(trackingRequiresLot: Boolean, availableLotCount: In
 internal fun canEditLicensePlate(status: String): Boolean =
     status.equals("Open", ignoreCase = true)
 
+/**
+ * A stock-built pallet may receive another product/lot before it is used or
+ * assigned to a document. This is the normal mixed-pallet case: the first
+ * stock row creates the physical LP, later rows remain separate LP lines.
+ */
+internal fun canAppendLicensePlateLine(status: String): Boolean =
+    status.equals("Open", ignoreCase = true) || status.equals("Built", ignoreCase = true)
+
 internal fun canAssignLicensePlateBin(status: String, lineCount: Int, binCode: String): Boolean =
     binCode.isBlank() && lineCount == 0 && (
         status.equals("Open", ignoreCase = true) || status.equals("Built", ignoreCase = true)
