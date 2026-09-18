@@ -21,6 +21,7 @@ import com.dynops.bcwms.scanner.BarcodeIntentResolver
 import com.dynops.bcwms.scanner.ScanField
 import com.dynops.bcwms.ui.*
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.delay
 import org.json.JSONObject
 
 internal data class QueriedLpSummary(
@@ -45,6 +46,12 @@ internal fun queriedLpSummary(lpNo: String, lines: List<JSONObject>): QueriedLpS
     )
 }
 
+internal fun itemLookupPath(value: String): String {
+    val safe = value.trim().replace("'", "''")
+    return "items?\$filter=contains(no,'$safe') or contains(description,'$safe')" +
+        "&\$select=no,description,baseUnitOfMeasure&\$orderby=no&\$top=12"
+}
+
 /** Item Inquiry — item card + LP lines that contain the item (on-hand by LP). */
 @Composable
 fun ItemInquiryModule(labelsOnly: Boolean = false) {
@@ -62,14 +69,32 @@ fun ItemInquiryModule(labelsOnly: Boolean = false) {
     var loading by remember { mutableStateOf(false) }
     var labelCopies by rememberSaveable { mutableStateOf("1") }
     var printing by remember { mutableStateOf(false) }
+    var suggestions by remember { mutableStateOf<List<JSONObject>>(emptyList()) }
+    var suggestionsLoading by remember { mutableStateOf(false) }
 
-    fun load() {
-        if (query.trim().isBlank()) return
+    LaunchedEffect(query) {
+        val needle = query.trim()
+        if (needle.length < 2 || loading) {
+            suggestions = emptyList()
+            suggestionsLoading = false
+            return@LaunchedEffect
+        }
+        delay(250)
+        suggestionsLoading = true
+        val page = runCatching { BcApi.getAllPages(context, itemLookupPath(needle)) }.getOrNull()
+        suggestions = if (page?.complete == true) page.rows else emptyList()
+        suggestionsLoading = false
+    }
+
+    fun load(requestedQuery: String = query) {
+        if (requestedQuery.trim().isBlank()) return
         scope.launch {
             loading = true; status = "Sorgulanıyor..."
+            suggestions = emptyList()
             item = null; lpLines = emptyList(); ledger = emptyList(); queriedLpNo = ""
             labelCopies = "1"
-            val q = query.trim()
+            val q = requestedQuery.trim()
+            query = q
             val safeQ = q.replace("'", "''")
             val byLp = BcApi.getAllPages(context, "licensePlateLines?\$filter=lpNo eq '$safeQ'&\$top=200")
             if (byLp.complete && byLp.rows.isNotEmpty()) {
@@ -147,9 +172,28 @@ fun ItemInquiryModule(labelsOnly: Boolean = false) {
       item {
         ScanField("Ürün No / LP No", query, { query = it; item = null }, modifier = Modifier.fillMaxWidth(), enabled = !loading, okButton = false, onScanned = {
             val resolved = BarcodeIntentResolver.resolve(it)
-            query = resolved.itemNo ?: resolved.value
-            load()
+            val scanned = resolved.itemNo ?: resolved.value
+            query = scanned
+            load(scanned)
         })
+        if (suggestionsLoading) {
+            Spacer(Modifier.height(6.dp))
+            LinearProgressIndicator(Modifier.fillMaxWidth())
+        }
+        suggestions.forEach { suggestion ->
+            val no = firstValue(suggestion, "no", "number")
+            val description = firstValue(suggestion, "description", "displayName")
+            Card(
+                onClick = { load(no) },
+                modifier = Modifier.fillMaxWidth().padding(top = 6.dp),
+                shape = RoundedCornerShape(10.dp),
+            ) {
+                Column(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 9.dp)) {
+                    Text(no, fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                    if (description.isNotBlank()) Text(description, fontSize = 12.sp, color = Color.Gray, maxLines = 2)
+                }
+            }
+        }
         Spacer(Modifier.height(8.dp))
         Button(onClick = { load() }, enabled = !loading && query.isNotBlank(), modifier = Modifier.fillMaxWidth().height(48.dp)) {
             Text(if (loading) "..." else "Sorgula", fontWeight = FontWeight.Bold)

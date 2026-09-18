@@ -378,6 +378,9 @@ private fun HomeScreen(
     val companyName = remember(companyEpoch) { BcApi.getCompanyName(context) }
     val companyBrand = remember(companyName, flavor) { resolveCompanyBrand(companyName, flavor) }
     val operatorName = remember(companyEpoch, connected) { BcApi.getOperatorDisplayName(context) }
+    val welcomeName = if (flavor.equals("emu", ignoreCase = true))
+        WmsTerminalSession.code(context).ifBlank { operatorName }
+    else operatorName
     var accessible by remember(companyEpoch, connected) { mutableStateOf(BcApi.getAccessibleCompanies(context)) }
     var discovering by remember { mutableStateOf(false) }
     // ELOG: liste boşsa (login switcher eklenmeden yapılmış / AAD-only atlama)
@@ -430,7 +433,7 @@ private fun HomeScreen(
             env = BcApi.getEnvironment(context),
             company = companyName,
             brand = companyBrand,
-            operatorName = operatorName,
+            operatorName = welcomeName,
             connected = connected,
             canSwitch = accessible.size > 1,
             onSwitchClick = { showSwitcher = true },
@@ -465,7 +468,7 @@ private fun HomeScreen(
         }
         // DKÇ (17 Eyl 2026): every terminal must have its own printer; say so
         // on the home screen instead of failing at the first label.
-        val homeLabelPrinter = com.dynops.bcwms.feature.rememberPrinterPreference("bcwms.printer.${com.dynops.bcwms.feature.PRINTER_USAGE_LABEL}")
+        val homeLabelPrinter = com.dynops.bcwms.feature.rememberDevicePrinter(com.dynops.bcwms.feature.PRINTER_USAGE_LABEL)
         if (connected && shouldForceProductionFlow(flavor) && homeLabelPrinter.isBlank()) {
             NoPrinterCard(onSelect = { onNavigate(Screen.Printers) })
             Spacer(Modifier.height(16.dp))
@@ -525,7 +528,7 @@ private fun HomeHeader(
                 Spacer(Modifier.width(12.dp))
                 Column(Modifier.weight(1f)) {
                     Text(
-                        if (operatorName.isBlank()) "Hoş geldiniz" else "Hoş geldin, $operatorName",
+                        if (operatorName.isBlank()) "Hoş geldiniz" else "Hoş geldin $operatorName",
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold,
                         color = Color.White
