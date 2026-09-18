@@ -50,21 +50,24 @@ page 72325 "DOPSWHS Terminal API"
         if LocalUser.Disabled or not LocalUser."PIN Login" or
            ((LocalUser."Terminal Code" <> Terminal.Code) and not LocalUser."Terminal Admin") then
             Error('Kullanıcı bu terminalde etkin değil.');
-        Printer.Get(printerCode);
-        if not Printer.Active then
-            Error('Yazıcı pasif.');
+        // Clearing must also work when the old printer was disabled or deleted.
+        if printerCode <> '' then begin
+            Printer.Get(printerCode);
+            if not Printer.Active then
+                Error('Yazıcı pasif.');
+        end;
         case usage of
             'LpLabel':
                 begin
-                    if Printer.Format <> Printer.Format::ZPL then
+                    if (printerCode <> '') and (Printer.Format <> Printer.Format::ZPL) then
                         Error('Etiket yazıcısı ZPL formatında olmalı.');
-                    Terminal.Validate("Label Printer Code", Printer.Code);
+                    Terminal.Validate("Label Printer Code", printerCode);
                 end;
             'Document':
                 begin
-                    if Printer.Format <> Printer.Format::PDF then
+                    if (printerCode <> '') and (Printer.Format <> Printer.Format::PDF) then
                         Error('Belge yazıcısı PDF formatında olmalı.');
-                    Terminal.Validate("Document Printer Code", Printer.Code);
+                    Terminal.Validate("Document Printer Code", printerCode);
                 end;
             else
                 Error('Geçersiz yazıcı kullanım türü.');
