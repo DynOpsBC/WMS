@@ -7,11 +7,18 @@ permissionset 72094 "DOPSWHS-ADMIN"
 
     Permissions =
         table "DOPSWHS Print Environment" = X,
-        tabledata "DOPSWHS Print Environment" = R,
+        // Shared data can only be changed through the environment codeunit.
+        // Audit environment print object IDs: 72377 72378 72379
+        tabledata "DOPSWHS Print Environment" = Rimd,
         table "DOPSWHS Environment Printer" = X,
-        tabledata "DOPSWHS Environment Printer" = R,
+        tabledata "DOPSWHS Environment Printer" = Rimd,
         table "DOPSWHS Environment Print Job" = X,
+        tabledata "DOPSWHS Environment Print Job" = rimd,
         codeunit "DOPSWHS Print Environment" = X,
+        tabledata "Job Queue Entry" = rimd,
+        tabledata "Job Queue Log Entry" = rimd,
+        tabledata "Error Message Register" = rimd,
+        tabledata "Error Message" = rimd,
         table "DOPSWHS WMS Terminal" = X,
         tabledata "DOPSWHS WMS Terminal" = RIMD,
         page "DOPSWHS Terminal API" = X,
