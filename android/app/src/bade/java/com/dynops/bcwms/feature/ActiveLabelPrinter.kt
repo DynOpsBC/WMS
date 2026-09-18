@@ -2,14 +2,13 @@ package com.dynops.bcwms.feature
 
 import android.content.Context
 import android.content.SharedPreferences
-import androidx.compose.foundation.layout.Column
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
-import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import com.dynops.bcwms.BcApi
@@ -60,17 +59,17 @@ internal fun ActiveLabelPrinter(modifier: Modifier = Modifier, refreshKey: Any) 
             printerName = if (response.ok) activePrinterAgentName(response.body, printerCode) else null
         } finally { loading = false }
     }
-    Column(modifier) {
-        Text("Etiket yazıcısı", style = MaterialTheme.typography.labelMedium)
-        Text(
-            when {
-                printerCode.isBlank() -> "Seçilmemiş"
-                printerName != null -> printerName!!
-                loading -> "Yükleniyor…"
-                else -> "Yazıcı adı alınamadı"
-            },
-            style = MaterialTheme.typography.bodyMedium,
-            fontWeight = FontWeight.SemiBold,
-        )
+    val displayName = when {
+        printerCode.isBlank() -> "Seçilmemiş"
+        printerName != null -> printerName!!
+        loading -> "Yükleniyor…"
+        else -> "Yazıcı adı alınamadı"
     }
+    Text(
+        text = "Yazıcı: $displayName",
+        modifier = modifier,
+        style = MaterialTheme.typography.labelSmall,
+        maxLines = 1,
+        overflow = TextOverflow.Ellipsis,
+    )
 }
