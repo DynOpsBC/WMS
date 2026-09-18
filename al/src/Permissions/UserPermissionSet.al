@@ -20,7 +20,7 @@ permissionset 72095 "DOPSWHS-USER"
         tabledata "Error Message Register" = rimd,
         tabledata "Error Message" = rimd,
         table "DOPSWHS WMS Terminal" = X,
-        tabledata "DOPSWHS WMS Terminal" = R,
+        tabledata "DOPSWHS WMS Terminal" = Rm,
         page "DOPSWHS Terminal API" = X,
         page "DOPSWHS Local User API" = X,
         tabledata "DOPSWHS Setup" = Rim,
