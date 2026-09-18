@@ -238,6 +238,17 @@ page 72061 "DOPSWHS Setup"
     {
         area(Processing)
         {
+            action(OpenTerminals)
+            {
+                Caption = 'WMS Terminalleri';
+                ToolTip = 'El terminallerini ve her terminalin etiket/belge yazıcısını yönetir.';
+                ApplicationArea = All;
+                Image = Setup;
+                Promoted = true;
+                PromotedCategory = Process;
+                PromotedIsBig = true;
+                RunObject = page "DOPSWHS Terminal List";
+            }
             group(DemoData)
             {
                 Caption = 'Demo Data';

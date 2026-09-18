@@ -38,10 +38,10 @@ jobs:
         shell: pwsh
         run: |
           New-Item dist -ItemType Directory -Force | Out-Null
-          al compile -- /project:al /packagecachepath:al/.alpackages /out:dist/BCWMSApp-EMU-1.14.2.13.app /errorsonlyinconsole
+          al compile -- /project:al /packagecachepath:al/.alpackages /out:dist/BCWMSApp-EMU-1.14.2.14.app /errorsonlyinconsole
           if ($LASTEXITCODE -ne 0) { throw 'AL compilation failed' }
-          if (-not (Test-Path dist/BCWMSApp-EMU-1.14.2.13.app)) { throw 'AL package was not produced' }
-          Get-FileHash dist/BCWMSApp-EMU-1.14.2.13.app -Algorithm SHA256 | Format-List | Out-File dist/package-sha256.txt
+          if (-not (Test-Path dist/BCWMSApp-EMU-1.14.2.14.app)) { throw 'AL package was not produced' }
+          Get-FileHash dist/BCWMSApp-EMU-1.14.2.14.app -Algorithm SHA256 | Format-List | Out-File dist/package-sha256.txt
           Copy-Item bc-symbol-version.txt dist/
       - uses: actions/upload-artifact@v7
         with:
