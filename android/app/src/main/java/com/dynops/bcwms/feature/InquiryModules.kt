@@ -299,7 +299,12 @@ fun ItemInquiryModule(labelsOnly: Boolean = false) {
             Spacer(Modifier.height(8.dp))
             PrinterDestinationCard(inquiryFallback = true)
             Spacer(Modifier.height(6.dp))
-            LabelCopiesField(labelCopies, { labelCopies = it }, enabled = !printing)
+            LabelCopiesField(
+                labelCopies,
+                { labelCopies = it },
+                enabled = !printing,
+                label = "İstenen ürün adedi",
+            )
             Spacer(Modifier.height(6.dp))
             val itemCopies = parseLabelCopies(labelCopies)
             OutlinedButton(
@@ -575,6 +580,33 @@ fun BinInquiryModule(labelsOnly: Boolean = false) {
             if (contentsPage.complete) contents = contentsPage.rows.filter { it.optDouble("quantity", 0.0) != 0.0 }
             val lpPage = BcApi.getAllPages(context, "licensePlates?\$filter=locationCode eq '$loc' and binCode eq '$code'&\$top=50")
             if (lpPage.complete) lps = lpPage.rows.filter { activeLicensePlateStatus(it.optString("status")) }
+            // Bazı eski depolarda standart Bin Content satırı henüz oluşmamış
+            // olabiliyor. Rafın içeriği yine LP satırlarında bulunduğu için
+            // Bin Sorgu boş görünmesin; sadece bu durumda LP içeriğini göster.
+            if (contents.isEmpty() && lps.isNotEmpty()) {
+                val lpContentPages = lps.map { lp ->
+                    async {
+                        BcApi.getAllPages(
+                            context,
+                            "licensePlateLines?\$filter=lpNo eq '${lp.optString("no").replace("'", "''")}'&\$top=100",
+                        )
+                    }
+                }.awaitAll()
+                val lpContents = lpContentPages.filter { it.complete }.flatMap { it.rows }
+                    .groupBy { listOf(it.optString("itemNo"), it.optString("variantCode"), it.optString("unitOfMeasure")) }
+                    .map { (key, lines) ->
+                        JSONObject().apply {
+                            put("itemNo", key[0])
+                            put("variantCode", key[1])
+                            put("unitOfMeasureCode", key[2])
+                            put("quantity", lines.sumOf { it.optDouble("quantity", 0.0) })
+                            put("itemDescription", "LP içeriği")
+                            put("activeLpNos", lines.map { it.optString("lpNo") }.filter { it.isNotBlank() }.distinct().joinToString(", "))
+                            put("activeLpQuantity", lines.sumOf { it.optDouble("quantity", 0.0) })
+                        }
+                    }.filter { it.optDouble("quantity", 0.0) != 0.0 }
+                contents = lpContents
+            }
             // Whse Entries (raf hareket geçmişi) — WI pariteti.
             val we = BcApi.get(context, "warehouseEntries?\$filter=locationCode eq '$loc' and binCode eq '$code'&\$orderby=registeringDate desc,entryNo desc&\$top=20")
             if (we.ok) whseEntries = BcApi.parseValueArray(we.body)
@@ -823,7 +855,7 @@ fun BinInquiryModule(labelsOnly: Boolean = false) {
       }
             if (contents.isNotEmpty()) {
                 item {
-                    Text("Bin İçeriği (${contents.size})", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface, modifier = Modifier.padding(vertical = 4.dp))
+                    Text("Raf İçeriği (${contents.size})", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface, modifier = Modifier.padding(vertical = 4.dp))
                 }
                 items(contents) { c ->
                     Card(
@@ -857,6 +889,9 @@ fun BinInquiryModule(labelsOnly: Boolean = false) {
                     }
                 }
                 item { Spacer(Modifier.height(8.dp)) }
+            }
+            if (bin != null && contents.isEmpty() && !loading && !labelsOnly) item {
+                EmptyState("Bu rafın stok içeriği yok.")
             }
             if (!labelsOnly) item {
                 Text("LP'ler (${lps.size})", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface, modifier = Modifier.padding(vertical = 4.dp))

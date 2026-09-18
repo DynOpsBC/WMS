@@ -41,7 +41,10 @@ internal suspend fun selectTerminalPrinter(context: Context, code: String, usage
     val terminal = WmsTerminalSession.code(context)
     val username = BcApi.getLocalUser(context)
     require(terminal.isNotBlank()) { "Önce terminal seçin." }
-    require(username.isNotBlank()) { "Önce kullanıcı girişi yapın." }
+    // Yazıcı seçimi kullanıcıya değil terminale aittir. Servis/AAD oturumuyla
+    // kurulmuş bir cihazda operatör PIN'i henüz açılmamış olsa da terminalin
+    // yazıcısı değiştirilebilmeli; BC tarafı boş kullanıcıyı terminal ayarı
+    // olarak kabul eder.
     val response = BcApi.boundAction(
         context, "wmsTerminals", terminal, "selectPrinter",
         JSONObject().put("username", username).put("usage", usage).put("printerCode", code).toString(),

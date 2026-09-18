@@ -46,12 +46,13 @@ internal fun LabelCopiesField(
     value: String,
     onValueChange: (String) -> Unit,
     enabled: Boolean = true,
+    label: String = "Etiket adedi",
     modifier: Modifier = Modifier,
 ) {
     val current = parseLabelCopies(value)
     Column(modifier.fillMaxWidth()) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Text("Etiket adedi", style = MaterialTheme.typography.labelLarge, modifier = Modifier.weight(1f))
+            Text(label, style = MaterialTheme.typography.labelLarge, modifier = Modifier.weight(1f))
             OutlinedButton(
                 onClick = { onValueChange(((current ?: 1) - 1).coerceAtLeast(1).toString()) },
                 enabled = enabled && (current ?: 1) > 1,
