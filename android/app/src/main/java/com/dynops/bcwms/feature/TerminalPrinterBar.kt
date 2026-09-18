@@ -82,6 +82,26 @@ internal fun rememberDevicePrinter(usage: String): String {
     return value
 }
 
+/** Top bar shortcut with the Print Agent display name of the active label printer. */
+@Composable
+internal fun ActivePrinterTopBarButton(onClick: () -> Unit) {
+    val context = LocalContext.current
+    val code = rememberDevicePrinter(PRINTER_USAGE_LABEL)
+    var binding by remember { mutableStateOf(printerBindingFrom(code, null)) }
+    LaunchedEffect(code) {
+        binding = printerBindingFrom(code, null)
+        binding = runCatching { loadPrinterBinding(context, code) }.getOrDefault(binding)
+    }
+    TextButton(onClick = onClick) {
+        Text(
+            if (code.isBlank()) "Yazıcı · Seçilmedi" else "Yazıcı · ${binding.title.ifBlank { code }}",
+            fontSize = 12.sp,
+            fontWeight = FontWeight.Bold,
+            maxLines = 1,
+        )
+    }
+}
+
 /** Green / red / grey dot for the agent-reported state. */
 @Composable
 internal fun PrinterStateDot(online: Boolean?, size: androidx.compose.ui.unit.Dp = 10.dp) {

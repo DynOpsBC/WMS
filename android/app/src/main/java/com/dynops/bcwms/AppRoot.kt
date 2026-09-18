@@ -176,7 +176,7 @@ fun AppRoot() {
                             },
                         )
                     }
-                    TextButton(onClick = { showDevicePrinters = true }) { Text("Yazıcı") }
+                    ActivePrinterTopBarButton(onClick = { showDevicePrinters = true })
                     ConnectionBadge(connected) { screen = Screen.Connection }
                 }
             )
