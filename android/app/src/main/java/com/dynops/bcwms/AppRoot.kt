@@ -234,8 +234,11 @@ fun AppRoot() {
                 Surface(color = MaterialTheme.colorScheme.primaryContainer, modifier = Modifier.fillMaxWidth()) {
                     Column(Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
                         Text("Aktif kullanıcı · ${TerminalSession.code(context)}", style = MaterialTheme.typography.labelMedium)
-                        Text(BcApi.getOperatorDisplayName(context), style = MaterialTheme.typography.titleLarge,
-                            fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                            Text(BcApi.getOperatorDisplayName(context), style = MaterialTheme.typography.titleLarge,
+                                fontWeight = androidx.compose.ui.text.font.FontWeight.Bold, modifier = Modifier.weight(1f))
+                            ActiveLabelPrinter(Modifier.weight(1f), refreshKey = screen)
+                        }
                     }
                 }
             }
