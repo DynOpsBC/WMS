@@ -75,9 +75,9 @@ page 72289 "DOPSWHS Printer API"
             Name := Rec."Printer Handle";
         if Name = '' then
             Name := Rec.Code;
-        Zpl := '^XA^CI28^PW400^LL240^FO20,20^A0N,24,24^FDYAZICI^FS' +
-            '^FO20,60^A0N,40,40^FB360,3,4,C^FH_^FD' + Encoder.EncodeFieldData(Name) +
-            '^FS^FO20,210^A0N,16,16^FH_^FD' + Encoder.EncodeFieldData(Rec.Code) + '^FS^PQ1^XZ';
+        Zpl := '^XA^CI28^PW400^LL240' +
+            '^FO10,24^A0N,72,72^FB380,2,4,C^FH_^FD' + Encoder.EncodeFieldData(Name) +
+            '^FS^FO10,210^A0N,16,16^FB380,1,0,C^FH_^FD' + Encoder.EncodeFieldData(Rec.Code) + '^FS^PQ1^XZ';
         exit(Client.Enqueue('PRINTER-NAME', Rec.Code, Rec.Format, Zpl, 1));
     end;
 
