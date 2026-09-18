@@ -352,6 +352,7 @@ private fun LpDocument(lpNo: String, onBack: () -> Unit) {
     val pendingReceiptNo = h?.optString("pendingReceiptNo").orEmpty().takeUnless { it == "null" }.orEmpty()
     val awaitingReceipt = pendingReceiptNo.isNotBlank()
     val canEdit = headerLoaded && linesComplete && !awaitingReceipt && canEditLicensePlate(st)
+    val canAppendLine = headerLoaded && linesComplete && !awaitingReceipt && canAppendLicensePlateLine(st)
     val canTransfer = headerLoaded && linesComplete && !awaitingReceipt && canTransferLicensePlate(st, lines.size)
     val canPartiallyUse = headerLoaded && linesComplete && !awaitingReceipt && canPartiallyUseLicensePlate(st, lines.size)
     val canDelete = headerLoaded && linesComplete && !awaitingReceipt && canDeleteLicensePlate(st, lines.size)
@@ -499,7 +500,7 @@ private fun LpDocument(lpNo: String, onBack: () -> Unit) {
                         shape = RoundedCornerShape(14.dp),
                     ) { WmsActionLabel(WmsGlyph.BIN_SEARCH, "Depo Gözü Ata") }
                 }
-                if (canEdit) {
+                if (canAppendLine) {
                     OutlinedButton(
                         onClick = { showAddLine = true },
                         enabled = !busy && lpBinCode.isNotBlank(),
@@ -511,6 +512,8 @@ private fun LpDocument(lpNo: String, onBack: () -> Unit) {
                             if (lpBinCode.isBlank()) "Satır Ekle (önce depo gözü atayın)" else "Satır Ekle",
                         )
                     }
+                }
+                if (canEdit) {
                     Button(
                         onClick = {
                             val payload = JSONObject().apply {

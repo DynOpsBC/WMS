@@ -159,6 +159,36 @@ codeunit 72144 "DOPSWHS LP Bulk Ledger Tests"
     end;
 
     [Test]
+    procedure BuiltPalletCanReceiveASecondStockLine()
+    var
+        ItemLedgerEntry: Record "Item Ledger Entry";
+        LPHeader: Record "DOPSWHS LP Header";
+        LPLine: Record "DOPSWHS LP Line";
+        LPMgt: Codeunit "DOPSWHS LP Management";
+        Assert: Codeunit "Library Assert";
+        CreatedLpNos: List of [Code[20]];
+    begin
+        Seed();
+        CreateItemLedgerEntry(72144005, 150);
+        CreateBinStock(72144005, 150);
+        ItemLedgerEntry.Get(72144005);
+
+        LPMgt.BuildManyFromItemLedgerEntry(
+            ItemLedgerEntry."Entry No.", 'PALLET-EUR', 'COUNT-BIN', 1, 100, CreatedLpNos);
+        LPHeader.Get(CreatedLpNos.Get(1));
+        Assert.AreEqual(LPHeader.Status::Built, LPHeader.Status, 'The first stock row closes the pallet as built.');
+
+        LPMgt.AddLineFromBin(LPHeader, 'ITEM-BULK', 'ADET', 50, '', '', 'COUNT-BIN', 'TEST');
+
+        LPHeader.Get(CreatedLpNos.Get(1));
+        Assert.AreEqual(LPHeader.Status::Built, LPHeader.Status, 'Appending a row must keep the usable pallet built.');
+        LPLine.SetRange("LP No.", LPHeader."No.");
+        Assert.AreEqual(2, LPLine.Count(), 'One physical pallet must contain both stock rows.');
+        LPLine.CalcSums(Quantity);
+        Assert.AreEqual(150, LPLine.Quantity, 'Both row quantities must remain on the same pallet.');
+    end;
+
+    [Test]
     procedure LegacyLpContentsCannotBeAllocatedAgainFromAnUnlinkedLedgerEntry()
     var
         ItemLedgerEntry: Record "Item Ledger Entry";
