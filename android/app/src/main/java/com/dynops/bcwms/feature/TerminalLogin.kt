@@ -113,8 +113,8 @@ internal object TerminalSession {
             .put("displayName", user.optString("displayName"))
             .put("terminalAdmin", user.optBoolean("terminalAdmin"))
         BcApi.saveLocalUser(context, username, profile.toString())
-        setDefaultPrinter(context, terminalRow.optString("labelPrinterCode"), PRINTER_USAGE_LABEL)
-        setDefaultPrinter(context, terminalRow.optString("documentPrinterCode"), PRINTER_USAGE_DOCUMENT)
+        applyTerminalPrinterDefault(context, terminalRow.optString("labelPrinterCode"), PRINTER_USAGE_LABEL)
+        applyTerminalPrinterDefault(context, terminalRow.optString("documentPrinterCode"), PRINTER_USAGE_DOCUMENT)
         return true
     }
     // Identity remains readable under the lock for in-flight document refreshes.
@@ -306,8 +306,8 @@ internal fun TerminalOperatorLogin(onConnected: (Boolean) -> Unit, onConnectionS
                         BcApi.saveLocalUser(context, username, profile.put("terminalScope", TerminalSession.scope(context))
                             .put("pinVerifiedAt", System.currentTimeMillis())
                             .put("pinVerifiedElapsed", android.os.SystemClock.elapsedRealtime()).toString())
-                        setDefaultPrinter(context, profile.optString("labelPrinterCode"), PRINTER_USAGE_LABEL)
-                        setDefaultPrinter(context, profile.optString("documentPrinterCode"), PRINTER_USAGE_DOCUMENT)
+                        applyTerminalPrinterDefault(context, profile.optString("labelPrinterCode"), PRINTER_USAGE_LABEL)
+                        applyTerminalPrinterDefault(context, profile.optString("documentPrinterCode"), PRINTER_USAGE_DOCUMENT)
                         onConnected(true)
                     } finally { busy = false }
                 }

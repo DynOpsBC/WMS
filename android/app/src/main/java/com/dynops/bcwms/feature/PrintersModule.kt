@@ -56,7 +56,16 @@ fun getDefaultPrinter(context: Context, usage: String = PRINTER_USAGE_LABEL): St
 
 fun setDefaultPrinter(context: Context, code: String, usage: String = PRINTER_USAGE_LABEL) {
     context.getSharedPreferences("bcwms_prefs", Context.MODE_PRIVATE)
-        .edit().putString(printerPreferenceKey(context, usage), code).apply()
+        .edit().putString(printerPreferenceKey(context, usage), code)
+        .putBoolean(printerPreferenceKey(context, usage) + ".localSelection", true).apply()
+}
+
+/** BC supplies the initial default; an explicit BADE device choice survives PIN login/resume. */
+internal fun applyTerminalPrinterDefault(context: Context, code: String, usage: String) {
+    val prefs = context.getSharedPreferences("bcwms_prefs", Context.MODE_PRIVATE)
+    val key = printerPreferenceKey(context, usage)
+    if (BuildConfig.FLAVOR == "bade" && prefs.getBoolean(key + ".localSelection", false)) return
+    prefs.edit().putString(key, code).apply()
 }
 
 /** MTE / LP material labels: the device's label printer, else its document printer, else BC mapping. */
@@ -251,7 +260,26 @@ fun PrintersModule() {
                 val stationId = row.optString("stationId")
                 val isLabelDefault = defaultLabelCode == code
                 val isDocumentDefault = defaultDocumentCode == code
-                Card(shape = RoundedCornerShape(12.dp)) {
+                fun selectPrinter(usage: String) {
+                    val issue = if (usage == PRINTER_USAGE_LABEL) labelPrinterSelectionIssue(active, format)
+                        else if (!active) "Yazıcı pasif."
+                        else if (format != "PDF") "Belge yazıcısı PDF formatında olmalı." else null
+                    if (issue != null) {
+                        status = "UYARI: $code seçilemedi. $issue"
+                        return
+                    }
+                    setDefaultPrinter(context, code, usage)
+                    if (usage == PRINTER_USAGE_LABEL) defaultLabelCode = code else defaultDocumentCode = code
+                    status = "TAMAM: ${desc.ifBlank { code }} ${if (usage == PRINTER_USAGE_LABEL) "etiket" else "belge"} yazıcısı olarak seçildi."
+                }
+                Card(
+                    modifier = Modifier.fillMaxWidth().then(
+                        if (terminalManaged) Modifier.clickable {
+                            selectPrinter(if (format == "PDF") PRINTER_USAGE_DOCUMENT else PRINTER_USAGE_LABEL)
+                        } else Modifier
+                    ),
+                    shape = RoundedCornerShape(12.dp),
+                ) {
                     Column(Modifier.padding(12.dp)) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Text(code, fontWeight = FontWeight.Bold)
@@ -282,6 +310,13 @@ fun PrintersModule() {
                         )
                         if (!productionCustomer && stationId.isNotBlank()) Text(stationId, fontSize = 11.sp, color = Color.Gray)
                         Spacer(Modifier.height(8.dp))
+                        if (terminalManaged) {
+                            OutlinedButton(onClick = {
+                                selectPrinter(if (format == "PDF") PRINTER_USAGE_DOCUMENT else PRINTER_USAGE_LABEL)
+                            }, enabled = active && format in setOf("ZPL", "PDF")) {
+                                Text(if (isLabelDefault || isDocumentDefault) "✓ Seçili" else "Bu yazıcıyı seç")
+                            }
+                        }
                         if (!terminalManaged) Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                             OutlinedButton(
                                 onClick = {
