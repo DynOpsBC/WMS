@@ -175,6 +175,7 @@ internal fun TerminalPrintersScreen(onChange: (() -> Unit)?) {
     LaunchedEffect(labelCode, documentCode) { refresh() }
 
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Text("Terminal: ${WmsTerminalSession.code(context).ifBlank { "Seçilmedi" }}", fontWeight = FontWeight.Bold)
         PrinterBindingCard(
             title = "Etiket yazıcısı",
             binding = label,
@@ -187,7 +188,13 @@ internal fun TerminalPrintersScreen(onChange: (() -> Unit)?) {
             }) else null,
         )
         if (labelCode.isNotBlank()) {
-            TextButton(onClick = { setDefaultPrinter(context, "", PRINTER_USAGE_LABEL) }) { Text("Etiket seçimini kaldır") }
+            TextButton(onClick = {
+                scope.launch {
+                    val result = selectTerminalPrinter(context, "", PRINTER_USAGE_LABEL)
+                    status = if (result.isSuccess) "Etiket yazıcısı terminalden ve BC'den kaldırıldı."
+                    else "HATA: ${result.exceptionOrNull()?.message.orEmpty()}"
+                }
+            }) { Text("Etiket seçimini kaldır") }
             OutlinedButton(enabled = !printing && !loading, onClick = {
                 printing = true
                 scope.launch {
@@ -201,7 +208,11 @@ internal fun TerminalPrintersScreen(onChange: (() -> Unit)?) {
         }
         PrinterBindingCard(title = "Belge yazıcısı", binding = document, onTest = null, onSelect = onChange)
         if (documentCode.isNotBlank()) TextButton(onClick = {
-            setDefaultPrinter(context, "", PRINTER_USAGE_DOCUMENT)
+            scope.launch {
+                val result = selectTerminalPrinter(context, "", PRINTER_USAGE_DOCUMENT)
+                status = if (result.isSuccess) "Belge yazıcısı terminalden ve BC'den kaldırıldı."
+                else "HATA: ${result.exceptionOrNull()?.message.orEmpty()}"
+            }
         }) { Text("Belge seçimini kaldır") }
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             OutlinedButton(onClick = { scope.launch { refresh() } }, enabled = !loading) { Text(if (loading) "..." else "Yenile") }

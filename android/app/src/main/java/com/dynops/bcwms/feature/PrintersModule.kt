@@ -43,14 +43,26 @@ private const val PREF_NAMESPACE = "bcwms.printer."
 const val PRINTER_USAGE_LABEL = "LpLabel"
 const val PRINTER_USAGE_DOCUMENT = "Document"
 
+internal fun printerPreferenceKey(context: Context, usage: String): String {
+    val terminal = WmsTerminalSession.code(context)
+    if (terminal.isBlank()) return PREF_NAMESPACE + usage
+    return PREF_NAMESPACE + WmsTerminalSession.scope(context) + ":" + terminal + ":" + usage
+}
+
 fun getDefaultPrinter(context: Context, usage: String = PRINTER_USAGE_LABEL): String {
-    return context.getSharedPreferences("bcwms_prefs", Context.MODE_PRIVATE)
-        .getString(PREF_NAMESPACE + usage, "") ?: ""
+    val prefs = context.getSharedPreferences("bcwms_prefs", Context.MODE_PRIVATE)
+    val scoped = prefs.getString(printerPreferenceKey(context, usage), null)
+    return scoped ?: prefs.getString(PREF_NAMESPACE + usage, "").orEmpty()
 }
 
 fun setDefaultPrinter(context: Context, code: String, usage: String = PRINTER_USAGE_LABEL) {
     context.getSharedPreferences("bcwms_prefs", Context.MODE_PRIVATE)
-        .edit().putString(PREF_NAMESPACE + usage, code).apply()
+        .edit().putString(printerPreferenceKey(context, usage), code).apply()
+}
+
+internal fun applyTerminalPrinterDefault(context: Context, code: String, usage: String) {
+    context.getSharedPreferences("bcwms_prefs", Context.MODE_PRIVATE)
+        .edit().putString(printerPreferenceKey(context, usage), code).apply()
 }
 
 /** MTE / LP material labels: the device's label printer, else its document printer, else BC mapping. */
@@ -95,8 +107,9 @@ fun PrintersModule() {
     var status by remember { mutableStateOf("") }
     var loading by remember { mutableStateOf(false) }
     var nameLabelBusy by remember { mutableStateOf(false) }
-    val defaultLabelCode = rememberPrinterPreference("bcwms.printer.$PRINTER_USAGE_LABEL")
-    val defaultDocumentCode = rememberPrinterPreference("bcwms.printer.$PRINTER_USAGE_DOCUMENT")
+    var defaultLabelCode by remember { mutableStateOf(getDefaultPrinter(context, PRINTER_USAGE_LABEL)) }
+    var defaultDocumentCode by remember { mutableStateOf(getDefaultPrinter(context, PRINTER_USAGE_DOCUMENT)) }
+    var saving by remember { mutableStateOf(false) }
     var scannedBarcode by rememberSaveable { mutableStateOf("") }
     var barcodePrintBusy by remember { mutableStateOf(false) }
     val productionCustomer = shouldForceProductionFlow(BuildConfig.FLAVOR)
@@ -109,9 +122,52 @@ fun PrintersModule() {
         return
     }
 
+    fun saveTerminalPrinter(code: String, usage: String, displayName: String = "") {
+        val terminal = WmsTerminalSession.code(context)
+        val username = BcApi.getLocalUser(context)
+        if (terminal.isBlank() || username.isBlank()) {
+            status = "UYARI: Önce kullanıcı ve terminal ile giriş yapın."
+            return
+        }
+        if (loading || saving) return
+        saving = true
+        status = "Yazıcı BC'ye kaydediliyor..."
+        scope.launch {
+            try {
+                val result = selectTerminalPrinter(context, code, usage)
+                val selected = result.getOrNull()
+                if (selected == null) {
+                    status = "HATA: ${result.exceptionOrNull()?.message ?: "Yazıcı BC terminal kaydına kaydedilemedi."}"
+                    return@launch
+                }
+                defaultLabelCode = selected.label
+                defaultDocumentCode = selected.document
+                status = if (code.isBlank()) "TAMAM: Yazıcı seçimi terminalden ve BC'den kaldırıldı."
+                    else "TAMAM: ${displayName.ifBlank { code }} seçildi ve BC'ye kaydedildi."
+            } finally {
+                saving = false
+            }
+        }
+    }
+
     fun load() {
         scope.launch {
             loading = true; status = "Yükleniyor..."
+            val terminal = WmsTerminalSession.code(context)
+            if (terminal.isNotBlank()) {
+                val key = java.net.URLEncoder.encode(terminal.replace("'", "''"), "UTF-8").replace("+", "%20")
+                val response = BcApi.get(context, "wmsTerminals('$key')")
+                val selected = if (response.ok) parseTerminalPrinterSelection(response.body, terminal, false) else null
+                if (selected == null) {
+                    loading = false
+                    status = "HATA: BC terminal yazıcı ayarları alınamadı."
+                    return@launch
+                }
+                applyTerminalPrinterDefault(context, selected.label, PRINTER_USAGE_LABEL)
+                applyTerminalPrinterDefault(context, selected.document, PRINTER_USAGE_DOCUMENT)
+                defaultLabelCode = selected.label
+                defaultDocumentCode = selected.document
+            }
             val page = BcApi.getAllPages(context, "printers?\$top=100&\$orderby=code")
             loading = false
             rows = if (page.complete) page.rows else emptyList()
@@ -140,19 +196,18 @@ fun PrintersModule() {
         Text("Bu cihazın etiket ve belge yazıcısı.", fontSize = 12.sp, color = Color.Gray)
         Spacer(Modifier.height(8.dp))
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Button(onClick = { load() }, enabled = !loading) { WmsRefreshLabel(loading) }
+            Button(onClick = { load() }, enabled = !loading && !saving) { WmsRefreshLabel(loading) }
         }
         if (defaultLabelCode.isNotBlank()) {
             TextButton(onClick = {
-                setDefaultPrinter(context, "", PRINTER_USAGE_LABEL)
-                status = "Etiket seçimi kaldırıldı. Ürün/Raf Sorgu için Belge yazıcısı kullanılacak."
+                saveTerminalPrinter("", PRINTER_USAGE_LABEL)
             }) { Text("Etiket seçimini kaldır") }
         }
         Spacer(Modifier.height(6.dp))
         StatusText(status)
         Spacer(Modifier.height(8.dp))
         LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            item { DevicePrinterSettings() }
+            if (!productionCustomer) item { DevicePrinterSettings() }
             if (!productionCustomer) item {
                 Card(
                     shape = RoundedCornerShape(12.dp),
@@ -253,8 +308,7 @@ fun PrintersModule() {
                 val isDocumentDefault = defaultDocumentCode == code
                 Card(modifier = Modifier.fillMaxWidth().clickable(enabled = active && format in setOf("ZPL", "PDF")) {
                     val usage = if (format == "PDF") PRINTER_USAGE_DOCUMENT else PRINTER_USAGE_LABEL
-                    setDefaultPrinter(context, code, usage)
-                    status = "TAMAM: ${desc.ifBlank { code }} seçildi."
+                    saveTerminalPrinter(code, usage, desc.ifBlank { code })
                 }, shape = RoundedCornerShape(12.dp)) {
                     Column(Modifier.padding(12.dp)) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -294,8 +348,7 @@ fun PrintersModule() {
                                 onClick = {
                                     val issue = labelPrinterSelectionIssue(active, format)
                                     if (issue == null) {
-                                        setDefaultPrinter(context, code, PRINTER_USAGE_LABEL)
-                                        status = "TAMAM: Bu cihazın etiket yazıcısı $code olarak kaydedildi."
+                                        saveTerminalPrinter(code, PRINTER_USAGE_LABEL, desc.ifBlank { code })
                                     } else {
                                         status = "UYARI: $code seçilemedi. $issue"
                                     }
@@ -304,8 +357,7 @@ fun PrintersModule() {
                             OutlinedButton(
                                 onClick = {
                                     if (active && format == "PDF") {
-                                        setDefaultPrinter(context, code, PRINTER_USAGE_DOCUMENT)
-                                        status = "TAMAM: Bu cihazın belge yazıcısı $code olarak kaydedildi."
+                                        saveTerminalPrinter(code, PRINTER_USAGE_DOCUMENT, desc.ifBlank { code })
                                     } else {
                                         val reason = if (!active) "Yazıcı pasif."
                                         else "Belge seçimi yalnızca PDF yazıcılarda kullanılabilir; bu yazıcının formatı $format."
@@ -315,8 +367,7 @@ fun PrintersModule() {
                             ) { Text(if (isDocumentDefault) "✓ Belge" else "Belge", fontSize = 12.sp) }
                         }
                         if (isLabelDefault || isDocumentDefault) TextButton(onClick = {
-                            setDefaultPrinter(context, "", if (format == "PDF") PRINTER_USAGE_DOCUMENT else PRINTER_USAGE_LABEL)
-                            status = "Yazıcı seçimi kaldırıldı."
+                            saveTerminalPrinter("", if (format == "PDF") PRINTER_USAGE_DOCUMENT else PRINTER_USAGE_LABEL)
                         }) { Text("Seçimi kaldır") }
                         if (format == "ZPL") OutlinedButton(enabled = active && !nameLabelBusy, onClick = {
                             nameLabelBusy = true

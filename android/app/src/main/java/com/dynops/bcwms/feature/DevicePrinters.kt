@@ -16,6 +16,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.dynops.bcwms.BcApi
+import kotlinx.coroutines.launch
 import org.json.JSONObject
 import java.util.UUID
 
@@ -86,8 +87,9 @@ internal fun DevicePrintersDialog(onDismiss: () -> Unit) {
 @Composable
 internal fun PrinterDestinationCard(usage: String = PRINTER_USAGE_LABEL, inquiryFallback: Boolean = false) {
     val context = LocalContext.current
-    val selected = rememberPrinterPreference("bcwms.printer.$usage")
-    val document = rememberPrinterPreference("bcwms.printer.$PRINTER_USAGE_DOCUMENT")
+    val scope = rememberCoroutineScope()
+    val selected = rememberDevicePrinter(usage)
+    val document = rememberDevicePrinter(PRINTER_USAGE_DOCUMENT)
     val effective = if (inquiryFallback) inquiryLabelPrinter(selected, document) else selected
     var open by remember { mutableStateOf(false) }
     var query by remember { mutableStateOf("") }
@@ -96,6 +98,7 @@ internal fun PrinterDestinationCard(usage: String = PRINTER_USAGE_LABEL, inquiry
     var complete by remember { mutableStateOf(false) }
     var loading by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf("") }
+    var saving by remember { mutableStateOf(false) }
     LaunchedEffect(generation) {
         loading = true; complete = false; error = ""
         try {
@@ -156,8 +159,13 @@ internal fun PrinterDestinationCard(usage: String = PRINTER_USAGE_LABEL, inquiry
             if (complete && visible.isEmpty()) Text("Uygun yazıcı bulunamadı. Aramayı veya Windows yazıcı ajanındaki eşitlemeyi kontrol edin.")
             LazyColumn(Modifier.heightIn(max = 280.dp)) {
                 items(visible, key = { it.optString("code") }) { printer ->
-                    TextButton(enabled = !loading, onClick = {
-                        setDefaultPrinter(context, printer.optString("code"), usage); open = false
+                    TextButton(enabled = !loading && !saving, onClick = {
+                        saving = true
+                        scope.launch {
+                            val result = selectTerminalPrinter(context, printer.optString("code"), usage)
+                            saving = false
+                            if (result.isSuccess) open = false else error = result.exceptionOrNull()?.message.orEmpty()
+                        }
                     }) {
                         Column(Modifier.fillMaxWidth()) {
                             Text((if (selected == printer.optString("code")) "✓ " else "") + printerBindingFrom(printer.optString("code"), printer).title, fontWeight = FontWeight.Bold)
@@ -179,6 +187,11 @@ internal fun PrinterDestinationCard(usage: String = PRINTER_USAGE_LABEL, inquiry
         }
     }, confirmButton = { TextButton(onClick = { open = false }) { Text("Kapat") } },
         dismissButton = { if (selected.isNotBlank()) TextButton(onClick = {
-            setDefaultPrinter(context, "", usage); open = false
+            saving = true
+            scope.launch {
+                val result = selectTerminalPrinter(context, "", usage)
+                saving = false
+                if (result.isSuccess) open = false else error = result.exceptionOrNull()?.message.orEmpty()
+            }
         }) { Text("Seçimi kaldır") } })
 }

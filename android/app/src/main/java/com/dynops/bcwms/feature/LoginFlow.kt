@@ -78,6 +78,10 @@ fun LoginFlow(onConnected: (Boolean) -> Unit) {
 
     // Kayıtlı WMS operatörleri (BC localUsers) — girişte listeden seçilir.
     var localUsers by remember { mutableStateOf<List<LocalUserOption>>(emptyList()) }
+    var terminals by remember { mutableStateOf<List<WmsTerminalOption>>(emptyList()) }
+    var selectedTerminal by remember { mutableStateOf(WmsTerminalSession.code(context)) }
+    var terminalsLoading by remember { mutableStateOf(false) }
+    var terminalsError by remember { mutableStateOf("") }
     var usersLoading by remember { mutableStateOf(false) }
     var usersError by remember { mutableStateOf("") }
     var manualUserEntry by remember { mutableStateOf(false) }
@@ -96,6 +100,10 @@ fun LoginFlow(onConnected: (Boolean) -> Unit) {
 
     fun startVerifiedAdminSession() {
         if (busy) return
+        if (selectedTerminal.isBlank()) {
+            status = "Önce bu cihazın terminalini seçin."
+            return
+        }
         scope.launch {
             busy = true
             status = "BC bağlantısı doğrulanıyor..."
@@ -153,6 +161,10 @@ fun LoginFlow(onConnected: (Boolean) -> Unit) {
         scope.launch {
             if (!BcApi.hasToken(context)) {
                 status = "🔴 Önce admin/servis erişim ayarlayın (Gelişmiş → token paste veya e-posta ile giriş)."
+                return@launch
+            }
+            if (selectedTerminal.isBlank()) {
+                status = "🔴 Önce bu cihazın terminalini seçin."
                 return@launch
             }
             // Sanitize the username before interpolating into the OData URL key. Reject any
@@ -282,6 +294,37 @@ fun LoginFlow(onConnected: (Boolean) -> Unit) {
         usersLoading = false
     }
 
+    LaunchedEffect(step, BcApi.getCompanyId(context)) {
+        if (step != Step.LocalUser || !BcApi.hasToken(context)) return@LaunchedEffect
+        terminalsLoading = true
+        val page = runCatching {
+            BcApi.getAllPages(context, "wmsTerminals?\$filter=disabled eq false&\$top=100")
+        }.getOrNull()
+        if (page?.complete == true) {
+            terminals = page.rows.mapNotNull { row ->
+                val code = row.optString("code").trim()
+                if (code.isBlank()) null else WmsTerminalOption(
+                    code, row.optString("labelPrinterCode"), row.optString("documentPrinterCode"),
+                )
+            }.sortedBy { it.code }
+            val current = terminals.firstOrNull { it.code == WmsTerminalSession.code(context) }
+            if (current != null) {
+                WmsTerminalSession.select(context, current)
+                selectedTerminal = current.code
+            } else {
+                WmsTerminalSession.clear(context)
+                selectedTerminal = ""
+            }
+            terminalsError = if (terminals.isEmpty())
+                "BC'de WMS Terminalleri listesinden Terminal 1, Terminal 2 gibi kayıtları oluşturun."
+            else ""
+        } else {
+            terminals = emptyList()
+            terminalsError = "Terminal listesi alınamadı. BC paketini güncelleyip bağlantıyı kontrol edin."
+        }
+        terminalsLoading = false
+    }
+
     if (showForgotPassword) {
         ForgotPasswordSheet(
             username = localUsername,
@@ -383,6 +426,43 @@ fun LoginFlow(onConnected: (Boolean) -> Unit) {
                     fontSize = 12.sp,
                     color = Color.Gray,
                 )
+                Spacer(Modifier.height(12.dp))
+                Text("Bu cihazın terminali", fontSize = 12.sp, fontWeight = FontWeight.Medium, color = Color.Gray)
+                Spacer(Modifier.height(6.dp))
+                when {
+                    terminalsLoading -> Row(verticalAlignment = Alignment.CenterVertically) {
+                        CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
+                        Spacer(Modifier.width(8.dp))
+                        Text("Terminaller yükleniyor...", fontSize = 12.sp)
+                    }
+                    terminals.isNotEmpty() -> terminals.forEach { terminal ->
+                        val selected = selectedTerminal == terminal.code
+                        Card(
+                            onClick = {
+                                WmsTerminalSession.select(context, terminal)
+                                selectedTerminal = terminal.code
+                                status = ""
+                            },
+                            colors = CardDefaults.cardColors(
+                                containerColor = if (selected) Color(0xFFDFF4E5) else Color(0xFFF3F0FF),
+                            ),
+                            shape = RoundedCornerShape(12.dp),
+                            modifier = Modifier.fillMaxWidth().padding(bottom = 6.dp),
+                        ) {
+                            Row(Modifier.fillMaxWidth().padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                                Column(Modifier.weight(1f)) {
+                                    Text(terminal.code, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                                    Text(
+                                        "Etiket: ${terminal.labelPrinterCode.ifBlank { "Seçilmedi" }} · Belge: ${terminal.documentPrinterCode.ifBlank { "Seçilmedi" }}",
+                                        fontSize = 11.sp, color = Color.Gray,
+                                    )
+                                }
+                                Text(if (selected) "✓" else "›", fontSize = 20.sp, color = Color(0xFF6C5CE7))
+                            }
+                        }
+                    }
+                    terminalsError.isNotBlank() -> Text(terminalsError, fontSize = 12.sp, color = MaterialTheme.colorScheme.error)
+                }
                 Spacer(Modifier.height(12.dp))
                 if (!BcApi.hasToken(context)) {
                     Card(colors = CardDefaults.cardColors(containerColor = Color(0xFFFFF3E0))) {
@@ -593,7 +673,7 @@ fun LoginFlow(onConnected: (Boolean) -> Unit) {
                     Spacer(Modifier.height(16.dp))
                     Button(
                         onClick = { startLocalSignIn() },
-                        enabled = !busy && !companyDiscovering && localUsername.isNotBlank() && localPassword.isNotBlank() && BcApi.hasToken(context),
+                        enabled = !busy && !companyDiscovering && selectedTerminal.isNotBlank() && localUsername.isNotBlank() && localPassword.isNotBlank() && BcApi.hasToken(context),
                         modifier = Modifier.fillMaxWidth().height(52.dp)
                     ) {
                         Text(
