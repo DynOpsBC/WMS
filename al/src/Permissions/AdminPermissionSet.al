@@ -15,6 +15,7 @@ permissionset 72094 "DOPSWHS-ADMIN"
         table "DOPSWHS Environment Print Job" = X,
         tabledata "DOPSWHS Environment Print Job" = rimd,
         codeunit "DOPSWHS Print Environment" = X,
+        codeunit "DOPSWHS Edition" = X,
         tabledata "Job Queue Entry" = rimd,
         tabledata "Job Queue Log Entry" = rimd,
         tabledata "Error Message Register" = rimd,

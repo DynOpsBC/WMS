@@ -109,6 +109,10 @@ codeunit 72377 "DOPSWHS Print Environment"
     begin
         if not IsEnabled() then
             exit;
+        // Read-only viewers use the company's existing cache; opening a list
+        // must not grant write access or attempt to schedule background work.
+        if not Setup.WritePermission() or not Printer.WritePermission() then
+            exit;
         Profile.Get('');
         NewSetup := not Setup.Get('');
         if NewSetup then begin
