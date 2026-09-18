@@ -111,6 +111,38 @@ fun PrintersModule() {
     val productionCustomer = shouldForceProductionFlow(BuildConfig.FLAVOR)
     val terminalManaged = BuildConfig.FLAVOR == "bade" && TerminalSession.code(context).isNotBlank()
 
+    fun saveTerminalPrinter(code: String, usage: String, displayName: String = "") {
+        if (loading || saving) return
+        if (!TerminalSession.authenticated(context)) {
+            status = "UYARI: Yazıcı ayarı için PIN ile giriş yapın."
+            return
+        }
+        val terminal = TerminalSession.code(context)
+        val terminalScope = TerminalSession.scope(context)
+        saving = true
+        status = "Yazıcı BC'ye kaydediliyor..."
+        scope.launch {
+            try {
+                val response = BcApi.boundAction(context, "wmsTerminals", terminal, "selectPrinter",
+                    JSONObject().put("username", BcApi.getLocalUser(context))
+                        .put("usage", usage).put("printerCode", code).toString())
+                val selection = if (response.ok) parseTerminalPrinterSelection(response.body, terminal, true) else null
+                if (selection == null) {
+                    status = if (response.httpCode == 404) "HATA: BC uzantısını 1.14.1.58 veya üstüne güncelleyin. Yazıcı kaydedilmedi."
+                        else "HATA: Yazıcı BC'ye kaydedilemedi. Bağlantıyı ve yetkinizi kontrol edip yenileyin."
+                    return@launch
+                }
+                if (terminalScope != TerminalSession.scope(context) || terminal != TerminalSession.code(context)) return@launch
+                applyTerminalPrinterDefault(context, selection.label, PRINTER_USAGE_LABEL)
+                applyTerminalPrinterDefault(context, selection.document, PRINTER_USAGE_DOCUMENT)
+                defaultLabelCode = selection.label
+                defaultDocumentCode = selection.document
+                status = if (code.isBlank()) "TAMAM: ${if (usage == PRINTER_USAGE_LABEL) "Etiket" else "Belge"} yazıcısı seçimi terminalden ve BC'den kaldırıldı."
+                else "TAMAM: $displayName seçildi ve BC terminal kaydına kaydedildi."
+            } finally { saving = false }
+        }
+    }
+
     fun load() {
         scope.launch {
             loading = true; status = "Yükleniyor..."
@@ -166,6 +198,18 @@ fun PrintersModule() {
         Spacer(Modifier.height(8.dp))
         Row(verticalAlignment = Alignment.CenterVertically) {
             Button(onClick = { load() }, enabled = !loading && !saving) { WmsRefreshLabel(loading) }
+        }
+        if (terminalManaged) {
+            if (defaultLabelCode.isNotBlank()) {
+                TextButton(onClick = { saveTerminalPrinter("", PRINTER_USAGE_LABEL) }, enabled = !loading && !saving) {
+                    Text("Etiket seçimini kaldır")
+                }
+            }
+            if (defaultDocumentCode.isNotBlank()) {
+                TextButton(onClick = { saveTerminalPrinter("", PRINTER_USAGE_DOCUMENT) }, enabled = !loading && !saving) {
+                    Text("Belge seçimini kaldır")
+                }
+            }
         }
         if (defaultLabelCode.isNotBlank() && !terminalManaged) {
             TextButton(onClick = {
@@ -285,33 +329,7 @@ fun PrintersModule() {
                         status = "UYARI: $code seçilemedi. $issue"
                         return
                     }
-                    if (!TerminalSession.authenticated(context)) {
-                        status = "UYARI: Yazıcı seçmek için PIN ile giriş yapın."
-                        return
-                    }
-                    val terminal = TerminalSession.code(context)
-                    val terminalScope = TerminalSession.scope(context)
-                    saving = true
-                    status = "Yazıcı BC'ye kaydediliyor..."
-                    scope.launch {
-                        try {
-                            val response = BcApi.boundAction(context, "wmsTerminals", terminal, "selectPrinter",
-                                JSONObject().put("username", BcApi.getLocalUser(context))
-                                    .put("usage", usage).put("printerCode", code).toString())
-                            val selection = if (response.ok) parseTerminalPrinterSelection(response.body, terminal, true) else null
-                            if (selection == null) {
-                                status = if (response.httpCode == 404) "HATA: BC uzantısını 1.14.1.57 veya üstüne güncelleyin. Yazıcı kaydedilmedi."
-                                    else "HATA: Yazıcı BC'ye kaydedilemedi. Bağlantıyı ve yetkinizi kontrol edip yenileyin."
-                                return@launch
-                            }
-                            if (terminalScope != TerminalSession.scope(context) || terminal != TerminalSession.code(context)) return@launch
-                            applyTerminalPrinterDefault(context, selection.label, PRINTER_USAGE_LABEL)
-                            applyTerminalPrinterDefault(context, selection.document, PRINTER_USAGE_DOCUMENT)
-                            defaultLabelCode = selection.label
-                            defaultDocumentCode = selection.document
-                            status = "TAMAM: ${desc.ifBlank { code }} seçildi ve BC terminal kaydına kaydedildi."
-                        } finally { saving = false }
-                    }
+                    saveTerminalPrinter(code, usage, desc.ifBlank { code })
                 }
                 Card(
                     modifier = Modifier.fillMaxWidth().then(

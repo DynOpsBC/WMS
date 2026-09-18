@@ -5,6 +5,14 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class TerminalPrinterSelectionTest {
+    @Test fun `clear response removes only the requested usage including when both become empty`() {
+        for (selection in listOf(TerminalPrinterSelection("", "D2"), TerminalPrinterSelection("Z1", ""), TerminalPrinterSelection("", ""))) {
+            val value = JSONObject().put("terminalCode", "T1")
+                .put("labelPrinterCode", selection.label).put("documentPrinterCode", selection.document)
+            assertEquals(selection, parseTerminalPrinterSelection(
+                JSONObject().put("value", value.toString()).toString(), "T1", true))
+        }
+    }
     @Test fun `save response preserves both printer usages`() {
         val value = """{"terminalCode":"T1","labelPrinterCode":"Z1","documentPrinterCode":"D2"}"""
         assertEquals(TerminalPrinterSelection("Z1", "D2"), parseTerminalPrinterSelection(
