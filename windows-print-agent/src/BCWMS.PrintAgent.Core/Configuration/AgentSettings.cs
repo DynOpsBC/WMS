@@ -35,6 +35,15 @@ public sealed record LabelPrinterSetting
 
 public static class AgentSettingsExtensions
 {
+    /// <summary>Assign stable IDs without discarding operator-facing metadata.</summary>
+    public static IReadOnlyList<LabelPrinterSetting> BindLabelPrinterIds(
+        this AgentSettings settings, IReadOnlyDictionary<string, string> mappings) =>
+        settings.EffectiveLabelPrinters()
+            .Where(static printer => !string.IsNullOrWhiteSpace(printer.PrinterName))
+            .DistinctBy(static printer => printer.PrinterName, StringComparer.OrdinalIgnoreCase)
+            .Select(printer => printer with { PrinterId = mappings[printer.PrinterName] })
+            .ToList();
+
     /// <summary>
     /// Label printers that accept jobs: the multi-printer list when present,
     /// otherwise the legacy single selection (settings saved by agent 1.0).

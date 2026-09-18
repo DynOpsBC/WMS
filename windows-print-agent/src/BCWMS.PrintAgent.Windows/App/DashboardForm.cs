@@ -331,6 +331,10 @@ internal sealed class DashboardForm : Form
 
     private void CaptureTypedDisplayNames()
     {
+        // Commit the active text editor before a refresh/selection rebuild
+        // reads Cell.Value and removes the old grid rows.
+        if (_printerNames.IsCurrentCellInEditMode && !_printerNames.EndEdit())
+            throw new InvalidOperationException("Görünen ad düzenlemesi tamamlanamadı.");
         foreach (DataGridViewRow row in _printerNames.Rows)
         {
             var printer = row.Cells["Printer"].Value?.ToString();
@@ -358,6 +362,7 @@ internal sealed class DashboardForm : Form
 
     private async Task RefreshPrintersAsync()
     {
+        CaptureTypedDisplayNames();
         var labelNames = CheckedLabelNames();
         if (labelNames.Count == 0)
         {
@@ -373,7 +378,6 @@ internal sealed class DashboardForm : Form
 
     private async Task SaveAsync()
     {
-        _printerNames.EndEdit();
         CaptureTypedDisplayNames();
         var current = _controller.Settings;
         var settings = current with

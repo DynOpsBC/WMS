@@ -91,7 +91,7 @@ internal sealed class AgentController : IAsyncDisposable
             CompanyId = segments.Length > 1 ? segments[1] : string.Empty,
             BlobReadSas = settings.BlobReadSas.Trim().TrimStart('?'),
             BlobEndpoint = settings.BlobEndpoint.Trim().TrimEnd('/'),
-            LabelPrinters = labelNames.Select(name => new LabelPrinterSetting { PrinterId = mappings[name], PrinterName = name }).ToList(),
+            LabelPrinters = settings.BindLabelPrinterIds(mappings),
             LabelPrinterName = labelNames.Count > 0 ? labelNames[0] : string.Empty,
             LabelPrinterId = labelNames.Count > 0 ? mappings[labelNames[0]] : string.Empty,
             DocumentPrinterId = GetId(mappings, settings.DocumentPrinterName),
