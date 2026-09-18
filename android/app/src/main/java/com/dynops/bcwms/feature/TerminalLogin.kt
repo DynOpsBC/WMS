@@ -10,8 +10,6 @@ import com.dynops.bcwms.ui.CompanyLogo
 import com.dynops.bcwms.ui.resolveCompanyBrand
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -210,7 +208,11 @@ internal fun TerminalOperatorLogin(onConnected: (Boolean) -> Unit, onConnectionS
         if (!busy) { selectedUser = null; adminPicker = false; pin = ""; error = "" }
     }
 
-    Column(Modifier.fillMaxSize().safeDrawingPadding().imePadding().padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+    Column(
+        Modifier.fillMaxSize().safeDrawingPadding().imePadding().padding(20.dp)
+            .verticalScroll(rememberScrollState()),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             CompanyLogo(brand = resolveCompanyBrand(BcApi.getCompanyName(context), BuildConfig.FLAVOR), height = 32.dp)
             Column {
@@ -240,36 +242,34 @@ internal fun TerminalOperatorLogin(onConnected: (Boolean) -> Unit, onConnectionS
         if (busy) LinearProgressIndicator(Modifier.fillMaxWidth())
         if (error.isNotBlank()) Text(error, color = MaterialTheme.colorScheme.error)
         if (selectedUser == null) {
-            LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                if (terminal.isBlank()) {
-                    items(terminals, key = { it.optString("code") }) { row ->
-                        TerminalChoiceCard(title = row.optString("code"),
-                            subtitle = row.optString("labelPrinterCode").takeIf { it.isNotBlank() }?.let { "Etiket yazıcısı: $it" }.orEmpty(),
-                            mark = "T", enabled = !busy, onClick = {
-                                val selected = row.optString("code")
-                                if (TerminalSession.select(context, selected)) terminal = selected
-                            })
-                    }
-                    if (loaded && terminals.isEmpty()) item { Text("BC’de önce terminal oluşturun.") }
-                } else {
-                    val managers = users.filter { it.optBoolean("terminalAdmin") }
-                    if (!adminPicker) item(key = "manager-entry") {
-                        TerminalChoiceCard(title = "Yönetici girişi", subtitle = if (loaded && managers.isEmpty()) "BC’de yönetici oluşturun" else "",
-                            mark = "Y", enabled = !busy && managers.isNotEmpty(), onClick = {
-                                pin = ""; error = ""
-                                if (managers.size == 1) selectedUser = managers.first() else adminPicker = true
-                            })
-                    }
-                    items(if (adminPicker) managers else users.filterNot { it.optBoolean("terminalAdmin") }, key = { it.optString("username") }) { row ->
-                        TerminalChoiceCard(title = terminalOperatorLabel(row), subtitle = "",
-                            mark = row.optString("displayName").take(1).uppercase().ifBlank { "K" }, enabled = !busy,
-                            onClick = { selectedUser = row; pin = ""; error = "" })
-                    }
-                    if (loaded && users.isEmpty()) item { Text("Bu terminale BC’den kullanıcı ekleyin.") }
+            if (terminal.isBlank()) {
+                terminals.forEach { row ->
+                    TerminalChoiceCard(title = row.optString("code"),
+                        subtitle = row.optString("labelPrinterCode").takeIf { it.isNotBlank() }?.let { "Etiket yazıcısı: $it" }.orEmpty(),
+                        mark = "T", enabled = !busy, onClick = {
+                            val selected = row.optString("code")
+                            if (TerminalSession.select(context, selected)) terminal = selected
+                        })
                 }
+                if (loaded && terminals.isEmpty()) Text("BC’de önce terminal oluşturun.")
+            } else {
+                val managers = users.filter { it.optBoolean("terminalAdmin") }
+                if (!adminPicker) {
+                    TerminalChoiceCard(title = "Yönetici girişi", subtitle = if (loaded && managers.isEmpty()) "BC’de yönetici oluşturun" else "",
+                        mark = "Y", enabled = !busy && managers.isNotEmpty(), onClick = {
+                            pin = ""; error = ""
+                            if (managers.size == 1) selectedUser = managers.first() else adminPicker = true
+                        })
+                }
+                (if (adminPicker) managers else users.filterNot { it.optBoolean("terminalAdmin") }).forEach { row ->
+                    TerminalChoiceCard(title = terminalOperatorLabel(row), subtitle = "",
+                        mark = row.optString("displayName").take(1).uppercase().ifBlank { "K" }, enabled = !busy,
+                        onClick = { selectedUser = row; pin = ""; error = "" })
+                }
+                if (loaded && users.isEmpty()) Text("Bu terminale BC’den kullanıcı ekleyin.")
             }
         } else {
-            Column(Modifier.weight(1f).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Text(if (selectedUser!!.optBoolean("terminalAdmin")) "Yönetici girişi" else terminalOperatorLabel(selectedUser!!), style = MaterialTheme.typography.titleLarge)
             OutlinedTextField(
                 value = pin,
