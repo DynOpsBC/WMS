@@ -60,12 +60,11 @@ fun setDefaultPrinter(context: Context, code: String, usage: String = PRINTER_US
         .putBoolean(printerPreferenceKey(context, usage) + ".localSelection", true).apply()
 }
 
-/** BC supplies the initial default; an explicit BADE device choice survives PIN login/resume. */
+/** BC is authoritative after terminal-side selections have been saved through its API. */
 internal fun applyTerminalPrinterDefault(context: Context, code: String, usage: String) {
     val prefs = context.getSharedPreferences("bcwms_prefs", Context.MODE_PRIVATE)
     val key = printerPreferenceKey(context, usage)
-    if (BuildConfig.FLAVOR == "bade" && prefs.getBoolean(key + ".localSelection", false)) return
-    prefs.edit().putString(key, code).apply()
+    prefs.edit().putString(key, code).remove(key + ".localSelection").apply()
 }
 
 /** MTE / LP material labels: the device's label printer, else its document printer, else BC mapping. */
@@ -104,6 +103,7 @@ fun PrintersModule() {
     var rows by remember { mutableStateOf<List<JSONObject>>(emptyList()) }
     var status by remember { mutableStateOf("") }
     var loading by remember { mutableStateOf(false) }
+    var saving by remember { mutableStateOf(false) }
     var defaultLabelCode by remember { mutableStateOf(getDefaultPrinter(context, PRINTER_USAGE_LABEL)) }
     var defaultDocumentCode by remember { mutableStateOf(getDefaultPrinter(context, PRINTER_USAGE_DOCUMENT)) }
     var scannedBarcode by rememberSaveable { mutableStateOf("") }
@@ -114,6 +114,22 @@ fun PrintersModule() {
     fun load() {
         scope.launch {
             loading = true; status = "Yükleniyor..."
+            if (terminalManaged) {
+                val terminal = TerminalSession.code(context)
+                val terminalScope = TerminalSession.scope(context)
+                val key = java.net.URLEncoder.encode(terminal.replace("'", "''"), "UTF-8").replace("+", "%20")
+                val response = BcApi.get(context, "wmsTerminals('$key')")
+                val selection = if (response.ok) parseTerminalPrinterSelection(response.body, terminal, false) else null
+                if (selection == null || terminalScope != TerminalSession.scope(context) || terminal != TerminalSession.code(context)) {
+                    loading = false
+                    status = "HATA: BC terminal yazıcı ayarları alınamadı. Yenileyip tekrar deneyin."
+                    return@launch
+                }
+                applyTerminalPrinterDefault(context, selection.label, PRINTER_USAGE_LABEL)
+                applyTerminalPrinterDefault(context, selection.document, PRINTER_USAGE_DOCUMENT)
+                defaultLabelCode = selection.label
+                defaultDocumentCode = selection.document
+            }
             val page = BcApi.getAllPages(context, "printers?\$top=100&\$orderby=code")
             loading = false
             rows = if (page.complete) page.rows else emptyList()
@@ -149,7 +165,7 @@ fun PrintersModule() {
         }
         Spacer(Modifier.height(8.dp))
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Button(onClick = { load() }, enabled = !loading) { WmsRefreshLabel(loading) }
+            Button(onClick = { load() }, enabled = !loading && !saving) { WmsRefreshLabel(loading) }
         }
         if (defaultLabelCode.isNotBlank() && !terminalManaged) {
             TextButton(onClick = {
@@ -261,6 +277,7 @@ fun PrintersModule() {
                 val isLabelDefault = defaultLabelCode == code
                 val isDocumentDefault = defaultDocumentCode == code
                 fun selectPrinter(usage: String) {
+                    if (loading || saving) return
                     val issue = if (usage == PRINTER_USAGE_LABEL) labelPrinterSelectionIssue(active, format)
                         else if (!active) "Yazıcı pasif."
                         else if (format != "PDF") "Belge yazıcısı PDF formatında olmalı." else null
@@ -268,13 +285,37 @@ fun PrintersModule() {
                         status = "UYARI: $code seçilemedi. $issue"
                         return
                     }
-                    setDefaultPrinter(context, code, usage)
-                    if (usage == PRINTER_USAGE_LABEL) defaultLabelCode = code else defaultDocumentCode = code
-                    status = "TAMAM: ${desc.ifBlank { code }} ${if (usage == PRINTER_USAGE_LABEL) "etiket" else "belge"} yazıcısı olarak seçildi."
+                    if (!TerminalSession.authenticated(context)) {
+                        status = "UYARI: Yazıcı seçmek için PIN ile giriş yapın."
+                        return
+                    }
+                    val terminal = TerminalSession.code(context)
+                    val terminalScope = TerminalSession.scope(context)
+                    saving = true
+                    status = "Yazıcı BC'ye kaydediliyor..."
+                    scope.launch {
+                        try {
+                            val response = BcApi.boundAction(context, "wmsTerminals", terminal, "selectPrinter",
+                                JSONObject().put("username", BcApi.getLocalUser(context))
+                                    .put("usage", usage).put("printerCode", code).toString())
+                            val selection = if (response.ok) parseTerminalPrinterSelection(response.body, terminal, true) else null
+                            if (selection == null) {
+                                status = if (response.httpCode == 404) "HATA: BC uzantısını 1.14.1.57 veya üstüne güncelleyin. Yazıcı kaydedilmedi."
+                                    else "HATA: Yazıcı BC'ye kaydedilemedi. Bağlantıyı ve yetkinizi kontrol edip yenileyin."
+                                return@launch
+                            }
+                            if (terminalScope != TerminalSession.scope(context) || terminal != TerminalSession.code(context)) return@launch
+                            applyTerminalPrinterDefault(context, selection.label, PRINTER_USAGE_LABEL)
+                            applyTerminalPrinterDefault(context, selection.document, PRINTER_USAGE_DOCUMENT)
+                            defaultLabelCode = selection.label
+                            defaultDocumentCode = selection.document
+                            status = "TAMAM: ${desc.ifBlank { code }} seçildi ve BC terminal kaydına kaydedildi."
+                        } finally { saving = false }
+                    }
                 }
                 Card(
                     modifier = Modifier.fillMaxWidth().then(
-                        if (terminalManaged) Modifier.clickable {
+                        if (terminalManaged) Modifier.clickable(enabled = !loading && !saving) {
                             selectPrinter(if (format == "PDF") PRINTER_USAGE_DOCUMENT else PRINTER_USAGE_LABEL)
                         } else Modifier
                     ),
@@ -313,7 +354,7 @@ fun PrintersModule() {
                         if (terminalManaged) {
                             OutlinedButton(onClick = {
                                 selectPrinter(if (format == "PDF") PRINTER_USAGE_DOCUMENT else PRINTER_USAGE_LABEL)
-                            }, enabled = active && format in setOf("ZPL", "PDF")) {
+                            }, enabled = !loading && !saving && active && format in setOf("ZPL", "PDF")) {
                                 Text(if (isLabelDefault || isDocumentDefault) "✓ Seçili" else "Bu yazıcıyı seç")
                             }
                         }
