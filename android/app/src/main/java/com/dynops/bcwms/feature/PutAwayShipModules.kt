@@ -1777,7 +1777,7 @@ private fun WhsePickDocument(no: String, onBack: () -> Unit) {
     // Sevk LP (toplama sepeti) ve eksik bildirimi — API'de vardı, ekranda yoktu (UAT shipping-x04).
     var shortLine by remember(no) { mutableStateOf<JSONObject?>(null) }
 
-    fun reload() {
+    fun reload(verifyClaim: Boolean = false) {
         scope.launch {
             busy = true
             header = null; lines = emptyList(); headerLoaded = false; linesComplete = false
@@ -1799,10 +1799,27 @@ private fun WhsePickDocument(no: String, onBack: () -> Unit) {
             lines = page.rows
             linesComplete = page.complete
             if (!headerLoaded || !linesComplete) status = "Belgenin tüm satırları yüklenemedi. Yenileyip tekrar deneyin."
+            else if (verifyClaim) {
+                val owner = header?.optString("assignedUserId").orEmpty()
+                status = if (canMutateAssignedDocument(owner, myUserId)) "TAMAM: Belge üzerinize alındı."
+                else "HATA: ${documentOwnershipMessage(owner, myUserId)}"
+            }
             busy = false
         }
     }
     LaunchedEffect(no) { reload() }
+
+    fun claimForCurrentUser() {
+        scope.launch {
+            busy = true
+            status = "Belge üzerinize alınıyor..."
+            val r = BcApi.claimPick(context, no)
+            status = if (r.ok) "Atama kontrol ediliyor..."
+            else QcErrorParser.friendlyStatus(BcApi.errorMessage(r.body), r.httpCode)
+            busy = false
+            reload(verifyClaim = r.ok)
+        }
+    }
 
     fun action(name: String, body: String, okMsg: String) {
         if (myUserId.isBlank()) {
@@ -1861,11 +1878,16 @@ private fun WhsePickDocument(no: String, onBack: () -> Unit) {
     val canMutate = headerLoaded && linesComplete &&
         canMutateAssignedDocument(assignedTo, myUserId)
     val takeLines = lines.filter { !BcEnum.decodeOData(it.optString("actionType")).equals("Place", ignoreCase = true) }
+    val productionPick = isProductionPick(lines)
+    val requireLpScan = lpScanRequired || productionPick
+    val productionDestinations = lines.filter { BcEnum.decodeOData(it.optString("actionType")).equals("Place", true) }
+        .map { "${it.optString("locationCode")} / ${it.optString("binCode")}" }.distinct().joinToString(", ")
     val allCollected = takeLines.isNotEmpty() && takeLines.all { lineDone(it, LineModule.PICK) }
     val readyToRegister = pickReadyToRegister(
         pickMode = BcEnum.decodeOData(h?.optString("pickMode").orEmpty()),
         qtyToHandle = takeLines.map { it.optDouble("qtyToHandle", 0.0) },
         allCollected = allCollected,
+        productionPick = productionPick,
     )
     DocumentScanHandler(
         enabled = qtyLine == null && groupTarget == null && !busy && canMutate,
@@ -1905,7 +1927,9 @@ private fun WhsePickDocument(no: String, onBack: () -> Unit) {
             }
             DocHeaderCard(
                 title = no,
-                subtitle = "Lokasyon: ${h?.optString("locationCode") ?: ""} · ${bcStatusLabelTr(h?.optString("status") ?: "")}",
+                subtitle = if (productionPick)
+                    "Üretim emri: ${h?.optString("sourceNo").orEmpty()}\nHedef: $productionDestinations"
+                else "Lokasyon: ${h?.optString("locationCode") ?: ""} · ${bcStatusLabelTr(h?.optString("status") ?: "")}",
                 badge = assignedTo.ifBlank { "Atanmadı" },
                 percent = h?.optDouble("percentComplete")?.toInt() ?: 0,
             )
@@ -1918,8 +1942,10 @@ private fun WhsePickDocument(no: String, onBack: () -> Unit) {
                     Column(Modifier.padding(12.dp)) {
                         Text(documentOwnershipMessage(assignedTo, myUserId), fontWeight = FontWeight.Bold, fontSize = 14.sp, color = bcwmsStatus().danger)
                         Text(
-                            "Salt görüntüleme. Aynı belgeyi iki kişi toplarsa miktarlar çakışır. " +
-                                "Devam etmek için önce \"Bana Ata\" ile sunucu üzerinden atama yapın.",
+                            if (assignedTo.isBlank())
+                                "Devam etmek için önce \"Bana Ata\" ile belgeyi üzerinize alın."
+                            else
+                                "Salt görüntüleme. Belge başka bir kullanıcıda. Depo sorumlusu BC üzerinden atamayı terminal kullanıcınıza devretmeli.",
                             fontSize = 12.sp,
                         )
                     }
@@ -1944,7 +1970,7 @@ private fun WhsePickDocument(no: String, onBack: () -> Unit) {
             }
             if (binFilter.isNotBlank()) { ScanFilterChip("📍 Raf $binFilter") { binFilter = "" }; Spacer(Modifier.height(4.dp)) }
             if (scanFilter.isNotBlank()) { ScanFilterChip(scanFilter) { scanFilter = "" }; Spacer(Modifier.height(4.dp)) }
-            if (lpScanRequired) {
+            if (requireLpScan) {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     val sourceGroups = if (merge) displayGroups else groupLines(displayLines, ::pickLineCapacity)
                         .flatMap { g -> g.lines.map { groupLines(listOf(it), ::pickLineCapacity).single() } }
@@ -1981,7 +2007,9 @@ private fun WhsePickDocument(no: String, onBack: () -> Unit) {
             }
             Spacer(Modifier.height(6.dp))
             Text(
-                if (h?.optString("mainLpNo").orEmpty().isBlank())
+                if (productionPick)
+                    "Paleti ve kaynak rafını doğrulayın. Toplamayı Kaydet, LP numarası ve içeriğini koruyarak üretim gözüne taşır ve üretim emrine bağlar. LP’nin tamamı bu emrin bileşenlerine karşılık gelmelidir."
+                else if (h?.optString("mainLpNo").orEmpty().isBlank())
                     "Yeni Sevk Paleti: Birden fazla kaynak LP'den topladığınız ürünleri yeni tek bir sevk LP'sinde birleştirir. Kaynak LP'lerde yalnız kalan miktar kalır. Tam LP'leri olduğu gibi sevk edecekseniz kullanmayın."
                 else
                     "Yeni sevk paleti hazır. Girdiğiniz miktarlar kaynak LP'lerden bu LP'ye aktarılacak; kaynak LP'lerde kalan miktar korunacak.",
@@ -1991,7 +2019,7 @@ private fun WhsePickDocument(no: String, onBack: () -> Unit) {
         }
         BottomActionBar {
             val mainLp = h?.optString("mainLpNo").orEmpty()
-            Column(Modifier.weight(1f)) {
+            if (!productionPick) Column(Modifier.weight(1f)) {
                 Text(
                     if (mainLp.isBlank()) "Kısmi miktarları yeni LP'de birleştir" else "Toplamayı Kaydet ile içeriği aktarılır",
                     fontSize = 10.sp,
@@ -2036,16 +2064,15 @@ private fun WhsePickDocument(no: String, onBack: () -> Unit) {
             }
         }
         BottomActionBar {
-            // "Bana Ata" kilitliyken de açık: devralma tek çıkış yolu. BC tarafı
-            // (ClaimPick) belge başkasındaysa zaten reddeder, o hata gösterilir.
-            OutlinedButton(onClick = { action("assignToMe", "{}", "Bana atandı") }, enabled = !busy && headerLoaded && linesComplete && myUserId.isNotBlank() && !canMutate, modifier = Modifier.weight(1f).height(com.dynops.bcwms.ui.wmsPrimaryButtonHeight())) {
+            // Claim always carries the terminal operator; BC rejects another owner's document.
+            OutlinedButton(onClick = { claimForCurrentUser() }, enabled = !busy && headerLoaded && linesComplete && myUserId.isNotBlank() && !canMutate, modifier = Modifier.weight(1f).height(com.dynops.bcwms.ui.wmsPrimaryButtonHeight())) {
                 Text("Bana Ata")
             }
             val canRegister = canRegisterAssignedPick(assignedTo, myUserId, readyToRegister, inFlightLineNos.size) && headerLoaded && linesComplete
             Button(onClick = {
                 scope.launch {
                     busy = true; status = "Toplama kaydediliyor..."
-                    val r = BcApi.registerPick(context, no)
+                    val r = BcApi.registerPick(context, no, requireIntactProductionLp = productionPick)
                     busy = false
                     status = if (r.ok) "Toplama kaydedildi." else QcErrorParser.friendlyStatus(BcApi.errorMessage(r.body), r.httpCode)
                     if (r.ok) reload()
@@ -2094,13 +2121,13 @@ private fun WhsePickDocument(no: String, onBack: () -> Unit) {
     }
 
     val ql = qtyLine
-    if (ql != null && lpScanRequired) {
+    if (ql != null && requireLpScan) {
         PalletPickSheet(no, groupLines(listOf(ql), ::pickLineCapacity).single(),
             onDismiss = { qtyLine = null },
             onFinished = { message -> qtyLine = null; status = message; reload() },
         )
     }
-    if (ql != null && !lpScanRequired) {
+    if (ql != null && !requireLpScan) {
         QuantityDialogSheet(
             title = "Çekme Miktarı",
             itemNo = ql.optString("itemNo"),
@@ -2129,7 +2156,9 @@ private fun WhsePickDocument(no: String, onBack: () -> Unit) {
         AlertDialog(
             onDismissRequest = { if (!busy) showCancelConfirm = false },
             title = { Text("$no iptal edilsin mi?") },
-            text = { Text("Yalnız kaydedilmemiş toplama iptal edilir. Sevkiyat silinmez; yeniden Pick Oluşturabilirsiniz.") },
+            text = { Text(if (productionPick)
+                "Yalnız kaydedilmemiş toplama iptal edilir. Üretim emri ve LP içeriği korunur; ambar çekmesini yeniden açabilirsiniz."
+                else "Yalnız kaydedilmemiş toplama iptal edilir. Sevkiyat silinmez; yeniden Pick Oluşturabilirsiniz.") },
             dismissButton = {
                 TextButton(onClick = { showCancelConfirm = false }, enabled = !busy) { Text("Vazgeç") }
             },
@@ -2143,13 +2172,13 @@ private fun WhsePickDocument(no: String, onBack: () -> Unit) {
         )
     }
     val gt = groupTarget
-    if (gt != null && lpScanRequired) {
+    if (gt != null && requireLpScan) {
         PalletPickSheet(no, gt,
             onDismiss = { groupTarget = null },
             onFinished = { message -> groupTarget = null; status = message; reload() },
         )
     }
-    if (gt != null && !lpScanRequired) {
+    if (gt != null && !requireLpScan) {
         QuantityDialogSheet(
             title = "Çekme Miktarı (${gt.count} satıra dağıtılır)",
             itemNo = gt.itemNo,

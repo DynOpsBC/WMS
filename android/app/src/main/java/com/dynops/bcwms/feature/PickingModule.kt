@@ -59,7 +59,8 @@ internal fun pickReadyToRegister(
     pickMode: String,
     qtyToHandle: List<Double>,
     allCollected: Boolean,
-): Boolean = if (pickMode.equals("Multi", ignoreCase = true)) {
+    productionPick: Boolean = false,
+): Boolean = if (pickMode.equals("Multi", ignoreCase = true) && !productionPick) {
     allCollected
 } else {
     qtyToHandle.any { it > 0.0 }
@@ -273,9 +274,7 @@ private fun V2PicksForFlow(flow: OutboundFlowMode) {
                 status = "HATA: Depo kullanıcınız doğrulanamadı. Yeniden giriş yapın."
                 return@launch
             }
-            val r = BcApi.boundAction(context, "picks", no, "reassign", JSONObject().apply {
-                put("userId", me); put("reason", "V2 ${flow.title} terminalinden üstlenildi")
-            }.toString())
+            val r = BcApi.claimPick(context, no)
             status = if (r.ok) "$no üzerinize alındı." else "HATA: ${BcApi.errorMessage(r.body)}"
             load()
         }
@@ -393,8 +392,7 @@ private fun ActivePicksTab() {
     LaunchedEffect(pickScope) { load() }
 
     // Listeden "Üzerime Al": paylaşımlı BC lisansında atama BC hesabına değil
-    // oturumdaki WMS kullanıcısına yazılır (reassign); WMS girişi yoksa
-    // assignToMe'ye düşer.
+    // oturumdaki WMS kullanıcısına yazılır ve kalıcı belge sahibi doğrulanır.
     fun takeOver(no: String) {
         scope.launch {
             loading = true; status = "Üzerine alınıyor..."
@@ -404,8 +402,7 @@ private fun ActivePicksTab() {
                 status = "HATA: Depo kullanıcınız doğrulanamadı. Yeniden giriş yapın."
                 return@launch
             }
-            val r = BcApi.boundAction(context, "picks", no, "reassign",
-                JSONObject().apply { put("userId", me); put("reason", "terminalden üstlenildi") }.toString())
+            val r = BcApi.claimPick(context, no)
             // "Atanmamış" kapsamındayken üstlenilen iş listeden düşer; nereye
             // gittiğini söylemezsek operatör işi kaybettiğini sanıyor.
             status = if (r.ok)
@@ -860,10 +857,7 @@ private fun GuidedPickDocument(no: String, flowMode: OutboundFlowMode? = null, o
                 busy = false
                 return@launch
             }
-            val r = BcApi.boundAction(
-                context, "picks", no, "reassign",
-                JSONObject().apply { put("userId", me); put("reason", "terminalden kendime atadım") }.toString(),
-            )
+            val r = BcApi.claimPick(context, no)
             status = if (r.ok) "✅ Pick kendinize atandı" else "HATA: ${BcApi.errorMessage(r.body)}"
             if (r.ok) myUserId = me
             reloadNow()
@@ -2153,10 +2147,13 @@ private fun PickDocument(no: String, onBack: () -> Unit) {
             OutlinedButton(onClick = {
                 // Paylaşımlı BC lisansı: atama oturumdaki WMS kullanıcısına yazılır.
                 scope.launch {
-                    val me = BcApi.currentUserId(context)
-                    if (me.isNotBlank())
-                        action("reassign", JSONObject().apply { put("userId", me); put("reason", "terminalden üstlenildi") }.toString(), "Üzerinize alındı ($me)")
-                    else action("assignToMe", "{}", "Bana atandı")
+                    busy = true
+                    status = "Belge üzerinize alınıyor..."
+                    val r = BcApi.claimPick(context, no)
+                    status = if (r.ok) "TAMAM: Belge üzerinize alındı."
+                    else QcErrorParser.friendlyStatus(BcApi.errorMessage(r.body), r.httpCode)
+                    busy = false
+                    reload()
                 }
             }, enabled = !busy, modifier = Modifier.weight(1f)) { Text("Bana Ata") }
         }

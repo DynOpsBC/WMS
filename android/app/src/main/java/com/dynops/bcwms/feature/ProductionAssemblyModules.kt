@@ -21,6 +21,7 @@ import com.dynops.bcwms.BcApi
 import com.dynops.bcwms.scanner.BarcodeIntentResolver
 import com.dynops.bcwms.scanner.ScanField
 import com.dynops.bcwms.ui.*
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 import org.json.JSONObject
 
@@ -47,7 +48,11 @@ fun ProductionModule() {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun ConsumptionTab() {
+internal fun ConsumptionTab(
+    loadComponents: suspend (android.content.Context, String) -> BcApi.PagedItemsResult = { context, path ->
+        BcApi.getAllPages(context, path)
+    },
+) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val navigator = com.dynops.bcwms.LocalNavigator.current
@@ -55,6 +60,7 @@ private fun ConsumptionTab() {
     var status by remember { mutableStateOf("") }
     var loading by remember { mutableStateOf(false) }
     var consumeLine by remember { mutableStateOf<JSONObject?>(null) }
+    var showPreparedLp by remember { mutableStateOf(false) }
     var selectedOrderNo by remember { mutableStateOf<String?>(null) }
     var showFinishConfirm by remember { mutableStateOf(false) }
     var search by remember { mutableStateOf("") }
@@ -66,7 +72,7 @@ private fun ConsumptionTab() {
         scope.launch {
             loading = true; status = "Bileşenler yükleniyor..."
             val filter = com.dynops.bcwms.ui.buildODataFilter(com.dynops.bcwms.ui.searchClause("prodOrderNo", search))
-            val page = BcApi.getAllPages(context, "productionConsumption?\$top=500&\$orderby=prodOrderNo desc&\$select=prodOrderNo,prodOrderLineNo,componentLineNo,itemNo,description,quantity,remainingQuantity,binCode,locationCode,status,producedItemNo,producedItemDescription,productionQuantity,dueDate$filter")
+            val page = loadComponents(context, "productionConsumption?\$top=500&\$orderby=prodOrderNo desc&\$select=prodOrderNo,prodOrderLineNo,componentLineNo,itemNo,description,quantity,remainingQuantity,binCode,locationCode,status,producedItemNo,producedItemDescription,productionQuantity,dueDate$filter")
             loading = false
             rows = if (page.complete) page.rows else emptyList()
             status = if (!page.complete) "HATA: Sarfiyat listesinin tamamı alınamadı. Yenileyin."
@@ -84,7 +90,7 @@ private fun ConsumptionTab() {
     // Barkod taraması yalnızca seçilen üretim emrinin bileşenlerinde arama yapar.
     // Böylece aynı malzeme başka bir üretim emrine yanlışlıkla sarf edilmez.
     DocumentScanHandler(
-        enabled = selectedOrderNo != null && consumeLine == null && !loading,
+        enabled = selectedOrderNo != null && consumeLine == null && !showPreparedLp && !loading,
         lines = selectedRows,
         onSingleMatch = { line, _ -> scanFilter = ""; consumeLine = line },
         onMultiMatch = { itemNo, _ -> scanFilter = itemNo; status = "TAMAM: '$itemNo' için birden fazla satır — birini seçin" },
@@ -94,28 +100,38 @@ private fun ConsumptionTab() {
         matchLinesByBarcode(listOf(it), BarcodeIntentResolver.resolve(scanFilter)).isNotEmpty()
     }
 
-    fun createPick() {
+    fun createPick(lpNo: String? = null) {
+        if (loading) return
         val firstLine = selectedRows.firstOrNull() ?: return
         scope.launch {
             loading = true
-            status = "Ambar Toplama oluşturuluyor..."
-            val key = "status='${firstLine.optString("status").ifBlank { BcEnum.ProdOrderStatus.RELEASED }}'," +
-                "prodOrderNo='${firstLine.optString("prodOrderNo")}'," +
-                "prodOrderLineNo=${firstLine.optInt("prodOrderLineNo")}," +
-                "componentLineNo=${firstLine.optInt("componentLineNo")}"
-            val r = BcApi.post(context, "productionConsumption($key)/Microsoft.NAV.createPick", "{}")
-            loading = false
-            if (r.ok) {
-                val pickNo = BcApi.scalarValue(r.body)
-                if (pickNo.isBlank()) {
-                    status = "HATA: Pick oluştu ancak belge numarası alınamadı."
-                } else {
-                    status = "TAMAM: $pickNo oluşturuldu"
+            status = "Üretim emrine bağlı ambar çekme hazırlanıyor..."
+            try {
+                val r = createProductionPickForOperator(
+                    prodOrderNo = firstLine.optString("prodOrderNo"),
+                    operatorId = BcApi.currentUserId(context),
+                    lpNo = lpNo,
+                    send = { action, body ->
+                        BcApi.post(context, "productionConsumption(${productionComponentKey(firstLine)})/Microsoft.NAV.$action", body)
+                    },
+                    readHeader = { pickNo ->
+                        BcApi.get(context, "picks('${pickNo.replace("'", "''")}')?\$select=no,sourceNo,assignedUserId")
+                    },
+                )
+                if (r.ok) {
+                    val pickNo = BcApi.scalarValue(r.body).trim()
+                    status = "TAMAM: $pickNo ambar çekmesi hazır"
                     com.dynops.bcwms.WhsePickNavigation.request(pickNo)
                     navigator(com.dynops.bcwms.Screen.Shipping)
+                } else {
+                    status = "HATA: ${BcApi.errorMessage(r.body)}"
                 }
-            } else {
-                status = "HATA: ${BcApi.errorMessage(r.body)} (HTTP ${r.httpCode})"
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                status = "HATA: Ambar çekme sonucu doğrulanamadı. Toplama listesini kontrol edin. ${e.message.orEmpty()}"
+            } finally {
+                loading = false
             }
         }
     }
@@ -204,13 +220,22 @@ private fun ConsumptionTab() {
             Spacer(Modifier.height(6.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Button(onClick = { createPick() }, enabled = !loading && selectedRows.isNotEmpty()) {
-                    Text(if (loading) "..." else "📦 Pick Et")
+                    Text(if (loading) "..." else "Ambar Çekme Aç")
                 }
                 Spacer(Modifier.width(8.dp))
                 OutlinedButton(onClick = { load() }, enabled = !loading) {
                     WmsActionLabel(WmsGlyph.ENTRIES, "Yenile")
                 }
             }
+            OutlinedButton(
+                onClick = { showPreparedLp = true },
+                enabled = !loading && selectedRows.isNotEmpty(),
+                modifier = Modifier.fillMaxWidth(),
+            ) { Text("Hazır LP ile Ambar Çekme") }
+            Text(
+                "Üretime hazırlanan LP'yi okutun. Toplamayı kaydettiğinizde LP bütün olarak üretim gözüne taşınır ve bu emre bağlanır.",
+                fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
             Spacer(Modifier.height(6.dp))
             OutlinedButton(
                 onClick = { showFinishConfirm = true },
@@ -242,6 +267,15 @@ private fun ConsumptionTab() {
                 columns = c; ColumnPrefs.save(context, "consumption", c); showColumns = false
             }
         }
+    }
+
+    if (showPreparedLp && selectedRows.isNotEmpty()) {
+        PreparedProductionLpSheet(
+            orderNo = selectedOrderNo.orEmpty(),
+            components = selectedRows,
+            onDismiss = { showPreparedLp = false },
+            onConfirm = { lpNo -> showPreparedLp = false; createPick(lpNo) },
+        )
     }
 
     if (showFinishConfirm) {
@@ -298,6 +332,103 @@ private fun ConsumptionTab() {
                 }
             }
         )
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun PreparedProductionLpSheet(
+    orderNo: String,
+    components: List<JSONObject>,
+    onDismiss: () -> Unit,
+    onConfirm: (String) -> Unit,
+) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var input by remember { mutableStateOf("") }
+    var header by remember { mutableStateOf<JSONObject?>(null) }
+    var contents by remember { mutableStateOf<List<JSONObject>>(emptyList()) }
+    var busy by remember { mutableStateOf(false) }
+    var status by remember { mutableStateOf("") }
+
+    fun loadPreview(raw: String) {
+        if (busy) return
+        val lpNo = BarcodeIntentResolver.resolve(raw).value.trim()
+        input = lpNo
+        header = null
+        contents = emptyList()
+        if (lpNo.isBlank()) { status = "LP numarasını okutun."; return }
+        busy = true
+        status = "LP ve içeriği doğrulanıyor..."
+        scope.launch {
+            try {
+                val safeNo = lpNo.replace("'", "''")
+                val result = BcApi.get(context, "licensePlates('$safeNo')")
+                check(result.ok) { BcApi.errorMessage(result.body) }
+                val loaded = JSONObject(result.body)
+                check(loaded.optString("no").equals(lpNo, true)) { "Okutulan LP doğrulanamadı." }
+                val page = BcApi.getAllPages(context, "licensePlateLines?\$filter=lpNo eq '$safeNo'&\$orderby=lineNo&\$top=100")
+                check(page.complete) { "LP içeriğinin tamamı alınamadı. Yenileyin." }
+                val loadedContents = page.rows.filter { it.optDouble("quantity") > 0 }
+                check(loadedContents.isNotEmpty()) { "LP içinde taşınacak ürün yok." }
+                header = loaded
+                contents = loadedContents
+                status = "LP hazır. İçeriği ve üretim hedefini kontrol edip ambar çekmesini açın."
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                status = "HATA: ${e.message ?: "LP doğrulanamadı."}"
+            } finally {
+                busy = false
+            }
+        }
+    }
+
+    SheetScaffold(onDismiss = { if (!busy) onDismiss() }, contentPadding = PaddingValues(20.dp)) {
+        Text("Hazır LP ile Ambar Çekme", fontWeight = FontWeight.Bold, fontSize = 18.sp)
+        Text("Üretim emri: $orderNo", fontWeight = FontWeight.SemiBold)
+        Spacer(Modifier.height(12.dp))
+        ScanField(
+            "Hazırlanan LP", input,
+            { input = it; header = null; contents = emptyList(); status = "" },
+            modifier = Modifier.fillMaxWidth(), enabled = !busy,
+            onScanned = { loadPreview(it) },
+        )
+        OutlinedButton(onClick = { loadPreview(input) }, enabled = !busy && input.isNotBlank()) {
+            Text(if (busy) "Kontrol ediliyor..." else "LP İçeriğini Göster")
+        }
+        StatusText(status)
+        header?.let { lp ->
+            Spacer(Modifier.height(8.dp))
+            Text("LP: ${lp.optString("no")}", fontWeight = FontWeight.Bold)
+            Text("Kaynak: ${lp.optString("locationCode")} / ${lp.optString("binCode")}")
+            Text("İçerik (${contents.size} satır)", fontWeight = FontWeight.SemiBold)
+            contents.forEach { line ->
+                Text(
+                    "${line.optString("itemNo").ifBlank { line.optString("childLpNo") }} · " +
+                        "${fmt(line.optDouble("quantity"))} ${line.optString("unitOfMeasure")}" +
+                        line.optString("lotNo").takeIf { it.isNotBlank() }?.let { " · Lot: $it" }.orEmpty(),
+                    fontSize = 13.sp,
+                )
+            }
+            Spacer(Modifier.height(8.dp))
+            Text("Üretim hedefi", fontWeight = FontWeight.SemiBold)
+            val items = contents.map { it.optString("itemNo") }.toSet()
+            val destinations = components.filter { it.optString("itemNo") in items }
+                .map { "${it.optString("locationCode")} / ${it.optString("binCode").ifBlank { "Tanımlı üretim gözü" }}" }.distinct()
+            if (destinations.isEmpty()) Text("Bu LP'nin ürünleri seçilen emirde bulunamadı.", color = MaterialTheme.colorScheme.error)
+            else destinations.forEach { Text(it, fontSize = 13.sp) }
+            Text(
+                "Yalnız bu LP'nin miktarları hazırlanır; diğer satırların işlenecek miktarı sıfırlanır. Başlanmış toplama değiştirilmez. Raf ve LP okutulduktan sonra Toplamayı Kaydet ile LP bütün olarak üretim gözüne taşınır.",
+                fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Spacer(Modifier.height(12.dp))
+            Button(
+                onClick = { onConfirm(lp.optString("no")) },
+                enabled = !busy && destinations.isNotEmpty(), modifier = Modifier.fillMaxWidth(),
+            ) { Text("Bu LP ile Ambar Çekmesini Aç") }
+        }
+        Spacer(Modifier.height(20.dp))
     }
 }
 
