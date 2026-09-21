@@ -1880,6 +1880,10 @@ private fun WhsePickDocument(no: String, onBack: () -> Unit) {
         canMutateAssignedDocument(assignedTo, myUserId)
     val takeLines = lines.filter { !BcEnum.decodeOData(it.optString("actionType")).equals("Place", ignoreCase = true) }
     val productionPick = isProductionPick(lines)
+    val productionTargetLp = if (productionPick) h?.optString("mainLpNo").orEmpty() else ""
+    val productionStaged = productionPick && h?.optBoolean("productionLpStaged", false) == true
+    var showProductionBin by remember(no) { mutableStateOf(false) }
+    var productionBinScan by remember(no) { mutableStateOf("") }
     val requireLpScan = lpScanRequired || productionPick
     val productionDestinations = lines.filter { BcEnum.decodeOData(it.optString("actionType")).equals("Place", true) }
         .map { "${it.optString("locationCode")} / ${it.optString("binCode")}" }.distinct().joinToString(", ")
@@ -1891,7 +1895,7 @@ private fun WhsePickDocument(no: String, onBack: () -> Unit) {
         productionPick = productionPick,
     )
     DocumentScanHandler(
-        enabled = qtyLine == null && groupTarget == null && !busy && canMutate,
+        enabled = qtyLine == null && groupTarget == null && !showProductionBin && !busy && canMutate,
         lines = takeLines,
         onSingleMatch = { line, _ ->
             scanFilter = ""
@@ -2008,8 +2012,12 @@ private fun WhsePickDocument(no: String, onBack: () -> Unit) {
             }
             Spacer(Modifier.height(6.dp))
             Text(
-                if (productionPick)
-                    "Paleti ve kaynak rafını doğrulayın. Toplamayı Kaydet, LP numarası ve içeriğini koruyarak üretim gözüne taşır ve üretim emrine bağlar. LP’nin tamamı bu emrin bileşenlerine karşılık gelmelidir."
+                if (productionStaged)
+                    "$productionTargetLp hazırlık gözü ${h?.optString("productionStageBin")} içinde. Hazır LP'yi satırlarda doğrulayın; Üretime Teslim Et ile hedef üretim gözünü okutun."
+                else if (productionTargetLp.isNotBlank())
+                    "Kaynak rafları ve LP'leri satırlarda okutun. Gereken miktarlar $productionTargetLp içinde birleştirilecek. LP Hazırla ile paleti bıraktığınız hazırlık gözünü okutun; üretime teslim ayrı adımdır."
+                else if (productionPick)
+                    "Hazır LP'yi bütün olarak göndermek için satırlarda okutun. Farklı paletlerden kısmi toplayacaksanız önce Yeni Üretim LP açın."
                 else if (h?.optString("mainLpNo").orEmpty().isBlank())
                     "Yeni Sevk Paleti: Birden fazla kaynak LP'den topladığınız ürünleri yeni tek bir sevk LP'sinde birleştirir. Kaynak LP'lerde yalnız kalan miktar kalır. Tam LP'leri olduğu gibi sevk edecekseniz kullanmayın."
                 else
@@ -2020,9 +2028,21 @@ private fun WhsePickDocument(no: String, onBack: () -> Unit) {
         }
         BottomActionBar {
             val mainLp = h?.optString("mainLpNo").orEmpty()
-            if (!productionPick) Column(Modifier.weight(1f)) {
+            if (productionStaged) OutlinedButton(
+                enabled = !busy,
+                modifier = Modifier.weight(1f),
+                onClick = { scope.launch {
+                    busy = true
+                    val body = JSONObject().put("printerId", getDefaultPrinter(context)).put("copies", 1).toString()
+                    val result = BcApi.boundAction(context, "licensePlates", productionTargetLp, "printLabel", body)
+                    busy = false
+                    status = if (result.ok) "TAMAM: $productionTargetLp etiketi yazdırma kuyruğuna alındı."
+                        else QcErrorParser.friendlyStatus(BcApi.errorMessage(result.body), result.httpCode)
+                } },
+            ) { Text("LP Etiketi Yazdır") }
+            if (!productionStaged) Column(Modifier.weight(1f)) {
                 Text(
-                    if (mainLp.isBlank()) "Kısmi miktarları yeni LP'de birleştir" else "Toplamayı Kaydet ile içeriği aktarılır",
+                    if (mainLp.isBlank()) "Kısmi miktarları yeni LP'de birleştir" else if (productionPick) "Hedef üretim LP: $mainLp" else "Toplamayı Kaydet ile içeriği aktarılır",
                     fontSize = 10.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -2034,20 +2054,26 @@ private fun WhsePickDocument(no: String, onBack: () -> Unit) {
                                 status = "Yeni hedef sevk LP oluşturuluyor..."
                                 val tpl = resolveLpTemplate(context, LpPurpose.PALLET)
                                 if (tpl == null) { busy = false; status = "HATA: Uygun sepet/palet şablonu bulunamadı."; return@launch }
-                                val r = BcApi.boundAction(context, "picks", no, "startShippingLP", JSONObject().apply { put("lpTemplateCode", tpl) }.toString())
+                                val r = BcApi.boundAction(context, "picks", no, if (productionPick) "startProductionLPFor" else "startShippingLP", JSONObject().apply {
+                                    put("lpTemplateCode", tpl)
+                                    if (productionPick) put("userId", myUserId)
+                                }.toString())
                                 busy = false
-                                status = if (r.ok) "TAMAM: Hedef Sevk LP ${BcApi.scalarValue(r.body).trim()} oluşturuldu; ürünler Toplamayı Kaydet sırasında kaynak LP'lerden aktarılacak."
+                                status = if (r.ok) if (productionPick) "TAMAM: Üretim LP ${BcApi.scalarValue(r.body).trim()} açıldı. Kaynak rafları ve paletleri doğrulayın."
+                                    else "TAMAM: Hedef Sevk LP ${BcApi.scalarValue(r.body).trim()} oluşturuldu; ürünler Toplamayı Kaydet sırasında kaynak LP'lerden aktarılacak."
                                     else QcErrorParser.friendlyStatus(BcApi.errorMessage(r.body), r.httpCode)
                             } else {
                                 busy = false
-                                status = "TAMAM: $mainLp hedef sevk LP hazır. Miktarları girip Toplamayı Kaydet'e basın; içerik o anda aktarılacak."
+                                status = if (productionPick) "$mainLp hedef LP açıldı. Satırlarda gereken miktarları doğrulayıp LP Hazırla'ya basın."
+                                    else "TAMAM: $mainLp hedef sevk LP hazır. Miktarları girip Toplamayı Kaydet'e basın; içerik o anda aktarılacak."
                             }
                             reload()
                         }
                     },
                     enabled = !busy && canMutate,
                     modifier = Modifier.fillMaxWidth().height(48.dp),
-                ) { Text(if (mainLp.isBlank()) "📦 Yeni Sevk LP" else "📦 Sevk LP Hazır", fontSize = 13.sp) }
+                ) { Text(if (productionPick) { if (mainLp.isBlank()) "Yeni Üretim LP" else "Üretim LP: $mainLp" }
+                    else if (mainLp.isBlank()) "📦 Yeni Sevk LP" else "📦 Sevk LP Hazır", fontSize = 13.sp) }
             }
             Column(Modifier.weight(1f)) {
                 Text("Açık satır için miktar bildirir", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -2059,7 +2085,7 @@ private fun WhsePickDocument(no: String, onBack: () -> Unit) {
                             else -> shortLine = open.first()
                         }
                     },
-                    enabled = !busy && canMutate,
+                    enabled = !busy && canMutate && !productionStaged,
                     modifier = Modifier.fillMaxWidth().height(48.dp),
                 ) { Text("📉 Eksik Bildir", fontSize = 13.sp) }
             }
@@ -2071,7 +2097,10 @@ private fun WhsePickDocument(no: String, onBack: () -> Unit) {
             }
             val canRegister = canRegisterAssignedPick(assignedTo, myUserId, readyToRegister, inFlightLineNos.size) && headerLoaded && linesComplete
             Button(onClick = {
-                scope.launch {
+                if (productionTargetLp.isNotBlank()) {
+                    productionBinScan = ""
+                    showProductionBin = true
+                } else scope.launch {
                     busy = true; status = "Toplama kaydediliyor..."
                     val r = BcApi.registerPick(context, no, requireIntactProductionLp = productionPick)
                     busy = false
@@ -2083,6 +2112,8 @@ private fun WhsePickDocument(no: String, onBack: () -> Unit) {
                     when {
                         !canMutate -> "Belge salt okunur"
                         inFlightLineNos.isNotEmpty() -> "Satır yazımı bekleniyor"
+                        canRegister && productionStaged -> "Üretime Teslim Et"
+                        canRegister && productionTargetLp.isNotBlank() -> "LP Hazırla"
                         canRegister -> "✅ Toplamayı Kaydet"
                         else -> "Miktar girin"
                     },
@@ -2090,6 +2121,37 @@ private fun WhsePickDocument(no: String, onBack: () -> Unit) {
                 )
             }
         }
+    }
+
+    if (showProductionBin) {
+        AlertDialog(
+            onDismissRequest = { if (!busy) showProductionBin = false },
+            title = { Text(if (productionStaged) "Üretime Teslim Et" else "Üretim LP Hazırla") },
+            text = { Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("Hedef LP: $productionTargetLp")
+                Text(if (productionStaged) "Teslim gözü: $productionDestinations"
+                    else "Paleti bıraktığınız hazırlık gözünü okutun. Bu adım üretime teslim sayılmaz.")
+                ScanField("Depo gözü", productionBinScan, { productionBinScan = it },
+                    modifier = Modifier.fillMaxWidth(), enabled = !busy,
+                    onScanned = { productionBinScan = it })
+            } },
+            confirmButton = { TextButton(enabled = !busy && productionBinScan.isNotBlank(), onClick = {
+                scope.launch {
+                    busy = true
+                    status = if (productionStaged) "Üretime teslim kaydediliyor..." else "LP hazırlık gözüne alınıyor..."
+                    val result = BcApi.productionLpPhase(context, no, productionBinScan, deliver = productionStaged)
+                    busy = false
+                    showProductionBin = false
+                    status = if (result.ok) {
+                        if (productionStaged) "TAMAM: Üretime teslim kaydedildi."
+                        else "TAMAM: LP hazırlık gözünde. Üretime teslimde bu LP'yi yeniden okutun."
+                    } else QcErrorParser.friendlyStatus(BcApi.errorMessage(result.body), result.httpCode)
+                    // BC deletes a completed pick: an expected 404 is not a loading failure.
+                    if (result.ok && productionStaged) onBack() else reload()
+                }
+            }) { Text(if (busy) "Kaydediliyor..." else "Onayla") } },
+            dismissButton = { TextButton(enabled = !busy, onClick = { showProductionBin = false }) { Text("Vazgeç") } },
+        )
     }
 
     shortLine?.let { sl ->

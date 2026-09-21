@@ -484,6 +484,7 @@ object BcApi {
         val registerScannedPick: Boolean = false,
         val registerProductionPallets: Boolean = false,
         val multiEntrySingleLp: Boolean = false,
+        val productionLpPreparation: Boolean = false,
     )
 
     internal fun pickRegistrationAction(capabilities: LpScanCapabilities, requireIntactProductionLp: Boolean = false): String? = when {
@@ -506,6 +507,9 @@ object BcApi {
             pickLineSources = metadata.contains("pickLineSources", ignoreCase = true),
             putAwayPlacementFromLp = metadata.contains("setPlacementFromLp", ignoreCase = true),
             bulkLpPlan = metadata.contains("createLicensePlatesFromPlanIdempotent", ignoreCase = true),
+            productionLpPreparation = listOf("prepareProductionLPFor", "deliverProductionLPFor", "startProductionLPFor").all { action ->
+                Regex("""<(?:(?:\w+):)?Action\b[^>]*\bName\s*=\s*["']$action["']""").containsMatchIn(metadata)
+            },
             multiEntrySingleLp = metadata.contains("createSingleLicensePlateFromEntriesIdempotent", ignoreCase = true),
             httpCode = httpCode,
             registerScannedPick = Regex("""<(?:(?:\w+):)?Action\b[^>]*\bName\s*=\s*["']registerScannedFor["']""").containsMatchIn(metadata),
@@ -741,6 +745,30 @@ object BcApi {
      * gönderilmez. Kayıt/post işlemi uzun sürebildiği için uzun zaman aşımlı
      * istemci kullanılır, belirsiz yanıtta ikinci kez post edilmez.
      */
+    /** Both phases use the exact scanned document, never a source-LP fallback. */
+    suspend fun productionLpPhase(context: Context, pickNo: String, targetBin: String, deliver: Boolean): ApiResult {
+        fun failure(message: String) = ApiResult(false, 400,
+            JSONObject().put("error", JSONObject().put("message", message)).toString())
+        if (targetBin.isBlank()) return failure("Hedef depo gözünü okutun.")
+        val userId = currentUserId(context)
+        if (userId.isBlank()) return failure("Depo kullanıcısı doğrulanamadı. Yeniden giriş yapın.")
+        val caps = getLpScanCapabilities(context)
+        if (!caps.metadataLoaded || !caps.productionLpPreparation)
+            return failure("Üretim LP hazırlama için BC güncellemesi gerekli. İşlem gönderilmedi.")
+        val plans = try {
+            com.dynops.bcwms.feature.PalletPickVerification.requireVerifiedDocument(context, pickNo)
+        } catch (e: kotlinx.coroutines.CancellationException) { throw e
+        } catch (e: Exception) { return failure(e.message ?: "Paletleri yeniden okutun.") }
+        val body = JSONObject().apply {
+            put("userId", userId)
+            put("targetBinCode", targetBin.trim())
+            put("palletPlan", com.dynops.bcwms.feature.scannedPalletRegistrationJson(plans))
+        }.toString()
+        // No automatic retry after an ambiguous stock-posting response.
+        return boundActionLongRunning(context, "picks", pickNo,
+            if (deliver) "deliverProductionLPFor" else "prepareProductionLPFor", body)
+    }
+
     suspend fun registerPick(context: Context, pickNo: String, requireIntactProductionLp: Boolean = false): ApiResult {
         val registrationCapabilities = getLpScanCapabilities(context)
         // BADE's older pickLines omit sourceType, so they cannot reliably tell

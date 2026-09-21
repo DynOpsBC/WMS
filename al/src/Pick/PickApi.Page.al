@@ -32,6 +32,8 @@ page 72092 "DOPSWHS Pick API"
                 field(vehicleNo; Rec."DOPSWHS Vehicle No.") { Caption = 'vehicleNo'; Editable = false; }
                 // Ana sepet: terminal toplamaya başlarken PATCH'ler; ekrandan
                 // çıkıp girince kaybolmasın diye kalıcı. Paketleme de okur.
+                field(productionLpStaged; Rec."DOPSWHS Prod LP Staged") { Editable = false; }
+                field(productionStageBin; Rec."DOPSWHS Prod Stage Bin") { Editable = false; }
                 field(mainLpNo; Rec."DOPSWHS Main LP No.") { Caption = 'mainLpNo'; Editable = false; }
                 field(sourceNo; SourceNo) { Caption = 'sourceNo'; }
                 field(status; StatusText) { Caption = 'status'; }
@@ -99,6 +101,30 @@ page 72092 "DOPSWHS Pick API"
         // kontrol codeunit'e değil, terminale bakan bu uca konuldu.)
         PickMgmt.EnsurePickOperator(Rec);
         exit(PickMgmt.StartShippingLP(Rec, lpTemplateCode));
+    end;
+
+    [ServiceEnabled]
+    procedure startProductionLPFor(userId: Code[50]; lpTemplateCode: Code[20]): Code[20]
+    var
+        Mgt: Codeunit "DOPSWHS Pick Mgmt";
+    begin
+        exit(Mgt.StartProductionLPFor(Rec, userId, lpTemplateCode));
+    end;
+
+    [ServiceEnabled]
+    procedure prepareProductionLPFor(userId: Code[50]; targetBinCode: Code[20]; palletPlan: Text)
+    var
+        Mgt: Codeunit "DOPSWHS Pick Mgmt";
+    begin
+        Mgt.PrepareProductionLPFor(Rec, userId, targetBinCode, palletPlan);
+    end;
+
+    [ServiceEnabled]
+    procedure deliverProductionLPFor(userId: Code[50]; targetBinCode: Code[20]; palletPlan: Text)
+    var
+        Mgt: Codeunit "DOPSWHS Pick Mgmt";
+    begin
+        Mgt.DeliverProductionLPFor(Rec, userId, targetBinCode, palletPlan);
     end;
 
     [ServiceEnabled]

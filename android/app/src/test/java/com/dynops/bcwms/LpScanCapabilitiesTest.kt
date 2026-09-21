@@ -10,6 +10,17 @@ import org.junit.Test
  * önceki akışa döner.
  */
 class LpScanCapabilitiesTest {
+    @Test fun productionPreparationRequiresAllThreeExactActions() {
+        val actions = listOf("prepareProductionLPFor", "deliverProductionLPFor", "startProductionLPFor")
+        val metadata = actions.joinToString("") { "<edm:Action Name='$it'/>" }
+        assertTrue(BcApi.parseLpScanCapabilities(metadata).productionLpPreparation)
+        actions.forEach { omitted ->
+            assertFalse(BcApi.parseLpScanCapabilities(metadata.replace("<edm:Action Name='$omitted'/>", "")).productionLpPreparation)
+        }
+        assertFalse(BcApi.parseLpScanCapabilities(metadata.replace("Action", "Property")).productionLpPreparation)
+        assertFalse(BcApi.parseLpScanCapabilities(metadata.replace("LPFor", "LPForPreview")).productionLpPreparation)
+    }
+
     @Test
     fun `multi entry single LP action is detected exactly from metadata`() {
         assertTrue(

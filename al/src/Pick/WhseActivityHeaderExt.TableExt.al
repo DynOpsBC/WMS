@@ -2,6 +2,19 @@ tableextension 72429 "DOPSWHS Whse Activity Hdr Ext" extends "Warehouse Activity
 {
     fields
     {
+        field(72403; "DOPSWHS Prod LP Staged"; Boolean)
+        {
+            Caption = 'Production LP Prepared';
+            DataClassification = CustomerContent;
+            Editable = false;
+        }
+        field(72404; "DOPSWHS Prod Stage Bin"; Code[20])
+        {
+            Caption = 'Production Preparation Bin';
+            DataClassification = CustomerContent;
+            Editable = false;
+        }
+
         // Terminal pick listesi bu alana göre Multi/Bulk/Batch sekmelerine
         // ayrılır. MultiOrderPick.CreateGroupedPick oluşturduğu pick'e damgalar.
         field(72400; "DOPSWHS Pick Mode"; Enum "DOPSWHS Pick Mode")

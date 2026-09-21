@@ -2,7 +2,7 @@
   "id": "6ea7421a-2108-4672-96e0-8b8567b88ad7",
   "name": "BCWMSApp Print Tests",
   "publisher": "DynamicsOps",
-  "version": "1.0.0.67",
+  "version": "1.0.0.68",
   "platform": "24.0.0.0",
   "application": "24.0.0.0",
   "runtime": "13.0",
@@ -12,6 +12,6 @@
     "id": "984e25aa-07c2-4401-babc-88f975303a52",
     "name": "BCWMSApp",
     "publisher": "DynamicsOps",
-    "version": "1.14.1.65"
+    "version": "1.14.1.66"
   }]
 }
