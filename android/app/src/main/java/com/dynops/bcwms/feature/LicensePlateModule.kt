@@ -464,15 +464,15 @@ private fun LpDocument(lpNo: String, onBack: () -> Unit) {
                                     color = MaterialTheme.colorScheme.primary,
                                     fontWeight = FontWeight.Bold,
                                 )
-                            val extra = listOfNotNull(
-                                ln.optInt("sourceItemLedgerEntryNo").takeIf { it > 0 }?.let { "Kaynak giriş: #$it" },
-                                ln.optString("sourceDocumentNo").takeIf { it.isNotBlank() && it != "null" }?.let { "Belge: $it" },
-                                ln.optString("sourceBinCode").takeIf { it.isNotBlank() && it != "null" }?.let { "Kaynak raf: $it" },
-                                // BADE (16 Eyl 2026): sevk LP satırında ürünün geldiği palet.
-                                ln.optString("sourceLpNo").takeIf { it.isNotBlank() && it != "null" }?.let { "Kaynak LP: $it" },
-                                ln.optString("lotNo").takeIf { it.isNotBlank() }?.let { "Lot $it" },
-                                ln.optString("serialNo").takeIf { it.isNotBlank() }?.let { "Seri $it" },
-                            ).joinToString(" · ")
+                                val extra = listOfNotNull(
+                                    ln.optInt("sourceItemLedgerEntryNo").takeIf { it > 0 }?.let { "Kaynak giriş: #$it" },
+                                    ln.optString("sourceDocumentNo").takeIf { it.isNotBlank() && it != "null" }?.let { "Belge: $it" },
+                                    ln.optString("sourceBinCode").takeIf { it.isNotBlank() && it != "null" }?.let { "Kaynak raf: $it" },
+                                    // BADE (16 Eyl 2026): sevk LP satırında ürünün geldiği palet.
+                                    ln.optString("sourceLpNo").takeIf { it.isNotBlank() && it != "null" }?.let { "Kaynak LP: $it" },
+                                    ln.optString("lotNo").takeIf { it.isNotBlank() }?.let { "Lot $it" },
+                                    ln.optString("serialNo").takeIf { it.isNotBlank() }?.let { "Seri $it" },
+                                ).joinToString(" · ")
                                 if (extra.isNotBlank()) Text(extra, fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                 if (com.dynops.bcwms.BuildConfig.FLAVOR == "bade" && !awaitingReceipt &&
                                     st in listOf("Open", "Built", "Assigned") && ln.optDouble("quantity") > 0 &&

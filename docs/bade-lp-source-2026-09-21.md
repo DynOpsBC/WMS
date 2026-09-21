@@ -17,7 +17,7 @@ Mevcut LP'ye `AddLineFromBin` ile ürün eklenirken raf stoğu kontrol edilip ge
 
 ## Doğrulama
 
-Android release birim testleri, lint, imza kontrolü ve Windows AL derlemesi paket tamamlandığında DOGRULAMA.txt içine kaydedilir. AL regresyon testleri: 150+850 onarım/etiket, yeni raf ekleme, belirsiz eşleşme, farklı lot/lokasyon, miktar yetersizliği, koli-temel birim dönüşümü, tekrarlanan istek, tarihsel LP koruma, kaynak eksikliği, mevcut kaynağı değiştirmeme. AL testleri BC sandbox içinde ayrıca yürütülmelidir.
+Android release derlemesi başarılı; 405 birim testi geçti, lint 0 hata (21 uyarı). APK imzası 1.14.141/142 ile aynı. BC 1.14.1.61 ve test paketi Windows CI üzerinde başarıyla derlendi: https://github.com/DynOpsBC/WMS/actions/runs/35582199867. AL testleri yalnız derlendi; BC sandbox içinde yürütülmedi. Ayrıntılar paket içindeki DOGRULAMA.txt dosyasında. AL regresyon testleri: 150+850 onarım/etiket, yeni raf ekleme, belirsiz eşleşme, farklı lot/lokasyon, miktar yetersizliği, koli-temel birim dönüşümü, tekrarlanan istek, tarihsel LP koruma, kaynak eksikliği, mevcut kaynağı değiştirmeme. AL testleri BC sandbox içinde ayrıca yürütülmelidir.
 
 ## Kurulum ve mevcut palet
 
