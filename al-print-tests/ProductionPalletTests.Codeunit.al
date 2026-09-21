@@ -815,6 +815,81 @@ codeunit 72186 "DOPSWHS Prod Pallet Tests"
         AssertBinQuantity(Line."Item No.", 'PROD', 10);
     end;
 
+    // Explicitly invoked by the sandbox HTTP concurrency harness, not normal tests.
+    procedure SetupConcurrentHttpFixture()
+    var
+        Environment: Codeunit "Environment Information";
+        Pick: Record "Warehouse Activity Header";
+        First: Record "Warehouse Activity Line";
+        Second: Record "Warehouse Activity Line";
+        Place: Record "Warehouse Activity Line";
+        LP: Record "DOPSWHS LP Header";
+        SecondLP: Record "DOPSWHS LP Header";
+        Target: Record "DOPSWHS LP Header";
+        Content: Record "DOPSWHS LP Line";
+    begin
+        Check(Environment.IsSandbox(), 'Concurrency fixtures are sandbox only.');
+        Check(LowerCase(Environment.GetEnvironmentName()) = 'sand0309', 'Expected sand0309.');
+        PreparationFixture(Pick, First, LP, Target);
+        AddPreparationStock(First, 100);
+        Second := First;
+        Second."Line No." := 30000;
+        Second."Bin Code" := 'RAW2';
+        Second.Insert(false);
+        AddPreparationStock(Second, 100);
+        SecondLP := LP;
+        SecondLP."No." := 'SECOND-PREP-LP';
+        SecondLP."Bin Code" := 'RAW2';
+        SecondLP.Insert(false);
+        Content.Get(LP."No.", 10000);
+        Content."LP No." := SecondLP."No.";
+        Content.Insert(false);
+        Place.Get(Pick.Type, Pick."No.", 20000);
+        Place.Quantity := 20;
+        Place."Qty. (Base)" := 20;
+        Place."Qty. Outstanding" := 20;
+        Place."Qty. Outstanding (Base)" := 20;
+        Place."Qty. to Handle" := 20;
+        Place."Qty. to Handle (Base)" := 20;
+        Place.Modify(false);
+        Commit();
+    end;
+
+    procedure VerifyConcurrentHttpFixture(Delivered: Boolean)
+    var
+        Environment: Codeunit "Environment Information";
+        Pick: Record "Warehouse Activity Header";
+        Target: Record "DOPSWHS LP Header";
+        Component: Record "Prod. Order Component";
+        LPMgt: Codeunit "DOPSWHS LP Management";
+    begin
+        Check(Environment.IsSandbox(), 'Sandbox only.');
+        Check(LowerCase(Environment.GetEnvironmentName()) = 'sand0309', 'Expected sand0309.');
+        Check(LPMgt.TotalBaseQuantity('PROD-LP-READY') = 90, 'First source debited more than once.');
+        Check(LPMgt.TotalBaseQuantity('SECOND-PREP-LP') = 90, 'Second source debited more than once.');
+        Check(LPMgt.TotalBaseQuantity('TARGET-PREP-LP') = 20, 'Target stock duplicated or lost.');
+        AssertBinQuantity('PROD-LP-ITEM', 'RAW', 90);
+        AssertBinQuantity('PROD-LP-ITEM', 'RAW2', 90);
+        Target.Get('TARGET-PREP-LP');
+        Component.Get(Component.Status::Released, 'PROD-LP-TEST', 10000, 10000);
+        if Delivered then begin
+            AssertBinQuantity('PROD-LP-ITEM', 'STAGE', 0);
+            AssertBinQuantity('PROD-LP-ITEM', 'PROD', 20);
+            Check(Component."Qty. Picked" = 20, 'Production picked more than once.');
+            Check(not Pick.Get(Pick.Type::Pick, 'PROD-PICK-TEST'), 'Delivered pick still exists.');
+            Target.TestField("Bin Code", 'PROD');
+            Target.TestField("Assigned Document Type", Target."Assigned Document Type"::ProdConsumption);
+            Target.TestField("Assigned Document No.", 'PROD-LP-TEST');
+        end else begin
+            AssertBinQuantity('PROD-LP-ITEM', 'STAGE', 20);
+            AssertBinQuantity('PROD-LP-ITEM', 'PROD', 0);
+            Check(Component."Qty. Picked" = 0, 'Preparation picked production.');
+            Pick.Get(Pick.Type::Pick, 'PROD-PICK-TEST');
+            Pick.TestField("DOPSWHS Prod LP Staged", true);
+            Target.TestField("Bin Code", 'STAGE');
+        end;
+    end;
+
     local procedure PreparationFixture(var Pick: Record "Warehouse Activity Header"; var TakeLine: Record "Warehouse Activity Line"; var LP: Record "DOPSWHS LP Header"; var Target: Record "DOPSWHS LP Header")
     var
         Line: Record "Warehouse Activity Line";
