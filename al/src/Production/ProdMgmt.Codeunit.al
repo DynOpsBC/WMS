@@ -75,6 +75,7 @@ codeunit 72048 "DOPSWHS Prod Mgmt"
         License: Codeunit "DOPSWHS License Mgmt";
         PickMgmt: Codeunit "DOPSWHS Pick Mgmt";
         LPPickPreference: Codeunit "DOPSWHS LP Pick Preference";
+        StockPolicy: Codeunit "DOPSWHS Prod Stock Policy";
         PickNo: Code[20];
         CreationError: Text;
     begin
@@ -122,13 +123,16 @@ codeunit 72048 "DOPSWHS Prod Mgmt"
             LPPickPreference.ConfigureForProduction(ProdOrderNo, LpNo);
             BindSubscription(LPPickPreference);
         end;
+        StockPolicy.SetPreparedLp(LpNo <> '');
         ClearLastError();
         if not TryCreateProductionPick(ProductionOrder) then begin
             CreationError := GetLastErrorText();
+            StockPolicy.SetPreparedLp(false);
             if LpNo <> '' then
                 UnbindSubscription(LPPickPreference);
             Error(CreationError);
         end;
+        StockPolicy.SetPreparedLp(false);
         if LpNo <> '' then
             UnbindSubscription(LPPickPreference);
 
