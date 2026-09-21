@@ -188,6 +188,15 @@ page 72092 "DOPSWHS Pick API"
         PickMgmt.RegisterScannedPickFor(Rec, userId, palletPlan);
     end;
 
+    /// <summary>Explicit capability for intact production LP registration.</summary>
+    [ServiceEnabled]
+    procedure registerProductionPalletsFor(userId: Code[50]; palletPlan: Text)
+    var
+        PickMgmt: Codeunit "DOPSWHS Pick Mgmt";
+    begin
+        PickMgmt.RegisterProductionPalletsFor(Rec, userId, palletPlan);
+    end;
+
     /// <summary>
     /// Genel DELETE yerine kontrollü iptal: yalnız atanmış operatör ve henüz
     /// hareket kaydetmemiş açık pick için çalışır.

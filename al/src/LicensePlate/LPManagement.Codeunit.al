@@ -1409,6 +1409,48 @@ codeunit 72040 "DOPSWHS LP Management"
     end;
 
     /// <summary>
+    /// Called only after the complete production pallet plan is validated, inside
+    /// warehouse registration's transaction. BC registers stock; this maintains
+    /// the intact LP identity and its production-order assignment.
+    /// </summary>
+    procedure StageProductionPickLp(var LP: Record "DOPSWHS LP Header"; PickNo: Code[20]; ProdOrderNo: Code[20]; SourceBinCode: Code[20]; TargetBinCode: Code[20])
+    var
+        TargetBin: Record Bin;
+        RelatedDocument: Code[40];
+    begin
+        EnsureNotPendingReceipt(LP);
+        if not (LP.Status in [LP.Status::Built, LP.Status::Assigned]) then
+            Error('%1 LP''si üretime taşımaya hazır değil.', LP."No.");
+        if ((LP.Status = LP.Status::Assigned) or (LP."Assigned Document Type" <> LP."Assigned Document Type"::None) or (LP."Assigned Document No." <> '')) and
+           not (((LP."Assigned Document Type" = LP."Assigned Document Type"::WhsePick) and (LP."Assigned Document No." = PickNo)) or
+                ((LP."Assigned Document Type" = LP."Assigned Document Type"::ProdConsumption) and (LP."Assigned Document No." = ProdOrderNo)))
+        then
+            Error('%1 LP''si başka bir belgeye atanmıştır.', LP."No.");
+        LP.TestField("Location Code");
+        LP.TestField("Bin Code", SourceBinCode);
+        if (ProdOrderNo = '') or (TargetBinCode = '') then
+            Error('Üretim emri ve hedef üretim rafı zorunludur.');
+        TargetBin.Get(LP."Location Code", TargetBinCode);
+        RelatedDocument := CopyStr('PROD:' + ProdOrderNo + '/PICK:' + PickNo, 1, MaxStrLen(RelatedDocument));
+        LogMutation('LP.ProductionPick');
+        if LP."Bin Code" <> TargetBinCode then begin
+            LP.Validate("Bin Code", TargetBinCode);
+            LP.Modify(true);
+            WriteToLedger(LP, LPActionMoved(), SourceBinCode, TargetBinCode, 0, '', '', RelatedDocument);
+        end;
+        if (LP.Status <> LP.Status::Assigned) or
+           (LP."Assigned Document Type" <> LP."Assigned Document Type"::ProdConsumption) or
+           (LP."Assigned Document No." <> ProdOrderNo)
+        then begin
+            LP.Status := LP.Status::Assigned;
+            LP."Assigned Document Type" := LP."Assigned Document Type"::ProdConsumption;
+            LP."Assigned Document No." := ProdOrderNo;
+            LP.Modify(true);
+            WriteToLedger(LP, LPActionAssigned(), TargetBinCode, TargetBinCode, 0, '', '', RelatedDocument);
+        end;
+    end;
+
+    /// <summary>
     /// Verifies that a quantity belongs to loose bin stock rather than an active LP.
     /// Product-based ad-hoc moves call this before posting so an unspecified pallet
     /// can never be split implicitly. Explicit LP moves use MoveToBin instead.
