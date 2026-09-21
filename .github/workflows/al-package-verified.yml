@@ -2,7 +2,8 @@ name: AL verified package
 on:
   workflow_dispatch:
 permissions:
-  contents: read
+  # Draft release assets require write-level repository access to be visible.
+  contents: write
 jobs:
   compile:
     runs-on: windows-latest
