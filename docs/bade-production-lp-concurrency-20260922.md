@@ -17,9 +17,9 @@ Every round checks source LPs and warehouse stock 100 → 90 in RAW and RAW2; ta
 
 The test fixture API is in the test extension only, guarded by IsSandbox and exact sand0309 environment name. Synthetic active data is cleaned in finally. The API assertions run in separate requests after competing mutations, rather than relying only on response status codes. The initial isolated AL test method could not persist cross-session fixtures; the final harness therefore sets them up through the guarded API.
 
-## Remaining UI check
+## UI follow-up
 
-This is an actual sandbox API integration test, not a two-physical-terminal test or completed terminal UI walkthrough. The emulator is available, but an authenticated BADE sand0309 terminal session is still needed to verify scanning, confirmation dialogs, screen refresh and navigation end to end. The user was asked to log in without sharing passwords or PINs. Do not describe this remaining check as passed.
+This is an actual sandbox API integration test, not a two-physical-terminal test or completed terminal UI walkthrough. The subsequent actual APK 154 emulator walkthrough passed on sand0309: takeover confirmation, source inputs, LP preparation, prepared-LP inputs, delivery and return to the list. See bade-production-lp-terminal-ui-20260922.md for exact scope and limitations. Physical scanner/printer testing remains separate.
 
 The earlier 43 named AL regression tests and the AL 67 physical-stock fix remain documented in bade-production-lp-sandbox-validation-20260922.md. Test extension 1.0.0.73 adds the HTTP fixture/harness; it is not a live release package.
 
