@@ -222,6 +222,7 @@ codeunit 72046 "DOPSWHS Pick Mgmt"
         LPMgt: Codeunit "DOPSWHS LP Management";
         RegisterMovement: Codeunit "Whse.-Activity-Register";
         Plans: Dictionary of [Integer, Text];
+        PlannedStock: Dictionary of [Text, Decimal];
         PlanText: Text;
         OrderNo: Code[20];
         ProductionBin: Code[20];
@@ -293,6 +294,7 @@ codeunit 72046 "DOPSWHS Pick Mgmt"
             if not Plans.Get(TakeLine."Line No.", PlanText) then
                 Error('%1 satırının palet doğrulaması eksik.', TakeLine."Line No.");
             ValidateScannedPickPlan(TakeLine, PlanText);
+            CheckProductionPreparationStock(TakeLine, PlannedStock);
         until TakeLine.Next() = 0;
 
         Movement.Type := Movement.Type::Movement;
@@ -336,6 +338,42 @@ codeunit 72046 "DOPSWHS Pick Mgmt"
         Pick."DOPSWHS Prod Stage Bin" := TargetBinCode;
         Pick.Modify(true);
         Log('Pick.PrepareProductionLP', Pick."No.", OperatorId);
+    end;
+
+    local procedure CheckProductionPreparationStock(Line: Record "Warehouse Activity Line"; var PlannedStock: Dictionary of [Text, Decimal])
+    var
+        Entry: Record "Warehouse Entry";
+        Bin: Record Bin;
+        Parts: JsonArray;
+        KeyText: Text;
+        Planned: Decimal;
+    begin
+        // Same-bin preparation has no native warehouse movement to validate
+        // availability. Check actual stock before any LP metadata is changed,
+        // accumulating demand when several component lines share one stock pool.
+        Bin.Get(Line."Location Code", Line."Bin Code");
+        if Bin."Block Movement" in [Bin."Block Movement"::All, Bin."Block Movement"::Outbound] then
+            Error('%1 kaynak gözünden çıkış engellenmiş.', Bin.Code);
+        Parts.Add(Line."Location Code"); Parts.Add(Line."Bin Code");
+        Parts.Add(Line."Item No."); Parts.Add(Line."Variant Code");
+        Parts.Add(Line."Lot No."); Parts.Add(Line."Serial No."); Parts.Add(Line."Package No.");
+        Parts.WriteTo(KeyText);
+        if not PlannedStock.Get(KeyText, Planned) then
+            Planned := 0;
+        Planned += Line."Qty. to Handle (Base)";
+        PlannedStock.Set(KeyText, Planned);
+        Entry.LockTable();
+        Entry.SetRange("Location Code", Line."Location Code");
+        Entry.SetRange("Bin Code", Line."Bin Code");
+        Entry.SetRange("Item No.", Line."Item No.");
+        Entry.SetRange("Variant Code", Line."Variant Code");
+        Entry.SetRange("Lot No.", Line."Lot No.");
+        Entry.SetRange("Serial No.", Line."Serial No.");
+        Entry.SetRange("Package No.", Line."Package No.");
+        Entry.CalcSums("Qty. (Base)");
+        if Entry."Qty. (Base)" + 0.00001 < Planned then
+            Error('%1 ürününün %2 gözündeki gerçek stoku yetersiz. Lot: %3. Mevcut temel miktar: %4, hazırlanacak: %5. LP ve raf stoklarını kontrol edin.',
+                Line."Item No.", Line."Bin Code", Line."Lot No.", Entry."Qty. (Base)", Planned);
     end;
 
     local procedure AddProductionPreparationMove(Movement: Record "Warehouse Activity Header"; Source: Record "Warehouse Activity Line"; BinCode: Code[20]; IsTake: Boolean; var NextLineNo: Integer)

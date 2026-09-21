@@ -496,7 +496,7 @@ codeunit 72186 "DOPSWHS Prod Pallet Tests"
     end;
 
     [Test]
-    procedure FailedPreparationRollsBackSourceTargetAndPick()
+    procedure MissingPhysicalStockLeavesSourceTargetAndPickUnchanged()
     var
         Pick: Record "Warehouse Activity Header";
         TakeLine: Record "Warehouse Activity Line";
@@ -509,13 +509,310 @@ codeunit 72186 "DOPSWHS Prod Pallet Tests"
         // LP metadata exists but physical warehouse stock is deliberately absent.
         Commit(); // Commit only synthetic fixture state; assert the operation rolls back.
         asserterror Mgt.PrepareProductionLPFor(Pick, Pick."Assigned User ID", 'STAGE', Plan(TakeLine, LP."No.", 10));
-        Check(StrPos(GetLastErrorCallStack(), 'Whse.-Activity-Register') > 0, GetLastErrorText());
+        Check(StrPos(GetLastErrorText(), 'gerçek stoku yetersiz') > 0, GetLastErrorText());
         Check(LPMgt.TotalBaseQuantity(LP."No.") = 100, 'Failed movement changed source LP.');
         Check(LPMgt.TotalBaseQuantity(Target."No.") = 0, 'Failed movement filled target LP.');
         Pick.Get(Pick.Type, Pick."No.");
         Check(not Pick."DOPSWHS Prod LP Staged", 'Failed movement persisted preparation state.');
         TakeLine.Get(Pick.Type, Pick."No.", TakeLine."Line No.");
         Check(TakeLine."Bin Code" = 'RAW', 'Failed movement rebased original pick.');
+    end;
+
+    [Test]
+    procedure MixedItemsAndLotsPrepareAndDeliverTogether()
+    begin
+        MixedPreparation(false);
+    end;
+
+    [Test]
+    procedure FailureOnSecondSourceRollsBackFirstSource()
+    begin
+        MixedPreparation(true);
+    end;
+
+    local procedure MixedPreparation(FailSecond: Boolean)
+    var
+        Pick: Record "Warehouse Activity Header";
+        First: Record "Warehouse Activity Line";
+        Second: Record "Warehouse Activity Line";
+        Place: Record "Warehouse Activity Line";
+        Source: Record "DOPSWHS LP Header";
+        Source2: Record "DOPSWHS LP Header";
+        Target: Record "DOPSWHS LP Header";
+        Content: Record "DOPSWHS LP Line";
+        Item: Record Item;
+        Uom: Record "Item Unit of Measure";
+        Component: Record "Prod. Order Component";
+        Mgt: Codeunit "DOPSWHS Pick Mgmt";
+        LPMgt: Codeunit "DOPSWHS LP Management";
+        Plans: JsonArray;
+        Part: JsonArray;
+        Token: JsonToken;
+        PlanText: Text;
+    begin
+        PreparationFixture(Pick, First, Source, Target);
+        AddPreparationStock(First, 100);
+        Item.Get(First."Item No.");
+        Item."No." := 'PROD-LP-ITEM2'; Item.Insert(false);
+        Uom.Get(First."Item No.", 'PCS');
+        Uom."Item No." := Item."No."; Uom.Insert(false);
+        Component.Get(Component.Status::Released, First."Source No.", 10000, 10000);
+        Component."Line No." := 20000; Component."Item No." := Item."No."; Component.Insert(false);
+        Second := First; Second."Line No." := 30000;
+        Second."Source Subline No." := 20000; Second."Item No." := Item."No.";
+        Second."Bin Code" := 'RAW2'; Second."Lot No." := 'LOT2'; Second.Insert(false);
+        Place := Second; Place."Line No." := 40000;
+        Place."Action Type" := Place."Action Type"::Place; Place."Bin Code" := 'PROD'; Place.Insert(false);
+        AddPreparationStock(Second, 100);
+        Source2 := Source; Source2."No." := 'SECOND-PREP-LP'; Source2."Bin Code" := 'RAW2'; Source2.Insert(false);
+        Content.Get(Source."No.", 10000); Content."LP No." := Source2."No.";
+        Content."Item No." := Item."No."; Content."Lot No." := 'LOT2';
+        if FailSecond then Content.Quantity := 1;
+        Content.Insert(false);
+        Plans.ReadFrom(Plan(First, Source."No.", 10)); Part.ReadFrom(Plan(Second, Source2."No.", 10));
+        Part.Get(0, Token); Plans.Add(Token); Plans.WriteTo(PlanText);
+        if FailSecond then begin
+            Commit();
+            asserterror Mgt.PrepareProductionLPFor(Pick, Pick."Assigned User ID", 'STAGE', PlanText);
+            Check(LPMgt.TotalBaseQuantity(Source."No.") = 100, 'First LP was consumed before the second source failed.');
+            Check(LPMgt.TotalBaseQuantity(Source2."No.") = 1, 'Failed source changed.');
+            Check(LPMgt.TotalBaseQuantity(Target."No.") = 0, 'Failed mixed preparation left target content.');
+            AssertBinQuantity(First."Item No.", 'RAW', 100);
+            AssertBinQuantity(Second."Item No.", 'RAW2', 100);
+            AssertBinQuantity(First."Item No.", 'STAGE', 0);
+            exit;
+        end;
+        Mgt.PrepareProductionLPFor(Pick, Pick."Assigned User ID", 'STAGE', PlanText);
+        Check(LPMgt.TotalBaseQuantity(Target."No.") = 20, 'Mixed target total incorrect.');
+        AssertBinQuantity(First."Item No.", 'RAW', 90);
+        AssertBinQuantity(Second."Item No.", 'RAW2', 90);
+        AssertBinQuantity(First."Item No.", 'STAGE', 10);
+        AssertBinQuantity(Second."Item No.", 'STAGE', 10);
+        First.Get(Pick.Type, Pick."No.", 10000); Second.Get(Pick.Type, Pick."No.", 30000);
+        Clear(Plans); Clear(Part);
+        Plans.ReadFrom(Plan(First, Target."No.", 10)); Part.ReadFrom(Plan(Second, Target."No.", 10));
+        Part.Get(0, Token); Plans.Add(Token); Plans.WriteTo(PlanText);
+        Mgt.DeliverProductionLPFor(Pick, Pick."Assigned User ID", 'PROD', PlanText);
+        AssertBinQuantity(First."Item No.", 'PROD', 10);
+        AssertBinQuantity(Second."Item No.", 'PROD', 10);
+        AssertBinQuantity(First."Item No.", 'STAGE', 0);
+        AssertBinQuantity(Second."Item No.", 'STAGE', 0);
+        Component.Get(Component.Status::Released, First."Source No.", 10000, 10000);
+        Check(Component."Qty. Picked" = 10, 'First component not picked exactly once.');
+        Component.Get(Component.Status::Released, Second."Source No.", 10000, 20000);
+        Check(Component."Qty. Picked" = 10, 'Second component not picked exactly once.');
+        Check(LPMgt.TotalBaseQuantity(Target."No.") = 20, 'Delivery changed mixed LP contents.');
+    end;
+
+    [Test]
+    procedure SourceBoxUomIsConvertedWithoutLosingStock()
+    var
+        Pick: Record "Warehouse Activity Header";
+        Line: Record "Warehouse Activity Line";
+        Source: Record "DOPSWHS LP Header";
+        Target: Record "DOPSWHS LP Header";
+        Content: Record "DOPSWHS LP Line";
+        Uom: Record "Item Unit of Measure";
+        Unit: Record "Unit of Measure";
+        Mgt: Codeunit "DOPSWHS Pick Mgmt";
+        LPMgt: Codeunit "DOPSWHS LP Management";
+    begin
+        PreparationFixture(Pick, Line, Source, Target); AddPreparationStock(Line, 100);
+        if not Unit.Get('PPBOX') then begin Unit.Code := 'PPBOX'; Unit.Insert(false); end;
+        Uom."Item No." := Line."Item No."; Uom.Code := 'PPBOX'; Uom."Qty. per Unit of Measure" := 10; Uom.Insert(false);
+        Content.Get(Source."No.", 10000); Content."Unit of Measure" := 'PPBOX'; Content.Quantity := 10; Content.Modify(false);
+        Mgt.PrepareProductionLPFor(Pick, Pick."Assigned User ID", 'STAGE', Plan(Line, Source."No.", 10));
+        Check(LPMgt.TotalBaseQuantity(Source."No.") = 90, 'Box conversion changed source base quantity.');
+        Check(LPMgt.TotalBaseQuantity(Target."No.") = 10, 'Box conversion changed target base quantity.');
+        Content.Get(Source."No.", 10000); Check(Content.Quantity = 9, 'Expected nine boxes to remain.');
+        Line.Get(Pick.Type, Pick."No.", 10000);
+        Mgt.DeliverProductionLPFor(Pick, Pick."Assigned User ID", 'PROD', Plan(Line, Target."No.", 10));
+        AssertBinQuantity(Line."Item No.", 'PROD', 10);
+    end;
+
+    [Test]
+    procedure WrongOwnerCannotPrepare()
+    begin PreparationRejected(1); end;
+    [Test]
+    procedure BlockedPreparationBinCannotReceive()
+    begin PreparationRejected(2); end;
+    [Test]
+    procedure ProductionBinCannotBeUsedAsPreparationBin()
+    begin PreparationRejected(3); end;
+    [Test]
+    procedure MissingScansCannotPrepare()
+    begin PreparationRejected(4); end;
+    [Test]
+    procedure ExcessScannedQuantityCannotPrepare()
+    begin PreparationRejected(5); end;
+    [Test]
+    procedure WrongLotSourceCannotPrepare()
+    begin PreparationRejected(6); end;
+    [Test]
+    procedure MovedSourceCannotPrepare()
+    begin PreparationRejected(7); end;
+    [Test]
+    procedure ForeignAssignedSourceCannotPrepare()
+    begin PreparationRejected(8); end;
+    [Test]
+    procedure DuplicatePlanLineCannotPrepare()
+    begin PreparationRejected(9); end;
+    [Test]
+    procedure InsufficientScannedQuantityCannotPrepare()
+    begin PreparationRejected(10); end;
+
+    [Test]
+    procedure BlockedLotCannotBePrepared()
+    begin PreparationRejected(11); end;
+    [Test]
+    procedure BlockedSourceCannotBePrepared()
+    begin PreparationRejected(12); end;
+
+    [Test]
+    procedure SharedSameBinStockIsNotCountedTwice()
+    var
+        Pick: Record "Warehouse Activity Header";
+        Line: Record "Warehouse Activity Line";
+        Second: Record "Warehouse Activity Line";
+        Place: Record "Warehouse Activity Line";
+        Source: Record "DOPSWHS LP Header";
+        Target: Record "DOPSWHS LP Header";
+        Mgt: Codeunit "DOPSWHS Pick Mgmt";
+        Plans: JsonArray;
+        Part: JsonArray;
+        Token: JsonToken;
+        PlanText: Text;
+    begin
+        PreparationFixture(Pick, Line, Source, Target); AddPreparationStock(Line, 15);
+        Second := Line; Second."Line No." := 30000; Second.Insert(false);
+        Place.Get(Pick.Type, Pick."No.", 20000);
+        Place.Quantity := 20; Place."Qty. (Base)" := 20;
+        Place."Qty. Outstanding" := 20; Place."Qty. Outstanding (Base)" := 20;
+        Place."Qty. to Handle" := 20; Place."Qty. to Handle (Base)" := 20; Place.Modify(false);
+        Plans.ReadFrom(Plan(Line, Source."No.", 10)); Part.ReadFrom(Plan(Second, Source."No.", 10));
+        Part.Get(0, Token); Plans.Add(Token); Plans.WriteTo(PlanText);
+        Commit();
+        asserterror Mgt.PrepareProductionLPFor(Pick, Pick."Assigned User ID", 'RAW', PlanText);
+        Check(StrPos(GetLastErrorText(), 'gerçek stoku yetersiz') > 0, GetLastErrorText());
+        Pick.Get(Pick.Type, Pick."No."); Check(not Pick."DOPSWHS Prod LP Staged", 'Shared stock was prepared twice.');
+        AssertBinQuantity(Line."Item No.", 'RAW', 15);
+    end;
+
+    [Test]
+    procedure PreparedReplayWrongBinAndMissingDeliveryProofAreRejected()
+    var
+        Pick: Record "Warehouse Activity Header";
+        Line: Record "Warehouse Activity Line";
+        Source: Record "DOPSWHS LP Header";
+        Target: Record "DOPSWHS LP Header";
+        Mgt: Codeunit "DOPSWHS Pick Mgmt";
+    begin
+        PreparationFixture(Pick, Line, Source, Target); AddPreparationStock(Line, 100);
+        Mgt.PrepareProductionLPFor(Pick, Pick."Assigned User ID", 'STAGE', Plan(Line, Source."No.", 10));
+        Commit();
+        asserterror Mgt.PrepareProductionLPFor(Pick, Pick."Assigned User ID", 'RAW2', Plan(Line, Source."No.", 10));
+        AssertBinQuantity(Line."Item No.", 'STAGE', 10);
+        Commit();
+        asserterror Mgt.DeliverProductionLPFor(Pick, Pick."Assigned User ID", 'PROD', '[]');
+        AssertBinQuantity(Line."Item No.", 'STAGE', 10);
+        AssertBinQuantity(Line."Item No.", 'PROD', 0);
+    end;
+
+    [Test]
+    procedure StaleDeliveryAfterTargetMovedIsRejected()
+    var
+        Pick: Record "Warehouse Activity Header";
+        Line: Record "Warehouse Activity Line";
+        Source: Record "DOPSWHS LP Header";
+        Target: Record "DOPSWHS LP Header";
+        Mgt: Codeunit "DOPSWHS Pick Mgmt";
+    begin
+        PreparationFixture(Pick, Line, Source, Target); AddPreparationStock(Line, 100);
+        Mgt.PrepareProductionLPFor(Pick, Pick."Assigned User ID", 'STAGE', Plan(Line, Source."No.", 10));
+        Line.Get(Pick.Type, Pick."No.", 10000);
+        Target.Get(Target."No."); Target."Bin Code" := 'RAW2'; Target.Modify(false);
+        Commit();
+        asserterror Mgt.DeliverProductionLPFor(Pick, Pick."Assigned User ID", 'PROD', Plan(Line, Target."No.", 10));
+        AssertBinQuantity(Line."Item No.", 'STAGE', 10);
+        AssertBinQuantity(Line."Item No.", 'PROD', 0);
+    end;
+
+    local procedure PreparationRejected(Scenario: Integer)
+    var
+        Pick: Record "Warehouse Activity Header";
+        Line: Record "Warehouse Activity Line";
+        Source: Record "DOPSWHS LP Header";
+        Target: Record "DOPSWHS LP Header";
+        Content: Record "DOPSWHS LP Line";
+        Bin: Record Bin;
+        Lot: Record "Lot No. Information";
+        Mgt: Codeunit "DOPSWHS Pick Mgmt";
+        LPMgt: Codeunit "DOPSWHS LP Management";
+        OperatorId: Code[50];
+        TargetBin: Code[20];
+        PlanText: Text;
+        Plans: JsonArray;
+        Token: JsonToken;
+    begin
+        PreparationFixture(Pick, Line, Source, Target); AddPreparationStock(Line, 100);
+        OperatorId := Pick."Assigned User ID"; TargetBin := 'STAGE'; PlanText := Plan(Line, Source."No.", 10);
+        case Scenario of
+            1: OperatorId := 'OTHER-OPERATOR';
+            2: begin Bin.Get(Pick."Location Code", 'STAGE'); Bin."Block Movement" := Bin."Block Movement"::Inbound; Bin.Modify(false); end;
+            3: TargetBin := 'PROD';
+            4: PlanText := '[]';
+            5: PlanText := Plan(Line, Source."No.", 11);
+            6: begin Content.Get(Source."No.", 10000); Content."Lot No." := 'WRONG-LOT'; Content.Modify(false); end;
+            7: begin Source."Bin Code" := 'RAW2'; Source.Modify(false); end;
+            8: begin Source.Status := Source.Status::Assigned; Source."Assigned Document Type" := Source."Assigned Document Type"::WhsePick; Source."Assigned Document No." := 'OTHER-PICK'; Source.Modify(false); end;
+            9: begin Plans.ReadFrom(PlanText); Plans.Get(0, Token); Plans.Add(Token); Plans.WriteTo(PlanText); end;
+            10: PlanText := Plan(Line, Source."No.", 9);
+            11: begin Lot."Item No." := Line."Item No."; Lot."Lot No." := Line."Lot No."; Lot.Blocked := true; Lot.Insert(false); end;
+            12: begin Bin.Get(Pick."Location Code", 'RAW'); Bin."Block Movement" := Bin."Block Movement"::Outbound; Bin.Modify(false); end;
+        end;
+        Commit();
+        asserterror Mgt.PrepareProductionLPFor(Pick, OperatorId, TargetBin, PlanText);
+        Check(LPMgt.TotalBaseQuantity(Target."No.") = 0, 'Rejected preparation filled target.');
+        Check(LPMgt.TotalBaseQuantity(Source."No.") = 100, 'Rejected preparation changed source.');
+        Pick.Get(Pick.Type, Pick."No."); Check(not Pick."DOPSWHS Prod LP Staged", 'Rejected preparation marked complete.');
+        AssertBinQuantity(Line."Item No.", 'RAW', 100); AssertBinQuantity(Line."Item No.", 'STAGE', 0);
+    end;
+
+    [Test]
+    procedure SameBinPreparationWithoutPhysicalStockIsRejected()
+    var
+        Pick: Record "Warehouse Activity Header";
+        Line: Record "Warehouse Activity Line";
+        Source: Record "DOPSWHS LP Header";
+        Target: Record "DOPSWHS LP Header";
+        Mgt: Codeunit "DOPSWHS Pick Mgmt";
+    begin
+        PreparationFixture(Pick, Line, Source, Target);
+        Commit();
+        asserterror Mgt.PrepareProductionLPFor(Pick, Pick."Assigned User ID", 'RAW', Plan(Line, Source."No.", 10));
+        Pick.Get(Pick.Type, Pick."No."); Check(not Pick."DOPSWHS Prod LP Staged", 'Nonexistent stock was prepared.');
+    end;
+
+    [Test]
+    procedure OwnershipChangeBetweenPreparationAndDeliveryIsEnforced()
+    var
+        Pick: Record "Warehouse Activity Header";
+        Line: Record "Warehouse Activity Line";
+        Source: Record "DOPSWHS LP Header";
+        Target: Record "DOPSWHS LP Header";
+        Mgt: Codeunit "DOPSWHS Pick Mgmt";
+        OldOwner: Code[50];
+    begin
+        PreparationFixture(Pick, Line, Source, Target); AddPreparationStock(Line, 100);
+        OldOwner := Pick."Assigned User ID";
+        Mgt.PrepareProductionLPFor(Pick, OldOwner, 'STAGE', Plan(Line, Source."No.", 10));
+        Mgt.ReassignPick(Pick, 'PP-NEW-OWNER', 'Sandbox ownership handover test');
+        Line.Get(Pick.Type, Pick."No.", 10000);
+        Commit();
+        asserterror Mgt.DeliverProductionLPFor(Pick, OldOwner, 'PROD', Plan(Line, Target."No.", 10));
+        AssertBinQuantity(Line."Item No.", 'STAGE', 10);
+        Mgt.DeliverProductionLPFor(Pick, 'PP-NEW-OWNER', 'PROD', Plan(Line, Target."No.", 10));
+        AssertBinQuantity(Line."Item No.", 'PROD', 10);
     end;
 
     local procedure PreparationFixture(var Pick: Record "Warehouse Activity Header"; var TakeLine: Record "Warehouse Activity Line"; var LP: Record "DOPSWHS LP Header"; var Target: Record "DOPSWHS LP Header")
@@ -665,6 +962,7 @@ codeunit 72186 "DOPSWHS Prod Pallet Tests"
         Component: Record "Prod. Order Component";
         ProdOrder: Record "Production Order";
         Item: Record Item;
+        Lot: Record "Lot No. Information";
         Reservation: Record "Reservation Entry";
         TrackingSpec: Record "Tracking Specification";
         WhseTracking: Record "Whse. Item Tracking Line";
@@ -674,10 +972,10 @@ codeunit 72186 "DOPSWHS Prod Pallet Tests"
         ItemUom: Record "Item Unit of Measure";
     begin
         // Exact, synthetic fixture IDs only; no customer stock is selected.
-        Reservation.SetRange("Item No.", 'PROD-LP-ITEM'); Reservation.DeleteAll(false);
-        TrackingSpec.SetRange("Item No.", 'PROD-LP-ITEM'); TrackingSpec.DeleteAll(false);
-        WhseTracking.SetRange("Item No.", 'PROD-LP-ITEM'); WhseTracking.DeleteAll(false);
-        ItemEntry.SetRange("Item No.", 'PROD-LP-ITEM'); ItemEntry.DeleteAll(false);
+        Reservation.SetFilter("Item No.", 'PROD-LP-ITEM|PROD-LP-ITEM2'); Reservation.DeleteAll(false);
+        TrackingSpec.SetFilter("Item No.", 'PROD-LP-ITEM|PROD-LP-ITEM2'); TrackingSpec.DeleteAll(false);
+        WhseTracking.SetFilter("Item No.", 'PROD-LP-ITEM|PROD-LP-ITEM2'); WhseTracking.DeleteAll(false);
+        ItemEntry.SetFilter("Item No.", 'PROD-LP-ITEM|PROD-LP-ITEM2'); ItemEntry.DeleteAll(false);
         Entry.SetRange("Location Code", 'PPTEST'); Entry.DeleteAll(false);
         Content.SetRange("Location Code", 'PPTEST'); Content.DeleteAll(false);
         ActivityLine.SetRange("Location Code", 'PPTEST'); ActivityLine.DeleteAll(false);
@@ -692,8 +990,9 @@ codeunit 72186 "DOPSWHS Prod Pallet Tests"
         Location.SetRange(Code, 'PPTEST'); Location.DeleteAll(false);
         Component.SetRange("Prod. Order No.", 'PROD-LP-TEST'); Component.DeleteAll(false);
         ProdOrder.SetRange("No.", 'PROD-LP-TEST'); ProdOrder.DeleteAll(false);
-        ItemUom.SetRange("Item No.", 'PROD-LP-ITEM'); ItemUom.DeleteAll(false);
-        Item.SetRange("No.", 'PROD-LP-ITEM'); Item.DeleteAll(false);
+        ItemUom.SetFilter("Item No.", 'PROD-LP-ITEM|PROD-LP-ITEM2'); ItemUom.DeleteAll(false);
+        Lot.SetFilter("Item No.", 'PROD-LP-ITEM|PROD-LP-ITEM2'); Lot.DeleteAll(false);
+        Item.SetFilter("No.", 'PROD-LP-ITEM|PROD-LP-ITEM2'); Item.DeleteAll(false);
         Tracking.SetRange(Code, 'PPTEST'); Tracking.DeleteAll(false);
         BinType.SetRange(Code, 'PPTEST'); BinType.DeleteAll(false);
     end;
