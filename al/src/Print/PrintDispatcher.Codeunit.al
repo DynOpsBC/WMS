@@ -118,10 +118,7 @@ codeunit 72051 "DOPSWHS Print Dispatcher"
     procedure PrintPalletItemLabelsWithOptions(var LP: Record "DOPSWHS LP Header"; PrinterId: Code[50]; Copies: Integer; OptionsJson: Text)
     var
         TargetPrinter: Code[50];
-        LPManagement: Codeunit "DOPSWHS LP Management";
     begin
-        // Validate every line before the first print job can be committed.
-        LPManagement.CheckMteStockSources(LP);
         TargetPrinter := ResolvePalletItemLabelPrinter(PrinterId);
         if PrinterIsPdf(TargetPrinter) then
             PrintPalletItemReport(LP, TargetPrinter, Copies, OptionsJson)

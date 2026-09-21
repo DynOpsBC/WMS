@@ -227,9 +227,12 @@ page 72088 "DOPSWHS LP API"
     procedure addLineFromBinWithSource(itemNo: Code[20]; unitOfMeasure: Code[10]; quantity: Decimal; lotNo: Code[50]; serialNo: Code[50]; sourceBinCode: Code[20]; userId: Code[50]; sourceItemLedgerEntryNo: Integer)
     var
         LPMgt: Codeunit "DOPSWHS LP Management";
+        SourceEntry: Record "Item Ledger Entry";
     begin
         if sourceItemLedgerEntryNo <= 0 then
             Error('Kaynak madde defteri girişini seçin.');
+        SourceEntry.Get(sourceItemLedgerEntryNo);
+        SourceEntry.TestField("Document No.");
         LPMgt.AddLineFromBin(Rec, itemNo, unitOfMeasure, quantity, lotNo, serialNo, sourceBinCode, userId, sourceItemLedgerEntryNo);
     end;
 

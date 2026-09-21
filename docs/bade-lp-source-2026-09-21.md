@@ -1,26 +1,38 @@
-# BADE 1.14.143 / BC 1.14.1.61 — LP kaynak giriş bağlantısı
+# BADE LP kaynak düzeltmesi — canlı güvenlik incelemesi
 
-## Neden
+## Yayın durumu
 
-Mevcut LP'ye `AddLineFromBin` ile ürün eklenirken raf stoğu kontrol edilip gerekirse raf hareketi yapılıyor, ancak LP satırına kaynak madde defteri giriş numarası ve kaynak belge yazılmıyordu. Etiket bu satırda depo giriş numarası yerine U.Y ve tarih olarak LP oluşturma tarihini kullanabiliyordu. ILE üzerindeki LP alanı da güncellenmiyordu. Fotoğraftaki LP000400: 150 adet bağlı satır, 850 adet kaynak bilgisi eksik satır durumuyla uyumlu. Canlı kayıt okunamadığı için bu örneğin gerçek kaynak giriş numarası henüz doğrulanmadı.
+**1.14.143 APK / BC 1.14.1.61 canlıya alınmamalı.** Güvenlik incelemesinde tespit edilen davranışlar aşağıdaki 1.14.144 / BC 1.14.1.62 adayında daraltıldı. Yeni aday da BADE sandbox doğrulaması yapılmadan canlıya hazır olarak değerlendirilmemeli.
 
-## Düzeltme
+## Tespit edilen ve kaldırılan riskler
 
-- BADE terminal Satır Ekle akışında aynı ürün/varyant/lot/seri/lokasyonun kaynak girişleri tarih, belge ve ayrılabilir miktarla gösterilir; kullanıcı seçer.
-- `addLineFromBinWithSource` kaynak girişini zorunlu taşır; eski BC'ye sessiz geri dönüş yoktur.
-- Sunucu kaynak kimliğini ve temel birimde ayrılabilir miktarı kontrol eder, kaynak bağlantısını satır eklemeyle aynı işlemde yazar. Stoktan toplu LP üretimi de aynı yolu kullanır.
-- Eski istemci kaynak seçmiyorsa yalnız tek uygun giriş otomatik seçilir; birden fazla giriş varsa işlem açıklamayla reddedilir.
-- Mevcut eksik satırlar terminal ve BC LP kartından **Kaynak Girişi Bağla** ile onarılır. Yanlış ürün/lot/seri/varyant/lokasyon ve yetersiz miktar reddedilir. Mevcut kaynak değiştirilemez. Miktar ve raf hareketi yapılmaz; hareket geçmişine sıfır miktarlı kaynak bağlama kaydı yazılır. Tekrarlanan istek çoğaltılmaz.
-- **LP Bilgisini Yenile** raf kaynaklı eski satırları yalnız tek uygun ve yeterli stok girişi varsa onarır. Ürün/lot benzerliğine dayalı eski tahmin kaldırıldı. Birden fazla aday varsa LP kartından seçim gerekir. Tarihsel tüketim LP referansları silinmez.
-- Etiket basılmadan bütün aktif stok satırlarının kaynak bilgisi kontrol edilir. Kaynağı eksik satır için açıklama gösterilir. Sıfır miktarlı eski satırlar toplu etiket verisine katılmaz.
-- Giriş Yapan kullanıcı düzeltmesi de bu sürümde korunur.
+- Kalan stokta tek eşleşme bulunması, eski LP satırının gerçek kökeninin kanıtı değildir. Otomatik eski-kaynak bağlama kaldırıldı. LP Bilgisini Yenile yalnız kayıtlı kesin kaynak bağlantılarını/standart kayıt ilişkilerini yansıtır. Kaynaksız satır için kullanıcı doğru girişi açıkça seçer.
+- Yeni genel kaynak-zorunluluğu, normal üretim LP'lerini ve onarımı mümkün olmayan tarihsel LP etiketlerini engelleyebiliyordu. Genel baskı engeli kaldırıldı; mevcut etiket yolları kaynak eksikliği yüzünden yeni bir engele takılmaz.
+- Bağlantı onarımı SKT'yi kaynak girişten koşulsuz kopyalıyordu. Onarım mevcut SKT'yi korur; iki bilinen tarih çelişiyorsa reddedilir. Yeni oluşturulan satır kaynak SKT'yi alır.
+- Eski addLineFromBin uç noktası kaynak numarası olmadan çalışmaya devam eder. Yeni BADE APK addLineFromBinWithSource kullanır ve açık kaynak seçer. Kaynağı olmayan eski istemciye kaynak tahmini yapılmaz.
+- Kaynak seçimindeki toplam 100 kayıt sınırı kaldırıldı. Belge numarası boş girişler seçilemez ve yeni API/onarım tarafından reddedilir.
 
-## Doğrulama
+## Korunan düzeltme
 
-Android release derlemesi başarılı; 405 birim testi geçti, lint 0 hata (21 uyarı). APK imzası 1.14.141/142 ile aynı. BC 1.14.1.61 ve test paketi Windows CI üzerinde başarıyla derlendi: https://github.com/DynOpsBC/WMS/actions/runs/35582199867. AL testleri yalnız derlendi; BC sandbox içinde yürütülmedi. Ayrıntılar paket içindeki DOGRULAMA.txt dosyasında. AL regresyon testleri: 150+850 onarım/etiket, yeni raf ekleme, belirsiz eşleşme, farklı lot/lokasyon, miktar yetersizliği, koli-temel birim dönüşümü, tekrarlanan istek, tarihsel LP koruma, kaynak eksikliği, mevcut kaynağı değiştirmeme. AL testleri BC sandbox içinde ayrıca yürütülmelidir.
+Yeni BADE Satır Ekle akışında aynı ürün/varyant/lot/seri/lokasyon için kaynak belge/giriş seçilir. Sunucu eşleşmeyi ve temel birimde LP'ye ayrılabilir miktarı kontrol eder. Kaynak numarası, belge ve miktar referansı satıra aynı işlemde yazılır. Stoktan toplu LP oluşturma zaten seçilmiş olan kesin giriş numarasını taşır.
 
-## Kurulum ve mevcut palet
+Mevcut LP satırında Kaynak Girişi Bağla işlemi yalnız bağlantı alanlarını ve ILE özel LP alanlarını günceller; stok/ambar hareketi oluşturmaz, miktar/raf/SKT değiştirmez. Mevcut dolu kaynak değiştirilemez. Tekrarlanan istek ikinci stok/audit kaydı oluşturmaz. Sıfır miktarlı kaynak-bağlandı audit kaydı tutulur.
 
-Önce BCWMSApp 1.14.1.61, ardından BADE APK 1.14.143 kurulmalı. Canlıya paket yüklenmedi, mevcut stok/LP kaydı değiştirilmedi, fiziksel baskı yapılmadı.
+## Test kapsamı ve sınırı
 
-LP000400 kartındaki 850 adetlik satırın kaynak girişini doğrulayın. Madde Defter Girişlerinde ilgili pozitif giriş seçilip LP Bilgisini Yenile çalıştırılabilir. Otomatik eşleşme bulunmazsa LP satırından Kaynak Girişi Bağla ile doğru belge/giriş seçilir. Kaynak giriş numarası ve belge, satırda ve ILE LP sütununda doğrulandıktan sonra etiket yeniden basılır. Eski kâğıt etiket kendiliğinden değişmez.
+- Android release test/lint/build ve Windows AL derleme sonuçları paket DOGRULAMA.txt içinde.
+- AL kaynak regresyonları derlenir; **BC runtime içinde henüz çalıştırılmadı**. TestPermissions=Disabled olduğundan runtime testleri başarılı olsa dahi terminal kullanıcısının gerçek izinleri ayrıca kontrol edilmelidir.
+- Mevcut Azure oturumu BADE tenant için AADSTS50020 alıyor. BADE canlı kayıtları okunamadı/değiştirilmedi, fiziksel etiket basılmadı.
+
+## Canlı öncesi gerekli BADE sandbox kontrolleri
+
+1. Önce BC 1.14.1.62, sonra APK 1.14.144 test ortamında kurulmalı; paket yüklemesinin eski LP/source alanlarını kendiliğinden değiştirmediği doğrulanmalı.
+2. Ayrı test uygulamasındaki codeunit 72182 Microsoft Test Explorer veya Test Tool üzerinden çalıştırılmalı. Uygulamanın kendi Test Center'ı bu Subtype=Test codeunit'ini çalıştırmaz.
+3. 150 bağlı + 850 kaynaksız örnekte LP Bilgisini Yenile'nin kaynak tahmin etmediği doğrulanmalı. 850 satırına açıkça doğru giriş seçildiğinde ILE Quantity/Remaining Quantity, toplam LP miktarı, raf ve SKT önce/sonra aynı kalmalı; sadece kaynak/LP referansları değişmeli. İkinci aynı istek yeni audit yaratmamalı.
+4. Farklı ürün/lot/seri/varyant/lokasyon, yetersiz stok, çelişen SKT ve boş belge reddedilmeli; başarısız işlem hiçbir kaynak bağlantısı bırakmamalı.
+5. Eski kaynak-opsiyonel APK/API, yeni kaynak seçmeli ekleme, toplu LP oluşturma, üretim LP etiketi ve tarihsel etiket yeniden basımı denenmeli.
+6. BADE müşteri PDF raporu 60150 kullanılıyorsa her PIN kullanıcısının displayName'i aynı şirkette tek aktif Employee ile eşleşmeli. Eşleşme yok/çoklu ise otomatik PDF baskısı hata verebilir; mal kabul başarılı kalabilir. ZPL bu Employee eşleşmesine ihtiyaç duymaz. Gerçek terminal rolüyle mal kabul+otomatik baskı ve bir yeniden baskı doğrulanmalı.
+
+## Mevcut LP000400
+
+Canlı 850 adetlik satır henüz onarılmadı. Doğru kaynak belge/giriş kullanıcı tarafından doğrulanıp seçilmeli; ardından etiket yeniden basılmalı. Eski kâğıt etiket veya eski giriş-yapan geçmişi kendiliğinden değişmez. Yeni basımdaki ad, o anda PIN ile giriş yapan operatördür.

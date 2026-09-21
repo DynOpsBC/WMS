@@ -37,7 +37,7 @@ pageextension 72313 "DOPSWHS Item Ledger Entries" extends "Item Ledger Entries"
             {
                 ApplicationArea = All;
                 Caption = 'LP Bilgisini Yenile';
-                ToolTip = 'Seçili girişlerin LP bilgisini yeniler. Kaynağı eksik stok satırlarını yalnız tek ve yeterli kaynak varsa bağlar; belirsiz satırlar LP kartından Kaynak Girişi Bağla ile seçilmelidir.';
+                ToolTip = 'Seçili girişlerin mevcut kaynak bağlantılarından LP bilgisini yeniler. Eksik kaynakları tahmin ederek bağlamaz; LP kartından Kaynak Girişi Bağla ile doğru giriş seçilmelidir.';
                 Image = RefreshLines;
                 Promoted = true;
                 PromotedCategory = Process;

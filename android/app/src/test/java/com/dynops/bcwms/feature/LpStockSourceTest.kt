@@ -36,6 +36,10 @@ class LpStockSourceTest {
         val rows = listOf(entry(53, 850.0), entry(454, 150.0))
         assertEquals(listOf(53, 454), lpStockSourceEntries(rows, key).map { it.entryNo })
     }
+    @Test fun `source lookup does not impose a total row limit`() {
+        assertFalse(lpStockSourcePath(key).contains("\$top="))
+        assertTrue(lpStockSourcePath(key).contains("\$orderby=postingDate,entryNo"))
+    }
     @Test fun `query carries exact location lot serial variant and escapes quotes`() {
         val path = lpStockSourcePath(key.copy(itemNo = "O'RING", serialNo = "S'1", variantCode = "V1"))
         assertTrue(path.contains("itemNo eq 'O''RING'"))

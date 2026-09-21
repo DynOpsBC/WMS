@@ -35,7 +35,7 @@ internal fun lpStockSourcePath(key: LpStockSourceKey): String {
         eq("lotNo", key.lotNo), eq("serialNo", key.serialNo), eq("variantCode", key.variantCode),
         "quantity gt 0", "remainingQuantity gt 0",
     ).joinToString(" and ")
-    return "itemLedgerEntries?\$filter=$filter&\$orderby=postingDate,entryNo&\$top=100"
+    return "itemLedgerEntries?\$filter=$filter&\$orderby=postingDate,entryNo"
 }
 
 internal fun lpStockSourceEntries(rows: List<JSONObject>, key: LpStockSourceKey): List<LpStockSourceEntry> =
@@ -101,11 +101,12 @@ internal fun LpStockSourceSheet(
             }
             LazyColumn(Modifier.fillMaxWidth().heightIn(max = 350.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 items(entries, key = { it.entryNo }) { entry ->
-                    OutlinedCard(onClick = { selected = entry.entryNo }, modifier = Modifier.fillMaxWidth()) {
+                    val selectable = entry.documentNo.isNotBlank()
+                    OutlinedCard(onClick = { selected = entry.entryNo }, enabled = selectable, modifier = Modifier.fillMaxWidth()) {
                         Row(Modifier.padding(10.dp)) {
-                            RadioButton(selected = selected == entry.entryNo, onClick = { selected = entry.entryNo })
+                            RadioButton(selected = selected == entry.entryNo, onClick = { selected = entry.entryNo }, enabled = selectable)
                             Column(Modifier.weight(1f).padding(start = 4.dp)) {
-                                Text(entry.documentNo.ifBlank { "Belge numarası boş" }, fontWeight = FontWeight.Bold)
+                                Text(entry.documentNo.ifBlank { "Belge no eksik — bağlanamaz" }, fontWeight = FontWeight.Bold)
                                 Text("${entry.postingDate} · Giriş #${entry.entryNo}", style = MaterialTheme.typography.bodySmall)
                                 Text("LP'ye ayrılabilir: ${entry.available} ${entry.baseUom}", style = MaterialTheme.typography.bodySmall)
                             }

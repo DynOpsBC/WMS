@@ -33,7 +33,7 @@ codeunit 72182 "DOPSWHS LP Stock Source Tests"
 
         // This is the 150-linked + 850-appended field case. Repair is a
         // reference change only; neither stock entry nor LP quantity changes.
-        Management.RepairUnlinkedStockLinesForEntry(Entry."Entry No.");
+        Management.LinkStockLineSource(LP, Line."Line No.", Entry."Entry No.");
         Line.Get(LP."No.", Line."Line No.");
         Check(Line."Source Item Ledger Entry No." = Entry."Entry No.", '850 was not linked to its own entry.');
         Check(Line."Source Document No." = 'MG-850', 'Source document was not restored.');
@@ -53,47 +53,15 @@ codeunit 72182 "DOPSWHS LP Stock Source Tests"
         LP: Record "DOPSWHS LP Header";
         Entry: Record "Item Ledger Entry";
         Line: Record "DOPSWHS LP Line";
-        Location: Record Location;
-        Bin: Record Bin;
-        Content: Record "Bin Content";
-        WarehouseEntry: Record "Warehouse Entry";
-        LastWarehouseEntry: Record "Warehouse Entry";
         Management: Codeunit "DOPSWHS LP Management";
     begin
         Fixture(LP, Entry, Line, 850);
         Line.Delete(false);
-        if not Location.Get(LP."Location Code") then begin
-            Location.Code := LP."Location Code";
-            Location.Insert(false);
-        end;
-        if not Bin.Get(LP."Location Code", LP."Bin Code") then begin
-            Bin."Location Code" := LP."Location Code";
-            Bin.Code := LP."Bin Code";
-            Bin.Insert(false);
-        end;
-        Content."Location Code" := LP."Location Code";
-        Content."Bin Code" := LP."Bin Code";
-        Content."Item No." := Entry."Item No.";
-        Content."Unit of Measure Code" := 'PCS';
-        Content."Qty. per Unit of Measure" := 1;
-        Content.Insert(false);
-        if LastWarehouseEntry.FindLast() then
-            WarehouseEntry."Entry No." := LastWarehouseEntry."Entry No." + 1
-        else
-            WarehouseEntry."Entry No." := 1;
-        WarehouseEntry."Location Code" := LP."Location Code";
-        WarehouseEntry."Bin Code" := LP."Bin Code";
-        WarehouseEntry."Item No." := Entry."Item No.";
-        WarehouseEntry."Lot No." := Entry."Lot No.";
-        WarehouseEntry."Unit of Measure Code" := 'PCS';
-        WarehouseEntry.Quantity := 850;
-        WarehouseEntry."Qty. (Base)" := 850;
-        WarehouseEntry.Insert(false);
+        CreateLooseStock(LP, Entry);
         Management.AddLineFromBin(LP, Entry."Item No.", 'PCS', 850, Entry."Lot No.", '', LP."Bin Code", 'SOURCE-TEST', Entry."Entry No.");
         Line.Get(LP."No.", 10000);
         Check(Line."Source Item Ledger Entry No." = Entry."Entry No.", 'New append lost its source entry.');
         Check(Line."Source Document No." = Entry."Document No.", 'New append lost its document.');
-        Management.CheckMteStockSources(LP);
         Entry.Get(Entry."Entry No.");
         Check(Entry."DOPSWHS LP No." = LP."No.", 'New append did not update the entry LP field.');
     end;
@@ -106,6 +74,7 @@ codeunit 72182 "DOPSWHS LP Stock Source Tests"
         OtherEntry: Record "Item Ledger Entry";
         Line: Record "DOPSWHS LP Line";
         Management: Codeunit "DOPSWHS LP Management";
+        Propagation: Codeunit "DOPSWHS LP Propagation";
     begin
         Fixture(LP, Entry, Line, 850);
         OtherEntry := Entry;
@@ -113,7 +82,7 @@ codeunit 72182 "DOPSWHS LP Stock Source Tests"
         OtherEntry.Quantity := 150;
         OtherEntry."Remaining Quantity" := 150;
         OtherEntry.Insert(false);
-        Management.RepairUnlinkedStockLinesForEntry(Entry."Entry No.");
+        Check(not Propagation.BackfillItemLedgerEntryLp(Entry), 'Refresh guessed an unproven source.');
         Line.Get(LP."No.", Line."Line No.");
         Check(Line."Source Item Ledger Entry No." = 0, 'An ambiguous source was guessed.');
         Management.LinkStockLineSource(LP, Line."Line No.", Entry."Entry No.");
@@ -217,7 +186,41 @@ codeunit 72182 "DOPSWHS LP Stock Source Tests"
     end;
 
     [Test]
-    procedure MissingSourceFailsBeforePrinting()
+    procedure RefreshDoesNotGuessEvenOneAvailableSource()
+    var
+        LP: Record "DOPSWHS LP Header";
+        Entry: Record "Item Ledger Entry";
+        Line: Record "DOPSWHS LP Line";
+        Propagation: Codeunit "DOPSWHS LP Propagation";
+    begin
+        Fixture(LP, Entry, Line, 850);
+        Check(not Propagation.BackfillItemLedgerEntryLp(Entry), 'One remaining entry is not historical origin proof.');
+        Line.Get(LP."No.", Line."Line No.");
+        Check(Line."Source Item Ledger Entry No." = 0, 'Refresh silently assigned a source.');
+        Entry.Get(Entry."Entry No.");
+        Check(Entry."DOPSWHS LP No." = '', 'Refresh silently stamped an unproven LP.');
+    end;
+
+    [Test]
+    procedure RepairPreservesKnownExpiryWhenSourceExpiryIsBlank()
+    var
+        LP: Record "DOPSWHS LP Header";
+        Entry: Record "Item Ledger Entry";
+        Line: Record "DOPSWHS LP Line";
+        Management: Codeunit "DOPSWHS LP Management";
+        OriginalExpiry: Date;
+    begin
+        Fixture(LP, Entry, Line, 850);
+        OriginalExpiry := DMY2Date(1, 1, 2030);
+        Line."Expiration Date" := OriginalExpiry;
+        Line.Modify(false);
+        Management.LinkStockLineSource(LP, Line."Line No.", Entry."Entry No.");
+        Line.Get(LP."No.", Line."Line No.");
+        Check(Line."Expiration Date" = OriginalExpiry, 'Repair cleared existing expiry metadata.');
+    end;
+
+    [Test]
+    procedure ConflictingExpiryRejectsRepairWithoutChangingLine()
     var
         LP: Record "DOPSWHS LP Header";
         Entry: Record "Item Ledger Entry";
@@ -225,10 +228,31 @@ codeunit 72182 "DOPSWHS LP Stock Source Tests"
         Management: Codeunit "DOPSWHS LP Management";
     begin
         Fixture(LP, Entry, Line, 850);
-        asserterror Management.CheckMteStockSources(LP);
-        Check(StrPos(GetLastErrorText(), 'Kaynak Girişi Bağla') > 0, 'Missing origin must be explained before printing.');
-        Management.LinkStockLineSource(LP, Line."Line No.", Entry."Entry No.");
-        Management.CheckMteStockSources(LP);
+        Line."Expiration Date" := DMY2Date(1, 1, 2030);
+        Line.Modify(false);
+        Entry."Expiration Date" := DMY2Date(1, 1, 2031);
+        Entry.Modify(false);
+        asserterror Management.LinkStockLineSource(LP, Line."Line No.", Entry."Entry No.");
+        Check(StrPos(GetLastErrorText(), 'son kullanma tarihi') > 0, 'Conflicting expiry was not rejected.');
+        Line.Get(LP."No.", Line."Line No.");
+        Check(Line."Expiration Date" = DMY2Date(1, 1, 2030), 'Failed repair changed expiry.');
+        Check(Line."Source Item Ledger Entry No." = 0, 'Failed repair assigned source.');
+    end;
+
+    [Test]
+    procedure BlankDocumentCannotBePresentedAsRepairedLabel()
+    var
+        LP: Record "DOPSWHS LP Header";
+        Entry: Record "Item Ledger Entry";
+        Line: Record "DOPSWHS LP Line";
+        Management: Codeunit "DOPSWHS LP Management";
+    begin
+        Fixture(LP, Entry, Line, 850);
+        Entry."Document No." := '';
+        Entry.Modify(false);
+        asserterror Management.LinkStockLineSource(LP, Line."Line No.", Entry."Entry No.");
+        Line.Get(LP."No.", Line."Line No.");
+        Check(Line."Source Item Ledger Entry No." = 0, 'Missing document repair should fail atomically.');
     end;
 
     [Test]
@@ -247,6 +271,62 @@ codeunit 72182 "DOPSWHS LP Stock Source Tests"
         OtherEntry.Insert(false);
         asserterror Management.LinkStockLineSource(LP, Line."Line No.", OtherEntry."Entry No.");
         Check(StrPos(GetLastErrorText(), 'mevcut kaynak değiştirilemez') > 0, 'Existing origin should not be overwritten.');
+    end;
+
+    [Test]
+    procedure LegacyAppendWithoutSourceStillWorks()
+    var
+        LP: Record "DOPSWHS LP Header";
+        Entry: Record "Item Ledger Entry";
+        Line: Record "DOPSWHS LP Line";
+        Management: Codeunit "DOPSWHS LP Management";
+    begin
+        Fixture(LP, Entry, Line, 850);
+        Line.Delete(false);
+        CreateLooseStock(LP, Entry);
+        Management.AddLineFromBin(LP, Entry."Item No.", 'PCS', 850, Entry."Lot No.", '', LP."Bin Code", 'SOURCE-TEST');
+        Line.Get(LP."No.", 10000);
+        Check(Line.Quantity = 850, 'Legacy append failed.');
+        Check(Line."Source Item Ledger Entry No." = 0, 'Legacy API guessed a source.');
+        Entry.Get(Entry."Entry No.");
+        Check(Entry."DOPSWHS LP No." = '', 'Legacy append wrote an unproven entry reference.');
+    end;
+
+    local procedure CreateLooseStock(LP: Record "DOPSWHS LP Header"; Entry: Record "Item Ledger Entry")
+    var
+        Location: Record Location;
+        Bin: Record Bin;
+        Content: Record "Bin Content";
+        WarehouseEntry: Record "Warehouse Entry";
+        LastWarehouseEntry: Record "Warehouse Entry";
+    begin
+        if not Location.Get(LP."Location Code") then begin
+            Location.Code := LP."Location Code";
+            Location.Insert(false);
+        end;
+        if not Bin.Get(LP."Location Code", LP."Bin Code") then begin
+            Bin."Location Code" := LP."Location Code";
+            Bin.Code := LP."Bin Code";
+            Bin.Insert(false);
+        end;
+        Content."Location Code" := LP."Location Code";
+        Content."Bin Code" := LP."Bin Code";
+        Content."Item No." := Entry."Item No.";
+        Content."Unit of Measure Code" := 'PCS';
+        Content."Qty. per Unit of Measure" := 1;
+        Content.Insert(false);
+        if LastWarehouseEntry.FindLast() then
+            WarehouseEntry."Entry No." := LastWarehouseEntry."Entry No." + 1
+        else
+            WarehouseEntry."Entry No." := 1;
+        WarehouseEntry."Location Code" := LP."Location Code";
+        WarehouseEntry."Bin Code" := LP."Bin Code";
+        WarehouseEntry."Item No." := Entry."Item No.";
+        WarehouseEntry."Lot No." := Entry."Lot No.";
+        WarehouseEntry."Unit of Measure Code" := 'PCS';
+        WarehouseEntry.Quantity := 850;
+        WarehouseEntry."Qty. (Base)" := 850;
+        WarehouseEntry.Insert(false);
     end;
 
     local procedure Fixture(var LP: Record "DOPSWHS LP Header"; var Entry: Record "Item Ledger Entry"; var Line: Record "DOPSWHS LP Line"; Quantity: Decimal)

@@ -495,7 +495,6 @@ codeunit 72428 "DOPSWHS LP Propagation"
     begin
         // Yeni akışta her LP satırı kesin kaynak giriş numarasını taşır. Tek
         // LP kadar birden fazla LP'yi de önce bu kesin bağdan geri yükle.
-        LPManagement.RepairUnlinkedStockLinesForEntry(ItemLedgerEntry."Entry No.");
         LPManagement.RefreshItemLedgerEntryLpReferences(ItemLedgerEntry."Entry No.", false);
         ItemLedgerEntry.Get(ItemLedgerEntry."Entry No.");
         if (ItemLedgerEntry."DOPSWHS LP No." <> '') or
@@ -543,7 +542,7 @@ codeunit 72428 "DOPSWHS LP Propagation"
             exit(CandidateLpNo);
 
         // A matching item/lot is not proof of origin. Missing legacy links
-        // are repaired only by the validated stock-source path above.
+        // require explicit source selection on the LP line.
         exit('');
     end;
 

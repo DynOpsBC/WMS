@@ -45,10 +45,7 @@ report 72375 "DOPSWHS MTE LP Report"
             end;
 
             trigger OnAfterGetRecord()
-            var
-                LPManagement: Codeunit "DOPSWHS LP Management";
             begin
-                LPManagement.CheckMteStockSources(LicensePlate);
                 if not LoadDynamicLabelData() then
                     CurrReport.Skip();
             end;
