@@ -1076,7 +1076,7 @@ codeunit 72043 "DOPSWHS Receipt Mgmt"
         LPMgt.Stop(LP, false, PrinterId);
         if PrintLabel then begin
             ClearLastError();
-            if not TryPrintCombinedMteLabel(LP, PrinterId) then
+            if not TryPrintCombinedMteLabel(LP, PrinterId, '') then
                 Telemetry.LogWarning(
                     'Print.ReceiptLpLabelsFailed',
                     CopyStr(
