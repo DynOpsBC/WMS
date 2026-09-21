@@ -5,6 +5,11 @@ import { getLicense } from "../shared/LicenseStore.js";
 type VerifyBody = {
   tenantId: string;
   key: string;
+  // Optional for backward compatibility: the BCWMSApp extension predates multi-product
+  // and sends only tenantId + key. Newer extensions (BCTraining onwards) send their
+  // product name, and then a key minted for a different product is refused — without
+  // this, one product's Enterprise key would unlock every product's paid tier.
+  product?: string;
 };
 
 export default async function licenseVerify(
@@ -28,6 +33,13 @@ export default async function licenseVerify(
       return {
         status: 200,
         jsonBody: { ok: true, valid: false, reason: result.reason },
+      };
+    }
+
+    if (body.product && result.claims.product !== body.product) {
+      return {
+        status: 200,
+        jsonBody: { ok: true, valid: false, reason: "product_mismatch" },
       };
     }
 

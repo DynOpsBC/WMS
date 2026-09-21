@@ -2,6 +2,7 @@ import type { HttpRequest, InvocationContext, HttpResponseInit } from "@azure/fu
 import { signLicense } from "../shared/JwtSigner.js";
 import { createLicense as defaultCreateLicense, supersedeActive as defaultSupersedeActive } from "../shared/LicenseStore.js";
 import { isAdminAuthorized as defaultIsAdminAuthorized } from "../shared/RequestAuth.js";
+import { KNOWN_PRODUCTS, isKnownProduct } from "../shared/Products.js";
 
 type IssueBody = {
   tenantId: string;
@@ -64,9 +65,19 @@ export async function handleIssue(
   }
 
   const product = body.product ?? "BCWMSApp";
+  if (!isKnownProduct(product)) {
+    // Reject at issue time: a mistyped product would mint a key that verify then refuses
+    // for every extension, and the customer finds out in the field.
+    return {
+      status: 400,
+      jsonBody: { ok: false, error: `unknown product '${product}' — known products: ${KNOWN_PRODUCTS.join(", ")}` },
+    };
+  }
 
   try {
-    if (body.replaceActive) await supersedeActive(body.tenantId);
+    // Scoped to the product so re-issuing one product's license never supersedes the
+    // same tenant's licenses for the other products.
+    if (body.replaceActive) await supersedeActive(body.tenantId, product);
 
     const { jwt, claims } = await signLicense({
       sub: cryptoRandomId(),

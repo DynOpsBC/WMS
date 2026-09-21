@@ -81,21 +81,27 @@ export async function getLicense(tenantId: string, id: string): Promise<LicenseR
   }
 }
 
-export async function listActiveByTenant(tenantId: string): Promise<LicenseRecord[]> {
+export async function listActiveByTenant(tenantId: string, product?: string): Promise<LicenseRecord[]> {
   const t = await table();
   const partition = assertTenantId(tenantId);
   const records: LicenseRecord[] = [];
+  const filter = product
+    ? odata`PartitionKey eq ${partition} and status eq 'active' and product eq ${product}`
+    : odata`PartitionKey eq ${partition} and status eq 'active'`;
   for await (const entity of t.listEntities<LicenseRecord>({
-    queryOptions: { filter: odata`PartitionKey eq ${partition} and status eq 'active'` },
+    queryOptions: { filter },
   })) {
     records.push(entity as LicenseRecord);
   }
   return records;
 }
 
-export async function supersedeActive(tenantId: string): Promise<void> {
+// Product-scoped on purpose: a tenant can hold one active license per product, and
+// re-issuing WMS must never knock out the same tenant's BCTraining license. Callers that
+// omit the product keep the historical supersede-everything behaviour.
+export async function supersedeActive(tenantId: string, product?: string): Promise<void> {
   const t = await table();
-  for (const record of await listActiveByTenant(tenantId)) {
+  for (const record of await listActiveByTenant(tenantId, product)) {
     await t.updateEntity({ ...record, status: "superseded" }, "Merge");
   }
 }
