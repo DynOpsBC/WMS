@@ -685,13 +685,14 @@ object BcApi {
     suspend fun patch(context: Context, path: String, jsonBody: String): ApiResult =
         request(context, "PATCH", path, jsonBody)
 
-    /** Claim for the terminal operator and confirm the persisted owner before reporting success. */
-    suspend fun claimPick(context: Context, pickNo: String): ApiResult {
+    /** User-confirmed takeover uses BC reassignment and verifies the persisted owner. */
+    suspend fun claimPick(context: Context, pickNo: String, confirmTakeover: suspend (String) -> Boolean = { false }): ApiResult {
         val escapedNo = pickNo.replace("'", "''")
-        return claimPickForOperator(
+        return claimPickWithConfirmation(
             operatorId = currentUserId(context),
-            send = { action, body -> boundAction(context, "picks", pickNo, action, body) },
             readHeader = { get(context, "picks('$escapedNo')?\$select=no,assignedUserId") },
+            confirmTakeover = confirmTakeover,
+            send = { action, body -> boundAction(context, "picks", pickNo, action, body) },
         )
     }
 

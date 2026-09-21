@@ -1748,6 +1748,7 @@ private fun WhsePickDocument(no: String, onBack: () -> Unit) {
     // Donanım Geri tuşu belge ekranından uygulamayı kapatmasın; listeye dönsün.
     androidx.activity.compose.BackHandler { onBack() }
     val context = LocalContext.current
+    val confirmPickTakeover = rememberPickTakeoverConfirmation()
     val scope = rememberCoroutineScope()
     var header by remember { mutableStateOf<JSONObject?>(null) }
     var lines by remember { mutableStateOf<List<JSONObject>>(emptyList()) }
@@ -1813,7 +1814,7 @@ private fun WhsePickDocument(no: String, onBack: () -> Unit) {
         scope.launch {
             busy = true
             status = "Belge üzerinize alınıyor..."
-            val r = BcApi.claimPick(context, no)
+            val r = BcApi.claimPick(context, no) { owner -> confirmPickTakeover(no, owner) }
             status = if (r.ok) "Atama kontrol ediliyor..."
             else QcErrorParser.friendlyStatus(BcApi.errorMessage(r.body), r.httpCode)
             busy = false
@@ -1945,7 +1946,7 @@ private fun WhsePickDocument(no: String, onBack: () -> Unit) {
                             if (assignedTo.isBlank())
                                 "Devam etmek için önce \"Bana Ata\" ile belgeyi üzerinize alın."
                             else
-                                "Salt görüntüleme. Belge başka bir kullanıcıda. Depo sorumlusu BC üzerinden atamayı terminal kullanıcınıza devretmeli.",
+                                "Belge başka bir kullanıcıda. Bana Ata ile onay vererek BC atamasını üzerinize alabilirsiniz.",
                             fontSize = 12.sp,
                         )
                     }
@@ -2064,7 +2065,7 @@ private fun WhsePickDocument(no: String, onBack: () -> Unit) {
             }
         }
         BottomActionBar {
-            // Claim always carries the terminal operator; BC rejects another owner's document.
+            // Another owner requires explicit confirmation before BC reassignment.
             OutlinedButton(onClick = { claimForCurrentUser() }, enabled = !busy && headerLoaded && linesComplete && myUserId.isNotBlank() && !canMutate, modifier = Modifier.weight(1f).height(com.dynops.bcwms.ui.wmsPrimaryButtonHeight())) {
                 Text("Bana Ata")
             }

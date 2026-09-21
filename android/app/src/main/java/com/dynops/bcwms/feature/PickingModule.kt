@@ -210,6 +210,7 @@ internal fun V2FlowSelector(
 @Composable
 private fun V2PicksForFlow(flow: OutboundFlowMode) {
     val context = LocalContext.current
+    val confirmPickTakeover = rememberPickTakeoverConfirmation()
     val scope = rememberCoroutineScope()
     var rows by remember { mutableStateOf<List<JSONObject>>(emptyList()) }
     var selected by remember { mutableStateOf<String?>(null) }
@@ -274,7 +275,7 @@ private fun V2PicksForFlow(flow: OutboundFlowMode) {
                 status = "HATA: Depo kullanıcınız doğrulanamadı. Yeniden giriş yapın."
                 return@launch
             }
-            val r = BcApi.claimPick(context, no)
+            val r = BcApi.claimPick(context, no) { owner -> confirmPickTakeover(no, owner) }
             status = if (r.ok) "$no üzerinize alındı." else "HATA: ${BcApi.errorMessage(r.body)}"
             load()
         }
@@ -343,6 +344,7 @@ private fun V2PicksForFlow(flow: OutboundFlowMode) {
 @Composable
 private fun ActivePicksTab() {
     val context = LocalContext.current
+    val confirmPickTakeover = rememberPickTakeoverConfirmation()
     val scope = rememberCoroutineScope()
     var selected by remember { mutableStateOf<String?>(null) }
     var rows by remember { mutableStateOf<List<JSONObject>>(emptyList()) }
@@ -402,7 +404,7 @@ private fun ActivePicksTab() {
                 status = "HATA: Depo kullanıcınız doğrulanamadı. Yeniden giriş yapın."
                 return@launch
             }
-            val r = BcApi.claimPick(context, no)
+            val r = BcApi.claimPick(context, no) { owner -> confirmPickTakeover(no, owner) }
             // "Atanmamış" kapsamındayken üstlenilen iş listeden düşer; nereye
             // gittiğini söylemezsek operatör işi kaybettiğini sanıyor.
             status = if (r.ok)
@@ -753,6 +755,7 @@ private fun GuidedPickDocument(no: String, flowMode: OutboundFlowMode? = null, o
     // Donanım Geri tuşu belge ekranından uygulamayı kapatmasın; listeye dönsün.
     androidx.activity.compose.BackHandler { onBack() }
     val context = LocalContext.current
+    val confirmPickTakeover = rememberPickTakeoverConfirmation()
     val scope = rememberCoroutineScope()
     var header by remember { mutableStateOf<JSONObject?>(null) }
     var lines by remember { mutableStateOf<List<JSONObject>>(emptyList()) }
@@ -857,7 +860,7 @@ private fun GuidedPickDocument(no: String, flowMode: OutboundFlowMode? = null, o
                 busy = false
                 return@launch
             }
-            val r = BcApi.claimPick(context, no)
+            val r = BcApi.claimPick(context, no) { owner -> confirmPickTakeover(no, owner) }
             status = if (r.ok) "✅ Pick kendinize atandı" else "HATA: ${BcApi.errorMessage(r.body)}"
             if (r.ok) myUserId = me
             reloadNow()
@@ -1884,6 +1887,7 @@ private fun PickDocument(no: String, onBack: () -> Unit) {
     // Donanım Geri tuşu belge ekranından uygulamayı kapatmasın; listeye dönsün.
     androidx.activity.compose.BackHandler { onBack() }
     val context = LocalContext.current
+    val confirmPickTakeover = rememberPickTakeoverConfirmation()
     val scope = rememberCoroutineScope()
     var header by remember { mutableStateOf<JSONObject?>(null) }
     var lines by remember { mutableStateOf<List<JSONObject>>(emptyList()) }
@@ -2149,7 +2153,7 @@ private fun PickDocument(no: String, onBack: () -> Unit) {
                 scope.launch {
                     busy = true
                     status = "Belge üzerinize alınıyor..."
-                    val r = BcApi.claimPick(context, no)
+                    val r = BcApi.claimPick(context, no) { owner -> confirmPickTakeover(no, owner) }
                     status = if (r.ok) "TAMAM: Belge üzerinize alındı."
                     else QcErrorParser.friendlyStatus(BcApi.errorMessage(r.body), r.httpCode)
                     busy = false
