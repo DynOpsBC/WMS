@@ -1,9 +1,6 @@
 name: AL verified package
 on:
   workflow_dispatch:
-  push:
-    branches: ['audit/bade-delivery-20260915']
-    paths: ['al/**', '.github/workflows/al-package-verified.yml']
 permissions:
   contents: read
 jobs:
@@ -21,19 +18,19 @@ jobs:
           dotnet tool install --global Microsoft.Dynamics.BusinessCentral.Development.Tools --version 18.0.41.39415
           if ($LASTEXITCODE -ne 0) { throw 'AL compiler installation failed' }
           al --version
-      - name: Download Microsoft BC 28 symbols
+      - name: Download verified Microsoft BC 28.1 symbol cache
         shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
-          Install-Module BcContainerHelper -Scope CurrentUser -Force
-          Import-Module BcContainerHelper
-          $artifactUrl = Get-BCArtifactUrl -type Sandbox -version '28.1' -country w1 -select Latest
-          if (-not $artifactUrl) { throw 'No BC 28.1 artifact found' }
-          $paths = Download-Artifacts -artifactUrl $artifactUrl -includePlatform
+          gh release download build-bade-142-symbols --repo $env:GITHUB_REPOSITORY --pattern bade-bc28-symbols.zip --dir symbol-input
+          if ($LASTEXITCODE -ne 0) { throw 'Symbol cache download failed' }
+          $zip = 'symbol-input/bade-bc28-symbols.zip'
+          $hash = (Get-FileHash $zip -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($hash -ne '13bb6a4b438c29a8db618e4fb85630c75f1125a611e32a512c719e07ef57e317') { throw 'Symbol cache checksum mismatch' }
           New-Item al/.alpackages -ItemType Directory -Force | Out-Null
-          foreach ($path in $paths) {
-            Get-ChildItem $path -Recurse -Filter '*.app' | Copy-Item -Destination al/.alpackages -Force
-          }
-          $artifactUrl | Set-Content bc-symbol-version.txt
+          Expand-Archive $zip al/.alpackages -Force
+          'Microsoft BC 28.1 local symbol cache; SHA-256 13bb6a4b438c29a8db618e4fb85630c75f1125a611e32a512c719e07ef57e317' | Set-Content bc-symbol-version.txt
       - name: Compile extension
         shell: pwsh
         run: |
