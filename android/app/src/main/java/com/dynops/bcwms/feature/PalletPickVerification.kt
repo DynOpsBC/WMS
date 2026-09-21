@@ -5,7 +5,8 @@ import com.dynops.bcwms.BcApi
 import org.json.JSONArray
 import org.json.JSONObject
 
-/** Reproduce BC's line/LP allocation order, including already staged rows.
+/** Reproduce BC's line/LP allocation order, including already staged rows
+ * that can use the selected stock. Registration checks the entire document.
  * Otherwise two separate confirmations could both instruct the operator to
  * take the last available units from the same pallet.
  */
@@ -17,8 +18,20 @@ internal suspend fun loadDocumentPalletPlans(
     val safeNo = pickNo.replace("'", "''")
     val page = BcApi.getAllPages(context, "pickLines?\$filter=no eq '$safeNo'&\$top=100")
     check(page.complete) { "Toplama satırlarının tamamı alınamadı. Belgeyi yenileyin." }
+    return buildDocumentPalletPlans(page.rows, requested) { lineNo ->
+        val response = BcApi.pickLineSources(context, pickNo, lineNo)
+        check(response.ok) { "Satır $lineNo paletleri doğrulanamadı: ${BcApi.errorMessage(response.body)}" }
+        BcApi.scalarValue(response.body)
+    }
+}
+
+internal suspend fun buildDocumentPalletPlans(
+    documentRows: List<JSONObject>,
+    requested: List<Pair<JSONObject, Double>>? = null,
+    loadSources: suspend (Int) -> String,
+): List<PalletPickPlan> {
     val overrides = requested?.associate { it.first.optInt("lineNo") to it.second }.orEmpty()
-    val rows = page.rows.filter { it.optString("actionType").equals("Take", true) }.sortedBy { it.optInt("lineNo") }
+    val rows = documentRows.filter { it.optString("actionType").equals("Take", true) }.sortedBy { it.optInt("lineNo") }
     check(overrides.keys.all { no -> rows.any { it.optInt("lineNo") == no } }) { "Toplama satırı değişmiş. Belgeyi yenileyin." }
     requested?.forEach { (expected, _) ->
         val actual = rows.first { it.optInt("lineNo") == expected.optInt("lineNo") }
@@ -35,14 +48,32 @@ internal suspend fun loadDocumentPalletPlans(
     for (row in rows) {
         val lineNo = row.optInt("lineNo")
         if (lineNo > lastRequested) break
+        // A prefilled quantity on an unrelated earlier item is not a dependency
+        // of this sheet. Keep earlier overlapping rows to reserve shared LP
+        // capacity, but never let YM.00273's missing LP block AB.02029's scanner.
+        if (requested != null && lineNo !in overrides &&
+            requested.none { (selected, _) -> palletStockMayOverlap(row, selected) }
+        ) continue
         val amount = overrides[lineNo] ?: row.optDouble("qtyToHandle", 0.0)
         if (amount <= 0) continue
-        val response = BcApi.pickLineSources(context, pickNo, lineNo)
-        check(response.ok) { "Satır $lineNo paletleri doğrulanamadı: ${BcApi.errorMessage(response.body)}" }
-        val plan = buildPalletPickPlan(row, amount, BcApi.scalarValue(response.body), used)
+        val plan = buildPalletPickPlan(row, amount, loadSources(lineNo), used)
         if (requested == null || lineNo in overrides) result += plan
     }
     return result
+}
+
+private fun palletStockMayOverlap(first: JSONObject, second: JSONObject): Boolean {
+    fun text(row: JSONObject, field: String) = row.optString(field).takeUnless { it == "null" }.orEmpty().trim()
+    if (listOf("itemNo", "variantCode", "locationCode", "binCode").any {
+        !text(first, it).equals(text(second, it), ignoreCase = true)
+    }) return false
+    // Blank tracking is resolved from LP candidates and may overlap an explicit
+    // lot/serial. UOM is deliberately excluded: allocation is in base quantities.
+    return listOf("lotNo", "serialNo").all {
+        val a = text(first, it)
+        val b = text(second, it)
+        a.isBlank() || b.isBlank() || a.equals(b, ignoreCase = true)
+    }
 }
 
 internal fun palletPlanJson(plan: PalletPickPlan): String = JSONObject().apply {
