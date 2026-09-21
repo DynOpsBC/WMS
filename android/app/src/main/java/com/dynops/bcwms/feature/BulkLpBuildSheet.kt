@@ -33,6 +33,7 @@ internal data class LedgerBulkLpBuildResult(
     val printSkippedOnReplay: Boolean,
     val printLabelsRequested: Boolean,
     val sourceEntryNo: Int,
+    val sourceEntryNos: List<Int> = listOf(sourceEntryNo),
 )
 
 internal data class PendingLedgerBulkLpRequest(
@@ -45,7 +46,10 @@ internal data class PendingLedgerBulkLpRequest(
     // kimliğini paylaşır ama gövdeleri farklıdır; uç adını saklamak, cihaz
     // yeniden açıldığında yanlış uca replay göndermeyi imkânsız kılar.
     val action: String = LEDGER_BULK_LP_CREATE_ACTION,
+    val sourceEntryNos: List<Int> = listOf(entryNo),
 )
+
+internal data class SingleLpSourceAllocation(val entryNo: Int, val quantity: Double)
 
 /**
  * Operatörün girdiği "LP başı miktar"dan üretilen palet planı.
@@ -89,6 +93,7 @@ private const val DEFAULT_LEDGER_LP_QUANTITY = "100"
 private const val LEDGER_ENTRY_DISPLAY_LIMIT = 50
 internal const val LEDGER_BULK_LP_CREATE_ACTION = "createLicensePlatesIdempotent"
 internal const val LEDGER_BULK_LP_PLAN_ACTION = "createLicensePlatesFromPlanIdempotent"
+internal const val LEDGER_SINGLE_LP_MULTI_ENTRY_ACTION = "createSingleLicensePlateFromEntriesIdempotent"
 private const val LEDGER_BULK_LP_PENDING_PREFS = "bcwms_bulk_lp_pending"
 
 private data class PendingLedgerBulkLpRestore(
@@ -188,6 +193,56 @@ internal fun ledgerLpAllocatableQuantity(row: JSONObject): Double =
         row.optDouble("remainingQuantity")
     }
 
+internal fun ledgerEntriesCanShareSingleLp(first: JSONObject, candidate: JSONObject): Boolean =
+    listOf("itemNo", "variantCode", "lotNo", "serialNo", "locationCode", "baseUnitOfMeasure").all { field ->
+        first.optString(field).trim().equals(candidate.optString(field).trim(), ignoreCase = true)
+    }
+
+internal fun singleLpSourceAllocations(
+    selectedEntries: List<JSONObject>,
+    requestedQuantity: Double?,
+): List<SingleLpSourceAllocation> {
+    if (selectedEntries.isEmpty() || selectedEntries.size > 50) return emptyList()
+    if (selectedEntries.map { it.optInt("entryNo") }.any { it <= 0 } ||
+        selectedEntries.map { it.optInt("entryNo") }.distinct().size != selectedEntries.size
+    ) return emptyList()
+    if (selectedEntries.drop(1).any { !ledgerEntriesCanShareSingleLp(selectedEntries.first(), it) }) return emptyList()
+
+    // With several selected ledger rows, the operation deliberately consumes
+    // each selected row's full LP-allocatable balance. This makes the split
+    // explicit and prevents a checked row from silently contributing zero.
+    if (selectedEntries.size > 1) return selectedEntries.mapNotNull { row ->
+        val quantity = ledgerLpAllocatableQuantity(row)
+        if (!quantity.isFinite() || quantity <= 0.0) null
+        else SingleLpSourceAllocation(row.optInt("entryNo"), quantity)
+    }.takeIf { it.size == selectedEntries.size }.orEmpty()
+
+    val quantity = requestedQuantity ?: return emptyList()
+    val available = ledgerLpAllocatableQuantity(selectedEntries.single())
+    if (!quantity.isFinite() || quantity <= 0.0 || quantity > available + 0.00001) return emptyList()
+    return listOf(SingleLpSourceAllocation(selectedEntries.single().optInt("entryNo"), quantity))
+}
+
+internal fun ledgerSingleLpMultiEntryPayload(
+    templateCode: String,
+    binCode: String,
+    allocations: List<SingleLpSourceAllocation>,
+    printerId: String,
+    printLabels: Boolean,
+    requestId: String,
+): String = JSONObject().apply {
+    put("templateCode", templateCode.trim())
+    put("binCode", binCode.trim())
+    put("sourcePlanJson", JSONArray().apply {
+        allocations.forEach { allocation ->
+            put(JSONObject().put("entryNo", allocation.entryNo).put("quantity", allocation.quantity))
+        }
+    }.toString())
+    put("printerId", printerId.trim())
+    put("printLabels", printLabels)
+    put("requestId", requestId)
+}.toString()
+
 internal fun validLedgerBulkLpResponse(
     expectedCount: Int,
     createdCount: Int,
@@ -211,6 +266,23 @@ internal fun ledgerLpSourceLinksMatch(
     val actual = lines.map { it.optString("lpNo").trim().uppercase() }.toSet()
     return expected == actual && lines.all {
         it.optInt("sourceItemLedgerEntryNo") == entryNo && it.optDouble("quantity", 0.0) > 0.0
+    }
+}
+
+internal fun ledgerLpSourcePlanMatches(
+    allocations: List<SingleLpSourceAllocation>,
+    createdLpNos: List<String>,
+    lines: List<JSONObject>,
+    complete: Boolean,
+): Boolean {
+    if (!complete || allocations.isEmpty() || createdLpNos.size != 1 || lines.isEmpty()) return false
+    val expectedLp = createdLpNos.single().trim().uppercase()
+    if (lines.any { it.optString("lpNo").trim().uppercase() != expectedLp }) return false
+    val actual = lines.groupBy { it.optInt("sourceItemLedgerEntryNo") }
+        .mapValues { (_, sourceLines) -> sourceLines.sumOf { it.optDouble("quantity", 0.0) } }
+    if (actual.keys != allocations.map { it.entryNo }.toSet()) return false
+    return allocations.all { allocation ->
+        kotlin.math.abs((actual[allocation.entryNo] ?: 0.0) - allocation.quantity) <= 0.00001
     }
 }
 
@@ -296,6 +368,7 @@ internal fun pendingLedgerBulkLpRequestJson(request: PendingLedgerBulkLpRequest)
         put("requestId", request.requestId)
         put("body", request.body)
         put("action", request.action)
+        put("sourceEntryNos", JSONArray(request.sourceEntryNos))
     }.toString()
 
 internal fun pendingLedgerBulkLpRequestFromJson(raw: String): PendingLedgerBulkLpRequest? = runCatching {
@@ -307,6 +380,9 @@ internal fun pendingLedgerBulkLpRequestFromJson(raw: String): PendingLedgerBulkL
         requestId = json.getString("requestId"),
         body = json.getString("body"),
         action = json.optString("action").trim().ifBlank { LEDGER_BULK_LP_CREATE_ACTION },
+        sourceEntryNos = json.optJSONArray("sourceEntryNos")?.let { array ->
+            List(array.length()) { index -> array.getInt(index) }
+        } ?: listOf(json.getInt("entryNo")),
     )
     val canonicalRequestId = UUID.fromString(request.requestId).toString()
     val body = JSONObject(request.body)
@@ -314,18 +390,33 @@ internal fun pendingLedgerBulkLpRequestFromJson(raw: String): PendingLedgerBulkL
     require(request.expectedCount in 1..100)
     require(canonicalRequestId.equals(request.requestId, ignoreCase = true))
     require(body.getString("requestId").equals(request.requestId, ignoreCase = true))
-    require(request.action == LEDGER_BULK_LP_CREATE_ACTION || request.action == LEDGER_BULK_LP_PLAN_ACTION)
-    val storedLastQty = body.optDouble("quantityLastLp", 0.0)
-    require(storedLastQty.isFinite() && storedLastQty >= 0.0)
-    // Artık palet varsa toplam palet adedi tam palet sayısından bir fazladır.
-    require(body.getInt("lpCount") + (if (storedLastQty > 0.0) 1 else 0) == request.expectedCount)
-    require(storedLastQty == 0.0 || request.action == LEDGER_BULK_LP_PLAN_ACTION)
+    require(request.sourceEntryNos.isNotEmpty() && request.sourceEntryNos.first() == request.entryNo)
+    require(request.sourceEntryNos.all { it > 0 } && request.sourceEntryNos.distinct().size == request.sourceEntryNos.size)
+    require(request.action in setOf(
+        LEDGER_BULK_LP_CREATE_ACTION,
+        LEDGER_BULK_LP_PLAN_ACTION,
+        LEDGER_SINGLE_LP_MULTI_ENTRY_ACTION,
+    ))
+    if (request.action == LEDGER_SINGLE_LP_MULTI_ENTRY_ACTION) {
+        require(request.expectedCount == 1 && request.sourceEntryNos.size > 1)
+        val sourcePlan = JSONArray(body.getString("sourcePlanJson"))
+        require(sourcePlan.length() == request.sourceEntryNos.size)
+        require(List(sourcePlan.length()) { sourcePlan.getJSONObject(it).getInt("entryNo") } == request.sourceEntryNos)
+        require(List(sourcePlan.length()) { sourcePlan.getJSONObject(it).getDouble("quantity") }
+            .all { it.isFinite() && it > 0.0 })
+    } else {
+        val storedLastQty = body.optDouble("quantityLastLp", 0.0)
+        require(storedLastQty.isFinite() && storedLastQty >= 0.0)
+        // Artık palet varsa toplam palet adedi tam palet sayısından bir fazladır.
+        require(body.getInt("lpCount") + (if (storedLastQty > 0.0) 1 else 0) == request.expectedCount)
+        require(storedLastQty == 0.0 || request.action == LEDGER_BULK_LP_PLAN_ACTION)
+        require(body.getDouble("quantityPerLp").let { it.isFinite() && it > 0.0 })
+    }
     require(body.getBoolean("printLabels") == request.printLabels)
     require(body.getString("templateCode").isNotBlank())
     // Blank bin means the server will distribute complete LPs across the
     // matching loose-stock bins. Explicit-bin requests remain supported.
     body.getString("binCode")
-    require(body.getDouble("quantityPerLp").let { it.isFinite() && it > 0.0 })
     request
 }.getOrNull()
 
@@ -418,7 +509,7 @@ internal fun BulkLpBuildSheet(
     val restoredPending = remember(context) { PendingLedgerBulkLpStore.load(context) }
     var lookup by remember { mutableStateOf("") }
     var entries by remember { mutableStateOf<List<JSONObject>>(emptyList()) }
-    var selectedEntry by remember { mutableStateOf<JSONObject?>(null) }
+    var selectedEntries by remember { mutableStateOf<List<JSONObject>>(emptyList()) }
     var template by remember { mutableStateOf("") }
     var templates by remember { mutableStateOf<List<String>>(emptyList()) }
     var templateExpanded by remember { mutableStateOf(false) }
@@ -432,6 +523,7 @@ internal fun BulkLpBuildSheet(
     // paletler önerir ve eski uca gider; yeni APK eski sunucuya tanımadığı bir
     // action göndermez.
     var planSupported by remember { mutableStateOf(false) }
+    var multiEntrySingleLpSupported by remember { mutableStateOf(false) }
     var busy by remember { mutableStateOf(false) }
     var status by remember {
         mutableStateOf(
@@ -457,14 +549,18 @@ internal fun BulkLpBuildSheet(
     var pendingRequest by remember { mutableStateOf(restoredPending.request) }
     var completedPrintLabelsRequested by remember { mutableStateOf(false) }
     var completedSourceEntryNo by remember { mutableStateOf(0) }
+    var completedSourceEntryNos by remember { mutableStateOf<List<Int>>(emptyList()) }
 
     fun buildResult() = LedgerBulkLpBuildResult(
         createdLpNos, failedPrintLpNos, replayed, printSkippedOnReplay,
         completedPrintLabelsRequested, completedSourceEntryNo,
+        completedSourceEntryNos.ifEmpty { listOf(completedSourceEntryNo) },
     )
 
     LaunchedEffect(Unit) {
-        planSupported = BcApi.getLpScanCapabilities(context).bulkLpPlan
+        val capabilities = BcApi.getLpScanCapabilities(context)
+        planSupported = capabilities.bulkLpPlan
+        multiEntrySingleLpSupported = capabilities.multiEntrySingleLp
         val page = BcApi.getAllPages(context, "licensePlateTemplates?\$top=50&\$select=code,description")
         templates = if (page.complete) {
             page.rows.map { it.optString("code") }.filter(String::isNotBlank)
@@ -484,7 +580,7 @@ internal fun BulkLpBuildSheet(
 
     fun clearLedgerSelectionAndPlan() {
         entries = emptyList()
-        selectedEntry = null
+        selectedEntries = emptyList()
         template = ""
         templateExpanded = false
         bin = ""
@@ -497,6 +593,7 @@ internal fun BulkLpBuildSheet(
         failedPrintLpNos = emptyList()
         replayed = false
         printSkippedOnReplay = false
+        completedSourceEntryNos = emptyList()
         pendingRequest = null
         status = ""
     }
@@ -509,7 +606,7 @@ internal fun BulkLpBuildSheet(
         }
         scope.launch {
             busy = true
-            selectedEntry = null
+            selectedEntries = emptyList()
             status = "Stok kayıtları aranıyor..."
             var usingLegacyQuantityFallback = false
             var complete = true
@@ -553,10 +650,12 @@ internal fun BulkLpBuildSheet(
         }
     }
 
-    val entry = selectedEntry
+    val entry = selectedEntries.firstOrNull()
     val lpCount = lpCountText.toIntOrNull()
     val quantityPerLp = quantityText.toFiniteDoubleOrNull()
-    val allocatableQuantity = entry?.let(::ledgerLpAllocatableQuantity) ?: 0.0
+    val allocatableQuantity = if (singleLpMode && selectedEntries.size > 1) {
+        selectedEntries.sumOf(::ledgerLpAllocatableQuantity)
+    } else entry?.let(::ledgerLpAllocatableQuantity) ?: 0.0
     // Müşteri isteği: operatör yalnız palet kapasitesini girer, tam palet
     // adedini ve son paletteki artığı sistem hesaplar.
     val autoPlan = if (singleLpMode) null else planLedgerLps(allocatableQuantity, quantityPerLp)
@@ -574,6 +673,10 @@ internal fun BulkLpBuildSheet(
         entry?.optString("serialNo").orEmpty(),
         remainderQuantity,
     )
+    val singleLpAllocations = if (singleLpMode) {
+        singleLpSourceAllocations(selectedEntries, quantityPerLp)
+    } else emptyList()
+    val effectivePlanValid = planValid && (!singleLpMode || singleLpAllocations.isNotEmpty())
     val inputsEnabled = !busy && !uncertainOutcome
 
     // Palet kapasitesi ya da seçili stok kaydı değiştiğinde tam palet adedini
@@ -596,8 +699,10 @@ internal fun BulkLpBuildSheet(
         val binCode = bin
         val shouldPrint = printLabels
         val printerId = getMtePrinter(context)
+        val selectedSourceAllocations = singleLpAllocations
         if (requestToReplay == null &&
-            (sourceEntry == null || count == null || perLp == null || templateCode.isBlank())
+            (sourceEntry == null || count == null || perLp == null || templateCode.isBlank() ||
+                (singleLpMode && selectedSourceAllocations.isEmpty()))
         ) return
 
         busy = true
@@ -622,24 +727,38 @@ internal fun BulkLpBuildSheet(
                 }
 
                 val requestId = UUID.randomUUID().toString()
+                val useMultiEntryAction = singleLpMode && selectedSourceAllocations.size > 1
                 PendingLedgerBulkLpRequest(
                     entryNo = sourceEntry!!.optInt("entryNo"),
                     // Beklenen kayıt sayısı artık paleti de kapsar; sunucudan
                     // dönen createdCount bununla karşılaştırılır.
-                    expectedCount = count!! + if (lastQty > 0.0) 1 else 0,
+                    expectedCount = if (useMultiEntryAction) 1 else count!! + if (lastQty > 0.0) 1 else 0,
                     printLabels = shouldPrint,
                     requestId = requestId,
-                    body = ledgerBulkLpPayload(
-                        templateCode,
-                        binCode,
-                        count,
-                        perLp!!,
-                        printerId,
-                        shouldPrint,
-                        requestId,
-                        lastQty,
-                    ),
-                    action = if (lastQty > 0.0) LEDGER_BULK_LP_PLAN_ACTION else LEDGER_BULK_LP_CREATE_ACTION,
+                    body = if (useMultiEntryAction) {
+                        ledgerSingleLpMultiEntryPayload(
+                            templateCode, binCode, selectedSourceAllocations,
+                            printerId, shouldPrint, requestId,
+                        )
+                    } else {
+                        ledgerBulkLpPayload(
+                            templateCode,
+                            binCode,
+                            count!!,
+                            perLp!!,
+                            printerId,
+                            shouldPrint,
+                            requestId,
+                            lastQty,
+                        )
+                    },
+                    action = when {
+                        useMultiEntryAction -> LEDGER_SINGLE_LP_MULTI_ENTRY_ACTION
+                        lastQty > 0.0 -> LEDGER_BULK_LP_PLAN_ACTION
+                        else -> LEDGER_BULK_LP_CREATE_ACTION
+                    },
+                    sourceEntryNos = if (useMultiEntryAction) selectedSourceAllocations.map { it.entryNo }
+                    else listOf(sourceEntry.optInt("entryNo")),
                 )
             }
             if (!PendingLedgerBulkLpStore.save(context, operation)) {
@@ -728,7 +847,15 @@ internal fun BulkLpBuildSheet(
             busy = true
             status = "LP kaynak giriş bağlantısı kontrol ediliyor..."
             val sourceLines = mutableListOf<JSONObject>()
-            var sourceReadComplete = response.optInt("sourceItemLedgerEntryNo") == operation.entryNo
+            val multiEntryOperation = operation.action == LEDGER_SINGLE_LP_MULTI_ENTRY_ACTION
+            val responseSourceEntryNos = response.optJSONArray("sourceItemLedgerEntryNos")?.let { sourceArray ->
+                List(sourceArray.length()) { index -> sourceArray.optInt(index) }
+            }.orEmpty()
+            var sourceReadComplete = if (multiEntryOperation) {
+                responseSourceEntryNos == operation.sourceEntryNos
+            } else {
+                response.optInt("sourceItemLedgerEntryNo") == operation.entryNo
+            }
             if (sourceReadComplete) {
                 for (batch in createdLpNos.chunked(20)) {
                     val page = BcApi.getAllPages(context, ledgerLpSourceLookupPath(batch))
@@ -739,21 +866,38 @@ internal fun BulkLpBuildSheet(
                     sourceLines += page.rows
                 }
             }
-            val linesLinked = ledgerLpSourceLinksMatch(operation.entryNo, createdLpNos, sourceLines, sourceReadComplete)
-            var entryLinked = false
+            val operationAllocations = if (multiEntryOperation) {
+                val sourcePlan = JSONArray(JSONObject(operation.body).getString("sourcePlanJson"))
+                List(sourcePlan.length()) { index ->
+                    val row = sourcePlan.getJSONObject(index)
+                    SingleLpSourceAllocation(row.getInt("entryNo"), row.getDouble("quantity"))
+                }
+            } else emptyList()
+            val linesLinked = if (multiEntryOperation) {
+                ledgerLpSourcePlanMatches(operationAllocations, createdLpNos, sourceLines, sourceReadComplete)
+            } else {
+                ledgerLpSourceLinksMatch(operation.entryNo, createdLpNos, sourceLines, sourceReadComplete)
+            }
+            var entryLinked = linesLinked
             if (linesLinked) {
-                val sourcePage = BcApi.getAllPages(
-                    context,
-                    "itemLedgerEntries?\$filter=entryNo eq ${operation.entryNo}&\$select=entryNo,lpNo,lpNos&\$top=1",
-                )
-                entryLinked = ledgerLpEntryReferenceMatches(
-                    operation.entryNo, createdLpNos, sourcePage.rows, sourcePage.complete,
-                )
+                for (sourceEntryNo in operation.sourceEntryNos) {
+                    val sourcePage = BcApi.getAllPages(
+                        context,
+                        "itemLedgerEntries?\$filter=entryNo eq $sourceEntryNo&\$select=entryNo,lpNo,lpNos&\$top=1",
+                    )
+                    if (!ledgerLpEntryReferenceMatches(
+                            sourceEntryNo, createdLpNos, sourcePage.rows, sourcePage.complete,
+                        )
+                    ) {
+                        entryLinked = false
+                        break
+                    }
+                }
             }
             busy = false
             if (!linesLinked || !entryLinked) {
                 uncertainOutcome = true
-                status = "UYARI: LP oluşturuldu ancak #${operation.entryNo} kaynak giriş bağlantısı doğrulanamadı. " +
+                status = "UYARI: LP oluşturuldu ancak ${operation.sourceEntryNos.joinToString { "#$it" }} kaynak giriş bağlantısı doğrulanamadı. " +
                     "Yeni LP oluşturmayın; Önceki İşlemi Kontrol Et düğmesine basın. " +
                     "Sorun devam ederse bu LP numaralarını yöneticinize iletin: ${createdLpNos.joinToString()}."
                 return@launch
@@ -781,6 +925,7 @@ internal fun BulkLpBuildSheet(
             }
             completedPrintLabelsRequested = operation.printLabels
             completedSourceEntryNo = operation.entryNo
+            completedSourceEntryNos = operation.sourceEntryNos
             completed = true
         }
     }
@@ -801,7 +946,11 @@ internal fun BulkLpBuildSheet(
         if (completed) {
             StatusText(status)
             Spacer(Modifier.height(12.dp))
-            Text("Kaynak giriş: #$completedSourceEntryNo", fontWeight = FontWeight.Bold)
+            Text(
+                "Kaynak giriş${if (completedSourceEntryNos.size > 1) "leri" else ""}: " +
+                    completedSourceEntryNos.ifEmpty { listOf(completedSourceEntryNo) }.joinToString { "#$it" },
+                fontWeight = FontWeight.Bold,
+            )
             Text("Oluşan LP'ler", fontWeight = FontWeight.Bold)
             createdLpNos.forEach { no ->
                 Text(no, fontSize = 13.sp)
@@ -844,7 +993,20 @@ internal fun BulkLpBuildSheet(
 
         if (entries.isNotEmpty()) {
             Spacer(Modifier.height(10.dp))
-            Text("Kullanılacak Stok Kaydı", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+            Text(
+                if (singleLpMode && multiEntrySingleLpSupported) "Kullanılacak Stok Kayıtları"
+                else "Kullanılacak Stok Kaydı",
+                fontWeight = FontWeight.Bold,
+                fontSize = 13.sp,
+            )
+            if (singleLpMode && multiEntrySingleLpSupported) {
+                Text(
+                    "Aynı ürün, lot, seri ve lokasyondaki birden fazla kaydı seçebilirsiniz. " +
+                        "Birden fazla seçimde kayıtların LP'lenebilir miktarlarının tamamı tek LP'ye eklenir.",
+                    fontSize = 11.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
             if (entries.size > LEDGER_ENTRY_DISPLAY_LIMIT) {
                 Text(
                         "Çok fazla kayıt bulundu; yalnızca en yeni $LEDGER_ENTRY_DISPLAY_LIMIT kayıt gösteriliyor. " +
@@ -854,19 +1016,59 @@ internal fun BulkLpBuildSheet(
                 )
             }
             entries.take(LEDGER_ENTRY_DISPLAY_LIMIT).forEach { row ->
-                val selected = selectedEntry?.optInt("entryNo") == row.optInt("entryNo")
+                val selected = selectedEntries.any { it.optInt("entryNo") == row.optInt("entryNo") }
                 Card(
                     onClick = {
-                        if (!selected) {
-                            template = ""
-                            templateExpanded = false
-                            bin = ""
-                            lpCountText = if (singleLpMode) "1" else DEFAULT_LEDGER_LP_COUNT
-                            quantityText = DEFAULT_LEDGER_LP_QUANTITY
-                            printLabels = true
+                        if (singleLpMode && multiEntrySingleLpSupported) {
+                            val nextEntries = if (selected) {
+                                selectedEntries.filterNot { it.optInt("entryNo") == row.optInt("entryNo") }
+                            } else {
+                                when {
+                                    selectedEntries.size >= 50 -> {
+                                        status = "HATA: Tek LP için en fazla 50 stok girişi seçebilirsiniz."
+                                        selectedEntries
+                                    }
+                                    selectedEntries.isNotEmpty() &&
+                                        !ledgerEntriesCanShareSingleLp(selectedEntries.first(), row) -> {
+                                        status = "HATA: Tek LP için seçilen kayıtların ürün, varyant, lot, seri, lokasyon ve ölçü birimi aynı olmalıdır."
+                                        selectedEntries
+                                    }
+                                    else -> selectedEntries + row
+                                }
+                            }
+                            if (nextEntries != selectedEntries) {
+                                if (selectedEntries.isEmpty()) {
+                                    template = ""
+                                    templateExpanded = false
+                                    bin = ""
+                                    printLabels = true
+                                }
+                                selectedEntries = nextEntries
+                                lpCountText = "1"
+                                quantityText = when {
+                                    nextEntries.isEmpty() -> DEFAULT_LEDGER_LP_QUANTITY
+                                    nextEntries.size == 1 -> formatLpQuantity(
+                                        minOf(
+                                            DEFAULT_LEDGER_LP_QUANTITY.toDouble(),
+                                            ledgerLpAllocatableQuantity(nextEntries.single()),
+                                        ),
+                                    )
+                                    else -> formatLpQuantity(nextEntries.sumOf(::ledgerLpAllocatableQuantity))
+                                }
+                                status = ""
+                            }
+                        } else {
+                            if (!selected) {
+                                template = ""
+                                templateExpanded = false
+                                bin = ""
+                                lpCountText = if (singleLpMode) "1" else DEFAULT_LEDGER_LP_COUNT
+                                quantityText = DEFAULT_LEDGER_LP_QUANTITY
+                                printLabels = true
+                            }
+                            selectedEntries = listOf(row)
+                            status = ""
                         }
-                        selectedEntry = row
-                        status = ""
                     },
                     modifier = Modifier.fillMaxWidth().padding(vertical = 3.dp),
                     enabled = inputsEnabled,
@@ -879,8 +1081,19 @@ internal fun BulkLpBuildSheet(
                         if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant,
                     ),
                 ) {
-                    Column(Modifier.padding(12.dp)) {
-                        Text("#${row.optInt("entryNo")} · ${row.optString("itemNo")}", fontWeight = FontWeight.Bold)
+                    Row(
+                        Modifier.padding(12.dp),
+                        verticalAlignment = Alignment.Top,
+                    ) {
+                        if (singleLpMode && multiEntrySingleLpSupported) {
+                            Checkbox(
+                                checked = selected,
+                                onCheckedChange = null,
+                                enabled = inputsEnabled,
+                            )
+                        }
+                        Column(Modifier.weight(1f)) {
+                            Text("#${row.optInt("entryNo")} · ${row.optString("itemNo")}", fontWeight = FontWeight.Bold)
                         val rowAllocatableQuantity = ledgerLpAllocatableQuantity(row)
                         Text(
                             "LP yapılabilecek: ${formatLpQuantity(rowAllocatableQuantity)} " +
@@ -896,8 +1109,9 @@ internal fun BulkLpBuildSheet(
                             row.optString("serialNo").takeIf(String::isNotBlank)?.let { "Seri $it" },
                             row.optString("documentNo").takeIf(String::isNotBlank)?.let { "Belge $it" },
                         ).joinToString(" · ")
-                        if (detail.isNotBlank())
-                            Text(detail, fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            if (detail.isNotBlank())
+                                Text(detail, fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
                     }
                 }
             }
@@ -966,11 +1180,11 @@ internal fun BulkLpBuildSheet(
                 OutlinedTextField(
                     value = quantityText,
                     onValueChange = { quantityText = lpQuantityText(it) },
-                    label = { Text("LP başı miktar") },
+                    label = { Text(if (singleLpMode) "LP toplam miktarı" else "LP başı miktar") },
                     suffix = { Text(entry.optString("baseUnitOfMeasure")) },
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                     singleLine = true,
-                    enabled = inputsEnabled,
+                    enabled = inputsEnabled && !(singleLpMode && selectedEntries.size > 1),
                     modifier = Modifier.weight(1f),
                 )
             }
@@ -978,6 +1192,8 @@ internal fun BulkLpBuildSheet(
             Text(
                 buildString {
                     append("Plan: ")
+                    if (singleLpMode && selectedEntries.size > 1)
+                        append("${selectedEntries.size} stok girişi → ")
                     append("${lpCount ?: 0} × ${formatLpQuantity(quantityPerLp ?: 0.0)}")
                     if (remainderQuantity > 0.0)
                         append(" + 1 × ${formatLpQuantity(remainderQuantity)}")
@@ -1024,7 +1240,7 @@ internal fun BulkLpBuildSheet(
             ) { Text(if (busy) "Kontrol ediliyor..." else "Önceki İşlemi Kontrol Et") }
         } else {
             Button(
-                enabled = inputsEnabled && entry != null && template.isNotBlank() && planValid,
+                enabled = inputsEnabled && entry != null && template.isNotBlank() && effectivePlanValid,
                 modifier = Modifier.fillMaxWidth(),
                 onClick = { submitBulkLp() },
             ) { Text(if (busy) "İşleniyor..." else if (singleLpMode) "Tekli LP'yi Oluştur" else "LP'leri Oluştur") }

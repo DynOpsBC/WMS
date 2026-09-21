@@ -358,6 +358,64 @@ codeunit 72185 "DOPSWHS Production Pick Tests"
     end;
 
     [Test]
+    procedure NextReadyLpCanReplaceRegisteredProductionHistory()
+    var
+        Pick: Record "Warehouse Activity Header";
+        FirstLP: Record "DOPSWHS LP Header";
+        NextLP: Record "DOPSWHS LP Header";
+        NextLPLine: Record "DOPSWHS LP Line";
+        Line: Record "Warehouse Activity Line";
+        Management: Codeunit "DOPSWHS Prod Mgmt";
+    begin
+        Fixture(Pick);
+        PalletFixture(FirstLP, 4);
+        FirstLP.Status := FirstLP.Status::Assigned;
+        FirstLP."Assigned Document Type" := FirstLP."Assigned Document Type"::ProdConsumption;
+        FirstLP."Assigned Document No." := 'PROD-LP-TEST';
+        FirstLP.Modify(false);
+
+        Line.SetRange("Activity Type", Line."Activity Type"::Pick);
+        Line.SetRange("No.", Pick."No.");
+        Line.FindSet(true);
+        repeat
+            Line.Quantity := 10;
+            Line."Qty. (Base)" := 10;
+            Line."Qty. Outstanding" := 6;
+            Line."Qty. Outstanding (Base)" := 6;
+            Line."Qty. to Handle" := 6;
+            Line."Qty. to Handle (Base)" := 6;
+            Line."Qty. Handled" := 4;
+            Line."Qty. Handled (Base)" := 4;
+            Line."LP No." := FirstLP."No.";
+            Line."Target LP No." := FirstLP."No.";
+            Line.Modify(false);
+        until Line.Next() = 0;
+
+        NextLP := FirstLP;
+        NextLP."No." := 'LP-PROD-NEXT';
+        NextLP.Status := NextLP.Status::Built;
+        NextLP."Assigned Document Type" := NextLP."Assigned Document Type"::None;
+        NextLP."Assigned Document No." := '';
+        NextLP.Insert(false);
+        NextLPLine.Get(FirstLP."No.", 10000);
+        NextLPLine."LP No." := NextLP."No.";
+        NextLPLine.Quantity := 3;
+        NextLPLine.Insert(false);
+
+        Check(
+            Management.CreateProductionPickFromLpFor('PROD-LP-TEST', NextLP."No.", 'OPERATOR') = Pick."No.",
+            'The next ready LP was not accepted after a registered segment.');
+        Line.Get(Line."Activity Type"::Pick, Pick."No.", 10000);
+        Check(Line."Qty. to Handle" = 3, 'Next ready LP did not replace the standard remaining proposal.');
+        Check(Line."LP No." = NextLP."No.", 'Next ready LP was not applied to the Take line.');
+        Check(Line."Target LP No." = '', 'Historical target LP reference was not cleared.');
+        Line.Get(Line."Activity Type"::Pick, Pick."No.", 20000);
+        Check(Line."Qty. to Handle" = 3, 'Next ready LP did not balance the Place line.');
+        Check(Line."LP No." = '', 'Historical LP reference was left on the Place line.');
+        Check(Line."Target LP No." = '', 'Historical target LP reference was left on the Place line.');
+    end;
+
+    [Test]
     procedure DifferentLotsCannotShareOneUntrackedTake()
     var
         Pick: Record "Warehouse Activity Header";

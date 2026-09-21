@@ -482,6 +482,7 @@ object BcApi {
         val bulkLpPlan: Boolean,
         val httpCode: Int,
         val registerScannedPick: Boolean = false,
+        val multiEntrySingleLp: Boolean = false,
     )
 
     internal fun pickRegistrationAction(capabilities: LpScanCapabilities): String? = when {
@@ -504,6 +505,7 @@ object BcApi {
             bulkLpPlan = metadata.contains("createLicensePlatesFromPlanIdempotent", ignoreCase = true),
             httpCode = httpCode,
             registerScannedPick = Regex("""<(?:(?:\w+):)?Action\b[^>]*\bName\s*=\s*["']registerScannedFor["']""").containsMatchIn(metadata),
+            multiEntrySingleLp = metadata.contains("createSingleLicensePlateFromEntriesIdempotent", ignoreCase = true),
         )
 
     /**

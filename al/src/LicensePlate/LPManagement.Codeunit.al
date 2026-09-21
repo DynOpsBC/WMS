@@ -153,6 +153,282 @@ codeunit 72040 "DOPSWHS LP Management"
             RequestId, true, CreatedLpNos, Replayed);
     end;
 
+    /// <summary>
+    /// Builds one physical LP from several positive Item Ledger Entries. Every
+    /// LP line keeps its exact source Entry No.; the entries themselves remain
+    /// unchanged. All selected entries must describe the same item, variant,
+    /// lot, serial and location so the resulting pallet has one stock identity.
+    /// </summary>
+    [CommitBehavior(CommitBehavior::Error)]
+    procedure BuildSingleFromItemLedgerEntriesIdempotent(BoundItemLedgerEntryNo: Integer; SourcePlanJson: Text; TemplateCode: Code[20]; BinCode: Code[20]; RequestId: Guid; var CreatedLpNos: List of [Code[20]]; var SourceEntryNos: List of [Integer]; var Replayed: Boolean)
+    var
+        ItemLedgerEntry: Record "Item Ledger Entry";
+        FirstEntry: Record "Item Ledger Entry";
+        Item: Record Item;
+        Bin: Record Bin;
+        WarehouseEntry: Record "Warehouse Entry";
+        LPHeader: Record "DOPSWHS LP Header";
+        LPLine: Record "DOPSWHS LP Line";
+        Quantities: Dictionary of [Integer, Decimal];
+        CheckedBinCodes: List of [Code[20]];
+        EntryNo: Integer;
+        RequestedQuantity: Decimal;
+        TotalQuantity: Decimal;
+        NormalizedPlan: Text;
+        TargetBinCode: Code[20];
+    begin
+        if IsNullGuid(RequestId) then
+            Error('Tekli LP işlem kimliği zorunludur.');
+        ParseSingleLpSourcePlan(SourcePlanJson, SourceEntryNos, Quantities, NormalizedPlan, TotalQuantity);
+        if SourceEntryNos.Get(1) <> BoundItemLedgerEntryNo then
+            Error('Bağlı stok girişi kaynak planının ilk satırı olmalıdır.');
+
+        ItemLedgerEntry.LockTable();
+        LPHeader.LockTable();
+        LPLine.LockTable();
+        WarehouseEntry.LockTable();
+
+        if LoadExistingSingleLpRequest(
+            RequestId, BoundItemLedgerEntryNo, TemplateCode, BinCode, NormalizedPlan,
+            SourceEntryNos, Quantities, CreatedLpNos)
+        then begin
+            foreach EntryNo in SourceEntryNos do
+                RefreshItemLedgerEntryLpReferences(EntryNo);
+            Replayed := true;
+            exit;
+        end;
+
+        foreach EntryNo in SourceEntryNos do begin
+            ItemLedgerEntry.Get(EntryNo);
+            RequestedQuantity := Quantities.Get(EntryNo);
+            ValidateSingleLpSourceEntry(ItemLedgerEntry, FirstEntry, RequestedQuantity);
+            if ItemLedgerEntry."Remaining Quantity" - AllocatedQuantityForItemLedgerEntry(EntryNo) < RequestedQuantity then
+                Error(
+                    '%1 numaralı Madde Defter Girişinde LP''ye ayrılabilir miktar %2, istenen miktar %3''tür.',
+                    EntryNo,
+                    ItemLedgerEntry."Remaining Quantity" - AllocatedQuantityForItemLedgerEntry(EntryNo),
+                    RequestedQuantity);
+        end;
+        if FirstEntry."Serial No." <> '' then
+            if (SourceEntryNos.Count() <> 1) or (TotalQuantity <> 1) then
+                Error('Seri takipli %1 maddesi yalnız tek kaynaktan 1 adetlik LP olarak oluşturulabilir.', FirstEntry."Item No.");
+
+        Item.Get(FirstEntry."Item No.");
+        if BinCode <> '' then begin
+            EnsureLooseStockAvailable(
+                FirstEntry."Location Code", BinCode, FirstEntry."Item No.",
+                FirstEntry."Lot No.", FirstEntry."Serial No.", TotalQuantity);
+            TargetBinCode := BinCode;
+        end else begin
+            if TotalLooseStockAvailable(
+                FirstEntry."Location Code", FirstEntry."Item No.",
+                FirstEntry."Lot No.", FirstEntry."Serial No.") < TotalQuantity
+            then
+                Error('%1 ürününün raflardaki LP''ye atanmamış stoku seçilen toplam miktarı karşılamıyor.', FirstEntry."Item No.");
+            Bin.SetRange("Location Code", FirstEntry."Location Code");
+            if Bin.FindSet() then
+                repeat
+                    if LooseStockAvailableInBin(
+                        FirstEntry."Location Code", Bin.Code, FirstEntry."Item No.",
+                        FirstEntry."Lot No.", FirstEntry."Serial No.") > 0
+                    then
+                        TargetBinCode := Bin.Code;
+                until (Bin.Next() = 0) or (TargetBinCode <> '');
+        end;
+        if TargetBinCode = '' then
+            Error('%1 ürünü için LP''ye atanabilecek raf stoku bulunamadı.', FirstEntry."Item No.");
+
+        InsertSingleLpBuildRequest(
+            RequestId, BoundItemLedgerEntryNo, TemplateCode, FirstEntry."Location Code",
+            BinCode, TotalQuantity, NormalizedPlan);
+        EnsureBinReadyForStockLp(FirstEntry."Location Code", TargetBinCode, CheckedBinCodes);
+        Build(TemplateCode, FirstEntry."Location Code", TargetBinCode, LPHeader);
+        LPHeader."Bulk Build Request ID" := RequestId;
+        LPHeader."Bulk Source ILE No." := BoundItemLedgerEntryNo;
+        LPHeader."Bulk Source Bin Code" := TargetBinCode;
+        LPHeader.Modify(true);
+
+        foreach EntryNo in SourceEntryNos do begin
+            ItemLedgerEntry.Get(EntryNo);
+            AddSingleLpSourceEntry(
+                LPHeader, ItemLedgerEntry, Item, BinCode, Quantities.Get(EntryNo), CheckedBinCodes);
+        end;
+
+        LPHeader."Planned Quantity" := TotalQuantity;
+        LPHeader.Modify(true);
+        Stop(LPHeader, false);
+        CreatedLpNos.Add(LPHeader."No.");
+        CompleteBulkBuildRequest(RequestId);
+        Replayed := false;
+    end;
+
+    local procedure ParseSingleLpSourcePlan(SourcePlanJson: Text; var SourceEntryNos: List of [Integer]; var Quantities: Dictionary of [Integer, Decimal]; var NormalizedPlan: Text; var TotalQuantity: Decimal)
+    var
+        Plan: JsonArray;
+        Normalized: JsonArray;
+        RowToken: JsonToken;
+        ValueToken: JsonToken;
+        Row: JsonObject;
+        NormalizedRow: JsonObject;
+        EntryNo: Integer;
+        Quantity: Decimal;
+    begin
+        Clear(SourceEntryNos);
+        Clear(Quantities);
+        Clear(TotalQuantity);
+        if not Plan.ReadFrom(SourcePlanJson) then
+            Error('Stok giriş planı geçerli JSON değildir.');
+        if (Plan.Count() < 1) or (Plan.Count() > 50) then
+            Error('Tek LP için 1 ile 50 arasında stok girişi seçebilirsiniz.');
+        foreach RowToken in Plan do begin
+            Row := RowToken.AsObject();
+            if not Row.Get('entryNo', ValueToken) then
+                Error('Stok giriş planında kayıt numarası eksiktir.');
+            Evaluate(EntryNo, Format(ValueToken.AsValue()));
+            if not Row.Get('quantity', ValueToken) then
+                Error('%1 stok girişinin miktarı eksiktir.', EntryNo);
+            Evaluate(Quantity, Format(ValueToken.AsValue()));
+            if EntryNo <= 0 then
+                Error('Stok giriş numarası sıfırdan büyük olmalıdır.');
+            if Quantity <= 0 then
+                Error('%1 stok girişinin LP miktarı sıfırdan büyük olmalıdır.', EntryNo);
+            if Quantities.ContainsKey(EntryNo) then
+                Error('%1 stok girişi kaynak planında birden fazla kez seçilemez.', EntryNo);
+            SourceEntryNos.Add(EntryNo);
+            Quantities.Add(EntryNo, Quantity);
+            TotalQuantity += Quantity;
+            Clear(NormalizedRow);
+            NormalizedRow.Add('entryNo', EntryNo);
+            NormalizedRow.Add('quantity', Quantity);
+            Normalized.Add(NormalizedRow);
+        end;
+        Normalized.WriteTo(NormalizedPlan);
+        if StrLen(NormalizedPlan) > 2048 then
+            Error('Stok giriş planı çok uzundur. Daha az kayıt seçin.');
+    end;
+
+    local procedure ValidateSingleLpSourceEntry(ItemLedgerEntry: Record "Item Ledger Entry"; var FirstEntry: Record "Item Ledger Entry"; RequestedQuantity: Decimal)
+    begin
+        if ItemLedgerEntry.Quantity <= 0 then
+            Error('%1 stok girişi pozitif bir giriş değildir.', ItemLedgerEntry."Entry No.");
+        if ItemLedgerEntry."Remaining Quantity" <= 0 then
+            Error('%1 stok girişinde kullanılabilir miktar yoktur.', ItemLedgerEntry."Entry No.");
+        if ItemLedgerEntry."Location Code" = '' then
+            Error('%1 stok girişinde lokasyon kodu yoktur.', ItemLedgerEntry."Entry No.");
+        if ItemLedgerEntry."Variant Code" <> '' then
+            Error('%1 stok girişi %2 varyantını içeriyor. Varyantlı stok için LP oluşturma desteklenmiyor.', ItemLedgerEntry."Entry No.", ItemLedgerEntry."Variant Code");
+        if RequestedQuantity <= 0 then
+            Error('%1 stok girişinin miktarı sıfırdan büyük olmalıdır.', ItemLedgerEntry."Entry No.");
+
+        if FirstEntry."Entry No." = 0 then begin
+            FirstEntry := ItemLedgerEntry;
+            exit;
+        end;
+        if (ItemLedgerEntry."Item No." <> FirstEntry."Item No.") or
+           (ItemLedgerEntry."Variant Code" <> FirstEntry."Variant Code") or
+           (ItemLedgerEntry."Lot No." <> FirstEntry."Lot No.") or
+           (ItemLedgerEntry."Serial No." <> FirstEntry."Serial No.") or
+           (ItemLedgerEntry."Location Code" <> FirstEntry."Location Code")
+        then
+            Error('Tek LP''deki stok girişlerinin ürün, varyant, lot, seri ve lokasyonu aynı olmalıdır. %1 kaydı diğer seçimlerle uyuşmuyor.', ItemLedgerEntry."Entry No.");
+    end;
+
+    local procedure AddSingleLpSourceEntry(var LPHeader: Record "DOPSWHS LP Header"; ItemLedgerEntry: Record "Item Ledger Entry"; Item: Record Item; ExplicitBinCode: Code[20]; RequestedQuantity: Decimal; var CheckedBinCodes: List of [Code[20]])
+    var
+        Bin: Record Bin;
+        SourceBinCode: Code[20];
+        AvailableInBin: Decimal;
+        QuantityFromBin: Decimal;
+        RemainingToFill: Decimal;
+    begin
+        if ExplicitBinCode <> '' then begin
+            EnsureBinReadyForStockLp(ItemLedgerEntry."Location Code", ExplicitBinCode, CheckedBinCodes);
+            AddItemLedgerEntryPartToLp(LPHeader, ItemLedgerEntry, Item, ExplicitBinCode, RequestedQuantity);
+            exit;
+        end;
+
+        RemainingToFill := RequestedQuantity;
+        Bin.SetRange("Location Code", ItemLedgerEntry."Location Code");
+        if Bin.FindSet() then
+            repeat
+                SourceBinCode := Bin.Code;
+                AvailableInBin := LooseStockAvailableInBin(
+                    ItemLedgerEntry."Location Code", SourceBinCode, ItemLedgerEntry."Item No.",
+                    ItemLedgerEntry."Lot No.", ItemLedgerEntry."Serial No.");
+                if AvailableInBin > 0 then begin
+                    QuantityFromBin := AvailableInBin;
+                    if QuantityFromBin > RemainingToFill then
+                        QuantityFromBin := RemainingToFill;
+                    EnsureBinReadyForStockLp(ItemLedgerEntry."Location Code", SourceBinCode, CheckedBinCodes);
+                    AddItemLedgerEntryPartToLp(LPHeader, ItemLedgerEntry, Item, SourceBinCode, QuantityFromBin);
+                    RemainingToFill -= QuantityFromBin;
+                end;
+            until (Bin.Next() = 0) or (RemainingToFill <= 0.00001);
+        if RemainingToFill > 0.00001 then
+            Error('%1 stok girişinden LP''ye eklenecek miktarın %2 kadarı raflarda karşılanamadı.', ItemLedgerEntry."Entry No.", RemainingToFill);
+    end;
+
+    local procedure LoadExistingSingleLpRequest(RequestId: Guid; BoundItemLedgerEntryNo: Integer; TemplateCode: Code[20]; BinCode: Code[20]; NormalizedPlan: Text; SourceEntryNos: List of [Integer]; Quantities: Dictionary of [Integer, Decimal]; var CreatedLpNos: List of [Code[20]]): Boolean
+    var
+        BulkRequest: Record "DOPSWHS LP Bulk Request";
+        LPHeader: Record "DOPSWHS LP Header";
+        LPLine: Record "DOPSWHS LP Line";
+        EntryNo: Integer;
+        LinkedQuantity: Decimal;
+    begin
+        Clear(CreatedLpNos);
+        BulkRequest.LockTable();
+        if not BulkRequest.Get(RequestId) then
+            exit(false);
+        if (BulkRequest."Source ILE No." <> BoundItemLedgerEntryNo) or
+           (BulkRequest."Template Code" <> TemplateCode) or
+           (BulkRequest."Bin Code" <> BinCode) or
+           (BulkRequest."LP Count" <> 1) or
+           (BulkRequest."Source Plan" <> NormalizedPlan)
+        then
+            Error('%1 tekli LP işlem kimliği farklı bir kaynak planı için daha önce kullanılmıştır.', Format(RequestId));
+        if not BulkRequest.Completed then
+            Error('%1 tekli LP işlemi tamamlanmamış görünüyor. İkinci LP oluşturulmadı; kayıtları kontrol edin.', Format(RequestId));
+
+        LPHeader.SetCurrentKey("Bulk Build Request ID");
+        LPHeader.SetRange("Bulk Build Request ID", RequestId);
+        if not LPHeader.FindFirst() then
+            Error('%1 tekli LP işlemi tamamlanmış ancak LP kaydı bulunamadı.', Format(RequestId));
+        CreatedLpNos.Add(LPHeader."No.");
+        if LPHeader.Next() <> 0 then
+            Error('%1 tekli LP işlemi için birden fazla LP bulundu.', Format(RequestId));
+
+        foreach EntryNo in SourceEntryNos do begin
+            Clear(LinkedQuantity);
+            LPLine.Reset();
+            LPLine.SetRange("LP No.", LPHeader."No.");
+            LPLine.SetRange("Source Item Ledger Entry No.", EntryNo);
+            if LPLine.FindSet() then
+                repeat
+                    LinkedQuantity += StockLineBaseQuantity(LPLine);
+                until LPLine.Next() = 0;
+            if Abs(LinkedQuantity - Quantities.Get(EntryNo)) > 0.00001 then
+                Error('%1 tekli LP işleminin %2 kaynak giriş miktarı tutarsızdır.', Format(RequestId), EntryNo);
+        end;
+        exit(true);
+    end;
+
+    local procedure InsertSingleLpBuildRequest(RequestId: Guid; BoundItemLedgerEntryNo: Integer; TemplateCode: Code[20]; LocationCode: Code[10]; BinCode: Code[20]; TotalQuantity: Decimal; NormalizedPlan: Text)
+    var
+        BulkRequest: Record "DOPSWHS LP Bulk Request";
+    begin
+        BulkRequest.Init();
+        BulkRequest."Request ID" := RequestId;
+        BulkRequest."Source ILE No." := BoundItemLedgerEntryNo;
+        BulkRequest."Template Code" := TemplateCode;
+        BulkRequest."Location Code" := LocationCode;
+        BulkRequest."Bin Code" := BinCode;
+        BulkRequest."LP Count" := 1;
+        BulkRequest."Quantity per LP" := TotalQuantity;
+        BulkRequest."Source Plan" := CopyStr(NormalizedPlan, 1, MaxStrLen(BulkRequest."Source Plan"));
+        BulkRequest.Insert(true);
+    end;
+
     [CommitBehavior(CommitBehavior::Error)]
     local procedure BuildManyFromItemLedgerEntryCore(ItemLedgerEntryNo: Integer; TemplateCode: Code[20]; BinCode: Code[20]; LpCount: Integer; QuantityPerLp: Decimal; QuantityLastLp: Decimal; RequestId: Guid; UseIdempotency: Boolean; var CreatedLpNos: List of [Code[20]]; var Replayed: Boolean)
     var

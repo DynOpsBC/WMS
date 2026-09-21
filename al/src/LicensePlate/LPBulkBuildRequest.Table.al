@@ -57,6 +57,11 @@ table 72008 "DOPSWHS LP Bulk Request"
             DecimalPlaces = 0 : 5;
             MinValue = 0;
         }
+        field(66; "Source Plan"; Text[2048])
+        {
+            Caption = 'Source Item Ledger Entry Plan';
+            DataClassification = CustomerContent;
+        }
         field(70; Completed; Boolean)
         {
             Caption = 'Completed';
@@ -116,6 +121,7 @@ table 72008 "DOPSWHS LP Bulk Request"
            ("LP Count" <> StoredRequest."LP Count") or
            ("Quantity per LP" <> StoredRequest."Quantity per LP") or
            ("Quantity Last LP" <> StoredRequest."Quantity Last LP") or
+           ("Source Plan" <> StoredRequest."Source Plan") or
            ("Created At" <> StoredRequest."Created At") or
            ("Created By" <> StoredRequest."Created By")
         then

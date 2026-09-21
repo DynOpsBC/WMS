@@ -396,10 +396,13 @@ codeunit 72048 "DOPSWHS Prod Mgmt"
         Line.SetRange("No.", PickNo);
         if Line.FindSet() then
             repeat
-                if (Line."Qty. Handled (Base)" <> 0) or (Line."LP No." <> '') or
-                   (Line."Target LP No." <> '') or (Line."DOPSWHS Source LP Line No." <> 0) or
-                   ((Line."Qty. to Handle (Base)" <> 0) and
-                    (Abs(Line."Qty. to Handle (Base)" - Line."Qty. Outstanding (Base)") > 0.00001))
+                // BC keeps Qty. Handled and the registered LP references on an
+                // open production pick, then refills Qty. to Handle with the
+                // remaining demand. Those values are history, not an active
+                // second collection. Accept only references to an LP already
+                // delivered to this production order; any partial quantity or
+                // unregistered LP still protects the operator's current work.
+                if ProductionPickLineHasActiveWork(Line, ProdOrderNo)
                 then
                     Error('%1 çekmesinde başlanmış toplama var. Hazır LP kapsamı mevcut çalışmayı sıfırlayamaz; açık çekmeyi tamamlayın veya kontrollü olarak iptal edin.', PickNo);
             until Line.Next() = 0;
@@ -445,11 +448,50 @@ codeunit 72048 "DOPSWHS Prod Mgmt"
             if not QtyByLine.Get(Line."Line No.", Qty) then
                 Qty := 0;
             Line.Validate("Qty. to Handle", Qty);
+            // Remove the previous registered segment's pallet hints before
+            // applying the next ready LP to the still-open production pick.
+            Line."LP No." := '';
+            Line."Target LP No." := '';
+            Line."DOPSWHS Source LP Line No." := 0;
             SelectedTake := (Line."Action Type" = Line."Action Type"::Take) and (Qty > 0);
             if SelectedTake then
                 Line."LP No." := LP."No.";
             Line.Modify(true);
         until Line.Next() = 0;
+    end;
+
+    local procedure ProductionPickLineHasActiveWork(Line: Record "Warehouse Activity Line"; ProdOrderNo: Code[20]): Boolean
+    begin
+        if (Line."Qty. to Handle (Base)" <> 0) and
+           (Abs(Line."Qty. to Handle (Base)" - Line."Qty. Outstanding (Base)") > 0.00001)
+        then
+            exit(true);
+
+        if Line."DOPSWHS Source LP Line No." <> 0 then
+            exit(true);
+        if (Line."LP No." <> '') and (not IsRegisteredProductionLp(Line."LP No.", ProdOrderNo)) then
+            exit(true);
+        if (Line."Target LP No." <> '') and (not IsRegisteredProductionLp(Line."Target LP No.", ProdOrderNo)) then
+            exit(true);
+
+        // Qty. Handled by itself is cumulative history on an open BC pick.
+        // With no active pallet hint and either zero or the standard full
+        // outstanding proposal, it is safe to scope the next prepared LP.
+        exit(false);
+    end;
+
+    local procedure IsRegisteredProductionLp(LpNo: Code[20]; ProdOrderNo: Code[20]): Boolean
+    var
+        HistoricalLP: Record "DOPSWHS LP Header";
+    begin
+        if LpNo = '' then
+            exit(true);
+        if not HistoricalLP.Get(LpNo) then
+            exit(false);
+        exit(
+            (HistoricalLP.Status = HistoricalLP.Status::Assigned) and
+            (HistoricalLP."Assigned Document Type" = HistoricalLP."Assigned Document Type"::ProdConsumption) and
+            (HistoricalLP."Assigned Document No." = ProdOrderNo));
     end;
 
     procedure FinishProductionOrder(ProdOrderNo: Code[20]; UpdateUnitCost: Boolean): Code[20]

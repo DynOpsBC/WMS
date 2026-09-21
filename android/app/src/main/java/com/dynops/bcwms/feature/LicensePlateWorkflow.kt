@@ -180,7 +180,9 @@ internal fun ledgerLpPrintSelection(result: LedgerBulkLpBuildResult): Set<String
 
 internal fun ledgerLpCompletionStatus(result: LedgerBulkLpBuildResult): String {
     val count = result.createdLpNos.size
-    val source = "Kaynak giriş: #${result.sourceEntryNo}."
+    val sourceEntries = result.sourceEntryNos.ifEmpty { listOf(result.sourceEntryNo) }
+    val source = "Kaynak giriş${if (sourceEntries.size > 1) "leri" else ""}: " +
+        sourceEntries.joinToString { "#$it" } + "."
     return when {
         result.printSkippedOnReplay ->
             "UYARI: Daha önce oluşturulan $count LP doğrulandı. $source " +

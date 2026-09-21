@@ -10,6 +10,20 @@ import org.junit.Test
  * önceki akışa döner.
  */
 class LpScanCapabilitiesTest {
+    @Test
+    fun `multi entry single LP action is detected exactly from metadata`() {
+        assertTrue(
+            BcApi.parseLpScanCapabilities(
+                """<Action Name="createSingleLicensePlateFromEntriesIdempotent" IsBound="true"/>""",
+            ).multiEntrySingleLp,
+        )
+        assertFalse(
+            BcApi.parseLpScanCapabilities(
+                """<Action Name="createLicensePlatesIdempotent" IsBound="true"/>""",
+            ).multiEntrySingleLp,
+        )
+    }
+
     @org.junit.Test fun metadataFailureNeverDowngradesToLegacyPosting() {
         val old = BcApi.parseLpScanCapabilities("""<Action Name="registerFor"/>""")
         val current = BcApi.parseLpScanCapabilities("""<Action Name="registerScannedFor"/>""")
