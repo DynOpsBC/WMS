@@ -28,4 +28,22 @@ class ItemLookupTest {
 
         assertEquals(listOf("9MM KOVAN", "STR 26"), rows.map { it.getString("no") })
     }
+
+    @Test fun `spare parts lookup includes category and description filter`() {
+        val paths = itemLookupPaths("CONV", sparePartsOnly = true)
+        assertEquals(2, paths.size)
+        assertTrue(paths.all { it.contains("contains(itemCategoryCode,'YEDEK')") })
+    }
+
+    @Test fun `isSparePart detects spare parts from category, description or number`() {
+        val spareByCat = JSONObject().put("no", "ITM-01").put("description", "V KAYIS").put("itemCategoryCode", "YEDEK")
+        val spareByDesc = JSONObject().put("no", "ITM-02").put("description", "YEDEK PARCA CIVATA")
+        val spareByNo = JSONObject().put("no", "YP-100").put("description", "SOMUN")
+        val normalItem = JSONObject().put("no", "ITM-03").put("description", "STANDART URUN")
+
+        assertTrue(isSparePart(spareByCat))
+        assertTrue(isSparePart(spareByDesc))
+        assertTrue(isSparePart(spareByNo))
+        assertTrue(!isSparePart(normalItem))
+    }
 }

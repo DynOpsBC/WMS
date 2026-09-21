@@ -54,6 +54,8 @@ fun ScanField(
     updateValueOnScan: Boolean = true,
     scanOnly: Boolean = false,
     okButton: Boolean = true,
+    autoFocus: Boolean = false,
+    onClear: (() -> Unit)? = null,
 ) {
     val context = LocalContext.current
     var hasCameraPermission by remember {
@@ -86,6 +88,13 @@ fun ScanField(
         if (!isFocused || !enabled || !windowFocused) return@LaunchedEffect
         ScanBus.events.collect { event ->
             deliverScan(event.raw)
+        }
+    }
+
+    if (autoFocus && focusRequester != null) {
+        LaunchedEffect(Unit) {
+            kotlinx.coroutines.delay(120)
+            runCatching { focusRequester.requestFocus() }
         }
     }
 
@@ -122,6 +131,20 @@ fun ScanField(
                 singleLine = true,
                 enabled = enabled,
                 interactionSource = interactionSource,
+                trailingIcon = if (value.isNotEmpty() && enabled) {
+                    {
+                        IconButton(onClick = {
+                            onValueChange("")
+                            onClear?.invoke()
+                        }) {
+                            WmsIcon(
+                                glyph = WmsGlyph.CLOSE,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.size(18.dp)
+                            )
+                        }
+                    }
+                } else null,
                 // Elle giriş: klavye "bitti"/Enter → okutmayı tetikle (emülatörde ve
                 // gerçek cihazda yazıp Enter'a basınca donanım taraması gibi işlenir).
                 keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),

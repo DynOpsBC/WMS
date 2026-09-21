@@ -85,7 +85,12 @@ internal fun DevicePrintersDialog(onDismiss: () -> Unit) {
 
 /** A configured destination is not a live USB/network connection claim. */
 @Composable
-internal fun PrinterDestinationCard(usage: String = PRINTER_USAGE_LABEL, inquiryFallback: Boolean = false) {
+internal fun PrinterDestinationCard(
+    usage: String = PRINTER_USAGE_LABEL,
+    inquiryFallback: Boolean = false,
+    compact: Boolean = false,
+    enabled: Boolean = true,
+) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val selected = rememberDevicePrinter(usage)
@@ -124,6 +129,43 @@ internal fun PrinterDestinationCard(usage: String = PRINTER_USAGE_LABEL, inquiry
         inquiryFallback && selected.isBlank() -> "Yazıcı seçilmedi; hedefi BC belirler."
         else -> ""
     }
+    if (compact) {
+        val defaultDestination = inquiryFallback && selected.isBlank()
+        val destinationProblem = error.isNotBlank() ||
+            (complete && effective.isNotBlank() && row == null) || (row != null && !row.optBoolean("active", true))
+        val compactWarning = when {
+            error.isNotBlank() -> error
+            loading -> ""
+            complete && effective.isNotBlank() && row == null -> "Yazıcıyı yeniden seçin."
+            row != null && !row.optBoolean("active", true) -> "Yazıcı pasif."
+            defaultDestination && document.isNotBlank() -> "Belge yazıcısı kullanılacak"
+            defaultDestination -> "Varsayılan yazıcı kullanılacak"
+            else -> ""
+        }
+        Surface(
+            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+            shape = androidx.compose.foundation.shape.RoundedCornerShape(12.dp),
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Row(Modifier.padding(start = 12.dp, end = 4.dp, top = 6.dp, bottom = 6.dp),
+                verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                com.dynops.bcwms.ui.WmsIcon(com.dynops.bcwms.ui.WmsGlyph.PRINTER,
+                    MaterialTheme.colorScheme.primary, Modifier.size(22.dp))
+                Column(Modifier.weight(1f)) {
+                    Text(printerBindingFrom(effective, row).title.ifBlank { "Yazıcı seçin" },
+                        style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold,
+                        maxLines = 2, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+                    if (compactWarning.isNotBlank()) Text(compactWarning,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = if (destinationProblem) MaterialTheme.colorScheme.error
+                            else MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                TextButton(enabled = enabled, onClick = { query = ""; open = true; generation++ }) {
+                    Text(if (selected.isBlank()) "Seç" else "Değiştir")
+                }
+            }
+        }
+    } else {
     Card(Modifier.fillMaxWidth()) {
         Row(
             Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
@@ -142,10 +184,11 @@ internal fun PrinterDestinationCard(usage: String = PRINTER_USAGE_LABEL, inquiry
                     color = MaterialTheme.colorScheme.error,
                 )
             }
-            TextButton(onClick = { query = ""; open = true; generation++ }) {
+            TextButton(enabled = enabled, onClick = { query = ""; open = true; generation++ }) {
                 Text(if (selected.isBlank()) "Seç" else "Değiştir")
             }
         }
+    }
     }
     if (open) AlertDialog(onDismissRequest = { open = false }, title = {
         Text(if (usage == PRINTER_USAGE_LABEL) "Bu cihaz için etiket yazıcısı" else "Bu cihaz için belge yazıcısı")

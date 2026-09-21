@@ -52,6 +52,7 @@ enum class WmsGlyph {
     QUALITY,
     QUALITY_MANAGEMENT,
     ITEM_SEARCH,
+    STOCK,
     BIN_SEARCH,
     ENTRIES,
     FIELD_SETTINGS,
@@ -88,6 +89,7 @@ fun glyphForScreen(screen: Screen): WmsGlyph = when (screen) {
     Screen.Quality -> WmsGlyph.QUALITY
     Screen.QualityMgmt -> WmsGlyph.QUALITY_MANAGEMENT
     Screen.ItemInquiry -> WmsGlyph.ITEM_SEARCH
+    Screen.Stock -> WmsGlyph.STOCK
     Screen.BinInquiry -> WmsGlyph.BIN_SEARCH
     Screen.Labels -> WmsGlyph.LABEL
     Screen.WhseEntries -> WmsGlyph.ENTRIES
@@ -367,6 +369,22 @@ fun WmsIcon(
                 roundRect(0.11f, 0.19f, 0.45f, 0.45f, fill = true); roundRect(0.11f, 0.19f, 0.45f, 0.45f)
                 line(0.11f, 0.34f, 0.335f, 0.47f); line(0.56f, 0.34f, 0.335f, 0.47f)
                 magnifier(0.65f, 0.65f)
+            }
+            WmsGlyph.STOCK -> {
+                roundRect(0.12f, 0.16f, 0.76f, 0.20f, fill = true)
+                roundRect(0.12f, 0.16f, 0.76f, 0.20f)
+                thinLine(0.38f, 0.16f, 0.38f, 0.36f)
+                thinLine(0.62f, 0.16f, 0.62f, 0.36f)
+
+                roundRect(0.12f, 0.42f, 0.76f, 0.20f, fill = true)
+                roundRect(0.12f, 0.42f, 0.76f, 0.20f)
+                thinLine(0.38f, 0.42f, 0.38f, 0.62f)
+                thinLine(0.62f, 0.42f, 0.62f, 0.62f)
+
+                roundRect(0.12f, 0.68f, 0.76f, 0.20f, fill = true)
+                roundRect(0.12f, 0.68f, 0.76f, 0.20f)
+                thinLine(0.38f, 0.68f, 0.38f, 0.88f)
+                thinLine(0.62f, 0.68f, 0.62f, 0.88f)
             }
             WmsGlyph.BIN_SEARCH -> {
                 roundRect(0.10f, 0.47f, 0.48f, 0.32f, fill = true); roundRect(0.10f, 0.47f, 0.48f, 0.32f)

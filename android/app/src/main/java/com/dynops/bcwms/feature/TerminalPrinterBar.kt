@@ -118,7 +118,7 @@ internal fun PrinterStateDot(online: Boolean?, size: androidx.compose.ui.unit.Dp
  * printer this terminal prints to. Tapping opens the printers screen.
  */
 @Composable
-internal fun LabelPrinterBar(onOpenPrinters: () -> Unit) {
+internal fun LabelPrinterBar(onOpenPrinters: () -> Unit, quiet: Boolean = false) {
     val context = LocalContext.current
     val code = rememberDevicePrinter(PRINTER_USAGE_LABEL)
     var binding by remember { mutableStateOf(printerBindingFrom(code, null)) }
@@ -131,7 +131,7 @@ internal fun LabelPrinterBar(onOpenPrinters: () -> Unit) {
     }
     val missing = !binding.isSet
     Surface(
-        color = if (missing) MaterialTheme.colorScheme.errorContainer else MaterialTheme.colorScheme.surfaceVariant,
+        color = if (missing && !quiet) MaterialTheme.colorScheme.errorContainer else MaterialTheme.colorScheme.surfaceVariant,
         modifier = Modifier.fillMaxWidth().clickable(onClick = onOpenPrinters),
     ) {
         Row(Modifier.padding(horizontal = 16.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -140,9 +140,9 @@ internal fun LabelPrinterBar(onOpenPrinters: () -> Unit) {
                 Spacer(Modifier.width(8.dp))
             }
             Text(
-                if (missing) "Etiket yazıcısı seçilmedi" else "Etiket yazıcısı",
+                if (missing && quiet) "Etiket yazıcısı seçin" else if (missing) "Etiket yazıcısı seçilmedi" else "Etiket yazıcısı",
                 fontSize = 12.sp,
-                color = if (missing) MaterialTheme.colorScheme.onErrorContainer else MaterialTheme.colorScheme.onSurfaceVariant,
+                color = if (missing && !quiet) MaterialTheme.colorScheme.onErrorContainer else MaterialTheme.colorScheme.onSurfaceVariant,
             )
             if (!missing) {
                 Spacer(Modifier.width(8.dp))

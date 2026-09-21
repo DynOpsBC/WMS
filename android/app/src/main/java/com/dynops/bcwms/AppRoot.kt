@@ -1,6 +1,7 @@
 package com.dynops.bcwms
 
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -67,6 +68,7 @@ enum class Screen(val title: String) {
     LicensePlates("LP (Taşıma Kabı)"),
     HierarchicalLP("DKC Kutu ve Palet"),
     ItemInquiry("Ürün Sorgu"),
+    Stock("Stok"),
     BinInquiry("Bin Sorgu"),
     Labels("Etiket Çıkar"),
     WhseEntries("Ambar Hareketleri"),
@@ -104,6 +106,8 @@ fun AppRoot() {
     var screen by rememberSaveable {
         mutableStateOf(if (BcApi.hasToken(context)) Screen.Home else Screen.Connection)
     }
+    // Keep the menu position alive while a module replaces HomeScreen.
+    val homeScrollState = rememberScrollState()
     // Bir belirtecin diskte bulunması bağlantı anlamına gelmez. Şirket ve API
     // doğrulanana kadar operasyonlar kapalı kalır.
     var connected by remember { mutableStateOf(false) }
@@ -176,7 +180,9 @@ fun AppRoot() {
                             },
                         )
                     }
-                    ActivePrinterTopBarButton(onClick = { showDevicePrinters = true })
+                    if (BuildConfig.FLAVOR != "emu" || screen !in setOf(Screen.ItemInquiry, Screen.Labels)) {
+                        ActivePrinterTopBarButton(onClick = { showDevicePrinters = true })
+                    }
                     ConnectionBadge(connected) { screen = Screen.Connection }
                 }
             )
@@ -187,11 +193,15 @@ fun AppRoot() {
             // BADE (17 Eyl 2026): the label printer this terminal prints to is
             // always visible on operational screens; tapping opens Yazıcılar.
             if (forceProductionFlow && connected && screen !in setOf(Screen.Home, Screen.Connection, Screen.Printers, Screen.Help)) {
-                com.dynops.bcwms.feature.LabelPrinterBar(onOpenPrinters = { screen = Screen.Printers })
+                com.dynops.bcwms.feature.LabelPrinterBar(
+                    onOpenPrinters = { screen = Screen.Printers },
+                    quiet = BuildConfig.FLAVOR == "emu" && screen in setOf(Screen.ItemInquiry, Screen.Labels),
+                )
             }
         Box(Modifier.weight(1f).fillMaxSize()) {
             when (screen) {
                 Screen.Home -> HomeScreen(
+                    scrollState = homeScrollState,
                     connected = connected,
                     flavor = BuildConfig.FLAVOR,
                     onConnectionChanged = { connected = it },
@@ -201,6 +211,7 @@ fun AppRoot() {
                 Screen.LicensePlates -> LicensePlateModule()
                 Screen.HierarchicalLP -> HierarchicalLpModule()
                 Screen.ItemInquiry -> ItemInquiryModule()
+                Screen.Stock -> StockModule()
                 Screen.BinInquiry -> BinInquiryModule()
                 Screen.Labels -> LabelsModule()
                 Screen.WhseEntries -> WhseEntriesModule()
@@ -345,6 +356,7 @@ private val HomeCategories = listOf(
     )),
     HomeCategory("Sorgu", Color(0xFF9B59B6), listOf(
         HomeTile(Screen.ItemInquiry, WmsGlyph.ITEM_SEARCH, "Ürün Sorgu", "Ürünün raf, lot ve miktarını bul"),
+        HomeTile(Screen.Stock, WmsGlyph.STOCK, "Stok", "Tüm stoktaki ürünler ve kritik seviyeler"),
         HomeTile(Screen.Labels, WmsGlyph.LABEL, "Etiket Çıkar", "Ürün etiketi · Bin etiketi · A3 belge"),
         HomeTile(Screen.BinInquiry, WmsGlyph.BIN_SEARCH, "Bin Sorgu", "Bir rafın mevcut içeriğini gör"),
         HomeTile(Screen.WhseEntries, WmsGlyph.ENTRIES, "Ambar Hareketleri", "Geçmiş stok hareketlerini incele"),
@@ -363,6 +375,7 @@ private val HomeCategories = listOf(
 
 @Composable
 private fun HomeScreen(
+    scrollState: ScrollState,
     connected: Boolean,
     flavor: String,
     onConnectionChanged: (Boolean) -> Unit,
@@ -426,7 +439,7 @@ private fun HomeScreen(
         Modifier
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background)
-            .verticalScroll(rememberScrollState())
+            .verticalScroll(scrollState)
             .padding(16.dp)
     ) {
         HomeHeader(

@@ -11,7 +11,7 @@ fun LabelsModule() {
     var tab by remember { mutableStateOf(0) }
     Column(Modifier.fillMaxSize()) {
         TabRow(selectedTabIndex = tab) {
-            Tab(selected = tab == 0, onClick = { tab = 0 }, text = { Text("Bin Etiketi") })
+            Tab(selected = tab == 0, onClick = { tab = 0 }, text = { Text("Raf Etiketi") })
             Tab(selected = tab == 1, onClick = { tab = 1 }, text = { Text("Ürün Etiketi") })
         }
         Box(Modifier.weight(1f)) {

@@ -1,7 +1,7 @@
 {
-  "versionCode": 200131,
-  "versionName": "1.14.131-emu",
-  "apkUrl": "https://github.com/DynOpsBC/WMS/releases/download/android-v1.14.131-emu/BCWMS-EMU-1.14.131-UYUMLU.apk",
-  "sha256": "42c64c2ca3876ebe56d7c054d4a97aae56f22e834ae221d40d45a1c3f53edc5f",
-  "releaseNotes": "DKÇ logosu giriş ve ana ekranda. BC 1.14.2.9 ile çalışır."
+  "versionCode": 200154,
+  "versionName": "1.14.154-emu",
+  "apkUrl": "https://github.com/DynOpsBC/WMS/releases/download/android-v1.14.154-emu/BCWMS-EMU-1.14.154-UYUMLU.apk",
+  "sha256": "a1822f5951b077dbfd4289677559d3e373f9d37ca9170ce208573d8ae54cbf6e",
+  "releaseNotes": "Ürün sorgu ekranı yenilendi. Çoklu ürün seçimi ve ürün başına adet ile toplu etiket yazdırma eklendi. Toplu yazdırma penceresi kompakt hale getirildi. Raf etiketi akışı sadeleştirildi."
 }
