@@ -224,6 +224,26 @@ page 72088 "DOPSWHS LP API"
     end;
 
     [ServiceEnabled]
+    procedure addLineFromBinWithSource(itemNo: Code[20]; unitOfMeasure: Code[10]; quantity: Decimal; lotNo: Code[50]; serialNo: Code[50]; sourceBinCode: Code[20]; userId: Code[50]; sourceItemLedgerEntryNo: Integer)
+    var
+        LPMgt: Codeunit "DOPSWHS LP Management";
+    begin
+        if sourceItemLedgerEntryNo <= 0 then
+            Error('Kaynak madde defteri girişini seçin.');
+        LPMgt.AddLineFromBin(Rec, itemNo, unitOfMeasure, quantity, lotNo, serialNo, sourceBinCode, userId, sourceItemLedgerEntryNo);
+    end;
+
+    [ServiceEnabled]
+    procedure linkStockSource(lineNo: Integer; sourceItemLedgerEntryNo: Integer)
+    var
+        LPMgt: Codeunit "DOPSWHS LP Management";
+    begin
+        if sourceItemLedgerEntryNo <= 0 then
+            Error('Kaynak madde defteri girişini seçin.');
+        LPMgt.LinkStockLineSource(Rec, lineNo, sourceItemLedgerEntryNo);
+    end;
+
+    [ServiceEnabled]
     procedure moveToBin(targetBinCode: Code[20]; userId: Code[50])
     var
         LPMgt: Codeunit "DOPSWHS LP Management";

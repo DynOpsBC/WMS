@@ -26,16 +26,17 @@ düşüyordu; bu alan LP insert sırasında BC bağlantı hesabıyla doldurulur.
 
 ## Doğrulama ve yayın sırası
 
-- BADE debug APK derlendi; 400 Android birim testi geçti.
+- BADE 1.14.142 imzalı release APK derlendi; 400 Android birim testi geçti.
+  Lint: 0 hata. İmza önceki 1.14.141 sürümüyle aynı.
 - `al-print-tests/MteOperatorTests.Codeunit.al`: ZPL üzerinde PIN adı,
   DYNOPS'a düşmeme, manuel çalışan önceliği ve PDF çalışan eşleşmesi
   regresyonları eklendi. Test nesnesi 72181 mevcut 72180–72189 test
   uygulaması aralığındadır; üretim nesnesi eklenmedi.
-- AL derlemesi / AL test yürütümü bu Mac oturumunda yapılmadı. Depo
-  talimatına göre Windows AL araçları gereklidir.
-- Yayına çıkmadan önce AL paketini Windows'ta derle, testleri sandbox'ta
-  çalıştır, yeni BC paketini yükle, ardından sürümü artırılmış BADE APK'yı
-  dağıt. Yeni APK eski BC paketiyle dağıtılmamalıdır.
+- BCWMSApp 1.14.1.60 ve AL test paketi Windows üzerinde başarıyla derlendi:
+  https://github.com/DynOpsBC/WMS/actions/runs/35580533805
+- AL testleri BC sandbox içinde henüz yürütülmedi. Yayına çıkmadan önce
+  sandbox doğrulaması ve yeni BC paketi kurulumu yapılmalı; ardından
+  BADE APK dağıtılmalı. Yeni APK eski BC paketiyle dağıtılmamalıdır.
 - Canlıya yayın veya fiziksel yazdırma yapılmadı. PIN ile iki farklı
   kullanıcı için toplu basım, otomatik basım ve yeniden basım çıktıları
   ayrıca doğrulanmalıdır. Önceden basılmış etiketler kendiliğinden değişmez.

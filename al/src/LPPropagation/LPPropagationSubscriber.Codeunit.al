@@ -495,7 +495,8 @@ codeunit 72428 "DOPSWHS LP Propagation"
     begin
         // Yeni akışta her LP satırı kesin kaynak giriş numarasını taşır. Tek
         // LP kadar birden fazla LP'yi de önce bu kesin bağdan geri yükle.
-        LPManagement.RefreshItemLedgerEntryLpReferences(ItemLedgerEntry."Entry No.");
+        LPManagement.RepairUnlinkedStockLinesForEntry(ItemLedgerEntry."Entry No.");
+        LPManagement.RefreshItemLedgerEntryLpReferences(ItemLedgerEntry."Entry No.", false);
         ItemLedgerEntry.Get(ItemLedgerEntry."Entry No.");
         if (ItemLedgerEntry."DOPSWHS LP No." <> '') or
            (ItemLedgerEntry."DOPSWHS LP Nos." <> '')
@@ -541,25 +542,9 @@ codeunit 72428 "DOPSWHS LP Propagation"
         if CandidateLpNo <> '' then
             exit(CandidateLpNo);
 
-        LPLine.Reset();
-        LPLine.SetRange("Item No.", ItemLedgerEntry."Item No.");
-        LPLine.SetRange("Variant Code", ItemLedgerEntry."Variant Code");
-        LPLine.SetRange("Lot No.", ItemLedgerEntry."Lot No.");
-        LPLine.SetRange("Serial No.", ItemLedgerEntry."Serial No.");
-        LPLine.SetFilter(Quantity, '>0');
-        if LPLine.FindSet() then
-            repeat
-                if LPHeader.Get(LPLine."LP No.") then
-                    if (LPHeader."Location Code" = ItemLedgerEntry."Location Code") and
-                       (LPHeader.Status in [LPHeader.Status::Open, LPHeader.Status::Built, LPHeader.Status::Assigned])
-                    then
-                        if CandidateLpNo = '' then
-                            CandidateLpNo := LPLine."LP No."
-                        else
-                            if CandidateLpNo <> LPLine."LP No." then
-                                exit('');
-            until LPLine.Next() = 0;
-        exit(CandidateLpNo);
+        // A matching item/lot is not proof of origin. Missing legacy links
+        // are repaired only by the validated stock-source path above.
+        exit('');
     end;
 
     local procedure StampPostedReceiptWarehouseEntries(PostedLine: Record "Posted Whse. Receipt Line"; LpNo: Code[20])

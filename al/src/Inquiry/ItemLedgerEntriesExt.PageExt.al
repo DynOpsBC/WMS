@@ -37,7 +37,7 @@ pageextension 72313 "DOPSWHS Item Ledger Entries" extends "Item Ledger Entries"
             {
                 ApplicationArea = All;
                 Caption = 'LP Bilgisini Yenile';
-                ToolTip = 'Seçili madde defteri girişlerinin LP bilgisini deftere nakledilmiş ambar kayıtlarından veya sonradan oluşturulmuş tek ve kesin LP eşleşmesinden yeniden getirir.';
+                ToolTip = 'Seçili girişlerin LP bilgisini yeniler. Kaynağı eksik stok satırlarını yalnız tek ve yeterli kaynak varsa bağlar; belirsiz satırlar LP kartından Kaynak Girişi Bağla ile seçilmelidir.';
                 Image = RefreshLines;
                 Promoted = true;
                 PromotedCategory = Process;
@@ -60,7 +60,7 @@ pageextension 72313 "DOPSWHS Item Ledger Entries" extends "Item Ledger Entries"
 
                     CurrPage.Update(false);
                     Message(
-                        '%1 kayıt için LP bilgisi doğrulandı/güncellendi. %2 kayıt için ilişkili LP bulunamadı.',
+                        '%1 kayıt için LP bilgisi doğrulandı/güncellendi. %2 kayıt için kesin LP bağlantısı bulunamadı. Kaynağı eksik satırları LP kartından Kaynak Girişi Bağla ile kontrol edin.',
                         UpdatedCount, NotFoundCount);
                 end;
             }

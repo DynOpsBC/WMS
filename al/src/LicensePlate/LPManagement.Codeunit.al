@@ -363,27 +363,11 @@ codeunit 72040 "DOPSWHS LP Management"
     end;
 
     local procedure AddItemLedgerEntryPartToLp(var LPHeader: Record "DOPSWHS LP Header"; ItemLedgerEntry: Record "Item Ledger Entry"; Item: Record Item; SourceBinCode: Code[20]; Quantity: Decimal)
-    var
-        LPLine: Record "DOPSWHS LP Line";
     begin
         AddLineFromBin(
-            LPHeader,
-            ItemLedgerEntry."Item No.",
-            Item."Base Unit of Measure",
-            Quantity,
-            ItemLedgerEntry."Lot No.",
-            ItemLedgerEntry."Serial No.",
-            SourceBinCode,
-            CopyStr(UserId(), 1, 50));
-
-        LPLine.SetRange("LP No.", LPHeader."No.");
-        if not LPLine.FindLast() then
-            Error('%1 LP satırı oluşturulamadı.', LPHeader."No.");
-        LPLine."Source Document No." := ItemLedgerEntry."Document No.";
-        LPLine."Source Document Line No." := ItemLedgerEntry."Entry No.";
-        LPLine."Source Document Quantity" := ItemLedgerEntry.Quantity;
-        LPLine."Source Item Ledger Entry No." := ItemLedgerEntry."Entry No.";
-        LPLine.Modify(true);
+            LPHeader, ItemLedgerEntry."Item No.", Item."Base Unit of Measure", Quantity,
+            ItemLedgerEntry."Lot No.", ItemLedgerEntry."Serial No.", SourceBinCode,
+            CopyStr(UserId(), 1, 50), ItemLedgerEntry."Entry No.");
     end;
 
     local procedure EnsureBinReadyForStockLp(LocationCode: Code[10]; BinCode: Code[20]; var CheckedBinCodes: List of [Code[20]])
@@ -400,6 +384,12 @@ codeunit 72040 "DOPSWHS LP Management"
     /// </summary>
     [CommitBehavior(CommitBehavior::Error)]
     procedure AddLineFromBin(var LP: Record "DOPSWHS LP Header"; ItemNo: Code[20]; UoM: Code[10]; Qty: Decimal; LotNo: Code[50]; SerialNo: Code[50]; SourceBinCode: Code[20]; OperatorUserId: Code[50])
+    begin
+        AddLineFromBin(LP, ItemNo, UoM, Qty, LotNo, SerialNo, SourceBinCode, OperatorUserId, 0);
+    end;
+
+    [CommitBehavior(CommitBehavior::Error)]
+    procedure AddLineFromBin(var LP: Record "DOPSWHS LP Header"; ItemNo: Code[20]; UoM: Code[10]; Qty: Decimal; LotNo: Code[50]; SerialNo: Code[50]; SourceBinCode: Code[20]; OperatorUserId: Code[50]; SourceEntryNo: Integer)
     var
         LPLine: Record "DOPSWHS LP Line";
         Item: Record Item;
@@ -411,8 +401,12 @@ codeunit 72040 "DOPSWHS LP Management"
         MovementMgmt: Codeunit "DOPSWHS Movement Mgmt";
         EffectiveUoM: Code[10];
         MovementQty: Decimal;
+        SourceEntry: Record "Item Ledger Entry";
     begin
+        // Same lock order as bulk creation: source stock, headers, then lines.
+        SourceEntry.LockTable();
         LP.LockTable();
+        LPLine.LockTable();
         LP.Get(LP."No.");
         EnsureNotPendingReceipt(LP);
         OnBeforeAddLine(LP, ItemNo, UoM, Qty);
@@ -459,12 +453,6 @@ codeunit 72040 "DOPSWHS LP Management"
 
         EnsureLooseStockAvailable(LP."Location Code", SourceBinCode, ItemNo, LotNo, SerialNo, MovementQty);
 
-        LogMutation('LP.AddLineFromBin');
-        if SourceBinCode <> LP."Bin Code" then
-            MovementMgmt.AdHocMoveTrackedAtLocation(
-                LP."Location Code", SourceBinCode, LP."Bin Code", ItemNo, LP."No.",
-                MovementQty, OperatorUserId, LotNo, SerialNo);
-
         LPLine.Init();
         LPLine."LP No." := LP."No.";
         LPLine.Validate("Item No.", ItemNo);
@@ -473,9 +461,18 @@ codeunit 72040 "DOPSWHS LP Management"
         LPLine."Lot No." := LotNo;
         LPLine."Serial No." := SerialNo;
         LPLine."Source Bin Code" := SourceBinCode;
+        SetStockLineSource(LP, LPLine, SourceEntryNo);
+
+        LogMutation('LP.AddLineFromBin');
+        if SourceBinCode <> LP."Bin Code" then
+            MovementMgmt.AdHocMoveTrackedAtLocation(
+                LP."Location Code", SourceBinCode, LP."Bin Code", ItemNo, LP."No.",
+                MovementQty, OperatorUserId, LotNo, SerialNo);
+
         LPLine.Insert(true);
         WriteToLedger(LP, LPActionItemAdded(), SourceBinCode, LP."Bin Code", Qty, ItemNo, LotNo + SerialNo, '');
         OnAfterAddLine(LP, LPLine);
+        RefreshItemLedgerEntryLpReferences(LPLine."Source Item Ledger Entry No.");
     end;
 
     /// <summary>
@@ -1553,7 +1550,7 @@ codeunit 72040 "DOPSWHS LP Management"
             repeat
                 if LPHeader.Get(LPLine."LP No.") then
                     if LPHeader.Status in [LPHeader.Status::Open, LPHeader.Status::Built, LPHeader.Status::Assigned] then
-                        AllocatedQuantity += LPLine.Quantity;
+                        AllocatedQuantity += StockLineBaseQuantity(LPLine);
             until LPLine.Next() = 0;
         exit(AllocatedQuantity);
     end;
@@ -1573,6 +1570,11 @@ codeunit 72040 "DOPSWHS LP Management"
     end;
 
     procedure RefreshItemLedgerEntryLpReferences(ItemLedgerEntryNo: Integer)
+    begin
+        RefreshItemLedgerEntryLpReferences(ItemLedgerEntryNo, true);
+    end;
+
+    procedure RefreshItemLedgerEntryLpReferences(ItemLedgerEntryNo: Integer; ClearWhenEmpty: Boolean)
     var
         ItemLedgerEntry: Record "Item Ledger Entry";
         LPHeader: Record "DOPSWHS LP Header";
@@ -1594,6 +1596,10 @@ codeunit 72040 "DOPSWHS LP Management"
                             SeenLpNos.Add(LPHeader."No.", true);
             until LPLine.Next() = 0;
 
+        // Backfill must preserve historical posted/consumed references when
+        // there are no longer any active LP lines for this stock entry.
+        if (SeenLpNos.Count() = 0) and not ClearWhenEmpty then
+            exit;
         if SeenLpNos.Count() = 1 then
             foreach LpNo in SeenLpNos.Keys() do
                 NewLpNo := LpNo
@@ -1614,6 +1620,182 @@ codeunit 72040 "DOPSWHS LP Management"
         ItemLedgerEntry."DOPSWHS LP No." := NewLpNo;
         ItemLedgerEntry."DOPSWHS LP Nos." := NewLpNos;
         ItemLedgerEntry.Modify(false);
+    end;
+
+    procedure CheckMteStockSources(LP: Record "DOPSWHS LP Header")
+    var
+        LPLine: Record "DOPSWHS LP Line";
+    begin
+        LPLine.SetRange("LP No.", LP."No.");
+        LPLine.SetFilter("Item No.", '<>%1', '');
+        LPLine.SetFilter(Quantity, '>0');
+        LPLine.SetRange("Source Item Ledger Entry No.", 0);
+        LPLine.SetRange("Source Document Type", LPLine."Source Document Type"::None);
+        LPLine.SetRange("Source Document No.", '');
+        if LPLine.FindFirst() then
+            Error('%1 LP''sinin %2 satırında kaynak stok girişi yok. LP satırındaki "Kaynak Girişi Bağla" işlemiyle doğru girişi seçin; ardından etiketi yeniden yazdırın.', LP."No.", LPLine."Line No.");
+    end;
+
+    local procedure StockLineBaseQuantity(LPLine: Record "DOPSWHS LP Line"): Decimal
+    var
+        Item: Record Item;
+        ItemUoM: Record "Item Unit of Measure";
+    begin
+        Item.Get(LPLine."Item No.");
+        if (LPLine."Unit of Measure" = '') or (LPLine."Unit of Measure" = Item."Base Unit of Measure") then
+            exit(LPLine.Quantity);
+        ItemUoM.Get(LPLine."Item No.", LPLine."Unit of Measure");
+        if ItemUoM."Qty. per Unit of Measure" <= 0 then
+            Error('%1 / %2 birim dönüşümü geçersiz.', LPLine."Item No.", LPLine."Unit of Measure");
+        exit(LPLine.Quantity * ItemUoM."Qty. per Unit of Measure");
+    end;
+
+    local procedure FilterStockSourceEntries(var Entry: Record "Item Ledger Entry"; LP: Record "DOPSWHS LP Header"; LPLine: Record "DOPSWHS LP Line")
+    begin
+        Entry.SetRange("Item No.", LPLine."Item No.");
+        Entry.SetRange("Variant Code", LPLine."Variant Code");
+        Entry.SetRange("Location Code", LP."Location Code");
+        Entry.SetRange("Lot No.", LPLine."Lot No.");
+        Entry.SetRange("Serial No.", LPLine."Serial No.");
+        Entry.SetFilter(Quantity, '>0');
+        Entry.SetFilter("Remaining Quantity", '>0');
+    end;
+
+    local procedure SingleAvailableStockSource(LP: Record "DOPSWHS LP Header"; LPLine: Record "DOPSWHS LP Line"): Integer
+    var
+        Entry: Record "Item Ledger Entry";
+        CandidateNo: Integer;
+        AvailableQty: Decimal;
+        RequiredQty: Decimal;
+    begin
+        RequiredQty := StockLineBaseQuantity(LPLine);
+        FilterStockSourceEntries(Entry, LP, LPLine);
+        if Entry.FindSet() then
+            repeat
+                AvailableQty := Entry."Remaining Quantity" - AllocatedQuantityForItemLedgerEntry(Entry."Entry No.");
+                if AvailableQty > 0 then begin
+                    // Even a smaller second entry makes the origin ambiguous.
+                    // Never infer the source from matching lot text alone.
+                    if CandidateNo <> 0 then
+                        exit(0);
+                    CandidateNo := Entry."Entry No.";
+                end;
+            until Entry.Next() = 0;
+        if CandidateNo = 0 then
+            exit(0);
+        Entry.Get(CandidateNo);
+        if Entry."Remaining Quantity" - AllocatedQuantityForItemLedgerEntry(CandidateNo) < RequiredQty then
+            exit(0);
+        exit(CandidateNo);
+    end;
+
+    local procedure SetStockLineSource(LP: Record "DOPSWHS LP Header"; var LPLine: Record "DOPSWHS LP Line"; SourceEntryNo: Integer)
+    var
+        Entry: Record "Item Ledger Entry";
+        AvailableQty: Decimal;
+        RequiredQty: Decimal;
+    begin
+        LPLine.TestField("Item No.");
+        if LPLine.Quantity <= 0 then
+            Error('Kaynak bağlantısı için LP satır miktarı sıfırdan büyük olmalıdır.');
+        if LPLine."Source Document Type" <> LPLine."Source Document Type"::None then
+            Error('Bu satır bir depo belgesine bağlıdır. Kaynak bağlantısını ilgili belge üzerinden kontrol edin.');
+        if SourceEntryNo = 0 then
+            SourceEntryNo := SingleAvailableStockSource(LP, LPLine);
+        if SourceEntryNo = 0 then
+            Error('%1 / %2 için tek ve yeterli kaynak stok girişi bulunamadı. Kaynak girişi seçin; farklı girişlerden alınan miktarları ayrı satır ekleyin.', LPLine."Item No.", LPLine."Lot No.");
+        Entry.Get(SourceEntryNo);
+        if (Entry."Item No." <> LPLine."Item No.") or
+           (Entry."Variant Code" <> LPLine."Variant Code") or
+           (Entry."Lot No." <> LPLine."Lot No.") or
+           (Entry."Serial No." <> LPLine."Serial No.") or
+           (Entry."Location Code" <> LP."Location Code") or (Entry.Quantity <= 0)
+        then
+            Error('%1 kaynak girişi LP satırının ürün, varyant, lot, seri veya lokasyonuyla uyuşmuyor.', SourceEntryNo);
+        if LPLine."Source Item Ledger Entry No." <> 0 then begin
+            if LPLine."Source Item Ledger Entry No." = SourceEntryNo then
+                exit;
+            Error('Satır zaten %1 girişine bağlı; mevcut kaynak değiştirilemez.', LPLine."Source Item Ledger Entry No.");
+        end;
+        if (LPLine."Source Document No." <> '') and (LPLine."Source Document No." <> Entry."Document No.") then
+            Error('Seçilen giriş, satırın kayıtlı kaynak belgesiyle uyuşmuyor.');
+        RequiredQty := StockLineBaseQuantity(LPLine);
+        AvailableQty := Entry."Remaining Quantity" - AllocatedQuantityForItemLedgerEntry(SourceEntryNo);
+        if AvailableQty < RequiredQty then
+            Error('%1 kaynak girişinde LP''ye ayrılabilir miktar %2; gerekli temel miktar %3.', SourceEntryNo, AvailableQty, RequiredQty);
+        LPLine."Source Item Ledger Entry No." := SourceEntryNo;
+        LPLine."Source Document No." := Entry."Document No.";
+        LPLine."Source Document Line No." := Entry."Entry No.";
+        LPLine."Source Document Quantity" := Entry.Quantity;
+        LPLine."Expiration Date" := Entry."Expiration Date";
+    end;
+
+    [CommitBehavior(CommitBehavior::Error)]
+    procedure LinkStockLineSource(var LP: Record "DOPSWHS LP Header"; LineNo: Integer; SourceEntryNo: Integer)
+    var
+        Entry: Record "Item Ledger Entry";
+        LPLine: Record "DOPSWHS LP Line";
+    begin
+        Entry.LockTable();
+        LP.LockTable();
+        LPLine.LockTable();
+        LP.Get(LP."No.");
+        EnsureNotPendingReceipt(LP);
+        if not (LP.Status in [LP.Status::Open, LP.Status::Built, LP.Status::Assigned]) then
+            Error('Yalnız aktif LP satırlarının kaynak bağlantısı kurulabilir.');
+        LPLine.Get(LP."No.", LineNo);
+        SetStockLineSource(LP, LPLine, SourceEntryNo);
+        if LPLine."Source Item Ledger Entry No." = 0 then
+            Error('Kaynak giriş seçilmedi.');
+        // Repeated requests must not add stock or duplicate the audit entry.
+        Entry.Get(LPLine."Source Item Ledger Entry No.");
+        if not StockLineAlreadyLinked(LP, LineNo, Entry."Entry No.") then begin
+            LPLine.Modify(true);
+            WriteToLedger(LP, Enum::"DOPSWHS LP Action"::SourceLinked, LP."Bin Code", LP."Bin Code", 0,
+                LPLine."Item No.", LPLine."Lot No.", CopyStr(StrSubstNo('ILE:%1 LINE:%2', Entry."Entry No.", LineNo), 1, 40));
+        end;
+        RefreshItemLedgerEntryLpReferences(Entry."Entry No.");
+    end;
+
+    local procedure StockLineAlreadyLinked(LP: Record "DOPSWHS LP Header"; LineNo: Integer; EntryNo: Integer): Boolean
+    var
+        ExistingLine: Record "DOPSWHS LP Line";
+    begin
+        ExistingLine.Get(LP."No.", LineNo);
+        exit(ExistingLine."Source Item Ledger Entry No." = EntryNo);
+    end;
+
+    procedure RepairUnlinkedStockLinesForEntry(EntryNo: Integer)
+    var
+        Entry: Record "Item Ledger Entry";
+        LP: Record "DOPSWHS LP Header";
+        LPLine: Record "DOPSWHS LP Line";
+    begin
+        Entry.LockTable();
+        LP.LockTable();
+        LPLine.LockTable();
+        Entry.Get(EntryNo);
+        if (Entry.Quantity <= 0) or (Entry."Remaining Quantity" <= 0) then
+            exit;
+        LPLine.SetRange("Item No.", Entry."Item No.");
+        LPLine.SetRange("Variant Code", Entry."Variant Code");
+        LPLine.SetRange("Lot No.", Entry."Lot No.");
+        LPLine.SetRange("Serial No.", Entry."Serial No.");
+        LPLine.SetRange("Source Item Ledger Entry No.", 0);
+        LPLine.SetRange("Source Document Type", LPLine."Source Document Type"::None);
+        LPLine.SetRange("Source Document No.", '');
+        LPLine.SetFilter("Source Bin Code", '<>%1', '');
+        LPLine.SetFilter(Quantity, '>0');
+        if LPLine.FindSet() then
+            repeat
+                if LP.Get(LPLine."LP No.") then
+                    if (LP."Location Code" = Entry."Location Code") and
+                       (LP."Pending Receipt No." = '') and
+                       (LP.Status in [LP.Status::Open, LP.Status::Built, LP.Status::Assigned])
+                    then
+                        if SingleAvailableStockSource(LP, LPLine) = EntryNo then
+                            LinkStockLineSource(LP, LPLine."Line No.", EntryNo);
+            until LPLine.Next() = 0;
     end;
 
     local procedure LoadExistingBulkBuildRequest(RequestId: Guid; ItemLedgerEntryNo: Integer; TemplateCode: Code[20]; BinCode: Code[20]; LpCount: Integer; QuantityPerLp: Decimal; QuantityLastLp: Decimal; ExpectedLpCount: Integer; var CreatedLpNos: List of [Code[20]]): Boolean

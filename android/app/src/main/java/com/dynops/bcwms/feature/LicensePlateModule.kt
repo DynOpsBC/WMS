@@ -281,6 +281,8 @@ private fun LpDocument(lpNo: String, onBack: () -> Unit) {
     // dialogs — LP aç → kaynak bin + ürün/lot seç → adet → kaydet.
     var showAddLine by remember { mutableStateOf(false) }
     var showQty by remember { mutableStateOf(false) }
+    var pendingSourceAdd by remember { mutableStateOf<Pair<QuantityResult, String>?>(null) }
+    var sourceRepairLine by remember { mutableStateOf<JSONObject?>(null) }
     var scannedItem by remember { mutableStateOf("") }
     var selectedLineItem by remember { mutableStateOf<LpItemSelection?>(null) }
     var showTransfer by remember { mutableStateOf(false) }
@@ -361,7 +363,7 @@ private fun LpDocument(lpNo: String, onBack: () -> Unit) {
     val canUnbuild = headerLoaded && linesComplete && !awaitingReceipt &&
         (st.equals("Open", ignoreCase = true) || st.equals("Built", ignoreCase = true)) && !canDelete
 
-    fun addLineFromSourceBin(res: com.dynops.bcwms.ui.QuantityResult, scannedBin: String) {
+    fun addLineFromSourceBin(res: com.dynops.bcwms.ui.QuantityResult, scannedBin: String, sourceEntryNo: Int = 0) {
         scope.launch {
             busy = true
             val userId = BcApi.currentUserId(context).trim()
@@ -403,8 +405,10 @@ private fun LpDocument(lpNo: String, onBack: () -> Unit) {
                 put("serialNo", res.serialNo)
                 put("sourceBinCode", sourceBin)
                 put("userId", userId)
+                if (sourceEntryNo > 0) put("sourceItemLedgerEntryNo", sourceEntryNo)
             }.toString()
-            val r = BcApi.boundAction(context, "licensePlates", lpNo, "addLineFromBin", body)
+            val sourceAction = if (sourceEntryNo > 0) "addLineFromBinWithSource" else "addLineFromBin"
+            val r = BcApi.boundAction(context, "licensePlates", lpNo, sourceAction, body)
             busy = false
             val targetBin = h?.optString("binCode").orEmpty()
             status = if (r.ok)
@@ -462,6 +466,7 @@ private fun LpDocument(lpNo: String, onBack: () -> Unit) {
                                 )
                             val extra = listOfNotNull(
                                 ln.optInt("sourceItemLedgerEntryNo").takeIf { it > 0 }?.let { "Kaynak giriş: #$it" },
+                                ln.optString("sourceDocumentNo").takeIf { it.isNotBlank() && it != "null" }?.let { "Belge: $it" },
                                 ln.optString("sourceBinCode").takeIf { it.isNotBlank() && it != "null" }?.let { "Kaynak raf: $it" },
                                 // BADE (16 Eyl 2026): sevk LP satırında ürünün geldiği palet.
                                 ln.optString("sourceLpNo").takeIf { it.isNotBlank() && it != "null" }?.let { "Kaynak LP: $it" },
@@ -469,6 +474,13 @@ private fun LpDocument(lpNo: String, onBack: () -> Unit) {
                                 ln.optString("serialNo").takeIf { it.isNotBlank() }?.let { "Seri $it" },
                             ).joinToString(" · ")
                                 if (extra.isNotBlank()) Text(extra, fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                if (com.dynops.bcwms.BuildConfig.FLAVOR == "bade" && !awaitingReceipt &&
+                                    st in listOf("Open", "Built", "Assigned") && ln.optDouble("quantity") > 0 &&
+                                    ln.optInt("sourceItemLedgerEntryNo") == 0 && ln.optString("sourceDocumentType") == "None") {
+                                    TextButton(onClick = { sourceRepairLine = ln }, enabled = !busy && linesComplete) {
+                                        Text("Kaynak Girişi Bağla")
+                                    }
+                                }
                             }
                         }
                     }
@@ -769,9 +781,41 @@ private fun LpDocument(lpNo: String, onBack: () -> Unit) {
                     status = "HATA: Seri takipli üründe her seri numarası için miktar 1 olmalıdır."
                 } else {
                     showQty = false
-                    addLineFromSourceBin(res, sourceBin)
+                    if (com.dynops.bcwms.BuildConfig.FLAVOR == "bade") pendingSourceAdd = res to sourceBin
+                    else addLineFromSourceBin(res, sourceBin)
                 }
             }
+        )
+    }
+    pendingSourceAdd?.let { (res, sourceBin) ->
+        LpStockSourceSheet(
+            source = LpStockSourceKey(scannedItem, h?.optString("locationCode").orEmpty(), res.lotNo, res.serialNo),
+            quantityLabel = "${res.quantity} ${res.uom}",
+            repair = false,
+            onDismiss = { pendingSourceAdd = null },
+            onChoose = { entryNo ->
+                pendingSourceAdd = null
+                addLineFromSourceBin(res, sourceBin, entryNo)
+            },
+        )
+    }
+    sourceRepairLine?.let { line ->
+        LpStockSourceSheet(
+            source = LpStockSourceKey(
+                line.optString("itemNo"), h?.optString("locationCode").orEmpty(),
+                line.optString("lotNo"), line.optString("serialNo"), line.optString("variantCode"),
+            ),
+            quantityLabel = "${line.optDouble("quantity")} ${line.optString("unitOfMeasure")}",
+            repair = true,
+            onDismiss = { sourceRepairLine = null },
+            onChoose = { entryNo ->
+                sourceRepairLine = null
+                action(
+                    "linkStockSource",
+                    JSONObject().put("lineNo", line.optInt("lineNo")).put("sourceItemLedgerEntryNo", entryNo).toString(),
+                    "Kaynak giriş #$entryNo bağlandı; stok miktarı değişmedi. Etiketi yeniden yazdırabilirsiniz.",
+                )
+            },
         )
     }
     if (showMteOptions) {

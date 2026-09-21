@@ -118,7 +118,10 @@ codeunit 72051 "DOPSWHS Print Dispatcher"
     procedure PrintPalletItemLabelsWithOptions(var LP: Record "DOPSWHS LP Header"; PrinterId: Code[50]; Copies: Integer; OptionsJson: Text)
     var
         TargetPrinter: Code[50];
+        LPManagement: Codeunit "DOPSWHS LP Management";
     begin
+        // Validate every line before the first print job can be committed.
+        LPManagement.CheckMteStockSources(LP);
         TargetPrinter := ResolvePalletItemLabelPrinter(PrinterId);
         if PrinterIsPdf(TargetPrinter) then
             PrintPalletItemReport(LP, TargetPrinter, Copies, OptionsJson)
@@ -235,6 +238,7 @@ codeunit 72051 "DOPSWHS Print Dispatcher"
     begin
         LPLine.SetRange("LP No.", LP."No.");
         LPLine.SetFilter("Source Item Ledger Entry No.", '<>0');
+        LPLine.SetFilter(Quantity, '>0');
         if LPLine.FindSet() then
             repeat
                 if not EntryNos.Contains(LPLine."Source Item Ledger Entry No.") then
@@ -399,6 +403,7 @@ codeunit 72051 "DOPSWHS Print Dispatcher"
     begin
         LPLine.SetRange("LP No.", LP."No.");
         LPLine.SetFilter("Item No.", '<>%1', '');
+        LPLine.SetFilter(Quantity, '>0');
         if LPLine.FindSet() then
             repeat
                 GroupKey := PalletItemGroupKey(LPLine);
@@ -439,6 +444,7 @@ codeunit 72051 "DOPSWHS Print Dispatcher"
         GroupLine.SetRange("Source Document Type", LPLine."Source Document Type");
         GroupLine.SetRange("Source Document No.", LPLine."Source Document No.");
         GroupLine.SetRange("Source Document Line No.", LPLine."Source Document Line No.");
+        GroupLine.SetFilter(Quantity, '>0');
         if GroupLine.FindSet() then
             repeat
                 GroupQuantity += GroupLine.Quantity;
