@@ -39,6 +39,11 @@ codeunit 72043 "DOPSWHS Receipt Mgmt"
     end;
 
     procedure PostReceiptAndCloseLP(var WhseReceiptHeader: Record "Warehouse Receipt Header"; PrintReport: Boolean; Invoice: Boolean; OperatorUserId: Code[50]; PrinterId: Code[50]; PrintLpLabels: Boolean; LpPrinterId: Code[50])
+    begin
+        PostReceiptAndCloseLP(WhseReceiptHeader, PrintReport, Invoice, OperatorUserId, PrinterId, PrintLpLabels, LpPrinterId, '');
+    end;
+
+    procedure PostReceiptAndCloseLP(var WhseReceiptHeader: Record "Warehouse Receipt Header"; PrintReport: Boolean; Invoice: Boolean; OperatorUserId: Code[50]; PrinterId: Code[50]; PrintLpLabels: Boolean; LpPrinterId: Code[50]; MteOptionsJson: Text)
     var
         WhseReceiptLine: Record "Warehouse Receipt Line";
         PostedWhseReceiptHeader: Record "Posted Whse. Receipt Header";
@@ -175,7 +180,7 @@ codeunit 72043 "DOPSWHS Receipt Mgmt"
             foreach ClosedLpNo in ClosedLpNos do
                 if ClosedLP.Get(ClosedLpNo) then begin
                     ClearLastError();
-                    if not TryPrintCombinedMteLabel(ClosedLP, LpPrinterId) then
+                    if not TryPrintCombinedMteLabel(ClosedLP, LpPrinterId, MteOptionsJson) then
                         Telemetry.LogWarning(
                             'Print.ReceiptLpLabelsFailed',
                             CopyStr(StrSubstNo('%1 LP etiketi yazdırılamadı: %2', ClosedLpNo, GetLastErrorText()), 1, 250),
@@ -1547,11 +1552,11 @@ codeunit 72043 "DOPSWHS Receipt Mgmt"
     end;
 
     [TryFunction]
-    local procedure TryPrintCombinedMteLabel(var LP: Record "DOPSWHS LP Header"; PrinterId: Code[50])
+    local procedure TryPrintCombinedMteLabel(var LP: Record "DOPSWHS LP Header"; PrinterId: Code[50]; OptionsJson: Text)
     var
         Dispatcher: Codeunit "DOPSWHS Print Dispatcher";
     begin
-        Dispatcher.PrintPalletItemLabels(LP, PrinterId, 1);
+        Dispatcher.PrintPalletItemLabelsWithOptions(LP, PrinterId, 1, OptionsJson);
     end;
 
     /// <summary>

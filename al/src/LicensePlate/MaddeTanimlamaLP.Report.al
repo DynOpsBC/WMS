@@ -52,6 +52,21 @@ report 72375 "DOPSWHS MTE LP Report"
         }
     }
 
+    requestpage
+    {
+        layout
+        {
+            area(Content)
+            {
+                field(InspectorName; InspectorNameOverride)
+                {
+                    ApplicationArea = All;
+                    Caption = 'Giriş Yapan';
+                }
+            }
+        }
+    }
+
     local procedure LoadDynamicLabelData(): Boolean
     var
         LPLine: Record "DOPSWHS LP Line";
@@ -125,7 +140,9 @@ report 72375 "DOPSWHS MTE LP Report"
         SetUnknownIfBlank(ReceiptDateText);
         SetUnknownIfBlank(ReceiptNo);
 
-        CheckedBy := LicensePlate."Built By User";
+        CheckedBy := InspectorNameOverride;
+        if CheckedBy = '' then
+            CheckedBy := LicensePlate."Built By User";
         SetUnknownIfBlank(CheckedBy);
         ApprovedBy := 'U.Y';
         QualityApprovalName := 'U.Y';
@@ -211,6 +228,7 @@ report 72375 "DOPSWHS MTE LP Report"
         ReceiptDateText: Text;
         ReceiptNo: Text;
         CheckedBy: Text;
+        InspectorNameOverride: Text;
         ApprovedBy: Text;
         QualityApprovalName: Text;
         QualityApprovalDate: Text;

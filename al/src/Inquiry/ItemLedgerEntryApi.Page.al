@@ -65,6 +65,16 @@ page 72214 "DOPSWHS Item Ledger Entry API"
     end;
 
     [ServiceEnabled]
+    procedure createLicensePlatesWithMte(templateCode: Code[20]; binCode: Code[20]; lpCount: Integer; quantityPerLp: Decimal; printerId: Code[50]; printLabels: Boolean; optionsJson: Text): Text
+    var
+        LPMgt: Codeunit "DOPSWHS LP Management";
+        CreatedLpNos: List of [Code[20]];
+    begin
+        LPMgt.BuildManyFromItemLedgerEntry(Rec."Entry No.", templateCode, binCode, lpCount, quantityPerLp, CreatedLpNos);
+        exit(FinishBulkLpCreation(CreatedLpNos, printLabels, printerId, false, optionsJson));
+    end;
+
+    [ServiceEnabled]
     procedure createLicensePlatesIdempotent(templateCode: Code[20]; binCode: Code[20]; lpCount: Integer; quantityPerLp: Decimal; printerId: Code[50]; printLabels: Boolean; requestId: Guid): Text
     var
         LPMgt: Codeunit "DOPSWHS LP Management";
@@ -75,6 +85,19 @@ page 72214 "DOPSWHS Item Ledger Entry API"
             Rec."Entry No.", templateCode, binCode, lpCount, quantityPerLp,
             requestId, CreatedLpNos, Replayed);
         exit(FinishBulkLpCreation(CreatedLpNos, printLabels, printerId, Replayed));
+    end;
+
+    [ServiceEnabled]
+    procedure createLicensePlatesIdempotentWithMte(templateCode: Code[20]; binCode: Code[20]; lpCount: Integer; quantityPerLp: Decimal; printerId: Code[50]; printLabels: Boolean; requestId: Guid; optionsJson: Text): Text
+    var
+        LPMgt: Codeunit "DOPSWHS LP Management";
+        CreatedLpNos: List of [Code[20]];
+        Replayed: Boolean;
+    begin
+        LPMgt.BuildManyFromItemLedgerEntryIdempotent(
+            Rec."Entry No.", templateCode, binCode, lpCount, quantityPerLp,
+            requestId, CreatedLpNos, Replayed);
+        exit(FinishBulkLpCreation(CreatedLpNos, printLabels, printerId, Replayed, optionsJson));
     end;
 
     /// <summary>
@@ -97,7 +120,25 @@ page 72214 "DOPSWHS Item Ledger Entry API"
         exit(FinishBulkLpCreation(CreatedLpNos, printLabels, printerId, Replayed));
     end;
 
+    [ServiceEnabled]
+    procedure createLicensePlatesFromPlanIdempotentWithMte(templateCode: Code[20]; binCode: Code[20]; lpCount: Integer; quantityPerLp: Decimal; quantityLastLp: Decimal; printerId: Code[50]; printLabels: Boolean; requestId: Guid; optionsJson: Text): Text
+    var
+        LPMgt: Codeunit "DOPSWHS LP Management";
+        CreatedLpNos: List of [Code[20]];
+        Replayed: Boolean;
+    begin
+        LPMgt.BuildManyFromItemLedgerEntryPlanIdempotent(
+            Rec."Entry No.", templateCode, binCode, lpCount, quantityPerLp, quantityLastLp,
+            requestId, CreatedLpNos, Replayed);
+        exit(FinishBulkLpCreation(CreatedLpNos, printLabels, printerId, Replayed, optionsJson));
+    end;
+
     local procedure FinishBulkLpCreation(var CreatedLpNos: List of [Code[20]]; PrintLabels: Boolean; PrinterId: Code[50]; Replayed: Boolean): Text
+    begin
+        exit(FinishBulkLpCreation(CreatedLpNos, PrintLabels, PrinterId, Replayed, ''));
+    end;
+
+    local procedure FinishBulkLpCreation(var CreatedLpNos: List of [Code[20]]; PrintLabels: Boolean; PrinterId: Code[50]; Replayed: Boolean; OptionsJson: Text): Text
     var
         LP: Record "DOPSWHS LP Header";
         LPMgt: Codeunit "DOPSWHS LP Management";
@@ -120,7 +161,7 @@ page 72214 "DOPSWHS Item Ledger Entry API"
             foreach LpNo in CreatedLpNos do begin
                 LP.Get(LpNo);
                 ClearLastError();
-                if TryPrintPalletItemLabel(LP, PrinterId) then
+                if TryPrintPalletItemLabel(LP, PrinterId, OptionsJson) then
                     PrintedCount += 1
                 else begin
                     PrintFailureCount += 1;
@@ -147,11 +188,11 @@ page 72214 "DOPSWHS Item Ledger Entry API"
     end;
 
     [TryFunction]
-    local procedure TryPrintPalletItemLabel(var LP: Record "DOPSWHS LP Header"; PrinterId: Code[50])
+    local procedure TryPrintPalletItemLabel(var LP: Record "DOPSWHS LP Header"; PrinterId: Code[50]; OptionsJson: Text)
     var
         Dispatcher: Codeunit "DOPSWHS Print Dispatcher";
     begin
-        Dispatcher.PrintPalletItemLabels(LP, PrinterId, 1);
+        Dispatcher.PrintPalletItemLabelsWithOptions(LP, PrinterId, 1, OptionsJson);
     end;
 
     var

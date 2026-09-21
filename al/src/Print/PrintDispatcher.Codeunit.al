@@ -1,6 +1,7 @@
 codeunit 72051 "DOPSWHS Print Dispatcher"
 {
     Access = Public;
+    Permissions = tabledata Employee = R;
 
     procedure PrintLPLabel(var LP: Record "DOPSWHS LP Header"; PrinterId: Code[50]; Copies: Integer)
     var
@@ -111,8 +112,8 @@ codeunit 72051 "DOPSWHS Print Dispatcher"
     /// <summary>
     /// OptionsJson (terminal "MTE Yazdır" ekranı): inspectorEmployeeNo,
     /// supplierLotNo, qcEmployeeNo, qcApprovalDate (yyyy-MM-dd), documentNo,
-    /// revisionNo, revisionDate (yyyy-MM-dd). Used only by the customer report
-    /// route; the ZPL label has no room for them.
+    /// revisionNo, revisionDate (yyyy-MM-dd), operatorDisplayName. The ZPL
+    /// and PDF routes both receive the same operator identity.
     /// </summary>
     procedure PrintPalletItemLabelsWithOptions(var LP: Record "DOPSWHS LP Header"; PrinterId: Code[50]; Copies: Integer; OptionsJson: Text)
     var
@@ -191,9 +192,12 @@ codeunit 72051 "DOPSWHS Print Dispatcher"
         ReportLP := LP;
         ReportLP.SetRecFilter();
         SourceRecord.GetTable(ReportLP);
-        PrintReport(
+        PrintReportWithParameters(
             LP."No.",
             Report::"DOPSWHS MTE LP Report",
+            '<ReportParameters id="' + Format(Report::"DOPSWHS MTE LP Report") + '"><Options>' +
+                XmlField('InspectorName', ResolveMteInspectorName(OptionsJson)) +
+                '</Options><DataItems></DataItems></ReportParameters>',
             PrinterId,
             Copies,
             Enum::"DOPSWHS IWX Report Usage"::Receipt,
@@ -271,7 +275,7 @@ codeunit 72051 "DOPSWHS Print Dispatcher"
         Xml := '<?xml version="1.0" standalone="yes"?>' +
             '<ReportParameters id="' + Format(ReportId) + '"><Options>' +
             XmlField('LpNoFilterReq', LP."No.") +
-            XmlField('InspectorEmployeeNo', JsonText(Options, 'inspectorEmployeeNo')) +
+            XmlField('InspectorEmployeeNo', ResolveMteInspectorEmployeeNo(OptionsJson)) +
             XmlField('TedarikciLotu', JsonText(Options, 'supplierLotNo')) +
             XmlField('QualityControlEmployeeNo', JsonText(Options, 'qcEmployeeNo')) +
             XmlField('QualityControlApprovalDate', JsonDateText(Options, 'qcApprovalDate')) +
@@ -280,6 +284,63 @@ codeunit 72051 "DOPSWHS Print Dispatcher"
             XmlField('RevizyonTarihi', JsonDateText(Options, 'revisionDate')) +
             '</Options><DataItems></DataItems></ReportParameters>';
         exit(Xml);
+    end;
+
+    // PDF report 60150 accepts an Employee No., never a literal operator name.
+    // A missing/ambiguous mapping must not silently print the BC service account.
+    procedure ResolveMteInspectorEmployeeNo(OptionsJson: Text): Text
+    var
+        Options: JsonObject;
+        Employee: Record Employee;
+        OperatorName: Text;
+        NameText: Text;
+        MatchNo: Code[20];
+    begin
+        if (OptionsJson <> '') and not Options.ReadFrom(OptionsJson) then
+            Error(MteOptionsInvalidErr);
+        if JsonText(Options, 'inspectorEmployeeNo') <> '' then
+            exit(JsonText(Options, 'inspectorEmployeeNo'));
+        OperatorName := JsonText(Options, 'operatorDisplayName').Trim();
+        if OperatorName = '' then
+            exit('');
+        Employee.SetRange(Status, Employee.Status::Active);
+        if Employee.FindSet() then
+            repeat
+                NameText := (Employee."First Name" + ' ' + Employee."Last Name").Trim();
+                if NameText = '' then
+                    NameText := Employee."Search Name";
+                if UpperCase(NameText) = UpperCase(OperatorName) then begin
+                    if MatchNo <> '' then
+                        Error('PDF MTE için %1 adına birden fazla çalışan bulundu. MTE Yazdır ekranında Giriş Yapan seçin.', OperatorName);
+                    MatchNo := Employee."No.";
+                end;
+            until Employee.Next() = 0;
+        if MatchNo = '' then
+            Error('PDF MTE için %1 adına çalışan bulunamadı. MTE Yazdır ekranında Giriş Yapan seçin.', OperatorName);
+        exit(MatchNo);
+    end;
+
+    procedure ResolveMteInspectorName(OptionsJson: Text): Text
+    var
+        Options: JsonObject;
+        Employee: Record Employee;
+        Inspector: Text;
+        NameText: Text;
+    begin
+        if (OptionsJson <> '') and not Options.ReadFrom(OptionsJson) then
+            Error(MteOptionsInvalidErr);
+        Inspector := JsonText(Options, 'inspectorEmployeeNo');
+        if Inspector = '' then
+            exit(JsonText(Options, 'operatorDisplayName'));
+        if StrLen(Inspector) <= MaxStrLen(Employee."No.") then
+            if Employee.Get(CopyStr(Inspector, 1, MaxStrLen(Employee."No."))) then begin
+                NameText := (Employee."First Name" + ' ' + Employee."Last Name").Trim();
+                if NameText = '' then
+                    NameText := Employee."Search Name";
+                if NameText <> '' then
+                    exit(NameText);
+            end;
+        exit(Inspector);
     end;
 
     local procedure XmlField(Name: Text; Value: Text): Text
