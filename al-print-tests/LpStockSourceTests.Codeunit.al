@@ -48,6 +48,57 @@ codeunit 72182 "DOPSWHS LP Stock Source Tests"
     end;
 
     [Test]
+    procedure NewBinAppendCarriesSourceBeforeItCanBePrinted()
+    var
+        LP: Record "DOPSWHS LP Header";
+        Entry: Record "Item Ledger Entry";
+        Line: Record "DOPSWHS LP Line";
+        Location: Record Location;
+        Bin: Record Bin;
+        Content: Record "Bin Content";
+        WarehouseEntry: Record "Warehouse Entry";
+        LastWarehouseEntry: Record "Warehouse Entry";
+        Management: Codeunit "DOPSWHS LP Management";
+    begin
+        Fixture(LP, Entry, Line, 850);
+        Line.Delete(false);
+        if not Location.Get(LP."Location Code") then begin
+            Location.Code := LP."Location Code";
+            Location.Insert(false);
+        end;
+        if not Bin.Get(LP."Location Code", LP."Bin Code") then begin
+            Bin."Location Code" := LP."Location Code";
+            Bin.Code := LP."Bin Code";
+            Bin.Insert(false);
+        end;
+        Content."Location Code" := LP."Location Code";
+        Content."Bin Code" := LP."Bin Code";
+        Content."Item No." := Entry."Item No.";
+        Content."Unit of Measure Code" := 'PCS';
+        Content."Qty. per Unit of Measure" := 1;
+        Content.Insert(false);
+        if LastWarehouseEntry.FindLast() then
+            WarehouseEntry."Entry No." := LastWarehouseEntry."Entry No." + 1
+        else
+            WarehouseEntry."Entry No." := 1;
+        WarehouseEntry."Location Code" := LP."Location Code";
+        WarehouseEntry."Bin Code" := LP."Bin Code";
+        WarehouseEntry."Item No." := Entry."Item No.";
+        WarehouseEntry."Lot No." := Entry."Lot No.";
+        WarehouseEntry."Unit of Measure Code" := 'PCS';
+        WarehouseEntry.Quantity := 850;
+        WarehouseEntry."Qty. (Base)" := 850;
+        WarehouseEntry.Insert(false);
+        Management.AddLineFromBin(LP, Entry."Item No.", 'PCS', 850, Entry."Lot No.", '', LP."Bin Code", 'SOURCE-TEST', Entry."Entry No.");
+        Line.Get(LP."No.", 10000);
+        Check(Line."Source Item Ledger Entry No." = Entry."Entry No.", 'New append lost its source entry.');
+        Check(Line."Source Document No." = Entry."Document No.", 'New append lost its document.');
+        Management.CheckMteStockSources(LP);
+        Entry.Get(Entry."Entry No.");
+        Check(Entry."DOPSWHS LP No." = LP."No.", 'New append did not update the entry LP field.');
+    end;
+
+    [Test]
     procedure AmbiguousSameLotDoesNotAttachToFirstEntry()
     var
         LP: Record "DOPSWHS LP Header";

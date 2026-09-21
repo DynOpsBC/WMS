@@ -405,6 +405,19 @@ codeunit 72040 "DOPSWHS LP Management"
     begin
         // Same lock order as bulk creation: source stock, headers, then lines.
         SourceEntry.LockTable();
+        if SourceEntryNo > 0 then
+            SourceEntry.Get(SourceEntryNo)
+        else begin
+            // Legacy clients omit the entry. Lock their candidate set before
+            // taking the LP lock; source resolution below still checks the
+            // refreshed header and refuses multiple available entries.
+            SourceEntry.SetRange("Item No.", ItemNo);
+            SourceEntry.SetRange("Location Code", LP."Location Code");
+            SourceEntry.SetRange("Lot No.", LotNo);
+            SourceEntry.SetRange("Serial No.", SerialNo);
+            SourceEntry.SetFilter("Remaining Quantity", '>0');
+            if SourceEntry.FindSet() then;
+        end;
         LP.LockTable();
         LPLine.LockTable();
         LP.Get(LP."No.");
@@ -1546,6 +1559,7 @@ codeunit 72040 "DOPSWHS LP Management"
         AllocatedQuantity: Decimal;
     begin
         LPLine.SetRange("Source Item Ledger Entry No.", ItemLedgerEntryNo);
+        LPLine.SetFilter(Quantity, '>0');
         if LPLine.FindSet() then
             repeat
                 if LPHeader.Get(LPLine."LP No.") then
@@ -1736,7 +1750,10 @@ codeunit 72040 "DOPSWHS LP Management"
         Entry: Record "Item Ledger Entry";
         LPLine: Record "DOPSWHS LP Line";
     begin
+        if SourceEntryNo <= 0 then
+            Error('Kaynak madde defteri girişini seçin.');
         Entry.LockTable();
+        Entry.Get(SourceEntryNo);
         LP.LockTable();
         LPLine.LockTable();
         LP.Get(LP."No.");
