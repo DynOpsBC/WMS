@@ -194,7 +194,7 @@ internal fun ledgerLpAllocatableQuantity(row: JSONObject): Double =
     }
 
 internal fun ledgerEntriesCanShareSingleLp(first: JSONObject, candidate: JSONObject): Boolean =
-    listOf("itemNo", "variantCode", "lotNo", "serialNo", "locationCode", "baseUnitOfMeasure").all { field ->
+    listOf("itemNo", "variantCode", "serialNo", "locationCode", "baseUnitOfMeasure").all { field ->
         first.optString(field).trim().equals(candidate.optString(field).trim(), ignoreCase = true)
     }
 
@@ -1011,7 +1011,7 @@ internal fun BulkLpBuildSheet(
             )
             if (singleLpMode) {
                 Text(
-                    "Aynı ürün, lot, seri ve lokasyondaki birden fazla kaydı seçebilirsiniz. " +
+                    "Aynı ürün ve lokasyondaki farklı lotları birlikte seçebilirsiniz. Lot, SKT ve kaynak giriş her satırda ayrı korunur. " +
                         "Birden fazla seçimde kayıtların LP'lenebilir miktarlarının tamamı tek LP'ye eklenir.",
                     fontSize = 11.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -1047,7 +1047,7 @@ internal fun BulkLpBuildSheet(
                                     }
                                     selectedEntries.isNotEmpty() &&
                                         !ledgerEntriesCanShareSingleLp(selectedEntries.first(), row) -> {
-                                        status = "HATA: Tek LP için seçilen kayıtların ürün, varyant, lot, seri, lokasyon ve ölçü birimi aynı olmalıdır."
+                                        status = "HATA: Tek LP için seçilen kayıtların ürün, varyant, seri, lokasyon ve ölçü birimi aynı olmalıdır. Farklı lotlar seçilebilir."
                                         selectedEntries
                                     }
                                     else -> selectedEntries + row
@@ -1178,7 +1178,7 @@ internal fun BulkLpBuildSheet(
                 enabled = inputsEnabled,
             )
             Text(
-                "Boş bırakırsanız sistem aynı ürün ve lotun bulunduğu rafları kod sırasıyla kullanır ve her LP'yi gerçek hedef rafına kaydeder. " +
+                "Boş bırakırsanız sistem her seçilen girişin kendi lotuna ait raf stokunu kullanır ve LP'yi gerçek hedef rafına kaydeder. " +
                     "Yalnız tek raftaki stoğu kullanmak isterseniz raf etiketini okutun.",
                 fontSize = 11.sp,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,

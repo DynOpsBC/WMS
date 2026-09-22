@@ -73,7 +73,12 @@ class BulkLpBuildWorkflowTest {
             listOf(SingleLpSourceAllocation(12435, 2330.0), SingleLpSourceAllocation(1042, 6030.0)),
             allocations,
         )
-        assertFalse(ledgerEntriesCanShareSingleLp(selected.first(), entry(99, 10.0, lot = "LOT-2")))
+        val otherLot = entry(99, 10.0, lot = "LOT-2")
+        assertTrue(ledgerEntriesCanShareSingleLp(selected.first(), otherLot))
+        assertEquals(listOf(SingleLpSourceAllocation(12435, 2330.0), SingleLpSourceAllocation(99, 10.0)),
+            singleLpSourceAllocations(listOf(selected.first(), otherLot), null))
+        assertFalse(ledgerEntriesCanShareSingleLp(selected.first(), entry(99, 10.0).put("locationCode", "OTHER")))
+        assertFalse(ledgerEntriesCanShareSingleLp(selected.first(), entry(99, 10.0).put("itemNo", "AB.OTHER")))
 
         val lines = allocations.map {
             JSONObject().put("lpNo", "LP1").put("sourceItemLedgerEntryNo", it.entryNo).put("quantity", it.quantity)

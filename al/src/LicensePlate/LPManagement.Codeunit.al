@@ -156,8 +156,8 @@ codeunit 72040 "DOPSWHS LP Management"
     /// <summary>
     /// Builds one physical LP from several positive Item Ledger Entries. Every
     /// LP line keeps its exact source Entry No.; the entries themselves remain
-    /// unchanged. All selected entries must describe the same item, variant,
-    /// lot, serial and location so the resulting pallet has one stock identity.
+    /// unchanged. Item, variant, serial and location must match; distinct lots
+    /// retain their own source, quantity and expiration date on separate lines.
     /// </summary>
     [CommitBehavior(CommitBehavior::Error)]
     procedure BuildSingleFromItemLedgerEntriesIdempotent(BoundItemLedgerEntryNo: Integer; SourcePlanJson: Text; TemplateCode: Code[20]; BinCode: Code[20]; RequestId: Guid; var CreatedLpNos: List of [Code[20]]; var SourceEntryNos: List of [Integer]; var Replayed: Boolean)
@@ -170,6 +170,9 @@ codeunit 72040 "DOPSWHS LP Management"
         LPHeader: Record "DOPSWHS LP Header";
         LPLine: Record "DOPSWHS LP Line";
         Quantities: Dictionary of [Integer, Decimal];
+        LotQuantities: Dictionary of [Code[50], Decimal];
+        LotNo: Code[50];
+        LotQuantity: Decimal;
         CheckedBinCodes: List of [Code[20]];
         EntryNo: Integer;
         RequestedQuantity: Decimal;
@@ -202,6 +205,10 @@ codeunit 72040 "DOPSWHS LP Management"
             ItemLedgerEntry.Get(EntryNo);
             RequestedQuantity := Quantities.Get(EntryNo);
             ValidateSingleLpSourceEntry(ItemLedgerEntry, FirstEntry, RequestedQuantity);
+            if LotQuantities.Get(ItemLedgerEntry."Lot No.", LotQuantity) then
+                LotQuantities.Set(ItemLedgerEntry."Lot No.", LotQuantity + RequestedQuantity)
+            else
+                LotQuantities.Add(ItemLedgerEntry."Lot No.", RequestedQuantity);
             if ItemLedgerEntry."Remaining Quantity" - AllocatedQuantityForItemLedgerEntry(EntryNo) < RequestedQuantity then
                 Error(
                     '%1 numaralı Madde Defter Girişinde LP''ye ayrılabilir miktar %2, istenen miktar %3''tür.',
@@ -214,17 +221,24 @@ codeunit 72040 "DOPSWHS LP Management"
                 Error('Seri takipli %1 maddesi yalnız tek kaynaktan 1 adetlik LP olarak oluşturulabilir.', FirstEntry."Item No.");
 
         Item.Get(FirstEntry."Item No.");
+        // Stock of another lot cannot cover a shortage. Aggregate same-lot
+        // ledger entries before checking physical stock to avoid double use.
+        foreach LotNo in LotQuantities.Keys() do begin
+            LotQuantity := LotQuantities.Get(LotNo);
+            if BinCode <> '' then
+                EnsureLooseStockAvailable(
+                    FirstEntry."Location Code", BinCode, FirstEntry."Item No.",
+                    LotNo, FirstEntry."Serial No.", LotQuantity)
+            else
+                if TotalLooseStockAvailable(
+                    FirstEntry."Location Code", FirstEntry."Item No.",
+                    LotNo, FirstEntry."Serial No.") < LotQuantity
+                then
+                    Error('%1 ürününün %2 lotunda LP''ye atanmamış raf stoku seçilen %3 miktarını karşılamıyor.', FirstEntry."Item No.", LotNo, LotQuantity);
+        end;
         if BinCode <> '' then begin
-            EnsureLooseStockAvailable(
-                FirstEntry."Location Code", BinCode, FirstEntry."Item No.",
-                FirstEntry."Lot No.", FirstEntry."Serial No.", TotalQuantity);
             TargetBinCode := BinCode;
         end else begin
-            if TotalLooseStockAvailable(
-                FirstEntry."Location Code", FirstEntry."Item No.",
-                FirstEntry."Lot No.", FirstEntry."Serial No.") < TotalQuantity
-            then
-                Error('%1 ürününün raflardaki LP''ye atanmamış stoku seçilen toplam miktarı karşılamıyor.', FirstEntry."Item No.");
             Bin.SetRange("Location Code", FirstEntry."Location Code");
             if Bin.FindSet() then
                 repeat
@@ -326,11 +340,10 @@ codeunit 72040 "DOPSWHS LP Management"
         end;
         if (ItemLedgerEntry."Item No." <> FirstEntry."Item No.") or
            (ItemLedgerEntry."Variant Code" <> FirstEntry."Variant Code") or
-           (ItemLedgerEntry."Lot No." <> FirstEntry."Lot No.") or
            (ItemLedgerEntry."Serial No." <> FirstEntry."Serial No.") or
            (ItemLedgerEntry."Location Code" <> FirstEntry."Location Code")
         then
-            Error('Tek LP''deki stok girişlerinin ürün, varyant, lot, seri ve lokasyonu aynı olmalıdır. %1 kaydı diğer seçimlerle uyuşmuyor.', ItemLedgerEntry."Entry No.");
+            Error('Tek LP''deki stok girişlerinin ürün, varyant, seri ve lokasyonu aynı olmalıdır. Farklı lotlar ayrı satırlarda korunur. %1 kaydı diğer seçimlerle uyuşmuyor.', ItemLedgerEntry."Entry No.");
     end;
 
     local procedure AddSingleLpSourceEntry(var LPHeader: Record "DOPSWHS LP Header"; ItemLedgerEntry: Record "Item Ledger Entry"; Item: Record Item; ExplicitBinCode: Code[20]; RequestedQuantity: Decimal; var CheckedBinCodes: List of [Code[20]])

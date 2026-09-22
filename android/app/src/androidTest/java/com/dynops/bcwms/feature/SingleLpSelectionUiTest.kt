@@ -16,7 +16,7 @@ class SingleLpSelectionUiTest {
     private fun open(supported: Boolean) {
         check(!BcApi.hasToken(InstrumentationRegistry.getInstrumentation().targetContext))
         fun entry(no: Int, qty: Int) = JSONObject()
-            .put("entryNo", no).put("itemNo", "AB.00102").put("lotNo", "A100896")
+            .put("entryNo", no).put("itemNo", "AB.00102").put("lotNo", if (no == 12435) "A100896" else "A100897")
             .put("locationCode", "MERKEZDEPO").put("baseUnitOfMeasure", "ADET")
             .put("lpAllocatableQuantity", qty)
         compose.setContent { MaterialTheme {
@@ -45,7 +45,7 @@ class SingleLpSelectionUiTest {
         compose.onNodeWithText("LP Şablonu").performScrollTo().performTextInput("PALET")
     }
 
-    @Test fun twoEntriesRemainSelectedAndCreateOneLp() {
+    @Test fun differentLotsRemainSelectedAndCreateOneLp() {
         open(true)
         compose.onNodeWithText("Tekli LP'yi Oluştur").performScrollTo().assertIsEnabled()
         compose.onNodeWithText("#12435 · AB.00102").performScrollTo().performClick()

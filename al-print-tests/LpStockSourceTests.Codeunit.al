@@ -299,7 +299,153 @@ codeunit 72182 "DOPSWHS LP Stock Source Tests"
         Check(Entry."DOPSWHS LP No." = '', 'Legacy append wrote an unproven entry reference.');
     end;
 
+    [Test]
+    procedure DifferentLotsSingleLpKeepsSourcesExpiryAndReplay()
+    begin
+        CheckMixedLotBuild(false);
+    end;
+
+    [Test]
+    procedure DifferentLotsFromSeparateBinsUseTheirOwnStock()
+    begin
+        CheckMixedLotBuild(true);
+    end;
+
+    local procedure CheckMixedLotBuild(SeparateBins: Boolean)
+    var
+        LP: Record "DOPSWHS LP Header";
+        FirstEntry: Record "Item Ledger Entry";
+        SecondEntry: Record "Item Ledger Entry";
+        Line: Record "DOPSWHS LP Line";
+        Mgt: Codeunit "DOPSWHS LP Management";
+        Created: List of [Code[20]];
+        Sources: List of [Integer];
+        RequestId: Guid;
+        TemplateCode: Code[20];
+        Plan: Text;
+        TargetNo: Code[20];
+        ExplicitBin: Code[20];
+        Replayed: Boolean;
+    begin
+        MixedLotFixture(LP, FirstEntry, SecondEntry, TemplateCode, SeparateBins);
+        Plan := StrSubstNo('[{"entryNo":%1,"quantity":300},{"entryNo":%2,"quantity":150}]', FirstEntry."Entry No.", SecondEntry."Entry No.");
+        RequestId := CreateGuid();
+        if not SeparateBins then ExplicitBin := 'BIN';
+        Mgt.BuildSingleFromItemLedgerEntriesIdempotent(FirstEntry."Entry No.", Plan, TemplateCode, ExplicitBin, RequestId, Created, Sources, Replayed);
+        Check((Created.Count() = 1) and not Replayed, 'Expected exactly one new mixed-lot LP.');
+        TargetNo := Created.Get(1);
+        Line.SetRange("LP No.", TargetNo);
+        Check(Line.Count() = 2, 'Lots were merged into one line or sources were lost.');
+        Line.SetRange("Source Item Ledger Entry No.", FirstEntry."Entry No.");
+        Line.FindFirst();
+        Check((Line.Quantity = 300) and (Line."Lot No." = FirstEntry."Lot No.") and
+            (Line."Expiration Date" = FirstEntry."Expiration Date") and (Line."Source Document No." = FirstEntry."Document No."), 'First lot source/expiry/quantity changed.');
+        Line.SetRange("Source Item Ledger Entry No.", SecondEntry."Entry No.");
+        Line.FindFirst();
+        Check((Line.Quantity = 150) and (Line."Lot No." = SecondEntry."Lot No.") and
+            (Line."Expiration Date" = SecondEntry."Expiration Date") and (Line."Source Document No." = SecondEntry."Document No."), 'Second lot source/expiry/quantity changed.');
+        if SeparateBins then Check(Line."Source Bin Code" = 'BIN2', 'Second lot was taken from the first lot bin.');
+        LP.Get(TargetNo);
+        Check((LP."Planned Quantity" = 450) and (LP."Bin Code" = 'BIN'), 'Mixed pallet total or target bin incorrect.');
+        FirstEntry.Get(FirstEntry."Entry No.");
+        SecondEntry.Get(SecondEntry."Entry No.");
+        Check((FirstEntry."Remaining Quantity" = 300) and (SecondEntry."Remaining Quantity" = 150), 'LP creation consumed ledger stock.');
+        Mgt.BuildSingleFromItemLedgerEntriesIdempotent(FirstEntry."Entry No.", Plan, TemplateCode, ExplicitBin, RequestId, Created, Sources, Replayed);
+        Check(Replayed and (Created.Count() = 1) and (Created.Get(1) = TargetNo), 'Retry created another mixed LP.');
+        Check(Mgt.TotalBaseQuantity(TargetNo) = 450, 'Retry duplicated LP contents.');
+    end;
+
+    [Test]
+    procedure MixedLotShortageCannotBorrowAnotherLotsSurplus()
+    var
+        LP: Record "DOPSWHS LP Header";
+        FirstEntry: Record "Item Ledger Entry";
+        SecondEntry: Record "Item Ledger Entry";
+        Entry: Record "Warehouse Entry";
+        Mgt: Codeunit "DOPSWHS LP Management";
+        Request: Record "DOPSWHS LP Bulk Request";
+        Created: List of [Code[20]];
+        Sources: List of [Integer];
+        TemplateCode: Code[20];
+        RequestId: Guid;
+        Replayed: Boolean;
+    begin
+        MixedLotFixture(LP, FirstEntry, SecondEntry, TemplateCode, false);
+        Entry.SetRange("Item No.", SecondEntry."Item No.");
+        Entry.SetRange("Lot No.", SecondEntry."Lot No.");
+        Entry.FindFirst();
+        Entry.Quantity := 50; Entry."Qty. (Base)" := 50; Entry.Modify(false);
+        Entry.SetRange("Lot No.", FirstEntry."Lot No.");
+        Entry.FindFirst();
+        Entry.Quantity := 1000; Entry."Qty. (Base)" := 1000; Entry.Modify(false);
+        RequestId := CreateGuid();
+        asserterror Mgt.BuildSingleFromItemLedgerEntriesIdempotent(FirstEntry."Entry No.",
+            StrSubstNo('[{"entryNo":%1,"quantity":300},{"entryNo":%2,"quantity":150}]', FirstEntry."Entry No.", SecondEntry."Entry No."),
+            TemplateCode, 'BIN', RequestId, Created, Sources, Replayed);
+        Check(not Request.Get(RequestId), 'Failed build left a request.');
+        LP.SetRange("Bulk Build Request ID", RequestId);
+        Check(LP.IsEmpty(), 'Failed build left an active LP.');
+    end;
+
+    local procedure MixedLotFixture(var LP: Record "DOPSWHS LP Header"; var FirstEntry: Record "Item Ledger Entry"; var SecondEntry: Record "Item Ledger Entry"; var TemplateCode: Code[20]; SeparateBins: Boolean)
+    var
+        Line: Record "DOPSWHS LP Line";
+        Template: Record "DOPSWHS LP Template";
+        Location: Record Location;
+        Uom: Record "Unit of Measure";
+        ItemUom: Record "Item Unit of Measure";
+        Item: Record Item;
+        Tracking: Record "Item Tracking Code";
+        BinType: Record "Bin Type";
+        Bin: Record Bin;
+        Zone: Record Zone;
+        Content: Record "Bin Content";
+        WarehouseEntry: Record "Warehouse Entry";
+    begin
+        Fixture(LP, FirstEntry, Line, 300);
+        Line.Delete(false);
+        FirstEntry.Positive := true; FirstEntry.Open := true;
+        FirstEntry."Expiration Date" := DMY2Date(1, 1, 2028); FirstEntry.Modify(false);
+        CreateLooseStockQuantity(LP, FirstEntry, 300);
+        Location.Get(LP."Location Code"); Location."Bin Mandatory" := true; Location.Modify(false);
+        if not Uom.Get('PCS') then begin Uom.Code := 'PCS'; Uom.Insert(false); end;
+        ItemUom."Item No." := FirstEntry."Item No."; ItemUom.Code := 'PCS';
+        ItemUom."Qty. per Unit of Measure" := 1; ItemUom.Insert(false);
+        SecondEntry := FirstEntry; SecondEntry."Entry No." += 1;
+        SecondEntry."Lot No." := 'SECOND-LOT'; SecondEntry."Document No." := 'MG-SECOND';
+        SecondEntry.Quantity := 150; SecondEntry."Remaining Quantity" := 150;
+        SecondEntry."Expiration Date" := DMY2Date(1, 6, 2028); SecondEntry.Insert(false);
+        if SeparateBins then LP."Bin Code" := 'BIN2';
+        CreateLooseStockQuantity(LP, SecondEntry, 150);
+        if SeparateBins then begin
+            // Match BADE's directed warehouse: bin-to-bin movement must not
+            // create item-journal postings or consume the source ledger entry.
+            Location."Directed Put-away and Pick" := true; Location.Modify(false);
+            if not BinType.Get('SRC-MIX') then begin
+                BinType.Code := 'SRC-MIX'; BinType.Pick := true; BinType."Put Away" := true; BinType.Insert(false);
+            end;
+            Bin.SetRange("Location Code", Location.Code); Bin.ModifyAll("Bin Type Code", BinType.Code);
+            Zone."Location Code" := Location.Code; Zone.Code := 'STOCK';
+            Zone."Bin Type Code" := BinType.Code; Zone.Insert(false);
+            Bin.ModifyAll("Zone Code", Zone.Code);
+            Content.SetRange("Location Code", Location.Code);
+            Content.ModifyAll("Zone Code", Zone.Code); Content.ModifyAll("Bin Type Code", BinType.Code);
+            WarehouseEntry.SetRange("Location Code", Location.Code);
+            WarehouseEntry.ModifyAll("Zone Code", Zone.Code);
+            if not Tracking.Get('SRC-MIX') then begin
+                Tracking.Code := 'SRC-MIX'; Tracking."Lot Warehouse Tracking" := true; Tracking.Insert(false);
+            end;
+            Item.Get(FirstEntry."Item No."); Item."Item Tracking Code" := Tracking.Code; Item.Modify(false);
+        end;
+        Template.Code := LP."No."; Template.Insert(false); TemplateCode := Template.Code;
+    end;
+
     local procedure CreateLooseStock(LP: Record "DOPSWHS LP Header"; Entry: Record "Item Ledger Entry")
+    begin
+        CreateLooseStockQuantity(LP, Entry, 850);
+    end;
+
+    local procedure CreateLooseStockQuantity(LP: Record "DOPSWHS LP Header"; Entry: Record "Item Ledger Entry"; StockQuantity: Decimal)
     var
         Location: Record Location;
         Bin: Record Bin;
@@ -321,7 +467,8 @@ codeunit 72182 "DOPSWHS LP Stock Source Tests"
         Content."Item No." := Entry."Item No.";
         Content."Unit of Measure Code" := 'PCS';
         Content."Qty. per Unit of Measure" := 1;
-        Content.Insert(false);
+        if not Content.Get(Content."Location Code", Content."Bin Code", Content."Item No.", '', 'PCS') then
+            Content.Insert(false);
         if LastWarehouseEntry.FindLast() then
             WarehouseEntry."Entry No." := LastWarehouseEntry."Entry No." + 1
         else
@@ -331,8 +478,8 @@ codeunit 72182 "DOPSWHS LP Stock Source Tests"
         WarehouseEntry."Item No." := Entry."Item No.";
         WarehouseEntry."Lot No." := Entry."Lot No.";
         WarehouseEntry."Unit of Measure Code" := 'PCS';
-        WarehouseEntry.Quantity := 850;
-        WarehouseEntry."Qty. (Base)" := 850;
+        WarehouseEntry.Quantity := StockQuantity;
+        WarehouseEntry."Qty. (Base)" := StockQuantity;
         WarehouseEntry.Insert(false);
     end;
 
