@@ -501,6 +501,8 @@ internal fun ledgerBulkLpFriendlyError(raw: String, httpCode: Int = 0): String =
 @Composable
 internal fun BulkLpBuildSheet(
     singleLpMode: Boolean = false,
+    loadCapabilities: suspend (android.content.Context) -> BcApi.LpScanCapabilities = { BcApi.getLpScanCapabilities(it) },
+    loadStockPage: suspend (android.content.Context, String) -> BcApi.PagedItemsResult = { context, path -> BcApi.getAllPages(context, path) },
     onDismiss: () -> Unit,
     onBuilt: (LedgerBulkLpBuildResult) -> Unit,
 ) {
@@ -524,6 +526,7 @@ internal fun BulkLpBuildSheet(
     // action göndermez.
     var planSupported by remember { mutableStateOf(false) }
     var multiEntrySingleLpSupported by remember { mutableStateOf(false) }
+    var capabilitiesLoaded by remember { mutableStateOf(false) }
     var busy by remember { mutableStateOf(false) }
     var status by remember {
         mutableStateOf(
@@ -558,10 +561,11 @@ internal fun BulkLpBuildSheet(
     )
 
     LaunchedEffect(Unit) {
-        val capabilities = BcApi.getLpScanCapabilities(context)
+        val capabilities = loadCapabilities(context)
         planSupported = capabilities.bulkLpPlan
         multiEntrySingleLpSupported = capabilities.multiEntrySingleLp
-        val page = BcApi.getAllPages(context, "licensePlateTemplates?\$top=50&\$select=code,description")
+        capabilitiesLoaded = capabilities.metadataLoaded
+        val page = loadStockPage(context, "licensePlateTemplates?\$top=50&\$select=code,description")
         templates = if (page.complete) {
             page.rows.map { it.optString("code") }.filter(String::isNotBlank)
         } else {
@@ -608,17 +612,21 @@ internal fun BulkLpBuildSheet(
             busy = true
             selectedEntries = emptyList()
             status = "Stok kayıtları aranıyor..."
+            val capabilities = loadCapabilities(context)
+            capabilitiesLoaded = capabilities.metadataLoaded
+            multiEntrySingleLpSupported = capabilities.multiEntrySingleLp
+            planSupported = capabilities.bulkLpPlan
             var usingLegacyQuantityFallback = false
             var complete = true
             val foundRows = mutableListOf<JSONObject>()
             for (filter in itemLedgerLookupFilters(value)) {
-                var page = BcApi.getAllPages(context, itemLedgerLookupPath(filter, includeLpAllocationFields = true))
+                var page = loadStockPage(context, itemLedgerLookupPath(filter, includeLpAllocationFields = true))
                 // 1.14.1.14 ve öncesinde yeni allocation alanları metadata'da yoktur;
                 // bilinmeyen $select alanı BC'den 400 döndürür. Eski pakette salt-okunur
                 // sorguyu ham Remaining Quantity ile çalıştırmaya devam et.
                 if (!page.complete && page.error?.httpCode == 400) {
                     usingLegacyQuantityFallback = true
-                    page = BcApi.getAllPages(context, itemLedgerLookupPath(filter, includeLpAllocationFields = false))
+                    page = loadStockPage(context, itemLedgerLookupPath(filter, includeLpAllocationFields = false))
                 }
                 if (!page.complete) {
                     complete = false
@@ -645,7 +653,8 @@ internal fun BulkLpBuildSheet(
                 entries.isEmpty() -> "BOŞ: LP yapılabilecek miktarı olan stok bulunamadı."
                 usingLegacyQuantityFallback ->
                     "${entries.size} stok kaydı bulundu. Kullanacağınız kaydı seçin."
-                else -> "${entries.size} stok kaydı bulundu. Kullanacağınız kaydı seçin."
+                else -> if (singleLpMode) "${entries.size} stok kaydı bulundu. Tek LP'ye eklenecek kayıtları işaretleyin."
+                    else "${entries.size} stok kaydı bulundu. Kullanacağınız kaydı seçin."
             }
         }
     }
@@ -676,7 +685,8 @@ internal fun BulkLpBuildSheet(
     val singleLpAllocations = if (singleLpMode) {
         singleLpSourceAllocations(selectedEntries, quantityPerLp)
     } else emptyList()
-    val effectivePlanValid = planValid && (!singleLpMode || singleLpAllocations.isNotEmpty())
+    val effectivePlanValid = planValid && (!singleLpMode || (singleLpAllocations.isNotEmpty() &&
+        (selectedEntries.size == 1 || multiEntrySingleLpSupported)))
     val inputsEnabled = !busy && !uncertainOutcome
 
     // Palet kapasitesi ya da seçili stok kaydı değiştiğinde tam palet adedini
@@ -994,17 +1004,24 @@ internal fun BulkLpBuildSheet(
         if (entries.isNotEmpty()) {
             Spacer(Modifier.height(10.dp))
             Text(
-                if (singleLpMode && multiEntrySingleLpSupported) "Kullanılacak Stok Kayıtları"
+                if (singleLpMode) "Kullanılacak Stok Kayıtları (${selectedEntries.size} seçili)"
                 else "Kullanılacak Stok Kaydı",
                 fontWeight = FontWeight.Bold,
                 fontSize = 13.sp,
             )
-            if (singleLpMode && multiEntrySingleLpSupported) {
+            if (singleLpMode) {
                 Text(
                     "Aynı ürün, lot, seri ve lokasyondaki birden fazla kaydı seçebilirsiniz. " +
                         "Birden fazla seçimde kayıtların LP'lenebilir miktarlarının tamamı tek LP'ye eklenir.",
                     fontSize = 11.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                if (!multiEntrySingleLpSupported) Text(
+                    if (!capabilitiesLoaded)
+                        "Çoklu seçim için sunucu desteği doğrulanamadı. Bağlantıyı kontrol edip Stokları Getir'e yeniden basın."
+                    else "Bu BC ortamındaki paket çoklu stok girişini desteklemiyor. BADE AL paketini güncelleyin; seçilen kayıtlar tek LP olarak henüz gönderilemez.",
+                    fontSize = 12.sp,
+                    color = MaterialTheme.colorScheme.error,
                 )
             }
             if (entries.size > LEDGER_ENTRY_DISPLAY_LIMIT) {
@@ -1019,7 +1036,7 @@ internal fun BulkLpBuildSheet(
                 val selected = selectedEntries.any { it.optInt("entryNo") == row.optInt("entryNo") }
                 Card(
                     onClick = {
-                        if (singleLpMode && multiEntrySingleLpSupported) {
+                        if (singleLpMode) {
                             val nextEntries = if (selected) {
                                 selectedEntries.filterNot { it.optInt("entryNo") == row.optInt("entryNo") }
                             } else {
@@ -1085,7 +1102,7 @@ internal fun BulkLpBuildSheet(
                         Modifier.padding(12.dp),
                         verticalAlignment = Alignment.Top,
                     ) {
-                        if (singleLpMode && multiEntrySingleLpSupported) {
+                        if (singleLpMode) {
                             Checkbox(
                                 checked = selected,
                                 onCheckedChange = null,

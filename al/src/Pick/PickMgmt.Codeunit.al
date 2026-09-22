@@ -2,6 +2,38 @@ codeunit 72046 "DOPSWHS Pick Mgmt"
 {
     Access = Public;
 
+    [EventSubscriber(ObjectType::Table, Database::"Warehouse Activity Header", 'OnBeforeDeleteEvent', '', false, false)]
+    local procedure BeforeProductionPickDelete(var Rec: Record "Warehouse Activity Header"; RunTrigger: Boolean)
+    var
+        CurrentPick: Record "Warehouse Activity Header";
+        RegisteredPick: Record "Registered Whse. Activity Hdr.";
+        OutstandingLine: Record "Warehouse Activity Line";
+    begin
+        // Standard registration also calls Delete(true). Permit it only when
+        // this registering document exists and no outstanding lines remain.
+        // Manual deletion must receive the terminal cancellation safeguards.
+        if Rec.IsTemporary() or not RunTrigger or (Rec.Type <> Rec.Type::Pick) then
+            exit;
+        if Rec."Registering No." <> '' then
+            if RegisteredPick.Get(Rec.Type, Rec."Registering No.") then
+                if RegisteredPick."Whse. Activity No." = Rec."No." then begin
+                    OutstandingLine.SetRange("Activity Type", Rec.Type);
+                    OutstandingLine.SetRange("No.", Rec."No.");
+                    OutstandingLine.SetFilter("Qty. Outstanding", '<>0');
+                    if OutstandingLine.IsEmpty() then
+                        exit;
+                end;
+        CurrentPick.LockTable();
+        if not CurrentPick.Get(Rec.Type, Rec."No.") then
+            exit;
+        if not (CurrentPick."DOPSWHS Prod LP Staged" or IsProductionPick(CurrentPick)) then
+            exit;
+        if CurrentPick."DOPSWHS Prod LP Staged" then
+            Error('%1 çekmesi için üretim LP''si hazırlanmış. Stok hazırlık rafına taşındığından belge silinemez. Mevcut çekmeden üretime teslimi tamamlayın.', CurrentPick."No.");
+        CleanupUnusedMainShippingLp(CurrentPick);
+        ReleasePreparedProductionLps(CurrentPick."No.");
+    end;
+
     procedure AssignToMe(var Pick: Record "Warehouse Activity Header")
     var
         CurrentUserId: Code[50];
@@ -229,7 +261,8 @@ codeunit 72046 "DOPSWHS Pick Mgmt"
         NextLineNo: Integer;
     begin
         Pick.LockTable();
-        Pick.Get(Pick.Type::Pick, Pick."No.");
+        if not Pick.Get(Pick.Type::Pick, Pick."No.") then
+            Error(PickGoneErr, Pick."No.");
         CheckOwnershipFor(Pick."No.", Pick."Assigned User ID", OperatorId);
         if not IsProductionPick(Pick) then
             Error('Bu işlem yalnız üretim ambar çekmesinde kullanılabilir.');
@@ -439,7 +472,8 @@ codeunit 72046 "DOPSWHS Pick Mgmt"
     procedure StartProductionLPFor(var Pick: Record "Warehouse Activity Header"; OperatorId: Code[50]; TemplateCode: Code[20]): Code[20]
     begin
         Pick.LockTable();
-        Pick.Get(Pick.Type::Pick, Pick."No.");
+        if not Pick.Get(Pick.Type::Pick, Pick."No.") then
+            Error(PickGoneErr, Pick."No.");
         CheckOwnershipFor(Pick."No.", Pick."Assigned User ID", OperatorId);
         if not IsProductionPick(Pick) then
             Error('Bu işlem yalnız üretim ambar çekmesinde kullanılabilir.');

@@ -1777,6 +1777,8 @@ private fun WhsePickDocument(no: String, onBack: () -> Unit) {
     var showCancelConfirm by remember { mutableStateOf(false) }
     // Sevk LP (toplama sepeti) ve eksik bildirimi — API'de vardı, ekranda yoktu (UAT shipping-x04).
     var shortLine by remember(no) { mutableStateOf<JSONObject?>(null) }
+    var showProductionBin by remember(no) { mutableStateOf(false) }
+    var productionBinScan by remember(no) { mutableStateOf("") }
 
     fun reload(verifyClaim: Boolean = false) {
         scope.launch {
@@ -1787,13 +1789,13 @@ private fun WhsePickDocument(no: String, onBack: () -> Unit) {
             val h = BcApi.get(context, "picks('$no')")
             header = if (h.ok) runCatching { JSONObject(h.body) }.getOrNull() else null
             headerLoaded = header != null
-            // Toplama kaydedilince BC belgeyi siler; 404 bir yükleme hatası değil,
-            // "iş bitti" demektir. Eskiden bunun yerine "satırlar yüklenemedi"
-            // hatası gösteriliyordu (kullanıcı başarılı kaydı hata sanıyordu).
+            // 404 can mean registration OR deletion in BC. It does not prove
+            // that stock was delivered successfully.
             if (!h.ok && h.httpCode == 404) {
                 busy = false
-                status = "TAMAM: Toplama kaydedildi, belge kapandı."
-                onBack()
+                qtyLine = null; groupTarget = null
+                showProductionBin = false
+                status = "Bu çekme BC'de silinmiş veya kapatılmış. İşlem yapılamaz; belge listesine dönün."
                 return@launch
             }
             val page = BcApi.getAllPages(context, "pickLines?\$filter=no eq '$no'&\$top=100")
@@ -1809,6 +1811,23 @@ private fun WhsePickDocument(no: String, onBack: () -> Unit) {
         }
     }
     LaunchedEffect(no) { reload() }
+
+    val latestBusy by rememberUpdatedState(busy)
+    LaunchedEffect(no) {
+        while (true) {
+            delay(10_000)
+            if (latestBusy) continue
+            val current = BcApi.get(context, "picks('$no')")
+            if (latestBusy) continue
+            if (!current.ok && current.httpCode == 404) {
+                header = null; lines = emptyList(); headerLoaded = false; linesComplete = false
+                qtyLine = null; groupTarget = null; shortLine = null
+                showProductionBin = false
+                status = "Bu çekme BC'de silinmiş veya kapatılmış. İşlem yapılamaz; belge listesine dönün."
+                break
+            }
+        }
+    }
 
     fun claimForCurrentUser() {
         scope.launch {
@@ -1882,8 +1901,6 @@ private fun WhsePickDocument(no: String, onBack: () -> Unit) {
     val productionPick = isProductionPick(lines)
     val productionTargetLp = if (productionPick) h?.optString("mainLpNo").orEmpty() else ""
     val productionStaged = productionPick && h?.optBoolean("productionLpStaged", false) == true
-    var showProductionBin by remember(no) { mutableStateOf(false) }
-    var productionBinScan by remember(no) { mutableStateOf("") }
     val requireLpScan = lpScanRequired || productionPick
     val productionDestinations = lines.filter { BcEnum.decodeOData(it.optString("actionType")).equals("Place", true) }
         .map { "${it.optString("locationCode")} / ${it.optString("binCode")}" }.distinct().joinToString(", ")
@@ -2050,7 +2067,10 @@ private fun WhsePickDocument(no: String, onBack: () -> Unit) {
                     onClick = {
                         scope.launch {
                             busy = true
-                            if (mainLp.isBlank()) {
+                            // Always ask BC, including retries with an existing
+                            // LP. The server checks existence/ownership and
+                            // returns the same LP without creating a duplicate.
+                            run {
                                 status = "Yeni hedef sevk LP oluşturuluyor..."
                                 val tpl = resolveLpTemplate(context, LpPurpose.PALLET)
                                 if (tpl == null) { busy = false; status = "HATA: Uygun sepet/palet şablonu bulunamadı."; return@launch }
@@ -2062,10 +2082,6 @@ private fun WhsePickDocument(no: String, onBack: () -> Unit) {
                                 status = if (r.ok) if (productionPick) "TAMAM: Üretim LP ${BcApi.scalarValue(r.body).trim()} açıldı. Kaynak rafları ve paletleri doğrulayın."
                                     else "TAMAM: Hedef Sevk LP ${BcApi.scalarValue(r.body).trim()} oluşturuldu; ürünler Toplamayı Kaydet sırasında kaynak LP'lerden aktarılacak."
                                     else QcErrorParser.friendlyStatus(BcApi.errorMessage(r.body), r.httpCode)
-                            } else {
-                                busy = false
-                                status = if (productionPick) "$mainLp hedef LP açıldı. Satırlarda gereken miktarları doğrulayıp LP Hazırla'ya basın."
-                                    else "TAMAM: $mainLp hedef sevk LP hazır. Miktarları girip Toplamayı Kaydet'e basın; içerik o anda aktarılacak."
                             }
                             reload()
                         }

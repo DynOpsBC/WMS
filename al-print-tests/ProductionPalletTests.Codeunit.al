@@ -347,6 +347,55 @@ codeunit 72186 "DOPSWHS Prod Pallet Tests"
         PreparationRoundTrip(true);
     end;
 
+    [Test]
+    procedure DirectBcDeleteRetiresEmptyTargetAndStaleStartCreatesNothing()
+    var
+        Pick: Record "Warehouse Activity Header";
+        StalePick: Record "Warehouse Activity Header";
+        TakeLine: Record "Warehouse Activity Line";
+        Source: Record "DOPSWHS LP Header";
+        Target: Record "DOPSWHS LP Header";
+        Mgt: Codeunit "DOPSWHS Pick Mgmt";
+        TargetNo: Code[20];
+        BeforeCount: Integer;
+    begin
+        PreparationFixture(Pick, TakeLine, Source, Target);
+        StalePick := Pick;
+        TargetNo := Target."No.";
+        // This is the standard BC delete path, not terminal CancelPickFor.
+        Pick.Delete(true);
+        Target.Get(TargetNo);
+        Check(Target.Status = Target.Status::Unbuilt, 'BC deletion left an active empty target LP.');
+        Target.Reset();
+        BeforeCount := Target.Count();
+        Commit();
+        asserterror Mgt.StartProductionLPFor(StalePick, StalePick."Assigned User ID", '');
+        Check(Target.Count() = BeforeCount, 'A stale terminal request created another LP.');
+    end;
+
+    [Test]
+    procedure DirectBcDeleteCannotOrphanPreparedProductionStock()
+    var
+        Pick: Record "Warehouse Activity Header";
+        TakeLine: Record "Warehouse Activity Line";
+        Source: Record "DOPSWHS LP Header";
+        Target: Record "DOPSWHS LP Header";
+        Mgt: Codeunit "DOPSWHS Pick Mgmt";
+        LPMgt: Codeunit "DOPSWHS LP Management";
+    begin
+        PreparationFixture(Pick, TakeLine, Source, Target);
+        AddPreparationStock(TakeLine, 100);
+        Mgt.PrepareProductionLPFor(Pick, Pick."Assigned User ID", 'STAGE', Plan(TakeLine, Source."No.", 10));
+        Commit();
+        asserterror Pick.Delete(true);
+        Check(Pick.Get(Pick.Type, Pick."No."), 'Prepared production pick was deleted.');
+        Target.Get(Target."No.");
+        Check(Target."Assigned Document No." = Pick."No.", 'Prepared pallet lost its document.');
+        Check(LPMgt.TotalBaseQuantity(Target."No.") = 10, 'Prepared pallet quantity changed.');
+        AssertBinQuantity(TakeLine."Item No.", 'STAGE', 10);
+        AssertBinQuantity(TakeLine."Item No.", 'RAW', 90);
+    end;
+
     local procedure PreparationRoundTrip(Directed: Boolean)
     var
         Pick: Record "Warehouse Activity Header";
