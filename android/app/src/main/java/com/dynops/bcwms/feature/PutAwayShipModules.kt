@@ -1040,6 +1040,44 @@ internal fun previousPutAwayStep(steps: List<PutAwayStep>, current: PutAwayStep)
     return steps.getOrNull(currentIndex - 1)
 }
 
+internal data class PutAwaySearchSuggestion(val value: String, val label: String)
+
+/**
+ * DKÇ operatörleri kodun tamamını yazmak yerine raf kodunun veya ürün
+ * açıklamasının ilk harfleriyle doğru satırı bulabilir. En az iki karakter
+ * istenir; öneri yalnız açık satırın beklenen rafı/ürünü için üretilir.
+ */
+internal fun putAwaySearchSuggestion(
+    step: PutAwayStep,
+    query: String,
+    expectedSource: String,
+    expectedItem: String,
+    description: String,
+): PutAwaySearchSuggestion? {
+    val needle = query.trim()
+    if (needle.length < 2) return null
+    return when (step) {
+        PutAwayStep.SOURCE_BIN -> expectedSource.takeIf {
+            it.isNotBlank() && it.contains(needle, ignoreCase = true)
+        }?.let { PutAwaySearchSuggestion(it, "$it rafını seç") }
+        PutAwayStep.ITEM -> expectedItem.takeIf {
+            it.isNotBlank() && (
+                it.contains(needle, ignoreCase = true) ||
+                    description.contains(needle, ignoreCase = true)
+                )
+        }?.let {
+            PutAwaySearchSuggestion(
+                it,
+                buildString {
+                    append(it)
+                    if (description.isNotBlank()) append(" · $description")
+                },
+            )
+        }
+        else -> null
+    }
+}
+
 /**
  * Yönlendirilmiş yerleştirme: kaynak raf → ürün → hedef raf → miktar.
  *
@@ -1323,6 +1361,25 @@ private fun PutAwayGuidedSheet(
                     scanOnly = false,
                     onScanned = { submit(it) },
                 )
+                val searchSuggestion = putAwaySearchSuggestion(
+                    step = step,
+                    query = scan,
+                    expectedSource = expectedSource,
+                    expectedItem = expectedItem,
+                    description = pair.description,
+                )
+                if (searchSuggestion != null) {
+                    Spacer(Modifier.height(6.dp))
+                    OutlinedButton(
+                        onClick = {
+                            scan = searchSuggestion.value
+                            submit(searchSuggestion.value)
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Text("🔎 ${searchSuggestion.label}", maxLines = 2)
+                    }
+                }
                 Spacer(Modifier.height(6.dp))
                 Button(
                     onClick = { submit(scan) },

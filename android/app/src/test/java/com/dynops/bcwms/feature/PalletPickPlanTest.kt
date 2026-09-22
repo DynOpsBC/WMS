@@ -229,4 +229,25 @@ class PalletPickPlanTest {
         assertEquals(PutAwayStep.SOURCE_BIN, previousPutAwayStep(steps, PutAwayStep.ITEM))
         assertNull(previousPutAwayStep(steps, PutAwayStep.SOURCE_BIN))
     }
+
+    @Test fun `putaway manual search finds expected rack and item by partial text`() {
+        assertEquals(
+            PutAwaySearchSuggestion("ÜR.0003", "ÜR.0003 rafını seç"),
+            putAwaySearchSuggestion(PutAwayStep.SOURCE_BIN, "000", "ÜR.0003", "BİLETAYC", "BİLET KURŞUN DKC"),
+        )
+        assertEquals(
+            PutAwaySearchSuggestion("BİLETAYC", "BİLETAYC · BİLET KURŞUN DKC"),
+            putAwaySearchSuggestion(PutAwayStep.ITEM, "kurş", "ÜR.0003", "BİLETAYC", "BİLET KURŞUN DKC"),
+        )
+        assertEquals(
+            PutAwaySearchSuggestion("BİLETAYC", "BİLETAYC · BİLET KURŞUN DKC"),
+            putAwaySearchSuggestion(PutAwayStep.ITEM, "bilet", "ÜR.0003", "BİLETAYC", "BİLET KURŞUN DKC"),
+        )
+    }
+
+    @Test fun `putaway manual search does not suggest unrelated or one letter input`() {
+        assertNull(putAwaySearchSuggestion(PutAwayStep.ITEM, "b", "ÜR.0003", "BİLETAYC", "BİLET KURŞUN DKC"))
+        assertNull(putAwaySearchSuggestion(PutAwayStep.ITEM, "başka", "ÜR.0003", "BİLETAYC", "BİLET KURŞUN DKC"))
+        assertNull(putAwaySearchSuggestion(PutAwayStep.TARGET_BIN, "z3", "ÜR.0003", "BİLETAYC", "BİLET KURŞUN DKC"))
+    }
 }
