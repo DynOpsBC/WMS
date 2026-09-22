@@ -36,6 +36,11 @@ class LpStockSourceTest {
         val rows = listOf(entry(53, 850.0), entry(454, 150.0))
         assertEquals(listOf(53, 454), lpStockSourceEntries(rows, key).map { it.entryNo })
     }
+    @Test fun `BC code fields match scanner casing without accepting another lot`() {
+        val scanned = key.copy(itemNo = "ab.01743", locationCode = "merkez", lotNo = "a101119")
+        assertEquals(listOf(53), lpStockSourceEntries(listOf(entry(53, 850.0)), scanned).map { it.entryNo })
+        assertTrue(lpStockSourceEntries(listOf(entry(53, 850.0)), scanned.copy(lotNo = "a101120")).isEmpty())
+    }
     @Test fun `source lookup does not impose a total row limit`() {
         assertFalse(lpStockSourcePath(key).contains("\$top="))
         assertTrue(lpStockSourcePath(key).contains("\$orderby=postingDate,entryNo"))
