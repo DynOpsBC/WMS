@@ -4,6 +4,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import org.json.JSONArray
 import org.json.JSONObject
 
 class BulkLpBuildWorkflowTest {
@@ -52,6 +53,54 @@ class BulkLpBuildWorkflowTest {
         assertFalse(ledgerLpSourceLinksMatch(1234, listOf("LP1"), emptyList(), true))
         linked.remove("sourceItemLedgerEntryNo")
         assertFalse(ledgerLpSourceLinksMatch(1234, listOf("LP1"), listOf(linked), true))
+    }
+
+    @Test
+    fun `compatible ledger entries can be combined into one LP with exact source quantities`() {
+        fun entry(no: Int, quantity: Double, lot: String = "LOT-1") = JSONObject()
+            .put("entryNo", no)
+            .put("itemNo", "AB.00102")
+            .put("variantCode", "")
+            .put("lotNo", lot)
+            .put("serialNo", "")
+            .put("locationCode", "MERKEZDEPO")
+            .put("baseUnitOfMeasure", "ADET")
+            .put("lpAllocatableQuantity", quantity)
+
+        val selected = listOf(entry(12435, 2330.0), entry(1042, 6030.0))
+        val allocations = singleLpSourceAllocations(selected, requestedQuantity = 100.0)
+        assertEquals(
+            listOf(SingleLpSourceAllocation(12435, 2330.0), SingleLpSourceAllocation(1042, 6030.0)),
+            allocations,
+        )
+        assertFalse(ledgerEntriesCanShareSingleLp(selected.first(), entry(99, 10.0, lot = "LOT-2")))
+
+        val lines = allocations.map {
+            JSONObject().put("lpNo", "LP1").put("sourceItemLedgerEntryNo", it.entryNo).put("quantity", it.quantity)
+        }
+        assertTrue(ledgerLpSourcePlanMatches(allocations, listOf("LP1"), lines, true))
+        assertFalse(ledgerLpSourcePlanMatches(allocations, listOf("LP1"), lines.dropLast(1), true))
+    }
+
+    @Test
+    fun `multi entry single LP request survives retry serialization`() {
+        val requestId = "d2881548-a77f-43ef-ae09-b277671f7e22"
+        val allocations = listOf(
+            SingleLpSourceAllocation(12435, 2330.0),
+            SingleLpSourceAllocation(1042, 6030.0),
+        )
+        val body = ledgerSingleLpMultiEntryPayload("PALET", "A.TOPLAM", allocations, "ZPL01", true, requestId)
+        val pending = PendingLedgerBulkLpRequest(
+            entryNo = 12435,
+            expectedCount = 1,
+            printLabels = true,
+            requestId = requestId,
+            body = body,
+            action = LEDGER_SINGLE_LP_MULTI_ENTRY_ACTION,
+            sourceEntryNos = allocations.map { it.entryNo },
+        )
+        assertEquals(pending, pendingLedgerBulkLpRequestFromJson(pendingLedgerBulkLpRequestJson(pending)))
+        assertEquals(2, JSONArray(JSONObject(body).getString("sourcePlanJson")).length())
     }
 
     @Test

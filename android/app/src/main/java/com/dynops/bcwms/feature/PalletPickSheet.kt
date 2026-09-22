@@ -34,11 +34,12 @@ internal fun PalletPickSheet(
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val key = "$pickNo|${group.key}|${group.lines.map { it.optInt("lineNo") }}"
-    var quantity by remember(key) { mutableStateOf(fmtNum(group.totalOutstanding)) }
+    var quantity by remember(key) { mutableStateOf(fmtNum(initialPalletPickQuantity(group.lines, group.totalOutstanding))) }
     var plans by remember(key) { mutableStateOf<List<PalletPickPlan>>(emptyList()) }
     var sourceBinVerified by remember(key) { mutableStateOf(false) }
     var scannedCount by remember(key) { mutableStateOf(0) }
     var scan by remember(key) { mutableStateOf("") }
+    var loadError by remember(key) { mutableStateOf("") }
     var error by remember(key) { mutableStateOf("") }
     var scanMessage by remember(key) { mutableStateOf("") }
     var loading by remember(key) { mutableStateOf(false) }
@@ -47,7 +48,8 @@ internal fun PalletPickSheet(
     val steps = palletScanSteps(plans)
     val qty = quantity.replace(',', '.').toDoubleOrNull()
     val uom = group.lines.first().optString("unitOfMeasureCode")
-    val canConfirm = qty == 0.0 || (sourceBinVerified && palletScansComplete(steps, scannedCount))
+    val canConfirm = loadError.isBlank() &&
+        (qty == 0.0 || (sourceBinVerified && palletScansComplete(steps, scannedCount)))
 
     suspend fun loadPlans(): List<PalletPickPlan> {
         require(qty != null && qty.isFinite() && qty >= 0 && qty <= group.totalOutstanding + 0.00001) {
@@ -62,7 +64,7 @@ internal fun PalletPickSheet(
     // The verified source bin belongs to the group, not to one candidate list:
     // it survives quantity edits, list refreshes and a rejected confirmation.
     LaunchedEffect(key, quantity, reloadKey) {
-        plans = emptyList(); scannedCount = 0; scan = ""; error = ""; scanMessage = ""; loading = true
+        plans = emptyList(); scannedCount = 0; scan = ""; loadError = ""; error = ""; scanMessage = ""; loading = true
         try {
             plans = loadPlans()
             loading = false
@@ -73,7 +75,7 @@ internal fun PalletPickSheet(
             // against an empty list and the stale message survived the reload.
             throw e
         } catch (e: Exception) {
-            error = e.message ?: "Paletler doğrulanamadı. Yenileyin."
+            loadError = e.message ?: "Paletler doğrulanamadı. Yenileyin."
             loading = false
         }
     }
@@ -91,6 +93,8 @@ internal fun PalletPickSheet(
                 return
             }
             sourceBinVerified = true
+            // A correct bin proves the physical address, not a successful
+            // pallet lookup. Never erase that independent blocker here.
             error = ""
             scanMessage = "Raf doğrulandı: ${group.binCode}. Şimdi sıradaki paletin LP etiketini okutun."
             return
@@ -103,7 +107,7 @@ internal fun PalletPickSheet(
         val currentSteps = palletScanSteps(plans)
         if (currentSteps.isEmpty()) {
             scanMessage = if (qty == 0.0) "Miktar sıfır. Palet toplamak için önce toplanacak miktarı girin."
-            else "$value okutuldu ama palet listesi hazır değil. Yukarıdaki BC hatasını giderip listeyi yenileyin."
+            else "$value okutuldu ama palet listesi hazır değil. Hata ayrıntısını kontrol edip palet listesini yenileyin."
             return
         }
         scanMessage = ""
@@ -186,6 +190,17 @@ internal fun PalletPickSheet(
             if (!submitting && sheetState.currentValue == SheetValue.Expanded) scanFocus.requestFocus()
         }
         if (scanMessage.isNotBlank()) Text(scanMessage, modifier = Modifier.padding(vertical = 8.dp))
+        if (loadError.isNotBlank()) {
+            Card(
+                modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer),
+            ) {
+                Column(Modifier.padding(12.dp)) {
+                    Text("Palet listesi hazırlanamadı", fontWeight = FontWeight.Bold)
+                    Text(loadError)
+                }
+            }
+        }
         if (steps.isNotEmpty()) {
             Text("${scannedCount}/${steps.size} palet adımı doğrulandı", Modifier.padding(vertical = 8.dp))
             steps.forEachIndexed { index, step ->
@@ -244,7 +259,7 @@ internal fun PalletPickSheet(
                             onFinished("HATA: $accepted/$requestedCount satır onaylandı. ${e.message}. Belgeyi kontrol edin.")
                         } else {
                             plans = emptyList(); scannedCount = 0
-                            error = e.message ?: "Doğrulama başarısız. Yenileyin."
+                            loadError = e.message ?: "Doğrulama başarısız. Yenileyin."
                         }
                     } finally {
                         submitting = false

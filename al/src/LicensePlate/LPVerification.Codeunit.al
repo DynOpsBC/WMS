@@ -262,11 +262,16 @@ codeunit 72216 "DOPSWHS LP Verification"
     /// Atanmış palet yalnız BU belgeye aitse kullanılabilir. Toplamada palet
     /// ya toplama belgesine ya da onun sevkiyatına ayrılmış olmalıdır.
     /// </summary>
-    local procedure AssignmentMatchesLine(LP: Record "DOPSWHS LP Header"; WhseActivityLine: Record "Warehouse Activity Line"): Boolean
+    procedure AssignmentMatchesLine(LP: Record "DOPSWHS LP Header"; WhseActivityLine: Record "Warehouse Activity Line"): Boolean
     begin
         if LP."Assigned Document No." = '' then
             exit(true);
         case LP."Assigned Document Type" of
+            LP."Assigned Document Type"::ProdConsumption:
+                exit((WhseActivityLine."Activity Type" = WhseActivityLine."Activity Type"::Pick) and
+                     (WhseActivityLine."Source Type" = Database::"Prod. Order Component") and
+                     (WhseActivityLine."Source Subtype" = 3) and
+                     (LP."Assigned Document No." = WhseActivityLine."Source No."));
             LP."Assigned Document Type"::WhsePick,
             LP."Assigned Document Type"::WhsePutaway,
             LP."Assigned Document Type"::WhseMovement:

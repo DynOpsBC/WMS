@@ -7,6 +7,7 @@ codeunit 72439 "DOPSWHS LP Pick Preference"
     procedure Configure(ShipmentNo: Code[20])
     begin
         ConfiguredShipmentNo := ShipmentNo;
+        ConfiguredProdOrderNo := '';
         ForcedLpNo := '';
         ForcedLpBinCode := '';
         Clear(PreferredFilterByItem);
@@ -32,6 +33,21 @@ codeunit 72439 "DOPSWHS LP Pick Preference"
         ForcedLpBinCode := LP."Bin Code";
     end;
 
+    /// <summary>Prefer a prepared LP while standard BC creates a production pick.</summary>
+    procedure ConfigureForProduction(ProdOrderNo: Code[20]; LpNo: Code[20])
+    var
+        LP: Record "DOPSWHS LP Header";
+    begin
+        Configure('');
+        ConfiguredProdOrderNo := ProdOrderNo;
+        if LpNo = '' then
+            exit;
+        if not LP.Get(LpNo) then
+            Error(ForcedLpNotFoundErr, LpNo);
+        ForcedLpNo := LP."No.";
+        ForcedLpBinCode := LP."Bin Code";
+    end;
+
     procedure StampPickLines(PickNo: Code[20])
     var
         PickLine: Record "Warehouse Activity Line";
@@ -39,6 +55,10 @@ codeunit 72439 "DOPSWHS LP Pick Preference"
     begin
         if PickNo = '' then
             exit;
+        if ConfiguredProdOrderNo <> '' then begin
+            StampProductionPickLines(PickNo);
+            exit;
+        end;
         PickLine.SetRange("Activity Type", PickLine."Activity Type"::Pick);
         PickLine.SetRange("No.", PickNo);
         PickLine.SetRange("Action Type", PickLine."Action Type"::Take);
@@ -70,17 +90,22 @@ codeunit 72439 "DOPSWHS LP Pick Preference"
     var
         PreferredFilter: Text;
     begin
-        if SourceType <> Database::"Sales Line" then
-            exit;
-        if not IsConfiguredShipmentSource(SourceNo, SourceLineNo) then
-            exit;
+        if ConfiguredProdOrderNo <> '' then begin
+            if not IsConfiguredProductionSource(SourceType, SourceSubType, SourceNo) then
+                exit;
+        end else begin
+            if SourceType <> Database::"Sales Line" then
+                exit;
+            if not IsConfiguredShipmentSource(SourceNo, SourceLineNo) then
+                exit;
+        end;
         if not GetPreferredBinFilter(LocationCode, ItemNo, VariantCode, ToBinCode, PreferredFilter) then
             exit;
         // Zorlanmış palet modunda (temel ambar) raf süzgeci yalnız paletin
         // tüm talebi karşıladığı durumda daraltılır; yetmiyorsa daraltmak
         // toplamanın hiç üretilememesine yol açar. Seçim o durumda da
         // StampPickLines ile damgalanır.
-        if ForcedLpNo <> '' then
+        if (ForcedLpNo <> '') and (ConfiguredProdOrderNo = '') then
             if not ForcedLpCoversDemand(LocationCode, ItemNo, VariantCode) then
                 exit;
         if BinCodeFilterText = '' then
@@ -95,7 +120,7 @@ codeunit 72439 "DOPSWHS LP Pick Preference"
     var
         PreferredFilter: Text;
     begin
-        if ConfiguredShipmentNo = '' then
+        if (ConfiguredShipmentNo = '') and (ConfiguredProdOrderNo = '') then
             exit;
         if not GetPreferredBinFilter(LocationCode, ItemNo, VariantCode, ToBinCode, PreferredFilter) then
             exit;
@@ -113,6 +138,13 @@ codeunit 72439 "DOPSWHS LP Pick Preference"
         TempBinContent.Ascending(true);
         Result := TempBinContent.FindFirst();
         if not Result then begin
+            if ConfiguredProdOrderNo <> '' then begin
+                // A selected production pallet must remain the source even
+                // when BC rejects its bin; the caller reports unavailable LP
+                // stock rather than silently choosing another pallet.
+                IsHandled := true;
+                exit;
+            end;
             // Reservation/tracking can invalidate an LP candidate. Fall back to
             // standard BC instead of producing an incomplete pick.
             TempBinContent.Reset();
@@ -125,7 +157,7 @@ codeunit 72439 "DOPSWHS LP Pick Preference"
         // raf TAMAMEN yeterliyse aday listesi daraltılır; yetmiyorsa BC'nin
         // tam aday listesi korunur (seçilen raf zaten içinde) ve kalan miktar
         // standart sıralamayla tamamlanır.
-        if ForcedLpNo <> '' then
+        if (ForcedLpNo <> '') and (ConfiguredProdOrderNo = '') then
             if BinFilterAvailableQtyBase(TempBinContent, PreferredFilter) + QtyTolerance() < TotalQtytoPickBase then begin
                 TempBinContent.Reset();
                 exit;
@@ -208,6 +240,10 @@ codeunit 72439 "DOPSWHS LP Pick Preference"
         CacheKey: Text;
     begin
         Clear(PreferredFilter);
+        if ConfiguredProdOrderNo <> '' then begin
+            PreferredFilter := BuildProductionBinFilter(LocationCode, ItemNo, VariantCode, ToBinCode);
+            exit(PreferredFilter <> '');
+        end;
         if (ConfiguredShipmentNo = '') or (LocationCode = '') or (ItemNo = '') then
             exit(false);
         CacheKey := LocationCode + '|' + ItemNo + '|' + VariantCode + '|' + ToBinCode;
@@ -352,6 +388,92 @@ codeunit 72439 "DOPSWHS LP Pick Preference"
         exit(not WhseShipmentLine.IsEmpty());
     end;
 
+    local procedure BuildProductionBinFilter(LocationCode: Code[10]; ItemNo: Code[20]; VariantCode: Code[10]; ToBinCode: Code[20]): Text
+    var
+        LP: Record "DOPSWHS LP Header";
+        Component: Record "Prod. Order Component";
+        Bin: Record Bin;
+        BinCodeText: Text;
+    begin
+        if (LocationCode = '') or (ItemNo = '') or not GetEligibleProductionLP(LP) then
+            exit('');
+        if (LP."Location Code" <> LocationCode) or (LP."Bin Code" = '') or (LP."Bin Code" = ToBinCode) then
+            exit('');
+        if not Bin.Get(LocationCode, LP."Bin Code") then
+            exit('');
+        if not LpHoldsItem(LP."No.", ItemNo, VariantCode) then
+            exit('');
+        Component.SetRange(Status, Component.Status::Released);
+        Component.SetRange("Prod. Order No.", ConfiguredProdOrderNo);
+        Component.SetRange("Location Code", LocationCode);
+        Component.SetRange("Item No.", ItemNo);
+        Component.SetRange("Variant Code", VariantCode);
+        if Component.IsEmpty() then
+            exit('');
+        // Do not change demand, reservations or tracking. BC builds and
+        // validates the Take/Place lines using stock in this real bin.
+        BinCodeText := LP."Bin Code";
+        exit('''' + BinCodeText.Replace('''', '''''') + '''');
+    end;
+
+    local procedure IsConfiguredProductionSource(SourceType: Integer; SourceSubType: Integer; SourceNo: Code[20]): Boolean
+    begin
+        exit((ConfiguredProdOrderNo <> '') and
+             (SourceType = Database::"Prod. Order Component") and
+             (SourceSubType = Enum::"Production Order Status"::Released.AsInteger()) and
+             (SourceNo = ConfiguredProdOrderNo));
+    end;
+
+    local procedure GetEligibleProductionLP(var LP: Record "DOPSWHS LP Header"): Boolean
+    begin
+        if (ConfiguredProdOrderNo = '') or (ForcedLpNo = '') or not LP.Get(ForcedLpNo) then
+            exit(false);
+        if LP."Assigned Document Type" = LP."Assigned Document Type"::None then
+            exit((LP.Status = LP.Status::Built) and (LP."Assigned Document No." = ''));
+        exit((LP.Status in [LP.Status::Built, LP.Status::Assigned]) and
+             (LP."Assigned Document Type" = LP."Assigned Document Type"::ProdConsumption) and
+             (LP."Assigned Document No." = ConfiguredProdOrderNo));
+    end;
+
+    local procedure StampProductionPickLines(PickNo: Code[20])
+    var
+        LP: Record "DOPSWHS LP Header";
+        LPLine: Record "DOPSWHS LP Line";
+        PickLine: Record "Warehouse Activity Line";
+    begin
+        if not GetEligibleProductionLP(LP) then
+            exit;
+        if (LP."Location Code" = '') or (LP."Bin Code" = '') then
+            exit;
+        PickLine.SetRange("Activity Type", PickLine."Activity Type"::Pick);
+        PickLine.SetRange("No.", PickNo);
+        PickLine.SetRange("Action Type", PickLine."Action Type"::Take);
+        PickLine.SetRange("Source Type", Database::"Prod. Order Component");
+        PickLine.SetRange("Source Subtype", Enum::"Production Order Status"::Released.AsInteger());
+        PickLine.SetRange("Source No.", ConfiguredProdOrderNo);
+        PickLine.SetRange("Location Code", LP."Location Code");
+        PickLine.SetRange("Bin Code", LP."Bin Code");
+        PickLine.SetFilter("Item No.", '<>%1', '');
+        if PickLine.FindSet(true) then
+            repeat
+                LPLine.Reset();
+                LPLine.SetRange("LP No.", LP."No.");
+                LPLine.SetRange("Item No.", PickLine."Item No.");
+                LPLine.SetRange("Variant Code", PickLine."Variant Code");
+                if PickLine."Lot No." <> '' then
+                    LPLine.SetRange("Lot No.", PickLine."Lot No.");
+                if PickLine."Serial No." <> '' then
+                    LPLine.SetRange("Serial No.", PickLine."Serial No.");
+                LPLine.SetFilter(Quantity, '>0');
+                if not LPLine.IsEmpty() and (PickLine."LP No." = '') then begin
+                    // Source hint only: standard pick quantity may exceed the
+                    // pallet quantity. Never change physical stock or demand.
+                    PickLine."LP No." := LP."No.";
+                    PickLine.Modify(true);
+                end;
+            until PickLine.Next() = 0;
+    end;
+
     local procedure FindUniqueSourceLP(PickLine: Record "Warehouse Activity Line"): Code[20]
     var
         LP: Record "DOPSWHS LP Header";
@@ -416,6 +538,7 @@ codeunit 72439 "DOPSWHS LP Pick Preference"
 
     var
         ConfiguredShipmentNo: Code[20];
+        ConfiguredProdOrderNo: Code[20];
         ForcedLpNo: Code[20];
         ForcedLpBinCode: Code[20];
         PreferredFilterByItem: Dictionary of [Text, Text];

@@ -482,10 +482,15 @@ object BcApi {
         val bulkLpPlan: Boolean,
         val httpCode: Int,
         val registerScannedPick: Boolean = false,
+        val registerProductionPallets: Boolean = false,
+        val multiEntrySingleLp: Boolean = false,
+        val productionLpPreparation: Boolean = false,
     )
 
-    internal fun pickRegistrationAction(capabilities: LpScanCapabilities): String? = when {
+    internal fun pickRegistrationAction(capabilities: LpScanCapabilities, requireIntactProductionLp: Boolean = false): String? = when {
         !capabilities.metadataLoaded -> null
+        requireIntactProductionLp && capabilities.registerProductionPallets -> "registerProductionPalletsFor"
+        requireIntactProductionLp -> null
         capabilities.registerScannedPick -> "registerScannedFor"
         else -> "registerFor"
     }
@@ -502,8 +507,13 @@ object BcApi {
             pickLineSources = metadata.contains("pickLineSources", ignoreCase = true),
             putAwayPlacementFromLp = metadata.contains("setPlacementFromLp", ignoreCase = true),
             bulkLpPlan = metadata.contains("createLicensePlatesFromPlanIdempotent", ignoreCase = true),
+            productionLpPreparation = listOf("prepareProductionLPFor", "deliverProductionLPFor", "startProductionLPFor").all { action ->
+                Regex("""<(?:(?:\w+):)?Action\b[^>]*\bName\s*=\s*["']$action["']""").containsMatchIn(metadata)
+            },
+            multiEntrySingleLp = metadata.contains("createSingleLicensePlateFromEntriesIdempotent", ignoreCase = true),
             httpCode = httpCode,
             registerScannedPick = Regex("""<(?:(?:\w+):)?Action\b[^>]*\bName\s*=\s*["']registerScannedFor["']""").containsMatchIn(metadata),
+            registerProductionPallets = Regex("""<(?:(?:\w+):)?Action\b[^>]*\bName\s*=\s*["']registerProductionPalletsFor["']""").containsMatchIn(metadata),
         )
 
     /**
@@ -679,6 +689,17 @@ object BcApi {
     suspend fun patch(context: Context, path: String, jsonBody: String): ApiResult =
         request(context, "PATCH", path, jsonBody)
 
+    /** User-confirmed takeover uses BC reassignment and verifies the persisted owner. */
+    suspend fun claimPick(context: Context, pickNo: String, confirmTakeover: suspend (String) -> Boolean = { false }): ApiResult {
+        val escapedNo = pickNo.replace("'", "''")
+        return claimPickWithConfirmation(
+            operatorId = currentUserId(context),
+            readHeader = { get(context, "picks('$escapedNo')?\$select=no,assignedUserId") },
+            confirmTakeover = confirmTakeover,
+            send = { action, body -> boundAction(context, "picks", pickNo, action, body) },
+        )
+    }
+
     /**
      * Warehouse Pick satırları doğrudan PATCH edilmez. Bu action yerel WMS
      * kullanıcısını sunucuya taşır; BC sahiplik ve lot kontrollerini atomik
@@ -724,9 +745,42 @@ object BcApi {
      * gönderilmez. Kayıt/post işlemi uzun sürebildiği için uzun zaman aşımlı
      * istemci kullanılır, belirsiz yanıtta ikinci kez post edilmez.
      */
-    suspend fun registerPick(context: Context, pickNo: String): ApiResult {
+    /** Both phases use the exact scanned document, never a source-LP fallback. */
+    suspend fun productionLpPhase(context: Context, pickNo: String, targetBin: String, deliver: Boolean): ApiResult {
+        fun failure(message: String) = ApiResult(false, 400,
+            JSONObject().put("error", JSONObject().put("message", message)).toString())
+        if (targetBin.isBlank()) return failure("Hedef depo gözünü okutun.")
+        val userId = currentUserId(context)
+        if (userId.isBlank()) return failure("Depo kullanıcısı doğrulanamadı. Yeniden giriş yapın.")
+        val caps = getLpScanCapabilities(context)
+        if (!caps.metadataLoaded || !caps.productionLpPreparation)
+            return failure("Üretim LP hazırlama için BC güncellemesi gerekli. İşlem gönderilmedi.")
+        val plans = try {
+            com.dynops.bcwms.feature.PalletPickVerification.requireVerifiedDocument(context, pickNo)
+        } catch (e: kotlinx.coroutines.CancellationException) { throw e
+        } catch (e: Exception) { return failure(e.message ?: "Paletleri yeniden okutun.") }
+        val body = JSONObject().apply {
+            put("userId", userId)
+            put("targetBinCode", targetBin.trim())
+            put("palletPlan", com.dynops.bcwms.feature.scannedPalletRegistrationJson(plans))
+        }.toString()
+        // No automatic retry after an ambiguous stock-posting response.
+        return boundActionLongRunning(context, "picks", pickNo,
+            if (deliver) "deliverProductionLPFor" else "prepareProductionLPFor", body)
+    }
+
+    suspend fun registerPick(context: Context, pickNo: String, requireIntactProductionLp: Boolean = false): ApiResult {
+        val registrationCapabilities = getLpScanCapabilities(context)
+        // BADE's older pickLines omit sourceType, so they cannot reliably tell
+        // production from shipment picks. Require the new server protocol before
+        // any BADE registration; the old scanned action alone is not sufficient.
+        if ((requireIntactProductionLp || com.dynops.bcwms.feature.requiresPalletWorkflow(BuildConfig.FLAVOR)) &&
+            (!registrationCapabilities.metadataLoaded || !registrationCapabilities.registerProductionPallets)) {
+            return ApiResult(false, 503, JSONObject().put("error", JSONObject().put("message",
+                "Üretim LP desteği doğrulanamadı. Bu terminal sürümüyle uyumlu BC güncellemesini ve bağlantıyı kontrol edin; kayıt gönderilmedi.")).toString())
+        }
         var scannedPlans: List<com.dynops.bcwms.feature.PalletPickPlan>? = null
-        if (com.dynops.bcwms.feature.requiresPalletWorkflow(BuildConfig.FLAVOR)) {
+        if (requireIntactProductionLp || com.dynops.bcwms.feature.requiresPalletWorkflow(BuildConfig.FLAVOR)) {
             try {
                 scannedPlans = com.dynops.bcwms.feature.PalletPickVerification.requireVerifiedDocument(context, pickNo)
             } catch (e: kotlinx.coroutines.CancellationException) {
@@ -743,19 +797,20 @@ object BcApi {
                 body = """{"error":{"message":"Depo kullanıcısı belirlenemedi. Yeniden giriş yapın."}}""",
             )
         }
-        val registrationCapabilities = if (scannedPlans != null) getLpScanCapabilities(context) else null
-        val registrationAction = if (registrationCapabilities == null) "registerFor" else pickRegistrationAction(registrationCapabilities)
+        val registrationAction = if (scannedPlans == null) "registerFor"
+            else pickRegistrationAction(registrationCapabilities, requireIntactProductionLp)
         if (registrationAction == null) {
             return ApiResult(false, 503, JSONObject().put("error", JSONObject().put("message",
-                "Palet kayıt desteği doğrulanamadı. Bağlantıyı kontrol edip tekrar deneyin; kayıt gönderilmedi.")).toString())
+                if (requireIntactProductionLp) "Üretime bütün LP taşıma desteği doğrulanamadı. Bağlantıyı ve sunucu sürümünü kontrol edin; kayıt gönderilmedi."
+                else "Palet kayıt desteği doğrulanamadı. Bağlantıyı kontrol edip tekrar deneyin; kayıt gönderilmedi.")).toString())
         }
-        val exactRegistration = registrationAction == "registerScannedFor"
+        val exactRegistration = registrationAction == "registerScannedFor" || registrationAction == "registerProductionPalletsFor"
         val body = JSONObject().apply {
             put("userId", userId)
             if (exactRegistration) put("palletPlan", com.dynops.bcwms.feature.scannedPalletRegistrationJson(requireNotNull(scannedPlans)))
         }.toString()
-        // Existing BC packages keep their existing action. Once the matching BC
-        // extension advertises the new action, send every scanned LP/quantity.
+        // Production always requires the exact scanned plan. Other existing BC
+        // packages keep their action until the new endpoint is advertised.
         // Never retry or fall back after a possibly successful posting request.
         return boundActionLongRunning(context, "picks", pickNo, registrationAction, body)
     }
@@ -798,9 +853,14 @@ object BcApi {
         action: String,
         body: String = "{}"
     ): ApiResult {
+        val prepared = try {
+            prepareMteOperatorRequest(context, entitySet, action, body)
+        } catch (error: IllegalArgumentException) {
+            return ApiResult(false, 0, error.message.orEmpty())
+        }
         val keySegment = if (key.contains("=") || key.startsWith("'")) key else "'${key.replace("'", "''")}'"
-        val path = "$entitySet($keySegment)/Microsoft.NAV.$action"
-        return request(context, "POST", path, body)
+        val path = "$entitySet($keySegment)/Microsoft.NAV.${prepared.action}"
+        return request(context, "POST", path, prepared.body)
     }
 
     /**
@@ -815,9 +875,26 @@ object BcApi {
         action: String,
         body: String = "{}"
     ): ApiResult {
+        val prepared = try {
+            prepareMteOperatorRequest(context, entitySet, action, body)
+        } catch (error: IllegalArgumentException) {
+            return ApiResult(false, 0, error.message.orEmpty())
+        }
         val keySegment = if (key.contains("=") || key.startsWith("'")) key else "'${key.replace("'", "''")}'"
-        val path = "$entitySet($keySegment)/Microsoft.NAV.$action"
-        return request(context, "POST", path, body, longRunningClient)
+        val path = "$entitySet($keySegment)/Microsoft.NAV.${prepared.action}"
+        return request(context, "POST", path, prepared.body, longRunningClient)
+    }
+
+    private fun prepareMteOperatorRequest(
+        context: Context, entitySet: String, action: String, body: String,
+    ): com.dynops.bcwms.feature.MteOperatorRequest {
+        val original = com.dynops.bcwms.feature.MteOperatorRequest(action, body)
+        if (BuildConfig.FLAVOR != "bade") return original
+        val target = com.dynops.bcwms.feature.mteOperatorAction(entitySet, action) ?: return original
+        require(com.dynops.bcwms.feature.TerminalSession.authenticated(context)) {
+            "Oturum süresi doldu. PIN ile yeniden giriş yapın."
+        }
+        return com.dynops.bcwms.feature.mteOperatorRequest(target, body, getOperatorDisplayName(context))
     }
 
     private val httpClient: OkHttpClient by lazy {
