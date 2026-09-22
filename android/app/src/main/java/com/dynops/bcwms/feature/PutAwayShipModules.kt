@@ -2097,9 +2097,28 @@ private fun WhsePickDocument(no: String, onBack: () -> Unit) {
             }
             val canRegister = canRegisterAssignedPick(assignedTo, myUserId, readyToRegister, inFlightLineNos.size) && headerLoaded && linesComplete
             Button(onClick = {
-                if (productionTargetLp.isNotBlank()) {
-                    productionBinScan = ""
-                    showProductionBin = true
+                if (productionTargetLp.isNotBlank()) scope.launch {
+                    busy = true
+                    try {
+                        val missingLine = PalletPickVerification.firstUnverifiedLine(context, no)
+                        if (missingLine != null) {
+                            val row = lines.firstOrNull { it.optInt("lineNo") == missingLine }
+                            check(row != null) { "Toplama satırı değişmiş. Belgeyi yenileyin." }
+                            status = if (productionStaged)
+                                "Teslimden önce hazırlık rafını ve $productionTargetLp etiketini doğrulayın."
+                            else "Hazırlamadan önce kaynak rafı ve paleti doğrulayın."
+                            qtyLine = row
+                        } else {
+                            productionBinScan = ""
+                            showProductionBin = true
+                        }
+                    } catch (e: kotlinx.coroutines.CancellationException) {
+                        throw e
+                    } catch (e: Exception) {
+                        status = e.message ?: "Palet doğrulaması yüklenemedi. Yenileyip tekrar deneyin."
+                    } finally {
+                        busy = false
+                    }
                 } else scope.launch {
                     busy = true; status = "Toplama kaydediliyor..."
                     val r = BcApi.registerPick(context, no, requireIntactProductionLp = productionPick)

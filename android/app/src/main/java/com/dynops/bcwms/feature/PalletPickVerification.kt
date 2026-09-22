@@ -97,6 +97,13 @@ internal fun palletPlanFromJson(json: String): PalletPickPlan? = runCatching {
         }, data.getString("identity"))
 }.getOrNull()
 
+internal fun firstUnverifiedPalletLine(
+    plans: List<PalletPickPlan>, readProof: (Int) -> PalletPickPlan?,
+): Int? = plans.firstOrNull { plan ->
+    val proof = readProof(plan.lineNo)
+    proof == null || !samePalletPickPlan(plan, proof)
+}?.lineNo
+
 internal object PalletPickVerification {
     private fun prefs(context: Context) = context.getSharedPreferences("pallet_pick_verification_v1", Context.MODE_PRIVATE)
     private fun key(context: Context, pickNo: String, lineNo: Int): String = JSONArray(listOf(
@@ -110,6 +117,11 @@ internal object PalletPickVerification {
     fun clear(context: Context, pickNo: String, lineNo: Int) {
         prefs(context).edit().remove(key(context, pickNo, lineNo)).apply()
     }
+
+    suspend fun firstUnverifiedLine(context: Context, pickNo: String): Int? =
+        firstUnverifiedPalletLine(loadDocumentPalletPlans(context, pickNo)) { lineNo ->
+            palletPlanFromJson(prefs(context).getString(key(context, pickNo, lineNo), "").orEmpty())
+        }
 
     suspend fun requireVerifiedDocument(context: Context, pickNo: String): List<PalletPickPlan> {
         val plans = loadDocumentPalletPlans(context, pickNo)

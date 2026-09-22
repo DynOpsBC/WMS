@@ -72,8 +72,10 @@ internal fun buildPalletPickPlan(
     val expectedSerial = line.pickText("serialNo")
     require(data.pickText("lotNo").equals(expectedLot, true)) { "Satırın lotu değişmiş. Belgeyi yenileyin." }
     val array = data.getJSONArray("sources")
+    val preparedLp = data.pickText("preparedLpNo")
     val candidates = (0 until array.length()).map { array.getJSONObject(it) }.filter {
         it.pickText("binCode").equals(line.pickText("binCode"), true) &&
+            (preparedLp.isBlank() || it.pickText("lpNo").equals(preparedLp, true)) &&
             (expectedLot.isBlank() || it.pickText("lotNo").equals(expectedLot, true)) &&
             (expectedSerial.isBlank() || it.pickText("serialNo").equals(expectedSerial, true))
     }
@@ -98,10 +100,23 @@ internal fun buildPalletPickPlan(
     var remaining = quantity * factor
     val consumption = usedBase.toMutableMap()
     val steps = mutableListOf<PalletPickStep>()
-    // Registration starts at the explicitly confirmed LP, then follows the
-    // server list. Preserve that order when rechecking previously staged rows.
-    val preferred = line.pickText("licensePlateNo")
-    for (source in candidates.sortedBy { if (it.pickText("lpNo").equals(preferred, true)) 0 else 1 }) {
+    val production = line.optInt("sourceType") == 5407 && line.optInt("sourceSubtype") == 3
+    // A creation-time source hint must not put a full production pallet ahead
+    // of smaller remainders. An explicitly prepared/reserved LP is preserved.
+    val preferred = if (production) data.pickText("preparedLpNo") else line.pickText("licensePlateNo")
+    fun remainingOnPallet(source: JSONObject): Double {
+        val available = source.getDouble("availableBaseQty")
+        require(available.isFinite() && available >= 0) { "Palet miktarı geçersiz." }
+        val key = listOf(source.pickText("lpNo"), line.pickText("itemNo"), line.pickText("variantCode"), lot, serial)
+            .joinToString("|").uppercase(Locale.ROOT)
+        return (available - (consumption[key] ?: 0.0)).coerceAtLeast(0.0)
+    }
+    val ordered = if (production) candidates.sortedWith(
+        compareBy<JSONObject> { if (preferred.isNotBlank() && it.pickText("lpNo").equals(preferred, true)) 0 else 1 }
+            .thenBy { remainingOnPallet(it) }
+            .thenBy { it.pickText("lpNo").uppercase(Locale.ROOT) }
+    ) else candidates.sortedBy { if (it.pickText("lpNo").equals(preferred, true)) 0 else 1 }
+    for (source in ordered) {
         if (remaining <= PICK_TOLERANCE) break
         val lp = source.pickText("lpNo")
         require(lp.isNotBlank()) { "Palet numarası eksik." }

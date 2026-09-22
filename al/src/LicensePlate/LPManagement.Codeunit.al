@@ -2036,6 +2036,124 @@ codeunit 72040 "DOPSWHS LP Management"
         RefreshItemLedgerEntryLpReferences(Entry."Entry No.");
     end;
 
+    /// <summary>Batch repair for active legacy stock lines. Never guess among entries.</summary>
+    [CommitBehavior(CommitBehavior::Error)]
+    procedure RepairMissingStockSources(var LPFilter: Record "DOPSWHS LP Header"; ApplyChanges: Boolean): Text
+    var
+        LP: Record "DOPSWHS LP Header";
+        Line: Record "DOPSWHS LP Line";
+        Entry: Record "Item Ledger Entry";
+        Item: Record Item;
+        Uom: Record "Item Unit of Measure";
+        Remaining: Dictionary of [Integer, Decimal];
+        Rows: JsonArray;
+        Row: JsonObject;
+        Result: JsonObject;
+        ResultText: Text;
+        Reason: Text;
+        CandidateNo: Integer;
+        CandidateCount: Integer;
+        EligibleCount: Integer;
+        SkippedCount: Integer;
+        Needed: Decimal;
+        Available: Decimal;
+    begin
+        // Match the explicit-link lock order. Apply is one transaction, including
+        // the source-link ledger and ILE references; no warehouse stock is posted.
+        if ApplyChanges then begin
+            Entry.LockTable();
+            LP.LockTable();
+            Line.LockTable();
+        end;
+        LP.CopyFilters(LPFilter);
+        LP.SetFilter(Status, '%1|%2|%3', LP.Status::Open, LP.Status::Built, LP.Status::Assigned);
+        if LP.FindSet() then repeat
+            Line.Reset();
+            Line.SetRange("LP No.", LP."No.");
+            Line.SetRange("Source Item Ledger Entry No.", 0);
+            Line.SetFilter(Quantity, '>0');
+            if Line.FindSet() then repeat
+                Clear(Reason);
+                CandidateNo := 0;
+                CandidateCount := 0;
+                Needed := Line.Quantity;
+                if (LP."Pending Receipt No." <> '') or
+                   (Line."Source Document Type" <> Line."Source Document Type"::None) or
+                   (Line."Child LP No." <> '') then
+                    Reason := 'Belgeye bağlı/bekleyen satır'
+                else if not Item.Get(Line."Item No.") then
+                    Reason := 'Ürün bulunamadı'
+                else begin
+                    if (Line."Unit of Measure" <> '') and (Line."Unit of Measure" <> Item."Base Unit of Measure") then
+                        if not Uom.Get(Line."Item No.", Line."Unit of Measure") then
+                            Reason := 'Birim dönüşümü bulunamadı'
+                        else if Uom."Qty. per Unit of Measure" <= 0 then
+                            Reason := 'Birim dönüşümü geçersiz'
+                        else
+                            Needed *= Uom."Qty. per Unit of Measure";
+                    if Reason = '' then begin
+                        Entry.Reset();
+                        Entry.SetRange("Item No.", Line."Item No.");
+                        Entry.SetRange("Variant Code", Line."Variant Code");
+                        Entry.SetRange("Location Code", LP."Location Code");
+                        Entry.SetRange("Lot No.", Line."Lot No.");
+                        Entry.SetRange("Serial No.", Line."Serial No.");
+                        Entry.SetFilter(Quantity, '>0');
+                        Entry.SetFilter("Remaining Quantity", '>0');
+                        if Line."Source Document No." <> '' then
+                            Entry.SetRange("Document No.", Line."Source Document No.");
+                        if Entry.FindSet() then repeat
+                            // Count identities before checking capacity: an entry
+                            // with more free stock is not proof of provenance.
+                            if (Line."Expiration Date" = 0D) or (Entry."Expiration Date" = 0D) or
+                               (Line."Expiration Date" = Entry."Expiration Date") then begin
+                                CandidateCount += 1;
+                                CandidateNo := Entry."Entry No.";
+                            end;
+                        until (Entry.Next() = 0) or (CandidateCount > 1);
+                        case CandidateCount of
+                            0: Reason := 'Eşleşen açık kaynak girişi yok';
+                            1: begin
+                                Entry.Get(CandidateNo);
+                                if (CandidateNo <= 0) or (Entry."Document No." = '') then
+                                    Reason := 'Kaynak giriş/belge bilgisi eksik'
+                                else begin
+                                    if not Remaining.Get(CandidateNo, Available) then
+                                        Available := AllocatableQuantityForItemLedgerEntry(CandidateNo);
+                                    if Available < Needed then
+                                        Reason := 'Kaynak girişte ayrılabilir miktar yetersiz'
+                                    else begin
+                                        if ApplyChanges then
+                                            LinkStockLineSource(LP, Line."Line No.", CandidateNo);
+                                        Remaining.Set(CandidateNo, Available - Needed);
+                                    end;
+                                end;
+                            end;
+                            else Reason := 'Birden fazla kaynak girişi var; elle seçim gerekli';
+                        end;
+                    end;
+                end;
+                Clear(Row);
+                Row.Add('lpNo', LP."No.");
+                Row.Add('lineNo', Line."Line No.");
+                Row.Add('itemNo', Line."Item No.");
+                Row.Add('lotNo', Line."Lot No.");
+                Row.Add('sourceEntryNo', CandidateNo);
+                Row.Add('baseQuantity', Needed);
+                Row.Add('reason', Reason);
+                Row.Add('eligible', Reason = '');
+                Rows.Add(Row);
+                if Reason = '' then EligibleCount += 1 else SkippedCount += 1;
+            until Line.Next() = 0;
+        until LP.Next() = 0;
+        Result.Add('applied', ApplyChanges);
+        Result.Add('eligible', EligibleCount);
+        Result.Add('skipped', SkippedCount);
+        Result.Add('rows', Rows);
+        Result.WriteTo(ResultText);
+        exit(ResultText);
+    end;
+
     local procedure StockLineAlreadyLinked(LP: Record "DOPSWHS LP Header"; LineNo: Integer; EntryNo: Integer): Boolean
     var
         ExistingLine: Record "DOPSWHS LP Line";

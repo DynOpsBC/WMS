@@ -51,6 +51,15 @@ page 72189 "DOPSWHS Sandbox HTTP Fixture"
         Guard();
         Tests.CleanupProductionPalletFixtures();
     end;
+    [ServiceEnabled]
+    procedure previewLegacySources(): Text
+    var
+        Scope: Record "DOPSWHS LP Header";
+        Mgt: Codeunit "DOPSWHS LP Management";
+    begin
+        Guard();
+        exit(Mgt.RepairMissingStockSources(Scope, false));
+    end;
     local procedure Guard()
     begin
         if not Environment.IsSandbox() or (LowerCase(Environment.GetEnvironmentName()) <> 'sand0309') then

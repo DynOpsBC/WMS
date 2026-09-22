@@ -2,6 +2,7 @@ codeunit 72182 "DOPSWHS LP Stock Source Tests"
 {
     Subtype = Test;
     TestPermissions = Disabled;
+    Permissions = tabledata "Item Ledger Entry" = RIMD, tabledata "Warehouse Entry" = RIMD;
 
     [Test]
     procedure Appended850LinksToItsOwnEntryAndPrintsDocument()
@@ -101,11 +102,13 @@ codeunit 72182 "DOPSWHS LP Stock Source Tests"
         Fixture(LP, Entry, Line, 850);
         Entry."Location Code" := 'OTHER';
         Entry.Modify(false);
+        Commit(); // Preserve the synthetic fixture while asserting operation rollback.
         asserterror Management.LinkStockLineSource(LP, Line."Line No.", Entry."Entry No.");
         Check(StrPos(GetLastErrorText(), 'uyuşmuyor') > 0, 'Wrong location should fail.');
         Entry."Location Code" := LP."Location Code";
         Entry."Lot No." := 'OTHER-LOT';
         Entry.Modify(false);
+        Commit(); // Preserve the synthetic fixture while asserting operation rollback.
         asserterror Management.LinkStockLineSource(LP, Line."Line No.", Entry."Entry No.");
         Check(StrPos(GetLastErrorText(), 'uyuşmuyor') > 0, 'Wrong lot should fail.');
         Line.Get(LP."No.", Line."Line No.");
@@ -123,6 +126,7 @@ codeunit 72182 "DOPSWHS LP Stock Source Tests"
         Fixture(LP, Entry, Line, 850);
         Entry."Remaining Quantity" := 849;
         Entry.Modify(false);
+        Commit(); // Preserve the synthetic fixture while asserting operation rollback.
         asserterror Management.LinkStockLineSource(LP, Line."Line No.", Entry."Entry No.");
         Check(StrPos(GetLastErrorText(), 'ayrılabilir miktar') > 0, 'Insufficient source stock should fail.');
     end;
@@ -232,6 +236,7 @@ codeunit 72182 "DOPSWHS LP Stock Source Tests"
         Line.Modify(false);
         Entry."Expiration Date" := DMY2Date(1, 1, 2031);
         Entry.Modify(false);
+        Commit(); // Preserve the synthetic fixture while asserting operation rollback.
         asserterror Management.LinkStockLineSource(LP, Line."Line No.", Entry."Entry No.");
         Check(StrPos(GetLastErrorText(), 'son kullanma tarihi') > 0, 'Conflicting expiry was not rejected.');
         Line.Get(LP."No.", Line."Line No.");
@@ -250,6 +255,7 @@ codeunit 72182 "DOPSWHS LP Stock Source Tests"
         Fixture(LP, Entry, Line, 850);
         Entry."Document No." := '';
         Entry.Modify(false);
+        Commit(); // Preserve the synthetic fixture while asserting operation rollback.
         asserterror Management.LinkStockLineSource(LP, Line."Line No.", Entry."Entry No.");
         Line.Get(LP."No.", Line."Line No.");
         Check(Line."Source Item Ledger Entry No." = 0, 'Missing document repair should fail atomically.');
@@ -269,6 +275,7 @@ codeunit 72182 "DOPSWHS LP Stock Source Tests"
         OtherEntry := Entry;
         OtherEntry."Entry No." += 1;
         OtherEntry.Insert(false);
+        Commit(); // Preserve the synthetic fixture while asserting operation rollback.
         asserterror Management.LinkStockLineSource(LP, Line."Line No.", OtherEntry."Entry No.");
         Check(StrPos(GetLastErrorText(), 'mevcut kaynak değiştirilemez') > 0, 'Existing origin should not be overwritten.');
     end;
@@ -327,6 +334,121 @@ codeunit 72182 "DOPSWHS LP Stock Source Tests"
         WarehouseEntry.Quantity := 850;
         WarehouseEntry."Qty. (Base)" := 850;
         WarehouseEntry.Insert(false);
+    end;
+
+    [Test]
+    procedure BulkPreviewIsReadOnlyAndApplyIsIdempotent()
+    var
+        LP: Record "DOPSWHS LP Header";
+        Scope: Record "DOPSWHS LP Header";
+        Entry: Record "Item Ledger Entry";
+        Line: Record "DOPSWHS LP Line";
+        Mgt: Codeunit "DOPSWHS LP Management";
+        Result: Text;
+    begin
+        Fixture(LP, Entry, Line, 98);
+        Scope.SetRange("No.", LP."No.");
+        Result := Mgt.RepairMissingStockSources(Scope, false);
+        AssertRepairCounts(Result, 1, 0);
+        Line.Get(LP."No.", 10000);
+        Line.TestField("Source Item Ledger Entry No.", 0);
+        Result := Mgt.RepairMissingStockSources(Scope, true);
+        AssertRepairCounts(Result, 1, 0);
+        Line.Get(LP."No.", 10000);
+        Line.TestField("Source Item Ledger Entry No.", Entry."Entry No.");
+        Line.TestField(Quantity, 98);
+        Line.TestField("Source Bin Code", 'BIN');
+        Entry.Get(Entry."Entry No.");
+        Entry.TestField("Remaining Quantity", 98);
+        AssertRepairCounts(Mgt.RepairMissingStockSources(Scope, true), 0, 0);
+    end;
+
+    [Test]
+    procedure BulkAmbiguityDoesNotUseLargestAvailableEntry()
+    var
+        LP: Record "DOPSWHS LP Header";
+        Scope: Record "DOPSWHS LP Header";
+        Entry: Record "Item Ledger Entry";
+        Other: Record "Item Ledger Entry";
+        Line: Record "DOPSWHS LP Line";
+        Mgt: Codeunit "DOPSWHS LP Management";
+    begin
+        Fixture(LP, Entry, Line, 98);
+        Other := Entry;
+        Other."Entry No." += 1;
+        Other.Quantity := 1;
+        Other."Remaining Quantity" := 1;
+        Other.Insert(false);
+        Scope.SetRange("No.", LP."No.");
+        AssertRepairCounts(Mgt.RepairMissingStockSources(Scope, true), 0, 1);
+        Line.Get(LP."No.", 10000);
+        Line.TestField("Source Item Ledger Entry No.", 0);
+    end;
+
+    [Test]
+    procedure BulkSharedEntryCapacityIsNotCountedTwice()
+    var
+        LP: Record "DOPSWHS LP Header";
+        Scope: Record "DOPSWHS LP Header";
+        Entry: Record "Item Ledger Entry";
+        First: Record "DOPSWHS LP Line";
+        Second: Record "DOPSWHS LP Line";
+        Mgt: Codeunit "DOPSWHS LP Management";
+    begin
+        Fixture(LP, Entry, First, 100);
+        First.Quantity := 60;
+        First.Modify(false);
+        Second := First;
+        Second."Line No." := 20000;
+        Second.Insert(false);
+        Scope.SetRange("No.", LP."No.");
+        AssertRepairCounts(Mgt.RepairMissingStockSources(Scope, false), 1, 1);
+        AssertRepairCounts(Mgt.RepairMissingStockSources(Scope, true), 1, 1);
+        First.Get(LP."No.", 10000);
+        First.TestField("Source Item Ledger Entry No.", Entry."Entry No.");
+        Second.Get(LP."No.", 20000);
+        Second.TestField("Source Item Ledger Entry No.", 0);
+        Check(Mgt.AllocatedQuantityForItemLedgerEntry(Entry."Entry No.") = 60, 'Bulk overallocated shared entry.');
+    end;
+
+    [Test]
+    procedure BulkUsesExactDocumentAndSkipsPendingReceipt()
+    var
+        LP: Record "DOPSWHS LP Header";
+        Scope: Record "DOPSWHS LP Header";
+        Entry: Record "Item Ledger Entry";
+        Other: Record "Item Ledger Entry";
+        Line: Record "DOPSWHS LP Line";
+        Mgt: Codeunit "DOPSWHS LP Management";
+    begin
+        Fixture(LP, Entry, Line, 98);
+        Other := Entry;
+        Other."Entry No." += 1;
+        Other."Document No." := 'OTHER';
+        Other.Insert(false);
+        Line."Source Document No." := Entry."Document No.";
+        Line.Modify(false);
+        LP."Pending Receipt No." := 'PENDING';
+        LP.Modify(false);
+        Scope.SetRange("No.", LP."No.");
+        AssertRepairCounts(Mgt.RepairMissingStockSources(Scope, true), 0, 1);
+        LP."Pending Receipt No." := '';
+        LP.Modify(false);
+        AssertRepairCounts(Mgt.RepairMissingStockSources(Scope, true), 1, 0);
+        Line.Get(LP."No.", 10000);
+        Line.TestField("Source Item Ledger Entry No.", Entry."Entry No.");
+    end;
+
+    local procedure AssertRepairCounts(Data: Text; Eligible: Integer; Skipped: Integer)
+    var
+        Result: JsonObject;
+        Token: JsonToken;
+    begin
+        Result.ReadFrom(Data);
+        Result.Get('eligible', Token);
+        Check(Token.AsValue().AsInteger() = Eligible, 'Unexpected eligible source repair count.');
+        Result.Get('skipped', Token);
+        Check(Token.AsValue().AsInteger() = Skipped, 'Unexpected skipped source repair count.');
     end;
 
     local procedure Fixture(var LP: Record "DOPSWHS LP Header"; var Entry: Record "Item Ledger Entry"; var Line: Record "DOPSWHS LP Line"; Quantity: Decimal)

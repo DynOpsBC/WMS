@@ -26,4 +26,46 @@ page 72070 "DOPSWHS LP List"
             }
         }
     }
+    actions
+    {
+        area(Processing)
+        {
+            action(RepairLegacyStockSources)
+            {
+                ApplicationArea = All;
+                Caption = 'Eksik Kaynakları Toplu Bağla';
+                ToolTip = 'Listedeki filtrelere uyan aktif LP satırlarını kontrol eder. Yalnız tek bir uygun girişle eşleşen satırları bağlar; belirsizleri raporlar. Stok miktarı ve raf değişmez.';
+                Image = Entries;
+                trigger OnAction()
+                var
+                    Scope: Record "DOPSWHS LP Header";
+                    Mgt: Codeunit "DOPSWHS LP Management";
+                    Summary: JsonObject;
+                    Token: JsonToken;
+                    Data: Text;
+                    ReportStream: InStream;
+                    WriteStream: OutStream;
+                    Blob: Codeunit "Temp Blob";
+                    FileName: Text;
+                    Eligible: Integer;
+                    Skipped: Integer;
+                begin
+                    Scope.CopyFilters(Rec);
+                    Data := Mgt.RepairMissingStockSources(Scope, false);
+                    Summary.ReadFrom(Data);
+                    Summary.Get('eligible', Token); Eligible := Token.AsValue().AsInteger();
+                    Summary.Get('skipped', Token); Skipped := Token.AsValue().AsInteger();
+                    if Eligible > 0 then
+                        if Confirm('%1 satır tek bir kaynakla eşleşti. %2 satır otomatik bağlanmayacak. Listedeki filtrelere uyan bu kayıtlar topluca bağlansın mı?', false, Eligible, Skipped) then
+                            Data := Mgt.RepairMissingStockSources(Scope, true);
+                    Blob.CreateOutStream(WriteStream, TextEncoding::UTF8);
+                    WriteStream.WriteText(Data);
+                    Blob.CreateInStream(ReportStream, TextEncoding::UTF8);
+                    FileName := 'LP-kaynak-baglanti-raporu.json';
+                    DownloadFromStream(ReportStream, '', '', '', FileName);
+                    CurrPage.Update(false);
+                end;
+            }
+        }
+    }
 }
