@@ -1,7 +1,7 @@
 {
-  "versionCode": 200154,
-  "versionName": "1.14.154-emu",
-  "apkUrl": "https://github.com/DynOpsBC/WMS/releases/download/android-v1.14.154-emu/BCWMS-EMU-1.14.154-RELEASE.apk",
-  "sha256": "db959e1939084be1ec30f281b6f4557769442cc8e7ee5822d4cc289c539dbe57",
-  "releaseNotes": "Ürün sorgu ekranı yenilendi. Çoklu ürün seçimi ve ürün başına adet ile toplu etiket yazdırma eklendi. Toplu yazdırma penceresi kompakt hale getirildi. Raf etiketi akışı sadeleştirildi."
+  "versionCode": 200155,
+  "versionName": "1.14.155-emu",
+  "apkUrl": "https://github.com/DynOpsBC/WMS/releases/download/android-v1.14.155-emu/BCWMS-EMU-1.14.155-RELEASE.apk",
+  "sha256": "500821817b9dd39e7e81c3255390f125c9bc8b521c2a80720dff7011fa93397a",
+  "releaseNotes": "Yerleştirmede geri tuşu veya Önceki Adım yalnızca bir önceki okutma adımına döner; daha önce doğrulanan bilgiler korunur."
 }

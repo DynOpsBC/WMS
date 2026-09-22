@@ -1034,6 +1034,12 @@ internal fun putAwayScanSteps(lpScanRequired: Boolean, expectedLp: String, expec
     add(PutAwayStep.QTY)
 }
 
+/** Returns the preceding guided step, or null when the sheet is already at its first step. */
+internal fun previousPutAwayStep(steps: List<PutAwayStep>, current: PutAwayStep): PutAwayStep? {
+    val currentIndex = steps.indexOf(current)
+    return steps.getOrNull(currentIndex - 1)
+}
+
 /**
  * Yönlendirilmiş yerleştirme: kaynak raf → ürün → hedef raf → miktar.
  *
@@ -1075,6 +1081,8 @@ private fun PutAwayGuidedSheet(
     var hint by remember { mutableStateOf("") }
     var showBinList by remember { mutableStateOf(false) }
     var validatingTargetBin by remember { mutableStateOf(false) }
+    var targetValidationGeneration by remember { mutableIntStateOf(0) }
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
     val outstanding = place.optDouble("qtyOutstanding", Double.NaN)
     val handled = place.optDouble("qtyHandled", 0.0)
@@ -1135,6 +1143,23 @@ private fun PutAwayGuidedSheet(
         step = steps[(steps.indexOf(step) + 1).coerceAtMost(steps.lastIndex)]
     }
 
+    fun goBackOneStep(): Boolean {
+        if (showBinList) {
+            showBinList = false
+            return true
+        }
+        val previous = previousPutAwayStep(steps, step) ?: return false
+        step = previous
+        // A target-bin lookup that was started on the later step must not move
+        // the operator forwards again after they deliberately went back.
+        targetValidationGeneration += 1
+        validatingTargetBin = false
+        scan = ""
+        error = ""
+        hint = ""
+        return true
+    }
+
     fun submit(raw: String) {
         val v = raw.trim()
         if (v.isBlank()) return
@@ -1157,11 +1182,14 @@ private fun PutAwayGuidedSheet(
             PutAwayStep.TARGET_BIN -> {
                 if (validatingTargetBin) return
                 val selectedBin = BarcodeIntentResolver.resolve(v).value.trim().ifBlank { v }
+                val validationGeneration = targetValidationGeneration + 1
+                targetValidationGeneration = validationGeneration
                 validatingTargetBin = true
                 error = ""
                 hint = "Raf doğrulanıyor..."
                 scope.launch {
                     val exists = targetBinExists(selectedBin)
+                    if (targetValidationGeneration != validationGeneration) return@launch
                     when {
                         exists == null -> {
                             hint = ""
@@ -1187,7 +1215,24 @@ private fun PutAwayGuidedSheet(
         }
     }
 
-    com.dynops.bcwms.ui.SheetScaffold(onDismiss = onDismiss, contentPadding = PaddingValues(20.dp)) {
+    // Donanım/gesture geri tuşu açık formu kapatıp bütün okutulanları kaybetmez:
+    // önce yalnızca bir önceki doğrulama adımına döner. İlk adımdayken geri,
+    // normal şekilde formu kapatır. Girilmiş miktar ve doğrulanmış değerler
+    // korunur; operatör yalnız hatalı adımı yeniden okutur.
+    com.dynops.bcwms.ui.SheetScaffold(
+        onDismiss = {
+            if (goBackOneStep()) {
+                // ModalBottomSheet hides itself before reporting a system-back,
+                // scrim-tap or swipe dismissal. Re-open the same sheet at the
+                // preceding step instead of letting that gesture erase the form.
+                scope.launch { sheetState.show() }
+            } else {
+                onDismiss()
+            }
+        },
+        sheetState = sheetState,
+        contentPadding = PaddingValues(20.dp),
+    ) {
         if (showBinList) {
             TextButton(onClick = { showBinList = false }) { Text("‹ Geri") }
             BinListContent(
@@ -1357,6 +1402,11 @@ private fun PutAwayGuidedSheet(
                         if (error.isBlank()) onConfirm(targetBin, entered ?: 0.0, scannedLp)
                     },
                 ) { Text("✅ Yerleştirmeyi Onayla", fontWeight = FontWeight.Bold) }
+            }
+            if (previousPutAwayStep(steps, step) != null) {
+                TextButton(onClick = { goBackOneStep() }, modifier = Modifier.fillMaxWidth()) {
+                    Text("‹ Önceki Adım")
+                }
             }
             TextButton(onClick = onDismiss, modifier = Modifier.fillMaxWidth()) { Text("Vazgeç") }
             Spacer(Modifier.height(24.dp))

@@ -222,7 +222,11 @@ class PalletPickPlanTest {
     }
 
     @Test fun `optional putaway keeps the existing product verification for other customers`() {
-        assertEquals(listOf(PutAwayStep.SOURCE_BIN, PutAwayStep.ITEM, PutAwayStep.TARGET_BIN, PutAwayStep.QTY),
-            putAwayScanSteps(false, "", "A-01"))
+        val steps = putAwayScanSteps(false, "", "A-01")
+        assertEquals(listOf(PutAwayStep.SOURCE_BIN, PutAwayStep.ITEM, PutAwayStep.TARGET_BIN, PutAwayStep.QTY), steps)
+        assertEquals(PutAwayStep.TARGET_BIN, previousPutAwayStep(steps, PutAwayStep.QTY))
+        assertEquals(PutAwayStep.ITEM, previousPutAwayStep(steps, PutAwayStep.TARGET_BIN))
+        assertEquals(PutAwayStep.SOURCE_BIN, previousPutAwayStep(steps, PutAwayStep.ITEM))
+        assertNull(previousPutAwayStep(steps, PutAwayStep.SOURCE_BIN))
     }
 }
