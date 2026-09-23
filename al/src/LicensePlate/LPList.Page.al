@@ -1,6 +1,7 @@
 page 72070 "DOPSWHS LP List"
 {
-    Caption = 'LP Listesi';
+    Caption = 'License Plates';
+    AdditionalSearchTerms = 'LP Listesi, LP';
     PageType = List;
     SourceTable = "DOPSWHS LP Header";
     SourceTableView = sorting(Status, "Location Code");
