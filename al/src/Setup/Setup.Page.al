@@ -103,7 +103,7 @@ page 72061 "DOPSWHS Setup"
                 field("MTE Report ID"; Rec."MTE Report ID")
                 {
                     ApplicationArea = All;
-                    ToolTip = 'Terminaldeki MTE Yazdır bu raporu çalıştırır (BADE: 60150 Madde Tanımlama Etiketi; BC''de seçili düzen kullanılır). 0 = BCWMS''in kendi MTE raporu. PDF çıktı belge yazıcısına gider; ZPL yazıcıda kısa ZPL MTE basılır.';
+                    ToolTip = 'Terminaldeki MTE Yazdır bu raporu çalıştırır. BADE''de 60150 seçiliyse terminal için ayrı 60298 LP raporu kullanılır; 60150''nin BC düzeni değişmez. 0 = BCWMS''in kendi MTE raporu.';
                 }
             }
             group(License)

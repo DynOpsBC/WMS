@@ -172,10 +172,8 @@ codeunit 72051 "DOPSWHS Print Dispatcher"
         SourceRecord: RecordRef;
         CustomerReportId: Integer;
     begin
-        // BADE: the customer's own MTE report (Setup "MTE Report ID", e.g.
-        // BadeProduction 60150) runs on the pallet's source item ledger
-        // entries with the operator's extra fields. Its BC-selected layout is
-        // what the customer already prints from the client.
+        // The terminal LP label uses its own report. The customer's 60150
+        // report and its selected BC layout remain reserved for BC users.
         if ResolveCustomerMteReport(CustomerReportId) then begin
             if not CollectLpSourceEntries(LP, SourceRecord) then
                 Error(MteNoSourceEntryErr, LP."No.");
@@ -215,6 +213,12 @@ codeunit 72051 "DOPSWHS Print Dispatcher"
             exit(false);
         if Setup."MTE Report ID" = 0 then
             exit(false);
+        if Setup."MTE Report ID" = 60150 then begin
+            if not AllObjWithCaption.Get(AllObjWithCaption."Object Type"::Report, 60298) then
+                Error('Terminal LP etiketi için BadeProduction 60298 raporu bulunamadı. Önce güncel BadeProduction paketini yükleyin. 60150 eski BC etiketine dokunulmadı.');
+            ReportId := 60298;
+            exit(true);
+        end;
         if not AllObjWithCaption.Get(AllObjWithCaption."Object Type"::Report, Setup."MTE Report ID") then
             exit(false);
         ReportId := Setup."MTE Report ID";
