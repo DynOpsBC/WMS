@@ -2,7 +2,8 @@ codeunit 72046 "DOPSWHS Pick Mgmt"
 {
     Access = Public;
 
-    [EventSubscriber(ObjectType::Table, Database::"Warehouse Activity Header", 'OnBeforeDeleteEvent', '', false, false)]
+    // Canlı ortamda doğrudan BC silme senaryosu uçtan uca doğrulanana kadar bu abonelik devre dışı.
+    // [EventSubscriber(ObjectType::Table, Database::"Warehouse Activity Header", 'OnBeforeDeleteEvent', '', false, false)]
     local procedure BeforeProductionPickDelete(var Rec: Record "Warehouse Activity Header"; RunTrigger: Boolean)
     var
         CurrentPick: Record "Warehouse Activity Header";
