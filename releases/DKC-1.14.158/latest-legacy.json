@@ -1,0 +1,7 @@
+{
+  "versionCode": 200158,
+  "versionName": "1.14.158-emu",
+  "apkUrl": "https://github.com/DynOpsBC/WMS/releases/download/android-v1.14.158-emu/BCWMS-EMU-1.14.158-UYUMLU.apk",
+  "sha256": "26c21cf48735eec788a3973ae4db7c3455dd74d37563a1e9d0666d78ed6cdc00",
+  "releaseNotes": "Mal kabulde atama zorunluluğu kaldırıldı ve ürün adları listede görünüyor. Sevkiyatta araç bilgileri ve kayıtlı irsaliye e-belge baskısı eklendi."
+}
