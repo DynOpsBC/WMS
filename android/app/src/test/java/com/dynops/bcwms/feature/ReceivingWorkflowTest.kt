@@ -9,6 +9,28 @@ import org.json.JSONObject
 
 class ReceivingWorkflowTest {
     @Test
+    fun `dkc receipt does not require assignment but still requires complete data`() {
+        assertTrue(canMutateReceipt(true, true, true, "", ""))
+        assertFalse(canMutateReceipt(true, true, false, "", ""))
+        assertFalse(canMutateReceipt(true, false, true, "", ""))
+        assertFalse(canMutateReceipt(false, true, true, "", ""))
+        assertTrue(canMutateReceipt(false, true, true, "USER1", "user1"))
+    }
+
+    @Test
+    fun `receipt preview lists distinct product names per document`() {
+        val lines = listOf(
+            JSONObject().put("no", "R1").put("itemNo", "A").put("description", "İlk ürün"),
+            JSONObject().put("no", "R1").put("itemNo", "A").put("description", "İlk ürün"),
+            JSONObject().put("no", "R1").put("itemNo", "B").put("description", "İkinci ürün"),
+            JSONObject().put("no", "R2").put("itemNo", "C").put("description", ""),
+        )
+
+        assertEquals(listOf("A · İlk ürün", "B · İkinci ürün"), receiptProductPreviews(lines)["R1"])
+        assertEquals(listOf("C"), receiptProductPreviews(lines)["R2"])
+    }
+
+    @Test
     fun `bulk receipt is blocked until single ledger entry server contract exists`() {
         val oldServerRows = listOf(JSONObject().put("lineNo", 10000))
         val safeServerRows = listOf(JSONObject().put("lineNo", 10000).put("bulkLpCount", 0))

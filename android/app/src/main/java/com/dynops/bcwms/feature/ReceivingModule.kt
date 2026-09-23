@@ -45,6 +45,47 @@ internal fun restoredBulkReceiptLineNos(lines: List<JSONObject>): Set<Int> = lin
 internal fun bulkReceiptKeepsSingleLedgerEntrySupported(lines: List<JSONObject>): Boolean =
     lines.isNotEmpty() && lines.all { it.has("bulkLpCount") }
 
+internal fun canMutateReceipt(
+    isDkc: Boolean,
+    headerLoaded: Boolean,
+    linesComplete: Boolean,
+    assignedUserId: String,
+    localUserId: String,
+): Boolean = headerLoaded && linesComplete &&
+    (isDkc || canMutateAssignedDocument(assignedUserId, localUserId))
+
+internal fun receiptProductPreviews(lines: List<JSONObject>): Map<String, List<String>> = lines
+    .asSequence()
+    .filter { it.optString("no").isNotBlank() && it.optString("itemNo").isNotBlank() }
+    .groupBy { it.optString("no") }
+    .mapValues { (_, receiptLines) ->
+        receiptLines.distinctBy { it.optString("itemNo") }.map { line ->
+            val description = line.optString("description").trim()
+            if (description.isBlank()) line.optString("itemNo")
+            else "${line.optString("itemNo")} · $description"
+        }
+    }
+
+@Composable
+private fun DkcReceiptPreviewCard(receipt: JSONObject, products: List<String>, previewLoaded: Boolean, onClick: () -> Unit) {
+    Card(onClick = onClick, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(10.dp)) {
+        Column(Modifier.padding(12.dp)) {
+            Text(receipt.optString("no"), fontWeight = FontWeight.Bold, fontSize = 16.sp)
+            Text("Lokasyon: ${firstValue(receipt, "locationCode")} · Kaynak: ${firstValue(receipt, "sourceNo")}", fontSize = 12.sp)
+            Spacer(Modifier.height(6.dp))
+            Text("Ürünler", fontWeight = FontWeight.SemiBold, fontSize = 12.sp)
+            when {
+                products.isNotEmpty() -> {
+                    products.take(3).forEach { Text(it, fontSize = 12.sp) }
+                    if (products.size > 3) Text("+${products.size - 3} ürün daha", fontSize = 12.sp)
+                }
+                !previewLoaded -> Text("Yükleniyor...", fontSize = 12.sp)
+                else -> Text("Ürün önizlemesi yok", fontSize = 12.sp)
+            }
+        }
+    }
+}
+
 /**
  * Mal Kabul (Receiving).
  *
@@ -84,19 +125,25 @@ fun ReceivingModule() {
 @Composable
 private fun WhseReceiptTab() {
     val context = LocalContext.current
+    val isDkc = com.dynops.bcwms.BuildConfig.FLAVOR.equals("emu", ignoreCase = true)
     val scope = rememberCoroutineScope()
     var selected by remember { mutableStateOf<String?>(null) }
     var rows by remember { mutableStateOf<List<JSONObject>>(emptyList()) }
+    var productPreviews by remember { mutableStateOf<Map<String, List<String>>>(emptyMap()) }
+    var previewLoaded by remember { mutableStateOf(false) }
     var status by remember { mutableStateOf("") }
     var loading by remember { mutableStateOf(false) }
     var search by remember { mutableStateOf("") }
-    var showAll by remember { mutableStateOf(false) }
+    var showAll by remember { mutableStateOf(isDkc) }
 
     fun load() {
         scope.launch {
             loading = true; status = "Yükleniyor..."
-            val myUser = if (showAll) "" else BcApi.currentUserId(context)
-            if (!canLoadAssignedOnlyList(showAll, myUser)) {
+            productPreviews = emptyMap()
+            previewLoaded = false
+            val allReceipts = isDkc || showAll
+            val myUser = if (allReceipts) "" else BcApi.currentUserId(context)
+            if (!canLoadAssignedOnlyList(allReceipts, myUser)) {
                 rows = emptyList(); loading = false
                 status = "HATA: Depo kullanıcısı doğrulanamadı. Yeniden giriş yapın."
                 return@launch
@@ -105,7 +152,7 @@ private fun WhseReceiptTab() {
             // "1002" yazınca 1002'yi içeren belgeler de listede kalır. Belgeler
             // aramasız çekilir, eşleşme istemcide birleştirilir.
             val filter = com.dynops.bcwms.ui.buildODataFilter(
-                com.dynops.bcwms.ui.assignedToMeClause(myUser, enabled = !showAll),
+                com.dynops.bcwms.ui.assignedToMeClause(myUser, enabled = !allReceipts),
             )
             val page = BcApi.getAllPagesWithStandardFallback(context, "receipts?\$top=100&\$orderby=no desc&\$select=no,locationCode,assignedUserId,sourceNo,vendorSourceName,dueDate,percentComplete$filter")
             val all = if (page.complete) page.rows else emptyList()
@@ -124,10 +171,24 @@ private fun WhseReceiptTab() {
                         it.optString("no") in itemDocsSet
                 }.also { filtered -> itemHit = filtered.count { it.optString("no") in itemDocsSet } }
             }
-            loading = false
             status = if (!page.complete) "HATA: Mal kabul listesinin tamamı alınamadı. Yenileyin."
-                else if (rows.isEmpty()) (if (q.isNotBlank()) "BOŞ: '$q' ile eşleşen belge/ürün yok" else if (showAll) "BOŞ: Açık ambar mal kabul belgesi yok" else "BOŞ: Size atanmış mal kabul yok")
+                else if (rows.isEmpty()) (if (q.isNotBlank()) "BOŞ: '$q' ile eşleşen belge/ürün yok" else if (allReceipts) "BOŞ: Açık ambar mal kabul belgesi yok" else "BOŞ: Size atanmış mal kabul yok")
                 else "TAMAM: ${rows.size} belge" + (if (itemHit > 0) " · 🔎 '$q' ürününü içerenler dahil" else "")
+            if (isDkc && rows.isNotEmpty()) {
+                val linePage = BcApi.getAllPages(
+                    context,
+                    "receiptLines?\$select=no,itemNo,description",
+                    maxPages = 1000,
+                )
+                if (linePage.complete) {
+                    val visibleNos = rows.mapTo(mutableSetOf()) { it.optString("no") }
+                    productPreviews = receiptProductPreviews(linePage.rows.filter { it.optString("no") in visibleNos })
+                } else {
+                    status += " · ürün önizlemesi alınamadı"
+                }
+                previewLoaded = true
+            }
+            loading = false
         }
     }
     LaunchedEffect(showAll) { load() }
@@ -153,9 +214,11 @@ private fun WhseReceiptTab() {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Button(onClick = { load() }, enabled = !loading) { WmsRefreshLabel(loading) }
             Spacer(Modifier.width(12.dp))
-            FilterChip(selected = !showAll, onClick = { showAll = false }, label = { Text("Bana atanan") })
-            Spacer(Modifier.width(6.dp))
-            FilterChip(selected = showAll, onClick = { showAll = true }, label = { Text("Tümü") })
+            if (!isDkc) {
+                FilterChip(selected = !showAll, onClick = { showAll = false }, label = { Text("Bana atanan") })
+                Spacer(Modifier.width(6.dp))
+                FilterChip(selected = showAll, onClick = { showAll = true }, label = { Text("Tümü") })
+            }
         }
         Spacer(Modifier.height(8.dp))
         com.dynops.bcwms.ui.DocSearchBar(value = search, onValueChange = { search = it }, onSearch = { load() }, label = "Mal kabul no ile ara")
@@ -165,14 +228,23 @@ private fun WhseReceiptTab() {
         Spacer(Modifier.height(8.dp))
         LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             items(shownRows) { d ->
-                OperationDocumentCard(
-                    title = d.optString("no"),
-                    metadata = "Lokasyon: ${firstValue(d, "locationCode")}  ·  Kaynak: ${firstValue(d, "sourceNo")}\nAtanan: ${rawValue(d, "assignedUserId").ifBlank { "Atanmamış" }}",
-                    progressPercent = d.optInt("percentComplete"),
-                    onClick = { selected = d.optString("no") },
-                )
+                if (isDkc) {
+                    DkcReceiptPreviewCard(
+                        receipt = d,
+                        products = productPreviews[d.optString("no")].orEmpty(),
+                        previewLoaded = previewLoaded,
+                        onClick = { selected = d.optString("no") },
+                    )
+                } else {
+                    OperationDocumentCard(
+                        title = d.optString("no"),
+                        metadata = "Lokasyon: ${firstValue(d, "locationCode")}  ·  Kaynak: ${firstValue(d, "sourceNo")}\nAtanan: ${rawValue(d, "assignedUserId").ifBlank { "Atanmamış" }}",
+                        progressPercent = d.optInt("percentComplete"),
+                        onClick = { selected = d.optString("no") },
+                    )
+                }
             }
-            if (rows.isEmpty() && !loading) item { EmptyState(if (showAll) "Açık ambar mal kabul belgesi yok. PO'dan direkt mal kabul için sağdaki sekmeyi kullanın." else "Size atanmış mal kabul yok. Tümünü görmek için \"Tümü\" seçin.") }
+            if (rows.isEmpty() && !loading) item { EmptyState(if (isDkc || showAll) "Açık ambar mal kabul belgesi yok. PO'dan direkt mal kabul için sağdaki sekmeyi kullanın." else "Size atanmış mal kabul yok. Tümünü görmek için \"Tümü\" seçin.") }
         }
     }
 }
@@ -183,6 +255,7 @@ private fun ReceiveDocument(no: String, onBack: () -> Unit) {
     // Donanım Geri tuşu belge ekranından uygulamayı kapatmasın; listeye dönsün.
     androidx.activity.compose.BackHandler { onBack() }
     val context = LocalContext.current
+    val isDkc = com.dynops.bcwms.BuildConfig.FLAVOR.equals("emu", ignoreCase = true)
     val scope = rememberCoroutineScope()
     var header by remember { mutableStateOf<JSONObject?>(null) }
     var lines by remember { mutableStateOf<List<JSONObject>>(emptyList()) }
@@ -270,7 +343,7 @@ private fun ReceiveDocument(no: String, onBack: () -> Unit) {
     LaunchedEffect(no) { reload() }
 
     fun action(name: String, body: String, okMsg: String, onResult: (BcApi.ApiResult) -> Unit = {}) {
-        if (!canMutateAssignedDocument(header?.optString("assignedUserId").orEmpty(), myUserId)) {
+        if (!isDkc && !canMutateAssignedDocument(header?.optString("assignedUserId").orEmpty(), myUserId)) {
             status = documentOwnershipMessage(header?.optString("assignedUserId").orEmpty(), myUserId)
             return
         }
@@ -307,8 +380,7 @@ private fun ReceiveDocument(no: String, onBack: () -> Unit) {
 
     val h = header
     val assignedUserId = h?.optString("assignedUserId")?.trim().orEmpty()
-    val canMutate = headerLoaded && linesComplete &&
-        canMutateAssignedDocument(assignedUserId, myUserId)
+    val canMutate = canMutateReceipt(isDkc, headerLoaded, linesComplete, assignedUserId, myUserId)
     val vehicleInfoRequired = h?.optBoolean("vehicleInfoRequired") == true
     val vehiclePlate = h?.optString("vehiclePlateNo")?.trim().orEmpty()
     val driverCode = h?.optString("driverCode")?.trim().orEmpty()
@@ -367,7 +439,7 @@ private fun ReceiveDocument(no: String, onBack: () -> Unit) {
                 title = no,
                 subtitle = "Lokasyon: ${h?.optString("locationCode") ?: ""} · Kaynak: ${h?.optString("sourceNo") ?: "-"}" +
                     (activeLp?.let { "\nAktif LP: $it" } ?: ""),
-                badge = rawValue(h ?: JSONObject(), "assignedUserId").ifBlank { "Atanmadı" },
+                badge = if (isDkc) "" else rawValue(h ?: JSONObject(), "assignedUserId").ifBlank { "Atanmadı" },
                 percent = h?.optDouble("percentComplete")?.toInt() ?: 0
             )
             if (vehicleInfoRequired) {
@@ -385,7 +457,7 @@ private fun ReceiveDocument(no: String, onBack: () -> Unit) {
             LineReadySummary(ready = readyCount, total = lines.size, stagedQty = postQty)
             Spacer(Modifier.height(6.dp))
             StatusText(status)
-            if (!canMutate && headerLoaded) {
+            if (!isDkc && !canMutate && headerLoaded) {
                 Text(
                     documentOwnershipMessage(assignedUserId, myUserId),
                     color = bcwmsStatus().danger,
@@ -505,7 +577,7 @@ private fun ReceiveDocument(no: String, onBack: () -> Unit) {
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
-                    if (!canMutate) {
+                    if (!isDkc && !canMutate) {
                         Button(
                             onClick = {
                                 scope.launch {
@@ -524,7 +596,7 @@ private fun ReceiveDocument(no: String, onBack: () -> Unit) {
                     } else {
                         Button(
                             onClick = { showScan = true },
-                            enabled = !busy,
+                            enabled = !busy && canMutate,
                             modifier = Modifier.weight(0.9f).height(46.dp),
                             contentPadding = PaddingValues(horizontal = 10.dp),
                         ) { WmsActionLabel(WmsGlyph.SCAN, "Tara") }
@@ -609,7 +681,7 @@ private fun ReceiveDocument(no: String, onBack: () -> Unit) {
             onConfirm = {
                 showPostConfirm = false
                 scope.launch {
-                    if (!canMutateAssignedDocument(header?.optString("assignedUserId").orEmpty(), myUserId)) {
+                    if (!isDkc && !canMutateAssignedDocument(header?.optString("assignedUserId").orEmpty(), myUserId)) {
                         status = documentOwnershipMessage(header?.optString("assignedUserId").orEmpty(), myUserId)
                         return@launch
                     }
@@ -804,7 +876,10 @@ private fun ReceiveDocument(no: String, onBack: () -> Unit) {
                 scanLot = ""; scanSerial = ""; scanSupplierLot = ""; scanExpiryDate = ""
                 val ln = scannedLine
                 if (ln == null) { status = "HATA: Satır eşleşmedi — listeden seçin"; return@QuantityDialogSheet }
-                if (!canMutate) { status = documentOwnershipMessage(assignedUserId, myUserId); return@QuantityDialogSheet }
+                if (!canMutate) {
+                    status = if (isDkc) "Belge satırları yüklenmedi. Yenileyin." else documentOwnershipMessage(assignedUserId, myUserId)
+                    return@QuantityDialogSheet
+                }
                 scope.launch {
                     busy = true; status = "Satır güncelleniyor..."
                     val body = JSONObject().apply {
@@ -863,7 +938,10 @@ private fun ReceiveDocument(no: String, onBack: () -> Unit) {
             onDismiss = { groupTarget = null },
             onConfirm = { res ->
                 groupTarget = null
-                if (!canMutate) { status = documentOwnershipMessage(assignedUserId, myUserId); return@QuantityDialogSheet }
+                if (!canMutate) {
+                    status = if (isDkc) "Belge satırları yüklenmedi. Yenileyin." else documentOwnershipMessage(assignedUserId, myUserId)
+                    return@QuantityDialogSheet
+                }
                 scope.launch {
                     busy = true; status = "Grup dağıtılıyor..."
                     val plan = distributeQty(gt, res.quantity, capReceipt)
