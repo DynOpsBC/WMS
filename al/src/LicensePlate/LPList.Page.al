@@ -1,6 +1,6 @@
 page 72070 "DOPSWHS LP List"
 {
-    Caption = 'License Plates';
+    Caption = 'LP Listesi';
     PageType = List;
     SourceTable = "DOPSWHS LP Header";
     SourceTableView = sorting(Status, "Location Code");
@@ -18,6 +18,12 @@ page 72070 "DOPSWHS LP List"
                 field(Status; Rec.Status) { ApplicationArea = All; }
                 field("Location Code"; Rec."Location Code") { ApplicationArea = All; }
                 field("Bin Code"; Rec."Bin Code") { ApplicationArea = All; }
+                field("Last Modified DateTime"; Rec."Last Modified DateTime")
+                {
+                    ApplicationArea = All;
+                    Caption = 'Son LP İşlemi';
+                    ToolTip = 'LP kaydındaki son güncelleme zamanıdır. Yakın zamanda taşınan LP''leri bulmak için sıralayın veya filtreleyin.';
+                }
                 field("LP Template Code"; Rec."LP Template Code") { ApplicationArea = All; }
                 field("Parent LP No."; Rec."Parent LP No.") { ApplicationArea = All; }
                 field(SSCC; Rec.SSCC) { ApplicationArea = All; }

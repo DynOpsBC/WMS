@@ -45,6 +45,29 @@ pageextension 72301 "DOPSWHS Bin Card Ext" extends "Bin Contents"
         }
     }
 
+    actions
+    {
+        addlast(Processing)
+        {
+            action(DOPSWHSFindLP)
+            {
+                ApplicationArea = All;
+                Caption = 'LP Numarasına Göre Ara';
+                ToolTip = 'Tüm LP kayıtlarını açar. LP No., konum ve raf alanlarında filtreleme ve sıralama yapabilirsiniz; bu sayfadaki konum filtresi taşınmış LP''leri gizlemez.';
+                Image = Find;
+                RunObject = page "DOPSWHS LP List";
+            }
+            action(DOPSWHSFindLPMovements)
+            {
+                ApplicationArea = All;
+                Caption = 'LP Hareketlerini Gör';
+                ToolTip = 'LP hareket geçmişini açar. Tarih, LP No., kaynak raf ve hedef raf alanlarıyla taşınan LP''leri arayabilirsiniz.';
+                Image = History;
+                RunObject = page "DOPSWHS LP Movement Ledger";
+            }
+        }
+    }
+
     trigger OnAfterGetRecord()
     var
         BinContentSubscriber: Codeunit "DOPSWHS Bin Content Subscriber";

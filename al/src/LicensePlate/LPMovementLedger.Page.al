@@ -1,6 +1,6 @@
 page 72072 "DOPSWHS LP Movement Ledger"
 {
-    Caption = 'LP Movement Ledger';
+    Caption = 'LP Hareket Geçmişi';
     PageType = List;
     SourceTable = "DOPSWHS LP Movement Ledger";
     ApplicationArea = All;
