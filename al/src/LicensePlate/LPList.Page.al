@@ -43,7 +43,7 @@ page 72070 "DOPSWHS LP List"
             {
                 ApplicationArea = All;
                 Caption = 'Eksik Kaynakları Toplu Bağla';
-                ToolTip = 'Listedeki filtrelere uyan aktif LP satırlarını kontrol eder. Yalnız tek bir uygun girişle eşleşen satırları bağlar; belirsizleri raporlar. Stok miktarı ve raf değişmez.';
+                ToolTip = 'Listedeki filtrelere uyan aktif LP satırlarını ürün, varyant, lot, seri, lokasyon ve varsa kaynak belge/SKT ile eşleştirir. Ayrılabilir miktarı yeterli tek bir giriş varsa bağlar; birden fazla adayı raporlar. Stok miktarı ve raf değişmez.';
                 Image = Entries;
                 trigger OnAction()
                 var

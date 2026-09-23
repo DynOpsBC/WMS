@@ -105,7 +105,7 @@ permissionset 72095 "DOPSWHS-USER"
         page "DOPSWHS LP Line API" = X,
         page "DOPSWHS LP Line ListPart" = X,
         page "DOPSWHS Active LP Contents" = X,
-        page "DOPSWHS Bin LP Filter Results" = X,
+        page "DOPSWHS LP Bin Contents" = X,
         page "DOPSWHS LP Template API" = X,
         page "DOPSWHS Receipt API" = X,
         page "DOPSWHS Receipt Line API" = X,

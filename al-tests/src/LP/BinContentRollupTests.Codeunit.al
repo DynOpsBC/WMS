@@ -188,6 +188,63 @@ codeunit 72110 "DOPSWHS Bin Rollup Tests"
         Assert.AreEqual(17, SourceLine.Quantity, 'Switching to bin overview must remove previous tracking filters.');
     end;
 
+    [Test]
+    procedure LPInquiryShowsContentWithoutBinStockOrSourceLink()
+    var
+        LPContents: TestPage "DOPSWHS LP Bin Contents";
+        Assert: Codeunit "Library Assert";
+    begin
+        AddTrackingSummaryLine('TEST-LP-NOSTOCK', 10000, 'LOT-A', '', 4080);
+        LPContents.OpenView();
+        LPContents.Filter.SetFilter("LP No.", 'TEST-LP-NOSTOCK');
+        Assert.IsTrue(LPContents.First(), 'An existing LP line must remain visible without any Bin Content row or source ILE.');
+        LPContents."LP No.".AssertEquals('TEST-LP-NOSTOCK');
+        LPContents.Quantity.AssertEquals(4080);
+        LPContents."Source Item Ledger Entry No.".AssertEquals(0);
+        LPContents.HasBCBinContent.AssertEquals(false);
+        LPContents.BCBinQuantity.AssertEquals(0);
+        LPContents.Close();
+    end;
+
+    [Test]
+    procedure LPInquiryUsesCurrentHeaderBinForProductionLP()
+    var
+        LP: Record "DOPSWHS LP Header";
+        LPContents: TestPage "DOPSWHS LP Bin Contents";
+        Assert: Codeunit "Library Assert";
+    begin
+        AddTrackingSummaryLine('TEST-LP-MOVED', 10000, 'LOT-A', '', 4);
+        LP.Get('TEST-LP-MOVED');
+        LP."Bin Code" := 'A.URETIM';
+        LP.Status := LP.Status::Assigned;
+        LP.Modify(false);
+        LPContents.OpenView();
+        LPContents.Filter.SetFilter("LP Bin Code", 'A.URETIM');
+        LPContents.Filter.SetFilter("LP No.", 'TEST-LP-MOVED');
+        Assert.IsTrue(LPContents.First(), 'The production LP must be found through its current header bin without stock rows.');
+        LPContents."LP Bin Code".AssertEquals('A.URETIM');
+        LPContents."LP Status".AssertEquals(LP.Status::Assigned);
+        LPContents.Close();
+    end;
+
+    [Test]
+    procedure LPInquiryExcludesUsedAndZeroQuantityLines()
+    var
+        LP: Record "DOPSWHS LP Header";
+        LPContents: TestPage "DOPSWHS LP Bin Contents";
+        Assert: Codeunit "Library Assert";
+    begin
+        AddTrackingSummaryLine('TEST-LP-INACTIVE', 10000, 'LOT-A', '', 4);
+        AddTrackingSummaryLine('TEST-LP-INQUIRY0', 10000, 'LOT-A', '', 0);
+        LP.Get('TEST-LP-INACTIVE');
+        LP.Status := LP.Status::Used;
+        LP.Modify(false);
+        LPContents.OpenView();
+        LPContents.Filter.SetFilter("LP No.", 'TEST-LP-INACTIVE|TEST-LP-INQUIRY0');
+        Assert.IsFalse(LPContents.First(), 'Inactive or empty LP content must not be presented as active LP quantity.');
+        LPContents.Close();
+    end;
+
     local procedure SeedTrackingSummary()
     begin
         AddTrackingSummaryLine('TEST-LP-A', 10000, 'LOT-A', '', 4);

@@ -2,14 +2,6 @@ pageextension 72301 "DOPSWHS Bin Card Ext" extends "Bin Contents"
 {
     layout
     {
-        addfirst(Content)
-        {
-            part(DOPSWHSLPFilterResults; "DOPSWHS Bin LP Filter Results")
-            {
-                ApplicationArea = All;
-                Visible = ShowLPFilterResults;
-            }
-        }
         addafter(ZoneCode)
         {
             field(DOPSWHSLPNoFilter; LpNoFilter)
@@ -35,6 +27,48 @@ pageextension 72301 "DOPSWHS Bin Card Ext" extends "Bin Contents"
                 begin
                     Page.Run(Page::"DOPSWHS LP List");
                 end;
+            }
+            group(DOPSWHSLPResult)
+            {
+                Caption = 'Bulunan LP';
+                Visible = ShowLPFilterResults;
+                field(DOPSWHSLPFound; FoundLPNo)
+                {
+                    ApplicationArea = All;
+                    Caption = 'LP No.';
+                    Editable = false;
+                    DrillDown = true;
+                    trigger OnDrillDown()
+                    var
+                        LP: Record "DOPSWHS LP Header";
+                    begin
+                        if LP.Get(FoundLPNo) then
+                            Page.Run(Page::"DOPSWHS LP Card", LP);
+                    end;
+                }
+                field(DOPSWHSLPFoundBin; FoundLPBin)
+                {
+                    ApplicationArea = All;
+                    Caption = 'Konum / Raf';
+                    Editable = false;
+                }
+                field(DOPSWHSLPFoundContents; FoundLPContents)
+                {
+                    ApplicationArea = All;
+                    Caption = 'LP İçeriği';
+                    Editable = false;
+                    DrillDown = true;
+                    trigger OnDrillDown()
+                    begin
+                        OpenLPBinContents(FoundLPNo);
+                    end;
+                }
+                field(DOPSWHSLPStockMatch; LPStockMatch)
+                {
+                    ApplicationArea = All;
+                    Caption = 'BC Raf Satırı';
+                    Editable = false;
+                }
             }
         }
         // The standard "Bin Contents" page shows its calculated quantity through
@@ -84,6 +118,19 @@ pageextension 72301 "DOPSWHS Bin Card Ext" extends "Bin Contents"
     {
         addlast(Processing)
         {
+            action(DOPSWHSLPBinContents)
+            {
+                ApplicationArea = All;
+                Caption = 'LP Raf İçeriği';
+                ToolTip = 'Aktif LP içeriklerini konum, raf, LP, ürün ve lot bazında açar. BC depo gözü satırı olmayan LP içerikleri de listelenir.';
+                Image = List;
+                Promoted = true;
+                PromotedCategory = Process;
+                trigger OnAction()
+                begin
+                    OpenLPBinContents('');
+                end;
+            }
             action(DOPSWHSLPsInBin)
             {
                 ApplicationArea = All;
@@ -158,12 +205,16 @@ pageextension 72301 "DOPSWHS Bin Card Ext" extends "Bin Contents"
         LP: Record "DOPSWHS LP Header";
         LPLine: Record "DOPSWHS LP Line";
         MatchedBinContent: Boolean;
+        BinContentSubscriber: Codeunit "DOPSWHS Bin Content Subscriber";
     begin
         Rec.MarkedOnly(false);
         Rec.ClearMarks();
         if LpNoFilter = '' then begin
             ShowLPFilterResults := false;
-            CurrPage.DOPSWHSLPFilterResults.Page.SetLPNo('');
+            Clear(FoundLPNo);
+            Clear(FoundLPBin);
+            Clear(FoundLPContents);
+            Clear(LPStockMatch);
             CurrPage.Update(false);
             exit;
         end;
@@ -171,7 +222,10 @@ pageextension 72301 "DOPSWHS Bin Card Ext" extends "Bin Contents"
         if not LP.Get(LpNoFilter) then
             Error('%1 LP numarası bulunamadı.', LpNoFilter);
         ShowLPFilterResults := true;
-        CurrPage.DOPSWHSLPFilterResults.Page.SetLPNo(LpNoFilter);
+        FoundLPNo := LP."No.";
+        FoundLPBin := LP."Location Code" + ' / ' + LP."Bin Code";
+        FoundLPContents := BinContentSubscriber.GetLPContentSummary(LP."No.");
+        LPStockMatch := 'Yok';
 
         LPLine.SetRange("LP No.", LP."No.");
         LPLine.SetFilter("Item No.", '<>%1', '');
@@ -182,23 +236,31 @@ pageextension 72301 "DOPSWHS Bin Card Ext" extends "Bin Contents"
                     LPLine."Variant Code", LPLine."Unit of Measure") then begin
                     Rec.Mark(true);
                     MatchedBinContent := true;
+                    LPStockMatch := 'Var';
                 end;
             until LPLine.Next() = 0;
 
         Rec.MarkedOnly(true);
         if not MatchedBinContent or Rec.IsEmpty() then begin
-            // Keep the LP result visible above the stock list. Restore the
-            // normal stock rows because an LP does not create BC stock.
-            Rec.MarkedOnly(false);
-            Rec.ClearMarks();
-            CurrPage.Update(false);
+            // Keep the entered filter and its stock result consistent. The
+            // independent LP summary remains visible even if no stock matches.
             if MatchedBinContent then
-                Message('%1 LP kaydı üstte gösteriliyor. Mevcut liste filtreleri eşleşen BC depo gözü satırını gizliyor.', LP."No.")
+                LPStockMatch := 'Var; mevcut liste filtreleri gizliyor'
             else
-                Message('%1 LP kaydı üstte gösteriliyor. Aynı raf, ürün, varyant ve ölçü biriminde BC depo gözü stok satırı yok; LP satır miktarı BC raf stoğu değildir.', LP."No.");
+                LPStockMatch := 'Yok; LP içeriğini LP numarasından açın';
+            CurrPage.Update(false);
             exit;
         end;
         CurrPage.Update(false);
+    end;
+
+    local procedure OpenLPBinContents(LPNo: Code[20])
+    var
+        LPLine: Record "DOPSWHS LP Line";
+    begin
+        if LPNo <> '' then
+            LPLine.SetRange("LP No.", LPNo);
+        Page.Run(Page::"DOPSWHS LP Bin Contents", LPLine);
     end;
 
     var
@@ -207,4 +269,8 @@ pageextension 72301 "DOPSWHS Bin Card Ext" extends "Bin Contents"
         LpNoFilter: Code[20];
         LPListLink: Text[50];
         ShowLPFilterResults: Boolean;
+        FoundLPNo: Code[20];
+        FoundLPBin: Text[50];
+        FoundLPContents: Text[250];
+        LPStockMatch: Text[80];
 }

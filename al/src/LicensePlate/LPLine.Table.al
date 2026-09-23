@@ -73,6 +73,27 @@ table 72011 "DOPSWHS LP Line"
             TableRelation = "DOPSWHS LP Header";
         }
         field(90; "Line Weight kg"; Decimal) { Caption = 'Line Weight kg'; DataClassification = CustomerContent; Editable = false; }
+        field(91; "LP Location Code"; Code[10])
+        {
+            Caption = 'Konum Kodu';
+            FieldClass = FlowField;
+            CalcFormula = lookup("DOPSWHS LP Header"."Location Code" where("No." = field("LP No.")));
+            Editable = false;
+        }
+        field(92; "LP Bin Code"; Code[20])
+        {
+            Caption = 'Depo Gözü Kodu';
+            FieldClass = FlowField;
+            CalcFormula = lookup("DOPSWHS LP Header"."Bin Code" where("No." = field("LP No.")));
+            Editable = false;
+        }
+        field(93; "LP Status"; Enum "DOPSWHS LP Status")
+        {
+            Caption = 'LP Durumu';
+            FieldClass = FlowField;
+            CalcFormula = lookup("DOPSWHS LP Header".Status where("No." = field("LP No.")));
+            Editable = false;
+        }
     }
 
     keys
