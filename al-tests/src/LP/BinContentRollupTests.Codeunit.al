@@ -171,6 +171,32 @@ codeunit 72110 "DOPSWHS Bin Rollup Tests"
     end;
 
     [Test]
+    procedure BinContentsDisplaysCurrentLPNoEvenWhenStoredIndexIsStale()
+    var
+        BinContent: Record "Bin Content";
+        BinContents: TestPage "Bin Contents";
+    begin
+        BinContent.Init();
+        BinContent."Location Code" := 'LPTEST';
+        BinContent."Bin Code" := 'TRACKING';
+        BinContent."Item No." := 'ITEM-LPLOT';
+        BinContent."Unit of Measure Code" := 'PCS';
+        BinContent.Insert(false);
+        AddTrackingSummaryLine('TEST-LP-LIVE', 10000, 'LOT-A', '', 4);
+        BinContent.Get('LPTEST', 'TRACKING', 'ITEM-LPLOT', '', 'PCS');
+        BinContent."DOPSWHS Current LP Nos" := '';
+        BinContent.Modify(false);
+
+        BinContents.OpenView();
+        BinContents.Filter.SetFilter("Location Code", 'LPTEST');
+        BinContents.Filter.SetFilter("Bin Code", 'TRACKING');
+        BinContents.Filter.SetFilter("Item No.", 'ITEM-LPLOT');
+        BinContents.DOPSWHSLPNos.AssertEquals('TEST-LP-LIVE');
+        BinContents.DOPSWHSLPQuantity.AssertEquals(4);
+        BinContents.Close();
+    end;
+
+    [Test]
     procedure DrillDownFilterUsesSameExactTrackingScope()
     var
         SourceLine: Record "DOPSWHS LP Line";
@@ -221,10 +247,6 @@ codeunit 72110 "DOPSWHS Bin Rollup Tests"
         Assert.IsTrue(BinContents.First(), 'The LP item must also appear in the main Bin Contents grid.');
         BinContents.DOPSWHSLPNos.AssertEquals('TEST-LP-BINPAGE');
         BinContents.DOPSWHSLPQuantity.AssertEquals(4080);
-        Assert.IsTrue(BinContents.DOPSWHSLPLines.First(), 'LP item line must appear without a BC Bin Content row.');
-        BinContents.DOPSWHSLPLines."Item No.".AssertEquals('ITEM-LPLOT');
-        BinContents.DOPSWHSLPLines.Quantity.AssertEquals(4080);
-        BinContents.DOPSWHSLPLines."Lot No.".AssertEquals('LOT-A');
         BinContents.Close();
         Assert.IsTrue(BinContent.Get('LPTEST', 'TRACKING', 'ITEM-LPLOT', '', 'PCS'),
             'The missing bin/item definition must be created.');
@@ -236,20 +258,21 @@ codeunit 72110 "DOPSWHS Bin Rollup Tests"
     [Test]
     procedure BinContentsShowsEveryLPItemInBinWithoutBinStock()
     var
-        BinContents: TestPage "Bin Contents";
+        LPContents: TestPage "DOPSWHS LP Bin Contents";
         Assert: Codeunit "Library Assert";
     begin
         AddTrackingSummaryLine('TEST-LP-BIN-A', 10000, 'LOT-A', '', 4);
         AddTrackingSummaryLine('TEST-LP-BIN-B', 10000, 'LOT-B', '', 7);
-        BinContents.OpenEdit();
-        BinContents.DOPSWHSLPBinFilter.SetValue('TRACKING');
-        Assert.IsTrue(BinContents.DOPSWHSLPLines.First(), 'LP lines from the selected bin must appear without BC Bin Content.');
-        BinContents.DOPSWHSLPLines."LP Bin Code".AssertEquals('TRACKING');
-        BinContents.DOPSWHSLPLines."Item No.".AssertEquals('ITEM-LPLOT');
-        BinContents.DOPSWHSLPLines.Quantity.AssertEquals(4);
-        Assert.IsTrue(BinContents.DOPSWHSLPLines.Next(), 'Every active LP item in the bin must be available.');
-        BinContents.DOPSWHSLPLines.Quantity.AssertEquals(7);
-        BinContents.Close();
+        LPContents.OpenView();
+        LPContents.Filter.SetFilter("LP Bin Code", 'TRACKING');
+        LPContents.Filter.SetFilter("LP No.", 'TEST-LP-BIN-A|TEST-LP-BIN-B');
+        Assert.IsTrue(LPContents.First(), 'LP lines from the selected bin must appear without BC Bin Content.');
+        LPContents."LP Bin Code".AssertEquals('TRACKING');
+        LPContents."Item No.".AssertEquals('ITEM-LPLOT');
+        LPContents.Quantity.AssertEquals(4);
+        Assert.IsTrue(LPContents.Next(), 'Every active LP item in the bin must be available.');
+        LPContents.Quantity.AssertEquals(7);
+        LPContents.Close();
     end;
 
     [Test]

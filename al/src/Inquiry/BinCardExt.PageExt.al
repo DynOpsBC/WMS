@@ -2,113 +2,57 @@ pageextension 72301 "DOPSWHS Bin Card Ext" extends "Bin Contents"
 {
     layout
     {
-        addafter(ZoneCode)
+        addafter(Options)
         {
-            field(DOPSWHSLPNoFilter; LpNoFilter)
+            group(DOPSWHSLPFilters)
             {
-                ApplicationArea = All;
-                Caption = 'LP No. Filtresi';
-                ToolTip = 'LP numarasını girin. LP maddeleri ana tabloda ve LP bölümünde gösterilir. Eksik depo gözü/ürün satırı oluşturulabilir; BC Miktar yalnız gerçek depo hareketlerini gösterir.';
-
-                trigger OnValidate()
-                begin
-                    ApplyLPFilter();
-                end;
-            }
-            field(DOPSWHSLPLocationFilter; LpLocationFilter)
-            {
-                ApplicationArea = All;
-                Caption = 'LP Konum Filtresi';
-                ToolTip = 'LP maddelerini konuma göre daraltın. Depo gözü koduyla birlikte kullanın.';
-
-                trigger OnValidate()
-                begin
-                    ApplyLPBinFilter();
-                end;
-            }
-            field(DOPSWHSLPBinFilter; LpBinFilter)
-            {
-                ApplicationArea = All;
-                Caption = 'LP Depo Gözü Filtresi';
-                ToolTip = 'BC stok satırı olmasa da bu depo gözündeki aktif LP maddelerini gösterir.';
-
-                trigger OnValidate()
-                begin
-                    ApplyLPBinFilter();
-                end;
-            }
-            field(DOPSWHSLPListLink; LPListLink)
-            {
-                ApplicationArea = All;
-                Caption = 'LP Listesi';
-                Editable = false;
-                DrillDown = true;
-                ToolTip = 'Tüm LP''leri LP numarası, konum ve depo gözü alanlarına göre filtrelemek veya sıralamak için açın.';
-
-                trigger OnDrillDown()
-                begin
-                    Page.Run(Page::"DOPSWHS LP List");
-                end;
-            }
-            group(DOPSWHSLPResult)
-            {
-                Caption = 'Bulunan LP';
-                Visible = ShowLPFilterResults;
-                field(DOPSWHSLPFound; FoundLPNo)
+                Caption = 'LP Filtreleri';
+                field(DOPSWHSLPNoFilter; LpNoFilter)
                 {
                     ApplicationArea = All;
-                    Caption = 'LP No.';
-                    Editable = false;
-                    DrillDown = true;
-                    trigger OnDrillDown()
-                    var
-                        LP: Record "DOPSWHS LP Header";
+                    Caption = 'LP No. Filtresi';
+                    ToolTip = 'LP numarasını girin. LP maddeleri ana tabloda gösterilir. Eksik raf/ürün tanımı oluşturulabilir; BC Miktar yalnız gerçek depo hareketlerini gösterir.';
+
+                    trigger OnValidate()
                     begin
-                        if LP.Get(FoundLPNo) then
-                            Page.Run(Page::"DOPSWHS LP Card", LP);
+                        ApplyLPFilter();
                     end;
                 }
-                field(DOPSWHSLPFoundBin; FoundLPBin)
+                field(DOPSWHSLPLocationFilter; LpLocationFilter)
                 {
                     ApplicationArea = All;
-                    Caption = 'Konum / Raf';
-                    Editable = false;
-                }
-                field(DOPSWHSLPFoundContents; FoundLPContents)
-                {
-                    ApplicationArea = All;
-                    Caption = 'LP İçeriği';
-                    Editable = false;
-                    DrillDown = true;
-                    trigger OnDrillDown()
+                    Caption = 'LP Konum Filtresi';
+                    ToolTip = 'LP Raf İçeriği eyleminde kullanılacak konumu seçin.';
+
+                    trigger OnValidate()
                     begin
-                        OpenLPBinContents(FoundLPNo);
+                        ApplyLPBinFilter();
                     end;
                 }
-                field(DOPSWHSLPStockMatch; LPStockMatch)
+                field(DOPSWHSLPBinFilter; LpBinFilter)
                 {
                     ApplicationArea = All;
-                    Caption = 'Ana Tablo Satırı';
-                    Editable = false;
+                    Caption = 'LP Depo Gözü Filtresi';
+                    ToolTip = 'LP Raf İçeriği eyleminde kullanılacak rafı seçin.';
+
+                    trigger OnValidate()
+                    begin
+                        ApplyLPBinFilter();
+                    end;
                 }
-            }
-            part(DOPSWHSLPLines; "DOPSWHS LP Bin Lines")
-            {
-                ApplicationArea = All;
-                Visible = ShowLPBinLines;
             }
         }
         // The standard "Bin Contents" page shows its calculated quantity through
         // the CalcQtyUOM control; there is no control named Quantity.
         addafter(CalcQtyUOM)
         {
-            field(DOPSWHSLPNos; Rec."DOPSWHS Current LP Nos")
+            field(DOPSWHSLPNos; ActiveLpNos)
             {
                 ApplicationArea = All;
                 Caption = 'Güncel LP No.ları';
                 Editable = false;
                 DrillDown = true;
-                ToolTip = 'Bu sütundan LP numarasına göre filtreleyip sıralayın. Birden çok LP içeren satırları bulmak için *LP000123* gibi yıldızlı filtre kullanın. Yalnız bu satırdaki ürün, varyant ve ölçü birimiyle eşleşen pozitif LP satırları gösterilir. Raftaki tüm LP başlıkları için Raftaki LP''ler eylemini kullanın.';
+                ToolTip = 'Bu satırdaki ürün, varyant ve ölçü birimiyle eşleşen aktif LP numaraları LP kayıtlarından güncel olarak hesaplanır. Numaraya göre aramak için LP No. Filtresi veya LP Numarasına Göre Ara eylemini kullanın.';
 
                 trigger OnDrillDown()
                 begin
@@ -143,6 +87,19 @@ pageextension 72301 "DOPSWHS Bin Card Ext" extends "Bin Contents"
     {
         addlast(Processing)
         {
+            action(DOPSWHSLPRefresh)
+            {
+                ApplicationArea = All;
+                Caption = 'LP No.larını Yenile';
+                ToolTip = 'Açık sayfadaki LP numaralarını ve miktarlarını güncel LP kayıtlarından yeniden hesaplar.';
+                Image = Refresh;
+                Promoted = true;
+                PromotedCategory = Process;
+                trigger OnAction()
+                begin
+                    CurrPage.Update(false);
+                end;
+            }
             action(DOPSWHSLPBinContents)
             {
                 ApplicationArea = All;
@@ -207,22 +164,17 @@ pageextension 72301 "DOPSWHS Bin Card Ext" extends "Bin Contents"
             ActiveLpNos, ActiveLpQuantity);
     end;
 
-    trigger OnOpenPage()
-    begin
-        LPListLink := 'LP listesini aç / sırala';
-    end;
-
     trigger OnAfterGetCurrRecord()
+    var
+        LP: Record "DOPSWHS LP Header";
     begin
-        if LpNoFilter <> '' then
-            CurrPage.DOPSWHSLPFactboxBin.Page.SetScope(FoundLPLocation, FoundLPBinCode, FoundLPNo)
-        else begin
+        if (LpNoFilter <> '') and LP.Get(LpNoFilter) then
+            CurrPage.DOPSWHSLPFactboxBin.Page.SetScope(LP."Location Code", LP."Bin Code", LP."No.")
+        else
             if LpBinFilter <> '' then
                 CurrPage.DOPSWHSLPFactboxBin.Page.SetScope(LpLocationFilter, LpBinFilter, '')
             else
                 CurrPage.DOPSWHSLPFactboxBin.Page.SetScope(Rec."Location Code", Rec."Bin Code", '');
-            UpdateLPBinLines();
-        end;
     end;
 
     local procedure OpenActiveLPContents()
@@ -243,41 +195,17 @@ pageextension 72301 "DOPSWHS Bin Card Ext" extends "Bin Contents"
         LP: Record "DOPSWHS LP Header";
         LPLine: Record "DOPSWHS LP Line";
         BinLPIndex: Codeunit "DOPSWHS Bin LP Index";
-        MatchedBinContent: Boolean;
-        BinContentSubscriber: Codeunit "DOPSWHS Bin Content Subscriber";
     begin
         Rec.MarkedOnly(false);
         Rec.ClearMarks();
         if LpNoFilter = '' then begin
-            ShowLPFilterResults := false;
-            Clear(FoundLPNo);
-            Clear(FoundLPBin);
-            Clear(FoundLPLocation);
-            Clear(FoundLPBinCode);
-            Clear(FoundLPContents);
-            Clear(LPStockMatch);
             CurrPage.Update(false);
-            UpdateLPBinLines();
             exit;
         end;
 
         if not LP.Get(LpNoFilter) then
             Error('%1 LP numarası bulunamadı.', LpNoFilter);
         BinLPIndex.EnsureLPItemRows(LP);
-        ShowLPFilterResults := true;
-        FoundLPNo := LP."No.";
-        FoundLPBin := LP."Location Code" + ' / ' + LP."Bin Code";
-        FoundLPLocation := LP."Location Code";
-        FoundLPBinCode := LP."Bin Code";
-        FoundLPContents := BinContentSubscriber.GetLPContentSummary(LP."No.");
-        LPStockMatch := 'Yok';
-        Clear(LastLPLocationScope);
-        Clear(LastLPBinScope);
-        CurrPage.DOPSWHSLPFactboxBin.Page.SetScope(FoundLPLocation, FoundLPBinCode, FoundLPNo);
-        ShowLPBinLines := true;
-        CurrPage.Update(false);
-        ShowLPBinLines := CurrPage.DOPSWHSLPLines.Page.SetScope('', '', FoundLPNo);
-
         LPLine.SetRange("LP No.", LP."No.");
         LPLine.SetFilter("Item No.", '<>%1', '');
         LPLine.SetFilter(Quantity, '>0');
@@ -286,29 +214,15 @@ pageextension 72301 "DOPSWHS Bin Card Ext" extends "Bin Contents"
                 if Rec.Get(LP."Location Code", LP."Bin Code", LPLine."Item No.",
                     LPLine."Variant Code", LPLine."Unit of Measure") then begin
                     Rec.Mark(true);
-                    MatchedBinContent := true;
-                    LPStockMatch := 'Var; BC miktarı ayrı';
                 end else
                     if (LPLine."Unit of Measure" <> '') and
                        Rec.Get(LP."Location Code", LP."Bin Code", LPLine."Item No.",
                            LPLine."Variant Code", '') then begin
                         Rec.Mark(true);
-                        MatchedBinContent := true;
-                        LPStockMatch := 'Var; BC miktarı ayrı';
                     end;
             until LPLine.Next() = 0;
 
         Rec.MarkedOnly(true);
-        if not MatchedBinContent or Rec.IsEmpty() then begin
-            // Keep the entered filter and its stock result consistent. The
-            // independent LP summary remains visible even if no stock matches.
-            if MatchedBinContent then
-                LPStockMatch := 'Var; mevcut liste filtreleri gizliyor'
-            else
-                LPStockMatch := 'Yok; LP içeriği yukarıda gösterilir';
-            CurrPage.Update(false);
-            exit;
-        end;
         CurrPage.Update(false);
     end;
 
@@ -318,44 +232,10 @@ pageextension 72301 "DOPSWHS Bin Card Ext" extends "Bin Contents"
             LpNoFilter := '';
             Rec.MarkedOnly(false);
             Rec.ClearMarks();
-            ShowLPFilterResults := false;
-            Clear(FoundLPNo);
-            Clear(FoundLPBin);
-            Clear(FoundLPLocation);
-            Clear(FoundLPBinCode);
-            Clear(FoundLPContents);
-            Clear(LPStockMatch);
         end;
-        Clear(LastLPLocationScope);
-        Clear(LastLPBinScope);
-        UpdateLPBinLines();
         if LpBinFilter <> '' then
             CurrPage.DOPSWHSLPFactboxBin.Page.SetScope(LpLocationFilter, LpBinFilter, '');
         CurrPage.Update(false);
-    end;
-
-    local procedure UpdateLPBinLines()
-    var
-        ScopeLocation: Code[10];
-        ScopeBin: Code[20];
-    begin
-        if LpNoFilter <> '' then
-            exit;
-        if LpBinFilter <> '' then begin
-            ScopeLocation := LpLocationFilter;
-            ScopeBin := LpBinFilter;
-        end else begin
-            ScopeLocation := Rec."Location Code";
-            ScopeBin := Rec."Bin Code";
-            if LpLocationFilter <> '' then
-                ScopeLocation := LpLocationFilter;
-        end;
-        if (ScopeLocation = LastLPLocationScope) and (ScopeBin = LastLPBinScope) then
-            exit;
-        LastLPLocationScope := ScopeLocation;
-        LastLPBinScope := ScopeBin;
-        ShowLPBinLines := ScopeBin <> '';
-        ShowLPBinLines := CurrPage.DOPSWHSLPLines.Page.SetScope(ScopeLocation, ScopeBin, '');
     end;
 
     local procedure OpenLPBinContents(LPNo: Code[20])
@@ -383,15 +263,4 @@ pageextension 72301 "DOPSWHS Bin Card Ext" extends "Bin Contents"
         LpNoFilter: Code[20];
         LpLocationFilter: Code[10];
         LpBinFilter: Code[20];
-        LPListLink: Text[50];
-        ShowLPFilterResults: Boolean;
-        ShowLPBinLines: Boolean;
-        LastLPLocationScope: Code[10];
-        LastLPBinScope: Code[20];
-        FoundLPNo: Code[20];
-        FoundLPBin: Text[50];
-        FoundLPLocation: Code[10];
-        FoundLPBinCode: Code[20];
-        FoundLPContents: Text[250];
-        LPStockMatch: Text[80];
 }
