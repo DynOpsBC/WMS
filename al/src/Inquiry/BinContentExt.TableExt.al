@@ -8,5 +8,16 @@ tableextension 72401 "DOPSWHS Bin Content Ext" extends "Bin Content"
             FieldClass = FlowField;
             CalcFormula = count("DOPSWHS LP Header" where("Location Code" = field("Location Code"), "Bin Code" = field("Bin Code"), Status = const(Built), "Parent LP No." = const('')));
         }
+        field(72402; "DOPSWHS Current LP Nos"; Text[250])
+        {
+            Caption = 'Güncel LP No.ları';
+            DataClassification = CustomerContent;
+            Editable = false;
+        }
+    }
+
+    keys
+    {
+        key(DOPSWHSLPNos; "DOPSWHS Current LP Nos") { }
     }
 }

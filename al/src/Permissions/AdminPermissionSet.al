@@ -235,6 +235,7 @@ permissionset 72094 "DOPSWHS-ADMIN"
         codeunit "DOPSWHS GS1 AI Parser" = X,
         codeunit "DOPSWHS Device Auth" = X,
         codeunit "DOPSWHS Bin Content Subscriber" = X,
+        codeunit "DOPSWHS Bin LP Index" = X,
         codeunit "DOPSWHS LP Management" = X,
         codeunit "DOPSWHS LP Verification" = X, // 72216
         codeunit "DOPSWHS LP Nest Manager" = X,

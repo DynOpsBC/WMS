@@ -33,13 +33,13 @@ pageextension 72301 "DOPSWHS Bin Card Ext" extends "Bin Contents"
         // the CalcQtyUOM control; there is no control named Quantity.
         addafter(CalcQtyUOM)
         {
-            field(DOPSWHSLPNos; ActiveLpNos)
+            field(DOPSWHSLPNos; Rec."DOPSWHS Current LP Nos")
             {
                 ApplicationArea = All;
                 Caption = 'Güncel LP No.ları';
                 Editable = false;
                 DrillDown = true;
-                ToolTip = 'Yalnız bu satırdaki ürün, varyant ve ölçü birimiyle eşleşen, miktarı sıfırdan büyük LP satırlarını gösterir. Raftaki tüm LP başlıkları için Raftaki LP''ler eylemini kullanın. Transfer sonrası F5 ile yenileyin.';
+                ToolTip = 'Bu sütundan LP numarasına göre filtreleyip sıralayın. Birden çok LP içeren satırları bulmak için *LP000123* gibi yıldızlı filtre kullanın. Yalnız bu satırdaki ürün, varyant ve ölçü birimiyle eşleşen pozitif LP satırları gösterilir. Raftaki tüm LP başlıkları için Raftaki LP''ler eylemini kullanın.';
 
                 trigger OnDrillDown()
                 begin

@@ -134,6 +134,43 @@ codeunit 72110 "DOPSWHS Bin Rollup Tests"
     end;
 
     [Test]
+    procedure CurrentLPNosCanBeFilteredAsStoredBinContentField()
+    var
+        BinContent: Record "Bin Content";
+        LP: Record "DOPSWHS LP Header";
+        LPLine: Record "DOPSWHS LP Line";
+        Assert: Codeunit "Library Assert";
+    begin
+        BinContent.Init();
+        BinContent."Location Code" := 'LPTEST';
+        BinContent."Bin Code" := 'TRACKING';
+        BinContent."Item No." := 'ITEM-LPLOT';
+        BinContent."Unit of Measure Code" := 'PCS';
+        BinContent.Insert(false);
+        AddTrackingSummaryLine('TEST-LP-A', 10000, 'LOT-A', '', 4);
+
+        BinContent.SetRange("DOPSWHS Current LP Nos", 'TEST-LP-A');
+        Assert.AreEqual(1, BinContent.Count(), 'The LP number must be filterable on Bin Content.');
+        BinContent.Reset();
+        BinContent.Get('LPTEST', 'TRACKING', 'ITEM-LPLOT', '', 'PCS');
+        Assert.AreEqual('TEST-LP-A', BinContent."DOPSWHS Current LP Nos", 'The LP line must update the stored column.');
+
+        LPLine.Get('TEST-LP-A', 10000);
+        LPLine.Quantity := 0;
+        LPLine.Modify(false);
+        BinContent.Get('LPTEST', 'TRACKING', 'ITEM-LPLOT', '', 'PCS');
+        Assert.AreEqual('', BinContent."DOPSWHS Current LP Nos", 'An empty LP line must leave the column.');
+
+        LPLine.Quantity := 4;
+        LPLine.Modify(false);
+        LP.Get('TEST-LP-A');
+        LP.Status := LP.Status::Unbuilt;
+        LP.Modify(false);
+        BinContent.Get('LPTEST', 'TRACKING', 'ITEM-LPLOT', '', 'PCS');
+        Assert.AreEqual('', BinContent."DOPSWHS Current LP Nos", 'An inactive LP must leave the column.');
+    end;
+
+    [Test]
     procedure DrillDownFilterUsesSameExactTrackingScope()
     var
         SourceLine: Record "DOPSWHS LP Line";

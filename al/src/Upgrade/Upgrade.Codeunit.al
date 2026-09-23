@@ -86,6 +86,8 @@ codeunit 72034 "DOPSWHS Upgrade"
             RepairOpenPutAwaysByReceiptLps();
         if ModuleInfo.DataVersion() < Version.Create(1, 14, 1, 29) then
             MigratePostedShipmentSscc();
+        if ModuleInfo.DataVersion() < Version.Create(1, 14, 1, 77) then
+            RebuildBinCurrentLPNos();
         AppProfileMgmt.SeedDefaults();          // seed DEFAULT app profile + install-user profile
         AppRoleSeed.Seed();                     // seed system roles + starter filter rules
         SetupWizard.SeedReportSelections();     // repair legacy empty/wrong document print routes
@@ -93,6 +95,13 @@ codeunit 72034 "DOPSWHS Upgrade"
         ScheduleLicenseVerify();                // seed/refresh the hourly /verify job
         PrintCleanup.ScheduleCleanupJob();      // seed daily print payload retention cleanup
         AzurePrintWorker.ScheduleWorkerJob();  // instant tasks use this as durable fallback/status pump
+    end;
+
+    local procedure RebuildBinCurrentLPNos()
+    var
+        BinLPIndex: Codeunit "DOPSWHS Bin LP Index";
+    begin
+        BinLPIndex.RebuildCurrentLPNos();
     end;
 
     local procedure MigratePostedShipmentSscc()
