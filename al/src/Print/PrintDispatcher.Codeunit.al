@@ -604,6 +604,10 @@ codeunit 72051 "DOPSWHS Print Dispatcher"
         if CodeMax > 120 then
             CodeMax := 120;
         CodeFont := Canvas.FitFont(Bin.Code, ColumnWidth, CodeMax, 36);
+        // HM.0001 gibi uzun raf kodlarında güvenli kenar boşluğu bırakmak için
+        // hesaplanan raf kodu fontunu bir kademe küçült.
+        if CodeFont > 36 then
+            CodeFont -= 4;
         Zpl += Canvas.WriteSized(X, Y, CodeFont + CodeFont div 10, CodeFont, ColumnWidth, Bin.Code);
         Y += CodeFont + CodeFont div 10 + 6;
         if Bin."Zone Code" <> '' then begin
@@ -861,24 +865,40 @@ codeunit 72051 "DOPSWHS Print Dispatcher"
         RequestedCopies: Integer;
     begin
         if Candidate <> '' then begin
-            if StrLen(Candidate) > MaxStrLen(Printer."Code") then
-                Error('Printer code %1 exceeds the supported length.', Candidate);
-            if not Printer.Get(CopyStr(Candidate, 1, MaxStrLen(Printer."Code"))) then
-                Error('Printer %1 is not registered.', Candidate);
-            if not Printer.Active then
-                Error('Printer %1 is inactive.', Candidate);
+            if StrLen(Candidate) <= MaxStrLen(Printer."Code") then
+                if Printer.Get(CopyStr(Candidate, 1, MaxStrLen(Printer."Code"))) then
+                    if Printer.Active then begin
+                        if Copies <= 0 then
+                            Copies := Printer."Default Copies";
+                        if Copies <= 0 then
+                            Copies := 1;
+                        if Copies > 10 then
+                            Error('A print job cannot exceed 10 copies.');
+                        exit(Printer."Code");
+                    end;
+        end;
+        RequestedCopies := Copies;
+        if SelfHosted.ResolvePrinterAndCopies(CopyStr(UserId(), 1, 50), Usage, RequestedCopies, ResolvedCode, Copies) then
+            exit(ResolvedCode);
+        if Usage in [Usage::Item, Usage::Bin] then
+            if SelfHosted.ResolvePrinterAndCopies(CopyStr(UserId(), 1, 50), Enum::"DOPSWHS IWX Report Usage"::LpLabel, RequestedCopies, ResolvedCode, Copies) then
+                exit(ResolvedCode);
+        // Never route a PDF document to an arbitrary ZPL label printer.
+        if Usage in [Usage::Receipt, Usage::PostedShipment, Usage::PackReceipt] then
+            exit('');
+        // Fallback: If candidate printer became inactive after print agent selection,
+        // or no explicit mapping exists, pick the active ZPL printer.
+        Printer.Reset();
+        Printer.SetRange(Active, true);
+        Printer.SetRange(Format, Printer.Format::ZPL);
+        if Printer.FindFirst() then begin
             if Copies <= 0 then
                 Copies := Printer."Default Copies";
             if Copies <= 0 then
                 Copies := 1;
-            if Copies > 10 then
-                Error('A print job cannot exceed 10 copies.');
-            exit(Printer."Code");
+            exit(Printer.Code);
         end;
-        RequestedCopies := Copies;
-        if not SelfHosted.ResolvePrinterAndCopies(CopyStr(UserId(), 1, 50), Usage, RequestedCopies, ResolvedCode, Copies) then
-            exit('');
-        exit(ResolvedCode);
+        exit('');
     end;
 
     local procedure ResolveConfiguredSelfHostedPrinter(Candidate: Code[50]; Usage: Enum "DOPSWHS IWX Report Usage"): Code[20]

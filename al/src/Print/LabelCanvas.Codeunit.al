@@ -364,15 +364,19 @@ codeunit 72321 "DOPSWHS Label Canvas"
             Modules := 11 * ((StrLen(Data) + 1) div 2 + 1) + 35
         else
             Modules := 11 * StrLen(Data) + 35;
-        // DKÇ (17 Eyl 2026): "barkod çok ince oldu, kalınlığını arttır" —
-        // yet "full sütunu doldurmasın". The bars grow up to 85% of the column
-        // (module width 2 dots at the very least) and the symbol is centred.
-        ModuleWidth := Clamp(MaxWidth * 85 div 100 div Modules, 2, 10);
-        // DKÇ (17 Eyl 2026): "barkod daha düzenli yazılsın, bozuk olmasın".
-        // The symbol is left-aligned at its natural width, so a code that does
-        // not divide the column evenly used to leave a ragged gap on the right
-        // and the bars looked uneven. Centring the exact symbol width in the
-        // column keeps the quiet zones equal on both sides.
+        if Modules <= 0 then
+            Modules := 35;
+        // DKÇ (18 Eyl 2026): Bars grow up to 85% of the column so short codes
+        // are thick and easy to scan, but must never exceed MaxWidth or overlap
+        // the QR code on the right. If the code is long, it drops to 1 dot so
+        // it stays strictly inside the column.
+        ModuleWidth := MaxWidth * 85 div 100 div Modules;
+        if ModuleWidth < 1 then
+            ModuleWidth := 1;
+        if ModuleWidth > 6 then
+            ModuleWidth := 6;
+        while (ModuleWidth > 1) and (Modules * ModuleWidth > MaxWidth) do
+            ModuleWidth -= 1;
         BarWidth := Modules * ModuleWidth;
         if BarWidth < MaxWidth then
             X += (MaxWidth - BarWidth) div 2;
@@ -470,11 +474,17 @@ codeunit 72321 "DOPSWHS Label Canvas"
     procedure BarHeightToBottom(Top: Integer; Human: Boolean): Integer
     var
         Available: Integer;
+        MaxHeight: Integer;
     begin
         EnsureInit();
         Available := Height - MarginDots - Top;
         if Human then
             Available -= SmallSize + 4;
+        // DKÇ (18 Eyl 2026): Capped at 28% of canvas height (approx 85-90 dots on 80x40mm)
+        // so short descriptions don't cause an excessively massive barcode.
+        MaxHeight := Height * 28 div 100;
+        if (MaxHeight > 40) and (Available > MaxHeight) then
+            Available := MaxHeight;
         if Available < 30 then
             exit(30);
         exit(Available);

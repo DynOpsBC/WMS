@@ -31,7 +31,6 @@ page 72325 "DOPSWHS Terminal API"
     procedure selectPrinter(username: Code[20]; usage: Text; printerCode: Code[20]): Text
     var
         Terminal: Record "DOPSWHS WMS Terminal";
-        LocalUser: Record "DOPSWHS Local User";
         Printer: Record "DOPSWHS Printer";
         Result: JsonObject;
         ResultText: Text;
@@ -40,15 +39,6 @@ page 72325 "DOPSWHS Terminal API"
         Terminal.Get(Rec.Code);
         if Terminal.Disabled then
             Error('Terminal devre dışı.');
-        // Yazıcı seçimi terminal ayarıdır, kullanıcı tercihi değildir. Bu
-        // nedenle cihaz servis/AAD oturumuyla kurulurken username boş olabilir.
-        // Bir kullanıcı gönderilmişse yine devre dışı hesapla değişiklik
-        // yapılmasına izin verme.
-        if username <> '' then begin
-            LocalUser.Get(username);
-            if LocalUser.Disabled then
-                Error('Kullanıcı devre dışı.');
-        end;
 
         if printerCode <> '' then begin
             Printer.Get(printerCode);
