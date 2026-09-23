@@ -79,6 +79,14 @@ pageextension 72301 "DOPSWHS Bin Card Ext" extends "Bin Contents"
             part(DOPSWHSLPFactboxBin; "DOPSWHS LP Factbox Bin")
             {
                 ApplicationArea = All;
+                SubPageLink = "Location Code" = field("Location Code"),
+                              "Bin Code" = field("Bin Code");
+            }
+            part(DOPSWHSLPLines; "DOPSWHS LP Bin Lines")
+            {
+                ApplicationArea = All;
+                SubPageLink = "LP Location Code" = field("Location Code"),
+                              "LP Bin Code" = field("Bin Code");
             }
         }
     }
@@ -90,13 +98,16 @@ pageextension 72301 "DOPSWHS Bin Card Ext" extends "Bin Contents"
             action(DOPSWHSLPRefresh)
             {
                 ApplicationArea = All;
-                Caption = 'LP No.larını Yenile';
-                ToolTip = 'Açık sayfadaki LP numaralarını ve miktarlarını güncel LP kayıtlarından yeniden hesaplar.';
+                Caption = 'Raftaki LP Maddelerini Yenile';
+                ToolTip = 'Seçili rafın tüm aktif LP maddeleri için eksik BC raf/ürün tanımlarını tamamlar ve sayfayı yeniler. Stok hareketi oluşturmaz.';
                 Image = Refresh;
                 Promoted = true;
                 PromotedCategory = Process;
                 trigger OnAction()
+                var
+                    BinLPIndex: Codeunit "DOPSWHS Bin LP Index";
                 begin
+                    BinLPIndex.EnsureBinItemRows(Rec."Location Code", Rec."Bin Code");
                     CurrPage.Update(false);
                 end;
             }
@@ -164,19 +175,6 @@ pageextension 72301 "DOPSWHS Bin Card Ext" extends "Bin Contents"
             ActiveLpNos, ActiveLpQuantity);
     end;
 
-    trigger OnAfterGetCurrRecord()
-    var
-        LP: Record "DOPSWHS LP Header";
-    begin
-        if (LpNoFilter <> '') and LP.Get(LpNoFilter) then
-            CurrPage.DOPSWHSLPFactboxBin.Page.SetScope(LP."Location Code", LP."Bin Code", LP."No.")
-        else
-            if LpBinFilter <> '' then
-                CurrPage.DOPSWHSLPFactboxBin.Page.SetScope(LpLocationFilter, LpBinFilter, '')
-            else
-                CurrPage.DOPSWHSLPFactboxBin.Page.SetScope(Rec."Location Code", Rec."Bin Code", '');
-    end;
-
     local procedure OpenActiveLPContents()
     var
         ActiveLPContents: Page "DOPSWHS Active LP Contents";
@@ -233,8 +231,6 @@ pageextension 72301 "DOPSWHS Bin Card Ext" extends "Bin Contents"
             Rec.MarkedOnly(false);
             Rec.ClearMarks();
         end;
-        if LpBinFilter <> '' then
-            CurrPage.DOPSWHSLPFactboxBin.Page.SetScope(LpLocationFilter, LpBinFilter, '');
         CurrPage.Update(false);
     end;
 

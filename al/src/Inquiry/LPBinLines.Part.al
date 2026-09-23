@@ -14,30 +14,39 @@ page 72059 "DOPSWHS LP Bin Lines"
             repeater(Lines)
             {
                 field("LP No."; Rec."LP No.") { ApplicationArea = All; }
-                field("LP Location Code"; Rec."LP Location Code") { ApplicationArea = All; }
-                field("LP Bin Code"; Rec."LP Bin Code") { ApplicationArea = All; }
                 field("Item No."; Rec."Item No.") { ApplicationArea = All; }
-                field("Variant Code"; Rec."Variant Code") { ApplicationArea = All; }
                 field(Quantity; Rec.Quantity)
                 {
                     ApplicationArea = All;
                     Caption = 'LP Miktarı';
                     ToolTip = 'LP satırının miktarıdır. BC raf stok miktarı değildir.';
                 }
-                field("Unit of Measure"; Rec."Unit of Measure") { ApplicationArea = All; }
+                field(BCBinQuantity; BCBinQuantity)
+                {
+                    ApplicationArea = All;
+                    Caption = 'BC Raf Miktarı';
+                    DecimalPlaces = 0 : 5;
+                    ToolTip = 'Aynı raftaki ürünün toplam BC miktarıdır; birden çok LP bu stoku paylaşabilir. Sıfırsa LP kaydı tek başına üretim tüketimine stok sağlamaz.';
+                }
                 field("Lot No."; Rec."Lot No.") { ApplicationArea = All; }
+                field("Unit of Measure"; Rec."Unit of Measure") { ApplicationArea = All; }
+                field("Variant Code"; Rec."Variant Code") { ApplicationArea = All; }
                 field("Serial No."; Rec."Serial No.") { ApplicationArea = All; }
-                field("Source Item Ledger Entry No."; Rec."Source Item Ledger Entry No.") { ApplicationArea = All; }
-                field("Source Document No."; Rec."Source Document No.") { ApplicationArea = All; }
             }
         }
     }
 
-    trigger OnOpenPage()
+    trigger OnAfterGetRecord()
+    var
+        BinContent: Record "Bin Content";
     begin
-        // Wait for the parent to supply a selected bin or LP number. Never show
-        // unrelated lines from the whole company while the page first opens.
-        Rec.SetRange("LP No.", '');
+        Rec.CalcFields("LP Location Code", "LP Bin Code");
+        Clear(BCBinQuantity);
+        if BinContent.Get(Rec."LP Location Code", Rec."LP Bin Code", Rec."Item No.",
+            Rec."Variant Code", Rec."Unit of Measure") then begin
+            BinContent.CalcFields(Quantity);
+            BCBinQuantity := BinContent.Quantity;
+        end;
     end;
 
     procedure SetScope(LocationCode: Code[10]; BinCode: Code[20]; LPNo: Code[20]): Boolean
@@ -57,4 +66,7 @@ page 72059 "DOPSWHS LP Bin Lines"
         CurrPage.Update(false);
         exit(not Rec.IsEmpty());
     end;
+
+    var
+        BCBinQuantity: Decimal;
 }

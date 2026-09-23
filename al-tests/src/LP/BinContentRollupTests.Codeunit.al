@@ -215,7 +215,7 @@ codeunit 72110 "DOPSWHS Bin Rollup Tests"
     end;
 
     [Test]
-    procedure LPInquiryShowsContentWithoutBinStockOrSourceLink()
+    procedure LPInquiryShowsContentWithoutStockOrSourceLink()
     var
         LPContents: TestPage "DOPSWHS LP Bin Contents";
         Assert: Codeunit "Library Assert";
@@ -223,7 +223,7 @@ codeunit 72110 "DOPSWHS Bin Rollup Tests"
         AddTrackingSummaryLine('TEST-LP-NOSTOCK', 10000, 'LOT-A', '', 4080);
         LPContents.OpenView();
         LPContents.Filter.SetFilter("LP No.", 'TEST-LP-NOSTOCK');
-        Assert.IsTrue(LPContents.First(), 'An existing LP line must remain visible without any Bin Content row or source ILE.');
+        Assert.IsTrue(LPContents.First(), 'An existing LP line must remain visible without BC stock or source ILE.');
         LPContents."LP No.".AssertEquals('TEST-LP-NOSTOCK');
         LPContents.Quantity.AssertEquals(4080);
         LPContents."Source Item Ledger Entry No.".AssertEquals(0);
@@ -256,7 +256,7 @@ codeunit 72110 "DOPSWHS Bin Rollup Tests"
     end;
 
     [Test]
-    procedure BinContentsShowsEveryLPItemInBinWithoutBinStock()
+    procedure LPInquiryShowsEveryLPItemInBin()
     var
         LPContents: TestPage "DOPSWHS LP Bin Contents";
         Assert: Codeunit "Library Assert";
@@ -266,7 +266,7 @@ codeunit 72110 "DOPSWHS Bin Rollup Tests"
         LPContents.OpenView();
         LPContents.Filter.SetFilter("LP Bin Code", 'TRACKING');
         LPContents.Filter.SetFilter("LP No.", 'TEST-LP-BIN-A|TEST-LP-BIN-B');
-        Assert.IsTrue(LPContents.First(), 'LP lines from the selected bin must appear without BC Bin Content.');
+        Assert.IsTrue(LPContents.First(), 'LP lines from the selected bin must appear.');
         LPContents."LP Bin Code".AssertEquals('TRACKING');
         LPContents."Item No.".AssertEquals('ITEM-LPLOT');
         LPContents.Quantity.AssertEquals(4);
@@ -294,6 +294,125 @@ codeunit 72110 "DOPSWHS Bin Rollup Tests"
         LPContents."LP Bin Code".AssertEquals('A.URETIM');
         LPContents."LP Status".AssertEquals(LP.Status::Assigned);
         LPContents.Close();
+    end;
+
+    [Test]
+    procedure ProductionBinShowsEveryAssignedLPAndItsItemLines()
+    var
+        LP: Record "DOPSWHS LP Header";
+        BinContent: Record "Bin Content";
+        BinContents: TestPage "Bin Contents";
+        Assert: Codeunit "Library Assert";
+    begin
+        AddTrackingSummaryLine('TEST-PROD-LP-A', 10000, 'LOT-A', '', 4);
+        AddTrackingSummaryLine('TEST-PROD-LP-B', 10000, 'LOT-B', '', 7);
+
+        LP.Get('TEST-PROD-LP-A');
+        LP."Bin Code" := 'A.URETIM';
+        LP.Status := LP.Status::Assigned;
+        LP."Assigned Document Type" := LP."Assigned Document Type"::ProdConsumption;
+        LP."Assigned Document No." := 'PROD-TEST';
+        LP.Modify(false);
+        LP.Get('TEST-PROD-LP-B');
+        LP."Bin Code" := 'A.URETIM';
+        LP.Status := LP.Status::Assigned;
+        LP."Assigned Document Type" := LP."Assigned Document Type"::ProdConsumption;
+        LP."Assigned Document No." := 'PROD-TEST';
+        LP.Modify(false);
+
+        Assert.IsTrue(BinContent.Get('LPTEST', 'A.URETIM', 'ITEM-LPLOT', '', 'PCS'),
+            'Production assignment must project the item into the destination bin.');
+        Assert.AreEqual(1, BinContent."Qty. per Unit of Measure",
+            'Projected bin content must keep the actual item UOM conversion.');
+        BinContent.CalcFields("Quantity (Base)");
+        Assert.AreEqual(0, BinContent."Quantity (Base)", 'Projection must not fabricate warehouse stock.');
+
+        BinContents.OpenView();
+        BinContents.Filter.SetFilter("Location Code", 'LPTEST');
+        BinContents.Filter.SetFilter("Bin Code", 'A.URETIM');
+        BinContents.Filter.SetFilter("Item No.", 'ITEM-LPLOT');
+        Assert.IsTrue(BinContents.First(), 'The projected production item must appear in the main grid.');
+        BinContents.DOPSWHSLPNos.AssertEquals('TEST-PROD-LP-A, TEST-PROD-LP-B');
+        BinContents.DOPSWHSLPQuantity.AssertEquals(11);
+        Assert.IsTrue(BinContents.DOPSWHSLPFactboxBin.First(), 'The first assigned LP must be listed for the production bin.');
+        BinContents.DOPSWHSLPFactboxBin."No.".AssertEquals('TEST-PROD-LP-A');
+        Assert.IsTrue(BinContents.DOPSWHSLPFactboxBin.Next(), 'The second assigned LP must be listed for the production bin.');
+        BinContents.DOPSWHSLPFactboxBin."No.".AssertEquals('TEST-PROD-LP-B');
+        Assert.IsTrue(BinContents.DOPSWHSLPLines.First(), 'First assigned LP item must appear in the bin details.');
+        BinContents.DOPSWHSLPLines."LP No.".AssertEquals('TEST-PROD-LP-A');
+        BinContents.DOPSWHSLPLines.Quantity.AssertEquals(4);
+        BinContents.DOPSWHSLPLines.BCBinQuantity.AssertEquals(0);
+        Assert.IsTrue(BinContents.DOPSWHSLPLines.Next(), 'Second assigned LP item must appear in the bin details.');
+        BinContents.DOPSWHSLPLines."LP No.".AssertEquals('TEST-PROD-LP-B');
+        BinContents.DOPSWHSLPLines.Quantity.AssertEquals(7);
+        BinContents.Close();
+    end;
+
+    [Test]
+    procedure ExistingProductionAssignmentBackfillsMissingBinRow()
+    var
+        LP: Record "DOPSWHS LP Header";
+        BinContent: Record "Bin Content";
+        BinLPIndex: Codeunit "DOPSWHS Bin LP Index";
+        Assert: Codeunit "Library Assert";
+    begin
+        AddTrackingSummaryLine('TEST-PROD-LEGACY', 10000, 'LOT-A', '', 4);
+        LP.Get('TEST-PROD-LEGACY');
+        LP."Bin Code" := 'A.URETIM';
+        LP.Status := LP.Status::Assigned;
+        LP."Assigned Document Type" := LP."Assigned Document Type"::ProdConsumption;
+        LP."Assigned Document No." := 'PROD-TEST';
+        LP.Modify(false);
+        BinContent.Get('LPTEST', 'A.URETIM', 'ITEM-LPLOT', '', 'PCS');
+        BinContent.Delete(false); // Legacy state before projection existed.
+
+        BinLPIndex.EnsureProductionAssignedRows();
+        Assert.IsTrue(BinContent.Get('LPTEST', 'A.URETIM', 'ITEM-LPLOT', '', 'PCS'),
+            'The upgrade repair must restore the missing production bin row.');
+        BinContent.CalcFields("Quantity (Base)");
+        Assert.AreEqual(0, BinContent."Quantity (Base)", 'Repair must not create warehouse stock.');
+    end;
+
+    [Test]
+    procedure BuiltProductionBinLPBackfillsMissingBinRow()
+    var
+        LP: Record "DOPSWHS LP Header";
+        BinContent: Record "Bin Content";
+        BinLPIndex: Codeunit "DOPSWHS Bin LP Index";
+        Assert: Codeunit "Library Assert";
+    begin
+        AddTrackingSummaryLine('TEST-PROD-BUILT', 10000, 'LOT-A', '', 4080);
+        LP.Get('TEST-PROD-BUILT');
+        LP."Bin Code" := 'A.URETIM';
+        LP.Modify(false);
+        BinContent.Get('LPTEST', 'A.URETIM', 'ITEM-LPLOT', '', 'PCS');
+        BinContent.Delete(false); // Simulate a pre-upgrade Built LP in production.
+
+        BinLPIndex.EnsureProductionAssignedRows();
+        Assert.IsTrue(BinContent.Get('LPTEST', 'A.URETIM', 'ITEM-LPLOT', '', 'PCS'),
+            'A Built LP in A.URETIM must also be visible after upgrade.');
+        Assert.AreEqual('TEST-PROD-BUILT', BinContent."DOPSWHS Current LP Nos",
+            'The production bin row must contain the LP number.');
+    end;
+
+    [Test]
+    procedure LPItemCreatesExactUOMRowDespiteExistingBlankAggregate()
+    var
+        BinContent: Record "Bin Content";
+        LP: Record "DOPSWHS LP Header";
+        BinLPIndex: Codeunit "DOPSWHS Bin LP Index";
+        Assert: Codeunit "Library Assert";
+    begin
+        BinContent.Init();
+        BinContent."Location Code" := 'LPTEST';
+        BinContent."Bin Code" := 'TRACKING';
+        BinContent."Item No." := 'ITEM-LPLOT';
+        BinContent.Insert(false);
+        AddTrackingSummaryLine('TEST-LP-EXACT-UOM', 10000, 'LOT-A', '', 4);
+        LP.Get('TEST-LP-EXACT-UOM');
+        BinLPIndex.EnsureLPItemRows(LP);
+        Assert.IsTrue(BinContent.Get('LPTEST', 'TRACKING', 'ITEM-LPLOT', '', 'PCS'),
+            'The LP row must remain visible when operators filter Bin Contents by UOM.');
     end;
 
     [Test]
@@ -331,6 +450,7 @@ codeunit 72110 "DOPSWHS Bin Rollup Tests"
         LPLine: Record "DOPSWHS LP Line";
     begin
         // Isolated test fixtures: no production workflow, posting or history writes.
+        EnsureTrackingMasterData();
         if not LP.Get(LpNo) then begin
             LP.Init();
             LP."No." := LpNo;
@@ -348,6 +468,52 @@ codeunit 72110 "DOPSWHS Bin Rollup Tests"
         LPLine."Serial No." := SerialNo;
         LPLine.Quantity := Qty;
         LPLine.Insert(false);
+    end;
+
+    local procedure EnsureTrackingMasterData()
+    var
+        Location: Record Location;
+        Bin: Record Bin;
+        Item: Record Item;
+        UnitOfMeasure: Record "Unit of Measure";
+        ItemUnitOfMeasure: Record "Item Unit of Measure";
+    begin
+        if not Location.Get('LPTEST') then begin
+            Location.Init();
+            Location.Code := 'LPTEST';
+            Location."Bin Mandatory" := true;
+            Location.Insert(false);
+        end;
+        if not Bin.Get('LPTEST', 'TRACKING') then begin
+            Bin.Init();
+            Bin."Location Code" := 'LPTEST';
+            Bin.Code := 'TRACKING';
+            Bin.Insert(false);
+        end;
+        if not Bin.Get('LPTEST', 'A.URETIM') then begin
+            Bin.Init();
+            Bin."Location Code" := 'LPTEST';
+            Bin.Code := 'A.URETIM';
+            Bin.Insert(false);
+        end;
+        if not UnitOfMeasure.Get('PCS') then begin
+            UnitOfMeasure.Init();
+            UnitOfMeasure.Code := 'PCS';
+            UnitOfMeasure.Insert(false);
+        end;
+        if not Item.Get('ITEM-LPLOT') then begin
+            Item.Init();
+            Item."No." := 'ITEM-LPLOT';
+            Item."Base Unit of Measure" := 'PCS';
+            Item.Insert(false);
+        end;
+        if not ItemUnitOfMeasure.Get('ITEM-LPLOT', 'PCS') then begin
+            ItemUnitOfMeasure.Init();
+            ItemUnitOfMeasure."Item No." := 'ITEM-LPLOT';
+            ItemUnitOfMeasure.Code := 'PCS';
+            ItemUnitOfMeasure."Qty. per Unit of Measure" := 1;
+            ItemUnitOfMeasure.Insert(false);
+        end;
     end;
 
     local procedure CreateBuiltLP(var LP: Record "DOPSWHS LP Header"; TemplateCode: Code[20]; Qty: Decimal)

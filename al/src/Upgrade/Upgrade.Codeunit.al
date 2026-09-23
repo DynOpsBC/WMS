@@ -89,6 +89,8 @@ codeunit 72034 "DOPSWHS Upgrade"
             MigratePostedShipmentSscc();
         if ModuleInfo.DataVersion() < Version.Create(1, 14, 1, 77) then
             RebuildBinCurrentLPNos();
+        if ModuleInfo.DataVersion() < Version.Create(1, 14, 1, 89) then
+            EnsureProductionLPBinRows();
         // Existing 1.14.1.80+ tenants have already run these seeds. Repeating them
         // on every patch upgrade writes config rows and may reschedule job queue
         // entries while users and background jobs are active.
@@ -108,6 +110,13 @@ codeunit 72034 "DOPSWHS Upgrade"
         BinLPIndex: Codeunit "DOPSWHS Bin LP Index";
     begin
         BinLPIndex.RebuildCurrentLPNos();
+    end;
+
+    local procedure EnsureProductionLPBinRows()
+    var
+        BinLPIndex: Codeunit "DOPSWHS Bin LP Index";
+    begin
+        BinLPIndex.EnsureProductionAssignedRows();
     end;
 
     local procedure MigratePostedShipmentSscc()

@@ -12,11 +12,6 @@ page 72078 "DOPSWHS LP Factbox Bin"
             repeater(Lines)
             {
                 field("No."; Rec."No.") { ApplicationArea = All; Caption = 'LP No.'; }
-                field("Bin Code"; Rec."Bin Code") { ApplicationArea = All; Caption = 'Bin Code'; }
-                field("LP Template Code"; Rec."LP Template Code") { ApplicationArea = All; Caption = 'Template'; }
-                field(Status; Rec.Status) { ApplicationArea = All; Caption = 'Status'; }
-                field("Line Count"; Rec."Line Count") { ApplicationArea = All; Caption = 'Line Count'; }
-                field("Total Quantity"; Rec."Total Quantity") { ApplicationArea = All; Caption = 'Total Quantity'; }
                 field(Contents; ContentsSummary)
                 {
                     ApplicationArea = All;
@@ -24,6 +19,11 @@ page 72078 "DOPSWHS LP Factbox Bin"
                     Editable = false;
                     ToolTip = 'Shows item, quantity and lot information stored in this LP.';
                 }
+                field("Total Quantity"; Rec."Total Quantity") { ApplicationArea = All; Caption = 'Total Quantity'; }
+                field(Status; Rec.Status) { ApplicationArea = All; Caption = 'Status'; }
+                field("Bin Code"; Rec."Bin Code") { ApplicationArea = All; Caption = 'Bin Code'; }
+                field("Line Count"; Rec."Line Count") { ApplicationArea = All; Caption = 'Line Count'; }
+                field("LP Template Code"; Rec."LP Template Code") { ApplicationArea = All; Caption = 'Template'; }
             }
         }
     }
