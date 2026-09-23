@@ -1718,6 +1718,7 @@ fun ToteScanSheet(title: String, hint: String, onDismiss: () -> Unit, onScanned:
 @Composable
 fun ShippingModule() {
     val context = LocalContext.current
+    val isDkc = com.dynops.bcwms.BuildConfig.FLAVOR.equals("emu", ignoreCase = true)
     // Sipariş bazlı (Sales Order) sekmesi Setup'tan opsiyonel (varsayılan açık).
     var showSo by remember { mutableStateOf(true) }
     LaunchedEffect(Unit) {
@@ -1726,7 +1727,7 @@ fun ShippingModule() {
     }
     var tab by remember { mutableStateOf(0) }
     var requestedPickNo by remember { mutableStateOf(com.dynops.bcwms.WhsePickNavigation.consume()) }
-    val tabs = if (showSo) {
+    val tabs = if (showSo || isDkc) {
         listOf(
             // Dar el terminalinde ortak "Ambar" öneki üç sekmenin metnini
             // kesiyor ve ilk iki sekmeyi aynı gösteriyordu. Ekran başlığı zaten
@@ -1734,7 +1735,7 @@ fun ShippingModule() {
             WmsGlyph.PICKING to "Toplama",
             WmsGlyph.SHIPPING to "Sevkiyat",
             WmsGlyph.ENTRIES to "Sipariş",
-        )
+        ) + if (isDkc) listOf(WmsGlyph.ENTRIES to "İrsaliyeler") else emptyList()
     } else {
         listOf(WmsGlyph.PICKING to "Toplama", WmsGlyph.SHIPPING to "Sevkiyat")
     }
@@ -1750,6 +1751,7 @@ fun ShippingModule() {
             0 -> WhsePickTab(initialPickNo = requestedPickNo, onInitialPickConsumed = { requestedPickNo = null })
             1 -> WhseShipmentTab(onPickCreated = { pickNo -> requestedPickNo = pickNo; tab = 0 })
             2 -> SalesOrderTab()
+            3 -> if (isDkc) DkcPostedShipmentTab()
         }
     }
 }
@@ -2858,12 +2860,13 @@ private fun ShipDocument(no: String, onBack: () -> Unit, onPickCreated: (String)
 @Composable
 private fun SalesOrderTab() {
     val context = LocalContext.current
+    val isDkc = com.dynops.bcwms.BuildConfig.FLAVOR.equals("emu", ignoreCase = true)
     val scope = rememberCoroutineScope()
     var selected by remember { mutableStateOf<String?>(null) }
     var rows by remember { mutableStateOf<List<JSONObject>>(emptyList()) }
     var status by remember { mutableStateOf("") }
     var loading by remember { mutableStateOf(false) }
-    var releasedOnly by remember { mutableStateOf(true) }
+    var releasedOnly by remember { mutableStateOf(!isDkc) }
     var search by remember { mutableStateOf("") }
 
     fun load() {
@@ -2880,7 +2883,8 @@ private fun SalesOrderTab() {
             loading = false
             // Kalan miktarı olmayan siparişler sevk edilemez; listede yer kaplayıp
             // operatörü yanıltıyordu (canlı UAT shipping-x01).
-            rows = if (page.complete) page.rows.filter { it.optDouble("outstandingQty", 0.0) > 0.0 } else emptyList()
+            rows = if (!page.complete) emptyList() else if (isDkc) page.rows
+                else page.rows.filter { it.optDouble("outstandingQty", 0.0) > 0.0 }
             status = if (!page.complete) "HATA: Satış siparişi listesinin tamamı alınamadı. Yenileyin."
                 else if (rows.isEmpty()) "BOŞ: sevk edilecek ${if (releasedOnly) "serbest bırakılmış" else "açık"} satış siparişi yok"
                 else "TAMAM: ${rows.size} satış siparişi"
@@ -2890,7 +2894,11 @@ private fun SalesOrderTab() {
 
     var itemDocs by remember { mutableStateOf<Pair<String, Set<String>>?>(null) }
     val sel = selected
-    if (sel != null) { ShipSalesOrder(no = sel, onBack = { selected = null; load() }); return }
+    if (sel != null) {
+        if (isDkc) DkcSalesOrderVehicle(no = sel, onBack = { selected = null })
+        else ShipSalesOrder(no = sel, onBack = { selected = null; load() })
+        return
+    }
 
     DocListScanHandler(
         enabled = true,

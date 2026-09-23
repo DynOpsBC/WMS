@@ -32,6 +32,14 @@ page 72294 "DOPSWHS Sales Source API"
                 field(percentComplete; PercentComplete) { Caption = 'percentComplete'; }
                 field(requiresWhseShipment; RequiresWhseShipment) { Caption = 'requiresWhseShipment'; }
                 field(directShipAllowed; DirectShipAllowed) { Caption = 'directShipAllowed'; }
+                field(vehiclePlateNo; VehiclePlateNo) { Caption = 'vehiclePlateNo'; Editable = false; }
+                field(trailerPlateNo; TrailerPlateNo) { Caption = 'trailerPlateNo'; Editable = false; }
+                field(foreignPlate; ForeignPlate) { Caption = 'foreignPlate'; Editable = false; }
+                field(driverCode; DriverCode) { Caption = 'driverCode'; Editable = false; }
+                field(driverFirstName; DriverFirstName) { Caption = 'driverFirstName'; Editable = false; }
+                field(driverFamilyName; DriverFamilyName) { Caption = 'driverFamilyName'; Editable = false; }
+                field(driverTitle; DriverTitle) { Caption = 'driverTitle'; Editable = false; }
+                field(driverIdentificationNo; DriverIdentificationNo) { Caption = 'driverIdentificationNo'; Editable = false; }
                 part(lines; "DOPSWHS Sales Source Line API")
                 {
                     Caption = 'lines';
@@ -125,16 +133,34 @@ page 72294 "DOPSWHS Sales Source API"
         PercentComplete: Decimal;
         RequiresWhseShipment: Boolean;
         DirectShipAllowed: Boolean;
+        VehiclePlateNo: Text[50];
+        TrailerPlateNo: Text[50];
+        ForeignPlate: Text[10];
+        DriverCode: Text[20];
+        DriverFirstName: Text[50];
+        DriverFamilyName: Text[50];
+        DriverTitle: Text[50];
+        DriverIdentificationNo: Text[20];
 
     local procedure FillCalculatedFields()
     var
         SL: Record "Sales Line";
         Loc: Record Location;
+        SalesRef: RecordRef;
         TotalQty: Decimal;
         ShippedQty: Decimal;
     begin
         Clear(LineCount); Clear(OutstandingQty); Clear(PercentComplete);
         Clear(RequiresWhseShipment); Clear(DirectShipAllowed);
+        SalesRef.GetTable(Rec);
+        VehiclePlateNo := CopyStr(ReadTenantField(SalesRef, 78016, 'DYN Vehicle Plate No.', 'Vehicle Plate No.'), 1, MaxStrLen(VehiclePlateNo));
+        TrailerPlateNo := CopyStr(ReadTenantField(SalesRef, 0, 'Trailer Plate No.', 'Dorse Plaka No.'), 1, MaxStrLen(TrailerPlateNo));
+        ForeignPlate := CopyStr(ReadTenantField(SalesRef, 0, 'Foreign Plate', 'Yabancı Plaka'), 1, MaxStrLen(ForeignPlate));
+        DriverCode := CopyStr(ReadTenantField(SalesRef, 78017, 'DYN Driver Code', 'Driver Code'), 1, MaxStrLen(DriverCode));
+        DriverFirstName := CopyStr(ReadTenantField(SalesRef, 78018, 'DYN Driver First Name', 'Driver Name'), 1, MaxStrLen(DriverFirstName));
+        DriverFamilyName := CopyStr(ReadTenantField(SalesRef, 78019, 'DYN Driver Family Name', 'Driver Surname'), 1, MaxStrLen(DriverFamilyName));
+        DriverTitle := CopyStr(ReadTenantField(SalesRef, 78020, 'DYN Driver Title', 'Driver Title'), 1, MaxStrLen(DriverTitle));
+        DriverIdentificationNo := CopyStr(ReadTenantField(SalesRef, 78021, 'DYN Driver Identification No.', 'Driver Identification No.'), 1, MaxStrLen(DriverIdentificationNo));
         SL.SetRange("Document Type", SL."Document Type"::Order);
         SL.SetRange("Document No.", Rec."No.");
         SL.SetFilter(Type, '<>%1', SL.Type::" ");
@@ -158,5 +184,22 @@ page 72294 "DOPSWHS Sales Source API"
             RequiresWhseShipment := false;
             DirectShipAllowed := true;
         end;
+    end;
+
+    local procedure ReadTenantField(var SourceRef: RecordRef; FieldNo: Integer; NameA: Text; NameB: Text): Text
+    var
+        Candidate: FieldRef;
+        FieldIndex: Integer;
+    begin
+        if (FieldNo <> 0) and SourceRef.FieldExist(FieldNo) then
+            exit(Format(SourceRef.Field(FieldNo).Value));
+        for FieldIndex := 1 to SourceRef.FieldCount do begin
+            Candidate := SourceRef.FieldIndex(FieldIndex);
+            if (Candidate.Name = NameA) or (Candidate.Caption = NameA) or
+               (Candidate.Name = NameB) or (Candidate.Caption = NameB)
+            then
+                exit(Format(Candidate.Value));
+        end;
+        exit('');
     end;
 }

@@ -737,6 +737,12 @@ codeunit 72051 "DOPSWHS Print Dispatcher"
         end;
     end;
 
+    procedure PrintExternalPdf(SourceDoc: Code[50]; PrinterId: Code[50]; PdfStream: InStream): Integer
+    begin
+        EnsureDocumentPrinter(PrinterId, Enum::"DOPSWHS IWX Report Usage"::PostedShipment);
+        exit(EnqueuePdf(SourceDoc, 0, PrinterId, 1, Enum::"DOPSWHS IWX Report Usage"::PostedShipment, PdfStream));
+    end;
+
     procedure IsDocumentPrinterConfigured(PrinterId: Code[50]; Usage: Enum "DOPSWHS IWX Report Usage"): Boolean
     var
         Setup: Record "DOPSWHS Setup";
