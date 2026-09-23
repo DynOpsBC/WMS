@@ -1,6 +1,6 @@
 page 72059 "DOPSWHS LP Bin Lines"
 {
-    Caption = 'LP İçindeki Maddeler';
+    Caption = 'Raftaki LP Maddeleri';
     PageType = ListPart;
     SourceTable = "DOPSWHS LP Line";
     SourceTableView = sorting("LP No.", "Line No.") where(Quantity = filter(> 0), "Item No." = filter(<> ''), "LP Status" = filter(Open | Built | Assigned));
@@ -14,6 +14,8 @@ page 72059 "DOPSWHS LP Bin Lines"
             repeater(Lines)
             {
                 field("LP No."; Rec."LP No.") { ApplicationArea = All; }
+                field("LP Location Code"; Rec."LP Location Code") { ApplicationArea = All; }
+                field("LP Bin Code"; Rec."LP Bin Code") { ApplicationArea = All; }
                 field("Item No."; Rec."Item No.") { ApplicationArea = All; }
                 field("Variant Code"; Rec."Variant Code") { ApplicationArea = All; }
                 field(Quantity; Rec.Quantity)
@@ -33,14 +35,26 @@ page 72059 "DOPSWHS LP Bin Lines"
 
     trigger OnOpenPage()
     begin
-        // The parent page sets one LP after its filter is validated. Until then,
-        // do not display unrelated LP lines from other bins.
+        // Wait for the parent to supply a selected bin or LP number. Never show
+        // unrelated lines from the whole company while the page first opens.
         Rec.SetRange("LP No.", '');
     end;
 
-    procedure SetLPNo(LPNo: Code[20])
+    procedure SetScope(LocationCode: Code[10]; BinCode: Code[20]; LPNo: Code[20]): Boolean
     begin
-        Rec.SetRange("LP No.", LPNo);
+        Rec.SetRange("LP No.");
+        Rec.SetRange("LP Location Code");
+        Rec.SetRange("LP Bin Code");
+        if LPNo <> '' then
+            Rec.SetRange("LP No.", LPNo)
+        else
+            if BinCode <> '' then begin
+                Rec.SetRange("LP Bin Code", BinCode);
+                if LocationCode <> '' then
+                    Rec.SetRange("LP Location Code", LocationCode);
+            end else
+                Rec.SetRange("LP No.", '');
         CurrPage.Update(false);
+        exit(not Rec.IsEmpty());
     end;
 }

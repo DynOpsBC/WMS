@@ -36,10 +36,16 @@ page 72078 "DOPSWHS LP Factbox Bin"
     procedure SetScope(LocationCode: Code[10]; BinCode: Code[20]; LPNo: Code[20])
     begin
         Rec.Reset();
-        Rec.SetRange("Location Code", LocationCode);
-        Rec.SetRange("Bin Code", BinCode);
-        if LPNo <> '' then
-            Rec.SetRange("No.", LPNo);
+        if (LocationCode = '') and (BinCode = '') and (LPNo = '') then
+            Rec.SetRange("No.", '')
+        else begin
+            if LocationCode <> '' then
+                Rec.SetRange("Location Code", LocationCode);
+            if BinCode <> '' then
+                Rec.SetRange("Bin Code", BinCode);
+            if LPNo <> '' then
+                Rec.SetRange("No.", LPNo);
+        end;
         Rec.SetFilter(Status, '%1|%2|%3', Rec.Status::Open, Rec.Status::Built, Rec.Status::Assigned);
         CurrPage.Update(false);
     end;
