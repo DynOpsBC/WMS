@@ -144,8 +144,10 @@ internal fun canTransferLicensePlate(status: String, lineCount: Int): Boolean =
 internal fun canPartiallyUseLicensePlate(status: String, lineCount: Int): Boolean =
     status.equals("Built", ignoreCase = true) && lineCount > 0
 
-internal fun validPartialUseInput(quantity: Double?, lineNo: Int?, maximumQuantity: Double): Boolean =
-    quantity != null && quantity > 0.0 && quantity <= maximumQuantity && lineNo != null && lineNo > 0
+internal fun validPartialUseInput(quantity: Double?, lineNo: Int?, maximumQuantity: Double, action: String): Boolean =
+    quantity != null && quantity.isFinite() &&
+        (quantity > 0.0 || (quantity == 0.0 && action == "CreateNewLP")) &&
+        quantity <= maximumQuantity && lineNo != null && lineNo > 0
 
 internal data class LpPartialAction(
     val apiValue: String,
@@ -157,7 +159,7 @@ internal val lpPartialActions = listOf(
     LpPartialAction(
         apiValue = "CreateNewLP",
         label = "Kalanı yeni LP'ye ayır",
-        help = "Girilen miktar bu LP'de kalır; kalan miktar yeni bir LP'ye aktarılır.",
+        help = "Girilen miktar bu LP'de kalır; kalan miktar yeni bir LP'ye aktarılır. Tamamını aktarmak için 0 girin.",
     ),
     LpPartialAction(
         apiValue = "RemoveExcess",

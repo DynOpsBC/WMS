@@ -199,10 +199,12 @@ class LicensePlateWorkflowTest {
 
     @Test
     fun `partial use validates selected line and quantity bounds`() {
-        assertTrue(validPartialUseInput(quantity = 3.0, lineNo = 10000, maximumQuantity = 5.0))
-        assertFalse(validPartialUseInput(quantity = 0.0, lineNo = 10000, maximumQuantity = 5.0))
-        assertFalse(validPartialUseInput(quantity = 6.0, lineNo = 10000, maximumQuantity = 5.0))
-        assertFalse(validPartialUseInput(quantity = 3.0, lineNo = null, maximumQuantity = 5.0))
+        assertTrue(validPartialUseInput(quantity = 3.0, lineNo = 10000, maximumQuantity = 5.0, action = "CreateNewLP"))
+        assertTrue(validPartialUseInput(quantity = 0.0, lineNo = 10000, maximumQuantity = 5.0, action = "CreateNewLP"))
+        assertFalse(validPartialUseInput(quantity = 0.0, lineNo = 10000, maximumQuantity = 5.0, action = "RemoveExcess"))
+        assertFalse(validPartialUseInput(quantity = 0.0, lineNo = 10000, maximumQuantity = 5.0, action = "RemoveUsedPortion"))
+        assertFalse(validPartialUseInput(quantity = 6.0, lineNo = 10000, maximumQuantity = 5.0, action = "CreateNewLP"))
+        assertFalse(validPartialUseInput(quantity = 3.0, lineNo = null, maximumQuantity = 5.0, action = "CreateNewLP"))
     }
 
     @Test

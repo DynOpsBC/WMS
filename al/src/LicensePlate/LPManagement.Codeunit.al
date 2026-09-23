@@ -1128,7 +1128,8 @@ codeunit 72040 "DOPSWHS LP Management"
         OnBeforeSplitForPartialUse(LP, Action, Qty, LineNo);
         LogMutation('LP.PartialUse');
         LPLine.Get(LP."No.", LineNo);
-        if (Qty <= 0) or (Qty > LPLine.Quantity) then
+        if (Qty < 0) or (Qty > LPLine.Quantity) or
+           ((Qty = 0) and (Action <> Action::CreateNewLP)) then
             Error('Kısmi kullanım miktarı geçersizdir.');
 
         case Action of
@@ -1144,9 +1145,12 @@ codeunit 72040 "DOPSWHS LP Management"
                         NewLP."Planned Quantity" := ExcessQty;
                         NewLP.Modify(true);
                     end;
-                    LPLine.Get(LP."No.", LineNo);
-                    LPLine.Validate(Quantity, Qty);
-                    LPLine.Modify(true);
+                    // Transfer deletes the source line when all of it moves.
+                    if Qty > 0 then begin
+                        LPLine.Get(LP."No.", LineNo);
+                        LPLine.Validate(Quantity, Qty);
+                        LPLine.Modify(true);
+                    end;
                     LP."Planned Quantity" := Qty;
                     LP.Modify(true);
                 end;
