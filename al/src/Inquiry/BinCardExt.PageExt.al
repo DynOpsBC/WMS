@@ -12,7 +12,7 @@ pageextension 72301 "DOPSWHS Bin Card Ext" extends "Bin Contents"
                 Caption = 'Güncel LP No.ları';
                 Editable = false;
                 DrillDown = true;
-                ToolTip = 'Bu raf ve maddedeki güncel LP dağılımını gösterir. Değer satır yüklendiği anda hesaplanır; terminalden yapılan transfer sonrası F5 ile yenileyin veya tıklayıp güncel dağılımı açın.';
+                ToolTip = 'Yalnız bu satırdaki ürün, varyant ve ölçü birimiyle eşleşen, miktarı sıfırdan büyük LP satırlarını gösterir. Raftaki tüm LP başlıkları için Raftaki LP''ler eylemini kullanın. Transfer sonrası F5 ile yenileyin.';
 
                 trigger OnDrillDown()
                 begin
@@ -41,6 +41,32 @@ pageextension 72301 "DOPSWHS Bin Card Ext" extends "Bin Contents"
                 ApplicationArea = All;
                 SubPageLink = "Location Code" = field("Location Code"),
                               "Bin Code" = field("Bin Code");
+            }
+        }
+    }
+
+    actions
+    {
+        addlast(Processing)
+        {
+            action(DOPSWHSLPsInBin)
+            {
+                ApplicationArea = All;
+                Caption = 'Raftaki LP''ler';
+                ToolTip = 'Seçili satırın rafındaki tüm açık, tamamlanmış ve atanmış LP''leri gösterir. Boş LP''ler de listelenir.';
+                Image = List;
+                Promoted = true;
+                PromotedCategory = Process;
+
+                trigger OnAction()
+                var
+                    LPHeader: Record "DOPSWHS LP Header";
+                begin
+                    LPHeader.SetRange("Location Code", Rec."Location Code");
+                    LPHeader.SetRange("Bin Code", Rec."Bin Code");
+                    LPHeader.SetFilter(Status, '%1|%2|%3', LPHeader.Status::Open, LPHeader.Status::Built, LPHeader.Status::Assigned);
+                    Page.Run(Page::"DOPSWHS LP List", LPHeader);
+                end;
             }
         }
     }

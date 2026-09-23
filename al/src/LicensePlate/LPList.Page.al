@@ -18,6 +18,8 @@ page 72070 "DOPSWHS LP List"
                 field(Status; Rec.Status) { ApplicationArea = All; }
                 field("Location Code"; Rec."Location Code") { ApplicationArea = All; }
                 field("Bin Code"; Rec."Bin Code") { ApplicationArea = All; }
+                field("Line Count"; Rec."Line Count") { ApplicationArea = All; }
+                field("Total Quantity"; Rec."Total Quantity") { ApplicationArea = All; }
                 field("LP Template Code"; Rec."LP Template Code") { ApplicationArea = All; }
                 field("Parent LP No."; Rec."Parent LP No.") { ApplicationArea = All; }
                 field(SSCC; Rec.SSCC) { ApplicationArea = All; }
