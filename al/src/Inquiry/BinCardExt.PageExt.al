@@ -8,7 +8,7 @@ pageextension 72301 "DOPSWHS Bin Card Ext" extends "Bin Contents"
             {
                 ApplicationArea = All;
                 Caption = 'LP No. Filtresi';
-                ToolTip = 'LP numarasını girerek yalnız bu LP''nin bulunduğu depo gözü ve madde satırlarını gösterin. Filtreyi temizleyerek tüm satırlara dönün.';
+                ToolTip = 'LP numarasını girerek eşleşen depo gözü ve madde satırlarını gösterin. BC depo gözü stok satırı yoksa LP kartı açılır; LP satırı stok varlığı anlamına gelmez. Filtreyi temizleyerek tüm satırlara dönün.';
 
                 trigger OnValidate()
                 begin
@@ -149,6 +149,7 @@ pageextension 72301 "DOPSWHS Bin Card Ext" extends "Bin Contents"
     var
         LP: Record "DOPSWHS LP Header";
         LPLine: Record "DOPSWHS LP Line";
+        MatchedBinContent: Boolean;
     begin
         Rec.MarkedOnly(false);
         Rec.ClearMarks();
@@ -166,11 +167,28 @@ pageextension 72301 "DOPSWHS Bin Card Ext" extends "Bin Contents"
         if LPLine.FindSet() then
             repeat
                 if Rec.Get(LP."Location Code", LP."Bin Code", LPLine."Item No.",
-                    LPLine."Variant Code", LPLine."Unit of Measure") then
+                    LPLine."Variant Code", LPLine."Unit of Measure") then begin
                     Rec.Mark(true);
+                    MatchedBinContent := true;
+                end;
             until LPLine.Next() = 0;
 
         Rec.MarkedOnly(true);
+        if not MatchedBinContent or Rec.IsEmpty() then begin
+            // An LP can still have a header and lines after its BC bin stock
+            // was moved/consumed, or existing page filters can hide the bin.
+            // Never invent a Bin Content row just to display that LP.
+            Rec.MarkedOnly(false);
+            Rec.ClearMarks();
+            LpNoFilter := '';
+            CurrPage.Update(false);
+            if MatchedBinContent then
+                Message('%1 LP''sinin depo gözü satırı var ancak mevcut liste filtreleri bu satırı gizliyor. LP kartı açılıyor.', LP."No.")
+            else
+                Message('%1 LP kaydı mevcut ancak aynı raf, ürün, varyant ve ölçü biriminde BC Depo Gözü İçeriği satırı yok. LP kartı açılıyor; LP satır miktarı tek başına BC raf stoğu değildir.', LP."No.");
+            Page.Run(Page::"DOPSWHS LP Card", LP);
+            exit;
+        end;
         CurrPage.Update(false);
     end;
 
