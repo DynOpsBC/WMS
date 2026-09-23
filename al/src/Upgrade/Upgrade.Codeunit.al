@@ -66,8 +66,9 @@ codeunit 72034 "DOPSWHS Upgrade"
             Cue.Init();
             Cue.Insert(true);
         end;
-        MigratePrintChannelDefault(Setup);
         NavApp.GetCurrentModuleInfo(ModuleInfo);
+        if ModuleInfo.DataVersion() < Version.Create(1, 10, 0, 0) then
+            MigratePrintChannelDefault(Setup);
         if ModuleInfo.DataVersion() < Version.Create(1, 13, 0, 0) then
             EnableExistingPrintersForBcReports();
         if ModuleInfo.DataVersion() < Version.Create(1, 14, 0, 0) then
@@ -88,13 +89,18 @@ codeunit 72034 "DOPSWHS Upgrade"
             MigratePostedShipmentSscc();
         if ModuleInfo.DataVersion() < Version.Create(1, 14, 1, 77) then
             RebuildBinCurrentLPNos();
-        AppProfileMgmt.SeedDefaults();          // seed DEFAULT app profile + install-user profile
-        AppRoleSeed.Seed();                     // seed system roles + starter filter rules
-        SetupWizard.SeedReportSelections();     // repair legacy empty/wrong document print routes
-        ConfigChecker.RegisterAssistedSetup();  // seed config checklist + register Assisted Setup
-        ScheduleLicenseVerify();                // seed/refresh the hourly /verify job
-        PrintCleanup.ScheduleCleanupJob();      // seed daily print payload retention cleanup
-        AzurePrintWorker.ScheduleWorkerJob();  // instant tasks use this as durable fallback/status pump
+        // Existing 1.14.1.80+ tenants have already run these seeds. Repeating them
+        // on every patch upgrade writes config rows and may reschedule job queue
+        // entries while users and background jobs are active.
+        if ModuleInfo.DataVersion() < Version.Create(1, 14, 1, 80) then begin
+            AppProfileMgmt.SeedDefaults();          // seed DEFAULT app profile + install-user profile
+            AppRoleSeed.Seed();                     // seed system roles + starter filter rules
+            SetupWizard.SeedReportSelections();     // repair legacy empty/wrong document print routes
+            ConfigChecker.RegisterAssistedSetup();  // seed config checklist + register Assisted Setup
+            ScheduleLicenseVerify();                // seed the hourly /verify job
+            PrintCleanup.ScheduleCleanupJob();      // seed daily print payload retention cleanup
+            AzurePrintWorker.ScheduleWorkerJob();  // durable print fallback/status pump
+        end;
     end;
 
     local procedure RebuildBinCurrentLPNos()
