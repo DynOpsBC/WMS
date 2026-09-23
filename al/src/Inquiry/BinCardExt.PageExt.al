@@ -108,8 +108,6 @@ pageextension 72301 "DOPSWHS Bin Card Ext" extends "Bin Contents"
             part(DOPSWHSLPFactboxBin; "DOPSWHS LP Factbox Bin")
             {
                 ApplicationArea = All;
-                SubPageLink = "Location Code" = field("Location Code"),
-                              "Bin Code" = field("Bin Code");
             }
         }
     }
@@ -128,7 +126,7 @@ pageextension 72301 "DOPSWHS Bin Card Ext" extends "Bin Contents"
                 PromotedCategory = Process;
                 trigger OnAction()
                 begin
-                    OpenLPBinContents('');
+                    OpenLPBinContents(LpNoFilter);
                 end;
             }
             action(DOPSWHSLPsInBin)
@@ -187,6 +185,14 @@ pageextension 72301 "DOPSWHS Bin Card Ext" extends "Bin Contents"
         LPListLink := 'LP listesini aç / sırala';
     end;
 
+    trigger OnAfterGetCurrRecord()
+    begin
+        if LpNoFilter <> '' then
+            CurrPage.DOPSWHSLPFactboxBin.Page.SetScope(FoundLPLocation, FoundLPBinCode, FoundLPNo)
+        else
+            CurrPage.DOPSWHSLPFactboxBin.Page.SetScope(Rec."Location Code", Rec."Bin Code", '');
+    end;
+
     local procedure OpenActiveLPContents()
     var
         ActiveLPContents: Page "DOPSWHS Active LP Contents";
@@ -213,6 +219,8 @@ pageextension 72301 "DOPSWHS Bin Card Ext" extends "Bin Contents"
             ShowLPFilterResults := false;
             Clear(FoundLPNo);
             Clear(FoundLPBin);
+            Clear(FoundLPLocation);
+            Clear(FoundLPBinCode);
             Clear(FoundLPContents);
             Clear(LPStockMatch);
             CurrPage.Update(false);
@@ -224,8 +232,11 @@ pageextension 72301 "DOPSWHS Bin Card Ext" extends "Bin Contents"
         ShowLPFilterResults := true;
         FoundLPNo := LP."No.";
         FoundLPBin := LP."Location Code" + ' / ' + LP."Bin Code";
+        FoundLPLocation := LP."Location Code";
+        FoundLPBinCode := LP."Bin Code";
         FoundLPContents := BinContentSubscriber.GetLPContentSummary(LP."No.");
         LPStockMatch := 'Yok';
+        CurrPage.DOPSWHSLPFactboxBin.Page.SetScope(FoundLPLocation, FoundLPBinCode, FoundLPNo);
 
         LPLine.SetRange("LP No.", LP."No.");
         LPLine.SetFilter("Item No.", '<>%1', '');
@@ -271,6 +282,8 @@ pageextension 72301 "DOPSWHS Bin Card Ext" extends "Bin Contents"
         ShowLPFilterResults: Boolean;
         FoundLPNo: Code[20];
         FoundLPBin: Text[50];
+        FoundLPLocation: Code[10];
+        FoundLPBinCode: Code[20];
         FoundLPContents: Text[250];
         LPStockMatch: Text[80];
 }

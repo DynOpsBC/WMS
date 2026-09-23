@@ -33,6 +33,17 @@ page 72078 "DOPSWHS LP Factbox Bin"
         Rec.SetFilter(Status, '%1|%2|%3', Rec.Status::Open, Rec.Status::Built, Rec.Status::Assigned);
     end;
 
+    procedure SetScope(LocationCode: Code[10]; BinCode: Code[20]; LPNo: Code[20])
+    begin
+        Rec.Reset();
+        Rec.SetRange("Location Code", LocationCode);
+        Rec.SetRange("Bin Code", BinCode);
+        if LPNo <> '' then
+            Rec.SetRange("No.", LPNo);
+        Rec.SetFilter(Status, '%1|%2|%3', Rec.Status::Open, Rec.Status::Built, Rec.Status::Assigned);
+        CurrPage.Update(false);
+    end;
+
     trigger OnAfterGetRecord()
     var
         BinContentSubscriber: Codeunit "DOPSWHS Bin Content Subscriber";
