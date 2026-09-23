@@ -95,6 +95,19 @@ pageextension 72301 "DOPSWHS Bin Card Ext" extends "Bin Contents"
     {
         addlast(Processing)
         {
+            action(DOPSWHSLPStockAudit)
+            {
+                ApplicationArea = All;
+                Caption = 'LP / Raf Stok Mutabakatı (CSV)';
+                ToolTip = 'Seçili depodaki aktif LP satırlarını madde, varyant, lot ve seri bazında gerçek ambar girişi bakiyesiyle karşılaştıran salt okunur raporu indirir. Stok değiştirmez.';
+                Image = Export;
+                trigger OnAction()
+                var
+                    Audit: Codeunit "DOPSWHS LP Stock Audit";
+                begin
+                    Audit.DownloadBinAudit(Rec."Location Code", Rec."Bin Code");
+                end;
+            }
             action(DOPSWHSLPRefresh)
             {
                 ApplicationArea = All;

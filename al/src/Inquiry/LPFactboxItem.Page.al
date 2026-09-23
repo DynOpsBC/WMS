@@ -4,6 +4,7 @@ page 72077 "DOPSWHS LP Factbox Item"
     SourceTable = "DOPSWHS LP Line";
     ApplicationArea = All;
     Caption = 'License Plates';
+    Editable = false;
 
     layout
     {

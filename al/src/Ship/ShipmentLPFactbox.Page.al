@@ -4,6 +4,7 @@ page 72486 "DOPSWHS Shipment LP Factbox"
     SourceTable = "DOPSWHS LP Header";
     ApplicationArea = All;
     Caption = 'Shipping License Plates';
+    Editable = false;
 
     layout
     {

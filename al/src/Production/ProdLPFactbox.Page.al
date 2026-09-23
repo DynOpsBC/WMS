@@ -4,6 +4,7 @@ page 72480 "DOPSWHS Prod LP Factbox"
     SourceTable = "DOPSWHS LP Header";
     ApplicationArea = All;
     Caption = 'Production LPs';
+    Editable = false;
 
     layout
     {
