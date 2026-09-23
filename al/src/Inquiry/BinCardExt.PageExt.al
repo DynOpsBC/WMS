@@ -8,7 +8,7 @@ pageextension 72301 "DOPSWHS Bin Card Ext" extends "Bin Contents"
             {
                 ApplicationArea = All;
                 Caption = 'LP No. Filtresi';
-                ToolTip = 'LP numarasını girin. LP kaydı üst bölümde her zaman gösterilir; eşleşen BC depo gözü stok satırları varsa alttaki listede filtrelenir. LP satırı stok varlığı anlamına gelmez.';
+                ToolTip = 'LP numarasını girin. LP içindeki ürünler ve lotlar üst bölümde gösterilir; eşleşen BC depo gözü stok satırları varsa alttaki listede filtrelenir. LP satırı stok varlığı anlamına gelmez.';
 
                 trigger OnValidate()
                 begin
@@ -69,6 +69,11 @@ pageextension 72301 "DOPSWHS Bin Card Ext" extends "Bin Contents"
                     Caption = 'BC Raf Satırı';
                     Editable = false;
                 }
+            }
+            part(DOPSWHSLPLines; "DOPSWHS LP Bin Lines")
+            {
+                ApplicationArea = All;
+                Visible = ShowLPFilterResults;
             }
         }
         // The standard "Bin Contents" page shows its calculated quantity through
@@ -224,6 +229,7 @@ pageextension 72301 "DOPSWHS Bin Card Ext" extends "Bin Contents"
             Clear(FoundLPContents);
             Clear(LPStockMatch);
             CurrPage.Update(false);
+            CurrPage.DOPSWHSLPLines.Page.SetLPNo('');
             exit;
         end;
 
@@ -237,6 +243,8 @@ pageextension 72301 "DOPSWHS Bin Card Ext" extends "Bin Contents"
         FoundLPContents := BinContentSubscriber.GetLPContentSummary(LP."No.");
         LPStockMatch := 'Yok';
         CurrPage.DOPSWHSLPFactboxBin.Page.SetScope(FoundLPLocation, FoundLPBinCode, FoundLPNo);
+        CurrPage.Update(false);
+        CurrPage.DOPSWHSLPLines.Page.SetLPNo(FoundLPNo);
 
         LPLine.SetRange("LP No.", LP."No.");
         LPLine.SetFilter("Item No.", '<>%1', '');
@@ -258,7 +266,7 @@ pageextension 72301 "DOPSWHS Bin Card Ext" extends "Bin Contents"
             if MatchedBinContent then
                 LPStockMatch := 'Var; mevcut liste filtreleri gizliyor'
             else
-                LPStockMatch := 'Yok; LP içeriğini LP numarasından açın';
+                LPStockMatch := 'Yok; LP içeriği yukarıda gösterilir';
             CurrPage.Update(false);
             exit;
         end;

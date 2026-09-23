@@ -207,6 +207,22 @@ codeunit 72110 "DOPSWHS Bin Rollup Tests"
     end;
 
     [Test]
+    procedure BinContentsShowsLPItemLinesWithoutBinStock()
+    var
+        BinContents: TestPage "Bin Contents";
+        Assert: Codeunit "Library Assert";
+    begin
+        AddTrackingSummaryLine('TEST-LP-BINPAGE', 10000, 'LOT-A', '', 4080);
+        BinContents.OpenEdit();
+        BinContents.DOPSWHSLPNoFilter.SetValue('TEST-LP-BINPAGE');
+        Assert.IsTrue(BinContents.DOPSWHSLPLines.First(), 'LP item line must appear without a BC Bin Content row.');
+        BinContents.DOPSWHSLPLines."Item No.".AssertEquals('ITEM-LPLOT');
+        BinContents.DOPSWHSLPLines.Quantity.AssertEquals(4080);
+        BinContents.DOPSWHSLPLines."Lot No.".AssertEquals('LOT-A');
+        BinContents.Close();
+    end;
+
+    [Test]
     procedure LPInquiryUsesCurrentHeaderBinForProductionLP()
     var
         LP: Record "DOPSWHS LP Header";
