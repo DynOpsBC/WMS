@@ -69,6 +69,7 @@ enum class WmsGlyph {
     CLOSE,
     CHEVRON,
     LAYOUT,
+    MIC,
 }
 
 fun glyphForScreen(screen: Screen): WmsGlyph = when (screen) {
@@ -488,6 +489,11 @@ fun WmsIcon(
                 drawArc(color, 25f, 145f, false, p(0.17f, 0.17f), Size(s * 0.66f, s * 0.66f), style = lineStroke)
                 line(0.23f, 0.75f, 0.22f, 0.55f)
                 line(0.23f, 0.75f, 0.43f, 0.72f)
+            }
+            WmsGlyph.MIC -> {
+                roundRect(0.38f, 0.12f, 0.24f, 0.44f)
+                drawArc(color, 0f, 180f, false, p(0.26f, 0.30f), Size(s * 0.48f, s * 0.44f), style = lineStroke)
+                line(0.50f, 0.74f, 0.50f, 0.88f); line(0.36f, 0.88f, 0.64f, 0.88f)
             }
             WmsGlyph.CLOSE -> { line(0.24f, 0.24f, 0.76f, 0.76f); line(0.76f, 0.24f, 0.24f, 0.76f) }
             WmsGlyph.CHEVRON -> { line(0.38f, 0.23f, 0.64f, 0.50f); line(0.64f, 0.50f, 0.38f, 0.77f) }

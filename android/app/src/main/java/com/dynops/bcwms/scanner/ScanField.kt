@@ -56,8 +56,11 @@ fun ScanField(
     okButton: Boolean = true,
     autoFocus: Boolean = false,
     onClear: (() -> Unit)? = null,
+    voiceInput: Boolean = false,
 ) {
     val context = LocalContext.current
+    // Spoken code waits for the operator's confirmation before searching.
+    var heardCode by remember { mutableStateOf<String?>(null) }
     var hasCameraPermission by remember {
         mutableStateOf(
             ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) ==
@@ -109,6 +112,15 @@ fun ScanField(
     // Kamera önizlemesi ekrana gömülü olduğu için sistem geri tuşu önce yalnızca
     // önizlemeyi kapatmalı; aksi halde operatör belge ekranından tamamen çıkıyordu.
     BackHandler(enabled = scanning) { scanning = false }
+    val startVoice = rememberVoiceCodeLauncher(
+        onCode = { code ->
+            cameraError = null
+            scanning = false
+            onValueChange(code)
+            heardCode = code
+        },
+        onUnavailable = { cameraError = "Bu cihazda sesli giriş hizmeti yok. Kodu okutun veya yazın." },
+    )
     LaunchedEffect(enabled) { if (!enabled) scanning = false }
 
     Column(modifier) {
@@ -171,6 +183,16 @@ fun ScanField(
                 ) { Text("OK") }
                 Spacer(Modifier.width(6.dp))
             }
+            if (voiceInput && !scanOnly) {
+                FilledTonalIconButton(
+                    enabled = enabled,
+                    modifier = Modifier.size(48.dp).semantics { contentDescription = "Sesle söyle" },
+                    onClick = { startVoice() },
+                ) {
+                    WmsIcon(glyph = WmsGlyph.MIC, color = MaterialTheme.colorScheme.primary, modifier = Modifier.size(22.dp))
+                }
+                Spacer(Modifier.width(6.dp))
+            }
             FilledTonalIconButton(
                 enabled = enabled,
                 modifier = Modifier.size(48.dp).semantics { contentDescription = if (scanning) "Kamerayı kapat" else "Kamera ile okut" },
@@ -193,6 +215,17 @@ fun ScanField(
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.error,
             )
+        }
+        heardCode?.let { code ->
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    "Duyulan: $code",
+                    style = MaterialTheme.typography.bodyMedium,
+                    modifier = Modifier.weight(1f),
+                )
+                if (onScanned != null) TextButton(enabled = enabled, onClick = { deliverScan(code) }) { Text("Ara") }
+                TextButton(onClick = { heardCode = null; onValueChange("") }) { Text("Sil") }
+            }
         }
         cameraError?.let {
             Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)

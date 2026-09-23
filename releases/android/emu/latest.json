@@ -1,7 +1,7 @@
 {
-  "versionCode": 200156,
-  "versionName": "1.14.156-emu",
-  "apkUrl": "https://github.com/DynOpsBC/WMS/releases/download/android-v1.14.156-emu/BCWMS-EMU-1.14.156-RELEASE.apk",
-  "sha256": "7888a16767c1dc62b4cdbccf81680c2bedaf5f9d1471f2282053b8cf42d9a5d0",
-  "releaseNotes": "Yerleştirmede raf kodunun veya ürün kodu/açıklamasının iki harfini yazınca doğru kayıt önerilir; önceki adımda okutulan bilgiler korunur."
+  "versionCode": 200157,
+  "versionName": "1.14.157-emu",
+  "apkUrl": "https://github.com/DynOpsBC/WMS/releases/download/android-v1.14.157-emu/BCWMS-EMU-1.14.157-RELEASE.apk",
+  "sha256": "8c211546e4f852f30edfe2534d0adf65b4fed73d03efa20ea2b2c702299f8849",
+  "releaseNotes": "Ürün Sorgu ve Bin Sorgu arama alanına sesli giriş eklendi: mikrofona basıp kodu söyleyin, duyulan kodu onaylayıp Ara'ya basın."
 }
