@@ -2,6 +2,33 @@ pageextension 72301 "DOPSWHS Bin Card Ext" extends "Bin Contents"
 {
     layout
     {
+        addafter(ZoneCode)
+        {
+            field(DOPSWHSLPNoFilter; LpNoFilter)
+            {
+                ApplicationArea = All;
+                Caption = 'LP No. Filtresi';
+                ToolTip = 'LP numarasını girerek yalnız bu LP''nin bulunduğu depo gözü ve madde satırlarını gösterin. Filtreyi temizleyerek tüm satırlara dönün.';
+
+                trigger OnValidate()
+                begin
+                    ApplyLPFilter();
+                end;
+            }
+            field(DOPSWHSLPListLink; LPListLink)
+            {
+                ApplicationArea = All;
+                Caption = 'LP Listesi';
+                Editable = false;
+                DrillDown = true;
+                ToolTip = 'Tüm LP''leri LP numarası, konum ve depo gözü alanlarına göre filtrelemek veya sıralamak için açın.';
+
+                trigger OnDrillDown()
+                begin
+                    Page.Run(Page::"DOPSWHS LP List");
+                end;
+            }
+        }
         // The standard "Bin Contents" page shows its calculated quantity through
         // the CalcQtyUOM control; there is no control named Quantity.
         addafter(CalcQtyUOM)
@@ -55,6 +82,8 @@ pageextension 72301 "DOPSWHS Bin Card Ext" extends "Bin Contents"
                 Caption = 'LP Numarasına Göre Ara';
                 ToolTip = 'Tüm LP kayıtlarını açar. LP No., konum ve raf alanlarında filtreleme ve sıralama yapabilirsiniz; bu sayfadaki konum filtresi taşınmış LP''leri gizlemez.';
                 Image = Find;
+                Promoted = true;
+                PromotedCategory = Process;
                 RunObject = page "DOPSWHS LP List";
             }
             action(DOPSWHSFindLPMovements)
@@ -63,6 +92,8 @@ pageextension 72301 "DOPSWHS Bin Card Ext" extends "Bin Contents"
                 Caption = 'LP Hareketlerini Gör';
                 ToolTip = 'LP hareket geçmişini açar. Tarih, LP No., kaynak raf ve hedef raf alanlarıyla taşınan LP''leri arayabilirsiniz.';
                 Image = History;
+                Promoted = true;
+                PromotedCategory = Process;
                 RunObject = page "DOPSWHS LP Movement Ledger";
             }
         }
@@ -75,6 +106,11 @@ pageextension 72301 "DOPSWHS Bin Card Ext" extends "Bin Contents"
         BinContentSubscriber.GetActiveLPItemInfo(
             Rec."Location Code", Rec."Bin Code", Rec."Item No.", Rec."Variant Code", Rec."Unit of Measure Code",
             ActiveLpNos, ActiveLpQuantity);
+    end;
+
+    trigger OnOpenPage()
+    begin
+        LPListLink := 'LP listesini aç / sırala';
     end;
 
     local procedure OpenActiveLPContents()
@@ -90,7 +126,38 @@ pageextension 72301 "DOPSWHS Bin Card Ext" extends "Bin Contents"
         CurrPage.Update(false);
     end;
 
+    local procedure ApplyLPFilter()
+    var
+        LP: Record "DOPSWHS LP Header";
+        LPLine: Record "DOPSWHS LP Line";
+    begin
+        Rec.MarkedOnly(false);
+        Rec.ClearMarks();
+        if LpNoFilter = '' then begin
+            CurrPage.Update(false);
+            exit;
+        end;
+
+        if not LP.Get(LpNoFilter) then
+            Error('%1 LP numarası bulunamadı.', LpNoFilter);
+
+        LPLine.SetRange("LP No.", LP."No.");
+        LPLine.SetFilter("Item No.", '<>%1', '');
+        LPLine.SetFilter(Quantity, '>0');
+        if LPLine.FindSet() then
+            repeat
+                if Rec.Get(LP."Location Code", LP."Bin Code", LPLine."Item No.",
+                    LPLine."Variant Code", LPLine."Unit of Measure") then
+                    Rec.Mark(true);
+            until LPLine.Next() = 0;
+
+        Rec.MarkedOnly(true);
+        CurrPage.Update(false);
+    end;
+
     var
         ActiveLpNos: Text[250];
         ActiveLpQuantity: Decimal;
+        LpNoFilter: Code[20];
+        LPListLink: Text[50];
 }
