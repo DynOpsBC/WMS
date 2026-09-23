@@ -16,9 +16,9 @@ page 72070 "DOPSWHS LP List"
             repeater(Lines)
             {
                 field("No."; Rec."No.") { ApplicationArea = All; }
-                field(Status; Rec.Status) { ApplicationArea = All; Editable = false; }
-                field("Location Code"; Rec."Location Code") { ApplicationArea = All; Editable = false; }
-                field("Bin Code"; Rec."Bin Code") { ApplicationArea = All; Editable = false; ToolTip = 'LP rafı yalnız kayıtlı LP taşıma işlemiyle değiştirilir.'; }
+                field(Status; Rec.Status) { ApplicationArea = All; }
+                field("Location Code"; Rec."Location Code") { ApplicationArea = All; }
+                field("Bin Code"; Rec."Bin Code") { ApplicationArea = All; }
                 field("Line Count"; Rec."Line Count") { ApplicationArea = All; }
                 field("Total Quantity"; Rec."Total Quantity") { ApplicationArea = All; }
                 field("Last Modified DateTime"; Rec."Last Modified DateTime")

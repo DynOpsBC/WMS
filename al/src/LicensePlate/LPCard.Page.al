@@ -12,9 +12,9 @@ page 72069 "DOPSWHS LP Card"
             group(General)
             {
                 field("No."; Rec."No.") { ApplicationArea = All; }
-                field(Status; Rec.Status) { ApplicationArea = All; Editable = false; }
-                field("Location Code"; Rec."Location Code") { ApplicationArea = All; Editable = false; }
-                field("Bin Code"; Rec."Bin Code") { ApplicationArea = All; Editable = false; ToolTip = 'LP rafı yalnız kayıtlı LP taşıma işlemiyle değiştirilir.'; }
+                field(Status; Rec.Status) { ApplicationArea = All; }
+                field("Location Code"; Rec."Location Code") { ApplicationArea = All; }
+                field("Bin Code"; Rec."Bin Code") { ApplicationArea = All; }
                 field("Parent LP No."; Rec."Parent LP No.") { ApplicationArea = All; }
                 field("LP Template Code"; Rec."LP Template Code") { ApplicationArea = All; }
                 field(SSCC; Rec.SSCC) { ApplicationArea = All; }

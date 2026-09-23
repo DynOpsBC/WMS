@@ -5,7 +5,6 @@ page 72483 "DOPSWHS LP Line ListPart"
     SourceTable = "DOPSWHS LP Line";
     ApplicationArea = All;
     AutoSplitKey = true;
-    Editable = false;
 
     layout
     {

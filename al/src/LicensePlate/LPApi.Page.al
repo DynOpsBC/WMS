@@ -82,20 +82,9 @@ page 72088 "DOPSWHS LP API"
     end;
 
     trigger OnModifyRecord(): Boolean
-    var
-        LPLine: Record "DOPSWHS LP Line";
     begin
         if Rec."Pending Receipt No." <> '' then
             Error('%1 LP''si %2 mal kabulünü bekliyor. Değişiklikleri Mal Kabul ekranından yapın.', Rec."No.", Rec."Pending Receipt No.");
-        if Rec.Status <> xRec.Status then
-            Error('%1 LP''sinin durumu doğrudan değiştirilemez. LP işlem eylemini kullanın.', Rec."No.");
-        if Rec."Location Code" <> xRec."Location Code" then
-            Error('%1 LP''sinin konumu doğrudan değiştirilemez. Kayıtlı LP taşıma işlemini kullanın.', Rec."No.");
-        if Rec."Bin Code" <> xRec."Bin Code" then begin
-            LPLine.SetRange("LP No.", Rec."No.");
-            if not LPLine.IsEmpty() then
-                Error('%1 LP''sinin rafı stok satırları varken doğrudan değiştirilemez. moveToBin işlemini kullanın.', Rec."No.");
-        end;
         exit(true);
     end;
 

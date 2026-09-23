@@ -4,7 +4,6 @@ page 72078 "DOPSWHS LP Factbox Bin"
     SourceTable = "DOPSWHS LP Header";
     ApplicationArea = All;
     Caption = 'License Plates';
-    Editable = false;
 
     layout
     {
