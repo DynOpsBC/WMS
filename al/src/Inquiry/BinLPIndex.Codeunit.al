@@ -1,6 +1,43 @@
 codeunit 72402 "DOPSWHS Bin LP Index"
 {
-    Permissions = tabledata "Bin Content" = rm;
+    Permissions = tabledata "Bin Content" = rim;
+
+    // Bin Contents is based on Bin Content, so an LP item without a matching
+    // record cannot appear in its main grid. Add only the missing bin/item/UOM
+    // definition; warehouse quantity still comes solely from Warehouse Entries.
+    procedure EnsureLPItemRows(LP: Record "DOPSWHS LP Header")
+    var
+        LPLine: Record "DOPSWHS LP Line";
+        BinContent: Record "Bin Content";
+    begin
+        if not (LP.Status in [LP.Status::Open, LP.Status::Built, LP.Status::Assigned]) then
+            exit;
+        if (LP."Location Code" = '') or (LP."Bin Code" = '') then
+            exit;
+        LPLine.SetRange("LP No.", LP."No.");
+        LPLine.SetFilter("Item No.", '<>%1', '');
+        LPLine.SetFilter(Quantity, '>0');
+        if LPLine.FindSet() then
+            repeat
+                if not BinContent.Get(LP."Location Code", LP."Bin Code", LPLine."Item No.",
+                    LPLine."Variant Code", LPLine."Unit of Measure") then
+                    // An existing blank-UOM row already represents this item.
+                    if (LPLine."Unit of Measure" = '') or
+                       not BinContent.Get(LP."Location Code", LP."Bin Code", LPLine."Item No.",
+                           LPLine."Variant Code", '') then begin
+                        BinContent.Init();
+                        BinContent."Location Code" := LP."Location Code";
+                        BinContent."Bin Code" := LP."Bin Code";
+                        BinContent."Item No." := LPLine."Item No.";
+                        BinContent."Variant Code" := LPLine."Variant Code";
+                        BinContent."Unit of Measure Code" := LPLine."Unit of Measure";
+                        if not BinContent.Insert(false) then
+                            BinContent.Get(LP."Location Code", LP."Bin Code", LPLine."Item No.",
+                                LPLine."Variant Code", LPLine."Unit of Measure");
+                        RefreshBinContent(BinContent);
+                    end;
+            until LPLine.Next() = 0;
+    end;
 
     // The Bin Contents column must be a stored table field for BC's native
     // column sorting and filtering. Keep its value in the LP transaction.

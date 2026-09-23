@@ -8,7 +8,7 @@ pageextension 72301 "DOPSWHS Bin Card Ext" extends "Bin Contents"
             {
                 ApplicationArea = All;
                 Caption = 'LP No. Filtresi';
-                ToolTip = 'LP numarasını girin. LP içindeki ürünler ve lotlar üst bölümde gösterilir; eşleşen BC depo gözü stok satırları varsa alttaki listede filtrelenir. LP satırı stok varlığı anlamına gelmez.';
+                ToolTip = 'LP numarasını girin. LP maddeleri ana tabloda ve LP bölümünde gösterilir. Eksik depo gözü/ürün satırı oluşturulabilir; BC Miktar yalnız gerçek depo hareketlerini gösterir.';
 
                 trigger OnValidate()
                 begin
@@ -88,7 +88,7 @@ pageextension 72301 "DOPSWHS Bin Card Ext" extends "Bin Contents"
                 field(DOPSWHSLPStockMatch; LPStockMatch)
                 {
                     ApplicationArea = All;
-                    Caption = 'BC Raf Satırı';
+                    Caption = 'Ana Tablo Satırı';
                     Editable = false;
                 }
             }
@@ -242,6 +242,7 @@ pageextension 72301 "DOPSWHS Bin Card Ext" extends "Bin Contents"
     var
         LP: Record "DOPSWHS LP Header";
         LPLine: Record "DOPSWHS LP Line";
+        BinLPIndex: Codeunit "DOPSWHS Bin LP Index";
         MatchedBinContent: Boolean;
         BinContentSubscriber: Codeunit "DOPSWHS Bin Content Subscriber";
     begin
@@ -262,6 +263,7 @@ pageextension 72301 "DOPSWHS Bin Card Ext" extends "Bin Contents"
 
         if not LP.Get(LpNoFilter) then
             Error('%1 LP numarası bulunamadı.', LpNoFilter);
+        BinLPIndex.EnsureLPItemRows(LP);
         ShowLPFilterResults := true;
         FoundLPNo := LP."No.";
         FoundLPBin := LP."Location Code" + ' / ' + LP."Bin Code";
@@ -285,8 +287,15 @@ pageextension 72301 "DOPSWHS Bin Card Ext" extends "Bin Contents"
                     LPLine."Variant Code", LPLine."Unit of Measure") then begin
                     Rec.Mark(true);
                     MatchedBinContent := true;
-                    LPStockMatch := 'Var';
-                end;
+                    LPStockMatch := 'Var; BC miktarı ayrı';
+                end else
+                    if (LPLine."Unit of Measure" <> '') and
+                       Rec.Get(LP."Location Code", LP."Bin Code", LPLine."Item No.",
+                           LPLine."Variant Code", '') then begin
+                        Rec.Mark(true);
+                        MatchedBinContent := true;
+                        LPStockMatch := 'Var; BC miktarı ayrı';
+                    end;
             until LPLine.Next() = 0;
 
         Rec.MarkedOnly(true);

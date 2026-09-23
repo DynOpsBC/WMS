@@ -210,16 +210,27 @@ codeunit 72110 "DOPSWHS Bin Rollup Tests"
     procedure BinContentsShowsLPItemLinesWithoutBinStock()
     var
         BinContents: TestPage "Bin Contents";
+        BinContent: Record "Bin Content";
         Assert: Codeunit "Library Assert";
     begin
         AddTrackingSummaryLine('TEST-LP-BINPAGE', 10000, 'LOT-A', '', 4080);
+        Assert.IsFalse(BinContent.Get('LPTEST', 'TRACKING', 'ITEM-LPLOT', '', 'PCS'),
+            'Fixture must start without a BC bin row.');
         BinContents.OpenEdit();
         BinContents.DOPSWHSLPNoFilter.SetValue('TEST-LP-BINPAGE');
+        Assert.IsTrue(BinContents.First(), 'The LP item must also appear in the main Bin Contents grid.');
+        BinContents.DOPSWHSLPNos.AssertEquals('TEST-LP-BINPAGE');
+        BinContents.DOPSWHSLPQuantity.AssertEquals(4080);
         Assert.IsTrue(BinContents.DOPSWHSLPLines.First(), 'LP item line must appear without a BC Bin Content row.');
         BinContents.DOPSWHSLPLines."Item No.".AssertEquals('ITEM-LPLOT');
         BinContents.DOPSWHSLPLines.Quantity.AssertEquals(4080);
         BinContents.DOPSWHSLPLines."Lot No.".AssertEquals('LOT-A');
         BinContents.Close();
+        Assert.IsTrue(BinContent.Get('LPTEST', 'TRACKING', 'ITEM-LPLOT', '', 'PCS'),
+            'The missing bin/item definition must be created.');
+        BinContent.CalcFields("Quantity (Base)");
+        Assert.AreEqual(0, BinContent."Quantity (Base)",
+            'An LP metadata row must not invent BC warehouse stock.');
     end;
 
     [Test]
