@@ -1293,14 +1293,14 @@ private fun PartialUseSheet(
         OutlinedTextField(
             qty,
             { qty = it.filter { c -> c.isDigit() || c == '.' || c == ',' }.replace(',', '.') },
-            label = { Text("Miktar (en fazla $maximumQuantity)") },
+            label = { Text(if (selectedAction.apiValue == "CreateNewLP") "Bu LP'de kalacak miktar (0–$maximumQuantity)" else "Miktar (en fazla $maximumQuantity)") },
             singleLine = true,
-            isError = qty.isNotBlank() && !validPartialUseInput(parsedQuantity, selectedLineNo, maximumQuantity),
+            isError = qty.isNotBlank() && !validPartialUseInput(parsedQuantity, selectedLineNo, maximumQuantity, selectedAction.apiValue),
             modifier = Modifier.fillMaxWidth(),
         )
         Spacer(Modifier.height(16.dp))
         Button(
-            enabled = validPartialUseInput(parsedQuantity, selectedLineNo, maximumQuantity),
+            enabled = validPartialUseInput(parsedQuantity, selectedLineNo, maximumQuantity, selectedAction.apiValue),
             modifier = Modifier.fillMaxWidth(),
             onClick = { onConfirm(selectedAction.apiValue, parsedQuantity ?: return@Button, selectedLineNo) },
         ) { Text("Uygula") }
