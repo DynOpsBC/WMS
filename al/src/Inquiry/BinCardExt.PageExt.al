@@ -2,13 +2,21 @@ pageextension 72301 "DOPSWHS Bin Card Ext" extends "Bin Contents"
 {
     layout
     {
+        addfirst(Content)
+        {
+            part(DOPSWHSLPFilterResults; "DOPSWHS Bin LP Filter Results")
+            {
+                ApplicationArea = All;
+                Visible = ShowLPFilterResults;
+            }
+        }
         addafter(ZoneCode)
         {
             field(DOPSWHSLPNoFilter; LpNoFilter)
             {
                 ApplicationArea = All;
                 Caption = 'LP No. Filtresi';
-                ToolTip = 'LP numarasını girerek eşleşen depo gözü ve madde satırlarını gösterin. BC depo gözü stok satırı yoksa LP kartı açılır; LP satırı stok varlığı anlamına gelmez. Filtreyi temizleyerek tüm satırlara dönün.';
+                ToolTip = 'LP numarasını girin. LP kaydı üst bölümde her zaman gösterilir; eşleşen BC depo gözü stok satırları varsa alttaki listede filtrelenir. LP satırı stok varlığı anlamına gelmez.';
 
                 trigger OnValidate()
                 begin
@@ -154,12 +162,16 @@ pageextension 72301 "DOPSWHS Bin Card Ext" extends "Bin Contents"
         Rec.MarkedOnly(false);
         Rec.ClearMarks();
         if LpNoFilter = '' then begin
+            ShowLPFilterResults := false;
+            CurrPage.DOPSWHSLPFilterResults.Page.SetLPNo('');
             CurrPage.Update(false);
             exit;
         end;
 
         if not LP.Get(LpNoFilter) then
             Error('%1 LP numarası bulunamadı.', LpNoFilter);
+        ShowLPFilterResults := true;
+        CurrPage.DOPSWHSLPFilterResults.Page.SetLPNo(LpNoFilter);
 
         LPLine.SetRange("LP No.", LP."No.");
         LPLine.SetFilter("Item No.", '<>%1', '');
@@ -175,18 +187,15 @@ pageextension 72301 "DOPSWHS Bin Card Ext" extends "Bin Contents"
 
         Rec.MarkedOnly(true);
         if not MatchedBinContent or Rec.IsEmpty() then begin
-            // An LP can still have a header and lines after its BC bin stock
-            // was moved/consumed, or existing page filters can hide the bin.
-            // Never invent a Bin Content row just to display that LP.
+            // Keep the LP result visible above the stock list. Restore the
+            // normal stock rows because an LP does not create BC stock.
             Rec.MarkedOnly(false);
             Rec.ClearMarks();
-            LpNoFilter := '';
             CurrPage.Update(false);
             if MatchedBinContent then
-                Message('%1 LP''sinin depo gözü satırı var ancak mevcut liste filtreleri bu satırı gizliyor. LP kartı açılıyor.', LP."No.")
+                Message('%1 LP kaydı üstte gösteriliyor. Mevcut liste filtreleri eşleşen BC depo gözü satırını gizliyor.', LP."No.")
             else
-                Message('%1 LP kaydı mevcut ancak aynı raf, ürün, varyant ve ölçü biriminde BC Depo Gözü İçeriği satırı yok. LP kartı açılıyor; LP satır miktarı tek başına BC raf stoğu değildir.', LP."No.");
-            Page.Run(Page::"DOPSWHS LP Card", LP);
+                Message('%1 LP kaydı üstte gösteriliyor. Aynı raf, ürün, varyant ve ölçü biriminde BC depo gözü stok satırı yok; LP satır miktarı BC raf stoğu değildir.', LP."No.");
             exit;
         end;
         CurrPage.Update(false);
@@ -197,4 +206,5 @@ pageextension 72301 "DOPSWHS Bin Card Ext" extends "Bin Contents"
         ActiveLpQuantity: Decimal;
         LpNoFilter: Code[20];
         LPListLink: Text[50];
+        ShowLPFilterResults: Boolean;
 }
