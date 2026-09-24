@@ -681,6 +681,8 @@ fun BinInquiryModule(labelsOnly: Boolean = false) {
     // and scanning still work; the lists are a convenience on top.
     var locations by remember { mutableStateOf<List<Pair<String, String>>>(emptyList()) }
     var binChoices by remember { mutableStateOf<List<Pair<String, String>>>(emptyList()) }
+    var pickerBinRows by remember { mutableStateOf<List<JSONObject>>(emptyList()) }
+    var selectedLabelBins by remember { mutableStateOf<List<JSONObject>>(emptyList()) }
     var showLocationPicker by remember { mutableStateOf(false) }
     var manualLocation by remember { mutableStateOf(false) }
     var showBinPicker by remember { mutableStateOf(false) }
@@ -849,7 +851,7 @@ fun BinInquiryModule(labelsOnly: Boolean = false) {
         }
     }
 
-    LaunchedEffect(location) { zone = ""; zoneBins = emptyList(); clearSelectedBin(); loadZones() }
+    LaunchedEffect(location) { zone = ""; zoneBins = emptyList(); selectedLabelBins = emptyList(); clearSelectedBin(); loadZones() }
     LaunchedEffect(location, zone, labelMode) {
         clearSelectedBin()
         if (labelsOnly) labelCopies = "1"
@@ -866,13 +868,17 @@ fun BinInquiryModule(labelsOnly: Boolean = false) {
         if (selectedLocation.isBlank() || selectedCode.isBlank()) { loading = false; return@LaunchedEffect }
         delay(350)
         loading = true
-        labelCopies = "1"
         status = ""
         try {
             val response = BcApi.get(context,
                 "bins?\$filter=locationCode eq '${selectedLocation.replace("'", "''")}' and code eq '${selectedCode.replace("'", "''")}'&\$top=1")
             if (location.trim() == selectedLocation && binCode.trim() == selectedCode) {
                 bin = if (response.ok) BcApi.parseValueArray(response.body).firstOrNull() else null
+                bin?.let { found ->
+                    if (selectedLabelBins.none { rawValue(it, "code").equals(rawValue(found, "code"), true) }) {
+                        selectedLabelBins = selectedLabelBins + found
+                    }
+                }
                 status = if (!response.ok) "HATA: Raf alınamadı. Kodu kontrol edip tekrar deneyin."
                     else if (bin == null) "BOŞ: Bu depoda '$selectedCode' rafı bulunamadı." else ""
             }
@@ -898,6 +904,7 @@ fun BinInquiryModule(labelsOnly: Boolean = false) {
             val page = BcApi.getAllPages(context, "bins?\$filter=locationCode eq '${loc.replace("'", "''")}'&\$orderby=code&\$top=500")
             pickerLoading = false
             if (!page.complete) { status = "HATA: Raf listesi alınamadı."; return@launch }
+            pickerBinRows = page.rows
             binChoices = page.rows.map { it.optString("code") to listOfNotNull(it.optString("zoneCode").takeIf { z -> z.isNotBlank() }?.let { z -> "Bölge $z" }, it.optString("description").takeIf { d -> d.isNotBlank() }).joinToString(" · ") }
             if (binChoices.isEmpty()) status = "BOŞ: '$loc' lokasyonunda raf yok." else showBinPicker = true
         }
@@ -957,9 +964,8 @@ fun BinInquiryModule(labelsOnly: Boolean = false) {
 
     fun printBinLabel() {
         if (printing) return
-        val b = bin ?: return
-        val loc = rawValue(b, "locationCode"); val code = rawValue(b, "code")
-        if (loc.isBlank() || code.isBlank()) return
+        val printRows = selectedLabelBins.toList()
+        if (printRows.isEmpty()) return
         val total = parseLabelCopies(labelCopies) ?: run {
             status = "HATA: Etiket adedi 1 ile $LABEL_COPIES_MAX arasında olmalı."
             return
@@ -967,27 +973,30 @@ fun BinInquiryModule(labelsOnly: Boolean = false) {
         scope.launch {
             printing = true
             try {
-                status = "🖨 $total adet bin etiketi yazdırılıyor..."
+                status = "🖨 ${printRows.size} raf etiketi yazdırılıyor..."
                 val choice = resolveInquiryPrinter(context).getOrElse {
                     status = "HATA: ${it.message}"
                     return@launch
                 }
-                val key = "locationCode='${loc.replace("'", "''")}',code='${code.replace("'", "''")}'"
                 var sent = 0
-                for (copies in labelCopyBatches(total)) {
-                    val payload = JSONObject().apply {
-                        put("printerId", choice.printerCode)
-                        put("copies", copies)
-                    }.toString()
-                    val r = BcApi.boundAction(context, "bins", key, "printLabel", payload)
-                    if (!r.ok) {
-                        status = "🔴 Yazdırma: ${BcApi.errorMessage(r.body)} (HTTP ${r.httpCode})" +
-                            if (sent > 0) " · $total etiketin $sent adedi kuyruğa alınmıştı." else ""
-                        return@launch
+                for (row in printRows) {
+                    val loc = rawValue(row, "locationCode"); val code = rawValue(row, "code")
+                    val key = "locationCode='${loc.replace("'", "''")}',code='${code.replace("'", "''")}'"
+                    for (copies in labelCopyBatches(total)) {
+                        val payload = JSONObject().apply {
+                            put("printerId", choice.printerCode)
+                            put("copies", copies)
+                        }.toString()
+                        val r = BcApi.boundAction(context, "bins", key, "printLabel", payload)
+                        if (!r.ok) {
+                            status = "🔴 $code rafında durdu: ${BcApi.errorMessage(r.body)} (HTTP ${r.httpCode})" +
+                                if (sent > 0) " · $sent etiket kuyruğa alınmıştı." else ""
+                            return@launch
+                        }
+                        sent += copies
                     }
-                    sent += copies
                 }
-                status = "🟢 $total adet bin etiketi ${choice.printerCode.ifBlank { "BC varsayılanı" }} kuyruğuna alındı ($loc/$code)." +
+                status = "🟢 ${printRows.size} raf × $total etiket ${choice.printerCode.ifBlank { "BC varsayılanı" }} kuyruğuna alındı." +
                     if (choice.warning.isBlank()) "" else " ${choice.warning}"
             } finally {
                 printing = false
@@ -997,15 +1006,14 @@ fun BinInquiryModule(labelsOnly: Boolean = false) {
 
     if (labelsOnly) {
         val busy = printing || showLabelPrintOptions
-        val targetRows = if (labelMode == BinLabelMode.Single) listOfNotNull(bin) else visibleZoneBins
+        val targetRows = if (labelMode == BinLabelMode.Single) selectedLabelBins else visibleZoneBins
         val ready = location.isNotBlank() && !loading && !pickerLoading && !zoneLoading && when (labelMode) {
-            BinLabelMode.Single -> bin != null && rawValue(requireNotNull(bin), "code").equals(binCode.trim(), true)
-                && rawValue(requireNotNull(bin), "locationCode").equals(location.trim(), true)
+            BinLabelMode.Single -> selectedLabelBins.isNotEmpty()
             BinLabelMode.Bulk -> zone.isNotBlank() && visibleZoneBins.isNotEmpty()
             BinLabelMode.Zone -> zone.isNotBlank()
         }
         val targetSummary = when (labelMode) {
-            BinLabelMode.Single -> "$location / ${bin?.let { rawValue(it, "code") }.orEmpty()}"
+            BinLabelMode.Single -> "$location · ${selectedLabelBins.size} raf: ${selectedLabelBins.joinToString(", ") { rawValue(it, "code") }}"
             BinLabelMode.Bulk -> "$location / $zone" + section.takeIf(String::isNotBlank)?.let { " / $it" }.orEmpty() + " · ${visibleZoneBins.size} raf"
             BinLabelMode.Zone -> "$location / $zone · Alan etiketi"
         }
@@ -1014,6 +1022,7 @@ fun BinInquiryModule(labelsOnly: Boolean = false) {
                 BinLabelModePicker(labelMode, !busy && !loading && !pickerLoading) { mode ->
                     if (mode != labelMode) {
                         labelMode = mode
+                        selectedLabelBins = emptyList()
                         clearSelectedBin()
                         status = ""
                         if (mode == BinLabelMode.Single) { zone = ""; section = "" }
@@ -1042,7 +1051,7 @@ fun BinInquiryModule(labelsOnly: Boolean = false) {
             if (location.isNotBlank()) item {
                 LabelWorkflowStep("2", if (labelMode == BinLabelMode.Single) "Rafı seçin veya okutun" else "Alanı seçin",
                     when (labelMode) {
-                        BinLabelMode.Single -> "Seçtiğiniz raf otomatik hazırlanır."
+                        BinLabelMode.Single -> "İstediğiniz rafları seçin veya art arda okutun."
                         BinLabelMode.Bulk -> "Alandaki tüm raflar veya bir bölüm için etiket alın."
                         BinLabelMode.Zone -> "Yalnızca alanın kendi etiketini yazdırın."
                     }) {
@@ -1050,7 +1059,7 @@ fun BinInquiryModule(labelsOnly: Boolean = false) {
                         OutlinedButton(onClick = { openBinPicker() },
                             enabled = !busy && !pickerLoading, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
                             shape = RoundedCornerShape(12.dp)) {
-                            WmsActionLabel(WmsGlyph.BIN_SEARCH, if (pickerLoading) "Raflar yükleniyor…" else "Raf listesinden seç")
+                            WmsActionLabel(WmsGlyph.BIN_SEARCH, if (pickerLoading) "Raflar yükleniyor…" else "Rafları seç")
                         }
                         ScanField(
                             label = "Raf kodu yazın veya okutun", value = binCode,
@@ -1062,6 +1071,25 @@ fun BinInquiryModule(labelsOnly: Boolean = false) {
                         if (loading) {
                             LinearProgressIndicator(Modifier.fillMaxWidth())
                             Text("Raf kontrol ediliyor…", style = MaterialTheme.typography.bodySmall)
+                        }
+                        if (selectedLabelBins.isNotEmpty()) {
+                            Surface(color = MaterialTheme.colorScheme.primaryContainer,
+                                shape = RoundedCornerShape(12.dp), modifier = Modifier.fillMaxWidth()) {
+                                Column(Modifier.padding(12.dp)) {
+                                    Text("Seçilen raflar (${selectedLabelBins.size})", fontWeight = FontWeight.Bold,
+                                        color = MaterialTheme.colorScheme.onPrimaryContainer)
+                                    selectedLabelBins.forEach { selected ->
+                                        val code = rawValue(selected, "code")
+                                        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                                            Text(code, Modifier.weight(1f), fontWeight = FontWeight.Medium)
+                                            TextButton(onClick = {
+                                                selectedLabelBins = selectedLabelBins.filterNot { rawValue(it, "code").equals(code, true) }
+                                                if (binCode.equals(code, true)) { binCode = ""; bin = null }
+                                            }, enabled = !busy) { Text("Kaldır") }
+                                        }
+                                    }
+                                }
+                            }
                         }
                     } else {
                         SelectorRow(label = "Alan", value = zone,
@@ -1098,7 +1126,7 @@ fun BinInquiryModule(labelsOnly: Boolean = false) {
             }
             if (ready) item {
                 LabelWorkflowStep("3", "Yazdırmaya hazır", targetSummary) {
-                    if (labelMode == BinLabelMode.Single) bin?.let { selected ->
+                    if (labelMode == BinLabelMode.Single && selectedLabelBins.size == 1) selectedLabelBins.firstOrNull()?.let { selected ->
                         val description = rawValue(selected, "description")
                         if (description.isNotBlank()) Text(description, style = MaterialTheme.typography.bodySmall)
                     }
@@ -1108,7 +1136,8 @@ fun BinInquiryModule(labelsOnly: Boolean = false) {
                         shape = RoundedCornerShape(12.dp),
                     ) {
                         WmsActionLabel(WmsGlyph.PRINTER, when (labelMode) {
-                            BinLabelMode.Single -> "Raf etiketini yazdır"
+                            BinLabelMode.Single -> if (selectedLabelBins.size == 1) "Raf etiketini yazdır"
+                                else "${selectedLabelBins.size} rafın etiketini yazdır"
                             BinLabelMode.Bulk -> "${visibleZoneBins.size} rafın etiketini yazdır"
                             BinLabelMode.Zone -> "Alan etiketini yazdır"
                         })
@@ -1129,7 +1158,18 @@ fun BinInquiryModule(labelsOnly: Boolean = false) {
             listOf("" to "Tüm bölümler · ${zoneBins.size} raf") + sectionChoices,
             onDismiss = { showSectionPicker = false },
             onPick = { chooseSection(it); showSectionPicker = false })
-        if (showBinPicker) InquiryPickerDialog(
+        if (showBinPicker && labelsOnly && labelMode == BinLabelMode.Single) InquiryMultiBinPickerDialog(
+            "Rafları seç · $location", pickerBinRows, selectedLabelBins.map { rawValue(it, "code") }.toSet(),
+            onDismiss = { showBinPicker = false },
+            onToggle = { row ->
+                val code = rawValue(row, "code")
+                selectedLabelBins = if (selectedLabelBins.any { rawValue(it, "code").equals(code, true) })
+                    selectedLabelBins.filterNot { rawValue(it, "code").equals(code, true) }
+                else selectedLabelBins + row
+                if (binCode.equals(code, true)) { binCode = ""; bin = null }
+            },
+        )
+        if (showBinPicker && (!labelsOnly || labelMode != BinLabelMode.Single)) InquiryPickerDialog(
             if (labelMode == BinLabelMode.Bulk) "Yazdırılacak raflar · ${visibleZoneBins.size}" else "Raf seç · $location",
             binChoices, onDismiss = { showBinPicker = false },
             onPick = { if (labelMode == BinLabelMode.Single) { binCode = it; bin = null; status = "" }; showBinPicker = false },
@@ -1715,5 +1755,53 @@ internal fun InquiryPickerDialog(
         },
         confirmButton = {},
         dismissButton = { TextButton(onClick = onDismiss) { Text("Kapat") } },
+    )
+}
+
+@Composable
+internal fun InquiryMultiBinPickerDialog(
+    title: String,
+    rows: List<JSONObject>,
+    selectedCodes: Set<String>,
+    onDismiss: () -> Unit,
+    onToggle: (JSONObject) -> Unit,
+) {
+    var query by remember { mutableStateOf("") }
+    val visible = remember(query, rows) {
+        val q = query.trim()
+        if (q.isBlank()) rows else rows.filter {
+            rawValue(it, "code").contains(q, ignoreCase = true) ||
+                rawValue(it, "description").contains(q, ignoreCase = true)
+        }
+    }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(title) },
+        text = {
+            Column(Modifier.fillMaxWidth().heightIn(max = 420.dp)) {
+                OutlinedTextField(query, { query = it }, label = { Text("Raf kodu veya açıklama ara") },
+                    singleLine = true, modifier = Modifier.fillMaxWidth())
+                Text("${selectedCodes.size} raf seçildi", color = MaterialTheme.colorScheme.primary,
+                    style = MaterialTheme.typography.bodySmall)
+                LazyColumn(Modifier.fillMaxWidth().weight(1f, fill = false)) {
+                    items(visible, key = { rawValue(it, "code") }) { row ->
+                        val code = rawValue(row, "code")
+                        Row(Modifier.fillMaxWidth().clickable { onToggle(row) }.padding(vertical = 6.dp),
+                            verticalAlignment = Alignment.CenterVertically) {
+                            Checkbox(checked = selectedCodes.any { it.equals(code, true) },
+                                onCheckedChange = { onToggle(row) })
+                            Column {
+                                Text(code, fontWeight = FontWeight.Bold)
+                                rawValue(row, "description").takeIf { it.isNotBlank() }?.let {
+                                    Text(it, style = MaterialTheme.typography.bodySmall)
+                                }
+                            }
+                        }
+                        HorizontalDivider()
+                    }
+                }
+            }
+        },
+        confirmButton = { TextButton(onClick = onDismiss) { Text("Tamam") } },
     )
 }

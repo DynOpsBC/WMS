@@ -1,7 +1,7 @@
 {
-  "versionCode": 200157,
-  "versionName": "1.14.157-emu",
-  "apkUrl": "https://github.com/DynOpsBC/WMS/releases/download/android-v1.14.157-emu/BCWMS-EMU-1.14.157-RELEASE.apk",
-  "sha256": "8c211546e4f852f30edfe2534d0adf65b4fed73d03efa20ea2b2c702299f8849",
-  "releaseNotes": "Ürün Sorgu ve Bin Sorgu arama alanına sesli giriş eklendi: mikrofona basıp kodu söyleyin, duyulan kodu onaylayıp Ara'ya basın."
+  "versionCode": 200159,
+  "versionName": "1.14.159-emu",
+  "apkUrl": "https://github.com/DynOpsBC/WMS/releases/download/android-v1.14.159-emu/BCWMS-EMU-1.14.159-RELEASE.apk",
+  "sha256": "2e03e58f0ebd2af895b0403c5806730d70a58b9eef116082137bfdc290006fa3",
+  "releaseNotes": "Raf etiketi ekranında Tek raf seçeneğiyle birden fazla rafı işaretleyebilir veya art arda okutabilirsiniz. Yalnız seçilen raflar, belirlediğiniz raf başına adet kadar yazdırılır."
 }
