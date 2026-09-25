@@ -167,7 +167,33 @@ private fun PutAwayDocument(no: String, onBack: () -> Unit) {
             header = if (h.ok) runCatching { JSONObject(h.body) }.getOrNull() else null
             headerLoaded = header != null
             val page = BcApi.getAllPages(context, "putAwayLines?\$filter=no eq '$no'&\$top=100")
-            lines = page.rows
+            val loadedLines = page.rows
+            val knownDescriptions = loadedLines.mapNotNull { line ->
+                line.optString("description").takeIf { it.isNotBlank() }
+                    ?.let { line.optString("itemNo") to it }
+            }.toMap()
+            loadedLines.forEach { line ->
+                if (line.optString("description").isBlank()) {
+                    knownDescriptions[line.optString("itemNo")]?.let { line.put("description", it) }
+                }
+            }
+            val missingItemNos = loadedLines.filter { it.optString("description").isBlank() }
+                .map { it.optString("itemNo").trim() }.filter { it.isNotBlank() }.distinct()
+            val itemDescriptions = mutableMapOf<String, String>()
+            for (itemNos in missingItemNos.chunked(20)) {
+                val filter = itemNos.joinToString(" or ") { "no eq '${it.replace("'", "''")}'" }
+                val itemPage = BcApi.getAllPages(context, "items?\$filter=$filter&\$select=no,description")
+                if (itemPage.complete) itemPage.rows.forEach { item ->
+                    itemDescriptions[item.optString("no")] = item.optString("description")
+                }
+            }
+            loadedLines.forEach { line ->
+                if (line.optString("description").isBlank()) {
+                    val description = itemDescriptions[line.optString("itemNo")].orEmpty()
+                    if (description.isNotBlank()) line.put("description", description)
+                }
+            }
+            lines = loadedLines
             linesComplete = page.complete
             if (page.complete) {
                 stagedLineNos = retainExistingPutAwayStagedLineNos(stagedLineNos, lines)
@@ -780,7 +806,12 @@ private fun groupPutAwayPairs(lines: List<JSONObject>): List<PutAwayPair> {
     return byKey.values.map { group ->
         val place = group.firstOrNull { isPutAwayPlaceLine(it) } ?: group.first()
         val take = group.firstOrNull { !isPutAwayPlaceLine(it) }
-        PutAwayPair(take, place, place.optString("itemNo"), place.optString("description"))
+        PutAwayPair(
+            take,
+            place,
+            place.optString("itemNo"),
+            place.optString("description").ifBlank { take?.optString("description").orEmpty() },
+        )
     }
 }
 
@@ -2220,7 +2251,8 @@ private fun WhsePickDocument(no: String, onBack: () -> Unit) {
             showLotSerial = true,
             showSerial = false,
             showSourceLp = true,
-            initialSourceLp = ql.optString("licensePlateNo"),
+            // Satırdaki önerilen LP okutulmuş kaynak palet değildir. Lot
+            // değiştiğinde eski LP'nin sunucuya gönderilmesini önle.
             lotRequired = ql.optBoolean("lotRequired", false),
             showAvailableLotLookup = true,
             autoDetectLotFromStock = true,

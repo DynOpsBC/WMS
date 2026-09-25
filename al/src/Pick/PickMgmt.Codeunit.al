@@ -360,7 +360,8 @@ codeunit 72046 "DOPSWHS Pick Mgmt"
             LPVerification.SingleLotForItem(
                 SourceLpNo, PickLine."Item No.", PickLine."Variant Code", EffectiveLotNo);
         EnsurePickLot(PickLine, EffectiveLotNo);
-        PickLine.Validate("Lot No.", EffectiveLotNo);
+        if PickLine."Lot No." <> EffectiveLotNo then
+            PickLine.Validate("Lot No.", EffectiveLotNo);
 
         // Okutulan paletin içeriği satırla birebir karşılaştırılır: madde,
         // varyant, lot, seri, lokasyon ve raf. Uymayan palette satır hiç
@@ -378,8 +379,10 @@ codeunit 72046 "DOPSWHS Pick Mgmt"
                 SourceLpNo, PickLine, EffectiveLotNo, PickLine."Serial No.", true, MatchedLPLine);
 
         EffectiveLpNo := SourceLpNo;
-        if EffectiveLpNo = '' then
-            EffectiveLpNo := PickLine."LP No.";
+        // Pick oluşturulurken satıra yazılan LP bir kaynak önerisidir. Mobil
+        // operatör farklı lot seçtiğinde bu öneriyi okutulmuş LP gibi zorlamak
+        // yanlış lotlu palete bağlar. Okutma yoksa seçilen lota uygun kaynağı
+        // yeniden çöz.
         PickLine."LP No." := ResolvePickSourceLp(PickLine, EffectiveLpNo);
         PickLine.Modify(true);
 

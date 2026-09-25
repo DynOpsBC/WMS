@@ -86,7 +86,7 @@ internal enum class LedgerBulkLpReplayState {
 
 private const val DEFAULT_LEDGER_LP_COUNT = "10"
 private const val DEFAULT_LEDGER_LP_QUANTITY = "100"
-private const val LEDGER_ENTRY_DISPLAY_LIMIT = 50
+private const val LEDGER_ENTRY_BATCH_SIZE = 50
 internal const val LEDGER_BULK_LP_CREATE_ACTION = "createLicensePlatesIdempotent"
 internal const val LEDGER_BULK_LP_PLAN_ACTION = "createLicensePlatesFromPlanIdempotent"
 private const val LEDGER_BULK_LP_PENDING_PREFS = "bcwms_bulk_lp_pending"
@@ -176,10 +176,18 @@ internal fun itemLedgerLookupFilters(rawLookup: String): List<String> {
 
 internal fun itemLedgerLookupPath(filter: String, includeLpAllocationFields: Boolean): String {
     val allocationFields = if (includeLpAllocationFields) ",allocatedLpQuantity,lpAllocatableQuantity" else ""
-    return "itemLedgerEntries?\$filter=$filter&\$orderby=entryNo desc&\$top=100&" +
+    return "itemLedgerEntries?\$filter=$filter&\$orderby=entryNo desc&" +
         "\$select=entryNo,itemNo,postingDate,documentNo,locationCode,quantity,remainingQuantity$allocationFields," +
         "baseUnitOfMeasure,variantCode,lotNo,serialNo"
 }
+
+internal fun sortedLedgerLookupRows(rows: List<JSONObject>, exactEntryNo: Int?): List<JSONObject> =
+    rows.distinctBy { it.optInt("entryNo") }
+        .filter { ledgerLpAllocatableQuantity(it) > 0.0 }
+        .sortedWith(
+            compareByDescending<JSONObject> { exactEntryNo != null && it.optInt("entryNo") == exactEntryNo }
+                .thenByDescending { it.optInt("entryNo") },
+        )
 
 internal fun ledgerLpAllocatableQuantity(row: JSONObject): Double =
     if (row.has("lpAllocatableQuantity") && !row.isNull("lpAllocatableQuantity")) {
@@ -418,6 +426,7 @@ internal fun BulkLpBuildSheet(
     val restoredPending = remember(context) { PendingLedgerBulkLpStore.load(context) }
     var lookup by remember { mutableStateOf("") }
     var entries by remember { mutableStateOf<List<JSONObject>>(emptyList()) }
+    var visibleEntryCount by remember { mutableIntStateOf(LEDGER_ENTRY_BATCH_SIZE) }
     var selectedEntry by remember { mutableStateOf<JSONObject?>(null) }
     var template by remember { mutableStateOf("") }
     var templates by remember { mutableStateOf<List<String>>(emptyList()) }
@@ -484,6 +493,7 @@ internal fun BulkLpBuildSheet(
 
     fun clearLedgerSelectionAndPlan() {
         entries = emptyList()
+        visibleEntryCount = LEDGER_ENTRY_BATCH_SIZE
         selectedEntry = null
         template = ""
         templateExpanded = false
@@ -533,16 +543,8 @@ internal fun BulkLpBuildSheet(
             // Operatör istek sürerken arama değerini değiştirdiyse eski sorgunun
             // sonucu yeni değer altında gösterilmemeli/seçilememeli.
             if (lookup.trim() != value) return@launch
-            entries = if (complete) {
-                val availableRows = foundRows.distinctBy { it.optInt("entryNo") }
-                    .filter { ledgerLpAllocatableQuantity(it) > 0.0 }
-                val exactEntryNo = value.toIntOrNull()
-                if (exactEntryNo == null) availableRows
-                else availableRows.sortedWith(
-                    compareByDescending<JSONObject> { it.optInt("entryNo") == exactEntryNo }
-                        .thenByDescending { it.optInt("entryNo") },
-                )
-            } else emptyList()
+            entries = if (complete) sortedLedgerLookupRows(foundRows, value.toIntOrNull()) else emptyList()
+            visibleEntryCount = LEDGER_ENTRY_BATCH_SIZE
             status = when {
                 !complete -> "HATA: Stok kayıtları alınamadı. Bağlantıyı kontrol edip tekrar deneyin."
                 entries.isEmpty() -> "BOŞ: LP yapılabilecek miktarı olan stok bulunamadı."
@@ -845,15 +847,15 @@ internal fun BulkLpBuildSheet(
         if (entries.isNotEmpty()) {
             Spacer(Modifier.height(10.dp))
             Text("Kullanılacak Stok Kaydı", fontWeight = FontWeight.Bold, fontSize = 13.sp)
-            if (entries.size > LEDGER_ENTRY_DISPLAY_LIMIT) {
+            if (entries.size > visibleEntryCount) {
                 Text(
-                        "Çok fazla kayıt bulundu; yalnızca en yeni $LEDGER_ENTRY_DISPLAY_LIMIT kayıt gösteriliyor. " +
-                            "Daha eski bir kayıt için stok kayıt numarasıyla arayın.",
+                        "${entries.size} kaydın ilk $visibleEntryCount tanesi gösteriliyor. " +
+                            "Kalanları görmek için aşağıdaki düğmeyi kullanın.",
                     fontSize = 11.sp,
                     color = MaterialTheme.colorScheme.tertiary,
                 )
             }
-            entries.take(LEDGER_ENTRY_DISPLAY_LIMIT).forEach { row ->
+            entries.take(visibleEntryCount).forEach { row ->
                 val selected = selectedEntry?.optInt("entryNo") == row.optInt("entryNo")
                 Card(
                     onClick = {
@@ -900,6 +902,13 @@ internal fun BulkLpBuildSheet(
                             Text(detail, fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }
+            }
+            if (entries.size > visibleEntryCount) {
+                OutlinedButton(
+                    onClick = { visibleEntryCount = minOf(entries.size, visibleEntryCount + LEDGER_ENTRY_BATCH_SIZE) },
+                    modifier = Modifier.fillMaxWidth(),
+                    enabled = inputsEnabled,
+                ) { Text("50 kayıt daha göster (${entries.size - visibleEntryCount} kaldı)") }
             }
         }
 

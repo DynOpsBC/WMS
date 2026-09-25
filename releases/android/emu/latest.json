@@ -1,7 +1,7 @@
 {
-  "versionCode": 200159,
-  "versionName": "1.14.159-emu",
-  "apkUrl": "https://github.com/DynOpsBC/WMS/releases/download/android-v1.14.159-emu/BCWMS-EMU-1.14.159-RELEASE.apk",
-  "sha256": "2e03e58f0ebd2af895b0403c5806730d70a58b9eef116082137bfdc290006fa3",
-  "releaseNotes": "Raf etiketi ekranında Tek raf seçeneğiyle birden fazla rafı işaretleyebilir veya art arda okutabilirsiniz. Yalnız seçilen raflar, belirlediğiniz raf başına adet kadar yazdırılır."
+  "versionCode": 200160,
+  "versionName": "1.14.160-emu",
+  "apkUrl": "https://github.com/DynOpsBC/WMS/releases/download/android-v1.14.160-emu/BCWMS-EMU-1.14.160-RELEASE.apk",
+  "sha256": "67c8d113b8cc729ca212850dc2a1d580c784c2249125c7edc9fdde78cd8fe3eb",
+  "releaseNotes": "Raf ve LP listeleri sıralı ve tam yüklenir; Bin Sorgu'da seçilen LP etiketleri toplu basılır. Yerleştirme satırında ürün adı gösterilir. Sevkiyat sonrası toplamada lot değiştiğinde eski LP önerisi gönderilmez. Toplama sunucu düzeltmesi için DKC BC 1.14.2.20 paketi gerekir."
 }

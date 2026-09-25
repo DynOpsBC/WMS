@@ -238,6 +238,18 @@ class BulkLpBuildWorkflowTest {
         assertTrue(current.contains("allocatedLpQuantity,lpAllocatableQuantity"))
         assertFalse(legacy.contains("allocatedLpQuantity"))
         assertTrue(legacy.contains("remainingQuantity"))
+        assertFalse(current.contains("\$top="))
+    }
+
+    @Test
+    fun `ledger lookup keeps every row in entry number order after filter pages are merged`() {
+        val rows = (1..120).map { no -> JSONObject().put("entryNo", no).put("lpAllocatableQuantity", 1) }
+        val merged = rows.filter { it.optInt("entryNo") % 2 == 0 }.reversed() +
+            rows.filter { it.optInt("entryNo") % 2 != 0 } + rows.take(3)
+        val result = sortedLedgerLookupRows(merged, exactEntryNo = null)
+        assertEquals(120, result.size)
+        assertEquals((120 downTo 1).toList(), result.map { it.optInt("entryNo") })
+        assertEquals(1, sortedLedgerLookupRows(merged, exactEntryNo = 1).first().optInt("entryNo"))
     }
 
     @Test

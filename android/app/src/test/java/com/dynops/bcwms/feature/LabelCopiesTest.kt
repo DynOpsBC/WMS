@@ -37,6 +37,9 @@ class LabelCopiesTest {
 
         val bins = sortedBinCodes(listOf("A10", "A2", "A100", "A1", "B1").map { JSONObject().put("code", it) })
         assertEquals(listOf("A1", "A2", "A10", "A100", "B1"), bins.map { it.optString("code") })
+        val numbered = sortedBinCodes(listOf("RAF001", "RAF120", "RAF089", "RAF002")
+            .map { JSONObject().put("code", it) })
+        assertEquals(listOf("RAF001", "RAF002", "RAF089", "RAF120"), numbered.map { it.optString("code") })
     }
 
     @Test fun `locations come from the BCWMS API or the standard API`() {

@@ -7,6 +7,15 @@ import org.junit.Test
 
 class LicensePlateWorkflowTest {
     @Test
+    fun `LP numbers remain in natural order after pages are merged`() {
+        val received = listOf("LP001", "LP120", "LP089", "LP002", "LP011")
+        assertEquals(
+            listOf("LP001", "LP002", "LP011", "LP089", "LP120"),
+            received.sortedWith(warehouseBinCodeComparator),
+        )
+    }
+
+    @Test
     fun `bulk print uses small ordered batches`() {
         val lpNos = listOf("LP1", "LP2", "LP3", "LP4", "LP5", "LP6", "LP7")
 
