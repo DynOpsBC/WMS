@@ -1,7 +1,7 @@
 {
-  "versionCode": 200157,
-  "versionName": "1.14.157-emu",
-  "apkUrl": "https://github.com/DynOpsBC/WMS/releases/download/android-v1.14.157-emu/BCWMS-EMU-1.14.157-UYUMLU.apk",
-  "sha256": "f99dc7afc695318b658c7ba04412bd0da0480bc7784aae48615850049b8a5a21",
-  "releaseNotes": "Ürün Sorgu ve Bin Sorgu arama alanına sesli giriş eklendi: mikrofona basıp kodu söyleyin, duyulan kodu onaylayıp Ara'ya basın."
+  "versionCode": 200160,
+  "versionName": "1.14.160-emu",
+  "apkUrl": "https://github.com/DynOpsBC/WMS/releases/download/android-v1.14.160-emu/BCWMS-EMU-1.14.160-UYUMLU.apk",
+  "sha256": "40bf177f0c111ac29ac08d72cfc3cc90e393db98190c07ecdbf6cff6c29fe8b9",
+  "releaseNotes": "Raf ve LP listeleri sıralı ve tam yüklenir; Bin Sorgu'da seçilen LP etiketleri toplu basılır. Yerleştirme satırında ürün adı gösterilir. Sevkiyat sonrası toplamada lot değiştiğinde eski LP önerisi gönderilmez. Toplama sunucu düzeltmesi için DKC BC 1.14.2.20 paketi gerekir."
 }
