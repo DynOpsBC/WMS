@@ -19,16 +19,18 @@ page 72482 "DOPSWHS Count Counter Part"
                     Lookup = true;
                     ToolTip = 'Bu sayıcı slotuna atanacak etkin terminal operatörünü Local WMS Users listesinden seçin.';
 
+                    // BADE (1 Eki 2026): OnLookup true döndüğünde platform alanı
+                    // Text ile doğrular. Önceden Text boş kaldığı için seçilen
+                    // kullanıcı alana hiç yazılmıyordu.
                     trigger OnLookup(var Text: Text): Boolean
                     var
                         LocalUser: Record "DOPSWHS Local User";
                     begin
                         LocalUser.SetRange(Disabled, false);
                         if Page.RunModal(Page::"DOPSWHS Terminal Users", LocalUser) <> Action::LookupOK then
-                            exit(true);
+                            exit(false);
 
-                        Rec.Validate("User ID", LocalUser.Username);
-                        CurrPage.Update(false);
+                        Text := LocalUser.Username;
                         exit(true);
                     end;
                 }
@@ -42,4 +44,22 @@ page 72482 "DOPSWHS Count Counter Part"
             }
         }
     }
+
+    // Yeni satır 0 slotla açılıyordu (geçerli değerler 1-3); ilk boş slot verilir.
+    trigger OnNewRecord(BelowxRec: Boolean)
+    var
+        Counter: Record "DOPSWHS Count Counter";
+        Slot: Integer;
+    begin
+        if Rec.GetFilter("Sheet No.") = '' then
+            exit;
+        for Slot := 1 to 3 do begin
+            Counter.SetFilter("Sheet No.", Rec.GetFilter("Sheet No."));
+            Counter.SetRange("Counter Slot", Slot);
+            if Counter.IsEmpty() then begin
+                Rec."Counter Slot" := Slot;
+                exit;
+            end;
+        end;
+    end;
 }

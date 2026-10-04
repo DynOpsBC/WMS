@@ -313,9 +313,15 @@ codeunit 72050 "DOPSWHS Count Mgmt"
                     end;
                 end;
 
+                // BADE (1 Eki 2026): LP rafta olmayan bir lotu tutarken raftaki
+                // başka bir lot LP dışında kalırsa (LP000229: LP 1.704 A101304,
+                // raf 1.213 A101304 + 371 A101077) lot satırları raf kalanını
+                // aşar. Bu LP kaynaklı tutarsızlığı da sayım bulur; bölgenin
+                // tüm satır üretimi durmasın. Kayıtta BC farkı gerçek raf
+                // bakiyesinden hesaplanır (BuildPostingCalculatedQty).
                 UntrackedLooseQty := ResidualQty - TotalTrackedLooseQty;
                 if UntrackedLooseQty < 0 then
-                    Error(TrackingBreakdownExceedsInventoryErr, BinContent."Item No.", BinContent."Bin Code", TotalTrackedLooseQty, ResidualQty);
+                    UntrackedLooseQty := 0;
                 if UntrackedLooseQty > 0 then begin
                     CreateLooseCountLine(
                         CountLine, SheetNo, NextLineNo,
@@ -1461,6 +1467,7 @@ codeunit 72050 "DOPSWHS Count Mgmt"
         ItemJournalLine: Record "Item Journal Line";
         ItemJnlPostBatch: Codeunit "Item Jnl.-Post Batch";
         Dimensions: Dictionary of [Text, Text];
+        CalculatedQty: Dictionary of [Integer, Decimal];
         WinningQty: Decimal;
         LineNo: Integer;
         CountDocumentNo: Code[20];
@@ -1507,6 +1514,7 @@ codeunit 72050 "DOPSWHS Count Mgmt"
         // from the bins BC still keeps it (outside this count), so a partial
         // count relocates instead of duplicating. Setup switch, default off.
         RelocateFoundStock(SheetNo, CountHeader);
+        BuildPostingCalculatedQty(SheetNo, CountHeader."Location Code", CalculatedQty);
 
         CountDocumentNo := CopyStr(SheetNo, 1, MaxStrLen(CountDocumentNo));
         Clear(ItemJournalLine);
@@ -1526,7 +1534,7 @@ codeunit 72050 "DOPSWHS Count Mgmt"
                 // Matching physical and system quantities need no inventory
                 // journal line. In particular, 10 matching LP rows must never
                 // be sent to the posting engine as ten zero-value operations.
-                if WinningQty <> CountLine."System Qty" then begin
+                if WinningQty <> CalculatedQty.Get(CountLine."Line No.") then begin
                     LineNo += 10000;
                     ItemJournalLine.Init();
                     ItemJournalLine.Validate("Journal Template Name", 'PHYS. INV.');
@@ -1542,7 +1550,7 @@ codeunit 72050 "DOPSWHS Count Mgmt"
                         ItemJournalLine.Validate("Unit of Measure Code", CountLine."Unit of Measure Code");
                     // Phys. inventory line: BC derives entry type + quantity from calculated vs counted.
                     ItemJournalLine.Validate("Phys. Inventory", true);
-                    ItemJournalLine.Validate("Qty. (Calculated)", CountLine."System Qty");
+                    ItemJournalLine.Validate("Qty. (Calculated)", CalculatedQty.Get(CountLine."Line No."));
                     ItemJournalLine.Validate("Qty. (Phys. Inventory)", WinningQty);
                     ItemJournalLine."DOPSWHS LP No." := CountLine."LP No.";
                     ItemJournalLine.Insert(true);
@@ -1556,7 +1564,7 @@ codeunit 72050 "DOPSWHS Count Mgmt"
         // raf taşıyamaz: fark yalnız ayarlama rafına (ADJ) yazılır, sayılan raf
         // düzelmez. BC standardı: önce Ambar Fiziksel Sayım Günlüğü register
         // (raf ± / ADJ ∓), ardından Item Journal ile ADJ bakiyesi ILE'ye taşınır.
-        RegisterDirectedPhysInventory(SheetNo, CountHeader, CountDocumentNo);
+        RegisterDirectedPhysInventory(SheetNo, CountHeader, CountDocumentNo, CalculatedQty);
 
         ItemJournalLine.Reset();
         ItemJournalLine.SetRange("Journal Template Name", 'PHYS. INV.');
@@ -1877,7 +1885,84 @@ codeunit 72050 "DOPSWHS Count Mgmt"
     /// orada Item Journal raf kodunu doğrudan taşır.
     /// </summary>
 
-    local procedure RegisterDirectedPhysInventory(SheetNo: Code[20]; CountHeader: Record "DOPSWHS Count Sheet Header"; CountDocumentNo: Code[20])
+    /// <summary>
+    /// BADE (1 Eki 2026): an LP line's "System Qty" is the LP quantity. When LPs
+    /// claim more than BC holds in the bin (moves or production picks posted in BC
+    /// without an LP), posting the variance against the LP quantity would take the
+    /// LP surplus out of BC stock a second time. Per bin/item/variant/unit/lot/serial,
+    /// the part of the sheet's system total above the real bin balance is removed
+    /// from the LP lines' calculated quantity, so BC is adjusted to the count from
+    /// its own balance. LP contents still follow the winning counts afterwards.
+    /// </summary>
+    local procedure BuildPostingCalculatedQty(SheetNo: Code[20]; LocationCode: Code[10]; var CalculatedQty: Dictionary of [Integer, Decimal])
+    var
+        CountLine: Record "DOPSWHS Count Sheet Line";
+        GroupLine: Record "DOPSWHS Count Sheet Line";
+        WarehouseEntry: Record "Warehouse Entry";
+        DoneGroups: Dictionary of [Text, Boolean];
+        GroupKey: Text;
+        SystemTotal: Decimal;
+        Excess: Decimal;
+        Cut: Decimal;
+    begin
+        Clear(CalculatedQty);
+        CountLine.SetRange("Sheet No.", SheetNo);
+        if CountLine.FindSet() then
+            repeat
+                CalculatedQty.Set(CountLine."Line No.", CountLine."System Qty");
+            until CountLine.Next() = 0;
+
+        CountLine.SetFilter("LP No.", '<>%1', '');
+        CountLine.SetFilter("Bin Code", '<>%1', '');
+        CountLine.SetFilter("Unit of Measure Code", '<>%1', '');
+        if CountLine.FindSet() then
+            repeat
+                GroupKey := TrackingAllocationKeyFor(
+                    CountLine."Item No.", CountLine."Variant Code", CountLine."Bin Code", CountLine."Unit of Measure Code",
+                    CountLine."Lot No.", CountLine."Serial No.");
+                if not DoneGroups.ContainsKey(GroupKey) then begin
+                    DoneGroups.Add(GroupKey, true);
+                    GroupLine.Reset();
+                    GroupLine.SetRange("Sheet No.", SheetNo);
+                    GroupLine.SetRange("Item No.", CountLine."Item No.");
+                    GroupLine.SetRange("Variant Code", CountLine."Variant Code");
+                    GroupLine.SetRange("Bin Code", CountLine."Bin Code");
+                    GroupLine.SetRange("Unit of Measure Code", CountLine."Unit of Measure Code");
+                    GroupLine.SetRange("Lot No.", CountLine."Lot No.");
+                    GroupLine.SetRange("Serial No.", CountLine."Serial No.");
+                    SystemTotal := 0;
+                    if GroupLine.FindSet() then
+                        repeat
+                            SystemTotal += CalculatedQty.Get(GroupLine."Line No.");
+                        until GroupLine.Next() = 0;
+
+                    WarehouseEntry.Reset();
+                    WarehouseEntry.SetRange("Location Code", LocationCode);
+                    WarehouseEntry.SetRange("Bin Code", CountLine."Bin Code");
+                    WarehouseEntry.SetRange("Item No.", CountLine."Item No.");
+                    WarehouseEntry.SetRange("Variant Code", CountLine."Variant Code");
+                    WarehouseEntry.SetRange("Unit of Measure Code", CountLine."Unit of Measure Code");
+                    WarehouseEntry.SetRange("Lot No.", CountLine."Lot No.");
+                    WarehouseEntry.SetRange("Serial No.", CountLine."Serial No.");
+                    WarehouseEntry.CalcSums(Quantity);
+                    Excess := SystemTotal - WarehouseEntry.Quantity;
+
+                    GroupLine.SetFilter("LP No.", '<>%1', '');
+                    if (Excess > 0) and GroupLine.FindSet() then
+                        repeat
+                            Cut := CalculatedQty.Get(GroupLine."Line No.");
+                            if Cut > Excess then
+                                Cut := Excess;
+                            if Cut > 0 then begin
+                                CalculatedQty.Set(GroupLine."Line No.", CalculatedQty.Get(GroupLine."Line No.") - Cut);
+                                Excess -= Cut;
+                            end;
+                        until (GroupLine.Next() = 0) or (Excess <= 0);
+                end;
+            until CountLine.Next() = 0;
+    end;
+
+    local procedure RegisterDirectedPhysInventory(SheetNo: Code[20]; CountHeader: Record "DOPSWHS Count Sheet Header"; CountDocumentNo: Code[20]; var CalculatedQty: Dictionary of [Integer, Decimal])
     var
         Location: Record Location;
         CountLine: Record "DOPSWHS Count Sheet Line";
@@ -1889,6 +1974,7 @@ codeunit 72050 "DOPSWHS Count Mgmt"
         WhseJnlRegisterBatch: Codeunit "Whse. Jnl.-Register Batch";
         UomMgt: Codeunit "Unit of Measure Management";
         WinningQty: Decimal;
+        CalcQty: Decimal;
         LineNo: Integer;
         Created: Boolean;
     begin
@@ -1923,7 +2009,8 @@ codeunit 72050 "DOPSWHS Count Mgmt"
         if CountLine.FindSet() then
             repeat
                 WinningQty := GetWinningQty(CountLine, SheetNo);
-                if (WinningQty <> CountLine."System Qty") and (CountLine."Bin Code" <> '') then begin
+                CalcQty := CalculatedQty.Get(CountLine."Line No.");
+                if (WinningQty <> CalcQty) and (CountLine."Bin Code" <> '') then begin
                     Bin.Get(CountHeader."Location Code", CountLine."Bin Code");
                     LineNo += 10000;
                     WhseJournalLine.Init();
@@ -1951,9 +2038,9 @@ codeunit 72050 "DOPSWHS Count Mgmt"
                     // "Qty. (Calculated) (Base)" alanının OnValidate'i yoktur ve "Qty. (Calculated)"
                     // doğrulaması onu doldurmaz; boş bırakılırsa ambar hareketine fark yerine
                     // sayılan miktarın tamamı taban miktar olarak yazılır (raf bakiyesi bozulur).
-                    WhseJournalLine.Validate("Qty. (Calculated)", CountLine."System Qty");
+                    WhseJournalLine.Validate("Qty. (Calculated)", CalcQty);
                     WhseJournalLine."Qty. (Calculated) (Base)" :=
-                        Round(CountLine."System Qty" * WhseJournalLine."Qty. per Unit of Measure", UomMgt.QtyRndPrecision());
+                        Round(CalcQty * WhseJournalLine."Qty. per Unit of Measure", UomMgt.QtyRndPrecision());
                     if ExpirationDateForLot(CountHeader."Location Code", CountLine."Item No.", CountLine."Variant Code", CountLine."Lot No.", CountLine."Serial No.") <> 0D then
                         WhseJournalLine."Expiration Date" :=
                             ExpirationDateForLot(CountHeader."Location Code", CountLine."Item No.", CountLine."Variant Code", CountLine."Lot No.", CountLine."Serial No.");
@@ -2444,7 +2531,6 @@ codeunit 72050 "DOPSWHS Count Mgmt"
         LPStockInsufficientInBinErr: Label '%1 LP içindeki %2 ürününden %3 adet var; %4 rafındaki kullanılabilir BC stoku %5 adettir.', Comment = '%1 LP, %2 item, %3 LP qty, %4 bin, %5 available';
         LooseLineAlreadyCountedErr: Label '%1 ürününün %2 rafındaki paletsiz sayım satırı daha önce sayılmıştır. %3 LP numarası bu aşamada rafa bağlanamaz; sayım satırlarını yeniden üretin.', Comment = '%1 item, %2 bin, %3 LP';
         TrackedLPExceedsInventoryErr: Label '%1 ürününün %2 rafındaki lot/seri bakiyesinden LP miktarı fazladır (Lot: %3, Seri: %4, fark: %5). LP ve BC izleme kayıtlarını düzeltin.', Comment = '%1 item, %2 bin, %3 lot, %4 serial, %5 excess';
-        TrackingBreakdownExceedsInventoryErr: Label '%1 ürününün %2 rafındaki lot/seri toplamı (%3), kullanılabilir raf stokunu (%4) aşıyor. BC izleme kayıtlarını düzeltin.', Comment = '%1 item, %2 bin, %3 tracked qty, %4 residual qty';
         CounterSlotErr: Label 'Sayıcı slotu 1, 2 veya 3 olmalıdır.';
         CounterAlreadyCompletedErr: Label '%1 sayıcı turu %2 sayım belgesinde kaydedilip kilitlenmiştir.', Comment = '%1 counter slot, %2 sheet no';
         CounterNotCompletedErr: Label '%1 sayıcı turu %2 sayım belgesinde henüz kaydedilmedi.', Comment = '%1 counter slot, %2 sheet no';

@@ -21,7 +21,7 @@ page 72078 "DOPSWHS LP Factbox Bin"
                 }
                 field("Total Quantity"; Rec."Total Quantity") { ApplicationArea = All; Caption = 'Total Quantity'; }
                 field(Status; Rec.Status) { ApplicationArea = All; Caption = 'Status'; }
-                field("Bin Code"; Rec."Bin Code") { ApplicationArea = All; Caption = 'Bin Code'; }
+                field("Bin Code"; Rec."Bin Code") { ApplicationArea = All; Caption = 'Bin Code'; Editable = false; }
                 field("Line Count"; Rec."Line Count") { ApplicationArea = All; Caption = 'Line Count'; }
                 field("LP Template Code"; Rec."LP Template Code") { ApplicationArea = All; Caption = 'Template'; }
             }

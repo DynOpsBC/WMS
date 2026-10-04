@@ -53,9 +53,9 @@ fun LicensePlateModule() {
         scope.launch {
             loading = true; status = "Yükleniyor..."
             val filter = com.dynops.bcwms.ui.buildODataFilter(com.dynops.bcwms.ui.searchClause("no", search))
-            val page = BcApi.getAllPagesWithStandardFallback(context, "licensePlates?\$top=200&\$orderby=no desc&\$select=no,status,locationCode,binCode,templateCode,sscc,lineCount,totalQuantity,plannedQuantity$filter")
+            val page = BcApi.getAllPagesWithStandardFallback(context, "licensePlates?\$orderby=no&\$select=no,status,locationCode,binCode,templateCode,sscc,lineCount,totalQuantity,plannedQuantity$filter")
             loading = false
-            rows = if (page.complete) page.rows else emptyList()
+            rows = if (page.complete) page.rows.sortedWith(compareBy(warehouseBinCodeComparator) { it.optString("no") }) else emptyList()
             // Arama sonuçsuzken "LP kaydı yok" demek yanıltıcıydı: kullanıcı tüm
             // LP'lerin silindiğini sanabiliyordu (UAT lp-01).
             status = when {

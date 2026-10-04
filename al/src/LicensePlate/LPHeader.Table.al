@@ -88,6 +88,7 @@ table 72010 "DOPSWHS LP Header"
     {
         key(PK; "No.") { Clustered = true; }
         key(StatusLocation; Status, "Location Code") { }
+        key(ProdLpRepairScope; "Location Code", "Bin Code", Status) { }
         key(Parent; "Parent LP No.") { }
         key(SSCCKey; SSCC) { }
         key(AssignedDoc; "Assigned Document Type", "Assigned Document No.") { }

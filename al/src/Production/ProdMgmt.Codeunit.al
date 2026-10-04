@@ -7,7 +7,6 @@ codeunit 72048 "DOPSWHS Prod Mgmt"
         ItemJournalLine: Record "Item Journal Line";
         ItemJnlPostBatch: Codeunit "Item Jnl.-Post Batch";
         License: Codeunit "DOPSWHS License Mgmt";
-        ConsumeQty: Decimal;
         ConsumeItemNo: Code[20];
     begin
         License.GuardFeature(Enum::"DOPSWHS License Feature"::Production);
@@ -20,13 +19,21 @@ codeunit 72048 "DOPSWHS Prod Mgmt"
         if ConsumeItemNo <> ProdOrderComponent."Item No." then
             Error('Item %1 does not match production component %2.', ConsumeItemNo, ProdOrderComponent."Item No.");
 
-        ConsumeQty := Qty;
-        if LpNo <> '' then
-            ConsumeQty := ResolveLpQuantity(LpNo, ConsumeItemNo, LotNo, SerialNo);
-        if ConsumeQty <= 0 then
+        if Qty <= 0 then
             Error('Consumption quantity must be greater than zero.');
 
-        CreateConsumptionLine(ProdOrderComponent, ConsumeItemNo, ConsumeQty, LpNo, LotNo, SerialNo, BinCode, ItemJournalLine);
+        // The production pick moves stock to the component bin. For a partial
+        // source LP, that registration already debits the picked amount. Post
+        // only the requested consumption quantity from the component bin.
+        // An LP QR carries no lot: take the tracking from the LP when it is
+        // unambiguous (single lot/serial), as before; the quantity stays Qty.
+        if (LpNo <> '') and (LotNo = '') and (SerialNo = '') then
+            if BinCode <> '' then
+                ResolveLpTracking(LpNo, ConsumeItemNo, BinCode, LotNo, SerialNo)
+            else
+                ResolveLpTracking(LpNo, ConsumeItemNo, ProdOrderComponent."Bin Code", LotNo, SerialNo);
+        CreateConsumptionLine(ProdOrderComponent, ConsumeItemNo, Qty, LpNo, LotNo, SerialNo, BinCode, ItemJournalLine);
+        ValidateProductionConsumptionSource(ItemJournalLine);
         LogTelemetry('AdvWMS.Production.Consumed', ProdOrderComponent."Prod. Order No.");
         // Post Batch (23) avoids the "Do you want to post?" Confirm that codeunit 241 raises (API/mobile-safe).
         ItemJnlPostBatch.Run(ItemJournalLine);
@@ -37,15 +44,18 @@ codeunit 72048 "DOPSWHS Prod Mgmt"
     var
         ProdOrderComponent: Record "Prod. Order Component";
     begin
+        if (ComponentLineNo = 0) and (LpNo = '') then
+            Error('Üretim bileşeni satırını veya LP numarasını seçin.');
         ProdOrderComponent.SetRange(Status, ProdOrderComponent.Status::Released);
         ProdOrderComponent.SetRange("Prod. Order No.", ProdOrderNo);
-        ProdOrderComponent.SetRange("Line No.", ComponentLineNo);
-        if ItemNo <> '' then
-            ProdOrderComponent.SetRange("Item No.", ItemNo);
-        ProdOrderComponent.FindFirst();
-
         if (LpNo <> '') and (ComponentLineNo = 0) then
             FindComponentForLp(ProdOrderNo, ItemNo, LpNo, ProdOrderComponent);
+        if ComponentLineNo <> 0 then begin
+            ProdOrderComponent.SetRange("Line No.", ComponentLineNo);
+            if ItemNo <> '' then
+                ProdOrderComponent.SetRange("Item No.", ItemNo);
+            ProdOrderComponent.FindFirst();
+        end;
 
         Consume(ProdOrderComponent, ItemNo, Qty, LpNo, LotNo, SerialNo, BinCode);
     end;
@@ -416,10 +426,12 @@ codeunit 72048 "DOPSWHS Prod Mgmt"
         if not OtherLP.IsEmpty() then
             Error('%1 çekmesine başka LP ayrılmış. Hazır LP kapsamı mevcut toplamayı değiştiremez.', PickNo);
 
+        TargetBin := '';
         BuildProductionLpAllocation(ProdOrderNo, PickNo, LP, TempTake);
         TempTake.Reset();
         TempTake.SetFilter("Qty. to Handle (Base)", '>0');
-        TempTake.FindSet();
+        if not TempTake.FindSet() then
+            Error('%1 LP''si için %2 üretim çekmesinde hazırlanacak Al satırı bulunamadı.', LP."No.", PickNo);
         repeat
             OriginalTake.Get(TempTake."Activity Type", TempTake."No.", TempTake."Line No.");
             PickMgmt.FindProductionPlaceLine(OriginalTake, PlaceLine);
@@ -635,6 +647,9 @@ codeunit 72048 "DOPSWHS Prod Mgmt"
         ItemJournalLine.Validate("Order Line No.", ProdOrderComponent."Prod. Order Line No.");
         ItemJournalLine.Validate("Item No.", ItemNo);
         ItemJournalLine.Validate("Prod. Order Comp. Line No.", ProdOrderComponent."Line No.");
+        ItemJournalLine.Validate("Variant Code", ProdOrderComponent."Variant Code");
+        if (LpNo <> '') and (ProdOrderComponent."Unit of Measure Code" <> '') then
+            ItemJournalLine.Validate("Unit of Measure Code", ProdOrderComponent."Unit of Measure Code");
         ItemJournalLine.Validate("Location Code", ProdOrderComponent."Location Code");
         if BinCode <> '' then
             ItemJournalLine.Validate("Bin Code", BinCode)
@@ -642,10 +657,82 @@ codeunit 72048 "DOPSWHS Prod Mgmt"
             if ProdOrderComponent."Bin Code" <> '' then
                 ItemJournalLine.Validate("Bin Code", ProdOrderComponent."Bin Code");
         ItemJournalLine.Validate(Quantity, Qty);
+        ItemJournalLine."DOPSWHS LP No." := LpNo;
         ItemJournalLine."Package No." := LpNo;
         ItemJournalLine."Lot No." := LotNo;
         ItemJournalLine."Serial No." := SerialNo;
         ItemJournalLine.Insert(true);
+    end;
+
+    local procedure ResolveLpTracking(LpNo: Code[20]; ItemNo: Code[20]; ConsumptionBin: Code[20]; var LotNo: Code[50]; var SerialNo: Code[50])
+    var
+        LP: Record "DOPSWHS LP Header";
+        LPLine: Record "DOPSWHS LP Line";
+        FirstLot: Code[50];
+        FirstSerial: Code[50];
+        Lines: Integer;
+    begin
+        // Only an LP standing in the consumption bin: a source LP left in the
+        // pick bin says nothing about the lot of the loose stock consumed here.
+        if not LP.Get(LpNo) then
+            exit;
+        if (ConsumptionBin <> '') and (LP."Bin Code" <> ConsumptionBin) then
+            exit;
+        LPLine.SetRange("LP No.", LpNo);
+        LPLine.SetRange("Item No.", ItemNo);
+        LPLine.SetFilter(Quantity, '>0');
+        if LPLine.FindSet() then
+            repeat
+                Lines += 1;
+                if Lines = 1 then begin
+                    FirstLot := LPLine."Lot No.";
+                    FirstSerial := LPLine."Serial No.";
+                end else
+                    if LPLine."Lot No." <> FirstLot then
+                        exit; // several lots: the operator must choose the lot
+            until LPLine.Next() = 0;
+        if Lines = 0 then
+            exit;
+        LotNo := FirstLot;
+        if Lines = 1 then
+            SerialNo := FirstSerial;
+    end;
+
+    procedure ValidateProductionConsumptionSource(ItemJournalLine: Record "Item Journal Line")
+    var
+        LP: Record "DOPSWHS LP Header";
+        StageLedger: Record "DOPSWHS LP Movement Ledger";
+    begin
+        if ItemJournalLine."Entry Type" <> ItemJournalLine."Entry Type"::Consumption then
+            exit;
+        if ItemJournalLine."DOPSWHS LP No." <> '' then begin
+            if not LP.Get(ItemJournalLine."DOPSWHS LP No.") then
+                Error('%1 LP numarası bulunamadı.', ItemJournalLine."DOPSWHS LP No.");
+            LP.TestField("Location Code", ItemJournalLine."Location Code");
+            if ItemJournalLine."Bin Code" = '' then
+                Error('%1 LP numarasından üretim sarfiyatı için depo gözü zorunlu.', LP."No.");
+            // An intact LP in the consumption bin is debited by the item
+            // ledger posting event. A partial source LP was already debited
+            // during the pick; only loose stock may now be consumed here.
+            if LP."Bin Code" = ItemJournalLine."Bin Code" then begin
+                if (LP.Status <> LP.Status::Assigned) or
+                   (LP."Assigned Document Type" <> LP."Assigned Document Type"::ProdConsumption) or
+                   (LP."Assigned Document No." <> ItemJournalLine."Order No.")
+                then
+                    Error('%1 LP numarası %2 üretim emrine bu gözde atanmış değil.', LP."No.", ItemJournalLine."Order No.");
+                StageLedger.SetRange("LP No.", LP."No.");
+                StageLedger.SetRange(Action, StageLedger.Action::Assigned);
+                StageLedger.SetFilter("Related Document", 'PROD:%1/PICK:*', ItemJournalLine."Order No.");
+                if StageLedger.IsEmpty() then
+                    Error('%1 LP numarasının %2 üretim emrine kayıtlı çekiş izi bulunamadı; sarfiyat kaydedilmedi.',
+                        LP."No.", ItemJournalLine."Order No.");
+                exit;
+            end;
+        end;
+        // BADE (28 Eyl 2026): consumption without an LP number (BC production
+        // journal, automatic/backward flushing) is never blocked. LPs of this
+        // production order in the consumption bin are debited after the
+        // warehouse entry by "DOPSWHS LP Prod Consumption".
     end;
 
     local procedure CreateOutputLine(var ProdOrderRoutingLine: Record "Prod. Order Routing Line"; OutputQty: Decimal; ScrapQty: Decimal; Runtime: Decimal; BinCode: Code[20]; var ItemJournalLine: Record "Item Journal Line")
@@ -698,26 +785,6 @@ codeunit 72048 "DOPSWHS Prod Mgmt"
         LPMgt.AddLine(LP, ProdOrderLine."Item No.", ProdOrderLine."Unit of Measure Code", OutputQty, '', '', 0D);
         LPMgt.Stop(LP, false);
         exit(LP."No.");
-    end;
-
-    local procedure ResolveLpQuantity(LpNo: Code[20]; ItemNo: Code[20]; var LotNo: Code[50]; var SerialNo: Code[50]): Decimal
-    var
-        LPLine: Record "DOPSWHS LP Line";
-        Qty: Decimal;
-    begin
-        LPLine.SetRange("LP No.", LpNo);
-        LPLine.SetRange("Item No.", ItemNo);
-        if LPLine.FindSet() then
-            repeat
-                Qty += LPLine.Quantity;
-                if LotNo = '' then
-                    LotNo := LPLine."Lot No.";
-                if SerialNo = '' then
-                    SerialNo := LPLine."Serial No.";
-            until LPLine.Next() = 0;
-        if Qty = 0 then
-            Error('LP %1 does not contain item %2.', LpNo, ItemNo);
-        exit(Qty);
     end;
 
     local procedure EnsureItemJournalBatch(var TemplateName: Code[10]; var BatchName: Code[10])

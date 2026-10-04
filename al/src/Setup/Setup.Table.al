@@ -330,6 +330,42 @@ table 72000 "DOPSWHS Setup"
             DataClassification = CustomerContent;
             InitValue = false;
         }
+        field(530; "Prod. LP Consume Sync"; Boolean)
+        {
+            // BADE (24 Eyl 2026): opt-in. On = after production consumption the
+            // LP named on the journal line or the LPs delivered to the same
+            // order (same bin, item, lot) are reduced (codeunit 72409).
+            Caption = 'Prod. LP Consume Sync';
+            DataClassification = CustomerContent;
+            InitValue = false;
+            ObsoleteState = Pending;
+            ObsoleteReason = 'Not used. The A.URETIM mismatch came from manual LP bin edits, not from consumption.';
+            ObsoleteTag = '1.14.1.95';
+        }
+        field(540; "Prod. LP Sync Bin Filter"; Text[250])
+        {
+            // BADE (24 Eyl 2026): "Move stock to LP bin" only handles LPs whose
+            // bin matches this filter, e.g. A.URETIM. Empty = none (codeunit 72409).
+            Caption = 'Prod. LP Sync Bin Filter';
+            DataClassification = CustomerContent;
+
+            trigger OnValidate()
+            var
+                TempBin: Record Bin temporary;
+            begin
+                // Reject an invalid filter here, never during posting.
+                if "Prod. LP Sync Bin Filter" <> '' then
+                    TempBin.SetFilter(Code, "Prod. LP Sync Bin Filter");
+            end;
+        }
+        field(550; "Prod. LP Sync Location"; Code[10])
+        {
+            // BADE (24 Eyl 2026): location of "Prod. LP Sync Bin Filter". A bin
+            // code is only unique within a location. Empty = no LP is reduced.
+            Caption = 'Prod. LP Sync Location';
+            DataClassification = CustomerContent;
+            TableRelation = Location;
+        }
         field(500; "Count Relocates Found Stock"; Boolean)
         {
             // BADE (16–17 Eyl 2026, Merve): sayımda bir rafta BC'nin bilmediği

@@ -80,6 +80,18 @@ page 72061 "DOPSWHS Setup"
                     ApplicationArea = All;
                     ToolTip = 'Ayarlanırsa, mal kabulde seri boş bırakılınca otomatik seri numarası üretilir. Boş = elle giriş.';
                 }
+                field("Prod. LP Sync Location"; Rec."Prod. LP Sync Location")
+                {
+                    ApplicationArea = All;
+                    Caption = 'LP düzeltme lokasyonu';
+                    ToolTip = 'LP düzeltme gözlerinin bulunduğu lokasyon (örnek: MERKEZDEPO). "Seçili LP''lerin Stoğunu LP Gözüne Taşı" yalnız bu lokasyondaki LP''leri işler. Boş bırakılırsa hiçbir LP işlenmez.';
+                }
+                field("Prod. LP Sync Bin Filter"; Rec."Prod. LP Sync Bin Filter")
+                {
+                    ApplicationArea = All;
+                    Caption = 'LP düzeltme gözleri';
+                    ToolTip = 'Düzeltilecek LP''lerin gözü (filtre; örnek: A.URETIM). "Seçili LP''lerin Stoğunu LP Gözüne Taşı" yalnız gözü bu filtreye uyan LP''leri işler. Boş bırakılırsa hiçbir LP işlenmez.';
+                }
                 field("Count Relocates Found Stock"; Rec."Count Relocates Found Stock")
                 {
                     ApplicationArea = All;

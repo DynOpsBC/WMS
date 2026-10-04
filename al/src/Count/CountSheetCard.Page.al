@@ -104,6 +104,11 @@ page 72075 "DOPSWHS Count Sheet Card"
                 begin
                     CountMgmt.ValidateBinReview(Rec."No.");
                     CountMgmt.EvaluateVariance(Rec."No.");
+                    // BADE (2 Eki 2026): EvaluateVariance satırlara fark/tekrar sayım
+                    // bayrağı yazar; yazma işlemi açıkken Page.RunModal yasak
+                    // ("Form.RunModal yazma işlemlerinde izin verilmez"). Farklar
+                    // yalnız analitik sonuçtur, inceleme penceresinden önce kaydedilir.
+                    Commit();
                     CountLine.SetRange("Sheet No.", Rec."No.");
                     Page.RunModal(Page::"DOPSWHS Count Bin Review", CountLine);
                     if not Confirm('İncelediğiniz raf farkları stoklara işlensin mi?', false) then

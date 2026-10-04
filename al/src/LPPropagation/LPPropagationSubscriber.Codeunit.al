@@ -665,11 +665,30 @@ codeunit 72428 "DOPSWHS LP Propagation"
     // (2) BC integration event subscribers
     // =========================================================================
 
+    [EventSubscriber(ObjectType::Codeunit, Codeunit::"Item Jnl.-Post Line", 'OnBeforePostItemJnlLine', '', false, false)]
+    local procedure CheckProductionConsumptionLp(var ItemJournalLine: Record "Item Journal Line")
+    var
+        ProdMgmt: Codeunit "DOPSWHS Prod Mgmt";
+    begin
+        if ItemJournalLine."Entry Type" <> ItemJournalLine."Entry Type"::Consumption then
+            exit;
+        if (ItemJournalLine."DOPSWHS LP No." <> '') and
+           ((ItemJournalLine."Order Type" <> ItemJournalLine."Order Type"::Production) or
+            (ItemJournalLine."Order No." = ''))
+        then
+            Error('LP numaralı sarfiyat için üretim emri zorunlu.');
+        if ItemJournalLine."Order Type" <> ItemJournalLine."Order Type"::Production then
+            exit;
+        ProdMgmt.ValidateProductionConsumptionSource(ItemJournalLine);
+    end;
+
     [EventSubscriber(ObjectType::Codeunit, Codeunit::"Item Jnl.-Post Line", 'OnAfterInsertItemLedgEntry', '', false, false)]
     local procedure CarryLpOntoItemLedgEntry(var ItemLedgerEntry: Record "Item Ledger Entry"; ItemJournalLine: Record "Item Journal Line")
     var
         Lp: Code[20];
+        LPManagement: Codeunit "DOPSWHS LP Management";
     begin
+        LPManagement.DebitPostedProductionConsumptionLp(ItemJournalLine, ItemLedgerEntry);
         if ItemLedgerEntry."DOPSWHS LP No." <> '' then
             exit;
         // Warehouse receipt posting must remain a standard BC inventory
@@ -680,6 +699,11 @@ codeunit 72428 "DOPSWHS LP Propagation"
         if ItemLedgerEntry."Entry Type" = ItemLedgerEntry."Entry Type"::Purchase then
             exit;
         Lp := ItemJournalLine."DOPSWHS LP No.";
+        // A production order may have several LPs for the same item, or use
+        // loose stock after a partial pick. An open pick line is not proof of
+        // which LP the posted consumption actually used.
+        if (Lp = '') and (ItemLedgerEntry."Entry Type" = ItemLedgerEntry."Entry Type"::Consumption) then
+            exit;
         if Lp = '' then
             Lp := ResolveLpForItemJnlLine(ItemJournalLine);
         if Lp = '' then

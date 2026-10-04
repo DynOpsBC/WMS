@@ -19,6 +19,8 @@ import com.dynops.bcwms.BcApi
 import com.dynops.bcwms.scanner.BarcodeIntentResolver
 import com.dynops.bcwms.scanner.ScanField
 import com.dynops.bcwms.ui.*
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.launch
 import org.json.JSONObject
 
@@ -327,6 +329,7 @@ fun BinInquiryModule() {
     var bin by remember { mutableStateOf<JSONObject?>(null) }
     var contents by remember { mutableStateOf<List<JSONObject>>(emptyList()) }
     var lps by remember { mutableStateOf<List<JSONObject>>(emptyList()) }
+    var selectedLpNos by remember { mutableStateOf<Set<String>>(emptySet()) }
     var whseEntries by remember { mutableStateOf<List<JSONObject>>(emptyList()) }
     var status by remember { mutableStateOf("Lokasyon + Bin girin.") }
     var loading by remember { mutableStateOf(false) }
@@ -335,16 +338,20 @@ fun BinInquiryModule() {
         if (location.trim().isBlank() || binCode.trim().isBlank()) return
         scope.launch {
             loading = true; status = "Yükleniyor..."
-            bin = null; contents = emptyList(); lps = emptyList(); whseEntries = emptyList()
+            bin = null; contents = emptyList(); lps = emptyList(); selectedLpNos = emptySet(); whseEntries = emptyList()
             val loc = location.trim(); val code = binCode.trim()
             val b = BcApi.get(context, "bins?\$filter=locationCode eq '$loc' and code eq '$code'&\$top=1")
             if (b.ok) bin = BcApi.parseValueArray(b.body).firstOrNull()
             // PDF Bin Inquiry §2 critical fix: now also fetch the real item
             // quantities from the new BinContent API page (T7302 Bin Content).
-            val contentsPage = BcApi.getAllPages(context, "binContents?\$filter=locationCode eq '$loc' and binCode eq '$code'&\$top=100")
-            if (contentsPage.complete) contents = contentsPage.rows.filter { it.optDouble("quantity", 0.0) != 0.0 }
-            val lpPage = BcApi.getAllPages(context, "licensePlates?\$filter=locationCode eq '$loc' and binCode eq '$code'&\$top=50")
-            if (lpPage.complete) lps = lpPage.rows.filter { activeLicensePlateStatus(it.optString("status")) }
+            val contentsPage = BcApi.getAllPages(context, "binContents?\$filter=locationCode eq '$loc' and binCode eq '$code'")
+            if (contentsPage.complete) contents = contentsPage.rows
+                .filter { it.optDouble("quantity", 0.0) != 0.0 }
+                .sortedWith(compareBy(warehouseBinCodeComparator) { it.optString("itemNo") })
+            val lpPage = BcApi.getAllPages(context, "licensePlates?\$filter=locationCode eq '$loc' and binCode eq '$code'&\$orderby=no")
+            if (lpPage.complete) lps = lpPage.rows
+                .filter { activeLicensePlateStatus(it.optString("status")) }
+                .sortedWith(compareBy(warehouseBinCodeComparator) { it.optString("no") })
             // Whse Entries (raf hareket geçmişi) — WI pariteti.
             val we = BcApi.get(context, "warehouseEntries?\$filter=locationCode eq '$loc' and binCode eq '$code'&\$orderby=registeringDate desc,entryNo desc&\$top=20")
             if (we.ok) whseEntries = BcApi.parseValueArray(we.body)
@@ -373,6 +380,42 @@ fun BinInquiryModule() {
             val r = BcApi.boundAction(context, "bins", key, "printLabel", payload)
             status = if (r.ok) ("🟢 Bin etiketi kuyruğa alındı ($loc/$code)." + if (choice.warning.isBlank()) "" else " ${choice.warning}")
                 else "🔴 Yazdırma: ${BcApi.errorMessage(r.body)} (HTTP ${r.httpCode})"
+        }
+    }
+
+    fun printSelectedLpLabels() {
+        if (loading || selectedLpNos.isEmpty()) return
+        val requested = lps.map { it.optString("no") }.filter { it in selectedLpNos }
+        if (requested.isEmpty()) return
+        scope.launch {
+            loading = true
+            val failures = linkedMapOf<String, String>()
+            val labelPrinter = getDefaultPrinter(context, PRINTER_USAGE_LABEL)
+            val documentPrinter = getDefaultPrinter(context, PRINTER_USAGE_DOCUMENT)
+            var completed = 0
+            for (batch in bulkLpPrintBatches(requested)) {
+                status = "LP etiketleri kuyruğa alınıyor: $completed/${requested.size}"
+                val results = batch.map { no ->
+                    val lp = lps.first { it.optString("no") == no }
+                    val route = bulkLpPrintRoute(lp.optInt("lineCount"), labelPrinter, documentPrinter)
+                    async {
+                        val payload = JSONObject().apply {
+                            put("printerId", route.printerCode)
+                            put("copies", 1)
+                        }.toString()
+                        val response = BcApi.boundActionLongRunning(context, "licensePlates", no, route.action, payload)
+                        no to if (response.ok) null else QcErrorParser.friendlyStatus(
+                            BcApi.errorMessage(response.body), response.httpCode,
+                        ).removePrefix("HATA: ")
+                    }
+                }.awaitAll()
+                results.forEach { (no, error) -> if (error != null) failures[no] = error }
+                completed += batch.size
+            }
+            selectedLpNos = failures.keys.toSet()
+            loading = false
+            status = if (failures.isEmpty()) "TAMAM: ${requested.size} LP etiketi yazdırma kuyruğuna alındı."
+                else "UYARI: ${failures.size} LP etiketi yazdırılamadı. ${failures.entries.first().key}: ${failures.values.first()}"
         }
     }
 
@@ -456,20 +499,44 @@ fun BinInquiryModule() {
                 item { Spacer(Modifier.height(8.dp)) }
             }
             item {
-                Text("LP'ler (${lps.size})", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface, modifier = Modifier.padding(vertical = 4.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("LP'ler (${lps.size})", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface, modifier = Modifier.weight(1f))
+                    if (lps.isNotEmpty()) TextButton(
+                        onClick = {
+                            selectedLpNos = if (selectedLpNos.size == lps.size) emptySet()
+                                else lps.map { it.optString("no") }.toSet()
+                        },
+                        enabled = !loading,
+                    ) { Text(if (selectedLpNos.size == lps.size) "Seçimi Kaldır" else "Tümünü Seç") }
+                }
+                if (selectedLpNos.isNotEmpty()) Button(
+                    onClick = { printSelectedLpLabels() },
+                    enabled = !loading,
+                    modifier = Modifier.fillMaxWidth(),
+                ) { Text("Seçilen LP Etiketlerini Bas (${selectedLpNos.size})") }
             }
             items(lps) { lp ->
                 Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp)) {
-                    Column(Modifier.padding(12.dp)) {
-                        Text("${lp.optString("no")} · ${lpStatusLabel(lp.optString("status"))}", fontWeight = FontWeight.Medium, color = MaterialTheme.colorScheme.onSurface)
-                        Text("${lp.optString("templateCode")}${lp.optString("sscc").takeIf { it.isNotBlank() }?.let { " · SSCC $it" } ?: ""}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        if (lp.has("lineCount") || lp.has("totalQuantity")) {
-                            Text(
-                                "LP içeriği: ${fmtItemQty(lp.optDouble("totalQuantity"))} adet · ${lp.optInt("lineCount")} satır",
-                                style = MaterialTheme.typography.bodySmall,
-                                fontWeight = FontWeight.SemiBold,
-                                color = MaterialTheme.colorScheme.primary,
-                            )
+                    Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                        val lpNo = lp.optString("no")
+                        Checkbox(
+                            checked = lpNo in selectedLpNos,
+                            onCheckedChange = { checked ->
+                                selectedLpNos = if (checked) selectedLpNos + lpNo else selectedLpNos - lpNo
+                            },
+                            enabled = !loading,
+                        )
+                        Column {
+                            Text("$lpNo · ${lpStatusLabel(lp.optString("status"))}", fontWeight = FontWeight.Medium, color = MaterialTheme.colorScheme.onSurface)
+                            Text("${lp.optString("templateCode")}${lp.optString("sscc").takeIf { it.isNotBlank() }?.let { " · SSCC $it" } ?: ""}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            if (lp.has("lineCount") || lp.has("totalQuantity")) {
+                                Text(
+                                    "LP içeriği: ${fmtItemQty(lp.optDouble("totalQuantity"))} adet · ${lp.optInt("lineCount")} satır",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = MaterialTheme.colorScheme.primary,
+                                )
+                            }
                         }
                     }
                 }

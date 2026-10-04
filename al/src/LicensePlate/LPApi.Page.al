@@ -82,9 +82,21 @@ page 72088 "DOPSWHS LP API"
     end;
 
     trigger OnModifyRecord(): Boolean
+    var
+        StoredLP: Record "DOPSWHS LP Header";
+        LPLine: Record "DOPSWHS LP Line";
     begin
         if Rec."Pending Receipt No." <> '' then
             Error('%1 LP''si %2 mal kabulünü bekliyor. Değişiklikleri Mal Kabul ekranından yapın.', Rec."No.", Rec."Pending Receipt No.");
+        // BADE (24 Eyl 2026): a PATCH of binCode/locationCode moves no stock.
+        // For an LP with content only the recorded LP move actions may change
+        // its bin; the first bin of an empty LP can still be set here.
+        if StoredLP.Get(Rec."No.") then
+            if (StoredLP."Bin Code" <> Rec."Bin Code") or (StoredLP."Location Code" <> Rec."Location Code") then begin
+                LPLine.SetRange("LP No.", Rec."No.");
+                if not LPLine.IsEmpty() then
+                    Error('%1 LP''sinin içinde ürün var. Gözü doğrudan değiştirilemez; LP taşıma işlemini (terminal ad-hoc taşıma) kullanın.', Rec."No.");
+            end;
         exit(true);
     end;
 

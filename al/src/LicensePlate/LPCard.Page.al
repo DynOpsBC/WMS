@@ -13,8 +13,8 @@ page 72069 "DOPSWHS LP Card"
             {
                 field("No."; Rec."No.") { ApplicationArea = All; }
                 field(Status; Rec.Status) { ApplicationArea = All; }
-                field("Location Code"; Rec."Location Code") { ApplicationArea = All; }
-                field("Bin Code"; Rec."Bin Code") { ApplicationArea = All; }
+                field("Location Code"; Rec."Location Code") { ApplicationArea = All; Editable = not HasContent; ToolTip = 'İçinde ürün olan LP''nin lokasyonu yalnız kayıtlı LP taşıma işlemiyle değişir.'; }
+                field("Bin Code"; Rec."Bin Code") { ApplicationArea = All; Editable = not HasContent; ToolTip = 'İçinde ürün olan LP''nin gözü yalnız kayıtlı LP taşıma işlemiyle (terminal ad-hoc taşıma) değişir; burada elle değiştirmek stoğu taşımaz.'; }
                 field("Parent LP No."; Rec."Parent LP No.") { ApplicationArea = All; }
                 field("LP Template Code"; Rec."LP Template Code") { ApplicationArea = All; }
                 field(SSCC; Rec.SSCC) { ApplicationArea = All; }
@@ -64,6 +64,44 @@ page 72069 "DOPSWHS LP Card"
     {
         area(Processing)
         {
+            action(RepairHistoricalProductionPick)
+            {
+                ApplicationArea = All;
+                AccessByPermission = codeunit "DOPSWHS LP Management" = X;
+                Caption = 'Eski Üretim Çekmesini Onar';
+                ToolTip = 'Kayıtlı çekmeyi bu LP ile eşleştirir. Kaynak ve hedef göz miktarları kesin eşleşirse eksik LP düşümünü ve gerekliyse geri taşınmış stoku düzeltir.';
+                Image = Entries;
+
+                trigger OnAction()
+                var
+                    RegisteredTake: Record "Registered Whse. Activity Line";
+                    TakeLookup: Page "DOPSWHS Prod Pick Repair Lines";
+                    LPMgt: Codeunit "DOPSWHS LP Management";
+                    Preview: Text;
+                    Result: Text;
+                begin
+                    Rec.TestField("Location Code");
+                    Rec.TestField("Bin Code");
+                    RegisteredTake.SetRange("Activity Type", RegisteredTake."Activity Type"::Pick);
+                    RegisteredTake.SetRange("Action Type", RegisteredTake."Action Type"::Take);
+                    RegisteredTake.SetRange("Source Type", Database::"Prod. Order Component");
+                    RegisteredTake.SetRange("Location Code", Rec."Location Code");
+                    RegisteredTake.SetRange("Bin Code", Rec."Bin Code");
+                    TakeLookup.SetTableView(RegisteredTake);
+                    TakeLookup.LookupMode(true);
+                    if TakeLookup.RunModal() <> Action::LookupOK then
+                        exit;
+                    TakeLookup.GetRecord(RegisteredTake);
+                    Preview := LPMgt.RepairHistoricalProductionPickLp(
+                        Rec."No.", RegisteredTake."No.", RegisteredTake."Line No.", false);
+                    if not Confirm('%1. Bu kayıtlı çekme için onarım uygulansın mı?', false, Preview) then
+                        exit;
+                    Result := LPMgt.RepairHistoricalProductionPickLp(
+                        Rec."No.", RegisteredTake."No.", RegisteredTake."Line No.", true);
+                    Message('%1', Result);
+                    CurrPage.Update(false);
+                end;
+            }
             action(PrintMteTerminalPath)
             {
                 // BADE 16 Eyl 2026: the terminal masks BC errors behind a REF
@@ -95,4 +133,18 @@ page 72069 "DOPSWHS LP Card"
             }
         }
     }
+
+    trigger OnAfterGetRecord()
+    var
+        LPLine: Record "DOPSWHS LP Line";
+    begin
+        // BADE (24 Eyl 2026): changing the bin of an LP with content here moved
+        // no stock (LP showed A.URETIM, stock stayed in the old bin). Only an
+        // empty LP may get its first bin on the card.
+        LPLine.SetRange("LP No.", Rec."No.");
+        HasContent := not LPLine.IsEmpty();
+    end;
+
+    var
+        HasContent: Boolean;
 }

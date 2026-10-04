@@ -1,6 +1,8 @@
 codeunit 72402 "DOPSWHS Bin LP Index"
 {
-    Permissions = tabledata "Bin Content" = rim;
+    Permissions = tabledata "Bin Content" = rim,
+        tabledata "DOPSWHS LP Header" = r,
+        tabledata "DOPSWHS LP Line" = r;
 
     // Bin Contents is based on Bin Content, so an LP item without a matching
     // record cannot appear in its main grid. Add only the missing bin/item/UOM
