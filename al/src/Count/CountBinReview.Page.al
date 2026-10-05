@@ -20,6 +20,11 @@ page 72060 "DOPSWHS Count Bin Review"
                 field("Unit of Measure Code"; Rec."Unit of Measure Code") { ApplicationArea = All; }
                 field("Bin Code"; Rec."Bin Code") { ApplicationArea = All; }
                 field("LP No."; Rec."LP No.") { ApplicationArea = All; }
+                field("Found From Bin"; Rec."Found From Bin") { ApplicationArea = All; ToolTip = 'LP farklı rafta sayıldığında sistemde kayıtlı olan raf. Ad-hoc sonrasında da ilk sayımın kaydı korunur.'; }
+                field("Found LP Qty"; Rec."Found LP Qty") { ApplicationArea = All; }
+                field(CurrentLPLocation; CurrentLPLocation) { Caption = 'Güncel LP Konumu'; ApplicationArea = All; }
+                field(CurrentLPBin; CurrentLPBin) { Caption = 'Güncel LP Rafı'; ApplicationArea = All; }
+                field(BinCorrectionDone; BinCorrectionDone) { Caption = 'LP Bulunan Rafta'; ApplicationArea = All; }
                 field("System Qty"; Rec."System Qty") { ApplicationArea = All; }
                 field("Counted Qty 1"; Rec."Counted Qty 1") { ApplicationArea = All; }
                 field("Counted Qty 2"; Rec."Counted Qty 2") { ApplicationArea = All; }
@@ -34,7 +39,18 @@ page 72060 "DOPSWHS Count Bin Review"
     trigger OnAfterGetRecord()
     var
         Line: Record "DOPSWHS Count Sheet Line";
+        LP: Record "DOPSWHS LP Header";
+        Header: Record "DOPSWHS Count Sheet Header";
     begin
+        Clear(CurrentLPBin);
+        Clear(CurrentLPLocation);
+        BinCorrectionDone := false;
+        if (Rec."Found From Bin" <> '') and LP.Get(Rec."LP No.") then begin
+            CurrentLPBin := LP."Bin Code";
+            CurrentLPLocation := LP."Location Code";
+            if Header.Get(Rec."Sheet No.") then
+                BinCorrectionDone := (CurrentLPBin = Rec."Bin Code") and (CurrentLPLocation = Header."Location Code");
+        end;
         Line.SetRange("Sheet No.", Rec."Sheet No.");
         Line.SetRange("Item No.", Rec."Item No.");
         Line.SetRange("Variant Code", Rec."Variant Code");
@@ -47,4 +63,7 @@ page 72060 "DOPSWHS Count Bin Review"
 
     var
         NetVariance: Decimal;
+        CurrentLPBin: Code[20];
+        CurrentLPLocation: Code[10];
+        BinCorrectionDone: Boolean;
 }

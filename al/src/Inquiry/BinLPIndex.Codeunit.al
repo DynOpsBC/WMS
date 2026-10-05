@@ -94,6 +94,9 @@ codeunit 72402 "DOPSWHS Bin LP Index"
     [EventSubscriber(ObjectType::Table, Database::"DOPSWHS LP Header", 'OnAfterInsertEvent', '', false, false)]
     local procedure AfterLPHeaderInsert(var Rec: Record "DOPSWHS LP Header"; RunTrigger: Boolean)
     begin
+        // Inquiry pages populate temporary copies; those must never write the live bin index.
+        if Rec.IsTemporary() then
+            exit;
         if IsProductionVisible(Rec) then
             EnsureLPItemRows(Rec);
         RefreshHeader(Rec);
@@ -102,6 +105,9 @@ codeunit 72402 "DOPSWHS Bin LP Index"
     [EventSubscriber(ObjectType::Table, Database::"DOPSWHS LP Header", 'OnAfterModifyEvent', '', false, false)]
     local procedure AfterLPHeaderModify(var Rec: Record "DOPSWHS LP Header"; var xRec: Record "DOPSWHS LP Header"; RunTrigger: Boolean)
     begin
+        // Inquiry pages populate temporary copies; those must never write the live bin index.
+        if Rec.IsTemporary() then
+            exit;
         if (Rec."Location Code" = xRec."Location Code") and
            (Rec."Bin Code" = xRec."Bin Code") and (Rec.Status = xRec.Status) and
            (Rec."Assigned Document Type" = xRec."Assigned Document Type") and
@@ -118,6 +124,9 @@ codeunit 72402 "DOPSWHS Bin LP Index"
     var
         LP: Record "DOPSWHS LP Header";
     begin
+        // Inquiry pages populate temporary copies; those must never write the live bin index.
+        if Rec.IsTemporary() then
+            exit;
         if LP.Get(Rec."LP No.") and IsProductionVisible(LP) then
             EnsureLPItemRow(LP, Rec);
         RefreshLine(Rec);
@@ -128,6 +137,9 @@ codeunit 72402 "DOPSWHS Bin LP Index"
     var
         LP: Record "DOPSWHS LP Header";
     begin
+        // Inquiry pages populate temporary copies; those must never write the live bin index.
+        if Rec.IsTemporary() then
+            exit;
         if (Rec."LP No." = xRec."LP No.") and
            (Rec."Item No." = xRec."Item No.") and
            (Rec."Variant Code" = xRec."Variant Code") and
@@ -143,12 +155,18 @@ codeunit 72402 "DOPSWHS Bin LP Index"
     [EventSubscriber(ObjectType::Table, Database::"DOPSWHS LP Line", 'OnAfterDeleteEvent', '', false, false)]
     local procedure AfterLPLineDelete(var Rec: Record "DOPSWHS LP Line"; RunTrigger: Boolean)
     begin
+        // Inquiry pages populate temporary copies; those must never write the live bin index.
+        if Rec.IsTemporary() then
+            exit;
         RefreshLine(Rec);
     end;
 
     [EventSubscriber(ObjectType::Table, Database::"Bin Content", 'OnAfterInsertEvent', '', false, false)]
     local procedure AfterBinContentInsert(var Rec: Record "Bin Content"; RunTrigger: Boolean)
     begin
+        // Inquiry pages populate temporary copies; those must never write the live bin index.
+        if Rec.IsTemporary() then
+            exit;
         RefreshBinContent(Rec);
     end;
 

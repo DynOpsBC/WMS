@@ -36,6 +36,9 @@ table 72017 "DOPSWHS Count Sheet Line"
         // BADE (16 Eyl 2026): kayıtta bu rafa taşınan miktar ve kaynağı (Count Relocates Found Stock).
         field(150; "Moved From Bin"; Code[20]) { Caption = 'Moved From Bin'; DataClassification = CustomerContent; Editable = false; }
         field(151; "Moved Qty"; Decimal) { Caption = 'Moved Qty'; DataClassification = CustomerContent; Editable = false; DecimalPlaces = 0 : 5; }
+        // Historical finding, not a live LP lookup: Ad-hoc must not erase the first count's evidence.
+        field(160; "Found From Bin"; Code[20]) { Caption = 'Sayımda Sistem Rafı'; DataClassification = CustomerContent; Editable = false; }
+        field(161; "Found LP Qty"; Decimal) { Caption = 'Sayımda LP Miktarı'; DataClassification = CustomerContent; Editable = false; DecimalPlaces = 0 : 5; }
     }
 
     keys

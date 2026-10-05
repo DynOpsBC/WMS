@@ -203,3 +203,26 @@ internal fun countV2VarianceReviewText(groups: List<CountV2VarianceGroup>): Stri
         }
         "$identity\n$bins\n$result"
     }.ifBlank { "Sayılmış satırlarda stok farkı yok" }
+
+
+internal enum class CountV2LineResult { Pending, Match, QuantityDifference, BinFinding }
+
+internal fun countV2LineResult(line: JSONObject, slot: Int): CountV2LineResult {
+    val qty = line.optDouble("countedQty$slot", Double.NaN)
+    val system = line.optDouble("systemQty", Double.NaN)
+    if (!isCountRecorded(line.has("counted$slot"), line.optBoolean("counted$slot"), qty) ||
+        !qty.isFinite() || !system.isFinite()) return CountV2LineResult.Pending
+    if (line.optString("foundFromBin").isNotBlank() && qty > 0.0) return CountV2LineResult.BinFinding
+    return if (abs(qty - system) < 0.00001) CountV2LineResult.Match else CountV2LineResult.QuantityDifference
+}
+
+internal fun countV2HasBinFindings(lines: List<JSONObject>): Boolean = lines.any { line ->
+    line.optString("foundFromBin").isNotBlank() && (1..3).any { slot ->
+        line.optBoolean("counted$slot") && line.optDouble("countedQty$slot", 0.0) > 0.0
+    }
+}
+
+internal fun countV2HasBlockingError(status: String): Boolean = status.startsWith("HATA:")
+
+internal const val COUNT_V2_BIN_FINDINGS_NOTE =
+    "Raf farkları kaydedildi. İlk sayımı koruyun; Ad-hoc düzeltmelerinden sonra ikinci sayımı yeni belgeyle başlatın. Bu belge stoklara işlenmez."

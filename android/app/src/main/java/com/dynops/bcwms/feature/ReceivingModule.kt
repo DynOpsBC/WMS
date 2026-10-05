@@ -195,6 +195,7 @@ private fun ReceiveDocument(no: String, onBack: () -> Unit) {
     var bulkLpTarget by remember(no) { mutableStateOf<JSONObject?>(null) }
     var showBulkLinePicker by remember(no) { mutableStateOf(false) }
     var printReceipt by remember(no) { mutableStateOf(false) }
+    var skipPrinting by remember(no) { mutableStateOf(false) }
     var showReceiptMte by remember(no) { mutableStateOf(false) }
     var manualLabelPrint by remember(no) { mutableStateOf(false) }
     // TOPLU POST: satır onayı (PATCH receiptLines) belgeyi ASLA postlamaz —
@@ -474,8 +475,16 @@ private fun ReceiveDocument(no: String, onBack: () -> Unit) {
                         modifier = Modifier.weight(1f),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        Checkbox(checked = printReceipt, onCheckedChange = { printReceipt = it })
-                        Text("Belgeyi yazdır", fontSize = 13.sp, maxLines = 1)
+                        Column {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Checkbox(checked = skipPrinting, onCheckedChange = { skipPrinting = it }, enabled = !busy)
+                                Text("Yazdırmadan kaydet", fontSize = 13.sp)
+                            }
+                            if (!skipPrinting) Row(verticalAlignment = Alignment.CenterVertically) {
+                                Checkbox(checked = printReceipt, onCheckedChange = { printReceipt = it }, enabled = !busy)
+                                Text("Belgeyi yazdır", fontSize = 13.sp)
+                            }
+                        }
                     }
                     if (activeLp == null) {
                         OutlinedButton(
@@ -651,18 +660,12 @@ private fun ReceiveDocument(no: String, onBack: () -> Unit) {
                         reload()
                         return@launch
                     }
-                    val r = BcApi.boundAction(
-                        context, "receipts", no, "postAndCloseLP",
-                        JSONObject().apply {
-                            put("print", printReceipt)
-                            put("invoice", false)
-                            put("printerId", getDefaultPrinter(context, PRINTER_USAGE_DOCUMENT))
-                            put("lpPrinterId", getMtePrinter(context))
-                        }.toString(),
-                    )
+                    val postRequest = receiptPostRequest(skipPrinting, printReceipt,
+                        getDefaultPrinter(context, PRINTER_USAGE_DOCUMENT), getMtePrinter(context))
+                    val r = BcApi.boundAction(context, "receipts", no, postRequest.action, postRequest.body)
                     // BADE (16 Eyl 2026): Kurulum "Manual Receipt Label Print" açıksa
                     // etiket basılmadı; kayıt sonrası ekranda Etiket Yazdır ile basılır.
-                    if (r.ok) manualLabelPrint = BcApi.manualReceiptLabelPrint(context)
+                    if (r.ok) manualLabelPrint = skipPrinting || BcApi.manualReceiptLabelPrint(context)
                     busy = false
                     status = if (r.ok) {
                         if (manualLabelPrint) "TAMAM: Mal kabul kaydedildi. Etiketler basılmadı; Etiket Yazdır ile basın."
@@ -756,7 +759,7 @@ private fun ReceiveDocument(no: String, onBack: () -> Unit) {
                             put("expectedQty", expectedQty)
                             put("distributionJson", bulkLpRowsJson(rows))
                             put("lpTemplateCode", template)
-                            put("printLabels", true)
+                            put("printLabels", !skipPrinting)
                             put("printerId", getDefaultPrinter(context))
                         }.toString(),
                     )

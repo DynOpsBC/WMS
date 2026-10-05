@@ -3,6 +3,68 @@ codeunit 72110 "DOPSWHS Bin Rollup Tests"
     Subtype = Test;
 
     [Test]
+    procedure LoadingActiveLPContentsDoesNotRepairLiveBinIndex()
+    var
+        BinContent: Record "Bin Content";
+        ActiveContents: Page "DOPSWHS Active LP Contents";
+        Assert: Codeunit "Library Assert";
+    begin
+        AddTrackingSummaryLine('TEST-LP-READONLY', 10000, 'LOT-A', '', 4);
+        BinContent.Init();
+        BinContent."Location Code" := 'LPTEST';
+        BinContent."Bin Code" := 'TRACKING';
+        BinContent."Item No." := 'ITEM-LPLOT';
+        BinContent."Unit of Measure Code" := 'PCS';
+        BinContent.Insert(false);
+        // Reproduce an old/stale index: the live summary is correct, but the
+        // persisted column needs repair. A read-only drill-down must not do it.
+        BinContent."DOPSWHS Current LP Nos" := '';
+        BinContent.Modify(false);
+
+        ActiveContents.LoadFromBin('LPTEST', 'TRACKING', 'ITEM-LPLOT', '', 'PCS');
+        BinContent.Get('LPTEST', 'TRACKING', 'ITEM-LPLOT', '', 'PCS');
+        Assert.AreEqual('', BinContent."DOPSWHS Current LP Nos",
+            'Loading temporary drill-down rows must not write the live index before RunModal.');
+        // Reload also deletes the previous temporary rows.
+        ActiveContents.LoadFromBin('LPTEST', 'TRACKING', 'ITEM-LPLOT', '', 'PCS');
+        BinContent.Get('LPTEST', 'TRACKING', 'ITEM-LPLOT', '', 'PCS');
+        Assert.AreEqual('', BinContent."DOPSWHS Current LP Nos", 'Reload must remain read-only.');
+    end;
+
+    [Test]
+    procedure TemporaryLPLineChangesLeaveLiveBinIndexUntouched()
+    var
+        BinContent: Record "Bin Content";
+        SourceLine: Record "DOPSWHS LP Line";
+        TempLine: Record "DOPSWHS LP Line" temporary;
+        Assert: Codeunit "Library Assert";
+    begin
+        AddTrackingSummaryLine('TEST-LP-TEMP', 10000, 'LOT-A', '', 4);
+        BinContent.Init();
+        BinContent."Location Code" := 'LPTEST';
+        BinContent."Bin Code" := 'TRACKING';
+        BinContent."Item No." := 'ITEM-LPLOT';
+        BinContent."Unit of Measure Code" := 'PCS';
+        BinContent.Insert(false);
+        BinContent."DOPSWHS Current LP Nos" := '';
+        BinContent.Modify(false);
+        SourceLine.Get('TEST-LP-TEMP', 10000);
+        TempLine := SourceLine;
+        TempLine.Insert(false);
+        TempLine.Quantity := 2;
+        TempLine.Modify(false);
+        TempLine.Delete(false);
+        BinContent.Get('LPTEST', 'TRACKING', 'ITEM-LPLOT', '', 'PCS');
+        Assert.AreEqual('', BinContent."DOPSWHS Current LP Nos", 'Temporary CRUD must not update real bins.');
+        SourceLine.Get('TEST-LP-TEMP', 10000);
+        Assert.AreEqual(4, SourceLine.Quantity, 'Temporary changes must leave physical LP quantity intact.');
+        SourceLine.Quantity := 3;
+        SourceLine.Modify(false);
+        BinContent.Get('LPTEST', 'TRACKING', 'ITEM-LPLOT', '', 'PCS');
+        Assert.AreEqual('TEST-LP-TEMP', BinContent."DOPSWHS Current LP Nos", 'Real LP changes must still refresh the index.');
+    end;
+
+    [Test]
     procedure ScenarioAOnePalletTwoCartonsEachFiftyTotalsOneHundred()
     var
         Pallet: Record "DOPSWHS LP Header";

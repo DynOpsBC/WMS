@@ -8,6 +8,44 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class CountV2WorkflowTest {
+    @Test fun `line colors distinguish correct quantity differences and bin findings`() {
+        val row = reviewLine("A.B07.11", 10.0, 10.0)
+        assertEquals(CountV2LineResult.Match, countV2LineResult(row, 1))
+        row.put("countedQty1", 0.0)
+        assertEquals(CountV2LineResult.QuantityDifference, countV2LineResult(row, 1))
+        row.put("systemQty", 0.0).put("countedQty1", 10.0).put("foundFromBin", "A.A08.22").put("foundLpQty", 10.0)
+        assertEquals(CountV2LineResult.BinFinding, countV2LineResult(row, 1))
+        row.put("countedQty1", 8.0)
+        assertEquals(CountV2LineResult.BinFinding, countV2LineResult(row, 1))
+        row.put("counted1", false)
+        assertEquals(CountV2LineResult.Pending, countV2LineResult(row, 1))
+    }
+
+    @Test fun `unrecorded and non finite quantities cannot appear green`() {
+        val row = reviewLine("A1", 0.0, 0.0).put("counted1", false)
+        assertEquals(CountV2LineResult.Pending, countV2LineResult(row, 1))
+        row.put("counted1", true).remove("systemQty")
+        assertEquals(CountV2LineResult.Pending, countV2LineResult(row, 1))
+    }
+
+    @Test fun `all counters findings block posting but undone and zero findings do not`() {
+        val row = reviewLine("A2", 0.0, 0.0).put("foundFromBin", "A1")
+        assertFalse(countV2HasBinFindings(listOf(row)))
+        row.put("counted2", true).put("countedQty2", 10.0)
+        assertTrue(countV2HasBinFindings(listOf(row)))
+        row.put("counted2", false)
+        assertFalse(countV2HasBinFindings(listOf(row)))
+        row.remove("foundFromBin")
+        row.put("counted1", true).put("countedQty1", 10.0)
+        assertFalse(countV2HasBinFindings(listOf(row)))
+    }
+
+    @Test fun `unacknowledged errors block mutations while recorded findings remain warnings`() {
+        assertTrue(countV2HasBlockingError("HATA: LP zaten başka rafta sayıldı"))
+        assertFalse(countV2HasBlockingError(""))
+        assertFalse(countV2HasBlockingError("TAMAM: Raf farkı kaydedildi"))
+    }
+
     @Test
     fun `persisted retry retains original counter bin quantity and scan identity`() {
         val pending = PendingCountV2Scan("cab4ecca-1528-49df-a905-0f6df019989c", "A1",

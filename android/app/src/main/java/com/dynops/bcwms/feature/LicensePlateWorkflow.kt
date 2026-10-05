@@ -237,3 +237,23 @@ internal fun legacyMteBody(body: String): String {
         put("copies", src.optInt("copies", 1).coerceAtLeast(1))
     }.toString()
 }
+
+/** Explicit destination and quantity: never route a transfer to partial-use subtraction. */
+internal fun partialLpTransferBody(source: String, target: String, lineNo: Int, qty: Double?, maximum: Double): String? {
+    val destination = target.trim()
+    if (destination.isBlank() || destination.equals(source.trim(), ignoreCase = true) ||
+        lineNo <= 0 || qty == null || !qty.isFinite() || !maximum.isFinite() || qty <= 0 || qty > maximum) return null
+    val selections = lpTransferLinesJson(listOf(LpTransferEntry(lineNo, maximum, qty.toString()))) ?: return null
+    return org.json.JSONObject().put("targetLpNo", destination).put("linesJson", selections).toString()
+}
+
+internal data class ReceiptPostRequest(val action: String, val body: String)
+
+/** postToPrinter also closes receipt LPs, but explicitly skips LP labels in ReceiptMgmt. */
+internal fun receiptPostRequest(skipPrinting: Boolean, printReceipt: Boolean, documentPrinter: String, lpPrinter: String): ReceiptPostRequest =
+    ReceiptPostRequest(if (skipPrinting) "postToPrinter" else "postAndCloseLP", org.json.JSONObject().apply {
+        put("print", !skipPrinting && printReceipt)
+        put("invoice", false)
+        put("printerId", if (skipPrinting) "" else documentPrinter)
+        if (!skipPrinting) put("lpPrinterId", lpPrinter)
+    }.toString())

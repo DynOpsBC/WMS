@@ -267,4 +267,41 @@ class LicensePlateWorkflowTest {
         assertNull(lpTransferLinesJson(listOf(LpTransferEntry(10000, 5.0, ""))))
         assertNull(lpTransferLinesJson(emptyList()))
     }
+
+    @Test fun `partial transfer retains exact line destination and quantity without subtraction action`() {
+        val payload = org.json.JSONObject(partialLpTransferBody("LP000079", " LP000080 ", 20000, 1000.0, 5000.0)!!)
+        assertEquals("LP000080", payload.getString("targetLpNo"))
+        val lines = org.json.JSONArray(payload.getString("linesJson"))
+        assertEquals(1, lines.length())
+        assertEquals(20000, lines.getJSONObject(0).getInt("lineNo"))
+        assertEquals(1000.0, lines.getJSONObject(0).getDouble("qty"), 0.0)
+        assertFalse(payload.has("action"))
+    }
+
+    @Test fun `partial transfer refuses same LP missing target and invalid quantities`() {
+        assertNull(partialLpTransferBody("LP1", " lp1 ", 10000, 1.0, 5.0))
+        assertNull(partialLpTransferBody("LP1", " ", 10000, 1.0, 5.0))
+        for (qty in listOf(null, 0.0, -1.0, 6.0, Double.NaN, Double.POSITIVE_INFINITY))
+            assertNull(partialLpTransferBody("LP1", "LP2", 10000, qty, 5.0))
+        assertNull(partialLpTransferBody("LP1", "LP2", 0, 1.0, 5.0))
+    }
+
+    @Test fun `printerless receipt overrides document print and does not pass LP printer`() {
+        val request = receiptPostRequest(true, true, "DOC-OFFLINE", "LP-OFFLINE")
+        assertEquals("postToPrinter", request.action)
+        val body = org.json.JSONObject(request.body)
+        assertFalse(body.getBoolean("print"))
+        assertFalse(body.getBoolean("invoice"))
+        assertEquals("", body.getString("printerId"))
+        assertFalse(body.has("lpPrinterId"))
+    }
+
+    @Test fun `normal receipt retains label printing route and printer selection`() {
+        val request = receiptPostRequest(false, true, "DOC01", "LP01")
+        assertEquals("postAndCloseLP", request.action)
+        val body = org.json.JSONObject(request.body)
+        assertTrue(body.getBoolean("print"))
+        assertEquals("DOC01", body.getString("printerId"))
+        assertEquals("LP01", body.getString("lpPrinterId"))
+    }
 }

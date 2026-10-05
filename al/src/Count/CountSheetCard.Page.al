@@ -102,6 +102,8 @@ page 72075 "DOPSWHS Count Sheet Card"
                     CountMgmt: Codeunit "DOPSWHS Count Mgmt";
                     CountLine: Record "DOPSWHS Count Sheet Line";
                 begin
+                    if CountMgmt.HasLPBinFindings(Rec."No.") then
+                        Error('Bu belge ilk sayımın raf düzeltme listesidir. LP Raf Düzeltme Listesi eylemini kullanın; Ad-hoc sonrası ikinci sayımı yeni belgeyle başlatın.');
                     CountMgmt.ValidateBinReview(Rec."No.");
                     CountMgmt.EvaluateVariance(Rec."No.");
                     // BADE (2 Eki 2026): EvaluateVariance satırlara fark/tekrar sayım
@@ -115,6 +117,21 @@ page 72075 "DOPSWHS Count Sheet Card"
                         exit;
                     CountMgmt.PostSheet(Rec."No.");
                     CurrPage.Update(false);
+                end;
+            }
+            action(LPBinFindings)
+            {
+                Caption = 'LP Raf Düzeltme Listesi';
+                ApplicationArea = All;
+                Image = List;
+                ToolTip = 'İlk sayımda farklı rafta bulunan LP kayıtlarını açar. Sistem rafı sayım anındaki değerdir; Ad-hoc sonrası da korunur. Pozitif sayılan miktarları esas alın.';
+                trigger OnAction()
+                var
+                    Line: Record "DOPSWHS Count Sheet Line";
+                begin
+                    Line.SetRange("Sheet No.", Rec."No.");
+                    Line.SetFilter("Found From Bin", '<>%1', '');
+                    Page.Run(Page::"DOPSWHS Count Bin Review", Line);
                 end;
             }
             action(PrintVarianceReport)

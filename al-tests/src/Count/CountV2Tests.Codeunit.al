@@ -3,6 +3,168 @@ codeunit 72142 "DOPSWHS Count V2 Tests"
     Subtype = Test;
 
     [Test]
+    procedure DifferentBinFindingPreservesZeroAndStockAndRequiresNewDocument()
+    var
+        SheetNo: Code[20];
+        SourceLineNo: Integer;
+        Line: Record "DOPSWHS Count Sheet Line";
+        LP: Record "DOPSWHS LP Header";
+        LPLine: Record "DOPSWHS LP Line";
+        NewSheet: Record "DOPSWHS Count Sheet Header";
+        Entry: Record "Warehouse Entry";
+        Mgmt: Codeunit "DOPSWHS Count Mgmt";
+        ScanId: Guid;
+        EntryCount: Integer;
+    begin
+        SheetNo := CreateBinFindingFixture();
+        Mgmt.PrepareV2Bin(SheetNo, 'A.A08.22');
+        Line.SetRange("Sheet No.", SheetNo);
+        Line.SetRange("Bin Code", 'A.A08.22');
+        Line.FindFirst();
+        SourceLineNo := Line."Line No.";
+        Mgmt.RecordCount(SheetNo, SourceLineNo, 1, 0);
+        EntryCount := Entry.Count();
+        ScanId := CreateGuid();
+        Assert.AreEqual(1, Mgmt.ScanV2Lp(SheetNo, ScanId, 'CV2-FIND-LP', 'A.B07.11', 1), 'Finding must be accepted.');
+        Mgmt.ScanV2Lp(SheetNo, ScanId, 'CV2-FIND-LP', 'A.B07.11', 1);
+        Mgmt.ScanV2Lp(SheetNo, CreateGuid(), 'CV2-FIND-LP', 'A.B07.11', 1);
+        Line.Reset();
+        Line.Get(SheetNo, SourceLineNo);
+        Assert.AreEqual(0, Line."Counted Qty 1", 'Original zero must be preserved.');
+        Assert.IsTrue(Line."Counted 1", 'Explicit zero must remain recorded.');
+        Line.SetRange("Sheet No.", SheetNo);
+        Line.SetRange("Bin Code", 'A.B07.11');
+        Assert.AreEqual(1, Line.Count(), 'Retries must not duplicate findings.');
+        Line.FindFirst();
+        Assert.AreEqual(10, Line."Counted Qty 1", 'Retry sets rather than adds LP quantity.');
+        Assert.AreEqual(0, Line."System Qty", 'Destination must not pretend it already held the LP.');
+        Assert.AreEqual('A.A08.22', Line."Found From Bin", 'Historical system bin must be captured.');
+        Assert.AreEqual(10, Line."Found LP Qty", 'Historical LP quantity must be captured.');
+        LP.Get('CV2-FIND-LP');
+        LPLine.Get(LP."No.", 10000);
+        Assert.AreEqual('A.A08.22', LP."Bin Code", 'Counting must not move the LP.');
+        Assert.AreEqual(10, LPLine.Quantity, 'Counting must not change LP quantity.');
+        Assert.AreEqual(EntryCount, Entry.Count(), 'Counting must not post warehouse entries.');
+        Mgmt.CompleteCounter(SheetNo, 1);
+        asserterror Mgmt.PostSheet(SheetNo);
+        Assert.ExpectedError('düzeltme listesidir');
+        // Simulate the LP location after a separately performed Ad-hoc operation.
+        LP."Bin Code" := 'A.B07.11';
+        LP.Modify(true);
+        Line.FindFirst();
+        Assert.AreEqual('A.A08.22', Line."Found From Bin", 'Ad-hoc must not rewrite first-count evidence.');
+        asserterror Mgmt.PostSheet(SheetNo);
+        Assert.ExpectedError('düzeltme listesidir');
+        NewSheet.Init();
+        NewSheet."No." := 'CV2-FIND-SECOND';
+        NewSheet."Location Code" := 'CV2FIND';
+        NewSheet.Insert(true);
+        Mgmt.ScanV2Lp(NewSheet."No.", CreateGuid(), LP."No.", 'A.B07.11', 1);
+        Line.Reset();
+        Line.SetRange("Sheet No.", NewSheet."No.");
+        Line.FindFirst();
+        Assert.AreEqual(10, Line."System Qty", 'New document must use the corrected current bin.');
+        Assert.AreEqual('', Line."Found From Bin", 'Second document must count normally after correction.');
+        Assert.IsFalse(Mgmt.HasLPBinFindings(NewSheet."No."), 'Old evidence must not leak into the second document.');
+    end;
+
+    [Test]
+    procedure PositiveLPCountCannotBeDuplicatedByScanOrManualCorrection()
+    var
+        SheetNo: Code[20];
+        SourceLineNo: Integer;
+        Line: Record "DOPSWHS Count Sheet Line";
+        Mgmt: Codeunit "DOPSWHS Count Mgmt";
+    begin
+        SheetNo := CreateBinFindingFixture();
+        Mgmt.ScanV2Lp(SheetNo, CreateGuid(), 'CV2-FIND-LP', 'A.A08.22', 1);
+        Line.SetRange("Sheet No.", SheetNo);
+        Line.FindFirst();
+        SourceLineNo := Line."Line No.";
+        asserterror Mgmt.ScanV2Lp(SheetNo, CreateGuid(), 'CV2-FIND-LP', 'A.B07.11', 1);
+        Assert.ExpectedError('zaten pozitif miktarla');
+        Assert.IsFalse(Mgmt.HasLPBinFindings(SheetNo), 'Rejected scan must not create a finding.');
+        Mgmt.RecordCount(SheetNo, SourceLineNo, 1, 0);
+        Mgmt.ScanV2Lp(SheetNo, CreateGuid(), 'CV2-FIND-LP', 'A.B07.11', 1);
+        asserterror Mgmt.RecordCount(SheetNo, SourceLineNo, 1, 5);
+        Assert.ExpectedError('zaten pozitif miktarla');
+        Line.Get(SheetNo, SourceLineNo);
+        Assert.AreEqual(0, Line."Counted Qty 1", 'Rejected manual correction must leave the original zero intact.');
+    end;
+
+    [Test]
+    procedure FindingSeedsSourceButDoesNotInventAZeroAndUndoRemovesPostingBlock()
+    var
+        SheetNo: Code[20];
+        Line: Record "DOPSWHS Count Sheet Line";
+        Mgmt: Codeunit "DOPSWHS Count Mgmt";
+        ScanId: Guid;
+    begin
+        SheetNo := CreateBinFindingFixture();
+        ScanId := CreateGuid();
+        Mgmt.ScanV2Lp(SheetNo, ScanId, 'CV2-FIND-LP', 'A.B07.11', 1);
+        Line.SetRange("Sheet No.", SheetNo);
+        Line.SetRange("Bin Code", 'A.A08.22');
+        Line.FindFirst();
+        Assert.IsFalse(Line."Counted 1", 'Original bin must await physical verification.');
+        asserterror Mgmt.CompleteCounter(SheetNo, 1);
+        Mgmt.UndoV2Lp(SheetNo, 'CV2-FIND-LP', 'A.B07.11', 1);
+        Assert.IsFalse(Mgmt.HasLPBinFindings(SheetNo), 'Undone findings must not require an Ad-hoc correction.');
+        asserterror Mgmt.ScanV2Lp(SheetNo, ScanId, 'CV2-FIND-LP', 'A.B07.11', 1);
+        Mgmt.ScanV2Lp(SheetNo, CreateGuid(), 'CV2-FIND-LP', 'A.A08.22', 1);
+    end;
+
+    [Test]
+    procedure RejectedScanCannotCreateLinesOrScanEvents()
+    var
+        SheetNo: Code[20];
+        Line: Record "DOPSWHS Count Sheet Line";
+        Scan: Record "DOPSWHS Count V2 Scan";
+        Mgmt: Codeunit "DOPSWHS Count Mgmt";
+        ScanId: Guid;
+    begin
+        SheetNo := CreateBinFindingFixture();
+        ScanId := CreateGuid();
+        asserterror Mgmt.ScanV2Lp(SheetNo, ScanId, 'CV2-FIND-LP', 'MISSING', 1);
+        Line.SetRange("Sheet No.", SheetNo);
+        Assert.AreEqual(0, Line.Count(), 'Invalid bin must leave no partial counted line.');
+        Assert.IsFalse(Scan.Get(ScanId), 'Invalid bin must not consume scan identity.');
+    end;
+
+    [Test]
+    procedure StockMovementCannotRewriteTheOriginalSystemSnapshot()
+    var
+        SheetNo: Code[20];
+        Line: Record "DOPSWHS Count Sheet Line";
+        LP: Record "DOPSWHS LP Header";
+        Mgmt: Codeunit "DOPSWHS Count Mgmt";
+    begin
+        SheetNo := CreateBinFindingFixture();
+        Mgmt.PrepareV2Bin(SheetNo, 'A.A08.22');
+        LP.Get('CV2-FIND-LP');
+        LP."Bin Code" := 'A.B07.11';
+        LP.Modify(true);
+        asserterror Mgmt.ScanV2Lp(SheetNo, CreateGuid(), LP."No.", 'A.A08.22', 1);
+        Assert.ExpectedError('ikinci sayım için yeni belge');
+        Line.SetRange("Sheet No.", SheetNo);
+        Line.SetRange("Bin Code", 'A.A08.22');
+        Line.FindFirst();
+        Assert.AreEqual(10, Line."System Qty", 'An external move must not overwrite the original snapshot with zero.');
+        Assert.AreEqual('', Line."Found From Bin", 'An old snapshot must not be reclassified as a new finding.');
+    end;
+
+    local procedure CreateBinFindingFixture(): Code[20]
+    var
+        Mgmt: Codeunit "DOPSWHS Count Mgmt";
+        Counters: array[3] of Code[50];
+    begin
+        EnsureItemLocationAndBin('CV2-FIND', 'CV2PCS', 'CV2FIND', 'A.A08.22');
+        EnsureItemLocationAndBin('CV2-FIND', 'CV2PCS', 'CV2FIND', 'A.B07.11');
+        InsertBuiltLp('CV2-FIND-LP', 'CV2-FIND', 'CV2PCS', 'CV2FIND', 'A.A08.22', 10);
+        exit(Mgmt.CreateSheet('CV2FIND', Enum::"DOPSWHS Count Mode"::Visible, Counters));
+    end;
+
+    [Test]
     procedure UndoKeepsTheBinPendingAndRejectsReplayOfReversedScan()
     var
         Line: Record "DOPSWHS Count Sheet Line";

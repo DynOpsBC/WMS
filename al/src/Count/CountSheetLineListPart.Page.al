@@ -33,6 +33,8 @@ page 72481 "DOPSWHS Count Sheet Line Part"
                 field("Variant Code"; Rec."Variant Code") { ApplicationArea = All; }
                 field("Bin Code"; Rec."Bin Code") { ApplicationArea = All; StyleExpr = LineStyle; }
                 field("LP No."; Rec."LP No.") { ApplicationArea = All; StyleExpr = LineStyle; }
+                field("Found From Bin"; Rec."Found From Bin") { ApplicationArea = All; ToolTip = 'LP farklı rafta sayıldığında sistemde kayıtlı olan raf. Ad-hoc sonrasında da ilk sayımın kaydı korunur.'; }
+                field("Found LP Qty"; Rec."Found LP Qty") { ApplicationArea = All; }
                 field("LP Line No."; Rec."LP Line No.") { ApplicationArea = All; }
                 field("Lot No."; Rec."Lot No.") { ApplicationArea = All; }
                 field("Serial No."; Rec."Serial No.") { ApplicationArea = All; }
@@ -76,6 +78,8 @@ page 72481 "DOPSWHS Count Sheet Line Part"
                 LineStyle := 'Favorable';
                 VarianceStyle := 'Favorable';
             end;
+        if CountedFlag and (Rec."Found From Bin" <> '') then
+            LineStyle := 'Ambiguous';
         if Rec."Recount Required" then
             VarianceStyle := 'Unfavorable';
     end;

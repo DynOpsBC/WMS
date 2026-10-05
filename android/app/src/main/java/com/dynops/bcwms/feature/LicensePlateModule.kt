@@ -18,6 +18,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.dynops.bcwms.BcApi
+import com.dynops.bcwms.LocalNavigator
+import com.dynops.bcwms.Screen
 import com.dynops.bcwms.scanner.BarcodeIntentResolver
 import com.dynops.bcwms.scanner.ScanField
 import com.dynops.bcwms.ui.*
@@ -38,6 +40,7 @@ fun LicensePlateModule() {
     val scope = rememberCoroutineScope()
 
     var selected by remember { mutableStateOf<String?>(null) }
+    var transferTarget by remember(TerminalSession.scope(context)) { mutableStateOf("") }
     var rows by remember { mutableStateOf<List<JSONObject>>(emptyList()) }
     var status by remember { mutableStateOf("") }
     var loading by remember { mutableStateOf(false) }
@@ -71,7 +74,7 @@ fun LicensePlateModule() {
 
     val sel = selected
     if (sel != null) {
-        LpDocument(lpNo = sel, onBack = { selected = null; loadList() })
+        LpDocument(lpNo = sel, transferTarget = transferTarget, onTransferTarget = { transferTarget = it }, onBack = { selected = null; loadList() })
         return
     }
 
@@ -268,7 +271,7 @@ private fun StatusBadge(status: String) {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun LpDocument(lpNo: String, onBack: () -> Unit) {
+private fun LpDocument(lpNo: String, transferTarget: String, onTransferTarget: (String) -> Unit, onBack: () -> Unit) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
 
@@ -287,6 +290,8 @@ private fun LpDocument(lpNo: String, onBack: () -> Unit) {
     var selectedLineItem by remember { mutableStateOf<LpItemSelection?>(null) }
     var showTransfer by remember { mutableStateOf(false) }
     var showPartial by remember { mutableStateOf(false) }
+    var printOnComplete by remember(lpNo) { mutableStateOf(false) }
+    val navigate = LocalNavigator.current
     var showMteOptions by remember { mutableStateOf(false) }
     var showAssignBin by remember { mutableStateOf(false) }
     var showUnbuildConfirm by remember { mutableStateOf(false) }
@@ -526,16 +531,22 @@ private fun LpDocument(lpNo: String, onBack: () -> Unit) {
                     }
                 }
                 if (canEdit) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Checkbox(checked = printOnComplete, onCheckedChange = { printOnComplete = it }, enabled = !busy)
+                        Text("Tamamlarken etiketi yazdır", fontSize = 13.sp)
+                    }
+                    Text("Yazdırmadan tamamlayabilir, etiketi daha sonra basabilirsiniz.", fontSize = 12.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant)
                     Button(
                         onClick = {
                             val payload = JSONObject().apply {
-                                put("printLabel", true)
-                                put("printerId", getMtePrinter(context))
+                                put("printLabel", printOnComplete)
+                                put("printerId", if (printOnComplete) getMtePrinter(context) else "")
                             }.toString()
                             if (lines.isEmpty()) {
                                 status = "EKSİK: Bu LP boş. Tamamlamadan önce içine en az bir ürün okutun."
                             } else {
-                                action("stopToPrinter", payload, "LP tamamlandı")
+                                action("stopToPrinter", payload, if (printOnComplete) "LP tamamlandı; etiket isteği gönderildi" else "LP yazdırılmadan tamamlandı. Etiketi daha sonra yazdırabilirsiniz.")
                             }
                         },
                         // Boş LP'de düğme sessizce pasifti; neden tamamlanamadığı
@@ -846,7 +857,15 @@ private fun LpDocument(lpNo: String, onBack: () -> Unit) {
         })
     }
     if (showPartial) {
-        PartialUseSheet(lines = lines, onDismiss = { showPartial = false }, onConfirm = { mode, qty, lineNo ->
+        PartialUseSheet(sourceLp = lpNo, initialTarget = transferTarget, lines = lines,
+            onDismiss = { showPartial = false },
+            onTransfer = { target, body ->
+                onTransferTarget(target)
+                showPartial = false
+                action("transfer", body, "Seçilen miktar $target LP'sine aktarıldı; kalan miktar $lpNo LP'sinde.")
+            },
+            onProductionPick = { showPartial = false; navigate(Screen.Production) },
+            onConfirm = { mode, qty, lineNo ->
             showPartial = false
             val label = lpPartialActions.firstOrNull { it.apiValue == mode }?.label ?: "Kısmi kullanım"
             action("usePartial", JSONObject().apply { put("action", mode); put("qty", qty); put("lineNo", lineNo) }.toString(), "$label tamamlandı")
@@ -1258,21 +1277,39 @@ private fun TransferSheet(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun PartialUseSheet(
+internal fun PartialUseSheet(
+    sourceLp: String,
+    initialTarget: String,
     lines: List<JSONObject>,
+    onTransfer: (target: String, body: String) -> Unit,
+    onProductionPick: () -> Unit,
     onDismiss: () -> Unit,
     onConfirm: (mode: String, qty: Double, lineNo: Int) -> Unit,
 ) {
-    var selectedAction by remember { mutableStateOf(lpPartialActions.first()) }
-    var qty by remember { mutableStateOf("1") }
+    val transferAction = LpPartialAction("Transfer", "Hedef LP'ye aktar", "Alınacak miktarı mevcut hedef LP'ye aktarır; kalan miktar kaynak LP'de kalır. İki LP aynı rafta olmalıdır.")
+    val actions = listOf(transferAction) + lpPartialActions
+    var selectedAction by remember { mutableStateOf(transferAction) }
+    var target by remember { mutableStateOf(initialTarget) }
+    var confirmReduction by remember { mutableStateOf(false) }
+    var qty by remember { mutableStateOf("") }
     var selectedLineNo by remember(lines) { mutableStateOf(lines.firstOrNull()?.optInt("lineNo") ?: 0) }
     var actionExpanded by remember { mutableStateOf(false) }
     var lineExpanded by remember { mutableStateOf(false) }
     val selectedLine = lines.firstOrNull { it.optInt("lineNo") == selectedLineNo }
     val maximumQuantity = selectedLine?.optDouble("quantity") ?: 0.0
     val parsedQuantity = qty.toFiniteDoubleOrNull()
+    val isTransfer = selectedAction.apiValue == "Transfer"
+    val transferBody = partialLpTransferBody(sourceLp, target, selectedLineNo, parsedQuantity, maximumQuantity)
+    val validInput = if (isTransfer) transferBody != null else validPartialUseInput(parsedQuantity, selectedLineNo, maximumQuantity)
+    if (confirmReduction) AlertDialog(
+        onDismissRequest = { confirmReduction = false },
+        title = { Text("LP miktarı azaltılacak") },
+        text = { Text("Bu işlem miktarı başka LP'ye aktarmaz. ${selectedAction.help} Girilen miktar: $qty. Devam edilsin mi?") },
+        confirmButton = { TextButton(onClick = { confirmReduction = false; onConfirm(selectedAction.apiValue, parsedQuantity ?: return@TextButton, selectedLineNo) }) { Text("Miktarı azalt") } },
+        dismissButton = { TextButton(onClick = { confirmReduction = false }) { Text("Vazgeç") } },
+    )
     com.dynops.bcwms.ui.SheetScaffold(onDismiss = onDismiss, contentPadding = androidx.compose.foundation.layout.PaddingValues(20.dp)) {
-        Text("Kısmi Kullanım", fontWeight = FontWeight.Bold, fontSize = 18.sp)
+        Text("Kısmi LP İşlemi", fontWeight = FontWeight.Bold, fontSize = 18.sp)
         Spacer(Modifier.height(8.dp))
         ExposedDropdownMenuBox(expanded = actionExpanded, onExpandedChange = { actionExpanded = !actionExpanded }) {
             OutlinedTextField(
@@ -1284,7 +1321,7 @@ private fun PartialUseSheet(
                 modifier = Modifier.fillMaxWidth().menuAnchor(),
             )
             ExposedDropdownMenu(expanded = actionExpanded, onDismissRequest = { actionExpanded = false }) {
-                lpPartialActions.forEach { action ->
+                actions.forEach { action ->
                     DropdownMenuItem(
                         text = { Text(action.label) },
                         onClick = { selectedAction = action; actionExpanded = false },
@@ -1292,7 +1329,15 @@ private fun PartialUseSheet(
                 }
             }
         }
-        Text(selectedAction.help, fontSize = 12.sp, color = Color.Gray)
+        Text(selectedAction.help, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        if (isTransfer) {
+            Spacer(Modifier.height(8.dp))
+            ScanField("Hedef LP No", target, { target = it }, modifier = Modifier.fillMaxWidth())
+            if (target.isNotBlank() && target.trim().equals(sourceLp, ignoreCase = true))
+                Text("Kaynak ve hedef LP aynı olamaz.", color = MaterialTheme.colorScheme.error, fontSize = 12.sp)
+            Text("Farklı raflardan üretime tek palet hazırlamak için üretim emrinde Ambar Çekme → Yeni Üretim LP akışını kullanın.", fontSize = 12.sp)
+            TextButton(onClick = onProductionPick) { Text("Üretim toplamaya git") }
+        }
         Spacer(Modifier.height(8.dp))
         ExposedDropdownMenuBox(expanded = lineExpanded, onExpandedChange = { lineExpanded = !lineExpanded }) {
             OutlinedTextField(
@@ -1313,7 +1358,7 @@ private fun PartialUseSheet(
                         },
                         onClick = {
                             selectedLineNo = line.optInt("lineNo")
-                            qty = "1"
+                            qty = ""
                             lineExpanded = false
                         },
                     )
@@ -1324,17 +1369,21 @@ private fun PartialUseSheet(
         OutlinedTextField(
             qty,
             { qty = it.filter { c -> c.isDigit() || c == '.' || c == ',' }.replace(',', '.') },
-            label = { Text("Miktar (en fazla $maximumQuantity)") },
+            label = { Text(if (isTransfer) "Aktarılacak miktar (en fazla ${fmtItemQty(maximumQuantity)})" else "Miktar (en fazla ${fmtItemQty(maximumQuantity)})") },
             singleLine = true,
             isError = qty.isNotBlank() && !validPartialUseInput(parsedQuantity, selectedLineNo, maximumQuantity),
             modifier = Modifier.fillMaxWidth(),
         )
         Spacer(Modifier.height(16.dp))
         Button(
-            enabled = validPartialUseInput(parsedQuantity, selectedLineNo, maximumQuantity),
+            enabled = validInput,
             modifier = Modifier.fillMaxWidth(),
-            onClick = { onConfirm(selectedAction.apiValue, parsedQuantity ?: return@Button, selectedLineNo) },
-        ) { Text("Uygula") }
+            onClick = {
+                if (isTransfer) onTransfer(target.trim(), transferBody ?: return@Button)
+                else if (selectedAction.apiValue == "CreateNewLP") onConfirm(selectedAction.apiValue, parsedQuantity ?: return@Button, selectedLineNo)
+                else confirmReduction = true
+            },
+        ) { Text(if (isTransfer) "Hedef LP'ye Aktar" else "Uygula") }
         Spacer(Modifier.height(24.dp))
     }
 }

@@ -754,9 +754,9 @@ codeunit 72050 "DOPSWHS Count Mgmt"
     /// Sayım V2 LP okutması: MTE/LP etiketi okutulunca LP içeriği (ürün, lot,
     /// seri, birim, miktar) olduğu gibi sayılır; operatör hiçbir şey girmez.
     /// Aynı LP aynı rafta tekrar okutulursa miktar SET edilir (toplanmaz) ve
-    /// ScanId tekrarı mevcut satır sayısını döndürür → idempotent. LP BC'de
-    /// başka rafta kayıtlıysa yanlış raf sayımına izin verilmez; operatör önce
-    /// doğru rafı okutmalıdır.
+    /// ScanId tekrarı mevcut satır sayısını döndürür → idempotent. Farklı rafta
+    /// bulunan LP, kaynak raf ve miktar korunarak bir düzeltme bulgusu olarak
+    /// kaydedilir; LP/ambar stoku değişmez. Düzeltme sonrası yeni belge açılır.
     /// </summary>
     procedure ScanV2Lp(SheetNo: Code[20]; ScanId: Guid; LpNo: Code[20]; BinCode: Code[20]; CounterSlot: Integer) LinesCounted: Integer
     var
@@ -772,6 +772,7 @@ codeunit 72050 "DOPSWHS Count Mgmt"
         UomCode: Code[10];
         NextLineNo: Integer;
         FirstLineNo: Integer;
+        FoundInOtherBin: Boolean;
     begin
         if not (CounterSlot in [1, 2, 3]) then
             Error(CounterSlotErr);
@@ -812,8 +813,10 @@ codeunit 72050 "DOPSWHS Count Mgmt"
         if not (LPHeader.Status in [LPHeader.Status::Open, LPHeader.Status::Built, LPHeader.Status::Assigned]) then
             Error(LPStatusNotCountableErr, LpNo, Format(LPHeader.Status));
 
-        if (LPHeader."Bin Code" <> '') and (LPHeader."Bin Code" <> BinCode) then
-            Error(LPCountBinMismatchErr, LpNo, LPHeader."Bin Code", BinCode);
+        FoundInOtherBin := (LPHeader."Bin Code" <> '') and (LPHeader."Bin Code" <> BinCode);
+        // Seed the original bin without inventing a zero count for the operator.
+        if FoundInOtherBin and RelatedBinInCountScope(CountHeader, LPHeader."Bin Code") then
+            MergeV2BinSnapshot(SheetNo, LPHeader."Bin Code", false);
 
         // Rafsız LP'ye okutulan raf yazılır (AttachLpToBin ile aynı).
         if LPHeader."Bin Code" = '' then begin
@@ -843,8 +846,22 @@ codeunit 72050 "DOPSWHS Count Mgmt"
                 // bu LP satırının kayıtlı içeriğidir. Tam raf bakiyesini her LP'ye
                 // kopyalamak aynı stoğu LP sayısı kadar çoğaltır. Mevcut satırı da
                 // yenileyerek hatalı snapshot ile oluşmuş açık sayımları düzeltiriz.
-                CountLine."System Qty" := LPLine.Quantity;
-                CountLine."Unexpected Stock" := false;
+                if FoundInOtherBin and (CountLine."System Qty" <> 0) then
+                    Error(LPFindingStockChangedErr, LpNo);
+                if CountLine."Found From Bin" <> '' then begin
+                    if (CountLine."Found From Bin" <> LPHeader."Bin Code") or
+                       (CountLine."Found LP Qty" <> LPLine.Quantity) then
+                        Error(LPFindingStockChangedErr, LpNo);
+                end;
+                if FoundInOtherBin then begin
+                    CountLine."System Qty" := 0;
+                    CountLine."Unexpected Stock" := true;
+                    CountLine."Found From Bin" := LPHeader."Bin Code";
+                    CountLine."Found LP Qty" := LPLine.Quantity;
+                end else begin
+                    CountLine."System Qty" := LPLine.Quantity;
+                    CountLine."Unexpected Stock" := false;
+                end;
                 SetCountValueAndModify(CountLine, CounterSlot, LPLine.Quantity);
             end else begin
                 UomCode := LPLine."Unit of Measure";
@@ -866,8 +883,13 @@ codeunit 72050 "DOPSWHS Count Mgmt"
                 // toplamıdır; her LP satırına yazılırsa sistem stoku katlanır.
                 // Klasik GenerateLines ve AttachLpToBin ile aynı semantik:
                 // her LP yalnız kendi kayıtlı miktarını snapshot eder.
-                CountLine."System Qty" := LPLine.Quantity;
-                CountLine."Unexpected Stock" := false;
+                if FoundInOtherBin then begin
+                    CountLine."System Qty" := 0;
+                    CountLine."Unexpected Stock" := true;
+                    CountLine."Found From Bin" := LPHeader."Bin Code";
+                    CountLine."Found LP Qty" := LPLine.Quantity;
+                end else
+                    CountLine."System Qty" := LPLine.Quantity;
                 SetCountValue(CountLine, CounterSlot, LPLine.Quantity);
                 CountLine.Insert(true);
             end;
@@ -1088,6 +1110,8 @@ codeunit 72050 "DOPSWHS Count Mgmt"
         LinesCreated: Integer;
     begin
         CountHeader.Get(SheetNo);
+        if CountHeader."V2 Scan Mode" then
+            exit(ScanV2Lp(SheetNo, CreateGuid(), LpNo, BinCode, CounterSlot));
         if CountHeader.Status = CountHeader.Status::Posted then
             Error(CountAlreadyPostedErr, SheetNo);
         if not (CounterSlot in [1, 2, 3]) then
@@ -1478,6 +1502,10 @@ codeunit 72050 "DOPSWHS Count Mgmt"
         CountHeader.Get(SheetNo);
         if CountHeader.Status = CountHeader.Status::Posted then
             Error(CountAlreadyPostedErr, SheetNo);
+        // First-count findings are an Ad-hoc work list, never inventory adjustments.
+        // Test before coverage: after Ad-hoc the historical snapshots intentionally remain unchanged.
+        if CountHeader."V2 Scan Mode" and HasLPBinFindings(SheetNo) then
+            Error(LPBinFindingsPostingErr);
         if CountHeader."V2 Scan Mode" then begin
             EnsureV2BinCoverage(SheetNo, true);
             EnsureAllCountersCompleted(SheetNo);
@@ -2178,8 +2206,46 @@ codeunit 72050 "DOPSWHS Count Mgmt"
         CountLine.Insert(true);
     end;
 
+    local procedure EnsureLPCountedInOneBin(CountLine: Record "DOPSWHS Count Sheet Line"; CounterSlot: Integer; Qty: Decimal)
+    var
+        Header: Record "DOPSWHS Count Sheet Header";
+        OtherLine: Record "DOPSWHS Count Sheet Line";
+    begin
+        if (CountLine."LP No." = '') or (Qty <= 0) then
+            exit;
+        Header.Get(CountLine."Sheet No.");
+        if not Header."V2 Scan Mode" then
+            exit;
+        OtherLine.LockTable();
+        OtherLine.SetRange("Sheet No.", CountLine."Sheet No.");
+        OtherLine.SetRange("LP No.", CountLine."LP No.");
+        OtherLine.SetFilter("Bin Code", '<>%1', CountLine."Bin Code");
+        if OtherLine.FindSet() then
+            repeat
+                if IsSlotCounted(OtherLine, CounterSlot) and (CountedQtyForSlot(OtherLine, CounterSlot) > 0) then
+                    Error(LPCountedInOtherBinErr, CountLine."LP No.", OtherLine."Bin Code", CounterSlot);
+            until OtherLine.Next() = 0;
+    end;
+
+    procedure HasLPBinFindings(SheetNo: Code[20]): Boolean
+    var
+        Line: Record "DOPSWHS Count Sheet Line";
+        Slot: Integer;
+    begin
+        Line.SetRange("Sheet No.", SheetNo);
+        Line.SetFilter("Found From Bin", '<>%1', '');
+        if Line.FindSet() then
+            repeat
+                for Slot := 1 to 3 do
+                    if IsSlotCounted(Line, Slot) and (CountedQtyForSlot(Line, Slot) > 0) then
+                        exit(true);
+            until Line.Next() = 0;
+        exit(false);
+    end;
+
     local procedure SetCountValue(var CountLine: Record "DOPSWHS Count Sheet Line"; CounterSlot: Integer; Qty: Decimal)
     begin
+        EnsureLPCountedInOneBin(CountLine, CounterSlot, Qty);
         case CounterSlot of
             1:
                 begin
@@ -2525,7 +2591,9 @@ codeunit 72050 "DOPSWHS Count Mgmt"
         LPNotFoundErr: Label '%1 LP numarası bulunamadı.', Comment = '%1 LP';
         LPLocationMismatchErr: Label '%1 LP numarası %2 lokasyonundadır; %3 lokasyonundaki bu sayıma bağlanamaz.', Comment = '%1 LP, %2 LP location, %3 count location';
         LPStatusNotCountableErr: Label '%1 LP numarasının durumu %2 olduğu için sayılamaz.', Comment = '%1 LP, %2 status';
-        LPCountBinMismatchErr: Label '%1 LP numarası sistemde %2 rafındadır; %3 rafında sayılamaz. Önce doğru rafı okutun.', Comment = '%1 LP, %2 current bin, %3 scanned bin';
+        LPCountedInOtherBinErr: Label '%1 LP, %3. sayımda %2 rafında zaten pozitif miktarla sayılmış. Önce o okutmayı geri alın veya miktarını düzeltin.', Comment = '%1 LP, %2 bin, %3 counter';
+        LPFindingStockChangedErr: Label '%1 LP için raf veya miktar ilk sayımdan sonra değişti. İlk sayımı koruyun; ikinci sayım için yeni belge açın.', Comment = '%1 LP';
+        LPBinFindingsPostingErr: Label 'Bu belge farklı rafta bulunan LP kayıtları içeriyor ve ilk sayımın düzeltme listesidir. Ad-hoc düzeltmelerini yapın, ikinci sayımı yeni belgeyle başlatın; bu belge stoklara işlenemez.';
         LPAlreadyInOtherBinErr: Label '%1 LP numarası sistemde %2 rafındadır; %3 rafına ilk atama yapılamaz. Önce fiziksel yerini doğrulayın.', Comment = '%1 LP, %2 current bin, %3 scanned bin';
         LPStockMissingInBinErr: Label '%1 LP içindeki %2 ürününden %3 adet için %4 rafında BC stoku bulunamadı.', Comment = '%1 LP, %2 item, %3 qty, %4 bin';
         LPStockInsufficientInBinErr: Label '%1 LP içindeki %2 ürününden %3 adet var; %4 rafındaki kullanılabilir BC stoku %5 adettir.', Comment = '%1 LP, %2 item, %3 LP qty, %4 bin, %5 available';
