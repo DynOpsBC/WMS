@@ -837,14 +837,12 @@ private fun LpDocument(lpNo: String, onBack: () -> Unit) {
         )
     }
     if (showTransfer) {
-        TransferSheet(onDismiss = { showTransfer = false }, onConfirm = { target ->
+        TransferSheet(lines = lines, onDismiss = { showTransfer = false }, onConfirm = { target, linesJson, count ->
             showTransfer = false
-            // Tüm satırları açıkça gönder — eski publish'te boş linesJson hiçbir
-            // satır taşımadan başarı dönüyordu (LPApi.ParseLines boş çıkışı).
-            val linesJson = org.json.JSONArray().apply {
-                lines.forEach { ln -> put(JSONObject().apply { put("lineNo", ln.optInt("lineNo")) }) }
-            }.toString()
-            action("transfer", JSONObject().apply { put("targetLpNo", target); put("linesJson", linesJson) }.toString(), "Transfer tamamlandı (${lines.size} satır)")
+            // Satırlar ve miktarlar açıkça gönderilir — eski publish'te boş linesJson hiçbir
+            // satır taşımadan başarı dönüyordu (LPApi.ParseLines boş çıkışı). Miktarı
+            // satırdan azı olan satır kısmi aktarılır, kalan bu LP'de durur.
+            action("transfer", JSONObject().apply { put("targetLpNo", target); put("linesJson", linesJson) }.toString(), "Transfer tamamlandı ($count satır)")
         })
     }
     if (showPartial) {
@@ -1208,18 +1206,51 @@ private suspend fun resolveLpItemOrLot(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun TransferSheet(onDismiss: () -> Unit, onConfirm: (String) -> Unit) {
+private fun TransferSheet(
+    lines: List<JSONObject>,
+    onDismiss: () -> Unit,
+    onConfirm: (target: String, linesJson: String, lineCount: Int) -> Unit,
+) {
     var target by remember { mutableStateOf("") }
+    // Varsayılan tam miktar: eski "tüm LP'yi taşı" davranışı değişmez. Kısmi için miktarı düşürün,
+    // satırı bırakmak için 0 yazın.
+    val quantityTexts = remember(lines) {
+        mutableStateMapOf<Int, String>().apply {
+            lines.forEach { put(it.optInt("lineNo"), fmtItemQty(it.optDouble("quantity"))) }
+        }
+    }
+    val entries = lines.map { LpTransferEntry(it.optInt("lineNo"), it.optDouble("quantity"), quantityTexts[it.optInt("lineNo")].orEmpty()) }
+    val linesJson = lpTransferLinesJson(entries)
     com.dynops.bcwms.ui.SheetScaffold(onDismiss = onDismiss, contentPadding = androidx.compose.foundation.layout.PaddingValues(20.dp)) {
         Text("LP Transferi", fontWeight = FontWeight.Bold, fontSize = 18.sp)
-        Text("İçeriği tamamlanmış bir hedef LP'ye taşıyın.", fontSize = 12.sp, color = Color.Gray)
+        Text(
+            "Seçilen miktarı aynı raftaki hedef LP'ye taşır. Kısmi taşımak için miktarı azaltın; kalan bu LP'de durur.",
+            fontSize = 12.sp, color = Color.Gray,
+        )
         Spacer(Modifier.height(12.dp))
         ScanField("Hedef LP No", target, { target = it }, modifier = Modifier.fillMaxWidth())
+        Spacer(Modifier.height(8.dp))
+        lines.forEach { line ->
+            val lineNo = line.optInt("lineNo")
+            val max = line.optDouble("quantity")
+            val text = quantityTexts[lineNo].orEmpty()
+            val parsed = text.trim().replace(',', '.').toDoubleOrNull()
+            OutlinedTextField(
+                value = text,
+                onValueChange = { quantityTexts[lineNo] = it.filter { c -> c.isDigit() || c == '.' || c == ',' } },
+                label = {
+                    Text("${line.optString("itemNo")} · ${line.optString("lotNo").ifBlank { "Lotsuz" }} (en fazla ${fmtItemQty(max)})")
+                },
+                singleLine = true,
+                isError = text.isNotBlank() && (parsed == null || parsed < 0.0 || parsed > max),
+                modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp),
+            )
+        }
         Spacer(Modifier.height(16.dp))
         Button(
-            enabled = target.isNotBlank(),
+            enabled = target.isNotBlank() && linesJson != null,
             modifier = Modifier.fillMaxWidth(),
-            onClick = { onConfirm(target.trim()) },
+            onClick = { onConfirm(target.trim(), linesJson ?: return@Button, org.json.JSONArray(linesJson).length()) },
         ) { Text("Transfer Et") }
         Spacer(Modifier.height(24.dp))
     }

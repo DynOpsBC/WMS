@@ -1,6 +1,7 @@
 package com.dynops.bcwms.feature
 
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Assert.assertEquals
 import org.junit.Test
@@ -239,5 +240,31 @@ class LicensePlateWorkflowTest {
         assertEquals(2, o.getInt("copies"))
         assertFalse(o.has("optionsJson"))
         assertEquals(1, org.json.JSONObject(legacyMteBody("not json")).getInt("copies"))
+    }
+
+    @Test
+    fun lpTransferLinesJsonSendsPartialQuantitiesAndSkipsZeroLines() {
+        val json = lpTransferLinesJson(
+            listOf(
+                LpTransferEntry(10000, 100.0, "40"),
+                LpTransferEntry(20000, 50.0, "0"),
+                LpTransferEntry(30000, 8.0, "2,5"),
+            ),
+        )
+        val array = org.json.JSONArray(json)
+        assertEquals(2, array.length())
+        assertEquals(10000, array.getJSONObject(0).getInt("lineNo"))
+        assertEquals(40.0, array.getJSONObject(0).getDouble("qty"), 0.0)
+        assertEquals(30000, array.getJSONObject(1).getInt("lineNo"))
+        assertEquals(2.5, array.getJSONObject(1).getDouble("qty"), 0.0)
+    }
+
+    @Test
+    fun lpTransferLinesJsonRejectsInvalidInput() {
+        assertNull(lpTransferLinesJson(listOf(LpTransferEntry(10000, 5.0, "6"))))
+        assertNull(lpTransferLinesJson(listOf(LpTransferEntry(10000, 5.0, "abc"))))
+        assertNull(lpTransferLinesJson(listOf(LpTransferEntry(10000, 5.0, "-1"))))
+        assertNull(lpTransferLinesJson(listOf(LpTransferEntry(10000, 5.0, ""))))
+        assertNull(lpTransferLinesJson(emptyList()))
     }
 }

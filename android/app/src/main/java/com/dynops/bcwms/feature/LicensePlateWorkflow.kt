@@ -147,6 +147,27 @@ internal fun canPartiallyUseLicensePlate(status: String, lineCount: Int): Boolea
 internal fun validPartialUseInput(quantity: Double?, lineNo: Int?, maximumQuantity: Double): Boolean =
     quantity != null && quantity > 0.0 && quantity <= maximumQuantity && lineNo != null && lineNo > 0
 
+/** Transfer ekranındaki bir LP satırı: en çok taşınabilecek miktar ve operatörün yazdığı metin. */
+internal data class LpTransferEntry(val lineNo: Int, val maxQuantity: Double, val quantityText: String)
+
+/**
+ * Kısmi LP transferi için BC `transfer` eylemine gidecek `linesJson`.
+ * Boş ya da 0 yazılan satır taşınmaz; satırdaki miktardan fazlası ya da sayı olmayan
+ * metin geçersizdir (null). Hiç satır seçilmediyse de null döner.
+ */
+internal fun lpTransferLinesJson(entries: List<LpTransferEntry>): String? {
+    val array = org.json.JSONArray()
+    for (entry in entries) {
+        val text = entry.quantityText.trim()
+        val quantity = if (text.isEmpty()) 0.0 else text.replace(',', '.').toDoubleOrNull()?.takeIf { it.isFinite() }
+            ?: return null
+        if (quantity < 0.0 || quantity > entry.maxQuantity) return null
+        if (quantity == 0.0) continue
+        array.put(org.json.JSONObject().apply { put("lineNo", entry.lineNo); put("qty", quantity) })
+    }
+    return if (array.length() == 0) null else array.toString()
+}
+
 internal data class LpPartialAction(
     val apiValue: String,
     val label: String,
