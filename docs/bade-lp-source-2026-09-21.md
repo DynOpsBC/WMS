@@ -26,12 +26,25 @@ Mevcut LP satırında Kaynak Girişi Bağla işlemi yalnız bağlantı alanları
 
 ## Canlı öncesi gerekli BADE sandbox kontrolleri
 
-1. Önce BC 1.14.1.62, sonra APK 1.14.144 test ortamında kurulmalı; paket yüklemesinin eski LP/source alanlarını kendiliğinden değiştirmediği doğrulanmalı.
+1. Her ilgili şirkette kurulu BC uygulamasının gerçek veri sürümü ve veri yükseltmesinin tamamlandığı doğrulanmalı; APK sürümü bu kontrolün yerine geçmez. Canlıdan kopyalanmış test ortamında önce BC 1.14.1.62, sonra APK 1.14.144 kurulmalı; LP/source, stok miktarı ve raf alanlarının önce/sonra karşılaştırması yapılmalı. Aşağıdaki mevcut yükseltme işlemleri nedeniyle kurulu sürüm bilinmeden "kurulum hiçbir eski kaydı değiştirmez" denemez.
 2. Ayrı test uygulamasındaki codeunit 72182 Microsoft Test Explorer veya Test Tool üzerinden çalıştırılmalı. Uygulamanın kendi Test Center'ı bu Subtype=Test codeunit'ini çalıştırmaz.
 3. 150 bağlı + 850 kaynaksız örnekte LP Bilgisini Yenile'nin kaynak tahmin etmediği doğrulanmalı. 850 satırına açıkça doğru giriş seçildiğinde ILE Quantity/Remaining Quantity, toplam LP miktarı, raf ve SKT önce/sonra aynı kalmalı; sadece kaynak/LP referansları değişmeli. İkinci aynı istek yeni audit yaratmamalı.
 4. Farklı ürün/lot/seri/varyant/lokasyon, yetersiz stok, çelişen SKT ve boş belge reddedilmeli; başarısız işlem hiçbir kaynak bağlantısı bırakmamalı.
 5. Eski kaynak-opsiyonel APK/API, yeni kaynak seçmeli ekleme, toplu LP oluşturma, üretim LP etiketi ve tarihsel etiket yeniden basımı denenmeli.
 6. BADE müşteri PDF raporu 60150 kullanılıyorsa her PIN kullanıcısının displayName'i aynı şirkette tek aktif Employee ile eşleşmeli. Eşleşme yok/çoklu ise otomatik PDF baskısı hata verebilir; mal kabul başarılı kalabilir. ZPL bu Employee eşleşmesine ihtiyaç duymaz. Gerçek terminal rolüyle mal kabul+otomatik baskı ve bir yeniden baskı doğrulanmalı.
+
+## Mevcut yükseltme işlemleri
+
+Upgrade codeunit bu düzeltmede değiştirilmedi; ancak aşağıdaki işlemler kurulu ModuleInfo.DataVersion değerine göre otomatik çalışır. Upgrade Tag kullanılmıyor.
+
+| Kurulu veri sürümü | Mevcut otomatik işlem |
+| --- | --- |
+| 1.14.0.54 öncesi | Boş LP raflarını doldurur. |
+| 1.14.0.83 öncesi | Mal kabul LP bağlantılarını posted/warehouse/ILE/value kayıtlarında ve LP satırının kaynak giriş alanında onarır; LP güncel rafını günceller. |
+| 1.14.0.85 öncesi | Açık put-away satırlarını LP bazında böler. |
+| 1.14.1.29 öncesi | Eski sevk SSCC alanlarını taşır. |
+
+Kurulu veri sürümü en az 1.14.1.29 ise bu tarihsel işlemler atlanır; örneğin gerçekten kurulu ve veri yükseltmesi tamamlanmış 1.14.1.59/60/61 bu koşulu sağlar. Her yükseltmede kurulum/edition damgası, eksik profil/rol/rapor yönlendirmeleri ve zamanlanmış işler yine işlenir. Bu nedenle güvenli ifade: bu yeni düzeltme kaynaksız eski LP'leri tahmin ederek otomatik bağlamaz; kurulumun bütün etkisi, gerçek kurulu veri sürümü ve test ortamındaki önce/sonra karşılaştırmasıyla doğrulanmalıdır.
 
 ## Mevcut LP000400
 

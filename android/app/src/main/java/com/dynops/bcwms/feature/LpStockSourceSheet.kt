@@ -43,7 +43,7 @@ internal fun lpStockSourceEntries(rows: List<JSONObject>, key: LpStockSourceKey)
         val matches = listOf(
             "itemNo" to key.itemNo, "locationCode" to key.locationCode,
             "lotNo" to key.lotNo, "serialNo" to key.serialNo, "variantCode" to key.variantCode,
-        ).all { (field, expected) -> row.optString(field) == expected }
+        ).all { (field, expected) -> row.optString(field).trim().equals(expected.trim(), ignoreCase = true) }
         val available = row.optDouble("lpAllocatableQuantity", Double.NaN)
         val entryNo = row.optInt("entryNo")
         if (!matches || entryNo <= 0 || row.optDouble("quantity", 0.0) <= 0.0 ||
