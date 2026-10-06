@@ -29,7 +29,7 @@ Aynı kaynak satın alma belgesindeki lotlar ayrı takip/defter girişleri olara
 - Android debug APK derlemesi başarılı. Lint: 0 hata, 77 uyarı.
 - Değişen AL dosyaları Microsoft AL söz dizimi ayrıştırıcısıyla kontrol edildi: 0 söz dizimi hatası. Bu kontrol paket derlemesi veya çalışma zamanı testi değildir.
 - BC: altı AL regresyon testi eklendi. Lot bazında rezervasyon/LP miktarları, otomatik lot grupları, ortak lot uyumluluğu, çelişen tedarikçi lotu, miktar uyuşmazlığı ve dışlama/iptal davranışı kapsanır.
-- Projenin `CLAUDE.md` kuralı gereği macOS'ta AL paketi derlenmedi. AL testleri BC ortamında çalıştırılmadı; gerçek mal kabul kaydı, defter girişleri, yerleştirme ve etiketler için sandbox doğrulaması gereklidir.
-- Kaynak kod düzeltmesidir. Canlı BC kurulumu, sürüm artırımı veya GitHub yayını yapılmadı. Sahaya çıkış için güncel BC eklentisi ile terminal uygulaması birlikte yayımlanmalıdır.
+- BCWMSApp **1.14.1.125**, genel AL test paketi ve yazıcı test paketi [GitHub Windows derlemesinde](https://github.com/DynOpsBC/WMS/actions/runs/37451750721) başarıyla derlendi. AL testleri BC ortamında çalıştırılmadı; gerçek mal kabul kaydı, defter girişleri, yerleştirme ve etiketler için sandbox doğrulaması gereklidir.
+- Yayın sürümleri: BADE Android **1.14.169** (200169), BCWMSApp **1.14.1.125**. Release APK önceki BADE paketiyle aynı sertifikayı kullanır. Çoklu lot için BC paketi ayrıca yüklenmelidir; GitHub yayını canlı BC kurulumu yapmaz.
 
-Yerel doğrulama çıktıları: `build/receipt-multi-lot-20261006/`.
+Yerel doğrulama çıktıları: `build/receipt-multi-lot-20261006/` ve `build/bade-release-1.14.169-publication/`.

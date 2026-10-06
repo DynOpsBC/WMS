@@ -1,7 +1,7 @@
 {
-  "versionCode": 200168,
-  "versionName": "1.14.168-bade",
-  "apkUrl": "https://github.com/DynOpsBC/WMS/releases/download/android-v1.14.168-bade/BCWMS-BADE-1.14.168.apk",
-  "sha256": "2609f3e844c7c9997603dc41d828272d39f2e69f5b716e8b40b10508a9a8085f",
-  "releaseNotes": "Yazdırmadan mal kabul kaydındaki hatalı yazıcı kontrolü düzeltildi. Sayımın ilgisiz raflara genişlemesini önleyen BCWMSApp 1.14.1.124 paketi yayına eklendi; sayım düzeltmesi için BC paketini ayrıca yükleyip yeni belge açın."
+  "versionCode": 200169,
+  "versionName": "1.14.169-bade",
+  "apkUrl": "https://github.com/DynOpsBC/WMS/releases/download/android-v1.14.169-bade/BCWMS-BADE-1.14.169.apk",
+  "sha256": "212f59dad4c4fb070f4190a57a032a8b388781190af51f6f236a7a2156d94bf4",
+  "releaseNotes": "Tek mal kabul belgesinde farklı iç lot ve tedarikçi lotları için lot grupları eklendi. Çoklu lot özelliği için yayındaki BCWMSApp 1.14.1.125 paketini ayrıca BC ortamına yükleyin."
 }
