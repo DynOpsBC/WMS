@@ -125,7 +125,7 @@ fun ReceivingModule() {
 @Composable
 private fun WhseReceiptTab() {
     val context = LocalContext.current
-    val isDkc = com.dynops.bcwms.BuildConfig.FLAVOR.equals("emu", ignoreCase = true)
+    val isDkc = com.dynops.bcwms.isEmuFamily(com.dynops.bcwms.BuildConfig.FLAVOR)
     val scope = rememberCoroutineScope()
     var selected by remember { mutableStateOf<String?>(null) }
     var rows by remember { mutableStateOf<List<JSONObject>>(emptyList()) }
@@ -255,7 +255,7 @@ private fun ReceiveDocument(no: String, onBack: () -> Unit) {
     // Donanım Geri tuşu belge ekranından uygulamayı kapatmasın; listeye dönsün.
     androidx.activity.compose.BackHandler { onBack() }
     val context = LocalContext.current
-    val isDkc = com.dynops.bcwms.BuildConfig.FLAVOR.equals("emu", ignoreCase = true)
+    val isDkc = com.dynops.bcwms.isEmuFamily(com.dynops.bcwms.BuildConfig.FLAVOR)
     val scope = rememberCoroutineScope()
     var header by remember { mutableStateOf<JSONObject?>(null) }
     var lines by remember { mutableStateOf<List<JSONObject>>(emptyList()) }

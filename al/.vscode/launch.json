@@ -1,7 +1,30 @@
 {
   "version": "0.2.0",
   "configurations": [
-    
+    {
+      "name": "DemoSandbox - KITOKO (fast publish)",
+      "type": "al",
+      "request": "launch",
+      "environmentType": "Sandbox",
+      "environmentName": "DemoSandbox",
+      "tenant": "f270e8be-e7b0-4ac0-b34a-33014d34d994",
+      "authentication": "AAD",
+      "schemaUpdateMode": "Synchronize",
+      "dependencyPublishingOption": "Default",
+      "launchBrowser": false
+    },
+    {
+      "name": "DemoSandbox - KITOKO (force sync)",
+      "type": "al",
+      "request": "launch",
+      "environmentType": "Sandbox",
+      "environmentName": "DemoSandbox",
+      "tenant": "f270e8be-e7b0-4ac0-b34a-33014d34d994",
+      "authentication": "AAD",
+      "schemaUpdateMode": "ForceSync",
+      "dependencyPublishingOption": "Default",
+      "launchBrowser": false
+    },
     {
       "name": "Sandbox - ICT (fast publish)",
       "type": "al",

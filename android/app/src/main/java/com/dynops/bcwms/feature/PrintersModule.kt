@@ -124,9 +124,10 @@ fun PrintersModule() {
 
     fun saveTerminalPrinter(code: String, usage: String, displayName: String = "") {
         val terminal = WmsTerminalSession.code(context)
-        val username = BcApi.getLocalUser(context)
-        if (terminal.isBlank() || username.isBlank()) {
-            status = "UYARI: Önce kullanıcı ve terminal ile giriş yapın."
+        // Printer settings belong to the terminal, including service/AAD sessions.
+        // Keep this gate consistent with selectTerminalPrinter.
+        if (terminal.isBlank()) {
+            status = "UYARI: Önce terminal seçin."
             return
         }
         if (loading || saving) return
