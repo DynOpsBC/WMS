@@ -1,0 +1,1021 @@
+diff --git a/al-print-tests/app.json b/al-print-tests/app.json
+index f1ab781..c4d7889 100644
+--- a/al-print-tests/app.json
++++ b/al-print-tests/app.json
+@@ -12,6 +12,6 @@
+     "id": "984e25aa-07c2-4401-babc-88f975303a52",
+     "name": "BCWMSApp",
+     "publisher": "DynamicsOps",
+-    "version": "1.14.1.56"
++    "version": "1.14.1.62"
+   }]
+ }
+diff --git a/al/app.json b/al/app.json
+index 4b0a96a..a29dd50 100644
+--- a/al/app.json
++++ b/al/app.json
+@@ -2,7 +2,7 @@
+   "id": "984e25aa-07c2-4401-babc-88f975303a52",
+   "publisher": "DynamicsOps",
+   "name": "BCWMSApp",
+-  "version": "1.14.1.59",
++  "version": "1.14.1.62",
+   "brief": "Advanced Warehouse Management System for Business Central SaaS",
+   "description": "Advanced warehouse management foundation for Business Central SaaS.",
+   "privacyStatement": "https://dynops.com/privacy",
+diff --git a/al/src/Enums/LPAction.Enum.al b/al/src/Enums/LPAction.Enum.al
+index 991df41..9411592 100644
+--- a/al/src/Enums/LPAction.Enum.al
++++ b/al/src/Enums/LPAction.Enum.al
+@@ -13,4 +13,5 @@ enum 72201 "DOPSWHS LP Action"
+     value(8; Unbuilt) { Caption = 'Unbuilt'; }
+     value(9; ItemAdded) { Caption = 'Item Added'; }
+     value(10; ItemRemoved) { Caption = 'Item Removed'; }
++    value(11; SourceLinked) { Caption = 'Kaynak giriş bağlandı'; }
+ }
+diff --git a/al/src/Inquiry/ItemLedgerEntriesExt.PageExt.al b/al/src/Inquiry/ItemLedgerEntriesExt.PageExt.al
+index 1eab72a..dadb72e 100644
+--- a/al/src/Inquiry/ItemLedgerEntriesExt.PageExt.al
++++ b/al/src/Inquiry/ItemLedgerEntriesExt.PageExt.al
+@@ -37,7 +37,7 @@ pageextension 72313 "DOPSWHS Item Ledger Entries" extends "Item Ledger Entries"
+             {
+                 ApplicationArea = All;
+                 Caption = 'LP Bilgisini Yenile';
+-                ToolTip = 'Seçili madde defteri girişlerinin LP bilgisini deftere nakledilmiş ambar kayıtlarından veya sonradan oluşturulmuş tek ve kesin LP eşleşmesinden yeniden getirir.';
++                ToolTip = 'Seçili girişlerin mevcut kaynak bağlantılarından LP bilgisini yeniler. Eksik kaynakları tahmin ederek bağlamaz; LP kartından Kaynak Girişi Bağla ile doğru giriş seçilmelidir.';
+                 Image = RefreshLines;
+                 Promoted = true;
+                 PromotedCategory = Process;
+@@ -60,7 +60,7 @@ pageextension 72313 "DOPSWHS Item Ledger Entries" extends "Item Ledger Entries"
+ 
+                     CurrPage.Update(false);
+                     Message(
+-                        '%1 kayıt için LP bilgisi doğrulandı/güncellendi. %2 kayıt için ilişkili LP bulunamadı.',
++                        '%1 kayıt için LP bilgisi doğrulandı/güncellendi. %2 kayıt için kesin LP bağlantısı bulunamadı. Kaynağı eksik satırları LP kartından Kaynak Girişi Bağla ile kontrol edin.',
+                         UpdatedCount, NotFoundCount);
+                 end;
+             }
+diff --git a/al/src/Inquiry/ItemLedgerEntryApi.Page.al b/al/src/Inquiry/ItemLedgerEntryApi.Page.al
+index f576f61..c81aaef 100644
+--- a/al/src/Inquiry/ItemLedgerEntryApi.Page.al
++++ b/al/src/Inquiry/ItemLedgerEntryApi.Page.al
+@@ -64,6 +64,16 @@ page 72214 "DOPSWHS Item Ledger Entry API"
+         exit(FinishBulkLpCreation(CreatedLpNos, printLabels, printerId, false));
+     end;
+ 
++    [ServiceEnabled]
++    procedure createLicensePlatesWithMte(templateCode: Code[20]; binCode: Code[20]; lpCount: Integer; quantityPerLp: Decimal; printerId: Code[50]; printLabels: Boolean; optionsJson: Text): Text
++    var
++        LPMgt: Codeunit "DOPSWHS LP Management";
++        CreatedLpNos: List of [Code[20]];
++    begin
++        LPMgt.BuildManyFromItemLedgerEntry(Rec."Entry No.", templateCode, binCode, lpCount, quantityPerLp, CreatedLpNos);
++        exit(FinishBulkLpCreation(CreatedLpNos, printLabels, printerId, false, optionsJson));
++    end;
++
+     [ServiceEnabled]
+     procedure createLicensePlatesIdempotent(templateCode: Code[20]; binCode: Code[20]; lpCount: Integer; quantityPerLp: Decimal; printerId: Code[50]; printLabels: Boolean; requestId: Guid): Text
+     var
+@@ -77,6 +87,19 @@ page 72214 "DOPSWHS Item Ledger Entry API"
+         exit(FinishBulkLpCreation(CreatedLpNos, printLabels, printerId, Replayed));
+     end;
+ 
++    [ServiceEnabled]
++    procedure createLicensePlatesIdempotentWithMte(templateCode: Code[20]; binCode: Code[20]; lpCount: Integer; quantityPerLp: Decimal; printerId: Code[50]; printLabels: Boolean; requestId: Guid; optionsJson: Text): Text
++    var
++        LPMgt: Codeunit "DOPSWHS LP Management";
++        CreatedLpNos: List of [Code[20]];
++        Replayed: Boolean;
++    begin
++        LPMgt.BuildManyFromItemLedgerEntryIdempotent(
++            Rec."Entry No.", templateCode, binCode, lpCount, quantityPerLp,
++            requestId, CreatedLpNos, Replayed);
++        exit(FinishBulkLpCreation(CreatedLpNos, printLabels, printerId, Replayed, optionsJson));
++    end;
++
+     /// <summary>
+     /// Tam paletler + tek artık palet. Operatör yalnız "LP başına miktar"
+     /// girer; terminal tam palet adedini ve artık miktarı hesaplayıp buraya
+@@ -97,7 +120,25 @@ page 72214 "DOPSWHS Item Ledger Entry API"
+         exit(FinishBulkLpCreation(CreatedLpNos, printLabels, printerId, Replayed));
+     end;
+ 
++    [ServiceEnabled]
++    procedure createLicensePlatesFromPlanIdempotentWithMte(templateCode: Code[20]; binCode: Code[20]; lpCount: Integer; quantityPerLp: Decimal; quantityLastLp: Decimal; printerId: Code[50]; printLabels: Boolean; requestId: Guid; optionsJson: Text): Text
++    var
++        LPMgt: Codeunit "DOPSWHS LP Management";
++        CreatedLpNos: List of [Code[20]];
++        Replayed: Boolean;
++    begin
++        LPMgt.BuildManyFromItemLedgerEntryPlanIdempotent(
++            Rec."Entry No.", templateCode, binCode, lpCount, quantityPerLp, quantityLastLp,
++            requestId, CreatedLpNos, Replayed);
++        exit(FinishBulkLpCreation(CreatedLpNos, printLabels, printerId, Replayed, optionsJson));
++    end;
++
+     local procedure FinishBulkLpCreation(var CreatedLpNos: List of [Code[20]]; PrintLabels: Boolean; PrinterId: Code[50]; Replayed: Boolean): Text
++    begin
++        exit(FinishBulkLpCreation(CreatedLpNos, PrintLabels, PrinterId, Replayed, ''));
++    end;
++
++    local procedure FinishBulkLpCreation(var CreatedLpNos: List of [Code[20]]; PrintLabels: Boolean; PrinterId: Code[50]; Replayed: Boolean; OptionsJson: Text): Text
+     var
+         LP: Record "DOPSWHS LP Header";
+         LPMgt: Codeunit "DOPSWHS LP Management";
+@@ -120,7 +161,7 @@ page 72214 "DOPSWHS Item Ledger Entry API"
+             foreach LpNo in CreatedLpNos do begin
+                 LP.Get(LpNo);
+                 ClearLastError();
+-                if TryPrintPalletItemLabel(LP, PrinterId) then
++                if TryPrintPalletItemLabel(LP, PrinterId, OptionsJson) then
+                     PrintedCount += 1
+                 else begin
+                     PrintFailureCount += 1;
+@@ -147,11 +188,11 @@ page 72214 "DOPSWHS Item Ledger Entry API"
+     end;
+ 
+     [TryFunction]
+-    local procedure TryPrintPalletItemLabel(var LP: Record "DOPSWHS LP Header"; PrinterId: Code[50])
++    local procedure TryPrintPalletItemLabel(var LP: Record "DOPSWHS LP Header"; PrinterId: Code[50]; OptionsJson: Text)
+     var
+         Dispatcher: Codeunit "DOPSWHS Print Dispatcher";
+     begin
+-        Dispatcher.PrintPalletItemLabels(LP, PrinterId, 1);
++        Dispatcher.PrintPalletItemLabelsWithOptions(LP, PrinterId, 1, OptionsJson);
+     end;
+ 
+     var
+diff --git a/al/src/LPPropagation/LPPropagationSubscriber.Codeunit.al b/al/src/LPPropagation/LPPropagationSubscriber.Codeunit.al
+index 0bb4ffa..8c69dc9 100644
+--- a/al/src/LPPropagation/LPPropagationSubscriber.Codeunit.al
++++ b/al/src/LPPropagation/LPPropagationSubscriber.Codeunit.al
+@@ -495,7 +495,7 @@ codeunit 72428 "DOPSWHS LP Propagation"
+     begin
+         // Yeni akışta her LP satırı kesin kaynak giriş numarasını taşır. Tek
+         // LP kadar birden fazla LP'yi de önce bu kesin bağdan geri yükle.
+-        LPManagement.RefreshItemLedgerEntryLpReferences(ItemLedgerEntry."Entry No.");
++        LPManagement.RefreshItemLedgerEntryLpReferences(ItemLedgerEntry."Entry No.", false);
+         ItemLedgerEntry.Get(ItemLedgerEntry."Entry No.");
+         if (ItemLedgerEntry."DOPSWHS LP No." <> '') or
+            (ItemLedgerEntry."DOPSWHS LP Nos." <> '')
+@@ -541,25 +541,9 @@ codeunit 72428 "DOPSWHS LP Propagation"
+         if CandidateLpNo <> '' then
+             exit(CandidateLpNo);
+ 
+-        LPLine.Reset();
+-        LPLine.SetRange("Item No.", ItemLedgerEntry."Item No.");
+-        LPLine.SetRange("Variant Code", ItemLedgerEntry."Variant Code");
+-        LPLine.SetRange("Lot No.", ItemLedgerEntry."Lot No.");
+-        LPLine.SetRange("Serial No.", ItemLedgerEntry."Serial No.");
+-        LPLine.SetFilter(Quantity, '>0');
+-        if LPLine.FindSet() then
+-            repeat
+-                if LPHeader.Get(LPLine."LP No.") then
+-                    if (LPHeader."Location Code" = ItemLedgerEntry."Location Code") and
+-                       (LPHeader.Status in [LPHeader.Status::Open, LPHeader.Status::Built, LPHeader.Status::Assigned])
+-                    then
+-                        if CandidateLpNo = '' then
+-                            CandidateLpNo := LPLine."LP No."
+-                        else
+-                            if CandidateLpNo <> LPLine."LP No." then
+-                                exit('');
+-            until LPLine.Next() = 0;
+-        exit(CandidateLpNo);
++        // A matching item/lot is not proof of origin. Missing legacy links
++        // require explicit source selection on the LP line.
++        exit('');
+     end;
+ 
+     local procedure StampPostedReceiptWarehouseEntries(PostedLine: Record "Posted Whse. Receipt Line"; LpNo: Code[20])
+diff --git a/al/src/LicensePlate/LPApi.Page.al b/al/src/LicensePlate/LPApi.Page.al
+index f2d95ba..d8c2817 100644
+--- a/al/src/LicensePlate/LPApi.Page.al
++++ b/al/src/LicensePlate/LPApi.Page.al
+@@ -223,6 +223,29 @@ page 72088 "DOPSWHS LP API"
+         LPMgt.AddLineFromBin(Rec, itemNo, unitOfMeasure, quantity, lotNo, serialNo, sourceBinCode, userId);
+     end;
+ 
++    [ServiceEnabled]
++    procedure addLineFromBinWithSource(itemNo: Code[20]; unitOfMeasure: Code[10]; quantity: Decimal; lotNo: Code[50]; serialNo: Code[50]; sourceBinCode: Code[20]; userId: Code[50]; sourceItemLedgerEntryNo: Integer)
++    var
++        LPMgt: Codeunit "DOPSWHS LP Management";
++        SourceEntry: Record "Item Ledger Entry";
++    begin
++        if sourceItemLedgerEntryNo <= 0 then
++            Error('Kaynak madde defteri girişini seçin.');
++        SourceEntry.Get(sourceItemLedgerEntryNo);
++        SourceEntry.TestField("Document No.");
++        LPMgt.AddLineFromBin(Rec, itemNo, unitOfMeasure, quantity, lotNo, serialNo, sourceBinCode, userId, sourceItemLedgerEntryNo);
++    end;
++
++    [ServiceEnabled]
++    procedure linkStockSource(lineNo: Integer; sourceItemLedgerEntryNo: Integer)
++    var
++        LPMgt: Codeunit "DOPSWHS LP Management";
++    begin
++        if sourceItemLedgerEntryNo <= 0 then
++            Error('Kaynak madde defteri girişini seçin.');
++        LPMgt.LinkStockLineSource(Rec, lineNo, sourceItemLedgerEntryNo);
++    end;
++
+     [ServiceEnabled]
+     procedure moveToBin(targetBinCode: Code[20]; userId: Code[50])
+     var
+@@ -242,6 +265,12 @@ page 72088 "DOPSWHS LP API"
+ 
+     [ServiceEnabled]
+     procedure stopToPrinter(printLabel: Boolean; printerId: Code[50])
++    begin
++        stopToPrinterWithMte(printLabel, printerId, '');
++    end;
++
++    [ServiceEnabled]
++    procedure stopToPrinterWithMte(printLabel: Boolean; printerId: Code[50]; optionsJson: Text)
+     var
+         LPMgt: Codeunit "DOPSWHS LP Management";
+         Telemetry: Codeunit "DOPSWHS Telemetry";
+@@ -252,7 +281,7 @@ page 72088 "DOPSWHS LP API"
+         LPMgt.Stop(Rec, false);
+         if printLabel then begin
+             ClearLastError();
+-            if not TryPrintLabels(Rec, printerId) then
++            if not TryPrintLabels(Rec, printerId, optionsJson) then
+                 Telemetry.LogWarning(
+                     'Print.LPLabelFailed',
+                     CopyStr(
+@@ -265,11 +294,11 @@ page 72088 "DOPSWHS LP API"
+     end;
+ 
+     [TryFunction]
+-    local procedure TryPrintLabels(var LP: Record "DOPSWHS LP Header"; PrinterId: Code[50])
++    local procedure TryPrintLabels(var LP: Record "DOPSWHS LP Header"; PrinterId: Code[50]; OptionsJson: Text)
+     var
+         Dispatcher: Codeunit "DOPSWHS Print Dispatcher";
+     begin
+-        Dispatcher.PrintPalletItemLabels(LP, PrinterId, 1);
++        Dispatcher.PrintPalletItemLabelsWithOptions(LP, PrinterId, 1, OptionsJson);
+     end;
+ 
+     /// <summary>BADE: MTE with the operator's extra fields (Giriş Yapan, tedarikçi lotu, KK onayı, doküman/revizyon).</summary>
+@@ -281,6 +310,15 @@ page 72088 "DOPSWHS LP API"
+         Dispatcher.PrintPalletItemLabelsWithOptions(Rec, printerId, copies, optionsJson);
+     end;
+ 
++    // Distinct endpoint: older BC packages must reject rather than ignore operatorDisplayName.
++    [ServiceEnabled]
++    procedure printMteForOperator(printerId: Code[50]; copies: Integer; optionsJson: Text)
++    var
++        Dispatcher: Codeunit "DOPSWHS Print Dispatcher";
++    begin
++        Dispatcher.PrintPalletItemLabelsWithOptions(Rec, printerId, copies, optionsJson);
++    end;
++
+     /// <summary>JSON [{no,name}] of active employees for the MTE extra-field pickers.</summary>
+     [ServiceEnabled]
+     procedure listEmployees(): Text
+diff --git a/al/src/LicensePlate/LPLineListPart.Page.al b/al/src/LicensePlate/LPLineListPart.Page.al
+index b064e33..406800d 100644
+--- a/al/src/LicensePlate/LPLineListPart.Page.al
++++ b/al/src/LicensePlate/LPLineListPart.Page.al
+@@ -23,6 +23,59 @@ page 72483 "DOPSWHS LP Line ListPart"
+                 field("Child LP No."; Rec."Child LP No.") { ApplicationArea = All; }
+                 field("Expiration Date"; Rec."Expiration Date") { ApplicationArea = All; }
+                 field("Source LP No."; Rec."Source LP No.") { ApplicationArea = All; ToolTip = 'Bu satırın toplandığı/aktarıldığı kaynak palet.'; }
++                field("Source Item Ledger Entry No."; Rec."Source Item Ledger Entry No.")
++                {
++                    ApplicationArea = All;
++                    Caption = 'Kaynak Giriş No.';
++                    Editable = false;
++                    ToolTip = 'Bu satırın alındığı kesin madde defteri girişi.';
++                }
++                field("Source Document No."; Rec."Source Document No.")
++                {
++                    ApplicationArea = All;
++                    Caption = 'Kaynak Belge No.';
++                    Editable = false;
++                }
++            }
++        }
++    }
++
++    actions
++    {
++        area(Processing)
++        {
++            action(LinkStockSource)
++            {
++                ApplicationArea = All;
++                Caption = 'Kaynak Girişi Bağla';
++                ToolTip = 'Kaynağı eksik stok satırını seçtiğiniz madde defteri girişine bağlar. Stok miktarını veya rafını değiştirmez.';
++                Image = Entries;
++                trigger OnAction()
++                var
++                    LP: Record "DOPSWHS LP Header";
++                    Entry: Record "Item Ledger Entry";
++                    EntryLookup: Page "Item Ledger Entries";
++                    LPManagement: Codeunit "DOPSWHS LP Management";
++                begin
++                    Rec.TestField("Item No.");
++                    if Rec."Source Item Ledger Entry No." <> 0 then
++                        Error('Bu satır zaten %1 girişine bağlıdır.', Rec."Source Item Ledger Entry No.");
++                    LP.Get(Rec."LP No.");
++                    Entry.SetRange("Item No.", Rec."Item No.");
++                    Entry.SetRange("Variant Code", Rec."Variant Code");
++                    Entry.SetRange("Lot No.", Rec."Lot No.");
++                    Entry.SetRange("Serial No.", Rec."Serial No.");
++                    Entry.SetRange("Location Code", LP."Location Code");
++                    Entry.SetFilter(Quantity, '>0');
++                    Entry.SetFilter("Remaining Quantity", '>0');
++                    EntryLookup.SetTableView(Entry);
++                    EntryLookup.LookupMode(true);
++                    if EntryLookup.RunModal() <> Action::LookupOK then
++                        exit;
++                    EntryLookup.GetRecord(Entry);
++                    LPManagement.LinkStockLineSource(LP, Rec."Line No.", Entry."Entry No.");
++                    CurrPage.Update(false);
++                end;
+             }
+         }
+     }
+diff --git a/al/src/LicensePlate/LPManagement.Codeunit.al b/al/src/LicensePlate/LPManagement.Codeunit.al
+index d3adb5e..fc1a066 100644
+--- a/al/src/LicensePlate/LPManagement.Codeunit.al
++++ b/al/src/LicensePlate/LPManagement.Codeunit.al
+@@ -363,27 +363,11 @@ codeunit 72040 "DOPSWHS LP Management"
+     end;
+ 
+     local procedure AddItemLedgerEntryPartToLp(var LPHeader: Record "DOPSWHS LP Header"; ItemLedgerEntry: Record "Item Ledger Entry"; Item: Record Item; SourceBinCode: Code[20]; Quantity: Decimal)
+-    var
+-        LPLine: Record "DOPSWHS LP Line";
+     begin
+         AddLineFromBin(
+-            LPHeader,
+-            ItemLedgerEntry."Item No.",
+-            Item."Base Unit of Measure",
+-            Quantity,
+-            ItemLedgerEntry."Lot No.",
+-            ItemLedgerEntry."Serial No.",
+-            SourceBinCode,
+-            CopyStr(UserId(), 1, 50));
+-
+-        LPLine.SetRange("LP No.", LPHeader."No.");
+-        if not LPLine.FindLast() then
+-            Error('%1 LP satırı oluşturulamadı.', LPHeader."No.");
+-        LPLine."Source Document No." := ItemLedgerEntry."Document No.";
+-        LPLine."Source Document Line No." := ItemLedgerEntry."Entry No.";
+-        LPLine."Source Document Quantity" := ItemLedgerEntry.Quantity;
+-        LPLine."Source Item Ledger Entry No." := ItemLedgerEntry."Entry No.";
+-        LPLine.Modify(true);
++            LPHeader, ItemLedgerEntry."Item No.", Item."Base Unit of Measure", Quantity,
++            ItemLedgerEntry."Lot No.", ItemLedgerEntry."Serial No.", SourceBinCode,
++            CopyStr(UserId(), 1, 50), ItemLedgerEntry."Entry No.");
+     end;
+ 
+     local procedure EnsureBinReadyForStockLp(LocationCode: Code[10]; BinCode: Code[20]; var CheckedBinCodes: List of [Code[20]])
+@@ -400,6 +384,12 @@ codeunit 72040 "DOPSWHS LP Management"
+     /// </summary>
+     [CommitBehavior(CommitBehavior::Error)]
+     procedure AddLineFromBin(var LP: Record "DOPSWHS LP Header"; ItemNo: Code[20]; UoM: Code[10]; Qty: Decimal; LotNo: Code[50]; SerialNo: Code[50]; SourceBinCode: Code[20]; OperatorUserId: Code[50])
++    begin
++        AddLineFromBin(LP, ItemNo, UoM, Qty, LotNo, SerialNo, SourceBinCode, OperatorUserId, 0);
++    end;
++
++    [CommitBehavior(CommitBehavior::Error)]
++    procedure AddLineFromBin(var LP: Record "DOPSWHS LP Header"; ItemNo: Code[20]; UoM: Code[10]; Qty: Decimal; LotNo: Code[50]; SerialNo: Code[50]; SourceBinCode: Code[20]; OperatorUserId: Code[50]; SourceEntryNo: Integer)
+     var
+         LPLine: Record "DOPSWHS LP Line";
+         Item: Record Item;
+@@ -411,8 +401,14 @@ codeunit 72040 "DOPSWHS LP Management"
+         MovementMgmt: Codeunit "DOPSWHS Movement Mgmt";
+         EffectiveUoM: Code[10];
+         MovementQty: Decimal;
++        SourceEntry: Record "Item Ledger Entry";
+     begin
++        // Same lock order as bulk creation: source stock, headers, then lines.
++        SourceEntry.LockTable();
++        if SourceEntryNo > 0 then
++            SourceEntry.Get(SourceEntryNo);
+         LP.LockTable();
++        LPLine.LockTable();
+         LP.Get(LP."No.");
+         EnsureNotPendingReceipt(LP);
+         OnBeforeAddLine(LP, ItemNo, UoM, Qty);
+@@ -459,12 +455,6 @@ codeunit 72040 "DOPSWHS LP Management"
+ 
+         EnsureLooseStockAvailable(LP."Location Code", SourceBinCode, ItemNo, LotNo, SerialNo, MovementQty);
+ 
+-        LogMutation('LP.AddLineFromBin');
+-        if SourceBinCode <> LP."Bin Code" then
+-            MovementMgmt.AdHocMoveTrackedAtLocation(
+-                LP."Location Code", SourceBinCode, LP."Bin Code", ItemNo, LP."No.",
+-                MovementQty, OperatorUserId, LotNo, SerialNo);
+-
+         LPLine.Init();
+         LPLine."LP No." := LP."No.";
+         LPLine.Validate("Item No.", ItemNo);
+@@ -473,9 +463,24 @@ codeunit 72040 "DOPSWHS LP Management"
+         LPLine."Lot No." := LotNo;
+         LPLine."Serial No." := SerialNo;
+         LPLine."Source Bin Code" := SourceBinCode;
++        // Old API callers keep their source-optional contract. The new API
++        // and bulk entry-based creation always supply an exact source.
++        if SourceEntryNo > 0 then begin
++            SetStockLineSource(LP, LPLine, SourceEntryNo);
++            LPLine."Expiration Date" := SourceEntry."Expiration Date";
++        end;
++
++        LogMutation('LP.AddLineFromBin');
++        if SourceBinCode <> LP."Bin Code" then
++            MovementMgmt.AdHocMoveTrackedAtLocation(
++                LP."Location Code", SourceBinCode, LP."Bin Code", ItemNo, LP."No.",
++                MovementQty, OperatorUserId, LotNo, SerialNo);
++
+         LPLine.Insert(true);
+         WriteToLedger(LP, LPActionItemAdded(), SourceBinCode, LP."Bin Code", Qty, ItemNo, LotNo + SerialNo, '');
+         OnAfterAddLine(LP, LPLine);
++        if LPLine."Source Item Ledger Entry No." <> 0 then
++            RefreshItemLedgerEntryLpReferences(LPLine."Source Item Ledger Entry No.");
+     end;
+ 
+     /// <summary>
+@@ -1549,11 +1554,12 @@ codeunit 72040 "DOPSWHS LP Management"
+         AllocatedQuantity: Decimal;
+     begin
+         LPLine.SetRange("Source Item Ledger Entry No.", ItemLedgerEntryNo);
++        LPLine.SetFilter(Quantity, '>0');
+         if LPLine.FindSet() then
+             repeat
+                 if LPHeader.Get(LPLine."LP No.") then
+                     if LPHeader.Status in [LPHeader.Status::Open, LPHeader.Status::Built, LPHeader.Status::Assigned] then
+-                        AllocatedQuantity += LPLine.Quantity;
++                        AllocatedQuantity += StockLineBaseQuantity(LPLine);
+             until LPLine.Next() = 0;
+         exit(AllocatedQuantity);
+     end;
+@@ -1573,6 +1579,11 @@ codeunit 72040 "DOPSWHS LP Management"
+     end;
+ 
+     procedure RefreshItemLedgerEntryLpReferences(ItemLedgerEntryNo: Integer)
++    begin
++        RefreshItemLedgerEntryLpReferences(ItemLedgerEntryNo, true);
++    end;
++
++    procedure RefreshItemLedgerEntryLpReferences(ItemLedgerEntryNo: Integer; ClearWhenEmpty: Boolean)
+     var
+         ItemLedgerEntry: Record "Item Ledger Entry";
+         LPHeader: Record "DOPSWHS LP Header";
+@@ -1594,6 +1605,10 @@ codeunit 72040 "DOPSWHS LP Management"
+                             SeenLpNos.Add(LPHeader."No.", true);
+             until LPLine.Next() = 0;
+ 
++        // Backfill must preserve historical posted/consumed references when
++        // there are no longer any active LP lines for this stock entry.
++        if (SeenLpNos.Count() = 0) and not ClearWhenEmpty then
++            exit;
+         if SeenLpNos.Count() = 1 then
+             foreach LpNo in SeenLpNos.Keys() do
+                 NewLpNo := LpNo
+@@ -1616,6 +1631,101 @@ codeunit 72040 "DOPSWHS LP Management"
+         ItemLedgerEntry.Modify(false);
+     end;
+ 
++    local procedure StockLineBaseQuantity(LPLine: Record "DOPSWHS LP Line"): Decimal
++    var
++        Item: Record Item;
++        ItemUoM: Record "Item Unit of Measure";
++    begin
++        Item.Get(LPLine."Item No.");
++        if (LPLine."Unit of Measure" = '') or (LPLine."Unit of Measure" = Item."Base Unit of Measure") then
++            exit(LPLine.Quantity);
++        ItemUoM.Get(LPLine."Item No.", LPLine."Unit of Measure");
++        if ItemUoM."Qty. per Unit of Measure" <= 0 then
++            Error('%1 / %2 birim dönüşümü geçersiz.', LPLine."Item No.", LPLine."Unit of Measure");
++        exit(LPLine.Quantity * ItemUoM."Qty. per Unit of Measure");
++    end;
++
++    local procedure SetStockLineSource(LP: Record "DOPSWHS LP Header"; var LPLine: Record "DOPSWHS LP Line"; SourceEntryNo: Integer)
++    var
++        Entry: Record "Item Ledger Entry";
++        AvailableQty: Decimal;
++        RequiredQty: Decimal;
++    begin
++        LPLine.TestField("Item No.");
++        if LPLine.Quantity <= 0 then
++            Error('Kaynak bağlantısı için LP satır miktarı sıfırdan büyük olmalıdır.');
++        if LPLine."Source Document Type" <> LPLine."Source Document Type"::None then
++            Error('Bu satır bir depo belgesine bağlıdır. Kaynak bağlantısını ilgili belge üzerinden kontrol edin.');
++        if SourceEntryNo <= 0 then
++            Error('Kaynak stok girişini açıkça seçin.');
++        Entry.Get(SourceEntryNo);
++        if (Entry."Item No." <> LPLine."Item No.") or
++           (Entry."Variant Code" <> LPLine."Variant Code") or
++           (Entry."Lot No." <> LPLine."Lot No.") or
++           (Entry."Serial No." <> LPLine."Serial No.") or
++           (Entry."Location Code" <> LP."Location Code") or (Entry.Quantity <= 0)
++        then
++            Error('%1 kaynak girişi LP satırının ürün, varyant, lot, seri veya lokasyonuyla uyuşmuyor.', SourceEntryNo);
++        if LPLine."Source Item Ledger Entry No." <> 0 then begin
++            if LPLine."Source Item Ledger Entry No." = SourceEntryNo then
++                exit;
++            Error('Satır zaten %1 girişine bağlı; mevcut kaynak değiştirilemez.', LPLine."Source Item Ledger Entry No.");
++        end;
++        if (LPLine."Source Document No." <> '') and (LPLine."Source Document No." <> Entry."Document No.") then
++            Error('Seçilen giriş, satırın kayıtlı kaynak belgesiyle uyuşmuyor.');
++        if (LPLine."Expiration Date" <> 0D) and (Entry."Expiration Date" <> 0D) and
++           (LPLine."Expiration Date" <> Entry."Expiration Date")
++        then
++            Error('LP satırının son kullanma tarihi seçilen kaynak girişle uyuşmuyor. Mevcut tarih değiştirilmedi.');
++        RequiredQty := StockLineBaseQuantity(LPLine);
++        AvailableQty := Entry."Remaining Quantity" - AllocatedQuantityForItemLedgerEntry(SourceEntryNo);
++        if AvailableQty < RequiredQty then
++            Error('%1 kaynak girişinde LP''ye ayrılabilir miktar %2; gerekli temel miktar %3.', SourceEntryNo, AvailableQty, RequiredQty);
++        LPLine."Source Item Ledger Entry No." := SourceEntryNo;
++        LPLine."Source Document No." := Entry."Document No.";
++        LPLine."Source Document Line No." := Entry."Entry No.";
++        LPLine."Source Document Quantity" := Entry.Quantity;
++    end;
++
++    [CommitBehavior(CommitBehavior::Error)]
++    procedure LinkStockLineSource(var LP: Record "DOPSWHS LP Header"; LineNo: Integer; SourceEntryNo: Integer)
++    var
++        Entry: Record "Item Ledger Entry";
++        LPLine: Record "DOPSWHS LP Line";
++    begin
++        if SourceEntryNo <= 0 then
++            Error('Kaynak madde defteri girişini seçin.');
++        Entry.LockTable();
++        Entry.Get(SourceEntryNo);
++        Entry.TestField("Document No.");
++        LP.LockTable();
++        LPLine.LockTable();
++        LP.Get(LP."No.");
++        EnsureNotPendingReceipt(LP);
++        if not (LP.Status in [LP.Status::Open, LP.Status::Built, LP.Status::Assigned]) then
++            Error('Yalnız aktif LP satırlarının kaynak bağlantısı kurulabilir.');
++        LPLine.Get(LP."No.", LineNo);
++        SetStockLineSource(LP, LPLine, SourceEntryNo);
++        if LPLine."Source Item Ledger Entry No." = 0 then
++            Error('Kaynak giriş seçilmedi.');
++        // Repeated requests must not add stock or duplicate the audit entry.
++        Entry.Get(LPLine."Source Item Ledger Entry No.");
++        if not StockLineAlreadyLinked(LP, LineNo, Entry."Entry No.") then begin
++            LPLine.Modify(true);
++            WriteToLedger(LP, Enum::"DOPSWHS LP Action"::SourceLinked, LP."Bin Code", LP."Bin Code", 0,
++                LPLine."Item No.", LPLine."Lot No.", CopyStr(StrSubstNo('ILE:%1 LINE:%2', Entry."Entry No.", LineNo), 1, 40));
++        end;
++        RefreshItemLedgerEntryLpReferences(Entry."Entry No.");
++    end;
++
++    local procedure StockLineAlreadyLinked(LP: Record "DOPSWHS LP Header"; LineNo: Integer; EntryNo: Integer): Boolean
++    var
++        ExistingLine: Record "DOPSWHS LP Line";
++    begin
++        ExistingLine.Get(LP."No.", LineNo);
++        exit(ExistingLine."Source Item Ledger Entry No." = EntryNo);
++    end;
++
+     local procedure LoadExistingBulkBuildRequest(RequestId: Guid; ItemLedgerEntryNo: Integer; TemplateCode: Code[20]; BinCode: Code[20]; LpCount: Integer; QuantityPerLp: Decimal; QuantityLastLp: Decimal; ExpectedLpCount: Integer; var CreatedLpNos: List of [Code[20]]): Boolean
+     var
+         BulkRequest: Record "DOPSWHS LP Bulk Request";
+diff --git a/al/src/LicensePlate/MaddeTanimlamaLP.Report.al b/al/src/LicensePlate/MaddeTanimlamaLP.Report.al
+index 3283580..5d060b8 100644
+--- a/al/src/LicensePlate/MaddeTanimlamaLP.Report.al
++++ b/al/src/LicensePlate/MaddeTanimlamaLP.Report.al
+@@ -52,6 +52,21 @@ report 72375 "DOPSWHS MTE LP Report"
+         }
+     }
+ 
++    requestpage
++    {
++        layout
++        {
++            area(Content)
++            {
++                field(InspectorName; InspectorNameOverride)
++                {
++                    ApplicationArea = All;
++                    Caption = 'Giriş Yapan';
++                }
++            }
++        }
++    }
++
+     local procedure LoadDynamicLabelData(): Boolean
+     var
+         LPLine: Record "DOPSWHS LP Line";
+@@ -125,7 +140,9 @@ report 72375 "DOPSWHS MTE LP Report"
+         SetUnknownIfBlank(ReceiptDateText);
+         SetUnknownIfBlank(ReceiptNo);
+ 
+-        CheckedBy := LicensePlate."Built By User";
++        CheckedBy := InspectorNameOverride;
++        if CheckedBy = '' then
++            CheckedBy := LicensePlate."Built By User";
+         SetUnknownIfBlank(CheckedBy);
+         ApprovedBy := 'U.Y';
+         QualityApprovalName := 'U.Y';
+@@ -211,6 +228,7 @@ report 72375 "DOPSWHS MTE LP Report"
+         ReceiptDateText: Text;
+         ReceiptNo: Text;
+         CheckedBy: Text;
++        InspectorNameOverride: Text;
+         ApprovedBy: Text;
+         QualityApprovalName: Text;
+         QualityApprovalDate: Text;
+diff --git a/al/src/Print/MteZplBuilder.Codeunit.al b/al/src/Print/MteZplBuilder.Codeunit.al
+index b950436..72593b6 100644
+--- a/al/src/Print/MteZplBuilder.Codeunit.al
++++ b/al/src/Print/MteZplBuilder.Codeunit.al
+@@ -105,6 +105,8 @@ codeunit 72320 "DOPSWHS MTE Zpl Builder"
+                 ReceiptDate := DateText(DT2Date(LP."Built DateTime"));
+         ReceiptNo := ResolveReceiptNo(LPLine, ItemLedgerEntry, HaveEntry);
+         InspectorText := EmployeeName(JsonText(Options, 'inspectorEmployeeNo'));
++        if InspectorText = '' then
++            InspectorText := JsonText(Options, 'operatorDisplayName');
+         if InspectorText = '' then
+             InspectorText := LP."Built By User";
+         QcName := EmployeeName(JsonText(Options, 'qcEmployeeNo'));
+diff --git a/al/src/Print/PrintDispatcher.Codeunit.al b/al/src/Print/PrintDispatcher.Codeunit.al
+index f4f2e95..34b5b19 100644
+--- a/al/src/Print/PrintDispatcher.Codeunit.al
++++ b/al/src/Print/PrintDispatcher.Codeunit.al
+@@ -1,6 +1,7 @@
+ codeunit 72051 "DOPSWHS Print Dispatcher"
+ {
+     Access = Public;
++    Permissions = tabledata Employee = R;
+ 
+     procedure PrintLPLabel(var LP: Record "DOPSWHS LP Header"; PrinterId: Code[50]; Copies: Integer)
+     var
+@@ -111,8 +112,8 @@ codeunit 72051 "DOPSWHS Print Dispatcher"
+     /// <summary>
+     /// OptionsJson (terminal "MTE Yazdır" ekranı): inspectorEmployeeNo,
+     /// supplierLotNo, qcEmployeeNo, qcApprovalDate (yyyy-MM-dd), documentNo,
+-    /// revisionNo, revisionDate (yyyy-MM-dd). Used only by the customer report
+-    /// route; the ZPL label has no room for them.
++    /// revisionNo, revisionDate (yyyy-MM-dd), operatorDisplayName. The ZPL
++    /// and PDF routes both receive the same operator identity.
+     /// </summary>
+     procedure PrintPalletItemLabelsWithOptions(var LP: Record "DOPSWHS LP Header"; PrinterId: Code[50]; Copies: Integer; OptionsJson: Text)
+     var
+@@ -191,9 +192,12 @@ codeunit 72051 "DOPSWHS Print Dispatcher"
+         ReportLP := LP;
+         ReportLP.SetRecFilter();
+         SourceRecord.GetTable(ReportLP);
+-        PrintReport(
++        PrintReportWithParameters(
+             LP."No.",
+             Report::"DOPSWHS MTE LP Report",
++            '<ReportParameters id="' + Format(Report::"DOPSWHS MTE LP Report") + '"><Options>' +
++                XmlField('InspectorName', ResolveMteInspectorName(OptionsJson)) +
++                '</Options><DataItems></DataItems></ReportParameters>',
+             PrinterId,
+             Copies,
+             Enum::"DOPSWHS IWX Report Usage"::Receipt,
+@@ -231,6 +235,7 @@ codeunit 72051 "DOPSWHS Print Dispatcher"
+     begin
+         LPLine.SetRange("LP No.", LP."No.");
+         LPLine.SetFilter("Source Item Ledger Entry No.", '<>0');
++        LPLine.SetFilter(Quantity, '>0');
+         if LPLine.FindSet() then
+             repeat
+                 if not EntryNos.Contains(LPLine."Source Item Ledger Entry No.") then
+@@ -271,7 +276,7 @@ codeunit 72051 "DOPSWHS Print Dispatcher"
+         Xml := '<?xml version="1.0" standalone="yes"?>' +
+             '<ReportParameters id="' + Format(ReportId) + '"><Options>' +
+             XmlField('LpNoFilterReq', LP."No.") +
+-            XmlField('InspectorEmployeeNo', JsonText(Options, 'inspectorEmployeeNo')) +
++            XmlField('InspectorEmployeeNo', ResolveMteInspectorEmployeeNo(OptionsJson)) +
+             XmlField('TedarikciLotu', JsonText(Options, 'supplierLotNo')) +
+             XmlField('QualityControlEmployeeNo', JsonText(Options, 'qcEmployeeNo')) +
+             XmlField('QualityControlApprovalDate', JsonDateText(Options, 'qcApprovalDate')) +
+@@ -282,6 +287,63 @@ codeunit 72051 "DOPSWHS Print Dispatcher"
+         exit(Xml);
+     end;
+ 
++    // PDF report 60150 accepts an Employee No., never a literal operator name.
++    // A missing/ambiguous mapping must not silently print the BC service account.
++    procedure ResolveMteInspectorEmployeeNo(OptionsJson: Text): Text
++    var
++        Options: JsonObject;
++        Employee: Record Employee;
++        OperatorName: Text;
++        NameText: Text;
++        MatchNo: Code[20];
++    begin
++        if (OptionsJson <> '') and not Options.ReadFrom(OptionsJson) then
++            Error(MteOptionsInvalidErr);
++        if JsonText(Options, 'inspectorEmployeeNo') <> '' then
++            exit(JsonText(Options, 'inspectorEmployeeNo'));
++        OperatorName := JsonText(Options, 'operatorDisplayName').Trim();
++        if OperatorName = '' then
++            exit('');
++        Employee.SetRange(Status, Employee.Status::Active);
++        if Employee.FindSet() then
++            repeat
++                NameText := (Employee."First Name" + ' ' + Employee."Last Name").Trim();
++                if NameText = '' then
++                    NameText := Employee."Search Name";
++                if UpperCase(NameText) = UpperCase(OperatorName) then begin
++                    if MatchNo <> '' then
++                        Error('PDF MTE için %1 adına birden fazla çalışan bulundu. MTE Yazdır ekranında Giriş Yapan seçin.', OperatorName);
++                    MatchNo := Employee."No.";
++                end;
++            until Employee.Next() = 0;
++        if MatchNo = '' then
++            Error('PDF MTE için %1 adına çalışan bulunamadı. MTE Yazdır ekranında Giriş Yapan seçin.', OperatorName);
++        exit(MatchNo);
++    end;
++
++    procedure ResolveMteInspectorName(OptionsJson: Text): Text
++    var
++        Options: JsonObject;
++        Employee: Record Employee;
++        Inspector: Text;
++        NameText: Text;
++    begin
++        if (OptionsJson <> '') and not Options.ReadFrom(OptionsJson) then
++            Error(MteOptionsInvalidErr);
++        Inspector := JsonText(Options, 'inspectorEmployeeNo');
++        if Inspector = '' then
++            exit(JsonText(Options, 'operatorDisplayName'));
++        if StrLen(Inspector) <= MaxStrLen(Employee."No.") then
++            if Employee.Get(CopyStr(Inspector, 1, MaxStrLen(Employee."No."))) then begin
++                NameText := (Employee."First Name" + ' ' + Employee."Last Name").Trim();
++                if NameText = '' then
++                    NameText := Employee."Search Name";
++                if NameText <> '' then
++                    exit(NameText);
++            end;
++        exit(Inspector);
++    end;
++
+     local procedure XmlField(Name: Text; Value: Text): Text
+     begin
+         if Value = '' then
+@@ -338,6 +400,7 @@ codeunit 72051 "DOPSWHS Print Dispatcher"
+     begin
+         LPLine.SetRange("LP No.", LP."No.");
+         LPLine.SetFilter("Item No.", '<>%1', '');
++        LPLine.SetFilter(Quantity, '>0');
+         if LPLine.FindSet() then
+             repeat
+                 GroupKey := PalletItemGroupKey(LPLine);
+@@ -378,6 +441,7 @@ codeunit 72051 "DOPSWHS Print Dispatcher"
+         GroupLine.SetRange("Source Document Type", LPLine."Source Document Type");
+         GroupLine.SetRange("Source Document No.", LPLine."Source Document No.");
+         GroupLine.SetRange("Source Document Line No.", LPLine."Source Document Line No.");
++        GroupLine.SetFilter(Quantity, '>0');
+         if GroupLine.FindSet() then
+             repeat
+                 GroupQuantity += GroupLine.Quantity;
+diff --git a/al/src/Receiving/ReceiptApi.Page.al b/al/src/Receiving/ReceiptApi.Page.al
+index 679ed31..a4cd4c5 100644
+--- a/al/src/Receiving/ReceiptApi.Page.al
++++ b/al/src/Receiving/ReceiptApi.Page.al
+@@ -159,6 +159,12 @@ page 72090 "DOPSWHS Receipt API"
+ 
+     [ServiceEnabled]
+     procedure postAndCloseLP(print: Boolean; invoice: Boolean; printerId: Code[50]; lpPrinterId: Code[50])
++    begin
++        postAndCloseLPWithMte(print, invoice, printerId, lpPrinterId, '');
++    end;
++
++    [ServiceEnabled]
++    procedure postAndCloseLPWithMte(print: Boolean; invoice: Boolean; printerId: Code[50]; lpPrinterId: Code[50]; optionsJson: Text)
+     var
+         Setup: Record "DOPSWHS Setup";
+         ReceiptMgmt: Codeunit "DOPSWHS Receipt Mgmt";
+@@ -173,7 +179,7 @@ page 72090 "DOPSWHS Receipt API"
+         PrintLpLabels := true;
+         if Setup.Get('') then
+             PrintLpLabels := not Setup."Manual Receipt Label Print";
+-        ReceiptMgmt.PostReceiptAndCloseLP(Rec, print, invoice, '', printerId, PrintLpLabels, lpPrinterId);
++        ReceiptMgmt.PostReceiptAndCloseLP(Rec, print, invoice, '', printerId, PrintLpLabels, lpPrinterId, optionsJson);
+     end;
+ 
+     /// <summary>
+diff --git a/al/src/Receiving/ReceiptMgmt.Codeunit.al b/al/src/Receiving/ReceiptMgmt.Codeunit.al
+index 8d5c936..67f9162 100644
+--- a/al/src/Receiving/ReceiptMgmt.Codeunit.al
++++ b/al/src/Receiving/ReceiptMgmt.Codeunit.al
+@@ -39,6 +39,11 @@ codeunit 72043 "DOPSWHS Receipt Mgmt"
+     end;
+ 
+     procedure PostReceiptAndCloseLP(var WhseReceiptHeader: Record "Warehouse Receipt Header"; PrintReport: Boolean; Invoice: Boolean; OperatorUserId: Code[50]; PrinterId: Code[50]; PrintLpLabels: Boolean; LpPrinterId: Code[50])
++    begin
++        PostReceiptAndCloseLP(WhseReceiptHeader, PrintReport, Invoice, OperatorUserId, PrinterId, PrintLpLabels, LpPrinterId, '');
++    end;
++
++    procedure PostReceiptAndCloseLP(var WhseReceiptHeader: Record "Warehouse Receipt Header"; PrintReport: Boolean; Invoice: Boolean; OperatorUserId: Code[50]; PrinterId: Code[50]; PrintLpLabels: Boolean; LpPrinterId: Code[50]; MteOptionsJson: Text)
+     var
+         WhseReceiptLine: Record "Warehouse Receipt Line";
+         PostedWhseReceiptHeader: Record "Posted Whse. Receipt Header";
+@@ -175,7 +180,7 @@ codeunit 72043 "DOPSWHS Receipt Mgmt"
+             foreach ClosedLpNo in ClosedLpNos do
+                 if ClosedLP.Get(ClosedLpNo) then begin
+                     ClearLastError();
+-                    if not TryPrintCombinedMteLabel(ClosedLP, LpPrinterId) then
++                    if not TryPrintCombinedMteLabel(ClosedLP, LpPrinterId, MteOptionsJson) then
+                         Telemetry.LogWarning(
+                             'Print.ReceiptLpLabelsFailed',
+                             CopyStr(StrSubstNo('%1 LP etiketi yazdırılamadı: %2', ClosedLpNo, GetLastErrorText()), 1, 250),
+@@ -1071,7 +1076,7 @@ codeunit 72043 "DOPSWHS Receipt Mgmt"
+         LPMgt.Stop(LP, false, PrinterId);
+         if PrintLabel then begin
+             ClearLastError();
+-            if not TryPrintCombinedMteLabel(LP, PrinterId) then
++            if not TryPrintCombinedMteLabel(LP, PrinterId, '') then
+                 Telemetry.LogWarning(
+                     'Print.ReceiptLpLabelsFailed',
+                     CopyStr(
+@@ -1547,11 +1552,11 @@ codeunit 72043 "DOPSWHS Receipt Mgmt"
+     end;
+ 
+     [TryFunction]
+-    local procedure TryPrintCombinedMteLabel(var LP: Record "DOPSWHS LP Header"; PrinterId: Code[50])
++    local procedure TryPrintCombinedMteLabel(var LP: Record "DOPSWHS LP Header"; PrinterId: Code[50]; OptionsJson: Text)
+     var
+         Dispatcher: Codeunit "DOPSWHS Print Dispatcher";
+     begin
+-        Dispatcher.PrintPalletItemLabels(LP, PrinterId, 1);
++        Dispatcher.PrintPalletItemLabelsWithOptions(LP, PrinterId, 1, OptionsJson);
+     end;
+ 
+     /// <summary>
+diff --git a/android/app/build.gradle.kts b/android/app/build.gradle.kts
+index a21c19c..68f63f4 100644
+--- a/android/app/build.gradle.kts
++++ b/android/app/build.gradle.kts
+@@ -9,8 +9,8 @@ val releaseVersionCodeOverride = providers.gradleProperty("releaseVersionCode").
+ val releaseVersionNameOverride = providers.gradleProperty("releaseVersionName").orNull?.takeIf { it.isNotBlank() }
+ // BADE ve EMU aynı kaynak koddan aynı anda yayınlanır. Müşteri flavor'larında
+ // ayrı sürüm değeri tutmak bir paketin geride kalmasına neden oluyordu.
+-val customerVersionCode = releaseVersionCodeOverride ?: 200141
+-val customerVersionName = releaseVersionNameOverride ?: "1.14.141"
++val customerVersionCode = releaseVersionCodeOverride ?: 200144
++val customerVersionName = releaseVersionNameOverride ?: "1.14.144"
+ 
+ plugins {
+   alias(libs.plugins.android.application)
+diff --git a/android/app/src/main/java/com/dynops/bcwms/BcApi.kt b/android/app/src/main/java/com/dynops/bcwms/BcApi.kt
+index f8704de..89f7e10 100644
+--- a/android/app/src/main/java/com/dynops/bcwms/BcApi.kt
++++ b/android/app/src/main/java/com/dynops/bcwms/BcApi.kt
+@@ -798,9 +798,14 @@ object BcApi {
+         action: String,
+         body: String = "{}"
+     ): ApiResult {
++        val prepared = try {
++            prepareMteOperatorRequest(context, entitySet, action, body)
++        } catch (error: IllegalArgumentException) {
++            return ApiResult(false, 0, error.message.orEmpty())
++        }
+         val keySegment = if (key.contains("=") || key.startsWith("'")) key else "'${key.replace("'", "''")}'"
+-        val path = "$entitySet($keySegment)/Microsoft.NAV.$action"
+-        return request(context, "POST", path, body)
++        val path = "$entitySet($keySegment)/Microsoft.NAV.${prepared.action}"
++        return request(context, "POST", path, prepared.body)
+     }
+ 
+     /**
+@@ -815,9 +820,26 @@ object BcApi {
+         action: String,
+         body: String = "{}"
+     ): ApiResult {
++        val prepared = try {
++            prepareMteOperatorRequest(context, entitySet, action, body)
++        } catch (error: IllegalArgumentException) {
++            return ApiResult(false, 0, error.message.orEmpty())
++        }
+         val keySegment = if (key.contains("=") || key.startsWith("'")) key else "'${key.replace("'", "''")}'"
+-        val path = "$entitySet($keySegment)/Microsoft.NAV.$action"
+-        return request(context, "POST", path, body, longRunningClient)
++        val path = "$entitySet($keySegment)/Microsoft.NAV.${prepared.action}"
++        return request(context, "POST", path, prepared.body, longRunningClient)
++    }
++
++    private fun prepareMteOperatorRequest(
++        context: Context, entitySet: String, action: String, body: String,
++    ): com.dynops.bcwms.feature.MteOperatorRequest {
++        val original = com.dynops.bcwms.feature.MteOperatorRequest(action, body)
++        if (BuildConfig.FLAVOR != "bade") return original
++        val target = com.dynops.bcwms.feature.mteOperatorAction(entitySet, action) ?: return original
++        require(com.dynops.bcwms.feature.TerminalSession.authenticated(context)) {
++            "Oturum süresi doldu. PIN ile yeniden giriş yapın."
++        }
++        return com.dynops.bcwms.feature.mteOperatorRequest(target, body, getOperatorDisplayName(context))
+     }
+ 
+     private val httpClient: OkHttpClient by lazy {
+diff --git a/android/app/src/main/java/com/dynops/bcwms/feature/LicensePlateModule.kt b/android/app/src/main/java/com/dynops/bcwms/feature/LicensePlateModule.kt
+index 7070cc0..b53847d 100644
+--- a/android/app/src/main/java/com/dynops/bcwms/feature/LicensePlateModule.kt
++++ b/android/app/src/main/java/com/dynops/bcwms/feature/LicensePlateModule.kt
+@@ -281,6 +281,8 @@ private fun LpDocument(lpNo: String, onBack: () -> Unit) {
+     // dialogs — LP aç → kaynak bin + ürün/lot seç → adet → kaydet.
+     var showAddLine by remember { mutableStateOf(false) }
+     var showQty by remember { mutableStateOf(false) }
++    var pendingSourceAdd by remember { mutableStateOf<Pair<QuantityResult, String>?>(null) }
++    var sourceRepairLine by remember { mutableStateOf<JSONObject?>(null) }
+     var scannedItem by remember { mutableStateOf("") }
+     var selectedLineItem by remember { mutableStateOf<LpItemSelection?>(null) }
+     var showTransfer by remember { mutableStateOf(false) }
+@@ -361,7 +363,7 @@ private fun LpDocument(lpNo: String, onBack: () -> Unit) {
+     val canUnbuild = headerLoaded && linesComplete && !awaitingReceipt &&
+         (st.equals("Open", ignoreCase = true) || st.equals("Built", ignoreCase = true)) && !canDelete
+ 
+-    fun addLineFromSourceBin(res: com.dynops.bcwms.ui.QuantityResult, scannedBin: String) {
++    fun addLineFromSourceBin(res: com.dynops.bcwms.ui.QuantityResult, scannedBin: String, sourceEntryNo: Int = 0) {
+         scope.launch {
+             busy = true
+             val userId = BcApi.currentUserId(context).trim()
+@@ -403,8 +405,10 @@ private fun LpDocument(lpNo: String, onBack: () -> Unit) {
+                 put("serialNo", res.serialNo)
+                 put("sourceBinCode", sourceBin)
+                 put("userId", userId)
++                if (sourceEntryNo > 0) put("sourceItemLedgerEntryNo", sourceEntryNo)
+             }.toString()
+-            val r = BcApi.boundAction(context, "licensePlates", lpNo, "addLineFromBin", body)
++            val sourceAction = if (sourceEntryNo > 0) "addLineFromBinWithSource" else "addLineFromBin"
++            val r = BcApi.boundAction(context, "licensePlates", lpNo, sourceAction, body)
+             busy = false
+             val targetBin = h?.optString("binCode").orEmpty()
+             status = if (r.ok)
+@@ -460,15 +464,23 @@ private fun LpDocument(lpNo: String, onBack: () -> Unit) {
+                                     color = MaterialTheme.colorScheme.primary,
+                                     fontWeight = FontWeight.Bold,
+                                 )
+-                            val extra = listOfNotNull(
+-                                ln.optInt("sourceItemLedgerEntryNo").takeIf { it > 0 }?.let { "Kaynak giriş: #$it" },
+-                                ln.optString("sourceBinCode").takeIf { it.isNotBlank() && it != "null" }?.let { "Kaynak raf: $it" },
+-                                // BADE (16 Eyl 2026): sevk LP satırında ürünün geldiği palet.
+-                                ln.optString("sourceLpNo").takeIf { it.isNotBlank() && it != "null" }?.let { "Kaynak LP: $it" },
+-                                ln.optString("lotNo").takeIf { it.isNotBlank() }?.let { "Lot $it" },
+-                                ln.optString("serialNo").takeIf { it.isNotBlank() }?.let { "Seri $it" },
+-                            ).joinToString(" · ")
++                                val extra = listOfNotNull(
++                                    ln.optInt("sourceItemLedgerEntryNo").takeIf { it > 0 }?.let { "Kaynak giriş: #$it" },
++                                    ln.optString("sourceDocumentNo").takeIf { it.isNotBlank() && it != "null" }?.let { "Belge: $it" },
++                                    ln.optString("sourceBinCode").takeIf { it.isNotBlank() && it != "null" }?.let { "Kaynak raf: $it" },
++                                    // BADE (16 Eyl 2026): sevk LP satırında ürünün geldiği palet.
++                                    ln.optString("sourceLpNo").takeIf { it.isNotBlank() && it != "null" }?.let { "Kaynak LP: $it" },
++                                    ln.optString("lotNo").takeIf { it.isNotBlank() }?.let { "Lot $it" },
++                                    ln.optString("serialNo").takeIf { it.isNotBlank() }?.let { "Seri $it" },
++                                ).joinToString(" · ")
+                                 if (extra.isNotBlank()) Text(extra, fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
++                                if (com.dynops.bcwms.BuildConfig.FLAVOR == "bade" && !awaitingReceipt &&
++                                    st in listOf("Open", "Built", "Assigned") && ln.optDouble("quantity") > 0 &&
++                                    ln.optInt("sourceItemLedgerEntryNo") == 0 && ln.optString("sourceDocumentType") == "None") {
++                                    TextButton(onClick = { sourceRepairLine = ln }, enabled = !busy && linesComplete) {
++                                        Text("Kaynak Girişi Bağla")
++                                    }
++                                }
+                             }
+                         }
+                     }
+@@ -769,11 +781,43 @@ private fun LpDocument(lpNo: String, onBack: () -> Unit) {
+                     status = "HATA: Seri takipli üründe her seri numarası için miktar 1 olmalıdır."
+                 } else {
+                     showQty = false
+-                    addLineFromSourceBin(res, sourceBin)
++                    if (com.dynops.bcwms.BuildConfig.FLAVOR == "bade") pendingSourceAdd = res to sourceBin
++                    else addLineFromSourceBin(res, sourceBin)
+                 }
+             }
+         )
+     }
++    pendingSourceAdd?.let { (res, sourceBin) ->
++        LpStockSourceSheet(
++            source = LpStockSourceKey(scannedItem, h?.optString("locationCode").orEmpty(), res.lotNo, res.serialNo),
++            quantityLabel = "${res.quantity} ${res.uom}",
++            repair = false,
++            onDismiss = { pendingSourceAdd = null },
++            onChoose = { entryNo ->
++                pendingSourceAdd = null
++                addLineFromSourceBin(res, sourceBin, entryNo)
++            },
++        )
++    }
++    sourceRepairLine?.let { line ->
++        LpStockSourceSheet(
++            source = LpStockSourceKey(
++                line.optString("itemNo"), h?.optString("locationCode").orEmpty(),
++                line.optString("lotNo"), line.optString("serialNo"), line.optString("variantCode"),
++            ),
++            quantityLabel = "${line.optDouble("quantity")} ${line.optString("unitOfMeasure")}",
++            repair = true,
++            onDismiss = { sourceRepairLine = null },
++            onChoose = { entryNo ->
++                sourceRepairLine = null
++                action(
++                    "linkStockSource",
++                    JSONObject().put("lineNo", line.optInt("lineNo")).put("sourceItemLedgerEntryNo", entryNo).toString(),
++                    "Kaynak giriş #$entryNo bağlandı; stok miktarı değişmedi. Etiketi yeniden yazdırabilirsiniz.",
++                )
++            },
++        )
++    }
+     if (showMteOptions) {
+         MteOptionsSheet(
+             lpNo = lpNo,

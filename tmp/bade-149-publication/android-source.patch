@@ -1,0 +1,1430 @@
+--- a/android/app/build.gradle.kts
++++ b/android/app/build.gradle.kts
+@@ -9,8 +9,8 @@
+ val releaseVersionNameOverride = providers.gradleProperty("releaseVersionName").orNull?.takeIf { it.isNotBlank() }
+ // BADE ve EMU aynı kaynak koddan aynı anda yayınlanır. Müşteri flavor'larında
+ // ayrı sürüm değeri tutmak bir paketin geride kalmasına neden oluyordu.
+-val customerVersionCode = releaseVersionCodeOverride ?: 200144
+-val customerVersionName = releaseVersionNameOverride ?: "1.14.144"
++val customerVersionCode = releaseVersionCodeOverride ?: 200146
++val customerVersionName = releaseVersionNameOverride ?: "1.14.146"
+ 
+ plugins {
+   alias(libs.plugins.android.application)
+--- a/android/app/src/androidTest/java/com/dynops/bcwms/feature/TerminalDialogTest.kt
++++ b/android/app/src/androidTest/java/com/dynops/bcwms/feature/TerminalDialogTest.kt
+@@ -111,6 +111,38 @@
+         evidence("pallet-failure")
+     }
+ 
++    @Test fun palletLookupErrorSurvivesWrongScanCorrectBinPalletScanAndReload() {
++        val row = JSONObject("""{"no":"PI-AUDIT","lineNo":10000,"itemNo":"AUDIT-ITEM",
++            "description":"Test ürünü","locationCode":"DEPO","binCode":"A-01",
++            "lotNo":"LOT-A","unitOfMeasureCode":"ADET","qtyOutstanding":5}""")
++        compose.setContent { MaterialTheme {
++            PalletPickSheet("PI-AUDIT", groupLines(listOf(row), ::pickLineCapacity).single(), {}, {})
++        } }
++        val sourceError = "Toplama satırlarının tamamı alınamadı."
++        waitForText(sourceError)
++        compose.onNodeWithText("1. Kaynak rafın kodunu okut").performScrollTo().assertIsFocused()
++        compose.runOnIdle { ScanBus.emit(ScanEvent("LP000005", "")) }
++        waitForText("LP000005 bir palet etiketi.")
++        compose.onNodeWithText(sourceError, substring = true).assertExists()
++        compose.runOnIdle { ScanBus.emit(ScanEvent("A-02", "")) }
++        waitForText("Yanlış raf: A-02.")
++        compose.onNodeWithText(sourceError, substring = true).assertExists()
++        compose.runOnIdle { ScanBus.emit(ScanEvent("A-01", "")) }
++        waitForText("Raf doğrulandı: A-01.")
++        compose.onNodeWithText(sourceError, substring = true).assertExists()
++        compose.runOnIdle { ScanBus.emit(ScanEvent("LP000005", "")) }
++        waitForText("LP000005 okutuldu ama palet listesi hazır değil.")
++        compose.onNodeWithText("Palet listesi hazırlanamadı").performScrollTo().assertIsDisplayed()
++        compose.onNodeWithText(sourceError, substring = true).performScrollTo().assertIsDisplayed()
++        compose.onNodeWithText("Okutulan Paletleri Onayla").performScrollTo().assertIsNotEnabled()
++        compose.onNodeWithText("Palet listesini yenile").performScrollTo().performClick()
++        waitForText(sourceError)
++        compose.onNodeWithText("RAF DOĞRULANDI").assertExists()
++        compose.onNodeWithText(sourceError, substring = true).performScrollTo().assertIsDisplayed()
++        compose.onNodeWithText("Okutulan Paletleri Onayla").performScrollTo().assertIsNotEnabled()
++        evidence("pallet-error-retained")
++    }
++
+     @Test fun unavailableLotLookupCanBeRetriedWithoutLosingEnteredQuantity() {
+         compose.setContent { MaterialTheme { QuantityDialogSheet(
+             title = "Lot kontrolü", itemNo = "AUDIT-ITEM", initialQty = 3.0,
+--- a/android/app/src/main/java/com/dynops/bcwms/BcApi.kt
++++ b/android/app/src/main/java/com/dynops/bcwms/BcApi.kt
+@@ -482,10 +482,13 @@
+         val bulkLpPlan: Boolean,
+         val httpCode: Int,
+         val registerScannedPick: Boolean = false,
++        val registerProductionPallets: Boolean = false,
+     )
+ 
+-    internal fun pickRegistrationAction(capabilities: LpScanCapabilities): String? = when {
++    internal fun pickRegistrationAction(capabilities: LpScanCapabilities, requireIntactProductionLp: Boolean = false): String? = when {
+         !capabilities.metadataLoaded -> null
++        requireIntactProductionLp && capabilities.registerProductionPallets -> "registerProductionPalletsFor"
++        requireIntactProductionLp -> null
+         capabilities.registerScannedPick -> "registerScannedFor"
+         else -> "registerFor"
+     }
+@@ -504,6 +507,7 @@
+             bulkLpPlan = metadata.contains("createLicensePlatesFromPlanIdempotent", ignoreCase = true),
+             httpCode = httpCode,
+             registerScannedPick = Regex("""<(?:(?:\w+):)?Action\b[^>]*\bName\s*=\s*["']registerScannedFor["']""").containsMatchIn(metadata),
++            registerProductionPallets = Regex("""<(?:(?:\w+):)?Action\b[^>]*\bName\s*=\s*["']registerProductionPalletsFor["']""").containsMatchIn(metadata),
+         )
+ 
+     /**
+@@ -679,6 +683,16 @@
+     suspend fun patch(context: Context, path: String, jsonBody: String): ApiResult =
+         request(context, "PATCH", path, jsonBody)
+ 
++    /** Claim for the terminal operator and confirm the persisted owner before reporting success. */
++    suspend fun claimPick(context: Context, pickNo: String): ApiResult {
++        val escapedNo = pickNo.replace("'", "''")
++        return claimPickForOperator(
++            operatorId = currentUserId(context),
++            send = { action, body -> boundAction(context, "picks", pickNo, action, body) },
++            readHeader = { get(context, "picks('$escapedNo')?\$select=no,assignedUserId") },
++        )
++    }
++
+     /**
+      * Warehouse Pick satırları doğrudan PATCH edilmez. Bu action yerel WMS
+      * kullanıcısını sunucuya taşır; BC sahiplik ve lot kontrollerini atomik
+@@ -724,9 +738,18 @@
+      * gönderilmez. Kayıt/post işlemi uzun sürebildiği için uzun zaman aşımlı
+      * istemci kullanılır, belirsiz yanıtta ikinci kez post edilmez.
+      */
+-    suspend fun registerPick(context: Context, pickNo: String): ApiResult {
++    suspend fun registerPick(context: Context, pickNo: String, requireIntactProductionLp: Boolean = false): ApiResult {
++        val registrationCapabilities = getLpScanCapabilities(context)
++        // BADE's older pickLines omit sourceType, so they cannot reliably tell
++        // production from shipment picks. Require the new server protocol before
++        // any BADE registration; the old scanned action alone is not sufficient.
++        if ((requireIntactProductionLp || com.dynops.bcwms.feature.requiresPalletWorkflow(BuildConfig.FLAVOR)) &&
++            (!registrationCapabilities.metadataLoaded || !registrationCapabilities.registerProductionPallets)) {
++            return ApiResult(false, 503, JSONObject().put("error", JSONObject().put("message",
++                "Üretim LP desteği doğrulanamadı. Bu terminal sürümüyle uyumlu BC güncellemesini ve bağlantıyı kontrol edin; kayıt gönderilmedi.")).toString())
++        }
+         var scannedPlans: List<com.dynops.bcwms.feature.PalletPickPlan>? = null
+-        if (com.dynops.bcwms.feature.requiresPalletWorkflow(BuildConfig.FLAVOR)) {
++        if (requireIntactProductionLp || com.dynops.bcwms.feature.requiresPalletWorkflow(BuildConfig.FLAVOR)) {
+             try {
+                 scannedPlans = com.dynops.bcwms.feature.PalletPickVerification.requireVerifiedDocument(context, pickNo)
+             } catch (e: kotlinx.coroutines.CancellationException) {
+@@ -743,19 +766,20 @@
+                 body = """{"error":{"message":"Depo kullanıcısı belirlenemedi. Yeniden giriş yapın."}}""",
+             )
+         }
+-        val registrationCapabilities = if (scannedPlans != null) getLpScanCapabilities(context) else null
+-        val registrationAction = if (registrationCapabilities == null) "registerFor" else pickRegistrationAction(registrationCapabilities)
++        val registrationAction = if (scannedPlans == null) "registerFor"
++            else pickRegistrationAction(registrationCapabilities, requireIntactProductionLp)
+         if (registrationAction == null) {
+             return ApiResult(false, 503, JSONObject().put("error", JSONObject().put("message",
+-                "Palet kayıt desteği doğrulanamadı. Bağlantıyı kontrol edip tekrar deneyin; kayıt gönderilmedi.")).toString())
+-        }
+-        val exactRegistration = registrationAction == "registerScannedFor"
++                if (requireIntactProductionLp) "Üretime bütün LP taşıma desteği doğrulanamadı. Bağlantıyı ve sunucu sürümünü kontrol edin; kayıt gönderilmedi."
++                else "Palet kayıt desteği doğrulanamadı. Bağlantıyı kontrol edip tekrar deneyin; kayıt gönderilmedi.")).toString())
++        }
++        val exactRegistration = registrationAction == "registerScannedFor" || registrationAction == "registerProductionPalletsFor"
+         val body = JSONObject().apply {
+             put("userId", userId)
+             if (exactRegistration) put("palletPlan", com.dynops.bcwms.feature.scannedPalletRegistrationJson(requireNotNull(scannedPlans)))
+         }.toString()
+-        // Existing BC packages keep their existing action. Once the matching BC
+-        // extension advertises the new action, send every scanned LP/quantity.
++        // Production always requires the exact scanned plan. Other existing BC
++        // packages keep their action until the new endpoint is advertised.
+         // Never retry or fall back after a possibly successful posting request.
+         return boundActionLongRunning(context, "picks", pickNo, registrationAction, body)
+     }
+--- /dev/null
++++ b/android/app/src/main/java/com/dynops/bcwms/PickClaim.kt
+@@ -0,0 +1,35 @@
++package com.dynops.bcwms
++
++import com.dynops.bcwms.feature.canMutateAssignedDocument
++import org.json.JSONObject
++
++/** A successful POST alone does not prove that the signed-in operator owns the pick. */
++internal suspend fun claimPickForOperator(
++    operatorId: String,
++    send: suspend (action: String, body: String) -> BcApi.ApiResult,
++    readHeader: suspend () -> BcApi.ApiResult,
++): BcApi.ApiResult {
++    val userId = operatorId.trim()
++    if (userId.isBlank()) return pickClaimError(401, "Depo kullanıcısı doğrulanamadı. Yeniden giriş yapın.")
++
++    // Never fall back to assignToMe: that endpoint uses the shared BC account.
++    val claimed = send("claim", JSONObject().put("userId", userId).toString())
++    if (!claimed.ok) return claimed
++
++    val refreshed = readHeader()
++    if (!refreshed.ok) return pickClaimError(
++        refreshed.httpCode,
++        "Atama isteği gönderildi ancak belge sahibi doğrulanamadı. Belgeyi yenileyip kontrol edin.",
++    )
++    val owner = runCatching { JSONObject(refreshed.body).optString("assignedUserId") }.getOrDefault("")
++    if (!canMutateAssignedDocument(owner, userId)) return pickClaimError(
++        409,
++        if (owner.isBlank()) "Belgenin size atandığı doğrulanamadı. Belgeyi yenileyip kontrol edin."
++        else "Belge hâlâ $owner kullanıcısına atanmış. BC üzerinden atamayı kontrol edin.",
++    )
++    return refreshed
++}
++
++private fun pickClaimError(code: Int, message: String) = BcApi.ApiResult(
++    false, code, JSONObject().put("error", JSONObject().put("message", message)).toString(),
++)
+--- a/android/app/src/main/java/com/dynops/bcwms/feature/LpStockSourceSheet.kt
++++ b/android/app/src/main/java/com/dynops/bcwms/feature/LpStockSourceSheet.kt
+@@ -43,7 +43,7 @@
+         val matches = listOf(
+             "itemNo" to key.itemNo, "locationCode" to key.locationCode,
+             "lotNo" to key.lotNo, "serialNo" to key.serialNo, "variantCode" to key.variantCode,
+-        ).all { (field, expected) -> row.optString(field) == expected }
++        ).all { (field, expected) -> row.optString(field).trim().equals(expected.trim(), ignoreCase = true) }
+         val available = row.optDouble("lpAllocatableQuantity", Double.NaN)
+         val entryNo = row.optInt("entryNo")
+         if (!matches || entryNo <= 0 || row.optDouble("quantity", 0.0) <= 0.0 ||
+--- a/android/app/src/main/java/com/dynops/bcwms/feature/PalletPickPlan.kt
++++ b/android/app/src/main/java/com/dynops/bcwms/feature/PalletPickPlan.kt
+@@ -72,8 +72,10 @@
+     val expectedSerial = line.pickText("serialNo")
+     require(data.pickText("lotNo").equals(expectedLot, true)) { "Satırın lotu değişmiş. Belgeyi yenileyin." }
+     val array = data.getJSONArray("sources")
++    val preparedLp = data.pickText("preparedLpNo")
+     val candidates = (0 until array.length()).map { array.getJSONObject(it) }.filter {
+         it.pickText("binCode").equals(line.pickText("binCode"), true) &&
++            (preparedLp.isBlank() || it.pickText("lpNo").equals(preparedLp, true)) &&
+             (expectedLot.isBlank() || it.pickText("lotNo").equals(expectedLot, true)) &&
+             (expectedSerial.isBlank() || it.pickText("serialNo").equals(expectedSerial, true))
+     }
+--- a/android/app/src/main/java/com/dynops/bcwms/feature/PalletPickSheet.kt
++++ b/android/app/src/main/java/com/dynops/bcwms/feature/PalletPickSheet.kt
+@@ -34,11 +34,12 @@
+     val context = LocalContext.current
+     val scope = rememberCoroutineScope()
+     val key = "$pickNo|${group.key}|${group.lines.map { it.optInt("lineNo") }}"
+-    var quantity by remember(key) { mutableStateOf(fmtNum(group.totalOutstanding)) }
++    var quantity by remember(key) { mutableStateOf(fmtNum(initialPalletPickQuantity(group.lines, group.totalOutstanding))) }
+     var plans by remember(key) { mutableStateOf<List<PalletPickPlan>>(emptyList()) }
+     var sourceBinVerified by remember(key) { mutableStateOf(false) }
+     var scannedCount by remember(key) { mutableStateOf(0) }
+     var scan by remember(key) { mutableStateOf("") }
++    var loadError by remember(key) { mutableStateOf("") }
+     var error by remember(key) { mutableStateOf("") }
+     var scanMessage by remember(key) { mutableStateOf("") }
+     var loading by remember(key) { mutableStateOf(false) }
+@@ -47,7 +48,8 @@
+     val steps = palletScanSteps(plans)
+     val qty = quantity.replace(',', '.').toDoubleOrNull()
+     val uom = group.lines.first().optString("unitOfMeasureCode")
+-    val canConfirm = qty == 0.0 || (sourceBinVerified && palletScansComplete(steps, scannedCount))
++    val canConfirm = loadError.isBlank() &&
++        (qty == 0.0 || (sourceBinVerified && palletScansComplete(steps, scannedCount)))
+ 
+     suspend fun loadPlans(): List<PalletPickPlan> {
+         require(qty != null && qty.isFinite() && qty >= 0 && qty <= group.totalOutstanding + 0.00001) {
+@@ -62,7 +64,7 @@
+     // The verified source bin belongs to the group, not to one candidate list:
+     // it survives quantity edits, list refreshes and a rejected confirmation.
+     LaunchedEffect(key, quantity, reloadKey) {
+-        plans = emptyList(); scannedCount = 0; scan = ""; error = ""; scanMessage = ""; loading = true
++        plans = emptyList(); scannedCount = 0; scan = ""; loadError = ""; error = ""; scanMessage = ""; loading = true
+         try {
+             plans = loadPlans()
+             loading = false
+@@ -73,7 +75,7 @@
+             // against an empty list and the stale message survived the reload.
+             throw e
+         } catch (e: Exception) {
+-            error = e.message ?: "Paletler doğrulanamadı. Yenileyin."
++            loadError = e.message ?: "Paletler doğrulanamadı. Yenileyin."
+             loading = false
+         }
+     }
+@@ -91,6 +93,8 @@
+                 return
+             }
+             sourceBinVerified = true
++            // A correct bin proves the physical address, not a successful
++            // pallet lookup. Never erase that independent blocker here.
+             error = ""
+             scanMessage = "Raf doğrulandı: ${group.binCode}. Şimdi sıradaki paletin LP etiketini okutun."
+             return
+@@ -103,7 +107,7 @@
+         val currentSteps = palletScanSteps(plans)
+         if (currentSteps.isEmpty()) {
+             scanMessage = if (qty == 0.0) "Miktar sıfır. Palet toplamak için önce toplanacak miktarı girin."
+-            else "$value okutuldu ama palet listesi hazır değil. Yukarıdaki BC hatasını giderip listeyi yenileyin."
++            else "$value okutuldu ama palet listesi hazır değil. Hata ayrıntısını kontrol edip palet listesini yenileyin."
+             return
+         }
+         scanMessage = ""
+@@ -186,6 +190,17 @@
+             if (!submitting && sheetState.currentValue == SheetValue.Expanded) scanFocus.requestFocus()
+         }
+         if (scanMessage.isNotBlank()) Text(scanMessage, modifier = Modifier.padding(vertical = 8.dp))
++        if (loadError.isNotBlank()) {
++            Card(
++                modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
++                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer),
++            ) {
++                Column(Modifier.padding(12.dp)) {
++                    Text("Palet listesi hazırlanamadı", fontWeight = FontWeight.Bold)
++                    Text(loadError)
++                }
++            }
++        }
+         if (steps.isNotEmpty()) {
+             Text("${scannedCount}/${steps.size} palet adımı doğrulandı", Modifier.padding(vertical = 8.dp))
+             steps.forEachIndexed { index, step ->
+@@ -244,7 +259,7 @@
+                             onFinished("HATA: $accepted/$requestedCount satır onaylandı. ${e.message}. Belgeyi kontrol edin.")
+                         } else {
+                             plans = emptyList(); scannedCount = 0
+-                            error = e.message ?: "Doğrulama başarısız. Yenileyin."
++                            loadError = e.message ?: "Doğrulama başarısız. Yenileyin."
+                         }
+                     } finally {
+                         submitting = false
+--- a/android/app/src/main/java/com/dynops/bcwms/feature/PalletPickVerification.kt
++++ b/android/app/src/main/java/com/dynops/bcwms/feature/PalletPickVerification.kt
+@@ -16,9 +16,27 @@
+ ): List<PalletPickPlan> {
+     val safeNo = pickNo.replace("'", "''")
+     val page = BcApi.getAllPages(context, "pickLines?\$filter=no eq '$safeNo'&\$top=100")
+-    check(page.complete) { "Toplama satırlarının tamamı alınamadı. Belgeyi yenileyin." }
++    check(page.complete) {
++        val detail = page.error?.let { BcApi.errorMessage(it.body) }.orEmpty()
++        "Toplama satırlarının tamamı alınamadı. " +
++            if (detail.isNotBlank()) detail else "Belgeyi yenileyin."
++    }
++    return planDocumentPalletRows(page.rows, requested) { lineNo ->
++        BcApi.pickLineSources(context, pickNo, lineNo)
++    }
++}
++
++/** A row sheet needs earlier allocations only when they can use the same LP
++ * stock. Unrelated products/bins must not block this row. Whole-document
++ * registration (requested == null) still validates every staged Take row.
++ */
++internal suspend fun planDocumentPalletRows(
++    allRows: List<JSONObject>,
++    requested: List<Pair<JSONObject, Double>>? = null,
++    loadSources: suspend (lineNo: Int) -> BcApi.ApiResult,
++): List<PalletPickPlan> {
+     val overrides = requested?.associate { it.first.optInt("lineNo") to it.second }.orEmpty()
+-    val rows = page.rows.filter { it.optString("actionType").equals("Take", true) }.sortedBy { it.optInt("lineNo") }
++    val rows = allRows.filter { it.optString("actionType").equals("Take", true) }.sortedBy { it.optInt("lineNo") }
+     check(overrides.keys.all { no -> rows.any { it.optInt("lineNo") == no } }) { "Toplama satırı değişmiş. Belgeyi yenileyin." }
+     requested?.forEach { (expected, _) ->
+         val actual = rows.first { it.optInt("lineNo") == expected.optInt("lineNo") }
+@@ -30,6 +48,7 @@
+         "Farklı ölçü birimlerini ayrı satırlarda toplayın."
+     }
+     val lastRequested = overrides.keys.maxOrNull() ?: Int.MAX_VALUE
++    val selectedRows = rows.filter { (overrides[it.optInt("lineNo")] ?: 0.0) > 0.0 }
+     val used = mutableMapOf<String, Double>()
+     val result = mutableListOf<PalletPickPlan>()
+     for (row in rows) {
+@@ -37,13 +56,25 @@
+         if (lineNo > lastRequested) break
+         val amount = overrides[lineNo] ?: row.optDouble("qtyToHandle", 0.0)
+         if (amount <= 0) continue
+-        val response = BcApi.pickLineSources(context, pickNo, lineNo)
++        if (requested != null && lineNo !in overrides && selectedRows.none {
++                lineNo < it.optInt("lineNo") && sharesPalletStock(row, it)
++            }) continue
++        val response = loadSources(lineNo)
+         check(response.ok) { "Satır $lineNo paletleri doğrulanamadı: ${BcApi.errorMessage(response.body)}" }
+         val plan = buildPalletPickPlan(row, amount, BcApi.scalarValue(response.body), used)
+         if (requested == null || lineNo in overrides) result += plan
+     }
+     return result
+ }
++
++private fun sharesPalletStock(a: JSONObject, b: JSONObject): Boolean =
++    listOf("itemNo", "variantCode", "locationCode", "binCode").all {
++        fun text(row: JSONObject) = row.optString(it).takeUnless { value -> value == "null" }.orEmpty().trim()
++        text(a).equals(text(b), ignoreCase = true)
++    }
++// Unit of measure is deliberately excluded: different UOMs draw from the same
++// base quantity. Lot/serial restrictions stay conservative, so an unspecified
++// lot on an earlier row cannot accidentally allow double allocation.
+ 
+ internal fun palletPlanJson(plan: PalletPickPlan): String = JSONObject().apply {
+     put("lineNo", plan.lineNo); put("quantity", plan.quantity); put("lotNo", plan.lotNo); put("identity", plan.identity)
+--- a/android/app/src/main/java/com/dynops/bcwms/feature/PickingModule.kt
++++ b/android/app/src/main/java/com/dynops/bcwms/feature/PickingModule.kt
+@@ -59,7 +59,8 @@
+     pickMode: String,
+     qtyToHandle: List<Double>,
+     allCollected: Boolean,
+-): Boolean = if (pickMode.equals("Multi", ignoreCase = true)) {
++    productionPick: Boolean = false,
++): Boolean = if (pickMode.equals("Multi", ignoreCase = true) && !productionPick) {
+     allCollected
+ } else {
+     qtyToHandle.any { it > 0.0 }
+@@ -2153,10 +2154,13 @@
+             OutlinedButton(onClick = {
+                 // Paylaşımlı BC lisansı: atama oturumdaki WMS kullanıcısına yazılır.
+                 scope.launch {
+-                    val me = BcApi.currentUserId(context)
+-                    if (me.isNotBlank())
+-                        action("reassign", JSONObject().apply { put("userId", me); put("reason", "terminalden üstlenildi") }.toString(), "Üzerinize alındı ($me)")
+-                    else action("assignToMe", "{}", "Bana atandı")
++                    busy = true
++                    status = "Belge üzerinize alınıyor..."
++                    val r = BcApi.claimPick(context, no)
++                    status = if (r.ok) "TAMAM: Belge üzerinize alındı."
++                    else QcErrorParser.friendlyStatus(BcApi.errorMessage(r.body), r.httpCode)
++                    busy = false
++                    reload()
+                 }
+             }, enabled = !busy, modifier = Modifier.weight(1f)) { Text("Bana Ata") }
+         }
+--- a/android/app/src/main/java/com/dynops/bcwms/feature/ProductionAssemblyModules.kt
++++ b/android/app/src/main/java/com/dynops/bcwms/feature/ProductionAssemblyModules.kt
+@@ -21,6 +21,7 @@
+ import com.dynops.bcwms.scanner.BarcodeIntentResolver
+ import com.dynops.bcwms.scanner.ScanField
+ import com.dynops.bcwms.ui.*
++import kotlinx.coroutines.CancellationException
+ import kotlinx.coroutines.launch
+ import org.json.JSONObject
+ 
+@@ -55,6 +56,7 @@
+     var status by remember { mutableStateOf("") }
+     var loading by remember { mutableStateOf(false) }
+     var consumeLine by remember { mutableStateOf<JSONObject?>(null) }
++    var showPreparedLp by remember { mutableStateOf(false) }
+     var selectedOrderNo by remember { mutableStateOf<String?>(null) }
+     var showFinishConfirm by remember { mutableStateOf(false) }
+     var search by remember { mutableStateOf("") }
+@@ -84,7 +86,7 @@
+     // Barkod taraması yalnızca seçilen üretim emrinin bileşenlerinde arama yapar.
+     // Böylece aynı malzeme başka bir üretim emrine yanlışlıkla sarf edilmez.
+     DocumentScanHandler(
+-        enabled = selectedOrderNo != null && consumeLine == null && !loading,
++        enabled = selectedOrderNo != null && consumeLine == null && !showPreparedLp && !loading,
+         lines = selectedRows,
+         onSingleMatch = { line, _ -> scanFilter = ""; consumeLine = line },
+         onMultiMatch = { itemNo, _ -> scanFilter = itemNo; status = "TAMAM: '$itemNo' için birden fazla satır — birini seçin" },
+@@ -94,28 +96,38 @@
+         matchLinesByBarcode(listOf(it), BarcodeIntentResolver.resolve(scanFilter)).isNotEmpty()
+     }
+ 
+-    fun createPick() {
++    fun createPick(lpNo: String? = null) {
++        if (loading) return
+         val firstLine = selectedRows.firstOrNull() ?: return
+         scope.launch {
+             loading = true
+-            status = "Ambar Toplama oluşturuluyor..."
+-            val key = "status='${firstLine.optString("status").ifBlank { BcEnum.ProdOrderStatus.RELEASED }}'," +
+-                "prodOrderNo='${firstLine.optString("prodOrderNo")}'," +
+-                "prodOrderLineNo=${firstLine.optInt("prodOrderLineNo")}," +
+-                "componentLineNo=${firstLine.optInt("componentLineNo")}"
+-            val r = BcApi.post(context, "productionConsumption($key)/Microsoft.NAV.createPick", "{}")
+-            loading = false
+-            if (r.ok) {
+-                val pickNo = BcApi.scalarValue(r.body)
+-                if (pickNo.isBlank()) {
+-                    status = "HATA: Pick oluştu ancak belge numarası alınamadı."
+-                } else {
+-                    status = "TAMAM: $pickNo oluşturuldu"
++            status = "Üretim emrine bağlı ambar çekme hazırlanıyor..."
++            try {
++                val r = createProductionPickForOperator(
++                    prodOrderNo = firstLine.optString("prodOrderNo"),
++                    operatorId = BcApi.currentUserId(context),
++                    lpNo = lpNo,
++                    send = { action, body ->
++                        BcApi.post(context, "productionConsumption(${productionComponentKey(firstLine)})/Microsoft.NAV.$action", body)
++                    },
++                    readHeader = { pickNo ->
++                        BcApi.get(context, "picks('${pickNo.replace("'", "''")}')?\$select=no,sourceNo,assignedUserId")
++                    },
++                )
++                if (r.ok) {
++                    val pickNo = BcApi.scalarValue(r.body).trim()
++                    status = "TAMAM: $pickNo ambar çekmesi hazır"
+                     com.dynops.bcwms.WhsePickNavigation.request(pickNo)
+                     navigator(com.dynops.bcwms.Screen.Shipping)
++                } else {
++                    status = "HATA: ${BcApi.errorMessage(r.body)}"
+                 }
+-            } else {
+-                status = "HATA: ${BcApi.errorMessage(r.body)} (HTTP ${r.httpCode})"
++            } catch (e: CancellationException) {
++                throw e
++            } catch (e: Exception) {
++                status = "HATA: Ambar çekme sonucu doğrulanamadı. Toplama listesini kontrol edin. ${e.message.orEmpty()}"
++            } finally {
++                loading = false
+             }
+         }
+     }
+@@ -204,13 +216,22 @@
+             Spacer(Modifier.height(6.dp))
+             Row(verticalAlignment = Alignment.CenterVertically) {
+                 Button(onClick = { createPick() }, enabled = !loading && selectedRows.isNotEmpty()) {
+-                    Text(if (loading) "..." else "📦 Pick Et")
++                    Text(if (loading) "..." else "Ambar Çekme Aç")
+                 }
+                 Spacer(Modifier.width(8.dp))
+                 OutlinedButton(onClick = { load() }, enabled = !loading) {
+                     WmsActionLabel(WmsGlyph.ENTRIES, "Yenile")
+                 }
+             }
++            OutlinedButton(
++                onClick = { showPreparedLp = true },
++                enabled = !loading && selectedRows.isNotEmpty(),
++                modifier = Modifier.fillMaxWidth(),
++            ) { Text("Hazır LP ile Ambar Çekme") }
++            Text(
++                "Üretime hazırlanan LP'yi okutun. Toplamayı kaydettiğinizde LP bütün olarak üretim gözüne taşınır ve bu emre bağlanır.",
++                fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant,
++            )
+             Spacer(Modifier.height(6.dp))
+             OutlinedButton(
+                 onClick = { showFinishConfirm = true },
+@@ -242,6 +263,15 @@
+                 columns = c; ColumnPrefs.save(context, "consumption", c); showColumns = false
+             }
+         }
++    }
++
++    if (showPreparedLp && selectedRows.isNotEmpty()) {
++        PreparedProductionLpSheet(
++            orderNo = selectedOrderNo.orEmpty(),
++            components = selectedRows,
++            onDismiss = { showPreparedLp = false },
++            onConfirm = { lpNo -> showPreparedLp = false; createPick(lpNo) },
++        )
+     }
+ 
+     if (showFinishConfirm) {
+@@ -298,6 +328,103 @@
+                 }
+             }
+         )
++    }
++}
++
++@OptIn(ExperimentalMaterial3Api::class)
++@Composable
++private fun PreparedProductionLpSheet(
++    orderNo: String,
++    components: List<JSONObject>,
++    onDismiss: () -> Unit,
++    onConfirm: (String) -> Unit,
++) {
++    val context = LocalContext.current
++    val scope = rememberCoroutineScope()
++    var input by remember { mutableStateOf("") }
++    var header by remember { mutableStateOf<JSONObject?>(null) }
++    var contents by remember { mutableStateOf<List<JSONObject>>(emptyList()) }
++    var busy by remember { mutableStateOf(false) }
++    var status by remember { mutableStateOf("") }
++
++    fun loadPreview(raw: String) {
++        if (busy) return
++        val lpNo = BarcodeIntentResolver.resolve(raw).value.trim()
++        input = lpNo
++        header = null
++        contents = emptyList()
++        if (lpNo.isBlank()) { status = "LP numarasını okutun."; return }
++        busy = true
++        status = "LP ve içeriği doğrulanıyor..."
++        scope.launch {
++            try {
++                val safeNo = lpNo.replace("'", "''")
++                val result = BcApi.get(context, "licensePlates('$safeNo')")
++                check(result.ok) { BcApi.errorMessage(result.body) }
++                val loaded = JSONObject(result.body)
++                check(loaded.optString("no").equals(lpNo, true)) { "Okutulan LP doğrulanamadı." }
++                val page = BcApi.getAllPages(context, "licensePlateLines?\$filter=lpNo eq '$safeNo'&\$orderby=lineNo&\$top=100")
++                check(page.complete) { "LP içeriğinin tamamı alınamadı. Yenileyin." }
++                val loadedContents = page.rows.filter { it.optDouble("quantity") > 0 }
++                check(loadedContents.isNotEmpty()) { "LP içinde taşınacak ürün yok." }
++                header = loaded
++                contents = loadedContents
++                status = "LP hazır. İçeriği ve üretim hedefini kontrol edip ambar çekmesini açın."
++            } catch (e: CancellationException) {
++                throw e
++            } catch (e: Exception) {
++                status = "HATA: ${e.message ?: "LP doğrulanamadı."}"
++            } finally {
++                busy = false
++            }
++        }
++    }
++
++    SheetScaffold(onDismiss = { if (!busy) onDismiss() }, contentPadding = PaddingValues(20.dp)) {
++        Text("Hazır LP ile Ambar Çekme", fontWeight = FontWeight.Bold, fontSize = 18.sp)
++        Text("Üretim emri: $orderNo", fontWeight = FontWeight.SemiBold)
++        Spacer(Modifier.height(12.dp))
++        ScanField(
++            "Hazırlanan LP", input,
++            { input = it; header = null; contents = emptyList(); status = "" },
++            modifier = Modifier.fillMaxWidth(), enabled = !busy,
++            onScanned = { loadPreview(it) },
++        )
++        OutlinedButton(onClick = { loadPreview(input) }, enabled = !busy && input.isNotBlank()) {
++            Text(if (busy) "Kontrol ediliyor..." else "LP İçeriğini Göster")
++        }
++        StatusText(status)
++        header?.let { lp ->
++            Spacer(Modifier.height(8.dp))
++            Text("LP: ${lp.optString("no")}", fontWeight = FontWeight.Bold)
++            Text("Kaynak: ${lp.optString("locationCode")} / ${lp.optString("binCode")}")
++            Text("İçerik (${contents.size} satır)", fontWeight = FontWeight.SemiBold)
++            contents.forEach { line ->
++                Text(
++                    "${line.optString("itemNo").ifBlank { line.optString("childLpNo") }} · " +
++                        "${fmt(line.optDouble("quantity"))} ${line.optString("unitOfMeasure")}" +
++                        line.optString("lotNo").takeIf { it.isNotBlank() }?.let { " · Lot: $it" }.orEmpty(),
++                    fontSize = 13.sp,
++                )
++            }
++            Spacer(Modifier.height(8.dp))
++            Text("Üretim hedefi", fontWeight = FontWeight.SemiBold)
++            val items = contents.map { it.optString("itemNo") }.toSet()
++            val destinations = components.filter { it.optString("itemNo") in items }
++                .map { "${it.optString("locationCode")} / ${it.optString("binCode").ifBlank { "Tanımlı üretim gözü" }}" }.distinct()
++            if (destinations.isEmpty()) Text("Bu LP'nin ürünleri seçilen emirde bulunamadı.", color = MaterialTheme.colorScheme.error)
++            else destinations.forEach { Text(it, fontSize = 13.sp) }
++            Text(
++                "Yalnız bu LP'nin miktarları hazırlanır; diğer satırların işlenecek miktarı sıfırlanır. Başlanmış toplama değiştirilmez. Raf ve LP okutulduktan sonra Toplamayı Kaydet ile LP bütün olarak üretim gözüne taşınır.",
++                fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant,
++            )
++            Spacer(Modifier.height(12.dp))
++            Button(
++                onClick = { onConfirm(lp.optString("no")) },
++                enabled = !busy && destinations.isNotEmpty(), modifier = Modifier.fillMaxWidth(),
++            ) { Text("Bu LP ile Ambar Çekmesini Aç") }
++        }
++        Spacer(Modifier.height(20.dp))
+     }
+ }
+ 
+--- /dev/null
++++ b/android/app/src/main/java/com/dynops/bcwms/feature/ProductionPickFlow.kt
+@@ -0,0 +1,55 @@
++package com.dynops.bcwms.feature
++
++import com.dynops.bcwms.BcApi
++import org.json.JSONObject
++
++internal fun productionComponentKey(line: JSONObject): String =
++    "status='${line.optString("status").ifBlank { BcEnum.ProdOrderStatus.RELEASED }.replace("'", "''")}'," +
++        "prodOrderNo='${line.optString("prodOrderNo").replace("'", "''")}'," +
++        "prodOrderLineNo=${line.optInt("prodOrderLineNo")},componentLineNo=${line.optInt("componentLineNo")}"
++
++/** A pick must belong to both the selected production order and the terminal operator. */
++internal suspend fun createProductionPickForOperator(
++    prodOrderNo: String,
++    operatorId: String,
++    lpNo: String? = null,
++    send: suspend (action: String, body: String) -> BcApi.ApiResult,
++    readHeader: suspend (pickNo: String) -> BcApi.ApiResult,
++): BcApi.ApiResult {
++    val userId = operatorId.trim()
++    if (userId.isBlank()) return productionPickError(401, "Depo kullanıcısı doğrulanamadı. Yeniden giriş yapın.")
++    if (prodOrderNo.isBlank()) return productionPickError(400, "Üretim emri seçilmedi.")
++    if (lpNo != null && lpNo.isBlank()) return productionPickError(400, "Hazır LP numarasını okutun.")
++    val body = JSONObject().put("userId", userId)
++    if (lpNo != null) body.put("lpNo", lpNo.trim())
++    val result = send(if (lpNo == null) "createPickFor" else "createPickFromLpFor", body.toString())
++    if (!result.ok) return result
++    val pickNo = BcApi.scalarValue(result.body).trim()
++    if (pickNo.isBlank()) return productionPickError(502, "Ambar çekme isteği gönderildi ancak belge numarası alınamadı. Toplama listesini kontrol edin.")
++    val read = readHeader(pickNo)
++    val header = if (read.ok) runCatching { JSONObject(read.body) }.getOrNull() else null
++    if (header == null || header.optString("no") != pickNo ||
++        !header.optString("sourceNo").equals(prodOrderNo, ignoreCase = true)
++    ) return productionPickError(409, "$pickNo belgesinin üretim emri bağlantısı doğrulanamadı. Toplama listesinden kontrol edin.")
++    val owner = header.optString("assignedUserId")
++    if (!canMutateAssignedDocument(owner, userId)) return productionPickError(
++        409, "$pickNo belgesinin terminal kullanıcınıza atandığı doğrulanamadı. ${documentOwnershipMessage(owner, userId)}",
++    )
++    return result
++}
++
++internal fun isProductionPick(lines: List<JSONObject>): Boolean {
++    val take = lines.filter { BcEnum.decodeOData(it.optString("actionType")).equals("Take", true) }
++    return take.isNotEmpty() && take.all { it.optInt("sourceType") == 5407 && it.optInt("sourceSubtype", -1) == 3 }
++}
++
++/** A ready production pallet is scoped by BC to its own quantities. */
++internal fun initialPalletPickQuantity(lines: List<JSONObject>, outstanding: Double): Double {
++    if (!isProductionPick(lines) || lines.none { it.optString("licensePlateNo").isNotBlank() }) return outstanding
++    return lines.sumOf { it.optDouble("qtyToHandle", 0.0) }
++        .takeIf { it.isFinite() && it >= 0.0 && it <= outstanding + 0.00001 } ?: 0.0
++}
++
++private fun productionPickError(code: Int, message: String) = BcApi.ApiResult(
++    false, code, JSONObject().put("error", JSONObject().put("message", message)).toString(),
++)
+--- a/android/app/src/main/java/com/dynops/bcwms/feature/PutAwayShipModules.kt
++++ b/android/app/src/main/java/com/dynops/bcwms/feature/PutAwayShipModules.kt
+@@ -1777,7 +1777,7 @@
+     // Sevk LP (toplama sepeti) ve eksik bildirimi — API'de vardı, ekranda yoktu (UAT shipping-x04).
+     var shortLine by remember(no) { mutableStateOf<JSONObject?>(null) }
+ 
+-    fun reload() {
++    fun reload(verifyClaim: Boolean = false) {
+         scope.launch {
+             busy = true
+             header = null; lines = emptyList(); headerLoaded = false; linesComplete = false
+@@ -1799,10 +1799,27 @@
+             lines = page.rows
+             linesComplete = page.complete
+             if (!headerLoaded || !linesComplete) status = "Belgenin tüm satırları yüklenemedi. Yenileyip tekrar deneyin."
++            else if (verifyClaim) {
++                val owner = header?.optString("assignedUserId").orEmpty()
++                status = if (canMutateAssignedDocument(owner, myUserId)) "TAMAM: Belge üzerinize alındı."
++                else "HATA: ${documentOwnershipMessage(owner, myUserId)}"
++            }
+             busy = false
+         }
+     }
+     LaunchedEffect(no) { reload() }
++
++    fun claimForCurrentUser() {
++        scope.launch {
++            busy = true
++            status = "Belge üzerinize alınıyor..."
++            val r = BcApi.claimPick(context, no)
++            status = if (r.ok) "Atama kontrol ediliyor..."
++            else QcErrorParser.friendlyStatus(BcApi.errorMessage(r.body), r.httpCode)
++            busy = false
++            reload(verifyClaim = r.ok)
++        }
++    }
+ 
+     fun action(name: String, body: String, okMsg: String) {
+         if (myUserId.isBlank()) {
+@@ -1861,11 +1878,16 @@
+     val canMutate = headerLoaded && linesComplete &&
+         canMutateAssignedDocument(assignedTo, myUserId)
+     val takeLines = lines.filter { !BcEnum.decodeOData(it.optString("actionType")).equals("Place", ignoreCase = true) }
++    val productionPick = isProductionPick(lines)
++    val requireLpScan = lpScanRequired || productionPick
++    val productionDestinations = lines.filter { BcEnum.decodeOData(it.optString("actionType")).equals("Place", true) }
++        .map { "${it.optString("locationCode")} / ${it.optString("binCode")}" }.distinct().joinToString(", ")
+     val allCollected = takeLines.isNotEmpty() && takeLines.all { lineDone(it, LineModule.PICK) }
+     val readyToRegister = pickReadyToRegister(
+         pickMode = BcEnum.decodeOData(h?.optString("pickMode").orEmpty()),
+         qtyToHandle = takeLines.map { it.optDouble("qtyToHandle", 0.0) },
+         allCollected = allCollected,
++        productionPick = productionPick,
+     )
+     DocumentScanHandler(
+         enabled = qtyLine == null && groupTarget == null && !busy && canMutate,
+@@ -1905,7 +1927,9 @@
+             }
+             DocHeaderCard(
+                 title = no,
+-                subtitle = "Lokasyon: ${h?.optString("locationCode") ?: ""} · ${bcStatusLabelTr(h?.optString("status") ?: "")}",
++                subtitle = if (productionPick)
++                    "Üretim emri: ${h?.optString("sourceNo").orEmpty()}\nHedef: $productionDestinations"
++                else "Lokasyon: ${h?.optString("locationCode") ?: ""} · ${bcStatusLabelTr(h?.optString("status") ?: "")}",
+                 badge = assignedTo.ifBlank { "Atanmadı" },
+                 percent = h?.optDouble("percentComplete")?.toInt() ?: 0,
+             )
+@@ -1918,8 +1942,10 @@
+                     Column(Modifier.padding(12.dp)) {
+                         Text(documentOwnershipMessage(assignedTo, myUserId), fontWeight = FontWeight.Bold, fontSize = 14.sp, color = bcwmsStatus().danger)
+                         Text(
+-                            "Salt görüntüleme. Aynı belgeyi iki kişi toplarsa miktarlar çakışır. " +
+-                                "Devam etmek için önce \"Bana Ata\" ile sunucu üzerinden atama yapın.",
++                            if (assignedTo.isBlank())
++                                "Devam etmek için önce \"Bana Ata\" ile belgeyi üzerinize alın."
++                            else
++                                "Salt görüntüleme. Belge başka bir kullanıcıda. Depo sorumlusu BC üzerinden atamayı terminal kullanıcınıza devretmeli.",
+                             fontSize = 12.sp,
+                         )
+                     }
+@@ -1944,7 +1970,7 @@
+             }
+             if (binFilter.isNotBlank()) { ScanFilterChip("📍 Raf $binFilter") { binFilter = "" }; Spacer(Modifier.height(4.dp)) }
+             if (scanFilter.isNotBlank()) { ScanFilterChip(scanFilter) { scanFilter = "" }; Spacer(Modifier.height(4.dp)) }
+-            if (lpScanRequired) {
++            if (requireLpScan) {
+                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                     val sourceGroups = if (merge) displayGroups else groupLines(displayLines, ::pickLineCapacity)
+                         .flatMap { g -> g.lines.map { groupLines(listOf(it), ::pickLineCapacity).single() } }
+@@ -1981,7 +2007,9 @@
+             }
+             Spacer(Modifier.height(6.dp))
+             Text(
+-                if (h?.optString("mainLpNo").orEmpty().isBlank())
++                if (productionPick)
++                    "Paleti ve kaynak rafını doğrulayın. Toplamayı Kaydet, LP numarası ve içeriğini koruyarak üretim gözüne taşır ve üretim emrine bağlar. LP’nin tamamı bu emrin bileşenlerine karşılık gelmelidir."
++                else if (h?.optString("mainLpNo").orEmpty().isBlank())
+                     "Yeni Sevk Paleti: Birden fazla kaynak LP'den topladığınız ürünleri yeni tek bir sevk LP'sinde birleştirir. Kaynak LP'lerde yalnız kalan miktar kalır. Tam LP'leri olduğu gibi sevk edecekseniz kullanmayın."
+                 else
+                     "Yeni sevk paleti hazır. Girdiğiniz miktarlar kaynak LP'lerden bu LP'ye aktarılacak; kaynak LP'lerde kalan miktar korunacak.",
+@@ -1991,7 +2019,7 @@
+         }
+         BottomActionBar {
+             val mainLp = h?.optString("mainLpNo").orEmpty()
+-            Column(Modifier.weight(1f)) {
++            if (!productionPick) Column(Modifier.weight(1f)) {
+                 Text(
+                     if (mainLp.isBlank()) "Kısmi miktarları yeni LP'de birleştir" else "Toplamayı Kaydet ile içeriği aktarılır",
+                     fontSize = 10.sp,
+@@ -2036,16 +2064,15 @@
+             }
+         }
+         BottomActionBar {
+-            // "Bana Ata" kilitliyken de açık: devralma tek çıkış yolu. BC tarafı
+-            // (ClaimPick) belge başkasındaysa zaten reddeder, o hata gösterilir.
+-            OutlinedButton(onClick = { action("assignToMe", "{}", "Bana atandı") }, enabled = !busy && headerLoaded && linesComplete && myUserId.isNotBlank() && !canMutate, modifier = Modifier.weight(1f).height(com.dynops.bcwms.ui.wmsPrimaryButtonHeight())) {
++            // Claim always carries the terminal operator; BC rejects another owner's document.
++            OutlinedButton(onClick = { claimForCurrentUser() }, enabled = !busy && headerLoaded && linesComplete && myUserId.isNotBlank() && !canMutate, modifier = Modifier.weight(1f).height(com.dynops.bcwms.ui.wmsPrimaryButtonHeight())) {
+                 Text("Bana Ata")
+             }
+             val canRegister = canRegisterAssignedPick(assignedTo, myUserId, readyToRegister, inFlightLineNos.size) && headerLoaded && linesComplete
+             Button(onClick = {
+                 scope.launch {
+                     busy = true; status = "Toplama kaydediliyor..."
+-                    val r = BcApi.registerPick(context, no)
++                    val r = BcApi.registerPick(context, no, requireIntactProductionLp = productionPick)
+                     busy = false
+                     status = if (r.ok) "Toplama kaydedildi." else QcErrorParser.friendlyStatus(BcApi.errorMessage(r.body), r.httpCode)
+                     if (r.ok) reload()
+@@ -2094,13 +2121,13 @@
+     }
+ 
+     val ql = qtyLine
+-    if (ql != null && lpScanRequired) {
++    if (ql != null && requireLpScan) {
+         PalletPickSheet(no, groupLines(listOf(ql), ::pickLineCapacity).single(),
+             onDismiss = { qtyLine = null },
+             onFinished = { message -> qtyLine = null; status = message; reload() },
+         )
+     }
+-    if (ql != null && !lpScanRequired) {
++    if (ql != null && !requireLpScan) {
+         QuantityDialogSheet(
+             title = "Çekme Miktarı",
+             itemNo = ql.optString("itemNo"),
+@@ -2129,7 +2156,9 @@
+         AlertDialog(
+             onDismissRequest = { if (!busy) showCancelConfirm = false },
+             title = { Text("$no iptal edilsin mi?") },
+-            text = { Text("Yalnız kaydedilmemiş toplama iptal edilir. Sevkiyat silinmez; yeniden Pick Oluşturabilirsiniz.") },
++            text = { Text(if (productionPick)
++                "Yalnız kaydedilmemiş toplama iptal edilir. Üretim emri ve LP içeriği korunur; ambar çekmesini yeniden açabilirsiniz."
++                else "Yalnız kaydedilmemiş toplama iptal edilir. Sevkiyat silinmez; yeniden Pick Oluşturabilirsiniz.") },
+             dismissButton = {
+                 TextButton(onClick = { showCancelConfirm = false }, enabled = !busy) { Text("Vazgeç") }
+             },
+@@ -2143,13 +2172,13 @@
+         )
+     }
+     val gt = groupTarget
+-    if (gt != null && lpScanRequired) {
++    if (gt != null && requireLpScan) {
+         PalletPickSheet(no, gt,
+             onDismiss = { groupTarget = null },
+             onFinished = { message -> groupTarget = null; status = message; reload() },
+         )
+     }
+-    if (gt != null && !lpScanRequired) {
++    if (gt != null && !requireLpScan) {
+         QuantityDialogSheet(
+             title = "Çekme Miktarı (${gt.count} satıra dağıtılır)",
+             itemNo = gt.itemNo,
+--- a/android/app/src/test/java/com/dynops/bcwms/LpScanCapabilitiesTest.kt
++++ b/android/app/src/test/java/com/dynops/bcwms/LpScanCapabilitiesTest.kt
+@@ -10,6 +10,30 @@
+  * önceki akışa döner.
+  */
+ class LpScanCapabilitiesTest {
++    @Test fun `production registration never downgrades from scanned LP action`() {
++        val legacy = BcApi.parseLpScanCapabilities("""<Action Name="registerFor"/>""")
++        val previousScanned = BcApi.parseLpScanCapabilities("""<Action Name="registerScannedFor"/>""")
++        val current = BcApi.parseLpScanCapabilities("""<Action Name="registerProductionPalletsFor"/>""")
++        org.junit.Assert.assertNull(BcApi.pickRegistrationAction(legacy, requireIntactProductionLp = true))
++        org.junit.Assert.assertNull(BcApi.pickRegistrationAction(previousScanned, requireIntactProductionLp = true))
++        org.junit.Assert.assertEquals("registerProductionPalletsFor", BcApi.pickRegistrationAction(current, requireIntactProductionLp = true))
++        org.junit.Assert.assertNull(BcApi.pickRegistrationAction(current.copy(metadataLoaded = false), requireIntactProductionLp = true))
++        org.junit.Assert.assertEquals("registerFor", BcApi.pickRegistrationAction(legacy))
++    }
++
++    @Test fun `production support requires exact action not old scanned protocol or a property`() {
++        assertTrue(BcApi.parseLpScanCapabilities("""<edm:Action Name='registerProductionPalletsFor'/>""").registerProductionPallets)
++        listOf(
++            """<Action Name="registerScannedFor"/>""",
++            """<Action Name="registerProductionPalletsForPreview"/>""",
++            """<Property Name="registerProductionPalletsFor"/>""",
++        ).forEach { metadata ->
++            val caps = BcApi.parseLpScanCapabilities(metadata)
++            assertFalse(caps.registerProductionPallets)
++            org.junit.Assert.assertNull(BcApi.pickRegistrationAction(caps, requireIntactProductionLp = true))
++        }
++    }
++
+     @org.junit.Test fun metadataFailureNeverDowngradesToLegacyPosting() {
+         val old = BcApi.parseLpScanCapabilities("""<Action Name="registerFor"/>""")
+         val current = BcApi.parseLpScanCapabilities("""<Action Name="registerScannedFor"/>""")
+--- /dev/null
++++ b/android/app/src/test/java/com/dynops/bcwms/PickClaimTest.kt
+@@ -0,0 +1,78 @@
++package com.dynops.bcwms
++
++import kotlinx.coroutines.runBlocking
++import org.json.JSONObject
++import org.junit.Assert.*
++import org.junit.Test
++
++class PickClaimTest {
++    @Test fun `claim carries PIN username and waits for persisted ownership`() = runBlocking {
++        val calls = mutableListOf<String>()
++        val result = claimPickForOperator(" MERVE ", { action, body ->
++            calls += action
++            assertEquals("MERVE", JSONObject(body).getString("userId"))
++            BcApi.ApiResult(true, 204, "")
++        }, {
++            calls += "read"
++            BcApi.ApiResult(true, 200, """{"assignedUserId":"merve"}""")
++        })
++        assertTrue(result.ok)
++        assertEquals(listOf("claim", "read"), calls)
++    }
++
++    @Test fun `legacy service-account success is never reported as assigned to operator`() = runBlocking {
++        val result = claimPickForOperator("MERVE", { _, _ -> BcApi.ApiResult(true, 204, "") }, {
++            BcApi.ApiResult(true, 200, """{"assignedUserId":"DYNOPS"}""")
++        })
++        assertFalse(result.ok)
++        assertEquals(409, result.httpCode)
++        assertTrue(result.body.contains("DYNOPS"))
++    }
++
++    @Test fun `another owner's rejection is preserved with no fallback or second write`() = runBlocking {
++        val actions = mutableListOf<String>()
++        val rejection = BcApi.ApiResult(false, 400, "Belge başka kullanıcıda")
++        val result = claimPickForOperator("MERVE", { action, _ ->
++            actions += action
++            rejection
++        }, { error("Rejected claim must not be reported as success") })
++        assertSame(rejection, result)
++        assertEquals(listOf("claim"), actions)
++    }
++
++    @Test fun `missing operator never sends a mutation`() = runBlocking {
++        val result = claimPickForOperator("  ", { _, _ -> error("Must not call BC") }, { error("Must not call BC") })
++        assertFalse(result.ok)
++        assertEquals(401, result.httpCode)
++    }
++
++    @Test fun `failed ownership read keeps claim uncertain and does not retry write`() = runBlocking {
++        var writes = 0
++        val result = claimPickForOperator("MERVE", { _, _ ->
++            writes++
++            BcApi.ApiResult(true, 204, "")
++        }, { BcApi.ApiResult(false, 503, "offline") })
++        assertFalse(result.ok)
++        assertEquals(1, writes)
++        assertTrue(result.body.contains("doğrulanamadı"))
++    }
++
++    @Test fun `missing owner and malformed responses cannot unlock document`() = runBlocking {
++        for (body in listOf("{}", "not json", """{"assignedUserId":""}""")) {
++            val result = claimPickForOperator("MERVE", { _, _ -> BcApi.ApiResult(true, 204, "") }, {
++                BcApi.ApiResult(true, 200, body)
++            })
++            assertFalse(body, result.ok)
++        }
++    }
++
++    @Test fun `missing claim endpoint never falls back to BC account assignment`() = runBlocking {
++        val actions = mutableListOf<String>()
++        val result = claimPickForOperator("MERVE", { action, _ ->
++            actions += action
++            BcApi.ApiResult(false, 404, "action unavailable")
++        }, { error("Must not read after failed request") })
++        assertFalse(result.ok)
++        assertEquals(listOf("claim"), actions)
++    }
++}
+--- /dev/null
++++ b/android/app/src/test/java/com/dynops/bcwms/feature/DocumentPalletPlansTest.kt
+@@ -0,0 +1,302 @@
++package com.dynops.bcwms.feature
++
++import com.dynops.bcwms.BcApi
++import kotlinx.coroutines.runBlocking
++import org.json.JSONArray
++import org.json.JSONObject
++import org.junit.Assert.*
++import org.junit.Test
++
++class DocumentPalletPlansTest {
++
++    @Test
++    fun `selected bottle row is not blocked by unrelated row with no pallets or BC error`() = runBlocking {
++        val unrelated = row(10000, staged = 1.0).put("itemNo", "YM.00273").put("binCode", "Y.A01.11")
++        val selected = row(20000, outstanding = 7809.0)
++        for (unrelatedResponse in listOf(
++            sourceResult(unrelated, pallets = emptyList()),
++            BcApi.ApiResult(false, 500, "{\"error\":{\"message\":\"Kaynak palet okunamadı\"}}"),
++        )) {
++            val loaded = mutableListOf<Int>()
++            val plans = planDocumentPalletRows(listOf(unrelated, selected), listOf(selected to 7809.0)) { no ->
++                loaded += no
++                if (no == 10000) unrelatedResponse
++                else sourceResult(selected, pallets = listOf("LP000159" to 7809.0))
++            }
++            assertEquals(listOf(20000), loaded)
++            assertEquals(20000, plans.single().lineNo)
++            assertEquals("LP000159", plans.single().steps.single().lpNo)
++            assertEquals(7809.0, plans.single().steps.single().baseQuantity, 0.00001)
++        }
++    }
++
++    @Test
++    fun `same item on another bin location or variant does not block selected row`() = runBlocking {
++        for (field in listOf("binCode", "locationCode", "variantCode")) {
++            val unrelated = row(10000, staged = 1.0).put(field, "OTHER")
++            val selected = row(20000)
++            val loaded = mutableListOf<Int>()
++            val plans = planDocumentPalletRows(listOf(unrelated, selected), listOf(selected to 5.0)) { no ->
++                loaded += no
++                if (no == 10000) BcApi.ApiResult(false, 500, "Unrelated row must not be queried")
++                else sourceResult(selected)
++            }
++            assertEquals(field, listOf(20000), loaded)
++            assertEquals(5.0, plans.single().quantity, 0.00001)
++        }
++    }
++
++    @Test
++    fun `earlier allocation on the same resource consumes capacity before requested row`() = runBlocking {
++        val previous = row(10000, staged = 7.0)
++        val selected = row(20000)
++        val rows = listOf(previous, selected)
++        val loaded = mutableListOf<Int>()
++        val plans = planDocumentPalletRows(rows, listOf(selected to 5.0)) { no ->
++            loaded += no
++            sourceResult(rows.first { it.getInt("lineNo") == no })
++        }
++        assertEquals(listOf(10000, 20000), loaded)
++        assertEquals(listOf(20000), plans.map { it.lineNo })
++        assertEquals(listOf("LP000159", "LP000160"), plans.single().steps.map { it.lpNo })
++        assertEquals(listOf(3.0, 2.0), plans.single().steps.map { it.baseQuantity })
++    }
++
++    @Test
++    fun `prior allocation cannot be ignored to overallocate one shared pallet`() {
++        val previous = row(10000, staged = 7.0)
++        val selected = row(20000)
++        val rows = listOf(previous, selected)
++        val error = assertThrows(IllegalArgumentException::class.java) {
++            runBlocking {
++                planDocumentPalletRows(rows, listOf(selected to 5.0)) { no ->
++                    sourceResult(rows.first { it.getInt("lineNo") == no }, pallets = listOf("LP000159" to 10.0))
++                }
++            }
++        }
++        assertTrue(error.message.orEmpty().contains("yeterli stok yok"))
++    }
++
++    @Test
++    fun `resource matching is case insensitive and still deducts earlier stock`() = runBlocking {
++        val previous = row(10000, staged = 7.0).apply {
++            put("itemNo", "ab.02029")
++            put("variantCode", "blue")
++            put("locationCode", "merkezdepo")
++            put("binCode", "a.c01.13")
++        }
++        val selected = row(20000).put("variantCode", "BLUE")
++        val rows = listOf(previous, selected)
++        val loaded = mutableListOf<Int>()
++        val plans = planDocumentPalletRows(rows, listOf(selected to 5.0)) { no ->
++            loaded += no
++            sourceResult(rows.first { it.getInt("lineNo") == no })
++        }
++        assertEquals(listOf(10000, 20000), loaded)
++        assertEquals(listOf(3.0, 2.0), plans.single().steps.map { it.baseQuantity })
++    }
++
++    @Test
++    fun `previous row with different UOM draws from the same base stock`() = runBlocking {
++        val previous = row(10000, staged = 0.8).put("unitOfMeasureCode", "KOLI")
++        val selected = row(20000)
++        val loaded = mutableListOf<Int>()
++        val plans = planDocumentPalletRows(listOf(previous, selected), listOf(selected to 5.0)) { no ->
++            loaded += no
++            if (no == 10000) sourceResult(previous, baseFactor = 10.0) else sourceResult(selected)
++        }
++        assertEquals(listOf(10000, 20000), loaded)
++        assertEquals(listOf(2.0, 3.0), plans.single().steps.map { it.baseQuantity })
++        assertEquals(listOf(2.0, 3.0), plans.single().steps.map { it.quantity })
++    }
++
++    @Test
++    fun `unspecified lot and serial on earlier row still consume matching selected stock`() = runBlocking {
++        val previous = row(10000, staged = 7.0)
++        val selected = row(20000).put("lotNo", "LOT-A").put("serialNo", "SERIAL-A")
++        val rows = listOf(previous, selected)
++        val loaded = mutableListOf<Int>()
++        val plans = planDocumentPalletRows(rows, listOf(selected to 5.0)) { no ->
++            loaded += no
++            sourceResult(rows.first { it.getInt("lineNo") == no }, sourceSerial = "SERIAL-A")
++        }
++        assertEquals(listOf(10000, 20000), loaded)
++        assertEquals(listOf(3.0, 2.0), plans.single().steps.map { it.baseQuantity })
++    }
++
++    @Test
++    fun `full document registration still rejects an unrelated staged row without pallets`() {
++        val unrelated = row(10000, staged = 1.0).put("itemNo", "YM.00273").put("binCode", "Y.A01.11")
++        val selected = row(20000, staged = 5.0)
++        val loaded = mutableListOf<Int>()
++        val error = assertThrows(IllegalArgumentException::class.java) {
++            runBlocking {
++                planDocumentPalletRows(listOf(selected, unrelated)) { no ->
++                    loaded += no
++                    if (no == 10000) sourceResult(unrelated, pallets = emptyList()) else sourceResult(selected)
++                }
++            }
++        }
++        assertEquals(listOf(10000), loaded)
++        assertTrue(error.message.orEmpty().contains("YM.00273"))
++        assertTrue(error.message.orEmpty().contains("Y.A01.11"))
++    }
++
++    @Test
++    fun `full document validates every positive Take row and excludes Place or zero rows`() = runBlocking {
++        val first = row(10000, staged = 3.0)
++        val place = row(15000, staged = 3.0).put("actionType", "Place")
++        val zero = row(20000)
++        val otherItem = row(30000, staged = 2.0).put("itemNo", "YM.00273")
++        val rows = listOf(otherItem, zero, place, first)
++        val loaded = mutableListOf<Int>()
++        val plans = planDocumentPalletRows(rows) { no ->
++            loaded += no
++            sourceResult(rows.first { it.getInt("lineNo") == no })
++        }
++        assertEquals(listOf(10000, 30000), loaded)
++        assertEquals(listOf(10000, 30000), plans.map { it.lineNo })
++    }
++
++    @Test
++    fun `group selections keep line order and cumulative stock including intervening allocations`() = runBlocking {
++        val first = row(10000, staged = 2.0)
++        val selectedA = row(20000)
++        val middle = row(30000, staged = 3.0)
++        val selectedB = row(40000)
++        val later = row(50000, staged = 20.0)
++        val rows = listOf(later, selectedB, selectedA, middle, first)
++        val loaded = mutableListOf<Int>()
++        val plans = planDocumentPalletRows(rows, listOf(selectedB to 5.0, selectedA to 4.0)) { no ->
++            loaded += no
++            sourceResult(rows.first { it.getInt("lineNo") == no })
++        }
++        assertEquals(listOf(10000, 20000, 30000, 40000), loaded)
++        assertEquals(listOf(20000, 40000), plans.map { it.lineNo })
++        assertEquals(listOf(4.0), plans[0].steps.map { it.baseQuantity })
++        assertEquals(listOf(1.0, 4.0), plans[1].steps.map { it.baseQuantity })
++    }
++
++    @Test
++    fun `zero requested quantities and rows after the last request do not fetch sources`() = runBlocking {
++        val earlier = row(10000, staged = 1.0)
++        val selected = row(20000, staged = 5.0)
++        val later = row(30000, staged = 20.0)
++        for (requested in listOf(emptyList(), listOf(selected to 0.0))) {
++            val loaded = mutableListOf<Int>()
++            val plans = planDocumentPalletRows(listOf(earlier, selected, later), requested) { no ->
++                loaded += no
++                BcApi.ApiResult(false, 500, "No source request expected")
++            }
++            assertTrue(loaded.isEmpty())
++            assertTrue(plans.isEmpty())
++        }
++    }
++
++    @Test
++    fun `zero override releases previously staged stock for another requested row`() = runBlocking {
++        val released = row(10000, staged = 7.0)
++        val selected = row(20000)
++        val loaded = mutableListOf<Int>()
++        val plans = planDocumentPalletRows(listOf(released, selected), listOf(released to 0.0, selected to 10.0)) { no ->
++            loaded += no
++            if (no == 10000) BcApi.ApiResult(false, 500, "Released row must not be queried")
++            else sourceResult(selected, pallets = listOf("LP000159" to 10.0))
++        }
++        assertEquals(listOf(20000), loaded)
++        assertEquals(listOf(20000), plans.map { it.lineNo })
++        assertEquals(10.0, plans.single().steps.single().baseQuantity, 0.00001)
++    }
++
++    @Test
++    fun `later staged row is skipped even when zero request extends the selected boundary`() = runBlocking {
++        val selected = row(10000)
++        val later = row(20000, staged = 20.0)
++        val zero = row(30000, staged = 5.0)
++        val loaded = mutableListOf<Int>()
++        val plans = planDocumentPalletRows(listOf(selected, later, zero), listOf(selected to 5.0, zero to 0.0)) { no ->
++            loaded += no
++            if (no != 10000) BcApi.ApiResult(false, 500, "Later allocation must not block the selected row")
++            else sourceResult(selected)
++        }
++        assertEquals(listOf(10000), loaded)
++        assertEquals(listOf(10000), plans.map { it.lineNo })
++        assertEquals(5.0, plans.single().quantity, 0.00001)
++    }
++
++    @Test
++    fun `changed selected row identity is rejected before any source fetch`() {
++        for (field in listOf("itemNo", "variantCode", "locationCode", "binCode", "lotNo", "serialNo", "unitOfMeasureCode")) {
++            val expected = row(20000)
++            val actual = JSONObject(expected.toString()).put(field, "CHANGED")
++            val loaded = mutableListOf<Int>()
++            val error = assertThrows(IllegalStateException::class.java) {
++                runBlocking {
++                    planDocumentPalletRows(listOf(row(10000, staged = 1.0), actual), listOf(expected to 5.0)) { no ->
++                        loaded += no
++                        sourceResult(actual)
++                    }
++                }
++            }
++            assertTrue(field, loaded.isEmpty())
++            assertTrue(error.message.orEmpty().contains("değişmiş"))
++        }
++    }
++
++    @Test
++    fun `removed selected line is rejected before any source fetch`() {
++        val loaded = mutableListOf<Int>()
++        assertThrows(IllegalStateException::class.java) {
++            runBlocking {
++                planDocumentPalletRows(listOf(row(10000, staged = 1.0)), listOf(row(20000) to 5.0)) { no ->
++                    loaded += no
++                    BcApi.ApiResult(false, 404, "Removed line")
++                }
++            }
++        }
++        assertTrue(loaded.isEmpty())
++    }
++
++    private fun row(no: Int, staged: Double = 0.0, outstanding: Double = 20.0) = JSONObject().apply {
++        put("no", "PI001943")
++        put("lineNo", no)
++        put("actionType", "Take")
++        put("itemNo", "AB.02029")
++        put("variantCode", "")
++        put("locationCode", "MERKEZDEPO")
++        put("binCode", "A.C01.13")
++        put("lotNo", "")
++        put("serialNo", "")
++        put("unitOfMeasureCode", "ADET")
++        put("qtyOutstanding", outstanding)
++        put("qtyToHandle", staged)
++    }
++
++    private fun sourceResult(
++        row: JSONObject,
++        baseFactor: Double = 1.0,
++        pallets: List<Pair<String, Double>> = listOf("LP000159" to 10.0, "LP000160" to 10.0),
++        sourceSerial: String = "",
++    ): BcApi.ApiResult {
++        val body = JSONObject().apply {
++            put("activityNo", row.getString("no"))
++            put("lineNo", row.getInt("lineNo"))
++            for (field in listOf("itemNo", "variantCode", "locationCode", "binCode", "lotNo", "unitOfMeasureCode")) {
++                put(field, row.getString(field))
++            }
++            put("lotRequired", true)
++            put("outstandingQty", row.getDouble("qtyOutstanding"))
++            put("outstandingBaseQty", row.getDouble("qtyOutstanding") * baseFactor)
++            put("sources", JSONArray().apply {
++                for ((lp, available) in pallets) put(JSONObject().apply {
++                    put("lpNo", lp)
++                    put("binCode", row.getString("binCode"))
++                    put("lotNo", row.getString("lotNo").ifBlank { "LOT-A" })
++                    put("serialNo", sourceSerial)
++                    put("availableBaseQty", available)
++                })
++            })
++        }
++        return BcApi.ApiResult(true, 200, JSONObject().put("value", body.toString()).toString())
++    }
++}
+--- a/android/app/src/test/java/com/dynops/bcwms/feature/LpStockSourceTest.kt
++++ b/android/app/src/test/java/com/dynops/bcwms/feature/LpStockSourceTest.kt
+@@ -36,6 +36,11 @@
+         val rows = listOf(entry(53, 850.0), entry(454, 150.0))
+         assertEquals(listOf(53, 454), lpStockSourceEntries(rows, key).map { it.entryNo })
+     }
++    @Test fun `BC code fields match scanner casing without accepting another lot`() {
++        val scanned = key.copy(itemNo = "ab.01743", locationCode = "merkez", lotNo = "a101119")
++        assertEquals(listOf(53), lpStockSourceEntries(listOf(entry(53, 850.0)), scanned).map { it.entryNo })
++        assertTrue(lpStockSourceEntries(listOf(entry(53, 850.0)), scanned.copy(lotNo = "a101120")).isEmpty())
++    }
+     @Test fun `source lookup does not impose a total row limit`() {
+         assertFalse(lpStockSourcePath(key).contains("\$top="))
+         assertTrue(lpStockSourcePath(key).contains("\$orderby=postingDate,entryNo"))
+--- a/android/app/src/test/java/com/dynops/bcwms/feature/PalletPickPlanTest.kt
++++ b/android/app/src/test/java/com/dynops/bcwms/feature/PalletPickPlanTest.kt
+@@ -153,6 +153,27 @@
+         reject(line = row, data = data)
+     }
+ 
++    @Test fun `reserved production LP determines lot without including the other lot`() {
++        val row = line().put("lotNo", "")
++        val data = response().put("lotNo", "").put("preparedLpNo", "LP0002")
++        data.getJSONArray("sources").getJSONObject(1).put("lotNo", "LOT-B")
++        val plan = buildPalletPickPlan(row, 10.0, data.toString())
++        assertEquals("LOT-B", plan.lotNo)
++        assertEquals(listOf("LP0002"), plan.steps.map { it.lpNo })
++        assertEquals(100.0, plan.steps.single().baseQuantity, 0.00001)
++    }
++
++    @Test fun `prepared LP never falls back to another pallet when too small or unavailable`() {
++        reject(data = response().put("preparedLpNo", "LP0002"))
++        reject(data = response().put("preparedLpNo", "MISSING"), qty = 5.0)
++    }
++
++    @Test fun `prepared LP cannot override the lot already required on the pick`() {
++        val data = response().put("preparedLpNo", "LP0002")
++        data.getJSONArray("sources").getJSONObject(1).put("lotNo", "LOT-B")
++        reject(data = data, qty = 5.0)
++    }
++
+     @Test fun `merged or previously staged lines do not reuse pallet capacity`() {
+         val used = mutableMapOf<String, Double>()
+         buildPalletPickPlan(line(), 8.0, response().toString(), used)
+--- /dev/null
++++ b/android/app/src/test/java/com/dynops/bcwms/feature/ProductionPickFlowTest.kt
+@@ -0,0 +1,115 @@
++package com.dynops.bcwms.feature
++
++import com.dynops.bcwms.BcApi
++import kotlinx.coroutines.runBlocking
++import org.json.JSONObject
++import org.junit.Assert.*
++import org.junit.Test
++
++class ProductionPickFlowTest {
++    private fun created() = BcApi.ApiResult(true, 200, """{"value":"PICK-1"}""")
++    private fun header(owner: String = "MERVE", source: String = "PROD-1", no: String = "PICK-1") =
++        BcApi.ApiResult(true, 200, JSONObject().put("no", no).put("sourceNo", source).put("assignedUserId", owner).toString())
++
++    @Test fun `ready LP request preserves scanned pallet and terminal operator`() = runBlocking {
++        val events = mutableListOf<String>()
++        val result = createProductionPickForOperator("PROD-1", " MERVE ", " LP-3 ", { action, body ->
++            events += action
++            assertEquals("MERVE", JSONObject(body).getString("userId"))
++            assertEquals("LP-3", JSONObject(body).getString("lpNo"))
++            created()
++        }, { pick ->
++            assertEquals("PICK-1", pick)
++            events += "read"
++            header(owner = "merve")
++        })
++        assertTrue(result.ok)
++        assertEquals(listOf("createPickFromLpFor", "read"), events)
++    }
++
++    @Test fun `standard production pick also carries terminal operator`() = runBlocking {
++        val result = createProductionPickForOperator("PROD-1", "MERVE", send = { action, body ->
++            assertEquals("createPickFor", action)
++            assertFalse(JSONObject(body).has("lpNo"))
++            created()
++        }, readHeader = { header() })
++        assertTrue(result.ok)
++    }
++
++    @Test fun `missing operator or explicit blank LP never mutates`() = runBlocking {
++        for ((user, lp) in listOf(" " to "LP-1", "MERVE" to " ")) {
++            val result = createProductionPickForOperator("PROD-1", user, lp,
++                { _, _ -> error("Must not write") }, { error("Must not read") })
++            assertFalse(result.ok)
++        }
++    }
++
++    @Test fun `missing endpoint never falls back to shared BC identity`() = runBlocking {
++        val actions = mutableListOf<String>()
++        val rejection = BcApi.ApiResult(false, 404, "not deployed")
++        val result = createProductionPickForOperator("PROD-1", "MERVE", "LP-1", { action, _ ->
++            actions += action
++            rejection
++        }, { error("Rejected action must not read") })
++        assertSame(rejection, result)
++        assertEquals(listOf("createPickFromLpFor"), actions)
++    }
++
++    @Test fun `wrong owner order identity and malformed response cannot open pick`() = runBlocking {
++        for (response in listOf(header(owner = "DYNOPS"), header(source = "OTHER"), header(no = "PICK-2"),
++            header(owner = ""), BcApi.ApiResult(true, 200, "invalid"), BcApi.ApiResult(false, 503, "offline"))) {
++            var writes = 0
++            val result = createProductionPickForOperator("PROD-1", "MERVE", send = { _, _ ->
++                writes++
++                created()
++            }, readHeader = { response })
++            assertFalse(response.body, result.ok)
++            assertEquals(1, writes)
++        }
++    }
++
++    @Test fun `missing pick number cannot navigate or attempt an ownership read`() = runBlocking {
++        val result = createProductionPickForOperator("PROD-1", "MERVE", send = { _, _ -> BcApi.ApiResult(true, 204, "") },
++            readHeader = { error("No pick exists to verify") })
++        assertFalse(result.ok)
++    }
++
++    @Test fun `production detection requires released component source for every take row`() {
++        fun line(source: Int = 5407, subtype: Int = 3, action: String = "Take") =
++            JSONObject().put("sourceType", source).put("sourceSubtype", subtype).put("actionType", action)
++        assertTrue(isProductionPick(listOf(line(), line(action = "Place"))))
++        assertFalse(isProductionPick(emptyList()))
++        assertFalse(isProductionPick(listOf(line(action = "Place"))))
++        assertFalse(isProductionPick(listOf(line(), line(source = 37))))
++        assertFalse(isProductionPick(listOf(line(subtype = 2))))
++        assertFalse(isProductionPick(listOf(JSONObject().put("actionType", "Take"))))
++    }
++
++    @Test fun `production key escapes order and status literals`() {
++        val key = productionComponentKey(JSONObject().put("prodOrderNo", "P'1").put("prodOrderLineNo", 10000).put("componentLineNo", 20000))
++        assertTrue(key.contains("prodOrderNo='P''1'"))
++        assertTrue(key.contains("prodOrderLineNo=10000,componentLineNo=20000"))
++    }
++
++    @Test fun `ready pallet starts at BC scoped quantity rather than full demand`() {
++        val line = JSONObject().put("actionType", "Take").put("sourceType", 5407).put("sourceSubtype", 3)
++            .put("licensePlateNo", "LP-4").put("qtyToHandle", 4.0)
++        assertEquals(4.0, initialPalletPickQuantity(listOf(line), 10.0), 0.00001)
++        line.put("qtyToHandle", 0.0)
++        assertEquals(0.0, initialPalletPickQuantity(listOf(line), 10.0), 0.00001)
++        line.put("qtyToHandle", 11.0)
++        assertEquals(0.0, initialPalletPickQuantity(listOf(line), 10.0), 0.00001)
++    }
++
++    @Test fun `ordinary sales pick keeps its previous initial quantity`() {
++        val line = JSONObject().put("actionType", "Take").put("sourceType", 37)
++            .put("licensePlateNo", "LP-4").put("qtyToHandle", 4.0)
++        assertEquals(10.0, initialPalletPickQuantity(listOf(line), 10.0), 0.00001)
++    }
++
++    @Test fun `production Multi pick permits one complete pallet with outstanding order demand`() {
++        assertTrue(pickReadyToRegister("Multi", listOf(4.0, 0.0), allCollected = false, productionPick = true))
++        assertFalse(pickReadyToRegister("Multi", listOf(0.0, 0.0), allCollected = false, productionPick = true))
++        assertFalse(pickReadyToRegister("Multi", listOf(4.0, 0.0), allCollected = false, productionPick = false))
++    }
++}
