@@ -1,0 +1,236 @@
+diff --git a/android/app/build.gradle.kts b/android/app/build.gradle.kts
+index 253d379..b0d16cb 100644
+--- a/android/app/build.gradle.kts
++++ b/android/app/build.gradle.kts
+@@ -9,8 +9,8 @@ val releaseVersionCodeOverride = providers.gradleProperty("releaseVersionCode").
+ val releaseVersionNameOverride = providers.gradleProperty("releaseVersionName").orNull?.takeIf { it.isNotBlank() }
+ // BADE ve EMU aynı kaynak koddan aynı anda yayınlanır. Müşteri flavor'larında
+ // ayrı sürüm değeri tutmak bir paketin geride kalmasına neden oluyordu.
+-val customerVersionCode = releaseVersionCodeOverride ?: 200150
+-val customerVersionName = releaseVersionNameOverride ?: "1.14.150"
++val customerVersionCode = releaseVersionCodeOverride ?: 200151
++val customerVersionName = releaseVersionNameOverride ?: "1.14.151"
+ 
+ plugins {
+   alias(libs.plugins.android.application)
+@@ -38,8 +38,8 @@ android {
+     // Saha APK'larından bazılarında CI tarafından 100000+ versionCode
+     // kullanıldı. Görünen sürüm adı eski olsa bile Android yalnız sayısal kodu
+     // karşılaştırdığı için semantik sürümleri 200000 bandında monoton tutuyoruz.
+-    versionCode = releaseVersionCodeOverride ?: 200150
+-    versionName = releaseVersionNameOverride ?: "1.14.150"
++    versionCode = releaseVersionCodeOverride ?: 200151
++    versionName = releaseVersionNameOverride ?: "1.14.151"
+     manifestPlaceholders["appLabel"] = "BCWMS"
+     // Ücretsiz dağıtım kanalı: public GitHub Release içindeki sabit latest.json.
+     // APK aynı release'de tutulur; uygulamaya GitHub hesabı/token gömülmez.
+diff --git a/android/app/src/main/java/com/dynops/bcwms/feature/PalletPickVerification.kt b/android/app/src/main/java/com/dynops/bcwms/feature/PalletPickVerification.kt
+index 5aa3dd7..9ed4294 100644
+--- a/android/app/src/main/java/com/dynops/bcwms/feature/PalletPickVerification.kt
++++ b/android/app/src/main/java/com/dynops/bcwms/feature/PalletPickVerification.kt
+@@ -5,7 +5,8 @@ import com.dynops.bcwms.BcApi
+ import org.json.JSONArray
+ import org.json.JSONObject
+ 
+-/** Reproduce BC's line/LP allocation order, including already staged rows.
++/** Reproduce BC's line/LP allocation order, including already staged rows
++ * that can use the selected stock. Registration checks the entire document.
+  * Otherwise two separate confirmations could both instruct the operator to
+  * take the last available units from the same pallet.
+  */
+@@ -17,8 +18,20 @@ internal suspend fun loadDocumentPalletPlans(
+     val safeNo = pickNo.replace("'", "''")
+     val page = BcApi.getAllPages(context, "pickLines?\$filter=no eq '$safeNo'&\$top=100")
+     check(page.complete) { "Toplama satırlarının tamamı alınamadı. Belgeyi yenileyin." }
++    return buildDocumentPalletPlans(page.rows, requested) { lineNo ->
++        val response = BcApi.pickLineSources(context, pickNo, lineNo)
++        check(response.ok) { "Satır $lineNo paletleri doğrulanamadı: ${BcApi.errorMessage(response.body)}" }
++        BcApi.scalarValue(response.body)
++    }
++}
++
++internal suspend fun buildDocumentPalletPlans(
++    documentRows: List<JSONObject>,
++    requested: List<Pair<JSONObject, Double>>? = null,
++    loadSources: suspend (Int) -> String,
++): List<PalletPickPlan> {
+     val overrides = requested?.associate { it.first.optInt("lineNo") to it.second }.orEmpty()
+-    val rows = page.rows.filter { it.optString("actionType").equals("Take", true) }.sortedBy { it.optInt("lineNo") }
++    val rows = documentRows.filter { it.optString("actionType").equals("Take", true) }.sortedBy { it.optInt("lineNo") }
+     check(overrides.keys.all { no -> rows.any { it.optInt("lineNo") == no } }) { "Toplama satırı değişmiş. Belgeyi yenileyin." }
+     requested?.forEach { (expected, _) ->
+         val actual = rows.first { it.optInt("lineNo") == expected.optInt("lineNo") }
+@@ -35,16 +48,34 @@ internal suspend fun loadDocumentPalletPlans(
+     for (row in rows) {
+         val lineNo = row.optInt("lineNo")
+         if (lineNo > lastRequested) break
++        // A prefilled quantity on an unrelated earlier item is not a dependency
++        // of this sheet. Keep earlier overlapping rows to reserve shared LP
++        // capacity, but never let YM.00273's missing LP block AB.02029's scanner.
++        if (requested != null && lineNo !in overrides &&
++            requested.none { (selected, _) -> palletStockMayOverlap(row, selected) }
++        ) continue
+         val amount = overrides[lineNo] ?: row.optDouble("qtyToHandle", 0.0)
+         if (amount <= 0) continue
+-        val response = BcApi.pickLineSources(context, pickNo, lineNo)
+-        check(response.ok) { "Satır $lineNo paletleri doğrulanamadı: ${BcApi.errorMessage(response.body)}" }
+-        val plan = buildPalletPickPlan(row, amount, BcApi.scalarValue(response.body), used)
++        val plan = buildPalletPickPlan(row, amount, loadSources(lineNo), used)
+         if (requested == null || lineNo in overrides) result += plan
+     }
+     return result
+ }
+ 
++private fun palletStockMayOverlap(first: JSONObject, second: JSONObject): Boolean {
++    fun text(row: JSONObject, field: String) = row.optString(field).takeUnless { it == "null" }.orEmpty().trim()
++    if (listOf("itemNo", "variantCode", "locationCode", "binCode").any {
++        !text(first, it).equals(text(second, it), ignoreCase = true)
++    }) return false
++    // Blank tracking is resolved from LP candidates and may overlap an explicit
++    // lot/serial. UOM is deliberately excluded: allocation is in base quantities.
++    return listOf("lotNo", "serialNo").all {
++        val a = text(first, it)
++        val b = text(second, it)
++        a.isBlank() || b.isBlank() || a.equals(b, ignoreCase = true)
++    }
++}
++
+ internal fun palletPlanJson(plan: PalletPickPlan): String = JSONObject().apply {
+     put("lineNo", plan.lineNo); put("quantity", plan.quantity); put("lotNo", plan.lotNo); put("identity", plan.identity)
+     put("steps", JSONArray().apply {
+diff --git a/android/app/src/test/java/com/dynops/bcwms/feature/DocumentPalletPlansTest.kt b/android/app/src/test/java/com/dynops/bcwms/feature/DocumentPalletPlansTest.kt
+new file mode 100644
+index 0000000..ba516e4
+--- /dev/null
++++ b/android/app/src/test/java/com/dynops/bcwms/feature/DocumentPalletPlansTest.kt
+@@ -0,0 +1,130 @@
++package com.dynops.bcwms.feature
++
++import kotlinx.coroutines.runBlocking
++import org.json.JSONArray
++import org.json.JSONObject
++import org.junit.Assert.*
++import org.junit.Test
++
++class DocumentPalletPlansTest {
++    private fun line(no: Int, item: String = "AB.02029", bin: String = "A.C01.13", qty: Double = 10.0) =
++        JSONObject().apply {
++            put("no", "PI001945"); put("lineNo", no); put("actionType", "Take")
++            put("itemNo", item); put("variantCode", ""); put("locationCode", "MERKEZDEPO")
++            put("binCode", bin); put("lotNo", ""); put("serialNo", "")
++            put("unitOfMeasureCode", "ADET"); put("qtyOutstanding", qty); put("qtyToHandle", qty)
++        }
++
++    private fun sources(row: JSONObject, available: Double = 10.0, empty: Boolean = false): String =
++        JSONObject(row.toString()).apply {
++            put("activityNo", row.getString("no"))
++            put("outstandingBaseQty", row.getDouble("qtyOutstanding"))
++            put("sources", JSONArray().apply {
++                if (!empty) put(JSONObject().apply {
++                    put("lpNo", "LP-AB"); put("binCode", row.getString("binCode"))
++                    put("lotNo", row.optString("lotNo").ifBlank { "LOT-A" })
++                    put("serialNo", row.optString("serialNo")); put("availableBaseQty", available)
++                })
++            })
++        }.toString()
++
++    @Test fun `AB02029 can open while earlier YM00273 has no LP`() = runBlocking {
++        val earlier = line(10000, "YM.00273", "Y.A01.11", 240.0).put("unitOfMeasureCode", "KG")
++        val selected = line(30000, qty = 7809.0)
++        val calls = mutableListOf<Int>()
++        val plans = buildDocumentPalletPlans(listOf(earlier, selected), listOf(selected to 7809.0)) { no ->
++            calls += no
++            if (no == 10000) sources(earlier, empty = true) else sources(selected, 7809.0)
++        }
++        assertEquals(listOf(30000), calls)
++        assertEquals(30000, plans.single().lineNo)
++        assertEquals(7809.0, plans.single().steps.single().baseQuantity, 0.0)
++    }
++
++    @Test fun `earlier rows with separate stock cannot block selected line`() = runBlocking {
++        for ((field, value) in listOf("itemNo" to "OTHER", "variantCode" to "RED",
++            "locationCode" to "OTHER", "binCode" to "OTHER", "lotNo" to "LOT-B", "serialNo" to "SERIAL-B")) {
++            val selected = line(30000).put("lotNo", "LOT-A").put("serialNo", "SERIAL-A")
++            val earlier = JSONObject(selected.toString()).put("lineNo", 10000).put(field, value)
++            val calls = mutableListOf<Int>()
++            val plans = buildDocumentPalletPlans(listOf(earlier, selected), listOf(selected to 10.0)) { no ->
++                calls += no
++                if (no == 10000) sources(earlier, empty = true) else sources(selected)
++            }
++            assertEquals(field, listOf(30000), calls)
++            assertEquals(1, plans.size)
++        }
++    }
++
++    @Test fun `earlier matching row still reserves shared pallet stock`() = runBlocking {
++        val earlier = line(10000, qty = 6.0)
++        val selected = line(30000)
++        val calls = mutableListOf<Int>()
++        val plans = buildDocumentPalletPlans(listOf(selected, earlier), listOf(selected to 4.0)) { no ->
++            calls += no
++            sources(if (no == 10000) earlier else selected)
++        }
++        assertEquals(listOf(10000, 30000), calls)
++        assertEquals(4.0, plans.single().steps.single().baseQuantity, 0.0)
++        val error = runCatching {
++            buildDocumentPalletPlans(listOf(earlier, selected), listOf(selected to 5.0)) { no ->
++                sources(if (no == 10000) earlier else selected)
++            }
++        }.exceptionOrNull()
++        assertNotNull(error)
++        assertTrue(error!!.message.orEmpty().contains("yeterli stok yok"))
++    }
++
++    @Test fun `blank earlier tracking still overlaps explicit selected tracking`() = runBlocking {
++        val earlier = line(10000, qty = 6.0)
++        val selected = line(30000).put("lotNo", "LOT-A")
++        val error = runCatching {
++            buildDocumentPalletPlans(listOf(earlier, selected), listOf(selected to 5.0)) { no ->
++                sources(if (no == 10000) earlier else selected)
++            }
++        }.exceptionOrNull()
++        assertNotNull(error)
++        assertTrue(error!!.message.orEmpty().contains("yeterli stok yok"))
++    }
++
++    @Test fun `registration still checks every staged item and fails on missing LP`() = runBlocking {
++        val earlier = line(10000, "YM.00273", "Y.A01.11")
++        val selected = line(30000)
++        val calls = mutableListOf<Int>()
++        val error = runCatching {
++            buildDocumentPalletPlans(listOf(earlier, selected)) { no ->
++                calls += no
++                sources(earlier, empty = true)
++            }
++        }.exceptionOrNull()
++        assertEquals(listOf(10000), calls)
++        assertNotNull(error)
++        assertTrue(error!!.message.orEmpty().contains("YM.00273"))
++    }
++
++    @Test fun `selected line without LP reports its own item`() = runBlocking {
++        val earlier = line(10000, "YM.00273", "Y.A01.11")
++        val selected = line(30000)
++        val error = runCatching {
++            buildDocumentPalletPlans(listOf(earlier, selected), listOf(selected to 10.0)) { no ->
++                sources(if (no == 10000) earlier else selected, empty = true)
++            }
++        }.exceptionOrNull()
++        assertNotNull(error)
++        assertTrue(error!!.message.orEmpty().contains("AB.02029"))
++        assertFalse(error.message.orEmpty().contains("YM.00273"))
++    }
++
++    @Test fun `selected snapshot changed on server still fails before loading LPs`() = runBlocking {
++        val selected = line(30000)
++        val current = JSONObject(selected.toString()).put("binCode", "NEW-BIN")
++        val error = runCatching {
++            buildDocumentPalletPlans(listOf(current), listOf(selected to 10.0)) {
++                fail("Changed snapshot must not load pallets")
++                ""
++            }
++        }.exceptionOrNull()
++        assertNotNull(error)
++        assertTrue(error!!.message.orEmpty().contains("değişmiş"))
++    }
++}

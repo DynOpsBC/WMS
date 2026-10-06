@@ -1,0 +1,1412 @@
+{
+  "date": "2026-10-06",
+  "scope": "EL_TERMINAL source recovery snapshots",
+  "snapshots": [
+    {
+      "kind": "worktree",
+      "root": "/Users/kaanodabas/Desktop/EL_TERMINAL/WMS",
+      "ref": "refs/heads/backup/local-20261006/wms",
+      "commit": "da2207f8feac1773ada9182a251022db3aa66331",
+      "tree": "a8894052c15cb39eb85c167834d67241d3154a59",
+      "files": [
+        "releases/BADE-1.14.144-TEST-ADAYI/son-kaynak-degisiklikleri.patch",
+        "releases/BADE-1.14.145-TEST-ADAYI/kaynak-degisiklikleri.patch",
+        "releases/BADE-1.14.146-TEST-ADAYI/kaynak-degisiklikleri.patch",
+        "releases/BADE-1.14.149-SANDBOX/dogrulama/bc-kaynak-degisiklikleri.patch",
+        "releases/BADE-1.14.149-URETIM-LP-ADAYI/bc-verified-62-uretim-lp.patch",
+        "releases/BADE-1.14.151-SANDBOX/source.patch",
+        "tmp/bade-144-folder-transfer-20260921-133514/source-changes.patch",
+        "tmp/bade-149-publication/android-source.patch",
+        "tmp/production-lp-fix-20260921/production-lp-vs-verified-62.patch"
+      ]
+    },
+    {
+      "kind": "worktree",
+      "root": "/Users/kaanodabas/Desktop/EL_TERMINAL/WMS-bade",
+      "ref": "refs/heads/backup/local-20261006/wms-bade",
+      "commit": "759bab2936ad2e2d92a57ce3f7e5a13014d47bac",
+      "tree": "c3b5999f366bd5676982de498b66f22baaf26a1a",
+      "files": [
+        "al-print-tests/LpStockSourceTests.Codeunit.al",
+        "al-print-tests/MteOperatorTests.Codeunit.al",
+        "al-print-tests/app.json",
+        "al/app.json",
+        "al/src/Enums/LPAction.Enum.al",
+        "al/src/Inquiry/ItemLedgerEntriesExt.PageExt.al",
+        "al/src/Inquiry/ItemLedgerEntryApi.Page.al",
+        "al/src/LPPropagation/LPPropagationSubscriber.Codeunit.al",
+        "al/src/LicensePlate/LPApi.Page.al",
+        "al/src/LicensePlate/LPLineListPart.Page.al",
+        "al/src/LicensePlate/LPManagement.Codeunit.al",
+        "al/src/LicensePlate/MaddeTanimlamaLP.Report.al",
+        "al/src/Print/MteZplBuilder.Codeunit.al",
+        "al/src/Print/PrintDispatcher.Codeunit.al",
+        "al/src/Receiving/ReceiptApi.Page.al",
+        "al/src/Receiving/ReceiptMgmt.Codeunit.al",
+        "android/app/build.gradle.kts",
+        "android/app/src/main/java/com/dynops/bcwms/BcApi.kt",
+        "android/app/src/main/java/com/dynops/bcwms/feature/LicensePlateModule.kt",
+        "android/app/src/main/java/com/dynops/bcwms/feature/LpStockSourceSheet.kt",
+        "android/app/src/main/java/com/dynops/bcwms/feature/MteOperatorRequest.kt",
+        "android/app/src/test/java/com/dynops/bcwms/feature/LpStockSourceTest.kt",
+        "android/app/src/test/java/com/dynops/bcwms/feature/MteOperatorRequestTest.kt",
+        "docs/bade-lp-source-2026-09-21.md",
+        "docs/bade-mte-operator-2026-09-21.md",
+        "releases/BADE-1.14.144-TEST-ADAYI/son-kaynak-degisiklikleri.patch"
+      ]
+    },
+    {
+      "kind": "worktree",
+      "root": "/Users/kaanodabas/Desktop/EL_TERMINAL/WMS-bade-release-142",
+      "ref": "refs/heads/backup/local-20261006/wms-bade-release-142",
+      "commit": "fe6ef087c50b5ae9ca5b922400c5e97126e8f358",
+      "tree": "417acda6ca7798a1d84786324cff48a84d6c533f",
+      "files": [
+        "android/app/src/main/java/com/dynops/bcwms/feature/LpStockSourceSheet.kt",
+        "android/app/src/test/java/com/dynops/bcwms/feature/LpStockSourceTest.kt",
+        "docs/bade-lp-source-2026-09-21.md"
+      ]
+    },
+    {
+      "kind": "worktree",
+      "root": "/Users/kaanodabas/Desktop/EL_TERMINAL/WMS-bade-release-175",
+      "ref": "refs/heads/backup/local-20261006/wms-bade-release-175",
+      "commit": "e876bb229a9cbfb5c41fe658ddae8c4ad489bf37",
+      "tree": "91a35999c4d7c615ac655d8b3d7e27c0cacfe60f",
+      "files": [
+        "al-tests/src/Production/ConsumptionTests.Codeunit.al",
+        "al/app.json",
+        "al/src/LicensePlate/LPCard.Page.al",
+        "al/src/LicensePlate/LPManagement.Codeunit.al",
+        "al/src/LicensePlate/ProdPickRepairLines.Page.al",
+        "al/src/Permissions/AdminPermissionSet.al",
+        "al/src/Pick/PickMgmt.Codeunit.al",
+        "al/src/Pick/WhsePickLineLp.PageExt.al",
+        "al/src/Production/ProdMgmt.Codeunit.al",
+        "al/src/PutAway/WhseActivityLineExt.TableExt.al"
+      ]
+    },
+    {
+      "kind": "worktree",
+      "root": "/Users/kaanodabas/Desktop/EL_TERMINAL/WMS-emu",
+      "ref": "refs/heads/backup/local-20261006/wms-emu",
+      "commit": "aa00504782b50eaf1553bb1ad2ab1cc644dcc40a",
+      "tree": "d50045335a4900a2d05ba05885437c75347b3402",
+      "files": [
+        "agent-name-save.patch",
+        "al-tests/src/Pick/PickRegisterTests.Codeunit.al",
+        "al/app.json",
+        "al/src/Pick/PickMgmt.Codeunit.al",
+        "al/src/Print/PrintDispatcher.Codeunit.al",
+        "android/app/src/main/java/com/dynops/bcwms/feature/PickLotPolicy.kt",
+        "android/app/src/main/java/com/dynops/bcwms/feature/PickingModule.kt",
+        "android/app/src/main/java/com/dynops/bcwms/feature/PrintersModule.kt",
+        "android/app/src/main/java/com/dynops/bcwms/feature/PutAwayShipModules.kt",
+        "android/app/src/main/java/com/dynops/bcwms/ui/Common.kt",
+        "android/app/src/test/java/com/dynops/bcwms/ProductionUxRulesTest.kt",
+        "android/app/src/test/java/com/dynops/bcwms/feature/PickLotPolicyTest.kt",
+        "docs/dkc-pick-lot-2026-09-29.md",
+        "docs/dkc-printer-names-2026-09-18.md",
+        "docs/gorsel-kullanim-rehberi/BCWMS-Gorsel-Kullanim-Rehberi.html",
+        "docs/gorsel-kullanim-rehberi/Onizleme.png",
+        "docs/gorsel-kullanim-rehberi/Temizlik-Raporu.md",
+        "docs/gorsel-kullanim-rehberi/cleanup-manifest.json",
+        "docs/gorsel-kullanim-rehberi/release-duplicates.json",
+        "releases/android/emu/latest.json",
+        "releases/android/emu/legacy/latest.json",
+        "windows-print-agent/scripts/KUR-DKC.cmd",
+        "windows-print-agent/scripts/kur-dkc.ps1"
+      ]
+    },
+    {
+      "kind": "worktree",
+      "root": "/Users/kaanodabas/Desktop/EL_TERMINAL/WMS-kitoko",
+      "ref": "refs/heads/backup/local-20261006/wms-kitoko",
+      "commit": "f621077b5582e03edd8cc63f28fd548e299bd08b",
+      "tree": "78c2735d6e869c4a502c018a6eaaf0bac9e3326d",
+      "files": [
+        "al-tests/src/Pick/PickRegisterTests.Codeunit.al",
+        "al/.vscode/launch.json",
+        "al/app.json",
+        "al/src/Pick/PickMgmt.Codeunit.al",
+        "al/src/Print/PrintDispatcher.Codeunit.al",
+        "al/src/Setup/Edition.Codeunit.al",
+        "android/app/build.gradle.kts",
+        "android/app/src/main/java/com/dynops/bcwms/AppRoot.kt",
+        "android/app/src/main/java/com/dynops/bcwms/feature/InquiryModules.kt",
+        "android/app/src/main/java/com/dynops/bcwms/feature/PickLotPolicy.kt",
+        "android/app/src/main/java/com/dynops/bcwms/feature/PickingModule.kt",
+        "android/app/src/main/java/com/dynops/bcwms/feature/PrintersModule.kt",
+        "android/app/src/main/java/com/dynops/bcwms/feature/PutAwayShipModules.kt",
+        "android/app/src/main/java/com/dynops/bcwms/feature/ReceivingModule.kt",
+        "android/app/src/main/java/com/dynops/bcwms/ui/Common.kt",
+        "android/app/src/test/java/com/dynops/bcwms/ProductionUxRulesTest.kt",
+        "android/app/src/test/java/com/dynops/bcwms/feature/PickLotPolicyTest.kt",
+        "docs/branching.md"
+      ]
+    },
+    {
+      "kind": "worktree",
+      "root": "/Users/kaanodabas/Desktop/EL_TERMINAL/WMS/tmp/production-lp-fix-20260921/windows-review",
+      "ref": "refs/heads/backup/local-20261006/windows-review",
+      "commit": "9ede4c750e62c945affbc956d1350ea3f8f1dbe0",
+      "tree": "08227ae9c86e22086b64cb241c84042a9e2f084c",
+      "files": [
+        "tmp/release-1.14.150-b4df3ee/bundle/source.patch",
+        "tmp/release-1.14.150-b4df3ee/sandbox/source.patch",
+        "tmp/release-1.14.151-388f93e/bundle/source.patch"
+      ]
+    },
+    {
+      "kind": "stash",
+      "ref": "refs/heads/backup/local-20261006/stash-0",
+      "commit": "f3b4bf19a46ade136a9363b13e9088dc1f24e8dd",
+      "stash_commit": "4d8d7c2169de90a182916e3bc28f13379b05faa2"
+    },
+    {
+      "kind": "stash",
+      "ref": "refs/heads/backup/local-20261006/stash-1",
+      "commit": "2e4e0538cf6271284074b3db152bb4f4feeb4d48",
+      "stash_commit": "de3750298ccd26318ed91bcc07af9af0ae588016"
+    },
+    {
+      "kind": "stash",
+      "ref": "refs/heads/backup/local-20261006/stash-2",
+      "commit": "3453ecc8735f233396041b7c399f99ad40b15bf6",
+      "stash_commit": "a7c40988741c261169f1d55ff2fd3603d1c5f632"
+    }
+  ],
+  "archive_files": [
+    {
+      "source": "WMS-bade/releases/BADE-1.14.142/KURULUM.md",
+      "path": "workspace-archive/WMS-bade/releases/BADE-1.14.142/KURULUM.md",
+      "sha256": "d0f8626f7bc85761d73ad69a5c886cbd89231b45ac50340908bf2e98d171db2d",
+      "bytes": 934
+    },
+    {
+      "source": "WMS-bade/releases/BADE-1.14.142/LP000072-INCELEME.md",
+      "path": "workspace-archive/WMS-bade/releases/BADE-1.14.142/LP000072-INCELEME.md",
+      "sha256": "3e7b25f56730f2fdab67bb8cc2c9fb836fc479e9bbd56c50ee44c8ce485d48ea",
+      "bytes": 1658
+    },
+    {
+      "source": "WMS-bade/releases/BADE-1.14.143/KURULUM.md",
+      "path": "workspace-archive/WMS-bade/releases/BADE-1.14.143/KURULUM.md",
+      "sha256": "049cfca96c3f5757ff6c6330816fe91a0c508f5f7a96598b2948c69426d390fb",
+      "bytes": 1997
+    },
+    {
+      "source": "WMS-bade/releases/BADE-1.14.143/TEKNIK-NOT.md",
+      "path": "workspace-archive/WMS-bade/releases/BADE-1.14.143/TEKNIK-NOT.md",
+      "sha256": "e8aba91e3015d8b31ef0ec1b67a88816a531984e7e67c307a65f186a376c4022",
+      "bytes": 3478
+    },
+    {
+      "source": "WMS-bade/releases/BADE-1.14.144-TEST-ADAYI/CANLI-ONCESI-INCELEME.md",
+      "path": "workspace-archive/WMS-bade/releases/BADE-1.14.144-TEST-ADAYI/CANLI-ONCESI-INCELEME.md",
+      "sha256": "b567530eda9ec90817d4be22e02aab1cf5b62a1ad4aa95e738078752dd4e936f",
+      "bytes": 6028
+    },
+    {
+      "source": "WMS-bade/releases/BADE-1.14.144-TEST-ADAYI/son-kaynak-degisiklikleri.patch",
+      "path": "workspace-archive/WMS-bade/releases/BADE-1.14.144-TEST-ADAYI/son-kaynak-degisiklikleri.patch",
+      "sha256": "0c27c4f9ecdf3882c4afd59a0b979d2477af1d6088c5ecf43e31694e37d75c27",
+      "bytes": 5986
+    },
+    {
+      "source": "WMS-emu/releases/DKC-1.14.141/DKC-Print-Agent-1.1.3-Tek-Tik/BCWMS-Print-Agent-win-x64/README.md",
+      "path": "workspace-archive/WMS-emu/releases/DKC-1.14.141/DKC-Print-Agent-1.1.3-Tek-Tik/BCWMS-Print-Agent-win-x64/README.md",
+      "sha256": "84cb63c329d6939545964e08aadad293c2b9e30886ba0ebefa83b807ca6739b5",
+      "bytes": 16953
+    },
+    {
+      "source": "WMS-emu/releases/DKC-1.14.141/DKC-Print-Agent-1.1.3-Tek-Tik/BCWMS-Print-Agent-win-x64/THIRD-PARTY-NOTICES.md",
+      "path": "workspace-archive/WMS-emu/releases/DKC-1.14.141/DKC-Print-Agent-1.1.3-Tek-Tik/BCWMS-Print-Agent-win-x64/THIRD-PARTY-NOTICES.md",
+      "sha256": "743727a0c23fb9f95fb6261d72f44bfeab9d11445f6b54d907965beb9976acb0",
+      "bytes": 936
+    },
+    {
+      "source": "WMS-emu/releases/DKC-1.14.141/DKC-Print-Agent-1.1.3-Tek-Tik/BCWMS-Print-Agent-win-x64/installer/disable-autostart.ps1",
+      "path": "workspace-archive/WMS-emu/releases/DKC-1.14.141/DKC-Print-Agent-1.1.3-Tek-Tik/BCWMS-Print-Agent-win-x64/installer/disable-autostart.ps1",
+      "sha256": "dd48f2b9cd6d0aeff847ffcb3c21e724b66447ce8a1c616d2cd3edb90fdac52b",
+      "bytes": 315
+    },
+    {
+      "source": "WMS-emu/releases/DKC-1.14.141/DKC-Print-Agent-1.1.3-Tek-Tik/BCWMS-Print-Agent-win-x64/installer/enable-autostart.ps1",
+      "path": "workspace-archive/WMS-emu/releases/DKC-1.14.141/DKC-Print-Agent-1.1.3-Tek-Tik/BCWMS-Print-Agent-win-x64/installer/enable-autostart.ps1",
+      "sha256": "0fa76a58f943084999df43e986324904bdf1d0fd2f31dd9dfc55b7a26c1c2e71",
+      "bytes": 674
+    },
+    {
+      "source": "WMS-emu/releases/DKC-1.14.141/DKC-Print-Agent-1.1.3-Tek-Tik/BCWMS-Print-Agent-win-x64/installer/install.cmd",
+      "path": "workspace-archive/WMS-emu/releases/DKC-1.14.141/DKC-Print-Agent-1.1.3-Tek-Tik/BCWMS-Print-Agent-win-x64/installer/install.cmd",
+      "sha256": "54327abac89e7d6a3da3d363dcdeae754e4f59c584a42d20e47b1039c4b92128",
+      "bytes": 596
+    },
+    {
+      "source": "WMS-emu/releases/DKC-1.14.141/DKC-Print-Agent-1.1.3-Tek-Tik/BCWMS-Print-Agent-win-x64/installer/install.ps1",
+      "path": "workspace-archive/WMS-emu/releases/DKC-1.14.141/DKC-Print-Agent-1.1.3-Tek-Tik/BCWMS-Print-Agent-win-x64/installer/install.ps1",
+      "sha256": "5da1007de5a5a9d32ed15d1ba53be5d25154c2cb0a3fecec0d18c4ad5d6adce9",
+      "bytes": 10064
+    },
+    {
+      "source": "WMS-emu/releases/DKC-1.14.141/DKC-Print-Agent-1.1.3-Tek-Tik/BCWMS-Print-Agent-win-x64/installer/uninstall.cmd",
+      "path": "workspace-archive/WMS-emu/releases/DKC-1.14.141/DKC-Print-Agent-1.1.3-Tek-Tik/BCWMS-Print-Agent-win-x64/installer/uninstall.cmd",
+      "sha256": "2a37678c2773010c8f95dc6e6f4992775d24e771e6c30fb1ce98585bbc02c3ff",
+      "bytes": 436
+    },
+    {
+      "source": "WMS-emu/releases/DKC-1.14.141/DKC-Print-Agent-1.1.3-Tek-Tik/BCWMS-Print-Agent-win-x64/installer/uninstall.ps1",
+      "path": "workspace-archive/WMS-emu/releases/DKC-1.14.141/DKC-Print-Agent-1.1.3-Tek-Tik/BCWMS-Print-Agent-win-x64/installer/uninstall.ps1",
+      "sha256": "c67d97632f0d6da81df1bf3b68d144f0047ce5d899e0aa2f01cdeb2a0e14e0e7",
+      "bytes": 2861
+    },
+    {
+      "source": "WMS-emu/releases/DKC-1.14.141/DKC-Print-Agent-1.1.3-Tek-Tik/KUR.cmd",
+      "path": "workspace-archive/WMS-emu/releases/DKC-1.14.141/DKC-Print-Agent-1.1.3-Tek-Tik/KUR.cmd",
+      "sha256": "6bf1f8451f4627c5b4a8ceec988069018c7804b82595375afdb7705e4bcc7104",
+      "bytes": 232
+    },
+    {
+      "source": "WMS-emu/releases/DKC-1.14.141/DKC-Print-Agent-1.1.3-Tek-Tik/update-dkc-one-click.ps1",
+      "path": "workspace-archive/WMS-emu/releases/DKC-1.14.141/DKC-Print-Agent-1.1.3-Tek-Tik/update-dkc-one-click.ps1",
+      "sha256": "4495850e1a9819159edbb0e424383d0effb9d786c49ffad69eab1586af3bfbd1",
+      "bytes": 2208
+    },
+    {
+      "source": "WMS-emu/releases/DKC-1.14.141/release-notes.md",
+      "path": "workspace-archive/WMS-emu/releases/DKC-1.14.141/release-notes.md",
+      "sha256": "ae5762fcb1fcc8cd62b87a28ec15b46a24fdcfeecf90508e3045cc74f8d39f0e",
+      "bytes": 1989
+    },
+    {
+      "source": "WMS-emu/releases/DKC-1.14.141/test-one-click/BCWMS-Print-Agent-win-x64/installer/install.ps1",
+      "path": "workspace-archive/WMS-emu/releases/DKC-1.14.141/test-one-click/BCWMS-Print-Agent-win-x64/installer/install.ps1",
+      "sha256": "cdaed842def136b449095e47d5196fe9acf9327aa81340149da10bb46160121b",
+      "bytes": 253
+    },
+    {
+      "source": "WMS-emu/releases/DKC-1.14.141/test-one-click/update-dkc-one-click.ps1",
+      "path": "workspace-archive/WMS-emu/releases/DKC-1.14.141/test-one-click/update-dkc-one-click.ps1",
+      "sha256": "4495850e1a9819159edbb0e424383d0effb9d786c49ffad69eab1586af3bfbd1",
+      "bytes": 2208
+    },
+    {
+      "source": "WMS-emu/releases/DKC-1.14.154/RELEASE-NOTES.md",
+      "path": "workspace-archive/WMS-emu/releases/DKC-1.14.154/RELEASE-NOTES.md",
+      "sha256": "3a43acb17e8b74623ed314b5047ad4a4565d24f0451abf55597ec6db7069b9c7",
+      "bytes": 1251
+    },
+    {
+      "source": "WMS-emu/releases/DKC-1.14.157/RELEASE-NOTES.md",
+      "path": "workspace-archive/WMS-emu/releases/DKC-1.14.157/RELEASE-NOTES.md",
+      "sha256": "4017df0a8eb988ca46fbcd34c86a92d19df096107282e96f7173d59920730b9d",
+      "bytes": 1287
+    },
+    {
+      "source": "WMS-emu/releases/DKC-1.14.159/RELEASE-NOTES.md",
+      "path": "workspace-archive/WMS-emu/releases/DKC-1.14.159/RELEASE-NOTES.md",
+      "sha256": "35a26dcbfcffada8bdb66f548a970a226cb20b6b47e2f96cc49e8e7e52bccbc7",
+      "bytes": 1024
+    },
+    {
+      "source": "WMS/build/bade-github-1.14.167/release-notes.md",
+      "path": "workspace-archive/WMS/build/bade-github-1.14.167/release-notes.md",
+      "sha256": "def1174b3494cfb03a2fcd82d1405032bbae71c3b2b3c7cb3cfa5376d60bfa2c",
+      "bytes": 1134
+    },
+    {
+      "source": "WMS/build/bade-release-1.14.168-publication/release-notes.md",
+      "path": "workspace-archive/WMS/build/bade-release-1.14.168-publication/release-notes.md",
+      "sha256": "6a94b1f21afeb516771cc2d423af5b8af78140998a5b19c9395e4c325bdffba7",
+      "bytes": 1322
+    },
+    {
+      "source": "WMS/releases/BADE-1.14.1.90-LP-AUDIT/RELEASE.md",
+      "path": "workspace-archive/WMS/releases/BADE-1.14.1.90-LP-AUDIT/RELEASE.md",
+      "sha256": "9ebce63b93901ec139aac3d391b9dc1c01b1a916746df4960925cfc971622472",
+      "bytes": 1382
+    },
+    {
+      "source": "WMS/releases/BADE-1.14.131/release-notes.md",
+      "path": "workspace-archive/WMS/releases/BADE-1.14.131/release-notes.md",
+      "sha256": "db0ef0582ade0a50a7bc202c59891cad3eb0053ca7bb59c42bd7b0f0772a944a",
+      "bytes": 822
+    },
+    {
+      "source": "WMS/releases/BADE-1.14.132/release-notes.md",
+      "path": "workspace-archive/WMS/releases/BADE-1.14.132/release-notes.md",
+      "sha256": "d4ee08ed697fd845672dc8866f851f925f1bd21874a972e68fa13cd1d8a0c259",
+      "bytes": 1076
+    },
+    {
+      "source": "WMS/releases/BADE-1.14.133/release-notes.md",
+      "path": "workspace-archive/WMS/releases/BADE-1.14.133/release-notes.md",
+      "sha256": "60bd9673d8a42b0a88bdf0666091bf33a42cbab6f52fdaa93048ebb14c42df36",
+      "bytes": 1055
+    },
+    {
+      "source": "WMS/releases/BADE-1.14.134/release-notes.md",
+      "path": "workspace-archive/WMS/releases/BADE-1.14.134/release-notes.md",
+      "sha256": "4a3b3c9fac3cac12e8f4fe6e87899cece150ed709ac4548a283cb8cca06d3530",
+      "bytes": 1424
+    },
+    {
+      "source": "WMS/releases/BADE-1.14.135/release-notes.md",
+      "path": "workspace-archive/WMS/releases/BADE-1.14.135/release-notes.md",
+      "sha256": "54d3539dec6717c314fd0a9acc80b49d76868e9902ad2c5a9e26e21c52b49cb5",
+      "bytes": 916
+    },
+    {
+      "source": "WMS/releases/BADE-1.14.136/release-notes.md",
+      "path": "workspace-archive/WMS/releases/BADE-1.14.136/release-notes.md",
+      "sha256": "c52abc04422e75307558886e45166c4ff34a4cd75feacba379b75a894095936d",
+      "bytes": 288
+    },
+    {
+      "source": "WMS/releases/BADE-1.14.137/release-notes.md",
+      "path": "workspace-archive/WMS/releases/BADE-1.14.137/release-notes.md",
+      "sha256": "6e7cd5d9dbf7a2ffc368f6327a20fa99347e456ca0412f57b9770ccd695f4be9",
+      "bytes": 187
+    },
+    {
+      "source": "WMS/releases/BADE-1.14.138/release-notes.md",
+      "path": "workspace-archive/WMS/releases/BADE-1.14.138/release-notes.md",
+      "sha256": "48f5d9928e22356a864fdf2308d50b16099cd693e223617896582db0d3a91979",
+      "bytes": 592
+    },
+    {
+      "source": "WMS/releases/BADE-1.14.139/release-notes.md",
+      "path": "workspace-archive/WMS/releases/BADE-1.14.139/release-notes.md",
+      "sha256": "50d88feeb142ab7b5485bcd0bb873eebf4fa4cbef81d3a45b011ed621862054e",
+      "bytes": 1227
+    },
+    {
+      "source": "WMS/releases/BADE-1.14.140/release-notes.md",
+      "path": "workspace-archive/WMS/releases/BADE-1.14.140/release-notes.md",
+      "sha256": "04b6fac38473c27c6a0eda8662d4453b1657da7b48abff028e28a2194336aabd",
+      "bytes": 843
+    },
+    {
+      "source": "WMS/releases/BADE-1.14.144-TEST-ADAYI/CANLI-ONCESI-INCELEME.md",
+      "path": "workspace-archive/WMS/releases/BADE-1.14.144-TEST-ADAYI/CANLI-ONCESI-INCELEME.md",
+      "sha256": "b567530eda9ec90817d4be22e02aab1cf5b62a1ad4aa95e738078752dd4e936f",
+      "bytes": 6028
+    },
+    {
+      "source": "WMS/releases/BADE-1.14.144-TEST-ADAYI/son-kaynak-degisiklikleri.patch",
+      "path": "workspace-archive/WMS/releases/BADE-1.14.144-TEST-ADAYI/son-kaynak-degisiklikleri.patch",
+      "sha256": "0c27c4f9ecdf3882c4afd59a0b979d2477af1d6088c5ecf43e31694e37d75c27",
+      "bytes": 5986
+    },
+    {
+      "source": "WMS/releases/BADE-1.14.145-TEST-ADAYI/BANA-ATA-DUZELTMESI.md",
+      "path": "workspace-archive/WMS/releases/BADE-1.14.145-TEST-ADAYI/BANA-ATA-DUZELTMESI.md",
+      "sha256": "8be35a4ae4c1a3c2554ec6e1ed5106252ec81b80f54c764d631557bf2594f714",
+      "bytes": 2378
+    },
+    {
+      "source": "WMS/releases/BADE-1.14.145-TEST-ADAYI/kaynak-degisiklikleri.patch",
+      "path": "workspace-archive/WMS/releases/BADE-1.14.145-TEST-ADAYI/kaynak-degisiklikleri.patch",
+      "sha256": "ae88159c9163378daad0d7e9b265c200c7fbfc1a86b5316fb1ff6353d169ed4d",
+      "bytes": 21683
+    },
+    {
+      "source": "WMS/releases/BADE-1.14.146-TEST-ADAYI/TOPLAMA-DUZELTMESI.md",
+      "path": "workspace-archive/WMS/releases/BADE-1.14.146-TEST-ADAYI/TOPLAMA-DUZELTMESI.md",
+      "sha256": "268b72f1618d344d54916c8e0cf31dfcd4de7553c54b7a353a9ef9bbc09e3358",
+      "bytes": 3379
+    },
+    {
+      "source": "WMS/releases/BADE-1.14.146-TEST-ADAYI/kaynak-degisiklikleri.patch",
+      "path": "workspace-archive/WMS/releases/BADE-1.14.146-TEST-ADAYI/kaynak-degisiklikleri.patch",
+      "sha256": "fcef40e48a74c732b22683298b5673076a2a943fbb3eb294e690d65a9c263893",
+      "bytes": 51539
+    },
+    {
+      "source": "WMS/releases/BADE-1.14.147-URETIM-LP-ADAYI/INCELEME.md",
+      "path": "workspace-archive/WMS/releases/BADE-1.14.147-URETIM-LP-ADAYI/INCELEME.md",
+      "sha256": "7b3d08b67b4f83bc49faa77d51a3834787e6636a93ab33995e6852fa437106c0",
+      "bytes": 5923
+    },
+    {
+      "source": "WMS/releases/BADE-1.14.148-URETIM-LP-ADAYI/INCELEME.md",
+      "path": "workspace-archive/WMS/releases/BADE-1.14.148-URETIM-LP-ADAYI/INCELEME.md",
+      "sha256": "1e982b4c4306d78393a041735bdaf9a9502b6cc0d05fae168bf6d57b2665fe25",
+      "bytes": 8335
+    },
+    {
+      "source": "WMS/releases/BADE-1.14.149-SANDBOX/KURULUM-VE-TEST.md",
+      "path": "workspace-archive/WMS/releases/BADE-1.14.149-SANDBOX/KURULUM-VE-TEST.md",
+      "sha256": "acc564b56011db5fa684db5b9c065cefe7124df3ad355cc4424098ee304baa93",
+      "bytes": 3712
+    },
+    {
+      "source": "WMS/releases/BADE-1.14.149-SANDBOX/dogrulama/bc-kaynak-degisiklikleri.patch",
+      "path": "workspace-archive/WMS/releases/BADE-1.14.149-SANDBOX/dogrulama/bc-kaynak-degisiklikleri.patch",
+      "sha256": "ffceada858c02dee2250f5dcc4d05081ad7b3211c0ce2444fa5abc0bdef649f7",
+      "bytes": 124778
+    },
+    {
+      "source": "WMS/releases/BADE-1.14.149-URETIM-LP-ADAYI/INCELEME.md",
+      "path": "workspace-archive/WMS/releases/BADE-1.14.149-URETIM-LP-ADAYI/INCELEME.md",
+      "sha256": "9d1182879f0b42aaf8d64616be705bb39f6c9739e4d3e51db8588b18ce997d39",
+      "bytes": 9609
+    },
+    {
+      "source": "WMS/releases/BADE-1.14.149-URETIM-LP-ADAYI/bc-verified-62-uretim-lp.patch",
+      "path": "workspace-archive/WMS/releases/BADE-1.14.149-URETIM-LP-ADAYI/bc-verified-62-uretim-lp.patch",
+      "sha256": "ffceada858c02dee2250f5dcc4d05081ad7b3211c0ce2444fa5abc0bdef649f7",
+      "bytes": 124778
+    },
+    {
+      "source": "WMS/releases/BADE-1.14.151-SANDBOX/RELEASE-NOTES.md",
+      "path": "workspace-archive/WMS/releases/BADE-1.14.151-SANDBOX/RELEASE-NOTES.md",
+      "sha256": "3e82a5769cb6bd8d67b457e40a55946dda0fae799ae7ee98713961f4d622220c",
+      "bytes": 732
+    },
+    {
+      "source": "WMS/releases/BADE-1.14.151-SANDBOX/TEST-RESULTS.md",
+      "path": "workspace-archive/WMS/releases/BADE-1.14.151-SANDBOX/TEST-RESULTS.md",
+      "sha256": "88b55990d3d0cf6cbd35155338b3b569608fd5698111cf89959a5facf7b87e75",
+      "bytes": 2280
+    },
+    {
+      "source": "WMS/releases/BADE-1.14.151-SANDBOX/source.patch",
+      "path": "workspace-archive/WMS/releases/BADE-1.14.151-SANDBOX/source.patch",
+      "sha256": "f70ad2a4b1499ed6581124254604f7513924883bda8ef03c63b668cc9f4f4fd1",
+      "bytes": 12560
+    },
+    {
+      "source": "WMS/releases/BADE-1.14.152/RELEASE-NOTES.md",
+      "path": "workspace-archive/WMS/releases/BADE-1.14.152/RELEASE-NOTES.md",
+      "sha256": "a7f5fd314bee10317ca0eb0b6344cb94d25378bf2c44ddf8d1cfcd64a77824b0",
+      "bytes": 832
+    },
+    {
+      "source": "WMS/releases/BADE-1.14.152/TEST-RESULTS.md",
+      "path": "workspace-archive/WMS/releases/BADE-1.14.152/TEST-RESULTS.md",
+      "sha256": "90d3de97d97d49fe7247a834ac7574b66bcd792176992ab5f4670268262779eb",
+      "bytes": 2388
+    },
+    {
+      "source": "WMS/releases/BADE-1.14.153/RELEASE-NOTES.md",
+      "path": "workspace-archive/WMS/releases/BADE-1.14.153/RELEASE-NOTES.md",
+      "sha256": "edc869633481b0a0cb061314dfc83c94a63810706b3efa07e6303f2888a71baf",
+      "bytes": 558
+    },
+    {
+      "source": "WMS/releases/BADE-1.14.153/TEST-RESULTS.md",
+      "path": "workspace-archive/WMS/releases/BADE-1.14.153/TEST-RESULTS.md",
+      "sha256": "4f2a4659b6f7297afa896c9b5f228ed2bca896124dc03ee54664169f5776db22",
+      "bytes": 1601
+    },
+    {
+      "source": "WMS/releases/BADE-1.14.154/KULLANIM.md",
+      "path": "workspace-archive/WMS/releases/BADE-1.14.154/KULLANIM.md",
+      "sha256": "0c16c182c40da35d87ff0e0ce04d20e7831fe59be410c5a5a3aab99276f6d53d",
+      "bytes": 3593
+    },
+    {
+      "source": "WMS/releases/BADE-1.14.154/RELEASE-NOTES.md",
+      "path": "workspace-archive/WMS/releases/BADE-1.14.154/RELEASE-NOTES.md",
+      "sha256": "897a5bbcadb19122801a4bdcbe39377d3a38acab44db4a516ebc98f0c111c361",
+      "bytes": 1250
+    },
+    {
+      "source": "WMS/releases/BADE-1.14.155/KULLANIM.md",
+      "path": "workspace-archive/WMS/releases/BADE-1.14.155/KULLANIM.md",
+      "sha256": "c9dccdba728ad3a0a2898b4236adfd155d15cae0cb49df086f2f4fcc6fb7b3ac",
+      "bytes": 3169
+    },
+    {
+      "source": "WMS/releases/BADE-BC-1.14.1.65/RELEASE-NOTES.md",
+      "path": "workspace-archive/WMS/releases/BADE-BC-1.14.1.65/RELEASE-NOTES.md",
+      "sha256": "e0e92bc4c6d10edecd75279364c6c154dfd0f01818dc92a286820766259bbd06",
+      "bytes": 1456
+    },
+    {
+      "source": "WMS/releases/BADE-BC-1.14.1.66/bundle/KULLANIM.md",
+      "path": "workspace-archive/WMS/releases/BADE-BC-1.14.1.66/bundle/KULLANIM.md",
+      "sha256": "0c16c182c40da35d87ff0e0ce04d20e7831fe59be410c5a5a3aab99276f6d53d",
+      "bytes": 3593
+    },
+    {
+      "source": "WMS/releases/BADE-BC-1.14.1.66/bundle/RELEASE-NOTES.md",
+      "path": "workspace-archive/WMS/releases/BADE-BC-1.14.1.66/bundle/RELEASE-NOTES.md",
+      "sha256": "897a5bbcadb19122801a4bdcbe39377d3a38acab44db4a516ebc98f0c111c361",
+      "bytes": 1250
+    },
+    {
+      "source": "WMS/releases/BADE-BC-1.14.1.67/RELEASE-NOTES.md",
+      "path": "workspace-archive/WMS/releases/BADE-BC-1.14.1.67/RELEASE-NOTES.md",
+      "sha256": "71368ac3cf37a14f288efc6a0fc3ebf622f3bffcae7ffd363c9cc7503d3c860d",
+      "bytes": 2718
+    },
+    {
+      "source": "WMS/releases/BADE-BC-1.14.1.68/KULLANIM.md",
+      "path": "workspace-archive/WMS/releases/BADE-BC-1.14.1.68/KULLANIM.md",
+      "sha256": "c9dccdba728ad3a0a2898b4236adfd155d15cae0cb49df086f2f4fcc6fb7b3ac",
+      "bytes": 3169
+    },
+    {
+      "source": "WMS/releases/BADE-BC-1.14.1.80/RELEASE-NOTES.md",
+      "path": "workspace-archive/WMS/releases/BADE-BC-1.14.1.80/RELEASE-NOTES.md",
+      "sha256": "92fb79a2dde6d1961b77328c6857c35104a2de1f9f267478fe838b67fa0d680e",
+      "bytes": 798
+    },
+    {
+      "source": "WMS/releases/BADE-BC-1.14.1.81/RELEASE-NOTES.md",
+      "path": "workspace-archive/WMS/releases/BADE-BC-1.14.1.81/RELEASE-NOTES.md",
+      "sha256": "8a010ef626903a46f5138623767aa5207a4cdb89221d199a049f4b8e5855e79b",
+      "bytes": 1894
+    },
+    {
+      "source": "WMS/tmp/al-64-sync-backup-20260921-203555/al-print-tests/ProductionPickTests.Codeunit.al",
+      "path": "workspace-archive/WMS/tmp/al-64-sync-backup-20260921-203555/al-print-tests/ProductionPickTests.Codeunit.al",
+      "sha256": "b7148b1708877bdd563a69412cff336f14566b407702914591b8288c610c6108",
+      "bytes": 20254
+    },
+    {
+      "source": "WMS/tmp/al-64-sync-backup-20260921-203555/al-print-tests/app.json",
+      "path": "workspace-archive/WMS/tmp/al-64-sync-backup-20260921-203555/al-print-tests/app.json",
+      "sha256": "e685ba53a370ea69a23f0c2e0d0094daaa1872899199f66a9dce83a9d394faa4",
+      "bytes": 455
+    },
+    {
+      "source": "WMS/tmp/al-64-sync-backup-20260921-203555/al/app.json",
+      "path": "workspace-archive/WMS/tmp/al-64-sync-backup-20260921-203555/al/app.json",
+      "sha256": "dddded80818e0f58444d91e71cc70e74aa087e72c961b081754c6189abf67580",
+      "bytes": 1107
+    },
+    {
+      "source": "WMS/tmp/al-64-sync-backup-20260921-203555/al/src/Inquiry/ItemLedgerEntryApi.Page.al",
+      "path": "workspace-archive/WMS/tmp/al-64-sync-backup-20260921-203555/al/src/Inquiry/ItemLedgerEntryApi.Page.al",
+      "sha256": "627eff5ff4890baf8e14ecc5719c5c3c401f276f3431569bc38595abe2b5cbd4",
+      "bytes": 9547
+    },
+    {
+      "source": "WMS/tmp/al-64-sync-backup-20260921-203555/al/src/LicensePlate/LPBulkBuildRequest.Table.al",
+      "path": "workspace-archive/WMS/tmp/al-64-sync-backup-20260921-203555/al/src/LicensePlate/LPBulkBuildRequest.Table.al",
+      "sha256": "c3145d5061febe15323735b845bd635dd001b7844195936fad7f69ec400cad69",
+      "bytes": 4695
+    },
+    {
+      "source": "WMS/tmp/al-64-sync-backup-20260921-203555/al/src/LicensePlate/LPManagement.Codeunit.al",
+      "path": "workspace-archive/WMS/tmp/al-64-sync-backup-20260921-203555/al/src/LicensePlate/LPManagement.Codeunit.al",
+      "sha256": "4eacc333dc005c223466cf8f5fa5247552b2a50aa7f583d2a63236c5b3ca9431",
+      "bytes": 99965
+    },
+    {
+      "source": "WMS/tmp/al-64-sync-backup-20260921-203555/al/src/Production/ProdMgmt.Codeunit.al",
+      "path": "workspace-archive/WMS/tmp/al-64-sync-backup-20260921-203555/al/src/Production/ProdMgmt.Codeunit.al",
+      "sha256": "cb2936d6b253c40a98bb668c298d1e0905bcf30e9985ad15db8d9710c0d49f5a",
+      "bytes": 39174
+    },
+    {
+      "source": "WMS/tmp/al65-backup-20260921-224830/al-print-tests/app.json",
+      "path": "workspace-archive/WMS/tmp/al65-backup-20260921-224830/al-print-tests/app.json",
+      "sha256": "53a3be7803892d4f57f3d02a54b5db1453c135512303cc9e46de64e39ff3a43f",
+      "bytes": 455
+    },
+    {
+      "source": "WMS/tmp/al65-backup-20260921-224830/al/app.json",
+      "path": "workspace-archive/WMS/tmp/al65-backup-20260921-224830/al/app.json",
+      "sha256": "6df91de4d0e15667838a828aea545989563697e1fc1cc17a6610082d8f2dea3c",
+      "bytes": 1107
+    },
+    {
+      "source": "WMS/tmp/al65-backup-20260921-224830/al/src/Permissions/AdminPermissionSet.al",
+      "path": "workspace-archive/WMS/tmp/al65-backup-20260921-224830/al/src/Permissions/AdminPermissionSet.al",
+      "sha256": "256e2a05baefe7dece24482e06e0fd92a6ca604b632cf5867cfcf349c33d74f8",
+      "bytes": 21531
+    },
+    {
+      "source": "WMS/tmp/al65-backup-20260921-224830/al/src/Permissions/UserPermissionSet.al",
+      "path": "workspace-archive/WMS/tmp/al65-backup-20260921-224830/al/src/Permissions/UserPermissionSet.al",
+      "sha256": "42eb879c6eb82fb2265033fb4a43b1d4c98fcc535bf8bff07db2338f0262f568",
+      "bytes": 15829
+    },
+    {
+      "source": "WMS/tmp/al65-backup-20260921-224830/al/src/Production/ProdMgmt.Codeunit.al",
+      "path": "workspace-archive/WMS/tmp/al65-backup-20260921-224830/al/src/Production/ProdMgmt.Codeunit.al",
+      "sha256": "358624ffa19f6904d6e9b12d8737df7b4988d24e5de68b79c3acd50c74f7216b",
+      "bytes": 41124
+    },
+    {
+      "source": "WMS/tmp/al67-sandbox-validation-backup-20260922/al-print-tests/ProductionPalletTests.Codeunit.al",
+      "path": "workspace-archive/WMS/tmp/al67-sandbox-validation-backup-20260922/al-print-tests/ProductionPalletTests.Codeunit.al",
+      "sha256": "3b4debf210231ba34b5af6132bf6761ae5e23101ab20ce970da7130c2fb02e01",
+      "bytes": 37047
+    },
+    {
+      "source": "WMS/tmp/al67-sandbox-validation-backup-20260922/al-print-tests/app.json",
+      "path": "workspace-archive/WMS/tmp/al67-sandbox-validation-backup-20260922/al-print-tests/app.json",
+      "sha256": "4c7d681b939b469b327d953be15efe122e6f9ffb05006f203a119bd22fdef8ef",
+      "bytes": 456
+    },
+    {
+      "source": "WMS/tmp/al67-sandbox-validation-backup-20260922/al/app.json",
+      "path": "workspace-archive/WMS/tmp/al67-sandbox-validation-backup-20260922/al/app.json",
+      "sha256": "f4783e331d3683c8e9279fd1c0dbc781e404146d66465cb05d2a0b0e60d3adc2",
+      "bytes": 1107
+    },
+    {
+      "source": "WMS/tmp/al67-sandbox-validation-backup-20260922/al/src/Pick/PickMgmt.Codeunit.al",
+      "path": "workspace-archive/WMS/tmp/al67-sandbox-validation-backup-20260922/al/src/Pick/PickMgmt.Codeunit.al",
+      "sha256": "a88ed4110d50026b2d680e1ab3d44676a7407803df4016bff33168b766006caf",
+      "bytes": 119469
+    },
+    {
+      "source": "WMS/tmp/android-152-sync-backup-20260921-215102/android/app/build.gradle.kts",
+      "path": "workspace-archive/WMS/tmp/android-152-sync-backup-20260921-215102/android/app/build.gradle.kts",
+      "sha256": "ea6c31003635b8dc558f6419d9438efa8a70f31699ce8470d4e3c22241d4f916",
+      "bytes": 12078
+    },
+    {
+      "source": "WMS/tmp/android-152-sync-backup-20260921-215102/android/app/src/main/java/com/dynops/bcwms/BcApi.kt",
+      "path": "workspace-archive/WMS/tmp/android-152-sync-backup-20260921-215102/android/app/src/main/java/com/dynops/bcwms/BcApi.kt",
+      "sha256": "8b25b966aed6a9137b668dded96de2347309d7de5563347804d9c02e7c5ef7a7",
+      "bytes": 58873
+    },
+    {
+      "source": "WMS/tmp/android-152-sync-backup-20260921-215102/android/app/src/main/java/com/dynops/bcwms/feature/BulkLpBuildSheet.kt",
+      "path": "workspace-archive/WMS/tmp/android-152-sync-backup-20260921-215102/android/app/src/main/java/com/dynops/bcwms/feature/BulkLpBuildSheet.kt",
+      "sha256": "ccafc395fa73c80689f5291c707070f3bc3b0af28237454188d7c399cd5bb72e",
+      "bytes": 48699
+    },
+    {
+      "source": "WMS/tmp/android-152-sync-backup-20260921-215102/android/app/src/main/java/com/dynops/bcwms/feature/LicensePlateWorkflow.kt",
+      "path": "workspace-archive/WMS/tmp/android-152-sync-backup-20260921-215102/android/app/src/main/java/com/dynops/bcwms/feature/LicensePlateWorkflow.kt",
+      "sha256": "b3f9485c07c0e32be80eb99bd1c6d4aff20ab879503b736bc7f05799875001f5",
+      "bytes": 9893
+    },
+    {
+      "source": "WMS/tmp/android-152-sync-backup-20260921-215102/android/app/src/main/java/com/dynops/bcwms/feature/PalletPickVerification.kt",
+      "path": "workspace-archive/WMS/tmp/android-152-sync-backup-20260921-215102/android/app/src/main/java/com/dynops/bcwms/feature/PalletPickVerification.kt",
+      "sha256": "b0fa84bc7a3ad320eaeaa8a81009f88f24f8532191a8b32a36e74529b5ff0ca1",
+      "bytes": 7644
+    },
+    {
+      "source": "WMS/tmp/android-152-sync-backup-20260921-215102/android/app/src/main/java/com/dynops/bcwms/feature/PickingModule.kt",
+      "path": "workspace-archive/WMS/tmp/android-152-sync-backup-20260921-215102/android/app/src/main/java/com/dynops/bcwms/feature/PickingModule.kt",
+      "sha256": "3b8314e413be843253092d6df32ad9ac5a7008f8a0a14b251438ff08d5c42f3b",
+      "bytes": 127822
+    },
+    {
+      "source": "WMS/tmp/android-152-sync-backup-20260921-215102/android/app/src/main/java/com/dynops/bcwms/feature/ProductionAssemblyModules.kt",
+      "path": "workspace-archive/WMS/tmp/android-152-sync-backup-20260921-215102/android/app/src/main/java/com/dynops/bcwms/feature/ProductionAssemblyModules.kt",
+      "sha256": "5830a4f06e20c6dc6d189d8b88a935dfdfec2c96ed72f4844c5a6b03c3eb77f2",
+      "bytes": 44945
+    },
+    {
+      "source": "WMS/tmp/android-152-sync-backup-20260921-215102/android/app/src/test/java/com/dynops/bcwms/LpScanCapabilitiesTest.kt",
+      "path": "workspace-archive/WMS/tmp/android-152-sync-backup-20260921-215102/android/app/src/test/java/com/dynops/bcwms/LpScanCapabilitiesTest.kt",
+      "sha256": "6363e34bc54c17f009be5bfb10d15182fe9dd19480086859777cf73874631e6e",
+      "bytes": 5225
+    },
+    {
+      "source": "WMS/tmp/android-152-sync-backup-20260921-215102/android/app/src/test/java/com/dynops/bcwms/feature/BulkLpBuildWorkflowTest.kt",
+      "path": "workspace-archive/WMS/tmp/android-152-sync-backup-20260921-215102/android/app/src/test/java/com/dynops/bcwms/feature/BulkLpBuildWorkflowTest.kt",
+      "sha256": "9e3c696605bc39d6ac9131df22d2bbb9b04e5a7ca424b49f415e6f78befe44f7",
+      "bytes": 16846
+    },
+    {
+      "source": "WMS/tmp/android-152-sync-backup-20260921-215102/android/app/src/test/java/com/dynops/bcwms/feature/DocumentPalletPlansTest.kt",
+      "path": "workspace-archive/WMS/tmp/android-152-sync-backup-20260921-215102/android/app/src/test/java/com/dynops/bcwms/feature/DocumentPalletPlansTest.kt",
+      "sha256": "653a31c1b918877a8ce6c850a7994ea1029d35acc061b670666d7d7ad09fe1c8",
+      "bytes": 13636
+    },
+    {
+      "source": "WMS/tmp/android-153-sync-backup-20260921-220154/android/app/build.gradle.kts",
+      "path": "workspace-archive/WMS/tmp/android-153-sync-backup-20260921-220154/android/app/build.gradle.kts",
+      "sha256": "961782a9cabbbd79ac90ac0b5f0a9fe17682c243c58e39761b1452e2e8144e19",
+      "bytes": 12078
+    },
+    {
+      "source": "WMS/tmp/android-153-sync-backup-20260921-220154/android/app/src/main/java/com/dynops/bcwms/BcApi.kt",
+      "path": "workspace-archive/WMS/tmp/android-153-sync-backup-20260921-220154/android/app/src/main/java/com/dynops/bcwms/BcApi.kt",
+      "sha256": "fdebe9c0aa88be6ad388cf5125f8bd43a8aded42545d76ec25bd06fcc3d688ab",
+      "bytes": 59042
+    },
+    {
+      "source": "WMS/tmp/android-153-sync-backup-20260921-220154/android/app/src/main/java/com/dynops/bcwms/PickClaim.kt",
+      "path": "workspace-archive/WMS/tmp/android-153-sync-backup-20260921-220154/android/app/src/main/java/com/dynops/bcwms/PickClaim.kt",
+      "sha256": "a708fe7ecf1024aed84fbcf54dbe79fedfdea11b11d3218954fae0f9a2a9f76d",
+      "bytes": 1568
+    },
+    {
+      "source": "WMS/tmp/android-153-sync-backup-20260921-220154/android/app/src/main/java/com/dynops/bcwms/feature/PickingModule.kt",
+      "path": "workspace-archive/WMS/tmp/android-153-sync-backup-20260921-220154/android/app/src/main/java/com/dynops/bcwms/feature/PickingModule.kt",
+      "sha256": "2164e3dff8e73d47652acc1eaff33f0be948d5d9a341a89ea83a68568046a78a",
+      "bytes": 127333
+    },
+    {
+      "source": "WMS/tmp/android-153-sync-backup-20260921-220154/android/app/src/main/java/com/dynops/bcwms/feature/PutAwayShipModules.kt",
+      "path": "workspace-archive/WMS/tmp/android-153-sync-backup-20260921-220154/android/app/src/main/java/com/dynops/bcwms/feature/PutAwayShipModules.kt",
+      "sha256": "9137374ba81538c85cc98016bd327169739cf204540e5448949d11e6a8ba01ad",
+      "bytes": 162298
+    },
+    {
+      "source": "WMS/tmp/bade-144-folder-transfer-20260921-133514/before/al-print-tests/app.json",
+      "path": "workspace-archive/WMS/tmp/bade-144-folder-transfer-20260921-133514/before/al-print-tests/app.json",
+      "sha256": "695c46d3769c91709c2212cf090c60e1698ee1da334769ed61949c5611c43fe0",
+      "bytes": 455
+    },
+    {
+      "source": "WMS/tmp/bade-144-folder-transfer-20260921-133514/before/al/app.json",
+      "path": "workspace-archive/WMS/tmp/bade-144-folder-transfer-20260921-133514/before/al/app.json",
+      "sha256": "831fa7e3b507f3514b6914486049efb24289f8b9c038a802df6e398de20a74f7",
+      "bytes": 1107
+    },
+    {
+      "source": "WMS/tmp/bade-144-folder-transfer-20260921-133514/before/al/src/Enums/LPAction.Enum.al",
+      "path": "workspace-archive/WMS/tmp/bade-144-folder-transfer-20260921-133514/before/al/src/Enums/LPAction.Enum.al",
+      "sha256": "d932ffb6240a1f207e1d7a1260326e44cdb10ce87655c53b9218a4bb8d79eb83",
+      "bytes": 600
+    },
+    {
+      "source": "WMS/tmp/bade-144-folder-transfer-20260921-133514/before/al/src/Inquiry/ItemLedgerEntriesExt.PageExt.al",
+      "path": "workspace-archive/WMS/tmp/bade-144-folder-transfer-20260921-133514/before/al/src/Inquiry/ItemLedgerEntriesExt.PageExt.al",
+      "sha256": "7b1a9475efc1265ef1dc3503139c84608d03d99ed4a1c8b4d5ad04b86ce12697",
+      "bytes": 6475
+    },
+    {
+      "source": "WMS/tmp/bade-144-folder-transfer-20260921-133514/before/al/src/Inquiry/ItemLedgerEntryApi.Page.al",
+      "path": "workspace-archive/WMS/tmp/bade-144-folder-transfer-20260921-133514/before/al/src/Inquiry/ItemLedgerEntryApi.Page.al",
+      "sha256": "3d77fe370d02bc526a63c61dc2ffb9895bee3e7a11be72a5b78f513a71f3d5d8",
+      "bytes": 7288
+    },
+    {
+      "source": "WMS/tmp/bade-144-folder-transfer-20260921-133514/before/al/src/LPPropagation/LPPropagationSubscriber.Codeunit.al",
+      "path": "workspace-archive/WMS/tmp/bade-144-folder-transfer-20260921-133514/before/al/src/LPPropagation/LPPropagationSubscriber.Codeunit.al",
+      "sha256": "6126180f288e6a9e66820a78ca866df8a5429f8978a0e1780989ede8382d213d",
+      "bytes": 103104
+    },
+    {
+      "source": "WMS/tmp/bade-144-folder-transfer-20260921-133514/before/al/src/LicensePlate/LPApi.Page.al",
+      "path": "workspace-archive/WMS/tmp/bade-144-folder-transfer-20260921-133514/before/al/src/LicensePlate/LPApi.Page.al",
+      "sha256": "d65a2bb9ee80ebfbb4e5ac8b553657c89bf32e623ca8768f8eef9d214446ca85",
+      "bytes": 12229
+    },
+    {
+      "source": "WMS/tmp/bade-144-folder-transfer-20260921-133514/before/al/src/LicensePlate/LPLineListPart.Page.al",
+      "path": "workspace-archive/WMS/tmp/bade-144-folder-transfer-20260921-133514/before/al/src/LicensePlate/LPLineListPart.Page.al",
+      "sha256": "28f755c3a422d1eed1ee40a80ca0fe926b29eb90c8823d1a3f56941d2bc16f76",
+      "bytes": 1279
+    },
+    {
+      "source": "WMS/tmp/bade-144-folder-transfer-20260921-133514/before/al/src/LicensePlate/LPManagement.Codeunit.al",
+      "path": "workspace-archive/WMS/tmp/bade-144-folder-transfer-20260921-133514/before/al/src/LicensePlate/LPManagement.Codeunit.al",
+      "sha256": "7a78d12f67cf3ec91830276aadd1cca36988d37db255848f353e392cc6d008b8",
+      "bytes": 91342
+    },
+    {
+      "source": "WMS/tmp/bade-144-folder-transfer-20260921-133514/before/al/src/LicensePlate/MaddeTanimlamaLP.Report.al",
+      "path": "workspace-archive/WMS/tmp/bade-144-folder-transfer-20260921-133514/before/al/src/LicensePlate/MaddeTanimlamaLP.Report.al",
+      "sha256": "974c7b028e925ab899be16a43e39a56e25c12aad264ca24230f085f41452016c",
+      "bytes": 8320
+    },
+    {
+      "source": "WMS/tmp/bade-144-folder-transfer-20260921-133514/before/al/src/Print/MteZplBuilder.Codeunit.al",
+      "path": "workspace-archive/WMS/tmp/bade-144-folder-transfer-20260921-133514/before/al/src/Print/MteZplBuilder.Codeunit.al",
+      "sha256": "901040e1f461843bbafd8de0d849d946ea0229451f9ed8597d449c45f55057af",
+      "bytes": 24471
+    },
+    {
+      "source": "WMS/tmp/bade-144-folder-transfer-20260921-133514/before/al/src/Print/PrintDispatcher.Codeunit.al",
+      "path": "workspace-archive/WMS/tmp/bade-144-folder-transfer-20260921-133514/before/al/src/Print/PrintDispatcher.Codeunit.al",
+      "sha256": "0ec4c67e543573a3bc86d563d7d0ac69afb1dc7adfd09b0bda2f157af037b1a7",
+      "bytes": 45309
+    },
+    {
+      "source": "WMS/tmp/bade-144-folder-transfer-20260921-133514/before/al/src/Receiving/ReceiptApi.Page.al",
+      "path": "workspace-archive/WMS/tmp/bade-144-folder-transfer-20260921-133514/before/al/src/Receiving/ReceiptApi.Page.al",
+      "sha256": "c5a378f4dcd796499f2c9220569c48e279d10dfcf63309e303a32f24760f6de1",
+      "bytes": 10936
+    },
+    {
+      "source": "WMS/tmp/bade-144-folder-transfer-20260921-133514/before/al/src/Receiving/ReceiptMgmt.Codeunit.al",
+      "path": "workspace-archive/WMS/tmp/bade-144-folder-transfer-20260921-133514/before/al/src/Receiving/ReceiptMgmt.Codeunit.al",
+      "sha256": "4be562bce422116efbd09867f99aa8ea662b9358f8c9a55ee9b59141287af034",
+      "bytes": 109663
+    },
+    {
+      "source": "WMS/tmp/bade-144-folder-transfer-20260921-133514/before/android/app/build.gradle.kts",
+      "path": "workspace-archive/WMS/tmp/bade-144-folder-transfer-20260921-133514/before/android/app/build.gradle.kts",
+      "sha256": "7e26b116e473c0e1b36932f0e052e7f234388920ccac886539356c0281a0963b",
+      "bytes": 12078
+    },
+    {
+      "source": "WMS/tmp/bade-144-folder-transfer-20260921-133514/before/android/app/src/main/java/com/dynops/bcwms/BcApi.kt",
+      "path": "workspace-archive/WMS/tmp/bade-144-folder-transfer-20260921-133514/before/android/app/src/main/java/com/dynops/bcwms/BcApi.kt",
+      "sha256": "3f5f4f953159e2e13c070978ad087e5ab4668faa12ee5380e577b819c365ea60",
+      "bytes": 55727
+    },
+    {
+      "source": "WMS/tmp/bade-144-folder-transfer-20260921-133514/before/android/app/src/main/java/com/dynops/bcwms/feature/LicensePlateModule.kt",
+      "path": "workspace-archive/WMS/tmp/bade-144-folder-transfer-20260921-133514/before/android/app/src/main/java/com/dynops/bcwms/feature/LicensePlateModule.kt",
+      "sha256": "403b33760f61b033ef213e4f916206d1a35d4582575affdec7fd3740f9239145",
+      "bytes": 62782
+    },
+    {
+      "source": "WMS/tmp/bade-144-folder-transfer-20260921-133514/source-changes.patch",
+      "path": "workspace-archive/WMS/tmp/bade-144-folder-transfer-20260921-133514/source-changes.patch",
+      "sha256": "d5a48184c68a1dc712523aebc031368533eaf8d508cdca3f9c7e5abea91ac12c",
+      "bytes": 52077
+    },
+    {
+      "source": "WMS/tmp/bade-144-github-release.md",
+      "path": "workspace-archive/WMS/tmp/bade-144-github-release.md",
+      "sha256": "f67cf0fd1c4c80efe7a6b7ec23a7d5efce77bef7c2dfed6bff55b1136dc48ff6",
+      "bytes": 1585
+    },
+    {
+      "source": "WMS/tmp/bade-145-github-release.md",
+      "path": "workspace-archive/WMS/tmp/bade-145-github-release.md",
+      "sha256": "750ab565ff0199d69c4b002fa61312baac0eb707457cd40bbcac036359c63e6e",
+      "bytes": 1444
+    },
+    {
+      "source": "WMS/tmp/bade-146-github-release.md",
+      "path": "workspace-archive/WMS/tmp/bade-146-github-release.md",
+      "sha256": "ad0f7d80f5b31ff2c2531a5c15c3e77ca1746504dbfbaec68037f4b4eef9852b",
+      "bytes": 1358
+    },
+    {
+      "source": "WMS/tmp/bade-149-publication/android-source.patch",
+      "path": "workspace-archive/WMS/tmp/bade-149-publication/android-source.patch",
+      "sha256": "fb376d1f298867b265d5b8b704ab6c36648026fde0c44ff9ee4e5536516f6d4b",
+      "bytes": 75602
+    },
+    {
+      "source": "WMS/tmp/bade-149-publication/release-notes.md",
+      "path": "workspace-archive/WMS/tmp/bade-149-publication/release-notes.md",
+      "sha256": "057ac270f56b2cafc10d4223132abb74ef676d52a06b5e5586fa0bcd636049c5",
+      "bytes": 1292
+    },
+    {
+      "source": "WMS/tmp/bade-151-publication/RELEASE-NOTES.md",
+      "path": "workspace-archive/WMS/tmp/bade-151-publication/RELEASE-NOTES.md",
+      "sha256": "69cacfbeeb582d21f1de17323d6e4e3023719a33ec30f7ad9420f699fb6a87cf",
+      "bytes": 800
+    },
+    {
+      "source": "WMS/tmp/bade-pallet-error-baseline-backup/PalletPickSheet.kt",
+      "path": "workspace-archive/WMS/tmp/bade-pallet-error-baseline-backup/PalletPickSheet.kt",
+      "sha256": "c1604acd8e04af70415bc794f67c71d097fca3311d1308cc53da97b7ade65548",
+      "bytes": 16036
+    },
+    {
+      "source": "WMS/tmp/bade-pallet-error-baseline-backup/PalletPickVerification.kt",
+      "path": "workspace-archive/WMS/tmp/bade-pallet-error-baseline-backup/PalletPickVerification.kt",
+      "sha256": "810f3df762b6ebf6ca289e9ec4850adfd0e8bece9a30770e62780660df524d44",
+      "bytes": 6297
+    },
+    {
+      "source": "WMS/tmp/bade-pallet-error-baseline-backup/TerminalDialogTest.kt",
+      "path": "workspace-archive/WMS/tmp/bade-pallet-error-baseline-backup/TerminalDialogTest.kt",
+      "sha256": "d9b5f141e012d3584223a60b65a7b97f0117c46480557f7cd489b445ae4d9a79",
+      "bytes": 8506
+    },
+    {
+      "source": "WMS/tmp/bade-terminal-change-release/prepare.py",
+      "path": "workspace-archive/WMS/tmp/bade-terminal-change-release/prepare.py",
+      "sha256": "c5106e17e4d068085f45582759548df114cd7e8be1d8a8c6429bad8d4340f910",
+      "bytes": 1666
+    },
+    {
+      "source": "WMS/tmp/bade155-source-backup/al-print-tests/LpStockSourceTests.Codeunit.al",
+      "path": "workspace-archive/WMS/tmp/bade155-source-backup/al-print-tests/LpStockSourceTests.Codeunit.al",
+      "sha256": "4b3a9d9a89a4edb0ab5b3b8b63f79b922e98f25505e7dfb331b1c6eebd688911",
+      "bytes": 16027
+    },
+    {
+      "source": "WMS/tmp/bade155-source-backup/al-print-tests/ProductionConcurrencyApi.Page.al",
+      "path": "workspace-archive/WMS/tmp/bade155-source-backup/al-print-tests/ProductionConcurrencyApi.Page.al",
+      "sha256": "49dd8f5434264bec2d2ee349781e2b58416b8f674f2cc55fea9fe638201d3f17",
+      "bytes": 1558
+    },
+    {
+      "source": "WMS/tmp/bade155-source-backup/al-print-tests/app.json",
+      "path": "workspace-archive/WMS/tmp/bade155-source-backup/al-print-tests/app.json",
+      "sha256": "ebbc58c4f144afae472cd313187b5d2c9d9c39695fe470d76ad740a9cfa389ee",
+      "bytes": 456
+    },
+    {
+      "source": "WMS/tmp/bade155-source-backup/al/app.json",
+      "path": "workspace-archive/WMS/tmp/bade155-source-backup/al/app.json",
+      "sha256": "03422945bfa36f231dfe91fd800f80623837c388f4014982cee9898eddb55f89",
+      "bytes": 1107
+    },
+    {
+      "source": "WMS/tmp/bade155-source-backup/al/src/LicensePlate/LPList.Page.al",
+      "path": "workspace-archive/WMS/tmp/bade155-source-backup/al/src/LicensePlate/LPList.Page.al",
+      "sha256": "be93b5befe2cf0843d3b192a63d33a838c22c376ce604fb0a62b3e8c9d559962",
+      "bytes": 1146
+    },
+    {
+      "source": "WMS/tmp/bade155-source-backup/al/src/LicensePlate/LPManagement.Codeunit.al",
+      "path": "workspace-archive/WMS/tmp/bade155-source-backup/al/src/LicensePlate/LPManagement.Codeunit.al",
+      "sha256": "5ee3b6fe51d0da75ee86bd9ddbd63a1671f04e9a01b5ba8d391a2e8605b56ee1",
+      "bytes": 114326
+    },
+    {
+      "source": "WMS/tmp/bade155-source-backup/android/app/build.gradle.kts",
+      "path": "workspace-archive/WMS/tmp/bade155-source-backup/android/app/build.gradle.kts",
+      "sha256": "66667c37975a92d9d93113d0193ea3251e0b7e0cb3a65ff3d3762a737bd7a9b1",
+      "bytes": 12078
+    },
+    {
+      "source": "WMS/tmp/bade155-source-backup/android/app/src/main/java/com/dynops/bcwms/feature/PalletPickPlan.kt",
+      "path": "workspace-archive/WMS/tmp/bade155-source-backup/android/app/src/main/java/com/dynops/bcwms/feature/PalletPickPlan.kt",
+      "sha256": "afc9c700d5a72eeb719fdaaff8525a8804a30f95c41b856e35a94df7a43e4d22",
+      "bytes": 9550
+    },
+    {
+      "source": "WMS/tmp/bade155-source-backup/android/app/src/main/java/com/dynops/bcwms/feature/PalletPickVerification.kt",
+      "path": "workspace-archive/WMS/tmp/bade155-source-backup/android/app/src/main/java/com/dynops/bcwms/feature/PalletPickVerification.kt",
+      "sha256": "6bec89494e1165ac9848ba6f5334410cc99a4d19cd21fca13ccc9c43ddefca7c",
+      "bytes": 7657
+    },
+    {
+      "source": "WMS/tmp/bade155-source-backup/android/app/src/main/java/com/dynops/bcwms/feature/PutAwayShipModules.kt",
+      "path": "workspace-archive/WMS/tmp/bade155-source-backup/android/app/src/main/java/com/dynops/bcwms/feature/PutAwayShipModules.kt",
+      "sha256": "eb15f7e252bca40d8b5f816ca420437e25f1890270bcd1057ddf4c931737729b",
+      "bytes": 166996
+    },
+    {
+      "source": "WMS/tmp/bade155-source-backup/android/app/src/test/java/com/dynops/bcwms/feature/PalletPickPlanTest.kt",
+      "path": "workspace-archive/WMS/tmp/bade155-source-backup/android/app/src/test/java/com/dynops/bcwms/feature/PalletPickPlanTest.kt",
+      "sha256": "7886e75208d6de1a08c18206e2ff5af401e8dac9ec7e31ee1097279c22faad5f",
+      "bytes": 12891
+    },
+    {
+      "source": "WMS/tmp/concurrency-backup-20260922/al-print-tests/ProductionPalletTests.Codeunit.al",
+      "path": "workspace-archive/WMS/tmp/concurrency-backup-20260922/al-print-tests/ProductionPalletTests.Codeunit.al",
+      "sha256": "aa7d181cd106d099d1b08a60acb50e0e215dd9ebed1c501ee5170dea22f5250d",
+      "bytes": 52214
+    },
+    {
+      "source": "WMS/tmp/concurrency-backup-20260922/al-print-tests/app.json",
+      "path": "workspace-archive/WMS/tmp/concurrency-backup-20260922/al-print-tests/app.json",
+      "sha256": "436c41a7c8d3aba79f124ffd645ed39255c66465fe3cc57e62defb932f0da3af",
+      "bytes": 456
+    },
+    {
+      "source": "WMS/tmp/production-lp-fix-20260921/before/al/src/LicensePlate/LPManagement.Codeunit.al",
+      "path": "workspace-archive/WMS/tmp/production-lp-fix-20260921/before/al/src/LicensePlate/LPManagement.Codeunit.al",
+      "sha256": "d6a14dbaadc8c598b2fdf196fc314f370c50b47b784896cfcb80c66a29473053",
+      "bytes": 97490
+    },
+    {
+      "source": "WMS/tmp/production-lp-fix-20260921/before/al/src/LicensePlate/LPVerification.Codeunit.al",
+      "path": "workspace-archive/WMS/tmp/production-lp-fix-20260921/before/al/src/LicensePlate/LPVerification.Codeunit.al",
+      "sha256": "2b9bb05c153ef944d265dfad0fbd9847fa757434863d5bd6da15bfaa26ece0b2",
+      "bytes": 15589
+    },
+    {
+      "source": "WMS/tmp/production-lp-fix-20260921/before/al/src/Pick/PickLineApi.Page.al",
+      "path": "workspace-archive/WMS/tmp/production-lp-fix-20260921/before/al/src/Pick/PickLineApi.Page.al",
+      "sha256": "bac4725008be961ecd9263028a2fb4719c48259d2343cf773ebd97c6357184cd",
+      "bytes": 3398
+    },
+    {
+      "source": "WMS/tmp/production-lp-fix-20260921/before/al/src/Pick/PickMgmt.Codeunit.al",
+      "path": "workspace-archive/WMS/tmp/production-lp-fix-20260921/before/al/src/Pick/PickMgmt.Codeunit.al",
+      "sha256": "23577351765f330aa362af973376a8af10545db8c766f55dd170003deb7f635f",
+      "bytes": 86479
+    },
+    {
+      "source": "WMS/tmp/production-lp-fix-20260921/followup-before/PickMgmt-before-scope.al",
+      "path": "workspace-archive/WMS/tmp/production-lp-fix-20260921/followup-before/PickMgmt-before-scope.al",
+      "sha256": "50195ee26b618ba742d1d15281d54d3de46b1ca123220c8e1f61300e5454ec39",
+      "bytes": 107426
+    },
+    {
+      "source": "WMS/tmp/production-lp-fix-20260921/followup-before/PickMgmt.Codeunit.al",
+      "path": "workspace-archive/WMS/tmp/production-lp-fix-20260921/followup-before/PickMgmt.Codeunit.al",
+      "sha256": "f34185f31f9bc8e35bc2cd9cd67fd8de4e3757a3d097022ed95df12742a81f9f",
+      "bytes": 99601
+    },
+    {
+      "source": "WMS/tmp/production-lp-fix-20260921/followup-before/ProdMgmt-before-scope.al",
+      "path": "workspace-archive/WMS/tmp/production-lp-fix-20260921/followup-before/ProdMgmt-before-scope.al",
+      "sha256": "2e3358ce246f7ef4f857e67672f59fcbb8098c86e7f728ef1b760b7c08c927f1",
+      "bytes": 33556
+    },
+    {
+      "source": "WMS/tmp/production-lp-fix-20260921/production-lp-vs-verified-62.patch",
+      "path": "workspace-archive/WMS/tmp/production-lp-fix-20260921/production-lp-vs-verified-62.patch",
+      "sha256": "ffceada858c02dee2250f5dcc4d05081ad7b3211c0ce2444fa5abc0bdef649f7",
+      "bytes": 124778
+    },
+    {
+      "source": "WMS/tmp/production-lp-fix-20260921/windows-review/tmp/bcapi-helper/Program.cs",
+      "path": "workspace-archive/WMS/tmp/production-lp-fix-20260921/windows-review/tmp/bcapi-helper/Program.cs",
+      "sha256": "34dd4a5b150cb0cbe063a4c63ed67f6257b368e841d30e39e07c41ddf2d99557",
+      "bytes": 4980
+    },
+    {
+      "source": "WMS/tmp/production-lp-fix-20260921/windows-review/tmp/bcapi-helper/bcapi-helper.csproj",
+      "path": "workspace-archive/WMS/tmp/production-lp-fix-20260921/windows-review/tmp/bcapi-helper/bcapi-helper.csproj",
+      "sha256": "2930999429f6df7cab74c4c90d96a11ea851dd060043e4fa79ef57858bfa5b61",
+      "bytes": 630
+    },
+    {
+      "source": "WMS/tmp/production-lp-fix-20260921/windows-review/tmp/concurrency-sand0309/run-operators.py",
+      "path": "workspace-archive/WMS/tmp/production-lp-fix-20260921/windows-review/tmp/concurrency-sand0309/run-operators.py",
+      "sha256": "83a0636b01d1f9adc500581f8c9b984db1a3cac7d75e55d9e83b2b92826c0fec",
+      "bytes": 2963
+    },
+    {
+      "source": "WMS/tmp/production-lp-fix-20260921/windows-review/tmp/concurrency-sand0309/run.py",
+      "path": "workspace-archive/WMS/tmp/production-lp-fix-20260921/windows-review/tmp/concurrency-sand0309/run.py",
+      "sha256": "d1d2d0e6500d8f58e2aa306b40d95bd0c1d65a13a477a2c32d965362d1ec5a2a",
+      "bytes": 2681
+    },
+    {
+      "source": "WMS/tmp/production-lp-fix-20260921/windows-review/tmp/release-1.14.150-b4df3ee/INSTALL-TEST.md",
+      "path": "workspace-archive/WMS/tmp/production-lp-fix-20260921/windows-review/tmp/release-1.14.150-b4df3ee/INSTALL-TEST.md",
+      "sha256": "f21a96a68db8c9fbb3663132cb8c0ee433131f9b3e2768c9f7c925bb417d5c09",
+      "bytes": 1422
+    },
+    {
+      "source": "WMS/tmp/production-lp-fix-20260921/windows-review/tmp/release-1.14.150-b4df3ee/bundle/INSTALL-TEST.md",
+      "path": "workspace-archive/WMS/tmp/production-lp-fix-20260921/windows-review/tmp/release-1.14.150-b4df3ee/bundle/INSTALL-TEST.md",
+      "sha256": "f21a96a68db8c9fbb3663132cb8c0ee433131f9b3e2768c9f7c925bb417d5c09",
+      "bytes": 1422
+    },
+    {
+      "source": "WMS/tmp/production-lp-fix-20260921/windows-review/tmp/release-1.14.150-b4df3ee/bundle/source.patch",
+      "path": "workspace-archive/WMS/tmp/production-lp-fix-20260921/windows-review/tmp/release-1.14.150-b4df3ee/bundle/source.patch",
+      "sha256": "3a9bc5135bf0030ad3777f20bafb08d23e3e180005c951c80329f332f28af196",
+      "bytes": 66648
+    },
+    {
+      "source": "WMS/tmp/production-lp-fix-20260921/windows-review/tmp/release-1.14.150-b4df3ee/release-body.md",
+      "path": "workspace-archive/WMS/tmp/production-lp-fix-20260921/windows-review/tmp/release-1.14.150-b4df3ee/release-body.md",
+      "sha256": "d59f437e7cca63827c1a96c1bb327fffb7f500f24284e52fa4f1046421b46368",
+      "bytes": 1473
+    },
+    {
+      "source": "WMS/tmp/production-lp-fix-20260921/windows-review/tmp/release-1.14.150-b4df3ee/sandbox/INSTALL-TEST.md",
+      "path": "workspace-archive/WMS/tmp/production-lp-fix-20260921/windows-review/tmp/release-1.14.150-b4df3ee/sandbox/INSTALL-TEST.md",
+      "sha256": "f21a96a68db8c9fbb3663132cb8c0ee433131f9b3e2768c9f7c925bb417d5c09",
+      "bytes": 1422
+    },
+    {
+      "source": "WMS/tmp/production-lp-fix-20260921/windows-review/tmp/release-1.14.150-b4df3ee/sandbox/source.patch",
+      "path": "workspace-archive/WMS/tmp/production-lp-fix-20260921/windows-review/tmp/release-1.14.150-b4df3ee/sandbox/source.patch",
+      "sha256": "3a9bc5135bf0030ad3777f20bafb08d23e3e180005c951c80329f332f28af196",
+      "bytes": 66648
+    },
+    {
+      "source": "WMS/tmp/production-lp-fix-20260921/windows-review/tmp/release-1.14.151-388f93e/bundle/RELEASE-NOTES.md",
+      "path": "workspace-archive/WMS/tmp/production-lp-fix-20260921/windows-review/tmp/release-1.14.151-388f93e/bundle/RELEASE-NOTES.md",
+      "sha256": "3e82a5769cb6bd8d67b457e40a55946dda0fae799ae7ee98713961f4d622220c",
+      "bytes": 732
+    },
+    {
+      "source": "WMS/tmp/production-lp-fix-20260921/windows-review/tmp/release-1.14.151-388f93e/bundle/TEST-RESULTS.md",
+      "path": "workspace-archive/WMS/tmp/production-lp-fix-20260921/windows-review/tmp/release-1.14.151-388f93e/bundle/TEST-RESULTS.md",
+      "sha256": "88b55990d3d0cf6cbd35155338b3b569608fd5698111cf89959a5facf7b87e75",
+      "bytes": 2280
+    },
+    {
+      "source": "WMS/tmp/production-lp-fix-20260921/windows-review/tmp/release-1.14.151-388f93e/bundle/source.patch",
+      "path": "workspace-archive/WMS/tmp/production-lp-fix-20260921/windows-review/tmp/release-1.14.151-388f93e/bundle/source.patch",
+      "sha256": "f70ad2a4b1499ed6581124254604f7513924883bda8ef03c63b668cc9f4f4fd1",
+      "bytes": 12560
+    },
+    {
+      "source": "WMS/tmp/production-lp-fix-20260921/windows-review/tmp/release-1.14.152/bundle/RELEASE-NOTES.md",
+      "path": "workspace-archive/WMS/tmp/production-lp-fix-20260921/windows-review/tmp/release-1.14.152/bundle/RELEASE-NOTES.md",
+      "sha256": "a7f5fd314bee10317ca0eb0b6344cb94d25378bf2c44ddf8d1cfcd64a77824b0",
+      "bytes": 832
+    },
+    {
+      "source": "WMS/tmp/production-lp-fix-20260921/windows-review/tmp/release-1.14.152/bundle/TEST-RESULTS.md",
+      "path": "workspace-archive/WMS/tmp/production-lp-fix-20260921/windows-review/tmp/release-1.14.152/bundle/TEST-RESULTS.md",
+      "sha256": "90d3de97d97d49fe7247a834ac7574b66bcd792176992ab5f4670268262779eb",
+      "bytes": 2388
+    },
+    {
+      "source": "WMS/tmp/production-lp-fix-20260921/windows-review/tmp/release-1.14.153/RELEASE-NOTES.md",
+      "path": "workspace-archive/WMS/tmp/production-lp-fix-20260921/windows-review/tmp/release-1.14.153/RELEASE-NOTES.md",
+      "sha256": "edc869633481b0a0cb061314dfc83c94a63810706b3efa07e6303f2888a71baf",
+      "bytes": 558
+    },
+    {
+      "source": "WMS/tmp/production-lp-fix-20260921/windows-review/tmp/release-1.14.153/TEST-RESULTS.md",
+      "path": "workspace-archive/WMS/tmp/production-lp-fix-20260921/windows-review/tmp/release-1.14.153/TEST-RESULTS.md",
+      "sha256": "4f2a4659b6f7297afa896c9b5f228ed2bca896124dc03ee54664169f5776db22",
+      "bytes": 1601
+    },
+    {
+      "source": "WMS/tmp/production-lp-fix-20260921/windows-review/tmp/release-1.14.154/KULLANIM.md",
+      "path": "workspace-archive/WMS/tmp/production-lp-fix-20260921/windows-review/tmp/release-1.14.154/KULLANIM.md",
+      "sha256": "0c16c182c40da35d87ff0e0ce04d20e7831fe59be410c5a5a3aab99276f6d53d",
+      "bytes": 3593
+    },
+    {
+      "source": "WMS/tmp/production-lp-fix-20260921/windows-review/tmp/release-1.14.154/RELEASE-NOTES.md",
+      "path": "workspace-archive/WMS/tmp/production-lp-fix-20260921/windows-review/tmp/release-1.14.154/RELEASE-NOTES.md",
+      "sha256": "897a5bbcadb19122801a4bdcbe39377d3a38acab44db4a516ebc98f0c111c361",
+      "bytes": 1250
+    },
+    {
+      "source": "WMS/tmp/production-lp-fix-20260921/windows-review/tmp/release-1.14.155/KULLANIM.md",
+      "path": "workspace-archive/WMS/tmp/production-lp-fix-20260921/windows-review/tmp/release-1.14.155/KULLANIM.md",
+      "sha256": "c9dccdba728ad3a0a2898b4236adfd155d15cae0cb49df086f2f4fcc6fb7b3ac",
+      "bytes": 3169
+    },
+    {
+      "source": "WMS/tmp/production-lp-fix-20260921/windows-review/tmp/release-al65/bundle/RELEASE-NOTES.md",
+      "path": "workspace-archive/WMS/tmp/production-lp-fix-20260921/windows-review/tmp/release-al65/bundle/RELEASE-NOTES.md",
+      "sha256": "e0e92bc4c6d10edecd75279364c6c154dfd0f01818dc92a286820766259bbd06",
+      "bytes": 1456
+    },
+    {
+      "source": "WMS/tmp/production-lp-fix-20260921/windows-review/tmp/release-al66/bundle/KULLANIM.md",
+      "path": "workspace-archive/WMS/tmp/production-lp-fix-20260921/windows-review/tmp/release-al66/bundle/KULLANIM.md",
+      "sha256": "0c16c182c40da35d87ff0e0ce04d20e7831fe59be410c5a5a3aab99276f6d53d",
+      "bytes": 3593
+    },
+    {
+      "source": "WMS/tmp/production-lp-fix-20260921/windows-review/tmp/release-al66/bundle/RELEASE-NOTES.md",
+      "path": "workspace-archive/WMS/tmp/production-lp-fix-20260921/windows-review/tmp/release-al66/bundle/RELEASE-NOTES.md",
+      "sha256": "897a5bbcadb19122801a4bdcbe39377d3a38acab44db4a516ebc98f0c111c361",
+      "bytes": 1250
+    },
+    {
+      "source": "WMS/tmp/production-lp-fix-20260921/windows-review/tmp/release-al67/RELEASE-NOTES.md",
+      "path": "workspace-archive/WMS/tmp/production-lp-fix-20260921/windows-review/tmp/release-al67/RELEASE-NOTES.md",
+      "sha256": "71368ac3cf37a14f288efc6a0fc3ebf622f3bffcae7ffd363c9cc7503d3c860d",
+      "bytes": 2718
+    },
+    {
+      "source": "WMS/tmp/production-lp-fix-20260921/windows-review/tmp/release-al68/KULLANIM.md",
+      "path": "workspace-archive/WMS/tmp/production-lp-fix-20260921/windows-review/tmp/release-al68/KULLANIM.md",
+      "sha256": "c9dccdba728ad3a0a2898b4236adfd155d15cae0cb49df086f2f4fcc6fb7b3ac",
+      "bytes": 3169
+    },
+    {
+      "source": "WMS/tmp/production-preparation-backup-20260922/al-print-tests/ProductionPalletTests.Codeunit.al",
+      "path": "workspace-archive/WMS/tmp/production-preparation-backup-20260922/al-print-tests/ProductionPalletTests.Codeunit.al",
+      "sha256": "711d8264d855e63ae75021035fbcad721a6545c49bd28f64db26abbdfb02a749",
+      "bytes": 18955
+    },
+    {
+      "source": "WMS/tmp/production-preparation-backup-20260922/al-print-tests/app.json",
+      "path": "workspace-archive/WMS/tmp/production-preparation-backup-20260922/al-print-tests/app.json",
+      "sha256": "77ed0a607c1ab4bd9558468c4b95db8f64e45443f9ecc7fa8ed4a6aef3a90b79",
+      "bytes": 456
+    },
+    {
+      "source": "WMS/tmp/production-preparation-backup-20260922/al/app.json",
+      "path": "workspace-archive/WMS/tmp/production-preparation-backup-20260922/al/app.json",
+      "sha256": "e6035c969386530e9b735b2b2923ec6c729f1f8be7778672984b6963dbdeff3d",
+      "bytes": 1107
+    },
+    {
+      "source": "WMS/tmp/production-preparation-backup-20260922/al/src/Pick/PickApi.Page.al",
+      "path": "workspace-archive/WMS/tmp/production-preparation-backup-20260922/al/src/Pick/PickApi.Page.al",
+      "sha256": "132e7e44eecd6ab8ba5d0960d45ba422ea281ea60a74d0b4a00a5b7fb4d266b8",
+      "bytes": 11635
+    },
+    {
+      "source": "WMS/tmp/production-preparation-backup-20260922/al/src/Pick/PickMgmt.Codeunit.al",
+      "path": "workspace-archive/WMS/tmp/production-preparation-backup-20260922/al/src/Pick/PickMgmt.Codeunit.al",
+      "sha256": "246a3cca109500c10b93cbca87e3fb0bb167f103fafb4d59869e5e5f9244a979",
+      "bytes": 107459
+    },
+    {
+      "source": "WMS/tmp/production-preparation-backup-20260922/al/src/Pick/WhseActivityHeaderExt.TableExt.al",
+      "path": "workspace-archive/WMS/tmp/production-preparation-backup-20260922/al/src/Pick/WhseActivityHeaderExt.TableExt.al",
+      "sha256": "7738b1c5860bb807c8dbda5906d1eabfb0f34197753dfc2b2eb0a408df1d2be5",
+      "bytes": 2613
+    },
+    {
+      "source": "WMS/tmp/production-preparation-backup-20260922/android/app/build.gradle.kts",
+      "path": "workspace-archive/WMS/tmp/production-preparation-backup-20260922/android/app/build.gradle.kts",
+      "sha256": "504f752d720faafaaa85dfd25e431617d160c9e809cd36d9edd5cbda4a1d97b6",
+      "bytes": 12078
+    },
+    {
+      "source": "WMS/tmp/production-preparation-backup-20260922/android/app/src/main/java/com/dynops/bcwms/BcApi.kt",
+      "path": "workspace-archive/WMS/tmp/production-preparation-backup-20260922/android/app/src/main/java/com/dynops/bcwms/BcApi.kt",
+      "sha256": "2c02b925d12b0bc83f32ae20ee1f5a5e6496b2533dfa1812e11b04db02da47bc",
+      "bytes": 59141
+    },
+    {
+      "source": "WMS/tmp/production-preparation-backup-20260922/android/app/src/main/java/com/dynops/bcwms/feature/PutAwayShipModules.kt",
+      "path": "workspace-archive/WMS/tmp/production-preparation-backup-20260922/android/app/src/main/java/com/dynops/bcwms/feature/PutAwayShipModules.kt",
+      "sha256": "dfbfb2f47254be74aceec6ada9bd60534146c84d08a12ad61e116ba003f0c6d3",
+      "bytes": 162365
+    },
+    {
+      "source": "WMS/tmp/production-preparation-backup-20260922/android/app/src/test/java/com/dynops/bcwms/LpScanCapabilitiesTest.kt",
+      "path": "workspace-archive/WMS/tmp/production-preparation-backup-20260922/android/app/src/test/java/com/dynops/bcwms/LpScanCapabilitiesTest.kt",
+      "sha256": "57a5c1460974c7201ad213ff24ed9d585cf1a7604bf6db4e282be7d6a7e23690",
+      "bytes": 5721
+    },
+    {
+      "source": "bade-reverted-20260917-235543/al/app.json",
+      "path": "workspace-archive/bade-reverted-20260917-235543/al/app.json",
+      "sha256": "03b237f04f97f7275228bd8252940f5b8b8d9f87b200e7b317b288296391ad07",
+      "bytes": 957
+    },
+    {
+      "source": "bade-reverted-20260917-235543/al/src/LocalAuth/EnvironmentAdmin.Table.al",
+      "path": "workspace-archive/bade-reverted-20260917-235543/al/src/LocalAuth/EnvironmentAdmin.Table.al",
+      "sha256": "73e86e425efd59581b7c755011a1690990004f67e02effd76ff8b65fe75997c4",
+      "bytes": 2833
+    },
+    {
+      "source": "bade-reverted-20260917-235543/al/src/LocalAuth/EnvironmentAdminMgmt.Codeunit.al",
+      "path": "workspace-archive/bade-reverted-20260917-235543/al/src/LocalAuth/EnvironmentAdminMgmt.Codeunit.al",
+      "sha256": "1fa7774732cdaad4ee535a8a7a4124a297557a710b6996764d41f4f7db34fac5",
+      "bytes": 5822
+    },
+    {
+      "source": "bade-reverted-20260917-235543/al/src/LocalAuth/EnvironmentTerminal.Table.al",
+      "path": "workspace-archive/bade-reverted-20260917-235543/al/src/LocalAuth/EnvironmentTerminal.Table.al",
+      "sha256": "c8e47eef24ccd1592a3b1b6dbf89a3d2b70148c143cf67351fdbae4e17b154bf",
+      "bytes": 1527
+    },
+    {
+      "source": "bade-reverted-20260917-235543/al/src/LocalAuth/LocalAuthMgmt.Codeunit.al",
+      "path": "workspace-archive/bade-reverted-20260917-235543/al/src/LocalAuth/LocalAuthMgmt.Codeunit.al",
+      "sha256": "cfd6e018cd4d77dc70b411a138e0ec9a7651cd22241aaac689be2e81ecf27ae3",
+      "bytes": 12417
+    },
+    {
+      "source": "bade-reverted-20260917-235543/al/src/LocalAuth/LocalUser.Table.al",
+      "path": "workspace-archive/bade-reverted-20260917-235543/al/src/LocalAuth/LocalUser.Table.al",
+      "sha256": "0f8e212117ef234604a73f32d4e38ec1db999f104aed02c9e2eb6467f9c122aa",
+      "bytes": 3800
+    },
+    {
+      "source": "bade-reverted-20260917-235543/al/src/LocalAuth/LocalUserApi.Page.al",
+      "path": "workspace-archive/bade-reverted-20260917-235543/al/src/LocalAuth/LocalUserApi.Page.al",
+      "sha256": "c7af8c025e179ddf06698b4cf55b61cf3a6fe4888b4e43049ef0f1baa6535d90",
+      "bytes": 3574
+    },
+    {
+      "source": "bade-reverted-20260917-235543/al/src/LocalAuth/LocalUserList.Page.al",
+      "path": "workspace-archive/bade-reverted-20260917-235543/al/src/LocalAuth/LocalUserList.Page.al",
+      "sha256": "19079c54726b46a9015f933ef089b3ad9f4d86054244fbf5ac37f6bc048dca9b",
+      "bytes": 2533
+    },
+    {
+      "source": "bade-reverted-20260917-235543/al/src/LocalAuth/Terminal.Table.al",
+      "path": "workspace-archive/bade-reverted-20260917-235543/al/src/LocalAuth/Terminal.Table.al",
+      "sha256": "5ec60eafdc88d285e2f98900aaa88b0003f7ef48cd37158c45417742f1babac5",
+      "bytes": 1325
+    },
+    {
+      "source": "bade-reverted-20260917-235543/al/src/LocalAuth/TerminalApi.Page.al",
+      "path": "workspace-archive/bade-reverted-20260917-235543/al/src/LocalAuth/TerminalApi.Page.al",
+      "sha256": "0fd6e07433940299804a7370600e90b5e20a5576ffd3141a3effcdad1df1e1c5",
+      "bytes": 944
+    },
+    {
+      "source": "bade-reverted-20260917-235543/al/src/LocalAuth/TerminalCard.Page.al",
+      "path": "workspace-archive/bade-reverted-20260917-235543/al/src/LocalAuth/TerminalCard.Page.al",
+      "sha256": "2a1ceaba26b78091368d7f1a0f04e33d565891159ec2bb67ec9b168431cd5062",
+      "bytes": 1957
+    },
+    {
+      "source": "bade-reverted-20260917-235543/al/src/LocalAuth/TerminalUserPart.Page.al",
+      "path": "workspace-archive/bade-reverted-20260917-235543/al/src/LocalAuth/TerminalUserPart.Page.al",
+      "sha256": "2ed587f7f67806bc14a420d22603a6f1fe9ec1ab746ae77beedcb4e5e3f0b3a9",
+      "bytes": 864
+    },
+    {
+      "source": "bade-reverted-20260917-235543/al/src/LocalAuth/TerminalUsers.Page.al",
+      "path": "workspace-archive/bade-reverted-20260917-235543/al/src/LocalAuth/TerminalUsers.Page.al",
+      "sha256": "76677bcceb7d638e7d60e9b109e4485a28ca3289fd7cd16469008c8d22a4e1f1",
+      "bytes": 1034
+    },
+    {
+      "source": "bade-reverted-20260917-235543/al/src/Permissions/AdminPermissionSet.al",
+      "path": "workspace-archive/bade-reverted-20260917-235543/al/src/Permissions/AdminPermissionSet.al",
+      "sha256": "d73a0da8687da6e5f43882c94367686642e7f6d18948cc107af6ec647e093b73",
+      "bytes": 20971
+    },
+    {
+      "source": "bade-reverted-20260917-235543/al/src/Permissions/UserPermissionSet.al",
+      "path": "workspace-archive/bade-reverted-20260917-235543/al/src/Permissions/UserPermissionSet.al",
+      "sha256": "e117122a0b30da745043f075dd83d7e9c9f705b3c90b34c5b4b4ea1afdc8f655",
+      "bytes": 15344
+    },
+    {
+      "source": "bade-reverted-20260917-235543/al/src/Permissions/ViewPermissionSet.al",
+      "path": "workspace-archive/bade-reverted-20260917-235543/al/src/Permissions/ViewPermissionSet.al",
+      "sha256": "a898ff15790d80d6d5753f584fe2601ca439db6f3ff06e7d77c8c1a7803a5f79",
+      "bytes": 12860
+    },
+    {
+      "source": "bade-reverted-20260917-235543/al/src/Upgrade/Upgrade.Codeunit.al",
+      "path": "workspace-archive/bade-reverted-20260917-235543/al/src/Upgrade/Upgrade.Codeunit.al",
+      "sha256": "7dd92bf6e193c1b9e3067db127cc1f6a62ed995b168fed02ae1553fc3f67a74c",
+      "bytes": 20356
+    },
+    {
+      "source": "build-address-count-guide.mjs",
+      "path": "workspace-archive/build-address-count-guide.mjs",
+      "sha256": "dd990b822b83295afebc06dba3b662668d6557c5915e0d67d3475228948b6bb4",
+      "bytes": 1868
+    },
+    {
+      "source": "build-single-html.mjs",
+      "path": "workspace-archive/build-single-html.mjs",
+      "sha256": "b57914281cf37921c3b8edeaa2b9c464357f96763f43a20e717fa8aba79e5da5",
+      "bytes": 7156
+    },
+    {
+      "source": "docs/elog-ziyaret-mail-taslagi.md",
+      "path": "workspace-archive/docs/elog-ziyaret-mail-taslagi.md",
+      "sha256": "016f6618794fc4a77a8a6d5b16c66974c91ba44775e2bfb7c182013fcdad8dad",
+      "bytes": 6705
+    },
+    {
+      "source": "single-file-build/BCWMS-Guncel-Raporlar-1.14.5/01-El-Terminali-Kilavuzu/index.html",
+      "path": "workspace-archive/single-file-build/BCWMS-Guncel-Raporlar-1.14.5/01-El-Terminali-Kilavuzu/index.html",
+      "sha256": "cf7b859513e60cad66f99119133f86d41abfbfbb5417ec2bdf1d171b654e56db",
+      "bytes": 74401
+    },
+    {
+      "source": "single-file-build/BCWMS-Guncel-Raporlar-1.14.5/02-Sayim-Kilavuzu/index.html",
+      "path": "workspace-archive/single-file-build/BCWMS-Guncel-Raporlar-1.14.5/02-Sayim-Kilavuzu/index.html",
+      "sha256": "4d47480e1c6ecd24c9ddd9a5eedfcfefd27a02c388ae0ec7b5ddc4cd1c020087",
+      "bytes": 40630
+    },
+    {
+      "source": "single-file-build/__MACOSX/BCWMS-Guncel-Raporlar-1.14.5/01-El-Terminali-Kilavuzu/._index.html",
+      "path": "workspace-archive/single-file-build/__MACOSX/BCWMS-Guncel-Raporlar-1.14.5/01-El-Terminali-Kilavuzu/._index.html",
+      "sha256": "be1af46b1c089af227e4d6d314ed99a5bdc2692d3eafa6f43420483d7d93faf4",
+      "bytes": 176
+    },
+    {
+      "source": "single-file-build/__MACOSX/BCWMS-Guncel-Raporlar-1.14.5/02-Sayim-Kilavuzu/._index.html",
+      "path": "workspace-archive/single-file-build/__MACOSX/BCWMS-Guncel-Raporlar-1.14.5/02-Sayim-Kilavuzu/._index.html",
+      "sha256": "c8fdccb734b7a1b3b08db57897e3366c21b2579a301cc80ca4012af4e072a61c",
+      "bytes": 176
+    },
+    {
+      "source": "verify-address-count-guide.mjs",
+      "path": "workspace-archive/verify-address-count-guide.mjs",
+      "sha256": "106e1554a439cb347cfa32b31ce09c6382a0a7fa2b5aeb9012c8bddc0b10a1eb",
+      "bytes": 1965
+    },
+    {
+      "source": "verify-single-html.mjs",
+      "path": "workspace-archive/verify-single-html.mjs",
+      "sha256": "222d5c9c968a225904538dbd552134fdb15c4d905a2519e482306450820cca35",
+      "bytes": 3064
+    }
+  ],
+  "excluded": "Dependency caches, signing keys, credentials, logs, compiled APK/APP copies and other generated binaries were not swept into Git. No local files were deleted. Latest BADE packages are in android-v1.14.168-bade."
+}

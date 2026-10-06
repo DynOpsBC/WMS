@@ -1,0 +1,1274 @@
+From b4df3eef11e4567ba56dd5f0823a5181b2093684 Mon Sep 17 00:00:00 2001
+From: kaanodabas <kaanodabas@dynamicsops.com>
+Date: Mon, 21 Sep 2026 18:38:56 +0300
+Subject: [PATCH] Support sequential production LPs and multi-entry pallets
+
+---
+ .../ProductionPickTests.Codeunit.al           |  58 ++++
+ al-print-tests/app.json                       |   2 +-
+ al/app.json                                   |   2 +-
+ al/src/Inquiry/ItemLedgerEntryApi.Page.al     |  37 ++
+ .../LicensePlate/LPBulkBuildRequest.Table.al  |   6 +
+ al/src/LicensePlate/LPManagement.Codeunit.al  | 276 +++++++++++++++
+ al/src/Production/ProdMgmt.Codeunit.al        |  50 ++-
+ android/app/build.gradle.kts                  |   8 +-
+ .../src/main/java/com/dynops/bcwms/BcApi.kt   |   2 +
+ .../dynops/bcwms/feature/BulkLpBuildSheet.kt  | 328 +++++++++++++++---
+ .../bcwms/feature/LicensePlateWorkflow.kt     |   4 +-
+ .../dynops/bcwms/LpScanCapabilitiesTest.kt    |  14 +
+ .../bcwms/feature/BulkLpBuildWorkflowTest.kt  |  49 +++
+ 13 files changed, 769 insertions(+), 67 deletions(-)
+
+diff --git a/al-print-tests/ProductionPickTests.Codeunit.al b/al-print-tests/ProductionPickTests.Codeunit.al
+index b202184..2086130 100644
+--- a/al-print-tests/ProductionPickTests.Codeunit.al
++++ b/al-print-tests/ProductionPickTests.Codeunit.al
+@@ -357,6 +357,64 @@ codeunit 72185 "DOPSWHS Production Pick Tests"
+         Check(Line."Qty. to Handle" = 0, 'Reopening the pick reset operator work.');
+     end;
+ 
++    [Test]
++    procedure NextReadyLpCanReplaceRegisteredProductionHistory()
++    var
++        Pick: Record "Warehouse Activity Header";
++        FirstLP: Record "DOPSWHS LP Header";
++        NextLP: Record "DOPSWHS LP Header";
++        NextLPLine: Record "DOPSWHS LP Line";
++        Line: Record "Warehouse Activity Line";
++        Management: Codeunit "DOPSWHS Prod Mgmt";
++    begin
++        Fixture(Pick);
++        PalletFixture(FirstLP, 4);
++        FirstLP.Status := FirstLP.Status::Assigned;
++        FirstLP."Assigned Document Type" := FirstLP."Assigned Document Type"::ProdConsumption;
++        FirstLP."Assigned Document No." := 'PROD-LP-TEST';
++        FirstLP.Modify(false);
++
++        Line.SetRange("Activity Type", Line."Activity Type"::Pick);
++        Line.SetRange("No.", Pick."No.");
++        Line.FindSet(true);
++        repeat
++            Line.Quantity := 10;
++            Line."Qty. (Base)" := 10;
++            Line."Qty. Outstanding" := 6;
++            Line."Qty. Outstanding (Base)" := 6;
++            Line."Qty. to Handle" := 6;
++            Line."Qty. to Handle (Base)" := 6;
++            Line."Qty. Handled" := 4;
++            Line."Qty. Handled (Base)" := 4;
++            Line."LP No." := FirstLP."No.";
++            Line."Target LP No." := FirstLP."No.";
++            Line.Modify(false);
++        until Line.Next() = 0;
++
++        NextLP := FirstLP;
++        NextLP."No." := 'LP-PROD-NEXT';
++        NextLP.Status := NextLP.Status::Built;
++        NextLP."Assigned Document Type" := NextLP."Assigned Document Type"::None;
++        NextLP."Assigned Document No." := '';
++        NextLP.Insert(false);
++        NextLPLine.Get(FirstLP."No.", 10000);
++        NextLPLine."LP No." := NextLP."No.";
++        NextLPLine.Quantity := 3;
++        NextLPLine.Insert(false);
++
++        Check(
++            Management.CreateProductionPickFromLpFor('PROD-LP-TEST', NextLP."No.", 'OPERATOR') = Pick."No.",
++            'The next ready LP was not accepted after a registered segment.');
++        Line.Get(Line."Activity Type"::Pick, Pick."No.", 10000);
++        Check(Line."Qty. to Handle" = 3, 'Next ready LP did not replace the standard remaining proposal.');
++        Check(Line."LP No." = NextLP."No.", 'Next ready LP was not applied to the Take line.');
++        Check(Line."Target LP No." = '', 'Historical target LP reference was not cleared.');
++        Line.Get(Line."Activity Type"::Pick, Pick."No.", 20000);
++        Check(Line."Qty. to Handle" = 3, 'Next ready LP did not balance the Place line.');
++        Check(Line."LP No." = '', 'Historical LP reference was left on the Place line.');
++        Check(Line."Target LP No." = '', 'Historical target LP reference was left on the Place line.');
++    end;
++
+     [Test]
+     procedure DifferentLotsCannotShareOneUntrackedTake()
+     var
+diff --git a/al-print-tests/app.json b/al-print-tests/app.json
+index cb13e2d..d879a9c 100644
+--- a/al-print-tests/app.json
++++ b/al-print-tests/app.json
+@@ -12,6 +12,6 @@
+     "id": "984e25aa-07c2-4401-babc-88f975303a52",
+     "name": "BCWMSApp",
+     "publisher": "DynamicsOps",
+-    "version": "1.14.1.63"
++    "version": "1.14.1.64"
+   }]
+ }
+diff --git a/al/app.json b/al/app.json
+index fecc173..9a5ce6f 100644
+--- a/al/app.json
++++ b/al/app.json
+@@ -2,7 +2,7 @@
+   "id": "984e25aa-07c2-4401-babc-88f975303a52",
+   "publisher": "DynamicsOps",
+   "name": "BCWMSApp",
+-  "version": "1.14.1.63",
++  "version": "1.14.1.64",
+   "brief": "Advanced Warehouse Management System for Business Central SaaS",
+   "description": "Advanced warehouse management foundation for Business Central SaaS.",
+   "privacyStatement": "https://dynops.com/privacy",
+diff --git a/al/src/Inquiry/ItemLedgerEntryApi.Page.al b/al/src/Inquiry/ItemLedgerEntryApi.Page.al
+index c81aaef..ad8d641 100644
+--- a/al/src/Inquiry/ItemLedgerEntryApi.Page.al
++++ b/al/src/Inquiry/ItemLedgerEntryApi.Page.al
+@@ -133,6 +133,43 @@ page 72214 "DOPSWHS Item Ledger Entry API"
+         exit(FinishBulkLpCreation(CreatedLpNos, printLabels, printerId, Replayed, optionsJson));
+     end;
+ 
++    /// <summary>
++    /// Creates exactly one LP from one or more explicitly selected positive
++    /// Item Ledger Entries. The bound record must be the first source in the
++    /// JSON plan. Every resulting LP line preserves its exact source Entry No.
++    /// </summary>
++    [ServiceEnabled]
++    procedure createSingleLicensePlateFromEntriesIdempotent(templateCode: Code[20]; binCode: Code[20]; sourcePlanJson: Text; printerId: Code[50]; printLabels: Boolean; requestId: Guid): Text
++    var
++        LPMgt: Codeunit "DOPSWHS LP Management";
++        CreatedLpNos: List of [Code[20]];
++        SourceEntryNos: List of [Integer];
++        Replayed: Boolean;
++    begin
++        LPMgt.BuildSingleFromItemLedgerEntriesIdempotent(
++            Rec."Entry No.", sourcePlanJson, templateCode, binCode, requestId,
++            CreatedLpNos, SourceEntryNos, Replayed);
++        exit(FinishMultiSourceLpCreation(
++            CreatedLpNos, SourceEntryNos, sourcePlanJson, printLabels, printerId, Replayed));
++    end;
++
++    local procedure FinishMultiSourceLpCreation(var CreatedLpNos: List of [Code[20]]; SourceEntryNos: List of [Integer]; SourcePlanJson: Text; PrintLabels: Boolean; PrinterId: Code[50]; Replayed: Boolean): Text
++    var
++        ResultObject: JsonObject;
++        SourceArray: JsonArray;
++        EntryNo: Integer;
++        ResultText: Text;
++    begin
++        ResultText := FinishBulkLpCreation(CreatedLpNos, PrintLabels, PrinterId, Replayed);
++        ResultObject.ReadFrom(ResultText);
++        foreach EntryNo in SourceEntryNos do
++            SourceArray.Add(EntryNo);
++        ResultObject.Add('sourceItemLedgerEntryNos', SourceArray);
++        ResultObject.Add('sourcePlanJson', SourcePlanJson);
++        ResultObject.WriteTo(ResultText);
++        exit(ResultText);
++    end;
++
+     local procedure FinishBulkLpCreation(var CreatedLpNos: List of [Code[20]]; PrintLabels: Boolean; PrinterId: Code[50]; Replayed: Boolean): Text
+     begin
+         exit(FinishBulkLpCreation(CreatedLpNos, PrintLabels, PrinterId, Replayed, ''));
+diff --git a/al/src/LicensePlate/LPBulkBuildRequest.Table.al b/al/src/LicensePlate/LPBulkBuildRequest.Table.al
+index c2a4ac1..51ef0a0 100644
+--- a/al/src/LicensePlate/LPBulkBuildRequest.Table.al
++++ b/al/src/LicensePlate/LPBulkBuildRequest.Table.al
+@@ -57,6 +57,11 @@ table 72008 "DOPSWHS LP Bulk Request"
+             DecimalPlaces = 0 : 5;
+             MinValue = 0;
+         }
++        field(66; "Source Plan"; Text[2048])
++        {
++            Caption = 'Source Item Ledger Entry Plan';
++            DataClassification = CustomerContent;
++        }
+         field(70; Completed; Boolean)
+         {
+             Caption = 'Completed';
+@@ -116,6 +121,7 @@ table 72008 "DOPSWHS LP Bulk Request"
+            ("LP Count" <> StoredRequest."LP Count") or
+            ("Quantity per LP" <> StoredRequest."Quantity per LP") or
+            ("Quantity Last LP" <> StoredRequest."Quantity Last LP") or
++           ("Source Plan" <> StoredRequest."Source Plan") or
+            ("Created At" <> StoredRequest."Created At") or
+            ("Created By" <> StoredRequest."Created By")
+         then
+diff --git a/al/src/LicensePlate/LPManagement.Codeunit.al b/al/src/LicensePlate/LPManagement.Codeunit.al
+index 99b5e56..3c6edee 100644
+--- a/al/src/LicensePlate/LPManagement.Codeunit.al
++++ b/al/src/LicensePlate/LPManagement.Codeunit.al
+@@ -153,6 +153,282 @@ codeunit 72040 "DOPSWHS LP Management"
+             RequestId, true, CreatedLpNos, Replayed);
+     end;
+ 
++    /// <summary>
++    /// Builds one physical LP from several positive Item Ledger Entries. Every
++    /// LP line keeps its exact source Entry No.; the entries themselves remain
++    /// unchanged. All selected entries must describe the same item, variant,
++    /// lot, serial and location so the resulting pallet has one stock identity.
++    /// </summary>
++    [CommitBehavior(CommitBehavior::Error)]
++    procedure BuildSingleFromItemLedgerEntriesIdempotent(BoundItemLedgerEntryNo: Integer; SourcePlanJson: Text; TemplateCode: Code[20]; BinCode: Code[20]; RequestId: Guid; var CreatedLpNos: List of [Code[20]]; var SourceEntryNos: List of [Integer]; var Replayed: Boolean)
++    var
++        ItemLedgerEntry: Record "Item Ledger Entry";
++        FirstEntry: Record "Item Ledger Entry";
++        Item: Record Item;
++        Bin: Record Bin;
++        WarehouseEntry: Record "Warehouse Entry";
++        LPHeader: Record "DOPSWHS LP Header";
++        LPLine: Record "DOPSWHS LP Line";
++        Quantities: Dictionary of [Integer, Decimal];
++        CheckedBinCodes: List of [Code[20]];
++        EntryNo: Integer;
++        RequestedQuantity: Decimal;
++        TotalQuantity: Decimal;
++        NormalizedPlan: Text;
++        TargetBinCode: Code[20];
++    begin
++        if IsNullGuid(RequestId) then
++            Error('Tekli LP işlem kimliği zorunludur.');
++        ParseSingleLpSourcePlan(SourcePlanJson, SourceEntryNos, Quantities, NormalizedPlan, TotalQuantity);
++        if SourceEntryNos.Get(1) <> BoundItemLedgerEntryNo then
++            Error('Bağlı stok girişi kaynak planının ilk satırı olmalıdır.');
++
++        ItemLedgerEntry.LockTable();
++        LPHeader.LockTable();
++        LPLine.LockTable();
++        WarehouseEntry.LockTable();
++
++        if LoadExistingSingleLpRequest(
++            RequestId, BoundItemLedgerEntryNo, TemplateCode, BinCode, NormalizedPlan,
++            SourceEntryNos, Quantities, CreatedLpNos)
++        then begin
++            foreach EntryNo in SourceEntryNos do
++                RefreshItemLedgerEntryLpReferences(EntryNo);
++            Replayed := true;
++            exit;
++        end;
++
++        foreach EntryNo in SourceEntryNos do begin
++            ItemLedgerEntry.Get(EntryNo);
++            RequestedQuantity := Quantities.Get(EntryNo);
++            ValidateSingleLpSourceEntry(ItemLedgerEntry, FirstEntry, RequestedQuantity);
++            if ItemLedgerEntry."Remaining Quantity" - AllocatedQuantityForItemLedgerEntry(EntryNo) < RequestedQuantity then
++                Error(
++                    '%1 numaralı Madde Defter Girişinde LP''ye ayrılabilir miktar %2, istenen miktar %3''tür.',
++                    EntryNo,
++                    ItemLedgerEntry."Remaining Quantity" - AllocatedQuantityForItemLedgerEntry(EntryNo),
++                    RequestedQuantity);
++        end;
++        if FirstEntry."Serial No." <> '' then
++            if (SourceEntryNos.Count() <> 1) or (TotalQuantity <> 1) then
++                Error('Seri takipli %1 maddesi yalnız tek kaynaktan 1 adetlik LP olarak oluşturulabilir.', FirstEntry."Item No.");
++
++        Item.Get(FirstEntry."Item No.");
++        if BinCode <> '' then begin
++            EnsureLooseStockAvailable(
++                FirstEntry."Location Code", BinCode, FirstEntry."Item No.",
++                FirstEntry."Lot No.", FirstEntry."Serial No.", TotalQuantity);
++            TargetBinCode := BinCode;
++        end else begin
++            if TotalLooseStockAvailable(
++                FirstEntry."Location Code", FirstEntry."Item No.",
++                FirstEntry."Lot No.", FirstEntry."Serial No.") < TotalQuantity
++            then
++                Error('%1 ürününün raflardaki LP''ye atanmamış stoku seçilen toplam miktarı karşılamıyor.', FirstEntry."Item No.");
++            Bin.SetRange("Location Code", FirstEntry."Location Code");
++            if Bin.FindSet() then
++                repeat
++                    if LooseStockAvailableInBin(
++                        FirstEntry."Location Code", Bin.Code, FirstEntry."Item No.",
++                        FirstEntry."Lot No.", FirstEntry."Serial No.") > 0
++                    then
++                        TargetBinCode := Bin.Code;
++                until (Bin.Next() = 0) or (TargetBinCode <> '');
++        end;
++        if TargetBinCode = '' then
++            Error('%1 ürünü için LP''ye atanabilecek raf stoku bulunamadı.', FirstEntry."Item No.");
++
++        InsertSingleLpBuildRequest(
++            RequestId, BoundItemLedgerEntryNo, TemplateCode, FirstEntry."Location Code",
++            BinCode, TotalQuantity, NormalizedPlan);
++        EnsureBinReadyForStockLp(FirstEntry."Location Code", TargetBinCode, CheckedBinCodes);
++        Build(TemplateCode, FirstEntry."Location Code", TargetBinCode, LPHeader);
++        LPHeader."Bulk Build Request ID" := RequestId;
++        LPHeader."Bulk Source ILE No." := BoundItemLedgerEntryNo;
++        LPHeader."Bulk Source Bin Code" := TargetBinCode;
++        LPHeader.Modify(true);
++
++        foreach EntryNo in SourceEntryNos do begin
++            ItemLedgerEntry.Get(EntryNo);
++            AddSingleLpSourceEntry(
++                LPHeader, ItemLedgerEntry, Item, BinCode, Quantities.Get(EntryNo), CheckedBinCodes);
++        end;
++
++        LPHeader."Planned Quantity" := TotalQuantity;
++        LPHeader.Modify(true);
++        Stop(LPHeader, false);
++        CreatedLpNos.Add(LPHeader."No.");
++        CompleteBulkBuildRequest(RequestId);
++        Replayed := false;
++    end;
++
++    local procedure ParseSingleLpSourcePlan(SourcePlanJson: Text; var SourceEntryNos: List of [Integer]; var Quantities: Dictionary of [Integer, Decimal]; var NormalizedPlan: Text; var TotalQuantity: Decimal)
++    var
++        Plan: JsonArray;
++        Normalized: JsonArray;
++        RowToken: JsonToken;
++        ValueToken: JsonToken;
++        Row: JsonObject;
++        NormalizedRow: JsonObject;
++        EntryNo: Integer;
++        Quantity: Decimal;
++    begin
++        Clear(SourceEntryNos);
++        Clear(Quantities);
++        Clear(TotalQuantity);
++        if not Plan.ReadFrom(SourcePlanJson) then
++            Error('Stok giriş planı geçerli JSON değildir.');
++        if (Plan.Count() < 1) or (Plan.Count() > 50) then
++            Error('Tek LP için 1 ile 50 arasında stok girişi seçebilirsiniz.');
++        foreach RowToken in Plan do begin
++            Row := RowToken.AsObject();
++            if not Row.Get('entryNo', ValueToken) then
++                Error('Stok giriş planında kayıt numarası eksiktir.');
++            Evaluate(EntryNo, Format(ValueToken.AsValue()));
++            if not Row.Get('quantity', ValueToken) then
++                Error('%1 stok girişinin miktarı eksiktir.', EntryNo);
++            Evaluate(Quantity, Format(ValueToken.AsValue()));
++            if EntryNo <= 0 then
++                Error('Stok giriş numarası sıfırdan büyük olmalıdır.');
++            if Quantity <= 0 then
++                Error('%1 stok girişinin LP miktarı sıfırdan büyük olmalıdır.', EntryNo);
++            if Quantities.ContainsKey(EntryNo) then
++                Error('%1 stok girişi kaynak planında birden fazla kez seçilemez.', EntryNo);
++            SourceEntryNos.Add(EntryNo);
++            Quantities.Add(EntryNo, Quantity);
++            TotalQuantity += Quantity;
++            Clear(NormalizedRow);
++            NormalizedRow.Add('entryNo', EntryNo);
++            NormalizedRow.Add('quantity', Quantity);
++            Normalized.Add(NormalizedRow);
++        end;
++        Normalized.WriteTo(NormalizedPlan);
++        if StrLen(NormalizedPlan) > 2048 then
++            Error('Stok giriş planı çok uzundur. Daha az kayıt seçin.');
++    end;
++
++    local procedure ValidateSingleLpSourceEntry(ItemLedgerEntry: Record "Item Ledger Entry"; var FirstEntry: Record "Item Ledger Entry"; RequestedQuantity: Decimal)
++    begin
++        if ItemLedgerEntry.Quantity <= 0 then
++            Error('%1 stok girişi pozitif bir giriş değildir.', ItemLedgerEntry."Entry No.");
++        if ItemLedgerEntry."Remaining Quantity" <= 0 then
++            Error('%1 stok girişinde kullanılabilir miktar yoktur.', ItemLedgerEntry."Entry No.");
++        if ItemLedgerEntry."Location Code" = '' then
++            Error('%1 stok girişinde lokasyon kodu yoktur.', ItemLedgerEntry."Entry No.");
++        if ItemLedgerEntry."Variant Code" <> '' then
++            Error('%1 stok girişi %2 varyantını içeriyor. Varyantlı stok için LP oluşturma desteklenmiyor.', ItemLedgerEntry."Entry No.", ItemLedgerEntry."Variant Code");
++        if RequestedQuantity <= 0 then
++            Error('%1 stok girişinin miktarı sıfırdan büyük olmalıdır.', ItemLedgerEntry."Entry No.");
++
++        if FirstEntry."Entry No." = 0 then begin
++            FirstEntry := ItemLedgerEntry;
++            exit;
++        end;
++        if (ItemLedgerEntry."Item No." <> FirstEntry."Item No.") or
++           (ItemLedgerEntry."Variant Code" <> FirstEntry."Variant Code") or
++           (ItemLedgerEntry."Lot No." <> FirstEntry."Lot No.") or
++           (ItemLedgerEntry."Serial No." <> FirstEntry."Serial No.") or
++           (ItemLedgerEntry."Location Code" <> FirstEntry."Location Code")
++        then
++            Error('Tek LP''deki stok girişlerinin ürün, varyant, lot, seri ve lokasyonu aynı olmalıdır. %1 kaydı diğer seçimlerle uyuşmuyor.', ItemLedgerEntry."Entry No.");
++    end;
++
++    local procedure AddSingleLpSourceEntry(var LPHeader: Record "DOPSWHS LP Header"; ItemLedgerEntry: Record "Item Ledger Entry"; Item: Record Item; ExplicitBinCode: Code[20]; RequestedQuantity: Decimal; var CheckedBinCodes: List of [Code[20]])
++    var
++        Bin: Record Bin;
++        SourceBinCode: Code[20];
++        AvailableInBin: Decimal;
++        QuantityFromBin: Decimal;
++        RemainingToFill: Decimal;
++    begin
++        if ExplicitBinCode <> '' then begin
++            EnsureBinReadyForStockLp(ItemLedgerEntry."Location Code", ExplicitBinCode, CheckedBinCodes);
++            AddItemLedgerEntryPartToLp(LPHeader, ItemLedgerEntry, Item, ExplicitBinCode, RequestedQuantity);
++            exit;
++        end;
++
++        RemainingToFill := RequestedQuantity;
++        Bin.SetRange("Location Code", ItemLedgerEntry."Location Code");
++        if Bin.FindSet() then
++            repeat
++                SourceBinCode := Bin.Code;
++                AvailableInBin := LooseStockAvailableInBin(
++                    ItemLedgerEntry."Location Code", SourceBinCode, ItemLedgerEntry."Item No.",
++                    ItemLedgerEntry."Lot No.", ItemLedgerEntry."Serial No.");
++                if AvailableInBin > 0 then begin
++                    QuantityFromBin := AvailableInBin;
++                    if QuantityFromBin > RemainingToFill then
++                        QuantityFromBin := RemainingToFill;
++                    EnsureBinReadyForStockLp(ItemLedgerEntry."Location Code", SourceBinCode, CheckedBinCodes);
++                    AddItemLedgerEntryPartToLp(LPHeader, ItemLedgerEntry, Item, SourceBinCode, QuantityFromBin);
++                    RemainingToFill -= QuantityFromBin;
++                end;
++            until (Bin.Next() = 0) or (RemainingToFill <= 0.00001);
++        if RemainingToFill > 0.00001 then
++            Error('%1 stok girişinden LP''ye eklenecek miktarın %2 kadarı raflarda karşılanamadı.', ItemLedgerEntry."Entry No.", RemainingToFill);
++    end;
++
++    local procedure LoadExistingSingleLpRequest(RequestId: Guid; BoundItemLedgerEntryNo: Integer; TemplateCode: Code[20]; BinCode: Code[20]; NormalizedPlan: Text; SourceEntryNos: List of [Integer]; Quantities: Dictionary of [Integer, Decimal]; var CreatedLpNos: List of [Code[20]]): Boolean
++    var
++        BulkRequest: Record "DOPSWHS LP Bulk Request";
++        LPHeader: Record "DOPSWHS LP Header";
++        LPLine: Record "DOPSWHS LP Line";
++        EntryNo: Integer;
++        LinkedQuantity: Decimal;
++    begin
++        Clear(CreatedLpNos);
++        BulkRequest.LockTable();
++        if not BulkRequest.Get(RequestId) then
++            exit(false);
++        if (BulkRequest."Source ILE No." <> BoundItemLedgerEntryNo) or
++           (BulkRequest."Template Code" <> TemplateCode) or
++           (BulkRequest."Bin Code" <> BinCode) or
++           (BulkRequest."LP Count" <> 1) or
++           (BulkRequest."Source Plan" <> NormalizedPlan)
++        then
++            Error('%1 tekli LP işlem kimliği farklı bir kaynak planı için daha önce kullanılmıştır.', Format(RequestId));
++        if not BulkRequest.Completed then
++            Error('%1 tekli LP işlemi tamamlanmamış görünüyor. İkinci LP oluşturulmadı; kayıtları kontrol edin.', Format(RequestId));
++
++        LPHeader.SetCurrentKey("Bulk Build Request ID");
++        LPHeader.SetRange("Bulk Build Request ID", RequestId);
++        if not LPHeader.FindFirst() then
++            Error('%1 tekli LP işlemi tamamlanmış ancak LP kaydı bulunamadı.', Format(RequestId));
++        CreatedLpNos.Add(LPHeader."No.");
++        if LPHeader.Next() <> 0 then
++            Error('%1 tekli LP işlemi için birden fazla LP bulundu.', Format(RequestId));
++
++        foreach EntryNo in SourceEntryNos do begin
++            Clear(LinkedQuantity);
++            LPLine.Reset();
++            LPLine.SetRange("LP No.", LPHeader."No.");
++            LPLine.SetRange("Source Item Ledger Entry No.", EntryNo);
++            if LPLine.FindSet() then
++                repeat
++                    LinkedQuantity += StockLineBaseQuantity(LPLine);
++                until LPLine.Next() = 0;
++            if Abs(LinkedQuantity - Quantities.Get(EntryNo)) > 0.00001 then
++                Error('%1 tekli LP işleminin %2 kaynak giriş miktarı tutarsızdır.', Format(RequestId), EntryNo);
++        end;
++        exit(true);
++    end;
++
++    local procedure InsertSingleLpBuildRequest(RequestId: Guid; BoundItemLedgerEntryNo: Integer; TemplateCode: Code[20]; LocationCode: Code[10]; BinCode: Code[20]; TotalQuantity: Decimal; NormalizedPlan: Text)
++    var
++        BulkRequest: Record "DOPSWHS LP Bulk Request";
++    begin
++        BulkRequest.Init();
++        BulkRequest."Request ID" := RequestId;
++        BulkRequest."Source ILE No." := BoundItemLedgerEntryNo;
++        BulkRequest."Template Code" := TemplateCode;
++        BulkRequest."Location Code" := LocationCode;
++        BulkRequest."Bin Code" := BinCode;
++        BulkRequest."LP Count" := 1;
++        BulkRequest."Quantity per LP" := TotalQuantity;
++        BulkRequest."Source Plan" := CopyStr(NormalizedPlan, 1, MaxStrLen(BulkRequest."Source Plan"));
++        BulkRequest.Insert(true);
++    end;
++
+     [CommitBehavior(CommitBehavior::Error)]
+     local procedure BuildManyFromItemLedgerEntryCore(ItemLedgerEntryNo: Integer; TemplateCode: Code[20]; BinCode: Code[20]; LpCount: Integer; QuantityPerLp: Decimal; QuantityLastLp: Decimal; RequestId: Guid; UseIdempotency: Boolean; var CreatedLpNos: List of [Code[20]]; var Replayed: Boolean)
+     var
+diff --git a/al/src/Production/ProdMgmt.Codeunit.al b/al/src/Production/ProdMgmt.Codeunit.al
+index ed0e6f4..ee8a9a4 100644
+--- a/al/src/Production/ProdMgmt.Codeunit.al
++++ b/al/src/Production/ProdMgmt.Codeunit.al
+@@ -396,10 +396,13 @@ codeunit 72048 "DOPSWHS Prod Mgmt"
+         Line.SetRange("No.", PickNo);
+         if Line.FindSet() then
+             repeat
+-                if (Line."Qty. Handled (Base)" <> 0) or (Line."LP No." <> '') or
+-                   (Line."Target LP No." <> '') or (Line."DOPSWHS Source LP Line No." <> 0) or
+-                   ((Line."Qty. to Handle (Base)" <> 0) and
+-                    (Abs(Line."Qty. to Handle (Base)" - Line."Qty. Outstanding (Base)") > 0.00001))
++                // BC keeps Qty. Handled and the registered LP references on an
++                // open production pick, then refills Qty. to Handle with the
++                // remaining demand. Those values are history, not an active
++                // second collection. Accept only references to an LP already
++                // delivered to this production order; any partial quantity or
++                // unregistered LP still protects the operator's current work.
++                if ProductionPickLineHasActiveWork(Line, ProdOrderNo)
+                 then
+                     Error('%1 çekmesinde başlanmış toplama var. Hazır LP kapsamı mevcut çalışmayı sıfırlayamaz; açık çekmeyi tamamlayın veya kontrollü olarak iptal edin.', PickNo);
+             until Line.Next() = 0;
+@@ -445,6 +448,11 @@ codeunit 72048 "DOPSWHS Prod Mgmt"
+             if not QtyByLine.Get(Line."Line No.", Qty) then
+                 Qty := 0;
+             Line.Validate("Qty. to Handle", Qty);
++            // Remove the previous registered segment's pallet hints before
++            // applying the next ready LP to the still-open production pick.
++            Line."LP No." := '';
++            Line."Target LP No." := '';
++            Line."DOPSWHS Source LP Line No." := 0;
+             SelectedTake := (Line."Action Type" = Line."Action Type"::Take) and (Qty > 0);
+             if SelectedTake then
+                 Line."LP No." := LP."No.";
+@@ -452,6 +460,40 @@ codeunit 72048 "DOPSWHS Prod Mgmt"
+         until Line.Next() = 0;
+     end;
+ 
++    local procedure ProductionPickLineHasActiveWork(Line: Record "Warehouse Activity Line"; ProdOrderNo: Code[20]): Boolean
++    begin
++        if (Line."Qty. to Handle (Base)" <> 0) and
++           (Abs(Line."Qty. to Handle (Base)" - Line."Qty. Outstanding (Base)") > 0.00001)
++        then
++            exit(true);
++
++        if Line."DOPSWHS Source LP Line No." <> 0 then
++            exit(true);
++        if (Line."LP No." <> '') and (not IsRegisteredProductionLp(Line."LP No.", ProdOrderNo)) then
++            exit(true);
++        if (Line."Target LP No." <> '') and (not IsRegisteredProductionLp(Line."Target LP No.", ProdOrderNo)) then
++            exit(true);
++
++        // Qty. Handled by itself is cumulative history on an open BC pick.
++        // With no active pallet hint and either zero or the standard full
++        // outstanding proposal, it is safe to scope the next prepared LP.
++        exit(false);
++    end;
++
++    local procedure IsRegisteredProductionLp(LpNo: Code[20]; ProdOrderNo: Code[20]): Boolean
++    var
++        HistoricalLP: Record "DOPSWHS LP Header";
++    begin
++        if LpNo = '' then
++            exit(true);
++        if not HistoricalLP.Get(LpNo) then
++            exit(false);
++        exit(
++            (HistoricalLP.Status = HistoricalLP.Status::Assigned) and
++            (HistoricalLP."Assigned Document Type" = HistoricalLP."Assigned Document Type"::ProdConsumption) and
++            (HistoricalLP."Assigned Document No." = ProdOrderNo));
++    end;
++
+     procedure FinishProductionOrder(ProdOrderNo: Code[20]; UpdateUnitCost: Boolean): Code[20]
+     var
+         ProductionOrder: Record "Production Order";
+diff --git a/android/app/build.gradle.kts b/android/app/build.gradle.kts
+index 68f63f4..253d379 100644
+--- a/android/app/build.gradle.kts
++++ b/android/app/build.gradle.kts
+@@ -9,8 +9,8 @@ val releaseVersionCodeOverride = providers.gradleProperty("releaseVersionCode").
+ val releaseVersionNameOverride = providers.gradleProperty("releaseVersionName").orNull?.takeIf { it.isNotBlank() }
+ // BADE ve EMU aynı kaynak koddan aynı anda yayınlanır. Müşteri flavor'larında
+ // ayrı sürüm değeri tutmak bir paketin geride kalmasına neden oluyordu.
+-val customerVersionCode = releaseVersionCodeOverride ?: 200144
+-val customerVersionName = releaseVersionNameOverride ?: "1.14.144"
++val customerVersionCode = releaseVersionCodeOverride ?: 200150
++val customerVersionName = releaseVersionNameOverride ?: "1.14.150"
+ 
+ plugins {
+   alias(libs.plugins.android.application)
+@@ -38,8 +38,8 @@ android {
+     // Saha APK'larından bazılarında CI tarafından 100000+ versionCode
+     // kullanıldı. Görünen sürüm adı eski olsa bile Android yalnız sayısal kodu
+     // karşılaştırdığı için semantik sürümleri 200000 bandında monoton tutuyoruz.
+-    versionCode = releaseVersionCodeOverride ?: 200141
+-    versionName = releaseVersionNameOverride ?: "1.14.141"
++    versionCode = releaseVersionCodeOverride ?: 200150
++    versionName = releaseVersionNameOverride ?: "1.14.150"
+     manifestPlaceholders["appLabel"] = "BCWMS"
+     // Ücretsiz dağıtım kanalı: public GitHub Release içindeki sabit latest.json.
+     // APK aynı release'de tutulur; uygulamaya GitHub hesabı/token gömülmez.
+diff --git a/android/app/src/main/java/com/dynops/bcwms/BcApi.kt b/android/app/src/main/java/com/dynops/bcwms/BcApi.kt
+index 89f7e10..70e6445 100644
+--- a/android/app/src/main/java/com/dynops/bcwms/BcApi.kt
++++ b/android/app/src/main/java/com/dynops/bcwms/BcApi.kt
+@@ -482,6 +482,7 @@ object BcApi {
+         val bulkLpPlan: Boolean,
+         val httpCode: Int,
+         val registerScannedPick: Boolean = false,
++        val multiEntrySingleLp: Boolean = false,
+     )
+ 
+     internal fun pickRegistrationAction(capabilities: LpScanCapabilities): String? = when {
+@@ -504,6 +505,7 @@ object BcApi {
+             bulkLpPlan = metadata.contains("createLicensePlatesFromPlanIdempotent", ignoreCase = true),
+             httpCode = httpCode,
+             registerScannedPick = Regex("""<(?:(?:\w+):)?Action\b[^>]*\bName\s*=\s*["']registerScannedFor["']""").containsMatchIn(metadata),
++            multiEntrySingleLp = metadata.contains("createSingleLicensePlateFromEntriesIdempotent", ignoreCase = true),
+         )
+ 
+     /**
+diff --git a/android/app/src/main/java/com/dynops/bcwms/feature/BulkLpBuildSheet.kt b/android/app/src/main/java/com/dynops/bcwms/feature/BulkLpBuildSheet.kt
+index 367936b..80ccbae 100644
+--- a/android/app/src/main/java/com/dynops/bcwms/feature/BulkLpBuildSheet.kt
++++ b/android/app/src/main/java/com/dynops/bcwms/feature/BulkLpBuildSheet.kt
+@@ -33,6 +33,7 @@ internal data class LedgerBulkLpBuildResult(
+     val printSkippedOnReplay: Boolean,
+     val printLabelsRequested: Boolean,
+     val sourceEntryNo: Int,
++    val sourceEntryNos: List<Int> = listOf(sourceEntryNo),
+ )
+ 
+ internal data class PendingLedgerBulkLpRequest(
+@@ -45,8 +46,11 @@ internal data class PendingLedgerBulkLpRequest(
+     // kimliğini paylaşır ama gövdeleri farklıdır; uç adını saklamak, cihaz
+     // yeniden açıldığında yanlış uca replay göndermeyi imkânsız kılar.
+     val action: String = LEDGER_BULK_LP_CREATE_ACTION,
++    val sourceEntryNos: List<Int> = listOf(entryNo),
+ )
+ 
++internal data class SingleLpSourceAllocation(val entryNo: Int, val quantity: Double)
++
+ /**
+  * Operatörün girdiği "LP başı miktar"dan üretilen palet planı.
+  * 10.350 adet / 1.000 kapasite -> 10 tam palet + 350'lik bir artık palet.
+@@ -89,6 +93,7 @@ private const val DEFAULT_LEDGER_LP_QUANTITY = "100"
+ private const val LEDGER_ENTRY_DISPLAY_LIMIT = 50
+ internal const val LEDGER_BULK_LP_CREATE_ACTION = "createLicensePlatesIdempotent"
+ internal const val LEDGER_BULK_LP_PLAN_ACTION = "createLicensePlatesFromPlanIdempotent"
++internal const val LEDGER_SINGLE_LP_MULTI_ENTRY_ACTION = "createSingleLicensePlateFromEntriesIdempotent"
+ private const val LEDGER_BULK_LP_PENDING_PREFS = "bcwms_bulk_lp_pending"
+ 
+ private data class PendingLedgerBulkLpRestore(
+@@ -188,6 +193,56 @@ internal fun ledgerLpAllocatableQuantity(row: JSONObject): Double =
+         row.optDouble("remainingQuantity")
+     }
+ 
++internal fun ledgerEntriesCanShareSingleLp(first: JSONObject, candidate: JSONObject): Boolean =
++    listOf("itemNo", "variantCode", "lotNo", "serialNo", "locationCode", "baseUnitOfMeasure").all { field ->
++        first.optString(field).trim().equals(candidate.optString(field).trim(), ignoreCase = true)
++    }
++
++internal fun singleLpSourceAllocations(
++    selectedEntries: List<JSONObject>,
++    requestedQuantity: Double?,
++): List<SingleLpSourceAllocation> {
++    if (selectedEntries.isEmpty() || selectedEntries.size > 50) return emptyList()
++    if (selectedEntries.map { it.optInt("entryNo") }.any { it <= 0 } ||
++        selectedEntries.map { it.optInt("entryNo") }.distinct().size != selectedEntries.size
++    ) return emptyList()
++    if (selectedEntries.drop(1).any { !ledgerEntriesCanShareSingleLp(selectedEntries.first(), it) }) return emptyList()
++
++    // With several selected ledger rows, the operation deliberately consumes
++    // each selected row's full LP-allocatable balance. This makes the split
++    // explicit and prevents a checked row from silently contributing zero.
++    if (selectedEntries.size > 1) return selectedEntries.mapNotNull { row ->
++        val quantity = ledgerLpAllocatableQuantity(row)
++        if (!quantity.isFinite() || quantity <= 0.0) null
++        else SingleLpSourceAllocation(row.optInt("entryNo"), quantity)
++    }.takeIf { it.size == selectedEntries.size }.orEmpty()
++
++    val quantity = requestedQuantity ?: return emptyList()
++    val available = ledgerLpAllocatableQuantity(selectedEntries.single())
++    if (!quantity.isFinite() || quantity <= 0.0 || quantity > available + 0.00001) return emptyList()
++    return listOf(SingleLpSourceAllocation(selectedEntries.single().optInt("entryNo"), quantity))
++}
++
++internal fun ledgerSingleLpMultiEntryPayload(
++    templateCode: String,
++    binCode: String,
++    allocations: List<SingleLpSourceAllocation>,
++    printerId: String,
++    printLabels: Boolean,
++    requestId: String,
++): String = JSONObject().apply {
++    put("templateCode", templateCode.trim())
++    put("binCode", binCode.trim())
++    put("sourcePlanJson", JSONArray().apply {
++        allocations.forEach { allocation ->
++            put(JSONObject().put("entryNo", allocation.entryNo).put("quantity", allocation.quantity))
++        }
++    }.toString())
++    put("printerId", printerId.trim())
++    put("printLabels", printLabels)
++    put("requestId", requestId)
++}.toString()
++
+ internal fun validLedgerBulkLpResponse(
+     expectedCount: Int,
+     createdCount: Int,
+@@ -214,6 +269,23 @@ internal fun ledgerLpSourceLinksMatch(
+     }
+ }
+ 
++internal fun ledgerLpSourcePlanMatches(
++    allocations: List<SingleLpSourceAllocation>,
++    createdLpNos: List<String>,
++    lines: List<JSONObject>,
++    complete: Boolean,
++): Boolean {
++    if (!complete || allocations.isEmpty() || createdLpNos.size != 1 || lines.isEmpty()) return false
++    val expectedLp = createdLpNos.single().trim().uppercase()
++    if (lines.any { it.optString("lpNo").trim().uppercase() != expectedLp }) return false
++    val actual = lines.groupBy { it.optInt("sourceItemLedgerEntryNo") }
++        .mapValues { (_, sourceLines) -> sourceLines.sumOf { it.optDouble("quantity", 0.0) } }
++    if (actual.keys != allocations.map { it.entryNo }.toSet()) return false
++    return allocations.all { allocation ->
++        kotlin.math.abs((actual[allocation.entryNo] ?: 0.0) - allocation.quantity) <= 0.00001
++    }
++}
++
+ /** ILE display fields must also reflect the allocation, not just the LP-side link. */
+ internal fun ledgerLpEntryReferenceMatches(
+     entryNo: Int,
+@@ -296,6 +368,7 @@ internal fun pendingLedgerBulkLpRequestJson(request: PendingLedgerBulkLpRequest)
+         put("requestId", request.requestId)
+         put("body", request.body)
+         put("action", request.action)
++        put("sourceEntryNos", JSONArray(request.sourceEntryNos))
+     }.toString()
+ 
+ internal fun pendingLedgerBulkLpRequestFromJson(raw: String): PendingLedgerBulkLpRequest? = runCatching {
+@@ -307,6 +380,9 @@ internal fun pendingLedgerBulkLpRequestFromJson(raw: String): PendingLedgerBulkL
+         requestId = json.getString("requestId"),
+         body = json.getString("body"),
+         action = json.optString("action").trim().ifBlank { LEDGER_BULK_LP_CREATE_ACTION },
++        sourceEntryNos = json.optJSONArray("sourceEntryNos")?.let { array ->
++            List(array.length()) { index -> array.getInt(index) }
++        } ?: listOf(json.getInt("entryNo")),
+     )
+     val canonicalRequestId = UUID.fromString(request.requestId).toString()
+     val body = JSONObject(request.body)
+@@ -314,18 +390,33 @@ internal fun pendingLedgerBulkLpRequestFromJson(raw: String): PendingLedgerBulkL
+     require(request.expectedCount in 1..100)
+     require(canonicalRequestId.equals(request.requestId, ignoreCase = true))
+     require(body.getString("requestId").equals(request.requestId, ignoreCase = true))
+-    require(request.action == LEDGER_BULK_LP_CREATE_ACTION || request.action == LEDGER_BULK_LP_PLAN_ACTION)
+-    val storedLastQty = body.optDouble("quantityLastLp", 0.0)
+-    require(storedLastQty.isFinite() && storedLastQty >= 0.0)
+-    // Artık palet varsa toplam palet adedi tam palet sayısından bir fazladır.
+-    require(body.getInt("lpCount") + (if (storedLastQty > 0.0) 1 else 0) == request.expectedCount)
+-    require(storedLastQty == 0.0 || request.action == LEDGER_BULK_LP_PLAN_ACTION)
++    require(request.sourceEntryNos.isNotEmpty() && request.sourceEntryNos.first() == request.entryNo)
++    require(request.sourceEntryNos.all { it > 0 } && request.sourceEntryNos.distinct().size == request.sourceEntryNos.size)
++    require(request.action in setOf(
++        LEDGER_BULK_LP_CREATE_ACTION,
++        LEDGER_BULK_LP_PLAN_ACTION,
++        LEDGER_SINGLE_LP_MULTI_ENTRY_ACTION,
++    ))
++    if (request.action == LEDGER_SINGLE_LP_MULTI_ENTRY_ACTION) {
++        require(request.expectedCount == 1 && request.sourceEntryNos.size > 1)
++        val sourcePlan = JSONArray(body.getString("sourcePlanJson"))
++        require(sourcePlan.length() == request.sourceEntryNos.size)
++        require(List(sourcePlan.length()) { sourcePlan.getJSONObject(it).getInt("entryNo") } == request.sourceEntryNos)
++        require(List(sourcePlan.length()) { sourcePlan.getJSONObject(it).getDouble("quantity") }
++            .all { it.isFinite() && it > 0.0 })
++    } else {
++        val storedLastQty = body.optDouble("quantityLastLp", 0.0)
++        require(storedLastQty.isFinite() && storedLastQty >= 0.0)
++        // Artık palet varsa toplam palet adedi tam palet sayısından bir fazladır.
++        require(body.getInt("lpCount") + (if (storedLastQty > 0.0) 1 else 0) == request.expectedCount)
++        require(storedLastQty == 0.0 || request.action == LEDGER_BULK_LP_PLAN_ACTION)
++        require(body.getDouble("quantityPerLp").let { it.isFinite() && it > 0.0 })
++    }
+     require(body.getBoolean("printLabels") == request.printLabels)
+     require(body.getString("templateCode").isNotBlank())
+     // Blank bin means the server will distribute complete LPs across the
+     // matching loose-stock bins. Explicit-bin requests remain supported.
+     body.getString("binCode")
+-    require(body.getDouble("quantityPerLp").let { it.isFinite() && it > 0.0 })
+     request
+ }.getOrNull()
+ 
+@@ -418,7 +509,7 @@ internal fun BulkLpBuildSheet(
+     val restoredPending = remember(context) { PendingLedgerBulkLpStore.load(context) }
+     var lookup by remember { mutableStateOf("") }
+     var entries by remember { mutableStateOf<List<JSONObject>>(emptyList()) }
+-    var selectedEntry by remember { mutableStateOf<JSONObject?>(null) }
++    var selectedEntries by remember { mutableStateOf<List<JSONObject>>(emptyList()) }
+     var template by remember { mutableStateOf("") }
+     var templates by remember { mutableStateOf<List<String>>(emptyList()) }
+     var templateExpanded by remember { mutableStateOf(false) }
+@@ -432,6 +523,7 @@ internal fun BulkLpBuildSheet(
+     // paletler önerir ve eski uca gider; yeni APK eski sunucuya tanımadığı bir
+     // action göndermez.
+     var planSupported by remember { mutableStateOf(false) }
++    var multiEntrySingleLpSupported by remember { mutableStateOf(false) }
+     var busy by remember { mutableStateOf(false) }
+     var status by remember {
+         mutableStateOf(
+@@ -457,14 +549,18 @@ internal fun BulkLpBuildSheet(
+     var pendingRequest by remember { mutableStateOf(restoredPending.request) }
+     var completedPrintLabelsRequested by remember { mutableStateOf(false) }
+     var completedSourceEntryNo by remember { mutableStateOf(0) }
++    var completedSourceEntryNos by remember { mutableStateOf<List<Int>>(emptyList()) }
+ 
+     fun buildResult() = LedgerBulkLpBuildResult(
+         createdLpNos, failedPrintLpNos, replayed, printSkippedOnReplay,
+         completedPrintLabelsRequested, completedSourceEntryNo,
++        completedSourceEntryNos.ifEmpty { listOf(completedSourceEntryNo) },
+     )
+ 
+     LaunchedEffect(Unit) {
+-        planSupported = BcApi.getLpScanCapabilities(context).bulkLpPlan
++        val capabilities = BcApi.getLpScanCapabilities(context)
++        planSupported = capabilities.bulkLpPlan
++        multiEntrySingleLpSupported = capabilities.multiEntrySingleLp
+         val page = BcApi.getAllPages(context, "licensePlateTemplates?\$top=50&\$select=code,description")
+         templates = if (page.complete) {
+             page.rows.map { it.optString("code") }.filter(String::isNotBlank)
+@@ -484,7 +580,7 @@ internal fun BulkLpBuildSheet(
+ 
+     fun clearLedgerSelectionAndPlan() {
+         entries = emptyList()
+-        selectedEntry = null
++        selectedEntries = emptyList()
+         template = ""
+         templateExpanded = false
+         bin = ""
+@@ -497,6 +593,7 @@ internal fun BulkLpBuildSheet(
+         failedPrintLpNos = emptyList()
+         replayed = false
+         printSkippedOnReplay = false
++        completedSourceEntryNos = emptyList()
+         pendingRequest = null
+         status = ""
+     }
+@@ -509,7 +606,7 @@ internal fun BulkLpBuildSheet(
+         }
+         scope.launch {
+             busy = true
+-            selectedEntry = null
++            selectedEntries = emptyList()
+             status = "Stok kayıtları aranıyor..."
+             var usingLegacyQuantityFallback = false
+             var complete = true
+@@ -553,10 +650,12 @@ internal fun BulkLpBuildSheet(
+         }
+     }
+ 
+-    val entry = selectedEntry
++    val entry = selectedEntries.firstOrNull()
+     val lpCount = lpCountText.toIntOrNull()
+     val quantityPerLp = quantityText.toFiniteDoubleOrNull()
+-    val allocatableQuantity = entry?.let(::ledgerLpAllocatableQuantity) ?: 0.0
++    val allocatableQuantity = if (singleLpMode && selectedEntries.size > 1) {
++        selectedEntries.sumOf(::ledgerLpAllocatableQuantity)
++    } else entry?.let(::ledgerLpAllocatableQuantity) ?: 0.0
+     // Müşteri isteği: operatör yalnız palet kapasitesini girer, tam palet
+     // adedini ve son paletteki artığı sistem hesaplar.
+     val autoPlan = if (singleLpMode) null else planLedgerLps(allocatableQuantity, quantityPerLp)
+@@ -574,6 +673,10 @@ internal fun BulkLpBuildSheet(
+         entry?.optString("serialNo").orEmpty(),
+         remainderQuantity,
+     )
++    val singleLpAllocations = if (singleLpMode) {
++        singleLpSourceAllocations(selectedEntries, quantityPerLp)
++    } else emptyList()
++    val effectivePlanValid = planValid && (!singleLpMode || singleLpAllocations.isNotEmpty())
+     val inputsEnabled = !busy && !uncertainOutcome
+ 
+     // Palet kapasitesi ya da seçili stok kaydı değiştiğinde tam palet adedini
+@@ -596,8 +699,10 @@ internal fun BulkLpBuildSheet(
+         val binCode = bin
+         val shouldPrint = printLabels
+         val printerId = getMtePrinter(context)
++        val selectedSourceAllocations = singleLpAllocations
+         if (requestToReplay == null &&
+-            (sourceEntry == null || count == null || perLp == null || templateCode.isBlank())
++            (sourceEntry == null || count == null || perLp == null || templateCode.isBlank() ||
++                (singleLpMode && selectedSourceAllocations.isEmpty()))
+         ) return
+ 
+         busy = true
+@@ -622,24 +727,38 @@ internal fun BulkLpBuildSheet(
+                 }
+ 
+                 val requestId = UUID.randomUUID().toString()
++                val useMultiEntryAction = singleLpMode && selectedSourceAllocations.size > 1
+                 PendingLedgerBulkLpRequest(
+                     entryNo = sourceEntry!!.optInt("entryNo"),
+                     // Beklenen kayıt sayısı artık paleti de kapsar; sunucudan
+                     // dönen createdCount bununla karşılaştırılır.
+-                    expectedCount = count!! + if (lastQty > 0.0) 1 else 0,
++                    expectedCount = if (useMultiEntryAction) 1 else count!! + if (lastQty > 0.0) 1 else 0,
+                     printLabels = shouldPrint,
+                     requestId = requestId,
+-                    body = ledgerBulkLpPayload(
+-                        templateCode,
+-                        binCode,
+-                        count,
+-                        perLp!!,
+-                        printerId,
+-                        shouldPrint,
+-                        requestId,
+-                        lastQty,
+-                    ),
+-                    action = if (lastQty > 0.0) LEDGER_BULK_LP_PLAN_ACTION else LEDGER_BULK_LP_CREATE_ACTION,
++                    body = if (useMultiEntryAction) {
++                        ledgerSingleLpMultiEntryPayload(
++                            templateCode, binCode, selectedSourceAllocations,
++                            printerId, shouldPrint, requestId,
++                        )
++                    } else {
++                        ledgerBulkLpPayload(
++                            templateCode,
++                            binCode,
++                            count!!,
++                            perLp!!,
++                            printerId,
++                            shouldPrint,
++                            requestId,
++                            lastQty,
++                        )
++                    },
++                    action = when {
++                        useMultiEntryAction -> LEDGER_SINGLE_LP_MULTI_ENTRY_ACTION
++                        lastQty > 0.0 -> LEDGER_BULK_LP_PLAN_ACTION
++                        else -> LEDGER_BULK_LP_CREATE_ACTION
++                    },
++                    sourceEntryNos = if (useMultiEntryAction) selectedSourceAllocations.map { it.entryNo }
++                    else listOf(sourceEntry.optInt("entryNo")),
+                 )
+             }
+             if (!PendingLedgerBulkLpStore.save(context, operation)) {
+@@ -728,7 +847,15 @@ internal fun BulkLpBuildSheet(
+             busy = true
+             status = "LP kaynak giriş bağlantısı kontrol ediliyor..."
+             val sourceLines = mutableListOf<JSONObject>()
+-            var sourceReadComplete = response.optInt("sourceItemLedgerEntryNo") == operation.entryNo
++            val multiEntryOperation = operation.action == LEDGER_SINGLE_LP_MULTI_ENTRY_ACTION
++            val responseSourceEntryNos = response.optJSONArray("sourceItemLedgerEntryNos")?.let { sourceArray ->
++                List(sourceArray.length()) { index -> sourceArray.optInt(index) }
++            }.orEmpty()
++            var sourceReadComplete = if (multiEntryOperation) {
++                responseSourceEntryNos == operation.sourceEntryNos
++            } else {
++                response.optInt("sourceItemLedgerEntryNo") == operation.entryNo
++            }
+             if (sourceReadComplete) {
+                 for (batch in createdLpNos.chunked(20)) {
+                     val page = BcApi.getAllPages(context, ledgerLpSourceLookupPath(batch))
+@@ -739,21 +866,38 @@ internal fun BulkLpBuildSheet(
+                     sourceLines += page.rows
+                 }
+             }
+-            val linesLinked = ledgerLpSourceLinksMatch(operation.entryNo, createdLpNos, sourceLines, sourceReadComplete)
+-            var entryLinked = false
++            val operationAllocations = if (multiEntryOperation) {
++                val sourcePlan = JSONArray(JSONObject(operation.body).getString("sourcePlanJson"))
++                List(sourcePlan.length()) { index ->
++                    val row = sourcePlan.getJSONObject(index)
++                    SingleLpSourceAllocation(row.getInt("entryNo"), row.getDouble("quantity"))
++                }
++            } else emptyList()
++            val linesLinked = if (multiEntryOperation) {
++                ledgerLpSourcePlanMatches(operationAllocations, createdLpNos, sourceLines, sourceReadComplete)
++            } else {
++                ledgerLpSourceLinksMatch(operation.entryNo, createdLpNos, sourceLines, sourceReadComplete)
++            }
++            var entryLinked = linesLinked
+             if (linesLinked) {
+-                val sourcePage = BcApi.getAllPages(
+-                    context,
+-                    "itemLedgerEntries?\$filter=entryNo eq ${operation.entryNo}&\$select=entryNo,lpNo,lpNos&\$top=1",
+-                )
+-                entryLinked = ledgerLpEntryReferenceMatches(
+-                    operation.entryNo, createdLpNos, sourcePage.rows, sourcePage.complete,
+-                )
++                for (sourceEntryNo in operation.sourceEntryNos) {
++                    val sourcePage = BcApi.getAllPages(
++                        context,
++                        "itemLedgerEntries?\$filter=entryNo eq $sourceEntryNo&\$select=entryNo,lpNo,lpNos&\$top=1",
++                    )
++                    if (!ledgerLpEntryReferenceMatches(
++                            sourceEntryNo, createdLpNos, sourcePage.rows, sourcePage.complete,
++                        )
++                    ) {
++                        entryLinked = false
++                        break
++                    }
++                }
+             }
+             busy = false
+             if (!linesLinked || !entryLinked) {
+                 uncertainOutcome = true
+-                status = "UYARI: LP oluşturuldu ancak #${operation.entryNo} kaynak giriş bağlantısı doğrulanamadı. " +
++                status = "UYARI: LP oluşturuldu ancak ${operation.sourceEntryNos.joinToString { "#$it" }} kaynak giriş bağlantısı doğrulanamadı. " +
+                     "Yeni LP oluşturmayın; Önceki İşlemi Kontrol Et düğmesine basın. " +
+                     "Sorun devam ederse bu LP numaralarını yöneticinize iletin: ${createdLpNos.joinToString()}."
+                 return@launch
+@@ -781,6 +925,7 @@ internal fun BulkLpBuildSheet(
+             }
+             completedPrintLabelsRequested = operation.printLabels
+             completedSourceEntryNo = operation.entryNo
++            completedSourceEntryNos = operation.sourceEntryNos
+             completed = true
+         }
+     }
+@@ -801,7 +946,11 @@ internal fun BulkLpBuildSheet(
+         if (completed) {
+             StatusText(status)
+             Spacer(Modifier.height(12.dp))
+-            Text("Kaynak giriş: #$completedSourceEntryNo", fontWeight = FontWeight.Bold)
++            Text(
++                "Kaynak giriş${if (completedSourceEntryNos.size > 1) "leri" else ""}: " +
++                    completedSourceEntryNos.ifEmpty { listOf(completedSourceEntryNo) }.joinToString { "#$it" },
++                fontWeight = FontWeight.Bold,
++            )
+             Text("Oluşan LP'ler", fontWeight = FontWeight.Bold)
+             createdLpNos.forEach { no ->
+                 Text(no, fontSize = 13.sp)
+@@ -844,7 +993,20 @@ internal fun BulkLpBuildSheet(
+ 
+         if (entries.isNotEmpty()) {
+             Spacer(Modifier.height(10.dp))
+-            Text("Kullanılacak Stok Kaydı", fontWeight = FontWeight.Bold, fontSize = 13.sp)
++            Text(
++                if (singleLpMode && multiEntrySingleLpSupported) "Kullanılacak Stok Kayıtları"
++                else "Kullanılacak Stok Kaydı",
++                fontWeight = FontWeight.Bold,
++                fontSize = 13.sp,
++            )
++            if (singleLpMode && multiEntrySingleLpSupported) {
++                Text(
++                    "Aynı ürün, lot, seri ve lokasyondaki birden fazla kaydı seçebilirsiniz. " +
++                        "Birden fazla seçimde kayıtların LP'lenebilir miktarlarının tamamı tek LP'ye eklenir.",
++                    fontSize = 11.sp,
++                    color = MaterialTheme.colorScheme.onSurfaceVariant,
++                )
++            }
+             if (entries.size > LEDGER_ENTRY_DISPLAY_LIMIT) {
+                 Text(
+                         "Çok fazla kayıt bulundu; yalnızca en yeni $LEDGER_ENTRY_DISPLAY_LIMIT kayıt gösteriliyor. " +
+@@ -854,19 +1016,59 @@ internal fun BulkLpBuildSheet(
+                 )
+             }
+             entries.take(LEDGER_ENTRY_DISPLAY_LIMIT).forEach { row ->
+-                val selected = selectedEntry?.optInt("entryNo") == row.optInt("entryNo")
++                val selected = selectedEntries.any { it.optInt("entryNo") == row.optInt("entryNo") }
+                 Card(
+                     onClick = {
+-                        if (!selected) {
+-                            template = ""
+-                            templateExpanded = false
+-                            bin = ""
+-                            lpCountText = if (singleLpMode) "1" else DEFAULT_LEDGER_LP_COUNT
+-                            quantityText = DEFAULT_LEDGER_LP_QUANTITY
+-                            printLabels = true
++                        if (singleLpMode && multiEntrySingleLpSupported) {
++                            val nextEntries = if (selected) {
++                                selectedEntries.filterNot { it.optInt("entryNo") == row.optInt("entryNo") }
++                            } else {
++                                when {
++                                    selectedEntries.size >= 50 -> {
++                                        status = "HATA: Tek LP için en fazla 50 stok girişi seçebilirsiniz."
++                                        selectedEntries
++                                    }
++                                    selectedEntries.isNotEmpty() &&
++                                        !ledgerEntriesCanShareSingleLp(selectedEntries.first(), row) -> {
++                                        status = "HATA: Tek LP için seçilen kayıtların ürün, varyant, lot, seri, lokasyon ve ölçü birimi aynı olmalıdır."
++                                        selectedEntries
++                                    }
++                                    else -> selectedEntries + row
++                                }
++                            }
++                            if (nextEntries != selectedEntries) {
++                                if (selectedEntries.isEmpty()) {
++                                    template = ""
++                                    templateExpanded = false
++                                    bin = ""
++                                    printLabels = true
++                                }
++                                selectedEntries = nextEntries
++                                lpCountText = "1"
++                                quantityText = when {
++                                    nextEntries.isEmpty() -> DEFAULT_LEDGER_LP_QUANTITY
++                                    nextEntries.size == 1 -> formatLpQuantity(
++                                        minOf(
++                                            DEFAULT_LEDGER_LP_QUANTITY.toDouble(),
++                                            ledgerLpAllocatableQuantity(nextEntries.single()),
++                                        ),
++                                    )
++                                    else -> formatLpQuantity(nextEntries.sumOf(::ledgerLpAllocatableQuantity))
++                                }
++                                status = ""
++                            }
++                        } else {
++                            if (!selected) {
++                                template = ""
++                                templateExpanded = false
++                                bin = ""
++                                lpCountText = if (singleLpMode) "1" else DEFAULT_LEDGER_LP_COUNT
++                                quantityText = DEFAULT_LEDGER_LP_QUANTITY
++                                printLabels = true
++                            }
++                            selectedEntries = listOf(row)
++                            status = ""
+                         }
+-                        selectedEntry = row
+-                        status = ""
+                     },
+                     modifier = Modifier.fillMaxWidth().padding(vertical = 3.dp),
+                     enabled = inputsEnabled,
+@@ -879,8 +1081,19 @@ internal fun BulkLpBuildSheet(
+                         if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant,
+                     ),
+                 ) {
+-                    Column(Modifier.padding(12.dp)) {
+-                        Text("#${row.optInt("entryNo")} · ${row.optString("itemNo")}", fontWeight = FontWeight.Bold)
++                    Row(
++                        Modifier.padding(12.dp),
++                        verticalAlignment = Alignment.Top,
++                    ) {
++                        if (singleLpMode && multiEntrySingleLpSupported) {
++                            Checkbox(
++                                checked = selected,
++                                onCheckedChange = null,
++                                enabled = inputsEnabled,
++                            )
++                        }
++                        Column(Modifier.weight(1f)) {
++                            Text("#${row.optInt("entryNo")} · ${row.optString("itemNo")}", fontWeight = FontWeight.Bold)
+                         val rowAllocatableQuantity = ledgerLpAllocatableQuantity(row)
+                         Text(
+                             "LP yapılabilecek: ${formatLpQuantity(rowAllocatableQuantity)} " +
+@@ -896,8 +1109,9 @@ internal fun BulkLpBuildSheet(
+                             row.optString("serialNo").takeIf(String::isNotBlank)?.let { "Seri $it" },
+                             row.optString("documentNo").takeIf(String::isNotBlank)?.let { "Belge $it" },
+                         ).joinToString(" · ")
+-                        if (detail.isNotBlank())
+-                            Text(detail, fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
++                            if (detail.isNotBlank())
++                                Text(detail, fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
++                        }
+                     }
+                 }
+             }
+@@ -966,11 +1180,11 @@ internal fun BulkLpBuildSheet(
+                 OutlinedTextField(
+                     value = quantityText,
+                     onValueChange = { quantityText = lpQuantityText(it) },
+-                    label = { Text("LP başı miktar") },
++                    label = { Text(if (singleLpMode) "LP toplam miktarı" else "LP başı miktar") },
+                     suffix = { Text(entry.optString("baseUnitOfMeasure")) },
+                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                     singleLine = true,
+-                    enabled = inputsEnabled,
++                    enabled = inputsEnabled && !(singleLpMode && selectedEntries.size > 1),
+                     modifier = Modifier.weight(1f),
+                 )
+             }
+@@ -978,6 +1192,8 @@ internal fun BulkLpBuildSheet(
+             Text(
+                 buildString {
+                     append("Plan: ")
++                    if (singleLpMode && selectedEntries.size > 1)
++                        append("${selectedEntries.size} stok girişi → ")
+                     append("${lpCount ?: 0} × ${formatLpQuantity(quantityPerLp ?: 0.0)}")
+                     if (remainderQuantity > 0.0)
+                         append(" + 1 × ${formatLpQuantity(remainderQuantity)}")
+@@ -1024,7 +1240,7 @@ internal fun BulkLpBuildSheet(
+             ) { Text(if (busy) "Kontrol ediliyor..." else "Önceki İşlemi Kontrol Et") }
+         } else {
+             Button(
+-                enabled = inputsEnabled && entry != null && template.isNotBlank() && planValid,
++                enabled = inputsEnabled && entry != null && template.isNotBlank() && effectivePlanValid,
+                 modifier = Modifier.fillMaxWidth(),
+                 onClick = { submitBulkLp() },
+             ) { Text(if (busy) "İşleniyor..." else if (singleLpMode) "Tekli LP'yi Oluştur" else "LP'leri Oluştur") }
+diff --git a/android/app/src/main/java/com/dynops/bcwms/feature/LicensePlateWorkflow.kt b/android/app/src/main/java/com/dynops/bcwms/feature/LicensePlateWorkflow.kt
+index 4c37fc4..f1250ba 100644
+--- a/android/app/src/main/java/com/dynops/bcwms/feature/LicensePlateWorkflow.kt
++++ b/android/app/src/main/java/com/dynops/bcwms/feature/LicensePlateWorkflow.kt
+@@ -180,7 +180,9 @@ internal fun ledgerLpPrintSelection(result: LedgerBulkLpBuildResult): Set<String
+ 
+ internal fun ledgerLpCompletionStatus(result: LedgerBulkLpBuildResult): String {
+     val count = result.createdLpNos.size
+-    val source = "Kaynak giriş: #${result.sourceEntryNo}."
++    val sourceEntries = result.sourceEntryNos.ifEmpty { listOf(result.sourceEntryNo) }
++    val source = "Kaynak giriş${if (sourceEntries.size > 1) "leri" else ""}: " +
++        sourceEntries.joinToString { "#$it" } + "."
+     return when {
+         result.printSkippedOnReplay ->
+             "UYARI: Daha önce oluşturulan $count LP doğrulandı. $source " +
+diff --git a/android/app/src/test/java/com/dynops/bcwms/LpScanCapabilitiesTest.kt b/android/app/src/test/java/com/dynops/bcwms/LpScanCapabilitiesTest.kt
+index e686cfb..e4fefb3 100644
+--- a/android/app/src/test/java/com/dynops/bcwms/LpScanCapabilitiesTest.kt
++++ b/android/app/src/test/java/com/dynops/bcwms/LpScanCapabilitiesTest.kt
+@@ -10,6 +10,20 @@ import org.junit.Test
+  * önceki akışa döner.
+  */
+ class LpScanCapabilitiesTest {
++    @Test
++    fun `multi entry single LP action is detected exactly from metadata`() {
++        assertTrue(
++            BcApi.parseLpScanCapabilities(
++                """<Action Name="createSingleLicensePlateFromEntriesIdempotent" IsBound="true"/>""",
++            ).multiEntrySingleLp,
++        )
++        assertFalse(
++            BcApi.parseLpScanCapabilities(
++                """<Action Name="createLicensePlatesIdempotent" IsBound="true"/>""",
++            ).multiEntrySingleLp,
++        )
++    }
++
+     @org.junit.Test fun metadataFailureNeverDowngradesToLegacyPosting() {
+         val old = BcApi.parseLpScanCapabilities("""<Action Name="registerFor"/>""")
+         val current = BcApi.parseLpScanCapabilities("""<Action Name="registerScannedFor"/>""")
+diff --git a/android/app/src/test/java/com/dynops/bcwms/feature/BulkLpBuildWorkflowTest.kt b/android/app/src/test/java/com/dynops/bcwms/feature/BulkLpBuildWorkflowTest.kt
+index 5de8631..fc831d6 100644
+--- a/android/app/src/test/java/com/dynops/bcwms/feature/BulkLpBuildWorkflowTest.kt
++++ b/android/app/src/test/java/com/dynops/bcwms/feature/BulkLpBuildWorkflowTest.kt
+@@ -4,6 +4,7 @@ import org.junit.Assert.assertEquals
+ import org.junit.Assert.assertFalse
+ import org.junit.Assert.assertTrue
+ import org.junit.Test
++import org.json.JSONArray
+ import org.json.JSONObject
+ 
+ class BulkLpBuildWorkflowTest {
+@@ -54,6 +55,54 @@ class BulkLpBuildWorkflowTest {
+         assertFalse(ledgerLpSourceLinksMatch(1234, listOf("LP1"), listOf(linked), true))
+     }
+ 
++    @Test
++    fun `compatible ledger entries can be combined into one LP with exact source quantities`() {
++        fun entry(no: Int, quantity: Double, lot: String = "LOT-1") = JSONObject()
++            .put("entryNo", no)
++            .put("itemNo", "AB.00102")
++            .put("variantCode", "")
++            .put("lotNo", lot)
++            .put("serialNo", "")
++            .put("locationCode", "MERKEZDEPO")
++            .put("baseUnitOfMeasure", "ADET")
++            .put("lpAllocatableQuantity", quantity)
++
++        val selected = listOf(entry(12435, 2330.0), entry(1042, 6030.0))
++        val allocations = singleLpSourceAllocations(selected, requestedQuantity = 100.0)
++        assertEquals(
++            listOf(SingleLpSourceAllocation(12435, 2330.0), SingleLpSourceAllocation(1042, 6030.0)),
++            allocations,
++        )
++        assertFalse(ledgerEntriesCanShareSingleLp(selected.first(), entry(99, 10.0, lot = "LOT-2")))
++
++        val lines = allocations.map {
++            JSONObject().put("lpNo", "LP1").put("sourceItemLedgerEntryNo", it.entryNo).put("quantity", it.quantity)
++        }
++        assertTrue(ledgerLpSourcePlanMatches(allocations, listOf("LP1"), lines, true))
++        assertFalse(ledgerLpSourcePlanMatches(allocations, listOf("LP1"), lines.dropLast(1), true))
++    }
++
++    @Test
++    fun `multi entry single LP request survives retry serialization`() {
++        val requestId = "d2881548-a77f-43ef-ae09-b277671f7e22"
++        val allocations = listOf(
++            SingleLpSourceAllocation(12435, 2330.0),
++            SingleLpSourceAllocation(1042, 6030.0),
++        )
++        val body = ledgerSingleLpMultiEntryPayload("PALET", "A.TOPLAM", allocations, "ZPL01", true, requestId)
++        val pending = PendingLedgerBulkLpRequest(
++            entryNo = 12435,
++            expectedCount = 1,
++            printLabels = true,
++            requestId = requestId,
++            body = body,
++            action = LEDGER_SINGLE_LP_MULTI_ENTRY_ACTION,
++            sourceEntryNos = allocations.map { it.entryNo },
++        )
++        assertEquals(pending, pendingLedgerBulkLpRequestFromJson(pendingLedgerBulkLpRequestJson(pending)))
++        assertEquals(2, JSONArray(JSONObject(body).getString("sourcePlanJson")).length())
++    }
++
+     @Test
+     fun `all bulk LPs and all split bin lines must reference the selected source`() {
+         fun line(no: String, source: Int = 1234) = JSONObject()
+-- 
+2.50.1 (Apple Git-155)
+

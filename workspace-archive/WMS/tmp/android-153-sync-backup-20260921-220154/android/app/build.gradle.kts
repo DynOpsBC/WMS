@@ -1,0 +1,250 @@
+import java.util.Properties
+import java.io.FileInputStream
+import java.security.KeyStore
+import java.security.MessageDigest
+
+// GitHub release işi monoton versionCode ve etiket sürümünü Gradle property
+// olarak verir. Lokal/emülatör derlemeleri aşağıdaki kaynak sürümünü kullanır.
+val releaseVersionCodeOverride = providers.gradleProperty("releaseVersionCode").orNull?.toIntOrNull()
+val releaseVersionNameOverride = providers.gradleProperty("releaseVersionName").orNull?.takeIf { it.isNotBlank() }
+// BADE ve EMU aynı kaynak koddan aynı anda yayınlanır. Müşteri flavor'larında
+// ayrı sürüm değeri tutmak bir paketin geride kalmasına neden oluyordu.
+val customerVersionCode = releaseVersionCodeOverride ?: 200152
+val customerVersionName = releaseVersionNameOverride ?: "1.14.152"
+
+plugins {
+  alias(libs.plugins.android.application)
+  alias(libs.plugins.kotlin.android)
+  alias(libs.plugins.kotlin.compose)
+  id("com.github.triplet.play") version "3.11.0" apply false
+}
+
+// gradle-play-publisher is only wired when both PLAY_SERVICE_ACCOUNT_JSON
+// (raw json content) is present and the `withPlayPublisher` Gradle property is
+// set; CI sets these on tag pipelines, local dev stays free of Play creds.
+if (project.hasProperty("withPlayPublisher")) {
+  apply(plugin = "com.github.triplet.play")
+}
+
+android {
+  namespace = "com.dynops.bcwms"
+  compileSdk = 35
+
+  defaultConfig {
+    applicationId = "com.dynops.bcwms"
+    minSdk = 26
+    targetSdk = 35
+    testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+    // Saha APK'larından bazılarında CI tarafından 100000+ versionCode
+    // kullanıldı. Görünen sürüm adı eski olsa bile Android yalnız sayısal kodu
+    // karşılaştırdığı için semantik sürümleri 200000 bandında monoton tutuyoruz.
+    versionCode = releaseVersionCodeOverride ?: 200152
+    versionName = releaseVersionNameOverride ?: "1.14.152"
+    manifestPlaceholders["appLabel"] = "BCWMS"
+    // Ücretsiz dağıtım kanalı: public GitHub Release içindeki sabit latest.json.
+    // APK aynı release'de tutulur; uygulamaya GitHub hesabı/token gömülmez.
+    buildConfigField("String", "UPDATE_MANIFEST_URL", "\"https://github.com/DynOpsBC/WMS/releases/latest/download/latest.json\"")
+    // El terminalleri ARM tabanlıdır. ML Kit'in x86/x86_64 yerel
+    // kütüphaneleri gerçek cihazda hiç kullanılmıyor ve APK'yı yaklaşık
+    // 12 MB şişiriyordu. ARM32 desteği eski terminaller için korunur.
+    ndk {
+      abiFilters += listOf("armeabi-v7a", "arm64-v8a")
+    }
+  }
+
+  flavorDimensions += "tenant"
+  productFlavors {
+    create("dynops") {
+      dimension = "tenant"
+      buildConfigField("String", "BC_CLIENT_ID", "\"8193e5c6-64d2-4e6f-8992-2114e77e4f24\"")
+      buildConfigField("String", "BC_FALLBACK_TENANT", "\"7fa2357e-26f2-4174-8e16-a713981356b8\"")
+      buildConfigField("String", "BC_DEFAULT_ENVIRONMENT", "\"SandboxUS\"")
+      buildConfigField("String", "BC_DEFAULT_COMPANY_ID", "\"1534369d-f248-f111-b478-7c1e521cfdf0\"")
+      buildConfigField("String", "BC_DEFAULT_COMPANY_NAME", "\"CRONUS USA, Inc.\"")
+      buildConfigField("boolean", "BC_ALLOW_PRODUCTION", "true")
+      buildConfigField("String", "TENANT_LABEL", "\"DynamicsOps\"")
+      buildConfigField("String", "LOGIN_EMAIL_HINT", "\"ornek@dynamicsops.com\"")
+      buildConfigField("String", "LOGIN_DEFAULT_EMAIL", "\"\"")
+    }
+    create("bade") {
+      dimension = "tenant"
+      applicationIdSuffix = ".bade"
+      versionCode = customerVersionCode
+      versionName = customerVersionName
+      versionNameSuffix = "-bade"
+      manifestPlaceholders["appLabel"] = "BCWMS BADE"
+      buildConfigField("String", "BC_CLIENT_ID", "\"3c4ba25a-89f4-41df-acf8-ebab8cb4809b\"")
+      buildConfigField("String", "BC_FALLBACK_TENANT", "\"3bbd610b-95e4-47b3-8b48-4f7caf717bc3\"")
+      buildConfigField("String", "BC_DEFAULT_ENVIRONMENT", "\"E-DefterSandbox\"")
+      // BADE APK must never fall back to the shared CRONUS demo company. The
+      // company UUID is discovered from BC by this exact display name after
+      // token acquisition, then persisted for all subsequent requests.
+      buildConfigField("String", "BC_DEFAULT_COMPANY_ID", "\"\"")
+      buildConfigField("String", "BC_DEFAULT_COMPANY_NAME", "\"BADE NATURAL DOĞAL YAŞAM ÜRÜNLERİ SAN. TİC. A.Ş.\"")
+      // Allow explicit Production discovery; BADE module access remains manager-gated.
+      // Keep Sandbox as the default until the operator selects an environment.
+      buildConfigField("boolean", "BC_ALLOW_PRODUCTION", "true")
+      buildConfigField("String", "TENANT_LABEL", "\"Bade Natural\"")
+      buildConfigField("String", "LOGIN_EMAIL_HINT", "\"dynops@badenatural.com\"")
+      buildConfigField("String", "LOGIN_DEFAULT_EMAIL", "\"dynops@badenatural.com\"")
+      buildConfigField(
+        "String",
+        "UPDATE_MANIFEST_URL",
+        "\"https://github.com/DynOpsBC/WMS/releases/download/android-bade-channel/latest.json\"",
+      )
+    }
+    create("emu") {
+      dimension = "tenant"
+      applicationIdSuffix = ".emu"
+      versionCode = customerVersionCode
+      versionName = customerVersionName
+      versionNameSuffix = "-emu"
+      manifestPlaceholders["appLabel"] = "BCWMS EMU"
+      buildConfigField("String", "BC_CLIENT_ID", "\"9f9a9965-f358-4b0b-a89e-923f1d8b7a04\"")
+      buildConfigField("String", "BC_FALLBACK_TENANT", "\"9de3e840-2fae-4ffb-b690-2fca32956342\"")
+      buildConfigField("String", "BC_DEFAULT_ENVIRONMENT", "\"Sandbox3007\"")
+      // DKÇ tenant'ında şirket, ilk Microsoft girişinden sonra erişilebilir
+      // şirketlerden seçilir. Ortak CRONUS kimliğine sessizce düşülmez.
+      buildConfigField("String", "BC_DEFAULT_COMPANY_ID", "\"\"")
+      buildConfigField("String", "BC_DEFAULT_COMPANY_NAME", "\"My Company\"")
+      // EMU is also used against the DKÇ production environment. Keep the
+      // explicit environment/company selection, but do not reject Production
+      // before the authenticated BC discovery request is sent.
+      buildConfigField("boolean", "BC_ALLOW_PRODUCTION", "true")
+      buildConfigField("String", "TENANT_LABEL", "\"DKÇ / EMU\"")
+      buildConfigField("String", "LOGIN_EMAIL_HINT", "\"deniz@atesci.com\"")
+      buildConfigField("String", "LOGIN_DEFAULT_EMAIL", "\"deniz@atesci.com\"")
+      // EMU kendi manifestini izler; GitHub'ın genel latest yayını BADE'ye
+      // ait kalır ve iki farklı applicationId birbirine APK önermez.
+      buildConfigField(
+        "String",
+        "UPDATE_MANIFEST_URL",
+        "\"https://github.com/DynOpsBC/WMS/releases/download/android-emu-channel/latest.json\"",
+      )
+    }
+  }
+
+  buildFeatures {
+    compose = true
+    buildConfig = true
+  }
+
+  buildTypes {
+    debug {
+      // Debug APK'lari saha uygulamasinin ustune kurulmamali. Android debug
+      // anahtari gelistirici makinesine ozeldir; release anahtariyla imzali
+      // guncellemelerle uyusmaz. Ayri applicationId iki paketi kesin olarak
+      // ayirir ve yanlis debug dagitiminin stabil uygulamayi kilitlemesini onler.
+      applicationIdSuffix = ".debug"
+      versionNameSuffix = "-debug"
+      buildConfigField("boolean", "IN_APP_UPDATES_ENABLED", "false")
+      isMinifyEnabled = false
+    }
+    release {
+      buildConfigField("boolean", "IN_APP_UPDATES_ENABLED", "true")
+      isMinifyEnabled = true
+      isShrinkResources = true
+      proguardFiles(
+        getDefaultProguardFile("proguard-android-optimize.txt"),
+        "proguard-rules.pro",
+      )
+      val keystorePropsFile = rootProject.file("play/keystore/keystore.properties")
+      if (keystorePropsFile.exists()) {
+        val props = Properties()
+        FileInputStream(keystorePropsFile).use { props.load(it) }
+        signingConfig = signingConfigs.create("release") {
+          storeFile = rootProject.file(props.getProperty("storeFile"))
+          storePassword = props.getProperty("storePassword")
+          keyAlias = props.getProperty("keyAlias")
+          keyPassword = props.getProperty("keyPassword")
+        }
+      }
+    }
+  }
+
+  // Existing field installations of 1.14.105 use this historical certificate.
+  // Opt in explicitly; never substitute another developer's debug keystore.
+  if (providers.gradleProperty("legacyEmuUpdates").orNull == "true") {
+    val legacyStore = file(providers.gradleProperty("legacyEmuKeystore").get())
+    val keyStore = KeyStore.getInstance("JKS")
+    legacyStore.inputStream().use { keyStore.load(it, "android".toCharArray()) }
+    val fingerprint = MessageDigest.getInstance("SHA-256")
+      .digest(keyStore.getCertificate("androiddebugkey").encoded)
+      .joinToString("") { "%02x".format(it) }
+    require(fingerprint == "b28316a8ba08c9241392fe881bd9f55eaa6b3c330970003197bbe54fe25e2204") {
+      "Legacy EMU certificate does not match the installed 1.14.105 APK"
+    }
+    val legacySigning = signingConfigs.create("legacyEmu") {
+      storeFile = legacyStore
+      storePassword = "android"
+      keyAlias = "androiddebugkey"
+      keyPassword = "android"
+    }
+    buildTypes.create("legacyRelease") {
+      initWith(buildTypes.getByName("release"))
+      matchingFallbacks += "release"
+      signingConfig = legacySigning
+      isDebuggable = false
+      buildConfigField("String", "UPDATE_MANIFEST_URL",
+        "\"https://github.com/DynOpsBC/WMS/releases/download/android-emu-legacy-channel/latest.json\"")
+    }
+  }
+
+  lint {
+    abortOnError = true
+    checkReleaseBuilds = true
+  }
+}
+
+androidComponents {
+  beforeVariants(selector().withBuildType("legacyRelease")) { variant ->
+    variant.enable = variant.productFlavors.any { it.second == "emu" }
+  }
+}
+
+dependencies {
+  implementation(project(":core-design"))
+  implementation(libs.androidx.core.ktx)
+  implementation(libs.androidx.activity.compose)
+  implementation(libs.androidx.lifecycle.runtime.ktx)
+  implementation(platform(libs.androidx.compose.bom))
+  implementation(libs.androidx.compose.ui)
+  implementation(libs.androidx.compose.ui.tooling.preview)
+  implementation(libs.androidx.compose.material3)
+  implementation("androidx.compose.foundation:foundation")
+  implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0")
+  // Real PATCH/DELETE verbs for BC API (HttpURLConnection can't PATCH; BC ignores X-HTTP-Method-Override).
+  implementation(libs.okhttp)
+
+  // Barcode scanning (camera) — graceful manual-entry fallback if camera/permission unavailable
+  implementation("com.google.mlkit:barcode-scanning:17.3.0")
+  implementation("androidx.camera:camera-core:1.4.0")
+  implementation("androidx.camera:camera-camera2:1.4.0")
+  implementation("androidx.camera:camera-lifecycle:1.4.0")
+  implementation("androidx.camera:camera-view:1.4.0")
+  implementation("androidx.lifecycle:lifecycle-runtime-compose:2.8.7")
+  implementation("androidx.core:core:1.13.1")
+  testImplementation(libs.junit)
+  testImplementation("com.squareup.okhttp3:mockwebserver:4.12.0")
+  // Android's org.json classes are stubs in local JVM tests. Use the reference
+  // implementation so pagination payload parsing is exercised for real.
+  testImplementation("org.json:json:20240303")
+  androidTestImplementation(platform(libs.androidx.compose.bom))
+  androidTestImplementation("androidx.compose.ui:ui-test-junit4")
+  androidTestImplementation("androidx.test:runner:1.7.0")
+  androidTestImplementation("androidx.test.espresso:espresso-core:3.7.0")
+  debugImplementation("androidx.compose.ui:ui-test-manifest")
+}
+
+// Closed-track Play publishing block is read by gradle-play-publisher only when
+// the plugin is applied above. service-account credentials come from
+// $PLAY_SERVICE_ACCOUNT_JSON env (CI) or play/play-service-account.json (local).
+if (project.hasProperty("withPlayPublisher")) {
+  configure<com.github.triplet.gradle.play.PlayPublisherExtension> {
+    serviceAccountCredentials.set(rootProject.file("play/play-service-account.json"))
+    defaultToAppBundles.set(true)
+    track.set("internal")
+    releaseStatus.set(com.github.triplet.gradle.androidpublisher.ReleaseStatus.DRAFT)
+    updatePriority.set(3)
+  }
+}
