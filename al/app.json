@@ -2,7 +2,7 @@
   "id": "984e25aa-07c2-4401-babc-88f975303a52",
   "publisher": "DynamicsOps",
   "name": "BCWMSApp",
-  "version": "1.14.1.124",
+  "version": "1.14.1.125",
   "brief": "Advanced Warehouse Management System for Business Central SaaS",
   "description": "Advanced warehouse management foundation for Business Central SaaS.",
   "privacyStatement": "https://dynops.com/privacy",
@@ -15,6 +15,10 @@
     "id": "6ea7421a-2108-4672-96e0-8b8567b88ad7",
     "name": "BCWMSApp Print Tests",
     "publisher": "DynamicsOps"
+  }, {
+    "id": "515fe9e0-7e77-4fe7-9395-04dc142206a5",
+    "name": "BCWMSApp Tests",
+    "publisher": "DynOps"
   }],
   "screenshots": [],
   "platform": "24.0.0.0",

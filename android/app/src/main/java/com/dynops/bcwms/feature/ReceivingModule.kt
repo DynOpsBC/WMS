@@ -734,6 +734,7 @@ private fun ReceiveDocument(no: String, onBack: () -> Unit) {
             initialSupplierLotNo = bulkLine.optString("supplierLotNo"),
             initialExpiryDate = bcDateOrBlank(bulkLine.optString("expiryDate")),
             lotRequired = bulkLine.optBoolean("lotRequired"),
+            allowLotGroups = bulkLine.has("receiptLpAllocations"),
             expiryEnabled = bulkLine.optBoolean("expirationDateEnabled"),
             expiryRequired = bulkLine.optBoolean("expirationDateRequired"),
             onDismiss = { bulkLpTarget = null },
@@ -786,7 +787,11 @@ private fun ReceiveDocument(no: String, onBack: () -> Unit) {
     }
     if (showQty) {
         val line = scannedLine
-        QuantityDialogSheet(
+        val preparedPlan = receiptLpPlan(line)
+        if (preparedPlan.isNotEmpty()) ReceiptLpPlanSheet(
+            itemNo = scannedItem, uom = line?.optString("unitOfMeasureCode").orEmpty(),
+            rows = preparedPlan, onDismiss = { showQty = false },
+        ) else QuantityDialogSheet(
             title = "Alınan Miktar",
             itemNo = scannedItem,
             initialQty = line?.optDouble("qtyToReceive")?.takeIf { it > 0 } ?: 1.0,
@@ -836,7 +841,10 @@ private fun ReceiveDocument(no: String, onBack: () -> Unit) {
         )
     }
     val gt = groupTarget
-    if (gt != null) {
+    val preparedGroupPlan = gt?.lines?.flatMap { receiptLpPlan(it) }.orEmpty()
+    if (gt != null && preparedGroupPlan.isNotEmpty()) {
+        ReceiptLpPlanSheet(gt.itemNo, gt.lines.first().optString("unitOfMeasureCode"), preparedGroupPlan) { groupTarget = null }
+    } else if (gt != null) {
         val groupRequiresLot = gt.lines.any { it.optBoolean("lotRequired") }
         val groupRequiresSerial = gt.lines.any { it.optBoolean("serialRequired") }
         val groupUsesExpiryDate = gt.lines.any { it.optBoolean("expirationDateEnabled") }

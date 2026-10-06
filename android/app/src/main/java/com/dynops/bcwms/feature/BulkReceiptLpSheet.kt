@@ -3,6 +3,7 @@ package com.dynops.bcwms.feature
 import com.dynops.bcwms.ui.toFiniteDoubleOrNull
 
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -11,6 +12,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
@@ -37,25 +39,33 @@ internal data class BulkReceiptLpRow(
     val expiryDate: String,
 )
 
+internal data class BulkReceiptLotGroup(
+    val groupId: String,
+    val lotNo: String = "",
+    val supplierLotNo: String = "",
+    val expiryDate: String = "",
+)
+
 private data class ManualBulkLpDraft(
     val id: Int,
     val quantity: String,
+    val groupId: String = COMMON_RECEIPT_LOT_GROUP,
 )
 
 private const val COMMON_RECEIPT_LOT_GROUP = "RECEIPT"
 
-internal fun withCommonBulkReceiptTracking(
+/** Group order also keeps a previously reserved lot in the first group. */
+internal fun withGroupedBulkReceiptTracking(
     rows: List<BulkReceiptLpRow>,
-    lotNo: String,
-    supplierLotNo: String,
-    expiryDate: String,
-): List<BulkReceiptLpRow> = rows.map { row ->
-    row.copy(
-        groupId = COMMON_RECEIPT_LOT_GROUP,
-        lotNo = lotNo,
-        supplierLotNo = supplierLotNo,
-        expiryDate = expiryDate,
-    )
+    groups: List<BulkReceiptLotGroup>,
+): List<BulkReceiptLpRow> {
+    require(groups.map { it.groupId }.distinct().size == groups.size)
+    require(rows.all { row -> groups.any { it.groupId == row.groupId } })
+    return groups.flatMap { group ->
+        rows.filter { it.groupId == group.groupId }.map { row ->
+            row.copy(lotNo = group.lotNo, supplierLotNo = group.supplierLotNo, expiryDate = group.expiryDate)
+        }
+    }
 }
 
 internal fun bulkLpRowsJson(rows: List<BulkReceiptLpRow>): String = JSONArray().apply {
@@ -102,13 +112,14 @@ internal fun manualBulkLpValidation(
     expectedQty: Double? = null,
     today: LocalDate = LocalDate.now(),
 ): String? {
-    if (maxQty <= 0.0) return "Bu satırda kabul edilecek açık miktar yok."
+    if (!maxQty.isFinite() || maxQty <= 0.0) return "Bu satırda kabul edilecek açık miktar yok."
     if (expectedQty != null && (!expectedQty.isFinite() || expectedQty <= 0.0))
         return "Toplam kabul miktarı sıfırdan büyük olmalıdır."
     if (expectedQty != null && expectedQty - maxQty > 0.00001)
         return "Toplam kabul miktarı açık miktarı aşamaz."
     if (rows.isEmpty()) return "En az bir LP ekleyin."
-    if (rows.any { it.quantity <= 0.0 }) return "Her LP için sıfırdan büyük miktar girin."
+    if (rows.size > 200) return "Tek işlemde en fazla 200 LP oluşturulabilir."
+    if (rows.any { !it.quantity.isFinite() || it.quantity <= 0.0 }) return "Her LP için sıfırdan büyük miktar girin."
     val rowTotal = rows.sumOf { it.quantity }
     if (rowTotal - maxQty > 0.00001) return "LP toplamı açık miktarı aşamaz."
     if (expectedQty != null && abs(rowTotal - expectedQty) > 0.00001)
@@ -120,6 +131,17 @@ internal fun manualBulkLpValidation(
     if (enteredExpiryDates.any {
             !expiryDateIsTodayOrFuture(normalizedBulkExpiryDate(it.expiryDate), today)
         }) return "Geçmiş SKT'li ürün mal kabul edilemez."
+    if (rows.any { it.lotNo.trim().length > 50 || it.supplierLotNo.trim().length > 50 })
+        return "Lot numaraları en fazla 50 karakter olabilir."
+    val groups = rows.groupBy { it.groupId }
+    if (groups.values.any { group -> group.map {
+            Triple(it.lotNo.trim().uppercase(), it.supplierLotNo.trim().uppercase(), normalizedBulkExpiryDate(it.expiryDate))
+        }.distinct().size > 1 }) return "Aynı lot grubundaki LP'lerin lot bilgileri aynı olmalıdır."
+    val internalLots = rows.filter { it.lotNo.isNotBlank() }.groupBy { it.lotNo.trim().uppercase() }
+    if (internalLots.values.any { lot -> lot.map { it.supplierLotNo.trim().uppercase() }.filter { it.isNotEmpty() }.distinct().size > 1 })
+        return "Aynı iç lot farklı tedarikçi lotlarıyla eşleştirilemez."
+    if (internalLots.values.any { lot -> lot.map { normalizedBulkExpiryDate(it.expiryDate) }.distinct().size > 1 })
+        return "Aynı iç lot için farklı SKT girilemez."
     return null
 }
 
@@ -133,6 +155,7 @@ internal fun BulkReceiptLpSheet(
     initialSupplierLotNo: String,
     initialExpiryDate: String,
     lotRequired: Boolean,
+    allowLotGroups: Boolean,
     expiryEnabled: Boolean,
     expiryRequired: Boolean,
     onDismiss: () -> Unit,
@@ -142,10 +165,14 @@ internal fun BulkReceiptLpSheet(
     var nextLpId by remember { mutableIntStateOf(2) }
     var receiptQtyText by remember(maxExpectedQty) { mutableStateOf(fmtBulkQty(maxExpectedQty)) }
     var palletCountText by remember { mutableStateOf("1") }
-    var commonLotNo by remember(initialLotNo) { mutableStateOf(initialLotNo) }
-    var commonSupplierLotNo by remember(initialSupplierLotNo) { mutableStateOf(initialSupplierLotNo) }
-    var commonExpiryDate by remember(initialExpiryDate) {
-        mutableStateOf(expiryDateForDisplay(initialExpiryDate))
+    var nextLotGroupId by remember { mutableIntStateOf(2) }
+    var lotGroups by remember(initialLotNo, initialSupplierLotNo, initialExpiryDate) {
+        mutableStateOf(listOf(BulkReceiptLotGroup(
+            COMMON_RECEIPT_LOT_GROUP, initialLotNo, initialSupplierLotNo, expiryDateForDisplay(initialExpiryDate),
+        )))
+    }
+    fun updateLotGroup(id: String, transform: (BulkReceiptLotGroup) -> BulkReceiptLotGroup) {
+        lotGroups = lotGroups.map { if (it.groupId == id) transform(it) else it }
     }
     var drafts by remember {
         mutableStateOf(
@@ -162,24 +189,18 @@ internal fun BulkReceiptLpSheet(
         drafts = drafts.map { if (it.id == id) transform(it) else it }
     }
 
-    val rows = withCommonBulkReceiptTracking(
+    val rows = withGroupedBulkReceiptTracking(
         rows = drafts.map { draft ->
-            BulkReceiptLpRow(
-                groupId = COMMON_RECEIPT_LOT_GROUP,
-                quantity = draft.quantity.toFiniteDoubleOrNull() ?: 0.0,
-                lotNo = "",
-                supplierLotNo = "",
-                expiryDate = "",
-            )
+            BulkReceiptLpRow(draft.groupId, draft.quantity.toFiniteDoubleOrNull() ?: 0.0, "", "", "")
         },
-        lotNo = commonLotNo,
-        supplierLotNo = commonSupplierLotNo,
-        expiryDate = commonExpiryDate,
+        groups = lotGroups,
     )
     val expectedQty = receiptQtyText.toFiniteDoubleOrNull() ?: 0.0
     val palletCount = palletCountText.toIntOrNull() ?: 0
     val enteredTotal = rows.sumOf { it.quantity }
-    val validationError = manualBulkLpValidation(
+    val unusedGroup = lotGroups.indexOfFirst { group -> drafts.none { it.groupId == group.groupId } }
+    val validationError = if (unusedGroup >= 0) "Lot grubu ${unusedGroup + 1} için en az bir LP seçin."
+    else manualBulkLpValidation(
         maxQty = maxExpectedQty,
         rows = rows,
         expiryRequired = expiryRequired,
@@ -243,6 +264,7 @@ internal fun BulkReceiptLpSheet(
                         ManualBulkLpDraft(
                             id = existing?.id ?: nextLpId++,
                             quantity = fmtBulkQty(quantity),
+                            groupId = existing?.groupId ?: lotGroups.last().groupId,
                         )
                     }
                 },
@@ -252,39 +274,59 @@ internal fun BulkReceiptLpSheet(
             ) { Text("Eşit Böl ve $palletCount LP Hazırla") }
             Spacer(Modifier.height(12.dp))
 
-            if (lotRequired) {
-                Text("Ortak Lot Bilgisi", fontWeight = FontWeight.Bold)
+            if (lotRequired || expiryEnabled) {
+                Text("Lot Grupları", fontWeight = FontWeight.Bold)
                 Text(
-                    "Bu mal kabulde oluşturulan bütün LP'lerde aynı lot kullanılacak.",
-                    fontSize = 12.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    "Aynı lotu paylaşan LP'lerde aynı grubu seçin. Bütün gruplar tek mal kabul belgesinde kaydedilir.",
+                    fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
-                Spacer(Modifier.height(6.dp))
-                OutlinedTextField(
-                    value = commonLotNo,
-                    onValueChange = { commonLotNo = it },
-                    label = { Text("İç lot (boşsa sistem üretir)") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth(),
-                )
-                Spacer(Modifier.height(6.dp))
-                OutlinedTextField(
-                    value = commonSupplierLotNo,
-                    onValueChange = { commonSupplierLotNo = it },
-                    label = { Text("Tedarikçi lotu (isteğe bağlı)") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth(),
-                )
+                lotGroups.forEachIndexed { index, group ->
+                    Card(Modifier.fillMaxWidth().padding(top = 8.dp)) {
+                        Column(Modifier.padding(12.dp)) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text("Lot Grubu ${index + 1}", fontWeight = FontWeight.Bold)
+                                Spacer(Modifier.weight(1f))
+                                if (index > 0) TextButton(onClick = {
+                                    drafts = drafts.map { if (it.groupId == group.groupId) it.copy(groupId = lotGroups.first().groupId) else it }
+                                    lotGroups = lotGroups.filterNot { it.groupId == group.groupId }
+                                }) { Text("Grubu Kaldır") }
+                            }
+                            if (lotRequired) {
+                                OutlinedTextField(
+                                    value = group.lotNo,
+                                    onValueChange = { value -> updateLotGroup(group.groupId) { it.copy(lotNo = value) } },
+                                    label = { Text("İç lot (boşsa sistem üretir)") },
+                                    singleLine = true, modifier = Modifier.fillMaxWidth().testTag("receipt-lot-${group.groupId}"),
+                                )
+                                Spacer(Modifier.height(6.dp))
+                                OutlinedTextField(
+                                    value = group.supplierLotNo,
+                                    onValueChange = { value -> updateLotGroup(group.groupId) { it.copy(supplierLotNo = value) } },
+                                    label = { Text("Tedarikçi lotu (isteğe bağlı)") },
+                                    singleLine = true, modifier = Modifier.fillMaxWidth().testTag("receipt-supplier-${group.groupId}"),
+                                )
+                            }
+                            if (expiryEnabled) {
+                                Spacer(Modifier.height(6.dp))
+                                BulkExpiryDateField(group.expiryDate, expiryRequired) { value ->
+                                    updateLotGroup(group.groupId) { it.copy(expiryDate = value) }
+                                }
+                            }
+                            val groupRows = rows.filter { it.groupId == group.groupId }
+                            Text("${groupRows.size} LP · ${fmtBulkQty(groupRows.sumOf { it.quantity })} $uom", modifier = Modifier.padding(top = 6.dp))
+                        }
+                    }
+                }
+                if (lotRequired && allowLotGroups) {
+                    OutlinedButton(
+                        onClick = { lotGroups = lotGroups + BulkReceiptLotGroup("LOT-${nextLotGroupId++}") },
+                        enabled = lotGroups.size < 200, modifier = Modifier.fillMaxWidth(),
+                    ) { Text("+ Lot Grubu Ekle") }
+                } else if (lotRequired && !allowLotGroups) {
+                    Text("Farklı lot grupları için Business Central eklentisini güncelleyin.", fontSize = 12.sp)
+                }
+                Spacer(Modifier.height(12.dp))
             }
-            if (expiryEnabled) {
-                Spacer(Modifier.height(6.dp))
-                BulkExpiryDateField(
-                    value = commonExpiryDate,
-                    required = expiryRequired,
-                    onValueChange = { commonExpiryDate = it },
-                )
-            }
-            if (lotRequired || expiryEnabled) Spacer(Modifier.height(12.dp))
 
             drafts.forEachIndexed { index, draft ->
                 Card(
@@ -305,12 +347,23 @@ internal fun BulkReceiptLpSheet(
                                 }
                             }
                         }
+                        if (lotGroups.size > 1) {
+                            Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                lotGroups.forEachIndexed { groupIndex, group ->
+                                    FilterChip(
+                                        selected = draft.groupId == group.groupId,
+                                        onClick = { updateDraft(draft.id) { it.copy(groupId = group.groupId) } },
+                                        label = { Text("Lot Grubu ${groupIndex + 1}") },
+                                    )
+                                }
+                            }
+                        }
                         OutlinedTextField(
                             value = draft.quantity,
                             onValueChange = { value -> updateDraft(draft.id) { it.copy(quantity = numericText(value)) } },
                             label = { Text("Miktar ($uom)") },
                             singleLine = true,
-                            modifier = Modifier.fillMaxWidth(),
+                            modifier = Modifier.fillMaxWidth().testTag("receipt-lp-${draft.id}-quantity"),
                         )
                     }
                 }
@@ -321,10 +374,12 @@ internal fun BulkReceiptLpSheet(
                     val expandedDrafts = drafts + ManualBulkLpDraft(
                         id = nextLpId++,
                         quantity = "",
+                        groupId = lotGroups.last().groupId,
                     )
                     drafts = expandedDrafts
                     palletCountText = expandedDrafts.size.toString()
                 },
+                enabled = drafts.size < 200,
                 modifier = Modifier.fillMaxWidth(),
             ) { Text("+ LP Ekle") }
 
@@ -476,4 +531,32 @@ internal fun BulkReceiptLinePicker(
         confirmButton = {},
         dismissButton = { TextButton(onClick = onDismiss) { Text("Kapat") } },
     )
+}
+
+internal fun receiptLpPlan(line: JSONObject?): List<JSONObject> = runCatching {
+    val rows = JSONArray(line?.optString("receiptLpAllocations").orEmpty().ifBlank { "[]" })
+    List(rows.length()) { rows.getJSONObject(it) }
+}.getOrDefault(emptyList())
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+internal fun ReceiptLpPlanSheet(itemNo: String, uom: String, rows: List<JSONObject>, onDismiss: () -> Unit) {
+    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
+        Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(16.dp)) {
+            Text("Hazırlanan Lot ve LP Dağılımı", fontSize = 21.sp, fontWeight = FontWeight.Bold)
+            Text("$itemNo · ${rows.size} LP · ${fmtBulkQty(rows.sumOf { it.optDouble("quantity", 0.0) })} $uom")
+            Text("Bütün LP'ler Mal Kabulü Kaydet ile aynı belge içinde kaydedilecek.", modifier = Modifier.padding(vertical = 10.dp))
+            rows.forEach { row ->
+                Card(Modifier.fillMaxWidth().padding(bottom = 8.dp)) {
+                    Column(Modifier.padding(12.dp)) {
+                        Text("${row.optString("lpNo")} · ${fmtBulkQty(row.optDouble("quantity"))} $uom", fontWeight = FontWeight.Bold)
+                        if (row.optString("lotNo").isNotBlank()) Text("İç lot: ${row.optString("lotNo")}")
+                        if (row.optString("supplierLotNo").isNotBlank()) Text("Tedarikçi lotu: ${row.optString("supplierLotNo")}")
+                        if (row.optString("expiryDate").isNotBlank()) Text("SKT: ${expiryDateForDisplay(row.optString("expiryDate"))}")
+                    }
+                }
+            }
+            Button(onClick = onDismiss, modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp)) { Text("Kapat") }
+        }
+    }
 }

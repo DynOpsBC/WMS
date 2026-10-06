@@ -50,6 +50,11 @@ jobs:
           New-Item test-dist -ItemType Directory -Force | Out-Null
           al compile -- /project:al-print-tests /packagecachepath:al/.alpackages /out:test-dist/BCWMSApp-Print-Tests.app /errorsonlyinconsole
           if ($LASTEXITCODE -ne 0) { throw 'Print regression test compilation failed' }
+      - name: Compile application regression tests
+        shell: pwsh
+        run: |
+          al compile -- /project:al-tests /packagecachepath:al/.alpackages /out:test-dist/BCWMSApp-Tests.app /errorsonlyinconsole
+          if ($LASTEXITCODE -ne 0) { throw 'Application regression test compilation failed' }
       - uses: actions/upload-artifact@v7
         with:
           name: bcwms-al-verified-package

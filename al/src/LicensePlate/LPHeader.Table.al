@@ -82,6 +82,24 @@ table 72010 "DOPSWHS LP Header"
             DataClassification = CustomerContent;
             Editable = false;
         }
+        field(128; "Pending Receipt Lot No."; Code[50])
+        {
+            Caption = 'Pending Receipt Lot No.';
+            DataClassification = CustomerContent;
+            Editable = false;
+        }
+        field(129; "Pending Receipt Expiry"; Date)
+        {
+            Caption = 'Pending Receipt Expiration Date';
+            DataClassification = CustomerContent;
+            Editable = false;
+        }
+        field(130; "Receipt Tracking Staged"; Boolean)
+        {
+            Caption = 'Receipt Tracking Staged';
+            DataClassification = SystemMetadata;
+            Editable = false;
+        }
     }
 
     keys

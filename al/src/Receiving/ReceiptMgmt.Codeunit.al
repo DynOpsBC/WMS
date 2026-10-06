@@ -88,11 +88,7 @@ codeunit 72043 "DOPSWHS Receipt Mgmt"
         // LP numaraları taslakta boş palet olarak bekler. Ürün/lot/miktar ancak
         // bu kayıt transaction'ı başarıyla tamamlanacaksa LP içine yazılır;
         // daha sonraki bir Error tüm içerik eklemelerini de geri alır.
-        MaterializePendingReceiptLPs(ReceiptNo);
-        // Toplu LP'ler fiziksel paket kayıtlarıdır; satın alma veya mal kabul
-        // satırını bölmez. Standart BC aynı ortak lotu tek defter girişi olarak
-        // kaydeder, LP dağılımı ayrı DOPSWHS LP satırlarında korunur.
-        PrepareLpReceiptTracking(ReceiptNo);
+        PrepareReceiptLPs(ReceiptNo);
         // Daha eski mobil sürümler tedarikçi lotunu yalnız Lot No.
         // Information kartına yazıyordu. Hazırlanmış satırları da
         // yeniden giriş istemeden BADE takip kolonuna taşı.
@@ -473,6 +469,14 @@ codeunit 72043 "DOPSWHS Receipt Mgmt"
             Error('%1 LP''si mal kabul için uygun durumda değil. Mevcut durum: %2.', LpNo, Format(LP.Status));
     end;
 
+    internal procedure PrepareReceiptLPs(ReceiptNo: Code[20])
+    begin
+        // Runs inside the posting transaction, without commits. LP contents and
+        // tracking therefore roll back together if standard receipt posting fails.
+        MaterializePendingReceiptLPs(ReceiptNo);
+        PrepareLpReceiptTracking(ReceiptNo);
+    end;
+
     local procedure MaterializePendingReceiptLPs(ReceiptNo: Code[20])
     var
         LP: Record "DOPSWHS LP Header";
@@ -507,13 +511,19 @@ codeunit 72043 "DOPSWHS Receipt Mgmt"
                 if LP.Status <> LP.Status::Open then
                     Error('%1 LP''si mal kabul kaydı için açık durumda değil.', LP."No.");
 
-                GetItemTracking(WhseReceiptLine, LotNo, SerialNo, ExpiryDate);
+                if LP."Receipt Tracking Staged" then begin
+                    LotNo := LP."Pending Receipt Lot No.";
+                    Clear(SerialNo);
+                    ExpiryDate := LP."Pending Receipt Expiry";
+                end else
+                    GetItemTracking(WhseReceiptLine, LotNo, SerialNo, ExpiryDate);
                 LPMgt.AddLine(
                     LP, WhseReceiptLine."Item No.", WhseReceiptLine."Unit of Measure Code",
                     LP."Planned Quantity", LotNo, SerialNo, ExpiryDate);
                 StampReceiptSourceOnLastLpLine(LP."No.", WhseReceiptLine);
                 Clear(LP."Pending Receipt No.");
                 LP."Pending Receipt Line No." := 0;
+                ClearPendingReceiptTracking(LP);
                 LP.Modify(true);
             end;
         end;
@@ -545,7 +555,15 @@ codeunit 72043 "DOPSWHS Receipt Mgmt"
             LP."Pending Receipt Line No." := WhseReceiptLine."Line No.";
             LP."Planned Quantity" := Quantity;
         end;
+        ClearPendingReceiptTracking(LP);
         LP.Modify(true);
+    end;
+
+    local procedure ClearPendingReceiptTracking(var LP: Record "DOPSWHS LP Header")
+    begin
+        Clear(LP."Pending Receipt Lot No.");
+        Clear(LP."Pending Receipt Expiry");
+        LP."Receipt Tracking Staged" := false;
     end;
 
     /// <summary>
@@ -595,6 +613,7 @@ codeunit 72043 "DOPSWHS Receipt Mgmt"
                     Clear(LP."Pending Receipt No.");
                     LP."Pending Receipt Line No." := 0;
                     LP."Planned Quantity" := 0;
+                    ClearPendingReceiptTracking(LP);
                     LP.Modify(true);
                     LPMgt.Unbuild(LP);
                 end;
@@ -1093,6 +1112,7 @@ codeunit 72043 "DOPSWHS Receipt Mgmt"
     /// remain empty drafts until receipt posting succeeds; item/lot/quantity is materialized in
     /// the same transaction as the warehouse receipt.
     /// </summary>
+    [CommitBehavior(CommitBehavior::Error)]
     procedure CreateBulkLPDistribution(var WhseReceiptHeader: Record "Warehouse Receipt Header"; LineNo: Integer; ExpectedQty: Decimal; DistributionJson: Text; TemplateCode: Code[20]; PrintLabels: Boolean; PrinterId: Code[50]): Text
     var
         WhseReceiptLine: Record "Warehouse Receipt Line";
@@ -1112,12 +1132,20 @@ codeunit 72043 "DOPSWHS Receipt Mgmt"
         RowQuantities: Dictionary of [Integer, Decimal];
         EffectiveTemplateCode: Code[20];
         LotNo: Code[50];
-        CommonLotNo: Code[50];
+        GroupId: Text;
+        GroupLots: Dictionary of [Text, Code[50]];
+        GroupSupplierLots: Dictionary of [Text, Code[50]];
+        GroupExpiryDates: Dictionary of [Text, Date];
+        RowLots: Dictionary of [Integer, Code[50]];
+        RowExpiryDates: Dictionary of [Integer, Date];
+        TempAllocation: Record "DOPSWHS LP Line" temporary;
         SupplierLotNo: Code[50];
-        CommonSupplierLotNo: Code[50];
+        ExistingSupplierLotNo: Code[50];
+        GroupSupplierLotNo: Code[50];
         ExpiryDateText: Text;
         ExpiryDate: Date;
-        CommonExpiryDate: Date;
+        GroupExpiryDate: Date;
+        GroupLotNo: Code[50];
         RowQuantity: Decimal;
         DistributionTotal: Decimal;
         OutstandingQty: Decimal;
@@ -1129,6 +1157,8 @@ codeunit 72043 "DOPSWHS Receipt Mgmt"
         OriginalLineNo: Integer;
     begin
         OriginalLineNo := LineNo;
+        // Serialize distribution creation for the same receipt source line.
+        WhseReceiptLine.LockTable();
         if not WhseReceiptLine.Get(WhseReceiptHeader."No.", LineNo) then
             Error('%1 mal kabul belgesinde %2 satırı bulunamadı.', WhseReceiptHeader."No.", LineNo);
         if ExpectedQty <= 0 then
@@ -1184,6 +1214,10 @@ codeunit 72043 "DOPSWHS Receipt Mgmt"
             if RowQuantity <= 0 then
                 Error('%1. LP satırının miktarı sıfırdan büyük olmalıdır.', RowIndex);
 
+            if (StrLen(BulkJsonText(RowObject, 'lotNo')) > MaxStrLen(LotNo)) or
+               (StrLen(BulkJsonText(RowObject, 'supplierLotNo')) > MaxStrLen(SupplierLotNo))
+            then
+                Error('%1. LP satırında lot numaraları en fazla 50 karakter olabilir.', RowIndex);
             LotNo := CopyStr(BulkJsonText(RowObject, 'lotNo'), 1, MaxStrLen(LotNo));
             SupplierLotNo := CopyStr(BulkJsonText(RowObject, 'supplierLotNo'), 1, MaxStrLen(SupplierLotNo));
             ExpiryDateText := BulkJsonText(RowObject, 'expiryDate');
@@ -1192,50 +1226,48 @@ codeunit 72043 "DOPSWHS Receipt Mgmt"
                 if not Evaluate(ExpiryDate, ExpiryDateText, 9) then
                     Error('%1. LP satırının SKT değeri geçersizdir: %2.', RowIndex, ExpiryDateText);
 
-            if LotRequired then begin
-                if RowIndex = 1 then begin
-                    // BADE (16 Eyl 2026): "Lot No Ata" ile ayrılan numara varsa o
-                    // kullanılır ve değiştirilemez; yeni numara yakılmaz.
-                    if LotNo = '' then
-                        LotNo := WhseReceiptLine."DOPSWHS Pending Lot No.";
-                    EnsurePendingLotUnchanged(WhseReceiptLine, LotNo);
-                    if LotNo = '' then begin
-                        LotNo := LotSerialGen.GenerateLotNoForItem(WhseReceiptLine."Item No.");
-                        if LotNo = '' then
-                            Error(
-                                '%1 ürünü için iç lot numara serisi tanımlı değil.',
-                                WhseReceiptLine."Item No.");
-                    end;
-                    CommonLotNo := LotNo;
-                end else begin
-                    if LotNo = '' then
-                        LotNo := CommonLotNo;
-                    if LotNo <> CommonLotNo then
-                        Error(
-                            'Aynı mal kabul satırındaki bütün paletler aynı iç lotu kullanmalıdır. ' +
-                            'Farklı lotları ayrı mal kabul satırlarında işleyin.');
-                end;
-            end else begin
+            if not LotRequired then begin
                 LotNo := '';
                 SupplierLotNo := '';
             end;
-
-            if RowIndex = 1 then begin
-                CommonSupplierLotNo := SupplierLotNo;
-                CommonExpiryDate := ExpiryDate;
-            end else begin
+            GroupId := BulkJsonText(RowObject, 'groupId');
+            if GroupId = '' then
+                GroupId := 'RECEIPT'; // Existing clients send one common group.
+            if GroupLots.ContainsKey(GroupId) then begin
+                GroupLots.Get(GroupId, GroupLotNo);
+                GroupSupplierLots.Get(GroupId, GroupSupplierLotNo);
+                GroupExpiryDates.Get(GroupId, GroupExpiryDate);
+                if LotNo = '' then
+                    LotNo := GroupLotNo;
                 if SupplierLotNo = '' then
-                    SupplierLotNo := CommonSupplierLotNo;
-                if SupplierLotNo <> CommonSupplierLotNo then
-                    Error(
-                        'Aynı mal kabul satırındaki bütün paletler aynı tedarikçi lotunu kullanmalıdır. ' +
-                        'Farklı lotları ayrı mal kabul satırlarında işleyin.');
+                    SupplierLotNo := GroupSupplierLotNo;
                 if ExpiryDate = 0D then
-                    ExpiryDate := CommonExpiryDate;
-                if ExpiryDate <> CommonExpiryDate then
-                    Error(
-                        'Aynı mal kabul satırındaki bütün paletler aynı son kullanma tarihini kullanmalıdır. ' +
-                        'Farklı tarihleri ayrı mal kabul satırlarında işleyin.');
+                    ExpiryDate := GroupExpiryDate;
+                if (LotNo <> GroupLotNo) or (SupplierLotNo <> GroupSupplierLotNo) or
+                   (ExpiryDate <> GroupExpiryDate)
+                then
+                    Error('%1 lot grubundaki LP''lerin lot, tedarikçi lotu ve SKT bilgileri aynı olmalıdır.', GroupId);
+            end else begin
+                if LotRequired then begin
+                    // An explicitly reserved lot belongs to the first group only.
+                    // Further groups get their own number when left blank.
+                    if RowIndex = 1 then begin
+                        if LotNo = '' then
+                            LotNo := WhseReceiptLine."DOPSWHS Pending Lot No.";
+                        EnsurePendingLotUnchanged(WhseReceiptLine, LotNo);
+                    end;
+                    if LotNo = '' then begin
+                        LotNo := LotSerialGen.GenerateLotNoForItem(WhseReceiptLine."Item No.");
+                        if LotNo = '' then
+                            Error('%1 ürünü için iç lot numara serisi tanımlı değil.', WhseReceiptLine."Item No.");
+                    end;
+                end else begin
+                    LotNo := '';
+                    SupplierLotNo := '';
+                end;
+                GroupLots.Add(GroupId, LotNo);
+                GroupSupplierLots.Add(GroupId, SupplierLotNo);
+                GroupExpiryDates.Add(GroupId, ExpiryDate);
             end;
 
             if ExpiryRequired and (ExpiryDate = 0D) then
@@ -1245,6 +1277,17 @@ codeunit 72043 "DOPSWHS Receipt Mgmt"
             if (SupplierLotNo <> '') and (LotNo = '') then
                 Error('%1. LP satırında tedarikçi lotu için iç lot zorunludur.', RowIndex);
 
+            // PersistSupplierLot rejects assigning two suppliers to one internal lot.
+            if SupplierLotNo <> '' then begin
+                GetSupplierLot(WhseReceiptLine, LotNo, ExistingSupplierLotNo);
+                if (ExistingSupplierLotNo <> '') and (ExistingSupplierLotNo <> SupplierLotNo) then
+                    Error('%1 iç lotu daha önce %2 tedarikçi lotuyla eşleştirilmiş. Girilen değer: %3.',
+                        LotNo, ExistingSupplierLotNo, SupplierLotNo);
+                PersistSupplierLot(WhseReceiptLine."Item No.", WhseReceiptLine."Variant Code", LotNo, SupplierLotNo);
+            end;
+            AddReceiptTrackingAllocation(TempAllocation, LotNo, '', ExpiryDate, RowQuantity);
+            RowLots.Add(RowIndex, LotNo);
+            RowExpiryDates.Add(RowIndex, ExpiryDate);
             RowQuantities.Add(RowIndex, RowQuantity);
             DistributionTotal += RowQuantity;
         end;
@@ -1258,14 +1301,13 @@ codeunit 72043 "DOPSWHS Receipt Mgmt"
         if EffectiveTemplateCode = '' then
             EffectiveTemplateCode := 'PALLET-EUR';
 
-        DeleteSourceReservationTracking(WhseReceiptLine);
-        DeleteWarehouseItemTracking(WhseReceiptLine);
-
         // Bu adım yalnız boş LP numaralarını ve planlanan dağılımı hazırlar.
         // Ürün/lot/miktar satırı Mal Kabulü Kaydet başarılı olana kadar LP
         // içine yazılmaz; böylece taslak veya silinen belge stoklu LP bırakmaz.
         for RowIndex := 1 to Rows.Count do begin
             RowQuantities.Get(RowIndex, RowQuantity);
+            RowLots.Get(RowIndex, LotNo);
+            RowExpiryDates.Get(RowIndex, ExpiryDate);
             Clear(LP);
             LPMgt.Build(
                 EffectiveTemplateCode, WhseReceiptHeader."Location Code",
@@ -1273,6 +1315,9 @@ codeunit 72043 "DOPSWHS Receipt Mgmt"
             LP."Pending Receipt No." := WhseReceiptLine."No.";
             LP."Pending Receipt Line No." := WhseReceiptLine."Line No.";
             LP."Planned Quantity" := RowQuantity;
+            LP."Pending Receipt Lot No." := LotNo;
+            LP."Pending Receipt Expiry" := ExpiryDate;
+            LP."Receipt Tracking Staged" := true;
             LP.Modify(true);
 
             CreatedLPNo := LP."No.";
@@ -1285,18 +1330,13 @@ codeunit 72043 "DOPSWHS Receipt Mgmt"
                 WhseReceiptHeader."DOPSWHS LP No." := CreatedLPNo;
         end;
 
-        // Yalnız kaydedilecek toplamı ve ortak takip bilgisini özgün satıra
-        // yaz. Quantity/Source Line No. değişmez; yeni receipt/purchase line yok.
+        // Keep one purchase/receipt line. Allocate tracking quantities by lot;
+        // physical LPs retain their own quantities and staged tracking.
         WhseReceiptLine.Validate("Qty. to Receive", ExpectedQty);
         Clear(WhseReceiptLine."DOPSWHS LP No.");
         Clear(WhseReceiptLine."DOPSWHS Pending Lot No.");
         WhseReceiptLine.Modify(true);
-        if Item."Item Tracking Code" <> '' then
-            PersistItemTrackingEntry(
-                WhseReceiptLine, ExpectedQty, CommonLotNo, '', CommonExpiryDate, CommonSupplierLotNo);
-        if CommonSupplierLotNo <> '' then
-            PersistSupplierLot(
-                WhseReceiptLine."Item No.", WhseReceiptLine."Variant Code", CommonLotNo, CommonSupplierLotNo);
+        PersistReceiptTrackingAllocations(WhseReceiptLine, TempAllocation);
 
         WhseReceiptHeader.Modify(true);
 
@@ -1349,6 +1389,8 @@ codeunit 72043 "DOPSWHS Receipt Mgmt"
         PendingLP.LockTable();
         PendingLP.SetRange("Pending Receipt No.", WhseReceiptLine."No.");
         PendingLP.SetRange("Pending Receipt Line No.", WhseReceiptLine."Line No.");
+        if ConfirmStagedReceiptLine(WhseReceiptLine, QtyToReceive, LotNo, SerialNo, ExpiryDate, BinCode, SupplierLotNo) then
+            exit;
         if PendingLP.Count() > 1 then begin
             PendingLP.CalcSums("Planned Quantity");
             if Abs(PendingLP."Planned Quantity" - QtyToReceive) > 0.00001 then
@@ -1829,8 +1871,8 @@ codeunit 72043 "DOPSWHS Receipt Mgmt"
 
     /// <summary>
     /// Rebuilds receipt tracking from LP metadata before posting. Many physical
-    /// LPs on one source line are aggregated under their common lot, keeping the
-    /// purchase line, receipt line and Item Ledger Entry single.
+    /// LPs on one source line are aggregated per lot, keeping a single purchase
+    /// and receipt line while preserving each lot's tracking quantity.
     /// </summary>
     local procedure PrepareLpReceiptTracking(ReceiptNo: Code[20])
     var
@@ -1870,14 +1912,8 @@ codeunit 72043 "DOPSWHS Receipt Mgmt"
     var
         LPLine: Record "DOPSWHS LP Line";
         LPHeader: Record "DOPSWHS LP Header";
-        Item: Record Item;
-        LpNos: Dictionary of [Code[20], Boolean];
-        CommonLotNo: Code[50];
-        CommonSerialNo: Code[50];
-        CommonExpiryDate: Date;
-        SupplierLotNo: Code[50];
+        TempAllocation: Record "DOPSWHS LP Line" temporary;
         TotalQuantity: Decimal;
-        FirstLine: Boolean;
     begin
         LPLine.SetRange("Source Document Type", LPLine."Source Document Type"::WhseReceipt);
         LPLine.SetRange("Source Document No.", ReceiptLine."No.");
@@ -1885,55 +1921,153 @@ codeunit 72043 "DOPSWHS Receipt Mgmt"
         LPLine.SetRange("Item No.", ReceiptLine."Item No.");
         LPLine.SetRange("Variant Code", ReceiptLine."Variant Code");
         LPLine.SetFilter(Quantity, '>0');
-        if not LPLine.FindSet() then
-            exit(false);
-
-        FirstLine := true;
-        repeat
-            if LPHeader.Get(LPLine."LP No.") and
-               (LPHeader.Status in [LPHeader.Status::Open, LPHeader.Status::Built])
-            then begin
-                if not LpNos.ContainsKey(LPLine."LP No.") then
-                    LpNos.Add(LPLine."LP No.", true);
-                if (LPLine."Unit of Measure" <> '') and
-                   (LPLine."Unit of Measure" <> ReceiptLine."Unit of Measure Code")
-                then
-                    Error(
-                        '%1 LP''sinin ölçü birimi mal kabul satırıyla aynı değil. İşlem durduruldu.',
-                        LPLine."LP No.");
-                if FirstLine then begin
-                    CommonLotNo := LPLine."Lot No.";
-                    CommonSerialNo := LPLine."Serial No.";
-                    CommonExpiryDate := LPLine."Expiration Date";
-                    FirstLine := false;
-                end else
-                    if (LPLine."Lot No." <> CommonLotNo) or
-                       (LPLine."Serial No." <> CommonSerialNo) or
-                       (LPLine."Expiration Date" <> CommonExpiryDate)
+        if LPLine.FindSet() then
+            repeat
+                if LPHeader.Get(LPLine."LP No.") and
+                   (LPHeader.Status in [LPHeader.Status::Open, LPHeader.Status::Built])
+                then begin
+                    if (LPLine."Unit of Measure" <> '') and
+                       (LPLine."Unit of Measure" <> ReceiptLine."Unit of Measure Code")
                     then
-                        Error(
-                            'Aynı mal kabul satırındaki bütün paletler aynı lot ve son kullanma tarihini kullanmalıdır. ' +
-                            'Farklı lotları ayrı mal kabul satırlarında işleyin.');
-                TotalQuantity += LPLine.Quantity;
-            end;
-        until LPLine.Next() = 0;
+                        Error('%1 LP''sinin ölçü birimi mal kabul satırıyla aynı değil. İşlem durduruldu.', LPLine."LP No.");
+                    AddReceiptTrackingAllocation(
+                        TempAllocation, LPLine."Lot No.", LPLine."Serial No.", LPLine."Expiration Date", LPLine.Quantity);
+                    TotalQuantity += LPLine.Quantity;
+                end;
+            until LPLine.Next() = 0;
 
-        if LpNos.Count() <= 1 then
+        if TotalQuantity = 0 then
             exit(false);
         if Abs(TotalQuantity - ReceiptLine."Qty. to Receive") > 0.00001 then
-            Error(
-                'Paletlerin toplam miktarı (%1), kabul miktarına (%2) eşit değil. İşlem durduruldu.',
+            Error('Paletlerin toplam miktarı (%1), kabul miktarına (%2) eşit değil. İşlem durduruldu.',
                 TotalQuantity, ReceiptLine."Qty. to Receive");
+        PersistReceiptTrackingAllocations(ReceiptLine, TempAllocation);
+        exit(true);
+    end;
 
+    local procedure AddReceiptTrackingAllocation(var TempAllocation: Record "DOPSWHS LP Line" temporary; LotNo: Code[50]; SerialNo: Code[50]; ExpiryDate: Date; Quantity: Decimal)
+    var
+        NextLineNo: Integer;
+    begin
+        TempAllocation.Reset();
+        TempAllocation.SetRange("Lot No.", LotNo);
+        TempAllocation.SetRange("Serial No.", SerialNo);
+        if TempAllocation.FindFirst() then begin
+            if TempAllocation."Expiration Date" <> ExpiryDate then
+                Error('%1 lotu için farklı son kullanma tarihleri girilemez.', LotNo);
+            TempAllocation.Quantity += Quantity;
+            TempAllocation.Modify();
+        end else begin
+            TempAllocation.Reset();
+            if TempAllocation.FindLast() then
+                NextLineNo := TempAllocation."Line No.";
+            TempAllocation.Init();
+            TempAllocation."Line No." := NextLineNo + 10000;
+            TempAllocation."Lot No." := LotNo;
+            TempAllocation."Serial No." := SerialNo;
+            TempAllocation."Expiration Date" := ExpiryDate;
+            TempAllocation.Quantity := Quantity;
+            TempAllocation.Insert();
+        end;
+        TempAllocation.Reset();
+    end;
+
+    local procedure PersistReceiptTrackingAllocations(ReceiptLine: Record "Warehouse Receipt Line"; var TempAllocation: Record "DOPSWHS LP Line" temporary)
+    var
+        Item: Record Item;
+        SupplierLotNo: Code[50];
+        SupplierLots: Dictionary of [Code[50], Code[50]];
+    begin
+        // Capture supplier values before replacing reservations, including values
+        // entered directly in BC by legacy clients.
+        TempAllocation.Reset();
+        if TempAllocation.FindSet() then
+            repeat
+                GetSupplierLot(ReceiptLine, TempAllocation."Lot No.", SupplierLotNo);
+                if not SupplierLots.ContainsKey(TempAllocation."Lot No.") then
+                    SupplierLots.Add(TempAllocation."Lot No.", SupplierLotNo);
+            until TempAllocation.Next() = 0;
         DeleteSourceReservationTracking(ReceiptLine);
         DeleteWarehouseItemTracking(ReceiptLine);
-        if Item.Get(ReceiptLine."Item No.") and (Item."Item Tracking Code" <> '') then begin
-            GetSupplierLot(ReceiptLine, CommonLotNo, SupplierLotNo);
-            PersistItemTrackingEntry(
-                ReceiptLine, ReceiptLine."Qty. to Receive", CommonLotNo,
-                CommonSerialNo, CommonExpiryDate, SupplierLotNo);
-        end;
+        if not Item.Get(ReceiptLine."Item No.") or (Item."Item Tracking Code" = '') then
+            exit;
+        if TempAllocation.FindSet() then
+            repeat
+                SupplierLots.Get(TempAllocation."Lot No.", SupplierLotNo);
+                PersistItemTrackingEntry(ReceiptLine, TempAllocation.Quantity, TempAllocation."Lot No.",
+                    TempAllocation."Serial No.", TempAllocation."Expiration Date", SupplierLotNo);
+            until TempAllocation.Next() = 0;
+    end;
+
+    local procedure ConfirmStagedReceiptLine(var ReceiptLine: Record "Warehouse Receipt Line"; QtyToReceive: Decimal; LotNo: Code[50]; SerialNo: Code[50]; ExpiryDate: Date; BinCode: Code[20]; SupplierLotNo: Code[50]): Boolean
+    var
+        LP: Record "DOPSWHS LP Header";
+        ExistingLotNo: Code[50];
+        ExistingSerialNo: Code[50];
+        ExistingSupplierLotNo: Code[50];
+        ExistingExpiryDate: Date;
+    begin
+        LP.SetRange("Pending Receipt No.", ReceiptLine."No.");
+        LP.SetRange("Pending Receipt Line No.", ReceiptLine."Line No.");
+        LP.SetRange("Receipt Tracking Staged", true);
+        if LP.IsEmpty() then
+            exit(false);
+        LP.CalcSums("Planned Quantity");
+        if Abs(LP."Planned Quantity" - QtyToReceive) > 0.00001 then
+            Error('Bu satır için paletlere toplam %1 adet ayrıldı. Kabul miktarı palet toplamıyla aynı olmalıdır.', LP."Planned Quantity");
+        GetItemTracking(ReceiptLine, ExistingLotNo, ExistingSerialNo, ExistingExpiryDate);
+        GetSupplierLot(ReceiptLine, ExistingLotNo, ExistingSupplierLotNo);
+        if ((LotNo <> '') and (LotNo <> ExistingLotNo)) or
+           ((SerialNo <> '') and (SerialNo <> ExistingSerialNo)) or
+           ((SupplierLotNo <> '') and (SupplierLotNo <> ExistingSupplierLotNo)) or
+           ((ExpiryDate <> 0D) and (ExpiryDate <> ExistingExpiryDate))
+        then
+            Error('LP lot dağılımı hazırlanmış. Lot bilgileri tek satır onayıyla değiştirilemez.');
+        if BinCode <> '' then
+            ReceiptLine.Validate("Bin Code", BinCode);
+        ReceiptLine.Validate("Qty. to Receive", QtyToReceive);
+        Clear(ReceiptLine."DOPSWHS LP No.");
+        ReceiptLine.Modify(true);
+        if LP.FindSet(true) then
+            repeat
+                BindLpToReceiptBin(LP, ReceiptLine);
+            until LP.Next() = 0;
+        // A retry of an old single-lot PATCH must never collapse the plan to
+        // the first lot returned by the backward-compatible scalar API fields.
         exit(true);
+    end;
+
+    procedure ReceiptLpAllocations(ReceiptLine: Record "Warehouse Receipt Line"): Text
+    var
+        LP: Record "DOPSWHS LP Header";
+        Allocations: JsonArray;
+        Allocation: JsonObject;
+        ResultText: Text;
+        LotNo: Code[50];
+        SupplierLotNo: Code[50];
+        ExpiryDate: Date;
+    begin
+        LP.SetRange("Pending Receipt No.", ReceiptLine."No.");
+        LP.SetRange("Pending Receipt Line No.", ReceiptLine."Line No.");
+        LP.SetRange("Receipt Tracking Staged", true);
+        if LP.FindSet() then
+            repeat
+                LotNo := LP."Pending Receipt Lot No.";
+                ExpiryDate := LP."Pending Receipt Expiry";
+                GetSupplierLot(ReceiptLine, LotNo, SupplierLotNo);
+                Clear(Allocation);
+                Allocation.Add('lpNo', LP."No.");
+                Allocation.Add('quantity', LP."Planned Quantity");
+                Allocation.Add('lotNo', LotNo);
+                Allocation.Add('supplierLotNo', SupplierLotNo);
+                if ExpiryDate <> 0D then
+                    Allocation.Add('expiryDate', Format(ExpiryDate, 0, 9))
+                else
+                    Allocation.Add('expiryDate', '');
+                Allocations.Add(Allocation);
+            until LP.Next() = 0;
+        Allocations.WriteTo(ResultText);
+        exit(ResultText);
     end;
 
     local procedure BulkJsonText(RowObject: JsonObject; PropertyName: Text): Text
@@ -1996,19 +2130,22 @@ codeunit 72043 "DOPSWHS Receipt Mgmt"
     local procedure SyncSupplierLotsToReservations(WhseReceiptHeader: Record "Warehouse Receipt Header")
     var
         WhseReceiptLine: Record "Warehouse Receipt Line";
-        LotNo: Code[50];
-        SerialNo: Code[50];
+        ReservationEntry: Record "Reservation Entry";
         SupplierLotNo: Code[50];
-        ExpiryDate: Date;
     begin
         WhseReceiptLine.SetRange("No.", WhseReceiptHeader."No.");
         WhseReceiptLine.SetFilter("Qty. to Receive", '>0');
         if WhseReceiptLine.FindSet() then
             repeat
-                GetItemTracking(WhseReceiptLine, LotNo, SerialNo, ExpiryDate);
-                GetSupplierLot(WhseReceiptLine, LotNo, SupplierLotNo);
-                if (LotNo <> '') and (SupplierLotNo <> '') then
-                    PersistSupplierLotOnReservation(WhseReceiptLine, LotNo, SerialNo, SupplierLotNo);
+                ReservationEntry.Reset();
+                SetSourceReservationFilters(ReservationEntry, WhseReceiptLine);
+                ReservationEntry.SetFilter("Lot No.", '<>%1', '');
+                if ReservationEntry.FindSet(true) then
+                    repeat
+                        GetSupplierLot(WhseReceiptLine, ReservationEntry."Lot No.", SupplierLotNo);
+                        if SupplierLotNo <> '' then
+                            SetSupplierLotField(ReservationEntry, SupplierLotNo);
+                    until ReservationEntry.Next() = 0;
             until WhseReceiptLine.Next() = 0;
     end;
 
