@@ -60,6 +60,41 @@ class TerminalLoginTest {
         assertFalse(terminalSessionFresh(login, login - 1))
         assertFalse(terminalSessionFresh(0, login))
     }
+
+    @Test fun `printerless receipt request passes terminal guard with or without configured printers`() {
+        for (printer in listOf("", "ZEBRA-1")) {
+            for (printReceipt in listOf(false, true)) {
+                val request = receiptPostRequest(true, printReceipt, printer, printer)
+                val path = "receipts('R1')/Microsoft.NAV.${request.action}"
+                assertNull(terminalPrintRequestIssue(request.body, path))
+            }
+        }
+    }
+
+    @Test fun `print false cannot bypass printer selection for other actions or malformed flags`() {
+        val receiptPath = "receipts('R1')/Microsoft.NAV.postToPrinter"
+        for (body in listOf(
+            """{"printerId":"","print":true}""",
+            """{"printerId":""}""",
+            """{"printerId":"","print":null}""",
+            """{"printerId":"","print":"false"}""",
+        )) assertNotNull(terminalPrintRequestIssue(body, receiptPath))
+        val noDocumentPrint = """{"printerId":"","print":false}"""
+        for (path in listOf(
+            "receipts('R1')/Microsoft.NAV.postAndCloseLP",
+            "receipts('R1')/Microsoft.NAV.postAndCloseLPWithMte",
+            "receipts('R1')/Microsoft.NAV.printMte",
+            "licensePlates('LP1')/Microsoft.NAV.postToPrinter",
+            "",
+        )) assertNotNull(terminalPrintRequestIssue(noDocumentPrint, path))
+    }
+
+    @Test fun `normal receipt printing still requires the configured printer`() {
+        val missing = receiptPostRequest(false, true, "", "")
+        assertNotNull(terminalPrintRequestIssue(missing.body, "receipts('R1')/Microsoft.NAV.${missing.action}"))
+        val selected = receiptPostRequest(false, true, "DOC01", "LP01")
+        assertNull(terminalPrintRequestIssue(selected.body, "receipts('R1')/Microsoft.NAV.${selected.action}"))
+    }
     @Test fun `locked session blocks warehouse writes but allows PIN login`() {
         assertFalse(terminalSessionRequestAllowed("POST", "receipts('R1')/Microsoft.NAV.post", false))
         assertFalse(terminalSessionRequestAllowed("PATCH", "receiptLines('L1')", false))

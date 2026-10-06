@@ -973,7 +973,7 @@ object BcApi {
                     if (!com.dynops.bcwms.feature.terminalSessionRequestAllowed(method, path,
                             com.dynops.bcwms.feature.TerminalSession.authenticated(context)))
                         return@withContext ApiResult(false, 401, "Oturum süresi doldu. Kullanıcınızı seçip PIN girin.")
-                    val issue = com.dynops.bcwms.feature.terminalPrintRequestIssue(jsonBody)
+                    val issue = com.dynops.bcwms.feature.terminalPrintRequestIssue(jsonBody, path)
                     if (issue != null) return@withContext ApiResult(false, 0, issue)
                 }
                 ensureFreshToken(context)

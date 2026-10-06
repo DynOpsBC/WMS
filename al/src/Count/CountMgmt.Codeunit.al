@@ -814,9 +814,8 @@ codeunit 72050 "DOPSWHS Count Mgmt"
             Error(LPStatusNotCountableErr, LpNo, Format(LPHeader.Status));
 
         FoundInOtherBin := (LPHeader."Bin Code" <> '') and (LPHeader."Bin Code" <> BinCode);
-        // Seed the original bin without inventing a zero count for the operator.
-        if FoundInOtherBin and RelatedBinInCountScope(CountHeader, LPHeader."Bin Code") then
-            MergeV2BinSnapshot(SheetNo, LPHeader."Bin Code", false);
+        // The registered bin is evidence on the finding, not an instruction to
+        // count that bin. Only an explicit bin selection/scan expands the sheet.
 
         // Rafsız LP'ye okutulan raf yazılır (AttachLpToBin ile aynı).
         if LPHeader."Bin Code" = '' then begin
@@ -1239,7 +1238,7 @@ codeunit 72050 "DOPSWHS Count Mgmt"
                 if not IsSlotCounted(CountLine, CounterSlot) then
                     RecordCount(SheetNo, CountLine."Line No.", CounterSlot, 0);
             until CountLine.Next() = 0;
-        // Related bins are only seeded, never counted or deducted automatically.
+        // Refresh only bins already opened/scanned in this document.
         EnsureV2BinCoverage(SheetNo, false);
     end;
 
@@ -1323,92 +1322,25 @@ codeunit 72050 "DOPSWHS Count Mgmt"
     var
         Header: Record "DOPSWHS Count Sheet Header";
         Line: Record "DOPSWHS Count Sheet Line";
-        RequiredSource: Record "DOPSWHS Count Sheet Line" temporary;
-        Entry: Record "Warehouse Entry";
-        Balances: Dictionary of [Code[20], Decimal];
         Bins: List of [Code[20]];
-        RelatedBin: Code[20];
-        Slot: Integer;
-        RequiredLineNo: Integer;
-        HasSurplus: Boolean;
+        SelectedBin: Code[20];
     begin
         Header.Get(SheetNo);
         if not Header."V2 Scan Mode" then
             exit;
         EnsureV2LpSystemSnapshotsAreSafe(SheetNo);
+        // BADE: a surplus/found LP must not pull every bin holding the same
+        // item/lot into this count (CNT-20261006094232). Keep full stock checks
+        // within bins the operator opened or scanned. Found From Bin preserves
+        // the source as evidence; LP findings still block inventory posting.
         Line.SetRange("Sheet No.", SheetNo);
         if Line.FindSet() then
             repeat
                 if not Bins.Contains(Line."Bin Code") then
                     Bins.Add(Line."Bin Code");
-                HasSurplus := false;
-                for Slot := 1 to 3 do
-                    if IsSlotCounted(Line, Slot) and (CountedQtyForSlot(Line, Slot) > Line."System Qty") then
-                        HasSurplus := true;
-                if HasSurplus then begin
-                    Clear(Balances);
-                    Entry.Reset();
-                    Entry.SetRange("Location Code", Header."Location Code");
-                    Entry.SetFilter("Bin Code", '<>%1&<>%2', Line."Bin Code", '');
-                    Entry.SetRange("Item No.", Line."Item No.");
-                    Entry.SetRange("Variant Code", Line."Variant Code");
-                    Entry.SetRange("Unit of Measure Code", Line."Unit of Measure Code");
-                    Entry.SetRange("Lot No.", Line."Lot No.");
-                    Entry.SetRange("Serial No.", Line."Serial No.");
-                    if Entry.FindSet() then
-                        repeat
-                            if Balances.ContainsKey(Entry."Bin Code") then
-                                Balances.Set(Entry."Bin Code", Balances.Get(Entry."Bin Code") + Entry.Quantity)
-                            else
-                                Balances.Add(Entry."Bin Code", Entry.Quantity);
-                        until Entry.Next() = 0;
-                    // BADE (17 Eyl 2026): a related bin outside the sheet's zone
-                    // filter cannot be counted here; it used to raise
-                    // BinOutsideZoneFilterErr and block finishing the bin. It is
-                    // skipped instead — with "Count Relocates Found Stock" it is
-                    // a relocation source at posting, otherwise the surplus posts
-                    // here and that zone's own count deducts it there.
-                    foreach RelatedBin in Balances.Keys() do
-                        if (Balances.Get(RelatedBin) > 0) and RelatedBinInCountScope(Header, RelatedBin) then begin
-                            if not Bins.Contains(RelatedBin) then
-                                Bins.Add(RelatedBin);
-                            RequiredLineNo += 1;
-                            RequiredSource := Line;
-                            RequiredSource."Line No." := RequiredLineNo;
-                            RequiredSource."Bin Code" := RelatedBin;
-                            RequiredSource.Insert(false);
-                        end;
-                end;
             until Line.Next() = 0;
-        foreach RelatedBin in Bins do
-            MergeV2BinSnapshot(SheetNo, RelatedBin, ValidateOnly);
-        // Inconsistent Bin Content data must not silently hide a positive
-        // warehouse balance in the related bin from the required count.
-        if RequiredSource.FindSet() then
-            repeat
-                Line.Reset();
-                Line.SetRange("Sheet No.", SheetNo);
-                Line.SetRange("Bin Code", RequiredSource."Bin Code");
-                Line.SetRange("Item No.", RequiredSource."Item No.");
-                Line.SetRange("Variant Code", RequiredSource."Variant Code");
-                Line.SetRange("Unit of Measure Code", RequiredSource."Unit of Measure Code");
-                Line.SetRange("Lot No.", RequiredSource."Lot No.");
-                Line.SetRange("Serial No.", RequiredSource."Serial No.");
-                Line.SetFilter("System Qty", '>%1', 0);
-                if Line.IsEmpty() then
-                    Error('Raf %1 madde %2 stok dağılımı eksik. Business Central raf içeriğini kontrol edin; diğer rafın sayımı atlanamaz.', RequiredSource."Bin Code", RequiredSource."Item No.");
-            until RequiredSource.Next() = 0;
-    end;
-
-    local procedure RelatedBinInCountScope(CountHeader: Record "DOPSWHS Count Sheet Header"; BinCode: Code[20]): Boolean
-    var
-        Bin: Record Bin;
-    begin
-        if CountHeader."Zone Filter" = '' then
-            exit(true);
-        if not Bin.Get(CountHeader."Location Code", BinCode) then
-            exit(false);
-        exit(Bin."Zone Code" = CountHeader."Zone Filter");
+        foreach SelectedBin in Bins do
+            MergeV2BinSnapshot(SheetNo, SelectedBin, ValidateOnly);
     end;
 
     procedure CompleteCounter(SheetNo: Code[20]; CounterSlot: Integer)

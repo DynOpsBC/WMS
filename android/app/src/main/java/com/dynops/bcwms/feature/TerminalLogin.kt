@@ -35,9 +35,13 @@ internal fun terminalProfileMatches(profile: JSONObject, username: String, termi
     profile.optString("error").isBlank() && profile.optString("userId") == username &&
         username.isNotBlank() && terminal.isNotBlank() && profile.optString("terminalCode") == terminal
 
-internal fun terminalPrintRequestIssue(body: String?): String? {
+internal fun terminalPrintRequestIssue(body: String?, path: String = ""): String? {
     val json = body?.let { runCatching { JSONObject(it) }.getOrNull() } ?: return null
     if (json.has("printLabels") && !json.optBoolean("printLabels")) return null
+    // Receipt postToPrinter(print=false) posts/closes LPs without printing.
+    // Do not apply this exemption to postAndCloseLP: it can still print LP labels.
+    if (path.startsWith("receipts(") && path.endsWith(")/Microsoft.NAV.postToPrinter") &&
+        json.opt("print") == false) return null
     return if (json.has("printerId") && json.optString("printerId").isBlank())
         "Bu terminal için yazıcı seçilmemiş. BC terminal kartında yazıcı seçin ve yeniden giriş yapın."
     else null
