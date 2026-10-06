@@ -720,21 +720,33 @@ codeunit 72046 "DOPSWHS Pick Mgmt"
         end;
     end;
 
-    /// <summary>Lot takipli toplama satırlarında mobil lot seçimini zorunlu kılar.</summary>
+    /// <summary>Ambar lot takibini ve satıra atanmış lotu toplamada korur.</summary>
     procedure PickLineRequiresLot(PickLine: Record "Warehouse Activity Line"): Boolean
     var
         Item: Record Item;
         ItemTrackingCode: Record "Item Tracking Code";
+        WhseItemTrackingSetup: Record "Item Tracking Setup";
+        ItemTrackingMgt: Codeunit "Item Tracking Management";
     begin
+        if PickLine."Lot No." <> '' then
+            exit(true);
         if not Item.Get(PickLine."Item No.") then
             exit(false);
         if Item."Item Tracking Code" = '' then
             exit(false);
         if not ItemTrackingCode.Get(Item."Item Tracking Code") then
             exit(false);
+        // Hiç ambar takibi yoksa standart Lot No. doğrulaması lotu reddeder;
+        // yalnız stok/satış takibi bu satırda lot girişini zorunlu kılamaz.
+        if not ItemTrackingMgt.GetWhseItemTrkgSetup(PickLine."Item No.", WhseItemTrackingSetup) then
+            exit(false);
+
+        // Seri/paket ambar takibi açıkken BC, satış lotunu tamamlayıcı takip
+        // bilgisi olarak isteyebilir (TestNonSpecificItemTracking). Bu geçerli
+        // kombinasyonlarda mevcut stok/satış lot zorunluluğunu koru.
         exit(
+            WhseItemTrackingSetup."Lot No. Required" or
             ItemTrackingCode."Lot Specific Tracking" or
-            ItemTrackingCode."Lot Warehouse Tracking" or
             ItemTrackingCode."Lot Sales Outbound Tracking");
     end;
 

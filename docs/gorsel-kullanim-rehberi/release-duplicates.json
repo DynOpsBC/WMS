@@ -1,0 +1,482 @@
+[
+  {
+    "size": 1987343,
+    "sha256": "e73c7db5834b87d262a0973be1271827d0b0d6dee9a04b86843b83cb207cbb9f",
+    "paths": [
+      "WMS-bade-release-159/releases/al/DynamicsOps_BCWMSApp_1.14.0.36.app",
+      "WMS-bade/releases/al/DynamicsOps_BCWMSApp_1.14.0.36.app",
+      "WMS/releases/al/DynamicsOps_BCWMSApp_1.14.0.36.app",
+      "WMS-bade-release-142/releases/al/DynamicsOps_BCWMSApp_1.14.0.36.app",
+      "WMS-bade-release-175/releases/al/DynamicsOps_BCWMSApp_1.14.0.36.app",
+      "WMS-main/releases/al/DynamicsOps_BCWMSApp_1.14.0.36.app",
+      "WMS-emu/releases/al/DynamicsOps_BCWMSApp_1.14.0.36.app"
+    ]
+  },
+  {
+    "size": 1918847,
+    "sha256": "19a8b0e56c868fe3b77123341147254896ebe16598cde681b2d0bb69ca5f4654",
+    "paths": [
+      "WMS-bade-release-159/releases/al/DynamicsOps_BCWMSApp_1.14.0.25.app",
+      "WMS-bade/releases/al/DynamicsOps_BCWMSApp_1.14.0.25.app",
+      "WMS/releases/al/DynamicsOps_BCWMSApp_1.14.0.25.app",
+      "WMS-bade-release-142/releases/al/DynamicsOps_BCWMSApp_1.14.0.25.app",
+      "WMS-bade-release-175/releases/al/DynamicsOps_BCWMSApp_1.14.0.25.app",
+      "WMS-main/releases/al/DynamicsOps_BCWMSApp_1.14.0.25.app",
+      "WMS-emu/releases/al/DynamicsOps_BCWMSApp_1.14.0.25.app"
+    ]
+  },
+  {
+    "size": 4095667,
+    "sha256": "283edb36629f3b9d03f8c90180889fc52334582fceef8f9de8900df5ca06f3c5",
+    "paths": [
+      "WMS-bade-release-159/releases/docs/BCWMS-El-Terminali-Kullanici-Kilavuzu.zip",
+      "WMS-bade/releases/docs/BCWMS-El-Terminali-Kullanici-Kilavuzu.zip",
+      "WMS/releases/docs/BCWMS-El-Terminali-Kullanici-Kilavuzu.zip",
+      "WMS-bade-release-142/releases/docs/BCWMS-El-Terminali-Kullanici-Kilavuzu.zip",
+      "WMS-bade-release-175/releases/docs/BCWMS-El-Terminali-Kullanici-Kilavuzu.zip",
+      "WMS-main/releases/docs/BCWMS-El-Terminali-Kullanici-Kilavuzu.zip",
+      "WMS-emu/releases/docs/BCWMS-El-Terminali-Kullanici-Kilavuzu.zip"
+    ]
+  },
+  {
+    "size": 12503136,
+    "sha256": "563652d3a973d2cd3bfcc3509d1cfc9aeb462b85eed276a7a935917f1a6489d7",
+    "paths": [
+      "WMS-bade-release-159/releases/android/BCWMS-BADE-1.14.61-RELEASE.apk",
+      "WMS-bade/releases/android/BCWMS-BADE-1.14.61-RELEASE.apk",
+      "WMS/releases/android/BCWMS-BADE-1.14.61-RELEASE.apk",
+      "WMS-bade-release-142/releases/android/BCWMS-BADE-1.14.61-RELEASE.apk",
+      "WMS-bade-release-175/releases/android/BCWMS-BADE-1.14.61-RELEASE.apk",
+      "WMS-main/releases/android/BCWMS-BADE-1.14.61-RELEASE.apk",
+      "WMS-emu/releases/android/BCWMS-BADE-1.14.61-RELEASE.apk"
+    ]
+  },
+  {
+    "size": 12503136,
+    "sha256": "a88318ba7bc3899d641a9548cf409e749791c731589e590c39c129b435498654",
+    "paths": [
+      "WMS-bade-release-159/releases/android/BCWMS-EMU-1.14.64-RELEASE.apk",
+      "WMS-bade/releases/android/BCWMS-EMU-1.14.64-RELEASE.apk",
+      "WMS/releases/android/BCWMS-EMU-1.14.64-RELEASE.apk",
+      "WMS-bade-release-142/releases/android/BCWMS-EMU-1.14.64-RELEASE.apk",
+      "WMS-bade-release-175/releases/android/BCWMS-EMU-1.14.64-RELEASE.apk",
+      "WMS-main/releases/android/BCWMS-EMU-1.14.64-RELEASE.apk",
+      "WMS-emu/releases/android/BCWMS-EMU-1.14.64-RELEASE.apk"
+    ]
+  },
+  {
+    "size": 12503136,
+    "sha256": "b7bfba1383d8abfbd282c5594bf248d2f57ec8c0e7ed906bcaeb9637dc01408c",
+    "paths": [
+      "WMS-bade-release-159/releases/android/BCWMS-BADE-1.14.59-RELEASE.apk",
+      "WMS-bade/releases/android/BCWMS-BADE-1.14.59-RELEASE.apk",
+      "WMS/releases/android/BCWMS-BADE-1.14.59-RELEASE.apk",
+      "WMS-bade-release-142/releases/android/BCWMS-BADE-1.14.59-RELEASE.apk",
+      "WMS-bade-release-175/releases/android/BCWMS-BADE-1.14.59-RELEASE.apk",
+      "WMS-main/releases/android/BCWMS-BADE-1.14.59-RELEASE.apk",
+      "WMS-emu/releases/android/BCWMS-BADE-1.14.59-RELEASE.apk"
+    ]
+  },
+  {
+    "size": 12503136,
+    "sha256": "e5125c80478a659732801c9bfa312a95f8eab638927f9bbeb0a89f6e3383d615",
+    "paths": [
+      "WMS-bade-release-159/releases/android/BCWMS-BADE-1.14.65-RELEASE.apk",
+      "WMS-bade/releases/android/BCWMS-BADE-1.14.65-RELEASE.apk",
+      "WMS/releases/android/BCWMS-BADE-1.14.65-RELEASE.apk",
+      "WMS-bade-release-142/releases/android/BCWMS-BADE-1.14.65-RELEASE.apk",
+      "WMS-bade-release-175/releases/android/BCWMS-BADE-1.14.65-RELEASE.apk",
+      "WMS-main/releases/android/BCWMS-BADE-1.14.65-RELEASE.apk",
+      "WMS-emu/releases/android/BCWMS-BADE-1.14.65-RELEASE.apk"
+    ]
+  },
+  {
+    "size": 12503136,
+    "sha256": "237821ca48acbba6c88375706e62b12e53bf7b686b91f0652bcbe93d8156b94b",
+    "paths": [
+      "WMS-bade-release-159/releases/android/BCWMS-BADE-1.14.60-RELEASE.apk",
+      "WMS-bade/releases/android/BCWMS-BADE-1.14.60-RELEASE.apk",
+      "WMS/releases/android/BCWMS-BADE-1.14.60-RELEASE.apk",
+      "WMS-bade-release-142/releases/android/BCWMS-BADE-1.14.60-RELEASE.apk",
+      "WMS-bade-release-175/releases/android/BCWMS-BADE-1.14.60-RELEASE.apk",
+      "WMS-main/releases/android/BCWMS-BADE-1.14.60-RELEASE.apk",
+      "WMS-emu/releases/android/BCWMS-BADE-1.14.60-RELEASE.apk"
+    ]
+  },
+  {
+    "size": 12503136,
+    "sha256": "6daae310a5bc68e2694967f9ee238e2db47feea6781fd8456729a11cde90b512",
+    "paths": [
+      "WMS-bade-release-159/releases/android/BCWMS-BADE-1.14.63-RELEASE.apk",
+      "WMS-bade/releases/android/BCWMS-BADE-1.14.63-RELEASE.apk",
+      "WMS/releases/android/BCWMS-BADE-1.14.63-RELEASE.apk",
+      "WMS-bade-release-142/releases/android/BCWMS-BADE-1.14.63-RELEASE.apk",
+      "WMS-bade-release-175/releases/android/BCWMS-BADE-1.14.63-RELEASE.apk",
+      "WMS-main/releases/android/BCWMS-BADE-1.14.63-RELEASE.apk",
+      "WMS-emu/releases/android/BCWMS-BADE-1.14.63-RELEASE.apk"
+    ]
+  },
+  {
+    "size": 12503136,
+    "sha256": "1b2408f966f3934cf5e465b28eb2c28676ab2b888cd5f17a416559d62877b49f",
+    "paths": [
+      "WMS-bade-release-159/releases/android/BCWMS-EMU-1.14.63-RELEASE.apk",
+      "WMS-bade/releases/android/BCWMS-EMU-1.14.63-RELEASE.apk",
+      "WMS/releases/android/BCWMS-EMU-1.14.63-RELEASE.apk",
+      "WMS-bade-release-142/releases/android/BCWMS-EMU-1.14.63-RELEASE.apk",
+      "WMS-bade-release-175/releases/android/BCWMS-EMU-1.14.63-RELEASE.apk",
+      "WMS-main/releases/android/BCWMS-EMU-1.14.63-RELEASE.apk",
+      "WMS-emu/releases/android/BCWMS-EMU-1.14.63-RELEASE.apk"
+    ]
+  },
+  {
+    "size": 12535908,
+    "sha256": "c940bf98d798fecb2221466b314a9f6a3559c9ac86962722e2d0fffbe06e69a4",
+    "paths": [
+      "WMS-bade-release-159/releases/android/BCWMS-EMU-1.14.68-RELEASE.apk",
+      "WMS-bade/releases/android/BCWMS-EMU-1.14.68-RELEASE.apk",
+      "WMS/releases/android/BCWMS-EMU-1.14.68-RELEASE.apk",
+      "WMS-bade-release-142/releases/android/BCWMS-EMU-1.14.68-RELEASE.apk",
+      "WMS-bade-release-175/releases/android/BCWMS-EMU-1.14.68-RELEASE.apk",
+      "WMS-main/releases/android/BCWMS-EMU-1.14.68-RELEASE.apk",
+      "WMS-emu/releases/android/BCWMS-EMU-1.14.68-RELEASE.apk"
+    ]
+  },
+  {
+    "size": 12535908,
+    "sha256": "b4c46192c8b7201e76bf1aac280a98b19f840d88dace6c09474aa560756d32e1",
+    "paths": [
+      "WMS-bade-release-159/releases/android/BCWMS-EMU-1.14.69-RELEASE.apk",
+      "WMS-bade/releases/android/BCWMS-EMU-1.14.69-RELEASE.apk",
+      "WMS/releases/android/bcwms-1.14.69-emu.apk",
+      "WMS/releases/android/BCWMS-EMU-1.14.69-RELEASE.apk",
+      "WMS-bade-release-142/releases/android/BCWMS-EMU-1.14.69-RELEASE.apk",
+      "WMS-bade-release-175/releases/android/BCWMS-EMU-1.14.69-RELEASE.apk",
+      "WMS-main/releases/android/BCWMS-EMU-1.14.69-RELEASE.apk",
+      "WMS-emu/releases/android/BCWMS-EMU-1.14.69-RELEASE.apk"
+    ]
+  },
+  {
+    "size": 12535904,
+    "sha256": "9486e95fda9e9c1b157c974f8b0b1658962a58a6ef1e937b44d78dd74cdb9de8",
+    "paths": [
+      "WMS-bade-release-159/releases/android/BCWMS-BADE-1.14.68-RELEASE.apk",
+      "WMS-bade/releases/android/BCWMS-BADE-1.14.68-RELEASE.apk",
+      "WMS/releases/android/BCWMS-BADE-1.14.68-RELEASE.apk",
+      "WMS-bade-release-142/releases/android/BCWMS-BADE-1.14.68-RELEASE.apk",
+      "WMS-bade-release-175/releases/android/BCWMS-BADE-1.14.68-RELEASE.apk",
+      "WMS-main/releases/android/BCWMS-BADE-1.14.68-RELEASE.apk",
+      "WMS-emu/releases/android/BCWMS-BADE-1.14.68-RELEASE.apk"
+    ]
+  },
+  {
+    "size": 12535904,
+    "sha256": "80ee60064843155f754d70f8d28e091700ac54ce8941fe3c7678b1f3998756a1",
+    "paths": [
+      "WMS-bade-release-159/releases/android/BCWMS-BADE-1.14.69-RELEASE.apk",
+      "WMS-bade/releases/android/BCWMS-BADE-1.14.69-RELEASE.apk",
+      "WMS/releases/android/bcwms-bade-1.14.69-golive-release.apk",
+      "WMS/releases/android/BCWMS-BADE-1.14.69-RELEASE.apk",
+      "WMS/releases/android/bcwms-1.14.69-bade.apk",
+      "WMS-bade-release-142/releases/android/BCWMS-BADE-1.14.69-RELEASE.apk",
+      "WMS-bade-release-175/releases/android/BCWMS-BADE-1.14.69-RELEASE.apk",
+      "WMS-main/releases/android/BCWMS-BADE-1.14.69-RELEASE.apk",
+      "WMS-emu/releases/android/BCWMS-BADE-1.14.69-RELEASE.apk"
+    ]
+  },
+  {
+    "size": 31200766,
+    "sha256": "951498fc5437916003debc1dc67d6225a68c2e771faacfdb073805834b4ce360",
+    "paths": [
+      "WMS-bade-release-159/releases/android/bcwms-bade-1.12.0-guided-pick-packing-release.apk",
+      "WMS-bade/releases/android/bcwms-bade-1.12.0-guided-pick-packing-release.apk",
+      "WMS/releases/android/bcwms-bade-1.12.0-guided-pick-packing-release.apk",
+      "WMS-bade-release-142/releases/android/bcwms-bade-1.12.0-guided-pick-packing-release.apk",
+      "WMS-bade-release-175/releases/android/bcwms-bade-1.12.0-guided-pick-packing-release.apk",
+      "WMS-main/releases/android/bcwms-bade-1.12.0-guided-pick-packing-release.apk",
+      "WMS-emu/releases/android/bcwms-bade-1.12.0-guided-pick-packing-release.apk"
+    ]
+  },
+  {
+    "size": 12503132,
+    "sha256": "650436e87ef2a4117569e947e72289790b198abcecc9856e7fb16f6dec7df284",
+    "paths": [
+      "WMS-bade-release-159/releases/android/BCWMS-BADE-1.14.64-RELEASE.apk",
+      "WMS-bade/releases/android/BCWMS-BADE-1.14.64-RELEASE.apk",
+      "WMS/releases/android/BCWMS-BADE-1.14.64-RELEASE.apk",
+      "WMS-bade-release-142/releases/android/BCWMS-BADE-1.14.64-RELEASE.apk",
+      "WMS-bade-release-175/releases/android/BCWMS-BADE-1.14.64-RELEASE.apk",
+      "WMS-main/releases/android/BCWMS-BADE-1.14.64-RELEASE.apk",
+      "WMS-emu/releases/android/BCWMS-BADE-1.14.64-RELEASE.apk"
+    ]
+  },
+  {
+    "size": 12519520,
+    "sha256": "c6c93308b3126811e43dc7f9714d32a0f5c492dfbce771f1b9dd59cf185e916f",
+    "paths": [
+      "WMS-bade-release-159/releases/android/BCWMS-EMU-1.14.67-RELEASE.apk",
+      "WMS-bade/releases/android/BCWMS-EMU-1.14.67-RELEASE.apk",
+      "WMS/releases/android/BCWMS-EMU-1.14.67-RELEASE.apk",
+      "WMS-bade-release-142/releases/android/BCWMS-EMU-1.14.67-RELEASE.apk",
+      "WMS-bade-release-175/releases/android/BCWMS-EMU-1.14.67-RELEASE.apk",
+      "WMS-main/releases/android/BCWMS-EMU-1.14.67-RELEASE.apk",
+      "WMS-emu/releases/android/BCWMS-EMU-1.14.67-RELEASE.apk"
+    ]
+  },
+  {
+    "size": 12519520,
+    "sha256": "4984b94e99aa0d09dc0022e2b7b6d39c5eb2b1588847fd1a15ba6e856c160d1c",
+    "paths": [
+      "WMS-bade-release-159/releases/android/BCWMS-BADE-1.14.67-RELEASE.apk",
+      "WMS-bade/releases/android/BCWMS-BADE-1.14.67-RELEASE.apk",
+      "WMS/releases/android/BCWMS-BADE-1.14.67-RELEASE.apk",
+      "WMS-bade-release-142/releases/android/BCWMS-BADE-1.14.67-RELEASE.apk",
+      "WMS-bade-release-175/releases/android/BCWMS-BADE-1.14.67-RELEASE.apk",
+      "WMS-main/releases/android/BCWMS-BADE-1.14.67-RELEASE.apk",
+      "WMS-emu/releases/android/BCWMS-BADE-1.14.67-RELEASE.apk"
+    ]
+  },
+  {
+    "size": 12519520,
+    "sha256": "232cf3a8d42f1ce82ab5b24d362104e55327a26ca79f6a489d7c745d70742fd5",
+    "paths": [
+      "WMS-bade-release-159/releases/android/BCWMS-EMU-1.14.66-RELEASE.apk",
+      "WMS-bade/releases/android/BCWMS-EMU-1.14.66-RELEASE.apk",
+      "WMS/releases/android/BCWMS-EMU-1.14.66-RELEASE.apk",
+      "WMS-bade-release-142/releases/android/BCWMS-EMU-1.14.66-RELEASE.apk",
+      "WMS-bade-release-175/releases/android/BCWMS-EMU-1.14.66-RELEASE.apk",
+      "WMS-main/releases/android/BCWMS-EMU-1.14.66-RELEASE.apk",
+      "WMS-emu/releases/android/BCWMS-EMU-1.14.66-RELEASE.apk"
+    ]
+  },
+  {
+    "size": 31266302,
+    "sha256": "7f3e63615ff731709cdc4b1fd797c1ae38afb90d301245e79592062e26e06fba",
+    "paths": [
+      "WMS-bade-release-159/releases/android/bcwms-bade-1.12.1-turkce-giris-hiz-release.apk",
+      "WMS-bade/releases/android/bcwms-bade-1.12.1-turkce-giris-hiz-release.apk",
+      "WMS/releases/android/bcwms-bade-1.12.1-turkce-giris-hiz-release.apk",
+      "WMS-bade-release-142/releases/android/bcwms-bade-1.12.1-turkce-giris-hiz-release.apk",
+      "WMS-bade-release-175/releases/android/bcwms-bade-1.12.1-turkce-giris-hiz-release.apk",
+      "WMS-main/releases/android/bcwms-bade-1.12.1-turkce-giris-hiz-release.apk",
+      "WMS-emu/releases/android/bcwms-bade-1.12.1-turkce-giris-hiz-release.apk"
+    ]
+  },
+  {
+    "size": 31266314,
+    "sha256": "4a3f02a8b085f1c7cc15268826e0ad42c231d68a39f0224f22843c6f186765e3",
+    "paths": [
+      "WMS-bade-release-159/releases/android/bcwms-dynops-1.12.1-turkce-giris-hiz-release.apk",
+      "WMS-bade/releases/android/bcwms-dynops-1.12.1-turkce-giris-hiz-release.apk",
+      "WMS/releases/android/bcwms-dynops-1.12.1-turkce-giris-hiz-release.apk",
+      "WMS-bade-release-142/releases/android/bcwms-dynops-1.12.1-turkce-giris-hiz-release.apk",
+      "WMS-bade-release-175/releases/android/bcwms-dynops-1.12.1-turkce-giris-hiz-release.apk",
+      "WMS-main/releases/android/bcwms-dynops-1.12.1-turkce-giris-hiz-release.apk",
+      "WMS-emu/releases/android/bcwms-dynops-1.12.1-turkce-giris-hiz-release.apk"
+    ]
+  },
+  {
+    "size": 12503140,
+    "sha256": "6a4c3dac1469548fc4873405a0240848208e72f897989e23ffb82a146b96966c",
+    "paths": [
+      "WMS-bade-release-159/releases/android/BCWMS-EMU-1.14.62-RELEASE.apk",
+      "WMS-bade/releases/android/BCWMS-EMU-1.14.62-RELEASE.apk",
+      "WMS/releases/android/BCWMS-EMU-1.14.62-RELEASE.apk",
+      "WMS-bade-release-142/releases/android/BCWMS-EMU-1.14.62-RELEASE.apk",
+      "WMS-bade-release-175/releases/android/BCWMS-EMU-1.14.62-RELEASE.apk",
+      "WMS-main/releases/android/BCWMS-EMU-1.14.62-RELEASE.apk",
+      "WMS-emu/releases/android/BCWMS-EMU-1.14.62-RELEASE.apk"
+    ]
+  },
+  {
+    "size": 12503140,
+    "sha256": "d8a3efa42002113f38de7a740aaea43d3bc5be9e7196e1b5348966633c95582b",
+    "paths": [
+      "WMS-bade-release-159/releases/android/BCWMS-EMU-1.14.65-RELEASE.apk",
+      "WMS-bade/releases/android/BCWMS-EMU-1.14.65-RELEASE.apk",
+      "WMS/releases/android/BCWMS-EMU-1.14.65-RELEASE.apk",
+      "WMS-bade-release-142/releases/android/BCWMS-EMU-1.14.65-RELEASE.apk",
+      "WMS-bade-release-175/releases/android/BCWMS-EMU-1.14.65-RELEASE.apk",
+      "WMS-main/releases/android/BCWMS-EMU-1.14.65-RELEASE.apk",
+      "WMS-emu/releases/android/BCWMS-EMU-1.14.65-RELEASE.apk"
+    ]
+  },
+  {
+    "size": 12486752,
+    "sha256": "166efb8c033b215272646636fe273d633b482b429843bf237d2e1ee97ce636d1",
+    "paths": [
+      "WMS-bade-release-159/releases/android/BCWMS-BADE-1.14.58-RELEASE.apk",
+      "WMS-bade/releases/android/BCWMS-BADE-1.14.58-RELEASE.apk",
+      "WMS/releases/android/BCWMS-BADE-1.14.58-RELEASE.apk",
+      "WMS-bade-release-142/releases/android/BCWMS-BADE-1.14.58-RELEASE.apk",
+      "WMS-bade-release-175/releases/android/BCWMS-BADE-1.14.58-RELEASE.apk",
+      "WMS-main/releases/android/BCWMS-BADE-1.14.58-RELEASE.apk",
+      "WMS-emu/releases/android/BCWMS-BADE-1.14.58-RELEASE.apk"
+    ]
+  },
+  {
+    "size": 12519516,
+    "sha256": "9f193533fba9a17b6b24f9a2bad2f1ba41fdff25bec8d4db065077e3bd81e484",
+    "paths": [
+      "WMS-bade-release-159/releases/android/BCWMS-BADE-1.14.66-RELEASE.apk",
+      "WMS-bade/releases/android/BCWMS-BADE-1.14.66-RELEASE.apk",
+      "WMS/releases/android/BCWMS-BADE-1.14.66-RELEASE.apk",
+      "WMS-bade-release-142/releases/android/BCWMS-BADE-1.14.66-RELEASE.apk",
+      "WMS-bade-release-175/releases/android/BCWMS-BADE-1.14.66-RELEASE.apk",
+      "WMS-main/releases/android/BCWMS-BADE-1.14.66-RELEASE.apk",
+      "WMS-emu/releases/android/BCWMS-BADE-1.14.66-RELEASE.apk"
+    ]
+  },
+  {
+    "size": 63900085,
+    "sha256": "af18719b05b651537d264f8d128fb89330df6475ebb6c0586b7a9871b030564c",
+    "paths": [
+      "WMS-bade-release-159/releases/windows/bcwms-print-agent-1.0.0-win-x64.zip",
+      "WMS-bade-release-159/releases/customer/BADE-Yazici-Tek-Tik-Kurulum/bcwms-print-agent-1.0.0-win-x64.zip",
+      "WMS-bade-release-159/releases/customer/BADE-Yazici-Tek-Tik-Kurulum 4/bcwms-print-agent-1.0.0-win-x64.zip",
+      "WMS-bade-release-159/releases/customer/BADE-Yazici-Tek-Tik-Kurulum 3/bcwms-print-agent-1.0.0-win-x64.zip",
+      "WMS-bade-release-159/releases/customer/BADE-Yazici-Tek-Tik-Kurulum 2/bcwms-print-agent-1.0.0-win-x64.zip",
+      "WMS-bade/releases/windows/bcwms-print-agent-1.0.0-win-x64.zip",
+      "WMS-bade/releases/customer/BADE-Yazici-Tek-Tik-Kurulum/bcwms-print-agent-1.0.0-win-x64.zip",
+      "WMS-bade/releases/customer/BADE-Yazici-Tek-Tik-Kurulum 4/bcwms-print-agent-1.0.0-win-x64.zip",
+      "WMS-bade/releases/customer/BADE-Yazici-Tek-Tik-Kurulum 3/bcwms-print-agent-1.0.0-win-x64.zip",
+      "WMS-bade/releases/customer/BADE-Yazici-Tek-Tik-Kurulum 2/bcwms-print-agent-1.0.0-win-x64.zip",
+      "WMS/releases/windows/bcwms-print-agent-1.0.0-win-x64.zip",
+      "WMS/releases/customer/EMU-WMS-SAND0708-Yazici-Tek-Tik-Kurulum/bcwms-print-agent-1.0.0-win-x64.zip",
+      "WMS/releases/customer/BADE-Yazici-Tek-Tik-Kurulum/bcwms-print-agent-1.0.0-win-x64.zip",
+      "WMS/releases/customer/BADE-Yazici-Tek-Tik-Kurulum 4/bcwms-print-agent-1.0.0-win-x64.zip",
+      "WMS/releases/customer/BADE-Yazici-Tek-Tik-Kurulum 3/bcwms-print-agent-1.0.0-win-x64.zip",
+      "WMS/releases/customer/BADE-Yazici-Tek-Tik-Kurulum 2/bcwms-print-agent-1.0.0-win-x64.zip",
+      "WMS-bade-release-142/releases/windows/bcwms-print-agent-1.0.0-win-x64.zip",
+      "WMS-bade-release-142/releases/customer/BADE-Yazici-Tek-Tik-Kurulum/bcwms-print-agent-1.0.0-win-x64.zip",
+      "WMS-bade-release-142/releases/customer/BADE-Yazici-Tek-Tik-Kurulum 4/bcwms-print-agent-1.0.0-win-x64.zip",
+      "WMS-bade-release-142/releases/customer/BADE-Yazici-Tek-Tik-Kurulum 3/bcwms-print-agent-1.0.0-win-x64.zip",
+      "WMS-bade-release-142/releases/customer/BADE-Yazici-Tek-Tik-Kurulum 2/bcwms-print-agent-1.0.0-win-x64.zip",
+      "WMS-bade-release-175/releases/windows/bcwms-print-agent-1.0.0-win-x64.zip",
+      "WMS-bade-release-175/releases/customer/BADE-Yazici-Tek-Tik-Kurulum/bcwms-print-agent-1.0.0-win-x64.zip",
+      "WMS-bade-release-175/releases/customer/BADE-Yazici-Tek-Tik-Kurulum 4/bcwms-print-agent-1.0.0-win-x64.zip",
+      "WMS-bade-release-175/releases/customer/BADE-Yazici-Tek-Tik-Kurulum 3/bcwms-print-agent-1.0.0-win-x64.zip",
+      "WMS-bade-release-175/releases/customer/BADE-Yazici-Tek-Tik-Kurulum 2/bcwms-print-agent-1.0.0-win-x64.zip",
+      "WMS-main/releases/windows/bcwms-print-agent-1.0.0-win-x64.zip",
+      "WMS-main/releases/customer/BADE-Yazici-Tek-Tik-Kurulum/bcwms-print-agent-1.0.0-win-x64.zip",
+      "WMS-main/releases/customer/BADE-Yazici-Tek-Tik-Kurulum 4/bcwms-print-agent-1.0.0-win-x64.zip",
+      "WMS-main/releases/customer/BADE-Yazici-Tek-Tik-Kurulum 3/bcwms-print-agent-1.0.0-win-x64.zip",
+      "WMS-main/releases/customer/BADE-Yazici-Tek-Tik-Kurulum 2/bcwms-print-agent-1.0.0-win-x64.zip",
+      "WMS-emu/releases/windows/bcwms-print-agent-1.0.0-win-x64.zip",
+      "WMS-emu/releases/customer/BADE-Yazici-Tek-Tik-Kurulum/bcwms-print-agent-1.0.0-win-x64.zip",
+      "WMS-emu/releases/customer/BADE-Yazici-Tek-Tik-Kurulum 4/bcwms-print-agent-1.0.0-win-x64.zip",
+      "WMS-emu/releases/customer/BADE-Yazici-Tek-Tik-Kurulum 3/bcwms-print-agent-1.0.0-win-x64.zip",
+      "WMS-emu/releases/customer/BADE-Yazici-Tek-Tik-Kurulum 2/bcwms-print-agent-1.0.0-win-x64.zip"
+    ]
+  },
+  {
+    "size": 63406195,
+    "sha256": "ef00c7111557a1183df8d176c97880d47b8ddbeb21357ccb5df3b3a5001d865b",
+    "paths": [
+      "WMS-bade-release-159/releases/customer/BADE-Yazici-Tek-Tik-Kurulum.zip",
+      "WMS-bade/releases/customer/BADE-Yazici-Tek-Tik-Kurulum.zip",
+      "WMS/releases/customer/BADE-Yazici-Tek-Tik-Kurulum.zip",
+      "WMS-bade-release-142/releases/customer/BADE-Yazici-Tek-Tik-Kurulum.zip",
+      "WMS-bade-release-175/releases/customer/BADE-Yazici-Tek-Tik-Kurulum.zip",
+      "WMS-main/releases/customer/BADE-Yazici-Tek-Tik-Kurulum.zip",
+      "WMS-emu/releases/customer/BADE-Yazici-Tek-Tik-Kurulum.zip"
+    ]
+  },
+  {
+    "size": 63404528,
+    "sha256": "2cf33d73a8110dd1b3e06ce4972471cbf8af2ae3ab09e088f4fe1d057ca5ca87",
+    "paths": [
+      "WMS-bade-release-159/releases/customer/BADE-Yazici-Tek-Tik-Kurulum-SABLON.zip",
+      "WMS-bade/releases/customer/BADE-Yazici-Tek-Tik-Kurulum-SABLON.zip",
+      "WMS/releases/customer/BADE-Yazici-Tek-Tik-Kurulum-SABLON.zip",
+      "WMS-bade-release-142/releases/customer/BADE-Yazici-Tek-Tik-Kurulum-SABLON.zip",
+      "WMS-bade-release-175/releases/customer/BADE-Yazici-Tek-Tik-Kurulum-SABLON.zip",
+      "WMS-main/releases/customer/BADE-Yazici-Tek-Tik-Kurulum-SABLON.zip",
+      "WMS-emu/releases/customer/BADE-Yazici-Tek-Tik-Kurulum-SABLON.zip"
+    ]
+  },
+  {
+    "size": 82852951,
+    "sha256": "1e04c879d5d757c5739613a7633aeb3658e89aea71fa36aa0a1c55ce169aa07e",
+    "paths": [
+      "WMS-bade-release-159/releases/customer/BADE-LP-QR-Yazici-Kurulum-Paketi-1.1.zip",
+      "WMS-bade/releases/customer/BADE-LP-QR-Yazici-Kurulum-Paketi-1.1.zip",
+      "WMS/releases/customer/BADE-LP-QR-Yazici-Kurulum-Paketi-1.1.zip",
+      "WMS-bade-release-142/releases/customer/BADE-LP-QR-Yazici-Kurulum-Paketi-1.1.zip",
+      "WMS-bade-release-175/releases/customer/BADE-LP-QR-Yazici-Kurulum-Paketi-1.1.zip",
+      "WMS-main/releases/customer/BADE-LP-QR-Yazici-Kurulum-Paketi-1.1.zip",
+      "WMS-emu/releases/customer/BADE-LP-QR-Yazici-Kurulum-Paketi-1.1.zip"
+    ]
+  },
+  {
+    "size": 82852260,
+    "sha256": "63675aa3e033a51c83266f44fb069a5241b0603a159750f375116c6c5d435810",
+    "paths": [
+      "WMS-bade-release-159/releases/customer/BADE-LP-QR-Yazici-Kurulum-Paketi-1.0.zip",
+      "WMS-bade/releases/customer/BADE-LP-QR-Yazici-Kurulum-Paketi-1.0.zip",
+      "WMS/releases/customer/BADE-LP-QR-Yazici-Kurulum-Paketi-1.0.zip",
+      "WMS-bade-release-142/releases/customer/BADE-LP-QR-Yazici-Kurulum-Paketi-1.0.zip",
+      "WMS-bade-release-175/releases/customer/BADE-LP-QR-Yazici-Kurulum-Paketi-1.0.zip",
+      "WMS-main/releases/customer/BADE-LP-QR-Yazici-Kurulum-Paketi-1.0.zip",
+      "WMS-emu/releases/customer/BADE-LP-QR-Yazici-Kurulum-Paketi-1.0.zip"
+    ]
+  },
+  {
+    "size": 63406235,
+    "sha256": "186561c6bd532dec716ff3f3c185ed3a3727e9bf8f0071476752c5278bcffb4f",
+    "paths": [
+      "WMS-bade-release-159/releases/customer/BADE-Yazici-Tek-Tik-Kurulum-MUSTERI-v2.zip",
+      "WMS-bade/releases/customer/BADE-Yazici-Tek-Tik-Kurulum-MUSTERI-v2.zip",
+      "WMS/releases/customer/BADE-Yazici-Tek-Tik-Kurulum-MUSTERI-v2.zip",
+      "WMS-bade-release-142/releases/customer/BADE-Yazici-Tek-Tik-Kurulum-MUSTERI-v2.zip",
+      "WMS-bade-release-175/releases/customer/BADE-Yazici-Tek-Tik-Kurulum-MUSTERI-v2.zip",
+      "WMS-main/releases/customer/BADE-Yazici-Tek-Tik-Kurulum-MUSTERI-v2.zip",
+      "WMS-emu/releases/customer/BADE-Yazici-Tek-Tik-Kurulum-MUSTERI-v2.zip"
+    ]
+  },
+  {
+    "size": 63904610,
+    "sha256": "7696854d7c3a755f6b88b54385fc287a821652a23a5c0bc79377179cab6c26f0",
+    "paths": [
+      "WMS-bade-release-159/releases/customer/BADE-Yazici-Tek-Tik-Kurulum-MUSTERI-v3.zip",
+      "WMS-bade/releases/customer/BADE-Yazici-Tek-Tik-Kurulum-MUSTERI-v3.zip",
+      "WMS/releases/customer/BADE-Yazici-Tek-Tik-Kurulum-MUSTERI-v3.zip",
+      "WMS-bade-release-142/releases/customer/BADE-Yazici-Tek-Tik-Kurulum-MUSTERI-v3.zip",
+      "WMS-bade-release-175/releases/customer/BADE-Yazici-Tek-Tik-Kurulum-MUSTERI-v3.zip",
+      "WMS-main/releases/customer/BADE-Yazici-Tek-Tik-Kurulum-MUSTERI-v3.zip",
+      "WMS-emu/releases/customer/BADE-Yazici-Tek-Tik-Kurulum-MUSTERI-v3.zip"
+    ]
+  },
+  {
+    "size": 12919624,
+    "sha256": "6ff3948995b18cc937547d044d35f9431f3700e87436a98a7249e27b5771ecc8",
+    "paths": [
+      "WMS-bade/releases/BADE-1.14.144-TEST-ADAYI/BCWMS-BADE-1.14.144.apk",
+      "WMS/releases/BADE-1.14.144-TEST-ADAYI/BCWMS-BADE-1.14.144.apk"
+    ]
+  },
+  {
+    "size": 12936008,
+    "sha256": "291d42cfea5305bd6c952322c122d1846637b64455bc6a5485036df3b174d9c8",
+    "paths": [
+      "WMS/releases/BADE-1.14.149-URETIM-LP-ADAYI/bcwms-bade-1.14.149-release.apk",
+      "WMS/releases/BADE-1.14.149-SANDBOX/BCWMS-BADE-1.14.149.apk"
+    ]
+  },
+  {
+    "size": 12903244,
+    "sha256": "f48686c638b6e4705ef216bd8b1cad7806751afa2b5dfd49f811a15edb042eb3",
+    "paths": [
+      "WMS/releases/BADE-Musteri-Paketi-1.14.127/BADE-Terminal-1.14.127.apk",
+      "WMS/releases/android/bcwms-bade-1.14.127-terminal-resume-release.apk"
+    ]
+  },
+  {
+    "size": 1356632,
+    "sha256": "c1b92da5356bb36f4ab55aa54b2d25a8a27518cf7a456eb4957ddfe94e2d428c",
+    "paths": [
+      "WMS-emu/releases/DKC-1.14.141/DKC-Print-Agent-1.1.3-Tek-Tik/BCWMS-Print-Agent-win-x64/app/mscordaccore_amd64_amd64_10.0.1126.37416.dll",
+      "WMS-emu/releases/DKC-1.14.141/DKC-Print-Agent-1.1.3-Tek-Tik/BCWMS-Print-Agent-win-x64/app/mscordaccore.dll"
+    ]
+  }
+]

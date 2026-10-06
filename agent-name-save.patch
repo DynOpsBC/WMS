@@ -1,0 +1,147 @@
+diff --git a/windows-print-agent/src/BCWMS.PrintAgent.Core/Configuration/AgentSettings.cs b/windows-print-agent/src/BCWMS.PrintAgent.Core/Configuration/AgentSettings.cs
+index 8bd7e21..37827e2 100644
+--- a/windows-print-agent/src/BCWMS.PrintAgent.Core/Configuration/AgentSettings.cs
++++ b/windows-print-agent/src/BCWMS.PrintAgent.Core/Configuration/AgentSettings.cs
+@@ -35,6 +35,15 @@ public sealed record LabelPrinterSetting
+ 
+ public static class AgentSettingsExtensions
+ {
++    /// <summary>Assign stable IDs without discarding operator-facing metadata.</summary>
++    public static IReadOnlyList<LabelPrinterSetting> BindLabelPrinterIds(
++        this AgentSettings settings, IReadOnlyDictionary<string, string> mappings) =>
++        settings.EffectiveLabelPrinters()
++            .Where(static printer => !string.IsNullOrWhiteSpace(printer.PrinterName))
++            .DistinctBy(static printer => printer.PrinterName, StringComparer.OrdinalIgnoreCase)
++            .Select(printer => printer with { PrinterId = mappings[printer.PrinterName] })
++            .ToList();
++
+     /// <summary>
+     /// Label printers that accept jobs: the multi-printer list when present,
+     /// otherwise the legacy single selection (settings saved by agent 1.0).
+diff --git a/windows-print-agent/src/BCWMS.PrintAgent.Windows/App/AgentController.cs b/windows-print-agent/src/BCWMS.PrintAgent.Windows/App/AgentController.cs
+index b77658d..be2838e 100644
+--- a/windows-print-agent/src/BCWMS.PrintAgent.Windows/App/AgentController.cs
++++ b/windows-print-agent/src/BCWMS.PrintAgent.Windows/App/AgentController.cs
+@@ -91,7 +91,7 @@ internal sealed class AgentController : IAsyncDisposable
+             CompanyId = segments.Length > 1 ? segments[1] : string.Empty,
+             BlobReadSas = settings.BlobReadSas.Trim().TrimStart('?'),
+             BlobEndpoint = settings.BlobEndpoint.Trim().TrimEnd('/'),
+-            LabelPrinters = labelNames.Select(name => new LabelPrinterSetting { PrinterId = mappings[name], PrinterName = name }).ToList(),
++            LabelPrinters = settings.BindLabelPrinterIds(mappings),
+             LabelPrinterName = labelNames.Count > 0 ? labelNames[0] : string.Empty,
+             LabelPrinterId = labelNames.Count > 0 ? mappings[labelNames[0]] : string.Empty,
+             DocumentPrinterId = GetId(mappings, settings.DocumentPrinterName),
+diff --git a/windows-print-agent/src/BCWMS.PrintAgent.Windows/App/DashboardForm.cs b/windows-print-agent/src/BCWMS.PrintAgent.Windows/App/DashboardForm.cs
+index 23e0481..5bcb58e 100644
+--- a/windows-print-agent/src/BCWMS.PrintAgent.Windows/App/DashboardForm.cs
++++ b/windows-print-agent/src/BCWMS.PrintAgent.Windows/App/DashboardForm.cs
+@@ -331,6 +331,10 @@ internal sealed class DashboardForm : Form
+ 
+     private void CaptureTypedDisplayNames()
+     {
++        // Commit the active text editor before a refresh/selection rebuild
++        // reads Cell.Value and removes the old grid rows.
++        if (_printerNames.IsCurrentCellInEditMode && !_printerNames.EndEdit())
++            throw new InvalidOperationException("Görünen ad düzenlemesi tamamlanamadı.");
+         foreach (DataGridViewRow row in _printerNames.Rows)
+         {
+             var printer = row.Cells["Printer"].Value?.ToString();
+@@ -358,6 +362,7 @@ internal sealed class DashboardForm : Form
+ 
+     private async Task RefreshPrintersAsync()
+     {
++        CaptureTypedDisplayNames();
+         var labelNames = CheckedLabelNames();
+         if (labelNames.Count == 0)
+         {
+@@ -373,7 +378,6 @@ internal sealed class DashboardForm : Form
+ 
+     private async Task SaveAsync()
+     {
+-        _printerNames.EndEdit();
+         CaptureTypedDisplayNames();
+         var current = _controller.Settings;
+         var settings = current with
+diff --git a/windows-print-agent/tests/BCWMS.PrintAgent.Core.Tests/PrinterNamePersistenceTests.cs b/windows-print-agent/tests/BCWMS.PrintAgent.Core.Tests/PrinterNamePersistenceTests.cs
+new file mode 100644
+index 0000000..5509f8e
+--- /dev/null
++++ b/windows-print-agent/tests/BCWMS.PrintAgent.Core.Tests/PrinterNamePersistenceTests.cs
+@@ -0,0 +1,77 @@
++using System.Text.Json;
++using BCWMS.PrintAgent.Core.Configuration;
++using Xunit;
++
++namespace BCWMS.PrintAgent.Core.Tests;
++
++public sealed class PrinterNamePersistenceTests
++{
++    [Fact]
++    public void AssigningStableIdsPreservesNamesAcrossConfigurationRoundTrip()
++    {
++        var settings = new AgentSettings
++        {
++            LabelPrinters =
++            [
++                new() { PrinterId = "", PrinterName = "Zebra A", DisplayName = "Yazıcı 1" },
++                new() { PrinterId = "", PrinterName = "Zebra B", DisplayName = "Sevkiyat" }
++            ],
++            DocumentPrinterDisplayName = "Belge yazıcısı"
++        };
++        var ids = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
++        {
++            ["Zebra A"] = "P0000000000000001",
++            ["Zebra B"] = "P0000000000000002"
++        };
++
++        settings = settings with { LabelPrinters = settings.BindLabelPrinterIds(ids) };
++        var reloaded = JsonSerializer.Deserialize<AgentSettings>(JsonSerializer.Serialize(settings))!;
++
++        Assert.Equal("Yazıcı 1", reloaded.LabelPrinters[0].DisplayName);
++        Assert.Equal("Sevkiyat", reloaded.LabelPrinters[1].DisplayName);
++        Assert.Equal("P0000000000000001", reloaded.LabelPrinters[0].PrinterId);
++        Assert.Equal("Zebra A", reloaded.LabelPrinters[0].PrinterName);
++        Assert.Equal("Belge yazıcısı", reloaded.DocumentPrinterDisplayName);
++        Assert.Equal(reloaded.LabelPrinters, reloaded.BindLabelPrinterIds(ids));
++    }
++
++    [Fact]
++    public void DuplicateWindowsNamesKeepFirstSelectionAndItsAlias()
++    {
++        var settings = new AgentSettings
++        {
++            LabelPrinters =
++            [
++                new() { PrinterId = "", PrinterName = "Zebra", DisplayName = "Mal Kabul" },
++                new() { PrinterId = "", PrinterName = "ZEBRA", DisplayName = "Duplicate" }
++            ]
++        };
++        var result = settings.BindLabelPrinterIds(
++            new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase) { ["Zebra"] = "P0000000000000001" });
++        Assert.Equal("Mal Kabul", Assert.Single(result).DisplayName);
++    }
++
++    [Fact]
++    public void ClearingAliasRemainsEmptyAfterSave()
++    {
++        var settings = new AgentSettings
++        {
++            LabelPrinters = [new() { PrinterId = "", PrinterName = "Zebra", DisplayName = "" }]
++        };
++        var result = settings.BindLabelPrinterIds(
++            new Dictionary<string, string> { ["Zebra"] = "P0000000000000001" });
++        Assert.Equal("", Assert.Single(result).DisplayName);
++    }
++
++    [Fact]
++    public void LegacySinglePrinterKeepsItsWindowsNameAndStableId()
++    {
++        var settings = new AgentSettings { LabelPrinterName = "Legacy Zebra" };
++        var result = settings.BindLabelPrinterIds(
++            new Dictionary<string, string> { ["Legacy Zebra"] = "P0000000000000001" });
++        var printer = Assert.Single(result);
++        Assert.Equal("Legacy Zebra", printer.PrinterName);
++        Assert.Equal("P0000000000000001", printer.PrinterId);
++        Assert.Equal("", printer.DisplayName);
++    }
++}

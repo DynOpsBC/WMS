@@ -2241,21 +2241,22 @@ private fun WhsePickDocument(no: String, onBack: () -> Unit) {
         )
     }
     if (ql != null && !lpScanRequired) {
+        val lotPolicy = pickLotInputPolicy(listOf(ql))
         QuantityDialogSheet(
             title = "Çekme Miktarı",
             itemNo = ql.optString("itemNo"),
             initialQty = ql.optDouble("qtyOutstanding").takeIf { it > 0 } ?: ql.optDouble("quantity").takeIf { it > 0 } ?: 1.0,
             initialUom = ql.optString("unitOfMeasureCode"),
-            initialLot = ql.optString("lotNo"),
+            initialLot = rawValue(ql, "lotNo"),
             allowZeroQuantity = true,
-            showLotSerial = true,
+            showLotSerial = lotPolicy.visible,
             showSerial = false,
             showSourceLp = true,
             // Satırdaki önerilen LP okutulmuş kaynak palet değildir. Lot
             // değiştiğinde eski LP'nin sunucuya gönderilmesini önle.
-            lotRequired = ql.optBoolean("lotRequired", false),
-            showAvailableLotLookup = true,
-            autoDetectLotFromStock = true,
+            lotRequired = lotPolicy.required,
+            showAvailableLotLookup = lotPolicy.visible,
+            autoDetectLotFromStock = lotPolicy.detectFromStock,
             locationCode = rawValue(ql, "locationCode").ifBlank { h?.optString("locationCode").orEmpty() },
             binCode = rawValue(ql, "binCode"),
             variantCode = ql.optString("variantCode"),
@@ -2291,20 +2292,21 @@ private fun WhsePickDocument(no: String, onBack: () -> Unit) {
         )
     }
     if (gt != null && !lpScanRequired) {
+        val lotPolicy = pickLotInputPolicy(gt.lines)
         QuantityDialogSheet(
             title = "Çekme Miktarı (${gt.count} satıra dağıtılır)",
             itemNo = gt.itemNo,
             initialQty = gt.totalOutstanding.takeIf { it > 0 } ?: 1.0,
             maximumQuantity = gt.totalOutstanding,
             initialUom = gt.lines.first().optString("unitOfMeasureCode"),
-            initialLot = gt.lines.first().optString("lotNo"),
+            initialLot = rawValue(gt.lines.first(), "lotNo"),
             allowZeroQuantity = true,
-            showLotSerial = true,
+            showLotSerial = lotPolicy.visible,
             showSerial = false,
             showSourceLp = true,
-            lotRequired = gt.lines.any { it.optBoolean("lotRequired", false) },
-            showAvailableLotLookup = true,
-            autoDetectLotFromStock = true,
+            lotRequired = lotPolicy.required,
+            showAvailableLotLookup = lotPolicy.visible,
+            autoDetectLotFromStock = lotPolicy.detectFromStock,
             locationCode = rawValue(gt.lines.first(), "locationCode").ifBlank { h?.optString("locationCode").orEmpty() },
             binCode = rawValue(gt.lines.first(), "binCode"),
             variantCode = gt.lines.first().optString("variantCode"),
@@ -2784,7 +2786,7 @@ private fun ShipDocument(no: String, onBack: () -> Unit, onPickCreated: (String)
             itemNo = ql.optString("itemNo"),
             initialQty = ql.optDouble("qtyOutstanding").takeIf { it > 0 } ?: 1.0,
             initialUom = ql.optString("uomCode"),
-            initialLot = ql.optString("lotNo"),
+            initialLot = rawValue(ql, "lotNo"),
             showLotSerial = true,
             showSerial = false,
             showSourceLp = true,

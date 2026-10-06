@@ -1,0 +1,206 @@
+[
+  {
+    "path": "WMS-bade-release-159/android/app/build/intermediates",
+    "bytes": 166096896
+  },
+  {
+    "path": "WMS-bade-release-159/android/core-design/build/intermediates",
+    "bytes": 1986560
+  },
+  {
+    "path": "WMS-bade-release-159/android/app/build/tmp",
+    "bytes": 41201664
+  },
+  {
+    "path": "WMS-bade-release-159/android/core-design/build/tmp",
+    "bytes": 16384
+  },
+  {
+    "path": "WMS-bade-release-159/android/.gradle",
+    "bytes": 11431936
+  },
+  {
+    "path": "WMS-bade/android/app/build/intermediates",
+    "bytes": 317480960
+  },
+  {
+    "path": "WMS-bade/android/core-design/build/intermediates",
+    "bytes": 2506752
+  },
+  {
+    "path": "WMS-bade/android/app/build/tmp",
+    "bytes": 40325120
+  },
+  {
+    "path": "WMS-bade/android/core-design/build/tmp",
+    "bytes": 16384
+  },
+  {
+    "path": "WMS-bade/android/.gradle",
+    "bytes": 23863296
+  },
+  {
+    "path": "WMS-bade/windows-print-agent/src/BCWMS.PrintAgent.Core/bin",
+    "bytes": 118784
+  },
+  {
+    "path": "WMS-bade/windows-print-agent/src/BCWMS.PrintAgent.Windows/bin",
+    "bytes": 212828160
+  },
+  {
+    "path": "WMS-bade/windows-print-agent/src/BCWMS.PrintAgent.Core/obj",
+    "bytes": 290816
+  },
+  {
+    "path": "WMS-bade/windows-print-agent/src/BCWMS.PrintAgent.Windows/obj",
+    "bytes": 1179648
+  },
+  {
+    "path": "WMS-bade/windows-print-agent/tests/BCWMS.PrintAgent.Core.Tests/bin",
+    "bytes": 4890624
+  },
+  {
+    "path": "WMS-bade/windows-print-agent/tests/BCWMS.PrintAgent.Core.Tests/obj",
+    "bytes": 360448
+  },
+  {
+    "path": "WMS/android/app/build/intermediates",
+    "bytes": 577855488
+  },
+  {
+    "path": "WMS/android/core-design/build/intermediates",
+    "bytes": 5935104
+  },
+  {
+    "path": "WMS/android/app/build/tmp",
+    "bytes": 120958976
+  },
+  {
+    "path": "WMS/android/core-design/build/tmp",
+    "bytes": 16384
+  },
+  {
+    "path": "WMS/android/.gradle",
+    "bytes": 86413312
+  },
+  {
+    "path": "WMS/windows-print-agent/src/BCWMS.PrintAgent.Core/bin",
+    "bytes": 360448
+  },
+  {
+    "path": "WMS/windows-print-agent/src/BCWMS.PrintAgent.Windows/bin",
+    "bytes": 426037248
+  },
+  {
+    "path": "WMS/windows-print-agent/src/DKCProduction.PrintAgent.Setup/bin",
+    "bytes": 209477632
+  },
+  {
+    "path": "WMS/windows-print-agent/src/BCWMS.PrintAgent.Core/obj",
+    "bytes": 720896
+  },
+  {
+    "path": "WMS/windows-print-agent/src/BCWMS.PrintAgent.Windows/obj",
+    "bytes": 2392064
+  },
+  {
+    "path": "WMS/windows-print-agent/src/DKCProduction.PrintAgent.Setup/obj",
+    "bytes": 72433664
+  },
+  {
+    "path": "WMS/windows-print-agent/tests/BCWMS.PrintAgent.Core.Tests/bin",
+    "bytes": 14499840
+  },
+  {
+    "path": "WMS/windows-print-agent/tests/BCWMS.PrintAgent.Core.Tests/obj",
+    "bytes": 753664
+  },
+  {
+    "path": "WMS-main/android/app/build/intermediates",
+    "bytes": 145207296
+  },
+  {
+    "path": "WMS-main/android/core-design/build/intermediates",
+    "bytes": 466944
+  },
+  {
+    "path": "WMS-main/android/app/build/tmp",
+    "bytes": 37466112
+  },
+  {
+    "path": "WMS-main/android/core-design/build/tmp",
+    "bytes": 16384
+  },
+  {
+    "path": "WMS-main/android/.gradle",
+    "bytes": 9256960
+  },
+  {
+    "path": "WMS-main/windows-print-agent/src/BCWMS.PrintAgent.Core/bin",
+    "bytes": 151552
+  },
+  {
+    "path": "WMS-main/windows-print-agent/src/BCWMS.PrintAgent.Windows/bin",
+    "bytes": 161185792
+  },
+  {
+    "path": "WMS-main/windows-print-agent/src/BCWMS.PrintAgent.Core/obj",
+    "bytes": 327680
+  },
+  {
+    "path": "WMS-main/windows-print-agent/src/BCWMS.PrintAgent.Windows/obj",
+    "bytes": 696320
+  },
+  {
+    "path": "WMS-main/windows-print-agent/tests/BCWMS.PrintAgent.Core.Tests/bin",
+    "bytes": 4882432
+  },
+  {
+    "path": "WMS-main/windows-print-agent/tests/BCWMS.PrintAgent.Core.Tests/obj",
+    "bytes": 356352
+  },
+  {
+    "path": "WMS-emu/android/app/build/intermediates",
+    "bytes": 480616448
+  },
+  {
+    "path": "WMS-emu/android/core-design/build/intermediates",
+    "bytes": 3649536
+  },
+  {
+    "path": "WMS-emu/android/app/build/tmp",
+    "bytes": 88555520
+  },
+  {
+    "path": "WMS-emu/android/core-design/build/tmp",
+    "bytes": 16384
+  },
+  {
+    "path": "WMS-emu/android/.gradle",
+    "bytes": 58716160
+  },
+  {
+    "path": "WMS-emu/windows-print-agent/src/BCWMS.PrintAgent.Core/bin",
+    "bytes": 118784
+  },
+  {
+    "path": "WMS-emu/windows-print-agent/src/BCWMS.PrintAgent.Windows/bin",
+    "bytes": 322375680
+  },
+  {
+    "path": "WMS-emu/windows-print-agent/src/BCWMS.PrintAgent.Core/obj",
+    "bytes": 290816
+  },
+  {
+    "path": "WMS-emu/windows-print-agent/src/BCWMS.PrintAgent.Windows/obj",
+    "bytes": 753664
+  },
+  {
+    "path": "WMS-emu/windows-print-agent/tests/BCWMS.PrintAgent.Core.Tests/bin",
+    "bytes": 4890624
+  },
+  {
+    "path": "WMS-emu/windows-print-agent/tests/BCWMS.PrintAgent.Core.Tests/obj",
+    "bytes": 360448
+  }
+]
