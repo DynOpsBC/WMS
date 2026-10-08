@@ -159,6 +159,12 @@ page 72090 "DOPSWHS Receipt API"
 
     [ServiceEnabled]
     procedure postAndCloseLP(print: Boolean; invoice: Boolean; printerId: Code[50]; lpPrinterId: Code[50])
+    begin
+        postAndCloseLPWithMte(print, invoice, printerId, lpPrinterId, '');
+    end;
+
+    [ServiceEnabled]
+    procedure postAndCloseLPWithMte(print: Boolean; invoice: Boolean; printerId: Code[50]; lpPrinterId: Code[50]; optionsJson: Text)
     var
         Setup: Record "DOPSWHS Setup";
         ReceiptMgmt: Codeunit "DOPSWHS Receipt Mgmt";
@@ -173,7 +179,7 @@ page 72090 "DOPSWHS Receipt API"
         PrintLpLabels := true;
         if Setup.Get('') then
             PrintLpLabels := not Setup."Manual Receipt Label Print";
-        ReceiptMgmt.PostReceiptAndCloseLP(Rec, print, invoice, '', printerId, PrintLpLabels, lpPrinterId);
+        ReceiptMgmt.PostReceiptAndCloseLP(Rec, print, invoice, '', printerId, PrintLpLabels, lpPrinterId, optionsJson);
     end;
 
     /// <summary>

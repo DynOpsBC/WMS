@@ -106,6 +106,8 @@ codeunit 72320 "DOPSWHS MTE Zpl Builder"
         ReceiptNo := ResolveReceiptNo(LPLine, ItemLedgerEntry, HaveEntry);
         InspectorText := EmployeeName(JsonText(Options, 'inspectorEmployeeNo'));
         if InspectorText = '' then
+            InspectorText := JsonText(Options, 'operatorDisplayName');
+        if InspectorText = '' then
             InspectorText := LP."Built By User";
         QcName := EmployeeName(JsonText(Options, 'qcEmployeeNo'));
         QcDate := JsonDateText(Options, 'qcApprovalDate');

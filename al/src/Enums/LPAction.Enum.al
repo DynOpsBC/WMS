@@ -13,4 +13,5 @@ enum 72201 "DOPSWHS LP Action"
     value(8; Unbuilt) { Caption = 'Unbuilt'; }
     value(9; ItemAdded) { Caption = 'Item Added'; }
     value(10; ItemRemoved) { Caption = 'Item Removed'; }
+    value(11; SourceLinked) { Caption = 'Kaynak giriş bağlandı'; }
 }

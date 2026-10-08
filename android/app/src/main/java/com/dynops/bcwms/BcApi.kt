@@ -798,9 +798,14 @@ object BcApi {
         action: String,
         body: String = "{}"
     ): ApiResult {
+        val prepared = try {
+            prepareMteOperatorRequest(context, entitySet, action, body)
+        } catch (error: IllegalArgumentException) {
+            return ApiResult(false, 0, error.message.orEmpty())
+        }
         val keySegment = if (key.contains("=") || key.startsWith("'")) key else "'${key.replace("'", "''")}'"
-        val path = "$entitySet($keySegment)/Microsoft.NAV.$action"
-        return request(context, "POST", path, body)
+        val path = "$entitySet($keySegment)/Microsoft.NAV.${prepared.action}"
+        return request(context, "POST", path, prepared.body)
     }
 
     /**
@@ -815,9 +820,26 @@ object BcApi {
         action: String,
         body: String = "{}"
     ): ApiResult {
+        val prepared = try {
+            prepareMteOperatorRequest(context, entitySet, action, body)
+        } catch (error: IllegalArgumentException) {
+            return ApiResult(false, 0, error.message.orEmpty())
+        }
         val keySegment = if (key.contains("=") || key.startsWith("'")) key else "'${key.replace("'", "''")}'"
-        val path = "$entitySet($keySegment)/Microsoft.NAV.$action"
-        return request(context, "POST", path, body, longRunningClient)
+        val path = "$entitySet($keySegment)/Microsoft.NAV.${prepared.action}"
+        return request(context, "POST", path, prepared.body, longRunningClient)
+    }
+
+    private fun prepareMteOperatorRequest(
+        context: Context, entitySet: String, action: String, body: String,
+    ): com.dynops.bcwms.feature.MteOperatorRequest {
+        val original = com.dynops.bcwms.feature.MteOperatorRequest(action, body)
+        if (BuildConfig.FLAVOR != "bade") return original
+        val target = com.dynops.bcwms.feature.mteOperatorAction(entitySet, action) ?: return original
+        require(com.dynops.bcwms.feature.TerminalSession.authenticated(context)) {
+            "Oturum süresi doldu. PIN ile yeniden giriş yapın."
+        }
+        return com.dynops.bcwms.feature.mteOperatorRequest(target, body, getOperatorDisplayName(context))
     }
 
     private val httpClient: OkHttpClient by lazy {

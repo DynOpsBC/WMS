@@ -224,6 +224,29 @@ page 72088 "DOPSWHS LP API"
     end;
 
     [ServiceEnabled]
+    procedure addLineFromBinWithSource(itemNo: Code[20]; unitOfMeasure: Code[10]; quantity: Decimal; lotNo: Code[50]; serialNo: Code[50]; sourceBinCode: Code[20]; userId: Code[50]; sourceItemLedgerEntryNo: Integer)
+    var
+        LPMgt: Codeunit "DOPSWHS LP Management";
+        SourceEntry: Record "Item Ledger Entry";
+    begin
+        if sourceItemLedgerEntryNo <= 0 then
+            Error('Kaynak madde defteri girişini seçin.');
+        SourceEntry.Get(sourceItemLedgerEntryNo);
+        SourceEntry.TestField("Document No.");
+        LPMgt.AddLineFromBin(Rec, itemNo, unitOfMeasure, quantity, lotNo, serialNo, sourceBinCode, userId, sourceItemLedgerEntryNo);
+    end;
+
+    [ServiceEnabled]
+    procedure linkStockSource(lineNo: Integer; sourceItemLedgerEntryNo: Integer)
+    var
+        LPMgt: Codeunit "DOPSWHS LP Management";
+    begin
+        if sourceItemLedgerEntryNo <= 0 then
+            Error('Kaynak madde defteri girişini seçin.');
+        LPMgt.LinkStockLineSource(Rec, lineNo, sourceItemLedgerEntryNo);
+    end;
+
+    [ServiceEnabled]
     procedure moveToBin(targetBinCode: Code[20]; userId: Code[50])
     var
         LPMgt: Codeunit "DOPSWHS LP Management";
@@ -242,6 +265,12 @@ page 72088 "DOPSWHS LP API"
 
     [ServiceEnabled]
     procedure stopToPrinter(printLabel: Boolean; printerId: Code[50])
+    begin
+        stopToPrinterWithMte(printLabel, printerId, '');
+    end;
+
+    [ServiceEnabled]
+    procedure stopToPrinterWithMte(printLabel: Boolean; printerId: Code[50]; optionsJson: Text)
     var
         LPMgt: Codeunit "DOPSWHS LP Management";
         Telemetry: Codeunit "DOPSWHS Telemetry";
@@ -252,7 +281,7 @@ page 72088 "DOPSWHS LP API"
         LPMgt.Stop(Rec, false);
         if printLabel then begin
             ClearLastError();
-            if not TryPrintLabels(Rec, printerId) then
+            if not TryPrintLabels(Rec, printerId, optionsJson) then
                 Telemetry.LogWarning(
                     'Print.LPLabelFailed',
                     CopyStr(
@@ -265,16 +294,25 @@ page 72088 "DOPSWHS LP API"
     end;
 
     [TryFunction]
-    local procedure TryPrintLabels(var LP: Record "DOPSWHS LP Header"; PrinterId: Code[50])
+    local procedure TryPrintLabels(var LP: Record "DOPSWHS LP Header"; PrinterId: Code[50]; OptionsJson: Text)
     var
         Dispatcher: Codeunit "DOPSWHS Print Dispatcher";
     begin
-        Dispatcher.PrintPalletItemLabels(LP, PrinterId, 1);
+        Dispatcher.PrintPalletItemLabelsWithOptions(LP, PrinterId, 1, OptionsJson);
     end;
 
     /// <summary>BADE: MTE with the operator's extra fields (Giriş Yapan, tedarikçi lotu, KK onayı, doküman/revizyon).</summary>
     [ServiceEnabled]
     procedure printMte(printerId: Code[50]; copies: Integer; optionsJson: Text)
+    var
+        Dispatcher: Codeunit "DOPSWHS Print Dispatcher";
+    begin
+        Dispatcher.PrintPalletItemLabelsWithOptions(Rec, printerId, copies, optionsJson);
+    end;
+
+    // Distinct endpoint: older BC packages must reject rather than ignore operatorDisplayName.
+    [ServiceEnabled]
+    procedure printMteForOperator(printerId: Code[50]; copies: Integer; optionsJson: Text)
     var
         Dispatcher: Codeunit "DOPSWHS Print Dispatcher";
     begin
