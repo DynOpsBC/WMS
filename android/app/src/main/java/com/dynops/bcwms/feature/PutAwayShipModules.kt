@@ -39,9 +39,12 @@ internal fun shipmentPostCommitted(actionOk: Boolean, verificationHttpCode: Int?
 @Composable
 fun PutAwayModule() {
     val context = LocalContext.current
+    val isDkc = com.dynops.bcwms.BuildConfig.FLAVOR.equals("emu", ignoreCase = true)
     val scope = rememberCoroutineScope()
     var selected by remember { mutableStateOf<String?>(null) }
     var rows by remember { mutableStateOf<List<JSONObject>>(emptyList()) }
+    var productPreviews by remember { mutableStateOf<Map<String, List<String>>>(emptyMap()) }
+    var previewLoading by remember { mutableStateOf(false) }
     var status by remember { mutableStateOf("") }
     var loading by remember { mutableStateOf(false) }
     var search by remember { mutableStateOf("") }
@@ -91,6 +94,23 @@ fun PutAwayModule() {
         rows.filter { it.optString("assignedUserId").trim().equals(myUser, true) } else rows
     val shownRows = itemDocs?.let { f -> scoped.filter { it.optString("no") in f.second } } ?: scoped
 
+    // Only read products for the displayed documents. Restart/cancel when the
+    // list is refreshed or filtered so old requests cannot replace new names.
+    LaunchedEffect(isDkc, rows, shownRows) {
+        productPreviews = emptyMap()
+        previewLoading = isDkc && shownRows.isNotEmpty()
+        if (!isDkc) return@LaunchedEffect
+        val documentNos = shownRows.map { it.optString("no") }.filter { it.isNotBlank() }.distinct()
+        for (batch in documentNos.chunked(40)) {
+            val page = BcApi.getAllPages(context, putAwayProductPreviewPath(batch), maxPages = 1000)
+            if (page.complete) {
+                val products = putAwayProductPreviews(page.rows)
+                productPreviews = productPreviews + batch.associateWith { products[it].orEmpty() }
+            }
+        }
+        previewLoading = false
+    }
+
     Column(Modifier.fillMaxSize().padding(12.dp)) {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Button(onClick = { load() }, enabled = !loading, modifier = Modifier.weight(1f)) { WmsRefreshLabel(loading) }
@@ -110,7 +130,23 @@ fun PutAwayModule() {
                     status = firstValue(d, "status"),
                     metadata = "Lokasyon: ${firstValue(d, "locationCode")}\nAtanan: ${firstValue(d, "assignedUserId")}",
                     onClick = { selected = d.optString("no") },
-                )
+                ) {
+                    if (isDkc) {
+                        Spacer(Modifier.height(8.dp))
+                        Text("Ürünler", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold)
+                        val products = productPreviews[d.optString("no")]
+                        when {
+                            products == null -> Text(
+                                if (previewLoading) "Ürünler yükleniyor..." else "Ürün adları alınamadı. Yenileyin.",
+                                style = MaterialTheme.typography.bodySmall,
+                            )
+                            products.isEmpty() -> Text("Ürün satırı yok", style = MaterialTheme.typography.bodySmall)
+                            else -> products.forEach { product ->
+                                Text(product, style = MaterialTheme.typography.bodyMedium)
+                            }
+                        }
+                    }
+                }
             }
             if (shownRows.isEmpty() && !loading) item {
                 EmptyState(
@@ -2241,21 +2277,22 @@ private fun WhsePickDocument(no: String, onBack: () -> Unit) {
         )
     }
     if (ql != null && !lpScanRequired) {
+        val lotPolicy = pickLotInputPolicy(listOf(ql))
         QuantityDialogSheet(
             title = "Çekme Miktarı",
             itemNo = ql.optString("itemNo"),
             initialQty = ql.optDouble("qtyOutstanding").takeIf { it > 0 } ?: ql.optDouble("quantity").takeIf { it > 0 } ?: 1.0,
             initialUom = ql.optString("unitOfMeasureCode"),
-            initialLot = ql.optString("lotNo"),
+            initialLot = rawValue(ql, "lotNo"),
             allowZeroQuantity = true,
-            showLotSerial = true,
+            showLotSerial = lotPolicy.visible,
             showSerial = false,
             showSourceLp = true,
             // Satırdaki önerilen LP okutulmuş kaynak palet değildir. Lot
             // değiştiğinde eski LP'nin sunucuya gönderilmesini önle.
-            lotRequired = ql.optBoolean("lotRequired", false),
-            showAvailableLotLookup = true,
-            autoDetectLotFromStock = true,
+            lotRequired = lotPolicy.required,
+            showAvailableLotLookup = lotPolicy.visible,
+            autoDetectLotFromStock = lotPolicy.detectFromStock,
             locationCode = rawValue(ql, "locationCode").ifBlank { h?.optString("locationCode").orEmpty() },
             binCode = rawValue(ql, "binCode"),
             variantCode = ql.optString("variantCode"),
@@ -2291,20 +2328,21 @@ private fun WhsePickDocument(no: String, onBack: () -> Unit) {
         )
     }
     if (gt != null && !lpScanRequired) {
+        val lotPolicy = pickLotInputPolicy(gt.lines)
         QuantityDialogSheet(
             title = "Çekme Miktarı (${gt.count} satıra dağıtılır)",
             itemNo = gt.itemNo,
             initialQty = gt.totalOutstanding.takeIf { it > 0 } ?: 1.0,
             maximumQuantity = gt.totalOutstanding,
             initialUom = gt.lines.first().optString("unitOfMeasureCode"),
-            initialLot = gt.lines.first().optString("lotNo"),
+            initialLot = rawValue(gt.lines.first(), "lotNo"),
             allowZeroQuantity = true,
-            showLotSerial = true,
+            showLotSerial = lotPolicy.visible,
             showSerial = false,
             showSourceLp = true,
-            lotRequired = gt.lines.any { it.optBoolean("lotRequired", false) },
-            showAvailableLotLookup = true,
-            autoDetectLotFromStock = true,
+            lotRequired = lotPolicy.required,
+            showAvailableLotLookup = lotPolicy.visible,
+            autoDetectLotFromStock = lotPolicy.detectFromStock,
             locationCode = rawValue(gt.lines.first(), "locationCode").ifBlank { h?.optString("locationCode").orEmpty() },
             binCode = rawValue(gt.lines.first(), "binCode"),
             variantCode = gt.lines.first().optString("variantCode"),
@@ -2784,7 +2822,7 @@ private fun ShipDocument(no: String, onBack: () -> Unit, onPickCreated: (String)
             itemNo = ql.optString("itemNo"),
             initialQty = ql.optDouble("qtyOutstanding").takeIf { it > 0 } ?: 1.0,
             initialUom = ql.optString("uomCode"),
-            initialLot = ql.optString("lotNo"),
+            initialLot = rawValue(ql, "lotNo"),
             showLotSerial = true,
             showSerial = false,
             showSourceLp = true,

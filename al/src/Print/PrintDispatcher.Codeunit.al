@@ -587,8 +587,11 @@ codeunit 72051 "DOPSWHS Print Dispatcher"
         ColumnWidth: Integer;
         Y: Integer;
         CodeFont: Integer;
+        CodeWidth: Integer;
         CodeMax: Integer;
+        FitWidth: Integer;
         ZoneFont: Integer;
+        ZoneWidth: Integer;
     begin
         // DKÇ (17 Eyl 2026): "tip yazısını kaldır, bölge kodu daha büyük kalın
         // fontlu yazılsın". The bin type is warehouse setup, not something the
@@ -603,16 +606,19 @@ codeunit 72051 "DOPSWHS Print Dispatcher"
             CodeMax := 60;
         if CodeMax > 120 then
             CodeMax := 120;
-        CodeFont := Canvas.FitFont(Bin.Code, ColumnWidth, CodeMax, 36);
-        // HM.0001 gibi uzun raf kodlarında güvenli kenar boşluğu bırakmak için
-        // hesaplanan raf kodu fontunu bir kademe küçült.
-        if CodeFont > 36 then
-            CodeFont -= 4;
-        Zpl += Canvas.WriteSized(X, Y, CodeFont + CodeFont div 10, CodeFont, ColumnWidth, Bin.Code);
+        // DKÇ (2 Eki 2026): "ODA-RAF-D" basılırken sondaki D satır başına,
+        // O'nun üstüne biniyordu. Düz 0,55 tahmini tireyi (ölçülen 0,91) çok
+        // dar sayıyordu; boyut ölçülmüş harf genişlikleriyle %4 payla seçilir,
+        // en küçük boyut da sığmazsa harfler daraltılır, satır asla taşmaz.
+        FitWidth := ColumnWidth * 96 div 100;
+        CodeFont := Canvas.FitFontMeasured(Bin.Code, FitWidth, CodeMax, 36);
+        CodeWidth := Canvas.FitFontMeasured(Bin.Code, FitWidth, CodeFont, 10);
+        Zpl += Canvas.WriteSized(X, Y, CodeFont + CodeFont div 10, CodeWidth, ColumnWidth, Bin.Code);
         Y += CodeFont + CodeFont div 10 + 6;
         if Bin."Zone Code" <> '' then begin
-            ZoneFont := Canvas.FitFont(Bin."Zone Code", ColumnWidth, Canvas.QtyFont(), Canvas.NormalFont());
-            Zpl += Canvas.WriteSized(X, Y, ZoneFont, ZoneFont, ColumnWidth, Bin."Zone Code");
+            ZoneFont := Canvas.FitFontMeasured(Bin."Zone Code", FitWidth, Canvas.QtyFont(), Canvas.NormalFont());
+            ZoneWidth := Canvas.FitFontMeasured(Bin."Zone Code", FitWidth, ZoneFont, 10);
+            Zpl += Canvas.WriteSized(X, Y, ZoneFont, ZoneWidth, ColumnWidth, Bin."Zone Code");
             Y += ZoneFont + 6;
         end;
         if InfoText <> '' then begin
@@ -640,7 +646,9 @@ codeunit 72051 "DOPSWHS Print Dispatcher"
         ColumnWidth: Integer;
         Y: Integer;
         CodeFont: Integer;
+        CodeWidth: Integer;
         CodeMax: Integer;
+        FitWidth: Integer;
     begin
         Canvas.Init();
         Zpl := Canvas.Frame('ALAN ETİKETİ', Zone."Location Code", Zone.Code, '', X, ColumnWidth, Y);
@@ -649,8 +657,11 @@ codeunit 72051 "DOPSWHS Print Dispatcher"
             CodeMax := 60;
         if CodeMax > 120 then
             CodeMax := 120;
-        CodeFont := Canvas.FitFont(Zone.Code, ColumnWidth, CodeMax, 36);
-        Zpl += Canvas.WriteSized(X, Y, CodeFont + CodeFont div 10, CodeFont, ColumnWidth, Zone.Code);
+        // Raf etiketiyle aynı ölçülmüş genişlik kuralı (2 Eki 2026).
+        FitWidth := ColumnWidth * 96 div 100;
+        CodeFont := Canvas.FitFontMeasured(Zone.Code, FitWidth, CodeMax, 36);
+        CodeWidth := Canvas.FitFontMeasured(Zone.Code, FitWidth, CodeFont, 10);
+        Zpl += Canvas.WriteSized(X, Y, CodeFont + CodeFont div 10, CodeWidth, ColumnWidth, Zone.Code);
         Y += CodeFont + CodeFont div 10 + 6;
         if Zone.Description <> '' then begin
             Zpl += Canvas.Write(X, Y, Canvas.NormalFont(), ColumnWidth, CopyStr(Zone.Description, 1, Canvas.MaxChars(ColumnWidth, Canvas.NormalFont())));

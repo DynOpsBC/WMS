@@ -103,6 +103,15 @@ class ProductionUxRulesTest {
     }
 
     @Test
+    fun `disabled warehouse tracking explains why an existing lot cannot be entered`() {
+        val visible = operatorFacingApiError(
+            "Warehouse item tracking is not enabled for No. KLC-7. CorrelationId: 1234-abcd.", 400)
+        assertTrue(visible, visible.contains("ambar lot/seri takibi kapalı"))
+        assertTrue(visible.contains("REF-"))
+        assertFalse(visible.contains("CorrelationId"))
+    }
+
+    @Test
     fun `raw Business Central errors become Turkish support references`() {
         val visible = operatorFacingApiError("The Item does not exist. Identification fields: No.=X", 404)
 

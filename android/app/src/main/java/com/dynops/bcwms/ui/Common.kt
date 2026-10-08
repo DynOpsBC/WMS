@@ -56,6 +56,7 @@ fun OperationDocumentCard(
     onClick: () -> Unit,
     status: String = "",
     progressPercent: Int? = null,
+    content: (@Composable ColumnScope.() -> Unit)? = null,
 ) {
     Card(
         onClick = onClick,
@@ -100,6 +101,7 @@ fun OperationDocumentCard(
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
             )
+            content?.invoke(this)
             progressPercent?.let { percent ->
                 Spacer(Modifier.height(9.dp))
                 LinearProgressIndicator(
@@ -247,6 +249,8 @@ fun normalizeQtyInput(raw: String): String {
 
 /** Sık görülen İngilizce BC iş kuralı hataları → eyleme dönük Türkçe metin (null = eşleşme yok). */
 fun operatorKnownBcError(raw: String): String? {
+    if (raw.contains("Warehouse item tracking is not enabled for", ignoreCase = true))
+        return "Bu ürünün ambar lot/seri takibi kapalı; toplama satırına lot/seri girilemez. Ürünün ambar takip ayarını yöneticinize kontrol ettirin."
     Regex("""cannot handle more than the outstanding\s+(\d+(?:[.,]\d+)?)""", RegexOption.IGNORE_CASE).find(raw)?.let {
         return "Kalan miktardan fazla giremezsiniz (kalan: ${it.groupValues[1]}). Miktarı düzeltin."
     }
