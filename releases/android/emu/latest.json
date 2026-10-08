@@ -1,7 +1,7 @@
 {
-  "versionCode": 200161,
-  "versionName": "1.14.161-emu",
-  "apkUrl": "https://github.com/DynOpsBC/WMS/releases/download/android-v1.14.161-emu/BCWMS-EMU-1.14.161-RELEASE.apk",
-  "sha256": "7790272c85d8c32785da21f1d2c9175ecd983728f7ae26627a95454afb032398",
-  "releaseNotes": "Toplamada lot zorunluluğu BC ambar takibiyle eşleştirildi. Ambar takibi kapalı ürüne lot zorlatılmaz; mevcut satır lotları ve gerekli takip kontrolleri korunur. Grup lot listeleri kaynak raftan gelir. Lot düzeltmesi için önce DKC BC 1.14.2.21 paketi kurulmalıdır."
+  "versionCode": 200162,
+  "versionName": "1.14.162-emu",
+  "apkUrl": "https://github.com/DynOpsBC/WMS/releases/download/android-v1.14.162-emu/BCWMS-EMU-1.14.162-RELEASE.apk",
+  "sha256": "98f7a2293d4d0c70f856355e97ac8bf651883482740160aff13e5bb5213d5643",
+  "releaseNotes": "Yerleştirme listesinde her belgenin ürünleri (ürün no · açıklama) belgeye girmeden görünür. BC paketi değişmedi."
 }
