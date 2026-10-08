@@ -1,6 +1,89 @@
 codeunit 72046 "DOPSWHS Pick Mgmt"
 {
     Access = Public;
+    Permissions = tabledata "Registered Whse. Activity Line" = R;
+
+    /// <summary>
+    /// Standard BC and BADE production picks both end here. The warehouse
+    /// register has already moved stock to the component bin; a partial Take
+    /// must also reduce the source LP. Intact pallets were moved and assigned
+    /// before registration, so their LP header no longer points to the Take bin.
+    /// </summary>
+    [EventSubscriber(ObjectType::Codeunit, Codeunit::"Whse.-Activity-Register", 'OnAfterRegisterWhseActivity', '', false, false)]
+    local procedure DebitRegisteredProductionPickLps(var WarehouseActivityHeader: Record "Warehouse Activity Header"; SuppressCommit: Boolean)
+    var
+        RegisteredLine: Record "Registered Whse. Activity Line";
+        LP: Record "DOPSWHS LP Header";
+        LPMgt: Codeunit "DOPSWHS LP Management";
+        ReturnedBySource: Dictionary of [Text, Decimal];
+        KeyText: Text;
+        ReturnedBaseQty: Decimal;
+        NetBaseQty: Decimal;
+    begin
+        if (WarehouseActivityHeader.Type <> WarehouseActivityHeader.Type::Pick) or
+           (WarehouseActivityHeader."Registering No." = '')
+        then
+            exit;
+        RegisteredLine.SetRange("Activity Type", RegisteredLine."Activity Type"::Pick);
+        RegisteredLine.SetRange("No.", WarehouseActivityHeader."Registering No.");
+        RegisteredLine.SetRange("Source Type", Database::"Prod. Order Component");
+        RegisteredLine.SetRange("Source Subtype", Enum::"Production Order Status"::Released.AsInteger());
+        RegisteredLine.SetRange("Action Type", RegisteredLine."Action Type"::Place);
+        if RegisteredLine.FindSet() then
+            repeat
+                KeyText := ProductionRegisteredStockKey(RegisteredLine);
+                if not ReturnedBySource.Get(KeyText, ReturnedBaseQty) then
+                    ReturnedBaseQty := 0;
+                ReturnedBySource.Set(KeyText, ReturnedBaseQty + RegisteredLine."Qty. (Base)");
+            until RegisteredLine.Next() = 0;
+
+        RegisteredLine.SetRange("Action Type", RegisteredLine."Action Type"::Take);
+        RegisteredLine.SetFilter("Qty. (Base)", '>0');
+        if RegisteredLine.FindSet() then
+            repeat
+                KeyText := ProductionRegisteredStockKey(RegisteredLine);
+                ReturnedBaseQty := 0;
+                ReturnedBySource.Get(KeyText, ReturnedBaseQty);
+                NetBaseQty := RegisteredLine."Qty. (Base)";
+                if ReturnedBaseQty > 0 then begin
+                    if ReturnedBaseQty >= NetBaseQty then begin
+                        ReturnedBySource.Set(KeyText, ReturnedBaseQty - NetBaseQty);
+                        NetBaseQty := 0;
+                    end else begin
+                        NetBaseQty -= ReturnedBaseQty;
+                        ReturnedBySource.Set(KeyText, 0);
+                    end;
+                end;
+                if (NetBaseQty > 0.00001) and (RegisteredLine."LP No." <> '') then begin
+                    if not LP.Get(RegisteredLine."LP No.") then
+                        Error('%1 üretim çekmesindeki LP bulunamadı.', RegisteredLine."LP No.");
+                    if LP."Bin Code" = RegisteredLine."Bin Code" then
+                        LPMgt.DebitProductionPickLp(RegisteredLine, NetBaseQty)
+                    else
+                        if not ((LP.Status = LP.Status::Assigned) and
+                                (LP."Assigned Document Type" = LP."Assigned Document Type"::ProdConsumption) and
+                                (LP."Assigned Document No." = RegisteredLine."Source No."))
+                        then
+                            Error('%1 LP numarası çekme kaynağı %2 gözünde değil.', LP."No.", RegisteredLine."Bin Code");
+                end;
+            until RegisteredLine.Next() = 0;
+    end;
+
+    local procedure ProductionRegisteredStockKey(RegisteredLine: Record "Registered Whse. Activity Line") KeyText: Text
+    var
+        Parts: JsonArray;
+    begin
+        Parts.Add(RegisteredLine."Source No.");
+        Parts.Add(RegisteredLine."Source Line No.");
+        Parts.Add(RegisteredLine."Source Subline No.");
+        Parts.Add(RegisteredLine."Item No.");
+        Parts.Add(RegisteredLine."Variant Code");
+        Parts.Add(RegisteredLine."Location Code");
+        Parts.Add(RegisteredLine."Bin Code");
+        Parts.Add(RegisteredLine."Lot No.");
+        Parts.Add(RegisteredLine."Serial No.");
+        Parts.WriteTo(KeyText);
+    end;
 
     [EventSubscriber(ObjectType::Table, Database::"Warehouse Activity Header", 'OnBeforeDeleteEvent', '', false, false)]
     local procedure BeforeProductionPickDelete(var Rec: Record "Warehouse Activity Header"; RunTrigger: Boolean)

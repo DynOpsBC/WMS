@@ -7,7 +7,6 @@ codeunit 72048 "DOPSWHS Prod Mgmt"
         ItemJournalLine: Record "Item Journal Line";
         ItemJnlPostBatch: Codeunit "Item Jnl.-Post Batch";
         License: Codeunit "DOPSWHS License Mgmt";
-        ConsumeQty: Decimal;
         ConsumeItemNo: Code[20];
     begin
         License.GuardFeature(Enum::"DOPSWHS License Feature"::Production);
@@ -20,13 +19,13 @@ codeunit 72048 "DOPSWHS Prod Mgmt"
         if ConsumeItemNo <> ProdOrderComponent."Item No." then
             Error('Item %1 does not match production component %2.', ConsumeItemNo, ProdOrderComponent."Item No.");
 
-        ConsumeQty := Qty;
-        if LpNo <> '' then
-            ConsumeQty := ResolveLpQuantity(LpNo, ConsumeItemNo, LotNo, SerialNo);
-        if ConsumeQty <= 0 then
+        if Qty <= 0 then
             Error('Consumption quantity must be greater than zero.');
 
-        CreateConsumptionLine(ProdOrderComponent, ConsumeItemNo, ConsumeQty, LpNo, LotNo, SerialNo, BinCode, ItemJournalLine);
+        // The production pick moves stock to the component bin. For a partial
+        // source LP, that registration already debits the picked amount. Post
+        // only the requested consumption quantity from the component bin.
+        CreateConsumptionLine(ProdOrderComponent, ConsumeItemNo, Qty, LpNo, LotNo, SerialNo, BinCode, ItemJournalLine);
         LogTelemetry('AdvWMS.Production.Consumed', ProdOrderComponent."Prod. Order No.");
         // Post Batch (23) avoids the "Do you want to post?" Confirm that codeunit 241 raises (API/mobile-safe).
         ItemJnlPostBatch.Run(ItemJournalLine);
@@ -37,15 +36,18 @@ codeunit 72048 "DOPSWHS Prod Mgmt"
     var
         ProdOrderComponent: Record "Prod. Order Component";
     begin
+        if (ComponentLineNo = 0) and (LpNo = '') then
+            Error('Üretim bileşeni satırını veya LP numarasını seçin.');
         ProdOrderComponent.SetRange(Status, ProdOrderComponent.Status::Released);
         ProdOrderComponent.SetRange("Prod. Order No.", ProdOrderNo);
-        ProdOrderComponent.SetRange("Line No.", ComponentLineNo);
-        if ItemNo <> '' then
-            ProdOrderComponent.SetRange("Item No.", ItemNo);
-        ProdOrderComponent.FindFirst();
-
         if (LpNo <> '') and (ComponentLineNo = 0) then
             FindComponentForLp(ProdOrderNo, ItemNo, LpNo, ProdOrderComponent);
+        if ComponentLineNo <> 0 then begin
+            ProdOrderComponent.SetRange("Line No.", ComponentLineNo);
+            if ItemNo <> '' then
+                ProdOrderComponent.SetRange("Item No.", ItemNo);
+            ProdOrderComponent.FindFirst();
+        end;
 
         Consume(ProdOrderComponent, ItemNo, Qty, LpNo, LotNo, SerialNo, BinCode);
     end;
@@ -635,6 +637,9 @@ codeunit 72048 "DOPSWHS Prod Mgmt"
         ItemJournalLine.Validate("Order Line No.", ProdOrderComponent."Prod. Order Line No.");
         ItemJournalLine.Validate("Item No.", ItemNo);
         ItemJournalLine.Validate("Prod. Order Comp. Line No.", ProdOrderComponent."Line No.");
+        ItemJournalLine.Validate("Variant Code", ProdOrderComponent."Variant Code");
+        if (LpNo <> '') and (ProdOrderComponent."Unit of Measure Code" <> '') then
+            ItemJournalLine.Validate("Unit of Measure Code", ProdOrderComponent."Unit of Measure Code");
         ItemJournalLine.Validate("Location Code", ProdOrderComponent."Location Code");
         if BinCode <> '' then
             ItemJournalLine.Validate("Bin Code", BinCode)
@@ -642,6 +647,7 @@ codeunit 72048 "DOPSWHS Prod Mgmt"
             if ProdOrderComponent."Bin Code" <> '' then
                 ItemJournalLine.Validate("Bin Code", ProdOrderComponent."Bin Code");
         ItemJournalLine.Validate(Quantity, Qty);
+        ItemJournalLine."DOPSWHS LP No." := LpNo;
         ItemJournalLine."Package No." := LpNo;
         ItemJournalLine."Lot No." := LotNo;
         ItemJournalLine."Serial No." := SerialNo;
@@ -698,26 +704,6 @@ codeunit 72048 "DOPSWHS Prod Mgmt"
         LPMgt.AddLine(LP, ProdOrderLine."Item No.", ProdOrderLine."Unit of Measure Code", OutputQty, '', '', 0D);
         LPMgt.Stop(LP, false);
         exit(LP."No.");
-    end;
-
-    local procedure ResolveLpQuantity(LpNo: Code[20]; ItemNo: Code[20]; var LotNo: Code[50]; var SerialNo: Code[50]): Decimal
-    var
-        LPLine: Record "DOPSWHS LP Line";
-        Qty: Decimal;
-    begin
-        LPLine.SetRange("LP No.", LpNo);
-        LPLine.SetRange("Item No.", ItemNo);
-        if LPLine.FindSet() then
-            repeat
-                Qty += LPLine.Quantity;
-                if LotNo = '' then
-                    LotNo := LPLine."Lot No.";
-                if SerialNo = '' then
-                    SerialNo := LPLine."Serial No.";
-            until LPLine.Next() = 0;
-        if Qty = 0 then
-            Error('LP %1 does not contain item %2.', LpNo, ItemNo);
-        exit(Qty);
     end;
 
     local procedure EnsureItemJournalBatch(var TemplateName: Code[10]; var BatchName: Code[10])

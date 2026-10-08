@@ -9,7 +9,20 @@ tableextension 72403 "DOPSWHS Whse Activity Line" extends "Warehouse Activity Li
             TableRelation = "DOPSWHS LP Header"."No.";
 
             trigger OnValidate()
+            var
+                LP: Record "DOPSWHS LP Header";
+                MatchedLPLine: Record "DOPSWHS LP Line";
+                Verification: Codeunit "DOPSWHS LP Verification";
             begin
+                if ("LP No." <> '') and ("Source Type" = Database::"Prod. Order Component") then begin
+                    if "Action Type" <> "Action Type"::Take then
+                        Error('Üretim çekmesinde kaynak LP yalnız Al satırında seçilebilir.');
+                    LP.Get("LP No.");
+                    if not (LP.Status in [LP.Status::Built, LP.Status::Assigned]) then
+                        Error('%1 LP numarası üretim çekmesinde kullanılamaz.', "LP No.");
+                    Verification.VerifyScannedLp("LP No.", Rec, "Lot No.", "Serial No.", true, MatchedLPLine);
+                    exit;
+                end;
                 FillActivityLinesFromLP();
             end;
         }
