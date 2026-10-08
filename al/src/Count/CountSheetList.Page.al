@@ -17,7 +17,7 @@ page 72074 "DOPSWHS Count Sheet List"
                 field("Location Code"; Rec."Location Code") { ApplicationArea = All; }
                 field("Zone Filter"; Rec."Zone Filter") { ApplicationArea = All; }
                 field(Mode; Rec.Mode) { ApplicationArea = All; }
-                field(Status; Rec.Status) { ApplicationArea = All; }
+                field(Status; Rec.Status) { ApplicationArea = All; Editable = false; }
                 field("V2 Scan Mode"; Rec."V2 Scan Mode") { ApplicationArea = All; Editable = false; }
                 field("Created DateTime"; Rec."Created DateTime") { ApplicationArea = All; }
             }

@@ -1,7 +1,7 @@
 {
-  "versionCode": 200169,
-  "versionName": "1.14.169-bade",
-  "apkUrl": "https://github.com/DynOpsBC/WMS/releases/download/android-v1.14.169-bade/BCWMS-BADE-1.14.169.apk",
-  "sha256": "212f59dad4c4fb070f4190a57a032a8b388781190af51f6f236a7a2156d94bf4",
-  "releaseNotes": "Tek mal kabul belgesinde farklı iç lot ve tedarikçi lotları için lot grupları eklendi. Çoklu lot özelliği için yayındaki BCWMSApp 1.14.1.125 paketini ayrıca BC ortamına yükleyin."
+  "versionCode": 200172,
+  "versionName": "1.14.172-bade",
+  "apkUrl": "https://github.com/DynOpsBC/WMS/releases/download/android-v1.14.172-bade/BCWMS-BADE-1.14.172.apk",
+  "sha256": "56a4bd6852c4f9cdff911c884a1f88ae22d4cfd66dc85c0a2b604716f73291b9",
+  "releaseNotes": "Mal kabul: bir LP'ye birden çok ürün girebilir; LP Kapat ile palet nakletmeden kapanır, Naklet ile tüm paletler tek kayıtla nakledilir. LP Başlat sonrası LP'siz girilmiş satırlar için onay sorulur; LP'siz satır varken nakil durur. BCWMSApp 1.14.1.129 ile kullanın."
 }

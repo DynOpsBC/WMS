@@ -27,6 +27,11 @@ page 72221 "DOPSWHS Count API"
                 // API POST gövdesindeki v2ScanMode yok sayılır.
                 field(v2ScanMode; Rec."V2 Scan Mode") { Caption = 'v2ScanMode'; Editable = false; }
                 field(binReviewSupported; BinReviewSupported) { Caption = 'binReviewSupported'; Editable = false; }
+                field(countRoundSupported; CountRoundSupported) { Caption = 'countRoundSupported'; Editable = false; }
+                field(roundNo; RoundNo) { Caption = 'roundNo'; Editable = false; }
+                field(previousRoundNo; Rec."Previous Round No.") { Caption = 'previousRoundNo'; Editable = false; }
+                field(nextRoundNo; Rec."Next Round No.") { Caption = 'nextRoundNo'; Editable = false; }
+                field(roundRootNo; Rec."Round Root No.") { Caption = 'roundRootNo'; Editable = false; }
                 field(zoneFilter; Rec."Zone Filter") { Caption = 'zoneFilter'; Editable = false; }
                 field(counter1UserId; Counter1UserId) { Caption = 'counter1UserId'; Editable = false; }
                 field(counter2UserId; Counter2UserId) { Caption = 'counter2UserId'; Editable = false; }
@@ -65,6 +70,8 @@ page 72221 "DOPSWHS Count API"
     begin
         TerminalPostAllowed := CountMgmt.TerminalCountPostingAllowed();
         BinReviewSupported := true;
+        CountRoundSupported := true;
+        RoundNo := CountMgmt.GetRoundNo(Rec);
         Clear(Counter1UserId);
         Clear(Counter2UserId);
         Clear(Counter3UserId);
@@ -207,6 +214,14 @@ page 72221 "DOPSWHS Count API"
     end;
 
     [ServiceEnabled]
+    procedure startNextRound(): Code[20]
+    var
+        CountMgmt: Codeunit "DOPSWHS Count Mgmt";
+    begin
+        exit(CountMgmt.StartNextRound(Rec."No."));
+    end;
+
+    [ServiceEnabled]
     procedure startRecount()
     var
         CountMgmt: Codeunit "DOPSWHS Count Mgmt";
@@ -236,6 +251,8 @@ page 72221 "DOPSWHS Count API"
 
     var
         BinReviewSupported: Boolean;
+        CountRoundSupported: Boolean;
+        RoundNo: Integer;
         Counter1UserId: Code[50];
         Counter2UserId: Code[50];
         Counter3UserId: Code[50];

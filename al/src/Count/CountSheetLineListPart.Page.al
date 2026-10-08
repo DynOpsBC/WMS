@@ -39,6 +39,14 @@ page 72481 "DOPSWHS Count Sheet Line Part"
                 field("Lot No."; Rec."Lot No.") { ApplicationArea = All; }
                 field("Serial No."; Rec."Serial No.") { ApplicationArea = All; }
                 field("Unit of Measure Code"; Rec."Unit of Measure Code") { ApplicationArea = All; }
+                field(PreviousSystemBin; PreviousSystemBin) { Caption = 'Önceki Tur Sistem Rafı'; ApplicationArea = All; Editable = false; Visible = HasPreviousRound; }
+                field(PreviousCountedBin; PreviousCountedBin) { Caption = 'Önceki Tur Sayılan Raf'; ApplicationArea = All; Editable = false; Visible = HasPreviousRound; }
+                field(PreviousSystemQty; PreviousSystemQty) { Caption = 'Önceki Tur Sistem Miktarı'; ApplicationArea = All; Editable = false; Visible = HasPreviousRound; }
+                field(PreviousQty1; PreviousQty1) { Caption = 'Önceki Tur Sayıcı 1'; ApplicationArea = All; Editable = false; Visible = HasPreviousRound; }
+                field(PreviousQty2; PreviousQty2) { Caption = 'Önceki Tur Sayıcı 2'; ApplicationArea = All; Editable = false; Visible = HasPreviousRound; }
+                field(PreviousQty3; PreviousQty3) { Caption = 'Önceki Tur Sayıcı 3'; ApplicationArea = All; Editable = false; Visible = HasPreviousRound; }
+                field(PreviousVariance; PreviousVariance) { Caption = 'Önceki Tur Stok Farkı'; ApplicationArea = All; Editable = false; Visible = HasPreviousRound; }
+                field(PreviousFound; PreviousFound) { Caption = 'Önceki Turda Satır Var'; ApplicationArea = All; Editable = false; Visible = HasPreviousRound; }
                 field("System Qty"; Rec."System Qty") { ApplicationArea = All; StyleExpr = LineStyle; }
                 field("Counted Qty 1"; Rec."Counted Qty 1") { ApplicationArea = All; StyleExpr = LineStyle; }
                 field("Counted Qty 2"; Rec."Counted Qty 2") { ApplicationArea = All; }
@@ -57,6 +65,7 @@ page 72481 "DOPSWHS Count Sheet Line Part"
     var
         Item: Record Item;
     begin
+        LoadPreviousRound();
         CountedFlag :=
             Rec."Counted 1" or Rec."Counted 2" or Rec."Counted 3" or
             (Rec."Counted Qty 1" <> 0) or (Rec."Counted Qty 2" <> 0) or (Rec."Counted Qty 3" <> 0);
@@ -84,7 +93,64 @@ page 72481 "DOPSWHS Count Sheet Line Part"
             VarianceStyle := 'Unfavorable';
     end;
 
+    local procedure LoadPreviousRound()
     var
+        Header: Record "DOPSWHS Count Sheet Header";
+        PreviousLine: Record "DOPSWHS Count Sheet Line";
+    begin
+        Clear(PreviousSystemQty);
+        Clear(PreviousQty1);
+        Clear(PreviousQty2);
+        Clear(PreviousQty3);
+        Clear(PreviousVariance);
+        Clear(PreviousSystemBin);
+        Clear(PreviousCountedBin);
+        PreviousFound := false;
+        HasPreviousRound := false;
+        if not Header.Get(Rec."Sheet No.") then
+            exit;
+        HasPreviousRound := Header."Previous Round No." <> '';
+        if not HasPreviousRound then
+            exit;
+        PreviousLine.SetRange("Sheet No.", Header."Previous Round No.");
+        PreviousLine.SetRange("Item No.", Rec."Item No.");
+        PreviousLine.SetRange("Variant Code", Rec."Variant Code");
+        PreviousLine.SetRange("Unit of Measure Code", Rec."Unit of Measure Code");
+        PreviousLine.SetRange("Lot No.", Rec."Lot No.");
+        PreviousLine.SetRange("Serial No.", Rec."Serial No.");
+        PreviousLine.SetRange("LP No.", Rec."LP No.");
+        if Rec."LP No." = '' then
+            PreviousLine.SetRange("Bin Code", Rec."Bin Code")
+        else
+            PreviousLine.SetRange("LP Line No.", Rec."LP Line No.");
+        if PreviousLine.FindSet() then
+            repeat
+                PreviousFound := true;
+                PreviousSystemQty += PreviousLine."System Qty";
+                PreviousQty1 += PreviousLine."Counted Qty 1";
+                PreviousQty2 += PreviousLine."Counted Qty 2";
+                PreviousQty3 += PreviousLine."Counted Qty 3";
+                PreviousVariance += PreviousLine.Variance;
+                if PreviousLine."Found From Bin" <> '' then
+                    PreviousSystemBin := PreviousLine."Found From Bin"
+                else
+                    if PreviousSystemBin = '' then
+                        PreviousSystemBin := PreviousLine."Bin Code";
+                if (PreviousLine."Counted Qty 1" > 0) or (PreviousLine."Counted Qty 2" > 0) or (PreviousLine."Counted Qty 3" > 0) then
+                    PreviousCountedBin := PreviousLine."Bin Code";
+            until PreviousLine.Next() = 0;
+    end;
+
+    var
+        HasPreviousRound: Boolean;
+        PreviousFound: Boolean;
+        PreviousSystemQty: Decimal;
+        PreviousQty1: Decimal;
+        PreviousQty2: Decimal;
+        PreviousQty3: Decimal;
+        PreviousVariance: Decimal;
+        PreviousSystemBin: Code[20];
+        PreviousCountedBin: Code[20];
         CountedFlag: Boolean;
         ItemDescription: Text[100];
         LineStyle: Text;

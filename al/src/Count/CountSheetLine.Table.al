@@ -67,6 +67,8 @@ table 72017 "DOPSWHS Count Sheet Line"
 
     trigger OnRename()
     begin
+        if "Sheet No." <> xRec."Sheet No." then
+            Error('Sayım satırı başka bir sayım turuna taşınamaz.');
         EnsureSheetIsMutable();
     end;
 
@@ -74,7 +76,10 @@ table 72017 "DOPSWHS Count Sheet Line"
     var
         CountHeader: Record "DOPSWHS Count Sheet Header";
     begin
+        CountHeader.LockTable();
         CountHeader.Get("Sheet No.");
+        if CountHeader."Next Round No." <> '' then
+            Error('Bu sayım turu arşivlendi. Sonraki tur: %1.', CountHeader."Next Round No.");
         if CountHeader.Status = CountHeader.Status::Posted then
             Error(PostedSheetImmutableErr, "Sheet No.");
     end;

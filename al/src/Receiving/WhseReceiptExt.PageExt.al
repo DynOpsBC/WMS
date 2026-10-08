@@ -2,6 +2,25 @@ pageextension 72303 "DOPSWHS Whse Receipt Ext" extends "Warehouse Receipt"
 {
     layout
     {
+        // BADE (8 Eki 2026): standart liste yalnız BC ambar çalışanlarını
+        // gösteriyordu. Terminal kullanıcıları (Local WMS User) da buradan
+        // atanabilir; atama terminalin kullandığı ReceiptMgmt.AssignUser ile yapılır,
+        // böylece BC kullanıcısı olmayan kimlik tablo ilişkisine takılmaz.
+        modify("Assigned User ID")
+        {
+            trigger OnLookup(var Text: Text): Boolean
+            var
+                ReceiptMgmt: Codeunit "DOPSWHS Receipt Mgmt";
+                AssignedUserId: Code[50];
+            begin
+                AssignedUserId := PickUser();
+                if AssignedUserId = '' then
+                    exit(false);
+                ReceiptMgmt.AssignUser(Rec, AssignedUserId);
+                CurrPage.Update(false);
+                exit(false);
+            end;
+        }
         // FactBoxes may only contain part/systempart controls. Keep these header
         // fields in the document's General area instead of an invalid FactBox group.
         addlast(General)

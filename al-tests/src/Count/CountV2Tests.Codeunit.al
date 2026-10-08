@@ -3,6 +3,354 @@ codeunit 72142 "DOPSWHS Count V2 Tests"
     Subtype = Test;
 
     [Test]
+    procedure IncompleteCounterIsRejectedBeforeCardConfirmation()
+    var
+        SheetNo: Code[20];
+        Header: Record "DOPSWHS Count Sheet Header";
+        Counter: Record "DOPSWHS Count Counter";
+        Card: TestPage "DOPSWHS Count Sheet Card";
+    begin
+        SheetNo := CreateSavedFindingRound();
+        Counter.Get(SheetNo, 1);
+        Counter.Completed := false;
+        Counter.Modify(true);
+        Header.Get(SheetNo);
+        Card.OpenEdit();
+        Card.GoToRecord(Header);
+        // No ConfirmHandler: the actionable validation must run before Confirm.
+        asserterror Card.StartNextRound.Invoke();
+        Assert.ExpectedError('Sayım Turunu Kaydet');
+        Header.Get(SheetNo);
+        Assert.AreEqual('', Header."Next Round No.", 'An incomplete count must remain active.');
+        Card.Close();
+    end;
+
+    [Test]
+    [HandlerFunctions('DeclineNextRound')]
+    procedure CancellingNextRoundKeepsTheOriginalActive()
+    var
+        SheetNo: Code[20];
+        Header: Record "DOPSWHS Count Sheet Header";
+        Card: TestPage "DOPSWHS Count Sheet Card";
+        HeaderCount: Integer;
+    begin
+        SheetNo := CreateSavedFindingRound();
+        HeaderCount := Header.Count();
+        Header.Get(SheetNo);
+        Card.OpenEdit();
+        Card.GoToRecord(Header);
+        Card.StartNextRound.Invoke();
+        Header.Get(SheetNo);
+        Assert.AreEqual('', Header."Next Round No.", 'Cancel must not archive the old round.');
+        Assert.AreEqual(HeaderCount, Header.Count(), 'Cancel must not allocate a new document.');
+        Card.Close();
+    end;
+
+    [ConfirmHandler]
+    procedure DeclineNextRound(Question: Text[1024]; var Reply: Boolean)
+    begin
+        Reply := false;
+    end;
+
+    [Test]
+    procedure EmptyFreshSnapshotRollsBackWithoutArchiving()
+    var
+        SheetNo: Code[20];
+        Header: Record "DOPSWHS Count Sheet Header";
+        LP: Record "DOPSWHS LP Header";
+        Mgmt: Codeunit "DOPSWHS Count Mgmt";
+        HeaderCount: Integer;
+    begin
+        SheetNo := CreateSavedFindingRound();
+        LP.Get('CV2-FIND-LP');
+        LP."Bin Code" := 'A.A08.22';
+        LP.Modify(true);
+        HeaderCount := Header.Count();
+        asserterror Mgmt.StartNextRound(SheetNo);
+        Assert.ExpectedError('güncel stok kalmadı');
+        Header.Get(SheetNo);
+        Assert.AreEqual('', Header."Next Round No.", 'The old round must stay active after an empty snapshot.');
+        Assert.AreEqual(HeaderCount, Header.Count(), 'The failed transition must leave no empty child.');
+    end;
+
+    [Test]
+    procedure ArchivedHistoryCannotBeMovedIntoAnActiveSheet()
+    var
+        SheetNo: Code[20];
+        NextNo: Code[20];
+        Line: Record "DOPSWHS Count Sheet Line";
+        Counter: Record "DOPSWHS Count Counter";
+        Scan: Record "DOPSWHS Count V2 Scan";
+        Mgmt: Codeunit "DOPSWHS Count Mgmt";
+    begin
+        SheetNo := CreateSavedFindingRound();
+        NextNo := Mgmt.StartNextRound(SheetNo);
+        Line.SetRange("Sheet No.", SheetNo);
+        Line.FindFirst();
+        asserterror Line.Rename(NextNo, 990000);
+        Assert.ExpectedError('taşınamaz');
+        Counter.Get(SheetNo, 1);
+        asserterror Counter.Rename(NextNo, 3);
+        Assert.ExpectedError('taşınamaz');
+        Scan.SetRange("Sheet No.", SheetNo);
+        Scan.FindFirst();
+        Scan."Sheet No." := NextNo;
+        asserterror Scan.Modify(true);
+        Assert.ExpectedError('taşınamaz');
+        // Even an in-memory parent change must not bypass Delete protection.
+        asserterror Scan.Delete(true);
+        Assert.ExpectedError('arşivlendi');
+        Scan.FindFirst();
+        Scan.Reversed := true;
+        asserterror Scan.Modify(true);
+        Assert.ExpectedError('arşivlendi');
+    end;
+
+    [Test]
+    procedure StoredArchiveStateProtectsDeleteAndRename()
+    var
+        SheetNo: Code[20];
+        Header: Record "DOPSWHS Count Sheet Header";
+        Mgmt: Codeunit "DOPSWHS Count Mgmt";
+    begin
+        SheetNo := CreateSavedFindingRound();
+        Mgmt.StartNextRound(SheetNo);
+        Header.Get(SheetNo);
+        Header."Next Round No." := '';
+        asserterror Header.Delete(true);
+        Assert.ExpectedError('geçmişi');
+        asserterror Header.Rename('CV2-ILLEGAL-RENAME');
+        Assert.ExpectedError('geçmişi');
+        Assert.IsTrue(Header.Get(SheetNo), 'Historical header must remain at its original key.');
+    end;
+
+    [Test]
+    procedure ArchivedCardSkipsToThirdRoundWithoutCreatingFourth()
+    var
+        SheetNo: Code[20];
+        SecondNo: Code[20];
+        ThirdNo: Code[20];
+        Header: Record "DOPSWHS Count Sheet Header";
+        Mgmt: Codeunit "DOPSWHS Count Mgmt";
+        Card: TestPage "DOPSWHS Count Sheet Card";
+        ActiveCard: TestPage "DOPSWHS Count Sheet Card";
+        HeaderCount: Integer;
+    begin
+        SheetNo := CreateSavedFindingRound();
+        SecondNo := Mgmt.StartNextRound(SheetNo);
+        Mgmt.ScanV2Lp(SecondNo, CreateGuid(), 'CV2-FIND-LP', 'A.B07.11', 1);
+        Mgmt.CompleteCounter(SecondNo, 1);
+        ThirdNo := Mgmt.StartNextRound(SecondNo);
+        Assert.AreEqual(SecondNo, Mgmt.StartNextRound(SheetNo), 'Retry on first round must not create a fourth round.');
+        HeaderCount := Header.Count();
+        Header.Get(SheetNo);
+        Card.OpenEdit();
+        Card.GoToRecord(Header);
+        ActiveCard.Trap();
+        Card.OpenNextRound.Invoke();
+        ActiveCard."No.".AssertEquals(ThirdNo);
+        ActiveCard."Count Round No.".AssertEquals(3);
+        Assert.AreEqual(HeaderCount, Header.Count(), 'Navigation must never allocate a new round.');
+        ActiveCard.Close();
+    end;
+
+    [Test]
+    [HandlerFunctions('ConfirmNextRound')]
+    procedure CardStartsNextRoundFromFilteredOldCard()
+    var
+        SheetNo: Code[20];
+        Header: Record "DOPSWHS Count Sheet Header";
+        Card: TestPage "DOPSWHS Count Sheet Card";
+        NextCard: TestPage "DOPSWHS Count Sheet Card";
+    begin
+        SheetNo := CreateSavedFindingRound();
+        Header.Get(SheetNo);
+        Card.OpenEdit();
+        Card.GoToRecord(Header);
+        Card.Filter.SetFilter("No.", SheetNo);
+        Assert.IsFalse(Card.OpenNextRound.Visible(), 'There is no existing next round to open yet.');
+        NextCard.Trap();
+        Card.StartNextRound.Invoke();
+        Header.Get(SheetNo);
+        Assert.IsTrue(Header."Next Round No." <> '', 'The original sheet must be archived successfully.');
+        NextCard."No.".AssertEquals(Header."Next Round No.");
+        NextCard."Round Root No.".AssertEquals(SheetNo);
+        NextCard."Count Round No.".AssertEquals(2);
+        Assert.IsFalse(NextCard.OpenNextRound.Visible(), 'The new card must be on the active round.');
+        NextCard.Close();
+    end;
+
+    [Test]
+    procedure ArchivedCardOpensExistingRoundWithoutCreatingAnother()
+    var
+        SheetNo: Code[20];
+        NextNo: Code[20];
+        Header: Record "DOPSWHS Count Sheet Header";
+        Mgmt: Codeunit "DOPSWHS Count Mgmt";
+        Card: TestPage "DOPSWHS Count Sheet Card";
+        NextCard: TestPage "DOPSWHS Count Sheet Card";
+        HeaderCount: Integer;
+    begin
+        SheetNo := CreateSavedFindingRound();
+        NextNo := Mgmt.StartNextRound(SheetNo);
+        HeaderCount := Header.Count();
+        Header.Get(SheetNo);
+        Card.OpenEdit();
+        Card.GoToRecord(Header);
+        Card.Filter.SetFilter("No.", SheetNo);
+        Assert.IsFalse(Card.StartNextRound.Visible(), 'Archived cards must not offer another new round.');
+        Assert.IsTrue(Card.OpenNextRound.Visible(), 'Archived cards must offer the existing active round.');
+        NextCard.Trap();
+        Card.OpenNextRound.Invoke();
+        NextCard."No.".AssertEquals(NextNo);
+        NextCard."Count Round No.".AssertEquals(2);
+        Assert.AreEqual(HeaderCount, Header.Count(), 'Opening a round must not create a new sheet.');
+        NextCard.Close();
+    end;
+
+    [ConfirmHandler]
+    procedure ConfirmNextRound(Question: Text[1024]; var Reply: Boolean)
+    begin
+        Assert.IsTrue(StrPos(Question, 'yeni tur') > 0, 'Only the new-round confirmation is expected.');
+        Reply := true;
+    end;
+
+    [Test]
+    procedure NextRoundPreservesHistoryAndReadsMovedLpStock()
+    var
+        SheetNo: Code[20];
+        NextNo: Code[20];
+        Header: Record "DOPSWHS Count Sheet Header";
+        OldLine: Record "DOPSWHS Count Sheet Line";
+        NewLine: Record "DOPSWHS Count Sheet Line";
+        LP: Record "DOPSWHS LP Header";
+        LPLine: Record "DOPSWHS LP Line";
+        Entry: Record "Warehouse Entry";
+        Counter: Record "DOPSWHS Count Counter";
+        Mgmt: Codeunit "DOPSWHS Count Mgmt";
+        EntriesBefore: Integer;
+    begin
+        SheetNo := CreateSavedFindingRound();
+        OldLine.SetRange("Sheet No.", SheetNo);
+        OldLine.FindFirst();
+        // Emulate the external Ad-hoc result before starting another round.
+        LP.Get('CV2-FIND-LP');
+        LP."Bin Code" := 'A.B07.11';
+        LP.Modify(true);
+        LPLine.SetRange("LP No.", LP."No.");
+        LPLine.FindFirst();
+        LPLine.Quantity := 8;
+        LPLine.Modify(true);
+        EntriesBefore := Entry.Count();
+        NextNo := Mgmt.StartNextRound(SheetNo);
+        Header.Get(NextNo);
+        Assert.AreEqual(2, Mgmt.GetRoundNo(Header), 'The next round must be numbered.');
+        Assert.AreEqual(SheetNo, Header."Previous Round No.", 'Historical sheet must be linked.');
+        Assert.AreEqual(SheetNo, Header."Round Root No.", 'Logical page number must not change.');
+        OldLine.Get(SheetNo, OldLine."Line No.");
+        Assert.AreEqual(10, OldLine."Counted Qty 1", 'First count must not change.');
+        Assert.AreEqual('A.A08.22', OldLine."Found From Bin", 'Original system bin must be preserved.');
+        NewLine.SetRange("Sheet No.", NextNo);
+        NewLine.SetRange("LP No.", LP."No.");
+        Assert.IsTrue(NewLine.FindFirst(), 'Current LP must be included.');
+        Assert.AreEqual(8, NewLine."System Qty", 'New round needs fresh stock.');
+        Assert.AreEqual('A.B07.11', NewLine."Bin Code", 'New round needs the current bin.');
+        Assert.IsFalse(NewLine."Counted 1", 'New round must require a fresh count.');
+        Assert.AreEqual('', NewLine."Found From Bin", 'Historical finding must not carry over.');
+        Assert.AreEqual(EntriesBefore, Entry.Count(), 'Starting a round must not post inventory.');
+        Counter.SetRange("Sheet No.", NextNo);
+        Counter.SetRange(Completed, true);
+        Assert.IsTrue(Counter.IsEmpty(), 'Previous completion must not carry over.');
+        Assert.AreEqual(NextNo, Mgmt.StartNextRound(SheetNo), 'Retry must return the same new round.');
+        asserterror Mgmt.PostSheet(SheetNo);
+        Assert.ExpectedError('arşivlendi');
+        asserterror Mgmt.ScanV2Lp(SheetNo, CreateGuid(), 'CV2-FIND-LP', 'A.B07.11', 1);
+        Assert.ExpectedError('arşivlendi');
+        asserterror Mgmt.RecordCount(SheetNo, OldLine."Line No.", 1, 99);
+        Assert.ExpectedError('arşivlendi');
+        asserterror Mgmt.StartRecount(SheetNo);
+        Assert.ExpectedError('arşivlendi');
+        asserterror Mgmt.PostSheet(NextNo);
+        Assert.ExpectedError('kayded');
+    end;
+
+    [Test]
+    procedure NextRoundRequiresSavedCountsAndRollsBackOnSnapshotFailure()
+    var
+        SheetNo: Code[20];
+        Header: Record "DOPSWHS Count Sheet Header";
+        Counter: Record "DOPSWHS Count Counter";
+        Mgmt: Codeunit "DOPSWHS Count Mgmt";
+        HeaderCount: Integer;
+        Card: TestPage "DOPSWHS Count Sheet Card";
+    begin
+        SheetNo := CreateSavedFindingRound();
+        Counter.Get(SheetNo, 1);
+        Counter.Completed := false;
+        Counter.Modify(true);
+        asserterror Mgmt.StartNextRound(SheetNo);
+        Counter.Completed := true;
+        Counter.Modify(true);
+        Header.Get(SheetNo);
+        // An invalid/newly changed scope must not leave a half-created round.
+        Header."Zone Filter" := 'MISSING';
+        Header.Modify(true);
+        HeaderCount := Header.Count();
+        asserterror Mgmt.StartNextRound(SheetNo);
+        Header.Get(SheetNo);
+        Assert.AreEqual('', Header."Next Round No.", 'Failed snapshot must leave the old round active.');
+        Assert.AreEqual(HeaderCount, Header.Count(), 'Failed snapshot must not leave an orphan round.');
+        Card.OpenEdit();
+        Card.GoToRecord(Header);
+        Assert.IsFalse(Card.OpenNextRound.Visible(), 'A failed transition must not offer a next round that does not exist.');
+        Card.Close();
+    end;
+
+    [Test]
+    procedure ArchivedRoundRejectsDirectEditsAndKeepsScanEvidence()
+    var
+        SheetNo: Code[20];
+        Header: Record "DOPSWHS Count Sheet Header";
+        Line: Record "DOPSWHS Count Sheet Line";
+        Scan: Record "DOPSWHS Count V2 Scan";
+        Mgmt: Codeunit "DOPSWHS Count Mgmt";
+        ScanCount: Integer;
+    begin
+        SheetNo := CreateSavedFindingRound();
+        Scan.SetRange("Sheet No.", SheetNo);
+        ScanCount := Scan.Count();
+        Mgmt.StartNextRound(SheetNo);
+        Assert.AreEqual(ScanCount, Scan.Count(), 'Original scan events must remain.');
+        Header.Get(SheetNo);
+        Header."Location Code" := 'CHANGED';
+        asserterror Header.Modify(true);
+        Header.Get(SheetNo);
+        asserterror Header.Delete(true);
+        Line.SetRange("Sheet No.", SheetNo);
+        Line.FindFirst();
+        Line."Counted Qty 1" := 99;
+        asserterror Line.Modify(true);
+        asserterror Line.Delete(true);
+    end;
+
+    local procedure CreateSavedFindingRound(): Code[20]
+    var
+        SheetNo: Code[20];
+        Mgmt: Codeunit "DOPSWHS Count Mgmt";
+        LP: Record "DOPSWHS LP Header";
+    begin
+        SheetNo := CreateBinFindingFixture();
+        Mgmt.ScanV2Lp(SheetNo, CreateGuid(), 'CV2-FIND-LP', 'A.B07.11', 1);
+        Mgmt.CompleteCounter(SheetNo, 1);
+        // Emulate completed Ad-hoc before opening the next round. The first
+        // count's historical source bin must still remain A.A08.22.
+        LP.Get('CV2-FIND-LP');
+        LP."Bin Code" := 'A.B07.11';
+        LP.Modify(true);
+        exit(SheetNo);
+    end;
+
+    [Test]
     procedure DifferentBinLpDoesNotPullSourceOrOtherStockBinsIntoCount()
     var
         SheetNo: Code[20];
@@ -218,7 +566,7 @@ codeunit 72142 "DOPSWHS Count V2 Tests"
         LP."Bin Code" := 'A.B07.11';
         LP.Modify(true);
         asserterror Mgmt.ScanV2Lp(SheetNo, CreateGuid(), LP."No.", 'A.A08.22', 1);
-        Assert.ExpectedError('ikinci sayım için yeni belge');
+        Assert.ExpectedError('Yeni Tur Başlat');
         Line.SetRange("Sheet No.", SheetNo);
         Line.SetRange("Bin Code", 'A.A08.22');
         Line.FindFirst();

@@ -226,3 +226,7 @@ internal fun countV2HasBlockingError(status: String): Boolean = status.startsWit
 
 internal const val COUNT_V2_BIN_FINDINGS_NOTE =
     "Raf farkları kaydedildi. İlk sayımı koruyun; Ad-hoc düzeltmelerinden sonra ikinci sayımı yeni belgeyle başlatın. Bu belge stoklara işlenmez."
+
+internal fun countV2BinFindingsNote(roundsSupported: Boolean): String = if (roundsSupported)
+    "Bu turun sonuçları korunur. Ad-hoc düzeltmesinden sonra Yeni Tur Başlat düğmesini kullanın; stok düzeltmesi yalnız son turdan yapılır."
+else COUNT_V2_BIN_FINDINGS_NOTE

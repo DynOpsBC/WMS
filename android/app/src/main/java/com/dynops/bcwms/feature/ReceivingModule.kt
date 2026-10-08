@@ -32,6 +32,30 @@ internal fun resolvedActiveReceiptLp(
 ): String? = serverLpNo.trim().takeIf { serverLpOpen && it.isNotBlank() }
     ?: successfulStartLp?.trim()?.takeIf { it.isNotBlank() }
 
+/**
+ * Bu oturumda miktarı girilmiş ama LP'ye bağlanmamış satırlar. Palet LP dağıtımı
+ * olan satırlar kendi paletlerini taşır. BC'nin önceden doldurduğu, operatörün
+ * dokunmadığı satırlar sayılmaz.
+ */
+internal fun receiptLinesAwaitingLp(lines: List<JSONObject>, touched: Set<Int>): List<Int> = lines
+    .filter { it.optInt("lineNo") in touched }
+    .filter { it.optDouble("qtyToReceive", 0.0) > 0.0 }
+    .filter { it.optString("licensePlateNo").isBlank() && it.optInt("bulkLpCount", 0) == 0 }
+    .map { it.optInt("lineNo") }
+
+internal fun receiptAttachLinesBody(lpNo: String, lineNos: List<Int>): String =
+    JSONObject().apply {
+        put("lpNo", lpNo)
+        put("lineNosJson", org.json.JSONArray(lineNos).toString())
+    }.toString()
+
+/** "LP Kapat": etiket nakilden sonra basılır; taslak palette henüz ürün yoktur. */
+internal fun receiptStopLpBody(lpNo: String): String =
+    JSONObject().apply { put("lpNo", lpNo); put("printLabel", false) }.toString()
+
+internal fun receiptLpClosedStatus(lpNo: String): String =
+    "TAMAM: $lpNo kapatıldı. Sonraki palet için LP Başlat'a, bitince Naklet'e basın."
+
 internal fun restoredBulkReceiptLineNos(lines: List<JSONObject>): Set<Int> = lines
     .asSequence()
     .filter {
@@ -192,6 +216,7 @@ private fun ReceiveDocument(no: String, onBack: () -> Unit) {
     var status by remember { mutableStateOf("") }
     var busy by remember { mutableStateOf(false) }
     var activeLp by remember { mutableStateOf<String?>(null) }
+    var attachPrompt by remember { mutableStateOf<Pair<String, List<Int>>?>(null) }
     var bulkLpTarget by remember(no) { mutableStateOf<JSONObject?>(null) }
     var showBulkLinePicker by remember(no) { mutableStateOf(false) }
     var printReceipt by remember(no) { mutableStateOf(false) }
@@ -561,7 +586,12 @@ private fun ReceiveDocument(no: String, onBack: () -> Unit) {
                                             createdLp.isBlank() -> "HATA: LP oluşturuldu ancak numarası alınamadı. Belgeyi yenileyip kontrol edin."
                                             else -> "TAMAM: $createdLp başlatıldı"
                                         }
-                                        if (createdLp.isNotBlank()) activeLp = createdLp
+                                        if (createdLp.isNotBlank()) {
+                                            activeLp = createdLp
+                                            // LP'den önce miktarı girilmiş satırlar operatör onayıyla LP'ye bağlanır.
+                                            val waiting = receiptLinesAwaitingLp(lines, touched)
+                                            if (waiting.isNotEmpty()) attachPrompt = createdLp to waiting
+                                        }
                                         busy = false
                                         // Başlık alanı API replikasında kısa süre gecikse
                                         // bile başarılı startLP yanıtını kaybetme.
@@ -573,13 +603,32 @@ private fun ReceiveDocument(no: String, onBack: () -> Unit) {
                                 contentPadding = PaddingValues(horizontal = 8.dp),
                             ) { Text("LP Başlat", maxLines = 1) }
                         } else {
-                            Text(
-                                "LP: $activeLp",
-                                modifier = Modifier.weight(1f),
-                                maxLines = 1,
-                                color = MaterialTheme.colorScheme.primary,
-                                fontWeight = FontWeight.SemiBold,
-                            )
+                            // BADE (8 Eki 2026): paleti kapatmak ile belgeyi nakletmek
+                            // ayrı adımlar. Kapanan taslak palet nakilde tek irsaliyeyle
+                            // kaydedilir; sonraki fiziksel palet için yeni LP başlatılır.
+                            OutlinedButton(
+                                onClick = {
+                                    val closingLp = activeLp ?: return@OutlinedButton
+                                    scope.launch {
+                                        busy = true
+                                        status = "$closingLp kapatılıyor..."
+                                        val r = BcApi.boundAction(
+                                            context, "receipts", no, "stopLP",
+                                            receiptStopLpBody(closingLp),
+                                        )
+                                        busy = false
+                                        status = if (r.ok) receiptLpClosedStatus(closingLp)
+                                            else QcErrorParser.friendlyStatus(BcApi.errorMessage(r.body), r.httpCode)
+                                        if (r.ok) {
+                                            activeLp = null
+                                            reload()
+                                        }
+                                    }
+                                },
+                                enabled = !busy,
+                                modifier = Modifier.weight(1f).height(46.dp),
+                                contentPadding = PaddingValues(horizontal = 8.dp),
+                            ) { Text("LP Kapat", maxLines = 1) }
                         }
 
                         // TOPLU POST: operatör istediği kadar satırı okutur/girer,
@@ -593,9 +642,9 @@ private fun ReceiveDocument(no: String, onBack: () -> Unit) {
                             Text(
                                 when {
                                     !canPost -> "Önce miktar gir"
-                                    vehicleInfoMissing -> "Araç → Kaydet"
-                                    activeLp != null -> "LP + Kaydet"
-                                    else -> "Kaydet · $readyCount"
+                                    vehicleInfoMissing -> "Araç → Naklet"
+                                    activeLp != null -> "LP + Naklet"
+                                    else -> "Naklet · $readyCount"
                                 },
                                 fontWeight = FontWeight.Bold,
                                 maxLines = 1,
@@ -609,12 +658,12 @@ private fun ReceiveDocument(no: String, onBack: () -> Unit) {
 
     if (showPostConfirm) {
         PostConfirmDialog(
-            title = if (activeLp != null) "LP’yi kapat ve mal kabulü kaydet" else "Mal kabulü kaydet",
+            title = if (activeLp != null) "LP’yi kapat ve deftere naklet" else "Deftere naklet",
             readyCount = readyCount,
             postLineCount = postLines.size,
             totalLineCount = lines.size,
             totalQty = postQty,
-            confirmLabel = if (activeLp != null) "LP’yi Kapat ve Kaydet" else "Kaydet",
+            confirmLabel = if (activeLp != null) "LP’yi Kapat ve Naklet" else "Deftere Naklet",
             onDismiss = { showPostConfirm = false },
             onConfirm = {
                 showPostConfirm = false
@@ -680,6 +729,36 @@ private fun ReceiveDocument(no: String, onBack: () -> Unit) {
                     }
                 }
             },
+        )
+    }
+
+    attachPrompt?.let { (lp, lineNos) ->
+        val names = lines.filter { it.optInt("lineNo") in lineNos }
+            .joinToString(", ") { it.optString("itemNo") }
+        AlertDialog(
+            onDismissRequest = { attachPrompt = null },
+            title = { Text("Satırlar $lp’ye eklensin mi?", fontWeight = FontWeight.Bold) },
+            text = {
+                Text(
+                    "${lineNos.size} satırın miktarı LP başlatılmadan girildi: $names. " +
+                        "Eklenmezse bu satırlar nakledilemez.",
+                    fontSize = 14.sp,
+                )
+            },
+            confirmButton = {
+                Button(onClick = {
+                    attachPrompt = null
+                    scope.launch {
+                        busy = true; status = "Satırlar $lp’ye ekleniyor..."
+                        val r = BcApi.boundAction(context, "receipts", no, "attachLinesToLp", receiptAttachLinesBody(lp, lineNos))
+                        busy = false
+                        status = if (r.ok) "TAMAM: ${lineNos.size} satır $lp’ye eklendi."
+                            else QcErrorParser.friendlyStatus(BcApi.errorMessage(r.body), r.httpCode)
+                        reload(preserveActiveLp = lp)
+                    }
+                }) { Text("LP’ye Ekle", fontWeight = FontWeight.Bold) }
+            },
+            dismissButton = { OutlinedButton(onClick = { attachPrompt = null }) { Text("Şimdi Değil") } },
         )
     }
 

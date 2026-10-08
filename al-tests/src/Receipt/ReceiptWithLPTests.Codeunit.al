@@ -48,8 +48,13 @@ codeunit 72133 "DOPSWHS Receipt With LP Tests"
         LP.Get(LpNo);
         Assert.AreEqual(5, LP."Planned Quantity", 'The empty draft LP must retain only its final planned quantity.');
         Assert.AreEqual(WhseReceiptLine."No.", LP."Pending Receipt No.", 'The empty LP must remain linked to its pending receipt.');
-        asserterror ReceiptMgmt.StopLP(WhseReceiptHeader, LpNo, false);
-        Assert.ExpectedError('Mal Kabulü Kaydet');
+        // "LP Kapat" taslak paleti kayıt yapmadan kapatır; içerik yine yalnız kayıtta oluşur.
+        ReceiptMgmt.StopLP(WhseReceiptHeader, LpNo, false);
+        LP.Get(LpNo);
+        Assert.AreEqual(Format(LP.Status::Built), Format(LP.Status), 'Closing a receipt draft must close the pallet without posting.');
+        LPLine.Reset();
+        LPLine.SetRange("LP No.", LpNo);
+        Assert.IsTrue(LPLine.IsEmpty(), 'Closing a receipt draft must not write LP contents before posting.');
 
         ReceiptMgmt.PostReceipt(WhseReceiptHeader, false, false);
 
@@ -83,6 +88,11 @@ codeunit 72133 "DOPSWHS Receipt With LP Tests"
         CreateReceipt(WhseReceiptHeader, WhseReceiptLine, 'PO-LP-RESTART', 20);
 
         FirstLpNo := ReceiptMgmt.StartLP(WhseReceiptHeader, 'PALLET-EUR');
+        // Boş palet kapatılamaz; önce satır eklenir.
+        asserterror ReceiptMgmt.StopLP(WhseReceiptHeader, FirstLpNo, false);
+        Assert.ExpectedError('boş, kapatılamaz');
+        ReceiptMgmt.ConfirmLine(WhseReceiptLine, 20, '', '', 0D, FirstLpNo, 'RECEIVE');
+        WhseReceiptHeader.Get(WhseReceiptHeader."No.");
         ReceiptMgmt.StopLP(WhseReceiptHeader, FirstLpNo, false);
         WhseReceiptHeader.Get(WhseReceiptHeader."No.");
         Assert.AreEqual(FirstLpNo, WhseReceiptHeader."DOPSWHS LP No.", 'Closing an LP must preserve the receipt LP pointer for reopening.');
@@ -388,6 +398,243 @@ codeunit 72133 "DOPSWHS Receipt With LP Tests"
         LP.Get(LpNo);
         Assert.AreEqual('', LP."Pending Receipt Lot No.", 'Cancellation clears staged tracking.');
         Assert.IsFalse(LP."Receipt Tracking Staged", 'Cancellation clears the staging marker.');
+    end;
+
+    [Test]
+    procedure OneLpCarriesBottleAndCap()
+    var
+        Header: Record "Warehouse Receipt Header";
+        BottleLine: Record "Warehouse Receipt Line";
+        CapLine: Record "Warehouse Receipt Line";
+        LP: Record "DOPSWHS LP Header";
+        LPLine: Record "DOPSWHS LP Line";
+        ReceiptMgmt: Codeunit "DOPSWHS Receipt Mgmt";
+        LpNo: Code[20];
+    begin
+        // BADE canlı (8 Eki 2026): şişe ve kapak ayrı madde, fiziksel olarak tek
+        // palet. İkinci satır "LP'si başka bir mal kabul satırı için bekliyor" diyordu.
+        CreateBottleCapFixture(Header, BottleLine, CapLine);
+        LpNo := ReceiptMgmt.StartLP(Header, 'PALLET-EUR');
+        ReceiptMgmt.ConfirmLine(BottleLine, 30, '', '', 0D, LpNo, '');
+        ReceiptMgmt.ConfirmLine(CapLine, 30, '', '', 0D, LpNo, '');
+        LP.Get(LpNo);
+        Assert.AreEqual(60, LP."Planned Quantity", 'The mixed draft must show the total of both receipt lines.');
+        LPLine.SetRange("LP No.", LpNo);
+        Assert.IsTrue(LPLine.IsEmpty(), 'Contents must not be written before posting.');
+
+        ReceiptMgmt.PrepareReceiptLPs(Header."No.");
+        ReceiptMgmt.EnsureReceiptLinesHaveLp(Header."No.", LpNo);
+
+        AssertLpLine(LpNo, BottleLine, 'RCPT-BOTTLE', 30);
+        AssertLpLine(LpNo, CapLine, 'RCPT-CAP', 30);
+        Assert.AreEqual(2, LPLine.Count(), 'One pallet must carry both products.');
+    end;
+
+    [Test]
+    procedure EmptyLpCannotBeClosedAndReadyLinesAreAttachedExplicitly()
+    var
+        Header: Record "Warehouse Receipt Header";
+        BottleLine: Record "Warehouse Receipt Line";
+        CapLine: Record "Warehouse Receipt Line";
+        LP: Record "DOPSWHS LP Header";
+        ReceiptMgmt: Codeunit "DOPSWHS Receipt Mgmt";
+        LineNos: List of [Integer];
+        LpNo: Code[20];
+    begin
+        // Önce miktar -> LP Başlat -> LP Kapat -> Naklet: boş LP kapanıp stok LP'siz giriyordu.
+        CreateBottleCapFixture(Header, BottleLine, CapLine);
+        ReceiptMgmt.ConfirmLine(BottleLine, 20, '', '', 0D, '', '');
+        ReceiptMgmt.ConfirmLine(CapLine, 8, '', '', 0D, '', '');
+        LpNo := ReceiptMgmt.StartLP(Header, 'PALLET-EUR');
+
+        asserterror ReceiptMgmt.StopLP(Header, LpNo, false);
+        Assert.ExpectedError('boş, kapatılamaz');
+
+        LineNos.Add(BottleLine."Line No.");
+        LineNos.Add(CapLine."Line No.");
+        Assert.AreEqual(2, ReceiptMgmt.AttachLinesToLp(Header, LpNo, LineNos), 'Both ready lines must join the LP.');
+        ReceiptMgmt.StopLP(Header, LpNo, false);
+        LP.Get(LpNo);
+        Assert.AreEqual(Format(LP.Status::Built), Format(LP.Status), 'A pallet with lines can be closed before posting.');
+
+        ReceiptMgmt.PrepareReceiptLPs(Header."No.");
+        ReceiptMgmt.EnsureReceiptLinesHaveLp(Header."No.", LpNo);
+        AssertLpLine(LpNo, BottleLine, 'RCPT-BOTTLE', 20);
+        AssertLpLine(LpNo, CapLine, 'RCPT-CAP', 8);
+    end;
+
+    [Test]
+    procedure LineWithoutLpBlocksPostingOfAnLpReceipt()
+    var
+        Header: Record "Warehouse Receipt Header";
+        BottleLine: Record "Warehouse Receipt Line";
+        CapLine: Record "Warehouse Receipt Line";
+        ReceiptMgmt: Codeunit "DOPSWHS Receipt Mgmt";
+        LineNos: List of [Integer];
+        LpNo: Code[20];
+    begin
+        // Birinci satıra miktar -> LP Başlat -> ikinci satır LP'ye -> Naklet:
+        // ilk satır LP'siz kalıyordu. Nakil satırı adıyla durmalı.
+        CreateBottleCapFixture(Header, BottleLine, CapLine);
+        ReceiptMgmt.ConfirmLine(BottleLine, 12, '', '', 0D, '', '');
+        LpNo := ReceiptMgmt.StartLP(Header, 'PALLET-EUR');
+        ReceiptMgmt.ConfirmLine(CapLine, 12, '', '', 0D, LpNo, '');
+
+        // Operatör "Şimdi Değil" dediyse sunucu satırı açık LP'ye kendiliğinden bağlamaz.
+        ReceiptMgmt.PrepareReceiptLPs(Header."No.");
+        BottleLine.Get(BottleLine."No.", BottleLine."Line No.");
+        Assert.AreEqual('', BottleLine."DOPSWHS LP No.", 'A line must join an LP only with the operator''s confirmation.');
+        asserterror ReceiptMgmt.EnsureReceiptLinesHaveLp(Header."No.", LpNo);
+        Assert.ExpectedError('RCPT-BOTTLE');
+    end;
+
+    [Test]
+    procedure OpenEmptyLpDoesNotSilentlyTakeReadyLines()
+    var
+        Header: Record "Warehouse Receipt Header";
+        BottleLine: Record "Warehouse Receipt Line";
+        CapLine: Record "Warehouse Receipt Line";
+        LPLine: Record "DOPSWHS LP Line";
+        ReceiptMgmt: Codeunit "DOPSWHS Receipt Mgmt";
+        LpNo: Code[20];
+    begin
+        // Önce miktar -> LP Başlat -> "Şimdi Değil" -> Naklet: LP boş kalır, nakil durur.
+        CreateBottleCapFixture(Header, BottleLine, CapLine);
+        ReceiptMgmt.ConfirmLine(BottleLine, 20, '', '', 0D, '', '');
+        ReceiptMgmt.ConfirmLine(CapLine, 8, '', '', 0D, '', '');
+        LpNo := ReceiptMgmt.StartLP(Header, 'PALLET-EUR');
+
+        ReceiptMgmt.PrepareReceiptLPs(Header."No.");
+        LPLine.SetRange("LP No.", LpNo);
+        Assert.IsTrue(LPLine.IsEmpty(), 'Unconfirmed lines must not be written into the open LP.');
+        asserterror ReceiptMgmt.EnsureReceiptLinesHaveLp(Header."No.", LpNo);
+        Assert.ExpectedError('bir LP''ye bağlı değil');
+    end;
+
+    [Test]
+    procedure ClosedPalletKeepsItsLineWhileAnotherLpIsActive()
+    var
+        Header: Record "Warehouse Receipt Header";
+        BottleLine: Record "Warehouse Receipt Line";
+        CapLine: Record "Warehouse Receipt Line";
+        ReceiptMgmt: Codeunit "DOPSWHS Receipt Mgmt";
+        FirstLpNo: Code[20];
+        SecondLpNo: Code[20];
+    begin
+        // LP1 kapat -> LP2 başlat -> LP1 satırını düzelt: terminal aktif LP2'yi
+        // gönderiyor; satır LP2'ye taşınmamalı.
+        CreateBottleCapFixture(Header, BottleLine, CapLine);
+        FirstLpNo := ReceiptMgmt.StartLP(Header, 'PALLET-EUR');
+        ReceiptMgmt.ConfirmLine(BottleLine, 15, '', '', 0D, FirstLpNo, '');
+        Header.Get(Header."No.");
+        ReceiptMgmt.StopLP(Header, FirstLpNo, false);
+        SecondLpNo := ReceiptMgmt.StartLP(Header, 'PALLET-EUR');
+        Assert.AreNotEqual(FirstLpNo, SecondLpNo, 'A closed pallet must lead to a new LP.');
+        ReceiptMgmt.ConfirmLine(CapLine, 6, '', '', 0D, SecondLpNo, '');
+
+        // Gerçek PATCH gibi: API gelen LP2'yi kayda yazar ve öyle gönderir.
+        BottleLine.Get(BottleLine."No.", BottleLine."Line No.");
+        BottleLine."DOPSWHS LP No." := SecondLpNo;
+        BottleLine."Qty. to Receive" := 14;
+        ReceiptMgmt.ConfirmLine(BottleLine, 14, '', '', 0D, SecondLpNo, '');
+        BottleLine.Get(BottleLine."No.", BottleLine."Line No.");
+        Assert.AreEqual(FirstLpNo, BottleLine."DOPSWHS LP No.", 'Editing a line of a closed pallet must keep it on that pallet.');
+
+        ReceiptMgmt.PrepareReceiptLPs(Header."No.");
+        AssertLpLine(FirstLpNo, BottleLine, 'RCPT-BOTTLE', 14);
+        AssertLpLine(SecondLpNo, CapLine, 'RCPT-CAP', 6);
+    end;
+
+    local procedure AssertLpLine(LpNo: Code[20]; ReceiptLine: Record "Warehouse Receipt Line"; ItemNo: Code[20]; ExpectedQty: Decimal)
+    var
+        LPLine: Record "DOPSWHS LP Line";
+    begin
+        LPLine.SetRange("LP No.", LpNo);
+        LPLine.SetRange("Source Document No.", ReceiptLine."No.");
+        LPLine.SetRange("Source Document Line No.", ReceiptLine."Line No.");
+        Assert.IsTrue(LPLine.FindFirst(), StrSubstNo('LP %1 must contain receipt line %2.', LpNo, ReceiptLine."Line No."));
+        Assert.AreEqual(ItemNo, LPLine."Item No.", StrSubstNo('LP %1 item for receipt line %2.', LpNo, ReceiptLine."Line No."));
+        Assert.AreEqual(ExpectedQty, LPLine.Quantity, StrSubstNo('LP %1 quantity for receipt line %2.', LpNo, ReceiptLine."Line No."));
+    end;
+
+    /// <summary>Bir satınalma siparişinde iki farklı madde: şişe ve kapak.</summary>
+    local procedure CreateBottleCapFixture(var Header: Record "Warehouse Receipt Header"; var BottleLine: Record "Warehouse Receipt Line"; var CapLine: Record "Warehouse Receipt Line")
+    var
+        Setup: Record "DOPSWHS Setup";
+        Helper: Codeunit "DOPSWHS Test Helper";
+        SetupWizard: Codeunit "DOPSWHS Setup Wizard";
+        NoSeries: Record "No. Series";
+        Uom: Record "Unit of Measure";
+        Location: Record Location;
+        PurchaseHeader: Record "Purchase Header";
+    begin
+        Setup := Helper.EnsureSetup();
+        if not NoSeries.Get('RCPT-LP') then
+            SeedReceiptSeries('RCPT-LP', 'RLP000001');
+        Setup."LP No. Series" := 'RCPT-LP';
+        Setup.Modify();
+        SetupWizard.SeedDefaultLPTemplates();
+        if not Uom.Get('PCS') then begin
+            Uom.Code := 'PCS';
+            Uom.Insert();
+        end;
+        if not Location.Get('RCPT-MIX') then begin
+            Location.Code := 'RCPT-MIX';
+            Location.Insert();
+        end;
+        PurchaseHeader."Document Type" := PurchaseHeader."Document Type"::Order;
+        PurchaseHeader."No." := 'RCPT-MIX';
+        PurchaseHeader.Insert();
+        Header."No." := 'RCPT-MIX';
+        Header."Location Code" := Location.Code;
+        Header.Insert();
+        CreateMixLine(Header, PurchaseHeader, BottleLine, 10000, 'RCPT-BOTTLE', 'Şişe - cam şeffaf');
+        CreateMixLine(Header, PurchaseHeader, CapLine, 20000, 'RCPT-CAP', 'Kapak - damlalık');
+    end;
+
+    local procedure CreateMixLine(Header: Record "Warehouse Receipt Header"; PurchaseHeader: Record "Purchase Header"; var Line: Record "Warehouse Receipt Line"; LineNo: Integer; ItemNo: Code[20]; ItemDescription: Text[100])
+    var
+        Item: Record Item;
+        ItemUom: Record "Item Unit of Measure";
+        PurchaseLine: Record "Purchase Line";
+    begin
+        Item."No." := ItemNo;
+        Item.Description := ItemDescription;
+        Item."Base Unit of Measure" := 'PCS';
+        Item.Insert();
+        ItemUom."Item No." := ItemNo;
+        ItemUom.Code := 'PCS';
+        ItemUom."Qty. per Unit of Measure" := 1;
+        ItemUom.Insert();
+        PurchaseLine."Document Type" := PurchaseHeader."Document Type";
+        PurchaseLine."Document No." := PurchaseHeader."No.";
+        PurchaseLine."Line No." := LineNo;
+        PurchaseLine.Type := PurchaseLine.Type::Item;
+        PurchaseLine."No." := ItemNo;
+        PurchaseLine."Location Code" := Header."Location Code";
+        PurchaseLine."Unit of Measure Code" := 'PCS';
+        PurchaseLine."Qty. per Unit of Measure" := 1;
+        PurchaseLine.Quantity := 100;
+        PurchaseLine."Quantity (Base)" := 100;
+        PurchaseLine."Outstanding Quantity" := 100;
+        PurchaseLine."Outstanding Qty. (Base)" := 100;
+        PurchaseLine.Insert();
+        Line."No." := Header."No.";
+        Line."Line No." := LineNo;
+        Line."Source Type" := Database::"Purchase Line";
+        Line."Source Subtype" := 1;
+        Line."Source No." := PurchaseHeader."No.";
+        Line."Source Line No." := LineNo;
+        Line."Item No." := ItemNo;
+        Line.Description := ItemDescription;
+        Line."Location Code" := Header."Location Code";
+        Line."Unit of Measure Code" := 'PCS';
+        Line."Qty. per Unit of Measure" := 1;
+        Line.Quantity := 100;
+        Line."Qty. (Base)" := 100;
+        Line."Qty. Outstanding" := 100;
+        Line."Qty. Outstanding (Base)" := 100;
+        Line.Insert();
     end;
 
     local procedure AssertTrackingQuantity(Line: Record "Warehouse Receipt Line"; LotNo: Code[50]; ExpectedQty: Decimal)

@@ -90,6 +90,28 @@ page 72090 "DOPSWHS Receipt API"
         exit(LpNo);
     end;
 
+    /// <summary>lineNosJson: [10000, 20000] — LP'den önce miktarı girilmiş satırlar.</summary>
+    [ServiceEnabled]
+    procedure attachLinesToLp(lpNo: Code[20]; lineNosJson: Text): Integer
+    var
+        ReceiptMgmt: Codeunit "DOPSWHS Receipt Mgmt";
+        LegacyWI: Codeunit "DOPSWHS Legacy WI Publisher";
+        LineArray: JsonArray;
+        LineToken: JsonToken;
+        LineNos: List of [Integer];
+        DocNo: Code[20];
+    begin
+        DocNo := Rec."No.";
+        LegacyWI.FireGetReceiptDocument(DocNo);
+        if not LineArray.ReadFrom(lineNosJson) then
+            Error('Satır listesi okunamadı.');
+        foreach LineToken in LineArray do
+            LineNos.Add(LineToken.AsValue().AsInteger());
+        if LineNos.Count() = 0 then
+            Error('LP''ye eklenecek satır seçilmedi.');
+        exit(ReceiptMgmt.AttachLinesToLp(Rec, lpNo, LineNos));
+    end;
+
     [ServiceEnabled]
     procedure stopLP(lpNo: Code[20]; printLabel: Boolean)
     var

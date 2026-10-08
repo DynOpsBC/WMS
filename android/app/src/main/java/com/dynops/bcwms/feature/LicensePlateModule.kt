@@ -491,7 +491,7 @@ private fun LpDocument(lpNo: String, transferTarget: String, onTransferTarget: (
                     }
                 }
                 if (lines.isEmpty() && !busy) EmptyState(
-                    if (awaitingReceipt) "$pendingReceiptNo mal kabulü henüz kaydedilmedi. Ürün, lot ve miktar LP + Kaydet başarılı olduğunda burada oluşacak."
+                    if (awaitingReceipt) "$pendingReceiptNo mal kabulü henüz kaydedilmedi. Ürün, lot ve miktar mal kabul deftere nakledildiğinde burada oluşacak."
                     else "Henüz satır yok. Satır Ekle düğmesiyle ürün ekleyin."
                 )
             }

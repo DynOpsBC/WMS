@@ -89,6 +89,7 @@ codeunit 72043 "DOPSWHS Receipt Mgmt"
         // bu kayıt transaction'ı başarıyla tamamlanacaksa LP içine yazılır;
         // daha sonraki bir Error tüm içerik eklemelerini de geri alır.
         PrepareReceiptLPs(ReceiptNo);
+        EnsureReceiptLinesHaveLp(ReceiptNo, LpNo);
         // Daha eski mobil sürümler tedarikçi lotunu yalnız Lot No.
         // Information kartına yazıyordu. Hazırlanmış satırları da
         // yeniden giriş istemeden BADE takip kolonuna taşı.
@@ -444,10 +445,15 @@ codeunit 72043 "DOPSWHS Receipt Mgmt"
 
         // Legacy clients may have only the active header LP. Ignore a stale
         // Assigned/Consumed reference left by an earlier partial wave.
+        // Boş aktif LP kapatılmaz: içeriksiz, etiketli bir palet bırakıyordu.
         if (HeaderLpNo <> '') and (not CheckedLPs.ContainsKey(HeaderLpNo)) then
             if HeaderLP.Get(HeaderLpNo) then
-                if HeaderLP.Status in [HeaderLP.Status::Open, HeaderLP.Status::Built] then
-                    EnsureReceiptLPReady(HeaderLpNo, ClosedLpNos);
+                if HeaderLP.Status in [HeaderLP.Status::Open, HeaderLP.Status::Built] then begin
+                    ReceiptLPLine.Reset();
+                    ReceiptLPLine.SetRange("LP No.", HeaderLpNo);
+                    if not ReceiptLPLine.IsEmpty() then
+                        EnsureReceiptLPReady(HeaderLpNo, ClosedLpNos);
+                end;
     end;
 
     local procedure EnsureReceiptLPReady(LpNo: Code[20]; var ClosedLpNos: List of [Code[20]])
@@ -499,46 +505,251 @@ codeunit 72043 "DOPSWHS Receipt Mgmt"
         // first, then clear that key safely while materializing each pallet.
         foreach PendingLpNo in PendingLpNos do begin
             LP.Get(PendingLpNo);
-            if not WhseReceiptLine.Get(ReceiptNo, LP."Pending Receipt Line No.") then
-                Error('%1 LP''sinin bekleyen mal kabul satırı bulunamadı.', LP."No.");
-            // Partial posting may deliberately leave another receipt line at
-            // zero. Its empty LP draft must wait for the next receipt wave.
-            if WhseReceiptLine."Qty. to Receive" > 0 then begin
-                if LP."Planned Quantity" <= 0 then
-                    Error('%1 LP''sinin bekleyen miktarı geçersizdir.', LP."No.");
-                if LP.Status = LP.Status::Built then
-                    LPMgt.Reopen(LP);
-                if LP.Status <> LP.Status::Open then
-                    Error('%1 LP''si mal kabul kaydı için açık durumda değil.', LP."No.");
+            // Satır no 0 = karma palet taslağı: içerik LP'ye bağlı mal kabul
+            // satırlarından okunur (bir LP'de birden çok ürün/satır).
+            if LP."Pending Receipt Line No." = 0 then
+                MaterializeMultiLineReceiptLP(LP, ReceiptNo)
+            else begin
+                if not WhseReceiptLine.Get(ReceiptNo, LP."Pending Receipt Line No.") then
+                    Error('%1 LP''sinin bekleyen mal kabul satırı bulunamadı.', LP."No.");
+                // Partial posting may deliberately leave another receipt line at
+                // zero. Its empty LP draft must wait for the next receipt wave.
+                if WhseReceiptLine."Qty. to Receive" > 0 then begin
+                    if LP."Planned Quantity" <= 0 then
+                        Error('%1 LP''sinin bekleyen miktarı geçersizdir.', LP."No.");
+                    if LP.Status = LP.Status::Built then
+                        LPMgt.Reopen(LP);
+                    if LP.Status <> LP.Status::Open then
+                        Error('%1 LP''si mal kabul kaydı için açık durumda değil.', LP."No.");
 
-                if LP."Receipt Tracking Staged" then begin
-                    LotNo := LP."Pending Receipt Lot No.";
-                    Clear(SerialNo);
-                    ExpiryDate := LP."Pending Receipt Expiry";
-                end else
-                    GetItemTracking(WhseReceiptLine, LotNo, SerialNo, ExpiryDate);
-                LPMgt.AddLine(
-                    LP, WhseReceiptLine."Item No.", WhseReceiptLine."Unit of Measure Code",
-                    LP."Planned Quantity", LotNo, SerialNo, ExpiryDate);
-                StampReceiptSourceOnLastLpLine(LP."No.", WhseReceiptLine);
-                Clear(LP."Pending Receipt No.");
-                LP."Pending Receipt Line No." := 0;
-                ClearPendingReceiptTracking(LP);
-                LP.Modify(true);
+                    if LP."Receipt Tracking Staged" then begin
+                        LotNo := LP."Pending Receipt Lot No.";
+                        Clear(SerialNo);
+                        ExpiryDate := LP."Pending Receipt Expiry";
+                    end else
+                        GetItemTracking(WhseReceiptLine, LotNo, SerialNo, ExpiryDate);
+                    LPMgt.AddLine(
+                        LP, WhseReceiptLine."Item No.", WhseReceiptLine."Unit of Measure Code",
+                        LP."Planned Quantity", LotNo, SerialNo, ExpiryDate);
+                    StampReceiptSourceOnLastLpLine(LP."No.", WhseReceiptLine);
+                    Clear(LP."Pending Receipt No.");
+                    LP."Pending Receipt Line No." := 0;
+                    ClearPendingReceiptTracking(LP);
+                    LP.Modify(true);
+                end;
             end;
         end;
+    end;
+
+    /// <summary>
+    /// BADE (8 Eki 2026): şişe + kapak gibi farklı ürünler fiziksel olarak tek
+    /// palettedir. Taslak LP'ye bağlı her mal kabul satırı, kayıt
+    /// transaction'ı içinde kendi miktarı ve takip bilgisiyle LP'ye yazılır.
+    /// </summary>
+    local procedure MaterializeMultiLineReceiptLP(var LP: Record "DOPSWHS LP Header"; ReceiptNo: Code[20])
+    var
+        ReceiptLine: Record "Warehouse Receipt Line";
+        LPMgt: Codeunit "DOPSWHS LP Management";
+        LotNo: Code[50];
+        SerialNo: Code[50];
+        ExpiryDate: Date;
+    begin
+        ReceiptLine.SetRange("No.", ReceiptNo);
+        ReceiptLine.SetRange("DOPSWHS LP No.", LP."No.");
+        if ReceiptLine.IsEmpty() then begin
+            // Satırlar başka LP'ye taşındı ya da LP'den çıkarıldı: taslak serbest kalır.
+            ReleaseReceiptDraft(LP);
+            exit;
+        end;
+        ReceiptLine.SetFilter("Qty. to Receive", '>0');
+        // Kısmi kayıtta palet tamamen dışarıda kaldıysa sonraki dalgayı bekler.
+        if ReceiptLine.IsEmpty() then
+            exit;
+        if LP.Status = LP.Status::Built then
+            LPMgt.Reopen(LP);
+        if LP.Status <> LP.Status::Open then
+            Error('%1 LP''si mal kabul kaydı için açık durumda değil.', LP."No.");
+        ReceiptLine.FindSet();
+        repeat
+            GetItemTracking(ReceiptLine, LotNo, SerialNo, ExpiryDate);
+            LPMgt.AddLine(
+                LP, ReceiptLine."Item No.", ReceiptLine."Unit of Measure Code",
+                ReceiptLine."Qty. to Receive", LotNo, SerialNo, ExpiryDate);
+            StampReceiptSourceOnLastLpLine(LP."No.", ReceiptLine);
+        until ReceiptLine.Next() = 0;
+        // Bu dalgada nakledilmeyen satırlar kapanan bu palete sonradan eklenemez.
+        ReceiptLine.SetRange("Qty. to Receive", 0);
+        ReceiptLine.ModifyAll("DOPSWHS LP No.", '', false);
+        LP.Get(LP."No.");
+        ReleaseReceiptDraft(LP);
+    end;
+
+    local procedure ReleaseReceiptDraft(var LP: Record "DOPSWHS LP Header")
+    begin
+        Clear(LP."Pending Receipt No.");
+        LP."Pending Receipt Line No." := 0;
+        LP."Planned Quantity" := 0;
+        ClearPendingReceiptTracking(LP);
+        LP.Modify(true);
+    end;
+
+    local procedure IsMultiLineReceiptDraft(LpNo: Code[20]; ReceiptNo: Code[20]): Boolean
+    var
+        LP: Record "DOPSWHS LP Header";
+    begin
+        if (LpNo = '') or (ReceiptNo = '') then
+            exit(false);
+        if not LP.Get(LpNo) then
+            exit(false);
+        exit((LP."Pending Receipt No." = ReceiptNo) and (LP."Pending Receipt Line No." = 0));
+    end;
+
+    local procedure KeepsClosedDraftLp(StoredLpNo: Code[20]; ReceiptNo: Code[20]; RequestedLpNo: Code[20]): Boolean
+    var
+        LP: Record "DOPSWHS LP Header";
+    begin
+        if not IsMultiLineReceiptDraft(StoredLpNo, ReceiptNo) then
+            exit(false);
+        if RequestedLpNo = '' then
+            exit(true);
+        if RequestedLpNo = StoredLpNo then
+            exit(false);
+        LP.Get(StoredLpNo);
+        exit(LP.Status = LP.Status::Built);
+    end;
+
+    /// <summary>
+    /// BADE (8 Eki 2026): "LP Başlat"tan önce miktarı girilmiş satırlar,
+    /// terminal operatörün onayıyla açık LP'ye bağlanır. Sunucu "hazır" satırı
+    /// kendisi tahmin etmez; BC yeni belgede Alınacak Miktar'ı önceden doldurabilir.
+    /// </summary>
+    procedure AttachLinesToLp(var WhseReceiptHeader: Record "Warehouse Receipt Header"; LpNo: Code[20]; LineNos: List of [Integer]): Integer
+    var
+        LP: Record "DOPSWHS LP Header";
+        ReceiptLine: Record "Warehouse Receipt Line";
+        PendingLP: Record "DOPSWHS LP Header";
+        LineNo: Integer;
+        AttachedCount: Integer;
+    begin
+        Log('Receipt.AttachLinesToLp', WhseReceiptHeader."No.", WhseReceiptHeader."Assigned User ID");
+        if not LP.Get(LpNo) then
+            Error('%1 LP kaydı bulunamadı.', LpNo);
+        if LP.Status <> LP.Status::Open then
+            Error('%1 LP''si açık değil. Satırları eklemek için yeni LP başlatın.', LpNo);
+        foreach LineNo in LineNos do begin
+            if not ReceiptLine.Get(WhseReceiptHeader."No.", LineNo) then
+                Error('%1 mal kabul belgesinde %2 satırı bulunamadı.', WhseReceiptHeader."No.", LineNo);
+            if ReceiptLine."Qty. to Receive" <= 0 then
+                Error('%1 satırında alınacak miktar yok.', LineNo);
+            PendingLP.SetRange("Pending Receipt No.", ReceiptLine."No.");
+            PendingLP.SetRange("Pending Receipt Line No.", ReceiptLine."Line No.");
+            if not PendingLP.IsEmpty() then
+                Error('%1 satırı Palet LP dağıtımıyla hazırlandı; başka LP''ye eklenemez.', LineNo);
+            if (ReceiptLine."DOPSWHS LP No." <> '') and (ReceiptLine."DOPSWHS LP No." <> LpNo) then
+                Error('%1 satırı zaten %2 LP''sinde.', LineNo, ReceiptLine."DOPSWHS LP No.");
+            LP.Get(LpNo);
+            BindLpToReceiptBin(LP, ReceiptLine);
+            ReceiptLine."DOPSWHS LP No." := LpNo;
+            ReceiptLine.Modify(true);
+            LP.Get(LpNo);
+            StageReceiptLP(LP, ReceiptLine, ReceiptLine."Qty. to Receive");
+            AttachedCount += 1;
+        end;
+        WhseReceiptHeader.Get(WhseReceiptHeader."No.");
+        if WhseReceiptHeader."DOPSWHS LP No." = '' then begin
+            WhseReceiptHeader."DOPSWHS LP No." := LpNo;
+            WhseReceiptHeader.Modify(true);
+        end;
+        exit(AttachedCount);
+    end;
+
+    /// <summary>
+    /// LP ile çalışılan belgede LP'siz satır nakledilmez: canlıda stok LP'siz
+    /// girip LP boş kalmıştı. Palet LP dağıtımı satırları kendi LP satırlarıyla sayılır.
+    /// </summary>
+    internal procedure EnsureReceiptLinesHaveLp(ReceiptNo: Code[20]; HeaderLpNo: Code[20])
+    var
+        ReceiptLine: Record "Warehouse Receipt Line";
+        LPLine: Record "DOPSWHS LP Line";
+        MissingLines: Text;
+    begin
+        if HeaderLpNo = '' then
+            exit;
+        ReceiptLine.SetRange("No.", ReceiptNo);
+        ReceiptLine.SetFilter("Qty. to Receive", '>0');
+        ReceiptLine.SetRange("DOPSWHS LP No.", '');
+        if ReceiptLine.FindSet() then
+            repeat
+                LPLine.SetRange("Source Document Type", LPLine."Source Document Type"::WhseReceipt);
+                LPLine.SetRange("Source Document No.", ReceiptLine."No.");
+                LPLine.SetRange("Source Document Line No.", ReceiptLine."Line No.");
+                LPLine.SetFilter(Quantity, '>0');
+                if LPLine.IsEmpty() then begin
+                    if MissingLines <> '' then
+                        MissingLines += ', ';
+                    MissingLines += StrSubstNo('%1 (%2)', ReceiptLine."Line No.", ReceiptLine."Item No.");
+                end;
+            until ReceiptLine.Next() = 0;
+        if MissingLines <> '' then
+            Error(
+                'Şu satırlar bir LP''ye bağlı değil: %1. LP Başlat ile satırları bir LP''ye ekleyin veya miktarlarını sıfırlayın.',
+                MissingLines);
+    end;
+
+    /// <summary>
+    /// Önceki sürümün tek satırlık LP taslağını karma palet taslağına çevirir.
+    /// Yalnız satırın kendisi LP'yi gösteriyorsa (aktif LP akışı) güvenlidir;
+    /// palet dağıtımı (Palet LP) taslakları kendi satırına bağlı kalır.
+    /// </summary>
+    local procedure ConvertToMultiLineDraft(var LP: Record "DOPSWHS LP Header"): Boolean
+    var
+        PendingLine: Record "Warehouse Receipt Line";
+    begin
+        if LP."Pending Receipt Line No." = 0 then
+            exit(true);
+        if LP."Receipt Tracking Staged" then
+            exit(false);
+        if not PendingLine.Get(LP."Pending Receipt No.", LP."Pending Receipt Line No.") then
+            exit(false);
+        if PendingLine."DOPSWHS LP No." <> LP."No." then
+            exit(false);
+        LP."Pending Receipt Line No." := 0;
+        LP."Planned Quantity" := DraftPlannedQuantity(LP."No.", LP."Pending Receipt No.");
+        LP.Modify(true);
+        exit(true);
+    end;
+
+    /// <summary>Karma taslakta LP kartının gösterdiği toplam: LP'ye bağlı satırların kabul miktarı.</summary>
+    local procedure DraftPlannedQuantity(LpNo: Code[20]; ReceiptNo: Code[20]): Decimal
+    var
+        ReceiptLine: Record "Warehouse Receipt Line";
+    begin
+        ReceiptLine.SetRange("No.", ReceiptNo);
+        ReceiptLine.SetRange("DOPSWHS LP No.", LpNo);
+        ReceiptLine.CalcSums("Qty. to Receive");
+        exit(ReceiptLine."Qty. to Receive");
     end;
 
     local procedure StageReceiptLP(var LP: Record "DOPSWHS LP Header"; WhseReceiptLine: Record "Warehouse Receipt Line"; Quantity: Decimal)
     var
         ExistingLPLine: Record "DOPSWHS LP Line";
     begin
-        if (LP."Pending Receipt No." <> '') and
-           ((LP."Pending Receipt No." <> WhseReceiptLine."No.") or
-            (LP."Pending Receipt Line No." <> WhseReceiptLine."Line No."))
+        if (LP."Pending Receipt No." <> '') and (LP."Pending Receipt No." <> WhseReceiptLine."No.") then
+            Error('%1 LP''si %2 mal kabulünü bekliyor. Bu belge için yeni LP başlatın.', LP."No.", LP."Pending Receipt No.");
+        // BADE (8 Eki 2026): bir LP aynı belgenin birden çok satırını (farklı
+        // ürünleri) taşıyabilir. Önceki sürümün tek satırlık taslağı çevrilir.
+        if (LP."Pending Receipt No." = WhseReceiptLine."No.") and
+           (LP."Pending Receipt Line No." <> 0) and
+           (LP."Pending Receipt Line No." <> WhseReceiptLine."Line No.")
         then
-            Error('%1 LP''si başka bir mal kabul satırı için bekliyor.', LP."No.");
-        if LP.Status <> LP.Status::Open then
+            if not ConvertToMultiLineDraft(LP) then
+                Error(
+                    '%1 LP''si %2 satırının palet dağıtımına ait. Bu LP''ye başka ürün eklenemez; yeni LP başlatın.',
+                    LP."No.", LP."Pending Receipt Line No.");
+        // "LP Kapat" ile kapatılmış taslak yalnız kendi satırının düzeltmesini kabul eder.
+        if not ((LP.Status = LP.Status::Open) or
+                ((LP.Status = LP.Status::Built) and IsMultiLineReceiptDraft(LP."No.", WhseReceiptLine."No.")))
+        then
             Error('%1 LP''si açık değil. Mal kabul için yeni LP başlatın.', LP."No.");
         ExistingLPLine.SetRange("LP No.", LP."No.");
         if (LP."Pending Receipt No." = '') and (not ExistingLPLine.IsEmpty()) then
@@ -547,14 +758,19 @@ codeunit 72043 "DOPSWHS Receipt Mgmt"
                 LP."No.");
 
         if Quantity <= 0 then begin
-            Clear(LP."Pending Receipt No.");
-            LP."Pending Receipt Line No." := 0;
-            LP."Planned Quantity" := 0;
+            // Satır kayıttan çıkar; karma taslak diğer satırları için kalır.
+            if LP."Pending Receipt Line No." = WhseReceiptLine."Line No." then begin
+                Clear(LP."Pending Receipt No.");
+                LP."Pending Receipt Line No." := 0;
+                LP."Planned Quantity" := 0;
+            end;
         end else begin
+            // Miktar ve takip, kayıt anında LP'ye bağlı satırlardan okunur.
             LP."Pending Receipt No." := WhseReceiptLine."No.";
-            LP."Pending Receipt Line No." := WhseReceiptLine."Line No.";
-            LP."Planned Quantity" := Quantity;
+            LP."Pending Receipt Line No." := 0;
         end;
+        if LP."Pending Receipt Line No." = 0 then
+            LP."Planned Quantity" := DraftPlannedQuantity(LP."No.", WhseReceiptLine."No.");
         ClearPendingReceiptTracking(LP);
         LP.Modify(true);
     end;
@@ -1082,13 +1298,28 @@ codeunit 72043 "DOPSWHS Receipt Mgmt"
     procedure StopLP(var WhseReceiptHeader: Record "Warehouse Receipt Header"; LpNo: Code[20]; PrintLabel: Boolean; PrinterId: Code[50])
     var
         LP: Record "DOPSWHS LP Header";
+        EmptyLPLine: Record "DOPSWHS LP Line";
         LPMgt: Codeunit "DOPSWHS LP Management";
         Telemetry: Codeunit "DOPSWHS Telemetry";
     begin
         Log('Receipt.StopLP', WhseReceiptHeader."No.", WhseReceiptHeader."Assigned User ID");
         LP.Get(LpNo);
-        if LP."Pending Receipt No." <> '' then
+        if LP."Pending Receipt No." <> '' then begin
+            // BADE (8 Eki 2026): "LP Kapat" ile "Deftere Naklet" ayrı adımlar.
+            // Taslak palet kapanır, içerik ve etiket belge nakledilince oluşur.
+            if (LP."Pending Receipt No." = WhseReceiptHeader."No.") and ConvertToMultiLineDraft(LP) then begin
+                if LP.Status = LP.Status::Open then begin
+                    LP.Status := LP.Status::Built;
+                    LP.Modify(true);
+                end;
+                exit;
+            end;
             Error('LP içeriği henüz kaydedilmedi. LP''yi kapatmak için Mal Kabulü Kaydet düğmesini kullanın.');
+        end;
+        // Boş palet kapatılmaz: satırlar sonra bu LP'ye bağlanamaz ve stok LP'siz girer.
+        EmptyLPLine.SetRange("LP No.", LP."No.");
+        if EmptyLPLine.IsEmpty() then
+            Error('%1 LP''si boş, kapatılamaz. Önce satırları bu LP''ye ekleyin.', LP."No.");
         // Closing the LP is the warehouse transaction; the combined MTE/LP label
         // is best-effort output and must not reopen the LP when a printer is
         // unavailable. No mobile/API contract changes are required.
@@ -1381,6 +1612,7 @@ codeunit 72043 "DOPSWHS Receipt Mgmt"
         ExistingSerialNo: Code[50];
         ExistingExpiryDate: Date;
         PendingLP: Record "DOPSWHS LP Header";
+        StoredLine: Record "Warehouse Receipt Line";
     begin
         Log('Receipt.ConfirmLine', WhseReceiptLine."No.", EffectiveOperator(OperatorUserId, ReceiptOperator(WhseReceiptLine."No.")));
         // The header points at the first pallet even for a bulk 50 + 50 plan.
@@ -1396,7 +1628,14 @@ codeunit 72043 "DOPSWHS Receipt Mgmt"
             if Abs(PendingLP."Planned Quantity" - QtyToReceive) > 0.00001 then
                 Error('Bu satır için paletlere toplam %1 adet ayrıldı. Kabul miktarı palet toplamıyla aynı olmalıdır.', PendingLP."Planned Quantity");
             Clear(LicensePlateNo);
-        end;
+        end else
+            // BADE (8 Eki 2026): "LP Kapat" ile kapatılan palet fizikseldir.
+            // Satırının miktarı düzeltilirken terminal LP göndermeyebilir ya da
+            // o anki aktif LP'yi gönderebilir; satır yine kendi paletinde kalır.
+            // API, gelen LP'yi Rec'e yazıp buraya gönderir: eski LP veritabanından okunur.
+            if StoredLine.Get(WhseReceiptLine."No.", WhseReceiptLine."Line No.") then
+                if KeepsClosedDraftLp(StoredLine."DOPSWHS LP No.", WhseReceiptLine."No.", LicensePlateNo) then
+                    LicensePlateNo := StoredLine."DOPSWHS LP No.";
         Item.Get(WhseReceiptLine."Item No.");
         EnsurePendingLotUnchanged(WhseReceiptLine, LotNo);
         // Mevcut BC takip bilgisi korunur. İç lot yalnız terminaldeki açık
@@ -1892,6 +2131,15 @@ codeunit 72043 "DOPSWHS Receipt Mgmt"
                         LPLine.SetRange("Item No.", ReceiptLine."Item No.");
                         LPLine.SetRange("Variant Code", ReceiptLine."Variant Code");
                         LPLine.SetFilter(Quantity, '>0');
+                        // Karma palette aynı ürün iki satırla gelebilir: önce bu satırın kendi LP satırı.
+                        LPLine.SetRange("Source Document Type", LPLine."Source Document Type"::WhseReceipt);
+                        LPLine.SetRange("Source Document No.", ReceiptLine."No.");
+                        LPLine.SetRange("Source Document Line No.", ReceiptLine."Line No.");
+                        if LPLine.IsEmpty() then begin
+                            LPLine.SetRange("Source Document Type");
+                            LPLine.SetRange("Source Document No.");
+                            LPLine.SetRange("Source Document Line No.");
+                        end;
                         if not LPLine.FindFirst() then
                             Error(
                                 '%1 LP''sinde %2 ürünü için kabul miktarı bulunamadı.',

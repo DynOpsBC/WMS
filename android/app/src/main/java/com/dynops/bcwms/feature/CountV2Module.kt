@@ -89,6 +89,7 @@ fun CountV2Module() {
         if (query.isBlank()) rows
         else rows.filter { sheet ->
             sheet.optString("no").contains(query, ignoreCase = true) ||
+                sheet.optString("roundRootNo").contains(query, ignoreCase = true) ||
                 sheet.optString("locationCode").contains(query, ignoreCase = true) ||
                 sheet.optString("zoneFilter").contains(query, ignoreCase = true) ||
                 sheet.optString("status").contains(query, ignoreCase = true)
@@ -110,7 +111,7 @@ fun CountV2Module() {
         scope.launch {
             loading = true
             status = "Sayım sayfaları yükleniyor..."
-            val filter = buildODataFilter(searchClause("no", search))
+            val filter = ""
             // Select kullanmamak eski/yeni AL paketleriyle listeyi uyumlu tutar;
             // V2 alanı yayınlandıysa aynı response içinde ayrıca gelir.
             val page = BcApi.getAllPages(
@@ -119,7 +120,7 @@ fun CountV2Module() {
             )
             val capabilities = BcApi.getCountCapabilities(context)
             backendReady = capabilities.v2Ready
-            rows = if (page.complete) page.rows else emptyList()
+            rows = if (page.complete) page.rows.filter { it.optString("nextRoundNo").isBlank() } else emptyList()
             if (newLocation.isBlank())
                 newLocation = rows.firstNotNullOfOrNull {
                     it.optString("locationCode").trim().takeIf(String::isNotBlank)
@@ -202,7 +203,7 @@ fun CountV2Module() {
         load()
     }
     selected?.let { no ->
-        CountV2Document(no = no, onBack = { selected = null; load() })
+        key(no) { CountV2Document(no = no, onBack = { selected = null; load() }, onRoundChanged = { selected = it }) }
         return
     }
 
@@ -247,7 +248,7 @@ fun CountV2Module() {
                 ) {
                     Column(Modifier.padding(12.dp)) {
                         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                            Text(sheet.optString("no"), fontWeight = FontWeight.Bold)
+                            Text("${sheet.optString("roundRootNo").ifBlank { sheet.optString("no") }} · ${sheet.optInt("roundNo", 1)}. tur", fontWeight = FontWeight.Bold)
                             Text(
                                 when {
                                     posted -> "Kapalı"
@@ -334,7 +335,7 @@ fun CountV2Module() {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun CountV2Document(no: String, onBack: () -> Unit) {
+private fun CountV2Document(no: String, onBack: () -> Unit, onRoundChanged: (String) -> Unit) {
     androidx.activity.compose.BackHandler { onBack() }
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -367,6 +368,12 @@ private fun CountV2Document(no: String, onBack: () -> Unit) {
     // Aynı raf + aynı miktarlı etiket (ham içerik) bu oturumda bir kez sayılır.
     var scannedQtyLabels by remember(no) { mutableStateOf(setOf<String>()) }
     var showPostConfirm by remember(no) { mutableStateOf(false) }
+    var showNextRound by remember(no) { mutableStateOf(false) }
+    var showComparison by remember(no) { mutableStateOf(false) }
+    var history by remember(no) { mutableStateOf<List<Pair<JSONObject, List<JSONObject>>>>(emptyList()) }
+    var comparisonLoading by remember(no) { mutableStateOf(false) }
+    var comparisonError by remember(no) { mutableStateOf("") }
+    var comparisonIndex by remember(no) { mutableIntStateOf(0) }
     var showFinishBin by remember(no) { mutableStateOf(false) }
     var unexpectedLabel by remember(no) { mutableStateOf<CountV2Label?>(null) }
 
@@ -402,6 +409,10 @@ private fun CountV2Document(no: String, onBack: () -> Unit) {
             context,
             "countSheetLines?\$filter=sheetNo eq '$safeNo'&\$top=200",
         )
+        if (loadedHeader?.optString("nextRoundNo").orEmpty().isNotBlank()) {
+            onRoundChanged(loadedHeader!!.optString("nextRoundNo"))
+            return false
+        }
         header = loadedHeader
         lines = if (page.complete) page.rows else emptyList()
         linesComplete = loadedHeader != null && page.complete
@@ -920,11 +931,58 @@ private fun CountV2Document(no: String, onBack: () -> Unit) {
         }
     }
 
+    fun startNextRound() {
+        if (busy || pendingRetry != null || pendingRestoreFailed) return
+        showNextRound = false
+        scope.launch {
+            busy = true
+            val result = BcApi.boundActionLongRunning(context, "countSheets", no, "startNextRound", "{}")
+            busy = false
+            val nextNo = if (result.ok) BcApi.scalarValue(result.body).trim().trim('"') else ""
+            if (nextNo.isNotBlank()) onRoundChanged(nextNo)
+            else status = if (BcApi.isAmbiguousMutationFailure(result))
+                "UYARI: Yeni tur yanıtı alınamadı. Yeni Tur Başlat'ı tekrar kullanabilirsiniz; ikinci bir tur oluşturulmaz."
+            else "HATA: ${BcApi.errorMessage(result.body)}"
+        }
+    }
+
+    fun loadComparison() {
+        showComparison = true
+        comparisonLoading = true
+        comparisonError = ""
+        history = emptyList()
+        comparisonIndex = 0
+        scope.launch {
+            // Refresh current quantities as well; comparing old cached values
+            // against another operator's latest round would be misleading.
+            if (!loadDocument()) {
+                comparisonLoading = false
+                comparisonError = "Güncel tur alınamadı. Yenileyin."
+                return@launch
+            }
+            var previousNo = header?.optString("previousRoundNo").orEmpty()
+            val seen = mutableSetOf(no)
+            val loaded = mutableListOf<Pair<JSONObject, List<JSONObject>>>()
+            while (previousNo.isNotBlank()) {
+                if (!seen.add(previousNo)) { comparisonError = "Tur geçmişi tutarsız; yeniden yükleyin."; break }
+                val safe = previousNo.replace("'", "''")
+                val result = BcApi.get(context, "countSheets('$safe')")
+                val oldHeader = if (result.ok) runCatching { JSONObject(result.body) }.getOrNull() else null
+                val page = BcApi.getAllPages(context, "countSheetLines?\$filter=sheetNo eq '$safe'&\$top=200")
+                if (oldHeader == null || !page.complete) { comparisonError = "Tur geçmişinin tamamı alınamadı. Yeniden deneyin."; break }
+                loaded += oldHeader to page.rows
+                previousNo = oldHeader.optString("previousRoundNo")
+            }
+            if (comparisonError.isBlank()) history = loaded
+            comparisonLoading = false
+        }
+    }
+
     fun postSheet() {
         if (countV2HasBlockingError(status)) return
         if (countV2HasBinFindings(lines)) {
             showPostConfirm = false
-            status = COUNT_V2_BIN_FINDINGS_NOTE
+            status = countV2BinFindingsNote(header?.optBoolean("countRoundSupported") == true)
             return
         }
         if (!terminalPostAllowed(header)) {
@@ -1033,13 +1091,24 @@ private fun CountV2Document(no: String, onBack: () -> Unit) {
                 Column {
                     TextButton(onClick = onBack, enabled = !busy) { Text("‹ Sayfa Listesi") }
                     DocHeaderCard(
-                        title = "$no · Sayım V2",
+                        title = "${h?.optString("roundRootNo").orEmpty().ifBlank { no }} · ${h?.optInt("roundNo", 1) ?: 1}. tur",
                         subtitle = "Lokasyon: ${h?.optString("locationCode").orEmpty()}" +
                             h?.optString("zoneFilter").orEmpty().takeIf(String::isNotBlank)?.let { " · Alan: $it" }.orEmpty() +
                             " · ${h?.optString("status").orEmpty()}",
                     )
                     Spacer(Modifier.height(8.dp))
                     if (!status.startsWith("HATA:")) StatusText(status)
+                    if (h?.optBoolean("countRoundSupported") == true) {
+                        OutlinedButton(
+                            onClick = { showNextRound = true },
+                            enabled = !busy && !comparisonLoading && linesComplete && lines.isNotEmpty() && allRequiredComplete && allRequiredSaved &&
+                                pendingRetry == null && !pendingRestoreFailed && allowedSlots.isNotEmpty() && countDocumentIsMutable(h.optString("status")),
+                            modifier = Modifier.fillMaxWidth(),
+                        ) { Text("Ad-hoc Sonrası Yeni Tur Başlat") }
+                        if (h.optString("previousRoundNo").isNotBlank()) {
+                            TextButton(onClick = { loadComparison() }, enabled = !busy && !comparisonLoading) { Text("Turları Yan Yana Karşılaştır") }
+                        }
+                    }
                     if (prepared && !binReviewSupported) Text("Raf tamamlama için Business Central sayım güncellemesi gerekli.")
                     Spacer(Modifier.height(8.dp))
 
@@ -1047,7 +1116,7 @@ private fun CountV2Document(no: String, onBack: () -> Unit) {
                         StatusText("Bu belge için $myUserId kullanıcısına sayıcı slotu atanmamış.")
                     } else if (allowedSlots.size > 1) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text("Sayım turu", fontSize = 12.sp, color = Color.Gray)
+                            Text("Sayıcı", fontSize = 12.sp, color = Color.Gray)
                             Spacer(Modifier.width(8.dp))
                             allowedSlots.forEach { candidate ->
                                 FilterChip(
@@ -1142,10 +1211,10 @@ private fun CountV2Document(no: String, onBack: () -> Unit) {
                     if (binReviewSupported && lines.isNotEmpty()) {
                         Text("Raf farkları · $slot sayımı", fontWeight = FontWeight.Bold)
                         Text(varianceReview, fontSize = 12.sp)
-                        Text(if (hasBinFindings) "Raf farkları için Ad-hoc düzeltmesi ve yeni sayım belgesi gerekir" else "Diğer raftan otomatik düşülmez · stok farkları onaydan sonra işlenir", fontSize = 11.sp)
+                        Text(if (hasBinFindings) countV2BinFindingsNote(h?.optBoolean("countRoundSupported") == true) else "Diğer raftan otomatik düşülmez · stok farkları onaydan sonra işlenir", fontSize = 11.sp)
                     }
                     Text("Yeşil: doğru · Kırmızı: miktar farkı · Sarı: farklı rafta bulunan LP", fontSize = 12.sp)
-                    if (hasBinFindings) Text(COUNT_V2_BIN_FINDINGS_NOTE, fontSize = 12.sp, color = Color(0xFF92400E))
+                    if (hasBinFindings) Text(countV2BinFindingsNote(h?.optBoolean("countRoundSupported") == true), fontSize = 12.sp, color = Color(0xFF92400E))
                     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                         Text(
                             if (prepared) "Otomatik oluşan satırlar (${lines.size})" else "Belgedeki klasik satırlar (${lines.size})",
@@ -1172,7 +1241,7 @@ private fun CountV2Document(no: String, onBack: () -> Unit) {
                     enabled = canSave,
                     modifier = Modifier.fillMaxWidth().height(52.dp),
                 ) { Text(if (currentSlotSaved) "✓ Sayım Turu Kaydedildi" else "✅ Sayım Turunu Kaydet", fontWeight = FontWeight.Bold) }
-                if (hasBinFindings) Text(COUNT_V2_BIN_FINDINGS_NOTE, fontSize = 12.sp, color = Color(0xFF92400E))
+                if (hasBinFindings) Text(countV2BinFindingsNote(h?.optBoolean("countRoundSupported") == true), fontSize = 12.sp, color = Color(0xFF92400E))
                 if (postAllowed) {
                     Spacer(Modifier.height(6.dp))
                     OutlinedButton(
@@ -1200,6 +1269,39 @@ private fun CountV2Document(no: String, onBack: () -> Unit) {
             }
         }
     }
+
+    if (showNextRound) AlertDialog(
+        onDismissRequest = { showNextRound = false },
+        title = { Text("Yeni sayım turu") },
+        text = { Text("Bu turun bütün sonuçları korunup kilitlenecek. Ad-hoc sonrası güncel stok ve raf bilgileriyle yeni tur açılacak. Stok düzeltmesi yalnız son turdan yapılabilir.") },
+        confirmButton = { Button(onClick = { startNextRound() }) { Text("Yeni Turu Başlat") } },
+        dismissButton = { TextButton(onClick = { showNextRound = false }) { Text("Vazgeç") } },
+    )
+    if (showComparison) AlertDialog(
+        onDismissRequest = { showComparison = false },
+        title = { Text("Sayım turları · Sayıcı $slot") },
+        text = {
+            Column {
+                if (comparisonLoading) Text("Tur geçmişi yükleniyor...")
+                if (comparisonError.isNotBlank()) Text(comparisonError)
+                if (history.isNotEmpty()) {
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                        TextButton(onClick = { comparisonIndex = (comparisonIndex + 1) % history.size }) {
+                            Text("${history[comparisonIndex].first.optInt("roundNo", 1)}. tur ▾")
+                        }
+                        Text("${h?.optInt("roundNo", 1)}. tur (son)")
+                    }
+                    LazyColumn(Modifier.heightIn(max = 420.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        items(compareCountRounds(history[comparisonIndex].second, lines, slot)) { comparison ->
+                            CountRoundComparisonCard(comparison)
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = { TextButton(onClick = { showComparison = false }) { Text("Kapat") } },
+        dismissButton = { if (comparisonError.isNotBlank()) TextButton(onClick = { loadComparison() }) { Text("Yeniden Dene") } },
+    )
 
     adjustLine?.let { line ->
         QuantityDialogSheet(
@@ -1403,5 +1505,30 @@ internal fun CountV2LineCard(line: JSONObject, slot: Int, enabled: Boolean = fal
                 }
             }
         }
+    }
+}
+
+@Composable
+internal fun CountRoundComparisonCard(comparison: CountRoundComparison) {
+    Column {
+        Text(comparison.label, fontWeight = FontWeight.SemiBold, fontSize = 12.sp)
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            listOf(comparison.previous, comparison.current).forEach { values ->
+                Column(Modifier.weight(1f)) {
+                    if (values == null) Text("Bu turda satır yok", fontSize = 12.sp)
+                    else {
+                        Text("Sistem rafı: ${values.systemBins}", fontSize = 12.sp)
+                        Text("Sayılan raf: ${values.countedBins}", fontSize = 12.sp)
+                        Text("Sayım rafı: ${values.scopeBins}", fontSize = 12.sp)
+                        Text("Raf stoku: ${formatCountV2Qty(values.systemQty)}", fontSize = 12.sp)
+                        values.recordedLpQty?.let { Text("Kayıtlı LP: ${formatCountV2Qty(it)}", fontSize = 12.sp) }
+                        Text("Sayılan: ${values.countedQty?.let { formatCountV2Qty(it) } ?: "Tamamlanmadı"}", fontSize = 12.sp)
+                        Text("Stok farkı: ${values.variance?.let { formatCountV2Qty(it) } ?: "—"}", fontSize = 12.sp)
+                    }
+                }
+            }
+        }
+        comparison.change?.let { Text("Turlar arası miktar farkı: ${formatCountV2Qty(it)}", fontSize = 12.sp) }
+        HorizontalDivider()
     }
 }
