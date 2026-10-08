@@ -416,7 +416,7 @@ fun ItemInquiryModule(labelsOnly: Boolean = false) {
             ScanField(
                 label = "Ürün No / LP No",
                 value = query,
-                voiceInput = com.dynops.bcwms.BuildConfig.FLAVOR == "emu",
+                voiceInput = com.dynops.bcwms.isEmuFamily(com.dynops.bcwms.BuildConfig.FLAVOR),
                 onValueChange = { query = it },
                 modifier = Modifier.fillMaxWidth(),
                 enabled = !loading,
@@ -1345,7 +1345,7 @@ fun BinInquiryModule(labelsOnly: Boolean = false) {
             binCode,
             { binCode = it; bin = null; contents = emptyList(); lps = emptyList(); whseEntries = emptyList() },
             modifier = Modifier.fillMaxWidth(),
-            voiceInput = com.dynops.bcwms.BuildConfig.FLAVOR == "emu",
+            voiceInput = com.dynops.bcwms.isEmuFamily(com.dynops.bcwms.BuildConfig.FLAVOR),
             enabled = !loading && !pickerLoading,
             okButton = false,
             onScanned = {

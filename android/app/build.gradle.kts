@@ -120,6 +120,32 @@ android {
         "\"https://github.com/DynOpsBC/WMS/releases/download/android-emu-channel/latest.json\"",
       )
     }
+    // Kitoko Group (2 Eki 2026): DKÇ/EMU sürümünün kopyası (isEmuFamily). Kendi
+    // Entra uygulama kaydı (Kitoko kiracısında public client), kendi
+    // applicationId'si ve güncelleme kanalı; DKÇ logosu/markası kullanılmaz.
+    create("kitoko") {
+      dimension = "tenant"
+      applicationIdSuffix = ".kitoko"
+      versionCode = customerVersionCode
+      versionName = customerVersionName
+      versionNameSuffix = "-kitoko"
+      manifestPlaceholders["appLabel"] = "BCWMS Kitoko"
+      // Entra "BCWMS Terminal (Kitoko)" uygulama kaydının Application (client) ID'si.
+      buildConfigField("String", "BC_CLIENT_ID", "\"${providers.gradleProperty("kitokoClientId").orNull ?: "KITOKO_CLIENT_ID_TBD"}\"")
+      buildConfigField("String", "BC_FALLBACK_TENANT", "\"f270e8be-e7b0-4ac0-b34a-33014d34d994\"")
+      buildConfigField("String", "BC_DEFAULT_ENVIRONMENT", "\"DemoSandbox\"")
+      buildConfigField("String", "BC_DEFAULT_COMPANY_ID", "\"\"")
+      buildConfigField("String", "BC_DEFAULT_COMPANY_NAME", "\"KITOKO-TR-DEMO-V1\"")
+      buildConfigField("boolean", "BC_ALLOW_PRODUCTION", "true")
+      buildConfigField("String", "TENANT_LABEL", "\"Kitoko\"")
+      buildConfigField("String", "LOGIN_EMAIL_HINT", "\"ornek@kitokogroup.com\"")
+      buildConfigField("String", "LOGIN_DEFAULT_EMAIL", "\"\"")
+      buildConfigField(
+        "String",
+        "UPDATE_MANIFEST_URL",
+        "\"https://github.com/DynOpsBC/WMS/releases/download/android-kitoko-channel/latest.json\"",
+      )
+    }
   }
 
   buildFeatures {

@@ -20,6 +20,19 @@ class ProductionUxRulesTest {
     }
 
     @Test
+    fun `kitoko behaves like the EMU line but keeps its own brand`() {
+        assertTrue(isEmuFamily("kitoko"))
+        assertTrue(isEmuFamily("emu"))
+        assertFalse(isEmuFamily("bade"))
+        assertTrue(shouldForceProductionFlow("kitoko"))
+        assertEquals(operatorHomeScreens("emu"), operatorHomeScreens("kitoko"))
+        assertEquals(
+            com.dynops.bcwms.ui.CompanyBrand.DEFAULT,
+            com.dynops.bcwms.ui.resolveCompanyBrand("KITOKO-TR-DEMO-V1", "kitoko"),
+        )
+    }
+
+    @Test
     fun `emu customer home hides technical test screens`() {
         val screens = operatorHomeScreens("emu")
         assertFalse(Screen.TestCenter in screens)
@@ -100,6 +113,15 @@ class ProductionUxRulesTest {
             "TAMAM: Sayım kaydedildi (sayıcı 2)",
             operatorFacingStatus("TAMAM: Sayım kaydedildi (slot 2) (HTTP 200)"),
         )
+    }
+
+    @Test
+    fun `disabled warehouse tracking explains why an existing lot cannot be entered`() {
+        val visible = operatorFacingApiError(
+            "Warehouse item tracking is not enabled for No. KLC-7. CorrelationId: 1234-abcd.", 400)
+        assertTrue(visible, visible.contains("ambar lot/seri takibi kapalı"))
+        assertTrue(visible.contains("REF-"))
+        assertFalse(visible.contains("CorrelationId"))
     }
 
     @Test

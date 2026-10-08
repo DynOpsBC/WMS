@@ -180,7 +180,7 @@ fun AppRoot() {
                             },
                         )
                     }
-                    if (BuildConfig.FLAVOR != "emu" || screen !in setOf(Screen.ItemInquiry, Screen.Labels)) {
+                    if (!isEmuFamily(BuildConfig.FLAVOR) || screen !in setOf(Screen.ItemInquiry, Screen.Labels)) {
                         ActivePrinterTopBarButton(onClick = { showDevicePrinters = true })
                     }
                     ConnectionBadge(connected) { screen = Screen.Connection }
@@ -195,7 +195,7 @@ fun AppRoot() {
             if (forceProductionFlow && connected && screen !in setOf(Screen.Home, Screen.Connection, Screen.Printers, Screen.Help)) {
                 com.dynops.bcwms.feature.LabelPrinterBar(
                     onOpenPrinters = { screen = Screen.Printers },
-                    quiet = BuildConfig.FLAVOR == "emu" && screen in setOf(Screen.ItemInquiry, Screen.Labels),
+                    quiet = isEmuFamily(BuildConfig.FLAVOR) && screen in setOf(Screen.ItemInquiry, Screen.Labels),
                 )
             }
         Box(Modifier.weight(1f).fillMaxSize()) {
@@ -243,9 +243,13 @@ fun AppRoot() {
     }
 }
 
+/** Kitoko (2 Eki 2026) DKÇ/EMU sürümünün kopyasıdır: davranış EMU ile ortak, marka/logo ayrı. */
+internal fun isEmuFamily(flavor: String): Boolean =
+    flavor.equals("emu", ignoreCase = true) || flavor.equals("kitoko", ignoreCase = true)
+
 /** Müşteri APK'ları tek, doğrulanmış operasyon akışıyla açılır. */
 internal fun shouldForceProductionFlow(flavor: String): Boolean =
-    flavor.equals("bade", ignoreCase = true) || flavor.equals("emu", ignoreCase = true)
+    flavor.equals("bade", ignoreCase = true) || isEmuFamily(flavor)
 
 /** Bağlantı gerektiren operasyonlar çevrimdışıyken tıklanıp hata üretmemelidir. */
 internal fun isHomeTileEnabled(screen: Screen, connected: Boolean): Boolean =
@@ -265,7 +269,7 @@ internal fun operatorHomeScreens(flavor: String, includeAdminTestTools: Boolean 
             hidden.remove(Screen.TestCenter)
             hidden.remove(Screen.PostingTest)
         }
-        if (!flavor.equals("emu", ignoreCase = true)) hidden += Screen.HierarchicalLP
+        if (!isEmuFamily(flavor)) hidden += Screen.HierarchicalLP
         return Screen.entries.toSet() - hidden
     }
     return Screen.entries.toSet() - setOf(Screen.Home, Screen.HierarchicalLP)
@@ -391,7 +395,7 @@ private fun HomeScreen(
     val companyName = remember(companyEpoch) { BcApi.getCompanyName(context) }
     val companyBrand = remember(companyName, flavor) { resolveCompanyBrand(companyName, flavor) }
     val operatorName = remember(companyEpoch, connected) { BcApi.getOperatorDisplayName(context) }
-    val welcomeName = if (flavor.equals("emu", ignoreCase = true))
+    val welcomeName = if (isEmuFamily(flavor))
         WmsTerminalSession.code(context).ifBlank { operatorName }
     else operatorName
     var accessible by remember(companyEpoch, connected) { mutableStateOf(BcApi.getAccessibleCompanies(context)) }

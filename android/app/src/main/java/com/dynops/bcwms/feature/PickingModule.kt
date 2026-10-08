@@ -1477,23 +1477,25 @@ private fun GuidedPickDocument(no: String, flowMode: OutboundFlowMode? = null, o
         )
     }
     if (qg != null && !lpScanRequired) {
+        val lotPolicy = pickLotInputPolicy(qg.lines)
         QuantityDialogSheet(
             title = "${qg.itemNo} — ${qg.count} siparişe dağıtılır",
             itemNo = qg.itemNo,
             initialQty = qg.totalOutstanding.takeIf { it > 0 } ?: 1.0,
             maximumQuantity = qg.totalOutstanding,
             initialUom = qg.lines.first().optString("unitOfMeasureCode"),
-            initialLot = qg.lines.first().optString("lotNo"),
+            initialLot = rawValue(qg.lines.first(), "lotNo"),
             allowZeroQuantity = true,
-            showLotSerial = true,
+            showLotSerial = lotPolicy.visible,
             showSerial = false,
             showSourceLp = true,
             // Zorunluluk açıkken miktar dağıtım ekranı da paletsiz kapanmaz.
             sourceLpRequired = lpScanRequired,
-            lotRequired = qg.lines.any { it.optBoolean("lotRequired", false) },
-            showAvailableLotLookup = true,
-            autoDetectLotFromStock = true,
+            lotRequired = lotPolicy.required,
+            showAvailableLotLookup = lotPolicy.visible,
+            autoDetectLotFromStock = lotPolicy.detectFromStock,
             locationCode = rawValue(qg.lines.first(), "locationCode"),
+            binCode = rawValue(qg.lines.first(), "binCode"),
             variantCode = qg.lines.first().optString("variantCode"),
             onDismiss = { qtyGroup = null },
             onConfirm = { res ->
@@ -2285,22 +2287,24 @@ private fun PickDocument(no: String, onBack: () -> Unit) {
 
     val gt = groupTarget
     if (gt != null) {
+        val lotPolicy = pickLotInputPolicy(gt.lines)
         QuantityDialogSheet(
             title = "Toplama Miktarı (${gt.count} satıra dağıtılır)",
             itemNo = gt.itemNo,
             initialQty = gt.totalOutstanding.takeIf { it > 0 } ?: 1.0,
             maximumQuantity = gt.totalOutstanding,
             initialUom = gt.lines.first().optString("unitOfMeasureCode"),
-            initialLot = gt.lines.first().optString("lotNo"),
+            initialLot = rawValue(gt.lines.first(), "lotNo"),
             allowZeroQuantity = true,
             // ELOG: lot no el terminalinden girilir; seri girişi pick'te kapalı.
-            showLotSerial = true,
+            showLotSerial = lotPolicy.visible,
             showSerial = false,
             showSourceLp = true,
-            lotRequired = gt.lines.any { it.optBoolean("lotRequired", false) },
-            showAvailableLotLookup = true,
-            autoDetectLotFromStock = true,
+            lotRequired = lotPolicy.required,
+            showAvailableLotLookup = lotPolicy.visible,
+            autoDetectLotFromStock = lotPolicy.detectFromStock,
             locationCode = rawValue(gt.lines.first(), "locationCode"),
+            binCode = rawValue(gt.lines.first(), "binCode"),
             variantCode = gt.lines.first().optString("variantCode"),
             onDismiss = { groupTarget = null },
             onConfirm = { res ->
