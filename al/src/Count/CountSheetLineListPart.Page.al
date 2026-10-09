@@ -61,6 +61,33 @@ page 72481 "DOPSWHS Count Sheet Line Part"
         }
     }
 
+    actions
+    {
+        area(Processing)
+        {
+            action(RefreshBin)
+            {
+                ApplicationArea = All;
+                Caption = 'Bu Rafı Yenile';
+                ToolTip = 'Sayım sürerken bu raftan mal alındıysa rafın sistem miktarlarını güncel stokla yeniler. Rafın bu turdaki sayımı silinir ve raf yeniden sayılır; diğer raflar ve önceki turlar korunur.';
+                Image = Refresh;
+
+                trigger OnAction()
+                var
+                    CountMgmt: Codeunit "DOPSWHS Count Mgmt";
+                    LinesCreated: Integer;
+                begin
+                    Rec.TestField("Bin Code");
+                    if not Confirm(RefreshBinQst, false, Rec."Bin Code") then
+                        exit;
+                    LinesCreated := CountMgmt.RefreshV2Bin(Rec."Sheet No.", Rec."Bin Code");
+                    CurrPage.Update(false);
+                    Message(RefreshBinDoneMsg, Rec."Bin Code", LinesCreated);
+                end;
+            }
+        }
+    }
+
     trigger OnAfterGetRecord()
     var
         Item: Record Item;
@@ -142,6 +169,8 @@ page 72481 "DOPSWHS Count Sheet Line Part"
     end;
 
     var
+        RefreshBinQst: Label '%1 rafının sistem miktarları güncel stokla yenilenecek ve bu turdaki sayımı silinecek. Raf yeniden sayılmalı. Devam edilsin mi?', Comment = '%1 bin code';
+        RefreshBinDoneMsg: Label '%1 rafı yenilendi (%2 satır). Rafı terminalden yeniden sayın.', Comment = '%1 bin code, %2 line count';
         HasPreviousRound: Boolean;
         PreviousFound: Boolean;
         PreviousSystemQty: Decimal;

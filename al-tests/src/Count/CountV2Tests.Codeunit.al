@@ -574,6 +574,45 @@ codeunit 72142 "DOPSWHS Count V2 Tests"
         Assert.AreEqual('', Line."Found From Bin", 'An old snapshot must not be reclassified as a new finding.');
     end;
 
+    [Test]
+    procedure RefreshBinRecoversCountWhenStockLeftDuringCount()
+    var
+        SheetNo: Code[20];
+        Line: Record "DOPSWHS Count Sheet Line";
+        LPLine: Record "DOPSWHS LP Line";
+        Counter: Record "DOPSWHS Count Counter";
+        Mgmt: Codeunit "DOPSWHS Count Mgmt";
+    begin
+        // BADE canlı (9 Eki 2026): 2. turda raftan üretime mal alındı (LP000186
+        // 8 -> 6). Raf tamamlanamıyor, 2. turda Sayımı Yeniden Başlat kapalı.
+        SheetNo := CreateBinFindingFixture();
+        Mgmt.PrepareV2Bin(SheetNo, 'A.A08.22');
+        Mgmt.ScanV2Lp(SheetNo, CreateGuid(), 'CV2-FIND-LP', 'A.A08.22', 1);
+        LPLine.SetRange("LP No.", 'CV2-FIND-LP');
+        LPLine.FindFirst();
+        LPLine.Quantity := 6;
+        LPLine.Modify(true);
+
+        asserterror Mgmt.CompleteV2Bin(SheetNo, 'A.A08.22', 1);
+        Assert.ExpectedError('Rafı Yenile');
+
+        Assert.IsTrue(Mgmt.RefreshV2Bin(SheetNo, 'A.A08.22') > 0, 'The bin must be rebuilt from current stock.');
+        Line.SetRange("Sheet No.", SheetNo);
+        Line.SetRange("Bin Code", 'A.A08.22');
+        Line.SetRange("LP No.", 'CV2-FIND-LP');
+        Line.FindFirst();
+        Assert.AreEqual(6, Line."System Qty", 'The refreshed bin must carry the current LP quantity.');
+        Assert.IsFalse(Line."Counted 1", 'Counts made before the stock change must not survive the refresh.');
+        Counter.SetRange("Sheet No.", SheetNo);
+        Counter.SetRange(Completed, true);
+        Assert.IsTrue(Counter.IsEmpty(), 'The refreshed bin must be counted again before the round completes.');
+
+        Mgmt.ScanV2Lp(SheetNo, CreateGuid(), 'CV2-FIND-LP', 'A.A08.22', 1);
+        Mgmt.CompleteV2Bin(SheetNo, 'A.A08.22', 1);
+        Line.FindFirst();
+        Assert.AreEqual(6, Line."Counted Qty 1", 'The recount must record the current pallet content.');
+    end;
+
     local procedure CreateBinFindingFixture(): Code[20]
     var
         Mgmt: Codeunit "DOPSWHS Count Mgmt";
