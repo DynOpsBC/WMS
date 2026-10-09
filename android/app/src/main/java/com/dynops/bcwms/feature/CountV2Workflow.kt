@@ -230,3 +230,27 @@ internal const val COUNT_V2_BIN_FINDINGS_NOTE =
 internal fun countV2BinFindingsNote(roundsSupported: Boolean): String = if (roundsSupported)
     "Bu turun sonuçları korunur. Ad-hoc düzeltmesinden sonra Yeni Tur Başlat düğmesini kullanın; stok düzeltmesi yalnız son turdan yapılır."
 else COUNT_V2_BIN_FINDINGS_NOTE
+
+private val COUNT_V2_STALE_BIN_MARKERS = listOf(
+    "güvenli olmayan sistem miktarı",
+    "sayım başladıktan sonra değişmiş",
+    "sistem stoku artık mevcut değil",
+    "Rafı Yenile",
+)
+
+/**
+ * BADE (9 Eki 2026): sayım sürerken raftan mal alındı, BC turu kaydetmiyor.
+ * Mesajdaki raf ya da LP'nin rafı döner; o raf terminalden yenilenip yeniden
+ * sayılır. Eski (Sayımı Yeniden Başlat diyen) ve yeni BC mesajlarını tanır.
+ */
+internal fun countV2StaleBin(message: String, lines: List<JSONObject>): String? {
+    val text = message.removePrefix("HATA:").trim()
+    if (COUNT_V2_STALE_BIN_MARKERS.none { text.contains(it, ignoreCase = true) }) return null
+    Regex("""Raf (\S+) madde""").find(text)?.let { return it.groupValues[1] }
+    val lpNo = Regex("""(\S+) LP numarasının""").find(text)?.groupValues?.get(1) ?: return null
+    val candidates = lines.filter { it.optString("lpNo") == lpNo && it.optString("binCode").isNotBlank() }
+    return (candidates.firstOrNull { it.optString("foundFromBin").isBlank() } ?: candidates.firstOrNull())
+        ?.optString("binCode")
+}
+
+internal fun countV2RefreshBinBody(binCode: String): String = JSONObject().put("binCode", binCode).toString()

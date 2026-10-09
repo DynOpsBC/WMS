@@ -1,7 +1,7 @@
 {
-  "versionCode": 200173,
-  "versionName": "1.14.173-bade",
-  "apkUrl": "https://github.com/DynOpsBC/WMS/releases/download/android-v1.14.173-bade/BCWMS-BADE-1.14.173.apk",
-  "sha256": "fc63b1b065b5a2c7c4cf0a826b432d95f576d0a577483647ef7e09a6b15a7b94",
-  "releaseNotes": "Canlı ortamda Mal Kabul ve Yerleştirme tüm terminal kullanıcılarına açıldı. Sevkiyat, Paketleme, Toplama ve Üretim yine yalnız terminal yöneticilerinde. BCWMSApp 1.14.1.129 veya üstüyle kullanın."
+  "versionCode": 200174,
+  "versionName": "1.14.174-bade",
+  "apkUrl": "https://github.com/DynOpsBC/WMS/releases/download/android-v1.14.174-bade/BCWMS-BADE-1.14.174.apk",
+  "sha256": "e89c47c01a563f1f60bbbb9fedaf562c23d6efbdc801d8270b8d032549e5d3da",
+  "releaseNotes": "Sayım V2: sayım sürerken raftan mal alınırsa hata penceresinde 'Rafı Yenile' çıkar; yalnız o raf güncel stokla yeniden sayılır, diğer raflar ve turlar korunur. BCWMSApp 1.14.1.132 veya üstü gerekir."
 }

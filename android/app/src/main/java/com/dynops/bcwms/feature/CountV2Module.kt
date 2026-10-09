@@ -1021,6 +1021,23 @@ private fun CountV2Document(no: String, onBack: () -> Unit, onRoundChanged: (Str
         }
     }
 
+    fun refreshStaleBin(bin: String) {
+        scope.launch {
+            busy = true
+            status = "$bin rafı güncel stokla yenileniyor..."
+            val result = BcApi.boundAction(context, "countSheets", no, "refreshV2Bin", countV2RefreshBinBody(bin))
+            busy = false
+            if (result.ok) {
+                activeBin = ""
+                lastCompleted = null; lastBatch = emptyList(); lastCompletedLp = null
+                loadDocument()
+                status = "TAMAM: $bin rafı güncel stokla yenilendi. Rafı okutup yeniden sayın, sonra rafı tamamlayın."
+            } else status = if (result.httpCode == 404)
+                "HATA: Rafı yenilemek için BC paketini 1.14.1.132 veya üstüne güncelleyin."
+            else "HATA: ${BcApi.errorMessage(result.body)}"
+        }
+    }
+
     fun finishBin() {
         if (countV2HasBlockingError(status)) return
         scope.launch {
@@ -1075,7 +1092,12 @@ private fun CountV2Document(no: String, onBack: () -> Unit, onRoundChanged: (Str
         countDocumentIsMutable(h?.optString("status").orEmpty())
 
     // Keep the dialog outside LazyColumn so errors remain visible even when the header is off-screen.
-    CountV2ErrorDialog(status, onDismiss = { status = "" })
+    CountV2ErrorDialog(
+        status,
+        onDismiss = { status = "" },
+        refreshBin = countV2StaleBin(status, lines),
+        onRefreshBin = { bin -> status = ""; refreshStaleBin(bin) },
+    )
 
     Column(Modifier.fillMaxSize()) {
         // Tek kaydırma alanı: başlık ve okutma kontrolleri yukarı
@@ -1370,7 +1392,12 @@ private fun formatCountV2Qty(value: Double): String =
 
 /** Acknowledgement clears only the message, never the pending scan/retry state. */
 @Composable
-internal fun CountV2ErrorDialog(status: String, onDismiss: () -> Unit) {
+internal fun CountV2ErrorDialog(
+    status: String,
+    onDismiss: () -> Unit,
+    refreshBin: String? = null,
+    onRefreshBin: (String) -> Unit = {},
+) {
     if (!status.startsWith("HATA:")) return
     val keyboard = androidx.compose.ui.platform.LocalSoftwareKeyboardController.current
     LaunchedEffect(status) { keyboard?.hide() }
@@ -1378,8 +1405,25 @@ internal fun CountV2ErrorDialog(status: String, onDismiss: () -> Unit) {
         onDismissRequest = onDismiss,
         properties = androidx.compose.ui.window.DialogProperties(dismissOnClickOutside = false),
         title = { Text("Sayım hatası") },
-        text = { Text(status.removePrefix("HATA:").trim(), Modifier.verticalScroll(rememberScrollState())) },
-        confirmButton = { TextButton(onClick = onDismiss) { Text("Tamam") } },
+        text = {
+            Column(Modifier.verticalScroll(rememberScrollState())) {
+                Text(status.removePrefix("HATA:").trim())
+                if (refreshBin != null) {
+                    Spacer(Modifier.height(10.dp))
+                    Text(
+                        "Sayım sürerken $refreshBin rafından mal alınmış olabilir. Rafı Yenile, rafın bu turdaki " +
+                            "sayımını silip güncel stokla yeniden açar; yalnız bu rafı tekrar sayarsınız. " +
+                            "Diğer raflar ve önceki turlar korunur.",
+                        fontSize = 13.sp,
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            if (refreshBin != null) Button(onClick = { onRefreshBin(refreshBin) }) { Text("Rafı Yenile · $refreshBin") }
+            else TextButton(onClick = onDismiss) { Text("Tamam") }
+        },
+        dismissButton = if (refreshBin != null) ({ TextButton(onClick = onDismiss) { Text("Vazgeç") } }) else null,
     )
 }
 
