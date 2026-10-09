@@ -44,10 +44,7 @@ codeunit 72320 "DOPSWHS MTE Zpl Builder"
 
     procedure Build(var LP: Record "DOPSWHS LP Header"; var LPLine: Record "DOPSWHS LP Line"; OptionsJson: Text): Text
     var
-        Item: Record Item;
-        ItemLedgerEntry: Record "Item Ledger Entry";
-        Options: JsonObject;
-        HaveEntry: Boolean;
+        Values: Dictionary of [Text, Text];
         Zpl: Text;
         ItemNo: Text;
         CategoryText: Text;
@@ -74,47 +71,27 @@ codeunit 72320 "DOPSWHS MTE Zpl Builder"
         LabelHeight := 1218;
         CanvasWidth := 1218;
         CanvasHeight := 812;
-        if (OptionsJson <> '') and not Options.ReadFrom(OptionsJson) then
-            Clear(Options);
 
-        if LPLine."Source Item Ledger Entry No." <> 0 then
-            HaveEntry := ItemLedgerEntry.Get(LPLine."Source Item Ledger Entry No.");
-        if Item.Get(LPLine."Item No.") then;
-
-        ItemNo := LPLine."Item No.";
-        CategoryText := ResolveCategory(Item);
-        VendorName := ResolveVendorName(Item, ItemLedgerEntry, HaveEntry);
-        ItemName := ResolveItemName(Item, LPLine, ItemLedgerEntry, HaveEntry);
-        InciName := ResolveInciName(Item);
-        SupplierLot := JsonText(Options, 'supplierLotNo');
-        if SupplierLot = '' then
-            SupplierLot := ResolveSupplierLot(LPLine);
-        ProductionDate := ResolveProductionDate(LPLine, ItemLedgerEntry, HaveEntry);
-        LotNo := LPLine."Lot No.";
-        if (LPLine."Expiration Date" <> 0D) then
-            ExpirationDate := DateText(LPLine."Expiration Date")
-        else
-            if HaveEntry then
-                ExpirationDate := DateText(ItemLedgerEntry."Expiration Date");
-        QtyText := FormatQuantity(LPLine.Quantity) + ' ' + LPLine."Unit of Measure";
-        StorageText := ResolveStorageCondition(Item);
-        if HaveEntry then
-            ReceiptDate := DateText(ItemLedgerEntry."Posting Date")
-        else
-            if LP."Built DateTime" <> 0DT then
-                ReceiptDate := DateText(DT2Date(LP."Built DateTime"));
-        ReceiptNo := ResolveReceiptNo(LPLine, ItemLedgerEntry, HaveEntry);
-        InspectorText := EmployeeName(JsonText(Options, 'inspectorEmployeeNo'));
-        if InspectorText = '' then
-            InspectorText := JsonText(Options, 'operatorDisplayName');
-        if InspectorText = '' then
-            InspectorText := LP."Built By User";
-        QcName := EmployeeName(JsonText(Options, 'qcEmployeeNo'));
-        QcDate := JsonDateText(Options, 'qcApprovalDate');
-        // BADE controlled MTE form: identical document metadata on every label.
-        DocumentNo := 'ET011';
-        RevisionNo := '01';
-        RevisionDate := '24.07.2026';
+        GetLabelValues(LP, LPLine, OptionsJson, Values);
+        ItemNo := Values.Get('ItemNo');
+        CategoryText := Values.Get('Category');
+        ItemName := Values.Get('ItemName');
+        InciName := Values.Get('InciName');
+        VendorName := Values.Get('VendorName');
+        SupplierLot := Values.Get('SupplierLot');
+        ProductionDate := Values.Get('ProductionDate');
+        LotNo := Values.Get('LotNo');
+        ExpirationDate := Values.Get('ExpirationDate');
+        QtyText := Values.Get('Quantity');
+        StorageText := Values.Get('StorageCondition');
+        ReceiptDate := Values.Get('ReceiptDate');
+        ReceiptNo := Values.Get('ReceiptNo');
+        InspectorText := Values.Get('Inspector');
+        QcName := Values.Get('QcName');
+        QcDate := Values.Get('QcDate');
+        DocumentNo := Values.Get('DocumentNo');
+        RevisionNo := Values.Get('RevisionNo');
+        RevisionDate := Values.Get('RevisionDate');
 
         // QR: the pallet when it exists, otherwise lot, otherwise item —
         // the terminal treats an LP-prefixed scan as a pallet.
@@ -173,6 +150,101 @@ codeunit 72320 "DOPSWHS MTE Zpl Builder"
             Cell(592, 756, 602, 32, 22, 20, 1, UY(DocumentNo) + ' / ' + UY(RevisionNo) + ' / ' + UY(RevisionDate)) +
             '^XZ';
         exit(Zpl);
+    end;
+
+    /// <summary>
+    /// MTE etiketinin çözümlenmiş değerleri (ham, U.Y uygulanmamış). Terminal ZPL'i ve
+    /// BC'deki "DOPSWHS MTE LP Report" aynı kaynağı kullanır; BADE (8 Eki 2026)
+    /// BC raporu kategori/INCI/depolama/doküman alanlarında farklı veri basıyordu.
+    /// </summary>
+    procedure GetLabelValues(var LP: Record "DOPSWHS LP Header"; var LPLine: Record "DOPSWHS LP Line"; OptionsJson: Text; var Values: Dictionary of [Text, Text])
+    var
+        Item: Record Item;
+        ItemLedgerEntry: Record "Item Ledger Entry";
+        Options: JsonObject;
+        HaveEntry: Boolean;
+        ItemNo: Text;
+        CategoryText: Text;
+        ItemName: Text;
+        InciName: Text;
+        VendorName: Text;
+        SupplierLot: Text;
+        ProductionDate: Text;
+        LotNo: Text;
+        ExpirationDate: Text;
+        QtyText: Text;
+        StorageText: Text;
+        ReceiptDate: Text;
+        ReceiptNo: Text;
+        InspectorText: Text;
+        QcName: Text;
+        QcDate: Text;
+        DocumentNo: Text;
+        RevisionNo: Text;
+        RevisionDate: Text;
+    begin
+        Clear(Values);
+        if (OptionsJson <> '') and not Options.ReadFrom(OptionsJson) then
+            Clear(Options);
+
+        if LPLine."Source Item Ledger Entry No." <> 0 then
+            HaveEntry := ItemLedgerEntry.Get(LPLine."Source Item Ledger Entry No.");
+        if Item.Get(LPLine."Item No.") then;
+
+        ItemNo := LPLine."Item No.";
+        CategoryText := ResolveCategory(Item);
+        VendorName := ResolveVendorName(Item, ItemLedgerEntry, HaveEntry);
+        ItemName := ResolveItemName(Item, LPLine, ItemLedgerEntry, HaveEntry);
+        InciName := ResolveInciName(Item);
+        SupplierLot := JsonText(Options, 'supplierLotNo');
+        if SupplierLot = '' then
+            SupplierLot := ResolveSupplierLot(LPLine);
+        ProductionDate := ResolveProductionDate(LPLine, ItemLedgerEntry, HaveEntry);
+        LotNo := LPLine."Lot No.";
+        if (LPLine."Expiration Date" <> 0D) then
+            ExpirationDate := DateText(LPLine."Expiration Date")
+        else
+            if HaveEntry then
+                ExpirationDate := DateText(ItemLedgerEntry."Expiration Date");
+        QtyText := FormatQuantity(LPLine.Quantity) + ' ' + LPLine."Unit of Measure";
+        StorageText := ResolveStorageCondition(Item);
+        if HaveEntry then
+            ReceiptDate := DateText(ItemLedgerEntry."Posting Date")
+        else
+            if LP."Built DateTime" <> 0DT then
+                ReceiptDate := DateText(DT2Date(LP."Built DateTime"));
+        ReceiptNo := ResolveReceiptNo(LPLine, ItemLedgerEntry, HaveEntry);
+        InspectorText := EmployeeName(JsonText(Options, 'inspectorEmployeeNo'));
+        if InspectorText = '' then
+            InspectorText := JsonText(Options, 'operatorDisplayName');
+        if InspectorText = '' then
+            InspectorText := LP."Built By User";
+        QcName := EmployeeName(JsonText(Options, 'qcEmployeeNo'));
+        QcDate := JsonDateText(Options, 'qcApprovalDate');
+        // BADE controlled MTE form: identical document metadata on every label.
+        DocumentNo := 'ET011';
+        RevisionNo := '01';
+        RevisionDate := '24.07.2026';
+
+        Values.Set('ItemNo', ItemNo);
+        Values.Set('Category', CategoryText);
+        Values.Set('ItemName', ItemName);
+        Values.Set('InciName', InciName);
+        Values.Set('VendorName', VendorName);
+        Values.Set('SupplierLot', SupplierLot);
+        Values.Set('ProductionDate', ProductionDate);
+        Values.Set('LotNo', LotNo);
+        Values.Set('ExpirationDate', ExpirationDate);
+        Values.Set('Quantity', QtyText);
+        Values.Set('StorageCondition', StorageText);
+        Values.Set('ReceiptDate', ReceiptDate);
+        Values.Set('ReceiptNo', ReceiptNo);
+        Values.Set('Inspector', InspectorText);
+        Values.Set('QcName', QcName);
+        Values.Set('QcDate', QcDate);
+        Values.Set('DocumentNo', DocumentNo);
+        Values.Set('RevisionNo', RevisionNo);
+        Values.Set('RevisionDate', RevisionDate);
     end;
 
     // ------------------------------------------------------------------

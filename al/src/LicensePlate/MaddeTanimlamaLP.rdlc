@@ -1090,8 +1090,7 @@
                                 <Paragraph>
                                   <TextRuns>
                                     <TextRun>
-                                      <Value>KONTROL EDEN
-ONAYLAYAN</Value>
+                                      <Value>GİRİŞ YAPAN</Value>
                                       <Style>
                                         <FontFamily>Verdana</FontFamily>
                                         <FontSize>5.5pt</FontSize>
@@ -1196,7 +1195,7 @@ ONAYLAYAN</Value>
                                 <Paragraph>
                                   <TextRuns>
                                     <TextRun>
-                                      <Value>İSİM</Value>
+                                      <Value>KONTROL EDEN</Value>
                                       <Style>
                                         <FontFamily>Verdana</FontFamily>
                                         <FontSize>5.5pt</FontSize>
@@ -1519,7 +1518,7 @@ ONAYLAYAN</Value>
                                       <Value>KARANTİNA</Value>
                                       <Style>
                                         <FontFamily>Verdana</FontFamily>
-                                        <FontSize>7pt</FontSize>
+                                        <FontSize>6pt</FontSize>
                                         <FontWeight>Bold</FontWeight>
                                       </Style>
                                     </TextRun>
@@ -1538,8 +1537,8 @@ ONAYLAYAN</Value>
                                   <Width>0.5pt</Width>
                                 </RightBorder>
                                 <VerticalAlign>Top</VerticalAlign>
-                                <PaddingLeft>2pt</PaddingLeft>
-                                <PaddingRight>2pt</PaddingRight>
+                                <PaddingLeft>0pt</PaddingLeft>
+                                <PaddingRight>0pt</PaddingRight>
                                 <PaddingTop>3pt</PaddingTop>
                                 <PaddingBottom>0pt</PaddingBottom>
                               </Style>

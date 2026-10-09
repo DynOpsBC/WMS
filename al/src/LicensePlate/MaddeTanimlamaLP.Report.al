@@ -72,13 +72,14 @@ report 72375 "DOPSWHS MTE LP Report"
         LPLine: Record "DOPSWHS LP Line";
         Item: Record Item;
         ItemCategory: Record "Item Category";
-        ItemLedgerEntry: Record "Item Ledger Entry";
-        LotInformation: Record "Lot No. Information";
-        Vendor: Record Vendor;
+        MteBuilder: Codeunit "DOPSWHS MTE Zpl Builder";
         BarcodeImageProvider: Interface "Barcode Image Provider 2D";
         BarcodeImage: Codeunit "Temp Blob";
         Base64Convert: Codeunit "Base64 Convert";
         ImageInStream: InStream;
+        Values: Dictionary of [Text, Text];
+        Options: JsonObject;
+        OptionsJson: Text;
         LabelQuantity: Decimal;
     begin
         ClearLabelData();
@@ -89,67 +90,41 @@ report 72375 "DOPSWHS MTE LP Report"
         if not LPLine.FindFirst() then
             exit(false);
 
+        // BADE (8 Eki 2026): BC etiketi terminal etiketiyle aynı veriyi basmalı.
+        // Kategori (üst kategori), INCI adı, tedarikçi madde adı, depolama koşulu
+        // ve doküman bilgisi terminalin ZPL'iyle aynı çözümlemeden gelir.
+        if InspectorNameOverride <> '' then
+            Options.Add('operatorDisplayName', InspectorNameOverride);
+        Options.WriteTo(OptionsJson);
+        MteBuilder.GetLabelValues(LicensePlate, LPLine, OptionsJson, Values);
+
         ItemNo := LPLine."Item No.";
         LotNoValue := LPLine."Lot No.";
+        CategoryDescription := UnknownIfBlank(Values.Get('Category'));
+        ItemDescription := UnknownIfBlank(Values.Get('ItemName'));
+        InciName := UnknownIfBlank(Values.Get('InciName'));
+        VendorName := UnknownIfBlank(Values.Get('VendorName'));
+        SupplierLotNo := UnknownIfBlank(Values.Get('SupplierLot'));
+        ProductionDateText := UnknownIfBlank(Values.Get('ProductionDate'));
+        ExpirationDateText := UnknownIfBlank(Values.Get('ExpirationDate'));
+        StorageCondition := UnknownIfBlank(Values.Get('StorageCondition'));
+        ReceiptDateText := UnknownIfBlank(Values.Get('ReceiptDate'));
+        ReceiptNo := UnknownIfBlank(Values.Get('ReceiptNo'));
+        CheckedBy := UnknownIfBlank(Values.Get('Inspector'));
+        ApprovedBy := 'U.Y';
+        QualityApprovalName := UnknownIfBlank(Values.Get('QcName'));
+        QualityApprovalDate := UnknownIfBlank(Values.Get('QcDate'));
+        DocumentNo := UnknownIfBlank(Values.Get('DocumentNo'));
+        RevisionNo := UnknownIfBlank(Values.Get('RevisionNo'));
+        RevisionDate := UnknownIfBlank(Values.Get('RevisionDate'));
         if Item.Get(ItemNo) then begin
-            ItemDescription := Item.Description;
-            InciName := Item."Search Description";
             ItemCategoryCode := Item."Item Category Code";
-            if ItemCategory.Get(ItemCategoryCode) then begin
-                CategoryDescription := ItemCategory.Description;
+            if ItemCategory.Get(ItemCategoryCode) then
                 ParentCategoryCode := ItemCategory."Parent Category";
-            end;
-            if CategoryDescription = '' then
-                CategoryDescription := ItemCategoryCode;
-            if (Item."Vendor No." <> '') and Vendor.Get(Item."Vendor No.") then
-                VendorName := Vendor.Name;
         end;
-        SetUnknownIfBlank(CategoryDescription);
-        SetUnknownIfBlank(InciName);
-        SetUnknownIfBlank(VendorName);
-
-        if (ItemNo <> '') and (LotNoValue <> '') and
-           LotInformation.Get(ItemNo, LPLine."Variant Code", LotNoValue)
-        then begin
-            SupplierLotNo := LotInformation.Description;
-            if SupplierLotNo = '' then
-                SupplierLotNo := LotInformation."DOPSWHS Supplier Lot No.";
-        end;
-        SetUnknownIfBlank(SupplierLotNo);
-
-        ProductionDateText := 'U.Y';
-        if LPLine."Expiration Date" = 0D then
-            ExpirationDateText := 'U.Y'
-        else
-            ExpirationDateText := FormatDate(LPLine."Expiration Date");
 
         LabelQuantity := PalletItemGroupQuantity(LPLine);
         QuantityUomText := StrSubstNo('%1 %2', LabelQuantity, LPLine."Unit of Measure");
-        StorageCondition := 'U.Y';
-
-        if (LPLine."Source Item Ledger Entry No." <> 0) and
-           ItemLedgerEntry.Get(LPLine."Source Item Ledger Entry No.")
-        then begin
-            ReceiptDateText := FormatDate(ItemLedgerEntry."Posting Date");
-            ReceiptNo := ItemLedgerEntry."Document No.";
-        end else begin
-            ReceiptNo := LPLine."Source Document No.";
-            if LicensePlate."Built DateTime" <> 0DT then
-                ReceiptDateText := FormatDate(DT2Date(LicensePlate."Built DateTime"));
-        end;
-        SetUnknownIfBlank(ReceiptDateText);
-        SetUnknownIfBlank(ReceiptNo);
-
-        CheckedBy := InspectorNameOverride;
-        if CheckedBy = '' then
-            CheckedBy := LicensePlate."Built By User";
-        SetUnknownIfBlank(CheckedBy);
-        ApprovedBy := 'U.Y';
-        QualityApprovalName := 'U.Y';
-        QualityApprovalDate := 'U.Y';
-        DocumentNo := 'U.Y';
-        RevisionNo := 'U.Y';
-        RevisionDate := 'U.Y';
 
         BarcodeImageProvider := Enum::"Barcode Image Provider 2D"::Dynamics2D;
         BarcodeImage := BarcodeImageProvider.EncodeImage(LicensePlate."No.", Enum::"Barcode Symbology 2D"::"QR-Code");
@@ -158,6 +133,13 @@ report 72375 "DOPSWHS MTE LP Report"
         BarcodeImage.CreateInStream(ImageInStream);
         QrCodeBase64 := Base64Convert.ToBase64(ImageInStream);
         exit(true);
+    end;
+
+    local procedure UnknownIfBlank(Value: Text): Text
+    begin
+        if Value.Trim() = '' then
+            exit('U.Y');
+        exit(Value);
     end;
 
     local procedure PalletItemGroupQuantity(LPLine: Record "DOPSWHS LP Line"): Decimal
@@ -185,12 +167,6 @@ report 72375 "DOPSWHS MTE LP Report"
     local procedure FormatDate(Value: Date): Text
     begin
         exit(Format(Value, 0, '<Day,2>.<Month,2>.<Year4>'));
-    end;
-
-    local procedure SetUnknownIfBlank(var Value: Text)
-    begin
-        if Value = '' then
-            Value := 'U.Y';
     end;
 
     local procedure ClearLabelData()

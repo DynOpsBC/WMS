@@ -7,6 +7,9 @@ codeunit 72454 "DOPSWHS Prod Stock Policy"
         Eligible: Boolean;
         Applying: Boolean;
         PreparedLp: Boolean;
+        PlanBuffer: Record "Whse. Item Tracking Line" temporary;
+        PlannedBase: Decimal;
+        PendingToBinCode: Code[20];
 
     procedure SetPreparedLp(Value: Boolean)
     begin
@@ -71,6 +74,12 @@ codeunit 72454 "DOPSWHS Prod Stock Policy"
         Candidate.Ascending(true);
     end;
 
+    // BADE (9 Eki 2026): lot planı önceden OnBeforeCalcPickBin içinden ikinci bir
+    // CreateTempLine çağrısıyla uygulanıyordu. Bitmemiş hesap yeniden başladığı için
+    // "Show Summary (Directed Put-away and Pick)" açıkken iki çağrı aynı özet
+    // numarasını hazırlıyor, ikinci Insert "Entry No. zaten var" hatası veriyordu.
+    // Artık dış hesap bu bileşeni çekmeden kapanır (özetini bir kez yazar); plan,
+    // OnAfterCreateTempLine'da standart izleme tamponu üzerinden ayrı bir hesapla uygulanır.
     [EventSubscriber(ObjectType::Codeunit, Codeunit::"Create Pick", 'OnAfterCreateTempLineCheckReservation', '', false, false)]
     local procedure CaptureSource(LocationCode: Code[10]; ItemNo: Code[20]; VariantCode: Code[10]; UnitofMeasureCode: Code[10]; QtyPerUnitofMeasure: Decimal; var TotalQtytoPick: Decimal; var TotalQtytoPickBase: Decimal; SourceType: Integer; SourceSubType: Option; SourceNo: Code[20]; SourceLineNo: Integer; SourceSubLineNo: Integer; var LastWhseItemTrkgLineNo: Integer; var TempWhseItemTrackingLine: Record "Whse. Item Tracking Line" temporary; var WhseShptLine: Record "Warehouse Shipment Line"; var QtyBaseMaxAvailToPick: Decimal)
     var
@@ -79,10 +88,15 @@ codeunit 72454 "DOPSWHS Prod Stock Policy"
         ExistingTracking: Record "Whse. Item Tracking Line" temporary;
         Location: Record Location;
     begin
+        // Planın uygulandığı iç hesap kendi izleme satırlarıyla standart yoldan geçer.
         if Applying then
             exit;
         Eligible := false;
         Clear(Component);
+        Clear(PendingToBinCode);
+        PlanBuffer.Reset();
+        PlanBuffer.DeleteAll();
+        PlannedBase := 0;
         if PreparedLp or (SourceType <> Database::"Prod. Order Component") or
            (SourceSubType <> Enum::"Production Order Status"::Released.AsInteger()) then
             exit;
@@ -104,6 +118,10 @@ codeunit 72454 "DOPSWHS Prod Stock Policy"
         if not ExistingTracking.IsEmpty() then
             exit;
         Eligible := TotalQtytoPickBase > 0;
+        // Plan, dış hesap bu bileşen için tek satır üretmeden önce hesaplanır;
+        // stok durumu plan uygulanırken aynıdır.
+        if Eligible then
+            PlannedBase := BuildLotPlan(PlanBuffer, TotalQtytoPickBase);
     end;
 
     [EventSubscriber(ObjectType::Codeunit, Codeunit::"Create Pick", 'OnBeforeCreateTempItemTrkgLines', '', false, false)]
@@ -114,53 +132,72 @@ codeunit 72454 "DOPSWHS Prod Stock Policy"
             IsHandled := true;
     end;
 
-    [EventSubscriber(ObjectType::Codeunit, Codeunit::"Create Pick", 'OnBeforeCalcPickBin', '', false, false)]
-    local procedure SelectDirectedLots(var Sender: Codeunit "Create Pick"; var TempWarehouseActivityLine: Record "Warehouse Activity Line" temporary; var TotalQtytoPick: Decimal; var TotalQtytoPickBase: Decimal; var TempWhseItemTrackingLine: Record "Whse. Item Tracking Line" temporary; CrossDock: Boolean; WhseTrackingExists: Boolean; WhseSource: Option; LocationCode: Code[10]; ItemNo: Code[20]; VariantCode: Code[10]; UnitofMeasureCode: Code[10]; ToBinCode: Code[20]; QtyPerUnitofMeasure: Decimal; var IsHandled: Boolean)
+    [EventSubscriber(ObjectType::Codeunit, Codeunit::"Create Pick", 'OnCreateTempLineOnAfterCreateTempLineWithItemTracking', '', false, false)]
+    local procedure DeferUntrackedPick(var TotalQtytoPickBase: Decimal; var HasExpiredItems: Boolean; LocationCode: Code[10]; ItemNo: Code[20]; VariantCode: Code[10]; UnitofMeasureCode: Code[10]; FromBinCode: Code[20]; ToBinCode: Code[20]; QtyPerUnitofMeasure: Decimal; var TempWhseActivLine: Record "Warehouse Activity Line" temporary; var TempLineNo: Integer; var IsHandled: Boolean; var TotalItemTrackedQtyToPickBase: Decimal)
     begin
-        if IsHandled or not Eligible or Applying or WhseTrackingExists then
+        if not Eligible or (Component."Item No." <> ItemNo) or (Component."Location Code" <> LocationCode) then
+            exit;
+        // Dış hesap: lotsuz çekme oluşmaz, plan hesap bitince uygulanır.
+        // İç hesap: planın karşılayamadığı kalan lotsuz satıra dönüşmez.
+        if not Applying then begin
+            PendingToBinCode := ToBinCode;
+            // Çağıran, kalan miktarı eski davranıştaki gibi görür: plan çekilecek.
+            TotalQtytoPickBase -= MinQty(TotalQtytoPickBase, PlannedBase);
+        end;
+        IsHandled := true;
+    end;
+
+    [EventSubscriber(ObjectType::Codeunit, Codeunit::"Create Pick", 'OnAfterCreateTempLine', '', false, false)]
+    local procedure ApplyPlanAfterCalculation(var Sender: Codeunit "Create Pick"; LocationCode: Code[10]; ToBinCode: Code[20]; ItemNo: Code[20]; VariantCode: Code[10]; UnitofMeasureCode: Code[10]; QtyPerUnitofMeasure: Decimal)
+    begin
+        if Applying or not Eligible then
             exit;
         if (Component."Item No." <> ItemNo) or (Component."Location Code" <> LocationCode) then
             exit;
-        ApplyPolicy(Sender, ToBinCode, TotalQtytoPick, TotalQtytoPickBase);
-        IsHandled := true;
+        ApplyPolicy(Sender);
     end;
 
-    [EventSubscriber(ObjectType::Codeunit, Codeunit::"Create Pick", 'OnBeforeCalcBWPickBin', '', false, false)]
-    local procedure SelectBasicLots(var Sender: Codeunit "Create Pick"; var TotalQtyToPick: Decimal; var TotalQtytoPickBase: Decimal; var TempWhseItemTrackingLine: Record "Whse. Item Tracking Line" temporary; var TempWhseActivLine: Record "Warehouse Activity Line" temporary; WhseItemTrkgExists: Boolean; var IsHandled: Boolean)
-    begin
-        if IsHandled or not Eligible or Applying or WhseItemTrkgExists then
-            exit;
-        ApplyPolicy(Sender, Component."Bin Code", TotalQtyToPick, TotalQtytoPickBase);
-        IsHandled := true;
-    end;
-
-    local procedure ApplyPolicy(var CreatePick: Codeunit "Create Pick"; ToBinCode: Code[20]; var Quantity: Decimal; var QuantityBase: Decimal)
+    local procedure ApplyPolicy(var CreatePick: Codeunit "Create Pick")
     var
         Failure: Text;
     begin
         Applying := true;
         ClearLastError();
-        if not TryApplyPolicy(CreatePick, ToBinCode, Quantity, QuantityBase) then begin
+        if not TryApplyPolicy(CreatePick) then begin
             Failure := GetLastErrorText();
             Applying := false;
             Eligible := false;
             Error('%1', Failure);
         end;
         Applying := false;
+        Eligible := false;
     end;
 
     [TryFunction]
-    local procedure TryApplyPolicy(var CreatePick: Codeunit "Create Pick"; ToBinCode: Code[20]; var Quantity: Decimal; var QuantityBase: Decimal)
+    local procedure TryApplyPolicy(var CreatePick: Codeunit "Create Pick")
+    var
+        PlanQtyBase: Decimal;
+        PlannedQty: Decimal;
+    begin
+        if PlannedBase <= 0 then
+            exit;
+        PlanQtyBase := PlannedBase;
+        // Native tracking buffer: sets Create Pick's own "tracking exists" state, so
+        // bin search filters by lot and every pick line carries its lot. This is a new
+        // calculation started after the previous one inserted its summary row.
+        CreatePick.SetTempWhseItemTrkgLineFromBuffer(PlanBuffer, Component."Prod. Order No.", Database::"Prod. Order Component", '', Component."Prod. Order Line No.", Component."Line No.", Component."Location Code");
+        PlannedQty := Round(PlanQtyBase / Component."Qty. per Unit of Measure", 0.00001);
+        CreatePick.CreateTempLine(Component."Location Code", Component."Item No.", Component."Variant Code", Component."Unit of Measure Code", '', PendingToBinCode, Component."Qty. per Unit of Measure", Component."Qty. Rounding Precision", Component."Qty. Rounding Precision (Base)", PlannedQty, PlanQtyBase);
+    end;
+
+    /// <summary>Ordered lot plan: HM/YM by expiry, others by posting date; blocked/expired lots excluded.</summary>
+    local procedure BuildLotPlan(var Buffer: Record "Whse. Item Tracking Line" temporary; QuantityBase: Decimal): Decimal
     var
         Candidate: Record "DOPSWHS Pick Stock Candidate";
-        Buffer: Record "Whse. Item Tracking Line" temporary;
         Availability: Codeunit "Create Pick";
         AvailableBase: Decimal;
         RequestedBase: Decimal;
-        RemainingBase: Decimal;
-        RemainingQty: Decimal;
         PlannedRemaining: Decimal;
-        PlannedBase: Decimal;
         LineNo: Integer;
         AllocatedByLot: Dictionary of [Code[50], Decimal];
         Allocated: Decimal;
@@ -182,6 +219,7 @@ codeunit 72454 "DOPSWHS Prod Stock Policy"
                 Buffer."Variant Code" := Component."Variant Code";
                 Buffer."Lot No." := Candidate."Lot No.";
                 Buffer."Expiration Date" := Candidate."Expiration Date";
+                // A separate Create Pick instance only reads availability.
                 AvailableBase := Availability.CalcTotalAvailQtyToPick(
                     Component."Location Code", Component."Item No.", Component."Variant Code", Buffer,
                     Database::"Prod. Order Component", Component.Status.AsInteger(), Component."Prod. Order No.",
@@ -200,24 +238,7 @@ codeunit 72454 "DOPSWHS Prod Stock Policy"
                     AllocatedByLot.Set(Candidate."Lot No.", Allocated + RequestedBase);
                 end;
             until (Candidate.Next() = 0) or (PlannedRemaining <= 0);
-        PlannedBase := QuantityBase - PlannedRemaining;
-        if PlannedBase <= 0 then
-            exit;
-        // Supply the entire ordered tracking plan in one native call. Re-entering
-        // once per lot would reuse BC's per-source tracking/quantity state.
-        CreatePick.SetTempWhseItemTrkgLineFromBuffer(Buffer, Component."Prod. Order No.", Database::"Prod. Order Component", '', Component."Prod. Order Line No.", Component."Line No.", Component."Location Code");
-        RemainingBase := PlannedBase;
-        RemainingQty := Round(PlannedBase / Component."Qty. per Unit of Measure", 0.00001);
-        CreatePick.CreateTempLine(Component."Location Code", Component."Item No.", Component."Variant Code", Component."Unit of Measure Code", '', ToBinCode, Component."Qty. per Unit of Measure", Component."Qty. Rounding Precision", Component."Qty. Rounding Precision (Base)", RemainingQty, RemainingBase);
-        QuantityBase -= PlannedBase - RemainingBase;
-        Quantity := Round(QuantityBase / Component."Qty. per Unit of Measure", 0.00001);
-    end;
-
-    [EventSubscriber(ObjectType::Codeunit, Codeunit::"Create Pick", 'OnCreateTempLineOnAfterCreateTempLineWithItemTracking', '', false, false)]
-    local procedure PreventUntrackedFallback(var TotalQtytoPickBase: Decimal; var HasExpiredItems: Boolean; LocationCode: Code[10]; ItemNo: Code[20]; VariantCode: Code[10]; UnitofMeasureCode: Code[10]; FromBinCode: Code[20]; ToBinCode: Code[20]; QtyPerUnitofMeasure: Decimal; var TempWhseActivLine: Record "Warehouse Activity Line" temporary; var TempLineNo: Integer; var IsHandled: Boolean; var TotalItemTrackedQtyToPickBase: Decimal)
-    begin
-        if Applying then
-            IsHandled := true;
+        exit(QuantityBase - PlannedRemaining);
     end;
 
     local procedure MinQty(Left: Decimal; Right: Decimal): Decimal
