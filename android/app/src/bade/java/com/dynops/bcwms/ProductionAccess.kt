@@ -4,12 +4,18 @@ import android.content.Context
 import com.dynops.bcwms.feature.TerminalSession
 import org.json.JSONObject
 
-/** BADE-only staged rollout. This policy is compiled only into BADE APKs. */
+/**
+ * BADE-only staged rollout. This policy is compiled only into BADE APKs.
+ * 9 Eki 2026: Mal Kabul ve Yerleştirme canlıda tüm terminal kullanıcılarına açıldı
+ * (karma palet mal kabulü sandbox'ta onaylandı). Diğerleri yalnız yöneticilerde.
+ */
+internal val ProductionManagerOnlyScreens = setOf(
+    Screen.Shipping, Screen.Packing, Screen.Picking, Screen.Production,
+)
+
 internal fun productionScreenAllowed(screen: Screen, environment: String, manager: Boolean): Boolean =
-    !environment.trim().equals("Production", ignoreCase = true) || manager || screen !in setOf(
-        Screen.Receiving, Screen.PutAway, Screen.Shipping,
-        Screen.Packing, Screen.Picking, Screen.Production,
-    )
+    !environment.trim().equals("Production", ignoreCase = true) || manager ||
+        screen !in ProductionManagerOnlyScreens
 
 internal fun isTerminalManager(profileJson: String): Boolean = runCatching {
     JSONObject(profileJson).optBoolean("terminalAdmin", false)

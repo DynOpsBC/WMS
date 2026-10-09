@@ -1,7 +1,7 @@
 {
-  "versionCode": 200172,
-  "versionName": "1.14.172-bade",
-  "apkUrl": "https://github.com/DynOpsBC/WMS/releases/download/android-v1.14.172-bade/BCWMS-BADE-1.14.172.apk",
-  "sha256": "56a4bd6852c4f9cdff911c884a1f88ae22d4cfd66dc85c0a2b604716f73291b9",
-  "releaseNotes": "Mal kabul: bir LP'ye birden çok ürün girebilir; LP Kapat ile palet nakletmeden kapanır, Naklet ile tüm paletler tek kayıtla nakledilir. LP Başlat sonrası LP'siz girilmiş satırlar için onay sorulur; LP'siz satır varken nakil durur. BCWMSApp 1.14.1.129 ile kullanın."
+  "versionCode": 200173,
+  "versionName": "1.14.173-bade",
+  "apkUrl": "https://github.com/DynOpsBC/WMS/releases/download/android-v1.14.173-bade/BCWMS-BADE-1.14.173.apk",
+  "sha256": "fc63b1b065b5a2c7c4cf0a826b432d95f576d0a577483647ef7e09a6b15a7b94",
+  "releaseNotes": "Canlı ortamda Mal Kabul ve Yerleştirme tüm terminal kullanıcılarına açıldı. Sevkiyat, Paketleme, Toplama ve Üretim yine yalnız terminal yöneticilerinde. BCWMSApp 1.14.1.129 veya üstüyle kullanın."
 }

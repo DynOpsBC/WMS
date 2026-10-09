@@ -13,9 +13,14 @@ class ProductionAccessTest {
     }
 
     private val restricted = setOf(
-        Screen.Receiving, Screen.PutAway, Screen.Shipping,
-        Screen.Packing, Screen.Picking, Screen.Production,
+        Screen.Shipping, Screen.Packing, Screen.Picking, Screen.Production,
     )
+
+    @Test fun `receiving and put-away are open to every production operator`() {
+        for (screen in listOf(Screen.Receiving, Screen.PutAway)) {
+            assertTrue("$screen", productionScreenAllowed(screen, "Production", manager = false))
+        }
+    }
 
     @Test fun `production operators can access only operations already rolled out`() {
         for (environment in listOf("Production", "production", " PRODUCTION ")) {
