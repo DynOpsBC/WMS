@@ -111,6 +111,50 @@ codeunit 72051 "DOPSWHS Print Dispatcher"
     end;
 
     /// <summary>
+    /// DKÇ (9 Eki 2026): item labels for many items at once (BC Item List
+    /// selection). ZPL labels are sent in jobs of LabelsPerJob labels so 2,000
+    /// items become ~40 queue jobs instead of 2,000. Returns the labels sent.
+    /// </summary>
+    procedure PrintItemLabels(var Item: Record Item; PrinterId: Code[50]; Copies: Integer): Integer
+    var
+        Printer: Record "DOPSWHS Printer";
+        Zpl: Text;
+        FirstItemNo: Code[20];
+        InJob: Integer;
+        Sent: Integer;
+    begin
+        if not Item.FindSet() then
+            exit(0);
+        if Printer.Get(PrinterId) and (Printer."Format" = Printer."Format"::PDF) then begin
+            repeat
+                PrintItemLabel(Item, PrinterId, Copies);
+                Sent += 1;
+            until Item.Next() = 0;
+            exit(Sent);
+        end;
+        repeat
+            if InJob = 0 then
+                FirstItemNo := Item."No.";
+            Zpl += BuildItemZpl(Item);
+            InJob += 1;
+            Sent += 1;
+            if InJob = LabelsPerJob() then begin
+                EnqueueZpl(FirstItemNo, Zpl, PrinterId, Copies, Enum::"DOPSWHS IWX Report Usage"::Item, 'Item');
+                Zpl := '';
+                InJob := 0;
+            end;
+        until Item.Next() = 0;
+        if InJob > 0 then
+            EnqueueZpl(FirstItemNo, Zpl, PrinterId, Copies, Enum::"DOPSWHS IWX Report Usage"::Item, 'Item');
+        exit(Sent);
+    end;
+
+    procedure LabelsPerJob(): Integer
+    begin
+        exit(50);
+    end;
+
+    /// <summary>
     /// Prints the material-identification label(s) (MTE) of one LP. The printer
     /// decides the format: a ZPL label printer (the field's 4 x 2 inch stock)
     /// gets one ZPL MTE per item group, exactly as before 1.14.1.37; a PDF

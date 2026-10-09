@@ -105,4 +105,32 @@ page 72086 "DOPSWHS Item API"
     begin
         Dispatcher.PrintItemLabel(Rec, printerId, copies);
     end;
+
+    /// <summary>
+    /// DKÇ (9 Eki 2026): terminal "Tüm ürünlerin etiketi" sends the item numbers in
+    /// batches (itemNosJson: ["A","B",...], at most 100). One call queues the whole batch
+    /// as LabelsPerJob-sized ZPL jobs. Bound to any item; the bound record is not used.
+    /// Returns the labels queued; unknown item numbers are skipped.
+    /// </summary>
+    [ServiceEnabled]
+    procedure printLabels(itemNosJson: Text; printerId: Code[50]): Integer
+    var
+        Item: Record Item;
+        Dispatcher: Codeunit "DOPSWHS Print Dispatcher";
+        ItemNos: JsonArray;
+        Token: JsonToken;
+        ItemNo: Code[20];
+    begin
+        if not ItemNos.ReadFrom(itemNosJson) then
+            Error('Ürün listesi okunamadı.');
+        if ItemNos.Count() > 100 then
+            Error('Tek istekte en fazla 100 ürün etiketi gönderilebilir.');
+        foreach Token in ItemNos do begin
+            ItemNo := CopyStr(Token.AsValue().AsText(), 1, MaxStrLen(ItemNo));
+            if Item.Get(ItemNo) then
+                Item.Mark(true);
+        end;
+        Item.MarkedOnly(true);
+        exit(Dispatcher.PrintItemLabels(Item, printerId, 1));
+    end;
 }

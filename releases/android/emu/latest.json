@@ -1,7 +1,7 @@
 {
-  "versionCode": 200162,
-  "versionName": "1.14.162-emu",
-  "apkUrl": "https://github.com/DynOpsBC/WMS/releases/download/android-v1.14.162-emu/BCWMS-EMU-1.14.162-RELEASE.apk",
-  "sha256": "98f7a2293d4d0c70f856355e97ac8bf651883482740160aff13e5bb5213d5643",
-  "releaseNotes": "Yerleştirme listesinde her belgenin ürünleri (ürün no · açıklama) belgeye girmeden görünür. BC paketi değişmedi."
+  "versionCode": 200163,
+  "versionName": "1.14.163-emu",
+  "apkUrl": "https://github.com/DynOpsBC/WMS/releases/download/android-v1.14.163-emu/BCWMS-EMU-1.14.163-RELEASE.apk",
+  "sha256": "f3bc31036f4c42ffac19f2325da2f90499c0f9fdb6cacb690708213feeb9e939",
+  "releaseNotes": "Etiket Çıkar → Ürün Etiketi: 'Tüm ürünlerin etiketi' ile BC'deki bütün ürünlerin etiketi 50'şerli paketlerle basılır; ekranda ilerleme ve Durdur. Önce DKC BC 1.14.2.23 kurulmalıdır."
 }

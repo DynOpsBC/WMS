@@ -13,13 +13,16 @@ pageextension 72324 "DOPSWHS Item List Label Ext" extends "Item List"
                 Promoted = true;
                 PromotedCategory = Process;
                 PromotedIsBig = true;
-                ToolTip = 'Seçili maddenin ZPL ürün etiketini seçeceğiniz etiket yazıcısına gönderir; terminaldeki Ürün Sorgu → Etiket Yazdır ile aynı çıktı.';
+                ToolTip = 'Seçili maddelerin ZPL ürün etiketlerini seçeceğiniz etiket yazıcısına gönderir; terminaldeki Ürün Sorgu → Etiket Yazdır ile aynı çıktı. Birden fazla madde seçilebilir (tümünü seç ile bütün liste).';
 
                 trigger OnAction()
                 var
+                    SelectedItem: Record Item;
                     LabelPrint: Codeunit "DOPSWHS BC Label Print";
                 begin
-                    LabelPrint.PrintItemLabel(Rec);
+                    // DKÇ (9 Eki 2026): tek madde yerine listede seçili bütün maddeler.
+                    CurrPage.SetSelectionFilter(SelectedItem);
+                    LabelPrint.PrintItemLabels(SelectedItem);
                 end;
             }
         }
