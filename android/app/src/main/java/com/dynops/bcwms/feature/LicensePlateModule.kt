@@ -1300,7 +1300,7 @@ internal fun PartialUseSheet(
     val parsedQuantity = qty.toFiniteDoubleOrNull()
     val isTransfer = selectedAction.apiValue == "Transfer"
     val transferBody = partialLpTransferBody(sourceLp, target, selectedLineNo, parsedQuantity, maximumQuantity)
-    val validInput = if (isTransfer) transferBody != null else validPartialUseInput(parsedQuantity, selectedLineNo, maximumQuantity)
+    val validInput = if (isTransfer) transferBody != null else validPartialUseInput(parsedQuantity, selectedLineNo, maximumQuantity, selectedAction.apiValue)
     if (confirmReduction) AlertDialog(
         onDismissRequest = { confirmReduction = false },
         title = { Text("LP miktarı azaltılacak") },
@@ -1369,9 +1369,13 @@ internal fun PartialUseSheet(
         OutlinedTextField(
             qty,
             { qty = it.filter { c -> c.isDigit() || c == '.' || c == ',' }.replace(',', '.') },
-            label = { Text(if (isTransfer) "Aktarılacak miktar (en fazla ${fmtItemQty(maximumQuantity)})" else "Miktar (en fazla ${fmtItemQty(maximumQuantity)})") },
+            label = { Text(when {
+                isTransfer -> "Aktarılacak miktar (en fazla ${fmtItemQty(maximumQuantity)})"
+                selectedAction.apiValue == "CreateNewLP" -> "Bu LP'de kalacak miktar (0–${fmtItemQty(maximumQuantity)})"
+                else -> "Miktar (en fazla ${fmtItemQty(maximumQuantity)})"
+            }) },
             singleLine = true,
-            isError = qty.isNotBlank() && !validPartialUseInput(parsedQuantity, selectedLineNo, maximumQuantity),
+            isError = qty.isNotBlank() && !validPartialUseInput(parsedQuantity, selectedLineNo, maximumQuantity, selectedAction.apiValue),
             modifier = Modifier.fillMaxWidth(),
         )
         Spacer(Modifier.height(16.dp))

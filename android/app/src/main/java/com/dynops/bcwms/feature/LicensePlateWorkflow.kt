@@ -144,8 +144,12 @@ internal fun canTransferLicensePlate(status: String, lineCount: Int): Boolean =
 internal fun canPartiallyUseLicensePlate(status: String, lineCount: Int): Boolean =
     status.equals("Built", ignoreCase = true) && lineCount > 0
 
-internal fun validPartialUseInput(quantity: Double?, lineNo: Int?, maximumQuantity: Double): Boolean =
-    quantity != null && quantity > 0.0 && quantity <= maximumQuantity && lineNo != null && lineNo > 0
+// "Kalanı yeni LP'ye ayır" 0 kabul eder: satırın tamamı yeni LP'ye geçer (BC
+// SplitForPartialUse). 23 Eyl düzeltmesi (f9961e7) ana hatta taşınmamıştı.
+internal fun validPartialUseInput(quantity: Double?, lineNo: Int?, maximumQuantity: Double, action: String): Boolean =
+    quantity != null && quantity.isFinite() &&
+        (quantity > 0.0 || (quantity == 0.0 && action == "CreateNewLP")) &&
+        quantity <= maximumQuantity && lineNo != null && lineNo > 0
 
 /** Transfer ekranındaki bir LP satırı: en çok taşınabilecek miktar ve operatörün yazdığı metin. */
 internal data class LpTransferEntry(val lineNo: Int, val maxQuantity: Double, val quantityText: String)
@@ -178,7 +182,7 @@ internal val lpPartialActions = listOf(
     LpPartialAction(
         apiValue = "CreateNewLP",
         label = "Kalanı yeni LP'ye ayır",
-        help = "Girilen miktar bu LP'de kalır; kalan miktar yeni bir LP'ye aktarılır.",
+        help = "Girilen miktar bu LP'de kalır; kalan miktar yeni bir LP'ye aktarılır. Tamamını aktarmak için 0 girin.",
     ),
     LpPartialAction(
         apiValue = "RemoveExcess",

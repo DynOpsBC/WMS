@@ -1,7 +1,7 @@
 {
-  "versionCode": 200175,
-  "versionName": "1.14.175-bade",
-  "apkUrl": "https://github.com/DynOpsBC/WMS/releases/download/android-v1.14.175-bade/BCWMS-BADE-1.14.175.apk",
-  "sha256": "187323315ba6e2c18d3535fdb56cf4fc2143353a31acbcc191b4acde965a8adf",
-  "releaseNotes": "LP ekranı: 'Tamamlarken etiketi yazdır' kutusu boşken LP'yi Tamamla artık 'yazıcı seçilmemiş' hatası vermez; LP etiket basılmadan tamamlanır. BC paketi değişmedi (BCWMSApp 1.14.1.132 veya üstü)."
+  "versionCode": 200176,
+  "versionName": "1.14.176-bade",
+  "apkUrl": "https://github.com/DynOpsBC/WMS/releases/download/android-v1.14.176-bade/BCWMS-BADE-1.14.176.apk",
+  "sha256": "2ddb54764adb9748cd7d1b39e4778da7d849183d2f50d93afb70f0225950e76b",
+  "releaseNotes": "Kısmi LP İşlemi: 'Kalanı yeni LP'ye ayır'da yeniden 0 girilebilir; 0 girilince satırın tamamı yeni LP'ye geçer. 1.14.175'teki yazdırmadan LP tamamlama düzeltmesi de içinde. BC paketi değişmedi."
 }
