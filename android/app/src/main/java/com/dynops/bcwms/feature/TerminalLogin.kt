@@ -42,6 +42,10 @@ internal fun terminalPrintRequestIssue(body: String?, path: String = ""): String
     // Do not apply this exemption to postAndCloseLP: it can still print LP labels.
     if (path.startsWith("receipts(") && path.endsWith(")/Microsoft.NAV.postToPrinter") &&
         json.opt("print") == false) return null
+    // BADE (13 Eki 2026): "Tamamlarken etiketi yazdır" kapalıyken LP tamamlama
+    // printLabel=false + boş printerId gönderir; BC LP'yi kapatır, baskı yapmaz.
+    if ((path.endsWith(")/Microsoft.NAV.stopToPrinter") || path.endsWith(")/Microsoft.NAV.stopToPrinterWithMte")) &&
+        json.opt("printLabel") == false) return null
     return if (json.has("printerId") && json.optString("printerId").isBlank())
         "Bu terminal için yazıcı seçilmemiş. BC terminal kartında yazıcı seçin ve yeniden giriş yapın."
     else null

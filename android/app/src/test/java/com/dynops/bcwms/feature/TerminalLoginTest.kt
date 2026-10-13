@@ -71,6 +71,16 @@ class TerminalLoginTest {
         }
     }
 
+    @Test fun `LP completion without label passes terminal guard`() {
+        for (action in listOf("stopToPrinter", "stopToPrinterWithMte")) {
+            val path = "licensePlates('LP000185')/Microsoft.NAV.$action"
+            assertNull(terminalPrintRequestIssue("""{"printLabel":false,"printerId":""}""", path))
+            assertNotNull(terminalPrintRequestIssue("""{"printLabel":true,"printerId":""}""", path))
+            assertNotNull(terminalPrintRequestIssue("""{"printLabel":"false","printerId":""}""", path))
+        }
+        assertNotNull(terminalPrintRequestIssue("""{"printLabel":false,"printerId":""}""", "licensePlates('LP1')/Microsoft.NAV.printLabel"))
+    }
+
     @Test fun `print false cannot bypass printer selection for other actions or malformed flags`() {
         val receiptPath = "receipts('R1')/Microsoft.NAV.postToPrinter"
         for (body in listOf(
