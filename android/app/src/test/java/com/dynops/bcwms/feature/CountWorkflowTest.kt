@@ -6,6 +6,22 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class CountWorkflowTest {
+    private fun line(bin: String, counted: Boolean?, qty: Double) = org.json.JSONObject().apply {
+        put("binCode", bin)
+        if (counted != null) put("counted1", counted)
+        put("countedQty1", qty)
+    }
+
+    @Test
+    fun `bin counts as completed after timeout only when every line of that bin is counted`() {
+        val done = listOf(line("A.E06.12", true, 0.0), line("A.E06.12", true, 5.0), line("A.G01.12", false, 0.0))
+        assertTrue(countV2BinCompletedForSlot(done, "a.e06.12", 1))
+        assertFalse(countV2BinCompletedForSlot(done, "A.G01.12", 1))
+        assertFalse(countV2BinCompletedForSlot(listOf(line("A.E06.12", true, 1.0), line("A.E06.12", null, 0.0)), "A.E06.12", 1))
+        assertFalse(countV2BinCompletedForSlot(done, "A.X99", 1))
+        assertFalse(countV2BinCompletedForSlot(done, "", 1))
+    }
+
     @Test
     fun `explicit counted flag preserves a physical zero count`() {
         assertTrue(isCountRecorded(hasExplicitFlag = true, explicitFlag = true, quantity = 0.0))

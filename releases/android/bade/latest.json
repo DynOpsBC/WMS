@@ -1,7 +1,7 @@
 {
-  "versionCode": 200176,
-  "versionName": "1.14.176-bade",
-  "apkUrl": "https://github.com/DynOpsBC/WMS/releases/download/android-v1.14.176-bade/BCWMS-BADE-1.14.176.apk",
-  "sha256": "2ddb54764adb9748cd7d1b39e4778da7d849183d2f50d93afb70f0225950e76b",
-  "releaseNotes": "Kısmi LP İşlemi: 'Kalanı yeni LP'ye ayır'da yeniden 0 girilebilir; 0 girilince satırın tamamı yeni LP'ye geçer. 1.14.175'teki yazdırmadan LP tamamlama düzeltmesi de içinde. BC paketi değişmedi."
+  "versionCode": 200177,
+  "versionName": "1.14.177-bade",
+  "apkUrl": "https://github.com/DynOpsBC/WMS/releases/download/android-v1.14.177-bade/BCWMS-BADE-1.14.177.apk",
+  "sha256": "87cc53e6ef8fbce16158dd28e071f1329b1e82055bf2f85d0484397e61cf55bc",
+  "releaseNotes": "Sayım V2: 'Rafı bitir' ve 'Sayım Turunu Kaydet' büyük sayımda 'timeout' vermez; terminal BC'yi 90 sn bekler, bağlantı koparsa belgeyi yeniden okuyup işlemin yapıldığını doğrular. BC paketi değişmedi."
 }

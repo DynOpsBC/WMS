@@ -188,3 +188,23 @@ internal fun countedLpLabelPrintStatus(afterPost: Boolean, lpCount: Int, printFa
     return if (printFailures == 0) "TAMAM: ${prefix}$lpCount LP etiketi güncel miktarla yazdırıldı"
     else "UYARI: ${prefix}$printFailures LP etiketi yazdırılamadı"
 }
+
+/**
+ * BADE (14 Eki 2026): completeV2Bin bütün açılmış rafları yeniden hesapladığı için
+ * büyük sayımda 12 sn'yi aşıp terminalde "timeout" veriyordu; BC işi yine de
+ * bitiriyordu. Belirsiz hatadan sonra belge yeniden okunur: rafın bütün
+ * satırları bu sayıcı için açıkça sayılmışsa raf tamamlanmış kabul edilir.
+ */
+internal fun countV2BinCompletedForSlot(lines: List<org.json.JSONObject>, bin: String, slot: Int): Boolean =
+    bin.isNotBlank() && allRequiredCountLinesExplicitlyCompleted(
+        lines.filter { it.optString("binCode").equals(bin, ignoreCase = true) }.map { line ->
+            CountSlotLineState(
+                hasExplicitFlag = line.has("counted$slot"),
+                explicitlyCounted = line.optBoolean("counted$slot"),
+                quantity = line.optDouble("countedQty$slot", Double.NaN),
+            )
+        },
+    )
+
+internal const val COUNT_V2_AMBIGUOUS_NOTE =
+    "BC geç yanıt verdi; işlem kaydedilmiş olabilir. Ekran yenilendi, durumu kontrol edip gerekiyorsa tekrar deneyin."

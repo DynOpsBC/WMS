@@ -1010,14 +1010,17 @@ private fun CountV2Document(no: String, onBack: () -> Unit, onRoundChanged: (Str
             busy = true
             status = "$slot. sayım turu kaydedilip kilitleniyor..."
             val body = JSONObject().apply { put("counterSlot", slot) }.toString()
-            val result = BcApi.boundAction(context, "countSheets", no, "completeCounter", body)
+            val result = BcApi.boundActionLongRunning(context, "countSheets", no, "completeCounter", body)
             busy = false
-            if (result.ok) {
-                loadDocument()
+            val savedAfterTimeout = !result.ok && BcApi.isAmbiguousMutationFailure(result) &&
+                loadDocument() && header?.optBoolean("counter${slot}Completed", false) == true
+            if (result.ok || savedAfterTimeout) {
+                if (result.ok) loadDocument()
                 if (linesComplete) status = if (countV2HasBinFindings(lines))
                     "TAMAM: $slot. sayım turu kaydedildi. $COUNT_V2_BIN_FINDINGS_NOTE"
                 else countRoundSavedMessage(slot, terminalPostAllowed(header))
-            } else status = "HATA: ${BcApi.errorMessage(result.body)} (HTTP ${result.httpCode})"
+            } else status = if (BcApi.isAmbiguousMutationFailure(result)) "HATA: $COUNT_V2_AMBIGUOUS_NOTE"
+            else "HATA: ${BcApi.errorMessage(result.body)} (HTTP ${result.httpCode})"
         }
     }
 
@@ -1043,14 +1046,17 @@ private fun CountV2Document(no: String, onBack: () -> Unit, onRoundChanged: (Str
         scope.launch {
             busy = true
             val bin = activeBin
-            val result = BcApi.boundAction(context, "countSheets", no, "completeV2Bin",
+            val result = BcApi.boundActionLongRunning(context, "countSheets", no, "completeV2Bin",
                 JSONObject().put("binCode", bin).put("counterSlot", slot).toString())
             showFinishBin = false
-            if (result.ok) {
+            val completedAfterTimeout = !result.ok && BcApi.isAmbiguousMutationFailure(result) &&
+                loadDocument() && countV2BinCompletedForSlot(lines, bin, slot)
+            if (result.ok || completedAfterTimeout) {
                 activeBin = ""
                 lastCompleted = null; lastBatch = emptyList(); lastCompletedLp = null
-                if (loadDocument()) status = "TAMAM: $bin tamamlandı · sayılmayanlar $slot sayımında 0 · bekleyen rafları da sayın"
-            } else status = "HATA: ${BcApi.errorMessage(result.body)}"
+                if (completedAfterTimeout || loadDocument()) status = "TAMAM: $bin tamamlandı · sayılmayanlar $slot sayımında 0 · bekleyen rafları da sayın"
+            } else status = if (BcApi.isAmbiguousMutationFailure(result)) "HATA: $COUNT_V2_AMBIGUOUS_NOTE"
+            else "HATA: ${BcApi.errorMessage(result.body)}"
             busy = false
         }
     }
