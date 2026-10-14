@@ -83,13 +83,16 @@ internal fun bulkLpRowsJson(rows: List<BulkReceiptLpRow>): String = JSONArray().
 /**
  * BC quantities use five decimal places in this flow. Equal shares are rounded
  * down and the final pallet receives the remainder, so the rows always add up
- * to the exact receipt quantity.
+ * to the exact receipt quantity. BADE (14 Eki 2026): a whole-number total is
+ * split into whole numbers (20020 / 6 = 5 × 3336 + 3340); ADET pallets got
+ * 3336,66666 before.
  */
 internal fun equalBulkLpQuantities(totalQty: Double, palletCount: Int): List<Double> {
     if (!totalQty.isFinite() || totalQty <= 0.0 || palletCount <= 0 || palletCount > 200) return emptyList()
     val total = BigDecimal.valueOf(totalQty)
     val count = BigDecimal.valueOf(palletCount.toLong())
-    val commonShare = total.divide(count, 5, RoundingMode.DOWN)
+    val wholeTotal = total.stripTrailingZeros().scale() <= 0
+    val commonShare = total.divide(count, if (wholeTotal) 0 else 5, RoundingMode.DOWN)
     val lastShare = total.subtract(commonShare.multiply(BigDecimal.valueOf((palletCount - 1).toLong())))
     return List(palletCount) { index ->
         (if (index == palletCount - 1) lastShare else commonShare).stripTrailingZeros().toDouble()

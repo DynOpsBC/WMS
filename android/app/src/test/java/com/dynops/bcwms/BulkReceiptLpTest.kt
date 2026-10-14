@@ -113,10 +113,20 @@ class BulkReceiptLpTest {
 
     @Test
     fun `equal distribution fills every pallet and preserves exact total`() {
-        val quantities = equalBulkLpQuantities(10.0, 3)
+        val quantities = equalBulkLpQuantities(10.5, 3)
 
-        assertEquals(listOf(3.33333, 3.33333, 3.33334), quantities)
-        assertEquals(10.0, quantities.sum(), 0.000001)
+        assertEquals(listOf(3.5, 3.5, 3.5), quantities)
+        assertEquals(10.5, quantities.sum(), 0.000001)
+        assertEquals(listOf(0.16666, 0.16666, 0.16668), equalBulkLpQuantities(0.5, 3))
+    }
+
+    @Test
+    fun `whole total is split into whole pallets with the remainder on the last`() {
+        assertEquals(listOf(3.0, 3.0, 4.0), equalBulkLpQuantities(10.0, 3))
+        val bade = equalBulkLpQuantities(20020.0, 6)
+        assertEquals(listOf(3336.0, 3336.0, 3336.0, 3336.0, 3336.0, 3340.0), bade)
+        assertEquals(20020.0, bade.sum(), 0.0)
+        assertEquals(listOf(0.0, 0.0, 2.0), equalBulkLpQuantities(2.0, 3))
     }
 
     @Test
