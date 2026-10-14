@@ -17,6 +17,15 @@
             <Width>9.58cm</Width>
             <Height>7.50cm</Height>
             <DataSetName>DataSet_Result</DataSetName>
+            <Filters>
+              <Filter>
+                <FilterExpression>=Len(Fields!MaddeKodu.Value) &gt; 0</FilterExpression>
+                <Operator>Equal</Operator>
+                <FilterValues>
+                  <FilterValue DataType="Boolean">true</FilterValue>
+                </FilterValues>
+              </Filter>
+            </Filters>
             <TablixBody>
               <TablixColumns>
                 <TablixColumn>
@@ -1752,6 +1761,9 @@
         <Field Name="CompanyLogo">
           <DataField>CompanyLogo</DataField>
         </Field>
+        <Field Name="LpNo">
+          <DataField>LpNo</DataField>
+        </Field>
         <Field Name="MaddeKodu">
           <DataField>MaddeKodu</DataField>
         </Field>
@@ -1811,9 +1823,6 @@
         </Field>
         <Field Name="QRCodeBase64">
           <DataField>QRCodeBase64</DataField>
-        </Field>
-        <Field Name="LpNo">
-          <DataField>LpNo</DataField>
         </Field>
         <Field Name="DokumanNo">
           <DataField>DokumanNo</DataField>

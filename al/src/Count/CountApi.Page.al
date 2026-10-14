@@ -101,6 +101,15 @@ page 72221 "DOPSWHS Count API"
             until Counter.Next() = 0;
     end;
 
+    /// <summary>Sayım sürerken stoğu değişen rafın görüntüsünü yeniler; raf yeniden sayılır.</summary>
+    [ServiceEnabled]
+    procedure refreshV2Bin(binCode: Code[20]): Integer
+    var
+        CountMgmt: Codeunit "DOPSWHS Count Mgmt";
+    begin
+        exit(CountMgmt.RefreshV2Bin(Rec."No.", binCode));
+    end;
+
     [ServiceEnabled]
     procedure prepareV2Bin(binCode: Code[20])
     var

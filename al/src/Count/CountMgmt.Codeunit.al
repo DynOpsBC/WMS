@@ -1322,6 +1322,69 @@ codeunit 72050 "DOPSWHS Count Mgmt"
         CountHeader.Modify(true);
     end;
 
+    /// <summary>
+    /// BADE (9 Eki 2026): sayım sürerken bir raftan mal alındı (2. tur, LP000186
+    /// 8 → 6). Belge "güvenli olmayan sistem miktarı" ile duruyor, 2. turda Sayımı
+    /// Yeniden Başlat kapalı. Yalnız bu rafın görüntüsü güncel stokla yeniden
+    /// alınır; rafın bu turdaki taramaları geçersiz sayılır ve raf yeniden sayılır.
+    /// Diğer raflar, önceki turlar ve sayıcı atamaları korunur.
+    /// </summary>
+    procedure RefreshV2Bin(SheetNo: Code[20]; BinCode: Code[20]) LinesCreated: Integer
+    var
+        Header: Record "DOPSWHS Count Sheet Header";
+        Snapshot: Record "DOPSWHS Count Sheet Line" temporary;
+        Line: Record "DOPSWHS Count Sheet Line";
+        LastLine: Record "DOPSWHS Count Sheet Line";
+        ScanEvent: Record "DOPSWHS Count V2 Scan";
+        Counter: Record "DOPSWHS Count Counter";
+        Bin: Record Bin;
+        NextLineNo: Integer;
+    begin
+        AssertActiveRound(SheetNo);
+        Header.Get(SheetNo);
+        if Header.Status = Header.Status::Posted then
+            Error(CountAlreadyPostedErr, SheetNo);
+        if not Header."V2 Scan Mode" then
+            Error('Rafı yenileme yalnız Sayım V2 belgelerinde kullanılır.');
+        if BinCode = '' then
+            Error(BinRequiredErr);
+        Bin.Get(Header."Location Code", BinCode);
+        EnsureBinInCountScope(Header, Bin);
+        BuildBinSnapshot(SheetNo, BinCode, Snapshot);
+
+        Line.LockTable();
+        Line.SetRange("Sheet No.", SheetNo);
+        Line.SetRange("Bin Code", BinCode);
+        if Line.FindSet() then
+            repeat
+                ScanEvent.SetRange("Sheet No.", SheetNo);
+                ScanEvent.SetRange("Line No.", Line."Line No.");
+                ScanEvent.ModifyAll(Reversed, true, true);
+            until Line.Next() = 0;
+        Line.DeleteAll(true);
+
+        LastLine.SetRange("Sheet No.", SheetNo);
+        if LastLine.FindLast() then
+            NextLineNo := LastLine."Line No.";
+        if Snapshot.FindSet() then
+            repeat
+                NextLineNo += 10000;
+                Line := Snapshot;
+                Line."Sheet No." := SheetNo;
+                Line."Line No." := NextLineNo;
+                Line.Insert(true);
+                LinesCreated += 1;
+            until Snapshot.Next() = 0;
+
+        // Raf yeniden sayılacağı için hiçbir sayıcı turu bitmiş sayılmaz.
+        Counter.SetRange("Sheet No.", SheetNo);
+        Counter.ModifyAll(Completed, false, true);
+        Counter.ModifyAll("Completed DateTime", 0DT, true);
+        Header.Get(SheetNo);
+        Header.Status := Header.Status::InProgress;
+        Header.Modify(true);
+    end;
+
     procedure PrepareV2Bin(SheetNo: Code[20]; BinCode: Code[20])
     begin
         MergeV2BinSnapshot(SheetNo, BinCode, false);
@@ -1410,7 +1473,7 @@ codeunit 72050 "DOPSWHS Count Mgmt"
                     Line.Insert(true);
                 end else
                     if Line."System Qty" <> Snapshot."System Qty" then
-                        Error('Raf %1 madde %2 için kayıtlı stok sayım başladıktan sonra değişmiş veya LP dağılımı uyuşmuyor. Sayımı kontrol edip yeni belge açın.', BinCode, Line."Item No.");
+                        Error('Raf %1 madde %2 için kayıtlı stok sayım başladıktan sonra değişmiş veya LP dağılımı uyuşmuyor. Sayım kartında bu raf için Rafı Yenile eylemini çalıştırıp rafı yeniden sayın.', BinCode, Line."Item No.");
             until Snapshot.Next() = 0;
         // Also detect stock that disappeared completely since the snapshot. It
         // must not be deducted a second time by this count's eventual posting.
@@ -1429,7 +1492,7 @@ codeunit 72050 "DOPSWHS Count Mgmt"
                 Snapshot.SetRange("LP No.", Line."LP No.");
                 Snapshot.SetRange("LP Line No.", Line."LP Line No.");
                 if Snapshot.IsEmpty() then
-                    Error('Raf %1 madde %2 için sayımdaki sistem stoku artık mevcut değil. Yeni sayım belgesi açın.', BinCode, Line."Item No.");
+                    Error('Raf %1 madde %2 için sayımdaki sistem stoku artık mevcut değil. Sayım kartında bu raf için Rafı Yenile eylemini çalıştırıp rafı yeniden sayın.', BinCode, Line."Item No.");
             until Line.Next() = 0;
     end;
 
@@ -2675,7 +2738,7 @@ codeunit 72050 "DOPSWHS Count Mgmt"
         V2LotRequiredErr: Label '%1 ürünü lot takiplidir; QR içinde lot numarası bulunmalıdır.', Comment = '%1 item no';
         V2SerialRequiredErr: Label '%1 ürünü seri takiplidir; QR içinde seri numarası bulunmalıdır.', Comment = '%1 item no';
         V2ScanIdConflictErr: Label '%1 okutma kimliği başka bir sayım belgesinde kullanılmıştır.', Comment = '%1 scan guid';
-        V2LpSystemSnapshotUnsafeErr: Label '%1 sayım belgesindeki %2 LP numarasının %3 satırında güvenli olmayan sistem miktarı var (sayım: %4, LP: %5). Önce Sayımı Yeniden Başlat eylemini çalıştırıp LP''yi yeniden okutun veya yeni sayım belgesi oluşturun.', Comment = '%1 sheet no, %2 LP no, %3 LP line no, %4 count system qty, %5 LP line qty';
+        V2LpSystemSnapshotUnsafeErr: Label '%1 sayım belgesindeki %2 LP numarasının %3 satırında güvenli olmayan sistem miktarı var (sayım: %4, LP: %5). Raftan sayım sırasında mal alınmış olabilir: sayım kartında bu raf için Rafı Yenile eylemini çalıştırıp rafı yeniden sayın.', Comment = '%1 sheet no, %2 LP no, %3 LP line no, %4 count system qty, %5 LP line qty';
         WhsePhysInvTemplateTok: Label 'PHYSINV', Locked = true;
         MultiBinTok: Label 'MULTI', Locked = true;
         WhsePhysInvBatchTok: Label 'DOPS-CNT', Locked = true;

@@ -11,32 +11,62 @@ report 72375 "DOPSWHS MTE LP Report"
         dataitem(LicensePlate; "DOPSWHS LP Header")
         {
             RequestFilterFields = "No.";
+            PrintOnlyIfDetail = true;
 
             column(CompanyLogo; CompanyInformation.Picture) { }
-            column(MaddeKodu; ItemNo) { }
-            column(MaddeKategoriKodu; CategoryDescription) { }
-            column(ItemCategoryCode; ItemCategoryCode) { }
-            column(ItemCategoryParentCategory; ParentCategoryCode) { }
-            column(MaddeAdi; ItemDescription) { }
-            column(InciAdi; InciName) { }
-            column(TedarikciAdi; VendorName) { }
-            column(TedarikciLotu; SupplierLotNo) { }
-            column(UretimTarihiTxt; ProductionDateText) { }
-            column(LotNo; LotNoValue) { }
-            column(SonKullanmaTarihiTxt; ExpirationDateText) { }
-            column(MiktarBirimTxt; QuantityUomText) { }
-            column(DepolamaKosulu; StorageCondition) { }
-            column(DepoGirisTarihiTxt; ReceiptDateText) { }
-            column(DepoGirisNo; ReceiptNo) { }
-            column(KontrolEden; CheckedBy) { }
-            column(Onaylayan; ApprovedBy) { }
-            column(KaliteKontrolOnayiIsim; QualityApprovalName) { }
-            column(KaliteKontrolOnayiTarih; QualityApprovalDate) { }
-            column(QRCodeBase64; QrCodeBase64) { }
             column(LpNo; "No.") { }
-            column(DokumanNo; DocumentNo) { }
-            column(RevizyonNo; RevisionNo) { }
-            column(RevizyonTarihi; RevisionDate) { }
+
+            // BADE (9 Eki 2026): karma palette (LP001645'te 8 ürün) yalnız ilk
+            // satır basılıyordu. Terminal ZPL'i gibi her ürün/lot/kaynak satırı
+            // grubu için ayrı etiket; RDLC her veri satırını ayrı sayfa basar.
+            dataitem(LabelLine; "DOPSWHS LP Line")
+            {
+                DataItemLink = "LP No." = field("No.");
+                DataItemTableView = sorting("LP No.", "Line No.") where(Quantity = filter(> 0));
+
+                column(MaddeKodu; ItemNo) { }
+                column(MaddeKategoriKodu; CategoryDescription) { }
+                column(ItemCategoryCode; ItemCategoryCode) { }
+                column(ItemCategoryParentCategory; ParentCategoryCode) { }
+                column(MaddeAdi; ItemDescription) { }
+                column(InciAdi; InciName) { }
+                column(TedarikciAdi; VendorName) { }
+                column(TedarikciLotu; SupplierLotNo) { }
+                column(UretimTarihiTxt; ProductionDateText) { }
+                column(LotNo; LotNoValue) { }
+                column(SonKullanmaTarihiTxt; ExpirationDateText) { }
+                column(MiktarBirimTxt; QuantityUomText) { }
+                column(DepolamaKosulu; StorageCondition) { }
+                column(DepoGirisTarihiTxt; ReceiptDateText) { }
+                column(DepoGirisNo; ReceiptNo) { }
+                column(KontrolEden; CheckedBy) { }
+                column(Onaylayan; ApprovedBy) { }
+                column(KaliteKontrolOnayiIsim; QualityApprovalName) { }
+                column(KaliteKontrolOnayiTarih; QualityApprovalDate) { }
+                column(QRCodeBase64; QrCodeBase64) { }
+                column(DokumanNo; DocumentNo) { }
+                column(RevizyonNo; RevisionNo) { }
+                column(RevizyonTarihi; RevisionDate) { }
+
+                trigger OnPreDataItem()
+                begin
+                    Clear(PrintedGroups);
+                end;
+
+                trigger OnAfterGetRecord()
+                var
+                    GroupKey: Text;
+                begin
+                    if "Item No." = '' then
+                        CurrReport.Skip();
+                    // Aynı ürün/lot/kaynak satırına ait bölünmüş satırlar tek etikette toplanır.
+                    GroupKey := PalletItemGroupKey(LabelLine);
+                    if PrintedGroups.ContainsKey(GroupKey) then
+                        CurrReport.Skip();
+                    PrintedGroups.Add(GroupKey, true);
+                    LoadDynamicLabelData(LabelLine);
+                end;
+            }
 
             trigger OnPreDataItem()
             begin
@@ -45,9 +75,16 @@ report 72375 "DOPSWHS MTE LP Report"
             end;
 
             trigger OnAfterGetRecord()
+            var
+                ContentLine: Record "DOPSWHS LP Line";
             begin
-                if not LoadDynamicLabelData() then
+                // İçeriği olmayan LP boş etiket basmaz.
+                ContentLine.SetRange("LP No.", "No.");
+                ContentLine.SetFilter("Item No.", '<>%1', '');
+                ContentLine.SetFilter(Quantity, '>0');
+                if ContentLine.IsEmpty() then
                     CurrReport.Skip();
+                QrCodeBase64 := LpQrCode("No.");
             end;
         }
     }
@@ -67,28 +104,17 @@ report 72375 "DOPSWHS MTE LP Report"
         }
     }
 
-    local procedure LoadDynamicLabelData(): Boolean
+    local procedure LoadDynamicLabelData(LPLine: Record "DOPSWHS LP Line")
     var
-        LPLine: Record "DOPSWHS LP Line";
         Item: Record Item;
         ItemCategory: Record "Item Category";
         MteBuilder: Codeunit "DOPSWHS MTE Zpl Builder";
-        BarcodeImageProvider: Interface "Barcode Image Provider 2D";
-        BarcodeImage: Codeunit "Temp Blob";
-        Base64Convert: Codeunit "Base64 Convert";
-        ImageInStream: InStream;
         Values: Dictionary of [Text, Text];
         Options: JsonObject;
         OptionsJson: Text;
         LabelQuantity: Decimal;
     begin
         ClearLabelData();
-
-        LPLine.SetRange("LP No.", LicensePlate."No.");
-        LPLine.SetFilter("Item No.", '<>%1', '');
-        LPLine.SetFilter(Quantity, '>0');
-        if not LPLine.FindFirst() then
-            exit(false);
 
         // BADE (8 Eki 2026): BC etiketi terminal etiketiyle aynı veriyi basmalı.
         // Kategori (üst kategori), INCI adı, tedarikçi madde adı, depolama koşulu
@@ -125,14 +151,29 @@ report 72375 "DOPSWHS MTE LP Report"
 
         LabelQuantity := PalletItemGroupQuantity(LPLine);
         QuantityUomText := StrSubstNo('%1 %2', LabelQuantity, LPLine."Unit of Measure");
+    end;
 
+    local procedure LpQrCode(LpNo: Code[20]): Text
+    var
+        BarcodeImageProvider: Interface "Barcode Image Provider 2D";
+        BarcodeImage: Codeunit "Temp Blob";
+        Base64Convert: Codeunit "Base64 Convert";
+        ImageInStream: InStream;
+    begin
         BarcodeImageProvider := Enum::"Barcode Image Provider 2D"::Dynamics2D;
-        BarcodeImage := BarcodeImageProvider.EncodeImage(LicensePlate."No.", Enum::"Barcode Symbology 2D"::"QR-Code");
+        BarcodeImage := BarcodeImageProvider.EncodeImage(LpNo, Enum::"Barcode Symbology 2D"::"QR-Code");
         if not BarcodeImage.HasValue() then
-            Error('%1 LP numarası için QR kod üretilemedi.', LicensePlate."No.");
+            Error('%1 LP numarası için QR kod üretilemedi.', LpNo);
         BarcodeImage.CreateInStream(ImageInStream);
-        QrCodeBase64 := Base64Convert.ToBase64(ImageInStream);
-        exit(true);
+        exit(Base64Convert.ToBase64(ImageInStream));
+    end;
+
+    local procedure PalletItemGroupKey(LPLine: Record "DOPSWHS LP Line"): Text
+    begin
+        exit(
+            LPLine."Item No." + '|' + LPLine."Variant Code" + '|' + LPLine."Unit of Measure" + '|' +
+            LPLine."Lot No." + '|' + LPLine."Serial No." + '|' + Format(LPLine."Source Document Type") + '|' +
+            LPLine."Source Document No." + '|' + Format(LPLine."Source Document Line No."));
     end;
 
     local procedure UnknownIfBlank(Value: Text): Text
@@ -183,7 +224,6 @@ report 72375 "DOPSWHS MTE LP Report"
         Clear(ReceiptDateText);
         Clear(ReceiptNo);
         Clear(CheckedBy);
-        Clear(QrCodeBase64);
     end;
 
     var
@@ -212,4 +252,5 @@ report 72375 "DOPSWHS MTE LP Report"
         DocumentNo: Text;
         RevisionNo: Text;
         RevisionDate: Text;
+        PrintedGroups: Dictionary of [Text, Boolean];
 }

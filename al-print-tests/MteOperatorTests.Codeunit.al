@@ -109,6 +109,79 @@ codeunit 72181 "DOPSWHS MTE Operator Tests"
         Check(Values.Get('RevisionDate') = '24.07.2026', 'The controlled form revision date must be printed.');
     end;
 
+    [Test]
+    procedure BcReportPrintsOneLabelPerProductOnMixedPallet()
+    var
+        LP: Record "DOPSWHS LP Header";
+        LPLine: Record "DOPSWHS LP Line";
+        Item: Record Item;
+        TempBlob: Codeunit "Temp Blob";
+        LpRef: RecordRef;
+        OutStr: OutStream;
+        InStr: InStream;
+        DataSet: Text;
+        Chunk: Text;
+    begin
+        // BADE (9 Eki 2026): LP001645 (8 ürün) için "Tüm LP MTE Etiketleri"
+        // hep ilk ürünü basıyordu. Her ürün/lot grubu ayrı etiket olmalı.
+        Item."No." := 'MTE-MIX-A';
+        Item.Description := 'Karma palet ürün A';
+        Item.Insert(false);
+        Clear(Item);
+        Item."No." := 'MTE-MIX-B';
+        Item.Description := 'Karma palet ürün B';
+        Item.Insert(false);
+        LP."No." := 'MTE-MIX-TEST';
+        LP.Status := LP.Status::Built;
+        LP.Insert(false);
+        AddLine(LP."No.", 10000, 'MTE-MIX-A', 'MIXLOT-A', 3);
+        AddLine(LP."No.", 20000, 'MTE-MIX-A', 'MIXLOT-A', 2);
+        AddLine(LP."No.", 30000, 'MTE-MIX-B', 'MIXLOT-B', 4);
+
+        LP.SetRange("No.", LP."No.");
+        LpRef.GetTable(LP);
+        TempBlob.CreateOutStream(OutStr);
+        Check(Report.SaveAs(Report::"DOPSWHS MTE LP Report", '', ReportFormat::Xml, OutStr, LpRef), 'The MTE report did not run.');
+        TempBlob.CreateInStream(InStr);
+        while not InStr.EOS() do begin
+            InStr.ReadText(Chunk);
+            DataSet += Chunk;
+        end;
+
+        Check(CountOf(DataSet, 'MTE-MIX-A') >= 1, 'Product A label is missing.');
+        Check(CountOf(DataSet, 'MTE-MIX-B') >= 1, 'Product B label is missing (only the first product was printed).');
+        Check(CountOf(DataSet, 'MIXLOT-A') = 1, StrSubstNo('Product A split lines must share one label; lot A appears %1 times.', CountOf(DataSet, 'MIXLOT-A')));
+        Check(CountOf(DataSet, 'MIXLOT-B') = 1, StrSubstNo('Product B must have exactly one label; lot B appears %1 times.', CountOf(DataSet, 'MIXLOT-B')));
+        Check(StrPos(DataSet, '5 ') > 0, 'Product A label must carry the merged quantity 5.');
+    end;
+
+    local procedure AddLine(LpNo: Code[20]; LineNo: Integer; ItemNo: Code[20]; LotNo: Code[50]; Qty: Decimal)
+    var
+        LPLine: Record "DOPSWHS LP Line";
+    begin
+        LPLine."LP No." := LpNo;
+        LPLine."Line No." := LineNo;
+        LPLine."Item No." := ItemNo;
+        LPLine."Unit of Measure" := 'ADET';
+        LPLine."Lot No." := LotNo;
+        LPLine.Quantity := Qty;
+        LPLine.Insert(false);
+    end;
+
+    local procedure CountOf(Haystack: Text; Needle: Text): Integer
+    var
+        Position: Integer;
+        Found: Integer;
+    begin
+        Position := StrPos(Haystack, Needle);
+        while Position > 0 do begin
+            Found += 1;
+            Haystack := CopyStr(Haystack, Position + StrLen(Needle));
+            Position := StrPos(Haystack, Needle);
+        end;
+        exit(Found);
+    end;
+
     local procedure Check(Condition: Boolean; Message: Text)
     begin
         if not Condition then
