@@ -689,6 +689,7 @@ codeunit 72428 "DOPSWHS LP Propagation"
         LPManagement: Codeunit "DOPSWHS LP Management";
     begin
         LPManagement.DebitPostedProductionConsumptionLp(ItemJournalLine, ItemLedgerEntry);
+        LPManagement.DebitUndoneReceiptLp(ItemJournalLine, ItemLedgerEntry);
         if ItemLedgerEntry."DOPSWHS LP No." <> '' then
             exit;
         // Warehouse receipt posting must remain a standard BC inventory

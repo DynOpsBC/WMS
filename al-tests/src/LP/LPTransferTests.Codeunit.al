@@ -315,6 +315,99 @@ codeunit 72114 "DOPSWHS LP Transfer Tests"
         Assert.AreEqual('PICK', LP."Bin Code", 'A rejected assigned-LP move must leave the bin unchanged.');
     end;
 
+    [Test]
+    procedure UndoneReceiptDebitsTheReceivedLpLineOnce()
+    var
+        LP: Record "DOPSWHS LP Header";
+        Line: Record "DOPSWHS LP Line";
+        ItemJournalLine: Record "Item Journal Line";
+        UndoEntry: Record "Item Ledger Entry";
+        LPMgt: Codeunit "DOPSWHS LP Management";
+        Assert: Codeunit "Library Assert";
+    begin
+        // BADE (14 Eki 2026): alış irsaliyesi geri alınınca LP dolu kalıyordu.
+        Seed();
+        BuildLPWithLine(LP, 10, Line);
+        Line."Source Item Ledger Entry No." := MockReceiptEntry(10);
+        Line.Modify(false);
+        MockUndo(ItemJournalLine, UndoEntry, Line."Source Item Ledger Entry No.", -4, true);
+        LPMgt.DebitUndoneReceiptLp(ItemJournalLine, UndoEntry);
+        Assert.AreEqual(6, GetLPQty(LP."No."), 'Undo must remove the undone quantity from the received LP.');
+        LPMgt.DebitUndoneReceiptLp(ItemJournalLine, UndoEntry);
+        Assert.AreEqual(6, GetLPQty(LP."No."), 'The same undo entry must not debit the LP twice.');
+    end;
+
+    [Test]
+    procedure FullUndoEmptiesTheReceivedLp()
+    var
+        LP: Record "DOPSWHS LP Header";
+        Line: Record "DOPSWHS LP Line";
+        ItemJournalLine: Record "Item Journal Line";
+        UndoEntry: Record "Item Ledger Entry";
+        LPMgt: Codeunit "DOPSWHS LP Management";
+        Assert: Codeunit "Library Assert";
+    begin
+        Seed();
+        BuildLPWithLine(LP, 10, Line);
+        Line."Source Item Ledger Entry No." := MockReceiptEntry(10);
+        Line.Modify(false);
+        MockUndo(ItemJournalLine, UndoEntry, Line."Source Item Ledger Entry No.", -10, true);
+        LPMgt.DebitUndoneReceiptLp(ItemJournalLine, UndoEntry);
+        Assert.AreEqual(0, CountLines(LP."No."), 'A fully undone receipt must leave the LP empty.');
+        LP.Get(LP."No.");
+        Assert.AreEqual(LP.Status::Used, LP.Status, 'An emptied LP must not stay Built in the bin.');
+    end;
+
+    [Test]
+    procedure NegativePurchaseWithoutUndoLeavesLpUnchanged()
+    var
+        LP: Record "DOPSWHS LP Header";
+        Line: Record "DOPSWHS LP Line";
+        ItemJournalLine: Record "Item Journal Line";
+        UndoEntry: Record "Item Ledger Entry";
+        LPMgt: Codeunit "DOPSWHS LP Management";
+        Assert: Codeunit "Library Assert";
+    begin
+        Seed();
+        BuildLPWithLine(LP, 10, Line);
+        Line."Source Item Ledger Entry No." := MockReceiptEntry(10);
+        Line.Modify(false);
+        MockUndo(ItemJournalLine, UndoEntry, Line."Source Item Ledger Entry No.", -4, false);
+        LPMgt.DebitUndoneReceiptLp(ItemJournalLine, UndoEntry);
+        Assert.AreEqual(10, GetLPQty(LP."No."), 'Only an undo (correction) of the receipt may debit the LP.');
+    end;
+
+    local procedure MockReceiptEntry(Qty: Decimal): Integer
+    var
+        Entry: Record "Item Ledger Entry";
+        LastEntry: Record "Item Ledger Entry";
+    begin
+        Entry.Init();
+        if LastEntry.FindLast() then
+            Entry."Entry No." := LastEntry."Entry No." + 1
+        else
+            Entry."Entry No." := 1;
+        Entry."Entry Type" := Entry."Entry Type"::Purchase;
+        Entry."Item No." := 'ITEMY';
+        Entry."Location Code" := 'BLUE';
+        Entry.Quantity := Qty;
+        Entry.Insert(false);
+        exit(Entry."Entry No.");
+    end;
+
+    local procedure MockUndo(var ItemJournalLine: Record "Item Journal Line"; var UndoEntry: Record "Item Ledger Entry"; ReceiptEntryNo: Integer; Qty: Decimal; IsCorrection: Boolean)
+    begin
+        Clear(ItemJournalLine);
+        ItemJournalLine.Correction := IsCorrection;
+        ItemJournalLine."Applies-to Entry" := ReceiptEntryNo;
+        Clear(UndoEntry);
+        UndoEntry."Entry No." := ReceiptEntryNo + 1000000;
+        UndoEntry."Entry Type" := UndoEntry."Entry Type"::Purchase;
+        UndoEntry."Item No." := 'ITEMY';
+        UndoEntry."Location Code" := 'BLUE';
+        UndoEntry.Quantity := Qty;
+    end;
+
     local procedure BuildLPWithLine(var LP: Record "DOPSWHS LP Header"; Qty: Decimal; var LPLine: Record "DOPSWHS LP Line")
     var
         LPMgt: Codeunit "DOPSWHS LP Management";

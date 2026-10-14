@@ -1416,8 +1416,10 @@ codeunit 72050 "DOPSWHS Count Mgmt"
                 if not IsSlotCounted(CountLine, CounterSlot) then
                     RecordCount(SheetNo, CountLine."Line No.", CounterSlot, 0);
             until CountLine.Next() = 0;
-        // Refresh only bins already opened/scanned in this document.
-        EnsureV2BinCoverage(SheetNo, false);
+        // BADE (14 Eki 2026): yalnız bu raf yenilenir (MergeV2BinSnapshot yukarıda).
+        // Bütün açılmış rafları her "Rafı bitir"de yeniden hesaplamak büyük
+        // sayımda çağrıyı dakikalara uzatıyordu; kapsam kontrolü tur kaydında
+        // (CompleteCounter) ve nakilde (PostSheet) EnsureV2BinCoverage ile yapılır.
     end;
 
     local procedure MergeV2BinSnapshot(SheetNo: Code[20]; BinCode: Code[20]; ValidateOnly: Boolean)

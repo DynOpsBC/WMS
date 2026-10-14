@@ -1481,6 +1481,62 @@ codeunit 72040 "DOPSWHS LP Management"
     end;
 
     /// <summary>
+    /// BADE (14 Eki 2026): alış irsaliyesi geri alınınca (Undo Purchase Receipt)
+    /// stok düşüyor ama LP dolu kalıyordu. Geri alma, orijinal mal kabul kaydına
+    /// uygulanan negatif bir Purchase kaydı (Correction) atar; aynı miktar o kayıttan
+    /// gelen LP satırlarından düşülür. Aktif olmayan LP'ye dokunulmaz; geri alma
+    /// hiçbir durumda bu yüzden durdurulmaz.
+    /// </summary>
+    procedure DebitUndoneReceiptLp(ItemJournalLine: Record "Item Journal Line"; ItemLedgerEntry: Record "Item Ledger Entry")
+    var
+        OriginalEntry: Record "Item Ledger Entry";
+        LP: Record "DOPSWHS LP Header";
+        LPLine: Record "DOPSWHS LP Line";
+        Verification: Codeunit "DOPSWHS LP Verification";
+        Reference: Code[40];
+        Remaining: Decimal;
+        LineBase: Decimal;
+        Take: Decimal;
+    begin
+        if (ItemLedgerEntry."Entry Type" <> ItemLedgerEntry."Entry Type"::Purchase) or (ItemLedgerEntry.Quantity >= 0) or
+           not ItemJournalLine.Correction or (ItemJournalLine."Applies-to Entry" = 0)
+        then
+            exit;
+        if not OriginalEntry.Get(ItemJournalLine."Applies-to Entry") then
+            exit;
+        Remaining := -ItemLedgerEntry.Quantity;
+        LPLine.SetRange("Source Item Ledger Entry No.", OriginalEntry."Entry No.");
+        if LPLine.IsEmpty() then begin
+            if OriginalEntry."DOPSWHS LP No." = '' then
+                exit;
+            LPLine.Reset();
+            LPLine.SetRange("LP No.", OriginalEntry."DOPSWHS LP No.");
+        end;
+        LPLine.SetRange("Item No.", ItemLedgerEntry."Item No.");
+        LPLine.SetRange("Variant Code", ItemLedgerEntry."Variant Code");
+        if ItemLedgerEntry."Lot No." <> '' then
+            LPLine.SetRange("Lot No.", ItemLedgerEntry."Lot No.");
+        if ItemLedgerEntry."Serial No." <> '' then
+            LPLine.SetRange("Serial No.", ItemLedgerEntry."Serial No.");
+        LPLine.SetFilter(Quantity, '>0');
+        if not LPLine.FindSet() then
+            exit;
+        repeat
+            if LP.Get(LPLine."LP No.") and (LP.Status in [LP.Status::Open, LP.Status::Built, LP.Status::Assigned]) then begin
+                LineBase := Verification.LineBaseQuantity(LPLine);
+                Take := LineBase;
+                if Take > Remaining then
+                    Take := Remaining;
+                if Take > Verification.QtyTolerance() then begin
+                    Reference := CopyStr(StrSubstNo('UNDO-RCPT:%1:%2', ItemLedgerEntry."Entry No.", LPLine."Line No."), 1, MaxStrLen(Reference));
+                    ConsumeLineForShipment(LPLine."LP No.", LPLine."Line No.", Take, Reference);
+                    Remaining -= Take;
+                end;
+            end;
+        until (LPLine.Next() = 0) or (Remaining <= Verification.QtyTolerance());
+    end;
+
+    /// <summary>
     /// A directed warehouse movement can take part of an LP and place that
     /// quantity as loose stock in the target bin. Reuse the same exact-line,
     /// base-UOM and idempotency rules as shipment consumption; the standard
