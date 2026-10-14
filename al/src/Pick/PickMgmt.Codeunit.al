@@ -2861,6 +2861,7 @@ codeunit 72046 "DOPSWHS Pick Mgmt"
         PackingOrder: Record "DOPSWHS Packing Order";
         PickingHeader: Record "DOPSWHS Picking Order Header";
         SalesHeader: Record "Sales Header";
+        MainLP: Record "DOPSWHS LP Header";
         PackingOrderExists: Boolean;
     begin
         if not SalesHeader.Get(SalesHeader."Document Type"::Order, PickLine."Source No.") then
@@ -2880,6 +2881,10 @@ codeunit 72046 "DOPSWHS Pick Mgmt"
         // Toplamada kullanılan ana sepeti paketlemeye taşı: paketleyici
         // "ürünler hangi sepette" bilgisini terminalde görsün.
         PackingOrder."Main LP No." := Pick."DOPSWHS Main LP No.";
+        // Bütün paletler tam sevk edildiyse boş Hedef LP iptal edilir; iptal
+        // edilmiş LP'yi paketlemeye "sepet" olarak taşıma.
+        if MainLP.Get(Pick."DOPSWHS Main LP No.") and (MainLP.Status = MainLP.Status::Unbuilt) then
+            PackingOrder."Main LP No." := '';
         // Toplama grubunun akış tipini paketlemeye taşı: terminaldeki V2
         // sekmeleri (Multi / Mono / Tek SKU) listeyi bu alanla filtreliyor.
         // Pick başlığı ana kaynaktır; özel grup kaydı bazı eski/standart
