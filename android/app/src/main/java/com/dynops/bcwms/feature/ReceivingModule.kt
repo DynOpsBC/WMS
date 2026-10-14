@@ -219,6 +219,9 @@ private fun ReceiveDocument(no: String, onBack: () -> Unit) {
     var attachPrompt by remember { mutableStateOf<Pair<String, List<Int>>?>(null) }
     var bulkLpTarget by remember(no) { mutableStateOf<JSONObject?>(null) }
     var showBulkLinePicker by remember(no) { mutableStateOf(false) }
+    // BADE (14 Eki 2026): karma palet — birden çok ürün aynı paletlerde, tek kayıt.
+    var showMixedLinePicker by remember(no) { mutableStateOf(false) }
+    var mixedLines by remember(no) { mutableStateOf<List<JSONObject>?>(null) }
     var printReceipt by remember(no) { mutableStateOf(false) }
     var skipPrinting by remember(no) { mutableStateOf(false) }
     var showReceiptMte by remember(no) { mutableStateOf(false) }
@@ -308,6 +311,25 @@ private fun ReceiveDocument(no: String, onBack: () -> Unit) {
             status = if (r.ok) "TAMAM: $okMsg (HTTP ${r.httpCode})" else "HATA: ${BcApi.errorMessage(r.body)} (HTTP ${r.httpCode})"
             onResult(r)
             if (r.ok) reload()
+        }
+    }
+
+    /** Hazırlanmış Palet LP / karma palet dağıtımını geri alır (BC cancelLPDistribution). */
+    fun cancelDistribution(lineNo: Int) {
+        scope.launch {
+            busy = true
+            status = "Palet dağıtımı geri alınıyor..."
+            val r = BcApi.boundAction(
+                context, "receipts", no, "cancelLPDistribution",
+                JSONObject().apply { put("lineNo", lineNo) }.toString(),
+            )
+            busy = false
+            if (r.ok) {
+                val cancelledLines = cancelledDistributionLineNos(BcApi.scalarValue(r.body)).ifEmpty { setOf(lineNo) }
+                touched = touched - cancelledLines
+                status = "TAMAM: Dağıtım geri alındı; ${cancelledLines.size} ürünün kabul miktarı sıfırlandı. Palet LP ya da Karma Palet ile yeniden hazırlayabilirsiniz."
+                reload()
+            } else status = QcErrorParser.friendlyStatus(BcApi.errorMessage(r.body), r.httpCode)
         }
     }
 
@@ -800,6 +822,54 @@ private fun ReceiveDocument(no: String, onBack: () -> Unit) {
                 showBulkLinePicker = false
                 bulkLpTarget = selected
             },
+            onMixed = if (header?.optBoolean("mixedPalletSupported") == true && mixedPalletCandidates(lines).size >= 2) {
+                { showBulkLinePicker = false; showMixedLinePicker = true }
+            } else null,
+        )
+    }
+    if (showMixedLinePicker) {
+        MixedReceiptLinePicker(
+            lines = mixedPalletCandidates(lines),
+            onDismiss = { showMixedLinePicker = false },
+            onConfirm = { selected ->
+                showMixedLinePicker = false
+                mixedLines = selected
+            },
+        )
+    }
+    val mixedSelection = mixedLines
+    if (mixedSelection != null) {
+        MixedReceiptLpSheet(
+            lines = mixedSelection,
+            onDismiss = { mixedLines = null },
+            onSubmit = { distributionJson, lineNos, palletCount ->
+                mixedLines = null
+                scope.launch {
+                    busy = true
+                    status = "Karma palet LP taslakları hazırlanıyor..."
+                    val template = resolveLpTemplate(context, LpPurpose.PALLET)
+                    if (template == null) {
+                        busy = false
+                        status = "HATA: Uygun palet şablonu belirlenemedi."
+                        return@launch
+                    }
+                    val result = BcApi.boundActionLongRunning(
+                        context, "receipts", no, "createMixedLPDistribution",
+                        JSONObject().apply {
+                            put("distributionJson", distributionJson)
+                            put("lpTemplateCode", template)
+                        }.toString(),
+                    )
+                    busy = false
+                    status = if (result.ok)
+                        "TAMAM: $palletCount karma palet LP'si hazırlandı. Ürünler ve lotlar Kaydet'e basınca paletlere yazılacak."
+                    else if (BcApi.isAmbiguousMutationFailure(result))
+                        "HATA: BC geç yanıt verdi; paletler hazırlanmış olabilir. Ekran yenilendi, satırlara dokunup kontrol edin."
+                    else QcErrorParser.friendlyStatus(BcApi.errorMessage(result.body), result.httpCode)
+                    if (result.ok) touched = touched + lineNos
+                    reload()
+                }
+            },
         )
     }
     val bulkLine = bulkLpTarget
@@ -870,6 +940,9 @@ private fun ReceiveDocument(no: String, onBack: () -> Unit) {
         if (preparedPlan.isNotEmpty()) ReceiptLpPlanSheet(
             itemNo = scannedItem, uom = line?.optString("unitOfMeasureCode").orEmpty(),
             rows = preparedPlan, onDismiss = { showQty = false },
+            onCancelDistribution = if (line != null && canMutate && header?.optBoolean("mixedPalletSupported") == true) {
+                { showQty = false; cancelDistribution(line.optInt("lineNo")) }
+            } else null,
         ) else QuantityDialogSheet(
             title = "Alınan Miktar",
             itemNo = scannedItem,
@@ -922,7 +995,7 @@ private fun ReceiveDocument(no: String, onBack: () -> Unit) {
     val gt = groupTarget
     val preparedGroupPlan = gt?.lines?.flatMap { receiptLpPlan(it) }.orEmpty()
     if (gt != null && preparedGroupPlan.isNotEmpty()) {
-        ReceiptLpPlanSheet(gt.itemNo, gt.lines.first().optString("unitOfMeasureCode"), preparedGroupPlan) { groupTarget = null }
+        ReceiptLpPlanSheet(gt.itemNo, gt.lines.first().optString("unitOfMeasureCode"), preparedGroupPlan, onDismiss = { groupTarget = null })
     } else if (gt != null) {
         val groupRequiresLot = gt.lines.any { it.optBoolean("lotRequired") }
         val groupRequiresSerial = gt.lines.any { it.optBoolean("serialRequired") }

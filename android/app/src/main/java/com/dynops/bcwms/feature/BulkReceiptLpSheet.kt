@@ -438,7 +438,7 @@ internal fun BulkReceiptLpSheet(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun BulkExpiryDateField(
+internal fun BulkExpiryDateField(
     value: String,
     required: Boolean,
     onValueChange: (String) -> Unit,
@@ -516,6 +516,7 @@ internal fun BulkReceiptLinePicker(
     lines: List<JSONObject>,
     onDismiss: () -> Unit,
     onSelect: (JSONObject) -> Unit,
+    onMixed: (() -> Unit)? = null,
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -525,6 +526,13 @@ internal fun BulkReceiptLinePicker(
                 Modifier.fillMaxWidth().heightIn(max = 430.dp).verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(6.dp),
             ) {
+                // BADE (14 Eki 2026): birden çok ürün aynı paletlerdeyse karma palet.
+                if (onMixed != null) {
+                    FilledTonalButton(onClick = onMixed, modifier = Modifier.fillMaxWidth().testTag("bulk-picker-mixed")) {
+                        Text("Karma palet · birden çok ürün aynı palette", fontWeight = FontWeight.Bold)
+                    }
+                    Text("Tek ürünü paletlere bölmek için aşağıdan ürünü seçin.", fontSize = 12.sp)
+                }
                 lines.forEach { line ->
                     OutlinedButton(
                         onClick = { onSelect(line) },
@@ -551,7 +559,27 @@ internal fun receiptLpPlan(line: JSONObject?): List<JSONObject> = runCatching {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-internal fun ReceiptLpPlanSheet(itemNo: String, uom: String, rows: List<JSONObject>, onDismiss: () -> Unit) {
+internal fun ReceiptLpPlanSheet(
+    itemNo: String,
+    uom: String,
+    rows: List<JSONObject>,
+    onDismiss: () -> Unit,
+    onCancelDistribution: (() -> Unit)? = null,
+) {
+    var confirmCancel by remember { mutableStateOf(false) }
+    val mixed = rows.any { it.optBoolean("mixed") }
+    if (confirmCancel && onCancelDistribution != null) AlertDialog(
+        onDismissRequest = { confirmCancel = false },
+        title = { Text("Dağıtım geri alınsın mı?") },
+        text = {
+            Text(
+                if (mixed) "Bu karma palet planındaki bütün paletler ve ürünler geri alınır; ürünlerin kabul miktarı sıfırlanır. Ardından planı yeniden hazırlayabilirsiniz."
+                else "Bu ürünün ${rows.size} palet taslağı geri alınır ve kabul miktarı sıfırlanır. Ardından yeniden Palet LP hazırlayabilirsiniz.",
+            )
+        },
+        confirmButton = { TextButton(onClick = { confirmCancel = false; onCancelDistribution() }) { Text("Geri Al") } },
+        dismissButton = { TextButton(onClick = { confirmCancel = false }) { Text("Vazgeç") } },
+    )
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
         Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(16.dp)) {
             Text("Hazırlanan Lot ve LP Dağılımı", fontSize = 21.sp, fontWeight = FontWeight.Bold)
@@ -561,12 +589,20 @@ internal fun ReceiptLpPlanSheet(itemNo: String, uom: String, rows: List<JSONObje
                 Card(Modifier.fillMaxWidth().padding(bottom = 8.dp)) {
                     Column(Modifier.padding(12.dp)) {
                         Text("${row.optString("lpNo")} · ${fmtBulkQty(row.optDouble("quantity"))} $uom", fontWeight = FontWeight.Bold)
+                        if (row.optBoolean("mixed")) Text(
+                            "Karma palet ${row.optInt("palletNo")}" +
+                                row.optString("otherItems").takeIf { it.isNotBlank() }?.let { " · birlikte: $it" }.orEmpty(),
+                        )
                         if (row.optString("lotNo").isNotBlank()) Text("İç lot: ${row.optString("lotNo")}")
                         if (row.optString("supplierLotNo").isNotBlank()) Text("Tedarikçi lotu: ${row.optString("supplierLotNo")}")
                         if (row.optString("expiryDate").isNotBlank()) Text("SKT: ${expiryDateForDisplay(row.optString("expiryDate"))}")
                     }
                 }
             }
+            if (onCancelDistribution != null) OutlinedButton(
+                onClick = { confirmCancel = true },
+                modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp).testTag("receipt-plan-cancel"),
+            ) { Text("Dağıtımı Geri Al") }
             Button(onClick = onDismiss, modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp)) { Text("Kapat") }
         }
     }

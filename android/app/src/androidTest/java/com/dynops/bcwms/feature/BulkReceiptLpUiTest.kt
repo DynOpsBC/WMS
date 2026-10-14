@@ -40,7 +40,7 @@ class BulkReceiptLpUiTest {
             JSONObject().put("lpNo", "LP-1").put("quantity", 400).put("lotNo", "A102370").put("supplierLotNo", "SUP-400"),
             JSONObject().put("lpNo", "LP-2").put("quantity", 600).put("lotNo", "A102371").put("supplierLotNo", "SUP-600"),
         )
-        compose.setContent { MaterialTheme { ReceiptLpPlanSheet("AB.00005", "ADET", rows) {} } }
+        compose.setContent { MaterialTheme { ReceiptLpPlanSheet("AB.00005", "ADET", rows, onDismiss = {}) } }
         compose.onNodeWithText("LP-1 · 400 ADET").assertExists()
         compose.onNodeWithText("İç lot: A102370").assertExists()
         compose.onNodeWithText("LP-2 · 600 ADET").assertExists()
