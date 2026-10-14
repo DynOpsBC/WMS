@@ -321,6 +321,7 @@ codeunit 72428 "DOPSWHS LP Propagation"
     local procedure StampReceiptLpSourceEntry(WhseReceiptNo: Code[20]; WhseReceiptLineNo: Integer; ItemNo: Code[20]; VariantCode: Code[10]; ItemLedgerEntryNo: Integer)
     var
         LPLine: Record "DOPSWHS LP Line";
+        ReceiptEntry: Record "Item Ledger Entry";
     begin
         if (WhseReceiptNo = '') or (ItemLedgerEntryNo = 0) then
             exit;
@@ -330,6 +331,16 @@ codeunit 72428 "DOPSWHS LP Propagation"
         LPLine.SetRange("Item No.", ItemNo);
         LPLine.SetRange("Variant Code", VariantCode);
         LPLine.SetFilter(Quantity, '>0');
+        // BADE (14 Eki 2026): çok lotlu ya da birden çok dalgada nakledilen
+        // satırda son kayıt bütün LP satırlarını eziyordu; irsaliye geri alma
+        // yanlış paleti düşüyordu. Yalnız henüz bağlanmamış ve lotu tutan satır.
+        LPLine.SetRange("Source Item Ledger Entry No.", 0);
+        if ReceiptEntry.Get(ItemLedgerEntryNo) then begin
+            if ReceiptEntry."Lot No." <> '' then
+                LPLine.SetRange("Lot No.", ReceiptEntry."Lot No.");
+            if ReceiptEntry."Serial No." <> '' then
+                LPLine.SetRange("Serial No.", ReceiptEntry."Serial No.");
+        end;
         if LPLine.FindSet(true) then
             repeat
                 if LPLine."Source Item Ledger Entry No." <> ItemLedgerEntryNo then begin

@@ -2278,6 +2278,63 @@ codeunit 72046 "DOPSWHS Pick Mgmt"
     end;
 
     /// <summary>
+    /// BADE (14 Eki 2026): sevkiyat nakli bir ambar sevk satırının miktarını o
+    /// satırdaki TEK LP'den düşer (LPPropagation ReconcileSalesEntry). Birden çok
+    /// paletten toplanan sevk satırının paletleri ayrı sevk edilemez; ya Hedef
+    /// LP'de birleşir ya da kayıt baştan durdurulur.
+    /// </summary>
+    local procedure CollectMultiPalletShipmentLines(Pick: Record "Warehouse Activity Header"; Plans: Dictionary of [Integer, Text]; var MultiPalletLps: Dictionary of [Code[20], Boolean]): Text
+    var
+        PickLine: Record "Warehouse Activity Line";
+        FirstLpByLine: Dictionary of [Text, Code[20]];
+        MultiLines: List of [Text];
+        Plan: JsonObject;
+        Steps: JsonArray;
+        Token: JsonToken;
+        Value: JsonToken;
+        LineKey: Text;
+        PlanText: Text;
+        LpNo: Code[20];
+        KnownLp: Code[20];
+        Pass: Integer;
+        FirstMultiLine: Text;
+    begin
+        PickLine.SetRange("Activity Type", Pick.Type);
+        PickLine.SetRange("No.", Pick."No.");
+        PickLine.SetRange("Action Type", PickLine."Action Type"::Take);
+        PickLine.SetFilter("Qty. to Handle (Base)", '>0');
+        for Pass := 1 to 2 do
+            if PickLine.FindSet() then
+                repeat
+                    LineKey := Format(PickLine."Whse. Document Type") + '|' + PickLine."Whse. Document No." + '|' + Format(PickLine."Whse. Document Line No.");
+                    if PickLine."Whse. Document No." = '' then
+                        LineKey := 'PICK|' + Format(PickLine."Line No.");
+                    if Plans.Get(PickLine."Line No.", PlanText) then begin
+                        Plan.ReadFrom(PlanText);
+                        Plan.Get('steps', Value);
+                        Steps := Value.AsArray();
+                        foreach Token in Steps do begin
+                            Token.AsObject().Get('lpNo', Value);
+                            LpNo := CopyStr(Value.AsValue().AsText(), 1, MaxStrLen(LpNo));
+                            if Pass = 1 then begin
+                                if FirstLpByLine.Get(LineKey, KnownLp) then begin
+                                    if (KnownLp <> LpNo) and not MultiLines.Contains(LineKey) then begin
+                                        MultiLines.Add(LineKey);
+                                        if FirstMultiLine = '' then
+                                            FirstMultiLine := PickLine."Item No.";
+                                    end;
+                                end else
+                                    FirstLpByLine.Add(LineKey, LpNo);
+                            end else
+                                if MultiLines.Contains(LineKey) then
+                                    MultiPalletLps.Set(LpNo, true);
+                        end;
+                    end;
+                until PickLine.Next() = 0;
+        exit(FirstMultiLine);
+    end;
+
+    /// <summary>
     /// BADE (14 Eki 2026): Hedef LP açıkken bütün içeriği bu toplamada alınan
     /// paletler. Tek raftan alınıp tek sevk rafına gitmeyen palet tam sayılmaz;
     /// onun miktarı Hedef LP'ye aktarılır. Toplamada hiç kısmi palet yoksa liste
@@ -2303,6 +2360,8 @@ codeunit 72046 "DOPSWHS Pick Mgmt"
         PlanText: Text;
         Planned: Decimal;
     begin
+        // Birden çok paletli sevk satırının paletleri Hedef LP'de birleşir.
+        CollectMultiPalletShipmentLines(Pick, Plans, SplitLps);
         PickLine.SetRange("Activity Type", Pick.Type);
         PickLine.SetRange("No.", Pick."No.");
         PickLine.SetRange("Action Type", PickLine."Action Type"::Take);
@@ -2379,6 +2438,8 @@ codeunit 72046 "DOPSWHS Pick Mgmt"
         PlaceBinByLp: Dictionary of [Code[20], Code[20]];
         WhseDocByLp: Dictionary of [Code[20], Code[20]];
         Partial: TextBuilder;
+        MultiPalletLps: Dictionary of [Code[20], Boolean];
+        MultiPalletItemNo: Text;
         LpNo: Code[20];
         TakeBin: Code[20];
         PlaceBin: Code[20];
@@ -2393,6 +2454,10 @@ codeunit 72046 "DOPSWHS Pick Mgmt"
         PickLine.SetFilter("Qty. to Handle (Base)", '>0');
         if Plans.Count() <> PickLine.Count() then
             Error('Toplama satırları değişmiş. Bütün açık satırların paletlerini yeniden doğrulayın.');
+        // Önce kayıt geçip sevkiyat naklinde "yeterli miktar yok" hatası çıkıyordu.
+        MultiPalletItemNo := CollectMultiPalletShipmentLines(Pick, Plans, MultiPalletLps);
+        if MultiPalletItemNo <> '' then
+            Error(MultiPalletLineNeedsShipLpErr, MultiPalletItemNo);
         if not PickLine.FindSet() then
             exit;
         repeat
@@ -3179,6 +3244,7 @@ codeunit 72046 "DOPSWHS Pick Mgmt"
 
     var
         SourceOrderRequiredErr: Label 'Source order no. is required to assign a tote.';
+        MultiPalletLineNeedsShipLpErr: Label '%1 ürününün bir sipariş satırı birden fazla paletten toplanıyor. Bu satırın paletleri tek sevk LP''sinde birleşmeli: önce "Hedef LP Oluştur"a basın.', Comment = '%1 = madde no';
         PartialPalletNeedsShipLpErr: Label 'Palet(ler) kısmen toplanıyor: %1. Kısmi toplamada önce "Hedef LP Oluştur" ile sevk paleti açın; yalnız tamamı toplanan paletler olduğu gibi sevk edilir.', Comment = '%1 = LP numaraları';
         ToteBusyErr: Label 'Tote %1 is still in use by another pick. Complete or release it first.', Comment = '%1 = LP No.';
         PickTakenErr: Label 'Toplama %1 şu anda %2 kullanıcısında. Üzerinize alamazsınız; devir için depo sorumlusundan yeniden atama isteyin.', Comment = '%1 = Pick No., %2 = operatör';

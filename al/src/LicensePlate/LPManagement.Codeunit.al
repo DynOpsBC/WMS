@@ -1494,6 +1494,7 @@ codeunit 72040 "DOPSWHS LP Management"
         LPLine: Record "DOPSWHS LP Line";
         Verification: Codeunit "DOPSWHS LP Verification";
         Reference: Code[40];
+        LpFilter: Text;
         Remaining: Decimal;
         LineBase: Decimal;
         Take: Decimal;
@@ -1514,15 +1515,21 @@ codeunit 72040 "DOPSWHS LP Management"
         FilterUndoneReceiptLpLines(LPLine, ItemLedgerEntry);
         LPLine.SetRange("Source Item Ledger Entry No.", OriginalEntry."Entry No.");
         if LPLine.IsEmpty() then begin
-            if OriginalEntry."DOPSWHS LP No." = '' then
+            LpFilter := OriginalEntry."DOPSWHS LP No.";
+            if LpFilter = '' then
+                LpFilter := DelChr(ConvertStr(OriginalEntry."DOPSWHS LP Nos.", ',', '|'), '=', ' ');
+            if LpFilter = '' then
                 exit;
             LPLine.SetRange("Source Item Ledger Entry No.");
-            LPLine.SetRange("LP No.", OriginalEntry."DOPSWHS LP No.");
+            LPLine.SetFilter("LP No.", LpFilter);
         end;
         if not LPLine.FindSet() then
             exit;
         repeat
+            // BC geri almaya yalnız stok mal kabul gözündeyken izin verir; o gözdeki
+            // paletler adaydır (rafa kaldırılmış eski dalga paletleri değil).
             if LP.Get(LPLine."LP No.") and (LP.Status in [LP.Status::Open, LP.Status::Built, LP.Status::Assigned]) and
+               ((ItemJournalLine."Bin Code" = '') or (LP."Bin Code" = ItemJournalLine."Bin Code")) and
                UndoLineUnitKnown(LPLine)
             then begin
                 LineBase := Verification.LineBaseQuantity(LPLine);

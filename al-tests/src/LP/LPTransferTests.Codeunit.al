@@ -382,6 +382,30 @@ codeunit 72114 "DOPSWHS LP Transfer Tests"
         Assert.AreEqual(10, GetLPQty(LP."No."), 'A purchase return must not debit the receipt LP.');
     end;
 
+    [Test]
+    procedure UndoOnlyDebitsLpsStillInTheReceiptBin()
+    var
+        LP: Record "DOPSWHS LP Header";
+        Line: Record "DOPSWHS LP Line";
+        ItemJournalLine: Record "Item Journal Line";
+        UndoEntry: Record "Item Ledger Entry";
+        LPMgt: Codeunit "DOPSWHS LP Management";
+        Assert: Codeunit "Library Assert";
+    begin
+        // An earlier receipt wave already put away (other bin) must not be emptied.
+        Seed();
+        BuildLPWithLine(LP, 10, Line);
+        Line."Source Item Ledger Entry No." := MockReceiptEntry(10);
+        Line.Modify(false);
+        MockUndo(ItemJournalLine, UndoEntry, Line."Source Item Ledger Entry No.", -4, true);
+        ItemJournalLine."Bin Code" := 'STAGE';
+        LPMgt.DebitUndoneReceiptLp(ItemJournalLine, UndoEntry);
+        Assert.AreEqual(10, GetLPQty(LP."No."), 'An LP outside the undone receipt bin must stay unchanged.');
+        ItemJournalLine."Bin Code" := 'PICK';
+        LPMgt.DebitUndoneReceiptLp(ItemJournalLine, UndoEntry);
+        Assert.AreEqual(6, GetLPQty(LP."No."), 'The LP in the receipt bin is debited.');
+    end;
+
     local procedure MockReceiptEntry(Qty: Decimal): Integer
     var
         Entry: Record "Item Ledger Entry";

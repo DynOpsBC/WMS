@@ -122,11 +122,13 @@ class BulkReceiptLpTest {
 
     @Test
     fun `whole total is split into whole pallets with the remainder on the last`() {
-        assertEquals(listOf(3.0, 3.0, 4.0), equalBulkLpQuantities(10.0, 3))
+        assertEquals(listOf(4.0, 3.0, 3.0), equalBulkLpQuantities(10.0, 3))
+        assertEquals(listOf(3.0, 3.0, 2.0, 2.0), equalBulkLpQuantities(10.0, 4))
         val bade = equalBulkLpQuantities(20020.0, 6)
-        assertEquals(listOf(3336.0, 3336.0, 3336.0, 3336.0, 3336.0, 3340.0), bade)
+        assertEquals(listOf(3337.0, 3337.0, 3337.0, 3337.0, 3336.0, 3336.0), bade)
         assertEquals(20020.0, bade.sum(), 0.0)
-        assertEquals(listOf(0.0, 0.0, 2.0), equalBulkLpQuantities(2.0, 3))
+        // Fewer units than pallets keeps the decimal split instead of zero pallets.
+        assertEquals(listOf(0.66666, 0.66666, 0.66668), equalBulkLpQuantities(2.0, 3))
     }
 
     @Test

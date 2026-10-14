@@ -83,16 +83,24 @@ internal fun bulkLpRowsJson(rows: List<BulkReceiptLpRow>): String = JSONArray().
 /**
  * BC quantities use five decimal places in this flow. Equal shares are rounded
  * down and the final pallet receives the remainder, so the rows always add up
- * to the exact receipt quantity. BADE (14 Eki 2026): a whole-number total is
- * split into whole numbers (20020 / 6 = 5 × 3336 + 3340); ADET pallets got
- * 3336,66666 before.
+ * to the exact receipt quantity. BADE (14 Eki 2026): a whole-number total that
+ * is not smaller than the pallet count is split into whole numbers, the
+ * remainder spread one by one (20020 / 6 = 4 × 3337 + 2 × 3336); ADET pallets
+ * got 3336,66666 before.
  */
 internal fun equalBulkLpQuantities(totalQty: Double, palletCount: Int): List<Double> {
     if (!totalQty.isFinite() || totalQty <= 0.0 || palletCount <= 0 || palletCount > 200) return emptyList()
     val total = BigDecimal.valueOf(totalQty)
     val count = BigDecimal.valueOf(palletCount.toLong())
-    val wholeTotal = total.stripTrailingZeros().scale() <= 0
-    val commonShare = total.divide(count, if (wholeTotal) 0 else 5, RoundingMode.DOWN)
+    // Tam sayılı toplam, palet sayısından küçük değilse tam sayı paletlere bölünür;
+    // artan adetler ilk paletlere birer birer dağıtılır (10 / 4 = 3, 3, 2, 2).
+    if (total.stripTrailingZeros().scale() <= 0 && total >= count) {
+        val (share, remainder) = total.divideAndRemainder(count)
+        return List(palletCount) { index ->
+            (if (index < remainder.toInt()) share.add(BigDecimal.ONE) else share).toDouble()
+        }
+    }
+    val commonShare = total.divide(count, 5, RoundingMode.DOWN)
     val lastShare = total.subtract(commonShare.multiply(BigDecimal.valueOf((palletCount - 1).toLong())))
     return List(palletCount) { index ->
         (if (index == palletCount - 1) lastShare else commonShare).stripTrailingZeros().toDouble()
