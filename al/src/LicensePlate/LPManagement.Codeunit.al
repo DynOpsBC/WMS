@@ -1498,31 +1498,33 @@ codeunit 72040 "DOPSWHS LP Management"
         LineBase: Decimal;
         Take: Decimal;
     begin
+        // Yalnız geri alma: negatif, düzeltme işaretli ve belge türü Alış İrsaliyesi.
+        // Alış iadesi (Purchase Return Shipment) depo toplamasıyla LP'den zaten düşer.
         if (ItemLedgerEntry."Entry Type" <> ItemLedgerEntry."Entry Type"::Purchase) or (ItemLedgerEntry.Quantity >= 0) or
+           (ItemLedgerEntry."Document Type" <> ItemLedgerEntry."Document Type"::"Purchase Receipt") or
            not ItemJournalLine.Correction or (ItemJournalLine."Applies-to Entry" = 0)
         then
             exit;
         if not OriginalEntry.Get(ItemJournalLine."Applies-to Entry") then
             exit;
         Remaining := -ItemLedgerEntry.Quantity;
+        // Önce mal kabul kaydının kendisinden gelen LP satırı; çok lotlu
+        // satırlarda kaynak giriş no lotlar arasında karışabildiği için
+        // bulunamazsa kaydın LP numarası (madde/lot eşleşmesiyle) denenir.
+        FilterUndoneReceiptLpLines(LPLine, ItemLedgerEntry);
         LPLine.SetRange("Source Item Ledger Entry No.", OriginalEntry."Entry No.");
         if LPLine.IsEmpty() then begin
             if OriginalEntry."DOPSWHS LP No." = '' then
                 exit;
-            LPLine.Reset();
+            LPLine.SetRange("Source Item Ledger Entry No.");
             LPLine.SetRange("LP No.", OriginalEntry."DOPSWHS LP No.");
         end;
-        LPLine.SetRange("Item No.", ItemLedgerEntry."Item No.");
-        LPLine.SetRange("Variant Code", ItemLedgerEntry."Variant Code");
-        if ItemLedgerEntry."Lot No." <> '' then
-            LPLine.SetRange("Lot No.", ItemLedgerEntry."Lot No.");
-        if ItemLedgerEntry."Serial No." <> '' then
-            LPLine.SetRange("Serial No.", ItemLedgerEntry."Serial No.");
-        LPLine.SetFilter(Quantity, '>0');
         if not LPLine.FindSet() then
             exit;
         repeat
-            if LP.Get(LPLine."LP No.") and (LP.Status in [LP.Status::Open, LP.Status::Built, LP.Status::Assigned]) then begin
+            if LP.Get(LPLine."LP No.") and (LP.Status in [LP.Status::Open, LP.Status::Built, LP.Status::Assigned]) and
+               UndoLineUnitKnown(LPLine)
+            then begin
                 LineBase := Verification.LineBaseQuantity(LPLine);
                 Take := LineBase;
                 if Take > Remaining then
@@ -1534,6 +1536,32 @@ codeunit 72040 "DOPSWHS LP Management"
                 end;
             end;
         until (LPLine.Next() = 0) or (Remaining <= Verification.QtyTolerance());
+    end;
+
+    local procedure FilterUndoneReceiptLpLines(var LPLine: Record "DOPSWHS LP Line"; ItemLedgerEntry: Record "Item Ledger Entry")
+    begin
+        LPLine.Reset();
+        LPLine.SetRange("Item No.", ItemLedgerEntry."Item No.");
+        LPLine.SetRange("Variant Code", ItemLedgerEntry."Variant Code");
+        if ItemLedgerEntry."Lot No." <> '' then
+            LPLine.SetRange("Lot No.", ItemLedgerEntry."Lot No.");
+        if ItemLedgerEntry."Serial No." <> '' then
+            LPLine.SetRange("Serial No.", ItemLedgerEntry."Serial No.");
+        LPLine.SetFilter(Quantity, '>0');
+    end;
+
+    local procedure UndoLineUnitKnown(LPLine: Record "DOPSWHS LP Line"): Boolean
+    var
+        Item: Record Item;
+        ItemUoM: Record "Item Unit of Measure";
+    begin
+        // ConsumeLineForShipment birimi bulamazsa hata verir; geri almayı
+        // durdurmamak için böyle bir LP satırı atlanır.
+        if not Item.Get(LPLine."Item No.") then
+            exit(false);
+        if (LPLine."Unit of Measure" = '') or (LPLine."Unit of Measure" = Item."Base Unit of Measure") then
+            exit(true);
+        exit(ItemUoM.Get(LPLine."Item No.", LPLine."Unit of Measure") and (ItemUoM."Qty. per Unit of Measure" > 0));
     end;
 
     /// <summary>

@@ -2280,7 +2280,9 @@ codeunit 72046 "DOPSWHS Pick Mgmt"
     /// <summary>
     /// BADE (14 Eki 2026): Hedef LP açıkken bütün içeriği bu toplamada alınan
     /// paletler. Tek raftan alınıp tek sevk rafına gitmeyen palet tam sayılmaz;
-    /// onun miktarı Hedef LP'ye aktarılır.
+    /// onun miktarı Hedef LP'ye aktarılır. Toplamada hiç kısmi palet yoksa liste
+    /// boş döner: operatör Hedef LP'yi paletleri birleştirmek için açmıştır ve
+    /// eski davranış (hepsi Hedef LP'ye) korunur.
     /// </summary>
     local procedure CollectWholeScannedPallets(Pick: Record "Warehouse Activity Header"; Plans: Dictionary of [Integer, Text]; var WholeTakeBin: Dictionary of [Code[20], Code[20]]; var WholePlaceBin: Dictionary of [Code[20], Code[20]]; var WholeWhseDoc: Dictionary of [Code[20], Code[20]])
     var
@@ -2348,6 +2350,11 @@ codeunit 72046 "DOPSWHS Pick Mgmt"
                 WhseDocByLp.Get(LpNo, KnownBin);
                 WholeWhseDoc.Add(LpNo, KnownBin);
             end;
+        end;
+        if WholeTakeBin.Count() = PlannedBaseByLp.Count() then begin
+            Clear(WholeTakeBin);
+            Clear(WholePlaceBin);
+            Clear(WholeWhseDoc);
         end;
     end;
 

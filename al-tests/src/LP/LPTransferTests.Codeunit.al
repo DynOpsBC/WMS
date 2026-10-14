@@ -375,6 +375,11 @@ codeunit 72114 "DOPSWHS LP Transfer Tests"
         MockUndo(ItemJournalLine, UndoEntry, Line."Source Item Ledger Entry No.", -4, false);
         LPMgt.DebitUndoneReceiptLp(ItemJournalLine, UndoEntry);
         Assert.AreEqual(10, GetLPQty(LP."No."), 'Only an undo (correction) of the receipt may debit the LP.');
+        // A corrective purchase return is debited by its warehouse pick, never here.
+        MockUndo(ItemJournalLine, UndoEntry, Line."Source Item Ledger Entry No.", -4, true);
+        UndoEntry."Document Type" := UndoEntry."Document Type"::"Purchase Return Shipment";
+        LPMgt.DebitUndoneReceiptLp(ItemJournalLine, UndoEntry);
+        Assert.AreEqual(10, GetLPQty(LP."No."), 'A purchase return must not debit the receipt LP.');
     end;
 
     local procedure MockReceiptEntry(Qty: Decimal): Integer
@@ -403,6 +408,7 @@ codeunit 72114 "DOPSWHS LP Transfer Tests"
         Clear(UndoEntry);
         UndoEntry."Entry No." := ReceiptEntryNo + 1000000;
         UndoEntry."Entry Type" := UndoEntry."Entry Type"::Purchase;
+        UndoEntry."Document Type" := UndoEntry."Document Type"::"Purchase Receipt";
         UndoEntry."Item No." := 'ITEMY';
         UndoEntry."Location Code" := 'BLUE';
         UndoEntry.Quantity := Qty;
