@@ -1,7 +1,7 @@
 {
-  "versionCode": 200177,
-  "versionName": "1.14.177-bade",
-  "apkUrl": "https://github.com/DynOpsBC/WMS/releases/download/android-v1.14.177-bade/BCWMS-BADE-1.14.177.apk",
-  "sha256": "87cc53e6ef8fbce16158dd28e071f1329b1e82055bf2f85d0484397e61cf55bc",
-  "releaseNotes": "Sayım V2: 'Rafı bitir' ve 'Sayım Turunu Kaydet' büyük sayımda 'timeout' vermez; terminal BC'yi 90 sn bekler, bağlantı koparsa belgeyi yeniden okuyup işlemin yapıldığını doğrular. BC paketi değişmedi."
+  "versionCode": 200178,
+  "versionName": "1.14.178-bade",
+  "apkUrl": "https://github.com/DynOpsBC/WMS/releases/download/android-v1.14.178-bade/BCWMS-BADE-1.14.178.apk",
+  "sha256": "302115b30930d5acb8441d671db5cfa04ff3b2ef2a5004b5c40ff0057366465a",
+  "releaseNotes": "Palet LP 'Eşit Böl' tam sayılı miktarı tam sayı paletlere böler (20020/6 = 5×3336 + 3340). Toplamada Hedef LP açıklaması güncellendi: yarım palet varken yalnız yarım alınan miktar Hedef LP'ye geçer, tam paletler kendi LP'siyle gider. BCWMSApp 1.14.1.134 ile kullanın."
 }
