@@ -102,6 +102,13 @@ pageextension 72313 "DOPSWHS Item Ledger Entries" extends "Item Ledger Entries"
         LPLine: Record "DOPSWHS LP Line";
     begin
         LPLine.SetRange("Source Item Ledger Entry No.", ItemLedgerEntry."Entry No.");
+        // BADE (14 Eki 2026): 1.14.1.135 öncesi çok lotlu / çok dalgalı mal
+        // kabulde kaynak giriş no lotlar arasında eziliyordu; başka lotun LP'si
+        // gelmesin diye madde ve lot da eşleşmeli.
+        LPLine.SetRange("Item No.", ItemLedgerEntry."Item No.");
+        LPLine.SetRange("Variant Code", ItemLedgerEntry."Variant Code");
+        if ItemLedgerEntry."Lot No." <> '' then
+            LPLine.SetRange("Lot No.", ItemLedgerEntry."Lot No.");
         LPLine.SetFilter(Quantity, '>0');
         if LPLine.FindSet() then
             repeat

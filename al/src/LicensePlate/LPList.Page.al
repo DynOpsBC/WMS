@@ -39,6 +39,34 @@ page 72070 "DOPSWHS LP List"
     {
         area(Processing)
         {
+            action(PrintSelectedMteReports)
+            {
+                ApplicationArea = All;
+                Caption = 'Seçili LP''lerin MTE Etiketleri';
+                ToolTip = 'Seçili LP''lerin Madde Tanımlama Etiketlerini açar (her LP''nin her ürün/lotu için ayrı sayfa).';
+                Image = PrintReport;
+                Promoted = true;
+                PromotedCategory = Report;
+
+                trigger OnAction()
+                var
+                    Selected: Record "DOPSWHS LP Header";
+                    LPHeader: Record "DOPSWHS LP Header";
+                    LpFilter: Text;
+                begin
+                    CurrPage.SetSelectionFilter(Selected);
+                    if Selected.FindSet() then
+                        repeat
+                            if LpFilter <> '' then
+                                LpFilter += '|';
+                            LpFilter += Selected."No.";
+                        until Selected.Next() = 0;
+                    if LpFilter = '' then
+                        Error('Önce etiketi alınacak LP''leri seçin.');
+                    LPHeader.SetFilter("No.", LpFilter);
+                    Report.RunModal(Report::"DOPSWHS MTE LP Report", true, false, LPHeader);
+                end;
+            }
             action(FindProductionPickRepairCandidates)
             {
                 ApplicationArea = All;

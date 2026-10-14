@@ -102,6 +102,26 @@ page 72069 "DOPSWHS LP Card"
                     CurrPage.Update(false);
                 end;
             }
+            action(PrintMteReport)
+            {
+                // BADE (14 Eki 2026): MTE doğrudan bu LP'den alınır; madde defteri
+                // girişi seçmek ve girişteki LP damgasına bağlı kalmak gerekmez.
+                // Karma palette her ürün/lot için ayrı etiket sayfası çıkar.
+                ApplicationArea = All;
+                Caption = 'MTE Etiketi';
+                ToolTip = 'Bu LP''nin Madde Tanımlama Etiketini (her ürün/lot için ayrı sayfa) açar; yazdırabilir veya PDF olarak indirebilirsiniz.';
+                Image = PrintReport;
+                Promoted = true;
+                PromotedCategory = Report;
+
+                trigger OnAction()
+                var
+                    LPHeader: Record "DOPSWHS LP Header";
+                begin
+                    LPHeader.SetRange("No.", Rec."No.");
+                    Report.RunModal(Report::"DOPSWHS MTE LP Report", true, false, LPHeader);
+                end;
+            }
             action(PrintMteTerminalPath)
             {
                 // BADE 16 Eyl 2026: the terminal masks BC errors behind a REF
