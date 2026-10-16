@@ -105,23 +105,40 @@ pageextension 72313 "DOPSWHS Item Ledger Entries" extends "Item Ledger Entries"
         // BADE (14 Eki 2026): 1.14.1.135 öncesi çok lotlu / çok dalgalı mal
         // kabulde kaynak giriş no lotlar arasında eziliyordu; başka lotun LP'si
         // gelmesin diye madde ve lot da eşleşmeli.
-        LPLine.SetRange("Item No.", ItemLedgerEntry."Item No.");
-        LPLine.SetRange("Variant Code", ItemLedgerEntry."Variant Code");
-        if ItemLedgerEntry."Lot No." <> '' then
-            LPLine.SetRange("Lot No.", ItemLedgerEntry."Lot No.");
-        LPLine.SetFilter(Quantity, '>0');
+        SetEntryIdentityFilters(LPLine, ItemLedgerEntry);
         if LPLine.FindSet() then
             repeat
                 AddLpNo(LPLine."LP No.", SeenLpNos);
             until LPLine.Next() = 0;
 
-        // Posted consumption entries can reference their LPs only through the
-        // propagated single/list fields after the source LP lines were consumed.
-        AddLpNo(ItemLedgerEntry."DOPSWHS LP No.", SeenLpNos);
-        AddLpNosFromText(ItemLedgerEntry."DOPSWHS LP Nos.", SeenLpNos);
+        // Legacy single/list stamps can point to a different product or lot.
+        // A stamp is a candidate only; its current contents must match the entry.
+        AddEntryLpNo(ItemLedgerEntry."DOPSWHS LP No.", ItemLedgerEntry, SeenLpNos);
+        AddLpNosFromText(ItemLedgerEntry."DOPSWHS LP Nos.", ItemLedgerEntry, SeenLpNos);
     end;
 
-    local procedure AddLpNosFromText(LpNosText: Text; var SeenLpNos: Dictionary of [Code[20], Boolean])
+    local procedure SetEntryIdentityFilters(var LPLine: Record "DOPSWHS LP Line"; ItemLedgerEntry: Record "Item Ledger Entry")
+    begin
+        LPLine.SetRange("Item No.", ItemLedgerEntry."Item No.");
+        LPLine.SetRange("Variant Code", ItemLedgerEntry."Variant Code");
+        LPLine.SetRange("Lot No.", ItemLedgerEntry."Lot No.");
+        LPLine.SetRange("Serial No.", ItemLedgerEntry."Serial No.");
+        LPLine.SetFilter(Quantity, '>0');
+    end;
+
+    local procedure AddEntryLpNo(LpNo: Code[20]; ItemLedgerEntry: Record "Item Ledger Entry"; var SeenLpNos: Dictionary of [Code[20], Boolean])
+    var
+        LPLine: Record "DOPSWHS LP Line";
+    begin
+        if (LpNo = '') or SeenLpNos.ContainsKey(LpNo) then
+            exit;
+        LPLine.SetRange("LP No.", LpNo);
+        SetEntryIdentityFilters(LPLine, ItemLedgerEntry);
+        if not LPLine.IsEmpty() then
+            AddLpNo(LpNo, SeenLpNos);
+    end;
+
+    local procedure AddLpNosFromText(LpNosText: Text; ItemLedgerEntry: Record "Item Ledger Entry"; var SeenLpNos: Dictionary of [Code[20], Boolean])
     var
         SeparatorPosition: Integer;
         LpNoText: Text;
@@ -135,7 +152,7 @@ pageextension 72313 "DOPSWHS Item Ledger Entries" extends "Item Ledger Entries"
                 LpNoText := CopyStr(LpNosText, 1, SeparatorPosition - 1);
                 LpNosText := CopyStr(LpNosText, SeparatorPosition + 1);
             end;
-            AddLpNo(CopyStr(LpNoText.Trim(), 1, 20), SeenLpNos);
+            AddEntryLpNo(CopyStr(LpNoText.Trim(), 1, 20), ItemLedgerEntry, SeenLpNos);
         end;
     end;
 

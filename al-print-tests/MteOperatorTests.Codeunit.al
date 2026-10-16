@@ -4,6 +4,7 @@ codeunit 72181 "DOPSWHS MTE Operator Tests"
     TestPermissions = Disabled;
 
     [Test]
+    [TransactionModel(TransactionModel::AutoRollback)]
     procedure ZplUsesPinNameInsteadOfServiceAccount()
     var
         LP: Record "DOPSWHS LP Header" temporary;
@@ -21,6 +22,7 @@ codeunit 72181 "DOPSWHS MTE Operator Tests"
     end;
 
     [Test]
+    [TransactionModel(TransactionModel::AutoRollback)]
     procedure ExplicitInspectorWins()
     var
         Dispatcher: Codeunit "DOPSWHS Print Dispatcher";
@@ -31,6 +33,7 @@ codeunit 72181 "DOPSWHS MTE Operator Tests"
     end;
 
     [Test]
+    [TransactionModel(TransactionModel::AutoRollback)]
     procedure PdfMapsOperatorOnlyInCurrentCompany()
     var
         Employee: Record Employee;
@@ -54,6 +57,7 @@ codeunit 72181 "DOPSWHS MTE Operator Tests"
     end;
 
     [Test]
+    [TransactionModel(TransactionModel::AutoRollback)]
     procedure MissingPdfEmployeeDoesNotFallBackToBcUser()
     var
         Dispatcher: Codeunit "DOPSWHS Print Dispatcher";
@@ -67,6 +71,7 @@ codeunit 72181 "DOPSWHS MTE Operator Tests"
     end;
 
     [Test]
+    [TransactionModel(TransactionModel::AutoRollback)]
     procedure BcReportAndTerminalShareLabelValues()
     var
         ParentCategory: Record "Item Category";
@@ -110,6 +115,7 @@ codeunit 72181 "DOPSWHS MTE Operator Tests"
     end;
 
     [Test]
+    [TransactionModel(TransactionModel::AutoRollback)]
     procedure BcReportPrintsOneLabelPerProductOnMixedPallet()
     var
         LP: Record "DOPSWHS LP Header";
@@ -153,6 +159,10 @@ codeunit 72181 "DOPSWHS MTE Operator Tests"
         Check(CountOf(DataSet, 'MIXLOT-A') = 1, StrSubstNo('Product A split lines must share one label; lot A appears %1 times.', CountOf(DataSet, 'MIXLOT-A')));
         Check(CountOf(DataSet, 'MIXLOT-B') = 1, StrSubstNo('Product B must have exactly one label; lot B appears %1 times.', CountOf(DataSet, 'MIXLOT-B')));
         Check(StrPos(DataSet, '5 ') > 0, 'Product A label must carry the merged quantity 5.');
+        Clear(TempBlob);
+        TempBlob.CreateOutStream(OutStr);
+        Check(Report.SaveAs(Report::"DOPSWHS MTE LP Report", '', ReportFormat::Pdf, OutStr, LpRef), 'The mixed-pallet RDLC could not render as PDF.');
+        Check(TempBlob.Length() > 1000, 'The MTE PDF output must contain a rendered label.');
     end;
 
     local procedure AddLine(LpNo: Code[20]; LineNo: Integer; ItemNo: Code[20]; LotNo: Code[50]; Qty: Decimal)

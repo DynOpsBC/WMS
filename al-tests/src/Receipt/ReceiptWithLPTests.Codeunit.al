@@ -3,6 +3,7 @@ codeunit 72133 "DOPSWHS Receipt With LP Tests"
     Subtype = Test;
 
     [Test]
+    [TransactionModel(TransactionModel::AutoRollback)]
     procedure PostingFlagDoesNotConflictWithPostedHeaderTransfer()
     var
         ReceiptHeader: Record "Warehouse Receipt Header" temporary;
@@ -21,6 +22,7 @@ codeunit 72133 "DOPSWHS Receipt With LP Tests"
     end;
 
     [Test]
+    [TransactionModel(TransactionModel::AutoRollback)]
     procedure ReceiptLpContentIsCreatedOnlyBySuccessfulPost()
     var
         TestHelper: Codeunit "DOPSWHS Test Helper";
@@ -74,6 +76,7 @@ codeunit 72133 "DOPSWHS Receipt With LP Tests"
     end;
 
     [Test]
+    [TransactionModel(TransactionModel::AutoRollback)]
     procedure StartAfterClosingEmptyLpCreatesNextLp()
     var
         TestHelper: Codeunit "DOPSWHS Test Helper";
@@ -106,6 +109,7 @@ codeunit 72133 "DOPSWHS Receipt With LP Tests"
     end;
 
     [Test]
+    [TransactionModel(TransactionModel::AutoRollback)]
     procedure BulkReceiptCountsOnlyUnpostedPalletsOnTheSingleSourceLine()
     var
         WhseReceiptHeader: Record "Warehouse Receipt Header";
@@ -130,6 +134,7 @@ codeunit 72133 "DOPSWHS Receipt With LP Tests"
     end;
 
     [Test]
+    [TransactionModel(TransactionModel::AutoRollback)]
     procedure CancelledReceiptRemovesItsUnpostedLpQuantity()
     var
         WhseReceiptHeader: Record "Warehouse Receipt Header";
@@ -150,6 +155,7 @@ codeunit 72133 "DOPSWHS Receipt With LP Tests"
     end;
 
     [Test]
+    [TransactionModel(TransactionModel::AutoRollback)]
     procedure CancelledReceiptClearsItsEmptyPendingLp()
     var
         WhseReceiptHeader: Record "Warehouse Receipt Header";
@@ -178,6 +184,7 @@ codeunit 72133 "DOPSWHS Receipt With LP Tests"
     end;
 
     [Test]
+    [TransactionModel(TransactionModel::AutoRollback)]
     procedure CancelledReceiptNeverChangesAssignedLp()
     var
         WhseReceiptHeader: Record "Warehouse Receipt Header";
@@ -198,6 +205,7 @@ codeunit 72133 "DOPSWHS Receipt With LP Tests"
     end;
 
     [Test]
+    [TransactionModel(TransactionModel::AutoRollback)]
     procedure PendingReceiptLpCannotBeEditedOutsideReceipt()
     var
         LP: Record "DOPSWHS LP Header";
@@ -230,6 +238,7 @@ codeunit 72133 "DOPSWHS Receipt With LP Tests"
     end;
 
     [Test]
+    [TransactionModel(TransactionModel::AutoRollback)]
     procedure ReconfirmBulkRowPreservesEachPalletQuantity()
     var
         Header: Record "Warehouse Receipt Header";
@@ -261,6 +270,7 @@ codeunit 72133 "DOPSWHS Receipt With LP Tests"
     end;
 
     [Test]
+    [TransactionModel(TransactionModel::AutoRollback)]
     procedure TwoReceiptLotsKeepOneSourceLineAndSeparatePalletContents()
     var
         Header: Record "Warehouse Receipt Header";
@@ -307,6 +317,7 @@ codeunit 72133 "DOPSWHS Receipt With LP Tests"
     end;
 
     [Test]
+    [TransactionModel(TransactionModel::AutoRollback)]
     procedure PalletsInOneGroupShareOneGeneratedLot()
     var
         Header: Record "Warehouse Receipt Header";
@@ -335,6 +346,7 @@ codeunit 72133 "DOPSWHS Receipt With LP Tests"
     end;
 
     [Test]
+    [TransactionModel(TransactionModel::AutoRollback)]
     procedure LegacyCommonGroupStillCreatesOneTrackingAllocation()
     var
         Header: Record "Warehouse Receipt Header";
@@ -349,6 +361,7 @@ codeunit 72133 "DOPSWHS Receipt With LP Tests"
     end;
 
     [Test]
+    [TransactionModel(TransactionModel::AutoRollback)]
     procedure SameInternalLotCannotUseDifferentSuppliers()
     var
         Header: Record "Warehouse Receipt Header";
@@ -364,6 +377,7 @@ codeunit 72133 "DOPSWHS Receipt With LP Tests"
     end;
 
     [Test]
+    [TransactionModel(TransactionModel::AutoRollback)]
     procedure MultiLotReceiptRejectsQuantityMismatch()
     var
         Header: Record "Warehouse Receipt Header";
@@ -378,6 +392,7 @@ codeunit 72133 "DOPSWHS Receipt With LP Tests"
     end;
 
     [Test]
+    [TransactionModel(TransactionModel::AutoRollback)]
     procedure ExcludedLotPlanWaitsForNextWaveAndCancellationClearsIt()
     var
         Header: Record "Warehouse Receipt Header";
@@ -393,6 +408,7 @@ codeunit 72133 "DOPSWHS Receipt With LP Tests"
         LP.SetRange("Pending Receipt No.", Header."No.");
         LP.FindFirst();
         LpNo := LP."No.";
+        Line.Get(Line."No.", Line."Line No.");
         ReceiptMgmt.ExcludeLineFromPost(Line);
         ReceiptMgmt.PrepareReceiptLPs(Header."No.");
         LP.Get(LpNo);
@@ -406,6 +422,7 @@ codeunit 72133 "DOPSWHS Receipt With LP Tests"
     end;
 
     [Test]
+    [TransactionModel(TransactionModel::AutoRollback)]
     procedure OneLpCarriesBottleAndCap()
     var
         Header: Record "Warehouse Receipt Header";
@@ -436,6 +453,7 @@ codeunit 72133 "DOPSWHS Receipt With LP Tests"
     end;
 
     [Test]
+    [TransactionModel(TransactionModel::AutoRollback)]
     procedure EmptyLpCannotBeClosedAndReadyLinesAreAttachedExplicitly()
     var
         Header: Record "Warehouse Receipt Header";
@@ -452,9 +470,6 @@ codeunit 72133 "DOPSWHS Receipt With LP Tests"
         ReceiptMgmt.ConfirmLine(CapLine, 8, '', '', 0D, '', '');
         LpNo := ReceiptMgmt.StartLP(Header, 'PALLET-EUR');
 
-        asserterror ReceiptMgmt.StopLP(Header, LpNo, false);
-        Assert.ExpectedError('boş, kapatılamaz');
-
         LineNos.Add(BottleLine."Line No.");
         LineNos.Add(CapLine."Line No.");
         Assert.AreEqual(2, ReceiptMgmt.AttachLinesToLp(Header, LpNo, LineNos), 'Both ready lines must join the LP.');
@@ -469,6 +484,23 @@ codeunit 72133 "DOPSWHS Receipt With LP Tests"
     end;
 
     [Test]
+    [TransactionModel(TransactionModel::AutoRollback)]
+    procedure EmptyReceiptLpCannotBeClosed()
+    var
+        Header: Record "Warehouse Receipt Header";
+        BottleLine: Record "Warehouse Receipt Line";
+        CapLine: Record "Warehouse Receipt Line";
+        ReceiptMgmt: Codeunit "DOPSWHS Receipt Mgmt";
+        LpNo: Code[20];
+    begin
+        CreateBottleCapFixture(Header, BottleLine, CapLine);
+        LpNo := ReceiptMgmt.StartLP(Header, 'PALLET-EUR');
+        asserterror ReceiptMgmt.StopLP(Header, LpNo, false);
+        Assert.ExpectedError('boş, kapatılamaz');
+    end;
+
+    [Test]
+    [TransactionModel(TransactionModel::AutoRollback)]
     procedure LineWithoutLpBlocksPostingOfAnLpReceipt()
     var
         Header: Record "Warehouse Receipt Header";
@@ -494,6 +526,7 @@ codeunit 72133 "DOPSWHS Receipt With LP Tests"
     end;
 
     [Test]
+    [TransactionModel(TransactionModel::AutoRollback)]
     procedure OpenEmptyLpDoesNotSilentlyTakeReadyLines()
     var
         Header: Record "Warehouse Receipt Header";
@@ -517,6 +550,7 @@ codeunit 72133 "DOPSWHS Receipt With LP Tests"
     end;
 
     [Test]
+    [TransactionModel(TransactionModel::AutoRollback)]
     procedure ClosedPalletKeepsItsLineWhileAnotherLpIsActive()
     var
         Header: Record "Warehouse Receipt Header";
@@ -551,6 +585,7 @@ codeunit 72133 "DOPSWHS Receipt With LP Tests"
     end;
 
     [Test]
+    [TransactionModel(TransactionModel::AutoRollback)]
     procedure MixedDistributionPutsBothProductsOnEveryPallet()
     var
         Header: Record "Warehouse Receipt Header";
@@ -597,6 +632,7 @@ codeunit 72133 "DOPSWHS Receipt With LP Tests"
     end;
 
     [Test]
+    [TransactionModel(TransactionModel::AutoRollback)]
     procedure MixedDistributionRejectsWrongProductTotal()
     var
         Header: Record "Warehouse Receipt Header";
@@ -610,6 +646,7 @@ codeunit 72133 "DOPSWHS Receipt With LP Tests"
     end;
 
     [Test]
+    [TransactionModel(TransactionModel::AutoRollback)]
     procedure MixedPalletCannotBePostedWithoutAllItsProducts()
     var
         Header: Record "Warehouse Receipt Header";
@@ -626,6 +663,7 @@ codeunit 72133 "DOPSWHS Receipt With LP Tests"
     end;
 
     [Test]
+    [TransactionModel(TransactionModel::AutoRollback)]
     procedure CancellingMixedDistributionClearsEveryPalletAndLine()
     var
         Header: Record "Warehouse Receipt Header";
@@ -652,6 +690,7 @@ codeunit 72133 "DOPSWHS Receipt With LP Tests"
     end;
 
     [Test]
+    [TransactionModel(TransactionModel::AutoRollback)]
     procedure StartLpAfterPalletDistributionOpensANewLp()
     var
         Header: Record "Warehouse Receipt Header";
@@ -677,6 +716,7 @@ codeunit 72133 "DOPSWHS Receipt With LP Tests"
     end;
 
     [Test]
+    [TransactionModel(TransactionModel::AutoRollback)]
     procedure MixedLineCannotBeAttachedToAnotherLp()
     var
         Header: Record "Warehouse Receipt Header";
@@ -696,6 +736,7 @@ codeunit 72133 "DOPSWHS Receipt With LP Tests"
     end;
 
     [Test]
+    [TransactionModel(TransactionModel::AutoRollback)]
     procedure EarlierWavePalletDoesNotJoinTheNextWaveTotal()
     var
         Header: Record "Warehouse Receipt Header";
@@ -707,6 +748,11 @@ codeunit 72133 "DOPSWHS Receipt With LP Tests"
         // ikinci dalganın palet toplamına katılıp kaydı durdurmamalı.
         CreateBottleCapFixture(Header, BottleLine, CapLine);
         CreateReceiptLP('LP-WAVE1', BottleLine, 40, true);
+        BottleLine."Qty. Received" := 40;
+        BottleLine."Qty. Received (Base)" := 40;
+        BottleLine."Qty. Outstanding" := 60;
+        BottleLine."Qty. Outstanding (Base)" := 60;
+        BottleLine.Modify(false);
         ReceiptMgmt.CreateBulkLPDistribution(Header, BottleLine."Line No.", 60,
             '[{"quantity":30},{"quantity":30}]', 'PALLET-EUR', false, '');
         CapLine.Get(CapLine."No.", CapLine."Line No.");
@@ -715,6 +761,7 @@ codeunit 72133 "DOPSWHS Receipt With LP Tests"
     end;
 
     [Test]
+    [TransactionModel(TransactionModel::AutoRollback)]
     procedure EarlierWavePalletDoesNotHideALineWithoutLp()
     var
         Header: Record "Warehouse Receipt Header";

@@ -1,7 +1,7 @@
 {
-  "versionCode": 200179,
-  "versionName": "1.14.179-bade",
-  "apkUrl": "https://github.com/DynOpsBC/WMS/releases/download/android-v1.14.179-bade/BCWMS-BADE-1.14.179.apk",
-  "sha256": "86e2640c121846de9b88b8a5198de26be414a3726ee82430efa4ada52b8bcaa6",
-  "releaseNotes": "Palet LP 'Eşit Böl' artanı ilk paletlere dağıtır (10/4 = 3,3,2,2). Toplama açıklaması: birden çok paletli sipariş satırı Hedef LP'de birleşir, tek paletle karşılanan satır kendi paletiyle gider. BCWMSApp 1.14.1.135 ile kullanın."
+  "versionCode": 200180,
+  "versionName": "1.14.180-bade",
+  "apkUrl": "https://github.com/DynOpsBC/WMS/releases/download/android-v1.14.180-bade/BCWMS-BADE-1.14.180.apk",
+  "sha256": "3fc7d2376f9e69d54b9f14efe7a8d72632fbabe1009febfa3a38862675fbaf78",
+  "releaseNotes": "Karma palet mal kabul: birden çok ürün ve lot aynı paletlerde, Eşit Böl ve dağıtımı geri alma. BC MTE etiketi ürün/lot doğrulaması. BCWMSApp 1.14.1.138 ile kullanın."
 }
