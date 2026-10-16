@@ -14,6 +14,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -33,6 +34,15 @@ import org.json.JSONObject
  * Lookup list -> document (header + lines) -> actions:
  *   Build new · Add line (scan + qty) · Stop (-> SSCC + print) · Transfer · Unbuild · Print · Partial-use.
  */
+private const val LP_LIST_PREFS = "dopswhs_lp_list"
+private const val LP_LIST_SORT_DESC = "sortDescending"
+
+/** LP listesi LP No'ya göre doğal sırada (LP000009 < LP000010); azalanda en yeni LP en üstte. */
+internal fun lpListOrder(rows: List<JSONObject>, descending: Boolean): List<JSONObject> {
+    val ascending = rows.sortedWith(compareBy(warehouseBinCodeComparator) { it.optString("no") })
+    return if (descending) ascending.asReversed() else ascending
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun LicensePlateModule() {
@@ -51,6 +61,9 @@ fun LicensePlateModule() {
     var search by remember { mutableStateOf("") }
     var lastCreatedLpNos by remember { mutableStateOf<Set<String>>(emptySet()) }
     var showLastCreatedOnly by remember { mutableStateOf(false) }
+    // BADE (16 Eki 2026): BC'deki gibi LP No'ya göre artan/azalan sıralama; seçim cihazda kalır.
+    val listPrefs = remember { context.getSharedPreferences(LP_LIST_PREFS, android.content.Context.MODE_PRIVATE) }
+    var sortDescending by remember { mutableStateOf(listPrefs.getBoolean(LP_LIST_SORT_DESC, false)) }
 
     fun loadList(statusAfterLoad: String? = null) {
         scope.launch {
@@ -185,7 +198,17 @@ fun LicensePlateModule() {
         com.dynops.bcwms.ui.DocSearchBar(value = search, onValueChange = { search = it }, onSearch = { loadList() }, label = "LP no ile ara")
         Spacer(Modifier.height(4.dp))
         StatusText(status)
-        Spacer(Modifier.height(8.dp))
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+            TextButton(
+                onClick = {
+                    sortDescending = !sortDescending
+                    listPrefs.edit().putBoolean(LP_LIST_SORT_DESC, sortDescending).apply()
+                },
+                modifier = Modifier.testTag("lp-list-sort"),
+            ) {
+                Text(if (sortDescending) "LP No ↓ büyükten küçüğe" else "LP No ↑ küçükten büyüğe", fontSize = 13.sp)
+            }
+        }
         if (lastCreatedLpNos.isNotEmpty()) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Checkbox(
@@ -200,7 +223,7 @@ fun LicensePlateModule() {
             }
         }
         LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            items(if (showLastCreatedOnly) rows.filter { it.optString("no") in lastCreatedLpNos } else rows) { lp ->
+            items(lpListOrder(if (showLastCreatedOnly) rows.filter { it.optString("no") in lastCreatedLpNos } else rows, sortDescending)) { lp ->
                 Card(
                     onClick = { selected = lp.optString("no") },
                     modifier = Modifier.fillMaxWidth(),
