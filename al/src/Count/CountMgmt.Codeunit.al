@@ -1503,7 +1503,11 @@ codeunit 72050 "DOPSWHS Count Mgmt"
         Header: Record "DOPSWHS Count Sheet Header";
         Line: Record "DOPSWHS Count Sheet Line";
         Bins: List of [Code[20]];
+        StaleBins: List of [Code[20]];
         SelectedBin: Code[20];
+        Reason: Text;
+        Details: Text;
+        StaleBinList: Text;
     begin
         Header.Get(SheetNo);
         if not Header."V2 Scan Mode" then
@@ -1519,8 +1523,88 @@ codeunit 72050 "DOPSWHS Count Mgmt"
                 if not Bins.Contains(Line."Bin Code") then
                     Bins.Add(Line."Bin Code");
             until Line.Next() = 0;
-        foreach SelectedBin in Bins do
-            MergeV2BinSnapshot(SheetNo, SelectedBin, ValidateOnly);
+        if not ValidateOnly then begin
+            foreach SelectedBin in Bins do
+                MergeV2BinSnapshot(SheetNo, SelectedBin, false);
+            exit;
+        end;
+
+        // BADE (16 Eki 2026): tur kaydı ve nakil ilk eskimiş rafta durup tek raf
+        // söylüyordu; operatör Rafı Yenile → say → Post döngüsünü raf raf
+        // tekrarlıyordu. Bütün raflar denetlenir, yenilenecek raflar tek listede.
+        PrepareV2(SheetNo);
+        foreach SelectedBin in Bins do begin
+            Reason := V2BinStaleReason(SheetNo, SelectedBin);
+            if Reason <> '' then begin
+                StaleBins.Add(SelectedBin);
+                if StaleBins.Count() <= 10 then
+                    Details += '' + Reason;
+            end;
+        end;
+        if StaleBins.Count() = 0 then
+            exit;
+        foreach SelectedBin in StaleBins do begin
+            if StaleBinList <> '' then
+                StaleBinList += ', ';
+            StaleBinList += SelectedBin;
+        end;
+        if StaleBins.Count() > 10 then
+            Details += '\...';
+        Error(StaleBinsErr, StaleBins.Count(), StaleBinList, Details);
+    end;
+
+    /// <summary>
+    /// MergeV2BinSnapshot'ın denetim kolunun hata atmayan hâli: rafın sayım
+    /// başladıktan sonra değişip değişmediğini söyler ('' = güncel). Veri yazmaz.
+    /// </summary>
+    local procedure V2BinStaleReason(SheetNo: Code[20]; BinCode: Code[20]): Text
+    var
+        Header: Record "DOPSWHS Count Sheet Header";
+        Snapshot: Record "DOPSWHS Count Sheet Line" temporary;
+        Line: Record "DOPSWHS Count Sheet Line";
+        Bin: Record Bin;
+    begin
+        Header.Get(SheetNo);
+        if BinCode = '' then
+            Error(BinRequiredErr);
+        Bin.Get(Header."Location Code", BinCode);
+        EnsureBinInCountScope(Header, Bin);
+        BuildBinSnapshot(SheetNo, BinCode, Snapshot);
+        if Snapshot.FindSet() then
+            repeat
+                Line.Reset();
+                Line.SetRange("Sheet No.", SheetNo);
+                Line.SetRange("Bin Code", BinCode);
+                Line.SetRange("Item No.", Snapshot."Item No.");
+                Line.SetRange("Variant Code", Snapshot."Variant Code");
+                Line.SetRange("Unit of Measure Code", Snapshot."Unit of Measure Code");
+                Line.SetRange("Lot No.", Snapshot."Lot No.");
+                Line.SetRange("Serial No.", Snapshot."Serial No.");
+                Line.SetRange("LP No.", Snapshot."LP No.");
+                Line.SetRange("LP Line No.", Snapshot."LP Line No.");
+                if not Line.FindFirst() then
+                    exit(StrSubstNo('Raf %1 madde %2: rafa sayımdan sonra gelmiş', BinCode, Snapshot."Item No."));
+                if Line."System Qty" <> Snapshot."System Qty" then
+                    exit(StrSubstNo('Raf %1 madde %2: stok değişmiş', BinCode, Line."Item No."));
+            until Snapshot.Next() = 0;
+        Line.Reset();
+        Line.SetRange("Sheet No.", SheetNo);
+        Line.SetRange("Bin Code", BinCode);
+        Line.SetFilter("System Qty", '<>%1', 0);
+        if Line.FindSet() then
+            repeat
+                Snapshot.Reset();
+                Snapshot.SetRange("Item No.", Line."Item No.");
+                Snapshot.SetRange("Variant Code", Line."Variant Code");
+                Snapshot.SetRange("Unit of Measure Code", Line."Unit of Measure Code");
+                Snapshot.SetRange("Lot No.", Line."Lot No.");
+                Snapshot.SetRange("Serial No.", Line."Serial No.");
+                Snapshot.SetRange("LP No.", Line."LP No.");
+                Snapshot.SetRange("LP Line No.", Line."LP Line No.");
+                if Snapshot.IsEmpty() then
+                    exit(StrSubstNo('Raf %1 madde %2: raftan çıkmış', BinCode, Line."Item No."));
+            until Line.Next() = 0;
+        exit('');
     end;
 
     procedure CompleteCounter(SheetNo: Code[20]; CounterSlot: Integer)
@@ -2705,6 +2789,7 @@ codeunit 72050 "DOPSWHS Count Mgmt"
         LPExceedsInventoryErr: Label '%1 ürününün %2 rafındaki LP miktarı BC stok miktarını %3 aşıyor. Sayım satırları üretilmeden önce LP/bin tutarsızlığını düzeltin.', Comment = '%1 item, %2 bin, %3 excess qty';
         LPLineMissingErr: Label '%1 LP numarasının %2 satırı artık bulunamadı. Sayım satırlarını yeniden üretin.', Comment = '%1 LP, %2 line';
         BinRequiredErr: Label 'Önce raf/bin barkodunu okutun.';
+        StaleBinsErr: Label 'Stoku sayım başladıktan sonra değişmiş %1 raf var: %2. Sayım kartında bu rafların her biri için Rafı Yenile eylemini çalıştırın, rafları terminalde yeniden sayıp Sayım Turunu Kaydet''e basın.%3', Comment = '%1 = raf sayısı, %2 = raf kodları, %3 = ayrıntı satırları';
         BinNotInLocationErr: Label '%1 rafı %2 lokasyonunda bulunamadı.', Comment = '%1 bin, %2 location';
         LPNotFoundErr: Label '%1 LP numarası bulunamadı.', Comment = '%1 LP';
         LPLocationMismatchErr: Label '%1 LP numarası %2 lokasyonundadır; %3 lokasyonundaki bu sayıma bağlanamaz.', Comment = '%1 LP, %2 LP location, %3 count location';

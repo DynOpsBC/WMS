@@ -409,6 +409,38 @@ codeunit 72142 "DOPSWHS Count V2 Tests"
     end;
 
     [Test]
+    procedure RoundSaveListsEveryStaleBinAtOnce()
+    var
+        LPLine: Record "DOPSWHS LP Line";
+        CountMgmt: Codeunit "DOPSWHS Count Mgmt";
+        Counters: array[3] of Code[50];
+        SheetNo: Code[20];
+    begin
+        // BADE (16 Eki 2026): sayım sürerken üretime iki raftan mal gitti; tur kaydı
+        // ilk rafta durup tek raf söylüyordu. İki raf da tek mesajda gelmeli.
+        EnsureItemLocationAndBin('CV2-STALE', 'CV2PCS', 'CV2STL', 'CV2STL-1');
+        EnsureItemLocationAndBin('CV2-STALE', 'CV2PCS', 'CV2STL', 'CV2STL-2');
+        InsertWarehouseBalance('CV2-STALE', 'CV2PCS', 'CV2STL', 'CV2STL-1', 10);
+        InsertWarehouseBalance('CV2-STALE', 'CV2PCS', 'CV2STL', 'CV2STL-2', 10);
+        InsertBuiltLp('CV2-STALE-LP1', 'CV2-STALE', 'CV2PCS', 'CV2STL', 'CV2STL-1', 10);
+        InsertBuiltLp('CV2-STALE-LP2', 'CV2-STALE', 'CV2PCS', 'CV2STL', 'CV2STL-2', 10);
+        SheetNo := CountMgmt.CreateSheet('CV2STL', Enum::"DOPSWHS Count Mode"::Visible, Counters);
+        CountMgmt.PrepareV2Bin(SheetNo, 'CV2STL-1');
+        CountMgmt.PrepareV2Bin(SheetNo, 'CV2STL-2');
+        LPLine.Get('CV2-STALE-LP1', 10000);
+        LPLine.Quantity := 9;
+        LPLine.Modify(true);
+        LPLine.Get('CV2-STALE-LP2', 10000);
+        LPLine.Quantity := 8;
+        LPLine.Modify(true);
+
+        asserterror CountMgmt.CompleteCounter(SheetNo, 1);
+        Assert.ExpectedError('sayım başladıktan sonra değişmiş 2 raf');
+        Assert.ExpectedError('CV2STL-1, CV2STL-2');
+        Assert.ExpectedError('Raf CV2STL-1 madde CV2-STALE');
+    end;
+
+    [Test]
     procedure SelectedBinStockChangeStillBlocksCompletingCount()
     var
         SheetNo: Code[20];
