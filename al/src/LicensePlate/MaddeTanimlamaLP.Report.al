@@ -59,6 +59,10 @@ report 72375 "DOPSWHS MTE LP Report"
                 begin
                     if "Item No." = '' then
                         CurrReport.Skip();
+                    if (AllowedEntries.Count() > 0) and
+                       not AllowedEntries.ContainsKey(EntryKey("LP No.", "Item No.", "Variant Code", "Lot No.", "Serial No."))
+                    then
+                        CurrReport.Skip();
                     // Aynı ürün/lot/kaynak satırına ait bölünmüş satırlar tek etikette toplanır.
                     GroupKey := PalletItemGroupKey(LabelLine);
                     if PrintedGroups.ContainsKey(GroupKey) then
@@ -103,6 +107,24 @@ report 72375 "DOPSWHS MTE LP Report"
             }
         }
     }
+
+    /// <summary>
+    /// Madde defterinden basımda yalnız seçilen girişin ürün/lotu basılır; karma
+    /// paletteki diğer ürünler atlanır. Hiç çağrılmazsa LP'nin bütün içeriği basılır.
+    /// </summary>
+    procedure RestrictToEntry(LpNo: Code[20]; ItemNo2: Code[20]; VariantCode: Code[10]; LotNo: Code[50]; SerialNo: Code[50])
+    var
+        EntryKeyText: Text;
+    begin
+        EntryKeyText := EntryKey(LpNo, ItemNo2, VariantCode, LotNo, SerialNo);
+        if not AllowedEntries.ContainsKey(EntryKeyText) then
+            AllowedEntries.Add(EntryKeyText, true);
+    end;
+
+    local procedure EntryKey(LpNo: Code[20]; ItemNo2: Code[20]; VariantCode: Code[10]; LotNo: Code[50]; SerialNo: Code[50]): Text
+    begin
+        exit(LpNo + '|' + ItemNo2 + '|' + VariantCode + '|' + LotNo + '|' + SerialNo);
+    end;
 
     local procedure LoadDynamicLabelData(LPLine: Record "DOPSWHS LP Line")
     var
@@ -253,4 +275,5 @@ report 72375 "DOPSWHS MTE LP Report"
         RevisionNo: Text;
         RevisionDate: Text;
         PrintedGroups: Dictionary of [Text, Boolean];
+        AllowedEntries: Dictionary of [Text, Boolean];
 }

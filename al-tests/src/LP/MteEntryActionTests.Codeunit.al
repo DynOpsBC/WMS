@@ -1,4 +1,4 @@
-codeunit 72494 "DOPSWHS MTE Action Tests"
+codeunit 72498 "DOPSWHS MTE Action Tests"
 {
     Subtype = Test;
     TestPermissions = Disabled;
@@ -176,6 +176,50 @@ codeunit 72494 "DOPSWHS MTE Action Tests"
         Entries.GoToRecord(Entry);
         Entries."DOPSWHS Print All LP MTE".Invoke();
         Entries.Close();
+    end;
+
+    [Test]
+    [TransactionModel(TransactionModel::AutoRollback)]
+    procedure LedgerMteOnMixedLpPrintsOnlySelectedItem()
+    var
+        LP: Record "DOPSWHS LP Header";
+        Line: Record "DOPSWHS LP Line";
+        Item: Record Item;
+        MteReport: Report "DOPSWHS MTE LP Report";
+        TempBlob: Codeunit "Temp Blob";
+        OutStr: OutStream;
+        InStr: InStream;
+        Dataset: Text;
+        Chunk: Text;
+    begin
+        // BADE (16 Eki 2026): LP001774 karma palet, 4 ürün. Madde defterinde şişe
+        // satırından basılan MTE yalnız şişeyi basmalı.
+        CreateLp('RT139-LP-MIX', 'RT139-ITEM-A', 'RT139-LOT-A', 5);
+        Item."No." := 'RT139-ITEM-B';
+        Item.Description := 'RT139 MTE mixed fixture';
+        Item.Insert(false);
+        Line."LP No." := 'RT139-LP-MIX';
+        Line."Line No." := 20000;
+        Line."Item No." := 'RT139-ITEM-B';
+        Line."Lot No." := 'RT139-LOT-B';
+        Line."Unit of Measure" := 'ADET';
+        Line.Quantity := 7;
+        Line.Insert(false);
+
+        LP.SetRange("No.", 'RT139-LP-MIX');
+        MteReport.SetTableView(LP);
+        MteReport.RestrictToEntry('RT139-LP-MIX', 'RT139-ITEM-A', '', 'RT139-LOT-A', '');
+        TempBlob.CreateOutStream(OutStr);
+        MteReport.SaveAs('', ReportFormat::Xml, OutStr);
+        TempBlob.CreateInStream(InStr);
+        while not InStr.EOS() do begin
+            InStr.ReadText(Chunk);
+            Dataset += Chunk;
+        end;
+        if StrPos(Dataset, 'RT139-ITEM-A') = 0 then
+            Error('Seçilen ürün MTE veri kümesinde yok.');
+        if StrPos(Dataset, 'RT139-ITEM-B') > 0 then
+            Error('Karma palette seçilmeyen ürün de basıldı.');
     end;
 
     [RequestPageHandler]
