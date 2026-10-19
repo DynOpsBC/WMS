@@ -198,16 +198,28 @@ fun LicensePlateModule() {
         com.dynops.bcwms.ui.DocSearchBar(value = search, onValueChange = { search = it }, onSearch = { loadList() }, label = "LP no ile ara")
         Spacer(Modifier.height(4.dp))
         StatusText(status)
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-            TextButton(
+        Row(
+            Modifier.fillMaxWidth().testTag("lp-list-sort"),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            FilterChip(
+                selected = !sortDescending,
                 onClick = {
-                    sortDescending = !sortDescending
-                    listPrefs.edit().putBoolean(LP_LIST_SORT_DESC, sortDescending).apply()
+                    sortDescending = false
+                    listPrefs.edit().putBoolean(LP_LIST_SORT_DESC, false).apply()
                 },
-                modifier = Modifier.testTag("lp-list-sort"),
-            ) {
-                Text(if (sortDescending) "LP No ↓ büyükten küçüğe" else "LP No ↑ küçükten büyüğe", fontSize = 13.sp)
-            }
+                label = { Text("Küçükten büyüğe ↑", fontSize = 13.sp) },
+                modifier = Modifier.weight(1f).testTag("lp-list-sort-ascending"),
+            )
+            FilterChip(
+                selected = sortDescending,
+                onClick = {
+                    sortDescending = true
+                    listPrefs.edit().putBoolean(LP_LIST_SORT_DESC, true).apply()
+                },
+                label = { Text("Büyükten küçüğe ↓", fontSize = 13.sp) },
+                modifier = Modifier.weight(1f).testTag("lp-list-sort-descending"),
+            )
         }
         if (lastCreatedLpNos.isNotEmpty()) {
             Row(verticalAlignment = Alignment.CenterVertically) {
