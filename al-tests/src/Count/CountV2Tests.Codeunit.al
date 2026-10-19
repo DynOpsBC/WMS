@@ -441,6 +441,37 @@ codeunit 72142 "DOPSWHS Count V2 Tests"
     end;
 
     [Test]
+    procedure PostListsConsumedLpBinTogetherWithOtherStaleBins()
+    var
+        LPLine: Record "DOPSWHS LP Line";
+        CountMgmt: Codeunit "DOPSWHS Count Mgmt";
+        Counters: array[3] of Code[50];
+        SheetNo: Code[20];
+    begin
+        // BADE (19 Eki 2026): LP000237 üretime gitti, LP satırı silindi; Post bunu
+        // tek başına söyleyip duruyordu. Diğer değişen rafla birlikte listelenmeli.
+        EnsureItemLocationAndBin('CV2-CONS', 'CV2PCS', 'CV2CNS', 'CV2CNS-1');
+        EnsureItemLocationAndBin('CV2-CONS', 'CV2PCS', 'CV2CNS', 'CV2CNS-2');
+        InsertWarehouseBalance('CV2-CONS', 'CV2PCS', 'CV2CNS', 'CV2CNS-1', 10);
+        InsertWarehouseBalance('CV2-CONS', 'CV2PCS', 'CV2CNS', 'CV2CNS-2', 10);
+        InsertBuiltLp('CV2-CONS-LP1', 'CV2-CONS', 'CV2PCS', 'CV2CNS', 'CV2CNS-1', 10);
+        InsertBuiltLp('CV2-CONS-LP2', 'CV2-CONS', 'CV2PCS', 'CV2CNS', 'CV2CNS-2', 10);
+        SheetNo := CountMgmt.CreateSheet('CV2CNS', Enum::"DOPSWHS Count Mode"::Visible, Counters);
+        CountMgmt.PrepareV2Bin(SheetNo, 'CV2CNS-1');
+        CountMgmt.PrepareV2Bin(SheetNo, 'CV2CNS-2');
+        LPLine.Get('CV2-CONS-LP1', 10000);
+        LPLine.Delete(false);
+        LPLine.Get('CV2-CONS-LP2', 10000);
+        LPLine.Quantity := 7;
+        LPLine.Modify(false);
+
+        asserterror CountMgmt.PostSheet(SheetNo);
+        Assert.ExpectedError('değişmiş 2 raf');
+        Assert.ExpectedError('CV2CNS-1, CV2CNS-2');
+        Assert.ExpectedError('LP raftan çıkmış');
+    end;
+
+    [Test]
     procedure SelectedBinStockChangeStillBlocksCompletingCount()
     var
         SheetNo: Code[20];

@@ -1512,7 +1512,8 @@ codeunit 72050 "DOPSWHS Count Mgmt"
         Header.Get(SheetNo);
         if not Header."V2 Scan Mode" then
             exit;
-        EnsureV2LpSystemSnapshotsAreSafe(SheetNo);
+        if not ValidateOnly then
+            EnsureV2LpSystemSnapshotsAreSafe(SheetNo);
         // BADE: a surplus/found LP must not pull every bin holding the same
         // item/lot into this count (CNT-20261006094232). Keep full stock checks
         // within bins the operator opened or scanned. Found From Bin preserves
@@ -1532,15 +1533,16 @@ codeunit 72050 "DOPSWHS Count Mgmt"
         // BADE (16 Eki 2026): tur kaydı ve nakil ilk eskimiş rafta durup tek raf
         // söylüyordu; operatör Rafı Yenile → say → Post döngüsünü raf raf
         // tekrarlıyordu. Bütün raflar denetlenir, yenilenecek raflar tek listede.
+        // BADE (19 Eki 2026): LP satırı kontrolü de ("LP… satırı artık bulunamadı",
+        // üretime giden LP) ilk hatada duruyordu; aynı listeye eklenir.
         PrepareV2(SheetNo);
-        foreach SelectedBin in Bins do begin
-            Reason := V2BinStaleReason(SheetNo, SelectedBin);
-            if Reason <> '' then begin
-                StaleBins.Add(SelectedBin);
-                if StaleBins.Count() <= 10 then
-                    Details += '' + Reason;
+        CollectV2LpSnapshotIssues(SheetNo, StaleBins, Details);
+        foreach SelectedBin in Bins do
+            if not StaleBins.Contains(SelectedBin) then begin
+                Reason := V2BinStaleReason(SheetNo, SelectedBin);
+                if Reason <> '' then
+                    AddStaleBin(StaleBins, Details, SelectedBin, Reason);
             end;
-        end;
         if StaleBins.Count() = 0 then
             exit;
         foreach SelectedBin in StaleBins do begin
@@ -2324,6 +2326,43 @@ codeunit 72050 "DOPSWHS Count Mgmt"
             repeat
                 if not LPLine.Get(CountLine."LP No.", CountLine."LP Line No.") then
                     Error(LPLineMissingErr, CountLine."LP No.", CountLine."LP Line No.");
+            until CountLine.Next() = 0;
+    end;
+
+    local procedure AddStaleBin(var StaleBins: List of [Code[20]]; var Details: Text; BinCode: Code[20]; Reason: Text)
+    begin
+        if StaleBins.Contains(BinCode) then
+            exit;
+        StaleBins.Add(BinCode);
+        if StaleBins.Count() <= 10 then
+            Details += '\' + Reason;
+    end;
+
+    /// <summary>
+    /// EnsureV2LpSystemSnapshotsAreSafe'in hata atmayan hâli: sorunlu LP
+    /// satırlarının rafını yenilenecek raflar listesine ekler. Veri yazmaz.
+    /// </summary>
+    local procedure CollectV2LpSnapshotIssues(SheetNo: Code[20]; var StaleBins: List of [Code[20]]; var Details: Text)
+    var
+        CountLine: Record "DOPSWHS Count Sheet Line";
+        LPHeader: Record "DOPSWHS LP Header";
+        LPLine: Record "DOPSWHS LP Line";
+    begin
+        CountLine.SetRange("Sheet No.", SheetNo);
+        CountLine.SetFilter("LP No.", '<>%1', '');
+        if CountLine.FindSet() then
+            repeat
+                if not LPLine.Get(CountLine."LP No.", CountLine."LP Line No.") then
+                    AddStaleBin(StaleBins, Details, CountLine."Bin Code",
+                        StrSubstNo('Raf %1 madde %2: %3 LP satırı %4 artık yok (LP raftan çıkmış)',
+                            CountLine."Bin Code", CountLine."Item No.", CountLine."LP No.", CountLine."LP Line No."))
+                else
+                    if LPHeader.Get(CountLine."LP No.") then
+                        if CountLine."Bin Code" = LPHeader."Bin Code" then
+                            if (CountLine."System Qty" <> LPLine.Quantity) or CountLine."Unexpected Stock" then
+                                AddStaleBin(StaleBins, Details, CountLine."Bin Code",
+                                    StrSubstNo('Raf %1 madde %2: %3 LP satırında güvenli olmayan sistem miktarı (sayım: %4, LP: %5)',
+                                        CountLine."Bin Code", CountLine."Item No.", CountLine."LP No.", CountLine."System Qty", LPLine.Quantity));
             until CountLine.Next() = 0;
     end;
 
