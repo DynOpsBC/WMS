@@ -99,10 +99,27 @@ report 72375 "DOPSWHS MTE LP Report"
         {
             area(Content)
             {
-                field(InspectorName; InspectorNameOverride)
+                // BADE (19 Eki 2026): terminaldeki MTE gibi Giriş Yapan ve Kalite
+                // Kontrol Onayı BC'deki Çalışanlar listesinden seçilir.
+                field(InspectorEmployee; InspectorEmployeeNo)
                 {
                     ApplicationArea = All;
                     Caption = 'Giriş Yapan';
+                    TableRelation = Employee;
+                    ToolTip = 'Çalışanlar listesinden seçin. Boş bırakılırsa LP''yi oluşturan kullanıcı yazılır.';
+                }
+                field(QcEmployee; QcEmployeeNo)
+                {
+                    ApplicationArea = All;
+                    Caption = 'Kalite Kontrol Onayı - İsim';
+                    TableRelation = Employee;
+                    ToolTip = 'Çalışanlar listesinden seçin. Boş bırakılırsa U.Y yazılır.';
+                }
+                field(QcDate; QcApprovalDate)
+                {
+                    ApplicationArea = All;
+                    Caption = 'Kalite Kontrol Onayı - Tarih';
+                    ToolTip = 'Boş bırakılırsa U.Y yazılır.';
                 }
             }
         }
@@ -141,8 +158,12 @@ report 72375 "DOPSWHS MTE LP Report"
         // BADE (8 Eki 2026): BC etiketi terminal etiketiyle aynı veriyi basmalı.
         // Kategori (üst kategori), INCI adı, tedarikçi madde adı, depolama koşulu
         // ve doküman bilgisi terminalin ZPL'iyle aynı çözümlemeden gelir.
-        if InspectorNameOverride <> '' then
-            Options.Add('operatorDisplayName', InspectorNameOverride);
+        if InspectorEmployeeNo <> '' then
+            Options.Add('inspectorEmployeeNo', InspectorEmployeeNo);
+        if QcEmployeeNo <> '' then
+            Options.Add('qcEmployeeNo', QcEmployeeNo);
+        if QcApprovalDate <> 0D then
+            Options.Add('qcApprovalDate', Format(QcApprovalDate, 0, 9));
         Options.WriteTo(OptionsJson);
         MteBuilder.GetLabelValues(LicensePlate, LPLine, OptionsJson, Values);
 
@@ -266,7 +287,9 @@ report 72375 "DOPSWHS MTE LP Report"
         ReceiptDateText: Text;
         ReceiptNo: Text;
         CheckedBy: Text;
-        InspectorNameOverride: Text;
+        InspectorEmployeeNo: Code[20];
+        QcEmployeeNo: Code[20];
+        QcApprovalDate: Date;
         ApprovedBy: Text;
         QualityApprovalName: Text;
         QualityApprovalDate: Text;
