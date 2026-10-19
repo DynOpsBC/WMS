@@ -389,6 +389,24 @@ table 72000 "DOPSWHS Setup"
             DataClassification = CustomerContent;
             InitValue = false;
         }
+        field(450; "Label Width (mm)"; Decimal)
+        {
+            // Kitoko (19 Eki 2026): DKÇ/EMU etiket çıkarma. Size of the label
+            // roll in the ZPL printer; item, bin and zone labels are laid out on
+            // this canvas (codeunit "DOPSWHS Label Canvas"). 0 = 80 mm. LP and
+            // MTE labels keep their own fixed layouts.
+            Caption = 'Label Width (mm)';
+            DataClassification = CustomerContent;
+            DecimalPlaces = 0 : 1;
+            MinValue = 0;
+        }
+        field(451; "Label Height (mm)"; Decimal)
+        {
+            Caption = 'Label Height (mm)';
+            DataClassification = CustomerContent;
+            DecimalPlaces = 0 : 1;
+            MinValue = 0;
+        }
         field(460; "MTE Report ID"; Integer)
         {
             // BADE (16 Eyl 2026): the terminal MTE runs the customer's own

@@ -225,7 +225,7 @@ internal fun TerminalOperatorLogin(onConnected: (Boolean) -> Unit, onConnectionS
             CompanyLogo(brand = resolveCompanyBrand(BcApi.getCompanyName(context), BuildConfig.FLAVOR), height = 32.dp)
             Column {
                 Text("Depo girişi", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-                Text("BADE · WMS", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text("${com.dynops.bcwms.BuildConfig.TENANT_LABEL} · WMS", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
         AppUpdateEntry()

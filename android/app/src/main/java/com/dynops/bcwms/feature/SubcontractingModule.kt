@@ -627,7 +627,7 @@ private fun SubcontractReceiptDetail(line: JSONObject, onBack: () -> Unit) {
         }
         Spacer(Modifier.height(6.dp))
         Text("Araç ve sürücü", fontWeight = FontWeight.Bold, fontSize = 15.sp)
-        Text("BADE ambar kabul lokasyonlarında aşağıdaki plaka ve sürücü zorunludur.", fontSize = 11.sp, color = Color.Gray)
+        Text("Ambar kabul lokasyonlarında aşağıdaki plaka ve sürücü zorunludur.", fontSize = 11.sp, color = Color.Gray)
         Row(Modifier.fillMaxWidth()) {
             OutlinedTextField(
                 value = vehiclePlateNo, onValueChange = { vehiclePlateNo = it.uppercase() }, label = { Text("Araç plakası") },

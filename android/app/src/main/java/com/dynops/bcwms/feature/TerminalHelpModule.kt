@@ -305,6 +305,7 @@ internal val TerminalHelpTopics = listOf(
         listOf(
             "Ürün Sorgu: bir ürün hangi rafta, hangi lotta, kaç adet var.",
             "Bin Sorgu: bir rafta ne var.",
+            "Etiket Çıkar: ürün, raf veya alan etiketini adetli basın; raflar için A4 belge de alabilirsiniz.",
             "Ambar Hareketleri: son kayıtları görürsünüz, değiştiremezsiniz.",
             "Yazıcılar: etiket ve belge için ayrı ayrı varsayılan yazıcı seçin.",
             "HATA mesajı görürseniz önce Yenile deyip fiziksel durumu kontrol edin.",

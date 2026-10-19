@@ -118,6 +118,22 @@ page 72061 "DOPSWHS Setup"
                     ToolTip = 'Terminaldeki MTE Yazdır bu raporu çalıştırır. BADE''de 60150 seçiliyse terminal için ayrı 60298 LP raporu kullanılır; 60150''nin BC düzeni değişmez. 0 = BCWMS''in kendi MTE raporu.';
                 }
             }
+            // Kitoko (19 Eki 2026): DKÇ/EMU etiket çıkarma, etiket rulosu ölçüsü.
+            group(LabelStock)
+            {
+                Caption = 'Etiket Rulosu (ZPL)';
+                InstructionalText = 'Zebra etiket yazıcısındaki rulonun etiket ölçüsü. Ürün, raf ve alan etiketleri bu ölçüye göre yerleştirilir; boş bırakılırsa 80 x 40 mm kabul edilir. LP ve MTE etiketleri değişmez.';
+                field("Label Width (mm)"; Rec."Label Width (mm)")
+                {
+                    ApplicationArea = All;
+                    ToolTip = 'Etiketin genişliği (mm). Boş/0 = 80 mm. Yaygın rulolar: 80x40, 100x50 (4x2 inç), 100x80, 100x100.';
+                }
+                field("Label Height (mm)"; Rec."Label Height (mm)")
+                {
+                    ApplicationArea = All;
+                    ToolTip = 'Etiketin yüksekliği (mm). Boş/0 = 40 mm. Yazıcıdaki rulo değişince yalnız bu iki değer güncellenir; yeni paket gerekmez.';
+                }
+            }
             group(License)
             {
                 Caption = 'License';

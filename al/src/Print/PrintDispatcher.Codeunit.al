@@ -97,6 +97,50 @@ codeunit 72051 "DOPSWHS Print Dispatcher"
     end;
 
     /// <summary>
+    /// Kitoko (19 Eki 2026): DKÇ/EMU toplu ürün etiketi (9 Eki 2026): item labels for many items at once (BC Item List
+    /// selection). ZPL labels are sent in jobs of LabelsPerJob labels so 2,000
+    /// items become ~40 queue jobs instead of 2,000. Returns the labels sent.
+    /// </summary>
+    procedure PrintItemLabels(var Item: Record Item; PrinterId: Code[50]; Copies: Integer): Integer
+    var
+        Printer: Record "DOPSWHS Printer";
+        Zpl: Text;
+        FirstItemNo: Code[20];
+        InJob: Integer;
+        Sent: Integer;
+    begin
+        if not Item.FindSet() then
+            exit(0);
+        if Printer.Get(PrinterId) and (Printer."Format" = Printer."Format"::PDF) then begin
+            repeat
+                PrintItemLabel(Item, PrinterId, Copies);
+                Sent += 1;
+            until Item.Next() = 0;
+            exit(Sent);
+        end;
+        repeat
+            if InJob = 0 then
+                FirstItemNo := Item."No.";
+            Zpl += BuildItemZpl(Item);
+            InJob += 1;
+            Sent += 1;
+            if InJob = LabelsPerJob() then begin
+                EnqueueZpl(FirstItemNo, Zpl, PrinterId, Copies, Enum::"DOPSWHS IWX Report Usage"::Item, 'Item');
+                Zpl := '';
+                InJob := 0;
+            end;
+        until Item.Next() = 0;
+        if InJob > 0 then
+            EnqueueZpl(FirstItemNo, Zpl, PrinterId, Copies, Enum::"DOPSWHS IWX Report Usage"::Item, 'Item');
+        exit(Sent);
+    end;
+
+    procedure LabelsPerJob(): Integer
+    begin
+        exit(50);
+    end;
+
+    /// <summary>
     /// Prints the material-identification label(s) (MTE) of one LP. The printer
     /// decides the format: a ZPL label printer (the field's 4 x 2 inch stock)
     /// gets one ZPL MTE per item group, exactly as before 1.14.1.37; a PDF
@@ -668,70 +712,161 @@ codeunit 72051 "DOPSWHS Print Dispatcher"
         PrintNode.SendPrintJob(Queue, Copies);
     end;
 
+    // Kitoko (19 Eki 2026): DKÇ/EMU etiket çıkarma. Ürün/raf etiketi sabit
+    // 4x2" yerine Setup'taki etiket ölçüsüne göre (Label Canvas) çizilir;
+    // alan (zone) etiketi eklendi. Hepsi BADE EnqueueZpl kanalından geçer.
     /// <summary>
-    /// 4x2" (812x406 dots, 203 dpi) item label: header band, large item number,
-    /// two-line description, base unit, Code128 + QR. Both barcodes carry the bare
-    /// item number, which the terminal resolves as an item by default.
+    /// Item label: item no. at the largest size that fits the text column,
+    /// description on up to two lines, unit and GTIN, Code128 + QR carrying the
+    /// bare item no. Laid out on the configured label canvas (Setup label size,
+    /// 80x40 mm at DKÇ) so nothing is cut off on the right or at the bottom.
     /// </summary>
-    local procedure BuildItemZpl(var Item: Record Item): Text
+    procedure BuildItemZpl(var Item: Record Item): Text
     var
-        ZplEncoder: Codeunit "DOPSWHS ZPL Encoder";
+        Canvas: Codeunit "DOPSWHS Label Canvas";
+        Lines: List of [Text];
+        Line: Text;
+        UnitText: Text;
+        Zpl: Text;
+        X: Integer;
+        ColumnWidth: Integer;
+        Y: Integer;
         NoFont: Integer;
+        NoWidth: Integer;
     begin
-        NoFont := FitFontSize(Item."No.", 560, 72);
-        exit(
-            '^XA^CI28^PW812^LL406' +
-            '^FO0,0^GB812,52,52^FS' +
-            '^FO24,10^A0N,32,32^FR^FH_^FDÜRÜN ETİKETİ^FS' +
-            '^FO470,12^A0N,26,26^FR^FH_^FB318,1,0,R^FD' + ZplEncoder.EncodeFieldData(CopyStr(CompanyProperty.DisplayName(), 1, 22)) + '^FS' +
-            '^FO24,66^A0N,' + Format(NoFont) + ',' + Format(NoFont) + '^FH_^FD' + ZplEncoder.EncodeFieldData(Item."No.") + '^FS' +
-            '^FO24,148^A0N,30,30^FH_^FD' + ZplEncoder.EncodeFieldData(DescriptionLine(Item.Description, 1, 33)) + '^FS' +
-            '^FO24,184^A0N,30,30^FH_^FD' + ZplEncoder.EncodeFieldData(DescriptionLine(Item.Description, 2, 33)) + '^FS' +
-            '^FO24,222^A0N,24,24^FH_^FDBİRİM: ' + ZplEncoder.EncodeFieldData(Item."Base Unit of Measure") +
-                ItemGtinText(Item) + '^FS' +
-            '^FO24,258^BY' + Format(BarcodeModuleWidth(Item."No.")) + '^BCN,100,Y,N,N^FH_^FD' + ZplEncoder.EncodeFieldData(Item."No.") + '^FS' +
-            '^FO604,66^BQN,2,7^FH_^FDLA,' + ZplEncoder.EncodeFieldData(Item."No.") + '^FS' +
-            '^FO604,320^A0N,22,22^FH_^FDQR = ÜRÜN NO^FS' +
-            '^XZ');
-    end;
-
-    local procedure ItemGtinText(var Item: Record Item): Text
-    var
-        ZplEncoder: Codeunit "DOPSWHS ZPL Encoder";
-    begin
-        if Item.GTIN = '' then
-            exit('');
-        exit('   GTIN: ' + ZplEncoder.EncodeFieldData(Item.GTIN));
+        Canvas.Init();
+        // DKÇ (16 Eyl 2026): no caption under the item QR.
+        Zpl := Canvas.Frame('ÜRÜN ETİKETİ', CompanyProperty.DisplayName(), Item."No.", '', X, ColumnWidth, Y);
+        // DKÇ (17 Eyl 2026): "ürün no çok büyük, uzunsa sığmıyor". Smaller
+        // preferred size, measured glyph widths; if even the small font is too
+        // wide the glyphs are condensed so the number never overprints.
+        NoFont := Canvas.FitFontMeasured(Item."No.", ColumnWidth, Canvas.ItemNoFont(), Canvas.SmallFont());
+        NoWidth := Canvas.FitFontMeasured(Item."No.", ColumnWidth, NoFont, 10);
+        Zpl += Canvas.WriteSized(X, Y, NoFont, NoWidth, ColumnWidth, Item."No.");
+        Y += NoFont + 8;
+        Canvas.WrapText(Item.Description, Canvas.MaxChars(ColumnWidth, Canvas.NormalFont()), 2, Lines);
+        foreach Line in Lines do begin
+            Zpl += Canvas.Write(X, Y, Canvas.NormalFont(), ColumnWidth, Line);
+            Y += Canvas.Pitch();
+        end;
+        UnitText := 'BİRİM: ' + Item."Base Unit of Measure";
+        if Item.GTIN <> '' then
+            UnitText += '   GTIN: ' + Item.GTIN;
+        Zpl += Canvas.Write(X, Y, Canvas.SmallFont(), ColumnWidth, CopyStr(UnitText, 1, Canvas.MaxChars(ColumnWidth, Canvas.SmallFont())));
+        Y += Canvas.SmallFont() + 8;
+        Zpl += Canvas.Code128(X, Y, Canvas.BarHeightToBottom(Y, true), Item."No.", ColumnWidth, true);
+        exit(Zpl + Canvas.Finish());
     end;
 
     /// <summary>
-    /// 4x2" bin label meant to be read from the aisle: the bin code fills the
-    /// left column at the largest size that fits, followed by zone / bin type /
-    /// description, Code128 + QR. Barcodes carry the bare bin code.
+    /// Bin label read from the aisle: the bin code at the largest size that
+    /// fits the text column, zone / bin type / description, Code128 + QR
+    /// carrying the bare bin code. Laid out on the configured label canvas.
     /// </summary>
-    local procedure BuildBinZpl(var Bin: Record Bin): Text
+    procedure BuildBinZpl(var Bin: Record Bin): Text
     var
-        ZplEncoder: Codeunit "DOPSWHS ZPL Encoder";
+        Canvas: Codeunit "DOPSWHS Label Canvas";
         InfoText: Text;
+        Zpl: Text;
+        X: Integer;
+        ColumnWidth: Integer;
+        Y: Integer;
         CodeFont: Integer;
+        CodeWidth: Integer;
+        CodeMax: Integer;
+        FitWidth: Integer;
+        ZoneFont: Integer;
+        ZoneWidth: Integer;
     begin
-        CodeFont := FitFontSize(Bin.Code, 560, 110);
-        if Bin."Zone Code" <> '' then
-            InfoText := 'BÖLGE: ' + Bin."Zone Code";
-        if Bin."Bin Type Code" <> '' then
-            InfoText := AppendLabelPart(InfoText, 'TİP: ' + Bin."Bin Type Code");
-        if Bin.Description <> '' then
-            InfoText := AppendLabelPart(InfoText, Bin.Description);
-        exit(
-            '^XA^CI28^PW812^LL406' +
-            '^FO0,0^GB812,52,52^FS' +
-            '^FO24,10^A0N,32,32^FR^FH_^FDRAF ETİKETİ^FS' +
-            '^FO470,12^A0N,26,26^FR^FH_^FB318,1,0,R^FD' + ZplEncoder.EncodeFieldData(Bin."Location Code") + '^FS' +
-            '^FO24,' + Format(62 + (110 - CodeFont) div 2) + '^A0N,' + Format(CodeFont + 10) + ',' + Format(CodeFont) + '^FH_^FD' + ZplEncoder.EncodeFieldData(Bin.Code) + '^FS' +
-            '^FO24,190^A0N,26,26^FH_^FB560,1,0,L^FD' + ZplEncoder.EncodeFieldData(CopyStr(InfoText, 1, 44)) + '^FS' +
-            '^FO24,236^BY' + Format(BarcodeModuleWidth(Bin.Code)) + '^BCN,110,Y,N,N^FH_^FD' + ZplEncoder.EncodeFieldData(Bin.Code) + '^FS' +
-            '^FO604,180^BQN,2,7^FH_^FDLA,' + ZplEncoder.EncodeFieldData(Bin.Code) + '^FS' +
-            '^XZ');
+        // DKÇ (17 Eyl 2026): "tip yazısını kaldır, bölge kodu daha büyük kalın
+        // fontlu yazılsın". The bin type is warehouse setup, not something the
+        // operator reads off the rack; the zone is what identifies the aisle.
+        InfoText := Bin.Description;
+
+        Canvas.Init();
+        // DKÇ (17 Eyl 2026): "qr altındaki QR = RAF KODU yazısını kaldır".
+        Zpl := Canvas.Frame('RAF ETİKETİ', Bin."Location Code", Bin.Code, '', X, ColumnWidth, Y);
+        CodeMax := Canvas.LabelHeight() * 32 div 100;
+        if CodeMax < 60 then
+            CodeMax := 60;
+        if CodeMax > 120 then
+            CodeMax := 120;
+        // DKÇ (2 Eki 2026): "ODA-RAF-D" basılırken sondaki D satır başına,
+        // O'nun üstüne biniyordu. Düz 0,55 tahmini tireyi (ölçülen 0,91) çok
+        // dar sayıyordu; boyut ölçülmüş harf genişlikleriyle %4 payla seçilir,
+        // en küçük boyut da sığmazsa harfler daraltılır, satır asla taşmaz.
+        FitWidth := ColumnWidth * 96 div 100;
+        CodeFont := Canvas.FitFontMeasured(Bin.Code, FitWidth, CodeMax, 36);
+        CodeWidth := Canvas.FitFontMeasured(Bin.Code, FitWidth, CodeFont, 10);
+        Zpl += Canvas.WriteSized(X, Y, CodeFont + CodeFont div 10, CodeWidth, ColumnWidth, Bin.Code);
+        Y += CodeFont + CodeFont div 10 + 6;
+        if Bin."Zone Code" <> '' then begin
+            ZoneFont := Canvas.FitFontMeasured(Bin."Zone Code", FitWidth, Canvas.QtyFont(), Canvas.NormalFont());
+            ZoneWidth := Canvas.FitFontMeasured(Bin."Zone Code", FitWidth, ZoneFont, 10);
+            Zpl += Canvas.WriteSized(X, Y, ZoneFont, ZoneWidth, ColumnWidth, Bin."Zone Code");
+            Y += ZoneFont + 6;
+        end;
+        if InfoText <> '' then begin
+            Zpl += Canvas.Write(X, Y, Canvas.NormalFont(), ColumnWidth, CopyStr(InfoText, 1, Canvas.MaxChars(ColumnWidth, Canvas.NormalFont())));
+            Y += Canvas.Pitch();
+        end;
+        Y += 2;
+        // DKÇ (17 Eyl 2026): "barkodun altındaki yazı kalksın". The bin code is
+        // already the largest text on the label, so repeating it under the bars
+        // only costs height that the bars themselves can use.
+        Zpl += Canvas.Code128(X, Y, Canvas.BarHeightToBottom(Y, false), Bin.Code, ColumnWidth, false);
+        exit(Zpl + Canvas.Finish());
+    end;
+
+    /// <summary>
+    /// DKÇ (17 Eyl 2026): "sadece akıllı dolabın kodunu alıcam, bin/raf
+    /// girmeden, alan QR'ı yani". Zone label: the zone code as the largest
+    /// text, its description under it, QR + Code128 carrying the zone code.
+    /// </summary>
+    procedure BuildZoneZpl(var Zone: Record Zone): Text
+    var
+        Canvas: Codeunit "DOPSWHS Label Canvas";
+        Zpl: Text;
+        X: Integer;
+        ColumnWidth: Integer;
+        Y: Integer;
+        CodeFont: Integer;
+        CodeWidth: Integer;
+        CodeMax: Integer;
+        FitWidth: Integer;
+    begin
+        Canvas.Init();
+        Zpl := Canvas.Frame('ALAN ETİKETİ', Zone."Location Code", Zone.Code, '', X, ColumnWidth, Y);
+        CodeMax := Canvas.LabelHeight() * 32 div 100;
+        if CodeMax < 60 then
+            CodeMax := 60;
+        if CodeMax > 120 then
+            CodeMax := 120;
+        // Raf etiketiyle aynı ölçülmüş genişlik kuralı (2 Eki 2026).
+        FitWidth := ColumnWidth * 96 div 100;
+        CodeFont := Canvas.FitFontMeasured(Zone.Code, FitWidth, CodeMax, 36);
+        CodeWidth := Canvas.FitFontMeasured(Zone.Code, FitWidth, CodeFont, 10);
+        Zpl += Canvas.WriteSized(X, Y, CodeFont + CodeFont div 10, CodeWidth, ColumnWidth, Zone.Code);
+        Y += CodeFont + CodeFont div 10 + 6;
+        if Zone.Description <> '' then begin
+            Zpl += Canvas.Write(X, Y, Canvas.NormalFont(), ColumnWidth, CopyStr(Zone.Description, 1, Canvas.MaxChars(ColumnWidth, Canvas.NormalFont())));
+            Y += Canvas.Pitch();
+        end;
+        Y += 2;
+        Zpl += Canvas.Code128(X, Y, Canvas.BarHeightToBottom(Y, false), Zone.Code, ColumnWidth, false);
+        exit(Zpl + Canvas.Finish());
+    end;
+
+    procedure PrintZoneLabel(var Zone: Record Zone; PrinterId: Code[50]; Copies: Integer)
+    var
+        Printer: Record "DOPSWHS Printer";
+    begin
+        if Printer.Get(PrinterId) then
+            if Printer."Format" = Printer."Format"::PDF then begin
+                PrintBarcodeDocument(PrinterId, Zone.Code, Copies, Zone.Code, 'ALAN ETIKETI', Zone."Location Code" + ' | ' + Zone.Description);
+                exit;
+            end;
+        EnqueueZpl(Zone.Code, BuildZoneZpl(Zone), PrinterId, Copies, Enum::"DOPSWHS IWX Report Usage"::Bin, 'Zone');
     end;
 
     local procedure AppendLabelPart(Existing: Text; Part: Text): Text
@@ -739,66 +874,6 @@ codeunit 72051 "DOPSWHS Print Dispatcher"
         if Existing = '' then
             exit(Part);
         exit(Existing + '   ' + Part);
-    end;
-
-    /// <summary>
-    /// Code128 module width so the bar pattern stays inside the 560-dot left
-    /// column: ~ (11 x chars + 35) x module dots.
-    /// </summary>
-    local procedure BarcodeModuleWidth(Data: Text): Integer
-    begin
-        if StrLen(Data) <= 10 then
-            exit(3);
-        if StrLen(Data) <= 22 then
-            exit(2);
-        exit(1);
-    end;
-
-    /// <summary>
-    /// Word-wraps Description into two lines of at most MaxChars and returns the
-    /// requested line. ^FB would overprint a third line onto the second, so the
-    /// split is done here and the remainder is cut.
-    /// </summary>
-    local procedure DescriptionLine(Description: Text; LineNo: Integer; MaxChars: Integer): Text
-    var
-        FirstLine: Text;
-        Rest: Text;
-        BreakAt: Integer;
-    begin
-        Description := DelChr(Description, '<>', ' ');
-        if StrLen(Description) <= MaxChars then begin
-            if LineNo = 1 then
-                exit(Description);
-            exit('');
-        end;
-        BreakAt := MaxChars + 1;
-        while (BreakAt > 1) and (Description[BreakAt] <> ' ') do
-            BreakAt -= 1;
-        if BreakAt <= MaxChars div 2 then
-            BreakAt := MaxChars + 1;
-        FirstLine := DelChr(CopyStr(Description, 1, BreakAt - 1), '>', ' ');
-        Rest := DelChr(CopyStr(Description, BreakAt), '<', ' ');
-        if LineNo = 1 then
-            exit(FirstLine);
-        exit(CopyStr(Rest, 1, MaxChars));
-    end;
-
-    /// <summary>
-    /// Largest Zebra font 0 size (dots) at which Value still fits MaxWidth.
-    /// Font 0 glyphs average ~0.55 x the point size in width.
-    /// </summary>
-    local procedure FitFontSize(Value: Text; MaxWidth: Integer; Preferred: Integer): Integer
-    var
-        Size: Integer;
-    begin
-        if StrLen(Value) = 0 then
-            exit(Preferred);
-        Size := MaxWidth div StrLen(Value) * 100 div 55;
-        if Size > Preferred then
-            Size := Preferred;
-        if Size < 24 then
-            Size := 24;
-        exit(Size);
     end;
 
     /// <summary>

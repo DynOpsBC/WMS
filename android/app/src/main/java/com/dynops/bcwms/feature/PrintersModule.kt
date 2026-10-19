@@ -81,6 +81,10 @@ internal data class InquiryPrinterChoice(val printerCode: String, val warning: S
 internal suspend fun resolveInquiryPrinter(context: Context): Result<InquiryPrinterChoice> = runCatching {
     val label = getDefaultPrinter(context)
     val document = getDefaultPrinter(context, PRINTER_USAGE_DOCUMENT)
+    // Kitoko/BADE: BcApi boş printerId'li baskıyı zaten durdurur; operatöre
+    // yazıcıyı nereden seçeceğini söyle, BC'ye yazıcısız istek gitmesin.
+    if (label.isBlank() && document.isBlank() && com.dynops.bcwms.isBadeFamily())
+        error("Bu terminal için etiket yazıcısı seçilmedi. Yazıcılar ekranından bir etiket yazıcısı seçin.")
     if (label.isBlank()) return@runCatching InquiryPrinterChoice(document, "")
     val escaped = label.replace("'", "''")
     val response = BcApi.get(context, "printers?\$filter=code eq '$escaped'&\$top=1")
@@ -108,6 +112,7 @@ fun PrintersModule() {
     var defaultDocumentCode by remember { mutableStateOf(getDefaultPrinter(context, PRINTER_USAGE_DOCUMENT)) }
     var scannedBarcode by rememberSaveable { mutableStateOf("") }
     var barcodePrintBusy by remember { mutableStateOf(false) }
+    var nameLabelBusy by remember { mutableStateOf(false) }
     val productionCustomer = shouldForceProductionFlow(BuildConfig.FLAVOR)
     val terminalManaged = com.dynops.bcwms.isBadeFamily() && TerminalSession.code(context).isNotBlank()
 
@@ -117,24 +122,14 @@ fun PrintersModule() {
             status = "UYARI: Yazıcı ayarı için PIN ile giriş yapın."
             return
         }
-        val terminal = TerminalSession.code(context)
-        val terminalScope = TerminalSession.scope(context)
         saving = true
         status = "Yazıcı BC'ye kaydediliyor..."
         scope.launch {
             try {
-                val response = BcApi.boundAction(context, "wmsTerminals", terminal, "selectPrinter",
-                    JSONObject().put("username", BcApi.getLocalUser(context))
-                        .put("usage", usage).put("printerCode", code).toString())
-                val selection = if (response.ok) parseTerminalPrinterSelection(response.body, terminal, true) else null
-                if (selection == null) {
-                    status = if (response.httpCode == 404) "HATA: BC uzantısını 1.14.1.58 veya üstüne güncelleyin. Yazıcı kaydedilmedi."
-                        else "HATA: Yazıcı BC'ye kaydedilemedi. Bağlantıyı ve yetkinizi kontrol edip yenileyin."
+                val selection = selectTerminalPrinter(context, code, usage).getOrElse {
+                    status = "HATA: ${it.message}"
                     return@launch
                 }
-                if (terminalScope != TerminalSession.scope(context) || terminal != TerminalSession.code(context)) return@launch
-                applyTerminalPrinterDefault(context, selection.label, PRINTER_USAGE_LABEL)
-                applyTerminalPrinterDefault(context, selection.document, PRINTER_USAGE_DOCUMENT)
                 defaultLabelCode = selection.label
                 defaultDocumentCode = selection.document
                 status = if (code.isBlank()) "TAMAM: ${if (usage == PRINTER_USAGE_LABEL) "Etiket" else "Belge"} yazıcısı seçimi terminalden ve BC'den kaldırıldı."
@@ -403,6 +398,17 @@ fun PrintersModule() {
                                 },
                             ) { Text(if (isDocumentDefault) "✓ Belge" else "Belge", fontSize = 12.sp) }
                         }
+                        // Kitoko (19 Eki 2026): EMU'daki gibi yazıcının üstüne yapıştırılacak ad etiketi.
+                        if (format == "ZPL") OutlinedButton(enabled = active && !nameLabelBusy && !loading, onClick = {
+                            nameLabelBusy = true
+                            scope.launch {
+                                try {
+                                    val result = BcApi.boundAction(context, "printers", code, "printNameLabel", "{}")
+                                    status = if (result.ok) "TAMAM: Yazıcı ad etiketi ${desc.ifBlank { code }} yazıcısının kuyruğuna eklendi."
+                                        else "HATA: ${BcApi.errorMessage(result.body)}"
+                                } finally { nameLabelBusy = false }
+                            }
+                        }) { Text(if (nameLabelBusy) "Gönderiliyor..." else "Yazıcı ad etiketi çıkar", fontSize = 12.sp) }
                         if (!productionCustomer) {
                             Spacer(Modifier.height(6.dp))
                             Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {

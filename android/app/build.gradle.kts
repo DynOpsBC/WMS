@@ -244,6 +244,8 @@ dependencies {
 
   // Barcode scanning (camera) — graceful manual-entry fallback if camera/permission unavailable
   implementation("com.google.mlkit:barcode-scanning:17.3.0")
+  // Kitoko (19 Eki 2026): A4 raf etiketi belgesindeki QR / Code 128 (EMU'dan).
+  implementation("com.google.zxing:core:3.5.3")
   implementation("androidx.camera:camera-core:1.4.0")
   implementation("androidx.camera:camera-camera2:1.4.0")
   implementation("androidx.camera:camera-lifecycle:1.4.0")

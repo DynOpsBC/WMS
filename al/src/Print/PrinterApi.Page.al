@@ -66,6 +66,30 @@ page 72289 "DOPSWHS Printer API"
         exit(Client.EnqueueSelfTest(Rec."Code"));
     end;
 
+    // Kitoko (19 Eki 2026): DKÇ/EMU yazıcı ad etiketi (yazıcının üstüne
+    // yapıştırılan 50x30 mm ad); BADE Self-Host kuyruğundan geçer.
+    [ServiceEnabled]
+    procedure printNameLabel(): Integer
+    var
+        Client: Codeunit "DOPSWHS Self-Host Print Client";
+        Encoder: Codeunit "DOPSWHS ZPL Encoder";
+        Name: Text;
+        Zpl: Text;
+    begin
+        Rec.TestField(Active, true);
+        if Rec.Format <> Rec.Format::ZPL then
+            Error('Yazıcı ad etiketi için ZPL etiket yazıcısı seçin.');
+        Name := Rec.Description;
+        if Name = '' then
+            Name := Rec."Printer Handle";
+        if Name = '' then
+            Name := Rec.Code;
+        Zpl := '^XA^CI28^PW400^LL240' +
+            '^FO10,24^A0N,72,72^FB380,2,4,C^FH_^FD' + Encoder.EncodeFieldData(Name) +
+            '^FS^FO10,210^A0N,16,16^FB380,1,0,C^FH_^FD' + Encoder.EncodeFieldData(Rec.Code) + '^FS^PQ1^XZ';
+        exit(Client.Enqueue('PRINTER-NAME', Rec.Code, Rec.Format, Zpl, 1));
+    end;
+
     [ServiceEnabled]
     procedure printBarcodeTest(barcodeValue: Text; copies: Integer): Integer
     var

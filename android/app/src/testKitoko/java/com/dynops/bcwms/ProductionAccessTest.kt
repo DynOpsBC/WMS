@@ -22,6 +22,11 @@ class ProductionAccessTest {
         }
     }
 
+    @Test fun `label screen is open to every production operator`() {
+        // Kitoko (19 Eki 2026): Etiket Çıkar stok değiştirmez; yönetici kapısı yok.
+        assertTrue(productionScreenAllowed(Screen.Labels, "Production", manager = false))
+    }
+
     @Test fun `production operators can access only operations already rolled out`() {
         for (environment in listOf("Production", "production", " PRODUCTION ")) {
             for (screen in Screen.entries) {
