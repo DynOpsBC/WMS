@@ -9,8 +9,8 @@ table 72284 "DOPSWHS Local User"
     Caption = 'Local WMS User';
     DataClassification = EndUserIdentifiableInformation;
     Access = Public;
-    LookupPageId = "DOPSWHS Local User List";
-    DrillDownPageId = "DOPSWHS Local User List";
+    LookupPageId = "DOPSWHS Terminal Users";
+    DrillDownPageId = "DOPSWHS Terminal Users";
 
     fields
     {
@@ -37,6 +37,14 @@ table 72284 "DOPSWHS Local User"
         field(71; "Failed Login Count"; Integer)   { Caption = 'Failed Logins'; Editable = false; }
         field(80; "Created DateTime"; DateTime) { Caption = 'Created'; Editable = false; }
         field(81; "Created By"; Code[50])       { Caption = 'Created By'; Editable = false; }
+        field(90; "Terminal Code"; Code[20])
+        {
+            Caption = 'Terminal';
+            TableRelation = "DOPSWHS WMS Terminal".Code;
+        }
+        field(91; "PIN Login"; Boolean) { Caption = 'PIN Girişi'; Editable = false; }
+        field(92; "PIN Locked Until"; DateTime) { Caption = 'PIN Kilidi'; Editable = false; }
+        field(93; "Terminal Admin"; Boolean) { Caption = 'Yönetici (Tüm Terminaller)'; }
         field(99; "Last Modified DateTime"; DateTime) { Caption = 'Modified'; Editable = false; }
     }
 
@@ -47,14 +55,52 @@ table 72284 "DOPSWHS Local User"
     }
 
     trigger OnInsert()
+    var
+        AuthMgt: Codeunit "DOPSWHS Local Auth Mgmt";
     begin
+        AuthMgt.EnsureCanManageLocalUsers();
         if "Created DateTime" = 0DT then "Created DateTime" := CurrentDateTime();
         if "Created By" = '' then "Created By" := CopyStr(UserId(), 1, 50);
         "Last Modified DateTime" := CurrentDateTime();
     end;
 
     trigger OnModify()
+    var
+        AuthMgt: Codeunit "DOPSWHS Local Auth Mgmt";
     begin
+        if ProtectedUserFieldsChanged() then
+            AuthMgt.EnsureCanManageLocalUsers();
         "Last Modified DateTime" := CurrentDateTime();
+    end;
+
+    trigger OnDelete()
+    var
+        AuthMgt: Codeunit "DOPSWHS Local Auth Mgmt";
+    begin
+        AuthMgt.EnsureCanManageLocalUsers();
+    end;
+
+    trigger OnRename()
+    var
+        AuthMgt: Codeunit "DOPSWHS Local Auth Mgmt";
+    begin
+        AuthMgt.EnsureCanManageLocalUsers();
+    end;
+
+    local procedure ProtectedUserFieldsChanged(): Boolean
+    begin
+        exit((Username <> xRec.Username) or
+            ("Display Name" <> xRec."Display Name") or
+            ("Password Hash" <> xRec."Password Hash") or
+            ("Password Salt" <> xRec."Password Salt") or
+            ("Default Location Code" <> xRec."Default Location Code") or
+            ("Default Bin Code" <> xRec."Default Bin Code") or
+            (Locale <> xRec.Locale) or
+            ("Hide Test Tools" <> xRec."Hide Test Tools") or
+            ("Hide Admin Tools" <> xRec."Hide Admin Tools") or
+            (Disabled <> xRec.Disabled) or
+            ("Terminal Code" <> xRec."Terminal Code") or
+            ("PIN Login" <> xRec."PIN Login") or
+            ("Terminal Admin" <> xRec."Terminal Admin"));
     end;
 }

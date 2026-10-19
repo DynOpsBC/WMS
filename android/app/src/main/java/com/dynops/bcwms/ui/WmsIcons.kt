@@ -52,13 +52,11 @@ enum class WmsGlyph {
     QUALITY,
     QUALITY_MANAGEMENT,
     ITEM_SEARCH,
-    STOCK,
     BIN_SEARCH,
     ENTRIES,
     FIELD_SETTINGS,
     HEALTH,
     PRINTER,
-    LABEL,
     TEST,
     POSTING,
     CONNECTION,
@@ -69,7 +67,6 @@ enum class WmsGlyph {
     CLOSE,
     CHEVRON,
     LAYOUT,
-    MIC,
 }
 
 fun glyphForScreen(screen: Screen): WmsGlyph = when (screen) {
@@ -90,9 +87,7 @@ fun glyphForScreen(screen: Screen): WmsGlyph = when (screen) {
     Screen.Quality -> WmsGlyph.QUALITY
     Screen.QualityMgmt -> WmsGlyph.QUALITY_MANAGEMENT
     Screen.ItemInquiry -> WmsGlyph.ITEM_SEARCH
-    Screen.Stock -> WmsGlyph.STOCK
     Screen.BinInquiry -> WmsGlyph.BIN_SEARCH
-    Screen.Labels -> WmsGlyph.LABEL
     Screen.WhseEntries -> WmsGlyph.ENTRIES
     Screen.FieldSettings -> WmsGlyph.FIELD_SETTINGS
     Screen.SelfTest -> WmsGlyph.HEALTH
@@ -371,22 +366,6 @@ fun WmsIcon(
                 line(0.11f, 0.34f, 0.335f, 0.47f); line(0.56f, 0.34f, 0.335f, 0.47f)
                 magnifier(0.65f, 0.65f)
             }
-            WmsGlyph.STOCK -> {
-                roundRect(0.12f, 0.16f, 0.76f, 0.20f, fill = true)
-                roundRect(0.12f, 0.16f, 0.76f, 0.20f)
-                thinLine(0.38f, 0.16f, 0.38f, 0.36f)
-                thinLine(0.62f, 0.16f, 0.62f, 0.36f)
-
-                roundRect(0.12f, 0.42f, 0.76f, 0.20f, fill = true)
-                roundRect(0.12f, 0.42f, 0.76f, 0.20f)
-                thinLine(0.38f, 0.42f, 0.38f, 0.62f)
-                thinLine(0.62f, 0.42f, 0.62f, 0.62f)
-
-                roundRect(0.12f, 0.68f, 0.76f, 0.20f, fill = true)
-                roundRect(0.12f, 0.68f, 0.76f, 0.20f)
-                thinLine(0.38f, 0.68f, 0.38f, 0.88f)
-                thinLine(0.62f, 0.68f, 0.62f, 0.88f)
-            }
             WmsGlyph.BIN_SEARCH -> {
                 roundRect(0.10f, 0.47f, 0.48f, 0.32f, fill = true); roundRect(0.10f, 0.47f, 0.48f, 0.32f)
                 thinLine(0.10f, 0.63f, 0.58f, 0.63f); thinLine(0.34f, 0.47f, 0.34f, 0.79f)
@@ -425,12 +404,6 @@ fun WmsIcon(
                 drawPath(heart, soft); drawPath(heart, color, style = lineStroke)
                 val pulse = Path().apply { moveTo(p(0.23f, 0.52f).x, p(0.23f, 0.52f).y); lineTo(p(0.39f, 0.52f).x, p(0.39f, 0.52f).y); lineTo(p(0.46f, 0.39f).x, p(0.46f, 0.39f).y); lineTo(p(0.56f, 0.64f).x, p(0.56f, 0.64f).y); lineTo(p(0.64f, 0.52f).x, p(0.64f, 0.52f).y); lineTo(p(0.77f, 0.52f).x, p(0.77f, 0.52f).y) }
                 drawPath(pulse, color, style = thin)
-            }
-            WmsGlyph.LABEL -> {
-                roundRect(0.12f, 0.20f, 0.76f, 0.60f, fill = true)
-                roundRect(0.12f, 0.20f, 0.76f, 0.60f)
-                for (x in listOf(0.26f, 0.34f, 0.45f, 0.51f, 0.62f, 0.73f)) line(x, 0.34f, x, 0.60f)
-                line(0.27f, 0.69f, 0.72f, 0.69f)
             }
             WmsGlyph.PRINTER -> {
                 roundRect(0.24f, 0.12f, 0.52f, 0.28f, fill = true); roundRect(0.24f, 0.12f, 0.52f, 0.28f)
@@ -489,11 +462,6 @@ fun WmsIcon(
                 drawArc(color, 25f, 145f, false, p(0.17f, 0.17f), Size(s * 0.66f, s * 0.66f), style = lineStroke)
                 line(0.23f, 0.75f, 0.22f, 0.55f)
                 line(0.23f, 0.75f, 0.43f, 0.72f)
-            }
-            WmsGlyph.MIC -> {
-                roundRect(0.38f, 0.12f, 0.24f, 0.44f)
-                drawArc(color, 0f, 180f, false, p(0.26f, 0.30f), Size(s * 0.48f, s * 0.44f), style = lineStroke)
-                line(0.50f, 0.74f, 0.50f, 0.88f); line(0.36f, 0.88f, 0.64f, 0.88f)
             }
             WmsGlyph.CLOSE -> { line(0.24f, 0.24f, 0.76f, 0.76f); line(0.76f, 0.24f, 0.24f, 0.76f) }
             WmsGlyph.CHEVRON -> { line(0.38f, 0.23f, 0.64f, 0.50f); line(0.64f, 0.50f, 0.38f, 0.77f) }

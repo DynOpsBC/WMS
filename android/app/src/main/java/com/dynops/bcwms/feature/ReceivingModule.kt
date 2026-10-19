@@ -32,6 +32,30 @@ internal fun resolvedActiveReceiptLp(
 ): String? = serverLpNo.trim().takeIf { serverLpOpen && it.isNotBlank() }
     ?: successfulStartLp?.trim()?.takeIf { it.isNotBlank() }
 
+/**
+ * Bu oturumda miktarı girilmiş ama LP'ye bağlanmamış satırlar. Palet LP dağıtımı
+ * olan satırlar kendi paletlerini taşır. BC'nin önceden doldurduğu, operatörün
+ * dokunmadığı satırlar sayılmaz.
+ */
+internal fun receiptLinesAwaitingLp(lines: List<JSONObject>, touched: Set<Int>): List<Int> = lines
+    .filter { it.optInt("lineNo") in touched }
+    .filter { it.optDouble("qtyToReceive", 0.0) > 0.0 }
+    .filter { it.optString("licensePlateNo").isBlank() && it.optInt("bulkLpCount", 0) == 0 }
+    .map { it.optInt("lineNo") }
+
+internal fun receiptAttachLinesBody(lpNo: String, lineNos: List<Int>): String =
+    JSONObject().apply {
+        put("lpNo", lpNo)
+        put("lineNosJson", org.json.JSONArray(lineNos).toString())
+    }.toString()
+
+/** "LP Kapat": etiket nakilden sonra basılır; taslak palette henüz ürün yoktur. */
+internal fun receiptStopLpBody(lpNo: String): String =
+    JSONObject().apply { put("lpNo", lpNo); put("printLabel", false) }.toString()
+
+internal fun receiptLpClosedStatus(lpNo: String): String =
+    "TAMAM: $lpNo kapatıldı. Sonraki palet için LP Başlat'a, bitince Naklet'e basın."
+
 internal fun restoredBulkReceiptLineNos(lines: List<JSONObject>): Set<Int> = lines
     .asSequence()
     .filter {
@@ -44,47 +68,6 @@ internal fun restoredBulkReceiptLineNos(lines: List<JSONObject>): Set<Int> = lin
 
 internal fun bulkReceiptKeepsSingleLedgerEntrySupported(lines: List<JSONObject>): Boolean =
     lines.isNotEmpty() && lines.all { it.has("bulkLpCount") }
-
-internal fun canMutateReceipt(
-    isDkc: Boolean,
-    headerLoaded: Boolean,
-    linesComplete: Boolean,
-    assignedUserId: String,
-    localUserId: String,
-): Boolean = headerLoaded && linesComplete &&
-    (isDkc || canMutateAssignedDocument(assignedUserId, localUserId))
-
-internal fun receiptProductPreviews(lines: List<JSONObject>): Map<String, List<String>> = lines
-    .asSequence()
-    .filter { it.optString("no").isNotBlank() && it.optString("itemNo").isNotBlank() }
-    .groupBy { it.optString("no") }
-    .mapValues { (_, receiptLines) ->
-        receiptLines.distinctBy { it.optString("itemNo") }.map { line ->
-            val description = line.optString("description").trim()
-            if (description.isBlank()) line.optString("itemNo")
-            else "${line.optString("itemNo")} · $description"
-        }
-    }
-
-@Composable
-private fun DkcReceiptPreviewCard(receipt: JSONObject, products: List<String>, previewLoaded: Boolean, onClick: () -> Unit) {
-    Card(onClick = onClick, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(10.dp)) {
-        Column(Modifier.padding(12.dp)) {
-            Text(receipt.optString("no"), fontWeight = FontWeight.Bold, fontSize = 16.sp)
-            Text("Lokasyon: ${firstValue(receipt, "locationCode")} · Kaynak: ${firstValue(receipt, "sourceNo")}", fontSize = 12.sp)
-            Spacer(Modifier.height(6.dp))
-            Text("Ürünler", fontWeight = FontWeight.SemiBold, fontSize = 12.sp)
-            when {
-                products.isNotEmpty() -> {
-                    products.take(3).forEach { Text(it, fontSize = 12.sp) }
-                    if (products.size > 3) Text("+${products.size - 3} ürün daha", fontSize = 12.sp)
-                }
-                !previewLoaded -> Text("Yükleniyor...", fontSize = 12.sp)
-                else -> Text("Ürün önizlemesi yok", fontSize = 12.sp)
-            }
-        }
-    }
-}
 
 /**
  * Mal Kabul (Receiving).
@@ -125,25 +108,19 @@ fun ReceivingModule() {
 @Composable
 private fun WhseReceiptTab() {
     val context = LocalContext.current
-    val isDkc = com.dynops.bcwms.isEmuFamily(com.dynops.bcwms.BuildConfig.FLAVOR)
     val scope = rememberCoroutineScope()
     var selected by remember { mutableStateOf<String?>(null) }
     var rows by remember { mutableStateOf<List<JSONObject>>(emptyList()) }
-    var productPreviews by remember { mutableStateOf<Map<String, List<String>>>(emptyMap()) }
-    var previewLoaded by remember { mutableStateOf(false) }
     var status by remember { mutableStateOf("") }
     var loading by remember { mutableStateOf(false) }
     var search by remember { mutableStateOf("") }
-    var showAll by remember { mutableStateOf(isDkc) }
+    var showAll by remember { mutableStateOf(false) }
 
     fun load() {
         scope.launch {
             loading = true; status = "Yükleniyor..."
-            productPreviews = emptyMap()
-            previewLoaded = false
-            val allReceipts = isDkc || showAll
-            val myUser = if (allReceipts) "" else BcApi.currentUserId(context)
-            if (!canLoadAssignedOnlyList(allReceipts, myUser)) {
+            val myUser = if (showAll) "" else BcApi.currentUserId(context)
+            if (!canLoadAssignedOnlyList(showAll, myUser)) {
                 rows = emptyList(); loading = false
                 status = "HATA: Depo kullanıcısı doğrulanamadı. Yeniden giriş yapın."
                 return@launch
@@ -152,9 +129,9 @@ private fun WhseReceiptTab() {
             // "1002" yazınca 1002'yi içeren belgeler de listede kalır. Belgeler
             // aramasız çekilir, eşleşme istemcide birleştirilir.
             val filter = com.dynops.bcwms.ui.buildODataFilter(
-                com.dynops.bcwms.ui.assignedToMeClause(myUser, enabled = !allReceipts),
+                com.dynops.bcwms.ui.assignedToMeClause(myUser, enabled = !showAll),
             )
-            val page = BcApi.getAllPagesWithStandardFallback(context, "receipts?\$top=100&\$orderby=no desc&\$select=no,locationCode,assignedUserId,sourceNo,vendorSourceName,dueDate,percentComplete$filter")
+            val page = BcApi.getAllPagesWithStandardFallback(context, "receipts?\$top=100&\$orderby=no desc&\$select=no,locationCode,assignedUserId,assignedUserName,sourceNo,vendorSourceName,dueDate,percentComplete$filter")
             val all = if (page.complete) page.rows else emptyList()
             val q = search.trim()
             var itemHit = 0
@@ -171,24 +148,10 @@ private fun WhseReceiptTab() {
                         it.optString("no") in itemDocsSet
                 }.also { filtered -> itemHit = filtered.count { it.optString("no") in itemDocsSet } }
             }
-            status = if (!page.complete) "HATA: Mal kabul listesinin tamamı alınamadı. Yenileyin."
-                else if (rows.isEmpty()) (if (q.isNotBlank()) "BOŞ: '$q' ile eşleşen belge/ürün yok" else if (allReceipts) "BOŞ: Açık ambar mal kabul belgesi yok" else "BOŞ: Size atanmış mal kabul yok")
-                else "TAMAM: ${rows.size} belge" + (if (itemHit > 0) " · 🔎 '$q' ürününü içerenler dahil" else "")
-            if (isDkc && rows.isNotEmpty()) {
-                val linePage = BcApi.getAllPages(
-                    context,
-                    "receiptLines?\$select=no,itemNo,description",
-                    maxPages = 1000,
-                )
-                if (linePage.complete) {
-                    val visibleNos = rows.mapTo(mutableSetOf()) { it.optString("no") }
-                    productPreviews = receiptProductPreviews(linePage.rows.filter { it.optString("no") in visibleNos })
-                } else {
-                    status += " · ürün önizlemesi alınamadı"
-                }
-                previewLoaded = true
-            }
             loading = false
+            status = if (!page.complete) "HATA: Mal kabul listesinin tamamı alınamadı. Yenileyin."
+                else if (rows.isEmpty()) (if (q.isNotBlank()) "BOŞ: '$q' ile eşleşen belge/ürün yok" else if (showAll) "BOŞ: Açık ambar mal kabul belgesi yok" else "BOŞ: Size atanmış mal kabul yok")
+                else "TAMAM: ${rows.size} belge" + (if (itemHit > 0) " · 🔎 '$q' ürününü içerenler dahil" else "")
         }
     }
     LaunchedEffect(showAll) { load() }
@@ -214,11 +177,9 @@ private fun WhseReceiptTab() {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Button(onClick = { load() }, enabled = !loading) { WmsRefreshLabel(loading) }
             Spacer(Modifier.width(12.dp))
-            if (!isDkc) {
-                FilterChip(selected = !showAll, onClick = { showAll = false }, label = { Text("Bana atanan") })
-                Spacer(Modifier.width(6.dp))
-                FilterChip(selected = showAll, onClick = { showAll = true }, label = { Text("Tümü") })
-            }
+            FilterChip(selected = !showAll, onClick = { showAll = false }, label = { Text("Bana atanan") })
+            Spacer(Modifier.width(6.dp))
+            FilterChip(selected = showAll, onClick = { showAll = true }, label = { Text("Tümü") })
         }
         Spacer(Modifier.height(8.dp))
         com.dynops.bcwms.ui.DocSearchBar(value = search, onValueChange = { search = it }, onSearch = { load() }, label = "Mal kabul no ile ara")
@@ -228,23 +189,14 @@ private fun WhseReceiptTab() {
         Spacer(Modifier.height(8.dp))
         LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             items(shownRows) { d ->
-                if (isDkc) {
-                    DkcReceiptPreviewCard(
-                        receipt = d,
-                        products = productPreviews[d.optString("no")].orEmpty(),
-                        previewLoaded = previewLoaded,
-                        onClick = { selected = d.optString("no") },
-                    )
-                } else {
-                    OperationDocumentCard(
-                        title = d.optString("no"),
-                        metadata = "Lokasyon: ${firstValue(d, "locationCode")}  ·  Kaynak: ${firstValue(d, "sourceNo")}\nAtanan: ${rawValue(d, "assignedUserId").ifBlank { "Atanmamış" }}",
-                        progressPercent = d.optInt("percentComplete"),
-                        onClick = { selected = d.optString("no") },
-                    )
-                }
+                OperationDocumentCard(
+                    title = d.optString("no"),
+                    metadata = "Lokasyon: ${firstValue(d, "locationCode")}  ·  Kaynak: ${firstValue(d, "sourceNo")}\nAtanan: ${rawValue(d, "assignedUserName", "assignedUserId").ifBlank { "Atanmamış" }}",
+                    progressPercent = d.optInt("percentComplete"),
+                    onClick = { selected = d.optString("no") },
+                )
             }
-            if (rows.isEmpty() && !loading) item { EmptyState(if (isDkc || showAll) "Açık ambar mal kabul belgesi yok. PO'dan direkt mal kabul için sağdaki sekmeyi kullanın." else "Size atanmış mal kabul yok. Tümünü görmek için \"Tümü\" seçin.") }
+            if (rows.isEmpty() && !loading) item { EmptyState(if (showAll) "Açık ambar mal kabul belgesi yok. PO'dan direkt mal kabul için sağdaki sekmeyi kullanın." else "Size atanmış mal kabul yok. Tümünü görmek için \"Tümü\" seçin.") }
         }
     }
 }
@@ -255,7 +207,6 @@ private fun ReceiveDocument(no: String, onBack: () -> Unit) {
     // Donanım Geri tuşu belge ekranından uygulamayı kapatmasın; listeye dönsün.
     androidx.activity.compose.BackHandler { onBack() }
     val context = LocalContext.current
-    val isDkc = com.dynops.bcwms.isEmuFamily(com.dynops.bcwms.BuildConfig.FLAVOR)
     val scope = rememberCoroutineScope()
     var header by remember { mutableStateOf<JSONObject?>(null) }
     var lines by remember { mutableStateOf<List<JSONObject>>(emptyList()) }
@@ -265,10 +216,16 @@ private fun ReceiveDocument(no: String, onBack: () -> Unit) {
     var status by remember { mutableStateOf("") }
     var busy by remember { mutableStateOf(false) }
     var activeLp by remember { mutableStateOf<String?>(null) }
+    var attachPrompt by remember { mutableStateOf<Pair<String, List<Int>>?>(null) }
     var bulkLpTarget by remember(no) { mutableStateOf<JSONObject?>(null) }
     var showBulkLinePicker by remember(no) { mutableStateOf(false) }
+    // BADE (14 Eki 2026): karma palet — birden çok ürün aynı paletlerde, tek kayıt.
+    var showMixedLinePicker by remember(no) { mutableStateOf(false) }
+    var mixedLines by remember(no) { mutableStateOf<List<JSONObject>?>(null) }
     var printReceipt by remember(no) { mutableStateOf(false) }
+    var skipPrinting by remember(no) { mutableStateOf(false) }
     var showReceiptMte by remember(no) { mutableStateOf(false) }
+    var manualLabelPrint by remember(no) { mutableStateOf(false) }
     // TOPLU POST: satır onayı (PATCH receiptLines) belgeyi ASLA postlamaz —
     // yalnız "Qty. to Receive"/lot/seri/LP yazar. Post tek bir yerden, alttaki
     // butondan ve özet onayından sonra çalışır.
@@ -343,7 +300,7 @@ private fun ReceiveDocument(no: String, onBack: () -> Unit) {
     LaunchedEffect(no) { reload() }
 
     fun action(name: String, body: String, okMsg: String, onResult: (BcApi.ApiResult) -> Unit = {}) {
-        if (!isDkc && !canMutateAssignedDocument(header?.optString("assignedUserId").orEmpty(), myUserId)) {
+        if (!canMutateAssignedDocument(header?.optString("assignedUserId").orEmpty(), myUserId)) {
             status = documentOwnershipMessage(header?.optString("assignedUserId").orEmpty(), myUserId)
             return
         }
@@ -354,6 +311,25 @@ private fun ReceiveDocument(no: String, onBack: () -> Unit) {
             status = if (r.ok) "TAMAM: $okMsg (HTTP ${r.httpCode})" else "HATA: ${BcApi.errorMessage(r.body)} (HTTP ${r.httpCode})"
             onResult(r)
             if (r.ok) reload()
+        }
+    }
+
+    /** Hazırlanmış Palet LP / karma palet dağıtımını geri alır (BC cancelLPDistribution). */
+    fun cancelDistribution(lineNo: Int) {
+        scope.launch {
+            busy = true
+            status = "Palet dağıtımı geri alınıyor..."
+            val r = BcApi.boundAction(
+                context, "receipts", no, "cancelLPDistribution",
+                JSONObject().apply { put("lineNo", lineNo) }.toString(),
+            )
+            busy = false
+            if (r.ok) {
+                val cancelledLines = cancelledDistributionLineNos(BcApi.scalarValue(r.body)).ifEmpty { setOf(lineNo) }
+                touched = touched - cancelledLines
+                status = "TAMAM: Dağıtım geri alındı; ${cancelledLines.size} ürünün kabul miktarı sıfırlandı. Palet LP ya da Karma Palet ile yeniden hazırlayabilirsiniz."
+                reload()
+            } else status = QcErrorParser.friendlyStatus(BcApi.errorMessage(r.body), r.httpCode)
         }
     }
 
@@ -380,7 +356,8 @@ private fun ReceiveDocument(no: String, onBack: () -> Unit) {
 
     val h = header
     val assignedUserId = h?.optString("assignedUserId")?.trim().orEmpty()
-    val canMutate = canMutateReceipt(isDkc, headerLoaded, linesComplete, assignedUserId, myUserId)
+    val canMutate = headerLoaded && linesComplete &&
+        canMutateAssignedDocument(assignedUserId, myUserId)
     val vehicleInfoRequired = h?.optBoolean("vehicleInfoRequired") == true
     val vehiclePlate = h?.optString("vehiclePlateNo")?.trim().orEmpty()
     val driverCode = h?.optString("driverCode")?.trim().orEmpty()
@@ -439,7 +416,7 @@ private fun ReceiveDocument(no: String, onBack: () -> Unit) {
                 title = no,
                 subtitle = "Lokasyon: ${h?.optString("locationCode") ?: ""} · Kaynak: ${h?.optString("sourceNo") ?: "-"}" +
                     (activeLp?.let { "\nAktif LP: $it" } ?: ""),
-                badge = if (isDkc) "" else rawValue(h ?: JSONObject(), "assignedUserId").ifBlank { "Atanmadı" },
+                badge = rawValue(h ?: JSONObject(), "assignedUserName", "assignedUserId").ifBlank { "Atanmadı" },
                 percent = h?.optDouble("percentComplete")?.toInt() ?: 0
             )
             if (vehicleInfoRequired) {
@@ -457,7 +434,7 @@ private fun ReceiveDocument(no: String, onBack: () -> Unit) {
             LineReadySummary(ready = readyCount, total = lines.size, stagedQty = postQty)
             Spacer(Modifier.height(6.dp))
             StatusText(status)
-            if (!isDkc && !canMutate && headerLoaded) {
+            if (!canMutate && headerLoaded) {
                 Text(
                     documentOwnershipMessage(assignedUserId, myUserId),
                     color = bcwmsStatus().danger,
@@ -545,8 +522,16 @@ private fun ReceiveDocument(no: String, onBack: () -> Unit) {
                         modifier = Modifier.weight(1f),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        Checkbox(checked = printReceipt, onCheckedChange = { printReceipt = it })
-                        Text("Belgeyi yazdır", fontSize = 13.sp, maxLines = 1)
+                        Column {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Checkbox(checked = skipPrinting, onCheckedChange = { skipPrinting = it }, enabled = !busy)
+                                Text("Yazdırmadan kaydet", fontSize = 13.sp)
+                            }
+                            if (!skipPrinting) Row(verticalAlignment = Alignment.CenterVertically) {
+                                Checkbox(checked = printReceipt, onCheckedChange = { printReceipt = it }, enabled = !busy)
+                                Text("Belgeyi yazdır", fontSize = 13.sp)
+                            }
+                        }
                     }
                     if (activeLp == null) {
                         OutlinedButton(
@@ -577,7 +562,7 @@ private fun ReceiveDocument(no: String, onBack: () -> Unit) {
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
-                    if (!isDkc && !canMutate) {
+                    if (!canMutate) {
                         Button(
                             onClick = {
                                 scope.launch {
@@ -596,7 +581,7 @@ private fun ReceiveDocument(no: String, onBack: () -> Unit) {
                     } else {
                         Button(
                             onClick = { showScan = true },
-                            enabled = !busy && canMutate,
+                            enabled = !busy,
                             modifier = Modifier.weight(0.9f).height(46.dp),
                             contentPadding = PaddingValues(horizontal = 10.dp),
                         ) { WmsActionLabel(WmsGlyph.SCAN, "Tara") }
@@ -623,7 +608,12 @@ private fun ReceiveDocument(no: String, onBack: () -> Unit) {
                                             createdLp.isBlank() -> "HATA: LP oluşturuldu ancak numarası alınamadı. Belgeyi yenileyip kontrol edin."
                                             else -> "TAMAM: $createdLp başlatıldı"
                                         }
-                                        if (createdLp.isNotBlank()) activeLp = createdLp
+                                        if (createdLp.isNotBlank()) {
+                                            activeLp = createdLp
+                                            // LP'den önce miktarı girilmiş satırlar operatör onayıyla LP'ye bağlanır.
+                                            val waiting = receiptLinesAwaitingLp(lines, touched)
+                                            if (waiting.isNotEmpty()) attachPrompt = createdLp to waiting
+                                        }
                                         busy = false
                                         // Başlık alanı API replikasında kısa süre gecikse
                                         // bile başarılı startLP yanıtını kaybetme.
@@ -635,13 +625,32 @@ private fun ReceiveDocument(no: String, onBack: () -> Unit) {
                                 contentPadding = PaddingValues(horizontal = 8.dp),
                             ) { Text("LP Başlat", maxLines = 1) }
                         } else {
-                            Text(
-                                "LP: $activeLp",
-                                modifier = Modifier.weight(1f),
-                                maxLines = 1,
-                                color = MaterialTheme.colorScheme.primary,
-                                fontWeight = FontWeight.SemiBold,
-                            )
+                            // BADE (8 Eki 2026): paleti kapatmak ile belgeyi nakletmek
+                            // ayrı adımlar. Kapanan taslak palet nakilde tek irsaliyeyle
+                            // kaydedilir; sonraki fiziksel palet için yeni LP başlatılır.
+                            OutlinedButton(
+                                onClick = {
+                                    val closingLp = activeLp ?: return@OutlinedButton
+                                    scope.launch {
+                                        busy = true
+                                        status = "$closingLp kapatılıyor..."
+                                        val r = BcApi.boundAction(
+                                            context, "receipts", no, "stopLP",
+                                            receiptStopLpBody(closingLp),
+                                        )
+                                        busy = false
+                                        status = if (r.ok) receiptLpClosedStatus(closingLp)
+                                            else QcErrorParser.friendlyStatus(BcApi.errorMessage(r.body), r.httpCode)
+                                        if (r.ok) {
+                                            activeLp = null
+                                            reload()
+                                        }
+                                    }
+                                },
+                                enabled = !busy,
+                                modifier = Modifier.weight(1f).height(46.dp),
+                                contentPadding = PaddingValues(horizontal = 8.dp),
+                            ) { Text("LP Kapat", maxLines = 1) }
                         }
 
                         // TOPLU POST: operatör istediği kadar satırı okutur/girer,
@@ -655,9 +664,9 @@ private fun ReceiveDocument(no: String, onBack: () -> Unit) {
                             Text(
                                 when {
                                     !canPost -> "Önce miktar gir"
-                                    vehicleInfoMissing -> "Araç → Kaydet"
-                                    activeLp != null -> "LP + Kaydet"
-                                    else -> "Kaydet · $readyCount"
+                                    vehicleInfoMissing -> "Araç → Naklet"
+                                    activeLp != null -> "LP + Naklet"
+                                    else -> "Naklet · $readyCount"
                                 },
                                 fontWeight = FontWeight.Bold,
                                 maxLines = 1,
@@ -671,17 +680,17 @@ private fun ReceiveDocument(no: String, onBack: () -> Unit) {
 
     if (showPostConfirm) {
         PostConfirmDialog(
-            title = if (activeLp != null) "LP’yi kapat ve mal kabulü kaydet" else "Mal kabulü kaydet",
+            title = if (activeLp != null) "LP’yi kapat ve deftere naklet" else "Deftere naklet",
             readyCount = readyCount,
             postLineCount = postLines.size,
             totalLineCount = lines.size,
             totalQty = postQty,
-            confirmLabel = if (activeLp != null) "LP’yi Kapat ve Kaydet" else "Kaydet",
+            confirmLabel = if (activeLp != null) "LP’yi Kapat ve Naklet" else "Deftere Naklet",
             onDismiss = { showPostConfirm = false },
             onConfirm = {
                 showPostConfirm = false
                 scope.launch {
-                    if (!isDkc && !canMutateAssignedDocument(header?.optString("assignedUserId").orEmpty(), myUserId)) {
+                    if (!canMutateAssignedDocument(header?.optString("assignedUserId").orEmpty(), myUserId)) {
                         status = documentOwnershipMessage(header?.optString("assignedUserId").orEmpty(), myUserId)
                         return@launch
                     }
@@ -722,19 +731,18 @@ private fun ReceiveDocument(no: String, onBack: () -> Unit) {
                         reload()
                         return@launch
                     }
-                    val r = BcApi.boundAction(
-                        context, "receipts", no, "postAndCloseLP",
-                        JSONObject().apply {
-                            put("print", printReceipt)
-                            put("invoice", false)
-                            put("printerId", getDefaultPrinter(context, PRINTER_USAGE_DOCUMENT))
-                            put("lpPrinterId", getMtePrinter(context))
-                        }.toString(),
-                    )
+                    val postRequest = receiptPostRequest(skipPrinting, printReceipt,
+                        getDefaultPrinter(context, PRINTER_USAGE_DOCUMENT), getMtePrinter(context))
+                    val r = BcApi.boundAction(context, "receipts", no, postRequest.action, postRequest.body)
+                    // BADE (16 Eyl 2026): Kurulum "Manual Receipt Label Print" açıksa
+                    // etiket basılmadı; kayıt sonrası ekranda Etiket Yazdır ile basılır.
+                    if (r.ok) manualLabelPrint = skipPrinting || BcApi.manualReceiptLabelPrint(context)
                     busy = false
-                    status = if (r.ok) "TAMAM: Mal kabul kaydedildi."
-                        else missingReceiptPostBackendStatus(r.httpCode, r.body)
-                            ?: receiptPostFailureStatus(BcApi.errorMessage(r.body), r.httpCode)
+                    status = if (r.ok) {
+                        if (manualLabelPrint) "TAMAM: Mal kabul kaydedildi. Etiketler basılmadı; Etiket Yazdır ile basın."
+                        else "TAMAM: Mal kabul kaydedildi."
+                    } else missingReceiptPostBackendStatus(r.httpCode, r.body)
+                        ?: receiptPostFailureStatus(BcApi.errorMessage(r.body), r.httpCode)
                     if (r.ok) {
                         touched = emptySet()
                         // Keep the successful receipt visible until labels have been checked.
@@ -746,8 +754,38 @@ private fun ReceiveDocument(no: String, onBack: () -> Unit) {
         )
     }
 
+    attachPrompt?.let { (lp, lineNos) ->
+        val names = lines.filter { it.optInt("lineNo") in lineNos }
+            .joinToString(", ") { it.optString("itemNo") }
+        AlertDialog(
+            onDismissRequest = { attachPrompt = null },
+            title = { Text("Satırlar $lp’ye eklensin mi?", fontWeight = FontWeight.Bold) },
+            text = {
+                Text(
+                    "${lineNos.size} satırın miktarı LP başlatılmadan girildi: $names. " +
+                        "Eklenmezse bu satırlar nakledilemez.",
+                    fontSize = 14.sp,
+                )
+            },
+            confirmButton = {
+                Button(onClick = {
+                    attachPrompt = null
+                    scope.launch {
+                        busy = true; status = "Satırlar $lp’ye ekleniyor..."
+                        val r = BcApi.boundAction(context, "receipts", no, "attachLinesToLp", receiptAttachLinesBody(lp, lineNos))
+                        busy = false
+                        status = if (r.ok) "TAMAM: ${lineNos.size} satır $lp’ye eklendi."
+                            else QcErrorParser.friendlyStatus(BcApi.errorMessage(r.body), r.httpCode)
+                        reload(preserveActiveLp = lp)
+                    }
+                }) { Text("LP’ye Ekle", fontWeight = FontWeight.Bold) }
+            },
+            dismissButton = { OutlinedButton(onClick = { attachPrompt = null }) { Text("Şimdi Değil") } },
+        )
+    }
+
     if (showReceiptMte) {
-        ReceiptMteSheet(receiptNo = no, onDismiss = { showReceiptMte = false; reload() })
+        ReceiptMteSheet(receiptNo = no, manualPrint = manualLabelPrint, onDismiss = { showReceiptMte = false; reload() })
     }
 
     if (showVehicle) {
@@ -784,6 +822,54 @@ private fun ReceiveDocument(no: String, onBack: () -> Unit) {
                 showBulkLinePicker = false
                 bulkLpTarget = selected
             },
+            onMixed = if (header?.optBoolean("mixedPalletSupported") == true && mixedPalletCandidates(lines).size >= 2) {
+                { showBulkLinePicker = false; showMixedLinePicker = true }
+            } else null,
+        )
+    }
+    if (showMixedLinePicker) {
+        MixedReceiptLinePicker(
+            lines = mixedPalletCandidates(lines),
+            onDismiss = { showMixedLinePicker = false },
+            onConfirm = { selected ->
+                showMixedLinePicker = false
+                mixedLines = selected
+            },
+        )
+    }
+    val mixedSelection = mixedLines
+    if (mixedSelection != null) {
+        MixedReceiptLpSheet(
+            lines = mixedSelection,
+            onDismiss = { mixedLines = null },
+            onSubmit = { distributionJson, lineNos, palletCount ->
+                mixedLines = null
+                scope.launch {
+                    busy = true
+                    status = "Karma palet LP taslakları hazırlanıyor..."
+                    val template = resolveLpTemplate(context, LpPurpose.PALLET)
+                    if (template == null) {
+                        busy = false
+                        status = "HATA: Uygun palet şablonu belirlenemedi."
+                        return@launch
+                    }
+                    val result = BcApi.boundActionLongRunning(
+                        context, "receipts", no, "createMixedLPDistribution",
+                        JSONObject().apply {
+                            put("distributionJson", distributionJson)
+                            put("lpTemplateCode", template)
+                        }.toString(),
+                    )
+                    busy = false
+                    status = if (result.ok)
+                        "TAMAM: $palletCount karma palet LP'si hazırlandı. Ürünler ve lotlar Kaydet'e basınca paletlere yazılacak."
+                    else if (BcApi.isAmbiguousMutationFailure(result))
+                        "HATA: BC geç yanıt verdi; paletler hazırlanmış olabilir. Ekran yenilendi, satırlara dokunup kontrol edin."
+                    else QcErrorParser.friendlyStatus(BcApi.errorMessage(result.body), result.httpCode)
+                    if (result.ok) touched = touched + lineNos
+                    reload()
+                }
+            },
         )
     }
     val bulkLine = bulkLpTarget
@@ -797,6 +883,7 @@ private fun ReceiveDocument(no: String, onBack: () -> Unit) {
             initialSupplierLotNo = bulkLine.optString("supplierLotNo"),
             initialExpiryDate = bcDateOrBlank(bulkLine.optString("expiryDate")),
             lotRequired = bulkLine.optBoolean("lotRequired"),
+            allowLotGroups = bulkLine.has("receiptLpAllocations"),
             expiryEnabled = bulkLine.optBoolean("expirationDateEnabled"),
             expiryRequired = bulkLine.optBoolean("expirationDateRequired"),
             onDismiss = { bulkLpTarget = null },
@@ -822,7 +909,7 @@ private fun ReceiveDocument(no: String, onBack: () -> Unit) {
                             put("expectedQty", expectedQty)
                             put("distributionJson", bulkLpRowsJson(rows))
                             put("lpTemplateCode", template)
-                            put("printLabels", true)
+                            put("printLabels", !skipPrinting)
                             put("printerId", getDefaultPrinter(context))
                         }.toString(),
                     )
@@ -849,7 +936,14 @@ private fun ReceiveDocument(no: String, onBack: () -> Unit) {
     }
     if (showQty) {
         val line = scannedLine
-        QuantityDialogSheet(
+        val preparedPlan = receiptLpPlan(line)
+        if (preparedPlan.isNotEmpty()) ReceiptLpPlanSheet(
+            itemNo = scannedItem, uom = line?.optString("unitOfMeasureCode").orEmpty(),
+            rows = preparedPlan, onDismiss = { showQty = false },
+            onCancelDistribution = if (line != null && canMutate && header?.optBoolean("mixedPalletSupported") == true) {
+                { showQty = false; cancelDistribution(line.optInt("lineNo")) }
+            } else null,
+        ) else QuantityDialogSheet(
             title = "Alınan Miktar",
             itemNo = scannedItem,
             initialQty = line?.optDouble("qtyToReceive")?.takeIf { it > 0 } ?: 1.0,
@@ -876,10 +970,7 @@ private fun ReceiveDocument(no: String, onBack: () -> Unit) {
                 scanLot = ""; scanSerial = ""; scanSupplierLot = ""; scanExpiryDate = ""
                 val ln = scannedLine
                 if (ln == null) { status = "HATA: Satır eşleşmedi — listeden seçin"; return@QuantityDialogSheet }
-                if (!canMutate) {
-                    status = if (isDkc) "Belge satırları yüklenmedi. Yenileyin." else documentOwnershipMessage(assignedUserId, myUserId)
-                    return@QuantityDialogSheet
-                }
+                if (!canMutate) { status = documentOwnershipMessage(assignedUserId, myUserId); return@QuantityDialogSheet }
                 scope.launch {
                     busy = true; status = "Satır güncelleniyor..."
                     val body = JSONObject().apply {
@@ -902,7 +993,10 @@ private fun ReceiveDocument(no: String, onBack: () -> Unit) {
         )
     }
     val gt = groupTarget
-    if (gt != null) {
+    val preparedGroupPlan = gt?.lines?.flatMap { receiptLpPlan(it) }.orEmpty()
+    if (gt != null && preparedGroupPlan.isNotEmpty()) {
+        ReceiptLpPlanSheet(gt.itemNo, gt.lines.first().optString("unitOfMeasureCode"), preparedGroupPlan, onDismiss = { groupTarget = null })
+    } else if (gt != null) {
         val groupRequiresLot = gt.lines.any { it.optBoolean("lotRequired") }
         val groupRequiresSerial = gt.lines.any { it.optBoolean("serialRequired") }
         val groupUsesExpiryDate = gt.lines.any { it.optBoolean("expirationDateEnabled") }
@@ -938,10 +1032,7 @@ private fun ReceiveDocument(no: String, onBack: () -> Unit) {
             onDismiss = { groupTarget = null },
             onConfirm = { res ->
                 groupTarget = null
-                if (!canMutate) {
-                    status = if (isDkc) "Belge satırları yüklenmedi. Yenileyin." else documentOwnershipMessage(assignedUserId, myUserId)
-                    return@QuantityDialogSheet
-                }
+                if (!canMutate) { status = documentOwnershipMessage(assignedUserId, myUserId); return@QuantityDialogSheet }
                 scope.launch {
                     busy = true; status = "Grup dağıtılıyor..."
                     val plan = distributeQty(gt, res.quantity, capReceipt)

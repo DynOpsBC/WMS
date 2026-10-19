@@ -80,6 +80,22 @@ page 72222 "DOPSWHS Consumption API"
     end;
 
     [ServiceEnabled]
+    procedure createPickFor(userId: Code[50]): Code[20]
+    var
+        ProdMgmt: Codeunit "DOPSWHS Prod Mgmt";
+    begin
+        exit(ProdMgmt.CreateProductionPickFor(Rec."Prod. Order No.", userId));
+    end;
+
+    [ServiceEnabled]
+    procedure createPickFromLpFor(lpNo: Code[20]; userId: Code[50]): Code[20]
+    var
+        ProdMgmt: Codeunit "DOPSWHS Prod Mgmt";
+    begin
+        exit(ProdMgmt.CreateProductionPickFromLpFor(Rec."Prod. Order No.", lpNo, userId));
+    end;
+
+    [ServiceEnabled]
     procedure finish(updateUnitCost: Boolean): Code[20]
     var
         ProdMgmt: Codeunit "DOPSWHS Prod Mgmt";

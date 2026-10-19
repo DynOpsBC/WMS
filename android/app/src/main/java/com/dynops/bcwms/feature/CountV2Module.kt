@@ -1,6 +1,11 @@
 package com.dynops.bcwms.feature
 
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
+import androidx.compose.ui.graphics.luminance
+import com.dynops.bcwms.ui.WmsGlyph
+import com.dynops.bcwms.ui.WmsIcon
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -84,6 +89,7 @@ fun CountV2Module() {
         if (query.isBlank()) rows
         else rows.filter { sheet ->
             sheet.optString("no").contains(query, ignoreCase = true) ||
+                sheet.optString("roundRootNo").contains(query, ignoreCase = true) ||
                 sheet.optString("locationCode").contains(query, ignoreCase = true) ||
                 sheet.optString("zoneFilter").contains(query, ignoreCase = true) ||
                 sheet.optString("status").contains(query, ignoreCase = true)
@@ -105,7 +111,7 @@ fun CountV2Module() {
         scope.launch {
             loading = true
             status = "Sayım sayfaları yükleniyor..."
-            val filter = buildODataFilter(searchClause("no", search))
+            val filter = ""
             // Select kullanmamak eski/yeni AL paketleriyle listeyi uyumlu tutar;
             // V2 alanı yayınlandıysa aynı response içinde ayrıca gelir.
             val page = BcApi.getAllPages(
@@ -114,7 +120,7 @@ fun CountV2Module() {
             )
             val capabilities = BcApi.getCountCapabilities(context)
             backendReady = capabilities.v2Ready
-            rows = if (page.complete) page.rows else emptyList()
+            rows = if (page.complete) page.rows.filter { it.optString("nextRoundNo").isBlank() } else emptyList()
             if (newLocation.isBlank())
                 newLocation = rows.firstNotNullOfOrNull {
                     it.optString("locationCode").trim().takeIf(String::isNotBlank)
@@ -191,11 +197,17 @@ fun CountV2Module() {
         }
     }
 
-    LaunchedEffect(Unit) { load() }
+    // Klasik Sayım ekranından "Sayım V2'de Aç" ile gelen belge doğrudan açılır.
+    LaunchedEffect(Unit) {
+        com.dynops.bcwms.CountV2Handoff.consume()?.let { selected = it }
+        load()
+    }
     selected?.let { no ->
-        CountV2Document(no = no, onBack = { selected = null; load() })
+        key(no) { CountV2Document(no = no, onBack = { selected = null; load() }, onRoundChanged = { selected = it }) }
         return
     }
+
+    CountV2ErrorDialog(status, onDismiss = { status = "" })
 
     Column(Modifier.fillMaxSize().padding(12.dp)) {
         Card(
@@ -222,7 +234,7 @@ fun CountV2Module() {
         Spacer(Modifier.height(8.dp))
         DocSearchBar(value = search, onValueChange = { search = it }, onSearch = { load() }, label = "Sayım no ile ara")
         Spacer(Modifier.height(6.dp))
-        StatusText(status)
+        if (!status.startsWith("HATA:")) StatusText(status)
         Spacer(Modifier.height(8.dp))
         LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             items(visibleRows) { sheet ->
@@ -236,7 +248,7 @@ fun CountV2Module() {
                 ) {
                     Column(Modifier.padding(12.dp)) {
                         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                            Text(sheet.optString("no"), fontWeight = FontWeight.Bold)
+                            Text("${sheet.optString("roundRootNo").ifBlank { sheet.optString("no") }} · ${sheet.optInt("roundNo", 1)}. tur", fontWeight = FontWeight.Bold)
                             Text(
                                 when {
                                     posted -> "Kapalı"
@@ -323,7 +335,7 @@ fun CountV2Module() {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun CountV2Document(no: String, onBack: () -> Unit) {
+private fun CountV2Document(no: String, onBack: () -> Unit, onRoundChanged: (String) -> Unit) {
     androidx.activity.compose.BackHandler { onBack() }
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -356,6 +368,12 @@ private fun CountV2Document(no: String, onBack: () -> Unit) {
     // Aynı raf + aynı miktarlı etiket (ham içerik) bu oturumda bir kez sayılır.
     var scannedQtyLabels by remember(no) { mutableStateOf(setOf<String>()) }
     var showPostConfirm by remember(no) { mutableStateOf(false) }
+    var showNextRound by remember(no) { mutableStateOf(false) }
+    var showComparison by remember(no) { mutableStateOf(false) }
+    var history by remember(no) { mutableStateOf<List<Pair<JSONObject, List<JSONObject>>>>(emptyList()) }
+    var comparisonLoading by remember(no) { mutableStateOf(false) }
+    var comparisonError by remember(no) { mutableStateOf("") }
+    var comparisonIndex by remember(no) { mutableIntStateOf(0) }
     var showFinishBin by remember(no) { mutableStateOf(false) }
     var unexpectedLabel by remember(no) { mutableStateOf<CountV2Label?>(null) }
 
@@ -391,6 +409,10 @@ private fun CountV2Document(no: String, onBack: () -> Unit) {
             context,
             "countSheetLines?\$filter=sheetNo eq '$safeNo'&\$top=200",
         )
+        if (loadedHeader?.optString("nextRoundNo").orEmpty().isNotBlank()) {
+            onRoundChanged(loadedHeader!!.optString("nextRoundNo"))
+            return false
+        }
         header = loadedHeader
         lines = if (page.complete) page.rows else emptyList()
         linesComplete = loadedHeader != null && page.complete
@@ -470,6 +492,7 @@ private fun CountV2Document(no: String, onBack: () -> Unit) {
     }
 
     fun selectBin(raw: String) {
+        if (countV2HasBlockingError(status)) return
         val value = BarcodeIntentResolver.resolve(raw).value.trim().ifBlank { raw.trim() }
         binScan = ""
         if (value.isBlank() || !prepared || busy || pendingRetry != null || pendingRestoreFailed) return
@@ -559,6 +582,7 @@ private fun CountV2Document(no: String, onBack: () -> Unit) {
     }
 
     fun sendScan(pending: PendingCountV2Scan) {
+        if (countV2HasBlockingError(status)) return
         if (busy || pendingRestoreFailed) return
         scope.launch {
             busy = true
@@ -572,6 +596,7 @@ private fun CountV2Document(no: String, onBack: () -> Unit) {
      * birim, miktar). Operatör hiçbir şey girmez; tekrar okutma miktarı toplamaz.
      */
     fun scanLp(lpNo: String) {
+        if (countV2HasBlockingError(status)) return
         scope.launch {
             busy = true
             status = "$lpNo LP içeriği $activeBin rafında sayılıyor..."
@@ -590,7 +615,15 @@ private fun CountV2Document(no: String, onBack: () -> Unit) {
                     lastBatch = emptyList()
                     lastCompletedLp = CompletedCountV2Lp(lpNo, activeBin, slot)
                     labelScan = ""
-                    reload("TAMAM: LP $lpNo → $n satır $activeBin rafında sayıldı")
+                    busy = true
+                    if (loadDocument()) {
+                        val finding = lines.firstOrNull { it.optString("lpNo") == lpNo &&
+                            it.optString("binCode") == activeBin && it.optString("foundFromBin").isNotBlank() }
+                        status = if (finding != null)
+                            "UYARI: LP $lpNo · sistem rafı ${finding.optString("foundFromBin")} → bulunan raf $activeBin · raf farkı kaydedildi, taşıma yapılmadı"
+                        else "TAMAM: LP $lpNo → $n satır $activeBin rafında sayıldı"
+                    }
+                    busy = false
                 }
                 result.httpCode == 404 || result.httpCode == 405 ||
                     BcApi.errorMessage(result.body).contains("scanV2Lp", ignoreCase = true) ->
@@ -682,10 +715,17 @@ private fun CountV2Document(no: String, onBack: () -> Unit) {
                     val item = BcApi.get(context, "items?\$filter=no eq '${safe(candidate.itemNo)}'&\$top=1")
                     val itemRow = if (item.ok) BcApi.parseValueArray(item.body).firstOrNull() else null
                     if (itemRow != null) {
+                        // BADE (16 Eyl 2026): ürün BC'de başka rafta kayıtlıysa operatör
+                        // bunu görsün; kayıtta stok oradan bu rafa taşınır.
+                        val otherBins = BcApi.getAllPages(
+                            context,
+                            "binContents?\$filter=locationCode eq '${safe(loc)}' and itemNo eq '${safe(candidate.itemNo)}'&\$top=50",
+                        )
                         unexpectedLabel = CountV2Label(candidate.itemNo, "", itemRow.optString("baseUnitOfMeasure"),
                             candidate.lotNo, candidate.serialNo, 1.0, candidate.raw)
                         busy = false
-                        status = "Bu rafta fiziksel olarak bulduğunuz miktarı girin"
+                        status = if (otherBins.complete) unexpectedStockHint(activeBin, otherBins.rows)
+                            else "Bu rafta fiziksel olarak bulduğunuz miktarı girin"
                         return@launch
                     }
                 }
@@ -693,7 +733,7 @@ private fun CountV2Document(no: String, onBack: () -> Unit) {
                 status = when {
                     !complete -> "HATA: Stok okunamadı. Yenileyip tekrar okutun."
                     candidate.lotNo.isNotBlank() -> "HATA: ${candidate.lotNo} lotu $loc lokasyonunda BC stokunda yok. LP okutun veya BC'de kontrol edin."
-                    else -> "UYARI: ${candidate.itemNo} $activeBin rafında BC stokunda yok. Bu rafta sayılması için LOT veya LP etiketini okutun (lokasyon toplamı rafa yazılmaz)."
+                    else -> "HATA: '${candidate.itemNo}' BC'de madde numarası olarak bulunamadı. Ürünün BCWMS etiketini (madde no) ya da LP/lot etiketini okutun; barkod GTIN ise BC'de madde referansı tanımlı olmalı."
                 }
                 return@launch
             }
@@ -781,6 +821,7 @@ private fun CountV2Document(no: String, onBack: () -> Unit) {
     }
 
     fun recordLineCount(line: JSONObject, qty: Double) {
+        if (countV2HasBlockingError(status)) return
         if (busy || pendingRetry != null || pendingRestoreFailed) return
         if (!qty.isFinite() || qty < 0.0) { status = "HATA: Geçerli bir sayım miktarı girin."; return }
         scope.launch {
@@ -798,6 +839,7 @@ private fun CountV2Document(no: String, onBack: () -> Unit) {
     }
 
     fun scanLabel(raw: String) {
+        if (countV2HasBlockingError(status)) return
         labelScan = ""
         if (activeBin.isBlank()) {
             status = "HATA: Önce raf barkodunu okutun."
@@ -846,6 +888,7 @@ private fun CountV2Document(no: String, onBack: () -> Unit) {
     }
 
     fun undoLastScan() {
+        if (countV2HasBlockingError(status)) return
         lastCompletedLp?.let { lp ->
             scope.launch {
                 busy = true
@@ -888,7 +931,60 @@ private fun CountV2Document(no: String, onBack: () -> Unit) {
         }
     }
 
+    fun startNextRound() {
+        if (busy || pendingRetry != null || pendingRestoreFailed) return
+        showNextRound = false
+        scope.launch {
+            busy = true
+            val result = BcApi.boundActionLongRunning(context, "countSheets", no, "startNextRound", "{}")
+            busy = false
+            val nextNo = if (result.ok) BcApi.scalarValue(result.body).trim().trim('"') else ""
+            if (nextNo.isNotBlank()) onRoundChanged(nextNo)
+            else status = if (BcApi.isAmbiguousMutationFailure(result))
+                "UYARI: Yeni tur yanıtı alınamadı. Yeni Tur Başlat'ı tekrar kullanabilirsiniz; ikinci bir tur oluşturulmaz."
+            else "HATA: ${BcApi.errorMessage(result.body)}"
+        }
+    }
+
+    fun loadComparison() {
+        showComparison = true
+        comparisonLoading = true
+        comparisonError = ""
+        history = emptyList()
+        comparisonIndex = 0
+        scope.launch {
+            // Refresh current quantities as well; comparing old cached values
+            // against another operator's latest round would be misleading.
+            if (!loadDocument()) {
+                comparisonLoading = false
+                comparisonError = "Güncel tur alınamadı. Yenileyin."
+                return@launch
+            }
+            var previousNo = header?.optString("previousRoundNo").orEmpty()
+            val seen = mutableSetOf(no)
+            val loaded = mutableListOf<Pair<JSONObject, List<JSONObject>>>()
+            while (previousNo.isNotBlank()) {
+                if (!seen.add(previousNo)) { comparisonError = "Tur geçmişi tutarsız; yeniden yükleyin."; break }
+                val safe = previousNo.replace("'", "''")
+                val result = BcApi.get(context, "countSheets('$safe')")
+                val oldHeader = if (result.ok) runCatching { JSONObject(result.body) }.getOrNull() else null
+                val page = BcApi.getAllPages(context, "countSheetLines?\$filter=sheetNo eq '$safe'&\$top=200")
+                if (oldHeader == null || !page.complete) { comparisonError = "Tur geçmişinin tamamı alınamadı. Yeniden deneyin."; break }
+                loaded += oldHeader to page.rows
+                previousNo = oldHeader.optString("previousRoundNo")
+            }
+            if (comparisonError.isBlank()) history = loaded
+            comparisonLoading = false
+        }
+    }
+
     fun postSheet() {
+        if (countV2HasBlockingError(status)) return
+        if (countV2HasBinFindings(lines)) {
+            showPostConfirm = false
+            status = countV2BinFindingsNote(header?.optBoolean("countRoundSupported") == true)
+            return
+        }
         if (!terminalPostAllowed(header)) {
             showPostConfirm = false
             status = COUNT_POSTED_IN_BC_NOTE
@@ -909,31 +1005,58 @@ private fun CountV2Document(no: String, onBack: () -> Unit) {
     }
 
     fun completeCounter() {
+        if (countV2HasBlockingError(status)) return
         scope.launch {
             busy = true
             status = "$slot. sayım turu kaydedilip kilitleniyor..."
             val body = JSONObject().apply { put("counterSlot", slot) }.toString()
-            val result = BcApi.boundAction(context, "countSheets", no, "completeCounter", body)
+            val result = BcApi.boundActionLongRunning(context, "countSheets", no, "completeCounter", body)
+            busy = false
+            val savedAfterTimeout = !result.ok && BcApi.isAmbiguousMutationFailure(result) &&
+                loadDocument() && header?.optBoolean("counter${slot}Completed", false) == true
+            if (result.ok || savedAfterTimeout) {
+                if (result.ok) loadDocument()
+                if (linesComplete) status = if (countV2HasBinFindings(lines))
+                    "TAMAM: $slot. sayım turu kaydedildi. $COUNT_V2_BIN_FINDINGS_NOTE"
+                else countRoundSavedMessage(slot, terminalPostAllowed(header))
+            } else status = if (BcApi.isAmbiguousMutationFailure(result)) "HATA: $COUNT_V2_AMBIGUOUS_NOTE"
+            else "HATA: ${BcApi.errorMessage(result.body)} (HTTP ${result.httpCode})"
+        }
+    }
+
+    fun refreshStaleBin(bin: String) {
+        scope.launch {
+            busy = true
+            status = "$bin rafı güncel stokla yenileniyor..."
+            val result = BcApi.boundAction(context, "countSheets", no, "refreshV2Bin", countV2RefreshBinBody(bin))
             busy = false
             if (result.ok) {
+                activeBin = ""
+                lastCompleted = null; lastBatch = emptyList(); lastCompletedLp = null
                 loadDocument()
-                status = countRoundSavedMessage(slot, terminalPostAllowed(header))
-            } else status = "HATA: ${BcApi.errorMessage(result.body)} (HTTP ${result.httpCode})"
+                status = "TAMAM: $bin rafı güncel stokla yenilendi. Rafı okutup yeniden sayın, sonra rafı tamamlayın."
+            } else status = if (result.httpCode == 404)
+                "HATA: Rafı yenilemek için BC paketini 1.14.1.132 veya üstüne güncelleyin."
+            else "HATA: ${BcApi.errorMessage(result.body)}"
         }
     }
 
     fun finishBin() {
+        if (countV2HasBlockingError(status)) return
         scope.launch {
             busy = true
             val bin = activeBin
-            val result = BcApi.boundAction(context, "countSheets", no, "completeV2Bin",
+            val result = BcApi.boundActionLongRunning(context, "countSheets", no, "completeV2Bin",
                 JSONObject().put("binCode", bin).put("counterSlot", slot).toString())
             showFinishBin = false
-            if (result.ok) {
+            val completedAfterTimeout = !result.ok && BcApi.isAmbiguousMutationFailure(result) &&
+                loadDocument() && countV2BinCompletedForSlot(lines, bin, slot)
+            if (result.ok || completedAfterTimeout) {
                 activeBin = ""
                 lastCompleted = null; lastBatch = emptyList(); lastCompletedLp = null
-                if (loadDocument()) status = "TAMAM: $bin tamamlandı · sayılmayanlar $slot sayımında 0 · bekleyen rafları da sayın"
-            } else status = "HATA: ${BcApi.errorMessage(result.body)}"
+                if (completedAfterTimeout || loadDocument()) status = "TAMAM: $bin tamamlandı · sayılmayanlar $slot sayımında 0 · bekleyen rafları da sayın"
+            } else status = if (BcApi.isAmbiguousMutationFailure(result)) "HATA: $COUNT_V2_AMBIGUOUS_NOTE"
+            else "HATA: ${BcApi.errorMessage(result.body)}"
             busy = false
         }
     }
@@ -965,12 +1088,22 @@ private fun CountV2Document(no: String, onBack: () -> Unit) {
     // Başlık yüklenmeden düğme hiç çizilmez (null başlık = izinli sayılmaz); yüklenen
     // eski AL paketi başlığında bayrak yoksa "izinli" kuralı korunur.
     val postAllowed = countV2PostButtonVisible(headerLoaded = h != null, terminalPostAllowed = terminalPostAllowed(h))
-    val canSave = !pendingRestoreFailed && pendingRetry == null && binReviewSupported && prepared && linesComplete && lines.isNotEmpty() && !busy && slot in allowedSlots &&
+    val hasBinFindings = countV2HasBinFindings(lines)
+    val blockingError = countV2HasBlockingError(status)
+    val canSave = !blockingError && !pendingRestoreFailed && pendingRetry == null && binReviewSupported && prepared && linesComplete && lines.isNotEmpty() && !busy && slot in allowedSlots &&
         currentSlotLinesComplete && !currentSlotSaved && countDocumentIsMutable(h?.optString("status").orEmpty())
-    val canPost = !pendingRestoreFailed && pendingRetry == null && binReviewSupported && postAllowed && prepared && linesComplete && lines.isNotEmpty() && !busy &&
+    val canPost = !blockingError && !hasBinFindings && !pendingRestoreFailed && pendingRetry == null && binReviewSupported && postAllowed && prepared && linesComplete && lines.isNotEmpty() && !busy &&
         allRequiredComplete && allRequiredSaved &&
         lines.none { it.optBoolean("recountRequired") } &&
         countDocumentIsMutable(h?.optString("status").orEmpty())
+
+    // Keep the dialog outside LazyColumn so errors remain visible even when the header is off-screen.
+    CountV2ErrorDialog(
+        status,
+        onDismiss = { status = "" },
+        refreshBin = countV2StaleBin(status, lines),
+        onRefreshBin = { bin -> status = ""; refreshStaleBin(bin) },
+    )
 
     Column(Modifier.fillMaxSize()) {
         // Tek kaydırma alanı: başlık ve okutma kontrolleri yukarı
@@ -986,13 +1119,24 @@ private fun CountV2Document(no: String, onBack: () -> Unit) {
                 Column {
                     TextButton(onClick = onBack, enabled = !busy) { Text("‹ Sayfa Listesi") }
                     DocHeaderCard(
-                        title = "$no · Sayım V2",
+                        title = "${h?.optString("roundRootNo").orEmpty().ifBlank { no }} · ${h?.optInt("roundNo", 1) ?: 1}. tur",
                         subtitle = "Lokasyon: ${h?.optString("locationCode").orEmpty()}" +
                             h?.optString("zoneFilter").orEmpty().takeIf(String::isNotBlank)?.let { " · Alan: $it" }.orEmpty() +
                             " · ${h?.optString("status").orEmpty()}",
                     )
                     Spacer(Modifier.height(8.dp))
-                    StatusText(status)
+                    if (!status.startsWith("HATA:")) StatusText(status)
+                    if (h?.optBoolean("countRoundSupported") == true) {
+                        OutlinedButton(
+                            onClick = { showNextRound = true },
+                            enabled = !busy && !comparisonLoading && linesComplete && lines.isNotEmpty() && allRequiredComplete && allRequiredSaved &&
+                                pendingRetry == null && !pendingRestoreFailed && allowedSlots.isNotEmpty() && countDocumentIsMutable(h.optString("status")),
+                            modifier = Modifier.fillMaxWidth(),
+                        ) { Text("Ad-hoc Sonrası Yeni Tur Başlat") }
+                        if (h.optString("previousRoundNo").isNotBlank()) {
+                            TextButton(onClick = { loadComparison() }, enabled = !busy && !comparisonLoading) { Text("Turları Yan Yana Karşılaştır") }
+                        }
+                    }
                     if (prepared && !binReviewSupported) Text("Raf tamamlama için Business Central sayım güncellemesi gerekli.")
                     Spacer(Modifier.height(8.dp))
 
@@ -1000,7 +1144,7 @@ private fun CountV2Document(no: String, onBack: () -> Unit) {
                         StatusText("Bu belge için $myUserId kullanıcısına sayıcı slotu atanmamış.")
                     } else if (allowedSlots.size > 1) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text("Sayım turu", fontSize = 12.sp, color = Color.Gray)
+                            Text("Sayıcı", fontSize = 12.sp, color = Color.Gray)
                             Spacer(Modifier.width(8.dp))
                             allowedSlots.forEach { candidate ->
                                 FilterChip(
@@ -1095,8 +1239,10 @@ private fun CountV2Document(no: String, onBack: () -> Unit) {
                     if (binReviewSupported && lines.isNotEmpty()) {
                         Text("Raf farkları · $slot sayımı", fontWeight = FontWeight.Bold)
                         Text(varianceReview, fontSize = 12.sp)
-                        Text("Diğer raftan otomatik düşülmez · stok farkları onaydan sonra işlenir", fontSize = 11.sp)
+                        Text(if (hasBinFindings) countV2BinFindingsNote(h?.optBoolean("countRoundSupported") == true) else "Diğer raftan otomatik düşülmez · stok farkları onaydan sonra işlenir", fontSize = 11.sp)
                     }
+                    Text("Yeşil: doğru · Kırmızı: miktar farkı · Sarı: farklı rafta bulunan LP", fontSize = 12.sp)
+                    if (hasBinFindings) Text(countV2BinFindingsNote(h?.optBoolean("countRoundSupported") == true), fontSize = 12.sp, color = Color(0xFF92400E))
                     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                         Text(
                             if (prepared) "Otomatik oluşan satırlar (${lines.size})" else "Belgedeki klasik satırlar (${lines.size})",
@@ -1108,37 +1254,9 @@ private fun CountV2Document(no: String, onBack: () -> Unit) {
                 }
             }
             items(lines.sortedByDescending { it.optInt("lineNo") }) { line ->
-                val counted = isCountRecorded(
-                    hasExplicitFlag = line.has("counted$slot"),
-                    explicitFlag = line.optBoolean("counted$slot"),
-                    quantity = line.optDouble("countedQty$slot", 0.0),
-                )
-                Card(
-                    Modifier.fillMaxWidth().clickable(enabled = prepared && !busy && !currentSlotSaved && pendingRetry == null && !pendingRestoreFailed) { adjustLine = line },
-                    shape = RoundedCornerShape(10.dp),
-                ) {
-                    Column(Modifier.padding(12.dp)) {
-                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                            Text(line.optString("itemNo"), fontWeight = FontWeight.Bold)
-                            Text(
-                                if (counted) "${formatCountV2Qty(line.optDouble("countedQty$slot"))} ${firstValue(line, "unitOfMeasureCode")}" else "Henüz sayılmadı",
-                                fontWeight = FontWeight.SemiBold,
-                                color = if (counted) Color(0xFF15803D) else Color.Gray,
-                            )
-                        }
-                        Text("📍 ${line.optString("binCode")}", fontSize = 12.sp, color = Color.Gray)
-                        val tracking = listOfNotNull(
-                            line.optString("lotNo").takeIf { it.isNotBlank() }?.let { "Lot: $it" },
-                            line.optString("serialNo").takeIf { it.isNotBlank() }?.let { "Seri: $it" },
-                        ).joinToString(" · ")
-                        if (tracking.isNotBlank()) Text(tracking, fontSize = 12.sp)
-                        Text(
-                            "Sistem: ${formatCountV2Qty(line.optDouble("systemQty"))} · Fark: ${formatCountV2Qty(line.optDouble("variance"))}",
-                            fontSize = 11.sp,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                }
+                CountV2LineCard(line, slot,
+                    enabled = prepared && !blockingError && !busy && !currentSlotSaved && pendingRetry == null && !pendingRestoreFailed,
+                    onClick = { adjustLine = line })
             }
             if (lines.isEmpty() && prepared && !busy) item {
                 EmptyState("Ekran boş. Rafı okutun, sonra LP / ürün / lot barkodunu okutun.")
@@ -1151,6 +1269,7 @@ private fun CountV2Document(no: String, onBack: () -> Unit) {
                     enabled = canSave,
                     modifier = Modifier.fillMaxWidth().height(52.dp),
                 ) { Text(if (currentSlotSaved) "✓ Sayım Turu Kaydedildi" else "✅ Sayım Turunu Kaydet", fontWeight = FontWeight.Bold) }
+                if (hasBinFindings) Text(countV2BinFindingsNote(h?.optBoolean("countRoundSupported") == true), fontSize = 12.sp, color = Color(0xFF92400E))
                 if (postAllowed) {
                     Spacer(Modifier.height(6.dp))
                     OutlinedButton(
@@ -1179,10 +1298,44 @@ private fun CountV2Document(no: String, onBack: () -> Unit) {
         }
     }
 
+    if (showNextRound) AlertDialog(
+        onDismissRequest = { showNextRound = false },
+        title = { Text("Yeni sayım turu") },
+        text = { Text("Bu turun bütün sonuçları korunup kilitlenecek. Ad-hoc sonrası güncel stok ve raf bilgileriyle yeni tur açılacak. Stok düzeltmesi yalnız son turdan yapılabilir.") },
+        confirmButton = { Button(onClick = { startNextRound() }) { Text("Yeni Turu Başlat") } },
+        dismissButton = { TextButton(onClick = { showNextRound = false }) { Text("Vazgeç") } },
+    )
+    if (showComparison) AlertDialog(
+        onDismissRequest = { showComparison = false },
+        title = { Text("Sayım turları · Sayıcı $slot") },
+        text = {
+            Column {
+                if (comparisonLoading) Text("Tur geçmişi yükleniyor...")
+                if (comparisonError.isNotBlank()) Text(comparisonError)
+                if (history.isNotEmpty()) {
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                        TextButton(onClick = { comparisonIndex = (comparisonIndex + 1) % history.size }) {
+                            Text("${history[comparisonIndex].first.optInt("roundNo", 1)}. tur ▾")
+                        }
+                        Text("${h?.optInt("roundNo", 1)}. tur (son)")
+                    }
+                    LazyColumn(Modifier.heightIn(max = 420.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        items(compareCountRounds(history[comparisonIndex].second, lines, slot)) { comparison ->
+                            CountRoundComparisonCard(comparison)
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = { TextButton(onClick = { showComparison = false }) { Text("Kapat") } },
+        dismissButton = { if (comparisonError.isNotBlank()) TextButton(onClick = { loadComparison() }) { Text("Yeniden Dene") } },
+    )
+
     adjustLine?.let { line ->
         QuantityDialogSheet(
             title = "Miktarı düzelt — ${line.optString("binCode")}",
             itemNo = line.optString("itemNo") +
+                line.optString("lpNo").takeIf { it.isNotBlank() }?.let { " · LP: $it" }.orEmpty() +
                 line.optString("lotNo").takeIf { it.isNotBlank() }?.let { " · Lot $it" }.orEmpty(),
             initialQty = if (line.optBoolean("counted$slot")) line.optDouble("countedQty$slot", 0.0)
                 else line.optDouble("systemQty", 0.0).coerceAtLeast(0.0),
@@ -1242,3 +1395,190 @@ private fun CountV2Document(no: String, onBack: () -> Unit) {
 
 private fun formatCountV2Qty(value: Double): String =
     if (value.isFinite() && value == value.toLong().toDouble()) value.toLong().toString() else value.toString()
+
+/** Acknowledgement clears only the message, never the pending scan/retry state. */
+@Composable
+internal fun CountV2ErrorDialog(
+    status: String,
+    onDismiss: () -> Unit,
+    refreshBin: String? = null,
+    onRefreshBin: (String) -> Unit = {},
+) {
+    if (!status.startsWith("HATA:")) return
+    val keyboard = androidx.compose.ui.platform.LocalSoftwareKeyboardController.current
+    LaunchedEffect(status) { keyboard?.hide() }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        properties = androidx.compose.ui.window.DialogProperties(dismissOnClickOutside = false),
+        title = { Text("Sayım hatası") },
+        text = {
+            Column(Modifier.verticalScroll(rememberScrollState())) {
+                Text(status.removePrefix("HATA:").trim())
+                if (refreshBin != null) {
+                    Spacer(Modifier.height(10.dp))
+                    Text(
+                        "Sayım sürerken $refreshBin rafından mal alınmış olabilir. Rafı Yenile, rafın bu turdaki " +
+                            "sayımını silip güncel stokla yeniden açar; yalnız bu rafı tekrar sayarsınız. " +
+                            "Diğer raflar ve önceki turlar korunur.",
+                        fontSize = 13.sp,
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            if (refreshBin != null) Button(onClick = { onRefreshBin(refreshBin) }) { Text("Rafı Yenile · $refreshBin") }
+            else TextButton(onClick = onDismiss) { Text("Tamam") }
+        },
+        dismissButton = if (refreshBin != null) ({ TextButton(onClick = onDismiss) { Text("Vazgeç") } }) else null,
+    )
+}
+
+@Composable
+internal fun CountV2LpIdentity(lpNo: String) {
+    Text(
+        if (lpNo.isNotBlank()) "LP: $lpNo" else "LP: Yok (LP’siz stok)",
+        fontSize = 13.sp,
+        fontWeight = FontWeight.SemiBold,
+    )
+}
+
+@Composable
+private fun countV2StatusColor(result: CountV2LineResult): Color {
+    val dark = MaterialTheme.colorScheme.surface.luminance() < 0.5f
+    return when (result) {
+        CountV2LineResult.Match -> if (dark) Color(0xFF6EE7B7) else Color(0xFF16724D)
+        CountV2LineResult.QuantityDifference -> if (dark) Color(0xFFFCA5A5) else Color(0xFFB42338)
+        CountV2LineResult.BinFinding -> if (dark) Color(0xFFFCD34D) else Color(0xFF946200)
+        CountV2LineResult.Pending -> MaterialTheme.colorScheme.onSurfaceVariant
+    }
+}
+
+@Composable
+internal fun CountV2BinFindingDetails(line: JSONObject, slot: Int) {
+    val source = line.optString("foundFromBin")
+    if (source.isBlank()) return
+    val accent = countV2StatusColor(CountV2LineResult.BinFinding)
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Surface(color = accent.copy(alpha = 0.07f), shape = RoundedCornerShape(10.dp)) {
+            Row(Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text("Sayımda sistem rafı", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(source, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                }
+                WmsIcon(WmsGlyph.CHEVRON, accent, Modifier.padding(horizontal = 8.dp).size(16.dp))
+                Column(Modifier.weight(1f)) {
+                    Text("Bulunan raf", fontSize = 11.sp, color = accent)
+                    Text(line.optString("binCode"), fontSize = 13.sp, fontWeight = FontWeight.Bold, color = accent)
+                }
+            }
+        }
+        val expected = line.optDouble("foundLpQty", Double.NaN)
+        val counted = line.optDouble("countedQty$slot", Double.NaN)
+        if (line.optBoolean("counted$slot") && expected.isFinite() && counted.isFinite() && kotlin.math.abs(counted - expected) >= 0.00001) {
+            Text("LP miktar farkı: ${formatCountV2Qty(counted - expected)} · Kayıtlı LP miktarı: ${formatCountV2Qty(expected)}",
+                color = countV2StatusColor(CountV2LineResult.QuantityDifference), fontSize = 12.sp)
+        }
+    }
+}
+
+@Composable
+internal fun CountV2LineCard(line: JSONObject, slot: Int, enabled: Boolean = false, onClick: () -> Unit = {}) {
+    val counted = isCountRecorded(
+        hasExplicitFlag = line.has("counted$slot"),
+        explicitFlag = line.optBoolean("counted$slot"),
+        quantity = line.optDouble("countedQty$slot", 0.0),
+    )
+    val result = countV2LineResult(line, slot)
+    val accent = countV2StatusColor(result)
+    val secondary = MaterialTheme.colorScheme.onSurfaceVariant
+    val systemQty = line.optDouble("systemQty")
+    val difference = line.optDouble("countedQty$slot") - systemQty
+    Card(
+        Modifier.fillMaxWidth().clickable(enabled = enabled, onClick = onClick),
+        shape = RoundedCornerShape(16.dp),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.65f)),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface,
+            contentColor = MaterialTheme.colorScheme.onSurface),
+    ) {
+        Row(Modifier.height(IntrinsicSize.Min)) {
+            Box(Modifier.width(4.dp).fillMaxHeight().background(accent))
+            Column(Modifier.weight(1f).padding(horizontal = 14.dp, vertical = 12.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Surface(color = accent.copy(alpha = 0.09f), contentColor = accent, shape = RoundedCornerShape(50)) {
+                    Row(Modifier.padding(horizontal = 9.dp, vertical = 3.dp),
+                        verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Box(Modifier.size(5.dp).background(accent, RoundedCornerShape(50)))
+                        Text(when (result) {
+                            CountV2LineResult.Match -> "Raf ve miktar doğru"
+                            CountV2LineResult.QuantityDifference -> "Miktar farkı"
+                            CountV2LineResult.BinFinding -> "Farklı rafta bulunan LP"
+                            CountV2LineResult.Pending -> "Sayım bekliyor"
+                        }, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+                    }
+                }
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                        Text(line.optString("itemNo"), fontWeight = FontWeight.Bold, fontSize = 20.sp)
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+                            WmsIcon(WmsGlyph.LICENSE_PLATE, secondary, Modifier.size(17.dp))
+                            CountV2LpIdentity(line.optString("lpNo"))
+                        }
+                    }
+                    Column(Modifier.widthIn(max = 130.dp), horizontalAlignment = Alignment.End) {
+                        Text(if (counted) formatCountV2Qty(line.optDouble("countedQty$slot")) else "—",
+                            fontWeight = FontWeight.Bold, fontSize = 26.sp, color = accent)
+                        Text(if (counted) firstValue(line, "unitOfMeasureCode") else "Henüz sayılmadı",
+                            fontSize = 10.sp, fontWeight = FontWeight.Medium, color = secondary)
+                    }
+                }
+                if (line.optString("foundFromBin").isNotBlank()) {
+                    CountV2BinFindingDetails(line, slot)
+                } else {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+                        WmsIcon(WmsGlyph.BIN_SEARCH, secondary, Modifier.size(16.dp))
+                        Text("Raf", fontSize = 12.sp, color = secondary)
+                        Text(line.optString("binCode"), fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                    }
+                }
+                val tracking = listOfNotNull(
+                    line.optString("lotNo").takeIf { it.isNotBlank() }?.let { "Lot: $it" },
+                    line.optString("serialNo").takeIf { it.isNotBlank() }?.let { "Seri: $it" },
+                ).joinToString(" · ")
+                if (tracking.isNotBlank()) Text(tracking, fontSize = 11.sp, color = secondary)
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Text("Bu rafta sistem: ${formatCountV2Qty(systemQty)}", Modifier.weight(1f), fontSize = 11.sp, color = secondary)
+                    Text("Fark: " + if (counted) formatCountV2Qty(difference) else "—",
+                        fontSize = 11.sp, fontWeight = FontWeight.SemiBold, color = accent)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+internal fun CountRoundComparisonCard(comparison: CountRoundComparison) {
+    Column {
+        Text(comparison.label, fontWeight = FontWeight.SemiBold, fontSize = 12.sp)
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            listOf(comparison.previous, comparison.current).forEach { values ->
+                Column(Modifier.weight(1f)) {
+                    if (values == null) Text("Bu turda satır yok", fontSize = 12.sp)
+                    else {
+                        Text("Sistem rafı: ${values.systemBins}", fontSize = 12.sp)
+                        Text("Sayılan raf: ${values.countedBins}", fontSize = 12.sp)
+                        Text("Sayım rafı: ${values.scopeBins}", fontSize = 12.sp)
+                        Text("Raf stoku: ${formatCountV2Qty(values.systemQty)}", fontSize = 12.sp)
+                        values.recordedLpQty?.let { Text("Kayıtlı LP: ${formatCountV2Qty(it)}", fontSize = 12.sp) }
+                        Text("Sayılan: ${values.countedQty?.let { formatCountV2Qty(it) } ?: "Tamamlanmadı"}", fontSize = 12.sp)
+                        Text("Stok farkı: ${values.variance?.let { formatCountV2Qty(it) } ?: "—"}", fontSize = 12.sp)
+                    }
+                }
+            }
+        }
+        comparison.change?.let { Text("Turlar arası miktar farkı: ${formatCountV2Qty(it)}", fontSize = 12.sp) }
+        HorizontalDivider()
+    }
+}

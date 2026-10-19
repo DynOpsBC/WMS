@@ -10,6 +10,7 @@ page 72088 "DOPSWHS LP API"
     DelayedInsert = true;
     DeleteAllowed = true;
     ODataKeyFields = "No.";
+    Permissions = tabledata Employee = R;
 
     layout
     {
@@ -32,19 +33,6 @@ page 72088 "DOPSWHS LP API"
                 field(widthCm; Rec."Width cm") { Caption = 'widthCm'; }
                 field(heightCm; Rec."Height cm") { Caption = 'heightCm'; }
                 field(notes; Rec.Notes) { Caption = 'notes'; }
-                field(sourceDocumentType; Rec."Source Document Type") { Caption = 'sourceDocumentType'; Editable = false; }
-                field(sourceDocumentNo; Rec."Source Document No.") { Caption = 'sourceDocumentNo'; Editable = false; }
-                field(partnerNo; Rec."Partner No.") { Caption = 'partnerNo'; Editable = false; }
-                field(partnerName; Rec."Partner Name") { Caption = 'partnerName'; Editable = false; }
-                field(shipToName; Rec."Ship-to Name") { Caption = 'shipToName'; Editable = false; }
-                field(shipToCity; Rec."Ship-to City") { Caption = 'shipToCity'; Editable = false; }
-                field(shipmentMethodCode; Rec."Shipment Method Code") { Caption = 'shipmentMethodCode'; }
-                field(shippingAgentCode; Rec."Shipping Agent Code") { Caption = 'shippingAgentCode'; }
-                field(externalDocumentNo; Rec."External Document No.") { Caption = 'externalDocumentNo'; }
-                field(containerNo; Rec."Container No.") { Caption = 'containerNo'; }
-                field(sealNo; Rec."Seal No.") { Caption = 'sealNo'; }
-                field(tareWeightKg; Rec."Tare Weight kg") { Caption = 'tareWeightKg'; }
-                field(containerKind; ContainerKind) { Caption = 'containerKind'; Editable = false; }
                 field(lineCount; Rec."Line Count") { Caption = 'lineCount'; Editable = false; }
                 field(totalQuantity; Rec."Total Quantity") { Caption = 'totalQuantity'; Editable = false; }
                 field(plannedQuantity; Rec."Planned Quantity") { Caption = 'plannedQuantity'; }
@@ -85,26 +73,35 @@ page 72088 "DOPSWHS LP API"
 
     trigger OnAfterGetRecord()
     var
-        LabelBuilder: Codeunit "DOPSWHS LP Label Builder";
         Template: Record "DOPSWHS LP Template";
     begin
         Rec.CalcFields("Line Count", "Total Quantity");
         Reusable := false;
-        ContainerKind := LabelBuilder.ContainerKindCaption(Rec."No.");
         if (Rec."LP Template Code" <> '') and Template.Get(Rec."LP Template Code") then
             Reusable := Template.Reusable;
     end;
 
     trigger OnModifyRecord(): Boolean
+    var
+        StoredLP: Record "DOPSWHS LP Header";
+        LPLine: Record "DOPSWHS LP Line";
     begin
         if Rec."Pending Receipt No." <> '' then
             Error('%1 LP''si %2 mal kabulünü bekliyor. Değişiklikleri Mal Kabul ekranından yapın.', Rec."No.", Rec."Pending Receipt No.");
+        // BADE (24 Eyl 2026): a PATCH of binCode/locationCode moves no stock.
+        // For an LP with content only the recorded LP move actions may change
+        // its bin; the first bin of an empty LP can still be set here.
+        if StoredLP.Get(Rec."No.") then
+            if (StoredLP."Bin Code" <> Rec."Bin Code") or (StoredLP."Location Code" <> Rec."Location Code") then begin
+                LPLine.SetRange("LP No.", Rec."No.");
+                if not LPLine.IsEmpty() then
+                    Error('%1 LP''sinin içinde ürün var. Gözü doğrudan değiştirilemez; LP taşıma işlemini (terminal ad-hoc taşıma) kullanın.', Rec."No.");
+            end;
         exit(true);
     end;
 
     var
         Reusable: Boolean;
-        ContainerKind: Text;
 
     [ServiceEnabled]
     procedure release()
@@ -139,7 +136,10 @@ page 72088 "DOPSWHS LP API"
         Lines: List of [Integer];
         Quantities: Dictionary of [Integer, Decimal];
     begin
-        TargetLP.Get(targetLpNo);
+        // A typo in the target LP surfaced as the English "record does not
+        // exist" text, which the terminal masks to a REF code (BADE 16 Eyl 2026).
+        if not TargetLP.Get(targetLpNo) then
+            Error(TargetLpMissingErr, targetLpNo);
         ParseLines(linesJson, Lines, Quantities);
         // Boş linesJson = "tüm içerik": önceden sessizce hiçbir satır
         // taşınmıyordu (boş liste boş döngü) — tüm satırlarla doldur.
@@ -204,7 +204,8 @@ page 72088 "DOPSWHS LP API"
         ParentLP: Record "DOPSWHS LP Header";
         NestManager: Codeunit "DOPSWHS LP Nest Manager";
     begin
-        ParentLP.Get(parentLpNo);
+        if not ParentLP.Get(parentLpNo) then
+            Error(TargetLpMissingErr, parentLpNo);
         NestManager.Nest(Rec, ParentLP);
     end;
 
@@ -235,6 +236,29 @@ page 72088 "DOPSWHS LP API"
     end;
 
     [ServiceEnabled]
+    procedure addLineFromBinWithSource(itemNo: Code[20]; unitOfMeasure: Code[10]; quantity: Decimal; lotNo: Code[50]; serialNo: Code[50]; sourceBinCode: Code[20]; userId: Code[50]; sourceItemLedgerEntryNo: Integer)
+    var
+        LPMgt: Codeunit "DOPSWHS LP Management";
+        SourceEntry: Record "Item Ledger Entry";
+    begin
+        if sourceItemLedgerEntryNo <= 0 then
+            Error('Kaynak madde defteri girişini seçin.');
+        SourceEntry.Get(sourceItemLedgerEntryNo);
+        SourceEntry.TestField("Document No.");
+        LPMgt.AddLineFromBin(Rec, itemNo, unitOfMeasure, quantity, lotNo, serialNo, sourceBinCode, userId, sourceItemLedgerEntryNo);
+    end;
+
+    [ServiceEnabled]
+    procedure linkStockSource(lineNo: Integer; sourceItemLedgerEntryNo: Integer)
+    var
+        LPMgt: Codeunit "DOPSWHS LP Management";
+    begin
+        if sourceItemLedgerEntryNo <= 0 then
+            Error('Kaynak madde defteri girişini seçin.');
+        LPMgt.LinkStockLineSource(Rec, lineNo, sourceItemLedgerEntryNo);
+    end;
+
+    [ServiceEnabled]
     procedure moveToBin(targetBinCode: Code[20]; userId: Code[50])
     var
         LPMgt: Codeunit "DOPSWHS LP Management";
@@ -253,6 +277,12 @@ page 72088 "DOPSWHS LP API"
 
     [ServiceEnabled]
     procedure stopToPrinter(printLabel: Boolean; printerId: Code[50])
+    begin
+        stopToPrinterWithMte(printLabel, printerId, '');
+    end;
+
+    [ServiceEnabled]
+    procedure stopToPrinterWithMte(printLabel: Boolean; printerId: Code[50]; optionsJson: Text)
     var
         LPMgt: Codeunit "DOPSWHS LP Management";
         Telemetry: Codeunit "DOPSWHS Telemetry";
@@ -263,7 +293,7 @@ page 72088 "DOPSWHS LP API"
         LPMgt.Stop(Rec, false);
         if printLabel then begin
             ClearLastError();
-            if not TryPrintLabels(Rec, printerId) then
+            if not TryPrintLabels(Rec, printerId, optionsJson) then
                 Telemetry.LogWarning(
                     'Print.LPLabelFailed',
                     CopyStr(
@@ -276,39 +306,58 @@ page 72088 "DOPSWHS LP API"
     end;
 
     [TryFunction]
-    local procedure TryPrintLabels(var LP: Record "DOPSWHS LP Header"; PrinterId: Code[50])
+    local procedure TryPrintLabels(var LP: Record "DOPSWHS LP Header"; PrinterId: Code[50]; OptionsJson: Text)
     var
         Dispatcher: Codeunit "DOPSWHS Print Dispatcher";
     begin
-        Dispatcher.PrintPalletItemLabels(LP, PrinterId, 1);
+        Dispatcher.PrintPalletItemLabelsWithOptions(LP, PrinterId, 1, OptionsJson);
     end;
 
-    /// <summary>EMU/DKÇ: copies the document's item lines into this open LP; returns the line count.</summary>
+    /// <summary>BADE: MTE with the operator's extra fields (Giriş Yapan, tedarikçi lotu, KK onayı, doküman/revizyon).</summary>
     [ServiceEnabled]
-    procedure pullFromDocument(docType: Enum "DOPSWHS Assigned Doc Type"; docNo: Code[20]): Integer
+    procedure printMte(printerId: Code[50]; copies: Integer; optionsJson: Text)
     var
-        DocumentLink: Codeunit "DOPSWHS LP Document Link";
+        Dispatcher: Codeunit "DOPSWHS Print Dispatcher";
     begin
-        exit(DocumentLink.PullFromDocument(Rec, docType, docNo));
+        Dispatcher.PrintPalletItemLabelsWithOptions(Rec, printerId, copies, optionsJson);
     end;
 
-    /// <summary>Re-reads partner / ship-to / shipping data from the LP's source document.</summary>
+    // Distinct endpoint: older BC packages must reject rather than ignore operatorDisplayName.
     [ServiceEnabled]
-    procedure refreshDocumentSnapshot()
+    procedure printMteForOperator(printerId: Code[50]; copies: Integer; optionsJson: Text)
     var
-        DocumentLink: Codeunit "DOPSWHS LP Document Link";
+        Dispatcher: Codeunit "DOPSWHS Print Dispatcher";
     begin
-        DocumentLink.RefreshSnapshot(Rec);
+        Dispatcher.PrintPalletItemLabelsWithOptions(Rec, printerId, copies, optionsJson);
     end;
 
-    /// <summary>Packing list (pallet → carton → box hierarchy) of this LP as a PDF on the document printer.</summary>
+    /// <summary>JSON [{no,name}] of active employees for the MTE extra-field pickers.</summary>
     [ServiceEnabled]
-    procedure printPackingList(printerId: Code[50]): Integer
+    procedure listEmployees(): Text
     var
-        PackingList: Codeunit "DOPSWHS Packing List Mgt.";
+        Employee: Record Employee;
+        Result: JsonArray;
+        Entry: JsonObject;
+        ResultText: Text;
+        NameText: Text;
     begin
-        exit(PackingList.PrintForLp(Rec."No.", printerId));
+        Employee.SetRange(Status, Employee.Status::Active);
+        if Employee.FindSet() then
+            repeat
+                Clear(Entry);
+                NameText := (Employee."First Name" + ' ' + Employee."Last Name").Trim();
+                if NameText = '' then
+                    NameText := Employee."Search Name";
+                Entry.Add('no', Employee."No.");
+                Entry.Add('name', NameText);
+                Result.Add(Entry);
+            until Employee.Next() = 0;
+        Result.WriteTo(ResultText);
+        exit(ResultText);
     end;
+
+    var
+        TargetLpMissingErr: Label '%1 numaralı LP bulunamadı. LP numarasını kontrol edip tekrar deneyin.', Comment = '%1 LP no';
 
     local procedure ParseLines(LinesJson: Text; var Lines: List of [Integer]; var Quantities: Dictionary of [Integer, Decimal])
     var

@@ -40,57 +40,45 @@ internal fun mtePrinterCode(labelPrinter: String, documentPrinter: String): Stri
 internal fun mtePrintRoute(labelPrinter: String, documentPrinter: String): LpPrintRoute =
     LpPrintRoute("printPalletLabels", mtePrinterCode(labelPrinter, documentPrinter))
 
-/** EMU/DKÇ (15 Eyl 2026): LP labels follow the LP template design; BADE keeps its MTE flow. */
-internal fun usesTemplateLpLabels(flavor: String): Boolean = !flavor.equals("bade", ignoreCase = true)
-
-/**
- * List / bulk print: with template labels every LP (filled or empty) prints its
- * template label (BC picks pallet/carton/box/sack and the copies); otherwise
- * the BADE MTE / QR document routing.
- */
-internal fun lpListPrintRoute(templateLabels: Boolean, lineCount: Int, labelPrinter: String, documentPrinter: String): LpPrintRoute =
-    if (templateLabels) LpPrintRoute("printLabel", mtePrinterCode(labelPrinter, documentPrinter))
-    else bulkLpPrintRoute(lineCount, labelPrinter, documentPrinter)
-
-internal data class PullDocumentType(val enumName: String, val title: String)
-
-/** Document types the terminal can pull LP lines from (BC enum "DOPSWHS Assigned Doc Type"). */
-internal val PULL_DOCUMENT_TYPES: List<PullDocumentType> = listOf(
-    PullDocumentType("SalesOrder", "Satış Siparişi"),
-    PullDocumentType("PurchaseOrder", "Satınalma Siparişi"),
-    PullDocumentType("TransferOrder", "Transfer Siparişi"),
-    PullDocumentType("WhseReceipt", "Ambar Mal Kabul"),
-    PullDocumentType("WhseShipment", "Ambar Sevkiyat"),
-    PullDocumentType("WhsePick", "Toplama Belgesi"),
-    PullDocumentType("WhsePutaway", "Yerleştirme Belgesi"),
-    PullDocumentType("WhseMovement", "Ambar Hareketi"),
-    PullDocumentType("PostedSalesShipment", "Kayıtlı Satış Sevki"),
-    PullDocumentType("PostedPurchaseReceipt", "Kayıtlı Alış İrsaliyesi"),
-    PullDocumentType("PostedWhseReceipt", "Kayıtlı Ambar Mal Kabul"),
-    PullDocumentType("PostedWhseShipment", "Kayıtlı Ambar Sevkiyat"),
-    PullDocumentType("PostedTransferShipment", "Kayıtlı Transfer Sevki"),
-    PullDocumentType("PostedTransferReceipt", "Kayıtlı Transfer Alımı"),
+/** Extra MTE fields the operator fills before printing (BADE report 60150 request page). */
+internal data class MteOptions(
+    val inspectorEmployeeNo: String = "",
+    val supplierLotNo: String = "",
+    val qcEmployeeNo: String = "",
+    val qcApprovalDate: String = "",
 )
 
-/** A scanned document barcode (RE…, SH…, PI…, %S%…, %PO%…) selects the matching pull type. */
-internal fun pullDocumentTypeForBarcode(docType: String?): PullDocumentType? {
-    val enumName = when (docType) {
-        "receipt" -> "WhseReceipt"
-        "shipment" -> "WhseShipment"
-        "pick" -> "WhsePick"
-        "putaway" -> "WhsePutaway"
-        "movement" -> "WhseMovement"
-        "salesOrder" -> "SalesOrder"
-        "purchaseOrder" -> "PurchaseOrder"
-        "transferOrder" -> "TransferOrder"
-        else -> return null
-    }
-    return PULL_DOCUMENT_TYPES.firstOrNull { it.enumName == enumName }
+/** JSON with only the filled fields; dates already normalised to yyyy-MM-dd. */
+internal fun mteOptionsJson(options: MteOptions): String {
+    val json = org.json.JSONObject()
+    fun put(key: String, value: String) { if (value.isNotBlank()) json.put(key, value.trim()) }
+    put("inspectorEmployeeNo", options.inspectorEmployeeNo)
+    put("supplierLotNo", options.supplierLotNo)
+    put("qcEmployeeNo", options.qcEmployeeNo)
+    put("qcApprovalDate", options.qcApprovalDate)
+    return json.toString()
 }
 
-/** Lines can only be pulled into an open LP that is not reserved by a receipt. */
-internal fun canPullFromDocument(status: String, pendingReceiptNo: String): Boolean =
-    status.equals("Open", ignoreCase = true) && pendingReceiptNo.isBlank()
+/** Accepts dd.MM.yyyy, dd/MM/yyyy or yyyy-MM-dd; returns yyyy-MM-dd, "" for blank, null when invalid. */
+internal fun normalizeMteDate(input: String): String? {
+    val value = input.trim()
+    if (value.isEmpty()) return ""
+    Regex("""^(\d{4})-(\d{2})-(\d{2})$""").matchEntire(value)?.let { return value }
+    Regex("""^(\d{1,2})[./](\d{1,2})[./](\d{4})$""").matchEntire(value)?.let { m ->
+        val (d, mo, y) = m.destructured
+        val day = d.toInt(); val month = mo.toInt()
+        if (day !in 1..31 || month !in 1..12) return null
+        return "%s-%02d-%02d".format(y, month, day)
+    }
+    return null
+}
+
+/**
+ * The customer MTE is a PDF report: it needs the device's document printer;
+ * without one BC falls back to the ZPL MTE on the label printer.
+ */
+internal fun mteReportPrinterCode(labelPrinter: String, documentPrinter: String): String =
+    documentPrinter.trim().ifBlank { labelPrinter.trim() }
 
 internal fun canPrintMte(linesComplete: Boolean, lineCount: Int, pendingReceiptNo: String): Boolean =
     linesComplete && lineCount > 0 && pendingReceiptNo.isBlank()
@@ -129,6 +117,14 @@ internal fun lpLotIsRequired(trackingRequiresLot: Boolean, availableLotCount: In
 internal fun canEditLicensePlate(status: String): Boolean =
     status.equals("Open", ignoreCase = true)
 
+/**
+ * A stock-built pallet may receive another product/lot before it is used or
+ * assigned to a document. This is the normal mixed-pallet case: the first
+ * stock row creates the physical LP, later rows remain separate LP lines.
+ */
+internal fun canAppendLicensePlateLine(status: String): Boolean =
+    status.equals("Open", ignoreCase = true) || status.equals("Built", ignoreCase = true)
+
 internal fun canAssignLicensePlateBin(status: String, lineCount: Int, binCode: String): Boolean =
     binCode.isBlank() && lineCount == 0 && (
         status.equals("Open", ignoreCase = true) || status.equals("Built", ignoreCase = true)
@@ -148,8 +144,33 @@ internal fun canTransferLicensePlate(status: String, lineCount: Int): Boolean =
 internal fun canPartiallyUseLicensePlate(status: String, lineCount: Int): Boolean =
     status.equals("Built", ignoreCase = true) && lineCount > 0
 
-internal fun validPartialUseInput(quantity: Double?, lineNo: Int?, maximumQuantity: Double): Boolean =
-    quantity != null && quantity > 0.0 && quantity <= maximumQuantity && lineNo != null && lineNo > 0
+// "Kalanı yeni LP'ye ayır" 0 kabul eder: satırın tamamı yeni LP'ye geçer (BC
+// SplitForPartialUse). 23 Eyl düzeltmesi (f9961e7) ana hatta taşınmamıştı.
+internal fun validPartialUseInput(quantity: Double?, lineNo: Int?, maximumQuantity: Double, action: String): Boolean =
+    quantity != null && quantity.isFinite() &&
+        (quantity > 0.0 || (quantity == 0.0 && action == "CreateNewLP")) &&
+        quantity <= maximumQuantity && lineNo != null && lineNo > 0
+
+/** Transfer ekranındaki bir LP satırı: en çok taşınabilecek miktar ve operatörün yazdığı metin. */
+internal data class LpTransferEntry(val lineNo: Int, val maxQuantity: Double, val quantityText: String)
+
+/**
+ * Kısmi LP transferi için BC `transfer` eylemine gidecek `linesJson`.
+ * Boş ya da 0 yazılan satır taşınmaz; satırdaki miktardan fazlası ya da sayı olmayan
+ * metin geçersizdir (null). Hiç satır seçilmediyse de null döner.
+ */
+internal fun lpTransferLinesJson(entries: List<LpTransferEntry>): String? {
+    val array = org.json.JSONArray()
+    for (entry in entries) {
+        val text = entry.quantityText.trim()
+        val quantity = if (text.isEmpty()) 0.0 else text.replace(',', '.').toDoubleOrNull()?.takeIf { it.isFinite() }
+            ?: return null
+        if (quantity < 0.0 || quantity > entry.maxQuantity) return null
+        if (quantity == 0.0) continue
+        array.put(org.json.JSONObject().apply { put("lineNo", entry.lineNo); put("qty", quantity) })
+    }
+    return if (array.length() == 0) null else array.toString()
+}
 
 internal data class LpPartialAction(
     val apiValue: String,
@@ -161,7 +182,7 @@ internal val lpPartialActions = listOf(
     LpPartialAction(
         apiValue = "CreateNewLP",
         label = "Kalanı yeni LP'ye ayır",
-        help = "Girilen miktar bu LP'de kalır; kalan miktar yeni bir LP'ye aktarılır.",
+        help = "Girilen miktar bu LP'de kalır; kalan miktar yeni bir LP'ye aktarılır. Tamamını aktarmak için 0 girin.",
     ),
     LpPartialAction(
         apiValue = "RemoveExcess",
@@ -184,7 +205,9 @@ internal fun ledgerLpPrintSelection(result: LedgerBulkLpBuildResult): Set<String
 
 internal fun ledgerLpCompletionStatus(result: LedgerBulkLpBuildResult): String {
     val count = result.createdLpNos.size
-    val source = "Kaynak giriş: #${result.sourceEntryNo}."
+    val sourceEntries = result.sourceEntryNos.ifEmpty { listOf(result.sourceEntryNo) }
+    val source = "Kaynak giriş${if (sourceEntries.size > 1) "leri" else ""}: " +
+        sourceEntries.joinToString { "#$it" } + "."
     return when {
         result.printSkippedOnReplay ->
             "UYARI: Daha önce oluşturulan $count LP doğrulandı. $source " +
@@ -199,3 +222,42 @@ internal fun ledgerLpCompletionStatus(result: LedgerBulkLpBuildResult): String {
             "TAMAM: $count LP kaynak girişine bağlı ve etiketleri kuyruğa alındı. $source"
     }
 }
+
+/**
+ * printMte exists from BCWMS 1.14.1.39 on. Older BC builds answer the bound action with
+ * 404 (no such resource) or a 400 naming the action; then the label is still printed via
+ * printPalletLabels, only without the operator's extra fields.
+ */
+internal fun mteFallbackToLegacy(httpCode: Int, error: String): Boolean =
+    httpCode == 404 ||
+        error.contains("printMte", ignoreCase = true) ||
+        error.contains("No HTTP resource was found", ignoreCase = true)
+
+/** printPalletLabels takes only printerId + copies; drop optionsJson from the printMte body. */
+internal fun legacyMteBody(body: String): String {
+    val src = runCatching { org.json.JSONObject(body) }.getOrDefault(org.json.JSONObject())
+    return org.json.JSONObject().apply {
+        put("printerId", src.optString("printerId"))
+        put("copies", src.optInt("copies", 1).coerceAtLeast(1))
+    }.toString()
+}
+
+/** Explicit destination and quantity: never route a transfer to partial-use subtraction. */
+internal fun partialLpTransferBody(source: String, target: String, lineNo: Int, qty: Double?, maximum: Double): String? {
+    val destination = target.trim()
+    if (destination.isBlank() || destination.equals(source.trim(), ignoreCase = true) ||
+        lineNo <= 0 || qty == null || !qty.isFinite() || !maximum.isFinite() || qty <= 0 || qty > maximum) return null
+    val selections = lpTransferLinesJson(listOf(LpTransferEntry(lineNo, maximum, qty.toString()))) ?: return null
+    return org.json.JSONObject().put("targetLpNo", destination).put("linesJson", selections).toString()
+}
+
+internal data class ReceiptPostRequest(val action: String, val body: String)
+
+/** postToPrinter also closes receipt LPs, but explicitly skips LP labels in ReceiptMgmt. */
+internal fun receiptPostRequest(skipPrinting: Boolean, printReceipt: Boolean, documentPrinter: String, lpPrinter: String): ReceiptPostRequest =
+    ReceiptPostRequest(if (skipPrinting) "postToPrinter" else "postAndCloseLP", org.json.JSONObject().apply {
+        put("print", !skipPrinting && printReceipt)
+        put("invoice", false)
+        put("printerId", if (skipPrinting) "" else documentPrinter)
+        if (!skipPrinting) put("lpPrinterId", lpPrinter)
+    }.toString())

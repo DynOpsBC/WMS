@@ -40,6 +40,7 @@ page 72227 "DOPSWHS Receipt Line API"
                 field(expirationDateEnabled; ExpirationDateEnabled) { Caption = 'expirationDateEnabled'; Editable = false; }
                 field(expirationDateRequired; ExpirationDateRequired) { Caption = 'expirationDateRequired'; Editable = false; }
                 field(licensePlateNo; Rec."DOPSWHS LP No.") { Caption = 'licensePlateNo'; }
+                field(receiptLpAllocations; LpAllocations) { Caption = 'receiptLpAllocations'; Editable = false; }
                 field(bulkLpCount; BulkLpCount) { Caption = 'bulkLpCount'; Editable = false; }
             }
         }
@@ -74,6 +75,7 @@ page 72227 "DOPSWHS Receipt Line API"
         ExpirationDateEnabled := ReceiptMgmt.ReceiptLineUsesExpirationDates(Rec);
         ExpirationDateRequired := ReceiptMgmt.ReceiptLineRequiresExpirationDate(Rec);
         BulkLpCount := ReceiptMgmt.BulkLpCountForReceiptLine(Rec);
+        LpAllocations := ReceiptMgmt.ReceiptLpAllocations(Rec);
         ReceiptMgmt.GetSupplierLot(Rec, LotNo, SupplierLotNo);
     end;
 
@@ -112,6 +114,7 @@ page 72227 "DOPSWHS Receipt Line API"
     end;
 
     var
+        LpAllocations: Text;
         LotNo: Code[50];
         SupplierLotNo: Code[50];
         SupplierLotRequired: Boolean;

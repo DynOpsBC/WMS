@@ -144,7 +144,9 @@ fun QuantityDialogSheet(
                     itemNo = itemNo,
                     onBack = { showSupplierLotLookup = false },
                     onSelect = { selectedLot, selectedSupplierLot ->
-                        lot = selectedLot
+                        // BADE (16 Eyl 2026): "Lot No Ata" ile atanan iç lot lookup ile
+                        // değiştirilemez; lookup yalnız tedarikçi lotunu doldurur.
+                        if (onAssignLotNo == null) lot = selectedLot
                         supplierLot = selectedSupplierLot
                         showSupplierLotLookup = false
                     },
@@ -159,7 +161,7 @@ fun QuantityDialogSheet(
                     variantCode = variantCode,
                     onBack = { showAvailableLotLookupContent = false },
                     onSelect = { selectedLot ->
-                        lot = selectedLot
+                        if (onAssignLotNo == null) lot = selectedLot
                         showAvailableLotLookupContent = false
                     },
                 )

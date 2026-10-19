@@ -17,6 +17,15 @@
             <Width>9.58cm</Width>
             <Height>7.50cm</Height>
             <DataSetName>DataSet_Result</DataSetName>
+            <Filters>
+              <Filter>
+                <FilterExpression>=Len(Fields!MaddeKodu.Value) &gt; 0</FilterExpression>
+                <Operator>Equal</Operator>
+                <FilterValues>
+                  <FilterValue DataType="Boolean">true</FilterValue>
+                </FilterValues>
+              </Filter>
+            </Filters>
             <TablixBody>
               <TablixColumns>
                 <TablixColumn>
@@ -1090,8 +1099,7 @@
                                 <Paragraph>
                                   <TextRuns>
                                     <TextRun>
-                                      <Value>KONTROL EDEN
-ONAYLAYAN</Value>
+                                      <Value>GİRİŞ YAPAN</Value>
                                       <Style>
                                         <FontFamily>Verdana</FontFamily>
                                         <FontSize>5.5pt</FontSize>
@@ -1196,7 +1204,7 @@ ONAYLAYAN</Value>
                                 <Paragraph>
                                   <TextRuns>
                                     <TextRun>
-                                      <Value>İSİM</Value>
+                                      <Value>KONTROL EDEN</Value>
                                       <Style>
                                         <FontFamily>Verdana</FontFamily>
                                         <FontSize>5.5pt</FontSize>
@@ -1519,7 +1527,7 @@ ONAYLAYAN</Value>
                                       <Value>KARANTİNA</Value>
                                       <Style>
                                         <FontFamily>Verdana</FontFamily>
-                                        <FontSize>7pt</FontSize>
+                                        <FontSize>6pt</FontSize>
                                         <FontWeight>Bold</FontWeight>
                                       </Style>
                                     </TextRun>
@@ -1538,8 +1546,8 @@ ONAYLAYAN</Value>
                                   <Width>0.5pt</Width>
                                 </RightBorder>
                                 <VerticalAlign>Top</VerticalAlign>
-                                <PaddingLeft>2pt</PaddingLeft>
-                                <PaddingRight>2pt</PaddingRight>
+                                <PaddingLeft>0pt</PaddingLeft>
+                                <PaddingRight>0pt</PaddingRight>
                                 <PaddingTop>3pt</PaddingTop>
                                 <PaddingBottom>0pt</PaddingBottom>
                               </Style>
@@ -1753,6 +1761,9 @@ ONAYLAYAN</Value>
         <Field Name="CompanyLogo">
           <DataField>CompanyLogo</DataField>
         </Field>
+        <Field Name="LpNo">
+          <DataField>LpNo</DataField>
+        </Field>
         <Field Name="MaddeKodu">
           <DataField>MaddeKodu</DataField>
         </Field>
@@ -1812,9 +1823,6 @@ ONAYLAYAN</Value>
         </Field>
         <Field Name="QRCodeBase64">
           <DataField>QRCodeBase64</DataField>
-        </Field>
-        <Field Name="LpNo">
-          <DataField>LpNo</DataField>
         </Field>
         <Field Name="DokumanNo">
           <DataField>DokumanNo</DataField>

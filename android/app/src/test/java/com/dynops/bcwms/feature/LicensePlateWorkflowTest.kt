@@ -1,13 +1,14 @@
 package com.dynops.bcwms.feature
 
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
 class LicensePlateWorkflowTest {
     @Test
-    fun `LP numbers remain in natural order after pages are merged`() {
+    fun `LP numbers keep natural order after separately paged results are merged`() {
         val received = listOf("LP001", "LP120", "LP089", "LP002", "LP011")
         assertEquals(
             listOf("LP001", "LP002", "LP011", "LP089", "LP120"),
@@ -58,39 +59,32 @@ class LicensePlateWorkflowTest {
     }
 
     @Test
-    fun `template labels are used by every flavor except BADE`() {
-        assertTrue(usesTemplateLpLabels("emu"))
-        assertTrue(usesTemplateLpLabels("dynops"))
-        assertFalse(usesTemplateLpLabels("bade"))
-        assertFalse(usesTemplateLpLabels("BADE"))
+    fun `MTE dates are normalised to the XML format`() {
+        assertEquals("", normalizeMteDate("  "))
+        assertEquals("2026-09-16", normalizeMteDate("16.09.2026"))
+        assertEquals("2026-09-16", normalizeMteDate("16/9/2026"))
+        assertEquals("2026-09-16", normalizeMteDate("2026-09-16"))
+        assertEquals(null, normalizeMteDate("31.13.2026"))
+        assertEquals(null, normalizeMteDate("dün"))
     }
 
     @Test
-    fun `template label route prints the LP label on the label printer with document fallback`() {
-        assertEquals(LpPrintRoute("printLabel", "ZPL01"), lpListPrintRoute(true, 3, " ZPL01 ", "PDF01"))
-        assertEquals(LpPrintRoute("printLabel", "ZPL01"), lpListPrintRoute(true, 0, "ZPL01", ""))
-        assertEquals(LpPrintRoute("printLabel", "PDF01"), lpListPrintRoute(true, 2, "", "PDF01"))
-        assertEquals(LpPrintRoute("printLabel", ""), lpListPrintRoute(true, 2, "", ""))
-        assertEquals(bulkLpPrintRoute(3, "ZPL01", "PDF01"), lpListPrintRoute(false, 3, "ZPL01", "PDF01"))
+    fun `MTE options json carries only filled fields`() {
+        val json = org.json.JSONObject(mteOptionsJson(MteOptions(inspectorEmployeeNo = " E001 ", qcApprovalDate = "2026-09-16")))
+        assertEquals("E001", json.getString("inspectorEmployeeNo"))
+        assertEquals("2026-09-16", json.getString("qcApprovalDate"))
+        assertFalse(json.has("documentNo"))
+        assertFalse(json.has("revisionNo"))
+        assertFalse(json.has("revisionDate"))
+        assertFalse(json.has("supplierLotNo"))
+        assertEquals("{}", mteOptionsJson(MteOptions()))
     }
 
     @Test
-    fun `document barcode selects the pull document type`() {
-        assertEquals("WhseReceipt", pullDocumentTypeForBarcode("receipt")?.enumName)
-        assertEquals("WhseShipment", pullDocumentTypeForBarcode("shipment")?.enumName)
-        assertEquals("WhsePick", pullDocumentTypeForBarcode("pick")?.enumName)
-        assertEquals("SalesOrder", pullDocumentTypeForBarcode("salesOrder")?.enumName)
-        assertEquals("PurchaseOrder", pullDocumentTypeForBarcode("purchaseOrder")?.enumName)
-        assertEquals(null, pullDocumentTypeForBarcode("assembly"))
-        assertEquals(null, pullDocumentTypeForBarcode(null))
-        assertEquals(PULL_DOCUMENT_TYPES.size, PULL_DOCUMENT_TYPES.map { it.enumName }.distinct().size)
-    }
-
-    @Test
-    fun `only an open LP outside a receipt can pull a document`() {
-        assertTrue(canPullFromDocument("Open", ""))
-        assertFalse(canPullFromDocument("Built", ""))
-        assertFalse(canPullFromDocument("Open", "RE000624"))
+    fun `customer MTE report prefers the document printer`() {
+        assertEquals("PDF01", mteReportPrinterCode("ZPL01", " PDF01 "))
+        assertEquals("ZPL01", mteReportPrinterCode("ZPL01", ""))
+        assertEquals("", mteReportPrinterCode("", ""))
     }
 
     @Test
@@ -180,6 +174,15 @@ class LicensePlateWorkflowTest {
     }
 
     @Test
+    fun `open and built LP can receive another product or lot line`() {
+        assertTrue(canAppendLicensePlateLine("Open"))
+        assertTrue(canAppendLicensePlateLine("Built"))
+        assertFalse(canAppendLicensePlateLine("Assigned"))
+        assertFalse(canAppendLicensePlateLine("Used"))
+        assertFalse(canAppendLicensePlateLine("Unbuilt"))
+    }
+
+    @Test
     fun `empty unlocated LP can receive its first bin`() {
         assertTrue(canAssignLicensePlateBin("Open", 0, ""))
         assertTrue(canAssignLicensePlateBin("Built", 0, ""))
@@ -206,10 +209,13 @@ class LicensePlateWorkflowTest {
 
     @Test
     fun `partial use validates selected line and quantity bounds`() {
-        assertTrue(validPartialUseInput(quantity = 3.0, lineNo = 10000, maximumQuantity = 5.0))
-        assertFalse(validPartialUseInput(quantity = 0.0, lineNo = 10000, maximumQuantity = 5.0))
-        assertFalse(validPartialUseInput(quantity = 6.0, lineNo = 10000, maximumQuantity = 5.0))
-        assertFalse(validPartialUseInput(quantity = 3.0, lineNo = null, maximumQuantity = 5.0))
+        assertTrue(validPartialUseInput(quantity = 3.0, lineNo = 10000, maximumQuantity = 5.0, action = "CreateNewLP"))
+        assertTrue(validPartialUseInput(quantity = 0.0, lineNo = 10000, maximumQuantity = 5.0, action = "CreateNewLP"))
+        assertFalse(validPartialUseInput(quantity = 0.0, lineNo = 10000, maximumQuantity = 5.0, action = "RemoveExcess"))
+        assertFalse(validPartialUseInput(quantity = 0.0, lineNo = 10000, maximumQuantity = 5.0, action = "RemoveUsedPortion"))
+        assertFalse(validPartialUseInput(quantity = 6.0, lineNo = 10000, maximumQuantity = 5.0, action = "CreateNewLP"))
+        assertFalse(validPartialUseInput(quantity = 3.0, lineNo = null, maximumQuantity = 5.0, action = "CreateNewLP"))
+        assertFalse(validPartialUseInput(quantity = Double.NaN, lineNo = 10000, maximumQuantity = 5.0, action = "CreateNewLP"))
     }
 
     @Test
@@ -218,5 +224,87 @@ class LicensePlateWorkflowTest {
             listOf("CreateNewLP", "RemoveExcess", "RemoveUsedPortion"),
             lpPartialActions.map { it.apiValue },
         )
+    }
+
+    @Test
+    fun `printMte falls back to the legacy action only when BC does not know it`() {
+        assertTrue(mteFallbackToLegacy(404, ""))
+        assertTrue(mteFallbackToLegacy(400, "Action 'Microsoft.NAV.printMte' not found"))
+        assertTrue(mteFallbackToLegacy(400, "No HTTP resource was found that matches the request URI"))
+        assertFalse(mteFallbackToLegacy(400, "Yazıcı bulunamadı"))
+        assertFalse(mteFallbackToLegacy(500, "No WMS bridge printer is mapped for LP label printing"))
+    }
+
+    @Test
+    fun `legacy MTE body keeps printer and copies and drops the options`() {
+        val body = legacyMteBody("""{"printerId":"ZD230","copies":2,"optionsJson":"{\"tedarikciLotu\":\"X\"}"}""")
+        val o = org.json.JSONObject(body)
+        assertEquals("ZD230", o.getString("printerId"))
+        assertEquals(2, o.getInt("copies"))
+        assertFalse(o.has("optionsJson"))
+        assertEquals(1, org.json.JSONObject(legacyMteBody("not json")).getInt("copies"))
+    }
+
+    @Test
+    fun lpTransferLinesJsonSendsPartialQuantitiesAndSkipsZeroLines() {
+        val json = lpTransferLinesJson(
+            listOf(
+                LpTransferEntry(10000, 100.0, "40"),
+                LpTransferEntry(20000, 50.0, "0"),
+                LpTransferEntry(30000, 8.0, "2,5"),
+            ),
+        )
+        val array = org.json.JSONArray(json)
+        assertEquals(2, array.length())
+        assertEquals(10000, array.getJSONObject(0).getInt("lineNo"))
+        assertEquals(40.0, array.getJSONObject(0).getDouble("qty"), 0.0)
+        assertEquals(30000, array.getJSONObject(1).getInt("lineNo"))
+        assertEquals(2.5, array.getJSONObject(1).getDouble("qty"), 0.0)
+    }
+
+    @Test
+    fun lpTransferLinesJsonRejectsInvalidInput() {
+        assertNull(lpTransferLinesJson(listOf(LpTransferEntry(10000, 5.0, "6"))))
+        assertNull(lpTransferLinesJson(listOf(LpTransferEntry(10000, 5.0, "abc"))))
+        assertNull(lpTransferLinesJson(listOf(LpTransferEntry(10000, 5.0, "-1"))))
+        assertNull(lpTransferLinesJson(listOf(LpTransferEntry(10000, 5.0, ""))))
+        assertNull(lpTransferLinesJson(emptyList()))
+    }
+
+    @Test fun `partial transfer retains exact line destination and quantity without subtraction action`() {
+        val payload = org.json.JSONObject(partialLpTransferBody("LP000079", " LP000080 ", 20000, 1000.0, 5000.0)!!)
+        assertEquals("LP000080", payload.getString("targetLpNo"))
+        val lines = org.json.JSONArray(payload.getString("linesJson"))
+        assertEquals(1, lines.length())
+        assertEquals(20000, lines.getJSONObject(0).getInt("lineNo"))
+        assertEquals(1000.0, lines.getJSONObject(0).getDouble("qty"), 0.0)
+        assertFalse(payload.has("action"))
+    }
+
+    @Test fun `partial transfer refuses same LP missing target and invalid quantities`() {
+        assertNull(partialLpTransferBody("LP1", " lp1 ", 10000, 1.0, 5.0))
+        assertNull(partialLpTransferBody("LP1", " ", 10000, 1.0, 5.0))
+        for (qty in listOf(null, 0.0, -1.0, 6.0, Double.NaN, Double.POSITIVE_INFINITY))
+            assertNull(partialLpTransferBody("LP1", "LP2", 10000, qty, 5.0))
+        assertNull(partialLpTransferBody("LP1", "LP2", 0, 1.0, 5.0))
+    }
+
+    @Test fun `printerless receipt overrides document print and does not pass LP printer`() {
+        val request = receiptPostRequest(true, true, "DOC-OFFLINE", "LP-OFFLINE")
+        assertEquals("postToPrinter", request.action)
+        val body = org.json.JSONObject(request.body)
+        assertFalse(body.getBoolean("print"))
+        assertFalse(body.getBoolean("invoice"))
+        assertEquals("", body.getString("printerId"))
+        assertFalse(body.has("lpPrinterId"))
+    }
+
+    @Test fun `normal receipt retains label printing route and printer selection`() {
+        val request = receiptPostRequest(false, true, "DOC01", "LP01")
+        assertEquals("postAndCloseLP", request.action)
+        val body = org.json.JSONObject(request.body)
+        assertTrue(body.getBoolean("print"))
+        assertEquals("DOC01", body.getString("printerId"))
+        assertEquals("LP01", body.getString("lpPrinterId"))
     }
 }

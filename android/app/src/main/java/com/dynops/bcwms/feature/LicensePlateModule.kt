@@ -14,10 +14,13 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.dynops.bcwms.BcApi
+import com.dynops.bcwms.LocalNavigator
+import com.dynops.bcwms.Screen
 import com.dynops.bcwms.scanner.BarcodeIntentResolver
 import com.dynops.bcwms.scanner.ScanField
 import com.dynops.bcwms.ui.*
@@ -31,6 +34,15 @@ import org.json.JSONObject
  * Lookup list -> document (header + lines) -> actions:
  *   Build new · Add line (scan + qty) · Stop (-> SSCC + print) · Transfer · Unbuild · Print · Partial-use.
  */
+private const val LP_LIST_PREFS = "dopswhs_lp_list"
+private const val LP_LIST_SORT_DESC = "sortDescending"
+
+/** LP listesi LP No'ya göre doğal sırada (LP000009 < LP000010); azalanda en yeni LP en üstte. */
+internal fun lpListOrder(rows: List<JSONObject>, descending: Boolean): List<JSONObject> {
+    val ascending = rows.sortedWith(compareBy(warehouseBinCodeComparator) { it.optString("no") })
+    return if (descending) ascending.asReversed() else ascending
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun LicensePlateModule() {
@@ -38,6 +50,7 @@ fun LicensePlateModule() {
     val scope = rememberCoroutineScope()
 
     var selected by remember { mutableStateOf<String?>(null) }
+    var transferTarget by remember(TerminalSession.scope(context)) { mutableStateOf("") }
     var rows by remember { mutableStateOf<List<JSONObject>>(emptyList()) }
     var status by remember { mutableStateOf("") }
     var loading by remember { mutableStateOf(false) }
@@ -48,6 +61,9 @@ fun LicensePlateModule() {
     var search by remember { mutableStateOf("") }
     var lastCreatedLpNos by remember { mutableStateOf<Set<String>>(emptySet()) }
     var showLastCreatedOnly by remember { mutableStateOf(false) }
+    // BADE (16 Eki 2026): BC'deki gibi LP No'ya göre artan/azalan sıralama; seçim cihazda kalır.
+    val listPrefs = remember { context.getSharedPreferences(LP_LIST_PREFS, android.content.Context.MODE_PRIVATE) }
+    var sortDescending by remember { mutableStateOf(listPrefs.getBoolean(LP_LIST_SORT_DESC, false)) }
 
     fun loadList(statusAfterLoad: String? = null) {
         scope.launch {
@@ -71,7 +87,7 @@ fun LicensePlateModule() {
 
     val sel = selected
     if (sel != null) {
-        LpDocument(lpNo = sel, onBack = { selected = null; loadList() })
+        LpDocument(lpNo = sel, transferTarget = transferTarget, onTransferTarget = { transferTarget = it }, onBack = { selected = null; loadList() })
         return
     }
 
@@ -113,11 +129,7 @@ fun LicensePlateModule() {
                 // işlendiği için hata özeti ve yeniden-deneme davranışı değişmez.
                 val results = batch.map { no ->
                     val row = rows.firstOrNull { it.optString("no") == no }
-                    val templateLabels = usesTemplateLpLabels(com.dynops.bcwms.BuildConfig.FLAVOR)
-                    val route = if (templateLabels) {
-                        // EMU/DKÇ: her LP kendi şablon tasarımıyla (palet/koli/kutu/çuval) basılır.
-                        lpListPrintRoute(true, row?.optInt("lineCount") ?: 0, labelPrinter, documentPrinter)
-                    } else if (no in palletLabelRetryNos) {
+                    val route = if (no in palletLabelRetryNos) {
                         // İlk toplu oluşturma çağrısıyla aynı MTE'yi aynı
                         // yazıcıdan yeniden üret (ZPL yazıcıda ZPL, PDF yazıcıda RDLC).
                         mtePrintRoute(labelPrinter, documentPrinter)
@@ -186,7 +198,17 @@ fun LicensePlateModule() {
         com.dynops.bcwms.ui.DocSearchBar(value = search, onValueChange = { search = it }, onSearch = { loadList() }, label = "LP no ile ara")
         Spacer(Modifier.height(4.dp))
         StatusText(status)
-        Spacer(Modifier.height(8.dp))
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+            TextButton(
+                onClick = {
+                    sortDescending = !sortDescending
+                    listPrefs.edit().putBoolean(LP_LIST_SORT_DESC, sortDescending).apply()
+                },
+                modifier = Modifier.testTag("lp-list-sort"),
+            ) {
+                Text(if (sortDescending) "LP No ↓ büyükten küçüğe" else "LP No ↑ küçükten büyüğe", fontSize = 13.sp)
+            }
+        }
         if (lastCreatedLpNos.isNotEmpty()) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Checkbox(
@@ -201,7 +223,7 @@ fun LicensePlateModule() {
             }
         }
         LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            items(if (showLastCreatedOnly) rows.filter { it.optString("no") in lastCreatedLpNos } else rows) { lp ->
+            items(lpListOrder(if (showLastCreatedOnly) rows.filter { it.optString("no") in lastCreatedLpNos } else rows, sortDescending)) { lp ->
                 Card(
                     onClick = { selected = lp.optString("no") },
                     modifier = Modifier.fillMaxWidth(),
@@ -272,7 +294,7 @@ private fun StatusBadge(status: String) {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun LpDocument(lpNo: String, onBack: () -> Unit) {
+private fun LpDocument(lpNo: String, transferTarget: String, onTransferTarget: (String) -> Unit, onBack: () -> Unit) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
 
@@ -285,11 +307,15 @@ private fun LpDocument(lpNo: String, onBack: () -> Unit) {
     // dialogs — LP aç → kaynak bin + ürün/lot seç → adet → kaydet.
     var showAddLine by remember { mutableStateOf(false) }
     var showQty by remember { mutableStateOf(false) }
+    var pendingSourceAdd by remember { mutableStateOf<Pair<QuantityResult, String>?>(null) }
+    var sourceRepairLine by remember { mutableStateOf<JSONObject?>(null) }
     var scannedItem by remember { mutableStateOf("") }
     var selectedLineItem by remember { mutableStateOf<LpItemSelection?>(null) }
     var showTransfer by remember { mutableStateOf(false) }
     var showPartial by remember { mutableStateOf(false) }
-    var showPullDocument by remember { mutableStateOf(false) }
+    var printOnComplete by remember(lpNo) { mutableStateOf(false) }
+    val navigate = LocalNavigator.current
+    var showMteOptions by remember { mutableStateOf(false) }
     var showAssignBin by remember { mutableStateOf(false) }
     var showUnbuildConfirm by remember { mutableStateOf(false) }
     var showDeleteConfirm by remember { mutableStateOf(false) }
@@ -332,13 +358,20 @@ private fun LpDocument(lpNo: String, onBack: () -> Unit) {
         }
         scope.launch {
             busy = true; status = "İşlem yapılıyor..."
-            val r = if (name == "printPalletLabels") {
+            var r = if (name == "printPalletLabels" || name == "printMte") {
                 BcApi.boundActionLongRunning(context, "licensePlates", lpNo, name, body)
             } else {
                 BcApi.boundAction(context, "licensePlates", lpNo, name, body)
             }
+            var okNote = ""
+            if (!com.dynops.bcwms.isBadeFamily() && name == "printMte" && !r.ok && mteFallbackToLegacy(r.httpCode, BcApi.errorMessage(r.body))) {
+                // BC 1.14.1.38 ve öncesi printMte aksiyonunu tanımaz: etiket yine çıksın diye
+                // ek alanlar olmadan eski MTE yoluna düşülür (terminal BC'den önce güncellenirse).
+                r = BcApi.boundActionLongRunning(context, "licensePlates", lpNo, "printPalletLabels", legacyMteBody(body))
+                okNote = " (BC sürümü eski: ek alanlar basılmadı, BCWMS 1.14.1.39 yükleyin.)"
+            }
             busy = false
-            status = if (r.ok) "TAMAM: $okMsg" else QcErrorParser.friendlyStatus(BcApi.errorMessage(r.body), r.httpCode)
+            status = if (r.ok) "TAMAM: $okMsg$okNote" else QcErrorParser.friendlyStatus(BcApi.errorMessage(r.body), r.httpCode)
             if (r.ok) reload()
         }
     }
@@ -349,6 +382,7 @@ private fun LpDocument(lpNo: String, onBack: () -> Unit) {
     val pendingReceiptNo = h?.optString("pendingReceiptNo").orEmpty().takeUnless { it == "null" }.orEmpty()
     val awaitingReceipt = pendingReceiptNo.isNotBlank()
     val canEdit = headerLoaded && linesComplete && !awaitingReceipt && canEditLicensePlate(st)
+    val canAppendLine = headerLoaded && linesComplete && !awaitingReceipt && canAppendLicensePlateLine(st)
     val canTransfer = headerLoaded && linesComplete && !awaitingReceipt && canTransferLicensePlate(st, lines.size)
     val canPartiallyUse = headerLoaded && linesComplete && !awaitingReceipt && canPartiallyUseLicensePlate(st, lines.size)
     val canDelete = headerLoaded && linesComplete && !awaitingReceipt && canDeleteLicensePlate(st, lines.size)
@@ -357,7 +391,7 @@ private fun LpDocument(lpNo: String, onBack: () -> Unit) {
     val canUnbuild = headerLoaded && linesComplete && !awaitingReceipt &&
         (st.equals("Open", ignoreCase = true) || st.equals("Built", ignoreCase = true)) && !canDelete
 
-    fun addLineFromSourceBin(res: com.dynops.bcwms.ui.QuantityResult, scannedBin: String) {
+    fun addLineFromSourceBin(res: com.dynops.bcwms.ui.QuantityResult, scannedBin: String, sourceEntryNo: Int = 0) {
         scope.launch {
             busy = true
             val userId = BcApi.currentUserId(context).trim()
@@ -399,8 +433,10 @@ private fun LpDocument(lpNo: String, onBack: () -> Unit) {
                 put("serialNo", res.serialNo)
                 put("sourceBinCode", sourceBin)
                 put("userId", userId)
+                if (sourceEntryNo > 0) put("sourceItemLedgerEntryNo", sourceEntryNo)
             }.toString()
-            val r = BcApi.boundAction(context, "licensePlates", lpNo, "addLineFromBin", body)
+            val sourceAction = if (sourceEntryNo > 0) "addLineFromBinWithSource" else "addLineFromBin"
+            val r = BcApi.boundAction(context, "licensePlates", lpNo, sourceAction, body)
             busy = false
             val targetBin = h?.optString("binCode").orEmpty()
             status = if (r.ok)
@@ -456,19 +492,29 @@ private fun LpDocument(lpNo: String, onBack: () -> Unit) {
                                     color = MaterialTheme.colorScheme.primary,
                                     fontWeight = FontWeight.Bold,
                                 )
-                            val extra = listOfNotNull(
-                                ln.optInt("sourceItemLedgerEntryNo").takeIf { it > 0 }?.let { "Kaynak giriş: #$it" },
-                                ln.optString("sourceBinCode").takeIf { it.isNotBlank() && it != "null" }?.let { "Kaynak raf: $it" },
-                                ln.optString("lotNo").takeIf { it.isNotBlank() }?.let { "Lot $it" },
-                                ln.optString("serialNo").takeIf { it.isNotBlank() }?.let { "Seri $it" },
-                            ).joinToString(" · ")
+                                val extra = listOfNotNull(
+                                    ln.optInt("sourceItemLedgerEntryNo").takeIf { it > 0 }?.let { "Kaynak giriş: #$it" },
+                                    ln.optString("sourceDocumentNo").takeIf { it.isNotBlank() && it != "null" }?.let { "Belge: $it" },
+                                    ln.optString("sourceBinCode").takeIf { it.isNotBlank() && it != "null" }?.let { "Kaynak raf: $it" },
+                                    // BADE (16 Eyl 2026): sevk LP satırında ürünün geldiği palet.
+                                    ln.optString("sourceLpNo").takeIf { it.isNotBlank() && it != "null" }?.let { "Kaynak LP: $it" },
+                                    ln.optString("lotNo").takeIf { it.isNotBlank() }?.let { "Lot $it" },
+                                    ln.optString("serialNo").takeIf { it.isNotBlank() }?.let { "Seri $it" },
+                                ).joinToString(" · ")
                                 if (extra.isNotBlank()) Text(extra, fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                if (com.dynops.bcwms.isBadeFamily() && !awaitingReceipt &&
+                                    st in listOf("Open", "Built", "Assigned") && ln.optDouble("quantity") > 0 &&
+                                    ln.optInt("sourceItemLedgerEntryNo") == 0 && ln.optString("sourceDocumentType") == "None") {
+                                    TextButton(onClick = { sourceRepairLine = ln }, enabled = !busy && linesComplete) {
+                                        Text("Kaynak Girişi Bağla")
+                                    }
+                                }
                             }
                         }
                     }
                 }
                 if (lines.isEmpty() && !busy) EmptyState(
-                    if (awaitingReceipt) "$pendingReceiptNo mal kabulü henüz kaydedilmedi. Ürün, lot ve miktar LP + Kaydet başarılı olduğunda burada oluşacak."
+                    if (awaitingReceipt) "$pendingReceiptNo mal kabulü henüz kaydedilmedi. Ürün, lot ve miktar mal kabul deftere nakledildiğinde burada oluşacak."
                     else "Henüz satır yok. Satır Ekle düğmesiyle ürün ekleyin."
                 )
             }
@@ -494,7 +540,7 @@ private fun LpDocument(lpNo: String, onBack: () -> Unit) {
                         shape = RoundedCornerShape(14.dp),
                     ) { WmsActionLabel(WmsGlyph.BIN_SEARCH, "Depo Gözü Ata") }
                 }
-                if (canEdit) {
+                if (canAppendLine) {
                     OutlinedButton(
                         onClick = { showAddLine = true },
                         enabled = !busy && lpBinCode.isNotBlank(),
@@ -506,16 +552,24 @@ private fun LpDocument(lpNo: String, onBack: () -> Unit) {
                             if (lpBinCode.isBlank()) "Satır Ekle (önce depo gözü atayın)" else "Satır Ekle",
                         )
                     }
+                }
+                if (canEdit) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Checkbox(checked = printOnComplete, onCheckedChange = { printOnComplete = it }, enabled = !busy)
+                        Text("Tamamlarken etiketi yazdır", fontSize = 13.sp)
+                    }
+                    Text("Yazdırmadan tamamlayabilir, etiketi daha sonra basabilirsiniz.", fontSize = 12.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant)
                     Button(
                         onClick = {
                             val payload = JSONObject().apply {
-                                put("printLabel", true)
-                                put("printerId", getMtePrinter(context))
+                                put("printLabel", printOnComplete)
+                                put("printerId", if (printOnComplete) getMtePrinter(context) else "")
                             }.toString()
                             if (lines.isEmpty()) {
                                 status = "EKSİK: Bu LP boş. Tamamlamadan önce içine en az bir ürün okutun."
                             } else {
-                                action("stopToPrinter", payload, "LP tamamlandı")
+                                action("stopToPrinter", payload, if (printOnComplete) "LP tamamlandı; etiket isteği gönderildi" else "LP yazdırılmadan tamamlandı. Etiketi daha sonra yazdırabilirsiniz.")
                             }
                         },
                         // Boş LP'de düğme sessizce pasifti; neden tamamlanamadığı
@@ -552,65 +606,15 @@ private fun LpDocument(lpNo: String, onBack: () -> Unit) {
                     }
                 }
 
-                val templateLabels = usesTemplateLpLabels(com.dynops.bcwms.BuildConfig.FLAVOR)
-                if (templateLabels) {
-                    // EMU/DKÇ: tek "Etiket Yazdır" — BC, LP şablonunun tasarımını
-                    // (palet/koli/kutu/çuval, içerik listesi) ve kopya sayısını uygular.
-                    OutlinedButton(
-                        onClick = {
-                            action(
-                                "printLabel",
-                                JSONObject().apply {
-                                    put("printerId", getMtePrinter(context))
-                                    put("copies", 0)
-                                }.toString(),
-                                "Etiket yazıcıya gönderildi (şablon tasarımı ve kopya sayısı BC'den).",
-                                requiresCompleteLines = false,
-                            )
-                        },
-                        enabled = !busy && headerLoaded,
-                        modifier = Modifier.fillMaxWidth().height(50.dp),
-                        shape = RoundedCornerShape(14.dp),
-                    ) { WmsActionLabel(WmsGlyph.PRINTER, "Etiket Yazdır") }
-                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        OutlinedButton(
-                            onClick = { showPullDocument = true },
-                            enabled = !busy && headerLoaded && canPullFromDocument(st, pendingReceiptNo),
-                            modifier = Modifier.weight(1f).height(50.dp),
-                            shape = RoundedCornerShape(14.dp),
-                        ) { WmsActionLabel(WmsGlyph.ENTRIES, "Belgeden Doldur") }
-                        OutlinedButton(
-                            onClick = {
-                                action(
-                                    "printPackingList",
-                                    JSONObject().apply { put("printerId", getDefaultPrinter(context, PRINTER_USAGE_DOCUMENT)) }.toString(),
-                                    "Paketleme listesi belge yazıcısına gönderildi.",
-                                    requiresCompleteLines = false,
-                                )
-                            },
-                            enabled = !busy && headerLoaded && lines.isNotEmpty(),
-                            modifier = Modifier.weight(1f).height(50.dp),
-                            shape = RoundedCornerShape(14.dp),
-                        ) { WmsActionLabel(WmsGlyph.PRINTER, "Paketleme Listesi") }
-                    }
-                } else {
-                    OutlinedButton(
-                        onClick = {
-                            val route = mtePrintRoute(getDefaultPrinter(context, PRINTER_USAGE_LABEL), getDefaultPrinter(context, PRINTER_USAGE_DOCUMENT))
-                            action(
-                                route.action,
-                                JSONObject().apply {
-                                    put("printerId", route.printerCode)
-                                    put("copies", 1)
-                                }.toString(),
-                                "MTE yazdırma isteği gönderildi. Fiziksel etiketi kontrol edin.",
-                            )
-                        },
-                        enabled = !busy && headerLoaded && canPrintMte(linesComplete, lines.size, pendingReceiptNo),
-                        modifier = Modifier.fillMaxWidth().height(50.dp),
-                        shape = RoundedCornerShape(14.dp),
-                    ) { WmsActionLabel(WmsGlyph.PRINTER, "MTE Yazdır") }
-                }
+                OutlinedButton(
+                    // BADE (16 Eyl 2026): önce ek alanlar (Giriş Yapan, tedarikçi lotu,
+                    // KK onayı, doküman/revizyon) sorulur, sonra müşterinin kendi MTE
+                    // raporu belge yazıcısından basılır.
+                    onClick = { showMteOptions = true },
+                    enabled = !busy && headerLoaded && canPrintMte(linesComplete, lines.size, pendingReceiptNo),
+                    modifier = Modifier.fillMaxWidth().height(50.dp),
+                    shape = RoundedCornerShape(14.dp),
+                ) { WmsActionLabel(WmsGlyph.PRINTER, "MTE Yazdır") }
                 if (awaitingReceipt) {
                     Text("MTE, mal kabul kaydedildikten sonra yazdırılabilir.", style = MaterialTheme.typography.bodySmall)
                 }
@@ -811,41 +815,80 @@ private fun LpDocument(lpNo: String, onBack: () -> Unit) {
                     status = "HATA: Seri takipli üründe her seri numarası için miktar 1 olmalıdır."
                 } else {
                     showQty = false
-                    addLineFromSourceBin(res, sourceBin)
+                    if (com.dynops.bcwms.isBadeFamily()) pendingSourceAdd = res to sourceBin
+                    else addLineFromSourceBin(res, sourceBin)
                 }
             }
         )
     }
-    if (showPullDocument) {
-        PullDocumentSheet(
-            onDismiss = { showPullDocument = false },
-            onConfirm = { type, docNo ->
-                showPullDocument = false
+    pendingSourceAdd?.let { (res, sourceBin) ->
+        LpStockSourceSheet(
+            source = LpStockSourceKey(scannedItem, h?.optString("locationCode").orEmpty(), res.lotNo, res.serialNo),
+            quantityLabel = "${res.quantity} ${res.uom}",
+            repair = false,
+            onDismiss = { pendingSourceAdd = null },
+            onChoose = { entryNo ->
+                pendingSourceAdd = null
+                addLineFromSourceBin(res, sourceBin, entryNo)
+            },
+        )
+    }
+    sourceRepairLine?.let { line ->
+        LpStockSourceSheet(
+            source = LpStockSourceKey(
+                line.optString("itemNo"), h?.optString("locationCode").orEmpty(),
+                line.optString("lotNo"), line.optString("serialNo"), line.optString("variantCode"),
+            ),
+            quantityLabel = "${line.optDouble("quantity")} ${line.optString("unitOfMeasure")}",
+            repair = true,
+            onDismiss = { sourceRepairLine = null },
+            onChoose = { entryNo ->
+                sourceRepairLine = null
                 action(
-                    "pullFromDocument",
+                    "linkStockSource",
+                    JSONObject().put("lineNo", line.optInt("lineNo")).put("sourceItemLedgerEntryNo", entryNo).toString(),
+                    "Kaynak giriş #$entryNo bağlandı; stok miktarı değişmedi. Etiketi yeniden yazdırabilirsiniz.",
+                )
+            },
+        )
+    }
+    if (showMteOptions) {
+        MteOptionsSheet(
+            lpNo = lpNo,
+            onDismiss = { showMteOptions = false },
+            onConfirm = { options ->
+                showMteOptions = false
+                action(
+                    "printMte",
                     JSONObject().apply {
-                        put("docType", type.enumName)
-                        put("docNo", docNo)
+                        put("printerId", mteReportPrinterCode(getDefaultPrinter(context, PRINTER_USAGE_LABEL), getDefaultPrinter(context, PRINTER_USAGE_DOCUMENT)))
+                        put("copies", 1)
+                        put("optionsJson", mteOptionsJson(options))
                     }.toString(),
-                    "$docNo belgesinin satırları LP'ye çekildi; müşteri/sevk bilgisi LP'ye yazıldı.",
-                    requiresCompleteLines = false,
+                    "MTE yazdırma isteği gönderildi. Fiziksel etiketi kontrol edin.",
                 )
             },
         )
     }
     if (showTransfer) {
-        TransferSheet(onDismiss = { showTransfer = false }, onConfirm = { target ->
+        TransferSheet(lines = lines, onDismiss = { showTransfer = false }, onConfirm = { target, linesJson, count ->
             showTransfer = false
-            // Tüm satırları açıkça gönder — eski publish'te boş linesJson hiçbir
-            // satır taşımadan başarı dönüyordu (LPApi.ParseLines boş çıkışı).
-            val linesJson = org.json.JSONArray().apply {
-                lines.forEach { ln -> put(JSONObject().apply { put("lineNo", ln.optInt("lineNo")) }) }
-            }.toString()
-            action("transfer", JSONObject().apply { put("targetLpNo", target); put("linesJson", linesJson) }.toString(), "Transfer tamamlandı (${lines.size} satır)")
+            // Satırlar ve miktarlar açıkça gönderilir — eski publish'te boş linesJson hiçbir
+            // satır taşımadan başarı dönüyordu (LPApi.ParseLines boş çıkışı). Miktarı
+            // satırdan azı olan satır kısmi aktarılır, kalan bu LP'de durur.
+            action("transfer", JSONObject().apply { put("targetLpNo", target); put("linesJson", linesJson) }.toString(), "Transfer tamamlandı ($count satır)")
         })
     }
     if (showPartial) {
-        PartialUseSheet(lines = lines, onDismiss = { showPartial = false }, onConfirm = { mode, qty, lineNo ->
+        PartialUseSheet(sourceLp = lpNo, initialTarget = transferTarget, lines = lines,
+            onDismiss = { showPartial = false },
+            onTransfer = { target, body ->
+                onTransferTarget(target)
+                showPartial = false
+                action("transfer", body, "Seçilen miktar $target LP'sine aktarıldı; kalan miktar $lpNo LP'sinde.")
+            },
+            onProductionPick = { showPartial = false; navigate(Screen.Production) },
+            onConfirm = { mode, qty, lineNo ->
             showPartial = false
             val label = lpPartialActions.firstOrNull { it.apiValue == mode }?.label ?: "Kısmi kullanım"
             action("usePartial", JSONObject().apply { put("action", mode); put("qty", qty); put("lineNo", lineNo) }.toString(), "$label tamamlandı")
@@ -853,53 +896,89 @@ private fun LpDocument(lpNo: String, onBack: () -> Unit) {
     }
 }
 
-/** EMU/DKÇ: pick a document type (or scan its barcode) and pull its lines into the open LP. */
+/** BADE: extra MTE fields (report 60150 request page) collected on the terminal before printing. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun PullDocumentSheet(
+private fun MteOptionsSheet(
+    lpNo: String,
     onDismiss: () -> Unit,
-    onConfirm: (PullDocumentType, String) -> Unit,
+    onConfirm: (MteOptions) -> Unit,
 ) {
-    var selected by remember { mutableStateOf(PULL_DOCUMENT_TYPES.first()) }
-    var docNo by remember { mutableStateOf("") }
-    var expanded by remember { mutableStateOf(false) }
+    val context = LocalContext.current
+    val companyScope = remember { TerminalSession.scope(context) }
+    var employees by remember { mutableStateOf<List<Pair<String, String>>>(emptyList()) }
+    var inspector by remember { mutableStateOf("") }
+    var supplierLot by remember { mutableStateOf("") }
+    var qcEmployee by remember { mutableStateOf("") }
+    var qcDate by remember { mutableStateOf("") }
+    var error by remember { mutableStateOf("") }
+    var inspectorMenu by remember { mutableStateOf(false) }
+    var qcMenu by remember { mutableStateOf(false) }
 
-    SheetScaffold(onDismiss = onDismiss, contentPadding = PaddingValues(20.dp)) {
-        Text("Belgeden Doldur", fontWeight = FontWeight.Bold, fontSize = 18.sp)
-        Text(
-            "Belgenin madde satırları lot/seri dağılımıyla bu LP'ye kopyalanır; müşteri, sevk adresi ve sevkiyat yöntemi LP'ye yazılır. Belge barkodu okutulursa tür kendiliğinden seçilir.",
-            fontSize = 12.sp,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-        Spacer(Modifier.height(12.dp))
+    fun submit(options: MteOptions) {
+        val resolved = runCatching { mteOptionsForCurrentOperator(context, options, employees, companyScope) }
+        resolved.onSuccess(onConfirm).onFailure {
+            error = it.message ?: "Giriş yapan kullanıcı doğrulanamadı."
+        }
+    }
+
+    LaunchedEffect(lpNo) {
+        val r = BcApi.boundAction(context, "licensePlates", lpNo, "listEmployees", "{}")
+        if (r.ok) {
+            employees = runCatching {
+                val arr = org.json.JSONArray(BcApi.scalarValue(r.body))
+                (0 until arr.length()).map { i -> arr.getJSONObject(i).optString("no") to arr.getJSONObject(i).optString("name") }
+            }.getOrDefault(emptyList())
+        }
+    }
+
+    @Composable
+    fun employeePicker(label: String, value: String, expanded: Boolean, onExpand: (Boolean) -> Unit, onPick: (String) -> Unit) {
         Box(Modifier.fillMaxWidth()) {
-            OutlinedButton(onClick = { expanded = true }, modifier = Modifier.fillMaxWidth().height(50.dp)) {
-                Text("Belge türü: ${selected.title}")
-            }
-            DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
-                PULL_DOCUMENT_TYPES.forEach { type ->
-                    DropdownMenuItem(text = { Text(type.title) }, onClick = { selected = type; expanded = false })
+            OutlinedTextField(
+                value = value,
+                onValueChange = { onPick(it.uppercase()) },
+                label = { Text(label) },
+                singleLine = true,
+                trailingIcon = if (employees.isNotEmpty()) ({ TextButton(onClick = { onExpand(true) }) { Text("Seç") } }) else null,
+                modifier = Modifier.fillMaxWidth(),
+            )
+            DropdownMenu(expanded = expanded, onDismissRequest = { onExpand(false) }) {
+                DropdownMenuItem(text = { Text("— boş —") }, onClick = { onPick(""); onExpand(false) })
+                employees.forEach { (no, name) ->
+                    DropdownMenuItem(text = { Text("$no · $name") }, onClick = { onPick(no); onExpand(false) })
                 }
             }
         }
-        Spacer(Modifier.height(8.dp))
-        ScanField(
-            "Belge No.",
-            docNo,
-            { docNo = it.uppercase() },
-            modifier = Modifier.fillMaxWidth(),
-            onScanned = { raw ->
-                val resolved = BarcodeIntentResolver.resolve(raw)
-                pullDocumentTypeForBarcode(resolved.docType)?.let { selected = it }
-                docNo = resolved.value.trim().uppercase()
-            },
+    }
+
+    SheetScaffold(onDismiss = onDismiss, contentPadding = PaddingValues(20.dp)) {
+        Text("MTE Yazdır · Ek Bilgiler", fontWeight = FontWeight.Bold, fontSize = 18.sp)
+        Text(
+            MTE_EMPTY_FIELDS_HINT,
+            fontSize = 12.sp,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
-        Spacer(Modifier.height(16.dp))
+        Spacer(Modifier.height(10.dp))
+        Text("Etiket Ek Bilgiler", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+        employeePicker("Giriş Yapan (çalışan no)", inspector, inspectorMenu, { inspectorMenu = it }) { inspector = it }
+        OutlinedTextField(value = supplierLot, onValueChange = { supplierLot = it }, label = { Text("Tedarikçi Lotu") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+        employeePicker("Kalite Kontrol Onayı - İsim (çalışan no)", qcEmployee, qcMenu, { qcMenu = it }) { qcEmployee = it }
+        OutlinedTextField(value = qcDate, onValueChange = { qcDate = it }, label = { Text("Kalite Kontrol Onayı - Tarih") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+        if (error.isNotBlank()) Text(error, color = MaterialTheme.colorScheme.error, fontSize = 12.sp)
+        Spacer(Modifier.height(14.dp))
         Button(
-            onClick = { onConfirm(selected, docNo.trim()) },
-            enabled = docNo.isNotBlank(),
+            onClick = {
+                val qc = normalizeMteDate(qcDate)
+                if (qc == null) {
+                    error = "Tarih biçimi geçersiz. gg.aa.yyyy girin."
+                    return@Button
+                }
+                submit(MteOptions(inspector, supplierLot, qcEmployee, qc))
+            },
             modifier = Modifier.fillMaxWidth().height(50.dp),
-        ) { Text("Satırları Çek") }
+        ) { Text("MTE Yazdır") }
+        TextButton(onClick = { submit(mteOptionsWithoutExtraFields(inspector)) }, modifier = Modifier.fillMaxWidth()) { Text(MTE_EMPTY_FIELDS_BUTTON) }
         Spacer(Modifier.height(24.dp))
     }
 }
@@ -1169,18 +1248,51 @@ private suspend fun resolveLpItemOrLot(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun TransferSheet(onDismiss: () -> Unit, onConfirm: (String) -> Unit) {
+private fun TransferSheet(
+    lines: List<JSONObject>,
+    onDismiss: () -> Unit,
+    onConfirm: (target: String, linesJson: String, lineCount: Int) -> Unit,
+) {
     var target by remember { mutableStateOf("") }
+    // Varsayılan tam miktar: eski "tüm LP'yi taşı" davranışı değişmez. Kısmi için miktarı düşürün,
+    // satırı bırakmak için 0 yazın.
+    val quantityTexts = remember(lines) {
+        mutableStateMapOf<Int, String>().apply {
+            lines.forEach { put(it.optInt("lineNo"), fmtItemQty(it.optDouble("quantity"))) }
+        }
+    }
+    val entries = lines.map { LpTransferEntry(it.optInt("lineNo"), it.optDouble("quantity"), quantityTexts[it.optInt("lineNo")].orEmpty()) }
+    val linesJson = lpTransferLinesJson(entries)
     com.dynops.bcwms.ui.SheetScaffold(onDismiss = onDismiss, contentPadding = androidx.compose.foundation.layout.PaddingValues(20.dp)) {
         Text("LP Transferi", fontWeight = FontWeight.Bold, fontSize = 18.sp)
-        Text("İçeriği tamamlanmış bir hedef LP'ye taşıyın.", fontSize = 12.sp, color = Color.Gray)
+        Text(
+            "Seçilen miktarı aynı raftaki hedef LP'ye taşır. Kısmi taşımak için miktarı azaltın; kalan bu LP'de durur.",
+            fontSize = 12.sp, color = Color.Gray,
+        )
         Spacer(Modifier.height(12.dp))
         ScanField("Hedef LP No", target, { target = it }, modifier = Modifier.fillMaxWidth())
+        Spacer(Modifier.height(8.dp))
+        lines.forEach { line ->
+            val lineNo = line.optInt("lineNo")
+            val max = line.optDouble("quantity")
+            val text = quantityTexts[lineNo].orEmpty()
+            val parsed = text.trim().replace(',', '.').toDoubleOrNull()
+            OutlinedTextField(
+                value = text,
+                onValueChange = { quantityTexts[lineNo] = it.filter { c -> c.isDigit() || c == '.' || c == ',' } },
+                label = {
+                    Text("${line.optString("itemNo")} · ${line.optString("lotNo").ifBlank { "Lotsuz" }} (en fazla ${fmtItemQty(max)})")
+                },
+                singleLine = true,
+                isError = text.isNotBlank() && (parsed == null || parsed < 0.0 || parsed > max),
+                modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp),
+            )
+        }
         Spacer(Modifier.height(16.dp))
         Button(
-            enabled = target.isNotBlank(),
+            enabled = target.isNotBlank() && linesJson != null,
             modifier = Modifier.fillMaxWidth(),
-            onClick = { onConfirm(target.trim()) },
+            onClick = { onConfirm(target.trim(), linesJson ?: return@Button, org.json.JSONArray(linesJson).length()) },
         ) { Text("Transfer Et") }
         Spacer(Modifier.height(24.dp))
     }
@@ -1188,21 +1300,39 @@ private fun TransferSheet(onDismiss: () -> Unit, onConfirm: (String) -> Unit) {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun PartialUseSheet(
+internal fun PartialUseSheet(
+    sourceLp: String,
+    initialTarget: String,
     lines: List<JSONObject>,
+    onTransfer: (target: String, body: String) -> Unit,
+    onProductionPick: () -> Unit,
     onDismiss: () -> Unit,
     onConfirm: (mode: String, qty: Double, lineNo: Int) -> Unit,
 ) {
-    var selectedAction by remember { mutableStateOf(lpPartialActions.first()) }
-    var qty by remember { mutableStateOf("1") }
+    val transferAction = LpPartialAction("Transfer", "Hedef LP'ye aktar", "Alınacak miktarı mevcut hedef LP'ye aktarır; kalan miktar kaynak LP'de kalır. İki LP aynı rafta olmalıdır.")
+    val actions = listOf(transferAction) + lpPartialActions
+    var selectedAction by remember { mutableStateOf(transferAction) }
+    var target by remember { mutableStateOf(initialTarget) }
+    var confirmReduction by remember { mutableStateOf(false) }
+    var qty by remember { mutableStateOf("") }
     var selectedLineNo by remember(lines) { mutableStateOf(lines.firstOrNull()?.optInt("lineNo") ?: 0) }
     var actionExpanded by remember { mutableStateOf(false) }
     var lineExpanded by remember { mutableStateOf(false) }
     val selectedLine = lines.firstOrNull { it.optInt("lineNo") == selectedLineNo }
     val maximumQuantity = selectedLine?.optDouble("quantity") ?: 0.0
     val parsedQuantity = qty.toFiniteDoubleOrNull()
+    val isTransfer = selectedAction.apiValue == "Transfer"
+    val transferBody = partialLpTransferBody(sourceLp, target, selectedLineNo, parsedQuantity, maximumQuantity)
+    val validInput = if (isTransfer) transferBody != null else validPartialUseInput(parsedQuantity, selectedLineNo, maximumQuantity, selectedAction.apiValue)
+    if (confirmReduction) AlertDialog(
+        onDismissRequest = { confirmReduction = false },
+        title = { Text("LP miktarı azaltılacak") },
+        text = { Text("Bu işlem miktarı başka LP'ye aktarmaz. ${selectedAction.help} Girilen miktar: $qty. Devam edilsin mi?") },
+        confirmButton = { TextButton(onClick = { confirmReduction = false; onConfirm(selectedAction.apiValue, parsedQuantity ?: return@TextButton, selectedLineNo) }) { Text("Miktarı azalt") } },
+        dismissButton = { TextButton(onClick = { confirmReduction = false }) { Text("Vazgeç") } },
+    )
     com.dynops.bcwms.ui.SheetScaffold(onDismiss = onDismiss, contentPadding = androidx.compose.foundation.layout.PaddingValues(20.dp)) {
-        Text("Kısmi Kullanım", fontWeight = FontWeight.Bold, fontSize = 18.sp)
+        Text("Kısmi LP İşlemi", fontWeight = FontWeight.Bold, fontSize = 18.sp)
         Spacer(Modifier.height(8.dp))
         ExposedDropdownMenuBox(expanded = actionExpanded, onExpandedChange = { actionExpanded = !actionExpanded }) {
             OutlinedTextField(
@@ -1214,7 +1344,7 @@ private fun PartialUseSheet(
                 modifier = Modifier.fillMaxWidth().menuAnchor(),
             )
             ExposedDropdownMenu(expanded = actionExpanded, onDismissRequest = { actionExpanded = false }) {
-                lpPartialActions.forEach { action ->
+                actions.forEach { action ->
                     DropdownMenuItem(
                         text = { Text(action.label) },
                         onClick = { selectedAction = action; actionExpanded = false },
@@ -1222,7 +1352,15 @@ private fun PartialUseSheet(
                 }
             }
         }
-        Text(selectedAction.help, fontSize = 12.sp, color = Color.Gray)
+        Text(selectedAction.help, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        if (isTransfer) {
+            Spacer(Modifier.height(8.dp))
+            ScanField("Hedef LP No", target, { target = it }, modifier = Modifier.fillMaxWidth())
+            if (target.isNotBlank() && target.trim().equals(sourceLp, ignoreCase = true))
+                Text("Kaynak ve hedef LP aynı olamaz.", color = MaterialTheme.colorScheme.error, fontSize = 12.sp)
+            Text("Farklı raflardan üretime tek palet hazırlamak için üretim emrinde Ambar Çekme → Yeni Üretim LP akışını kullanın.", fontSize = 12.sp)
+            TextButton(onClick = onProductionPick) { Text("Üretim toplamaya git") }
+        }
         Spacer(Modifier.height(8.dp))
         ExposedDropdownMenuBox(expanded = lineExpanded, onExpandedChange = { lineExpanded = !lineExpanded }) {
             OutlinedTextField(
@@ -1243,7 +1381,7 @@ private fun PartialUseSheet(
                         },
                         onClick = {
                             selectedLineNo = line.optInt("lineNo")
-                            qty = "1"
+                            qty = ""
                             lineExpanded = false
                         },
                     )
@@ -1254,17 +1392,25 @@ private fun PartialUseSheet(
         OutlinedTextField(
             qty,
             { qty = it.filter { c -> c.isDigit() || c == '.' || c == ',' }.replace(',', '.') },
-            label = { Text("Miktar (en fazla $maximumQuantity)") },
+            label = { Text(when {
+                isTransfer -> "Aktarılacak miktar (en fazla ${fmtItemQty(maximumQuantity)})"
+                selectedAction.apiValue == "CreateNewLP" -> "Bu LP'de kalacak miktar (0–${fmtItemQty(maximumQuantity)})"
+                else -> "Miktar (en fazla ${fmtItemQty(maximumQuantity)})"
+            }) },
             singleLine = true,
-            isError = qty.isNotBlank() && !validPartialUseInput(parsedQuantity, selectedLineNo, maximumQuantity),
+            isError = qty.isNotBlank() && !validPartialUseInput(parsedQuantity, selectedLineNo, maximumQuantity, selectedAction.apiValue),
             modifier = Modifier.fillMaxWidth(),
         )
         Spacer(Modifier.height(16.dp))
         Button(
-            enabled = validPartialUseInput(parsedQuantity, selectedLineNo, maximumQuantity),
+            enabled = validInput,
             modifier = Modifier.fillMaxWidth(),
-            onClick = { onConfirm(selectedAction.apiValue, parsedQuantity ?: return@Button, selectedLineNo) },
-        ) { Text("Uygula") }
+            onClick = {
+                if (isTransfer) onTransfer(target.trim(), transferBody ?: return@Button)
+                else if (selectedAction.apiValue == "CreateNewLP") onConfirm(selectedAction.apiValue, parsedQuantity ?: return@Button, selectedLineNo)
+                else confirmReduction = true
+            },
+        ) { Text(if (isTransfer) "Hedef LP'ye Aktar" else "Uygula") }
         Spacer(Modifier.height(24.dp))
     }
 }

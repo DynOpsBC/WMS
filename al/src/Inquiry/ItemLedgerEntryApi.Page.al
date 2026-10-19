@@ -65,6 +65,16 @@ page 72214 "DOPSWHS Item Ledger Entry API"
     end;
 
     [ServiceEnabled]
+    procedure createLicensePlatesWithMte(templateCode: Code[20]; binCode: Code[20]; lpCount: Integer; quantityPerLp: Decimal; printerId: Code[50]; printLabels: Boolean; optionsJson: Text): Text
+    var
+        LPMgt: Codeunit "DOPSWHS LP Management";
+        CreatedLpNos: List of [Code[20]];
+    begin
+        LPMgt.BuildManyFromItemLedgerEntry(Rec."Entry No.", templateCode, binCode, lpCount, quantityPerLp, CreatedLpNos);
+        exit(FinishBulkLpCreation(CreatedLpNos, printLabels, printerId, false, optionsJson));
+    end;
+
+    [ServiceEnabled]
     procedure createLicensePlatesIdempotent(templateCode: Code[20]; binCode: Code[20]; lpCount: Integer; quantityPerLp: Decimal; printerId: Code[50]; printLabels: Boolean; requestId: Guid): Text
     var
         LPMgt: Codeunit "DOPSWHS LP Management";
@@ -75,6 +85,19 @@ page 72214 "DOPSWHS Item Ledger Entry API"
             Rec."Entry No.", templateCode, binCode, lpCount, quantityPerLp,
             requestId, CreatedLpNos, Replayed);
         exit(FinishBulkLpCreation(CreatedLpNos, printLabels, printerId, Replayed));
+    end;
+
+    [ServiceEnabled]
+    procedure createLicensePlatesIdempotentWithMte(templateCode: Code[20]; binCode: Code[20]; lpCount: Integer; quantityPerLp: Decimal; printerId: Code[50]; printLabels: Boolean; requestId: Guid; optionsJson: Text): Text
+    var
+        LPMgt: Codeunit "DOPSWHS LP Management";
+        CreatedLpNos: List of [Code[20]];
+        Replayed: Boolean;
+    begin
+        LPMgt.BuildManyFromItemLedgerEntryIdempotent(
+            Rec."Entry No.", templateCode, binCode, lpCount, quantityPerLp,
+            requestId, CreatedLpNos, Replayed);
+        exit(FinishBulkLpCreation(CreatedLpNos, printLabels, printerId, Replayed, optionsJson));
     end;
 
     /// <summary>
@@ -97,7 +120,62 @@ page 72214 "DOPSWHS Item Ledger Entry API"
         exit(FinishBulkLpCreation(CreatedLpNos, printLabels, printerId, Replayed));
     end;
 
+    [ServiceEnabled]
+    procedure createLicensePlatesFromPlanIdempotentWithMte(templateCode: Code[20]; binCode: Code[20]; lpCount: Integer; quantityPerLp: Decimal; quantityLastLp: Decimal; printerId: Code[50]; printLabels: Boolean; requestId: Guid; optionsJson: Text): Text
+    var
+        LPMgt: Codeunit "DOPSWHS LP Management";
+        CreatedLpNos: List of [Code[20]];
+        Replayed: Boolean;
+    begin
+        LPMgt.BuildManyFromItemLedgerEntryPlanIdempotent(
+            Rec."Entry No.", templateCode, binCode, lpCount, quantityPerLp, quantityLastLp,
+            requestId, CreatedLpNos, Replayed);
+        exit(FinishBulkLpCreation(CreatedLpNos, printLabels, printerId, Replayed, optionsJson));
+    end;
+
+    /// <summary>
+    /// Creates exactly one LP from one or more explicitly selected positive
+    /// Item Ledger Entries. The bound record must be the first source in the
+    /// JSON plan. Every resulting LP line preserves its exact source Entry No.
+    /// </summary>
+    [ServiceEnabled]
+    procedure createSingleLicensePlateFromEntriesIdempotent(templateCode: Code[20]; binCode: Code[20]; sourcePlanJson: Text; printerId: Code[50]; printLabels: Boolean; requestId: Guid): Text
+    var
+        LPMgt: Codeunit "DOPSWHS LP Management";
+        CreatedLpNos: List of [Code[20]];
+        SourceEntryNos: List of [Integer];
+        Replayed: Boolean;
+    begin
+        LPMgt.BuildSingleFromItemLedgerEntriesIdempotent(
+            Rec."Entry No.", sourcePlanJson, templateCode, binCode, requestId,
+            CreatedLpNos, SourceEntryNos, Replayed);
+        exit(FinishMultiSourceLpCreation(
+            CreatedLpNos, SourceEntryNos, sourcePlanJson, printLabels, printerId, Replayed));
+    end;
+
+    local procedure FinishMultiSourceLpCreation(var CreatedLpNos: List of [Code[20]]; SourceEntryNos: List of [Integer]; SourcePlanJson: Text; PrintLabels: Boolean; PrinterId: Code[50]; Replayed: Boolean): Text
+    var
+        ResultObject: JsonObject;
+        SourceArray: JsonArray;
+        EntryNo: Integer;
+        ResultText: Text;
+    begin
+        ResultText := FinishBulkLpCreation(CreatedLpNos, PrintLabels, PrinterId, Replayed);
+        ResultObject.ReadFrom(ResultText);
+        foreach EntryNo in SourceEntryNos do
+            SourceArray.Add(EntryNo);
+        ResultObject.Add('sourceItemLedgerEntryNos', SourceArray);
+        ResultObject.Add('sourcePlanJson', SourcePlanJson);
+        ResultObject.WriteTo(ResultText);
+        exit(ResultText);
+    end;
+
     local procedure FinishBulkLpCreation(var CreatedLpNos: List of [Code[20]]; PrintLabels: Boolean; PrinterId: Code[50]; Replayed: Boolean): Text
+    begin
+        exit(FinishBulkLpCreation(CreatedLpNos, PrintLabels, PrinterId, Replayed, ''));
+    end;
+
+    local procedure FinishBulkLpCreation(var CreatedLpNos: List of [Code[20]]; PrintLabels: Boolean; PrinterId: Code[50]; Replayed: Boolean; OptionsJson: Text): Text
     var
         LP: Record "DOPSWHS LP Header";
         LPMgt: Codeunit "DOPSWHS LP Management";
@@ -120,7 +198,7 @@ page 72214 "DOPSWHS Item Ledger Entry API"
             foreach LpNo in CreatedLpNos do begin
                 LP.Get(LpNo);
                 ClearLastError();
-                if TryPrintPalletItemLabel(LP, PrinterId) then
+                if TryPrintPalletItemLabel(LP, PrinterId, OptionsJson) then
                     PrintedCount += 1
                 else begin
                     PrintFailureCount += 1;
@@ -147,11 +225,11 @@ page 72214 "DOPSWHS Item Ledger Entry API"
     end;
 
     [TryFunction]
-    local procedure TryPrintPalletItemLabel(var LP: Record "DOPSWHS LP Header"; PrinterId: Code[50])
+    local procedure TryPrintPalletItemLabel(var LP: Record "DOPSWHS LP Header"; PrinterId: Code[50]; OptionsJson: Text)
     var
         Dispatcher: Codeunit "DOPSWHS Print Dispatcher";
     begin
-        Dispatcher.PrintPalletItemLabels(LP, PrinterId, 1);
+        Dispatcher.PrintPalletItemLabelsWithOptions(LP, PrinterId, 1, OptionsJson);
     end;
 
     var

@@ -771,7 +771,7 @@ fun AdHocMoveModule() {
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun CountModule() {
+fun CountModule(onOpenCountV2: ((String) -> Unit)? = null) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var selected by remember { mutableStateOf<String?>(null) }
@@ -854,7 +854,7 @@ fun CountModule() {
 
     var itemDocs by remember { mutableStateOf<Pair<String, Set<String>>?>(null) }
     val sel = selected
-    if (sel != null) { CountDocument(no = sel, onBack = { selected = null; load() }); return }
+    if (sel != null) { CountDocument(no = sel, onBack = { selected = null; load() }, onOpenCountV2 = onOpenCountV2); return }
 
     DocListScanHandler(
         enabled = true,
@@ -951,7 +951,7 @@ internal fun shouldRetryClassicCountWithoutCounter(errorMessage: String): Boolea
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun CountDocument(no: String, onBack: () -> Unit) {
+private fun CountDocument(no: String, onBack: () -> Unit, onOpenCountV2: ((String) -> Unit)? = null) {
     // Donanım Geri tuşu belge ekranından uygulamayı kapatmasın; listeye dönsün.
     androidx.activity.compose.BackHandler { onBack() }
     val context = LocalContext.current
@@ -1231,12 +1231,27 @@ private fun CountDocument(no: String, onBack: () -> Unit) {
             if (isV2Document) {
                 Spacer(Modifier.height(8.dp))
                 Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.10f))) {
-                    Text(
-                        "Bu belge Sayım V2 ile başlatılmıştır. Otomatik QR satırlarına devam etmek için ana menüde Sayım V2'yi açın.",
-                        Modifier.fillMaxWidth().padding(12.dp),
-                        fontWeight = FontWeight.SemiBold,
-                        color = MaterialTheme.colorScheme.primary,
-                    )
+                    Column(Modifier.fillMaxWidth().padding(12.dp)) {
+                        Text(
+                            "Bu belge Sayım V2 ile başlatılmıştır. Raf ve etiket okutarak saymak için Sayım V2'de açın.",
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.primary,
+                        )
+                        if (onOpenCountV2 != null) {
+                            Spacer(Modifier.height(8.dp))
+                            Button(
+                                onClick = { onOpenCountV2(no) },
+                                modifier = Modifier.fillMaxWidth().height(48.dp),
+                            ) { Text("Sayım V2'de Aç") }
+                        } else {
+                            Spacer(Modifier.height(4.dp))
+                            Text(
+                                "Ana menüden Sayım V2'yi açıp $no belgesini seçin.",
+                                fontSize = 12.sp,
+                                color = MaterialTheme.colorScheme.primary,
+                            )
+                        }
+                    }
                 }
             }
             if (recountLines.isNotEmpty()) {

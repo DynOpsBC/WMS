@@ -39,6 +39,10 @@ table 72016 "DOPSWHS Count Sheet Header"
                 CountMgmt.ValidateV2ScanModeChange(Rec, "V2 Scan Mode");
             end;
         }
+        field(90; "Count Round No."; Integer) { Caption = 'Sayım Turu'; DataClassification = CustomerContent; Editable = false; }
+        field(91; "Previous Round No."; Code[20]) { Caption = 'Önceki Tur Belgesi'; DataClassification = CustomerContent; Editable = false; TableRelation = "DOPSWHS Count Sheet Header"; }
+        field(92; "Next Round No."; Code[20]) { Caption = 'Sonraki Tur Belgesi'; DataClassification = CustomerContent; Editable = false; TableRelation = "DOPSWHS Count Sheet Header"; }
+        field(93; "Round Root No."; Code[20]) { Caption = 'Sayım Sayfası'; DataClassification = CustomerContent; Editable = false; TableRelation = "DOPSWHS Count Sheet Header"; }
         field(80; "Zone Filter"; Code[10])
         {
             Caption = 'Zone Filter';
@@ -60,6 +64,7 @@ table 72016 "DOPSWHS Count Sheet Header"
         NoSeries: Codeunit "No. Series";
         CountMgmt: Codeunit "DOPSWHS Count Mgmt";
     begin
+        "Count Round No." := 1;
         if "No." = '' then begin
             if Setup.Get('') then
                 if Setup."Count Sheet No. Series" <> '' then
@@ -74,23 +79,42 @@ table 72016 "DOPSWHS Count Sheet Header"
     end;
 
     trigger OnModify()
+    var
+        StoredHeader: Record "DOPSWHS Count Sheet Header";
     begin
         // A posted count is an immutable inventory document.  Keep the guard in
         // the table as well as the pages/API so alternate clients cannot bypass it.
-        if xRec.Status = xRec.Status::Posted then
+        // Check persisted state, not xRec: a codeunit-driven Modify can supply
+        // an xRec buffer that already contains the newly assigned archive link.
+        // The first transition must succeed; later edits must remain blocked.
+        StoredHeader.LockTable();
+        StoredHeader.Get("No.");
+        if StoredHeader."Next Round No." <> '' then
+            Error('Arşivlenmiş sayım turu değiştirilemez. Aktif Sayım Turunu Aç ile devam edin. Sonraki tur: %1.', StoredHeader."Next Round No.");
+        if StoredHeader.Status = StoredHeader.Status::Posted then
             Error(PostedSheetImmutableErr, "No.");
     end;
 
     trigger OnDelete()
     begin
-        if Status = Status::Posted then
-            Error(PostedSheetImmutableErr, "No.");
+        EnsureCanRemove("No.");
     end;
 
     trigger OnRename()
     begin
-        if Status = Status::Posted then
-            Error(PostedSheetImmutableErr, "No.");
+        EnsureCanRemove(xRec."No.");
+    end;
+
+    local procedure EnsureCanRemove(SheetNo: Code[20])
+    var
+        StoredHeader: Record "DOPSWHS Count Sheet Header";
+    begin
+        StoredHeader.LockTable();
+        StoredHeader.Get(SheetNo);
+        if (StoredHeader."Next Round No." <> '') or (StoredHeader."Previous Round No." <> '') then
+            Error('Sayım turu geçmişi silinemez veya yeniden adlandırılamaz.');
+        if StoredHeader.Status = StoredHeader.Status::Posted then
+            Error(PostedSheetImmutableErr, SheetNo);
     end;
 
     var

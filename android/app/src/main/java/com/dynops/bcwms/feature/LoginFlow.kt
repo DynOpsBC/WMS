@@ -39,18 +39,9 @@ data class LocalUserOption(val username: String, val displayName: String)
 
 /**
  * Kurulum ve saha testi sırasında BC servis hesabıyla yönetici geçişi gerekir.
- * Tüm uygulama flavor'larında kart görünür; operatör girişleri yine Local WMS
- * Users üzerinden yapılmaya devam eder.
+ * Bade kullanıcıları terminal/PIN akışını kullanır; servis hesabıyla atlama kapalıdır.
  */
-internal fun allowAdminBypass(flavor: String): Boolean = true
-
-/**
- * DKÇ (17 Eyl 2026): operators must not see an "admin, no password" card at
- * the top of their own list. Customer builds keep the admin route, but under
- * "Gelişmiş" at the bottom of the screen.
- */
-internal fun showAdminShortcutCard(flavor: String): Boolean =
-    allowAdminBypass(flavor) && !com.dynops.bcwms.shouldForceProductionFlow(flavor)
+internal fun allowAdminBypass(flavor: String): Boolean = !com.dynops.bcwms.isBadeFamily(flavor)
 
 /**
  * Email-based sign-in: email → device-code (browser) → environment + company selection → connect.
@@ -61,9 +52,19 @@ fun LoginFlow(onConnected: (Boolean) -> Unit) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
 
+    var connectionSetup by remember { mutableStateOf(!BcApi.hasToken(context)) }
+    if (com.dynops.bcwms.isBadeFamily() && BcApi.hasToken(context) && !connectionSetup) {
+        TerminalOperatorLogin(onConnected = onConnected, onConnectionSettings = { connectionSetup = true })
+        return
+    }
+
     // Paylaşımlı BC lisansı modeli: BC servis hesabı + ortam zaten bağlıysa
     // ekran doğrudan WMS operatör girişinden başlar (vardiya/kullanıcı değişimi
     // de "Bağlı" rozetine dokunup buradan yapılır).
+    val finishConnection: (Boolean) -> Unit = { success ->
+        if (success && com.dynops.bcwms.isBadeFamily()) connectionSetup = false
+        onConnected(success)
+    }
     var step by remember { mutableStateOf(if (BcApi.hasToken(context)) Step.LocalUser else Step.Email) }
     var email by remember {
         mutableStateOf(BcApi.getLoginEmail(context, BuildConfig.LOGIN_DEFAULT_EMAIL))
@@ -78,10 +79,6 @@ fun LoginFlow(onConnected: (Boolean) -> Unit) {
 
     // Kayıtlı WMS operatörleri (BC localUsers) — girişte listeden seçilir.
     var localUsers by remember { mutableStateOf<List<LocalUserOption>>(emptyList()) }
-    var terminals by remember { mutableStateOf<List<WmsTerminalOption>>(emptyList()) }
-    var selectedTerminal by remember { mutableStateOf(WmsTerminalSession.code(context)) }
-    var terminalsLoading by remember { mutableStateOf(false) }
-    var terminalsError by remember { mutableStateOf("") }
     var usersLoading by remember { mutableStateOf(false) }
     var usersError by remember { mutableStateOf("") }
     var manualUserEntry by remember { mutableStateOf(false) }
@@ -100,10 +97,6 @@ fun LoginFlow(onConnected: (Boolean) -> Unit) {
 
     fun startVerifiedAdminSession() {
         if (busy) return
-        if (selectedTerminal.isBlank()) {
-            status = "Önce bu cihazın terminalini seçin."
-            return
-        }
         scope.launch {
             busy = true
             status = "BC bağlantısı doğrulanıyor..."
@@ -112,10 +105,10 @@ fun LoginFlow(onConnected: (Boolean) -> Unit) {
             if (result.ok) {
                 BcApi.startAdminTestSession(context)
                 status = "Yönetici olarak bağlandı."
-                onConnected(true)
+                finishConnection(true)
             } else {
                 status = "🔴 ${BcApi.connectionFailureMessage(result)}"
-                onConnected(false)
+                finishConnection(false)
             }
         }
     }
@@ -161,10 +154,6 @@ fun LoginFlow(onConnected: (Boolean) -> Unit) {
         scope.launch {
             if (!BcApi.hasToken(context)) {
                 status = "🔴 Önce admin/servis erişim ayarlayın (Gelişmiş → token paste veya e-posta ile giriş)."
-                return@launch
-            }
-            if (selectedTerminal.isBlank()) {
-                status = "🔴 Önce bu cihazın terminalini seçin."
                 return@launch
             }
             // Sanitize the username before interpolating into the OData URL key. Reject any
@@ -214,7 +203,7 @@ fun LoginFlow(onConnected: (Boolean) -> Unit) {
                     loginCompanies = finalList
                     step = Step.SelectCompanyAfterLogin
                 } else
-                    onConnected(true)
+                    finishConnection(true)
             } else {
                 val msg = BcApi.errorMessage(r.body).ifBlank { "HTTP ${r.httpCode}" }
                 status = "🔴 ${if (msg.contains("Invalid username")) "Kullanıcı adı veya şifre hatalı." else msg}"
@@ -261,9 +250,20 @@ fun LoginFlow(onConnected: (Boolean) -> Unit) {
         }
     }
 
+    LaunchedEffect(Unit) {
+        if (com.dynops.bcwms.isBadeFamily() && BcApi.hasToken(context)) {
+            step = Step.SelectEnvCompany
+            busy = true
+            lastToken = BcApi.getToken(context)
+            envList = runCatching { BcApi.discoverEnvironments(lastToken) }.getOrDefault(emptyList())
+            selectedEnv = envList.firstOrNull { it.environment == BcApi.getEnvironment(context) }
+            busy = false
+        }
+    }
+
     // WMS giriş adımına gelince kayıtlı operatörleri çek (token varsa).
     LaunchedEffect(step) {
-        if (step != Step.LocalUser || localUsers.isNotEmpty() || !BcApi.hasToken(context)) return@LaunchedEffect
+        if (com.dynops.bcwms.isBadeFamily() || step != Step.LocalUser || localUsers.isNotEmpty() || !BcApi.hasToken(context)) return@LaunchedEffect
         usersLoading = true
         // Sade sorgu: $select/$orderby bazı BC sürümlerinde bu entity'de hata
         // veriyor ve liste sessizce boş kalıyordu. Önce sade dene, olmazsa
@@ -294,37 +294,6 @@ fun LoginFlow(onConnected: (Boolean) -> Unit) {
         usersLoading = false
     }
 
-    LaunchedEffect(step, BcApi.getCompanyId(context)) {
-        if (step != Step.LocalUser || !BcApi.hasToken(context)) return@LaunchedEffect
-        terminalsLoading = true
-        val page = runCatching {
-            BcApi.getAllPages(context, "wmsTerminals?\$filter=disabled eq false&\$top=100")
-        }.getOrNull()
-        if (page?.complete == true) {
-            terminals = page.rows.mapNotNull { row ->
-                val code = row.optString("code").trim()
-                if (code.isBlank()) null else WmsTerminalOption(
-                    code, row.optString("labelPrinterCode"), row.optString("documentPrinterCode"),
-                )
-            }.sortedBy { it.code }
-            val current = terminals.firstOrNull { it.code == WmsTerminalSession.code(context) }
-            if (current != null) {
-                WmsTerminalSession.select(context, current)
-                selectedTerminal = current.code
-            } else {
-                WmsTerminalSession.clear(context)
-                selectedTerminal = ""
-            }
-            terminalsError = if (terminals.isEmpty())
-                "BC'de WMS Terminalleri listesinden Terminal 1, Terminal 2 gibi kayıtları oluşturun."
-            else ""
-        } else {
-            terminals = emptyList()
-            terminalsError = "Terminal listesi alınamadı. BC paketini güncelleyip bağlantıyı kontrol edin."
-        }
-        terminalsLoading = false
-    }
-
     if (showForgotPassword) {
         ForgotPasswordSheet(
             username = localUsername,
@@ -333,23 +302,35 @@ fun LoginFlow(onConnected: (Boolean) -> Unit) {
     }
 
     val loginBrand = resolveCompanyBrand(BcApi.getCompanyName(context), BuildConfig.FLAVOR)
-    Column(Modifier.fillMaxSize().padding(20.dp).verticalScroll(rememberScrollState())) {
+    Column(Modifier.fillMaxSize().safeDrawingPadding().padding(20.dp).verticalScroll(rememberScrollState())) {
+        if (com.dynops.bcwms.isBadeFamily()) AppUpdateEntry()
+        if (com.dynops.bcwms.isBadeFamily() && BcApi.hasToken(context)) {
+            TextButton(onClick = { connectionSetup = false }) { Text("Terminal girişine dön") }
+        }
         Row(verticalAlignment = Alignment.CenterVertically) {
             CompanyLogo(brand = loginBrand, height = 28.dp)
             Spacer(Modifier.width(12.dp))
             Column {
-                Text("WMS Girişi", fontWeight = FontWeight.Bold, fontSize = 20.sp)
+                Text(if (com.dynops.bcwms.isBadeFamily()) "Bağlantı kurulumu" else "WMS Girişi", fontWeight = FontWeight.Bold, fontSize = 20.sp)
+                Text(if (com.dynops.bcwms.isBadeFamily()) "Ortam ve şirket seçimi" else "Hızlı ve güvenli depo erişimi", fontSize = 12.sp, color = Color.Gray)
             }
         }
         Spacer(Modifier.height(20.dp))
 
-        AppUpdateCard()
-        Spacer(Modifier.height(20.dp))
+        if (!com.dynops.bcwms.isBadeFamily()) {
+            AppUpdateCard()
+            Spacer(Modifier.height(20.dp))
+        }
 
         when (step) {
             Step.Email -> {
-                Text("Cihaz kurulumu", fontWeight = FontWeight.Bold, fontSize = 18.sp)
-                Text("Bir kez yapılır, cihaz hatırlar.", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text("Bu terminali bir kez bağlayın", fontWeight = FontWeight.Bold, fontSize = 18.sp)
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    if (com.dynops.bcwms.isBadeFamily()) "Microsoft hesabıyla bağlanın, ardından ortam ve şirketi seçin." else "İlk bağlantıdan sonra güvenli oturum cihazda hatırlanır; her açılışta e-posta girmeniz gerekmez.",
+                    fontSize = 12.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
                 Spacer(Modifier.height(14.dp))
                 if (editEmail) {
                     OutlinedTextField(
@@ -393,6 +374,7 @@ fun LoginFlow(onConnected: (Boolean) -> Unit) {
                     label = { Text("Microsoft hesabı şifresi") },
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
                     visualTransformation = PasswordVisualTransformation(),
+                    supportingText = { Text("Şifre kaydedilmez; yalnız ilk bağlantı için kullanılır.") },
                     singleLine = true, modifier = Modifier.fillMaxWidth()
                 )
                 Spacer(Modifier.height(12.dp))
@@ -400,13 +382,21 @@ fun LoginFlow(onConnected: (Boolean) -> Unit) {
                     onClick = { startPasswordSignIn() },
                     enabled = !busy && email.isNotBlank() && password.isNotBlank(),
                     modifier = Modifier.fillMaxWidth().height(52.dp)
-                ) { Text(if (busy) "Bağlanıyor…" else "Bağlan", fontWeight = FontWeight.Bold) }
+                ) { Text(if (busy) "Bağlanıyor…" else "Bağlan ve Bu Cihazı Hatırla", fontWeight = FontWeight.Bold) }
                 Spacer(Modifier.height(10.dp))
                 OutlinedButton(
                     onClick = { startSignIn() },
                     enabled = !busy && email.isNotBlank(),
                     modifier = Modifier.fillMaxWidth().height(48.dp)
                 ) { Text("Tarayıcıda Microsoft ile Giriş", fontSize = 13.sp) }
+                Text(
+                    "MFA açıksa bu seçeneği kullanın. Kod yalnız ilk cihaz kurulumunda istenir.",
+                    fontSize = 10.sp,
+                    color = Color.Gray,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.fillMaxWidth().padding(top = 5.dp),
+                )
+                if (!com.dynops.bcwms.isBadeFamily()) {
                 Spacer(Modifier.height(20.dp))
                 HorizontalDivider()
                 Spacer(Modifier.height(16.dp))
@@ -414,64 +404,52 @@ fun LoginFlow(onConnected: (Boolean) -> Unit) {
                     onClick = { step = Step.LocalUser; status = "" },
                     enabled = !busy,
                     modifier = Modifier.fillMaxWidth().height(48.dp)
-                ) { Text("Depo Girişi", fontSize = 13.sp) }
+                ) { Text("Bu Cihaz Zaten Kurulu — Depo Girişi", fontSize = 13.sp) }
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    "Servis bağlantısı daha önce yapıldıysa operatörünüzü seçin.",
+                    fontSize = 10.sp,
+                    color = Color.Gray
+                )
+                }
             }
 
             Step.LocalUser -> {
-                var showAdvanced by remember { mutableStateOf(false) }
-                Text("Depo Girişi", fontWeight = FontWeight.Bold, fontSize = 18.sp)
-                // DKÇ (17 Eyl 2026): one quiet line instead of a "Bağlantı bilgisi" card.
-                if (BcApi.hasToken(context)) Text(
-                    listOf(BcApi.getCompanyName(context), BcApi.getEnvironment(context)).filter(String::isNotBlank).joinToString(" · "),
-                    fontSize = 12.sp,
-                    color = Color.Gray,
+                Text("Depo çalışanı girişi", fontWeight = FontWeight.Medium)
+                Text(
+                    "Kullanıcınızı seçin ve şifrenizi girin.",
+                    fontSize = 11.sp,
+                    color = Color.Gray
                 )
                 Spacer(Modifier.height(12.dp))
-                Text("Bu cihazın terminali", fontSize = 12.sp, fontWeight = FontWeight.Medium, color = Color.Gray)
-                Spacer(Modifier.height(6.dp))
-                when {
-                    terminalsLoading -> Row(verticalAlignment = Alignment.CenterVertically) {
-                        CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
-                        Spacer(Modifier.width(8.dp))
-                        Text("Terminaller yükleniyor...", fontSize = 12.sp)
-                    }
-                    terminals.isNotEmpty() -> terminals.forEach { terminal ->
-                        val selected = selectedTerminal == terminal.code
-                        Card(
-                            onClick = {
-                                WmsTerminalSession.select(context, terminal)
-                                selectedTerminal = terminal.code
-                                status = ""
-                            },
-                            colors = CardDefaults.cardColors(
-                                containerColor = if (selected) Color(0xFFDFF4E5) else Color(0xFFF3F0FF),
-                            ),
-                            shape = RoundedCornerShape(12.dp),
-                            modifier = Modifier.fillMaxWidth().padding(bottom = 6.dp),
-                        ) {
-                            Row(Modifier.fillMaxWidth().padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                                Column(Modifier.weight(1f)) {
-                                    Text(terminal.code, fontWeight = FontWeight.Bold, fontSize = 16.sp)
-                                    Text(
-                                        "Etiket: ${terminal.labelPrinterCode.ifBlank { "Seçilmedi" }} · Belge: ${terminal.documentPrinterCode.ifBlank { "Seçilmedi" }}",
-                                        fontSize = 11.sp, color = Color.Gray,
-                                    )
-                                }
-                                Text(if (selected) "✓" else "›", fontSize = 20.sp, color = Color(0xFF6C5CE7))
-                            }
+                // Bu ekranda yalnız ortam yazıyordu; hangi şirkete ve hangi
+                // kullanıcıyla bağlı olunduğu görünmüyordu (UAT GN-19).
+                if (BcApi.hasToken(context)) {
+                    var oturumKullanici by remember { mutableStateOf("") }
+                    LaunchedEffect(Unit) { oturumKullanici = BcApi.currentUserId(context).trim() }
+                    Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)) {
+                        Column(Modifier.fillMaxWidth().padding(12.dp)) {
+                            Text("Bağlantı bilgisi", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                            Text("Ortam: ${BcApi.getEnvironment(context).ifBlank { "-" }}", fontSize = 12.sp)
+                            Text("Şirket: ${BcApi.getCompanyName(context).ifBlank { "-" }}", fontSize = 12.sp)
+                            Text(
+                                "Kullanıcı: ${oturumKullanici.ifBlank { "henüz giriş yapılmadı" }}",
+                                fontSize = 12.sp,
+                            )
                         }
                     }
-                    terminalsError.isNotBlank() -> Text(terminalsError, fontSize = 12.sp, color = MaterialTheme.colorScheme.error)
+                    Spacer(Modifier.height(12.dp))
                 }
-                Spacer(Modifier.height(12.dp))
                 if (!BcApi.hasToken(context)) {
                     Card(colors = CardDefaults.cardColors(containerColor = Color(0xFFFFF3E0))) {
-                        Text(
-                            "Bu cihaz henüz kurulmamış. Yöneticiniz kurulumu yapmalı.",
-                            Modifier.fillMaxWidth().padding(12.dp),
-                            fontSize = 12.sp,
-                            color = Color(0xFF6D4C41),
-                        )
+                        Column(Modifier.fillMaxWidth().padding(12.dp)) {
+                            Text("Bu cihaz henüz kurulmamış", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                            Text(
+                                "Bağlantı kurulumu için yöneticinizle iletişime geçin veya aşağıdaki gelişmiş ayarları açın.",
+                                fontSize = 11.sp,
+                                color = Color(0xFF6D4C41)
+                            )
+                        }
                     }
                     Spacer(Modifier.height(12.dp))
                 }
@@ -488,11 +466,11 @@ fun LoginFlow(onConnected: (Boolean) -> Unit) {
                             Spacer(Modifier.height(8.dp))
                         }
                         localUsers.isNotEmpty() -> {
-                            Text("Adınıza dokunun", fontSize = 12.sp, fontWeight = FontWeight.Medium, color = Color.Gray)
+                            Text("Kullanıcınızı seçin", fontSize = 12.sp, fontWeight = FontWeight.Medium, color = Color.Gray)
                             Spacer(Modifier.height(8.dp))
 
                             // Kurulum/saha testi için servis hesabıyla yönetici geçişi.
-                            if (showAdminShortcutCard(BuildConfig.FLAVOR)) Card(
+                            if (allowAdminBypass(BuildConfig.FLAVOR)) Card(
                                 onClick = { startVerifiedAdminSession() },
                                 enabled = !busy,
                                 colors = CardDefaults.cardColors(containerColor = Color(0xFFFFF3E0)),
@@ -576,7 +554,7 @@ fun LoginFlow(onConnected: (Boolean) -> Unit) {
                             }
                             Spacer(Modifier.height(4.dp))
                             TextButton(onClick = { manualUserEntry = true }) {
-                                Text("Listede yokum", fontSize = 12.sp)
+                                Text("Listede yokum — elle yazayım", fontSize = 12.sp)
                             }
                         }
                         // Liste boş/çekilemedi: nedenini göster + yönetici yolu
@@ -673,7 +651,7 @@ fun LoginFlow(onConnected: (Boolean) -> Unit) {
                     Spacer(Modifier.height(16.dp))
                     Button(
                         onClick = { startLocalSignIn() },
-                        enabled = !busy && !companyDiscovering && selectedTerminal.isNotBlank() && localUsername.isNotBlank() && localPassword.isNotBlank() && BcApi.hasToken(context),
+                        enabled = !busy && !companyDiscovering && localUsername.isNotBlank() && localPassword.isNotBlank() && BcApi.hasToken(context),
                         modifier = Modifier.fillMaxWidth().height(52.dp)
                     ) {
                         Text(
@@ -691,21 +669,12 @@ fun LoginFlow(onConnected: (Boolean) -> Unit) {
                         modifier = Modifier.align(Alignment.CenterHorizontally),
                     ) { Text("Şifremi unuttum", fontSize = 12.sp, color = Color(0xFF6C5CE7)) }
                 }
-                Spacer(Modifier.height(12.dp))
-                // DKÇ (17 Eyl 2026): setup routes (device connection, environment,
-                // admin session) live under one small "Gelişmiş" toggle so the
-                // operator screen is just the name list and the password.
-                TextButton(onClick = { showAdvanced = !showAdvanced }) {
-                    Text(if (showAdvanced) "Gelişmiş ▴" else "Gelişmiş ▾", fontSize = 12.sp, color = Color.Gray)
-                }
-                if (showAdvanced) TextButton(onClick = { step = Step.Email; status = ""; manualUserEntry = false }) { Text("Cihaz bağlantısı", fontSize = 12.sp) }
-                if (showAdvanced && !showAdminShortcutCard(BuildConfig.FLAVOR) && allowAdminBypass(BuildConfig.FLAVOR)) {
-                    TextButton(onClick = { startVerifiedAdminSession() }, enabled = !busy) { Text("Yönetici girişi", fontSize = 12.sp) }
-                }
+                Spacer(Modifier.height(4.dp))
+                TextButton(onClick = { step = Step.Email; status = ""; manualUserEntry = false }) { Text("‹ Geri (e-posta girişine dön)") }
                 // Ortam (sandbox) değiştirmek için eskiden baştan e-posta girişi
                 // yapmak gerekiyordu — oysa AAD token'ı zaten kayıtlı. Kayıtlı
                 // token'la ortamları doğrudan yeniden keşfedip seçiciye geçiyoruz.
-                if (showAdvanced && BcApi.hasToken(context)) {
+                if (BcApi.hasToken(context)) {
                     TextButton(
                         enabled = !busy,
                         onClick = {
@@ -725,7 +694,7 @@ fun LoginFlow(onConnected: (Boolean) -> Unit) {
                                 else ""
                             }
                         },
-                    ) { Text("Ortam değiştir (${BcApi.getEnvironment(context)})", fontSize = 12.sp) }
+                    ) { Text("Ortam / sandbox değiştir (${BcApi.getEnvironment(context)})", fontSize = 12.sp) }
                 }
                 // Not: yönetici girişi artık kullanıcı listesinin başındaki
                 // "Yönetici (demo sürüm)" kartından yapılıyor.
@@ -745,7 +714,7 @@ fun LoginFlow(onConnected: (Boolean) -> Unit) {
                     val isActive = c.id.equals(activeId, ignoreCase = true)
                     Card(
                         onClick = {
-                            onConnected(false)
+                            finishConnection(false)
                             scope.launch {
                                 busy = true
                                 status = "${c.displayName} doğrulanıyor..."
@@ -754,10 +723,10 @@ fun LoginFlow(onConnected: (Boolean) -> Unit) {
                                 busy = false
                                 if (result.ok) {
                                     status = "🟢 ${c.displayName} şirketine bağlandı."
-                                    onConnected(true)
+                                    finishConnection(true)
                                 } else {
                                     status = "🔴 ${BcApi.connectionFailureMessage(result)}"
-                                    onConnected(false)
+                                    finishConnection(false)
                                 }
                             }
                         },
@@ -825,14 +794,27 @@ fun LoginFlow(onConnected: (Boolean) -> Unit) {
             }
 
             Step.SelectEnvCompany -> {
-                Text("Ortam seçin", fontWeight = FontWeight.Medium)
+                if (com.dynops.bcwms.isBadeFamily()) {
+                    Surface(shape = RoundedCornerShape(12.dp), color = MaterialTheme.colorScheme.primaryContainer) {
+                        Column(Modifier.fillMaxWidth().padding(16.dp)) {
+                            Text("Şu an seçili ortam", style = MaterialTheme.typography.labelMedium)
+                            Text(BcApi.getEnvironment(context).ifBlank { "Henüz seçilmedi" }, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                            Text(BcApi.getCompanyName(context), style = MaterialTheme.typography.bodyMedium)
+                        }
+                    }
+                    Spacer(Modifier.height(20.dp))
+                    Text("1. Ortamı seçin", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                    Text("Sandbox: test ortamı · Production: canlı ortam", style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    if (busy) LinearProgressIndicator(Modifier.fillMaxWidth().padding(top = 8.dp))
+                } else Text("Ortam seçin", fontWeight = FontWeight.Medium)
                 Spacer(Modifier.height(6.dp))
                 // Otomatik keşif her müşterinin ortam adını bilemez (BADE =
                 // "Production" vb.) — kullanıcı ortam adını elle yoklayabilir.
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     OutlinedTextField(
                         value = manualEnv, onValueChange = { manualEnv = it },
-                    label = { Text("Ortam adı (ör. ${BuildConfig.BC_DEFAULT_ENVIRONMENT})") },
+                    label = { Text(if (com.dynops.bcwms.isBadeFamily()) "Ortam adıyla ara" else "Ortam adı (ör. ${BuildConfig.BC_DEFAULT_ENVIRONMENT})") },
                         singleLine = true, modifier = Modifier.weight(1f),
                     )
                     Spacer(Modifier.width(8.dp))
@@ -856,26 +838,28 @@ fun LoginFlow(onConnected: (Boolean) -> Unit) {
                 envList.forEach { ec ->
                     val sel = ec.environment == selectedEnv?.environment
                     Card(
-                        onClick = { selectedEnv = ec },
+                        onClick = { if (!busy) selectedEnv = ec },
                         modifier = Modifier.fillMaxWidth().padding(vertical = 3.dp),
                         colors = CardDefaults.cardColors(containerColor = if (sel) Color(0xFFD1C4E9) else Color(0xFFF5F5F5))
                     ) {
                         Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                            RadioButton(selected = sel, onClick = { selectedEnv = ec })
+                            RadioButton(selected = sel, enabled = !busy, onClick = { selectedEnv = ec })
                             Text("${ec.environment} (${ec.companies.size} şirket)", fontWeight = FontWeight.Medium)
                         }
                     }
                 }
                 Spacer(Modifier.height(12.dp))
-                Text("Şirket seçin", fontWeight = FontWeight.Medium)
+                Text(if (com.dynops.bcwms.isBadeFamily()) "2. Şirketi seçip bağlanın" else "Şirket seçin", fontWeight = FontWeight.Bold)
                 Spacer(Modifier.height(6.dp))
                 selectedEnv?.companies?.forEach { c ->
                     Card(
                         onClick = {
+                            if (busy) return@Card
+                            val environmentToConnect = selectedEnv ?: return@Card
                             scope.launch {
-                                onConnected(false)
+                                finishConnection(false)
                                 busy = true; status = "Bağlanılıyor: ${c.displayName}..."
-                                BcApi.setEnvironment(context, selectedEnv!!.environment)
+                                BcApi.setEnvironment(context, environmentToConnect.environment)
                                 BcApi.setCompany(context, c.id, c.displayName)
                                 val r = BcApi.testConnection(context)
                                 busy = false
@@ -885,7 +869,7 @@ fun LoginFlow(onConnected: (Boolean) -> Unit) {
                                     // şirketleri şimdi hesapla/sakla. WMS kullanıcı girişi yapılırsa
                                     // orada kullanıcı-bazlı daha dar listeyle üzerine yazılır.
                                     val wmsCompanies = runCatching {
-                                        BcApi.probeWmsCompanies(context, selectedEnv!!.environment, selectedEnv!!.companies)
+                                        BcApi.probeWmsCompanies(context, environmentToConnect.environment, environmentToConnect.companies)
                                     }.getOrDefault(emptyList())
                                     BcApi.saveAccessibleCompanies(
                                         context,
@@ -894,16 +878,17 @@ fun LoginFlow(onConnected: (Boolean) -> Unit) {
                                     // Paylaşımlı BC lisansı: ortam bağlantısı servis hesabıyla
                                     // yapıldı; oturum ancak WMS operatörü kendi kullanıcı adı +
                                     // şifresiyle doğrulanınca açılır (BC → WMS Users / Local User).
-                                    status = "🟢 Ortam bağlandı: ${selectedEnv!!.environment} / ${c.displayName} — şimdi WMS kullanıcınızla giriş yapın"
+                                    status = "🟢 Ortam bağlandı: ${environmentToConnect.environment} / ${c.displayName} — şimdi WMS kullanıcınızla giriş yapın"
                                     step = Step.LocalUser
-                                } else { status = "🔴 ${BcApi.connectionFailureMessage(r)}"; onConnected(false) }
+                                    if (com.dynops.bcwms.isBadeFamily()) connectionSetup = false
+                                } else { status = "🔴 ${BcApi.connectionFailureMessage(r)}"; finishConnection(false) }
                             }
                         },
                         modifier = Modifier.fillMaxWidth().padding(vertical = 3.dp), shape = RoundedCornerShape(10.dp)
                     ) {
                         Column(Modifier.padding(12.dp)) {
                             Text(c.displayName, fontWeight = FontWeight.Medium)
-                            Text("Seçmek için dokunun →", fontSize = 11.sp, color = Color(0xFF6A1B9A))
+                            Text(if (com.dynops.bcwms.isBadeFamily()) "Bu şirketle devam et →" else "Seçmek için dokunun →", fontSize = 11.sp, color = Color(0xFF6A1B9A))
                         }
                     }
                 }
@@ -911,7 +896,7 @@ fun LoginFlow(onConnected: (Boolean) -> Unit) {
                 // yanlışlıkla açan operatör ekranda kilitli kalıyordu.
                 if (BcApi.hasToken(context)) {
                     Spacer(Modifier.height(8.dp))
-                    TextButton(onClick = { step = Step.LocalUser; status = "" }) {
+                    TextButton(onClick = { if (com.dynops.bcwms.isBadeFamily()) connectionSetup = false else step = Step.LocalUser; status = "" }, enabled = !busy) {
                         Text("‹ Vazgeç (WMS girişine dön)", fontSize = 12.sp)
                     }
                 }
@@ -927,7 +912,7 @@ fun LoginFlow(onConnected: (Boolean) -> Unit) {
         // yalnızca geliştirme varyantlarında gösterilir.
         if (!shouldForceProductionFlow(BuildConfig.FLAVOR)) {
             TextButton(onClick = { showAdvanced = !showAdvanced }) { Text(if (showAdvanced) "Token girişini gizle" else "Gelişmiş: token ile giriş") }
-            if (showAdvanced) TokenPasteFallback(onConnected = onConnected)
+            if (showAdvanced) TokenPasteFallback(onConnected = finishConnection)
         }
     }
 }

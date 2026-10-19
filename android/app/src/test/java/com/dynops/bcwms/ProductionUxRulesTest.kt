@@ -4,6 +4,7 @@ import com.dynops.bcwms.feature.allowAdminBypass
 import com.dynops.bcwms.ui.assignedToMeClause
 import com.dynops.bcwms.ui.canLoadAssignedOnlyList
 import com.dynops.bcwms.ui.operatorFacingApiError
+import com.dynops.bcwms.ui.operatorSupportReference
 import com.dynops.bcwms.ui.normalizeQtyInput
 import com.dynops.bcwms.ui.operatorFacingStatus
 import org.junit.Assert.assertEquals
@@ -17,19 +18,6 @@ class ProductionUxRulesTest {
         assertTrue(shouldForceProductionFlow("bade"))
         assertFalse(shouldForceProductionFlow("dynops"))
         assertTrue(shouldForceProductionFlow("emu"))
-    }
-
-    @Test
-    fun `kitoko behaves like the EMU line but keeps its own brand`() {
-        assertTrue(isEmuFamily("kitoko"))
-        assertTrue(isEmuFamily("emu"))
-        assertFalse(isEmuFamily("bade"))
-        assertTrue(shouldForceProductionFlow("kitoko"))
-        assertEquals(operatorHomeScreens("emu"), operatorHomeScreens("kitoko"))
-        assertEquals(
-            com.dynops.bcwms.ui.CompanyBrand.DEFAULT,
-            com.dynops.bcwms.ui.resolveCompanyBrand("KITOKO-TR-DEMO-V1", "kitoko"),
-        )
     }
 
     @Test
@@ -83,14 +71,9 @@ class ProductionUxRulesTest {
 
     @Test
     fun `BADE cannot bypass local operator authentication with service token`() {
-        assertTrue(allowAdminBypass("bade"))
+        assertFalse(allowAdminBypass("bade"))
         assertTrue(allowAdminBypass("dynops"))
         assertTrue(allowAdminBypass("customer"))
-        // DKÇ 17 Eyl: customer builds keep the admin route but not as a card
-        // above the operators' own names.
-        assertFalse(com.dynops.bcwms.feature.showAdminShortcutCard("emu"))
-        assertFalse(com.dynops.bcwms.feature.showAdminShortcutCard("bade"))
-        assertTrue(com.dynops.bcwms.feature.showAdminShortcutCard("dynops"))
     }
 
     @Test
@@ -116,22 +99,76 @@ class ProductionUxRulesTest {
     }
 
     @Test
-    fun `disabled warehouse tracking explains why an existing lot cannot be entered`() {
-        val visible = operatorFacingApiError(
-            "Warehouse item tracking is not enabled for No. KLC-7. CorrelationId: 1234-abcd.", 400)
-        assertTrue(visible, visible.contains("ambar lot/seri takibi kapalı"))
-        assertTrue(visible.contains("REF-"))
-        assertFalse(visible.contains("CorrelationId"))
-    }
-
-    @Test
     fun `raw Business Central errors become Turkish support references`() {
         val visible = operatorFacingApiError("The Item does not exist. Identification fields: No.=X", 404)
 
-        assertTrue(visible.startsWith("HATA: İşlem tamamlanamadı."))
+        // 16 Eyl 2026: "does not exist" artık kaydın adıyla açıklanır, REF kodu kalır.
+        assertTrue(visible, visible.startsWith("HATA: Ürün kaydı bulunamadı (No.=X)."))
         assertTrue(visible.contains("REF-"))
         assertFalse(visible.contains("Identification"))
         assertFalse(visible.contains("404"))
+    }
+
+    @Test
+    fun `on-device error log resolves the REF code shown to the operator and stays bounded`() {
+        ApiErrorLog.clear(null)
+        val raw = "Report 60150 could not be rendered as PDF.  CorrelationId:  aa-bb."
+        val entry = ApiErrorLog.record(null, "POST", "licensePlates('LP000025')/Microsoft.NAV.printMte", 400, raw)
+        val shown = operatorFacingApiError(raw, 400)
+        assertTrue(shown, shown.contains(entry.ref))
+        assertEquals(operatorSupportReference(raw, 400), entry.ref)
+        assertEquals(raw.trim(), ApiErrorLog.entries(null).first().message)
+        repeat(ApiErrorLog.MAX_ENTRIES + 5) { i -> ApiErrorLog.record(null, "GET", "x/$i", 500, "e$i") }
+        assertEquals(ApiErrorLog.MAX_ENTRIES, ApiErrorLog.entries(null).size)
+        assertEquals("e${ApiErrorLog.MAX_ENTRIES + 4}", ApiErrorLog.entries(null).first().message)
+        ApiErrorLog.clear(null)
+    }
+
+    @Test
+    fun `report render failures from BC carry the real cause to the operator`() {
+        // BADE 16 Eyl 2026: LP000025 MTE Yazdır yalnız REF-534F3BFA gösteriyordu.
+        val permission = operatorFacingApiError(
+            "60150 Madde Tanımlama Etiketi raporu PDF olarak oluşturulamadı. BC hatası: You do not have the following permissions on Report Madde Tanımlama Etiketi: Execute.  CorrelationId:  aa-bb.",
+            400,
+        )
+        assertTrue(permission, permission.startsWith("HATA: 60150 Madde Tanımlama Etiketi raporu PDF olarak oluşturulamadı. Neden: Terminal kullanıcısının BC'de 'Madde Tanımlama Etiketi' (Report) nesnesi için Execute yetkisi yok."))
+        assertFalse(permission.contains("CorrelationId"))
+
+        val reportRule = operatorFacingApiError(
+            "60150 Madde Tanımlama Etiketi raporu PDF olarak oluşturulamadı. BC hatası: Etiket basılacak kayıt bulunamadı. Filtre/selection kontrol edin.  CorrelationId:  aa-bb.",
+            400,
+        )
+        assertTrue(reportRule, reportRule.contains("Neden: Etiket basılacak kayıt bulunamadı. Filtre/selection kontrol edin."))
+
+        val qr = operatorFacingApiError("LP000025 LP QR belgesi oluşturulamadı. BC hatası: The report layout is missing.", 400)
+        assertTrue(qr, qr.contains("LP000025 LP QR belgesi oluşturulamadı. Neden: The report layout is missing."))
+    }
+
+    @Test
+    fun `license guard errors tell the operator that the license lapsed`() {
+        val v = operatorFacingApiError("License is not active (Expired). Verification failed (expired)  CorrelationId:  aa-bb.", 400)
+        assertTrue(v, v.startsWith("HATA: BCWMS lisansı aktif değil (Expired): Verification failed (expired). Yöneticiniz BC Kurulum"))
+        assertFalse(v.contains("CorrelationId"))
+        val tier = operatorFacingApiError("Feature PrintBridge requires the Advanced tier. Current license: Essentials.", 400)
+        assertTrue(tier, tier.contains("PrintBridge için Advanced paketi gerekir (mevcut: Essentials)"))
+        val seats = operatorFacingApiError("License seat limit reached (5 of 5). Upgrade the license or remove inactive devices.", 400)
+        assertTrue(seats, seats.contains("cihaz sınırı doldu (5/5)"))
+    }
+
+    @Test
+    fun `missing LP or overlong value errors name the record and value`() {
+        val lp = operatorFacingApiError(
+            "The DOPSWHS LP Header does not exist. Identification fields and values: No.='LP00099'  CorrelationId:  aa-bb.",
+            400,
+        )
+        assertTrue(lp, lp.startsWith("HATA: LP kaydı bulunamadı (No.='LP00099'). Numarayı kontrol edip tekrar deneyin."))
+        val tooLong = operatorFacingApiError(
+            "The length of the string is 60, but it must be less than or equal to 50 characters. Value: ABCDEFGHIJ  CorrelationId:  aa-bb.",
+            400,
+        )
+        assertTrue(tooLong, tooLong.contains("Girilen değer çok uzun (60 karakter, en fazla 50): ABCDEFGHIJ"))
+        val perm = operatorFacingApiError("You do not have the following permissions on TableData Employee: Read.", 400)
+        assertTrue(perm, perm.contains("'Employee' (TableData) nesnesi için Read yetkisi yok"))
     }
 
     @Test

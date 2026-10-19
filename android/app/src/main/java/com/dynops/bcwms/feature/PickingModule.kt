@@ -59,7 +59,8 @@ internal fun pickReadyToRegister(
     pickMode: String,
     qtyToHandle: List<Double>,
     allCollected: Boolean,
-): Boolean = if (pickMode.equals("Multi", ignoreCase = true)) {
+    productionPick: Boolean = false,
+): Boolean = if (pickMode.equals("Multi", ignoreCase = true) && !productionPick) {
     allCollected
 } else {
     qtyToHandle.any { it > 0.0 }
@@ -209,6 +210,7 @@ internal fun V2FlowSelector(
 @Composable
 private fun V2PicksForFlow(flow: OutboundFlowMode) {
     val context = LocalContext.current
+    val confirmPickTakeover = rememberPickTakeoverConfirmation()
     val scope = rememberCoroutineScope()
     var rows by remember { mutableStateOf<List<JSONObject>>(emptyList()) }
     var selected by remember { mutableStateOf<String?>(null) }
@@ -246,7 +248,7 @@ private fun V2PicksForFlow(flow: OutboundFlowMode) {
             )
             val page = BcApi.getAllPagesWithStandardFallback(
                 context,
-                "picks?\$top=100&\$orderby=no desc&\$select=no,locationCode,assignedUserId,sourceNo,status,percentComplete,pickMode,mainLpNo$filter",
+                "picks?\$top=100&\$orderby=no desc&\$select=no,locationCode,assignedUserId,assignedUserName,sourceNo,status,percentComplete,pickMode,mainLpNo$filter",
             )
             rows = if (page.complete) page.rows.filter { row ->
                 // BC modu OData kaçışıyla döndürebiliyor: boş mod "_x0020_"
@@ -273,9 +275,7 @@ private fun V2PicksForFlow(flow: OutboundFlowMode) {
                 status = "HATA: Depo kullanıcınız doğrulanamadı. Yeniden giriş yapın."
                 return@launch
             }
-            val r = BcApi.boundAction(context, "picks", no, "reassign", JSONObject().apply {
-                put("userId", me); put("reason", "V2 ${flow.title} terminalinden üstlenildi")
-            }.toString())
+            val r = BcApi.claimPick(context, no) { owner -> confirmPickTakeover(no, owner) }
             status = if (r.ok) "$no üzerinize alındı." else "HATA: ${BcApi.errorMessage(r.body)}"
             load()
         }
@@ -344,6 +344,7 @@ private fun V2PicksForFlow(flow: OutboundFlowMode) {
 @Composable
 private fun ActivePicksTab() {
     val context = LocalContext.current
+    val confirmPickTakeover = rememberPickTakeoverConfirmation()
     val scope = rememberCoroutineScope()
     var selected by remember { mutableStateOf<String?>(null) }
     var rows by remember { mutableStateOf<List<JSONObject>>(emptyList()) }
@@ -380,7 +381,7 @@ private fun ActivePicksTab() {
                 return@launch
             }
             val combined = buildODataFilter(scopeClause, searchClause("no", search))
-            val page = BcApi.getAllPagesWithStandardFallback(context, "picks?\$top=100&\$orderby=no desc&\$select=no,locationCode,assignedUserId,vehicleNo,sourceNo,status,percentComplete$combined")
+            val page = BcApi.getAllPagesWithStandardFallback(context, "picks?\$top=100&\$orderby=no desc&\$select=no,locationCode,assignedUserId,assignedUserName,vehicleNo,sourceNo,status,percentComplete$combined")
             loading = false
             rows = if (page.complete) page.rows else emptyList()
             status = when {
@@ -393,8 +394,7 @@ private fun ActivePicksTab() {
     LaunchedEffect(pickScope) { load() }
 
     // Listeden "Üzerime Al": paylaşımlı BC lisansında atama BC hesabına değil
-    // oturumdaki WMS kullanıcısına yazılır (reassign); WMS girişi yoksa
-    // assignToMe'ye düşer.
+    // oturumdaki WMS kullanıcısına yazılır ve kalıcı belge sahibi doğrulanır.
     fun takeOver(no: String) {
         scope.launch {
             loading = true; status = "Üzerine alınıyor..."
@@ -404,8 +404,7 @@ private fun ActivePicksTab() {
                 status = "HATA: Depo kullanıcınız doğrulanamadı. Yeniden giriş yapın."
                 return@launch
             }
-            val r = BcApi.boundAction(context, "picks", no, "reassign",
-                JSONObject().apply { put("userId", me); put("reason", "terminalden üstlenildi") }.toString())
+            val r = BcApi.claimPick(context, no) { owner -> confirmPickTakeover(no, owner) }
             // "Atanmamış" kapsamındayken üstlenilen iş listeden düşer; nereye
             // gittiğini söylemezsek operatör işi kaybettiğini sanıyor.
             status = if (r.ok)
@@ -756,6 +755,7 @@ private fun GuidedPickDocument(no: String, flowMode: OutboundFlowMode? = null, o
     // Donanım Geri tuşu belge ekranından uygulamayı kapatmasın; listeye dönsün.
     androidx.activity.compose.BackHandler { onBack() }
     val context = LocalContext.current
+    val confirmPickTakeover = rememberPickTakeoverConfirmation()
     val scope = rememberCoroutineScope()
     var header by remember { mutableStateOf<JSONObject?>(null) }
     var lines by remember { mutableStateOf<List<JSONObject>>(emptyList()) }
@@ -860,10 +860,7 @@ private fun GuidedPickDocument(no: String, flowMode: OutboundFlowMode? = null, o
                 busy = false
                 return@launch
             }
-            val r = BcApi.boundAction(
-                context, "picks", no, "reassign",
-                JSONObject().apply { put("userId", me); put("reason", "terminalden kendime atadım") }.toString(),
-            )
+            val r = BcApi.claimPick(context, no) { owner -> confirmPickTakeover(no, owner) }
             status = if (r.ok) "✅ Pick kendinize atandı" else "HATA: ${BcApi.errorMessage(r.body)}"
             if (r.ok) myUserId = me
             reloadNow()
@@ -1097,6 +1094,7 @@ private fun GuidedPickDocument(no: String, flowMode: OutboundFlowMode? = null, o
     val allCollected = headerLoaded && linesComplete && takeLines.isNotEmpty() && outstanding.isEmpty()
     val orderCount = takeLines.map { rawValue(it, "sourceNo").ifBlank { "—" } }.distinct().size
     val assignedTo = header?.optString("assignedUserId").orEmpty()
+    val assignedName = header?.optString("assignedUserName").orEmpty().ifBlank { assignedTo }
     val notAssigned = headerLoaded && assignedTo.isBlank()
     // Belge başkasına atanmış: liste ekranındaki uyarıya rağmen açıldıysa burada
     // toplama kilitli kalır — iki kişinin aynı pick'i toplaması miktarları bozar.
@@ -1161,7 +1159,7 @@ private fun GuidedPickDocument(no: String, flowMode: OutboundFlowMode? = null, o
                 title = no,
                 subtitle = "📦 $orderCount sipariş · 🧾 $doneCount/${takeLines.size} ürün" +
                     "\nLokasyon: ${header?.optString("locationCode").orEmpty()}" +
-                    (if (!notAssigned) " · 👤 Atanan Kullanıcı: $assignedTo" else "") +
+                    (if (!notAssigned) " · 👤 Atanan Kullanıcı: $assignedName" else "") +
                     (if (mainLp.isNotBlank()) "\n📦 Ana sepet: $mainLp" else ""),
                 percent = if (takeLines.isEmpty()) 0 else ((doneCount * 100.0) / takeLines.size).toInt(),
             )
@@ -1215,7 +1213,7 @@ private fun GuidedPickDocument(no: String, flowMode: OutboundFlowMode? = null, o
                         modifier = Modifier.fillMaxWidth(),
                     ) {
                         Column(Modifier.fillMaxWidth().padding(20.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                            Text("Bu toplama $assignedTo kullanıcısında", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = OtherUserRed)
+                            Text("Bu toplama $assignedName kullanıcısında", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = OtherUserRed)
                             Spacer(Modifier.height(4.dp))
                             Text(
                                 "Salt görüntüleme. Aynı pick'i iki kişi toplarsa miktarlar çakışır. " +
@@ -1477,25 +1475,23 @@ private fun GuidedPickDocument(no: String, flowMode: OutboundFlowMode? = null, o
         )
     }
     if (qg != null && !lpScanRequired) {
-        val lotPolicy = pickLotInputPolicy(qg.lines)
         QuantityDialogSheet(
             title = "${qg.itemNo} — ${qg.count} siparişe dağıtılır",
             itemNo = qg.itemNo,
             initialQty = qg.totalOutstanding.takeIf { it > 0 } ?: 1.0,
             maximumQuantity = qg.totalOutstanding,
             initialUom = qg.lines.first().optString("unitOfMeasureCode"),
-            initialLot = rawValue(qg.lines.first(), "lotNo"),
+            initialLot = qg.lines.first().optString("lotNo"),
             allowZeroQuantity = true,
-            showLotSerial = lotPolicy.visible,
+            showLotSerial = true,
             showSerial = false,
             showSourceLp = true,
             // Zorunluluk açıkken miktar dağıtım ekranı da paletsiz kapanmaz.
             sourceLpRequired = lpScanRequired,
-            lotRequired = lotPolicy.required,
-            showAvailableLotLookup = lotPolicy.visible,
-            autoDetectLotFromStock = lotPolicy.detectFromStock,
+            lotRequired = qg.lines.any { it.optBoolean("lotRequired", false) },
+            showAvailableLotLookup = true,
+            autoDetectLotFromStock = true,
             locationCode = rawValue(qg.lines.first(), "locationCode"),
-            binCode = rawValue(qg.lines.first(), "binCode"),
             variantCode = qg.lines.first().optString("variantCode"),
             onDismiss = { qtyGroup = null },
             onConfirm = { res ->
@@ -1891,6 +1887,7 @@ private fun PickDocument(no: String, onBack: () -> Unit) {
     // Donanım Geri tuşu belge ekranından uygulamayı kapatmasın; listeye dönsün.
     androidx.activity.compose.BackHandler { onBack() }
     val context = LocalContext.current
+    val confirmPickTakeover = rememberPickTakeoverConfirmation()
     val scope = rememberCoroutineScope()
     var header by remember { mutableStateOf<JSONObject?>(null) }
     var lines by remember { mutableStateOf<List<JSONObject>>(emptyList()) }
@@ -2102,9 +2099,11 @@ private fun PickDocument(no: String, onBack: () -> Unit) {
             Spacer(Modifier.height(6.dp))
             Text(
                 if (shipLp == null)
-                    "Farklı kaynak LP'leri tek sevk paletinde birleştirecekseniz miktar girmeden önce Hedef LP Oluştur'a basın; mevcut LP'leri olduğu gibi sevk edecekseniz kullanmayın."
+                    "Her sipariş satırı tek bir paletin tamamıyla karşılanıyorsa Hedef LP oluşturmayın: okutulan palet olduğu gibi sevk LP'si olur. " +
+                        "Bir palet yarım alınacak, bir satır birden fazla paletten alınacak ya da paletler birleştirilecekse önce Hedef LP Oluştur'a basın."
                 else
-                    "Hedef sevk paleti hazır; kaydettiğiniz miktarlar kaynak LP'lerden bu palete aktarılacak.",
+                    "Hedef sevk paleti hazır. Tek paletin tamamıyla karşılanan sipariş satırları (toplamada yarım palet varken) kendi paletiyle gider; " +
+                        "diğer bütün miktarlar bu palette birleşir.",
                 fontSize = 11.sp,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -2153,10 +2152,13 @@ private fun PickDocument(no: String, onBack: () -> Unit) {
             OutlinedButton(onClick = {
                 // Paylaşımlı BC lisansı: atama oturumdaki WMS kullanıcısına yazılır.
                 scope.launch {
-                    val me = BcApi.currentUserId(context)
-                    if (me.isNotBlank())
-                        action("reassign", JSONObject().apply { put("userId", me); put("reason", "terminalden üstlenildi") }.toString(), "Üzerinize alındı ($me)")
-                    else action("assignToMe", "{}", "Bana atandı")
+                    busy = true
+                    status = "Belge üzerinize alınıyor..."
+                    val r = BcApi.claimPick(context, no) { owner -> confirmPickTakeover(no, owner) }
+                    status = if (r.ok) "TAMAM: Belge üzerinize alındı."
+                    else QcErrorParser.friendlyStatus(BcApi.errorMessage(r.body), r.httpCode)
+                    busy = false
+                    reload()
                 }
             }, enabled = !busy, modifier = Modifier.weight(1f)) { Text("Bana Ata") }
         }
@@ -2287,24 +2289,22 @@ private fun PickDocument(no: String, onBack: () -> Unit) {
 
     val gt = groupTarget
     if (gt != null) {
-        val lotPolicy = pickLotInputPolicy(gt.lines)
         QuantityDialogSheet(
             title = "Toplama Miktarı (${gt.count} satıra dağıtılır)",
             itemNo = gt.itemNo,
             initialQty = gt.totalOutstanding.takeIf { it > 0 } ?: 1.0,
             maximumQuantity = gt.totalOutstanding,
             initialUom = gt.lines.first().optString("unitOfMeasureCode"),
-            initialLot = rawValue(gt.lines.first(), "lotNo"),
+            initialLot = gt.lines.first().optString("lotNo"),
             allowZeroQuantity = true,
             // ELOG: lot no el terminalinden girilir; seri girişi pick'te kapalı.
-            showLotSerial = lotPolicy.visible,
+            showLotSerial = true,
             showSerial = false,
             showSourceLp = true,
-            lotRequired = lotPolicy.required,
-            showAvailableLotLookup = lotPolicy.visible,
-            autoDetectLotFromStock = lotPolicy.detectFromStock,
+            lotRequired = gt.lines.any { it.optBoolean("lotRequired", false) },
+            showAvailableLotLookup = true,
+            autoDetectLotFromStock = true,
             locationCode = rawValue(gt.lines.first(), "locationCode"),
-            binCode = rawValue(gt.lines.first(), "binCode"),
             variantCode = gt.lines.first().optString("variantCode"),
             onDismiss = { groupTarget = null },
             onConfirm = { res ->

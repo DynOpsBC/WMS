@@ -80,6 +80,23 @@ page 72061 "DOPSWHS Setup"
                     ApplicationArea = All;
                     ToolTip = 'Ayarlanırsa, mal kabulde seri boş bırakılınca otomatik seri numarası üretilir. Boş = elle giriş.';
                 }
+                field("Prod. LP Sync Location"; Rec."Prod. LP Sync Location")
+                {
+                    ApplicationArea = All;
+                    Caption = 'LP düzeltme lokasyonu';
+                    ToolTip = 'LP düzeltme gözlerinin bulunduğu lokasyon (örnek: MERKEZDEPO). "Seçili LP''lerin Stoğunu LP Gözüne Taşı" yalnız bu lokasyondaki LP''leri işler. Boş bırakılırsa hiçbir LP işlenmez.';
+                }
+                field("Prod. LP Sync Bin Filter"; Rec."Prod. LP Sync Bin Filter")
+                {
+                    ApplicationArea = All;
+                    Caption = 'LP düzeltme gözleri';
+                    ToolTip = 'Düzeltilecek LP''lerin gözü (filtre; örnek: A.URETIM). "Seçili LP''lerin Stoğunu LP Gözüne Taşı" yalnız gözü bu filtreye uyan LP''leri işler. Boş bırakılırsa hiçbir LP işlenmez.';
+                }
+                field("Count Relocates Found Stock"; Rec."Count Relocates Found Stock")
+                {
+                    ApplicationArea = All;
+                    ToolTip = 'Açık: sayımda bir rafta BC''nin bilmediği (fazla) ürün bulunursa kayıt sırasında stok taşınır: önce aynı sayımda eksik sayılan raftan (sistem bu rafı da saydırır; orada yoksa eksi+artı yerine tek raf taşıması olur), sonra sayım dışındaki raflardan. Yalnız LP''siz serbest stok taşınır; kalan fark artı düzeltme olur. Kapalı (varsayılan): eksik raf eksi, bulunan raf artı düzeltme olur.';
+                }
                 field("Terminal Count Posting"; Rec."Terminal Count Posting")
                 {
                     ApplicationArea = All;
@@ -90,25 +107,15 @@ page 72061 "DOPSWHS Setup"
                     ApplicationArea = All;
                     ToolTip = 'Kapalı (varsayılan): toplama satırı kaynak LP okutulmadan da onaylanabilir, yerleştirmede ürün barkodu okutulur. Açık: toplamada kaynak LP okutmak zorunludur ve yerleştirme LP okutmasıyla doğrulanır; okutulan LP''nin maddesi, varyantı, lotu ve rafı satırla uyuşmazsa işlem reddedilir.';
                 }
-                field("Auto Print Packing List"; Rec."Auto Print Packing List")
+                field("Manual Receipt Label Print"; Rec."Manual Receipt Label Print")
                 {
                     ApplicationArea = All;
-                    ToolTip = 'Açık: terminalden sevkiyat kaydedilince palet/koli/kutu paketleme listesi de belge yazıcısına gönderilir.';
+                    ToolTip = 'Kapalı (varsayılan): mal kabul kaydedilince palet MTE etiketleri otomatik basılır. Açık: etiket basılmaz; operatör kayıt sonrası açılan ekranda paletleri seçip "Etiket Yazdır" der.';
                 }
-            }
-            group(LabelStock)
-            {
-                Caption = 'Etiket Rulosu (ZPL)';
-                InstructionalText = 'Zebra etiket yazıcısındaki rulonun etiket ölçüsü. Ürün, raf ve LP etiketleri bu ölçüye göre yerleştirilir; boş bırakılırsa 80 x 40 mm kabul edilir.';
-                field("Label Width (mm)"; Rec."Label Width (mm)")
+                field("MTE Report ID"; Rec."MTE Report ID")
                 {
                     ApplicationArea = All;
-                    ToolTip = 'Etiketin genişliği (mm). Boş/0 = 80 mm. Yaygın rulolar: 80x40, 100x50 (4x2 inç), 100x80, 100x100.';
-                }
-                field("Label Height (mm)"; Rec."Label Height (mm)")
-                {
-                    ApplicationArea = All;
-                    ToolTip = 'Etiketin yüksekliği (mm). Boş/0 = 40 mm. Yazıcıdaki rulo değişince yalnız bu iki değer güncellenir; yeni paket gerekmez.';
+                    ToolTip = 'Terminaldeki MTE Yazdır bu raporu çalıştırır. BADE''de 60150 seçiliyse terminal için ayrı 60298 LP raporu kullanılır; 60150''nin BC düzeni değişmez. 0 = BCWMS''in kendi MTE raporu.';
                 }
             }
             group(License)
@@ -170,6 +177,14 @@ page 72061 "DOPSWHS Setup"
             group(AzureDirectPrint)
             {
                 Caption = 'Azure Direct Print';
+                Editable = not EnvironmentPrintEnabled;
+                field(EnvironmentPrintEnabled; EnvironmentPrintEnabled)
+                {
+                    Caption = 'Ortam Bazlı Ortak Yazıcılar';
+                    ApplicationArea = All;
+                    Editable = false;
+                    ToolTip = 'Bu BC ortamındaki şirketler aynı Azure bağlantısını ve yazıcıları kullanır. Baskı işleri ve terminal seçimleri şirket bazında kalır.';
+                }
                 field(HttpClientInstruction; HttpClientInstruction)
                 {
                     Caption = 'Required Extension Setting';
@@ -238,17 +253,6 @@ page 72061 "DOPSWHS Setup"
     {
         area(Processing)
         {
-            action(OpenTerminals)
-            {
-                Caption = 'WMS Terminalleri';
-                ToolTip = 'El terminallerini ve her terminalin etiket/belge yazıcısını yönetir.';
-                ApplicationArea = All;
-                Image = Setup;
-                Promoted = true;
-                PromotedCategory = Process;
-                PromotedIsBig = true;
-                RunObject = page "DOPSWHS Terminal List";
-            }
             group(DemoData)
             {
                 Caption = 'Demo Data';
@@ -317,30 +321,6 @@ page 72061 "DOPSWHS Setup"
                     end;
                 }
             }
-            group(LicensePlateRules)
-            {
-                Caption = 'License Plates';
-                action(LpAutoRulesAction)
-                {
-                    Caption = 'LP Auto Rules';
-                    ApplicationArea = All;
-                    Image = Setup;
-                    Promoted = true;
-                    PromotedCategory = Process;
-                    ToolTip = 'Lokasyon ve belge türüne göre otomatik LP açma / kayıtta kapatma ve etiket kuralları.';
-                    RunObject = page "DOPSWHS LP Auto Rules";
-                }
-                action(LpTemplatesAction)
-                {
-                    Caption = 'LP Templates';
-                    ApplicationArea = All;
-                    Image = Template;
-                    Promoted = true;
-                    PromotedCategory = Process;
-                    ToolTip = 'Kap türü, etiket tasarımı ve kopya sayısı şablonda tanımlanır.';
-                    RunObject = page "DOPSWHS LP Template List";
-                }
-            }
             group(PrinterBridge)
             {
                 Caption = 'Printer Bridge';
@@ -364,6 +344,23 @@ page 72061 "DOPSWHS Setup"
                     ToolTip = 'Map each device/user to a default printer per usage.';
                     RunObject = page "DOPSWHS Device Printer Map";
                 }
+                action(EnableEnvironmentPrinting)
+                {
+                    Caption = 'Yazıcıları Bu Ortamda Ortak Kullan';
+                    ApplicationArea = All;
+                    Image = Setup;
+                    AccessByPermission = tabledata "DOPSWHS Setup" = D;
+                    ToolTip = 'İçe aktarılan Azure bağlantısını ve yazıcıları bu BC ortamındaki tüm şirketlerde kullanılabilir yapar. Mevcut Print Agent kurulumu korunur.';
+
+                    trigger OnAction()
+                    begin
+                        PrintEnvironment.Enable();
+                        EnvironmentPrintEnabled := PrintEnvironment.IsEnabled();
+                        Rec.Get('');
+                        CurrPage.Update(false);
+                        Message('Bu ortamdaki şirketler ortak Azure bağlantısını ve yazıcıları kullanacak. Diğer şirketlerde Yazıcılar sayfasını veya terminal yazıcı listesini açmanız yeterlidir. Azure durum kuyruğunu bu şirketin WMS yazdırma görevi okuyacak.');
+                    end;
+                }
                 action(ImportAzureRuntimeConfig)
                 {
                     Caption = 'Import BC Azure Print Config';
@@ -373,7 +370,7 @@ page 72061 "DOPSWHS Setup"
                     PromotedCategory = Process;
                     PromotedIsBig = true;
                     AccessByPermission = tabledata "DOPSWHS Setup" = D;
-                    ToolTip = 'Imports schemaVersion 1 business-central.runtime.secrets.json. Credentials are extracted into company-scoped Isolated Storage and are never written to a table. Enable Allow HttpClient Requests for this extension first.';
+                    ToolTip = 'Imports schemaVersion 1 business-central.runtime.secrets.json. With environment sharing enabled the connection applies to every company in this BC environment. Credentials stay in Isolated Storage. Enable Allow HttpClient Requests first.';
 
                     trigger OnAction()
                     var
@@ -394,7 +391,7 @@ page 72061 "DOPSWHS Setup"
                     ApplicationArea = All;
                     Image = EncryptionKeys;
                     AccessByPermission = tabledata "DOPSWHS Setup" = D;
-                    ToolTip = 'Stores or rotates Azure credentials in company-scoped Isolated Storage. A new Blob SAS requires its expiry date from the deployment output.';
+                    ToolTip = 'Stores or rotates Azure credentials in Isolated Storage. With environment sharing enabled the new credentials apply to all companies in this BC environment. A new Blob SAS requires its expiry date.';
 
                     trigger OnAction()
                     var
@@ -529,6 +526,8 @@ page 72061 "DOPSWHS Setup"
 
     trigger OnOpenPage()
     begin
+        PrintEnvironment.SyncCompany();
+        EnvironmentPrintEnabled := PrintEnvironment.IsEnabled();
         if not Rec.Get('') then begin
             Rec.Init();
             Rec.Insert(true);
@@ -545,6 +544,8 @@ page 72061 "DOPSWHS Setup"
     end;
 
     var
+        PrintEnvironment: Codeunit "DOPSWHS Print Environment";
+        EnvironmentPrintEnabled: Boolean;
         LicenseStyle: Text;
         BlobUploadSecretSet: Boolean;
         JobsSecretSet: Boolean;

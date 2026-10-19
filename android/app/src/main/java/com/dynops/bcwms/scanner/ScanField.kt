@@ -53,14 +53,8 @@ fun ScanField(
     focusRequester: androidx.compose.ui.focus.FocusRequester? = null,
     updateValueOnScan: Boolean = true,
     scanOnly: Boolean = false,
-    okButton: Boolean = true,
-    autoFocus: Boolean = false,
-    onClear: (() -> Unit)? = null,
-    voiceInput: Boolean = false,
 ) {
     val context = LocalContext.current
-    // Spoken code waits for the operator's confirmation before searching.
-    var heardCode by remember { mutableStateOf<String?>(null) }
     var hasCameraPermission by remember {
         mutableStateOf(
             ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) ==
@@ -94,13 +88,6 @@ fun ScanField(
         }
     }
 
-    if (autoFocus && focusRequester != null) {
-        LaunchedEffect(Unit) {
-            kotlinx.coroutines.delay(120)
-            runCatching { focusRequester.requestFocus() }
-        }
-    }
-
     val permLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) { granted ->
@@ -112,15 +99,6 @@ fun ScanField(
     // Kamera önizlemesi ekrana gömülü olduğu için sistem geri tuşu önce yalnızca
     // önizlemeyi kapatmalı; aksi halde operatör belge ekranından tamamen çıkıyordu.
     BackHandler(enabled = scanning) { scanning = false }
-    val startVoice = rememberVoiceCodeLauncher(
-        onCode = { code ->
-            cameraError = null
-            scanning = false
-            onValueChange(code)
-            heardCode = code
-        },
-        onUnavailable = { cameraError = "Bu cihazda sesli giriş hizmeti yok. Kodu okutun veya yazın." },
-    )
     LaunchedEffect(enabled) { if (!enabled) scanning = false }
 
     Column(modifier) {
@@ -143,20 +121,6 @@ fun ScanField(
                 singleLine = true,
                 enabled = enabled,
                 interactionSource = interactionSource,
-                trailingIcon = if (value.isNotEmpty() && enabled) {
-                    {
-                        IconButton(onClick = {
-                            onValueChange("")
-                            onClear?.invoke()
-                        }) {
-                            WmsIcon(
-                                glyph = WmsGlyph.CLOSE,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.size(18.dp)
-                            )
-                        }
-                    }
-                } else null,
                 // Elle giriş: klavye "bitti"/Enter → okutmayı tetikle (emülatörde ve
                 // gerçek cihazda yazıp Enter'a basınca donanım taraması gibi işlenir).
                 keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
@@ -171,7 +135,7 @@ fun ScanField(
             )
             Spacer(Modifier.width(8.dp))
             // Elle giriş için "OK" — yazıp bas, hemen işlensin (Enter'a alternatif).
-            if (onScanned != null && !scanOnly && okButton) {
+            if (onScanned != null && !scanOnly) {
                 // OK, alan boşken pasifti: operatör basıyor, hiçbir şey olmuyor
                 // ve nedenini göremiyordu. Artık basılabiliyor ve ne beklendiğini
                 // söylüyor (UAT: aynı sessizlik yerleştirme, ad-hoc ve paketlemede).
@@ -183,19 +147,9 @@ fun ScanField(
                 ) { Text("OK") }
                 Spacer(Modifier.width(6.dp))
             }
-            if (voiceInput && !scanOnly) {
-                FilledTonalIconButton(
-                    enabled = enabled,
-                    modifier = Modifier.size(48.dp).semantics { contentDescription = "Sesle söyle" },
-                    onClick = { startVoice() },
-                ) {
-                    WmsIcon(glyph = WmsGlyph.MIC, color = MaterialTheme.colorScheme.primary, modifier = Modifier.size(22.dp))
-                }
-                Spacer(Modifier.width(6.dp))
-            }
-            FilledTonalIconButton(
+            FilledTonalButton(
                 enabled = enabled,
-                modifier = Modifier.size(48.dp).semantics { contentDescription = if (scanning) "Kamerayı kapat" else "Kamera ile okut" },
+                modifier = Modifier.semantics { contentDescription = if (scanning) "Kamerayı kapat" else "Kamera ile okut" },
                 onClick = {
                     cameraError = null
                     if (hasCameraPermission) scanning = !scanning
@@ -215,17 +169,6 @@ fun ScanField(
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.error,
             )
-        }
-        heardCode?.let { code ->
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    "Duyulan: $code",
-                    style = MaterialTheme.typography.bodyMedium,
-                    modifier = Modifier.weight(1f),
-                )
-                if (onScanned != null) TextButton(enabled = enabled, onClick = { deliverScan(code) }) { Text("Ara") }
-                TextButton(onClick = { heardCode = null; onValueChange("") }) { Text("Sil") }
-            }
         }
         cameraError?.let {
             Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)

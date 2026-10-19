@@ -2,7 +2,9 @@ page 72286 "DOPSWHS Local User Card"
 {
     PageType = Card;
     SourceTable = "DOPSWHS Local User";
-    Caption = 'Local WMS User';
+    Caption = 'WMS Kullanıcısı';
+    InsertAllowed = false;
+    DeleteAllowed = false;
     ApplicationArea = All;
 
     layout
@@ -11,27 +13,40 @@ page 72286 "DOPSWHS Local User Card"
         {
             group(General)
             {
-                Caption = 'General';
-                field("Username"; Rec.Username) { ApplicationArea = All; }
-                field("Display Name"; Rec."Display Name") { ApplicationArea = All; }
-                field("Disabled"; Rec.Disabled) { ApplicationArea = All; }
+                Caption = 'Kullanıcı';
+                field("Terminal Admin"; Rec."Terminal Admin") { ApplicationArea = All; Editable = CanManageUsers; }
+                field("Terminal Code"; Rec."Terminal Code") { ApplicationArea = All; Editable = CanManageUsers; }
+                field("Display Name"; Rec."Display Name") { Caption = 'Ad Soyad'; ApplicationArea = All; Editable = CanManageUsers; }
+                field("Disabled"; Rec.Disabled) { Caption = 'Devre Dışı'; ApplicationArea = All; Editable = CanManageUsers; }
             }
             group(Security)
             {
-                Caption = 'Şifre';
+                Caption = 'PIN';
+                Visible = CanManageUsers;
+                field(PasswordState; PasswordState)
+                {
+                    ApplicationArea = All;
+                    Caption = 'Mevcut Şifre / PIN';
+                    Editable = false;
+                    ToolTip = 'Şifre ve PIN değerleri güvenlik için hash olarak saklanır; mevcut değer görüntülenemez.';
+                }
                 field(PasswordTemp; PasswordTemp)
                 {
                     ApplicationArea = All;
-                    Caption = 'Yeni Şifre';
+                    Caption = 'Yeni 4 Haneli PIN';
                     ExtendedDatatype = Masked;
-                    ToolTip = 'Yeni şifre belirleyin, Enter sonrası otomatik kaydedilir';
+                    Editable = CanManageUsers;
+                    ToolTip = '4 rakam girin. Mevcut PIN gösterilmez.';
 
                     trigger OnValidate()
                     begin
                         if PasswordTemp <> '' then
                         begin
-                            AuthMgt.Register(Rec.Username, Rec."Display Name", PasswordTemp, Rec."Default Location Code", Rec."Default Bin Code");
-                            Message('Şifre kaydedildi.');
+                            AuthMgt.ValidatePin(PasswordTemp);
+                            CurrPage.SaveRecord();
+                            AuthMgt.UpdatePassword(Rec.Username, PasswordTemp);
+                            Rec.Get(Rec.Username);
+                            CurrPage.Update(false);
                             PasswordTemp := '';
                         end;
                     end;
@@ -39,17 +54,21 @@ page 72286 "DOPSWHS Local User Card"
             }
             group(Defaults)
             {
-                Caption = 'Mobil Varsayılanları';
-                field("Default Location Code"; Rec."Default Location Code") { ApplicationArea = All; }
-                field("Default Bin Code"; Rec."Default Bin Code") { ApplicationArea = All; }
-                field("Locale"; Rec.Locale) { ApplicationArea = All; ToolTip = 'tr / en / de'; }
-                field("Hide Test Tools"; Rec."Hide Test Tools") { ApplicationArea = All; }
-                field("Hide Admin Tools"; Rec."Hide Admin Tools") { ApplicationArea = All; }
+                Caption = 'Diğer Ayarlar';
+                Visible = ShowAdvanced;
+
+                field("Default Location Code"; Rec."Default Location Code") { ApplicationArea = All; Editable = CanManageUsers; }
+                field("Default Bin Code"; Rec."Default Bin Code") { ApplicationArea = All; Editable = CanManageUsers; }
+                field("Locale"; Rec.Locale) { ApplicationArea = All; ToolTip = 'tr / en / de'; Editable = CanManageUsers; }
+                field("Hide Test Tools"; Rec."Hide Test Tools") { ApplicationArea = All; Editable = CanManageUsers; }
+                field("Hide Admin Tools"; Rec."Hide Admin Tools") { ApplicationArea = All; Editable = CanManageUsers; }
             }
             group(Telemetry)
             {
-                Caption = 'Telemetri';
-                field("Last Login DateTime"; Rec."Last Login DateTime") { ApplicationArea = All; Editable = false; }
+                Caption = 'Son Giriş';
+                Visible = ShowAdvanced;
+
+                field("Last Login DateTime"; Rec."Last Login DateTime") { Caption = 'Son Giriş'; ApplicationArea = All; Editable = false; }
                 field("Failed Login Count"; Rec."Failed Login Count") { ApplicationArea = All; Editable = false; }
                 field("Created DateTime"; Rec."Created DateTime") { ApplicationArea = All; Editable = false; }
                 field("Created By"; Rec."Created By") { ApplicationArea = All; Editable = false; }
@@ -61,30 +80,35 @@ page 72286 "DOPSWHS Local User Card"
     {
         area(Processing)
         {
-            action(SetPassword)
+            action(Advanced)
             {
-                Caption = 'Şifre Belirle / Sıfırla';
-                Image = EncryptionKeys;
+                Caption = 'Diğer Ayarlar';
                 ApplicationArea = All;
-                Promoted = true;
-                PromotedCategory = Process;
-                PromotedIsBig = true;
-                ToolTip = 'Bu kullanıcı için yeni şifre belirler. Mobil app bu şifreyle "WMS Hesabı" girişini yapar.';
-
+                Image = Setup;
                 trigger OnAction()
                 begin
-                    if Rec.Username = '' then
-                        Error('Önce kullanıcı kaydını oluşturun ve username belirleyin.');
-                    if not Dialog.Confirm('Bu kullanıcının şifresini "wms1234" olarak ayarla?', true) then
-                        exit;
-                    AuthMgt.Register(Rec.Username, Rec."Display Name", 'wms1234', Rec."Default Location Code", Rec."Default Bin Code");
-                    Message('Şifre belirlendi: wms1234');
+                    ShowAdvanced := not ShowAdvanced;
                 end;
             }
         }
     }
+    trigger OnOpenPage()
+    begin
+        CanManageUsers := AuthMgt.CanManageLocalUsers();
+    end;
+
+    trigger OnAfterGetRecord()
+    begin
+        if (Rec."Password Hash" <> '') and (Rec."Password Salt" <> '') then
+            PasswordState := 'Tanımlı (mevcut değer görüntülenemez)'
+        else
+            PasswordState := 'Tanımlı değil';
+    end;
 
     var
+        ShowAdvanced: Boolean;
+        CanManageUsers: Boolean;
         AuthMgt: Codeunit "DOPSWHS Local Auth Mgmt";
         PasswordTemp: Text;
+        PasswordState: Text[100];
 }

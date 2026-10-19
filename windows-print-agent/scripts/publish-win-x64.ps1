@@ -66,9 +66,7 @@ foreach ($requiredFile in $requiredFiles) {
 }
 
 Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'install.ps1') -Destination $installerRoot
-Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'install.cmd') -Destination $installerRoot
 Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'uninstall.ps1') -Destination $installerRoot
-Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'uninstall.cmd') -Destination $installerRoot
 Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'enable-autostart.ps1') -Destination $installerRoot
 Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'disable-autostart.ps1') -Destination $installerRoot
 Copy-Item -LiteralPath (Join-Path $projectRoot 'README.md') -Destination $packageRoot
@@ -123,7 +121,7 @@ $hashes = Get-ChildItem -LiteralPath $packageRoot -File -Recurse | Sort-Object F
 [ordered]@{
     schemaVersion = 1
     productId = 'DynOps.BCWMS.PrintAgent'
-    productVersion = '1.1.3'
+    productVersion = '1.0.0'
     runtime = 'win-x64'
     selfContained = $true
     authenticodeSigned = $authenticodeSigned

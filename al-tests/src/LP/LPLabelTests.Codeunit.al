@@ -60,8 +60,10 @@ codeunit 72141 "DOPSWHS LP Label Tests"
         Zpl := Dispatcher.BuildPalletItemZpl(LP, LPLine);
 #pragma warning restore AL0432
 
-        Assert.IsTrue(StrPos(Zpl, 'TOPLAM MAL KABUL: 500 ADET') > 0, 'MTE must keep the total receipt quantity.');
-        Assert.IsTrue(StrPos(Zpl, 'PALET MIKTARI: 250 ADET') > 0, 'MTE must show the quantity assigned to this LP.');
+        Assert.IsTrue(StrPos(Zpl, '^PW812^LL640') > 0, 'MTE is drawn on the 10 x 8 cm label like the customer report.');
+        Assert.IsTrue(StrPos(Zpl, 'MİKTAR/BİRİM') > 0, 'MTE must carry the MİKTAR/BİRİM cell.');
+        Assert.IsTrue(StrPos(Zpl, '250 ADET') > 0, 'MTE must show the quantity assigned to this LP.');
+        Assert.IsTrue(StrPos(Zpl, 'KARANT') > 0, 'MTE must carry the KABUL / RED / KARANTİNA decision cells.');
         Assert.IsTrue(StrPos(Zpl, '^FDLA,LP00044^FS') > 0, 'A pallet-bound MTE QR must identify the LP.');
         Assert.IsTrue(StrPos(Zpl, 'LP: LP00044') > 0, 'MTE must visibly identify its LP.');
     end;

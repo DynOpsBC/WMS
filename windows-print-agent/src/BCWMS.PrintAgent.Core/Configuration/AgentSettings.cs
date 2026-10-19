@@ -15,55 +15,6 @@ public enum LabelTransport
     WindowsRaw
 }
 
-/// <summary>
-/// One Windows printer that accepts label jobs (ZPL / ESC-POS / RAW) for this
-/// station. Several printers can be enabled on one PC (DKÇ, 16 Sep 2026); the
-/// job names the printer and the agent prints to exactly that queue.
-/// </summary>
-public sealed record LabelPrinterSetting
-{
-    public required string PrinterId { get; init; }
-    public required string PrinterName { get; init; }
-    /// <summary>
-    /// Operator-facing name (BADE, 17 Eyl 2026: "yazıcılara isim verebilelim"),
-    /// published to Business Central as the printer description so terminals
-    /// show "Mal Kabul Zebra" instead of the Windows driver name. Empty = the
-    /// Windows printer name.
-    /// </summary>
-    public string DisplayName { get; init; } = string.Empty;
-}
-
-public static class AgentSettingsExtensions
-{
-    /// <summary>Assign stable IDs without discarding operator-facing metadata.</summary>
-    public static IReadOnlyList<LabelPrinterSetting> BindLabelPrinterIds(
-        this AgentSettings settings, IReadOnlyDictionary<string, string> mappings) =>
-        settings.EffectiveLabelPrinters()
-            .Where(static printer => !string.IsNullOrWhiteSpace(printer.PrinterName))
-            .DistinctBy(static printer => printer.PrinterName, StringComparer.OrdinalIgnoreCase)
-            .Select(printer => printer with { PrinterId = mappings[printer.PrinterName] })
-            .ToList();
-
-    /// <summary>
-    /// Label printers that accept jobs: the multi-printer list when present,
-    /// otherwise the legacy single selection (settings saved by agent 1.0).
-    /// </summary>
-    public static IReadOnlyList<LabelPrinterSetting> EffectiveLabelPrinters(this AgentSettings settings)
-    {
-        if (settings.LabelPrinters.Count > 0)
-        {
-            return settings.LabelPrinters;
-        }
-
-        if (string.IsNullOrWhiteSpace(settings.LabelPrinterName))
-        {
-            return [];
-        }
-
-        return [new LabelPrinterSetting { PrinterId = settings.LabelPrinterId, PrinterName = settings.LabelPrinterName }];
-    }
-}
-
 public sealed record AgentSettings
 {
     public int SchemaVersion { get; init; } = 1;
@@ -77,15 +28,10 @@ public sealed record AgentSettings
     public string BlobEndpoint { get; init; } = string.Empty;
     public string BlobReadSas { get; init; } = string.Empty;
     public DateTimeOffset? BlobSasExpiresAtUtc { get; init; }
-    /// <summary>Primary label printer (first enabled one); kept for agent 1.0 settings files.</summary>
     public string LabelPrinterId { get; init; } = string.Empty;
     public string LabelPrinterName { get; init; } = string.Empty;
-    /// <summary>Every enabled label printer; all share <see cref="LabelFormat"/>.</summary>
-    public IReadOnlyList<LabelPrinterSetting> LabelPrinters { get; init; } = [];
     public string DocumentPrinterId { get; init; } = string.Empty;
     public string DocumentPrinterName { get; init; } = string.Empty;
-    /// <summary>Operator-facing name of the document printer; empty = Windows name.</summary>
-    public string DocumentPrinterDisplayName { get; init; } = string.Empty;
     public LabelTransport LabelTransport { get; init; } = LabelTransport.WindowsRaw;
     public PrintFormat LabelFormat { get; init; } = PrintFormat.ZPL;
     public int MaxDeliveryAttempts { get; init; } = 5;
@@ -108,11 +54,6 @@ public sealed record AgentSettings
 
 public static class AgentSettingsValidator
 {
-    /// <summary>BC "DOPSWHS Printer".Description is Text[100]; no control characters.</summary>
-    public static bool IsValidDisplayName(string? displayName) =>
-        string.IsNullOrEmpty(displayName) ||
-        (displayName.Trim().Length <= 100 && !displayName.Any(static ch => char.IsControl(ch)));
-
     public static IReadOnlyList<string> Validate(AgentSettings settings)
     {
         var errors = new List<string>();
@@ -166,45 +107,19 @@ public static class AgentSettingsValidator
             errors.Add("Blob SAS süresi dolmuş; print-agent.runtime.secrets.json yeniden üretilmelidir.");
         }
 
-        var labelPrinters = settings.EffectiveLabelPrinters();
-        if (labelPrinters.Count == 0 && string.IsNullOrWhiteSpace(settings.DocumentPrinterName))
+        if (string.IsNullOrWhiteSpace(settings.LabelPrinterName) && string.IsNullOrWhiteSpace(settings.DocumentPrinterName))
         {
             errors.Add("En az bir etiket veya belge yazıcısı seçilmelidir.");
-        }
-
-        if (labelPrinters.Count > 32)
-        {
-            errors.Add("En fazla 32 etiket yazıcısı seçilebilir.");
         }
 
         ValidateSelectedPrinter(settings.LabelPrinterId, settings.LabelPrinterName, "Etiket", errors);
         ValidateSelectedPrinter(settings.DocumentPrinterId, settings.DocumentPrinterName, "Belge", errors);
         ValidateSelectedMapping(settings.PrinterIdsByName, settings.LabelPrinterId, settings.LabelPrinterName, "Etiket", errors);
         ValidateSelectedMapping(settings.PrinterIdsByName, settings.DocumentPrinterId, settings.DocumentPrinterName, "Belge", errors);
-        foreach (var labelPrinter in labelPrinters)
-        {
-            ValidateSelectedPrinter(labelPrinter.PrinterId, labelPrinter.PrinterName, "Etiket", errors);
-            ValidateSelectedMapping(settings.PrinterIdsByName, labelPrinter.PrinterId, labelPrinter.PrinterName, "Etiket", errors);
-        }
-
-        if (labelPrinters.Select(static printer => printer.PrinterName).Distinct(StringComparer.OrdinalIgnoreCase).Count() != labelPrinters.Count)
-        {
-            errors.Add("Aynı etiket yazıcısı birden fazla kez seçilemez.");
-        }
-
-        if (!string.IsNullOrWhiteSpace(settings.DocumentPrinterName) &&
-            labelPrinters.Any(printer => string.Equals(printer.PrinterName, settings.DocumentPrinterName, StringComparison.OrdinalIgnoreCase)))
+        if (!string.IsNullOrWhiteSpace(settings.LabelPrinterName) &&
+            string.Equals(settings.LabelPrinterName, settings.DocumentPrinterName, StringComparison.OrdinalIgnoreCase))
         {
             errors.Add("Etiket ve belge için farklı Windows yazıcı kuyrukları seçilmelidir.");
-        }
-
-        foreach (var displayName in labelPrinters.Select(static printer => printer.DisplayName).Append(settings.DocumentPrinterDisplayName))
-        {
-            if (!IsValidDisplayName(displayName))
-            {
-                errors.Add("Yazıcı görünen adı en fazla 100 karakter olmalı ve kontrol karakteri içermemelidir.");
-                break;
-            }
         }
 
         if (settings.LabelTransport != LabelTransport.WindowsRaw)

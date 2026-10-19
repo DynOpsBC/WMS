@@ -7,7 +7,7 @@ Tek repo (DynOpsBC/WMS), tek uygulama kimliği (BCWMSApp), üç hat:
 | **Ana paket (BASE)** | `main` | `EL_TERMINAL/WMS-main` | 1.14.**0**.x | flavor `dynops` (com.dynops.bcwms) |
 | BADE | `customer/bade` | `EL_TERMINAL/WMS` | 1.14.**1**.x | flavor `bade` → `android-bade-channel/latest.json` |
 | EMU / DKÇ | `customer/emu` | `EL_TERMINAL/WMS-emu` | 1.14.**2**.x | flavor `emu` → `android-emu-channel/latest.json`; eski imzalı cihazlar `android-emu-legacy-channel` |
-| Kitoko Group | `customer/kitoko` (EMU kopyası, 2 Eki 2026) | `EL_TERMINAL/WMS-kitoko` | 1.14.**3**.x | flavor `kitoko` (com.dynops.bcwms.kitoko) → `android-kitoko-channel/latest.json`; davranış `isEmuFamily` ile EMU'yla ortak |
+| Kitoko Group | `customer/kitoko` (19 Eki 2026'dan beri BADE kopyası; eski EMU tabanı `archive/kitoko-emu-base-20261019`) | `EL_TERMINAL/WMS-kitoko` | 1.14.**3**.x | flavor `kitoko` (com.dynops.bcwms.kitoko, `src/kitoko` = `src/bade` kopyası) → `android-kitoko-channel/latest.json`; davranış `isBadeFamily()` ile BADE'yle ortak; `customer/bade` buraya merge edilir |
 | Sonraki müşteri | `customer/<kod>` | `EL_TERMINAL/WMS-<kod>` | 1.14.4.x … | yeni flavor + kanal |
 
 Sürüm şeması **A.B.C.D**: `A.B` ürün hattı (1.14), `C` müşteri yuvası (0 = ana paket), `D` yapı numarası.

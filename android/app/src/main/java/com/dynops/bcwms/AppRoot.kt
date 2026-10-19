@@ -1,7 +1,6 @@
 package com.dynops.bcwms
 
 import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -62,15 +61,28 @@ object WhsePickNavigation {
     fun consume(): String? = pendingPickNo.also { pendingPickNo = null }
 }
 
+/**
+ * BADE (17 Eyl 2026, Merve): a sheet created in BC with "V2 Scan Mode" on can
+ * only be counted on the Sayım V2 screen. Opening it from the classic Sayım
+ * screen used to end at a note; now that note carries the sheet over.
+ */
+object CountV2Handoff {
+    private var pendingSheetNo: String? = null
+
+    fun request(sheetNo: String) {
+        pendingSheetNo = sheetNo.takeIf { it.isNotBlank() }
+    }
+
+    fun consume(): String? = pendingSheetNo.also { pendingSheetNo = null }
+}
+
 enum class Screen(val title: String) {
     Home("Ana Menü"),
     Connection("Bağlantı Ayarları"),
     LicensePlates("LP (Taşıma Kabı)"),
     HierarchicalLP("DKC Kutu ve Palet"),
     ItemInquiry("Ürün Sorgu"),
-    Stock("Stok"),
     BinInquiry("Bin Sorgu"),
-    Labels("Etiket Çıkar"),
     WhseEntries("Ambar Hareketleri"),
     Receiving("Mal Kabul"),
     Picking("Toplama"),
@@ -106,12 +118,11 @@ fun AppRoot() {
     var screen by rememberSaveable {
         mutableStateOf(if (BcApi.hasToken(context)) Screen.Home else Screen.Connection)
     }
-    // Keep the menu position alive while a module replaces HomeScreen.
-    val homeScrollState = rememberScrollState()
     // Bir belirtecin diskte bulunması bağlantı anlamına gelmez. Şirket ve API
     // doğrulanana kadar operasyonlar kapalı kalır.
     var connected by remember { mutableStateOf(false) }
     var booting by remember { mutableStateOf(true) }
+    var sessionEpoch by remember { mutableIntStateOf(0) }
     // V2 yerel bir özellik anahtarıdır: sunucu verisini değiştirmez ve klasik
     // ekranları silmez. Operatör aynı cihazda son seçimini korur.
     var v2Enabled by rememberSaveable {
@@ -133,6 +144,9 @@ fun AppRoot() {
             // BADE must not inherit the historical shared CRONUS company UUID.
             BcApi.ensurePreferredCompany(context)
             connected = BcApi.testConnection(context).ok
+            if (connected && com.dynops.bcwms.isBadeFamily() && TerminalSession.authenticated(context)) {
+                connected = TerminalSession.resume(context)
+            }
         }
         // Marka açılışı görülebilsin ama operatörü gereksiz yere bekletmesin.
         val remaining = 850L - (android.os.SystemClock.elapsedRealtime() - startedAt)
@@ -140,10 +154,35 @@ fun AppRoot() {
         booting = false
     }
 
+    // The public APK channel must remain available even when BC or PIN login is unavailable.
+    if (com.dynops.bcwms.isBadeFamily()) UpdateChecker()
+
     if (booting) {
         WmsSplashScreen(
             resolveCompanyBrand(BcApi.getCompanyName(context), BuildConfig.FLAVOR),
         )
+        return
+    }
+
+    var terminalAuthenticated by remember { mutableStateOf(connected && TerminalSession.authenticated(context)) }
+    var openedOperator by remember { mutableStateOf("") }
+    LaunchedEffect(sessionEpoch, connected, screen) {
+        do {
+            terminalAuthenticated = connected && TerminalSession.authenticated(context)
+            if (!com.dynops.bcwms.isBadeFamily()) break
+            delay(500)
+        } while (true)
+    }
+    if (com.dynops.bcwms.isBadeFamily() && terminalAuthenticated && openedOperator.isBlank()) {
+        openedOperator = BcApi.getLocalUser(context)
+    }
+    if (com.dynops.bcwms.isBadeFamily() && !terminalAuthenticated && openedOperator.isBlank()) {
+        LoginFlow(onConnected = {
+            connected = it
+            sessionEpoch++
+            terminalAuthenticated = TerminalSession.authenticated(context)
+            if (it) screen = Screen.Home
+        })
         return
     }
 
@@ -154,11 +193,9 @@ fun AppRoot() {
         screen = Screen.Home
     }
 
-    var showDevicePrinters by remember { mutableStateOf(false) }
-    if (showDevicePrinters) DevicePrintersDialog { showDevicePrinters = false }
-
     Scaffold(
         topBar = {
+            Column {
             TopAppBar(
                 title = { Text(screen.title) },
                 navigationIcon = {
@@ -180,46 +217,64 @@ fun AppRoot() {
                             },
                         )
                     }
-                    if (!isEmuFamily(BuildConfig.FLAVOR) || screen !in setOf(Screen.ItemInquiry, Screen.Labels)) {
-                        ActivePrinterTopBarButton(onClick = { showDevicePrinters = true })
+                    if (com.dynops.bcwms.isBadeFamily() && screen == Screen.Home) {
+                        TextButton(onClick = {
+                            TerminalSession.signOut(context)
+                            openedOperator = ""
+                            terminalAuthenticated = false
+                            connected = false
+                            screen = Screen.Connection
+                        }) { Text("Kullanıcı çıkışı") }
+                    } else if (!com.dynops.bcwms.isBadeFamily()) {
+                        ConnectionBadge(connected) { screen = Screen.Connection }
                     }
-                    ConnectionBadge(connected) { screen = Screen.Connection }
                 }
             )
+            if (com.dynops.bcwms.isBadeFamily()) {
+                Surface(color = MaterialTheme.colorScheme.primaryContainer, modifier = Modifier.fillMaxWidth()) {
+                    Column(Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
+                        Text("Aktif kullanıcı · ${TerminalSession.code(context)}", style = MaterialTheme.typography.labelMedium)
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                            Text(BcApi.getOperatorDisplayName(context), style = MaterialTheme.typography.titleLarge,
+                                fontWeight = androidx.compose.ui.text.font.FontWeight.Bold, modifier = Modifier.weight(1f))
+                            ActiveLabelPrinter(Modifier.weight(1f), refreshKey = screen)
+                        }
+                    }
+                }
+            }
+            }
         }
     ) { padding ->
         CompositionLocalProvider(LocalNavigator provides { target -> screen = target }) {
-        Column(Modifier.padding(padding).fillMaxSize()) {
-            // BADE (17 Eyl 2026): the label printer this terminal prints to is
-            // always visible on operational screens; tapping opens Yazıcılar.
-            if (forceProductionFlow && connected && screen !in setOf(Screen.Home, Screen.Connection, Screen.Printers, Screen.Help)) {
-                com.dynops.bcwms.feature.LabelPrinterBar(
-                    onOpenPrinters = { screen = Screen.Printers },
-                    quiet = isEmuFamily(BuildConfig.FLAVOR) && screen in setOf(Screen.ItemInquiry, Screen.Labels),
-                )
-            }
-        Box(Modifier.weight(1f).fillMaxSize()) {
-            when (screen) {
+        Box(Modifier.padding(padding).fillMaxSize()) {
+            // Guard rendering as well as the menu: restored screens, help links and
+            // cross-module navigation must never mount a restricted module.
+            if (!canOpenOperationalScreen(context, screen)) {
+                Column(Modifier.padding(24.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                    Text("Bu bölüm Production ortamında yalnızca Yönetici erişimine açıktır.")
+                    Button(onClick = { screen = Screen.Home }) { Text("Ana Menüye Dön") }
+                }
+            } else when (screen) {
                 Screen.Home -> HomeScreen(
-                    scrollState = homeScrollState,
                     connected = connected,
                     flavor = BuildConfig.FLAVOR,
                     onConnectionChanged = { connected = it },
                     onNavigate = { screen = it },
                 )
-                Screen.Connection -> LoginFlow(onConnected = { connected = it })
+                Screen.Connection -> LoginFlow(onConnected = { connected = it; sessionEpoch++; if (it) screen = Screen.Home })
                 Screen.LicensePlates -> LicensePlateModule()
                 Screen.HierarchicalLP -> HierarchicalLpModule()
                 Screen.ItemInquiry -> ItemInquiryModule()
-                Screen.Stock -> StockModule()
                 Screen.BinInquiry -> BinInquiryModule()
-                Screen.Labels -> LabelsModule()
                 Screen.WhseEntries -> WhseEntriesModule()
                 Screen.Receiving -> ReceivingModule()
                 Screen.Picking -> key(v2Enabled) { PickingModule(v2Enabled = v2Enabled) }
                 Screen.Packing -> key(v2Enabled) { PackingModule(v2Enabled = v2Enabled) }
                 Screen.AdHocMove -> AdHocMoveModule()
-                Screen.Count -> CountModule()
+                Screen.Count -> CountModule(onOpenCountV2 = { sheetNo ->
+                    CountV2Handoff.request(sheetNo)
+                    screen = Screen.CountV2
+                })
                 Screen.CountV2 -> CountV2Module()
                 Screen.PutAway -> PutAwayModule()
                 Screen.Shipping -> ShippingModule()
@@ -236,20 +291,32 @@ fun AppRoot() {
                 Screen.FieldSettings -> FieldSettingsModule()
                 Screen.Help -> TerminalHelpModule(connected = connected, onNavigate = { screen = it })
             }
-            UpdateChecker()
-        }
+            if (!com.dynops.bcwms.isBadeFamily()) UpdateChecker()
         }
         }
     }
+    if (com.dynops.bcwms.isBadeFamily() && !terminalAuthenticated && openedOperator.isNotBlank()) {
+        TerminalReauthenticationDialog(
+            previousOperator = openedOperator,
+            onVerified = { changed ->
+                if (changed) screen = Screen.Home
+                openedOperator = BcApi.getLocalUser(context)
+                connected = true
+                terminalAuthenticated = true
+                sessionEpoch++
+            },
+            onConnectionSettings = {
+                TerminalSession.signOut(context)
+                openedOperator = ""
+                screen = Screen.Connection
+            },
+        )
+    }
 }
-
-/** Kitoko (2 Eki 2026) DKÇ/EMU sürümünün kopyasıdır: davranış EMU ile ortak, marka/logo ayrı. */
-internal fun isEmuFamily(flavor: String): Boolean =
-    flavor.equals("emu", ignoreCase = true) || flavor.equals("kitoko", ignoreCase = true)
 
 /** Müşteri APK'ları tek, doğrulanmış operasyon akışıyla açılır. */
 internal fun shouldForceProductionFlow(flavor: String): Boolean =
-    flavor.equals("bade", ignoreCase = true) || isEmuFamily(flavor)
+    isBadeFamily(flavor) || flavor.equals("emu", ignoreCase = true)
 
 /** Bağlantı gerektiren operasyonlar çevrimdışıyken tıklanıp hata üretmemelidir. */
 internal fun isHomeTileEnabled(screen: Screen, connected: Boolean): Boolean =
@@ -269,7 +336,7 @@ internal fun operatorHomeScreens(flavor: String, includeAdminTestTools: Boolean 
             hidden.remove(Screen.TestCenter)
             hidden.remove(Screen.PostingTest)
         }
-        if (!isEmuFamily(flavor)) hidden += Screen.HierarchicalLP
+        if (!flavor.equals("emu", ignoreCase = true)) hidden += Screen.HierarchicalLP
         return Screen.entries.toSet() - hidden
     }
     return Screen.entries.toSet() - setOf(Screen.Home, Screen.HierarchicalLP)
@@ -360,8 +427,6 @@ private val HomeCategories = listOf(
     )),
     HomeCategory("Sorgu", Color(0xFF9B59B6), listOf(
         HomeTile(Screen.ItemInquiry, WmsGlyph.ITEM_SEARCH, "Ürün Sorgu", "Ürünün raf, lot ve miktarını bul"),
-        HomeTile(Screen.Stock, WmsGlyph.STOCK, "Stok", "Tüm stoktaki ürünler ve kritik seviyeler"),
-        HomeTile(Screen.Labels, WmsGlyph.LABEL, "Etiket Çıkar", "Ürün etiketi · Bin etiketi · A3 belge"),
         HomeTile(Screen.BinInquiry, WmsGlyph.BIN_SEARCH, "Bin Sorgu", "Bir rafın mevcut içeriğini gör"),
         HomeTile(Screen.WhseEntries, WmsGlyph.ENTRIES, "Ambar Hareketleri", "Geçmiş stok hareketlerini incele"),
     )),
@@ -379,7 +444,6 @@ private val HomeCategories = listOf(
 
 @Composable
 private fun HomeScreen(
-    scrollState: ScrollState,
     connected: Boolean,
     flavor: String,
     onConnectionChanged: (Boolean) -> Unit,
@@ -395,9 +459,6 @@ private fun HomeScreen(
     val companyName = remember(companyEpoch) { BcApi.getCompanyName(context) }
     val companyBrand = remember(companyName, flavor) { resolveCompanyBrand(companyName, flavor) }
     val operatorName = remember(companyEpoch, connected) { BcApi.getOperatorDisplayName(context) }
-    val welcomeName = if (isEmuFamily(flavor))
-        WmsTerminalSession.code(context).ifBlank { operatorName }
-    else operatorName
     var accessible by remember(companyEpoch, connected) { mutableStateOf(BcApi.getAccessibleCompanies(context)) }
     var discovering by remember { mutableStateOf(false) }
     // ELOG: liste boşsa (login switcher eklenmeden yapılmış / AAD-only atlama)
@@ -424,7 +485,7 @@ private fun HomeScreen(
         includeAdminTestTools = BuildConfig.DEBUG && BcApi.isAdminTestSession(context),
     )
     val visibleCategories = HomeCategories.mapNotNull { category ->
-        category.copy(tiles = category.tiles.filter { it.screen in visibleScreens })
+        category.copy(tiles = category.tiles.filter { it.screen in visibleScreens && canOpenOperationalScreen(context, it.screen) })
             .takeIf { it.tiles.isNotEmpty() }
     }
 
@@ -443,14 +504,14 @@ private fun HomeScreen(
         Modifier
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background)
-            .verticalScroll(scrollState)
+            .verticalScroll(rememberScrollState())
             .padding(16.dp)
     ) {
         HomeHeader(
             env = BcApi.getEnvironment(context),
             company = companyName,
             brand = companyBrand,
-            operatorName = welcomeName,
+            operatorName = if (isBadeFamily(flavor)) "${TerminalSession.code(context)} · $operatorName" else operatorName,
             connected = connected,
             canSwitch = accessible.size > 1,
             onSwitchClick = { showSwitcher = true },
@@ -481,13 +542,6 @@ private fun HomeScreen(
 
         if (!connected) {
             NotConnectedCard()
-            Spacer(Modifier.height(16.dp))
-        }
-        // DKÇ (17 Eyl 2026): every terminal must have its own printer; say so
-        // on the home screen instead of failing at the first label.
-        val homeLabelPrinter = com.dynops.bcwms.feature.rememberDevicePrinter(com.dynops.bcwms.feature.PRINTER_USAGE_LABEL)
-        if (connected && shouldForceProductionFlow(flavor) && homeLabelPrinter.isBlank()) {
-            NoPrinterCard(onSelect = { onNavigate(Screen.Printers) })
             Spacer(Modifier.height(16.dp))
         }
 
@@ -545,7 +599,7 @@ private fun HomeHeader(
                 Spacer(Modifier.width(12.dp))
                 Column(Modifier.weight(1f)) {
                     Text(
-                        if (operatorName.isBlank()) "Hoş geldiniz" else "Hoş geldin $operatorName",
+                        if (operatorName.isBlank()) "Hoş geldiniz" else operatorName,
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold,
                         color = Color.White
@@ -580,7 +634,7 @@ private fun HomeHeader(
                         Box(Modifier.size(8.dp).clip(CircleShape).background(statusColor))
                         Spacer(Modifier.width(6.dp))
                         Text(
-                            if (connected) "Bağlı — canlı bağlantı" else "Bağlı değil",
+                            if (connected) "Bağlı" else "Bağlı değil",
                             style = MaterialTheme.typography.labelMedium,
                             fontWeight = FontWeight.SemiBold,
                             color = Color.White
@@ -636,28 +690,6 @@ private fun HelpButton(
         WmsIcon(WmsGlyph.HELP, MaterialTheme.colorScheme.primary, Modifier.size(20.dp))
         Spacer(Modifier.width(9.dp))
         Text("Terminali Nasıl Kullanırım?", fontWeight = FontWeight.Bold)
-    }
-}
-
-@Composable
-private fun NoPrinterCard(onSelect: () -> Unit) {
-    val warn = bcwmsStatus().warning
-    Card(
-        onClick = onSelect,
-        colors = CardDefaults.cardColors(containerColor = warn.copy(alpha = 0.12f)),
-        shape = RoundedCornerShape(14.dp),
-        modifier = Modifier.fillMaxWidth()
-    ) {
-        Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
-            WmsIcon(WmsGlyph.PRINTER, warn, Modifier.size(23.dp))
-            Spacer(Modifier.width(10.dp))
-            Text(
-                "Bu cihaz için yazıcı seçilmedi. Seçmek için dokunun.",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurface,
-                modifier = Modifier.weight(1f),
-            )
-        }
     }
 }
 

@@ -28,6 +28,8 @@ page 72487 "DOPSWHS Count Sheet Line API"
                 field(variantCode; Rec."Variant Code") { Caption = 'variantCode'; }
                 field(binCode; Rec."Bin Code") { Caption = 'binCode'; }
                 field(lpNo; Rec."LP No.") { Caption = 'lpNo'; }
+                field(foundFromBin; Rec."Found From Bin") { Caption = 'foundFromBin'; }
+                field(foundLpQty; Rec."Found LP Qty") { Caption = 'foundLpQty'; }
                 field(lpLineNo; Rec."LP Line No.") { Caption = 'lpLineNo'; }
                 field(lotNo; Rec."Lot No.") { Caption = 'lotNo'; }
                 field(serialNo; Rec."Serial No.") { Caption = 'serialNo'; }

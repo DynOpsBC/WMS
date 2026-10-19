@@ -1,6 +1,7 @@
 codeunit 72051 "DOPSWHS Print Dispatcher"
 {
     Access = Public;
+    Permissions = tabledata Employee = R;
 
     procedure PrintLPLabel(var LP: Record "DOPSWHS LP Header"; PrinterId: Code[50]; Copies: Integer)
     var
@@ -16,25 +17,10 @@ codeunit 72051 "DOPSWHS Print Dispatcher"
         Zpl: Text;
         ResolvedPrinter: Code[20];
         JobId: Integer;
-        Builder: Codeunit "DOPSWHS LP Label Builder";
-        ReportLP: Record "DOPSWHS LP Header";
-        SourceRecord: RecordRef;
-        TemplateReportId: Integer;
     begin
-        // EMU/DKÇ (15 Eyl 2026): the LP template decides copies and design. A
-        // template routed to an RDLC report prints as a PDF document; every
-        // other design is ZPL built by the label builder.
-        if Copies <= 0 then
-            Copies := Builder.ResolveCopies(LP);
         if Copies > 10 then
             Error('A print job cannot exceed 10 copies.');
-        if Builder.UsesReportLayout(LP, TemplateReportId) then begin
-            ReportLP := LP;
-            ReportLP.SetRecFilter();
-            SourceRecord.GetTable(ReportLP);
-            PrintReport(LP."No.", TemplateReportId, PrinterId, Copies, Enum::"DOPSWHS IWX Report Usage"::Receipt, SourceRecord);
-            exit;
-        end;
+        PrintEnvironment.SyncCompany();
         Setup.Get('');
         Zpl := LabelReport.BuildZpl(LP);
 
@@ -119,14 +105,25 @@ codeunit 72051 "DOPSWHS Print Dispatcher"
     /// the label printer that the terminals already use.
     /// </summary>
     procedure PrintPalletItemLabels(var LP: Record "DOPSWHS LP Header"; PrinterId: Code[50]; Copies: Integer)
+    begin
+        PrintPalletItemLabelsWithOptions(LP, PrinterId, Copies, '');
+    end;
+
+    /// <summary>
+    /// OptionsJson (terminal "MTE Yazdır" ekranı): inspectorEmployeeNo,
+    /// supplierLotNo, qcEmployeeNo, qcApprovalDate (yyyy-MM-dd), documentNo,
+    /// revisionNo, revisionDate (yyyy-MM-dd), operatorDisplayName. The ZPL
+    /// and PDF routes both receive the same operator identity.
+    /// </summary>
+    procedure PrintPalletItemLabelsWithOptions(var LP: Record "DOPSWHS LP Header"; PrinterId: Code[50]; Copies: Integer; OptionsJson: Text)
     var
         TargetPrinter: Code[50];
     begin
         TargetPrinter := ResolvePalletItemLabelPrinter(PrinterId);
         if PrinterIsPdf(TargetPrinter) then
-            PrintPalletItemReport(LP, TargetPrinter, Copies)
+            PrintPalletItemReport(LP, TargetPrinter, Copies, OptionsJson)
         else
-            PrintPalletItemZplLabels(LP, TargetPrinter, Copies);
+            PrintPalletItemZplLabels(LP, TargetPrinter, Copies, OptionsJson);
     end;
 
     /// <summary>
@@ -143,6 +140,7 @@ codeunit 72051 "DOPSWHS Print Dispatcher"
     begin
         if PrinterId <> '' then
             exit(PrinterId);
+        PrintEnvironment.SyncCompany();
         if not Setup.Get('') then
             exit('');
         if not (Setup."Print Channel" in [Setup."Print Channel"::SelfHosted, Setup."Print Channel"::AzureDirect]) then
@@ -168,28 +166,236 @@ codeunit 72051 "DOPSWHS Print Dispatcher"
     /// <summary>
     /// The approved 10 x 8 cm MTE RDLC (one page per LP) as a PDF document.
     /// </summary>
-    local procedure PrintPalletItemReport(var LP: Record "DOPSWHS LP Header"; PrinterId: Code[50]; Copies: Integer)
+    local procedure PrintPalletItemReport(var LP: Record "DOPSWHS LP Header"; PrinterId: Code[50]; Copies: Integer; OptionsJson: Text)
     var
         ReportLP: Record "DOPSWHS LP Header";
         SourceRecord: RecordRef;
+        CustomerReportId: Integer;
     begin
+        // The terminal LP label uses its own report. The customer's 60150
+        // report and its selected BC layout remain reserved for BC users.
+        if ResolveCustomerMteReport(CustomerReportId) then begin
+            if not CollectLpSourceEntries(LP, SourceRecord) then
+                Error(MteNoSourceEntryErr, LP."No.");
+            PrintReportWithParameters(
+                LP."No.",
+                CustomerReportId,
+                BuildMteParameters(CustomerReportId, LP, OptionsJson),
+                PrinterId,
+                Copies,
+                Enum::"DOPSWHS IWX Report Usage"::Receipt,
+                SourceRecord);
+            exit;
+        end;
         ReportLP := LP;
         ReportLP.SetRecFilter();
         SourceRecord.GetTable(ReportLP);
-        PrintReport(
+        PrintReportWithParameters(
             LP."No.",
             Report::"DOPSWHS MTE LP Report",
+            '<ReportParameters id="' + Format(Report::"DOPSWHS MTE LP Report") + '"><Options>' +
+                XmlField('InspectorName', ResolveMteInspectorName(OptionsJson)) +
+                '</Options><DataItems></DataItems></ReportParameters>',
             PrinterId,
             Copies,
             Enum::"DOPSWHS IWX Report Usage"::Receipt,
             SourceRecord);
     end;
 
+    local procedure ResolveCustomerMteReport(var ReportId: Integer): Boolean
+    var
+        Setup: Record "DOPSWHS Setup";
+        AllObjWithCaption: Record AllObjWithCaption;
+    begin
+        Clear(ReportId);
+        PrintEnvironment.SyncCompany();
+        if not Setup.Get('') then
+            exit(false);
+        if Setup."MTE Report ID" = 0 then
+            exit(false);
+        if Setup."MTE Report ID" = 60150 then begin
+            if not AllObjWithCaption.Get(AllObjWithCaption."Object Type"::Report, 60298) then
+                Error('Terminal LP etiketi için BadeProduction 60298 raporu bulunamadı. Önce güncel BadeProduction paketini yükleyin. 60150 eski BC etiketine dokunulmadı.');
+            ReportId := 60298;
+            exit(true);
+        end;
+        if not AllObjWithCaption.Get(AllObjWithCaption."Object Type"::Report, Setup."MTE Report ID") then
+            exit(false);
+        ReportId := Setup."MTE Report ID";
+        exit(true);
+    end;
+
+    /// <summary>
+    /// The item ledger entries the pallet was received on: the LP lines' source
+    /// entries, else the entries stamped with this LP number.
+    /// </summary>
+    local procedure CollectLpSourceEntries(var LP: Record "DOPSWHS LP Header"; var SourceRecord: RecordRef): Boolean
+    var
+        LPLine: Record "DOPSWHS LP Line";
+        ItemLedgerEntry: Record "Item Ledger Entry";
+        EntryNos: List of [Integer];
+        EntryNo: Integer;
+        FilterText: Text;
+    begin
+        LPLine.SetRange("LP No.", LP."No.");
+        LPLine.SetFilter("Source Item Ledger Entry No.", '<>0');
+        LPLine.SetFilter(Quantity, '>0');
+        if LPLine.FindSet() then
+            repeat
+                if not EntryNos.Contains(LPLine."Source Item Ledger Entry No.") then
+                    EntryNos.Add(LPLine."Source Item Ledger Entry No.");
+            until LPLine.Next() = 0;
+        if EntryNos.Count() = 0 then begin
+            ItemLedgerEntry.SetRange("DOPSWHS LP No.", LP."No.");
+            if ItemLedgerEntry.FindSet() then
+                repeat
+                    EntryNos.Add(ItemLedgerEntry."Entry No.");
+                until ItemLedgerEntry.Next() = 0;
+        end;
+        if EntryNos.Count() = 0 then
+            exit(false);
+        foreach EntryNo in EntryNos do begin
+            if FilterText <> '' then
+                FilterText += '|';
+            FilterText += Format(EntryNo);
+        end;
+        ItemLedgerEntry.Reset();
+        ItemLedgerEntry.SetFilter("Entry No.", FilterText);
+        SourceRecord.GetTable(ItemLedgerEntry);
+        exit(true);
+    end;
+
+    /// <summary>
+    /// Request-page values for the customer report as BC's ReportParameters
+    /// XML. Control names follow BadeProduction report 60150; dates use the XML
+    /// (yyyy-MM-dd) format the request page stores.
+    /// </summary>
+    local procedure BuildMteParameters(ReportId: Integer; var LP: Record "DOPSWHS LP Header"; OptionsJson: Text): Text
+    var
+        Options: JsonObject;
+        Xml: Text;
+    begin
+        if (OptionsJson <> '') and not Options.ReadFrom(OptionsJson) then
+            Error(MteOptionsInvalidErr);
+        Xml := '<?xml version="1.0" standalone="yes"?>' +
+            '<ReportParameters id="' + Format(ReportId) + '"><Options>' +
+            XmlField('LpNoFilterReq', LP."No.") +
+            XmlField('InspectorEmployeeNo', ResolveMteInspectorEmployeeNo(OptionsJson)) +
+            XmlField('TedarikciLotu', JsonText(Options, 'supplierLotNo')) +
+            XmlField('QualityControlEmployeeNo', JsonText(Options, 'qcEmployeeNo')) +
+            XmlField('QualityControlApprovalDate', JsonDateText(Options, 'qcApprovalDate')) +
+            XmlField('DokumanNoReq', JsonText(Options, 'documentNo')) +
+            XmlField('RevizyonNo', JsonText(Options, 'revisionNo')) +
+            XmlField('RevizyonTarihi', JsonDateText(Options, 'revisionDate')) +
+            '</Options><DataItems></DataItems></ReportParameters>';
+        exit(Xml);
+    end;
+
+    // PDF report 60150 accepts an Employee No., never a literal operator name.
+    // A missing/ambiguous mapping must not silently print the BC service account.
+    procedure ResolveMteInspectorEmployeeNo(OptionsJson: Text): Text
+    var
+        Options: JsonObject;
+        Employee: Record Employee;
+        OperatorName: Text;
+        NameText: Text;
+        MatchNo: Code[20];
+    begin
+        if (OptionsJson <> '') and not Options.ReadFrom(OptionsJson) then
+            Error(MteOptionsInvalidErr);
+        if JsonText(Options, 'inspectorEmployeeNo') <> '' then
+            exit(JsonText(Options, 'inspectorEmployeeNo'));
+        OperatorName := JsonText(Options, 'operatorDisplayName').Trim();
+        if OperatorName = '' then
+            exit('');
+        Employee.SetRange(Status, Employee.Status::Active);
+        if Employee.FindSet() then
+            repeat
+                NameText := (Employee."First Name" + ' ' + Employee."Last Name").Trim();
+                if NameText = '' then
+                    NameText := Employee."Search Name";
+                if UpperCase(NameText) = UpperCase(OperatorName) then begin
+                    if MatchNo <> '' then
+                        Error('PDF MTE için %1 adına birden fazla çalışan bulundu. MTE Yazdır ekranında Giriş Yapan seçin.', OperatorName);
+                    MatchNo := Employee."No.";
+                end;
+            until Employee.Next() = 0;
+        if MatchNo = '' then
+            Error('PDF MTE için %1 adına çalışan bulunamadı. MTE Yazdır ekranında Giriş Yapan seçin.', OperatorName);
+        exit(MatchNo);
+    end;
+
+    procedure ResolveMteInspectorName(OptionsJson: Text): Text
+    var
+        Options: JsonObject;
+        Employee: Record Employee;
+        Inspector: Text;
+        NameText: Text;
+    begin
+        if (OptionsJson <> '') and not Options.ReadFrom(OptionsJson) then
+            Error(MteOptionsInvalidErr);
+        Inspector := JsonText(Options, 'inspectorEmployeeNo');
+        if Inspector = '' then
+            exit(JsonText(Options, 'operatorDisplayName'));
+        if StrLen(Inspector) <= MaxStrLen(Employee."No.") then
+            if Employee.Get(CopyStr(Inspector, 1, MaxStrLen(Employee."No."))) then begin
+                NameText := (Employee."First Name" + ' ' + Employee."Last Name").Trim();
+                if NameText = '' then
+                    NameText := Employee."Search Name";
+                if NameText <> '' then
+                    exit(NameText);
+            end;
+        exit(Inspector);
+    end;
+
+    local procedure XmlField(Name: Text; Value: Text): Text
+    begin
+        if Value = '' then
+            exit('');
+        exit('<Field name="' + Name + '">' + XmlEscape(Value) + '</Field>');
+    end;
+
+    local procedure XmlEscape(Value: Text): Text
+    begin
+        Value := Value.Replace('&', '&amp;');
+        Value := Value.Replace('<', '&lt;');
+        Value := Value.Replace('>', '&gt;');
+        Value := Value.Replace('"', '&quot;');
+        exit(Value);
+    end;
+
+    local procedure JsonText(var Options: JsonObject; KeyName: Text): Text
+    var
+        Token: JsonToken;
+    begin
+        if not Options.Get(KeyName, Token) then
+            exit('');
+        if Token.AsValue().IsNull() then
+            exit('');
+        exit(Token.AsValue().AsText().Trim());
+    end;
+
+    /// <summary>Accepts yyyy-MM-dd or dd.MM.yyyy from the terminal; emits the XML date.</summary>
+    local procedure JsonDateText(var Options: JsonObject; KeyName: Text): Text
+    var
+        Value: Text;
+        DateValue: Date;
+    begin
+        Value := JsonText(Options, KeyName);
+        if Value = '' then
+            exit('');
+        if Evaluate(DateValue, Value, 9) then
+            exit(Format(DateValue, 0, 9));
+        if Evaluate(DateValue, Value) then
+            exit(Format(DateValue, 0, 9));
+        Error(MteDateInvalidErr, Value);
+    end;
+
     /// <summary>
     /// One ZPL material-identification label for every item group on the LP.
     /// This is the label the BADE terminals print on their ZPL label printer.
     /// </summary>
-    local procedure PrintPalletItemZplLabels(var LP: Record "DOPSWHS LP Header"; PrinterId: Code[50]; Copies: Integer)
+    local procedure PrintPalletItemZplLabels(var LP: Record "DOPSWHS LP Header"; PrinterId: Code[50]; Copies: Integer; OptionsJson: Text)
     var
         LPLine: Record "DOPSWHS LP Line";
         LabelLine: Record "DOPSWHS LP Line";
@@ -198,6 +404,7 @@ codeunit 72051 "DOPSWHS Print Dispatcher"
     begin
         LPLine.SetRange("LP No.", LP."No.");
         LPLine.SetFilter("Item No.", '<>%1', '');
+        LPLine.SetFilter(Quantity, '>0');
         if LPLine.FindSet() then
             repeat
                 GroupKey := PalletItemGroupKey(LPLine);
@@ -207,7 +414,7 @@ codeunit 72051 "DOPSWHS Print Dispatcher"
                     LabelLine.Quantity := PalletItemGroupQuantity(LPLine);
                     EnqueueZpl(
                         LP."No.",
-                        BuildPalletItemZpl(LP, LabelLine),
+                        BuildPalletItemZplWithOptions(LP, LabelLine, OptionsJson),
                         PrinterId,
                         Copies,
                         Enum::"DOPSWHS IWX Report Usage"::LpLabel,
@@ -238,6 +445,7 @@ codeunit 72051 "DOPSWHS Print Dispatcher"
         GroupLine.SetRange("Source Document Type", LPLine."Source Document Type");
         GroupLine.SetRange("Source Document No.", LPLine."Source Document No.");
         GroupLine.SetRange("Source Document Line No.", LPLine."Source Document Line No.");
+        GroupLine.SetFilter(Quantity, '>0');
         if GroupLine.FindSet() then
             repeat
                 GroupQuantity += GroupLine.Quantity;
@@ -246,69 +454,19 @@ codeunit 72051 "DOPSWHS Print Dispatcher"
     end;
 
     /// <summary>
-    /// Pallet item label, one per item group on the pallet: item, description,
-    /// lot, received total and pallet quantity; QR and Code128 carry the LP No.
-    /// Laid out on the configured label canvas (Setup label size).
+    /// BADE MTE as ZPL: the customer's report layout on the 10 x 8 cm Zebra
+    /// stock (codeunit "DOPSWHS MTE Zpl Builder"). Kept for callers and tests.
     /// </summary>
     procedure BuildPalletItemZpl(var LP: Record "DOPSWHS LP Header"; var LPLine: Record "DOPSWHS LP Line"): Text
-    var
-        Item: Record Item;
-        Canvas: Codeunit "DOPSWHS Label Canvas";
-        Lines: List of [Text];
-        DescriptionText: Text;
-        TotalQuantity: Decimal;
-        QrData: Text;
-        TotalText: Text;
-        PalletText: Text;
-        LotText: Text;
-        Zpl: Text;
-        X: Integer;
-        ColumnWidth: Integer;
-        Y: Integer;
-        NoFont: Integer;
-        Bars: Integer;
     begin
-        if Item.Get(LPLine."Item No.") then
-            DescriptionText := Item.Description;
-        TotalQuantity := LPLine."Source Document Quantity";
-        if TotalQuantity = 0 then
-            TotalQuantity := LPLine.Quantity;
+        exit(BuildPalletItemZplWithOptions(LP, LPLine, ''));
+    end;
 
-        TotalText := StrSubstNo('TOPLAM MAL KABUL: %1 %2', TotalQuantity, LPLine."Unit of Measure");
-        PalletText := StrSubstNo('PALET MİKTARI: %1 %2', LPLine.Quantity, LPLine."Unit of Measure");
-        if LPLine."Lot No." <> '' then
-            LotText := 'LOT: ' + LPLine."Lot No.";
-
-        QrData := LP."No.";
-        if QrData = '' then
-            QrData := LPLine."Lot No.";
-        if QrData = '' then
-            QrData := LPLine."Item No.";
-
-        Canvas.Init();
-        Zpl := Canvas.Frame('MADDE TANIMLAMA ETİKETİ', LP."No.", QrData, 'QR = LP NO', X, ColumnWidth, Y);
-        NoFont := Canvas.FitFont(LPLine."Item No.", ColumnWidth, Canvas.BigFont() - 8, 28);
-        Zpl += Canvas.Write(X, Y, NoFont, ColumnWidth, LPLine."Item No.");
-        Y += NoFont + 6;
-        Canvas.WrapText(DescriptionText, Canvas.MaxChars(ColumnWidth, Canvas.NormalFont()), 1, Lines);
-        if Lines.Count() > 0 then begin
-            Zpl += Canvas.Write(X, Y, Canvas.NormalFont(), ColumnWidth, Lines.Get(1));
-            Y += Canvas.Pitch() - 2;
-        end;
-        if LotText <> '' then begin
-            Zpl += Canvas.Write(X, Y, Canvas.NormalFont(), ColumnWidth, CopyStr(LotText, 1, Canvas.MaxChars(ColumnWidth, Canvas.NormalFont())));
-            Y += Canvas.Pitch() - 2;
-        end;
-        Zpl += Canvas.Write(X, Y, Canvas.SmallFont(), ColumnWidth, CopyStr(TotalText, 1, Canvas.MaxChars(ColumnWidth, Canvas.SmallFont())));
-        Y += Canvas.SmallFont() + 6;
-        Zpl += Canvas.Write(X, Y, Canvas.QtyFont(), ColumnWidth, CopyStr(PalletText, 1, Canvas.MaxChars(ColumnWidth, Canvas.QtyFont())));
-        Y += Canvas.QtyFont() + 8;
-        if LP."No." <> '' then begin
-            Bars := Canvas.LabelHeight() - Canvas.Margin() - Y;
-            if Bars >= 30 then
-                Zpl += Canvas.Code128(X, Y, Bars, LP."No.", ColumnWidth, false);
-        end;
-        exit(Zpl + Canvas.Finish());
+    procedure BuildPalletItemZplWithOptions(var LP: Record "DOPSWHS LP Header"; var LPLine: Record "DOPSWHS LP Line"; OptionsJson: Text): Text
+    var
+        Builder: Codeunit "DOPSWHS MTE Zpl Builder";
+    begin
+        exit(Builder.Build(LP, LPLine, OptionsJson));
     end;
 
     procedure PrintBinLabel(var Bin: Record Bin; PrinterId: Code[50]; Copies: Integer)
@@ -371,9 +529,10 @@ codeunit 72051 "DOPSWHS Print Dispatcher"
         BarcodeReport.SetLabelContent(Heading, Description);
         TempBlob.CreateOutStream(PdfOutStream);
         if not BarcodeReport.SaveAs('', ReportFormat::Pdf, PdfOutStream) then
-            Error('The scanned barcode test PDF could not be rendered.');
+            Error('The scanned barcode test PDF could not be rendered: %1', LastRenderError());
         if not TempBlob.HasValue() then
             Error('The scanned barcode test produced an empty PDF.');
+        PrintEnvironment.SyncCompany();
         Setup.Get('');
         TempBlob.CreateInStream(PdfInStream);
         if Setup."Print Channel" = Setup."Print Channel"::AzureDirect then
@@ -433,11 +592,14 @@ codeunit 72051 "DOPSWHS Print Dispatcher"
         LP.SetRecFilter();
         LpQrReport.SetTableView(LP);
         TempBlob.CreateOutStream(PdfOutStream);
+        // BADE 16 Eyl 2026: the boolean SaveAs swallows the report's own error
+        // (permission, layout, data); the terminal only saw a REF code. Surface it.
         if not LpQrReport.SaveAs('', ReportFormat::Pdf, PdfOutStream) then
-            Error('The LP QR PDF could not be rendered.');
+            Error(LpQrRenderFailedErr, LP."No.", LastRenderError());
         if not TempBlob.HasValue() then
             Error('The LP QR report produced an empty PDF.');
 
+        PrintEnvironment.SyncCompany();
         Setup.Get('');
         TempBlob.CreateInStream(PdfInStream);
         if Setup."Print Channel" = Setup."Print Channel"::AzureDirect then
@@ -471,15 +633,12 @@ codeunit 72051 "DOPSWHS Print Dispatcher"
         Queue: Record "DOPSWHS Print Job Queue";
         PrintNode: Codeunit "DOPSWHS PrintNode Client";
         SelfHosted: Codeunit "DOPSWHS Self-Host Print Client";
-        AzureBridge: Codeunit "DOPSWHS Azure Print Bridge";
-        TempBlob: Codeunit "Temp Blob";
-        ZplInStream: InStream;
         OutStream: OutStream;
         ResolvedPrinter: Code[20];
-        JobId: Integer;
     begin
         if Copies > 10 then
             Error('A print job cannot exceed 10 copies.');
+        PrintEnvironment.SyncCompany();
         Setup.Get('');
 
         if Setup."Print Channel" in [Setup."Print Channel"::SelfHosted, Setup."Print Channel"::AzureDirect] then begin
@@ -487,23 +646,7 @@ codeunit 72051 "DOPSWHS Print Dispatcher"
             ResolvedPrinter := ResolveSelfHostedPrinter(PrinterId, Usage, Copies);
             if ResolvedPrinter = '' then
                 Error('No WMS bridge printer is mapped for %1 label printing. Configure Device Printer Mapping or pass a Printer Code.', LabelName);
-            if Setup."Print Channel" = Setup."Print Channel"::AzureDirect then begin
-                TempBlob.CreateOutStream(OutStream, TextEncoding::UTF8);
-                OutStream.WriteText(Zpl);
-                TempBlob.CreateInStream(ZplInStream);
-                JobId := SelfHosted.EnqueueStreamForImmediateDispatch(
-                    SourceDoc, 0, ResolvedPrinter, Enum::"DOPSWHS Print Format"::ZPL,
-                    ZplInStream, Copies, '');
-                // Explicit terminal actions go to Service Bus in this request;
-                // the one-minute worker remains only as the recovery path.
-                Commit();
-                AzureBridge.DispatchJob(JobId);
-                Commit();
-                Queue.Get(JobId);
-                if Queue.Status in [Queue.Status::Queued, Queue.Status::Failed] then
-                    Error('The %1 label job was saved but Azure dispatch failed: %2', LabelName, Queue."Last Error");
-            end else
-                SelfHosted.Enqueue(SourceDoc, ResolvedPrinter, Enum::"DOPSWHS Print Format"::ZPL, Zpl, Copies);
+            SelfHosted.Enqueue(SourceDoc, ResolvedPrinter, Enum::"DOPSWHS Print Format"::ZPL, Zpl, Copies);
             exit;
         end;
         if Setup."Print Channel" <> Setup."Print Channel"::PrintNode then
@@ -530,158 +673,65 @@ codeunit 72051 "DOPSWHS Print Dispatcher"
     /// two-line description, base unit, Code128 + QR. Both barcodes carry the bare
     /// item number, which the terminal resolves as an item by default.
     /// </summary>
-    /// <summary>
-    /// Item label: item no. at the largest size that fits the text column,
-    /// description on up to two lines, unit and GTIN, Code128 + QR carrying the
-    /// bare item no. Laid out on the configured label canvas (Setup label size,
-    /// 80x40 mm at DKÇ) so nothing is cut off on the right or at the bottom.
-    /// </summary>
-    procedure BuildItemZpl(var Item: Record Item): Text
+    local procedure BuildItemZpl(var Item: Record Item): Text
     var
-        Canvas: Codeunit "DOPSWHS Label Canvas";
-        Lines: List of [Text];
-        Line: Text;
-        UnitText: Text;
-        Zpl: Text;
-        X: Integer;
-        ColumnWidth: Integer;
-        Y: Integer;
+        ZplEncoder: Codeunit "DOPSWHS ZPL Encoder";
         NoFont: Integer;
-        NoWidth: Integer;
     begin
-        Canvas.Init();
-        // DKÇ (16 Eyl 2026): no caption under the item QR.
-        Zpl := Canvas.Frame('ÜRÜN ETİKETİ', CompanyProperty.DisplayName(), Item."No.", '', X, ColumnWidth, Y);
-        // DKÇ (17 Eyl 2026): "ürün no çok büyük, uzunsa sığmıyor". Smaller
-        // preferred size, measured glyph widths; if even the small font is too
-        // wide the glyphs are condensed so the number never overprints.
-        NoFont := Canvas.FitFontMeasured(Item."No.", ColumnWidth, Canvas.ItemNoFont(), Canvas.SmallFont());
-        NoWidth := Canvas.FitFontMeasured(Item."No.", ColumnWidth, NoFont, 10);
-        Zpl += Canvas.WriteSized(X, Y, NoFont, NoWidth, ColumnWidth, Item."No.");
-        Y += NoFont + 8;
-        Canvas.WrapText(Item.Description, Canvas.MaxChars(ColumnWidth, Canvas.NormalFont()), 2, Lines);
-        foreach Line in Lines do begin
-            Zpl += Canvas.Write(X, Y, Canvas.NormalFont(), ColumnWidth, Line);
-            Y += Canvas.Pitch();
-        end;
-        UnitText := 'BİRİM: ' + Item."Base Unit of Measure";
-        if Item.GTIN <> '' then
-            UnitText += '   GTIN: ' + Item.GTIN;
-        Zpl += Canvas.Write(X, Y, Canvas.SmallFont(), ColumnWidth, CopyStr(UnitText, 1, Canvas.MaxChars(ColumnWidth, Canvas.SmallFont())));
-        Y += Canvas.SmallFont() + 8;
-        Zpl += Canvas.Code128(X, Y, Canvas.BarHeightToBottom(Y, true), Item."No.", ColumnWidth, true);
-        exit(Zpl + Canvas.Finish());
+        NoFont := FitFontSize(Item."No.", 560, 72);
+        exit(
+            '^XA^CI28^PW812^LL406' +
+            '^FO0,0^GB812,52,52^FS' +
+            '^FO24,10^A0N,32,32^FR^FH_^FDÜRÜN ETİKETİ^FS' +
+            '^FO470,12^A0N,26,26^FR^FH_^FB318,1,0,R^FD' + ZplEncoder.EncodeFieldData(CopyStr(CompanyProperty.DisplayName(), 1, 22)) + '^FS' +
+            '^FO24,66^A0N,' + Format(NoFont) + ',' + Format(NoFont) + '^FH_^FD' + ZplEncoder.EncodeFieldData(Item."No.") + '^FS' +
+            '^FO24,148^A0N,30,30^FH_^FD' + ZplEncoder.EncodeFieldData(DescriptionLine(Item.Description, 1, 33)) + '^FS' +
+            '^FO24,184^A0N,30,30^FH_^FD' + ZplEncoder.EncodeFieldData(DescriptionLine(Item.Description, 2, 33)) + '^FS' +
+            '^FO24,222^A0N,24,24^FH_^FDBİRİM: ' + ZplEncoder.EncodeFieldData(Item."Base Unit of Measure") +
+                ItemGtinText(Item) + '^FS' +
+            '^FO24,258^BY' + Format(BarcodeModuleWidth(Item."No.")) + '^BCN,100,Y,N,N^FH_^FD' + ZplEncoder.EncodeFieldData(Item."No.") + '^FS' +
+            '^FO604,66^BQN,2,7^FH_^FDLA,' + ZplEncoder.EncodeFieldData(Item."No.") + '^FS' +
+            '^FO604,320^A0N,22,22^FH_^FDQR = ÜRÜN NO^FS' +
+            '^XZ');
+    end;
+
+    local procedure ItemGtinText(var Item: Record Item): Text
+    var
+        ZplEncoder: Codeunit "DOPSWHS ZPL Encoder";
+    begin
+        if Item.GTIN = '' then
+            exit('');
+        exit('   GTIN: ' + ZplEncoder.EncodeFieldData(Item.GTIN));
     end;
 
     /// <summary>
-    /// Bin label read from the aisle: the bin code at the largest size that
-    /// fits the text column, zone / bin type / description, Code128 + QR
-    /// carrying the bare bin code. Laid out on the configured label canvas.
+    /// 4x2" bin label meant to be read from the aisle: the bin code fills the
+    /// left column at the largest size that fits, followed by zone / bin type /
+    /// description, Code128 + QR. Barcodes carry the bare bin code.
     /// </summary>
-    procedure BuildBinZpl(var Bin: Record Bin): Text
+    local procedure BuildBinZpl(var Bin: Record Bin): Text
     var
-        Canvas: Codeunit "DOPSWHS Label Canvas";
+        ZplEncoder: Codeunit "DOPSWHS ZPL Encoder";
         InfoText: Text;
-        Zpl: Text;
-        X: Integer;
-        ColumnWidth: Integer;
-        Y: Integer;
         CodeFont: Integer;
-        CodeWidth: Integer;
-        CodeMax: Integer;
-        FitWidth: Integer;
-        ZoneFont: Integer;
-        ZoneWidth: Integer;
     begin
-        // DKÇ (17 Eyl 2026): "tip yazısını kaldır, bölge kodu daha büyük kalın
-        // fontlu yazılsın". The bin type is warehouse setup, not something the
-        // operator reads off the rack; the zone is what identifies the aisle.
-        InfoText := Bin.Description;
-
-        Canvas.Init();
-        // DKÇ (17 Eyl 2026): "qr altındaki QR = RAF KODU yazısını kaldır".
-        Zpl := Canvas.Frame('RAF ETİKETİ', Bin."Location Code", Bin.Code, '', X, ColumnWidth, Y);
-        CodeMax := Canvas.LabelHeight() * 32 div 100;
-        if CodeMax < 60 then
-            CodeMax := 60;
-        if CodeMax > 120 then
-            CodeMax := 120;
-        // DKÇ (2 Eki 2026): "ODA-RAF-D" basılırken sondaki D satır başına,
-        // O'nun üstüne biniyordu. Düz 0,55 tahmini tireyi (ölçülen 0,91) çok
-        // dar sayıyordu; boyut ölçülmüş harf genişlikleriyle %4 payla seçilir,
-        // en küçük boyut da sığmazsa harfler daraltılır, satır asla taşmaz.
-        FitWidth := ColumnWidth * 96 div 100;
-        CodeFont := Canvas.FitFontMeasured(Bin.Code, FitWidth, CodeMax, 36);
-        CodeWidth := Canvas.FitFontMeasured(Bin.Code, FitWidth, CodeFont, 10);
-        Zpl += Canvas.WriteSized(X, Y, CodeFont + CodeFont div 10, CodeWidth, ColumnWidth, Bin.Code);
-        Y += CodeFont + CodeFont div 10 + 6;
-        if Bin."Zone Code" <> '' then begin
-            ZoneFont := Canvas.FitFontMeasured(Bin."Zone Code", FitWidth, Canvas.QtyFont(), Canvas.NormalFont());
-            ZoneWidth := Canvas.FitFontMeasured(Bin."Zone Code", FitWidth, ZoneFont, 10);
-            Zpl += Canvas.WriteSized(X, Y, ZoneFont, ZoneWidth, ColumnWidth, Bin."Zone Code");
-            Y += ZoneFont + 6;
-        end;
-        if InfoText <> '' then begin
-            Zpl += Canvas.Write(X, Y, Canvas.NormalFont(), ColumnWidth, CopyStr(InfoText, 1, Canvas.MaxChars(ColumnWidth, Canvas.NormalFont())));
-            Y += Canvas.Pitch();
-        end;
-        Y += 2;
-        // DKÇ (17 Eyl 2026): "barkodun altındaki yazı kalksın". The bin code is
-        // already the largest text on the label, so repeating it under the bars
-        // only costs height that the bars themselves can use.
-        Zpl += Canvas.Code128(X, Y, Canvas.BarHeightToBottom(Y, false), Bin.Code, ColumnWidth, false);
-        exit(Zpl + Canvas.Finish());
-    end;
-
-    /// <summary>
-    /// DKÇ (17 Eyl 2026): "sadece akıllı dolabın kodunu alıcam, bin/raf
-    /// girmeden, alan QR'ı yani". Zone label: the zone code as the largest
-    /// text, its description under it, QR + Code128 carrying the zone code.
-    /// </summary>
-    procedure BuildZoneZpl(var Zone: Record Zone): Text
-    var
-        Canvas: Codeunit "DOPSWHS Label Canvas";
-        Zpl: Text;
-        X: Integer;
-        ColumnWidth: Integer;
-        Y: Integer;
-        CodeFont: Integer;
-        CodeWidth: Integer;
-        CodeMax: Integer;
-        FitWidth: Integer;
-    begin
-        Canvas.Init();
-        Zpl := Canvas.Frame('ALAN ETİKETİ', Zone."Location Code", Zone.Code, '', X, ColumnWidth, Y);
-        CodeMax := Canvas.LabelHeight() * 32 div 100;
-        if CodeMax < 60 then
-            CodeMax := 60;
-        if CodeMax > 120 then
-            CodeMax := 120;
-        // Raf etiketiyle aynı ölçülmüş genişlik kuralı (2 Eki 2026).
-        FitWidth := ColumnWidth * 96 div 100;
-        CodeFont := Canvas.FitFontMeasured(Zone.Code, FitWidth, CodeMax, 36);
-        CodeWidth := Canvas.FitFontMeasured(Zone.Code, FitWidth, CodeFont, 10);
-        Zpl += Canvas.WriteSized(X, Y, CodeFont + CodeFont div 10, CodeWidth, ColumnWidth, Zone.Code);
-        Y += CodeFont + CodeFont div 10 + 6;
-        if Zone.Description <> '' then begin
-            Zpl += Canvas.Write(X, Y, Canvas.NormalFont(), ColumnWidth, CopyStr(Zone.Description, 1, Canvas.MaxChars(ColumnWidth, Canvas.NormalFont())));
-            Y += Canvas.Pitch();
-        end;
-        Y += 2;
-        Zpl += Canvas.Code128(X, Y, Canvas.BarHeightToBottom(Y, false), Zone.Code, ColumnWidth, false);
-        exit(Zpl + Canvas.Finish());
-    end;
-
-    procedure PrintZoneLabel(var Zone: Record Zone; PrinterId: Code[50]; Copies: Integer)
-    var
-        Printer: Record "DOPSWHS Printer";
-    begin
-        if Printer.Get(PrinterId) then
-            if Printer."Format" = Printer."Format"::PDF then begin
-                PrintBarcodeDocument(PrinterId, Zone.Code, Copies, Zone.Code, 'ALAN ETIKETI', Zone."Location Code" + ' | ' + Zone.Description);
-                exit;
-            end;
-        EnqueueZpl(Zone.Code, BuildZoneZpl(Zone), PrinterId, Copies, Enum::"DOPSWHS IWX Report Usage"::Bin, 'Zone');
+        CodeFont := FitFontSize(Bin.Code, 560, 110);
+        if Bin."Zone Code" <> '' then
+            InfoText := 'BÖLGE: ' + Bin."Zone Code";
+        if Bin."Bin Type Code" <> '' then
+            InfoText := AppendLabelPart(InfoText, 'TİP: ' + Bin."Bin Type Code");
+        if Bin.Description <> '' then
+            InfoText := AppendLabelPart(InfoText, Bin.Description);
+        exit(
+            '^XA^CI28^PW812^LL406' +
+            '^FO0,0^GB812,52,52^FS' +
+            '^FO24,10^A0N,32,32^FR^FH_^FDRAF ETİKETİ^FS' +
+            '^FO470,12^A0N,26,26^FR^FH_^FB318,1,0,R^FD' + ZplEncoder.EncodeFieldData(Bin."Location Code") + '^FS' +
+            '^FO24,' + Format(62 + (110 - CodeFont) div 2) + '^A0N,' + Format(CodeFont + 10) + ',' + Format(CodeFont) + '^FH_^FD' + ZplEncoder.EncodeFieldData(Bin.Code) + '^FS' +
+            '^FO24,190^A0N,26,26^FH_^FB560,1,0,L^FD' + ZplEncoder.EncodeFieldData(CopyStr(InfoText, 1, 44)) + '^FS' +
+            '^FO24,236^BY' + Format(BarcodeModuleWidth(Bin.Code)) + '^BCN,110,Y,N,N^FH_^FD' + ZplEncoder.EncodeFieldData(Bin.Code) + '^FS' +
+            '^FO604,180^BQN,2,7^FH_^FDLA,' + ZplEncoder.EncodeFieldData(Bin.Code) + '^FS' +
+            '^XZ');
     end;
 
     local procedure AppendLabelPart(Existing: Text; Part: Text): Text
@@ -692,11 +742,76 @@ codeunit 72051 "DOPSWHS Print Dispatcher"
     end;
 
     /// <summary>
+    /// Code128 module width so the bar pattern stays inside the 560-dot left
+    /// column: ~ (11 x chars + 35) x module dots.
+    /// </summary>
+    local procedure BarcodeModuleWidth(Data: Text): Integer
+    begin
+        if StrLen(Data) <= 10 then
+            exit(3);
+        if StrLen(Data) <= 22 then
+            exit(2);
+        exit(1);
+    end;
+
+    /// <summary>
+    /// Word-wraps Description into two lines of at most MaxChars and returns the
+    /// requested line. ^FB would overprint a third line onto the second, so the
+    /// split is done here and the remainder is cut.
+    /// </summary>
+    local procedure DescriptionLine(Description: Text; LineNo: Integer; MaxChars: Integer): Text
+    var
+        FirstLine: Text;
+        Rest: Text;
+        BreakAt: Integer;
+    begin
+        Description := DelChr(Description, '<>', ' ');
+        if StrLen(Description) <= MaxChars then begin
+            if LineNo = 1 then
+                exit(Description);
+            exit('');
+        end;
+        BreakAt := MaxChars + 1;
+        while (BreakAt > 1) and (Description[BreakAt] <> ' ') do
+            BreakAt -= 1;
+        if BreakAt <= MaxChars div 2 then
+            BreakAt := MaxChars + 1;
+        FirstLine := DelChr(CopyStr(Description, 1, BreakAt - 1), '>', ' ');
+        Rest := DelChr(CopyStr(Description, BreakAt), '<', ' ');
+        if LineNo = 1 then
+            exit(FirstLine);
+        exit(CopyStr(Rest, 1, MaxChars));
+    end;
+
+    /// <summary>
+    /// Largest Zebra font 0 size (dots) at which Value still fits MaxWidth.
+    /// Font 0 glyphs average ~0.55 x the point size in width.
+    /// </summary>
+    local procedure FitFontSize(Value: Text; MaxWidth: Integer; Preferred: Integer): Integer
+    var
+        Size: Integer;
+    begin
+        if StrLen(Value) = 0 then
+            exit(Preferred);
+        Size := MaxWidth div StrLen(Value) * 100 div 55;
+        if Size > Preferred then
+            Size := Preferred;
+        if Size < 24 then
+            Size := 24;
+        exit(Size);
+    end;
+
+    /// <summary>
     /// Renders a filtered Business Central report as PDF and routes it through
     /// the same provider queue used by terminal labels. The RecordRef is
     /// mandatory so a report can never accidentally print every record.
     /// </summary>
     procedure PrintReport(SourceDoc: Code[50]; ReportId: Integer; PrinterId: Code[50]; Copies: Integer; Usage: Enum "DOPSWHS IWX Report Usage"; SourceRecord: RecordRef): Integer
+    begin
+        exit(PrintReportWithParameters(SourceDoc, ReportId, '', PrinterId, Copies, Usage, SourceRecord));
+    end;
+
+    procedure PrintReportWithParameters(SourceDoc: Code[50]; ReportId: Integer; Parameters: Text; PrinterId: Code[50]; Copies: Integer; Usage: Enum "DOPSWHS IWX Report Usage"; SourceRecord: RecordRef): Integer
     var
         TempBlob: Codeunit "Temp Blob";
         PdfInStream: InStream;
@@ -712,8 +827,12 @@ codeunit 72051 "DOPSWHS Print Dispatcher"
         EnsureDocumentPrinter(PrinterId, Usage);
 
         TempBlob.CreateOutStream(PdfOutStream);
-        if not Report.SaveAs(ReportId, '', ReportFormat::Pdf, PdfOutStream, SourceRecord) then
-            Error('Report %1 could not be rendered as PDF.', ReportId);
+        // BADE 16 Eyl 2026 (LP000025 MTE): the boolean SaveAs swallows the
+        // report's own error (missing Execute permission on the customer report,
+        // report Error(), layout/data failure) and the terminal only showed a
+        // REF code. Carry the real message so the operator/admin can act.
+        if not Report.SaveAs(ReportId, Parameters, ReportFormat::Pdf, PdfOutStream, SourceRecord) then
+            Error(ReportRenderFailedErr, ReportId, ReportCaption(ReportId), LastRenderError());
         if not TempBlob.HasValue() then
             Error('Report %1 produced an empty PDF.', ReportId);
         TempBlob.CreateInStream(PdfInStream);
@@ -728,6 +847,7 @@ codeunit 72051 "DOPSWHS Print Dispatcher"
         ResolvedPrinter: Code[20];
         EffectiveCopies: Integer;
     begin
+        PrintEnvironment.SyncCompany();
         if not Setup.Get('') then
             Error('Advanced WMS Setup must be configured before document printing.');
         case Setup."Print Channel" of
@@ -752,12 +872,6 @@ codeunit 72051 "DOPSWHS Print Dispatcher"
         end;
     end;
 
-    procedure PrintExternalPdf(SourceDoc: Code[50]; PrinterId: Code[50]; PdfStream: InStream): Integer
-    begin
-        EnsureDocumentPrinter(PrinterId, Enum::"DOPSWHS IWX Report Usage"::PostedShipment);
-        exit(EnqueuePdf(SourceDoc, 0, PrinterId, 1, Enum::"DOPSWHS IWX Report Usage"::PostedShipment, PdfStream));
-    end;
-
     procedure IsDocumentPrinterConfigured(PrinterId: Code[50]; Usage: Enum "DOPSWHS IWX Report Usage"): Boolean
     var
         Setup: Record "DOPSWHS Setup";
@@ -765,6 +879,7 @@ codeunit 72051 "DOPSWHS Print Dispatcher"
         AzureBridge: Codeunit "DOPSWHS Azure Print Bridge";
         ResolvedPrinter: Code[20];
     begin
+        PrintEnvironment.SyncCompany();
         if not Setup.Get('') then
             exit(false);
         case Setup."Print Channel" of
@@ -805,6 +920,7 @@ codeunit 72051 "DOPSWHS Print Dispatcher"
         SelfHosted: Codeunit "DOPSWHS Self-Host Print Client";
         ResolvedPrinter: Code[20];
     begin
+        PrintEnvironment.SyncCompany();
         Setup.Get('');
         case Setup."Print Channel" of
             Setup."Print Channel"::SelfHosted,
@@ -876,40 +992,24 @@ codeunit 72051 "DOPSWHS Print Dispatcher"
         RequestedCopies: Integer;
     begin
         if Candidate <> '' then begin
-            if StrLen(Candidate) <= MaxStrLen(Printer."Code") then
-                if Printer.Get(CopyStr(Candidate, 1, MaxStrLen(Printer."Code"))) then
-                    if Printer.Active then begin
-                        if Copies <= 0 then
-                            Copies := Printer."Default Copies";
-                        if Copies <= 0 then
-                            Copies := 1;
-                        if Copies > 10 then
-                            Error('A print job cannot exceed 10 copies.');
-                        exit(Printer."Code");
-                    end;
-        end;
-        RequestedCopies := Copies;
-        if SelfHosted.ResolvePrinterAndCopies(CopyStr(UserId(), 1, 50), Usage, RequestedCopies, ResolvedCode, Copies) then
-            exit(ResolvedCode);
-        if Usage in [Usage::Item, Usage::Bin] then
-            if SelfHosted.ResolvePrinterAndCopies(CopyStr(UserId(), 1, 50), Enum::"DOPSWHS IWX Report Usage"::LpLabel, RequestedCopies, ResolvedCode, Copies) then
-                exit(ResolvedCode);
-        // Never route a PDF document to an arbitrary ZPL label printer.
-        if Usage in [Usage::Receipt, Usage::PostedShipment, Usage::PackReceipt] then
-            exit('');
-        // Fallback: If candidate printer became inactive after print agent selection,
-        // or no explicit mapping exists, pick the active ZPL printer.
-        Printer.Reset();
-        Printer.SetRange(Active, true);
-        Printer.SetRange(Format, Printer.Format::ZPL);
-        if Printer.FindFirst() then begin
+            if StrLen(Candidate) > MaxStrLen(Printer."Code") then
+                Error('Printer code %1 exceeds the supported length.', Candidate);
+            if not Printer.Get(CopyStr(Candidate, 1, MaxStrLen(Printer."Code"))) then
+                Error('Printer %1 is not registered.', Candidate);
+            if not Printer.Active then
+                Error('Printer %1 is inactive.', Candidate);
             if Copies <= 0 then
                 Copies := Printer."Default Copies";
             if Copies <= 0 then
                 Copies := 1;
-            exit(Printer.Code);
+            if Copies > 10 then
+                Error('A print job cannot exceed 10 copies.');
+            exit(Printer."Code");
         end;
-        exit('');
+        RequestedCopies := Copies;
+        if not SelfHosted.ResolvePrinterAndCopies(CopyStr(UserId(), 1, 50), Usage, RequestedCopies, ResolvedCode, Copies) then
+            exit('');
+        exit(ResolvedCode);
     end;
 
     local procedure ResolveConfiguredSelfHostedPrinter(Candidate: Code[50]; Usage: Enum "DOPSWHS IWX Report Usage"): Code[20]
@@ -928,4 +1028,34 @@ codeunit 72051 "DOPSWHS Print Dispatcher"
             exit('');
         exit(ResolvedCode);
     end;
+
+    /// <summary>The message behind a failed Report.SaveAs (BC clears it on success).</summary>
+    local procedure LastRenderError(): Text
+    var
+        LastError: Text;
+    begin
+        LastError := GetLastErrorText();
+        ClearLastError();
+        if LastError = '' then
+            exit(RenderErrorUnknownTxt);
+        exit(LastError);
+    end;
+
+    local procedure ReportCaption(ReportId: Integer): Text
+    var
+        AllObjWithCaption: Record AllObjWithCaption;
+    begin
+        if AllObjWithCaption.Get(AllObjWithCaption."Object Type"::Report, ReportId) then
+            exit(AllObjWithCaption."Object Caption");
+        exit('');
+    end;
+
+    var
+        MteNoSourceEntryErr: Label '%1 paletinin kaynak madde defteri girişi yok; müşteri MTE raporu için palet önce mal kabulle kaydedilmiş olmalı.', Comment = '%1 LP no';
+        PrintEnvironment: Codeunit "DOPSWHS Print Environment";
+        MteOptionsInvalidErr: Label 'MTE ek alanları okunamadı (geçersiz JSON).';
+        MteDateInvalidErr: Label 'MTE tarih alanı geçersiz: %1 (gg.aa.yyyy veya yyyy-aa-gg girin).', Comment = '%1 value';
+        ReportRenderFailedErr: Label '%1 %2 raporu PDF olarak oluşturulamadı. BC hatası: %3', Comment = '%1 report id, %2 report caption, %3 BC error text';
+        LpQrRenderFailedErr: Label '%1 LP QR belgesi oluşturulamadı. BC hatası: %2', Comment = '%1 LP no, %2 BC error text';
+        RenderErrorUnknownTxt: Label 'ayrıntı alınamadı', Comment = 'shown when GetLastErrorText is empty';
 }

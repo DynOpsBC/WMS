@@ -19,6 +19,7 @@ page 72090 "DOPSWHS Receipt API"
                 field(no; Rec."No.") { Caption = 'no'; }
                 field(locationCode; Rec."Location Code") { Caption = 'locationCode'; }
                 field(assignedUserId; Rec."Assigned User ID") { Caption = 'assignedUserId'; }
+                field(assignedUserName; AssignedUserName) { Caption = 'assignedUserName'; Editable = false; }
                 field(sourceNo; SourceNo) { Caption = 'sourceNo'; }
                 field(sourceType; SourceType) { Caption = 'sourceType'; }
                 field(vendorSourceName; VendorSourceName) { Caption = 'vendorSourceName'; }
@@ -31,6 +32,8 @@ page 72090 "DOPSWHS Receipt API"
                 field(driverName; DriverName) { Caption = 'driverName'; }
                 field(lpNo; Rec."DOPSWHS LP No.") { Caption = 'lpNo'; }
                 field(lpOpen; LpOpen) { Caption = 'lpOpen'; }
+                // BADE (14 Eki 2026): terminal karma palet ve dağıtım iptalini bu bayrakla açar.
+                field(mixedPalletSupported; MixedPalletSupported) { Caption = 'mixedPalletSupported'; Editable = false; }
                 part(lines; "DOPSWHS Receipt Line API")
                 {
                     Caption = 'lines';
@@ -53,7 +56,13 @@ page 72090 "DOPSWHS Receipt API"
     end;
 
     trigger OnAfterGetRecord()
+    var
+        LocalUser: Record "DOPSWHS Local User";
     begin
+        AssignedUserName := Rec."Assigned User ID";
+        if StrLen(Rec."Assigned User ID") <= MaxStrLen(LocalUser.Username) then
+            if LocalUser.Get(CopyStr(Rec."Assigned User ID", 1, MaxStrLen(LocalUser.Username))) then
+                AssignedUserName := LocalUser."Display Name";
         FillCalculatedFields();
     end;
 
@@ -81,6 +90,28 @@ page 72090 "DOPSWHS Receipt API"
         LegacyWI.FireGetReceiptDocument(DocNo);
         LpNo := ReceiptMgmt.StartLP(Rec, lpTemplateCode);
         exit(LpNo);
+    end;
+
+    /// <summary>lineNosJson: [10000, 20000] — LP'den önce miktarı girilmiş satırlar.</summary>
+    [ServiceEnabled]
+    procedure attachLinesToLp(lpNo: Code[20]; lineNosJson: Text): Integer
+    var
+        ReceiptMgmt: Codeunit "DOPSWHS Receipt Mgmt";
+        LegacyWI: Codeunit "DOPSWHS Legacy WI Publisher";
+        LineArray: JsonArray;
+        LineToken: JsonToken;
+        LineNos: List of [Integer];
+        DocNo: Code[20];
+    begin
+        DocNo := Rec."No.";
+        LegacyWI.FireGetReceiptDocument(DocNo);
+        if not LineArray.ReadFrom(lineNosJson) then
+            Error('Satır listesi okunamadı.');
+        foreach LineToken in LineArray do
+            LineNos.Add(LineToken.AsValue().AsInteger());
+        if LineNos.Count() = 0 then
+            Error('LP''ye eklenecek satır seçilmedi.');
+        exit(ReceiptMgmt.AttachLinesToLp(Rec, lpNo, LineNos));
     end;
 
     [ServiceEnabled]
@@ -126,6 +157,36 @@ page 72090 "DOPSWHS Receipt API"
             Rec, lineNo, expectedQty, distributionJson, lpTemplateCode, printLabels, printerId));
     end;
 
+    /// <summary>
+    /// BADE (14 Eki 2026): birden çok ürünü aynı paletlere dağıtır (karma palet).
+    /// distributionJson: {"lines":[{lineNo, expectedQty, lotNo, supplierLotNo, expiryDate}],
+    /// "pallets":[{"items":[{lineNo, quantity}]}]}. Paletler boş taslak LP olarak açılır,
+    /// ürünler Mal Kabulü Kaydet ile yazılır.
+    /// </summary>
+    [ServiceEnabled]
+    procedure createMixedLPDistribution(distributionJson: Text; lpTemplateCode: Code[20]): Text
+    var
+        ReceiptMgmt: Codeunit "DOPSWHS Receipt Mgmt";
+        LegacyWI: Codeunit "DOPSWHS Legacy WI Publisher";
+        DocNo: Code[20];
+    begin
+        DocNo := Rec."No.";
+        LegacyWI.FireGetReceiptDocument(DocNo);
+        exit(ReceiptMgmt.CreateMixedLPDistribution(Rec, distributionJson, lpTemplateCode));
+    end;
+
+    /// <summary>
+    /// Satırın hazırlanmış Palet LP ya da karma palet dağıtımını geri alır (taslak
+    /// LP'ler bozulur, satırın kabul miktarı sıfırlanır).
+    /// </summary>
+    [ServiceEnabled]
+    procedure cancelLPDistribution(lineNo: Integer): Text
+    var
+        ReceiptMgmt: Codeunit "DOPSWHS Receipt Mgmt";
+    begin
+        exit(ReceiptMgmt.CancelLPDistribution(Rec, lineNo));
+    end;
+
     [ServiceEnabled]
     procedure post(print: Boolean; invoice: Boolean)
     var
@@ -152,14 +213,27 @@ page 72090 "DOPSWHS Receipt API"
 
     [ServiceEnabled]
     procedure postAndCloseLP(print: Boolean; invoice: Boolean; printerId: Code[50]; lpPrinterId: Code[50])
+    begin
+        postAndCloseLPWithMte(print, invoice, printerId, lpPrinterId, '');
+    end;
+
+    [ServiceEnabled]
+    procedure postAndCloseLPWithMte(print: Boolean; invoice: Boolean; printerId: Code[50]; lpPrinterId: Code[50]; optionsJson: Text)
     var
+        Setup: Record "DOPSWHS Setup";
         ReceiptMgmt: Codeunit "DOPSWHS Receipt Mgmt";
         LegacyWI: Codeunit "DOPSWHS Legacy WI Publisher";
         DocNo: Code[20];
+        PrintLpLabels: Boolean;
     begin
         DocNo := Rec."No.";
         LegacyWI.FireGetReceiptDocument(DocNo);
-        ReceiptMgmt.PostReceiptAndCloseLP(Rec, print, invoice, '', printerId, true, lpPrinterId);
+        // BADE (16 Eyl 2026): Kurulum "Manual Receipt Label Print" açıkken
+        // etiket kayıtla basılmaz; operatör kayıt sonrası "Etiket Yazdır" der.
+        PrintLpLabels := true;
+        if Setup.Get('') then
+            PrintLpLabels := not Setup."Manual Receipt Label Print";
+        ReceiptMgmt.PostReceiptAndCloseLP(Rec, print, invoice, '', printerId, PrintLpLabels, lpPrinterId, optionsJson);
     end;
 
     /// <summary>
@@ -195,6 +269,7 @@ page 72090 "DOPSWHS Receipt API"
         DriverCode: Code[20];
         DriverName: Text[200];
         LpOpen: Boolean;
+        MixedPalletSupported: Boolean;
 
     local procedure FillCalculatedFields()
     var
@@ -217,13 +292,16 @@ page 72090 "DOPSWHS Receipt API"
         Clear(DriverCode);
         Clear(DriverName);
         Clear(LpOpen);
+        MixedPalletSupported := true;
 
         // Terminal yeniden açıldığında açık LP'yi bulabilsin; aksi halde ikinci
         // bir LP başlatılıyor. StopLP başlıktaki LP No.'yu silmez, o yüzden
         // "açık mı" ayrıca bildirilir.
         if Rec."DOPSWHS LP No." <> '' then
             if LPHeader.Get(Rec."DOPSWHS LP No.") then
-                LpOpen := LPHeader.Status = LPHeader.Status::Open;
+                // Palet LP / karma palet taslağı açık durumda bekler ama aktif
+                // (ürün eklenebilir) LP değildir; terminal LP Başlat'ı göstermeli.
+                LpOpen := (LPHeader.Status = LPHeader.Status::Open) and not LPHeader."Receipt Tracking Staged";
 
         VendorShipmentNo := CopyStr(ReceiptMgmt.GetTenantHeaderField(Rec, 'Vendor Shipment No.'), 1, MaxStrLen(VendorShipmentNo));
         VehicleInfoRequired := ReceiptMgmt.VehicleInfoRequired(Rec);
@@ -257,4 +335,6 @@ page 72090 "DOPSWHS Receipt API"
         if TotalQty <> 0 then
             PercentComplete := Round(HandledQty / TotalQty * 100, 1);
     end;
+    var
+        AssignedUserName: Text[100];
 }

@@ -66,7 +66,7 @@ page 72083 "DOPSWHS Pick Queue"
                     LocalUser: Record "DOPSWHS Local User";
                 begin
                     LocalUser.SetRange(Disabled, false);
-                    if Page.RunModal(Page::"DOPSWHS Local User List", LocalUser) <> Action::LookupOK then
+                    if Page.RunModal(Page::"DOPSWHS Terminal Users", LocalUser) <> Action::LookupOK then
                         exit;
 
                     if (Rec."Assigned User ID" <> '') and (Rec."Assigned User ID" <> LocalUser.Username) then

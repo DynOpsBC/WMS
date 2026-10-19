@@ -33,6 +33,12 @@ table 72017 "DOPSWHS Count Sheet Line"
         field(120; "Counted 1"; Boolean) { Caption = 'Counted 1'; DataClassification = CustomerContent; Editable = false; }
         field(130; "Counted 2"; Boolean) { Caption = 'Counted 2'; DataClassification = CustomerContent; Editable = false; }
         field(140; "Counted 3"; Boolean) { Caption = 'Counted 3'; DataClassification = CustomerContent; Editable = false; }
+        // BADE (16 Eyl 2026): kayıtta bu rafa taşınan miktar ve kaynağı (Count Relocates Found Stock).
+        field(150; "Moved From Bin"; Code[20]) { Caption = 'Moved From Bin'; DataClassification = CustomerContent; Editable = false; }
+        field(151; "Moved Qty"; Decimal) { Caption = 'Moved Qty'; DataClassification = CustomerContent; Editable = false; DecimalPlaces = 0 : 5; }
+        // Historical finding, not a live LP lookup: Ad-hoc must not erase the first count's evidence.
+        field(160; "Found From Bin"; Code[20]) { Caption = 'Sayımda Sistem Rafı'; DataClassification = CustomerContent; Editable = false; }
+        field(161; "Found LP Qty"; Decimal) { Caption = 'Sayımda LP Miktarı'; DataClassification = CustomerContent; Editable = false; DecimalPlaces = 0 : 5; }
     }
 
     keys
@@ -61,6 +67,8 @@ table 72017 "DOPSWHS Count Sheet Line"
 
     trigger OnRename()
     begin
+        if "Sheet No." <> xRec."Sheet No." then
+            Error('Sayım satırı başka bir sayım turuna taşınamaz.');
         EnsureSheetIsMutable();
     end;
 
@@ -68,7 +76,10 @@ table 72017 "DOPSWHS Count Sheet Line"
     var
         CountHeader: Record "DOPSWHS Count Sheet Header";
     begin
+        CountHeader.LockTable();
         CountHeader.Get("Sheet No.");
+        if CountHeader."Next Round No." <> '' then
+            Error('Bu sayım turu arşivlendi. Sonraki tur: %1.', CountHeader."Next Round No.");
         if CountHeader.Status = CountHeader.Status::Posted then
             Error(PostedSheetImmutableErr, "Sheet No.");
     end;

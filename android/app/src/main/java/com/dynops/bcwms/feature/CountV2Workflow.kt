@@ -114,6 +114,27 @@ internal fun countV2ManualCandidate(resolved: ResolvedBarcode): CountV2ManualCan
     )
 }
 
+/**
+ * BADE (16 Eyl 2026, Merve): BC'de bu rafta olmayan ürün için, ürünün BC'de
+ * kayıtlı olduğu diğer rafları operatöre söyler. Kayıtta (Kurulum "Count
+ * Relocates Found Stock" açıksa) stok o raflardan buraya taşınır.
+ */
+internal fun unexpectedStockHint(activeBin: String, otherBinRows: List<JSONObject>): String {
+    val others = otherBinRows
+        .filter { it.optDouble("quantity", 0.0) > 0.0 && !it.optString("binCode").equals(activeBin, ignoreCase = true) }
+        .groupBy { it.optString("binCode") }
+        .map { (bin, rows) -> bin to rows.sumOf { it.optDouble("quantity", 0.0) } }
+        .sortedByDescending { it.second }
+    if (others.isEmpty())
+        return "Bu ürün BC'de bu lokasyonun hiçbir rafında kayıtlı değil. Bulduğunuz miktarı girin; kayıtta artı sayım farkı olur."
+    val shown = others.take(3).joinToString(", ") { (bin, qty) -> "$bin (${formatCountV2Quantity(qty)})" }
+    val more = if (others.size > 3) " +${others.size - 3} raf" else ""
+    return "BC'de $shown$more rafında kayıtlı. Burada bulduğunuz miktarı girin; kayıtta stok o raftan bu rafa taşınır."
+}
+
+internal fun formatCountV2Quantity(value: Double): String =
+    if (value.isFinite() && value == value.toLong().toDouble()) value.toLong().toString() else value.toString()
+
 /** Donanım/kamera aynı decode olayını art arda yayarsa miktarın iki kez eklenmesini önler. */
 internal fun isRapidCountV2Duplicate(
     previousRaw: String,
@@ -182,3 +203,54 @@ internal fun countV2VarianceReviewText(groups: List<CountV2VarianceGroup>): Stri
         }
         "$identity\n$bins\n$result"
     }.ifBlank { "Sayılmış satırlarda stok farkı yok" }
+
+
+internal enum class CountV2LineResult { Pending, Match, QuantityDifference, BinFinding }
+
+internal fun countV2LineResult(line: JSONObject, slot: Int): CountV2LineResult {
+    val qty = line.optDouble("countedQty$slot", Double.NaN)
+    val system = line.optDouble("systemQty", Double.NaN)
+    if (!isCountRecorded(line.has("counted$slot"), line.optBoolean("counted$slot"), qty) ||
+        !qty.isFinite() || !system.isFinite()) return CountV2LineResult.Pending
+    if (line.optString("foundFromBin").isNotBlank() && qty > 0.0) return CountV2LineResult.BinFinding
+    return if (abs(qty - system) < 0.00001) CountV2LineResult.Match else CountV2LineResult.QuantityDifference
+}
+
+internal fun countV2HasBinFindings(lines: List<JSONObject>): Boolean = lines.any { line ->
+    line.optString("foundFromBin").isNotBlank() && (1..3).any { slot ->
+        line.optBoolean("counted$slot") && line.optDouble("countedQty$slot", 0.0) > 0.0
+    }
+}
+
+internal fun countV2HasBlockingError(status: String): Boolean = status.startsWith("HATA:")
+
+internal const val COUNT_V2_BIN_FINDINGS_NOTE =
+    "Raf farkları kaydedildi. İlk sayımı koruyun; Ad-hoc düzeltmelerinden sonra ikinci sayımı yeni belgeyle başlatın. Bu belge stoklara işlenmez."
+
+internal fun countV2BinFindingsNote(roundsSupported: Boolean): String = if (roundsSupported)
+    "Bu turun sonuçları korunur. Ad-hoc düzeltmesinden sonra Yeni Tur Başlat düğmesini kullanın; stok düzeltmesi yalnız son turdan yapılır."
+else COUNT_V2_BIN_FINDINGS_NOTE
+
+private val COUNT_V2_STALE_BIN_MARKERS = listOf(
+    "güvenli olmayan sistem miktarı",
+    "sayım başladıktan sonra değişmiş",
+    "sistem stoku artık mevcut değil",
+    "Rafı Yenile",
+)
+
+/**
+ * BADE (9 Eki 2026): sayım sürerken raftan mal alındı, BC turu kaydetmiyor.
+ * Mesajdaki raf ya da LP'nin rafı döner; o raf terminalden yenilenip yeniden
+ * sayılır. Eski (Sayımı Yeniden Başlat diyen) ve yeni BC mesajlarını tanır.
+ */
+internal fun countV2StaleBin(message: String, lines: List<JSONObject>): String? {
+    val text = message.removePrefix("HATA:").trim()
+    if (COUNT_V2_STALE_BIN_MARKERS.none { text.contains(it, ignoreCase = true) }) return null
+    Regex("""Raf (\S+) madde""").find(text)?.let { return it.groupValues[1] }
+    val lpNo = Regex("""(\S+) LP numarasının""").find(text)?.groupValues?.get(1) ?: return null
+    val candidates = lines.filter { it.optString("lpNo") == lpNo && it.optString("binCode").isNotBlank() }
+    return (candidates.firstOrNull { it.optString("foundFromBin").isBlank() } ?: candidates.firstOrNull())
+        ?.optString("binCode")
+}
+
+internal fun countV2RefreshBinBody(binCode: String): String = JSONObject().put("binCode", binCode).toString()

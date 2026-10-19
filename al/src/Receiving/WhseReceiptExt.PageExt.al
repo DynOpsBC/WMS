@@ -2,6 +2,25 @@ pageextension 72303 "DOPSWHS Whse Receipt Ext" extends "Warehouse Receipt"
 {
     layout
     {
+        // BADE (8 Eki 2026): standart liste yalnız BC ambar çalışanlarını
+        // gösteriyordu. Terminal kullanıcıları (Local WMS User) da buradan
+        // atanabilir; atama terminalin kullandığı ReceiptMgmt.AssignUser ile yapılır,
+        // böylece BC kullanıcısı olmayan kimlik tablo ilişkisine takılmaz.
+        modify("Assigned User ID")
+        {
+            trigger OnLookup(var Text: Text): Boolean
+            var
+                ReceiptMgmt: Codeunit "DOPSWHS Receipt Mgmt";
+                AssignedUserId: Code[50];
+            begin
+                AssignedUserId := PickUser();
+                if AssignedUserId = '' then
+                    exit(false);
+                ReceiptMgmt.AssignUser(Rec, AssignedUserId);
+                CurrPage.Update(false);
+                exit(false);
+            end;
+        }
         // FactBoxes may only contain part/systempart controls. Keep these header
         // fields in the document's General area instead of an invalid FactBox group.
         addlast(General)
@@ -12,7 +31,8 @@ pageextension 72303 "DOPSWHS Whse Receipt Ext" extends "Warehouse Receipt"
                 field("DOPSWHS Assigned User"; Rec."Assigned User ID")
                 {
                     ApplicationArea = All;
-                    Caption = 'Assigned User';
+                    Caption = 'Atanan Kullanıcı';
+                    Editable = false;
                 }
                 field("DOPSWHS Percent Complete"; PercentComplete)
                 {
@@ -112,10 +132,11 @@ pageextension 72303 "DOPSWHS Whse Receipt Ext" extends "Warehouse Receipt"
 
     local procedure PickUser(): Code[50]
     var
-        User: Record User;
+        User: Record "DOPSWHS Local User";
     begin
-        if Page.RunModal(Page::"User Lookup", User) = Action::LookupOK then
-            exit(User."User Name");
+        User.SetRange(Disabled, false);
+        if Page.RunModal(Page::"DOPSWHS Terminal Users", User) = Action::LookupOK then
+            exit(User.Username);
         exit('');
     end;
 

@@ -17,7 +17,7 @@ page 72074 "DOPSWHS Count Sheet List"
                 field("Location Code"; Rec."Location Code") { ApplicationArea = All; }
                 field("Zone Filter"; Rec."Zone Filter") { ApplicationArea = All; }
                 field(Mode; Rec.Mode) { ApplicationArea = All; }
-                field(Status; Rec.Status) { ApplicationArea = All; }
+                field(Status; Rec.Status) { ApplicationArea = All; Editable = false; }
                 field("V2 Scan Mode"; Rec."V2 Scan Mode") { ApplicationArea = All; Editable = false; }
                 field("Created DateTime"; Rec."Created DateTime") { ApplicationArea = All; }
             }
@@ -53,6 +53,10 @@ page 72074 "DOPSWHS Count Sheet List"
                 var
                     CountMgmt: Codeunit "DOPSWHS Count Mgmt";
                 begin
+                    // BADE (16 Eki 2026): listeden Post soru sormadan stoğa işliyordu;
+                    // kartta farklar gösterilip onay alınıyor. Listede de onay sorulur.
+                    if not Confirm(PostConfirmQst, false, Rec."No.") then
+                        exit;
                     CountMgmt.PostSheet(Rec."No.");
                     CurrPage.Update(false);
                 end;
@@ -99,4 +103,5 @@ page 72074 "DOPSWHS Count Sheet List"
     var
         AlreadyV2Msg: Label '%1 sayım belgesi zaten Sayım V2 modunda.', Comment = '%1 count sheet no';
         ConvertedToV2Msg: Label '%1 sayım belgesi Sayım V2 moduna alındı.', Comment = '%1 count sheet no';
+        PostConfirmQst: Label '%1 sayımındaki farklar stoklara işlenecek. Bu işlem geri alınamaz. Nakledilsin mi?', Comment = '%1 count sheet no';
 }

@@ -7,6 +7,8 @@ import android.content.Intent
 import android.net.Uri
 import android.os.Environment
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
@@ -141,7 +143,7 @@ fun UpdateChecker() {
 
 /** Bağlantı ekranından operatörün istediği anda sürüm kontrolü yapabilmesi için. */
 @Composable
-fun AppUpdateCard() {
+fun AppUpdateCard(compact: Boolean = false) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val statusColors = bcwmsStatus()
@@ -160,6 +162,7 @@ fun AppUpdateCard() {
     ) {
         Column(Modifier.fillMaxWidth().padding(16.dp)) {
             Text("Sürüm ve Güncelleme", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
+            if (!compact) {
             Text(
                 if (BuildConfig.IN_APP_UPDATES_ENABLED) {
                     "✓ Uzaktan güncelleme etkin"
@@ -185,6 +188,7 @@ fun AppUpdateCard() {
                 fontWeight = FontWeight.SemiBold,
             )
             Spacer(Modifier.height(10.dp))
+            }
             Text("Mevcut sürüm: v${BuildConfig.VERSION_NAME}", style = MaterialTheme.typography.bodyMedium)
             Text("Son güncelleme: ${formatUpdateDate(installDate)}", style = MaterialTheme.typography.bodySmall)
             Text("Son kontrol: ${formatUpdateDate(lastCheck)}", style = MaterialTheme.typography.bodySmall)
@@ -326,9 +330,7 @@ private fun UpdatePromptDialog(
 }
 
 private fun fetchManifest(): UpdateManifest? {
-    // GitHub can cache an old release-asset redirect despite no-cache headers.
-    val separator = if (UPDATE_MANIFEST_URL.contains('?')) "&" else "?"
-    val manifestUrl = URL("$UPDATE_MANIFEST_URL${separator}check=${System.currentTimeMillis()}")
+    val manifestUrl = URL(UPDATE_MANIFEST_URL)
     require(manifestUrl.protocol == "https") { "manifest must be served over HTTPS" }
     val conn = (manifestUrl.openConnection() as HttpURLConnection).apply {
         connectTimeout = 8_000
@@ -449,5 +451,30 @@ private fun installApk(context: Context, apk: File) {
 class UpdateReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context?, intent: Intent?) {
         // currently a no-op; reserved for completed-download notification.
+    }
+}
+
+/** Public update channel: no BC token, environment, terminal or employee session is needed. */
+@Composable
+internal fun AppUpdateEntry() {
+    var open by remember { mutableStateOf(false) }
+    OutlinedButton(onClick = { open = true }) { Text("Uygulamayı güncelle") }
+    if (open) {
+        androidx.compose.ui.window.Dialog(
+            onDismissRequest = { open = false },
+            properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false),
+        ) {
+            Surface(Modifier.fillMaxSize().safeDrawingPadding()) {
+                Column(Modifier.fillMaxSize().padding(20.dp).verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                    TextButton(onClick = { open = false }) { Text("‹ Geri") }
+                    Text("Uygulama güncellemesi", style = MaterialTheme.typography.headlineSmall,
+                        fontWeight = FontWeight.Bold)
+                    Text("BC bağlantısı veya PIN gerekmez. İnternet bağlantısı yeterli.",
+                        style = MaterialTheme.typography.bodyMedium)
+                    AppUpdateCard(compact = true)
+                }
+            }
+        }
     }
 }

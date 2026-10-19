@@ -278,7 +278,7 @@ table 72000 "DOPSWHS Setup"
         {
             Caption = 'Company Route ID';
             DataClassification = CustomerContent;
-            ToolTip = 'Second segment of every canonical station ID. Use one dedicated Azure deployment/status queue per Business Central company.';
+            ToolTip = 'Second segment of the station ID. With environment sharing enabled this is the shared deployment route, not the Business Central company name. Different BC environments require separate Azure deployments.';
 
             trigger OnValidate()
             begin
@@ -295,6 +295,12 @@ table 72000 "DOPSWHS Setup"
         field(410; "Azure Expiry Warning At"; DateTime)
         {
             Caption = 'Blob SAS Expiry Warning At';
+            DataClassification = SystemMetadata;
+            Editable = false;
+        }
+        field(520; "Environment Print Linked"; Boolean)
+        {
+            Caption = 'Environment Print Linked';
             DataClassification = SystemMetadata;
             Editable = false;
         }
@@ -324,32 +330,64 @@ table 72000 "DOPSWHS Setup"
             DataClassification = CustomerContent;
             InitValue = false;
         }
-        field(440; "Auto Print Packing List"; Boolean)
+        field(530; "Prod. LP Consume Sync"; Boolean)
         {
-            // EMU/DKÇ (15 Eyl 2026): after a warehouse shipment is posted from
-            // the terminal, the pallet/carton/box packing list is queued to the
-            // document printer next to the posted shipment print.
-            Caption = 'Auto Print Packing List';
+            // BADE (24 Eyl 2026): opt-in. On = after production consumption the
+            // LP named on the journal line or the LPs delivered to the same
+            // order (same bin, item, lot) are reduced (codeunit 72409).
+            Caption = 'Prod. LP Consume Sync';
+            DataClassification = CustomerContent;
+            InitValue = false;
+            ObsoleteState = Pending;
+            ObsoleteReason = 'Not used. The A.URETIM mismatch came from manual LP bin edits, not from consumption.';
+            ObsoleteTag = '1.14.1.95';
+        }
+        field(540; "Prod. LP Sync Bin Filter"; Text[250])
+        {
+            // BADE (24 Eyl 2026): "Move stock to LP bin" only handles LPs whose
+            // bin matches this filter, e.g. A.URETIM. Empty = none (codeunit 72409).
+            Caption = 'Prod. LP Sync Bin Filter';
+            DataClassification = CustomerContent;
+
+            trigger OnValidate()
+            var
+                TempBin: Record Bin temporary;
+            begin
+                // Reject an invalid filter here, never during posting.
+                if "Prod. LP Sync Bin Filter" <> '' then
+                    TempBin.SetFilter(Code, "Prod. LP Sync Bin Filter");
+            end;
+        }
+        field(550; "Prod. LP Sync Location"; Code[10])
+        {
+            // BADE (24 Eyl 2026): location of "Prod. LP Sync Bin Filter". A bin
+            // code is only unique within a location. Empty = no LP is reduced.
+            Caption = 'Prod. LP Sync Location';
+            DataClassification = CustomerContent;
+            TableRelation = Location;
+        }
+        field(500; "Count Relocates Found Stock"; Boolean)
+        {
+            // BADE (16–17 Eyl 2026, Merve): sayımda bir rafta BC'nin bilmediği
+            // (fazla) ürün bulunduğunda kayıt, stoğu taşır: önce aynı fişte
+            // eksik sayılan raftan (kapsam kuralı o rafı da saydırır; eksi+artı
+            // yerine tek raf taşıması), sonra fiş dışındaki raflardan
+            // (Count Mgmt.PlanFoundStockRelocations). Yalnız LP'siz serbest stok;
+            // kalan fark artı düzeltme. Kapalıyken (varsayılan): eksik raf eksi,
+            // bulunan raf artı düzeltme (satınalma girişi + artı giriş yan yana).
+            Caption = 'Count Relocates Found Stock';
             DataClassification = CustomerContent;
             InitValue = false;
         }
-        field(450; "Label Width (mm)"; Decimal)
+        field(490; "Manual Receipt Label Print"; Boolean)
         {
-            // EMU/DKÇ (16 Eyl 2026): size of the label roll in the ZPL printer.
-            // Every terminal label (item, bin, LP designs) is laid out on this
-            // canvas (codeunit "DOPSWHS Label Canvas"). 0 = 80 mm, the roll found
-            // in DKÇ's Zebra ZD230; the old designs assumed 4x2" and were cut off.
-            Caption = 'Label Width (mm)';
+            // BADE (16 Eyl 2026): mal kabul kaydedilince MTE/LP etiketleri
+            // kendiliğinden basılmasın; operatör kayıt sonrası ekranda
+            // "Etiket Yazdır" ile bassın. Varsayılan KAPALI = eski davranış
+            // (kayıtla birlikte otomatik baskı) korunur.
+            Caption = 'Manual Receipt Label Print';
             DataClassification = CustomerContent;
-            DecimalPlaces = 0 : 1;
-            MinValue = 0;
-        }
-        field(451; "Label Height (mm)"; Decimal)
-        {
-            Caption = 'Label Height (mm)';
-            DataClassification = CustomerContent;
-            DecimalPlaces = 0 : 1;
-            MinValue = 0;
+            InitValue = false;
         }
         field(460; "MTE Report ID"; Integer)
         {

@@ -1,0 +1,141 @@
+package com.dynops.bcwms.feature
+
+import org.json.JSONObject
+import org.junit.Assert.*
+import org.junit.Test
+
+class TerminalLoginTest {
+    @Test fun `PIN keeps leading zeroes and accepts exactly four ASCII digits`() {
+        assertTrue(validTerminalPin("0017"))
+        assertTrue(validTerminalPin("9876"))
+        listOf("", "123", "12345", " 1234", "12a4", "１２３４", "١٢٣٤").forEach {
+            assertFalse(it, validTerminalPin(it))
+        }
+    }
+    @Test fun `terminal preference scopes isolate companies and environments without separator collisions`() {
+        val one = terminalPreferenceScope("tenant", "Production", "company1")
+        assertNotEquals(one, terminalPreferenceScope("tenant", "Production", "company2"))
+        assertNotEquals(one, terminalPreferenceScope("tenant", "Sandbox", "company1"))
+        assertNotEquals(one, terminalPreferenceScope("other", "Production", "company1"))
+        assertNotEquals(terminalPreferenceScope("a:b", "c", "d"), terminalPreferenceScope("a", "b:c", "d"))
+    }
+    @Test fun `terminal key remains an escaped OData string with Turkish and special characters`() {
+        assertEquals("wmsTerminals('TERM%C4%B0NAL-1')/Microsoft.NAV.login", terminalLoginPath("TERMİNAL-1"))
+        assertEquals("wmsTerminals('A%27%27%2FB%3DC')/Microsoft.NAV.login", terminalLoginPath("A'/B=C"))
+    }
+    @Test fun `login response must match both the selected employee and terminal`() {
+        val p = JSONObject().put("userId", "OP01").put("terminalCode", "TERMINAL-1")
+        assertTrue(terminalProfileMatches(p, "OP01", "TERMINAL-1"))
+        assertFalse(terminalProfileMatches(p, "OP02", "TERMINAL-1"))
+        assertFalse(terminalProfileMatches(p, "OP01", "TERMINAL-2"))
+        assertFalse(terminalProfileMatches(JSONObject(), "", ""))
+        p.put("error", "PIN hatalı")
+        assertFalse(terminalProfileMatches(p, "OP01", "TERMINAL-1"))
+    }
+    @Test fun `manager membership spans terminals but a regular user remains terminal specific`() {
+        val user = JSONObject().put("username", "OP01").put("disabled", false).put("terminalCode", "TERM-1")
+        assertTrue(authorizedTerminalUser(user, "OP01", "TERM-1"))
+        assertFalse(authorizedTerminalUser(user, "OP01", "TERM-2"))
+        user.put("terminalAdmin", true)
+        assertTrue(authorizedTerminalUser(user, "OP01", "TERM-2"))
+        user.put("disabled", true)
+        assertFalse(authorizedTerminalUser(user, "OP01", "TERM-2"))
+        assertFalse(authorizedTerminalUser(user, "OTHER", "TERM-2"))
+    }
+    @Test fun `operator list includes active managers and escapes the terminal code`() {
+        assertEquals("localUsers?\$filter=terminalCode eq 'T%27%27%201' and disabled eq false", terminalUsersPath("T' 1"))
+        assertEquals("Merve · Yönetici", terminalOperatorLabel(JSONObject().put("displayName", "Merve").put("terminalAdmin", true)))
+    }
+    @Test fun `terminal print cannot silently use shared service account default`() {
+        assertNotNull(terminalPrintRequestIssue("""{"printerId":"","copies":1}"""))
+        assertNull(terminalPrintRequestIssue("""{"printerId":"ZEBRA-1","copies":1}"""))
+        assertNull(terminalPrintRequestIssue("""{"printerId":"","printLabels":false}"""))
+        assertNull(terminalPrintRequestIssue("""{"username":"OP01","pin":"0017"}"""))
+    }
+    @Test fun `PIN expires exactly at thirty minutes and clock rollback cannot extend it`() {
+        val login = 100000L
+        assertTrue(terminalSessionFresh(login, login))
+        assertTrue(terminalSessionFresh(login, login + TERMINAL_SESSION_MS - 1))
+        assertFalse(terminalSessionFresh(login, login + TERMINAL_SESSION_MS))
+        assertFalse(terminalSessionFresh(login, login - 1))
+        assertFalse(terminalSessionFresh(0, login))
+    }
+
+    @Test fun `printerless receipt request passes terminal guard with or without configured printers`() {
+        for (printer in listOf("", "ZEBRA-1")) {
+            for (printReceipt in listOf(false, true)) {
+                val request = receiptPostRequest(true, printReceipt, printer, printer)
+                val path = "receipts('R1')/Microsoft.NAV.${request.action}"
+                assertNull(terminalPrintRequestIssue(request.body, path))
+            }
+        }
+    }
+
+    @Test fun `LP completion without label passes terminal guard`() {
+        for (action in listOf("stopToPrinter", "stopToPrinterWithMte")) {
+            val path = "licensePlates('LP000185')/Microsoft.NAV.$action"
+            assertNull(terminalPrintRequestIssue("""{"printLabel":false,"printerId":""}""", path))
+            assertNotNull(terminalPrintRequestIssue("""{"printLabel":true,"printerId":""}""", path))
+            assertNotNull(terminalPrintRequestIssue("""{"printLabel":"false","printerId":""}""", path))
+        }
+        assertNotNull(terminalPrintRequestIssue("""{"printLabel":false,"printerId":""}""", "licensePlates('LP1')/Microsoft.NAV.printLabel"))
+    }
+
+    @Test fun `print false cannot bypass printer selection for other actions or malformed flags`() {
+        val receiptPath = "receipts('R1')/Microsoft.NAV.postToPrinter"
+        for (body in listOf(
+            """{"printerId":"","print":true}""",
+            """{"printerId":""}""",
+            """{"printerId":"","print":null}""",
+            """{"printerId":"","print":"false"}""",
+        )) assertNotNull(terminalPrintRequestIssue(body, receiptPath))
+        val noDocumentPrint = """{"printerId":"","print":false}"""
+        for (path in listOf(
+            "receipts('R1')/Microsoft.NAV.postAndCloseLP",
+            "receipts('R1')/Microsoft.NAV.postAndCloseLPWithMte",
+            "receipts('R1')/Microsoft.NAV.printMte",
+            "licensePlates('LP1')/Microsoft.NAV.postToPrinter",
+            "",
+        )) assertNotNull(terminalPrintRequestIssue(noDocumentPrint, path))
+    }
+
+    @Test fun `normal receipt printing still requires the configured printer`() {
+        val missing = receiptPostRequest(false, true, "", "")
+        assertNotNull(terminalPrintRequestIssue(missing.body, "receipts('R1')/Microsoft.NAV.${missing.action}"))
+        val selected = receiptPostRequest(false, true, "DOC01", "LP01")
+        assertNull(terminalPrintRequestIssue(selected.body, "receipts('R1')/Microsoft.NAV.${selected.action}"))
+    }
+    @Test fun `locked session blocks warehouse writes but allows PIN login`() {
+        assertFalse(terminalSessionRequestAllowed("POST", "receipts('R1')/Microsoft.NAV.post", false))
+        assertFalse(terminalSessionRequestAllowed("PATCH", "receiptLines('L1')", false))
+        assertFalse(terminalSessionRequestAllowed("DELETE", "countLines('L1')", false))
+        assertTrue(terminalSessionRequestAllowed("POST", terminalLoginPath("T1"), false))
+        assertTrue(terminalSessionRequestAllowed("GET", terminalUsersPath("T1"), false))
+        assertTrue(terminalSessionRequestAllowed("POST", "receipts('R1')/Microsoft.NAV.post", true))
+    }
+
+    @Test fun `BC compatible queries merge terminal employees with managers without duplicates`() = kotlinx.coroutines.runBlocking {
+        fun user(id: String, terminal: String, admin: Boolean = false, disabled: Boolean = false) =
+            JSONObject().put("username", id).put("displayName", id).put("terminalCode", terminal)
+                .put("terminalAdmin", admin).put("disabled", disabled)
+        val paths = mutableListOf<String>()
+        val manager = user("M1", "T1", true)
+        val result = loadTerminalUsers("T1") { path ->
+            paths += path
+            assertFalse(path.contains(" or "))
+            when (path) {
+                terminalUsersPath("T1") -> listOf(user("U1", "T1"), manager, user("OTHER", "T2"), user("OFF", "T1", disabled = true))
+                TERMINAL_ADMINS_PATH -> listOf(manager, user("M2", "", true))
+                else -> error("Unexpected query")
+            }
+        }
+        assertEquals(listOf(terminalUsersPath("T1"), TERMINAL_ADMINS_PATH), paths)
+        assertEquals(setOf("U1", "M1", "M2"), result!!.map { it.optString("username") }.toSet())
+        assertEquals(3, result.size)
+    }
+    @Test fun `incomplete manager or employee listing is not shown as an empty user list`() = kotlinx.coroutines.runBlocking {
+        assertNull(loadTerminalUsers("T1") { path -> if (path == TERMINAL_ADMINS_PATH) null else emptyList() })
+        assertNull(loadTerminalUsers("T1") { null })
+        assertEquals(emptyList<JSONObject>(), loadTerminalUsers("") { error("No request for blank terminal") })
+    }
+}

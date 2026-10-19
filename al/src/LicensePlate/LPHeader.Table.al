@@ -82,120 +82,23 @@ table 72010 "DOPSWHS LP Header"
             DataClassification = CustomerContent;
             Editable = false;
         }
-        // EMU/DKÇ (15 Eyl 2026): snapshot of the document the LP was filled
-        // from. Plain fields on purpose: they survive deletion of the source
-        // document and are what the label and packing list print.
-        field(130; "Source Document Type"; Enum "DOPSWHS Assigned Doc Type")
+        field(128; "Pending Receipt Lot No."; Code[50])
         {
-            Caption = 'Source Document Type';
+            Caption = 'Pending Receipt Lot No.';
             DataClassification = CustomerContent;
             Editable = false;
         }
-        field(131; "Source Document No."; Code[20])
+        field(129; "Pending Receipt Expiry"; Date)
         {
-            Caption = 'Source Document No.';
+            Caption = 'Pending Receipt Expiration Date';
             DataClassification = CustomerContent;
             Editable = false;
         }
-        field(132; "Partner Type"; Option)
+        field(130; "Receipt Tracking Staged"; Boolean)
         {
-            Caption = 'Partner Type';
-            OptionMembers = " ",Customer,Vendor,Location;
-            OptionCaption = ' ,Müşteri,Tedarikçi,Lokasyon';
-            DataClassification = CustomerContent;
+            Caption = 'Receipt Tracking Staged';
+            DataClassification = SystemMetadata;
             Editable = false;
-        }
-        field(133; "Partner No."; Code[20])
-        {
-            Caption = 'Customer/Vendor No.';
-            DataClassification = CustomerContent;
-            Editable = false;
-        }
-        field(134; "Partner Name"; Text[100])
-        {
-            Caption = 'Customer/Vendor Name';
-            DataClassification = CustomerContent;
-            Editable = false;
-        }
-        field(135; "Ship-to Code"; Code[10])
-        {
-            Caption = 'Ship-to Code';
-            DataClassification = CustomerContent;
-            Editable = false;
-        }
-        field(136; "Ship-to Name"; Text[100])
-        {
-            Caption = 'Ship-to Name';
-            DataClassification = CustomerContent;
-            Editable = false;
-        }
-        field(137; "Ship-to Address"; Text[100])
-        {
-            Caption = 'Ship-to Address';
-            DataClassification = CustomerContent;
-            Editable = false;
-        }
-        field(138; "Ship-to City"; Text[30])
-        {
-            Caption = 'Ship-to City';
-            DataClassification = CustomerContent;
-            Editable = false;
-        }
-        field(139; "Ship-to Post Code"; Code[20])
-        {
-            Caption = 'Ship-to Post Code';
-            DataClassification = CustomerContent;
-            Editable = false;
-        }
-        field(140; "Ship-to Country Code"; Code[10])
-        {
-            Caption = 'Ship-to Country/Region Code';
-            DataClassification = CustomerContent;
-            Editable = false;
-        }
-        field(141; "Shipment Method Code"; Code[10])
-        {
-            Caption = 'Shipment Method Code';
-            DataClassification = CustomerContent;
-            TableRelation = "Shipment Method";
-        }
-        field(142; "Shipping Agent Code"; Code[10])
-        {
-            Caption = 'Shipping Agent Code';
-            DataClassification = CustomerContent;
-            TableRelation = "Shipping Agent";
-        }
-        field(143; "Shipping Agent Service Code"; Code[10])
-        {
-            Caption = 'Shipping Agent Service Code';
-            DataClassification = CustomerContent;
-        }
-        field(144; "External Document No."; Code[35])
-        {
-            Caption = 'External Document No.';
-            DataClassification = CustomerContent;
-        }
-        field(145; "Container No."; Code[30])
-        {
-            Caption = 'Container No.';
-            DataClassification = CustomerContent;
-        }
-        field(146; "Seal No."; Code[30])
-        {
-            Caption = 'Seal No.';
-            DataClassification = CustomerContent;
-        }
-        field(147; "Source Document Date"; Date)
-        {
-            Caption = 'Source Document Date';
-            DataClassification = CustomerContent;
-            Editable = false;
-        }
-        field(148; "Tare Weight kg"; Decimal)
-        {
-            Caption = 'Tare Weight kg';
-            DataClassification = CustomerContent;
-            DecimalPlaces = 0 : 3;
         }
     }
 
@@ -203,6 +106,7 @@ table 72010 "DOPSWHS LP Header"
     {
         key(PK; "No.") { Clustered = true; }
         key(StatusLocation; Status, "Location Code") { }
+        key(ProdLpRepairScope; "Location Code", "Bin Code", Status) { }
         key(Parent; "Parent LP No.") { }
         key(SSCCKey; SSCC) { }
         key(AssignedDoc; "Assigned Document Type", "Assigned Document No.") { }

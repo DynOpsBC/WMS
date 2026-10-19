@@ -9,8 +9,8 @@ val releaseVersionCodeOverride = providers.gradleProperty("releaseVersionCode").
 val releaseVersionNameOverride = providers.gradleProperty("releaseVersionName").orNull?.takeIf { it.isNotBlank() }
 // BADE ve EMU aynı kaynak koddan aynı anda yayınlanır. Müşteri flavor'larında
 // ayrı sürüm değeri tutmak bir paketin geride kalmasına neden oluyordu.
-val customerVersionCode = releaseVersionCodeOverride ?: 200160
-val customerVersionName = releaseVersionNameOverride ?: "1.14.160"
+val customerVersionCode = releaseVersionCodeOverride ?: 200181
+val customerVersionName = releaseVersionNameOverride ?: "1.14.181"
 
 plugins {
   alias(libs.plugins.android.application)
@@ -38,8 +38,8 @@ android {
     // Saha APK'larından bazılarında CI tarafından 100000+ versionCode
     // kullanıldı. Görünen sürüm adı eski olsa bile Android yalnız sayısal kodu
     // karşılaştırdığı için semantik sürümleri 200000 bandında monoton tutuyoruz.
-    versionCode = releaseVersionCodeOverride ?: 200160
-    versionName = releaseVersionNameOverride ?: "1.14.160"
+    versionCode = releaseVersionCodeOverride ?: 200181
+    versionName = releaseVersionNameOverride ?: "1.14.181"
     manifestPlaceholders["appLabel"] = "BCWMS"
     // Ücretsiz dağıtım kanalı: public GitHub Release içindeki sabit latest.json.
     // APK aynı release'de tutulur; uygulamaya GitHub hesabı/token gömülmez.
@@ -81,7 +81,9 @@ android {
       // token acquisition, then persisted for all subsequent requests.
       buildConfigField("String", "BC_DEFAULT_COMPANY_ID", "\"\"")
       buildConfigField("String", "BC_DEFAULT_COMPANY_NAME", "\"BADE NATURAL DOĞAL YAŞAM ÜRÜNLERİ SAN. TİC. A.Ş.\"")
-      buildConfigField("boolean", "BC_ALLOW_PRODUCTION", "false")
+      // Allow explicit Production discovery; BADE module access remains manager-gated.
+      // Keep Sandbox as the default until the operator selects an environment.
+      buildConfigField("boolean", "BC_ALLOW_PRODUCTION", "true")
       buildConfigField("String", "TENANT_LABEL", "\"Bade Natural\"")
       buildConfigField("String", "LOGIN_EMAIL_HINT", "\"dynops@badenatural.com\"")
       buildConfigField("String", "LOGIN_DEFAULT_EMAIL", "\"dynops@badenatural.com\"")
@@ -89,6 +91,32 @@ android {
         "String",
         "UPDATE_MANIFEST_URL",
         "\"https://github.com/DynOpsBC/WMS/releases/download/android-bade-channel/latest.json\"",
+      )
+    }
+    // Kitoko Group (19 Eki 2026): BADE hattının kopyası (isBadeFamily) + EMU'nun
+    // etiket ekranları. Kendi Entra uygulama kaydı (Kitoko kiracısında public
+    // client), kendi applicationId'si ve güncelleme kanalı; BADE logosu kullanılmaz.
+    create("kitoko") {
+      dimension = "tenant"
+      applicationIdSuffix = ".kitoko"
+      versionCode = customerVersionCode
+      versionName = customerVersionName
+      versionNameSuffix = "-kitoko"
+      manifestPlaceholders["appLabel"] = "BCWMS Kitoko"
+      // Entra "BCWMS Terminal (Kitoko)" uygulama kaydının Application (client) ID'si.
+      buildConfigField("String", "BC_CLIENT_ID", "\"${providers.gradleProperty("kitokoClientId").orNull ?: "8dbc8036-e191-4d8b-ad18-f987d5d499e1"}\"")
+      buildConfigField("String", "BC_FALLBACK_TENANT", "\"f270e8be-e7b0-4ac0-b34a-33014d34d994\"")
+      buildConfigField("String", "BC_DEFAULT_ENVIRONMENT", "\"DemoSandbox\"")
+      buildConfigField("String", "BC_DEFAULT_COMPANY_ID", "\"\"")
+      buildConfigField("String", "BC_DEFAULT_COMPANY_NAME", "\"KITOKO-TR-DEMO-V1\"")
+      buildConfigField("boolean", "BC_ALLOW_PRODUCTION", "true")
+      buildConfigField("String", "TENANT_LABEL", "\"Kitoko\"")
+      buildConfigField("String", "LOGIN_EMAIL_HINT", "\"ornek@kitokogroup.com\"")
+      buildConfigField("String", "LOGIN_DEFAULT_EMAIL", "\"\"")
+      buildConfigField(
+        "String",
+        "UPDATE_MANIFEST_URL",
+        "\"https://github.com/DynOpsBC/WMS/releases/download/android-kitoko-channel/latest.json\"",
       )
     }
     create("emu") {
@@ -118,32 +146,6 @@ android {
         "String",
         "UPDATE_MANIFEST_URL",
         "\"https://github.com/DynOpsBC/WMS/releases/download/android-emu-channel/latest.json\"",
-      )
-    }
-    // Kitoko Group (2 Eki 2026): DKÇ/EMU sürümünün kopyası (isEmuFamily). Kendi
-    // Entra uygulama kaydı (Kitoko kiracısında public client), kendi
-    // applicationId'si ve güncelleme kanalı; DKÇ logosu/markası kullanılmaz.
-    create("kitoko") {
-      dimension = "tenant"
-      applicationIdSuffix = ".kitoko"
-      versionCode = customerVersionCode
-      versionName = customerVersionName
-      versionNameSuffix = "-kitoko"
-      manifestPlaceholders["appLabel"] = "BCWMS Kitoko"
-      // Entra "BCWMS Terminal (Kitoko)" uygulama kaydının Application (client) ID'si.
-      buildConfigField("String", "BC_CLIENT_ID", "\"${providers.gradleProperty("kitokoClientId").orNull ?: "8dbc8036-e191-4d8b-ad18-f987d5d499e1"}\"")
-      buildConfigField("String", "BC_FALLBACK_TENANT", "\"f270e8be-e7b0-4ac0-b34a-33014d34d994\"")
-      buildConfigField("String", "BC_DEFAULT_ENVIRONMENT", "\"DemoSandbox\"")
-      buildConfigField("String", "BC_DEFAULT_COMPANY_ID", "\"\"")
-      buildConfigField("String", "BC_DEFAULT_COMPANY_NAME", "\"KITOKO-TR-DEMO-V1\"")
-      buildConfigField("boolean", "BC_ALLOW_PRODUCTION", "true")
-      buildConfigField("String", "TENANT_LABEL", "\"Kitoko\"")
-      buildConfigField("String", "LOGIN_EMAIL_HINT", "\"ornek@kitokogroup.com\"")
-      buildConfigField("String", "LOGIN_DEFAULT_EMAIL", "\"\"")
-      buildConfigField(
-        "String",
-        "UPDATE_MANIFEST_URL",
-        "\"https://github.com/DynOpsBC/WMS/releases/download/android-kitoko-channel/latest.json\"",
       )
     }
   }
@@ -242,7 +244,6 @@ dependencies {
 
   // Barcode scanning (camera) — graceful manual-entry fallback if camera/permission unavailable
   implementation("com.google.mlkit:barcode-scanning:17.3.0")
-  implementation("com.google.zxing:core:3.5.3")
   implementation("androidx.camera:camera-core:1.4.0")
   implementation("androidx.camera:camera-camera2:1.4.0")
   implementation("androidx.camera:camera-lifecycle:1.4.0")

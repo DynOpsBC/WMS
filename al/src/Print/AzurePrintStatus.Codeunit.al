@@ -11,16 +11,26 @@ codeunit 72375 "DOPSWHS Azure Print Status"
     var
         Processed: Integer;
     begin
+        PrintEnvironment.SyncCompany();
+        if not PrintEnvironment.IsStatusOwner() then begin
+            PrintEnvironment.ApplyCompanyResults(20);
+            exit;
+        end;
         if MaxMessages <= 0 then
             MaxMessages := 20;
         // Keep consuming durable agent results even if the independent Blob
         // upload credential has expired and new dispatches are blocked.
         AzureBridge.ValidateStatusConfiguration();
         while Processed < MaxMessages do begin
-            if not ReceiveOne() then
+            if not ReceiveOne() then begin
+                PrintEnvironment.ApplyCompanyResults(20);
+                PrintEnvironment.PublishPrinters();
                 exit;
+            end;
             Processed += 1;
         end;
+        PrintEnvironment.ApplyCompanyResults(20);
+        PrintEnvironment.PublishPrinters();
     end;
 
     procedure MarkStalePrinters(MaxPrinters: Integer): Integer
@@ -126,7 +136,7 @@ codeunit 72375 "DOPSWHS Azure Print Status"
             'heartbeat':
                 ProcessHeartbeat(Root);
             'jobresult':
-                ProcessJobResult(Root);
+                ProcessJobResult(Root, true, false);
             else
                 Error('Unsupported printer-status message type %1.', MessageType);
         end;
@@ -212,7 +222,6 @@ codeunit 72375 "DOPSWHS Azure Print Status"
         Printer: Record "DOPSWHS Printer";
         PrinterCode: Code[20];
         PrinterName: Text;
-        DisplayName: Text;
         StatusText: Text;
         FormatText: Text;
         IsNew: Boolean;
@@ -220,9 +229,6 @@ codeunit 72375 "DOPSWHS Azure Print Status"
         ValidatePrinterId(PrinterIdText);
         PrinterCode := CopyStr(PrinterIdText, 1, MaxStrLen(PrinterCode));
         PrinterName := RequireText(PrinterObject, 'printerName');
-        // Agent 1.1.1+ (BADE, 17 Eyl 2026): operator-facing name typed in the
-        // agent panel. Older agents send none; the Windows name stays.
-        DisplayName := DelChr(OptionalText(PrinterObject, 'displayName'), '<>', ' ');
         if StrLen(PrinterName) > MaxStrLen(Printer."Printer Handle") then
             Error('Printer name for %1 exceeds %2 characters.', PrinterCode, MaxStrLen(Printer."Printer Handle"));
         StatusText := LowerCase(RequireText(PrinterObject, 'status'));
@@ -247,10 +253,7 @@ codeunit 72375 "DOPSWHS Azure Print Status"
                 exit(true);
         end;
 
-        if DisplayName <> '' then
-            Printer.Description := CopyStr(DisplayName, 1, MaxStrLen(Printer.Description))
-        else
-            Printer.Description := CopyStr(PrinterName, 1, MaxStrLen(Printer.Description));
+        Printer.Description := CopyStr(PrinterName, 1, MaxStrLen(Printer.Description));
         Printer."Printer Handle" := CopyStr(PrinterName, 1, MaxStrLen(Printer."Printer Handle"));
         FormatText := RequireText(PrinterObject, 'format');
         if FormatText <> UpperCase(FormatText) then
@@ -304,7 +307,33 @@ codeunit 72375 "DOPSWHS Azure Print Status"
             until Printer.Next() = 0;
     end;
 
-    local procedure ProcessJobResult(Root: JsonObject)
+    procedure ApplyStoredResult(Body: Text)
+    begin
+        ProcessStoredResult(Body, false);
+    end;
+
+    [TryFunction]
+    procedure TryValidateStoredResult(Body: Text)
+    begin
+        // Validation-only path: a malformed/mismatched result cannot write
+        // partial state or block unrelated companies' durable results.
+        ProcessStoredResult(Body, true);
+    end;
+
+    local procedure ProcessStoredResult(Body: Text; ValidateOnly: Boolean)
+    var
+        Root: JsonObject;
+    begin
+        if not Root.ReadFrom(Body) then
+            Error('Stored printer result is not valid JSON.');
+        RequireSchemaV1(Root);
+        ValidateOwnedMessage(Root);
+        if LowerCase(RequireText(Root, 'messageType')) <> 'jobresult' then
+            Error('Stored printer result must be a jobresult.');
+        ProcessJobResult(Root, false, ValidateOnly);
+    end;
+
+    local procedure ProcessJobResult(Root: JsonObject; DeferSharedResult: Boolean; ValidateOnly: Boolean)
     var
         Queue: Record "DOPSWHS Print Job Queue";
         Printer: Record "DOPSWHS Printer";
@@ -346,8 +375,14 @@ codeunit 72375 "DOPSWHS Azure Print Status"
         if (Attempt < 1) or (Attempt > 10) then
             Error('JobResult attempt must be between 1 and 10.');
 
+        if DeferSharedResult then
+            if PrintEnvironment.CaptureResult(Root) then
+                exit;
+
         Queue.SetRange("Cloud Job ID", JobGuid);
         if not Queue.FindFirst() then begin
+            if ValidateOnly then
+                Error('The originating company print job no longer exists.');
             // Azure-only smoke tests and results arriving after BC retention do
             // not have a local queue row. The complete v1 envelope and route
             // ownership were validated above, so settle the orphan instead of
@@ -381,6 +416,9 @@ codeunit 72375 "DOPSWHS Azure Print Status"
             exit;
         if Queue.Status <> Queue.Status::Dispatched then
             Error('JobResult %1 arrived while the job was in state %2.', JobIdText, Queue.Status);
+
+        if ValidateOnly then
+            exit;
 
         Queue."Agent ID" := AgentId;
         Queue."Claimed At" := CompletedAt;
@@ -766,5 +804,6 @@ codeunit 72375 "DOPSWHS Azure Print Status"
     end;
 
     var
+        PrintEnvironment: Codeunit "DOPSWHS Print Environment";
         AzureBridge: Codeunit "DOPSWHS Azure Print Bridge";
 }

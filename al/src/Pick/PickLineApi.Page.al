@@ -42,6 +42,8 @@ page 72229 "DOPSWHS Pick Line API"
                 field(licensePlateNo; Rec."LP No.") { Caption = 'licensePlateNo'; Editable = false; }
                 // ELOG: satırın kaynak siparişi — terminal tote önerisi için kullanır.
                 field(sourceNo; Rec."Source No.") { Caption = 'sourceNo'; Editable = false; }
+                field(sourceType; Rec."Source Type") { Caption = 'sourceType'; Editable = false; }
+                field(sourceSubtype; Rec."Source Subtype") { Caption = 'sourceSubtype'; Editable = false; }
             }
         }
     }

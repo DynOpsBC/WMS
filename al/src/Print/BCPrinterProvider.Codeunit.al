@@ -13,7 +13,9 @@ codeunit 72367 "DOPSWHS BC Printer Provider"
         PaperTrays: JsonArray;
         DefaultTray: JsonObject;
         VirtualPrinterName: Text[250];
+        PrintEnvironment: Codeunit "DOPSWHS Print Environment";
     begin
+        PrintEnvironment.SyncCompany();
         if not Setup.Get('') then
             exit;
         if not (Setup."Print Channel" in [Setup."Print Channel"::SelfHosted, Setup."Print Channel"::AzureDirect]) then

@@ -1,7 +1,7 @@
 {
-  "versionCode": 200160,
-  "versionName": "1.14.160-emu",
-  "apkUrl": "https://github.com/DynOpsBC/WMS/releases/download/android-v1.14.160-emu/BCWMS-EMU-1.14.160-RELEASE.apk",
-  "sha256": "67c8d113b8cc729ca212850dc2a1d580c784c2249125c7edc9fdde78cd8fe3eb",
-  "releaseNotes": "Raf ve LP listeleri sıralı ve tam yüklenir; Bin Sorgu'da seçilen LP etiketleri toplu basılır. Yerleştirme satırında ürün adı gösterilir. Sevkiyat sonrası toplamada lot değiştiğinde eski LP önerisi gönderilmez. Toplama sunucu düzeltmesi için DKC BC 1.14.2.20 paketi gerekir."
+  "versionCode": 200106,
+  "versionName": "1.14.106-emu",
+  "apkUrl": "https://github.com/DynOpsBC/WMS/releases/download/android-emu-button-recovery/BCWMS-EMU-1.14.106-GECIS.apk",
+  "sha256": "8c80f3a63787520083aabfc0fd40cecd2c65fda052d35c229d6ccea26d1f0363",
+  "releaseNotes": "1.14.105 için imza uyumlu geçiş. İndir & yükle ile kurun. Uygulama açılınca Güncellemeyi Kontrol Et düğmesine tekrar basarak 1.14.110 sürümünü yükleyin. Uygulamayı kaldırmayın."
 }

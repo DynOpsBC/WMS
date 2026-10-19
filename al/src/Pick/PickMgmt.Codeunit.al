@@ -2,6 +2,697 @@ codeunit 72046 "DOPSWHS Pick Mgmt"
 {
     Access = Public;
 
+    // LP reads in the production pick debit run inside standard BC pick
+    // registration; they must not depend on the posting user's BCWMS set.
+    Permissions = tabledata "Registered Whse. Activity Line" = R,
+        tabledata "Warehouse Activity Line" = R,
+        tabledata "Warehouse Shipment Line" = R,
+        tabledata "DOPSWHS LP Header" = R,
+        tabledata "DOPSWHS LP Line" = R;
+
+    /// <summary>
+    /// Standard BC and BADE production picks both end here. The warehouse
+    /// register has already moved stock to the component bin; a partial Take
+    /// must also reduce the source LP. Intact pallets were moved and assigned
+    /// before registration, so their LP header no longer points to the Take bin.
+    /// BADE (1.14.1.119): the extended rules (several pallets, Open pallets,
+    /// bin-excess cap, pallets claimed by other documents) apply only in the
+    /// sync bin (Setup "Prod. LP Sync Bin Filter", A.URETIM). Every other bin
+    /// keeps the 1.14.1.117 behaviour unchanged.
+    /// </summary>
+    // BC commits before OnAfterRegisterWhseActivity when SuppressCommit is
+    // false. Run before that commit so a failed LP debit also rolls back the
+    // registered warehouse movement.
+    [EventSubscriber(ObjectType::Codeunit, Codeunit::"Whse.-Activity-Register", 'OnCodeOnBeforeCommit', '', false, false)]
+    [InherentPermissions(PermissionObjectType::TableData, Database::"DOPSWHS LP Header", 'RM')]
+    [InherentPermissions(PermissionObjectType::TableData, Database::"DOPSWHS LP Line", 'RMD')]
+    [InherentPermissions(PermissionObjectType::TableData, Database::"DOPSWHS LP Movement Ledger", 'RI')]
+    [InherentPermissions(PermissionObjectType::TableData, Database::"DOPSWHS Setup", 'R')]
+    local procedure DebitRegisteredProductionPickLps(RegisteredWhseActivHeader: Record "Registered Whse. Activity Hdr.")
+    var
+        RegisteredLine: Record "Registered Whse. Activity Line";
+        ReturnedBySource: Dictionary of [Text, Decimal];
+        NetByLine: Dictionary of [Integer, Decimal];
+        Deferred: List of [Integer];
+        Bound: Dictionary of [Code[20], Boolean];
+        BoundLoaded: Boolean;
+        KeyText: Text;
+        PickNo: Code[20];
+        PreferredLpNo: Code[20];
+        ReturnedBaseQty: Decimal;
+    begin
+        if (RegisteredWhseActivHeader.Type <> RegisteredWhseActivHeader.Type::Pick) or
+           (RegisteredWhseActivHeader."No." = '')
+        then
+            exit;
+        PickNo := RegisteredWhseActivHeader."Whse. Activity No.";
+        RegisteredLine.SetRange("Activity Type", RegisteredLine."Activity Type"::Pick);
+        RegisteredLine.SetRange("No.", RegisteredWhseActivHeader."No.");
+        RegisteredLine.SetRange("Source Type", Database::"Prod. Order Component");
+        RegisteredLine.SetRange("Source Subtype", Enum::"Production Order Status"::Released.AsInteger());
+        RegisteredLine.SetRange("Action Type", RegisteredLine."Action Type"::Place);
+        if RegisteredLine.FindSet() then
+            repeat
+                KeyText := ProductionRegisteredStockKey(RegisteredLine);
+                if not ReturnedBySource.Get(KeyText, ReturnedBaseQty) then
+                    ReturnedBaseQty := 0;
+                ReturnedBySource.Set(KeyText, ReturnedBaseQty + RegisteredLine."Qty. (Base)");
+            until RegisteredLine.Next() = 0;
+
+        RegisteredLine.SetRange("Action Type", RegisteredLine."Action Type"::Take);
+        RegisteredLine.SetFilter("Qty. (Base)", '>0');
+
+        // Net quantity per Take (minus a same-bin return), once per line, in
+        // the order the debits run: LP-tagged lines first, then the others.
+        RegisteredLine.SetFilter("LP No.", '<>%1', '');
+        if RegisteredLine.FindSet() then
+            repeat
+                NetByLine.Add(RegisteredLine."Line No.", NetOfReturns(RegisteredLine, ReturnedBySource));
+            until RegisteredLine.Next() = 0;
+        RegisteredLine.SetRange("LP No.", '');
+        if RegisteredLine.FindSet() then
+            repeat
+                NetByLine.Add(RegisteredLine."Line No.", NetOfReturns(RegisteredLine, ReturnedBySource));
+            until RegisteredLine.Next() = 0;
+
+        // 1) Exact debits of usable LP numbers. They decide whether the other
+        //    Takes can come from loose stock or from the remaining LPs.
+        RegisteredLine.SetFilter("LP No.", '<>%1', '');
+        if RegisteredLine.FindSet() then
+            repeat
+                if not DebitTaggedProductionTake(RegisteredLine, NetByLine.Get(RegisteredLine."Line No."), PickNo, Bound, BoundLoaded) then
+                    Deferred.Add(RegisteredLine."Line No.");
+            until RegisteredLine.Next() = 0;
+
+        // 2) Proof logic, only after ALL exact debits: Takes without an LP and
+        //    Takes whose LP number could not be used (tried first there).
+        RegisteredLine.SetRange("LP No.");
+        if RegisteredLine.FindSet() then
+            repeat
+                if (RegisteredLine."LP No." = '') or Deferred.Contains(RegisteredLine."Line No.") then begin
+                    PreferredLpNo := RegisteredLine."LP No.";
+                    RegisteredLine."LP No." := '';
+                    DebitUntaggedProductionTake(RegisteredLine, NetByLine.Get(RegisteredLine."Line No."), PreferredLpNo, PickNo, Bound, BoundLoaded);
+                end;
+            until RegisteredLine.Next() = 0;
+    end;
+
+    local procedure NetOfReturns(RegisteredLine: Record "Registered Whse. Activity Line"; var ReturnedBySource: Dictionary of [Text, Decimal]) NetBaseQty: Decimal
+    var
+        KeyText: Text;
+        ReturnedBaseQty: Decimal;
+    begin
+        KeyText := ProductionRegisteredStockKey(RegisteredLine);
+        // The key carries the bin: a Take (A.URETIM) usually has no matching
+        // Place (DO.01). An unchecked Get would raise and roll back every pick.
+        if not ReturnedBySource.Get(KeyText, ReturnedBaseQty) then
+            ReturnedBaseQty := 0;
+        NetBaseQty := RegisteredLine."Qty. (Base)";
+        if ReturnedBaseQty > 0 then
+            if ReturnedBaseQty >= NetBaseQty then begin
+                ReturnedBySource.Set(KeyText, ReturnedBaseQty - NetBaseQty);
+                NetBaseQty := 0;
+            end else begin
+                NetBaseQty -= ReturnedBaseQty;
+                ReturnedBySource.Set(KeyText, 0);
+            end;
+    end;
+
+    /// <summary>
+    /// BADE (28 Eyl 2026): never block a BC pick. The LP number on a Take line
+    /// may only be a preference written when the pick was created. Returns
+    /// false when it cannot be used, so the line is retried by the proof logic
+    /// after all exact debits.
+    /// </summary>
+    local procedure DebitTaggedProductionTake(var RegisteredLine: Record "Registered Whse. Activity Line"; NetBaseQty: Decimal; PickNo: Code[20]; var Bound: Dictionary of [Code[20], Boolean]; var BoundLoaded: Boolean): Boolean
+    var
+        LP: Record "DOPSWHS LP Header";
+        LPMgt: Codeunit "DOPSWHS LP Management";
+        LPStock: Codeunit "DOPSWHS LP Prod Consumption";
+        BoundElsewhere: Boolean;
+        DebitBaseQty: Decimal;
+    begin
+        if NetBaseQty <= 0.00001 then
+            exit(true);
+        if not LP.Get(RegisteredLine."LP No.") then
+            exit(false);
+        // Moved whole to the production bin before registering (terminal): the
+        // consumption debits it there; nothing to do here.
+        if LP."Bin Code" <> RegisteredLine."Bin Code" then
+            exit(true);
+        if not LPStock.IsSyncBin(RegisteredLine."Location Code", RegisteredLine."Bin Code") then begin
+            // Outside the sync bin nothing changes against 1.14.1.117.
+            if CanAutoDebitProductionLp(LP, RegisteredLine, NetBaseQty, false) then begin
+                LPMgt.DebitProductionPickLp(RegisteredLine, NetBaseQty);
+                exit(true);
+            end;
+            ReleaseStalePickReservation(LP, RegisteredLine."Whse. Activity No.");
+            exit(false);
+        end;
+        UsePickNo(RegisteredLine, PickNo);
+        // The terminal staged pallets for this pick and moved their LP content
+        // itself; a second debit here would count the same stock twice.
+        if StagedByTerminal(RegisteredLine."Source No.", RegisteredLine."Whse. Activity No.") then
+            exit(true);
+        // A pallet another activity or a shipment line has claimed stays with
+        // that document (its later posting checks the LP content); the proof
+        // logic may take the quantity from other pallets instead.
+        LoadBoundLps(RegisteredLine."Location Code", RegisteredLine."Whse. Activity No.", Bound, BoundLoaded);
+        if Bound.Get(LP."No.", BoundElsewhere) then
+            if BoundElsewhere then
+                exit(false);
+        // BADE (30 Eyl 2026): never take more from the LPs than the bin now
+        // lacks for them - a Take served from loose stock leaves no excess.
+        DebitBaseQty := BinExcess(RegisteredLine);
+        if DebitBaseQty <= 0.00001 then begin
+            ReleaseStalePickReservation(LP, RegisteredLine."Whse. Activity No.");
+            exit(true);
+        end;
+        if DebitBaseQty > NetBaseQty then
+            DebitBaseQty := NetBaseQty;
+        if CanAutoDebitProductionLp(LP, RegisteredLine, DebitBaseQty, true) then begin
+            LPMgt.DebitProductionPickLp(RegisteredLine, DebitBaseQty);
+            exit(true);
+        end;
+        ReleaseStalePickReservation(LP, RegisteredLine."Whse. Activity No.");
+        exit(false);
+    end;
+
+    /// <summary>
+    /// BADE (1.14.1.119): a Take without a usable LP number. In the sync bin
+    /// (A.URETIM) only what the candidate pallets claim above the WHOLE bin
+    /// balance can have come from them, so only that is debited (loose stock
+    /// and other pallets cover the rest). Candidates hold this item/lot and no
+    /// other document claims them: not reserved to another document, not on an
+    /// outstanding warehouse activity line, not on a warehouse shipment line.
+    /// Order: the Take's own LP number, pallets reserved to this pick or
+    /// order, then free pallets by LP No. A pick the terminal staged was
+    /// handled there. Never blocks the pick; what cannot be proven is left to
+    /// the LP stock repair action. Other bins keep the 1.14.1.117 rule.
+    /// </summary>
+    local procedure DebitUntaggedProductionTake(var RegisteredLine: Record "Registered Whse. Activity Line"; NetBaseQty: Decimal; PreferredLpNo: Code[20]; PickNo: Code[20]; var Bound: Dictionary of [Code[20], Boolean]; var BoundLoaded: Boolean)
+    var
+        LP: Record "DOPSWHS LP Header";
+        LPMgt: Codeunit "DOPSWHS LP Management";
+        LPStock: Codeunit "DOPSWHS LP Prod Consumption";
+        Candidates: List of [Code[20]];
+        Reserved: List of [Code[20]];
+        Free: List of [Code[20]];
+        LpNo: Code[20];
+        CandidateClaims: Decimal;
+        ToDebit: Decimal;
+        Take: Decimal;
+    begin
+        if NetBaseQty <= 0.00001 then
+            exit;
+        if not LPStock.IsSyncBin(RegisteredLine."Location Code", RegisteredLine."Bin Code") then begin
+            DebitSingleSourceLpTake(RegisteredLine, NetBaseQty);
+            exit;
+        end;
+        UsePickNo(RegisteredLine, PickNo);
+        if StagedByTerminal(RegisteredLine."Source No.", RegisteredLine."Whse. Activity No.") then
+            exit;
+        LoadBoundLps(RegisteredLine."Location Code", RegisteredLine."Whse. Activity No.", Bound, BoundLoaded);
+
+        LP.SetRange("Location Code", RegisteredLine."Location Code");
+        LP.SetRange("Bin Code", RegisteredLine."Bin Code");
+        LP.SetFilter(Status, '%1|%2|%3', LP.Status::Open, LP.Status::Built, LP.Status::Assigned);
+        LP.SetRange("Pending Receipt No.", '');
+        if LP.FindSet() then
+            repeat
+                if not Bound.ContainsKey(LP."No.") then
+                    if LpHoldsTake(LP."No.", RegisteredLine) then
+                        if (LP."Assigned Document No." = '') or IsReservedToTake(LP, RegisteredLine) then
+                            if LP."No." = PreferredLpNo then
+                                Candidates.Add(LP."No.")
+                            else
+                                if LP."Assigned Document No." = '' then
+                                    Free.Add(LP."No.")
+                                else
+                                    Reserved.Add(LP."No.");
+            until LP.Next() = 0;
+        foreach LpNo in Reserved do
+            Candidates.Add(LpNo);
+        foreach LpNo in Free do
+            Candidates.Add(LpNo);
+
+        foreach LpNo in Candidates do
+            CandidateClaims += LpTakeContent(LpNo, RegisteredLine);
+        if CandidateClaims <= 0.00001 then
+            exit;
+        ToDebit := CandidateClaims -
+            LPStock.BinBalance(
+                RegisteredLine."Location Code", RegisteredLine."Bin Code",
+                RegisteredLine."Item No.", RegisteredLine."Variant Code",
+                RegisteredLine."Lot No.", RegisteredLine."Serial No.",
+                RegisteredLine."Lot No." <> '', RegisteredLine."Serial No." <> '');
+        // The shipment check reads other documents: only when it can matter.
+        if ToDebit > 0.00001 then
+            ToDebit -= UnshippedPickTakes(RegisteredLine);
+        if ToDebit > NetBaseQty then
+            ToDebit := NetBaseQty;
+        foreach LpNo in Candidates do
+            if ToDebit >= MinDebitBaseQty() then
+                if LP.Get(LpNo) then begin
+                    Take := LpTakeContent(LpNo, RegisteredLine);
+                    if Take > ToDebit then
+                        Take := ToDebit;
+                    if (Take >= MinDebitBaseQty()) and CanAutoDebitProductionLp(LP, RegisteredLine, Take, true) then begin
+                        // Keep the registered BC document immutable. The PP
+                        // movement ledger stores the LP and line of each debit.
+                        RegisteredLine."LP No." := LpNo;
+                        LPMgt.DebitProductionPickLp(RegisteredLine, Take);
+                        ToDebit -= Take;
+                    end else
+                        ReleaseStalePickReservation(LP, RegisteredLine."Whse. Activity No.");
+                end;
+        RegisteredLine."LP No." := '';
+    end;
+
+    /// <summary>
+    /// The 1.14.1.117 rule, kept unchanged for every bin outside the sync bin:
+    /// debit only when the whole Take came from LPs and exactly one LP holds
+    /// the item/tracking in the Take bin.
+    /// </summary>
+    local procedure DebitSingleSourceLpTake(var RegisteredLine: Record "Registered Whse. Activity Line"; NetBaseQty: Decimal)
+    var
+        LP: Record "DOPSWHS LP Header";
+        LPMgt: Codeunit "DOPSWHS LP Management";
+        LPStock: Codeunit "DOPSWHS LP Prod Consumption";
+        ExcessBaseQty: Decimal;
+        UseLot: Boolean;
+        UseSerial: Boolean;
+    begin
+        if NetBaseQty <= 0.00001 then
+            exit;
+        UseLot := RegisteredLine."Lot No." <> '';
+        UseSerial := RegisteredLine."Serial No." <> '';
+        ExcessBaseQty := LPStock.BinClaims(
+            RegisteredLine."Location Code", RegisteredLine."Bin Code",
+            RegisteredLine."Item No.", RegisteredLine."Variant Code",
+            RegisteredLine."Lot No.", RegisteredLine."Serial No.", UseLot, UseSerial) -
+            LPStock.BinBalance(
+                RegisteredLine."Location Code", RegisteredLine."Bin Code",
+                RegisteredLine."Item No.", RegisteredLine."Variant Code",
+                RegisteredLine."Lot No.", RegisteredLine."Serial No.", UseLot, UseSerial);
+        if ExcessBaseQty <= 0.00001 then
+            exit;
+        // Loose and LP stock mixed: the pallet cannot be proven, leave it to
+        // the LP stock reconciliation instead of failing the pick.
+        if ExcessBaseQty + 0.00001 < NetBaseQty then
+            exit;
+        // Only one LP may own this item/tracking in the source bin. Where
+        // several LPs remain, the physical pallet cannot be inferred.
+        RegisteredLine."LP No." := FindOnlyProductionSourceLp(RegisteredLine);
+        if RegisteredLine."LP No." = '' then
+            exit;
+        if not LP.Get(RegisteredLine."LP No.") then
+            exit;
+        if not CanAutoDebitProductionLp(LP, RegisteredLine, NetBaseQty, false) then begin
+            ReleaseStalePickReservation(LP, RegisteredLine."Whse. Activity No.");
+            exit;
+        end;
+        // Keep the registered BC document immutable. The PP movement ledger
+        // stores the LP and registered line used for this debit.
+        LPMgt.DebitProductionPickLp(RegisteredLine, NetBaseQty);
+    end;
+
+    /// <summary>
+    /// What the LPs of the Take bin claim above the bin balance, less the
+    /// registered shipment picks from this bin that are not shipped yet: their
+    /// LP is reduced at shipment posting and must not be taken again here.
+    /// </summary>
+    local procedure BinExcess(RegisteredLine: Record "Registered Whse. Activity Line") Excess: Decimal
+    var
+        LPStock: Codeunit "DOPSWHS LP Prod Consumption";
+        UseLot: Boolean;
+        UseSerial: Boolean;
+    begin
+        UseLot := RegisteredLine."Lot No." <> '';
+        UseSerial := RegisteredLine."Serial No." <> '';
+        Excess :=
+            LPStock.BinClaims(
+                RegisteredLine."Location Code", RegisteredLine."Bin Code",
+                RegisteredLine."Item No.", RegisteredLine."Variant Code",
+                RegisteredLine."Lot No.", RegisteredLine."Serial No.", UseLot, UseSerial) -
+            LPStock.BinBalance(
+                RegisteredLine."Location Code", RegisteredLine."Bin Code",
+                RegisteredLine."Item No.", RegisteredLine."Variant Code",
+                RegisteredLine."Lot No.", RegisteredLine."Serial No.", UseLot, UseSerial);
+        // The shipment check reads other documents: only when it can matter.
+        if Excess > 0.00001 then
+            Excess -= UnshippedPickTakes(RegisteredLine);
+    end;
+
+    /// <summary>
+    /// Registered shipment Takes from this bin whose shipment line is picked
+    /// but not shipped yet. Driven by the open shipment lines of the item
+    /// (index Item No., Location Code, Variant Code) and each line's own
+    /// registered Takes (index Whse. Document Type, No., Line No.), never by
+    /// the whole registered pick history.
+    /// </summary>
+    local procedure UnshippedPickTakes(RegisteredLine: Record "Registered Whse. Activity Line") Total: Decimal
+    var
+        ShipmentLine: Record "Warehouse Shipment Line";
+        ShipmentTake: Record "Registered Whse. Activity Line";
+        Open: Decimal;
+        Taken: Decimal;
+    begin
+        ShipmentLine.SetCurrentKey("Item No.", "Location Code", "Variant Code", "Due Date");
+        ShipmentLine.SetRange("Item No.", RegisteredLine."Item No.");
+        ShipmentLine.SetRange("Location Code", RegisteredLine."Location Code");
+        ShipmentLine.SetRange("Variant Code", RegisteredLine."Variant Code");
+        ShipmentLine.SetFilter("Qty. Picked (Base)", '>0');
+        if ShipmentLine.FindSet() then
+            repeat
+                Open := ShipmentLine."Qty. Picked (Base)" - ShipmentLine."Qty. Shipped (Base)";
+                if Open > 0 then begin
+                    ShipmentTake.Reset();
+                    ShipmentTake.SetCurrentKey("Whse. Document Type", "Whse. Document No.", "Whse. Document Line No.");
+                    ShipmentTake.SetRange("Whse. Document Type", ShipmentTake."Whse. Document Type"::Shipment);
+                    ShipmentTake.SetRange("Whse. Document No.", ShipmentLine."No.");
+                    ShipmentTake.SetRange("Whse. Document Line No.", ShipmentLine."Line No.");
+                    ShipmentTake.SetRange("Activity Type", ShipmentTake."Activity Type"::Pick);
+                    ShipmentTake.SetRange("Action Type", ShipmentTake."Action Type"::Take);
+                    ShipmentTake.SetRange("Location Code", RegisteredLine."Location Code");
+                    ShipmentTake.SetRange("Bin Code", RegisteredLine."Bin Code");
+                    if RegisteredLine."Lot No." <> '' then
+                        ShipmentTake.SetRange("Lot No.", RegisteredLine."Lot No.");
+                    if RegisteredLine."Serial No." <> '' then
+                        ShipmentTake.SetRange("Serial No.", RegisteredLine."Serial No.");
+                    Taken := 0;
+                    if ShipmentTake.FindSet() then
+                        repeat
+                            Taken += ShipmentTake."Qty. (Base)";
+                        until ShipmentTake.Next() = 0;
+                    if Taken > Open then
+                        Taken := Open;
+                    if Taken > 0 then
+                        Total += Taken;
+                end;
+            until ShipmentLine.Next() = 0;
+    end;
+
+    /// <summary>
+    /// LPs an outstanding warehouse activity line (as LP or target LP) or a
+    /// warehouse shipment line of the location refers to. Value true: claimed
+    /// by another document; false: only by an outstanding line of this pick.
+    /// Read uncommitted, once per registration: it never waits on other
+    /// registrations, and a dirty row can only hold more pallets back.
+    /// </summary>
+    local procedure LoadBoundLps(LocationCode: Code[10]; PickNo: Code[20]; var Bound: Dictionary of [Code[20], Boolean]; var Loaded: Boolean)
+    var
+        ActivityLine: Record "Warehouse Activity Line";
+        ShipmentLine: Record "Warehouse Shipment Line";
+    begin
+        if Loaded then
+            exit;
+        Loaded := true;
+        ActivityLine.ReadIsolation := IsolationLevel::ReadUncommitted;
+        ActivityLine.SetCurrentKey("Location Code", "Activity Type");
+        ActivityLine.SetRange("Location Code", LocationCode);
+        ActivityLine.SetFilter("Qty. Outstanding (Base)", '>0');
+        ActivityLine.SetFilter("LP No.", '<>%1', '');
+        ActivityLine.SetLoadFields("Activity Type", "No.", "LP No.");
+        if ActivityLine.FindSet() then
+            repeat
+                MarkBound(Bound, ActivityLine."LP No.", (ActivityLine."Activity Type" <> ActivityLine."Activity Type"::Pick) or (ActivityLine."No." <> PickNo));
+            until ActivityLine.Next() = 0;
+        ActivityLine.SetRange("LP No.");
+        ActivityLine.SetFilter("Target LP No.", '<>%1', '');
+        ActivityLine.SetLoadFields("Activity Type", "No.", "Target LP No.");
+        if ActivityLine.FindSet() then
+            repeat
+                MarkBound(Bound, ActivityLine."Target LP No.", (ActivityLine."Activity Type" <> ActivityLine."Activity Type"::Pick) or (ActivityLine."No." <> PickNo));
+            until ActivityLine.Next() = 0;
+        ShipmentLine.ReadIsolation := IsolationLevel::ReadUncommitted;
+        ShipmentLine.SetRange("Location Code", LocationCode);
+        ShipmentLine.SetFilter("LP No.", '<>%1', '');
+        ShipmentLine.SetLoadFields("LP No.");
+        if ShipmentLine.FindSet() then
+            repeat
+                MarkBound(Bound, ShipmentLine."LP No.", true);
+            until ShipmentLine.Next() = 0;
+    end;
+
+    local procedure MarkBound(var Bound: Dictionary of [Code[20], Boolean]; LpNo: Code[20]; Elsewhere: Boolean)
+    var
+        Current: Boolean;
+    begin
+        if LpNo = '' then
+            exit;
+        if not Bound.Get(LpNo, Current) then
+            Bound.Add(LpNo, Elsewhere)
+        else
+            if Elsewhere and not Current then
+                Bound.Set(LpNo, true);
+    end;
+
+    /// <summary>
+    /// True when the terminal already moved LP content for this pick: it
+    /// staged a pallet for the order and pick (StageProductionPickLp writes
+    /// 'PROD:order/PICK:pick') or transferred a partial quantity into a new LP
+    /// (TransferPickedQuantity writes 'PICK:pick:line'). A second debit here
+    /// would count the same stock twice.
+    /// </summary>
+    local procedure StagedByTerminal(ProdOrderNo: Code[20]; PickNo: Code[20]): Boolean
+    var
+        StageLedger: Record "DOPSWHS LP Movement Ledger";
+        RelatedDocument: Code[40];
+    begin
+        if PickNo = '' then
+            exit(false);
+        StageLedger.SetCurrentKey("Related Document", Action);
+        if ProdOrderNo <> '' then begin
+            RelatedDocument := CopyStr('PROD:' + ProdOrderNo + '/PICK:' + PickNo, 1, MaxStrLen(RelatedDocument));
+            StageLedger.SetRange("Related Document", RelatedDocument);
+            if not StageLedger.IsEmpty() then
+                exit(true);
+        end;
+        StageLedger.SetFilter("Related Document", 'PICK:%1:*', PickNo);
+        exit(not StageLedger.IsEmpty());
+    end;
+
+    /// <summary>
+    /// BC leaves "Whse. Activity No." empty on registered lines; the
+    /// reservation checks need the pick number. In memory only.
+    /// </summary>
+    local procedure UsePickNo(var RegisteredLine: Record "Registered Whse. Activity Line"; PickNo: Code[20])
+    begin
+        if RegisteredLine."Whse. Activity No." = '' then
+            RegisteredLine."Whse. Activity No." := PickNo;
+    end;
+
+    local procedure IsReservedToTake(LP: Record "DOPSWHS LP Header"; RegisteredLine: Record "Registered Whse. Activity Line"): Boolean
+    begin
+        exit(
+            ((LP."Assigned Document Type" = LP."Assigned Document Type"::WhsePick) and (LP."Assigned Document No." = RegisteredLine."Whse. Activity No.")) or
+            ((LP."Assigned Document Type" = LP."Assigned Document Type"::ProdConsumption) and (LP."Assigned Document No." = RegisteredLine."Source No.")));
+    end;
+
+    /// <summary>Smaller remainders (rounding) are not worth a ledger entry.</summary>
+    local procedure MinDebitBaseQty(): Decimal
+    begin
+        exit(0.001);
+    end;
+
+    local procedure LpHoldsTake(LpNo: Code[20]; RegisteredLine: Record "Registered Whse. Activity Line"): Boolean
+    var
+        LPLine: Record "DOPSWHS LP Line";
+    begin
+        FilterLpTakeLines(LPLine, LpNo, RegisteredLine);
+        exit(not LPLine.IsEmpty());
+    end;
+
+    local procedure LpTakeContent(LpNo: Code[20]; RegisteredLine: Record "Registered Whse. Activity Line") Total: Decimal
+    var
+        LPLine: Record "DOPSWHS LP Line";
+        LineBase: Decimal;
+    begin
+        FilterLpTakeLines(LPLine, LpNo, RegisteredLine);
+        if LPLine.FindSet() then
+            repeat
+                if TryLineBaseQuantity(LPLine, LineBase) then
+                    Total += LineBase;
+            until LPLine.Next() = 0;
+    end;
+
+    local procedure FilterLpTakeLines(var LPLine: Record "DOPSWHS LP Line"; LpNo: Code[20]; RegisteredLine: Record "Registered Whse. Activity Line")
+    begin
+        LPLine.SetRange("LP No.", LpNo);
+        LPLine.SetRange("Item No.", RegisteredLine."Item No.");
+        LPLine.SetRange("Variant Code", RegisteredLine."Variant Code");
+        LPLine.SetFilter(Quantity, '>0');
+        if RegisteredLine."Lot No." <> '' then
+            LPLine.SetRange("Lot No.", RegisteredLine."Lot No.");
+        if RegisteredLine."Serial No." <> '' then
+            LPLine.SetRange("Serial No.", RegisteredLine."Serial No.");
+    end;
+
+    /// <summary>
+    /// The LP may be debited only when the pick debit's own checks will pass;
+    /// otherwise the pick is left untouched (never blocked). Open pallets are
+    /// accepted only where the caller allows them (the sync bin).
+    /// </summary>
+    local procedure CanAutoDebitProductionLp(LP: Record "DOPSWHS LP Header"; RegisteredLine: Record "Registered Whse. Activity Line"; BaseQty: Decimal; AllowOpen: Boolean): Boolean
+    var
+        LPLine: Record "DOPSWHS LP Line";
+        Verification: Codeunit "DOPSWHS LP Verification";
+        LotNo: Code[50];
+        SerialNo: Code[50];
+        Available: Decimal;
+        LineBase: Decimal;
+        FirstLine: Boolean;
+    begin
+        if not ((LP.Status in [LP.Status::Built, LP.Status::Assigned]) or (AllowOpen and (LP.Status = LP.Status::Open))) then
+            exit(false);
+        if (LP."Location Code" <> RegisteredLine."Location Code") or (LP."Bin Code" <> RegisteredLine."Bin Code") then
+            exit(false);
+        if LP.Status = LP.Status::Assigned then
+            if not (((LP."Assigned Document Type" = LP."Assigned Document Type"::WhsePick) and
+                     (LP."Assigned Document No." = RegisteredLine."Whse. Activity No.")) or
+                    ((LP."Assigned Document Type" = LP."Assigned Document Type"::ProdConsumption) and
+                     (LP."Assigned Document No." = RegisteredLine."Source No.")))
+            then
+                exit(false);
+        LPLine.SetRange("LP No.", LP."No.");
+        LPLine.SetRange("Item No.", RegisteredLine."Item No.");
+        LPLine.SetRange("Variant Code", RegisteredLine."Variant Code");
+        LPLine.SetFilter(Quantity, '>0');
+        if RegisteredLine."Lot No." <> '' then
+            LPLine.SetRange("Lot No.", RegisteredLine."Lot No.");
+        if RegisteredLine."Serial No." <> '' then
+            LPLine.SetRange("Serial No.", RegisteredLine."Serial No.");
+        if not LPLine.FindSet() then
+            exit(false);
+        repeat
+            if not FirstLine then begin
+                LotNo := LPLine."Lot No.";
+                SerialNo := LPLine."Serial No.";
+                FirstLine := true;
+            end else
+                if (LotNo <> LPLine."Lot No.") or (SerialNo <> LPLine."Serial No.") then
+                    exit(false);
+            if not TryLineBaseQuantity(LPLine, LineBase) then
+                exit(false);
+            Available += LineBase;
+        until LPLine.Next() = 0;
+        if Available + Verification.QtyTolerance() < BaseQty then
+            exit(false);
+        if (SerialNo <> '') and (Abs(BaseQty - 1) > Verification.QtyTolerance()) then
+            exit(false);
+        exit(true);
+    end;
+
+    /// <summary>
+    /// An LP reserved to this pick (Assigned / Whse. Pick) whose debit was
+    /// skipped must not stay reserved to a pick BC is about to delete: release
+    /// it once no open line of the pick refers to it any more.
+    /// </summary>
+    local procedure ReleaseStalePickReservation(var LP: Record "DOPSWHS LP Header"; PickNo: Code[20])
+    var
+        OpenLine: Record "Warehouse Activity Line";
+        LPMgt: Codeunit "DOPSWHS LP Management";
+    begin
+        if (PickNo = '') or (LP.Status <> LP.Status::Assigned) then
+            exit;
+        if (LP."Assigned Document Type" <> LP."Assigned Document Type"::WhsePick) or (LP."Assigned Document No." <> PickNo) then
+            exit;
+        OpenLine.SetRange("Activity Type", OpenLine."Activity Type"::Pick);
+        OpenLine.SetRange("No.", PickNo);
+        OpenLine.SetRange("LP No.", LP."No.");
+        OpenLine.SetFilter("Qty. Outstanding (Base)", '>0');
+        if not OpenLine.IsEmpty() then
+            exit;
+        LPMgt.Release(LP);
+    end;
+
+    [TryFunction]
+    local procedure TryLineBaseQuantity(LPLine: Record "DOPSWHS LP Line"; var LineBase: Decimal)
+    var
+        Verification: Codeunit "DOPSWHS LP Verification";
+    begin
+        LineBase := Verification.LineBaseQuantity(LPLine);
+    end;
+
+    local procedure FindOnlyProductionSourceLp(RegisteredLine: Record "Registered Whse. Activity Line"): Code[20]
+    var
+        LP: Record "DOPSWHS LP Header";
+        LPLine: Record "DOPSWHS LP Line";
+        CandidateLpNo: Code[20];
+    begin
+        LP.SetRange("Location Code", RegisteredLine."Location Code");
+        LP.SetRange("Bin Code", RegisteredLine."Bin Code");
+        LP.SetFilter(Status, '%1|%2|%3', LP.Status::Open, LP.Status::Built, LP.Status::Assigned);
+        LP.SetRange("Pending Receipt No.", '');
+        LPLine.SetRange("Item No.", RegisteredLine."Item No.");
+        LPLine.SetRange("Variant Code", RegisteredLine."Variant Code");
+        LPLine.SetFilter(Quantity, '>0');
+        if RegisteredLine."Lot No." <> '' then
+            LPLine.SetRange("Lot No.", RegisteredLine."Lot No.");
+        if RegisteredLine."Serial No." <> '' then
+            LPLine.SetRange("Serial No.", RegisteredLine."Serial No.");
+        if LP.FindSet() then
+            repeat
+                LPLine.SetRange("LP No.", LP."No.");
+                if not LPLine.IsEmpty() then begin
+                    if CandidateLpNo <> '' then
+                        exit(''); // several LPs: not provable, never block the pick
+                    CandidateLpNo := LP."No.";
+                end;
+            until LP.Next() = 0;
+        exit(CandidateLpNo);
+    end;
+
+    local procedure ProductionRegisteredStockKey(RegisteredLine: Record "Registered Whse. Activity Line") KeyText: Text
+    var
+        Parts: JsonArray;
+    begin
+        Parts.Add(RegisteredLine."Source No.");
+        Parts.Add(RegisteredLine."Source Line No.");
+        Parts.Add(RegisteredLine."Source Subline No.");
+        Parts.Add(RegisteredLine."Item No.");
+        Parts.Add(RegisteredLine."Variant Code");
+        Parts.Add(RegisteredLine."Location Code");
+        Parts.Add(RegisteredLine."Bin Code");
+        Parts.Add(RegisteredLine."Lot No.");
+        Parts.Add(RegisteredLine."Serial No.");
+        Parts.WriteTo(KeyText);
+    end;
+
+    // Canlı ortamda doğrudan BC silme senaryosu uçtan uca doğrulanana kadar bu abonelik devre dışı.
+    // [EventSubscriber(ObjectType::Table, Database::"Warehouse Activity Header", 'OnBeforeDeleteEvent', '', false, false)]
+    local procedure BeforeProductionPickDelete(var Rec: Record "Warehouse Activity Header"; RunTrigger: Boolean)
+    var
+        CurrentPick: Record "Warehouse Activity Header";
+        RegisteredPick: Record "Registered Whse. Activity Hdr.";
+        OutstandingLine: Record "Warehouse Activity Line";
+    begin
+        // Standard registration also calls Delete(true). Permit it only when
+        // this registering document exists and no outstanding lines remain.
+        // Manual deletion must receive the terminal cancellation safeguards.
+        if Rec.IsTemporary() or not RunTrigger or (Rec.Type <> Rec.Type::Pick) then
+            exit;
+        if Rec."Registering No." <> '' then
+            if RegisteredPick.Get(Rec.Type, Rec."Registering No.") then
+                if RegisteredPick."Whse. Activity No." = Rec."No." then begin
+                    OutstandingLine.SetRange("Activity Type", Rec.Type);
+                    OutstandingLine.SetRange("No.", Rec."No.");
+                    OutstandingLine.SetFilter("Qty. Outstanding", '<>0');
+                    if OutstandingLine.IsEmpty() then
+                        exit;
+                end;
+        CurrentPick.LockTable();
+        if not CurrentPick.Get(Rec.Type, Rec."No.") then
+            exit;
+        if not (CurrentPick."DOPSWHS Prod LP Staged" or IsProductionPick(CurrentPick)) then
+            exit;
+        if CurrentPick."DOPSWHS Prod LP Staged" then
+            Error('%1 çekmesi için üretim LP''si hazırlanmış. Stok hazırlık rafına taşındığından belge silinemez. Mevcut çekmeden üretime teslimi tamamlayın.', CurrentPick."No.");
+        CleanupUnusedMainShippingLp(CurrentPick);
+        ReleasePreparedProductionLps(CurrentPick."No.");
+    end;
+
     procedure AssignToMe(var Pick: Record "Warehouse Activity Header")
     var
         CurrentUserId: Code[50];
@@ -203,6 +894,252 @@ codeunit 72046 "DOPSWHS Pick Mgmt"
         until PickingHeader.Next() = 0;
     end;
 
+    /// Preparation posts a warehouse MOVEMENT only. Production picking is
+    /// registered later, from the preparation bin, on this same source document.
+    [CommitBehavior(CommitBehavior::Error)]
+    procedure PrepareProductionLPFor(var Pick: Record "Warehouse Activity Header"; OperatorId: Code[50]; TargetBinCode: Code[20]; PalletPlan: Text)
+    var
+        TakeLine: Record "Warehouse Activity Line";
+        PlaceLine: Record "Warehouse Activity Line";
+        Movement: Record "Warehouse Activity Header";
+        MovementLine: Record "Warehouse Activity Line";
+        LP: Record "DOPSWHS LP Header";
+        TargetBin: Record Bin;
+        BinType: Record "Bin Type";
+        Component: Record "Prod. Order Component";
+        ProdOrder: Record "Production Order";
+        LotInfo: Record "Lot No. Information";
+        SerialInfo: Record "Serial No. Information";
+        LPMgt: Codeunit "DOPSWHS LP Management";
+        RegisterMovement: Codeunit "Whse.-Activity-Register";
+        Plans: Dictionary of [Integer, Text];
+        NoWholePallets: Dictionary of [Code[20], Code[20]];
+        PlannedStock: Dictionary of [Text, Decimal];
+        PlanText: Text;
+        OrderNo: Code[20];
+        ProductionBin: Code[20];
+        NextLineNo: Integer;
+    begin
+        Pick.LockTable();
+        if not Pick.Get(Pick.Type::Pick, Pick."No.") then
+            Error(PickGoneErr, Pick."No.");
+        CheckOwnershipFor(Pick."No.", Pick."Assigned User ID", OperatorId);
+        if not IsProductionPick(Pick) then
+            Error('Bu işlem yalnız üretim ambar çekmesinde kullanılabilir.');
+        Pick.TestField("DOPSWHS Main LP No.");
+        if Pick."DOPSWHS Prod LP Staged" then begin
+            Pick.TestField("DOPSWHS Prod Stage Bin", TargetBinCode);
+            exit; // A lost response must never move the source quantity twice.
+        end;
+        if TargetBinCode = '' then
+            Error('Hazırlık gözünü okutun.');
+        TargetBin.Get(Pick."Location Code", TargetBinCode);
+        if TargetBin."Block Movement" in [TargetBin."Block Movement"::All, TargetBin."Block Movement"::Inbound, TargetBin."Block Movement"::Outbound] then
+            Error('Hazırlık gözünde giriş ve çıkış hareketleri açık olmalıdır.');
+        if TargetBin."Bin Type Code" <> '' then begin
+            BinType.Get(TargetBin."Bin Type Code");
+            BinType.TestField(Pick, true);
+        end;
+        LP.LockTable();
+        LP.Get(Pick."DOPSWHS Main LP No.");
+        ValidateLPForPick(LP, Pick, true);
+        if LPMgt.TotalBaseQuantity(LP."No.") <> 0 then
+            Error('Hazırlamadan önce hedef LP boş olmalıdır.');
+        ParseScannedPickPlans(PalletPlan, Plans);
+        TakeLine.LockTable();
+        TakeLine.SetRange("Activity Type", Pick.Type);
+        TakeLine.SetRange("No.", Pick."No.");
+        TakeLine.SetRange("Action Type", TakeLine."Action Type"::Take);
+        TakeLine.SetFilter("Qty. Outstanding (Base)", '>0');
+        if TakeLine.IsEmpty() or (Plans.Count() <> TakeLine.Count()) then
+            Error('Hazırlanacak çekmenin bütün açık satırlarını okutun.');
+        EnsureTakeAndPlaceQuantitiesBalanced(Pick);
+        TakeLine.FindSet(true);
+        repeat
+            TakeLine.TestField("Source Type", Database::"Prod. Order Component");
+            TakeLine.TestField("Source Subtype", 3);
+            TakeLine.TestField("Location Code", Pick."Location Code");
+            if LotInfo.Get(TakeLine."Item No.", TakeLine."Variant Code", TakeLine."Lot No.") then
+                LotInfo.TestField(Blocked, false);
+            if SerialInfo.Get(TakeLine."Item No.", TakeLine."Variant Code", TakeLine."Serial No.") then
+                SerialInfo.TestField(Blocked, false);
+            TakeLine.TestField("Qty. Handled", 0);
+            if TakeLine."Qty. to Handle (Base)" <> TakeLine."Qty. Outstanding (Base)" then
+                Error('Hazırlama için %1 satırının açık miktarının tamamını doğrulayın. Kaynak LP''nin yalnız gereken kısmı alınır.', TakeLine."Line No.");
+            ProdOrder.Get(ProdOrder.Status::Released, TakeLine."Source No.");
+            Component.Get(Component.Status::Released, TakeLine."Source No.", TakeLine."Source Line No.", TakeLine."Source Subline No.");
+            Component.TestField("Item No.", TakeLine."Item No.");
+            Component.TestField("Location Code", TakeLine."Location Code");
+            Component.TestField("Variant Code", TakeLine."Variant Code");
+            FindProductionPlaceLine(TakeLine, PlaceLine);
+            PlaceLine.TestField("Bin Code", Component."Bin Code");
+            PlaceLine.TestField("Location Code", Pick."Location Code");
+            PlaceLine.TestField("Lot No.", TakeLine."Lot No.");
+            PlaceLine.TestField("Serial No.", TakeLine."Serial No.");
+            if OrderNo = '' then begin
+                OrderNo := TakeLine."Source No.";
+                ProductionBin := PlaceLine."Bin Code";
+            end;
+            TakeLine.TestField("Source No.", OrderNo);
+            PlaceLine.TestField("Bin Code", ProductionBin);
+            if TargetBinCode = ProductionBin then
+                Error('Hazırlık gözü üretim teslim gözünden farklı olmalıdır. Önce hazırlayın, sonra Üretime Teslim Et ile kaydedin.');
+            if not Plans.Get(TakeLine."Line No.", PlanText) then
+                Error('%1 satırının palet doğrulaması eksik.', TakeLine."Line No.");
+            ValidateScannedPickPlan(TakeLine, PlanText);
+            CheckProductionPreparationStock(TakeLine, PlannedStock);
+        until TakeLine.Next() = 0;
+
+        Movement.Type := Movement.Type::Movement;
+        Movement."Location Code" := Pick."Location Code";
+        Movement."Posting Date" := WorkDate();
+        Movement."Assigned User ID" := OperatorId;
+        TakeLine.FindSet(true);
+        repeat
+            Plans.Get(TakeLine."Line No.", PlanText);
+            // Preserve source identity in the LP ledger, but route quantities to
+            // the scanned preparation bin instead of the production destination.
+            PlaceLine := TakeLine;
+            PlaceLine."Bin Code" := TargetBinCode;
+            TransferScannedPickLine(Pick, TakeLine, LP, PlaceLine, PlanText, NoWholePallets);
+            if TakeLine."Bin Code" <> TargetBinCode then begin
+                if Movement."No." = '' then
+                    Movement.Insert(true);
+                AddProductionPreparationMove(Movement, TakeLine, TakeLine."Bin Code", true, NextLineNo);
+                AddProductionPreparationMove(Movement, TakeLine, TargetBinCode, false, NextLineNo);
+            end;
+            // Release the original bin reservation atomically with the physical
+            // move. Keep all production source fields, lots and quantities.
+            TakeLine."Bin Code" := TargetBinCode;
+            TakeLine."Zone Code" := TargetBin."Zone Code";
+            TakeLine."Bin Ranking" := TargetBin."Bin Ranking";
+            TakeLine."LP No." := LP."No.";
+            TakeLine."Target LP No." := LP."No.";
+            TakeLine.Modify(true);
+        until TakeLine.Next() = 0;
+        MovementLine.SetRange("Activity Type", Movement.Type);
+        MovementLine.SetRange("No.", Movement."No.");
+        if MovementLine.FindFirst() then begin
+            RegisterMovement.SetSuppressCommit(true);
+            RegisterMovement.Run(MovementLine);
+        end;
+        LP.Get(LP."No.");
+        if LP.Status = LP.Status::Open then
+            LPMgt.Stop(LP, false);
+        LPMgt.Assign(LP, Enum::"DOPSWHS Assigned Doc Type"::WhsePick, Pick."No.");
+        Pick."DOPSWHS Prod LP Staged" := true;
+        Pick."DOPSWHS Prod Stage Bin" := TargetBinCode;
+        Pick.Modify(true);
+        Log('Pick.PrepareProductionLP', Pick."No.", OperatorId);
+    end;
+
+    local procedure CheckProductionPreparationStock(Line: Record "Warehouse Activity Line"; var PlannedStock: Dictionary of [Text, Decimal])
+    var
+        Entry: Record "Warehouse Entry";
+        Bin: Record Bin;
+        Parts: JsonArray;
+        KeyText: Text;
+        Planned: Decimal;
+    begin
+        // Same-bin preparation has no native warehouse movement to validate
+        // availability. Check actual stock before any LP metadata is changed,
+        // accumulating demand when several component lines share one stock pool.
+        Bin.Get(Line."Location Code", Line."Bin Code");
+        if Bin."Block Movement" in [Bin."Block Movement"::All, Bin."Block Movement"::Outbound] then
+            Error('%1 kaynak gözünden çıkış engellenmiş.', Bin.Code);
+        Parts.Add(Line."Location Code"); Parts.Add(Line."Bin Code");
+        Parts.Add(Line."Item No."); Parts.Add(Line."Variant Code");
+        Parts.Add(Line."Lot No."); Parts.Add(Line."Serial No."); Parts.Add(Line."Package No.");
+        Parts.WriteTo(KeyText);
+        if not PlannedStock.Get(KeyText, Planned) then
+            Planned := 0;
+        Planned += Line."Qty. to Handle (Base)";
+        PlannedStock.Set(KeyText, Planned);
+        Entry.LockTable();
+        Entry.SetRange("Location Code", Line."Location Code");
+        Entry.SetRange("Bin Code", Line."Bin Code");
+        Entry.SetRange("Item No.", Line."Item No.");
+        Entry.SetRange("Variant Code", Line."Variant Code");
+        Entry.SetRange("Lot No.", Line."Lot No.");
+        Entry.SetRange("Serial No.", Line."Serial No.");
+        Entry.SetRange("Package No.", Line."Package No.");
+        Entry.CalcSums("Qty. (Base)");
+        if Entry."Qty. (Base)" + 0.00001 < Planned then
+            Error('%1 ürününün %2 gözündeki gerçek stoku yetersiz. Lot: %3. Mevcut temel miktar: %4, hazırlanacak: %5. LP ve raf stoklarını kontrol edin.',
+                Line."Item No.", Line."Bin Code", Line."Lot No.", Entry."Qty. (Base)", Planned);
+    end;
+
+    local procedure AddProductionPreparationMove(Movement: Record "Warehouse Activity Header"; Source: Record "Warehouse Activity Line"; BinCode: Code[20]; IsTake: Boolean; var NextLineNo: Integer)
+    var
+        Line: Record "Warehouse Activity Line";
+        Bin: Record Bin;
+    begin
+        Bin.Get(Movement."Location Code", BinCode);
+        NextLineNo += 10000;
+        Line.Init();
+        Line."Activity Type" := Movement.Type;
+        Line."No." := Movement."No.";
+        Line."Line No." := NextLineNo;
+        if IsTake then
+            Line."Action Type" := Line."Action Type"::Take
+        else
+            Line."Action Type" := Line."Action Type"::Place;
+        Line."Location Code" := Movement."Location Code";
+        Line."Item No." := Source."Item No.";
+        Line.Description := Source.Description;
+        Line."Variant Code" := Source."Variant Code";
+        Line."Unit of Measure Code" := Source."Unit of Measure Code";
+        Line."Qty. per Unit of Measure" := Source."Qty. per Unit of Measure";
+        Line."Qty. Rounding Precision" := Source."Qty. Rounding Precision";
+        Line."Qty. Rounding Precision (Base)" := Source."Qty. Rounding Precision (Base)";
+        Line."Bin Code" := BinCode;
+        Line."Zone Code" := Bin."Zone Code";
+        Line."Bin Ranking" := Bin."Bin Ranking";
+        Line."Lot No." := Source."Lot No.";
+        Line."Serial No." := Source."Serial No.";
+        Line."Package No." := Source."Package No.";
+        Line."Expiration Date" := Source."Expiration Date";
+        Line.Quantity := Source."Qty. to Handle";
+        Line."Qty. (Base)" := Source."Qty. to Handle (Base)";
+        Line."Qty. Outstanding" := Line.Quantity;
+        Line."Qty. Outstanding (Base)" := Line."Qty. (Base)";
+        Line."Qty. to Handle" := Line.Quantity;
+        Line."Qty. to Handle (Base)" := Line."Qty. (Base)";
+        Line.Insert(true);
+    end;
+
+    procedure DeliverProductionLPFor(var Pick: Record "Warehouse Activity Header"; OperatorId: Code[50]; TargetBinCode: Code[20]; PalletPlan: Text)
+    var
+        PlaceLine: Record "Warehouse Activity Line";
+    begin
+        Pick.LockTable();
+        Pick.Get(Pick.Type::Pick, Pick."No.");
+        CheckOwnershipFor(Pick."No.", Pick."Assigned User ID", OperatorId);
+        Pick.TestField("DOPSWHS Prod LP Staged", true);
+        if TargetBinCode = '' then
+            Error('Üretim teslim gözünü okutun.');
+        PlaceLine.SetRange("Activity Type", Pick.Type);
+        PlaceLine.SetRange("No.", Pick."No.");
+        PlaceLine.SetRange("Action Type", PlaceLine."Action Type"::Place);
+        if not PlaceLine.FindSet() then
+            Error('Üretim teslim satırları bulunamadı.');
+        repeat
+            PlaceLine.TestField("Bin Code", TargetBinCode);
+        until PlaceLine.Next() = 0;
+        RegisterProductionPalletsFor(Pick, OperatorId, PalletPlan);
+    end;
+
+    procedure StartProductionLPFor(var Pick: Record "Warehouse Activity Header"; OperatorId: Code[50]; TemplateCode: Code[20]): Code[20]
+    begin
+        Pick.LockTable();
+        if not Pick.Get(Pick.Type::Pick, Pick."No.") then
+            Error(PickGoneErr, Pick."No.");
+        CheckOwnershipFor(Pick."No.", Pick."Assigned User ID", OperatorId);
+        if not IsProductionPick(Pick) then
+            Error('Bu işlem yalnız üretim ambar çekmesinde kullanılabilir.');
+        exit(StartShippingLP(Pick, TemplateCode));
+    end;
+
     procedure StartShippingLP(var Pick: Record "Warehouse Activity Header"; TemplateCode: Code[20]): Code[20]
     var
         LP: Record "DOPSWHS LP Header";
@@ -264,11 +1201,16 @@ codeunit 72046 "DOPSWHS Pick Mgmt"
 
     procedure RegisterShortPick(var PickLine: Record "Warehouse Activity Line"; ShortQty: Decimal; ReasonCode: Code[20])
     var
+        Header: Record "Warehouse Activity Header";
         Reason: Record "DOPSWHS Short Pick Reason";
+        ProductionPlace: Record "Warehouse Activity Line";
         PickableQty: Decimal;
     begin
         // Eksik toplama bildirimi de bir işlemdir: belge başkasındaysa/atanmamışsa reddet.
         CheckLineOwnership(PickLine, '');
+        Header.Get(PickLine."Activity Type", PickLine."No.");
+        if Header."DOPSWHS Prod LP Staged" then
+            Error('Hazırlanmış üretim LP''sinde eksik bildirilemez. Palet hazırlanmış miktarıyla teslim edilmelidir.');
         if ShortQty < 0 then
             Error('Short quantity cannot be negative.');
         if ReasonCode <> '' then
@@ -282,6 +1224,8 @@ codeunit 72046 "DOPSWHS Pick Mgmt"
             Error(
                 'Eksik miktar (%1) kalan miktardan (%2) fazla olamaz.',
                 ShortQty, PickLine."Qty. Outstanding");
+        if PickLine."Source Type" = Database::"Prod. Order Component" then
+            FindProductionPlaceLine(PickLine, ProductionPlace);
         PickableQty := PickLine."Qty. Outstanding" - ShortQty;
         // Eksik bildirimi = kalan miktar TOPLANMAYACAK demektir. Yalnız
         // "Qty. to Handle" düşürülürse BC kaydı reddediyor ("Complete all items
@@ -291,7 +1235,10 @@ codeunit 72046 "DOPSWHS Pick Mgmt"
         PickLine.Validate("Qty. to Handle", PickableQty);
         PickLine.Modify(true);
         // Take satırı değiştiyse eş Place satırı da aynı miktara çekilir.
-        SyncRelatedShortPlaceLine(PickLine);
+        if ProductionPlace."Line No." <> 0 then
+            SyncProductionPlaceLine(PickLine, ProductionPlace, true)
+        else
+            SyncRelatedShortPlaceLine(PickLine);
         // Eksik bildiren operatör = belgeyi üstlenen kullanıcı; uç nokta ayrı
         // kimlik taşımıyor, o yüzden atamadan okunur.
         Log('Pick.Short.' + ReasonCode, PickLine."No.", PickOperator(PickLine."No."));
@@ -327,7 +1274,9 @@ codeunit 72046 "DOPSWHS Pick Mgmt"
 
     local procedure ConfirmPickLineInternal(var PickLine: Record "Warehouse Activity Line"; QtyToHandle: Decimal; LotNo: Code[50]; SourceLpNo: Code[20]; RequestingUserId: Code[50])
     var
+        Header: Record "Warehouse Activity Header";
         MatchedLPLine: Record "DOPSWHS LP Line";
+        ProductionPlace: Record "Warehouse Activity Line";
         LPVerification: Codeunit "DOPSWHS LP Verification";
         EffectiveLpNo: Code[20];
         EffectiveLotNo: Code[50];
@@ -338,6 +1287,14 @@ codeunit 72046 "DOPSWHS Pick Mgmt"
         // Belge hâlâ bu operatörde mi? Satır bazında her onayda doğrulanır;
         // sorumlu toplamayı toplama sırasında devretmiş olabilir.
         CheckLineOwnership(PickLine, RequestingUserId);
+        Header.Get(PickLine."Activity Type", PickLine."No.");
+        if Header."DOPSWHS Prod LP Staged" then begin
+            if QtyToHandle <> PickLine."Qty. Outstanding" then
+                Error('Hazırlanmış üretim LP''sinin miktarı değiştirilemez. Hazırlanan miktarın tamamını doğrulayın.');
+            Header.TestField("DOPSWHS Main LP No.", SourceLpNo);
+            if (LotNo <> '') and (LotNo <> PickLine."Lot No.") then
+                Error('Hazırlanmış üretim LP''sinin lotu değiştirilemez.');
+        end;
 
         // El terminalindeki toplama fiziksel bir raf/bin doğrulamasıdır. Kaynak
         // rafı boş bir satırın miktarını onaylamak, terminalde gerçekte hangi
@@ -351,6 +1308,9 @@ codeunit 72046 "DOPSWHS Pick Mgmt"
         // değildir; onu okutma yerine saymak kontrolü tamamen boşa çıkarırdı.
         LPVerification.RequireScannedLp(PickLine, SourceLpNo, QtyToHandle);
 
+        // Resolve before quantity/tracking validation changes the identifying fields.
+        if PickLine."Source Type" = Database::"Prod. Order Component" then
+            FindProductionPlaceLine(PickLine, ProductionPlace);
         PickLine.Validate("Qty. to Handle", QtyToHandle);
 
         EffectiveLotNo := LotNo;
@@ -378,11 +1338,11 @@ codeunit 72046 "DOPSWHS Pick Mgmt"
             LPVerification.VerifyScannedLp(
                 SourceLpNo, PickLine, EffectiveLotNo, PickLine."Serial No.", true, MatchedLPLine);
 
-        EffectiveLpNo := SourceLpNo;
         // Pick oluşturulurken satıra yazılan LP bir kaynak önerisidir. Mobil
         // operatör farklı lot seçtiğinde bu öneriyi okutulmuş LP gibi zorlamak
-        // yanlış lotlu palete bağlar. Okutma yoksa seçilen lota uygun kaynağı
-        // yeniden çöz.
+        // yanlış lotlu palete bağlar. Yalnız açıkça okutulan LP'yi zorunlu
+        // kaynak kabul et; okutma yoksa seçilen lota uygun kaynağı yeniden çöz.
+        EffectiveLpNo := SourceLpNo;
         PickLine."LP No." := ResolvePickSourceLp(PickLine, EffectiveLpNo);
         PickLine.Modify(true);
 
@@ -391,7 +1351,10 @@ codeunit 72046 "DOPSWHS Pick Mgmt"
         // toplamada Take=250, Place=300 kalırsa kayıt stoktan 250 düşüp sevkiyat
         // gözüne 300 koyarak 50 birim hayali stok üretir. Aynı kaynak+lot
         // çiftindeki Place satırını kesin olarak aynı miktara getir.
-        SyncRelatedPlaceLine(PickLine);
+        if ProductionPlace."Line No." <> 0 then
+            SyncProductionPlaceLine(PickLine, ProductionPlace, false)
+        else
+            SyncRelatedPlaceLine(PickLine);
 
         // Sevkiyat özet alanını açık Take satırlarının tamamına bakarak yalnız
         // tek lot varsa doldur.
@@ -558,6 +1521,7 @@ codeunit 72046 "DOPSWHS Pick Mgmt"
     procedure ListPickLineSources(PickLine: Record "Warehouse Activity Line"): Text
     var
         LPHeader: Record "DOPSWHS LP Header";
+        PickHeader: Record "Warehouse Activity Header";
         LPLine: Record "DOPSWHS LP Line";
         LPVerification: Codeunit "DOPSWHS LP Verification";
         Result: JsonObject;
@@ -567,6 +1531,7 @@ codeunit 72046 "DOPSWHS Pick Mgmt"
         LotKey: Text;
         ResultText: Text;
         AvailableQty: Decimal;
+        PreparedLpNo: Code[20];
     begin
         Result.Add('activityNo', PickLine."No.");
         Result.Add('lineNo', PickLine."Line No.");
@@ -580,11 +1545,28 @@ codeunit 72046 "DOPSWHS Pick Mgmt"
         Result.Add('outstandingBaseQty', PickLine."Qty. Outstanding (Base)");
         Result.Add('outstandingQty', PickLine."Qty. Outstanding");
         Result.Add('scanRequired', LPVerification.ScanRequired());
+        // Only an explicitly reserved production LP determines an unspecified
+        // lot. A generic suggested source LP must not choose among multiple lots.
+        if (PickLine."Source Type" = Database::"Prod. Order Component") and
+           (PickLine."Source Subtype" = 3) and (PickLine."LP No." <> '')
+        then
+            if LPHeader.Get(PickLine."LP No.") then
+                if (LPHeader.Status = LPHeader.Status::Assigned) and
+                   (((LPHeader."Assigned Document Type" = LPHeader."Assigned Document Type"::WhsePick) and
+                     (LPHeader."Assigned Document No." = PickLine."No.")) or
+                    ((LPHeader."Assigned Document Type" = LPHeader."Assigned Document Type"::ProdConsumption) and
+                     (LPHeader."Assigned Document No." = PickLine."Source No.")))
+                then
+                    PreparedLpNo := LPHeader."No.";
+        Result.Add('preparedLpNo', PreparedLpNo);
 
         if (PickLine."Item No." <> '') and (PickLine."Location Code" <> '') and (PickLine."Bin Code" <> '') then begin
             // Adaylar zaten TEK rafta; birincil anahtar (LP No.) sırası hem
             // deterministik hem de ResolvePickSourceLp'nin tarama sırasıyla
             // aynıdır. Tabloda lokasyon+raf anahtarı yoktur.
+            if PickHeader.Get(PickLine."Activity Type", PickLine."No.") then
+                if PickHeader."DOPSWHS Prod LP Staged" then
+                    LPHeader.SetRange("No.", PickHeader."DOPSWHS Main LP No.");
             LPHeader.SetRange("Location Code", PickLine."Location Code");
             LPHeader.SetRange("Bin Code", PickLine."Bin Code");
             LPHeader.SetFilter(
@@ -636,9 +1618,13 @@ codeunit 72046 "DOPSWHS Pick Mgmt"
     end;
 
     local procedure PickSourceLpAssignmentMatches(LPHeader: Record "DOPSWHS LP Header"; PickLine: Record "Warehouse Activity Line"): Boolean
+    var
+        LPVerification: Codeunit "DOPSWHS LP Verification";
     begin
         if LPHeader.Status <> LPHeader.Status::Assigned then
             exit(true);
+        if LPHeader."Assigned Document Type" = LPHeader."Assigned Document Type"::ProdConsumption then
+            exit(LPVerification.AssignmentMatchesLine(LPHeader, PickLine));
         exit(
             ((LPHeader."Assigned Document Type" = LPHeader."Assigned Document Type"::WhsePick) and
              (LPHeader."Assigned Document No." = PickLine."No.")) or
@@ -720,33 +1706,21 @@ codeunit 72046 "DOPSWHS Pick Mgmt"
         end;
     end;
 
-    /// <summary>Ambar lot takibini ve satıra atanmış lotu toplamada korur.</summary>
+    /// <summary>Lot takipli toplama satırlarında mobil lot seçimini zorunlu kılar.</summary>
     procedure PickLineRequiresLot(PickLine: Record "Warehouse Activity Line"): Boolean
     var
         Item: Record Item;
         ItemTrackingCode: Record "Item Tracking Code";
-        WhseItemTrackingSetup: Record "Item Tracking Setup";
-        ItemTrackingMgt: Codeunit "Item Tracking Management";
     begin
-        if PickLine."Lot No." <> '' then
-            exit(true);
         if not Item.Get(PickLine."Item No.") then
             exit(false);
         if Item."Item Tracking Code" = '' then
             exit(false);
         if not ItemTrackingCode.Get(Item."Item Tracking Code") then
             exit(false);
-        // Hiç ambar takibi yoksa standart Lot No. doğrulaması lotu reddeder;
-        // yalnız stok/satış takibi bu satırda lot girişini zorunlu kılamaz.
-        if not ItemTrackingMgt.GetWhseItemTrkgSetup(PickLine."Item No.", WhseItemTrackingSetup) then
-            exit(false);
-
-        // Seri/paket ambar takibi açıkken BC, satış lotunu tamamlayıcı takip
-        // bilgisi olarak isteyebilir (TestNonSpecificItemTracking). Bu geçerli
-        // kombinasyonlarda mevcut stok/satış lot zorunluluğunu koru.
         exit(
-            WhseItemTrackingSetup."Lot No. Required" or
             ItemTrackingCode."Lot Specific Tracking" or
+            ItemTrackingCode."Lot Warehouse Tracking" or
             ItemTrackingCode."Lot Sales Outbound Tracking");
     end;
 
@@ -789,6 +1763,13 @@ codeunit 72046 "DOPSWHS Pick Mgmt"
         RegisterPickInternal(Pick, RequestingUserId, PalletPlan);
     end;
 
+    procedure RegisterProductionPalletsFor(var Pick: Record "Warehouse Activity Header"; RequestingUserId: Code[50]; PalletPlan: Text)
+    begin
+        if not IsProductionPick(Pick) then
+            Error('%1 belgesi üretim ambar çekmesi değildir.', Pick."No.");
+        RegisterScannedPickFor(Pick, RequestingUserId, PalletPlan);
+    end;
+
     /// <summary>
     /// Terminalden güvenli toplama iptali. Genel API DELETE bilerek kapalıdır;
     /// yalnız belge sahibi, henüz kaydedilmemiş ve fiziksel hareket üretmemiş
@@ -819,6 +1800,8 @@ codeunit 72046 "DOPSWHS Pick Mgmt"
 
         PickNo := LockedPick."No.";
         CleanupUnusedMainShippingLp(LockedPick);
+        if IsProductionPick(LockedPick) then
+            ReleasePreparedProductionLps(LockedPick."No.");
         LockedPick.Delete(true);
 
         // Özel toplama grubu bu standart pick'e bağlıysa tekrar oluşturulabilsin.
@@ -862,7 +1845,7 @@ codeunit 72046 "DOPSWHS Pick Mgmt"
         Log('Pick.Register', Pick."No.", EffectiveOperator(Pick."No.", RequestingUserId));
         EnsurePickHasBins(Pick);
         EnsureTakeAndPlaceQuantitiesBalanced(Pick);
-        if Pick."DOPSWHS Pick Mode" = Pick."DOPSWHS Pick Mode"::Multi then
+        if (Pick."DOPSWHS Pick Mode" = Pick."DOPSWHS Pick Mode"::Multi) and not IsProductionPick(Pick) then
             EnsureAllMultiPickLinesScanned(Pick);
 
         // Microsoft Quality Management block guard — QM (BC 28) devre dışı.
@@ -885,9 +1868,13 @@ codeunit 72046 "DOPSWHS Pick Mgmt"
         if (PalletPlan <> '') and PickLine.IsEmpty() then
             Error('Toplama satırları artık bulunamıyor. Belgeyi yenileyin.');
         if PickLine.FindFirst() then begin
-            MovePickedContentsToMainLp(Pick, PalletPlan);
-            CompleteMainShippingLp(Pick);
-            PreparePackingOrders(Pick);
+            if IsProductionPick(Pick) then
+                PrepareProductionPallets(Pick, PalletPlan)
+            else begin
+                MovePickedContentsToMainLp(Pick, PalletPlan);
+                CompleteMainShippingLp(Pick);
+                PreparePackingOrders(Pick);
+            end;
             WhseActivityRegister.SetSuppressCommit(true);
             WhseActivityRegister.Run(PickLine);
             PickingHeader.SetRange("Warehouse Pick No.", PickNo);
@@ -900,6 +1887,233 @@ codeunit 72046 "DOPSWHS Pick Mgmt"
         end;
     end;
 
+    local procedure ReleasePreparedProductionLps(PickNo: Code[20])
+    var
+        LP: Record "DOPSWHS LP Header";
+        LPMgt: Codeunit "DOPSWHS LP Management";
+    begin
+        LP.LockTable();
+        LP.SetRange(Status, LP.Status::Assigned);
+        LP.SetRange("Assigned Document Type", LP."Assigned Document Type"::WhsePick);
+        LP.SetRange("Assigned Document No.", PickNo);
+        if LP.FindSet(true) then
+            repeat
+                // Only the open pick's reservation is released. Pallets already
+                // delivered to production remain assigned to that order.
+                LPMgt.Release(LP);
+            until LP.Next() = 0;
+    end;
+
+    local procedure IsProductionPick(Pick: Record "Warehouse Activity Header"): Boolean
+    var
+        Line: Record "Warehouse Activity Line";
+    begin
+        Line.SetRange("Activity Type", Pick.Type);
+        Line.SetRange("No.", Pick."No.");
+        Line.SetRange("Source Type", Database::"Prod. Order Component");
+        exit(not Line.IsEmpty());
+    end;
+
+    /// <summary>
+    /// Validate the complete prepared pallets under locks before changing any LP.
+    /// The caller registers the BC Take/Place entries in the SAME transaction.
+    /// No consumption, repacking, source-ledger rewrite or location transfer occurs.
+    /// </summary>
+    procedure PrepareProductionPallets(Pick: Record "Warehouse Activity Header"; PalletPlan: Text)
+    var
+        TakeLine: Record "Warehouse Activity Line";
+        PlaceLine: Record "Warehouse Activity Line";
+        Component: Record "Prod. Order Component";
+        ProductionOrder: Record "Production Order";
+        LP: Record "DOPSWHS LP Header";
+        ChildLP: Record "DOPSWHS LP Header";
+        LPLine: Record "DOPSWHS LP Line";
+        MatchedLine: Record "DOPSWHS LP Line";
+        Verification: Codeunit "DOPSWHS LP Verification";
+        LPMgt: Codeunit "DOPSWHS LP Management";
+        Plans: Dictionary of [Integer, Text];
+        PlannedByContent: Dictionary of [Text, Decimal];
+        ActualByContent: Dictionary of [Text, Decimal];
+        OrderByLp: Dictionary of [Code[20], Code[20]];
+        TakeBinByLp: Dictionary of [Code[20], Code[20]];
+        PlaceBinByLp: Dictionary of [Code[20], Code[20]];
+        LpByPlaceLine: Dictionary of [Integer, Code[20]];
+        Plan: JsonObject;
+        Step: JsonObject;
+        Steps: JsonArray;
+        Token: JsonToken;
+        Value: JsonToken;
+        PlanText: Text;
+        ContentKey: Text;
+        LpNo: Code[20];
+        ExpectedCode: Code[20];
+        BaseQty: Decimal;
+        ExistingQty: Decimal;
+        ActualQty: Decimal;
+        PlaceLineNo: Integer;
+    begin
+        if (Pick."DOPSWHS Main LP No." <> '') and not Pick."DOPSWHS Prod LP Staged" then
+            Error('Önce Üretim LP Hazırla ile kaynak paletlerden hazırlık gözüne toplayın.');
+        if PalletPlan = '' then
+            Error('Üretim ambar çekmesinde taşınacak LP''lerin tamamını okutun.');
+
+        // A concurrent LP edit/another pick cannot change quantities after validation.
+        ProductionOrder.LockTable();
+        Component.LockTable();
+        LP.LockTable();
+        LPLine.LockTable();
+        TakeLine.LockTable();
+        ParseScannedPickPlans(PalletPlan, Plans);
+        TakeLine.SetRange("Activity Type", TakeLine."Activity Type"::Pick);
+        TakeLine.SetRange("No.", Pick."No.");
+        TakeLine.SetRange("Action Type", TakeLine."Action Type"::Take);
+        TakeLine.SetFilter("Qty. to Handle (Base)", '>0');
+        if (Plans.Count() <> TakeLine.Count()) or TakeLine.IsEmpty() then
+            Error('Üretim çekme satırları değişmiş. İşlenecek satırların LP''lerini yeniden okutun.');
+        TakeLine.FindSet();
+        repeat
+            TakeLine.TestField("Source Type", Database::"Prod. Order Component");
+            TakeLine.TestField("Source Subtype", 3); // Released production order.
+            ProductionOrder.Get(ProductionOrder.Status::Released, TakeLine."Source No.");
+            Component.Get(Component.Status::Released, TakeLine."Source No.", TakeLine."Source Line No.", TakeLine."Source Subline No.");
+            Component.TestField("Item No.", TakeLine."Item No.");
+            Component.TestField("Variant Code", TakeLine."Variant Code");
+            Component.TestField("Location Code", TakeLine."Location Code");
+            if not Plans.Get(TakeLine."Line No.", PlanText) then
+                Error('%1 satırının LP doğrulaması eksik.', TakeLine."Line No.");
+            ValidateScannedPickPlan(TakeLine, PlanText);
+            FindRelatedPlaceLineForShippingLp(TakeLine, PlaceLine);
+            PlaceLine.TestField("Location Code", TakeLine."Location Code");
+            PlaceLine.TestField("Bin Code", Component."Bin Code");
+            PlaceLine.TestField("Bin Code");
+            PlaceLine.TestField("Lot No.", TakeLine."Lot No.");
+            PlaceLine.TestField("Serial No.", TakeLine."Serial No.");
+
+            Plan.ReadFrom(PlanText);
+            Plan.Get('steps', Token);
+            Steps := Token.AsArray();
+            foreach Token in Steps do begin
+                Step := Token.AsObject();
+                Step.Get('lpNo', Value);
+                LpNo := Value.AsValue().AsText();
+                Step.Get('baseQuantity', Value);
+                BaseQty := Value.AsValue().AsDecimal();
+                if Pick."DOPSWHS Prod LP Staged" then
+                    Pick.TestField("DOPSWHS Main LP No.", LpNo);
+                LP.Get(LpNo);
+                LP.TestField("Location Code", TakeLine."Location Code");
+                LP.TestField("Bin Code", TakeLine."Bin Code");
+                LP.TestField("Parent LP No.", '');
+                LP.TestField("Pending Receipt No.", '');
+                if not (LP.Status in [LP.Status::Built, LP.Status::Assigned]) then
+                    Error('%1 LP''sini üretime çekmeden önce LP oluşturmayı tamamlayın.', LpNo);
+                if ((LP."Assigned Document Type" <> LP."Assigned Document Type"::None) or (LP."Assigned Document No." <> '')) and
+                   not (((LP."Assigned Document Type" = LP."Assigned Document Type"::WhsePick) and (LP."Assigned Document No." = Pick."No.")) or
+                        ((LP."Assigned Document Type" = LP."Assigned Document Type"::ProdConsumption) and (LP."Assigned Document No." = TakeLine."Source No.")))
+                then
+                    Error('%1 LP''si başka bir belgeye ayrılmıştır.', LpNo);
+                ChildLP.SetRange("Parent LP No.", LpNo);
+                if not ChildLP.IsEmpty() then
+                    Error('%1 LP''sinin alt LP''leri var. Üretime gönderilecek LP''leri ayrı ayrı okutun.', LpNo);
+                Verification.VerifyScannedLp(LpNo, TakeLine, TakeLine."Lot No.", TakeLine."Serial No.", true, MatchedLine);
+                if OrderByLp.Get(LpNo, ExpectedCode) then begin
+                    if ExpectedCode <> TakeLine."Source No." then
+                        Error('%1 LP''si aynı işlemde iki üretim emrine taşınamaz.', LpNo);
+                    TakeBinByLp.Get(LpNo, ExpectedCode);
+                    if ExpectedCode <> TakeLine."Bin Code" then
+                        Error('%1 LP''si için kaynak raflar uyuşmuyor.', LpNo);
+                    PlaceBinByLp.Get(LpNo, ExpectedCode);
+                    if ExpectedCode <> PlaceLine."Bin Code" then
+                        Error('%1 LP''si iki üretim rafına bölünemez. Üretime gidecek LP''yi depoda hazırlayın.', LpNo);
+                end else begin
+                    OrderByLp.Add(LpNo, TakeLine."Source No.");
+                    TakeBinByLp.Add(LpNo, TakeLine."Bin Code");
+                    PlaceBinByLp.Add(LpNo, PlaceLine."Bin Code");
+                end;
+                ContentKey := ProductionContentKey(LpNo, TakeLine."Item No.", TakeLine."Variant Code", TakeLine."Lot No.", TakeLine."Serial No.");
+                if PlannedByContent.Get(ContentKey, ExistingQty) then
+                    PlannedByContent.Set(ContentKey, ExistingQty + BaseQty)
+                else
+                    PlannedByContent.Add(ContentKey, BaseQty);
+            end;
+        until TakeLine.Next() = 0;
+
+        // Compare each item/variant/lot/serial, not just a mixed pallet total.
+        foreach LpNo in OrderByLp.Keys() do begin
+            LPLine.SetRange("LP No.", LpNo);
+            if not LPLine.FindSet() then
+                Error('%1 LP''sinin içeriği boş.', LpNo);
+            repeat
+                if (LPLine."Child LP No." <> '') or (LPLine.Quantity < 0) then
+                    Error('%1 LP''sinin iç içe veya negatif içeriği bu üretim çekmesinde kullanılamaz.', LpNo);
+                if LPLine.Quantity > 0 then begin
+                    LPLine.TestField("Item No.");
+                    ContentKey := ProductionContentKey(LpNo, LPLine."Item No.", LPLine."Variant Code", LPLine."Lot No.", LPLine."Serial No.");
+                    if ActualByContent.Get(ContentKey, ExistingQty) then
+                        ActualByContent.Set(ContentKey, ExistingQty + Verification.LineBaseQuantity(LPLine))
+                    else
+                        ActualByContent.Add(ContentKey, Verification.LineBaseQuantity(LPLine));
+                end;
+            until LPLine.Next() = 0;
+        end;
+        if PlannedByContent.Count() <> ActualByContent.Count() then
+            Error('LP içeriğinin tamamı üretim çekmesine dahil değil. Hazır LP''yi bölmeden taşıyacak miktarları okutun.');
+        foreach ContentKey in ActualByContent.Keys() do begin
+            ActualByContent.Get(ContentKey, ActualQty);
+            if not PlannedByContent.Get(ContentKey, BaseQty) then
+                Error('LP içeriği değişmiş veya üretim emriyle eşleşmiyor. LP''leri yeniden kontrol edin.');
+            if Abs(ActualQty - BaseQty) > Verification.QtyTolerance() then
+                Error('Üretim çekmesindeki miktar LP içeriğinin tamamını karşılamıyor. LP''yi bölmeden taşıyacak miktarları okutun.');
+        end;
+
+        foreach LpNo in OrderByLp.Keys() do begin
+            LP.Get(LpNo);
+            LPMgt.StageProductionPickLp(LP, Pick."No.", OrderByLp.Get(LpNo), TakeBinByLp.Get(LpNo), PlaceBinByLp.Get(LpNo));
+        end;
+        // A standard Place line can combine Takes from multiple bins/pallets.
+        // Its scalar LP reference must represent ALL contributing Take plans.
+        TakeLine.FindSet(true);
+        repeat
+            Plans.Get(TakeLine."Line No.", PlanText);
+            Plan.ReadFrom(PlanText);
+            Plan.Get('steps', Token);
+            Steps := Token.AsArray();
+            LpNo := '';
+            if Steps.Count() = 1 then
+                LpNo := FirstPlannedPalletNo(PlanText);
+            FindRelatedPlaceLineForShippingLp(TakeLine, PlaceLine);
+            if LpByPlaceLine.Get(PlaceLine."Line No.", ExpectedCode) then begin
+                if ExpectedCode <> LpNo then
+                    LpByPlaceLine.Set(PlaceLine."Line No.", '');
+            end else
+                LpByPlaceLine.Add(PlaceLine."Line No.", LpNo);
+            // The created pick's LP was only a preference. Registration must
+            // use the actual scanned pallet(s), including clearing ambiguity.
+            TakeLine."LP No." := LpNo;
+            TakeLine."Target LP No." := LpNo;
+            TakeLine.Modify(true);
+        until TakeLine.Next() = 0;
+        foreach PlaceLineNo in LpByPlaceLine.Keys() do begin
+            PlaceLine.Get(Pick.Type, Pick."No.", PlaceLineNo);
+            LpNo := LpByPlaceLine.Get(PlaceLineNo);
+            PlaceLine."LP No." := LpNo;
+            PlaceLine."Target LP No." := LpNo;
+            PlaceLine.Modify(true);
+        end;
+    end;
+
+    local procedure ProductionContentKey(LpNo: Code[20]; ItemNo: Code[20]; VariantCode: Code[10]; LotNo: Code[50]; SerialNo: Code[50]) KeyText: Text
+    var
+        Parts: JsonArray;
+    begin
+        Parts.Add(LpNo);
+        Parts.Add(ItemNo);
+        Parts.Add(VariantCode);
+        Parts.Add(LotNo);
+        Parts.Add(SerialNo);
+        Parts.WriteTo(KeyText);
+    end;
+
     /// <summary>
     /// Hedef sevk LP'si Toplamayı Kaydet işleminin aynı transaction'ında
     /// tamamlanır. Operatörün ayrıca boş LP'yi önceden kapatması gerekmez;
@@ -908,6 +2122,7 @@ codeunit 72046 "DOPSWHS Pick Mgmt"
     local procedure CompleteMainShippingLp(Pick: Record "Warehouse Activity Header")
     var
         LP: Record "DOPSWHS LP Header";
+        LPLine: Record "DOPSWHS LP Line";
         PickLine: Record "Warehouse Activity Line";
         WhseShipmentLine: Record "Warehouse Shipment Line";
         LPMgt: Codeunit "DOPSWHS LP Management";
@@ -915,6 +2130,14 @@ codeunit 72046 "DOPSWHS Pick Mgmt"
         if Pick."DOPSWHS Main LP No." = '' then
             exit;
         LP.Get(Pick."DOPSWHS Main LP No.");
+        // BADE (14 Eki 2026): bütün paletler tam sevk edildiyse Hedef LP boş kalır;
+        // boş, etiketli bir sevk paleti bırakılmaz.
+        LPLine.SetRange("LP No.", LP."No.");
+        if LPLine.IsEmpty() then begin
+            if LP.Status in [LP.Status::Open, LP.Status::Built] then
+                LPMgt.Unbuild(LP);
+            exit;
+        end;
         if LP.Status = LP.Status::Open then
             LPMgt.Stop(LP, false)
         else
@@ -927,6 +2150,7 @@ codeunit 72046 "DOPSWHS Pick Mgmt"
         PickLine.SetRange("No.", Pick."No.");
         PickLine.SetRange("Action Type", PickLine."Action Type"::Take);
         PickLine.SetRange("Whse. Document Type", PickLine."Whse. Document Type"::Shipment);
+        PickLine.SetRange("Target LP No.", LP."No.");
         if PickLine.FindSet() then
             repeat
                 if WhseShipmentLine.Get(PickLine."Whse. Document No.", PickLine."Whse. Document Line No.") then
@@ -971,14 +2195,27 @@ codeunit 72046 "DOPSWHS Pick Mgmt"
         PickLine: Record "Warehouse Activity Line";
         PlaceLine: Record "Warehouse Activity Line";
         ShippingLP: Record "DOPSWHS LP Header";
+        LineLP: Record "DOPSWHS LP Header";
+        WholeLP: Record "DOPSWHS LP Header";
         WhseShipmentLine: Record "Warehouse Shipment Line";
         LPMgt: Codeunit "DOPSWHS LP Management";
         Plans: Dictionary of [Integer, Text];
+        WholeTakeBin: Dictionary of [Code[20], Code[20]];
+        WholePlaceBin: Dictionary of [Code[20], Code[20]];
+        WholeWhseDoc: Dictionary of [Code[20], Code[20]];
         PlanText: Text;
+        LineLpNo: Code[20];
+        WholeLpNo: Code[20];
+        TakeBin: Code[20];
+        PlaceBin: Code[20];
+        WhseDocNo: Code[20];
     begin
         if Pick."DOPSWHS Main LP No." = '' then begin
+            // BADE (16 Eyl 2026): no "Hedef LP" is needed when every scanned
+            // pallet is picked in full; the pallets themselves become the
+            // shipping LPs. Partial pallets still require a shipping LP.
             if PalletPlan <> '' then
-                Error('Sevk paleti bulunamadı. Toplamanın sevk LP bilgisini yenileyin.');
+                ShipScannedPalletsDirectly(Pick, PalletPlan);
             exit;
         end;
         ShippingLP.Get(Pick."DOPSWHS Main LP No.");
@@ -994,12 +2231,27 @@ codeunit 72046 "DOPSWHS Pick Mgmt"
         end;
         if not PickLine.FindSet(true) then
             exit;
+        // BADE (14 Eki 2026): Hedef LP açık olsa da tamamı toplanan palet kendi
+        // LP'siyle sevk edilir; yalnız kısmen toplanan paletin miktarı Hedef LP'ye
+        // aktarılır (10 paletin 9'u tam, 1'i yarım: 9 palet bir LP'ye karışıyordu).
+        if PalletPlan <> '' then begin
+            CollectWholeScannedPallets(Pick, Plans, WholeTakeBin, WholePlaceBin, WholeWhseDoc);
+            foreach WholeLpNo in WholeTakeBin.Keys() do begin
+                WholeLP.Get(WholeLpNo);
+                WholeTakeBin.Get(WholeLpNo, TakeBin);
+                WholePlaceBin.Get(WholeLpNo, PlaceBin);
+                WholeWhseDoc.Get(WholeLpNo, WhseDocNo);
+                LPMgt.ShipLpDirectly(WholeLP, Pick."No.", WhseDocNo, TakeBin, PlaceBin);
+            end;
+        end;
         repeat
             FindRelatedPlaceLineForShippingLp(PickLine, PlaceLine);
+            LineLpNo := ShippingLP."No.";
             if PalletPlan <> '' then begin
                 if not Plans.Get(PickLine."Line No.", PlanText) then
                     Error('%1 satırının palet doğrulaması eksik.', PickLine."Line No.");
-                TransferScannedPickLine(Pick, PickLine, ShippingLP, PlaceLine, PlanText);
+                if TransferScannedPickLine(Pick, PickLine, ShippingLP, PlaceLine, PlanText, WholeTakeBin) = 0 then
+                    LineLpNo := FirstPlannedPalletNo(PlanText);
             end else begin
                 LPMgt.TransferPickedQuantityFromAvailableLps(
                     PickLine."LP No.", ShippingLP."No.", Pick."No.", PickLine."Line No.",
@@ -1008,20 +2260,309 @@ codeunit 72046 "DOPSWHS Pick Mgmt"
                     PickLine."Lot No.", PickLine."Serial No.", PickLine."Bin Code", PlaceLine."Bin Code");
             end;
 
-            PickLine."Target LP No." := ShippingLP."No.";
+            PickLine."Target LP No." := LineLpNo;
             PickLine.Modify(true);
-            PlaceLine."LP No." := ShippingLP."No.";
-            PlaceLine."Target LP No." := ShippingLP."No.";
+            PlaceLine."LP No." := LineLpNo;
+            PlaceLine."Target LP No." := LineLpNo;
             PlaceLine.Modify(true);
 
             if (PickLine."Whse. Document Type" = PickLine."Whse. Document Type"::Shipment) and
-               WhseShipmentLine.Get(PickLine."Whse. Document No.", PickLine."Whse. Document Line No.")
+               WhseShipmentLine.Get(PickLine."Whse. Document No.", PickLine."Whse. Document Line No.") and
+               LineLP.Get(LineLpNo)
             then begin
-                WhseShipmentLine."LP No." := ShippingLP."No.";
-                WhseShipmentLine.SSCC := ShippingLP.SSCC;
+                WhseShipmentLine."LP No." := LineLP."No.";
+                WhseShipmentLine.SSCC := LineLP.SSCC;
                 WhseShipmentLine.Modify(true);
             end;
         until PickLine.Next() = 0;
+    end;
+
+    /// <summary>
+    /// BADE (14 Eki 2026): sevkiyat nakli bir ambar sevk satırının miktarını o
+    /// satırdaki TEK LP'den düşer (LPPropagation ReconcileSalesEntry). Birden çok
+    /// paletten toplanan sevk satırının paletleri ayrı sevk edilemez; ya Hedef
+    /// LP'de birleşir ya da kayıt baştan durdurulur.
+    /// </summary>
+    local procedure CollectMultiPalletShipmentLines(Pick: Record "Warehouse Activity Header"; Plans: Dictionary of [Integer, Text]; var MultiPalletLps: Dictionary of [Code[20], Boolean]): Text
+    var
+        PickLine: Record "Warehouse Activity Line";
+        FirstLpByLine: Dictionary of [Text, Code[20]];
+        MultiLines: List of [Text];
+        Plan: JsonObject;
+        Steps: JsonArray;
+        Token: JsonToken;
+        Value: JsonToken;
+        LineKey: Text;
+        PlanText: Text;
+        LpNo: Code[20];
+        KnownLp: Code[20];
+        Pass: Integer;
+        FirstMultiLine: Text;
+    begin
+        PickLine.SetRange("Activity Type", Pick.Type);
+        PickLine.SetRange("No.", Pick."No.");
+        PickLine.SetRange("Action Type", PickLine."Action Type"::Take);
+        PickLine.SetFilter("Qty. to Handle (Base)", '>0');
+        for Pass := 1 to 2 do
+            if PickLine.FindSet() then
+                repeat
+                    LineKey := Format(PickLine."Whse. Document Type") + '|' + PickLine."Whse. Document No." + '|' + Format(PickLine."Whse. Document Line No.");
+                    if PickLine."Whse. Document No." = '' then
+                        LineKey := 'PICK|' + Format(PickLine."Line No.");
+                    if Plans.Get(PickLine."Line No.", PlanText) then begin
+                        Plan.ReadFrom(PlanText);
+                        Plan.Get('steps', Value);
+                        Steps := Value.AsArray();
+                        foreach Token in Steps do begin
+                            Token.AsObject().Get('lpNo', Value);
+                            LpNo := CopyStr(Value.AsValue().AsText(), 1, MaxStrLen(LpNo));
+                            if Pass = 1 then begin
+                                if FirstLpByLine.Get(LineKey, KnownLp) then begin
+                                    if (KnownLp <> LpNo) and not MultiLines.Contains(LineKey) then begin
+                                        MultiLines.Add(LineKey);
+                                        if FirstMultiLine = '' then
+                                            FirstMultiLine := PickLine."Item No.";
+                                    end;
+                                end else
+                                    FirstLpByLine.Add(LineKey, LpNo);
+                            end else
+                                if MultiLines.Contains(LineKey) then
+                                    MultiPalletLps.Set(LpNo, true);
+                        end;
+                    end;
+                until PickLine.Next() = 0;
+        exit(FirstMultiLine);
+    end;
+
+    /// <summary>
+    /// BADE (14 Eki 2026): Hedef LP açıkken bütün içeriği bu toplamada alınan
+    /// paletler. Tek raftan alınıp tek sevk rafına gitmeyen palet tam sayılmaz;
+    /// onun miktarı Hedef LP'ye aktarılır. Toplamada hiç kısmi palet yoksa liste
+    /// boş döner: operatör Hedef LP'yi paletleri birleştirmek için açmıştır ve
+    /// eski davranış (hepsi Hedef LP'ye) korunur.
+    /// </summary>
+    local procedure CollectWholeScannedPallets(Pick: Record "Warehouse Activity Header"; Plans: Dictionary of [Integer, Text]; var WholeTakeBin: Dictionary of [Code[20], Code[20]]; var WholePlaceBin: Dictionary of [Code[20], Code[20]]; var WholeWhseDoc: Dictionary of [Code[20], Code[20]])
+    var
+        PickLine: Record "Warehouse Activity Line";
+        PlaceLine: Record "Warehouse Activity Line";
+        LPMgt: Codeunit "DOPSWHS LP Management";
+        PlannedBaseByLp: Dictionary of [Code[20], Decimal];
+        TakeBinByLp: Dictionary of [Code[20], Code[20]];
+        PlaceBinByLp: Dictionary of [Code[20], Code[20]];
+        WhseDocByLp: Dictionary of [Code[20], Code[20]];
+        SplitLps: Dictionary of [Code[20], Boolean];
+        Plan: JsonObject;
+        Steps: JsonArray;
+        Token: JsonToken;
+        Value: JsonToken;
+        LpNo: Code[20];
+        KnownBin: Code[20];
+        PlanText: Text;
+        Planned: Decimal;
+    begin
+        // Birden çok paletli sevk satırının paletleri Hedef LP'de birleşir.
+        CollectMultiPalletShipmentLines(Pick, Plans, SplitLps);
+        PickLine.SetRange("Activity Type", Pick.Type);
+        PickLine.SetRange("No.", Pick."No.");
+        PickLine.SetRange("Action Type", PickLine."Action Type"::Take);
+        PickLine.SetFilter("Qty. to Handle (Base)", '>0');
+        if not PickLine.FindSet() then
+            exit;
+        repeat
+            if not Plans.Get(PickLine."Line No.", PlanText) then
+                Error('%1 satırının palet doğrulaması eksik.', PickLine."Line No.");
+            ValidateScannedPickPlan(PickLine, PlanText);
+            FindRelatedPlaceLineForShippingLp(PickLine, PlaceLine);
+            Plan.ReadFrom(PlanText);
+            Plan.Get('steps', Value);
+            Steps := Value.AsArray();
+            foreach Token in Steps do begin
+                Token.AsObject().Get('lpNo', Value);
+                LpNo := CopyStr(Value.AsValue().AsText(), 1, MaxStrLen(LpNo));
+                Token.AsObject().Get('baseQuantity', Value);
+                if PlannedBaseByLp.Get(LpNo, Planned) then
+                    PlannedBaseByLp.Set(LpNo, Planned + Value.AsValue().AsDecimal())
+                else
+                    PlannedBaseByLp.Add(LpNo, Value.AsValue().AsDecimal());
+                if TakeBinByLp.Get(LpNo, KnownBin) then begin
+                    if KnownBin <> PickLine."Bin Code" then
+                        SplitLps.Set(LpNo, true);
+                end else
+                    TakeBinByLp.Add(LpNo, PickLine."Bin Code");
+                if PlaceBinByLp.Get(LpNo, KnownBin) then begin
+                    if KnownBin <> PlaceLine."Bin Code" then
+                        SplitLps.Set(LpNo, true);
+                end else
+                    PlaceBinByLp.Add(LpNo, PlaceLine."Bin Code");
+                if not WhseDocByLp.ContainsKey(LpNo) then
+                    WhseDocByLp.Add(LpNo, PickLine."Whse. Document No.");
+            end;
+        until PickLine.Next() = 0;
+
+        foreach LpNo in PlannedBaseByLp.Keys() do begin
+            PlannedBaseByLp.Get(LpNo, Planned);
+            if not SplitLps.ContainsKey(LpNo) and (Abs(LPMgt.TotalBaseQuantity(LpNo) - Planned) <= 0.00001) then begin
+                TakeBinByLp.Get(LpNo, KnownBin);
+                WholeTakeBin.Add(LpNo, KnownBin);
+                PlaceBinByLp.Get(LpNo, KnownBin);
+                WholePlaceBin.Add(LpNo, KnownBin);
+                WhseDocByLp.Get(LpNo, KnownBin);
+                WholeWhseDoc.Add(LpNo, KnownBin);
+            end;
+        end;
+        if WholeTakeBin.Count() = PlannedBaseByLp.Count() then begin
+            Clear(WholeTakeBin);
+            Clear(WholePlaceBin);
+            Clear(WholeWhseDoc);
+        end;
+    end;
+
+    /// <summary>
+    /// BADE (16 Eyl 2026): registers a scanned-pallet pick without a shipping LP.
+    /// Allowed only when every scanned pallet is taken in full (its whole content
+    /// equals the planned base quantity across all lines); each pallet is then
+    /// assigned to the pick and moved to the Place bin as the shipping LP, and the
+    /// pick/shipment lines are stamped with it. A partially picked pallet stops
+    /// the registration with the instruction to open a "Hedef LP" first.
+    /// </summary>
+    local procedure ShipScannedPalletsDirectly(Pick: Record "Warehouse Activity Header"; PalletPlan: Text)
+    var
+        PickLine: Record "Warehouse Activity Line";
+        PlaceLine: Record "Warehouse Activity Line";
+        WhseShipmentLine: Record "Warehouse Shipment Line";
+        LP: Record "DOPSWHS LP Header";
+        LPMgt: Codeunit "DOPSWHS LP Management";
+        Plans: Dictionary of [Integer, Text];
+        PlannedBaseByLp: Dictionary of [Code[20], Decimal];
+        TakeBinByLp: Dictionary of [Code[20], Code[20]];
+        PlaceBinByLp: Dictionary of [Code[20], Code[20]];
+        WhseDocByLp: Dictionary of [Code[20], Code[20]];
+        Partial: TextBuilder;
+        MultiPalletLps: Dictionary of [Code[20], Boolean];
+        MultiPalletItemNo: Text;
+        LpNo: Code[20];
+        TakeBin: Code[20];
+        PlaceBin: Code[20];
+        WhseDocNo: Code[20];
+        PlanText: Text;
+        Planned: Decimal;
+    begin
+        ParseScannedPickPlans(PalletPlan, Plans);
+        PickLine.SetRange("Activity Type", Pick.Type);
+        PickLine.SetRange("No.", Pick."No.");
+        PickLine.SetRange("Action Type", PickLine."Action Type"::Take);
+        PickLine.SetFilter("Qty. to Handle (Base)", '>0');
+        if Plans.Count() <> PickLine.Count() then
+            Error('Toplama satırları değişmiş. Bütün açık satırların paletlerini yeniden doğrulayın.');
+        // Önce kayıt geçip sevkiyat naklinde "yeterli miktar yok" hatası çıkıyordu.
+        MultiPalletItemNo := CollectMultiPalletShipmentLines(Pick, Plans, MultiPalletLps);
+        if MultiPalletItemNo <> '' then
+            Error(MultiPalletLineNeedsShipLpErr, MultiPalletItemNo);
+        if not PickLine.FindSet() then
+            exit;
+        repeat
+            if not Plans.Get(PickLine."Line No.", PlanText) then
+                Error('%1 satırının palet doğrulaması eksik.', PickLine."Line No.");
+            ValidateScannedPickPlan(PickLine, PlanText);
+            FindRelatedPlaceLineForShippingLp(PickLine, PlaceLine);
+            AccumulatePlannedPalletQuantities(PlanText, PickLine."Bin Code", PlaceLine."Bin Code", PickLine."Whse. Document No.", PlannedBaseByLp, TakeBinByLp, PlaceBinByLp, WhseDocByLp);
+        until PickLine.Next() = 0;
+
+        foreach LpNo in PlannedBaseByLp.Keys() do begin
+            PlannedBaseByLp.Get(LpNo, Planned);
+            if Abs(LPMgt.TotalBaseQuantity(LpNo) - Planned) > 0.00001 then begin
+                if Partial.Length() > 0 then
+                    Partial.Append(', ');
+                Partial.Append(LpNo);
+            end;
+        end;
+        if Partial.Length() > 0 then
+            Error(PartialPalletNeedsShipLpErr, Partial.ToText());
+
+        foreach LpNo in PlannedBaseByLp.Keys() do begin
+            LP.Get(LpNo);
+            TakeBinByLp.Get(LpNo, TakeBin);
+            PlaceBinByLp.Get(LpNo, PlaceBin);
+            WhseDocByLp.Get(LpNo, WhseDocNo);
+            LPMgt.ShipLpDirectly(LP, Pick."No.", WhseDocNo, TakeBin, PlaceBin);
+        end;
+
+        // Stamp the document lines with the pallet(s) that now travel as shipping LPs.
+        if PickLine.FindSet(true) then
+            repeat
+                Plans.Get(PickLine."Line No.", PlanText);
+                LpNo := FirstPlannedPalletNo(PlanText);
+                FindRelatedPlaceLineForShippingLp(PickLine, PlaceLine);
+                PickLine."Target LP No." := LpNo;
+                PickLine.Modify(true);
+                PlaceLine."LP No." := LpNo;
+                PlaceLine."Target LP No." := LpNo;
+                PlaceLine.Modify(true);
+                if (PickLine."Whse. Document Type" = PickLine."Whse. Document Type"::Shipment) and
+                   WhseShipmentLine.Get(PickLine."Whse. Document No.", PickLine."Whse. Document Line No.") and
+                   LP.Get(LpNo)
+                then begin
+                    WhseShipmentLine."LP No." := LP."No.";
+                    WhseShipmentLine.SSCC := LP.SSCC;
+                    WhseShipmentLine.Modify(true);
+                end;
+            until PickLine.Next() = 0;
+    end;
+
+    local procedure AccumulatePlannedPalletQuantities(PlanText: Text; TakeBin: Code[20]; PlaceBin: Code[20]; WhseDocNo: Code[20]; var PlannedBaseByLp: Dictionary of [Code[20], Decimal]; var TakeBinByLp: Dictionary of [Code[20], Code[20]]; var PlaceBinByLp: Dictionary of [Code[20], Code[20]]; var WhseDocByLp: Dictionary of [Code[20], Code[20]])
+    var
+        Plan: JsonObject;
+        Step: JsonObject;
+        Steps: JsonArray;
+        Token: JsonToken;
+        Value: JsonToken;
+        LpNo: Code[20];
+        Planned: Decimal;
+        KnownBin: Code[20];
+    begin
+        Plan.ReadFrom(PlanText);
+        Plan.Get('steps', Value);
+        Steps := Value.AsArray();
+        foreach Token in Steps do begin
+            Step := Token.AsObject();
+            Step.Get('lpNo', Value);
+            LpNo := CopyStr(Value.AsValue().AsText(), 1, MaxStrLen(LpNo));
+            Step.Get('baseQuantity', Value);
+            Planned := 0;
+            if PlannedBaseByLp.Get(LpNo, Planned) then
+                PlannedBaseByLp.Set(LpNo, Planned + Value.AsValue().AsDecimal())
+            else
+                PlannedBaseByLp.Add(LpNo, Value.AsValue().AsDecimal());
+            if TakeBinByLp.Get(LpNo, KnownBin) then begin
+                if KnownBin <> TakeBin then
+                    Error('%1 paleti iki farklı raftan (%2, %3) toplanıyor; paletleri yeniden okutun.', LpNo, KnownBin, TakeBin);
+            end else
+                TakeBinByLp.Add(LpNo, TakeBin);
+            if PlaceBinByLp.Get(LpNo, KnownBin) then begin
+                if KnownBin <> PlaceBin then
+                    Error('%1 paleti iki farklı sevk rafına (%2, %3) gidiyor; tam palet sevki için önce Hedef LP oluşturun.', LpNo, KnownBin, PlaceBin);
+            end else
+                PlaceBinByLp.Add(LpNo, PlaceBin);
+            if not WhseDocByLp.ContainsKey(LpNo) then
+                WhseDocByLp.Add(LpNo, WhseDocNo);
+        end;
+    end;
+
+    local procedure FirstPlannedPalletNo(PlanText: Text): Code[20]
+    var
+        Plan: JsonObject;
+        Steps: JsonArray;
+        Token: JsonToken;
+        Value: JsonToken;
+    begin
+        Plan.ReadFrom(PlanText);
+        Plan.Get('steps', Value);
+        Steps := Value.AsArray();
+        foreach Token in Steps do begin
+            Token.AsObject().Get('lpNo', Value);
+            exit(CopyStr(Value.AsValue().AsText(), 1, 20));
+        end;
+        exit('');
     end;
 
     local procedure ParseScannedPickPlans(PalletPlan: Text; var Plans: Dictionary of [Integer, Text])
@@ -1109,7 +2650,7 @@ codeunit 72046 "DOPSWHS Pick Mgmt"
 
     end;
 
-    local procedure TransferScannedPickLine(Pick: Record "Warehouse Activity Header"; PickLine: Record "Warehouse Activity Line"; ShippingLP: Record "DOPSWHS LP Header"; PlaceLine: Record "Warehouse Activity Line"; PlanText: Text)
+    local procedure TransferScannedPickLine(Pick: Record "Warehouse Activity Header"; PickLine: Record "Warehouse Activity Line"; ShippingLP: Record "DOPSWHS LP Header"; PlaceLine: Record "Warehouse Activity Line"; PlanText: Text; WholeLps: Dictionary of [Code[20], Code[20]]) Transferred: Integer
     var
         LPMgt: Codeunit "DOPSWHS LP Management";
         Plan: JsonObject;
@@ -1129,13 +2670,17 @@ codeunit 72046 "DOPSWHS Pick Mgmt"
             Step := Token.AsObject();
             Step.Get('lpNo', Value);
             SourceLpNo := Value.AsValue().AsText();
-            Step.Get('baseQuantity', Value);
-            BaseQty := Value.AsValue().AsDecimal();
-            PickQty := Round(BaseQty * PickLine."Qty. to Handle" / PickLine."Qty. to Handle (Base)", 0.00001);
-            LPMgt.TransferPickedQuantity(
-                SourceLpNo, ShippingLP."No.", Pick."No.", PickLine."Line No.", PickLine."Whse. Document No.",
-                PickLine."Item No.", PickLine."Variant Code", PickLine."Unit of Measure Code", PickQty, BaseQty,
-                PickLine."Lot No.", PickLine."Serial No.", PickLine."Bin Code", PlaceLine."Bin Code");
+            // Tam sevk edilen palet olduğu gibi gider; Hedef LP'ye aktarılmaz.
+            if not WholeLps.ContainsKey(SourceLpNo) then begin
+                Transferred += 1;
+                Step.Get('baseQuantity', Value);
+                BaseQty := Value.AsValue().AsDecimal();
+                PickQty := Round(BaseQty * PickLine."Qty. to Handle" / PickLine."Qty. to Handle (Base)", 0.00001);
+                LPMgt.TransferPickedQuantity(
+                    SourceLpNo, ShippingLP."No.", Pick."No.", PickLine."Line No.", PickLine."Whse. Document No.",
+                    PickLine."Item No.", PickLine."Variant Code", PickLine."Unit of Measure Code", PickQty, BaseQty,
+                    PickLine."Lot No.", PickLine."Serial No.", PickLine."Bin Code", PlaceLine."Bin Code");
+            end;
         end;
     end;
 
@@ -1149,8 +2694,122 @@ codeunit 72046 "DOPSWHS Pick Mgmt"
             Error('Palet planının %1 bilgisi değişmiş. Belgeyi yenileyip yeniden okutun.', FieldName);
     end;
 
+    /// <summary>Identify the production pair without choosing the first same-item row.</summary>
+    internal procedure FindProductionPlaceLine(TakeLine: Record "Warehouse Activity Line"; var PlaceLine: Record "Warehouse Activity Line")
+    var
+        OtherTake: Record "Warehouse Activity Line";
+        Candidate: Record "Warehouse Activity Line";
+        Position: Integer;
+        Found: Boolean;
+    begin
+        FilterProductionSourceLines(TakeLine, Candidate);
+        Candidate.SetRange("Action Type", Candidate."Action Type"::Place);
+        Candidate.SetTrackingFilterFromWhseActivityLine(TakeLine);
+        if Candidate.IsEmpty() then begin
+            // BC may already have copied new tracking to the related Place.
+            Candidate.SetRange("Lot No.");
+            Candidate.SetRange("Serial No.");
+        end;
+        if Candidate.Count() = 1 then begin
+            Candidate.FindFirst();
+            PlaceLine := Candidate;
+            exit;
+        end;
+        // Original base quantity distinguishes 1200/6800 Take/Place pairs.
+        Candidate.SetRange("Qty. (Base)", TakeLine."Qty. (Base)");
+        if Candidate.Count() = 1 then begin
+            Candidate.FindFirst();
+            PlaceLine := Candidate;
+            exit;
+        end;
+        FilterProductionSourceLines(TakeLine, OtherTake);
+        OtherTake.SetRange("Action Type", OtherTake."Action Type"::Take);
+        OtherTake.SetRange("Qty. (Base)", TakeLine."Qty. (Base)");
+        OtherTake.SetTrackingFilterFromWhseActivityLine(TakeLine);
+        // Equal quantities use their order within the SAME source/tracking set,
+        // not adjacency. This also covers sorting all Takes before all Places.
+        if (Candidate.Count() > 1) and (Candidate.Count() = OtherTake.Count()) then begin
+            if TakeLine."Sorting Sequence No." <> 0 then begin
+                Candidate.SetCurrentKey("Activity Type", "No.", "Sorting Sequence No.");
+                OtherTake.SetCurrentKey("Activity Type", "No.", "Sorting Sequence No.");
+            end;
+            OtherTake.FindSet();
+            repeat
+                Position += 1;
+                Found := OtherTake."Line No." = TakeLine."Line No.";
+            until Found or (OtherTake.Next() = 0);
+            if Found then begin
+                Candidate.FindFirst();
+                if Position > 1 then
+                    Candidate.Next(Position - 1);
+                PlaceLine := Candidate;
+                exit;
+            end;
+        end;
+        Error('%1 üretim çekmesinde %2 Al satırının Yer eşleştirmesi belirsiz. BC''de satırları kontrol edin; hiçbir miktar değiştirilmedi.', TakeLine."No.", TakeLine."Line No.");
+    end;
+
+    local procedure FilterProductionSourceLines(SourceLine: Record "Warehouse Activity Line"; var Line: Record "Warehouse Activity Line")
+    begin
+        Line.Reset();
+        Line.SetRange("Activity Type", SourceLine."Activity Type");
+        Line.SetRange("No.", SourceLine."No.");
+        Line.SetRange("Whse. Document Type", SourceLine."Whse. Document Type");
+        Line.SetRange("Whse. Document No.", SourceLine."Whse. Document No.");
+        Line.SetRange("Whse. Document Line No.", SourceLine."Whse. Document Line No.");
+        Line.SetRange("Source Type", SourceLine."Source Type");
+        Line.SetRange("Source Subtype", SourceLine."Source Subtype");
+        Line.SetRange("Source No.", SourceLine."Source No.");
+        Line.SetRange("Source Line No.", SourceLine."Source Line No.");
+        Line.SetRange("Source Subline No.", SourceLine."Source Subline No.");
+        Line.SetRange("Item No.", SourceLine."Item No.");
+        Line.SetRange("Variant Code", SourceLine."Variant Code");
+        Line.SetRange("Location Code", SourceLine."Location Code");
+        Line.SetRange("Unit of Measure Code", SourceLine."Unit of Measure Code");
+        Line.SetRange("Breakbulk No.", SourceLine."Breakbulk No.");
+    end;
+
+    local procedure SyncProductionPlaceLine(TakeLine: Record "Warehouse Activity Line"; OriginalPlace: Record "Warehouse Activity Line"; ShortPick: Boolean)
+    var
+        PlaceLine: Record "Warehouse Activity Line";
+        OtherTake: Record "Warehouse Activity Line";
+        OtherPlace: Record "Warehouse Activity Line";
+        QtyToHandle: Decimal;
+    begin
+        PlaceLine.Get(OriginalPlace."Activity Type", OriginalPlace."No.", OriginalPlace."Line No.");
+        QtyToHandle := TakeLine."Qty. to Handle";
+        FilterProductionSourceLines(TakeLine, OtherTake);
+        OtherTake.SetRange("Action Type", OtherTake."Action Type"::Take);
+        OtherTake.SetFilter("Line No.", '<>%1', TakeLine."Line No.");
+        if OtherTake.FindSet() then
+            repeat
+                FindProductionPlaceLine(OtherTake, OtherPlace);
+                if OtherPlace."Line No." = PlaceLine."Line No." then begin
+                    if ShortPick then
+                        Error('Birleşmiş üretim Yer satırında eksik bildirimini BC''de satırları ayırarak yapın.');
+                    if OtherTake."Qty. to Handle" > 0 then begin
+                        if (OtherTake."Lot No." <> TakeLine."Lot No.") or (OtherTake."Serial No." <> TakeLine."Serial No.") then
+                            Error('Birleşmiş üretim Yer satırında farklı lot/seri toplanamaz. BC''de satırları ayırın.');
+                        QtyToHandle += OtherTake."Qty. to Handle";
+                    end;
+                end;
+            until OtherTake.Next() = 0;
+        if ShortPick then
+            PlaceLine.Validate(Quantity, TakeLine.Quantity);
+        PlaceLine.Validate("Qty. to Handle", QtyToHandle);
+        PlaceLine.Validate("Lot No.", TakeLine."Lot No.");
+        PlaceLine.Validate("Serial No.", TakeLine."Serial No.");
+        // Exact scalar LP references are stamped from the full scanned plan at registration.
+        PlaceLine."LP No." := '';
+        PlaceLine.Modify(true);
+    end;
+
     local procedure FindRelatedPlaceLineForShippingLp(PickLine: Record "Warehouse Activity Line"; var PlaceLine: Record "Warehouse Activity Line")
     begin
+        if PickLine."Source Type" = Database::"Prod. Order Component" then begin
+            FindProductionPlaceLine(PickLine, PlaceLine);
+            exit;
+        end;
         PlaceLine.Reset();
         PlaceLine.SetRange("Activity Type", PickLine."Activity Type");
         PlaceLine.SetRange("No.", PickLine."No.");
@@ -1158,6 +2817,8 @@ codeunit 72046 "DOPSWHS Pick Mgmt"
         PlaceLine.SetRange("Whse. Document Type", PickLine."Whse. Document Type");
         PlaceLine.SetRange("Whse. Document No.", PickLine."Whse. Document No.");
         PlaceLine.SetRange("Whse. Document Line No.", PickLine."Whse. Document Line No.");
+        PlaceLine.SetRange("Source Type", PickLine."Source Type");
+        PlaceLine.SetRange("Source Subtype", PickLine."Source Subtype");
         PlaceLine.SetRange("Source No.", PickLine."Source No.");
         PlaceLine.SetRange("Source Line No.", PickLine."Source Line No.");
         PlaceLine.SetRange("Source Subline No.", PickLine."Source Subline No.");
@@ -1272,6 +2933,7 @@ codeunit 72046 "DOPSWHS Pick Mgmt"
         PackingOrder: Record "DOPSWHS Packing Order";
         PickingHeader: Record "DOPSWHS Picking Order Header";
         SalesHeader: Record "Sales Header";
+        MainLP: Record "DOPSWHS LP Header";
         PackingOrderExists: Boolean;
     begin
         if not SalesHeader.Get(SalesHeader."Document Type"::Order, PickLine."Source No.") then
@@ -1291,6 +2953,10 @@ codeunit 72046 "DOPSWHS Pick Mgmt"
         // Toplamada kullanılan ana sepeti paketlemeye taşı: paketleyici
         // "ürünler hangi sepette" bilgisini terminalde görsün.
         PackingOrder."Main LP No." := Pick."DOPSWHS Main LP No.";
+        // Bütün paletler tam sevk edildiyse boş Hedef LP iptal edilir; iptal
+        // edilmiş LP'yi paketlemeye "sepet" olarak taşıma.
+        if MainLP.Get(Pick."DOPSWHS Main LP No.") and (MainLP.Status = MainLP.Status::Unbuilt) then
+            PackingOrder."Main LP No." := '';
         // Toplama grubunun akış tipini paketlemeye taşı: terminaldeki V2
         // sekmeleri (Multi / Mono / Tek SKU) listeyi bu alanla filtreliyor.
         // Pick başlığı ana kaynaktır; özel grup kaydı bazı eski/standart
@@ -1578,6 +3244,8 @@ codeunit 72046 "DOPSWHS Pick Mgmt"
 
     var
         SourceOrderRequiredErr: Label 'Source order no. is required to assign a tote.';
+        MultiPalletLineNeedsShipLpErr: Label '%1 ürününün bir sipariş satırı birden fazla paletten toplanıyor. Bu satırın paletleri tek sevk LP''sinde birleşmeli: önce "Hedef LP Oluştur"a basın.', Comment = '%1 = madde no';
+        PartialPalletNeedsShipLpErr: Label 'Palet(ler) kısmen toplanıyor: %1. Kısmi toplamada önce "Hedef LP Oluştur" ile sevk paleti açın; yalnız tamamı toplanan paletler olduğu gibi sevk edilir.', Comment = '%1 = LP numaraları';
         ToteBusyErr: Label 'Tote %1 is still in use by another pick. Complete or release it first.', Comment = '%1 = LP No.';
         PickTakenErr: Label 'Toplama %1 şu anda %2 kullanıcısında. Üzerinize alamazsınız; devir için depo sorumlusundan yeniden atama isteyin.', Comment = '%1 = Pick No., %2 = operatör';
         PickOwnedByOtherErr: Label 'Toplama %1 %2 kullanıcısında. Bu belgede işlem yapamazsınız.', Comment = '%1 = Pick No., %2 = operatör';

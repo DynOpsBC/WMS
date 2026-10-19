@@ -111,6 +111,38 @@ class TerminalDialogTest {
         evidence("pallet-failure")
     }
 
+    @Test fun palletLookupErrorSurvivesWrongScanCorrectBinPalletScanAndReload() {
+        val row = JSONObject("""{"no":"PI-AUDIT","lineNo":10000,"itemNo":"AUDIT-ITEM",
+            "description":"Test ürünü","locationCode":"DEPO","binCode":"A-01",
+            "lotNo":"LOT-A","unitOfMeasureCode":"ADET","qtyOutstanding":5}""")
+        compose.setContent { MaterialTheme {
+            PalletPickSheet("PI-AUDIT", groupLines(listOf(row), ::pickLineCapacity).single(), {}, {})
+        } }
+        val sourceError = "Toplama satırlarının tamamı alınamadı."
+        waitForText(sourceError)
+        compose.onNodeWithText("1. Kaynak rafın kodunu okut").performScrollTo().assertIsFocused()
+        compose.runOnIdle { ScanBus.emit(ScanEvent("LP000005", "")) }
+        waitForText("LP000005 bir palet etiketi.")
+        compose.onNodeWithText(sourceError, substring = true).assertExists()
+        compose.runOnIdle { ScanBus.emit(ScanEvent("A-02", "")) }
+        waitForText("Yanlış raf: A-02.")
+        compose.onNodeWithText(sourceError, substring = true).assertExists()
+        compose.runOnIdle { ScanBus.emit(ScanEvent("A-01", "")) }
+        waitForText("Raf doğrulandı: A-01.")
+        compose.onNodeWithText(sourceError, substring = true).assertExists()
+        compose.runOnIdle { ScanBus.emit(ScanEvent("LP000005", "")) }
+        waitForText("LP000005 okutuldu ama palet listesi hazır değil.")
+        compose.onNodeWithText("Palet listesi hazırlanamadı").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText(sourceError, substring = true).performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("Okutulan Paletleri Onayla").performScrollTo().assertIsNotEnabled()
+        compose.onNodeWithText("Palet listesini yenile").performScrollTo().performClick()
+        waitForText(sourceError)
+        compose.onNodeWithText("RAF DOĞRULANDI").assertExists()
+        compose.onNodeWithText(sourceError, substring = true).performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("Okutulan Paletleri Onayla").performScrollTo().assertIsNotEnabled()
+        evidence("pallet-error-retained")
+    }
+
     @Test fun unavailableLotLookupCanBeRetriedWithoutLosingEnteredQuantity() {
         compose.setContent { MaterialTheme { QuantityDialogSheet(
             title = "Lot kontrolü", itemNo = "AUDIT-ITEM", initialQty = 3.0,

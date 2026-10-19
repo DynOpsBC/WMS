@@ -90,6 +90,7 @@ codeunit 72039 "DOPSWHS Bin Content Subscriber"
     begin
         LPLine.SetRange("LP No.", LPNo);
         LPLine.SetFilter("Item No.", '<>%1', '');
+        LPLine.SetFilter(Quantity, '>0');
         if LPLine.FindSet() then
             repeat
                 LineText := LPLine."Item No." + ' x ' + Format(LPLine.Quantity);

@@ -17,4 +17,9 @@ tableextension 72449 "DOPSWHS Regd Whse Act Line" extends "Registered Whse. Acti
             Editable = false;
         }
     }
+
+    keys
+    {
+        key(ProdLpRepairScope; "Source Type", "Source Subtype", "Location Code", "Bin Code", "Action Type", "Item No.") { }
+    }
 }

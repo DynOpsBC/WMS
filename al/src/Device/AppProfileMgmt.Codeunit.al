@@ -97,6 +97,9 @@ codeunit 72265 "DOPSWHS App Profile Mgmt"
         // okuyup ekranı ona göre kurar; alan yoksa (eski BC paketi) istemci
         // false varsayar ve bu paketten önceki akış aynen sürer.
         Json.Append(StrSubstNo('"lpScanRequired":%1,', BoolTxt(LpScanRequiredFromSetup())));
+        // BADE (16 Eyl 2026): mal kabul etiketi elle mi basılır. Alan yoksa
+        // (eski BC) terminal false varsayar = kayıtla otomatik baskı.
+        Json.Append(StrSubstNo('"manualReceiptLabelPrint":%1,', BoolTxt(ManualReceiptLabelPrintFromSetup())));
         Json.Append('"visibleModules":[');
         AppendVisibleModules(Json, Profile."Config Code");
         Json.Append('],');
@@ -131,6 +134,14 @@ codeunit 72265 "DOPSWHS App Profile Mgmt"
                 Json.Append(StrSubstNo('{"module":"%1","menuItem":"%2","sort":%3}',
                     Format(DeviceMenu."Application Module"), Esc(DeviceMenu."Menu Item"), DeviceMenu."Sort Order"));
             until DeviceMenu.Next() = 0;
+    end;
+
+    local procedure ManualReceiptLabelPrintFromSetup(): Boolean
+    var
+        Setup: Record "DOPSWHS Setup";
+    begin
+        if Setup.Get('') then exit(Setup."Manual Receipt Label Print");
+        exit(false);
     end;
 
     local procedure LpScanRequiredFromSetup(): Boolean

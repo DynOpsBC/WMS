@@ -57,36 +57,30 @@ internal sealed class PrintCoordinator
 
     public async Task PrintLabelTestAsync(CancellationToken cancellationToken)
     {
-        var labelPrinters = _settings.EffectiveLabelPrinters();
-        if (labelPrinters.Count == 0)
+        if (string.IsNullOrWhiteSpace(_settings.LabelPrinterName))
         {
             throw new PermanentJobException("Etiket yazıcısı seçilmedi.");
         }
 
-        // One test label per enabled printer so every queue on the station is exercised.
-        foreach (var labelPrinter in labelPrinters)
+        var bytes = TestDocumentFactory.CreateRaw(_settings.LabelFormat, _settings.StationId);
+        AgentPaths.EnsureCreated();
+        var path = Path.Combine(AgentPaths.SpoolDirectory, "local-test-" + Guid.NewGuid().ToString("N") + ".raw");
+        try
         {
-            var bytes = TestDocumentFactory.CreateRaw(_settings.LabelFormat, _settings.StationId);
-            AgentPaths.EnsureCreated();
-            var path = Path.Combine(AgentPaths.SpoolDirectory, "local-test-" + Guid.NewGuid().ToString("N") + ".raw");
+            await File.WriteAllBytesAsync(path, bytes, cancellationToken).ConfigureAwait(false);
+            await _printGate.WaitAsync(cancellationToken).ConfigureAwait(false);
             try
             {
-                await File.WriteAllBytesAsync(path, bytes, cancellationToken).ConfigureAwait(false);
-                await _printGate.WaitAsync(cancellationToken).ConfigureAwait(false);
-                try
-                {
-                    _logger.Info($"Yerel etiket testi -> {labelPrinter.PrinterName}");
-                    await IsolatedPrintWorker.PrintAsync(path, labelPrinter.PrinterName, "BCWMS-LOCAL-TEST", _settings.LabelFormat, 1, cancellationToken).ConfigureAwait(false);
-                }
-                finally
-                {
-                    _printGate.Release();
-                }
+                await IsolatedPrintWorker.PrintAsync(path, _settings.LabelPrinterName, "BCWMS-LOCAL-TEST", _settings.LabelFormat, 1, cancellationToken).ConfigureAwait(false);
             }
             finally
             {
-                BlobPayloadDownloader.DeleteIfExists(path);
+                _printGate.Release();
             }
+        }
+        finally
+        {
+            BlobPayloadDownloader.DeleteIfExists(path);
         }
     }
 

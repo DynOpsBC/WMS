@@ -14,25 +14,11 @@ internal sealed class DashboardForm : Form
     private readonly Label _stationHeader = new();
     private readonly TextBox _station = new();
     private readonly TextBox _agentId = new();
-    private readonly CheckedListBox _labelPrinters = new() { CheckOnClick = true, IntegralHeight = false };
+    private readonly ComboBox _labelPrinter = new();
     private readonly ComboBox _documentPrinter = new();
     private readonly TextBox _labelPrinterId = new() { ReadOnly = true };
     private readonly TextBox _documentPrinterId = new() { ReadOnly = true };
     private readonly ComboBox _labelFormat = new();
-    // BADE (17 Eyl 2026): operator-facing printer names, published to BC as the
-    // printer description so the terminals show "Mal Kabul Zebra".
-    private readonly DataGridView _printerNames = new()
-    {
-        AllowUserToAddRows = false,
-        AllowUserToDeleteRows = false,
-        AllowUserToResizeRows = false,
-        RowHeadersVisible = false,
-        AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill,
-        SelectionMode = DataGridViewSelectionMode.CellSelect,
-        MultiSelect = false,
-        BackgroundColor = SystemColors.Window,
-        BorderStyle = BorderStyle.FixedSingle,
-    };
     private readonly TextBox _jobsConnection = SecretTextBox();
     private readonly TextBox _statusConnection = SecretTextBox();
     private readonly TextBox _storageAccount = new();
@@ -78,6 +64,11 @@ internal sealed class DashboardForm : Form
     /// </summary>
     private async Task AutoImportRuntimeSecretsAsync()
     {
+        if (!string.IsNullOrWhiteSpace(_controller.Settings.StationId))
+        {
+            return;
+        }
+
         var candidatePath = Path.Combine(AppContext.BaseDirectory, "print-agent.runtime.secrets.json");
         if (!File.Exists(candidatePath))
         {
@@ -87,46 +78,6 @@ internal sealed class DashboardForm : Form
         try
         {
             var imported = await RuntimeSecretsImporter.ImportAsync(candidatePath, _lifetime.Token);
-            var current = _controller.Settings;
-            // Fresh settings contain a DEFAULT station ID but no credentials.
-            var configured = !string.IsNullOrWhiteSpace(current.JobsListenConnectionString) ||
-                !string.IsNullOrWhiteSpace(current.StatusSendConnectionString) ||
-                !string.IsNullOrWhiteSpace(current.BlobReadSas);
-
-            // BADE (17 Eyl 2026): an upgrade package carries renewed credentials
-            // for the SAME station. Take them over silently and reconnect;
-            // printers and names stay as they are. A file for another station
-            // is never applied on top of a working setup.
-            if (configured)
-            {
-                if (!string.Equals(current.StationId, imported.StationId, StringComparison.OrdinalIgnoreCase))
-                {
-                    _controller.Logger.Warning($"Paketteki ayar dosyası başka istasyona ait ({imported.StationId}); mevcut kurulum ({current.StationId}) korunuyor.");
-                    return;
-                }
-
-                var newer = imported.BlobSasExpiresAtUtc is { } incoming &&
-                    (current.BlobSasExpiresAtUtc is not { } existing || incoming > existing);
-                if (!newer)
-                {
-                    return;
-                }
-
-                var renewed = current with
-                {
-                    JobsListenConnectionString = imported.JobsListenConnectionString,
-                    StatusSendConnectionString = imported.StatusSendConnectionString,
-                    StorageAccount = imported.StorageAccount,
-                    BlobEndpoint = imported.BlobEndpoint,
-                    BlobReadSas = imported.BlobReadSas,
-                    BlobSasExpiresAtUtc = imported.BlobSasExpiresAtUtc
-                };
-                await _controller.SaveAndRestartAsync(renewed, _printers, _lifetime.Token);
-                LoadSettings(_controller.Settings);
-                _controller.Logger.Info($"Yenilenen Azure ayarları otomatik alındı (SAS bitişi {imported.BlobSasExpiresAtUtc:yyyy-MM-dd}); yazıcı ayarları korundu.");
-                return;
-            }
-
             _station.Text = imported.StationId;
             _jobsConnection.Text = imported.JobsListenConnectionString;
             _statusConnection.Text = imported.StatusSendConnectionString;
@@ -137,7 +88,7 @@ internal sealed class DashboardForm : Form
             UpdateSasExpiry();
             _controller.Logger.Info("Kurulum paketindeki print-agent.runtime.secrets.json otomatik içe aktarıldı.");
         }
-        catch (Exception exception) when (exception is InvalidDataException or IOException or UnauthorizedAccessException or InvalidOperationException or ArgumentException)
+        catch (Exception exception) when (exception is InvalidDataException or IOException or UnauthorizedAccessException)
         {
             // Fall through to manual "İçe Aktar" — the installer file may be
             // stale or partially written; never block the app on it.
@@ -213,22 +164,18 @@ internal sealed class DashboardForm : Form
         AddRow(layout, 1, "Agent ID", _agentId, "Bu kurulum için otomatik ve kalıcı GUID");
         _agentId.ReadOnly = true;
 
+        ConfigurePrinterCombo(_labelPrinter);
         ConfigurePrinterCombo(_documentPrinter);
-        _labelPrinters.ItemCheck += (_, _) => BeginInvoke(new Action(PreviewPrinterIds));
+        _labelPrinter.SelectedIndexChanged += (_, _) => PreviewPrinterIds();
         _documentPrinter.SelectedIndexChanged += (_, _) => PreviewPrinterIds();
-        AddRow(layout, 2, "Etiket yazıcıları", _labelPrinters, "İşaretli her yazıcı ZPL / ESC-POS / RAW etiket işi alır; birden fazla seçilebilir", 132);
-        AddRow(layout, 3, "Etiket Printer ID", _labelPrinterId, "İşaretli yazıcıların BC Code[20] kalıcı ID'leri");
+        AddRow(layout, 2, "Etiket yazıcısı", _labelPrinter, "ZPL / ESC-POS / RAW işlerinin hedefi");
+        AddRow(layout, 3, "Etiket Printer ID", _labelPrinterId, "BC Code[20] güvenli kalıcı logical ID");
         AddRow(layout, 4, "Belge yazıcısı", _documentPrinter, "PDF işlerinin hedefi");
         AddRow(layout, 5, "Belge Printer ID", _documentPrinterId, "BC Code[20] güvenli kalıcı logical ID");
 
         _labelFormat.DropDownStyle = ComboBoxStyle.DropDownList;
         _labelFormat.Items.AddRange(new object[] { PrintFormat.ZPL, PrintFormat.ESCPOS, PrintFormat.RAW });
         AddRow(layout, 6, "Etiket formatı", _labelFormat, "Business Central yazıcı formatıyla aynı olmalı");
-
-        _printerNames.Columns.Add(new DataGridViewTextBoxColumn { Name = "Printer", HeaderText = "Windows yazıcısı", ReadOnly = true, FillWeight = 45 });
-        _printerNames.Columns.Add(new DataGridViewTextBoxColumn { Name = "Kind", HeaderText = "Tür", ReadOnly = true, FillWeight = 15 });
-        _printerNames.Columns.Add(new DataGridViewTextBoxColumn { Name = "DisplayName", HeaderText = "Görünen ad (terminalde böyle görünür)", FillWeight = 40 });
-        AddRow(layout, 7, "Görünen adlar", _printerNames, "Örn. Mal Kabul Zebra, Sevkiyat Zebra. Boş bırakılırsa Windows adı kullanılır; Buluta Eşitle ile terminallere gider.", 118);
 
         var buttons = new FlowLayoutPanel { Dock = DockStyle.Fill, AutoSize = true, WrapContents = true, Padding = new Padding(0, 8, 0, 4) };
         buttons.Controls.Add(ActionButton("Yazıcıları Yenile", async () => await RefreshPrintersAsync()));
@@ -237,7 +184,7 @@ internal sealed class DashboardForm : Form
         buttons.Controls.Add(ActionButton("Etiket Testi", () => _controller.PrintLabelTestAsync(_lifetime.Token)));
         buttons.Controls.Add(ActionButton("Belge Testi", () => _controller.PrintDocumentTestAsync(_lifetime.Token)));
         buttons.Controls.Add(ActionButton("Belirsiz İşleri İncele", ReviewUncertainPrintsAsync, width: 170));
-        layout.Controls.Add(buttons, 0, 8);
+        layout.Controls.Add(buttons, 0, 7);
         layout.SetColumnSpan(buttons, 3);
 
         _logs.Dock = DockStyle.Fill;
@@ -246,7 +193,7 @@ internal sealed class DashboardForm : Form
         _logs.ForeColor = Color.Gainsboro;
         _logs.Font = new Font("Consolas", 8.5F);
         _logs.WordWrap = false;
-        layout.Controls.Add(_logs, 0, 9);
+        layout.Controls.Add(_logs, 0, 8);
         layout.SetColumnSpan(_logs, 3);
         layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         page.Controls.Add(layout);
@@ -315,73 +262,23 @@ internal sealed class DashboardForm : Form
         _blobSas.Text = settings.BlobReadSas;
         _blobSasExpiry = settings.BlobSasExpiresAtUtc;
         UpdateSasExpiry();
-        _labelPrinterId.Text = string.Join(", ", settings.EffectiveLabelPrinters().Select(static printer => printer.PrinterId));
+        _labelPrinterId.Text = settings.LabelPrinterId;
         _documentPrinterId.Text = settings.DocumentPrinterId;
         _labelFormat.SelectedItem = settings.LabelFormat;
-        foreach (var printer in settings.EffectiveLabelPrinters())
-        {
-            _displayNames[printer.PrinterName] = printer.DisplayName;
-        }
-        if (!string.IsNullOrWhiteSpace(settings.DocumentPrinterName))
-        {
-            _displayNames[settings.DocumentPrinterName] = settings.DocumentPrinterDisplayName;
-        }
-        RebuildPrinterNameRows();
     }
-
-    /// <summary>Typed names survive list refreshes; keyed by Windows printer name.</summary>
-    private readonly Dictionary<string, string> _displayNames = new(StringComparer.OrdinalIgnoreCase);
-
-    private void CaptureTypedDisplayNames()
-    {
-        // Commit the active text editor before a refresh/selection rebuild
-        // reads Cell.Value and removes the old grid rows.
-        if (_printerNames.IsCurrentCellInEditMode && !_printerNames.EndEdit())
-            throw new InvalidOperationException("Görünen ad düzenlemesi tamamlanamadı.");
-        foreach (DataGridViewRow row in _printerNames.Rows)
-        {
-            var printer = row.Cells["Printer"].Value?.ToString();
-            if (string.IsNullOrWhiteSpace(printer)) continue;
-            _displayNames[printer] = row.Cells["DisplayName"].Value?.ToString()?.Trim() ?? string.Empty;
-        }
-    }
-
-    private void RebuildPrinterNameRows()
-    {
-        _printerNames.Rows.Clear();
-        foreach (var name in CheckedLabelNames())
-        {
-            _printerNames.Rows.Add(name, "Etiket", _displayNames.TryGetValue(name, out var typed) ? typed : string.Empty);
-        }
-        var document = SelectedName(_documentPrinter);
-        if (!string.IsNullOrWhiteSpace(document))
-        {
-            _printerNames.Rows.Add(document, "Belge", _displayNames.TryGetValue(document, out var typed) ? typed : string.Empty);
-        }
-    }
-
-    private string DisplayNameFor(string printerName) =>
-        _displayNames.TryGetValue(printerName, out var typed) ? typed.Trim() : string.Empty;
 
     private async Task RefreshPrintersAsync()
     {
-        CaptureTypedDisplayNames();
-        var labelNames = CheckedLabelNames();
-        if (labelNames.Count == 0)
-        {
-            labelNames = _controller.Settings.EffectiveLabelPrinters().Select(static printer => printer.PrinterName).ToList();
-        }
-
+        var labelName = SelectedName(_labelPrinter) ?? _controller.Settings.LabelPrinterName;
         var documentName = SelectedName(_documentPrinter) ?? _controller.Settings.DocumentPrinterName;
         _printers = await _controller.DiscoverPrintersAsync(_lifetime.Token);
-        FillLabelPrinterList(labelNames);
+        FillPrinterCombo(_labelPrinter, labelName);
         FillPrinterCombo(_documentPrinter, documentName);
         _controller.Logger.Info($"Windows'ta {_printers.Count} yazıcı bulundu.");
     }
 
     private async Task SaveAsync()
     {
-        CaptureTypedDisplayNames();
         var current = _controller.Settings;
         var settings = current with
         {
@@ -393,10 +290,8 @@ internal sealed class DashboardForm : Form
             BlobEndpoint = _blobEndpoint.Text.Trim(),
             BlobReadSas = _blobSas.Text.Trim(),
             BlobSasExpiresAtUtc = _blobSasExpiry,
-            LabelPrinters = CheckedLabelNames().Select(name => new LabelPrinterSetting { PrinterId = string.Empty, PrinterName = name, DisplayName = DisplayNameFor(name) }).ToList(),
-            LabelPrinterName = CheckedLabelNames().FirstOrDefault() ?? string.Empty,
+            LabelPrinterName = SelectedName(_labelPrinter) ?? string.Empty,
             DocumentPrinterName = SelectedName(_documentPrinter) ?? string.Empty,
-            DocumentPrinterDisplayName = DisplayNameFor(SelectedName(_documentPrinter) ?? string.Empty),
             LabelFormat = _labelFormat.SelectedItem is PrintFormat format ? format : PrintFormat.ZPL,
             LabelTransport = LabelTransport.WindowsRaw
         };
@@ -577,45 +472,10 @@ internal sealed class DashboardForm : Form
     private static string? SelectedName(ComboBox combo) =>
         combo.SelectedItem is PrinterChoice choice && !string.IsNullOrWhiteSpace(choice.Name) ? choice.Name : null;
 
-    /// <summary>Discovered printers as check items; previously chosen names stay checked even when offline.</summary>
-    private void FillLabelPrinterList(IReadOnlyCollection<string> checkedNames)
-    {
-        _labelPrinters.BeginUpdate();
-        try
-        {
-            _labelPrinters.Items.Clear();
-            foreach (var printer in _printers)
-            {
-                var isChecked = checkedNames.Any(name => string.Equals(name, printer.Name, StringComparison.OrdinalIgnoreCase));
-                _labelPrinters.Items.Add(new PrinterChoice(printer.Name, printer.Status, printer.IsDefault), isChecked);
-            }
-
-            foreach (var name in checkedNames.Where(name => !_printers.Any(printer => string.Equals(printer.Name, name, StringComparison.OrdinalIgnoreCase))))
-            {
-                _labelPrinters.Items.Add(new PrinterChoice(name, "Offline / bulunamadı", false), true);
-            }
-        }
-        finally
-        {
-            _labelPrinters.EndUpdate();
-        }
-
-        PreviewPrinterIds();
-    }
-
-    private List<string> CheckedLabelNames() =>
-        _labelPrinters.CheckedItems.Cast<PrinterChoice>()
-            .Select(static choice => choice.Name)
-            .Where(static name => !string.IsNullOrWhiteSpace(name))
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .ToList();
-
     private void PreviewPrinterIds()
     {
-        _labelPrinterId.Text = string.Join(", ", CheckedLabelNames().Select(PreviewId));
+        _labelPrinterId.Text = PreviewId(SelectedName(_labelPrinter));
         _documentPrinterId.Text = PreviewId(SelectedName(_documentPrinter));
-        CaptureTypedDisplayNames();
-        RebuildPrinterNameRows();
     }
 
     private string PreviewId(string? name)
@@ -645,9 +505,9 @@ internal sealed class DashboardForm : Form
         return table;
     }
 
-    private static void AddRow(TableLayoutPanel table, int row, string label, Control input, string hint, int height = 47)
+    private static void AddRow(TableLayoutPanel table, int row, string label, Control input, string hint)
     {
-        table.RowStyles.Add(new RowStyle(SizeType.Absolute, height));
+        table.RowStyles.Add(new RowStyle(SizeType.Absolute, 47));
         table.Controls.Add(new Label { Text = label, AutoSize = true, Anchor = AnchorStyles.Left, Font = new Font(table.Font, FontStyle.Bold) }, 0, row);
         input.Dock = DockStyle.Fill;
         input.Margin = new Padding(3, 7, 8, 7);

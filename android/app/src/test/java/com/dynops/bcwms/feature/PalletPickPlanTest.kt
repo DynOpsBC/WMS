@@ -54,6 +54,65 @@ class PalletPickPlanTest {
         }
     }
 
+    @Test fun `production drains smallest pallets first and splits only the last one`() {
+        val row = line().put("sourceType", 5407).put("sourceSubtype", 3)
+            .put("unitOfMeasureCode", "PCS").put("qtyOutstanding", 1000)
+            .put("licensePlateNo", "LP-500")
+        val data = response().put("outstandingBaseQty", 1000).put("sources", JSONArray().apply {
+            for ((lp, qty) in listOf("LP-500" to 500, "LP-400" to 400, "LP-300" to 300)) {
+                put(JSONObject().put("lpNo", lp).put("binCode", "A-01").put("lotNo", "LOT-A")
+                    .put("serialNo", "").put("availableBaseQty", qty))
+            }
+        })
+        val plan = buildPalletPickPlan(row, 1000.0, data.toString())
+        assertEquals(listOf("LP-300", "LP-400", "LP-500"), plan.steps.map { it.lpNo })
+        assertEquals(listOf(300.0, 400.0, 300.0), plan.steps.map { it.baseQuantity })
+        assertEquals(200.0, 500.0 - plan.steps.last().baseQuantity, 0.00001)
+        assertTrue(acceptsPalletStep(plan.steps, 0, "LP-300"))
+        assertFalse(acceptsPalletStep(plan.steps, 0, "LP-500"))
+    }
+
+    @Test fun `explicit prepared production pallet stays ahead of ordinary small sources`() {
+        val row = line().put("sourceType", 5407).put("sourceSubtype", 3)
+        val data = response().put("preparedLpNo", "LP0001")
+        assertEquals("LP0001", buildPalletPickPlan(row, 5.0, data.toString()).steps.first().lpNo)
+    }
+
+    @Test fun `production small pallet policy never switches the selected lot`() {
+        val row = line().put("sourceType", 5407).put("sourceSubtype", 3)
+        val data = response()
+        data.getJSONArray("sources").put(JSONObject().put("lpNo", "NEW-LOT-SMALL")
+            .put("binCode", "A-01").put("lotNo", "LOT-B").put("serialNo", "")
+            .put("availableBaseQty", 1))
+        val plan = buildPalletPickPlan(row, 15.0, data.toString())
+        assertEquals(listOf("LP0001", "LP0002"), plan.steps.map { it.lpNo })
+        assertTrue(plan.steps.all { it.lotNo == "LOT-A" })
+    }
+
+    @Test fun `production smallest remainder ordering uses base units and shared prior consumption`() {
+        val row = line().put("sourceType", 5407).put("sourceSubtype", 3)
+        val data = response()
+        data.getJSONArray("sources").getJSONObject(0).put("availableBaseQty", 100)
+        data.getJSONArray("sources").getJSONObject(1).put("availableBaseQty", 120)
+        val used = mutableMapOf("LP0002|ITEM||LOT-A|" to 100.0)
+        val plan = buildPalletPickPlan(row, 10.0, data.toString(), used)
+        assertEquals(listOf("LP0002", "LP0001"), plan.steps.map { it.lpNo })
+        assertEquals(listOf(2.0, 8.0), plan.steps.map { it.quantity })
+        assertEquals(listOf(20.0, 80.0), plan.steps.map { it.baseQuantity })
+    }
+
+    @Test fun `delivery routes back to the first missing or stale pallet proof`() {
+        val first = buildPalletPickPlan(line(), 15.0, response().toString())
+        val second = first.copy(lineNo = 20000)
+        assertEquals(10000, firstUnverifiedPalletLine(listOf(first, second)) { null })
+        assertEquals(20000, firstUnverifiedPalletLine(listOf(first, second)) { if (it == 10000) first else null })
+        assertNull(firstUnverifiedPalletLine(listOf(first, second)) { if (it == 10000) first else second })
+        val staged = first.copy(identity = "PI001|ITEM||BADE|STAGE||KOLI",
+            steps = first.steps.map { it.copy(lpNo = "NEW-TARGET", binCode = "STAGE") })
+        assertEquals(10000, firstUnverifiedPalletLine(listOf(staged)) { first })
+        assertNull(firstUnverifiedPalletLine(listOf(staged)) { staged })
+    }
+
     private fun line(no: Int = 10000) = JSONObject("""{
         "no":"PI001", "lineNo":$no, "itemNo":"ITEM", "variantCode":"", "locationCode":"BADE",
         "binCode":"A-01", "lotNo":"LOT-A", "serialNo":"", "unitOfMeasureCode":"KOLI", "qtyOutstanding":15
@@ -153,6 +212,27 @@ class PalletPickPlanTest {
         reject(line = row, data = data)
     }
 
+    @Test fun `reserved production LP determines lot without including the other lot`() {
+        val row = line().put("lotNo", "")
+        val data = response().put("lotNo", "").put("preparedLpNo", "LP0002")
+        data.getJSONArray("sources").getJSONObject(1).put("lotNo", "LOT-B")
+        val plan = buildPalletPickPlan(row, 10.0, data.toString())
+        assertEquals("LOT-B", plan.lotNo)
+        assertEquals(listOf("LP0002"), plan.steps.map { it.lpNo })
+        assertEquals(100.0, plan.steps.single().baseQuantity, 0.00001)
+    }
+
+    @Test fun `prepared LP never falls back to another pallet when too small or unavailable`() {
+        reject(data = response().put("preparedLpNo", "LP0002"))
+        reject(data = response().put("preparedLpNo", "MISSING"), qty = 5.0)
+    }
+
+    @Test fun `prepared LP cannot override the lot already required on the pick`() {
+        val data = response().put("preparedLpNo", "LP0002")
+        data.getJSONArray("sources").getJSONObject(1).put("lotNo", "LOT-B")
+        reject(data = data, qty = 5.0)
+    }
+
     @Test fun `merged or previously staged lines do not reuse pallet capacity`() {
         val used = mutableMapOf<String, Double>()
         buildPalletPickPlan(line(), 8.0, response().toString(), used)
@@ -222,32 +302,7 @@ class PalletPickPlanTest {
     }
 
     @Test fun `optional putaway keeps the existing product verification for other customers`() {
-        val steps = putAwayScanSteps(false, "", "A-01")
-        assertEquals(listOf(PutAwayStep.SOURCE_BIN, PutAwayStep.ITEM, PutAwayStep.TARGET_BIN, PutAwayStep.QTY), steps)
-        assertEquals(PutAwayStep.TARGET_BIN, previousPutAwayStep(steps, PutAwayStep.QTY))
-        assertEquals(PutAwayStep.ITEM, previousPutAwayStep(steps, PutAwayStep.TARGET_BIN))
-        assertEquals(PutAwayStep.SOURCE_BIN, previousPutAwayStep(steps, PutAwayStep.ITEM))
-        assertNull(previousPutAwayStep(steps, PutAwayStep.SOURCE_BIN))
-    }
-
-    @Test fun `putaway manual search finds expected rack and item by partial text`() {
-        assertEquals(
-            PutAwaySearchSuggestion("ÜR.0003", "ÜR.0003 rafını seç"),
-            putAwaySearchSuggestion(PutAwayStep.SOURCE_BIN, "000", "ÜR.0003", "BİLETAYC", "BİLET KURŞUN DKC"),
-        )
-        assertEquals(
-            PutAwaySearchSuggestion("BİLETAYC", "BİLETAYC · BİLET KURŞUN DKC"),
-            putAwaySearchSuggestion(PutAwayStep.ITEM, "kurş", "ÜR.0003", "BİLETAYC", "BİLET KURŞUN DKC"),
-        )
-        assertEquals(
-            PutAwaySearchSuggestion("BİLETAYC", "BİLETAYC · BİLET KURŞUN DKC"),
-            putAwaySearchSuggestion(PutAwayStep.ITEM, "bilet", "ÜR.0003", "BİLETAYC", "BİLET KURŞUN DKC"),
-        )
-    }
-
-    @Test fun `putaway manual search does not suggest unrelated or one letter input`() {
-        assertNull(putAwaySearchSuggestion(PutAwayStep.ITEM, "b", "ÜR.0003", "BİLETAYC", "BİLET KURŞUN DKC"))
-        assertNull(putAwaySearchSuggestion(PutAwayStep.ITEM, "başka", "ÜR.0003", "BİLETAYC", "BİLET KURŞUN DKC"))
-        assertNull(putAwaySearchSuggestion(PutAwayStep.TARGET_BIN, "z3", "ÜR.0003", "BİLETAYC", "BİLET KURŞUN DKC"))
+        assertEquals(listOf(PutAwayStep.SOURCE_BIN, PutAwayStep.ITEM, PutAwayStep.TARGET_BIN, PutAwayStep.QTY),
+            putAwayScanSteps(false, "", "A-01"))
     }
 }
