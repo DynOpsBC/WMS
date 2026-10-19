@@ -131,7 +131,7 @@ android {
       versionNameSuffix = "-kitoko"
       manifestPlaceholders["appLabel"] = "BCWMS Kitoko"
       // Entra "BCWMS Terminal (Kitoko)" uygulama kaydının Application (client) ID'si.
-      buildConfigField("String", "BC_CLIENT_ID", "\"${providers.gradleProperty("kitokoClientId").orNull ?: "KITOKO_CLIENT_ID_TBD"}\"")
+      buildConfigField("String", "BC_CLIENT_ID", "\"${providers.gradleProperty("kitokoClientId").orNull ?: "8dbc8036-e191-4d8b-ad18-f987d5d499e1"}\"")
       buildConfigField("String", "BC_FALLBACK_TENANT", "\"f270e8be-e7b0-4ac0-b34a-33014d34d994\"")
       buildConfigField("String", "BC_DEFAULT_ENVIRONMENT", "\"DemoSandbox\"")
       buildConfigField("String", "BC_DEFAULT_COMPANY_ID", "\"\"")
