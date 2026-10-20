@@ -2259,6 +2259,10 @@ codeunit 72050 "DOPSWHS Count Mgmt"
                     WhseJournalLine.Validate("Zone Code", Bin."Zone Code");
                     WhseJournalLine.Validate("Bin Code", CountLine."Bin Code");
                     WhseJournalLine.Validate("Phys. Inventory", true);
+                    // Directed physical-inventory registration requires the
+                    // balancing adjustment bin on every differing line. BC
+                    // rejects the line at register time if this is omitted.
+                    WhseJournalLine.Validate("To Bin Code", Location."Adjustment Bin Code");
                     // Ambar günlüğünde lot/seri satırın KENDİ alanlarındadır
                     // (fiziksel sayımda ayrı izleme satırı kullanılmaz); boş
                     // bırakılırsa BC "Lot No. must have a value" ile reddeder.

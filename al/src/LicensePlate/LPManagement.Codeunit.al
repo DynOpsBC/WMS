@@ -16,7 +16,14 @@ codeunit 72040 "DOPSWHS LP Management"
         tabledata "DOPSWHS LP Movement Ledger" = RI;
 
     procedure Build(TemplateCode: Code[20]; LocationCode: Code[10]; BinCode: Code[20]; var LP: Record "DOPSWHS LP Header")
+    begin
+        Build(TemplateCode, LocationCode, BinCode, '', LP);
+    end;
+
+    /// <summary>NoSeriesCode boşsa şirketin LP No. Series'i, doluysa o seri kullanılır.</summary>
+    procedure Build(TemplateCode: Code[20]; LocationCode: Code[10]; BinCode: Code[20]; NoSeriesCode: Code[20]; var LP: Record "DOPSWHS LP Header")
     var
+        LPSeriesSetup: Codeunit "DOPSWHS LP Series Setup";
         Template: Record "DOPSWHS LP Template";
         Location: Record Location;
         Bin: Record Bin;
@@ -40,6 +47,8 @@ codeunit 72040 "DOPSWHS LP Management"
         // create that LP again instead of requesting a new number-series value.
         Clear(LP);
         LP.Init();
+        if NoSeriesCode <> '' then
+            LP."No." := LPSeriesSetup.NextFreeLpNo(NoSeriesCode);
         LP."LP Template Code" := TemplateCode;
         LP."Location Code" := LocationCode;
         LP."Bin Code" := BinCode;

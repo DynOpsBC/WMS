@@ -29,6 +29,11 @@ page 72061 "DOPSWHS Setup"
                 {
                     ApplicationArea = All;
                 }
+                field("Prod. Output LP No. Series"; Rec."Prod. Output LP No. Series")
+                {
+                    ApplicationArea = All;
+                    ToolTip = 'Terminalden üretim çıkışında açılan LP''ler bu seriden numara alır (ör. YLP, MLP). Boşsa LP No. Series kullanılır. Mal kabul, stoktan LP ve diğer LP''ler LP No. Series''ten devam eder.';
+                }
                 field("SSCC No. Series"; Rec."SSCC No. Series")
                 {
                     ApplicationArea = All;

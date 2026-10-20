@@ -769,6 +769,7 @@ codeunit 72048 "DOPSWHS Prod Mgmt"
         Setup: Record "DOPSWHS Setup";
         LP: Record "DOPSWHS LP Header";
         LPMgt: Codeunit "DOPSWHS LP Management";
+        LPSeriesSetup: Codeunit "DOPSWHS LP Series Setup";
         LocationCode: Code[10];
         EffectiveBinCode: Code[20];
     begin
@@ -781,7 +782,7 @@ codeunit 72048 "DOPSWHS Prod Mgmt"
             if Setup.Get('') then
                 LocationCode := Setup."Default Location Code";
 
-        LPMgt.Build(NewLpTemplate, LocationCode, EffectiveBinCode, LP);
+        LPMgt.Build(NewLpTemplate, LocationCode, EffectiveBinCode, LPSeriesSetup.ProdOutputLpNoSeries(), LP);
         LPMgt.AddLine(LP, ProdOrderLine."Item No.", ProdOrderLine."Unit of Measure Code", OutputQty, '', '', 0D);
         LPMgt.Stop(LP, false);
         exit(LP."No.");

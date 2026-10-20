@@ -27,6 +27,38 @@ codeunit 72057 "DOPSWHS LP Series Setup"
         exit(SeriesCode);
     end;
 
+    /// <summary>
+    /// Seriden kullanılmamış ilk LP numarasını verir. Kopyalanmış/geri yüklenmiş
+    /// şirkette LP kayıtları serinin ilerisinde olabilir; dolu numaralar atlanır.
+    /// </summary>
+    procedure NextFreeLpNo(SeriesCode: Code[20]): Code[20]
+    var
+        ExistingLP: Record "DOPSWHS LP Header";
+        NoSeries: Codeunit "No. Series";
+        LpNo: Code[20];
+        Attempts: Integer;
+    begin
+        repeat
+            LpNo := NoSeries.GetNextNo(SeriesCode);
+            Attempts += 1;
+            if Attempts > 10000 then
+                Error(
+                    '%1 numara serisinde kullanılabilir LP numarası bulunamadı. Numara serisinin son kullanılan değerini kontrol edin.',
+                    SeriesCode);
+        until not ExistingLP.Get(LpNo);
+        exit(LpNo);
+    end;
+
+    /// <summary>Üretim çıkışı LP serisi; tanımlı değilse '' (şirketin LP serisi kullanılır).</summary>
+    procedure ProdOutputLpNoSeries(): Code[20]
+    var
+        Setup: Record "DOPSWHS Setup";
+    begin
+        if Setup.Get('') then
+            exit(Setup."Prod. Output LP No. Series");
+        exit('');
+    end;
+
     procedure EnsureSsccNoSeries(): Code[20]
     var
         Setup: Record "DOPSWHS Setup";

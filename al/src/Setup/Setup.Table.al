@@ -16,6 +16,14 @@ table 72000 "DOPSWHS Setup"
             Caption = 'LP No. Series';
             TableRelation = "No. Series";
         }
+        field(560; "Prod. Output LP No. Series"; Code[20])
+        {
+            // BADE (20 Eki 2026): BS Üretim'de hammadde LP'leri HLP, bulk üretim
+            // çıkışı YLP; BS Group'ta ambalaj LP, mamul çıkışı MLP. Boşsa üretim
+            // çıkışı da şirketin LP No. Series'ini kullanır.
+            Caption = 'Üretim Çıkışı LP No. Serisi';
+            TableRelation = "No. Series";
+        }
         field(20; "SSCC No. Series"; Code[20])
         {
             Caption = 'SSCC No. Series';
