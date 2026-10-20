@@ -965,6 +965,7 @@ private fun ItemLabelInquiry() {
             progress = bulkProgress,
             result = bulkResult,
             onPrint = ::printSelectedLabels,
+            onTestPrint = { itemNo -> printItemLabelCopies(context, itemNo, 1) },
             onDismiss = { if (!printing) bulkProducts = null },
         )
     }
