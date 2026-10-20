@@ -271,8 +271,27 @@ codeunit 72466 "DOPSWHS Label Layout Engine"
         LayoutLine: Record "DOPSWHS Label Layout Line";
         LineNo: Integer;
     begin
-        if Layout.Get('ETIKETV2') then
+        if Layout.Get('ETIKETV2') then begin
+            // Apply the requested ~30% enlargement once, while preserving any
+            // later manual edits to these dimensions.
+            if LayoutLine.Get('ETIKETV2', 10000) and
+               (LayoutLine."Element Type" = LayoutLine."Element Type"::QRCode) and
+               (LayoutLine."Width (mm)" = 15) and (LayoutLine."Height (mm)" = 15)
+            then begin
+                LayoutLine."Width (mm)" := 19.5;
+                LayoutLine."Height (mm)" := 19.5;
+                LayoutLine.Modify(true);
+            end;
+            if LayoutLine.Get('ETIKETV2', 20000) and
+               (LayoutLine."Element Type" = LayoutLine."Element Type"::Field) and
+               (LayoutLine."Source Field" = 'ItemNo') and
+               (LayoutLine."Font Height (mm)" = 2.25)
+            then begin
+                LayoutLine."Font Height (mm)" := 2.925;
+                LayoutLine.Modify(true);
+            end;
             exit;
+        end;
         Layout.Init();
         Layout.Code := 'ETIKETV2';
         Layout.Description := 'Ürün etiketi V2 - QR + madde no';
@@ -428,13 +447,13 @@ codeunit 72466 "DOPSWHS Label Layout Engine"
 
     local procedure FillItemV2Lines(var LayoutLine: Record "DOPSWHS Label Layout Line"; LayoutCode: Code[20]; var LineNo: Integer)
     begin
-        // QR'ı önceki konumundan 10 mm sola al; madde numarasını altına ortala.
-        NewLine(LayoutLine, LayoutCode, LineNo, LayoutLine."Element Type"::QRCode, 50, 6.5, 15, 15);
+        // QR +30%; madde numarası da %30 büyük ve QR'ın altında ortalı.
+        NewLine(LayoutLine, LayoutCode, LineNo, LayoutLine."Element Type"::QRCode, 50, 6.5, 19.5, 19.5);
         LayoutLine."Source Field" := 'ItemNo';
         LayoutLine.Insert();
         NewLine(LayoutLine, LayoutCode, LineNo, LayoutLine."Element Type"::Field, 42, 26.5, 31, 0);
         LayoutLine."Source Field" := 'ItemNo';
-        LayoutLine."Font Height (mm)" := 2.25;
+        LayoutLine."Font Height (mm)" := 2.925;
         LayoutLine."Fit to Width" := true;
         LayoutLine."Min Font Height (mm)" := 1.5;
         LayoutLine.Alignment := LayoutLine.Alignment::Center;
