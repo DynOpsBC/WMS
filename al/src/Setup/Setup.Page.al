@@ -110,6 +110,11 @@ page 72061 "DOPSWHS Setup"
                     ApplicationArea = All;
                     ToolTip = 'Etiketin yüksekliği (mm). Boş/0 = 40 mm. Yazıcıdaki rulo değişince yalnız bu iki değer güncellenir; yeni paket gerekmez.';
                 }
+                field("Label Top Offset (mm)"; Rec."Label Top Offset (mm)")
+                {
+                    ApplicationArea = All;
+                    ToolTip = 'Baskı etiketin üstünden kesiliyor ve altta boşluk kalıyorsa pozitif değer girin (ör. 3 = 3 mm aşağı). Yukarı kaydırmak için negatif değer girin. Ürün, raf, alan ve LP etiketlerinin hepsine uygulanır.';
+                }
             }
             group(License)
             {

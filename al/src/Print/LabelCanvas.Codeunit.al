@@ -27,6 +27,7 @@ codeunit 72321 "DOPSWHS Label Canvas"
         ContentLines: Integer;
         DefaultWidthMm: Decimal;
         DefaultHeightMm: Decimal;
+        TopOffsetDots: Integer;
 
     /// <summary>Reads the label size from Setup (default 80x40 mm) and derives the metrics.</summary>
     procedure Init()
@@ -42,6 +43,8 @@ codeunit 72321 "DOPSWHS Label Canvas"
             HeightMm := Setup."Label Height (mm)";
         end;
         InitSize(WidthMm, HeightMm);
+        // ^LT sınırı ±120 nokta (8 nokta/mm → ±15 mm).
+        TopOffsetDots := Clamp(Round(Setup."Label Top Offset (mm)" * 8, 1), -120, 120);
     end;
 
     /// <summary>Canvas for an explicit size; 0 or an unusable value falls back to 80x40 mm.</summary>
@@ -298,6 +301,8 @@ codeunit 72321 "DOPSWHS Label Canvas"
     begin
         EnsureInit();
         // ^CI28 = UTF-8 so Turkish characters print correctly.
+        if TopOffsetDots <> 0 then
+            exit('^XA^CI28^PW' + Format(Width) + '^LL' + Format(Height) + '^LT' + Format(TopOffsetDots) + '^LH0,0');
         exit('^XA^CI28^PW' + Format(Width) + '^LL' + Format(Height) + '^LH0,0');
     end;
 
