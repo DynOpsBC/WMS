@@ -102,6 +102,12 @@ codeunit 72051 "DOPSWHS Print Dispatcher"
     /// items become ~40 queue jobs instead of 2,000. Returns the labels sent.
     /// </summary>
     procedure PrintItemLabels(var Item: Record Item; PrinterId: Code[50]; Copies: Integer): Integer
+    begin
+        exit(PrintItemLabelsWithLayout(Item, PrinterId, Copies, ''));
+    end;
+
+    /// <summary>Prints item labels with the requested saved ITEM layout; blank uses the active layout.</summary>
+    procedure PrintItemLabelsWithLayout(var Item: Record Item; PrinterId: Code[50]; Copies: Integer; LayoutCode: Code[20]): Integer
     var
         Printer: Record "DOPSWHS Printer";
         Zpl: Text;
@@ -112,6 +118,8 @@ codeunit 72051 "DOPSWHS Print Dispatcher"
         if not Item.FindSet() then
             exit(0);
         if Printer.Get(PrinterId) and (Printer."Format" = Printer."Format"::PDF) then begin
+            if LayoutCode <> '' then
+                Error('Özel ürün etiketi tasarımları yalnızca ZPL etiket yazıcılarında kullanılabilir.');
             repeat
                 PrintItemLabel(Item, PrinterId, Copies);
                 Sent += 1;
@@ -121,7 +129,7 @@ codeunit 72051 "DOPSWHS Print Dispatcher"
         repeat
             if InJob = 0 then
                 FirstItemNo := Item."No.";
-            Zpl += BuildItemZpl(Item);
+            Zpl += BuildItemZplForLayout(Item, LayoutCode);
             InJob += 1;
             Sent += 1;
             if InJob = LabelsPerJob() then begin
@@ -133,6 +141,23 @@ codeunit 72051 "DOPSWHS Print Dispatcher"
         if InJob > 0 then
             EnqueueZpl(FirstItemNo, Zpl, PrinterId, Copies, Enum::"DOPSWHS IWX Report Usage"::Item, 'Item');
         exit(Sent);
+    end;
+
+    local procedure BuildItemZplForLayout(var Item: Record Item; LayoutCode: Code[20]): Text
+    var
+        Layout: Record "DOPSWHS Label Layout";
+        LayoutEngine: Codeunit "DOPSWHS Label Layout Engine";
+        LayoutFields: Codeunit "DOPSWHS Label Layout Fields";
+        LayoutValues: Dictionary of [Text, Text];
+    begin
+        if LayoutCode = '' then
+            exit(BuildItemZpl(Item));
+        if not Layout.Get(LayoutCode) then
+            Error('Etiket tasarımı %1 bulunamadı.', LayoutCode);
+        if Layout."Label Kind" <> Enum::"DOPSWHS Label Kind"::Item then
+            Error('%1 tasarımı ürün etiketi değil.', LayoutCode);
+        LayoutFields.ItemValues(Item, LayoutValues);
+        exit(LayoutEngine.BuildZpl(LayoutCode, LayoutValues, 1));
     end;
 
     procedure LabelsPerJob(): Integer
@@ -738,7 +763,7 @@ codeunit 72051 "DOPSWHS Print Dispatcher"
         NoFont: Integer;
         NoWidth: Integer;
     begin
-        // Kitoko (20 Eki 2026): aktif etiket tasarımı varsa onu kullan, yoksa aşağıdaki sabit tasarım.
+        // Kitoko: aktif etiket tasarımı varsa onu kullan, yoksa aşağıdaki sabit tasarım.
         if LayoutEngine.FindActiveLayout(Enum::"DOPSWHS Label Kind"::Item, LayoutCode) then begin
             LayoutFields.ItemValues(Item, LayoutValues);
             exit(LayoutEngine.BuildZpl(LayoutCode, LayoutValues, 1));

@@ -75,9 +75,11 @@ private sealed interface AllItemLabelsStep {
  * dönen gösterge ve "X / N", Durdur'a basınca o anki paket bitince durur.
  */
 @Composable
-fun AllItemLabelsCard(enabled: Boolean = true) {
+fun AllItemLabelsCard(enabled: Boolean = true, v2Format: Boolean = false) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
+    val action = if (v2Format) "printLabelsV2" else "printLabels"
+    val title = if (v2Format) "Tüm ürünlerin etiketi · ETIKETV2 (QR + madde no)" else "Tüm ürünlerin etiketi"
     var step by remember { mutableStateOf<AllItemLabelsStep>(AllItemLabelsStep.Idle) }
     var stopRequested by remember { mutableStateOf(false) }
     var loadError by remember { mutableStateOf("") }
@@ -103,7 +105,7 @@ fun AllItemLabelsCard(enabled: Boolean = true) {
             CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
             Spacer(Modifier.width(10.dp))
             Text("Ürün listesi alınıyor…")
-        } else WmsActionLabel(WmsGlyph.PRINTER, "Tüm ürünlerin etiketi")
+        } else WmsActionLabel(WmsGlyph.PRINTER, title)
     }
     if (loadError.isNotBlank()) Text(loadError, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
 
@@ -112,7 +114,7 @@ fun AllItemLabelsCard(enabled: Boolean = true) {
             val count = allItemLabelBatches(current.itemNos).sumOf { it.size }
             AlertDialog(
                 onDismissRequest = { step = AllItemLabelsStep.Idle },
-                title = { Text("Tüm ürünlerin etiketi", fontWeight = FontWeight.Bold) },
+                title = { Text(title, fontWeight = FontWeight.Bold) },
                 text = {
                     Text(
                         "$count ürün için $count etiket basılacak (yaklaşık ${count * 4 / 100} metre rulo). " +
@@ -134,7 +136,7 @@ fun AllItemLabelsCard(enabled: Boolean = true) {
                                     batches,
                                     send = { batch ->
                                         val response = BcApi.boundActionLongRunning(
-                                            context, "items", batch.first(), "printLabels",
+                                            context, "items", batch.first(), action,
                                             allItemLabelsPayload(batch, choice.printerCode),
                                         )
                                         if (response.ok) Result.success(BcApi.scalarValue(response.body).trim().toIntOrNull() ?: batch.size)

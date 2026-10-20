@@ -134,4 +134,27 @@ page 72086 "DOPSWHS Item API"
         Item.MarkedOnly(true);
         exit(Dispatcher.PrintItemLabels(Item, printerId, 1));
     end;
+
+    /// <summary>Kitoko terminal: prints the QR-only ETIKETV2 item layout.</summary>
+    [ServiceEnabled]
+    procedure printLabelsV2(itemNosJson: Text; printerId: Code[50]): Integer
+    var
+        Item: Record Item;
+        Dispatcher: Codeunit "DOPSWHS Print Dispatcher";
+        ItemNos: JsonArray;
+        Token: JsonToken;
+        ItemNo: Code[20];
+    begin
+        if not ItemNos.ReadFrom(itemNosJson) then
+            Error('Ürün listesi okunamadı.');
+        if ItemNos.Count() > 100 then
+            Error('Tek istekte en fazla 100 ürün etiketi gönderilebilir.');
+        foreach Token in ItemNos do begin
+            ItemNo := CopyStr(Token.AsValue().AsText(), 1, MaxStrLen(ItemNo));
+            if Item.Get(ItemNo) then
+                Item.Mark(true);
+        end;
+        Item.MarkedOnly(true);
+        exit(Dispatcher.PrintItemLabelsWithLayout(Item, printerId, 1, 'ETIKETV2'));
+    end;
 }

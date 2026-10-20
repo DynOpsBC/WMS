@@ -33,5 +33,8 @@ page 72469 "DOPSWHS Label Layout List"
         if Rec.IsEmpty() then
             if Rec.WritePermission() then
                 Engine.SeedDefaults();
+        // Kitoko: güncellemeyle eklenen ETIKETV2, mevcut kayıtlı tasarımlarda da listelensin.
+        if Rec.WritePermission() then
+            Engine.EnsureItemV2Layout();
     end;
 }

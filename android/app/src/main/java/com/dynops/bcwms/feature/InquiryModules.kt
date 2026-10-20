@@ -731,6 +731,7 @@ private fun ItemLabelInquiry() {
     ) {
         // DKÇ (9 Eki 2026): Etiket Çıkar → Ürün Etiketi'nde bütün ürünler tek seferde.
         item { AllItemLabelsCard(enabled = !loading && !printing) }
+        item { AllItemLabelsCard(enabled = !loading && !printing, v2Format = true) }
         // Aşağı çekerek silme bildirimi (Swipe down to clear)
         if (pullOffset > 10f) {
             item {

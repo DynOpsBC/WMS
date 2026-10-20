@@ -64,6 +64,12 @@ codeunit 72466 "DOPSWHS Label Layout Engine"
 
     /// <summary>ZPL (^XA..^XZ) of the layout filled with Values; Copies above 1 adds ^PQ.</summary>
     procedure BuildZpl(LayoutCode: Code[20]; Values: Dictionary of [Text, Text]; Copies: Integer): Text
+    begin
+        exit(BuildZplWithYOffset(LayoutCode, Values, Copies, 0));
+    end;
+
+    /// <summary>ZPL for a layout with every element shifted down by YOffsetMm.</summary>
+    procedure BuildZplWithYOffset(LayoutCode: Code[20]; Values: Dictionary of [Text, Text]; Copies: Integer; YOffsetMm: Decimal): Text
     var
         LayoutLine: Record "DOPSWHS Label Layout Line";
         WidthMm: Decimal;
@@ -82,7 +88,7 @@ codeunit 72466 "DOPSWHS Label Layout Engine"
         LayoutLine.SetRange(Enabled, true);
         if LayoutLine.FindSet() then
             repeat
-                Zpl += BuildElement(LayoutLine, Values, Dpi, WidthDots);
+                Zpl += BuildElement(LayoutLine, Values, Dpi, WidthDots, YOffsetMm);
             until LayoutLine.Next() = 0;
         if Copies > 1 then
             Zpl += '^PQ' + Format(Copies);
@@ -101,7 +107,7 @@ codeunit 72466 "DOPSWHS Label Layout Engine"
         exit(BuildZpl(LayoutCode, Values, 1));
     end;
 
-    local procedure BuildElement(var LayoutLine: Record "DOPSWHS Label Layout Line"; var Values: Dictionary of [Text, Text]; Dpi: Integer; LabelWidthDots: Integer): Text
+    local procedure BuildElement(var LayoutLine: Record "DOPSWHS Label Layout Line"; var Values: Dictionary of [Text, Text]; Dpi: Integer; LabelWidthDots: Integer; YOffsetMm: Decimal): Text
     var
         Value: Text;
         X: Integer;
@@ -112,7 +118,7 @@ codeunit 72466 "DOPSWHS Label Layout Engine"
         Side: Integer;
     begin
         X := MmToDots(LayoutLine."X (mm)", Dpi);
-        Y := MmToDots(LayoutLine."Y (mm)", Dpi);
+        Y := MmToDots(LayoutLine."Y (mm)" + YOffsetMm, Dpi);
         W := MmToDots(LayoutLine."Width (mm)", Dpi);
         H := MmToDots(LayoutLine."Height (mm)", Dpi);
         case LayoutLine."Element Type" of
@@ -255,6 +261,28 @@ codeunit 72466 "DOPSWHS Label Layout Engine"
                 FillDefaultLines(DefaultCode(Kind), Kind);
             end;
         end;
+        EnsureItemV2Layout();
+    end;
+
+    /// <summary>Creates the QR-only item label option when it is missing.</summary>
+    procedure EnsureItemV2Layout()
+    var
+        Layout: Record "DOPSWHS Label Layout";
+        LayoutLine: Record "DOPSWHS Label Layout Line";
+        LineNo: Integer;
+    begin
+        if Layout.Get('ETIKETV2') then
+            exit;
+        Layout.Init();
+        Layout.Code := 'ETIKETV2';
+        Layout.Description := 'Ürün etiketi V2 - QR + madde no';
+        Layout."Label Kind" := Enum::"DOPSWHS Label Kind"::Item;
+        Layout."Width (mm)" := 80;
+        Layout."Height (mm)" := 40;
+        Layout.Dpi := 203;
+        Layout.Active := false;
+        Layout.Insert(true);
+        FillItemV2Lines(LayoutLine, Layout.Code, LineNo);
     end;
 
     /// <summary>Replaces all lines of the layout with the default design of its kind (80x40 mm, 203 dpi).</summary>
@@ -313,6 +341,10 @@ codeunit 72466 "DOPSWHS Label Layout Engine"
         RightField: Text[30];
         CodeField: Text[30];
     begin
+        if LayoutCode = 'ETIKETV2' then begin
+            FillItemV2Lines(LayoutLine, LayoutCode, LineNo);
+            exit;
+        end;
         // Siyah başlık şeridi (5,5 mm): sol başlık, sağ firma/depo adı, ikisi beyaz.
         case Kind of
             Kind::Item:
@@ -391,6 +423,21 @@ codeunit 72466 "DOPSWHS Label Layout Engine"
         NewLine(LayoutLine, LayoutCode, LineNo, LayoutLine."Element Type"::Barcode128, 2, 21.75, 53, 11.1);
         LayoutLine."Source Field" := 'ItemNo';
         LayoutLine."Show Text" := true;
+        LayoutLine.Insert();
+    end;
+
+    local procedure FillItemV2Lines(var LayoutLine: Record "DOPSWHS Label Layout Line"; LayoutCode: Code[20]; var LineNo: Integer)
+    begin
+        // QR'ı önceki konumundan 10 mm sola al; madde numarasını altına ortala.
+        NewLine(LayoutLine, LayoutCode, LineNo, LayoutLine."Element Type"::QRCode, 50, 6.5, 15, 15);
+        LayoutLine."Source Field" := 'ItemNo';
+        LayoutLine.Insert();
+        NewLine(LayoutLine, LayoutCode, LineNo, LayoutLine."Element Type"::Field, 42, 26.5, 31, 0);
+        LayoutLine."Source Field" := 'ItemNo';
+        LayoutLine."Font Height (mm)" := 2.25;
+        LayoutLine."Fit to Width" := true;
+        LayoutLine."Min Font Height (mm)" := 1.5;
+        LayoutLine.Alignment := LayoutLine.Alignment::Center;
         LayoutLine.Insert();
     end;
 
