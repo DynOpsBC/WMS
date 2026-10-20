@@ -2209,6 +2209,7 @@ codeunit 72050 "DOPSWHS Count Mgmt"
         CalcQty: Decimal;
         LineNo: Integer;
         Created: Boolean;
+        AdjustmentBin: Record Bin;
     begin
         if not Location.Get(CountHeader."Location Code") then
             exit;
@@ -2260,9 +2261,18 @@ codeunit 72050 "DOPSWHS Count Mgmt"
                     WhseJournalLine.Validate("Bin Code", CountLine."Bin Code");
                     WhseJournalLine.Validate("Phys. Inventory", true);
                     // Directed physical-inventory registration requires the
-                    // balancing adjustment bin on every differing line. BC
-                    // rejects the line at register time if this is omitted.
-                    WhseJournalLine.Validate("To Bin Code", Location."Adjustment Bin Code");
+                    // balancing adjustment bin on every differing line. BADE
+                    // (20 Eki 2026): Validate("To Bin Code", ADJ.01) bin'i
+                    // satırın alanında aradığı için (To Zone Code = sayılan raf
+                    // alanı) "ADJ.01 bulunamadı" veriyordu. Standart "Whse.
+                    // Calculate Inventory" gibi: giriş türü Pozitif, ayarlama gözü
+                    // "From" tarafında; fark eksiyse BC Quantity doğrulamasında
+                    // From/To'yu kendisi değiştirir (ExchangeFromToBin).
+                    AdjustmentBin.Get(CountHeader."Location Code", Location."Adjustment Bin Code");
+                    WhseJournalLine."Entry Type" := WhseJournalLine."Entry Type"::"Positive Adjmt.";
+                    WhseJournalLine."From Zone Code" := AdjustmentBin."Zone Code";
+                    WhseJournalLine."From Bin Code" := AdjustmentBin.Code;
+                    WhseJournalLine."From Bin Type Code" := AdjustmentBin."Bin Type Code";
                     // Ambar günlüğünde lot/seri satırın KENDİ alanlarındadır
                     // (fiziksel sayımda ayrı izleme satırı kullanılmaz); boş
                     // bırakılırsa BC "Lot No. must have a value" ile reddeder.
