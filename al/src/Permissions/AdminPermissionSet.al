@@ -6,6 +6,11 @@ permissionset 72094 "DOPSWHS-ADMIN"
     Caption = 'Advanced WMS Admin';
 
     Permissions =
+        tabledata "DOPSWHS Prepared Label Row" = RIMD,
+        table "DOPSWHS Prepared Label Row" = X,
+        page "DOPSWHS Prepared Label Row API" = X,
+        codeunit "DOPSWHS Prepared Label Mgmt" = X,
+        page "DOPSWHS Prepared Label Setup" = X,
         tabledata "DOPSWHS Setup" = RIMD,
         tabledata "DOPSWHS Device Configuration" = RIMD,
         tabledata "DOPSWHS Device Menu" = RIMD,

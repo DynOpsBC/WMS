@@ -154,6 +154,67 @@ codeunit 72051 "DOPSWHS Print Dispatcher"
         exit(50);
     end;
 
+    /// One queue job per ordered Excel batch. Build and validate the entire batch
+    /// before any enqueue/Commit. No Item.Mark, FindSet, deduplication or quantity multiplier.
+    procedure PrintExcelItemLabels(RowsJson: Text; PrinterId: Code[50]): Integer
+    var
+        Printer: Record "DOPSWHS Printer";
+        Zpl: Text;
+        Count: Integer;
+    begin
+        if Printer.Get(PrinterId) then
+            if Printer.Format <> Printer.Format::ZPL then
+                Error('Excel ürün / göz etiketleri için ZPL etiket yazıcısı seçin.');
+        Zpl := BuildExcelItemLabels(RowsJson, Count);
+        EnqueueZpl('EXCEL', Zpl, PrinterId, 1, Enum::"DOPSWHS IWX Report Usage"::Item, 'Excel item/bin');
+        exit(Count);
+    end;
+
+    procedure BuildExcelItemLabels(RowsJson: Text; var Count: Integer): Text
+    var
+        Item: Record Item;
+        Rows: JsonArray;
+        Token: JsonToken;
+        Value: JsonToken;
+        Row: JsonObject;
+        ItemNo: Text;
+        BinCode: Text;
+        Sequence: Integer;
+        Previous: Integer;
+        Zpl: Text;
+    begin
+        Count := 0;
+        if not Rows.ReadFrom(RowsJson) then
+            Error('Excel etiket satırları okunamadı.');
+        if (Rows.Count() = 0) or (Rows.Count() > LabelsPerJob()) then
+            Error('Bir Excel baskı paketinde 1–50 satır olmalı.');
+        foreach Token in Rows do begin
+            Row := Token.AsObject();
+            if not Row.Get('order', Value) then
+                Error('Etiket sırası eksik.');
+            Sequence := Value.AsValue().AsInteger();
+            if (Sequence < 1) or ((Count > 0) and (Sequence <> Previous + 1)) then
+                Error('Excel etiket sırası kesintisiz artmalı.');
+            Previous := Sequence;
+            if not Row.Get('itemNo', Value) then
+                Error('Ürün numarası eksik.');
+            ItemNo := Value.AsValue().AsText();
+            if (ItemNo = '') or (StrLen(ItemNo) > MaxStrLen(Item."No.")) then
+                Error('Etiket %1: ürün numarası geçersiz.', Sequence);
+            if not Item.Get(ItemNo) then
+                Error('Etiket %1: %2 ürünü bulunamadı.', Sequence, ItemNo);
+            Item.TestField(Blocked, false);
+            if not Row.Get('bin', Value) then
+                Error('Göz bilgisi eksik.');
+            BinCode := Value.AsValue().AsText();
+            if (BinCode.Trim() = '') or (StrLen(BinCode) > 20) then
+                Error('Etiket %1: göz bilgisi geçersiz.', Sequence);
+            Zpl += BuildItemBinZpl(Item, BinCode, Sequence);
+            Count += 1;
+        end;
+        exit(Zpl);
+    end;
+
     /// <summary>
     /// Prints the material-identification label(s) (MTE) of one LP. The printer
     /// decides the format: a ZPL label printer (the field's 4 x 2 inch stock)
@@ -581,6 +642,11 @@ codeunit 72051 "DOPSWHS Print Dispatcher"
     /// 80x40 mm at DKÇ) so nothing is cut off on the right or at the bottom.
     /// </summary>
     procedure BuildItemZpl(var Item: Record Item): Text
+    begin
+        exit(BuildItemBinZpl(Item, '', 0));
+    end;
+
+    local procedure BuildItemBinZpl(var Item: Record Item; BinCode: Text; Sequence: Integer): Text
     var
         Canvas: Codeunit "DOPSWHS Label Canvas";
         Lines: List of [Text];
@@ -595,7 +661,10 @@ codeunit 72051 "DOPSWHS Print Dispatcher"
     begin
         Canvas.Init();
         // DKÇ (16 Eyl 2026): no caption under the item QR.
-        Zpl := Canvas.Frame('ÜRÜN ETİKETİ', CompanyProperty.DisplayName(), Item."No.", '', X, ColumnWidth, Y);
+        if BinCode = '' then
+            Zpl := Canvas.Frame('ÜRÜN ETİKETİ', CompanyProperty.DisplayName(), Item."No.", '', X, ColumnWidth, Y)
+        else
+            Zpl := Canvas.Frame('ÜRÜN / GÖZ', 'SIRA: ' + Format(Sequence, 0, 9), Item."No.", '', X, ColumnWidth, Y);
         // DKÇ (17 Eyl 2026): "ürün no çok büyük, uzunsa sığmıyor". Smaller
         // preferred size, measured glyph widths; if even the small font is too
         // wide the glyphs are condensed so the number never overprints.
@@ -603,6 +672,10 @@ codeunit 72051 "DOPSWHS Print Dispatcher"
         NoWidth := Canvas.FitFontMeasured(Item."No.", ColumnWidth, NoFont, 10);
         Zpl += Canvas.WriteSized(X, Y, NoFont, NoWidth, ColumnWidth, Item."No.");
         Y += NoFont + 8;
+        if BinCode <> '' then begin
+            Zpl += Canvas.Write(X, Y, Canvas.NormalFont(), ColumnWidth, 'GÖZ: ' + BinCode);
+            Y += Canvas.Pitch();
+        end;
         Canvas.WrapText(Item.Description, Canvas.MaxChars(ColumnWidth, Canvas.NormalFont()), 2, Lines);
         foreach Line in Lines do begin
             Zpl += Canvas.Write(X, Y, Canvas.NormalFont(), ColumnWidth, Line);

@@ -6,6 +6,9 @@ permissionset 72096 "DOPSWHS-VIEW"
     Caption = 'Advanced WMS View';
 
     Permissions =
+        tabledata "DOPSWHS Prepared Label Row" = R,
+        table "DOPSWHS Prepared Label Row" = X,
+        page "DOPSWHS Prepared Label Row API" = X,
         tabledata "DOPSWHS Setup" = R,
         tabledata "DOPSWHS Device Configuration" = R,
         tabledata "DOPSWHS Device Menu" = R,

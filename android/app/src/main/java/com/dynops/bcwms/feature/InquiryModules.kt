@@ -375,7 +375,10 @@ fun ItemInquiryModule(labelsOnly: Boolean = false) {
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
         // DKÇ (9 Eki 2026): Etiket Çıkar → Ürün Etiketi'nde bütün ürünler tek seferde.
-        if (labelsOnly) item { AllItemLabelsCard(enabled = !loading && !printing) }
+        if (labelsOnly) {
+            if (com.dynops.bcwms.BuildConfig.FLAVOR == "emu") item { ExcelItemLabelsCard(enabled = !loading && !printing) }
+            item { AllItemLabelsCard(enabled = !loading && !printing) }
+        }
         // Aşağı çekerek silme bildirimi (Swipe down to clear)
         if (pullOffset > 10f) {
             item {

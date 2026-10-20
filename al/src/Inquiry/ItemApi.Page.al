@@ -106,12 +106,15 @@ page 72086 "DOPSWHS Item API"
         Dispatcher.PrintItemLabel(Rec, printerId, copies);
     end;
 
-    /// <summary>
-    /// DKÇ (9 Eki 2026): terminal "Tüm ürünlerin etiketi" sends the item numbers in
-    /// batches (itemNosJson: ["A","B",...], at most 100). One call queues the whole batch
-    /// as LabelsPerJob-sized ZPL jobs. Bound to any item; the bound record is not used.
-    /// Returns the labels queued; unknown item numbers are skipped.
-    /// </summary>
+    // Excel rows are ordered and may repeat an item in several bins.
+    [ServiceEnabled]
+    procedure printLabelRows(rowsJson: Text; printerId: Code[50]): Integer
+    var
+        Dispatcher: Codeunit "DOPSWHS Print Dispatcher";
+    begin
+        exit(Dispatcher.PrintExcelItemLabels(rowsJson, printerId));
+    end;
+
     [ServiceEnabled]
     procedure printLabels(itemNosJson: Text; printerId: Code[50]): Integer
     var

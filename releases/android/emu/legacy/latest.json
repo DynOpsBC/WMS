@@ -1,7 +1,7 @@
 {
-  "versionCode": 200163,
-  "versionName": "1.14.163-emu",
-  "apkUrl": "https://github.com/DynOpsBC/WMS/releases/download/android-v1.14.163-emu/BCWMS-EMU-1.14.163-UYUMLU.apk",
-  "sha256": "f7117cf459197ceb5376889857acc92099e931370e1d13bcbf24e6e8f7f377e0",
-  "releaseNotes": "Etiket Çıkar → Ürün Etiketi: 'Tüm ürünlerin etiketi' ile BC'deki bütün ürünlerin etiketi 50'şerli paketlerle basılır; ekranda ilerleme ve Durdur. Önce DKC BC 1.14.2.23 kurulmalıdır."
+  "versionCode": 200165,
+  "versionName": "1.14.165-emu",
+  "apkUrl": "https://github.com/DynOpsBC/WMS/releases/download/android-v1.14.165-emu/BCWMS-EMU-1.14.165-UYUMLU.apk",
+  "sha256": "279b13b555c74727854272c5c6e4dfd34b7e9de02eed6ecd4d4a723e5e5a2e68",
+  "releaseNotes": "Excel seçmeden Hazır göz listesi — 1.535 etiket. 15.10.2026 listesi BC’den açılır; sıra, gözler ve tekrarlar korunur. Önizleme ve Tümünü yazdır. BCWMSApp 1.14.2.25 ve hazırlanmış liste gerekir."
 }

@@ -9,8 +9,8 @@ val releaseVersionCodeOverride = providers.gradleProperty("releaseVersionCode").
 val releaseVersionNameOverride = providers.gradleProperty("releaseVersionName").orNull?.takeIf { it.isNotBlank() }
 // BADE ve EMU aynı kaynak koddan aynı anda yayınlanır. Müşteri flavor'larında
 // ayrı sürüm değeri tutmak bir paketin geride kalmasına neden oluyordu.
-val customerVersionCode = releaseVersionCodeOverride ?: 200163
-val customerVersionName = releaseVersionNameOverride ?: "1.14.163"
+val customerVersionCode = releaseVersionCodeOverride ?: 200165
+val customerVersionName = releaseVersionNameOverride ?: "1.14.165"
 
 plugins {
   alias(libs.plugins.android.application)
@@ -38,8 +38,8 @@ android {
     // Saha APK'larından bazılarında CI tarafından 100000+ versionCode
     // kullanıldı. Görünen sürüm adı eski olsa bile Android yalnız sayısal kodu
     // karşılaştırdığı için semantik sürümleri 200000 bandında monoton tutuyoruz.
-    versionCode = releaseVersionCodeOverride ?: 200163
-    versionName = releaseVersionNameOverride ?: "1.14.163"
+    versionCode = releaseVersionCodeOverride ?: 200165
+    versionName = releaseVersionNameOverride ?: "1.14.165"
     manifestPlaceholders["appLabel"] = "BCWMS"
     // Ücretsiz dağıtım kanalı: public GitHub Release içindeki sabit latest.json.
     // APK aynı release'de tutulur; uygulamaya GitHub hesabı/token gömülmez.
@@ -100,7 +100,7 @@ android {
       manifestPlaceholders["appLabel"] = "BCWMS EMU"
       buildConfigField("String", "BC_CLIENT_ID", "\"9f9a9965-f358-4b0b-a89e-923f1d8b7a04\"")
       buildConfigField("String", "BC_FALLBACK_TENANT", "\"9de3e840-2fae-4ffb-b690-2fca32956342\"")
-      buildConfigField("String", "BC_DEFAULT_ENVIRONMENT", "\"Sandbox3007\"")
+      buildConfigField("String", "BC_DEFAULT_ENVIRONMENT", "\"Sandbox1510\"")
       // DKÇ tenant'ında şirket, ilk Microsoft girişinden sonra erişilebilir
       // şirketlerden seçilir. Ortak CRONUS kimliğine sessizce düşülmez.
       buildConfigField("String", "BC_DEFAULT_COMPANY_ID", "\"\"")
