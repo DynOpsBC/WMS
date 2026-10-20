@@ -360,6 +360,15 @@ page 72061 "DOPSWHS Setup"
                     ToolTip = 'Map each device/user to a default printer per usage.';
                     RunObject = page "DOPSWHS Device Printer Map";
                 }
+                // Kitoko (20 Eki 2026): ürün/raf/alan etiket tasarımı ekranı.
+                action(LabelLayoutsAction)
+                {
+                    Caption = 'Etiket Tasarımları';
+                    ApplicationArea = All;
+                    Image = Template;
+                    ToolTip = 'Ürün, raf ve alan etiketlerinin yerleşimini mm cinsinden düzenler.';
+                    RunObject = page "DOPSWHS Label Layout List";
+                }
                 action(EnableEnvironmentPrinting)
                 {
                     Caption = 'Yazıcıları Bu Ortamda Ortak Kullan';

@@ -7,7 +7,16 @@ codeunit 72285 "DOPSWHS Local Auth Mgmt"
     Permissions = tabledata "DOPSWHS Local User" = m;
 
     procedure CanManageLocalUsers(): Boolean
+    var
+        Edition: Codeunit "DOPSWHS Edition";
     begin
+        // Kitoko's existing tenant administrator must be able to provision
+        // terminals. Keep this account exception inside the Kitoko edition.
+        if Edition.Current() = 'KITOKO' then
+            case UpperCase(UserId()) of
+                'BCADMIN', 'BCADMİN':
+                    exit(true);
+            end;
         case UpperCase(UserId()) of
             'UMUT', 'DYNOPS', 'BC_SUPPORT':
                 exit(true);
@@ -18,7 +27,7 @@ codeunit 72285 "DOPSWHS Local Auth Mgmt"
     procedure EnsureCanManageLocalUsers()
     begin
         if not CanManageLocalUsers() then
-            Error('WMS kullanıcılarını yalnız UMUT, DYNOPS veya BC_SUPPORT hesabı yönetebilir.');
+            Error('Bu BC hesabının WMS kullanıcılarını yönetme yetkisi yok.');
     end;
 
     /// <summary>Yeni bir yerel kullanıcı oluşturur ya da mevcut olanı günceller (idempotent).

@@ -724,6 +724,10 @@ codeunit 72051 "DOPSWHS Print Dispatcher"
     procedure BuildItemZpl(var Item: Record Item): Text
     var
         Canvas: Codeunit "DOPSWHS Label Canvas";
+        LayoutEngine: Codeunit "DOPSWHS Label Layout Engine";
+        LayoutFields: Codeunit "DOPSWHS Label Layout Fields";
+        LayoutValues: Dictionary of [Text, Text];
+        LayoutCode: Code[20];
         Lines: List of [Text];
         Line: Text;
         UnitText: Text;
@@ -734,6 +738,11 @@ codeunit 72051 "DOPSWHS Print Dispatcher"
         NoFont: Integer;
         NoWidth: Integer;
     begin
+        // Kitoko (20 Eki 2026): aktif etiket tasarımı varsa onu kullan, yoksa aşağıdaki sabit tasarım.
+        if LayoutEngine.FindActiveLayout(Enum::"DOPSWHS Label Kind"::Item, LayoutCode) then begin
+            LayoutFields.ItemValues(Item, LayoutValues);
+            exit(LayoutEngine.BuildZpl(LayoutCode, LayoutValues, 1));
+        end;
         Canvas.Init();
         // DKÇ (16 Eyl 2026): no caption under the item QR.
         Zpl := Canvas.Frame('ÜRÜN ETİKETİ', CompanyProperty.DisplayName(), Item."No.", '', X, ColumnWidth, Y);
@@ -766,6 +775,10 @@ codeunit 72051 "DOPSWHS Print Dispatcher"
     procedure BuildBinZpl(var Bin: Record Bin): Text
     var
         Canvas: Codeunit "DOPSWHS Label Canvas";
+        LayoutEngine: Codeunit "DOPSWHS Label Layout Engine";
+        LayoutFields: Codeunit "DOPSWHS Label Layout Fields";
+        LayoutValues: Dictionary of [Text, Text];
+        LayoutCode: Code[20];
         InfoText: Text;
         Zpl: Text;
         X: Integer;
@@ -778,6 +791,11 @@ codeunit 72051 "DOPSWHS Print Dispatcher"
         ZoneFont: Integer;
         ZoneWidth: Integer;
     begin
+        // Kitoko (20 Eki 2026): aktif etiket tasarımı varsa onu kullan.
+        if LayoutEngine.FindActiveLayout(Enum::"DOPSWHS Label Kind"::Bin, LayoutCode) then begin
+            LayoutFields.BinValues(Bin, LayoutValues);
+            exit(LayoutEngine.BuildZpl(LayoutCode, LayoutValues, 1));
+        end;
         // DKÇ (17 Eyl 2026): "tip yazısını kaldır, bölge kodu daha büyük kalın
         // fontlu yazılsın". The bin type is warehouse setup, not something the
         // operator reads off the rack; the zone is what identifies the aisle.
@@ -826,6 +844,10 @@ codeunit 72051 "DOPSWHS Print Dispatcher"
     procedure BuildZoneZpl(var Zone: Record Zone): Text
     var
         Canvas: Codeunit "DOPSWHS Label Canvas";
+        LayoutEngine: Codeunit "DOPSWHS Label Layout Engine";
+        LayoutFields: Codeunit "DOPSWHS Label Layout Fields";
+        LayoutValues: Dictionary of [Text, Text];
+        LayoutCode: Code[20];
         Zpl: Text;
         X: Integer;
         ColumnWidth: Integer;
@@ -835,6 +857,11 @@ codeunit 72051 "DOPSWHS Print Dispatcher"
         CodeMax: Integer;
         FitWidth: Integer;
     begin
+        // Kitoko (20 Eki 2026): aktif etiket tasarımı varsa onu kullan.
+        if LayoutEngine.FindActiveLayout(Enum::"DOPSWHS Label Kind"::Zone, LayoutCode) then begin
+            LayoutFields.ZoneValues(Zone, LayoutValues);
+            exit(LayoutEngine.BuildZpl(LayoutCode, LayoutValues, 1));
+        end;
         Canvas.Init();
         Zpl := Canvas.Frame('ALAN ETİKETİ', Zone."Location Code", Zone.Code, '', X, ColumnWidth, Y);
         CodeMax := Canvas.LabelHeight() * 32 div 100;
@@ -867,6 +894,23 @@ codeunit 72051 "DOPSWHS Print Dispatcher"
                 exit;
             end;
         EnqueueZpl(Zone.Code, BuildZoneZpl(Zone), PrinterId, Copies, Enum::"DOPSWHS IWX Report Usage"::Bin, 'Zone');
+    end;
+
+    /// <summary>
+    /// Kitoko (20 Eki 2026): etiket tasarım ekranındaki "Test Baskı"; ÖRNEK
+    /// verili ZPL, ürün/raf etiketiyle aynı kuyruk kanalından gönderilir.
+    /// </summary>
+    procedure PrintLayoutTest(Zpl: Text; PrinterId: Code[50]; Kind: Enum "DOPSWHS Label Kind")
+    var
+        Printer: Record "DOPSWHS Printer";
+    begin
+        if Printer.Get(PrinterId) then
+            if Printer."Format" = Printer."Format"::PDF then
+                Error('%1 bir PDF yazıcıdır; ZPL etiket yazıcısı seçin.', PrinterId);
+        if Kind = Kind::Item then
+            EnqueueZpl('ETIKET-TEST', Zpl, PrinterId, 1, Enum::"DOPSWHS IWX Report Usage"::Item, 'Test')
+        else
+            EnqueueZpl('ETIKET-TEST', Zpl, PrinterId, 1, Enum::"DOPSWHS IWX Report Usage"::Bin, 'Test');
     end;
 
     local procedure AppendLabelPart(Existing: Text; Part: Text): Text
