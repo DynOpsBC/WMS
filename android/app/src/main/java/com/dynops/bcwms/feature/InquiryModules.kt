@@ -32,6 +32,7 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import org.json.JSONArray
 import org.json.JSONObject
 
 internal data class QueriedLpSummary(
@@ -161,6 +162,25 @@ internal suspend fun printItemLabelCopies(context: Context, itemNo: String, tota
         if (choice.warning.isBlank()) "" else " ${choice.warning}"
 }
 
+/** Prints one selected item's QR-only ETIKETV2 label. */
+internal suspend fun sendSingleItemLabelV2(context: Context, itemNo: String): String {
+    val choice = resolveInquiryPrinter(context).getOrElse { return "HATA: ${it.message}" }
+    val payload = JSONObject()
+        .put("itemNosJson", JSONArray().put(itemNo).toString())
+        .put("printerId", choice.printerCode)
+        .toString()
+    val response = try {
+        BcApi.boundActionLongRunning(context, "items", itemNo, "printLabelsV2", payload)
+    } catch (cancelled: CancellationException) {
+        throw cancelled
+    } catch (error: Exception) {
+        return "HATA: $itemNo ETIKETV2 etiketi gönderilemedi. ${error.message.orEmpty()}"
+    }
+    if (!response.ok) return "🔴 ETIKETV2: ${BcApi.errorMessage(response.body)} (HTTP ${response.httpCode})"
+    return "🟢 $itemNo ETIKETV2 etiketi ${choice.printerCode} kuyruğuna alındı." +
+        if (choice.warning.isBlank()) "" else " ${choice.warning}"
+}
+
 /** Raf etiketleri: her raf için adet kadar etiket; ilk hatada durur ve kaçının gittiğini söyler. */
 internal suspend fun printBinLabelCopies(
     context: Context,
@@ -222,6 +242,7 @@ internal fun ItemLabelPrintSheet(
     printing: Boolean,
     status: String,
     onPrint: () -> Unit,
+    onPrintV2: () -> Unit,
     onDismiss: () -> Unit,
 ) {
     ModalBottomSheet(onDismissRequest = { if (!printing) onDismiss() }) {
@@ -242,6 +263,13 @@ internal fun ItemLabelPrintSheet(
                 modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
             ) {
                 WmsActionLabel(WmsGlyph.PRINTER, if (printing) "Gönderiliyor…" else "${count ?: "—"} adet etiket yazdır")
+            }
+            OutlinedButton(
+                onClick = onPrintV2,
+                enabled = !printing,
+                modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
+            ) {
+                WmsActionLabel(WmsGlyph.PRINTER, if (printing) "Gönderiliyor…" else "1 adet ETIKETV2 yazdır (QR + madde no)")
             }
             TextButton(onClick = onDismiss, enabled = !printing, modifier = Modifier.fillMaxWidth()) {
                 Text("Kapat")
@@ -328,6 +356,21 @@ private fun ItemStockInquiry() {
         scope.launch {
             try {
                 labelStatus = printItemLabelCopies(context, no, total)
+                status = labelStatus
+            } finally {
+                printing = false
+            }
+        }
+    }
+
+    fun printItemLabelV2() {
+        if (printing) return
+        val no = item?.let { rawValue(it, "no", "number") }?.takeIf { it.isNotBlank() } ?: return
+        printing = true
+        labelStatus = "🖨 $no ETIKETV2 yazdırılıyor..."
+        scope.launch {
+            try {
+                labelStatus = sendSingleItemLabelV2(context, no)
                 status = labelStatus
             } finally {
                 printing = false
@@ -510,6 +553,7 @@ private fun ItemStockInquiry() {
         printing = printing,
         status = labelStatus,
         onPrint = { printItemLabel() },
+        onPrintV2 = { printItemLabelV2() },
         onDismiss = { if (!printing) showLabelSheet = false },
     )
 }
@@ -659,6 +703,20 @@ private fun ItemLabelInquiry() {
         scope.launch {
             try {
                 status = printItemLabelCopies(context, no, total)
+            } finally {
+                printing = false
+            }
+        }
+    }
+
+    fun printItemLabelV2(entry: InquiryItemEntry) {
+        if (printing) return
+        val no = entry.item?.let { rawValue(it, "no", "number") }?.takeIf { it.isNotBlank() } ?: return
+        printing = true
+        status = "🖨 $no ETIKETV2 yazdırılıyor..."
+        scope.launch {
+            try {
+                status = sendSingleItemLabelV2(context, no)
             } finally {
                 printing = false
             }
@@ -984,6 +1042,7 @@ private fun ItemLabelInquiry() {
             printing = printing,
             status = if (showPrintStatus) status else "",
             onPrint = { showPrintStatus = true; printItemLabel(printEntry) },
+            onPrintV2 = { showPrintStatus = true; printItemLabelV2(printEntry) },
             onDismiss = { if (!printing) printKey = null },
         )
     }

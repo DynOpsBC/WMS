@@ -9,8 +9,8 @@ val releaseVersionCodeOverride = providers.gradleProperty("releaseVersionCode").
 val releaseVersionNameOverride = providers.gradleProperty("releaseVersionName").orNull?.takeIf { it.isNotBlank() }
 // BADE ve EMU aynı kaynak koddan aynı anda yayınlanır. Müşteri flavor'larında
 // ayrı sürüm değeri tutmak bir paketin geride kalmasına neden oluyordu.
-val customerVersionCode = releaseVersionCodeOverride ?: 200183
-val customerVersionName = releaseVersionNameOverride ?: "1.14.183"
+val customerVersionCode = releaseVersionCodeOverride ?: 200184
+val customerVersionName = releaseVersionNameOverride ?: "1.14.184"
 
 plugins {
   alias(libs.plugins.android.application)
@@ -38,8 +38,8 @@ android {
     // Saha APK'larından bazılarında CI tarafından 100000+ versionCode
     // kullanıldı. Görünen sürüm adı eski olsa bile Android yalnız sayısal kodu
     // karşılaştırdığı için semantik sürümleri 200000 bandında monoton tutuyoruz.
-    versionCode = releaseVersionCodeOverride ?: 200183
-    versionName = releaseVersionNameOverride ?: "1.14.183"
+    versionCode = releaseVersionCodeOverride ?: 200184
+    versionName = releaseVersionNameOverride ?: "1.14.184"
     manifestPlaceholders["appLabel"] = "BCWMS"
     // Ücretsiz dağıtım kanalı: public GitHub Release içindeki sabit latest.json.
     // APK aynı release'de tutulur; uygulamaya GitHub hesabı/token gömülmez.
@@ -106,9 +106,9 @@ android {
       // Entra "BCWMS Terminal (Kitoko)" uygulama kaydının Application (client) ID'si.
       buildConfigField("String", "BC_CLIENT_ID", "\"${providers.gradleProperty("kitokoClientId").orNull ?: "8dbc8036-e191-4d8b-ad18-f987d5d499e1"}\"")
       buildConfigField("String", "BC_FALLBACK_TENANT", "\"f270e8be-e7b0-4ac0-b34a-33014d34d994\"")
-      buildConfigField("String", "BC_DEFAULT_ENVIRONMENT", "\"DemoSandbox\"")
+      buildConfigField("String", "BC_DEFAULT_ENVIRONMENT", "\"Sand2010\"")
       buildConfigField("String", "BC_DEFAULT_COMPANY_ID", "\"\"")
-      buildConfigField("String", "BC_DEFAULT_COMPANY_NAME", "\"KITOKO-TR-DEMO-V1\"")
+      buildConfigField("String", "BC_DEFAULT_COMPANY_NAME", "\"Element 4 Dizayn Müh. End. A.Ş.\"")
       buildConfigField("boolean", "BC_ALLOW_PRODUCTION", "true")
       buildConfigField("String", "TENANT_LABEL", "\"Kitoko\"")
       buildConfigField("String", "LOGIN_EMAIL_HINT", "\"ornek@kitokogroup.com\"")

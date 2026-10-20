@@ -106,7 +106,23 @@ object BcApi {
     } catch (e: Exception) { null }
 
     // ---- Environment / company selection (runtime-configurable) ----
-    fun getEnvironment(context: Context): String = prefs(context).getString(KEY_ENV, DEFAULT_ENVIRONMENT) ?: DEFAULT_ENVIRONMENT
+    fun getEnvironment(context: Context): String {
+        val preferences = prefs(context)
+        val stored = preferences.getString(KEY_ENV, null)
+        // Kitoko terminal migrated from DemoSandbox to the customer's Sand2010
+        // environment. Clear the old company selection so the new environment
+        // resolves Element 4 instead of carrying a DemoSandbox company ID over.
+        if (BuildConfig.TENANT_LABEL == "Kitoko" && stored.equals("DemoSandbox", ignoreCase = true)) {
+            preferences.edit()
+                .putString(KEY_ENV, DEFAULT_ENVIRONMENT)
+                .remove(KEY_COMPANY_ID)
+                .remove(KEY_COMPANY_NAME)
+                .remove(KEY_ACCESSIBLE_COMPANIES)
+                .apply()
+            return DEFAULT_ENVIRONMENT
+        }
+        return stored ?: DEFAULT_ENVIRONMENT
+    }
     fun getCompanyId(context: Context): String = prefs(context).getString(KEY_COMPANY_ID, DEFAULT_COMPANY_ID) ?: DEFAULT_COMPANY_ID
     fun getCompanyName(context: Context): String = prefs(context).getString(KEY_COMPANY_NAME, DEFAULT_COMPANY_NAME) ?: DEFAULT_COMPANY_NAME
 
