@@ -1,7 +1,7 @@
 {
-  "versionCode": 200180,
-  "versionName": "1.14.180-bade",
-  "apkUrl": "https://github.com/DynOpsBC/WMS/releases/download/android-v1.14.180-bade/BCWMS-BADE-1.14.180.apk",
-  "sha256": "3fc7d2376f9e69d54b9f14efe7a8d72632fbabe1009febfa3a38862675fbaf78",
-  "releaseNotes": "Karma palet mal kabul: birden çok ürün ve lot aynı paletlerde, Eşit Böl ve dağıtımı geri alma. BC MTE etiketi ürün/lot doğrulaması. BCWMSApp 1.14.1.138 ile kullanın."
+  "versionCode": 200186,
+  "versionName": "1.14.186-bade",
+  "apkUrl": "https://github.com/DynOpsBC/WMS/releases/download/android-v1.14.186-bade/BCWMS-BADE-1.14.186.apk",
+  "sha256": "e1d07d8957251a44cafa4e430bc5fcd326fb01f08248ebefd30d5aeaad41ec32",
+  "releaseNotes": "HLP, YLP, MLP gibi önekli LP numaraları okutulunca LP olarak tanınır (BS Üretim / BS Group LP serileri). BCWMSApp 1.14.1.145 ile birlikte kullanın."
 }
