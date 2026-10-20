@@ -4,15 +4,15 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: Kitoko version, for example 1.14.184
+        description: Kitoko version, for example 1.14.185
         required: true
         type: string
-        default: 1.14.184
+        default: 1.14.185
       version_code:
         description: Monotonically increasing Android versionCode
         required: true
         type: number
-        default: 200184
+        default: 200185
   push:
     branches:
       - customer/kitoko
@@ -39,8 +39,8 @@ jobs:
 
       - name: Validate version
         env:
-          RELEASE_VERSION: ${{ inputs.version || '1.14.184' }}
-          RELEASE_VERSION_CODE: ${{ inputs.version_code || '200184' }}
+          RELEASE_VERSION: ${{ inputs.version || '1.14.185' }}
+          RELEASE_VERSION_CODE: ${{ inputs.version_code || '200185' }}
         run: |
           [[ "$RELEASE_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
           [[ "$RELEASE_VERSION_CODE" =~ ^[0-9]+$ ]]
@@ -74,8 +74,8 @@ jobs:
       - name: Build signed Kitoko APK
         working-directory: android
         env:
-          RELEASE_VERSION: ${{ inputs.version || '1.14.184' }}
-          RELEASE_VERSION_CODE: ${{ inputs.version_code || '200184' }}
+          RELEASE_VERSION: ${{ inputs.version || '1.14.185' }}
+          RELEASE_VERSION_CODE: ${{ inputs.version_code || '200185' }}
         run: |
           ./gradlew :app:assembleKitokoRelease \
             -PreleaseVersionCode="$RELEASE_VERSION_CODE" \
@@ -96,8 +96,8 @@ jobs:
 
       - name: Prepare APK and update manifest
         env:
-          RELEASE_VERSION: ${{ inputs.version || '1.14.184' }}
-          RELEASE_VERSION_CODE: ${{ inputs.version_code || '200184' }}
+          RELEASE_VERSION: ${{ inputs.version || '1.14.185' }}
+          RELEASE_VERSION_CODE: ${{ inputs.version_code || '200185' }}
           REPO: ${{ github.repository }}
         run: |
           mkdir -p dist
@@ -113,13 +113,13 @@ jobs:
             --arg tag "$TAG" \
             --arg name "$NAME" \
             --arg sha256 "$SHA" \
-            '{versionCode:$versionCode,versionName:$versionName,apkUrl:("https://github.com/"+$repo+"/releases/download/"+$tag+"/"+$name),sha256:$sha256,releaseNotes:("Kitoko Android "+$versionName+" — tekli ve toplu ETIKETV2 QR etiketi; Sand2010 ve Element 4 varsayılanı")}' \
+            '{versionCode:$versionCode,versionName:$versionName,apkUrl:("https://github.com/"+$repo+"/releases/download/"+$tag+"/"+$name),sha256:$sha256,releaseNotes:("Kitoko Android "+$versionName+" — toplu ve tekli ETIKETV2; ilk 300 ürünü yazdırma; Sand2010 / Element 4 varsayılanı")}' \
             > dist/latest.json
 
       - name: Publish Kitoko release and advance update channel
         env:
           GH_TOKEN: ${{ github.token }}
-          RELEASE_VERSION: ${{ inputs.version || '1.14.184' }}
+          RELEASE_VERSION: ${{ inputs.version || '1.14.185' }}
           REPO: ${{ github.repository }}
         run: |
           TAG="android-v${RELEASE_VERSION}-kitoko"

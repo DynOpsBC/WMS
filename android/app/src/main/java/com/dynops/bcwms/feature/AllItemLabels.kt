@@ -75,11 +75,15 @@ private sealed interface AllItemLabelsStep {
  * dönen gösterge ve "X / N", Durdur'a basınca o anki paket bitince durur.
  */
 @Composable
-fun AllItemLabelsCard(enabled: Boolean = true, v2Format: Boolean = false) {
+fun AllItemLabelsCard(enabled: Boolean = true, v2Format: Boolean = false, itemLimit: Int? = null) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val action = if (v2Format) "printLabelsV2" else "printLabels"
-    val title = if (v2Format) "Tüm ürünlerin etiketi · ETIKETV2 (QR + madde no)" else "Tüm ürünlerin etiketi"
+    val title = when {
+        itemLimit != null && v2Format -> "İlk $itemLimit ürün · ETIKETV2 (QR + madde no)"
+        v2Format -> "Tüm ürünlerin etiketi · ETIKETV2 (QR + madde no)"
+        else -> "Tüm ürünlerin etiketi"
+    }
     var step by remember { mutableStateOf<AllItemLabelsStep>(AllItemLabelsStep.Idle) }
     var stopRequested by remember { mutableStateOf(false) }
     var loadError by remember { mutableStateOf("") }
@@ -89,8 +93,14 @@ fun AllItemLabelsCard(enabled: Boolean = true, v2Format: Boolean = false) {
             loadError = ""
             step = AllItemLabelsStep.Loading
             scope.launch {
-                val page = BcApi.getAllPages(context, "items?\$select=no&\$filter=blocked eq false", maxPages = 1000)
-                val itemNos = page.rows.map { it.optString("no") }
+                val query = buildString {
+                    append("items?\$select=no&\$filter=blocked eq false")
+                    if (itemLimit != null) append("&\$orderby=no asc&\$top=$itemLimit")
+                }
+                val page = BcApi.getAllPages(context, query, maxPages = 1000)
+                val itemNos = page.rows.map { it.optString("no") }.let { rows ->
+                    if (itemLimit == null) rows else rows.take(itemLimit)
+                }
                 step = if (page.complete && itemNos.isNotEmpty()) AllItemLabelsStep.Confirm(itemNos)
                 else {
                     loadError = if (page.complete) "BC'de etiket basılacak ürün bulunamadı." else "Ürün listesi alınamadı. Bağlantıyı kontrol edip tekrar deneyin."
