@@ -36,6 +36,12 @@ data class ResolvedBarcode(
 )
 
 object BarcodeIntentResolver {
+    /**
+     * LP numarası: isteğe bağlı en çok 3 harflik şirket/işlem öneki + "LP" + rakam.
+     * BADE (20 Eki 2026): BS Üretim HLP/YLP, BS Group LP/MLP serileri kullanır;
+     * yalnız "LP" ile başlayanları tanımak HLP000001'i ürün kodu sanıyordu.
+     */
+    private val LP_NUMBER = Regex("^[A-Z]{0,3}LP\\d{2,}$", RegexOption.IGNORE_CASE)
 
     fun resolve(raw0: String): ResolvedBarcode {
         val raw = raw0.trim()
@@ -47,7 +53,7 @@ object BarcodeIntentResolver {
                 return ResolvedBarcode(BarcodeKind.Bin, raw, raw)
             raw.startsWith("TPL-", ignoreCase = true) ->
                 return ResolvedBarcode(BarcodeKind.LpTemplate, raw, raw)
-            raw.startsWith("LP", ignoreCase = true) && raw.drop(2).all { it.isDigit() } && raw.length >= 4 ->
+            LP_NUMBER.matches(raw) ->
                 return ResolvedBarcode(BarcodeKind.Lp, raw, raw)
         }
 

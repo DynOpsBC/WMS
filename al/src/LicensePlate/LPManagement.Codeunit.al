@@ -61,6 +61,20 @@ codeunit 72040 "DOPSWHS LP Management"
         OnAfterBuild(LP);
     end;
 
+    /// <summary>
+    /// BADE (20 Eki 2026): üretim BC'de nakledilip LP stoktan açılsa da (Stoktan
+    /// LP Oluştur) üretim çıkışı serisi kullanılır. Kaynak giriş üretim/montaj
+    /// çıkışı değilse '' (şirketin LP No. Series'i).
+    /// </summary>
+    local procedure SourceEntryLpNoSeries(ItemLedgerEntry: Record "Item Ledger Entry"): Code[20]
+    var
+        LPSeriesSetup: Codeunit "DOPSWHS LP Series Setup";
+    begin
+        if ItemLedgerEntry."Entry Type" in [ItemLedgerEntry."Entry Type"::Output, ItemLedgerEntry."Entry Type"::"Assembly Output"] then
+            exit(LPSeriesSetup.ProdOutputLpNoSeries());
+        exit('');
+    end;
+
     procedure Stop(var LP: Record "DOPSWHS LP Header"; PrintLabel: Boolean)
     begin
         Stop(LP, PrintLabel, '');
@@ -265,7 +279,7 @@ codeunit 72040 "DOPSWHS LP Management"
             RequestId, BoundItemLedgerEntryNo, TemplateCode, FirstEntry."Location Code",
             BinCode, TotalQuantity, NormalizedPlan);
         EnsureBinReadyForStockLp(FirstEntry."Location Code", TargetBinCode, CheckedBinCodes);
-        Build(TemplateCode, FirstEntry."Location Code", TargetBinCode, LPHeader);
+        Build(TemplateCode, FirstEntry."Location Code", TargetBinCode, SourceEntryLpNoSeries(FirstEntry), LPHeader);
         LPHeader."Bulk Build Request ID" := RequestId;
         LPHeader."Bulk Source ILE No." := BoundItemLedgerEntryNo;
         LPHeader."Bulk Source Bin Code" := TargetBinCode;
@@ -618,7 +632,7 @@ codeunit 72040 "DOPSWHS LP Management"
             Error('%1 ürünü için LP''ye atanabilecek raf stoku bulunamadı.', ItemLedgerEntry."Item No.");
 
         EnsureBinReadyForStockLp(ItemLedgerEntry."Location Code", TargetBinCode, CheckedBinCodes);
-        Build(TemplateCode, ItemLedgerEntry."Location Code", TargetBinCode, LPHeader);
+        Build(TemplateCode, ItemLedgerEntry."Location Code", TargetBinCode, SourceEntryLpNoSeries(ItemLedgerEntry), LPHeader);
         if UseIdempotency then
             LPHeader."Bulk Build Request ID" := RequestId;
         LPHeader."Bulk Source ILE No." := ItemLedgerEntry."Entry No.";

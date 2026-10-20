@@ -67,4 +67,20 @@ class BarcodeIntentResolverTest {
         assertEquals("A100797", result.value)
         assertEquals("A100797", result.lotNo)
     }
+
+    @Test
+    fun `company and operation prefixed LP numbers are license plates`() {
+        for (no in listOf("LP000001", "HLP000001", "YLP000123", "MLP000045", "hlp000002")) {
+            val result = BarcodeIntentResolver.resolve(no)
+            assertEquals(no, BarcodeKind.Lp, result.kind)
+            assertEquals(no, result.value)
+        }
+    }
+
+    @Test
+    fun `item codes that only contain LP stay items`() {
+        for (code in listOf("AB.02316", "HLPA01", "LPX", "ABCDLP000001", "LP1")) {
+            assertEquals(code, BarcodeKind.Item, BarcodeIntentResolver.resolve(code).kind)
+        }
+    }
 }
