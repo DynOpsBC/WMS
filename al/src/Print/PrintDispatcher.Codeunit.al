@@ -658,35 +658,40 @@ codeunit 72051 "DOPSWHS Print Dispatcher"
         Y: Integer;
         NoFont: Integer;
         NoWidth: Integer;
+        TextFont: Integer;
     begin
         Canvas.Init();
         // DKÇ (16 Eyl 2026): no caption under the item QR.
         if BinCode = '' then
-            Zpl := Canvas.Frame('ÜRÜN ETİKETİ', CompanyProperty.DisplayName(), Item."No.", '', X, ColumnWidth, Y)
+            Zpl := Canvas.Frame('ÜRÜN ETİKETİ', CompanyProperty.DisplayName(), Item."No.", '', 34, X, ColumnWidth, Y)
         else
-            Zpl := Canvas.Frame('ÜRÜN / GÖZ', 'SIRA: ' + Format(Sequence, 0, 9), Item."No.", '', X, ColumnWidth, Y);
+            Zpl := Canvas.Frame('ÜRÜN / GÖZ', 'SIRA: ' + Format(Sequence, 0, 9), Item."No.", '', 34, X, ColumnWidth, Y);
+        // DKÇ (20 Eki 2026): "etiket küçük kaldı, biraz büyüt" — 80x40'ta altta
+        // ~1 cm boş kalıyordu. QR %34, ürün no ve açıklama birer kademe büyük,
+        // barkod yüksekliğin %36'sına kadar uzar. Uzun ürün no yine sığdırılır.
+        TextFont := Canvas.NormalFont() + 4;
         // DKÇ (17 Eyl 2026): "ürün no çok büyük, uzunsa sığmıyor". Smaller
         // preferred size, measured glyph widths; if even the small font is too
         // wide the glyphs are condensed so the number never overprints.
-        NoFont := Canvas.FitFontMeasured(Item."No.", ColumnWidth, Canvas.ItemNoFont(), Canvas.SmallFont());
+        NoFont := Canvas.FitFontMeasured(Item."No.", ColumnWidth, Canvas.ItemNoFont() + 8, Canvas.SmallFont());
         NoWidth := Canvas.FitFontMeasured(Item."No.", ColumnWidth, NoFont, 10);
         Zpl += Canvas.WriteSized(X, Y, NoFont, NoWidth, ColumnWidth, Item."No.");
         Y += NoFont + 8;
         if BinCode <> '' then begin
-            Zpl += Canvas.Write(X, Y, Canvas.NormalFont(), ColumnWidth, 'GÖZ: ' + BinCode);
-            Y += Canvas.Pitch();
+            Zpl += Canvas.Write(X, Y, TextFont, ColumnWidth, 'GÖZ: ' + BinCode);
+            Y += TextFont + 6;
         end;
-        Canvas.WrapText(Item.Description, Canvas.MaxChars(ColumnWidth, Canvas.NormalFont()), 2, Lines);
+        Canvas.WrapText(Item.Description, Canvas.MaxChars(ColumnWidth, TextFont), 2, Lines);
         foreach Line in Lines do begin
-            Zpl += Canvas.Write(X, Y, Canvas.NormalFont(), ColumnWidth, Line);
-            Y += Canvas.Pitch();
+            Zpl += Canvas.Write(X, Y, TextFont, ColumnWidth, Line);
+            Y += TextFont + 6;
         end;
         UnitText := 'BİRİM: ' + Item."Base Unit of Measure";
         if Item.GTIN <> '' then
             UnitText += '   GTIN: ' + Item.GTIN;
         Zpl += Canvas.Write(X, Y, Canvas.SmallFont(), ColumnWidth, CopyStr(UnitText, 1, Canvas.MaxChars(ColumnWidth, Canvas.SmallFont())));
         Y += Canvas.SmallFont() + 8;
-        Zpl += Canvas.Code128(X, Y, Canvas.BarHeightToBottom(Y, true), Item."No.", ColumnWidth, true);
+        Zpl += Canvas.Code128(X, Y, Canvas.BarHeightToBottom(Y, true, 36), Item."No.", ColumnWidth, true);
         exit(Zpl + Canvas.Finish());
     end;
 
