@@ -38,6 +38,9 @@ fun ExcelItemLabelsCard(enabled: Boolean = true, loadPreparedRows: (suspend () -
     // satırlar gösterilir, onaylanırsa atlanıp kalanlar sırayla basılır.
     var skipPrompt by remember { mutableStateOf<List<ExcelLabelRow>>(emptyList()) }
     var promptResume by remember { mutableStateOf(false) }
+    var promptOnly by remember { mutableStateOf<Set<Int>?>(null) }
+    // DKÇ (21 Eki 2026): yazıcı ajanının reddettiği (ör. eski yazıcı kaydı) etiketler.
+    var unprintedPrompt by remember { mutableStateOf<List<Int>?>(null) }
     // DKÇ (21 Eki 2026): durdurulan/yarım kalan gönderimden sonra 1'den yeniden basmamak için
     // son başarıyla gönderilen sıra saklanır; önizlemede "Kaldığı yerden devam" çıkar.
     var resumeAfter by remember { mutableIntStateOf(preferences.getInt("resumeAfter", 0)) }
@@ -108,9 +111,40 @@ fun ExcelItemLabelsCard(enabled: Boolean = true, loadPreparedRows: (suspend () -
         }) { Text("Kontrol ettim") } },
     )
 
-    fun promptRows(): List<ExcelLabelRow> = if (promptResume) rowsAfterOrder(rows, resumeAfter) else rows
+    fun promptRows(): List<ExcelLabelRow> = promptOnly?.let { only -> rows.filter { it.order in only } }
+        ?: if (promptResume) rowsAfterOrder(rows, resumeAfter) else rows
 
-    fun startPrint(skipMissing: Boolean, resume: Boolean) {
+    fun findUnprinted() {
+        loading = true
+        error = ""
+        scope.launch {
+            try {
+                val since = java.time.LocalDate.now().atStartOfDay(java.time.ZoneId.systemDefault()).toInstant().toString()
+                val page = BcApi.getAllPages(context,
+                    "printJobs?\$filter=sourceDoc eq 'EXCEL' and createdAt ge $since&\$select=jobId,status,payload&\$orderby=jobId asc",
+                    maxPages = 50)
+                check(page.complete) { "Yazdırma kuyruğu okunamadı. Bağlantıyı kontrol edin." }
+                val jobs = page.rows.map { job ->
+                    val zpl = runCatching {
+                        String(java.util.Base64.getDecoder().decode(job.optString("payload")), Charsets.UTF_8)
+                    }.getOrDefault("")
+                    ExcelJobRecord(job.optInt("jobId"), job.optString("status"), excelJobOrders(zpl))
+                }
+                val listOrders = rows.map { it.order }.toSet()
+                val unprinted = unprintedExcelOrders(jobs).filter { it in listOrders }
+                if (unprinted.isEmpty()) error = "Bugün yazıcıya ulaşmayan etiket yok."
+                else unprintedPrompt = unprinted
+            } catch (cancelled: kotlinx.coroutines.CancellationException) {
+                throw cancelled
+            } catch (failure: Exception) {
+                error = failure.message ?: "Yazdırma kuyruğu okunamadı."
+            } finally {
+                loading = false
+            }
+        }
+    }
+
+    fun startPrint(skipMissing: Boolean, resume: Boolean, only: Set<Int>? = null) {
         // Set synchronously: repeated taps cannot create a second coroutine.
         loading = true
         error = ""
@@ -121,11 +155,17 @@ fun ExcelItemLabelsCard(enabled: Boolean = true, loadPreparedRows: (suspend () -
                 check(page.complete) { "Ürünler doğrulanamadı. Hiçbir etiket gönderilmedi." }
                 val available = page.rows.filter { !it.optBoolean("blocked") }
                     .map { it.optString("no").uppercase(Locale.ROOT) }.toSet()
-                val source = if (resume) rowsAfterOrder(rows, resumeAfter) else rows
+                val trackResume = only == null
+                val source = when {
+                    only != null -> rows.filter { it.order in only }
+                    resume -> rowsAfterOrder(rows, resumeAfter)
+                    else -> rows
+                }
                 check(source.isNotEmpty()) { "Devam edilecek satır kalmadı." }
                 val missing = unavailableLabelRows(source, available)
                 if (missing.isNotEmpty() && !skipMissing) {
                     promptResume = resume
+                    promptOnly = only
                     skipPrompt = missing
                     return@launch
                 }
@@ -149,10 +189,12 @@ fun ExcelItemLabelsCard(enabled: Boolean = true, loadPreparedRows: (suspend () -
                     val count = BcApi.scalarValue(response.body).trim().toIntOrNull()
                     if (response.ok && count == batch.size) {
                         withContext(Dispatchers.IO) {
-                            preferences.edit().remove("inFlight").putInt("resumeAfter", batch.last().order).commit()
+                            val edit = preferences.edit().remove("inFlight")
+                            if (trackResume) edit.putInt("resumeAfter", batch.last().order)
+                            edit.commit()
                         }
                         uncertain = ""
-                        resumeAfter = batch.last().order
+                        if (trackResume) resumeAfter = batch.last().order
                         // Paket yazıcıya iletilmeden sonraki gönderilmez (sıra karışmasın).
                         val orderError = if (lastJobId == null) { delay(20_000L); null }
                             else awaitExcelJob(range, fetchJobs = { excelPrintJobsAfter(context, lastJobId) }, pause = { delay(it) })
@@ -161,7 +203,7 @@ fun ExcelItemLabelsCard(enabled: Boolean = true, loadPreparedRows: (suspend () -
                         if (response.httpCode == 404) "Bu işlem için BCWMSApp 1.14.2.24 veya üzeri gerekir."
                         else "${BcApi.errorMessage(response.body)} (HTTP ${response.httpCode})"))
                 }, stopRequested = { stop }, onProgress = { done, _ -> sent = done })
-                if (outcome?.let { it.error == null && !it.stopped } == true) {
+                if (trackResume && outcome?.let { it.error == null && !it.stopped } == true) {
                     preferences.edit().remove("resumeAfter").commit()
                     resumeAfter = 0
                 }
@@ -186,7 +228,21 @@ fun ExcelItemLabelsCard(enabled: Boolean = true, loadPreparedRows: (suspend () -
         resumeFromOrder = if (resumeAfter > 0 && rows.any { it.order > resumeAfter }) resumeAfter + 1 else 0,
         resumeCount = rowsAfterOrder(rows, resumeAfter).size,
         onResume = { startPrint(false, resume = true) },
+        onUnprinted = { findUnprinted() },
     )
+    unprintedPrompt?.let { orders -> if (!printing && outcome == null) AlertDialog(
+        onDismissRequest = { unprintedPrompt = null },
+        title = { Text("${orders.size} etiket yazıcıya ulaşmamış") },
+        text = { Column {
+            Text("Bugün yazıcı tarafından reddedilen sıralar: ${orderRangesText(orders)}")
+            Spacer(Modifier.height(8.dp))
+            Text("Seçili yazıcıya sırayla basılsın mı? Önce doğru yazıcının seçili olduğunu kontrol edin.")
+        } },
+        confirmButton = { Button(onClick = { unprintedPrompt = null; startPrint(false, resume = false, only = orders.toSet()) }) {
+            Text("Yazdır (${orders.size})")
+        } },
+        dismissButton = { TextButton(onClick = { unprintedPrompt = null }) { Text("Vazgeç") } },
+    ) }
     if (skipPrompt.isNotEmpty() && !printing && outcome == null) AlertDialog(
         onDismissRequest = { skipPrompt = emptyList() },
         title = { Text("${skipPrompt.size} satır basılamaz") },
@@ -200,7 +256,7 @@ fun ExcelItemLabelsCard(enabled: Boolean = true, loadPreparedRows: (suspend () -
             Spacer(Modifier.height(8.dp))
             Text("Bu satırlar atlanıp kalan ${promptRows().size - skipPrompt.size} etiket sırayla basılsın mı?")
         } },
-        confirmButton = { Button(onClick = { skipPrompt = emptyList(); startPrint(true, promptResume) }) {
+        confirmButton = { Button(onClick = { skipPrompt = emptyList(); startPrint(true, promptResume, promptOnly) }) {
             Text("Atlayarak yazdır (${promptRows().size - skipPrompt.size})")
         } },
         dismissButton = { TextButton(onClick = { skipPrompt = emptyList() }) { Text("Vazgeç") } },
@@ -239,6 +295,7 @@ internal fun ExcelLabelsPreview(
     resumeFromOrder: Int = 0,
     resumeCount: Int = 0,
     onResume: () -> Unit = {},
+    onUnprinted: (() -> Unit)? = null,
 ) {
     AlertDialog(
         onDismissRequest = { if (!busy) onDismiss() },
@@ -266,6 +323,7 @@ internal fun ExcelLabelsPreview(
             }
             if (resumeFromOrder > 0) OutlinedButton(onClick = onPrint, enabled = !busy) { Text("Baştan yazdır (${rows.size})") }
             else Button(onClick = onPrint, enabled = !busy) { Text("Tümünü yazdır (${rows.size})") }
+            if (onUnprinted != null) TextButton(onClick = onUnprinted, enabled = !busy) { Text("Basılamayanları yazdır") }
         } },
         dismissButton = { TextButton(onClick = onDismiss, enabled = !busy) { Text("Vazgeç") } },
     )

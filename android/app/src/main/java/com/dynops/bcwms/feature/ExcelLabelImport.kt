@@ -176,8 +176,10 @@ internal fun excelJobState(jobs: List<JSONObject>): ExcelJobState {
     own.firstOrNull { it.optString("status").equals("Failed", ignoreCase = true) }?.let {
         return ExcelJobState.Failed(it.optString("lastError").ifBlank { "Yazdırma işi başarısız." })
     }
-    return if (own.any { it.optString("status").equals("Queued", ignoreCase = true) }) ExcelJobState.Waiting
-    else ExcelJobState.Delivered
+    // DKÇ (21 Eki 2026): "Dispatched" yalnız buluta iletildi demek; yazıcı ajanı işi
+    // reddedebilir (ör. eski yazıcı kaydı). Ajan "Sent" demeden sonraki paket gitmez.
+    return if (own.all { it.optString("status").equals("Sent", ignoreCase = true) }) ExcelJobState.Delivered
+    else ExcelJobState.Waiting
 }
 
 /** null: paket yazıcıya iletildi; aksi halde kalan paketleri durduran metin. */
@@ -192,12 +194,43 @@ internal suspend fun awaitExcelJob(
     while (true) {
         when (val state = fetchJobs()?.let { excelJobState(it) } ?: ExcelJobState.Waiting) {
             ExcelJobState.Delivered -> return null
-            is ExcelJobState.Failed -> return "$range paketi yazıcıya iletilemedi: ${state.message} Sıra bozulmasın diye kalanlar gönderilmedi."
+            is ExcelJobState.Failed -> return "$range paketi yazıcıda basılamadı: ${state.message} Kalanlar gönderilmedi; yazıcı seçimini kontrol edip \"Basılamayanları yazdır\" ile tamamlayın."
             ExcelJobState.Waiting -> Unit
         }
-        if (waited >= maxWaitMs) return "$range paketi ${maxWaitMs / 60_000} dakikadır yazıcıya iletilmedi. " +
+        if (waited >= maxWaitMs) return "$range paketi ${maxWaitMs / 60_000} dakikadır yazıcıdan onay almadı. " +
             "Sıra bozulmasın diye kalanlar gönderilmedi; yazıcı ajanını ve BC yazdırma kuyruğunu kontrol edin."
         pause(pollMs)
         waited += pollMs
     }
+}
+
+/** Etiket işinin ZPL'indeki "SIRA: n" numaraları (DKÇ ürün/göz etiketi başlığı). */
+internal fun excelJobOrders(zpl: String): List<Int> =
+    Regex("""SIRA:\s*(\d+)""").findAll(zpl).map { it.groupValues[1].toInt() }.toList()
+
+internal data class ExcelJobRecord(val jobId: Int, val status: String, val orders: List<Int>)
+
+/**
+ * Yazıcıya ulaşmayan sıralar: bir sıranın en son işi "Failed" ise basılmamıştır;
+ * sonradan başarıyla (ya da hâlâ yolda) gönderilenler çıkarılır.
+ */
+internal fun unprintedExcelOrders(jobs: List<ExcelJobRecord>): List<Int> {
+    val last = sortedMapOf<Int, String>()
+    jobs.sortedBy { it.jobId }.forEach { job -> job.orders.forEach { last[it] = job.status } }
+    return last.filterValues { it.equals("Failed", ignoreCase = true) }.keys.toList()
+}
+
+/** 1,2,3,5,6 → "1–3, 5–6" */
+internal fun orderRangesText(orders: List<Int>): String {
+    if (orders.isEmpty()) return ""
+    val sorted = orders.sorted()
+    val parts = mutableListOf<String>()
+    var start = sorted.first()
+    var prev = start
+    for (n in sorted.drop(1)) {
+        if (n != prev + 1) { parts += if (start == prev) "$start" else "$start–$prev"; start = n }
+        prev = n
+    }
+    parts += if (start == prev) "$start" else "$start–$prev"
+    return parts.joinToString(", ")
 }

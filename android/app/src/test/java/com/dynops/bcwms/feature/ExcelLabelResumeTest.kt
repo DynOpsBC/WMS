@@ -33,11 +33,30 @@ class ExcelLabelResumeTest {
 
     @Test
     fun `next batch waits until the EXCEL job leaves the queue`() = runBlocking {
-        val answers = ArrayDeque(listOf(null, listOf(job("Dispatched", "OTHER")), listOf(job("Queued")), listOf(job("Dispatched"))))
+        val answers = ArrayDeque(listOf(null, listOf(job("Sent", "OTHER")), listOf(job("Queued")), listOf(job("Dispatched")), listOf(job("Sent"))))
         var pauses = 0
         assertNull(awaitExcelJob("501–531", fetchJobs = { answers.removeFirst() }, pause = { pauses++ }))
-        assertEquals(3, pauses)
+        assertEquals(4, pauses)
+        val rejected = awaitExcelJob("1–50", fetchJobs = { listOf(job("Failed")) }, pause = {})
+        assertTrue(rejected!!.contains("Basılamayanları yazdır"))
         val stuck = awaitExcelJob("501–531", fetchJobs = { listOf(job("Queued")) }, pause = {}, pollMs = 1_000, maxWaitMs = 2_000)
         assertTrue(stuck!!.contains("kalanlar gönderilmedi"))
+    }
+
+    @Test
+    fun `unprinted orders are the ones whose last job failed`() {
+        val zpl = "^FDSIRA: 733^FS ... ^FDSIRA: 734^FS"
+        assertEquals(listOf(733, 734), excelJobOrders(zpl))
+        val jobs = listOf(
+            ExcelJobRecord(2585, "Failed", (1..50).toList()),
+            ExcelJobRecord(2595, "Failed", (501..531).toList()),
+            ExcelJobRecord(2596, "Failed", (533..582).toList()),
+            ExcelJobRecord(2600, "Sent", (733..782).toList()),
+            ExcelJobRecord(2700, "Sent", (1..10).toList()),
+        )
+        val unprinted = unprintedExcelOrders(jobs)
+        assertEquals(11, unprinted.first())
+        assertTrue(733 !in unprinted && 532 !in unprinted)
+        assertEquals("11–50, 501–531, 533–582", orderRangesText(unprinted))
     }
 }
