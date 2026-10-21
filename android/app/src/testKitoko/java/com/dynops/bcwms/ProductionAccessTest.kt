@@ -9,8 +9,7 @@ class ProductionAccessTest {
     @Test fun `Kitoko discovers Production while retaining its sandbox default`() {
         assertTrue(BuildConfig.BC_ALLOW_PRODUCTION)
         assertTrue("Production" in BcApi.KNOWN_ENVIRONMENTS)
-        // Kitoko (20 Eki 2026): varsayılan ortam Sand2010 oldu (build.gradle.kts).
-        assertEquals("Sand2010", BcApi.DEFAULT_ENVIRONMENT)
+        assertEquals("DemoSandbox", BcApi.DEFAULT_ENVIRONMENT)
     }
 
     private val restricted = setOf(

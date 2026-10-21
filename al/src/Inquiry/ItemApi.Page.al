@@ -107,20 +107,6 @@ page 72086 "DOPSWHS Item API"
     end;
 
     /// <summary>
-    /// Kitoko (21 Eki 2026): EMU'dan Excel'den sıralı ürün / göz etiketleri.
-    /// rowsJson: [{"order":1,"itemNo":"A","bin":"R.1.1"},...] (en çok 50). Rows are
-    /// ordered and may repeat an item in several bins; each row is one label.
-    /// Bound to any item; the bound record is not used. Returns the labels queued.
-    /// </summary>
-    [ServiceEnabled]
-    procedure printLabelRows(rowsJson: Text; printerId: Code[50]): Integer
-    var
-        Dispatcher: Codeunit "DOPSWHS Print Dispatcher";
-    begin
-        exit(Dispatcher.PrintExcelItemLabels(rowsJson, printerId));
-    end;
-
-    /// <summary>
     /// Kitoko (19 Eki 2026): DKÇ/EMU toplu ürün etiketi. The terminal sends the
     /// item numbers in batches (itemNosJson: ["A","B",...], at most 100). One call
     /// queues the whole batch as LabelsPerJob-sized ZPL jobs. Bound to any item;

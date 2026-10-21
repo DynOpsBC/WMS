@@ -166,75 +166,6 @@ codeunit 72051 "DOPSWHS Print Dispatcher"
     end;
 
     /// <summary>
-    /// Kitoko (21 Eki 2026): EMU 1.14.2.24'ten Excel'den sıralı ürün / göz
-    /// etiketleri. One queue job per ordered terminal batch. The entire batch is
-    /// built and validated before anything is queued. No Item.Mark, FindSet,
-    /// deduplication or quantity multiplier: every row is exactly one label.
-    /// </summary>
-    procedure PrintExcelItemLabels(RowsJson: Text; PrinterId: Code[50]): Integer
-    var
-        Printer: Record "DOPSWHS Printer";
-        Zpl: Text;
-        Count: Integer;
-    begin
-        if Printer.Get(PrinterId) then
-            if Printer."Format" <> Printer."Format"::ZPL then
-                Error('Excel ürün / göz etiketleri için ZPL etiket yazıcısı seçin.');
-        Zpl := BuildExcelItemLabels(RowsJson, Count);
-        EnqueueZpl('EXCEL', Zpl, PrinterId, 1, Enum::"DOPSWHS IWX Report Usage"::Item, 'Excel item/bin');
-        exit(Count);
-    end;
-
-    /// <summary>
-    /// RowsJson: [{"order":1,"itemNo":"A","bin":"R.1.1"},...], 1 to LabelsPerJob rows
-    /// with consecutive order numbers. The same item may repeat in several bins.
-    /// </summary>
-    procedure BuildExcelItemLabels(RowsJson: Text; var Count: Integer): Text
-    var
-        Item: Record Item;
-        Rows: JsonArray;
-        Token: JsonToken;
-        Value: JsonToken;
-        Row: JsonObject;
-        ItemNo: Text;
-        BinCode: Text;
-        Sequence: Integer;
-        Previous: Integer;
-        Zpl: Text;
-    begin
-        Count := 0;
-        if not Rows.ReadFrom(RowsJson) then
-            Error('Excel etiket satırları okunamadı.');
-        if (Rows.Count() = 0) or (Rows.Count() > LabelsPerJob()) then
-            Error('Bir Excel baskı paketinde 1–50 satır olmalı.');
-        foreach Token in Rows do begin
-            Row := Token.AsObject();
-            if not Row.Get('order', Value) then
-                Error('Etiket sırası eksik.');
-            Sequence := Value.AsValue().AsInteger();
-            if (Sequence < 1) or ((Count > 0) and (Sequence <> Previous + 1)) then
-                Error('Excel etiket sırası kesintisiz artmalı.');
-            Previous := Sequence;
-            if not Row.Get('itemNo', Value) then
-                Error('Ürün numarası eksik.');
-            ItemNo := Value.AsValue().AsText();
-            if (ItemNo = '') or (StrLen(ItemNo) > MaxStrLen(Item."No.")) then
-                Error('Etiket %1: ürün numarası geçersiz.', Sequence);
-            if not Item.Get(ItemNo) then
-                Error('Etiket %1: %2 ürünü bulunamadı.', Sequence, ItemNo);
-            Item.TestField(Blocked, false);
-            if not Row.Get('bin', Value) then
-                Error('Göz bilgisi eksik.');
-            BinCode := Value.AsValue().AsText();
-            if (BinCode.Trim() = '') or (StrLen(BinCode) > 20) then
-                Error('Etiket %1: göz bilgisi geçersiz.', Sequence);
-            Zpl += BuildItemBinZpl(Item, BinCode, Sequence);
-            Count += 1;
-        end;
-        exit(Zpl);
-    end;
-
-    /// <summary>
     /// Prints the material-identification label(s) (MTE) of one LP. The printer
     /// decides the format: a ZPL label printer (the field's 4 x 2 inch stock)
     /// gets one ZPL MTE per item group, exactly as before 1.14.1.37; a PDF
@@ -858,50 +789,6 @@ codeunit 72051 "DOPSWHS Print Dispatcher"
         Zpl += Canvas.Write(X, Y, Canvas.SmallFont(), ColumnWidth, CopyStr(UnitText, 1, Canvas.MaxChars(ColumnWidth, Canvas.SmallFont())));
         Y += Canvas.SmallFont() + 8;
         Zpl += Canvas.Code128(X, Y, Canvas.BarHeightToBottom(Y, true), Item."No.", ColumnWidth, true);
-        exit(Zpl + Canvas.Finish());
-    end;
-
-    /// <summary>
-    /// Kitoko (21 Eki 2026): EMU 1.14.2.26'dan "ÜRÜN / GÖZ" etiketi (Excel
-    /// listesi). Bant sağında SIRA, ürün no altında GÖZ satırı; QR yalnız ürün
-    /// no. Göz ve sıra Etiket Tasarımı alanlarında olmadığı için her zaman bu
-    /// sabit tasarım (Setup etiket ölçüsü) kullanılır. QR %34, yazılar bir
-    /// kademe büyük, barkod yüksekliğin %36'sına kadar uzar.
-    /// </summary>
-    local procedure BuildItemBinZpl(var Item: Record Item; BinCode: Text; Sequence: Integer): Text
-    var
-        Canvas: Codeunit "DOPSWHS Label Canvas";
-        Lines: List of [Text];
-        Line: Text;
-        UnitText: Text;
-        Zpl: Text;
-        X: Integer;
-        ColumnWidth: Integer;
-        Y: Integer;
-        NoFont: Integer;
-        NoWidth: Integer;
-        TextFont: Integer;
-    begin
-        Canvas.Init();
-        Zpl := Canvas.Frame('ÜRÜN / GÖZ', 'SIRA: ' + Format(Sequence, 0, 9), Item."No.", '', 34, X, ColumnWidth, Y);
-        TextFont := Canvas.NormalFont() + 4;
-        NoFont := Canvas.FitFontMeasured(Item."No.", ColumnWidth, Canvas.ItemNoFont() + 8, Canvas.SmallFont());
-        NoWidth := Canvas.FitFontMeasured(Item."No.", ColumnWidth, NoFont, 10);
-        Zpl += Canvas.WriteSized(X, Y, NoFont, NoWidth, ColumnWidth, Item."No.");
-        Y += NoFont + 8;
-        Zpl += Canvas.Write(X, Y, TextFont, ColumnWidth, 'GÖZ: ' + BinCode);
-        Y += TextFont + 6;
-        Canvas.WrapText(Item.Description, Canvas.MaxChars(ColumnWidth, TextFont), 2, Lines);
-        foreach Line in Lines do begin
-            Zpl += Canvas.Write(X, Y, TextFont, ColumnWidth, Line);
-            Y += TextFont + 6;
-        end;
-        UnitText := 'BİRİM: ' + Item."Base Unit of Measure";
-        if Item.GTIN <> '' then
-            UnitText += '   GTIN: ' + Item.GTIN;
-        Zpl += Canvas.Write(X, Y, Canvas.SmallFont(), ColumnWidth, CopyStr(UnitText, 1, Canvas.MaxChars(ColumnWidth, Canvas.SmallFont())));
-        Y += Canvas.SmallFont() + 8;
-        Zpl += Canvas.Code128(X, Y, Canvas.BarHeightToBottom(Y, true, 36), Item."No.", ColumnWidth, true);
         exit(Zpl + Canvas.Finish());
     end;
 
