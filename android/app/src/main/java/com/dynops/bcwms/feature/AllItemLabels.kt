@@ -1,5 +1,6 @@
 package com.dynops.bcwms.feature
 
+import android.content.Context
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -13,9 +14,11 @@ import com.dynops.bcwms.BcApi
 import com.dynops.bcwms.ui.WmsActionLabel
 import com.dynops.bcwms.ui.WmsGlyph
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import org.json.JSONArray
 import org.json.JSONObject
+import java.util.Locale
 
 /** Etiket sayısı ne olursa olsun BC'ye tek istekte giden ürün sayısı (BC sınırı 100). */
 internal const val ALL_ITEM_LABELS_BATCH = 50
@@ -60,6 +63,75 @@ internal suspend fun sendAllItemLabels(
         onProgress(sent, total)
     }
     return AllItemLabelsOutcome(sent, total, stopped = false)
+}
+
+internal sealed interface PrintBatchState {
+    data object Waiting : PrintBatchState
+    data object Delivered : PrintBatchState
+    data class Failed(val message: String) : PrintBatchState
+}
+
+/**
+ * Kitoko (21 Eki 2026): BC her paketi ayrı bir arka plan göreviyle yazıcıya
+ * iletir; görevler yer değiştirirse paketler karışık basılır. Paketin işi
+ * (gönderimden sonra açılan, kaynağı paketteki bir ürün olan iş) "Queued"dan
+ * çıkmadan sonraki paket gönderilmez. Yazıcı ajanı işleri geliş sırasıyla tek tek basar.
+ */
+internal fun printBatchState(jobs: List<JSONObject>, batch: List<String>): PrintBatchState {
+    val itemNos = batch.map { it.trim().uppercase(Locale.ROOT) }.toSet()
+    val own = jobs.filter { it.optString("sourceDoc").trim().uppercase(Locale.ROOT) in itemNos }
+    if (own.isEmpty()) return PrintBatchState.Waiting
+    own.firstOrNull { it.optString("status").equals("Failed", ignoreCase = true) }?.let {
+        return PrintBatchState.Failed(it.optString("lastError").ifBlank { "Yazdırma işi başarısız." })
+    }
+    return if (own.any { it.optString("status").equals("Queued", ignoreCase = true) }) PrintBatchState.Waiting
+    else PrintBatchState.Delivered
+}
+
+internal const val PRINT_BATCH_POLL_MS = 2_000L
+internal const val PRINT_BATCH_MAX_WAIT_MS = 5 * 60_000L
+
+/** BC yazdırma kuyruğu okunamıyorsa (yetki/eski sürüm) paketler arasında beklenen süre. */
+internal const val PRINT_BATCH_FALLBACK_GAP_MS = 20_000L
+
+/** null: paket yazıcıya iletildi. Aksi halde kalan paketleri durduran hata metni. */
+internal suspend fun awaitPrintBatch(
+    batch: List<String>,
+    fetchJobs: suspend () -> List<JSONObject>?,
+    pause: suspend (Long) -> Unit,
+    pollMs: Long = PRINT_BATCH_POLL_MS,
+    maxWaitMs: Long = PRINT_BATCH_MAX_WAIT_MS,
+): String? {
+    var waited = 0L
+    while (true) {
+        // Okunamayan yanıt (ağ kesintisi) beklemeye sayılır; süre dolunca durur.
+        when (val state = fetchJobs()?.let { printBatchState(it, batch) } ?: PrintBatchState.Waiting) {
+            PrintBatchState.Delivered -> return null
+            is PrintBatchState.Failed ->
+                return "${batch.first()}–${batch.last()} paketi yazıcıya iletilemedi: ${state.message} Sıra bozulmasın diye kalan etiketler gönderilmedi."
+            PrintBatchState.Waiting -> Unit
+        }
+        if (waited >= maxWaitMs) return "${batch.first()}–${batch.last()} paketi ${maxWaitMs / 60_000} dakikadır yazıcıya iletilmedi. " +
+            "Sıra bozulmasın diye kalan etiketler gönderilmedi; yazıcı ajanını ve BC yazdırma kuyruğunu kontrol edin."
+        pause(pollMs)
+        waited += pollMs
+    }
+}
+
+private fun jobRows(body: String): List<JSONObject>? = runCatching {
+    val array = JSONObject(body).getJSONArray("value")
+    (0 until array.length()).map { array.getJSONObject(it) }
+}.getOrNull()
+
+private suspend fun lastPrintJobId(context: Context): Int? {
+    val response = BcApi.get(context, "printJobs?\$select=jobId&\$orderby=jobId desc&\$top=1")
+    if (!response.ok) return null
+    return jobRows(response.body)?.let { rows -> rows.firstOrNull()?.optInt("jobId") ?: 0 }
+}
+
+private suspend fun printJobsAfter(context: Context, jobId: Int): List<JSONObject>? {
+    val response = BcApi.get(context, "printJobs?\$select=jobId,sourceDoc,status,lastError&\$filter=jobId gt $jobId&\$orderby=jobId asc&\$top=100")
+    return if (response.ok) jobRows(response.body) else null
 }
 
 private sealed interface AllItemLabelsStep {
@@ -131,6 +203,7 @@ fun AllItemLabelsCard(enabled: Boolean = true, v2Format: Boolean = false, itemLi
                 text = {
                     Text(
                         "$count ürün için $count etiket basılacak (yaklaşık ${count * 4 / 100} metre rulo). " +
+                            "Ürün no sırasıyla basılır; bir paket yazıcıya ulaşmadan sonraki gönderilmez. " +
                             "İstediğiniz an Durdur'a basabilirsiniz."
                     )
                 },
@@ -148,12 +221,20 @@ fun AllItemLabelsCard(enabled: Boolean = true, v2Format: Boolean = false, itemLi
                                 sendAllItemLabels(
                                     batches,
                                     send = { batch ->
+                                        val lastJobId = lastPrintJobId(context)
                                         val response = BcApi.boundActionLongRunning(
                                             context, "items", batch.first(), action,
                                             allItemLabelsPayload(batch, choice.printerCode),
                                         )
-                                        if (response.ok) Result.success(BcApi.scalarValue(response.body).trim().toIntOrNull() ?: batch.size)
-                                        else Result.failure(IllegalStateException("${BcApi.errorMessage(response.body)} (HTTP ${response.httpCode})"))
+                                        if (!response.ok) Result.failure(IllegalStateException("${BcApi.errorMessage(response.body)} (HTTP ${response.httpCode})"))
+                                        else {
+                                            val count = BcApi.scalarValue(response.body).trim().toIntOrNull() ?: batch.size
+                                            val orderError = if (lastJobId == null) {
+                                                delay(PRINT_BATCH_FALLBACK_GAP_MS)
+                                                null
+                                            } else awaitPrintBatch(batch, fetchJobs = { printJobsAfter(context, lastJobId) }, pause = { delay(it) })
+                                            if (orderError == null) Result.success(count) else Result.failure(IllegalStateException(orderError))
+                                        }
                                     },
                                     stopRequested = { stopRequested },
                                     onProgress = { sent, total -> step = AllItemLabelsStep.Printing(sent, total, stopRequested) },

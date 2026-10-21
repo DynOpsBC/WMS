@@ -794,6 +794,8 @@ private fun ItemLabelInquiry() {
         item { AllItemLabelsCard(enabled = !loading && !printing, v2Format = true, itemRange = 301..500) }
         item { AllItemLabelsCard(enabled = !loading && !printing, v2Format = true, itemRange = 501..700) }
         item { AllItemLabelsCard(enabled = !loading && !printing, v2Format = true, itemRange = 701..1000) }
+        item { AllItemLabelsCard(enabled = !loading && !printing, v2Format = true, itemRange = 1001..1250) }
+        item { AllItemLabelsCard(enabled = !loading && !printing, v2Format = true, itemRange = 1251..1500) }
         // Aşağı çekerek silme bildirimi (Swipe down to clear)
         if (pullOffset > 10f) {
             item {
