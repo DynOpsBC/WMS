@@ -794,15 +794,15 @@ private fun ItemLabelInquiry() {
             .padding(12.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
-        // DKÇ (9 Eki 2026): Etiket Çıkar → Ürün Etiketi'nde bütün ürünler tek seferde.
-        item { AllItemLabelsCard(enabled = !loading && !printing) }
-        item { AllItemLabelsCard(enabled = !loading && !printing, v2Format = true) }
-        item { AllItemLabelsCard(enabled = !loading && !printing, v2Format = true, itemLimit = 300) }
-        item { AllItemLabelsCard(enabled = !loading && !printing, v2Format = true, itemRange = 301..500) }
-        item { AllItemLabelsCard(enabled = !loading && !printing, v2Format = true, itemRange = 501..700) }
-        item { AllItemLabelsCard(enabled = !loading && !printing, v2Format = true, itemRange = 701..1000) }
-        item { AllItemLabelsCard(enabled = !loading && !printing, v2Format = true, itemRange = 1001..1250) }
-        item { AllItemLabelsCard(enabled = !loading && !printing, v2Format = true, itemRange = 1251..1500) }
+        // Kitoko (21 Eki 2026): etiket tasarımı ekranın en üstünde seçilir; tekli, toplu
+        // ve aralık düğmeleri bu seçimle basar. "Tüm ürünler" düğmeleri kaldırıldı.
+        item { LabelLayoutSelector(itemLayout, enabled = !loading && !printing) }
+        item { AllItemLabelsCard(enabled = !loading && !printing, v2Format = true, itemLimit = 300, layout = itemLayout) }
+        item { AllItemLabelsCard(enabled = !loading && !printing, v2Format = true, itemRange = 301..500, layout = itemLayout) }
+        item { AllItemLabelsCard(enabled = !loading && !printing, v2Format = true, itemRange = 501..700, layout = itemLayout) }
+        item { AllItemLabelsCard(enabled = !loading && !printing, v2Format = true, itemRange = 701..1000, layout = itemLayout) }
+        item { AllItemLabelsCard(enabled = !loading && !printing, v2Format = true, itemRange = 1001..1250, layout = itemLayout) }
+        item { AllItemLabelsCard(enabled = !loading && !printing, v2Format = true, itemRange = 1251..1500, layout = itemLayout) }
         // Aşağı çekerek silme bildirimi (Swipe down to clear)
         if (pullOffset > 10f) {
             item {

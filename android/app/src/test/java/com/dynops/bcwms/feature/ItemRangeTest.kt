@@ -22,4 +22,17 @@ class ItemRangeTest {
         assertEquals(0, itemsInRange(items.take(250), 301..500).size)
         assertEquals(100, itemsInRange(items.take(1350), 1251..1500).size)
     }
+
+    @Test
+    fun `range buttons follow the design picked on top`() {
+        assertEquals("İlk 300 ürünün etiketi", allItemLabelsTitle(1..300, v2Format = true, withLayoutPicker = true))
+        assertEquals("Ürün 1001–1250 etiketi", allItemLabelsTitle(1001..1250, v2Format = true, withLayoutPicker = true))
+        assertEquals("Ürün 301–500 · ETIKETV2 (QR + madde no)", allItemLabelsTitle(301..500, v2Format = true, withLayoutPicker = false))
+        assertEquals("printLabelsV2", allItemLabelsAction(v2Format = true, layoutCode = ""))
+        assertEquals("printLabelsWithLayout", allItemLabelsAction(v2Format = true, layoutCode = "URUN-01"))
+        val withLayout = org.json.JSONObject(allItemLabelsPayload(listOf("A", "B"), "ZEBRA1", "URUN-01"))
+        assertEquals("URUN-01", withLayout.getString("layoutCode"))
+        assertEquals("[\"A\",\"B\"]", withLayout.getString("itemNosJson"))
+        assertEquals(false, org.json.JSONObject(allItemLabelsPayload(listOf("A"), "ZEBRA1")).has("layoutCode"))
+    }
 }

@@ -29,8 +29,31 @@ internal fun allItemLabelBatches(itemNos: List<String>, size: Int = ALL_ITEM_LAB
         .distinctBy { it.uppercase(java.util.Locale.ROOT) }
         .chunked(size)
 
-internal fun allItemLabelsPayload(batch: List<String>, printerId: String): String =
-    JSONObject().put("itemNosJson", JSONArray(batch).toString()).put("printerId", printerId).toString()
+internal fun allItemLabelsPayload(batch: List<String>, printerId: String, layoutCode: String = ""): String =
+    JSONObject().put("itemNosJson", JSONArray(batch).toString()).put("printerId", printerId)
+        .apply { if (layoutCode.isNotBlank()) put("layoutCode", layoutCode) }
+        .toString()
+
+/** Tasarım seçiliyse items/printLabelsWithLayout; değilse kartın eski aksiyonu (printLabels / printLabelsV2). */
+internal fun allItemLabelsAction(v2Format: Boolean, layoutCode: String): String = when {
+    layoutCode.isNotBlank() -> "printLabelsWithLayout"
+    v2Format -> "printLabelsV2"
+    else -> "printLabels"
+}
+
+/**
+ * Kitoko (21 Eki 2026): tasarım ekranın üstünde seçildiğinde düğmede yalnız
+ * aralık yazar; seçici yoksa eski başlıklar (ETIKETV2 adıyla) kalır.
+ */
+internal fun allItemLabelsTitle(range: IntRange?, v2Format: Boolean, withLayoutPicker: Boolean): String = when {
+    withLayoutPicker && range != null && range.first == 1 -> "İlk ${range.last} ürünün etiketi"
+    withLayoutPicker && range != null -> "Ürün ${range.first}–${range.last} etiketi"
+    withLayoutPicker -> "Tüm ürünlerin etiketi"
+    range != null && range.first == 1 && v2Format -> "İlk ${range.last} ürün · ETIKETV2 (QR + madde no)"
+    range != null && v2Format -> "Ürün ${range.first}–${range.last} · ETIKETV2 (QR + madde no)"
+    v2Format -> "Tüm ürünlerin etiketi · ETIKETV2 (QR + madde no)"
+    else -> "Tüm ürünlerin etiketi"
+}
 
 internal data class AllItemLabelsOutcome(val sent: Int, val total: Int, val stopped: Boolean, val error: String? = null)
 
@@ -147,18 +170,20 @@ private sealed interface AllItemLabelsStep {
  * dönen gösterge ve "X / N", Durdur'a basınca o anki paket bitince durur.
  */
 @Composable
-fun AllItemLabelsCard(enabled: Boolean = true, v2Format: Boolean = false, itemLimit: Int? = null, itemRange: IntRange? = null) {
+internal fun AllItemLabelsCard(
+    enabled: Boolean = true,
+    v2Format: Boolean = false,
+    itemLimit: Int? = null,
+    itemRange: IntRange? = null,
+    // Kitoko (21 Eki 2026): ekranın üstündeki "Etiket tasarımı" seçimi; boş = eski aksiyon.
+    layout: LabelLayoutChoice? = null,
+) {
     // Kitoko (21 Eki 2026): ürün no sırasına göre 301–500, 501–700 gibi bloklar.
     val range = itemRange ?: itemLimit?.let { 1..it }
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    val action = if (v2Format) "printLabelsV2" else "printLabels"
-    val title = when {
-        range != null && range.first == 1 && v2Format -> "İlk ${range.last} ürün · ETIKETV2 (QR + madde no)"
-        range != null && v2Format -> "Ürün ${range.first}–${range.last} · ETIKETV2 (QR + madde no)"
-        v2Format -> "Tüm ürünlerin etiketi · ETIKETV2 (QR + madde no)"
-        else -> "Tüm ürünlerin etiketi"
-    }
+    val title = allItemLabelsTitle(range, v2Format, layout != null)
+    val defaultDesign = if (v2Format) "ETIKETV2" else "BC'de aktif tasarım"
     var step by remember { mutableStateOf<AllItemLabelsStep>(AllItemLabelsStep.Idle) }
     var stopRequested by remember { mutableStateOf(false) }
     var loadError by remember { mutableStateOf("") }
@@ -201,8 +226,10 @@ fun AllItemLabelsCard(enabled: Boolean = true, v2Format: Boolean = false, itemLi
                 onDismissRequest = { step = AllItemLabelsStep.Idle },
                 title = { Text(title, fontWeight = FontWeight.Bold) },
                 text = {
+                    val design = layout?.layoutCode.orEmpty().ifBlank { defaultDesign }
                     Text(
                         "$count ürün için $count etiket basılacak (yaklaşık ${count * 4 / 100} metre rulo). " +
+                            (if (layout != null) "Tasarım: $design. " else "") +
                             "Ürün no sırasıyla basılır; bir paket yazıcıya ulaşmadan sonraki gönderilmez. " +
                             "İstediğiniz an Durdur'a basabilirsiniz."
                     )
@@ -218,13 +245,15 @@ fun AllItemLabelsCard(enabled: Boolean = true, v2Format: Boolean = false, itemLi
                                     step = AllItemLabelsStep.Done(AllItemLabelsOutcome(0, count, false, it.message ?: "Yazıcı seçimi doğrulanamadı."))
                                     return@launch
                                 }
+                                val layoutCode = layout?.awaitLayoutCode(context).orEmpty()
+                                val action = allItemLabelsAction(v2Format, layoutCode)
                                 sendAllItemLabels(
                                     batches,
                                     send = { batch ->
                                         val lastJobId = lastPrintJobId(context)
                                         val response = BcApi.boundActionLongRunning(
                                             context, "items", batch.first(), action,
-                                            allItemLabelsPayload(batch, choice.printerCode),
+                                            allItemLabelsPayload(batch, choice.printerCode, layoutCode),
                                         )
                                         if (!response.ok) Result.failure(IllegalStateException("${BcApi.errorMessage(response.body)} (HTTP ${response.httpCode})"))
                                         else {
