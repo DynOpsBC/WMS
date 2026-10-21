@@ -232,14 +232,18 @@ page 72228 "DOPSWHS PutAway Line API"
     var
         PlaceLine: Record "Warehouse Activity Line";
         TakeLine: Record "Warehouse Activity Line";
+        HasTakeLine: Boolean;
     begin
         PlaceLine.Get(Rec."Activity Type", Rec."No.", Rec."Line No.");
+        // Eş "Al" satırı, "Koy" satırının damgası değişmeden ÖNCE bulunur; LP'ye
+        // bölünmüş belgede çifti satırın kendi LP'si belirler.
+        HasTakeLine := FindRelatedTakeLine(PlaceLine, TakeLine);
         PlaceLine."LP No." := SourceLpNo;
         PlaceLine."DOPSWHS Source LP Line No." := SourceLpLineNo;
         PlaceLine.Modify(true);
         Rec := PlaceLine;
 
-        if FindRelatedTakeLine(PlaceLine, TakeLine) then begin
+        if HasTakeLine then begin
             TakeLine."LP No." := SourceLpNo;
             TakeLine."DOPSWHS Source LP Line No." := SourceLpLineNo;
             TakeLine.Modify(true);
@@ -280,6 +284,15 @@ page 72228 "DOPSWHS PutAway Line API"
         TakeLine.SetRange("Unit of Measure Code", PlaceLine."Unit of Measure Code");
         TakeLine.SetRange("Lot No.", PlaceLine."Lot No.");
         TakeLine.SetRange("Serial No.", PlaceLine."Serial No.");
+        // BADE (21 Eki 2026): bir mal kabul satırı LP'lere bölündüğünde aynı lotun
+        // birden çok "Al" satırı olur. Önce bu "Koy" satırının LP'sini taşıyan "Al"
+        // satırı seçilir; yoksa ilk satır başka bir paletin LP/miktarını alırdı.
+        if PlaceLine."LP No." <> '' then begin
+            TakeLine.SetRange("LP No.", PlaceLine."LP No.");
+            if TakeLine.FindFirst() then
+                exit(true);
+            TakeLine.SetRange("LP No.");
+        end;
         if TakeLine.FindFirst() then
             exit(true);
         TakeLine.SetRange("Lot No.");

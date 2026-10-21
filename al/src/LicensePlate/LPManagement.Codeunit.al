@@ -3035,6 +3035,113 @@ codeunit 72040 "DOPSWHS LP Management"
             until LPHeader.Next() = 0;
     end;
 
+    /// <summary>
+    /// BADE (21 Eki 2026): true when the LP is Assigned but the document it is
+    /// assigned to no longer exists (e.g. a put-away deleted in BC). Deleting a
+    /// document never releases its LPs, and such an LP blocks every later flow.
+    /// Conservative: a document that still exists in any form (open, registered or
+    /// posted) or an unknown document type is never treated as orphaned.
+    /// </summary>
+    procedure IsAssignmentOrphaned(LP: Record "DOPSWHS LP Header"): Boolean
+    var
+        ActivityHeader: Record "Warehouse Activity Header";
+        RegisteredActivityHeader: Record "Registered Whse. Activity Hdr.";
+        WhseReceiptHeader: Record "Warehouse Receipt Header";
+        PostedWhseReceiptHeader: Record "Posted Whse. Receipt Header";
+        WhseShipmentHeader: Record "Warehouse Shipment Header";
+        PostedWhseShipmentHeader: Record "Posted Whse. Shipment Header";
+        ProductionOrder: Record "Production Order";
+        AssemblyHeader: Record "Assembly Header";
+        PostedAssemblyHeader: Record "Posted Assembly Header";
+        DocNo: Code[20];
+    begin
+        if LP.Status <> LP.Status::Assigned then
+            exit(false);
+        if LP."Pending Receipt No." <> '' then
+            exit(false);
+        DocNo := LP."Assigned Document No.";
+        if DocNo = '' then
+            exit(true);
+        case LP."Assigned Document Type" of
+            LP."Assigned Document Type"::WhsePutaway:
+                exit(not ActivityHeader.Get(ActivityHeader.Type::"Put-away", DocNo));
+            LP."Assigned Document Type"::WhseMovement:
+                exit(not ActivityHeader.Get(ActivityHeader.Type::Movement, DocNo));
+            LP."Assigned Document Type"::WhsePick:
+                begin
+                    // A registered pick keeps its LPs assigned until the shipment
+                    // posts (ShipLpDirectly); only a pick that vanished unregistered
+                    // is orphaned.
+                    if ActivityHeader.Get(ActivityHeader.Type::Pick, DocNo) then
+                        exit(false);
+                    RegisteredActivityHeader.SetRange(Type, RegisteredActivityHeader.Type::Pick);
+                    RegisteredActivityHeader.SetRange("Whse. Activity No.", DocNo);
+                    exit(RegisteredActivityHeader.IsEmpty());
+                end;
+            LP."Assigned Document Type"::WhseReceipt:
+                begin
+                    // Receipt posting assigns to the posted receipt number.
+                    if WhseReceiptHeader.Get(DocNo) or PostedWhseReceiptHeader.Get(DocNo) then
+                        exit(false);
+                    PostedWhseReceiptHeader.SetRange("Whse. Receipt No.", DocNo);
+                    exit(PostedWhseReceiptHeader.IsEmpty());
+                end;
+            LP."Assigned Document Type"::WhseShipment:
+                begin
+                    if WhseShipmentHeader.Get(DocNo) then
+                        exit(false);
+                    PostedWhseShipmentHeader.SetRange("Whse. Shipment No.", DocNo);
+                    exit(PostedWhseShipmentHeader.IsEmpty());
+                end;
+            LP."Assigned Document Type"::ProdConsumption,
+            LP."Assigned Document Type"::ProdOutput:
+                begin
+                    ProductionOrder.SetRange("No.", DocNo);
+                    exit(ProductionOrder.IsEmpty());
+                end;
+            LP."Assigned Document Type"::Assembly:
+                begin
+                    if AssemblyHeader.Get(AssemblyHeader."Document Type"::Order, DocNo) then
+                        exit(false);
+                    PostedAssemblyHeader.SetRange("Order No.", DocNo);
+                    exit(PostedAssemblyHeader.IsEmpty());
+                end;
+        end;
+        exit(false);
+    end;
+
+    /// <summary>
+    /// Releases (Assigned -> Built, with ledger entry) every LP within the Scope
+    /// filters whose assigned document no longer exists. With ApplyRelease = false
+    /// nothing changes and only the count is returned (for the confirmation).
+    /// </summary>
+    procedure ReleaseOrphanAssignments(var Scope: Record "DOPSWHS LP Header"; ApplyRelease: Boolean): Integer
+    var
+        LP: Record "DOPSWHS LP Header";
+        OrphanLP: Record "DOPSWHS LP Header";
+        OrphanLpNos: List of [Code[20]];
+        LpNo: Code[20];
+        ReleasedCount: Integer;
+    begin
+        LP.CopyFilters(Scope);
+        LP.SetRange(Status, LP.Status::Assigned);
+        if LP.FindSet() then
+            repeat
+                if IsAssignmentOrphaned(LP) then
+                    OrphanLpNos.Add(LP."No.");
+            until LP.Next() = 0;
+        if not ApplyRelease then
+            exit(OrphanLpNos.Count());
+
+        foreach LpNo in OrphanLpNos do
+            if OrphanLP.Get(LpNo) then
+                if IsAssignmentOrphaned(OrphanLP) then begin
+                    Release(OrphanLP);
+                    ReleasedCount += 1;
+                end;
+        exit(ReleasedCount);
+    end;
+
     local procedure EnsureNotPendingReceipt(LP: Record "DOPSWHS LP Header")
     begin
         if LP."Pending Receipt No." <> '' then

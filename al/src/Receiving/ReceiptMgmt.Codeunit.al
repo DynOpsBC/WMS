@@ -1180,6 +1180,347 @@ codeunit 72043 "DOPSWHS Receipt Mgmt"
         exit(10000);
     end;
 
+    /// <summary>
+    /// BADE (21 Eki 2026): A put-away created later from standard BC ("Create Put-away"
+    /// on the posted receipt or the put-away worksheet) is one aggregated Take/Place
+    /// pair without an LP, while the receipt LPs still stand in the Take bin. The
+    /// terminal needs one LP per pair, so every blank-LP pair is split into one pair
+    /// per LP found in its Take bin. LPs are taken from the bin and not from receipt
+    /// metadata: unbuilding/merging pallets after posting leaves LP lines whose source
+    /// document no longer points at the receipt. Any Error rolls the whole split back.
+    /// </summary>
+    /// <returns>Number of put-away lines (Take + Place) that now carry an LP.</returns>
+    procedure SplitPutAwayByBinLPs(PutAwayNo: Code[20]): Integer
+    var
+        LockLine: Record "Warehouse Activity Line";
+        PlanPlaceLineNos: List of [Integer];
+        PlanTakeLineNos: List of [Integer];
+        PlanLpNos: List of [Code[20]];
+        PlanPlaceQtys: List of [Decimal];
+        PlanTakeQtys: List of [Decimal];
+        RemainderBaseQty: Decimal;
+    begin
+        LockLine.LockTable();
+        BuildBinLpSplitPlan(PutAwayNo, PlanPlaceLineNos, PlanTakeLineNos, PlanLpNos, PlanPlaceQtys, PlanTakeQtys, RemainderBaseQty);
+        if PlanLpNos.Count() = 0 then
+            exit(0);
+        exit(ApplyBinLpSplitPlan(PutAwayNo, PlanPlaceLineNos, PlanTakeLineNos, PlanLpNos, PlanPlaceQtys, PlanTakeQtys));
+    end;
+
+    /// <summary>Computes the SplitPutAwayByBinLPs plan without changing any record.</summary>
+    procedure PreviewSplitPutAwayByBinLPs(PutAwayNo: Code[20]; var LpCount: Integer; var LineCount: Integer; var RemainderBaseQty: Decimal)
+    var
+        PlanPlaceLineNos: List of [Integer];
+        PlanTakeLineNos: List of [Integer];
+        PlanLpNos: List of [Code[20]];
+        PlanPlaceQtys: List of [Decimal];
+        PlanTakeQtys: List of [Decimal];
+    begin
+        BuildBinLpSplitPlan(PutAwayNo, PlanPlaceLineNos, PlanTakeLineNos, PlanLpNos, PlanPlaceQtys, PlanTakeQtys, RemainderBaseQty);
+        LpCount := PlanLpNos.Count();
+        // Every planned LP gets exactly one Take and one Place line.
+        LineCount := 2 * LpCount;
+    end;
+
+    local procedure BuildBinLpSplitPlan(PutAwayNo: Code[20]; var PlanPlaceLineNos: List of [Integer]; var PlanTakeLineNos: List of [Integer]; var PlanLpNos: List of [Code[20]]; var PlanPlaceQtys: List of [Decimal]; var PlanTakeQtys: List of [Decimal]; var RemainderBaseQty: Decimal)
+    var
+        PutAwayHeader: Record "Warehouse Activity Header";
+        PlaceLine: Record "Warehouse Activity Line";
+        TakeLine: Record "Warehouse Activity Line";
+        UsedTakeLineNos: List of [Integer];
+        EligibleLps: Dictionary of [Code[20], Decimal];
+        LpNo: Code[20];
+        LpBaseQty: Decimal;
+        LeftOverBaseQty: Decimal;
+        LeftOverCount: Integer;
+    begin
+        Clear(RemainderBaseQty);
+        if not PutAwayHeader.Get(PutAwayHeader.Type::"Put-away", PutAwayNo) then
+            Error('Yerleştirme belgesi %1 bulunamadı.', PutAwayNo);
+
+        PlaceLine.SetRange("Activity Type", PlaceLine."Activity Type"::"Put-away");
+        PlaceLine.SetRange("No.", PutAwayNo);
+        PlaceLine.SetRange("Action Type", PlaceLine."Action Type"::Place);
+        PlaceLine.SetRange("LP No.", '');
+        PlaceLine.SetRange("Breakbulk No.", 0);
+        PlaceLine.SetRange("Qty. Handled", 0);
+        PlaceLine.SetFilter("Qty. (Base)", '>0');
+        if PlaceLine.FindSet() then
+            repeat
+                if FindBinLpSplitTakeLine(PlaceLine, UsedTakeLineNos, TakeLine) then begin
+                    UsedTakeLineNos.Add(TakeLine."Line No.");
+                    PlanBinLpSplitPair(
+                        PutAwayNo, PlaceLine, TakeLine, EligibleLps,
+                        PlanPlaceLineNos, PlanTakeLineNos, PlanLpNos, PlanPlaceQtys, PlanTakeQtys, RemainderBaseQty);
+                end;
+            until PlaceLine.Next() = 0;
+
+        // An LP is moved as a whole. If the bin holds more matching LP quantity than
+        // the open pairs, choosing a subset would put the wrong pallets on the
+        // document; stop and let the user correct the LP contents first.
+        foreach LpNo in EligibleLps.Keys do
+            if not PlanLpNos.Contains(LpNo) then begin
+                EligibleLps.Get(LpNo, LpBaseQty);
+                LeftOverBaseQty += LpBaseQty;
+                LeftOverCount += 1;
+            end;
+        if LeftOverCount > 0 then
+            Error(
+                '%1 yerleştirmesinde gözdeki LP toplamı LP''siz satır miktarını aşıyor: %2 LP (toplam %3, temel birim) hiçbir Al/Koy çiftine sığmadı. Gözdeki LP içeriklerini kontrol edin. Hiçbir satır değiştirilmedi.',
+                PutAwayNo, LeftOverCount, LeftOverBaseQty);
+    end;
+
+    local procedure FindBinLpSplitTakeLine(PlaceLine: Record "Warehouse Activity Line"; UsedTakeLineNos: List of [Integer]; var TakeLine: Record "Warehouse Activity Line"): Boolean
+    begin
+        TakeLine.Reset();
+        TakeLine.SetRange("Activity Type", PlaceLine."Activity Type");
+        TakeLine.SetRange("No.", PlaceLine."No.");
+        TakeLine.SetRange("Action Type", TakeLine."Action Type"::Take);
+        TakeLine.SetRange("Whse. Document Type", PlaceLine."Whse. Document Type");
+        TakeLine.SetRange("Whse. Document No.", PlaceLine."Whse. Document No.");
+        TakeLine.SetRange("Whse. Document Line No.", PlaceLine."Whse. Document Line No.");
+        TakeLine.SetRange("Item No.", PlaceLine."Item No.");
+        TakeLine.SetRange("Variant Code", PlaceLine."Variant Code");
+        TakeLine.SetRange("Lot No.", PlaceLine."Lot No.");
+        TakeLine.SetRange("Serial No.", PlaceLine."Serial No.");
+        TakeLine.SetRange("Breakbulk No.", 0);
+        TakeLine.SetRange("LP No.", '');
+        TakeLine.SetRange("Qty. Handled", 0);
+        // Only an unambiguous 1:1 pair is reshaped. A Take split over several
+        // Place bins (or manually split lines) is left for the user.
+        if TakeLine.Count() <> 1 then
+            exit(false);
+        TakeLine.FindFirst();
+        if UsedTakeLineNos.Contains(TakeLine."Line No.") then
+            exit(false);
+        if TakeLine."Bin Code" = '' then
+            exit(false);
+        exit(Abs(TakeLine."Qty. (Base)" - PlaceLine."Qty. (Base)") <= 0.00001);
+    end;
+
+    local procedure PlanBinLpSplitPair(PutAwayNo: Code[20]; PlaceLine: Record "Warehouse Activity Line"; TakeLine: Record "Warehouse Activity Line"; var EligibleLps: Dictionary of [Code[20], Decimal]; var PlanPlaceLineNos: List of [Integer]; var PlanTakeLineNos: List of [Integer]; var PlanLpNos: List of [Code[20]]; var PlanPlaceQtys: List of [Decimal]; var PlanTakeQtys: List of [Decimal]; var RemainderBaseQty: Decimal)
+    var
+        LP: Record "DOPSWHS LP Header";
+        LpBaseQty: Decimal;
+        RemainingBaseQty: Decimal;
+        PlannedForPair: Boolean;
+    begin
+        RemainingBaseQty := PlaceLine."Qty. (Base)";
+        LP.SetCurrentKey("Location Code", "Bin Code", Status);
+        LP.SetRange("Location Code", TakeLine."Location Code");
+        LP.SetRange("Bin Code", TakeLine."Bin Code");
+        LP.SetFilter(Status, '%1|%2', LP.Status::Built, LP.Status::Assigned);
+        LP.SetRange("Pending Receipt No.", '');
+        LP.SetRange("Parent LP No.", '');
+        if LP.FindSet() then
+            repeat
+                // Content first (indexed by LP), then the assignment/open-line checks.
+                if not PlanLpNos.Contains(LP."No.") then
+                    if BinLpMatchingBaseQty(LP."No.", TakeLine, LpBaseQty) then
+                        if BinLpUsableForPutAway(LP, PutAwayNo, PlaceLine) then begin
+                            if not EligibleLps.ContainsKey(LP."No.") then
+                                EligibleLps.Add(LP."No.", LpBaseQty);
+                            // Whole LPs only, and never more than the original pair.
+                            if LpBaseQty <= RemainingBaseQty + 0.00001 then begin
+                                PlanPlaceLineNos.Add(PlaceLine."Line No.");
+                                PlanTakeLineNos.Add(TakeLine."Line No.");
+                                PlanLpNos.Add(LP."No.");
+                                PlanPlaceQtys.Add(BinLpLineQuantity(LpBaseQty, PlaceLine));
+                                PlanTakeQtys.Add(BinLpLineQuantity(LpBaseQty, TakeLine));
+                                RemainingBaseQty -= LpBaseQty;
+                                PlannedForPair := true;
+                            end;
+                        end;
+            until LP.Next() = 0;
+        if PlannedForPair and (RemainingBaseQty > 0.00001) then
+            RemainderBaseQty += RemainingBaseQty;
+    end;
+
+    /// <summary>
+    /// Built LPs are free. An Assigned LP is used only when it already belongs to this
+    /// put-away, to the posted receipt the pair comes from, or to a document that no
+    /// longer exists (e.g. a deleted put-away). An LP on another open activity line is
+    /// never taken.
+    /// </summary>
+    local procedure BinLpUsableForPutAway(LP: Record "DOPSWHS LP Header"; PutAwayNo: Code[20]; PlaceLine: Record "Warehouse Activity Line"): Boolean
+    var
+        OpenLine: Record "Warehouse Activity Line";
+        LPMgt: Codeunit "DOPSWHS LP Management";
+    begin
+        if LP.Status = LP.Status::Assigned then
+            if not (((LP."Assigned Document Type" = LP."Assigned Document Type"::WhsePutaway) and
+                     (LP."Assigned Document No." = PutAwayNo)) or
+                    ((LP."Assigned Document Type" = LP."Assigned Document Type"::WhseReceipt) and
+                     (PlaceLine."Whse. Document Type" = PlaceLine."Whse. Document Type"::Receipt) and
+                     (LP."Assigned Document No." = PlaceLine."Whse. Document No.")) or
+                    LPMgt.IsAssignmentOrphaned(LP))
+            then
+                exit(false);
+        if not (LP.Status in [LP.Status::Built, LP.Status::Assigned]) then
+            exit(false);
+        OpenLine.SetRange("LP No.", LP."No.");
+        OpenLine.SetFilter("Qty. Outstanding", '>0');
+        exit(OpenLine.IsEmpty());
+    end;
+
+    /// <summary>
+    /// Sums every active line of the LP in base units. The LP must carry only the
+    /// pair's item/variant/lot/serial: the register moves the LP header with the
+    /// pair, so a mixed or nested pallet is never split here.
+    /// </summary>
+    local procedure BinLpMatchingBaseQty(LpNo: Code[20]; TakeLine: Record "Warehouse Activity Line"; var BaseQty: Decimal): Boolean
+    var
+        LPLine: Record "DOPSWHS LP Line";
+        LPVerification: Codeunit "DOPSWHS LP Verification";
+        QtyPerUoM: Decimal;
+    begin
+        Clear(BaseQty);
+        LPLine.SetRange("LP No.", LpNo);
+        LPLine.SetFilter("Child LP No.", '<>%1', '');
+        if not LPLine.IsEmpty() then
+            exit(false);
+        LPLine.SetRange("Child LP No.");
+        LPLine.SetFilter(Quantity, '<>0');
+        if not LPLine.FindSet() then
+            exit(false);
+        QtyPerUoM := TakeLine."Qty. per Unit of Measure";
+        if QtyPerUoM <= 0 then
+            QtyPerUoM := 1;
+        repeat
+            if (LPLine.Quantity < 0) or
+               (LPLine."Item No." <> TakeLine."Item No.") or
+               (LPLine."Variant Code" <> TakeLine."Variant Code") or
+               (LPLine."Lot No." <> TakeLine."Lot No.") or
+               (LPLine."Serial No." <> TakeLine."Serial No.")
+            then
+                exit(false);
+            // Same rule as the receipt split: a blank LP unit means the line's unit.
+            if (LPLine."Unit of Measure" = '') or (LPLine."Unit of Measure" = TakeLine."Unit of Measure Code") then
+                BaseQty += Round(LPLine.Quantity * QtyPerUoM, 0.00001)
+            else
+                BaseQty += LPVerification.LineBaseQuantity(LPLine);
+        until LPLine.Next() = 0;
+        exit(BaseQty > 0);
+    end;
+
+    local procedure BinLpLineQuantity(BaseQty: Decimal; ActivityLine: Record "Warehouse Activity Line"): Decimal
+    var
+        QtyPerUoM: Decimal;
+        LineQty: Decimal;
+    begin
+        QtyPerUoM := ActivityLine."Qty. per Unit of Measure";
+        if QtyPerUoM <= 0 then
+            QtyPerUoM := 1;
+        LineQty := Round(BaseQty / QtyPerUoM, 0.00001);
+        if Abs(LineQty * QtyPerUoM - BaseQty) > 0.0001 then
+            Error(
+                '%1 ürününün LP miktarı (%2, temel birim) %3 birimine tam çevrilemiyor. Hiçbir satır değiştirilmedi.',
+                ActivityLine."Item No.", BaseQty, ActivityLine."Unit of Measure Code");
+        exit(LineQty);
+    end;
+
+    local procedure ApplyBinLpSplitPlan(PutAwayNo: Code[20]; PlanPlaceLineNos: List of [Integer]; PlanTakeLineNos: List of [Integer]; PlanLpNos: List of [Code[20]]; PlanPlaceQtys: List of [Decimal]; PlanTakeQtys: List of [Decimal]) LpLineCount: Integer
+    var
+        PlaceLine: Record "Warehouse Activity Line";
+        TakeLine: Record "Warehouse Activity Line";
+        OriginalPlaceLine: Record "Warehouse Activity Line";
+        OriginalTakeLine: Record "Warehouse Activity Line";
+        NewLine: Record "Warehouse Activity Line";
+        LpNo: Code[20];
+        PlaceQty: Decimal;
+        TakeQty: Decimal;
+        PlaceRemaining: Decimal;
+        TakeRemaining: Decimal;
+        CurrentPlaceLineNo: Integer;
+        Index: Integer;
+        PairOpen: Boolean;
+    begin
+        // Same shape as SplitOnePutAwayPairByReceiptLPs: the first LP reuses the
+        // original Take/Place pair, every further LP gets a new Place + Take pair, and
+        // both lines carry the LP (the terminal pairs Take/Place by LP).
+        for Index := 1 to PlanLpNos.Count() do begin
+            LpNo := PlanLpNos.Get(Index);
+            PlaceQty := PlanPlaceQtys.Get(Index);
+            TakeQty := PlanTakeQtys.Get(Index);
+            if (not PairOpen) or (PlanPlaceLineNos.Get(Index) <> CurrentPlaceLineNo) then begin
+                if PairOpen then
+                    InsertBinLpRemainderPair(OriginalPlaceLine, OriginalTakeLine, PlaceRemaining, TakeRemaining);
+                CurrentPlaceLineNo := PlanPlaceLineNos.Get(Index);
+                PlaceLine.Get(PlaceLine."Activity Type"::"Put-away", PutAwayNo, CurrentPlaceLineNo);
+                TakeLine.Get(TakeLine."Activity Type"::"Put-away", PutAwayNo, PlanTakeLineNos.Get(Index));
+                PlaceLine.TestField("Qty. Handled", 0);
+                TakeLine.TestField("Qty. Handled", 0);
+                OriginalPlaceLine := PlaceLine;
+                OriginalTakeLine := TakeLine;
+                PlaceRemaining := PlaceLine.Quantity;
+                TakeRemaining := TakeLine.Quantity;
+                PairOpen := true;
+
+                ApplyPutAwayLpQuantity(PlaceLine, LpNo, PlaceQty);
+                PlaceLine.Modify(true);
+                ApplyPutAwayLpQuantity(TakeLine, LpNo, TakeQty);
+                TakeLine.Modify(true);
+            end else begin
+                InsertPutAwayLpLine(OriginalPlaceLine, LpNo, PlaceQty, NewLine);
+                InsertPutAwayLpLine(OriginalTakeLine, LpNo, TakeQty, NewLine);
+            end;
+            PlaceRemaining -= PlaceQty;
+            TakeRemaining -= TakeQty;
+            LpLineCount += 2;
+        end;
+        if PairOpen then
+            InsertBinLpRemainderPair(OriginalPlaceLine, OriginalTakeLine, PlaceRemaining, TakeRemaining);
+
+        AssignBinLpsToPutAway(PutAwayNo, PlanLpNos);
+    end;
+
+    /// <summary>
+    /// Quantity not covered by an LP stays on a blank-LP pair at the end of the
+    /// document, so the split never creates or loses quantity.
+    /// </summary>
+    local procedure InsertBinLpRemainderPair(OriginalPlaceLine: Record "Warehouse Activity Line"; OriginalTakeLine: Record "Warehouse Activity Line"; PlaceRemaining: Decimal; TakeRemaining: Decimal)
+    var
+        NewLine: Record "Warehouse Activity Line";
+    begin
+        if (PlaceRemaining < -0.00001) or (TakeRemaining < -0.00001) then
+            Error(
+                '%1 yerleştirmesinin %2 satırı için LP miktarları satır miktarını aşıyor. Hiçbir satır değiştirilmedi.',
+                OriginalPlaceLine."No.", OriginalPlaceLine."Line No.");
+        if (PlaceRemaining <= 0.00001) and (TakeRemaining <= 0.00001) then
+            exit;
+        if (PlaceRemaining <= 0.00001) or (TakeRemaining <= 0.00001) then
+            Error(
+                '%1 yerleştirmesinin %2 satırında Al/Koy kalan miktarları dengesiz. Hiçbir satır değiştirilmedi.',
+                OriginalPlaceLine."No.", OriginalPlaceLine."Line No.");
+        InsertPutAwayLpLine(OriginalPlaceLine, '', PlaceRemaining, NewLine);
+        InsertPutAwayLpLine(OriginalTakeLine, '', TakeRemaining, NewLine);
+    end;
+
+    /// <summary>
+    /// The LPs now belong to this put-away: FinalizePutAwayLp releases them after the
+    /// register only when they are assigned to it. A stale assignment (deleted
+    /// document or the posted receipt) is released first so the LP ledger shows both
+    /// steps.
+    /// </summary>
+    local procedure AssignBinLpsToPutAway(PutAwayNo: Code[20]; LpNos: List of [Code[20]])
+    var
+        LP: Record "DOPSWHS LP Header";
+        LPMgt: Codeunit "DOPSWHS LP Management";
+        LpNo: Code[20];
+    begin
+        foreach LpNo in LpNos do begin
+            LP.Get(LpNo);
+            if not ((LP.Status = LP.Status::Assigned) and
+                    (LP."Assigned Document Type" = LP."Assigned Document Type"::WhsePutaway) and
+                    (LP."Assigned Document No." = PutAwayNo))
+            then begin
+                if LP.Status = LP.Status::Assigned then
+                    LPMgt.Release(LP);
+                LPMgt.Assign(LP, Enum::"DOPSWHS Assigned Doc Type"::WhsePutaway, PutAwayNo);
+            end;
+        end;
+    end;
+
     local procedure ResolvePutAwayLineLp(PostedReceiptNo: Code[20]; WhseActivityLine: Record "Warehouse Activity Line"): Code[20]
     var
         PostedReceiptLine: Record "Posted Whse. Receipt Line";

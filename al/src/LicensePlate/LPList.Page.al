@@ -163,6 +163,31 @@ page 72070 "DOPSWHS LP List"
                     CurrPage.Update(false);
                 end;
             }
+            action(ReleaseOrphanAssignments)
+            {
+                ApplicationArea = All;
+                Caption = 'Yetim atamaları serbest bırak';
+                ToolTip = 'Atandı durumundaki LP''lerden, atandığı belge (yerleştirme, toplama, hareket, sevkiyat, mal kabul, üretim/montaj emri) artık hiçbir biçimde bulunmayanları Oluşturuldu durumuna döndürür. Kayıtlı/deftere nakledilmiş belgeye atanmış LP''lere dokunmaz. Listedeki filtrelere uyar; önce sayıyı gösterip onay ister. Stok ve raf değişmez.';
+                Image = ReleaseDoc;
+                trigger OnAction()
+                var
+                    Scope: Record "DOPSWHS LP Header";
+                    Mgt: Codeunit "DOPSWHS LP Management";
+                    OrphanCount: Integer;
+                begin
+                    Scope.CopyFilters(Rec);
+                    OrphanCount := Mgt.ReleaseOrphanAssignments(Scope, false);
+                    if OrphanCount = 0 then begin
+                        Message('Artık bulunmayan bir belgeye atanmış LP yok. Hiçbir şey değişmedi.');
+                        exit;
+                    end;
+                    if not Confirm('%1 LP artık bulunmayan bir belgeye atanmış görünüyor. Bu LP''ler serbest bırakılsın (Oluşturuldu) mı?', false, OrphanCount) then
+                        exit;
+                    OrphanCount := Mgt.ReleaseOrphanAssignments(Scope, true);
+                    CurrPage.Update(false);
+                    Message('%1 LP serbest bırakıldı.', OrphanCount);
+                end;
+            }
             action(RepairLegacyStockSources)
             {
                 ApplicationArea = All;
