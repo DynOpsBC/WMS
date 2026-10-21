@@ -21,6 +21,9 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.repeatOnLifecycle
 import com.dynops.bcwms.BcApi
 import com.dynops.bcwms.BuildConfig
 import com.dynops.bcwms.DeviceAuth
@@ -29,6 +32,7 @@ import com.dynops.bcwms.ui.CompanyLogo
 import com.dynops.bcwms.ui.StatusText
 import com.dynops.bcwms.ui.operatorFacingStatus
 import com.dynops.bcwms.ui.resolveCompanyBrand
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import org.json.JSONObject
 
@@ -64,9 +68,26 @@ fun LoginFlow(onConnected: (Boolean) -> Unit) {
     // Paylaşımlı BC lisansı modeli: BC servis hesabı + ortam zaten bağlıysa
     // ekran doğrudan WMS operatör girişinden başlar (vardiya/kullanıcı değişimi
     // de "Bağlı" rozetine dokunup buradan yapılır).
-    var step by remember { mutableStateOf(if (BcApi.hasToken(context)) Step.LocalUser else Step.Email) }
+    // EMU (DKÇ, 21 Eki 2026): a Microsoft sign-in waiting for the Authenticator
+    // approval survives leaving the app, activity recreation and process death.
+    // The screen opens on the same code again instead of "Cihaz kurulumu".
+    val simpleSignIn = simpleMicrosoftSignIn(BuildConfig.FLAVOR)
+    val signInRepo = remember { pendingSignInRepository(context) }
+    val resumedSignIn = remember { if (simpleSignIn) signInRepo.resumable() else null }
+    var step by remember {
+        mutableStateOf(
+            when {
+                resumedSignIn != null -> Step.DeviceCode
+                BcApi.hasToken(context) -> Step.LocalUser
+                else -> Step.Email
+            }
+        )
+    }
     var email by remember {
-        mutableStateOf(BcApi.getLoginEmail(context, BuildConfig.LOGIN_DEFAULT_EMAIL))
+        mutableStateOf(
+            resumedSignIn?.email?.takeIf { it.isNotBlank() }
+                ?: BcApi.getLoginEmail(context, BuildConfig.LOGIN_DEFAULT_EMAIL)
+        )
     }
     var editEmail by remember { mutableStateOf(email.isBlank()) }
     var password by remember { mutableStateOf("") }
@@ -93,6 +114,15 @@ fun LoginFlow(onConnected: (Boolean) -> Unit) {
     var signedInAs by remember { mutableStateOf("") }
 
     var deviceCode by remember { mutableStateOf<DeviceAuth.DeviceCode?>(null) }
+    // EMU Microsoft sign-in (device code + Authenticator) state.
+    var pendingSignIn by remember { mutableStateOf(resumedSignIn) }
+    var signInExpired by remember { mutableStateOf(false) }
+    var signInOffline by remember { mutableStateOf(false) }
+    var signInApproved by remember { mutableStateOf(false) }
+    var codeCopied by remember { mutableStateOf(false) }
+    var showPasswordSignIn by remember { mutableStateOf(false) }
+    var nowMs by remember { mutableLongStateOf(System.currentTimeMillis()) }
+    val lifecycleOwner = LocalLifecycleOwner.current
     var envList by remember { mutableStateOf<List<BcApi.EnvCompanies>>(emptyList()) }
     var selectedEnv by remember { mutableStateOf<BcApi.EnvCompanies?>(null) }
     var manualEnv by remember { mutableStateOf("") }
@@ -261,6 +291,122 @@ fun LoginFlow(onConnected: (Boolean) -> Unit) {
         }
     }
 
+    /** EMU: token from the Microsoft sign-in → same environment/company selection as before. */
+    suspend fun acceptMicrosoftToken(t: DeviceAuth.TokenResult.Success, signInEmail: String) {
+        BcApi.saveLoginEmail(context, signInEmail)
+        BcApi.saveToken(context, t.accessToken)
+        BcApi.saveRefreshToken(context, t.refreshToken)
+        BcApi.saveTokenExpiry(context, t.expiresInSec)
+        status = "Giriş onaylandı, ortamlar yükleniyor..."
+        lastToken = t.accessToken
+        envList = BcApi.discoverEnvironments(t.accessToken)
+        selectedEnv = envList.firstOrNull()
+        step = Step.SelectEnvCompany
+        status = if (envList.isEmpty())
+            "⚠️ Otomatik ortam bulunamadı — ortam adınızı yazıp 'Ortamı Bul' deyin"
+        else ""
+    }
+
+    /** EMU: request a device code, keep it on disk and show the code screen. */
+    fun startMicrosoftSignIn() {
+        if (busy) return
+        scope.launch {
+            busy = true; status = "Giriş kodu alınıyor..."
+            val signInEmail = email.trim()
+            val res = DeviceAuth.requestCode(signInEmail)
+            busy = false
+            res.onSuccess { code ->
+                pendingSignIn = signInRepo.save(code, signInEmail)
+                signInExpired = false
+                signInOffline = false
+                signInApproved = false
+                codeCopied = false
+                nowMs = System.currentTimeMillis()
+                step = Step.DeviceCode
+                status = ""
+            }.onFailure {
+                status = if (it is java.io.IOException)
+                    "🔴 Giriş kodu alınamadı. İnternet bağlantısını kontrol edip tekrar deneyin."
+                else "🔴 Giriş kodu alınamadı: ${it.message}"
+            }
+        }
+    }
+
+    fun cancelMicrosoftSignIn() {
+        signInRepo.clear()
+        pendingSignIn = null
+        signInExpired = false
+        signInOffline = false
+        step = Step.Email
+        status = ""
+    }
+
+    // EMU: the code is copied as soon as it is shown (also after a resume).
+    LaunchedEffect(step, pendingSignIn?.userCode) {
+        val pending = pendingSignIn
+        if (!simpleSignIn || step != Step.DeviceCode || pending == null || codeCopied) return@LaunchedEffect
+        codeCopied = copySignInCode(context, pending.userCode)
+    }
+
+    // EMU: remaining-time clock of the code screen.
+    LaunchedEffect(step, pendingSignIn) {
+        if (!simpleSignIn || step != Step.DeviceCode || pendingSignIn == null) return@LaunchedEffect
+        while (true) {
+            nowMs = System.currentTimeMillis()
+            delay(1_000L)
+        }
+    }
+
+    // EMU: wait for the Authenticator approval. Polls only while BCWMS is on
+    // screen (Android cuts network for background apps); every return from the
+    // browser/Authenticator restarts the block, so the first poll is immediate.
+    // Network errors never end the sign-in, they are retried.
+    LaunchedEffect(step, pendingSignIn) {
+        val pending = pendingSignIn
+        if (!simpleSignIn || step != Step.DeviceCode || pending == null) return@LaunchedEffect
+        lifecycleOwner.lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
+            var delayMs = pending.pollIntervalMs()
+            while (true) {
+                val result = DeviceAuth.pollOnce(pending.toDeviceCode(System.currentTimeMillis()))
+                when (val next = nextDevicePollStep(result, delayMs, pending, System.currentTimeMillis())) {
+                    is DevicePollStep.Wait -> {
+                        signInOffline = next.offline
+                        delayMs = next.nextDelayMs
+                        delay(delayMs)
+                    }
+                    is DevicePollStep.Done -> {
+                        signInRepo.clear()
+                        signInOffline = false
+                        signInApproved = true
+                        // Outside this effect: clearing pendingSignIn cancels the effect.
+                        scope.launch {
+                            try {
+                                acceptMicrosoftToken(next.token, pending.email.ifBlank { email.trim() })
+                            } finally {
+                                signInApproved = false
+                            }
+                        }
+                        pendingSignIn = null
+                        return@repeatOnLifecycle
+                    }
+                    is DevicePollStep.Stop -> {
+                        signInRepo.clear()
+                        signInOffline = false
+                        pendingSignIn = null
+                        if (next.expired) {
+                            signInExpired = true
+                            status = ""
+                        } else {
+                            step = Step.Email
+                            status = "🔴 ${next.message}"
+                        }
+                        return@repeatOnLifecycle
+                    }
+                }
+            }
+        }
+    }
+
     // WMS giriş adımına gelince kayıtlı operatörleri çek (token varsa).
     LaunchedEffect(step) {
         if (step != Step.LocalUser || localUsers.isNotEmpty() || !BcApi.hasToken(context)) return@LaunchedEffect
@@ -333,7 +479,11 @@ fun LoginFlow(onConnected: (Boolean) -> Unit) {
     }
 
     val loginBrand = resolveCompanyBrand(BcApi.getCompanyName(context), BuildConfig.FLAVOR)
-    Column(Modifier.fillMaxSize().padding(20.dp).verticalScroll(rememberScrollState())) {
+    val screenScroll = rememberScrollState()
+    // EMU: the code screen starts at the top so the code is the first thing seen.
+    val microsoftCodeScreen = simpleSignIn && step == Step.DeviceCode
+    LaunchedEffect(microsoftCodeScreen) { if (microsoftCodeScreen) screenScroll.scrollTo(0) }
+    Column(Modifier.fillMaxSize().padding(20.dp).verticalScroll(screenScroll)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             CompanyLogo(brand = loginBrand, height = 28.dp)
             Spacer(Modifier.width(12.dp))
@@ -343,8 +493,10 @@ fun LoginFlow(onConnected: (Boolean) -> Unit) {
         }
         Spacer(Modifier.height(20.dp))
 
-        AppUpdateCard()
-        Spacer(Modifier.height(20.dp))
+        if (!microsoftCodeScreen) {
+            AppUpdateCard()
+            Spacer(Modifier.height(20.dp))
+        }
 
         when (step) {
             Step.Email -> {
@@ -387,6 +539,50 @@ fun LoginFlow(onConnected: (Boolean) -> Unit) {
                         }
                     }
                 }
+                if (simpleSignIn) {
+                    // EMU (DKÇ): one obvious sign-in button. The tenant requires
+                    // Authenticator (MFA), so the password route rarely works and
+                    // stays behind a small link.
+                    Spacer(Modifier.height(14.dp))
+                    Button(
+                        onClick = { startMicrosoftSignIn() },
+                        enabled = !busy && email.isNotBlank(),
+                        shape = RoundedCornerShape(14.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = loginBrand.primary),
+                        modifier = Modifier.fillMaxWidth().heightIn(min = 64.dp),
+                    ) {
+                        Text(
+                            if (busy && !showPasswordSignIn) "Kod alınıyor…" else "Microsoft ile Giriş Yap",
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 17.sp,
+                        )
+                    }
+                    Spacer(Modifier.height(6.dp))
+                    Text(
+                        "Bir kod gösterilir; Microsoft sayfasında girip Authenticator'da onaylarsınız.",
+                        fontSize = 12.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Spacer(Modifier.height(4.dp))
+                    TextButton(onClick = { showPasswordSignIn = !showPasswordSignIn }) {
+                        Text(if (showPasswordSignIn) "Şifre ile bağlan ▴" else "Şifre ile bağlan ▾", fontSize = 12.sp)
+                    }
+                    if (showPasswordSignIn) {
+                        OutlinedTextField(
+                            value = password, onValueChange = { password = it },
+                            label = { Text("Microsoft hesabı şifresi") },
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                            visualTransformation = PasswordVisualTransformation(),
+                            singleLine = true, modifier = Modifier.fillMaxWidth()
+                        )
+                        Spacer(Modifier.height(8.dp))
+                        OutlinedButton(
+                            onClick = { startPasswordSignIn() },
+                            enabled = !busy && email.isNotBlank() && password.isNotBlank(),
+                            modifier = Modifier.fillMaxWidth().height(48.dp)
+                        ) { Text(if (busy) "Bağlanıyor…" else "Bağlan", fontWeight = FontWeight.Bold) }
+                    }
+                } else {
                 Spacer(Modifier.height(10.dp))
                 OutlinedTextField(
                     value = password, onValueChange = { password = it },
@@ -407,6 +603,7 @@ fun LoginFlow(onConnected: (Boolean) -> Unit) {
                     enabled = !busy && email.isNotBlank(),
                     modifier = Modifier.fillMaxWidth().height(48.dp)
                 ) { Text("Tarayıcıda Microsoft ile Giriş", fontSize = 13.sp) }
+                }
                 Spacer(Modifier.height(20.dp))
                 HorizontalDivider()
                 Spacer(Modifier.height(16.dp))
@@ -788,7 +985,28 @@ fun LoginFlow(onConnected: (Boolean) -> Unit) {
                 )
             }
 
-            Step.DeviceCode -> {
+            Step.DeviceCode -> if (simpleSignIn) {
+                val pending = pendingSignIn
+                MicrosoftCodePanel(
+                    pending = pending,
+                    nowMs = nowMs,
+                    expired = signInExpired || pending == null || pending.isExpired(nowMs),
+                    offline = signInOffline,
+                    approved = signInApproved,
+                    copied = codeCopied,
+                    busy = busy,
+                    brandColor = loginBrand.primary,
+                    onCopyAndOpen = {
+                        if (pending != null) {
+                            codeCopied = copySignInCode(context, pending.userCode) || codeCopied
+                            if (!openSignInPage(context, pending.verificationUri))
+                                status = "⚠️ Tarayıcı açılamadı. ${pending.verificationUri} adresine gidip kodu girin."
+                        }
+                    },
+                    onNewCode = { startMicrosoftSignIn() },
+                    onCancel = { cancelMicrosoftSignIn() },
+                )
+            } else {
                 val code = deviceCode
                 Card(colors = CardDefaults.cardColors(containerColor = Color(0xFFEDE7F6))) {
                     Column(Modifier.fillMaxWidth().padding(16.dp), horizontalAlignment = Alignment.CenterHorizontally) {

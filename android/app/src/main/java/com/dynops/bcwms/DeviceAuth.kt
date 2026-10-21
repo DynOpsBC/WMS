@@ -1,5 +1,6 @@
 package com.dynops.bcwms
 
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
@@ -27,7 +28,11 @@ object DeviceAuth {
     //   - ROPC (password): tenant-belirsiz authority AADSTS50059 verir → domain ŞART.
     //   - device-code: domain verilebilirse tenant-özel; yoksa /organizations.
     private fun authority(path: String, tenantSegment: String) =
-        "https://login.microsoftonline.com/$tenantSegment/oauth2/v2.0/$path"
+        "$loginHost/$tenantSegment/oauth2/v2.0/$path"
+
+    /** Entra sign-in host; unit tests point it at a local mock server. */
+    @Volatile
+    internal var loginHost = "https://login.microsoftonline.com"
 
     /** E-posta domainini tenant segmenti olarak döndürür; domain yoksa fallback. */
     private fun tenantFromEmail(email: String, fallback: String): String {
@@ -86,30 +91,73 @@ object DeviceAuth {
         }
     }
 
+    /** Result of a single token-endpoint poll during the device-code flow. */
+    sealed class PollResult {
+        data class Success(val token: TokenResult.Success) : PollResult()
+        /** authorization_pending / slow_down: the user has not finished in the browser yet. */
+        data class Waiting(val slowDown: Boolean = false) : PollResult()
+        /**
+         * The request never reached Entra (no network, DNS, timeout). Not an answer
+         * from the server, so the caller keeps the code and simply polls again.
+         */
+        data class Offline(val reason: String) : PollResult()
+        data class Failed(val error: String, val expired: Boolean = false) : PollResult()
+    }
+
+    /** Maps one token-endpoint response to a [PollResult]. Pure, unit-tested. */
+    internal fun interpretTokenResponse(status: Int, text: String): PollResult {
+        val j = try { JSONObject(text) } catch (e: Exception) { JSONObject() }
+        if (status in 200..299) {
+            val token = j.optString("access_token")
+            if (token.isNotBlank())
+                return PollResult.Success(TokenResult.Success(token, j.optString("refresh_token"), j.optInt("expires_in", 3600)))
+        }
+        return when (val error = j.optString("error")) {
+            "authorization_pending" -> PollResult.Waiting()
+            "slow_down" -> PollResult.Waiting(slowDown = true)
+            "expired_token", "code_expired" -> PollResult.Failed("Kod süresi doldu, tekrar deneyin.", expired = true)
+            "authorization_declined", "access_denied" -> PollResult.Failed("Giriş reddedildi.")
+            // A body without an OAuth error (proxy page, 5xx) is not a final answer.
+            "" -> if (status >= 500 || status in 200..299) PollResult.Waiting() else PollResult.Offline("HTTP $status")
+            else -> PollResult.Failed(j.optString("error_description", error).substringBefore("\r").substringBefore("\n"))
+        }
+    }
+
+    /**
+     * One poll of the token endpoint. Never throws for network problems:
+     * a terminal that is in the background (Android 15+ cuts network for
+     * cached apps), roaming between access points or briefly offline must
+     * not crash the app while the user approves in Authenticator.
+     */
+    suspend fun pollOnce(code: DeviceCode): PollResult = withContext(Dispatchers.IO) {
+        try {
+            val body = "grant_type=urn:ietf:params:oauth:grant-type:device_code" +
+                "&client_id=${BcApi.CLIENT_ID}&device_code=${enc(code.deviceCode)}"
+            val (status, text) = postForm(authority("token", code.tenantSegment), body)
+            interpretTokenResponse(status, text)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            PollResult.Offline(e.message ?: e.javaClass.simpleName)
+        }
+    }
+
     /**
      * Step 2: poll the token endpoint until the user completes sign-in (or it times out).
      * Honors the server interval and authorization_pending/slow_down semantics.
+     * Network errors are retried until the code expires (they used to escape
+     * as an uncaught IOException and close the app).
      */
     suspend fun pollForToken(code: DeviceCode): TokenResult = withContext(Dispatchers.IO) {
         var intervalMs = code.interval.coerceAtLeast(1) * 1000L
         val deadline = System.currentTimeMillis() + code.expiresIn * 1000L
         while (System.currentTimeMillis() < deadline) {
             delay(intervalMs)
-            val body = "grant_type=urn:ietf:params:oauth:grant-type:device_code" +
-                "&client_id=${BcApi.CLIENT_ID}&device_code=${enc(code.deviceCode)}"
-            val (status, text) = postForm(authority("token", code.tenantSegment), body)
-            val j = try { JSONObject(text) } catch (e: Exception) { JSONObject() }
-            if (status in 200..299) {
-                val token = j.optString("access_token")
-                if (token.isNotBlank()) return@withContext TokenResult.Success(token, j.optString("refresh_token"), j.optInt("expires_in", 3600))
-            }
-            when (j.optString("error")) {
-                "authorization_pending" -> {}                       // keep waiting
-                "slow_down" -> intervalMs += 5000L                  // back off
-                "expired_token", "code_expired" -> return@withContext TokenResult.Failure("Kod süresi doldu, tekrar deneyin.")
-                "authorization_declined", "access_denied" -> return@withContext TokenResult.Failure("Giriş reddedildi.")
-                "" -> {}
-                else -> return@withContext TokenResult.Failure(j.optString("error_description", j.optString("error")))
+            when (val r = pollOnce(code)) {
+                is PollResult.Success -> return@withContext r.token
+                is PollResult.Waiting -> if (r.slowDown) intervalMs += 5000L
+                is PollResult.Offline -> {}                                 // try again next interval
+                is PollResult.Failed -> return@withContext TokenResult.Failure(r.error)
             }
         }
         TokenResult.Failure("Zaman aşımı — giriş tamamlanmadı.")

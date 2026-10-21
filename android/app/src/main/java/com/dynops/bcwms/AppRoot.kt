@@ -103,8 +103,13 @@ fun AppRoot() {
     // getirirse operatör ana menüye düşmesin, son ekranda kalsın.
     // (Cihaz döndürmede zaten manifest'teki configChanges sayesinde Activity
     // yeniden yaratılmıyor — tüm ekran state'i olduğu gibi korunuyor.)
+    // EMU: a Microsoft sign-in still waiting for the Authenticator approval
+    // reopens on its code screen, not on the menu of an older connection.
     var screen by rememberSaveable {
-        mutableStateOf(if (BcApi.hasToken(context)) Screen.Home else Screen.Connection)
+        mutableStateOf(
+            if (BcApi.hasToken(context) && !hasResumableDeviceSignIn(context, BuildConfig.FLAVOR)) Screen.Home
+            else Screen.Connection
+        )
     }
     // Keep the menu position alive while a module replaces HomeScreen.
     val homeScrollState = rememberScrollState()
