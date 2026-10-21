@@ -678,6 +678,24 @@ codeunit 72161 "DOPSWHS Label Designer Tests"
         Assert.IsTrue(Layout.Get(SavedCode), 'A saved design is kept.');
     end;
 
+    [Test]
+    procedure KindAndTypeParsingIgnoresSessionLanguage()
+    var
+        DesignerMgt: Codeunit "DOPSWHS Label Designer Mgt";
+        Assert: Codeunit "Library Assert";
+        PreviousLanguage: Integer;
+    begin
+        // Türkçe oturumda LowerCase('Item') = 'ıtem' olur; kayıt "Bilinmeyen etiket türü" veriyordu.
+        PreviousLanguage := GlobalLanguage();
+        GlobalLanguage(1055);
+        Assert.AreEqual(Enum::"DOPSWHS Label Kind"::Item, DesignerMgt.TextToKind('Item'), 'Item in a Turkish session.');
+        Assert.AreEqual(Enum::"DOPSWHS Label Kind"::Item, DesignerMgt.TextToKind('ITEM'), 'Upper case.');
+        Assert.AreEqual(Enum::"DOPSWHS Label Kind"::LP, DesignerMgt.TextToKind('lp'), 'Lower case.');
+        Assert.AreEqual('item', DesignerMgt.AsciiLower('Item'), 'ASCII lower keeps dotted i.');
+        Assert.AreEqual('IMG-1', DesignerMgt.AsciiUpper('img-1'), 'ASCII upper keeps dotless I.');
+        GlobalLanguage(PreviousLanguage);
+    end;
+
     local procedure ClearLayouts()
     var
         Layout: Record "DOPSWHS Label Layout";

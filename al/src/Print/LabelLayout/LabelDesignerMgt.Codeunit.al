@@ -561,7 +561,7 @@ codeunit 72472 "DOPSWHS Label Designer Mgt"
             if GetInteger(Root, 'version') > 1 then
                 Error(UnsupportedVersionErr, GetInteger(Root, 'version'));
         JsonCode := GetText(Root, 'code');
-        if (JsonCode <> '') and (UpperCase(JsonCode) <> LayoutCode) then
+        if (JsonCode <> '') and (AsciiUpper(JsonCode) <> LayoutCode) then
             Error(CodeMismatchErr, JsonCode, LayoutCode);
 
         // Missing header values keep the saved layout's values.
@@ -671,7 +671,7 @@ codeunit 72472 "DOPSWHS Label Designer Mgt"
         TempLayoutLine.Symbology := TextToSymbology(GetText(Element, 'symbology'), Index);
         TempLayoutLine."Show Text" := GetBoolean(Element, 'showText', false);
         TempLayoutLine."Thickness (mm)" := NonNegative(Round(GetDecimal(Element, 'thicknessMm'), 0.01));
-        TempLayoutLine."Image Id" := CopyStr(UpperCase(CheckLength(GetText(Element, 'imageId'), MaxStrLen(TempLayoutLine."Image Id"), Index, 'imageId')), 1, MaxStrLen(TempLayoutLine."Image Id"));
+        TempLayoutLine."Image Id" := CopyStr(AsciiUpper(CheckLength(GetText(Element, 'imageId'), MaxStrLen(TempLayoutLine."Image Id"), Index, 'imageId')), 1, MaxStrLen(TempLayoutLine."Image Id"));
         TempLayoutLine.Enabled := GetBoolean(Element, 'enabled', true);
         ImageGf := GetText(Element, 'imageGf');
         if ImageGf <> '' then
@@ -686,7 +686,7 @@ codeunit 72472 "DOPSWHS Label Designer Mgt"
         ImageId: Text;
         DataUrl: Text;
     begin
-        ImageId := UpperCase(GetText(Image, 'id'));
+        ImageId := AsciiUpper(GetText(Image, 'id'));
         DataUrl := GetText(Image, 'dataUrl');
         // A reference without data (image already stored in BC) needs no write.
         if DataUrl = '' then
@@ -712,6 +712,19 @@ codeunit 72472 "DOPSWHS Label Designer Mgt"
     // Mappings
     // ------------------------------------------------------------------
 
+    // Kitoko (21 Eki 2026): LowerCase/UpperCase oturum diline göre çalışır; Türkçe
+    // oturumda "Item" -> "ıtem" olur ve tür tanınmaz. JSON anahtarları/kodları
+    // ASCII'dir: yalnız A-Z / a-z çevrilir.
+    procedure AsciiLower(Value: Text): Text
+    begin
+        exit(ConvertStr(Value, 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'));
+    end;
+
+    procedure AsciiUpper(Value: Text): Text
+    begin
+        exit(ConvertStr(Value, 'abcdefghijklmnopqrstuvwxyz', 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'));
+    end;
+
     procedure KindToText(Kind: Enum "DOPSWHS Label Kind"): Text
     begin
         case Kind of
@@ -727,7 +740,7 @@ codeunit 72472 "DOPSWHS Label Designer Mgt"
 
     procedure TextToKind(Value: Text): Enum "DOPSWHS Label Kind"
     begin
-        case LowerCase(Value) of
+        case AsciiLower(Value) of
             'item':
                 exit(Enum::"DOPSWHS Label Kind"::Item);
             'bin':
@@ -761,7 +774,7 @@ codeunit 72472 "DOPSWHS Label Designer Mgt"
 
     local procedure TextToType(Value: Text; Index: Integer): Enum "DOPSWHS Label Element Type"
     begin
-        case LowerCase(Value) of
+        case AsciiLower(Value) of
             'text':
                 exit(Enum::"DOPSWHS Label Element Type"::Text);
             'field':
@@ -793,7 +806,7 @@ codeunit 72472 "DOPSWHS Label Designer Mgt"
 
     local procedure TextToSymbology(Value: Text; Index: Integer): Enum "DOPSWHS Label Symbology"
     begin
-        case LowerCase(Value) of
+        case AsciiLower(Value) of
             'code128', '':
                 exit(Enum::"DOPSWHS Label Symbology"::Code128);
             'ean13', 'ean-13':
@@ -817,7 +830,7 @@ codeunit 72472 "DOPSWHS Label Designer Mgt"
 
     local procedure TextToAlign(Value: Text; Index: Integer): Enum "DOPSWHS Label Alignment"
     begin
-        case LowerCase(Value) of
+        case AsciiLower(Value) of
             'left', '':
                 exit(Enum::"DOPSWHS Label Alignment"::Left);
             'center':

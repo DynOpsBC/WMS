@@ -94,9 +94,10 @@ page 72469 "DOPSWHS Label Layout List"
         Designer.SetTableView(Layout);
         if CreatedNew then
             Designer.SetCreatedNew();
-        Designer.RunModal();
+        // Tam sayfa açılsın (RunModal küçük pencere açıyordu); liste yeni kaydı hemen gösterir.
         if Rec.Get(LayoutCode) then;
         CurrPage.Update(false);
+        Designer.Run();
     end;
 
     var
