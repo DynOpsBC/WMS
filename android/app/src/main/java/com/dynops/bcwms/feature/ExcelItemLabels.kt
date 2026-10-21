@@ -14,6 +14,8 @@ import androidx.compose.ui.window.DialogProperties
 import com.dynops.bcwms.BcApi
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import androidx.compose.ui.Alignment
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import java.util.Locale
 
@@ -35,6 +37,10 @@ fun ExcelItemLabelsCard(enabled: Boolean = true, loadPreparedRows: (suspend () -
     // DKÇ (21 Eki 2026): BC'de bulunamayan/bloke ürün satırı bütün listeyi durdurmasın;
     // satırlar gösterilir, onaylanırsa atlanıp kalanlar sırayla basılır.
     var skipPrompt by remember { mutableStateOf<List<ExcelLabelRow>>(emptyList()) }
+    var promptResume by remember { mutableStateOf(false) }
+    // DKÇ (21 Eki 2026): durdurulan/yarım kalan gönderimden sonra 1'den yeniden basmamak için
+    // son başarıyla gönderilen sıra saklanır; önizlemede "Kaldığı yerden devam" çıkar.
+    var resumeAfter by remember { mutableIntStateOf(preferences.getInt("resumeAfter", 0)) }
     var skippedCount by remember { mutableIntStateOf(0) }
     var printTotal by remember { mutableIntStateOf(0) }
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
@@ -92,12 +98,19 @@ fun ExcelItemLabelsCard(enabled: Boolean = true, loadPreparedRows: (suspend () -
         title = { Text("Yazıcı kuyruğunu kontrol edin") },
         text = { Text("Önceki gönderim doğrulanamadı: $uncertain. Bu aralık basılmış olabilir. Tekrar baskıdan önce kuyruğu ve çıkan etiketleri kontrol edin.") },
         confirmButton = { TextButton(onClick = {
+            val start = uncertainRangeStart(uncertain)
+            if (start != null && resumeAfter == 0) {
+                resumeAfter = start - 1
+                preferences.edit().putInt("resumeAfter", resumeAfter).commit()
+            }
             preferences.edit().remove("inFlight").commit()
             uncertain = ""
         }) { Text("Kontrol ettim") } },
     )
 
-    fun startPrint(skipMissing: Boolean) {
+    fun promptRows(): List<ExcelLabelRow> = if (promptResume) rowsAfterOrder(rows, resumeAfter) else rows
+
+    fun startPrint(skipMissing: Boolean, resume: Boolean) {
         // Set synchronously: repeated taps cannot create a second coroutine.
         loading = true
         error = ""
@@ -108,12 +121,15 @@ fun ExcelItemLabelsCard(enabled: Boolean = true, loadPreparedRows: (suspend () -
                 check(page.complete) { "Ürünler doğrulanamadı. Hiçbir etiket gönderilmedi." }
                 val available = page.rows.filter { !it.optBoolean("blocked") }
                     .map { it.optString("no").uppercase(Locale.ROOT) }.toSet()
-                val missing = unavailableLabelRows(rows, available)
+                val source = if (resume) rowsAfterOrder(rows, resumeAfter) else rows
+                check(source.isNotEmpty()) { "Devam edilecek satır kalmadı." }
+                val missing = unavailableLabelRows(source, available)
                 if (missing.isNotEmpty() && !skipMissing) {
+                    promptResume = resume
                     skipPrompt = missing
                     return@launch
                 }
-                val toPrint = rows - missing.toSet()
+                val toPrint = source - missing.toSet()
                 check(toPrint.isNotEmpty()) { "Basılacak satır kalmadı. Hiçbir etiket gönderilmedi." }
                 skippedCount = missing.size
                 printTotal = toPrint.size
@@ -127,17 +143,28 @@ fun ExcelItemLabelsCard(enabled: Boolean = true, loadPreparedRows: (suspend () -
                         "Baskı durumu kaydedilemedi; gönderim yapılmadı."
                     }
                     uncertain = range
+                    val lastJobId = lastExcelPrintJobId(context)
                     val response = BcApi.boundActionLongRunning(context, "items", batch.first().itemNo,
                         "printLabelRows", excelLabelsPayload(batch, choice.printerCode))
                     val count = BcApi.scalarValue(response.body).trim().toIntOrNull()
                     if (response.ok && count == batch.size) {
-                        withContext(Dispatchers.IO) { preferences.edit().remove("inFlight").commit() }
+                        withContext(Dispatchers.IO) {
+                            preferences.edit().remove("inFlight").putInt("resumeAfter", batch.last().order).commit()
+                        }
                         uncertain = ""
-                        Result.success(count)
+                        resumeAfter = batch.last().order
+                        // Paket yazıcıya iletilmeden sonraki gönderilmez (sıra karışmasın).
+                        val orderError = if (lastJobId == null) { delay(20_000L); null }
+                            else awaitExcelJob(range, fetchJobs = { excelPrintJobsAfter(context, lastJobId) }, pause = { delay(it) })
+                        if (orderError == null) Result.success(count) else Result.failure(IllegalStateException(orderError))
                     } else Result.failure(IllegalStateException(
                         if (response.httpCode == 404) "Bu işlem için BCWMSApp 1.14.2.24 veya üzeri gerekir."
                         else "${BcApi.errorMessage(response.body)} (HTTP ${response.httpCode})"))
                 }, stopRequested = { stop }, onProgress = { done, _ -> sent = done })
+                if (outcome?.let { it.error == null && !it.stopped } == true) {
+                    preferences.edit().remove("resumeAfter").commit()
+                    resumeAfter = 0
+                }
             } catch (cancelled: kotlinx.coroutines.CancellationException) {
                 throw cancelled
             } catch (failure: Exception) {
@@ -155,7 +182,10 @@ fun ExcelItemLabelsCard(enabled: Boolean = true, loadPreparedRows: (suspend () -
         error = error,
         source = previewSource,
         onDismiss = { if (!loading) rows = emptyList() },
-        onPrint = { startPrint(false) },
+        onPrint = { startPrint(false, resume = false) },
+        resumeFromOrder = if (resumeAfter > 0 && rows.any { it.order > resumeAfter }) resumeAfter + 1 else 0,
+        resumeCount = rowsAfterOrder(rows, resumeAfter).size,
+        onResume = { startPrint(false, resume = true) },
     )
     if (skipPrompt.isNotEmpty() && !printing && outcome == null) AlertDialog(
         onDismissRequest = { skipPrompt = emptyList() },
@@ -168,10 +198,10 @@ fun ExcelItemLabelsCard(enabled: Boolean = true, loadPreparedRows: (suspend () -
             }
             if (skipPrompt.size > 8) Text("… ve ${skipPrompt.size - 8} satır daha")
             Spacer(Modifier.height(8.dp))
-            Text("Bu satırlar atlanıp kalan ${rows.size - skipPrompt.size} etiket sırayla basılsın mı?")
+            Text("Bu satırlar atlanıp kalan ${promptRows().size - skipPrompt.size} etiket sırayla basılsın mı?")
         } },
-        confirmButton = { Button(onClick = { skipPrompt = emptyList(); startPrint(true) }) {
-            Text("Atlayarak yazdır (${rows.size - skipPrompt.size})")
+        confirmButton = { Button(onClick = { skipPrompt = emptyList(); startPrint(true, promptResume) }) {
+            Text("Atlayarak yazdır (${promptRows().size - skipPrompt.size})")
         } },
         dismissButton = { TextButton(onClick = { skipPrompt = emptyList() }) { Text("Vazgeç") } },
     )
@@ -199,7 +229,17 @@ fun ExcelItemLabelsCard(enabled: Boolean = true, loadPreparedRows: (suspend () -
 }
 
 @Composable
-internal fun ExcelLabelsPreview(rows: List<ExcelLabelRow>, busy: Boolean, error: String = "", source: String = "Excel sırası korunur.", onDismiss: () -> Unit, onPrint: () -> Unit) {
+internal fun ExcelLabelsPreview(
+    rows: List<ExcelLabelRow>,
+    busy: Boolean,
+    error: String = "",
+    source: String = "Excel sırası korunur.",
+    onDismiss: () -> Unit,
+    onPrint: () -> Unit,
+    resumeFromOrder: Int = 0,
+    resumeCount: Int = 0,
+    onResume: () -> Unit = {},
+) {
     AlertDialog(
         onDismissRequest = { if (!busy) onDismiss() },
         title = { Text("${rows.size} satır → ${rows.size} etiket") },
@@ -220,7 +260,13 @@ internal fun ExcelLabelsPreview(rows: List<ExcelLabelRow>, busy: Boolean, error:
             if (busy) { Spacer(Modifier.height(8.dp)); Text("Yazıcı ve ürünler doğrulanıyor…") }
             if (error.isNotBlank()) Text(error, color = MaterialTheme.colorScheme.error)
         } },
-        confirmButton = { Button(onClick = onPrint, enabled = !busy) { Text("Tümünü yazdır (${rows.size})") } },
+        confirmButton = { Column(horizontalAlignment = Alignment.End) {
+            if (resumeFromOrder > 0) Button(onClick = onResume, enabled = !busy) {
+                Text("Kaldığı yerden devam ($resumeFromOrder'den, $resumeCount)")
+            }
+            if (resumeFromOrder > 0) OutlinedButton(onClick = onPrint, enabled = !busy) { Text("Baştan yazdır (${rows.size})") }
+            else Button(onClick = onPrint, enabled = !busy) { Text("Tümünü yazdır (${rows.size})") }
+        } },
         dismissButton = { TextButton(onClick = onDismiss, enabled = !busy) { Text("Vazgeç") } },
     )
 }
@@ -235,3 +281,23 @@ internal fun PreparedLabelsButton(enabled: Boolean, loading: Boolean, onClick: (
 /** BC'de olmayan ya da bloke ürünün satırları; sıra korunur. */
 internal fun unavailableLabelRows(rows: List<ExcelLabelRow>, availableItemNos: Set<String>): List<ExcelLabelRow> =
     rows.filter { it.itemNo.uppercase(Locale.ROOT) !in availableItemNos }
+
+/** "501–551" → 501; okunamazsa null. */
+internal fun uncertainRangeStart(range: String): Int? =
+    range.split('–', '-').firstOrNull()?.trim()?.toIntOrNull()?.takeIf { it > 1 }
+
+private fun excelJobRows(body: String): List<org.json.JSONObject>? = runCatching {
+    val array = org.json.JSONObject(body).getJSONArray("value")
+    (0 until array.length()).map { array.getJSONObject(it) }
+}.getOrNull()
+
+private suspend fun lastExcelPrintJobId(context: android.content.Context): Int? {
+    val response = BcApi.get(context, "printJobs?\$select=jobId&\$orderby=jobId desc&\$top=1")
+    if (!response.ok) return null
+    return excelJobRows(response.body)?.let { rows -> rows.firstOrNull()?.optInt("jobId") ?: 0 }
+}
+
+private suspend fun excelPrintJobsAfter(context: android.content.Context, jobId: Int): List<org.json.JSONObject>? {
+    val response = BcApi.get(context, "printJobs?\$select=jobId,sourceDoc,status,lastError&\$filter=jobId gt $jobId&\$orderby=jobId asc&\$top=100")
+    return if (response.ok) excelJobRows(response.body) else null
+}

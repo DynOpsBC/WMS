@@ -119,7 +119,7 @@ internal suspend fun sendExcelLabels(
 ): AllItemLabelsOutcome {
     var sent = 0
     onProgress(0, rows.size)
-    for (batch in rows.chunked(ALL_ITEM_LABELS_BATCH)) {
+    for (batch in excelLabelBatches(rows)) {
         if (stopRequested()) return AllItemLabelsOutcome(sent, rows.size, true)
         val result = try { send(batch) } catch (cancelled: kotlinx.coroutines.CancellationException) {
             throw cancelled
@@ -134,4 +134,70 @@ internal suspend fun sendExcelLabels(
         onProgress(sent, rows.size)
     }
     return AllItemLabelsOutcome(sent, rows.size, false)
+}
+
+/**
+ * DKÇ (21 Eki 2026): BC bir paketin içinde sıranın kesintisiz artmasını ister
+ * ("Excel etiket sırası kesintisiz artmalı"). Atlanan satır (bloke ürün) ya da
+ * kaldığı yerden devam boşluk yaratır; paket boşlukta bölünür, sıra korunur.
+ */
+internal fun excelLabelBatches(rows: List<ExcelLabelRow>, size: Int = ALL_ITEM_LABELS_BATCH): List<List<ExcelLabelRow>> {
+    val batches = mutableListOf<List<ExcelLabelRow>>()
+    var current = mutableListOf<ExcelLabelRow>()
+    for (row in rows) {
+        if (current.isNotEmpty() && (current.size == size || row.order != current.last().order + 1)) {
+            batches += current
+            current = mutableListOf()
+        }
+        current += row
+    }
+    if (current.isNotEmpty()) batches += current
+    return batches
+}
+
+/** Kaldığı yerden devam: son başarıyla gönderilen sıradan sonraki satırlar. */
+internal fun rowsAfterOrder(rows: List<ExcelLabelRow>, lastSentOrder: Int): List<ExcelLabelRow> =
+    rows.filter { it.order > lastSentOrder }
+
+internal sealed interface ExcelJobState {
+    data object Waiting : ExcelJobState
+    data object Delivered : ExcelJobState
+    data class Failed(val message: String) : ExcelJobState
+}
+
+/**
+ * BC her 50'lik işi ayrı arka plan göreviyle yazıcıya iletir; görevler yer
+ * değiştirirse paketler karışık basılır. Paketin işi (gönderimden sonra açılan
+ * "EXCEL" işi) "Queued"dan çıkmadan sonraki paket gönderilmez.
+ */
+internal fun excelJobState(jobs: List<JSONObject>): ExcelJobState {
+    val own = jobs.filter { it.optString("sourceDoc").equals("EXCEL", ignoreCase = true) }
+    if (own.isEmpty()) return ExcelJobState.Waiting
+    own.firstOrNull { it.optString("status").equals("Failed", ignoreCase = true) }?.let {
+        return ExcelJobState.Failed(it.optString("lastError").ifBlank { "Yazdırma işi başarısız." })
+    }
+    return if (own.any { it.optString("status").equals("Queued", ignoreCase = true) }) ExcelJobState.Waiting
+    else ExcelJobState.Delivered
+}
+
+/** null: paket yazıcıya iletildi; aksi halde kalan paketleri durduran metin. */
+internal suspend fun awaitExcelJob(
+    range: String,
+    fetchJobs: suspend () -> List<JSONObject>?,
+    pause: suspend (Long) -> Unit,
+    pollMs: Long = 2_000L,
+    maxWaitMs: Long = 5 * 60_000L,
+): String? {
+    var waited = 0L
+    while (true) {
+        when (val state = fetchJobs()?.let { excelJobState(it) } ?: ExcelJobState.Waiting) {
+            ExcelJobState.Delivered -> return null
+            is ExcelJobState.Failed -> return "$range paketi yazıcıya iletilemedi: ${state.message} Sıra bozulmasın diye kalanlar gönderilmedi."
+            ExcelJobState.Waiting -> Unit
+        }
+        if (waited >= maxWaitMs) return "$range paketi ${maxWaitMs / 60_000} dakikadır yazıcıya iletilmedi. " +
+            "Sıra bozulmasın diye kalanlar gönderilmedi; yazıcı ajanını ve BC yazdırma kuyruğunu kontrol edin."
+        pause(pollMs)
+        waited += pollMs
+    }
 }
