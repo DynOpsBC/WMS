@@ -407,6 +407,17 @@ table 72000 "DOPSWHS Setup"
             DecimalPlaces = 0 : 1;
             MinValue = 0;
         }
+        field(452; "Label Top Offset (mm)"; Decimal)
+        {
+            // Kitoko (21 Eki 2026): EMU 1.14.2.27'den. Yazıcı etiketin başını
+            // erken alıp üst şeridi kesiyorsa pozitif değer baskıyı aşağı,
+            // negatif yukarı kaydırır (^LT). Kalibrasyon gerekmeden ayarlanır.
+            Caption = 'Etiket Dikey Kaydırma (mm)';
+            DataClassification = CustomerContent;
+            DecimalPlaces = 0 : 1;
+            MinValue = -15;
+            MaxValue = 15;
+        }
         field(460; "MTE Report ID"; Integer)
         {
             // BADE (16 Eyl 2026): the terminal MTE runs the customer's own

@@ -787,6 +787,8 @@ private fun ItemLabelInquiry() {
             .padding(12.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
+        // Kitoko (21 Eki 2026): EMU'dan Excel'den sıralı ürün / göz etiketleri.
+        if (com.dynops.bcwms.BuildConfig.FLAVOR == "kitoko") item { ExcelItemLabelsCard(enabled = !loading && !printing) }
         // DKÇ (9 Eki 2026): Etiket Çıkar → Ürün Etiketi'nde bütün ürünler tek seferde.
         item { AllItemLabelsCard(enabled = !loading && !printing) }
         item { AllItemLabelsCard(enabled = !loading && !printing, v2Format = true) }

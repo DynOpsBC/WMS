@@ -28,6 +28,7 @@ codeunit 72321 "DOPSWHS Label Canvas"
         ContentLines: Integer;
         DefaultWidthMm: Decimal;
         DefaultHeightMm: Decimal;
+        TopOffsetDots: Integer;
 
     /// <summary>Reads the label size from Setup (default 80x40 mm) and derives the metrics.</summary>
     procedure Init()
@@ -43,6 +44,9 @@ codeunit 72321 "DOPSWHS Label Canvas"
             HeightMm := Setup."Label Height (mm)";
         end;
         InitSize(WidthMm, HeightMm);
+        // Kitoko (21 Eki 2026): EMU 1.14.2.27'den etiket dikey kaydırma.
+        // ^LT sınırı ±120 nokta (8 nokta/mm → ±15 mm).
+        TopOffsetDots := Clamp(Round(Setup."Label Top Offset (mm)" * 8, 1), -120, 120);
     end;
 
     /// <summary>Canvas for an explicit size; 0 or an unusable value falls back to 80x40 mm.</summary>
@@ -299,6 +303,8 @@ codeunit 72321 "DOPSWHS Label Canvas"
     begin
         EnsureInit();
         // ^CI28 = UTF-8 so Turkish characters print correctly.
+        if TopOffsetDots <> 0 then
+            exit('^XA^CI28^PW' + Format(Width) + '^LL' + Format(Height) + '^LT' + Format(TopOffsetDots) + '^LH0,0');
         exit('^XA^CI28^PW' + Format(Width) + '^LL' + Format(Height) + '^LH0,0');
     end;
 
@@ -413,6 +419,12 @@ codeunit 72321 "DOPSWHS Label Canvas"
     /// column: LeftX, ColumnWidth and the first free TopY under the band.
     /// </summary>
     procedure Frame(Title: Text; RightText: Text; QrData: Text; QrCaption: Text; var LeftX: Integer; var ColumnWidth: Integer; var TopY: Integer): Text
+    begin
+        exit(Frame(Title, RightText, QrData, QrCaption, 30, LeftX, ColumnWidth, TopY));
+    end;
+
+    /// <summary>QrPercent: QR'ın en çok etiket genişliğinin yüzde kaçı olacağı (varsayılan 30).</summary>
+    procedure Frame(Title: Text; RightText: Text; QrData: Text; QrCaption: Text; QrPercent: Integer; var LeftX: Integer; var ColumnWidth: Integer; var TopY: Integer): Text
     var
         ZplEncoder: Codeunit "DOPSWHS ZPL Encoder";
         Zpl: Text;
@@ -425,7 +437,7 @@ codeunit 72321 "DOPSWHS Label Canvas"
     begin
         EnsureInit();
         // Zebra (and Labelary) draw the QR symbol about 10 dots below the ^FO origin.
-        QrMax := Width * 30 div 100;
+        QrMax := Width * QrPercent div 100;
         if QrCaption = '' then begin
             if Height - BandDots - 8 - QrOffset() - MarginDots < QrMax then
                 QrMax := Height - BandDots - 8 - QrOffset() - MarginDots;
@@ -473,6 +485,12 @@ codeunit 72321 "DOPSWHS Label Canvas"
 
     /// <summary>Bar height for a barcode starting at Top that ends on the bottom margin.</summary>
     procedure BarHeightToBottom(Top: Integer; Human: Boolean): Integer
+    begin
+        exit(BarHeightToBottom(Top, Human, 28));
+    end;
+
+    /// <summary>MaxPercent: barkodun en çok etiket yüksekliğinin yüzde kaçı olacağı.</summary>
+    procedure BarHeightToBottom(Top: Integer; Human: Boolean; MaxPercent: Integer): Integer
     var
         Available: Integer;
         MaxHeight: Integer;
@@ -483,7 +501,7 @@ codeunit 72321 "DOPSWHS Label Canvas"
             Available -= SmallSize + 4;
         // DKÇ (18 Eyl 2026): Capped at 28% of canvas height (approx 85-90 dots on 80x40mm)
         // so short descriptions don't cause an excessively massive barcode.
-        MaxHeight := Height * 28 div 100;
+        MaxHeight := Height * MaxPercent div 100;
         if (MaxHeight > 40) and (Available > MaxHeight) then
             Available := MaxHeight;
         if Available < 30 then
