@@ -75,12 +75,15 @@ private sealed interface AllItemLabelsStep {
  * dönen gösterge ve "X / N", Durdur'a basınca o anki paket bitince durur.
  */
 @Composable
-fun AllItemLabelsCard(enabled: Boolean = true, v2Format: Boolean = false, itemLimit: Int? = null) {
+fun AllItemLabelsCard(enabled: Boolean = true, v2Format: Boolean = false, itemLimit: Int? = null, itemRange: IntRange? = null) {
+    // Kitoko (21 Eki 2026): ürün no sırasına göre 301–500, 501–700 gibi bloklar.
+    val range = itemRange ?: itemLimit?.let { 1..it }
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val action = if (v2Format) "printLabelsV2" else "printLabels"
     val title = when {
-        itemLimit != null && v2Format -> "İlk $itemLimit ürün · ETIKETV2 (QR + madde no)"
+        range != null && range.first == 1 && v2Format -> "İlk ${range.last} ürün · ETIKETV2 (QR + madde no)"
+        range != null && v2Format -> "Ürün ${range.first}–${range.last} · ETIKETV2 (QR + madde no)"
         v2Format -> "Tüm ürünlerin etiketi · ETIKETV2 (QR + madde no)"
         else -> "Tüm ürünlerin etiketi"
     }
@@ -95,11 +98,11 @@ fun AllItemLabelsCard(enabled: Boolean = true, v2Format: Boolean = false, itemLi
             scope.launch {
                 val query = buildString {
                     append("items?\$select=no&\$filter=blocked eq false")
-                    if (itemLimit != null) append("&\$orderby=no asc&\$top=$itemLimit")
+                    if (range != null) append("&\$orderby=no asc&\$top=${range.last}")
                 }
                 val page = BcApi.getAllPages(context, query, maxPages = 1000)
                 val itemNos = page.rows.map { it.optString("no") }.let { rows ->
-                    if (itemLimit == null) rows else rows.take(itemLimit)
+                    if (range == null) rows else itemsInRange(rows, range)
                 }
                 step = if (page.complete && itemNos.isNotEmpty()) AllItemLabelsStep.Confirm(itemNos)
                 else {
@@ -234,3 +237,7 @@ fun AllItemLabelsCard(enabled: Boolean = true, v2Format: Boolean = false, itemLi
         else -> Unit
     }
 }
+
+/** Ürün no sırasındaki 1'den başlayan konumlar (ikisi dahil). */
+internal fun <T> itemsInRange(rows: List<T>, range: IntRange): List<T> =
+    rows.drop(range.first - 1).take(range.last - range.first + 1)
