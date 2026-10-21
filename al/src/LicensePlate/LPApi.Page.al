@@ -182,6 +182,18 @@ page 72088 "DOPSWHS LP API"
         Dispatcher.PrintLPLabel(Rec, printerId, copies);
     end;
 
+    /// <summary>
+    /// Kitoko (21 Eki 2026): printLabel with the LP label design chosen on the
+    /// terminal (labelLayouts, kind LP). Blank layoutCode = printLabel.
+    /// </summary>
+    [ServiceEnabled]
+    procedure printLabelWithLayout(printerId: Code[50]; copies: Integer; layoutCode: Code[20])
+    var
+        Dispatcher: Codeunit "DOPSWHS Print Dispatcher";
+    begin
+        Dispatcher.PrintLPLabelWithLayout(Rec, printerId, copies, layoutCode);
+    end;
+
     [ServiceEnabled]
     procedure printPalletLabels(printerId: Code[50]; copies: Integer)
     var

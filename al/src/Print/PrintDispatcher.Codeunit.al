@@ -4,6 +4,15 @@ codeunit 72051 "DOPSWHS Print Dispatcher"
     Permissions = tabledata Employee = R;
 
     procedure PrintLPLabel(var LP: Record "DOPSWHS LP Header"; PrinterId: Code[50]; Copies: Integer)
+    begin
+        PrintLPLabelWithLayout(LP, PrinterId, Copies, '');
+    end;
+
+    /// <summary>
+    /// Kitoko (21 Eki 2026): LP etiketi terminalde seçilen LP tasarımıyla. Boş
+    /// LayoutCode = PrintLPLabel ile aynı (aktif LP tasarımı, yoksa sabit 4x2").
+    /// </summary>
+    procedure PrintLPLabelWithLayout(var LP: Record "DOPSWHS LP Header"; PrinterId: Code[50]; Copies: Integer; LayoutCode: Code[20])
     var
         Setup: Record "DOPSWHS Setup";
         Queue: Record "DOPSWHS Print Job Queue";
@@ -22,7 +31,7 @@ codeunit 72051 "DOPSWHS Print Dispatcher"
             Error('A print job cannot exceed 10 copies.');
         PrintEnvironment.SyncCompany();
         Setup.Get('');
-        Zpl := LabelReport.BuildZpl(LP);
+        Zpl := LabelReport.BuildZplWithLayout(LP, LayoutCode);
 
         if Setup."Print Channel" in [Setup."Print Channel"::SelfHosted, Setup."Print Channel"::AzureDirect] then begin
             GuardLicense().GuardFeature(Enum::"DOPSWHS License Feature"::PrintBridge);
@@ -56,6 +65,9 @@ codeunit 72051 "DOPSWHS Print Dispatcher"
         if Setup."Print Channel" = Setup."Print Channel"::BCNative then begin
             if not GuiAllowed() then
                 Error('Business Central Native cannot deliver a terminal ZPL label. Configure Azure Direct, Self-Hosted or PrintNode.');
+            // Kitoko (21 Eki 2026): BC Native raporu çalıştırır; seçilen tasarımı taşıyamaz.
+            if LayoutCode <> '' then
+                Error('Seçilen LP etiket tasarımı Business Central Native kanalıyla basılamaz. Azure Direct, Self-Hosted veya PrintNode kullanın.');
         end else
             if Setup."Print Channel" <> Setup."Print Channel"::PrintNode then
                 Error('Print channel %1 is not supported for LP labels.', Setup."Print Channel");
@@ -97,6 +109,20 @@ codeunit 72051 "DOPSWHS Print Dispatcher"
     end;
 
     /// <summary>
+    /// Kitoko (21 Eki 2026): tek ürün etiketi terminalde seçilen ürün tasarımıyla.
+    /// Boş LayoutCode = PrintItemLabel (aktif tasarım, yoksa sabit tasarım).
+    /// </summary>
+    procedure PrintItemLabelWithLayout(var Item: Record Item; PrinterId: Code[50]; Copies: Integer; LayoutCode: Code[20])
+    begin
+        if LayoutCode = '' then begin
+            PrintItemLabel(Item, PrinterId, Copies);
+            exit;
+        end;
+        CheckZplLayout(LayoutCode, Enum::"DOPSWHS Label Kind"::Item, PrinterId);
+        EnqueueZpl(Item."No.", BuildItemZplWithLayout(Item, LayoutCode), PrinterId, Copies, Enum::"DOPSWHS IWX Report Usage"::Item, 'Item');
+    end;
+
+    /// <summary>
     /// Kitoko (19 Eki 2026): DKÇ/EMU toplu ürün etiketi (9 Eki 2026): item labels for many items at once (BC Item List
     /// selection). ZPL labels are sent in jobs of LabelsPerJob labels so 2,000
     /// items become ~40 queue jobs instead of 2,000. Returns the labels sent.
@@ -129,7 +155,7 @@ codeunit 72051 "DOPSWHS Print Dispatcher"
         repeat
             if InJob = 0 then
                 FirstItemNo := Item."No.";
-            Zpl += BuildItemZplForLayout(Item, LayoutCode);
+            Zpl += BuildItemZplWithLayout(Item, LayoutCode);
             InJob += 1;
             Sent += 1;
             if InJob = LabelsPerJob() then begin
@@ -143,21 +169,64 @@ codeunit 72051 "DOPSWHS Print Dispatcher"
         exit(Sent);
     end;
 
-    local procedure BuildItemZplForLayout(var Item: Record Item; LayoutCode: Code[20]): Text
+    /// <summary>
+    /// Kitoko (21 Eki 2026): item label ZPL of the requested ITEM layout; blank =
+    /// BuildItemZpl (active layout, else built-in). A missing layout or another
+    /// kind is an error.
+    /// </summary>
+    procedure BuildItemZplWithLayout(var Item: Record Item; LayoutCode: Code[20]): Text
     var
-        Layout: Record "DOPSWHS Label Layout";
         LayoutEngine: Codeunit "DOPSWHS Label Layout Engine";
         LayoutFields: Codeunit "DOPSWHS Label Layout Fields";
         LayoutValues: Dictionary of [Text, Text];
     begin
         if LayoutCode = '' then
             exit(BuildItemZpl(Item));
-        if not Layout.Get(LayoutCode) then
-            Error('Etiket tasarımı %1 bulunamadı.', LayoutCode);
-        if Layout."Label Kind" <> Enum::"DOPSWHS Label Kind"::Item then
-            Error('%1 tasarımı ürün etiketi değil.', LayoutCode);
+        LayoutEngine.CheckLayoutKind(LayoutCode, Enum::"DOPSWHS Label Kind"::Item);
         LayoutFields.ItemValues(Item, LayoutValues);
         exit(LayoutEngine.BuildZpl(LayoutCode, LayoutValues, 1));
+    end;
+
+    /// <summary>Kitoko (21 Eki 2026): bin label ZPL of the requested BIN layout; blank = BuildBinZpl.</summary>
+    procedure BuildBinZplWithLayout(var Bin: Record Bin; LayoutCode: Code[20]): Text
+    var
+        LayoutEngine: Codeunit "DOPSWHS Label Layout Engine";
+        LayoutFields: Codeunit "DOPSWHS Label Layout Fields";
+        LayoutValues: Dictionary of [Text, Text];
+    begin
+        if LayoutCode = '' then
+            exit(BuildBinZpl(Bin));
+        LayoutEngine.CheckLayoutKind(LayoutCode, Enum::"DOPSWHS Label Kind"::Bin);
+        LayoutFields.BinValues(Bin, LayoutValues);
+        exit(LayoutEngine.BuildZpl(LayoutCode, LayoutValues, 1));
+    end;
+
+    /// <summary>Kitoko (21 Eki 2026): zone label ZPL of the requested ZONE layout; blank = BuildZoneZpl.</summary>
+    procedure BuildZoneZplWithLayout(var Zone: Record Zone; LayoutCode: Code[20]): Text
+    var
+        LayoutEngine: Codeunit "DOPSWHS Label Layout Engine";
+        LayoutFields: Codeunit "DOPSWHS Label Layout Fields";
+        LayoutValues: Dictionary of [Text, Text];
+    begin
+        if LayoutCode = '' then
+            exit(BuildZoneZpl(Zone));
+        LayoutEngine.CheckLayoutKind(LayoutCode, Enum::"DOPSWHS Label Kind"::Zone);
+        LayoutFields.ZoneValues(Zone, LayoutValues);
+        exit(LayoutEngine.BuildZpl(LayoutCode, LayoutValues, 1));
+    end;
+
+    /// <summary>
+    /// Kitoko (21 Eki 2026): a chosen layout is ZPL; a PDF document printer would
+    /// silently print the generic barcode page instead, so it is refused.
+    /// </summary>
+    local procedure CheckZplLayout(LayoutCode: Code[20]; Kind: Enum "DOPSWHS Label Kind"; PrinterId: Code[50])
+    var
+        Printer: Record "DOPSWHS Printer";
+        LayoutEngine: Codeunit "DOPSWHS Label Layout Engine";
+    begin
+        LayoutEngine.CheckLayoutKind(LayoutCode, Kind);
+        if Printer.Get(PrinterId) and (Printer."Format" = Printer."Format"::PDF) then
+            Error('%1 bir PDF yazıcıdır; seçilen etiket tasarımı yalnızca ZPL etiket yazıcısında basılabilir.', PrinterId);
     end;
 
     procedure LabelsPerJob(): Integer
@@ -550,6 +619,17 @@ codeunit 72051 "DOPSWHS Print Dispatcher"
         EnqueueZpl(Bin."Code", BuildBinZpl(Bin), PrinterId, Copies, Enum::"DOPSWHS IWX Report Usage"::Bin, 'Bin');
     end;
 
+    /// <summary>Kitoko (21 Eki 2026): bin label with the layout chosen on the terminal; blank = PrintBinLabel.</summary>
+    procedure PrintBinLabelWithLayout(var Bin: Record Bin; PrinterId: Code[50]; Copies: Integer; LayoutCode: Code[20])
+    begin
+        if LayoutCode = '' then begin
+            PrintBinLabel(Bin, PrinterId, Copies);
+            exit;
+        end;
+        CheckZplLayout(LayoutCode, Enum::"DOPSWHS Label Kind"::Bin, PrinterId);
+        EnqueueZpl(Bin."Code", BuildBinZplWithLayout(Bin, LayoutCode), PrinterId, Copies, Enum::"DOPSWHS IWX Report Usage"::Bin, 'Bin');
+    end;
+
     /// <summary>
     /// Renders the exact value scanned by a terminal as a one-page PDF and
     /// sends it to the explicitly selected document printer. This deliberately
@@ -921,6 +1001,17 @@ codeunit 72051 "DOPSWHS Print Dispatcher"
         EnqueueZpl(Zone.Code, BuildZoneZpl(Zone), PrinterId, Copies, Enum::"DOPSWHS IWX Report Usage"::Bin, 'Zone');
     end;
 
+    /// <summary>Kitoko (21 Eki 2026): zone label with the layout chosen on the terminal; blank = PrintZoneLabel.</summary>
+    procedure PrintZoneLabelWithLayout(var Zone: Record Zone; PrinterId: Code[50]; Copies: Integer; LayoutCode: Code[20])
+    begin
+        if LayoutCode = '' then begin
+            PrintZoneLabel(Zone, PrinterId, Copies);
+            exit;
+        end;
+        CheckZplLayout(LayoutCode, Enum::"DOPSWHS Label Kind"::Zone, PrinterId);
+        EnqueueZpl(Zone.Code, BuildZoneZplWithLayout(Zone, LayoutCode), PrinterId, Copies, Enum::"DOPSWHS IWX Report Usage"::Bin, 'Zone');
+    end;
+
     /// <summary>
     /// Kitoko (20 Eki 2026): etiket tasarım ekranındaki "Test Baskı"; ÖRNEK
     /// verili ZPL, ürün/raf etiketiyle aynı kuyruk kanalından gönderilir.
@@ -932,10 +1023,15 @@ codeunit 72051 "DOPSWHS Print Dispatcher"
         if Printer.Get(PrinterId) then
             if Printer."Format" = Printer."Format"::PDF then
                 Error('%1 bir PDF yazıcıdır; ZPL etiket yazıcısı seçin.', PrinterId);
-        if Kind = Kind::Item then
-            EnqueueZpl('ETIKET-TEST', Zpl, PrinterId, 1, Enum::"DOPSWHS IWX Report Usage"::Item, 'Test')
-        else
-            EnqueueZpl('ETIKET-TEST', Zpl, PrinterId, 1, Enum::"DOPSWHS IWX Report Usage"::Bin, 'Test');
+        case Kind of
+            Kind::Item:
+                EnqueueZpl('ETIKET-TEST', Zpl, PrinterId, 1, Enum::"DOPSWHS IWX Report Usage"::Item, 'Test');
+            // Kitoko (21 Eki 2026): LP tasarımı LP etiket yazıcı eşlemesiyle basılır.
+            Kind::LP:
+                EnqueueZpl('ETIKET-TEST', Zpl, PrinterId, 1, Enum::"DOPSWHS IWX Report Usage"::LpLabel, 'Test');
+            else
+                EnqueueZpl('ETIKET-TEST', Zpl, PrinterId, 1, Enum::"DOPSWHS IWX Report Usage"::Bin, 'Test');
+        end;
     end;
 
     local procedure AppendLabelPart(Existing: Text; Part: Text): Text

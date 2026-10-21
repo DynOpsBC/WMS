@@ -107,6 +107,18 @@ page 72086 "DOPSWHS Item API"
     end;
 
     /// <summary>
+    /// Kitoko (21 Eki 2026): printLabel with the item label design chosen on the
+    /// terminal (labelLayouts, kind Item). Blank layoutCode = printLabel.
+    /// </summary>
+    [ServiceEnabled]
+    procedure printLabelWithLayout(printerId: Code[50]; copies: Integer; layoutCode: Code[20])
+    var
+        Dispatcher: Codeunit "DOPSWHS Print Dispatcher";
+    begin
+        Dispatcher.PrintItemLabelWithLayout(Rec, printerId, copies, layoutCode);
+    end;
+
+    /// <summary>
     /// Kitoko (19 Eki 2026): DKÇ/EMU toplu ürün etiketi. The terminal sends the
     /// item numbers in batches (itemNosJson: ["A","B",...], at most 100). One call
     /// queues the whole batch as LabelsPerJob-sized ZPL jobs. Bound to any item;
@@ -156,5 +168,34 @@ page 72086 "DOPSWHS Item API"
         end;
         Item.MarkedOnly(true);
         exit(Dispatcher.PrintItemLabelsWithLayout(Item, printerId, 1, 'ETIKETV2'));
+    end;
+
+    /// <summary>
+    /// Kitoko (21 Eki 2026): printLabels with the item label design chosen on the
+    /// terminal. Blank layoutCode = printLabels (active design or built-in).
+    /// </summary>
+    [ServiceEnabled]
+    procedure printLabelsWithLayout(itemNosJson: Text; printerId: Code[50]; layoutCode: Code[20]): Integer
+    var
+        Item: Record Item;
+        Dispatcher: Codeunit "DOPSWHS Print Dispatcher";
+        LayoutEngine: Codeunit "DOPSWHS Label Layout Engine";
+        ItemNos: JsonArray;
+        Token: JsonToken;
+        ItemNo: Code[20];
+    begin
+        if layoutCode <> '' then
+            LayoutEngine.CheckLayoutKind(layoutCode, Enum::"DOPSWHS Label Kind"::Item);
+        if not ItemNos.ReadFrom(itemNosJson) then
+            Error('Ürün listesi okunamadı.');
+        if ItemNos.Count() > 100 then
+            Error('Tek istekte en fazla 100 ürün etiketi gönderilebilir.');
+        foreach Token in ItemNos do begin
+            ItemNo := CopyStr(Token.AsValue().AsText(), 1, MaxStrLen(ItemNo));
+            if Item.Get(ItemNo) then
+                Item.Mark(true);
+        end;
+        Item.MarkedOnly(true);
+        exit(Dispatcher.PrintItemLabelsWithLayout(Item, printerId, 1, layoutCode));
     end;
 }

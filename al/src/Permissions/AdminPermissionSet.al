@@ -356,9 +356,17 @@ permissionset 72094 "DOPSWHS-ADMIN"
         page "DOPSWHS Label Layout List" = X,
         page "DOPSWHS Label Layout Card" = X,
         page "DOPSWHS Label Layout Lines" = X,
+        // Kitoko (21 Eki 2026): terminal etiket tasarımı seçici (labelLayouts)
+        page "DOPSWHS Label Layout API" = X,
         codeunit "DOPSWHS Label Layout Engine" = X,
         codeunit "DOPSWHS Label Layout Fields" = X,
         codeunit "DOPSWHS Label Layout Preview" = X,
+        // Kitoko (21 Eki 2026): sürükle-bırak etiket tasarımcısı
+        tabledata "DOPSWHS Label Image" = RIMD,
+        table "DOPSWHS Label Image" = X,
+        page "DOPSWHS Label Image List" = X,
+        page "DOPSWHS Label Designer" = X,
+        codeunit "DOPSWHS Label Designer Mgt" = X,
         tabledata "DOPSWHS Device Printer Map" = RIMD,
         table "DOPSWHS Printer" = X,
         table "DOPSWHS Device Printer Map" = X,

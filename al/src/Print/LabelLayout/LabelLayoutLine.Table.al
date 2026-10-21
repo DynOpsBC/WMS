@@ -153,10 +153,79 @@ table 72462 "DOPSWHS Label Layout Line"
             DataClassification = CustomerContent;
             InitValue = true;
         }
+        // Kitoko (21 Eki 2026): sürükle-bırak etiket tasarımcısı (docs/label-designer-contract.md).
+        field(22; Rotation; Integer)
+        {
+            Caption = 'Döndürme';
+            DataClassification = CustomerContent;
+            ToolTip = 'Saat yönünde döndürme: 0, 90, 180 veya 270 derece. QR kod döndürülmez. X/Y döndürülmüş elemanın etiketteki sol üst köşesidir; Genişlik metin/barkod yönündeki uzunluktur.';
+
+            trigger OnValidate()
+            begin
+                if not (Rotation in [0, 90, 180, 270]) then
+                    Error('Döndürme 0, 90, 180 veya 270 olmalıdır.');
+            end;
+        }
+        field(23; Bold; Boolean)
+        {
+            Caption = 'Kalın';
+            DataClassification = CustomerContent;
+            ToolTip = 'ZPL yazı tipinde kalın yoktur; harfler %20 geniş basılır.';
+        }
+        field(24; Symbology; Enum "DOPSWHS Label Symbology")
+        {
+            Caption = 'Barkod Türü';
+            DataClassification = CustomerContent;
+            ToolTip = 'Barkod elemanının türü: Code128, EAN-13 (12/13 rakam) veya GS1-128 (ör. (01)08690000012345(10)LOT1).';
+        }
+        field(25; "Image Id"; Code[20])
+        {
+            Caption = 'Resim';
+            DataClassification = CustomerContent;
+            TableRelation = "DOPSWHS Label Image"."Code";
+            ValidateTableRelation = false;
+            ToolTip = 'Resim elemanının kaynağı (Etiket Resimleri). Basılan veri Resim ^GFA alanıdır.';
+        }
+        field(26; "Image GF"; Blob)
+        {
+            Caption = 'Resim ^GFA';
+            DataClassification = CustomerContent;
+        }
+        field(27; "Element Id"; Text[50])
+        {
+            Caption = 'Tasarımcı Kimliği';
+            DataClassification = SystemMetadata;
+        }
     }
 
     keys
     {
         key(PK; "Layout Code", "Line No.") { Clustered = true; }
     }
+
+    /// <summary>Kitoko (21 Eki 2026): ^GFA image data of an Image element ('' when none).</summary>
+    procedure GetImageGf(): Text
+    var
+        TypeHelper: Codeunit "Type Helper";
+        InStr: InStream;
+        LF: Char;
+    begin
+        CalcFields("Image GF");
+        if not "Image GF".HasValue() then
+            exit('');
+        "Image GF".CreateInStream(InStr, TextEncoding::UTF8);
+        LF := 10;
+        exit(TypeHelper.ReadAsTextWithSeparator(InStr, Format(LF)));
+    end;
+
+    procedure SetImageGf(Value: Text)
+    var
+        OutStr: OutStream;
+    begin
+        Clear("Image GF");
+        if Value = '' then
+            exit;
+        "Image GF".CreateOutStream(OutStr, TextEncoding::UTF8);
+        OutStr.WriteText(Value);
+    end;
 }

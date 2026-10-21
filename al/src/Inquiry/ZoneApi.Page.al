@@ -43,4 +43,16 @@ page 72327 "DOPSWHS Zone API"
     begin
         Dispatcher.PrintZoneLabel(Rec, printerId, copies);
     end;
+
+    /// <summary>
+    /// Kitoko (21 Eki 2026): printLabel with the zone label design chosen on the
+    /// terminal (labelLayouts, kind Zone). Blank layoutCode = printLabel.
+    /// </summary>
+    [ServiceEnabled]
+    procedure printLabelWithLayout(printerId: Code[50]; copies: Integer; layoutCode: Code[20])
+    var
+        Dispatcher: Codeunit "DOPSWHS Print Dispatcher";
+    begin
+        Dispatcher.PrintZoneLabelWithLayout(Rec, printerId, copies, layoutCode);
+    end;
 }

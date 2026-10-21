@@ -33,6 +33,19 @@ page 72470 "DOPSWHS Label Layout Card"
     {
         area(Processing)
         {
+            // Kitoko (21 Eki 2026): sürükle-bırak etiket tasarımcısı.
+            action(OpenDesigner)
+            {
+                Caption = 'Tasarımcıyı Aç';
+                ApplicationArea = All;
+                Image = Design;
+                Promoted = true;
+                PromotedCategory = Process;
+                PromotedIsBig = true;
+                RunObject = page "DOPSWHS Label Designer";
+                RunPageLink = "Code" = field("Code");
+                ToolTip = 'Bu tasarımı sürükle-bırak etiket tasarımcısında açar.';
+            }
             action(LoadDefault)
             {
                 Caption = 'Varsayılanı Yükle';

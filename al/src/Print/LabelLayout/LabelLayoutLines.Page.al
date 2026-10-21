@@ -13,7 +13,7 @@ page 72471 "DOPSWHS Label Layout Lines"
             repeater(Group)
             {
                 field(Enabled; Rec.Enabled) { ApplicationArea = All; ToolTip = 'Kapalı eleman basılmaz.'; }
-                field("Element Type"; Rec."Element Type") { ApplicationArea = All; ToolTip = 'Metin/Alan: yazı; Barkod: Code128; QR Kod; Çizgi; Kutu.'; }
+                field("Element Type"; Rec."Element Type") { ApplicationArea = All; ToolTip = 'Metin/Alan: yazı; Barkod (Barkod Türü: Code128/EAN-13/GS1-128); QR Kod; Çizgi; Kutu; Resim (tasarımcıdan).'; }
                 field("X (mm)"; Rec."X (mm)") { ApplicationArea = All; ToolTip = 'Sol kenardan uzaklık (mm).'; }
                 field("Y (mm)"; Rec."Y (mm)") { ApplicationArea = All; ToolTip = 'Üst kenardan uzaklık (mm).'; }
                 field("Width (mm)"; Rec."Width (mm)") { ApplicationArea = All; }
@@ -51,6 +51,11 @@ page 72471 "DOPSWHS Label Layout Lines"
                 field(Inverted; Rec.Inverted) { ApplicationArea = All; }
                 field("Show Text"; Rec."Show Text") { ApplicationArea = All; }
                 field("Thickness (mm)"; Rec."Thickness (mm)") { ApplicationArea = All; Visible = false; }
+                // Kitoko (21 Eki 2026): tasarımcı alanları.
+                field(Rotation; Rec.Rotation) { ApplicationArea = All; Visible = false; }
+                field(Bold; Rec.Bold) { ApplicationArea = All; Visible = false; }
+                field(Symbology; Rec.Symbology) { ApplicationArea = All; Visible = false; }
+                field("Image Id"; Rec."Image Id") { ApplicationArea = All; Visible = false; }
             }
         }
     }

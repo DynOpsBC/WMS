@@ -10,6 +10,7 @@ codeunit 72466 "DOPSWHS Label Layout Engine"
 
     var
         Canvas: Codeunit "DOPSWHS Label Canvas";
+        EtiketV2SizeTagTxt: Label 'DOPSWHS-KITOKO-ETIKETV2-SIZE-20261021', Locked = true;
 
     /// <summary>mm to printer dots (203 dpi = 8 dots per mm); a Dpi of 0 means 203.</summary>
     procedure MmToDots(Mm: Decimal; Dpi: Integer): Integer
@@ -37,13 +38,45 @@ codeunit 72466 "DOPSWHS Label Layout Engine"
         exit(true);
     end;
 
+    /// <summary>
+    /// Kitoko (21 Eki 2026): terminalde seçilen etiket tasarımı. Boş kod = bugünkü
+    /// davranış (bu türün aktif tasarımı; yoksa false → koddaki sabit tasarım).
+    /// Dolu kod: tasarım var olmalı ve türü Kind olmalı, yoksa hata.
+    /// </summary>
+    procedure ResolveLayout(Kind: Enum "DOPSWHS Label Kind"; RequestedCode: Code[20]; var LayoutCode: Code[20]): Boolean
+    begin
+        if RequestedCode = '' then
+            exit(FindActiveLayout(Kind, LayoutCode));
+        CheckLayoutKind(RequestedCode, Kind);
+        LayoutCode := RequestedCode;
+        exit(true);
+    end;
+
+    /// <summary>Kitoko (21 Eki 2026): errors when the layout is missing or belongs to another label kind.</summary>
+    procedure CheckLayoutKind(LayoutCode: Code[20]; Kind: Enum "DOPSWHS Label Kind")
+    var
+        Layout: Record "DOPSWHS Label Layout";
+    begin
+        if not Layout.Get(LayoutCode) then
+            Error('Etiket tasarımı %1 bulunamadı.', LayoutCode);
+        if Layout."Label Kind" <> Kind then
+            Error('%1 etiket tasarımının türü %2; %3 etiketi için kullanılamaz.', LayoutCode, Layout."Label Kind", Kind);
+    end;
+
     /// <summary>Effective label size of a layout (0 = Setup size, else 80x40 mm).</summary>
     procedure LayoutSize(LayoutCode: Code[20]; var WidthMm: Decimal; var HeightMm: Decimal; var Dpi: Integer)
     var
         Layout: Record "DOPSWHS Label Layout";
-        Setup: Record "DOPSWHS Setup";
     begin
         Layout.Get(LayoutCode);
+        LayoutSizeOf(Layout, WidthMm, HeightMm, Dpi);
+    end;
+
+    /// <summary>Kitoko (21 Eki 2026): effective size of a layout record (also a temporary one built from designer JSON).</summary>
+    procedure LayoutSizeOf(var Layout: Record "DOPSWHS Label Layout"; var WidthMm: Decimal; var HeightMm: Decimal; var Dpi: Integer)
+    var
+        Setup: Record "DOPSWHS Setup";
+    begin
         WidthMm := Layout."Width (mm)";
         HeightMm := Layout."Height (mm)";
         Dpi := Layout.Dpi;
@@ -71,7 +104,25 @@ codeunit 72466 "DOPSWHS Label Layout Engine"
     /// <summary>ZPL for a layout with every element shifted down by YOffsetMm.</summary>
     procedure BuildZplWithYOffset(LayoutCode: Code[20]; Values: Dictionary of [Text, Text]; Copies: Integer; YOffsetMm: Decimal): Text
     var
+        Layout: Record "DOPSWHS Label Layout";
         LayoutLine: Record "DOPSWHS Label Layout Line";
+    begin
+        Layout.Get(LayoutCode);
+        exit(BuildFromRecords(Layout, LayoutLine, Values, Copies, YOffsetMm));
+    end;
+
+    /// <summary>
+    /// Kitoko (21 Eki 2026): ZPL of a layout held in (temporary) records, e.g. an
+    /// unsaved designer JSON for preview / test print. Lines are filtered on the
+    /// layout code and Enabled.
+    /// </summary>
+    procedure BuildZplFromRecords(var Layout: Record "DOPSWHS Label Layout"; var LayoutLine: Record "DOPSWHS Label Layout Line"; Values: Dictionary of [Text, Text]; Copies: Integer): Text
+    begin
+        exit(BuildFromRecords(Layout, LayoutLine, Values, Copies, 0));
+    end;
+
+    local procedure BuildFromRecords(var Layout: Record "DOPSWHS Label Layout"; var LayoutLine: Record "DOPSWHS Label Layout Line"; var Values: Dictionary of [Text, Text]; Copies: Integer; YOffsetMm: Decimal): Text
+    var
         WidthMm: Decimal;
         HeightMm: Decimal;
         Dpi: Integer;
@@ -79,16 +130,16 @@ codeunit 72466 "DOPSWHS Label Layout Engine"
         HeightDots: Integer;
         Zpl: Text;
     begin
-        LayoutSize(LayoutCode, WidthMm, HeightMm, Dpi);
+        LayoutSizeOf(Layout, WidthMm, HeightMm, Dpi);
         WidthDots := MmToDots(WidthMm, Dpi);
         HeightDots := MmToDots(HeightMm, Dpi);
         Canvas.InitSize(WidthMm, HeightMm);
         Zpl := '^XA^CI28^PW' + Format(WidthDots) + '^LL' + Format(HeightDots) + '^LH0,0';
-        LayoutLine.SetRange("Layout Code", LayoutCode);
+        LayoutLine.SetRange("Layout Code", Layout."Code");
         LayoutLine.SetRange(Enabled, true);
         if LayoutLine.FindSet() then
             repeat
-                Zpl += BuildElement(LayoutLine, Values, Dpi, WidthDots, YOffsetMm);
+                Zpl += BuildElement(LayoutLine, Values, Dpi, WidthDots, HeightDots, YOffsetMm);
             until LayoutLine.Next() = 0;
         if Copies > 1 then
             Zpl += '^PQ' + Format(Copies);
@@ -107,13 +158,14 @@ codeunit 72466 "DOPSWHS Label Layout Engine"
         exit(BuildZpl(LayoutCode, Values, 1));
     end;
 
-    local procedure BuildElement(var LayoutLine: Record "DOPSWHS Label Layout Line"; var Values: Dictionary of [Text, Text]; Dpi: Integer; LabelWidthDots: Integer; YOffsetMm: Decimal): Text
+    local procedure BuildElement(var LayoutLine: Record "DOPSWHS Label Layout Line"; var Values: Dictionary of [Text, Text]; Dpi: Integer; LabelWidthDots: Integer; LabelHeightDots: Integer; YOffsetMm: Decimal): Text
     var
         Value: Text;
         X: Integer;
         Y: Integer;
         W: Integer;
         H: Integer;
+        Swap: Integer;
         Thickness: Integer;
         Side: Integer;
     begin
@@ -123,17 +175,23 @@ codeunit 72466 "DOPSWHS Label Layout Engine"
         H := MmToDots(LayoutLine."Height (mm)", Dpi);
         case LayoutLine."Element Type" of
             LayoutLine."Element Type"::Text, LayoutLine."Element Type"::Field:
-                exit(BuildText(LayoutLine, ResolveValue(LayoutLine, Values), X, Y, W, Dpi, LabelWidthDots));
+                exit(BuildText(LayoutLine, ResolveValue(LayoutLine, Values), X, Y, W, Dpi, LabelWidthDots, LabelHeightDots));
             LayoutLine."Element Type"::Barcode128:
                 begin
                     Value := ResolveValue(LayoutLine, Values);
                     if Value = '' then
                         exit('');
                     if W = 0 then
-                        W := LabelWidthDots - X - 16;
+                        if IsSideways(LayoutLine.Rotation) then
+                            W := LabelHeightDots - Y - 16
+                        else
+                            W := LabelWidthDots - X - 16;
                     if H = 0 then
                         H := MmToDots(10, Dpi);
-                    exit(Canvas.Code128(X, Y, H, Value, W, LayoutLine."Show Text"));
+                    // Kitoko (21 Eki 2026): unrotated Code128 keeps the original Label Canvas output.
+                    if (LayoutLine.Rotation = 0) and (LayoutLine.Symbology = LayoutLine.Symbology::Code128) then
+                        exit(Canvas.Code128(X, Y, H, Value, W, LayoutLine."Show Text"));
+                    exit(BuildBarcode(LayoutLine, Value, X, Y, W, H));
                 end;
             LayoutLine."Element Type"::QRCode:
                 begin
@@ -145,6 +203,7 @@ codeunit 72466 "DOPSWHS Label Layout Engine"
                         Side := H;
                     if Side = 0 then
                         Side := MmToDots(20, Dpi);
+                    // QR is never rotated (a QR scans in any orientation).
                     exit(Canvas.Qr(X, Y, Canvas.QrMagnification(Value, Side), Value));
                 end;
             LayoutLine."Element Type"::Line, LayoutLine."Element Type"::Box:
@@ -153,6 +212,12 @@ codeunit 72466 "DOPSWHS Label Layout Engine"
                         W := 1;
                     if H = 0 then
                         H := 1;
+                    // Kitoko (21 Eki 2026): a box turned by 90/270 occupies H x W on the label.
+                    if IsSideways(LayoutLine.Rotation) then begin
+                        Swap := W;
+                        W := H;
+                        H := Swap;
+                    end;
                     Thickness := MmToDots(LayoutLine."Thickness (mm)", Dpi);
                     if (Thickness = 0) or (LayoutLine."Element Type" = LayoutLine."Element Type"::Line) then begin
                         Thickness := W;
@@ -161,11 +226,215 @@ codeunit 72466 "DOPSWHS Label Layout Engine"
                     end;
                     exit('^FO' + Format(X) + ',' + Format(Y) + '^GB' + Format(W) + ',' + Format(H) + ',' + Format(Thickness) + '^FS');
                 end;
+            LayoutLine."Element Type"::Image:
+                begin
+                    // Kitoko (21 Eki 2026): the designer converts the picture to ^GFA for
+                    // the element size and dpi (rotation included); BC places it as is.
+                    Value := LayoutLine.GetImageGf();
+                    if not IsSafeGraphic(Value) then
+                        exit('');
+                    exit('^FO' + Format(X) + ',' + Format(Y) + Value + '^FS');
+                end;
         end;
         exit('');
     end;
 
-    local procedure BuildText(var LayoutLine: Record "DOPSWHS Label Layout Line"; Value: Text; X: Integer; Y: Integer; W: Integer; Dpi: Integer; LabelWidthDots: Integer): Text
+    /// <summary>
+    /// Kitoko (21 Eki 2026): rotated Code128, EAN-13 (^BE) and GS1-128 (^BC mode D,
+    /// FNC1 + AIs in parentheses) with the printer's own interpretation line.
+    /// Length (W) runs along the bars' reading direction, H is the bar height.
+    /// </summary>
+    local procedure BuildBarcode(var LayoutLine: Record "DOPSWHS Label Layout Line"; Value: Text; X: Integer; Y: Integer; W: Integer; H: Integer): Text
+    var
+        ZplEncoder: Codeunit "DOPSWHS ZPL Encoder";
+        Orientation: Text[1];
+        Human: Text[1];
+        Command: Text;
+        Data: Text;
+        FieldData: Text;
+        Modules: Integer;
+        ModuleWidth: Integer;
+        BarLength: Integer;
+        FncCount: Integer;
+    begin
+        Orientation := OrientationCode(LayoutLine.Rotation);
+        Human := 'N';
+        if LayoutLine."Show Text" then
+            Human := 'Y';
+        Data := Value;
+        case LayoutLine.Symbology of
+            LayoutLine.Symbology::EAN13:
+                begin
+                    Data := DelChr(Value, '=', ' ');
+                    if (DelChr(Data, '=', '0123456789') = '') and (StrLen(Data) in [12, 13]) then begin
+                        // The printer adds the check digit itself: send the first 12 digits.
+                        Data := CopyStr(Data, 1, 12);
+                        Modules := 95;
+                        Command := '^BE' + Orientation + ',' + Format(H) + ',' + Human + ',N';
+                    end else begin
+                        // Not EAN-13 data: print it as Code128 rather than an unreadable symbol.
+                        Data := Value;
+                        Modules := Code128Modules(Data);
+                        Command := '^BC' + Orientation + ',' + Format(H) + ',' + Human + ',N,N,A';
+                    end;
+                end;
+            LayoutLine.Symbology::GS1128:
+                if Gs1FieldData(Value, FieldData, FncCount) then begin
+                    // Mode D: starts with FNC1, strips "(" ")" and spaces from the bars and
+                    // prints them in the human readable line; FNC1 separators are generated.
+                    Modules := Code128Modules(DelChr(Value.Replace('>8', ''), '=', '() ')) + 11 * (FncCount + 1);
+                    Command := '^BC' + Orientation + ',' + Format(H) + ',' + Human + ',N,N,D';
+                end else begin
+                    // A ">" cannot be encoded in mode D: print the data as plain Code128.
+                    FieldData := '';
+                    Modules := Code128Modules(Data);
+                    Command := '^BC' + Orientation + ',' + Format(H) + ',' + Human + ',N,N,A';
+                end;
+            else begin
+                Modules := Code128Modules(Data);
+                Command := '^BC' + Orientation + ',' + Format(H) + ',' + Human + ',N,N,A';
+            end;
+        end;
+        ModuleWidth := W * 85 div 100 div Modules;
+        if ModuleWidth < 1 then
+            ModuleWidth := 1;
+        if ModuleWidth > 6 then
+            ModuleWidth := 6;
+        while (ModuleWidth > 1) and (Modules * ModuleWidth > W) do
+            ModuleWidth -= 1;
+        BarLength := Modules * ModuleWidth;
+        if BarLength < W then
+            if IsSideways(LayoutLine.Rotation) then
+                Y += (W - BarLength) div 2
+            else
+                X += (W - BarLength) div 2;
+        if FieldData = '' then
+            FieldData := ZplEncoder.EncodeFieldData(Data);
+        exit('^FO' + Format(X) + ',' + Format(Y) + '^BY' + Format(ModuleWidth) + Command + '^FH_^FD' + FieldData + '^FS');
+    end;
+
+    /// <summary>
+    /// Kitoko (21 Eki 2026): ^FD data of a GS1-128 (^BC mode D) barcode. AIs are written
+    /// in parentheses, e.g. (01)08690000012345(10)LOT1(17)271231. After an AI without a
+    /// predefined length that is followed by another AI, the engine emits a raw ">8"
+    /// (FNC1); user data is ^FH-escaped. The printer decodes ^FH before it reads Code 128
+    /// invocation codes (labelary: "_3E8" also becomes FNC1, any other ">x" truncates
+    /// the symbol in mode D), so user data may not contain ">" at all: false = print as
+    /// plain Code128. A ">8" typed by the user (older contract) is dropped and regenerated.
+    /// </summary>
+    local procedure Gs1FieldData(Value: Text; var FieldData: Text; var FncCount: Integer): Boolean
+    var
+        ZplEncoder: Codeunit "DOPSWHS ZPL Encoder";
+        Rest: Text;
+        Ai: Text;
+        Data: Text;
+        Close: Integer;
+        Next: Integer;
+    begin
+        FieldData := '';
+        FncCount := 0;
+        Rest := Value.Replace('>8', '');
+        if StrPos(Rest, '>') > 0 then
+            exit(false);
+        if CopyStr(Rest, 1, 1) <> '(' then begin
+            FieldData := ZplEncoder.EncodeFieldData(Rest);
+            exit(true);
+        end;
+        while Rest <> '' do begin
+            Close := StrPos(Rest, ')');
+            if Close = 0 then begin
+                FieldData += ZplEncoder.EncodeFieldData(Rest);
+                exit(true);
+            end;
+            Ai := CopyStr(Rest, 2, Close - 2);
+            Rest := CopyStr(Rest, Close + 1);
+            Next := StrPos(Rest, '(');
+            if Next = 0 then begin
+                Data := Rest;
+                Rest := '';
+            end else begin
+                Data := CopyStr(Rest, 1, Next - 1);
+                Rest := CopyStr(Rest, Next);
+            end;
+            FieldData += ZplEncoder.EncodeFieldData('(' + Ai + ')' + Data);
+            if (Rest <> '') and not IsPredefinedLengthAi(Ai) then begin
+                FieldData += '>8';
+                FncCount += 1;
+            end;
+        end;
+        exit(true);
+    end;
+
+    /// <summary>GS1 General Specifications: AIs starting with these two digits have a predefined length and need no FNC1 after them.</summary>
+    local procedure IsPredefinedLengthAi(Ai: Text): Boolean
+    begin
+        exit(CopyStr(DelChr(Ai, '=', ' '), 1, 2) in
+            ['00', '01', '02', '03', '04', '11', '12', '13', '14', '15', '16', '17', '18', '19', '20',
+             '31', '32', '33', '34', '35', '36', '41']);
+    end;
+
+    local procedure Code128Modules(Data: Text): Integer
+    var
+        Modules: Integer;
+    begin
+        if (Data <> '') and (DelChr(Data, '=', '0123456789') = '') then
+            Modules := 11 * ((StrLen(Data) + 1) div 2 + 1) + 35
+        else
+            Modules := 11 * StrLen(Data) + 35;
+        if Modules <= 0 then
+            Modules := 35;
+        exit(Modules);
+    end;
+
+    /// <summary>Kitoko (21 Eki 2026): ZPL field orientation for a clockwise rotation (N/R/I/B).</summary>
+    procedure OrientationCode(Rotation: Integer): Text[1]
+    begin
+        case Rotation of
+            90:
+                exit('R');
+            180:
+                exit('I');
+            270:
+                exit('B');
+        end;
+        exit('N');
+    end;
+
+    local procedure IsSideways(Rotation: Integer): Boolean
+    begin
+        exit(Rotation in [90, 270]);
+    end;
+
+    /// <summary>
+    /// Kitoko (21 Eki 2026): only a single ^GFA command may come from the designer;
+    /// any other ^ or ~ would let stored data inject printer commands.
+    /// </summary>
+    procedure IsSafeGraphic(Value: Text): Boolean
+    var
+        Parts: List of [Text];
+        Rest: Text;
+        Header: Text;
+        Index: Integer;
+    begin
+        if StrLen(Value) < 12 then
+            exit(false);
+        if CopyStr(Value, 1, 5) <> '^GFA,' then
+            exit(false);
+        Rest := CopyStr(Value, 6);
+        if (StrPos(Rest, '^') > 0) or (StrPos(Rest, '~') > 0) then
+            exit(false);
+        // ^GFA,<total bytes>,<total bytes>,<bytes per row>,<data>: three numbers first.
+        Header := CopyStr(Rest, 1, 40);
+        Parts := Header.Split(',');
+        if Parts.Count() < 4 then
+            exit(false);
+        for Index := 1 to 3 do
+            if (Parts.Get(Index) = '') or (DelChr(Parts.Get(Index), '=', '0123456789') <> '') then
+                exit(false);
+        exit(true);
+    end;
+
+    local procedure BuildText(var LayoutLine: Record "DOPSWHS Label Layout Line"; Value: Text; X: Integer; Y: Integer; W: Integer; Dpi: Integer; LabelWidthDots: Integer; LabelHeightDots: Integer): Text
     var
         Lines: List of [Text];
         TextLine: Text;
@@ -174,12 +443,19 @@ codeunit 72466 "DOPSWHS Label Layout Engine"
         FontWidth: Integer;
         MinHeight: Integer;
         FitSize: Integer;
+        FitWidth: Integer;
         Index: Integer;
+        Pitch: Integer;
+        LineX: Integer;
+        LineY: Integer;
     begin
         if Value = '' then
             exit('');
         if W = 0 then
-            W := LabelWidthDots - X;
+            if IsSideways(LayoutLine.Rotation) then
+                W := LabelHeightDots - Y
+            else
+                W := LabelWidthDots - X;
         if W < 8 then
             W := 8;
         FontHeight := MmToDots(LayoutLine."Font Height (mm)", Dpi);
@@ -188,19 +464,40 @@ codeunit 72466 "DOPSWHS Label Layout Engine"
         FontWidth := MmToDots(LayoutLine."Font Width (mm)", Dpi);
         if FontWidth = 0 then
             FontWidth := FontHeight;
+        // Kitoko (21 Eki 2026): ^A0 has no bold; bold glyphs are printed 20% wider,
+        // so fitting measures against 1/1.2 of the width.
+        FitWidth := W;
+        if LayoutLine.Bold then
+            FitWidth := W * 10 div 12;
         if LayoutLine."Fit to Width" then begin
             MinHeight := MmToDots(LayoutLine."Min Font Height (mm)", Dpi);
             if (MinHeight = 0) or (MinHeight > FontHeight) then
                 MinHeight := FontHeight div 2;
-            FitSize := Canvas.FitFontMeasured(Value, W, FontHeight, MinHeight);
+            FitSize := Canvas.FitFontMeasured(Value, FitWidth, FontHeight, MinHeight);
             // Even the smallest size too wide: condense the glyphs instead of overprinting.
-            FontWidth := Canvas.FitFontMeasured(Value, W, FitSize, 10);
+            FontWidth := Canvas.FitFontMeasured(Value, FitWidth, FitSize, 10);
             FontHeight := FitSize;
         end;
+        if LayoutLine.Bold then
+            FontWidth := Round(FontWidth * 1.2, 1);
         if LayoutLine."Max Lines" > 1 then begin
-            Canvas.WrapText(Value, Canvas.MaxChars(W, FontHeight), LayoutLine."Max Lines", Lines);
+            Canvas.WrapText(Value, Canvas.MaxChars(FitWidth, FontHeight), LayoutLine."Max Lines", Lines);
+            Pitch := FontHeight + 6;
             foreach TextLine in Lines do begin
-                Zpl += TextLineZpl(LayoutLine, X, Y + Index * (FontHeight + 6), FontHeight, FontWidth, W, TextLine);
+                // Lines stack in the text's own "down" direction: right for 90, up for 180, left for 270.
+                LineX := X;
+                LineY := Y;
+                case LayoutLine.Rotation of
+                    90:
+                        LineX := X + (Lines.Count() - 1 - Index) * Pitch;
+                    180:
+                        LineY := Y + (Lines.Count() - 1 - Index) * Pitch;
+                    270:
+                        LineX := X + Index * Pitch;
+                    else
+                        LineY := Y + Index * Pitch;
+                end;
+                Zpl += TextLineZpl(LayoutLine, LineX, LineY, FontHeight, FontWidth, W, TextLine);
                 Index += 1;
             end;
             exit(Zpl);
@@ -222,7 +519,7 @@ codeunit 72466 "DOPSWHS Label Layout Engine"
             else
                 Align := 'L';
         end;
-        Zpl := '^FO' + Format(X) + ',' + Format(Y) + '^A0N,' + Format(FontHeight) + ',' + Format(FontWidth);
+        Zpl := '^FO' + Format(X) + ',' + Format(Y) + '^A0' + OrientationCode(LayoutLine.Rotation) + ',' + Format(FontHeight) + ',' + Format(FontWidth);
         if LayoutLine.Inverted then
             Zpl += '^FR';
         exit(Zpl + '^FH_^FB' + Format(W) + ',1,0,' + Align + '^FD' + ZplEncoder.EncodeFieldData(Value) + '^FS');
@@ -264,17 +561,98 @@ codeunit 72466 "DOPSWHS Label Layout Engine"
         EnsureItemV2Layout();
     end;
 
+    /// <summary>
+    /// Kitoko (21 Eki 2026): creates the passive default LP layout when no LP layout
+    /// exists yet (installs seeded before the LP kind existed).
+    /// </summary>
+    procedure EnsureLpLayout()
+    var
+        Layout: Record "DOPSWHS Label Layout";
+        Existing: Record "DOPSWHS Label Layout";
+    begin
+        Layout.SetRange("Label Kind", Layout."Label Kind"::LP);
+        if not Layout.IsEmpty() then begin
+            UpgradeLpDefaultLines(DefaultCode(Enum::"DOPSWHS Label Kind"::LP));
+            exit;
+        end;
+        if Existing.Get(DefaultCode(Enum::"DOPSWHS Label Kind"::LP)) then
+            exit;
+        CreateLayout(Enum::"DOPSWHS Label Kind"::LP);
+        FillDefaultLines(DefaultCode(Enum::"DOPSWHS Label Kind"::LP), Enum::"DOPSWHS Label Kind"::LP);
+    end;
+
+    /// <summary>
+    /// Kitoko (21 Eki 2026): the first default LP lines (barcode = LP no., first-line
+    /// quantity) become the current defaults (SSCC barcode, total quantity, "+N DİĞER
+    /// SATIR") only while every line is still exactly as generated; edited layouts are kept.
+    /// </summary>
+    local procedure UpgradeLpDefaultLines(LayoutCode: Code[20])
+    var
+        Layout: Record "DOPSWHS Label Layout";
+        LayoutLine: Record "DOPSWHS Label Layout Line";
+        TempOldLine: Record "DOPSWHS Label Layout Line" temporary;
+        LineNo: Integer;
+    begin
+        if not Layout.Get(LayoutCode) then
+            exit;
+        if Layout."Label Kind" <> Layout."Label Kind"::LP then
+            exit;
+        FillLpLines(TempOldLine, LayoutCode, LineNo, 1);
+        LayoutLine.SetRange("Layout Code", LayoutCode);
+        if LayoutLine.Count() <> TempOldLine.Count() then
+            exit;
+        if LayoutLine.FindSet() then
+            repeat
+                if not TempOldLine.Get(LayoutLine."Layout Code", LayoutLine."Line No.") then
+                    exit;
+                if not SameGeneratedLine(LayoutLine, TempOldLine) then
+                    exit;
+            until LayoutLine.Next() = 0;
+        LayoutLine.DeleteAll();
+        LineNo := 0;
+        FillLpLines(LayoutLine, LayoutCode, LineNo, LpDefaultVersion());
+    end;
+
+    /// <summary>Every printed property equal (the designer's Element Id is ignored).</summary>
+    local procedure SameGeneratedLine(var Line: Record "DOPSWHS Label Layout Line"; var Generated: Record "DOPSWHS Label Layout Line"): Boolean
+    begin
+        exit(
+            (Line."Element Type" = Generated."Element Type") and
+            (Line."X (mm)" = Generated."X (mm)") and (Line."Y (mm)" = Generated."Y (mm)") and
+            (Line."Width (mm)" = Generated."Width (mm)") and (Line."Height (mm)" = Generated."Height (mm)") and
+            (Line."Font Height (mm)" = Generated."Font Height (mm)") and (Line."Font Width (mm)" = Generated."Font Width (mm)") and
+            (Line."Min Font Height (mm)" = Generated."Min Font Height (mm)") and (Line.Alignment = Generated.Alignment) and
+            (Line."Source Field" = Generated."Source Field") and (Line."Static Text" = Generated."Static Text") and
+            (Line.Prefix = Generated.Prefix) and (Line.Suffix = Generated.Suffix) and
+            (Line."Max Lines" = Generated."Max Lines") and (Line."Fit to Width" = Generated."Fit to Width") and
+            (Line.Inverted = Generated.Inverted) and (Line."Show Text" = Generated."Show Text") and
+            (Line."Thickness (mm)" = Generated."Thickness (mm)") and (Line.Enabled = Generated.Enabled) and
+            (Line.Rotation = Generated.Rotation) and (Line.Bold = Generated.Bold) and
+            (Line.Symbology = Generated.Symbology) and (Line."Image Id" = Generated."Image Id"));
+    end;
+
+    local procedure LpDefaultVersion(): Integer
+    begin
+        exit(2);
+    end;
+
     /// <summary>Creates the QR-only item label option when it is missing.</summary>
     procedure EnsureItemV2Layout()
     var
         Layout: Record "DOPSWHS Label Layout";
         LayoutLine: Record "DOPSWHS Label Layout Line";
+        UpgradeTag: Codeunit "Upgrade Tag";
         LineNo: Integer;
     begin
         if Layout.Get('ETIKETV2') then begin
+            // Kitoko (21 Eki 2026): the enlargement runs once per company (upgrade tag),
+            // so a size chosen later in the designer or on the lines page is never undone.
+            if UpgradeTag.HasUpgradeTag(EtiketV2SizeTagTxt) then
+                exit;
             // Apply the requested ~30% enlargement once, while preserving any
             // later manual edits to these dimensions.
             if LayoutLine.Get('ETIKETV2', 10000) and
+               (LayoutLine."Element Id" = '') and
                (LayoutLine."Element Type" = LayoutLine."Element Type"::QRCode) and
                (LayoutLine."Width (mm)" in [15, 19.5]) and
                (LayoutLine."Height (mm)" in [15, 19.5])
@@ -285,6 +663,7 @@ codeunit 72466 "DOPSWHS Label Layout Engine"
                 LayoutLine.Modify(true);
             end;
             if LayoutLine.Get('ETIKETV2', 20000) and
+               (LayoutLine."Element Id" = '') and
                (LayoutLine."Element Type" = LayoutLine."Element Type"::Field) and
                (LayoutLine."Source Field" = 'ItemNo') and
                (LayoutLine."Font Height (mm)" in [2.25, 2.925])
@@ -293,6 +672,7 @@ codeunit 72466 "DOPSWHS Label Layout Engine"
                 LayoutLine."Y (mm)" := 31.5;
                 LayoutLine.Modify(true);
             end;
+            UpgradeTag.SetUpgradeTag(EtiketV2SizeTagTxt);
             exit;
         end;
         Layout.Init();
@@ -305,9 +685,12 @@ codeunit 72466 "DOPSWHS Label Layout Engine"
         Layout.Active := false;
         Layout.Insert(true);
         FillItemV2Lines(LayoutLine, Layout.Code, LineNo);
+        // New lines already have the enlarged sizes.
+        if not UpgradeTag.HasUpgradeTag(EtiketV2SizeTagTxt) then
+            UpgradeTag.SetUpgradeTag(EtiketV2SizeTagTxt);
     end;
 
-    /// <summary>Replaces all lines of the layout with the default design of its kind (80x40 mm, 203 dpi).</summary>
+    /// <summary>Replaces all lines of the layout with the default design of its kind (80x40 mm; LP 4x2", 203 dpi).</summary>
     procedure ResetToDefault(LayoutCode: Code[20])
     var
         Layout: Record "DOPSWHS Label Layout";
@@ -316,8 +699,8 @@ codeunit 72466 "DOPSWHS Label Layout Engine"
         Layout.Get(LayoutCode);
         LayoutLine.SetRange("Layout Code", LayoutCode);
         LayoutLine.DeleteAll();
-        Layout."Width (mm)" := 80;
-        Layout."Height (mm)" := 40;
+        Layout."Width (mm)" := DefaultWidthMm(Layout."Label Kind");
+        Layout."Height (mm)" := DefaultHeightMm(Layout."Label Kind");
         Layout.Dpi := 203;
         Layout.Modify();
         FillDefaultLines(LayoutCode, Layout."Label Kind");
@@ -330,8 +713,25 @@ codeunit 72466 "DOPSWHS Label Layout Engine"
                 exit('ITEM');
             Kind::Bin:
                 exit('BIN');
+            Kind::LP:
+                exit('LP');
         end;
         exit('ZONE');
+    end;
+
+    /// <summary>Kitoko (21 Eki 2026): the built-in LP label is 4x2" (101.6 x 50.8 mm), the others 80x40 mm.</summary>
+    procedure DefaultWidthMm(Kind: Enum "DOPSWHS Label Kind"): Decimal
+    begin
+        if Kind = Kind::LP then
+            exit(101.6);
+        exit(80);
+    end;
+
+    procedure DefaultHeightMm(Kind: Enum "DOPSWHS Label Kind"): Decimal
+    begin
+        if Kind = Kind::LP then
+            exit(50.8);
+        exit(40);
     end;
 
     local procedure CreateLayout(Kind: Enum "DOPSWHS Label Kind")
@@ -341,8 +741,8 @@ codeunit 72466 "DOPSWHS Label Layout Engine"
         Layout.Init();
         Layout."Code" := DefaultCode(Kind);
         Layout."Label Kind" := Kind;
-        Layout."Width (mm)" := 80;
-        Layout."Height (mm)" := 40;
+        Layout."Width (mm)" := DefaultWidthMm(Kind);
+        Layout."Height (mm)" := DefaultHeightMm(Kind);
         Layout.Dpi := 203;
         case Kind of
             Kind::Item:
@@ -351,6 +751,8 @@ codeunit 72466 "DOPSWHS Label Layout Engine"
                 Layout.Description := 'Raf etiketi (varsayılan)';
             Kind::Zone:
                 Layout.Description := 'Alan etiketi (varsayılan)';
+            Kind::LP:
+                Layout.Description := 'LP / palet etiketi (varsayılan)';
         end;
         Layout.Insert();
     end;
@@ -365,6 +767,10 @@ codeunit 72466 "DOPSWHS Label Layout Engine"
     begin
         if LayoutCode = 'ETIKETV2' then begin
             FillItemV2Lines(LayoutLine, LayoutCode, LineNo);
+            exit;
+        end;
+        if Kind = Kind::LP then begin
+            FillLpLines(LayoutLine, LayoutCode, LineNo, LpDefaultVersion());
             exit;
         end;
         // Siyah başlık şeridi (5,5 mm): sol başlık, sağ firma/depo adı, ikisi beyaz.
@@ -486,6 +892,127 @@ codeunit 72466 "DOPSWHS Label Layout Engine"
         LayoutLine.Insert();
     end;
 
+    /// <summary>
+    /// Kitoko (21 Eki 2026): the LP Label report's 4x2" design in mm (8 dots/mm):
+    /// black band with title and location / bin, large LP no., item, lot, quantity,
+    /// Code128 + QR. Version 2 (current) matches the built-in label's data: the
+    /// barcode is BarcodeData (SSCC, else LP no.), the quantity is TotalQuantity and
+    /// "+N DİĞER SATIR" follows the lot. Version 1 = the first 1.14.3.13 lines, kept
+    /// only to recognise untouched layouts (UpgradeLpDefaultLines).
+    /// </summary>
+    local procedure FillLpLines(var LayoutLine: Record "DOPSWHS Label Layout Line"; LayoutCode: Code[20]; var LineNo: Integer; Version: Integer)
+    begin
+        NewLine(LayoutLine, LayoutCode, LineNo, LayoutLine."Element Type"::Box, 0, 0, 101.6, 6.5);
+        LayoutLine.Insert();
+        NewLine(LayoutLine, LayoutCode, LineNo, LayoutLine."Element Type"::Text, 3, 1.25, 55, 0);
+        LayoutLine."Static Text" := 'PALET / LP ETİKETİ';
+        LayoutLine."Font Height (mm)" := 4;
+        LayoutLine.Inverted := true;
+        LayoutLine.Insert();
+        NewLine(LayoutLine, LayoutCode, LineNo, LayoutLine."Element Type"::Field, 58.75, 1.5, 20, 0);
+        LayoutLine."Source Field" := 'LocationCode';
+        LayoutLine."Font Height (mm)" := 3.25;
+        LayoutLine.Alignment := LayoutLine.Alignment::Right;
+        LayoutLine.Inverted := true;
+        LayoutLine.Insert();
+        NewLine(LayoutLine, LayoutCode, LineNo, LayoutLine."Element Type"::Field, 79, 1.5, 19.75, 0);
+        LayoutLine."Source Field" := 'BinCode';
+        LayoutLine.Prefix := ' / ';
+        LayoutLine."Font Height (mm)" := 3.25;
+        LayoutLine."Fit to Width" := true;
+        LayoutLine."Min Font Height (mm)" := 2.25;
+        LayoutLine.Inverted := true;
+        LayoutLine.Insert();
+        NewLine(LayoutLine, LayoutCode, LineNo, LayoutLine."Element Type"::Field, 3, 7.75, 70, 0);
+        LayoutLine."Source Field" := 'LPNo';
+        LayoutLine."Font Height (mm)" := 10;
+        LayoutLine."Font Width (mm)" := 9.5;
+        LayoutLine."Fit to Width" := true;
+        LayoutLine."Min Font Height (mm)" := 7;
+        LayoutLine.Insert();
+        NewLine(LayoutLine, LayoutCode, LineNo, LayoutLine."Element Type"::QRCode, 75.5, 7.75, 24, 24);
+        LayoutLine."Source Field" := 'LPNo';
+        LayoutLine.Insert();
+        NewLine(LayoutLine, LayoutCode, LineNo, LayoutLine."Element Type"::Field, 3, 18.75, 22, 0);
+        LayoutLine."Source Field" := 'ItemNo';
+        LayoutLine."Font Height (mm)" := 3.25;
+        LayoutLine."Fit to Width" := true;
+        LayoutLine."Min Font Height (mm)" := 2.25;
+        LayoutLine.Insert();
+        NewLine(LayoutLine, LayoutCode, LineNo, LayoutLine."Element Type"::Field, 26, 18.75, 47, 0);
+        LayoutLine."Source Field" := 'Description';
+        LayoutLine."Font Height (mm)" := 3.25;
+        LayoutLine."Fit to Width" := true;
+        LayoutLine."Min Font Height (mm)" := 2.25;
+        LayoutLine.Insert();
+        if Version >= 2 then
+            NewLine(LayoutLine, LayoutCode, LineNo, LayoutLine."Element Type"::Field, 3, 23.25, 30, 0)
+        else
+            NewLine(LayoutLine, LayoutCode, LineNo, LayoutLine."Element Type"::Field, 3, 23.25, 40, 0);
+        LayoutLine."Source Field" := 'LotNo';
+        LayoutLine.Prefix := 'LOT: ';
+        LayoutLine."Font Height (mm)" := 3.25;
+        LayoutLine."Fit to Width" := true;
+        LayoutLine."Min Font Height (mm)" := 2.25;
+        LayoutLine.Insert();
+        if Version >= 2 then begin
+            // "+N DİĞER SATIR" next to the lot, as on the built-in LP label.
+            NewLine(LayoutLine, LayoutCode, LineNo, LayoutLine."Element Type"::Field, 34, 23.25, 19, 0);
+            LayoutLine."Source Field" := 'ExtraLines';
+            LayoutLine."Font Height (mm)" := 3.25;
+            LayoutLine."Fit to Width" := true;
+            LayoutLine."Min Font Height (mm)" := 2.25;
+            LayoutLine.Insert();
+            NewLine(LayoutLine, LayoutCode, LineNo, LayoutLine."Element Type"::Field, 54, 23.25, 19, 0);
+        end else
+            NewLine(LayoutLine, LayoutCode, LineNo, LayoutLine."Element Type"::Field, 44, 23.25, 29, 0);
+        LayoutLine."Source Field" := 'ExpirationDate';
+        LayoutLine.Prefix := 'SKT: ';
+        LayoutLine."Font Height (mm)" := 3.25;
+        if Version >= 2 then begin
+            LayoutLine."Fit to Width" := true;
+            LayoutLine."Min Font Height (mm)" := 2.25;
+        end;
+        LayoutLine.Insert();
+        NewLine(LayoutLine, LayoutCode, LineNo, LayoutLine."Element Type"::Field, 3, 27.75, 46, 0);
+        if Version >= 2 then
+            LayoutLine."Source Field" := 'TotalQuantity'
+        else
+            LayoutLine."Source Field" := 'Quantity';
+        LayoutLine.Prefix := 'MİKTAR: ';
+        LayoutLine."Font Height (mm)" := 5.5;
+        LayoutLine."Fit to Width" := true;
+        LayoutLine."Min Font Height (mm)" := 3.5;
+        LayoutLine.Insert();
+        NewLine(LayoutLine, LayoutCode, LineNo, LayoutLine."Element Type"::Field, 50, 27.75, 23, 0);
+        LayoutLine."Source Field" := 'UoM';
+        LayoutLine."Font Height (mm)" := 5.5;
+        LayoutLine."Fit to Width" := true;
+        LayoutLine."Min Font Height (mm)" := 3.5;
+        LayoutLine.Insert();
+        NewLine(LayoutLine, LayoutCode, LineNo, LayoutLine."Element Type"::Barcode128, 3, 34.25, 70, 10.5);
+        if Version >= 2 then
+            LayoutLine."Source Field" := 'BarcodeData'
+        else
+            LayoutLine."Source Field" := 'LPNo';
+        LayoutLine.Insert();
+        NewLine(LayoutLine, LayoutCode, LineNo, LayoutLine."Element Type"::Text, 75.5, 40, 24, 0);
+        LayoutLine."Static Text" := 'QR = LP NO';
+        LayoutLine."Font Height (mm)" := 2.75;
+        LayoutLine.Alignment := LayoutLine.Alignment::Center;
+        LayoutLine.Insert();
+        NewLine(LayoutLine, LayoutCode, LineNo, LayoutLine."Element Type"::Field, 3, 46.25, 40, 0);
+        LayoutLine."Source Field" := 'Today';
+        LayoutLine."Font Height (mm)" := 2.5;
+        LayoutLine.Insert();
+        NewLine(LayoutLine, LayoutCode, LineNo, LayoutLine."Element Type"::Field, 44, 46.25, 29, 0);
+        LayoutLine."Source Field" := 'ItemCount';
+        LayoutLine.Prefix := 'ÜRÜN ÇEŞİDİ: ';
+        LayoutLine."Font Height (mm)" := 2.5;
+        LayoutLine.Alignment := LayoutLine.Alignment::Right;
+        LayoutLine.Insert();
+    end;
+
     local procedure FillZoneLines(var LayoutLine: Record "DOPSWHS Label Layout Line"; LayoutCode: Code[20]; var LineNo: Integer)
     begin
         NewLine(LayoutLine, LayoutCode, LineNo, LayoutLine."Element Type"::Field, 2, 6.5, 51, 0);
@@ -506,7 +1033,8 @@ codeunit 72466 "DOPSWHS Label Layout Engine"
     local procedure NewLine(var LayoutLine: Record "DOPSWHS Label Layout Line"; LayoutCode: Code[20]; var LineNo: Integer; ElementType: Enum "DOPSWHS Label Element Type"; X: Decimal; Y: Decimal; W: Decimal; H: Decimal)
     begin
         LineNo += 10000;
-        Clear(LayoutLine);
+        // Reset + Init (not Clear) so the defaults can also be generated into a temporary record.
+        LayoutLine.Reset();
         LayoutLine.Init();
         LayoutLine."Layout Code" := LayoutCode;
         LayoutLine."Line No." := LineNo;

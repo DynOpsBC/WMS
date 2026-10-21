@@ -35,8 +35,11 @@ codeunit 72160 "DOPSWHS Label Layout Tests"
         Assert.AreEqual(Layout."Label Kind"::Zone, Layout."Label Kind", 'ZONE is a zone layout.');
         LayoutLine.SetRange("Layout Code", 'ITEM');
         Assert.IsTrue(LayoutLine.Count() >= 8, 'ITEM has its default elements.');
+        // Kitoko (21 Eki 2026): ITEM, BIN, ZONE, LP + ETIKETV2.
+        Assert.IsTrue(Layout.Get('LP'), 'LP seeded');
+        Assert.IsTrue(Layout.Get('ETIKETV2'), 'ETIKETV2 seeded');
         Engine.SeedDefaults();
-        Assert.AreEqual(3, Layout.Count(), 'Seeding twice creates nothing new.');
+        Assert.AreEqual(5, Layout.Count(), 'Seeding twice creates nothing new.');
     end;
 
     [Test]

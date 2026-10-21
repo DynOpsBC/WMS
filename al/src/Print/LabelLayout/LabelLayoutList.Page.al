@@ -25,6 +25,26 @@ page 72469 "DOPSWHS Label Layout List"
         }
     }
 
+    actions
+    {
+        area(Processing)
+        {
+            // Kitoko (21 Eki 2026): sürükle-bırak etiket tasarımcısı.
+            action(OpenDesigner)
+            {
+                Caption = 'Tasarımcıyı Aç';
+                ApplicationArea = All;
+                Image = Design;
+                Promoted = true;
+                PromotedCategory = Process;
+                PromotedIsBig = true;
+                RunObject = page "DOPSWHS Label Designer";
+                RunPageLink = "Code" = field("Code");
+                ToolTip = 'Seçili tasarımı sürükle-bırak etiket tasarımcısında açar.';
+            }
+        }
+    }
+
     trigger OnOpenPage()
     var
         Engine: Codeunit "DOPSWHS Label Layout Engine";
@@ -34,7 +54,10 @@ page 72469 "DOPSWHS Label Layout List"
             if Rec.WritePermission() then
                 Engine.SeedDefaults();
         // Kitoko: güncellemeyle eklenen ETIKETV2, mevcut kayıtlı tasarımlarda da listelensin.
-        if Rec.WritePermission() then
+        if Rec.WritePermission() then begin
             Engine.EnsureItemV2Layout();
+            // Kitoko (21 Eki 2026): LP türü sonradan eklendi; pasif varsayılan LP tasarımı.
+            Engine.EnsureLpLayout();
+        end;
     end;
 }

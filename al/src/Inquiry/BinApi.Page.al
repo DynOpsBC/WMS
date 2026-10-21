@@ -38,4 +38,16 @@ page 72087 "DOPSWHS Bin API"
     begin
         Dispatcher.PrintBinLabel(Rec, printerId, copies);
     end;
+
+    /// <summary>
+    /// Kitoko (21 Eki 2026): printLabel with the bin label design chosen on the
+    /// terminal (labelLayouts, kind Bin). Blank layoutCode = printLabel.
+    /// </summary>
+    [ServiceEnabled]
+    procedure printLabelWithLayout(printerId: Code[50]; copies: Integer; layoutCode: Code[20])
+    var
+        Dispatcher: Codeunit "DOPSWHS Print Dispatcher";
+    begin
+        Dispatcher.PrintBinLabelWithLayout(Rec, printerId, copies, layoutCode);
+    end;
 }

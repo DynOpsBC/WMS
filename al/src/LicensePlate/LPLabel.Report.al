@@ -23,6 +23,24 @@ report 72091 "DOPSWHS LP Label"
     }
 
     /// <summary>
+    /// Kitoko (21 Eki 2026): LP etiketi terminalde seçilen LP tasarımıyla. Boş
+    /// LayoutCode = BuildZpl (aktif LP tasarımı, yoksa aşağıdaki sabit tasarım);
+    /// bulunmayan veya başka türdeki tasarım hata verir.
+    /// </summary>
+    procedure BuildZplWithLayout(var LP: Record "DOPSWHS LP Header"; LayoutCode: Code[20]): Text
+    var
+        LayoutEngine: Codeunit "DOPSWHS Label Layout Engine";
+        LayoutFields: Codeunit "DOPSWHS Label Layout Fields";
+        LayoutValues: Dictionary of [Text, Text];
+    begin
+        if LayoutCode = '' then
+            exit(BuildZpl(LP));
+        LayoutEngine.CheckLayoutKind(LayoutCode, Enum::"DOPSWHS Label Kind"::LP);
+        LayoutFields.LpValues(LP, LayoutValues);
+        exit(LayoutEngine.BuildZpl(LayoutCode, LayoutValues, 1));
+    end;
+
+    /// <summary>
     /// 4x2" (812x406 dots, 203 dpi) pallet label: header band with location /
     /// bin, large LP number, first item line, lot and extra-line count, pallet
     /// quantity, Code128 (SSCC when stopped, else LP No.) and a QR that always
@@ -33,6 +51,10 @@ report 72091 "DOPSWHS LP Label"
         LPLine: Record "DOPSWHS LP Line";
         Item: Record Item;
         ZplEncoder: Codeunit "DOPSWHS ZPL Encoder";
+        LayoutEngine: Codeunit "DOPSWHS Label Layout Engine";
+        LayoutFields: Codeunit "DOPSWHS Label Layout Fields";
+        LayoutValues: Dictionary of [Text, Text];
+        LayoutCode: Code[20];
         Footer: Text;
         ItemText: Text;
         LotText: Text;
@@ -42,6 +64,11 @@ report 72091 "DOPSWHS LP Label"
         LineCount: Integer;
         NoFont: Integer;
     begin
+        // Kitoko (21 Eki 2026): aktif LP etiket tasarımı varsa onu kullan, yoksa aşağıdaki sabit tasarım.
+        if LayoutEngine.FindActiveLayout(Enum::"DOPSWHS Label Kind"::LP, LayoutCode) then begin
+            LayoutFields.LpValues(LP, LayoutValues);
+            exit(LayoutEngine.BuildZpl(LayoutCode, LayoutValues, 1));
+        end;
         LPLine.SetRange("LP No.", LP."No.");
         LPLine.SetFilter("Item No.", '<>%1', '');
         if LPLine.FindSet() then begin

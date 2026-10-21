@@ -27,6 +27,16 @@ codeunit 72468 "DOPSWHS Label Layout Preview"
         DownloadFromStream(PngStream, 'Etiket Önizleme', '', 'PNG (*.png)|*.png', FileName);
     end;
 
+    /// <summary>
+    /// Kitoko (21 Eki 2026): renders ZPL to PNG through labelary.com for the label
+    /// designer. Callers must pass sample-data ZPL only. False = failed (GetLastErrorText).
+    /// </summary>
+    procedure TryRenderPng(Zpl: Text; WidthMm: Decimal; HeightMm: Decimal; Dpi: Integer; var TempBlob: Codeunit "Temp Blob"): Boolean
+    begin
+        ClearLastError();
+        exit(TryRender(Zpl, WidthMm, HeightMm, Dpi, TempBlob));
+    end;
+
     /// <summary>Labelary sizes are in inches and the resolution in dots per mm (6/8/12/24).</summary>
     procedure PreviewUrl(WidthMm: Decimal; HeightMm: Decimal; Dpi: Integer): Text
     var
