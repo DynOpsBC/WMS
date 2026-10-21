@@ -64,6 +64,8 @@ fun LicensePlateModule() {
     // BADE (16 Eki 2026): BC'deki gibi LP No'ya göre artan/azalan sıralama; seçim cihazda kalır.
     val listPrefs = remember { context.getSharedPreferences(LP_LIST_PREFS, android.content.Context.MODE_PRIVATE) }
     var sortDescending by remember { mutableStateOf(listPrefs.getBoolean(LP_LIST_SORT_DESC, false)) }
+    // Kitoko (21 Eki 2026): boş LP'nin LP etiketi için seçilen etiket tasarımı.
+    val lpLayout = rememberLabelLayoutChoice(LabelLayoutKind.LP)
 
     fun loadList(statusAfterLoad: String? = null) {
         scope.launch {
@@ -120,6 +122,7 @@ fun LicensePlateModule() {
             val failures = linkedMapOf<String, String>()
             val labelPrinter = getDefaultPrinter(context, PRINTER_USAGE_LABEL)
             val documentPrinter = getDefaultPrinter(context, PRINTER_USAGE_DOCUMENT)
+            val lpLayoutCode = lpLayout.awaitLayoutCode(context)
             var completed = 0
             bulkLpPrintBatches(requested).forEach { batch ->
                 status = "Yazdırma kuyruğu hazırlanıyor: $completed/${requested.size}"
@@ -134,12 +137,16 @@ fun LicensePlateModule() {
                         // yazıcıdan yeniden üret (ZPL yazıcıda ZPL, PDF yazıcıda RDLC).
                         mtePrintRoute(labelPrinter, documentPrinter)
                     } else {
-                        bulkLpPrintRoute(row?.optInt("lineCount") ?: 0, labelPrinter, documentPrinter)
+                        lpLabelRouteWithLayout(
+                            bulkLpPrintRoute(row?.optInt("lineCount") ?: 0, labelPrinter, documentPrinter),
+                            lpLayoutCode,
+                        )
                     }
                     async {
                         val payload = JSONObject().apply {
                             put("printerId", route.printerCode)
                             put("copies", 1)
+                            if (route.action == LP_LABEL_WITH_LAYOUT_ACTION) put("layoutCode", lpLayoutCode)
                         }.toString()
                         // Azure Direct, işi kalıcı kuyruğa yazdıktan sonra fiziksel
                         // ajan sonucunu bekleyebilir. Uzun timeout çift baskıya yol
@@ -194,6 +201,10 @@ fun LicensePlateModule() {
                 Text("Seçilenleri Yazdır (${selectedForPrint.size})")
             }
         }
+        if (selectedForPrint.isNotEmpty()) LabelLayoutSelector(
+            lpLayout, enabled = !loading, note = "Boş LP'nin etiketinde kullanılır; içerikli LP'ye MTE basılır.",
+            modifier = Modifier.padding(top = 6.dp),
+        )
         Spacer(Modifier.height(8.dp))
         com.dynops.bcwms.ui.DocSearchBar(value = search, onValueChange = { search = it }, onSearch = { loadList() }, label = "LP no ile ara")
         Spacer(Modifier.height(4.dp))

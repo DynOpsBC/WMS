@@ -134,20 +134,18 @@ private const val LABEL_COPIES_INVALID = "HATA: Etiket adedi 1 ile $LABEL_COPIES
 private fun binLabelKey(locationCode: String, code: String) =
     "locationCode='${locationCode.replace("'", "''")}',code='${code.replace("'", "''")}'"
 
-private fun labelPayload(printerCode: String, copies: Int) =
-    JSONObject().put("printerId", printerCode).put("copies", copies).toString()
-
 /**
  * Kitoko (19 Eki 2026): EMU'nun adetli ürün etiketi. Adet, BC ve yazıcı ajanının
  * kabul ettiği 10'luk işlere bölünür; ilk hatada durur, otomatik tekrar denemez.
  * Yazıcı [resolveInquiryPrinter] ile çözülür; seçili yazıcı yoksa istek gitmez.
  */
-internal suspend fun printItemLabelCopies(context: Context, itemNo: String, total: Int): String {
+internal suspend fun printItemLabelCopies(context: Context, itemNo: String, total: Int, layoutCode: String = ""): String {
     val choice = resolveInquiryPrinter(context).getOrElse { return "HATA: ${it.message}" }
     var sent = 0
     for (copies in labelCopyBatches(total)) {
         val r = try {
-            BcApi.boundAction(context, "items", itemNo, "printLabel", labelPayload(choice.printerCode, copies))
+            // Kitoko (21 Eki 2026): seçilen etiket tasarımı varsa printLabelWithLayout.
+            BcApi.boundAction(context, "items", itemNo, labelPrintAction(layoutCode), labelPrintPayload(choice.printerCode, copies, layoutCode))
         } catch (cancelled: CancellationException) {
             throw cancelled
         } catch (error: Exception) {
@@ -158,7 +156,7 @@ internal suspend fun printItemLabelCopies(context: Context, itemNo: String, tota
             if (sent > 0) " · $total etiketin $sent adedi kuyruğa alınmıştı." else ""
         sent += copies
     }
-    return "🟢 $total adet ürün etiketi ${choice.printerCode} kuyruğuna alındı ($itemNo)." +
+    return "🟢 $total adet ürün etiketi ${choice.printerCode} kuyruğuna alındı ($itemNo)." + labelLayoutNote(layoutCode) +
         if (choice.warning.isBlank()) "" else " ${choice.warning}"
 }
 
@@ -186,6 +184,7 @@ internal suspend fun printBinLabelCopies(
     context: Context,
     rows: List<JSONObject>,
     total: Int,
+    layoutCode: String = "",
     onProgress: (String) -> Unit = {},
 ): String {
     if (rows.isEmpty()) return "BOŞ: Yazdırılacak raf yok."
@@ -196,7 +195,7 @@ internal suspend fun printBinLabelCopies(
         if (rows.size > 1) onProgress("🖨 ${rows.size} raf · $code (${index + 1}.)")
         for (copies in labelCopyBatches(total)) {
             val r = try {
-                BcApi.boundAction(context, "bins", binLabelKey(loc, code), "printLabel", labelPayload(choice.printerCode, copies))
+                BcApi.boundAction(context, "bins", binLabelKey(loc, code), labelPrintAction(layoutCode), labelPrintPayload(choice.printerCode, copies, layoutCode))
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (error: Exception) {
@@ -210,16 +209,16 @@ internal suspend fun printBinLabelCopies(
     }
     val target = if (rows.size == 1) "${rawValue(rows[0], "locationCode")}/${rawValue(rows[0], "code")} raf etiketi × $total"
         else "${rows.size} raf × $total etiket"
-    return "🟢 $target ${choice.printerCode} kuyruğuna alındı." +
+    return "🟢 $target ${choice.printerCode} kuyruğuna alındı." + labelLayoutNote(layoutCode) +
         if (choice.warning.isBlank()) "" else " ${choice.warning}"
 }
 
 /** DKÇ (17 Eyl 2026): alanın kendi QR etiketi (zones/printLabel). */
-internal suspend fun printZoneLabelCopies(context: Context, locationCode: String, zoneCode: String, total: Int): String {
+internal suspend fun printZoneLabelCopies(context: Context, locationCode: String, zoneCode: String, total: Int, layoutCode: String = ""): String {
     val choice = resolveInquiryPrinter(context).getOrElse { return "HATA: ${it.message}" }
     for (copies in labelCopyBatches(total)) {
         val r = try {
-            BcApi.boundAction(context, "zones", binLabelKey(locationCode, zoneCode), "printLabel", labelPayload(choice.printerCode, copies))
+            BcApi.boundAction(context, "zones", binLabelKey(locationCode, zoneCode), labelPrintAction(layoutCode), labelPrintPayload(choice.printerCode, copies, layoutCode))
         } catch (cancelled: CancellationException) {
             throw cancelled
         } catch (error: Exception) {
@@ -228,7 +227,7 @@ internal suspend fun printZoneLabelCopies(context: Context, locationCode: String
         if (!r.ok) return "🔴 Alan etiketi: ${BcApi.errorMessage(r.body)} (HTTP ${r.httpCode})" +
             if (r.httpCode == 404) " · BC uzantısını güncelleyin." else ""
     }
-    return "🟢 $zoneCode alan etiketi × $total ${choice.printerCode} kuyruğuna alındı." +
+    return "🟢 $zoneCode alan etiketi × $total ${choice.printerCode} kuyruğuna alındı." + labelLayoutNote(layoutCode) +
         if (choice.warning.isBlank()) "" else " ${choice.warning}"
 }
 
@@ -244,6 +243,8 @@ internal fun ItemLabelPrintSheet(
     onPrint: () -> Unit,
     onPrintV2: () -> Unit,
     onDismiss: () -> Unit,
+    // Kitoko (21 Eki 2026): etiket tasarımı seçici (LabelLayoutSelector); argüman = düzenlenebilir mi.
+    layoutContent: @Composable (enabled: Boolean) -> Unit = {},
 ) {
     ModalBottomSheet(onDismissRequest = { if (!printing) onDismiss() }) {
         Column(
@@ -254,6 +255,7 @@ internal fun ItemLabelPrintSheet(
             Text("Ürün etiketi yazdır", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
             Text(itemNo, style = MaterialTheme.typography.titleMedium)
             PrinterDestinationCard(inquiryFallback = true)
+            layoutContent(!printing)
             LabelCopiesField(copies, onCopies, enabled = !printing)
             if (status.isNotBlank()) StatusText(status)
             val count = parseLabelCopies(copies)
@@ -308,6 +310,7 @@ private fun ItemStockInquiry() {
     var labelCopies by remember { mutableStateOf("1") }
     var labelStatus by remember { mutableStateOf("") }
     var printing by remember { mutableStateOf(false) }
+    val itemLayout = rememberLabelLayoutChoice(LabelLayoutKind.Item)
 
     fun load() {
         if (query.trim().isBlank() || printing) return
@@ -355,7 +358,7 @@ private fun ItemStockInquiry() {
         labelStatus = "🖨 $total adet ürün etiketi yazdırılıyor..."
         scope.launch {
             try {
-                labelStatus = printItemLabelCopies(context, no, total)
+                labelStatus = printItemLabelCopies(context, no, total, itemLayout.awaitLayoutCode(context))
                 status = labelStatus
             } finally {
                 printing = false
@@ -555,6 +558,7 @@ private fun ItemStockInquiry() {
         onPrint = { printItemLabel() },
         onPrintV2 = { printItemLabelV2() },
         onDismiss = { if (!printing) showLabelSheet = false },
+        layoutContent = { enabled -> LabelLayoutSelector(itemLayout, enabled) },
     )
 }
 
@@ -583,6 +587,8 @@ private fun ItemLabelInquiry() {
     var printing by remember { mutableStateOf(false) }
     var suggestions by remember { mutableStateOf<List<JSONObject>>(emptyList()) }
     var suggestionsLoading by remember { mutableStateOf(false) }
+    // Kitoko (21 Eki 2026): tekli ve toplu ürün etiketi aynı tasarım seçimini kullanır.
+    val itemLayout = rememberLabelLayoutChoice(LabelLayoutKind.Item)
 
     var pullOffset by remember { mutableFloatStateOf(0f) }
     val pullThreshold = 75f
@@ -702,7 +708,7 @@ private fun ItemLabelInquiry() {
         status = "🖨 $total adet ürün etiketi yazdırılıyor..."
         scope.launch {
             try {
-                status = printItemLabelCopies(context, no, total)
+                status = printItemLabelCopies(context, no, total, itemLayout.awaitLayoutCode(context))
             } finally {
                 printing = false
             }
@@ -738,9 +744,10 @@ private fun ItemLabelInquiry() {
                     bulkResult = InquiryLabelBatchResult(emptyMap(), it.message ?: "Yazıcı seçimi doğrulanamadı.")
                     return@launch
                 }
+                val layoutCode = itemLayout.awaitLayoutCode(context)
                 bulkResult = sendInquiryLabelBatch(jobs, send = { no, copies ->
-                    val payload = JSONObject().put("printerId", choice.printerCode).put("copies", copies).toString()
-                    val response = BcApi.boundAction(context, "items", no, "printLabel", payload)
+                    val payload = labelPrintPayload(choice.printerCode, copies, layoutCode)
+                    val response = BcApi.boundAction(context, "items", no, labelPrintAction(layoutCode), payload)
                     if (response.ok) Result.success(Unit)
                     else Result.failure(IllegalStateException("$no: ${BcApi.errorMessage(response.body)} (HTTP ${response.httpCode})"))
                 }, onProgress = { no, sent, total ->
@@ -1030,8 +1037,10 @@ private fun ItemLabelInquiry() {
             progress = bulkProgress,
             result = bulkResult,
             onPrint = ::printSelectedLabels,
-            onTestPrint = { itemNo -> printItemLabelCopies(context, itemNo, 1) },
+            onTestPrint = { itemNo -> printItemLabelCopies(context, itemNo, 1, itemLayout.awaitLayoutCode(context)) },
             onDismiss = { if (!printing) bulkProducts = null },
+            layoutCode = itemLayout.layoutCode,
+            layoutContent = { enabled -> LabelLayoutSelector(itemLayout, enabled, modifier = Modifier.padding(top = 8.dp)) },
         )
     }
 
@@ -1050,6 +1059,7 @@ private fun ItemLabelInquiry() {
             onPrint = { showPrintStatus = true; printItemLabel(printEntry) },
             onPrintV2 = { showPrintStatus = true; printItemLabelV2(printEntry) },
             onDismiss = { if (!printing) printKey = null },
+            layoutContent = { enabled -> LabelLayoutSelector(itemLayout, enabled) },
         )
     }
 }
@@ -1084,6 +1094,7 @@ private fun BinStockInquiry() {
     var labelCopies by remember { mutableStateOf("1") }
     var labelStatus by remember { mutableStateOf("") }
     var printing by remember { mutableStateOf(false) }
+    val binLayout = rememberLabelLayoutChoice(LabelLayoutKind.Bin)
 
     fun load() {
         if (location.trim().isBlank() || binCode.trim().isBlank() || printing) return
@@ -1123,7 +1134,7 @@ private fun BinStockInquiry() {
         labelStatus = "🖨 Bin etiketi yazdırılıyor..."
         scope.launch {
             try {
-                labelStatus = printBinLabelCopies(context, listOf(b), total)
+                labelStatus = printBinLabelCopies(context, listOf(b), total, binLayout.awaitLayoutCode(context))
                 status = labelStatus
             } finally {
                 printing = false
@@ -1322,6 +1333,7 @@ private fun BinStockInquiry() {
         copies = labelCopies, onCopies = { labelCopies = it },
         documentOutput = documentOutput, onDocumentOutput = { documentOutput = it },
         printing = printing, status = labelStatus,
+        layoutContent = { enabled -> LabelLayoutSelector(binLayout, enabled) },
         onDismiss = { if (!printing) showLabelSheet = false },
         onPrint = {
             if (documentOutput) {
@@ -1363,6 +1375,9 @@ private fun BinLabelInquiry() {
     var locationsLoading by remember { mutableStateOf(false) }
     var labelCopies by rememberSaveable { mutableStateOf("1") }
     var printing by remember { mutableStateOf(false) }
+    // Kitoko (21 Eki 2026): raf ve alan etiketinin tasarımı ayrı seçilir/hatırlanır.
+    val binLayout = rememberLabelLayoutChoice(LabelLayoutKind.Bin)
+    val zoneLayout = rememberLabelLayoutChoice(LabelLayoutKind.Zone)
     // DKÇ (17 Eyl 2026): lokasyon → alan → o alandaki bütün rafların etiketi.
     var zones by remember { mutableStateOf<List<Pair<String, String>>>(emptyList()) }
     var zone by rememberSaveable { mutableStateOf("") }
@@ -1459,7 +1474,7 @@ private fun BinLabelInquiry() {
         status = "🖨 $z alan etiketi yazdırılıyor..."
         scope.launch {
             try {
-                status = printZoneLabelCopies(context, loc, z, total)
+                status = printZoneLabelCopies(context, loc, z, total, zoneLayout.awaitLayoutCode(context))
             } finally {
                 printing = false
             }
@@ -1479,7 +1494,7 @@ private fun BinLabelInquiry() {
         status = "🖨 ${printRows.size} raf etiketi yazdırılıyor..."
         scope.launch {
             try {
-                status = printBinLabelCopies(context, printRows, total) { status = it }
+                status = printBinLabelCopies(context, printRows, total, binLayout.awaitLayoutCode(context)) { status = it }
             } finally {
                 printing = false
             }
@@ -1727,6 +1742,7 @@ private fun BinLabelInquiry() {
         copies = labelCopies, onCopies = { labelCopies = it },
         documentOutput = documentOutput, onDocumentOutput = { documentOutput = it },
         printing = printing, status = status,
+        layoutContent = { enabled -> LabelLayoutSelector(if (labelMode == BinLabelMode.Zone) zoneLayout else binLayout, enabled) },
         onDismiss = { if (!printing) showLabelPrintOptions = false },
         onPrint = {
             if (documentOutput && labelMode != BinLabelMode.Zone) {

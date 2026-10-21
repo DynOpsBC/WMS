@@ -37,14 +37,17 @@ internal fun BulkItemLabelsSheet(
     printerContent: @Composable () -> Unit = {
         PrinterDestinationCard(inquiryFallback = true, compact = true, enabled = !printing && result == null)
     },
+    // Kitoko (21 Eki 2026): seçili etiket tasarımı; değişince örnek etiket yeniden istenir.
+    layoutCode: String = "",
+    layoutContent: @Composable (enabled: Boolean) -> Unit = {},
 ) {
     val scope = rememberCoroutineScope()
     var selected by remember(products) { mutableStateOf(products.map { it.itemNo }.toSet()) }
     var quantities by remember(products) { mutableStateOf(products.associate { it.itemNo to it.copies }) }
-    var testItemNo by remember(products) { mutableStateOf<String?>(null) }
-    var testStatus by remember(products) { mutableStateOf("") }
+    var testItemNo by remember(products, layoutCode) { mutableStateOf<String?>(null) }
+    var testStatus by remember(products, layoutCode) { mutableStateOf("") }
     var testBusy by remember(products) { mutableStateOf(false) }
-    var testApproved by remember(products) { mutableStateOf(false) }
+    var testApproved by remember(products, layoutCode) { mutableStateOf(false) }
     val selectedProducts = products.filter { it.itemNo in selected }
     val valid = selectedProducts.isNotEmpty() && selectedProducts.all { parseLabelCopies(quantities[it.itemNo].orEmpty()) != null }
     val total = selectedProducts.sumOf { parseLabelCopies(quantities[it.itemNo].orEmpty()) ?: 0 }
@@ -74,6 +77,7 @@ internal fun BulkItemLabelsSheet(
             }
             Spacer(Modifier.height(12.dp))
             printerContent()
+            layoutContent(editable)
             Text("Önce 1 örnek etiket basıp kontrol edin. Onaylayınca kalan adetler toplu gönderilir.",
                 fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
             Row(Modifier.fillMaxWidth().padding(top = 4.dp), verticalAlignment = Alignment.CenterVertically) {

@@ -82,6 +82,8 @@ internal fun BinLabelPrintSheet(
     onPrint: () -> Unit,
     onDismiss: () -> Unit,
     printerContent: @Composable () -> Unit = { PrinterDestinationCard(inquiryFallback = true) },
+    // Kitoko (21 Eki 2026): raf/alan etiket tasarımı seçici; argüman = düzenlenebilir mi.
+    layoutContent: @Composable (enabled: Boolean) -> Unit = {},
 ) {
     var submitted by remember { mutableStateOf(false) }
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true,
@@ -102,6 +104,7 @@ internal fun BinLabelPrintSheet(
             val count = parseLabelCopies(copies)
             if (!documentOutput || areaOnly) {
                 if (!printing && !submitted) printerContent()
+                layoutContent(!printing && !submitted)
                 LabelCopiesField(copies, onCopies, enabled = !printing && !submitted,
                     label = if (targetCount > 1) "Raf başına" else "Etiket adedi")
                 Text(if (count == null) "Etiket adedini kontrol edin."
