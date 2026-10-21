@@ -8,11 +8,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
-import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.DialogProperties
 import com.dynops.bcwms.BcApi
@@ -36,10 +32,6 @@ fun ExcelItemLabelsCard(enabled: Boolean = true, loadPreparedRows: (suspend () -
     val preferences = remember { context.getSharedPreferences("excel-label-print", 0) }
     var uncertain by remember { mutableStateOf(preferences.getString("inFlight", "").orEmpty()) }
     var previewSource by remember { mutableStateOf("Excel sırası korunur.") }
-    // DKÇ (21 Eki 2026): seçilen sıra aralığı; kağıt bitince eksikleri ya da
-    // yarıda kalan baskıyı kaldığı yerden basmak için.
-    var selected by remember { mutableStateOf<List<ExcelLabelRow>>(emptyList()) }
-    var resume by remember { mutableStateOf(preferences.getString("resume", "").orEmpty()) }
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null) {
             loading = true
@@ -105,10 +97,8 @@ fun ExcelItemLabelsCard(enabled: Boolean = true, loadPreparedRows: (suspend () -
         busy = loading,
         error = error,
         source = previewSource,
-        resume = labelResumeRange(resume, previewSource, rows.size),
         onDismiss = { if (!loading) rows = emptyList() },
-        onPrint = { chosen ->
-            selected = chosen
+        onPrint = {
             // Set synchronously: repeated taps cannot create a second coroutine.
             loading = true
             error = ""
@@ -119,7 +109,7 @@ fun ExcelItemLabelsCard(enabled: Boolean = true, loadPreparedRows: (suspend () -
                     check(page.complete) { "Ürünler doğrulanamadı. Hiçbir etiket gönderilmedi." }
                     val available = page.rows.filter { !it.optBoolean("blocked") }
                         .map { it.optString("no").uppercase(Locale.ROOT) }.toSet()
-                    val missing = chosen.filter { it.itemNo.uppercase(Locale.ROOT) !in available }
+                    val missing = rows.filter { it.itemNo.uppercase(Locale.ROOT) !in available }
                     check(missing.isEmpty()) {
                         "${missing.size} satırdaki ürün bulunamadı veya bloke: ${missing.take(5).joinToString { it.itemNo }}. Hiçbir etiket gönderilmedi."
                     }
@@ -127,7 +117,7 @@ fun ExcelItemLabelsCard(enabled: Boolean = true, loadPreparedRows: (suspend () -
                     loading = false
                     stop = false
                     sent = 0
-                    val result = sendExcelLabels(chosen, send = { batch ->
+                    outcome = sendExcelLabels(rows, send = { batch ->
                         val range = "${batch.first().order}–${batch.last().order}"
                         check(withContext(Dispatchers.IO) { preferences.edit().putString("inFlight", range).commit() }) {
                             "Baskı durumu kaydedilemedi; gönderim yapılmadı."
@@ -144,12 +134,6 @@ fun ExcelItemLabelsCard(enabled: Boolean = true, loadPreparedRows: (suspend () -
                             if (response.httpCode == 404) "Bu işlem için BCWMSApp 1.14.2.24 veya üzeri gerekir."
                             else "${BcApi.errorMessage(response.body)} (HTTP ${response.httpCode})"))
                     }, stopRequested = { stop }, onProgress = { done, _ -> sent = done })
-                    // Yarıda kalırsa bir sonraki açılışta "Kaldığı yerden" önerilir.
-                    resume = if (result.sent < result.total) {
-                        labelResumeValue(previewSource, rows.size, chosen[result.sent].order, chosen.last().order)
-                    } else ""
-                    withContext(Dispatchers.IO) { preferences.edit().putString("resume", resume).commit() }
-                    outcome = result
                 } catch (cancelled: kotlinx.coroutines.CancellationException) {
                     throw cancelled
                 } catch (failure: Exception) {
@@ -166,9 +150,9 @@ fun ExcelItemLabelsCard(enabled: Boolean = true, loadPreparedRows: (suspend () -
         properties = DialogProperties(dismissOnBackPress = false, dismissOnClickOutside = false),
         title = { Text(if (stop) "Durduruluyor…" else "Etiketler gönderiliyor…") },
         text = { Column {
-            Text("$sent / ${selected.size} etiket yazıcıya gönderildi.")
+            Text("$sent / ${rows.size} etiket yazıcıya gönderildi.")
             Spacer(Modifier.height(12.dp))
-            LinearProgressIndicator(progress = { sent.toFloat() / selected.size.coerceAtLeast(1) }, modifier = Modifier.fillMaxWidth())
+            LinearProgressIndicator(progress = { sent.toFloat() / rows.size }, modifier = Modifier.fillMaxWidth())
             Text("Sıra korunur; her satır bir etikettir. Durdur, mevcut 50'lik paket bitince uygulanır.")
         } },
         confirmButton = { TextButton(onClick = { stop = true }, enabled = !stop) { Text("Durdur") } },
@@ -178,78 +162,23 @@ fun ExcelItemLabelsCard(enabled: Boolean = true, loadPreparedRows: (suspend () -
         title = { Text(if (done.error != null || done.stopped) "Gönderim durdu" else "Etiketler gönderildi") },
         text = { Text("${done.sent} / ${done.total} etiket yazıcıya gönderildi. " +
             (done.error ?: if (done.stopped) "Kalan satırlar gönderilmedi." else "Çıktı sırası önizleme ile aynıdır.") +
-            (if (done.sent < done.total) " Kaldığı yerden devam: sıra ${selected[done.sent].order}." else "") +
             " Gönderilen işler yazıcı kuyruğunda basılmaya devam edebilir.") },
         confirmButton = { TextButton(onClick = { outcome = null; rows = emptyList() }) { Text("Kapat") } },
     ) }
 }
 
 @Composable
-internal fun ExcelLabelsPreview(
-    rows: List<ExcelLabelRow>,
-    busy: Boolean,
-    error: String = "",
-    source: String = "Excel sırası korunur.",
-    resume: IntRange? = null,
-    presets: List<IntRange> = LABEL_RANGE_PRESETS,
-    onDismiss: () -> Unit,
-    onPrint: (List<ExcelLabelRow>) -> Unit,
-) {
-    val first = rows.first().order
-    val last = rows.last().order
-    var from by remember(rows) { mutableStateOf(first.toString()) }
-    var to by remember(rows) { mutableStateOf(last.toString()) }
-    val range = labelRange(rows, from, to)
-    val chosen = range.getOrDefault(emptyList())
+internal fun ExcelLabelsPreview(rows: List<ExcelLabelRow>, busy: Boolean, error: String = "", source: String = "Excel sırası korunur.", onDismiss: () -> Unit, onPrint: () -> Unit) {
     AlertDialog(
         onDismissRequest = { if (!busy) onDismiss() },
-        title = { Text("${rows.size} etiket hazır") },
+        title = { Text("${rows.size} satır → ${rows.size} etiket") },
         text = { Column {
-            Text("$source Her satır bir etiket.", style = MaterialTheme.typography.bodySmall)
+            Text(source, style = MaterialTheme.typography.labelLarge)
+            Spacer(Modifier.height(6.dp))
+            Text("${rows.map { it.itemNo }.distinct().size} farklı ürün. Tekrarlar ve göz sırası korunur. Stok miktarı baskı adedi değildir. QR yalnız ürün numarasını içerir; göz etikette ayrıca yazılır.")
             Spacer(Modifier.height(12.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                OutlinedTextField(
-                    value = from, onValueChange = { from = it.filter(Char::isDigit).take(5) },
-                    label = { Text("İlk sıra") }, singleLine = true, enabled = !busy,
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                    modifier = Modifier.weight(1f).testTag("label-range-from"),
-                )
-                OutlinedTextField(
-                    value = to, onValueChange = { to = it.filter(Char::isDigit).take(5) },
-                    label = { Text("Son sıra") }, singleLine = true, enabled = !busy,
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                    modifier = Modifier.weight(1f).testTag("label-range-to"),
-                )
-            }
-            val shown = presets.filter { it.first >= first && it.last <= last }
-            if (shown.isNotEmpty()) Row(Modifier.fillMaxWidth().padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                shown.forEach { preset ->
-                    val active = from == preset.first.toString() && to == preset.last.toString()
-                    val pick = { from = preset.first.toString(); to = preset.last.toString() }
-                    val label: @Composable () -> Unit = {
-                        Text("${preset.first}–${preset.last}", maxLines = 1, softWrap = false,
-                            style = MaterialTheme.typography.labelLarge)
-                    }
-                    val chipModifier = Modifier.weight(1f).heightIn(min = 40.dp).testTag("label-range-preset-${preset.first}")
-                    val padding = PaddingValues(horizontal = 4.dp)
-                    if (active) Button(onClick = pick, enabled = !busy, modifier = chipModifier, contentPadding = padding) { label() }
-                    else OutlinedButton(onClick = pick, enabled = !busy, modifier = chipModifier, contentPadding = padding) { label() }
-                }
-            }
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                TextButton(
-                    onClick = { from = first.toString(); to = last.toString() }, enabled = !busy,
-                    modifier = Modifier.testTag("label-range-all"),
-                ) { Text("Tümü") }
-                if (resume != null) TextButton(
-                    onClick = { from = resume.first.toString(); to = resume.last.toString() }, enabled = !busy,
-                    modifier = Modifier.testTag("label-range-resume"),
-                ) { Text("Kaldığı yerden (${resume.first}–${resume.last})") }
-            }
-            range.exceptionOrNull()?.let { Text(it.message.orEmpty(), color = MaterialTheme.colorScheme.error) }
-            Spacer(Modifier.height(8.dp))
-            LazyColumn(Modifier.heightIn(max = 260.dp)) {
-                items(chosen, key = { it.order }) { row ->
+            LazyColumn(Modifier.heightIn(max = 320.dp)) {
+                items(rows, key = { it.order }) { row ->
                     Column(Modifier.fillMaxWidth().padding(vertical = 6.dp)) {
                         Text("${row.order}. ${row.itemNo}  •  ${row.bin}", style = MaterialTheme.typography.titleSmall)
                         Text(row.description, style = MaterialTheme.typography.bodySmall)
@@ -260,40 +189,9 @@ internal fun ExcelLabelsPreview(
             if (busy) { Spacer(Modifier.height(8.dp)); Text("Yazıcı ve ürünler doğrulanıyor…") }
             if (error.isNotBlank()) Text(error, color = MaterialTheme.colorScheme.error)
         } },
-        confirmButton = {
-            Button(onClick = { onPrint(chosen) }, enabled = !busy && chosen.isNotEmpty(), modifier = Modifier.testTag("label-range-print")) {
-                Text(if (chosen.size == rows.size) "Tümünü yazdır (${chosen.size})" else "Yazdır (${chosen.size})")
-            }
-        },
+        confirmButton = { Button(onClick = onPrint, enabled = !busy) { Text("Tümünü yazdır (${rows.size})") } },
         dismissButton = { TextButton(onClick = onDismiss, enabled = !busy) { Text("Vazgeç") } },
     )
-}
-
-/** Kullanıcı isteği (21 Eki 2026): sık basılan bloklar tek dokunuşla seçilir. */
-internal val LABEL_RANGE_PRESETS = listOf(301..500, 501..700, 701..1000)
-
-/** Sıra numarasına göre aralık (ikisi dahil). Liste sırası ve tekrarlar korunur. */
-internal fun labelRange(rows: List<ExcelLabelRow>, fromText: String, toText: String): Result<List<ExcelLabelRow>> = runCatching {
-    require(rows.isNotEmpty()) { "Liste boş." }
-    val first = rows.first().order
-    val last = rows.last().order
-    val from = fromText.trim().toIntOrNull()
-    val to = toText.trim().toIntOrNull()
-    require(from != null && to != null) { "İlk ve son sıra numarasını yazın." }
-    require(from in first..last && to in first..last) { "Sıra numarası $first ile $last arasında olmalı." }
-    require(from <= to) { "İlk sıra son sıradan büyük olamaz." }
-    rows.filter { it.order in from..to }
-}
-
-internal fun labelResumeValue(source: String, total: Int, from: Int, to: Int): String = "$source|$total|$from|$to"
-
-/** Kayıtlı devam noktası yalnız aynı liste (kaynak + satır sayısı) açıldığında önerilir. */
-internal fun labelResumeRange(value: String, source: String, total: Int): IntRange? {
-    val parts = value.split("|")
-    if (parts.size != 4 || parts[0] != source || parts[1] != total.toString()) return null
-    val from = parts[2].toIntOrNull() ?: return null
-    val to = parts[3].toIntOrNull() ?: return null
-    return if (from <= to) from..to else null
 }
 
 @Composable
