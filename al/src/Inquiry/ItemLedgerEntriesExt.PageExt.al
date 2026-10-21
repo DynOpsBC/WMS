@@ -64,6 +64,43 @@ pageextension 72313 "DOPSWHS Item Ledger Entries" extends "Item Ledger Entries"
                         UpdatedCount, NotFoundCount);
                 end;
             }
+            action("DOPSWHS Empty Undone Receipt LPs")
+            {
+                ApplicationArea = All;
+                Caption = 'Geri Alınan Mal Kabul LP''lerini Boşalt';
+                ToolTip = 'Seçili geri alınmış mal kabul girişlerinin (eksi düzeltme kaydı ya da geri alınan artı mal kabul kaydı) dolu kalan LP''lerini boşaltır. Yalnız o girişe bağlı LP satırları, geri alınan miktar kadar ve girişin kalan miktarını aşan kısım için düşülür; gerçek stoğu olan LP''ye dokunulmaz.';
+                Image = Undo;
+
+                trigger OnAction()
+                var
+                    SelectedItemLedgerEntry: Record "Item Ledger Entry";
+                    LPManagement: Codeunit "DOPSWHS LP Management";
+                    UndoEntryNos: List of [Integer];
+                    UndoEntryNo: Integer;
+                    PlannedLineCount: Integer;
+                    EmptiedLineCount: Integer;
+                begin
+                    // BADE (21 Eki 2026): 1.14.1.147 öncesi geri alınan mal kabullerde
+                    // (109433 / 15286) LP'ler dolu kaldı; bu işlem onları onarır.
+                    CurrPage.SetSelectionFilter(SelectedItemLedgerEntry);
+                    if SelectedItemLedgerEntry.FindSet() then
+                        repeat
+                            LPManagement.CollectUndoneReceiptEntries(SelectedItemLedgerEntry."Entry No.", UndoEntryNos);
+                        until SelectedItemLedgerEntry.Next() = 0;
+                    foreach UndoEntryNo in UndoEntryNos do
+                        PlannedLineCount += LPManagement.PreviewUndoneReceiptLpRepair(UndoEntryNo);
+                    if PlannedLineCount = 0 then begin
+                        Message('Seçili girişlerde boşaltılacak geri alınmış mal kabul LP satırı bulunamadı.');
+                        exit;
+                    end;
+                    if not Confirm('%1 geri alma kaydı için %2 LP satırı boşaltılacak. Devam edilsin mi?', false, UndoEntryNos.Count(), PlannedLineCount) then
+                        exit;
+                    foreach UndoEntryNo in UndoEntryNos do
+                        EmptiedLineCount += LPManagement.RepairUndoneReceiptLps(UndoEntryNo);
+                    CurrPage.Update(false);
+                    Message('%1 LP satırı boşaltıldı.', EmptiedLineCount);
+                end;
+            }
             action("DOPSWHS Print All LP MTE")
             {
                 ApplicationArea = All;

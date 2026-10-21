@@ -1509,63 +1509,281 @@ codeunit 72040 "DOPSWHS LP Management"
     /// uygulanan negatif bir Purchase kaydı (Correction) atar; aynı miktar o kayıttan
     /// gelen LP satırlarından düşülür. Aktif olmayan LP'ye dokunulmaz; geri alma
     /// hiçbir durumda bu yüzden durdurulmaz.
+    /// BADE (21 Eki 2026): BC geri alma kaydını Item Jnl.-Post Line
+    /// UndoQuantityPosting ile atar; PostItem çalışmadığından
+    /// OnAfterInsertItemLedgEntry hiç tetiklenmiyordu (109433 / 90 LP dolu kaldı).
+    /// Artık OnAfterUndoQuantityPosting'ten çağrılır ve koruma kaydın kendisine bakar.
     /// </summary>
     procedure DebitUndoneReceiptLp(ItemJournalLine: Record "Item Journal Line"; ItemLedgerEntry: Record "Item Ledger Entry")
+    begin
+        DebitUndoneReceiptEntryLp(
+            ItemLedgerEntry, ItemJournalLine."Applies-to Entry", ItemJournalLine.Correction, ItemJournalLine."Bin Code");
+    end;
+
+    /// <summary>
+    /// Kalem günlüğü satırı olmadan çağrılabilen çekirdek. AppliesToEntryNo ve
+    /// BinCode boş olabilir; orijinal mal kabul girişi kayıttan bulunur.
+    /// Döndürür: düşülen LP satırı sayısı.
+    /// </summary>
+    procedure DebitUndoneReceiptEntryLp(UndoEntry: Record "Item Ledger Entry"; AppliesToEntryNo: Integer; JournalCorrection: Boolean; BinCode: Code[20]): Integer
     var
         OriginalEntry: Record "Item Ledger Entry";
-        LP: Record "DOPSWHS LP Header";
         LPLine: Record "DOPSWHS LP Line";
-        Verification: Codeunit "DOPSWHS LP Verification";
-        Reference: Code[40];
         LpFilter: Text;
-        Remaining: Decimal;
-        LineBase: Decimal;
-        Take: Decimal;
     begin
         // Yalnız geri alma: negatif, düzeltme işaretli ve belge türü Alış İrsaliyesi.
         // Alış iadesi (Purchase Return Shipment) depo toplamasıyla LP'den zaten düşer.
-        if (ItemLedgerEntry."Entry Type" <> ItemLedgerEntry."Entry Type"::Purchase) or (ItemLedgerEntry.Quantity >= 0) or
-           (ItemLedgerEntry."Document Type" <> ItemLedgerEntry."Document Type"::"Purchase Receipt") or
-           not ItemJournalLine.Correction or (ItemJournalLine."Applies-to Entry" = 0)
-        then
-            exit;
-        if not OriginalEntry.Get(ItemJournalLine."Applies-to Entry") then
-            exit;
-        Remaining := -ItemLedgerEntry.Quantity;
+        if not IsUndoneReceiptEntry(UndoEntry, JournalCorrection) then
+            exit(0);
+        if not FindUndoneReceiptOriginalEntry(UndoEntry, AppliesToEntryNo, OriginalEntry) then
+            exit(0);
+        // Aynı geri alma kaydı ikinci kez işlenmez (kayıt anı tek seferliktir;
+        // sonradan kalan eksik Onarım ile miktar sınırıyla tamamlanır).
+        if UndoReceiptAlreadyDebited(UndoEntry."Entry No.") then
+            exit(0);
         // Önce mal kabul kaydının kendisinden gelen LP satırı; çok lotlu
         // satırlarda kaynak giriş no lotlar arasında karışabildiği için
         // bulunamazsa kaydın LP numarası (madde/lot eşleşmesiyle) denenir.
-        FilterUndoneReceiptLpLines(LPLine, ItemLedgerEntry);
+        FilterUndoneReceiptLpLines(LPLine, UndoEntry);
         LPLine.SetRange("Source Item Ledger Entry No.", OriginalEntry."Entry No.");
         if LPLine.IsEmpty() then begin
             LpFilter := OriginalEntry."DOPSWHS LP No.";
             if LpFilter = '' then
                 LpFilter := DelChr(ConvertStr(OriginalEntry."DOPSWHS LP Nos.", ',', '|'), '=', ' ');
             if LpFilter = '' then
-                exit;
+                exit(0);
             LPLine.SetRange("Source Item Ledger Entry No.");
             LPLine.SetFilter("LP No.", LpFilter);
         end;
-        if not LPLine.FindSet() then
+        // BC geri almaya yalnız stok mal kabul gözündeyken izin verir; o gözdeki
+        // paletler adaydır (rafa kaldırılmış eski dalga paletleri değil).
+        exit(DebitUndoneReceiptLpLines(LPLine, UndoEntry."Entry No.", -UndoEntry.Quantity, BinCode, true));
+    end;
+
+    /// <summary>
+    /// BADE (21 Eki 2026): 1.14.1.147 öncesi geri alınan mal kabullerin LP'leri
+    /// dolu kaldı. Geri alma kaydının orijinal girişine kesin bağlı (Source Item
+    /// Ledger Entry No.) aktif LP satırlarını boşaltır; en çok geri alınan miktar
+    /// kadar ve yalnız orijinal girişin kalan miktarı bağlı aktif LP miktarından
+    /// azken. Gerçek stokla desteklenen LP boşaltılamaz; tekrar çalıştırmak
+    /// bir şey değiştirmez. Döndürür: boşaltılan LP satırı sayısı.
+    /// </summary>
+    procedure RepairUndoneReceiptLps(UndoEntryNo: Integer): Integer
+    begin
+        exit(RunUndoneReceiptLpRepair(UndoEntryNo, true));
+    end;
+
+    /// <summary>RepairUndoneReceiptLps'in değişiklik yapmayan ön izlemesi.</summary>
+    procedure PreviewUndoneReceiptLpRepair(UndoEntryNo: Integer): Integer
+    begin
+        exit(RunUndoneReceiptLpRepair(UndoEntryNo, false));
+    end;
+
+    /// <summary>
+    /// Seçilen giriş geri alma kaydıysa onu, geri alınmış bir mal kabul
+    /// kaydıysa onu geri alan düzeltme kayıtlarını listeye (tekrarsız) ekler.
+    /// </summary>
+    procedure CollectUndoneReceiptEntries(EntryNo: Integer; var UndoEntryNos: List of [Integer])
+    var
+        Entry: Record "Item Ledger Entry";
+        UndoEntry: Record "Item Ledger Entry";
+        OriginalEntry: Record "Item Ledger Entry";
+    begin
+        if not Entry.Get(EntryNo) then
             exit;
+        if IsUndoneReceiptEntry(Entry, false) then begin
+            if not UndoEntryNos.Contains(Entry."Entry No.") then
+                UndoEntryNos.Add(Entry."Entry No.");
+            exit;
+        end;
+        if (Entry."Entry Type" <> Entry."Entry Type"::Purchase) or (Entry.Quantity <= 0) or Entry.Correction then
+            exit;
+        UndoEntry.SetRange("Document No.", Entry."Document No.");
+        UndoEntry.SetRange("Document Type", UndoEntry."Document Type"::"Purchase Receipt");
+        UndoEntry.SetRange("Entry Type", UndoEntry."Entry Type"::Purchase);
+        UndoEntry.SetRange("Item No.", Entry."Item No.");
+        UndoEntry.SetRange("Variant Code", Entry."Variant Code");
+        UndoEntry.SetRange("Lot No.", Entry."Lot No.");
+        UndoEntry.SetRange("Serial No.", Entry."Serial No.");
+        UndoEntry.SetRange(Correction, true);
+        UndoEntry.SetFilter(Quantity, '<0');
+        UndoEntry.SetFilter("Entry No.", '>%1', Entry."Entry No.");
+        if UndoEntry.FindSet() then
+            repeat
+                if FindUndoneReceiptOriginalEntry(UndoEntry, 0, OriginalEntry) then
+                    if (OriginalEntry."Entry No." = Entry."Entry No.") and not UndoEntryNos.Contains(UndoEntry."Entry No.") then
+                        UndoEntryNos.Add(UndoEntry."Entry No.");
+            until UndoEntry.Next() = 0;
+    end;
+
+    local procedure RunUndoneReceiptLpRepair(UndoEntryNo: Integer; ApplyChanges: Boolean): Integer
+    var
+        UndoEntry: Record "Item Ledger Entry";
+        OriginalEntry: Record "Item Ledger Entry";
+        LPLine: Record "DOPSWHS LP Line";
+        Verification: Codeunit "DOPSWHS LP Verification";
+        UndoneLpNo: Code[20];
+        UndoneLpNos: Text[250];
+        ExcessQty: Decimal;
+        RepairQty: Decimal;
+        LineCount: Integer;
+    begin
+        if not UndoEntry.Get(UndoEntryNo) then
+            exit(0);
+        if not IsUndoneReceiptEntry(UndoEntry, false) then
+            exit(0);
+        if not FindUndoneReceiptOriginalEntry(UndoEntry, 0, OriginalEntry) then
+            exit(0);
+        // Kesin bağ: yalnız orijinal girişe bağlı, ürün/varyant/lot/seri tutan satırlar.
+        FilterUndoneReceiptLpLines(LPLine, OriginalEntry);
+        LPLine.SetRange("Source Item Ledger Entry No.", OriginalEntry."Entry No.");
+        ExcessQty := ActiveUndoLpBaseQuantity(LPLine) - OriginalEntry."Remaining Quantity";
+        RepairQty := -UndoEntry.Quantity;
+        if ExcessQty < RepairQty then
+            RepairQty := ExcessQty;
+        if RepairQty <= Verification.QtyTolerance() then
+            exit(0);
+        if ApplyChanges then begin
+            // Boşaltmadan önce girişe yalnız kendi LP'lerini yaz (satırın bütün
+            // LP listesi yerine); geri alma kaydı da boşalttığı LP'leri gösterir.
+            RefreshItemLedgerEntryLpReferences(OriginalEntry."Entry No.", false);
+            OriginalEntry.Get(OriginalEntry."Entry No.");
+            UndoneLpNo := OriginalEntry."DOPSWHS LP No.";
+            UndoneLpNos := OriginalEntry."DOPSWHS LP Nos.";
+        end;
+        LineCount := DebitUndoneReceiptLpLines(LPLine, UndoEntry."Entry No.", RepairQty, '', ApplyChanges);
+        if ApplyChanges and (LineCount > 0) then begin
+            RefreshItemLedgerEntryLpReferences(OriginalEntry."Entry No.", false);
+            UndoEntry.Get(UndoEntry."Entry No.");
+            if (UndoEntry."DOPSWHS LP No." <> UndoneLpNo) or (UndoEntry."DOPSWHS LP Nos." <> UndoneLpNos) then begin
+                UndoEntry."DOPSWHS LP No." := UndoneLpNo;
+                UndoEntry."DOPSWHS LP Nos." := UndoneLpNos;
+                UndoEntry.Modify(false);
+            end;
+        end;
+        exit(LineCount);
+    end;
+
+    local procedure IsUndoneReceiptEntry(Entry: Record "Item Ledger Entry"; JournalCorrection: Boolean): Boolean
+    begin
+        exit(
+            (Entry."Entry Type" = Entry."Entry Type"::Purchase) and (Entry.Quantity < 0) and
+            (Entry."Document Type" = Entry."Document Type"::"Purchase Receipt") and
+            (Entry.Correction or JournalCorrection));
+    end;
+
+    /// <summary>
+    /// Geri alınan mal kabul girişi: önce günlükteki Applies-to Entry, sonra
+    /// kaydın kendi Applies-to Entry'si (BC düzeltme kaydına orijinali yazar),
+    /// en son aynı irsaliye + ürün/varyant/lot/seri + aynı miktardaki pozitif
+    /// mal kabul kaydı. Belge satır no eşleştirilmez: geri alma kaydı yeni
+    /// düzeltme satır numarasını taşır (ör. 10000 yerine 20000).
+    /// </summary>
+    local procedure FindUndoneReceiptOriginalEntry(UndoEntry: Record "Item Ledger Entry"; AppliesToEntryNo: Integer; var OriginalEntry: Record "Item Ledger Entry"): Boolean
+    var
+        Candidate: Record "Item Ledger Entry";
+    begin
+        if IsUndoneReceiptOriginal(UndoEntry, AppliesToEntryNo, OriginalEntry) then
+            exit(true);
+        if IsUndoneReceiptOriginal(UndoEntry, UndoEntry."Applies-to Entry", OriginalEntry) then
+            exit(true);
+        if UndoEntry."Document No." = '' then
+            exit(false);
+        Candidate.SetRange("Document No.", UndoEntry."Document No.");
+        Candidate.SetRange("Document Type", Candidate."Document Type"::"Purchase Receipt");
+        Candidate.SetRange("Entry Type", Candidate."Entry Type"::Purchase);
+        Candidate.SetRange("Item No.", UndoEntry."Item No.");
+        Candidate.SetRange("Variant Code", UndoEntry."Variant Code");
+        Candidate.SetRange("Lot No.", UndoEntry."Lot No.");
+        Candidate.SetRange("Serial No.", UndoEntry."Serial No.");
+        Candidate.SetRange("Location Code", UndoEntry."Location Code");
+        Candidate.SetRange(Quantity, -UndoEntry.Quantity);
+        Candidate.SetRange(Correction, false);
+        Candidate.SetFilter("Entry No.", '<%1', UndoEntry."Entry No.");
+        if not Candidate.FindLast() then
+            exit(false);
+        OriginalEntry := Candidate;
+        exit(true);
+    end;
+
+    local procedure IsUndoneReceiptOriginal(UndoEntry: Record "Item Ledger Entry"; EntryNo: Integer; var OriginalEntry: Record "Item Ledger Entry"): Boolean
+    begin
+        if (EntryNo = 0) or (EntryNo = UndoEntry."Entry No.") then
+            exit(false);
+        if not OriginalEntry.Get(EntryNo) then
+            exit(false);
+        exit(
+            (OriginalEntry."Entry Type" = OriginalEntry."Entry Type"::Purchase) and (OriginalEntry.Quantity > 0) and
+            (OriginalEntry."Item No." = UndoEntry."Item No.") and (OriginalEntry."Variant Code" = UndoEntry."Variant Code") and
+            (OriginalEntry."Lot No." = UndoEntry."Lot No.") and (OriginalEntry."Serial No." = UndoEntry."Serial No."));
+    end;
+
+    local procedure DebitUndoneReceiptLpLines(var LPLine: Record "DOPSWHS LP Line"; UndoEntryNo: Integer; UndoneQty: Decimal; BinCode: Code[20]; ApplyChanges: Boolean) DebitedLines: Integer
+    var
+        LP: Record "DOPSWHS LP Header";
+        Verification: Codeunit "DOPSWHS LP Verification";
+        Reference: Code[40];
+        Remaining: Decimal;
+        Take: Decimal;
+    begin
+        Remaining := UndoneQty;
+        if Remaining <= Verification.QtyTolerance() then
+            exit(0);
+        if not LPLine.FindSet() then
+            exit(0);
         repeat
-            // BC geri almaya yalnız stok mal kabul gözündeyken izin verir; o gözdeki
-            // paletler adaydır (rafa kaldırılmış eski dalga paletleri değil).
             if LP.Get(LPLine."LP No.") and (LP.Status in [LP.Status::Open, LP.Status::Built, LP.Status::Assigned]) and
-               ((ItemJournalLine."Bin Code" = '') or (LP."Bin Code" = ItemJournalLine."Bin Code")) and
+               ((BinCode = '') or (LP."Bin Code" = BinCode)) and
                UndoLineUnitKnown(LPLine)
             then begin
-                LineBase := Verification.LineBaseQuantity(LPLine);
-                Take := LineBase;
-                if Take > Remaining then
-                    Take := Remaining;
-                if Take > Verification.QtyTolerance() then begin
-                    Reference := CopyStr(StrSubstNo('UNDO-RCPT:%1:%2', ItemLedgerEntry."Entry No.", LPLine."Line No."), 1, MaxStrLen(Reference));
-                    ConsumeLineForShipment(LPLine."LP No.", LPLine."Line No.", Take, Reference);
-                    Remaining -= Take;
+                Reference := CopyStr(StrSubstNo('UNDO-RCPT:%1:%2', UndoEntryNo, LPLine."Line No."), 1, MaxStrLen(Reference));
+                // Bu geri alma bu satırı zaten düştüyse ikinci kez sayılmaz.
+                if not UndoReceiptLineDebited(LPLine."LP No.", Reference) then begin
+                    Take := Verification.LineBaseQuantity(LPLine);
+                    if Take > Remaining then
+                        Take := Remaining;
+                    if Take > Verification.QtyTolerance() then begin
+                        if ApplyChanges then
+                            ConsumeLineForShipment(LPLine."LP No.", LPLine."Line No.", Take, Reference);
+                        DebitedLines += 1;
+                        Remaining -= Take;
+                    end;
                 end;
             end;
         until (LPLine.Next() = 0) or (Remaining <= Verification.QtyTolerance());
+    end;
+
+    local procedure ActiveUndoLpBaseQuantity(var LPLine: Record "DOPSWHS LP Line") Total: Decimal
+    var
+        LP: Record "DOPSWHS LP Header";
+        Verification: Codeunit "DOPSWHS LP Verification";
+    begin
+        if LPLine.FindSet() then
+            repeat
+                if LP.Get(LPLine."LP No.") and (LP.Status in [LP.Status::Open, LP.Status::Built, LP.Status::Assigned]) and
+                   UndoLineUnitKnown(LPLine)
+                then
+                    Total += Verification.LineBaseQuantity(LPLine);
+            until LPLine.Next() = 0;
+    end;
+
+    local procedure UndoReceiptLineDebited(LpNo: Code[20]; Reference: Code[40]): Boolean
+    var
+        MovementLedger: Record "DOPSWHS LP Movement Ledger";
+    begin
+        MovementLedger.SetRange("LP No.", LpNo);
+        MovementLedger.SetRange(Action, MovementLedger.Action::ItemRemoved);
+        MovementLedger.SetRange("Related Document", Reference);
+        exit(not MovementLedger.IsEmpty());
+    end;
+
+    local procedure UndoReceiptAlreadyDebited(UndoEntryNo: Integer): Boolean
+    var
+        MovementLedger: Record "DOPSWHS LP Movement Ledger";
+    begin
+        MovementLedger.SetRange(Action, MovementLedger.Action::ItemRemoved);
+        MovementLedger.SetFilter("Related Document", 'UNDO-RCPT:%1:*', Format(UndoEntryNo));
+        exit(not MovementLedger.IsEmpty());
     end;
 
     local procedure FilterUndoneReceiptLpLines(var LPLine: Record "DOPSWHS LP Line"; ItemLedgerEntry: Record "Item Ledger Entry")

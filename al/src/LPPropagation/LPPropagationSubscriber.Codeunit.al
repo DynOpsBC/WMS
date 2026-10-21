@@ -249,6 +249,7 @@ codeunit 72428 "DOPSWHS LP Propagation"
         PostedLine: Record "Posted Whse. Receipt Line";
         WhseItemEntryRelation: Record "Whse. Item Entry Relation";
         ItemLedgerEntry: Record "Item Ledger Entry";
+        LPManagement: Codeunit "DOPSWHS LP Management";
         LineLpNo: Code[20];
         LineLpNos: Text[250];
         WhseReceiptNo: Code[20];
@@ -282,6 +283,10 @@ codeunit 72428 "DOPSWHS LP Propagation"
             // Birden fazla fiziksel LP tek standart stok hareketine bağlıdır.
             // Bu durumda başlıktaki ilk LP'yi bütün harekete yazmak yerine LP
             // listesini yalnız özel liste alanında sakla.
+            // BADE (21 Eki 2026): satırdaki BÜTÜN LP'ler (önceki dalga/lot dahil)
+            // her girişe yazılıyordu; 14251, 15285 ve geri alma 15286 aynı
+            // LP001737... listesini gösteriyordu. Her giriş yalnız kendisine
+            // bağlanan (Source Item Ledger Entry No.) LP'leri taşır.
             if CurrentLpCount > 1 then begin
                 WhseItemEntryRelation.Reset();
                 WhseItemEntryRelation.SetSourceFilter(
@@ -294,7 +299,7 @@ codeunit 72428 "DOPSWHS LP Propagation"
                                 WhseReceiptNo, ReceiptLineNo,
                                 PostedLine."Item No.", PostedLine."Variant Code",
                                 ItemLedgerEntry."Entry No.");
-                            StampInboundItemLedgerEntryLpList(ItemLedgerEntry, LineLpNos);
+                            LPManagement.RefreshItemLedgerEntryLpReferences(ItemLedgerEntry."Entry No.", false);
                         end;
                     until WhseItemEntryRelation.Next() = 0;
             end else
@@ -380,14 +385,6 @@ codeunit 72428 "DOPSWHS LP Propagation"
         LpCount := SeenLpNos.Count();
         Result := CopyStr(LpListText, 1, MaxStrLen(Result));
         exit(Result);
-    end;
-
-    local procedure StampInboundItemLedgerEntryLpList(var ItemLedgerEntry: Record "Item Ledger Entry"; LpNos: Text[250])
-    begin
-        if ItemLedgerEntry."DOPSWHS LP Nos." = LpNos then
-            exit;
-        ItemLedgerEntry."DOPSWHS LP Nos." := LpNos;
-        ItemLedgerEntry.Modify();
     end;
 
     local procedure ResolvePostedReceiptLineLp(WhseReceiptNo: Code[20]; PostedLine: Record "Posted Whse. Receipt Line"): Code[20]
@@ -724,6 +721,21 @@ codeunit 72428 "DOPSWHS LP Propagation"
         // OnAfterInsertItemLedgEntry fires AFTER Insert(true) and the base app does not re-write
         // the row, so an in-memory assignment is discarded without an explicit Modify. Persist it.
         ItemLedgerEntry.Modify();
+    end;
+
+    /// <summary>
+    /// BADE (21 Eki 2026): Undo Purchase Receipt düzeltme kaydını Item Jnl.-Post
+    /// Line UndoQuantityPosting ile atar; PostItem çalışmadığından
+    /// OnAfterInsertItemLedgEntry tetiklenmez ve LP dolu kalıyordu (109433, 90 LP).
+    /// Geri alınan mal kabulün LP düşümü burada yapılır; yalnız LP tabloları
+    /// değişir, kayıt sırasında madde defteri girişine yazılmaz.
+    /// </summary>
+    [EventSubscriber(ObjectType::Codeunit, Codeunit::"Item Jnl.-Post Line", 'OnAfterUndoQuantityPosting', '', false, false)]
+    local procedure DebitLpOnUndoQuantityPosting(var ItemLedgerEntry: Record "Item Ledger Entry"; ItemJournalLine: Record "Item Journal Line")
+    var
+        LPManagement: Codeunit "DOPSWHS LP Management";
+    begin
+        LPManagement.DebitUndoneReceiptLp(ItemJournalLine, ItemLedgerEntry);
     end;
 
     [EventSubscriber(ObjectType::Codeunit, Codeunit::"Item Jnl.-Post Line", 'OnAfterInsertValueEntry', '', false, false)]
