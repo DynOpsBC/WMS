@@ -29,6 +29,44 @@ page 72469 "DOPSWHS Label Layout List"
     {
         area(Processing)
         {
+            // Kitoko (21 Eki 2026): tasarımcıyla sıfırdan yeni tasarım; boş tasarımda
+            // hazır şablon galerisi açılır, kaydedilmeden kapatılırsa kayıt silinir.
+            action(NewDesign)
+            {
+                Caption = 'Yeni Tasarım';
+                ApplicationArea = All;
+                Image = NewDocument;
+                Promoted = true;
+                PromotedCategory = Process;
+                PromotedIsBig = true;
+                PromotedOnly = true;
+                ToolTip = 'Etiket türünü seçin; tasarımcı boş bir tasarımla açılır ve hazır şablonlardan biriyle başlayabilirsiniz.';
+
+                trigger OnAction()
+                var
+                    Choice: Integer;
+                begin
+                    Choice := StrMenu(KindMenuTxt, 1, KindMenuQst);
+                    if Choice = 0 then
+                        exit;
+                    OpenInDesigner(DesignerMgt.CreateNewLayout(Enum::"DOPSWHS Label Kind".FromInteger(Choice - 1)), true);
+                end;
+            }
+            action(CopyDesign)
+            {
+                Caption = 'Kopyala';
+                ApplicationArea = All;
+                Image = Copy;
+                Promoted = true;
+                PromotedCategory = Process;
+                PromotedOnly = true;
+                ToolTip = 'Seçili tasarımın kopyasını (pasif) oluşturur ve tasarımcıda açar.';
+
+                trigger OnAction()
+                begin
+                    OpenInDesigner(DesignerMgt.CopyLayout(Rec."Code"), false);
+                end;
+            }
             // Kitoko (21 Eki 2026): sürükle-bırak etiket tasarımcısı.
             action(OpenDesigner)
             {
@@ -44,6 +82,27 @@ page 72469 "DOPSWHS Label Layout List"
             }
         }
     }
+
+    local procedure OpenInDesigner(LayoutCode: Code[20]; CreatedNew: Boolean)
+    var
+        Layout: Record "DOPSWHS Label Layout";
+        Designer: Page "DOPSWHS Label Designer";
+    begin
+        Commit();
+        Layout.Get(LayoutCode);
+        Layout.SetRecFilter();
+        Designer.SetTableView(Layout);
+        if CreatedNew then
+            Designer.SetCreatedNew();
+        Designer.RunModal();
+        if Rec.Get(LayoutCode) then;
+        CurrPage.Update(false);
+    end;
+
+    var
+        DesignerMgt: Codeunit "DOPSWHS Label Designer Mgt";
+        KindMenuTxt: Label 'Ürün etiketi,Raf etiketi,Alan etiketi,LP / palet etiketi';
+        KindMenuQst: Label 'Hangi etiket için yeni tasarım?';
 
     trigger OnOpenPage()
     var

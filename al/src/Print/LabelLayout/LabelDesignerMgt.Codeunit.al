@@ -26,6 +26,12 @@ codeunit 72472 "DOPSWHS Label Designer Mgt"
         InvalidGraphicErr: Label '%1. eleman: resim verisi geçersiz (^GFA bekleniyor).', Comment = '%1 = element index';
         InvalidImageErr: Label 'Resim "%1" geçersiz: kod 1-20 karakter, veri data:image/... olmalı.', Comment = '%1 = image id';
         PreviewFailedErr: Label 'Önizleme alınamadı (labelary.com): %1', Comment = '%1 = error text';
+        NoFreeCodeErr: Label '%1 ile başlayan boş tasarım kodu kalmadı.', Comment = '%1 = code prefix';
+        NewItemDescTxt: Label 'Yeni ürün etiketi';
+        NewBinDescTxt: Label 'Yeni raf etiketi';
+        NewZoneDescTxt: Label 'Yeni alan etiketi';
+        NewLpDescTxt: Label 'Yeni LP / palet etiketi';
+        CopyDescTxt: Label '%1 (kopya)', Comment = '%1 = source description';
 
     // ------------------------------------------------------------------
     // BC -> designer
@@ -236,6 +242,113 @@ codeunit 72472 "DOPSWHS Label Designer Mgt"
         if HeightPx > 0 then
             Image.Add('heightPx', HeightPx);
         exit(Image);
+    end;
+
+    // ------------------------------------------------------------------
+    // New / copy layout (Kitoko 21 Eki 2026: tasarımcıyla yeni tasarım)
+    // ------------------------------------------------------------------
+
+    /// <summary>
+    /// Creates an empty, inactive layout of the kind with the next free code
+    /// (URUN-01, RAF-01, ALAN-01, LP-01). Item/Bin/Zone keep 0 mm (= Kurulum
+    /// ölçüsü); LP starts at 101.6 x 50.8 mm. The designer then opens the
+    /// template gallery for the empty design.
+    /// </summary>
+    procedure CreateNewLayout(Kind: Enum "DOPSWHS Label Kind"): Code[20]
+    var
+        Layout: Record "DOPSWHS Label Layout";
+    begin
+        if not CanEdit() then
+            Error(NoWritePermissionErr);
+        Layout.Init();
+        Layout."Code" := NextFreeCode(Kind);
+        Layout."Label Kind" := Kind;
+        case Kind of
+            Kind::Bin:
+                Layout.Description := NewBinDescTxt;
+            Kind::Zone:
+                Layout.Description := NewZoneDescTxt;
+            Kind::LP:
+                begin
+                    Layout.Description := NewLpDescTxt;
+                    Layout."Width (mm)" := 101.6;
+                    Layout."Height (mm)" := 50.8;
+                end;
+            else
+                Layout.Description := NewItemDescTxt;
+        end;
+        Layout.Active := false;
+        Layout.Insert(true);
+        exit(Layout."Code");
+    end;
+
+    /// <summary>Copies a layout with all its lines under the next free code of its kind; the copy is inactive.</summary>
+    procedure CopyLayout(FromCode: Code[20]): Code[20]
+    var
+        Source: Record "DOPSWHS Label Layout";
+        Target: Record "DOPSWHS Label Layout";
+        SourceLine: Record "DOPSWHS Label Layout Line";
+        TargetLine: Record "DOPSWHS Label Layout Line";
+    begin
+        if not CanEdit() then
+            Error(NoWritePermissionErr);
+        Source.Get(FromCode);
+        Target := Source;
+        Target."Code" := NextFreeCode(Source."Label Kind");
+        Target.Description := CopyStr(StrSubstNo(CopyDescTxt, Source.Description), 1, MaxStrLen(Target.Description));
+        Target.Active := false;
+        Target.Insert(true);
+        SourceLine.SetRange("Layout Code", Source."Code");
+        if SourceLine.FindSet() then
+            repeat
+                SourceLine.CalcFields("Image GF");
+                TargetLine := SourceLine;
+                TargetLine."Layout Code" := Target."Code";
+                TargetLine.Insert(true);
+            until SourceLine.Next() = 0;
+        exit(Target."Code");
+    end;
+
+    /// <summary>Deletes a layout that still has no elements (a "Yeni Tasarım" closed without saving).</summary>
+    procedure DeleteIfEmpty(LayoutCode: Code[20])
+    var
+        Layout: Record "DOPSWHS Label Layout";
+        LayoutLine: Record "DOPSWHS Label Layout Line";
+    begin
+        if not Layout.Get(LayoutCode) then
+            exit;
+        LayoutLine.SetRange("Layout Code", LayoutCode);
+        if not LayoutLine.IsEmpty() then
+            exit;
+        Layout.Delete(true);
+    end;
+
+    local procedure NextFreeCode(Kind: Enum "DOPSWHS Label Kind"): Code[20]
+    var
+        Layout: Record "DOPSWHS Label Layout";
+        Prefix: Text;
+        Candidate: Code[20];
+        i: Integer;
+    begin
+        case Kind of
+            Kind::Bin:
+                Prefix := 'RAF';
+            Kind::Zone:
+                Prefix := 'ALAN';
+            Kind::LP:
+                Prefix := 'LP';
+            else
+                Prefix := 'URUN';
+        end;
+        for i := 1 to 999 do begin
+            if i < 10 then
+                Candidate := CopyStr(Prefix + '-0' + Format(i), 1, MaxStrLen(Candidate))
+            else
+                Candidate := CopyStr(Prefix + '-' + Format(i), 1, MaxStrLen(Candidate));
+            if not Layout.Get(Candidate) then
+                exit(Candidate);
+        end;
+        Error(NoFreeCodeErr, Prefix);
     end;
 
     // ------------------------------------------------------------------

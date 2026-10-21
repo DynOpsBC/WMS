@@ -602,6 +602,82 @@ codeunit 72161 "DOPSWHS Label Designer Tests"
         Item.Insert();
     end;
 
+    [Test]
+    procedure NewLayoutGetsNextFreeCodeAndStaysInactive()
+    var
+        Layout: Record "DOPSWHS Label Layout";
+        DesignerMgt: Codeunit "DOPSWHS Label Designer Mgt";
+        Assert: Codeunit "Library Assert";
+    begin
+        ClearLayouts();
+        Assert.AreEqual('URUN-01', DesignerMgt.CreateNewLayout(Enum::"DOPSWHS Label Kind"::Item), 'First item design code.');
+        Assert.AreEqual('URUN-02', DesignerMgt.CreateNewLayout(Enum::"DOPSWHS Label Kind"::Item), 'Next free item design code.');
+        Assert.AreEqual('RAF-01', DesignerMgt.CreateNewLayout(Enum::"DOPSWHS Label Kind"::Bin), 'Bin design code.');
+        Assert.AreEqual('LP-01', DesignerMgt.CreateNewLayout(Enum::"DOPSWHS Label Kind"::LP), 'LP design code.');
+
+        Layout.Get('URUN-01');
+        Assert.IsFalse(Layout.Active, 'A new design never replaces the printed label by itself.');
+        Assert.AreEqual(0, Layout."Width (mm)", 'Item design starts with the Setup label size.');
+        Layout.Get('LP-01');
+        Assert.AreEqual(Enum::"DOPSWHS Label Kind"::LP, Layout."Label Kind", 'Kind is kept.');
+        Assert.AreEqual(101.6, Layout."Width (mm)", 'LP design starts at 4 inch width.');
+    end;
+
+    [Test]
+    procedure CopyLayoutCopiesLinesAsInactive()
+    var
+        Layout: Record "DOPSWHS Label Layout";
+        LayoutLine: Record "DOPSWHS Label Layout Line";
+        Engine: Codeunit "DOPSWHS Label Layout Engine";
+        DesignerMgt: Codeunit "DOPSWHS Label Designer Mgt";
+        Assert: Codeunit "Library Assert";
+        NewCode: Code[20];
+        SourceLines: Integer;
+    begin
+        ClearLayouts();
+        Engine.SeedDefaults();
+        Layout.Get('ITEM');
+        Layout.Validate(Active, true);
+        Layout.Modify(true);
+        LayoutLine.SetRange("Layout Code", 'ITEM');
+        SourceLines := LayoutLine.Count();
+
+        NewCode := DesignerMgt.CopyLayout('ITEM');
+
+        Assert.AreEqual('URUN-01', NewCode, 'Copy gets the next free code of its kind.');
+        LayoutLine.SetRange("Layout Code", NewCode);
+        Assert.AreEqual(SourceLines, LayoutLine.Count(), 'Every line is copied.');
+        Layout.Get(NewCode);
+        Assert.IsFalse(Layout.Active, 'The copy is inactive.');
+        Layout.Get('ITEM');
+        Assert.IsTrue(Layout.Active, 'The source stays active.');
+        Assert.AreEqual(Engine.BuildSampleZpl('ITEM'), Engine.BuildSampleZpl(NewCode), 'The copy prints the same label.');
+    end;
+
+    [Test]
+    procedure DeleteIfEmptyKeepsSavedDesigns()
+    var
+        Layout: Record "DOPSWHS Label Layout";
+        DesignerMgt: Codeunit "DOPSWHS Label Designer Mgt";
+        Assert: Codeunit "Library Assert";
+        EmptyCode: Code[20];
+        SavedCode: Code[20];
+        Json: Text;
+    begin
+        ClearLayouts();
+        EmptyCode := DesignerMgt.CreateNewLayout(Enum::"DOPSWHS Label Kind"::Item);
+        SavedCode := DesignerMgt.CreateNewLayout(Enum::"DOPSWHS Label Kind"::Item);
+        Json := StrSubstNo(OneElementJsonTxt, '"type":"text","xMm":2,"yMm":2,"wMm":30,"hMm":5,"fontMm":3,"text":"A"');
+        Json := Json.Replace('"code":"DSG"', '"code":"' + SavedCode + '"');
+        DesignerMgt.SaveFromJson(SavedCode, Json);
+
+        DesignerMgt.DeleteIfEmpty(EmptyCode);
+        DesignerMgt.DeleteIfEmpty(SavedCode);
+
+        Assert.IsFalse(Layout.Get(EmptyCode), 'An unsaved new design is removed on close.');
+        Assert.IsTrue(Layout.Get(SavedCode), 'A saved design is kept.');
+    end;
+
     local procedure ClearLayouts()
     var
         Layout: Record "DOPSWHS Label Layout";

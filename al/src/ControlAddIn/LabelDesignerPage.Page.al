@@ -88,6 +88,19 @@ page 72472 "DOPSWHS Label Designer"
             LoadCurrent();
     end;
 
+    trigger OnClosePage()
+    begin
+        // "Yeni Tasarım" ile açılıp hiç kaydedilmeden kapatılan boş tasarım listede kalmasın.
+        if CreatedNew and (Rec."Code" <> '') and DesignerMgt.CanEdit() then
+            DesignerMgt.DeleteIfEmpty(Rec."Code");
+    end;
+
+    /// <summary>The layout was created just now by "Yeni Tasarım"; delete it on close if nothing was saved.</summary>
+    procedure SetCreatedNew()
+    begin
+        CreatedNew := true;
+    end;
+
     local procedure LoadCurrent()
     begin
         if Rec."Code" = '' then
@@ -99,6 +112,7 @@ page 72472 "DOPSWHS Label Designer"
     var
         DesignerMgt: Codeunit "DOPSWHS Label Designer Mgt";
         IsReady: Boolean;
+        CreatedNew: Boolean;
         LoadedCode: Code[20];
         NoWritePermissionErr: Label 'Etiket tasarımlarını değiştirme yetkiniz yok.';
         SavedMsg: Label '"%1" tasarımı kaydedildi.', Comment = '%1 = layout code';
