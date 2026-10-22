@@ -866,6 +866,136 @@ codeunit 72040 "DOPSWHS LP Management"
         WriteToLedger(LP, LPActionTransferOut(), SourceBinCode, TargetBinCode, TotalQty, '', '', 'BIN-MOVE');
     end;
 
+    /// <summary>
+    /// Kitoko (22 Eki 2026): belgesiz lokasyonlar arası LP taşıma. LP içeriği tek
+    /// madde yeniden sınıflandırma kaydıyla yeni lokasyon/göze geçer; ardından LP
+    /// başlığı taşınır ve satırların kaynak girişleri yeni pozitif transfer
+    /// girişlerine bağlanır. Hepsi tek işlemdir: kayıt düşerse hiçbir şey değişmez.
+    /// Yönlendirilmiş (Directed Put-away and Pick) depolarda kullanılamaz.
+    /// </summary>
+    procedure MoveToLocation(var LP: Record "DOPSWHS LP Header"; NewLocationCode: Code[10]; NewBinCode: Code[20]; OperatorUserId: Code[50])
+    var
+        LPLine: Record "DOPSWHS LP Line";
+        ChildLP: Record "DOPSWHS LP Header";
+        SourceLocation: Record Location;
+        TargetLocation: Record Location;
+        TargetBin: Record Bin;
+        SourceBin: Record Bin;
+        MovementMgmt: Codeunit "DOPSWHS Movement Mgmt";
+        NewEntryByLine: Dictionary of [Integer, Integer];
+        OldEntries: List of [Integer];
+        NewEntries: List of [Integer];
+        SourceLocationCode: Code[10];
+        SourceBinCode: Code[20];
+        EntryNo: Integer;
+        TotalQty: Decimal;
+        HasLines: Boolean;
+    begin
+        LP.LockTable();
+        LP.Get(LP."No.");
+
+        EnsureNotPendingReceipt(LP);
+        if OperatorUserId = '' then
+            Error('%1 LP numarasını taşımak için operatör kullanıcı kimliği zorunludur.', LP."No.");
+        if not (LP.Status in [LP.Status::Open, LP.Status::Built]) then
+            Error('%1 LP numarası %2 durumundayken taşınamaz. Önce belge atamasını kaldırın.', LP."No.", LP.Status);
+        if LP."Parent LP No." <> '' then
+            Error('%1 LP numarası %2 LP''sinin içinde. Önce iç içe bağlantıyı kaldırın.', LP."No.", LP."Parent LP No.");
+        ChildLP.SetRange("Parent LP No.", LP."No.");
+        if not ChildLP.IsEmpty() then
+            Error('%1 LP numarası iç içe LP içeriyor. Lokasyonlar arası taşımadan önce bağlantıyı kaldırın.', LP."No.");
+        if LP."Location Code" = '' then
+            Error('%1 LP numarasının lokasyonu boş. Önce LP''yi bir lokasyona atayın.', LP."No.");
+        if NewLocationCode = '' then
+            Error('Hedef lokasyon zorunludur.');
+        if NewLocationCode = LP."Location Code" then
+            Error('%1 LP numarası zaten %2 lokasyonunda. Aynı lokasyonda göz değiştirmek için LP''yi rafa taşıyın.', LP."No.", NewLocationCode);
+        SourceLocationCode := LP."Location Code";
+        SourceBinCode := LP."Bin Code";
+        if not SourceLocation.Get(SourceLocationCode) then
+            Error('%1 lokasyonu bulunamadı.', SourceLocationCode);
+        if not TargetLocation.Get(NewLocationCode) then
+            Error('%1 lokasyonu bulunamadı.', NewLocationCode);
+        if SourceLocation."Directed Put-away and Pick" then
+            Error('%1 yönlendirilmiş (Directed Put-away and Pick) depo; yönlendirilmiş depoda lokasyonlar arası taşıma yapılamaz, Transfer Emri kullanın.', SourceLocationCode);
+        if TargetLocation."Directed Put-away and Pick" then
+            Error('%1 yönlendirilmiş (Directed Put-away and Pick) depo; yönlendirilmiş depoda lokasyonlar arası taşıma yapılamaz, Transfer Emri kullanın.', NewLocationCode);
+        if TargetLocation."Bin Mandatory" and (NewBinCode = '') then
+            Error('%1 lokasyonunda göz zorunlu. Hedef gözü okutun veya seçin.', NewLocationCode);
+        if (NewBinCode <> '') and not TargetBin.Get(NewLocationCode, NewBinCode) then
+            Error('%1 hedef gözü %2 lokasyonunda bulunamadı.', NewBinCode, NewLocationCode);
+
+        LPLine.SetRange("LP No.", LP."No.");
+        if LPLine.FindSet() then
+            repeat
+                if LPLine."Child LP No." <> '' then
+                    Error('%1 LP numarası iç içe %2 LP numarasını içeriyor. Ana LP taşınmadan önce bağlantıyı kaldırın.', LP."No.", LPLine."Child LP No.");
+                if LPLine.Quantity > 0 then begin
+                    if LPLine."Item No." = '' then
+                        Error('%1 LP numarasının %2 satırında madde bulunmadığı için taşınamaz.', LP."No.", LPLine."Line No.");
+                    if (LPLine."Serial No." <> '') and (StockLineBaseQuantity(LPLine) <> 1) then
+                        Error('%1 seri numarası tek bir temel birimi temsil eder; miktar 1 olmalıdır.', LPLine."Serial No.");
+                    HasLines := true;
+                    TotalQty += LPLine.Quantity;
+                end;
+            until LPLine.Next() = 0;
+
+        if HasLines then begin
+            if SourceLocation."Bin Mandatory" then begin
+                if SourceBinCode = '' then
+                    Error('%1 LP numarasının gözü boş; %2 lokasyonunda göz zorunlu olduğu için stok taşınamaz.', LP."No.", SourceLocationCode);
+                if not SourceBin.Get(SourceLocationCode, SourceBinCode) then
+                    Error('%1 kaynak gözü %2 lokasyonunda bulunamadı.', SourceBinCode, SourceLocationCode);
+            end else
+                SourceBinCode := '';
+
+            MovementMgmt.PostLpLocationReclass(
+                LP."No.", SourceLocationCode, SourceBinCode, NewLocationCode,
+                BinForPosting(TargetLocation, NewBinCode), OperatorUserId, NewEntryByLine);
+
+            LPLine.Reset();
+            LPLine.SetRange("LP No.", LP."No.");
+            LPLine.SetFilter(Quantity, '>0');
+            if LPLine.FindSet(true) then
+                repeat
+                    if not NewEntryByLine.ContainsKey(LPLine."Line No.") then
+                        Error('%1 LP numarasının %2 satırı için yeni lokasyondaki stok girişi bulunamadı. Taşıma geri alındı.', LP."No.", LPLine."Line No.");
+                    EntryNo := NewEntryByLine.Get(LPLine."Line No.");
+                    if (LPLine."Source Item Ledger Entry No." <> 0) and not OldEntries.Contains(LPLine."Source Item Ledger Entry No.") then
+                        OldEntries.Add(LPLine."Source Item Ledger Entry No.");
+                    if not NewEntries.Contains(EntryNo) then
+                        NewEntries.Add(EntryNo);
+                    LPLine."Source Item Ledger Entry No." := EntryNo;
+                    if LPLine."Source Document Type" = LPLine."Source Document Type"::None then begin
+                        LPLine."Source Document No." := CopyStr('LPLOC-' + LP."No.", 1, MaxStrLen(LPLine."Source Document No."));
+                        LPLine."Source Document Line No." := EntryNo;
+                        LPLine."Source Document Quantity" := StockLineBaseQuantity(LPLine);
+                    end;
+                    LPLine.Modify(true);
+                until LPLine.Next() = 0;
+        end;
+
+        LogMutation('LP.MoveToLocation');
+        LP."Location Code" := NewLocationCode;
+        LP."Bin Code" := NewBinCode;
+        LP.Modify(true);
+        WriteToLedger(LP, LPActionTransferOut(), SourceBinCode, NewBinCode, TotalQty, '', '',
+            CopyStr('LOC-MOVE ' + SourceLocationCode + '>' + NewLocationCode, 1, 40));
+
+        foreach EntryNo in OldEntries do
+            RefreshItemLedgerEntryLpReferences(EntryNo);
+        foreach EntryNo in NewEntries do
+            RefreshItemLedgerEntryLpReferences(EntryNo);
+    end;
+
+    local procedure BinForPosting(TargetLocation: Record Location; NewBinCode: Code[20]): Code[20]
+    begin
+        // Göz zorunlu olmayan lokasyonda göz kodu kayda yazılmaz (BC orada göz içeriği tutmaz).
+        if TargetLocation."Bin Mandatory" then
+            exit(NewBinCode);
+        exit('');
+    end;
+
     procedure RemoveLine(var LPLine: Record "DOPSWHS LP Line")
     var
         LP: Record "DOPSWHS LP Header";

@@ -16,6 +16,7 @@ codeunit 72045 "DOPSWHS Movement Mgmt"
         tabledata "Whse. Item Tracking Line" = RIMD,
         // Bakım onarımı ("Qty. (Base)" tutarsızlığı) ambar hareketini günceller.
         tabledata "Warehouse Entry" = RMD,
+        tabledata "Item Ledger Entry" = R,
         tabledata "DOPSWHS LP Header" = RM,
         tabledata "DOPSWHS LP Line" = R;
 
@@ -1295,6 +1296,226 @@ codeunit 72045 "DOPSWHS Movement Mgmt"
         ItemJournalLine."DOPSWHS LP No." := LpNo;
         ItemJournalLine."Package No." := LpNo;
         ItemJournalLine.Insert(true);
+    end;
+
+    /// <summary>
+    /// Kitoko (22 Eki 2026): LP'nin tüm satırlarını tek madde yeniden sınıflandırma
+    /// günlüğüyle başka lokasyona/göze taşır (belgesiz, yönlendirilmemiş depolar).
+    /// Lot/seri ve son kullanma tarihi korunur. Kayıttan sonra her LP satırı için
+    /// oluşan pozitif transfer girişini NewEntryByLine'a yazar (satır no → ILE no).
+    /// Commit yapılmaz: çağıran LP güncellemesiyle aynı işlemde kalır.
+    /// </summary>
+    procedure PostLpLocationReclass(LpNo: Code[20]; FromLocationCode: Code[10]; FromBinCode: Code[20]; ToLocationCode: Code[10]; ToBinCode: Code[20]; UserId: Code[50]; var NewEntryByLine: Dictionary of [Integer, Integer])
+    var
+        LPLine: Record "DOPSWHS LP Line";
+        ItemJournalTemplate: Record "Item Journal Template";
+        ItemJournalLine: Record "Item Journal Line";
+        FirstJournalLine: Record "Item Journal Line";
+        ItemLedgerEntry: Record "Item Ledger Entry";
+        ItemJnlPostBatch: Codeunit "Item Jnl.-Post Batch";
+        LineByJournalLine: Dictionary of [Integer, Integer];
+        BaseQtyByLine: Dictionary of [Integer, Decimal];
+        UsedEntries: List of [Integer];
+        BatchName: Code[10];
+        DocumentNo: Code[20];
+        LastEntryNo: Integer;
+        NextLineNo: Integer;
+        BaseQty: Decimal;
+        LpLineNo: Integer;
+        JournalLineNo: Integer;
+        Found: Boolean;
+    begin
+        EnsureReclassTemplate(ItemJournalTemplate);
+        BatchName := EnsureDeviceJournalBatch(UserId);
+        PurgeStaleItemLines(ItemJournalTemplate.Name, BatchName);
+        DocumentNo := CopyStr('LPLOC-' + LpNo, 1, MaxStrLen(DocumentNo));
+
+        ItemLedgerEntry.Reset();
+        if ItemLedgerEntry.FindLast() then
+            LastEntryNo := ItemLedgerEntry."Entry No.";
+
+        NextLineNo := 10000;
+        LPLine.SetRange("LP No.", LpNo);
+        LPLine.SetFilter(Quantity, '>0');
+        if not LPLine.FindSet() then
+            exit;
+        repeat
+            BaseQty := LpLineBaseQuantity(LPLine);
+            Clear(ItemJournalLine);
+            ItemJournalLine.Init();
+            ItemJournalLine."Journal Template Name" := ItemJournalTemplate.Name;
+            ItemJournalLine."Journal Batch Name" := BatchName;
+            ItemJournalLine."Line No." := NextLineNo;
+            ItemJournalLine."Posting Date" := WorkDate();
+            ItemJournalLine."Document No." := DocumentNo;
+            ItemJournalLine."Entry Type" := ItemJournalLine."Entry Type"::Transfer;
+            ItemJournalLine.Validate("Item No.", LPLine."Item No.");
+            if LPLine."Variant Code" <> '' then
+                ItemJournalLine.Validate("Variant Code", LPLine."Variant Code");
+            ItemJournalLine.Validate("Location Code", FromLocationCode);
+            ItemJournalLine.Validate("New Location Code", ToLocationCode);
+            if FromBinCode <> '' then
+                ItemJournalLine.Validate("Bin Code", FromBinCode);
+            if ToBinCode <> '' then
+                ItemJournalLine.Validate("New Bin Code", ToBinCode);
+            // Madde no doğrulaması temel birimi seçer; miktar temel birimde gönderilir.
+            ItemJournalLine.Validate(Quantity, BaseQty);
+            if (LPLine."Lot No." = '') and (LPLine."Serial No." = '') then
+                ApplyToLinkedSourceEntry(ItemJournalLine, LPLine, FromLocationCode, BaseQty);
+            ItemJournalLine."DOPSWHS LP No." := LpNo;
+            ItemJournalLine."Package No." := LpNo;
+            ItemJournalLine.Insert(true);
+            if (LPLine."Lot No." <> '') or (LPLine."Serial No." <> '') then
+                AddLocationReclassTracking(ItemJournalLine, LPLine, FromLocationCode);
+            LineByJournalLine.Add(NextLineNo, LPLine."Line No.");
+            BaseQtyByLine.Add(LPLine."Line No.", BaseQty);
+            NextLineNo += 10000;
+        until LPLine.Next() = 0;
+
+        FirstJournalLine.SetRange("Journal Template Name", ItemJournalTemplate.Name);
+        FirstJournalLine.SetRange("Journal Batch Name", BatchName);
+        FirstJournalLine.FindFirst();
+        ItemJnlPostBatch.SetSuppressCommit(true);
+        ItemJnlPostBatch.Run(FirstJournalLine);
+
+        // Pozitif transfer girişlerini LP satırlarıyla eşle (madde/varyant/lot/seri/miktar).
+        foreach JournalLineNo in LineByJournalLine.Keys() do begin
+            LpLineNo := LineByJournalLine.Get(JournalLineNo);
+            LPLine.Get(LpNo, LpLineNo);
+            BaseQty := BaseQtyByLine.Get(LpLineNo);
+            Found := false;
+            ItemLedgerEntry.Reset();
+            ItemLedgerEntry.SetFilter("Entry No.", '>%1', LastEntryNo);
+            ItemLedgerEntry.SetRange("Entry Type", ItemLedgerEntry."Entry Type"::Transfer);
+            ItemLedgerEntry.SetRange("Document No.", DocumentNo);
+            ItemLedgerEntry.SetRange("Location Code", ToLocationCode);
+            ItemLedgerEntry.SetRange(Positive, true);
+            ItemLedgerEntry.SetRange("Item No.", LPLine."Item No.");
+            ItemLedgerEntry.SetRange("Variant Code", LPLine."Variant Code");
+            ItemLedgerEntry.SetRange("Lot No.", LPLine."Lot No.");
+            ItemLedgerEntry.SetRange("Serial No.", LPLine."Serial No.");
+            if ItemLedgerEntry.FindSet() then
+                repeat
+                    if (not UsedEntries.Contains(ItemLedgerEntry."Entry No.")) and
+                       (Abs(ItemLedgerEntry.Quantity - BaseQty) <= QtyTolerance())
+                    then begin
+                        UsedEntries.Add(ItemLedgerEntry."Entry No.");
+                        NewEntryByLine.Add(LpLineNo, ItemLedgerEntry."Entry No.");
+                        Found := true;
+                    end;
+                until Found or (ItemLedgerEntry.Next() = 0);
+        end;
+    end;
+
+    /// <summary>Yönlendirilmiş (Directed Put-away and Pick) lokasyon mu?</summary>
+    procedure IsDirectedLocation(LocationCode: Code[10]): Boolean
+    var
+        Location: Record Location;
+    begin
+        if not Location.Get(LocationCode) then
+            exit(false);
+        exit(Location."Directed Put-away and Pick");
+    end;
+
+    local procedure ApplyToLinkedSourceEntry(var ItemJournalLine: Record "Item Journal Line"; LPLine: Record "DOPSWHS LP Line"; FromLocationCode: Code[10]; BaseQty: Decimal)
+    var
+        SourceEntry: Record "Item Ledger Entry";
+    begin
+        // İzlemesiz satırda LP'nin bağlı olduğu açık giriş kapatılır; böylece başka
+        // LP'lere ayrılmış girişler FIFO ile yanlışlıkla tüketilmez.
+        if LPLine."Source Item Ledger Entry No." = 0 then
+            exit;
+        if not SourceEntry.Get(LPLine."Source Item Ledger Entry No.") then
+            exit;
+        if (not SourceEntry.Open) or (not SourceEntry.Positive) or
+           (SourceEntry."Location Code" <> FromLocationCode) or
+           (SourceEntry."Item No." <> LPLine."Item No.") or
+           (SourceEntry."Variant Code" <> LPLine."Variant Code") or
+           (SourceEntry."Remaining Quantity" < BaseQty)
+        then
+            exit;
+        ItemJournalLine.Validate("Applies-to Entry", SourceEntry."Entry No.");
+        ItemJournalLine."Location Code" := FromLocationCode;
+    end;
+
+    local procedure AddLocationReclassTracking(ItemJnlLine: Record "Item Journal Line"; LPLine: Record "DOPSWHS LP Line"; FromLocationCode: Code[10])
+    var
+        TempReservEntry: Record "Reservation Entry" temporary;
+        ReservEntry: Record "Reservation Entry";
+        SourceEntry: Record "Item Ledger Entry";
+        CreateReservEntry: Codeunit "Create Reserv. Entry";
+        ExpirationDate: Date;
+        ApplToEntryNo: Integer;
+    begin
+        ExpirationDate := LPLine."Expiration Date";
+        if (LPLine."Source Item Ledger Entry No." <> 0) and SourceEntry.Get(LPLine."Source Item Ledger Entry No.") then
+            if SourceEntry.Open and SourceEntry.Positive and (SourceEntry."Location Code" = FromLocationCode) and
+               (SourceEntry."Item No." = LPLine."Item No.") and (SourceEntry."Variant Code" = LPLine."Variant Code") and
+               (SourceEntry."Lot No." = LPLine."Lot No.") and (SourceEntry."Serial No." = LPLine."Serial No.") and
+               (SourceEntry."Remaining Quantity" >= ItemJnlLine."Quantity (Base)")
+            then begin
+                ApplToEntryNo := SourceEntry."Entry No.";
+                if ExpirationDate = 0D then
+                    ExpirationDate := SourceEntry."Expiration Date";
+            end;
+        if ExpirationDate = 0D then
+            ExpirationDate := TrackedEntryExpirationDate(FromLocationCode, LPLine);
+
+        TempReservEntry."Lot No." := LPLine."Lot No.";
+        TempReservEntry."New Lot No." := LPLine."Lot No.";
+        TempReservEntry."Serial No." := LPLine."Serial No.";
+        TempReservEntry."New Serial No." := LPLine."Serial No.";
+        TempReservEntry."Expiration Date" := ExpirationDate;
+        TempReservEntry."New Expiration Date" := ExpirationDate;
+        CreateReservEntry.CreateReservEntryFor(
+            Database::"Item Journal Line",
+            ItemJnlLine."Entry Type".AsInteger(),
+            ItemJnlLine."Journal Template Name",
+            ItemJnlLine."Journal Batch Name",
+            0,
+            ItemJnlLine."Line No.",
+            ItemJnlLine."Qty. per Unit of Measure",
+            ItemJnlLine.Quantity,
+            ItemJnlLine."Quantity (Base)",
+            TempReservEntry);
+        CreateReservEntry.CreateEntry(
+            ItemJnlLine."Item No.", ItemJnlLine."Variant Code", ItemJnlLine."Location Code",
+            ItemJnlLine.Description, 0D, 0D, 0, Enum::"Reservation Status"::Prospect);
+
+        // Create Reserv. Entry yeni lot/seri/SKT alanlarını taşımayabiliyor (bkz. AddItemTracking).
+        ReservEntry.SetRange("Source Type", Database::"Item Journal Line");
+        ReservEntry.SetRange("Source Subtype", ItemJnlLine."Entry Type".AsInteger());
+        ReservEntry.SetRange("Source ID", ItemJnlLine."Journal Template Name");
+        ReservEntry.SetRange("Source Batch Name", ItemJnlLine."Journal Batch Name");
+        ReservEntry.SetRange("Source Ref. No.", ItemJnlLine."Line No.");
+        if ReservEntry.FindSet(true) then
+            repeat
+                ReservEntry."New Lot No." := LPLine."Lot No.";
+                ReservEntry."New Serial No." := LPLine."Serial No.";
+                if ExpirationDate <> 0D then begin
+                    ReservEntry."Expiration Date" := ExpirationDate;
+                    ReservEntry."New Expiration Date" := ExpirationDate;
+                end;
+                if ApplToEntryNo <> 0 then
+                    ReservEntry."Appl.-to Item Entry" := ApplToEntryNo;
+                ReservEntry.Modify();
+            until ReservEntry.Next() = 0;
+    end;
+
+    local procedure TrackedEntryExpirationDate(LocationCode: Code[10]; LPLine: Record "DOPSWHS LP Line"): Date
+    var
+        ItemLedgerEntry: Record "Item Ledger Entry";
+    begin
+        ItemLedgerEntry.SetRange("Item No.", LPLine."Item No.");
+        ItemLedgerEntry.SetRange("Variant Code", LPLine."Variant Code");
+        ItemLedgerEntry.SetRange("Location Code", LocationCode);
+        ItemLedgerEntry.SetRange("Lot No.", LPLine."Lot No.");
+        ItemLedgerEntry.SetRange("Serial No.", LPLine."Serial No.");
+        ItemLedgerEntry.SetRange(Positive, true);
+        ItemLedgerEntry.SetFilter("Expiration Date", '<>%1', 0D);
+        if ItemLedgerEntry.FindLast() then
+            exit(ItemLedgerEntry."Expiration Date");
+        exit(0D);
     end;
 
     var

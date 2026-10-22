@@ -69,6 +69,9 @@ fun LicensePlateModule() {
     // Kitoko (22 Eki 2026): seçili LP'lerin (içerikli dahil) LP etiketi etiket yazıcısına.
     val lpLabelActions = lpLabelActionsOffered()
     var lpLabelSheetNos by remember { mutableStateOf<List<String>?>(null) }
+    // Kitoko (22 Eki 2026): boş LP oluştur (lokasyon/raf/şablon/adet) + hemen LP etiketi.
+    val emptyLpOffered = emptyLpCreateOffered()
+    var showEmptyCreate by remember { mutableStateOf(false) }
 
     fun loadList(statusAfterLoad: String? = null) {
         scope.launch {
@@ -92,7 +95,7 @@ fun LicensePlateModule() {
 
     // Kitoko (22 Eki 2026): LP okutunca (QR = LP No) içerik kartı; ana menüde okutulan LP de buraya gelir.
     var scannedCard by remember { mutableStateOf<LpScanRef?>(LpCardNavigation.consume()) }
-    LpScanListener(enabled = selected == null && scannedCard == null && !showBulkBuild && !showSingleBuild) { scannedCard = it }
+    LpScanListener(enabled = selected == null && scannedCard == null && !showBulkBuild && !showSingleBuild && !showEmptyCreate && lpLabelSheetNos == null) { scannedCard = it }
     val card = scannedCard
     if (card != null && selected == null) {
         LpContentCard(
@@ -202,6 +205,20 @@ fun LicensePlateModule() {
         }
     }
 
+    if (showEmptyCreate) {
+        EmptyLpCreateSheet(
+            onDismiss = { showEmptyCreate = false },
+            onCreated = { created, result ->
+                lastCreatedLpNos = created.toSet()
+                showLastCreatedOnly = true
+                selectedForPrint = created.toSet()
+                search = ""
+                loadList(result)
+            },
+            onPrint = { nos -> showEmptyCreate = false; lpLabelSheetNos = nos },
+        )
+    }
+
     lpLabelSheetNos?.let { nos ->
         LpLabelPrintSheet(
             lpNos = nos,
@@ -221,6 +238,14 @@ fun LicensePlateModule() {
             Button(onClick = { showBulkBuild = true }, enabled = !loading) {
                 WmsActionLabel(WmsGlyph.LICENSE_PLATE, "Stoktan LP Oluştur")
             }
+        }
+        if (emptyLpOffered) {
+            Spacer(Modifier.height(6.dp))
+            Button(
+                onClick = { showEmptyCreate = true },
+                enabled = !loading,
+                modifier = Modifier.fillMaxWidth().height(48.dp).testTag("lp-list-create-empty"),
+            ) { WmsActionLabel(WmsGlyph.LICENSE_PLATE, "Boş LP Oluştur") }
         }
         Spacer(Modifier.height(6.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {

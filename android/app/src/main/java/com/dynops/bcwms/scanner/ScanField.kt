@@ -27,6 +27,7 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
 import com.dynops.bcwms.ui.WmsGlyph
@@ -34,6 +35,22 @@ import com.dynops.bcwms.ui.WmsIcon
 import com.google.mlkit.vision.barcode.BarcodeScanning
 import com.google.mlkit.vision.common.InputImage
 import java.util.concurrent.Executors
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.ime
+import androidx.compose.ui.ExperimentalComposeUiApi
+import androidx.compose.ui.platform.InterceptPlatformTextInput
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import kotlinx.coroutines.awaitCancellation
+
+/**
+ * Kitoko (22 Eki 2026): "sürekli alttan klavye açılmasın". Okutma alanları
+ * odaklanınca ekran klavyesi açılmaz; donanım tarayıcı (ScanBus intent'i ve
+ * tuş olayları) odaklı alana yazmaya devam eder. Elle yazmak için alanın
+ * yanındaki ⌨ düğmesi klavyeyi açar. BADE/EMU/DynOps davranışı değişmez.
+ */
+internal fun scanFieldSuppressesKeyboard(flavor: String = com.dynops.bcwms.BuildConfig.FLAVOR): Boolean =
+    flavor.equals("kitoko", ignoreCase = true)
 
 /**
  * A scan input: a labelled text field with a "Scan" button.
@@ -58,6 +75,10 @@ fun ScanField(
     okButton: Boolean = true,
     autoFocus: Boolean = false,
     onClear: (() -> Unit)? = null,
+    // Kitoko: okutma alanında ekran klavyesi yalnız ⌨ ile açılır.
+    suppressKeyboard: Boolean = scanFieldSuppressesKeyboard(),
+    // false: donanım okutmalarını ekran düzeyindeki yönlendirici alır (Kitoko ad-hoc).
+    listenScanBus: Boolean = true,
 ) {
     val context = LocalContext.current
     var hasCameraPermission by remember {
@@ -85,18 +106,48 @@ fun ScanField(
     // bile sarı tetik basışı sadece kullanıcının seçtiği alana yazar.
     val interactionSource = remember { MutableInteractionSource() }
     val isFocused by interactionSource.collectIsFocusedAsState()
+    // ⌨ ile elle giriş istendi mi? Alan odağı kaybedince yine klavyesiz moda döner.
+    val manualKeyboardState = remember { mutableStateOf(false) }
+    var manualKeyboard by manualKeyboardState
+    val internalFocusRequester = remember { androidx.compose.ui.focus.FocusRequester() }
+    val fieldFocusRequester = focusRequester ?: internalFocusRequester
+    val keyboardController = LocalSoftwareKeyboardController.current
+    val imeBottom = WindowInsets.ime.getBottom(LocalDensity.current)
+    var wasFocused by remember { mutableStateOf(false) }
+    var refocusing by remember { mutableStateOf(false) }
+    val focusManager = androidx.compose.ui.platform.LocalFocusManager.current
+    LaunchedEffect(isFocused) {
+        if (isFocused) wasFocused = true
+        else if (wasFocused && !refocusing) { wasFocused = false; manualKeyboard = false }
+    }
+    // Yedek koruma: başka bir alanın açtığı klavye bu alana geçince kapanır.
+    LaunchedEffect(isFocused, imeBottom, manualKeyboard, suppressKeyboard) {
+        if (suppressKeyboard && !scanOnly && isFocused && !manualKeyboard && imeBottom > 0) keyboardController?.hide()
+    }
+    LaunchedEffect(manualKeyboard) {
+        if (manualKeyboard && suppressKeyboard) {
+            // Giriş oturumu odak alınırken başlar: klavyeye izin verip odağı yenile.
+            refocusing = true
+            try {
+                if (isFocused) { focusManager.clearFocus(force = true); kotlinx.coroutines.delay(60) }
+                runCatching { fieldFocusRequester.requestFocus() }
+                kotlinx.coroutines.delay(80)
+                keyboardController?.show()
+            } finally { refocusing = false }
+        }
+    }
     val windowFocused = androidx.compose.ui.platform.LocalWindowInfo.current.isWindowFocused
-    LaunchedEffect(isFocused, enabled, windowFocused) {
-        if (!isFocused || !enabled || !windowFocused) return@LaunchedEffect
+    LaunchedEffect(isFocused, enabled, windowFocused, listenScanBus) {
+        if (!listenScanBus || !isFocused || !enabled || !windowFocused) return@LaunchedEffect
         ScanBus.events.collect { event ->
             deliverScan(event.raw)
         }
     }
 
-    if (autoFocus && focusRequester != null) {
+    if (autoFocus) {
         LaunchedEffect(Unit) {
             kotlinx.coroutines.delay(120)
-            runCatching { focusRequester.requestFocus() }
+            runCatching { fieldFocusRequester.requestFocus() }
         }
     }
 
@@ -126,7 +177,7 @@ fun ScanField(
                         onScanned = { deliverScan(it) },
                     )
                 }
-            } else OutlinedTextField(
+            } else Box(Modifier.weight(1f)) { KeyboardPolicy(suppress = suppressKeyboard, manual = manualKeyboardState) { OutlinedTextField(
                 value = value,
                 onValueChange = onValueChange,
                 label = { Text(label) },
@@ -157,8 +208,19 @@ fun ScanField(
                 }),
                 // Ekran akışı alanı programatik odaklayabilsin (sadece-okut sayım):
                 // donanım tarayıcı yalnız odaklı alana yazar.
-                modifier = if (focusRequester != null) Modifier.weight(1f).focusRequester(focusRequester) else Modifier.weight(1f),
-            )
+                modifier = Modifier.fillMaxWidth().focusRequester(fieldFocusRequester),
+            ) } }
+            if (suppressKeyboard && !scanOnly) {
+                Spacer(Modifier.width(4.dp))
+                IconButton(
+                    enabled = enabled,
+                    onClick = {
+                        if (manualKeyboard) { manualKeyboard = false; keyboardController?.hide() }
+                        else manualKeyboard = true
+                    },
+                    modifier = Modifier.semantics { contentDescription = if (manualKeyboard) "Klavyeyi kapat" else "Klavyeyle yaz" },
+                ) { Text("⌨", fontSize = 20.sp, color = if (manualKeyboard) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant) }
+            }
             Spacer(Modifier.width(8.dp))
             // Elle giriş için "OK" — yazıp bas, hemen işlensin (Enter'a alternatif).
             if (onScanned != null && !scanOnly && okButton) {
@@ -297,5 +359,22 @@ private fun CameraBarcodePreview(
             }, ContextCompat.getMainExecutor(ctx))
             previewView
         }
+    )
+}
+
+/**
+ * Kitoko: [suppress] iken alan odaklansa da ekran klavyesi için giriş oturumu
+ * açılmaz (Compose InterceptPlatformTextInput). [manual] true olunca istek
+ * normal yoldan geçer (⌨). Donanım tuş olayları ve ScanBus etkilenmez.
+ */
+@OptIn(ExperimentalComposeUiApi::class)
+@Composable
+private fun KeyboardPolicy(suppress: Boolean, manual: State<Boolean>, content: @Composable () -> Unit) {
+    if (!suppress) { content(); return }
+    InterceptPlatformTextInput(
+        interceptor = { request, nextHandler ->
+            if (manual.value) nextHandler.startInputMethod(request) else awaitCancellation()
+        },
+        content = content,
     )
 }

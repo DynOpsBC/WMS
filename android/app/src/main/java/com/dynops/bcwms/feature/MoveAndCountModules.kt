@@ -131,8 +131,18 @@ fun AdHocMoveModule() {
     var busy by remember { mutableStateOf(false) }
     // Son başarılı hareketin kalıcı özeti — PASS sonrası ekranda kart olarak durur.
     var lastMove by remember { mutableStateOf<List<String>?>(null) }
+    // Kitoko (22 Eki 2026): alana dokunmadan okutma — ekran düzeyi yönlendirici.
+    val screenRouting = remember { adHocScreenScanRouting() }
+    // Kitoko (22 Eki 2026): belgesiz lokasyonlar arası LP taşıma (BC 1.14.3.18 moveToLocation).
+    var locationMoveOffered by remember { mutableStateOf(adHocLocationMoveOffered()) }
+    var targetLocation by remember { mutableStateOf("") }
+    var locationOptions by remember { mutableStateOf<List<BulkLpLocationOption>>(emptyList()) }
+    var locationMenuOpen by remember { mutableStateOf(false) }
+    var targetLocationBins by remember { mutableStateOf<List<String>>(emptyList()) }
 
-    fun resetLpFlow() { fromBin = ""; lpNo = ""; binLps = emptyList(); lpLines = emptyList(); lpLinesComplete = false; target = ""; targetIsLp = null; targetLpBin = ""; sourceLpLocation = ""; sourceLpBin = "" }
+    fun resetLpFlow() { fromBin = ""; lpNo = ""; binLps = emptyList(); lpLines = emptyList(); lpLinesComplete = false; target = ""; targetIsLp = null; targetLpBin = ""; sourceLpLocation = ""; sourceLpBin = ""; targetLocation = ""; targetLocationBins = emptyList() }
+    fun crossLocation(): Boolean = locationMoveOffered && targetLocation.isNotBlank() && sourceLpLocation.isNotBlank() &&
+        !targetLocation.equals(sourceLpLocation, ignoreCase = true)
 
     fun invalidateAvailableLots() {
         lotLookupRequestId += 1
@@ -213,6 +223,9 @@ fun AdHocMoveModule() {
             val header = JSONObject(h.body)
             sourceLpLocation = header.optString("locationCode").trim().takeUnless { it == "null" }.orEmpty()
             sourceLpBin = header.optString("binCode").trim().takeUnless { it == "null" }.orEmpty()
+            targetLocation = sourceLpLocation; targetLocationBins = emptyList()
+            // Doğrudan LP okutulduysa (kaynak raf okutulmadan) LP'nin kayıtlı rafı kaynak olur.
+            if (fromBin.isBlank() && sourceLpBin.isNotBlank()) fromBin = sourceLpBin
             if (sourceLpBin.isNotBlank() && fromBin.isNotBlank() && !sourceLpBin.equals(fromBin.trim(), ignoreCase = true)) {
                 busy = false
                 lpNo = ""; lpLines = emptyList(); lpLinesComplete = false
@@ -273,6 +286,24 @@ fun AdHocMoveModule() {
             status = "HATA: LP satırları eksik yüklendi. Hedef seçmeden önce LP içeriğini yenileyin."
             return
         }
+        if (crossLocation()) {
+            // Lokasyonlar arası: hedef yalnız seçili hedef lokasyondaki raf olabilir.
+            val loc = targetLocation.trim()
+            scope.launch {
+                busy = true; targetIsLp = null; targetLpBin = ""
+                val bins = BcApi.get(context, "bins?\$filter=code eq '${t.replace("'", "''")}' and locationCode eq '${loc.replace("'", "''")}'&\$top=2&\$select=code,locationCode")
+                val matches = if (bins.ok) BcApi.parseValueArray(bins.body) else emptyList()
+                busy = false
+                if (!bins.ok || matches.size != 1) {
+                    status = if (!bins.ok) "HATA: Hedef raf doğrulanamadı. Bağlantıyı kontrol edip yeniden deneyin."
+                        else "HATA: '$t' $loc lokasyonunda bir raf değil. Hedef lokasyonu ya da rafı kontrol edin."
+                    return@launch
+                }
+                target = t; targetIsLp = false
+                status = "📍 Hedef: $loc / $t — LP ve içeriği bu lokasyona taşınacak"
+            }
+            return
+        }
         scope.launch {
             busy = true; targetIsLp = null; targetLpBin = ""
             if (t.equals(lpNo, ignoreCase = true)) {
@@ -319,9 +350,83 @@ fun AdHocMoveModule() {
         }
     }
 
+    fun confirmLocationMove() {
+        val loc = targetLocation.trim()
+        val bin = target.trim()
+        scope.launch {
+            busy = true; status = "Lokasyonlar arası taşıma gönderiliyor..."
+            val userId = BcApi.currentUserId(context).trim()
+            if (userId.isBlank()) {
+                busy = false
+                status = "HATA: Kullanıcı kimliği çözülemedi (BC'ye ulaşılamıyor). Bağlantıyı kontrol edip tekrar deneyin."
+                return@launch
+            }
+            val fromLoc = sourceLpLocation
+            val r = BcApi.boundAction(context, "licensePlates", lpNo, "moveToLocation",
+                JSONObject().apply {
+                    put("newLocationCode", loc)
+                    put("newBinCode", bin)
+                    put("userId", userId)
+                }.toString())
+            busy = false
+            if (!r.ok) {
+                val message = BcApi.errorMessage(r.body)
+                if (adHocLocationMoveMissing(r.httpCode, message)) {
+                    locationMoveOffered = false
+                    targetLocation = sourceLpLocation; target = ""; targetIsLp = null
+                    status = "HATA: BC uzantısı lokasyonlar arası LP taşımayı desteklemiyor (1.14.3.18 gerekir). Seçenek gizlendi."
+                } else status = "HATA: LP taşınamadı: $message (HTTP ${r.httpCode}). Hiçbir stok değişmedi."
+                return@launch
+            }
+            status = "TAMAM: LP $lpNo ve içeriği $fromLoc → $loc${if (bin.isNotBlank()) " / $bin" else ""} taşındı (madde yeniden sınıflandırma)"
+            lastMove = buildList {
+                add("🧺 $lpNo · 🏭 $fromLoc / ${fromBin.trim()} → 🏭 $loc${if (bin.isNotBlank()) " / $bin" else ""}")
+                lpLines.forEach { ln ->
+                    add("• ${ln.optString("itemNo")} × ${fmtq(ln.optDouble("quantity"))}" +
+                        (ln.optString("lotNo").takeIf { it.isNotBlank() && it != "null" }?.let { " · Lot $it" } ?: ""))
+                }
+            }
+            resetLpFlow()
+        }
+    }
+
+    fun loadLocationOptions() {
+        if (locationOptions.isNotEmpty()) return
+        scope.launch {
+            val page = BcApi.getAllPagesWithStandardFallback(context, "locations?\$top=200&\$orderby=code")
+            if (page.complete) locationOptions = bulkLpLocationOptions(page.rows)
+            else status = "HATA: Lokasyon listesi alınamadı. Yeniden deneyin."
+        }
+    }
+
+    fun loadTargetLocationBins() {
+        val loc = targetLocation.trim()
+        if (loc.isBlank()) return
+        scope.launch {
+            busy = true
+            val page = BcApi.getAllPages(context, "bins?\$filter=locationCode eq '${loc.replace("'", "''")}'&\$top=200&\$select=code")
+            busy = false
+            targetLocationBins = if (page.complete) page.rows.map { it.optString("code") }.filter { it.isNotBlank() }
+                .sortedWith(warehouseBinCodeComparator) else emptyList()
+            status = when {
+                !page.complete -> "HATA: $loc rafları alınamadı. Yeniden deneyin."
+                targetLocationBins.isEmpty() -> "⚠️ $loc lokasyonunda raf yok — rafsız taşımak için hedefi boş bırakıp onaylayın."
+                else -> "TAMAM: $loc lokasyonunda ${targetLocationBins.size} raf — okutun ya da dokunarak seçin"
+            }
+        }
+    }
+
     fun confirmLpMove() {
         if (!lpLinesComplete) {
             status = "HATA: LP satırları eksik yüklendi. Hareket yapılmadı; LP içeriğini yenileyin."
+            return
+        }
+        if (crossLocation()) {
+            if (target.isNotBlank() && targetIsLp != false) {
+                status = "HATA: Önce hedef rafı doğrulayın."
+                return
+            }
+            confirmLocationMove()
             return
         }
         if (targetIsLp == null || target.isBlank()) {
@@ -398,6 +503,96 @@ fun AdHocMoveModule() {
                 }
                 resetLpFlow()
             }
+        }
+    }
+
+    // SSCC okutulursa LP No'yu sunucudan bul (tek eşleşme şart).
+    fun withLpNoForSscc(sscc: String, onLp: (String) -> Unit) {
+        scope.launch {
+            busy = true
+            val r = BcApi.get(context, "licensePlates?\$filter=sscc eq '${sscc.replace("'", "''")}'&\$top=2&\$select=no")
+            busy = false
+            val rows = if (r.ok) BcApi.parseValueArray(r.body) else emptyList()
+            if (rows.size == 1) onLp(rows.single().optString("no"))
+            else status = if (!r.ok) "HATA: SSCC doğrulanamadı. Bağlantıyı kontrol edin." else "HATA: $sscc SSCC'li LP bulunamadı."
+        }
+    }
+
+    fun handleScreenScan(raw: String) {
+        if (busy) { status = "⏳ Önceki işlem sürüyor — bitince yeniden okutun."; return }
+        if (lastMove != null) { lastMove = null }
+        if (lpFlow) {
+            val step = adHocLpStep(fromBin, lpLinesComplete && lpNo.isNotBlank())
+            when (val route = routeAdHocLpScan(raw, step)) {
+                is AdHocLpScan.SourceBin -> { resetLpFlow(); fromBin = route.bin; loadBinLps(route.bin) }
+                is AdHocLpScan.Lp -> when (val ref = route.ref) {
+                    is LpScanRef.ByNo -> loadLp(ref.value)
+                    is LpScanRef.BySscc -> withLpNoForSscc(ref.value) { loadLp(it) }
+                }
+                is AdHocLpScan.BinOrItem -> scope.launch {
+                    busy = true
+                    val safe = route.value.replace("'", "''")
+                    val bins = BcApi.get(context, "bins?\$filter=code eq '$safe'&\$top=1&\$select=code")
+                    busy = false
+                    if (!bins.ok) { status = "HATA: Okutulan kod doğrulanamadı. Bağlantıyı kontrol edin."; return@launch }
+                    if (BcApi.parseValueArray(bins.body).isNotEmpty()) {
+                        resetLpFlow(); fromBin = route.value; loadBinLps(route.value)
+                    } else {
+                        // Raf değil → ürün: "Ürün ile" moduna geç, kaynak raf korunur.
+                        val keepBin = fromBin
+                        resetLpFlow(); lpFlow = false
+                        fromBin = keepBin; invalidateAvailableLots()
+                        itemOrLp = route.itemNo
+                        if (route.lotNo.isNotBlank()) lotNoInput = route.lotNo
+                        status = "📦 Ürün okutuldu (${route.itemNo}) — “Ürün ile” moduna geçildi. Hedef rafı okutun."
+                    }
+                }
+                is AdHocLpScan.Target -> if (route.isSscc) withLpNoForSscc(route.value) { resolveTarget(it) }
+                    else resolveTarget(route.value)
+                is AdHocLpScan.Rejected -> status = "HATA: ${route.message}"
+            }
+        } else {
+            val step = adHocProductStep(fromBin, itemOrLp, toBin)
+            when (val route = routeAdHocProductScan(raw, step)) {
+                is AdHocProductScan.SourceBin -> {
+                    if (route.bin != fromBin) invalidateAvailableLots()
+                    fromBin = route.bin
+                    status = "TAMAM: Kaynak raf ${route.bin} — ürünü okutun"
+                }
+                is AdHocProductScan.Item -> {
+                    if (route.itemNo != itemOrLp) invalidateAvailableLots()
+                    itemOrLp = route.itemNo
+                    if (route.lotNo.isNotBlank()) lotNoInput = route.lotNo
+                    status = "TAMAM: Ürün ${route.itemNo} — hedef rafı okutun"
+                }
+                is AdHocProductScan.OpenLp -> if (fromBin.isBlank()) {
+                    invalidateAvailableLots(); itemOrLp = ""; toBin = ""; qty = "1"
+                    lpFlow = true
+                    lpScanRef(route.lpNo)?.let { ref ->
+                        when (ref) {
+                            is LpScanRef.ByNo -> loadLp(ref.value)
+                            is LpScanRef.BySscc -> withLpNoForSscc(ref.value) { loadLp(it) }
+                        }
+                    } ?: loadLp(route.lpNo)
+                } else openLpWorkflowFromProductMode(route.lpNo)
+                is AdHocProductScan.TargetBin -> {
+                    toBin = route.bin
+                    status = "TAMAM: Hedef raf ${route.bin} — miktarı kontrol edip onaylayın"
+                }
+                is AdHocProductScan.Lot -> {
+                    lotNoInput = route.lotNo
+                    status = "TAMAM: Lot ${route.lotNo} seçildi"
+                }
+                is AdHocProductScan.Rejected -> status = "HATA: ${route.message}"
+            }
+        }
+    }
+    if (screenRouting) {
+        val windowFocused = androidx.compose.ui.platform.LocalWindowInfo.current.isWindowFocused
+        val onScreenScan by rememberUpdatedState<(String) -> Unit> { raw -> handleScreenScan(raw) }
+        LaunchedEffect(windowFocused, lotPickerOpen, locationMenuOpen) {
+            if (!windowFocused || lotPickerOpen || locationMenuOpen) return@LaunchedEffect
+            com.dynops.bcwms.scanner.ScanBus.events.collect { event -> onScreenScan(event.raw) }
         }
     }
 
@@ -486,11 +681,29 @@ fun AdHocMoveModule() {
             FilterChip(selected = lpFlow, onClick = { lpFlow = true }, label = { Text("🧺 LP ile") })
             FilterChip(selected = !lpFlow, onClick = { lpFlow = false }, label = { Text("📦 Ürün ile") })
         }
+        if (screenRouting) {
+            // Alana dokunmadan okutma: sıradaki adım burada yazılı.
+            Spacer(Modifier.height(8.dp))
+            Card(
+                Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(12.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer),
+            ) {
+                Text(
+                    "📷 " + if (lpFlow) adHocLpStepHint(adHocLpStep(fromBin, lpLinesComplete && lpNo.isNotBlank()))
+                        else adHocProductStepHint(adHocProductStep(fromBin, itemOrLp, toBin)),
+                    modifier = Modifier.padding(10.dp),
+                    fontWeight = FontWeight.SemiBold,
+                    fontSize = 14.sp,
+                    color = MaterialTheme.colorScheme.onSecondaryContainer,
+                )
+            }
+        }
         Spacer(Modifier.height(12.dp))
 
         if (lpFlow) {
             // 1) Kaynak bin — okutulunca o bindeki LP'ler otomatik listelenir.
-            ScanField("1) Kaynak Bin okut", fromBin, { fromBin = it }, modifier = Modifier.fillMaxWidth(), onScanned = {
+            ScanField("1) Kaynak Bin okut", fromBin, { fromBin = it }, modifier = Modifier.fillMaxWidth(), listenScanBus = !screenRouting, onScanned = {
                 val b = BarcodeIntentResolver.resolve(it).value
                 fromBin = b
                 loadBinLps(b)
@@ -533,7 +746,7 @@ fun AdHocMoveModule() {
                     }
                     Spacer(Modifier.height(6.dp))
                 }
-                ScanField(if (lpLines.isEmpty()) "…ya da LP barkodu okut" else "2) LP", lpNo, { lpNo = it }, modifier = Modifier.fillMaxWidth(), onScanned = {
+                ScanField(if (lpLines.isEmpty()) "…ya da LP barkodu okut" else "2) LP", lpNo, { lpNo = it }, modifier = Modifier.fillMaxWidth(), listenScanBus = !screenRouting, onScanned = {
                     loadLp(BarcodeIntentResolver.resolve(it).value)
                 })
                 // Elle yazılan LP için: okuma tetiklenmediğinde içerik bu butonla gelir.
@@ -547,9 +760,10 @@ fun AdHocMoveModule() {
                 }
                 Spacer(Modifier.height(8.dp))
             }
-            // 3) İçerik (sistem gösterir)
-            if (lpLines.isNotEmpty()) {
-                Text("3) LP içeriği (${lpLines.size})", fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+            // 3) İçerik (sistem gösterir) — boş LP de taşınabilir: hedef adımı içerik yüklenince açılır.
+            if (lpLinesComplete && lpNo.isNotBlank()) {
+                if (lpLines.isNotEmpty()) Text("3) LP içeriği (${lpLines.size})", fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+                else Text("3) LP boş — yine de taşınabilir", fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
                 Spacer(Modifier.height(4.dp))
                 lpLines.forEach { ln ->
                     Card(Modifier.fillMaxWidth().padding(vertical = 2.dp)) {
@@ -564,10 +778,68 @@ fun AdHocMoveModule() {
                     }
                 }
                 Spacer(Modifier.height(8.dp))
+                if (locationMoveOffered && sourceLpLocation.isNotBlank()) {
+                    // Kitoko: hedef lokasyon (varsayılan aynı lokasyon). Farklı seçilirse
+                    // LP belgesiz olarak madde yeniden sınıflandırmasıyla taşınır.
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text("Hedef lokasyon:", fontSize = 13.sp, modifier = Modifier.padding(end = 8.dp))
+                        Box {
+                            OutlinedButton(
+                                enabled = !busy,
+                                onClick = { loadLocationOptions(); locationMenuOpen = true },
+                            ) {
+                                Text(
+                                    (targetLocation.ifBlank { sourceLpLocation }) +
+                                        if (crossLocation()) " (lokasyon değişir)" else " (aynı)",
+                                    fontWeight = FontWeight.SemiBold,
+                                )
+                            }
+                            DropdownMenu(expanded = locationMenuOpen, onDismissRequest = { locationMenuOpen = false }) {
+                                if (locationOptions.isEmpty()) DropdownMenuItem(text = { Text("Lokasyonlar yükleniyor...") }, onClick = { loadLocationOptions() })
+                                locationOptions.forEach { option ->
+                                    DropdownMenuItem(
+                                        text = { Text(option.label + if (option.code.equals(sourceLpLocation, true)) " · aynı" else "") },
+                                        onClick = {
+                                            locationMenuOpen = false
+                                            if (!option.code.equals(targetLocation, true)) {
+                                                targetLocation = option.code
+                                                target = ""; targetIsLp = null; targetLpBin = ""; targetLocationBins = emptyList()
+                                                status = if (crossLocation()) "🏭 Hedef lokasyon ${option.code} — hedef rafı okutun ya da listeden seçin"
+                                                    else "Hedef lokasyon aynı (${option.code}) — hedef raf ya da LP okutun"
+                                            }
+                                        },
+                                    )
+                                }
+                            }
+                        }
+                    }
+                    if (crossLocation()) {
+                        OutlinedButton(
+                            enabled = !busy,
+                            onClick = { loadTargetLocationBins() },
+                            modifier = Modifier.fillMaxWidth().padding(top = 6.dp),
+                        ) { Text("📋 ${targetLocation} raflarını listele") }
+                        if (targetLocationBins.isNotEmpty()) {
+                            Row(
+                                Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(top = 4.dp),
+                                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            ) {
+                                targetLocationBins.take(100).forEach { bin ->
+                                    FilterChip(
+                                        selected = bin.equals(target, true),
+                                        onClick = { resolveTarget(bin) },
+                                        label = { Text(bin) },
+                                    )
+                                }
+                            }
+                        }
+                    }
+                    Spacer(Modifier.height(8.dp))
+                }
                 // 4) Hedef: LP ya da bin
-                ScanField("4) Hedef okut (LP veya Bin)", target, {
+                ScanField(if (crossLocation()) "4) Hedef raf okut (${targetLocation})" else "4) Hedef okut (LP veya Bin)", target, {
                     target = it; targetIsLp = null; targetLpBin = ""
-                }, modifier = Modifier.fillMaxWidth(), onScanned = {
+                }, modifier = Modifier.fillMaxWidth(), listenScanBus = !screenRouting, onScanned = {
                     resolveTarget(BarcodeIntentResolver.resolve(it).value)
                 })
                 if (target.isNotBlank() && targetIsLp == null) {
@@ -580,17 +852,14 @@ fun AdHocMoveModule() {
                 }
                 Spacer(Modifier.height(12.dp))
                 Button(
-                    enabled = !busy && lpLinesComplete && lpNo.isNotBlank() && target.isNotBlank() && targetIsLp != null,
+                    enabled = !busy && lpLinesComplete && lpNo.isNotBlank() && (
+                        if (crossLocation()) target.isBlank() || targetIsLp == false
+                        else target.isNotBlank() && targetIsLp != null),
                     modifier = Modifier.fillMaxWidth().height(52.dp),
                     onClick = { confirmLpMove() },
                 ) {
                     Text(
-                        when {
-                            busy -> "Gönderiliyor..."
-                            targetIsLp == true -> "✅ İçeriği $target LP'sine Aktar"
-                            targetIsLp == false -> "✅ LP'yi $target Rafına Taşı"
-                            else -> "✅ Hareketi Onayla"
-                        },
+                        adHocLpConfirmLabel(busy, crossLocation(), targetLocation, target, targetIsLp),
                         fontWeight = FontWeight.Bold,
                     )
                 }
@@ -605,7 +874,7 @@ fun AdHocMoveModule() {
             ScanField("Kaynak Bin", fromBin, {
                 if (it != fromBin) invalidateAvailableLots()
                 fromBin = it
-            }, modifier = Modifier.fillMaxWidth(), onScanned = {
+            }, modifier = Modifier.fillMaxWidth(), listenScanBus = !screenRouting, onScanned = {
                 val scanned = BarcodeIntentResolver.resolve(it).value
                 if (scanned != fromBin) invalidateAvailableLots()
                 fromBin = scanned
@@ -614,7 +883,7 @@ fun AdHocMoveModule() {
             ScanField("Ürün / LP", itemOrLp, {
                 if (it != itemOrLp) invalidateAvailableLots()
                 itemOrLp = it
-            }, modifier = Modifier.fillMaxWidth(), onScanned = {
+            }, modifier = Modifier.fillMaxWidth(), listenScanBus = !screenRouting, onScanned = {
                 val decision = decideAdHocProductInput(it)
                 when (decision.route) {
                     AdHocProductInputRoute.LicensePlateWorkflow ->
@@ -633,14 +902,14 @@ fun AdHocMoveModule() {
                 }
             })
             Spacer(Modifier.height(8.dp))
-            ScanField("Hedef Bin", toBin, { toBin = it }, modifier = Modifier.fillMaxWidth(), onScanned = {
+            ScanField("Hedef Bin", toBin, { toBin = it }, modifier = Modifier.fillMaxWidth(), listenScanBus = !screenRouting, onScanned = {
                 toBin = BarcodeIntentResolver.resolve(it).value
             })
             Spacer(Modifier.height(8.dp))
             OutlinedTextField(qty, { qty = normalizeQtyInput(it) }, label = { Text("Miktar") }, singleLine = true, modifier = Modifier.fillMaxWidth())
             Spacer(Modifier.height(8.dp))
             // Lot izlemeli ürünler için ("You must assign a lot number" hatası).
-            ScanField("Lot No (lot izlemeli üründe)", lotNoInput, { lotNoInput = it }, modifier = Modifier.fillMaxWidth(), onScanned = {
+            ScanField("Lot No (lot izlemeli üründe)", lotNoInput, { lotNoInput = it }, modifier = Modifier.fillMaxWidth(), listenScanBus = !screenRouting, onScanned = {
                 lotNoInput = BarcodeIntentResolver.resolve(it).value
             })
             Spacer(Modifier.height(6.dp))

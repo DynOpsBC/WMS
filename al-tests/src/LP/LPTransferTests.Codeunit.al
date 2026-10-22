@@ -316,6 +316,114 @@ codeunit 72114 "DOPSWHS LP Transfer Tests"
     end;
 
     [Test]
+    procedure EmptyLpMovesToAnotherLocation()
+    var
+        LP: Record "DOPSWHS LP Header";
+        Ledger: Record "DOPSWHS LP Movement Ledger";
+        LPMgt: Codeunit "DOPSWHS LP Management";
+        Assert: Codeunit "Library Assert";
+    begin
+        Seed();
+        SeedLocationBin('GREEN', 'G-01');
+        BuildEmptyBuiltLP(LP);
+
+        LPMgt.MoveToLocation(LP, 'GREEN', 'G-01', 'USER1');
+
+        LP.Get(LP."No.");
+        Assert.AreEqual('GREEN', LP."Location Code", 'The LP header must move to the new location.');
+        Assert.AreEqual('G-01', LP."Bin Code", 'The LP header must move to the new bin.');
+        Ledger.SetRange("LP No.", LP."No.");
+        Ledger.SetFilter("Related Document", 'LOC-MOVE*');
+        Assert.IsFalse(Ledger.IsEmpty(), 'The location move must write an LP movement ledger entry.');
+    end;
+
+    [Test]
+    procedure LocationMoveRejectsDirectedTarget()
+    var
+        LP: Record "DOPSWHS LP Header";
+        LPMgt: Codeunit "DOPSWHS LP Management";
+        Assert: Codeunit "Library Assert";
+    begin
+        Seed();
+        SeedDirectedLocation('WHITE', 'W-01');
+        BuildEmptyBuiltLP(LP);
+
+        asserterror LPMgt.MoveToLocation(LP, 'WHITE', 'W-01', 'USER1');
+
+        Assert.ExpectedError('Transfer Emri kullanın');
+        LP.Get(LP."No.");
+        Assert.AreEqual('BLUE', LP."Location Code", 'A rejected move must leave the LP location unchanged.');
+    end;
+
+    [Test]
+    procedure LocationMoveRejectsSameLocation()
+    var
+        LP: Record "DOPSWHS LP Header";
+        LPMgt: Codeunit "DOPSWHS LP Management";
+        Assert: Codeunit "Library Assert";
+    begin
+        Seed();
+        BuildEmptyBuiltLP(LP);
+
+        asserterror LPMgt.MoveToLocation(LP, 'BLUE', 'STAGE', 'USER1');
+
+        Assert.ExpectedError('zaten BLUE lokasyonunda');
+    end;
+
+    [Test]
+    procedure LocationMoveRequiresExistingTargetBin()
+    var
+        LP: Record "DOPSWHS LP Header";
+        LPMgt: Codeunit "DOPSWHS LP Management";
+        Assert: Codeunit "Library Assert";
+    begin
+        Seed();
+        SeedLocationBin('GREEN', 'G-01');
+        BuildEmptyBuiltLP(LP);
+
+        asserterror LPMgt.MoveToLocation(LP, 'GREEN', 'NOPE', 'USER1');
+
+        Assert.ExpectedError('NOPE hedef gözü GREEN lokasyonunda bulunamadı');
+        LP.Get(LP."No.");
+        Assert.AreEqual('PICK', LP."Bin Code", 'A rejected move must leave the LP bin unchanged.');
+    end;
+
+    [Test]
+    procedure AssignedLpCannotChangeLocation()
+    var
+        LP: Record "DOPSWHS LP Header";
+        LPMgt: Codeunit "DOPSWHS LP Management";
+        Assert: Codeunit "Library Assert";
+    begin
+        Seed();
+        SeedLocationBin('GREEN', 'G-01');
+        BuildEmptyBuiltLP(LP);
+        LPMgt.Assign(LP, Enum::"DOPSWHS Assigned Doc Type"::WhsePick, 'PICK-1');
+
+        asserterror LPMgt.MoveToLocation(LP, 'GREEN', 'G-01', 'USER1');
+
+        Assert.ExpectedError('durumundayken taşınamaz');
+        LP.Get(LP."No.");
+        Assert.AreEqual('BLUE', LP."Location Code", 'An assigned LP must stay in its location.');
+    end;
+
+    [Test]
+    procedure LocationMoveRequiresOperator()
+    var
+        LP: Record "DOPSWHS LP Header";
+        LPMgt: Codeunit "DOPSWHS LP Management";
+        Assert: Codeunit "Library Assert";
+    begin
+        Seed();
+        SeedLocationBin('GREEN', 'G-01');
+        BuildEmptyBuiltLP(LP);
+
+        asserterror LPMgt.MoveToLocation(LP, 'GREEN', 'G-01', '');
+
+        Assert.ExpectedError('operatör kullanıcı kimliği zorunludur');
+    end;
+
+    [Test]
     procedure UndoneReceiptDebitsTheReceivedLpLineOnce()
     var
         LP: Record "DOPSWHS LP Header";
@@ -506,6 +614,19 @@ codeunit 72114 "DOPSWHS LP Transfer Tests"
         Item: Record Item;
     begin
         if not Item.Get(ItemNo) then begin Item.Init(); Item."No." := ItemNo; Item.Description := ItemNo; Item."Base Unit of Measure" := UoM; Item.Insert(true); end;
+    end;
+
+    local procedure SeedDirectedLocation(LocationCode: Code[10]; BinCode: Code[20])
+    var
+        Location: Record Location; Bin: Record Bin;
+    begin
+        if not Location.Get(LocationCode) then begin
+            Location.Init(); Location.Code := LocationCode;
+            Location."Bin Mandatory" := true;
+            Location."Directed Put-away and Pick" := true;
+            Location.Insert(false);
+        end;
+        if not Bin.Get(LocationCode, BinCode) then begin Bin.Init(); Bin."Location Code" := LocationCode; Bin.Code := BinCode; Bin.Insert(false); end;
     end;
 
     local procedure SeedLocationBin(LocationCode: Code[10]; BinCode: Code[20])

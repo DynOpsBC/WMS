@@ -296,6 +296,19 @@ page 72088 "DOPSWHS LP API"
         Rec.Get(Rec."No.");
     end;
 
+    /// <summary>
+    /// Kitoko (22 Eki 2026): belgesiz lokasyonlar arası LP taşıma (yönlendirilmemiş
+    /// depolar). İçerik madde yeniden sınıflandırmasıyla kaydedilir; tek işlem.
+    /// </summary>
+    [ServiceEnabled]
+    procedure moveToLocation(newLocationCode: Code[10]; newBinCode: Code[20]; userId: Code[50])
+    var
+        LPMgt: Codeunit "DOPSWHS LP Management";
+    begin
+        LPMgt.MoveToLocation(Rec, newLocationCode, newBinCode, userId);
+        Rec.Get(Rec."No.");
+    end;
+
     [ServiceEnabled]
     procedure stop(printLabel: Boolean)
     var
