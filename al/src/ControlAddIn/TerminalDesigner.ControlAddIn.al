@@ -8,9 +8,9 @@ controladdin "DOPSWHS Terminal Designer"
     MinimumWidth = 720;
     VerticalStretch = true;
     HorizontalStretch = true;
-    Scripts = 'src/ControlAddIn/Resources/terminalDesigner.js';
-    StyleSheets = 'src/ControlAddIn/Resources/terminalDesigner.css';
-    StartupScript = 'src/ControlAddIn/Resources/terminalDesigner.js';
+    Scripts = 'Resources/terminalDesigner.js';
+    StyleSheets = 'Resources/terminalDesigner.css';
+    StartupScript = 'Resources/terminalDesigner.js';
 
     /// Katalog, yerleşim listesi, roller, terminaller ve seçili yerleşim.
     procedure SetData(Json: Text);

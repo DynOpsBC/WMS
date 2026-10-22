@@ -10,8 +10,8 @@ controladdin "DOPSWHS Health Panel"
     VerticalStretch = true;
     HorizontalStretch = true;
     // Tek IIFE paket yalnız StartupScript olarak yüklenir (iki kez çalışmasın).
-    StyleSheets = 'src/ControlAddIn/Resources/healthPanel.css';
-    StartupScript = 'src/ControlAddIn/Resources/healthPanel.js';
+    StyleSheets = 'Resources/healthPanel.css';
+    StartupScript = 'Resources/healthPanel.js';
 
     /// <summary>Panel verisi (DOPSWHS Health Detector.BuildJson).</summary>
     procedure SetData(Json: Text);

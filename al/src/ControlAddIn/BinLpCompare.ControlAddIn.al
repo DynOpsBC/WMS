@@ -9,9 +9,9 @@ controladdin "DOPSWHS Bin LP Compare"
     MinimumWidth = 520;
     VerticalStretch = true;
     HorizontalStretch = true;
-    Scripts = '../../ControlAddIn/Resources/binLpCompare.js';
-    StyleSheets = '../../ControlAddIn/Resources/binLpCompare.css';
-    StartupScript = '../../ControlAddIn/Resources/binLpCompare.js';
+    Scripts = 'Resources/binLpCompare.js';
+    StyleSheets = 'Resources/binLpCompare.css';
+    StartupScript = 'Resources/binLpCompare.js';
 
     procedure SetData(Json: Text);
     procedure SetLocale(LocaleCode: Text);

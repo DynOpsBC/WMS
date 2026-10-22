@@ -8,9 +8,9 @@ controladdin "DOPSWHS LP Trace"
     MinimumWidth = 520;
     VerticalStretch = true;
     HorizontalStretch = true;
-    Scripts = 'src/ControlAddIn/Resources/lpTrace.js';
-    StyleSheets = 'src/ControlAddIn/Resources/lpTrace.css';
-    StartupScript = 'src/ControlAddIn/Resources/lpTrace.js';
+    Scripts = 'Resources/lpTrace.js';
+    StyleSheets = 'Resources/lpTrace.css';
+    StartupScript = 'Resources/lpTrace.js';
 
     procedure SetData(Json: Text);
     procedure SetBusy(Busy: Boolean);
