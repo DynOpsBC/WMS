@@ -26,6 +26,13 @@ internal fun receiptMteLpNos(receiptNo: String, lines: List<JSONObject>): List<S
     .sorted()
 
 /**
+ * Kitoko (22 Eki 2026): mal kabulde lot etiketi yalnız lot numaralı satırı olan
+ * LP'ler için önerilir (lot takipli ürün). Sıra [lpNos] sırasıdır.
+ */
+internal fun receiptLotLabelLpNos(lpNos: Collection<String>, lines: List<JSONObject>): List<String> =
+    lpNos.filter { lpNo -> lpLinesHaveLots(lines.filter { it.optString("lpNo").trim() == lpNo }) }
+
+/**
  * Auto mode: posting already requested labels; reprinting is explicit, with no
  * initial selection. Manual mode (BADE, 16 Eyl 2026 — Kurulum "Manual Receipt
  * Label Print"): posting printed nothing, so every pallet starts selected and
@@ -42,6 +49,49 @@ internal fun ReceiptMteSheet(receiptNo: String, manualPrint: Boolean = false, on
     var loaded by remember { mutableStateOf(false) }
     var status by remember { mutableStateOf("") }
     var preselected by remember(receiptNo) { mutableStateOf(false) }
+    // Kitoko (22 Eki 2026): LP etiketi + lot etiketi (ürüne yapıştırılan, 80x40).
+    var receiptLines by remember(receiptNo) { mutableStateOf<List<JSONObject>>(emptyList()) }
+    var lpCopies by remember(receiptNo) { mutableStateOf("1") }
+    var lotCopies by remember(receiptNo) { mutableStateOf("1") }
+    val lpLayout = rememberLabelLayoutChoice(LabelLayoutKind.LP)
+    val lotLayout = rememberLabelLayoutChoice(LabelLayoutKind.Lot)
+    LaunchedEffect(Unit) { lotLayout.ensureLoaded(context) }
+
+    fun printLabels(lp: Boolean, lot: Boolean) {
+        val lpTotal = parseLabelCopies(lpCopies)
+        val lotTotal = parseLabelCopies(lotCopies)
+        if ((lp && lpTotal == null) || (lot && lotTotal == null)) {
+            status = "HATA: Etiket adedi 1 ile $LABEL_COPIES_MAX arasında olmalı."
+            return
+        }
+        val requested = lpNos.filter { it in selected }
+        val lotTargets = if (lot) receiptLotLabelLpNos(requested, receiptLines).toSet() else emptySet()
+        scope.launch {
+            busy = true
+            val failures = mutableListOf<String>()
+            var sent = 0
+            try {
+                val lpLayoutCode = if (lp) lpLayout.awaitLayoutCode(context) else ""
+                val lotLayoutCode = if (lot) lotLayout.awaitLayoutCode(context) else ""
+                requested.forEachIndexed { index, lpNo ->
+                    status = "Etiketler gönderiliyor: ${index + 1}/${requested.size} · $lpNo"
+                    if (lp) {
+                        val r = printLpCardLabels(context, lpNo, lot = false, total = lpTotal ?: 1, layoutCode = lpLayoutCode)
+                        if (r.startsWith("🟢")) sent++ else failures += "$lpNo LP: ${r.removePrefix("HATA: ").removePrefix("🔴 ")}"
+                    }
+                    if (lpNo in lotTargets) {
+                        val r = printLpCardLabels(context, lpNo, lot = true, total = lotTotal ?: 1, layoutCode = lotLayoutCode)
+                        if (r.startsWith("🟢")) sent++ else failures += "$lpNo lot: ${r.removePrefix("HATA: ").removePrefix("🔴 ")}"
+                    }
+                }
+            } finally {
+                busy = false
+            }
+            // No automatic retry: a network failure can occur after physical printing.
+            status = if (failures.isEmpty()) "TAMAM: $sent etiket isteği gönderildi. Fiziksel çıktıları kontrol edin."
+                else "UYARI: ${failures.size} etiket isteği başarısız: ${failures.first()}. Çıktıları kontrol edip yalnız eksikleri yeniden basın."
+        }
+    }
 
     fun load() {
         scope.launch {
@@ -54,6 +104,7 @@ internal fun ReceiptMteSheet(receiptNo: String, manualPrint: Boolean = false, on
                 "licensePlateLines?\$filter=sourceDocumentType eq 'WhseReceipt' and sourceDocumentNo eq '$safeNo' and quantity gt 0",
             )
             loaded = page.complete
+            receiptLines = if (page.complete) page.rows else emptyList()
             lpNos = if (page.complete) receiptMteLpNos(receiptNo, page.rows) else emptyList()
             selected = if (manualPrint && !preselected && page.complete) lpNos.toSet() else selected.intersect(lpNos.toSet())
             if (page.complete) preselected = true
@@ -144,6 +195,36 @@ internal fun ReceiptMteSheet(receiptNo: String, manualPrint: Boolean = false, on
                     }
                 },
             ) { Text(if (manualPrint) "Etiket Yazdır (${selected.size})" else "Seçilen MTE'leri Yazdır (${selected.size})") }
+            // Kitoko (22 Eki 2026): seçili LP'lerin LP etiketi ve (lot takipli ürünlerde) lot etiketi.
+            val selectedLps = lpNos.filter { it in selected }
+            val lotOffered = receiptLotLabelLpNos(selectedLps, receiptLines).isNotEmpty() && lotLayout.load is LabelLayoutLoad.Ready
+            if (loaded && lpNos.isNotEmpty()) {
+                HorizontalDivider()
+                Text("LP ve lot etiketi (seçili LP'ler)", style = MaterialTheme.typography.titleSmall)
+                LabelLayoutSelector(lpLayout, enabled = !busy)
+                LabelCopiesField(lpCopies, { lpCopies = it }, enabled = !busy, label = "LP etiketi adedi")
+                if (lotOffered) {
+                    LabelLayoutSelector(lotLayout, enabled = !busy)
+                    LabelCopiesField(lotCopies, { lotCopies = it }, enabled = !busy, label = "Lot başına lot etiketi")
+                }
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedButton(
+                        onClick = { printLabels(lp = true, lot = false) },
+                        enabled = !busy && selectedLps.isNotEmpty(),
+                        modifier = Modifier.weight(1f),
+                    ) { Text("LP etiketi") }
+                    if (lotOffered) OutlinedButton(
+                        onClick = { printLabels(lp = false, lot = true) },
+                        enabled = !busy,
+                        modifier = Modifier.weight(1f),
+                    ) { Text("Lot etiketi") }
+                }
+                if (lotOffered) Button(
+                    onClick = { printLabels(lp = true, lot = true) },
+                    enabled = !busy,
+                    modifier = Modifier.fillMaxWidth(),
+                ) { Text("İkisini de bas (LP + lot)") }
+            }
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                 TextButton(onClick = { load() }, enabled = !busy) { Text("Yenile") }
                 TextButton(onClick = onDismiss, enabled = !busy) { Text("Devam Et") }

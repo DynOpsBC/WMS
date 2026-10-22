@@ -229,6 +229,87 @@ codeunit 72051 "DOPSWHS Print Dispatcher"
             Error('%1 bir PDF yazıcıdır; seçilen etiket tasarımı yalnızca ZPL etiket yazıcısında basılabilir.', PrinterId);
     end;
 
+    /// <summary>
+    /// Kitoko (22 Eki 2026): one lot label per distinct item + variant + lot on the
+    /// LP (quantity = that lot's total on the LP). LayoutCode blank = the active
+    /// lot layout, else the default "LOT" layout (created when missing). ZPL label
+    /// printers only. Returns the number of distinct lots (0 = no lot lines, nothing sent).
+    /// </summary>
+    procedure PrintLotLabels(var LP: Record "DOPSWHS LP Header"; PrinterId: Code[50]; Copies: Integer; LayoutCode: Code[20]): Integer
+    var
+        Printer: Record "DOPSWHS Printer";
+        Zpl: Text;
+        LotCount: Integer;
+    begin
+        if Printer.Get(PrinterId) and (Printer."Format" = Printer."Format"::PDF) then
+            Error('%1 bir PDF yazıcıdır; lot etiketi yalnızca ZPL etiket yazıcısında basılabilir.', PrinterId);
+        Zpl := BuildLotZpl(LP, LayoutCode, LotCount);
+        if LotCount = 0 then
+            exit(0);
+        EnqueueZpl(LP."No.", Zpl, PrinterId, Copies, Enum::"DOPSWHS IWX Report Usage"::LpLabel, 'Lot');
+        exit(LotCount);
+    end;
+
+    /// <summary>Lot label ZPL of all lots on the LP (one ^XA..^XZ per lot); LotCount = labels.</summary>
+    procedure BuildLotZpl(var LP: Record "DOPSWHS LP Header"; LayoutCode: Code[20]; var LotCount: Integer): Text
+    var
+        LPLine: Record "DOPSWHS LP Line";
+        GroupLine: Record "DOPSWHS LP Line";
+        LayoutEngine: Codeunit "DOPSWHS Label Layout Engine";
+        LayoutFields: Codeunit "DOPSWHS Label Layout Fields";
+        LayoutValues: Dictionary of [Text, Text];
+        Done: List of [Text];
+        GroupKey: Text;
+        SourceDocument: Text;
+        ResolvedCode: Code[20];
+        Quantity: Decimal;
+        Expiration: Date;
+        Zpl: Text;
+    begin
+        LotCount := 0;
+        if not LayoutEngine.ResolveLayout(Enum::"DOPSWHS Label Kind"::Lot, LayoutCode, ResolvedCode) then begin
+            LayoutEngine.EnsureLotLayout();
+            ResolvedCode := LayoutEngine.DefaultCode(Enum::"DOPSWHS Label Kind"::Lot);
+            LayoutEngine.CheckLayoutKind(ResolvedCode, Enum::"DOPSWHS Label Kind"::Lot);
+        end;
+        CheckZplLayout(ResolvedCode, Enum::"DOPSWHS Label Kind"::Lot, '');
+        LPLine.SetRange("LP No.", LP."No.");
+        LPLine.SetFilter("Item No.", '<>%1', '');
+        LPLine.SetFilter("Lot No.", '<>%1', '');
+        if not LPLine.FindSet() then
+            exit('');
+        repeat
+            GroupKey := LPLine."Item No." + '|' + LPLine."Variant Code" + '|' + LPLine."Lot No.";
+            if not Done.Contains(GroupKey) then begin
+                Done.Add(GroupKey);
+                Quantity := 0;
+                Expiration := 0D;
+                GroupLine.SetRange("LP No.", LP."No.");
+                GroupLine.SetRange("Item No.", LPLine."Item No.");
+                GroupLine.SetRange("Variant Code", LPLine."Variant Code");
+                GroupLine.SetRange("Lot No.", LPLine."Lot No.");
+                GroupLine.SetRange("Unit of Measure", LPLine."Unit of Measure");
+                if GroupLine.FindSet() then
+                    repeat
+                        Quantity += GroupLine.Quantity;
+                        if (GroupLine."Expiration Date" <> 0D) and ((Expiration = 0D) or (GroupLine."Expiration Date" < Expiration)) then
+                            Expiration := GroupLine."Expiration Date";
+                    until GroupLine.Next() = 0;
+                SourceDocument := '';
+                if LPLine."Source Document No." <> '' then
+                    SourceDocument := LayoutFields.DocumentText(LPLine."Source Document Type", LPLine."Source Document No.")
+                else
+                    if LP."Pending Receipt No." <> '' then
+                        SourceDocument := LayoutFields.DocumentText(Enum::"DOPSWHS Assigned Doc Type"::WhseReceipt, LP."Pending Receipt No.");
+                LayoutFields.LotValues(LPLine."Item No.", LPLine."Variant Code", LPLine."Lot No.", Expiration, Quantity,
+                    LPLine."Unit of Measure", SourceDocument, LP."No.", LayoutValues);
+                Zpl += LayoutEngine.BuildZpl(ResolvedCode, LayoutValues, 1);
+                LotCount += 1;
+            end;
+        until LPLine.Next() = 0;
+        exit(Zpl);
+    end;
+
     procedure LabelsPerJob(): Integer
     begin
         exit(50);
@@ -1027,7 +1108,7 @@ codeunit 72051 "DOPSWHS Print Dispatcher"
             Kind::Item:
                 EnqueueZpl('ETIKET-TEST', Zpl, PrinterId, 1, Enum::"DOPSWHS IWX Report Usage"::Item, 'Test');
             // Kitoko (21 Eki 2026): LP tasarımı LP etiket yazıcı eşlemesiyle basılır.
-            Kind::LP:
+            Kind::LP, Kind::Lot:
                 EnqueueZpl('ETIKET-TEST', Zpl, PrinterId, 1, Enum::"DOPSWHS IWX Report Usage"::LpLabel, 'Test');
             else
                 EnqueueZpl('ETIKET-TEST', Zpl, PrinterId, 1, Enum::"DOPSWHS IWX Report Usage"::Bin, 'Test');

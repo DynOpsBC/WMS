@@ -252,6 +252,7 @@ export const KIND_LABELS: Record<LabelKind, string> = {
   Bin: "Raf etiketi",
   Zone: "Alan etiketi",
   LP: "LP / Palet etiketi",
+  Lot: "Lot etiketi",
 };
 
 export const SYMBOLOGY_LABELS: Record<Symbology, string> = {

@@ -33,7 +33,7 @@ controladdin "DOPSWHS Label Designer"
   "version": 1,
   "code": "ITEM",
   "description": "Ürün etiketi",
-  "kind": "Item",                 // Item | Bin | Zone | LP
+  "kind": "Item",                 // Item | Bin | Zone | LP | Lot
   "widthMm": 80, "heightMm": 40, "dpi": 203,   // dpi: 203 | 300
   "active": true,
   "activeAtLoad": true,           // BC → tasarımcı → BC: yüklemedeki Aktif (aşağıya bakın)
@@ -82,14 +82,38 @@ Kurallar:
 ## LP türü veri alanları (yeni)
 
 `LPNo, SSCC, BarcodeData, ItemNo, Description, LotNo, ExpirationDate, Quantity, TotalQuantity,
-UoM, LocationCode, BinCode, ItemCount, LineCount, ExtraLines, Company, Today`
+UoM, LocationCode, BinCode, ItemCount, LineCount, ExtraLines, Lots, VariantCode, PackageNo,
+SourceDocument, ContentsLine1, ContentsLine2, ContentsLine3, Company, Today`
+
+BC 1.14.3.17 (Kitoko, 22 Eki 2026) eklemeleri:
+- `ExpirationDate`: satırlardaki en erken SKT (gg.aa.yyyy).
+- `Lots`: farklı lotlar, ilk ikisi + kalan sayısı (`L1, L2 +3`).
+- `VariantCode`, `PackageNo`: ilk ürün satırından.
+- `SourceDocument`: LP'nin geldiği belge (satır kaynak belgesi, yoksa bekleyen mal kabul,
+  yoksa atandığı belge), ör. `KABUL RE000123`, `ÜRETİM RPO0001`.
+- `ContentsLine1..3`: satır başına `ÜrünNo · Lot · Miktar Birim` (lot boşsa yazılmaz); 3'ten
+  fazla satırda ilk iki satır + `+N SATIR DAHA`.
+- Galeri şablonları "LP QR + Lot (100×50)" ve "LP QR + içerik (100×100)": QR yalnız `LPNo`
+  taşır (terminalde LP okutulan her alan kabul eder). BC pasif `LP-QR` tasarımını 100×50
+  şablonuyla aynı ölçülerde bir kez oluşturur (upgrade tag; silinirse yeniden oluşmaz).
+
+## Lot türü veri alanları (BC 1.14.3.17)
+
+`ItemNo, Description, LotNo, ExpirationDate, Quantity, UoM, VariantCode, SourceDocument,
+VendorNo, VendorName, LPNo, Company, Today`
+
+Mal kabulde ürüne yapıştırılan lot etiketi. `licensePlates(...)/printLotLabels(printerId,
+copies, layoutCode)` LP'deki her ürün + varyant + lot için bir etiket basar (Quantity = o
+lotun LP'deki toplamı, ExpirationDate = en erken SKT); boş layoutCode = aktif Lot tasarımı,
+yoksa varsayılan pasif `LOT` (80×40: QR = ürün no, Code128 = lot no). Yalnız ZPL yazıcı;
+lot satırı yoksa hata döner. Galeri şablonu "Lot etiketi (80×40)" `LOT` ile aynı ölçülerde.
 
 Sabit LP etiketiyle aynı veriyi vermek için (BC 1.14.3.14):
 - `BarcodeData`: SSCC doluysa SSCC, değilse LP No (sabit etiketin çizgi barkodu).
 - `TotalQuantity`: tüm ürün satırlarının miktar toplamı (Quantity ile aynı biçim). Satırların
   birimleri farklıysa boş kalır (farklı birimler toplanmaz).
 - `LineCount`: ürün satırı sayısı. `ExtraLines`: birden fazla satır varsa `+N DİĞER SATIR`, yoksa boş.
-- `Quantity`, `UoM`, `ItemNo`, `LotNo`, `ExpirationDate` ilk ürün satırındandır; `ItemCount` farklı ürün sayısıdır.
+- `Quantity`, `UoM`, `ItemNo`, `LotNo` ilk ürün satırındandır (`ExpirationDate` 1.14.3.17 ile en erken SKT); `ItemCount` farklı ürün sayısıdır.
 
 ## BC uygulama notları (BC 1.14.3.13, 21 Eki 2026)
 
@@ -137,7 +161,7 @@ geriye uyumlu (opsiyonel) alan ekler.
   gönderilmeden çözülür). Kayıtta BC'deki değer 0 iken geri gelen ölçü çözülen ölçüyle aynıysa
   0 korunur (Kurulum ölçüsünü izlemeye devam eder); farklıysa yeni ölçü yazılır.
   Kabul edilen dpi: 203, 300, 600 (0 → 203). Ölçü: genişlik 0–300 mm, yükseklik 0–400 mm.
-  `kind` gönderilirse Item | Bin | Zone | LP olmalıdır; boş veya bilinmeyen değer hatadır.
+  `kind` gönderilirse Item | Bin | Zone | LP | Lot olmalıdır; boş veya bilinmeyen değer hatadır.
 - **Eleman:** `id` en çok 50 karakter (BC "Element Id"); `lineNo` kayıtta yok sayılır.
   `text` ≤ 100, `field`/`prefix`/`suffix` ≤ 30 karakter; aşan değer kaydı hatayla durdurur.
   Bilinmeyen `type`/`symbology`/`align` veya rotation ∉ {0,90,180,270} hatadır.

@@ -52,6 +52,29 @@ codeunit 72467 "DOPSWHS Label Layout Fields"
                     FieldKeys.Add('ItemCount');
                     FieldKeys.Add('LineCount');
                     FieldKeys.Add('ExtraLines');
+                    // Kitoko (22 Eki 2026): QR'lı LP etiketi ve karma palet içerik satırları.
+                    FieldKeys.Add('Lots');
+                    FieldKeys.Add('VariantCode');
+                    FieldKeys.Add('PackageNo');
+                    FieldKeys.Add('SourceDocument');
+                    FieldKeys.Add('ContentsLine1');
+                    FieldKeys.Add('ContentsLine2');
+                    FieldKeys.Add('ContentsLine3');
+                end;
+            // Kitoko (22 Eki 2026): lot etiketi (bir LP'deki her ürün + lot için bir etiket).
+            Kind::Lot:
+                begin
+                    FieldKeys.Add('ItemNo');
+                    FieldKeys.Add('Description');
+                    FieldKeys.Add('LotNo');
+                    FieldKeys.Add('ExpirationDate');
+                    FieldKeys.Add('Quantity');
+                    FieldKeys.Add('UoM');
+                    FieldKeys.Add('VariantCode');
+                    FieldKeys.Add('SourceDocument');
+                    FieldKeys.Add('VendorNo');
+                    FieldKeys.Add('VendorName');
+                    FieldKeys.Add('LPNo');
                 end;
         end;
         FieldKeys.Add('Company');
@@ -121,23 +144,34 @@ codeunit 72467 "DOPSWHS Label Layout Fields"
     /// line; ItemCount is the number of distinct items on the LP. Like the built-in
     /// LP label: BarcodeData = SSCC (else LP no.), ExtraLines = "+N DİĞER SATIR".
     /// TotalQuantity sums the item lines when they share one unit, else stays empty.
+    /// Kitoko (22 Eki 2026): ExpirationDate = earliest date of the lines, Lots = the
+    /// distinct lots ("L1, L2 +3"), ContentsLine1..3 = "ItemNo · Lot · Qty UoM" per
+    /// line (more than three lines: two lines and "+N SATIR DAHA"), SourceDocument =
+    /// the document the LP came from (line source, pending receipt or assignment).
     /// </summary>
     procedure LpValues(var LP: Record "DOPSWHS LP Header"; var Values: Dictionary of [Text, Text])
     var
         LPLine: Record "DOPSWHS LP Line";
         Item: Record Item;
         Items: List of [Code[20]];
+        Lots: List of [Text];
+        Contents: List of [Text];
         First: Boolean;
         ItemNo: Text;
         Description: Text;
         LotNo: Text;
-        ExpirationDate: Text;
+        VariantCode: Text;
+        PackageNo: Text;
+        SourceDocument: Text;
         Quantity: Text;
         UoM: Text;
         BarcodeData: Text;
         ExtraLines: Text;
+        ContentsLine: array[3] of Text;
+        EarliestExpiration: Date;
         TotalQuantity: Decimal;
         LineCount: Integer;
+        i: Integer;
         SameUoM: Boolean;
     begin
         Clear(Values);
@@ -153,18 +187,37 @@ codeunit 72467 "DOPSWHS Label Layout Fields"
                     if Item.Get(LPLine."Item No.") then
                         Description := Item.Description;
                     LotNo := LPLine."Lot No.";
-                    if LPLine."Expiration Date" <> 0D then
-                        ExpirationDate := FormatDate(LPLine."Expiration Date");
+                    VariantCode := LPLine."Variant Code";
+                    PackageNo := LPLine."Package No.";
                     Quantity := Format(LPLine.Quantity);
                     UoM := LPLine."Unit of Measure";
                 end;
+                if (SourceDocument = '') and (LPLine."Source Document No." <> '') then
+                    SourceDocument := DocumentText(LPLine."Source Document Type", LPLine."Source Document No.");
+                if LPLine."Expiration Date" <> 0D then
+                    if (EarliestExpiration = 0D) or (LPLine."Expiration Date" < EarliestExpiration) then
+                        EarliestExpiration := LPLine."Expiration Date";
+                if (LPLine."Lot No." <> '') and not Lots.Contains(LPLine."Lot No.") then
+                    Lots.Add(LPLine."Lot No.");
                 if not Items.Contains(LPLine."Item No.") then
                     Items.Add(LPLine."Item No.");
                 LineCount += 1;
+                if LineCount <= 3 then
+                    Contents.Add(ContentsText(LPLine));
                 TotalQuantity += LPLine.Quantity;
                 if LPLine."Unit of Measure" <> UoM then
                     SameUoM := false;
             until LPLine.Next() = 0;
+        if SourceDocument = '' then
+            if LP."Pending Receipt No." <> '' then
+                SourceDocument := DocumentText(Enum::"DOPSWHS Assigned Doc Type"::WhseReceipt, LP."Pending Receipt No.")
+            else
+                if LP."Assigned Document No." <> '' then
+                    SourceDocument := DocumentText(LP."Assigned Document Type", LP."Assigned Document No.");
+        for i := 1 to Contents.Count() do
+            ContentsLine[i] := Contents.Get(i);
+        if LineCount > 3 then
+            ContentsLine[3] := StrSubstNo('+%1 SATIR DAHA', LineCount - 2);
         BarcodeData := LP.SSCC;
         if BarcodeData = '' then
             BarcodeData := LP."No.";
@@ -176,7 +229,10 @@ codeunit 72467 "DOPSWHS Label Layout Fields"
         Values.Add('ItemNo', ItemNo);
         Values.Add('Description', Description);
         Values.Add('LotNo', LotNo);
-        Values.Add('ExpirationDate', ExpirationDate);
+        if EarliestExpiration <> 0D then
+            Values.Add('ExpirationDate', FormatDate(EarliestExpiration))
+        else
+            Values.Add('ExpirationDate', '');
         Values.Add('Quantity', Quantity);
         if (LineCount > 0) and SameUoM then
             Values.Add('TotalQuantity', Format(TotalQuantity))
@@ -188,7 +244,105 @@ codeunit 72467 "DOPSWHS Label Layout Fields"
         Values.Add('ItemCount', Format(Items.Count()));
         Values.Add('LineCount', Format(LineCount));
         Values.Add('ExtraLines', ExtraLines);
+        Values.Add('Lots', LotsText(Lots));
+        Values.Add('VariantCode', VariantCode);
+        Values.Add('PackageNo', PackageNo);
+        Values.Add('SourceDocument', SourceDocument);
+        Values.Add('ContentsLine1', ContentsLine[1]);
+        Values.Add('ContentsLine2', ContentsLine[2]);
+        Values.Add('ContentsLine3', ContentsLine[3]);
         AddCommon(Values);
+    end;
+
+    /// <summary>
+    /// Kitoko (22 Eki 2026): lot label values of one item + lot of an LP. Vendor =
+    /// the item card's vendor (cheap, no ledger lookup).
+    /// </summary>
+    procedure LotValues(ItemNo: Code[20]; VariantCode: Code[10]; LotNo: Code[50]; ExpirationDate: Date; Quantity: Decimal; UoM: Code[10]; SourceDocument: Text; LPNo: Code[20]; var Values: Dictionary of [Text, Text])
+    var
+        Item: Record Item;
+        Vendor: Record Vendor;
+        Description: Text;
+        VendorNo: Text;
+        VendorName: Text;
+    begin
+        Clear(Values);
+        if Item.Get(ItemNo) then begin
+            Description := Item.Description;
+            VendorNo := Item."Vendor No.";
+            if Item."Vendor No." <> '' then
+                if Vendor.Get(Item."Vendor No.") then
+                    VendorName := Vendor.Name;
+        end;
+        Values.Add('ItemNo', ItemNo);
+        Values.Add('Description', Description);
+        Values.Add('LotNo', LotNo);
+        if ExpirationDate <> 0D then
+            Values.Add('ExpirationDate', FormatDate(ExpirationDate))
+        else
+            Values.Add('ExpirationDate', '');
+        Values.Add('Quantity', Format(Quantity));
+        Values.Add('UoM', UoM);
+        Values.Add('VariantCode', VariantCode);
+        Values.Add('SourceDocument', SourceDocument);
+        Values.Add('VendorNo', VendorNo);
+        Values.Add('VendorName', VendorName);
+        Values.Add('LPNo', LPNo);
+        AddCommon(Values);
+    end;
+
+    /// <summary>"L1, L2 +3": the first two distinct lots and how many more.</summary>
+    local procedure LotsText(Lots: List of [Text]): Text
+    var
+        Result: Text;
+        i: Integer;
+    begin
+        for i := 1 to Lots.Count() do
+            if i <= 2 then begin
+                if Result <> '' then
+                    Result += ', ';
+                Result += Lots.Get(i);
+            end;
+        if Lots.Count() > 2 then
+            Result += StrSubstNo(' +%1', Lots.Count() - 2);
+        exit(Result);
+    end;
+
+    /// <summary>"ItemNo · Lot · Qty UoM"; an empty lot is left out.</summary>
+    local procedure ContentsText(var LPLine: Record "DOPSWHS LP Line"): Text
+    var
+        Result: Text;
+    begin
+        Result := LPLine."Item No.";
+        if LPLine."Lot No." <> '' then
+            Result += ' · ' + LPLine."Lot No.";
+        Result += ' · ' + DelChr(Format(LPLine.Quantity) + ' ' + LPLine."Unit of Measure", '>', ' ');
+        exit(Result);
+    end;
+
+    /// <summary>Short Turkish document text for the label, e.g. "KABUL RE000123".</summary>
+    procedure DocumentText(DocType: Enum "DOPSWHS Assigned Doc Type"; DocNo: Code[20]): Text
+    begin
+        if DocNo = '' then
+            exit('');
+        case DocType of
+            DocType::WhseReceipt:
+                exit('KABUL ' + DocNo);
+            DocType::WhsePick:
+                exit('TOPLAMA ' + DocNo);
+            DocType::WhseShipment:
+                exit('SEVK ' + DocNo);
+            DocType::WhsePutaway:
+                exit('YERLEŞTİRME ' + DocNo);
+            DocType::WhseMovement:
+                exit('HAREKET ' + DocNo);
+            DocType::ProdConsumption,
+            DocType::ProdOutput:
+                exit('ÜRETİM ' + DocNo);
+            DocType::Assembly:
+                exit('MONTAJ ' + DocNo);
+        end;
+        exit(DocNo);
     end;
 
     /// <summary>Kitoko (21 Eki 2026): Turkish caption of a field key for the designer's field list.</summary>
@@ -239,6 +393,22 @@ codeunit 72467 "DOPSWHS Label Layout Fields"
                 exit('Satır Sayısı');
             'ExtraLines':
                 exit('Diğer Satırlar (+N DİĞER SATIR)');
+            'Lots':
+                exit('Lotlar (L1, L2 +N)');
+            'PackageNo':
+                exit('Paket No');
+            'VendorNo':
+                exit('Satıcı No');
+            'VendorName':
+                exit('Satıcı Adı');
+            'SourceDocument':
+                exit('Kaynak Belge');
+            'ContentsLine1':
+                exit('İçerik Satırı 1 (Ürün · Lot · Miktar)');
+            'ContentsLine2':
+                exit('İçerik Satırı 2');
+            'ContentsLine3':
+                exit('İçerik Satırı 3 (fazlası +N SATIR DAHA)');
             'Company':
                 exit('Şirket');
             'Today':
@@ -294,6 +464,27 @@ codeunit 72467 "DOPSWHS Label Layout Fields"
                     Values.Add('ItemCount', '1');
                     Values.Add('LineCount', '2');
                     Values.Add('ExtraLines', '+1 DİĞER SATIR');
+                    Values.Add('Lots', 'LOT-2026-001, LOT-2026-002');
+                    Values.Add('VariantCode', 'MAVİ');
+                    Values.Add('PackageNo', 'PK-0007');
+                    Values.Add('SourceDocument', 'KABUL RE000123');
+                    Values.Add('ContentsLine1', 'SK-10025 · LOT-2026-001 · 48 KOLİ');
+                    Values.Add('ContentsLine2', 'SK-10031 · LOT-2026-002 · 12 KOLİ');
+                    Values.Add('ContentsLine3', '');
+                end;
+            Kind::Lot:
+                begin
+                    Values.Add('ItemNo', 'SK-10025');
+                    Values.Add('Description', 'ÖRNEK ÜRÜN AÇIKLAMASI 500 ML ŞİŞE');
+                    Values.Add('LotNo', 'LOT-2026-001');
+                    Values.Add('ExpirationDate', '31.12.2027');
+                    Values.Add('Quantity', '48');
+                    Values.Add('UoM', 'KOLİ');
+                    Values.Add('VariantCode', 'MAVİ');
+                    Values.Add('SourceDocument', 'KABUL RE000123');
+                    Values.Add('VendorNo', 'S-0042');
+                    Values.Add('VendorName', 'ÖRNEK TEDARİKÇİ A.Ş.');
+                    Values.Add('LPNo', 'LP000123');
                 end;
         end;
         AddCommon(Values);

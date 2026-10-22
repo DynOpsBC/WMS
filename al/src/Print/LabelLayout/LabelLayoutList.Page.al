@@ -102,7 +102,7 @@ page 72469 "DOPSWHS Label Layout List"
 
     var
         DesignerMgt: Codeunit "DOPSWHS Label Designer Mgt";
-        KindMenuTxt: Label 'Ürün etiketi,Raf etiketi,Alan etiketi,LP / palet etiketi';
+        KindMenuTxt: Label 'Ürün etiketi,Raf etiketi,Alan etiketi,LP / palet etiketi,Lot etiketi';
         KindMenuQst: Label 'Hangi etiket için yeni tasarım?';
 
     trigger OnOpenPage()
@@ -118,6 +118,10 @@ page 72469 "DOPSWHS Label Layout List"
             Engine.EnsureItemV2Layout();
             // Kitoko (21 Eki 2026): LP türü sonradan eklendi; pasif varsayılan LP tasarımı.
             Engine.EnsureLpLayout();
+            // Kitoko (22 Eki 2026): pasif "LP-QR" tasarımı (LP QR + Lot 100x50).
+            Engine.EnsureLpQrLayout();
+            // Kitoko (22 Eki 2026): pasif varsayılan lot etiketi (LOT, 80x40).
+            Engine.EnsureLotLayout();
         end;
     end;
 }

@@ -34,6 +34,8 @@ internal enum class LabelLayoutKind(val bcName: String) {
     Bin("Bin"),
     Zone("Zone"),
     LP("LP"),
+    // Kitoko (22 Eki 2026): lot etiketi (BC 1.14.3.17+); eski BC'de bu türde tasarım yok → gizli.
+    Lot("Lot"),
 }
 
 internal data class LabelLayoutOption(

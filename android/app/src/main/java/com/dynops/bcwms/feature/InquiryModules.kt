@@ -311,6 +311,8 @@ private fun ItemStockInquiry() {
     var labelStatus by remember { mutableStateOf("") }
     var printing by remember { mutableStateOf(false) }
     val itemLayout = rememberLabelLayoutChoice(LabelLayoutKind.Item)
+    // Kitoko (22 Eki 2026): LP okutulunca LP kartı (içerik + LP / lot etiketi) açılır.
+    var lpCard by remember { mutableStateOf<LpScanRef?>(null) }
 
     fun load() {
         if (query.trim().isBlank() || printing) return
@@ -381,12 +383,19 @@ private fun ItemStockInquiry() {
         }
     }
 
+    val openCard = lpCard
+    if (openCard != null) {
+        LpContentCard(ref = openCard, onClose = { lpCard = null }, closeLabel = "‹ Ürün Sorgu")
+        return
+    }
+
     val palette = bcwmsStatus()
     val itemUom = item?.let { firstValue(it, "baseUnitOfMeasure", "baseUoM") }.orEmpty()
     Column(Modifier.fillMaxSize().padding(12.dp)) {
         ScanField("Ürün No / LP No", query, { query = it }, modifier = Modifier.fillMaxWidth(), onScanned = {
             val resolved = BarcodeIntentResolver.resolve(it)
             query = resolved.itemNo ?: resolved.value
+            lpScanRef(it)?.let { ref -> lpCard = ref }
         })
         Spacer(Modifier.height(8.dp))
         Button(onClick = { load() }, enabled = !loading, modifier = Modifier.fillMaxWidth()) {
@@ -453,6 +462,9 @@ private fun ItemStockInquiry() {
                                         style = MaterialTheme.typography.bodyMedium,
                                         color = MaterialTheme.colorScheme.onSecondaryContainer,
                                     )
+                                }
+                                TextButton(onClick = { lpCard = LpScanRef.ByNo(lp.lpNo) }) {
+                                    Text("LP içeriği ve etiketi ›", fontWeight = FontWeight.SemiBold)
                                 }
                             }
                         }

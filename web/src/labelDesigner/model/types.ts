@@ -2,7 +2,7 @@
 // Bilinmeyen anahtarlar çalışma zamanında nesnelerde korunur (spread ile),
 // tipler yalnız bilinen alanları tanımlar.
 
-export type LabelKind = "Item" | "Bin" | "Zone" | "LP";
+export type LabelKind = "Item" | "Bin" | "Zone" | "LP" | "Lot";
 export type ElementType = "text" | "field" | "barcode" | "qr" | "line" | "box" | "image";
 export type Rotation = 0 | 90 | 180 | 270;
 export type Align = "left" | "center" | "right";
@@ -86,6 +86,6 @@ export const LIMITS = {
 } as const;
 
 export const ELEMENT_TYPES: readonly ElementType[] = ["text", "field", "barcode", "qr", "line", "box", "image"];
-export const LABEL_KINDS: readonly LabelKind[] = ["Item", "Bin", "Zone", "LP"];
+export const LABEL_KINDS: readonly LabelKind[] = ["Item", "Bin", "Zone", "LP", "Lot"];
 export const ROTATIONS: readonly Rotation[] = [0, 90, 180, 270];
 export const SYMBOLOGIES: readonly Symbology[] = ["code128", "ean13", "gs1-128"];

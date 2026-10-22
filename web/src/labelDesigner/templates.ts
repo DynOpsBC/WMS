@@ -25,7 +25,15 @@ export const KIND_FIELD_KEYS: Record<LabelKind, readonly string[]> = {
   Zone: ["ZoneCode", "LocationCode", "Description", "Company", "Today"],
   LP: [
     "LPNo", "SSCC", "BarcodeData", "ItemNo", "Description", "LotNo", "ExpirationDate", "Quantity", "TotalQuantity", "UoM",
-    "LocationCode", "BinCode", "ItemCount", "LineCount", "ExtraLines", "Company", "Today",
+    "LocationCode", "BinCode", "ItemCount", "LineCount", "ExtraLines",
+    // Kitoko (22 Eki 2026): QR'lı LP etiketi + karma palet içerik satırları.
+    "Lots", "VariantCode", "PackageNo", "SourceDocument", "ContentsLine1", "ContentsLine2", "ContentsLine3",
+    "Company", "Today",
+  ],
+  // Kitoko (22 Eki 2026): mal kabulde ürüne yapıştırılan lot etiketi.
+  Lot: [
+    "ItemNo", "Description", "LotNo", "ExpirationDate", "Quantity", "UoM", "VariantCode", "SourceDocument",
+    "VendorNo", "VendorName", "LPNo", "Company", "Today",
   ],
 };
 
@@ -36,6 +44,10 @@ const FIELD_LABELS: Record<string, string> = {
   Quantity: "Miktar", ItemCount: "Ürün Çeşidi Sayısı", Company: "Şirket", Today: "Bugünün Tarihi",
   BarcodeData: "Barkod Verisi (SSCC, yoksa LP No)", TotalQuantity: "Toplam Miktar", LineCount: "Satır Sayısı",
   ExtraLines: "Diğer Satırlar (+N DİĞER SATIR)",
+  Lots: "Lotlar (L1, L2 +N)", PackageNo: "Paket No", SourceDocument: "Kaynak Belge",
+  ContentsLine1: "İçerik Satırı 1 (Ürün · Lot · Miktar)", ContentsLine2: "İçerik Satırı 2",
+  ContentsLine3: "İçerik Satırı 3 (fazlası +N SATIR DAHA)",
+  VendorNo: "Satıcı No", VendorName: "Satıcı Adı",
 };
 
 function today(): string {
@@ -52,10 +64,13 @@ function fallbackSample(kind: LabelKind, key: string): string {
     LocationCode: "ANA", ZoneCode: "K", BinTypeCode: "PICK", LPNo: "LP000123", SSCC: "386900000000012345",
     LotNo: "LOT-2026-001", ExpirationDate: "31.12.2027", Quantity: "48", ItemCount: "3", Company: "ÖRNEK ŞİRKET A.Ş.", Today: today(),
     BarcodeData: "386900000000012345", TotalQuantity: "60", LineCount: "2", ExtraLines: "+1 DİĞER SATIR",
+    Lots: "LOT-2026-001, LOT-2026-002", PackageNo: "PK-0007", SourceDocument: "KABUL RE000123",
+    VendorNo: "S-0042", VendorName: "ÖRNEK TEDARİKÇİ A.Ş.",
+    ContentsLine1: "SK-10025 · LOT-2026-001 · 48 KOLİ", ContentsLine2: "SK-10031 · LOT-2026-002 · 12 KOLİ", ContentsLine3: "",
   };
   if (kind === "Bin" && key === "Description") return "KOZMETİK ÜST RAF";
   if (kind === "Zone" && key === "Description") return "KOZMETİK ALANI";
-  if (kind === "LP" && key === "UoM") return "KOLİ";
+  if ((kind === "LP" || kind === "Lot") && key === "UoM") return "KOLİ";
   return common[key] ?? "";
 }
 
@@ -76,6 +91,51 @@ const field = (key: string, x: number, y: number, w: number, fontMm: number, mor
 const qr = (key: string, x: number, y: number, size: number): TemplateElement => ({ type: "qr", field: key, xMm: x, yMm: y, wMm: size, hMm: size });
 const barcode = (key: string, x: number, y: number, w: number, h: number, more: Partial<LabelElement> = {}): TemplateElement => ({ type: "barcode", field: key, xMm: x, yMm: y, wMm: w, hMm: h, symbology: "code128", showText: true, ...more });
 const fit = (minFontMm = 0): Partial<LabelElement> => ({ fit: true, minFontMm });
+
+/**
+ * "LP QR + Lot (100×50)". BC'deki pasif LP-QR tasarımı aynı ölçülerle üretilir
+ * (al/src/Print/LabelLayout/LabelLayoutEngine.Codeunit.al FillLpQrLines): burada
+ * değişen bir ölçü orada da değişmeli.
+ */
+const LP_QR_LOT_ELEMENTS: TemplateElement[] = [
+  qr("LPNo", 2, 2, 30),
+  text("QR = LP NO", 2, 33, 30, 2.25, { align: "center" }),
+  field("LocationCode", 2, 37, 30, 2.75, { prefix: "DEPO: ", ...fit(2) }),
+  field("SourceDocument", 2, 41.5, 30, 2.25, fit(1.5)),
+  field("SSCC", 2, 46, 30, 2, { prefix: "SSCC ", ...fit(1.25) }),
+  field("LPNo", 35, 2, 63, 9, { ...fit(5), bold: true }),
+  line(35, 12.5, 63, 0.4),
+  field("ItemNo", 35, 14, 63, 4, { ...fit(2.5), bold: true }),
+  field("Description", 35, 19, 63, 2.75, { maxLines: 2 }),
+  field("Lots", 35, 25.5, 63, 4, { prefix: "LOT: ", ...fit(2.5), bold: true }),
+  field("ExpirationDate", 35, 31, 30, 3.25, { prefix: "SKT: ", ...fit(2.25) }),
+  field("BinCode", 66, 31, 32, 3.25, { prefix: "GÖZ: ", ...fit(2.25), align: "right" }),
+  field("TotalQuantity", 35, 36, 40, 5.5, { prefix: "MİKTAR: ", ...fit(3), bold: true }),
+  field("UoM", 76, 36, 22, 5.5, { ...fit(3), align: "right" }),
+  line(35, 43.5, 63, 0.3),
+  field("Company", 35, 45.5, 40, 2.5, fit(1.75)),
+  field("Today", 76, 45.5, 22, 2.5, { align: "right" }),
+];
+
+/**
+ * "Lot etiketi (80×40)": QR = ürün no (mevcut ürün okutmaları çalışır), Code128 =
+ * lot no. BC'deki varsayılan LOT tasarımı (LabelLayoutEngine FillLotLines) aynı ölçülerle.
+ */
+const LOT_ELEMENTS: TemplateElement[] = [
+  field("ItemNo", 2, 2, 53, 4.5, { ...fit(2.5), bold: true }),
+  field("Description", 2, 7.5, 53, 2.5, { maxLines: 2 }),
+  text("LOT", 2, 13.75, 20, 2.25),
+  field("LotNo", 2, 16.5, 53, 6, { ...fit(3), bold: true }),
+  barcode("LotNo", 2, 23.5, 53, 8, { showText: false }),
+  qr("ItemNo", 57, 2, 21),
+  field("SourceDocument", 57, 24.5, 21, 2.25, fit(1.5)),
+  field("LPNo", 57, 28.5, 21, 2.25, fit(1.5)),
+  line(2, 33, 76, 0.3),
+  field("ExpirationDate", 2, 34.75, 27, 3, { prefix: "SKT: ", ...fit(2), bold: true }),
+  field("Quantity", 30, 34.75, 16, 3, { ...fit(2), bold: true, align: "right" }),
+  field("UoM", 47, 34.75, 12, 3, fit(1.75)),
+  field("Today", 60, 35, 18, 2.5, { ...fit(1.75), align: "right" }),
+];
 
 /** Basamaklı kutulardan ok (ZPL'de çapraz çizgi yok): yukarı ya da aşağı. */
 function arrow(cx: number, top: number, dir: "up" | "down"): TemplateElement[] {
@@ -298,6 +358,62 @@ export const TEMPLATES: readonly LabelTemplate[] = [
       field("Today", 3, 46.25, 40, 2.5),
       field("ItemCount", 44, 46.25, 29, 2.5, { prefix: "ÜRÜN ÇEŞİDİ: ", align: "right" }),
     ],
+  },
+  // Kitoko (22 Eki 2026): QR = yalnız LP No (terminalde her LP okutma alanı kabul eder).
+  // BC "LP-QR" pasif tasarımı (Label Layout Engine FillLpQrLines) bu şablonla aynıdır.
+  {
+    id: "lp-qr-lot",
+    kind: "LP",
+    name: "LP QR + Lot (100×50)",
+    description: "Solda büyük LP QR'ı; LP no, ürün, açıklama, lot, SKT, miktar, göz, şirket ve tarih.",
+    widthMm: 100,
+    heightMm: 50,
+    dpi: 203,
+    elements: LP_QR_LOT_ELEMENTS,
+  },
+  {
+    id: "lp-qr-contents",
+    kind: "LP",
+    name: "LP QR + içerik (100×100)",
+    description: "Karma palet: LP QR'ı, LP no, konum, ilk 3 içerik satırı (ürün · lot · miktar), ürün çeşidi ve toplam.",
+    widthMm: 100,
+    heightMm: 100,
+    dpi: 203,
+    elements: [
+      box(0, 0, 100, 10),
+      text("LP İÇERİK", 4, 2, 50, 6, { inverted: true, bold: true }),
+      field("Today", 56, 3, 40, 3.5, { align: "right", inverted: true }),
+      qr("LPNo", 4, 13, 30),
+      field("LPNo", 38, 13, 58, 9, { ...fit(5), bold: true }),
+      field("LocationCode", 38, 24.5, 58, 3.5, { prefix: "DEPO: ", ...fit(2.5) }),
+      field("BinCode", 38, 29.5, 58, 3.5, { prefix: "GÖZ: ", ...fit(2.5), bold: true }),
+      field("SourceDocument", 38, 34.5, 58, 3, fit(2)),
+      field("SSCC", 38, 39, 58, 2.5, { prefix: "SSCC ", ...fit(2) }),
+      line(4, 45.5, 92, 0.5),
+      text("İÇERİK", 4, 47.5, 40, 3, { bold: true }),
+      field("ContentsLine1", 4, 52, 92, 4.5, fit(2.5)),
+      field("ContentsLine2", 4, 59, 92, 4.5, fit(2.5)),
+      field("ContentsLine3", 4, 66, 92, 4.5, fit(2.5)),
+      line(4, 74, 92, 0.5),
+      box(4, 77, 44, 19, 0.6),
+      text("ÜRÜN ÇEŞİDİ", 6, 79, 40, 3, { align: "center" }),
+      field("ItemCount", 6, 83.5, 40, 10, { ...fit(5), bold: true, align: "center" }),
+      box(52, 77, 44, 19, 0.6),
+      text("TOPLAM MİKTAR", 54, 79, 40, 3, { align: "center" }),
+      field("TotalQuantity", 54, 83.5, 40, 6.5, { ...fit(3.5), bold: true, align: "center" }),
+      field("UoM", 54, 91, 40, 3, { ...fit(2), align: "center" }),
+    ],
+  },
+  // ---------------------------------------------------------------- Lot
+  {
+    id: "lot-standard",
+    kind: "Lot",
+    name: "Lot etiketi (80×40)",
+    description: "Ürüne yapıştırılan lot etiketi: QR = ürün no, büyük lot no ve lot barkodu, SKT, miktar, tarih.",
+    widthMm: 80,
+    heightMm: 40,
+    dpi: 203,
+    elements: LOT_ELEMENTS,
   },
   {
     id: "lp-a6",

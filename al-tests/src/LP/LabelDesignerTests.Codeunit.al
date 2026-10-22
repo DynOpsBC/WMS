@@ -171,7 +171,7 @@ codeunit 72161 "DOPSWHS Label Designer Tests"
         Assert: Codeunit "Library Assert";
         Values: Dictionary of [Text, Text];
     begin
-        Assert.AreEqual('LPNo,SSCC,BarcodeData,ItemNo,Description,LotNo,ExpirationDate,Quantity,TotalQuantity,UoM,LocationCode,BinCode,ItemCount,LineCount,ExtraLines,Company,Today',
+        Assert.AreEqual('LPNo,SSCC,BarcodeData,ItemNo,Description,LotNo,ExpirationDate,Quantity,TotalQuantity,UoM,LocationCode,BinCode,ItemCount,LineCount,ExtraLines,Lots,VariantCode,PackageNo,SourceDocument,ContentsLine1,ContentsLine2,ContentsLine3,Company,Today',
             LayoutFields.KeyList(Enum::"DOPSWHS Label Kind"::LP), 'LP keys follow the designer contract.');
 
         CreateLp(LP);
@@ -193,6 +193,32 @@ codeunit 72161 "DOPSWHS Label Designer Tests"
         Assert.AreEqual(Format(10), Values.Get('TotalQuantity'), 'Total of all item lines (one unit).');
         Assert.AreEqual('3', Values.Get('LineCount'), 'Item lines.');
         Assert.AreEqual('+2 DİĞER SATIR', Values.Get('ExtraLines'), 'Extra lines as on the built-in label.');
+        // Kitoko (22 Eki 2026): QR'lı LP etiketi alanları.
+        Assert.AreEqual('L1, L2 +1', Values.Get('Lots'), 'First two distinct lots and how many more.');
+        Assert.AreEqual('LPDES-ITEM-A · L1 · ' + Format(5) + ' ADET', Values.Get('ContentsLine1'), 'Contents line 1.');
+        Assert.AreEqual('LPDES-ITEM-B · L2 · ' + Format(3) + ' ADET', Values.Get('ContentsLine2'), 'Contents line 2.');
+        Assert.AreEqual('LPDES-ITEM-A · L3 · ' + Format(2) + ' ADET', Values.Get('ContentsLine3'), 'Contents line 3.');
+        Assert.AreEqual('', Values.Get('SourceDocument'), 'No source document.');
+        Assert.IsTrue(Values.ContainsKey('VariantCode') and Values.ContainsKey('PackageNo'), 'Variant and package keys.');
+
+        LPLine.Get(LpNoTxt, 20000);
+        LPLine."Expiration Date" := DMY2Date(30, 6, 2027);
+        LPLine."Source Document Type" := LPLine."Source Document Type"::WhseReceipt;
+        LPLine."Source Document No." := 'RE-LPDES';
+        LPLine.Modify();
+        AddLpLine(40000, 'LPDES-ITEM-B', 1, 'L4', 0D);
+        LayoutFields.LpValues(LP, Values);
+        Assert.AreEqual('30.06.2027', Values.Get('ExpirationDate'), 'Earliest expiration date of the lines.');
+        Assert.AreEqual('KABUL RE-LPDES', Values.Get('SourceDocument'), 'Source document of a line.');
+        Assert.AreEqual('+2 SATIR DAHA', Values.Get('ContentsLine3'), 'More than three lines: two lines and the rest.');
+        Assert.AreEqual('L1, L2 +2', Values.Get('Lots'), 'Lots with the count of the rest.');
+        LPLine.Get(LpNoTxt, 40000);
+        LPLine.Delete();
+        LPLine.Get(LpNoTxt, 20000);
+        LPLine."Expiration Date" := 0D;
+        LPLine."Source Document Type" := LPLine."Source Document Type"::None;
+        LPLine."Source Document No." := '';
+        LPLine.Modify();
 
         LP.SSCC := '';
         LP.Modify();
@@ -389,6 +415,81 @@ codeunit 72161 "DOPSWHS Label Designer Tests"
         Layout.Validate(Active, false);
         Layout.Modify();
         Assert.AreEqual(BuiltIn, LabelReport.BuildZpl(LP), 'Deactivated: back to the built-in LP label.');
+    end;
+
+    [Test]
+    procedure LpQrLayoutIsSeededPassiveWithLpNoQr()
+    var
+        Layout: Record "DOPSWHS Label Layout";
+        LayoutLine: Record "DOPSWHS Label Layout Line";
+        LP: Record "DOPSWHS LP Header";
+        Engine: Codeunit "DOPSWHS Label Layout Engine";
+        LabelReport: Report "DOPSWHS LP Label";
+        Assert: Codeunit "Library Assert";
+        Zpl: Text;
+    begin
+        ClearLayouts();
+        Engine.SeedDefaults();
+        if not Layout.Get('LP-QR') then
+            exit; // seeded once per company (upgrade tag); a previous test run already did it.
+        Assert.IsFalse(Layout.Active, 'LP-QR stays passive.');
+        Assert.AreEqual(Layout."Label Kind"::LP, Layout."Label Kind", 'LP kind.');
+        Assert.AreEqual(100, Layout."Width (mm)", '100 mm wide.');
+        Assert.AreEqual(50, Layout."Height (mm)", '50 mm high.');
+        LayoutLine.SetRange("Layout Code", 'LP-QR');
+        LayoutLine.SetRange("Element Type", LayoutLine."Element Type"::QRCode);
+        Assert.AreEqual(1, LayoutLine.Count(), 'One QR.');
+        LayoutLine.FindFirst();
+        Assert.AreEqual('LPNo', LayoutLine."Source Field", 'QR = LP no.');
+        CreateLp(LP);
+        Zpl := LabelReport.BuildZplWithLayout(LP, 'LP-QR');
+        Assert.IsTrue(StrPos(Zpl, '^FDLA,' + LpNoTxt + '^FS') > 0, 'QR carries only the LP no.');
+        Assert.IsTrue(StrPos(Zpl, '^FDLOT: L1, L2 +1^FS') > 0, 'Lots on the label.');
+    end;
+
+    [Test]
+    procedure LotKindKeysValuesAndOneLabelPerLot()
+    var
+        LP: Record "DOPSWHS LP Header";
+        Layout: Record "DOPSWHS Label Layout";
+        LayoutLine: Record "DOPSWHS Label Layout Line";
+        LayoutFields: Codeunit "DOPSWHS Label Layout Fields";
+        Engine: Codeunit "DOPSWHS Label Layout Engine";
+        Dispatcher: Codeunit "DOPSWHS Print Dispatcher";
+        DesignerMgt: Codeunit "DOPSWHS Label Designer Mgt";
+        Assert: Codeunit "Library Assert";
+        Values: Dictionary of [Text, Text];
+        LotCount: Integer;
+        Zpl: Text;
+    begin
+        Assert.AreEqual('ItemNo,Description,LotNo,ExpirationDate,Quantity,UoM,VariantCode,SourceDocument,VendorNo,VendorName,LPNo,Company,Today',
+            LayoutFields.KeyList(Enum::"DOPSWHS Label Kind"::Lot), 'Lot keys follow the designer contract.');
+        Assert.AreEqual('Lot', DesignerMgt.KindToText(Enum::"DOPSWHS Label Kind"::Lot), 'Kind text.');
+        Assert.AreEqual(Enum::"DOPSWHS Label Kind"::Lot, DesignerMgt.TextToKind('lot'), 'Kind from text.');
+
+        LayoutFields.LotValues('LPDES-ITEM-A', '', 'L1', DMY2Date(31, 12, 2027), 5, 'ADET', 'KABUL RE1', LpNoTxt, Values);
+        Assert.AreEqual('L1', Values.Get('LotNo'), 'Lot no.');
+        Assert.AreEqual('31.12.2027', Values.Get('ExpirationDate'), 'SKT dd.mm.yyyy.');
+        Assert.AreEqual('KABUL RE1', Values.Get('SourceDocument'), 'Source document.');
+
+        ClearLayouts();
+        Engine.EnsureLotLayout();
+        Assert.IsTrue(Layout.Get('LOT'), 'Default lot layout.');
+        Assert.IsFalse(Layout.Active, 'Lot layout stays passive.');
+        Assert.AreEqual(80, Layout."Width (mm)", '80 mm.');
+        LayoutLine.SetRange("Layout Code", 'LOT');
+        LayoutLine.SetRange("Element Type", LayoutLine."Element Type"::QRCode);
+        LayoutLine.FindFirst();
+        Assert.AreEqual('ItemNo', LayoutLine."Source Field", 'QR = item no., item scans keep working.');
+        Engine.EnsureLotLayout();
+        Layout.SetRange("Label Kind", Layout."Label Kind"::Lot);
+        Assert.AreEqual(1, Layout.Count(), 'Calling it again creates nothing.');
+
+        CreateLp(LP);
+        Zpl := Dispatcher.BuildLotZpl(LP, '', LotCount);
+        Assert.AreEqual(3, LotCount, 'One label per item + lot.');
+        Assert.IsTrue(StrPos(Zpl, '^FDLA,LPDES-ITEM-A^FS') > 0, 'QR carries the item no.');
+        Assert.IsTrue(StrPos(Zpl, '^FDL2^FS') > 0, 'Lot no. printed.');
     end;
 
     [Test]

@@ -85,10 +85,20 @@ fun PutAwayModule() {
         onDocument = { selected = it },
         onError = { status = it },
     ) { item, docs ->
-        when { docs.isEmpty() -> status = "⚠️ '$item' açık yerleştirmede yok"; docs.size == 1 -> selected = docs.first(); else -> { itemDocs = item to docs; status = "TAMAM: '$item' → ${docs.size} belge" } }
+        // Kitoko (22 Eki 2026): ürün birden çok belgede ise bana atanan belge doğrudan açılır;
+        // başkasındaki belgeyi açıp "başka kullanıcıda" hatası alınmasın.
+        val mine = docs.filter { no -> rows.any { it.optString("no") == no && it.optString("assignedUserId").trim().equals(myUser, true) } }
+        when {
+            docs.isEmpty() -> status = "⚠️ '$item' açık yerleştirmede yok"
+            docs.size == 1 -> selected = docs.first()
+            mine.size == 1 -> selected = mine.first()
+            else -> { itemDocs = item to docs; status = "TAMAM: '$item' → ${docs.size} belge" }
+        }
     }
-    val scoped = if (mineOnly && myUser.isNotBlank())
-        rows.filter { it.optString("assignedUserId").trim().equals(myUser, true) } else rows
+    val scoped = sortPutAwaysForUser(
+        if (mineOnly && myUser.isNotBlank()) rows.filter { it.optString("assignedUserId").trim().equals(myUser, true) } else rows,
+        myUser,
+    )
     val shownRows = itemDocs?.let { f -> scoped.filter { it.optString("no") in f.second } } ?: scoped
 
     Column(Modifier.fillMaxSize().padding(12.dp)) {
@@ -728,6 +738,17 @@ private fun putAwayPairKey(line: JSONObject): String {
  * yalnız operatörün doğruladığı Take/Place çiftleri pozitif kalmalı, diğerleri
  * sıfırlanmalıdır; aksi halde tek okutma tüm belgeyi kapatır.
  */
+/** Kitoko (22 Eki 2026): önce bana atanan, sonra atanmamış, en sonda başkasındaki belgeler; grup içinde sıra korunur. */
+internal fun sortPutAwaysForUser(rows: List<JSONObject>, myUser: String): List<JSONObject> =
+    rows.sortedBy { row ->
+        val owner = row.optString("assignedUserId").trim()
+        when {
+            myUser.isNotBlank() && owner.equals(myUser.trim(), ignoreCase = true) -> 0
+            owner.isBlank() -> 1
+            else -> 2
+        }
+    }
+
 internal fun putAwayRegisterQuantityPlan(
     lines: List<JSONObject>,
     stagedLineNos: Set<Int>,

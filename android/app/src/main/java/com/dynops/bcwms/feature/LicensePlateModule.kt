@@ -87,6 +87,20 @@ fun LicensePlateModule() {
     }
     LaunchedEffect(Unit) { loadList() }
 
+    // Kitoko (22 Eki 2026): LP okutunca (QR = LP No) içerik kartı; ana menüde okutulan LP de buraya gelir.
+    var scannedCard by remember { mutableStateOf<LpScanRef?>(LpCardNavigation.consume()) }
+    LpScanListener(enabled = selected == null && scannedCard == null && !showBulkBuild && !showSingleBuild) { scannedCard = it }
+    val card = scannedCard
+    if (card != null && selected == null) {
+        LpContentCard(
+            ref = card,
+            onClose = { scannedCard = null },
+            closeLabel = "‹ LP Listesi",
+            onOpenDocument = { no -> scannedCard = null; selected = no },
+        )
+        return
+    }
+
     val sel = selected
     if (sel != null) {
         LpDocument(lpNo = sel, transferTarget = transferTarget, onTransferTarget = { transferTarget = it }, onBack = { selected = null; loadList() })
@@ -206,7 +220,7 @@ fun LicensePlateModule() {
             modifier = Modifier.padding(top = 6.dp),
         )
         Spacer(Modifier.height(8.dp))
-        com.dynops.bcwms.ui.DocSearchBar(value = search, onValueChange = { search = it }, onSearch = { loadList() }, label = "LP no ile ara")
+        com.dynops.bcwms.ui.DocSearchBar(value = search, onValueChange = { search = it }, onSearch = { loadList() }, label = "LP no ile ara (LP QR'ı okutun: içerik açılır)")
         Spacer(Modifier.height(4.dp))
         StatusText(status)
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
@@ -253,7 +267,7 @@ fun LicensePlateModule() {
                                 },
                             )
                             Text(lp.optString("no"), fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
-                            StatusBadge(lp.optString("status"))
+                            LpStatusBadge(lp.optString("status"))
                         }
                         Text(
                             "${lp.optString("templateCode")} · ${lp.optString("locationCode")}/${lp.optString("binCode").ifBlank { "Depo gözü atanmadı" }}",
@@ -290,7 +304,7 @@ internal fun lpStatusLabel(status: String): String = when (status) {
 }
 
 @Composable
-private fun StatusBadge(status: String) {
+internal fun LpStatusBadge(status: String) {
     val (bg, fg) = when (status) {
         "Built" -> Color(0xFFEFF4FF) to Color(0xFF3448A5)
         "Assigned" -> Color(0xFFFFF4E5) to Color(0xFF9A5B00)
@@ -337,21 +351,17 @@ private fun LpDocument(lpNo: String, transferTarget: String, onTransferTarget: (
             header = null
             lines = emptyList()
             linesComplete = false
-            val safeLpNo = lpNo.replace("'", "''")
-            val h = BcApi.get(context, "licensePlates('$safeLpNo')")
-            header = if (h.ok) runCatching { JSONObject(h.body) }.getOrNull() else null
-            if (header == null) {
+            // Kitoko (22 Eki 2026): LP kartıyla aynı okuma (fetchLpHeaderAndLines).
+            val loaded = fetchLpHeaderAndLines(context, lpNo)
+            if (loaded !is LpCardLoad.Ready) {
                 status = "HATA: LP bilgisi alınamadı. Yenileyip tekrar deneyin."
                 busy = false
                 return@launch
             }
-            val page = BcApi.getAllPages(
-                context,
-                "licensePlateLines?\$filter=lpNo eq '$safeLpNo'&\$orderby=lineNo",
-            )
-            lines = page.rows
-            linesComplete = page.complete
-            if (!page.complete) status = "HATA: LP satırlarının tamamı alınamadı. Yenileyip tekrar deneyin."
+            header = loaded.data.header
+            lines = loaded.data.lines
+            linesComplete = loaded.data.linesComplete
+            if (!linesComplete) status = "HATA: LP satırlarının tamamı alınamadı. Yenileyip tekrar deneyin."
             else if (status.startsWith("HATA:")) status = ""
             busy = false
         }

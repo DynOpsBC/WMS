@@ -31,6 +31,7 @@ codeunit 72472 "DOPSWHS Label Designer Mgt"
         NewBinDescTxt: Label 'Yeni raf etiketi';
         NewZoneDescTxt: Label 'Yeni alan etiketi';
         NewLpDescTxt: Label 'Yeni LP / palet etiketi';
+        NewLotDescTxt: Label 'Yeni lot etiketi';
         CopyDescTxt: Label '%1 (kopya)', Comment = '%1 = source description';
 
     // ------------------------------------------------------------------
@@ -274,6 +275,12 @@ codeunit 72472 "DOPSWHS Label Designer Mgt"
                     Layout."Width (mm)" := 101.6;
                     Layout."Height (mm)" := 50.8;
                 end;
+            Kind::Lot:
+                begin
+                    Layout.Description := NewLotDescTxt;
+                    Layout."Width (mm)" := 80;
+                    Layout."Height (mm)" := 40;
+                end;
             else
                 Layout.Description := NewItemDescTxt;
         end;
@@ -337,6 +344,8 @@ codeunit 72472 "DOPSWHS Label Designer Mgt"
                 Prefix := 'ALAN';
             Kind::LP:
                 Prefix := 'LP';
+            Kind::Lot:
+                Prefix := 'LOT';
             else
                 Prefix := 'URUN';
         end;
@@ -734,6 +743,8 @@ codeunit 72472 "DOPSWHS Label Designer Mgt"
                 exit('Zone');
             Kind::LP:
                 exit('LP');
+            Kind::Lot:
+                exit('Lot');
         end;
         exit('Item');
     end;
@@ -749,6 +760,8 @@ codeunit 72472 "DOPSWHS Label Designer Mgt"
                 exit(Enum::"DOPSWHS Label Kind"::Zone);
             'lp':
                 exit(Enum::"DOPSWHS Label Kind"::LP);
+            'lot':
+                exit(Enum::"DOPSWHS Label Kind"::Lot);
         end;
         Error(UnknownKindErr, Value);
     end;

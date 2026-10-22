@@ -37,9 +37,24 @@ page 72089 "DOPSWHS LP Line API"
                 field(sourceDocumentQuantity; Rec."Source Document Quantity") { Caption = 'sourceDocumentQuantity'; }
                 field(sourceItemLedgerEntryNo; Rec."Source Item Ledger Entry No.") { Caption = 'sourceItemLedgerEntryNo'; }
                 field(sourceLpNo; Rec."Source LP No.") { Caption = 'sourceLpNo'; }
+                // Kitoko (22 Eki 2026): terminal LP kartı (LP okutunca içerik) ürün açıklamasını gösterir.
+                field(itemDescription; ItemDescription) { Caption = 'itemDescription'; Editable = false; }
             }
         }
     }
+    var
+        ItemDescription: Text[100];
+
+    trigger OnAfterGetRecord()
+    var
+        Item: Record Item;
+    begin
+        ItemDescription := '';
+        if Rec."Item No." <> '' then
+            if Item.Get(Rec."Item No.") then
+                ItemDescription := Item.Description;
+    end;
+
     trigger OnOpenPage()
     var
         FilterMgmt: Codeunit "DOPSWHS App Role Filter Mgmt";

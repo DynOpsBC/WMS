@@ -194,6 +194,23 @@ page 72088 "DOPSWHS LP API"
         Dispatcher.PrintLPLabelWithLayout(Rec, printerId, copies, layoutCode);
     end;
 
+    /// <summary>
+    /// Kitoko (22 Eki 2026): lot labels of the LP, one per item + lot (kind Lot
+    /// layouts). Blank layoutCode = active lot layout, else LOT. Errors when the LP
+    /// has no lot lines, so the terminal never reports a print that sent nothing.
+    /// </summary>
+    [ServiceEnabled]
+    procedure printLotLabels(printerId: Code[50]; copies: Integer; layoutCode: Code[20]): Integer
+    var
+        Dispatcher: Codeunit "DOPSWHS Print Dispatcher";
+        Printed: Integer;
+    begin
+        Printed := Dispatcher.PrintLotLabels(Rec, printerId, copies, layoutCode);
+        if Printed = 0 then
+            Error('%1 LP''sinde lot numaralı satır yok; lot etiketi basılmadı.', Rec."No.");
+        exit(Printed);
+    end;
+
     [ServiceEnabled]
     procedure printPalletLabels(printerId: Code[50]; copies: Integer)
     var

@@ -91,6 +91,10 @@ codeunit 72034 "DOPSWHS Upgrade"
             RebuildBinCurrentLPNos();
         if ModuleInfo.DataVersion() < Version.Create(1, 14, 1, 89) then
             EnsureProductionLPBinRows();
+        // Kitoko (22 Eki 2026): pasif LOT ve LP-QR etiket tasarımları; terminal lot
+        // etiketi düğmesi lot türünde tasarım görünce açılır.
+        if ModuleInfo.DataVersion() < Version.Create(1, 14, 3, 17) then
+            EnsureKitokoLabelLayouts();
         // Existing 1.14.1.80+ tenants have already run these seeds. Repeating them
         // on every patch upgrade writes config rows and may reschedule job queue
         // entries while users and background jobs are active.
@@ -103,6 +107,14 @@ codeunit 72034 "DOPSWHS Upgrade"
             PrintCleanup.ScheduleCleanupJob();      // seed daily print payload retention cleanup
             AzurePrintWorker.ScheduleWorkerJob();  // durable print fallback/status pump
         end;
+    end;
+
+    local procedure EnsureKitokoLabelLayouts()
+    var
+        LabelEngine: Codeunit "DOPSWHS Label Layout Engine";
+    begin
+        LabelEngine.EnsureLotLayout();
+        LabelEngine.EnsureLpQrLayout();
     end;
 
     local procedure RebuildBinCurrentLPNos()

@@ -488,6 +488,13 @@ private fun HomeScreen(
         flavor,
         includeAdminTestTools = BuildConfig.DEBUG && BcApi.isAdminTestSession(context),
     )
+    // Kitoko (22 Eki 2026): ana menüde LP QR'ı / SSCC okutulursa LP ekranında içerik kartı
+    // açılır. Yalnız ana menü dinler; iş akışlarındaki LP okutmalarının anlamı değişmez.
+    val lpCardAllowed = Screen.LicensePlates in visibleScreens && canOpenOperationalScreen(context, Screen.LicensePlates)
+    com.dynops.bcwms.feature.LpScanListener(enabled = connected && lpCardAllowed && !showSwitcher) { ref ->
+        com.dynops.bcwms.feature.LpCardNavigation.request(ref)
+        onNavigate(Screen.LicensePlates)
+    }
     val visibleCategories = HomeCategories.mapNotNull { category ->
         category.copy(tiles = category.tiles.filter { it.screen in visibleScreens && canOpenOperationalScreen(context, it.screen) })
             .takeIf { it.tiles.isNotEmpty() }

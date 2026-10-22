@@ -20,6 +20,9 @@ describe("hazır şablonlar", () => {
       "LP Standart 4x2 (101.6×50.8)",
       "Palet A6 (100×150) SSCC + içerik",
       "Karma palet özet (100×100)",
+      "LP QR + Lot (100×50)",
+      "LP QR + içerik (100×100)",
+      "Lot etiketi (80×40)",
     ]) {
       expect(names).toContain(n);
     }
@@ -46,6 +49,34 @@ describe("hazır şablonlar", () => {
       expect(validateDesign(design, ctx).map((w) => w.message)).toEqual([]);
     });
   }
+
+  it("LP QR şablonlarında QR yalnız LP No taşır (terminal LP okutma alanları kabul etsin)", () => {
+    for (const id of ["lp-qr-lot", "lp-qr-contents"]) {
+      const t = TEMPLATES.find((x) => x.id === id);
+      expect(t, id).toBeDefined();
+      const qrs = t?.elements.filter((e) => e.type === "qr") ?? [];
+      expect(qrs.length, id).toBe(1);
+      expect(qrs[0].field).toBe("LPNo");
+      expect(qrs[0].prefix ?? "").toBe("");
+      expect(qrs[0].suffix ?? "").toBe("");
+    }
+    const contents = TEMPLATES.find((x) => x.id === "lp-qr-contents");
+    for (const key of ["ContentsLine1", "ContentsLine2", "ContentsLine3", "ItemCount", "TotalQuantity"]) {
+      expect(contents?.elements.some((e) => e.field === key), key).toBe(true);
+    }
+    const lot = TEMPLATES.find((x) => x.id === "lp-qr-lot");
+    for (const key of ["LPNo", "ItemNo", "Description", "Lots", "ExpirationDate", "TotalQuantity", "UoM", "BinCode", "Company", "Today", "SSCC"]) {
+      expect(lot?.elements.some((e) => e.field === key), key).toBe(true);
+    }
+  });
+
+  it("Lot etiketi: QR = ürün no, barkod = lot no", () => {
+    const t = TEMPLATES.find((x) => x.id === "lot-standard");
+    expect(t?.kind).toBe("Lot");
+    expect(t?.elements.find((e) => e.type === "qr")?.field).toBe("ItemNo");
+    expect(t?.elements.find((e) => e.type === "barcode")?.field).toBe("LotNo");
+    expect(normalizeDesign({ kind: "Lot", code: "LOT" }).kind).toBe("Lot");
+  });
 
   it("şablon uygulanınca öğeler + ölçü + dpi değişir, kod/alanlar/resimler kalır", () => {
     const t = TEMPLATES.find((x) => x.id === "lp-a6");

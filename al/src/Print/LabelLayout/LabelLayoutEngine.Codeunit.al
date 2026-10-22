@@ -11,6 +11,8 @@ codeunit 72466 "DOPSWHS Label Layout Engine"
     var
         Canvas: Codeunit "DOPSWHS Label Canvas";
         EtiketV2SizeTagTxt: Label 'DOPSWHS-KITOKO-ETIKETV2-SIZE-20261021', Locked = true;
+        LpQrSeedTagTxt: Label 'DOPSWHS-KITOKO-LPQR-SEED-20261022', Locked = true;
+        LpQrCodeTok: Label 'LP-QR', Locked = true;
 
     /// <summary>mm to printer dots (203 dpi = 8 dots per mm); a Dpi of 0 means 203.</summary>
     procedure MmToDots(Mm: Decimal; Dpi: Integer): Integer
@@ -559,6 +561,154 @@ codeunit 72466 "DOPSWHS Label Layout Engine"
             end;
         end;
         EnsureItemV2Layout();
+        EnsureLpQrLayout();
+    end;
+
+    /// <summary>
+    /// Kitoko (22 Eki 2026): seeds the passive "LP-QR" layout (web gallery template
+    /// "LP QR + Lot (100×50)": big QR = LP no., LP no., item, lot, SKT, quantity,
+    /// bin, company, date) once per company. It is never activated here, and a
+    /// deleted LP-QR is not created again (upgrade tag).
+    /// </summary>
+    procedure EnsureLpQrLayout()
+    var
+        Layout: Record "DOPSWHS Label Layout";
+        LayoutLine: Record "DOPSWHS Label Layout Line";
+        UpgradeTag: Codeunit "Upgrade Tag";
+        LineNo: Integer;
+    begin
+        if UpgradeTag.HasUpgradeTag(LpQrSeedTagTxt) then
+            exit;
+        if not Layout.Get(LpQrCodeTok) then begin
+            Layout.Init();
+            Layout."Code" := LpQrCodeTok;
+            Layout.Description := 'LP QR + Lot (100x50)';
+            Layout."Label Kind" := Layout."Label Kind"::LP;
+            Layout."Width (mm)" := 100;
+            Layout."Height (mm)" := 50;
+            Layout.Dpi := 203;
+            Layout.Active := false;
+            Layout.Insert(true);
+            FillLpQrLines(LayoutLine, Layout."Code", LineNo);
+        end;
+        UpgradeTag.SetUpgradeTag(LpQrSeedTagTxt);
+    end;
+
+    /// <summary>
+    /// The LP-QR lines; same sizes as LP_QR_LOT_ELEMENTS in
+    /// web/src/labelDesigner/templates.ts (change both together).
+    /// </summary>
+    local procedure FillLpQrLines(var LayoutLine: Record "DOPSWHS Label Layout Line"; LayoutCode: Code[20]; var LineNo: Integer)
+    begin
+        NewLine(LayoutLine, LayoutCode, LineNo, LayoutLine."Element Type"::QRCode, 2, 2, 30, 30);
+        LayoutLine."Source Field" := 'LPNo';
+        LayoutLine.Insert();
+        NewLine(LayoutLine, LayoutCode, LineNo, LayoutLine."Element Type"::Text, 2, 33, 30, 0);
+        LayoutLine."Static Text" := 'QR = LP NO';
+        LayoutLine."Font Height (mm)" := 2.25;
+        LayoutLine.Alignment := LayoutLine.Alignment::Center;
+        LayoutLine.Insert();
+        AddLpQrField(LayoutLine, LayoutCode, LineNo, 'LocationCode', 2, 37, 30, 2.75, 2, 'DEPO: ', false);
+        AddLpQrField(LayoutLine, LayoutCode, LineNo, 'SourceDocument', 2, 41.5, 30, 2.25, 1.5, '', false);
+        AddLpQrField(LayoutLine, LayoutCode, LineNo, 'SSCC', 2, 46, 30, 2, 1.25, 'SSCC ', false);
+        AddLpQrField(LayoutLine, LayoutCode, LineNo, 'LPNo', 35, 2, 63, 9, 5, '', true);
+        NewLine(LayoutLine, LayoutCode, LineNo, LayoutLine."Element Type"::Line, 35, 12.5, 63, 0.4);
+        LayoutLine."Thickness (mm)" := 0.4;
+        LayoutLine.Insert();
+        AddLpQrField(LayoutLine, LayoutCode, LineNo, 'ItemNo', 35, 14, 63, 4, 2.5, '', true);
+        NewLine(LayoutLine, LayoutCode, LineNo, LayoutLine."Element Type"::Field, 35, 19, 63, 0);
+        LayoutLine."Source Field" := 'Description';
+        LayoutLine."Font Height (mm)" := 2.75;
+        LayoutLine."Max Lines" := 2;
+        LayoutLine.Insert();
+        AddLpQrField(LayoutLine, LayoutCode, LineNo, 'Lots', 35, 25.5, 63, 4, 2.5, 'LOT: ', true);
+        AddLpQrField(LayoutLine, LayoutCode, LineNo, 'ExpirationDate', 35, 31, 30, 3.25, 2.25, 'SKT: ', false);
+        AddLpQrField(LayoutLine, LayoutCode, LineNo, 'BinCode', 66, 31, 32, 3.25, 2.25, 'GÖZ: ', false);
+        LayoutLine.Alignment := LayoutLine.Alignment::Right;
+        LayoutLine.Modify();
+        AddLpQrField(LayoutLine, LayoutCode, LineNo, 'TotalQuantity', 35, 36, 40, 5.5, 3, 'MİKTAR: ', true);
+        AddLpQrField(LayoutLine, LayoutCode, LineNo, 'UoM', 76, 36, 22, 5.5, 3, '', false);
+        LayoutLine.Alignment := LayoutLine.Alignment::Right;
+        LayoutLine.Modify();
+        NewLine(LayoutLine, LayoutCode, LineNo, LayoutLine."Element Type"::Line, 35, 43.5, 63, 0.3);
+        LayoutLine."Thickness (mm)" := 0.3;
+        LayoutLine.Insert();
+        AddLpQrField(LayoutLine, LayoutCode, LineNo, 'Company', 35, 45.5, 40, 2.5, 1.75, '', false);
+        NewLine(LayoutLine, LayoutCode, LineNo, LayoutLine."Element Type"::Field, 76, 45.5, 22, 0);
+        LayoutLine."Source Field" := 'Today';
+        LayoutLine."Font Height (mm)" := 2.5;
+        LayoutLine.Alignment := LayoutLine.Alignment::Right;
+        LayoutLine.Insert();
+    end;
+
+    /// <summary>
+    /// Kitoko (22 Eki 2026): creates the passive default lot layout "LOT" when no
+    /// lot layout exists yet (installs seeded before the Lot kind existed).
+    /// </summary>
+    procedure EnsureLotLayout()
+    var
+        Layout: Record "DOPSWHS Label Layout";
+    begin
+        Layout.SetRange("Label Kind", Layout."Label Kind"::Lot);
+        if not Layout.IsEmpty() then
+            exit;
+        if Layout.Get(DefaultCode(Enum::"DOPSWHS Label Kind"::Lot)) then
+            exit;
+        CreateLayout(Enum::"DOPSWHS Label Kind"::Lot);
+        FillDefaultLines(DefaultCode(Enum::"DOPSWHS Label Kind"::Lot), Enum::"DOPSWHS Label Kind"::Lot);
+    end;
+
+    /// <summary>
+    /// Default lot label, 80x40 mm: QR = item no. (every item scan keeps working),
+    /// Code128 = lot no., item no., description, big lot no., SKT, quantity + unit,
+    /// date. Same sizes as the web template "Lot etiketi (80×40)"
+    /// (web/src/labelDesigner/templates.ts LOT_ELEMENTS; change both together).
+    /// </summary>
+    local procedure FillLotLines(var LayoutLine: Record "DOPSWHS Label Layout Line"; LayoutCode: Code[20]; var LineNo: Integer)
+    begin
+        AddLpQrField(LayoutLine, LayoutCode, LineNo, 'ItemNo', 2, 2, 53, 4.5, 2.5, '', true);
+        NewLine(LayoutLine, LayoutCode, LineNo, LayoutLine."Element Type"::Field, 2, 7.5, 53, 0);
+        LayoutLine."Source Field" := 'Description';
+        LayoutLine."Font Height (mm)" := 2.5;
+        LayoutLine."Max Lines" := 2;
+        LayoutLine.Insert();
+        NewLine(LayoutLine, LayoutCode, LineNo, LayoutLine."Element Type"::Text, 2, 13.75, 20, 0);
+        LayoutLine."Static Text" := 'LOT';
+        LayoutLine."Font Height (mm)" := 2.25;
+        LayoutLine.Insert();
+        AddLpQrField(LayoutLine, LayoutCode, LineNo, 'LotNo', 2, 16.5, 53, 6, 3, '', true);
+        NewLine(LayoutLine, LayoutCode, LineNo, LayoutLine."Element Type"::Barcode128, 2, 23.5, 53, 8);
+        LayoutLine."Source Field" := 'LotNo';
+        LayoutLine.Insert();
+        NewLine(LayoutLine, LayoutCode, LineNo, LayoutLine."Element Type"::QRCode, 57, 2, 21, 21);
+        LayoutLine."Source Field" := 'ItemNo';
+        LayoutLine.Insert();
+        AddLpQrField(LayoutLine, LayoutCode, LineNo, 'SourceDocument', 57, 24.5, 21, 2.25, 1.5, '', false);
+        AddLpQrField(LayoutLine, LayoutCode, LineNo, 'LPNo', 57, 28.5, 21, 2.25, 1.5, '', false);
+        NewLine(LayoutLine, LayoutCode, LineNo, LayoutLine."Element Type"::Line, 2, 33, 76, 0.3);
+        LayoutLine."Thickness (mm)" := 0.3;
+        LayoutLine.Insert();
+        AddLpQrField(LayoutLine, LayoutCode, LineNo, 'ExpirationDate', 2, 34.75, 27, 3, 2, 'SKT: ', true);
+        AddLpQrField(LayoutLine, LayoutCode, LineNo, 'Quantity', 30, 34.75, 16, 3, 2, '', true);
+        LayoutLine.Alignment := LayoutLine.Alignment::Right;
+        LayoutLine.Modify();
+        AddLpQrField(LayoutLine, LayoutCode, LineNo, 'UoM', 47, 34.75, 12, 3, 1.75, '', false);
+        AddLpQrField(LayoutLine, LayoutCode, LineNo, 'Today', 60, 35, 18, 2.5, 1.75, '', false);
+        LayoutLine.Alignment := LayoutLine.Alignment::Right;
+        LayoutLine.Modify();
+    end;
+
+    /// <summary>A "Genişliğe sığdır" field line of the LP-QR layout.</summary>
+    local procedure AddLpQrField(var LayoutLine: Record "DOPSWHS Label Layout Line"; LayoutCode: Code[20]; var LineNo: Integer; FieldKey: Text[30]; X: Decimal; Y: Decimal; W: Decimal; FontMm: Decimal; MinFontMm: Decimal; FieldPrefix: Text[30]; IsBold: Boolean)
+    begin
+        NewLine(LayoutLine, LayoutCode, LineNo, LayoutLine."Element Type"::Field, X, Y, W, 0);
+        LayoutLine."Source Field" := FieldKey;
+        LayoutLine.Prefix := FieldPrefix;
+        LayoutLine."Font Height (mm)" := FontMm;
+        LayoutLine."Fit to Width" := true;
+        LayoutLine."Min Font Height (mm)" := MinFontMm;
+        LayoutLine.Bold := IsBold;
+        LayoutLine.Insert();
     end;
 
     /// <summary>
@@ -715,6 +865,8 @@ codeunit 72466 "DOPSWHS Label Layout Engine"
                 exit('BIN');
             Kind::LP:
                 exit('LP');
+            Kind::Lot:
+                exit('LOT');
         end;
         exit('ZONE');
     end;
@@ -753,6 +905,8 @@ codeunit 72466 "DOPSWHS Label Layout Engine"
                 Layout.Description := 'Alan etiketi (varsayılan)';
             Kind::LP:
                 Layout.Description := 'LP / palet etiketi (varsayılan)';
+            Kind::Lot:
+                Layout.Description := 'Lot etiketi (varsayılan)';
         end;
         Layout.Insert();
     end;
@@ -771,6 +925,10 @@ codeunit 72466 "DOPSWHS Label Layout Engine"
         end;
         if Kind = Kind::LP then begin
             FillLpLines(LayoutLine, LayoutCode, LineNo, LpDefaultVersion());
+            exit;
+        end;
+        if Kind = Kind::Lot then begin
+            FillLotLines(LayoutLine, LayoutCode, LineNo);
             exit;
         end;
         // Siyah başlık şeridi (5,5 mm): sol başlık, sağ firma/depo adı, ikisi beyaz.
