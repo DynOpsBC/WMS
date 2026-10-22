@@ -232,61 +232,43 @@ fun LicensePlateModule() {
         )
     }
 
+    // Kitoko (22 Eki 2026): sade LP ekranı. Üstte okut/ara, tek "Yeni LP" menüsü;
+    // yazdırma düğmeleri yalnız LP seçilince alttaki çubukta görünür.
+    var showCreateMenu by remember { mutableStateOf(false) }
+    val visibleRows = lpListOrder(if (showLastCreatedOnly) rows.filter { it.optString("no") in lastCreatedLpNos } else rows, sortDescending)
     Column(Modifier.fillMaxSize().padding(12.dp)) {
+        com.dynops.bcwms.ui.DocSearchBar(value = search, onValueChange = { search = it }, onSearch = { loadList() }, label = "LP okut veya LP no ile ara")
+        Spacer(Modifier.height(8.dp))
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Button(onClick = { loadList() }, enabled = !loading) { WmsRefreshLabel(loading) }
-            Button(onClick = { showBulkBuild = true }, enabled = !loading) {
-                WmsActionLabel(WmsGlyph.LICENSE_PLATE, "Stoktan LP Oluştur")
-            }
-        }
-        if (emptyLpOffered) {
-            Spacer(Modifier.height(6.dp))
-            Button(
-                onClick = { showEmptyCreate = true },
-                enabled = !loading,
-                modifier = Modifier.fillMaxWidth().height(48.dp).testTag("lp-list-create-empty"),
-            ) { WmsActionLabel(WmsGlyph.LICENSE_PLATE, "Boş LP Oluştur") }
-        }
-        Spacer(Modifier.height(6.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            OutlinedButton(onClick = { showSingleBuild = true }, enabled = !loading, modifier = Modifier.weight(1f)) {
-                Text("Tekli LP Oluştur")
-            }
-            if (!lpLabelActions) OutlinedButton(onClick = { printSelected() }, enabled = !loading && selectedForPrint.isNotEmpty(), modifier = Modifier.weight(1f)) {
-                Text("Seçilenleri Yazdır (${selectedForPrint.size})")
-            }
-        }
-        if (lpLabelActions) {
-            // Kitoko: iki ayrı baskı. "LP Etiketi" her seçili LP'ye etiket yazıcısından
-            // LP etiketi; "Seçilenleri Yazdır · MTE" eski yol (içerikliye MTE, boşa LP etiketi).
-            Spacer(Modifier.height(6.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Box(Modifier.weight(1f)) {
                 Button(
-                    onClick = { lpLabelSheetNos = lpListOrder(rows.filter { it.optString("no") in selectedForPrint }, sortDescending).map { it.optString("no") }
-                        .ifEmpty { selectedForPrint.toList() } },
-                    enabled = !loading && selectedForPrint.isNotEmpty(),
-                    modifier = Modifier.weight(1f).testTag("lp-list-print-lp-label"),
-                ) { Text("LP Etiketi Yazdır (${selectedForPrint.size})") }
-                if (mteOffered()) OutlinedButton(onClick = { printSelected() }, enabled = !loading && selectedForPrint.isNotEmpty(), modifier = Modifier.weight(1f)) {
-                    Text("Seçilenleri Yazdır · MTE (${selectedForPrint.size})")
+                    onClick = { showCreateMenu = true },
+                    enabled = !loading,
+                    modifier = Modifier.fillMaxWidth().height(50.dp).testTag("lp-list-create-menu"),
+                    shape = RoundedCornerShape(14.dp),
+                ) { WmsActionLabel(WmsGlyph.LICENSE_PLATE, "Yeni LP ▾") }
+                DropdownMenu(expanded = showCreateMenu, onDismissRequest = { showCreateMenu = false }) {
+                    if (emptyLpOffered) DropdownMenuItem(
+                        text = { Column { Text("Boş LP Oluştur", fontWeight = FontWeight.Bold); Text("Etiketi önceden basılacak boş palet/kap", fontSize = 12.sp) } },
+                        onClick = { showCreateMenu = false; showEmptyCreate = true },
+                        modifier = Modifier.testTag("lp-list-create-empty"),
+                    )
+                    DropdownMenuItem(
+                        text = { Column { Text("Stoktan LP Oluştur", fontWeight = FontWeight.Bold); Text("Raftaki stoğu LP'lere böl", fontSize = 12.sp) } },
+                        onClick = { showCreateMenu = false; showBulkBuild = true },
+                    )
+                    DropdownMenuItem(
+                        text = { Column { Text("Tekli LP Oluştur", fontWeight = FontWeight.Bold); Text("Tek LP aç, içine ürün ekle", fontSize = 12.sp) } },
+                        onClick = { showCreateMenu = false; showSingleBuild = true },
+                    )
                 }
             }
-            if (selectedForPrint.isNotEmpty() && mteOffered()) Text(
-                "LP Etiketi: her LP'ye (içerikli dahil) etiket yazıcısından LP etiketi. MTE: içerikli LP'ye MTE, boş LP'ye LP etiketi.",
-                fontSize = 11.sp,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(top = 4.dp),
-            )
+            OutlinedButton(onClick = { loadList() }, enabled = !loading, modifier = Modifier.height(50.dp)) { WmsRefreshLabel(loading) }
         }
-        if (selectedForPrint.isNotEmpty() && !lpLabelActions) LabelLayoutSelector(
-            lpLayout, enabled = !loading, note = "Boş LP'nin etiketinde kullanılır; içerikli LP'ye MTE basılır.",
-            modifier = Modifier.padding(top = 6.dp),
-        )
-        Spacer(Modifier.height(8.dp))
-        com.dynops.bcwms.ui.DocSearchBar(value = search, onValueChange = { search = it }, onSearch = { loadList() }, label = "LP no ile ara (LP QR'ı okutun: içerik açılır)")
         Spacer(Modifier.height(4.dp))
         StatusText(status)
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Text("LP'ler (${visibleRows.size})", fontWeight = FontWeight.Bold, fontSize = 14.sp, modifier = Modifier.weight(1f))
             TextButton(
                 onClick = {
                     sortDescending = !sortDescending
@@ -294,7 +276,7 @@ fun LicensePlateModule() {
                 },
                 modifier = Modifier.testTag("lp-list-sort"),
             ) {
-                Text(if (sortDescending) "LP No ↓ büyükten küçüğe" else "LP No ↑ küçükten büyüğe", fontSize = 13.sp)
+                Text(if (sortDescending) "No ↓" else "No ↑", fontSize = 13.sp)
             }
         }
         if (lastCreatedLpNos.isNotEmpty()) {
@@ -307,11 +289,11 @@ fun LicensePlateModule() {
                         if (it) selectedForPrint = selectedForPrint.intersect(lastCreatedLpNos)
                     },
                 )
-                Text("Son oluşturulan LP'ler (${lastCreatedLpNos.size})", fontSize = 12.sp)
+                Text("Yalnız son oluşturulanlar (${lastCreatedLpNos.size})", fontSize = 12.sp)
             }
         }
         LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            items(lpListOrder(if (showLastCreatedOnly) rows.filter { it.optString("no") in lastCreatedLpNos } else rows, sortDescending)) { lp ->
+            items(visibleRows) { lp ->
                 Card(
                     onClick = { selected = lp.optString("no") },
                     modifier = Modifier.fillMaxWidth(),
@@ -329,11 +311,16 @@ fun LicensePlateModule() {
                                     selectedForPrint = if (checked) selectedForPrint + no else selectedForPrint - no
                                 },
                             )
-                            Text(lp.optString("no"), fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+                            Text(lp.optString("no"), fontWeight = FontWeight.Bold, fontSize = 17.sp, modifier = Modifier.weight(1f))
                             LpStatusBadge(lp.optString("status"))
                         }
                         Text(
-                            "${lp.optString("templateCode")} · ${lp.optString("locationCode")}/${lp.optString("binCode").ifBlank { "Depo gözü atanmadı" }}",
+                            "📍 ${lp.optString("locationCode")} / ${lp.optString("binCode").ifBlank { "göz atanmadı" }}",
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.SemiBold,
+                        )
+                        if (lp.optString("templateCode").isNotBlank()) Text(
+                            lp.optString("templateCode"),
                             fontSize = 12.sp,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
@@ -349,6 +336,32 @@ fun LicensePlateModule() {
                     if (search.isNotBlank()) "'$search' ile eşleşen LP bulunamadı."
                     else "LP kaydı bulunamadı."
                 )
+            }
+        }
+        if (selectedForPrint.isNotEmpty()) Surface(tonalElevation = 3.dp, shadowElevation = 6.dp, shape = RoundedCornerShape(14.dp)) {
+            Column(Modifier.fillMaxWidth().padding(10.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("${selectedForPrint.size} LP seçili", fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+                    TextButton(onClick = { selectedForPrint = emptySet() }, enabled = !loading) { Text("Seçimi temizle") }
+                }
+                if (lpLabelActions) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Button(
+                            onClick = { lpLabelSheetNos = lpListOrder(rows.filter { it.optString("no") in selectedForPrint }, sortDescending).map { it.optString("no") }
+                                .ifEmpty { selectedForPrint.toList() } },
+                            enabled = !loading,
+                            modifier = Modifier.weight(1f).height(48.dp).testTag("lp-list-print-lp-label"),
+                        ) { WmsActionLabel(WmsGlyph.PRINTER, "LP Etiketi Yazdır") }
+                        if (mteOffered()) OutlinedButton(onClick = { printSelected() }, enabled = !loading, modifier = Modifier.weight(1f).height(48.dp)) {
+                            Text("MTE Yazdır")
+                        }
+                    }
+                } else {
+                    LabelLayoutSelector(lpLayout, enabled = !loading, note = "Boş LP'nin etiketinde kullanılır; içerikli LP'ye MTE basılır.")
+                    OutlinedButton(onClick = { printSelected() }, enabled = !loading, modifier = Modifier.fillMaxWidth().height(48.dp)) {
+                        Text("Seçilenleri Yazdır (${selectedForPrint.size})")
+                    }
+                }
             }
         }
     }
@@ -463,6 +476,7 @@ private fun LpDocument(lpNo: String, transferTarget: String, onTransferTarget: (
 
     val h = header
     val headerLoaded = h != null
+    val isTote = h?.optBoolean("reusable") == true
     val st = h?.optString("status") ?: ""
     val pendingReceiptNo = h?.optString("pendingReceiptNo").orEmpty().takeUnless { it == "null" }.orEmpty()
     val awaitingReceipt = pendingReceiptNo.isNotBlank()
@@ -537,64 +551,50 @@ private fun LpDocument(lpNo: String, transferTarget: String, onTransferTarget: (
     Column(Modifier.fillMaxSize()) {
         Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(12.dp)) {
             TextButton(onClick = onBack) { Text("‹ LP Listesi") }
-            val isTote = h?.optBoolean("reusable") == true
-            DocHeaderCard(
-                title = lpNo,
-                subtitle = "${h?.optString("templateCode") ?: ""}${if (isTote) " · ♻ Tote" else ""} · ${h?.optString("locationCode") ?: ""}/${lpBinCode.ifBlank { "Depo gözü atanmadı" }}" +
-                    (h?.optDouble("plannedQuantity", 0.0)?.takeIf { it > 0.0 }?.let { "\nPlanlanan miktar: $it" } ?: "") +
-                    (h?.optString("sscc")?.takeIf { it.isNotBlank() }?.let { "\nSSCC: $it" } ?: ""),
-                badge = lpStatusLabel(st)
-            )
-            Spacer(Modifier.height(6.dp))
-            StatusText(status)
-            // Tote (yeniden kullanılabilir LP): iş bitince Release → tekrar Built.
-            if (st.equals("Assigned", ignoreCase = true)) {
-                Spacer(Modifier.height(6.dp))
-                Button(
-                    onClick = { action("release", "{}", "LP serbest bırakıldı — yeniden kullanılabilir") },
-                    enabled = !busy, modifier = Modifier.fillMaxWidth().height(48.dp),
-                ) { WmsActionLabel(WmsGlyph.LICENSE_PLATE, if (isTote) "Tote'u Serbest Bırak" else "Serbest Bırak") }
+            // Kitoko (22 Eki 2026): nerede ve içinde ne var ilk bakışta okunsun.
+            Card(
+                Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
+            ) {
+                Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(lpNo, fontWeight = FontWeight.Bold, fontSize = 22.sp, modifier = Modifier.weight(1f))
+                        LpStatusBadge(st)
+                    }
+                    Text(
+                        "📍 ${h?.optString("locationCode").orEmpty()} / ${lpBinCode.ifBlank { "göz atanmadı" }}",
+                        fontSize = 18.sp,
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                    Text(
+                        "📦 " + lpCardTotals(lines.filter { it.optString("itemNo").isNotBlank() }).ifBlank { "Boş LP" } +
+                            " · ${lines.size} satır",
+                        fontSize = 15.sp,
+                    )
+                    val small = listOfNotNull(
+                        h?.optString("templateCode")?.takeIf { it.isNotBlank() },
+                        "♻ Tote".takeIf { isTote },
+                        h?.optDouble("plannedQuantity", 0.0)?.takeIf { it > 0.0 }?.let { "Planlanan ${fmtItemQty(it)}" },
+                        h?.optString("sscc")?.takeIf { it.isNotBlank() }?.let { "SSCC $it" },
+                        lpAssignedDocLabel(h?.optString("assignedDocumentType"), h?.optString("assignedDocumentNo")).takeIf { it.isNotBlank() }?.let { "Belge $it" },
+                    ).joinToString(" · ")
+                    if (small.isNotBlank()) Text(small, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
             }
             Spacer(Modifier.height(6.dp))
-            Text("Satırlar (${lines.size})", fontWeight = FontWeight.Bold, fontSize = 14.sp)
+            StatusText(status)
+            Spacer(Modifier.height(6.dp))
+            Text("İçerik (${lines.size})", fontWeight = FontWeight.Bold, fontSize = 15.sp)
             Spacer(Modifier.height(8.dp))
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 lines.forEach { ln ->
-                    Card(
-                        Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(14.dp),
-                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
-                    ) {
-                        Row(Modifier.padding(13.dp), verticalAlignment = Alignment.CenterVertically) {
-                            WmsIconBadge(WmsGlyph.LICENSE_PLATE, MaterialTheme.colorScheme.primary, size = 40.dp, iconSize = 22.dp)
-                            Spacer(Modifier.width(11.dp))
-                            Column(Modifier.weight(1f)) {
-                                Text(ln.optString("itemNo"), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                                Text(
-                                    "${ln.optDouble("quantity")} ${ln.optString("unitOfMeasure")}".trim(),
-                                    style = MaterialTheme.typography.labelMedium,
-                                    color = MaterialTheme.colorScheme.primary,
-                                    fontWeight = FontWeight.Bold,
-                                )
-                                val extra = listOfNotNull(
-                                    ln.optInt("sourceItemLedgerEntryNo").takeIf { it > 0 }?.let { "Kaynak giriş: #$it" },
-                                    ln.optString("sourceDocumentNo").takeIf { it.isNotBlank() && it != "null" }?.let { "Belge: $it" },
-                                    ln.optString("sourceBinCode").takeIf { it.isNotBlank() && it != "null" }?.let { "Kaynak raf: $it" },
-                                    // BADE (16 Eyl 2026): sevk LP satırında ürünün geldiği palet.
-                                    ln.optString("sourceLpNo").takeIf { it.isNotBlank() && it != "null" }?.let { "Kaynak LP: $it" },
-                                    ln.optString("lotNo").takeIf { it.isNotBlank() }?.let { "Lot $it" },
-                                    ln.optString("serialNo").takeIf { it.isNotBlank() }?.let { "Seri $it" },
-                                ).joinToString(" · ")
-                                if (extra.isNotBlank()) Text(extra, fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                if (com.dynops.bcwms.isBadeFamily() && !awaitingReceipt &&
-                                    st in listOf("Open", "Built", "Assigned") && ln.optDouble("quantity") > 0 &&
-                                    ln.optInt("sourceItemLedgerEntryNo") == 0 && ln.optString("sourceDocumentType") == "None") {
-                                    TextButton(onClick = { sourceRepairLine = ln }, enabled = !busy && linesComplete) {
-                                        Text("Kaynak Girişi Bağla")
-                                    }
-                                }
-                            }
+                    LpCardLine(ln)
+                    if (com.dynops.bcwms.isBadeFamily() && !awaitingReceipt &&
+                        st in listOf("Open", "Built", "Assigned") && ln.optDouble("quantity") > 0 &&
+                        ln.optInt("sourceItemLedgerEntryNo") == 0 && ln.optString("sourceDocumentType") == "None") {
+                        TextButton(onClick = { sourceRepairLine = ln }, enabled = !busy && linesComplete) {
+                            Text("Kaynak Girişi Bağla · ${ln.optString("itemNo")}")
                         }
                     }
                 }
@@ -643,8 +643,6 @@ private fun LpDocument(lpNo: String, transferTarget: String, onTransferTarget: (
                         Checkbox(checked = printOnComplete, onCheckedChange = { printOnComplete = it }, enabled = !busy)
                         Text("Tamamlarken etiketi yazdır", fontSize = 13.sp)
                     }
-                    Text("Yazdırmadan tamamlayabilir, etiketi daha sonra basabilirsiniz.", fontSize = 12.sp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant)
                     Button(
                         onClick = {
                             val payload = JSONObject().apply {
@@ -670,102 +668,77 @@ private fun LpDocument(lpNo: String, transferTarget: String, onTransferTarget: (
                     }
                 }
 
-                if (canTransfer || canPartiallyUse) {
-                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        if (canTransfer) {
-                            OutlinedButton(
-                                onClick = { showTransfer = true },
-                                enabled = !busy,
-                                modifier = Modifier.weight(1f).height(52.dp),
-                                shape = RoundedCornerShape(14.dp),
-                            ) { WmsActionLabel(WmsGlyph.AD_HOC, "Transfer") }
-                        }
-                        if (canPartiallyUse) {
-                            OutlinedButton(
-                                onClick = { showPartial = true },
-                                enabled = !busy,
-                                modifier = Modifier.weight(1f).height(52.dp),
-                                shape = RoundedCornerShape(14.dp),
-                            ) { WmsActionLabel(WmsGlyph.PACKING, "Kısmi İşlem") }
-                        }
-                    }
+                // Kitoko (22 Eki 2026): altta tek ana baskı düğmesi + "Diğer İşlemler" menüsü.
+                var showMore by remember { mutableStateOf(false) }
+                val printA4 = {
+                    val defaultPrinter = getDefaultPrinter(context, PRINTER_USAGE_DOCUMENT)
+                    val payload = JSONObject().apply {
+                        put("printerId", defaultPrinter)
+                        put("copies", 1)
+                    }.toString()
+                    action(
+                        "printDocument",
+                        payload,
+                        if (defaultPrinter.isBlank()) "LP QR belgesi (A4) varsayılan belge yazıcısına gönderildi" else "LP QR belgesi (A4) $defaultPrinter belge yazıcısına gönderildi",
+                        requiresCompleteLines = false,
+                    )
                 }
-
-                if (lpLabelActionsOffered()) {
-                    // Kitoko (22 Eki 2026): içerikli LP dahil LP etiketi etiket yazıcısına.
-                    Button(
+                val mteEnabled = headerLoaded && canPrintMte(linesComplete, lines.size, pendingReceiptNo)
+                val blockedReason = if (canDelete || canUnbuild) "" else when {
+                    awaitingReceipt -> "Bu LP mal kabul için ayrıldı. Değişiklik veya iptal işlemini $pendingReceiptNo belgesinden yapın."
+                    st.equals("Assigned", ignoreCase = true) ->
+                        "Bu LP bir belgeye atanmış; bozulamaz. Önce 'Serbest Bırak' ile belgeden çıkarın."
+                    st.equals("Used", ignoreCase = true) ->
+                        "Bu LP tüketilmiş (Kullanıldı); içeriği sevk edildiği için bozulamaz."
+                    st.equals("Unbuilt", ignoreCase = true) ->
+                        "Bu LP zaten bozulmuş durumda."
+                    else -> "Bu LP'nin durumu ($st) bozmaya uygun değil."
+                }
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    if (lpLabelActionsOffered()) Button(
                         onClick = { showLpLabelPrint = true },
                         enabled = !busy && headerLoaded,
-                        modifier = Modifier.fillMaxWidth().height(52.dp).testTag("lp-detail-print-lp-label"),
+                        modifier = Modifier.weight(1f).height(52.dp).testTag("lp-detail-print-lp-label"),
                         shape = RoundedCornerShape(14.dp),
-                    ) { WmsActionLabel(WmsGlyph.LABEL, "LP Etiketi Yazdır (etiket yazıcısı)") }
-                }
-
-                // Kitoko (22 Eki 2026): MTE kullanılmaz; LP etiketi düğmesi kalır.
-                if (mteOffered()) OutlinedButton(
-                    // BADE (16 Eyl 2026): önce ek alanlar (Giriş Yapan, tedarikçi lotu,
-                    // KK onayı, doküman/revizyon) sorulur, sonra müşterinin kendi MTE
-                    // raporu belge yazıcısından basılır.
-                    onClick = { showMteOptions = true },
-                    enabled = !busy && headerLoaded && canPrintMte(linesComplete, lines.size, pendingReceiptNo),
-                    modifier = Modifier.fillMaxWidth().height(50.dp),
-                    shape = RoundedCornerShape(14.dp),
-                ) { WmsActionLabel(WmsGlyph.PRINTER, "MTE Yazdır") }
-                if (awaitingReceipt && mteOffered()) {
-                    Text("MTE, mal kabul kaydedildikten sonra yazdırılabilir.", style = MaterialTheme.typography.bodySmall)
-                }
-
-                OutlinedButton(
-                    onClick = {
-                        val defaultPrinter = getDefaultPrinter(context, PRINTER_USAGE_DOCUMENT)
-                        val payload = JSONObject().apply {
-                            put("printerId", defaultPrinter)
-                            put("copies", 1)
-                        }.toString()
-                        action(
-                            "printDocument",
-                            payload,
-                            if (defaultPrinter.isBlank()) "LP QR belgesi (A4) varsayılan belge yazıcısına gönderildi" else "LP QR belgesi (A4) $defaultPrinter belge yazıcısına gönderildi",
-                            requiresCompleteLines = false,
-                        )
-                    },
-                    enabled = !busy && headerLoaded,
-                    modifier = Modifier.fillMaxWidth().height(50.dp),
-                    shape = RoundedCornerShape(14.dp),
-                ) { WmsActionLabel(WmsGlyph.PRINTER, "LP QR Belgesi (A4) Yazdır") }
-
-                when {
-                    canDelete -> OutlinedButton(
-                        onClick = { showDeleteConfirm = true },
-                        enabled = !busy,
-                        modifier = Modifier.fillMaxWidth().height(50.dp),
-                        shape = RoundedCornerShape(14.dp),
-                        colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error),
-                    ) { WmsActionLabel(WmsGlyph.WARNING, "Boş LP'yi Sil") }
-                    canUnbuild -> OutlinedButton(
-                        onClick = { showUnbuildConfirm = true },
-                        enabled = !busy,
-                        modifier = Modifier.fillMaxWidth().height(50.dp),
-                        shape = RoundedCornerShape(14.dp),
-                        colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error),
-                    ) { WmsActionLabel(WmsGlyph.WARNING, "LP'yi Boz") }
-                    // Bozma/silme yapılamıyorsa neden yapılamadığı hiç yazmıyordu;
-                    // düğme sessizce kayboluyordu (UAT lp-04).
-                    else -> Text(
-                        when {
-                            awaitingReceipt -> "Bu LP mal kabul için ayrıldı. Değişiklik veya iptal işlemini $pendingReceiptNo belgesinden yapın."
-                            st.equals("Assigned", ignoreCase = true) ->
-                                "Bu LP bir belgeye atanmış; bozulamaz. Önce 'Serbest Bırak' ile belgeden çıkarın."
-                            st.equals("Used", ignoreCase = true) ->
-                                "Bu LP tüketilmiş (Kullanıldı); içeriği sevk edildiği için bozulamaz."
-                            st.equals("Unbuilt", ignoreCase = true) ->
-                                "Bu LP zaten bozulmuş durumda."
-                            else -> "Bu LP'nin durumu ($st) bozmaya uygun değil."
-                        },
-                        fontSize = 12.sp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
-                    )
+                    ) { WmsActionLabel(WmsGlyph.PRINTER, "LP Etiketi Yazdır") }
+                    Box(if (lpLabelActionsOffered()) Modifier else Modifier.weight(1f)) {
+                        OutlinedButton(
+                            onClick = { showMore = true },
+                            enabled = !busy,
+                            modifier = (if (lpLabelActionsOffered()) Modifier else Modifier.fillMaxWidth()).height(52.dp).testTag("lp-detail-more"),
+                            shape = RoundedCornerShape(14.dp),
+                        ) { Text("Diğer İşlemler ▾") }
+                        DropdownMenu(expanded = showMore, onDismissRequest = { showMore = false }) {
+                            if (canTransfer) DropdownMenuItem(text = { Text("Transfer (başka LP'ye aktar)") }, onClick = { showMore = false; showTransfer = true })
+                            if (canPartiallyUse) DropdownMenuItem(text = { Text("Kısmi İşlem (miktar azalt)") }, onClick = { showMore = false; showPartial = true })
+                            if (st.equals("Assigned", ignoreCase = true)) DropdownMenuItem(
+                                text = { Text(if (isTote) "Tote'u Serbest Bırak" else "Belgeden Serbest Bırak") },
+                                onClick = { showMore = false; action("release", "{}", "LP serbest bırakıldı — yeniden kullanılabilir") },
+                            )
+                            if (mteOffered()) DropdownMenuItem(
+                                text = { Text(if (awaitingReceipt) "MTE Yazdır (mal kabul kaydından sonra)" else "MTE Yazdır") },
+                                enabled = mteEnabled,
+                                onClick = { showMore = false; showMteOptions = true },
+                            )
+                            DropdownMenuItem(text = { Text("LP QR Belgesi (A4) Yazdır") }, enabled = headerLoaded, onClick = { showMore = false; printA4() })
+                            HorizontalDivider()
+                            when {
+                                canDelete -> DropdownMenuItem(
+                                    text = { Text("Boş LP'yi Sil", color = MaterialTheme.colorScheme.error) },
+                                    onClick = { showMore = false; showDeleteConfirm = true },
+                                )
+                                canUnbuild -> DropdownMenuItem(
+                                    text = { Text("LP'yi Boz", color = MaterialTheme.colorScheme.error) },
+                                    onClick = { showMore = false; showUnbuildConfirm = true },
+                                )
+                                else -> DropdownMenuItem(
+                                    text = { Text(blockedReason, fontSize = 12.sp) },
+                                    enabled = false,
+                                    onClick = {},
+                                )
+                            }
+                        }
+                    }
                 }
             }
         }

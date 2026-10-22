@@ -340,7 +340,7 @@ private fun LpCardInfo(label: String, value: String) {
 }
 
 @Composable
-private fun LpCardLine(ln: JSONObject) {
+internal fun LpCardLine(ln: JSONObject) {
     Card(
         Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(12.dp),
