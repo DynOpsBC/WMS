@@ -109,18 +109,8 @@ object BcApi {
     fun getEnvironment(context: Context): String {
         val preferences = prefs(context)
         val stored = preferences.getString(KEY_ENV, null)
-        // Kitoko terminal migrated from DemoSandbox to the customer's Sand2010
-        // environment. Clear the old company selection so the new environment
-        // resolves Element 4 instead of carrying a DemoSandbox company ID over.
-        if (BuildConfig.TENANT_LABEL == "Kitoko" && stored.equals("DemoSandbox", ignoreCase = true)) {
-            preferences.edit()
-                .putString(KEY_ENV, DEFAULT_ENVIRONMENT)
-                .remove(KEY_COMPANY_ID)
-                .remove(KEY_COMPANY_NAME)
-                .remove(KEY_ACCESSIBLE_COMPANIES)
-                .apply()
-            return DEFAULT_ENVIRONMENT
-        }
+        // Kitoko (22 Eki 2026): 20 Eki'deki zorunlu DemoSandbox→Sand2010 çevirmesi
+        // kaldırıldı; "Ortam değiştir" ile seçilen ortam (ör. DemoSandbox) korunur.
         return stored ?: DEFAULT_ENVIRONMENT
     }
     fun getCompanyId(context: Context): String = prefs(context).getString(KEY_COMPANY_ID, DEFAULT_COMPANY_ID) ?: DEFAULT_COMPANY_ID
