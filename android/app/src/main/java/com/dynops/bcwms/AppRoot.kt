@@ -92,6 +92,8 @@ enum class Screen(val title: String) {
     AdHocMove("Ad-Hoc Hareket"),
     Count("Sayım"),
     CountV2("Sayım V2"),
+    // Kitoko (22 Eki 2026): rafsız/alansız madde sayımı.
+    FirstCount("İlk Sayım"),
     PutAway("Yerleştirme"),
     Shipping("Sevkiyat"),
     Production("Üretim"),
@@ -279,6 +281,7 @@ fun AppRoot() {
                     screen = Screen.CountV2
                 })
                 Screen.CountV2 -> CountV2Module()
+                Screen.FirstCount -> com.dynops.bcwms.feature.FirstCountModule()
                 Screen.PutAway -> PutAwayModule()
                 Screen.Shipping -> ShippingModule()
                 Screen.Production -> ProductionModule()
@@ -403,8 +406,11 @@ private data class HomeTile(
 // yalnız okutulan raflar sayılır (V2 altyapısı). Klasik belge sayımı gizli.
 private fun kitokoCountTiles(tiles: List<HomeTile>, flavor: String = BuildConfig.FLAVOR): List<HomeTile> =
     if (!flavor.equals("kitoko", ignoreCase = true)) tiles
-    else tiles.filterNot { it.screen == Screen.Count }.map {
-        if (it.screen == Screen.CountV2) it.copy(label = "Sayım", description = "Raf okut, LP/ürün okut, adet gir") else it
+    else tiles.filterNot { it.screen == Screen.Count }.flatMap {
+        if (it.screen == Screen.CountV2) listOf(
+            it.copy(label = "Sayım", description = "Alan, raf okut, LP/ürün okut, adet gir"),
+            HomeTile(Screen.FirstCount, WmsGlyph.COUNT, "İlk Sayım", "Sadece madde okut, adet gir"),
+        ) else listOf(it)
     }
 
 private data class HomeCategory(val title: String, val accent: Color, val tiles: List<HomeTile>)
