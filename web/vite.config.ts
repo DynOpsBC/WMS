@@ -55,7 +55,10 @@ export default defineConfig({
       }
     : {
         outDir: "../al/src/ControlAddIn/Resources/",
-        emptyOutDir: true,
+        // Resources klasöründe başka eklenti paketleri de var (labelDesigner,
+        // healthPanel, lpTrace, binLpCompare, terminalDesigner, src/*.al.js):
+        // temizlenirse silinirler. Ana paket yalnız kendi dosyalarının üzerine yazar.
+        emptyOutDir: false,
         sourcemap: true,
         rollupOptions: {
           input: {

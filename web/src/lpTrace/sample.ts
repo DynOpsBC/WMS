@@ -1,0 +1,222 @@
+// Örnek (temsili) yükler — yalnız vitest ve Playwright ekran görüntüleri için.
+// BADE vakası esas alındı (AB.01740, A102452/A102511, RE001191, PU001130, 109433);
+// numaralar ve miktarlar açıklayıcıdır, canlı veri değildir. Pakete girmez.
+import type { TracePayload, TreeLp } from "./types";
+import { emptyTrace } from "./model";
+
+const pad = (n: number) => String(n).padStart(6, "0");
+
+export const sampleLpTrace: TracePayload = {
+  ...emptyTrace(),
+  mode: "lp",
+  query: "LP001740",
+  generatedAt: "2026-10-22T07:30:00Z",
+  lp: {
+    no: "LP001740",
+    status: "assigned",
+    statusCaption: "Assigned",
+    locationCode: "BADE",
+    binCode: "KABUL-01",
+    templateCode: "PALET",
+    sscc: "386912345000017406",
+    totalQty: 3000,
+    lineCount: 2,
+    plannedQty: 3000,
+    weightKg: 0,
+    builtBy: "MERVE",
+    builtAt: "2026-10-17T07:42:10Z",
+    lastModifiedAt: "2026-10-17T09:02:44Z",
+    pendingReceiptNo: "",
+    notes: "",
+    assigned: { type: "whsePutaway", typeCaption: "Ambar yerine koyma", no: "PU001130", state: "missing", exists: false, nav: null },
+    orphan: true,
+    parent: null,
+    children: [],
+  },
+  lines: [
+    {
+      lineNo: 10000,
+      itemNo: "AB.01740",
+      itemDescription: "Ambalaj malzemesi",
+      variantCode: "",
+      lotNo: "A102452",
+      serialNo: "",
+      packageNo: "",
+      qty: 2812,
+      baseQty: 2812,
+      uom: "ADET",
+      expirationDate: "2028-10-01",
+      sourceBin: "",
+      sourceDocType: "whseReceipt",
+      sourceDocTypeCaption: "Ambar mal kabulü",
+      sourceDocNo: "RE001191",
+      sourceDocLineNo: 10000,
+      sourceDocQty: 45000,
+      sourceIleNo: 15210,
+      sourceLpNo: "",
+      childLpNo: "",
+      groupKey: "doc:whseReceipt:RE001191",
+      sourceDocState: "posted",
+      nav: { kind: "postedWhseReceipt", key: "KAB000845" },
+    },
+    {
+      lineNo: 20000,
+      itemNo: "AB.01740",
+      itemDescription: "Ambalaj malzemesi",
+      variantCode: "",
+      lotNo: "A102452",
+      serialNo: "",
+      packageNo: "",
+      qty: 188,
+      baseQty: 188,
+      uom: "ADET",
+      expirationDate: "2028-10-01",
+      sourceBin: "",
+      sourceDocType: "whseReceipt",
+      sourceDocTypeCaption: "Ambar mal kabulü",
+      sourceDocNo: "RE001191",
+      sourceDocLineNo: 10000,
+      sourceDocQty: 45000,
+      sourceIleNo: 15210,
+      sourceLpNo: "LP001752",
+      childLpNo: "",
+      groupKey: "lp:LP001752",
+      sourceDocState: "posted",
+      nav: { kind: "postedWhseReceipt", key: "KAB000845" },
+    },
+  ],
+  sourceGroups: [
+    { key: "doc:whseReceipt:RE001191", kind: "doc", label: "Ambar mal kabulü RE001191", sourceLpNo: "", sourceLpStatus: "", sourceDocType: "whseReceipt", sourceDocNo: "RE001191", sourceIleNo: 15210, qty: 2812, lineCount: 1 },
+    { key: "lp:LP001752", kind: "lp", label: "LP LP001752 üzerinden (RE001191)", sourceLpNo: "LP001752", sourceLpStatus: "unbuilt", sourceDocType: "whseReceipt", sourceDocNo: "RE001191", sourceIleNo: 15210, qty: 188, lineCount: 1 },
+  ],
+  mixedSources: true,
+  timeline: [
+    { entryNo: 90311, action: "built", actionCaption: "Built", at: "2026-10-17T07:42:10Z", user: "MERVE", device: "TC21-04", fromBin: "", toBin: "KABUL-01", qty: 0, itemNo: "", lotSerial: "", relatedDocument: "", sourceLpNo: "", targetLpNo: "", undo: false, link: null },
+    { entryNo: 90312, action: "itemAdded", actionCaption: "Item Added", at: "2026-10-17T07:42:11Z", user: "MERVE", device: "TC21-04", fromBin: "", toBin: "KABUL-01", qty: 2812, itemNo: "AB.01740", lotSerial: "A102452", relatedDocument: "RE001191", sourceLpNo: "", targetLpNo: "", undo: false, link: { kind: "postedWhseReceipt", key: "KAB000845", label: "Kayıtlı ambar mal kabulü KAB000845" } },
+    { entryNo: 90377, action: "transferIn", actionCaption: "Transfer In", at: "2026-10-17T08:15:32Z", user: "MERVE", device: "TC21-04", fromBin: "KABUL-01", toBin: "KABUL-01", qty: 188, itemNo: "AB.01740", lotSerial: "A102452", relatedDocument: "LP001752", sourceLpNo: "LP001752", targetLpNo: "LP001740", undo: false, link: { kind: "lp", key: "LP001752", label: "Kaynak LP LP001752" } },
+    { entryNo: 90402, action: "assigned", actionCaption: "Assigned", at: "2026-10-17T09:02:44Z", user: "MERVE", device: "", fromBin: "KABUL-01", toBin: "KABUL-01", qty: 0, itemNo: "", lotSerial: "", relatedDocument: "Warehouse Put-awayPU001130", sourceLpNo: "", targetLpNo: "", undo: false, link: null, missingDocNo: "PU001130" },
+  ],
+  itemLedger: [
+    { entryNo: 15210, postingDate: "2026-10-17", entryType: "Satınalma", documentType: "Alış İrsaliyesi", documentNo: "109304", documentLineNo: 10000, orderNo: "", itemNo: "AB.01740", variantCode: "", lotNo: "A102452", serialNo: "", locationCode: "BADE", qty: 45000, remainingQty: 45000, open: true, positive: true, correction: false, appliesToEntry: 0, lpNo: "", lpNos: "LP001737, LP001738, LP001739, LP001740", matchedBy: "sourceLine", undoneByEntryNo: 0, thisLpQty: 3000, linkedLpQty: 45000 },
+  ],
+  warehouseEntries: [
+    { entryNo: 88112, registeringDate: "2026-10-17", entryType: "Pozitif Düzeltme", locationCode: "BADE", zoneCode: "KABUL", binCode: "KABUL-01", itemNo: "AB.01740", lotNo: "A102452", qty: 3000, qtyBase: 3000, uom: "ADET", sourceDocument: "S. Siparişi", sourceNo: "SAS000512", whseDocumentType: "Mal Kabul", whseDocumentNo: "RE001191", referenceDocument: "Kayıtlı İrs.", referenceNo: "109304", userId: "MERVE" },
+  ],
+  documents: [
+    { key: "purchaseOrder|SAS000512", kind: "purchaseOrder", kindCaption: "Satınalma siparişi", no: "SAS000512", state: "open", exists: true, stage: 10, role: "related", note: "", nav: { kind: "purchaseOrder", key: "SAS000512" } },
+    { key: "whseReceipt|RE001191", kind: "whseReceipt", kindCaption: "Ambar mal kabulü", no: "RE001191", state: "posted", exists: true, stage: 20, role: "source", note: "Kaydedildi: KAB000845", nav: { kind: "postedWhseReceipt", key: "KAB000845" } },
+    { key: "postedWhseReceipt|KAB000845", kind: "postedWhseReceipt", kindCaption: "Kayıtlı ambar mal kabulü", no: "KAB000845", state: "posted", exists: true, stage: 25, role: "related", note: "Ambar mal kabulü RE001191", nav: { kind: "postedWhseReceipt", key: "KAB000845" } },
+    { key: "purchRcpt|109304", kind: "purchRcpt", kindCaption: "Alış irsaliyesi", no: "109304", state: "posted", exists: true, stage: 30, role: "ledger", note: "", nav: { kind: "purchRcpt", key: "109304" } },
+    { key: "whsePutaway|PU001130", kind: "whsePutaway", kindCaption: "Ambar yerine koyma", no: "PU001130", state: "missing", exists: false, stage: 40, role: "assigned", note: "Belge bulunamadı (silinmiş olabilir)", nav: null },
+  ],
+  insights: [
+    { level: "info", code: "mixedSources", text: "LP içeriği 2 farklı kaynaktan geliyor: Ambar mal kabulü RE001191 (2.812) + LP LP001752 üzerinden (RE001191) (188).", nav: null },
+    { level: "error", code: "orphanAssignment", text: "LP, artık bulunmayan Ambar yerine koyma PU001130 belgesine atanmış (yetim). LP Listesi > \"Yetim atamaları serbest bırak\" ile serbest bırakılabilir.", nav: { kind: "lp", key: "LP001740" } },
+  ],
+};
+
+function lpRange(from: number, count: number, qty: number, entryNo: number, binCode: string, undoneBy = 0, orphanDoc = ""): TreeLp[] {
+  return Array.from({ length: count }, (_, index) => ({
+    no: `LP${pad(from + index)}`,
+    status: orphanDoc ? "assigned" : "built",
+    statusCaption: orphanDoc ? "Assigned" : "Built",
+    locationCode: "BADE",
+    binCode,
+    assignedDocType: orphanDoc ? "whsePutaway" : "none",
+    assignedDocNo: orphanDoc,
+    orphan: Boolean(orphanDoc),
+    qty,
+    lineCount: 1,
+    mixedSources: false,
+    onUndoneEntry: undoneBy !== 0,
+    sourceIleNo: entryNo,
+    lines: [{ lineNo: 10000, qty, baseQty: qty, uom: "ADET", sourceDocType: "whseReceipt", sourceDocNo: "RE001191", sourceIleNo: entryNo, sourceLpNo: "", groupKey: "doc:whseReceipt:RE001191", sourceLabel: "Ambar mal kabulü RE001191", sourceUndoneBy: undoneBy }],
+  }));
+}
+
+/** Onarım (1.14.1.147) öncesi durum: geri alınan 109433'ün LP'leri hâlâ dolu. */
+export const sampleLotTrace: TracePayload = {
+  ...emptyTrace(),
+  mode: "lot",
+  query: "A102511",
+  title: "Lot A102511",
+  generatedAt: "2026-10-21T09:10:00Z",
+  groups: [
+    {
+      key: "AB.01740|A102511",
+      itemNo: "AB.01740",
+      itemDescription: "Ambalaj malzemesi",
+      lotNo: "A102511",
+      lpCount: 90,
+      lpQty: 90000,
+      bcRemainingQty: 45000,
+      unlinkedLpQty: 0,
+      diff: -45000,
+      state: "excess",
+      lps: [...lpRange(1975, 45, 1000, 15286, "K.K03.11", 15412), ...lpRange(2020, 45, 1000, 15301, "K.K03.11")],
+      entries: [
+        { entryNo: 15286, postingDate: "2026-10-18", entryType: "Satınalma", documentType: "Alış İrsaliyesi", documentNo: "109433", locationCode: "BADE", qty: 45000, remainingQty: 0, open: false, positive: true, correction: false, undoneByEntryNo: 15412, lpQty: 45000, diff: -45000 },
+        { entryNo: 15301, postingDate: "2026-10-18", entryType: "Satınalma", documentType: "Alış İrsaliyesi", documentNo: "109440", locationCode: "BADE", qty: 45000, remainingQty: 45000, open: true, positive: true, correction: false, undoneByEntryNo: 0, lpQty: 45000, diff: 0 },
+        { entryNo: 15412, postingDate: "2026-10-20", entryType: "Satınalma", documentType: "Alış İrsaliyesi", documentNo: "109433", locationCode: "BADE", qty: -45000, remainingQty: 0, open: false, positive: false, correction: true, undoneByEntryNo: 0, lpQty: 0, diff: 0 },
+      ],
+    },
+  ],
+  totals: { groupCount: 1, lpCount: 90, lpQty: 90000, bcRemainingQty: 45000, historicLpCount: 0, orphanLpCount: 0 },
+  documents: [
+    { key: "whseReceipt|RE001191", kind: "whseReceipt", kindCaption: "Ambar mal kabulü", no: "RE001191", state: "posted", exists: true, stage: 20, role: "source", note: "Kaydedildi: KAB000851", nav: { kind: "postedWhseReceipt", key: "KAB000851" } },
+    { key: "purchRcpt|109433", kind: "purchRcpt", kindCaption: "Alış irsaliyesi", no: "109433", state: "posted", exists: true, stage: 30, role: "ledger", note: "", nav: { kind: "purchRcpt", key: "109433" } },
+    { key: "purchRcpt|109440", kind: "purchRcpt", kindCaption: "Alış irsaliyesi", no: "109440", state: "posted", exists: true, stage: 30, role: "ledger", note: "", nav: { kind: "purchRcpt", key: "109440" } },
+  ],
+  insights: [
+    { level: "warning", code: "lpExceedsStock", text: "AB.01740 / lot A102511: LP'lerdeki miktar (90.000) BC kalan miktarından (45.000) fazla.", nav: null },
+    { level: "error", code: "sourceUndoneLpFull", text: "Madde girişi 15286 (109433, lot A102511) geri alınmış (düzeltme 15412) ama LP'lerde hâlâ 45.000 bağlı miktar var. Madde Defteri > \"Geri Alınan Mal Kabul LP'lerini Boşalt\".", nav: { kind: "ile", key: "15286" } },
+  ],
+};
+
+/** Onarım sonrası belge araması: 109433'ün LP'leri geri alma ile boşaltıldı. */
+export const sampleDocumentTrace: TracePayload = {
+  ...emptyTrace(),
+  mode: "document",
+  query: "109433",
+  title: "Alış irsaliyesi 109433",
+  generatedAt: "2026-10-22T07:35:00Z",
+  groups: [
+    {
+      key: "AB.01740|A102511",
+      itemNo: "AB.01740",
+      itemDescription: "Ambalaj malzemesi",
+      lotNo: "A102511",
+      lpCount: 0,
+      lpQty: 0,
+      bcRemainingQty: 45000,
+      unlinkedLpQty: 0,
+      diff: 45000,
+      state: "partial",
+      lps: [],
+      entries: [
+        { entryNo: 15286, postingDate: "2026-10-18", entryType: "Satınalma", documentType: "Alış İrsaliyesi", documentNo: "109433", locationCode: "BADE", qty: 45000, remainingQty: 0, open: false, positive: true, correction: false, undoneByEntryNo: 15412, lpQty: 0, diff: 0 },
+        { entryNo: 15412, postingDate: "2026-10-20", entryType: "Satınalma", documentType: "Alış İrsaliyesi", documentNo: "109433", locationCode: "BADE", qty: -45000, remainingQty: 0, open: false, positive: false, correction: true, undoneByEntryNo: 0, lpQty: 0, diff: 0 },
+      ],
+    },
+  ],
+  historicLps: Array.from({ length: 45 }, (_, index) => ({
+    no: `LP${pad(1975 + index)}`,
+    status: "used",
+    statusCaption: "Used",
+    locationCode: "BADE",
+    binCode: "K.K03.11",
+    assignedDocNo: "",
+    orphan: false,
+    lastAction: "itemRemoved",
+    lastAt: "2026-10-21T11:58:00Z",
+    lastRelatedDocument: `UNDO-RCPT:15412:${10000 * (index + 1)}`,
+    emptiedByUndo: true,
+  })),
+  totals: { groupCount: 1, lpCount: 0, lpQty: 0, bcRemainingQty: 45000, historicLpCount: 45, orphanLpCount: 0 },
+  documents: [
+    { key: "purchaseOrder|SAS000530", kind: "purchaseOrder", kindCaption: "Satınalma siparişi", no: "SAS000530", state: "open", exists: true, stage: 10, role: "related", note: "", nav: { kind: "purchaseOrder", key: "SAS000530" } },
+    { key: "purchRcpt|109433", kind: "purchRcpt", kindCaption: "Alış irsaliyesi", no: "109433", state: "posted", exists: true, stage: 30, role: "query", note: "", nav: { kind: "purchRcpt", key: "109433" } },
+    { key: "whsePutaway|PU001134", kind: "whsePutaway", kindCaption: "Ambar yerine koyma", no: "PU001134", state: "open", exists: true, stage: 40, role: "activity", note: "", nav: { kind: "whsePutaway", key: "PU001134" } },
+  ],
+  insights: [{ level: "info", code: "emptiedByUndo", text: "45 LP geri alınan mal kabul nedeniyle boşaltıldı.", nav: null }],
+};

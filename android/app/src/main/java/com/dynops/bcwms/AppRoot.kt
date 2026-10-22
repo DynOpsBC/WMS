@@ -180,6 +180,23 @@ fun AppRoot() {
     if (com.dynops.bcwms.isBadeFamily() && terminalAuthenticated && openedOperator.isBlank()) {
         openedOperator = BcApi.getLocalUser(context)
     }
+    // Terminal Ekran Tasarımcısı: giriş/bağlanma sonrası hemen, devam ettirmede en fazla 5 dk'da bir.
+    // API yoksa (eski BC) ya da hata olursa menü bugünkü gibi kalır.
+    LaunchedEffect(connected, sessionEpoch, terminalAuthenticated) {
+        if (connected) com.dynops.bcwms.layout.TerminalLayoutRepository.refresh(context, force = true)
+    }
+    val layoutLifecycle = androidx.compose.ui.platform.LocalLifecycleOwner.current
+    val layoutScope = rememberCoroutineScope()
+    val connectedForLayout by rememberUpdatedState(connected)
+    DisposableEffect(layoutLifecycle) {
+        val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
+            if (event == androidx.lifecycle.Lifecycle.Event.ON_RESUME && connectedForLayout) {
+                layoutScope.launch { com.dynops.bcwms.layout.TerminalLayoutRepository.refresh(context) }
+            }
+        }
+        layoutLifecycle.lifecycle.addObserver(observer)
+        onDispose { layoutLifecycle.lifecycle.removeObserver(observer) }
+    }
     if (com.dynops.bcwms.isBadeFamily() && !terminalAuthenticated && openedOperator.isBlank()) {
         LoginFlow(onConnected = {
             connected = it
@@ -415,6 +432,20 @@ private fun kitokoCountTiles(tiles: List<HomeTile>, flavor: String = BuildConfig
 
 private data class HomeCategory(val title: String, val accent: Color, val tiles: List<HomeTile>)
 
+/** BC yerleşimini kutulara uygular; layout null ise liste aynen döner. */
+private fun applyTerminalLayout(tiles: List<HomeTile>, layout: com.dynops.bcwms.layout.TerminalLayout?): List<HomeTile> {
+    if (layout == null) return tiles
+    val home = com.dynops.bcwms.layout.TerminalLayoutCatalog.HOME
+    return com.dynops.bcwms.layout.applyHomeLayout(tiles, layout) { com.dynops.bcwms.layout.TerminalLayoutCatalog.tileKey(it.screen.name) }
+        .map { tile ->
+            val key = com.dynops.bcwms.layout.TerminalLayoutCatalog.tileKey(tile.screen.name) ?: return@map tile
+            tile.copy(
+                label = layout.label(home, key) ?: tile.label,
+                description = layout.note(home, key) ?: tile.description,
+            )
+        }
+}
+
 private val HomeCategories = listOf(
     HomeCategory("Gelen", Color(0xFF26A65B), listOf(
         HomeTile(Screen.Receiving, WmsGlyph.RECEIVING, "Mal Kabul", "Gelen ürünü kaydet, LP'yi başlat"),
@@ -509,8 +540,15 @@ private fun HomeScreen(
         com.dynops.bcwms.feature.LpCardNavigation.request(ref)
         onNavigate(Screen.LicensePlates)
     }
+    // Terminal Ekran Tasarımcısı (BC): önce terminalin kendi yetki kuralları, sonra
+    // BC yerleşimi yalnız gizler/sıralar/yeniden adlandırır. Yerleşim yoksa menü aynen kalır.
+    val terminalLayout = com.dynops.bcwms.layout.TerminalLayoutRepository.current(context)
+    LaunchedEffect(companyEpoch) {
+        if (companyEpoch > 0) com.dynops.bcwms.layout.TerminalLayoutRepository.refresh(context, force = true)
+    }
     val visibleCategories = HomeCategories.mapNotNull { category ->
-        category.copy(tiles = kitokoCountTiles(category.tiles).filter { it.screen in visibleScreens && canOpenOperationalScreen(context, it.screen) })
+        val allowed = kitokoCountTiles(category.tiles).filter { it.screen in visibleScreens && canOpenOperationalScreen(context, it.screen) }
+        category.copy(tiles = applyTerminalLayout(allowed, terminalLayout))
             .takeIf { it.tiles.isNotEmpty() }
     }
 

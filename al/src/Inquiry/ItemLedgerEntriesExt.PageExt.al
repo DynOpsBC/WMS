@@ -33,6 +33,29 @@ pageextension 72313 "DOPSWHS Item Ledger Entries" extends "Item Ledger Entries"
     {
         addlast(Processing)
         {
+            action("DOPSWHS LP Trace")
+            {
+                ApplicationArea = All;
+                Caption = 'LP İzlenebilirlik';
+                ToolTip = 'Girişin LP''sini (yoksa madde ve lotunu, o da yoksa belgesini) LP İzlenebilirlik ekranında açar: LP içeriği, hareket geçmişi, bağlı girişler ve BC kalan miktarıyla karşılaştırma.';
+                Image = Trace;
+                Promoted = true;
+                PromotedCategory = Process;
+
+                trigger OnAction()
+                var
+                    TracePage: Page "DOPSWHS LP Trace";
+                begin
+                    if Rec."DOPSWHS LP No." <> '' then
+                        TracePage.SetSearch(Rec."DOPSWHS LP No.")
+                    else
+                        if Rec."Lot No." <> '' then
+                            TracePage.SetSearch(Rec."Item No." + ' ' + Rec."Lot No.")
+                        else
+                            TracePage.SetSearch(Rec."Document No.");
+                    TracePage.Run();
+                end;
+            }
             action("DOPSWHS Refresh LP No.")
             {
                 ApplicationArea = All;

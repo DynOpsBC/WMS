@@ -601,7 +601,10 @@ private fun PutAwayDocument(no: String, onBack: () -> Unit) {
                 // reddedilir. Operatörü hep hata verecek bir düğmeye
                 // yönlendirmek yerine, satır satır palet okutmaya bırak.
                 val bulkPlacementAllowed = hasLpMovements || !lpScanRequired
-                OutlinedButton(
+                // Terminal Ekran Tasarımcısı: yalnız "Tümünü Bir Bine" biçimi gizlenebilir.
+                val allToOneBinHidden = !hasLpMovements && bulkPlacementAllowed &&
+                    !com.dynops.bcwms.layout.TerminalLayoutRepository.buttonVisible(context, com.dynops.bcwms.layout.TerminalLayoutCatalog.Buttons.PUTAWAY, com.dynops.bcwms.layout.TerminalLayoutCatalog.Buttons.PUTAWAY_ALL_TO_ONE_BIN)
+                if (!allToOneBinHidden) OutlinedButton(
                     onClick = {
                         if (hasLpMovements) showBatchPlacement = true else showBulkBin = true
                     },

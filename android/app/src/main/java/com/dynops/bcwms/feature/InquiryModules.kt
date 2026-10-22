@@ -582,6 +582,10 @@ private fun ItemStockInquiry() {
 @Composable
 private fun ItemLabelInquiry() {
     val context = LocalContext.current
+    // Terminal Ekran Tasarımcısı (BC): tasarım seçimi ve aralık blokları gizlenebilir.
+    val labelsButtons = com.dynops.bcwms.layout.TerminalLayoutCatalog.Buttons
+    val showLayoutPicker = com.dynops.bcwms.layout.TerminalLayoutRepository.buttonVisible(context, labelsButtons.LABELS, labelsButtons.LABELS_LAYOUT_PICKER)
+    val showRanges = com.dynops.bcwms.layout.TerminalLayoutRepository.buttonVisible(context, labelsButtons.LABELS, labelsButtons.LABELS_RANGES)
     val scope = rememberCoroutineScope()
     val focusRequester = remember { FocusRequester() }
     val listState = rememberLazyListState()
@@ -808,13 +812,15 @@ private fun ItemLabelInquiry() {
     ) {
         // Kitoko (21 Eki 2026): etiket tasarımı ekranın en üstünde seçilir; tekli, toplu
         // ve aralık düğmeleri bu seçimle basar. "Tüm ürünler" düğmeleri kaldırıldı.
-        item { LabelLayoutSelector(itemLayout, enabled = !loading && !printing) }
-        item { AllItemLabelsCard(enabled = !loading && !printing, v2Format = true, itemLimit = 300, layout = itemLayout) }
-        item { AllItemLabelsCard(enabled = !loading && !printing, v2Format = true, itemRange = 301..500, layout = itemLayout) }
-        item { AllItemLabelsCard(enabled = !loading && !printing, v2Format = true, itemRange = 501..700, layout = itemLayout) }
-        item { AllItemLabelsCard(enabled = !loading && !printing, v2Format = true, itemRange = 701..1000, layout = itemLayout) }
-        item { AllItemLabelsCard(enabled = !loading && !printing, v2Format = true, itemRange = 1001..1250, layout = itemLayout) }
-        item { AllItemLabelsCard(enabled = !loading && !printing, v2Format = true, itemRange = 1251..1500, layout = itemLayout) }
+        if (showLayoutPicker) item { LabelLayoutSelector(itemLayout, enabled = !loading && !printing) }
+        if (showRanges) {
+            item { AllItemLabelsCard(enabled = !loading && !printing, v2Format = true, itemLimit = 300, layout = itemLayout) }
+            item { AllItemLabelsCard(enabled = !loading && !printing, v2Format = true, itemRange = 301..500, layout = itemLayout) }
+            item { AllItemLabelsCard(enabled = !loading && !printing, v2Format = true, itemRange = 501..700, layout = itemLayout) }
+            item { AllItemLabelsCard(enabled = !loading && !printing, v2Format = true, itemRange = 701..1000, layout = itemLayout) }
+            item { AllItemLabelsCard(enabled = !loading && !printing, v2Format = true, itemRange = 1001..1250, layout = itemLayout) }
+            item { AllItemLabelsCard(enabled = !loading && !printing, v2Format = true, itemRange = 1251..1500, layout = itemLayout) }
+        }
         // Aşağı çekerek silme bildirimi (Swipe down to clear)
         if (pullOffset > 10f) {
             item {
@@ -1284,7 +1290,8 @@ private fun BinStockInquiry() {
                         enabled = !loading,
                     ) { Text(if (selectedLpNos.size == lps.size) "Seçimi Kaldır" else "Tümünü Seç") }
                 }
-                if (selectedLpNos.isNotEmpty()) Button(
+                if (selectedLpNos.isNotEmpty() &&
+                    com.dynops.bcwms.layout.TerminalLayoutRepository.buttonVisible(context, com.dynops.bcwms.layout.TerminalLayoutCatalog.Buttons.BIN_INQUIRY, com.dynops.bcwms.layout.TerminalLayoutCatalog.Buttons.BIN_INQUIRY_PRINT_LP_LABELS)) Button(
                     onClick = { printSelectedLpLabels() },
                     enabled = !loading,
                     modifier = Modifier.fillMaxWidth(),

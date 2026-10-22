@@ -257,7 +257,8 @@ fun LicensePlateModule() {
                         text = { Column { Text("Stoktan LP Oluştur", fontWeight = FontWeight.Bold); Text("Raftaki stoğu LP'lere böl", fontSize = 12.sp) } },
                         onClick = { showCreateMenu = false; showBulkBuild = true },
                     )
-                    DropdownMenuItem(
+                    // Terminal Ekran Tasarımcısı: BC'de gizlendiyse menüde çıkmaz.
+                    if (com.dynops.bcwms.layout.TerminalLayoutRepository.buttonVisible(context, com.dynops.bcwms.layout.TerminalLayoutCatalog.Buttons.LICENSE_PLATES, com.dynops.bcwms.layout.TerminalLayoutCatalog.Buttons.LP_CREATE_SINGLE)) DropdownMenuItem(
                         text = { Column { Text("Tekli LP Oluştur", fontWeight = FontWeight.Bold); Text("Tek LP aç, içine ürün ekle", fontSize = 12.sp) } },
                         onClick = { showCreateMenu = false; showSingleBuild = true },
                     )
@@ -715,7 +716,7 @@ private fun LpDocument(lpNo: String, transferTarget: String, onTransferTarget: (
                                 text = { Text(if (isTote) "Tote'u Serbest Bırak" else "Belgeden Serbest Bırak") },
                                 onClick = { showMore = false; action("release", "{}", "LP serbest bırakıldı — yeniden kullanılabilir") },
                             )
-                            if (mteOffered()) DropdownMenuItem(
+                            if (mteOffered() && com.dynops.bcwms.layout.TerminalLayoutRepository.buttonVisible(context, com.dynops.bcwms.layout.TerminalLayoutCatalog.Buttons.LICENSE_PLATES, com.dynops.bcwms.layout.TerminalLayoutCatalog.Buttons.LP_PRINT_MTE)) DropdownMenuItem(
                                 text = { Text(if (awaitingReceipt) "MTE Yazdır (mal kabul kaydından sonra)" else "MTE Yazdır") },
                                 enabled = mteEnabled,
                                 onClick = { showMore = false; showMteOptions = true },
@@ -727,11 +728,12 @@ private fun LpDocument(lpNo: String, transferTarget: String, onTransferTarget: (
                                     text = { Text("Boş LP'yi Sil", color = MaterialTheme.colorScheme.error) },
                                     onClick = { showMore = false; showDeleteConfirm = true },
                                 )
-                                canUnbuild -> DropdownMenuItem(
+                                // Terminal Ekran Tasarımcısı: BC'de gizlendiyse "LP'yi Boz" çıkmaz.
+                                canUnbuild && com.dynops.bcwms.layout.TerminalLayoutRepository.buttonVisible(context, com.dynops.bcwms.layout.TerminalLayoutCatalog.Buttons.LICENSE_PLATES, com.dynops.bcwms.layout.TerminalLayoutCatalog.Buttons.LP_BREAK) -> DropdownMenuItem(
                                     text = { Text("LP'yi Boz", color = MaterialTheme.colorScheme.error) },
                                     onClick = { showMore = false; showUnbuildConfirm = true },
                                 )
-                                else -> DropdownMenuItem(
+                                blockedReason.isNotEmpty() -> DropdownMenuItem(
                                     text = { Text(blockedReason, fontSize = 12.sp) },
                                     enabled = false,
                                     onClick = {},

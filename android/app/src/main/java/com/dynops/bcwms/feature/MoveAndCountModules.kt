@@ -1140,7 +1140,7 @@ fun CountModule(onOpenCountV2: ((String) -> Unit)? = null) {
             Button(onClick = { load() }, enabled = !loading, modifier = Modifier.weight(1f)) { WmsRefreshLabel(loading) }
             // Terminalden yeni klasik sayım açmanın yolu yoktu; operatör ofisin
             // BC'de sayfa açmasını bekliyordu (UAT count-26).
-            Button(
+            if (com.dynops.bcwms.layout.TerminalLayoutRepository.buttonVisible(context, com.dynops.bcwms.layout.TerminalLayoutCatalog.Buttons.COUNT, com.dynops.bcwms.layout.TerminalLayoutCatalog.Buttons.COUNT_CREATE_NEW)) Button(
                 onClick = { showCreate = true; loadCountZones() },
                 enabled = !loading,
                 modifier = Modifier.weight(1f),
@@ -1480,7 +1480,8 @@ private fun CountDocument(no: String, onBack: () -> Unit, onOpenCountV2: ((Strin
             if (documentStatus.equals("Posted", ignoreCase = true)) {
                 Spacer(Modifier.height(8.dp))
                 StatusText("Bu sayım kaydedilmiş ve kapatılmıştır; terminalden değiştirilemez.")
-                if (showsCountedLpLabelReprint(documentStatus, countedLpCount)) {
+                if (showsCountedLpLabelReprint(documentStatus, countedLpCount) &&
+                    com.dynops.bcwms.layout.TerminalLayoutRepository.buttonVisible(context, com.dynops.bcwms.layout.TerminalLayoutCatalog.Buttons.COUNT, com.dynops.bcwms.layout.TerminalLayoutCatalog.Buttons.COUNT_PRINT_LP_LABELS)) {
                     // BC'den işlenen sayımda etiketler basılmamıştır; güncel miktarla yeniden bas.
                     Spacer(Modifier.height(8.dp))
                     OutlinedButton(

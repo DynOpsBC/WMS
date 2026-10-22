@@ -76,6 +76,9 @@ page 72095 "DOPSWHS DynOps WMS RC"
                 action(LPListNav) { Caption = 'LP List'; ApplicationArea = All; RunObject = page "DOPSWHS LP List"; }
                 action(LPTemplateNav) { Caption = 'LP Templates'; ApplicationArea = All; RunObject = page "DOPSWHS LP Template List"; }
                 action(LPMovLedgerNav) { Caption = 'LP Movement Ledger'; ApplicationArea = All; RunObject = page "DOPSWHS LP Movement Ledger"; }
+                action(HealthPanelNav) { Caption = 'Depo Sağlık Paneli'; ApplicationArea = All; RunObject = page "DOPSWHS Health Panel"; }
+                action(LpTraceNav) { Caption = 'LP İzlenebilirlik'; ApplicationArea = All; RunObject = page "DOPSWHS LP Trace"; }
+                action(BinLpCompareNav) { Caption = 'Göz ve LP Karşılaştırma'; ApplicationArea = All; RunObject = page "DOPSWHS Bin LP Compare"; }
             }
             group(SayimNav)
             {
@@ -95,6 +98,7 @@ page 72095 "DOPSWHS DynOps WMS RC"
                 action(PrintJobLogNav) { Caption = 'Print Job Log'; ApplicationArea = All; RunObject = page "DOPSWHS Print Job Log"; }
                 action(PrintersNav) { Caption = 'Printers'; ApplicationArea = All; RunObject = page "DOPSWHS Printer List"; }
                 action(DevicePrinterMapNav) { Caption = 'Device Printer Mapping'; ApplicationArea = All; RunObject = page "DOPSWHS Device Printer Map"; }
+                action(TerminalDesignerNav) { Caption = 'Terminal Ekran Tasarımcısı'; ApplicationArea = All; RunObject = page "DOPSWHS Terminal Designer"; }
                 action(SyncConflictNav) { Caption = 'Sync Conflicts'; ApplicationArea = All; RunObject = page "DOPSWHS Sync Conflict List"; }
             }
 
