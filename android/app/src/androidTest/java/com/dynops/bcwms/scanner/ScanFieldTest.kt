@@ -87,6 +87,8 @@ class ScanFieldTest {
     }
 
     @Test fun manualPutAwayInputCanBeConfirmedAndBlankInputExplainsWhatToDo() {
+        // Kitoko'da alan yerel EditText; elle giriş KeyboardlessScanFieldTest'te.
+        org.junit.Assume.assumeFalse(scanFieldSuppressesKeyboard())
         val accepted = mutableListOf<String>()
         compose.setContent {
             var value by remember { mutableStateOf("") }

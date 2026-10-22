@@ -151,3 +151,125 @@ internal fun ScannerTextField(
         TextButton(onClick = { submit(); editor?.requestFocus() }) { Text("Okunan Paleti Doğrula") }
     }
 }
+
+/**
+ * Kitoko (22 Eki 2026): değer bağlı, klavyesiz okutma alanı. Yerel EditText
+ * (showSoftInputOnFocus=false) giriş bağlantısını açık tutar: klavye-kama
+ * tarayıcı metni doğrudan yazar, ekran klavyesi hiç açılmaz (aç-kapa titremesi
+ * yok). [manualKeyboard] true iken klavye açılır ve elle yazılır.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+internal fun KeyboardlessTextField(
+    label: String,
+    value: String,
+    onValueChange: (String) -> Unit,
+    enabled: Boolean,
+    focusRequester: FocusRequester,
+    interactionSource: MutableInteractionSource,
+    manualKeyboard: Boolean,
+    onSubmit: (String) -> Unit,
+    modifier: Modifier = Modifier,
+    trailingIcon: (@Composable () -> Unit)? = null,
+) {
+    var editor by remember { mutableStateOf<EditText?>(null) }
+    var focusInteraction by remember { mutableStateOf<FocusInteraction.Focus?>(null) }
+    val currentOnValueChange by rememberUpdatedState(onValueChange)
+    val currentOnSubmit by rememberUpdatedState(onSubmit)
+    val currentEnabled by rememberUpdatedState(enabled)
+    val currentManual by rememberUpdatedState(manualKeyboard)
+    val textColor = MaterialTheme.colorScheme.onSurface.toArgb()
+    DisposableEffect(interactionSource) {
+        onDispose { focusInteraction?.let { interactionSource.tryEmit(FocusInteraction.Unfocus(it)) } }
+    }
+    LaunchedEffect(manualKeyboard) {
+        val e = editor ?: return@LaunchedEffect
+        val imm = e.context.getSystemService(android.view.inputmethod.InputMethodManager::class.java)
+        e.showSoftInputOnFocus = manualKeyboard
+        if (manualKeyboard) {
+            e.requestFocus()
+            e.post { imm.showSoftInput(e, 0) }
+        } else if (e.isFocused) imm.hideSoftInputFromWindow(e.windowToken, 0)
+    }
+    Box(
+        modifier.heightIn(min = 56.dp)
+            .pointerInput(enabled) { detectTapGestures { if (enabled) editor?.requestFocus() } }
+            .semantics(mergeDescendants = true) {
+                editableText = AnnotatedString(value)
+                if (!enabled) disabled()
+                onClick { if (enabled) editor?.requestFocus(); enabled }
+            },
+    ) {
+        OutlinedTextFieldDefaults.DecorationBox(
+            value = value,
+            enabled = enabled,
+            singleLine = true,
+            visualTransformation = VisualTransformation.None,
+            interactionSource = interactionSource,
+            label = { Text(label) },
+            trailingIcon = trailingIcon,
+            innerTextField = {
+                AndroidView(
+                    modifier = Modifier.fillMaxWidth().heightIn(min = 24.dp).focusRequester(focusRequester),
+                    factory = { context ->
+                        EditText(context).apply {
+                            contentDescription = label
+                            setSingleLine(true)
+                            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS
+                            imeOptions = EditorInfo.IME_ACTION_DONE or EditorInfo.IME_FLAG_NO_EXTRACT_UI
+                            showSoftInputOnFocus = currentManual
+                            isFocusable = true
+                            isFocusableInTouchMode = true
+                            setPadding(0, 0, 0, 0)
+                            background = null
+                            textSize = 16f
+                            setTextColor(textColor)
+                            setText(value)
+                            setOnFocusChangeListener { _, hasFocus ->
+                                focusInteraction?.let { interactionSource.tryEmit(FocusInteraction.Unfocus(it)) }
+                                focusInteraction = if (hasFocus) FocusInteraction.Focus().also { interactionSource.tryEmit(it) } else null
+                                // Önceki alanın (ör. miktar penceresi) açık bıraktığı klavyeyi kapat.
+                                if (hasFocus && !currentManual) post {
+                                    if (isFocused) context.getSystemService(android.view.inputmethod.InputMethodManager::class.java)
+                                        .hideSoftInputFromWindow(windowToken, 0)
+                                }
+                            }
+                            setOnEditorActionListener { _, action, event ->
+                                if (action == EditorInfo.IME_ACTION_DONE || event?.keyCode == KeyEvent.KEYCODE_ENTER) {
+                                    if (currentEnabled && (event == null || event.action == KeyEvent.ACTION_DOWN)) currentOnSubmit(text.toString())
+                                    true
+                                } else false
+                            }
+                            setOnKeyListener { _, code, event ->
+                                if (code in listOf(KeyEvent.KEYCODE_ENTER, KeyEvent.KEYCODE_NUMPAD_ENTER, KeyEvent.KEYCODE_TAB)) {
+                                    if (currentEnabled && event.action == KeyEvent.ACTION_DOWN) currentOnSubmit(text.toString())
+                                    true // Sonek odağı kaydırmasın.
+                                } else false
+                            }
+                            doAfterTextChanged { text ->
+                                val raw = text?.toString().orEmpty()
+                                val ended = raw.endsWith('\r') || raw.endsWith('\n') || raw.endsWith('\t')
+                                val clean = raw.trimEnd('\r', '\n', '\t')
+                                if (ended) { setText(clean); setSelection(clean.length) }
+                                if (clean != (tag as? String)) { tag = clean; currentOnValueChange(clean) }
+                                if (ended && currentEnabled) currentOnSubmit(clean)
+                            }
+                            tag = value
+                            editor = this
+                        }
+                    },
+                    update = {
+                        it.isEnabled = enabled
+                        it.setTextColor(textColor)
+                        it.contentDescription = label
+                        if (it.text.toString() != value) {
+                            it.tag = value
+                            it.setText(value)
+                            it.setSelection(value.length)
+                        }
+                    },
+                )
+            },
+        )
+    }
+}

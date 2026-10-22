@@ -109,33 +109,11 @@ fun ScanField(
     val internalFocusRequester = remember { androidx.compose.ui.focus.FocusRequester() }
     val fieldFocusRequester = focusRequester ?: internalFocusRequester
     val keyboardController = LocalSoftwareKeyboardController.current
-    val imeBottom = WindowInsets.ime.getBottom(LocalDensity.current)
     var wasFocused by remember { mutableStateOf(false) }
     var refocusing by remember { mutableStateOf(false) }
-    val focusManager = androidx.compose.ui.platform.LocalFocusManager.current
     LaunchedEffect(isFocused) {
         if (isFocused) wasFocused = true
         else if (wasFocused && !refocusing) { wasFocused = false; manualKeyboard = false }
-    }
-    // Giriş bağlantısı açık kalır (klavye-kama tarayıcılar metni onunla yazar);
-    // yalnız ekran klavyesi gizlenir: odak alınınca ve klavye her göründüğünde.
-    LaunchedEffect(isFocused, imeBottom, manualKeyboard, suppressKeyboard) {
-        if (suppressKeyboard && !scanOnly && isFocused && !manualKeyboard) {
-            keyboardController?.hide()
-            if (imeBottom == 0) { kotlinx.coroutines.delay(150); keyboardController?.hide() }
-        }
-    }
-    LaunchedEffect(manualKeyboard) {
-        if (manualKeyboard && suppressKeyboard) {
-            // Giriş oturumu odak alınırken başlar: klavyeye izin verip odağı yenile.
-            refocusing = true
-            try {
-                if (isFocused) { focusManager.clearFocus(force = true); kotlinx.coroutines.delay(60) }
-                runCatching { fieldFocusRequester.requestFocus() }
-                kotlinx.coroutines.delay(80)
-                keyboardController?.show()
-            } finally { refocusing = false }
-        }
     }
     val windowFocused = androidx.compose.ui.platform.LocalWindowInfo.current.isWindowFocused
     LaunchedEffect(isFocused, enabled, windowFocused, listenScanBus) {
@@ -178,7 +156,35 @@ fun ScanField(
                         onScanned = { deliverScan(it) },
                     )
                 }
-            } else Box(Modifier.weight(1f)) { KeyboardPolicy(suppress = suppressKeyboard, manual = manualKeyboardState) { OutlinedTextField(
+            } else if (suppressKeyboard) Box(Modifier.weight(1f)) {
+                KeyboardlessTextField(
+                    label = label,
+                    value = value,
+                    onValueChange = onValueChange,
+                    enabled = enabled,
+                    focusRequester = fieldFocusRequester,
+                    interactionSource = interactionSource,
+                    manualKeyboard = manualKeyboard,
+                    onSubmit = { text ->
+                        if (text.isBlank()) emptyHint = true else { emptyHint = false; onScanned?.invoke(text.trim()) }
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                    trailingIcon = if (onClear != null && value.isNotEmpty() && enabled) {
+                    {
+                        IconButton(
+                            onClick = { onValueChange(""); onClear() },
+                            modifier = Modifier.semantics { contentDescription = "Alanı temizle" },
+                        ) {
+                            WmsIcon(
+                                glyph = WmsGlyph.CLOSE,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.size(18.dp),
+                            )
+                        }
+                    }
+                } else null,
+                )
+            } else Box(Modifier.weight(1f)) { OutlinedTextField(
                 value = value,
                 onValueChange = onValueChange,
                 label = { Text(label) },
@@ -210,7 +216,7 @@ fun ScanField(
                 // Ekran akışı alanı programatik odaklayabilsin (sadece-okut sayım):
                 // donanım tarayıcı yalnız odaklı alana yazar.
                 modifier = Modifier.fillMaxWidth().focusRequester(fieldFocusRequester),
-            ) } }
+            ) }
             if (suppressKeyboard && !scanOnly) {
                 Spacer(Modifier.width(4.dp))
                 IconButton(
@@ -361,16 +367,4 @@ private fun CameraBarcodePreview(
             previewView
         }
     )
-}
-
-/**
- * Kitoko: giriş oturumu her zaman açılır. 1.14.194'te oturum engelleniyordu;
- * klavye-kama modundaki tarayıcılar metni giriş bağlantısıyla yazdığı için
- * okutma ⌨'e basılmadan alana düşmüyordu. Klavye artık ScanField içinde
- * gizleniyor; [suppress]/[manual] yalnız çağıranların imzası için duruyor.
- */
-@Suppress("UNUSED_PARAMETER")
-@Composable
-private fun KeyboardPolicy(suppress: Boolean, manual: State<Boolean>, content: @Composable () -> Unit) {
-    content()
 }
