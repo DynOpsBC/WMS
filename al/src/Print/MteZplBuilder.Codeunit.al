@@ -161,6 +161,8 @@ codeunit 72320 "DOPSWHS MTE Zpl Builder"
     var
         Item: Record Item;
         ItemLedgerEntry: Record "Item Ledger Entry";
+        OriginEntry: Record "Item Ledger Entry";
+        ReclassRelink: Codeunit "DOPSWHS LP Reclass Relink";
         Options: JsonObject;
         HaveEntry: Boolean;
         ItemNo: Text;
@@ -189,17 +191,23 @@ codeunit 72320 "DOPSWHS MTE Zpl Builder"
 
         if LPLine."Source Item Ledger Entry No." <> 0 then
             HaveEntry := ItemLedgerEntry.Get(LPLine."Source Item Ledger Entry No.");
+        // BADE (22 Eki 2026): SKT değiştiren yeniden sınıflandırmadan sonra LP yeni
+        // transfer girişine bağlanır. SKT bu girişten/LP satırından; tedarikçi ve
+        // mal kabul bilgisi zincirin başındaki asıl girişten okunur.
+        OriginEntry := ItemLedgerEntry;
+        if HaveEntry then
+            ReclassRelink.FindOriginEntry(OriginEntry);
         if Item.Get(LPLine."Item No.") then;
 
         ItemNo := LPLine."Item No.";
         CategoryText := ResolveCategory(Item);
-        VendorName := ResolveVendorName(Item, ItemLedgerEntry, HaveEntry);
-        ItemName := ResolveItemName(Item, LPLine, ItemLedgerEntry, HaveEntry);
+        VendorName := ResolveVendorName(Item, OriginEntry, HaveEntry);
+        ItemName := ResolveItemName(Item, LPLine, OriginEntry, HaveEntry);
         InciName := ResolveInciName(Item);
         SupplierLot := JsonText(Options, 'supplierLotNo');
         if SupplierLot = '' then
             SupplierLot := ResolveSupplierLot(LPLine);
-        ProductionDate := ResolveProductionDate(LPLine, ItemLedgerEntry, HaveEntry);
+        ProductionDate := ResolveProductionDate(LPLine, OriginEntry, HaveEntry);
         LotNo := LPLine."Lot No.";
         if (LPLine."Expiration Date" <> 0D) then
             ExpirationDate := DateText(LPLine."Expiration Date")
@@ -209,11 +217,11 @@ codeunit 72320 "DOPSWHS MTE Zpl Builder"
         QtyText := FormatQuantity(LPLine.Quantity) + ' ' + LPLine."Unit of Measure";
         StorageText := ResolveStorageCondition(Item);
         if HaveEntry then
-            ReceiptDate := DateText(ItemLedgerEntry."Posting Date")
+            ReceiptDate := DateText(OriginEntry."Posting Date")
         else
             if LP."Built DateTime" <> 0DT then
                 ReceiptDate := DateText(DT2Date(LP."Built DateTime"));
-        ReceiptNo := ResolveReceiptNo(LPLine, ItemLedgerEntry, HaveEntry);
+        ReceiptNo := ResolveReceiptNo(LPLine, OriginEntry, HaveEntry);
         InspectorText := EmployeeName(JsonText(Options, 'inspectorEmployeeNo'));
         if InspectorText = '' then
             InspectorText := JsonText(Options, 'operatorDisplayName');

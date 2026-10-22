@@ -245,6 +245,7 @@ permissionset 72094 "DOPSWHS-ADMIN"
         codeunit "DOPSWHS Bin Content Subscriber" = X,
         codeunit "DOPSWHS Bin LP Index" = X,
         codeunit "DOPSWHS LP Management" = X,
+        codeunit "DOPSWHS LP Reclass Relink" = X, // 72455
         codeunit "DOPSWHS LP Verification" = X, // 72216
         codeunit "DOPSWHS LP Nest Manager" = X,
         codeunit "DOPSWHS Lot Serial Generator" = X,

@@ -101,6 +101,41 @@ pageextension 72313 "DOPSWHS Item Ledger Entries" extends "Item Ledger Entries"
                     Message('%1 LP satırı boşaltıldı.', EmptiedLineCount);
                 end;
             }
+            action("DOPSWHS Relink Reclass LPs")
+            {
+                ApplicationArea = All;
+                Caption = 'Yeniden sınıflandırmadan LP''leri taşı';
+                ToolTip = 'Seçili girişin yeniden sınıflandırma (SKT/lot değişikliği) zincirini izler. Kalanı tükenmiş eski girişe bağlı kalan LP satırlarını, taşınan miktar kadar yeni açık girişe bağlar; LP satırının lot ve SKT bilgisi yeni girişten alınır. Kendi girişinin kalan miktarıyla desteklenen LP''ye dokunulmaz. Önce ön izleme gösterilir.';
+                Image = ItemTrackingLedger;
+
+                trigger OnAction()
+                var
+                    SelectedItemLedgerEntry: Record "Item Ledger Entry";
+                    ReclassRelink: Codeunit "DOPSWHS LP Reclass Relink";
+                    SourceEntryNos: List of [Integer];
+                    PreviewText: Text;
+                    PlannedLineCount: Integer;
+                    MovedLineCount: Integer;
+                begin
+                    // BADE (22 Eki 2026): HM.00516 / H100807 SKT yeniden sınıflandırması
+                    // sonrası LP'ler eski (kalanı 0) girişte ve eski SKT'de kalmıştı.
+                    CurrPage.SetSelectionFilter(SelectedItemLedgerEntry);
+                    if SelectedItemLedgerEntry.FindSet() then
+                        repeat
+                            ReclassRelink.CollectRelinkSourceEntries(SelectedItemLedgerEntry."Entry No.", SourceEntryNos);
+                        until SelectedItemLedgerEntry.Next() = 0;
+                    PlannedLineCount := ReclassRelink.PreviewReclassRelink(SourceEntryNos, PreviewText);
+                    if PlannedLineCount = 0 then begin
+                        Message('Seçili girişlerde yeniden sınıflandırma girişine taşınacak LP satırı bulunamadı. LP''ler kendi girişlerinin kalan stoğuyla destekleniyor ya da açık ardıl giriş yok.');
+                        exit;
+                    end;
+                    if not Confirm('%1 LP satırı taşınacak (LP/satır: eski giriş -> yeni giriş):\%2\Devam edilsin mi?', false, PlannedLineCount, PreviewText) then
+                        exit;
+                    MovedLineCount := ReclassRelink.ApplyReclassRelink(SourceEntryNos);
+                    CurrPage.Update(false);
+                    Message('%1 LP satırı yeni girişe bağlandı; lot/SKT güncellendi.', MovedLineCount);
+                end;
+            }
             action("DOPSWHS Print All LP MTE")
             {
                 ApplicationArea = All;

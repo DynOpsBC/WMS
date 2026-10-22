@@ -48,7 +48,7 @@ page 72483 "DOPSWHS LP Line ListPart"
             {
                 ApplicationArea = All;
                 Caption = 'Kaynak Girişi Bağla';
-                ToolTip = 'Kaynağı eksik stok satırını seçtiğiniz madde defteri girişine bağlar. Stok miktarını veya rafını değiştirmez.';
+                ToolTip = 'Kaynağı eksik stok satırını seçtiğiniz madde defteri girişine bağlar. Kaynak girişi tükenmişse (ör. SKT değiştiren yeniden sınıflandırma sonrası) satırı açık ardıl girişe yeniden bağlar; SKT ve gerekirse lot seçilen girişten alınır. Stok miktarını veya rafını değiştirmez.';
                 Image = Entries;
                 trigger OnAction()
                 var
@@ -56,11 +56,29 @@ page 72483 "DOPSWHS LP Line ListPart"
                     Entry: Record "Item Ledger Entry";
                     EntryLookup: Page "Item Ledger Entries";
                     LPManagement: Codeunit "DOPSWHS LP Management";
+                    ReclassRelink: Codeunit "DOPSWHS LP Reclass Relink";
                 begin
                     Rec.TestField("Item No.");
-                    if Rec."Source Item Ledger Entry No." <> 0 then
-                        Error('Bu satır zaten %1 girişine bağlıdır.', Rec."Source Item Ledger Entry No.");
                     LP.Get(Rec."LP No.");
+                    if Rec."Source Item Ledger Entry No." <> 0 then begin
+                        // BADE (22 Eki 2026): kaynağı tükenmiş satır yeniden bağlanır;
+                        // gerçek stokla desteklenen kaynak değiştirilemez.
+                        Entry.SetFilter("Entry No.", ReclassRelink.GetRelinkCandidateFilter(LP, Rec));
+                        EntryLookup.SetTableView(Entry);
+                        EntryLookup.LookupMode(true);
+                        if EntryLookup.RunModal() <> Action::LookupOK then
+                            exit;
+                        EntryLookup.GetRecord(Entry);
+                        if not Confirm(
+                            '%1 LP satırı %2 girişinden %3 girişine yeniden bağlanacak.\Lot: %4 -> %5\SKT: %6 -> %7\Devam edilsin mi?', false,
+                            Rec."LP No.", Rec."Source Item Ledger Entry No.", Entry."Entry No.",
+                            Rec."Lot No.", Entry."Lot No.", Rec."Expiration Date", Entry."Expiration Date")
+                        then
+                            exit;
+                        ReclassRelink.RelinkExhaustedStockLine(LP, Rec."Line No.", Entry."Entry No.");
+                        CurrPage.Update(false);
+                        exit;
+                    end;
                     Entry.SetRange("Item No.", Rec."Item No.");
                     Entry.SetRange("Variant Code", Rec."Variant Code");
                     Entry.SetRange("Lot No.", Rec."Lot No.");

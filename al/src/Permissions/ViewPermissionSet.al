@@ -161,6 +161,7 @@ permissionset 72096 "DOPSWHS-VIEW"
         codeunit "DOPSWHS Webhook Mgmt" = X,
         codeunit "DOPSWHS Legacy WI Publisher" = X,
         codeunit "DOPSWHS LP Propagation" = X,
+        codeunit "DOPSWHS LP Reclass Relink" = X, // 72455
         codeunit "DOPSWHS App Role Filter Mgmt" = X,
         tabledata "DOPSWHS App Role" = R,
         tabledata "DOPSWHS App User Role" = R,
