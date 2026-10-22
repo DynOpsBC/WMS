@@ -399,6 +399,14 @@ private data class HomeTile(
     val label: String,
     val description: String,
 )
+// Kitoko (22 Eki 2026): tek sayım ekranı. Raf okut → LP/ürün okut → adet gir;
+// yalnız okutulan raflar sayılır (V2 altyapısı). Klasik belge sayımı gizli.
+private fun kitokoCountTiles(tiles: List<HomeTile>, flavor: String = BuildConfig.FLAVOR): List<HomeTile> =
+    if (!flavor.equals("kitoko", ignoreCase = true)) tiles
+    else tiles.filterNot { it.screen == Screen.Count }.map {
+        if (it.screen == Screen.CountV2) it.copy(label = "Sayım", description = "Raf okut, LP/ürün okut, adet gir") else it
+    }
+
 private data class HomeCategory(val title: String, val accent: Color, val tiles: List<HomeTile>)
 
 private val HomeCategories = listOf(
@@ -496,7 +504,7 @@ private fun HomeScreen(
         onNavigate(Screen.LicensePlates)
     }
     val visibleCategories = HomeCategories.mapNotNull { category ->
-        category.copy(tiles = category.tiles.filter { it.screen in visibleScreens && canOpenOperationalScreen(context, it.screen) })
+        category.copy(tiles = kitokoCountTiles(category.tiles).filter { it.screen in visibleScreens && canOpenOperationalScreen(context, it.screen) })
             .takeIf { it.tiles.isNotEmpty() }
     }
 

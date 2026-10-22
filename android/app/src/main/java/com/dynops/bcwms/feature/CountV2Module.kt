@@ -376,6 +376,10 @@ private fun CountV2Document(no: String, onBack: () -> Unit, onRoundChanged: (Str
     var comparisonIndex by remember(no) { mutableIntStateOf(0) }
     var showFinishBin by remember(no) { mutableStateOf(false) }
     var unexpectedLabel by remember(no) { mutableStateOf<CountV2Label?>(null) }
+    // Kitoko: okutulan LP/ürünün satırları için sırayla adet sorulur.
+    val askMode = remember { countV2AsksQuantity() }
+    var askTarget by remember(no) { mutableStateOf<CountV2AskTarget?>(null) }
+    var askedLines by remember(no) { mutableStateOf(setOf<Int>()) }
 
     fun assignments(h: JSONObject?): List<CountSlotAssignment> = listOf(
         CountSlotAssignment(1, h?.optString("counter1UserId").orEmpty()),
@@ -622,6 +626,7 @@ private fun CountV2Document(no: String, onBack: () -> Unit, onRoundChanged: (Str
                         status = if (finding != null)
                             "UYARI: LP $lpNo · sistem rafı ${finding.optString("foundFromBin")} → bulunan raf $activeBin · raf farkı kaydedildi, taşıma yapılmadı"
                         else "TAMAM: LP $lpNo → $n satır $activeBin rafında sayıldı"
+                        if (askMode) { askTarget = CountV2AskTarget(activeBin, lpNo = lpNo); askedLines = emptySet() }
                     }
                     busy = false
                 }
@@ -804,8 +809,10 @@ private fun CountV2Document(no: String, onBack: () -> Unit, onRoundChanged: (Str
             busy = false
             if (batch.isEmpty()) {
                 status = "ℹ️ $what bu rafta zaten sayıldı. Farklıysa satıra dokunup düzeltin."
+                if (askMode) { askTarget = CountV2AskTarget(activeBin, itemNo = candidate.itemNo, lotNo = candidate.lotNo); askedLines = emptySet() }
                 return@launch
             }
+            if (askMode) { askTarget = CountV2AskTarget(activeBin, itemNo = candidate.itemNo, lotNo = candidate.lotNo); askedLines = emptySet() }
             lastCompleted = null
             lastBatch = batch.toList()
             lastCompletedLp = null
@@ -1053,6 +1060,7 @@ private fun CountV2Document(no: String, onBack: () -> Unit, onRoundChanged: (Str
                 loadDocument() && countV2BinCompletedForSlot(lines, bin, slot)
             if (result.ok || completedAfterTimeout) {
                 activeBin = ""
+                askTarget = null
                 lastCompleted = null; lastBatch = emptyList(); lastCompletedLp = null
                 if (completedAfterTimeout || loadDocument()) status = "TAMAM: $bin tamamlandı · sayılmayanlar $slot sayımında 0 · bekleyen rafları da sayın"
             } else status = if (BcApi.isAmbiguousMutationFailure(result)) "HATA: $COUNT_V2_AMBIGUOUS_NOTE"
@@ -1195,7 +1203,7 @@ private fun CountV2Document(no: String, onBack: () -> Unit, onRoundChanged: (Str
                                 Text("📍 $activeBin", fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
                                 TextButton(
                                     onClick = {
-                                        activeBin = ""; lastCompleted = null; lastBatch = emptyList(); lastCompletedLp = null; pendingRetry = null
+                                        activeBin = ""; askTarget = null; lastCompleted = null; lastBatch = emptyList(); lastCompletedLp = null; pendingRetry = null
                                         status = "Raf seçin: raf barkodunu okutun."
                                     },
                                     enabled = !busy && pendingRetry == null && !pendingRestoreFailed,
@@ -1374,6 +1382,31 @@ private fun CountV2Document(no: String, onBack: () -> Unit, onRoundChanged: (Str
         confirmButton = { TextButton(onClick = { finishBin() }, enabled = !busy) { Text("Rafı bitir") } },
         dismissButton = { TextButton(onClick = { showFinishBin = false }, enabled = !busy) { Text("Devam et") } },
     )
+    val askLine = askTarget?.takeIf { askMode && adjustLine == null && unexpectedLabel == null && !busy &&
+        pendingRetry == null && !status.startsWith("HATA") }?.let { target ->
+        countV2LinesToAsk(lines, target, askedLines).firstOrNull()
+    }
+    askLine?.let { line ->
+        QuantityDialogSheet(
+            title = "Sayılan adet — ${line.optString("binCode")}",
+            itemNo = line.optString("itemNo") +
+                line.optString("lpNo").takeIf { it.isNotBlank() }?.let { " · LP: $it" }.orEmpty() +
+                line.optString("lotNo").takeIf { it.isNotBlank() }?.let { " · Lot $it" }.orEmpty() +
+                " · sistem ${formatCountV2Qty(line.optDouble("systemQty", 0.0))}",
+            initialQty = line.optDouble("systemQty", 0.0).coerceAtLeast(0.0),
+            initialUom = line.optString("unitOfMeasureCode"),
+            showLotSerial = false,
+            allowZeroQuantity = true,
+            onDismiss = {
+                askTarget = null
+                status = "ℹ️ Adet girilmedi · sistem miktarı yazılı kaldı, farklıysa satıra dokunun"
+            },
+            onConfirm = { res ->
+                askedLines = askedLines + line.optInt("lineNo")
+                recordLineCount(line, res.quantity)
+            },
+        )
+    }
     unexpectedLabel?.let { label ->
         QuantityDialogSheet(
             title = "Bu rafta bulduğunuz miktar — $activeBin",
@@ -1582,3 +1615,27 @@ internal fun CountRoundComparisonCard(comparison: CountRoundComparison) {
         HorizontalDivider()
     }
 }
+
+/** Kitoko (22 Eki 2026): okutulan LP/ürünün sayım satırları için adet sorulur. */
+internal fun countV2AsksQuantity(flavor: String = com.dynops.bcwms.BuildConfig.FLAVOR): Boolean =
+    flavor.equals("kitoko", ignoreCase = true)
+
+internal data class CountV2AskTarget(
+    val bin: String,
+    val lpNo: String = "",
+    val itemNo: String = "",
+    val lotNo: String = "",
+)
+
+/**
+ * Okutmanın raftaki satırları: LP okutmasında o LP'nin satırları; ürün/lot
+ * okutmasında LP'siz satırlar (düz metin lot etiketi madde no gibi gelebilir).
+ */
+internal fun countV2LinesToAsk(lines: List<JSONObject>, target: CountV2AskTarget, asked: Set<Int>): List<JSONObject> =
+    lines.filter { line ->
+        line.optString("binCode") == target.bin && line.optInt("lineNo") !in asked &&
+            if (target.lpNo.isNotBlank()) line.optString("lpNo") == target.lpNo
+            else line.optString("lpNo").isBlank() &&
+                (target.itemNo.isBlank() || line.optString("itemNo") == target.itemNo || line.optString("lotNo") == target.itemNo) &&
+                (target.lotNo.isBlank() || line.optString("lotNo") == target.lotNo)
+    }.sortedBy { it.optInt("lineNo") }
