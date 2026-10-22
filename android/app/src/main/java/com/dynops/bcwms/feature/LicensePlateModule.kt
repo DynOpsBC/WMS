@@ -66,6 +66,9 @@ fun LicensePlateModule() {
     var sortDescending by remember { mutableStateOf(listPrefs.getBoolean(LP_LIST_SORT_DESC, false)) }
     // Kitoko (21 Eki 2026): boş LP'nin LP etiketi için seçilen etiket tasarımı.
     val lpLayout = rememberLabelLayoutChoice(LabelLayoutKind.LP)
+    // Kitoko (22 Eki 2026): seçili LP'lerin (içerikli dahil) LP etiketi etiket yazıcısına.
+    val lpLabelActions = lpLabelActionsOffered()
+    var lpLabelSheetNos by remember { mutableStateOf<List<String>?>(null) }
 
     fun loadList(statusAfterLoad: String? = null) {
         scope.launch {
@@ -199,6 +202,19 @@ fun LicensePlateModule() {
         }
     }
 
+    lpLabelSheetNos?.let { nos ->
+        LpLabelPrintSheet(
+            lpNos = nos,
+            onDismiss = { lpLabelSheetNos = null },
+            onFinished = { result, failed ->
+                lpLabelSheetNos = null
+                status = result
+                // Yeniden denemede yalnız başarısız LP'ler seçili kalır; basılanlar çift basılmaz.
+                selectedForPrint = failed.intersect(nos.toSet())
+            },
+        )
+    }
+
     Column(Modifier.fillMaxSize().padding(12.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Button(onClick = { loadList() }, enabled = !loading) { WmsRefreshLabel(loading) }
@@ -211,11 +227,33 @@ fun LicensePlateModule() {
             OutlinedButton(onClick = { showSingleBuild = true }, enabled = !loading, modifier = Modifier.weight(1f)) {
                 Text("Tekli LP Oluştur")
             }
-            OutlinedButton(onClick = { printSelected() }, enabled = !loading && selectedForPrint.isNotEmpty(), modifier = Modifier.weight(1f)) {
+            if (!lpLabelActions) OutlinedButton(onClick = { printSelected() }, enabled = !loading && selectedForPrint.isNotEmpty(), modifier = Modifier.weight(1f)) {
                 Text("Seçilenleri Yazdır (${selectedForPrint.size})")
             }
         }
-        if (selectedForPrint.isNotEmpty()) LabelLayoutSelector(
+        if (lpLabelActions) {
+            // Kitoko: iki ayrı baskı. "LP Etiketi" her seçili LP'ye etiket yazıcısından
+            // LP etiketi; "Seçilenleri Yazdır · MTE" eski yol (içerikliye MTE, boşa LP etiketi).
+            Spacer(Modifier.height(6.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Button(
+                    onClick = { lpLabelSheetNos = lpListOrder(rows.filter { it.optString("no") in selectedForPrint }, sortDescending).map { it.optString("no") }
+                        .ifEmpty { selectedForPrint.toList() } },
+                    enabled = !loading && selectedForPrint.isNotEmpty(),
+                    modifier = Modifier.weight(1f).testTag("lp-list-print-lp-label"),
+                ) { Text("LP Etiketi Yazdır (${selectedForPrint.size})") }
+                OutlinedButton(onClick = { printSelected() }, enabled = !loading && selectedForPrint.isNotEmpty(), modifier = Modifier.weight(1f)) {
+                    Text("Seçilenleri Yazdır · MTE (${selectedForPrint.size})")
+                }
+            }
+            if (selectedForPrint.isNotEmpty()) Text(
+                "LP Etiketi: her LP'ye (içerikli dahil) etiket yazıcısından LP etiketi. MTE: içerikli LP'ye MTE, boş LP'ye LP etiketi.",
+                fontSize = 11.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(top = 4.dp),
+            )
+        }
+        if (selectedForPrint.isNotEmpty() && !lpLabelActions) LabelLayoutSelector(
             lpLayout, enabled = !loading, note = "Boş LP'nin etiketinde kullanılır; içerikli LP'ye MTE basılır.",
             modifier = Modifier.padding(top = 6.dp),
         )
@@ -344,6 +382,7 @@ private fun LpDocument(lpNo: String, transferTarget: String, onTransferTarget: (
     var showAssignBin by remember { mutableStateOf(false) }
     var showUnbuildConfirm by remember { mutableStateOf(false) }
     var showDeleteConfirm by remember { mutableStateOf(false) }
+    var showLpLabelPrint by remember { mutableStateOf(false) }
 
     fun reload() {
         scope.launch {
@@ -627,6 +666,16 @@ private fun LpDocument(lpNo: String, transferTarget: String, onTransferTarget: (
                     }
                 }
 
+                if (lpLabelActionsOffered()) {
+                    // Kitoko (22 Eki 2026): içerikli LP dahil LP etiketi etiket yazıcısına.
+                    Button(
+                        onClick = { showLpLabelPrint = true },
+                        enabled = !busy && headerLoaded,
+                        modifier = Modifier.fillMaxWidth().height(52.dp).testTag("lp-detail-print-lp-label"),
+                        shape = RoundedCornerShape(14.dp),
+                    ) { WmsActionLabel(WmsGlyph.LABEL, "LP Etiketi Yazdır (etiket yazıcısı)") }
+                }
+
                 OutlinedButton(
                     // BADE (16 Eyl 2026): önce ek alanlar (Giriş Yapan, tedarikçi lotu,
                     // KK onayı, doküman/revizyon) sorulur, sonra müşterinin kendi MTE
@@ -650,14 +699,14 @@ private fun LpDocument(lpNo: String, transferTarget: String, onTransferTarget: (
                         action(
                             "printDocument",
                             payload,
-                            if (defaultPrinter.isBlank()) "LP QR belgesi varsayılan yazıcıya gönderildi" else "LP QR belgesi $defaultPrinter yazıcısına gönderildi",
+                            if (defaultPrinter.isBlank()) "LP QR belgesi (A4) varsayılan belge yazıcısına gönderildi" else "LP QR belgesi (A4) $defaultPrinter belge yazıcısına gönderildi",
                             requiresCompleteLines = false,
                         )
                     },
                     enabled = !busy && headerLoaded,
                     modifier = Modifier.fillMaxWidth().height(50.dp),
                     shape = RoundedCornerShape(14.dp),
-                ) { WmsActionLabel(WmsGlyph.PRINTER, "LP QR Belgesini Yazdır") }
+                ) { WmsActionLabel(WmsGlyph.PRINTER, "LP QR Belgesi (A4) Yazdır") }
 
                 when {
                     canDelete -> OutlinedButton(
@@ -694,6 +743,14 @@ private fun LpDocument(lpNo: String, transferTarget: String, onTransferTarget: (
                 }
             }
         }
+    }
+
+    if (showLpLabelPrint) {
+        LpLabelPrintSheet(
+            lpNos = listOf(lpNo),
+            onDismiss = { showLpLabelPrint = false },
+            onFinished = { result, _ -> showLpLabelPrint = false; status = result },
+        )
     }
 
     if (showAssignBin) {
