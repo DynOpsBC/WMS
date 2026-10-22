@@ -45,3 +45,28 @@ class CountV2AskQuantityTest {
         assertEquals(listOf(50), countV2LinesToAsk(lines, CountV2AskTarget("A-01", lotNo = "L7"), emptySet()).map { it.optInt("lineNo") })
     }
 }
+
+class CountV2ZoneStartTest {
+    private fun sheet(no: String, loc: String, zone: String, status: String = "Open") =
+        JSONObject().put("no", no).put("locationCode", loc).put("zoneFilter", zone).put("status", status)
+
+    @Test fun `opens the open sheet of the scanned zone`() {
+        val r = countV2ZoneStart("PICK", listOf("MERKEZ"), "", listOf(sheet("C1", "MERKEZ", "PICK", "Posted"), sheet("C2", "MERKEZ", "PICK")), true)
+        assertEquals(CountV2ZoneStart.Open("C2"), r)
+    }
+
+    @Test fun `creates when no open sheet for that zone`() {
+        val r = countV2ZoneStart("PICK", listOf("MERKEZ"), "", listOf(sheet("C1", "MERKEZ", "PICK", "Posted"), sheet("C3", "MERKEZ", "BULK")), true)
+        assertEquals(CountV2ZoneStart.Create("MERKEZ"), r)
+    }
+
+    @Test fun `zone in several locations uses current location or asks`() {
+        assertEquals(CountV2ZoneStart.Create("B"), countV2ZoneStart("PICK", listOf("A", "B"), "B", emptyList(), true))
+        assertEquals(CountV2ZoneStart.ChooseLocation(listOf("A", "B")), countV2ZoneStart("PICK", listOf("A", "B"), "", emptyList(), true))
+    }
+
+    @Test fun `unknown zone or failed read is an error`() {
+        assertTrue(countV2ZoneStart("X", emptyList(), "", emptyList(), true) is CountV2ZoneStart.Error)
+        assertTrue(countV2ZoneStart("X", listOf("A"), "", emptyList(), false) is CountV2ZoneStart.Error)
+    }
+}

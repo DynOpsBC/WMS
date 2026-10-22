@@ -197,6 +197,31 @@ fun CountV2Module() {
         }
     }
 
+    // Kitoko (22 Eki 2026): sayım alan etiketiyle başlar. Alan QR'ı (alan kodu)
+    // okutulunca o alanın açık sayımı açılır; yoksa lokasyon + alan için oluşturulur.
+    var zoneScan by remember { mutableStateOf("") }
+    fun startFromZone(raw: String) {
+        val zone = raw.trim().uppercase()
+        zoneScan = ""
+        if (zone.isBlank() || creating || loading) return
+        scope.launch {
+            loading = true
+            status = "$zone alanı aranıyor..."
+            val page = BcApi.getAllPages(context, "zones?\$filter=code eq '${zone.replace("'", "''")}'&\$top=20")
+            loading = false
+            val locations = if (page.complete) page.rows.map { it.optString("locationCode") }.filter(String::isNotBlank).distinct() else emptyList()
+            when (val pick = countV2ZoneStart(zone, locations, newLocation, rows, page.complete)) {
+                is CountV2ZoneStart.Open -> { status = "TAMAM: $zone alanının açık sayımı açıldı"; selected = pick.sheetNo }
+                is CountV2ZoneStart.Create -> { newLocation = pick.location; newZone = zone; createV2() }
+                is CountV2ZoneStart.ChooseLocation -> {
+                    newZone = zone; zones = listOf(zone); showCreate = true
+                    status = "$zone alanı birden fazla lokasyonda var (${pick.locations.joinToString()}); lokasyonu seçin."
+                }
+                is CountV2ZoneStart.Error -> status = "HATA: ${pick.message}"
+            }
+        }
+    }
+
     // Klasik Sayım ekranından "Sayım V2'de Aç" ile gelen belge doğrudan açılır.
     LaunchedEffect(Unit) {
         com.dynops.bcwms.CountV2Handoff.consume()?.let { selected = it }
@@ -224,6 +249,19 @@ fun CountV2Module() {
             }
         }
         Spacer(Modifier.height(8.dp))
+        if (countV2AsksQuantity()) {
+            ScanField(
+                label = "1. Alan etiketini okut",
+                value = zoneScan,
+                onValueChange = { zoneScan = it },
+                onScanned = { startFromZone(it) },
+                enabled = backendReady && !loading && !creating,
+                autoFocus = true,
+                modifier = Modifier.fillMaxWidth(),
+            )
+            Text("Sonra raf → LP/ürün okutup adet girersiniz.", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Spacer(Modifier.height(8.dp))
+        }
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Button(onClick = { load() }, enabled = !loading) { WmsRefreshLabel(loading) }
             Button(
@@ -1639,3 +1677,36 @@ internal fun countV2LinesToAsk(lines: List<JSONObject>, target: CountV2AskTarget
                 (target.itemNo.isBlank() || line.optString("itemNo") == target.itemNo || line.optString("lotNo") == target.itemNo) &&
                 (target.lotNo.isBlank() || line.optString("lotNo") == target.lotNo)
     }.sortedBy { it.optInt("lineNo") }
+
+internal sealed interface CountV2ZoneStart {
+    data class Open(val sheetNo: String) : CountV2ZoneStart
+    data class Create(val location: String) : CountV2ZoneStart
+    data class ChooseLocation(val locations: List<String>) : CountV2ZoneStart
+    data class Error(val message: String) : CountV2ZoneStart
+}
+
+/**
+ * Alan etiketi okutması: alan tek lokasyondaysa (ya da seçili lokasyon onlardan
+ * biriyse) o lokasyon+alanın işlenmemiş en yeni sayımı açılır, yoksa yenisi kurulur.
+ */
+internal fun countV2ZoneStart(
+    zone: String,
+    zoneLocations: List<String>,
+    currentLocation: String,
+    sheets: List<JSONObject>,
+    complete: Boolean,
+): CountV2ZoneStart {
+    if (!complete) return CountV2ZoneStart.Error("Alan bilgisi okunamadı. Bağlantıyı kontrol edip tekrar okutun.")
+    if (zoneLocations.isEmpty()) return CountV2ZoneStart.Error("'$zone' BC'de alan kodu olarak bulunamadı. Alan etiketini okutun.")
+    val location = when {
+        zoneLocations.size == 1 -> zoneLocations.single()
+        currentLocation.trim() in zoneLocations -> currentLocation.trim()
+        else -> return CountV2ZoneStart.ChooseLocation(zoneLocations)
+    }
+    val open = sheets.firstOrNull {
+        it.optString("locationCode").equals(location, ignoreCase = true) &&
+            it.optString("zoneFilter").equals(zone, ignoreCase = true) &&
+            countDocumentIsMutable(it.optString("status"))
+    }
+    return if (open != null) CountV2ZoneStart.Open(open.optString("no")) else CountV2ZoneStart.Create(location)
+}
