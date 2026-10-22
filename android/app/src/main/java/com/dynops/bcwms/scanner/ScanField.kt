@@ -37,11 +37,8 @@ import com.google.mlkit.vision.common.InputImage
 import java.util.concurrent.Executors
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.ime
-import androidx.compose.ui.ExperimentalComposeUiApi
-import androidx.compose.ui.platform.InterceptPlatformTextInput
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
-import kotlinx.coroutines.awaitCancellation
 
 /**
  * Kitoko (22 Eki 2026): "sürekli alttan klavye açılmasın". Okutma alanları
@@ -120,9 +117,13 @@ fun ScanField(
         if (isFocused) wasFocused = true
         else if (wasFocused && !refocusing) { wasFocused = false; manualKeyboard = false }
     }
-    // Yedek koruma: başka bir alanın açtığı klavye bu alana geçince kapanır.
+    // Giriş bağlantısı açık kalır (klavye-kama tarayıcılar metni onunla yazar);
+    // yalnız ekran klavyesi gizlenir: odak alınınca ve klavye her göründüğünde.
     LaunchedEffect(isFocused, imeBottom, manualKeyboard, suppressKeyboard) {
-        if (suppressKeyboard && !scanOnly && isFocused && !manualKeyboard && imeBottom > 0) keyboardController?.hide()
+        if (suppressKeyboard && !scanOnly && isFocused && !manualKeyboard) {
+            keyboardController?.hide()
+            if (imeBottom == 0) { kotlinx.coroutines.delay(150); keyboardController?.hide() }
+        }
     }
     LaunchedEffect(manualKeyboard) {
         if (manualKeyboard && suppressKeyboard) {
@@ -363,18 +364,13 @@ private fun CameraBarcodePreview(
 }
 
 /**
- * Kitoko: [suppress] iken alan odaklansa da ekran klavyesi için giriş oturumu
- * açılmaz (Compose InterceptPlatformTextInput). [manual] true olunca istek
- * normal yoldan geçer (⌨). Donanım tuş olayları ve ScanBus etkilenmez.
+ * Kitoko: giriş oturumu her zaman açılır. 1.14.194'te oturum engelleniyordu;
+ * klavye-kama modundaki tarayıcılar metni giriş bağlantısıyla yazdığı için
+ * okutma ⌨'e basılmadan alana düşmüyordu. Klavye artık ScanField içinde
+ * gizleniyor; [suppress]/[manual] yalnız çağıranların imzası için duruyor.
  */
-@OptIn(ExperimentalComposeUiApi::class)
+@Suppress("UNUSED_PARAMETER")
 @Composable
 private fun KeyboardPolicy(suppress: Boolean, manual: State<Boolean>, content: @Composable () -> Unit) {
-    if (!suppress) { content(); return }
-    InterceptPlatformTextInput(
-        interceptor = { request, nextHandler ->
-            if (manual.value) nextHandler.startInputMethod(request) else awaitCancellation()
-        },
-        content = content,
-    )
+    content()
 }
