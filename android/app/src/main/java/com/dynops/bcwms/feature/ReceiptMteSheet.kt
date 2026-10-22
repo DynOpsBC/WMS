@@ -40,8 +40,10 @@ internal fun receiptLotLabelLpNos(lpNos: Collection<String>, lines: List<JSONObj
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-internal fun ReceiptMteSheet(receiptNo: String, manualPrint: Boolean = false, onDismiss: () -> Unit) {
+internal fun ReceiptMteSheet(receiptNo: String, manualPrint: Boolean = false, printSummary: String = "", onDismiss: () -> Unit) {
     val context = LocalContext.current
+    // Kitoko (22 Eki 2026): MTE yok; sayfa "Etiketler" — yalnız LP / lot etiketi.
+    val mte = remember { mteOffered() }
     val scope = rememberCoroutineScope()
     var lpNos by remember(receiptNo) { mutableStateOf<List<String>>(emptyList()) }
     var selected by remember(receiptNo) { mutableStateOf<Set<String>>(emptySet()) }
@@ -110,7 +112,9 @@ internal fun ReceiptMteSheet(receiptNo: String, manualPrint: Boolean = false, on
             if (page.complete) preselected = true
             status = when {
                 !page.complete -> "HATA: LP listesi tamamlanamadı. Yenileyin; mal kabulü tekrar kaydetmeyin."
+                lpNos.isEmpty() && !mte -> "Bu mal kabule bağlı ürün içeren LP bulunamadı."
                 lpNos.isEmpty() -> "Bu mal kabule bağlı ürün içeren LP bulunamadı. MTE için LP oluşturulmuş olmalı."
+                !mte -> "${lpNos.size} LP bulundu. Etiket basılacak LP'leri seçin."
                 manualPrint -> "${lpNos.size} LP bulundu. Etiket Yazdır ile seçili paletlerin etiketi basılır."
                 else -> "${lpNos.size} LP bulundu. Yalnız etiketi eksik olanları seçin."
             }
@@ -130,9 +134,16 @@ internal fun ReceiptMteSheet(receiptNo: String, manualPrint: Boolean = false, on
             Modifier.fillMaxWidth().padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
-            Text(if (manualPrint) "Mal kabul kaydedildi · Etiket Yazdır" else "Mal kabul kaydedildi · MTE", style = MaterialTheme.typography.titleLarge)
+            Text(if (!mte) "Etiketler" else if (manualPrint) "Mal kabul kaydedildi · Etiket Yazdır" else "Mal kabul kaydedildi · MTE", style = MaterialTheme.typography.titleLarge)
             Text("Belge: $receiptNo")
-            Text(
+            if (!mte) {
+                if (printSummary.isNotBlank()) StatusText(printSummary)
+                Text(
+                    "LP etiketini yeniden basmak ya da lot etiketi basmak için LP'leri seçin; yalnız eksikleri basın. " +
+                        "Liste bu belgenin önceki kısmi kabullerine ait LP'leri de içerebilir.",
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            } else Text(
                 if (manualPrint)
                     "Etiketler kayıtla birlikte basılmadı. Basılacak paletler seçili; Etiket Yazdır'a basın. " +
                         "Liste bu belgenin önceki kısmi kabullerine ait LP'leri de içerebilir."
@@ -154,7 +165,7 @@ internal fun ReceiptMteSheet(receiptNo: String, manualPrint: Boolean = false, on
                     }
                 }
             }
-            Button(
+            if (mte) Button(
                 enabled = loaded && !busy && selected.isNotEmpty(),
                 modifier = Modifier.fillMaxWidth(),
                 onClick = {
@@ -200,7 +211,7 @@ internal fun ReceiptMteSheet(receiptNo: String, manualPrint: Boolean = false, on
             val lotOffered = receiptLotLabelLpNos(selectedLps, receiptLines).isNotEmpty() && lotLayout.load is LabelLayoutLoad.Ready
             if (loaded && lpNos.isNotEmpty()) {
                 HorizontalDivider()
-                Text("LP ve lot etiketi (seçili LP'ler)", style = MaterialTheme.typography.titleSmall)
+                Text(if (mte) "LP ve lot etiketi (seçili LP'ler)" else "LP etiketi / lot etiketi (seçili LP'ler: ${selectedLps.size})", style = MaterialTheme.typography.titleSmall)
                 LabelLayoutSelector(lpLayout, enabled = !busy)
                 LabelCopiesField(lpCopies, { lpCopies = it }, enabled = !busy, label = "LP etiketi adedi")
                 if (lotOffered) {

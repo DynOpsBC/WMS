@@ -242,11 +242,11 @@ fun LicensePlateModule() {
                     enabled = !loading && selectedForPrint.isNotEmpty(),
                     modifier = Modifier.weight(1f).testTag("lp-list-print-lp-label"),
                 ) { Text("LP Etiketi Yazdır (${selectedForPrint.size})") }
-                OutlinedButton(onClick = { printSelected() }, enabled = !loading && selectedForPrint.isNotEmpty(), modifier = Modifier.weight(1f)) {
+                if (mteOffered()) OutlinedButton(onClick = { printSelected() }, enabled = !loading && selectedForPrint.isNotEmpty(), modifier = Modifier.weight(1f)) {
                     Text("Seçilenleri Yazdır · MTE (${selectedForPrint.size})")
                 }
             }
-            if (selectedForPrint.isNotEmpty()) Text(
+            if (selectedForPrint.isNotEmpty() && mteOffered()) Text(
                 "LP Etiketi: her LP'ye (içerikli dahil) etiket yazıcısından LP etiketi. MTE: içerikli LP'ye MTE, boş LP'ye LP etiketi.",
                 fontSize = 11.sp,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -676,7 +676,8 @@ private fun LpDocument(lpNo: String, transferTarget: String, onTransferTarget: (
                     ) { WmsActionLabel(WmsGlyph.LABEL, "LP Etiketi Yazdır (etiket yazıcısı)") }
                 }
 
-                OutlinedButton(
+                // Kitoko (22 Eki 2026): MTE kullanılmaz; LP etiketi düğmesi kalır.
+                if (mteOffered()) OutlinedButton(
                     // BADE (16 Eyl 2026): önce ek alanlar (Giriş Yapan, tedarikçi lotu,
                     // KK onayı, doküman/revizyon) sorulur, sonra müşterinin kendi MTE
                     // raporu belge yazıcısından basılır.
@@ -685,7 +686,7 @@ private fun LpDocument(lpNo: String, transferTarget: String, onTransferTarget: (
                     modifier = Modifier.fillMaxWidth().height(50.dp),
                     shape = RoundedCornerShape(14.dp),
                 ) { WmsActionLabel(WmsGlyph.PRINTER, "MTE Yazdır") }
-                if (awaitingReceipt) {
+                if (awaitingReceipt && mteOffered()) {
                     Text("MTE, mal kabul kaydedildikten sonra yazdırılabilir.", style = MaterialTheme.typography.bodySmall)
                 }
 

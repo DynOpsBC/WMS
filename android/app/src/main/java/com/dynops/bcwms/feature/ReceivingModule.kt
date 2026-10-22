@@ -226,6 +226,12 @@ private fun ReceiveDocument(no: String, onBack: () -> Unit) {
     var skipPrinting by remember(no) { mutableStateOf(false) }
     var showReceiptMte by remember(no) { mutableStateOf(false) }
     var manualLabelPrint by remember(no) { mutableStateOf(false) }
+    // Kitoko (22 Eki 2026): MTE yok; kayıttan sonra terminal LP etiketini basar.
+    val terminalReceiptLabels = remember { terminalPrintsReceiptLabels() }
+    var lotLabelsToo by remember(no) { mutableStateOf(false) }
+    var receiptLabelSummary by remember(no) { mutableStateOf("") }
+    val receiptLpLayout = rememberLabelLayoutChoice(LabelLayoutKind.LP)
+    val receiptLotLayout = rememberLabelLayoutChoice(LabelLayoutKind.Lot)
     // TOPLU POST: satır onayı (PATCH receiptLines) belgeyi ASLA postlamaz —
     // yalnız "Qty. to Receive"/lot/seri/LP yazar. Post tek bir yerden, alttaki
     // butondan ve özet onayından sonra çalışır.
@@ -686,6 +692,9 @@ private fun ReceiveDocument(no: String, onBack: () -> Unit) {
             totalLineCount = lines.size,
             totalQty = postQty,
             confirmLabel = if (activeLp != null) "LP’yi Kapat ve Naklet" else "Deftere Naklet",
+            extraContent = if (terminalReceiptLabels) {
+                { ReceiptPostLabelOptions(skipPrinting, receiptLpLayout, receiptLotLayout, lotLabelsToo) { lotLabelsToo = it } }
+            } else null,
             onDismiss = { showPostConfirm = false },
             onConfirm = {
                 showPostConfirm = false
@@ -731,9 +740,53 @@ private fun ReceiveDocument(no: String, onBack: () -> Unit) {
                         reload()
                         return@launch
                     }
-                    val postRequest = receiptPostRequest(skipPrinting, printReceipt,
+                    val postRequest = receiptPostRequestFor(com.dynops.bcwms.BuildConfig.FLAVOR, skipPrinting, printReceipt,
                         getDefaultPrinter(context, PRINTER_USAGE_DOCUMENT), getMtePrinter(context))
+                    // Kitoko: kayıttan önce bu mal kabulün içerikli LP'leri; kayıttan sonra
+                    // yeni dolanlar + bu kayda katılanlar etiketlenir (önceki kısmi kabuller değil).
+                    val autoLabels = receiptAutoLpLabels(com.dynops.bcwms.BuildConfig.FLAVOR, skipPrinting)
+                    val labelCandidates = receiptPostLpCandidates(postLines, header?.optString("lpNo"), activeLp)
+                    val lpLinesBeforePost = if (autoLabels) fetchReceiptLpLines(context, no) else null
                     val r = BcApi.boundAction(context, "receipts", no, postRequest.action, postRequest.body)
+                    if (r.ok && terminalReceiptLabels) {
+                        touched = emptySet()
+                        receiptLabelSummary = ""
+                        manualLabelPrint = true
+                        if (autoLabels) {
+                            status = "TAMAM: Mal kabul kaydedildi. LP etiketleri hazırlanıyor..."
+                            val lpLinesAfterPost = fetchReceiptLpLines(context, no)
+                            val result = when {
+                                lpLinesBeforePost == null || lpLinesAfterPost == null -> ReceiptAutoLabelResult(
+                                    emptyList(), emptyList(), emptyMap(),
+                                    error = "Bu kayıtta kapanan LP'ler belirlenemedi (LP listesi okunamadı).",
+                                )
+                                else -> try {
+                                    printReceiptLpLabels(
+                                        context,
+                                        receiptLpsClosedByPost(no, lpLinesBeforePost, lpLinesAfterPost, labelCandidates),
+                                        lpLinesAfterPost,
+                                        receiptLpLayout.awaitLayoutCode(context),
+                                        if (lotLabelsToo) receiptLotLayout.awaitLayoutCode(context) else null,
+                                    ) { status = it }
+                                } catch (cancelled: kotlinx.coroutines.CancellationException) {
+                                    throw cancelled
+                                } catch (error: Exception) {
+                                    // Kısmi gönderim olabilir: yeniden deneme yok, operatör kontrol eder.
+                                    ReceiptAutoLabelResult(emptyList(), emptyList(), mapOf("Etiket" to error.message.orEmpty().ifBlank { "beklenmeyen hata" }))
+                                }
+                            }
+                            // Hiç istek gitmediyse Etiketler ekranında tüm LP'ler seçili gelir.
+                            manualLabelPrint = result.error.isNotBlank()
+                            receiptLabelSummary = receiptAutoLabelStatus(result)
+                            status = receiptLabelSummary
+                        } else {
+                            status = "TAMAM: Mal kabul kaydedildi. Etiket basılmadı; Etiketler ekranından basın."
+                            receiptLabelSummary = status
+                        }
+                        busy = false
+                        showReceiptMte = true
+                        return@launch
+                    }
                     // BADE (16 Eyl 2026): Kurulum "Manual Receipt Label Print" açıksa
                     // etiket basılmadı; kayıt sonrası ekranda Etiket Yazdır ile basılır.
                     if (r.ok) manualLabelPrint = skipPrinting || BcApi.manualReceiptLabelPrint(context)
@@ -785,7 +838,11 @@ private fun ReceiveDocument(no: String, onBack: () -> Unit) {
     }
 
     if (showReceiptMte) {
-        ReceiptMteSheet(receiptNo = no, manualPrint = manualLabelPrint, onDismiss = { showReceiptMte = false; reload() })
+        ReceiptMteSheet(
+            receiptNo = no, manualPrint = manualLabelPrint,
+            printSummary = if (terminalReceiptLabels) receiptLabelSummary else "",
+            onDismiss = { showReceiptMte = false; reload() },
+        )
     }
 
     if (showVehicle) {
@@ -1126,6 +1183,7 @@ private fun PostConfirmDialog(
     totalLineCount: Int,
     totalQty: Double,
     confirmLabel: String,
+    extraContent: (@Composable () -> Unit)? = null,
     onDismiss: () -> Unit,
     onConfirm: () -> Unit,
 ) {
@@ -1134,7 +1192,7 @@ private fun PostConfirmDialog(
         onDismissRequest = onDismiss,
         title = { Text(title, fontWeight = FontWeight.Bold) },
         text = {
-            Column {
+            Column(if (extraContent != null) Modifier.verticalScroll(rememberScrollState()) else Modifier) {
                 Text("İşlediğiniz satır: $readyCount/$totalLineCount", fontSize = 14.sp)
                 Text("Kaydedilecek satır: $postLineCount", fontSize = 14.sp)
                 Text("Toplam miktar: ${fmtNum(totalQty)}", fontSize = 16.sp, fontWeight = FontWeight.Bold)
@@ -1153,6 +1211,10 @@ private fun PostConfirmDialog(
                     fontSize = 12.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
+                extraContent?.let {
+                    Spacer(Modifier.height(8.dp))
+                    it()
+                }
             }
         },
         confirmButton = { Button(onClick = onConfirm) { Text(confirmLabel, fontWeight = FontWeight.Bold) } },
