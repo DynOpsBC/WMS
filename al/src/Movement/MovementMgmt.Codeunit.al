@@ -85,6 +85,7 @@ codeunit 72045 "DOPSWHS Movement Mgmt"
 
     local procedure ExecuteAdHocMove(LocationCode: Code[10]; FromBinCode: Code[20]; ToBinCode: Code[20]; ItemNo: Code[20]; LpNo: Code[20]; Qty: Decimal; UserId: Code[50]; LotNo: Code[50]; SerialNo: Code[50])
     var
+        LPBinSync: Codeunit "DOPSWHS LP Bin Sync";
         Location: Record Location;
         FromBin: Record Bin;
         ToBin: Record Bin;
@@ -172,7 +173,10 @@ codeunit 72045 "DOPSWHS Movement Mgmt"
         // Post via batch codeunit (22/23) rather than "Item Jnl.-Post" (241): the latter raises a
         // "Do you want to post?" Confirm that fails as a client callback over the API / on the handheld.
         ItemJnlPostBatch.SetSuppressCommit(true);
+        // Terminal: LP başlığını kayıttan sonra çağıran taşır (DOPSWHS LP Bin Sync devre dışı).
+        LPBinSync.EnterTerminalPosting();
         ItemJnlPostBatch.Run(ItemJournalLine);
+        LPBinSync.ExitTerminalPosting();
     end;
 
     /// <summary>Geriye dönük imza: operatör kimliği belgenin atamasından okunur.</summary>
@@ -188,6 +192,7 @@ codeunit 72045 "DOPSWHS Movement Mgmt"
     /// </summary>
     procedure RegisterDirected(var WhseActivityHeader: Record "Warehouse Activity Header"; OperatorUserId: Code[50])
     var
+        LPBinSync: Codeunit "DOPSWHS LP Bin Sync";
         WhseActivityLine: Record "Warehouse Activity Line";
         // QM (BC 28) devre dışı — bkz. QualityMgmtBridge.Codeunit.al
         // QualityBridge: Codeunit "DOPSWHS Quality Mgmt Bridge";
@@ -241,7 +246,9 @@ codeunit 72045 "DOPSWHS Movement Mgmt"
         WhseActivityLine.SetRange("Activity Type", WhseActivityHeader.Type);
         WhseActivityLine.SetRange("No.", WhseActivityHeader."No.");
         if WhseActivityLine.FindFirst() then begin
+            LPBinSync.EnterTerminalPosting();
             WhseActivityRegister.Run(WhseActivityLine);
+            LPBinSync.ExitTerminalPosting();
             foreach PutAwayLpNo in PutAwayDestinations.Keys do begin
                 PutAwayDestinations.Get(PutAwayLpNo, PutAwayTargetBin);
                 FinalizePutAwayLp(
@@ -832,6 +839,7 @@ codeunit 72045 "DOPSWHS Movement Mgmt"
 
     local procedure RegisterWhseMove(LocationCode: Code[10]; FromBinCode: Code[20]; ToBinCode: Code[20]; ItemNo: Code[20]; LpNo: Code[20]; Qty: Decimal; UserId: Code[50]; LotNo: Code[50]; SerialNo: Code[50])
     var
+        LPBinSync: Codeunit "DOPSWHS LP Bin Sync";
         Item: Record Item;
         FromBin: Record Bin;
         ToBin: Record Bin;
@@ -886,7 +894,9 @@ codeunit 72045 "DOPSWHS Movement Mgmt"
         // Item Jnl.-Post Batch'in ambar karşılığı — confirm diyaloğu açmadan
         // register eder (web servis bağlamı).
         WhseJnlRegisterBatch.SetSuppressCommit(true);
+        LPBinSync.EnterTerminalPosting();
         WhseJnlRegisterBatch.Run(WhseJournalLine);
+        LPBinSync.ExitTerminalPosting();
     end;
 
     local procedure AddWhseItemTracking(WhseJnlLine: Record "Warehouse Journal Line"; LotNo: Code[50]; SerialNo: Code[50])
@@ -930,6 +940,7 @@ codeunit 72045 "DOPSWHS Movement Mgmt"
     /// </summary>
     procedure AdjustBinToQuantity(LocationCode: Code[10]; BinCode: Code[20]; ItemNo: Code[20]; VariantCode: Code[10]; UomCode: Code[10]; LotNo: Code[50]; SerialNo: Code[50]; TargetQty: Decimal; Reference: Text[50]): Decimal
     var
+        LPBinSync: Codeunit "DOPSWHS LP Bin Sync";
         Location: Record Location;
         Bin: Record Bin;
         Item: Record Item;
@@ -1026,7 +1037,9 @@ codeunit 72045 "DOPSWHS Movement Mgmt"
         WhseJournalLine.SetRange("Location Code", LocationCode);
         WhseJournalLine.FindFirst();
         WhseJnlRegisterBatch.SetSuppressCommit(true);
+        LPBinSync.EnterTerminalPosting();
         WhseJnlRegisterBatch.Run(WhseJournalLine);
+        LPBinSync.ExitTerminalPosting();
         exit(TargetQty - CurrentQty);
     end;
 

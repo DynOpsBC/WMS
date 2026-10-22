@@ -830,10 +830,18 @@ codeunit 72428 "DOPSWHS LP Propagation"
         WhseShip: Boolean;
         WhseReceive: Boolean;
         var EverythingInvoiced: Boolean)
+    var
+        LPBinSync: Codeunit "DOPSWHS LP Bin Sync";
     begin
-        if PreviewMode or (SalesShipmentHeader."No." = '') then
+        if PreviewMode then begin
+            LPBinSync.DiscardDeferredSales();
             exit;
-        ReconcileSalesLp(SalesShipmentHeader."No.", WhseShip);
+        end;
+        if SalesShipmentHeader."No." <> '' then
+            ReconcileSalesLp(SalesShipmentHeader."No.", WhseShip);
+        // 1.14.1.150: mutabakattan sonra, satış kaydının göz azaltmalarında LP
+        // toplamı göz stokunu hâlâ aşıyorsa fazlası düşülür (yalnız fazla).
+        LPBinSync.FlushDeferredSales();
     end;
 
     /// <summary>
@@ -1146,12 +1154,14 @@ codeunit 72428 "DOPSWHS LP Propagation"
         LinesConsumedPerLp: Dictionary of [Code[20], Integer];
         UnmetByBin: Dictionary of [Code[20], Decimal];
         TakeBins: List of [Code[20]];
+        LPBinSync: Codeunit "DOPSWHS LP Bin Sync";
         ConsumptionReference: Code[40];
         WhseShipmentNo: Code[20];
         FirstConsumedLpNo: Code[20];
         RemainingBaseQty: Decimal;
         TakeBaseQty: Decimal;
         ConsumedBaseQty: Decimal;
+        SyncedTakes: Boolean;
     begin
         RemainingBaseQty := Abs(ItemLedgerEntry.Quantity);
         if RemainingBaseQty = 0 then
@@ -1184,19 +1194,33 @@ codeunit 72428 "DOPSWHS LP Propagation"
                         TakeBaseQty := RemainingBaseQty;
                     if TakeBaseQty > QtyTolerance() then begin
                         ConsumedBaseQty := 0;
-                        if TempPickTake."LP No." <> '' then
-                            ConsumedBaseQty := ConsumeSalesCandidates(
-                                TempCandidate, TempPickTake."LP No.", '', TakeBaseQty,
+                        if LPBinSync.WasActivitySynced(TempPickTake."No.") then begin
+                            // 1.14.1.150: toplama BC'den kaydedilirken LP etkisi
+                            // işlendi (DOPSWHS LP Bin Sync): bütün taşınan paletler
+                            // sevk gözüne gitti, kısmi alınan kısım kaynak LP'den
+                            // düşüldü. Yalnız bu toplamanın bu gözden taşıdığı
+                            // paletler tüketilir; Al gözündeki LP'ler bir daha
+                            // düşülmez.
+                            SyncedTakes := true;
+                            ConsumedBaseQty := ConsumeSyncedPickLps(
+                                TempCandidate, TempPickTake."No.", TempPickTake."Bin Code", TakeBaseQty,
                                 ConsumptionReference, LinesConsumedPerLp, FirstConsumedLpNo);
-                        // A Take without LP, or naming an LP that does not hold this
-                        // lot (mis-scan, cross-line copy): the pallet standing in the
-                        // Take bin is the physical source.
-                        if (TakeBaseQty - ConsumedBaseQty > QtyTolerance()) and (TempPickTake."Bin Code" <> '') then
-                            ConsumedBaseQty += ConsumeSalesCandidates(
-                                TempCandidate, '', TempPickTake."Bin Code", TakeBaseQty - ConsumedBaseQty,
-                                ConsumptionReference, LinesConsumedPerLp, FirstConsumedLpNo);
-                        RemainingBaseQty -= ConsumedBaseQty;
-                        AddUnmetBinQty(UnmetByBin, TakeBins, TempPickTake."Bin Code", TakeBaseQty - ConsumedBaseQty);
+                            RemainingBaseQty -= ConsumedBaseQty;
+                        end else begin
+                            if TempPickTake."LP No." <> '' then
+                                ConsumedBaseQty := ConsumeSalesCandidates(
+                                    TempCandidate, TempPickTake."LP No.", '', TakeBaseQty,
+                                    ConsumptionReference, LinesConsumedPerLp, FirstConsumedLpNo);
+                            // A Take without LP, or naming an LP that does not hold this
+                            // lot (mis-scan, cross-line copy): the pallet standing in the
+                            // Take bin is the physical source.
+                            if (TakeBaseQty - ConsumedBaseQty > QtyTolerance()) and (TempPickTake."Bin Code" <> '') then
+                                ConsumedBaseQty += ConsumeSalesCandidates(
+                                    TempCandidate, '', TempPickTake."Bin Code", TakeBaseQty - ConsumedBaseQty,
+                                    ConsumptionReference, LinesConsumedPerLp, FirstConsumedLpNo);
+                            RemainingBaseQty -= ConsumedBaseQty;
+                            AddUnmetBinQty(UnmetByBin, TakeBins, TempPickTake."Bin Code", TakeBaseQty - ConsumedBaseQty);
+                        end;
                     end;
                 until (TempPickTake.Next() = 0) or (RemainingBaseQty <= QtyTolerance());
 
@@ -1215,7 +1239,7 @@ codeunit 72428 "DOPSWHS LP Propagation"
             // 3. No pallet found where the pick says the stock was (LP bin stale
             //    after a BC-side movement): only an unambiguous single LP line at
             //    the location may stand in.
-            if (FirstConsumedLpNo = '') and (RemainingBaseQty > QtyTolerance()) then
+            if (FirstConsumedLpNo = '') and (RemainingBaseQty > QtyTolerance()) and (not SyncedTakes) then
                 ConsumeSingleCandidateLine(
                     TempCandidate, RemainingBaseQty,
                     ConsumptionReference, LinesConsumedPerLp, FirstConsumedLpNo);
@@ -1232,6 +1256,24 @@ codeunit 72428 "DOPSWHS LP Propagation"
             StampItemLedgerEntryLpList(ItemLedgerEntry);
         end else
             ClearItemLedgerEntryLp(ItemLedgerEntry);
+    end;
+
+    /// <summary>
+    /// 1.14.1.150: BC'den kaydedilen toplamanın FromBinCode gözünden sevk
+    /// gözüne bütün olarak taşıdığı paletlerden en çok MaxBaseQty tüketir.
+    /// </summary>
+    local procedure ConsumeSyncedPickLps(var TempCandidate: Record "DOPSWHS LP Line" temporary; RegisteredPickNo: Code[20]; FromBinCode: Code[20]; MaxBaseQty: Decimal; ConsumptionReference: Code[40]; var LinesConsumedPerLp: Dictionary of [Code[20], Integer]; var FirstConsumedLpNo: Code[20]) ConsumedBaseQty: Decimal
+    var
+        LPBinSync: Codeunit "DOPSWHS LP Bin Sync";
+        MovedLpNos: List of [Code[20]];
+        MovedLpNo: Code[20];
+    begin
+        LPBinSync.GetActivityMovedLps(RegisteredPickNo, FromBinCode, MovedLpNos);
+        foreach MovedLpNo in MovedLpNos do
+            if MaxBaseQty - ConsumedBaseQty > QtyTolerance() then
+                ConsumedBaseQty += ConsumeSalesCandidates(
+                    TempCandidate, MovedLpNo, '', MaxBaseQty - ConsumedBaseQty,
+                    ConsumptionReference, LinesConsumedPerLp, FirstConsumedLpNo);
     end;
 
     /// <summary>

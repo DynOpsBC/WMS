@@ -3020,6 +3020,7 @@ codeunit 72040 "DOPSWHS LP Management"
     local procedure EnsureNoUnresolvedPlannedLPs(LocationCode: Code[10]; BinCode: Code[20])
     var
         LPHeader: Record "DOPSWHS LP Header";
+        WhseReceiptHeader: Record "Warehouse Receipt Header";
     begin
         LPHeader.SetRange("Location Code", LocationCode);
         LPHeader.SetRange("Bin Code", BinCode);
@@ -3028,10 +3029,16 @@ codeunit 72040 "DOPSWHS LP Management"
         if LPHeader.FindSet() then
             repeat
                 LPHeader.CalcFields("Line Count");
-                if LPHeader."Line Count" = 0 then
+                if LPHeader."Line Count" = 0 then begin
+                    if LPHeader."Pending Receipt No." <> '' then
+                        if not WhseReceiptHeader.Get(LPHeader."Pending Receipt No.") then
+                            Error(
+                                '%1 rafında, artık bulunmayan %2 mal kabulüne bağlı boş taslak %3 LP kaydı bulundu (miktar %4). LP Listesi > "Yetim taslak LP''leri temizle" ile temizleyin.',
+                                BinCode, LPHeader."Pending Receipt No.", LPHeader."No.", LPHeader."Planned Quantity");
                     Error(
                         '%1 rafında miktarı %2 olan eski/boş %3 LP kaydı bulundu. Aynı stoka ikinci LP etiketi üretmemek için önce bu LP''yi doğrulayın, içeriğini tamamlayın veya kontrollü olarak kaldırın.',
                         BinCode, LPHeader."Planned Quantity", LPHeader."No.");
+                end;
             until LPHeader.Next() = 0;
     end;
 

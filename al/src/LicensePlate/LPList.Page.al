@@ -188,6 +188,29 @@ page 72070 "DOPSWHS LP List"
                     Message('%1 LP serbest bırakıldı.', OrphanCount);
                 end;
             }
+            action(CleanupOrphanDraftLps)
+            {
+                ApplicationArea = All;
+                Caption = 'Yetim taslak LP''leri temizle';
+                ToolTip = 'Artık bulunmayan bir ambar mal kabulüne bağlı kalmış, içi boş taslak LP''leri (terminalde hazırlanmış, mal kabul BC''den kaydedilmiş veya silinmiş) bozar. Bu LP''ler "Stoktan LP Oluştur"u engeller. İçinde ürün olan, var olan bir mal kabule bağlı veya atanmış LP''lere dokunmaz. Önce sayıyı gösterip onay ister. Stok değişmez.';
+                Image = Delete;
+                trigger OnAction()
+                var
+                    ReceiptMgmt: Codeunit "DOPSWHS Receipt Mgmt";
+                    OrphanCount: Integer;
+                begin
+                    OrphanCount := ReceiptMgmt.CleanupOrphanDraftLPs(false);
+                    if OrphanCount = 0 then begin
+                        Message('Artık bulunmayan bir mal kabule bağlı boş taslak LP yok. Hiçbir şey değişmedi.');
+                        exit;
+                    end;
+                    if not Confirm('%1 boş taslak LP artık bulunmayan bir mal kabule bağlı. Bu LP''ler bozulsun (Bozuldu) mu?', false, OrphanCount) then
+                        exit;
+                    OrphanCount := ReceiptMgmt.CleanupOrphanDraftLPs(true);
+                    CurrPage.Update(false);
+                    Message('%1 taslak LP bozuldu.', OrphanCount);
+                end;
+            }
             action(RepairLegacyStockSources)
             {
                 ApplicationArea = All;

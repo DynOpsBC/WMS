@@ -60,6 +60,9 @@ codeunit 72455 "DOPSWHS LP Reclass Relink"
     end;
 
     [EventSubscriber(ObjectType::Codeunit, Codeunit::"Item Jnl.-Post Line", 'OnAfterPostItemJnlLine', '', false, false)]
+    [InherentPermissions(PermissionObjectType::TableData, Database::"DOPSWHS LP Header", 'R')]
+    [InherentPermissions(PermissionObjectType::TableData, Database::"DOPSWHS LP Line", 'RM')]
+    [InherentPermissions(PermissionObjectType::TableData, Database::"DOPSWHS LP Movement Ledger", 'RI')]
     local procedure RelinkOnAfterPostItemJnlLine(var ItemJournalLine: Record "Item Journal Line")
     var
         EntryNos: List of [Integer];
@@ -101,7 +104,6 @@ codeunit 72455 "DOPSWHS LP Reclass Relink"
     var
         NewEntry: Record "Item Ledger Entry";
         OldEntry: Record "Item Ledger Entry";
-        LPLine: Record "DOPSWHS LP Line";
         Sources: Dictionary of [Integer, Decimal];
         Planned: Dictionary of [Integer, Decimal];
         TargetNos: List of [Integer];
@@ -113,8 +115,10 @@ codeunit 72455 "DOPSWHS LP Reclass Relink"
         TransferredQty: Decimal;
         MovedLines: Integer;
     begin
-        if not (LPLine.WritePermission() and NewEntry.WritePermission()) then
-            exit(0);
+        // 1.14.1.150: Burada WritePermission() kontrolü vardı. Madde defteri
+        // girişine doğrudan yazma izni kimsede olmadığından (yalnız dolaylı izin)
+        // otomatik bağlama hiç çalışmıyordu. İzin codeunit Permissions ve
+        // abonedeki InherentPermissions ile sağlanır.
         if not NewEntry.Get(NewEntryNo) then
             exit(0);
         if not IsPositiveTransfer(NewEntry) then

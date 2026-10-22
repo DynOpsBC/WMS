@@ -1687,6 +1687,7 @@ codeunit 72050 "DOPSWHS Count Mgmt"
 
     procedure PostSheet(SheetNo: Code[20])
     var
+        LPBinSync: Codeunit "DOPSWHS LP Bin Sync";
         CountHeader: Record "DOPSWHS Count Sheet Header";
         CountLine: Record "DOPSWHS Count Sheet Line";
         ItemJournalLine: Record "Item Journal Line";
@@ -1804,7 +1805,9 @@ codeunit 72050 "DOPSWHS Count Mgmt"
             // Keep stock posting, LP updates and the final header transition
             // in one transaction. A later error must roll all of them back.
             ItemJnlPostBatch.SetSuppressCommit(true);
+            LPBinSync.EnterTerminalPosting();
             ItemJnlPostBatch.Run(ItemJournalLine);
+            LPBinSync.ExitTerminalPosting();
         end;
 
         // BC stok postu başarılı olduktan sonra LP içeriğini aynı kazanan sayım
@@ -2196,6 +2199,7 @@ codeunit 72050 "DOPSWHS Count Mgmt"
 
     local procedure RegisterDirectedPhysInventory(SheetNo: Code[20]; CountHeader: Record "DOPSWHS Count Sheet Header"; CountDocumentNo: Code[20]; var CalculatedQty: Dictionary of [Integer, Decimal])
     var
+        LPBinSync: Codeunit "DOPSWHS LP Bin Sync";
         Location: Record Location;
         CountLine: Record "DOPSWHS Count Sheet Line";
         Bin: Record Bin;
@@ -2304,7 +2308,9 @@ codeunit 72050 "DOPSWHS Count Mgmt"
         WhseJournalLine.SetRange("Location Code", CountHeader."Location Code");
         WhseJournalLine.FindFirst();
         WhseJnlRegisterBatch.SetSuppressCommit(true);
+        LPBinSync.EnterTerminalPosting();
         WhseJnlRegisterBatch.Run(WhseJournalLine);
+        LPBinSync.ExitTerminalPosting();
     end;
 
     /// <summary>

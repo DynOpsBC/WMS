@@ -899,6 +899,7 @@ codeunit 72046 "DOPSWHS Pick Mgmt"
     [CommitBehavior(CommitBehavior::Error)]
     procedure PrepareProductionLPFor(var Pick: Record "Warehouse Activity Header"; OperatorId: Code[50]; TargetBinCode: Code[20]; PalletPlan: Text)
     var
+        LPBinSync: Codeunit "DOPSWHS LP Bin Sync";
         TakeLine: Record "Warehouse Activity Line";
         PlaceLine: Record "Warehouse Activity Line";
         Movement: Record "Warehouse Activity Header";
@@ -1021,7 +1022,9 @@ codeunit 72046 "DOPSWHS Pick Mgmt"
         MovementLine.SetRange("No.", Movement."No.");
         if MovementLine.FindFirst() then begin
             RegisterMovement.SetSuppressCommit(true);
+            LPBinSync.EnterTerminalPosting();
             RegisterMovement.Run(MovementLine);
+            LPBinSync.ExitTerminalPosting();
         end;
         LP.Get(LP."No.");
         if LP.Status = LP.Status::Open then
@@ -1818,6 +1821,7 @@ codeunit 72046 "DOPSWHS Pick Mgmt"
 
     local procedure RegisterPickInternal(var Pick: Record "Warehouse Activity Header"; RequestingUserId: Code[50]; PalletPlan: Text)
     var
+        LPBinSync: Codeunit "DOPSWHS LP Bin Sync";
         PickLine: Record "Warehouse Activity Line";
         PickingHeader: Record "DOPSWHS Picking Order Header";
         LockedPick: Record "Warehouse Activity Header";
@@ -1876,7 +1880,9 @@ codeunit 72046 "DOPSWHS Pick Mgmt"
                 PreparePackingOrders(Pick);
             end;
             WhseActivityRegister.SetSuppressCommit(true);
+            LPBinSync.EnterTerminalPosting();
             WhseActivityRegister.Run(PickLine);
+            LPBinSync.ExitTerminalPosting();
             PickingHeader.SetRange("Warehouse Pick No.", PickNo);
             if PickingHeader.FindSet(true) then
                 repeat

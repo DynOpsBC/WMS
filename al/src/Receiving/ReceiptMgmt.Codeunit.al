@@ -46,6 +46,7 @@ codeunit 72043 "DOPSWHS Receipt Mgmt"
 
     procedure PostReceiptAndCloseLP(var WhseReceiptHeader: Record "Warehouse Receipt Header"; PrintReport: Boolean; Invoice: Boolean; OperatorUserId: Code[50]; PrinterId: Code[50]; PrintLpLabels: Boolean; LpPrinterId: Code[50]; MteOptionsJson: Text)
     var
+        LPBinSync: Codeunit "DOPSWHS LP Bin Sync";
         WhseReceiptLine: Record "Warehouse Receipt Line";
         PostedWhseReceiptHeader: Record "Posted Whse. Receipt Header";
         WhsePostReceipt: Codeunit "Whse.-Post Receipt";
@@ -118,7 +119,9 @@ codeunit 72043 "DOPSWHS Receipt Mgmt"
             // the API returns an error without leaving a half-posted receipt.
             WhsePostReceipt.SetSuppressCommit(true);
             WhsePostReceipt.SetHideValidationDialog(true);
+            LPBinSync.EnterTerminalPosting();
             WhsePostReceipt.Run(WhseReceiptLine);
+            LPBinSync.ExitTerminalPosting();
         end;
 
         // Partial posting may keep the working header. It must remain
@@ -872,6 +875,58 @@ codeunit 72043 "DOPSWHS Receipt Mgmt"
                     LPMgt.Unbuild(LP);
                 end;
             end;
+    end;
+
+    /// <summary>
+    /// 1.14.1.150 (BADE, WRCPT): terminalde hazırlanmış taslak LP'ler, mal kabul
+    /// BC'den kaydedilince (Whse.-Post Receipt başlığı tetiksiz siler) silinmiş
+    /// belgeye bağlı, içi boş kalıyordu ve "Stoktan LP Oluştur"u engelliyordu.
+    /// Yalnız: bekleyen mal kabulü artık bulunmayan, satırı olmayan, Açık veya
+    /// Oluşturuldu durumundaki LP'ler bozulur. ApplyChanges = false: yalnız sayar.
+    /// </summary>
+    procedure CleanupOrphanDraftLPs(ApplyChanges: Boolean): Integer
+    var
+        LP: Record "DOPSWHS LP Header";
+        LPLine: Record "DOPSWHS LP Line";
+        WhseReceiptHeader: Record "Warehouse Receipt Header";
+        Mixed: Record "DOPSWHS Receipt Mixed Alloc.";
+        LPMgt: Codeunit "DOPSWHS LP Management";
+        LpNos: List of [Code[20]];
+        ReceiptNos: List of [Code[20]];
+        LpNo: Code[20];
+        ReceiptNo: Code[20];
+    begin
+        LP.SetCurrentKey("Pending Receipt No.", "Pending Receipt Line No.");
+        LP.SetFilter("Pending Receipt No.", '<>%1', '');
+        LP.SetFilter(Status, '%1|%2', LP.Status::Open, LP.Status::Built);
+        if LP.FindSet() then
+            repeat
+                if not WhseReceiptHeader.Get(LP."Pending Receipt No.") then begin
+                    LPLine.SetRange("LP No.", LP."No.");
+                    if LPLine.IsEmpty() then begin
+                        LpNos.Add(LP."No.");
+                        if not ReceiptNos.Contains(LP."Pending Receipt No.") then
+                            ReceiptNos.Add(LP."Pending Receipt No.");
+                    end;
+                end;
+            until LP.Next() = 0;
+        if not ApplyChanges then
+            exit(LpNos.Count());
+        foreach ReceiptNo in ReceiptNos do begin
+            Mixed.SetRange("Receipt No.", ReceiptNo);
+            if not Mixed.IsEmpty() then
+                Mixed.DeleteAll(true);
+        end;
+        foreach LpNo in LpNos do begin
+            LP.Get(LpNo);
+            Clear(LP."Pending Receipt No.");
+            LP."Pending Receipt Line No." := 0;
+            LP."Planned Quantity" := 0;
+            ClearPendingReceiptTracking(LP);
+            LP.Modify(true);
+            LPMgt.Unbuild(LP);
+        end;
+        exit(LpNos.Count());
     end;
 
     local procedure EnsurePutAwayCreated(PostedReceiptNo: Code[20]; LocationCode: Code[10]; AssignedUserId: Code[50]): Code[20]

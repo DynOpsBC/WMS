@@ -4,6 +4,7 @@ codeunit 72048 "DOPSWHS Prod Mgmt"
 
     procedure Consume(var ProdOrderComponent: Record "Prod. Order Component"; ItemNo: Code[20]; Qty: Decimal; LpNo: Code[20]; LotNo: Code[50]; SerialNo: Code[50]; BinCode: Code[20])
     var
+        LPBinSync: Codeunit "DOPSWHS LP Bin Sync";
         ItemJournalLine: Record "Item Journal Line";
         ItemJnlPostBatch: Codeunit "Item Jnl.-Post Batch";
         License: Codeunit "DOPSWHS License Mgmt";
@@ -36,7 +37,9 @@ codeunit 72048 "DOPSWHS Prod Mgmt"
         ValidateProductionConsumptionSource(ItemJournalLine);
         LogTelemetry('AdvWMS.Production.Consumed', ProdOrderComponent."Prod. Order No.");
         // Post Batch (23) avoids the "Do you want to post?" Confirm that codeunit 241 raises (API/mobile-safe).
+        LPBinSync.EnterTerminalPosting();
         ItemJnlPostBatch.Run(ItemJournalLine);
+        LPBinSync.ExitTerminalPosting();
         OnAfterConsume(ProdOrderComponent, ItemJournalLine);
     end;
 
@@ -567,6 +570,7 @@ codeunit 72048 "DOPSWHS Prod Mgmt"
 
     local procedure ReportOutputInternal(var ProdOrderRoutingLine: Record "Prod. Order Routing Line"; OutputQty: Decimal; ScrapQty: Decimal; Runtime: Decimal; NewLpTemplate: Code[20]; BinCode: Code[20]): Code[20]
     var
+        LPBinSync: Codeunit "DOPSWHS LP Bin Sync";
         ItemJournalLine: Record "Item Journal Line";
         ItemJnlPostBatch: Codeunit "Item Jnl.-Post Batch";
         NewLpNo: Code[20];
@@ -578,7 +582,9 @@ codeunit 72048 "DOPSWHS Prod Mgmt"
 
         CreateOutputLine(ProdOrderRoutingLine, OutputQty, ScrapQty, Runtime, BinCode, ItemJournalLine);
         LogTelemetry('AdvWMS.Production.Output', ProdOrderRoutingLine."Prod. Order No.");
+        LPBinSync.EnterTerminalPosting();
         ItemJnlPostBatch.Run(ItemJournalLine);
+        LPBinSync.ExitTerminalPosting();
 
         if NewLpTemplate <> '' then
             NewLpNo := CreateOutputLp(ProdOrderRoutingLine, OutputQty, NewLpTemplate, BinCode);

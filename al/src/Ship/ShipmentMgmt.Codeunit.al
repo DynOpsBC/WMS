@@ -446,6 +446,7 @@ codeunit 72047 "DOPSWHS Shipment Mgmt"
 
     procedure PostShipment(var WhseShipmentHeader: Record "Warehouse Shipment Header"; PrintPackingSlip: Boolean; Invoice: Boolean; PrinterId: Code[50])
     var
+        LPBinSync: Codeunit "DOPSWHS LP Bin Sync";
         WhseShipmentLine: Record "Warehouse Shipment Line";
         PostedWhseShipmentLine: Record "Posted Whse. Shipment Line";
         PostedWhseShipmentHeader: Record "Posted Whse. Shipment Header";
@@ -503,8 +504,11 @@ codeunit 72047 "DOPSWHS Shipment Mgmt"
 
         EnsureAssignedShipmentLpsHaveSscc(WhseShipmentNo, LpCount);
 
-        if WhseShipmentLine.FindFirst() then
+        if WhseShipmentLine.FindFirst() then begin
+            LPBinSync.EnterTerminalPosting();
             WhsePostShipment.Run(WhseShipmentLine);
+            LPBinSync.ExitTerminalPosting();
+        end;
 
         PostedWhseShipmentHeader.SetRange("Whse. Shipment No.", WhseShipmentNo);
         if PostedWhseShipmentHeader.FindLast() then

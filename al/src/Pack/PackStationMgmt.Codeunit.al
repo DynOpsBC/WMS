@@ -816,6 +816,7 @@ codeunit 72334 "DOPSWHS Pack Station Mgmt"
     // kendi tamamlanmalarında aynı yoldan post edilir.
     local procedure PostViaWhseShipment(var PackSession: Record "DOPSWHS Pack Session"; ShipmentNo: Code[20]; OrderNo: Code[20])
     var
+        LPBinSync: Codeunit "DOPSWHS LP Bin Sync";
         WhseShptHeader: Record "Warehouse Shipment Header";
         WhseShptLine: Record "Warehouse Shipment Line";
         OrderShptLine: Record "Warehouse Shipment Line";
@@ -867,7 +868,9 @@ codeunit 72334 "DOPSWHS Pack Station Mgmt"
         if not OrderShptLine.FindFirst() then
             Error(NothingToPostErr, OrderNo);
         WhsePostShipment.SetPostingSettings(true);
+        LPBinSync.EnterTerminalPosting();
         WhsePostShipment.Run(OrderShptLine);
+        LPBinSync.ExitTerminalPosting();
     end;
 
     local procedure BuildPackedDict(SessionId: Integer; OrderNo: Code[20]; var PackedByKey: Dictionary of [Text, Decimal])
