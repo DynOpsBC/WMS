@@ -83,7 +83,7 @@ fun glyphForScreen(screen: Screen): WmsGlyph = when (screen) {
     Screen.DirectedMove -> WmsGlyph.DIRECTED_MOVE
     Screen.Count -> WmsGlyph.COUNT
     Screen.CountV2 -> WmsGlyph.COUNT_V2
-    Screen.FirstCount -> WmsGlyph.COUNT
+    Screen.FirstCount -> WmsGlyph.STOCK
     Screen.Production -> WmsGlyph.PRODUCTION
     Screen.Subcontracting -> WmsGlyph.SUBCONTRACTING
     Screen.Assembly -> WmsGlyph.ASSEMBLY

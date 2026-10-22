@@ -409,7 +409,7 @@ private fun kitokoCountTiles(tiles: List<HomeTile>, flavor: String = BuildConfig
     else tiles.filterNot { it.screen == Screen.Count }.flatMap {
         if (it.screen == Screen.CountV2) listOf(
             it.copy(label = "Sayım", description = "Alan, raf okut, LP/ürün okut, adet gir"),
-            HomeTile(Screen.FirstCount, WmsGlyph.COUNT, "İlk Sayım", "Sadece madde okut, adet gir"),
+            HomeTile(Screen.FirstCount, WmsGlyph.STOCK, "İlk Sayım", "Sadece madde okut, adet gir"),
         ) else listOf(it)
     }
 
