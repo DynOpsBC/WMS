@@ -46,7 +46,35 @@ internal data class MteOptions(
     val supplierLotNo: String = "",
     val qcEmployeeNo: String = "",
     val qcApprovalDate: String = "",
+    // BADE 1.14.200 (Merve): etiket kopya adedi; BC printMte/printPalletLabels "copies".
+    val copies: Int = 1,
 )
+
+/** BC yazdırma uçları 1..10 kopya kabul eder (Print Dispatcher). */
+internal const val MTE_MAX_COPIES = 10
+
+/** Kopya adedi: boş = 1; 1..10 dışı veya sayı değilse null (hata gösterilir). */
+internal fun normalizeMteCopies(input: String): Int? {
+    val value = input.trim()
+    if (value.isEmpty()) return 1
+    val n = value.toIntOrNull() ?: return null
+    return n.takeIf { it in 1..MTE_MAX_COPIES }
+}
+
+/** Kalite kontrol tarihi alanının varsayılanı: bugün, gg.aa.yyyy. */
+internal fun defaultMteQcDate(today: java.time.LocalDate = java.time.LocalDate.now()): String =
+    "%02d.%02d.%04d".format(today.dayOfMonth, today.monthValue, today.year)
+
+/**
+ * Mal kabul sonrası "Etiket Yazdır": LP modülündeki MTE ek bilgileriyle aynı gövde.
+ * Giriş Yapan boşsa BADE'de BcApi PIN kullanıcısının adını ekler (printMteForOperator).
+ */
+internal fun receiptMtePrintBody(printerCode: String, options: MteOptions): String =
+    org.json.JSONObject()
+        .put("printerId", printerCode)
+        .put("copies", options.copies.coerceIn(1, MTE_MAX_COPIES))
+        .put("optionsJson", mteOptionsJson(options))
+        .toString()
 
 /** JSON with only the filled fields; dates already normalised to yyyy-MM-dd. */
 internal fun mteOptionsJson(options: MteOptions): String {

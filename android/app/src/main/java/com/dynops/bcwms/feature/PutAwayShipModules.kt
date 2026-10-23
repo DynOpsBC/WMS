@@ -50,30 +50,87 @@ fun PutAwayModule() {
     var mineOnly by remember { mutableStateOf(true) }
     var myUser by remember { mutableStateOf("") }
 
+    var itemDocs by remember { mutableStateOf<Pair<String, Set<String>>?>(null) }
+
+    /**
+     * BADE 1.14.200 (Merve): arama kutusuna / okutucuya LP (veya SSCC) gelirse o LP'yi
+     * taşıyan yerleştirme(ler) bulunur: önce Al/Koy satırlarındaki LP damgası, yoksa LP
+     * başlığının yerleştirme ataması. null = bağlantı hatası.
+     */
+    suspend fun putAwayDocsForLp(raw: String): Set<String>? {
+        val resolved = BarcodeIntentResolver.resolve(raw)
+        var lpNo = resolved.value.trim().ifBlank { raw.trim() }.uppercase()
+        if (lpNo.isBlank()) return emptySet()
+        var lpHeader: JSONObject? = null
+        if (lpNo.length == 18 && lpNo.all { it.isDigit() }) {
+            val bySscc = BcApi.getAllPages(context, licensePlateBySsccPath(lpNo))
+            if (!bySscc.complete) return null
+            lpHeader = bySscc.rows.singleOrNull()
+            lpNo = lpHeader?.optString("no")?.trim()?.uppercase().orEmpty()
+            if (lpNo.isBlank()) return emptySet()
+        }
+        val page = BcApi.getAllPages(context, putAwayLinesByLpPath(lpNo))
+        if (!page.complete) return null
+        val docs = page.rows.map { it.optString("no").trim() }.filter { it.isNotBlank() }.toSet()
+        if (docs.isNotEmpty()) return docs
+        // Belge no gibi LP olmayan yazılar için LP başlığı sorgulanmaz (gereksiz 404).
+        if (lpHeader == null && resolved.kind != BarcodeKind.Lp) return emptySet()
+        if (lpHeader == null) {
+            val r = BcApi.get(context, "licensePlates('${lpNo.replace("'", "''")}')")
+            lpHeader = if (r.ok) runCatching { JSONObject(r.body) }.getOrNull() else null
+        }
+        return setOfNotNull(putAwayNoFromLpAssignment(lpHeader))
+    }
+
     fun load() {
         scope.launch {
             loading = true; status = "Yükleniyor..."
             if (myUser.isBlank()) myUser = BcApi.currentUserId(context).trim()
-            val filter = com.dynops.bcwms.ui.buildODataFilter(com.dynops.bcwms.ui.searchClause("no", search))
-            val page = BcApi.getAllPages(context, "putAways?\$top=100&\$orderby=no desc&\$select=no,locationCode,assignedUserId,status$filter")
+            val query = search.trim()
+            // Önce LP olarak dene; LP bulunursa o belge(ler) gösterilir, tek belge doğrudan açılır.
+            val lpDocs = if (query.isNotBlank()) putAwayDocsForLp(query) else emptySet()
+            val filter = if (!lpDocs.isNullOrEmpty()) "" else
+                com.dynops.bcwms.ui.buildODataFilter(com.dynops.bcwms.ui.searchClause("no", search))
+            // $select yok: BC 1.14.1.152 assignedUserName alanını ekledi; eski BC'de olmayan
+            // alan $select'te 400 dönerdi. Başlık kaydı küçük, satırlar genişletilmiyor.
+            val page = BcApi.getAllPages(context, "putAways?\$top=100&\$orderby=no desc$filter")
             loading = false
-            rows = if (page.complete) page.rows else emptyList()
+            val loaded = if (page.complete) page.rows else emptyList()
+            if (!lpDocs.isNullOrEmpty()) {
+                rows = loaded.filter { it.optString("no") in lpDocs }
+                when (val outcome = putAwaySearchOutcome(lpDocs)) {
+                    is PutAwaySearchOutcome.Open -> {
+                        status = "TAMAM: '$query' → ${outcome.no}"
+                        // Belgeden geri dönünce aynı arama belgeyi yeniden açmasın.
+                        search = ""
+                        selected = outcome.no
+                        return@launch
+                    }
+                    is PutAwaySearchOutcome.Filter -> {
+                        itemDocs = query to outcome.docs
+                        status = "TAMAM: '$query' LP'si ${outcome.docs.size} yerleştirmede"
+                        return@launch
+                    }
+                    PutAwaySearchOutcome.NotFound -> Unit
+                }
+            }
+            rows = loaded
             val shown = if (mineOnly && myUser.isNotBlank())
-                rows.count { it.optString("assignedUserId").trim().equals(myUser, true) } else rows.size
+                rows.count { putAwayVisibleForMine(it, myUser) } else rows.size
             status = when {
                 !page.complete -> "HATA: Yerleştirme listesinin tamamı alınamadı. Yenileyin."
+                lpDocs == null && rows.isEmpty() -> "HATA: LP araması yapılamadı. Bağlantıyı kontrol edip tekrar deneyin."
                 // Arama sonuçsuzsa "hiç belge yok" demek yanıltıcı: belgeler var,
                 // aramaya uyan yok (UAT pa-01).
-                rows.isEmpty() && search.isNotBlank() -> "BOŞ: '$search' ile eşleşen yerleştirme belgesi bulunamadı"
+                rows.isEmpty() && search.isNotBlank() -> "BOŞ: '$search' ile eşleşen yerleştirme belgesi veya LP bulunamadı"
                 rows.isEmpty() -> "BOŞ: Açık yerleştirme belgesi yok"
-                shown == 0 && mineOnly -> "BOŞ: Üzerinize atanmış yerleştirme yok — 'Tümü' ile bakabilirsiniz (${rows.size} açık belge)"
+                shown == 0 && mineOnly -> "BOŞ: Size atanmış veya boşta yerleştirme yok — 'Tümü' ile bakabilirsiniz (${rows.size} açık belge)"
                 else -> "TAMAM: $shown belge"
             }
         }
     }
     LaunchedEffect(Unit) { load() }
 
-    var itemDocs by remember { mutableStateOf<Pair<String, Set<String>>?>(null) }
     val sel = selected
     if (sel != null) { PutAwayDocument(no = sel, onBack = { selected = null; load() }); return }
 
@@ -84,31 +141,57 @@ fun PutAwayModule() {
         acceptDocTypes = setOf("putaway"),
         onDocument = { selected = it },
         onError = { status = it },
+        onLp = { raw ->
+            scope.launch {
+                when (val outcome = putAwayDocsForLp(raw)?.let(::putAwaySearchOutcome)) {
+                    null -> status = "HATA: LP araması yapılamadı. Bağlantıyı kontrol edip tekrar okutun."
+                    is PutAwaySearchOutcome.Open -> selected = outcome.no
+                    is PutAwaySearchOutcome.Filter -> { itemDocs = raw to outcome.docs; status = "TAMAM: '$raw' LP'si ${outcome.docs.size} yerleştirmede" }
+                    PutAwaySearchOutcome.NotFound -> status = "⚠️ '$raw' LP'si açık bir yerleştirmede yok"
+                }
+            }
+        },
     ) { item, docs ->
-        when { docs.isEmpty() -> status = "⚠️ '$item' açık yerleştirmede yok"; docs.size == 1 -> selected = docs.first(); else -> { itemDocs = item to docs; status = "TAMAM: '$item' → ${docs.size} belge" } }
+        // Ürün birden çok belgede ise bana atanan belge doğrudan açılır.
+        val mine = docs.filter { no -> rows.any { it.optString("no") == no && myUser.isNotBlank() && it.optString("assignedUserId").trim().equals(myUser, true) } }
+        when {
+            docs.isEmpty() -> status = "⚠️ '$item' açık yerleştirmede yok"
+            docs.size == 1 -> selected = docs.first()
+            mine.size == 1 -> selected = mine.first()
+            else -> { itemDocs = item to docs; status = "TAMAM: '$item' → ${docs.size} belge" }
+        }
     }
-    val scoped = if (mineOnly && myUser.isNotBlank())
-        rows.filter { it.optString("assignedUserId").trim().equals(myUser, true) } else rows
+    // LP/ürün filtresi aktifken atama süzgeci uygulanmaz: okutulan LP'nin belgesi
+    // başkasında olsa da görünür (açınca sahiplik mesajı çıkar).
+    val scoped = sortPutAwaysForUser(
+        if (mineOnly && myUser.isNotBlank() && itemDocs == null) rows.filter { putAwayVisibleForMine(it, myUser) } else rows,
+        myUser,
+    )
     val shownRows = itemDocs?.let { f -> scoped.filter { it.optString("no") in f.second } } ?: scoped
 
     Column(Modifier.fillMaxSize().padding(12.dp)) {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Button(onClick = { load() }, enabled = !loading, modifier = Modifier.weight(1f)) { WmsRefreshLabel(loading) }
-            FilterChip(selected = mineOnly, onClick = { mineOnly = true; load() }, label = { Text("Bana atanan", fontSize = 12.sp) })
+            FilterChip(selected = mineOnly, onClick = { mineOnly = true; load() }, label = { Text("Bana + boşta", fontSize = 12.sp) })
             FilterChip(selected = !mineOnly, onClick = { mineOnly = false; load() }, label = { Text("Tümü", fontSize = 12.sp) })
         }
         Spacer(Modifier.height(8.dp))
-        com.dynops.bcwms.ui.DocSearchBar(value = search, onValueChange = { search = it }, onSearch = { load() })
+        com.dynops.bcwms.ui.DocSearchBar(
+            value = search,
+            onValueChange = { search = it },
+            onSearch = { itemDocs = null; load() },
+            label = "Belge no veya LP ile ara / okut",
+        )
         Spacer(Modifier.height(4.dp))
         StatusText(status)
-        if (itemDocs != null) { ScanFilterChip("${itemDocs!!.first} → ${itemDocs!!.second.size} belge") { itemDocs = null } }
+        if (itemDocs != null) { ScanFilterChip("${itemDocs!!.first} → ${itemDocs!!.second.size} belge") { itemDocs = null; search = ""; load() } }
         Spacer(Modifier.height(8.dp))
         LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             items(shownRows) { d ->
                 OperationDocumentCard(
                     title = d.optString("no"),
                     status = firstValue(d, "status"),
-                    metadata = "Lokasyon: ${firstValue(d, "locationCode")}\nAtanan: ${firstValue(d, "assignedUserId")}",
+                    metadata = "Lokasyon: ${firstValue(d, "locationCode")}\nAtanan: ${putAwayAssigneeLabel(d.optString("assignedUserId"), d.optString("assignedUserName"))}",
                     onClick = { selected = d.optString("no") },
                 )
             }
@@ -116,7 +199,7 @@ fun PutAwayModule() {
                 EmptyState(
                     when {
                         search.isNotBlank() -> "'$search' ile eşleşen yerleştirme belgesi bulunamadı."
-                        mineOnly && rows.isNotEmpty() -> "Üzerinize atanmış yerleştirme yok. 'Tümü' sekmesinden açık belgeleri görebilirsiniz."
+                        mineOnly && rows.isNotEmpty() -> "Size atanmış veya boşta yerleştirme yok. 'Tümü' sekmesinden açık belgeleri görebilirsiniz."
                         else -> "Açık yerleştirme belgesi yok."
                     }
                 )
@@ -154,6 +237,14 @@ private fun PutAwayDocument(no: String, onBack: () -> Unit) {
     // donuste kart yesil gorunmesine ragmen Kaydet "Once dokunun" diyordu.
     var stagedLineNos by remember(no) { mutableStateOf(PutAwayStagedStore.load(context, no)) }
     LaunchedEffect(no, stagedLineNos) { PutAwayStagedStore.save(context, no, stagedLineNos) }
+    // BADE 1.14.200: her palet için boş göz önerisi (BC 1.14.1.152 suggestEmptyBins).
+    // Eski BC'de uç yoksa boş kalır; kartta BC'nin Koy gözü öneri olarak gösterilir.
+    var binSuggestions by remember(no) { mutableStateOf<Map<Int, PutAwayBinSuggestion>>(emptyMap()) }
+
+    suspend fun refreshBinSuggestions() {
+        val r = BcApi.boundAction(context, "putAways", no, "suggestEmptyBins", "{}")
+        binSuggestions = if (r.ok) parsePutAwayBinSuggestions(BcApi.scalarValue(r.body)) else emptyMap()
+    }
 
     fun reload() {
         scope.launch {
@@ -200,6 +291,7 @@ private fun PutAwayDocument(no: String, onBack: () -> Unit) {
                 stagedLineNos = retainExistingPutAwayStagedLineNos(stagedLineNos, lines)
             }
             if (!headerLoaded || !linesComplete) status = "HATA: Belgenin tüm satırları yüklenemedi. Yenileyip tekrar deneyin."
+            else refreshBinSuggestions()
             busy = false
         }
     }
@@ -331,6 +423,7 @@ private fun PutAwayDocument(no: String, onBack: () -> Unit) {
         headerLoaded = header != null || lines.isEmpty()
         busy = false
         stagedLineNos = emptySet()
+        if (lines.isNotEmpty()) refreshBinSuggestions()
         val remaining = lines.sumOf { it.optDouble("qtyOutstanding", 0.0) }
         status = when {
             lines.isEmpty() -> "TAMAM: Tüm satırlar yerleştirildi — belge tamamlandı ✅"
@@ -376,6 +469,34 @@ private fun PutAwayDocument(no: String, onBack: () -> Unit) {
             }
             if (r.ok) reload()
         }
+    }
+
+    /**
+     * BADE 1.14.200: mal kabul artık yerleştirmeyi atamıyor. Atanmamış belgede ilk
+     * dokunuş/okutma belgeyi önce bu operatöre alır, sonra işleme devam eder.
+     */
+    suspend fun claimIfUnassigned(): Boolean {
+        if (header?.optString("assignedUserId").orEmpty().isNotBlank()) return true
+        if (myUserId.isBlank()) {
+            status = "HATA: WMS kullanıcı kimliği çözülemedi. Oturumu yenileyin."
+            return false
+        }
+        busy = true
+        status = "Belge üzerinize alınıyor..."
+        val r = BcApi.boundAction(
+            context, "putAways", no, "assignToMe",
+            JSONObject().apply { put("userId", myUserId) }.toString(),
+        )
+        if (r.ok) {
+            val h2 = BcApi.get(context, "putAways('$no')")
+            val fresh = if (h2.ok) runCatching { JSONObject(h2.body) }.getOrNull() else null
+            header = fresh ?: JSONObject(header?.toString() ?: "{}").put("assignedUserId", myUserId)
+            status = "TAMAM: Yerleştirme belgesi üzerinize alındı"
+        } else {
+            status = QcErrorParser.friendlyStatus(BcApi.errorMessage(r.body), r.httpCode)
+        }
+        busy = false
+        return r.ok
     }
 
     // Toplu bin: iadelerde/çok satırda tüm satırları tek seferde aynı bine yerleştir.
@@ -480,19 +601,30 @@ private fun PutAwayDocument(no: String, onBack: () -> Unit) {
 
     val h = header
     val assignedUserId = h?.optString("assignedUserId")?.trim().orEmpty()
+    val assignedUserLabel = putAwayAssigneeLabel(assignedUserId, h?.optString("assignedUserName").orEmpty())
     val canMutate = headerLoaded && linesComplete &&
         (adminTestSession || canMutateAssignedDocument(assignedUserId, myUserId))
+    // Atanmamış belge: dokunma/okutma önce belgeyi üstlenir (claimIfUnassigned).
+    val canClaim = headerLoaded && linesComplete && assignedUserId.isBlank() && myUserId.isNotBlank()
+
+    fun openPair(pair: PutAwayPair?) {
+        if (pair == null || busy) return
+        if (canMutate) { guidedPair = pair; return }
+        if (!canClaim) { status = documentOwnershipMessage(assignedUserId, myUserId); return }
+        scope.launch { if (claimIfUnassigned()) guidedPair = pair }
+    }
+
     DocumentScanHandler(
-        enabled = canMutate && guidedPair == null && !showBulkBin && !showBatchPlacement && !busy,
+        enabled = (canMutate || canClaim) && guidedPair == null && !showBulkBin && !showBatchPlacement && !busy,
         lines = lines,
         matchKeys = listOf("lpNo", "itemNo", "itemReference"),
-        onSingleMatch = { line, _ -> scanFilter = ""; guidedPair = groupPutAwayPairs(putAwayPairLines(line, lines)).firstOrNull() },
+        onSingleMatch = { line, _ -> scanFilter = ""; openPair(groupPutAwayPairs(putAwayPairLines(line, lines)).firstOrNull()) },
         onMultiMatch = { value, resolved ->
             if (resolved.kind == BarcodeKind.Lp) {
                 val lpLine = lines.firstOrNull { it.optString("lpNo").equals(resolved.value, ignoreCase = true) }
                 if (lpLine != null) {
                     scanFilter = ""
-                    guidedPair = groupPutAwayPairs(putAwayPairLines(lpLine, lines)).firstOrNull()
+                    openPair(groupPutAwayPairs(putAwayPairLines(lpLine, lines)).firstOrNull())
                 } else status = "⚠️ '${resolved.value}' bu yerleştirmede yok"
             } else {
                 scanFilter = value
@@ -521,14 +653,15 @@ private fun PutAwayDocument(no: String, onBack: () -> Unit) {
             DocHeaderCard(
                 title = no,
                 subtitle = "Lokasyon: ${h?.optString("locationCode") ?: ""} · ${firstValue(h ?: JSONObject(), "status")}" +
-                    (assignedUserId.takeIf { it.isNotBlank() }?.let { " · Atanan: $it" } ?: " · Atanmamış") +
+                    (assignedUserId.takeIf { it.isNotBlank() }?.let { " · Atanan: $assignedUserLabel" } ?: " · Atanmamış") +
                     if (headerLoaded) " · %$pct tamamlandı" else "",
             )
             Spacer(Modifier.height(6.dp))
             StatusText(status)
             if (!canMutate && headerLoaded) {
                 Text(
-                    documentOwnershipMessage(assignedUserId, myUserId),
+                    if (canClaim) "Belge boşta. 'Bana Ata' deyin veya bir yerleştirmeye dokunun; belge üzerinize alınır."
+                    else documentOwnershipMessage(assignedUserId, myUserId).replace(assignedUserId, assignedUserLabel),
                     color = bcwmsStatus().danger,
                     fontSize = 13.sp,
                     modifier = Modifier.padding(vertical = 4.dp),
@@ -568,9 +701,13 @@ private fun PutAwayDocument(no: String, onBack: () -> Unit) {
             if (scanFilter.isNotBlank()) { ScanFilterChip(scanFilter) { scanFilter = "" }; Spacer(Modifier.height(4.dp)) }
             Spacer(Modifier.height(8.dp))
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                pairs.forEach { pair -> PutAwayPairCard(pair, staged = pair.place.optInt("lineNo") in stagedLineNos) {
-                    if (canMutate && !busy) guidedPair = pair
-                } }
+                pairs.forEach { pair ->
+                    PutAwayPairCard(
+                        pair,
+                        staged = pair.place.optInt("lineNo") in stagedLineNos,
+                        suggestion = binSuggestions[pair.place.optInt("lineNo")],
+                    ) { openPair(pair) }
+                }
                 if (pairs.isEmpty() && !busy) EmptyState("Yerleştirilecek satır yok.")
             }
         }
@@ -606,13 +743,10 @@ private fun PutAwayDocument(no: String, onBack: () -> Unit) {
                         },
                     )
                 }
-                // Hazırlanan miktar BC'ye yazılıyor; ekrandan çıkıp dönünce
-                // oturum hafızası sıfırlanıyor ve düğme pasifleşiyordu — BC'de
-                // bekleyen iş kaydedilemez hâle geliyordu (UAT pa-05).
-                val serverStaged = lines.any {
-                    it.optString("actionType").equals("Place", true) && it.optDouble("qtyToHandle", 0.0) > 0.0
-                }
-                val canRegister = canMutate && (stagedLineNos.isNotEmpty() || serverStaged)
+                // Hazırlanan çiftler cihazda kalıcı tutulur (PutAwayStagedStore; UAT pa-05).
+                // BADE 1.14.200: BC'nin satırları Qty. to Handle dolu oluşturması "hazır"
+                // sayılmaz; yalnız terminalde doğrulanan çiftler kaydedilir.
+                val canRegister = canMutate && stagedLineNos.isNotEmpty()
                 Button(
                     onClick = { register() },
                     enabled = !busy && canRegister,
@@ -659,6 +793,7 @@ private fun PutAwayDocument(no: String, onBack: () -> Unit) {
             pair = gp,
             locationCode = h?.optString("locationCode") ?: "",
             lpScanRequired = lpScanRequired,
+            suggestion = binSuggestions[gp.place.optInt("lineNo")],
             onDismiss = { guidedPair = null },
             onConfirm = { bin, qty, sourceLpNo ->
                 guidedPair = null
@@ -827,13 +962,14 @@ internal fun logicalPutAwayMovementCount(lines: List<JSONObject>): Int =
 /** Take/Place çiftini "nereden → nereye" tek kart olarak gösteren, tıklanabilir satır. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun PutAwayPairCard(pair: PutAwayPair, staged: Boolean, onClick: () -> Unit) {
+private fun PutAwayPairCard(pair: PutAwayPair, staged: Boolean, suggestion: PutAwayBinSuggestion? = null, onClick: () -> Unit) {
     val place = pair.place
-    // Kart, BC'de bekleyen hazırlığı da "hazır" saymalı: aksi hâlde ekrandan
-    // çıkıp dönen operatör satırı hazırlanmamış sanıyor (UAT pa-05).
-    val done = staged || lineDone(place, LineModule.PUTAWAY) || place.optDouble("qtyToHandle", 0.0) > 0.0
+    // BADE 1.14.200 (Merve): BC satırları Qty. to Handle dolu oluşturduğu için kart
+    // hiçbir şey yapılmadan "✓ Hazır" görünüyordu. Yalnız terminalde doğrulanan çift
+    // hazırdır (cihazda kalıcı; UAT pa-05 korunur). Hedef o zamana dek nötr "Öneri".
+    val done = putAwayPairReady(staged)
     val sourceBin = pair.take?.optString("binCode")?.ifBlank { null } ?: "-"
-    val targetBin = place.optString("binCode").ifBlank { "" }
+    val target = putAwayCardTarget(staged, place.optString("binCode"), suggestion)
     val lpNo = place.optString("lpNo").trim()
     val toHandle = place.optDouble("qtyToHandle", 0.0)
     val outstanding = place.optDouble("qtyOutstanding", place.optDouble("quantity", 0.0))
@@ -851,7 +987,7 @@ private fun PutAwayPairCard(pair: PutAwayPair, staged: Boolean, onClick: () -> U
             Row(verticalAlignment = Alignment.CenterVertically) {
                 BinPill("📤 Al", sourceBin, Color(0xFF64748B))
                 Text("  →  ", fontSize = 20.sp, fontWeight = FontWeight.Bold, color = Color(0xFF6366F1))
-                BinPill("📥 Koy", targetBin.ifBlank { "Bin seç" }, if (targetBin.isBlank()) Color(0xFFEA580C) else Color(0xFF16A34A))
+                BinPill(target.label, target.bin, if (target.confirmed) Color(0xFF16A34A) else Color(0xFF64748B))
                 Spacer(Modifier.weight(1f))
                 Text("›", fontSize = 26.sp, color = Color.Gray)
             }
@@ -859,7 +995,7 @@ private fun PutAwayPairCard(pair: PutAwayPair, staged: Boolean, onClick: () -> U
             Text(
                 // Hazırlanan miktar ayrı yazılır; eskiden "Miktar" alanına
                 // yazılıp kalanla karışıyordu (UAT pa-05).
-                (if (toHandle > 0) "Hazırlanan: ${fmtNum(toHandle)} · Kalan: ${fmtNum(outstanding)} $uom"
+                (if (staged && toHandle > 0) "Hazırlanan: ${fmtNum(toHandle)} · Kalan: ${fmtNum(outstanding)} $uom"
                  else "Miktar: ${fmtNum(outstanding)} · Kalan: ${fmtNum(outstanding)} $uom").trim(),
                 fontSize = 12.sp, color = Color.Gray,
             )
@@ -1082,6 +1218,7 @@ private fun PutAwayGuidedSheet(
     pair: PutAwayPair,
     locationCode: String,
     lpScanRequired: Boolean = false,
+    suggestion: PutAwayBinSuggestion? = null,
     onDismiss: () -> Unit,
     onConfirm: (bin: String, qty: Double, sourceLpNo: String) -> Unit,
 ) {
@@ -1090,7 +1227,9 @@ private fun PutAwayGuidedSheet(
     val place = pair.place
     val pairLines = listOfNotNull(pair.take, place)
     val expectedSource = pair.take?.optString("binCode").orEmpty().trim()
-    val expectedTarget = place.optString("binCode").trim()
+    // BADE 1.14.200: öneri boş göz kuralından (BC suggestEmptyBins) gelir; yoksa BC'nin
+    // Koy gözü. Bilgi amaçlıdır: operatör aynı lokasyonda geçerli başka gözü okutabilir.
+    val expectedTarget = suggestion?.binCode?.trim().orEmpty().ifBlank { place.optString("binCode").trim() }
     val expectedItem = place.optString("itemNo").trim()
     val expectedLp = place.optString("lpNo").trim()
 
@@ -1240,7 +1379,8 @@ private fun PutAwayGuidedSheet(
                 BinPill(
                     if (targetBin.isBlank() && expectedTarget.isNotBlank()) "📥 Öneri" else "📥 Koy",
                     targetBin.ifBlank { expectedTarget.ifBlank { "Okutun" } },
-                    Color(0xFF16A34A),
+                    // Öneri nötr; yalnız okutulup doğrulanan hedef yeşil.
+                    if (targetBin.isBlank()) Color(0xFF64748B) else Color(0xFF16A34A),
                 )
             }
             Spacer(Modifier.height(14.dp))
@@ -1269,7 +1409,9 @@ private fun PutAwayGuidedSheet(
                     Text("Koyacağınız rafı okutun", fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
                     Text(
                         if (expectedTarget.isNotBlank())
-                            "Önerilen: $expectedTarget · Aynı lokasyondaki başka bir rafı da seçebilirsiniz."
+                            "Öneri: $expectedTarget" +
+                                (if (suggestion?.isEmptyBin == true) " (boş göz)" else "") +
+                                " · Aynı lokasyondaki başka bir rafı da okutabilirsiniz."
                         else
                             "Aynı lokasyondaki geçerli bir rafı okutun veya listeden seçin.",
                         fontSize = 12.sp, color = Color.Gray,

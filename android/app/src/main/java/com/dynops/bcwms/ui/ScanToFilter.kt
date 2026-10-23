@@ -102,11 +102,15 @@ fun DocListScanHandler(
     acceptDocTypes: Set<String> = emptySet(), // bu ekranın açtığı belge türleri, ör. setOf("receipt")
     onDocument: ((docNo: String) -> Unit)? = null,
     onError: ((message: String) -> Unit)? = null,
+    // LP/SSCC okutulunca ekran kendi aramasını yapar (ör. Yerleştirme: LP'yi taşıyan belge).
+    // null ise eski davranış: değer ürün no gibi aranır.
+    onLp: ((lpValue: String) -> Unit)? = null,
     onResult: (itemNo: String, docs: Set<String>) -> Unit,
 ) {
     val context = LocalContext.current
     val cb by rememberUpdatedState(onResult)
     val docCb by rememberUpdatedState(onDocument)
+    val lpCb by rememberUpdatedState(onLp)
     LaunchedEffect(enabled, linesEndpoint) {
         if (!enabled) return@LaunchedEffect
         ScanBus.events.collect { ev ->
@@ -124,7 +128,13 @@ fun DocListScanHandler(
                 if (exists) { docCb?.invoke(docNo); return@collect }
                 // Belge bulunamadıysa (yanlış ekran / kapalı belge) ürün aramasına düş.
             }
-            // 2) Ürün barkodu → o ürünü içeren belgeleri bul (mevcut davranış).
+            // 2) LP barkodu → ekranın LP araması (verildiyse).
+            val lpHandler = lpCb
+            if (resolved.kind == BarcodeKind.Lp && lpHandler != null) {
+                lpHandler(resolved.value.trim().ifBlank { ev.raw.trim() })
+                return@collect
+            }
+            // 3) Ürün barkodu → o ürünü içeren belgeleri bul (mevcut davranış).
             val itemNo = (resolved.itemNo ?: resolved.value).trim()
             if (itemNo.isBlank()) return@collect
             val safe = itemNo.replace("'", "''")

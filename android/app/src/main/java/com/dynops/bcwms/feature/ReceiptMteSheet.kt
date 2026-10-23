@@ -42,6 +42,51 @@ internal fun ReceiptMteSheet(receiptNo: String, manualPrint: Boolean = false, on
     var loaded by remember { mutableStateOf(false) }
     var status by remember { mutableStateOf("") }
     var preselected by remember(receiptNo) { mutableStateOf(false) }
+    // BADE 1.14.200 (Merve): yazdırmadan önce Giriş Yapan, Kalite Kontrolü Yapan,
+    // Kalite Kontrol Tarihi ve Kopya adedi sorulur (LP ekranındaki MTE ile aynı ekran).
+    val askMteOptions = com.dynops.bcwms.BuildConfig.FLAVOR == "bade"
+    var showOptions by remember { mutableStateOf(false) }
+
+    fun printSelected(options: MteOptions) {
+        val requested = selected.toList()
+        if (requested.isEmpty()) return
+        scope.launch {
+            busy = true
+            val failures = linkedMapOf<String, String>()
+            val route = mtePrintRoute(getDefaultPrinter(context, PRINTER_USAGE_LABEL), getDefaultPrinter(context, PRINTER_USAGE_DOCUMENT))
+            requested.forEachIndexed { index, lpNo ->
+                status = "MTE gönderiliyor: ${index + 1}/${requested.size}"
+                // A draft or emptied LP must not produce a misleading successful reprint.
+                val safeLp = lpNo.replace("'", "''")
+                val response = BcApi.get(context, "licensePlates('$safeLp')")
+                val header = if (response.ok) runCatching { JSONObject(response.body) }.getOrNull() else null
+                if (header == null || !canPrintMte(
+                        linesComplete = header.has("lineCount") && header.has("pendingReceiptNo"),
+                        lineCount = header.optInt("lineCount"),
+                        pendingReceiptNo = header.optString("pendingReceiptNo"),
+                    )) {
+                    failures[lpNo] = "LP içeriği doğrulanamadı veya LP henüz mal kabulü bekliyor."
+                } else {
+                    val result = BcApi.boundActionLongRunning(
+                        context, "licensePlates", lpNo, route.action,
+                        if (askMteOptions) receiptMtePrintBody(route.printerCode, options)
+                        else JSONObject().put("printerId", route.printerCode).put("copies", 1).toString(),
+                    )
+                    if (!result.ok) failures[lpNo] = QcErrorParser.friendlyStatus(BcApi.errorMessage(result.body), result.httpCode)
+                }
+            }
+            // No automatic retry: a network failure can occur after physical printing.
+            selected = emptySet()
+            status = if (failures.isEmpty()) {
+                "TAMAM: ${requested.size} LP için MTE isteği gönderildi" +
+                    (if (options.copies > 1) " (${options.copies} kopya)" else "") + ". Fiziksel çıktıları kontrol edin."
+            } else {
+                "UYARI: ${failures.size} LP için baskı doğrulanamadı: ${failures.keys.joinToString()}. " +
+                    "${failures.values.first()} Tekrar seçmeden önce çıktıları kontrol edin. Mal kabul kaydedildi."
+            }
+            busy = false
+        }
+    }
 
     fun load() {
         scope.launch {
@@ -107,41 +152,7 @@ internal fun ReceiptMteSheet(receiptNo: String, manualPrint: Boolean = false, on
                 enabled = loaded && !busy && selected.isNotEmpty(),
                 modifier = Modifier.fillMaxWidth(),
                 onClick = {
-                    val requested = selected.toList()
-                    scope.launch {
-                        busy = true
-                        val failures = linkedMapOf<String, String>()
-                        val route = mtePrintRoute(getDefaultPrinter(context, PRINTER_USAGE_LABEL), getDefaultPrinter(context, PRINTER_USAGE_DOCUMENT))
-                        requested.forEachIndexed { index, lpNo ->
-                            status = "MTE gönderiliyor: ${index + 1}/${requested.size}"
-                            // A draft or emptied LP must not produce a misleading successful reprint.
-                            val safeLp = lpNo.replace("'", "''")
-                            val response = BcApi.get(context, "licensePlates('$safeLp')")
-                            val header = if (response.ok) runCatching { JSONObject(response.body) }.getOrNull() else null
-                            if (header == null || !canPrintMte(
-                                    linesComplete = header.has("lineCount") && header.has("pendingReceiptNo"),
-                                    lineCount = header.optInt("lineCount"),
-                                    pendingReceiptNo = header.optString("pendingReceiptNo"),
-                                )) {
-                                failures[lpNo] = "LP içeriği doğrulanamadı veya LP henüz mal kabulü bekliyor."
-                            } else {
-                                val result = BcApi.boundActionLongRunning(
-                                    context, "licensePlates", lpNo, route.action,
-                                    JSONObject().put("printerId", route.printerCode).put("copies", 1).toString(),
-                                )
-                                if (!result.ok) failures[lpNo] = QcErrorParser.friendlyStatus(BcApi.errorMessage(result.body), result.httpCode)
-                            }
-                        }
-                        // No automatic retry: a network failure can occur after physical printing.
-                        selected = emptySet()
-                        status = if (failures.isEmpty()) {
-                            "TAMAM: ${requested.size} LP için MTE isteği gönderildi. Fiziksel çıktıları kontrol edin."
-                        } else {
-                            "UYARI: ${failures.size} LP için baskı doğrulanamadı: ${failures.keys.joinToString()}. " +
-                                "${failures.values.first()} Tekrar seçmeden önce çıktıları kontrol edin. Mal kabul kaydedildi."
-                        }
-                        busy = false
-                    }
+                    if (askMteOptions) showOptions = true else printSelected(MteOptions())
                 },
             ) { Text(if (manualPrint) "Etiket Yazdır (${selected.size})" else "Seçilen MTE'leri Yazdır (${selected.size})") }
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
@@ -149,5 +160,20 @@ internal fun ReceiptMteSheet(receiptNo: String, manualPrint: Boolean = false, on
                 TextButton(onClick = onDismiss, enabled = !busy) { Text("Devam Et") }
             }
         }
+    }
+    val firstLp = selected.sorted().firstOrNull()
+    if (showOptions && firstLp != null) {
+        MteOptionsSheet(
+            lpNo = firstLp,
+            title = "Etiket Yazdır · ${selected.size} LP",
+            confirmLabel = "Etiket Yazdır (${selected.size})",
+            showSupplierLot = false,
+            resolveOperator = false,
+            onDismiss = { showOptions = false },
+            onConfirm = { options ->
+                showOptions = false
+                printSelected(options)
+            },
+        )
     }
 }

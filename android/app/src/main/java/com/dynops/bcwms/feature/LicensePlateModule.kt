@@ -874,7 +874,7 @@ private fun LpDocument(lpNo: String, transferTarget: String, onTransferTarget: (
                     "printMte",
                     JSONObject().apply {
                         put("printerId", mteReportPrinterCode(getDefaultPrinter(context, PRINTER_USAGE_LABEL), getDefaultPrinter(context, PRINTER_USAGE_DOCUMENT)))
-                        put("copies", 1)
+                        put("copies", options.copies.coerceIn(1, MTE_MAX_COPIES))
                         put("optionsJson", mteOptionsJson(options))
                     }.toString(),
                     "MTE yazdırma isteği gönderildi. Fiziksel etiketi kontrol edin.",
@@ -908,13 +908,23 @@ private fun LpDocument(lpNo: String, transferTarget: String, onTransferTarget: (
     }
 }
 
-/** BADE: extra MTE fields (report 60150 request page) collected on the terminal before printing. */
+/**
+ * BADE: extra MTE fields (report 60150 request page) collected on the terminal before printing.
+ * 1.14.200 (Merve): LP ekranı ve mal kabul sonrası "Etiket Yazdır" aynı ekranı kullanır:
+ * Giriş Yapan, Kalite Kontrolü Yapan, Kalite Kontrol Tarihi (varsayılan bugün), Kopya adedi
+ * (varsayılan 1). resolveOperator = false: Giriş Yapan boşsa BcApi PIN kullanıcısının adını
+ * sunucuya iletir (mal kabul yolunun eski davranışı).
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun MteOptionsSheet(
+internal fun MteOptionsSheet(
     lpNo: String,
     onDismiss: () -> Unit,
     onConfirm: (MteOptions) -> Unit,
+    title: String = "MTE Yazdır · Ek Bilgiler",
+    confirmLabel: String = "MTE Yazdır",
+    showSupplierLot: Boolean = true,
+    resolveOperator: Boolean = true,
 ) {
     val context = LocalContext.current
     val companyScope = remember { TerminalSession.scope(context) }
@@ -922,13 +932,15 @@ private fun MteOptionsSheet(
     var inspector by remember { mutableStateOf("") }
     var supplierLot by remember { mutableStateOf("") }
     var qcEmployee by remember { mutableStateOf("") }
-    var qcDate by remember { mutableStateOf("") }
+    var qcDate by remember { mutableStateOf(defaultMteQcDate()) }
+    var copiesText by remember { mutableStateOf("1") }
     var error by remember { mutableStateOf("") }
     var inspectorMenu by remember { mutableStateOf(false) }
     var qcMenu by remember { mutableStateOf(false) }
 
     fun submit(options: MteOptions) {
-        val resolved = runCatching { mteOptionsForCurrentOperator(context, options, employees, companyScope) }
+        val resolved = if (!resolveOperator) Result.success(options)
+            else runCatching { mteOptionsForCurrentOperator(context, options, employees, companyScope) }
         resolved.onSuccess(onConfirm).onFailure {
             error = it.message ?: "Giriş yapan kullanıcı doğrulanamadı."
         }
@@ -965,7 +977,7 @@ private fun MteOptionsSheet(
     }
 
     SheetScaffold(onDismiss = onDismiss, contentPadding = PaddingValues(20.dp)) {
-        Text("MTE Yazdır · Ek Bilgiler", fontWeight = FontWeight.Bold, fontSize = 18.sp)
+        Text(title, fontWeight = FontWeight.Bold, fontSize = 18.sp)
         Text(
             MTE_EMPTY_FIELDS_HINT,
             fontSize = 12.sp,
@@ -974,9 +986,18 @@ private fun MteOptionsSheet(
         Spacer(Modifier.height(10.dp))
         Text("Etiket Ek Bilgiler", fontWeight = FontWeight.Bold, fontSize = 13.sp)
         employeePicker("Giriş Yapan (çalışan no)", inspector, inspectorMenu, { inspectorMenu = it }) { inspector = it }
-        OutlinedTextField(value = supplierLot, onValueChange = { supplierLot = it }, label = { Text("Tedarikçi Lotu") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-        employeePicker("Kalite Kontrol Onayı - İsim (çalışan no)", qcEmployee, qcMenu, { qcMenu = it }) { qcEmployee = it }
-        OutlinedTextField(value = qcDate, onValueChange = { qcDate = it }, label = { Text("Kalite Kontrol Onayı - Tarih") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+        if (showSupplierLot)
+            OutlinedTextField(value = supplierLot, onValueChange = { supplierLot = it }, label = { Text("Tedarikçi Lotu") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+        employeePicker("Kalite Kontrolü Yapan (çalışan no)", qcEmployee, qcMenu, { qcMenu = it }) { qcEmployee = it }
+        OutlinedTextField(value = qcDate, onValueChange = { qcDate = it }, label = { Text("Kalite Kontrol Tarihi (gg.aa.yyyy)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+        OutlinedTextField(
+            value = copiesText,
+            onValueChange = { copiesText = it.filter(Char::isDigit).take(2) },
+            label = { Text("Kopya adedi (1-$MTE_MAX_COPIES)") },
+            singleLine = true,
+            keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Number),
+            modifier = Modifier.fillMaxWidth(),
+        )
         if (error.isNotBlank()) Text(error, color = MaterialTheme.colorScheme.error, fontSize = 12.sp)
         Spacer(Modifier.height(14.dp))
         Button(
@@ -986,10 +1007,15 @@ private fun MteOptionsSheet(
                     error = "Tarih biçimi geçersiz. gg.aa.yyyy girin."
                     return@Button
                 }
-                submit(MteOptions(inspector, supplierLot, qcEmployee, qc))
+                val copies = normalizeMteCopies(copiesText)
+                if (copies == null) {
+                    error = "Kopya adedi 1 ile $MTE_MAX_COPIES arasında olmalı."
+                    return@Button
+                }
+                submit(MteOptions(inspector, if (showSupplierLot) supplierLot else "", qcEmployee, qc, copies))
             },
             modifier = Modifier.fillMaxWidth().height(50.dp),
-        ) { Text("MTE Yazdır") }
+        ) { Text(confirmLabel) }
         TextButton(onClick = { submit(mteOptionsWithoutExtraFields(inspector)) }, modifier = Modifier.fillMaxWidth()) { Text(MTE_EMPTY_FIELDS_BUTTON) }
         Spacer(Modifier.height(24.dp))
     }
