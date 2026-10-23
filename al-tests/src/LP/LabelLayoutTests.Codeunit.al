@@ -163,7 +163,7 @@ codeunit 72160 "DOPSWHS Label Layout Tests"
         Preview: Codeunit "DOPSWHS Label Layout Preview";
         Assert: Codeunit "Library Assert";
     begin
-        Assert.AreEqual('https://api.labelary.com/v1/printers/8dpmm/labels/3.15x1.57/0/', Preview.PreviewUrl(80, 40, 203), '80x40 mm at 203 dpi');
+        Assert.AreEqual('https://api.labelary.com/v1/printers/8dpmm/labels/3.1552x1.5788/0/', Preview.PreviewUrl(80, 40, 203), '80x40 mm at 203 dpi = exactly 640 x 320 dots on Labelary');
         Assert.IsTrue(StrPos(Preview.PreviewUrl(80, 40, 300), '12dpmm') > 0, '300 dpi is 12 dpmm.');
     end;
 

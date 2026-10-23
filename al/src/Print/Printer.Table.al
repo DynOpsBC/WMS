@@ -178,6 +178,21 @@ table 72287 "DOPSWHS Printer"
             DataClassification = SystemMetadata;
             Editable = false;
         }
+        // Kitoko (23 Eki 2026): etiket tasarımının dpi'si yazıcıyla aynı olmalı; 300 dpi
+        // tasarım 203 dpi yazıcıda 1,5 kat büyük basılır ve etikete sığmaz.
+        field(30; "Resolution (dpi)"; Integer)
+        {
+            Caption = 'Çözünürlük (dpi)';
+            DataClassification = CustomerContent;
+            MinValue = 0;
+            ToolTip = 'ZPL etiket yazıcısının çözünürlüğü: 203 (8 nokta/mm; Zebra ZD230, ZD220, ZQ630), 300 (12 nokta/mm) veya 600. 0 = bilinmiyor, 203 kabul edilir. Etiket tasarımının dpi değeri bununla aynı olmalıdır; farklıysa test baskı ve terminal baskısı hata verir.';
+
+            trigger OnValidate()
+            begin
+                if not ("Resolution (dpi)" in [0, 203, 300, 600]) then
+                    Error('Çözünürlük 0, 203, 300 veya 600 olmalıdır.');
+            end;
+        }
     }
 
     keys

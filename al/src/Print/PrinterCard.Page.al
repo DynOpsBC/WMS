@@ -29,6 +29,7 @@ page 72297 "DOPSWHS Printer Card"
                 field("Default Copies"; Rec."Default Copies") { ApplicationArea = All; }
                 field("Paper Width (mm)"; Rec."Paper Width (mm)") { ApplicationArea = All; }
                 field("Paper Height (mm)"; Rec."Paper Height (mm)") { ApplicationArea = All; }
+                field("Resolution (dpi)"; Rec."Resolution (dpi)") { ApplicationArea = All; }
             }
             group(Security)
             {

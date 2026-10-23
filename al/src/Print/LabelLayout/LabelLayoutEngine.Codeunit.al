@@ -160,6 +160,13 @@ codeunit 72466 "DOPSWHS Label Layout Engine"
         exit(BuildZpl(LayoutCode, Values, 1));
     end;
 
+    /// <summary>
+    /// Kitoko (23 Eki 2026): "8x4 seçiyorum, çıkarırken tam sığmıyor". Every element is
+    /// kept inside ^PW x ^LL: an element starting outside the label is dropped, text
+    /// boxes, barcodes, QR codes and boxes are shortened to the label edge and a text
+    /// or barcode that would run over the bottom (right when turned) moves up (left)
+    /// onto the label. Designs that already fit print exactly as before.
+    /// </summary>
     local procedure BuildElement(var LayoutLine: Record "DOPSWHS Label Layout Line"; var Values: Dictionary of [Text, Text]; Dpi: Integer; LabelWidthDots: Integer; LabelHeightDots: Integer; YOffsetMm: Decimal): Text
     var
         Value: Text;
@@ -170,11 +177,15 @@ codeunit 72466 "DOPSWHS Label Layout Engine"
         Swap: Integer;
         Thickness: Integer;
         Side: Integer;
+        MaxSide: Integer;
+        Human: Integer;
     begin
         X := MmToDots(LayoutLine."X (mm)", Dpi);
         Y := MmToDots(LayoutLine."Y (mm)" + YOffsetMm, Dpi);
         W := MmToDots(LayoutLine."Width (mm)", Dpi);
         H := MmToDots(LayoutLine."Height (mm)", Dpi);
+        if (X >= LabelWidthDots) or (Y >= LabelHeightDots) then
+            exit('');
         case LayoutLine."Element Type" of
             LayoutLine."Element Type"::Text, LayoutLine."Element Type"::Field:
                 exit(BuildText(LayoutLine, ResolveValue(LayoutLine, Values), X, Y, W, Dpi, LabelWidthDots, LabelHeightDots));
@@ -188,12 +199,22 @@ codeunit 72466 "DOPSWHS Label Layout Engine"
                             W := LabelHeightDots - Y - 16
                         else
                             W := LabelWidthDots - X - 16;
+                    if IsSideways(LayoutLine.Rotation) then
+                        W := ClampMax(W, LabelHeightDots - Y)
+                    else
+                        W := ClampMax(W, LabelWidthDots - X);
+                    if W < 16 then
+                        W := 16;
                     if H = 0 then
                         H := MmToDots(10, Dpi);
                     // Kitoko (21 Eki 2026): unrotated Code128 keeps the original Label Canvas output.
-                    if (LayoutLine.Rotation = 0) and (LayoutLine.Symbology = LayoutLine.Symbology::Code128) then
+                    if (LayoutLine.Rotation = 0) and (LayoutLine.Symbology = LayoutLine.Symbology::Code128) then begin
+                        if LayoutLine."Show Text" then
+                            Human := Canvas.SmallFont() + 4;
+                        FitBarHeight(Y, H, Human, LabelHeightDots);
                         exit(Canvas.Code128(X, Y, H, Value, W, LayoutLine."Show Text"));
-                    exit(BuildBarcode(LayoutLine, Value, X, Y, W, H));
+                    end;
+                    exit(BuildBarcode(LayoutLine, Value, X, Y, W, H, LabelWidthDots, LabelHeightDots));
                 end;
             LayoutLine."Element Type"::QRCode:
                 begin
@@ -205,6 +226,12 @@ codeunit 72466 "DOPSWHS Label Layout Engine"
                         Side := H;
                     if Side = 0 then
                         Side := MmToDots(20, Dpi);
+                    // Zebra draws the symbol QrTopOffset dots below ^FO: keep it above the bottom edge.
+                    MaxSide := LabelWidthDots - X;
+                    if LabelHeightDots - Y - QrTopOffsetDots() < MaxSide then
+                        MaxSide := LabelHeightDots - Y - QrTopOffsetDots();
+                    if (MaxSide > 0) and (Side > MaxSide) then
+                        Side := MaxSide;
                     // QR is never rotated (a QR scans in any orientation).
                     exit(Canvas.Qr(X, Y, Canvas.QrMagnification(Value, Side), Value));
                 end;
@@ -220,12 +247,15 @@ codeunit 72466 "DOPSWHS Label Layout Engine"
                         W := H;
                         H := Swap;
                     end;
+                    W := ClampMax(W, LabelWidthDots - X);
+                    H := ClampMax(H, LabelHeightDots - Y);
                     Thickness := MmToDots(LayoutLine."Thickness (mm)", Dpi);
-                    if (Thickness = 0) or (LayoutLine."Element Type" = LayoutLine."Element Type"::Line) then begin
+                    if (Thickness = 0) or (LayoutLine."Element Type" = LayoutLine."Element Type"::Line) then
                         Thickness := W;
-                        if H < Thickness then
-                            Thickness := H;
-                    end;
+                    if H < Thickness then
+                        Thickness := H;
+                    if W < Thickness then
+                        Thickness := W;
                     exit('^FO' + Format(X) + ',' + Format(Y) + '^GB' + Format(W) + ',' + Format(H) + ',' + Format(Thickness) + '^FS');
                 end;
             LayoutLine."Element Type"::Image:
@@ -241,16 +271,50 @@ codeunit 72466 "DOPSWHS Label Layout Engine"
         exit('');
     end;
 
+    /// <summary>Zebra (and Labelary) draw a ^BQ symbol 10 dots below its ^FO origin (measured on Labelary, magnification 2..8).</summary>
+    procedure QrTopOffsetDots(): Integer
+    begin
+        exit(10);
+    end;
+
+    /// <summary>Value, but never above Maximum (and never below 1).</summary>
+    local procedure ClampMax(Value: Integer; Maximum: Integer): Integer
+    begin
+        if Value > Maximum then
+            Value := Maximum;
+        if Value < 1 then
+            Value := 1;
+        exit(Value);
+    end;
+
+    /// <summary>
+    /// Kitoko (23 Eki 2026): bars + human readable line (Human dots) end on the label:
+    /// first the bars get shorter (down to 16 dots), then the barcode moves up.
+    /// </summary>
+    local procedure FitBarHeight(var Top: Integer; var BarHeight: Integer; Human: Integer; Limit: Integer)
+    begin
+        if Top + BarHeight + Human <= Limit then
+            exit;
+        BarHeight := Limit - Top - Human;
+        if BarHeight < 16 then begin
+            BarHeight := 16;
+            Top := Limit - BarHeight - Human;
+            if Top < 0 then
+                Top := 0;
+        end;
+    end;
+
     /// <summary>
     /// Kitoko (21 Eki 2026): rotated Code128, EAN-13 (^BE) and GS1-128 (^BC mode D,
     /// FNC1 + AIs in parentheses) with the printer's own interpretation line.
     /// Length (W) runs along the bars' reading direction, H is the bar height.
     /// </summary>
-    local procedure BuildBarcode(var LayoutLine: Record "DOPSWHS Label Layout Line"; Value: Text; X: Integer; Y: Integer; W: Integer; H: Integer): Text
+    local procedure BuildBarcode(var LayoutLine: Record "DOPSWHS Label Layout Line"; Value: Text; X: Integer; Y: Integer; W: Integer; H: Integer; LabelWidthDots: Integer; LabelHeightDots: Integer): Text
     var
         ZplEncoder: Codeunit "DOPSWHS ZPL Encoder";
         Orientation: Text[1];
-        Human: Text[1];
+        HumanFlag: Text[1];
+        CommandTail: Text;
         Command: Text;
         Data: Text;
         FieldData: Text;
@@ -258,11 +322,12 @@ codeunit 72466 "DOPSWHS Label Layout Engine"
         ModuleWidth: Integer;
         BarLength: Integer;
         FncCount: Integer;
+        Human: Integer;
     begin
         Orientation := OrientationCode(LayoutLine.Rotation);
-        Human := 'N';
+        HumanFlag := 'N';
         if LayoutLine."Show Text" then
-            Human := 'Y';
+            HumanFlag := 'Y';
         Data := Value;
         case LayoutLine.Symbology of
             LayoutLine.Symbology::EAN13:
@@ -272,12 +337,14 @@ codeunit 72466 "DOPSWHS Label Layout Engine"
                         // The printer adds the check digit itself: send the first 12 digits.
                         Data := CopyStr(Data, 1, 12);
                         Modules := 95;
-                        Command := '^BE' + Orientation + ',' + Format(H) + ',' + Human + ',N';
+                        Command := '^BE' + Orientation + ',';
+                        CommandTail := ',' + HumanFlag + ',N';
                     end else begin
                         // Not EAN-13 data: print it as Code128 rather than an unreadable symbol.
                         Data := Value;
                         Modules := Code128Modules(Data);
-                        Command := '^BC' + Orientation + ',' + Format(H) + ',' + Human + ',N,N,A';
+                        Command := '^BC' + Orientation + ',';
+                        CommandTail := ',' + HumanFlag + ',N,N,A';
                     end;
                 end;
             LayoutLine.Symbology::GS1128:
@@ -285,16 +352,19 @@ codeunit 72466 "DOPSWHS Label Layout Engine"
                     // Mode D: starts with FNC1, strips "(" ")" and spaces from the bars and
                     // prints them in the human readable line; FNC1 separators are generated.
                     Modules := Code128Modules(DelChr(Value.Replace('>8', ''), '=', '() ')) + 11 * (FncCount + 1);
-                    Command := '^BC' + Orientation + ',' + Format(H) + ',' + Human + ',N,N,D';
+                    Command := '^BC' + Orientation + ',';
+                    CommandTail := ',' + HumanFlag + ',N,N,D';
                 end else begin
                     // A ">" cannot be encoded in mode D: print the data as plain Code128.
                     FieldData := '';
                     Modules := Code128Modules(Data);
-                    Command := '^BC' + Orientation + ',' + Format(H) + ',' + Human + ',N,N,A';
+                    Command := '^BC' + Orientation + ',';
+                    CommandTail := ',' + HumanFlag + ',N,N,A';
                 end;
             else begin
                 Modules := Code128Modules(Data);
-                Command := '^BC' + Orientation + ',' + Format(H) + ',' + Human + ',N,N,A';
+                Command := '^BC' + Orientation + ',';
+                CommandTail := ',' + HumanFlag + ',N,N,A';
             end;
         end;
         ModuleWidth := W * 85 div 100 div Modules;
@@ -304,6 +374,14 @@ codeunit 72466 "DOPSWHS Label Layout Engine"
             ModuleWidth := 6;
         while (ModuleWidth > 1) and (Modules * ModuleWidth > W) do
             ModuleWidth -= 1;
+        // Kitoko (23 Eki 2026): the printer's interpretation line grows with the module
+        // width (Labelary: ^BY2 about 20 dots, ^BY3 about 27 under the bars).
+        if LayoutLine."Show Text" then
+            Human := 3 + 9 * ModuleWidth;
+        if IsSideways(LayoutLine.Rotation) then
+            FitBarHeight(X, H, Human, LabelWidthDots)
+        else
+            FitBarHeight(Y, H, Human, LabelHeightDots);
         BarLength := Modules * ModuleWidth;
         if BarLength < W then
             if IsSideways(LayoutLine.Rotation) then
@@ -312,7 +390,7 @@ codeunit 72466 "DOPSWHS Label Layout Engine"
                 X += (W - BarLength) div 2;
         if FieldData = '' then
             FieldData := ZplEncoder.EncodeFieldData(Data);
-        exit('^FO' + Format(X) + ',' + Format(Y) + '^BY' + Format(ModuleWidth) + Command + '^FH_^FD' + FieldData + '^FS');
+        exit('^FO' + Format(X) + ',' + Format(Y) + '^BY' + Format(ModuleWidth) + Command + Format(H) + CommandTail + '^FH_^FD' + FieldData + '^FS');
     end;
 
     /// <summary>
@@ -458,6 +536,11 @@ codeunit 72466 "DOPSWHS Label Layout Engine"
                 W := LabelHeightDots - Y
             else
                 W := LabelWidthDots - X;
+        // Kitoko (23 Eki 2026): the text box never runs past the label edge (fit-to-width then shrinks to it).
+        if IsSideways(LayoutLine.Rotation) then
+            W := ClampMax(W, LabelHeightDots - Y)
+        else
+            W := ClampMax(W, LabelWidthDots - X);
         if W < 8 then
             W := 8;
         FontHeight := MmToDots(LayoutLine."Font Height (mm)", Dpi);
@@ -485,6 +568,7 @@ codeunit 72466 "DOPSWHS Label Layout Engine"
         if LayoutLine."Max Lines" > 1 then begin
             Canvas.WrapText(Value, Canvas.MaxChars(FitWidth, FontHeight), LayoutLine."Max Lines", Lines);
             Pitch := FontHeight + 6;
+            KeepTextOnLabel(LayoutLine.Rotation, Lines.Count() * Pitch - 6, X, Y, LabelWidthDots, LabelHeightDots);
             foreach TextLine in Lines do begin
                 // Lines stack in the text's own "down" direction: right for 90, up for 180, left for 270.
                 LineX := X;
@@ -504,7 +588,27 @@ codeunit 72466 "DOPSWHS Label Layout Engine"
             end;
             exit(Zpl);
         end;
+        KeepTextOnLabel(LayoutLine.Rotation, FontHeight, X, Y, LabelWidthDots, LabelHeightDots);
         exit(TextLineZpl(LayoutLine, X, Y, FontHeight, FontWidth, W, Value));
+    end;
+
+    /// <summary>
+    /// Kitoko (23 Eki 2026): a text block (Thickness = lines x font + gaps) that would run
+    /// over the bottom edge (the right edge when turned 90/270) moves back onto the label.
+    /// </summary>
+    local procedure KeepTextOnLabel(Rotation: Integer; Thickness: Integer; var X: Integer; var Y: Integer; LabelWidthDots: Integer; LabelHeightDots: Integer)
+    begin
+        if IsSideways(Rotation) then begin
+            if X + Thickness > LabelWidthDots then
+                X := LabelWidthDots - Thickness;
+            if X < 0 then
+                X := 0;
+        end else begin
+            if Y + Thickness > LabelHeightDots then
+                Y := LabelHeightDots - Thickness;
+            if Y < 0 then
+                Y := 0;
+        end;
     end;
 
     local procedure TextLineZpl(var LayoutLine: Record "DOPSWHS Label Layout Line"; X: Integer; Y: Integer; FontHeight: Integer; FontWidth: Integer; W: Integer; Value: Text): Text

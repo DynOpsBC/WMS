@@ -182,3 +182,34 @@ geriye uyumlu (opsiyonel) alan ekler.
   Değerler LP başlığı + satırlardan (yukarıdaki LP alanları).
 - **ETIKETV2:** QR/ürün no büyütmesi şirket başına bir kez yapılır (upgrade tag
   `DOPSWHS-KITOKO-ETIKETV2-SIZE-20261021`); sonra tasarımcıda veya satırlarda seçilen ölçü geri alınmaz.
+
+## Ölçü ve sığma (BC 1.14.3.21, Kitoko 23 Eki 2026)
+
+Şikâyet: "8x4 (80×40 mm) seçiyorum, çıkarırken tam sığmıyor". Kök neden ve kurallar:
+
+- **Ölçü değişince öğeler yerinde kalıyordu.** Tasarımcıda ölçü 100×50 / 101,6×50,8 (LP
+  varsayılanı, 100'lük şablonlar) iken 80×40 seçilince öğeler mm konumlarını koruyordu;
+  tuval yalnız etiketi çizdiği için taşan kısım ekranda görünmüyor, BC `^PW640^LL320`
+  basıyor, yazıcı geri kalanı kesiyordu (ör. "LP QR + Lot" 17 öğeden 13'ü, standart LP
+  17 öğeden 7'si dışarıda). Tasarımcı artık hazır ölçü seçilince öğeleri yeni ölçüye
+  oranlar (Geri Al ile geri döner), elle girilen ölçüde taşan öğeleri kırmızı gösterir ve
+  "Etikete sığdır" önerir.
+- **Taşma kontrolü yazıcı noktasıyla:** `^PW = MmToDots(genişlik)`, `^LL = MmToDots(yükseklik)`
+  (203 dpi = 8 nokta/mm → 80×40 = 640×320, 100×50 = 800×400, 100×100 = 800×800; 300 dpi =
+  12 nokta/mm). Öğenin basılı alanı (yazı kutusu, yazı boyu, barkod + altındaki yazı, QR
+  sembolü `^FO`'nun 10 nokta altından başlar) bu sınırla karşılaştırılır.
+- **Güvenli kenar:** yazıcı etiketi ±1 mm kaydırabilir; tasarımcı varsayılan 1,5 mm güvenli
+  alan çizer ve kenara bundan yakın yazı/barkod/QR için uyarır (kutu/çizgi kenara dayanabilir).
+  Ayar tasarımcıda (Kapalı / 1 / 1,5 / 2 / 3 mm), BC'ye gönderilmez.
+- **Motor (BC) etiketi aşmaz:** `^FO`'su etiketin dışında kalan öğe basılmaz; yazı kutusu
+  (`^FB`), barkod uzunluğu, QR kenarı ve kutu/çizgi etiket kenarında kesilir; alt kenarı
+  aşan yazı bloğu ve barkod (önce çubuk kısalır) etikete geri çekilir. Sığan tasarımların
+  ZPL'i değişmez. Testler: `al-tests/src/LP/LabelSizeFitTests.Codeunit.al`.
+- **Labelary önizlemesi:** Labelary `floor(inç × 203)` nokta çizer; eski 2 haneli inç
+  (3,15×1,57) 80×40'ı 639×318 nokta gösteriyordu (son sütun ve iki satır kesik). Ölçü artık
+  `(nokta + 0,5) / 203` inç (8 dpmm; 12 dpmm için 304): 80×40 = tam 640×320.
+- **dpi yazıcıya aittir:** ZPL koordinatları yazıcı noktasıdır; 300 dpi tasarım 203 dpi
+  yazıcıda 1,5 kat büyük basılır. `DOPSWHS Printer`."Resolution (dpi)" (Yazıcı kartı,
+  "Çözünürlük (dpi)"; 0 = bilinmiyor, 203 kabul) doluysa tasarımcı/kart test baskısı ve
+  terminalden seçilen tasarımla baskı, dpi farklıysa hata verir. Zebra ZD230/ZD220/ZQ630 = 203.
+  Bilinmiyorsa 203 bırakın.

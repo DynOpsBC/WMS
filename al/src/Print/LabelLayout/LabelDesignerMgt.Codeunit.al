@@ -477,9 +477,15 @@ codeunit 72472 "DOPSWHS Label Designer Mgt"
     var
         TempLayout: Record "DOPSWHS Label Layout" temporary;
         Dispatcher: Codeunit "DOPSWHS Print Dispatcher";
+        Engine: Codeunit "DOPSWHS Label Layout Engine";
         Zpl: Text;
+        WidthMm: Decimal;
+        HeightMm: Decimal;
+        Dpi: Integer;
     begin
         Zpl := BuildSampleZplFor(LayoutCode, DesignJson, TempLayout);
+        Engine.LayoutSizeOf(TempLayout, WidthMm, HeightMm, Dpi);
+        Dispatcher.CheckLayoutDpi(PrinterCode, Dpi);
         Dispatcher.PrintLayoutTest(Zpl, PrinterCode, TempLayout."Label Kind");
     end;
 

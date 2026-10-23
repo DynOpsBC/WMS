@@ -227,6 +227,41 @@ codeunit 72051 "DOPSWHS Print Dispatcher"
         LayoutEngine.CheckLayoutKind(LayoutCode, Kind);
         if Printer.Get(PrinterId) and (Printer."Format" = Printer."Format"::PDF) then
             Error('%1 bir PDF yazıcıdır; seçilen etiket tasarımı yalnızca ZPL etiket yazıcısında basılabilir.', PrinterId);
+        CheckPrinterResolution(PrinterId, LayoutCode);
+    end;
+
+    /// <summary>Kitoko (23 Eki 2026): CheckLayoutDpi for a saved layout (its effective dpi).</summary>
+    local procedure CheckPrinterResolution(PrinterId: Code[50]; LayoutCode: Code[20])
+    var
+        LayoutEngine: Codeunit "DOPSWHS Label Layout Engine";
+        WidthMm: Decimal;
+        HeightMm: Decimal;
+        Dpi: Integer;
+    begin
+        if PrinterId = '' then
+            exit;
+        LayoutEngine.LayoutSize(LayoutCode, WidthMm, HeightMm, Dpi);
+        CheckLayoutDpi(PrinterId, Dpi);
+    end;
+
+    /// <summary>
+    /// Kitoko (23 Eki 2026): ZPL coordinates are printer dots, so a layout must use the
+    /// printer's resolution: a 300 dpi layout on a 203 dpi printer prints 1.5 times too
+    /// large and runs off the label. Only checked when the printer's "Resolution (dpi)"
+    /// is filled in (0 = unknown, nothing to compare).
+    /// </summary>
+    procedure CheckLayoutDpi(PrinterId: Code[50]; LayoutDpi: Integer)
+    var
+        Printer: Record "DOPSWHS Printer";
+    begin
+        if LayoutDpi <= 0 then
+            LayoutDpi := 203;
+        if not Printer.Get(PrinterId) then
+            exit;
+        if Printer."Resolution (dpi)" <= 0 then
+            exit;
+        if Printer."Resolution (dpi)" <> LayoutDpi then
+            Error('%1 yazıcısı %2 dpi, etiket tasarımı %3 dpi. Tasarımcıda çözünürlüğü %2 dpi yapın; aksi halde etiket yanlış ölçüde basılır ve sığmaz.', Printer."Code", Printer."Resolution (dpi)", LayoutDpi);
     end;
 
     /// <summary>

@@ -37,23 +37,48 @@ codeunit 72468 "DOPSWHS Label Layout Preview"
         exit(TryRender(Zpl, WidthMm, HeightMm, Dpi, TempBlob));
     end;
 
-    /// <summary>Labelary sizes are in inches and the resolution in dots per mm (6/8/12/24).</summary>
+    /// <summary>
+    /// Labelary sizes are in inches and the resolution in dots per mm (6/8/12/24).
+    /// Kitoko (23 Eki 2026): Labelary renders floor(inches x nominal dpi) dots
+    /// (8 dpmm = 203, 12 dpmm = 304, measured). The old 2-decimal inches gave
+    /// 3.15 x 1.57 = 639 x 318 dots for 80 x 40 mm, so the preview itself cut the
+    /// last dot column and two rows. The size is now (dots + 0.5) / nominal dpi,
+    /// which yields exactly the ^PW x ^LL of the label (640 x 320).
+    /// </summary>
     procedure PreviewUrl(WidthMm: Decimal; HeightMm: Decimal; Dpi: Integer): Text
     var
+        Engine: Codeunit "DOPSWHS Label Layout Engine";
         Dpmm: Integer;
+        Nominal: Decimal;
     begin
         case true of
             Dpi <= 175:
-                Dpmm := 6;
+                begin
+                    Dpmm := 6;
+                    Nominal := 152;
+                end;
             Dpi <= 250:
-                Dpmm := 8;
+                begin
+                    Dpmm := 8;
+                    Nominal := 203;
+                end;
             Dpi <= 450:
-                Dpmm := 12;
-            else
+                begin
+                    Dpmm := 12;
+                    Nominal := 304;
+                end;
+            else begin
                 Dpmm := 24;
+                Nominal := 608.8;
+            end;
         end;
         exit('https://api.labelary.com/v1/printers/' + Format(Dpmm) + 'dpmm/labels/' +
-            Format(Round(WidthMm / 25.4, 0.01), 0, 9) + 'x' + Format(Round(HeightMm / 25.4, 0.01), 0, 9) + '/0/');
+            InchText(Engine.MmToDots(WidthMm, Dpi), Nominal) + 'x' + InchText(Engine.MmToDots(HeightMm, Dpi), Nominal) + '/0/');
+    end;
+
+    local procedure InchText(Dots: Integer; Nominal: Decimal): Text
+    begin
+        exit(Format(Round((Dots + 0.5) / Nominal, 0.0001), 0, 9));
     end;
 
     [TryFunction]

@@ -101,6 +101,7 @@ page 72470 "DOPSWHS Label Layout Card"
                     if PrinterList.RunModal() <> Action::LookupOK then
                         exit;
                     PrinterList.GetRecord(Printer);
+                    Dispatcher.CheckLayoutDpi(Printer."Code", Rec.Dpi);
                     Dispatcher.PrintLayoutTest(Engine.BuildSampleZpl(Rec."Code"), Printer."Code", Rec."Label Kind");
                     Message('Test etiketi %1 yazıcısına gönderildi.', Printer."Code");
                 end;
