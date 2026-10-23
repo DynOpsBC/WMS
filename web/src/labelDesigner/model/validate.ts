@@ -1,46 +1,77 @@
 // Kaydı engellemeyen uyarılar: etiket dışına taşan eleman, bilinmeyen alan,
 // boş metin, sığmayan yazı, geçersiz EAN-13 vb.
 import { elementName, isKnownType, resolveValue } from "./design";
-import { elementGeometry, layoutBarcode, layoutQr, layoutText, type LayoutContext } from "./layout";
+import { edgeClearanceMm, labelDots, layoutBarcode, layoutQr, layoutText, overflowDots, type LayoutContext } from "./layout";
 import { LIMITS, type LabelDesign } from "./types";
+import { dotsPerMm, formatDecimal } from "./units";
 import { ean13Status } from "../render/barcode";
+
+/** error = baskıda kesilir/BC kaydetmez, warn = kontrol edin, info = öneri (güvenli kenar). */
+export type WarningLevel = "error" | "warn" | "info";
+export type WarningCode = "overflow" | "margin" | "other";
 
 export interface Warning {
   elementId: string | null;
   message: string;
+  level: WarningLevel;
+  code: WarningCode;
 }
 
-const EPS = 0.05;
+export interface ValidateOptions {
+  /** Güvenli kenar (mm): yazı/barkod/QR/resim kenara bundan yakınsa öneri. 0 = kapalı. */
+  safeMarginMm?: number;
+}
 
-export function validateDesign(design: LabelDesign, ctx: LayoutContext): Warning[] {
+/** Yazıcının etiketi kaydırma payı (±1 mm) + pay: varsayılan güvenli kenar. */
+export const DEFAULT_SAFE_MARGIN_MM = 1.5;
+
+export function validateDesign(design: LabelDesign, ctx: LayoutContext, opts: ValidateOptions = {}): Warning[] {
+  const safe = opts.safeMarginMm ?? 0;
   const warnings: Warning[] = [];
+  const L = labelDots(ctx);
+  const dpm = dotsPerMm(ctx.dpi);
   const fieldKeys = new Set(design.fields.map((f) => f.key));
   const imageIds = new Set(design.images.map((i) => i.id));
   if (design.widthMm > LIMITS.widthMm || design.heightMm > LIMITS.heightMm) {
-    warnings.push({ elementId: null, message: `Etiket en çok ${LIMITS.widthMm} × ${LIMITS.heightMm} mm olabilir; BC kaydetmez.` });
+    warnings.push({ elementId: null, message: `Etiket en çok ${LIMITS.widthMm} × ${LIMITS.heightMm} mm olabilir; BC kaydetmez.`, level: "error", code: "other" });
+  }
+  if (design.dpi !== 203) {
+    warnings.push({
+      elementId: null,
+      message: `${design.dpi} dpi seçili: yazıcı 203 dpi ise (Zebra ZD230, ZD220, ZQ630) etiket ${formatDecimal(Math.round((dotsPerMm(design.dpi) / 8) * 100) / 100)} kat büyük basılır ve sığmaz. Yazıcınızın çözünürlüğünü seçin.`,
+      level: "warn",
+      code: "other",
+    });
   }
   if (design.elements.length === 0) {
-    warnings.push({ elementId: null, message: "Etiket boş: soldaki paletten öğe sürükleyin." });
+    warnings.push({ elementId: null, message: "Etiket boş: soldaki paletten öğe sürükleyin.", level: "info", code: "other" });
   }
   for (const el of design.elements) {
     const name = elementName(design, el);
-    const add = (message: string) => warnings.push({ elementId: el.id, message: `${name} — ${message}` });
+    const add = (message: string, level: WarningLevel = "warn", code: WarningCode = "other") =>
+      warnings.push({ elementId: el.id, message: `${name} — ${message}`, level, code });
     if (!isKnownType(el.type)) {
       add(`bilinmeyen öğe türü (${el.type}); tasarımcı bunu çizemez ama korur.`);
       continue;
     }
     // BC sınırları: aşan değer kaydı hatayla durdurur.
-    if (el.id.length > LIMITS.id) add(`öğe kimliği ${LIMITS.id} karakteri aşıyor; BC kaydetmez.`);
-    if (el.text.length > LIMITS.text) add(`metin ${LIMITS.text} karakteri aşıyor; BC kaydetmez.`);
-    if (el.field.length > LIMITS.field) add(`alan adı ${LIMITS.field} karakteri aşıyor; BC kaydetmez.`);
-    if (el.prefix.length > LIMITS.prefix) add(`ön ek ${LIMITS.prefix} karakteri aşıyor; BC kaydetmez.`);
-    if (el.suffix.length > LIMITS.suffix) add(`son ek ${LIMITS.suffix} karakteri aşıyor; BC kaydetmez.`);
+    if (el.id.length > LIMITS.id) add(`öğe kimliği ${LIMITS.id} karakteri aşıyor; BC kaydetmez.`, "error");
+    if (el.text.length > LIMITS.text) add(`metin ${LIMITS.text} karakteri aşıyor; BC kaydetmez.`, "error");
+    if (el.field.length > LIMITS.field) add(`alan adı ${LIMITS.field} karakteri aşıyor; BC kaydetmez.`, "error");
+    if (el.prefix.length > LIMITS.prefix) add(`ön ek ${LIMITS.prefix} karakteri aşıyor; BC kaydetmez.`, "error");
+    if (el.suffix.length > LIMITS.suffix) add(`son ek ${LIMITS.suffix} karakteri aşıyor; BC kaydetmez.`, "error");
     if (!el.enabled) continue;
 
-    const geo = elementGeometry(el, ctx);
-    const e = geo.extent;
-    if (e.x < -EPS || e.y < -EPS || e.x + e.w > design.widthMm + EPS || e.y + e.h > design.heightMm + EPS) {
-      add("etiketin dışına taşıyor, kesilecek.");
+    // Taşma yazıcı noktasıyla ölçülür: BC ^PW×^LL (80×40 mm @203 dpi = 640×320).
+    const over = overflowDots(el, ctx);
+    if (over > 0) {
+      add(`etiketin dışına ${formatDecimal(Math.max(0.01, over / dpm))} mm taşıyor (${L.w} × ${L.h} nokta); yazıcı bu kısmı basamaz.`, "error", "overflow");
+    } else if (safe > 0 && el.type !== "box" && el.type !== "line" && !el.inverted) {
+      // Kutu/çizgi ve siyah şerit üstündeki ters yazı kenara dayanabilir (şerit taşar).
+      const clear = edgeClearanceMm(el, ctx);
+      if (clear < safe - 0.01) {
+        add(`kenara ${formatDecimal(Math.max(0, clear))} mm yakın (güvenli kenar ${formatDecimal(safe)} mm). Yazıcı etiketi biraz kaydırırsa kesilebilir.`, "info", "margin");
+      }
     }
 
     if (el.field && fieldKeys.size > 0 && !fieldKeys.has(el.field)) {

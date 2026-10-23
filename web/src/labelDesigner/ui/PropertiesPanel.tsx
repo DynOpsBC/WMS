@@ -1,12 +1,68 @@
 // Sağ panel: seçili öğenin özellikleri (Türkçe), seçim yoksa etiket bilgisi ve öğe listesi.
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, type ReactNode } from "react";
 import { elementName, isKnownType, KIND_LABELS, resolveValue, SYMBOLOGY_LABELS, TYPE_LABELS } from "../model/design";
-import { elementGeometry, type LayoutContext } from "../model/layout";
+import { elementGeometry, labelDots, printBoundsDots, type LayoutContext } from "../model/layout";
+import type { AlignMode } from "../model/ops";
 import { LIMITS, type Align, type LabelDesign, type LabelElement, type Rotation, type Symbology } from "../model/types";
-import { roundMm } from "../model/units";
+import { formatDecimal, roundMm } from "../model/units";
 import type { Warning } from "../model/validate";
 import { NumberField, Row, Section, Segmented, Toggle } from "./controls";
-import { IconBuilding, IconCopy, IconEye, IconEyeOff, IconRotate, IconTrash, IconUpload, IconWarn, TypeIcon } from "./icons";
+import {
+  IconAlignBottom,
+  IconAlignHCenter,
+  IconAlignLeft,
+  IconAlignRight,
+  IconAlignTop,
+  IconAlignVCenter,
+  IconBuilding,
+  IconCopy,
+  IconDistH,
+  IconDistV,
+  IconEye,
+  IconEyeOff,
+  IconFit,
+  IconInfo,
+  IconRotate,
+  IconTrash,
+  IconUpload,
+  IconWarn,
+  TypeIcon,
+} from "./icons";
+
+export interface AlignActions {
+  onAlign: (mode: AlignMode) => void;
+  onDistribute: (axis: "h" | "v") => void;
+  onFit: () => void;
+  /** seçili öğe sayısı: 1 = etikete göre, 2+ = seçime göre, 3+ = dağıt */
+  count: number;
+}
+
+const ALIGN_BUTTONS: { mode: AlignMode; label: string; icon: ReactNode }[] = [
+  { mode: "left", label: "Sola hizala", icon: <IconAlignLeft /> },
+  { mode: "hcenter", label: "Yatayda ortala", icon: <IconAlignHCenter /> },
+  { mode: "right", label: "Sağa hizala", icon: <IconAlignRight /> },
+  { mode: "top", label: "Üste hizala", icon: <IconAlignTop /> },
+  { mode: "vcenter", label: "Dikeyde ortala", icon: <IconAlignVCenter /> },
+  { mode: "bottom", label: "Alta hizala", icon: <IconAlignBottom /> },
+];
+
+/** Hizalama çubuğu: tek öğe etikete (güvenli kenarla), çoklu seçim seçimin kutusuna. */
+function AlignBar({ a, readOnly }: { a: AlignActions; readOnly: boolean }) {
+  const scope = a.count > 1 ? "seçime göre" : "etikete göre";
+  return (
+    <div className="ld-alignbar" role="group" aria-label={`Hizala (${scope})`}>
+      {ALIGN_BUTTONS.map((b) => (
+        <button key={b.mode} type="button" className="ld-icon-btn" disabled={readOnly} onClick={() => a.onAlign(b.mode)} title={`${b.label} (${scope})`} aria-label={b.label}>
+          {b.icon}
+        </button>
+      ))}
+      <span className="ld-alignbar-sep" aria-hidden="true" />
+      <button type="button" className="ld-icon-btn" disabled={readOnly || a.count < 3} onClick={() => a.onDistribute("h")} title="Yatayda eşit dağıt (en az 3 öğe)" aria-label="Yatayda eşit dağıt"><IconDistH /></button>
+      <button type="button" className="ld-icon-btn" disabled={readOnly || a.count < 3} onClick={() => a.onDistribute("v")} title="Dikeyde eşit dağıt (en az 3 öğe)" aria-label="Dikeyde eşit dağıt"><IconDistV /></button>
+      <button type="button" className="ld-icon-btn" disabled={readOnly} onClick={a.onFit} title="Etiketin güvenli alanına al (taşıyorsa küçültür)" aria-label="Etikete sığdır"><IconFit /></button>
+    </div>
+  );
+}
 
 export type ElementPatcher = (patch: Partial<LabelElement>, key?: string) => void;
 
@@ -25,6 +81,7 @@ interface ElementPanelProps {
   onRequestLogo: () => void;
   onImageAspect: () => void;
   logoPending: boolean;
+  align: AlignActions;
 }
 
 const FONT_PRESETS: { label: string; mm: number }[] = [
@@ -88,6 +145,7 @@ export function ElementPanel(props: ElementPanelProps) {
           <span className="ld-muted ld-small">{elementName(design, el)}</span>
         </div>
       </div>
+      <AlignBar a={props.align} readOnly={readOnly} />
       <div className="ld-props-actions">
         {el.type !== "qr" ? (
           <button type="button" className="ld-btn ld-btn-ghost" disabled={readOnly} title="90° döndür (R)" onClick={() => props.onRotate(((el.rotation + 90) % 360) as Rotation)}>
@@ -103,9 +161,9 @@ export function ElementPanel(props: ElementPanelProps) {
       </div>
 
       {warnings.length > 0 ? (
-        <ul className="ld-inline-warnings">
+        <ul className={`ld-inline-warnings${warnings.some((w) => w.level === "error") ? " has-error" : warnings.every((w) => w.level === "info") ? " is-info" : ""}`}>
           {warnings.map((w, i) => (
-            <li key={i}><IconWarn /> <span>{w.message.replace(/^.*? — /, "")}</span></li>
+            <li key={i} className={`ld-warn-${w.level}`}>{w.level === "info" ? <IconInfo /> : <IconWarn />} <span>{w.message.replace(/^.*? — /, "")}</span></li>
           ))}
         </ul>
       ) : null}
@@ -281,7 +339,7 @@ export function ElementPanel(props: ElementPanelProps) {
         ) : null}
 
         {/* ------------------------------------------------ Konum ve boyut */}
-        <Section title="Konum ve boyut">
+        <Section title="Konum ve boyut" aside={<DotReadout el={el} ctx={ctx} />}>
           <div className="ld-grid2">
             <Row label="Soldan (X)">
               <NumberField value={el.xMm} min={0} max={design.widthMm} onChange={(v) => onPatch({ xMm: v }, k("x"))} />
@@ -335,6 +393,16 @@ export function ElementPanel(props: ElementPanelProps) {
   );
 }
 
+/** Elemanın yazıcıdaki kutusu (nokta) — BC ^FO ve basılı alan. */
+function DotReadout({ el, ctx }: { el: LabelElement; ctx: LayoutContext }) {
+  const { box } = printBoundsDots(el, ctx);
+  return (
+    <span className="ld-dots" title="Yazıcı noktası: ^FO x,y ve basılı alan (203 dpi = 8 nokta/mm)">
+      ^FO {box.x0},{box.y0} · {box.x1 - box.x0}×{box.y1 - box.y0}
+    </span>
+  );
+}
+
 function AffixRows({ el, onPatch, k }: { el: LabelElement; onPatch: ElementPatcher; k: (p: string) => string }) {
   return (
     <div className="ld-grid2">
@@ -350,15 +418,16 @@ function AffixRows({ el, onPatch, k }: { el: LabelElement; onPatch: ElementPatch
 
 // ---------------------------------------------------------------- çoklu seçim
 
-export function MultiPanel({ count, readOnly, onDuplicate, onDelete, onClear }: { count: number; readOnly: boolean; onDuplicate: () => void; onDelete: () => void; onClear: () => void }) {
+export function MultiPanel({ count, readOnly, onDuplicate, onDelete, onClear, align }: { count: number; readOnly: boolean; onDuplicate: () => void; onDelete: () => void; onClear: () => void; align: AlignActions }) {
   return (
     <div className="ld-props">
       <div className="ld-props-head">
         <div className="ld-props-title">
           <strong>{count} öğe seçili</strong>
-          <span className="ld-muted ld-small">Birlikte taşıyabilir, çoğaltabilir ya da silebilirsiniz.</span>
+          <span className="ld-muted ld-small">Birlikte taşıyabilir, hizalayabilir, çoğaltabilir ya da silebilirsiniz.</span>
         </div>
       </div>
+      <AlignBar a={align} readOnly={readOnly} />
       <div className="ld-props-actions">
         <button type="button" className="ld-btn ld-btn-ghost" disabled={readOnly} onClick={onDuplicate}><IconCopy /> Çoğalt</button>
         <button type="button" className="ld-btn ld-btn-ghost ld-btn-danger" disabled={readOnly} onClick={onDelete}><IconTrash /> Sil</button>
@@ -372,24 +441,37 @@ export function MultiPanel({ count, readOnly, onDuplicate, onDelete, onClear }: 
 
 interface LabelPanelProps {
   design: LabelDesign;
+  ctx: LayoutContext;
   readOnly: boolean;
   warnedIds: ReadonlySet<string>;
+  overflow: ReadonlyMap<string, number>;
+  safeMarginMm: number;
   onMeta: (patch: Partial<LabelDesign>, key?: string) => void;
   onSelect: (id: string) => void;
   onToggleEnabled: (id: string, enabled: boolean) => void;
 }
 
-export function LabelPanel({ design, readOnly, warnedIds, onMeta, onSelect, onToggleEnabled }: LabelPanelProps) {
+export function LabelPanel({ design, ctx, readOnly, warnedIds, overflow, safeMarginMm, onMeta, onSelect, onToggleEnabled }: LabelPanelProps) {
+  const dots = labelDots(ctx);
   return (
     <div className="ld-props">
+      <div className="ld-sizecard">
+        <div className="ld-sizecard-main">
+          <strong>{formatDecimal(design.widthMm)} × {formatDecimal(design.heightMm)} mm</strong>
+          <span>{design.dpi} dpi · {dots.w} × {dots.h} nokta</span>
+        </div>
+        <p className="ld-sizecard-note">
+          BC bu tasarımı tam bu ölçüde basar (^PW{dots.w} ^LL{dots.h}). Yazıcıdaki rulo da {formatDecimal(design.widthMm)} × {formatDecimal(design.heightMm)} mm olmalı.
+          {safeMarginMm > 0 ? ` Yazı, barkod ve QR kenardan en az ${formatDecimal(safeMarginMm)} mm içeride kalmalı (kesikli çizgi).` : ""}
+        </p>
+        {overflow.size > 0 ? <p className="ld-sizecard-over"><IconWarn size={14} /> {overflow.size} öğe etiketin dışına taşıyor.</p> : null}
+      </div>
       <Section title="Etiket">
         <dl className="ld-kv">
           <dt>Kod</dt>
           <dd>{design.code || "—"}</dd>
           <dt>Tür</dt>
           <dd>{KIND_LABELS[design.kind]}</dd>
-          <dt>Ölçü</dt>
-          <dd>{String(design.widthMm).replace(".", ",")} × {String(design.heightMm).replace(".", ",")} mm · {design.dpi} dpi</dd>
         </dl>
         <fieldset className="ld-fieldset" disabled={readOnly}>
           <Row label="Açıklama">
@@ -406,7 +488,11 @@ export function LabelPanel({ design, readOnly, warnedIds, onMeta, onSelect, onTo
               <button type="button" className="ld-layer" onClick={() => onSelect(el.id)}>
                 <span className="ld-layer-icon"><TypeIcon type={el.type} size={16} /></span>
                 <span className="ld-layer-name">{elementName(design, el)}</span>
-                {warnedIds.has(el.id) ? <span className="ld-layer-warn" title="Uyarı var"><IconWarn size={14} /></span> : null}
+                {overflow.has(el.id) ? (
+                  <span className="ld-layer-over" title="Etiketin dışına taşıyor">{formatDecimal(overflow.get(el.id) ?? 0)} mm</span>
+                ) : warnedIds.has(el.id) ? (
+                  <span className="ld-layer-warn" title="Uyarı var"><IconWarn size={14} /></span>
+                ) : null}
               </button>
               <button
                 type="button"
@@ -422,7 +508,7 @@ export function LabelPanel({ design, readOnly, warnedIds, onMeta, onSelect, onTo
           ))}
         </ul>
       </Section>
-      <p className="ld-note">İpucu: öğeye çift tıklayınca içeriği burada düzenlenir. Boyut tutamakları metinde yazı boyunu değiştirir.</p>
+      <p className="ld-note">İpucu: öğeye çift tıklayınca içeriği burada düzenlenir. Metinde üst/alt tutamak yazı boyunu değiştirir.</p>
     </div>
   );
 }

@@ -1,7 +1,7 @@
 // Önizleme penceresi (Labelary), bildirimler ve uyarı çubuğu.
 import { useEffect } from "react";
 import type { Warning } from "../model/validate";
-import { IconCheck, IconClose, IconWarn } from "./icons";
+import { IconCheck, IconClose, IconInfo, IconWarn } from "./icons";
 
 export interface PreviewState {
   open: boolean;
@@ -86,24 +86,32 @@ export function Toasts({ toasts, onDismiss }: { toasts: Toast[]; onDismiss: (id:
 }
 
 export function WarningsBar({ warnings, open, onToggle, onPick }: { warnings: Warning[]; open: boolean; onToggle: () => void; onPick: (id: string) => void }) {
-  if (warnings.length === 0) {
+  const errors = warnings.filter((w) => w.level === "error").length;
+  const warns = warnings.filter((w) => w.level === "warn").length;
+  const infos = warnings.filter((w) => w.level === "info").length;
+  if (errors + warns === 0 && infos === 0) {
     return (
       <footer className="ld-warnbar is-ok">
-        <IconCheck /> <span>Uyarı yok — tasarım basılmaya hazır görünüyor.</span>
+        <IconCheck /> <span>Sorun yok — tasarım etikete sığıyor ve basılmaya hazır.</span>
       </footer>
     );
   }
+  const tone = errors > 0 ? "is-error" : warns > 0 ? "is-warn" : "is-info";
   return (
-    <footer className={`ld-warnbar${open ? " is-open" : ""}`}>
+    <footer className={`ld-warnbar ${tone}${open ? " is-open" : ""}`}>
       <button type="button" className="ld-warnbar-toggle" onClick={onToggle} aria-expanded={open}>
-        <IconWarn /> <strong>{warnings.length} uyarı</strong>
-        <span className="ld-muted">— kaydı engellemez</span>
-        <span className="ld-warnbar-caret">{open ? "▾" : "▴"}</span>
+        {errors + warns > 0 ? <IconWarn /> : <IconInfo />}
+        {errors > 0 ? <span className="ld-count ld-count-error">{errors} taşma / hata</span> : null}
+        {warns > 0 ? <span className="ld-count ld-count-warn">{warns} uyarı</span> : null}
+        {infos > 0 ? <span className="ld-count ld-count-info">{infos} öneri</span> : null}
+        <span className="ld-muted ld-small">— kaydı engellemez</span>
+        <span className="ld-warnbar-caret">{open ? "Gizle ▾" : "Göster ▴"}</span>
       </button>
       {open ? (
         <ul className="ld-warnlist">
           {warnings.map((w, i) => (
-            <li key={i}>
+            <li key={i} className={`ld-warn-${w.level}`}>
+              <span className="ld-warn-dot" aria-hidden="true" />
               {w.elementId ? (
                 <button type="button" className="ld-link" onClick={() => onPick(w.elementId as string)}>{w.message}</button>
               ) : (

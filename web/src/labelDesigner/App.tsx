@@ -2,10 +2,15 @@
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
 import { isInsideBc, listen, raise, setDevHandler, simulateIncoming, type IncomingMessage } from "./bridge";
 import { createElement, nextElementId, normalizeDesign, parseIncoming, sampleValues } from "./model/design";
-import { layoutContext, type LayoutContext } from "./model/layout";
+import { layoutContext, overflowDots, type LayoutContext } from "./model/layout";
 import {
   addElement,
+  alignElements,
+  countOutside,
+  distributeElements,
   duplicateElements,
+  fitAllToLabel,
+  fitElementsInside,
   fitIntoLabel,
   mapElements,
   nextImageId,
@@ -13,13 +18,15 @@ import {
   placeAt,
   removeElements,
   rotateTo,
+  scaleDesignTo,
   syncTextHeight,
+  type AlignMode,
   updateElement,
   withImageAspect,
 } from "./model/ops";
 import type { Dpi, LabelDesign, LabelElement, LabelImage, Rotation } from "./model/types";
-import { dotsPerMm, mmToDots } from "./model/units";
-import { validateDesign } from "./model/validate";
+import { dotsPerMm, formatDecimal, mmToDots } from "./model/units";
+import { DEFAULT_SAFE_MARGIN_MM, validateDesign } from "./model/validate";
 import { parseGfa, type MonoBitmap } from "./render/gf";
 import { imageElementBitmap, loadImage, makeSampleLogo, readImageFile } from "./render/imageRaster";
 import { renderLabel } from "./render/renderLabel";
@@ -34,6 +41,7 @@ import { PreviewModal, Toasts, WarningsBar, type PreviewState, type Toast } from
 import { ElementPanel, LabelPanel, MultiPanel } from "./ui/PropertiesPanel";
 import { fitZoom, Stage } from "./ui/Stage";
 import { TopBar } from "./ui/TopBar";
+import { IconWarn } from "./ui/icons";
 
 const COMPANY_IMAGE_ID = "COMPANY";
 const EMPTY_DESIGN: LabelDesign = normalizeDesign({ version: 1, code: "", kind: "Item", widthMm: 80, heightMm: 40, dpi: 203, elements: [] });
@@ -42,6 +50,30 @@ const PREVIEW_TIMEOUT_MS = 30_000;
 const LOGO_TIMEOUT_MS = 20_000;
 
 let controlReadySent = false;
+
+const SAFE_MARGIN_KEY = "dops.labelDesigner.safeMarginMm";
+const SAFE_MARGIN_STEPS = [0, 1, 1.5, 2, 3];
+
+/** Güvenli kenar bu tarayıcıda hatırlanır (BC'ye gönderilmez). */
+function loadSafeMargin(): number {
+  try {
+    const v = Number(window.localStorage.getItem(SAFE_MARGIN_KEY));
+    if (SAFE_MARGIN_STEPS.includes(v) && window.localStorage.getItem(SAFE_MARGIN_KEY) !== null) return v;
+  } catch {
+    /* depolama kapalı */
+  }
+  return DEFAULT_SAFE_MARGIN_MM;
+}
+
+function saveSafeMargin(v: number) {
+  try {
+    window.localStorage.setItem(SAFE_MARGIN_KEY, String(v));
+  } catch {
+    /* depolama kapalı */
+  }
+}
+
+const fmtSize = (w: number, h: number) => `${formatDecimal(w)} × ${formatDecimal(h)} mm`;
 
 function ctxOf(d: LabelDesign): LayoutContext {
   return layoutContext(d, sampleValues(d));
@@ -62,6 +94,7 @@ export function App() {
   const [zoomMode, setZoomMode] = useState<"fit" | "manual">("fit");
   const [gridStep, setGridStep] = useState(1);
   const [showRulers, setShowRulers] = useState(true);
+  const [safeMarginMm, setSafeMarginMm] = useState(loadSafeMargin);
   const [stageSize, setStageSize] = useState({ w: 0, h: 0 });
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [preview, setPreview] = useState<PreviewState>({ open: false, status: "loading", designPng: "", realPng: "", error: "" });
@@ -93,8 +126,22 @@ export function App() {
   const dirty = design !== savedRef.current;
   const values = useMemo(() => sampleValues(design), [design]);
   const ctx = useMemo(() => layoutContext(design, values), [design, values]);
-  const warnings = useMemo(() => validateDesign(design, ctx), [design, ctx]);
-  const warnedIds = useMemo(() => new Set(warnings.map((w) => w.elementId).filter((id): id is string => Boolean(id))), [warnings]);
+  const warnings = useMemo(() => validateDesign(design, ctx, { safeMarginMm }), [design, ctx, safeMarginMm]);
+  const warnedIds = useMemo(
+    () => new Set(warnings.filter((w) => w.level !== "info").map((w) => w.elementId).filter((id): id is string => Boolean(id))),
+    [warnings],
+  );
+  // Etiketten taşan öğeler (yazıcı noktasıyla, BC ^PW × ^LL): id → mm.
+  const overflow = useMemo(() => {
+    const m = new Map<string, number>();
+    const dpm = dotsPerMm(design.dpi);
+    for (const el of design.elements) {
+      if (!el.enabled) continue;
+      const over = overflowDots(el, ctx);
+      if (over > 0) m.set(el.id, Math.max(0.1, Math.round((over / dpm) * 10) / 10));
+    }
+    return m;
+  }, [design, ctx]);
   const decoded = useDecodedImages(design.images);
 
   // ------------------------------------------------------------ yardımcılar
@@ -445,6 +492,59 @@ export function App() {
     [commit, readOnly, toast],
   );
 
+  /** Hazır ölçü: taşacak öğe varsa öğeler yeni ölçüye oranlanır (Geri Al ile döner). */
+  const applyPreset = useCallback(
+    (w: number, h: number) => {
+      if (readOnly) return;
+      const d = designRef.current;
+      if (d.widthMm === w && d.heightMm === h) return;
+      const outside = countOutside(d, w, h);
+      if (d.elements.length > 0 && outside > 0) {
+        commit((cur) => scaleDesignTo(cur, w, h));
+        toast("success", `Öğeler ${fmtSize(d.widthMm, d.heightMm)} → ${fmtSize(w, h)} ölçüsüne oranlandı (${outside} öğe dışarıda kalacaktı). Geri almak için Ctrl+Z.`);
+      } else {
+        commit((cur) => ({ ...cur, widthMm: w, heightMm: h }));
+      }
+      setZoomMode("fit");
+    },
+    [commit, readOnly, toast],
+  );
+
+  /** Taşan öğeleri (ya da seçili öğeleri) etiketin güvenli alanına alır. */
+  const fitInside = useCallback(
+    (ids?: readonly string[]) => {
+      if (readOnly) return;
+      commit((d) => fitElementsInside(d, ctxOf(d), safeMarginMm, ids));
+      toast("success", "Öğeler etiketin içine alındı. Geri almak için Ctrl+Z.");
+    },
+    [commit, readOnly, safeMarginMm, toast],
+  );
+
+  /** Bütün tasarımı (yerleşimi koruyarak) etiketin güvenli alanına oranlar. */
+  const fitAll = useCallback(() => {
+    if (readOnly) return;
+    commit((d) => fitAllToLabel(d, ctxOf(d), safeMarginMm));
+    toast("success", "Tasarım etikete oranlandı. Geri almak için Ctrl+Z.");
+  }, [commit, readOnly, safeMarginMm, toast]);
+
+  const align = useCallback(
+    (mode: AlignMode) => {
+      const sel = selectionRef.current;
+      if (readOnly || sel.length === 0) return;
+      commit((d) => alignElements(d, sel, mode, ctxOf(d), safeMarginMm));
+    },
+    [commit, readOnly, safeMarginMm],
+  );
+
+  const distribute = useCallback(
+    (axis: "h" | "v") => {
+      const sel = selectionRef.current;
+      if (readOnly || sel.length < 3) return;
+      commit((d) => distributeElements(d, sel, axis, ctxOf(d)));
+    },
+    [commit, readOnly],
+  );
+
   // ------------------------------------------------------------ BC olayları
   const save = useCallback(async () => {
     if (readOnly) {
@@ -566,6 +666,7 @@ export function App() {
         previewBusy={preview.open && preview.status === "loading"}
         onUndo={() => dispatch({ type: "undo" })}
         onRedo={() => dispatch({ type: "redo" })}
+        onPreset={applyPreset}
         onSize={(w, h) => commit((d) => ({ ...d, widthMm: w, heightMm: h }), "size")}
         onDpi={(dpi: Dpi) => commit((d) => ({ ...d, dpi }))}
         onSave={() => void save()}
@@ -589,27 +690,58 @@ export function App() {
           <div className="ld-stagebar">
             <div className="ld-zoom" role="group" aria-label="Yakınlaştırma">
               <button type="button" className="ld-icon-btn" onClick={() => zoomBy(-1)} aria-label="Uzaklaştır" title="Uzaklaştır">−</button>
-              <span className="ld-zoom-value" title="%100 = gerçek boyut">%{Math.round(zoom * 100)}</span>
+              <span className="ld-zoom-value" title="%100 = gerçek boyut (96 dpi ekranda)">%{Math.round(zoom * 100)}</span>
               <button type="button" className="ld-icon-btn" onClick={() => zoomBy(1)} aria-label="Yakınlaştır" title="Yakınlaştır">+</button>
-              <button type="button" className={`ld-btn ld-btn-ghost ld-btn-sm${zoomMode === "fit" ? " is-on" : ""}`} onClick={() => setZoomMode("fit")}>Sığdır</button>
-              <button type="button" className="ld-btn ld-btn-ghost ld-btn-sm" onClick={() => { setZoomMode("manual"); setZoom(1); }} title="Gerçek boyut">%100</button>
+              <button type="button" className={`ld-btn ld-btn-ghost ld-btn-sm${zoomMode === "fit" ? " is-on" : ""}`} onClick={() => setZoomMode("fit")} title="Etiketi ekrana sığdır">Sığdır</button>
+              <button type="button" className={`ld-btn ld-btn-ghost ld-btn-sm${zoomMode === "manual" && zoom === 1 ? " is-on" : ""}`} onClick={() => { setZoomMode("manual"); setZoom(1); }} title="Gerçek boyut">1:1</button>
+              <button type="button" className={`ld-btn ld-btn-ghost ld-btn-sm${showRulers ? " is-on" : ""}`} onClick={() => setShowRulers((v) => !v)} aria-pressed={showRulers} title="mm cetvelini göster/gizle">Cetvel</button>
             </div>
-            <label className="ld-stagebar-item">
-              <span>Izgara</span>
-              <select className="ld-select ld-select-compact" value={gridStep} onChange={(e) => setGridStep(Number(e.currentTarget.value))}>
-                <option value={0}>Kapalı</option>
-                <option value={0.5}>0,5 mm</option>
-                <option value={1}>1 mm</option>
-              </select>
-            </label>
-            <label className="ld-stagebar-item">
-              <input type="checkbox" checked={showRulers} onChange={(e) => setShowRulers(e.currentTarget.checked)} /> Cetvel
-            </label>
+            <select
+              className="ld-select ld-select-compact"
+              value={gridStep}
+              aria-label="Izgara"
+              title="Taşırken/boyutlandırırken mm ızgaraya yapışır (Alt ile serbest)"
+              onChange={(e) => setGridStep(Number(e.currentTarget.value))}
+            >
+              <option value={0}>Izgara yok</option>
+              <option value={0.5}>Izgara 0,5 mm</option>
+              <option value={1}>Izgara 1 mm</option>
+              <option value={2}>Izgara 2 mm</option>
+              <option value={5}>Izgara 5 mm</option>
+            </select>
+            <select
+              className="ld-select ld-select-compact"
+              value={safeMarginMm}
+              aria-label="Güvenli kenar payı"
+              title="Yazıcı etiketi ±1 mm kaydırabilir: yazı, barkod ve QR bu kesikli çizginin içinde kalmalı"
+              onChange={(e) => {
+                const v = Number(e.currentTarget.value);
+                setSafeMarginMm(v);
+                saveSafeMargin(v);
+              }}
+            >
+              {SAFE_MARGIN_STEPS.map((v) => (
+                <option key={v} value={v}>{v === 0 ? "Kenar payı yok" : `Kenar payı ${formatDecimal(v)} mm`}</option>
+              ))}
+            </select>
             <span className="ld-topbar-spacer" />
-            <span className="ld-muted ld-small ld-stagebar-hint">
-              {design.widthMm} × {design.heightMm} mm · {design.dpi} dpi · örnek verilerle gösteriliyor
-            </span>
+            <span className="ld-muted ld-small ld-stagebar-hint">Örnek verilerle · %100 = gerçek boyut</span>
           </div>
+          {overflow.size > 0 && loaded ? (
+            <div className="ld-overflow-banner" role="alert">
+              <IconWarn />
+              <span>
+                <strong>{overflow.size} öğe {fmtSize(design.widthMm, design.heightMm)} etiketin dışına taşıyor</strong> — yazıcı bu kısımları basamaz.
+              </span>
+              {readOnly ? null : (
+                <>
+                  <button type="button" className="ld-btn ld-btn-sm ld-btn-danger-solid" onClick={fitAll} title="Tüm öğeleri yerleşimini koruyarak küçültür ve etikete alır">Tümünü oranla</button>
+                <button type="button" className="ld-btn ld-btn-sm ld-btn-ghost" onClick={() => fitInside([...overflow.keys()])} title="Yalnız taşan öğeleri içeri kaydırır (gerekirse küçültür)">Taşanları içeri al</button>
+                  <button type="button" className="ld-btn ld-btn-sm ld-btn-ghost" onClick={() => setSelection([...overflow.keys()])}>Seç</button>
+                </>
+              )}
+            </div>
+          ) : null}
           <div className="ld-stage-wrap">
             <Stage
               design={design}
@@ -622,6 +754,8 @@ export function App() {
               imageBitmap={imageBitmap}
               imageVersion={decoded.version}
               warnedIds={warnedIds}
+              overflow={overflow}
+              safeMarginMm={safeMarginMm}
               onSelect={setSelection}
               onGestureBegin={() => dispatch({ type: "gestureBegin" })}
               onGestureUpdate={(update) => dispatch({ type: "gestureUpdate", update })}
@@ -658,14 +792,25 @@ export function App() {
               onRequestLogo={requestLogo}
               onImageAspect={imageAspect}
               logoPending={logoPending}
+              align={{ onAlign: align, onDistribute: distribute, onFit: () => fitInside(selectionRef.current), count: 1 }}
             />
           ) : selection.length > 1 ? (
-            <MultiPanel count={selection.length} readOnly={readOnly} onDuplicate={duplicateSelected} onDelete={deleteSelected} onClear={() => setSelection([])} />
+            <MultiPanel
+              count={selection.length}
+              readOnly={readOnly}
+              onDuplicate={duplicateSelected}
+              onDelete={deleteSelected}
+              onClear={() => setSelection([])}
+              align={{ onAlign: align, onDistribute: distribute, onFit: () => fitInside(selectionRef.current), count: selection.length }}
+            />
           ) : (
             <LabelPanel
               design={design}
+              ctx={ctx}
               readOnly={readOnly}
               warnedIds={warnedIds}
+              overflow={overflow}
+              safeMarginMm={safeMarginMm}
               onMeta={(patch, key) => commit((d) => ({ ...d, ...patch }), key)}
               onSelect={(id) => setSelection([id])}
               onToggleEnabled={(id, enabled) => patchElement(id, { enabled })}

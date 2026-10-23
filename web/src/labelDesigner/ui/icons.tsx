@@ -46,3 +46,14 @@ export function TypeIcon({ type, size = 20 }: { type: ElementType | string; size
   }
 }
 export const IconTemplates = ({ size = 18 }: P) => svg(size, <><rect x="3" y="3" width="8" height="8" rx="1" /><rect x="13" y="3" width="8" height="8" rx="1" /><rect x="3" y="13" width="8" height="8" rx="1" /><rect x="13" y="13" width="8" height="8" rx="1" /></>);
+// Hizalama / sığdırma (Kitoko 23 Eki 2026).
+export const IconAlignLeft = ({ size = 16 }: P) => svg(size, <><path d="M4 3v18" /><rect x="7" y="6" width="12" height="4" rx="1" /><rect x="7" y="14" width="7" height="4" rx="1" /></>);
+export const IconAlignHCenter = ({ size = 16 }: P) => svg(size, <><path d="M12 3v18" /><rect x="5" y="6" width="14" height="4" rx="1" /><rect x="8" y="14" width="8" height="4" rx="1" /></>);
+export const IconAlignRight = ({ size = 16 }: P) => svg(size, <><path d="M20 3v18" /><rect x="5" y="6" width="12" height="4" rx="1" /><rect x="10" y="14" width="7" height="4" rx="1" /></>);
+export const IconAlignTop = ({ size = 16 }: P) => svg(size, <><path d="M3 4h18" /><rect x="6" y="7" width="4" height="12" rx="1" /><rect x="14" y="7" width="4" height="7" rx="1" /></>);
+export const IconAlignVCenter = ({ size = 16 }: P) => svg(size, <><path d="M3 12h18" /><rect x="6" y="5" width="4" height="14" rx="1" /><rect x="14" y="8" width="4" height="8" rx="1" /></>);
+export const IconAlignBottom = ({ size = 16 }: P) => svg(size, <><path d="M3 20h18" /><rect x="6" y="5" width="4" height="12" rx="1" /><rect x="14" y="10" width="4" height="7" rx="1" /></>);
+export const IconDistH = ({ size = 16 }: P) => svg(size, <><path d="M4 4v16M20 4v16" /><rect x="9" y="8" width="6" height="8" rx="1" /></>);
+export const IconDistV = ({ size = 16 }: P) => svg(size, <><path d="M4 4h16M4 20h16" /><rect x="8" y="9" width="8" height="6" rx="1" /></>);
+export const IconFit = ({ size = 16 }: P) => svg(size, <><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5" /><rect x="8" y="8" width="8" height="8" rx="1" /></>);
+export const IconInfo = ({ size = 16 }: P) => svg(size, <><circle cx="12" cy="12" r="9" /><path d="M12 11v6M12 7.5v.01" /></>);

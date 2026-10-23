@@ -41,7 +41,12 @@ const fmt = (n: number) => String(n).replace(".", ",");
 
 export function TemplateGallery({ open, mode, design, bitmapFor, imageVersion, onApply, onBlank, onClose }: Props) {
   const [pending, setPending] = useState<LabelTemplate | null>(null);
-  const templates = useMemo(() => templatesFor(design.kind), [design.kind]);
+  // Mevcut etiket ölçüsündeki şablonlar önce (ölçü değişmeden uygulanır).
+  const templates = useMemo(() => {
+    const all = templatesFor(design.kind);
+    const same = (t: LabelTemplate) => t.widthMm === design.widthMm && t.heightMm === design.heightMm;
+    return [...all.filter(same), ...all.filter((t) => !same(t))];
+  }, [design.kind, design.widthMm, design.heightMm]);
   const hasLogo = design.images.some((i) => i.id === "COMPANY" && i.dataUrl);
 
   const thumbs = useMemo(() => {
@@ -112,7 +117,11 @@ export function TemplateGallery({ open, mode, design, bitmapFor, imageVersion, o
                     </span>
                     <span className="ld-tpl-meta">
                       <span className="ld-tpl-name">{t.name.replace(/\s*\([^)]*\)\s*$/, "")}</span>
-                      <span className="ld-tpl-size">{fmt(t.widthMm)} × {fmt(t.heightMm)} mm</span>
+                      {t.widthMm === design.widthMm && t.heightMm === design.heightMm ? (
+                        <span className="ld-tpl-current" title="Etiketinizle aynı ölçü">{fmt(t.widthMm)} × {fmt(t.heightMm)} mm · bu ölçü</span>
+                      ) : (
+                        <span className="ld-tpl-size">{fmt(t.widthMm)} × {fmt(t.heightMm)} mm</span>
+                      )}
                     </span>
                     <span className="ld-tpl-desc">{t.description}</span>
                     {templateUsesLogo(t) && !hasLogo ? (

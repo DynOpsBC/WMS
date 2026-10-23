@@ -188,7 +188,7 @@ export const TEMPLATES: readonly LabelTemplate[] = [
     elements: [
       qr("ItemNo", 29.5, 0.75, 21),
       field("ItemNo", 2, 24.5, 76, 6, { ...fit(3), bold: true, align: "center" }),
-      field("Description", 2, 32.5, 76, 2.75, { maxLines: 2, align: "center" }),
+      field("Description", 2, 32, 76, 2.75, { maxLines: 2, align: "center" }),
     ],
   },
   {

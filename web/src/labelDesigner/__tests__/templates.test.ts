@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { normalizeDesign, sampleValues } from "../model/design";
 import { elementGeometry, layoutContext } from "../model/layout";
-import { validateDesign } from "../model/validate";
+import { DEFAULT_SAFE_MARGIN_MM, validateDesign } from "../model/validate";
 import { applyTemplate, fieldsForKind, KIND_FIELD_KEYS, TEMPLATES, templatePreviewDesign, templatesFor } from "../templates";
 
 const LOGO = { id: "COMPANY", name: "Şirket logosu", dataUrl: "data:image/png;base64,AAAA" };
@@ -46,7 +46,8 @@ describe("hazır şablonlar", () => {
         expect(e.x + e.w, `${el.id} sağ`).toBeLessThanOrEqual(design.widthMm + 0.05);
         expect(e.y + e.h, `${el.id} alt`).toBeLessThanOrEqual(design.heightMm + 0.05);
       }
-      expect(validateDesign(design, ctx).map((w) => w.message)).toEqual([]);
+      // Güvenli kenar (1,5 mm) dahil: şablonlar yazıcı kaydırsa da kesilmez.
+      expect(validateDesign(design, ctx, { safeMarginMm: DEFAULT_SAFE_MARGIN_MM }).map((w) => w.message)).toEqual([]);
     });
   }
 

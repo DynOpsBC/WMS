@@ -376,3 +376,56 @@ export function barHeightFromBox(el: LabelElement, boxLocalHmm: number, ctx: Lay
   const extraDots = lay.barcode ? lay.barcode.totalH - lay.barcode.barH : lay.h - (mmToDots(el.hMm, ctx.dpi) || mmToDots(10, ctx.dpi));
   return Math.max(1, boxLocalHmm - extraDots / dpm);
 }
+
+// ------------------------------------------------------------------ baskı sınırı (nokta)
+
+/** Etiketin yazıcı noktası ölçüsü: BC ^PW / ^LL (203 dpi = 8 nokta/mm → 80×40 = 640×320). */
+export function labelDots(ctx: LayoutContext): { w: number; h: number } {
+  return { w: mmToDots(ctx.labelWidthMm, ctx.dpi), h: mmToDots(ctx.labelHeightMm, ctx.dpi) };
+}
+
+export interface DotBounds {
+  x0: number;
+  y0: number;
+  x1: number;
+  y1: number;
+}
+
+/**
+ * Elemanın yazıcıda kapladığı alan (nokta, etiket koordinatı). `box` BC'nin ayırdığı
+ * kutudur (yazı kutusu ^FB × en çok satır, barkod + altındaki yazı, QR kenarı);
+ * `ink` basılan kısımdır (QR sembolü ^FO'nun 10 nokta altından başlar).
+ * Taşma `box ∪ ink` ile, güvenli kenar `ink` ile ölçülür.
+ */
+export function printBoundsDots(el: LabelElement, ctx: LayoutContext): { box: DotBounds; ink: DotBounds } {
+  const lay = layoutElement(el, ctx);
+  const x0 = mmToDots(el.xMm, ctx.dpi);
+  const y0 = mmToDots(el.yMm, ctx.dpi);
+  const turned = isQuarterTurn(el);
+  const w = turned ? lay.boxH : lay.w;
+  const h = turned ? lay.w : lay.boxH;
+  const box = { x0, y0, x1: x0 + w, y1: y0 + h };
+  if (el.type === "qr" && lay.qr) {
+    const s = lay.qr.symbolSize;
+    return { box, ink: { x0, y0: y0 + lay.qr.offsetY, x1: x0 + s, y1: y0 + lay.qr.offsetY + s } };
+  }
+  return { box, ink: box };
+}
+
+/** Etiketin dışına en çok taşan miktar (nokta; 0 = sığıyor). */
+export function overflowDots(el: LabelElement, ctx: LayoutContext): number {
+  const { box, ink } = printBoundsDots(el, ctx);
+  const L = labelDots(ctx);
+  const x0 = Math.min(box.x0, ink.x0);
+  const y0 = Math.min(box.y0, ink.y0);
+  const x1 = Math.max(box.x1, ink.x1);
+  const y1 = Math.max(box.y1, ink.y1);
+  return Math.max(0, -x0, -y0, x1 - L.w, y1 - L.h);
+}
+
+/** Basılan kısmın en yakın etiket kenarına uzaklığı (mm; negatif = taşıyor). */
+export function edgeClearanceMm(el: LabelElement, ctx: LayoutContext): number {
+  const { ink } = printBoundsDots(el, ctx);
+  const L = labelDots(ctx);
+  return Math.min(ink.x0, ink.y0, L.w - ink.x1, L.h - ink.y1) / dotsPerMm(ctx.dpi);
+}

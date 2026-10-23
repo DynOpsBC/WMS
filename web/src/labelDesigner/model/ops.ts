@@ -1,8 +1,8 @@
 // Tasarım üzerinde değişmez (immutable) düzenleme işlemleri.
-import { duplicateElement, nextElementId } from "./design";
-import { barHeightFromBox, elementGeometry, isQuarterTurn, type LayoutContext } from "./layout";
+import { duplicateElement, nextElementId, sampleValues } from "./design";
+import { barHeightFromBox, elementGeometry, isQuarterTurn, layoutContext, printBoundsDots, type LayoutContext } from "./layout";
 import type { LabelDesign, LabelElement, LabelImage, Rotation } from "./types";
-import { clamp, roundMm, snapMm } from "./units";
+import { clamp, dotsPerMm, roundMm, snapMm } from "./units";
 
 export type Handle = "n" | "s" | "e" | "w" | "ne" | "nw" | "se" | "sw";
 
@@ -263,4 +263,234 @@ export function syncTextHeight(el: LabelElement, ctx: LayoutContext): LabelEleme
   if (el.type !== "text" && el.type !== "field") return el;
   const h = roundMm(elementGeometry(el, ctx).localH);
   return h === el.hMm ? el : { ...el, hMm: h };
+}
+
+// ------------------------------------------------------------------ ölçü değişimi / sığdırma
+
+/** 0,05 mm adımına yuvarla (yazı boyu gibi değerlerde gürültü kalmasın). */
+const r05 = (mm: number) => Math.round(mm * 20) / 20;
+
+/**
+ * Elemanın ölçülerini oranlar (konumu değil). along = metin/barkod yönü (wMm),
+ * across = ona dik eksen, s = yazı/QR/kalınlık gibi en-boy oranı korunan ölçüler.
+ */
+function scaleSize(el: LabelElement, along: number, across: number, s: number): LabelElement {
+  switch (el.type) {
+    case "text":
+    case "field":
+      return {
+        ...el,
+        wMm: el.wMm > 0 ? roundMm(el.wMm * along) : 0,
+        fontMm: Math.max(1, r05((el.fontMm > 0 ? el.fontMm : 2.75) * s)),
+        fontWidthMm: el.fontWidthMm > 0 ? Math.max(0.5, r05(el.fontWidthMm * s)) : 0,
+        minFontMm: el.minFontMm > 0 ? Math.max(0.75, r05(el.minFontMm * s)) : 0,
+      };
+    case "barcode":
+      return { ...el, wMm: el.wMm > 0 ? roundMm(el.wMm * along) : 0, hMm: Math.max(2, roundMm((el.hMm > 0 ? el.hMm : 10) * s)) };
+    case "qr": {
+      const side = Math.max(5, roundMm((el.wMm || el.hMm || 20) * s));
+      return { ...el, wMm: side, hMm: side };
+    }
+    case "line": {
+      const horizontal = el.wMm >= el.hMm;
+      const thick = Math.max(0.13, roundMm(Math.min(el.wMm, el.hMm) * s));
+      return horizontal
+        ? { ...el, wMm: roundMm(el.wMm * along), hMm: thick, thicknessMm: thick }
+        : { ...el, hMm: roundMm(el.hMm * across), wMm: thick, thicknessMm: thick };
+    }
+    case "box":
+      return {
+        ...el,
+        wMm: Math.max(0.13, roundMm(el.wMm * along)),
+        hMm: Math.max(0.13, roundMm(el.hMm * across)),
+        thicknessMm: el.thicknessMm > 0 ? Math.max(0.13, roundMm(el.thicknessMm * s)) : 0,
+      };
+    case "image":
+      return { ...el, wMm: Math.max(1, roundMm(el.wMm * s)), hMm: Math.max(1, roundMm(el.hMm * s)) };
+    default:
+      return el;
+  }
+}
+
+/** Basılı alanın etiket koordinatında sınırı (mm): BC'nin ayırdığı kutu ∪ basılan kısım. */
+function boundsMm(el: LabelElement, ctx: LayoutContext): { x0: number; y0: number; x1: number; y1: number } {
+  const { box, ink } = printBoundsDots(el, ctx);
+  const dpm = dotsPerMm(ctx.dpi);
+  return {
+    x0: Math.min(box.x0, ink.x0) / dpm,
+    y0: Math.min(box.y0, ink.y0) / dpm,
+    x1: Math.max(box.x1, ink.x1) / dpm,
+    y1: Math.max(box.y1, ink.y1) / dpm,
+  };
+}
+
+/**
+ * Elemanı etiketin içine alır: önce kaydırır (güvenli kenara kadar, yer yoksa
+ * etiket kenarına), etiketten büyükse küçültür. Sığan eleman değişmez.
+ */
+export function keepInside(el: LabelElement, design: LabelDesign, ctx: LayoutContext, marginMm = 0): LabelElement {
+  const W = design.widthMm;
+  const H = design.heightMm;
+  let cur = el;
+  for (let pass = 0; pass < 4; pass++) {
+    const b = boundsMm(cur, ctx);
+    const bw = b.x1 - b.x0;
+    const bh = b.y1 - b.y0;
+    if (bw > W + 0.01 || bh > H + 0.01) {
+      const f = Math.min(1, (W - 2 * marginMm) / bw, (H - 2 * marginMm) / bh, W / bw, H / bh) * 0.98;
+      const turned = isQuarterTurn(cur);
+      const fx = Math.min(1, (W / bw) * 0.98);
+      const fy = Math.min(1, (H / bh) * 0.98);
+      const along = turned ? fy : fx;
+      const across = turned ? fx : fy;
+      cur = scaleSize(cur, along, across, Math.max(0.05, f));
+      if (cur.type === "text" || cur.type === "field") cur = { ...cur, fit: true };
+      continue;
+    }
+    const mx = bw <= W - 2 * marginMm ? marginMm : Math.max(0, (W - bw) / 2);
+    const my = bh <= H - 2 * marginMm ? marginMm : Math.max(0, (H - bh) / 2);
+    let dx = 0;
+    let dy = 0;
+    if (b.x0 < mx) dx = mx - b.x0;
+    else if (b.x1 > W - mx) dx = W - mx - b.x1;
+    if (b.y0 < my) dy = my - b.y0;
+    else if (b.y1 > H - my) dy = H - my - b.y1;
+    if (Math.abs(dx) < 0.005 && Math.abs(dy) < 0.005) break;
+    cur = { ...cur, xMm: roundMm(Math.max(0, cur.xMm + dx)), yMm: roundMm(Math.max(0, cur.yMm + dy)) };
+  }
+  return syncTextHeight(cur, ctx);
+}
+
+/** Etiketten taşan elemanları (ya da verilenleri) içeri alır. */
+export function fitElementsInside(design: LabelDesign, ctx: LayoutContext, marginMm = 0, ids?: readonly string[]): LabelDesign {
+  const targets = ids ?? design.elements.map((e) => e.id);
+  return mapElements(design, targets, (el) => {
+    const next = keepInside(el, design, ctx, marginMm);
+    return next.xMm === el.xMm && next.yMm === el.yMm && next.wMm === el.wMm && next.hMm === el.hMm && next.fontMm === el.fontMm ? el : next;
+  });
+}
+
+/**
+ * Etiket ölçüsünü değiştirir ve elemanları yeni ölçüye oranlar: konumlar eksene göre
+ * (sx, sy), yazı/QR/kalınlık en küçük orana göre; sonra taşan kalırsa içeri alınır.
+ * Kitoko (23 Eki 2026): 100×50 tasarımda 80×40 seçilince öğeler yerinde kalıp
+ * etiketin dışına düşüyor, baskıda kesiliyordu.
+ */
+export function scaleDesignTo(design: LabelDesign, widthMm: number, heightMm: number): LabelDesign {
+  if (!(design.widthMm > 0 && design.heightMm > 0)) return { ...design, widthMm, heightMm };
+  const sx = widthMm / design.widthMm;
+  const sy = heightMm / design.heightMm;
+  const s = Math.min(sx, sy);
+  const next: LabelDesign = { ...design, widthMm, heightMm };
+  const ctx = layoutContext(next, sampleValues(next));
+  const elements = design.elements.map((el) => {
+    const turned = isQuarterTurn(el);
+    let scaled = scaleSize(el, turned ? sy : sx, turned ? sx : sy, s);
+    scaled = { ...scaled, xMm: roundMm(el.xMm * sx), yMm: roundMm(el.yMm * sy) };
+    return keepInside(syncTextHeight(scaled, ctx), next, ctx, 0);
+  });
+  return { ...next, elements };
+}
+
+/**
+ * Tüm tasarımı (öğelerin ortak sınır kutusunu) etiketin güvenli alanına oranlar:
+ * tasarım küçülür ve kaydırılır, öğelerin birbirine göre yerleşimi korunur.
+ */
+export function fitAllToLabel(design: LabelDesign, ctx: LayoutContext, marginMm = 0): LabelDesign {
+  const els = design.elements.filter((e) => e.enabled);
+  if (els.length === 0) return design;
+  const bs = els.map((e) => boundsMm(e, ctx));
+  const x0 = Math.min(...bs.map((b) => b.x0));
+  const y0 = Math.min(...bs.map((b) => b.y0));
+  const x1 = Math.max(...bs.map((b) => b.x1));
+  const y1 = Math.max(...bs.map((b) => b.y1));
+  const W = design.widthMm;
+  const H = design.heightMm;
+  const f = Math.min(1, (W - 2 * marginMm) / (x1 - x0), (H - 2 * marginMm) / (y1 - y0));
+  const ox = Math.max(marginMm, Math.min(x0, W - marginMm - (x1 - x0) * f));
+  const oy = Math.max(marginMm, Math.min(y0, H - marginMm - (y1 - y0) * f));
+  const moved: LabelDesign = {
+    ...design,
+    elements: design.elements.map((el) => {
+      const scaled = f < 1 ? scaleSize(el, f, f, f) : el;
+      return { ...scaled, xMm: roundMm(Math.max(0, ox + (el.xMm - x0) * f)), yMm: roundMm(Math.max(0, oy + (el.yMm - y0) * f)) };
+    }),
+  };
+  return { ...moved, elements: moved.elements.map((el) => keepInside(syncTextHeight(el, ctx), moved, ctx, 0)) };
+}
+
+/** Ölçü değişince etiketin dışında kalacak eleman sayısı (yeni ölçüyle). */
+export function countOutside(design: LabelDesign, widthMm: number, heightMm: number): number {
+  const next: LabelDesign = { ...design, widthMm, heightMm };
+  const ctx = layoutContext(next, sampleValues(next));
+  return design.elements.filter((el) => {
+    const b = boundsMm(el, ctx);
+    return b.x0 < -0.01 || b.y0 < -0.01 || b.x1 > widthMm + 0.01 || b.y1 > heightMm + 0.01;
+  }).length;
+}
+
+// ------------------------------------------------------------------ hizalama
+
+export type AlignMode = "left" | "hcenter" | "right" | "top" | "vcenter" | "bottom";
+
+/**
+ * Hizalama: tek eleman etikete (güvenli kenar payıyla), birden çok eleman seçimin
+ * sınır kutusuna göre hizalanır.
+ */
+export function alignElements(design: LabelDesign, ids: readonly string[], mode: AlignMode, ctx: LayoutContext, marginMm = 0): LabelDesign {
+  const els = design.elements.filter((e) => ids.includes(e.id));
+  if (els.length === 0) return design;
+  const geos = new Map(els.map((e) => [e.id, elementGeometry(e, ctx)]));
+  let ref: { x0: number; y0: number; x1: number; y1: number };
+  if (els.length === 1) {
+    ref = { x0: marginMm, y0: marginMm, x1: design.widthMm - marginMm, y1: design.heightMm - marginMm };
+  } else {
+    const all = [...geos.values()];
+    ref = {
+      x0: Math.min(...all.map((g) => g.x)),
+      y0: Math.min(...all.map((g) => g.y)),
+      x1: Math.max(...all.map((g) => g.x + g.w)),
+      y1: Math.max(...all.map((g) => g.y + g.h)),
+    };
+  }
+  return mapElements(design, ids, (el) => {
+    const g = geos.get(el.id);
+    if (!g) return el;
+    let { xMm, yMm } = el;
+    if (mode === "left") xMm = ref.x0;
+    else if (mode === "right") xMm = ref.x1 - g.w;
+    else if (mode === "hcenter") xMm = (ref.x0 + ref.x1) / 2 - g.w / 2;
+    else if (mode === "top") yMm = ref.y0;
+    else if (mode === "bottom") yMm = ref.y1 - g.h;
+    else yMm = (ref.y0 + ref.y1) / 2 - g.h / 2;
+    xMm = roundMm(Math.max(0, xMm));
+    yMm = roundMm(Math.max(0, yMm));
+    return xMm === el.xMm && yMm === el.yMm ? el : { ...el, xMm, yMm };
+  });
+}
+
+/** En az üç elemanı yatay ya da dikey eşit aralıkla dağıtır (uçtakiler yerinde kalır). */
+export function distributeElements(design: LabelDesign, ids: readonly string[], axis: "h" | "v", ctx: LayoutContext): LabelDesign {
+  const items = design.elements
+    .filter((e) => ids.includes(e.id))
+    .map((e) => ({ el: e, g: elementGeometry(e, ctx) }))
+    .sort((a, b) => (axis === "h" ? a.g.x + a.g.w / 2 - (b.g.x + b.g.w / 2) : a.g.y + a.g.h / 2 - (b.g.y + b.g.h / 2)));
+  if (items.length < 3) return design;
+  const size = (g: { w: number; h: number }) => (axis === "h" ? g.w : g.h);
+  const start = axis === "h" ? items[0].g.x : items[0].g.y;
+  const lastG = items[items.length - 1].g;
+  const end = axis === "h" ? lastG.x + lastG.w : lastG.y + lastG.h;
+  const total = items.reduce((sum, it) => sum + size(it.g), 0);
+  const gap = (end - start - total) / (items.length - 1);
+  const pos = new Map<string, number>();
+  let cursor = start;
+  for (const it of items) {
+    pos.set(it.el.id, roundMm(Math.max(0, cursor)));
+    cursor += size(it.g) + gap;
+  }
+  return mapElements(design, ids, (el) => {
+    const p = pos.get(el.id);
+    if (p === undefined) return el;
+    return axis === "h" ? (p === el.xMm ? el : { ...el, xMm: p }) : p === el.yMm ? el : { ...el, yMm: p };
+  });
 }

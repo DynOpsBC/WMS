@@ -4,13 +4,15 @@ import { elementName, fieldLabel, isKnownType, resolveValue } from "../model/des
 import { elementGeometry, type ElementGeometry, type LayoutContext } from "../model/layout";
 import { moveFrom, resizeElement, updateElement, type Box, type Handle } from "../model/ops";
 import type { LabelDesign, LabelElement } from "../model/types";
-import { CSS_PX_PER_MM, mmToDots, pxPerMm } from "../model/units";
+import { CSS_PX_PER_MM, formatDecimal, mmToDots, pxPerMm } from "../model/units";
 import type { MonoBitmap } from "../render/gf";
 import { renderLabel } from "../render/renderLabel";
 import { DRAG_MIME, type PalettePayload } from "./Palette";
 
 const RULER = 22;
 const MARGIN = 28;
+/** Üstte ölçü rozeti için ek boşluk. */
+const BADGE = 30;
 const MAX_CANVAS_PIXELS = 16_000_000;
 
 interface StageProps {
@@ -24,6 +26,10 @@ interface StageProps {
   imageBitmap: (el: LabelElement) => MonoBitmap | null;
   imageVersion: number;
   warnedIds: ReadonlySet<string>;
+  /** Etiketten taşan öğeler: id → taşma (mm). */
+  overflow: ReadonlyMap<string, number>;
+  /** Güvenli kenar (mm); 0 = gösterme. */
+  safeMarginMm: number;
   onSelect: (ids: string[]) => void;
   onGestureBegin: () => void;
   onGestureUpdate: (update: (d: LabelDesign) => LabelDesign) => void;
@@ -60,11 +66,14 @@ export function Stage(props: StageProps) {
   const ruler = showRulers ? RULER : 0;
   // İçerik sahneden küçükse etiketi ortala.
   const contentW = paperW + ruler + 2 * MARGIN;
-  const contentH = paperH + ruler + 2 * MARGIN;
+  const contentH = paperH + ruler + 2 * MARGIN + BADGE;
   const padX = Math.max(0, (view.w - contentW) / 2);
   const padY = Math.max(0, (view.h - contentH) / 2);
   const offsetX = MARGIN + ruler + padX;
-  const offsetY = MARGIN + ruler + padY;
+  const offsetY = MARGIN + BADGE + ruler + padY;
+  const wDots = mmToDots(design.widthMm, design.dpi);
+  const hDots = mmToDots(design.heightMm, design.dpi);
+  const safePx = props.safeMarginMm * scale;
 
   const geometries = useMemo(() => {
     const m = new Map<string, ElementGeometry>();
@@ -213,6 +222,12 @@ export function Stage(props: StageProps) {
       onDrop={onDrop}
     >
       <div className="ld-stage-inner" style={{ width: Math.max(contentW, view.w), height: Math.max(contentH, view.h) }}>
+        <div className="ld-size-badge" style={{ left: offsetX, top: offsetY - ruler - BADGE + 2 }} title="Fiziksel etiket ölçüsü ve yazıcı noktası (BC ^PW × ^LL)">
+          <strong>{formatDecimal(design.widthMm)} × {formatDecimal(design.heightMm)} mm</strong>
+          <span>{design.dpi} dpi</span>
+          <span className="ld-muted">{wDots} × {hDots} nokta</span>
+          {zoom >= 0.995 && zoom <= 1.005 ? <span className="ld-size-badge-true">gerçek boyut</span> : null}
+        </div>
         {showRulers ? (
           <>
             <canvas ref={topRulerRef} className="ld-ruler ld-ruler-h" style={{ left: offsetX, top: offsetY - RULER, width: paperW, height: RULER }} />
@@ -221,6 +236,13 @@ export function Stage(props: StageProps) {
         ) : null}
         <div ref={paperRef} className="ld-paper" style={{ left: offsetX, top: offsetY, width: paperW, height: paperH }}>
           <canvas ref={canvasRef} className="ld-canvas" style={{ width: paperW, height: paperH }} />
+          {safePx >= 2 ? (
+            <div
+              className="ld-safe-area"
+              style={{ left: safePx, top: safePx, width: Math.max(0, paperW - 2 * safePx), height: Math.max(0, paperH - 2 * safePx) }}
+              title={`Güvenli alan: kenardan ${formatDecimal(props.safeMarginMm)} mm`}
+            />
+          ) : null}
           {showGridLines ? (
             <div
               className="ld-grid"
@@ -239,6 +261,7 @@ export function Stage(props: StageProps) {
                 (el.type === "text" || el.type === "field" || el.type === "barcode" || el.type === "qr") && value === "";
               const placeholder = el.field ? `‹${fieldLabel(design, el.field)}›` : el.type === "text" ? "‹boş metin›" : "‹veri yok›";
               const thin = geo.w * scale < 8 || geo.h * scale < 8;
+              const over = props.overflow.get(el.id);
               return (
                 <div
                   key={el.id}
@@ -248,6 +271,7 @@ export function Stage(props: StageProps) {
                     selected ? "is-selected" : "",
                     el.enabled ? "" : "is-disabled",
                     props.warnedIds.has(el.id) ? "is-warned" : "",
+                    over !== undefined ? "is-overflow" : "",
                     thin ? "is-thin" : "",
                   ].join(" ")}
                   style={{ left: geo.x * scale, top: geo.y * scale, width: Math.max(geo.w * scale, 2), height: Math.max(geo.h * scale, 2) }}
@@ -260,6 +284,9 @@ export function Stage(props: StageProps) {
                 >
                   {showPlaceholder ? <span className="ld-el-placeholder" style={{ fontSize: Math.max(9, Math.min(14, geo.h * scale * 0.6)) }}>{placeholder}</span> : null}
                   {!el.enabled ? <span className="ld-el-badge">Pasif</span> : null}
+                  {over !== undefined && el.enabled && (selected || props.overflow.size === 1) ? (
+                    <span className="ld-el-badge ld-el-badge-over">Taşıyor {formatDecimal(over)} mm</span>
+                  ) : null}
                 </div>
               );
             })}
@@ -330,14 +357,16 @@ function drawRuler(canvas: HTMLCanvasElement | null, lengthMm: number, scale: nu
     }
     g.stroke();
     if (mm % labelEvery === 0 && mm > 0) {
+      // Son etiket kenara çok yakınsa sağa/aşağı yaslanır (kesilmesin).
+      const nearEnd = len - p < 8;
       if (dir === "h") {
-        g.textAlign = "center";
+        g.textAlign = nearEnd ? "right" : "center";
         g.fillText(String(mm), p, 10);
       } else {
         g.save();
         g.translate(9, p);
         g.rotate(-Math.PI / 2);
-        g.textAlign = "center";
+        g.textAlign = nearEnd ? "left" : "center";
         g.fillText(String(mm), 0, 0);
         g.restore();
       }
@@ -349,7 +378,7 @@ function drawRuler(canvas: HTMLCanvasElement | null, lengthMm: number, scale: nu
 export function fitZoom(stageW: number, stageH: number, design: LabelDesign, showRulers: boolean): number {
   const pad = 2 * MARGIN + (showRulers ? RULER : 0) + 8;
   const zw = (stageW - pad) / (design.widthMm * CSS_PX_PER_MM);
-  const zh = (stageH - pad) / (design.heightMm * CSS_PX_PER_MM);
+  const zh = (stageH - pad - BADGE) / (design.heightMm * CSS_PX_PER_MM);
   const z = Math.min(zw, zh);
   if (!Number.isFinite(z) || z <= 0) return 1;
   return Math.max(0.25, Math.min(12, z));
