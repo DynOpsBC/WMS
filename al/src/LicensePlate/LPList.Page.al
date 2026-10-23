@@ -211,6 +211,37 @@ page 72070 "DOPSWHS LP List"
                     Message('%1 taslak LP bozuldu.', OrphanCount);
                 end;
             }
+            action(RepairLpExcess)
+            {
+                ApplicationArea = All;
+                Caption = 'Göz stoğuyla eşitle';
+                ToolTip = 'Seçili LP''lerin gözünde LP toplamı ambar stoğunu aşıyorsa (ör. terminalden kaydedilen satın alma iadesinden kalan dolu LP) fazlası düşülür; boşalan LP Kullanıldı olur. Önce düşülecek miktarı gösterip onay ister. Stok değişmez, yalnız LP içeriği stokla eşitlenir.';
+                Image = Recalculate;
+                trigger OnAction()
+                var
+                    SelectedLp: Record "DOPSWHS LP Header";
+                    LPBinSync: Codeunit "DOPSWHS LP Bin Sync";
+                    Excess: Decimal;
+                begin
+                    CurrPage.SetSelectionFilter(SelectedLp);
+                    if SelectedLp.FindSet() then
+                        repeat
+                            Excess += LPBinSync.RepairLpExcess(SelectedLp."No.", false);
+                        until SelectedLp.Next() = 0;
+                    if Excess <= 0 then begin
+                        Message('Seçili LP''lerin gözünde LP fazlası yok. Hiçbir şey değişmedi.');
+                        exit;
+                    end;
+                    if not Confirm('Seçili LP''lerin gözünde stokta olmayan toplam %1 (temel birim) LP miktarı var. Fazlası LP''lerden düşülsün mü?', false, Excess) then
+                        exit;
+                    if SelectedLp.FindSet() then
+                        repeat
+                            LPBinSync.RepairLpExcess(SelectedLp."No.", true);
+                        until SelectedLp.Next() = 0;
+                    CurrPage.Update(false);
+                    Message('LP''ler göz stoğuyla eşitlendi.');
+                end;
+            }
             action(RepairLegacyStockSources)
             {
                 ApplicationArea = All;

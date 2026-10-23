@@ -224,6 +224,50 @@ codeunit 72149 "DOPSWHS LP Bin Sync Tests"
         Assert.AreEqual('RT150-GONE', LP."Pending Receipt No.", 'A draft with content must stay untouched.');
     end;
 
+    [Test]
+    [TransactionModel(TransactionModel::AutoRollback)]
+    procedure TerminalShipmentNonSalesDebitsShipBinLp()
+    var
+        Entry: Record "Warehouse Entry";
+        TempEntry: Record "Warehouse Entry" temporary;
+        Sync: Codeunit "DOPSWHS LP Bin Sync";
+        Assert: Codeunit "Library Assert";
+    begin
+        // BADE 23 Eki: terminalden kaydedilen satın alma iadesi sevkinde LP dolu kalıyordu.
+        Seed();
+        CreateLp('RT151-LP-S', 'S1', 50, EarlierExpiry());
+        CreateEntry(11, 'S1', 50, MovementType(), '', TempEntry, false);
+        CreateEntry(12, 'S1', -50, NegativeAdjmt(), '', TempEntry, false);
+        Entry.Get(2147470000 + 12);
+        Entry."Whse. Document Type" := Entry."Whse. Document Type"::Shipment;
+        Entry."Whse. Document No." := 'PWS-RT151';
+        Entry.Modify(false);
+
+        Assert.AreEqual(1, Sync.SyncPostedWhseShipment('PWS-RT151'), 'The LP left in the shipping bin must be debited.');
+        Assert.AreEqual(0, LpQty('RT151-LP-S'), 'The returned quantity must leave the LP.');
+        Assert.AreEqual(0, Sync.SyncPostedWhseShipment('PWS-RT151'), 'A second run must not debit again.');
+    end;
+
+    [Test]
+    [TransactionModel(TransactionModel::AutoRollback)]
+    procedure RepairLpExcessPreviewsThenDebits()
+    var
+        TempEntry: Record "Warehouse Entry" temporary;
+        Sync: Codeunit "DOPSWHS LP Bin Sync";
+        Assert: Codeunit "Library Assert";
+    begin
+        Seed();
+        CreateLp('RT151-LP-R', 'B1', 50, EarlierExpiry());
+        CreateEntry(21, 'B1', 50, PositiveAdjmt(), '', TempEntry, false);
+        CreateEntry(22, 'B1', -20, NegativeAdjmt(), '', TempEntry, false);
+
+        Assert.AreEqual(20, Sync.RepairLpExcess('RT151-LP-R', false), 'Preview must report the 20 that is no longer in the bin.');
+        Assert.AreEqual(50, LpQty('RT151-LP-R'), 'Preview must not change the LP.');
+        Sync.RepairLpExcess('RT151-LP-R', true);
+        Assert.AreEqual(30, LpQty('RT151-LP-R'), 'Repair must align the LP with bin stock.');
+        Assert.AreEqual(0, Sync.RepairLpExcess('RT151-LP-R', false), 'Nothing left to repair.');
+    end;
+
     local procedure Seed()
     var
         Item: Record Item;

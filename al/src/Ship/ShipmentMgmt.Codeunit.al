@@ -528,8 +528,11 @@ codeunit 72047 "DOPSWHS Shipment Mgmt"
         // At this point the durable posted warehouse lines contain the exact
         // LP selected by the operator. Reconcile through BC's exact posted-line
         // to item-ledger relation before returning to the terminal.
-        if PostedNo <> '' then
+        if PostedNo <> '' then begin
             LpPropagation.ReconcilePostedWarehouseShipment(PostedNo);
+            // Satış dışı sevk (satın alma iadesi, transfer): sevk gözündeki LP fazlası.
+            LPBinSync.SyncPostedWhseShipment(PostedNo);
+        end;
 
         StampHeaders(WhseShipmentNo, PostedNo);
 

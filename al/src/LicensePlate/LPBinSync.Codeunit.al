@@ -620,6 +620,91 @@ codeunit 72456 "DOPSWHS LP Bin Sync"
     // =========================================================================
 
     /// <summary>Gözdeki aktif LP'lerin (mal kabul bekleyenler hariç) bu anahtardaki temel miktarı.</summary>
+    /// <summary>
+    /// BADE (23 Eki 2026): terminalden kaydedilen ambar sevkiyatında senkron kapalıdır
+    /// (EnterTerminalPosting); satış LP mutabakatı yalnız satış satırlarını düşer.
+    /// Satın alma iadesi / transfer çıkışı gibi satış dışı sevklerde sevk gözünde
+    /// LP dolu kalıyordu. Kayıt bittikten sonra sevkin ambar girişleri üzerinden
+    /// yalnız göz stoğunu aşan LP fazlası düşülür; satışta fazla kalmadığı için
+    /// hiçbir şey değişmez (çift düşüm olmaz).
+    /// </summary>
+    [InherentPermissions(PermissionObjectType::TableData, Database::"DOPSWHS LP Header", 'RM')]
+    [InherentPermissions(PermissionObjectType::TableData, Database::"DOPSWHS LP Line", 'RMD')]
+    [InherentPermissions(PermissionObjectType::TableData, Database::"DOPSWHS LP Movement Ledger", 'RI')]
+    procedure SyncPostedWhseShipment(PostedShipmentNo: Code[20]): Integer
+    var
+        WarehouseEntry: Record "Warehouse Entry";
+        TempEntry: Record "Warehouse Entry" temporary;
+    begin
+        if PostedShipmentNo = '' then
+            exit(0);
+        WarehouseEntry.SetRange("Whse. Document Type", WarehouseEntry."Whse. Document Type"::Shipment);
+        WarehouseEntry.SetRange("Whse. Document No.", PostedShipmentNo);
+        if WarehouseEntry.FindSet() then
+            repeat
+                if (WarehouseEntry."Bin Code" <> '') and (WarehouseEntry."Item No." <> '') and (WarehouseEntry."Qty. (Base)" <> 0) then
+                    AddToBuffer(TempEntry, WarehouseEntry);
+            until WarehouseEntry.Next() = 0;
+        TempEntry.Reset();
+        if TempEntry.IsEmpty() then
+            exit(0);
+        exit(ProcessBuffer(TempEntry, LineReference(TempEntry), ''));
+    end;
+
+    /// <summary>
+    /// Onarım: LP'nin gözünde aktif LP toplamı göz stoğunu aşıyorsa fazlası düşülür
+    /// (önce bu LP). Apply = false yalnız düşülecek toplam fazlayı döndürür.
+    /// </summary>
+    [InherentPermissions(PermissionObjectType::TableData, Database::"DOPSWHS LP Header", 'RM')]
+    [InherentPermissions(PermissionObjectType::TableData, Database::"DOPSWHS LP Line", 'RMD')]
+    [InherentPermissions(PermissionObjectType::TableData, Database::"DOPSWHS LP Movement Ledger", 'RI')]
+    procedure RepairLpExcess(LpNo: Code[20]; Apply: Boolean): Decimal
+    var
+        LP: Record "DOPSWHS LP Header";
+        LPLine: Record "DOPSWHS LP Line";
+        TempEntry: Record "Warehouse Entry" temporary;
+        Keys: List of [Text];
+        BinKey: Text;
+        Excess: Decimal;
+        TotalExcess: Decimal;
+        NextNo: Integer;
+    begin
+        if not LP.Get(LpNo) then
+            exit(0);
+        if not IsActive(LP) or (LP."Bin Code" = '') or (LP."Pending Receipt No." <> '') then
+            exit(0);
+        if IsAdjustmentBin(LP."Location Code", LP."Bin Code") then
+            exit(0);
+        LPLine.SetRange("LP No.", LpNo);
+        LPLine.SetFilter("Item No.", '<>%1', '');
+        if LPLine.FindSet() then
+            repeat
+                BinKey := MakeBinKey(LP."Location Code", LP."Bin Code", LPLine."Item No.", LPLine."Variant Code", LPLine."Lot No.", LPLine."Serial No.");
+                if not Keys.Contains(BinKey) then begin
+                    Keys.Add(BinKey);
+                    Excess := Round(BinClaims(BinKey) - BinBalance(BinKey), 0.00001);
+                    if Excess > Tolerance() then begin
+                        TotalExcess += Excess;
+                        NextNo += 1;
+                        TempEntry.Init();
+                        TempEntry."Entry No." := NextNo;
+                        TempEntry."Location Code" := LP."Location Code";
+                        TempEntry."Bin Code" := LP."Bin Code";
+                        TempEntry."Item No." := LPLine."Item No.";
+                        TempEntry."Variant Code" := LPLine."Variant Code";
+                        TempEntry."Lot No." := LPLine."Lot No.";
+                        TempEntry."Serial No." := LPLine."Serial No.";
+                        TempEntry."Qty. (Base)" := -Excess;
+                        TempEntry."DOPSWHS LP No." := LpNo;
+                        TempEntry.Insert();
+                    end;
+                end;
+            until LPLine.Next() = 0;
+        if Apply and (TotalExcess > 0) then
+            ProcessBuffer(TempEntry, CopyStr('LPREPAIR#' + LpNo, 1, 40), '');
+        exit(TotalExcess);
+    end;
+
     procedure BinClaims(BinKey: Text) Total: Decimal
     var
         LP: Record "DOPSWHS LP Header";
