@@ -205,9 +205,9 @@ page 72228 "DOPSWHS PutAway Line API"
     end;
 
     /// <summary>
-    /// Belge başka bir operatördeyse yerleştirme tamamlanamaz. Atanmamış belge
-    /// serbest bırakılır (terminal önce assignToMe çağırır; atama yarışını o uç
-    /// kilitle çözer).
+    /// Belge başka bir operatördeyse yerleştirme tamamlanamaz. BADE 1.14.1.152:
+    /// atanmamış belge ilk doğrulanmış okutmada bu operatöre atanır (mal kabul
+    /// artık yerleştirmeyi atamıyor; terminal normalde önce assignToMe çağırır).
     /// </summary>
     local procedure EnsurePutAwayOperator(UserIdValue: Code[50])
     var
@@ -215,12 +215,17 @@ page 72228 "DOPSWHS PutAway Line API"
     begin
         if UserIdValue = '' then
             Error('WMS kullanıcı kimliği boş olamaz. Terminal oturumunu yenileyin.');
+        PutAwayHeader.LockTable();
         if not PutAwayHeader.Get(PutAwayHeader.Type::"Put-away", Rec."No.") then
             Error('Yerleştirme belgesi %1 artık bulunamıyor. Listeyi yenileyin.', Rec."No.");
         if (PutAwayHeader."Assigned User ID" <> '') and (PutAwayHeader."Assigned User ID" <> UserIdValue) then
             Error(
                 'Yerleştirme belgesi %1, %2 kullanıcısına atanmış.',
                 Rec."No.", PutAwayHeader."Assigned User ID");
+        if PutAwayHeader."Assigned User ID" = '' then begin
+            PutAwayHeader."Assigned User ID" := CopyStr(UserIdValue, 1, MaxStrLen(PutAwayHeader."Assigned User ID"));
+            PutAwayHeader.Modify(true);
+        end;
     end;
 
     /// <summary>

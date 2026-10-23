@@ -117,6 +117,11 @@ page 72061 "DOPSWHS Setup"
                     ApplicationArea = All;
                     ToolTip = 'Kapalı (varsayılan): mal kabul kaydedilince palet MTE etiketleri otomatik basılır. Açık: etiket basılmaz; operatör kayıt sonrası açılan ekranda paletleri seçip "Etiket Yazdır" der.';
                 }
+                field("Put-away Assignment"; Rec."Put-away Assignment")
+                {
+                    ApplicationArea = All;
+                    ToolTip = 'Terminalden kaydedilen mal kabulün oluşturduğu yerleştirme kime atanır. Edition Default: BADE''de atanmamış, diğer sürümlerde mal kabulü yapan kullanıcı. Receipt Operator: her zaman mal kabulü yapan. Unassigned: boş kalır; yerleştirmeyi yapan operatör terminalde "Bana Ata" der ya da ilk okutmada belge kendiliğinden ona atanır.';
+                }
                 field("MTE Report ID"; Rec."MTE Report ID")
                 {
                     ApplicationArea = All;

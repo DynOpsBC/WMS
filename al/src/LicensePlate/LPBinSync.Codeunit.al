@@ -334,7 +334,7 @@ codeunit 72456 "DOPSWHS LP Bin Sync"
                     CollectCandidatesForKey(BinKey, Named, ActivityNo, Candidates);
                     foreach LpNo in Candidates do
                         if Excess > Tolerance() then begin
-                            Qty := DebitLp(LpNo, BinKey, Excess, Reference);
+                            Qty := DebitLp(LpNo, BinKey, Excess, '', Reference);
                             if Qty > 0 then begin
                                 Excess -= Qty;
                                 Changed += 1;
@@ -456,7 +456,7 @@ codeunit 72456 "DOPSWHS LP Bin Sync"
         LP.Modify(true);
     end;
 
-    local procedure DebitLp(LpNo: Code[20]; BinKey: Text; MaxBase: Decimal; Reference: Code[40]) Removed: Decimal
+    local procedure DebitLp(LpNo: Code[20]; BinKey: Text; MaxBase: Decimal; ToBinCode: Code[20]; Reference: Code[40]) Removed: Decimal
     var
         LP: Record "DOPSWHS LP Header";
         LPLine: Record "DOPSWHS LP Line";
@@ -493,7 +493,7 @@ codeunit 72456 "DOPSWHS LP Bin Sync"
                             TargetLine.Modify(true);
                         end;
                         LPMgt.WriteToLedger(
-                            LP, Enum::"DOPSWHS LP Action"::ItemRemoved, LP."Bin Code", '', TakeBase,
+                            LP, Enum::"DOPSWHS LP Action"::ItemRemoved, LP."Bin Code", ToBinCode, TakeBase,
                             LPLine."Item No.", CopyStr(LPLine."Lot No." + LPLine."Serial No.", 1, 50), Reference);
                         Removed += TakeBase;
                     end;
@@ -503,6 +503,49 @@ codeunit 72456 "DOPSWHS LP Bin Sync"
             LP.Get(LpNo);
             LPMgt.MarkUsedIfEmptied(LP);
         end;
+    end;
+
+    /// <summary>
+    /// BADE (23 Eki 2026, 1.14.1.152): LP'nin bu ürün/varyant/lot/seri anahtarındaki
+    /// içeriği (temel birim). Lot/seri yalnız maddenin ambar lot/seri izlemesi varsa
+    /// anahtara girer (MakeBinKey ile aynı kural).
+    /// </summary>
+    procedure LpContentBase(LpNo: Code[20]; ItemNo: Code[20]; VariantCode: Code[10]; LotNo: Code[50]; SerialNo: Code[50]) Total: Decimal
+    var
+        LP: Record "DOPSWHS LP Header";
+        LPLine: Record "DOPSWHS LP Line";
+        LineBase: Decimal;
+    begin
+        if not LP.Get(LpNo) then
+            exit(0);
+        FilterMatchingLines(LPLine, LpNo, MakeBinKey(LP."Location Code", LP."Bin Code", ItemNo, VariantCode, LotNo, SerialNo));
+        if LPLine.FindSet() then
+            repeat
+                if LineBaseQty(LPLine, LineBase) then
+                    Total += LineBase;
+            until LPLine.Next() = 0;
+        Total := Round(Total, 0.00001);
+    end;
+
+    /// <summary>
+    /// BADE (23 Eki 2026, 1.14.1.152): kısmi yerleştirme. LP'den çıkıp başka göze
+    /// konan miktar kadar (en çok MaxBase, temel birim) eşleşen LP satırları düşülür;
+    /// LP başlığı yerinde kalır, taşınan kısım hedef gözde LP'siz stok olur (Kural 2
+    /// ile aynı sonuç). Defterde ItemRemoved, Kimden = LP gözü, Kime = ToBinCode.
+    /// Boşalan LP Used olur. Hiç Error vermez; döndürür: düşülen temel miktar.
+    /// </summary>
+    [InherentPermissions(PermissionObjectType::TableData, Database::"DOPSWHS LP Header", 'RM')]
+    [InherentPermissions(PermissionObjectType::TableData, Database::"DOPSWHS LP Line", 'RMD')]
+    [InherentPermissions(PermissionObjectType::TableData, Database::"DOPSWHS LP Movement Ledger", 'RI')]
+    procedure DebitLpContent(LpNo: Code[20]; ItemNo: Code[20]; VariantCode: Code[10]; LotNo: Code[50]; SerialNo: Code[50]; MaxBase: Decimal; ToBinCode: Code[20]; Reference: Code[40]): Decimal
+    var
+        LP: Record "DOPSWHS LP Header";
+    begin
+        if MaxBase <= Tolerance() then
+            exit(0);
+        if not LP.Get(LpNo) then
+            exit(0);
+        exit(DebitLp(LpNo, MakeBinKey(LP."Location Code", LP."Bin Code", ItemNo, VariantCode, LotNo, SerialNo), MaxBase, ToBinCode, Reference));
     end;
 
     // =========================================================================

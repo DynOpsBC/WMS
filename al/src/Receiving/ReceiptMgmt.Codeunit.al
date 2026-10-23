@@ -160,7 +160,9 @@ codeunit 72043 "DOPSWHS Receipt Mgmt"
             // LP satirlarini bolen/degistiren tenant subscriber'lari da calisip
             // bittikten sonra belge sahipligini son kez dogrula. Atama sessizce
             // kaybolursa mal kabul basarili donmemeli; ayni transaction geri alinmali.
-            EnsurePutAwayAssigned(PutAwayNo, AssignedUserId);
+            // BADE 1.14.1.152: Kurulum "Put-away Assignment" atanmamış diyorsa
+            // yerleştirme boş bırakılır (bkz. ApplyPutAwayAssignment).
+            ApplyPutAwayAssignment(PutAwayNo, AssignedUserId);
         end;
 
         if PrintReport then begin
@@ -950,7 +952,7 @@ codeunit 72043 "DOPSWHS Receipt Mgmt"
             // BC yerleştirmeyi kendi postu sırasında ürettiyse burada erken
             // çıkılıyordu ve operatör ataması hiç yapılmıyordu: belge "Atanan: —"
             // kalıyor, terminalde "Bana atanan" listesinde görünmüyordu.
-            EnsurePutAwayAssigned(PutAwayNo, AssignedUserId);
+            ApplyPutAwayAssignment(PutAwayNo, AssignedUserId);
             exit(PutAwayNo);
         end;
 
@@ -961,7 +963,10 @@ codeunit 72043 "DOPSWHS Receipt Mgmt"
             exit('');
 
         PostedWhseReceiptLine.SetHideValidationDialog(true);
-        PostedWhseReceiptLine.CreatePutAwayDoc(PostedWhseReceiptLine, AssignedUserId);
+        if LeavePutAwayUnassigned() then
+            PostedWhseReceiptLine.CreatePutAwayDoc(PostedWhseReceiptLine, '')
+        else
+            PostedWhseReceiptLine.CreatePutAwayDoc(PostedWhseReceiptLine, AssignedUserId);
 
         PutAwayNo := FindPutAwayNo(PostedReceiptNo);
         if PutAwayNo = '' then
@@ -970,8 +975,9 @@ codeunit 72043 "DOPSWHS Receipt Mgmt"
                 PostedReceiptNo);
         // Standart CreatePutAwayDoc "Assigned User ID"yi her zaman taşımıyor;
         // mal kabulü yapan operatör yerleştirmede de sahibi olsun (terminalde
-        // "Bana atanan" listesi boş kalmasın).
-        EnsurePutAwayAssigned(PutAwayNo, AssignedUserId);
+        // "Bana atanan" listesi boş kalmasın). BADE 1.14.1.152: kurulum
+        // atanmamış diyorsa boş bırakılır.
+        ApplyPutAwayAssignment(PutAwayNo, AssignedUserId);
         exit(PutAwayNo);
     end;
 
@@ -1002,6 +1008,62 @@ codeunit 72043 "DOPSWHS Receipt Mgmt"
                     WhseItemTrackingLine.Modify(false);
                 end;
             until WhseItemTrackingLine.Next() = 0;
+    end;
+
+    /// <summary>
+    /// BADE (23 Eki 2026, 1.14.1.152 - Merve): mal kabulü yapan ile yerleştirmeyi yapan
+    /// farklı kişiler; terminal mal kabulünün ürettiği yerleştirme o kişiye atanınca
+    /// "Atanan: OP..." görünüyor ve yerleştirmeci belgeyi alamıyordu. Kurulum
+    /// "Put-away Assignment" atanmamış diyorsa (BADE varsayılanı) standart BC'nin mal
+    /// kabul sahibinden kopyaladığı atama silinir; aksi halde eski davranış
+    /// (EnsurePutAwayAssigned) sürer. Elle atama ("Bana Ata", BC'den atama) değişmez.
+    /// </summary>
+    procedure ApplyPutAwayAssignment(PutAwayNo: Code[20]; ReceiptOperatorId: Code[50])
+    begin
+        if LeavePutAwayUnassigned() then
+            ClearPutAwayAssignment(PutAwayNo, ReceiptOperatorId)
+        else
+            EnsurePutAwayAssigned(PutAwayNo, ReceiptOperatorId);
+    end;
+
+    /// <summary>True: terminal mal kabulünün oluşturduğu yerleştirme atanmamış kalmalı.</summary>
+    procedure LeavePutAwayUnassigned(): Boolean
+    var
+        Setup: Record "DOPSWHS Setup";
+        Edition: Codeunit "DOPSWHS Edition";
+    begin
+        if not Setup.Get('') then
+            exit(Edition.Current() = 'BADE');
+        case Setup."Put-away Assignment" of
+            Setup."Put-away Assignment"::Unassigned:
+                exit(true);
+            Setup."Put-away Assignment"::"Receipt Operator":
+                exit(false);
+            else
+                exit(Edition.Current() = 'BADE');
+        end;
+    end;
+
+    /// <summary>
+    /// Yalnız mal kabulü yapanın (veya hiç kimsenin) atamasını siler; başka bir
+    /// kullanıcıya bilinçli yapılmış atamaya dokunmaz.
+    /// </summary>
+    local procedure ClearPutAwayAssignment(PutAwayNo: Code[20]; ReceiptOperatorId: Code[50])
+    var
+        WhseActivityHeader: Record "Warehouse Activity Header";
+    begin
+        if PutAwayNo = '' then
+            exit;
+        if not WhseActivityHeader.Get(WhseActivityHeader.Type::"Put-away", PutAwayNo) then
+            Error('%1 yerleştirme belgesinin başlığı bulunamadı. Mal kabul işlemi geri alındı.', PutAwayNo);
+        if WhseActivityHeader."Assigned User ID" = '' then
+            exit;
+        if (ReceiptOperatorId <> '') and (WhseActivityHeader."Assigned User ID" <> ReceiptOperatorId) then
+            exit;
+        WhseActivityHeader."Assigned User ID" := '';
+        WhseActivityHeader."Assignment Date" := 0D;
+        WhseActivityHeader."Assignment Time" := 0T;
+        WhseActivityHeader.Modify(true);
     end;
 
     /// <summary>

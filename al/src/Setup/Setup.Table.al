@@ -424,6 +424,18 @@ table 72000 "DOPSWHS Setup"
             Caption = 'Allow Edition Change';
             DataClassification = SystemMetadata;
         }
+        field(570; "Put-away Assignment"; Option)
+        {
+            // BADE (23 Eki 2026, 1.14.1.152 - Merve): mal kabulü yapan ile yerleştiren
+            // farklı kişiler. Terminal mal kabul kaydının ürettiği yerleştirme kime atansın:
+            // Edition Default = BADE'de atanmamış, diğer sürümlerde mal kabulü yapan
+            // (eski davranış); Receipt Operator = her zaman mal kabulü yapan;
+            // Unassigned = her zaman boş (operatör "Bana Ata" der veya ilk işlemde üstlenir).
+            Caption = 'Put-away Assignment';
+            OptionMembers = "Edition Default","Receipt Operator",Unassigned;
+            OptionCaption = 'Edition Default,Receipt Operator,Unassigned';
+            DataClassification = CustomerContent;
+        }
     }
 
     keys

@@ -20,6 +20,8 @@ page 72091 "DOPSWHS PutAway API"
                 field(no; Rec."No.") { Caption = 'no'; }
                 field(locationCode; Rec."Location Code") { Caption = 'locationCode'; }
                 field(assignedUserId; Rec."Assigned User ID") { Caption = 'assignedUserId'; }
+                // BADE 1.14.1.152: terminal "Atanan: OP50FFC..." yerine kişinin adını gösterir.
+                field(assignedUserName; AssignedUserName) { Caption = 'assignedUserName'; Editable = false; }
                 // TODO Sprint H+ post-deploy: bind to activity status if exposed by the target BC app.
                 field(status; StatusText) { Caption = 'status'; }
                 part(lines; "DOPSWHS PutAway Line API")
@@ -41,6 +43,47 @@ page 72091 "DOPSWHS PutAway API"
         RecRef.GetTable(Rec);
         FilterMgmt.ApplyForCurrentUser(RecRef, Enum::"DOPSWHS App Filter Entity"::PutAway);
         RecRef.SetTable(Rec);
+    end;
+
+    trigger OnAfterGetRecord()
+    begin
+        AssignedUserName := ResolveUserName(Rec."Assigned User ID");
+    end;
+
+    /// <summary>
+    /// WMS yerel kullanıcısının görünen adı; yoksa BC kullanıcısının tam adı; o da yoksa boş
+    /// (terminal kimliği gösterir).
+    /// </summary>
+    local procedure ResolveUserName(UserIdValue: Code[50]): Text[100]
+    var
+        LocalUser: Record "DOPSWHS Local User";
+        BcUser: Record User;
+    begin
+        if UserIdValue = '' then
+            exit('');
+        if StrLen(UserIdValue) <= MaxStrLen(LocalUser.Username) then
+            if LocalUser.Get(CopyStr(UserIdValue, 1, MaxStrLen(LocalUser.Username))) then
+                if LocalUser."Display Name" <> '' then
+                    exit(LocalUser."Display Name");
+        if not BcUser.ReadPermission() then
+            exit('');
+        BcUser.SetRange("User Name", UserIdValue);
+        if BcUser.FindFirst() then
+            exit(CopyStr(BcUser."Full Name", 1, 100));
+        exit('');
+    end;
+
+    /// <summary>
+    /// BADE 1.14.1.152: her palet (LP) için boş göz önerisi, JSON dizi
+    /// [{lineNo, lpNo, binCode, zoneCode, source}]. Kural: codeunit "DOPSWHS Directed
+    /// PutAway".SuggestEmptyBinsJson. Hiçbir kaydı değiştirmez.
+    /// </summary>
+    [ServiceEnabled]
+    procedure suggestEmptyBins(): Text
+    var
+        DirectedPutAway: Codeunit "DOPSWHS Directed PutAway";
+    begin
+        exit(DirectedPutAway.SuggestEmptyBinsJson(Rec."No."));
     end;
 
     [ServiceEnabled]
@@ -104,4 +147,5 @@ page 72091 "DOPSWHS PutAway API"
 
     var
         StatusText: Text[30];
+        AssignedUserName: Text[100];
 }
