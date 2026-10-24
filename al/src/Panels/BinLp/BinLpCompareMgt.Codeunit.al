@@ -570,7 +570,7 @@ codeunit 72396 "DOPSWHS Bin LP Compare Mgt"
                     TempRow."Undo Entry Nos." := CopyStr(JoinIntegers(RowUndo), 1, MaxStrLen(TempRow."Undo Entry Nos."));
                     TempRow."Repairable LP Lines" := RepairableLines;
                     TempRow."Reason Detail" := CopyStr(
-                        StrSubstNo('Mal kabul geri alınmış (kayıt %1) ama LP dolu kalmış; %2 LP satırı boşaltılabilir.',
+                        StrSubstNo('Mal kabul geri alınmış (kayıt %1), LP dolu; %2 LP satırı boşaltılabilir.',
                             TempRow."Undo Entry Nos.", RepairableLines),
                         1, MaxStrLen(TempRow."Reason Detail"));
                     TempRow.Modify();
@@ -588,7 +588,7 @@ codeunit 72396 "DOPSWHS Bin LP Compare Mgt"
             repeat
                 TempRow.Reason := TempRow.Reason::OrphanAssignment;
                 TempRow."Reason Detail" := CopyStr(
-                    StrSubstNo('LP atandığı belge artık yok (%1); LP başka işlemlerde kullanılamaz.', TempRow."Orphan LP Nos."),
+                    StrSubstNo('LP''nin atandığı belge artık yok (%1).', TempRow."Orphan LP Nos."),
                     1, MaxStrLen(TempRow."Reason Detail"));
                 TempRow.Modify();
             until TempRow.Next() = 0;
@@ -630,10 +630,10 @@ codeunit 72396 "DOPSWHS Bin LP Compare Mgt"
                 LpSurplus := TempRow."Comparison Status" in [TempRow."Comparison Status"::LpOver, TempRow."Comparison Status"::LpNoStock];
                 if LpSurplus then begin
                     if StockSurplusByBinItem.Get(BinItemKey(TempRow), Found) then
-                        SetReason(TempRow, TempRow.Reason::LotMismatch, StrSubstNo('Bu gözde LP''siz stok farklı lotta: %1. LP lotu yanlış girilmiş olabilir.', Found))
+                        SetReason(TempRow, TempRow.Reason::LotMismatch, StrSubstNo('Bu gözde LP''siz stok farklı lotta: %1.', Found))
                     else
                         if StockSurplusByItemLot.Get(ItemLotKey(TempRow), Found) then
-                            SetReason(TempRow, TempRow.Reason::OtherBin, StrSubstNo('Bu madde/lot stoğu başka gözde: %1. LP fiziksel olarak taşınmış ama sistemde taşınmamış olabilir.', Found));
+                            SetReason(TempRow, TempRow.Reason::OtherBin, StrSubstNo('Bu madde/lot stoğu başka gözde: %1.', Found));
                 end else begin
                     if LpSurplusByBinItem.Get(BinItemKey(TempRow), Found) then
                         SetReason(TempRow, TempRow.Reason::LotMismatch, StrSubstNo('Bu gözdeki LP''lerde farklı lot var: %1.', Found))

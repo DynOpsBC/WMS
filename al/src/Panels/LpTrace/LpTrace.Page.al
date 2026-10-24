@@ -49,7 +49,7 @@ page 72392 "DOPSWHS LP Trace"
             {
                 ApplicationArea = All;
                 Caption = 'Yenile';
-                ToolTip = 'Son aramayı güncel verilerle yeniden çalıştırır.';
+                ToolTip = 'Son aramayı yeniler.';
                 Image = Refresh;
 
                 trigger OnAction()
@@ -64,7 +64,7 @@ page 72392 "DOPSWHS LP Trace"
             {
                 ApplicationArea = All;
                 Caption = 'Depo Sağlık Paneli';
-                ToolTip = 'Depodaki LP/stok tutarsızlıklarını ve diğer sorunları tek ekranda gösterir.';
+                ToolTip = 'Depo sorunlarını listeler.';
                 Image = CheckList;
                 RunObject = page "DOPSWHS Health Panel";
             }
@@ -72,7 +72,7 @@ page 72392 "DOPSWHS LP Trace"
             {
                 ApplicationArea = All;
                 Caption = 'Göz ve LP Karşılaştırma';
-                ToolTip = 'LP miktarını stokla göz (göz zorunlu değilse lokasyon) + madde + lot bazında karşılaştırır.';
+                ToolTip = 'Göz veya lokasyon stoğunu aktif LP miktarıyla karşılaştırır.';
                 Image = CompareCOA;
                 RunObject = page "DOPSWHS Bin LP Compare";
             }

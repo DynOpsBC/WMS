@@ -17,31 +17,31 @@ export const STATUS_META: Record<CompareStatus, { label: string; short: string; 
     label: "LP fazla",
     short: "LP > stok",
     tone: "red",
-    hint: "LP'lerde gözdeki BC stoğundan fazla miktar var (hayalet LP miktarı).",
+    hint: "LP miktarı BC stoğundan fazla.",
   },
   lpNoStock: {
     label: "Stok yok, LP var",
     short: "Stok 0",
     tone: "crimson",
-    hint: "Gözde BC stoğu yok ama aktif LP miktar taşıyor.",
+    hint: "BC stoğu yok, aktif LP'de miktar var.",
   },
   stockOver: {
     label: "Stok fazla",
     short: "Stok > LP",
     tone: "orange",
-    hint: "Gözdeki stoğun bir kısmı hiçbir LP'de değil.",
+    hint: "Stoğun bir kısmı LP'de değil.",
   },
   stockNoLp: {
     label: "LP'siz stok",
     short: "LP yok",
     tone: "amber",
-    hint: "Gözde stok var, hiçbir aktif LP'de değil.",
+    hint: "Stok var, aktif LP yok.",
   },
   negativeStock: {
     label: "Eksi stok",
     short: "Stok < 0",
     tone: "purple",
-    hint: "BC göz stoğu eksi; depo girişlerini kontrol edin.",
+    hint: "BC stoğu eksi.",
   },
   equal: {
     label: "Eşit",
@@ -56,23 +56,19 @@ export const STATUS_ORDER: CompareStatus[] = ["lpOver", "lpNoStock", "stockOver"
 export const REASON_META: Record<Exclude<CompareReason, "none">, { label: string; advice: string }> = {
   undoneReceipt: {
     label: "Geri alınan mal kabul",
-    advice:
-      "Mal kabul BC'de geri alınmış ama LP'ler dolu kalmış. Boşaltma yalnız geri alınan miktar kadar yapılır; gerçek stoğu olan LP'ye dokunulmaz.",
+    advice: "Mal kabul geri alınmış, LP'ler dolu. Yalnız geri alınan miktar boşaltılır.",
   },
   orphanAssignment: {
     label: "Yetim atama",
-    advice:
-      "LP, artık bulunmayan bir belgeye atanmış görünüyor. Serbest bırakınca LP Oluşturuldu durumuna döner; stok ve göz değişmez.",
+    advice: "LP artık bulunmayan bir belgeye atanmış. Serbest bırakılabilir; stok ve göz değişmez.",
   },
   lotMismatch: {
     label: "Lot uyuşmazlığı",
-    advice:
-      "Aynı gözde aynı madde farklı lotlarla duruyor. LP lotu yanlış girilmiş olabilir: LP kartında lotu kontrol edin ya da gözü sayın.",
+    advice: "Aynı madde farklı lotlarla duruyor. LP lotunu kontrol edin.",
   },
   otherBin: {
     label: "Başka gözde",
-    advice:
-      "Aynı madde/lot başka bir gözde eşleşmeyen miktarla duruyor. LP fiziksel olarak taşınmış ama sistemde taşınmamış olabilir: LP'yi doğru göze taşıyın.",
+    advice: "Aynı madde/lot başka gözde eşleşmeyen miktarla duruyor. LP gözünü kontrol edin.",
   },
 };
 
@@ -80,14 +76,14 @@ export function statusAdvice(status: CompareStatus): string {
   switch (status) {
     case "lpOver":
     case "lpNoStock":
-      return "LP içeriğini fiziksel olarak doğrulayın. LP'de fazla görünen miktar gözde yoksa LP'den düşün; LP başka göze taşındıysa taşımayı sisteme işleyin.";
+      return "LP içeriğini sayın ve düzeltin.";
     case "stockOver":
     case "stockNoLp":
-      return "Gözde LP'siz stok var. Ürünü bir LP'ye koyun (LP oluştur) ya da göz içeriğini sayarak BC stoğunu düzeltin.";
+      return "LP oluşturun veya stoğu sayın.";
     case "negativeStock":
-      return "BC göz stoğu eksi. Göz içeriği ve depo girişlerini kontrol edin; çoğunlukla eksik bir yerleştirme veya hatalı düzeltme kaydıdır.";
+      return "Göz içeriğini ve depo girişlerini kontrol edin.";
     default:
-      return "Stok ve LP miktarı eşit; işlem gerekmiyor.";
+      return "İşlem gerekmiyor.";
   }
 }
 

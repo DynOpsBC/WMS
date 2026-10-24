@@ -1,5 +1,5 @@
 /// <summary>
-/// BADE (22 Eki 2026): Depo Sağlık Paneli (Sorun Merkezi). Depo yöneticisi için
+/// Depo Sağlık Paneli (Sorun Merkezi). Depo yöneticisi için
 /// tek sayfa: sorunlar kategori kartlarında, önem rengi ve kısa açıklamayla.
 /// Tarama salt okunurdur; güvenli düzeltmeler onayla ve yazma izniyle çalışır.
 /// </summary>
@@ -77,7 +77,7 @@ page 72389 "DOPSWHS Health Panel"
             {
                 ApplicationArea = All;
                 Caption = 'Yenile';
-                ToolTip = 'Sorunları yeniden tarar. Tarama hiçbir kaydı değiştirmez.';
+                ToolTip = 'Sorunları yeniden tarar.';
                 Image = Refresh;
 
                 trigger OnAction()
@@ -97,7 +97,7 @@ page 72389 "DOPSWHS Health Panel"
             {
                 ApplicationArea = All;
                 Caption = 'Göz ve LP Karşılaştırma';
-                ToolTip = 'LP miktarını stokla göz (göz zorunlu değilse lokasyon) + madde + lot bazında karşılaştırır.';
+                ToolTip = 'Göz veya lokasyon stoğunu aktif LP miktarıyla karşılaştırır.';
                 Image = CompareCOA;
                 RunObject = page "DOPSWHS Bin LP Compare";
             }
@@ -105,7 +105,7 @@ page 72389 "DOPSWHS Health Panel"
             {
                 ApplicationArea = All;
                 Caption = 'LP İzlenebilirlik';
-                ToolTip = 'LP, lot, madde veya belge no ile LP geçmişini ve bağlı girişleri açar.';
+                ToolTip = 'LP İzlenebilirlik sayfasını açar.';
                 Image = Trace;
                 RunObject = page "DOPSWHS LP Trace";
             }

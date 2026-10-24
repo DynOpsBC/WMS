@@ -6,14 +6,6 @@ import { cleanSearch, formatDateTime, modeLabel, normalizeTrace, truncatedSectio
 import { TreeView } from "./TreeView";
 import type { TracePayload } from "./types";
 
-const EXAMPLES = [
-  { text: "LP001737", hint: "LP" },
-  { text: "A102511", hint: "lot" },
-  { text: "AB.01740", hint: "madde" },
-  { text: "RE001191", hint: "mal kabul" },
-  { text: "PU001130", hint: "silinmiş belge" },
-];
-
 export function LpTraceApp() {
   const host = useHostState();
   const trace = useMemo<TracePayload>(() => normalizeTrace(host.payload), [host.payload]);
@@ -60,7 +52,7 @@ export function LpTraceApp() {
           </span>
           <div>
             <div className="lt-brand__title">LP İzlenebilirlik</div>
-            <div className="lt-brand__sub">LP, lot, madde ya da belge no ile ara</div>
+            <div className="lt-brand__sub">LP, SSCC, lot, madde veya belge no ile arama</div>
           </div>
         </div>
         <form className="lt-search" onSubmit={onSubmit} role="search">
@@ -68,7 +60,7 @@ export function LpTraceApp() {
             className="lt-search__input"
             value={text}
             onChange={(event) => setText(event.target.value)}
-            placeholder="ör. LP001737, A102452, AB.01740, RE001191"
+            placeholder="LP no, lot, madde veya belge no"
             aria-label="Arama"
             spellCheck={false}
             autoComplete="off"
@@ -91,11 +83,14 @@ export function LpTraceApp() {
       <main className={`lt-content${host.busy ? " lt-content--busy" : ""}`} aria-busy={host.busy}>
         {trace.mode === "lp" ? <LpView trace={trace} onTrace={search} /> : null}
         {trace.mode === "lot" || trace.mode === "item" || trace.mode === "document" ? <TreeView trace={trace} onTrace={search} /> : null}
-        {trace.mode === "empty" ? <EmptyState onSearch={search} /> : null}
+        {trace.mode === "empty" ? (
+          <div className="lt-card lt-state">
+            <p>Aramak için LP no, lot, madde veya belge no girin.</p>
+          </div>
+        ) : null}
         {trace.mode === "notFound" ? (
           <div className="lt-card lt-state">
             <h2>“{trace.query}” bulunamadı</h2>
-            <p>LP numarası, SSCC, lot, madde ya da belge numarası (mal kabul, irsaliye, yerine koyma, toplama, sevkiyat, üretim emri) deneyin.</p>
           </div>
         ) : null}
         {trace.mode === "error" ? (
@@ -112,26 +107,6 @@ export function LpTraceApp() {
           </footer>
         ) : null}
       </main>
-    </div>
-  );
-}
-
-function EmptyState({ onSearch }: { onSearch: (text: string) => void }) {
-  return (
-    <div className="lt-card lt-state lt-welcome">
-      <h2>Bir LP'nin hikâyesini izleyin</h2>
-      <p>
-        LP numarası girince bugünkü durumu, içeriği (hangi kaynaktan geldiği), hareket geçmişi, bağlı madde/ambar girişleri ve belgeler tek ekranda
-        görünür. Lot, madde ya da belge numarası girince LP ağacı ve BC kalan miktarıyla karşılaştırma gelir.
-      </p>
-      <div className="lt-examples">
-        {EXAMPLES.map((example) => (
-          <button key={example.text} type="button" className="lt-example" onClick={() => onSearch(example.text)}>
-            <strong>{example.text}</strong>
-            <span>{example.hint}</span>
-          </button>
-        ))}
-      </div>
     </div>
   );
 }

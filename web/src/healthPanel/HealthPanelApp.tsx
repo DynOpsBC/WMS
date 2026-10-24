@@ -89,8 +89,8 @@ export function HealthPanelApp({ initialData = null, connect = true }: HealthPan
       title: c.fixAllCaption,
       message:
         c.key === "orphanAssignment"
-          ? `Seçili depodaki ${scope} yetim LP ataması serbest bırakılacak. LP'ler "Oluşturuldu" durumuna döner; stok ve göz değişmez. Devam edilsin mi?`
-          : `Listede görünen ${scope} bulgu sırayla düzeltilecek. Düzeltilemeyen olursa diğerleri yine uygulanır ve sonuç bildirilir. Devam edilsin mi?`,
+          ? `${scope} yetim LP ataması serbest bırakılacak. Stok ve göz değişmez. Devam edilsin mi?`
+          : `Listelenen ${scope} bulgu düzeltilecek. Devam edilsin mi?`,
       confirmLabel: c.fixAllCaption,
       onConfirm: () => {
         setBusy(true);
@@ -155,12 +155,11 @@ export function HealthPanelApp({ initialData = null, connect = true }: HealthPan
             <div className="hp-status-text">
               {total === 0 ? (
                 <>
-                  <CheckIcon /> <strong>Her şey yolunda.</strong> Açık sorun bulunmadı.
+                  <CheckIcon /> <strong>Açık sorun yok.</strong>
                 </>
               ) : (
                 <>
-                  <AlertIcon /> <strong>{total} sorun bulundu.</strong>{" "}
-                  {data.summary.critical > 0 ? "Önce kırmızı (kritik) olanlara bakın." : "Kritik sorun yok."}
+                  <AlertIcon /> <strong>{total} sorun bulundu.</strong>
                 </>
               )}
             </div>
@@ -310,7 +309,7 @@ function CategoryCard(props: {
         <>
           <p className="hp-cat-desc">{c.description}</p>
           {c.scanLimited ? (
-            <p className="hp-note">Tarama güvenlik sınırına ulaştı; sonuçlar eksik olabilir. Depo filtresiyle daraltın.</p>
+            <p className="hp-note">Tarama sınırına ulaşıldı; sonuçlar eksik olabilir.</p>
           ) : null}
           <div className="hp-issues">
             {visible.map((i) => (
@@ -319,7 +318,7 @@ function CategoryCard(props: {
           </div>
           {hidden > 0 ? (
             <p className="hp-more">
-              +{hidden} bulgu daha var (ilk {c.issues.length} gösteriliyor). Depo seçerek daraltın ya da düzelttikçe yenileyin.
+              +{hidden} bulgu daha var (ilk {c.issues.length} gösteriliyor).
             </p>
           ) : null}
         </>

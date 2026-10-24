@@ -128,7 +128,7 @@ export interface TimelineEntry {
   targetLpNo: string;
   undo: boolean;
   link: TimelineLink | null;
-  /** Çözülemeyen (silinmiş) belge no — ör. PU001130. */
+  /** Çözülemeyen (silinmiş) belge no. */
   missingDocNo?: string;
 }
 

@@ -8,7 +8,7 @@ pageextension 72398 "DOPSWHS Bin Cont LP Compare" extends "Bin Contents"
             {
                 ApplicationArea = All;
                 Caption = 'Göz ve LP karşılaştırma';
-                ToolTip = 'Seçili gözün BC stoğunu gözdeki aktif LP miktarıyla madde/lot bazında karşılaştırır; farkların olası nedenini gösterir.';
+                ToolTip = 'Seçili gözün stoğunu aktif LP miktarıyla karşılaştırır.';
                 Image = CompareCOA;
 
                 trigger OnAction()

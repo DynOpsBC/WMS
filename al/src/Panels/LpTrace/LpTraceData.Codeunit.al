@@ -4,8 +4,6 @@ codeunit 72391 "DOPSWHS LP Trace Data"
     // Bütün veri burada tek bir JSON'da toplanır; sayfa ve React eklentisi yalnız
     // çizer. Her sorgu LP, madde, lot ya da belge filtresiyle ve Max* sınırlarıyla
     // yapılır; sınır aşılırsa "truncated" altında işaretlenir.
-    // Örnek (BADE, 21 Eki 2026): AB.01740 lot A102452/A102511, LP001737-LP001751
-    // ve LP001975-LP002064; 109433 geri alındı, PU001130 silindi, PU001134 bölündü.
 
     var
         LPMgt: Codeunit "DOPSWHS Panel LP Repair";
@@ -18,7 +16,7 @@ codeunit 72391 "DOPSWHS LP Trace Data"
         UndoEntryCache: Dictionary of [Integer, Integer];
         OrphanLpCount: Integer;
         EmptiedByUndoCount: Integer;
-        NodeNotFoundMsg: Label '%1 artık bulunmuyor; açılacak sayfa yok.', Comment = '%1 = document, LP or entry number';
+        NodeNotFoundMsg: Label '%1 bulunamadı.', Comment = '%1 = document, LP or entry number';
 
     /// <summary>Builds the LP trace payload for a search text (LP No., SSCC, item, lot or document).</summary>
     procedure BuildTraceJson(SearchText: Text): Text
@@ -568,7 +566,7 @@ codeunit 72391 "DOPSWHS LP Trace Data"
                 AddLpLink(Entry, OtherLP."No.", 'LP ');
                 exit;
             end;
-        // Çözülemeyen belge (ör. silinmiş PU001130): ekranda "bulunamadı" diye gösterilir.
+        // Çözülemeyen (silinmiş) belge: ekranda "bulunamadı" diye gösterilir.
         if Ledger.Action in [Ledger.Action::Assigned, Ledger.Action::Released, Ledger.Action::Moved] then
             MissingDocNo := Candidate;
         Entry.Add('link', NullValue());
@@ -866,7 +864,7 @@ codeunit 72391 "DOPSWHS LP Trace Data"
     begin
         if LPMgt.IsAssignmentOrphaned(LP) then
             AddInsight('error', 'orphanAssignment',
-                StrSubstNo('LP, artık bulunmayan %1 %2 belgesine atanmış (yetim). LP Listesi > "Yetim atamaları serbest bırak" ile serbest bırakılabilir.',
+                StrSubstNo('LP, artık bulunmayan %1 %2 belgesine atanmış (yetim).',
                     DocTypeCaption(LP."Assigned Document Type"), LP."Assigned Document No."), 'lp', LP."No.")
         else
             if LP."Assigned Document No." <> '' then
@@ -1023,7 +1021,7 @@ codeunit 72391 "DOPSWHS LP Trace Data"
         LPHeader.Reset();
         LPHeader.SetRange("Assigned Document No.", DocNo);
         CollectHeaders(LPHeader, TempLine, GroupKeys, HistoricLps);
-        // Silinmiş belgeye (ör. PU001130) atalı LP'ler: belgeyi "bulunamadı" düğümü olarak göster.
+        // Silinmiş belgeye atalı LP'ler: belgeyi "bulunamadı" düğümü olarak göster.
         if not Found then
             if LPHeader.FindFirst() then
                 ResolveTypedDocument(LPHeader."Assigned Document Type", DocNo, 'query', NavKind, NavKey);
@@ -1200,7 +1198,7 @@ codeunit 72391 "DOPSWHS LP Trace Data"
         Trace.Add('totals', Totals);
         if OrphanLpCount > 0 then
             AddInsight('error', 'orphanAssignment',
-                StrSubstNo('%1 LP artık bulunmayan bir belgeye atanmış (yetim). LP Listesi > "Yetim atamaları serbest bırak" ile serbest bırakılabilir.', OrphanLpCount), '', '');
+                StrSubstNo('%1 LP artık bulunmayan bir belgeye atanmış (yetim).', OrphanLpCount), '', '');
         if EmptiedByUndoCount > 0 then
             AddInsight('info', 'emptiedByUndo',
                 StrSubstNo('%1 LP geri alınan mal kabul nedeniyle boşaltıldı.', EmptiedByUndoCount), '', '');
@@ -1831,7 +1829,7 @@ codeunit 72391 "DOPSWHS LP Trace Data"
     /// <summary>
     /// Lines that came by different routes get different keys: a line moved from
     /// another LP (Source LP No.) is not the same source as one received directly
-    /// on the same receipt (BADE: 2812 from RE001191 + 188 from an unbuilt LP).
+    /// on the same receipt (e.g. part from the receipt, part from an unbuilt LP).
     /// </summary>
     procedure SourceGroupKey(LPLine: Record "DOPSWHS LP Line"): Text
     begin
@@ -1872,8 +1870,8 @@ codeunit 72391 "DOPSWHS LP Trace Data"
     end;
 
     /// <summary>
-    /// Ledger "Related Document" is free text: "RE001191", "PICK:PI000123" or a
-    /// caption glued to the number ("Warehouse Put-awayPU001130"). Returns the
+    /// Ledger "Related Document" is free text: a document no., "PICK:<no.>" or a
+    /// caption glued to the number ("Warehouse Put-away<no.>"). Returns the
     /// trailing run of document-number characters.
     /// </summary>
     procedure ExtractDocumentNo(Ref: Text): Text

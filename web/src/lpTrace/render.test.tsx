@@ -12,7 +12,7 @@ describe("rendering", () => {
     const html = renderToStaticMarkup(<LpView trace={normalizeTrace(sampleLpTrace)} onTrace={noop} />);
     expect(html).toContain("LP001740");
     expect(html).toContain("Yetim");
-    expect(html).toContain("2 farklı kaynaktan doldu");
+    expect(html).toContain("2 farklı kaynak");
     expect(html).toContain("Aktarım geldi");
     expect(html).toContain("PU001130");
     expect(html).toContain("Bulunamadı");

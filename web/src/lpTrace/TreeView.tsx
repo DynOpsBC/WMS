@@ -218,7 +218,7 @@ function HistoricLps({ lps, onTrace }: { lps: HistoricLp[]; onTrace: (text: stri
       }
     >
       <p className="lt-hint">
-        <Icon name="undo" size={13} /> Bu LP'ler bu lotu/belgeyi bir zamanlar taşıdı; artık dolu satırları yok. Son hareketleri gösterilir.
+        <Icon name="undo" size={13} /> Dolu satırı kalmayan LP'ler; son hareketleriyle.
       </p>
       <ul className="lt-history">
         {visible.map((lp) => {

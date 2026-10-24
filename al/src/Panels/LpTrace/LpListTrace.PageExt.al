@@ -8,7 +8,7 @@ pageextension 72394 "DOPSWHS LP List Trace" extends "DOPSWHS LP List"
             {
                 ApplicationArea = All;
                 Caption = 'İzlenebilirlik';
-                ToolTip = 'Seçili LP''nin içeriğini, hareket geçmişini, bağlı madde/ambar girişlerini ve belgelerini tek ekranda gösterir.';
+                ToolTip = 'Seçili LP''nin içeriğini, hareketlerini ve bağlı belgelerini gösterir.';
                 Image = Trace;
                 Promoted = true;
                 PromotedCategory = Process;

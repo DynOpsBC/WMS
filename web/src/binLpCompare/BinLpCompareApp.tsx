@@ -104,10 +104,7 @@ export function BinLpCompareApp() {
       <header className="blc-head">
         <div className="blc-title">
           <h1>Göz ve LP Karşılaştırma</h1>
-          <p>
-            BC göz stoğu ile gözdeki aktif LP miktarı (Açık, Oluşturuldu, Atandı) · madde, varyant ve lot bazında, temel
-            birimde
-          </p>
+          <p>BC stoğu ile aktif LP miktarı · temel birim</p>
         </div>
         <div className="blc-head-actions">
           {data?.generatedAt && !data.needsLocation && (
@@ -134,8 +131,7 @@ export function BinLpCompareApp() {
 
       {!binMode && filter.location && (
         <p className="blc-note" role="note">
-          {filter.location} göz kullanmıyor: karşılaştırma lokasyon düzeyinde (madde/varyant/lot), BC stoğu madde
-          girişlerinden okunur. Bölge ve göz filtreleri kullanılmaz.
+          {filter.location} göz kullanmıyor; karşılaştırma lokasyon düzeyinde yapılır.
         </p>
       )}
       <form className="blc-filters" onSubmit={onSubmit}>
@@ -175,14 +171,14 @@ export function BinLpCompareApp() {
           <div className="blc-range">
             <input
               value={filter.binFrom}
-              placeholder="K.K03.01 veya K.K03*"
+              placeholder="Başlangıç"
               aria-label="Başlangıç gözü"
               onChange={(e) => setFilter({ ...filter, binFrom: e.target.value })}
             />
             <span aria-hidden>–</span>
             <input
               value={filter.binTo}
-              placeholder="K.K03.99"
+              placeholder="Bitiş"
               aria-label="Bitiş gözü"
               onChange={(e) => setFilter({ ...filter, binTo: e.target.value })}
             />
@@ -193,7 +189,7 @@ export function BinLpCompareApp() {
           <span>Madde</span>
           <input
             value={filter.item}
-            placeholder="ITM-1042* veya A|B"
+            placeholder="Madde no veya filtre"
             onChange={(e) => setFilter({ ...filter, item: e.target.value })}
           />
         </label>
@@ -232,8 +228,7 @@ export function BinLpCompareApp() {
         </div>
       ) : data.needsLocation ? (
         <div className="blc-empty">
-          <h2>Bir lokasyon seçin</h2>
-          <p>Lokasyonu seçip Karşılaştır'a basın. Göz aralığı ve madde filtresi isteğe bağlıdır.</p>
+          <h2>Lokasyon seçin</h2>
         </div>
       ) : (
         <>
@@ -280,7 +275,7 @@ export function BinLpCompareApp() {
               <IconSearch />
               <input
                 value={search}
-                placeholder="Tabloda ara: göz, madde, lot, LP"
+                placeholder="Göz, madde, lot veya LP ara"
                 onChange={(e) => setSearch(e.target.value)}
               />
             </div>
@@ -293,8 +288,7 @@ export function BinLpCompareApp() {
           {data.truncated && (
             <div className="blc-notice blc-notice--info">
               <span>
-                İlk {formatQty(data.maxRows ?? rows.length)} satır gösteriliyor. Daha dar bir göz aralığı veya madde
-                filtresi seçin; Excel'e aktar tüm satırları indirir.
+                İlk {formatQty(data.maxRows ?? rows.length)} satır gösteriliyor. Tüm satırlar için Excel'e aktarın.
               </span>
             </div>
           )}
@@ -305,8 +299,8 @@ export function BinLpCompareApp() {
               <h2>Fark yok</h2>
               <p>
                 {statusFilter === "all" && !search
-                  ? "Seçilen filtrelerde BC göz stoğu ile aktif LP miktarı eşit."
-                  : "Bu süzgece uyan satır yok."}
+                  ? "Stok ve LP miktarı eşit."
+                  : "Süzgece uyan satır yok."}
               </p>
             </div>
           ) : (
@@ -489,7 +483,7 @@ function RowDetail({
         </div>
         {groups.length === 0 ? (
           <p className="blc-nolp">
-            Bu gözde bu madde{row.lot ? `/lot (${row.lot})` : ""} için aktif LP yok. Stok gözde LP'siz duruyor.
+            Bu madde{row.lot ? `/lot (${row.lot})` : ""} için aktif LP yok.
           </p>
         ) : (
           groups.map((group) => (

@@ -8,7 +8,7 @@ pageextension 72399 "DOPSWHS LP List LP Compare" extends "DOPSWHS LP List"
             {
                 ApplicationArea = All;
                 Caption = 'Göz ve LP karşılaştırma';
-                ToolTip = 'Seçili LP''nin gözündeki BC stoğunu aktif LP miktarıyla karşılaştırır; hayalet LP miktarlarını ve LP''siz stoğu gösterir.';
+                ToolTip = 'Seçili LP''nin gözündeki stoğu aktif LP miktarıyla karşılaştırır.';
                 Image = CompareCOA;
                 Promoted = true;
                 PromotedCategory = Report;

@@ -12,7 +12,7 @@ pageextension 72390 "DOPSWHS Health Panel LP List" extends "DOPSWHS LP List"
             {
                 ApplicationArea = All;
                 Caption = 'Depo Sağlık Paneli';
-                ToolTip = 'Depodaki sorunları (LP miktarı ≠ stok, LP''nin kaynak girişi tükenmiş, LP lokasyon/göz uyuşmazlığı, negatif LP satırı, yetim LP ataması, geri alınmış mal kabulde dolu LP, takılan baskılar) tek ekranda gösterir; güvenli olanları onayla düzeltir.';
+                ToolTip = 'Depo sorunlarını listeler.';
                 Image = CheckList;
                 RunObject = page "DOPSWHS Health Panel";
                 Promoted = true;

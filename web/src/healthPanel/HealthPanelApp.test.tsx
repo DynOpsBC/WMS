@@ -58,7 +58,7 @@ describe("HealthPanelApp rendering", () => {
 
   it("shows the all-clear state", () => {
     const html = render(SAMPLE_CLEAN_PAYLOAD);
-    expect(html).toContain("Her şey yolunda.");
+    expect(html).toContain("Açık sorun yok.");
     expect(html).not.toContain("hp-issue ");
   });
 

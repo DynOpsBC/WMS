@@ -1106,7 +1106,7 @@ button.lt-doc:hover {
 }
 
 .lt-state h2 {
-  margin: 0 0 8px;
+  margin: 0;
   font-size: 18px;
 }
 
@@ -1115,41 +1115,12 @@ button.lt-doc:hover {
   color: var(--lt-ink-2);
 }
 
+.lt-state h2 + p {
+  margin-top: 8px;
+}
+
 .lt-state--error {
   border-color: #f1bcc6;
-}
-
-.lt-examples {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin-top: 18px;
-}
-
-.lt-example {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  min-width: 120px;
-  padding: 9px 12px;
-  border: 1px solid var(--lt-line);
-  border-radius: 8px;
-  background: #fafbfc;
-  cursor: pointer;
-}
-
-.lt-example:hover {
-  border-color: var(--lt-accent);
-  background: var(--lt-accent-soft);
-}
-
-.lt-example strong {
-  font-family: "Cascadia Mono", Consolas, ui-monospace, Menlo, monospace;
-}
-
-.lt-example span {
-  color: var(--lt-ink-3);
-  font-size: 12px;
 }
 
 .lt-foot {

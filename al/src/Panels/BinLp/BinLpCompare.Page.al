@@ -95,7 +95,7 @@ page 72397 "DOPSWHS Bin LP Compare"
             {
                 ApplicationArea = All;
                 Caption = 'Yenile';
-                ToolTip = 'Karşılaştırmayı aynı filtrelerle yeniden hesaplar.';
+                ToolTip = 'Karşılaştırmayı yeniler.';
                 Image = Refresh;
 
                 trigger OnAction()
@@ -107,7 +107,7 @@ page 72397 "DOPSWHS Bin LP Compare"
             {
                 ApplicationArea = All;
                 Caption = 'Depo Sağlık Paneli';
-                ToolTip = 'Depodaki LP/stok tutarsızlıklarını ve diğer sorunları tek ekranda gösterir.';
+                ToolTip = 'Depo sorunlarını listeler.';
                 Image = CheckList;
                 RunObject = page "DOPSWHS Health Panel";
             }
@@ -115,7 +115,7 @@ page 72397 "DOPSWHS Bin LP Compare"
             {
                 ApplicationArea = All;
                 Caption = 'LP İzlenebilirlik';
-                ToolTip = 'LP, lot, madde veya belge no ile LP geçmişini ve bağlı girişleri açar.';
+                ToolTip = 'LP İzlenebilirlik sayfasını açar.';
                 Image = Trace;
                 RunObject = page "DOPSWHS LP Trace";
             }
@@ -123,7 +123,7 @@ page 72397 "DOPSWHS Bin LP Compare"
             {
                 ApplicationArea = All;
                 Caption = 'Excel''e aktar';
-                ToolTip = 'Ekrandaki filtrelerle karşılaştırma satırlarını Excel dosyası olarak indirir.';
+                ToolTip = 'Karşılaştırma satırlarını Excel''e aktarır.';
                 Image = ExportToExcel;
 
                 trigger OnAction()
@@ -143,7 +143,7 @@ page 72397 "DOPSWHS Bin LP Compare"
         CompareMgt: Codeunit "DOPSWHS Bin LP Compare Mgt";
         LastFilterJson: Text;
         RepairConfirmQst: Label '%1 geri alma kaydı için %2 LP satırı boşaltılacak (yalnız geri alınan miktar kadar; gerçek stoğu olan LP''ye dokunulmaz). Devam edilsin mi?', Comment = '%1 = geri alma kaydı sayısı, %2 = LP satırı sayısı';
-        ReleaseConfirmQst: Label '%1 LP artık bulunmayan bir belgeye atanmış görünüyor. Bu LP''ler serbest bırakılsın (Oluşturuldu) mı? Stok ve göz değişmez.', Comment = '%1 = LP sayısı';
+        ReleaseConfirmQst: Label '%1 LP artık bulunmayan bir belgeye atanmış. LP''ler serbest bırakılsın mı? Stok ve göz değişmez.', Comment = '%1 = LP sayısı';
 
     /// <summary>Sayfayı bir lokasyon/göz/madde bağlamıyla açmak için (Göz İçeriği, LP listesi).</summary>
     procedure SetContext(LocationCode: Code[10]; BinCode: Code[20]; ItemNo: Code[20])

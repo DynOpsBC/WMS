@@ -1,6 +1,6 @@
 /// <summary>
-/// Depo Sağlık Paneli (Sorun Merkezi). BADE'de 22 Eki 2026'da yazıldı; Kitoko
-/// hattına (22 Eki 2026) göz zorunlu OLMAYAN lokasyonlar için uyarlandı.
+/// Depo Sağlık Paneli (Sorun Merkezi); göz zorunlu olan ve olmayan
+/// lokasyonları destekler.
 /// Taranan sorunlar: LP miktarı ≠ gerçek stok (göz zorunluysa göz bazında,
 /// değilse lokasyon + madde/varyant/lot bazında madde girişlerinden), LP
 /// satırının bağlı olduğu madde girişi yok/tükenmiş, LP lokasyon/göz
@@ -235,13 +235,13 @@ codeunit 72388 "DOPSWHS Health Detector"
             // LP'de görünen ama stokta olmayan miktar: terminal olmayan paleti gösterir.
             Issue.Severity := Issue.Severity::Critical;
             Issue.Detail := CopyStr(StrSubstNo(
-                '%1 BC stoğu %2, aktif LP''ler ise %3 gösteriyor. LP''lerde %4 fazla görünüyor: terminal olmayan paleti önerebilir. Sayım veya LP düzeltmesi gerekir; otomatik düzeltme yapılmaz.',
+                '%1 BC stoğu %2, aktif LP''ler %3. LP fazlası: %4. Sayım veya LP düzeltmesi gerekir.',
                 PlaceText, FormatQty(StockQty), FormatQty(LpQty), FormatQty(Diff)), 1, MaxStrLen(Issue.Detail));
         end else begin
             if not BinLevel then
                 Issue.Severity := Issue.Severity::Info;
             Issue.Detail := CopyStr(StrSubstNo(
-                '%1 BC stoğu %2, aktif LP''ler ise %3 gösteriyor. %4 stok hiçbir LP''de değil (LP''siz stok). Bilinçliyse (ör. İlk Sayım ile girilen stok) sorun yok; değilse LP oluşturun veya sayın.',
+                '%1 BC stoğu %2, aktif LP''ler %3. LP''siz stok: %4.',
                 PlaceText, FormatQty(StockQty), FormatQty(LpQty), FormatQty(-Diff)), 1, MaxStrLen(Issue.Detail));
         end;
         Issue."Show Caption" := 'LP''leri göster';
@@ -279,7 +279,7 @@ codeunit 72388 "DOPSWHS Health Detector"
                     Issue."Document No." := LP."Assigned Document No.";
                     Issue.Title := CopyStr(StrSubstNo('LP %1 · %2', LP."No.", AssignedDocLabel(LP)), 1, MaxStrLen(Issue.Title));
                     Issue.Detail := CopyStr(StrSubstNo(
-                        'LP, artık bulunmayan %1 belgesine atanmış görünüyor (göz %2). Bu LP terminalde hiçbir işte kullanılamaz. Serbest bırakınca "Oluşturuldu" durumuna döner; stok ve göz değişmez.',
+                        'LP, artık bulunmayan %1 belgesine atanmış (göz %2). Terminalde kullanılamaz.',
                         AssignedDocLabel(LP), LP."Bin Code"), 1, MaxStrLen(Issue.Detail));
                     Issue."Fix Available" := true;
                     Issue."Fix Caption" := 'Serbest bırak';
@@ -339,7 +339,7 @@ codeunit 72388 "DOPSWHS Health Detector"
                                 LotText := ' · Lot ' + UndoEntry."Lot No.";
                             Issue.Title := CopyStr(StrSubstNo('İrsaliye %1 · %2%3', UndoEntry."Document No.", ItemLabel(UndoEntry."Item No.", UndoEntry."Variant Code"), LotText), 1, MaxStrLen(Issue.Title));
                             Issue.Detail := CopyStr(StrSubstNo(
-                                'Mal kabul %1 tarihinde geri alındı (%2), stok düştü; ama bu kabulden gelen %3 LP satırı hâlâ dolu görünüyor. Onarım yalnız bu kabule bağlı ve gerçek stokla desteklenmeyen miktarı boşaltır.',
+                                'Mal kabul %1 tarihinde geri alındı (%2); bu kabulden gelen %3 LP satırı hâlâ dolu.',
                                 UndoEntry."Posting Date", FormatQty(UndoEntry.Quantity), LineCount), 1, MaxStrLen(Issue.Detail));
                             Issue."Fix Available" := true;
                             Issue."Fix Caption" := 'LP''leri boşalt';
@@ -445,7 +445,7 @@ codeunit 72388 "DOPSWHS Health Detector"
             if not Entry.Get(EntryNo) then begin
                 Issue.Severity := Issue.Severity::Critical;
                 Issue.Detail := CopyStr(StrSubstNo(
-                    '%1 LP satırı (ilk LP %2, toplam %3) %4 numaralı madde girişine bağlı, ama bu giriş yok. LP''nin stokla bağı kopmuş; LP İzlenebilirlik ile kontrol edin, gerekirse sayın.',
+                    '%1 LP satırı (ilk LP %2, toplam %3) %4 numaralı madde girişine bağlı, ama bu giriş yok.',
                     Issue."Affected Count", Issue."LP No.", FormatQty(Linked), EntryNo), 1, MaxStrLen(Issue.Detail));
                 Issue."Show Caption" := 'LP kartını aç';
                 StoreIssue(Issues, Issue);
@@ -456,7 +456,7 @@ codeunit 72388 "DOPSWHS Health Detector"
                     Issue.Severity := Issue.Severity::Critical;
                     Issue."Document No." := Entry."Document No.";
                     Issue.Detail := CopyStr(StrSubstNo(
-                        'LP %1 satırı %2 girişine bağlı, ama giriş başka madde/varyant/lot taşıyor (%3 %4 lot %5). LP içeriği yanlış girilmiş olabilir.',
+                        'LP %1 satırı %2 girişine bağlı, ama giriş başka madde/varyant/lot taşıyor (%3 %4 lot %5).',
                         Issue."LP No.", EntryNo, Entry."Item No.", Entry."Variant Code", Entry."Lot No."), 1, MaxStrLen(Issue.Detail));
                     StoreIssue(Issues, Issue);
                 end else
@@ -469,11 +469,11 @@ codeunit 72388 "DOPSWHS Health Detector"
                                 // Stok lokasyonda duruyor; yalnız LP'nin kaynak bağı eski bir girişi gösteriyor.
                                 Issue.Severity := Issue.Severity::Info;
                                 Issue.Detail := CopyStr(StrSubstNo(
-                                    '%1 girişinde kalan %2, bu girişe bağlı LP''ler %3. Lokasyonda bu madde/lot için %4 stok var; LP büyük olasılıkla başka girişe taşındı. Bağ eski ama stok yerinde.',
+                                    '%1 girişinde kalan %2, bağlı LP''ler %3. Lokasyonda bu madde/lot için %4 stok var.',
                                     EntryNo, FormatQty(Entry."Remaining Quantity"), FormatQty(Linked), FormatQty(Inventory)), 1, MaxStrLen(Issue.Detail));
                             end else
                                 Issue.Detail := CopyStr(StrSubstNo(
-                                    '%1 girişinde kalan %2, bu girişe bağlı aktif LP''ler ise %3 gösteriyor; lokasyondaki toplam stok da (%4) LP''leri karşılamıyor. Stok LP''den düşülmeden çıkmış (satış, sarf, geri alma) olabilir.',
+                                    '%1 girişinde kalan %2, bağlı aktif LP''ler %3; lokasyon stoğu (%4) LP''leri karşılamıyor.',
                                     EntryNo, FormatQty(Entry."Remaining Quantity"), FormatQty(Linked), FormatQty(Inventory)), 1, MaxStrLen(Issue.Detail));
                             StoreIssue(Issues, Issue);
                         end;
@@ -539,14 +539,14 @@ codeunit 72388 "DOPSWHS Health Detector"
                 Severity := Issue.Severity::Critical;
             end else
                 if Location."Bin Mandatory" and (LP."Bin Code" = '') then
-                    Reason := StrSubstNo('%1 lokasyonu göz zorunlu, ama LP''nin gözü boş. LP göz/LP karşılaştırmasına girmez; terminal LP''yi bulamayabilir.', LP."Location Code")
+                    Reason := StrSubstNo('%1 lokasyonu göz zorunlu, ama LP''nin gözü boş.', LP."Location Code")
                 else
                     if (LP."Bin Code" <> '') and not Bin.Get(LP."Location Code", LP."Bin Code") then begin
                         Reason := StrSubstNo('LP''nin gözü (%1) %2 lokasyonunda tanımlı değil.', LP."Bin Code", LP."Location Code");
                         Severity := Issue.Severity::Critical;
                     end else
                         if (not Location."Bin Mandatory") and (LP."Bin Code" <> '') then begin
-                            Reason := StrSubstNo('%1 lokasyonu göz kullanmıyor, ama LP''de %2 gözü yazılı. Stok karşılaştırmasında göz yok sayılır.', LP."Location Code", LP."Bin Code");
+                            Reason := StrSubstNo('%1 lokasyonu göz kullanmıyor, ama LP''de %2 gözü var.', LP."Location Code", LP."Bin Code");
                             Severity := Issue.Severity::Info;
                         end;
         if (Reason = '') and (LP."Parent LP No." <> '') then
@@ -617,18 +617,18 @@ codeunit 72388 "DOPSWHS Health Detector"
                 Reason := '';
                 Severity := Issue.Severity::Warning;
                 if LPLine.Quantity < 0 then begin
-                    Reason := StrSubstNo('Satır miktarı negatif (%1 %2). Negatif LP satırı stok toplamlarını bozar; satırı düzeltin veya LP''yi sayın.', FormatQty(LPLine.Quantity), LPLine."Unit of Measure");
+                    Reason := StrSubstNo('Satır miktarı negatif (%1 %2).', FormatQty(LPLine.Quantity), LPLine."Unit of Measure");
                     Severity := Issue.Severity::Critical;
                 end else
                     if LPLine."Item No." = '' then begin
                         if LPLine.Quantity <> 0 then
-                            Reason := StrSubstNo('Satırda madde yok ama miktar %1. Bu miktar hiçbir stokla eşleşmez.', FormatQty(LPLine.Quantity));
+                            Reason := StrSubstNo('Satırda madde yok ama miktar %1.', FormatQty(LPLine.Quantity));
                     end else
                         if not UnitKnown(LPLine."Item No.", LPLine."Unit of Measure") then
-                            Reason := StrSubstNo('Madde %1 ya da birimi %2 bulunamadı; satır temel birime çevrilemiyor, karşılaştırmalarda 1:1 sayılıyor.', LPLine."Item No.", LPLine."Unit of Measure")
+                            Reason := StrSubstNo('Madde %1 veya birimi %2 bulunamadı; satır temel birime çevrilemiyor.', LPLine."Item No.", LPLine."Unit of Measure")
                         else
                             if LPLine.Quantity = 0 then begin
-                                Reason := 'Satır miktarı sıfır (boşalmış satır). Zararsızdır; LP içeriğini sadeleştirmek için silinebilir.';
+                                Reason := 'Satır miktarı sıfır.';
                                 Severity := Issue.Severity::Info;
                             end;
                 if Reason <> '' then begin
@@ -714,7 +714,7 @@ codeunit 72388 "DOPSWHS Health Detector"
                         Issue."Bin Qty. (Base)" := Qty;
                         Issue.Title := CopyStr(StrSubstNo('%1 · %2', Issue."Location Code", ItemLabel(Item."No.", Issue."Variant Code")), 1, MaxStrLen(Issue.Title));
                         Issue.Detail := CopyStr(StrSubstNo(
-                            'Ürün kartında bloke, ama %1 lokasyonunda %2 stok duruyor. Bu stok toplanamaz ve sevk edilemez. Bloke bilinçliyse sorun yok; değilse ürün kartını kontrol edin.',
+                            'Ürün bloke, ama %1 lokasyonunda %2 stok var. Bu stok toplanamaz ve sevk edilemez.',
                             Issue."Location Code", FormatQty(Qty)), 1, MaxStrLen(Issue.Detail));
                         Issue."Show Caption" := 'Ürün kartını aç';
                         StoreIssue(Issues, Issue);
@@ -806,7 +806,7 @@ codeunit 72388 "DOPSWHS Health Detector"
         end else begin
             Issue.Title := CopyStr(StrSubstNo('Baskı bekliyor · %1', PrinterText), 1, MaxStrLen(Issue.Title));
             Issue.Detail := CopyStr(StrSubstNo(
-                '%1 belgesinin baskısı %2 tarihinden beri "%3" durumunda bekliyor. Yazıcı ajanı çalışıyor mu, yazıcı açık mı kontrol edin. Son hata: %4',
+                '%1 belgesinin baskısı %2 tarihinden beri "%3" durumunda. Son hata: %4',
                 Job."Source Doc", Job.Created, Job.Status, ErrorText), 1, MaxStrLen(Issue.Detail));
         end;
         Issue."Show Caption" := 'Baskı kuyruğunu aç';
@@ -861,7 +861,7 @@ codeunit 72388 "DOPSWHS Health Detector"
                         Issue."Document No." := CopyStr(DeviceMap."Printer Code", 1, MaxStrLen(Issue."Document No."));
                         Issue.Title := CopyStr(StrSubstNo('%1 · %2 → %3', DeviceText, Format(DeviceMap.Usage), DeviceMap."Printer Code"), 1, MaxStrLen(Issue.Title));
                         Issue.Detail := CopyStr(StrSubstNo(
-                            '"%1" kullanımı için seçili yazıcı %2: %3. Bu cihazdan bu baskı gitmeyebilir; eşleşmeyi güncel bir yazıcıya çevirin.',
+                            '"%1" kullanımı için seçili yazıcı %2: %3.',
                             Format(DeviceMap.Usage), DeviceMap."Printer Code", Reason), 1, MaxStrLen(Issue.Detail));
                         Issue."Show Caption" := 'Eşleşmeyi aç';
                         StoreIssue(Issues, Issue);
@@ -1285,23 +1285,23 @@ codeunit 72388 "DOPSWHS Health Detector"
     begin
         case Category of
             Issue.Category::StockMismatch:
-                exit('Aktif LP''lerin toplamı gerçek BC stoğundan farklı: göz zorunlu lokasyonda göz bazında, diğerlerinde lokasyon + madde/varyant/lot bazında. LP fazlası kritiktir (terminal olmayan paleti önerir). Otomatik düzeltme yok; sayım ya da LP düzeltmesi gerekir.');
+                exit('Aktif LP toplamı BC stoğundan farklı (göz zorunlu lokasyonda göz, diğerlerinde lokasyon bazında).');
             Issue.Category::OrphanAssignment:
-                exit('LP, artık bulunmayan bir belgeye (ör. silinmiş rafa kaldırma) atanmış ve terminalde kullanılamıyor. Serbest bırakmak güvenlidir: stok ve göz değişmez.');
+                exit('LP artık bulunmayan bir belgeye atanmış. Serbest bırakılabilir; stok ve göz değişmez.');
             Issue.Category::UndoneReceiptLp:
-                exit('Mal kabul geri alındı ve stok düştü, ama o kabulden gelen LP''ler hâlâ dolu. Onarım yalnız bu kabule bağlı, gerçek stokla desteklenmeyen miktarı boşaltır.');
+                exit('Mal kabul geri alınmış, bu kabulden gelen LP''ler hâlâ dolu.');
             Issue.Category::LpSourceEntry:
-                exit('LP satırının bağlı olduğu madde girişi silinmiş, başka madde/lot taşıyor ya da kalan miktarı bağlı LP''leri karşılamıyor. Stok LP''den düşülmeden çıkmış olabilir. LP İzlenebilirlik ile inceleyin.');
+                exit('LP satırının madde girişi yok, başka madde/lot taşıyor veya kalan miktarı yetersiz.');
             Issue.Category::LpLocationMismatch:
-                exit('İçinde stok olan LP''nin lokasyonu boş/tanımsız, göz zorunlu lokasyonda gözü boş, gözü lokasyonda yok ya da üst LP''siyle farklı yerde.');
+                exit('Stoklu LP''nin lokasyonu veya gözü geçersiz ya da üst LP''siyle farklı yerde.');
             Issue.Category::InvalidLpQty:
-                exit('Aktif LP''de negatif miktarlı, maddesiz veya birimi bulunamayan satır (sıfır miktarlı artık satırlar bilgi olarak).');
+                exit('Aktif LP''de negatif, sıfır, maddesiz veya birimi bulunamayan satır.');
             Issue.Category::BlockedItemStock:
-                exit('Ürün kartında bloke olan ürünler gözde stokta duruyor. Bu stok toplanamaz ve sevk edilemez. Bilgi amaçlıdır.');
+                exit('Bloke ürünlerde stok var; bu stok toplanamaz ve sevk edilemez.');
             Issue.Category::PrintJob:
-                exit('Bugün başarısız olan ya da 10 dakikadan uzun süredir kuyrukta bekleyen etiket ve belge baskıları.');
+                exit('Bugün başarısız olan veya 10 dakikadan uzun süredir bekleyen baskılar.');
             Issue.Category::PrinterMapping:
-                exit('Cihaz–yazıcı eşleşmesi silinmiş, pasif ya da uzun süredir görülmeyen bir yazıcıyı gösteriyor. Bu cihazdan baskı gitmeyebilir.');
+                exit('Cihaz–yazıcı eşleşmesi silinmiş, pasif veya uzun süredir görülmeyen bir yazıcıyı gösteriyor.');
         end;
     end;
 

@@ -172,7 +172,7 @@ export function TerminalDesignerApp() {
           <div className="td-brand-icon"><Icon name="PHONE" size={20} /></div>
           <div>
             <h1>Terminal Ekran Tasarımcısı</h1>
-            <p>El terminali menüsünü ve düğmelerini sürükleyip bırakarak düzenleyin.</p>
+            <p>El terminali menü ve düğme yerleşimi</p>
           </div>
         </div>
         <div className="td-top-actions">
@@ -302,8 +302,7 @@ export function TerminalDesignerApp() {
             onBack={() => { setScreen("HOME"); setSelected(currentScreen.tileKey || "RECEIVING"); }}
           />
           <p className="td-stage-foot">
-            <Icon name="LOCK" size={14} /> Yerleşim yalnız <b>gizler, sıralar ve yeniden adlandırır</b>. Terminalin kendi yetki kuralları
-            (ör. canlı ortamda yalnız yöneticiye açık ekranlar) her zaman önce uygulanır; yerleşim erişim vermez.
+            <Icon name="LOCK" size={14} /> Yerleşim yalnız gizler, sıralar ve yeniden adlandırır; yetki vermez.
           </p>
         </section>
 
@@ -312,7 +311,7 @@ export function TerminalDesignerApp() {
           {selectedItem && selectedLine ? (
             <Inspector item={selectedItem} line={selectedLine} dispatch={dispatch} catalog={catalog} layout={layout} />
           ) : (
-            <div className="td-empty">Telefondan ya da soldaki listeden bir öğe seçin.</div>
+            <div className="td-empty">Bir öğe seçin.</div>
           )}
           <div className="td-summary">
             <div><b>{changes}</b> öğe standarttan farklı</div>
@@ -474,10 +473,10 @@ function Phone({ catalog, layout, screen, screenTitle, selected, editable, showH
           {isHome ? (
             <>
               <div className="td-home-header">
-                <div className="td-home-brand">BADE</div>
+                <div className="td-home-brand">WMS</div>
                 <div>
-                  <div className="td-home-company">BADE Natural · E-DefterSandbox</div>
-                  <div className="td-home-user">DEPO-01 · Ahmet Yılmaz</div>
+                  <div className="td-home-company">Şirket</div>
+                  <div className="td-home-user">Terminal · Kullanıcı</div>
                 </div>
               </div>
               {groupsOf(catalog, "HOME").map((g) => {
@@ -587,7 +586,7 @@ function Inspector({ item, line, dispatch, catalog, layout }: {
           <p className="td-insp-desc">{item.description}</p>
           <label className="td-field td-field-block">
             <span>Not (yalnız BC'de görünür)</span>
-            <textarea rows={2} value={line.note} maxLength={250} placeholder="Ör. DKÇ istemedi, 21.10 Merve"
+            <textarea rows={2} value={line.note} maxLength={250}
               onChange={(e) => dispatch({ type: "note", screen: item.screen, key: item.key, value: e.target.value })} />
           </label>
         </>
@@ -605,7 +604,7 @@ function Inspector({ item, line, dispatch, catalog, layout }: {
               </label>
             );
           })}
-          <small>Kural terminale iletilir; destekleyen terminal sürümünde uygulanır.</small>
+          <small>Destekleyen terminal sürümlerinde uygulanır.</small>
         </fieldset>
       )}
 
@@ -633,12 +632,12 @@ function NewLayoutDialog({ data, onCancel, onCreate, currentCode }: {
         <h2>Yeni yerleşim</h2>
         <label className="td-field td-field-block">
           <span>Kod</span>
-          <input autoFocus value={p.code} maxLength={20} placeholder="ör. DEPOCU" onChange={(e) => setP({ ...p, code: e.target.value.toUpperCase() })} />
+          <input autoFocus value={p.code} maxLength={20} onChange={(e) => setP({ ...p, code: e.target.value.toUpperCase() })} />
           {exists && <small className="td-err">Bu kod zaten var.</small>}
         </label>
         <label className="td-field td-field-block">
           <span>Açıklama</span>
-          <input value={p.description} maxLength={100} placeholder="ör. Depo operatörü — sade menü" onChange={(e) => setP({ ...p, description: e.target.value })} />
+          <input value={p.description} maxLength={100} onChange={(e) => setP({ ...p, description: e.target.value })} />
         </label>
         <div className="td-field td-field-block">
           <span>Uygulandığı</span>

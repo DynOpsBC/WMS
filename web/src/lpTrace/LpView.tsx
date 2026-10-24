@@ -146,13 +146,13 @@ function Contents({ trace, onTrace }: Props) {
       }
     >
       {trace.lines.length === 0 ? (
-        <p className="lt-empty">LP boş. Geçmişte ne olduğunu aşağıdaki zaman çizelgesi gösterir.</p>
+        <p className="lt-empty">LP boş.</p>
       ) : (
         <>
           {shares.length > 1 ? (
             <div className="lt-sources">
               <div className="lt-sources__title">
-                <Icon name="split" size={14} /> Bu LP {shares.length} farklı kaynaktan doldu
+                <Icon name="split" size={14} /> {shares.length} farklı kaynak
               </div>
               <div className="lt-stack" role="img" aria-label="Kaynak payları">
                 {shares.map((share) => (

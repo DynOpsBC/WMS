@@ -8,7 +8,7 @@ pageextension 72393 "DOPSWHS LP Card Trace" extends "DOPSWHS LP Card"
             {
                 ApplicationArea = All;
                 Caption = 'İzlenebilirlik';
-                ToolTip = 'LP''nin içeriğini, hareket geçmişini, bağlı madde/ambar girişlerini ve belgelerini tek ekranda gösterir.';
+                ToolTip = 'LP''nin içeriğini, hareketlerini ve bağlı belgelerini gösterir.';
                 Image = Trace;
                 Promoted = true;
                 PromotedCategory = Process;
