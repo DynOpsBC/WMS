@@ -193,9 +193,7 @@ codeunit 72051 "DOPSWHS Print Dispatcher"
         PrintReportWithParameters(
             LP."No.",
             Report::"DOPSWHS MTE LP Report",
-            '<ReportParameters id="' + Format(Report::"DOPSWHS MTE LP Report") + '"><Options>' +
-                XmlField('InspectorName', ResolveMteInspectorName(OptionsJson)) +
-                '</Options><DataItems></DataItems></ReportParameters>',
+            BuildTerminalMteParameters(OptionsJson),
             PrinterId,
             Copies,
             Enum::"DOPSWHS IWX Report Usage"::Receipt,
@@ -325,6 +323,59 @@ codeunit 72051 "DOPSWHS Print Dispatcher"
         exit(MatchNo);
     end;
 
+    /// <summary>
+    /// 72375 "DOPSWHS MTE LP Report" istek sayfası (BADE 19 Eki 2026'dan beri) Giriş Yapan,
+    /// Kalite Kontrol çalışanı ve tarihi alır; BC parametre XML'inde alan adı kontrolün
+    /// kaynak değişkenidir: InspectorEmployeeNo, QcEmployeeNo, QcApprovalDate. Sand2809 (25 Eki 2026, MTE Report ID = 0):
+    /// XML bildirimi olmadan BC metni kayıtlı parametre adı sayıp "Object Options"
+    /// filtresi hatası veriyordu ve eski "InspectorName" alanı artık yoktu; MTE hiç
+    /// basılamıyor, Giriş Yapan / Kalite Kontrol bilgileri hiç gitmiyordu.
+    /// Giriş Yapan seçilmediyse operatör adı tek bir çalışanla eşleşirse o çalışan
+    /// gönderilir; eşleşmezse boş kalır ve rapor LP'yi oluşturanı yazar (baskı durmaz).
+    /// </summary>
+    local procedure BuildTerminalMteParameters(OptionsJson: Text): Text
+    var
+        Options: JsonObject;
+    begin
+        if (OptionsJson <> '') and not Options.ReadFrom(OptionsJson) then
+            Error(MteOptionsInvalidErr);
+        exit(
+            '<?xml version="1.0" standalone="yes"?>' +
+            '<ReportParameters id="' + Format(Report::"DOPSWHS MTE LP Report") + '"><Options>' +
+            XmlField('InspectorEmployeeNo', FindMteInspectorEmployeeNo(Options)) +
+            XmlField('QcEmployeeNo', JsonText(Options, 'qcEmployeeNo')) +
+            XmlField('QcApprovalDate', JsonDateText(Options, 'qcApprovalDate')) +
+            '</Options><DataItems></DataItems></ReportParameters>');
+    end;
+
+    /// <summary>Seçilen Giriş Yapan; yoksa operatör adıyla tek eşleşen aktif çalışan; yoksa boş. Hata vermez.</summary>
+    local procedure FindMteInspectorEmployeeNo(var Options: JsonObject): Text
+    var
+        Employee: Record Employee;
+        OperatorName: Text;
+        NameText: Text;
+        MatchNo: Code[20];
+    begin
+        if JsonText(Options, 'inspectorEmployeeNo') <> '' then
+            exit(JsonText(Options, 'inspectorEmployeeNo'));
+        OperatorName := JsonText(Options, 'operatorDisplayName');
+        if OperatorName = '' then
+            exit('');
+        Employee.SetRange(Status, Employee.Status::Active);
+        if Employee.FindSet() then
+            repeat
+                NameText := (Employee."First Name" + ' ' + Employee."Last Name").Trim();
+                if NameText = '' then
+                    NameText := Employee."Search Name";
+                if UpperCase(NameText) = UpperCase(OperatorName) then begin
+                    if MatchNo <> '' then
+                        exit('');
+                    MatchNo := Employee."No.";
+                end;
+            until Employee.Next() = 0;
+        exit(MatchNo);
+    end;
+
     procedure ResolveMteInspectorName(OptionsJson: Text): Text
     var
         Options: JsonObject;
@@ -386,9 +437,31 @@ codeunit 72051 "DOPSWHS Print Dispatcher"
             exit('');
         if Evaluate(DateValue, Value, 9) then
             exit(Format(DateValue, 0, 9));
+        // API oturumunun dili en-US olabilir; gg.aa.yyyy / gg/aa/yyyy dile bakmadan çözülür.
+        if TryDayMonthYear(Value, DateValue) then
+            exit(Format(DateValue, 0, 9));
         if Evaluate(DateValue, Value) then
             exit(Format(DateValue, 0, 9));
         Error(MteDateInvalidErr, Value);
+    end;
+
+    [TryFunction]
+    local procedure TryDayMonthYear(Value: Text; var DateValue: Date)
+    var
+        Parts: List of [Text];
+        Day: Integer;
+        Month: Integer;
+        Year: Integer;
+    begin
+        Parts := Value.Replace('/', '.').Split('.');
+        if Parts.Count() <> 3 then
+            Error('');
+        if (StrLen(Parts.Get(3)) <> 4) or (StrLen(Parts.Get(1)) > 2) or (StrLen(Parts.Get(2)) > 2) then
+            Error('');
+        Evaluate(Day, Parts.Get(1));
+        Evaluate(Month, Parts.Get(2));
+        Evaluate(Year, Parts.Get(3));
+        DateValue := DMY2Date(Day, Month, Year);
     end;
 
     /// <summary>
