@@ -128,6 +128,22 @@ page 72061 "DOPSWHS Setup"
                     ToolTip = 'Terminaldeki MTE Yazdır bu raporu çalıştırır. BADE''de 60150 seçiliyse terminal için ayrı 60298 LP raporu kullanılır; 60150''nin BC düzeni değişmez. 0 = BCWMS''in kendi MTE raporu.';
                 }
             }
+            // BADE (25 Eki 2026, Kitoko etiket tasarımcısı): etiket rulosu ölçüsü.
+            group(LabelStock)
+            {
+                Caption = 'Etiket Rulosu (ZPL)';
+                InstructionalText = 'Etiket tasarımlarının varsayılan ölçüsü ve alan etiketi bu ölçüye göre yerleşir; boşsa 80 x 40 mm. Aktif tasarım yoksa ürün, raf ve LP etiketleri bugünkü sabit 4x2" tasarımla, MTE her zamanki gibi basılır.';
+                field("Label Width (mm)"; Rec."Label Width (mm)")
+                {
+                    ApplicationArea = All;
+                    ToolTip = 'Etiketin genişliği (mm). Boş/0 = 80 mm. Yaygın rulolar: 80x40, 100x50 (4x2 inç), 100x80, 100x100.';
+                }
+                field("Label Height (mm)"; Rec."Label Height (mm)")
+                {
+                    ApplicationArea = All;
+                    ToolTip = 'Etiketin yüksekliği (mm). Boş/0 = 40 mm.';
+                }
+            }
             group(License)
             {
                 Caption = 'License';
@@ -353,6 +369,15 @@ page 72061 "DOPSWHS Setup"
                     PromotedCategory = Process;
                     ToolTip = 'Map each device/user to a default printer per usage.';
                     RunObject = page "DOPSWHS Device Printer Map";
+                }
+                // BADE (25 Eki 2026, Kitoko'dan): sürükle-bırak etiket tasarımcısı.
+                action(LabelLayoutsAction)
+                {
+                    Caption = 'Etiket Tasarımları';
+                    ApplicationArea = All;
+                    Image = Template;
+                    ToolTip = 'Ürün, raf, alan, LP ve lot etiketlerini sürükle-bırak tasarımcıyla düzenler. Tasarım aktifleşene kadar mevcut etiketler değişmez.';
+                    RunObject = page "DOPSWHS Label Layout List";
                 }
                 action(EnableEnvironmentPrinting)
                 {

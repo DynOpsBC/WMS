@@ -104,3 +104,54 @@ internal fun putAwaySearchOutcome(docs: Set<String>): PutAwaySearchOutcome = whe
     1 -> PutAwaySearchOutcome.Open(docs.first())
     else -> PutAwaySearchOutcome.Filter(docs)
 }
+
+/** BADE (25 Eki 2026): bins yanıtında okutulan koda TAM eşit raf (büyük/küçük harf duyarsız). */
+internal fun putAwayExactBinRow(rows: List<JSONObject>, binCode: String): JSONObject? =
+    rows.firstOrNull { it.optString("code").trim().equals(binCode.trim(), ignoreCase = true) }
+
+/**
+ * BADE (25 Eki 2026): hedef raf için operatöre gösterilecek hata; null = raf uygun.
+ * [bin] null ise raf lokasyonda yok. Sunucu putAwayBlock / putAwayBlockMessage
+ * (BC 1.14.1.153+) verir; eski BC'de yalnız blockMovement'a bakılır.
+ * Kalite reddi alan LP'nin ret/karantina gözü ([qualityRejectBin]) her zaman kabul edilir.
+ */
+internal fun putAwayTargetBinError(
+    scanned: String,
+    locationCode: String,
+    bin: JSONObject?,
+    qualityRejectBin: String = "",
+): String? {
+    val shown = scanned.trim()
+    if (bin == null) {
+        return if (locationCode.isNotBlank())
+            "❌ $shown rafı $locationCode lokasyonunda yok. Raf kodunu kontrol edip tekrar okutun."
+        else
+            "❌ $shown rafı bulunamadı. Raf kodunu kontrol edip tekrar okutun."
+    }
+    val code = bin.optString("code").trim().ifBlank { shown }
+    if (qualityRejectBin.isNotBlank() && code.equals(qualityRejectBin.trim(), ignoreCase = true)) return null
+    val reason = bin.optString("putAwayBlock").trim().lowercase().ifBlank {
+        when (BcEnum.decodeOData(bin.optString("blockMovement")).trim().lowercase()) {
+            "inbound", "all" -> "blocked"
+            else -> ""
+        }
+    }
+    if (reason.isBlank()) return null
+    val serverMessage = bin.optString("putAwayBlockMessage").trim()
+    if (serverMessage.isNotBlank()) return "❌ $serverMessage"
+    return when (reason) {
+        "blocked" -> "❌ $code rafı yerleştirmeye kapalı (hareket blokajı). Başka bir raf okutun."
+        "receive" -> "❌ $code rafı mal kabul gözüdür; yerleştirme hedefi olamaz. Başka bir raf okutun."
+        "ship" -> "❌ $code rafı sevkiyat gözüdür; yerleştirme hedefi olamaz. Başka bir raf okutun."
+        "adjustment" -> "❌ $code rafı düzeltme (sayım farkı) gözüdür; yerleştirme hedefi olamaz. Başka bir raf okutun."
+        else -> "❌ $code rafına yerleştirme yapılamaz. Başka bir raf okutun."
+    }
+}
+
+/**
+ * Toplu LP yerleştirmede okutulan/yazılan raf: önce tam eşleşme; yoksa kısmi
+ * yazımda (ör. "Y.G03") yalnız TEK aday varsa o. Birden çok aday ya da hiç
+ * aday yoksa null — eskiden ilk kısmi eşleşme sessizce seçiliyordu.
+ */
+internal fun putAwayBatchBinRow(rows: List<JSONObject>, candidate: String): JSONObject? =
+    putAwayExactBinRow(rows, candidate) ?: rows.singleOrNull()

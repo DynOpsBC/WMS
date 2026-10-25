@@ -397,6 +397,24 @@ table 72000 "DOPSWHS Setup"
             DataClassification = CustomerContent;
             InitValue = false;
         }
+        field(450; "Label Width (mm)"; Decimal)
+        {
+            // BADE (25 Eki 2026, Kitoko etiket tasarımcısı): ZPL etiket rulosunun
+            // ölçüsü. Yeni etiket tasarımlarının ve alan etiketinin varsayılan
+            // kanvası; 0 = 80 mm. BADE'nin sabit 4x2" ürün/raf/LP etiketleri ve
+            // MTE bu alandan etkilenmez.
+            Caption = 'Label Width (mm)';
+            DataClassification = CustomerContent;
+            DecimalPlaces = 0 : 1;
+            MinValue = 0;
+        }
+        field(451; "Label Height (mm)"; Decimal)
+        {
+            Caption = 'Label Height (mm)';
+            DataClassification = CustomerContent;
+            DecimalPlaces = 0 : 1;
+            MinValue = 0;
+        }
         field(460; "MTE Report ID"; Integer)
         {
             // BADE (16 Eyl 2026): the terminal MTE runs the customer's own

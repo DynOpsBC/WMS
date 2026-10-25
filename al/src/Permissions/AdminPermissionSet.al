@@ -428,5 +428,23 @@ permissionset 72094 "DOPSWHS-ADMIN"
         report "Whse.-Shipment - Create Pick" = X,
         report "Whse. - Posted Receipt" = X,
         report "Whse. - Posted Shipment" = X,
+        // BADE (25 Eki 2026, Kitoko'dan): etiket tasarımları + sürükle-bırak tasarımcı.
+        codeunit "DOPSWHS Label Canvas" = X,
+        tabledata "DOPSWHS Label Layout" = RIMD,
+        table "DOPSWHS Label Layout" = X,
+        tabledata "DOPSWHS Label Layout Line" = RIMD,
+        table "DOPSWHS Label Layout Line" = X,
+        page "DOPSWHS Label Layout List" = X,
+        page "DOPSWHS Label Layout Card" = X,
+        page "DOPSWHS Label Layout Lines" = X,
+        page "DOPSWHS Label Layout API" = X,
+        codeunit "DOPSWHS Label Layout Engine" = X,
+        codeunit "DOPSWHS Label Layout Fields" = X,
+        codeunit "DOPSWHS Label Layout Preview" = X,
+        tabledata "DOPSWHS Label Image" = RIMD,
+        table "DOPSWHS Label Image" = X,
+        page "DOPSWHS Label Image List" = X,
+        page "DOPSWHS Label Designer" = X,
+        codeunit "DOPSWHS Label Designer Mgt" = X,
         report "Standard Sales - Invoice" = X;
 }

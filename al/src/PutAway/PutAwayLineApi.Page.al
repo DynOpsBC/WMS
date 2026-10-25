@@ -178,6 +178,8 @@ page 72228 "DOPSWHS PutAway Line API"
     local procedure ApplyPlacement(TargetBinCode: Code[20]; QtyToHandle: Decimal)
     var
         TargetBin: Record Bin;
+        DirectedPutAway: Codeunit "DOPSWHS Directed PutAway";
+        BlockMessage: Text;
     begin
         if TargetBinCode = '' then
             Error('Hedef raf zorunludur.');
@@ -189,6 +191,13 @@ page 72228 "DOPSWHS PutAway Line API"
             Error('Yerleştirme miktarı %1, kalan %2 miktarını aşamaz.', QtyToHandle, Rec."Qty. Outstanding");
 
         VerifyQualityPlacement(TargetBinCode);
+        // BADE (25 Eki 2026): bloke / mal kabul / sevk / düzeltme gözü yerleştirme
+        // hedefi olamaz. Reddedilen LP'nin ret/karantina gözü bu kuraldan muaftır.
+        if not IsQualityRejectTarget(TargetBinCode) then begin
+            BlockMessage := DirectedPutAway.PutAwayTargetBlockMessage(TargetBin);
+            if BlockMessage <> '' then
+                Error(BlockMessage);
+        end;
 
         // Önerilen raftan farklı bir hedef başka zone'da olabilir. Yalnız Bin
         // Code'u doğrulamak, Place satırındaki eski öneri zone'unu korur ve BC
@@ -305,6 +314,18 @@ page 72228 "DOPSWHS PutAway Line API"
         if TakeLine.Count() <> 1 then
             exit(false);
         exit(TakeLine.FindFirst());
+    end;
+
+    local procedure IsQualityRejectTarget(TargetBinCode: Code[20]): Boolean
+    var
+        QualityOrder: Record "DOPSWHS Quality Order";
+    begin
+        if Rec."LP No." = '' then
+            exit(false);
+        QualityOrder.SetRange("LP No.", Rec."LP No.");
+        QualityOrder.SetRange(Status, QualityOrder.Status::Failed);
+        QualityOrder.SetRange("Quarantine Bin", TargetBinCode);
+        exit(not QualityOrder.IsEmpty());
     end;
 
     local procedure VerifyQualityPlacement(TargetBinCode: Code[20])

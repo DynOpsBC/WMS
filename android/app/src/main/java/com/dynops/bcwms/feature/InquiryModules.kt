@@ -97,6 +97,8 @@ fun ItemInquiryModule() {
     var lpPlacement by remember { mutableStateOf<Map<String, LpPlacement>>(emptyMap()) }
     var status by remember { mutableStateOf("Ürün No. veya LP No. tarayın/girin.") }
     var loading by remember { mutableStateOf(false) }
+    // BADE (25 Eki 2026): BC'deki Etiket Tasarımları; varsayılan = BC'de aktif (yoksa sabit 4x2").
+    val itemLayout = rememberLabelLayoutChoice(LabelLayoutKind.Item)
 
     fun load() {
         if (query.trim().isBlank()) return
@@ -143,12 +145,9 @@ fun ItemInquiryModule() {
                 status = "HATA: ${it.message}"
                 return@launch
             }
-            val payload = JSONObject().apply {
-                put("printerId", choice.printerCode)
-                put("copies", 1)
-            }.toString()
-            val r = BcApi.boundAction(context, "items", no, "printLabel", payload)
-            status = if (r.ok) ("🟢 Ürün etiketi kuyruğa alındı ($no)." + if (choice.warning.isBlank()) "" else " ${choice.warning}")
+            val layoutCode = itemLayout.awaitLayoutCode(context)
+            val r = BcApi.boundAction(context, "items", no, labelPrintAction(layoutCode), labelPrintPayload(choice.printerCode, 1, layoutCode))
+            status = if (r.ok) ("🟢 Ürün etiketi kuyruğa alındı ($no)." + labelLayoutNote(layoutCode) + if (choice.warning.isBlank()) "" else " ${choice.warning}")
                 else "🔴 Yazdırma: ${BcApi.errorMessage(r.body)} (HTTP ${r.httpCode})"
         }
     }
@@ -247,6 +246,8 @@ fun ItemInquiryModule() {
                 }
             }
             Spacer(Modifier.height(8.dp))
+            LabelLayoutSelector(itemLayout)
+            Spacer(Modifier.height(6.dp))
             OutlinedButton(onClick = { printItemLabel() }, modifier = Modifier.fillMaxWidth().height(48.dp)) {
                 WmsActionLabel(WmsGlyph.PRINTER, "Ürün Etiketi Bas")
             }
@@ -333,6 +334,9 @@ fun BinInquiryModule() {
     var whseEntries by remember { mutableStateOf<List<JSONObject>>(emptyList()) }
     var status by remember { mutableStateOf("Lokasyon + Bin girin.") }
     var loading by remember { mutableStateOf(false) }
+    // BADE (25 Eki 2026): raf ve (boş) LP etiketi için BC'deki Etiket Tasarımları.
+    val binLayout = rememberLabelLayoutChoice(LabelLayoutKind.Bin)
+    val lpLayout = rememberLabelLayoutChoice(LabelLayoutKind.LP)
 
     fun load() {
         if (location.trim().isBlank() || binCode.trim().isBlank()) return
@@ -373,12 +377,9 @@ fun BinInquiryModule() {
                 return@launch
             }
             val key = "locationCode='${loc.replace("'", "''")}',code='${code.replace("'", "''")}'"
-            val payload = JSONObject().apply {
-                put("printerId", choice.printerCode)
-                put("copies", 1)
-            }.toString()
-            val r = BcApi.boundAction(context, "bins", key, "printLabel", payload)
-            status = if (r.ok) ("🟢 Bin etiketi kuyruğa alındı ($loc/$code)." + if (choice.warning.isBlank()) "" else " ${choice.warning}")
+            val layoutCode = binLayout.awaitLayoutCode(context)
+            val r = BcApi.boundAction(context, "bins", key, labelPrintAction(layoutCode), labelPrintPayload(choice.printerCode, 1, layoutCode))
+            status = if (r.ok) ("🟢 Bin etiketi kuyruğa alındı ($loc/$code)." + labelLayoutNote(layoutCode) + if (choice.warning.isBlank()) "" else " ${choice.warning}")
                 else "🔴 Yazdırma: ${BcApi.errorMessage(r.body)} (HTTP ${r.httpCode})"
         }
     }
@@ -392,16 +393,20 @@ fun BinInquiryModule() {
             val failures = linkedMapOf<String, String>()
             val labelPrinter = getDefaultPrinter(context, PRINTER_USAGE_LABEL)
             val documentPrinter = getDefaultPrinter(context, PRINTER_USAGE_DOCUMENT)
+            // Yalnız boş LP'nin LP etiketi (printLabel) tasarıma uyar; MTE değişmez.
+            val lpLayoutCode = lpLayout.awaitLayoutCode(context)
             var completed = 0
             for (batch in bulkLpPrintBatches(requested)) {
                 status = "LP etiketleri kuyruğa alınıyor: $completed/${requested.size}"
                 val results = batch.map { no ->
                     val lp = lps.first { it.optString("no") == no }
-                    val route = bulkLpPrintRoute(lp.optInt("lineCount"), labelPrinter, documentPrinter)
+                    val route = lpLabelRouteWithLayout(
+                        bulkLpPrintRoute(lp.optInt("lineCount"), labelPrinter, documentPrinter), lpLayoutCode)
                     async {
                         val payload = JSONObject().apply {
                             put("printerId", route.printerCode)
                             put("copies", 1)
+                            if (route.action == LP_LABEL_WITH_LAYOUT_ACTION) put("layoutCode", lpLayoutCode)
                         }.toString()
                         val response = BcApi.boundActionLongRunning(context, "licensePlates", no, route.action, payload)
                         no to if (response.ok) null else QcErrorParser.friendlyStatus(
@@ -455,6 +460,8 @@ fun BinInquiryModule() {
                 }
             }
             Spacer(Modifier.height(8.dp))
+            LabelLayoutSelector(binLayout)
+            Spacer(Modifier.height(6.dp))
             OutlinedButton(onClick = { printBinLabel() }, modifier = Modifier.fillMaxWidth().height(48.dp)) {
                 WmsActionLabel(WmsGlyph.PRINTER, "Bin Etiketi Bas")
             }
@@ -498,7 +505,7 @@ fun BinInquiryModule() {
                 }
                 item { Spacer(Modifier.height(8.dp)) }
             }
-            item {
+            item { Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text("LP'ler (${lps.size})", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface, modifier = Modifier.weight(1f))
                     if (lps.isNotEmpty()) TextButton(
@@ -509,12 +516,15 @@ fun BinInquiryModule() {
                         enabled = !loading,
                     ) { Text(if (selectedLpNos.size == lps.size) "Seçimi Kaldır" else "Tümünü Seç") }
                 }
+                if (selectedLpNos.isNotEmpty()) LabelLayoutSelector(
+                    lpLayout, enabled = !loading, note = "Yalnız boş LP etiketine uygulanır; dolu LP'de MTE basılır.",
+                )
                 if (selectedLpNos.isNotEmpty()) Button(
                     onClick = { printSelectedLpLabels() },
                     enabled = !loading,
                     modifier = Modifier.fillMaxWidth(),
                 ) { Text("Seçilen LP Etiketlerini Bas (${selectedLpNos.size})") }
-            }
+            } }
             items(lps) { lp ->
                 Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp)) {
                     Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {

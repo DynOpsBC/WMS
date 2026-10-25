@@ -4,6 +4,16 @@ codeunit 72051 "DOPSWHS Print Dispatcher"
     Permissions = tabledata Employee = R;
 
     procedure PrintLPLabel(var LP: Record "DOPSWHS LP Header"; PrinterId: Code[50]; Copies: Integer)
+    begin
+        PrintLPLabelWithLayout(LP, PrinterId, Copies, '');
+    end;
+
+    /// <summary>
+    /// BADE (25 Eki 2026, Kitoko etiket tasarımcısı): LP etiketi terminalde seçilen
+    /// LP tasarımıyla. Boş LayoutCode = PrintLPLabel ile aynı (aktif LP tasarımı,
+    /// yoksa sabit 4x2"). MTE bu yoldan geçmez, değişmez.
+    /// </summary>
+    procedure PrintLPLabelWithLayout(var LP: Record "DOPSWHS LP Header"; PrinterId: Code[50]; Copies: Integer; LayoutCode: Code[20])
     var
         Setup: Record "DOPSWHS Setup";
         Queue: Record "DOPSWHS Print Job Queue";
@@ -22,7 +32,9 @@ codeunit 72051 "DOPSWHS Print Dispatcher"
             Error('A print job cannot exceed 10 copies.');
         PrintEnvironment.SyncCompany();
         Setup.Get('');
-        Zpl := LabelReport.BuildZpl(LP);
+        if LayoutCode <> '' then
+            CheckZplLayout(LayoutCode, Enum::"DOPSWHS Label Kind"::LP, PrinterId);
+        Zpl := LabelReport.BuildZplWithLayout(LP, LayoutCode);
 
         if Setup."Print Channel" in [Setup."Print Channel"::SelfHosted, Setup."Print Channel"::AzureDirect] then begin
             GuardLicense().GuardFeature(Enum::"DOPSWHS License Feature"::PrintBridge);
@@ -56,6 +68,9 @@ codeunit 72051 "DOPSWHS Print Dispatcher"
         if Setup."Print Channel" = Setup."Print Channel"::BCNative then begin
             if not GuiAllowed() then
                 Error('Business Central Native cannot deliver a terminal ZPL label. Configure Azure Direct, Self-Hosted or PrintNode.');
+            // BC Native raporu çalıştırır; seçilen tasarımı taşıyamaz.
+            if LayoutCode <> '' then
+                Error('Seçilen LP etiket tasarımı Business Central Native kanalıyla basılamaz. Azure Direct, Self-Hosted veya PrintNode kullanın.');
         end else
             if Setup."Print Channel" <> Setup."Print Channel"::PrintNode then
                 Error('Print channel %1 is not supported for LP labels.', Setup."Print Channel");
@@ -94,6 +109,192 @@ codeunit 72051 "DOPSWHS Print Dispatcher"
                 exit;
             end;
         EnqueueZpl(Item."No.", BuildItemZpl(Item), PrinterId, Copies, Enum::"DOPSWHS IWX Report Usage"::Item, 'Item');
+    end;
+
+    /// <summary>
+    /// BADE (25 Eki 2026, Kitoko etiket tasarımcısı): tek ürün etiketi terminalde
+    /// seçilen ürün tasarımıyla. Boş LayoutCode = PrintItemLabel (aktif tasarım,
+    /// yoksa sabit 4x2" tasarım).
+    /// </summary>
+    procedure PrintItemLabelWithLayout(var Item: Record Item; PrinterId: Code[50]; Copies: Integer; LayoutCode: Code[20])
+    begin
+        if LayoutCode = '' then begin
+            PrintItemLabel(Item, PrinterId, Copies);
+            exit;
+        end;
+        CheckZplLayout(LayoutCode, Enum::"DOPSWHS Label Kind"::Item, PrinterId);
+        EnqueueZpl(Item."No.", BuildItemZplWithLayout(Item, LayoutCode), PrinterId, Copies, Enum::"DOPSWHS IWX Report Usage"::Item, 'Item');
+    end;
+
+    /// <summary>Item label ZPL of the requested ITEM layout; blank = BuildItemZpl (active layout, else built-in).</summary>
+    procedure BuildItemZplWithLayout(var Item: Record Item; LayoutCode: Code[20]): Text
+    var
+        LayoutEngine: Codeunit "DOPSWHS Label Layout Engine";
+        LayoutFields: Codeunit "DOPSWHS Label Layout Fields";
+        LayoutValues: Dictionary of [Text, Text];
+    begin
+        if LayoutCode = '' then
+            exit(BuildItemZpl(Item));
+        LayoutEngine.CheckLayoutKind(LayoutCode, Enum::"DOPSWHS Label Kind"::Item);
+        LayoutFields.ItemValues(Item, LayoutValues);
+        exit(LayoutEngine.BuildZpl(LayoutCode, LayoutValues, 1));
+    end;
+
+    /// <summary>Bin label ZPL of the requested BIN layout; blank = BuildBinZpl.</summary>
+    procedure BuildBinZplWithLayout(var Bin: Record Bin; LayoutCode: Code[20]): Text
+    var
+        LayoutEngine: Codeunit "DOPSWHS Label Layout Engine";
+        LayoutFields: Codeunit "DOPSWHS Label Layout Fields";
+        LayoutValues: Dictionary of [Text, Text];
+    begin
+        if LayoutCode = '' then
+            exit(BuildBinZpl(Bin));
+        LayoutEngine.CheckLayoutKind(LayoutCode, Enum::"DOPSWHS Label Kind"::Bin);
+        LayoutFields.BinValues(Bin, LayoutValues);
+        exit(LayoutEngine.BuildZpl(LayoutCode, LayoutValues, 1));
+    end;
+
+    /// <summary>Zone label ZPL of the requested ZONE layout; blank = BuildZoneZpl.</summary>
+    procedure BuildZoneZplWithLayout(var Zone: Record Zone; LayoutCode: Code[20]): Text
+    var
+        LayoutEngine: Codeunit "DOPSWHS Label Layout Engine";
+        LayoutFields: Codeunit "DOPSWHS Label Layout Fields";
+        LayoutValues: Dictionary of [Text, Text];
+    begin
+        if LayoutCode = '' then
+            exit(BuildZoneZpl(Zone));
+        LayoutEngine.CheckLayoutKind(LayoutCode, Enum::"DOPSWHS Label Kind"::Zone);
+        LayoutFields.ZoneValues(Zone, LayoutValues);
+        exit(LayoutEngine.BuildZpl(LayoutCode, LayoutValues, 1));
+    end;
+
+    /// <summary>
+    /// A chosen layout is ZPL; a PDF document printer would silently print the
+    /// generic barcode page instead, so it is refused.
+    /// </summary>
+    local procedure CheckZplLayout(LayoutCode: Code[20]; Kind: Enum "DOPSWHS Label Kind"; PrinterId: Code[50])
+    var
+        Printer: Record "DOPSWHS Printer";
+        LayoutEngine: Codeunit "DOPSWHS Label Layout Engine";
+    begin
+        LayoutEngine.CheckLayoutKind(LayoutCode, Kind);
+        if Printer.Get(PrinterId) and (Printer."Format" = Printer."Format"::PDF) then
+            Error('%1 bir PDF yazıcıdır; seçilen etiket tasarımı yalnızca ZPL etiket yazıcısında basılabilir.', PrinterId);
+        CheckPrinterResolution(PrinterId, LayoutCode);
+    end;
+
+    local procedure CheckPrinterResolution(PrinterId: Code[50]; LayoutCode: Code[20])
+    var
+        LayoutEngine: Codeunit "DOPSWHS Label Layout Engine";
+        WidthMm: Decimal;
+        HeightMm: Decimal;
+        Dpi: Integer;
+    begin
+        if PrinterId = '' then
+            exit;
+        LayoutEngine.LayoutSize(LayoutCode, WidthMm, HeightMm, Dpi);
+        CheckLayoutDpi(PrinterId, Dpi);
+    end;
+
+    /// <summary>
+    /// ZPL coordinates are printer dots, so a layout must use the printer's
+    /// resolution: a 300 dpi layout on a 203 dpi printer prints 1.5 times too large
+    /// and runs off the label. Only checked when the printer's "Resolution (dpi)"
+    /// is filled in (0 = unknown, nothing to compare).
+    /// </summary>
+    procedure CheckLayoutDpi(PrinterId: Code[50]; LayoutDpi: Integer)
+    var
+        Printer: Record "DOPSWHS Printer";
+    begin
+        if LayoutDpi <= 0 then
+            LayoutDpi := 203;
+        if not Printer.Get(PrinterId) then
+            exit;
+        if Printer."Resolution (dpi)" <= 0 then
+            exit;
+        if Printer."Resolution (dpi)" <> LayoutDpi then
+            Error('%1 yazıcısı %2 dpi, etiket tasarımı %3 dpi. Tasarımcıda çözünürlüğü %2 dpi yapın; aksi halde etiket yanlış ölçüde basılır ve sığmaz.', Printer."Code", Printer."Resolution (dpi)", LayoutDpi);
+    end;
+
+    /// <summary>
+    /// One lot label per distinct item + variant + lot on the LP (quantity = that
+    /// lot's total on the LP). LayoutCode blank = the active lot layout, else the
+    /// default "LOT" layout (created when missing). ZPL label printers only.
+    /// Returns the number of distinct lots (0 = no lot lines, nothing sent).
+    /// </summary>
+    procedure PrintLotLabels(var LP: Record "DOPSWHS LP Header"; PrinterId: Code[50]; Copies: Integer; LayoutCode: Code[20]): Integer
+    var
+        Printer: Record "DOPSWHS Printer";
+        Zpl: Text;
+        LotCount: Integer;
+    begin
+        if Printer.Get(PrinterId) and (Printer."Format" = Printer."Format"::PDF) then
+            Error('%1 bir PDF yazıcıdır; lot etiketi yalnızca ZPL etiket yazıcısında basılabilir.', PrinterId);
+        Zpl := BuildLotZpl(LP, LayoutCode, LotCount);
+        if LotCount = 0 then
+            exit(0);
+        EnqueueZpl(LP."No.", Zpl, PrinterId, Copies, Enum::"DOPSWHS IWX Report Usage"::LpLabel, 'Lot');
+        exit(LotCount);
+    end;
+
+    /// <summary>Lot label ZPL of all lots on the LP (one ^XA..^XZ per lot); LotCount = labels.</summary>
+    procedure BuildLotZpl(var LP: Record "DOPSWHS LP Header"; LayoutCode: Code[20]; var LotCount: Integer): Text
+    var
+        LPLine: Record "DOPSWHS LP Line";
+        GroupLine: Record "DOPSWHS LP Line";
+        LayoutEngine: Codeunit "DOPSWHS Label Layout Engine";
+        LayoutFields: Codeunit "DOPSWHS Label Layout Fields";
+        LayoutValues: Dictionary of [Text, Text];
+        Done: List of [Text];
+        GroupKey: Text;
+        SourceDocument: Text;
+        ResolvedCode: Code[20];
+        Quantity: Decimal;
+        Expiration: Date;
+        Zpl: Text;
+    begin
+        LotCount := 0;
+        if not LayoutEngine.ResolveLayout(Enum::"DOPSWHS Label Kind"::Lot, LayoutCode, ResolvedCode) then begin
+            LayoutEngine.EnsureLotLayout();
+            ResolvedCode := LayoutEngine.DefaultCode(Enum::"DOPSWHS Label Kind"::Lot);
+            LayoutEngine.CheckLayoutKind(ResolvedCode, Enum::"DOPSWHS Label Kind"::Lot);
+        end;
+        CheckZplLayout(ResolvedCode, Enum::"DOPSWHS Label Kind"::Lot, '');
+        LPLine.SetRange("LP No.", LP."No.");
+        LPLine.SetFilter("Item No.", '<>%1', '');
+        LPLine.SetFilter("Lot No.", '<>%1', '');
+        if not LPLine.FindSet() then
+            exit('');
+        repeat
+            GroupKey := LPLine."Item No." + '|' + LPLine."Variant Code" + '|' + LPLine."Lot No.";
+            if not Done.Contains(GroupKey) then begin
+                Done.Add(GroupKey);
+                Quantity := 0;
+                Expiration := 0D;
+                GroupLine.SetRange("LP No.", LP."No.");
+                GroupLine.SetRange("Item No.", LPLine."Item No.");
+                GroupLine.SetRange("Variant Code", LPLine."Variant Code");
+                GroupLine.SetRange("Lot No.", LPLine."Lot No.");
+                GroupLine.SetRange("Unit of Measure", LPLine."Unit of Measure");
+                if GroupLine.FindSet() then
+                    repeat
+                        Quantity += GroupLine.Quantity;
+                        if (GroupLine."Expiration Date" <> 0D) and ((Expiration = 0D) or (GroupLine."Expiration Date" < Expiration)) then
+                            Expiration := GroupLine."Expiration Date";
+                    until GroupLine.Next() = 0;
+                SourceDocument := '';
+                if LPLine."Source Document No." <> '' then
+                    SourceDocument := LayoutFields.DocumentText(LPLine."Source Document Type", LPLine."Source Document No.")
+                else
+                    if LP."Pending Receipt No." <> '' then
+                        SourceDocument := LayoutFields.DocumentText(Enum::"DOPSWHS Assigned Doc Type"::WhseReceipt, LP."Pending Receipt No.");
+                LayoutFields.LotValues(LPLine."Item No.", LPLine."Variant Code", LPLine."Lot No.", Expiration, Quantity,
+                    LPLine."Unit of Measure", SourceDocument, LP."No.", LayoutValues);
+                Zpl += LayoutEngine.BuildZpl(ResolvedCode, LayoutValues, 1);
+                LotCount += 1;
+            end;
+        until LPLine.Next() = 0;
+        exit(Zpl);
     end;
 
     /// <summary>
@@ -554,6 +755,62 @@ codeunit 72051 "DOPSWHS Print Dispatcher"
         EnqueueZpl(Bin."Code", BuildBinZpl(Bin), PrinterId, Copies, Enum::"DOPSWHS IWX Report Usage"::Bin, 'Bin');
     end;
 
+    /// <summary>BADE (25 Eki 2026): bin label with the layout chosen on the terminal; blank = PrintBinLabel.</summary>
+    procedure PrintBinLabelWithLayout(var Bin: Record Bin; PrinterId: Code[50]; Copies: Integer; LayoutCode: Code[20])
+    begin
+        if LayoutCode = '' then begin
+            PrintBinLabel(Bin, PrinterId, Copies);
+            exit;
+        end;
+        CheckZplLayout(LayoutCode, Enum::"DOPSWHS Label Kind"::Bin, PrinterId);
+        EnqueueZpl(Bin."Code", BuildBinZplWithLayout(Bin, LayoutCode), PrinterId, Copies, Enum::"DOPSWHS IWX Report Usage"::Bin, 'Bin');
+    end;
+
+    /// <summary>BADE (25 Eki 2026, Kitoko etiket tasarımcısı): alan (zone) etiketi.</summary>
+    procedure PrintZoneLabel(var Zone: Record Zone; PrinterId: Code[50]; Copies: Integer)
+    var
+        Printer: Record "DOPSWHS Printer";
+    begin
+        if Printer.Get(PrinterId) then
+            if Printer."Format" = Printer."Format"::PDF then begin
+                PrintBarcodeDocument(PrinterId, Zone.Code, Copies, Zone.Code, 'ALAN ETIKETI', Zone."Location Code" + ' | ' + Zone.Description);
+                exit;
+            end;
+        EnqueueZpl(Zone.Code, BuildZoneZpl(Zone), PrinterId, Copies, Enum::"DOPSWHS IWX Report Usage"::Bin, 'Zone');
+    end;
+
+    /// <summary>Zone label with the layout chosen on the terminal; blank = PrintZoneLabel.</summary>
+    procedure PrintZoneLabelWithLayout(var Zone: Record Zone; PrinterId: Code[50]; Copies: Integer; LayoutCode: Code[20])
+    begin
+        if LayoutCode = '' then begin
+            PrintZoneLabel(Zone, PrinterId, Copies);
+            exit;
+        end;
+        CheckZplLayout(LayoutCode, Enum::"DOPSWHS Label Kind"::Zone, PrinterId);
+        EnqueueZpl(Zone.Code, BuildZoneZplWithLayout(Zone, LayoutCode), PrinterId, Copies, Enum::"DOPSWHS IWX Report Usage"::Bin, 'Zone');
+    end;
+
+    /// <summary>
+    /// Etiket tasarım ekranındaki "Test Baskı": ÖRNEK verili ZPL, ürün/raf/LP
+    /// etiketiyle aynı kuyruk kanalından gönderilir.
+    /// </summary>
+    procedure PrintLayoutTest(Zpl: Text; PrinterId: Code[50]; Kind: Enum "DOPSWHS Label Kind")
+    var
+        Printer: Record "DOPSWHS Printer";
+    begin
+        if Printer.Get(PrinterId) then
+            if Printer."Format" = Printer."Format"::PDF then
+                Error('%1 bir PDF yazıcıdır; ZPL etiket yazıcısı seçin.', PrinterId);
+        case Kind of
+            Kind::Item:
+                EnqueueZpl('ETIKET-TEST', Zpl, PrinterId, 1, Enum::"DOPSWHS IWX Report Usage"::Item, 'Test');
+            Kind::LP, Kind::Lot:
+                EnqueueZpl('ETIKET-TEST', Zpl, PrinterId, 1, Enum::"DOPSWHS IWX Report Usage"::LpLabel, 'Test');
+            else
+                EnqueueZpl('ETIKET-TEST', Zpl, PrinterId, 1, Enum::"DOPSWHS IWX Report Usage"::Bin, 'Test');
+        end;
+    end;
+
     /// <summary>
     /// Renders the exact value scanned by a terminal as a one-page PDF and
     /// sends it to the explicitly selected document printer. This deliberately
@@ -746,11 +1003,21 @@ codeunit 72051 "DOPSWHS Print Dispatcher"
     /// two-line description, base unit, Code128 + QR. Both barcodes carry the bare
     /// item number, which the terminal resolves as an item by default.
     /// </summary>
-    local procedure BuildItemZpl(var Item: Record Item): Text
+    procedure BuildItemZpl(var Item: Record Item): Text
     var
         ZplEncoder: Codeunit "DOPSWHS ZPL Encoder";
+        LayoutEngine: Codeunit "DOPSWHS Label Layout Engine";
+        LayoutFields: Codeunit "DOPSWHS Label Layout Fields";
+        LayoutValues: Dictionary of [Text, Text];
+        LayoutCode: Code[20];
         NoFont: Integer;
     begin
+        // BADE (25 Eki 2026): aktif ürün etiket tasarımı varsa onu kullan; yoksa
+        // aşağıdaki sabit 4x2" tasarım aynen kalır (varsayılan tasarımlar pasif).
+        if LayoutEngine.FindActiveLayout(Enum::"DOPSWHS Label Kind"::Item, LayoutCode) then begin
+            LayoutFields.ItemValues(Item, LayoutValues);
+            exit(LayoutEngine.BuildZpl(LayoutCode, LayoutValues, 1));
+        end;
         NoFont := FitFontSize(Item."No.", 560, 72);
         exit(
             '^XA^CI28^PW812^LL406' +
@@ -782,12 +1049,21 @@ codeunit 72051 "DOPSWHS Print Dispatcher"
     /// left column at the largest size that fits, followed by zone / bin type /
     /// description, Code128 + QR. Barcodes carry the bare bin code.
     /// </summary>
-    local procedure BuildBinZpl(var Bin: Record Bin): Text
+    procedure BuildBinZpl(var Bin: Record Bin): Text
     var
         ZplEncoder: Codeunit "DOPSWHS ZPL Encoder";
+        LayoutEngine: Codeunit "DOPSWHS Label Layout Engine";
+        LayoutFields: Codeunit "DOPSWHS Label Layout Fields";
+        LayoutValues: Dictionary of [Text, Text];
+        LayoutCode: Code[20];
         InfoText: Text;
         CodeFont: Integer;
     begin
+        // BADE (25 Eki 2026): aktif raf etiket tasarımı varsa onu kullan; yoksa sabit 4x2".
+        if LayoutEngine.FindActiveLayout(Enum::"DOPSWHS Label Kind"::Bin, LayoutCode) then begin
+            LayoutFields.BinValues(Bin, LayoutValues);
+            exit(LayoutEngine.BuildZpl(LayoutCode, LayoutValues, 1));
+        end;
         CodeFont := FitFontSize(Bin.Code, 560, 110);
         if Bin."Zone Code" <> '' then
             InfoText := 'BÖLGE: ' + Bin."Zone Code";
@@ -805,6 +1081,52 @@ codeunit 72051 "DOPSWHS Print Dispatcher"
             '^FO24,236^BY' + Format(BarcodeModuleWidth(Bin.Code)) + '^BCN,110,Y,N,N^FH_^FD' + ZplEncoder.EncodeFieldData(Bin.Code) + '^FS' +
             '^FO604,180^BQN,2,7^FH_^FDLA,' + ZplEncoder.EncodeFieldData(Bin.Code) + '^FS' +
             '^XZ');
+    end;
+
+    /// <summary>
+    /// Zone label (BADE 25 Eki 2026, Kitoko'dan): the zone code as the largest text,
+    /// its description under it, QR + Code128 carrying the zone code, laid out on the
+    /// Setup label canvas (default 80x40 mm). An active ZONE layout replaces it.
+    /// </summary>
+    procedure BuildZoneZpl(var Zone: Record Zone): Text
+    var
+        Canvas: Codeunit "DOPSWHS Label Canvas";
+        LayoutEngine: Codeunit "DOPSWHS Label Layout Engine";
+        LayoutFields: Codeunit "DOPSWHS Label Layout Fields";
+        LayoutValues: Dictionary of [Text, Text];
+        LayoutCode: Code[20];
+        Zpl: Text;
+        X: Integer;
+        ColumnWidth: Integer;
+        Y: Integer;
+        CodeFont: Integer;
+        CodeWidth: Integer;
+        CodeMax: Integer;
+        FitWidth: Integer;
+    begin
+        if LayoutEngine.FindActiveLayout(Enum::"DOPSWHS Label Kind"::Zone, LayoutCode) then begin
+            LayoutFields.ZoneValues(Zone, LayoutValues);
+            exit(LayoutEngine.BuildZpl(LayoutCode, LayoutValues, 1));
+        end;
+        Canvas.Init();
+        Zpl := Canvas.Frame('ALAN ETİKETİ', Zone."Location Code", Zone.Code, '', X, ColumnWidth, Y);
+        CodeMax := Canvas.LabelHeight() * 32 div 100;
+        if CodeMax < 60 then
+            CodeMax := 60;
+        if CodeMax > 120 then
+            CodeMax := 120;
+        FitWidth := ColumnWidth * 96 div 100;
+        CodeFont := Canvas.FitFontMeasured(Zone.Code, FitWidth, CodeMax, 36);
+        CodeWidth := Canvas.FitFontMeasured(Zone.Code, FitWidth, CodeFont, 10);
+        Zpl += Canvas.WriteSized(X, Y, CodeFont + CodeFont div 10, CodeWidth, ColumnWidth, Zone.Code);
+        Y += CodeFont + CodeFont div 10 + 6;
+        if Zone.Description <> '' then begin
+            Zpl += Canvas.Write(X, Y, Canvas.NormalFont(), ColumnWidth, CopyStr(Zone.Description, 1, Canvas.MaxChars(ColumnWidth, Canvas.NormalFont())));
+            Y += Canvas.Pitch();
+        end;
+        Y += 2;
+        Zpl += Canvas.Code128(X, Y, Canvas.BarHeightToBottom(Y, false), Zone.Code, ColumnWidth, false);
+        exit(Zpl + Canvas.Finish());
     end;
 
     local procedure AppendLabelPart(Existing: Text; Part: Text): Text

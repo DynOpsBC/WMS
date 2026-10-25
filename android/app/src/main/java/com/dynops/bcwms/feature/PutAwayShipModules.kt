@@ -15,6 +15,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -1045,15 +1047,26 @@ private fun BatchLpPutAwaySheet(
             checkingBin = true
             status = "$candidate rafı kontrol ediliyor..."
             val page = BcApi.getAllPages(context, putAwayExactBinPath(locationCode, candidate))
-            val found = page.rows.firstOrNull()
-            if (page.complete && found != null) {
+            val found = if (page.complete) putAwayBatchBinRow(page.rows, candidate) else null
+            // BADE (25 Eki 2026): bloke / mal kabul / sevk / düzeltme gözü hedef olamaz.
+            val rejectBin = lpPairs.firstNotNullOfOrNull { pair ->
+                pair.place.optString("lpQualityBin").trim().takeIf {
+                    pair.place.optString("lpQualityStatus").trim().equals("failed", ignoreCase = true) &&
+                        it.equals(found?.optString("code")?.trim().orEmpty(), ignoreCase = true)
+                }
+            }.orEmpty()
+            val problem = if (page.complete && found != null) putAwayTargetBinError(candidate, locationCode, found, rejectBin) else null
+            if (page.complete && found != null && problem == null) {
                 currentBin = found.optString("code").ifBlank { candidate }
                 status = "TAMAM: Hedef raf $currentBin — LP'leri peş peşe okutun."
             } else {
-                status = if (page.complete)
-                    "HATA: $candidate rafı $locationCode lokasyonunda bulunamadı."
-                else
-                    "HATA: Raf doğrulanamadı; bağlantıyı kontrol edip tekrar okutun."
+                status = when {
+                    !page.complete -> "HATA: Raf doğrulanamadı; bağlantıyı kontrol edip tekrar okutun."
+                    problem != null -> "HATA: " + problem.removePrefix("❌ ")
+                    page.rows.size > 1 && putAwayExactBinRow(page.rows, candidate) == null ->
+                        "HATA: $candidate tam bir raf kodu değil; ${page.rows.size} raf eşleşti. Rafın kendi etiketini okutun."
+                    else -> "HATA: " + putAwayTargetBinError(candidate, locationCode, null).orEmpty().removePrefix("❌ ")
+                }
             }
             scan = ""
             checkingBin = false
@@ -1246,6 +1259,11 @@ private fun PutAwayGuidedSheet(
     var hint by remember { mutableStateOf("") }
     var showBinList by remember { mutableStateOf(false) }
     var validatingTargetBin by remember { mutableStateOf(false) }
+    // BADE (25 Eki 2026): hata sonrası okutma alanı odakta kalır; donanım
+    // tarayıcısı yalnız odaklı alana yazar.
+    val scanFocus = remember { androidx.compose.ui.focus.FocusRequester() }
+    val qualityRejectBin = if (place.optString("lpQualityStatus").trim().equals("failed", ignoreCase = true))
+        place.optString("lpQualityBin").trim() else ""
 
     val outstanding = place.optDouble("qtyOutstanding", Double.NaN)
     val handled = place.optDouble("qtyHandled", 0.0)
@@ -1285,7 +1303,12 @@ private fun PutAwayGuidedSheet(
         return needle.equals(expectedLp, ignoreCase = true)
     }
 
-    suspend fun targetBinExists(binCode: String): Boolean? {
+    /**
+     * BADE (25 Eki 2026): hedef raf BC'de aranır. complete=false bağlantı hatası;
+     * row=null rafın lokasyonda olmadığı. $select kullanılmaz: eski BC'de
+     * putAwayBlock alanı yoksa istek 400 vermesin.
+     */
+    suspend fun lookupTargetBin(binCode: String): Pair<Boolean, JSONObject?> {
         val safeLocation = odataLiteral(locationCode)
         val safeBin = odataLiteral(binCode)
         val filter = if (safeLocation.isNotBlank())
@@ -1294,10 +1317,19 @@ private fun PutAwayGuidedSheet(
             "code eq '$safeBin'"
         val page = BcApi.getAllPages(
             context,
-            "bins?\$filter=$filter&\$select=code&\$top=1",
+            "bins?\$filter=$filter&\$top=1",
         )
-        if (!page.complete) return null
-        return page.rows.any { it.optString("code").equals(binCode, ignoreCase = true) }
+        if (!page.complete) return false to null
+        return true to putAwayExactBinRow(page.rows, binCode)
+    }
+
+    /** LP numarası beklenmiyorsa okutulan paletin BC'de var olduğu doğrulanır (null = bağlantı hatası). */
+    suspend fun lpExists(lpValue: String): Boolean? {
+        val path = if (lpValue.length == 18 && lpValue.all { it.isDigit() }) licensePlateBySsccPath(lpValue)
+            else "licensePlates?\$filter=no eq '${odataLiteral(lpValue.uppercase())}'&\$select=no&\$top=1"
+        val page = BcApi.getAllPages(context, path)
+        if (!page.complete) return if (page.error?.httpCode == 404) false else null
+        return page.rows.isNotEmpty()
     }
 
     fun advance() {
@@ -1306,25 +1338,50 @@ private fun PutAwayGuidedSheet(
         step = steps[(steps.indexOf(step) + 1).coerceAtMost(steps.lastIndex)]
     }
 
+    /** Hata: alan temizlenir ve odakta kalır, sonraki okutma doğrudan buraya düşer. */
+    fun fail(message: String) {
+        hint = ""
+        error = message
+        scan = ""
+        runCatching { scanFocus.requestFocus() }
+    }
+
     fun submit(raw: String) {
         val v = raw.trim()
         if (v.isBlank()) return
         when (step) {
             PutAwayStep.LP ->
-                if (lpMatches(v)) {
-                    scannedLp = scannedLpValue(v)
-                    advance()
-                } else error =
+                if (!lpMatches(v)) fail(
                     if (expectedLp.isNotBlank())
                         "❌ Yanlış LP. Beklenen: $expectedLp · Okuttuğunuz: $v"
                     else
                         "❌ Palet okunamadı. Etiketi tekrar okutun."
+                ) else if (expectedLp.isNotBlank()) {
+                    scannedLp = scannedLpValue(v)
+                    advance()
+                } else {
+                    // BADE (25 Eki 2026): beklenen LP yokken olmayan bir LP kabul
+                    // edilip hata ancak onayda çıkıyordu; şimdi okutulunca denetlenir.
+                    if (validatingTargetBin) return
+                    val lpValue = scannedLpValue(v)
+                    validatingTargetBin = true
+                    error = ""
+                    hint = "LP doğrulanıyor..."
+                    scope.launch {
+                        when (lpExists(lpValue)) {
+                            true -> { hint = ""; scannedLp = lpValue; advance() }
+                            false -> fail("❌ $lpValue LP'si BC'de bulunamadı. Paletin etiketini kontrol edip tekrar okutun.")
+                            null -> fail("❌ LP doğrulanamadı. Bağlantıyı kontrol edip tekrar okutun.")
+                        }
+                        validatingTargetBin = false
+                    }
+                }
             PutAwayStep.SOURCE_BIN ->
                 if (binEquals(v, expectedSource)) advance()
-                else error = "❌ Yanlış raf. Beklenen: $expectedSource · Okuttuğunuz: $v"
+                else fail("❌ Yanlış raf. Beklenen: $expectedSource · Okuttuğunuz: $v")
             PutAwayStep.ITEM ->
                 if (itemMatches(v)) advance()
-                else error = "❌ Yanlış ürün. Beklenen: $expectedItem · Okuttuğunuz: $v"
+                else fail("❌ Yanlış ürün. Beklenen: $expectedItem · Okuttuğunuz: $v")
             PutAwayStep.TARGET_BIN -> {
                 if (validatingTargetBin) return
                 val selectedBin = BarcodeIntentResolver.resolve(v).value.trim().ifBlank { v }
@@ -1332,24 +1389,20 @@ private fun PutAwayGuidedSheet(
                 error = ""
                 hint = "Raf doğrulanıyor..."
                 scope.launch {
-                    val exists = targetBinExists(selectedBin)
+                    val (complete, row) = lookupTargetBin(selectedBin)
+                    val problem = if (complete) putAwayTargetBinError(selectedBin, locationCode, row, qualityRejectBin) else null
                     when {
-                        exists == null -> {
-                            hint = ""
-                            error = "❌ Raf doğrulanamadı. Bağlantıyı kontrol edip tekrar deneyin."
-                        }
-                        decidePutAwayTarget(selectedBin, expectedTarget, exists) in setOf(
+                        !complete -> fail("❌ Raf doğrulanamadı. Bağlantıyı kontrol edip tekrar okutun.")
+                        problem != null -> fail(problem)
+                        decidePutAwayTarget(selectedBin, expectedTarget, row != null) in setOf(
                             PutAwayTargetDecision.SUGGESTED,
                             PutAwayTargetDecision.ALTERNATIVE,
                         ) -> {
-                            targetBin = selectedBin
+                            targetBin = row?.optString("code")?.trim()?.ifBlank { null } ?: selectedBin
                             hint = ""
                             advance()
                         }
-                        else -> {
-                            hint = ""
-                            error = "❌ $selectedBin rafı $locationCode lokasyonunda bulunamadı."
-                        }
+                        else -> fail(putAwayTargetBinError(selectedBin, locationCode, null).orEmpty())
                     }
                     validatingTargetBin = false
                 }
@@ -1447,11 +1500,20 @@ private fun PutAwayGuidedSheet(
                         else -> "Raf okut"
                     },
                     value = scan,
-                    onValueChange = { scan = it },
+                    onValueChange = { scan = it; if (it.isNotBlank()) error = "" },
                     modifier = Modifier.fillMaxWidth(),
                     scanOnly = false,
+                    focusRequester = scanFocus,
                     onScanned = { submit(it) },
                 )
+                // BADE (25 Eki 2026): hata kartı okutma alanının hemen altında.
+                // Eskiden "Bin Listesinden Seç" düğmesinin altındaydı ve ekran
+                // klavyesi / küçük terminal ekranında görünmüyordu: operatör olmayan
+                // bir rafı okutunca "hiçbir şey olmadı" sanıp takılıyordu.
+                if (error.isNotBlank()) {
+                    Spacer(Modifier.height(6.dp))
+                    PutAwayStepError(error)
+                }
                 Spacer(Modifier.height(6.dp))
                 Button(
                     onClick = { submit(scan) },
@@ -1462,7 +1524,7 @@ private fun PutAwayGuidedSheet(
                         CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
                         Spacer(Modifier.width(8.dp))
                     }
-                    Text(if (validatingTargetBin) "Raf kontrol ediliyor" else "Doğrula")
+                    Text(if (validatingTargetBin) (if (step == PutAwayStep.LP) "LP kontrol ediliyor" else "Raf kontrol ediliyor") else "Doğrula")
                 }
             }
 
@@ -1493,17 +1555,9 @@ private fun PutAwayGuidedSheet(
                 if (hint.isNotBlank()) { Spacer(Modifier.height(4.dp)); Text(operatorFacingStatus(hint), fontSize = 12.sp, color = Color.Gray) }
             }
 
-            if (error.isNotBlank()) {
+            if (error.isNotBlank() && step == PutAwayStep.QTY) {
                 Spacer(Modifier.height(10.dp))
-                Surface(shape = RoundedCornerShape(10.dp), color = Color(0xFFDC2626).copy(alpha = 0.12f)) {
-                    Text(
-                        error,
-                        Modifier.fillMaxWidth().padding(12.dp),
-                        color = Color(0xFFB91C1C),
-                        fontSize = 13.sp,
-                        fontWeight = FontWeight.SemiBold,
-                    )
-                }
+                PutAwayStepError(error)
             }
 
             Spacer(Modifier.height(16.dp))
@@ -1535,6 +1589,20 @@ private fun PutAwayGuidedSheet(
             TextButton(onClick = onDismiss, modifier = Modifier.fillMaxWidth()) { Text("Vazgeç") }
             Spacer(Modifier.height(24.dp))
         }
+    }
+}
+
+@Composable
+private fun PutAwayStepError(message: String) {
+    Surface(shape = RoundedCornerShape(10.dp), color = Color(0xFFDC2626).copy(alpha = 0.12f)) {
+        Text(
+            message,
+            Modifier.fillMaxWidth().padding(12.dp)
+                .semantics { liveRegion = androidx.compose.ui.semantics.LiveRegionMode.Assertive },
+            color = Color(0xFFB91C1C),
+            fontSize = 13.sp,
+            fontWeight = FontWeight.SemiBold,
+        )
     }
 }
 

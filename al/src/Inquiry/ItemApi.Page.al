@@ -105,4 +105,16 @@ page 72086 "DOPSWHS Item API"
     begin
         Dispatcher.PrintItemLabel(Rec, printerId, copies);
     end;
+
+    /// <summary>
+    /// BADE (25 Eki 2026): printLabel with the item label design chosen on the
+    /// terminal (labelLayouts, kind Item). Blank layoutCode = printLabel.
+    /// </summary>
+    [ServiceEnabled]
+    procedure printLabelWithLayout(printerId: Code[50]; copies: Integer; layoutCode: Code[20])
+    var
+        Dispatcher: Codeunit "DOPSWHS Print Dispatcher";
+    begin
+        Dispatcher.PrintItemLabelWithLayout(Rec, printerId, copies, layoutCode);
+    end;
 }

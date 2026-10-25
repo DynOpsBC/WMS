@@ -258,6 +258,57 @@ codeunit 72044 "DOPSWHS Directed PutAway" implements "DOPSWHS PutAway Strategy"
         exit(LP.IsEmpty());
     end;
 
+    /// <summary>
+    /// BADE (25 Eki 2026): yerleştirme hedefi olamayacak göz için kısa neden kodu;
+    /// '' = uygun. blocked = Hareket Blokajı Giriş/Tümü; receive / ship = lokasyonun
+    /// mal kabul / sevk gözü ya da yalnız kabul / sevk tipindeki göz; adjustment =
+    /// düzeltme gözü. Terminal hedef rafı okuttuğunda bu kodu (bins.putAwayBlock)
+    /// okuyup açık Türkçe hata gösterir; setPlacement aynı kuralla sunucuda da reddeder.
+    /// </summary>
+    procedure PutAwayTargetBlockReason(Bin: Record Bin): Text
+    var
+        Location: Record Location;
+        BinType: Record "Bin Type";
+    begin
+        if Bin."Block Movement" in [Bin."Block Movement"::Inbound, Bin."Block Movement"::All] then
+            exit('blocked');
+        if Bin."Adjustment Bin" then
+            exit('adjustment');
+        if Location.Get(Bin."Location Code") then begin
+            if (Location."Adjustment Bin Code" <> '') and (Location."Adjustment Bin Code" = Bin.Code) then
+                exit('adjustment');
+            if (Location."Receipt Bin Code" <> '') and (Location."Receipt Bin Code" = Bin.Code) then
+                exit('receive');
+            if (Location."Shipment Bin Code" <> '') and (Location."Shipment Bin Code" = Bin.Code) then
+                exit('ship');
+        end;
+        if Bin."Bin Type Code" <> '' then
+            if BinType.Get(Bin."Bin Type Code") then
+                if not BinType."Put Away" then begin
+                    if BinType.Receive then
+                        exit('receive');
+                    if BinType.Ship then
+                        exit('ship');
+                end;
+        exit('');
+    end;
+
+    /// <summary>PutAwayTargetBlockReason için operatöre gösterilen Türkçe metin; uygun gözde ''.</summary>
+    procedure PutAwayTargetBlockMessage(Bin: Record Bin): Text
+    begin
+        case PutAwayTargetBlockReason(Bin) of
+            'blocked':
+                exit(StrSubstNo(TargetBlockedErr, Bin.Code, Format(Bin."Block Movement")));
+            'receive':
+                exit(StrSubstNo(TargetReceiveErr, Bin.Code));
+            'ship':
+                exit(StrSubstNo(TargetShipErr, Bin.Code));
+            'adjustment':
+                exit(StrSubstNo(TargetAdjustmentErr, Bin.Code));
+        end;
+        exit('');
+    end;
+
     local procedure CollectSpecialBins(Location: Record Location; var SpecialBins: List of [Code[20]])
     begin
         Clear(SpecialBins);
@@ -361,4 +412,10 @@ codeunit 72044 "DOPSWHS Directed PutAway" implements "DOPSWHS PutAway Strategy"
             exit(Zone."Zone Ranking");
         exit(0);
     end;
+
+    var
+        TargetBlockedErr: Label '%1 rafı yerleştirmeye kapalı (Hareket Blokajı: %2). Başka bir raf okutun.', Comment = '%1 = bin code, %2 = block movement';
+        TargetReceiveErr: Label '%1 rafı mal kabul gözüdür; yerleştirme hedefi olamaz. Başka bir raf okutun.', Comment = '%1 = bin code';
+        TargetShipErr: Label '%1 rafı sevkiyat gözüdür; yerleştirme hedefi olamaz. Başka bir raf okutun.', Comment = '%1 = bin code';
+        TargetAdjustmentErr: Label '%1 rafı düzeltme (sayım farkı) gözüdür; yerleştirme hedefi olamaz. Başka bir raf okutun.', Comment = '%1 = bin code';
 }

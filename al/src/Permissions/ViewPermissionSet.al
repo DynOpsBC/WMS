@@ -249,5 +249,22 @@ permissionset 72096 "DOPSWHS-VIEW"
         tabledata "Prod. Order Routing Line" = R,
         tabledata "Prod. Order Component" = R,
         tabledata "Work Center" = R,
+        // BADE (25 Eki 2026, Kitoko'dan): etiket tasarımları + sürükle-bırak tasarımcı.
+        tabledata "DOPSWHS Label Layout" = R,
+        table "DOPSWHS Label Layout" = X,
+        tabledata "DOPSWHS Label Layout Line" = R,
+        table "DOPSWHS Label Layout Line" = X,
+        page "DOPSWHS Label Layout List" = X,
+        page "DOPSWHS Label Layout Card" = X,
+        page "DOPSWHS Label Layout Lines" = X,
+        page "DOPSWHS Label Layout API" = X,
+        codeunit "DOPSWHS Label Layout Engine" = X,
+        codeunit "DOPSWHS Label Layout Fields" = X,
+        codeunit "DOPSWHS Label Layout Preview" = X,
+        tabledata "DOPSWHS Label Image" = R,
+        table "DOPSWHS Label Image" = X,
+        page "DOPSWHS Label Image List" = X,
+        page "DOPSWHS Label Designer" = X,
+        codeunit "DOPSWHS Label Designer Mgt" = X,
         tabledata Vendor = R;
 }
