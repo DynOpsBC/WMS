@@ -64,5 +64,13 @@ tableextension 72429 "DOPSWHS Whse Activity Hdr Ext" extends "Warehouse Activity
                         LP."No.", LP."Assigned Document Type", LP."Assigned Document No.");
             end;
         }
+        // BADE (26 Eki 2026): atanan kullanıcı kodu yerine adı görünsün.
+        field(72406; "DOPSWHS Assigned User Name"; Text[100])
+        {
+            Caption = 'Atanan Kullanıcı Adı';
+            FieldClass = FlowField;
+            CalcFormula = lookup("DOPSWHS Local User"."Display Name" where(Username = field("Assigned User ID")));
+            Editable = false;
+        }
     }
 }

@@ -21,6 +21,14 @@ pageextension 72303 "DOPSWHS Whse Receipt Ext" extends "Warehouse Receipt"
                 exit(false);
             end;
         }
+        addafter("Assigned User ID")
+        {
+            field("DOPSWHS Assigned User Name Hdr"; Rec."DOPSWHS Assigned User Name")
+            {
+                ApplicationArea = All;
+                ToolTip = 'Belgeye atanan WMS kullanıcısının adı.';
+            }
+        }
         // FactBoxes may only contain part/systempart controls. Keep these header
         // fields in the document's General area instead of an invalid FactBox group.
         addlast(General)
@@ -28,7 +36,7 @@ pageextension 72303 "DOPSWHS Whse Receipt Ext" extends "Warehouse Receipt"
             group("DOPSWHS Mobile FactBox")
             {
                 Caption = 'DOPSWHS Mobile';
-                field("DOPSWHS Assigned User"; Rec."Assigned User ID")
+                field("DOPSWHS Assigned User"; Rec."DOPSWHS Assigned User Name")
                 {
                     ApplicationArea = All;
                     Caption = 'Atanan Kullanıcı';

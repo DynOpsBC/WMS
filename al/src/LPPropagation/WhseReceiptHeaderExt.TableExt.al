@@ -25,6 +25,14 @@ tableextension 72422 "DOPSWHS Whse Rcpt Hdr Ext" extends "Warehouse Receipt Head
             DataClassification = SystemMetadata;
             Editable = false;
         }
+        // BADE (26 Eki 2026): atanan kullanıcı kodu yerine adı görünsün.
+        field(72436; "DOPSWHS Assigned User Name"; Text[100])
+        {
+            Caption = 'Atanan Kullanıcı Adı';
+            FieldClass = FlowField;
+            CalcFormula = lookup("DOPSWHS Local User"."Display Name" where(Username = field("Assigned User ID")));
+            Editable = false;
+        }
     }
 
     trigger OnBeforeDelete()

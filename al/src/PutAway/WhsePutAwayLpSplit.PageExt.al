@@ -5,6 +5,37 @@
 /// </summary>
 pageextension 72328 "DOPSWHS Whse PutAway LP Split" extends "Warehouse Put-away"
 {
+    layout
+    {
+        // BADE (26 Eki 2026): standart liste yalnız BC ambar çalışanlarını
+        // gösteriyordu. Mal kabuldeki gibi WMS kullanıcıları listelenir ve adı görünür.
+        modify("Assigned User ID")
+        {
+            trigger OnLookup(var Text: Text): Boolean
+            var
+                LocalUser: Record "DOPSWHS Local User";
+            begin
+                LocalUser.SetRange(Disabled, false);
+                if Page.RunModal(Page::"DOPSWHS Terminal Users", LocalUser) <> Action::LookupOK then
+                    exit(false);
+                Rec."Assigned User ID" := LocalUser.Username;
+                Rec."Assignment Date" := Today();
+                Rec."Assignment Time" := Time();
+                Rec.Modify(true);
+                CurrPage.Update(false);
+                exit(false);
+            end;
+        }
+        addafter("Assigned User ID")
+        {
+            field("DOPSWHS Assigned User Name"; Rec."DOPSWHS Assigned User Name")
+            {
+                ApplicationArea = All;
+                ToolTip = 'Belgeye atanan WMS kullanıcısının adı.';
+            }
+        }
+    }
+
     actions
     {
         addlast("F&unctions")

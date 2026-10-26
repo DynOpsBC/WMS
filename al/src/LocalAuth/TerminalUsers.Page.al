@@ -15,6 +15,7 @@ page 72324 "DOPSWHS Terminal Users"
         {
             repeater(Users)
             {
+                field(Username; Rec.Username) { Caption = 'Kullanıcı Kodu'; ApplicationArea = All; Editable = false; }
                 field("Display Name"; Rec."Display Name") { Caption = 'Ad Soyad'; ApplicationArea = All; Editable = CanManageUsers; }
                 field("Terminal Admin"; Rec."Terminal Admin") { ApplicationArea = All; Editable = false; }
                 field("Terminal Code"; Rec."Terminal Code") { ApplicationArea = All; Editable = CanManageUsers; }
