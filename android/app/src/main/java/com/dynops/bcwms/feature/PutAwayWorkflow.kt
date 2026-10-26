@@ -76,9 +76,26 @@ internal fun putAwayAssigneeLabel(assignedUserId: String, assignedUserName: Stri
 
 private fun odataQuote(value: String): String = value.trim().replace("'", "''")
 
-/** LP'yi taşıyan yerleştirme satırları (Al veya Koy). */
+/**
+ * LP'yi taşıyan ambar aktivitesi satırları (Al veya Koy). Uç tüm aktivite türlerini
+ * döndürür (toplama, hareket de); yerleştirme dışındakiler [putAwayDocNos] ile elenir.
+ */
 internal fun putAwayLinesByLpPath(lpNo: String): String =
-    "putAwayLines?\$filter=lpNo eq '${odataQuote(lpNo.uppercase())}'&\$select=no&\$top=200"
+    "putAwayLines?\$filter=lpNo eq '${odataQuote(lpNo.uppercase())}'&\$select=no,activityType&\$top=200"
+
+/**
+ * BADE (26 Eki 2026, Merve): LP ile aramada LP bir toplamada da duruyorsa toplama
+ * belgesi (PI…) açılıyor ve "satırlar yüklenemedi" hatası veriyordu. Yalnız
+ * yerleştirme satırlarının belge numaraları döner.
+ */
+internal fun putAwayDocNos(rows: List<JSONObject>): Set<String> =
+    rows.filter { isPutAwayActivity(it.optString("activityType")) }
+        .map { it.optString("no").trim() }
+        .filter { it.isNotBlank() }
+        .toSet()
+
+internal fun isPutAwayActivity(raw: String): Boolean =
+    BcEnum.decodeOData(raw.trim()).equals(BcEnum.WhseActivityType.PUT_AWAY, ignoreCase = true)
 
 /** SSCC okutulduğunda LP no'yu bulmak için. */
 internal fun licensePlateBySsccPath(sscc: String): String =

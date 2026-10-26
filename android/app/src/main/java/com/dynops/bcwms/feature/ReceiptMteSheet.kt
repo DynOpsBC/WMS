@@ -33,7 +33,12 @@ internal fun receiptMteLpNos(receiptNo: String, lines: List<JSONObject>): List<S
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-internal fun ReceiptMteSheet(receiptNo: String, manualPrint: Boolean = false, onDismiss: () -> Unit) {
+internal fun ReceiptMteSheet(
+    receiptNo: String,
+    manualPrint: Boolean = false,
+    openOptionsOnLoad: Boolean = false,
+    onDismiss: () -> Unit,
+) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var lpNos by remember(receiptNo) { mutableStateOf<List<String>>(emptyList()) }
@@ -101,6 +106,10 @@ internal fun ReceiptMteSheet(receiptNo: String, manualPrint: Boolean = false, on
             loaded = page.complete
             lpNos = if (page.complete) receiptMteLpNos(receiptNo, page.rows) else emptyList()
             selected = if (manualPrint && !preselected && page.complete) lpNos.toSet() else selected.intersect(lpNos.toSet())
+            // BADE (26 Eki 2026): kayıtta yazdırma istendiyse etiket bilgileri
+            // (Giriş Yapan, Kalite Kontrol, tarih, adet) hemen sorulur.
+            if (openOptionsOnLoad && askMteOptions && !preselected && page.complete && lpNos.isNotEmpty())
+                showOptions = true
             if (page.complete) preselected = true
             status = when {
                 !page.complete -> "HATA: LP listesi tamamlanamadı. Yenileyin; mal kabulü tekrar kaydetmeyin."

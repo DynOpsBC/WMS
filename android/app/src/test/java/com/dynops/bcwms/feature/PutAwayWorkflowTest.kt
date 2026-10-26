@@ -117,7 +117,7 @@ class PutAwayWorkflowTest {
     @Test
     fun `LP aramasi satir ve atama sorgulari guvenli kurulur`() {
         assertEquals(
-            "putAwayLines?\$filter=lpNo eq 'LP000706'&\$select=no&\$top=200",
+            "putAwayLines?\$filter=lpNo eq 'LP000706'&\$select=no,activityType&\$top=200",
             putAwayLinesByLpPath(" lp000706 "),
         )
         assertTrue(putAwayLinesByLpPath("L'P").contains("'L''P'"))
@@ -136,5 +136,16 @@ class PutAwayWorkflowTest {
         assertEquals(PutAwaySearchOutcome.Open("PU001042"), putAwaySearchOutcome(setOf("PU001042")))
         assertEquals(PutAwaySearchOutcome.Filter(setOf("PU1", "PU2")), putAwaySearchOutcome(setOf("PU1", "PU2")))
         assertEquals(PutAwaySearchOutcome.NotFound, putAwaySearchOutcome(emptySet()))
+    }
+
+    @Test
+    fun `LP aramasi yalniz yerlestirme belgelerini dondurur`() {
+        val rows = listOf(
+            org.json.JSONObject().put("no", "PI002101").put("activityType", "Pick"),
+            org.json.JSONObject().put("no", "PU001067").put("activityType", "Put_x002D_away"),
+            org.json.JSONObject().put("no", "PU001068").put("activityType", "Put-away"),
+            org.json.JSONObject().put("no", "MV000010").put("activityType", "Movement"),
+        )
+        assertEquals(setOf("PU001067", "PU001068"), putAwayDocNos(rows))
     }
 }

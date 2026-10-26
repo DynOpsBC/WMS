@@ -282,8 +282,24 @@ internal fun partialLpTransferBody(source: String, target: String, lineNo: Int, 
 internal data class ReceiptPostRequest(val action: String, val body: String)
 
 /** postToPrinter also closes receipt LPs, but explicitly skips LP labels in ReceiptMgmt. */
-internal fun receiptPostRequest(skipPrinting: Boolean, printReceipt: Boolean, documentPrinter: String, lpPrinter: String): ReceiptPostRequest =
-    ReceiptPostRequest(if (skipPrinting) "postToPrinter" else "postAndCloseLP", org.json.JSONObject().apply {
+internal fun receiptDefersLabels(flavor: String): Boolean = flavor == "bade"
+
+internal fun receiptPostRequest(
+    skipPrinting: Boolean,
+    printReceipt: Boolean,
+    documentPrinter: String,
+    lpPrinter: String,
+    deferLabels: Boolean = false,
+): ReceiptPostRequest =
+    // BADE (26 Eki 2026, Merve): etiket kayıtla sorulmadan basılmasın. Kayıt LP'leri
+    // kapatır ve istenirse belgeyi basar; etiketler kayıttan sonra Giriş Yapan /
+    // Kalite Kontrol / tarih / adet sorulup basılır (ReceiptMteSheet).
+    if (deferLabels && !skipPrinting) ReceiptPostRequest("postToPrinter", org.json.JSONObject().apply {
+        put("print", printReceipt)
+        put("invoice", false)
+        put("printerId", if (printReceipt) documentPrinter else "")
+    }.toString())
+    else ReceiptPostRequest(if (skipPrinting) "postToPrinter" else "postAndCloseLP", org.json.JSONObject().apply {
         put("print", !skipPrinting && printReceipt)
         put("invoice", false)
         put("printerId", if (skipPrinting) "" else documentPrinter)

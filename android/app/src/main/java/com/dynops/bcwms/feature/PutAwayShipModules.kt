@@ -73,7 +73,7 @@ fun PutAwayModule() {
         }
         val page = BcApi.getAllPages(context, putAwayLinesByLpPath(lpNo))
         if (!page.complete) return null
-        val docs = page.rows.map { it.optString("no").trim() }.filter { it.isNotBlank() }.toSet()
+        val docs = putAwayDocNos(page.rows)
         if (docs.isNotEmpty()) return docs
         // Belge no gibi LP olmayan yazılar için LP başlığı sorgulanmaz (gereksiz 404).
         if (lpHeader == null && resolved.kind != BarcodeKind.Lp) return emptySet()
@@ -153,7 +153,9 @@ fun PutAwayModule() {
                 }
             }
         },
-    ) { item, docs ->
+    ) { item, allDocs ->
+        // Uç toplama/hareket belgelerini de döndürür; yalnız listedeki yerleştirmeler kalır.
+        val docs = allDocs.filter { no -> rows.any { it.optString("no") == no } }.toSet()
         // Ürün birden çok belgede ise bana atanan belge doğrudan açılır.
         val mine = docs.filter { no -> rows.any { it.optString("no") == no && myUser.isNotBlank() && it.optString("assignedUserId").trim().equals(myUser, true) } }
         when {

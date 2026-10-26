@@ -307,4 +307,21 @@ class LicensePlateWorkflowTest {
         assertEquals("DOC01", body.getString("printerId"))
         assertEquals("LP01", body.getString("lpPrinterId"))
     }
+
+    @Test
+    fun `BADE mal kabul kaydi etiketi basmaz, belgeyi istenirse basar`() {
+        val deferred = receiptPostRequest(false, true, "DOC01", "LP01", deferLabels = true)
+        assertEquals("postToPrinter", deferred.action)
+        val body = org.json.JSONObject(deferred.body)
+        assertEquals(true, body.getBoolean("print"))
+        assertEquals("DOC01", body.getString("printerId"))
+        assertFalse(body.has("lpPrinterId"))
+        val noDoc = org.json.JSONObject(receiptPostRequest(false, false, "DOC01", "LP01", deferLabels = true).body)
+        assertEquals(false, noDoc.getBoolean("print"))
+        assertEquals("", noDoc.getString("printerId"))
+        // Diğer müşterilerde davranış aynı kalır.
+        assertEquals("postAndCloseLP", receiptPostRequest(false, true, "DOC01", "LP01").action)
+        assertTrue(receiptDefersLabels("bade"))
+        assertFalse(receiptDefersLabels("kitoko"))
+    }
 }

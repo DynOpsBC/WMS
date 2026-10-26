@@ -224,6 +224,7 @@ private fun ReceiveDocument(no: String, onBack: () -> Unit) {
     var mixedLines by remember(no) { mutableStateOf<List<JSONObject>?>(null) }
     var printReceipt by remember(no) { mutableStateOf(false) }
     var skipPrinting by remember(no) { mutableStateOf(false) }
+    var askLabelOptionsNow by remember(no) { mutableStateOf(false) }
     var showReceiptMte by remember(no) { mutableStateOf(false) }
     var manualLabelPrint by remember(no) { mutableStateOf(false) }
     // TOPLU POST: satır onayı (PATCH receiptLines) belgeyi ASLA postlamaz —
@@ -731,12 +732,18 @@ private fun ReceiveDocument(no: String, onBack: () -> Unit) {
                         reload()
                         return@launch
                     }
+                    val deferLabels = receiptDefersLabels(com.dynops.bcwms.BuildConfig.FLAVOR)
                     val postRequest = receiptPostRequest(skipPrinting, printReceipt,
-                        getDefaultPrinter(context, PRINTER_USAGE_DOCUMENT), getMtePrinter(context))
+                        getDefaultPrinter(context, PRINTER_USAGE_DOCUMENT), getMtePrinter(context), deferLabels)
                     val r = BcApi.boundAction(context, "receipts", no, postRequest.action, postRequest.body)
                     // BADE (16 Eyl 2026): Kurulum "Manual Receipt Label Print" açıksa
                     // etiket basılmadı; kayıt sonrası ekranda Etiket Yazdır ile basılır.
-                    if (r.ok) manualLabelPrint = skipPrinting || BcApi.manualReceiptLabelPrint(context)
+                    // BADE (26 Eki 2026): etiket hiçbir zaman kayıtla basılmaz; yazdırma
+                    // istendiyse kayıttan hemen sonra etiket bilgileri penceresi açılır.
+                    if (r.ok) {
+                        manualLabelPrint = skipPrinting || deferLabels || BcApi.manualReceiptLabelPrint(context)
+                        askLabelOptionsNow = deferLabels && !skipPrinting
+                    }
                     busy = false
                     status = if (r.ok) {
                         if (manualLabelPrint) "TAMAM: Mal kabul kaydedildi. Etiketler basılmadı; Etiket Yazdır ile basın."
@@ -785,7 +792,12 @@ private fun ReceiveDocument(no: String, onBack: () -> Unit) {
     }
 
     if (showReceiptMte) {
-        ReceiptMteSheet(receiptNo = no, manualPrint = manualLabelPrint, onDismiss = { showReceiptMte = false; reload() })
+        ReceiptMteSheet(
+            receiptNo = no,
+            manualPrint = manualLabelPrint,
+            openOptionsOnLoad = askLabelOptionsNow,
+            onDismiss = { showReceiptMte = false; askLabelOptionsNow = false; reload() },
+        )
     }
 
     if (showVehicle) {
