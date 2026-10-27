@@ -814,12 +814,9 @@ private fun ItemLabelInquiry() {
         // ve aralık düğmeleri bu seçimle basar. "Tüm ürünler" düğmeleri kaldırıldı.
         if (showLayoutPicker) item { LabelLayoutSelector(itemLayout, enabled = !loading && !printing) }
         if (showRanges) {
-            item { AllItemLabelsCard(enabled = !loading && !printing, v2Format = true, itemLimit = 300, layout = itemLayout) }
-            item { AllItemLabelsCard(enabled = !loading && !printing, v2Format = true, itemRange = 301..500, layout = itemLayout) }
-            item { AllItemLabelsCard(enabled = !loading && !printing, v2Format = true, itemRange = 501..700, layout = itemLayout) }
-            item { AllItemLabelsCard(enabled = !loading && !printing, v2Format = true, itemRange = 701..1000, layout = itemLayout) }
-            item { AllItemLabelsCard(enabled = !loading && !printing, v2Format = true, itemRange = 1001..1250, layout = itemLayout) }
-            item { AllItemLabelsCard(enabled = !loading && !printing, v2Format = true, itemRange = 1251..1500, layout = itemLayout) }
+            items(itemLabelRanges(com.dynops.bcwms.BuildConfig.FLAVOR == "kitoko")) { range ->
+                AllItemLabelsCard(enabled = !loading && !printing, v2Format = true, itemRange = range, layout = itemLayout)
+            }
         }
         // Aşağı çekerek silme bildirimi (Swipe down to clear)
         if (pullOffset > 10f) {

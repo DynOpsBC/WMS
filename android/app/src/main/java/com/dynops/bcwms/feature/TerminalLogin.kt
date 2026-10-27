@@ -372,7 +372,9 @@ internal fun BadeConnectionSummary(environment: String, company: String, enabled
             Text("SEÇİLİ ORTAM", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             Text(environment.ifBlank { "Ortam seçilmedi" }, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
             if (company.isNotBlank()) Text(company, style = MaterialTheme.typography.bodySmall)
-            OutlinedButton(onClick = onChange, enabled = enabled, modifier = Modifier.fillMaxWidth()) { Text("Ortamı değiştir") }
+            OutlinedButton(onClick = onChange, enabled = enabled, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) {
+                Text(if (BuildConfig.FLAVOR == "kitoko") "Ortam / şirket değiştir" else "Ortamı değiştir")
+            }
         }
     }
 }

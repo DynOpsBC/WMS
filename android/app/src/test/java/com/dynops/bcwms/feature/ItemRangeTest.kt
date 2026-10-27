@@ -4,7 +4,18 @@ import org.junit.Assert.assertEquals
 import org.junit.Test
 
 class ItemRangeTest {
-    private val items = (1..1600).map { "IT%04d".format(it) }
+    private val items = (1..2400).map { "IT%04d".format(it) }
+
+    @Test
+    fun `kitoko prints four consecutive blocks with no overlap or missing boundary`() {
+        val ranges = itemLabelRanges(kitoko = true)
+        assertEquals(listOf(1251..1500, 1501..1750, 1751..2000, 2001..2250), ranges)
+        val blocks = ranges.map { itemsInRange(items, it) }
+        assertEquals(listOf(250, 250, 250, 250), blocks.map { it.size })
+        assertEquals(items.slice(1250 until 2250), blocks.flatten())
+        assertEquals(listOf(5, 5, 5, 5), blocks.map { allItemLabelBatches(it).size })
+        assertEquals(listOf(1..300, 301..500, 501..700, 701..1000, 1001..1250, 1251..1500), itemLabelRanges(kitoko = false))
+    }
 
     @Test
     fun `blocks follow item number order`() {
@@ -21,6 +32,9 @@ class ItemRangeTest {
         assertEquals(50, itemsInRange(items.take(750), 701..1000).size)
         assertEquals(0, itemsInRange(items.take(250), 301..500).size)
         assertEquals(100, itemsInRange(items.take(1350), 1251..1500).size)
+        assertEquals(100, itemsInRange(items.take(1600), 1501..1750).size)
+        assertEquals(0, itemsInRange(items.take(1750), 1751..2000).size)
+        assertEquals(100, itemsInRange(items.take(2100), 2001..2250).size)
     }
 
     @Test

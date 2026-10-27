@@ -100,8 +100,9 @@ class TerminalLoginUiTest {
         compose.onNodeWithText("TERMİNAL-1").performClick()
         waitFor("Merve Demirci")
         evidence("terminal-users")
-        compose.onNodeWithText("Merve Demirci").performClick()
-        compose.onNodeWithText("Giriş yap").assertIsNotEnabled()
+        compose.onNodeWithText("Merve Demirci").performScrollTo().performClick()
+        waitFor("4 haneli PIN")
+        compose.onNodeWithText("Giriş yap").performScrollTo().assertIsNotEnabled()
         compose.onNodeWithText("4 haneli PIN").performClick().performTextReplacement("9999")
         compose.onNodeWithText("Giriş yap").performScrollTo().performClick()
         waitFor("PIN hatalı.")
@@ -123,8 +124,9 @@ class TerminalLoginUiTest {
         var signedIn = false
         compose.setContent { MaterialTheme { TerminalOperatorLogin({ signedIn = it }, {}, gateway) } }
         waitFor("Ayşe Yılmaz")
-        compose.onNodeWithText("Ayşe Yılmaz").performClick()
-        compose.onNodeWithText("4 haneli PIN").performTextReplacement("0017")
+        compose.onNodeWithText("Ayşe Yılmaz").performScrollTo().performClick()
+        waitFor("4 haneli PIN")
+        compose.onNodeWithText("4 haneli PIN").performScrollTo().performTextReplacement("0017")
         compose.onNodeWithText("Giriş yap").performScrollTo().performClick()
         compose.waitUntil(10000) { signedIn }
         assertEquals("OP02", BcApi.getLocalUser(context))
@@ -137,7 +139,7 @@ class TerminalLoginUiTest {
         compose.setContent { MaterialTheme { TerminalOperatorLogin({ signedIn = it }, {}, gateway) } }
         waitFor("Yönetici girişi")
         compose.onNodeWithText("Yönetici girişi").performClick()
-        compose.onNodeWithText("4 haneli PIN").performTextReplacement("0017")
+        compose.onNodeWithText("4 haneli PIN").performScrollTo().performTextReplacement("0017")
         compose.onNodeWithText("Giriş yap").performScrollTo().performClick()
         compose.waitUntil(10000) { signedIn }
         assertEquals("ADMIN01", BcApi.getLocalUser(context))
@@ -161,8 +163,9 @@ class TerminalLoginUiTest {
         var signedIn = false
         compose.setContent { MaterialTheme { TerminalOperatorLogin({ signedIn = it }, {}, gateway) } }
         waitFor("Ayşe Yılmaz")
-        compose.onNodeWithText("Ayşe Yılmaz").performClick()
-        compose.onNodeWithText("4 haneli PIN").performTextReplacement("0017")
+        compose.onNodeWithText("Ayşe Yılmaz").performScrollTo().performClick()
+        waitFor("4 haneli PIN")
+        compose.onNodeWithText("4 haneli PIN").performScrollTo().performTextReplacement("0017")
         compose.onNodeWithText("Giriş yap").performScrollTo().performClick()
         compose.waitUntil(10000) { signedIn }
         assertTrue(TerminalSession.authenticated(context))
@@ -205,8 +208,9 @@ class TerminalLoginUiTest {
         compose.onNodeWithText("Sonraki adım").performClick()
         compose.runOnIdle { locked = true }
         waitFor("Merve Demirci")
-        compose.onNodeWithText(if (changeEmployee) "Ayşe Yılmaz" else "Merve Demirci").performClick()
-        compose.onNodeWithText("4 haneli PIN").performTextReplacement("9999")
+        compose.onNodeWithText(if (changeEmployee) "Ayşe Yılmaz" else "Merve Demirci").performScrollTo().performClick()
+        waitFor("4 haneli PIN")
+        compose.onNodeWithText("4 haneli PIN").performScrollTo().performTextReplacement("9999")
         compose.onNodeWithText("Giriş yap").performScrollTo().performClick()
         waitFor("PIN hatalı.")
         compose.runOnIdle { assertTrue(locked); assertEquals(1, documentMounts) }

@@ -282,7 +282,19 @@ fun AppRoot() {
                     onConnectionChanged = { connected = it },
                     onNavigate = { screen = it },
                 )
-                Screen.Connection -> LoginFlow(onConnected = { connected = it; sessionEpoch++; if (it) screen = Screen.Home })
+                Screen.Connection -> LoginFlow(
+                    onConnected = {
+                        connected = it
+                        sessionEpoch++
+                        if (BuildConfig.FLAVOR == "kitoko" && !it && !TerminalSession.authenticated(context)) {
+                            openedOperator = ""
+                            terminalAuthenticated = false
+                        }
+                        if (it) screen = Screen.Home
+                    },
+                    startWithConnectionSettings = BuildConfig.FLAVOR == "kitoko",
+                    onCancelSettings = if (BuildConfig.FLAVOR == "kitoko") ({ screen = Screen.Home }) else null,
+                )
                 Screen.LicensePlates -> LicensePlateModule()
                 Screen.HierarchicalLP -> HierarchicalLpModule()
                 Screen.ItemInquiry -> ItemInquiryModule()
@@ -578,6 +590,7 @@ private fun HomeScreen(
             connected = connected,
             canSwitch = accessible.size > 1,
             onSwitchClick = { showSwitcher = true },
+            onEnvironmentClick = if (flavor == "kitoko") ({ onNavigate(Screen.Connection) }) else null,
         )
         if (showSwitcher) {
             CompanySwitcherSheet(
@@ -642,6 +655,7 @@ private fun HomeHeader(
     connected: Boolean,
     canSwitch: Boolean = false,
     onSwitchClick: () -> Unit = {},
+    onEnvironmentClick: (() -> Unit)? = null,
 ) {
     val status = bcwmsStatus()
     val statusColor = if (connected) status.success else Color(0xFFFF7A7A)
@@ -709,7 +723,7 @@ private fun HomeHeader(
                 // ya da eksik olduğunda buton hiç görünmüyor, operatör şirket
                 // değiştiremiyordu. Artık tek şirkette de açılıyor — sayfa
                 // erişilebilir şirketleri yeniden keşfedip listeliyor.
-                if (connected) {
+                if (connected && onEnvironmentClick == null) {
                     Spacer(Modifier.width(8.dp))
                     Surface(
                         shape = RoundedCornerShape(50),
@@ -732,6 +746,15 @@ private fun HomeHeader(
                 style = MaterialTheme.typography.labelSmall,
                 color = Color.White.copy(alpha = 0.62f),
             )
+            if (onEnvironmentClick != null) {
+                Spacer(Modifier.height(10.dp))
+                OutlinedButton(
+                    onClick = onEnvironmentClick,
+                    modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
+                    colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, Color.White.copy(alpha = 0.5f)),
+                ) { Text("Ortam / şirket değiştir", fontWeight = FontWeight.Bold) }
+            }
         }
     }
 }

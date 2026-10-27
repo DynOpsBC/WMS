@@ -23,6 +23,13 @@ import java.util.Locale
 /** Etiket sayısı ne olursa olsun BC'ye tek istekte giden ürün sayısı (BC sınırı 100). */
 internal const val ALL_ITEM_LABELS_BATCH = 50
 
+/** Ürün no sırasındaki konumlar; Kitoko'da tamamlanan eski bloklar gösterilmez. */
+internal fun itemLabelRanges(kitoko: Boolean): List<IntRange> = if (kitoko) {
+    listOf(1251..1500, 1501..1750, 1751..2000, 2001..2250)
+} else {
+    listOf(1..300, 301..500, 501..700, 701..1000, 1001..1250, 1251..1500)
+}
+
 /** Boş ve tekrar eden ürün numaraları atılır; sıra korunur. */
 internal fun allItemLabelBatches(itemNos: List<String>, size: Int = ALL_ITEM_LABELS_BATCH): List<List<String>> =
     itemNos.map { it.trim() }.filter { it.isNotEmpty() }

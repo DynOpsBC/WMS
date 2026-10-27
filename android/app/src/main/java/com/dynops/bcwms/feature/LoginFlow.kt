@@ -48,11 +48,15 @@ internal fun allowAdminBypass(flavor: String): Boolean = !com.dynops.bcwms.isBad
  * No token paste required. Token-paste remains available as an "advanced" fallback.
  */
 @Composable
-fun LoginFlow(onConnected: (Boolean) -> Unit) {
+fun LoginFlow(
+    onConnected: (Boolean) -> Unit,
+    startWithConnectionSettings: Boolean = false,
+    onCancelSettings: (() -> Unit)? = null,
+) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
 
-    var connectionSetup by remember { mutableStateOf(!BcApi.hasToken(context)) }
+    var connectionSetup by remember { mutableStateOf(startWithConnectionSettings || !BcApi.hasToken(context)) }
     if (com.dynops.bcwms.isBadeFamily() && BcApi.hasToken(context) && !connectionSetup) {
         TerminalOperatorLogin(onConnected = onConnected, onConnectionSettings = { connectionSetup = true })
         return
@@ -95,6 +99,50 @@ fun LoginFlow(onConnected: (Boolean) -> Unit) {
     var manualEnv by remember { mutableStateOf("") }
     var lastToken by remember { mutableStateOf("") }
 
+    fun cancelConnectionSettings() {
+        if (onCancelSettings != null) onCancelSettings() else connectionSetup = false
+    }
+
+    androidx.activity.compose.BackHandler(
+        enabled = BuildConfig.FLAVOR == "kitoko" && connectionSetup && BcApi.hasToken(context),
+    ) { if (!busy) cancelConnectionSettings() }
+
+    suspend fun discoverLoginEnvironments(token: String): List<BcApi.EnvCompanies> =
+        BcApi.discoverEnvironments(token, if (BuildConfig.FLAVOR == "kitoko") BcApi.connectionEnvironmentNames(context) else emptyList())
+
+    fun refreshEnvironments() {
+        scope.launch {
+            busy = true
+            status = ""
+            try {
+                lastToken = BcApi.connectionToken(context)
+                envList = discoverLoginEnvironments(lastToken)
+                envList.forEach { BcApi.rememberEnvironment(context, it.environment) }
+                selectedEnv = envList.firstOrNull { it.environment.equals(BcApi.getEnvironment(context), true) }
+                if (envList.isEmpty()) status = "Ortam listesi alınamadı. Yenileyin veya ortam adını girin."
+            } finally { busy = false }
+        }
+    }
+
+    fun connectKitoko(environment: BcApi.EnvCompanies, company: BcApi.Company) {
+        scope.launch {
+            busy = true
+            status = "${environment.environment} / ${company.displayName} kontrol ediliyor…"
+            try {
+                val result = verifyConnectionChange(
+                    verify = { BcApi.testCompanyConnection(context, environment.environment, company) },
+                    save = { BcApi.saveConnection(context, environment.environment, company) },
+                )
+                if (result.ok) {
+                    finishConnection(false)
+                    connectionSetup = false
+                    step = Step.LocalUser
+                    status = ""
+                } else status = BcApi.connectionFailureMessage(result)
+            } finally { busy = false }
+        }
+    }
+
     fun startVerifiedAdminSession() {
         if (busy) return
         scope.launch {
@@ -129,7 +177,7 @@ fun LoginFlow(onConnected: (Boolean) -> Unit) {
                     BcApi.saveTokenExpiry(context, t.expiresInSec)
                     status = "Token alındı, ortamlar keşfediliyor..."
                     lastToken = t.accessToken
-                    envList = BcApi.discoverEnvironments(t.accessToken)
+                    envList = discoverLoginEnvironments(t.accessToken)
                     busy = false
                     // Ortam otomatik bulunamasa bile ekrana geç: kullanıcı ortam
                     // adını (ör. "Production") elle girip yoklayabilir.
@@ -232,7 +280,7 @@ fun LoginFlow(onConnected: (Boolean) -> Unit) {
                     BcApi.saveTokenExpiry(context, t.expiresInSec)
                             status = "Token alındı, ortamlar keşfediliyor..."
                             lastToken = t.accessToken
-                            envList = BcApi.discoverEnvironments(t.accessToken)
+                            envList = discoverLoginEnvironments(t.accessToken)
                             busy = false
                             selectedEnv = envList.firstOrNull()
                             step = Step.SelectEnvCompany
@@ -253,6 +301,10 @@ fun LoginFlow(onConnected: (Boolean) -> Unit) {
     LaunchedEffect(Unit) {
         if (com.dynops.bcwms.isBadeFamily() && BcApi.hasToken(context)) {
             step = Step.SelectEnvCompany
+            if (BuildConfig.FLAVOR == "kitoko") {
+                refreshEnvironments()
+                return@LaunchedEffect
+            }
             busy = true
             lastToken = BcApi.getToken(context)
             envList = runCatching { BcApi.discoverEnvironments(lastToken) }.getOrDefault(emptyList())
@@ -302,16 +354,18 @@ fun LoginFlow(onConnected: (Boolean) -> Unit) {
     }
 
     val loginBrand = resolveCompanyBrand(BcApi.getCompanyName(context), BuildConfig.FLAVOR)
-    Column(Modifier.fillMaxSize().safeDrawingPadding().padding(20.dp).verticalScroll(rememberScrollState())) {
+    Column(Modifier.fillMaxSize().safeDrawingPadding().imePadding().padding(20.dp).verticalScroll(rememberScrollState())) {
         if (com.dynops.bcwms.isBadeFamily()) AppUpdateEntry()
         if (com.dynops.bcwms.isBadeFamily() && BcApi.hasToken(context)) {
-            TextButton(onClick = { connectionSetup = false }) { Text("Terminal girişine dön") }
+            TextButton(onClick = { cancelConnectionSettings() }, enabled = !busy) {
+                Text(if (onCancelSettings != null) "‹ Geri" else "Terminal girişine dön")
+            }
         }
         Row(verticalAlignment = Alignment.CenterVertically) {
             CompanyLogo(brand = loginBrand, height = 28.dp)
             Spacer(Modifier.width(12.dp))
             Column {
-                Text(if (com.dynops.bcwms.isBadeFamily()) "Bağlantı kurulumu" else "WMS Girişi", fontWeight = FontWeight.Bold, fontSize = 20.sp)
+                Text(if (BuildConfig.FLAVOR == "kitoko") "Ortam ve şirket" else if (com.dynops.bcwms.isBadeFamily()) "Bağlantı kurulumu" else "WMS Girişi", fontWeight = FontWeight.Bold, fontSize = 20.sp)
                 Text(if (com.dynops.bcwms.isBadeFamily()) "Ortam ve şirket seçimi" else "Hızlı ve güvenli depo erişimi", fontSize = 12.sp, color = Color.Gray)
             }
         }
@@ -794,110 +848,138 @@ fun LoginFlow(onConnected: (Boolean) -> Unit) {
             }
 
             Step.SelectEnvCompany -> {
-                if (com.dynops.bcwms.isBadeFamily()) {
-                    Surface(shape = RoundedCornerShape(12.dp), color = MaterialTheme.colorScheme.primaryContainer) {
-                        Column(Modifier.fillMaxWidth().padding(16.dp)) {
-                            Text("Şu an seçili ortam", style = MaterialTheme.typography.labelMedium)
-                            Text(BcApi.getEnvironment(context).ifBlank { "Henüz seçilmedi" }, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-                            Text(BcApi.getCompanyName(context), style = MaterialTheme.typography.bodyMedium)
-                        }
-                    }
-                    Spacer(Modifier.height(20.dp))
-                    Text("1. Ortamı seçin", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-                    Text("Sandbox: test ortamı · Production: canlı ortam", style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    if (busy) LinearProgressIndicator(Modifier.fillMaxWidth().padding(top = 8.dp))
-                } else Text("Ortam seçin", fontWeight = FontWeight.Medium)
-                Spacer(Modifier.height(6.dp))
-                // Otomatik keşif her müşterinin ortam adını bilemez (BADE =
-                // "Production" vb.) — kullanıcı ortam adını elle yoklayabilir.
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    OutlinedTextField(
-                        value = manualEnv, onValueChange = { manualEnv = it },
-                    label = { Text(if (com.dynops.bcwms.isBadeFamily()) "Ortam adıyla ara" else "Ortam adı (ör. ${BuildConfig.BC_DEFAULT_ENVIRONMENT})") },
-                        singleLine = true, modifier = Modifier.weight(1f),
+                if (BuildConfig.FLAVOR == "kitoko") {
+                    ConnectionPicker(
+                        environments = envList,
+                        currentEnvironment = BcApi.getEnvironment(context),
+                        currentCompanyId = BcApi.getCompanyId(context),
+                        currentCompanyName = BcApi.getCompanyName(context),
+                        busy = busy,
+                        onRefresh = { refreshEnvironments() },
+                        onFind = { name ->
+                            scope.launch {
+                                busy = true
+                                status = "$name aranıyor…"
+                                try {
+                                    lastToken = BcApi.connectionToken(context)
+                                    val found = BcApi.probeEnvironment(BcApi.getTenant(context), name, lastToken)
+                                    if (found != null) {
+                                        envList = envList.filterNot { it.environment.equals(found.environment, true) } + found
+                                        BcApi.rememberEnvironment(context, found.environment)
+                                        status = "${found.environment} bulundu. Ortam listesinden seçin."
+                                    } else status = "$name bulunamadı veya erişim izni yok. Ortam adını kontrol edin."
+                                } finally { busy = false }
+                            }
+                        },
+                        onConnect = { environment, company -> connectKitoko(environment, company) },
+                        onCancel = { cancelConnectionSettings() },
                     )
-                    Spacer(Modifier.width(8.dp))
-                    Button(
-                        enabled = !busy && manualEnv.isNotBlank() && lastToken.isNotBlank(),
-                        onClick = {
-                            scope.launch {
-                                busy = true; status = "'${manualEnv.trim()}' yoklanıyor..."
-                                val ec = BcApi.probeEnvironment(BcApi.getTenant(context), manualEnv.trim(), lastToken)
-                                busy = false
-                                if (ec != null) {
-                                    if (envList.none { it.environment == ec.environment }) envList = envList + ec
-                                    selectedEnv = ec
-                                    status = "🟢 ${ec.environment} bulundu (${ec.companies.size} şirket)"
-                                } else status = "🔴 '${manualEnv.trim()}' bulunamadı ya da şirket yok — ortam adını kontrol edin"
+                } else {
+                    if (com.dynops.bcwms.isBadeFamily()) {
+                        Surface(shape = RoundedCornerShape(12.dp), color = MaterialTheme.colorScheme.primaryContainer) {
+                            Column(Modifier.fillMaxWidth().padding(16.dp)) {
+                                Text("Şu an seçili ortam", style = MaterialTheme.typography.labelMedium)
+                                Text(BcApi.getEnvironment(context).ifBlank { "Henüz seçilmedi" }, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                                Text(BcApi.getCompanyName(context), style = MaterialTheme.typography.bodyMedium)
                             }
-                        },
-                    ) { Text("Bul") }
-                }
-                Spacer(Modifier.height(10.dp))
-                envList.forEach { ec ->
-                    val sel = ec.environment == selectedEnv?.environment
-                    Card(
-                        onClick = { if (!busy) selectedEnv = ec },
-                        modifier = Modifier.fillMaxWidth().padding(vertical = 3.dp),
-                        colors = CardDefaults.cardColors(containerColor = if (sel) Color(0xFFD1C4E9) else Color(0xFFF5F5F5))
-                    ) {
-                        Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                            RadioButton(selected = sel, enabled = !busy, onClick = { selectedEnv = ec })
-                            Text("${ec.environment} (${ec.companies.size} şirket)", fontWeight = FontWeight.Medium)
+                        }
+                        Spacer(Modifier.height(20.dp))
+                        Text("1. Ortamı seçin", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                        Text("Sandbox: test ortamı · Production: canlı ortam", style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        if (busy) LinearProgressIndicator(Modifier.fillMaxWidth().padding(top = 8.dp))
+                    } else Text("Ortam seçin", fontWeight = FontWeight.Medium)
+                    Spacer(Modifier.height(6.dp))
+                    // Otomatik keşif her müşterinin ortam adını bilemez (BADE =
+                    // "Production" vb.) — kullanıcı ortam adını elle yoklayabilir.
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        OutlinedTextField(
+                            value = manualEnv, onValueChange = { manualEnv = it },
+                        label = { Text(if (com.dynops.bcwms.isBadeFamily()) "Ortam adıyla ara" else "Ortam adı (ör. ${BuildConfig.BC_DEFAULT_ENVIRONMENT})") },
+                            singleLine = true, modifier = Modifier.weight(1f),
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        Button(
+                            enabled = !busy && manualEnv.isNotBlank() && lastToken.isNotBlank(),
+                            onClick = {
+                                scope.launch {
+                                    busy = true; status = "'${manualEnv.trim()}' yoklanıyor..."
+                                    val ec = BcApi.probeEnvironment(BcApi.getTenant(context), manualEnv.trim(), lastToken)
+                                    busy = false
+                                    if (ec != null) {
+                                        if (envList.none { it.environment == ec.environment }) envList = envList + ec
+                                        selectedEnv = ec
+                                        status = "🟢 ${ec.environment} bulundu (${ec.companies.size} şirket)"
+                                    } else status = "🔴 '${manualEnv.trim()}' bulunamadı ya da şirket yok — ortam adını kontrol edin"
+                                }
+                            },
+                        ) { Text("Bul") }
+                    }
+                    Spacer(Modifier.height(10.dp))
+                    envList.forEach { ec ->
+                        val sel = ec.environment == selectedEnv?.environment
+                        Card(
+                            onClick = { if (!busy) selectedEnv = ec },
+                            modifier = Modifier.fillMaxWidth().padding(vertical = 3.dp),
+                            colors = CardDefaults.cardColors(containerColor = if (sel) Color(0xFFD1C4E9) else Color(0xFFF5F5F5))
+                        ) {
+                            Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                                RadioButton(selected = sel, enabled = !busy, onClick = { selectedEnv = ec })
+                                Text("${ec.environment} (${ec.companies.size} şirket)", fontWeight = FontWeight.Medium)
+                            }
                         }
                     }
-                }
-                Spacer(Modifier.height(12.dp))
-                Text(if (com.dynops.bcwms.isBadeFamily()) "2. Şirketi seçip bağlanın" else "Şirket seçin", fontWeight = FontWeight.Bold)
-                Spacer(Modifier.height(6.dp))
-                selectedEnv?.companies?.forEach { c ->
-                    Card(
-                        onClick = {
-                            if (busy) return@Card
-                            val environmentToConnect = selectedEnv ?: return@Card
-                            scope.launch {
-                                finishConnection(false)
-                                busy = true; status = "Bağlanılıyor: ${c.displayName}..."
-                                BcApi.setEnvironment(context, environmentToConnect.environment)
-                                BcApi.setCompany(context, c.id, c.displayName)
-                                val r = BcApi.testConnection(context)
-                                busy = false
-                                if (r.ok) {
-                                    // ELOG multi-company: WMS kullanıcı girişi ATLANSA bile (admin/AAD)
-                                    // üstteki şirket değiştirici çalışsın diye erişilebilir (WMS kurulu)
-                                    // şirketleri şimdi hesapla/sakla. WMS kullanıcı girişi yapılırsa
-                                    // orada kullanıcı-bazlı daha dar listeyle üzerine yazılır.
-                                    val wmsCompanies = runCatching {
-                                        BcApi.probeWmsCompanies(context, environmentToConnect.environment, environmentToConnect.companies)
-                                    }.getOrDefault(emptyList())
-                                    BcApi.saveAccessibleCompanies(
-                                        context,
-                                        wmsCompanies.ifEmpty { listOf(c) },
-                                    )
-                                    // Paylaşımlı BC lisansı: ortam bağlantısı servis hesabıyla
-                                    // yapıldı; oturum ancak WMS operatörü kendi kullanıcı adı +
-                                    // şifresiyle doğrulanınca açılır (BC → WMS Users / Local User).
-                                    status = "🟢 Ortam bağlandı: ${environmentToConnect.environment} / ${c.displayName} — şimdi WMS kullanıcınızla giriş yapın"
-                                    step = Step.LocalUser
-                                    if (com.dynops.bcwms.isBadeFamily()) connectionSetup = false
-                                } else { status = "🔴 ${BcApi.connectionFailureMessage(r)}"; finishConnection(false) }
+                    Spacer(Modifier.height(12.dp))
+                    Text(if (com.dynops.bcwms.isBadeFamily()) "2. Şirketi seçip bağlanın" else "Şirket seçin", fontWeight = FontWeight.Bold)
+                    Spacer(Modifier.height(6.dp))
+                    selectedEnv?.companies?.forEach { c ->
+                        Card(
+                            onClick = {
+                                if (busy) return@Card
+                                val environmentToConnect = selectedEnv ?: return@Card
+                                scope.launch {
+                                    finishConnection(false)
+                                    busy = true; status = "Bağlanılıyor: ${c.displayName}..."
+                                    BcApi.setEnvironment(context, environmentToConnect.environment)
+                                    BcApi.setCompany(context, c.id, c.displayName)
+                                    val r = BcApi.testConnection(context)
+                                    busy = false
+                                    if (r.ok) {
+                                        // ELOG multi-company: WMS kullanıcı girişi ATLANSA bile (admin/AAD)
+                                        // üstteki şirket değiştirici çalışsın diye erişilebilir (WMS kurulu)
+                                        // şirketleri şimdi hesapla/sakla. WMS kullanıcı girişi yapılırsa
+                                        // orada kullanıcı-bazlı daha dar listeyle üzerine yazılır.
+                                        val wmsCompanies = runCatching {
+                                            BcApi.probeWmsCompanies(context, environmentToConnect.environment, environmentToConnect.companies)
+                                        }.getOrDefault(emptyList())
+                                        BcApi.saveAccessibleCompanies(
+                                            context,
+                                            wmsCompanies.ifEmpty { listOf(c) },
+                                        )
+                                        // Paylaşımlı BC lisansı: ortam bağlantısı servis hesabıyla
+                                        // yapıldı; oturum ancak WMS operatörü kendi kullanıcı adı +
+                                        // şifresiyle doğrulanınca açılır (BC → WMS Users / Local User).
+                                        status = "🟢 Ortam bağlandı: ${environmentToConnect.environment} / ${c.displayName} — şimdi WMS kullanıcınızla giriş yapın"
+                                        step = Step.LocalUser
+                                        if (com.dynops.bcwms.isBadeFamily()) connectionSetup = false
+                                    } else { status = "🔴 ${BcApi.connectionFailureMessage(r)}"; finishConnection(false) }
+                                }
+                            },
+                            modifier = Modifier.fillMaxWidth().padding(vertical = 3.dp), shape = RoundedCornerShape(10.dp)
+                        ) {
+                            Column(Modifier.padding(12.dp)) {
+                                Text(c.displayName, fontWeight = FontWeight.Medium)
+                                Text(if (com.dynops.bcwms.isBadeFamily()) "Bu şirketle devam et →" else "Seçmek için dokunun →", fontSize = 11.sp, color = Color(0xFF6A1B9A))
                             }
-                        },
-                        modifier = Modifier.fillMaxWidth().padding(vertical = 3.dp), shape = RoundedCornerShape(10.dp)
-                    ) {
-                        Column(Modifier.padding(12.dp)) {
-                            Text(c.displayName, fontWeight = FontWeight.Medium)
-                            Text(if (com.dynops.bcwms.isBadeFamily()) "Bu şirketle devam et →" else "Seçmek için dokunun →", fontSize = 11.sp, color = Color(0xFF6A1B9A))
                         }
                     }
-                }
-                // Vazgeçme yolu: bu adımda şirket seçmeden çıkılamıyordu, ortamı
-                // yanlışlıkla açan operatör ekranda kilitli kalıyordu.
-                if (BcApi.hasToken(context)) {
-                    Spacer(Modifier.height(8.dp))
-                    TextButton(onClick = { if (com.dynops.bcwms.isBadeFamily()) connectionSetup = false else step = Step.LocalUser; status = "" }, enabled = !busy) {
-                        Text("‹ Vazgeç (WMS girişine dön)", fontSize = 12.sp)
+                    // Vazgeçme yolu: bu adımda şirket seçmeden çıkılamıyordu, ortamı
+                    // yanlışlıkla açan operatör ekranda kilitli kalıyordu.
+                    if (BcApi.hasToken(context)) {
+                        Spacer(Modifier.height(8.dp))
+                        TextButton(onClick = { if (com.dynops.bcwms.isBadeFamily()) connectionSetup = false else step = Step.LocalUser; status = "" }, enabled = !busy) {
+                            Text("‹ Vazgeç (WMS girişine dön)", fontSize = 12.sp)
+                        }
                     }
                 }
             }

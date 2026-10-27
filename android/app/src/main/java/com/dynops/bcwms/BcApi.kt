@@ -128,6 +128,29 @@ object BcApi {
         prefs(context).edit().putString(KEY_COMPANY_ID, id).putString(KEY_COMPANY_NAME, name).apply()
     }
 
+    /** Commit a verified target together; the previous operator must sign in in the new scope. */
+    fun saveConnection(context: Context, environment: String, company: Company) {
+        prefs(context).edit().putString(KEY_ENV, environment)
+            .putString(KEY_COMPANY_ID, company.id).putString(KEY_COMPANY_NAME, company.displayName)
+            .remove(KEY_LOCAL_USER).remove(KEY_LOCAL_PROFILE).remove(KEY_BC_USER)
+            .putBoolean(KEY_ADMIN_TEST_SESSION, false).apply()
+        rememberEnvironment(context, environment)
+        saveAccessibleCompanies(context, listOf(company))
+    }
+
+    private fun environmentHistoryKey(context: Context) = "connection_environments." + getTenant(context)
+
+    fun rememberEnvironment(context: Context, environment: String) {
+        val key = environmentHistoryKey(context)
+        val history = prefs(context).getStringSet(key, emptySet()).orEmpty() + environment.trim()
+        prefs(context).edit().putStringSet(key, history.filter { it.isNotBlank() }.toSet()).apply()
+    }
+
+    fun connectionEnvironmentNames(context: Context): List<String> =
+        (listOf(getEnvironment(context), DEFAULT_ENVIRONMENT, "DemoSandbox") +
+            prefs(context).getStringSet(environmentHistoryKey(context), emptySet()).orEmpty().sorted() +
+            KNOWN_ENVIRONMENTS).filter { it.isNotBlank() }.distinctBy { it.lowercase() }
+
     /**
      * Resolves a flavor's preferred company by name before the first API call.
      *
@@ -307,6 +330,11 @@ object BcApi {
     }
 
     fun getToken(context: Context): String = prefs(context).getString(KEY_TOKEN, "") ?: ""
+
+    suspend fun connectionToken(context: Context): String = withContext(Dispatchers.IO) {
+        ensureFreshToken(context)
+        getToken(context)
+    }
 
     fun hasToken(context: Context): Boolean = getToken(context).isNotBlank()
 
@@ -1062,11 +1090,21 @@ object BcApi {
      * sorgusu yedek olarak korunur.
      */
     suspend fun testConnection(context: Context): ApiResult {
+        return testConnectionWith { path -> get(context, path) }
+    }
+
+    /** Probe an explicit target without changing environment, company or operator preferences. */
+    suspend fun testCompanyConnection(context: Context, environment: String, company: Company): ApiResult {
+        val base = "$BC_RESOURCE/v2.0/${getTenant(context)}/$environment/api/dynops/warehouse/v2.0/companies(${company.id})"
+        return testConnectionWith { path -> get(context, "$base/$path") }
+    }
+
+    private suspend fun testConnectionWith(fetch: suspend (String) -> ApiResult): ApiResult {
         var result = ApiResult(false, -1, "Bağlantı henüz denenmedi")
         repeat(4) { attempt ->
-            val localUsers = get(context, "localUsers?\$top=1&\$select=username")
+            val localUsers = fetch("localUsers?\$top=1&\$select=username")
             if (localUsers.ok) return localUsers
-            val licensePlates = get(context, "licensePlates?\$top=1&\$select=no")
+            val licensePlates = fetch("licensePlates?\$top=1&\$select=no")
             result = selectConnectionProbeResult(localUsers, licensePlates)
             if (!isRetryableConnectionFailure(result) || attempt == 3) return result
 
@@ -1142,9 +1180,11 @@ object BcApi {
      * Multi-tenant: tenant token'dan (tid) çözülür — BADE token'ıyla BADE
      * tenant'ı, DynamicsOps token'ıyla DynamicsOps tenant'ı sorgulanır.
      */
-    suspend fun discoverEnvironments(token: String): List<EnvCompanies> = withContext(Dispatchers.IO) {
+    suspend fun discoverEnvironments(token: String, preferredEnvironments: List<String> = emptyList()): List<EnvCompanies> = withContext(Dispatchers.IO) {
         val tenant = tenantIdFromJwt(token) ?: FALLBACK_TENANT
-        KNOWN_ENVIRONMENTS.mapNotNull { env -> probeEnvironment(tenant, env, token) }
+        if (preferredEnvironments.isEmpty()) KNOWN_ENVIRONMENTS.mapNotNull { env -> probeEnvironment(tenant, env, token) }
+        else (preferredEnvironments + KNOWN_ENVIRONMENTS).distinctBy { it.lowercase() }
+            .map { env -> async { probeEnvironment(tenant, env, token) } }.awaitAll().filterNotNull()
     }
 
     /** Tek bir ortamı yoklar; şirket dönerse EnvCompanies, yoksa null.
