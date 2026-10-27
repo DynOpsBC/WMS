@@ -210,7 +210,9 @@ internal fun AllItemLabelsCard(
                 }
                 step = if (page.complete && itemNos.isNotEmpty()) AllItemLabelsStep.Confirm(itemNos)
                 else {
-                    loadError = if (page.complete) "BC'de etiket basılacak ürün bulunamadı." else "Ürün listesi alınamadı. Bağlantıyı kontrol edip tekrar deneyin."
+                    loadError = if (page.complete) {
+                        allItemLabelsEmptyMessage(range, page.rows.size, BcApi.getEnvironment(context), BcApi.getCompanyName(context))
+                    } else "Ürün listesi alınamadı. Bağlantıyı kontrol edip tekrar deneyin."
                     AllItemLabelsStep.Idle
                 }
             }
@@ -356,5 +358,14 @@ internal fun AllItemLabelsCard(
 }
 
 /** Ürün no sırasındaki 1'den başlayan konumlar (ikisi dahil). */
+/**
+ * Kitoko (27 Eki 2026): demo ortamda 1251'den az ürün olduğu için aralıklar boş
+ * geliyordu; mesaj bağlantıyı ve ürün sayısını söyler ki yanlış ortam fark edilsin.
+ */
+internal fun allItemLabelsEmptyMessage(range: IntRange?, itemCount: Int, environment: String, company: String): String =
+    if (range != null && itemCount < range.first) {
+        "Bu aralıkta ürün yok: $environment · $company bağlantısında $itemCount ürün var, aralık ${range.first}. üründen başlıyor. Ortam / şirket seçimini kontrol edin."
+    } else "BC'de etiket basılacak ürün bulunamadı."
+
 internal fun <T> itemsInRange(rows: List<T>, range: IntRange): List<T> =
     rows.drop(range.first - 1).take(range.last - range.first + 1)

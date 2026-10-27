@@ -18,6 +18,16 @@ class ItemRangeTest {
     }
 
     @Test
+    fun `empty range names the connection and item count`() {
+        assertEquals(
+            "Bu aralıkta ürün yok: DemoSandbox · ELEMENT4-TR-DEMO-V1 bağlantısında 868 ürün var, aralık 1251. üründen başlıyor. Ortam / şirket seçimini kontrol edin.",
+            allItemLabelsEmptyMessage(1251..1500, 868, "DemoSandbox", "ELEMENT4-TR-DEMO-V1"),
+        )
+        assertEquals("BC'de etiket basılacak ürün bulunamadı.", allItemLabelsEmptyMessage(null, 0, "Sand2010", "Element 4"))
+        assertEquals("BC'de etiket basılacak ürün bulunamadı.", allItemLabelsEmptyMessage(1251..1500, 1300, "Sand2010", "Element 4"))
+    }
+
+    @Test
     fun `blocks follow item number order`() {
         assertEquals(300, itemsInRange(items, 1..300).size)
         assertEquals(listOf("IT0301", "IT0500"), itemsInRange(items, 301..500).let { listOf(it.first(), it.last()) })
