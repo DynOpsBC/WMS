@@ -1,0 +1,7 @@
+{
+  "versionCode": 200199,
+  "versionName": "1.14.199-kitoko",
+  "apkUrl": "https://github.com/DynOpsBC/WMS/releases/download/android-v1.14.199-kitoko/BCWMS-Kitoko-1.14.199.apk",
+  "sha256": "d09c12773d032f1b831b8c9e96b3c5e59c0eb89cb3db9d2d1f983a130642aafd",
+  "releaseNotes": "Ana menüden Ortam / şirket değiştir. Sand2010, DemoSandbox ve canlı ortam için kolay seçim; bağlantı doğrulandıktan sonra geçiş. BC güncellemesi gerekmez."
+}
