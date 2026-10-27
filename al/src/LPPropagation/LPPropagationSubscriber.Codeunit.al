@@ -106,6 +106,143 @@ codeunit 72428 "DOPSWHS LP Propagation"
     end;
 
     /// <summary>
+    /// BADE (27 Eki 2026, LP000846): satın alma iadesinde LP sevk satırında değil
+    /// toplama satırındadır; kayıt anında toplama satırı kaydedilmiş olduğundan
+    /// iade sevkinin ambar ve madde defteri girişleri LP'siz kalıyordu. Kayıttan
+    /// sonra kaydedilmiş toplamanın Yerleştir satırlarından (yoksa Al satırlarından)
+    /// LP bulunur ve girişlere yazılır. Aynı lotta birden çok palet varsa ambar
+    /// girişi boş kalır, madde defteri girişine LP listesi yazılır. LP düşümünden
+    /// (DOPSWHS LP Bin Sync) önce çağrılmalı: adı geçen LP önce düşülür.
+    /// </summary>
+    procedure StampPostedReturnShipmentLps(PostedWhseShipmentNo: Code[20])
+    var
+        PostedWhseShipmentLine: Record "Posted Whse. Shipment Line";
+        WarehouseEntry: Record "Warehouse Entry";
+        LpNos: List of [Code[20]];
+        LineLpNos: List of [Code[20]];
+        LpNo: Code[20];
+    begin
+        if PostedWhseShipmentNo = '' then
+            exit;
+        PostedWhseShipmentLine.SetRange("No.", PostedWhseShipmentNo);
+        PostedWhseShipmentLine.SetRange("Source Type", Database::"Purchase Line");
+        if not PostedWhseShipmentLine.FindSet(true) then
+            exit;
+        repeat
+            Clear(LineLpNos);
+            WarehouseEntry.Reset();
+            WarehouseEntry.SetRange("Reference No.", PostedWhseShipmentLine."Posted Source No.");
+            WarehouseEntry.SetRange("Reference Document", WarehouseEntry."Reference Document"::"Posted Rtrn. Shipment");
+            WarehouseEntry.SetRange("Source Type", Database::"Purchase Line");
+            WarehouseEntry.SetRange("Source No.", PostedWhseShipmentLine."Source No.");
+            WarehouseEntry.SetRange("Source Line No.", PostedWhseShipmentLine."Source Line No.");
+            WarehouseEntry.SetRange("Item No.", PostedWhseShipmentLine."Item No.");
+            WarehouseEntry.SetFilter("Qty. (Base)", '<0');
+            if WarehouseEntry.FindSet(true) then
+                repeat
+                    ReturnEntryLps(PostedWhseShipmentLine, WarehouseEntry, LpNos);
+                    if (LpNos.Count() = 1) and (WarehouseEntry."DOPSWHS LP No." = '') then begin
+                        WarehouseEntry."DOPSWHS LP No." := LpNos.Get(1);
+                        WarehouseEntry.Modify();
+                    end;
+                    foreach LpNo in LpNos do
+                        if not LineLpNos.Contains(LpNo) then
+                            LineLpNos.Add(LpNo);
+                    StampReturnItemEntries(PostedWhseShipmentLine, WarehouseEntry, LpNos);
+                until WarehouseEntry.Next() = 0;
+            if (LineLpNos.Count() = 1) and (PostedWhseShipmentLine."LP No." = '') then begin
+                PostedWhseShipmentLine."LP No." := LineLpNos.Get(1);
+                PostedWhseShipmentLine.Modify();
+            end;
+        until PostedWhseShipmentLine.Next() = 0;
+    end;
+
+    /// <summary>
+    /// Girişin gözünde hâlâ duran ve bu sevk satırının toplamasında geçen
+    /// LP'ler; önce Yerleştir satırları (bölünmüş "yeni sevk LP" burada), yoksa
+    /// Al satırları.
+    /// </summary>
+    local procedure ReturnEntryLps(PostedWhseShipmentLine: Record "Posted Whse. Shipment Line"; WarehouseEntry: Record "Warehouse Entry"; var LpNos: List of [Code[20]])
+    var
+        RegdWhseActivityLine: Record "Registered Whse. Activity Line";
+    begin
+        Clear(LpNos);
+        if PostedWhseShipmentLine."LP No." <> '' then begin
+            LpNos.Add(PostedWhseShipmentLine."LP No.");
+            exit;
+        end;
+        RegdWhseActivityLine.SetRange("Whse. Document Type", RegdWhseActivityLine."Whse. Document Type"::Shipment);
+        RegdWhseActivityLine.SetRange("Whse. Document No.", PostedWhseShipmentLine."Whse. Shipment No.");
+        RegdWhseActivityLine.SetRange("Whse. Document Line No.", PostedWhseShipmentLine."Whse Shipment Line No.");
+        RegdWhseActivityLine.SetRange("Item No.", WarehouseEntry."Item No.");
+        RegdWhseActivityLine.SetRange("Variant Code", WarehouseEntry."Variant Code");
+        RegdWhseActivityLine.SetRange("Lot No.", WarehouseEntry."Lot No.");
+        RegdWhseActivityLine.SetRange("Serial No.", WarehouseEntry."Serial No.");
+        RegdWhseActivityLine.SetFilter("LP No.", '<>%1', '');
+        RegdWhseActivityLine.SetRange("Action Type", RegdWhseActivityLine."Action Type"::Place);
+        RegdWhseActivityLine.SetRange("Bin Code", WarehouseEntry."Bin Code");
+        AddReturnLps(RegdWhseActivityLine, WarehouseEntry, LpNos);
+        if LpNos.Count() > 0 then
+            exit;
+        RegdWhseActivityLine.SetRange("Action Type", RegdWhseActivityLine."Action Type"::Take);
+        RegdWhseActivityLine.SetRange("Bin Code");
+        AddReturnLps(RegdWhseActivityLine, WarehouseEntry, LpNos);
+    end;
+
+    local procedure AddReturnLps(var RegdWhseActivityLine: Record "Registered Whse. Activity Line"; WarehouseEntry: Record "Warehouse Entry"; var LpNos: List of [Code[20]])
+    var
+        LP: Record "DOPSWHS LP Header";
+    begin
+        if RegdWhseActivityLine.FindSet() then
+            repeat
+                if not LpNos.Contains(RegdWhseActivityLine."LP No.") then
+                    if LP.Get(RegdWhseActivityLine."LP No.") then
+                        if (LP."Location Code" = WarehouseEntry."Location Code") and (LP."Bin Code" = WarehouseEntry."Bin Code") and
+                           (LP.Status in [LP.Status::Open, LP.Status::Built, LP.Status::Assigned])
+                        then
+                            LpNos.Add(RegdWhseActivityLine."LP No.");
+            until RegdWhseActivityLine.Next() = 0;
+    end;
+
+    local procedure StampReturnItemEntries(PostedWhseShipmentLine: Record "Posted Whse. Shipment Line"; WarehouseEntry: Record "Warehouse Entry"; LpNos: List of [Code[20]])
+    var
+        ItemLedgerEntry: Record "Item Ledger Entry";
+        LpNo: Code[20];
+        LpListText: Text;
+    begin
+        if LpNos.Count() = 0 then
+            exit;
+        ItemLedgerEntry.SetCurrentKey("Document No.", "Document Type", "Document Line No.");
+        ItemLedgerEntry.SetRange("Document No.", PostedWhseShipmentLine."Posted Source No.");
+        ItemLedgerEntry.SetRange("Document Type", ItemLedgerEntry."Document Type"::"Purchase Return Shipment");
+        ItemLedgerEntry.SetRange("Entry Type", ItemLedgerEntry."Entry Type"::Purchase);
+        ItemLedgerEntry.SetRange("Item No.", WarehouseEntry."Item No.");
+        ItemLedgerEntry.SetRange("Variant Code", WarehouseEntry."Variant Code");
+        ItemLedgerEntry.SetRange("Location Code", WarehouseEntry."Location Code");
+        ItemLedgerEntry.SetRange("Lot No.", WarehouseEntry."Lot No.");
+        ItemLedgerEntry.SetRange("Serial No.", WarehouseEntry."Serial No.");
+        ItemLedgerEntry.SetFilter(Quantity, '<0');
+        ItemLedgerEntry.SetRange("DOPSWHS LP No.", '');
+        if not ItemLedgerEntry.FindSet(true) then
+            exit;
+        if LpNos.Count() > 1 then
+            foreach LpNo in LpNos do begin
+                if LpListText <> '' then
+                    LpListText += ', ';
+                LpListText += LpNo;
+            end;
+        repeat
+            if LpNos.Count() = 1 then
+                StampItemLedgerEntry(ItemLedgerEntry, LpNos.Get(1))
+            else
+                if ItemLedgerEntry."DOPSWHS LP Nos." = '' then begin
+                    ItemLedgerEntry."DOPSWHS LP Nos." := CopyStr(LpListText, 1, MaxStrLen(ItemLedgerEntry."DOPSWHS LP Nos."));
+                    ItemLedgerEntry.Modify();
+                end;
+        until ItemLedgerEntry.Next() = 0;
+    end;
+
+    /// <summary>
     /// Negative Sale entries of the sales shipment a posted warehouse line
     /// produced. Sales-Post keeps the sales line number on the posted shipment
     /// line and on the item ledger entry, so the source line pins the entries
