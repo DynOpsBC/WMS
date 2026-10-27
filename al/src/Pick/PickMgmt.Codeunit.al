@@ -1380,6 +1380,15 @@ codeunit 72046 "DOPSWHS Pick Mgmt"
     begin
         if PickLine."Action Type" <> PickLine."Action Type"::Take then
             exit;
+        // Birden çok palet çifti varsa yalnız bu Al satırının eşi küçültülür.
+        if FindPairedPlaceLine(PickLine, RelatedPlaceLine) then begin
+            RelatedPlaceLine.Validate(Quantity, PickLine.Quantity);
+            RelatedPlaceLine.Validate("Qty. to Handle", PickLine."Qty. to Handle");
+            if RelatedPlaceLine."Lot No." <> PickLine."Lot No." then
+                RelatedPlaceLine.Validate("Lot No.", PickLine."Lot No.");
+            RelatedPlaceLine.Modify(true);
+            exit;
+        end;
         RelatedPlaceLine.SetRange("Activity Type", PickLine."Activity Type");
         RelatedPlaceLine.SetRange("No.", PickLine."No.");
         RelatedPlaceLine.SetRange("Action Type", RelatedPlaceLine."Action Type"::Place);
@@ -1422,7 +1431,8 @@ codeunit 72046 "DOPSWHS Pick Mgmt"
         RelatedPlaceLine.SetRange("Unit of Measure Code", PickLine."Unit of Measure Code");
         RelatedPlaceLine.SetRange("Breakbulk No.", PickLine."Breakbulk No.");
         RelatedPlaceLine.SetTrackingFilterFromWhseActivityLine(PickLine);
-        if not RelatedPlaceLine.FindFirst() then begin
+        if not FindPairedPlaceLine(PickLine, RelatedPlaceLine) then
+            if not RelatedPlaceLine.FindFirst() then begin
             // A newly-created pick can be structurally paired while its Place
             // line is still untracked. Clear only the tracking filters and
             // accept the fallback when the structural identity is unique.
@@ -2810,6 +2820,63 @@ codeunit 72046 "DOPSWHS Pick Mgmt"
         PlaceLine.Modify(true);
     end;
 
+    /// <summary>
+    /// BADE (27 Eki 2026, Merve PI002102): aynı kaynak satırı ve lot için iki palet
+    /// (iki Al/Yer çifti) olunca ilk Yer satırı her iki Al için bulunuyordu. 2. paletten
+    /// 200 onaylanınca 1. paletin Yer satırı 200 oluyor, kayıt "alınan 700, bırakılan
+    /// 500" diye duruyordu. Aynı yapıdaki Al ve Yer satırları satır sırasıyla eşlenir
+    /// (k. Al = k. Yer); sayılar tutmazsa false döner ve eski arama kullanılır.
+    /// </summary>
+    local procedure FindPairedPlaceLine(TakeLine: Record "Warehouse Activity Line"; var PlaceLine: Record "Warehouse Activity Line"): Boolean
+    var
+        Takes: Record "Warehouse Activity Line";
+        Places: Record "Warehouse Activity Line";
+        Position: Integer;
+        Found: Boolean;
+    begin
+        if TakeLine."Action Type" <> TakeLine."Action Type"::Take then
+            exit(false);
+        FilterPairStructure(TakeLine, Takes);
+        Takes.SetRange("Action Type", Takes."Action Type"::Take);
+        FilterPairStructure(TakeLine, Places);
+        Places.SetRange("Action Type", Places."Action Type"::Place);
+        if (Takes.Count() < 2) or (Takes.Count() <> Places.Count()) then
+            exit(false);
+        Takes.SetCurrentKey("Activity Type", "No.", "Line No.");
+        Takes.FindSet();
+        repeat
+            Position += 1;
+            Found := Takes."Line No." = TakeLine."Line No.";
+        until Found or (Takes.Next() = 0);
+        if not Found then
+            exit(false);
+        Places.SetCurrentKey("Activity Type", "No.", "Line No.");
+        Places.FindFirst();
+        if Position > 1 then
+            Places.Next(Position - 1);
+        PlaceLine := Places;
+        exit(true);
+    end;
+
+    local procedure FilterPairStructure(SourceLine: Record "Warehouse Activity Line"; var Line: Record "Warehouse Activity Line")
+    begin
+        Line.Reset();
+        Line.SetRange("Activity Type", SourceLine."Activity Type");
+        Line.SetRange("No.", SourceLine."No.");
+        Line.SetRange("Whse. Document Type", SourceLine."Whse. Document Type");
+        Line.SetRange("Whse. Document No.", SourceLine."Whse. Document No.");
+        Line.SetRange("Whse. Document Line No.", SourceLine."Whse. Document Line No.");
+        Line.SetRange("Source Type", SourceLine."Source Type");
+        Line.SetRange("Source Subtype", SourceLine."Source Subtype");
+        Line.SetRange("Source No.", SourceLine."Source No.");
+        Line.SetRange("Source Line No.", SourceLine."Source Line No.");
+        Line.SetRange("Source Subline No.", SourceLine."Source Subline No.");
+        Line.SetRange("Item No.", SourceLine."Item No.");
+        Line.SetRange("Variant Code", SourceLine."Variant Code");
+        Line.SetRange("Unit of Measure Code", SourceLine."Unit of Measure Code");
+        Line.SetRange("Breakbulk No.", SourceLine."Breakbulk No.");
+    end;
+
     local procedure FindRelatedPlaceLineForShippingLp(PickLine: Record "Warehouse Activity Line"; var PlaceLine: Record "Warehouse Activity Line")
     begin
         if PickLine."Source Type" = Database::"Prod. Order Component" then begin
@@ -2832,6 +2899,8 @@ codeunit 72046 "DOPSWHS Pick Mgmt"
         PlaceLine.SetRange("Variant Code", PickLine."Variant Code");
         PlaceLine.SetRange("Unit of Measure Code", PickLine."Unit of Measure Code");
         PlaceLine.SetRange("Breakbulk No.", PickLine."Breakbulk No.");
+        if FindPairedPlaceLine(PickLine, PlaceLine) then
+            exit;
         PlaceLine.SetTrackingFilterFromWhseActivityLine(PickLine);
         if PlaceLine.FindFirst() then
             exit;

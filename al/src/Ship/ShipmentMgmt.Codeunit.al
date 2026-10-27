@@ -531,7 +531,7 @@ codeunit 72047 "DOPSWHS Shipment Mgmt"
         if PostedNo <> '' then begin
             LpPropagation.ReconcilePostedWarehouseShipment(PostedNo);
             // Satış dışı sevk (satın alma iadesi, transfer): sevk gözündeki LP fazlası.
-            LPBinSync.SyncPostedWhseShipment(PostedNo);
+            LPBinSync.SyncPostedWhseShipment(PostedNo, WhseShipmentNo);
         end;
 
         StampHeaders(WhseShipmentNo, PostedNo);

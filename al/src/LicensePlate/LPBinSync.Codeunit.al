@@ -675,19 +675,49 @@ codeunit 72456 "DOPSWHS LP Bin Sync"
     [InherentPermissions(PermissionObjectType::TableData, Database::"DOPSWHS LP Line", 'RMD')]
     [InherentPermissions(PermissionObjectType::TableData, Database::"DOPSWHS LP Movement Ledger", 'RI')]
     procedure SyncPostedWhseShipment(PostedShipmentNo: Code[20]): Integer
+    begin
+        exit(SyncPostedWhseShipment(PostedShipmentNo, ''));
+    end;
+
+    /// <summary>
+    /// BADE (27 Eki 2026, Merve LP000846): satın alma iadesi terminalden sevk edildi ama
+    /// LP sevk gözünde dolu kaldı. Ambar girişleri yalnız kayıtlı sevk numarasıyla
+    /// aranıyordu; BC sevk girişini ambar sevk numarasıyla ya da yalnız kayıtlı kaynak
+    /// belgeyle (iade sevk irsaliyesi) yazabiliyor. Üç yol da taranır, giriş tekrarı yok.
+    /// </summary>
+    procedure SyncPostedWhseShipment(PostedShipmentNo: Code[20]; WhseShipmentNo: Code[20]): Integer
     var
         WarehouseEntry: Record "Warehouse Entry";
+        PostedLine: Record "Posted Whse. Shipment Line";
         TempEntry: Record "Warehouse Entry" temporary;
+        SourceDocs: List of [Code[20]];
+        SourceNo: Code[20];
     begin
         if PostedShipmentNo = '' then
             exit(0);
         WarehouseEntry.SetRange("Whse. Document Type", WarehouseEntry."Whse. Document Type"::Shipment);
         WarehouseEntry.SetRange("Whse. Document No.", PostedShipmentNo);
-        if WarehouseEntry.FindSet() then
+        CollectShipmentEntries(WarehouseEntry, TempEntry);
+        if WhseShipmentNo <> '' then begin
+            WarehouseEntry.SetRange("Whse. Document No.", WhseShipmentNo);
+            CollectShipmentEntries(WarehouseEntry, TempEntry);
+        end;
+        PostedLine.SetRange("No.", PostedShipmentNo);
+        if PostedLine.FindSet() then
             repeat
-                if (WarehouseEntry."Bin Code" <> '') and (WarehouseEntry."Item No." <> '') and (WarehouseEntry."Qty. (Base)" <> 0) then
-                    AddToBuffer(TempEntry, WarehouseEntry);
-            until WarehouseEntry.Next() = 0;
+                if (PostedLine."Posted Source No." <> '') and not SourceDocs.Contains(PostedLine."Posted Source No.") then
+                    SourceDocs.Add(PostedLine."Posted Source No.");
+            until PostedLine.Next() = 0;
+        foreach SourceNo in SourceDocs do begin
+            WarehouseEntry.Reset();
+            WarehouseEntry.SetRange("Reference No.", SourceNo);
+            WarehouseEntry.SetFilter("Reference Document", '%1|%2|%3',
+                WarehouseEntry."Reference Document"::"Posted Rtrn. Shipment",
+                WarehouseEntry."Reference Document"::"Posted Shipment",
+                WarehouseEntry."Reference Document"::"Posted T. Shipment");
+            WarehouseEntry.SetFilter("Entry Type", '%1', WarehouseEntry."Entry Type"::"Negative Adjmt.");
+            CollectShipmentEntries(WarehouseEntry, TempEntry);
+        end;
         TempEntry.Reset();
         if TempEntry.IsEmpty() then
             exit(0);
@@ -933,6 +963,15 @@ codeunit 72456 "DOPSWHS LP Bin Sync"
         if (WarehouseJournalLine."New Serial No." <> '') and (WarehouseJournalLine."New Serial No." <> WarehouseJournalLine."Serial No.") then
             exit(true);
         exit(false);
+    end;
+
+    local procedure CollectShipmentEntries(var WarehouseEntry: Record "Warehouse Entry"; var TempEntry: Record "Warehouse Entry" temporary)
+    begin
+        if WarehouseEntry.FindSet() then
+            repeat
+                if (WarehouseEntry."Bin Code" <> '') and (WarehouseEntry."Item No." <> '') and (WarehouseEntry."Qty. (Base)" <> 0) then
+                    AddToBuffer(TempEntry, WarehouseEntry);
+            until WarehouseEntry.Next() = 0;
     end;
 
     local procedure AddToBuffer(var TempBuffer: Record "Warehouse Entry" temporary; WarehouseEntry: Record "Warehouse Entry")
