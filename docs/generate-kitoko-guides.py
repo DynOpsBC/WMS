@@ -17,7 +17,7 @@ import subprocess
 ROOT = Path(__file__).resolve().parents[1]
 OUT = ROOT / 'output/kilavuzlar'
 SHOTS = ROOT / 'output/kitoko-1.14.200-release/screenshots'
-VERSION = '1.14.200-kitoko'
+VERSION = '1.14.201-kitoko'
 DATE = '27 Ekim 2026'
 
 CSS = """
@@ -80,7 +80,7 @@ SAYIM = f"""
 <ol class="steps">
 <li>BCWMS Kitoko uygulamasını açın. Açılışta <strong>Yeni sürüm hazır</strong> penceresi çıkarsa doğrudan 3. adıma geçin.</li>
 <li>Pencere çıkmazsa giriş ekranındaki <strong>Uygulamayı güncelle</strong> düğmesine, ardından <strong>Güncellemeyi Kontrol Et</strong> düğmesine dokunun.</li>
-<li>Pencerede <strong>v{VERSION}</strong> yazdığını görün ve <strong>İndir &amp; yükle</strong> düğmesine dokunun. İndirme birkaç saniye sürer.</li>
+<li>Pencerede en güncel sürümü (bu kılavuz hazırlanırken <strong>v{VERSION}</strong>) görün ve <strong>İndir &amp; yükle</strong> düğmesine dokunun. İndirme birkaç saniye sürer. Görseldeki sürüm numarası farklı olabilir.</li>
 <li>Android’in onay penceresinde <strong>Güncelle</strong>’ye dokunun. Kurulum bitince <strong>Aç</strong> ile uygulamaya dönün.</li>
 </ol>
 <div class="shots">
@@ -89,7 +89,7 @@ SAYIM = f"""
 <figure><img src="{img('04-android-guncelle.png')}" alt="Android güncelleme onayı"><figcaption>C. Android onayı. Bu görüntü İngilizce bir emülatörden alındı; Türkçe terminalde düğme “Güncelle” yazar.</figcaption></figure>
 </div>
 <div class="note">Kurulum izni sorulursa <strong>Ayarlar → Bu kaynaktan izin ver</strong> seçeneğini açın, geri dönüp Güncelle’ye dokunun. Bu izin terminal başına bir kez sorulur.</div>
-<p>Güncellemeden sonra giriş ekranında <strong>ortamı</strong> ve <strong>Element 4 Dizayn Müh. End. A.Ş.</strong> şirketini kontrol edin, kendi terminal kullanıcınız ve PIN’inizle giriş yapın. Yanlış ortama bağlı bir terminalde ürün listesi boş gelir ve etiket basılamaz.</p>
+<p>Güncellemeden sonra giriş ekranında <strong>ortamı</strong> ve <strong>Element 4 Dizayn Müh. End. A.Ş.</strong> şirketini kontrol edin, kendi terminal kullanıcınız ve PIN’inizle giriş yapın. Etiketler ve sayım <strong>Sand2010 · Element 4 Dizayn Müh. End. A.Ş.</strong> bağlantısında yapılır. Demo ortama (DemoSandbox, DemoV2) bağlı bir terminalde ürün listesi eksik gelir ve sayım etiketleri basılamaz. Bağlantıyı ana menüdeki <strong>Ortam / şirket değiştir</strong> ile değiştirebilirsiniz.</p>
 {BACK}</section>
 
 <section id="fark"><h2>2. İki tür etiket ve farkı</h2>
@@ -184,7 +184,7 @@ SAYIM = f"""
 <section id="sorun"><h2>6. Sorun olursa</h2>
 <table><thead><tr><th>Ne görüyorsunuz?</th><th>Ne yapın?</th></tr></thead><tbody>
 <tr><td>Etiket çıkmıyor</td><td>Yazıcının açık ve rulosunun takılı olduğunu, bağlı bilgisayarın ve Print Agent’ın açık olduğunu, terminalde doğru yazıcının seçili olduğunu kontrol edin. Kuyruğa bakmadan aynı aralığı yeniden başlatmayın.</td></tr>
-<tr><td>“BC’de etiket basılacak ürün bulunamadı”</td><td>Seçilen aralıkta ürün yok demektir. Terminalin doğru ortama ve Element 4 şirketine bağlı olduğunu kontrol edin.</td></tr>
+<tr><td>“Bu aralıkta ürün yok: … bağlantısında N ürün var” veya “BC’de etiket basılacak ürün bulunamadı”</td><td>Terminal ürün sayısı az olan bir ortama bağlı (ör. DemoSandbox · ELEMENT4-TR-DEMO-V1). Ana menüden <strong>Ortam / şirket değiştir</strong> ile <strong>Sand2010 · Element 4 Dizayn Müh. End. A.Ş.</strong> bağlantısını seçin.</td></tr>
 <tr><td>“Ürün listesi alınamadı”</td><td>Bağlantı sorunu. Wi-Fi’yi kontrol edip tekrar deneyin.</td></tr>
 <tr><td>“… için ürün veya LP bulunamadı”</td><td>Okutulan barkod BC’de bir maddeyle eşleşmiyor. Etiketi kontrol edin veya madde numarasını elle yazın.</td></tr>
 <tr><td>Sayımda “rafı bu sayımın lokasyon/alan filtresinde bulunamadı”</td><td>Okuttuğunuz raf bu sayımın kapsamında değil. Doğru alanda olduğunuzu kontrol edin veya sorumluya bildirin.</td></tr>
