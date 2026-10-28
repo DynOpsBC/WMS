@@ -967,6 +967,10 @@ codeunit 72456 "DOPSWHS LP Bin Sync"
 
     local procedure CollectShipmentEntries(var WarehouseEntry: Record "Warehouse Entry"; var TempEntry: Record "Warehouse Entry" temporary)
     begin
+        // Yalnız sevkin çıkış girişleri. Ambar sevk no'su toplamanın Movement
+        // girişlerini de taşır; onlar alınırsa sevk gözüne giren +500 çıkan -500'ü
+        // sıfırlar ve LP düşülmez (28 Eki, LP000871 / 105039).
+        WarehouseEntry.SetFilter("Entry Type", '<>%1', WarehouseEntry."Entry Type"::Movement);
         if WarehouseEntry.FindSet() then
             repeat
                 if (WarehouseEntry."Bin Code" <> '') and (WarehouseEntry."Item No." <> '') and (WarehouseEntry."Qty. (Base)" <> 0) then

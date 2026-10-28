@@ -1061,6 +1061,47 @@ codeunit 72047 "DOPSWHS Shipment Mgmt"
         WhseItemTrackingLine.Insert(true);
     end;
 
+    /// <summary>
+    /// BADE (28 Eki 2026): kaydedilmiş bir sevkin (kaynak belge no, örn. iade
+    /// sevk irsaliyesi 105039) kayıt sonrası LP adımlarını yeniden çalıştırır:
+    /// iade girişlerine LP yazımı ve sevk gözündeki LP fazlasının düşümü. Tekrar
+    /// çalıştırmak güvenlidir (düşüm yalnız LP toplamı göz stokunu aşarsa olur).
+    /// Döndürür: bulunan kayıtlar ve değişen LP sayısı (teşhis için).
+    /// </summary>
+    procedure ResyncPostedShipmentLps(PostedSourceNo: Code[20]): Text
+    var
+        PostedWhseShipmentLine: Record "Posted Whse. Shipment Line";
+        WarehouseEntry: Record "Warehouse Entry";
+        LPBinSync: Codeunit "DOPSWHS LP Bin Sync";
+        LpPropagation: Codeunit "DOPSWHS LP Propagation";
+        PostedNo: Code[20];
+        WhseShipmentNo: Code[20];
+        ByReference: Integer;
+        ByPostedNo: Integer;
+        ByWhseNo: Integer;
+        Changed: Integer;
+    begin
+        PostedWhseShipmentLine.SetRange("Posted Source No.", PostedSourceNo);
+        if not PostedWhseShipmentLine.FindFirst() then
+            exit(StrSubstNo('%1 için kayıtlı ambar sevk satırı yok.', PostedSourceNo));
+        PostedNo := PostedWhseShipmentLine."No.";
+        WhseShipmentNo := PostedWhseShipmentLine."Whse. Shipment No.";
+
+        WarehouseEntry.SetRange("Reference No.", PostedSourceNo);
+        ByReference := WarehouseEntry.Count();
+        WarehouseEntry.Reset();
+        WarehouseEntry.SetRange("Whse. Document Type", WarehouseEntry."Whse. Document Type"::Shipment);
+        WarehouseEntry.SetRange("Whse. Document No.", PostedNo);
+        ByPostedNo := WarehouseEntry.Count();
+        WarehouseEntry.SetRange("Whse. Document No.", WhseShipmentNo);
+        ByWhseNo := WarehouseEntry.Count();
+
+        LpPropagation.StampPostedReturnShipmentLps(PostedNo);
+        Changed := LPBinSync.SyncPostedWhseShipment(PostedNo, WhseShipmentNo);
+        exit(StrSubstNo('posted=%1 whse=%2 sourceType=%3 entriesByRef=%4 byPostedNo=%5 byWhseNo=%6 changedLps=%7',
+            PostedNo, WhseShipmentNo, PostedWhseShipmentLine."Source Type", ByReference, ByPostedNo, ByWhseNo, Changed));
+    end;
+
     local procedure StampHeaders(WhseShipmentNo: Code[20]; PostedShipmentNo: Code[20])
     var
         LpPropagation: Codeunit "DOPSWHS LP Propagation";

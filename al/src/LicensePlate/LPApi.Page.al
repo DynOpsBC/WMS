@@ -103,6 +103,15 @@ page 72088 "DOPSWHS LP API"
     var
         Reusable: Boolean;
 
+    /// <summary>Kaydedilmiş sevkin LP adımlarını yeniden çalıştırır (bkz. DOPSWHS Shipment Mgmt).</summary>
+    [ServiceEnabled]
+    procedure resyncPostedShipment(postedSourceNo: Code[20]): Text
+    var
+        ShipmentMgmt: Codeunit "DOPSWHS Shipment Mgmt";
+    begin
+        exit(ShipmentMgmt.ResyncPostedShipmentLps(postedSourceNo));
+    end;
+
     [ServiceEnabled]
     procedure release()
     var

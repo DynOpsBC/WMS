@@ -51,13 +51,28 @@ codeunit 72440 "DOPSWHS Assignment Stamp"
     end;
 
     local procedure Stamp(AssignedUserId: Code[50]; var AssignmentDate: Date; var AssignmentTime: Time)
+    var
+        TypeHelper: Codeunit "Type Helper";
+        LocalNow: DateTime;
     begin
         if AssignedUserId = '' then begin
             AssignmentDate := 0D;
             AssignmentTime := 0T;
             exit;
         end;
-        AssignmentDate := Today();
-        AssignmentTime := Time();
+        // İstemci oturumunda Today/Time kullanıcının saat dilimindedir. Terminal
+        // (API) oturumu UTC'dedir; "bana ata" saati 3 saat geri yazılıyordu
+        // (27 Eki, PU001071 12:15). Depo saati Türkiye saatine çevrilir.
+        if GuiAllowed() then begin
+            AssignmentDate := Today();
+            AssignmentTime := Time();
+            exit;
+        end;
+        LocalNow := TypeHelper.ConvertDateTimeFromUTCToTimeZone(CurrentDateTime(), WarehouseTimeZoneTxt);
+        AssignmentDate := DT2Date(LocalNow);
+        AssignmentTime := DT2Time(LocalNow);
     end;
+
+    var
+        WarehouseTimeZoneTxt: Label 'Turkey Standard Time', Locked = true;
 }

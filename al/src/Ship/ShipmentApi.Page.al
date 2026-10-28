@@ -21,6 +21,8 @@ page 72093 "DOPSWHS Shipment API"
                 field(no; Rec."No.") { Caption = 'no'; }
                 field(locationCode; Rec."Location Code") { Caption = 'locationCode'; }
                 field(assignedUserId; Rec."Assigned User ID") { Caption = 'assignedUserId'; Editable = false; }
+                field(assignmentDate; Rec."Assignment Date") { Caption = 'assignmentDate'; Editable = false; }
+                field(assignmentTime; Rec."Assignment Time") { Caption = 'assignmentTime'; Editable = false; }
                 field(status; Rec.Status) { Caption = 'status'; }
                 field(shipmentDate; Rec."Shipment Date") { Caption = 'shipmentDate'; }
                 field(sourceNo; SourceNo) { Caption = 'sourceNo'; }
