@@ -20,6 +20,7 @@ class MainActivity : ComponentActivity() {
     // setContent içinden LaunchedEffect(Unit) ile dispatch, Compose tree
     // mount edildikten sonra çalışır → subscriber'lar hazır → drop yok.
     val coldStartIntent: Intent? = intent
+    DeviceAuth.handleBrowserRedirect(coldStartIntent?.data)
     setContent {
       LaunchedEffect(Unit) { ScanBus.dispatch(coldStartIntent) }
       BcwmsTheme {
@@ -32,6 +33,8 @@ class MainActivity : ComponentActivity() {
 
   override fun onNewIntent(intent: Intent) {
     super.onNewIntent(intent)
+    // Tarayıcıda Microsoft girişi <applicationId>://auth ile buraya döner.
+    if (DeviceAuth.handleBrowserRedirect(intent.data)) return
     // Warm intent: app zaten foreground'da, Zebra sarı tetik tarayan
     // operatörün barkodunu ScanBus üzerinden aktif ekrana ulaştır.
     ScanBus.dispatch(intent)

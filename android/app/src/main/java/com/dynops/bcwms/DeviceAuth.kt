@@ -1,12 +1,20 @@
 package com.dynops.bcwms
 
+import android.content.Context
+import android.content.Intent
+import android.net.Uri
+import android.util.Base64
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import org.json.JSONObject
 import java.net.HttpURLConnection
 import java.net.URL
 import java.net.URLEncoder
+import java.security.MessageDigest
+import java.security.SecureRandom
 
 /**
  * Email-based sign-in via the OAuth 2.0 Device Authorization Grant (no MSAL dependency).
@@ -175,6 +183,87 @@ object DeviceAuth {
             // AAD rotates refresh tokens; fall back to the old one if none returned.
             else Triple(token, j.optString("refresh_token").ifBlank { refreshToken }, j.optInt("expires_in", 3600))
         } catch (e: Exception) { null }
+    }
+
+    // ---- Browser sign-in (authorization code + PKCE) ----
+    // ICT (30 Eki 2026): ICT kiracısında Microsoft güvenlik varsayılanları açık ve cihaz kodu
+    // akışını engelliyor (AADSTS530035). Bu akışta giriş, cihazın tarayıcısında normal Microsoft
+    // sayfasında yapılır (MFA dahil) ve tarayıcı <applicationId>://auth adresiyle uygulamaya döner.
+
+    private class PendingBrowserSignIn(val state: String, val verifier: String, val tenant: String) {
+        val code = CompletableDeferred<Result<String>>()
+    }
+
+    @Volatile private var pendingBrowser: PendingBrowserSignIn? = null
+
+    fun browserRedirectUri(): String = "${BuildConfig.APPLICATION_ID}://auth"
+
+    /** Opens the Microsoft sign-in page and waits (up to 10 minutes) for the app redirect. */
+    suspend fun signInWithBrowser(context: Context, email: String): TokenResult {
+        val verifier = randomUrlSafe(48)
+        val challenge = Base64.encodeToString(
+            MessageDigest.getInstance("SHA-256").digest(verifier.toByteArray(Charsets.US_ASCII)),
+            Base64.URL_SAFE or Base64.NO_PADDING or Base64.NO_WRAP,
+        )
+        val tenant = tenantFromEmail(email, BuildConfig.BC_FALLBACK_TENANT)
+        val pending = PendingBrowserSignIn(randomUrlSafe(16), verifier, tenant)
+        pendingBrowser = pending
+        val url = authority("authorize", tenant) +
+            "?client_id=${enc(BcApi.CLIENT_ID)}&response_type=code" +
+            "&redirect_uri=${enc(browserRedirectUri())}&response_mode=query" +
+            "&scope=${enc(SCOPE)}&state=${enc(pending.state)}" +
+            "&code_challenge=${enc(challenge)}&code_challenge_method=S256" +
+            (if (email.isNotBlank()) "&login_hint=${enc(email.trim())}" else "") +
+            "&prompt=select_account"
+        context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+        val result = withTimeoutOrNull(10 * 60 * 1000L) { pending.code.await() }
+        pendingBrowser = null
+        val code = result ?: return TokenResult.Failure("Zaman aşımı — tarayıcıda giriş tamamlanmadı.")
+        return code.fold(
+            onSuccess = { redeemBrowserCode(it, pending) },
+            onFailure = { TokenResult.Failure(it.message ?: "Giriş tamamlanmadı.") },
+        )
+    }
+
+    /** Called by MainActivity for <applicationId>://auth intents. Returns true when handled. */
+    fun handleBrowserRedirect(uri: Uri?): Boolean {
+        if (uri == null || uri.scheme != BuildConfig.APPLICATION_ID || uri.host != "auth") return false
+        val pending = pendingBrowser ?: return true
+        if (uri.getQueryParameter("state") != pending.state) {
+            pending.code.complete(Result.failure(IllegalStateException("Giriş yanıtı bu cihazın isteğine ait değil.")))
+            return true
+        }
+        val code = uri.getQueryParameter("code")
+        if (!code.isNullOrBlank()) pending.code.complete(Result.success(code))
+        else pending.code.complete(Result.failure(IllegalStateException(
+            uri.getQueryParameter("error_description")?.substringBefore("\r")?.substringBefore("\n")
+                ?: uri.getQueryParameter("error") ?: "Giriş reddedildi.")))
+        return true
+    }
+
+    private suspend fun redeemBrowserCode(code: String, pending: PendingBrowserSignIn): TokenResult = withContext(Dispatchers.IO) {
+        try {
+            val body = "grant_type=authorization_code" +
+                "&client_id=${enc(BcApi.CLIENT_ID)}" +
+                "&code=${enc(code)}" +
+                "&redirect_uri=${enc(browserRedirectUri())}" +
+                "&code_verifier=${enc(pending.verifier)}" +
+                "&scope=${enc(SCOPE)}"
+            val (status, text) = postForm(authority("token", pending.tenant), body)
+            val j = try { JSONObject(text) } catch (e: Exception) { JSONObject() }
+            val token = j.optString("access_token")
+            if (status in 200..299 && token.isNotBlank())
+                TokenResult.Success(token, j.optString("refresh_token"), j.optInt("expires_in", 3600))
+            else TokenResult.Failure(j.optString("error_description").substringBefore("\r").ifBlank { "AAD hatası ($status)" })
+        } catch (e: Exception) {
+            TokenResult.Failure(e.message ?: "ağ hatası")
+        }
+    }
+
+    private fun randomUrlSafe(bytes: Int): String {
+        val b = ByteArray(bytes)
+        SecureRandom().nextBytes(b)
+        return Base64.encodeToString(b, Base64.URL_SAFE or Base64.NO_PADDING or Base64.NO_WRAP)
     }
 
     private fun enc(s: String) = URLEncoder.encode(s, "UTF-8")

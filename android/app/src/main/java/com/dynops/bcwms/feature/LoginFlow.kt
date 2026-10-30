@@ -259,42 +259,27 @@ fun LoginFlow(
         }
     }
 
+    // ICT kiracısı cihaz kodu akışını engellediği için giriş tarayıcıda yapılır ve uygulamaya döner.
     fun startSignIn() {
         scope.launch {
-            busy = true; status = "Giriş kodu alınıyor..."
-            val res = DeviceAuth.requestCode(email.trim())
-            busy = false
-            res.onSuccess { code ->
-                deviceCode = code
-                step = Step.DeviceCode
-                status = ""
-                // (User taps "Tarayıcıda Aç" to open the browser — keeps the code visible in-app first.)
-                // Poll for completion.
-                scope.launch {
-                    busy = true; status = "Tarayıcıda giriş bekleniyor..."
-                    when (val t = DeviceAuth.pollForToken(code)) {
-                        is DeviceAuth.TokenResult.Success -> {
-                            BcApi.saveLoginEmail(context, email)
-                            BcApi.saveToken(context, t.accessToken)
+            busy = true; status = "Tarayıcıda Microsoft girişi bekleniyor..."
+            when (val t = DeviceAuth.signInWithBrowser(context, email.trim())) {
+                is DeviceAuth.TokenResult.Success -> {
+                    BcApi.saveLoginEmail(context, email)
+                    BcApi.saveToken(context, t.accessToken)
                     BcApi.saveRefreshToken(context, t.refreshToken)
                     BcApi.saveTokenExpiry(context, t.expiresInSec)
-                            status = "Token alındı, ortamlar keşfediliyor..."
-                            lastToken = t.accessToken
-                            envList = discoverLoginEnvironments(t.accessToken)
-                            busy = false
-                            selectedEnv = envList.firstOrNull()
-                            step = Step.SelectEnvCompany
-                            if (envList.isEmpty()) {
-                                status = "⚠️ Otomatik ortam bulunamadı — ortam adınızı yazıp 'Ortamı Bul' deyin"
-                            } else {
-                                status = ""
-                            }
-                        }
-                        is DeviceAuth.TokenResult.Failure -> { busy = false; status = "🔴 ${t.error}" }
-                        is DeviceAuth.TokenResult.Pending -> { busy = false; status = t.reason }
-                    }
+                    status = "Token alındı, ortamlar keşfediliyor..."
+                    lastToken = t.accessToken
+                    envList = discoverLoginEnvironments(t.accessToken)
+                    busy = false
+                    selectedEnv = envList.firstOrNull()
+                    step = Step.SelectEnvCompany
+                    status = if (envList.isEmpty()) "⚠️ Otomatik ortam bulunamadı — ortam adınızı yazıp 'Ortamı Bul' deyin" else ""
                 }
-            }.onFailure { busy = false; status = "🔴 ${it.message}" }
+                is DeviceAuth.TokenResult.Failure -> { busy = false; status = "🔴 ${t.error}" }
+                is DeviceAuth.TokenResult.Pending -> { busy = false; status = t.reason }
+            }
         }
     }
 

@@ -11,3 +11,11 @@ Flavor adı `kitoko` kalır; yalnız şu değerler ICT'ye aittir:
 - Uygulama kimliği `com.dynops.bcwms.ict`, etiket "BCWMS ICT", güncelleme kanalı `android-ict-channel`.
 
 BC: BCWMSApp 1.14.3.22 ICT Sandbox'a kuruldu (önceki 1.14.1.32'nin üzerine).
+
+## 1.14.202 (30 Eki 2026) — tarayıcıyla Microsoft girişi
+
+ICT kiracısında Microsoft güvenlik varsayılanları cihaz kodu akışını engelliyor (AADSTS530035).
+"Tarayıcıda Microsoft ile Giriş" artık cihazın tarayıcısında normal Microsoft sayfasını açar
+(MFA dahil, authorization code + PKCE) ve `com.dynops.bcwms.ict://auth` ile uygulamaya döner.
+Entra kaydına bu yönlendirme adresi eklendi. Terminal EL-01, "ICT Yönetici" ve "Test Operatör"
+PIN kullanıcıları ICT Sandbox'ta tek seferlik kurulum uzantısıyla açıldı (uzantı kaldırıldı).
