@@ -96,27 +96,30 @@ android {
     // Kitoko Group (19 Eki 2026): BADE hattının kopyası (isBadeFamily) + EMU'nun
     // etiket ekranları. Kendi Entra uygulama kaydı (Kitoko kiracısında public
     // client), kendi applicationId'si ve güncelleme kanalı; BADE logosu kullanılmaz.
+    // ICT Investment (30 Eki 2026): Element 4 / Kitoko hattının birebir aynısı. Flavor adı "kitoko"
+    // kalır, böylece bütün Kitoko ekran ve akış davranışı değişmeden gelir; yalnız kiracı, Entra
+    // kaydı, varsayılan ortam/şirket, uygulama kimliği ve güncelleme kanalı ICT'ye aittir.
     create("kitoko") {
       dimension = "tenant"
-      applicationIdSuffix = ".kitoko"
+      applicationIdSuffix = ".ict"
       versionCode = customerVersionCode
       versionName = customerVersionName
-      versionNameSuffix = "-kitoko"
-      manifestPlaceholders["appLabel"] = "BCWMS Kitoko"
-      // Entra "BCWMS Terminal (Kitoko)" uygulama kaydının Application (client) ID'si.
-      buildConfigField("String", "BC_CLIENT_ID", "\"${providers.gradleProperty("kitokoClientId").orNull ?: "8dbc8036-e191-4d8b-ad18-f987d5d499e1"}\"")
-      buildConfigField("String", "BC_FALLBACK_TENANT", "\"f270e8be-e7b0-4ac0-b34a-33014d34d994\"")
-      buildConfigField("String", "BC_DEFAULT_ENVIRONMENT", "\"Sand2010\"")
+      versionNameSuffix = "-ict"
+      manifestPlaceholders["appLabel"] = "BCWMS ICT"
+      // Entra "BCWMS Terminal (ICT)" uygulama kaydının Application (client) ID'si (ICT kiracısı, public client).
+      buildConfigField("String", "BC_CLIENT_ID", "\"${providers.gradleProperty("ictClientId").orNull ?: "cd87f9b3-1a16-4b0b-bceb-3385e5f82eb5"}\"")
+      buildConfigField("String", "BC_FALLBACK_TENANT", "\"b8eb0ad0-3b74-4e0b-9390-5fb1ff8555e1\"")
+      buildConfigField("String", "BC_DEFAULT_ENVIRONMENT", "\"Sandbox\"")
       buildConfigField("String", "BC_DEFAULT_COMPANY_ID", "\"\"")
-      buildConfigField("String", "BC_DEFAULT_COMPANY_NAME", "\"Element 4 Dizayn Müh. End. A.Ş.\"")
+      buildConfigField("String", "BC_DEFAULT_COMPANY_NAME", "\"ICT\"")
       buildConfigField("boolean", "BC_ALLOW_PRODUCTION", "true")
-      buildConfigField("String", "TENANT_LABEL", "\"Kitoko\"")
-      buildConfigField("String", "LOGIN_EMAIL_HINT", "\"ornek@kitokogroup.com\"")
+      buildConfigField("String", "TENANT_LABEL", "\"ICT Investment\"")
+      buildConfigField("String", "LOGIN_EMAIL_HINT", "\"ornek@ictinvest.onmicrosoft.com\"")
       buildConfigField("String", "LOGIN_DEFAULT_EMAIL", "\"\"")
       buildConfigField(
         "String",
         "UPDATE_MANIFEST_URL",
-        "\"https://github.com/DynOpsBC/WMS/releases/download/android-kitoko-channel/latest.json\"",
+        "\"https://github.com/DynOpsBC/WMS/releases/download/android-ict-channel/latest.json\"",
       )
     }
     create("emu") {
