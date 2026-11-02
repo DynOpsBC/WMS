@@ -48,7 +48,7 @@ page 72006 "DOPSWHS Quality Rules"
                 field("Create Automatically"; Rec."Create Automatically")
                 {
                     ApplicationArea = All;
-                    ToolTip = 'Specifies that the quality order is created automatically when a warehouse receipt line is created for a purchase order line in the scope of the rule (Before Posting). Otherwise use Create Quality Orders on the receipt or purchase order.';
+                    ToolTip = 'Specifies that the quality order is created automatically: for purchase receipts (Before Posting) when the warehouse receipt line is created, for assembly outputs when the assembly order is released. Otherwise use Create Quality Orders / Create Final Inspection on the document.';
                 }
                 field(Description; Rec.Description)
                 {

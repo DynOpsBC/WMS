@@ -78,9 +78,11 @@ table 72036 "DOPSWHS Quality Rule"
         }
         field(90; "Create Automatically"; Boolean)
         {
-            // Before Posting rules: the quality order is created together with
-            // the warehouse receipt line (BC and terminal), so the inspector finds
-            // it in the quality list before the goods are received.
+            // Before Posting receipt rules: the quality order is created together
+            // with the warehouse receipt line (BC and terminal), so the inspector
+            // finds it in the quality list before the goods are received.
+            // Assembly Output rules: the final inspection is created when the
+            // assembly order is released.
             Caption = 'Create Automatically';
             InitValue = true;
         }

@@ -482,6 +482,41 @@ codeunit 72001 "DOPSWHS Quality Gate Mgmt"
     // INV-009 assembly final inspection gate
     // -------------------------------------------------------------------------
 
+    /// <summary>
+    /// Creation rule: releasing an assembly order (also an assemble-to-order
+    /// order released with its sales order) in the scope of an "Assembly
+    /// Output" rule with "Create Automatically" creates its final inspection,
+    /// unless an inspection for the coming output already exists.
+    /// </summary>
+    [EventSubscriber(ObjectType::Codeunit, Codeunit::"Release Assembly Document", 'OnAfterReleaseAssemblyDoc', '', false, false)]
+    local procedure AutoCreateFinalInspection(var AssemblyHeader: Record "Assembly Header")
+    var
+        QualityRule: Record "DOPSWHS Quality Rule";
+    begin
+        if AssemblyHeader.IsTemporary() then
+            exit;
+        if (AssemblyHeader."Document Type" <> AssemblyHeader."Document Type"::Order) or (AssemblyHeader."Item No." = '') then
+            exit;
+        if not AssemblyGateEnabled() then
+            exit;
+        if not FindRule(Enum::"DOPSWHS Quality Rule Source"::"Assembly Output", AssemblyHeader."Location Code", AssemblyHeader."Item No.", '', QualityRule) then
+            exit;
+        if not QualityRule."Create Automatically" then
+            exit;
+        if FinalInspectionExists(AssemblyHeader) then
+            exit;
+        CreateFinalInspection(AssemblyHeader);
+    end;
+
+    [InherentPermissions(PermissionObjectType::TableData, Database::"DOPSWHS Quality Order", 'R')]
+    local procedure FinalInspectionExists(AssemblyHeader: Record "Assembly Header"): Boolean
+    var
+        QualityOrder: Record "DOPSWHS Quality Order";
+    begin
+        SetFinalInspectionFilter(QualityOrder, AssemblyHeader);
+        exit(not QualityOrder.IsEmpty());
+    end;
+
     [EventSubscriber(ObjectType::Codeunit, Codeunit::"Assembly-Post", 'OnBeforePost', '', false, false)]
     local procedure CheckAssemblyFinalInspection(var AssemblyHeader: Record "Assembly Header")
     var

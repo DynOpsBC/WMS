@@ -1522,8 +1522,8 @@
         <note from="Xliff Generator" annotates="general" priority="3">Table DOPSWHS Quality Rule - Field Create Automatically - Property Caption</note>
       </trans-unit>
       <trans-unit id="Page 1426521280 - Control 641436099 - Property 1295455071" size-unit="char" translate="yes" xml:space="preserve">
-        <source>Specifies that the quality order is created automatically when a warehouse receipt line is created for a purchase order line in the scope of the rule (Before Posting). Otherwise use Create Quality Orders on the receipt or purchase order.</source>
-        <target state="translated">Kural kapsamındaki bir satınalma siparişi satırı için ambar mal kabul satırı oluşturulduğunda kalite emrinin otomatik oluşturulacağını belirtir (Nakilden Önce). Aksi halde mal kabulde veya satınalma siparişinde Kalite Emirleri Oluştur'u kullanın.</target>
+        <source>Specifies that the quality order is created automatically: for purchase receipts (Before Posting) when the warehouse receipt line is created, for assembly outputs when the assembly order is released. Otherwise use Create Quality Orders / Create Final Inspection on the document.</source>
+        <target state="translated">Kalite emrinin otomatik oluşturulacağını belirtir: satınalma mal kabullerinde (Nakilden Önce) ambar mal kabul satırı oluşturulduğunda, montaj çıktılarında montaj siparişi serbest bırakıldığında. Aksi halde belgede Kalite Emirleri Oluştur / Son Kontrol Oluştur'u kullanın.</target>
         <note from="Developer" annotates="general" priority="2"></note>
         <note from="Xliff Generator" annotates="general" priority="3">Page DOPSWHS Quality Rules - Control Create Automatically - Property ToolTip</note>
       </trans-unit>
