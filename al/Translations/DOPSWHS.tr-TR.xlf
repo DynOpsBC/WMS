@@ -1527,6 +1527,744 @@
         <note from="Developer" annotates="general" priority="2"></note>
         <note from="Xliff Generator" annotates="general" priority="3">Page DOPSWHS Quality Rules - Control Create Automatically - Property ToolTip</note>
       </trans-unit>
+      <trans-unit id="Table 4047688041 - Field 2461322776 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Approved Exceeding Lines</source>
+        <target state="translated">Onaylanan Tolerans Dışı Satır</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Table DOPSWHS Count Sheet Header - Field Approved Exceeding Lines - Property Caption</note>
+      </trans-unit>
+      <trans-unit id="Table 4047688041 - Field 1825050326 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Approved Variance Amount (LCY)</source>
+        <target state="translated">Onaylanan Fark Tutarı (UPB)</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Table DOPSWHS Count Sheet Header - Field Approved Variance Amount - Property Caption</note>
+      </trans-unit>
+      <trans-unit id="Table 4047688041 - Field 1944110437 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Cycle Count</source>
+        <target state="translated">Çevrim Sayımı</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Table DOPSWHS Count Sheet Header - Field Cycle Count - Property Caption</note>
+      </trans-unit>
+      <trans-unit id="Table 4047688041 - Field 889142349 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Variance Approved At</source>
+        <target state="translated">Fark Onay Zamanı</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Table DOPSWHS Count Sheet Header - Field Variance Approved At - Property Caption</note>
+      </trans-unit>
+      <trans-unit id="Table 4047688041 - Field 3635821367 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Variance Approved By</source>
+        <target state="translated">Farkı Onaylayan</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Table DOPSWHS Count Sheet Header - Field Variance Approved By - Property Caption</note>
+      </trans-unit>
+      <trans-unit id="Table 792432685 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Inventory Control Approver</source>
+        <target state="translated">Stok Kontrol Onaycısı</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Table DOPSWHS Inventory Approver - Property Caption</note>
+      </trans-unit>
+      <trans-unit id="Table 792432685 - Field 939529099 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Approve Count Variance</source>
+        <target state="translated">Sayım Farkını Onaylayabilir</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Table DOPSWHS Inventory Approver - Field Approve Count Variance - Property Caption</note>
+      </trans-unit>
+      <trans-unit id="Table 792432685 - Field 2216379834 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Approve Reclassification</source>
+        <target state="translated">Yeniden Sınıflandırmayı Onaylayabilir</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Table DOPSWHS Inventory Approver - Field Approve Reclassification - Property Caption</note>
+      </trans-unit>
+      <trans-unit id="Table 792432685 - Field 3461834954 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Description</source>
+        <target state="translated">Açıklama</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Table DOPSWHS Inventory Approver - Field Description - Property Caption</note>
+      </trans-unit>
+      <trans-unit id="Table 792432685 - Field 2708250016 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
+        <source>User ID</source>
+        <target state="translated">Kullanıcı Kimliği</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Table DOPSWHS Inventory Approver - Field User ID - Property Caption</note>
+      </trans-unit>
+      <trans-unit id="Table 3140292245 - Field 3400592305 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Count Tolerance %</source>
+        <target state="translated">Sayım Toleransı %</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Table DOPSWHS Setup - Field Count Tolerance % - Property Caption</note>
+      </trans-unit>
+      <trans-unit id="Table 3140292245 - Field 1878229850 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Count Tolerance Amount (LCY)</source>
+        <target state="translated">Sayım Tolerans Tutarı (UPB)</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Table DOPSWHS Setup - Field Count Tolerance Amount - Property Caption</note>
+      </trans-unit>
+      <trans-unit id="Table 3140292245 - Field 1955297328 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Count Tolerance Check</source>
+        <target state="translated">Sayım Tolerans Denetimi</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Table DOPSWHS Setup - Field Count Tolerance Check - Property Caption</note>
+      </trans-unit>
+      <trans-unit id="Codeunit 225826352 - NamedType 1669856683" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Select at least one item for the cycle count.</source>
+        <target state="translated">Çevrim sayımı için en az bir madde seçin.</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Codeunit DOPSWHS Count Mgmt - NamedType ItemFilterRequiredErr</note>
+      </trans-unit>
+      <trans-unit id="Codeunit 506527431 - NamedType 2204524663" size-unit="char" translate="yes" xml:space="preserve">
+        <source>%1 LCY</source>
+        <target state="translated">%1 UPB</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Codeunit DOPSWHS Count Tolerance Mgmt - NamedType AmountToleranceTxt</note>
+      </trans-unit>
+      <trans-unit id="Codeunit 506527431 - NamedType 1252413726" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Count sheet %1 has %2 line(s) above the count tolerance, total variance value %3. You are an inventory control approver. Approve the variances and post?</source>
+        <target state="translated">%1 sayım fişinde sayım toleransını aşan %2 satır var, toplam fark tutarı %3. Stok kontrol onaycısısınız. Farklar onaylanıp nakledilsin mi?</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Codeunit DOPSWHS Count Tolerance Mgmt - NamedType ApproveAndPostQst</note>
+      </trans-unit>
+      <trans-unit id="Codeunit 506527431 - NamedType 270837651" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Approve %2 line(s) above the count tolerance on count sheet %1 (total variance value %3)?</source>
+        <target state="translated">%1 sayım fişinde sayım toleransını aşan %2 satır (toplam fark tutarı %3) onaylansın mı?</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Codeunit DOPSWHS Count Tolerance Mgmt - NamedType ApproveQst</note>
+      </trans-unit>
+      <trans-unit id="Codeunit 506527431 - NamedType 2483678012" size-unit="char" translate="yes" xml:space="preserve">
+        <source>%1 percent or %2 LCY</source>
+        <target state="translated">yüzde %1 veya %2 UPB</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Codeunit DOPSWHS Count Tolerance Mgmt - NamedType BothToleranceTxt</note>
+      </trans-unit>
+      <trans-unit id="Codeunit 506527431 - NamedType 4262032854" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Phys. inventory journal batch %1 has %2 line(s) above the count tolerance (%4), total variance value %3. Only an inventory control approver can post it.</source>
+        <target state="translated">%1 fiziksel envanter günlüğü toplu işinde sayım toleransını (%4) aşan %2 satır var, toplam fark tutarı %3. Bu günlüğü yalnız bir stok kontrol onaycısı nakledebilir.</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Codeunit DOPSWHS Count Tolerance Mgmt - NamedType JournalApprovalRequiredErr</note>
+      </trans-unit>
+      <trans-unit id="Codeunit 506527431 - NamedType 414387895" size-unit="char" translate="yes" xml:space="preserve">
+        <source>The phys. inventory journal has %1 line(s) above the count tolerance (%3), total variance value %2. Do you want to post it anyway?</source>
+        <target state="translated">Fiziksel envanter günlüğünde sayım toleransını (%3) aşan %1 satır var, toplam fark tutarı %2. Yine de nakletmek istiyor musunuz?</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Codeunit DOPSWHS Count Tolerance Mgmt - NamedType JournalWarningQst</note>
+      </trans-unit>
+      <trans-unit id="Codeunit 506527431 - NamedType 263252847" size-unit="char" translate="yes" xml:space="preserve">
+        <source>User %1 is not an inventory control approver for count variances (Inventory Control Approvers).</source>
+        <target state="translated">%1 kullanıcısı sayım farkları için stok kontrol onaycısı değil (Stok Kontrol Onaycıları).</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Codeunit DOPSWHS Count Tolerance Mgmt - NamedType NotApproverErr</note>
+      </trans-unit>
+      <trans-unit id="Codeunit 506527431 - NamedType 19891092" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Count sheet %1 has no variance above the count tolerance.</source>
+        <target state="translated">%1 sayım fişinde sayım toleransını aşan fark yok.</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Codeunit DOPSWHS Count Tolerance Mgmt - NamedType NothingToApproveMsg</note>
+      </trans-unit>
+      <trans-unit id="Codeunit 506527431 - NamedType 1108166074" size-unit="char" translate="yes" xml:space="preserve">
+        <source>%1 percent</source>
+        <target state="translated">yüzde %1</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Codeunit DOPSWHS Count Tolerance Mgmt - NamedType PctToleranceTxt</note>
+      </trans-unit>
+      <trans-unit id="Codeunit 506527431 - NamedType 4023105824" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Count sheet %1 has %2 line(s) above the count tolerance (%4), total variance value %3. An inventory control approver must approve the variances (Approve Variances on the count sheet) before it can be posted.</source>
+        <target state="translated">%1 sayım fişinde sayım toleransını (%4) aşan %2 satır var, toplam fark tutarı %3. Fiş nakledilmeden önce bir stok kontrol onaycısı farkları onaylamalıdır (sayım fişinde Farkları Onayla).</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Codeunit DOPSWHS Count Tolerance Mgmt - NamedType SheetApprovalRequiredErr</note>
+      </trans-unit>
+      <trans-unit id="Codeunit 506527431 - NamedType 4154664261" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Count sheet %1 is already posted.</source>
+        <target state="translated">%1 sayım fişi zaten nakledildi.</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Codeunit DOPSWHS Count Tolerance Mgmt - NamedType SheetPostedErr</note>
+      </trans-unit>
+      <trans-unit id="Codeunit 506527431 - NamedType 1354357181" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Count sheet %1 has %2 line(s) above the count tolerance (%4), total variance value %3. Do you want to post it anyway?</source>
+        <target state="translated">%1 sayım fişinde sayım toleransını (%4) aşan %2 satır var, toplam fark tutarı %3. Yine de nakletmek istiyor musunuz?</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Codeunit DOPSWHS Count Tolerance Mgmt - NamedType SheetWarningQst</note>
+      </trans-unit>
+      <trans-unit id="Codeunit 506527431 - NamedType 735553141" size-unit="char" translate="yes" xml:space="preserve">
+        <source>no tolerance</source>
+        <target state="translated">tolerans yok</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Codeunit DOPSWHS Count Tolerance Mgmt - NamedType ZeroToleranceTxt</note>
+      </trans-unit>
+      <trans-unit id="Codeunit 2593989672 - NamedType 676163648" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Due</source>
+        <target state="translated">Zamanı Geldi</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Codeunit DOPSWHS Cycle Count Mgmt - NamedType DueTxt</note>
+      </trans-unit>
+      <trans-unit id="Codeunit 2593989672 - NamedType 3854898923" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Select the location to count.</source>
+        <target state="translated">Sayılacak lokasyonu seçin.</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Codeunit DOPSWHS Cycle Count Mgmt - NamedType LocationRequiredErr</note>
+      </trans-unit>
+      <trans-unit id="Codeunit 2593989672 - NamedType 4252952301" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Select the items to count.</source>
+        <target state="translated">Sayılacak maddeleri seçin.</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Codeunit DOPSWHS Cycle Count Mgmt - NamedType NoItemsSelectedErr</note>
+      </trans-unit>
+      <trans-unit id="Codeunit 2593989672 - NamedType 3369616619" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Not Due</source>
+        <target state="translated">Zamanı Gelmedi</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Codeunit DOPSWHS Cycle Count Mgmt - NamedType NotDueTxt</note>
+      </trans-unit>
+      <trans-unit id="Codeunit 2593989672 - NamedType 220341859" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Not Planned</source>
+        <target state="translated">Planlanmadı</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Codeunit DOPSWHS Cycle Count Mgmt - NamedType NotPlannedTxt</note>
+      </trans-unit>
+      <trans-unit id="Codeunit 2593989672 - NamedType 1875196686" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Overdue</source>
+        <target state="translated">Gecikti</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Codeunit DOPSWHS Cycle Count Mgmt - NamedType OverdueTxt</note>
+      </trans-unit>
+      <trans-unit id="Page 3499112864 - Control 1944110437 - Property 1295455071" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Specifies that the count sheet was created from the cycle count plan. Posting it moves the counted items to their next counting period.</source>
+        <target state="translated">Sayım fişinin çevrim sayımı planından oluşturulduğunu belirtir. Nakledilince sayılan maddeler bir sonraki sayma dönemine geçer.</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Page DOPSWHS Count Sheet Card - Control Cycle Count - Property ToolTip</note>
+      </trans-unit>
+      <trans-unit id="Page 3499112864 - Control 3106617182 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Variance Approval</source>
+        <target state="translated">Fark Onayı</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Page DOPSWHS Count Sheet Card - Control VarianceApproval - Property Caption</note>
+      </trans-unit>
+      <trans-unit id="Page 3499112864 - Control 2461322776 - Property 1295455071" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Specifies how many lines above the tolerance were approved. If a recount changes them, a new approval is needed.</source>
+        <target state="translated">Toleransı aşan kaç satırın onaylandığını belirtir. Yeniden sayım bunları değiştirirse yeni onay gerekir.</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Page DOPSWHS Count Sheet Card - Control Approved Exceeding Lines - Property ToolTip</note>
+      </trans-unit>
+      <trans-unit id="Page 3499112864 - Control 1825050326 - Property 1295455071" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Specifies the approved variance value (LCY) of the lines above the tolerance.</source>
+        <target state="translated">Toleransı aşan satırların onaylanan fark tutarını (UPB) belirtir.</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Page DOPSWHS Count Sheet Card - Control Approved Variance Amount - Property ToolTip</note>
+      </trans-unit>
+      <trans-unit id="Page 3499112864 - Control 889142349 - Property 1295455071" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Specifies when the variances were approved.</source>
+        <target state="translated">Farkların ne zaman onaylandığını belirtir.</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Page DOPSWHS Count Sheet Card - Control Variance Approved At - Property ToolTip</note>
+      </trans-unit>
+      <trans-unit id="Page 3499112864 - Control 3635821367 - Property 1295455071" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Specifies the inventory control approver who approved the variances above the count tolerance.</source>
+        <target state="translated">Sayım toleransını aşan farkları onaylayan stok kontrol onaycısını belirtir.</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Page DOPSWHS Count Sheet Card - Control Variance Approved By - Property ToolTip</note>
+      </trans-unit>
+      <trans-unit id="Page 3499112864 - Action 3958185699 - Property 1295455071" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Approve the lines above the count tolerance (inventory control approvers only). The sheet can then be posted, also from the terminal. A recount that changes the variances needs a new approval.</source>
+        <target state="translated">Sayım toleransını aşan satırları onaylayın (yalnız stok kontrol onaycıları). Fiş bundan sonra terminalden de nakledilebilir. Farkları değiştiren yeniden sayım yeni onay gerektirir.</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Page DOPSWHS Count Sheet Card - Action ApproveVariances - Property ToolTip</note>
+      </trans-unit>
+      <trans-unit id="Page 3499112864 - Action 3958185699 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Approve Variances</source>
+        <target state="translated">Farkları Onayla</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Page DOPSWHS Count Sheet Card - Action ApproveVariances - Property Caption</note>
+      </trans-unit>
+      <trans-unit id="Page 3499112864 - Action 2480890310 - Property 1295455071" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Print the count variance report of this count sheet: counted and system quantity, variance, variance % and value, and the lines above the count tolerance.</source>
+        <target state="translated">Bu sayım fişinin sayım farkı raporunu yazdırın: sayılan ve sistem miktarı, fark, fark % ve tutarı ile sayım toleransını aşan satırlar.</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Page DOPSWHS Count Sheet Card - Action PrintVarianceReport - Property ToolTip</note>
+      </trans-unit>
+      <trans-unit id="Page 4178766080 - Property 1064389655" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Cycle count plan</source>
+        <target state="translated">Çevrim sayımı planı</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Page DOPSWHS Cycle Count Plan - Property AboutTitle</note>
+      </trans-unit>
+      <trans-unit id="Page 4178766080 - Property 247559172" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Items with a counting period are counted in cycles. Select the due items and use Create Count Sheet: the WMS count sheet contains all their bins and license plates in the location. Posting the sheet moves the items to their next counting period.</source>
+        <target state="translated">Sayma dönemi atanmış maddeler çevrimler halinde sayılır. Sayım zamanı gelen maddeleri seçip Sayım Fişi Oluştur'u kullanın: WMS sayım fişi bu maddelerin lokasyondaki tüm raflarını ve LP'lerini içerir. Fiş nakledilince maddeler bir sonraki sayma dönemine geçer.</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Page DOPSWHS Cycle Count Plan - Property AboutText</note>
+      </trans-unit>
+      <trans-unit id="Page 4178766080 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Cycle Count Plan</source>
+        <target state="translated">Çevrim Sayımı Planı</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Page DOPSWHS Cycle Count Plan - Property Caption</note>
+      </trans-unit>
+      <trans-unit id="Page 4178766080 - NamedType 3774818346" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Count sheet %1 was created with %2 line(s).</source>
+        <target state="translated">%1 sayım fişi %2 satırla oluşturuldu.</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Page DOPSWHS Cycle Count Plan - NamedType SheetCreatedMsg</note>
+      </trans-unit>
+      <trans-unit id="Page 4178766080 - Control 411531942 - Property 1295455071" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Specifies the base unit of measure of the item.</source>
+        <target state="translated">Maddenin temel ölçü birimini belirtir.</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Page DOPSWHS Cycle Count Plan - Control Base Unit of Measure - Property ToolTip</note>
+      </trans-unit>
+      <trans-unit id="Page 4178766080 - Control 3461834954 - Property 1295455071" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Specifies the item description.</source>
+        <target state="translated">Madde açıklamasını belirtir.</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Page DOPSWHS Cycle Count Plan - Control Description - Property ToolTip</note>
+      </trans-unit>
+      <trans-unit id="Page 4178766080 - Control 1160484316 - Property 1295455071" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Specifies whether the item is due or overdue for counting in its current counting period.</source>
+        <target state="translated">Maddenin geçerli sayma döneminde sayım zamanının gelip gelmediğini veya geciktiğini belirtir.</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Page DOPSWHS Cycle Count Plan - Control DueStatus - Property ToolTip</note>
+      </trans-unit>
+      <trans-unit id="Page 4178766080 - Control 1160484316 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Counting Status</source>
+        <target state="translated">Sayım Durumu</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Page DOPSWHS Cycle Count Plan - Control DueStatus - Property Caption</note>
+      </trans-unit>
+      <trans-unit id="Page 4178766080 - Control 2105307182 - Property 1295455071" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Specifies the inventory of the item in the selected location.</source>
+        <target state="translated">Maddenin seçili lokasyondaki stoğunu belirtir.</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Page DOPSWHS Cycle Count Plan - Control Inventory - Property ToolTip</note>
+      </trans-unit>
+      <trans-unit id="Page 4178766080 - Control 2083097511 - Property 1295455071" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Specifies when the item was last counted in a counting period.</source>
+        <target state="translated">Maddenin en son hangi tarihte bir sayma döneminde sayıldığını belirtir.</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Page DOPSWHS Cycle Count Plan - Control Last Counting Period Update - Property ToolTip</note>
+      </trans-unit>
+      <trans-unit id="Page 4178766080 - Control 1827444577 - Property 1295455071" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Specifies the end of the next counting period.</source>
+        <target state="translated">Bir sonraki sayma döneminin bitişini belirtir.</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Page DOPSWHS Cycle Count Plan - Control Next Counting End Date - Property ToolTip</note>
+      </trans-unit>
+      <trans-unit id="Page 4178766080 - Control 3147824652 - Property 1295455071" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Specifies the start of the next counting period.</source>
+        <target state="translated">Bir sonraki sayma döneminin başlangıcını belirtir.</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Page DOPSWHS Cycle Count Plan - Control Next Counting Start Date - Property ToolTip</note>
+      </trans-unit>
+      <trans-unit id="Page 4178766080 - Control 4200184881 - Property 1295455071" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Specifies the item number.</source>
+        <target state="translated">Madde numarasını belirtir.</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Page DOPSWHS Cycle Count Plan - Control No. - Property ToolTip</note>
+      </trans-unit>
+      <trans-unit id="Page 4178766080 - Control 3329913992 - Property 1295455071" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Specifies the counting period of the item.</source>
+        <target state="translated">Maddenin sayma dönemini belirtir.</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Page DOPSWHS Cycle Count Plan - Control Phys Invt Counting Period Code - Property ToolTip</note>
+      </trans-unit>
+      <trans-unit id="Page 4178766080 - Control 2346885236 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Options</source>
+        <target state="translated">Seçenekler</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Page DOPSWHS Cycle Count Plan - Control Options - Property Caption</note>
+      </trans-unit>
+      <trans-unit id="Page 4178766080 - Control 4272556766 - Property 1295455071" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Specifies how the count sheet is counted on the terminal. Blind hides the system quantity from the counter.</source>
+        <target state="translated">Sayım fişinin terminalde nasıl sayılacağını belirtir. Kör sayım, sistem miktarını sayıcıdan gizler.</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Page DOPSWHS Cycle Count Plan - Control CountModeField - Property ToolTip</note>
+      </trans-unit>
+      <trans-unit id="Page 4178766080 - Control 4272556766 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Count Mode</source>
+        <target state="translated">Sayım Modu</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Page DOPSWHS Cycle Count Plan - Control CountModeField - Property Caption</note>
+      </trans-unit>
+      <trans-unit id="Page 4178766080 - Control 260747438 - Property 1295455071" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Specifies whether only items whose counting period has started are shown.</source>
+        <target state="translated">Yalnız sayma dönemi başlamış maddelerin gösterilip gösterilmeyeceğini belirtir.</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Page DOPSWHS Cycle Count Plan - Control DueOnlyField - Property ToolTip</note>
+      </trans-unit>
+      <trans-unit id="Page 4178766080 - Control 260747438 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Show Due Items Only</source>
+        <target state="translated">Yalnız Sayım Zamanı Gelenler</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Page DOPSWHS Cycle Count Plan - Control DueOnlyField - Property Caption</note>
+      </trans-unit>
+      <trans-unit id="Page 4178766080 - Control 1814255230 - Property 1295455071" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Specifies the location to count. The inventory column shows the quantity in this location.</source>
+        <target state="translated">Sayılacak lokasyonu belirtir. Stok sütunu bu lokasyondaki miktarı gösterir.</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Page DOPSWHS Cycle Count Plan - Control LocationCodeField - Property ToolTip</note>
+      </trans-unit>
+      <trans-unit id="Page 4178766080 - Control 1814255230 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Location Code</source>
+        <target state="translated">Lokasyon Kodu</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Page DOPSWHS Cycle Count Plan - Control LocationCodeField - Property Caption</note>
+      </trans-unit>
+      <trans-unit id="Page 4178766080 - Action 878515767 - Property 1295455071" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Define how many times per year items of a counting period are counted.</source>
+        <target state="translated">Bir sayma dönemindeki maddelerin yılda kaç kez sayılacağını tanımlayın.</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Page DOPSWHS Cycle Count Plan - Action CountingPeriods - Property ToolTip</note>
+      </trans-unit>
+      <trans-unit id="Page 4178766080 - Action 878515767 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Counting Periods</source>
+        <target state="translated">Sayma Dönemleri</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Page DOPSWHS Cycle Count Plan - Action CountingPeriods - Property Caption</note>
+      </trans-unit>
+      <trans-unit id="Page 4178766080 - Action 1233144529 - Property 1295455071" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Open the WMS count sheets.</source>
+        <target state="translated">WMS sayım fişlerini açın.</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Page DOPSWHS Cycle Count Plan - Action CountSheets - Property ToolTip</note>
+      </trans-unit>
+      <trans-unit id="Page 4178766080 - Action 1233144529 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Count Sheets</source>
+        <target state="translated">Sayım Fişleri</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Page DOPSWHS Cycle Count Plan - Action CountSheets - Property Caption</note>
+      </trans-unit>
+      <trans-unit id="Page 4178766080 - Action 2876958691 - Property 1295455071" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Open the item card, for example to assign a counting period.</source>
+        <target state="translated">Madde kartını açın, örneğin sayma dönemi atamak için.</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Page DOPSWHS Cycle Count Plan - Action ItemCard - Property ToolTip</note>
+      </trans-unit>
+      <trans-unit id="Page 4178766080 - Action 2876958691 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Item Card</source>
+        <target state="translated">Madde Kartı</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Page DOPSWHS Cycle Count Plan - Action ItemCard - Property Caption</note>
+      </trans-unit>
+      <trans-unit id="Page 4178766080 - Action 25158740 - Property 1295455071" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Create a WMS count sheet for the selected items in the selected location (all bins and license plates). Posting it updates their counting periods.</source>
+        <target state="translated">Seçili maddeler için seçili lokasyonda WMS sayım fişi oluşturun (tüm raflar ve LP'ler). Fiş nakledilince sayma dönemleri güncellenir.</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Page DOPSWHS Cycle Count Plan - Action CreateCountSheet - Property ToolTip</note>
+      </trans-unit>
+      <trans-unit id="Page 4178766080 - Action 25158740 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Create Count Sheet</source>
+        <target state="translated">Sayım Fişi Oluştur</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Page DOPSWHS Cycle Count Plan - Action CreateCountSheet - Property Caption</note>
+      </trans-unit>
+      <trans-unit id="Page 4178766080 - Action 3383493608 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Process</source>
+        <target state="translated">İşlem</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Page DOPSWHS Cycle Count Plan - Action Category_Process - Property Caption</note>
+      </trans-unit>
+      <trans-unit id="Page 2968815652 - Property 1064389655" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Inventory control approvers</source>
+        <target state="translated">Stok kontrol onaycıları</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Page DOPSWHS Inventory Approvers - Property AboutTitle</note>
+      </trans-unit>
+      <trans-unit id="Page 2968815652 - Property 247559172" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Users listed here may approve count variances above the count tolerance and post item reclassification journals. The list is only used when Count Tolerance Check = Approval Required or Reclass Posting Restricted is switched on in Advanced WMS Setup.</source>
+        <target state="translated">Burada listelenen kullanıcılar sayım toleransını aşan farkları onaylayabilir ve madde yeniden sınıflandırma günlüklerini nakledebilir. Liste yalnız Gelişmiş WMS Kurulumu'nda Sayım Tolerans Denetimi = Onay Gerekli veya Yeniden Sınıflandırma Nakli Kısıtlı açıkken kullanılır.</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Page DOPSWHS Inventory Approvers - Property AboutText</note>
+      </trans-unit>
+      <trans-unit id="Page 2968815652 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Inventory Control Approvers</source>
+        <target state="translated">Stok Kontrol Onaycıları</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Page DOPSWHS Inventory Approvers - Property Caption</note>
+      </trans-unit>
+      <trans-unit id="Page 2968815652 - Control 939529099 - Property 1295455071" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Specifies that the user may approve count variances above the count tolerance and post such phys. inventory journals.</source>
+        <target state="translated">Kullanıcının sayım toleransını aşan farkları onaylayabileceğini ve bu tür fiziksel envanter günlüklerini nakledebileceğini belirtir.</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Page DOPSWHS Inventory Approvers - Control Approve Count Variance - Property ToolTip</note>
+      </trans-unit>
+      <trans-unit id="Page 2968815652 - Control 2216379834 - Property 1295455071" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Specifies that the user may post item reclassification journals when reclass posting is restricted.</source>
+        <target state="translated">Yeniden sınıflandırma nakli kısıtlıyken kullanıcının madde yeniden sınıflandırma günlüklerini nakledebileceğini belirtir.</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Page DOPSWHS Inventory Approvers - Control Approve Reclassification - Property ToolTip</note>
+      </trans-unit>
+      <trans-unit id="Page 2968815652 - Control 3461834954 - Property 1295455071" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Specifies a description, for example the role of the user.</source>
+        <target state="translated">Bir açıklama belirtir, örneğin kullanıcının rolü.</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Page DOPSWHS Inventory Approvers - Control Description - Property ToolTip</note>
+      </trans-unit>
+      <trans-unit id="Page 2968815652 - Control 2708250016 - Property 1295455071" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Specifies the Business Central user.</source>
+        <target state="translated">Business Central kullanıcısını belirtir.</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Page DOPSWHS Inventory Approvers - Control User ID - Property ToolTip</note>
+      </trans-unit>
+      <trans-unit id="Page 3140292245 - Control 3400592305 - Property 1295455071" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Specifies the allowed variance in percent of the system quantity. 0 = not used. With both tolerance values 0 every variance exceeds the tolerance.</source>
+        <target state="translated">İzin verilen farkı sistem miktarının yüzdesi olarak belirtir. 0 = kullanılmaz. İki tolerans değeri de 0 ise her fark toleransı aşar.</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Page DOPSWHS Setup - Control Count Tolerance % - Property ToolTip</note>
+      </trans-unit>
+      <trans-unit id="Page 3140292245 - Control 1878229850 - Property 1295455071" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Specifies the allowed variance value in LCY (variance in base unit x item unit cost) per line. 0 = not used.</source>
+        <target state="translated">Satır başına izin verilen fark tutarını UPB olarak belirtir (temel birimde fark x madde birim maliyeti). 0 = kullanılmaz.</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Page DOPSWHS Setup - Control Count Tolerance Amount - Property ToolTip</note>
+      </trans-unit>
+      <trans-unit id="Page 3140292245 - Control 1955297328 - Property 1295455071" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Specifies what happens when a count variance exceeds the tolerance: nothing (Disabled), a confirmation (Warning) or an approval by an inventory control approver (Approval Required). Applies to WMS count sheets and phys. inventory journals.</source>
+        <target state="translated">Sayım farkı toleransı aştığında ne olacağını belirtir: hiçbir şey (Devre Dışı), onay sorusu (Uyarı) veya bir stok kontrol onaycısının onayı (Onay Gerekli). WMS sayım fişleri ve fiziksel envanter günlükleri için geçerlidir.</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Page DOPSWHS Setup - Control Count Tolerance Check - Property ToolTip</note>
+      </trans-unit>
+      <trans-unit id="Page 3140292245 - Action 2804229234 - Property 1295455071" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Show the items with a counting period and create count sheets for the due ones.</source>
+        <target state="translated">Sayma dönemi olan maddeleri gösterin ve sayım zamanı gelenler için sayım fişi oluşturun.</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Page DOPSWHS Setup - Action CycleCountPlanAction - Property ToolTip</note>
+      </trans-unit>
+      <trans-unit id="Page 3140292245 - Action 2804229234 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Cycle Count Plan</source>
+        <target state="translated">Çevrim Sayımı Planı</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Page DOPSWHS Setup - Action CycleCountPlanAction - Property Caption</note>
+      </trans-unit>
+      <trans-unit id="Page 3140292245 - Action 2223275046 - Property 1295455071" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Define who may approve count variances above tolerance and post item reclassification journals.</source>
+        <target state="translated">Toleransı aşan sayım farklarını kimin onaylayabileceğini ve madde yeniden sınıflandırma günlüklerini kimin nakledebileceğini tanımlayın.</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Page DOPSWHS Setup - Action InventoryApproversAction - Property ToolTip</note>
+      </trans-unit>
+      <trans-unit id="Page 3140292245 - Action 2223275046 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Inventory Control Approvers</source>
+        <target state="translated">Stok Kontrol Onaycıları</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Page DOPSWHS Setup - Action InventoryApproversAction - Property Caption</note>
+      </trans-unit>
+      <trans-unit id="Report 2434910774 - NamedType 3339054118" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Variance Approved By</source>
+        <target state="translated">Farkı Onaylayan</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Report DOPSWHS Count Variance - NamedType ApprovedByLbl</note>
+      </trans-unit>
+      <trans-unit id="Report 2434910774 - NamedType 1785548201" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Bin</source>
+        <target state="translated">Raf</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Report DOPSWHS Count Variance - NamedType BinLbl</note>
+      </trans-unit>
+      <trans-unit id="Report 2434910774 - NamedType 4022649152" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Counted Qty.</source>
+        <target state="translated">Sayılan Miktar</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Report DOPSWHS Count Variance - NamedType CountedQtyLbl</note>
+      </trans-unit>
+      <trans-unit id="Report 2434910774 - NamedType 291269830" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Created</source>
+        <target state="translated">Oluşturma</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Report DOPSWHS Count Variance - NamedType CreatedLbl</note>
+      </trans-unit>
+      <trans-unit id="Report 2434910774 - NamedType 772595915" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Cycle Count</source>
+        <target state="translated">Çevrim Sayımı</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Report DOPSWHS Count Variance - NamedType CycleCountLbl</note>
+      </trans-unit>
+      <trans-unit id="Report 2434910774 - NamedType 3569966352" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Description</source>
+        <target state="translated">Açıklama</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Report DOPSWHS Count Variance - NamedType DescriptionLbl</note>
+      </trans-unit>
+      <trans-unit id="Report 2434910774 - NamedType 203589512" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Value above Tolerance (LCY)</source>
+        <target state="translated">Toleransı Aşan Tutar (UPB)</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Report DOPSWHS Count Variance - NamedType ExceedingAmountLbl</note>
+      </trans-unit>
+      <trans-unit id="Report 2434910774 - NamedType 2486025359" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Lines above Tolerance</source>
+        <target state="translated">Toleransı Aşan Satır</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Report DOPSWHS Count Variance - NamedType ExceedingLinesLbl</note>
+      </trans-unit>
+      <trans-unit id="Report 2434910774 - NamedType 3571147493" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Above Tolerance</source>
+        <target state="translated">Tolerans Dışı</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Report DOPSWHS Count Variance - NamedType ExceedsLbl</note>
+      </trans-unit>
+      <trans-unit id="Report 2434910774 - NamedType 1343378506" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Yes</source>
+        <target state="translated">Evet</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Report DOPSWHS Count Variance - NamedType ExceedsYesTxt</note>
+      </trans-unit>
+      <trans-unit id="Report 2434910774 - NamedType 3938104762" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Item No.</source>
+        <target state="translated">Madde No.</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Report DOPSWHS Count Variance - NamedType ItemNoLbl</note>
+      </trans-unit>
+      <trans-unit id="Report 2434910774 - NamedType 3629245473" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Location</source>
+        <target state="translated">Lokasyon</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Report DOPSWHS Count Variance - NamedType LocationLbl</note>
+      </trans-unit>
+      <trans-unit id="Report 2434910774 - NamedType 2219103287" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Lot / Serial No.</source>
+        <target state="translated">Lot / Seri No.</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Report DOPSWHS Count Variance - NamedType LotSerialLbl</note>
+      </trans-unit>
+      <trans-unit id="Report 2434910774 - NamedType 3805354818" size-unit="char" translate="yes" xml:space="preserve">
+        <source>LP No.</source>
+        <target state="translated">LP No.</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Report DOPSWHS Count Variance - NamedType LpLbl</note>
+      </trans-unit>
+      <trans-unit id="Report 2434910774 - NamedType 1877187315" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Page</source>
+        <target state="translated">Sayfa</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Report DOPSWHS Count Variance - NamedType PageLbl</note>
+      </trans-unit>
+      <trans-unit id="Report 2434910774 - NamedType 1733831957" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Posted</source>
+        <target state="translated">Nakil</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Report DOPSWHS Count Variance - NamedType PostedLbl</note>
+      </trans-unit>
+      <trans-unit id="Report 2434910774 - NamedType 3040577680" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Count Variance</source>
+        <target state="translated">Sayım Farkı</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Report DOPSWHS Count Variance - NamedType ReportTitleLbl</note>
+      </trans-unit>
+      <trans-unit id="Report 2434910774 - NamedType 1831709391" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Count Sheet</source>
+        <target state="translated">Sayım Fişi</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Report DOPSWHS Count Variance - NamedType SheetLbl</note>
+      </trans-unit>
+      <trans-unit id="Report 2434910774 - NamedType 3193096050" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Status</source>
+        <target state="translated">Durum</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Report DOPSWHS Count Variance - NamedType StatusLbl</note>
+      </trans-unit>
+      <trans-unit id="Report 2434910774 - NamedType 3598826013" size-unit="char" translate="yes" xml:space="preserve">
+        <source>System Qty.</source>
+        <target state="translated">Sistem Miktarı</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Report DOPSWHS Count Variance - NamedType SystemQtyLbl</note>
+      </trans-unit>
+      <trans-unit id="Report 2434910774 - NamedType 2226979471" size-unit="char" translate="yes" xml:space="preserve">
+        <source>%1, %2</source>
+        <target state="translated">%1, %2</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Report DOPSWHS Count Variance - NamedType ToleranceActiveTxt</note>
+      </trans-unit>
+      <trans-unit id="Report 2434910774 - NamedType 843781507" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Disabled (%1)</source>
+        <target state="translated">Devre dışı (%1)</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Report DOPSWHS Count Variance - NamedType ToleranceDisabledTxt</note>
+      </trans-unit>
+      <trans-unit id="Report 2434910774 - NamedType 4033430333" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Count Tolerance</source>
+        <target state="translated">Sayım Toleransı</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Report DOPSWHS Count Variance - NamedType ToleranceLbl</note>
+      </trans-unit>
+      <trans-unit id="Report 2434910774 - NamedType 2653080779" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Total Variance Value (LCY)</source>
+        <target state="translated">Toplam Fark Tutarı (UPB)</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Report DOPSWHS Count Variance - NamedType TotalVarianceAmountLbl</note>
+      </trans-unit>
+      <trans-unit id="Report 2434910774 - NamedType 3675848865" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Unit Cost</source>
+        <target state="translated">Birim Maliyet</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Report DOPSWHS Count Variance - NamedType UnitCostLbl</note>
+      </trans-unit>
+      <trans-unit id="Report 2434910774 - NamedType 4129166423" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Unit</source>
+        <target state="translated">Birim</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Report DOPSWHS Count Variance - NamedType UomLbl</note>
+      </trans-unit>
+      <trans-unit id="Report 2434910774 - NamedType 1750125509" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Variance Value</source>
+        <target state="translated">Fark Tutarı</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Report DOPSWHS Count Variance - NamedType VarianceAmountLbl</note>
+      </trans-unit>
+      <trans-unit id="Report 2434910774 - NamedType 3473093657" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Variance</source>
+        <target state="translated">Fark</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Report DOPSWHS Count Variance - NamedType VarianceLbl</note>
+      </trans-unit>
+      <trans-unit id="Report 2434910774 - NamedType 1758069108" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Variance %</source>
+        <target state="translated">Fark %</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Report DOPSWHS Count Variance - NamedType VariancePctLbl</note>
+      </trans-unit>
+      <trans-unit id="Report 2434910774 - NamedType 3631226591" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Variant</source>
+        <target state="translated">Varyant</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Report DOPSWHS Count Variance - NamedType VariantLbl</note>
+      </trans-unit>
+      <trans-unit id="Report 2434910774 - Control 2346885236 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Options</source>
+        <target state="translated">Seçenekler</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Report DOPSWHS Count Variance - Control Options - Property Caption</note>
+      </trans-unit>
+      <trans-unit id="Report 2434910774 - Control 3393798434 - Property 1295455071" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Specifies whether only count lines with a variance are printed.</source>
+        <target state="translated">Yalnız fark içeren sayım satırlarının yazdırılıp yazdırılmayacağını belirtir.</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Report DOPSWHS Count Variance - Control OnlyVarianceLinesField - Property ToolTip</note>
+      </trans-unit>
+      <trans-unit id="Report 2434910774 - Control 3393798434 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Only Lines with Variance</source>
+        <target state="translated">Yalnız Farklı Satırlar</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Report DOPSWHS Count Variance - Control OnlyVarianceLinesField - Property Caption</note>
+      </trans-unit>
+      <trans-unit id="Enum 3371588612 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Count Tolerance Check</source>
+        <target state="translated">Sayım Tolerans Denetimi</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Enum DOPSWHS Count Tolerance Check - Property Caption</note>
+      </trans-unit>
+      <trans-unit id="Enum 3371588612 - EnumValue 643766618 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Approval Required</source>
+        <target state="translated">Onay Gerekli</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Enum DOPSWHS Count Tolerance Check - EnumValue Approval Required - Property Caption</note>
+      </trans-unit>
+      <trans-unit id="Enum 3371588612 - EnumValue 1864907812 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Disabled</source>
+        <target state="translated">Devre Dışı</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Enum DOPSWHS Count Tolerance Check - EnumValue Disabled - Property Caption</note>
+      </trans-unit>
+      <trans-unit id="Enum 3371588612 - EnumValue 3955473374 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Warning</source>
+        <target state="translated">Uyarı</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Enum DOPSWHS Count Tolerance Check - EnumValue Warning - Property Caption</note>
+      </trans-unit>
     </body>
   </file>
 </xliff>

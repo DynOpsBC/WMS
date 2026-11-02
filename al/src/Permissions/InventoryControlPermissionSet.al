@@ -12,13 +12,19 @@ permissionset 72000 "DOPSWHS-INV-CTRL"
     Permissions =
         tabledata "DOPSWHS Quality Order" = RIMD,
         tabledata "DOPSWHS Quality Rule" = RIMD,
+        tabledata "DOPSWHS Inventory Approver" = RIMD,
         table "DOPSWHS Quality Order" = X,
         table "DOPSWHS Quality Rule" = X,
+        table "DOPSWHS Inventory Approver" = X,
         page "DOPSWHS Quality Orders" = X,
         page "DOPSWHS Quality Order Card" = X,
         page "DOPSWHS Quality Result Dialog" = X,
         page "DOPSWHS Quality Rules" = X,
+        page "DOPSWHS Inventory Approvers" = X,
+        page "DOPSWHS Cycle Count Plan" = X,
         codeunit "DOPSWHS Quality Gate Mgmt" = X,
         codeunit "DOPSWHS Quality Lot Hold" = X,
-        codeunit "DOPSWHS Quality Decision Mgmt" = X;
+        codeunit "DOPSWHS Quality Decision Mgmt" = X,
+        codeunit "DOPSWHS Count Tolerance Mgmt" = X,
+        codeunit "DOPSWHS Cycle Count Mgmt" = X;
 }

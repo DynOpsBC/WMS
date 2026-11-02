@@ -49,6 +49,42 @@ table 72016 "DOPSWHS Count Sheet Header"
             DataClassification = CustomerContent;
             TableRelation = Zone.Code where("Location Code" = field("Location Code"));
         }
+        // KIT-014 (Kitoko, Kas 2026): approval of variances above the count
+        // tolerance. The approval is bound to the number and value of the
+        // exceeding lines it saw; a later recount that changes them needs a new one.
+        field(100; "Variance Approved By"; Code[50])
+        {
+            Caption = 'Variance Approved By';
+            DataClassification = EndUserIdentifiableInformation;
+            Editable = false;
+        }
+        field(101; "Variance Approved At"; DateTime)
+        {
+            Caption = 'Variance Approved At';
+            DataClassification = CustomerContent;
+            Editable = false;
+        }
+        field(102; "Approved Variance Amount"; Decimal)
+        {
+            Caption = 'Approved Variance Amount (LCY)';
+            DataClassification = CustomerContent;
+            AutoFormatType = 1;
+            Editable = false;
+        }
+        field(103; "Approved Exceeding Lines"; Integer)
+        {
+            Caption = 'Approved Exceeding Lines';
+            DataClassification = CustomerContent;
+            Editable = false;
+        }
+        field(110; "Cycle Count"; Boolean)
+        {
+            // Created from the cycle count plan: posting it updates the counting
+            // period dates of the counted items (standard Phys. Invt. Counting Period).
+            Caption = 'Cycle Count';
+            DataClassification = CustomerContent;
+            Editable = false;
+        }
     }
 
     keys

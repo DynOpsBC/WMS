@@ -22,6 +22,11 @@ page 72075 "DOPSWHS Count Sheet Card"
                 field("Zone Filter"; Rec."Zone Filter") { ApplicationArea = All; Editable = HeaderEditable; }
                 field(Mode; Rec.Mode) { ApplicationArea = All; Editable = HeaderEditable; }
                 field(Status; Rec.Status) { ApplicationArea = All; Editable = false; }
+                field("Cycle Count"; Rec."Cycle Count")
+                {
+                    ApplicationArea = All;
+                    ToolTip = 'Specifies that the count sheet was created from the cycle count plan. Posting it moves the counted items to their next counting period.';
+                }
                 field("V2 Scan Mode"; Rec."V2 Scan Mode")
                 {
                     ApplicationArea = All;
@@ -58,6 +63,32 @@ page 72075 "DOPSWHS Count Sheet Card"
                     ApplicationArea = All;
                     Editable = false;
                     StyleExpr = VarianceLinesStyle;
+                }
+            }
+            // KIT-014 (Kitoko, Kas 2026): variance approval above the count tolerance.
+            group(VarianceApproval)
+            {
+                Caption = 'Variance Approval';
+                Visible = ToleranceCheckActive;
+                field("Variance Approved By"; Rec."Variance Approved By")
+                {
+                    ApplicationArea = All;
+                    ToolTip = 'Specifies the inventory control approver who approved the variances above the count tolerance.';
+                }
+                field("Variance Approved At"; Rec."Variance Approved At")
+                {
+                    ApplicationArea = All;
+                    ToolTip = 'Specifies when the variances were approved.';
+                }
+                field("Approved Exceeding Lines"; Rec."Approved Exceeding Lines")
+                {
+                    ApplicationArea = All;
+                    ToolTip = 'Specifies how many lines above the tolerance were approved. If a recount changes them, a new approval is needed.';
+                }
+                field("Approved Variance Amount"; Rec."Approved Variance Amount")
+                {
+                    ApplicationArea = All;
+                    ToolTip = 'Specifies the approved variance value (LCY) of the lines above the tolerance.';
                 }
             }
             part(Counters; "DOPSWHS Count Counter Part")
@@ -193,12 +224,33 @@ page 72075 "DOPSWHS Count Sheet Card"
                 Caption = 'Print Variance Report';
                 ApplicationArea = All;
                 Image = PrintReport;
+                ToolTip = 'Print the count variance report of this count sheet: counted and system quantity, variance, variance % and value, and the lines above the count tolerance.';
                 trigger OnAction()
                 var
-                    CountLine: Record "DOPSWHS Count Sheet Line";
+                    CountHeader: Record "DOPSWHS Count Sheet Header";
                 begin
-                    CountLine.SetRange("Sheet No.", Rec."No.");
-                    Report.RunModal(Report::"DOPSWHS Count Variance", true, false, CountLine);
+                    // The report starts from the sheet header; a line filter alone
+                    // printed every count sheet header (KIT-014).
+                    CountHeader.SetRange("No.", Rec."No.");
+                    Report.RunModal(Report::"DOPSWHS Count Variance", true, false, CountHeader);
+                end;
+            }
+            // KIT-014 (Kitoko, Kas 2026): approval of variances above the count tolerance.
+            action(ApproveVariances)
+            {
+                Caption = 'Approve Variances';
+                ApplicationArea = All;
+                Image = Approve;
+                Visible = ToleranceCheckActive;
+                Enabled = HeaderEditable;
+                ToolTip = 'Approve the lines above the count tolerance (inventory control approvers only). The sheet can then be posted, also from the terminal. A recount that changes the variances needs a new approval.';
+                trigger OnAction()
+                var
+                    CountToleranceMgmt: Codeunit "DOPSWHS Count Tolerance Mgmt";
+                begin
+                    CurrPage.SaveRecord();
+                    CountToleranceMgmt.ApproveSheet(Rec."No.");
+                    CurrPage.Update(false);
                 end;
             }
         }
@@ -225,6 +277,17 @@ page 72075 "DOPSWHS Count Sheet Card"
         CountCard.SetRecord(Target);
         CountCard.Run();
         CurrPage.Close();
+    end;
+
+    trigger OnOpenPage()
+    var
+        CountToleranceMgmt: Codeunit "DOPSWHS Count Tolerance Mgmt";
+        ToleranceCheck: Enum "DOPSWHS Count Tolerance Check";
+        TolerancePct: Decimal;
+        ToleranceAmount: Decimal;
+    begin
+        CountToleranceMgmt.GetToleranceSetup(ToleranceCheck, TolerancePct, ToleranceAmount);
+        ToleranceCheckActive := ToleranceCheck <> ToleranceCheck::Disabled;
     end;
 
     trigger OnAfterGetCurrRecord()
@@ -276,5 +339,6 @@ page 72075 "DOPSWHS Count Sheet Card"
         HasNextRound: Boolean;
         IsActiveRound: Boolean;
         CanStartNextRound: Boolean;
+        ToleranceCheckActive: Boolean;
         RoundNo: Integer;
 }

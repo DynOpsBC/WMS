@@ -149,6 +149,21 @@ page 72061 "DOPSWHS Setup"
                     ApplicationArea = All;
                     ToolTip = 'Specifies the item journal batch used to post scrap decisions. Keep it empty; it is posted as a whole.';
                 }
+                field("Count Tolerance Check"; Rec."Count Tolerance Check")
+                {
+                    ApplicationArea = All;
+                    ToolTip = 'Specifies what happens when a count variance exceeds the tolerance: nothing (Disabled), a confirmation (Warning) or an approval by an inventory control approver (Approval Required). Applies to WMS count sheets and phys. inventory journals.';
+                }
+                field("Count Tolerance %"; Rec."Count Tolerance %")
+                {
+                    ApplicationArea = All;
+                    ToolTip = 'Specifies the allowed variance in percent of the system quantity. 0 = not used. With both tolerance values 0 every variance exceeds the tolerance.';
+                }
+                field("Count Tolerance Amount"; Rec."Count Tolerance Amount")
+                {
+                    ApplicationArea = All;
+                    ToolTip = 'Specifies the allowed variance value in LCY (variance in base unit x item unit cost) per line. 0 = not used.';
+                }
             }
             // Kitoko (19 Eki 2026): DKÇ/EMU etiket çıkarma, etiket rulosu ölçüsü.
             group(LabelStock)
@@ -367,6 +382,22 @@ page 72061 "DOPSWHS Setup"
                     Image = TaskQualityMeasure;
                     RunObject = page "DOPSWHS Quality Orders";
                     ToolTip = 'Open the quality orders.';
+                }
+                action(InventoryApproversAction)
+                {
+                    Caption = 'Inventory Control Approvers';
+                    ApplicationArea = All;
+                    Image = UserSetup;
+                    RunObject = page "DOPSWHS Inventory Approvers";
+                    ToolTip = 'Define who may approve count variances above tolerance and post item reclassification journals.';
+                }
+                action(CycleCountPlanAction)
+                {
+                    Caption = 'Cycle Count Plan';
+                    ApplicationArea = All;
+                    Image = PeriodEntries;
+                    RunObject = page "DOPSWHS Cycle Count Plan";
+                    ToolTip = 'Show the items with a counting period and create count sheets for the due ones.';
                 }
             }
             group(LicenseActions)

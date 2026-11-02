@@ -479,6 +479,27 @@ table 72000 "DOPSWHS Setup"
             DataClassification = CustomerContent;
             TableRelation = "Item Journal Batch".Name where("Journal Template Name" = field("Quality Scrap Jnl. Template"));
         }
+        field(610; "Count Tolerance Check"; Enum "DOPSWHS Count Tolerance Check")
+        {
+            // KIT-014: what happens when a count variance exceeds the tolerance.
+            Caption = 'Count Tolerance Check';
+            DataClassification = CustomerContent;
+        }
+        field(611; "Count Tolerance %"; Decimal)
+        {
+            Caption = 'Count Tolerance %';
+            DataClassification = CustomerContent;
+            DecimalPlaces = 0 : 2;
+            MinValue = 0;
+        }
+        field(612; "Count Tolerance Amount"; Decimal)
+        {
+            // Absolute variance value (base quantity x item unit cost, LCY).
+            Caption = 'Count Tolerance Amount (LCY)';
+            DataClassification = CustomerContent;
+            AutoFormatType = 1;
+            MinValue = 0;
+        }
     }
 
     keys

@@ -161,6 +161,19 @@ codeunit 72050 "DOPSWHS Count Mgmt"
         exit(BuildBinSnapshot(SheetNo, '', CountLine));
     end;
 
+    /// <summary>
+    /// KIT-014 cycle count (Kitoko, Kas 2026): same snapshot as GenerateLines,
+    /// restricted to the items of ItemFilter (LP contents and loose bin stock).
+    /// </summary>
+    procedure GenerateLinesForItems(SheetNo: Code[20]; ItemFilter: Text) LinesCreated: Integer
+    begin
+        if ItemFilter = '' then
+            Error(ItemFilterRequiredErr);
+        SnapshotItemFilter := ItemFilter;
+        LinesCreated := GenerateLines(SheetNo);
+        SnapshotItemFilter := '';
+    end;
+
     // Shared snapshot builder: V2 uses a temporary buffer and never deletes scans.
     local procedure BuildBinSnapshot(SheetNo: Code[20]; BinCode: Code[20]; var CountLine: Record "DOPSWHS Count Sheet Line") LinesCreated: Integer
     var
@@ -205,6 +218,9 @@ codeunit 72050 "DOPSWHS Count Mgmt"
                         LPInScope := (CountHeader."Zone Filter" = '') or (Bin."Zone Code" = CountHeader."Zone Filter");
                 LPLine.SetRange("LP No.", LPHeader."No.");
                 LPLine.SetFilter("Item No.", '<>%1', '');
+                // Cycle count: only the planned items (GenerateLinesForItems).
+                if SnapshotItemFilter <> '' then
+                    LPLine.SetFilter("Item No.", SnapshotItemFilter);
                 // Rafı henüz belli olmayan LP sayımın tamamını durdurmaz. Bu LP,
                 // terminalde önce raf sonra LP okutulduğunda AttachLpToBin ile
                 // ilgili rafa bağlanır ve satırları o anda sayım sayfasına eklenir.
@@ -247,6 +263,8 @@ codeunit 72050 "DOPSWHS Count Mgmt"
             BinContent.SetRange("Bin Code", BinCode);
         if CountHeader."Zone Filter" <> '' then
             BinContent.SetRange("Zone Code", CountHeader."Zone Filter");
+        if SnapshotItemFilter <> '' then
+            BinContent.SetFilter("Item No.", SnapshotItemFilter);
         if BinContent.FindSet() then
             repeat
                 BinContent.CalcFields(Quantity);
@@ -1693,6 +1711,8 @@ codeunit 72050 "DOPSWHS Count Mgmt"
         ItemJnlPostBatch: Codeunit "Item Jnl.-Post Batch";
         Dimensions: Dictionary of [Text, Text];
         CalculatedQty: Dictionary of [Integer, Decimal];
+        CountToleranceMgmt: Codeunit "DOPSWHS Count Tolerance Mgmt";
+        CycleCountMgmt: Codeunit "DOPSWHS Cycle Count Mgmt";
         WinningQty: Decimal;
         LineNo: Integer;
         CountDocumentNo: Code[20];
@@ -1736,6 +1756,11 @@ codeunit 72050 "DOPSWHS Count Mgmt"
             Commit();
             Error(RecountRequiredErr, SheetNo);
         end;
+
+        // KIT-014 (Kitoko, Kas 2026): variances above the count tolerance need
+        // a confirmation or an approval (Setup "Count Tolerance Check", default
+        // Disabled). Runs before any stock is moved or posted.
+        CountToleranceMgmt.CheckSheetBeforePost(CountHeader);
 
         // Belge no izlenebilir olmalı: sayfa no zaten 'CNT-…' ile başlıyor;
         // ikinci bir önek 20 karakter sınırında son haneleri kırpıyordu
@@ -1815,6 +1840,9 @@ codeunit 72050 "DOPSWHS Count Mgmt"
         CountHeader."Posted DateTime" := CurrentDateTime();
         // The table guard reads persisted state and permits this first transition.
         CountHeader.Modify(true);
+
+        // KIT-014: a cycle count moves the counted items to their next counting period.
+        CycleCountMgmt.UpdateCountingPeriods(CountHeader);
 
         Dimensions.Add('sheetNo', SheetNo);
         Session.LogMessage('AdvWMS.Count.SheetPosted', StrSubstNo('Count sheet %1 posted.', SheetNo), Verbosity::Normal, DataClassification::SystemMetadata, TelemetryScope::ExtensionPublisher, Dimensions);
@@ -2824,6 +2852,8 @@ codeunit 72050 "DOPSWHS Count Mgmt"
     end;
 
     var
+        SnapshotItemFilter: Text;
+        ItemFilterRequiredErr: Label 'Select at least one item for the cycle count.';
         CounterSheetNotOpenErr: Label '%1 sayım sayfası açık değil; sayıcı ataması yapılamaz.', Comment = '%1 sheet no';
         LPExceedsInventoryErr: Label '%1 ürününün %2 rafındaki LP miktarı BC stok miktarını %3 aşıyor. Sayım satırları üretilmeden önce LP/bin tutarsızlığını düzeltin.', Comment = '%1 item, %2 bin, %3 excess qty';
         LPLineMissingErr: Label '%1 LP numarasının %2 satırı artık bulunamadı. Sayım satırlarını yeniden üretin.', Comment = '%1 LP, %2 line';
