@@ -2265,6 +2265,48 @@
         <note from="Developer" annotates="general" priority="2"></note>
         <note from="Xliff Generator" annotates="general" priority="3">Enum DOPSWHS Count Tolerance Check - EnumValue Warning - Property Caption</note>
       </trans-unit>
+      <trans-unit id="Table 3140292245 - Field 2925176345 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Reclass Posting Restricted</source>
+        <target state="translated">Yeniden Sınıflandırma Nakli Kısıtlı</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Table DOPSWHS Setup - Field Reclass Approval Required - Property Caption</note>
+      </trans-unit>
+      <trans-unit id="Table 3140292245 - Field 48257214 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Reclass Reason Code Mandatory</source>
+        <target state="translated">Yeniden Sınıflandırmada Neden Kodu Zorunlu</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Table DOPSWHS Setup - Field Reclass Reason Mandatory - Property Caption</note>
+      </trans-unit>
+      <trans-unit id="Codeunit 1062506614 - NamedType 1545003169" size-unit="char" translate="yes" xml:space="preserve">
+        <source>You (%1) are not allowed to post item reclassification journals (batch %2). Ask an administrator to add you to the Inventory Control Approvers with Approve Reclassification.</source>
+        <target state="translated">Madde yeniden sınıflandırma günlüğü nakletme yetkiniz (%1) yok (toplu iş %2). Bir yöneticiden sizi Yeniden Sınıflandırmayı Onaylayabilir ile Stok Kontrol Onaycılarına eklemesini isteyin.</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Codeunit DOPSWHS Reclass Control - NamedType NotAuthorizedErr</note>
+      </trans-unit>
+      <trans-unit id="Codeunit 1062506614 - NamedType 234118031" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Reason Code must be filled in on reclassification journal line %1 (item %2, batch %3).</source>
+        <target state="translated">Yeniden sınıflandırma günlüğü %1 satırında (madde %2, toplu iş %3) Neden Kodu doldurulmalıdır.</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Codeunit DOPSWHS Reclass Control - NamedType ReasonCodeRequiredErr</note>
+      </trans-unit>
+      <trans-unit id="Page 3140292245 - Control 2925176345 - Property 1295455071" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Specifies that only users on the Inventory Control Approvers list with Approve Reclassification can post item reclassification journals.</source>
+        <target state="translated">Madde yeniden sınıflandırma günlüklerini yalnız Stok Kontrol Onaycıları listesinde Yeniden Sınıflandırmayı Onaylayabilir işaretli kullanıcıların nakledebileceğini belirtir.</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Page DOPSWHS Setup - Control Reclass Approval Required - Property ToolTip</note>
+      </trans-unit>
+      <trans-unit id="Page 3140292245 - Control 48257214 - Property 1295455071" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Specifies that every item reclassification journal line must have a reason code. Batches the WMS posts itself for terminal moves are exempt.</source>
+        <target state="translated">Her madde yeniden sınıflandırma günlüğü satırında neden kodu bulunması gerektiğini belirtir. WMS'in terminal hareketleri için kendisinin naklettiği toplu işler muaftır.</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Page DOPSWHS Setup - Control Reclass Reason Mandatory - Property ToolTip</note>
+      </trans-unit>
+      <trans-unit id="TableExtension 2240429038 - Field 2160913911 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
+        <source>WMS System Batch</source>
+        <target state="translated">WMS Sistem Toplu İşi</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">TableExtension DOPSWHS Item Jnl. Batch Ctrl - Field DOPSWHS System Batch - Property Caption</note>
+      </trans-unit>
     </body>
   </file>
 </xliff>

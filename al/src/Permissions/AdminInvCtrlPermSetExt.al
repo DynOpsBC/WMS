@@ -16,5 +16,6 @@ permissionsetextension 72000 "DOPSWHS-ADMIN Inv Ctrl" extends "DOPSWHS-ADMIN"
         codeunit "DOPSWHS Quality Lot Hold" = X,
         codeunit "DOPSWHS Quality Decision Mgmt" = X,
         codeunit "DOPSWHS Count Tolerance Mgmt" = X,
-        codeunit "DOPSWHS Cycle Count Mgmt" = X;
+        codeunit "DOPSWHS Cycle Count Mgmt" = X,
+        codeunit "DOPSWHS Reclass Control" = X;
 }

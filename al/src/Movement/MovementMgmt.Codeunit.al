@@ -37,10 +37,13 @@ codeunit 72045 "DOPSWHS Movement Mgmt"
             ItemJournalBatch.Name := BatchName;
             ItemJournalBatch.Description := CopyStr('DOPSWHS mobile ' + UserId, 1, MaxStrLen(ItemJournalBatch.Description));
             ItemJournalBatch.Recurring := false;
+            // KIT-015: terminal moves are exempt from the reclassification controls.
+            ItemJournalBatch."DOPSWHS System Batch" := true;
             ItemJournalBatch.Insert(true);
         end else
-            if ItemJournalBatch.Recurring then begin
+            if ItemJournalBatch.Recurring or not ItemJournalBatch."DOPSWHS System Batch" then begin
                 ItemJournalBatch.Recurring := false;
+                ItemJournalBatch."DOPSWHS System Batch" := true;
                 ItemJournalBatch.Modify(true);
             end;
 

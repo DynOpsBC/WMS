@@ -26,5 +26,6 @@ permissionset 72000 "DOPSWHS-INV-CTRL"
         codeunit "DOPSWHS Quality Lot Hold" = X,
         codeunit "DOPSWHS Quality Decision Mgmt" = X,
         codeunit "DOPSWHS Count Tolerance Mgmt" = X,
-        codeunit "DOPSWHS Cycle Count Mgmt" = X;
+        codeunit "DOPSWHS Cycle Count Mgmt" = X,
+        codeunit "DOPSWHS Reclass Control" = X;
 }

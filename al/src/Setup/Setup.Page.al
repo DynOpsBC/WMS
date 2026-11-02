@@ -164,6 +164,16 @@ page 72061 "DOPSWHS Setup"
                     ApplicationArea = All;
                     ToolTip = 'Specifies the allowed variance value in LCY (variance in base unit x item unit cost) per line. 0 = not used.';
                 }
+                field("Reclass Reason Mandatory"; Rec."Reclass Reason Mandatory")
+                {
+                    ApplicationArea = All;
+                    ToolTip = 'Specifies that every item reclassification journal line must have a reason code. Batches the WMS posts itself for terminal moves are exempt.';
+                }
+                field("Reclass Approval Required"; Rec."Reclass Approval Required")
+                {
+                    ApplicationArea = All;
+                    ToolTip = 'Specifies that only users on the Inventory Control Approvers list with Approve Reclassification can post item reclassification journals.';
+                }
             }
             // Kitoko (19 Eki 2026): DKÇ/EMU etiket çıkarma, etiket rulosu ölçüsü.
             group(LabelStock)

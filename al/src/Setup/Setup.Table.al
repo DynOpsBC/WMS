@@ -500,6 +500,21 @@ table 72000 "DOPSWHS Setup"
             AutoFormatType = 1;
             MinValue = 0;
         }
+        field(620; "Reclass Reason Mandatory"; Boolean)
+        {
+            // KIT-015: item reclassification journal lines need a reason code.
+            Caption = 'Reclass Reason Code Mandatory';
+            DataClassification = CustomerContent;
+            InitValue = false;
+        }
+        field(621; "Reclass Approval Required"; Boolean)
+        {
+            // KIT-015: only users on the inventory approver list with "Approve
+            // Reclassification" may post item reclassification journals.
+            Caption = 'Reclass Posting Restricted';
+            DataClassification = CustomerContent;
+            InitValue = false;
+        }
     }
 
     keys

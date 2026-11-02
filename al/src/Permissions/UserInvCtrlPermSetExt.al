@@ -22,5 +22,6 @@ permissionsetextension 72001 "DOPSWHS-USER Inv Ctrl" extends "DOPSWHS-USER"
         codeunit "DOPSWHS Quality Lot Hold" = X,
         codeunit "DOPSWHS Quality Decision Mgmt" = X,
         codeunit "DOPSWHS Count Tolerance Mgmt" = X,
-        codeunit "DOPSWHS Cycle Count Mgmt" = X;
+        codeunit "DOPSWHS Cycle Count Mgmt" = X,
+        codeunit "DOPSWHS Reclass Control" = X;
 }
