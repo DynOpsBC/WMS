@@ -118,6 +118,38 @@ page 72061 "DOPSWHS Setup"
                     ToolTip = 'Terminaldeki MTE Yazdır bu raporu çalıştırır. BADE''de 60150 seçiliyse terminal için ayrı 60298 LP raporu kullanılır; 60150''nin BC düzeni değişmez. 0 = BCWMS''in kendi MTE raporu.';
                 }
             }
+            // Kitoko (Kas 2026): quality & inventory control (KIT-009, KIT-010,
+            // INV-009, INV-010, KIT-014, KIT-015). All switches default to off.
+            group(QualityInventoryControl)
+            {
+                Caption = 'Quality & Inventory Control';
+                InstructionalText = 'Optional controls for quality inspection, quality hold, count tolerance and reclassification. Each switch is off by default; nothing changes until it is turned on.';
+                field("Receipt Quality Gate"; Rec."Receipt Quality Gate")
+                {
+                    ApplicationArea = All;
+                    ToolTip = 'Specifies that purchase receipt lines covered by a quality inspection rule (Before Posting) cannot be posted until their quality order has a result. After Posting rules create the quality orders when the receipt is posted.';
+                }
+                field("Quality Lot Hold"; Rec."Quality Lot Hold")
+                {
+                    ApplicationArea = All;
+                    ToolTip = 'Specifies that the lot or serial number of an open or failed quality order is blocked, so it cannot be picked, shipped, consumed or reserved. Held stock can only be put away or moved to the quality order''s quarantine bin. Passing the order releases the block.';
+                }
+                field("Assembly Quality Gate"; Rec."Assembly Quality Gate")
+                {
+                    ApplicationArea = All;
+                    ToolTip = 'Specifies that assembly orders covered by an Assembly Output quality rule can only be posted after their final inspection is passed or accepted with deviation.';
+                }
+                field("Quality Scrap Jnl. Template"; Rec."Quality Scrap Jnl. Template")
+                {
+                    ApplicationArea = All;
+                    ToolTip = 'Specifies the item journal template used to post scrap decisions of failed quality orders.';
+                }
+                field("Quality Scrap Jnl. Batch"; Rec."Quality Scrap Jnl. Batch")
+                {
+                    ApplicationArea = All;
+                    ToolTip = 'Specifies the item journal batch used to post scrap decisions. Keep it empty; it is posted as a whole.';
+                }
+            }
             // Kitoko (19 Eki 2026): DKÇ/EMU etiket çıkarma, etiket rulosu ölçüsü.
             group(LabelStock)
             {
@@ -314,6 +346,27 @@ page 72061 "DOPSWHS Setup"
                     Promoted = true;
                     PromotedCategory = Process;
                     RunObject = page "DOPSWHS Demo E2E Results";
+                }
+            }
+            // Kitoko (Kas 2026): quality & inventory control lists.
+            group(QualityInventoryControlActions)
+            {
+                Caption = 'Quality & Inventory Control';
+                action(QualityRulesAction)
+                {
+                    Caption = 'Quality Inspection Rules';
+                    ApplicationArea = All;
+                    Image = CheckRulesSyntax;
+                    RunObject = page "DOPSWHS Quality Rules";
+                    ToolTip = 'Define which purchase receipts and assembly outputs require a quality inspection.';
+                }
+                action(QualityOrdersAction)
+                {
+                    Caption = 'Quality Orders';
+                    ApplicationArea = All;
+                    Image = TaskQualityMeasure;
+                    RunObject = page "DOPSWHS Quality Orders";
+                    ToolTip = 'Open the quality orders.';
                 }
             }
             group(LicenseActions)

@@ -27,6 +27,1506 @@
       <trans-unit id="PreflightCheck"><source>Preflight Check</source><target>Ön Kontrol</target></trans-unit>
       <trans-unit id="DryRun"><source>Dry Run</source><target>Deneme Çalıştırması</target></trans-unit>
       <trans-unit id="Cutover"><source>Cutover</source><target>Geçişi Tamamla</target></trans-unit>
+      <trans-unit id="Table 2758473473 - Field 1086602828 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Decision</source>
+        <target state="translated">Karar</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Table DOPSWHS Quality Order - Field Decision - Property Caption</note>
+      </trans-unit>
+      <trans-unit id="Table 2758473473 - Field 1383543077 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Decision By</source>
+        <target state="translated">Kararı Uygulayan</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Table DOPSWHS Quality Order - Field Decision By - Property Caption</note>
+      </trans-unit>
+      <trans-unit id="Table 2758473473 - Field 3885910323 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Decision DateTime</source>
+        <target state="translated">Karar Tarihi/Saati</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Table DOPSWHS Quality Order - Field Decision DateTime - Property Caption</note>
+      </trans-unit>
+      <trans-unit id="Table 2758473473 - Field 80365836 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Decision Document No.</source>
+        <target state="translated">Karar Belge No.</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Table DOPSWHS Quality Order - Field Decision Document No. - Property Caption</note>
+      </trans-unit>
+      <trans-unit id="Table 2758473473 - Field 1986127093 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Decision Executed</source>
+        <target state="translated">Karar Uygulandı</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Table DOPSWHS Quality Order - Field Decision Executed - Property Caption</note>
+      </trans-unit>
+      <trans-unit id="Table 2758473473 - Field 1577084726 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Decision Qty.</source>
+        <target state="translated">Karar Miktarı</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Table DOPSWHS Quality Order - Field Decision Qty. - Property Caption</note>
+      </trans-unit>
+      <trans-unit id="Table 2758473473 - Field 1701151363 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Decision Reason Code</source>
+        <target state="translated">Karar Neden Kodu</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Table DOPSWHS Quality Order - Field Decision Reason Code - Property Caption</note>
+      </trans-unit>
+      <trans-unit id="Table 2758473473 - Field 1482668068 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Lot No.</source>
+        <target state="translated">Lot No.</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Table DOPSWHS Quality Order - Field Lot No. - Property Caption</note>
+      </trans-unit>
+      <trans-unit id="Table 2758473473 - Field 2960574539 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Posted Document No.</source>
+        <target state="translated">Nakledilen Belge No.</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Table DOPSWHS Quality Order - Field Posted Document No. - Property Caption</note>
+      </trans-unit>
+      <trans-unit id="Table 2758473473 - Field 4124392663 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Re-inspection Order No.</source>
+        <target state="translated">Yeniden Kontrol Emri No.</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Table DOPSWHS Quality Order - Field Re-inspection Order No. - Property Caption</note>
+      </trans-unit>
+      <trans-unit id="Table 2758473473 - Field 47037625 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Serial No.</source>
+        <target state="translated">Seri No.</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Table DOPSWHS Quality Order - Field Serial No. - Property Caption</note>
+      </trans-unit>
+      <trans-unit id="Table 2758473473 - Field 312545736 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Source Line No.</source>
+        <target state="translated">Kaynak Satır No.</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Table DOPSWHS Quality Order - Field Source Line No. - Property Caption</note>
+      </trans-unit>
+      <trans-unit id="Table 2758473473 - Field 205345179 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Source Subtype</source>
+        <target state="translated">Kaynak Alt Türü</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Table DOPSWHS Quality Order - Field Source Subtype - Property Caption</note>
+      </trans-unit>
+      <trans-unit id="Table 2758473473 - Field 76420432 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Source Table No.</source>
+        <target state="translated">Kaynak Tablo No.</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Table DOPSWHS Quality Order - Field Source Table No. - Property Caption</note>
+      </trans-unit>
+      <trans-unit id="Table 2758473473 - Field 1753214751 - Property 62802879" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Manual,Receipt,Production,Shipment,Return,Assembly</source>
+        <target state="translated">Manuel,Mal Kabul,Üretim,Sevkiyat,İade,Montaj</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Table DOPSWHS Quality Order - Field Source Type - Property OptionCaption</note>
+      </trans-unit>
+      <trans-unit id="Table 2758473473 - Field 2385270358 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Unit of Measure Code</source>
+        <target state="translated">Ölçü Birimi Kodu</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Table DOPSWHS Quality Order - Field Unit of Measure Code - Property Caption</note>
+      </trans-unit>
+      <trans-unit id="Table 2758473473 - Field 3450651614 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Variant Code</source>
+        <target state="translated">Varyant Kodu</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Table DOPSWHS Quality Order - Field Variant Code - Property Caption</note>
+      </trans-unit>
+      <trans-unit id="Table 2758473473 - Field 1527594213 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Vendor No.</source>
+        <target state="translated">Satıcı No.</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Table DOPSWHS Quality Order - Field Vendor No. - Property Caption</note>
+      </trans-unit>
+      <trans-unit id="Table 2758473473 - Field 1483846801 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Whse. Document No.</source>
+        <target state="translated">Ambar Belge No.</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Table DOPSWHS Quality Order - Field Whse. Document No. - Property Caption</note>
+      </trans-unit>
+      <trans-unit id="Table 2959783145 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Quality Inspection Rule</source>
+        <target state="translated">Kalite Kontrol Kuralı</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Table DOPSWHS Quality Rule - Property Caption</note>
+      </trans-unit>
+      <trans-unit id="Table 2959783145 - Field 3461834954 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Description</source>
+        <target state="translated">Açıklama</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Table DOPSWHS Quality Rule - Field Description - Property Caption</note>
+      </trans-unit>
+      <trans-unit id="Table 2959783145 - Field 2891538263 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Enabled</source>
+        <target state="translated">Etkin</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Table DOPSWHS Quality Rule - Field Enabled - Property Caption</note>
+      </trans-unit>
+      <trans-unit id="Table 2959783145 - Field 883711285 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Entry No.</source>
+        <target state="translated">Giriş No.</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Table DOPSWHS Quality Rule - Field Entry No. - Property Caption</note>
+      </trans-unit>
+      <trans-unit id="Table 2959783145 - Field 1037119892 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Item Category Code</source>
+        <target state="translated">Madde Kategorisi Kodu</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Table DOPSWHS Quality Rule - Field Item Category Code - Property Caption</note>
+      </trans-unit>
+      <trans-unit id="Table 2959783145 - Field 568743302 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Item No.</source>
+        <target state="translated">Madde No.</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Table DOPSWHS Quality Rule - Field Item No. - Property Caption</note>
+      </trans-unit>
+      <trans-unit id="Table 2959783145 - Field 2161572060 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Location Code</source>
+        <target state="translated">Lokasyon Kodu</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Table DOPSWHS Quality Rule - Field Location Code - Property Caption</note>
+      </trans-unit>
+      <trans-unit id="Table 2959783145 - Field 1753214751 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Source Type</source>
+        <target state="translated">Kaynak Türü</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Table DOPSWHS Quality Rule - Field Source Type - Property Caption</note>
+      </trans-unit>
+      <trans-unit id="Table 2959783145 - Field 1498196060 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Inspection Timing</source>
+        <target state="translated">Kontrol Zamanı</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Table DOPSWHS Quality Rule - Field Timing - Property Caption</note>
+      </trans-unit>
+      <trans-unit id="Table 2959783145 - Field 1527594213 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Vendor No.</source>
+        <target state="translated">Satıcı No.</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Table DOPSWHS Quality Rule - Field Vendor No. - Property Caption</note>
+      </trans-unit>
+      <trans-unit id="Table 3140292245 - Field 1259998824 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Assembly Quality Gate</source>
+        <target state="translated">Montaj Kalite Kapısı</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Table DOPSWHS Setup - Field Assembly Quality Gate - Property Caption</note>
+      </trans-unit>
+      <trans-unit id="Table 3140292245 - Field 259374903 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Quality Lot Hold</source>
+        <target state="translated">Kalite Lot Blokajı</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Table DOPSWHS Setup - Field Quality Lot Hold - Property Caption</note>
+      </trans-unit>
+      <trans-unit id="Table 3140292245 - Field 3329123816 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Quality Scrap Jnl. Batch</source>
+        <target state="translated">Kalite Hurda Günlük Toplu İşi</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Table DOPSWHS Setup - Field Quality Scrap Jnl. Batch - Property Caption</note>
+      </trans-unit>
+      <trans-unit id="Table 3140292245 - Field 2315302036 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Quality Scrap Jnl. Template</source>
+        <target state="translated">Kalite Hurda Günlük Şablonu</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Table DOPSWHS Setup - Field Quality Scrap Jnl. Template - Property Caption</note>
+      </trans-unit>
+      <trans-unit id="Table 3140292245 - Field 614381162 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Receipt Quality Gate</source>
+        <target state="translated">Mal Kabul Kalite Kapısı</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Table DOPSWHS Setup - Field Receipt Quality Gate - Property Caption</note>
+      </trans-unit>
+      <trans-unit id="Codeunit 2901786998 - NamedType 639225484" size-unit="char" translate="yes" xml:space="preserve">
+        <source>The stock of quality order %1 was accepted with deviation and released.</source>
+        <target state="translated">%1 kalite emrinin stoğu sapmayla kabul edildi ve serbest bırakıldı.</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Codeunit DOPSWHS Quality Decision Mgmt - NamedType AcceptedMsg</note>
+      </trans-unit>
+      <trans-unit id="Codeunit 2901786998 - NamedType 1180555251" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Select a decision for quality order %1 first.</source>
+        <target state="translated">Önce %1 kalite emri için bir karar seçin.</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Codeunit DOPSWHS Quality Decision Mgmt - NamedType DecisionMissingErr</note>
+      </trans-unit>
+      <trans-unit id="Codeunit 2901786998 - NamedType 2337018859" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Decision Qty. must be greater than zero on quality order %1.</source>
+        <target state="translated">%1 kalite emrinde Karar Miktarı sıfırdan büyük olmalıdır.</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Codeunit DOPSWHS Quality Decision Mgmt - NamedType DecisionQtyErr</note>
+      </trans-unit>
+      <trans-unit id="Codeunit 2901786998 - NamedType 2279981411" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Execute the decision %1 for quality order %2?</source>
+        <target state="translated">%2 kalite emri için %1 kararı uygulansın mı?</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Codeunit DOPSWHS Quality Decision Mgmt - NamedType ExecuteDecisionQst</note>
+      </trans-unit>
+      <trans-unit id="Codeunit 2901786998 - NamedType 4185921066" size-unit="char" translate="yes" xml:space="preserve">
+        <source>The source document of quality order %1 cannot be found.</source>
+        <target state="translated">%1 kalite emrinin kaynak belgesi bulunamadı.</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Codeunit DOPSWHS Quality Decision Mgmt - NamedType NoSourceDocumentErr</note>
+      </trans-unit>
+      <trans-unit id="Codeunit 2901786998 - NamedType 4203557970" size-unit="char" translate="yes" xml:space="preserve">
+        <source>The lot/serial of quality order %1 is not on quality hold.</source>
+        <target state="translated">%1 kalite emrinin lotu/serisi kalite blokajında değil.</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Codeunit DOPSWHS Quality Decision Mgmt - NamedType NotOnHoldErr</note>
+      </trans-unit>
+      <trans-unit id="Codeunit 2901786998 - NamedType 2579192733" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Quality order %1 has no lot or serial number.</source>
+        <target state="translated">%1 kalite emrinde lot veya seri numarası yok.</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Codeunit DOPSWHS Quality Decision Mgmt - NamedType NoTrackingErr</note>
+      </trans-unit>
+      <trans-unit id="Codeunit 2901786998 - NamedType 420618684" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Re-inspection quality order %1 was created. The stock stays on quality hold until it is passed.</source>
+        <target state="translated">%1 yeniden kontrol kalite emri oluşturuldu. Stok, kontrol geçene kadar kalite blokajında kalır.</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Codeunit DOPSWHS Quality Decision Mgmt - NamedType ReinspectionCreatedMsg</note>
+      </trans-unit>
+      <trans-unit id="Codeunit 2901786998 - NamedType 1683695316" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Release the quality hold of item %1 (%2)? The stock becomes usable without an inspection result.</source>
+        <target state="translated">%1 maddesinin (%2) kalite blokajı kaldırılsın mı? Stok, kontrol sonucu olmadan kullanılabilir hale gelir.</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Codeunit DOPSWHS Quality Decision Mgmt - NamedType ReleaseHoldQst</note>
+      </trans-unit>
+      <trans-unit id="Codeunit 2901786998 - NamedType 2558773024" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Quality return %1</source>
+        <target state="translated">Kalite iadesi %1</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Codeunit DOPSWHS Quality Decision Mgmt - NamedType ReturnDescriptionTxt</note>
+      </trans-unit>
+      <trans-unit id="Codeunit 2901786998 - NamedType 1780995758" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Item journal %1 / %2 contains other lines. Post or delete them before posting a quality scrap decision.</source>
+        <target state="translated">%1 / %2 madde günlüğünde başka satırlar var. Kalite hurda kararını nakletmeden önce bu satırları nakledin veya silin.</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Codeunit DOPSWHS Quality Decision Mgmt - NamedType ScrapBatchNotEmptyErr</note>
+      </trans-unit>
+      <trans-unit id="Codeunit 2901786998 - NamedType 432498681" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Quality order %1 has no bin. Enter the bin (or quarantine bin) of the rejected stock in location %2 before posting the scrap.</source>
+        <target state="translated">%1 kalite emrinde raf yok. Hurdayı nakletmeden önce reddedilen stoğun %2 lokasyonundaki rafını (veya karantina rafını) girin.</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Codeunit DOPSWHS Quality Decision Mgmt - NamedType ScrapBinMissingErr</note>
+      </trans-unit>
+      <trans-unit id="Codeunit 2901786998 - NamedType 1983400759" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Quality scrap %1</source>
+        <target state="translated">Kalite hurdası %1</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Codeunit DOPSWHS Quality Decision Mgmt - NamedType ScrapDescriptionTxt</note>
+      </trans-unit>
+      <trans-unit id="Codeunit 2901786998 - NamedType 1261627737" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Location %1 uses directed put-away and pick. Post the scrap of quality order %2 with the warehouse item journal and Calculate Whse. Adjustment.</source>
+        <target state="translated">%1 lokasyonu yönlendirilmiş yerleştirme ve toplama kullanıyor. %2 kalite emrinin hurdasını ambar madde günlüğü ve Ambar Düzeltmesini Hesapla ile nakledin.</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Codeunit DOPSWHS Quality Decision Mgmt - NamedType ScrapDirectedLocationErr</note>
+      </trans-unit>
+      <trans-unit id="Codeunit 2901786998 - NamedType 1907176997" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Select the quality scrap journal template and batch in Advanced WMS Setup before posting a scrap decision.</source>
+        <target state="translated">Hurda kararını nakletmeden önce Gelişmiş WMS Kurulumu'nda kalite hurda günlük şablonunu ve toplu işini seçin.</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Codeunit DOPSWHS Quality Decision Mgmt - NamedType ScrapJournalMissingErr</note>
+      </trans-unit>
+      <trans-unit id="Codeunit 2901786998 - NamedType 1467498821" size-unit="char" translate="yes" xml:space="preserve">
+        <source>%1 of item %2 was scrapped with document %3.</source>
+        <target state="translated">%2 maddesinden %1 adet %3 belgesiyle hurdaya ayrıldı.</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Codeunit DOPSWHS Quality Decision Mgmt - NamedType ScrapPostedMsg</note>
+      </trans-unit>
+      <trans-unit id="Codeunit 2901786998 - NamedType 827015599" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Enter the Vendor No. on quality order %1. The vendor could not be found from the lot's purchase receipt.</source>
+        <target state="translated">%1 kalite emrine Satıcı No. girin. Satıcı, lotun satınalma girişinden bulunamadı.</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Codeunit DOPSWHS Quality Decision Mgmt - NamedType VendorMissingErr</note>
+      </trans-unit>
+      <trans-unit id="Codeunit 946495919 - NamedType 270809113" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Final inspection %1 for assembly order %2 is still open.</source>
+        <target state="translated">%2 montaj siparişinin %1 son kontrolü hâlâ açık.</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Codeunit DOPSWHS Quality Gate Mgmt - NamedType FinalInspectionExistsErr</note>
+      </trans-unit>
+      <trans-unit id="Codeunit 946495919 - NamedType 2148242317" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Assembly order %1 cannot be posted: final quality inspection %2 is not completed.</source>
+        <target state="translated">%1 montaj siparişi nakledilemez: %2 son kalite kontrolü tamamlanmadı.</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Codeunit DOPSWHS Quality Gate Mgmt - NamedType FinalInspectionOpenErr</note>
+      </trans-unit>
+      <trans-unit id="Codeunit 946495919 - NamedType 2531357283" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Assembly order %1 cannot be posted: final quality inspection %2 was rejected. Rework and re-inspect the output, or record and execute an Accept with Deviation decision.</source>
+        <target state="translated">%1 montaj siparişi nakledilemez: %2 son kalite kontrolü reddedildi. Çıktıyı yeniden işleyip tekrar kontrol edin veya Sapmayla Kabul kararını girip uygulayın.</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Codeunit DOPSWHS Quality Gate Mgmt - NamedType FinalInspectionRejectedErr</note>
+      </trans-unit>
+      <trans-unit id="Codeunit 946495919 - NamedType 2371889098" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Assembly order %1 (item %2) requires a final quality inspection before it can be posted. Use Create Final Inspection and record the result.</source>
+        <target state="translated">%1 montaj siparişi (%2 maddesi) nakledilmeden önce son kalite kontrolü gerektirir. Son Kontrol Oluştur ile kontrolü oluşturup sonucunu girin.</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Codeunit DOPSWHS Quality Gate Mgmt - NamedType FinalInspectionRequiredErr</note>
+      </trans-unit>
+      <trans-unit id="Codeunit 946495919 - NamedType 3723404024" size-unit="char" translate="yes" xml:space="preserve">
+        <source>No quality inspection rule covers these lines. Do you want to create quality orders for all lines anyway?</source>
+        <target state="translated">Bu satırları kapsayan bir kalite kontrol kuralı yok. Yine de tüm satırlar için kalite emri oluşturmak istiyor musunuz?</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Codeunit DOPSWHS Quality Gate Mgmt - NamedType NoRuleCreateAllQst</note>
+      </trans-unit>
+      <trans-unit id="Codeunit 946495919 - NamedType 3370952557" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Quality order %1 for item %2 (lot/serial %3) on purchase order %4 is not completed. The receipt is blocked until the quality inspection has a result.</source>
+        <target state="translated">%4 satınalma siparişindeki %2 maddesi (lot/seri %3) için %1 kalite emri tamamlanmadı. Kalite kontrolü (QC) sonuçlanana kadar mal kabul bloke.</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Codeunit DOPSWHS Quality Gate Mgmt - NamedType ReceiptInspectionOpenErr</note>
+      </trans-unit>
+      <trans-unit id="Codeunit 946495919 - NamedType 2504154026" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Item %1 on purchase order %2, line %3 requires a quality inspection before it can be received. Create a quality order (Create Quality Orders) and record its result.</source>
+        <target state="translated">%2 satınalma siparişi, %3 satırındaki %1 maddesi teslim alınmadan önce kalite kontrolü (QC) gerektirir. Kalite emri oluşturun (Kalite Emirleri Oluştur) ve sonucunu girin.</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Codeunit DOPSWHS Quality Gate Mgmt - NamedType ReceiptInspectionRequiredErr</note>
+      </trans-unit>
+      <trans-unit id="Codeunit 946495919 - NamedType 4187624128" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Lot %1 of item %2 on purchase order %3, line %4 has no quality inspection. Create a quality order for the lot before receiving it.</source>
+        <target state="translated">%3 satınalma siparişi, %4 satırındaki %2 maddesinin %1 lotu için kalite kontrolü (QC) yok. Teslim almadan önce lot için kalite emri oluşturun.</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Codeunit DOPSWHS Quality Gate Mgmt - NamedType ReceiptLotNotInspectedErr</note>
+      </trans-unit>
+      <trans-unit id="Codeunit 2882325131 - NamedType 647910243" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Item %1 (%2) is blocked by quality order %3 and cannot be picked until the inspection is passed.</source>
+        <target state="translated">%1 maddesi (%2) %3 kalite emri nedeniyle QC blokajında; kontrol geçene kadar toplanamaz.</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Codeunit DOPSWHS Quality Lot Hold - NamedType HeldStockPickErr</note>
+      </trans-unit>
+      <trans-unit id="Codeunit 2882325131 - NamedType 2768376547" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Item %1 (%2) is blocked by quality order %3 until the inspection is passed. It cannot be placed in bin %4.</source>
+        <target state="translated">%1 maddesi (%2) kontrol geçene kadar %3 kalite emri nedeniyle QC blokajında. %4 rafına yerleştirilemez.</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Codeunit DOPSWHS Quality Lot Hold - NamedType HeldStockPlacementErr</note>
+      </trans-unit>
+      <trans-unit id="Codeunit 2882325131 - NamedType 2575467094" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Item %1 (%2) is blocked by quality order %3. It can only be placed in quarantine bin %4.</source>
+        <target state="translated">%1 maddesi (%2) %3 kalite emri nedeniyle QC blokajında. Yalnız %4 karantina rafına yerleştirilebilir.</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Codeunit DOPSWHS Quality Lot Hold - NamedType HeldStockQuarantineOnlyErr</note>
+      </trans-unit>
+      <trans-unit id="Codeunit 2882325131 - NamedType 3262112113" size-unit="char" translate="yes" xml:space="preserve">
+        <source>lot %1</source>
+        <target state="translated">lot %1</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Codeunit DOPSWHS Quality Lot Hold - NamedType LotTok</note>
+      </trans-unit>
+      <trans-unit id="Codeunit 2882325131 - NamedType 2555684024" size-unit="char" translate="yes" xml:space="preserve">
+        <source>LP %1</source>
+        <target state="translated">LP %1</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Codeunit DOPSWHS Quality Lot Hold - NamedType LpTok</note>
+      </trans-unit>
+      <trans-unit id="Codeunit 2882325131 - NamedType 350150212" size-unit="char" translate="yes" xml:space="preserve">
+        <source>serial %1</source>
+        <target state="translated">seri %1</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Codeunit DOPSWHS Quality Lot Hold - NamedType SerialTok</note>
+      </trans-unit>
+      <trans-unit id="Codeunit 4134072206 - NamedType 3599389713" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Too many quality orders were created within one second. Try again.</source>
+        <target state="translated">Bir saniye içinde çok fazla kalite emri oluşturuldu. Tekrar deneyin.</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Codeunit DOPSWHS Quality Mgmt - NamedType TooManyOrdersErr</note>
+      </trans-unit>
+      <trans-unit id="Page 3432802029 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Quality Order</source>
+        <target state="translated">Kalite Emri</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Page DOPSWHS Quality Order Card - Property Caption</note>
+      </trans-unit>
+      <trans-unit id="Page 3432802029 - Control 1414237849 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Decision</source>
+        <target state="translated">Karar</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Page DOPSWHS Quality Order Card - Control DecisionGroup - Property Caption</note>
+      </trans-unit>
+      <trans-unit id="Page 3432802029 - Control 1086602828 - Property 1295455071" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Specifies what happens with the rejected stock: Scrap posts a negative adjustment, Return to Vendor creates a purchase return order, Rework opens a re-inspection, Accept with Deviation releases the stock.</source>
+        <target state="translated">Reddedilen stokla ne yapılacağını belirtir: Hurda negatif düzeltme nakleder, Satıcıya İade satınalma iade siparişi oluşturur, Yeniden İşleme yeni kontrol açar, Sapmayla Kabul stoğu serbest bırakır.</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Page DOPSWHS Quality Order Card - Control Decision - Property ToolTip</note>
+      </trans-unit>
+      <trans-unit id="Page 3432802029 - Control 1383543077 - Property 1295455071" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Specifies who executed the decision.</source>
+        <target state="translated">Kararı kimin uyguladığını belirtir.</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Page DOPSWHS Quality Order Card - Control Decision By - Property ToolTip</note>
+      </trans-unit>
+      <trans-unit id="Page 3432802029 - Control 3885910323 - Property 1295455071" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Specifies when the decision was executed.</source>
+        <target state="translated">Kararın ne zaman uygulandığını belirtir.</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Page DOPSWHS Quality Order Card - Control Decision DateTime - Property ToolTip</note>
+      </trans-unit>
+      <trans-unit id="Page 3432802029 - Control 80365836 - Property 1295455071" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Specifies the scrap journal document, return order or re-inspection order created by the decision.</source>
+        <target state="translated">Kararla oluşturulan hurda günlüğü belgesini, iade siparişini veya yeniden kontrol emrini belirtir.</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Page DOPSWHS Quality Order Card - Control Decision Document No. - Property ToolTip</note>
+      </trans-unit>
+      <trans-unit id="Page 3432802029 - Control 1986127093 - Property 1295455071" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Specifies whether the decision has been executed.</source>
+        <target state="translated">Kararın uygulanıp uygulanmadığını belirtir.</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Page DOPSWHS Quality Order Card - Control Decision Executed - Property ToolTip</note>
+      </trans-unit>
+      <trans-unit id="Page 3432802029 - Control 1577084726 - Property 1295455071" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Specifies the quantity the decision applies to. Zero means the inspected quantity.</source>
+        <target state="translated">Kararın uygulanacağı miktarı belirtir. Sıfır, kontrol edilen miktar anlamına gelir.</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Page DOPSWHS Quality Order Card - Control Decision Qty. - Property ToolTip</note>
+      </trans-unit>
+      <trans-unit id="Page 3432802029 - Control 1701151363 - Property 1295455071" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Specifies the reason code written on the scrap journal line.</source>
+        <target state="translated">Hurda günlüğü satırına yazılan neden kodunu belirtir.</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Page DOPSWHS Quality Order Card - Control Decision Reason Code - Property ToolTip</note>
+      </trans-unit>
+      <trans-unit id="Page 3432802029 - Control 2445482498 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
+        <source>General</source>
+        <target state="translated">Genel</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Page DOPSWHS Quality Order Card - Control General - Property Caption</note>
+      </trans-unit>
+      <trans-unit id="Page 3432802029 - Control 3572756595 - Property 1295455071" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Specifies when the quality order was created.</source>
+        <target state="translated">Kalite emrinin ne zaman oluşturulduğunu belirtir.</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Page DOPSWHS Quality Order Card - Control Created DateTime - Property ToolTip</note>
+      </trans-unit>
+      <trans-unit id="Page 3432802029 - Control 4085727052 - Property 1295455071" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Specifies when the inspection is due.</source>
+        <target state="translated">Kontrolün son tarihini belirtir.</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Page DOPSWHS Quality Order Card - Control Due Date - Property ToolTip</note>
+      </trans-unit>
+      <trans-unit id="Page 3432802029 - Control 4200184881 - Property 1295455071" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Specifies the number of the quality order. It is assigned automatically.</source>
+        <target state="translated">Kalite emrinin numarasını belirtir. Numara otomatik atanır.</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Page DOPSWHS Quality Order Card - Control No. - Property ToolTip</note>
+      </trans-unit>
+      <trans-unit id="Page 3432802029 - Control 2960574539 - Property 1295455071" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Specifies the posted receipt or assembly that used this inspection. A later posting of the same line needs a new inspection.</source>
+        <target state="translated">Bu kontrolü kullanan nakledilmiş mal kabulü veya montajı belirtir. Aynı satırın sonraki nakli yeni kontrol gerektirir.</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Page DOPSWHS Quality Order Card - Control Posted Document No. - Property ToolTip</note>
+      </trans-unit>
+      <trans-unit id="Page 3432802029 - Control 312545736 - Property 1295455071" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Specifies the source document line that is inspected.</source>
+        <target state="translated">Kontrol edilen kaynak belge satırını belirtir.</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Page DOPSWHS Quality Order Card - Control Source Line No. - Property ToolTip</note>
+      </trans-unit>
+      <trans-unit id="Page 3432802029 - Control 1882905478 - Property 1295455071" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Specifies the source document (purchase order, assembly order, warehouse receipt).</source>
+        <target state="translated">Kaynak belgeyi belirtir (satınalma siparişi, montaj siparişi, ambar mal kabulü).</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Page DOPSWHS Quality Order Card - Control Source No. - Property ToolTip</note>
+      </trans-unit>
+      <trans-unit id="Page 3432802029 - Control 1753214751 - Property 1295455071" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Specifies what the inspection is for (receipt, assembly, manual, ...).</source>
+        <target state="translated">Kontrolün ne için yapıldığını belirtir (mal kabul, montaj, manuel, ...).</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Page DOPSWHS Quality Order Card - Control Source Type - Property ToolTip</note>
+      </trans-unit>
+      <trans-unit id="Page 3432802029 - Control 513339096 - Property 1295455071" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Specifies the inspection status. Use the Pass and Fail actions to record the result.</source>
+        <target state="translated">Kontrol durumunu belirtir. Sonucu girmek için Geçti ve Kaldı eylemlerini kullanın.</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Page DOPSWHS Quality Order Card - Control Status - Property ToolTip</note>
+      </trans-unit>
+      <trans-unit id="Page 3432802029 - Control 1483846801 - Property 1295455071" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Specifies the warehouse receipt the inspection was created from.</source>
+        <target state="translated">Kontrolün oluşturulduğu ambar mal kabulünü belirtir.</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Page DOPSWHS Quality Order Card - Control Whse. Document No. - Property ToolTip</note>
+      </trans-unit>
+      <trans-unit id="Page 3432802029 - Control 472338107 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Result</source>
+        <target state="translated">Sonuç</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Page DOPSWHS Quality Order Card - Control Result - Property Caption</note>
+      </trans-unit>
+      <trans-unit id="Page 3432802029 - Control 1772086050 - Property 1295455071" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Specifies when the result was recorded.</source>
+        <target state="translated">Sonucun ne zaman girildiğini belirtir.</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Page DOPSWHS Quality Order Card - Control Inspected DateTime - Property ToolTip</note>
+      </trans-unit>
+      <trans-unit id="Page 3432802029 - Control 2638810765 - Property 1295455071" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Specifies who recorded the result.</source>
+        <target state="translated">Sonucu kimin girdiğini belirtir.</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Page DOPSWHS Quality Order Card - Control Inspector - Property ToolTip</note>
+      </trans-unit>
+      <trans-unit id="Page 3432802029 - Control 2997609285 - Property 1295455071" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Specifies the only bin in which held stock of this order may be put away or moved.</source>
+        <target state="translated">Bu emrin blokajdaki stoğunun yerleştirilebileceği veya taşınabileceği tek rafı belirtir.</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Page DOPSWHS Quality Order Card - Control Quarantine Bin - Property ToolTip</note>
+      </trans-unit>
+      <trans-unit id="Page 3432802029 - Control 2718514765 - Property 1295455071" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Specifies why the stock was rejected.</source>
+        <target state="translated">Stoğun neden reddedildiğini belirtir.</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Page DOPSWHS Quality Order Card - Control Reject Reason - Property ToolTip</note>
+      </trans-unit>
+      <trans-unit id="Page 3432802029 - Control 4098006262 - Property 1295455071" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Specifies the inspector's notes.</source>
+        <target state="translated">Kontrolcünün notlarını belirtir.</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Page DOPSWHS Quality Order Card - Control Result Notes - Property ToolTip</note>
+      </trans-unit>
+      <trans-unit id="Page 3432802029 - Control 3153743028 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Inspected Stock</source>
+        <target state="translated">Kontrol Edilen Stok</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Page DOPSWHS Quality Order Card - Control Stock - Property Caption</note>
+      </trans-unit>
+      <trans-unit id="Page 3432802029 - Control 2814799924 - Property 1295455071" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Specifies the bin of the inspected stock.</source>
+        <target state="translated">Kontrol edilen stoğun rafını belirtir.</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Page DOPSWHS Quality Order Card - Control Bin Code - Property ToolTip</note>
+      </trans-unit>
+      <trans-unit id="Page 3432802029 - Control 2842094365 - Property 1295455071" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Specifies the description of the inspected item.</source>
+        <target state="translated">Kontrol edilen maddenin açıklamasını belirtir.</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Page DOPSWHS Quality Order Card - Control Item Description - Property ToolTip</note>
+      </trans-unit>
+      <trans-unit id="Page 3432802029 - Control 568743302 - Property 1295455071" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Specifies the inspected item.</source>
+        <target state="translated">Kontrol edilen maddeyi belirtir.</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Page DOPSWHS Quality Order Card - Control Item No. - Property ToolTip</note>
+      </trans-unit>
+      <trans-unit id="Page 3432802029 - Control 2161572060 - Property 1295455071" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Specifies the location of the inspected stock.</source>
+        <target state="translated">Kontrol edilen stoğun lokasyonunu belirtir.</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Page DOPSWHS Quality Order Card - Control Location Code - Property ToolTip</note>
+      </trans-unit>
+      <trans-unit id="Page 3432802029 - Control 1482668068 - Property 1295455071" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Specifies the inspected lot. With Quality Lot Hold on, the lot is blocked until the order is passed.</source>
+        <target state="translated">Kontrol edilen lotu belirtir. Kalite Lot Blokajı açıkken lot, emir geçene kadar bloke kalır.</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Page DOPSWHS Quality Order Card - Control Lot No. - Property ToolTip</note>
+      </trans-unit>
+      <trans-unit id="Page 3432802029 - Control 2835493861 - Property 1295455071" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Specifies the license plate of the inspected stock.</source>
+        <target state="translated">Kontrol edilen stoğun LP'sini belirtir.</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Page DOPSWHS Quality Order Card - Control LP No. - Property ToolTip</note>
+      </trans-unit>
+      <trans-unit id="Page 3432802029 - Control 2816448978 - Property 1295455071" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Specifies whether the lot/serial of the order is currently blocked by the quality hold.</source>
+        <target state="translated">Emrin lotunun/serisinin şu anda kalite blokajında olup olmadığını belirtir.</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Page DOPSWHS Quality Order Card - Control OnHold - Property ToolTip</note>
+      </trans-unit>
+      <trans-unit id="Page 3432802029 - Control 2816448978 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
+        <source>On Quality Hold</source>
+        <target state="translated">Kalite Blokajında</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Page DOPSWHS Quality Order Card - Control OnHold - Property Caption</note>
+      </trans-unit>
+      <trans-unit id="Page 3432802029 - Control 2704404533 - Property 1295455071" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Specifies the inspected quantity.</source>
+        <target state="translated">Kontrol edilen miktarı belirtir.</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Page DOPSWHS Quality Order Card - Control Quantity - Property ToolTip</note>
+      </trans-unit>
+      <trans-unit id="Page 3432802029 - Control 3034202381 - Property 1295455071" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Specifies how many units are sampled.</source>
+        <target state="translated">Kaç birimden numune alındığını belirtir.</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Page DOPSWHS Quality Order Card - Control Sample Size - Property ToolTip</note>
+      </trans-unit>
+      <trans-unit id="Page 3432802029 - Control 47037625 - Property 1295455071" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Specifies the inspected serial number.</source>
+        <target state="translated">Kontrol edilen seri numarasını belirtir.</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Page DOPSWHS Quality Order Card - Control Serial No. - Property ToolTip</note>
+      </trans-unit>
+      <trans-unit id="Page 3432802029 - Control 2385270358 - Property 1295455071" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Specifies the unit of measure of the quantity. Blank means the base unit of measure.</source>
+        <target state="translated">Miktarın ölçü birimini belirtir. Boş, temel ölçü birimi anlamına gelir.</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Page DOPSWHS Quality Order Card - Control Unit of Measure Code - Property ToolTip</note>
+      </trans-unit>
+      <trans-unit id="Page 3432802029 - Control 3450651614 - Property 1295455071" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Specifies the variant of the inspected item.</source>
+        <target state="translated">Kontrol edilen maddenin varyantını belirtir.</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Page DOPSWHS Quality Order Card - Control Variant Code - Property ToolTip</note>
+      </trans-unit>
+      <trans-unit id="Page 3432802029 - Control 1527594213 - Property 1295455071" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Specifies the vendor of the inspected stock. A return to vendor decision creates the return order for this vendor.</source>
+        <target state="translated">Kontrol edilen stoğun satıcısını belirtir. Satıcıya iade kararı iade siparişini bu satıcı için oluşturur.</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Page DOPSWHS Quality Order Card - Control Vendor No. - Property ToolTip</note>
+      </trans-unit>
+      <trans-unit id="Page 3432802029 - Action 3505869542 - Property 1295455071" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Show the item ledger entries of the inspected item and lot/serial.</source>
+        <target state="translated">Kontrol edilen madde ve lot/seri için madde defteri girişlerini gösterin.</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Page DOPSWHS Quality Order Card - Action ItemLedgerEntries - Property ToolTip</note>
+      </trans-unit>
+      <trans-unit id="Page 3432802029 - Action 3505869542 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Item Ledger Entries</source>
+        <target state="translated">Madde Defteri Girişleri</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Page DOPSWHS Quality Order Card - Action ItemLedgerEntries - Property Caption</note>
+      </trans-unit>
+      <trans-unit id="Page 3432802029 - Action 2512773725 - Property 1295455071" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Open the lot information card of the inspected lot.</source>
+        <target state="translated">Kontrol edilen lotun lot bilgi kartını açın.</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Page DOPSWHS Quality Order Card - Action LotInformation - Property ToolTip</note>
+      </trans-unit>
+      <trans-unit id="Page 3432802029 - Action 2512773725 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Lot No. Information</source>
+        <target state="translated">Lot No. Bilgileri</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Page DOPSWHS Quality Order Card - Action LotInformation - Property Caption</note>
+      </trans-unit>
+      <trans-unit id="Page 3432802029 - Action 3873595854 - Property 1295455071" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Open the purchase order or assembly order the inspection belongs to.</source>
+        <target state="translated">Kontrolün ait olduğu satınalma siparişini veya montaj siparişini açın.</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Page DOPSWHS Quality Order Card - Action SourceDocument - Property ToolTip</note>
+      </trans-unit>
+      <trans-unit id="Page 3432802029 - Action 3873595854 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Source Document</source>
+        <target state="translated">Kaynak Belge</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Page DOPSWHS Quality Order Card - Action SourceDocument - Property Caption</note>
+      </trans-unit>
+      <trans-unit id="Page 3432802029 - Action 383542681 - Property 1295455071" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Execute the decision of the failed order: post the scrap, create the purchase return order, open a re-inspection or accept with deviation.</source>
+        <target state="translated">Kalan emrin kararını uygulayın: hurdayı nakledin, satınalma iade siparişini oluşturun, yeniden kontrol açın veya sapmayla kabul edin.</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Page DOPSWHS Quality Order Card - Action ExecuteDecision - Property ToolTip</note>
+      </trans-unit>
+      <trans-unit id="Page 3432802029 - Action 383542681 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Execute Decision</source>
+        <target state="translated">Kararı Uygula</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Page DOPSWHS Quality Order Card - Action ExecuteDecision - Property Caption</note>
+      </trans-unit>
+      <trans-unit id="Page 3432802029 - Action 3232087136 - Property 1295455071" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Record a failed inspection with a reason and quarantine bin. The lot stays blocked until a decision is executed.</source>
+        <target state="translated">Kalan kontrolü neden ve karantina rafıyla girin. Lot, bir karar uygulanana kadar bloke kalır.</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Page DOPSWHS Quality Order Card - Action FailOrder - Property ToolTip</note>
+      </trans-unit>
+      <trans-unit id="Page 3432802029 - Action 3232087136 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Fail</source>
+        <target state="translated">Kaldı</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Page DOPSWHS Quality Order Card - Action FailOrder - Property Caption</note>
+      </trans-unit>
+      <trans-unit id="Page 3432802029 - Action 439394737 - Property 1295455071" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Record a passed inspection. The quality hold of the lot is released.</source>
+        <target state="translated">Geçen kontrolü girin. Lotun kalite blokajı kaldırılır.</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Page DOPSWHS Quality Order Card - Action PassOrder - Property ToolTip</note>
+      </trans-unit>
+      <trans-unit id="Page 3432802029 - Action 439394737 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Pass</source>
+        <target state="translated">Geçti</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Page DOPSWHS Quality Order Card - Action PassOrder - Property Caption</note>
+      </trans-unit>
+      <trans-unit id="Page 3432802029 - Action 2770980930 - Property 1295455071" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Unblock the lot/serial of the order without a result, for example to pick a rejected lot for its return shipment.</source>
+        <target state="translated">Emrin lotunun/serisinin blokajını sonuç girmeden kaldırın, örneğin reddedilen lotu iade sevkiyatı için toplamak üzere.</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Page DOPSWHS Quality Order Card - Action ReleaseHold - Property ToolTip</note>
+      </trans-unit>
+      <trans-unit id="Page 3432802029 - Action 2770980930 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Release Quality Hold</source>
+        <target state="translated">Kalite Blokajını Kaldır</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Page DOPSWHS Quality Order Card - Action ReleaseHold - Property Caption</note>
+      </trans-unit>
+      <trans-unit id="Page 3432802029 - Action 3383493608 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Process</source>
+        <target state="translated">İşlem</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Page DOPSWHS Quality Order Card - Action Category_Process - Property Caption</note>
+      </trans-unit>
+      <trans-unit id="Page 514676568 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Quality Orders</source>
+        <target state="translated">Kalite Emirleri</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Page DOPSWHS Quality Orders - Property Caption</note>
+      </trans-unit>
+      <trans-unit id="Page 514676568 - Control 2814799924 - Property 1295455071" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Specifies the bin of the inspected stock.</source>
+        <target state="translated">Kontrol edilen stoğun rafını belirtir.</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Page DOPSWHS Quality Orders - Control Bin Code - Property ToolTip</note>
+      </trans-unit>
+      <trans-unit id="Page 514676568 - Control 3572756595 - Property 1295455071" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Specifies when the quality order was created.</source>
+        <target state="translated">Kalite emrinin ne zaman oluşturulduğunu belirtir.</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Page DOPSWHS Quality Orders - Control Created DateTime - Property ToolTip</note>
+      </trans-unit>
+      <trans-unit id="Page 514676568 - Control 1086602828 - Property 1295455071" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Specifies what happens with rejected stock: scrap, return to vendor, rework or accept with deviation.</source>
+        <target state="translated">Reddedilen stokla ne yapılacağını belirtir: hurda, satıcıya iade, yeniden işleme veya sapmayla kabul.</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Page DOPSWHS Quality Orders - Control Decision - Property ToolTip</note>
+      </trans-unit>
+      <trans-unit id="Page 514676568 - Control 80365836 - Property 1295455071" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Specifies the scrap journal document, return order or re-inspection order created by the decision.</source>
+        <target state="translated">Kararla oluşturulan hurda günlüğü belgesini, iade siparişini veya yeniden kontrol emrini belirtir.</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Page DOPSWHS Quality Orders - Control Decision Document No. - Property ToolTip</note>
+      </trans-unit>
+      <trans-unit id="Page 514676568 - Control 1986127093 - Property 1295455071" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Specifies whether the decision has been executed.</source>
+        <target state="translated">Kararın uygulanıp uygulanmadığını belirtir.</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Page DOPSWHS Quality Orders - Control Decision Executed - Property ToolTip</note>
+      </trans-unit>
+      <trans-unit id="Page 514676568 - Control 4085727052 - Property 1295455071" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Specifies when the inspection is due.</source>
+        <target state="translated">Kontrolün son tarihini belirtir.</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Page DOPSWHS Quality Orders - Control Due Date - Property ToolTip</note>
+      </trans-unit>
+      <trans-unit id="Page 514676568 - Control 1772086050 - Property 1295455071" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Specifies when the result was recorded.</source>
+        <target state="translated">Sonucun ne zaman girildiğini belirtir.</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Page DOPSWHS Quality Orders - Control Inspected DateTime - Property ToolTip</note>
+      </trans-unit>
+      <trans-unit id="Page 514676568 - Control 2638810765 - Property 1295455071" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Specifies who recorded the result.</source>
+        <target state="translated">Sonucu kimin girdiğini belirtir.</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Page DOPSWHS Quality Orders - Control Inspector - Property ToolTip</note>
+      </trans-unit>
+      <trans-unit id="Page 514676568 - Control 2842094365 - Property 1295455071" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Specifies the description of the inspected item.</source>
+        <target state="translated">Kontrol edilen maddenin açıklamasını belirtir.</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Page DOPSWHS Quality Orders - Control Item Description - Property ToolTip</note>
+      </trans-unit>
+      <trans-unit id="Page 514676568 - Control 568743302 - Property 1295455071" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Specifies the inspected item.</source>
+        <target state="translated">Kontrol edilen maddeyi belirtir.</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Page DOPSWHS Quality Orders - Control Item No. - Property ToolTip</note>
+      </trans-unit>
+      <trans-unit id="Page 514676568 - Control 2161572060 - Property 1295455071" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Specifies the location of the inspected stock.</source>
+        <target state="translated">Kontrol edilen stoğun lokasyonunu belirtir.</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Page DOPSWHS Quality Orders - Control Location Code - Property ToolTip</note>
+      </trans-unit>
+      <trans-unit id="Page 514676568 - Control 1482668068 - Property 1295455071" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Specifies the inspected lot. With Quality Lot Hold on, the lot is blocked until the order is passed.</source>
+        <target state="translated">Kontrol edilen lotu belirtir. Kalite Lot Blokajı açıkken lot, emir geçene kadar bloke kalır.</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Page DOPSWHS Quality Orders - Control Lot No. - Property ToolTip</note>
+      </trans-unit>
+      <trans-unit id="Page 514676568 - Control 2835493861 - Property 1295455071" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Specifies the license plate of the inspected stock.</source>
+        <target state="translated">Kontrol edilen stoğun LP'sini belirtir.</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Page DOPSWHS Quality Orders - Control LP No. - Property ToolTip</note>
+      </trans-unit>
+      <trans-unit id="Page 514676568 - Control 4200184881 - Property 1295455071" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Specifies the number of the quality order.</source>
+        <target state="translated">Kalite emrinin numarasını belirtir.</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Page DOPSWHS Quality Orders - Control No. - Property ToolTip</note>
+      </trans-unit>
+      <trans-unit id="Page 514676568 - Control 2816448978 - Property 1295455071" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Specifies whether the lot/serial of the order is currently blocked by the quality hold.</source>
+        <target state="translated">Emrin lotunun/serisinin şu anda kalite blokajında olup olmadığını belirtir.</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Page DOPSWHS Quality Orders - Control OnHold - Property ToolTip</note>
+      </trans-unit>
+      <trans-unit id="Page 514676568 - Control 2816448978 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
+        <source>On Quality Hold</source>
+        <target state="translated">Kalite Blokajında</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Page DOPSWHS Quality Orders - Control OnHold - Property Caption</note>
+      </trans-unit>
+      <trans-unit id="Page 514676568 - Control 2960574539 - Property 1295455071" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Specifies the posted receipt or assembly that used this inspection.</source>
+        <target state="translated">Bu kontrolü kullanan nakledilmiş mal kabulü veya montajı belirtir.</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Page DOPSWHS Quality Orders - Control Posted Document No. - Property ToolTip</note>
+      </trans-unit>
+      <trans-unit id="Page 514676568 - Control 2704404533 - Property 1295455071" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Specifies the inspected quantity.</source>
+        <target state="translated">Kontrol edilen miktarı belirtir.</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Page DOPSWHS Quality Orders - Control Quantity - Property ToolTip</note>
+      </trans-unit>
+      <trans-unit id="Page 514676568 - Control 2997609285 - Property 1295455071" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Specifies the only bin in which held stock of this order may be placed.</source>
+        <target state="translated">Bu emrin blokajdaki stoğunun yerleştirilebileceği tek rafı belirtir.</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Page DOPSWHS Quality Orders - Control Quarantine Bin - Property ToolTip</note>
+      </trans-unit>
+      <trans-unit id="Page 514676568 - Control 2718514765 - Property 1295455071" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Specifies why the stock was rejected.</source>
+        <target state="translated">Stoğun neden reddedildiğini belirtir.</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Page DOPSWHS Quality Orders - Control Reject Reason - Property ToolTip</note>
+      </trans-unit>
+      <trans-unit id="Page 514676568 - Control 47037625 - Property 1295455071" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Specifies the inspected serial number.</source>
+        <target state="translated">Kontrol edilen seri numarasını belirtir.</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Page DOPSWHS Quality Orders - Control Serial No. - Property ToolTip</note>
+      </trans-unit>
+      <trans-unit id="Page 514676568 - Control 312545736 - Property 1295455071" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Specifies the source document line that is inspected.</source>
+        <target state="translated">Kontrol edilen kaynak belge satırını belirtir.</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Page DOPSWHS Quality Orders - Control Source Line No. - Property ToolTip</note>
+      </trans-unit>
+      <trans-unit id="Page 514676568 - Control 1882905478 - Property 1295455071" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Specifies the source document (purchase order, assembly order, warehouse receipt).</source>
+        <target state="translated">Kaynak belgeyi belirtir (satınalma siparişi, montaj siparişi, ambar mal kabulü).</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Page DOPSWHS Quality Orders - Control Source No. - Property ToolTip</note>
+      </trans-unit>
+      <trans-unit id="Page 514676568 - Control 1753214751 - Property 1295455071" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Specifies what the inspection is for (receipt, assembly, manual, ...).</source>
+        <target state="translated">Kontrolün ne için yapıldığını belirtir (mal kabul, montaj, manuel, ...).</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Page DOPSWHS Quality Orders - Control Source Type - Property ToolTip</note>
+      </trans-unit>
+      <trans-unit id="Page 514676568 - Control 513339096 - Property 1295455071" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Specifies the inspection status: Open until a result is recorded, then Passed or Failed.</source>
+        <target state="translated">Kontrol durumunu belirtir: sonuç girilene kadar Açık, sonra Geçti veya Kaldı.</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Page DOPSWHS Quality Orders - Control Status - Property ToolTip</note>
+      </trans-unit>
+      <trans-unit id="Page 514676568 - Control 2385270358 - Property 1295455071" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Specifies the unit of measure of the quantity. Blank means the base unit of measure.</source>
+        <target state="translated">Miktarın ölçü birimini belirtir. Boş, temel ölçü birimi anlamına gelir.</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Page DOPSWHS Quality Orders - Control Unit of Measure Code - Property ToolTip</note>
+      </trans-unit>
+      <trans-unit id="Page 514676568 - Control 3450651614 - Property 1295455071" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Specifies the variant of the inspected item.</source>
+        <target state="translated">Kontrol edilen maddenin varyantını belirtir.</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Page DOPSWHS Quality Orders - Control Variant Code - Property ToolTip</note>
+      </trans-unit>
+      <trans-unit id="Page 514676568 - Control 1527594213 - Property 1295455071" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Specifies the vendor of the inspected stock.</source>
+        <target state="translated">Kontrol edilen stoğun satıcısını belirtir.</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Page DOPSWHS Quality Orders - Control Vendor No. - Property ToolTip</note>
+      </trans-unit>
+      <trans-unit id="Page 514676568 - Control 1483846801 - Property 1295455071" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Specifies the warehouse receipt the inspection was created from.</source>
+        <target state="translated">Kontrolün oluşturulduğu ambar mal kabulünü belirtir.</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Page DOPSWHS Quality Orders - Control Whse. Document No. - Property ToolTip</note>
+      </trans-unit>
+      <trans-unit id="Page 514676568 - Action 3505869542 - Property 1295455071" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Show the item ledger entries of the inspected item and lot/serial.</source>
+        <target state="translated">Kontrol edilen madde ve lot/seri için madde defteri girişlerini gösterin.</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Page DOPSWHS Quality Orders - Action ItemLedgerEntries - Property ToolTip</note>
+      </trans-unit>
+      <trans-unit id="Page 514676568 - Action 3505869542 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Item Ledger Entries</source>
+        <target state="translated">Madde Defteri Girişleri</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Page DOPSWHS Quality Orders - Action ItemLedgerEntries - Property Caption</note>
+      </trans-unit>
+      <trans-unit id="Page 514676568 - Action 2512773725 - Property 1295455071" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Open the lot information card of the inspected lot.</source>
+        <target state="translated">Kontrol edilen lotun lot bilgi kartını açın.</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Page DOPSWHS Quality Orders - Action LotInformation - Property ToolTip</note>
+      </trans-unit>
+      <trans-unit id="Page 514676568 - Action 2512773725 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Lot No. Information</source>
+        <target state="translated">Lot No. Bilgileri</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Page DOPSWHS Quality Orders - Action LotInformation - Property Caption</note>
+      </trans-unit>
+      <trans-unit id="Page 514676568 - Action 783110772 - Property 1295455071" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Define which receipts and assembly outputs require an inspection.</source>
+        <target state="translated">Hangi mal kabullerin ve montaj çıktılarının kontrol gerektirdiğini tanımlayın.</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Page DOPSWHS Quality Orders - Action QualityRules - Property ToolTip</note>
+      </trans-unit>
+      <trans-unit id="Page 514676568 - Action 783110772 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Quality Inspection Rules</source>
+        <target state="translated">Kalite Kontrol Kuralları</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Page DOPSWHS Quality Orders - Action QualityRules - Property Caption</note>
+      </trans-unit>
+      <trans-unit id="Page 514676568 - Action 3873595854 - Property 1295455071" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Open the purchase order or assembly order the inspection belongs to.</source>
+        <target state="translated">Kontrolün ait olduğu satınalma siparişini veya montaj siparişini açın.</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Page DOPSWHS Quality Orders - Action SourceDocument - Property ToolTip</note>
+      </trans-unit>
+      <trans-unit id="Page 514676568 - Action 3873595854 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Source Document</source>
+        <target state="translated">Kaynak Belge</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Page DOPSWHS Quality Orders - Action SourceDocument - Property Caption</note>
+      </trans-unit>
+      <trans-unit id="Page 514676568 - Action 383542681 - Property 1295455071" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Execute the decision of the failed order: post the scrap, create the purchase return order, open a re-inspection or accept with deviation.</source>
+        <target state="translated">Kalan emrin kararını uygulayın: hurdayı nakledin, satınalma iade siparişini oluşturun, yeniden kontrol açın veya sapmayla kabul edin.</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Page DOPSWHS Quality Orders - Action ExecuteDecision - Property ToolTip</note>
+      </trans-unit>
+      <trans-unit id="Page 514676568 - Action 383542681 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Execute Decision</source>
+        <target state="translated">Kararı Uygula</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Page DOPSWHS Quality Orders - Action ExecuteDecision - Property Caption</note>
+      </trans-unit>
+      <trans-unit id="Page 514676568 - Action 3232087136 - Property 1295455071" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Record a failed inspection with a reason and quarantine bin. The lot stays blocked until a decision is executed.</source>
+        <target state="translated">Kalan kontrolü neden ve karantina rafıyla girin. Lot, bir karar uygulanana kadar bloke kalır.</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Page DOPSWHS Quality Orders - Action FailOrder - Property ToolTip</note>
+      </trans-unit>
+      <trans-unit id="Page 514676568 - Action 3232087136 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Fail</source>
+        <target state="translated">Kaldı</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Page DOPSWHS Quality Orders - Action FailOrder - Property Caption</note>
+      </trans-unit>
+      <trans-unit id="Page 514676568 - Action 439394737 - Property 1295455071" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Record a passed inspection. The quality hold of the lot is released.</source>
+        <target state="translated">Geçen kontrolü girin. Lotun kalite blokajı kaldırılır.</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Page DOPSWHS Quality Orders - Action PassOrder - Property ToolTip</note>
+      </trans-unit>
+      <trans-unit id="Page 514676568 - Action 439394737 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Pass</source>
+        <target state="translated">Geçti</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Page DOPSWHS Quality Orders - Action PassOrder - Property Caption</note>
+      </trans-unit>
+      <trans-unit id="Page 514676568 - Action 2770980930 - Property 1295455071" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Unblock the lot/serial of the order without a result, for example to pick a rejected lot for its return shipment.</source>
+        <target state="translated">Emrin lotunun/serisinin blokajını sonuç girmeden kaldırın, örneğin reddedilen lotu iade sevkiyatı için toplamak üzere.</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Page DOPSWHS Quality Orders - Action ReleaseHold - Property ToolTip</note>
+      </trans-unit>
+      <trans-unit id="Page 514676568 - Action 2770980930 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Release Quality Hold</source>
+        <target state="translated">Kalite Blokajını Kaldır</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Page DOPSWHS Quality Orders - Action ReleaseHold - Property Caption</note>
+      </trans-unit>
+      <trans-unit id="Page 514676568 - Action 3383493608 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Process</source>
+        <target state="translated">İşlem</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Page DOPSWHS Quality Orders - Action Category_Process - Property Caption</note>
+      </trans-unit>
+      <trans-unit id="Page 1153140364 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Quality Inspection Result</source>
+        <target state="translated">Kalite Kontrol Sonucu</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Page DOPSWHS Quality Result Dialog - Property Caption</note>
+      </trans-unit>
+      <trans-unit id="Page 1153140364 - Control 2441333386 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Inspection</source>
+        <target state="translated">Kontrol</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Page DOPSWHS Quality Result Dialog - Control Inspection - Property Caption</note>
+      </trans-unit>
+      <trans-unit id="Page 1153140364 - Control 2001143843 - Property 1295455071" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Specifies who inspected the stock.</source>
+        <target state="translated">Stoğu kimin kontrol ettiğini belirtir.</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Page DOPSWHS Quality Result Dialog - Control InspectorField - Property ToolTip</note>
+      </trans-unit>
+      <trans-unit id="Page 1153140364 - Control 2001143843 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Inspector</source>
+        <target state="translated">Kontrolcü</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Page DOPSWHS Quality Result Dialog - Control InspectorField - Property Caption</note>
+      </trans-unit>
+      <trans-unit id="Page 1153140364 - Control 4152422523 - Property 1295455071" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Specifies the inspection notes.</source>
+        <target state="translated">Kontrol notlarını belirtir.</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Page DOPSWHS Quality Result Dialog - Control NotesField - Property ToolTip</note>
+      </trans-unit>
+      <trans-unit id="Page 1153140364 - Control 4152422523 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Notes</source>
+        <target state="translated">Notlar</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Page DOPSWHS Quality Result Dialog - Control NotesField - Property Caption</note>
+      </trans-unit>
+      <trans-unit id="Page 1153140364 - Control 3183679054 - Property 1295455071" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Specifies the quality order the result is recorded for.</source>
+        <target state="translated">Sonucun girildiği kalite emrini belirtir.</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Page DOPSWHS Quality Result Dialog - Control QualityOrderNo - Property ToolTip</note>
+      </trans-unit>
+      <trans-unit id="Page 1153140364 - Control 3183679054 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Quality Order No.</source>
+        <target state="translated">Kalite Emri No.</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Page DOPSWHS Quality Result Dialog - Control QualityOrderNo - Property Caption</note>
+      </trans-unit>
+      <trans-unit id="Page 1153140364 - Control 2710335529 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Rejection</source>
+        <target state="translated">Red</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Page DOPSWHS Quality Result Dialog - Control Rejection - Property Caption</note>
+      </trans-unit>
+      <trans-unit id="Page 1153140364 - Control 1339927107 - Property 1295455071" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Specifies the bin the rejected stock must be placed in. Held stock cannot be put away anywhere else.</source>
+        <target state="translated">Reddedilen stoğun yerleştirilmesi gereken rafı belirtir. Blokajdaki stok başka bir yere yerleştirilemez.</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Page DOPSWHS Quality Result Dialog - Control QuarantineBinField - Property ToolTip</note>
+      </trans-unit>
+      <trans-unit id="Page 1153140364 - Control 1339927107 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Quarantine Bin</source>
+        <target state="translated">Karantina Rafı</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Page DOPSWHS Quality Result Dialog - Control QuarantineBinField - Property Caption</note>
+      </trans-unit>
+      <trans-unit id="Page 1153140364 - Control 848406515 - Property 1295455071" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Specifies why the stock is rejected.</source>
+        <target state="translated">Stoğun neden reddedildiğini belirtir.</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Page DOPSWHS Quality Result Dialog - Control RejectReasonField - Property ToolTip</note>
+      </trans-unit>
+      <trans-unit id="Page 1153140364 - Control 848406515 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Reject Reason</source>
+        <target state="translated">Red Nedeni</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Page DOPSWHS Quality Result Dialog - Control RejectReasonField - Property Caption</note>
+      </trans-unit>
+      <trans-unit id="Page 1426521280 - Property 1064389655" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Quality inspection rules</source>
+        <target state="translated">Kalite kontrol kuralları</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Page DOPSWHS Quality Rules - Property AboutTitle</note>
+      </trans-unit>
+      <trans-unit id="Page 1426521280 - Property 247559172" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Each rule makes an inspection mandatory for purchase receipts or assembly outputs of a location, item category (including its sub-categories), item or vendor. Blank fields match everything; the most specific rule wins. The rules take effect when Receipt Quality Gate / Assembly Quality Gate is switched on in Advanced WMS Setup.</source>
+        <target state="translated">Her kural bir lokasyonun, madde kategorisinin (alt kategorileri dahil), maddenin veya satıcının satınalma mal kabulleri ya da montaj çıktıları için kontrolü zorunlu kılar. Boş alanlar her şeyle eşleşir; en özel kural geçerli olur. Kurallar Gelişmiş WMS Kurulumu'nda Mal Kabul Kalite Kapısı / Montaj Kalite Kapısı açıldığında devreye girer.</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Page DOPSWHS Quality Rules - Property AboutText</note>
+      </trans-unit>
+      <trans-unit id="Page 1426521280 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Quality Inspection Rules</source>
+        <target state="translated">Kalite Kontrol Kuralları</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Page DOPSWHS Quality Rules - Property Caption</note>
+      </trans-unit>
+      <trans-unit id="Page 1426521280 - Control 3461834954 - Property 1295455071" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Specifies a description of the rule.</source>
+        <target state="translated">Kuralın açıklamasını belirtir.</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Page DOPSWHS Quality Rules - Control Description - Property ToolTip</note>
+      </trans-unit>
+      <trans-unit id="Page 1426521280 - Control 2891538263 - Property 1295455071" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Specifies whether the rule is used.</source>
+        <target state="translated">Kuralın kullanılıp kullanılmadığını belirtir.</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Page DOPSWHS Quality Rules - Control Enabled - Property ToolTip</note>
+      </trans-unit>
+      <trans-unit id="Page 1426521280 - Control 1037119892 - Property 1295455071" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Specifies the item category the rule applies to, including its sub-categories. Blank means all categories.</source>
+        <target state="translated">Kuralın uygulandığı madde kategorisini (alt kategorileri dahil) belirtir. Boş, tüm kategoriler anlamına gelir.</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Page DOPSWHS Quality Rules - Control Item Category Code - Property ToolTip</note>
+      </trans-unit>
+      <trans-unit id="Page 1426521280 - Control 568743302 - Property 1295455071" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Specifies the item the rule applies to. Blank means all items.</source>
+        <target state="translated">Kuralın uygulandığı maddeyi belirtir. Boş, tüm maddeler anlamına gelir.</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Page DOPSWHS Quality Rules - Control Item No. - Property ToolTip</note>
+      </trans-unit>
+      <trans-unit id="Page 1426521280 - Control 2161572060 - Property 1295455071" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Specifies the location the rule applies to. Blank means all locations.</source>
+        <target state="translated">Kuralın uygulandığı lokasyonu belirtir. Boş, tüm lokasyonlar anlamına gelir.</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Page DOPSWHS Quality Rules - Control Location Code - Property ToolTip</note>
+      </trans-unit>
+      <trans-unit id="Page 1426521280 - Control 1753214751 - Property 1295455071" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Specifies the posting the rule guards: purchase receipt or assembly output.</source>
+        <target state="translated">Kuralın denetlediği nakli belirtir: satınalma mal kabulü veya montaj çıktısı.</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Page DOPSWHS Quality Rules - Control Source Type - Property ToolTip</note>
+      </trans-unit>
+      <trans-unit id="Page 1426521280 - Control 1498196060 - Property 1295455071" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Specifies when the inspection takes place. Before Posting: the receipt cannot be posted until the inspection has a result. After Posting: posting the receipt creates the inspection and the received lot stays on quality hold until it is passed.</source>
+        <target state="translated">Kontrolün ne zaman yapılacağını belirtir. Nakilden Önce: kontrol sonuçlanana kadar mal kabul nakledilemez. Nakilden Sonra: mal kabul nakli kontrolü oluşturur ve teslim alınan lot, kontrol geçene kadar kalite blokajında kalır.</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Page DOPSWHS Quality Rules - Control Timing - Property ToolTip</note>
+      </trans-unit>
+      <trans-unit id="Page 1426521280 - Control 1527594213 - Property 1295455071" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Specifies the vendor the rule applies to (purchase receipts only). Blank means all vendors.</source>
+        <target state="translated">Kuralın uygulandığı satıcıyı belirtir (yalnız satınalma mal kabulleri). Boş, tüm satıcılar anlamına gelir.</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Page DOPSWHS Quality Rules - Control Vendor No. - Property ToolTip</note>
+      </trans-unit>
+      <trans-unit id="Page 1426521280 - Action 1561983724 - Property 1295455071" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Open the quality orders.</source>
+        <target state="translated">Kalite emirlerini açın.</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Page DOPSWHS Quality Rules - Action QualityOrders - Property ToolTip</note>
+      </trans-unit>
+      <trans-unit id="Page 1426521280 - Action 1561983724 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Quality Orders</source>
+        <target state="translated">Kalite Emirleri</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Page DOPSWHS Quality Rules - Action QualityOrders - Property Caption</note>
+      </trans-unit>
+      <trans-unit id="Page 3140292245 - Control 3689774364 - Property 1968111052" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Optional controls for quality inspection, quality hold, count tolerance and reclassification. Each switch is off by default; nothing changes until it is turned on.</source>
+        <target state="translated">Kalite kontrolü, kalite blokajı, sayım toleransı ve yeniden sınıflandırma için isteğe bağlı denetimler. Her seçenek varsayılan olarak kapalıdır; açılana kadar hiçbir şey değişmez.</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Page DOPSWHS Setup - Control QualityInventoryControl - Property InstructionalText</note>
+      </trans-unit>
+      <trans-unit id="Page 3140292245 - Control 3689774364 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Quality &amp; Inventory Control</source>
+        <target state="translated">Kalite ve Stok Kontrolü</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Page DOPSWHS Setup - Control QualityInventoryControl - Property Caption</note>
+      </trans-unit>
+      <trans-unit id="Page 3140292245 - Control 1259998824 - Property 1295455071" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Specifies that assembly orders covered by an Assembly Output quality rule can only be posted after their final inspection is passed or accepted with deviation.</source>
+        <target state="translated">Montaj Çıktısı kalite kuralı kapsamındaki montaj siparişlerinin ancak son kontrolleri geçtikten veya sapmayla kabul edildikten sonra nakledilebileceğini belirtir.</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Page DOPSWHS Setup - Control Assembly Quality Gate - Property ToolTip</note>
+      </trans-unit>
+      <trans-unit id="Page 3140292245 - Control 259374903 - Property 1295455071" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Specifies that the lot or serial number of an open or failed quality order is blocked, so it cannot be picked, shipped, consumed or reserved. Held stock can only be put away or moved to the quality order's quarantine bin. Passing the order releases the block.</source>
+        <target state="translated">Açık veya kalan bir kalite emrinin lot ya da seri numarasının bloke edildiğini, böylece toplanamayacağını, sevk edilemeyeceğini, tüketilemeyeceğini ve rezerve edilemeyeceğini belirtir. Blokajdaki stok yalnız kalite emrinin karantina rafına yerleştirilebilir veya taşınabilir. Emrin geçmesi blokajı kaldırır.</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Page DOPSWHS Setup - Control Quality Lot Hold - Property ToolTip</note>
+      </trans-unit>
+      <trans-unit id="Page 3140292245 - Control 3329123816 - Property 1295455071" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Specifies the item journal batch used to post scrap decisions. Keep it empty; it is posted as a whole.</source>
+        <target state="translated">Hurda kararlarının naklinde kullanılan madde günlüğü toplu işini belirtir. Toplu işi boş tutun; bütün olarak nakledilir.</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Page DOPSWHS Setup - Control Quality Scrap Jnl. Batch - Property ToolTip</note>
+      </trans-unit>
+      <trans-unit id="Page 3140292245 - Control 2315302036 - Property 1295455071" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Specifies the item journal template used to post scrap decisions of failed quality orders.</source>
+        <target state="translated">Kalan kalite emirlerinin hurda kararlarının naklinde kullanılan madde günlüğü şablonunu belirtir.</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Page DOPSWHS Setup - Control Quality Scrap Jnl. Template - Property ToolTip</note>
+      </trans-unit>
+      <trans-unit id="Page 3140292245 - Control 614381162 - Property 1295455071" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Specifies that purchase receipt lines covered by a quality inspection rule (Before Posting) cannot be posted until their quality order has a result. After Posting rules create the quality orders when the receipt is posted.</source>
+        <target state="translated">Bir kalite kontrol kuralı (Nakilden Önce) kapsamındaki satınalma mal kabul satırlarının, kalite emirleri sonuçlanana kadar nakledilemeyeceğini belirtir. Nakilden Sonra kuralları, mal kabul nakledilince kalite emirlerini oluşturur.</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Page DOPSWHS Setup - Control Receipt Quality Gate - Property ToolTip</note>
+      </trans-unit>
+      <trans-unit id="Page 3140292245 - Action 301096191 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Quality &amp; Inventory Control</source>
+        <target state="translated">Kalite ve Stok Kontrolü</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Page DOPSWHS Setup - Action QualityInventoryControlActions - Property Caption</note>
+      </trans-unit>
+      <trans-unit id="Page 3140292245 - Action 4248715426 - Property 1295455071" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Open the quality orders.</source>
+        <target state="translated">Kalite emirlerini açın.</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Page DOPSWHS Setup - Action QualityOrdersAction - Property ToolTip</note>
+      </trans-unit>
+      <trans-unit id="Page 3140292245 - Action 4248715426 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Quality Orders</source>
+        <target state="translated">Kalite Emirleri</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Page DOPSWHS Setup - Action QualityOrdersAction - Property Caption</note>
+      </trans-unit>
+      <trans-unit id="Page 3140292245 - Action 1873175642 - Property 1295455071" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Define which purchase receipts and assembly outputs require a quality inspection.</source>
+        <target state="translated">Hangi satınalma mal kabullerinin ve montaj çıktılarının kalite kontrolü gerektirdiğini tanımlayın.</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Page DOPSWHS Setup - Action QualityRulesAction - Property ToolTip</note>
+      </trans-unit>
+      <trans-unit id="Page 3140292245 - Action 1873175642 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Quality Inspection Rules</source>
+        <target state="translated">Kalite Kontrol Kuralları</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Page DOPSWHS Setup - Action QualityRulesAction - Property Caption</note>
+      </trans-unit>
+      <trans-unit id="PageExtension 472549134 - Action 1255487633 - Property 1295455071" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Create a quality order for the component on this line (with its lot/serial). Fail it with the defect reason and decide scrap or return to vendor.</source>
+        <target state="translated">Bu satırdaki bileşen için (lotu/serisiyle) kalite emri oluşturun. Emri hata nedeniyle reddedip hurda veya satıcıya iade kararı verin.</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">PageExtension DOPSWHS Asm. Subform Quality - Action DOPSWHS Report Defect - Property ToolTip</note>
+      </trans-unit>
+      <trans-unit id="PageExtension 472549134 - Action 1255487633 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Report Component Defect</source>
+        <target state="translated">Bileşen Hatası Bildir</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">PageExtension DOPSWHS Asm. Subform Quality - Action DOPSWHS Report Defect - Property Caption</note>
+      </trans-unit>
+      <trans-unit id="PageExtension 1876284187 - Action 197604067 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Quality Inspection</source>
+        <target state="translated">Kalite Kontrolü</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">PageExtension DOPSWHS Assembly Order Quality - Action DOPSWHS Quality - Property Caption</note>
+      </trans-unit>
+      <trans-unit id="PageExtension 1876284187 - Action 4257958718 - Property 1295455071" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Create the final quality inspection of the assembly output. With the assembly quality gate on, the order can only be posted after the inspection is passed.</source>
+        <target state="translated">Montaj çıktısının son kalite kontrolünü oluşturun. Montaj kalite kapısı açıkken sipariş ancak kontrol geçtikten sonra nakledilebilir.</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">PageExtension DOPSWHS Assembly Order Quality - Action DOPSWHS Create Final Inspection - Property ToolTip</note>
+      </trans-unit>
+      <trans-unit id="PageExtension 1876284187 - Action 4257958718 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Create Final Inspection</source>
+        <target state="translated">Son Kontrol Oluştur</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">PageExtension DOPSWHS Assembly Order Quality - Action DOPSWHS Create Final Inspection - Property Caption</note>
+      </trans-unit>
+      <trans-unit id="PageExtension 1876284187 - Action 514676568 - Property 1295455071" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Show the final inspections and component defect records of this assembly order.</source>
+        <target state="translated">Bu montaj siparişinin son kontrollerini ve bileşen hata kayıtlarını gösterin.</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">PageExtension DOPSWHS Assembly Order Quality - Action DOPSWHS Quality Orders - Property ToolTip</note>
+      </trans-unit>
+      <trans-unit id="PageExtension 1876284187 - Action 514676568 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Quality Orders</source>
+        <target state="translated">Kalite Emirleri</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">PageExtension DOPSWHS Assembly Order Quality - Action DOPSWHS Quality Orders - Property Caption</note>
+      </trans-unit>
+      <trans-unit id="PageExtension 2901010087 - Action 514676568 - Property 1295455071" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Show the quality orders of this lot.</source>
+        <target state="translated">Bu lotun kalite emirlerini gösterin.</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">PageExtension DOPSWHS Lot No. Card Quality - Action DOPSWHS Quality Orders - Property ToolTip</note>
+      </trans-unit>
+      <trans-unit id="PageExtension 2901010087 - Action 514676568 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Quality Orders</source>
+        <target state="translated">Kalite Emirleri</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">PageExtension DOPSWHS Lot No. Card Quality - Action DOPSWHS Quality Orders - Property Caption</note>
+      </trans-unit>
+      <trans-unit id="PageExtension 1794858215 - NamedType 1076900899" size-unit="char" translate="yes" xml:space="preserve">
+        <source>%1 quality order(s) created.</source>
+        <target state="translated">%1 kalite emri oluşturuldu.</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">PageExtension DOPSWHS Purch. Order Quality - NamedType QualityOrdersCreatedMsg</note>
+      </trans-unit>
+      <trans-unit id="PageExtension 1794858215 - Action 197604067 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Quality Inspection</source>
+        <target state="translated">Kalite Kontrolü</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">PageExtension DOPSWHS Purch. Order Quality - Action DOPSWHS Quality - Property Caption</note>
+      </trans-unit>
+      <trans-unit id="PageExtension 1794858215 - Action 585620292 - Property 1295455071" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Create quality orders for the order lines that require an inspection (one per assigned lot). The lines can be received when every inspection has a result.</source>
+        <target state="translated">Kontrol gerektiren sipariş satırları için kalite emirleri oluşturun (atanmış her lot için bir tane). Tüm kontroller sonuçlanınca satırlar teslim alınabilir.</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">PageExtension DOPSWHS Purch. Order Quality - Action DOPSWHS Create Quality Orders - Property ToolTip</note>
+      </trans-unit>
+      <trans-unit id="PageExtension 1794858215 - Action 585620292 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Create Quality Orders</source>
+        <target state="translated">Kalite Emirleri Oluştur</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">PageExtension DOPSWHS Purch. Order Quality - Action DOPSWHS Create Quality Orders - Property Caption</note>
+      </trans-unit>
+      <trans-unit id="PageExtension 1794858215 - Action 514676568 - Property 1295455071" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Show the quality orders of this purchase order.</source>
+        <target state="translated">Bu satınalma siparişinin kalite emirlerini gösterin.</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">PageExtension DOPSWHS Purch. Order Quality - Action DOPSWHS Quality Orders - Property ToolTip</note>
+      </trans-unit>
+      <trans-unit id="PageExtension 1794858215 - Action 514676568 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Quality Orders</source>
+        <target state="translated">Kalite Emirleri</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">PageExtension DOPSWHS Purch. Order Quality - Action DOPSWHS Quality Orders - Property Caption</note>
+      </trans-unit>
+      <trans-unit id="PageExtension 1279551520 - NamedType 1076900899" size-unit="char" translate="yes" xml:space="preserve">
+        <source>%1 quality order(s) created.</source>
+        <target state="translated">%1 kalite emri oluşturuldu.</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">PageExtension DOPSWHS Whse Receipt Quality - NamedType QualityOrdersCreatedMsg</note>
+      </trans-unit>
+      <trans-unit id="PageExtension 1279551520 - Action 197604067 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Quality Inspection</source>
+        <target state="translated">Kalite Kontrolü</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">PageExtension DOPSWHS Whse Receipt Quality - Action DOPSWHS Quality - Property Caption</note>
+      </trans-unit>
+      <trans-unit id="PageExtension 1279551520 - Action 585620292 - Property 1295455071" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Create quality orders for the receipt lines that require an inspection (one per assigned lot). The receipt can be posted when every inspection has a result.</source>
+        <target state="translated">Kontrol gerektiren mal kabul satırları için kalite emirleri oluşturun (atanmış her lot için bir tane). Tüm kontroller sonuçlanınca mal kabul nakledilebilir.</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">PageExtension DOPSWHS Whse Receipt Quality - Action DOPSWHS Create Quality Orders - Property ToolTip</note>
+      </trans-unit>
+      <trans-unit id="PageExtension 1279551520 - Action 585620292 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Create Quality Orders</source>
+        <target state="translated">Kalite Emirleri Oluştur</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">PageExtension DOPSWHS Whse Receipt Quality - Action DOPSWHS Create Quality Orders - Property Caption</note>
+      </trans-unit>
+      <trans-unit id="PageExtension 1279551520 - Action 514676568 - Property 1295455071" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Show the quality orders of this receipt and its purchase orders.</source>
+        <target state="translated">Bu mal kabulün ve satınalma siparişlerinin kalite emirlerini gösterin.</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">PageExtension DOPSWHS Whse Receipt Quality - Action DOPSWHS Quality Orders - Property ToolTip</note>
+      </trans-unit>
+      <trans-unit id="PageExtension 1279551520 - Action 514676568 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Quality Orders</source>
+        <target state="translated">Kalite Emirleri</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">PageExtension DOPSWHS Whse Receipt Quality - Action DOPSWHS Quality Orders - Property Caption</note>
+      </trans-unit>
+      <trans-unit id="TableExtension 2945945777 - Field 370904226 - Property 1295455071" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Specifies that the lot is blocked because a quality order is not passed yet. The block is released automatically when the inspection is passed.</source>
+        <target state="translated">Lotun, bir kalite emri henüz geçmediği için bloke olduğunu belirtir. Kontrol geçince blokaj otomatik kaldırılır.</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">TableExtension DOPSWHS Lot No. Info Quality - Field DOPSWHS Quality Hold - Property ToolTip</note>
+      </trans-unit>
+      <trans-unit id="TableExtension 2945945777 - Field 370904226 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Quality Hold</source>
+        <target state="translated">Kalite Blokajı</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">TableExtension DOPSWHS Lot No. Info Quality - Field DOPSWHS Quality Hold - Property Caption</note>
+      </trans-unit>
+      <trans-unit id="TableExtension 2945945777 - Field 1105882636 - Property 1295455071" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Specifies the quality order that placed the lot on quality hold.</source>
+        <target state="translated">Lotu kalite blokajına alan kalite emrini belirtir.</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">TableExtension DOPSWHS Lot No. Info Quality - Field DOPSWHS Quality Order No. - Property ToolTip</note>
+      </trans-unit>
+      <trans-unit id="TableExtension 2945945777 - Field 1105882636 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Quality Order No.</source>
+        <target state="translated">Kalite Emri No.</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">TableExtension DOPSWHS Lot No. Info Quality - Field DOPSWHS Quality Order No. - Property Caption</note>
+      </trans-unit>
+      <trans-unit id="TableExtension 2110172609 - Field 370904226 - Property 1295455071" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Specifies that the serial number is blocked because a quality order is not passed yet. The block is released automatically when the inspection is passed.</source>
+        <target state="translated">Seri numarasının, bir kalite emri henüz geçmediği için bloke olduğunu belirtir. Kontrol geçince blokaj otomatik kaldırılır.</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">TableExtension DOPSWHS Serial Info Quality - Field DOPSWHS Quality Hold - Property ToolTip</note>
+      </trans-unit>
+      <trans-unit id="TableExtension 2110172609 - Field 370904226 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Quality Hold</source>
+        <target state="translated">Kalite Blokajı</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">TableExtension DOPSWHS Serial Info Quality - Field DOPSWHS Quality Hold - Property Caption</note>
+      </trans-unit>
+      <trans-unit id="TableExtension 2110172609 - Field 1105882636 - Property 1295455071" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Specifies the quality order that placed the serial number on quality hold.</source>
+        <target state="translated">Seri numarasını kalite blokajına alan kalite emrini belirtir.</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">TableExtension DOPSWHS Serial Info Quality - Field DOPSWHS Quality Order No. - Property ToolTip</note>
+      </trans-unit>
+      <trans-unit id="TableExtension 2110172609 - Field 1105882636 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Quality Order No.</source>
+        <target state="translated">Kalite Emri No.</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">TableExtension DOPSWHS Serial Info Quality - Field DOPSWHS Quality Order No. - Property Caption</note>
+      </trans-unit>
+      <trans-unit id="Enum 1275263659 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Quality Decision</source>
+        <target state="translated">Kalite Kararı</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Enum DOPSWHS Quality Decision - Property Caption</note>
+      </trans-unit>
+      <trans-unit id="Enum 1275263659 - EnumValue 1371923692 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
+        <source> </source>
+        <target state="translated"> </target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Enum DOPSWHS Quality Decision - EnumValue   - Property Caption</note>
+      </trans-unit>
+      <trans-unit id="Enum 1275263659 - EnumValue 2652118595 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Accept with Deviation</source>
+        <target state="translated">Sapmayla Kabul</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Enum DOPSWHS Quality Decision - EnumValue Accept with Deviation - Property Caption</note>
+      </trans-unit>
+      <trans-unit id="Enum 1275263659 - EnumValue 3490530119 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Return to Vendor</source>
+        <target state="translated">Satıcıya İade</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Enum DOPSWHS Quality Decision - EnumValue Return to Vendor - Property Caption</note>
+      </trans-unit>
+      <trans-unit id="Enum 1275263659 - EnumValue 65591274 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Rework</source>
+        <target state="translated">Yeniden İşleme</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Enum DOPSWHS Quality Decision - EnumValue Rework - Property Caption</note>
+      </trans-unit>
+      <trans-unit id="Enum 1275263659 - EnumValue 2575590693 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Scrap</source>
+        <target state="translated">Hurda</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Enum DOPSWHS Quality Decision - EnumValue Scrap - Property Caption</note>
+      </trans-unit>
+      <trans-unit id="Enum 1793921653 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Quality Inspection Timing</source>
+        <target state="translated">Kalite Kontrol Zamanı</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Enum DOPSWHS Quality Insp. Timing - Property Caption</note>
+      </trans-unit>
+      <trans-unit id="Enum 1793921653 - EnumValue 2120296608 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
+        <source>After Posting</source>
+        <target state="translated">Nakilden Sonra</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Enum DOPSWHS Quality Insp. Timing - EnumValue After Posting - Property Caption</note>
+      </trans-unit>
+      <trans-unit id="Enum 1793921653 - EnumValue 2142733299 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Before Posting</source>
+        <target state="translated">Nakilden Önce</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Enum DOPSWHS Quality Insp. Timing - EnumValue Before Posting - Property Caption</note>
+      </trans-unit>
+      <trans-unit id="Enum 1387580054 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Quality Rule Source</source>
+        <target state="translated">Kalite Kuralı Kaynağı</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Enum DOPSWHS Quality Rule Source - Property Caption</note>
+      </trans-unit>
+      <trans-unit id="Enum 1387580054 - EnumValue 222541771 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Assembly Output</source>
+        <target state="translated">Montaj Çıktısı</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Enum DOPSWHS Quality Rule Source - EnumValue Assembly Output - Property Caption</note>
+      </trans-unit>
+      <trans-unit id="Enum 1387580054 - EnumValue 1935146801 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Purchase Receipt</source>
+        <target state="translated">Satınalma Mal Kabulü</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Enum DOPSWHS Quality Rule Source - EnumValue Purchase Receipt - Property Caption</note>
+      </trans-unit>
+      <trans-unit id="PermissionSet 914038520 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Advanced WMS Inventory Control</source>
+        <target state="translated">Gelişmiş WMS Stok Kontrolü</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">PermissionSet DOPSWHS-INV-CTRL - Property Caption</note>
+      </trans-unit>
+      <trans-unit id="Table 2959783145 - Field 641436099 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Create Automatically</source>
+        <target state="translated">Otomatik Oluştur</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Table DOPSWHS Quality Rule - Field Create Automatically - Property Caption</note>
+      </trans-unit>
+      <trans-unit id="Page 1426521280 - Control 641436099 - Property 1295455071" size-unit="char" translate="yes" xml:space="preserve">
+        <source>Specifies that the quality order is created automatically when a warehouse receipt line is created for a purchase order line in the scope of the rule (Before Posting). Otherwise use Create Quality Orders on the receipt or purchase order.</source>
+        <target state="translated">Kural kapsamındaki bir satınalma siparişi satırı için ambar mal kabul satırı oluşturulduğunda kalite emrinin otomatik oluşturulacağını belirtir (Nakilden Önce). Aksi halde mal kabulde veya satınalma siparişinde Kalite Emirleri Oluştur'u kullanın.</target>
+        <note from="Developer" annotates="general" priority="2"></note>
+        <note from="Xliff Generator" annotates="general" priority="3">Page DOPSWHS Quality Rules - Control Create Automatically - Property ToolTip</note>
+      </trans-unit>
     </body>
   </file>
 </xliff>

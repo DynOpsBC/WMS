@@ -434,6 +434,51 @@ table 72000 "DOPSWHS Setup"
             Caption = 'Allow Edition Change';
             DataClassification = SystemMetadata;
         }
+        // Kitoko (Kas 2026) quality & inventory control. Every switch is OFF by
+        // default: an upgrade changes nothing until a company opts in.
+        field(600; "Receipt Quality Gate"; Boolean)
+        {
+            // KIT-009: purchase receipts in the scope of a quality rule cannot be
+            // posted while their inspection has no result.
+            Caption = 'Receipt Quality Gate';
+            DataClassification = CustomerContent;
+            InitValue = false;
+        }
+        field(601; "Quality Lot Hold"; Boolean)
+        {
+            // KIT-010: a quality order blocks its lot/serial until it is passed;
+            // put-away/movement of held stock is limited to the quarantine bin.
+            Caption = 'Quality Lot Hold';
+            DataClassification = CustomerContent;
+            InitValue = false;
+        }
+        field(602; "Assembly Quality Gate"; Boolean)
+        {
+            // INV-009: assembly orders in the scope of a quality rule cannot be
+            // posted without a passed (or accepted) final inspection.
+            Caption = 'Assembly Quality Gate';
+            DataClassification = CustomerContent;
+            InitValue = false;
+        }
+        field(603; "Quality Scrap Jnl. Template"; Code[10])
+        {
+            // INV-010: item journal used to post scrap decisions.
+            Caption = 'Quality Scrap Jnl. Template';
+            DataClassification = CustomerContent;
+            TableRelation = "Item Journal Template".Name where(Type = const(Item), Recurring = const(false));
+
+            trigger OnValidate()
+            begin
+                if "Quality Scrap Jnl. Template" <> xRec."Quality Scrap Jnl. Template" then
+                    "Quality Scrap Jnl. Batch" := '';
+            end;
+        }
+        field(604; "Quality Scrap Jnl. Batch"; Code[10])
+        {
+            Caption = 'Quality Scrap Jnl. Batch';
+            DataClassification = CustomerContent;
+            TableRelation = "Item Journal Batch".Name where("Journal Template Name" = field("Quality Scrap Jnl. Template"));
+        }
     }
 
     keys

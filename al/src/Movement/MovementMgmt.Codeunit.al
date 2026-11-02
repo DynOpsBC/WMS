@@ -96,6 +96,7 @@ codeunit 72045 "DOPSWHS Movement Mgmt"
         ItemJnlPostBatch: Codeunit "Item Jnl.-Post Batch";
         LPMgt: Codeunit "DOPSWHS LP Management";
         Telemetry: Codeunit "DOPSWHS Telemetry";
+        QualityLotHold: Codeunit "DOPSWHS Quality Lot Hold";
         CustomDimensions: Dictionary of [Text, Text];
         BatchName: Code[10];
     begin
@@ -126,6 +127,11 @@ codeunit 72045 "DOPSWHS Movement Mgmt"
         end;
         if (SerialNo <> '') and (Qty <> 1) then
             Error('%1 seri numarası tek bir temel birimi temsil eder; hareket miktarı 1 olmalıdır.', SerialNo);
+
+        // KIT-010 (Kitoko, Kas 2026): stock on quality hold may only be moved to
+        // the quarantine bin of its quality order (Setup "Quality Lot Hold").
+        // A warehouse reclass (directed locations) is not checked by BC itself.
+        QualityLotHold.CheckPlacementAllowed(LocationCode, ToBinCode, ItemNo, '', LotNo, SerialNo, LpNo, 0, 0, '', 0);
 
         // Ürün bazlı ad-hoc hareket hangi fiziksel LP'nin seçildiğini söylemez.
         // Bu nedenle yalnız LP'ye atanmamış serbest stok taşınabilir. Aksi halde
