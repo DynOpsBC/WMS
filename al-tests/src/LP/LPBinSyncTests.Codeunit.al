@@ -10,6 +10,8 @@ codeunit 72149 "DOPSWHS LP Bin Sync Tests"
     TestPermissions = Disabled;
     Permissions =
         tabledata "Warehouse Entry" = rimd,
+        tabledata "Registered Whse. Activity Line" = rimd,
+        tabledata "Posted Whse. Shipment Line" = rimd,
         tabledata "Warehouse Receipt Header" = rimd;
 
     [Test]
@@ -177,6 +179,11 @@ codeunit 72149 "DOPSWHS LP Bin Sync Tests"
         asserterror Sync.CheckReceiptPostingAllowed('RT150-WR');
         Assert.ExpectedError('terminalde hazırlanmış');
 
+        // The expected error rolls back the fixture transaction on the server.
+        Header.Init();
+        Header."No." := 'RT150-WR';
+        if Header.Insert(false) then;
+
         Sync.EnterTerminalPosting();
         Sync.CheckReceiptPostingAllowed('RT150-WR');
         Sync.ExitTerminalPosting();
@@ -250,6 +257,93 @@ codeunit 72149 "DOPSWHS LP Bin Sync Tests"
 
     [Test]
     [TransactionModel(TransactionModel::AutoRollback)]
+    procedure ReturnPostingUsesPickedLpBeforeFefo()
+    var
+        PostedLine: Record "Posted Whse. Shipment Line";
+        Entry: Record "Warehouse Entry";
+        TempEntry: Record "Warehouse Entry" temporary;
+        Propagation: Codeunit "DOPSWHS LP Propagation";
+        Assert: Codeunit "Library Assert";
+    begin
+        Seed();
+        CreateLp('RT161-PICKED', 'S1', 50, LaterExpiry());
+        CreateLp('RT161-OTHER', 'S1', 50, EarlierExpiry());
+        CreateEntry(31, 'S1', 100, MovementType(), '', TempEntry, false);
+        CreateReturnFixture(32, 30, 'RT161-PICKED', PostedLine, TempEntry);
+
+        Propagation.FinalizePostedReturnShipment(PostedLine);
+        Assert.AreEqual(20, LpQty('RT161-PICKED'), 'Only the returned quantity leaves the picked pallet.');
+        Assert.AreEqual(50, LpQty('RT161-OTHER'), 'An earlier-expiring unrelated pallet must not be debited.');
+        Entry.Get(2147470032);
+        Assert.AreEqual('RT161-PICKED', Entry."DOPSWHS LP No.", 'The posted return must carry the picked LP.');
+        Propagation.FinalizePostedReturnShipment(PostedLine);
+        Assert.AreEqual(20, LpQty('RT161-PICKED'), 'Repeating terminal reconciliation must not debit twice.');
+    end;
+
+    [Test]
+    [TransactionModel(TransactionModel::AutoRollback)]
+    procedure ReturnFinalizesWhileTerminalPostingIsActive()
+    var
+        PostedLine: Record "Posted Whse. Shipment Line";
+        TempEntry: Record "Warehouse Entry" temporary;
+        Propagation: Codeunit "DOPSWHS LP Propagation";
+        Sync: Codeunit "DOPSWHS LP Bin Sync";
+        Assert: Codeunit "Library Assert";
+    begin
+        Seed();
+        CreateLp('RT161-PICKED', 'S1', 50, EarlierExpiry());
+        CreateEntry(31, 'S1', 50, MovementType(), '', TempEntry, false);
+        CreateReturnFixture(32, 50, 'RT161-PICKED', PostedLine, TempEntry);
+        Sync.EnterTerminalPosting();
+        Propagation.FinalizePostedReturnShipment(PostedLine);
+        Sync.ExitTerminalPosting();
+        Assert.AreEqual(0, LpQty('RT161-PICKED'), 'Return posting must finalize even inside the terminal wrapper.');
+        Assert.AreEqual(Format(Enum::"DOPSWHS LP Status"::Used), Format(LpStatus('RT161-PICKED')), 'A returned full pallet becomes Used.');
+    end;
+
+    local procedure CreateReturnFixture(Offset: Integer; Qty: Decimal; LpNo: Code[20]; var PostedLine: Record "Posted Whse. Shipment Line"; var TempEntry: Record "Warehouse Entry" temporary)
+    var
+        Entry: Record "Warehouse Entry";
+        PickLine: Record "Registered Whse. Activity Line";
+    begin
+        PostedLine.Init();
+        PostedLine."No." := 'RT161-POSTED';
+        PostedLine."Line No." := 10000;
+        PostedLine."Whse. Shipment No." := 'RT161-SHIP';
+        PostedLine."Whse Shipment Line No." := 10000;
+        PostedLine."Source Type" := Database::"Purchase Line";
+        PostedLine."Source Document" := PostedLine."Source Document"::"Purchase Return Order";
+        PostedLine."Source No." := 'RT161-RETURN';
+        PostedLine."Source Line No." := 10000;
+        PostedLine."Posted Source No." := 'RT161-RTRNSHIP';
+        PostedLine."Item No." := ItemNo();
+        PostedLine.Insert(false);
+        PickLine.Init();
+        PickLine."Activity Type" := PickLine."Activity Type"::Pick;
+        PickLine."No." := 'RT161-PICK';
+        PickLine."Line No." := 20000;
+        PickLine."Action Type" := PickLine."Action Type"::Place;
+        PickLine."Whse. Document Type" := PickLine."Whse. Document Type"::Shipment;
+        PickLine."Whse. Document No." := PostedLine."Whse. Shipment No.";
+        PickLine."Whse. Document Line No." := 10000;
+        PickLine."Item No." := ItemNo();
+        PickLine."Bin Code" := 'S1';
+        PickLine."LP No." := LpNo;
+        PickLine.Insert(false);
+        CreateEntry(Offset, 'S1', -Qty, NegativeAdjmt(), '', TempEntry, false);
+        Entry.Get(2147470000 + Offset);
+        Entry."Whse. Document Type" := Entry."Whse. Document Type"::Shipment;
+        Entry."Whse. Document No." := PostedLine."No.";
+        Entry."Reference Document" := Entry."Reference Document"::"Posted Rtrn. Shipment";
+        Entry."Reference No." := PostedLine."Posted Source No.";
+        Entry."Source Type" := PostedLine."Source Type";
+        Entry."Source No." := PostedLine."Source No.";
+        Entry."Source Line No." := PostedLine."Source Line No.";
+        Entry.Modify(false);
+    end;
+
+    [Test]
+    [TransactionModel(TransactionModel::AutoRollback)]
     procedure RepairLpExcessPreviewsThenDebits()
     var
         TempEntry: Record "Warehouse Entry" temporary;
@@ -272,6 +366,7 @@ codeunit 72149 "DOPSWHS LP Bin Sync Tests"
     var
         Item: Record Item;
         Location: Record Location;
+        Bin: Record Bin;
     begin
         if not Item.Get(ItemNo()) then begin
             Item.Init();
@@ -286,6 +381,12 @@ codeunit 72149 "DOPSWHS LP Bin Sync Tests"
             Location."Bin Mandatory" := true;
             Location."Adjustment Bin Code" := 'ADJ';
             Location.Insert(false);
+        end;
+        if not Bin.Get('RT150', 'B2') then begin
+            Bin.Init();
+            Bin."Location Code" := 'RT150';
+            Bin.Code := 'B2';
+            Bin.Insert(false);
         end;
     end;
 

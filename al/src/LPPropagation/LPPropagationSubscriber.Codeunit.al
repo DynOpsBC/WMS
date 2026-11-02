@@ -114,6 +114,27 @@ codeunit 72428 "DOPSWHS LP Propagation"
     /// girişi boş kalır, madde defteri girişine LP listesi yazılır. LP düşümünden
     /// (DOPSWHS LP Bin Sync) önce çağrılmalı: adı geçen LP önce düşülür.
     /// </summary>
+    [EventSubscriber(ObjectType::Codeunit, Codeunit::"Whse.-Post Shipment", 'OnAfterPostWhseJnlLines', '', false, false)]
+    local procedure FinalizeReturnAfterWhseJournals(var TempWhseJnlLine: Record "Warehouse Journal Line" temporary; var PostedWhseShptLine: Record "Posted Whse. Shipment Line"; var TempTrackingSpecification: Record "Tracking Specification" temporary; WhseJnlRegisterLine: Codeunit "Whse. Jnl.-Register Line")
+    begin
+        FinalizePostedReturnShipment(PostedWhseShptLine);
+    end;
+
+    // Run inside BC's posting transaction, after all tracking splits have been
+    // registered. This also covers BC UI posting and posting paths that bypass
+    // the terminal's Shipment Mgmt wrapper. The wrapper may safely repeat it.
+    internal procedure FinalizePostedReturnShipment(PostedLine: Record "Posted Whse. Shipment Line")
+    var
+        LPBinSync: Codeunit "DOPSWHS LP Bin Sync";
+    begin
+        if (PostedLine."Source Type" <> Database::"Purchase Line") or
+           (PostedLine."Source Document" <> PostedLine."Source Document"::"Purchase Return Order")
+        then
+            exit;
+        StampPostedReturnShipmentLps(PostedLine."No.");
+        LPBinSync.SyncPostedWhseShipment(PostedLine."No.", PostedLine."Whse. Shipment No.");
+    end;
+
     procedure StampPostedReturnShipmentLps(PostedWhseShipmentNo: Code[20])
     var
         PostedWhseShipmentLine: Record "Posted Whse. Shipment Line";

@@ -105,6 +105,15 @@ codeunit 72456 "DOPSWHS LP Bin Sync"
         // defteri tarafı (DOPSWHS LP Reclass Relink) günceller.
         if TrackingChanges(WarehouseJournalLine) then
             exit;
+        // A return shipment must first resolve the exact LP from its registered
+        // pick. Processing each journal split here could debit an unrelated
+        // pallet by FEFO before that stamp exists. LP Propagation finalizes the
+        // return in Whse.-Post Shipment.OnAfterPostWhseJnlLines instead.
+        if (WarehouseEntry."Source Type" = Database::"Purchase Line") and
+           (WarehouseEntry."Whse. Document Type" = WarehouseEntry."Whse. Document Type"::Shipment) and
+           (WarehouseEntry."Reference Document" = WarehouseEntry."Reference Document"::"Posted Rtrn. Shipment")
+        then
+            exit;
         if IsActivityEntry(WarehouseEntry) then begin
             // Üretim toplamasının LP düşümü DOPSWHS Pick Mgmt'tedir.
             if WarehouseEntry."Source Type" = Database::"Prod. Order Component" then
