@@ -90,6 +90,9 @@ codeunit 72428 "DOPSWHS LP Propagation"
             exit;
 
         PostedWhseShipmentLine.SetRange("No.", PostedWhseShipmentNo);
+        // Yalnız satış: satın alma iadesi satırının LP'si StampPostedReturnShipmentLps
+        // ile yazılır (SH001008: LP'li iade satırında "satış stok hareketi bulunamadı").
+        PostedWhseShipmentLine.SetRange("Source Type", Database::"Sales Line");
         PostedWhseShipmentLine.SetFilter("LP No.", '<>%1', '');
         if not PostedWhseShipmentLine.FindSet() then
             exit;

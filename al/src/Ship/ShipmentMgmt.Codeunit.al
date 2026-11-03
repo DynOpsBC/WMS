@@ -3,7 +3,7 @@ codeunit 72047 "DOPSWHS Shipment Mgmt"
     Access = Public;
     Permissions =
         tabledata "Warehouse Entry" = r,
-        tabledata "Reservation Entry" = r,
+        tabledata "Reservation Entry" = rim,
         tabledata "Whse. Item Tracking Line" = rimd;
 
     procedure ConfirmShipmentLine(var WhseShipmentLine: Record "Warehouse Shipment Line"; QtyToShip: Decimal; LotNo: Code[50]; LicensePlateNo: Code[20]; SSCC: Code[18])
@@ -112,7 +112,9 @@ codeunit 72047 "DOPSWHS Shipment Mgmt"
         LP: Record "DOPSWHS LP Header";
         LPLine: Record "DOPSWHS LP Line";
         WhseShipmentLine: Record "Warehouse Shipment Line";
+        SourceLots: List of [Code[50]];
         HasMatchingItem: Boolean;
+        ReturnLotMismatch: Boolean;
     begin
         if not LP.Get(LpNo) then
             Error(LpNotFoundErr, LpNo);
@@ -136,12 +138,24 @@ codeunit 72047 "DOPSWHS Shipment Mgmt"
                 if WhseShipmentLine."DOPSWHS Lot No." <> '' then
                     LPLine.SetRange("Lot No.", WhseShipmentLine."DOPSWHS Lot No.");
                 LPLine.SetFilter(Quantity, '>0');
-                if not LPLine.IsEmpty() then
-                    HasMatchingItem := true;
+                if ReturnSourceLots(WhseShipmentLine, SourceLots) then begin
+                    if LPLine.FindSet() then
+                        repeat
+                            if SourceLots.Contains(LPLine."Lot No.") then
+                                HasMatchingItem := true
+                            else
+                                ReturnLotMismatch := true;
+                        until (LPLine.Next() = 0) or HasMatchingItem;
+                end else
+                    if not LPLine.IsEmpty() then
+                        HasMatchingItem := true;
             until (WhseShipmentLine.Next() = 0) or HasMatchingItem;
 
-        if not HasMatchingItem then
+        if not HasMatchingItem then begin
+            if ReturnLotMismatch then
+                Error(LpLotNotOnReturnErr, LpNo, LotListText(SourceLots));
             Error(LpHasNoShipmentItemErr, LpNo, WhseShipmentHeader."No.");
+        end;
     end;
 
     local procedure CreatePickForUser(var WhseShipmentHeader: Record "Warehouse Shipment Header"; AssignToUserId: Code[50]; ForcedLpNo: Code[20]): Code[20]
@@ -376,6 +390,7 @@ codeunit 72047 "DOPSWHS Shipment Mgmt"
         WarehouseEntry: Record "Warehouse Entry";
         PreferredLpLine: Record "DOPSWHS LP Line";
         PreferredLots: List of [Code[50]];
+        SourceLots: List of [Code[50]];
         WhseItemTrackingLine: Record "Whse. Item Tracking Line";
         LotQtyByNo: Dictionary of [Code[50], Decimal];
         LotNos: List of [Code[50]];
@@ -436,6 +451,17 @@ codeunit 72047 "DOPSWHS Shipment Mgmt"
             LotNos := PreferredLots;
         end;
 
+        // Satın alma iadesinde lot iade siparişinde seçildiyse yalnız o lot(lar)
+        // dağıtılır; başka lot toplanırsa sevk kaydı lot uyuşmazlığıyla düşer
+        // (SH001008: iade A102405, toplama A102365).
+        if ReturnSourceLots(WhseShipmentLine, SourceLots) then begin
+            Clear(PreferredLots);
+            foreach LotNo in LotNos do
+                if SourceLots.Contains(LotNo) then
+                    PreferredLots.Add(LotNo);
+            LotNos := PreferredLots;
+        end;
+
         EntryNo := WhseItemTrackingLine.GetLastEntryNo();
         foreach LotNo in LotNos do begin
             LotQtyByNo.Get(LotNo, ExistingQtyBase);
@@ -460,6 +486,72 @@ codeunit 72047 "DOPSWHS Shipment Mgmt"
                 RemainingQtyBase -= AllocateQtyBase;
             end;
         end;
+    end;
+
+    /// <summary>Teşhis: sevk satırlarının kaynak rezervasyon/izleme ve ambar izleme kayıtları.</summary>
+    procedure TrackingDiagnostics(WhseShipmentHeader: Record "Warehouse Shipment Header") Result: Text
+    var
+        WhseShipmentLine: Record "Warehouse Shipment Line";
+        ReservationEntry: Record "Reservation Entry";
+        WhseItemTrackingLine: Record "Whse. Item Tracking Line";
+    begin
+        WhseShipmentLine.SetRange("No.", WhseShipmentHeader."No.");
+        if WhseShipmentLine.FindSet() then
+            repeat
+                Result += StrSubstNo('LINE %1 src=%2/%3/%4/%5 qtyToShipBase=%6 picked=%7 | ', WhseShipmentLine."Line No.",
+                    WhseShipmentLine."Source Type", WhseShipmentLine."Source Subtype", WhseShipmentLine."Source No.", WhseShipmentLine."Source Line No.",
+                    WhseShipmentLine."Qty. to Ship (Base)", WhseShipmentLine."Qty. Picked (Base)");
+                ReservationEntry.Reset();
+                SetSourceReservationFilters(ReservationEntry, WhseShipmentLine);
+                if ReservationEntry.FindSet() then
+                    repeat
+                        Result += StrSubstNo('RE %1 pos=%2 status=%3 lot=%4 qtyBase=%5 toHandle=%6 toInvoice=%7 applTo=%8 | ',
+                            ReservationEntry."Entry No.", ReservationEntry.Positive, ReservationEntry."Reservation Status", ReservationEntry."Lot No.",
+                            ReservationEntry."Quantity (Base)", ReservationEntry."Qty. to Handle (Base)", ReservationEntry."Qty. to Invoice (Base)",
+                            ReservationEntry."Appl.-to Item Entry");
+                    until ReservationEntry.Next() = 0;
+                WhseItemTrackingLine.Reset();
+                WhseItemTrackingLine.SetRange("Source Type", Database::"Warehouse Shipment Line");
+                WhseItemTrackingLine.SetRange("Source ID", WhseShipmentLine."No.");
+                WhseItemTrackingLine.SetRange("Source Ref. No.", WhseShipmentLine."Line No.");
+                if WhseItemTrackingLine.FindSet() then
+                    repeat
+                        Result += StrSubstNo('WIT %1 lot=%2 qtyBase=%3 handled=%4 | ', WhseItemTrackingLine."Entry No.", WhseItemTrackingLine."Lot No.",
+                            WhseItemTrackingLine."Quantity (Base)", WhseItemTrackingLine."Quantity Handled (Base)");
+                    until WhseItemTrackingLine.Next() = 0;
+            until WhseShipmentLine.Next() = 0;
+    end;
+
+    /// <summary>
+    /// Teşhis: sevki commit'siz kaydeder ve sonunda DRYRUN-OK hatasıyla geri
+    /// alır. Gerçek kayıt hatasının ham metnini görmek içindir; hiçbir şey
+    /// kalıcı olmaz.
+    /// </summary>
+    local procedure DryRunLpState(PostedNo: Code[20]) Result: Text
+    var
+        PostedWhseShipmentLine: Record "Posted Whse. Shipment Line";
+        WarehouseEntry: Record "Warehouse Entry";
+        LP: Record "DOPSWHS LP Header";
+    begin
+        PostedWhseShipmentLine.SetRange("No.", PostedNo);
+        if PostedWhseShipmentLine.FindSet() then
+            repeat
+                Result += StrSubstNo('[line LP=%1', PostedWhseShipmentLine."LP No.");
+                if LP.Get(PostedWhseShipmentLine."LP No.") then begin
+                    LP.CalcFields("Total Quantity");
+                    Result += StrSubstNo(' status=%1 qty=%2', LP.Status, LP."Total Quantity");
+                end;
+                WarehouseEntry.SetRange("Reference No.", PostedWhseShipmentLine."Posted Source No.");
+                if WarehouseEntry.FindFirst() then
+                    Result += StrSubstNo(' entryLP=%1', WarehouseEntry."DOPSWHS LP No.");
+                Result += ']';
+            until PostedWhseShipmentLine.Next() = 0;
+    end;
+
+    procedure DryRunPostShipment(var WhseShipmentHeader: Record "Warehouse Shipment Header")
+    begin
+        DryRunMode := true;
+        PostShipment(WhseShipmentHeader, false, false, '');
     end;
 
     procedure PostShipment(var WhseShipmentHeader: Record "Warehouse Shipment Header"; PrintPackingSlip: Boolean; Invoice: Boolean)
@@ -529,6 +621,8 @@ codeunit 72047 "DOPSWHS Shipment Mgmt"
 
         if WhseShipmentLine.FindFirst() then begin
             LPBinSync.EnterTerminalPosting();
+            if DryRunMode then
+                WhsePostShipment.SetSuppressCommit(true);
             WhsePostShipment.Run(WhseShipmentLine);
             LPBinSync.ExitTerminalPosting();
         end;
@@ -560,6 +654,8 @@ codeunit 72047 "DOPSWHS Shipment Mgmt"
         end;
 
         StampHeaders(WhseShipmentNo, PostedNo);
+        if DryRunMode then
+            Error(DryRunOkErr, WhseShipmentNo, PostedNo, DryRunLpState(PostedNo));
 
         if PrintPackingSlip then begin
             ClearLastError();
@@ -593,6 +689,39 @@ codeunit 72047 "DOPSWHS Shipment Mgmt"
             ItemTrackingCode."Lot Specific Tracking" or
             ItemTrackingCode."Lot Warehouse Tracking" or
             ItemTrackingCode."Lot Sales Outbound Tracking");
+    end;
+
+    /// <summary>
+    /// Satın alma iadesi satırında madde izlemeyle seçilmiş lotlar. Satışta
+    /// kaynak lot bilerek dikkate alınmaz (çok lotlu toplama); iadede ise
+    /// tedarikçiye dönen lot belgede bellidir ve sevk kaydı onu ister.
+    /// </summary>
+    local procedure ReturnSourceLots(WhseShipmentLine: Record "Warehouse Shipment Line"; var Lots: List of [Code[50]]): Boolean
+    var
+        ReservationEntry: Record "Reservation Entry";
+    begin
+        Clear(Lots);
+        if WhseShipmentLine."Source Type" <> Database::"Purchase Line" then
+            exit(false);
+        SetSourceReservationFilters(ReservationEntry, WhseShipmentLine);
+        ReservationEntry.SetFilter("Lot No.", '<>%1', '');
+        if ReservationEntry.FindSet() then
+            repeat
+                if not Lots.Contains(ReservationEntry."Lot No.") then
+                    Lots.Add(ReservationEntry."Lot No.");
+            until ReservationEntry.Next() = 0;
+        exit(Lots.Count() > 0);
+    end;
+
+    local procedure LotListText(Lots: List of [Code[50]]) Result: Text
+    var
+        LotNo: Code[50];
+    begin
+        foreach LotNo in Lots do begin
+            if Result <> '' then
+                Result += ', ';
+            Result += LotNo;
+        end;
     end;
 
     local procedure SetSourceReservationFilters(var ReservationEntry: Record "Reservation Entry"; WhseShipmentLine: Record "Warehouse Shipment Line")
@@ -690,6 +819,8 @@ codeunit 72047 "DOPSWHS Shipment Mgmt"
         LPLine: Record "DOPSWHS LP Line";
         Item: Record Item;
         DemandByKey: Dictionary of [Text, Decimal];
+        SourceLots: List of [Code[50]];
+        HasSourceLots: Boolean;
         DemandKey: Text;
         RequiredQtyBase: Decimal;
         AvailableQtyBase: Decimal;
@@ -733,9 +864,12 @@ codeunit 72047 "DOPSWHS Shipment Mgmt"
                         if WhseShipmentLine."DOPSWHS Lot No." <> '' then
                             LPLine.SetRange("Lot No.", WhseShipmentLine."DOPSWHS Lot No.");
                         LPLine.SetFilter(Quantity, '>0');
+                        HasSourceLots := ReturnSourceLots(WhseShipmentLine, SourceLots);
                         if LPLine.FindSet() then
                             repeat
-                                if not OptionAlreadyListed(TempOption, LP."No.", LPLine."Item No.", LPLine."Variant Code", LPLine."Lot No.") then begin
+                                if (not HasSourceLots or SourceLots.Contains(LPLine."Lot No.")) and
+                                   not OptionAlreadyListed(TempOption, LP."No.", LPLine."Item No.", LPLine."Variant Code", LPLine."Lot No.")
+                                then begin
                                     AvailableQtyBase :=
                                         LpLineAvailableQtyBase(LP, LPLine, WhseShipmentHeader."Location Code");
                                     if AvailableQtyBase > 0 then begin
@@ -911,6 +1045,7 @@ codeunit 72047 "DOPSWHS Shipment Mgmt"
                     if not WhseShipmentLine.Get(WhseShipmentLine."No.", WhseShipmentLine."Line No.") then
                         exit;
                     EnsureShipmentHasCompleteLotTracking(WhseShipmentLine);
+                    EnsureReturnSourceTracking(WhseShipmentLine);
                 end else begin
                     GetShipmentLineLot(WhseShipmentLine, LotNo);
                     if LotNo <> '' then
@@ -919,6 +1054,85 @@ codeunit 72047 "DOPSWHS Shipment Mgmt"
                         EnsureShipmentHasCompleteLotTracking(WhseShipmentLine);
                 end;
             until WhseShipmentLine.Next() = 0;
+    end;
+
+    /// <summary>
+    /// BADE (3 Kas 2026, SH001006/SH001008): lotu iade siparişinde seçilmemiş
+    /// satın alma iadesinde toplamada okunan lot yalnız ambar izleme satırında
+    /// kalıyor, iade satırına geçmiyordu; kayıt "You must assign a lot number"
+    /// ile düşüyordu. Sevk miktarını karşılamayan kısım için kayıtlı toplamanın
+    /// lotları iade satırına madde izleme olarak yazılır. Satışa dokunmaz.
+    /// </summary>
+    local procedure EnsureReturnSourceTracking(WhseShipmentLine: Record "Warehouse Shipment Line")
+    var
+        ReservationEntry: Record "Reservation Entry";
+        CreatedEntry: Record "Reservation Entry";
+        WhseItemTrackingLine: Record "Whse. Item Tracking Line";
+        CreateReservEntry: Codeunit "Create Reserv. Entry";
+        SourceLotQty: Dictionary of [Code[50], Decimal];
+        TrackedBase: Decimal;
+        MissingBase: Decimal;
+        AddBase: Decimal;
+        ExistingBase: Decimal;
+    begin
+        if WhseShipmentLine."Source Type" <> Database::"Purchase Line" then
+            exit;
+        if (WhseShipmentLine."Qty. to Ship (Base)" <= 0) or (not ShipmentLineRequiresLot(WhseShipmentLine)) then
+            exit;
+
+        SetSourceReservationFilters(ReservationEntry, WhseShipmentLine);
+        ReservationEntry.SetFilter("Lot No.", '<>%1', '');
+        if ReservationEntry.FindSet() then
+            repeat
+                TrackedBase += Abs(ReservationEntry."Qty. to Handle (Base)");
+                if SourceLotQty.Get(ReservationEntry."Lot No.", ExistingBase) then
+                    SourceLotQty.Set(ReservationEntry."Lot No.", ExistingBase + Abs(ReservationEntry."Quantity (Base)"))
+                else
+                    SourceLotQty.Add(ReservationEntry."Lot No.", Abs(ReservationEntry."Quantity (Base)"));
+            until ReservationEntry.Next() = 0;
+        MissingBase := WhseShipmentLine."Qty. to Ship (Base)" - TrackedBase;
+        if MissingBase <= 0.00001 then
+            exit;
+
+        WhseItemTrackingLine.SetRange("Source Type", Database::"Warehouse Shipment Line");
+        WhseItemTrackingLine.SetRange("Source ID", WhseShipmentLine."No.");
+        WhseItemTrackingLine.SetRange("Source Ref. No.", WhseShipmentLine."Line No.");
+        WhseItemTrackingLine.SetFilter("Lot No.", '<>%1', '');
+        WhseItemTrackingLine.SetFilter("Quantity Handled (Base)", '>0');
+        if WhseItemTrackingLine.FindSet() then
+            repeat
+                AddBase := WhseItemTrackingLine."Quantity Handled (Base)";
+                if SourceLotQty.Get(WhseItemTrackingLine."Lot No.", ExistingBase) then
+                    AddBase -= ExistingBase;
+                if AddBase > MissingBase then
+                    AddBase := MissingBase;
+                if AddBase > 0.00001 then begin
+                    ReservationEntry.Init();
+                    ReservationEntry."Lot No." := WhseItemTrackingLine."Lot No.";
+                    CreateReservEntry.SetDates(0D, WhseItemTrackingLine."Expiration Date");
+                    CreateReservEntry.SetQtyToHandleAndInvoice(AddBase, AddBase);
+                    CreateReservEntry.CreateReservEntryFor(
+                        WhseShipmentLine."Source Type", WhseShipmentLine."Source Subtype", WhseShipmentLine."Source No.", '', 0,
+                        WhseShipmentLine."Source Line No.", WhseShipmentLine."Qty. per Unit of Measure",
+                        Round(AddBase / WhseShipmentLine."Qty. per Unit of Measure", 0.00001), AddBase, ReservationEntry);
+                    CreateReservEntry.CreateEntry(
+                        WhseShipmentLine."Item No.", WhseShipmentLine."Variant Code", WhseShipmentLine."Location Code",
+                        WhseShipmentLine.Description, 0D, WhseShipmentLine."Shipment Date", 0, Enum::"Reservation Status"::Surplus);
+                    // Create Reserv. Entry miktarı çıkış için eksiye çevirir ama
+                    // SetQtyToHandleAndInvoice değerini olduğu gibi yazar; işlenecek
+                    // miktar kaydın kendi işaretli miktarına eşitlenir.
+                    CreatedEntry.Reset();
+                    SetSourceReservationFilters(CreatedEntry, WhseShipmentLine);
+                    CreatedEntry.SetRange("Lot No.", WhseItemTrackingLine."Lot No.");
+                    if CreatedEntry.FindLast() then
+                        if CreatedEntry."Qty. to Handle (Base)" <> CreatedEntry."Quantity (Base)" then begin
+                            CreatedEntry."Qty. to Handle (Base)" := CreatedEntry."Quantity (Base)";
+                            CreatedEntry."Qty. to Invoice (Base)" := CreatedEntry."Quantity (Base)";
+                            CreatedEntry.Modify();
+                        end;
+                    MissingBase -= AddBase;
+                end;
+            until (WhseItemTrackingLine.Next() = 0) or (MissingBase <= 0.00001);
     end;
 
     local procedure HasRegisteredPickToShip(WhseShipmentLine: Record "Warehouse Shipment Line"): Boolean
@@ -1237,6 +1451,9 @@ codeunit 72047 "DOPSWHS Shipment Mgmt"
         LpAssignedElsewhereErr: Label '%1 numaralı taşıma kabı %2 belgesine atanmış.', Comment = '%1 = LP No., %2 = document no.';
         LpOtherLocationErr: Label '%1 numaralı taşıma kabı %2 lokasyonunda; sevkiyat %3 lokasyonundan yapılıyor.', Comment = '%1 = LP No., %2 = LP location, %3 = shipment location';
         LpNoBinErr: Label '%1 numaralı taşıma kabının rafı boş. Önce kabı bir rafa yerleştirin.', Comment = '%1 = LP No.';
+        DryRunMode: Boolean;
+        DryRunOkErr: Label 'DRYRUN-OK %1 -> %2 %3 (geri alındı)', Locked = true;
+        LpLotNotOnReturnErr: Label '%1 numaralı palet bu iadede seçili lotta değil. İade siparişinde lot %2 seçili; bu paleti iade etmek için iade siparişindeki madde izleme lotunu değiştirin.', Comment = '%1 = LP No., %2 = lot list';
         LpHasNoShipmentItemErr: Label '%1 numaralı taşıma kabı, %2 sevkiyatının açık satırlarındaki üründen (veya istenen lottan) bulundurmuyor.', Comment = '%1 = LP No., %2 = shipment no.';
 
     [BusinessEvent(false)]

@@ -90,6 +90,23 @@ page 72093 "DOPSWHS Shipment API"
     end;
 
     [ServiceEnabled]
+    procedure trackingDiagnostics(): Text
+    var
+        ShipmentMgmt: Codeunit "DOPSWHS Shipment Mgmt";
+    begin
+        exit(ShipmentMgmt.TrackingDiagnostics(Rec));
+    end;
+
+    /// <summary>Teşhis: kaydı commit'siz dener, her durumda geri alır.</summary>
+    [ServiceEnabled]
+    procedure dryRunPost()
+    var
+        ShipmentMgmt: Codeunit "DOPSWHS Shipment Mgmt";
+    begin
+        ShipmentMgmt.DryRunPostShipment(Rec);
+    end;
+
+    [ServiceEnabled]
     procedure pickSourceOptions(): Text
     var
         ShipmentMgmt: Codeunit "DOPSWHS Shipment Mgmt";
