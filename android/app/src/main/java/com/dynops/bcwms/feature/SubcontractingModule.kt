@@ -719,7 +719,7 @@ private fun SubcontractOperationDetail(operation: JSONObject, onBack: () -> Unit
     val serialNos = remember { mutableStateMapOf<String, String>() }
     val bins = remember { mutableStateMapOf<String, String>() }
 
-    fun loadComponents() {
+    fun loadComponents(resultMessage: String = "") {
         scope.launch {
             loading = true
             status = "Fasona gönderilecek malzemeler yükleniyor..."
@@ -750,6 +750,8 @@ private fun SubcontractOperationDetail(operation: JSONObject, onBack: () -> Unit
                 components.isEmpty() -> "TAMAM: Bu operasyonda fasona gönderilecek kalan malzeme yok."
                 else -> "TAMAM: ${components.size} malzeme sevke hazır."
             }
+            // Sevk sonucu (ör. açılan depo sevkiyatı) liste yenilenince kaybolmasın.
+            if (resultMessage.isNotBlank() && result.complete) status = resultMessage
         }
     }
 
@@ -859,7 +861,7 @@ private fun SubcontractOperationDetail(operation: JSONObject, onBack: () -> Unit
             loading = false
             status = if (warehouseFlow) "TAMAM: ${posted.joinToString()}"
                 else "TAMAM: Ana stoktan düşüldü, fason lokasyonuna aktarıldı ve e-İrsaliye kuyruğu oluşturuldu · ${posted.joinToString()}"
-            loadComponents()
+            loadComponents(status)
         }
     }
 
@@ -983,10 +985,11 @@ private fun SubcontractOperationDetail(operation: JSONObject, onBack: () -> Unit
         text = {
             Text(
                 "${operation.optString("prodOrderNo")} için ${chosen.size} malzeme " +
-                    "${operation.optString("targetLocationCode")} lokasyonuna aktarılacak. Bu işlem stok kaydı oluşturur."
+                    "${operation.optString("targetLocationCode")} lokasyonuna gönderilecek. Depo sevkiyatlı lokasyonda transfer ve " +
+                    "depo sevkiyatı açılır; malzeme Sevkiyat ekranında toplanıp kaydedilince fasona geçer."
             )
         },
-        confirmButton = { Button(onClick = { dispatch() }) { Text("Stok Aktar ve İrsaliye Oluştur") } },
+        confirmButton = { Button(onClick = { dispatch() }) { Text("Fasona Gönder") } },
         dismissButton = { TextButton(onClick = { showConfirm = false }) { Text("Vazgeç") } },
     )
 }
