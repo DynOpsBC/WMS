@@ -6,12 +6,21 @@ codeunit 72446 "DOPSWHS Subcont Receipt Mgt"
         tabledata "Purchase Header" = RM,
         tabledata "Purchase Line" = RM,
         tabledata "Purch. Rcpt. Line" = R,
+        tabledata "Reservation Entry" = RIM,
         tabledata Location = R,
         tabledata "Warehouse Receipt Header" = RM,
-        tabledata "Warehouse Receipt Line" = RM;
+        tabledata "Warehouse Receipt Line" = RM,
+        tabledata "DOPSWHS Subcontract Dispatch" = RM;
 
     procedure Receive(PurchaseLine: Record "Purchase Line"; Quantity: Decimal; VendorShipmentNo: Code[35]; InboundReferenceNo: Code[50]; BinCode: Code[20]; FinishOperation: Boolean; VehiclePlateNo: Text; DriverCode: Code[20]; IdempotencyKey: Guid): Text
+    begin
+        // Eski terminaller lot göndermez: lotlu mamulde lot madde serisinden verilir.
+        exit(Receive(PurchaseLine, Quantity, VendorShipmentNo, InboundReferenceNo, BinCode, FinishOperation, VehiclePlateNo, DriverCode, '', 0D, IdempotencyKey));
+    end;
+
+    procedure Receive(PurchaseLine: Record "Purchase Line"; Quantity: Decimal; VendorShipmentNo: Code[35]; InboundReferenceNo: Code[50]; BinCode: Code[20]; FinishOperation: Boolean; VehiclePlateNo: Text; DriverCode: Code[20]; LotNo: Code[50]; ExpirationDate: Date; IdempotencyKey: Guid): Text
     var
+        Consumption: Codeunit "DOPSWHS Subcont Consumption";
         Audit: Record "DOPSWHS Subcontract Receipt";
         PurchaseHeader: Record "Purchase Header";
         Location: Record Location;
@@ -32,16 +41,22 @@ codeunit 72446 "DOPSWHS Subcont Receipt Mgt"
             Error('%1 lokasyonu bulunamadı.', PurchaseLine."Location Code");
 
         PreparePurchaseDocument(PurchaseHeader, PurchaseLine, Quantity, VendorShipmentNo, BinCode, FinishOperation);
+        AssignOutputTracking(PurchaseLine, Quantity, LotNo, ExpirationDate);
         InsertPendingAudit(
             PurchaseHeader, PurchaseLine, Quantity, VendorShipmentNo, InboundReferenceNo,
             BinCode, FinishOperation, IdempotencyKey, Audit);
 
-        if Location."Require Receive" then
+        // BC fason satın alma satırını ambar mal kabulüne almaz ("alınacak miktar kalmamış");
+        // fason çıktısı satın alma kabulüyle doğrudan kaydedilir. Plaka/sürücü yine zorunlu.
+        if Location."Require Receive" and (PurchaseLine."Prod. Order No." = '') then
             PostThroughWarehouse(
                 PurchaseHeader, PurchaseLine, Quantity, VendorShipmentNo, BinCode,
                 VehiclePlateNo, DriverCode, WarehouseReceiptNo)
-        else
+        else begin
+            if Location."Require Receive" and ((DelChr(VehiclePlateNo, '<>', ' ') = '') or (DriverCode = '')) then
+                Error('BADE ambar kabulünde araç plakası ve sürücü kodu zorunludur.');
             PostDirect(PurchaseHeader);
+        end;
 
         PostedReceiptNo := FindPostedReceiptNo(PurchaseLine."Document No.", PurchaseLine."Line No.");
         if PostedReceiptNo = '' then
@@ -50,6 +65,7 @@ codeunit 72446 "DOPSWHS Subcont Receipt Mgt"
         Audit."Warehouse Receipt No." := WarehouseReceiptNo;
         Audit.Status := 'POSTED';
         Audit."Posted At" := CurrentDateTime();
+        Consumption.PostForReceipt(Audit);
         Audit.Modify(true);
         exit(ResultJson(Audit));
     end;
@@ -108,6 +124,79 @@ codeunit 72446 "DOPSWHS Subcont Receipt Mgt"
         SelectedLine.Validate("Qty. to Receive", Quantity);
         SelectedLine.Validate(Finished, FinishOperation);
         SelectedLine.Modify(true);
+    end;
+
+    /// <summary>
+    /// Fason son operasyonsa satın alma kabulü mamulü stoka alır; lotlu mamulde
+    /// satın alma satırına lot bağlanır. Lot girilmediyse madde lot serisinden
+    /// verilir. BC'de satıra zaten tam lot atanmışsa ona dokunulmaz.
+    /// </summary>
+    local procedure AssignOutputTracking(PurchaseLine: Record "Purchase Line"; Quantity: Decimal; LotNo: Code[50]; ExpirationDate: Date)
+    var
+        Item: Record Item;
+        TrackingCode: Record "Item Tracking Code";
+        ReservEntry: Record "Reservation Entry";
+        TempReservation: Record "Reservation Entry" temporary;
+        LotSerialGen: Codeunit "DOPSWHS Lot Serial Generator";
+        CreateReservEntry: Codeunit "Create Reserv. Entry";
+        UOMMgt: Codeunit "Unit of Measure Management";
+        ProdOrderLine: Record "Prod. Order Line";
+        QtyPerUoM: Decimal;
+        QtyBase: Decimal;
+    begin
+        AssignedLotNo := '';
+        if not Item.Get(PurchaseLine."No.") then
+            exit;
+        if (Item."Item Tracking Code" = '') or not TrackingCode.Get(Item."Item Tracking Code") then
+            exit;
+        // Fason çıktısı üretim girişidir; ayrıntılı ayarlarda "Lot Manuf. Inbound" belirleyicidir.
+        if TrackingCode."SN Specific Tracking" or TrackingCode."SN Manuf. Inbound Tracking" then
+            Error('%1 seri numarası izlenen bir ürün; fason teslimde seri girişi desteklenmiyor. BC satın alma satırında seri atayın.', Item."No.");
+        if not (TrackingCode."Lot Specific Tracking" or TrackingCode."Lot Manuf. Inbound Tracking" or TrackingCode."Lot Purchase Inbound Tracking") then
+            exit;
+        PurchaseLine.Get(PurchaseLine."Document Type", PurchaseLine."Document No.", PurchaseLine."Line No.");
+        // Purch.-Post fason çıktısını Output olarak kaydeder; satırın temel miktarı 0
+        // olduğu için satın alma lotu taşınmaz. Çıktı kaydı lotu üretim emri satırından
+        // alır (Mfg. Item Jnl.-Post Line: TransferPOLineToItemJnlLine).
+        ProdOrderLine.Get(ProdOrderLine.Status::Released, PurchaseLine."Prod. Order No.", PurchaseLine."Prod. Order Line No.");
+        // Fason satın alma satırında "Qty. per Unit of Measure" 0 bırakılır (Calculate
+        // Subcontracts); katsayı maddenin ölçü biriminden alınır.
+        QtyPerUoM := PurchaseLine."Qty. per Unit of Measure";
+        if QtyPerUoM = 0 then
+            QtyPerUoM := UOMMgt.GetQtyPerUnitOfMeasure(Item, PurchaseLine."Unit of Measure Code");
+        if QtyPerUoM = 0 then
+            QtyPerUoM := 1;
+        QtyBase := Round(Quantity * QtyPerUoM, 0.00001);
+        ReservEntry.SetRange("Source Type", Database::"Prod. Order Line");
+        ReservEntry.SetRange("Source Subtype", ProdOrderLine.Status.AsInteger());
+        ReservEntry.SetRange("Source ID", ProdOrderLine."Prod. Order No.");
+        ReservEntry.SetRange("Source Prod. Order Line", ProdOrderLine."Line No.");
+        ReservEntry.SetFilter("Lot No.", '<>%1', '');
+        ReservEntry.CalcSums("Qty. to Handle (Base)");
+        if ReservEntry."Qty. to Handle (Base)" + 0.00001 >= QtyBase then begin
+            if ReservEntry.FindFirst() then
+                AssignedLotNo := ReservEntry."Lot No.";
+            exit;
+        end;
+        if not ReservEntry.IsEmpty() then
+            Error('%1 üretim emri satırında BC''de kısmi lot ataması var. Lotları BC''de tamamlayın veya silin.', ProdOrderLine."Prod. Order No.");
+        if LotNo = '' then
+            LotNo := LotSerialGen.GenerateLotNoForItem(Item."No.");
+        if LotNo = '' then
+            Error('%1 lot izlenen bir ürün. Fason firmanın lot numarasını girin (madde kartında lot no. serisi de tanımlı değil).', Item."No.");
+        if TrackingCode."Man. Expir. Date Entry Reqd." and (ExpirationDate = 0D) then
+            Error('%1 için son kullanma tarihi zorunlu. Fason firmanın belgesindeki SKT''yi girin.', Item."No.");
+        TempReservation."Lot No." := LotNo;
+        CreateReservEntry.SetDates(0D, ExpirationDate);
+        CreateReservEntry.SetQtyToHandleAndInvoice(QtyBase, QtyBase);
+        CreateReservEntry.CreateReservEntryFor(
+            Database::"Prod. Order Line", ProdOrderLine.Status.AsInteger(), ProdOrderLine."Prod. Order No.", '',
+            ProdOrderLine."Line No.", 0, ProdOrderLine."Qty. per Unit of Measure",
+            Round(QtyBase / ProdOrderLine."Qty. per Unit of Measure", 0.00001), QtyBase, TempReservation);
+        CreateReservEntry.CreateEntry(
+            ProdOrderLine."Item No.", ProdOrderLine."Variant Code", ProdOrderLine."Location Code", ProdOrderLine.Description,
+            ProdOrderLine."Due Date", 0D, 0, Enum::"Reservation Status"::Surplus);
+        AssignedLotNo := LotNo;
     end;
 
     local procedure PostDirect(var PurchaseHeader: Record "Purchase Header")
@@ -189,6 +278,8 @@ codeunit 72446 "DOPSWHS Subcont Receipt Mgt"
         Audit."Inbound Reference No." := InboundReferenceNo;
         Audit."Operation Finished" := FinishOperation;
         Audit.Status := 'PENDING';
+        Audit."Consumption Status" := 'PENDING';
+        Audit."Lot No." := AssignedLotNo;
         Audit."Created By" := CopyStr(UserId(), 1, MaxStrLen(Audit."Created By"));
         Audit."Created At" := CurrentDateTime();
         Audit.Insert(true);
@@ -196,6 +287,7 @@ codeunit 72446 "DOPSWHS Subcont Receipt Mgt"
 
     local procedure ReconcileOrReturn(PurchaseLine: Record "Purchase Line"; IdempotencyKey: Guid; var Audit: Record "DOPSWHS Subcontract Receipt"): Boolean
     var
+        Consumption: Codeunit "DOPSWHS Subcont Consumption";
         PostedReceiptNo: Code[20];
     begin
         Audit.SetRange("Idempotency Key", IdempotencyKey);
@@ -205,14 +297,23 @@ codeunit 72446 "DOPSWHS Subcont Receipt Mgt"
            (Audit."Purchase Line No." <> PurchaseLine."Line No.")
         then
             Error('İşlem anahtarı başka bir fason kabul satırı için kullanılmış. Ekranı yenileyip tekrar deneyin.');
-        if Audit.Status = 'POSTED' then
+        if Audit.Status = 'POSTED' then begin
+            // Ambar kabulü commit ettikten sonra sarfiyat hata verdiyse aynı işlem
+            // anahtarıyla tekrar denemede yalnız sarfiyat tamamlanır.
+            if Audit."Consumption Status" = 'PENDING' then begin
+                Consumption.PostForReceipt(Audit);
+                Audit.Modify(true);
+            end;
             exit(true);
+        end;
         PostedReceiptNo := FindPostedReceiptNo(Audit."Purchase Order No.", Audit."Purchase Line No.");
         if PostedReceiptNo = '' then
             Error('%1/%2 fason kabulünün önceki denemesi tamamlanmamış. BC belgesini kontrol edin; ikinci stok kaydı oluşturmadık.', Audit."Purchase Order No.", Audit."Purchase Line No.");
         Audit."Posted Purchase Receipt No." := PostedReceiptNo;
         Audit.Status := 'POSTED';
         Audit."Posted At" := CurrentDateTime();
+        if Audit."Consumption Status" = 'PENDING' then
+            Consumption.PostForReceipt(Audit);
         Audit.Modify(true);
         exit(true);
     end;
@@ -249,7 +350,12 @@ codeunit 72446 "DOPSWHS Subcont Receipt Mgt"
         Result.Add('operationFinished', Audit."Operation Finished");
         Result.Add('serviceReceiptComplete', ServiceReceiptComplete);
         Result.Add('invoicePending', true);
+        Result.Add('consumptionStatus', Audit."Consumption Status");
+        Result.Add('lotNo', Audit."Lot No.");
         Result.WriteTo(ResultText);
         exit(ResultText);
     end;
+
+    var
+        AssignedLotNo: Code[50];
 }

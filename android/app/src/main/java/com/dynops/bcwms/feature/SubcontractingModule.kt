@@ -534,13 +534,17 @@ private fun SubcontractReceiptDetail(line: JSONObject, onBack: () -> Unit) {
     var vehiclePlateNo by remember(subcontractReceiptKey(line)) { mutableStateOf("") }
     var driverCode by remember(subcontractReceiptKey(line)) { mutableStateOf("") }
     var finishOperation by remember(subcontractReceiptKey(line)) { mutableStateOf(true) }
+    var lotNo by remember(subcontractReceiptKey(line)) { mutableStateOf("") }
+    var expiryText by remember(subcontractReceiptKey(line)) { mutableStateOf("") }
     var showConfirm by remember { mutableStateOf(false) }
     var busy by remember { mutableStateOf(false) }
     var status by remember { mutableStateOf("") }
     val idempotencyKey = remember(subcontractReceiptKey(line)) { UUID.randomUUID().toString() }
     val enteredQty = quantity.replace(',', '.').toFiniteDoubleOrNull() ?: 0.0
     val fullReceipt = canFinishSubcontractOperation(enteredQty, maxQty)
-    val valid = enteredQty > 0.0 && enteredQty <= maxQty && vendorShipmentNo.trim().isNotBlank()
+    val expiryIso = subcontractExpiryIso(expiryText)
+    val valid = enteredQty > 0.0 && enteredQty <= maxQty && vendorShipmentNo.trim().isNotBlank() &&
+        (expiryText.isBlank() || expiryIso != null)
 
     fun receive() {
         showConfirm = false
@@ -555,11 +559,14 @@ private fun SubcontractReceiptDetail(line: JSONObject, onBack: () -> Unit) {
                 put("finishOperation", finishOperation && fullReceipt)
                 put("vehiclePlateNo", vehiclePlateNo.trim())
                 put("driverCode", driverCode.trim())
+                put("lotNo", lotNo.trim().uppercase())
+                put("expirationDate", expiryIso ?: "0001-01-01")
                 put("idempotencyKey", idempotencyKey)
             }.toString()
+            // BC 1.14.1.185+: lotlu fason mamulünde lot/SKT satırla birlikte gönderilir.
             val response = BcApi.post(
                 context,
-                "subcontractReceipts(${subcontractReceiptODataKey(line)})/Microsoft.NAV.receive",
+                "subcontractReceipts(${subcontractReceiptODataKey(line)})/Microsoft.NAV.receiveWithLot",
                 body,
             )
             busy = false
@@ -568,7 +575,8 @@ private fun SubcontractReceiptDetail(line: JSONObject, onBack: () -> Unit) {
                 return@launch
             }
             val result = runCatching { JSONObject(BcApi.scalarValue(response.body)) }.getOrNull()
-            status = "TAMAM: ${result?.optString("postedPurchaseReceiptNo").orEmpty().ifBlank { "kayıtlı satın alma irsaliyesi" }} · " +
+            val lotInfo = result?.optString("lotNo").orEmpty().let { if (it.isBlank()) "" else "Lot $it · " }
+            status = "TAMAM: ${result?.optString("postedPurchaseReceiptNo").orEmpty().ifBlank { "kayıtlı satın alma irsaliyesi" }} · " + lotInfo +
                 if (result?.optBoolean("operationFinished") == true) "fason operasyonu kapandı; fatura bağlantısı korundu."
                 else "parsiyel kabul işlendi; kalan miktar açık."
         }
@@ -625,6 +633,23 @@ private fun SubcontractReceiptDetail(line: JSONObject, onBack: () -> Unit) {
                 singleLine = true, enabled = !busy, modifier = Modifier.weight(1f),
             )
         }
+        Row(Modifier.fillMaxWidth()) {
+            ScanField(
+                label = "Lot no (boşsa otomatik)", value = lotNo, onValueChange = { lotNo = it },
+                enabled = !busy, modifier = Modifier.weight(1f),
+            )
+            Spacer(Modifier.width(6.dp))
+            OutlinedTextField(
+                value = expiryText, onValueChange = { expiryText = it },
+                label = { Text("SKT (gg.aa.yyyy)") }, singleLine = true, enabled = !busy,
+                isError = expiryText.isNotBlank() && expiryIso == null,
+                modifier = Modifier.weight(1f),
+            )
+        }
+        Text(
+            "Lotlu mamulde fason firmanın lot ve SKT bilgisini girin. Lot boşsa madde kartındaki lot serisinden verilir.",
+            fontSize = 11.sp, color = Color.Gray,
+        )
         Spacer(Modifier.height(6.dp))
         Text("Araç ve sürücü", fontWeight = FontWeight.Bold, fontSize = 15.sp)
         Text("BADE ambar kabul lokasyonlarında aşağıdaki plaka ve sürücü zorunludur.", fontSize = 11.sp, color = Color.Gray)
@@ -737,6 +762,7 @@ private fun SubcontractOperationDetail(operation: JSONObject, onBack: () -> Unit
             loading = true
             val groups = chosen.groupBy { it.optString("locationCode") }
             val posted = mutableListOf<String>()
+            var warehouseFlow = false
             for ((sourceLocation, lines) in groups) {
                 status = "$sourceLocation stokları fasona aktarılıyor..."
                 val payloadLines = JSONArray()
@@ -825,10 +851,14 @@ private fun SubcontractOperationDetail(operation: JSONObject, onBack: () -> Unit
                 val shipment = result?.optString("postedTransferShipmentNo").orEmpty().ifBlank { "kayıtlı irsaliye" }
                 val reference = result?.optString("fasonReferenceNo").orEmpty().ifBlank { operation.optString("prodOrderNo") }
                 val eDespatch = result?.optString("eDespatchStatus").orEmpty().ifBlank { "durum alınamadı" }
-                posted += "$shipment · Ref $reference · E-İrsaliye $eDespatch"
+                val pendingMessage = result?.optString("message").orEmpty()
+                posted += if (pendingMessage.isNotBlank()) pendingMessage
+                    else "$shipment · Ref $reference · E-İrsaliye $eDespatch"
+                if (pendingMessage.isNotBlank()) warehouseFlow = true
             }
             loading = false
-            status = "TAMAM: Ana stoktan düşüldü, fason lokasyonuna aktarıldı ve e-İrsaliye kuyruğu oluşturuldu · ${posted.joinToString()}"
+            status = if (warehouseFlow) "TAMAM: ${posted.joinToString()}"
+                else "TAMAM: Ana stoktan düşüldü, fason lokasyonuna aktarıldı ve e-İrsaliye kuyruğu oluşturuldu · ${posted.joinToString()}"
             loadComponents()
         }
     }
@@ -1019,3 +1049,17 @@ internal fun canFinishSubcontractOperation(quantity: Double, outstandingQuantity
 
 private fun fmtSub(value: Double): String =
     if (value == value.toLong().toDouble()) value.toLong().toString() else value.toString()
+
+/** "gg.aa.yyyy" veya "yyyy-aa-gg" → ISO tarih; boş/hatalıysa null. */
+internal fun subcontractExpiryIso(text: String): String? {
+    val t = text.trim()
+    if (t.isEmpty()) return null
+    val iso = Regex("""^(\d{4})-(\d{2})-(\d{2})$""").matchEntire(t)
+    val tr = Regex("""^(\d{1,2})[./](\d{1,2})[./](\d{4})$""").matchEntire(t)
+    val (y, m, d) = when {
+        iso != null -> Triple(iso.groupValues[1].toInt(), iso.groupValues[2].toInt(), iso.groupValues[3].toInt())
+        tr != null -> Triple(tr.groupValues[3].toInt(), tr.groupValues[2].toInt(), tr.groupValues[1].toInt())
+        else -> return null
+    }
+    return runCatching { java.time.LocalDate.of(y, m, d).toString() }.getOrNull()
+}

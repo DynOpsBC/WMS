@@ -63,6 +63,93 @@ codeunit 72048 "DOPSWHS Prod Mgmt"
         Consume(ProdOrderComponent, ItemNo, Qty, LpNo, LotNo, SerialNo, BinCode);
     end;
 
+    /// <summary>
+    /// Fason teslim alma: fasona transferle gönderilmiş bileşeni, bileşen
+    /// satırının lokasyonundan değil fason lokasyonundan tüketir. Satırlar
+    /// eklenir; kayıt PostSubcontractConsumption ile tek seferde yapılır.
+    /// </summary>
+    procedure AddSubcontractConsumptionLine(ProdOrderComponent: Record "Prod. Order Component"; Qty: Decimal; LocationCode: Code[10]; BinCode: Code[20]; LotNo: Code[50]; SerialNo: Code[50]; DocumentNo: Code[20]; AppliesToEntryNo: Integer)
+    var
+        ItemJournalLine: Record "Item Journal Line";
+        TempReservEntry: Record "Reservation Entry" temporary;
+        CreatedEntry: Record "Reservation Entry";
+        CreateReservEntry: Codeunit "Create Reserv. Entry";
+        TemplateName: Code[10];
+        BatchName: Code[10];
+    begin
+        ProdOrderComponent.TestField(Status, ProdOrderComponent.Status::Released);
+        if Qty <= 0 then
+            exit;
+        EnsureSubcontractJournalBatch(TemplateName, BatchName);
+        InitItemJournalLine(TemplateName, BatchName, ItemJournalLine);
+        if DocumentNo <> '' then
+            ItemJournalLine."Document No." := DocumentNo;
+        ItemJournalLine.Validate("Entry Type", ItemJournalLine."Entry Type"::Consumption);
+        ItemJournalLine.Validate("Order Type", ItemJournalLine."Order Type"::Production);
+        ItemJournalLine.Validate("Order No.", ProdOrderComponent."Prod. Order No.");
+        ItemJournalLine.Validate("Order Line No.", ProdOrderComponent."Prod. Order Line No.");
+        ItemJournalLine.Validate("Item No.", ProdOrderComponent."Item No.");
+        ItemJournalLine.Validate("Prod. Order Comp. Line No.", ProdOrderComponent."Line No.");
+        ItemJournalLine.Validate("Variant Code", ProdOrderComponent."Variant Code");
+        if ProdOrderComponent."Unit of Measure Code" <> '' then
+            ItemJournalLine.Validate("Unit of Measure Code", ProdOrderComponent."Unit of Measure Code");
+        ItemJournalLine.Validate("Location Code", LocationCode);
+        if BinCode <> '' then
+            ItemJournalLine.Validate("Bin Code", BinCode);
+        ItemJournalLine.Validate(Quantity, Qty);
+        ItemJournalLine.Insert(true);
+        // Lot/seri satıra doğrudan yazılınca BC "lot atanmalı" der; izleme kaydı gerekir.
+        // Fason girişi (transfer) kaydına uygulanır.
+        if (LotNo <> '') or (SerialNo <> '') then begin
+            TempReservEntry."Lot No." := LotNo;
+            TempReservEntry."Serial No." := SerialNo;
+            TempReservEntry."Appl.-to Item Entry" := AppliesToEntryNo;
+            CreateReservEntry.SetQtyToHandleAndInvoice(ItemJournalLine."Quantity (Base)", ItemJournalLine."Quantity (Base)");
+            CreateReservEntry.CreateReservEntryFor(
+                Database::"Item Journal Line", ItemJournalLine."Entry Type".AsInteger(),
+                ItemJournalLine."Journal Template Name", ItemJournalLine."Journal Batch Name", 0,
+                ItemJournalLine."Line No.", ItemJournalLine."Qty. per Unit of Measure",
+                ItemJournalLine.Quantity, ItemJournalLine."Quantity (Base)", TempReservEntry);
+            CreateReservEntry.CreateEntry(
+                ItemJournalLine."Item No.", ItemJournalLine."Variant Code", ItemJournalLine."Location Code",
+                ItemJournalLine.Description, 0D, ItemJournalLine."Posting Date", 0, Enum::"Reservation Status"::Prospect);
+            CreatedEntry.SetRange("Source Type", Database::"Item Journal Line");
+            CreatedEntry.SetRange("Source ID", ItemJournalLine."Journal Template Name");
+            CreatedEntry.SetRange("Source Batch Name", ItemJournalLine."Journal Batch Name");
+            CreatedEntry.SetRange("Source Ref. No.", ItemJournalLine."Line No.");
+            if CreatedEntry.FindLast() then
+                if CreatedEntry."Qty. to Handle (Base)" <> CreatedEntry."Quantity (Base)" then begin
+                    CreatedEntry."Qty. to Handle (Base)" := CreatedEntry."Quantity (Base)";
+                    CreatedEntry."Qty. to Invoice (Base)" := CreatedEntry."Quantity (Base)";
+                    CreatedEntry.Modify();
+                end;
+        end else
+            if AppliesToEntryNo <> 0 then begin
+                ItemJournalLine."Applies-to Entry" := AppliesToEntryNo;
+                ItemJournalLine.Modify();
+            end;
+    end;
+
+    procedure PostSubcontractConsumption()
+    var
+        ItemJournalLine: Record "Item Journal Line";
+        LPBinSync: Codeunit "DOPSWHS LP Bin Sync";
+        ItemJnlPostBatch: Codeunit "Item Jnl.-Post Batch";
+        TemplateName: Code[10];
+        BatchName: Code[10];
+    begin
+        EnsureSubcontractJournalBatch(TemplateName, BatchName);
+        ItemJournalLine.SetRange("Journal Template Name", TemplateName);
+        ItemJournalLine.SetRange("Journal Batch Name", BatchName);
+        if not ItemJournalLine.FindFirst() then
+            exit;
+        // Fason teslim kaydıyla aynı işlemde kalsın: yarım sarfiyat commit edilmesin.
+        ItemJnlPostBatch.SetSuppressCommit(true);
+        LPBinSync.EnterTerminalPosting();
+        ItemJnlPostBatch.Run(ItemJournalLine);
+        LPBinSync.ExitTerminalPosting();
+    end;
+
     procedure CreateProductionPick(ProdOrderNo: Code[20]): Code[20]
     begin
         exit(CreateProductionPickFor(ProdOrderNo, CopyStr(UserId(), 1, 50)));
@@ -815,6 +902,22 @@ codeunit 72048 "DOPSWHS Prod Mgmt"
             ItemJournalBatch."Journal Template Name" := TemplateName;
             ItemJournalBatch.Name := BatchName;
             ItemJournalBatch.Description := 'DOPSWHS production';
+            ItemJournalBatch.Insert(true);
+        end;
+    end;
+
+    local procedure EnsureSubcontractJournalBatch(var TemplateName: Code[10]; var BatchName: Code[10])
+    var
+        ItemJournalBatch: Record "Item Journal Batch";
+    begin
+        // Ayrı defter: üretim terminalinin DOPSPROD satırlarıyla karışmasın.
+        EnsureItemJournalBatch(TemplateName, BatchName);
+        BatchName := 'DOPSFASON';
+        if not ItemJournalBatch.Get(TemplateName, BatchName) then begin
+            ItemJournalBatch.Init();
+            ItemJournalBatch."Journal Template Name" := TemplateName;
+            ItemJournalBatch.Name := BatchName;
+            ItemJournalBatch.Description := 'DOPSWHS fason sarfiyat';
             ItemJournalBatch.Insert(true);
         end;
     end;

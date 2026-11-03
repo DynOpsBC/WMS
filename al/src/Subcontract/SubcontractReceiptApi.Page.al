@@ -116,6 +116,19 @@ page 72445 "DOPSWHS Subcont Receipt API"
             finishOperation, vehiclePlateNo, driverCode, idempotencyKey));
     end;
 
+    [ServiceEnabled]
+    procedure receiveWithLot(quantity: Decimal; vendorShipmentNo: Code[35]; inboundReferenceNo: Code[50]; binCode: Code[20]; finishOperation: Boolean; vehiclePlateNo: Text; driverCode: Code[20]; lotNo: Code[50]; expirationDate: Date; idempotencyKey: Guid): Text
+    var
+        Mgmt: Codeunit "DOPSWHS Subcont Receipt Mgt";
+        ReceiptPermission: Record "DOPSWHS Subcontract Receipt";
+    begin
+        if not ReceiptPermission.WritePermission() then
+            Error('Fason teslim alma kaydı oluşturma yetkiniz yok. Depo kullanıcı rolünü kontrol edin.');
+        exit(Mgmt.Receive(
+            Rec, quantity, vendorShipmentNo, inboundReferenceNo, binCode,
+            finishOperation, vehiclePlateNo, driverCode, lotNo, expirationDate, idempotencyKey));
+    end;
+
     local procedure ClearCalculatedFields()
     begin
         Clear(VendorNo);

@@ -94,9 +94,10 @@ codeunit 72439 "DOPSWHS LP Pick Preference"
             if not IsConfiguredProductionSource(SourceType, SourceSubType, SourceNo) then
                 exit;
         end else begin
-            if SourceType <> Database::"Sales Line" then
+            // Seçilen palet satın alma iadesi ve transfer (fason) sevkiyatlarında da geçerli.
+            if (SourceType <> Database::"Sales Line") and (ForcedLpNo = '') then
                 exit;
-            if not IsConfiguredShipmentSource(SourceNo, SourceLineNo) then
+            if not IsConfiguredShipmentSource(SourceType, SourceNo, SourceLineNo) then
                 exit;
         end;
         if not GetPreferredBinFilter(LocationCode, ItemNo, VariantCode, ToBinCode, PreferredFilter) then
@@ -275,7 +276,11 @@ codeunit 72439 "DOPSWHS LP Pick Preference"
         FilterText: Text;
     begin
         WhseShipmentLine.SetRange("No.", ConfiguredShipmentNo);
-        WhseShipmentLine.SetRange("Source Type", Database::"Sales Line");
+        // Otomatik LP tercihi satışta; operatörün seçtiği palet her sevkiyat türünde
+        // (satın alma iadesi, fason transferi) zorlanır. Önceden yalnız satış
+        // satırları sayıldığı için iade/transferde seçilen palet yok sayılıyordu.
+        if ForcedLpNo = '' then
+            WhseShipmentLine.SetRange("Source Type", Database::"Sales Line");
         WhseShipmentLine.SetRange("Location Code", LocationCode);
         WhseShipmentLine.SetRange("Item No.", ItemNo);
         WhseShipmentLine.SetRange("Variant Code", VariantCode);
@@ -375,14 +380,14 @@ codeunit 72439 "DOPSWHS LP Pick Preference"
         exit(FilterText);
     end;
 
-    local procedure IsConfiguredShipmentSource(SourceNo: Code[20]; SourceLineNo: Integer): Boolean
+    local procedure IsConfiguredShipmentSource(SourceType: Integer; SourceNo: Code[20]; SourceLineNo: Integer): Boolean
     var
         WhseShipmentLine: Record "Warehouse Shipment Line";
     begin
         if (ConfiguredShipmentNo = '') or (SourceNo = '') then
             exit(false);
         WhseShipmentLine.SetRange("No.", ConfiguredShipmentNo);
-        WhseShipmentLine.SetRange("Source Type", Database::"Sales Line");
+        WhseShipmentLine.SetRange("Source Type", SourceType);
         WhseShipmentLine.SetRange("Source No.", SourceNo);
         WhseShipmentLine.SetRange("Source Line No.", SourceLineNo);
         exit(not WhseShipmentLine.IsEmpty());

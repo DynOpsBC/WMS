@@ -30,6 +30,10 @@ table 72444 "DOPSWHS Subcontract Receipt"
         field(40; "Created By"; Code[50]) { }
         field(41; "Created At"; DateTime) { }
         field(42; "Posted At"; DateTime) { }
+        // PENDING: teslim kaydı var, bileşen sarfiyatı henüz yazılmadı.
+        // POSTED: sarfiyat yazıldı. NONE: bu operasyona sevk edilmiş bileşen yok.
+        field(50; "Consumption Status"; Code[20]) { }
+        field(51; "Lot No."; Code[50]) { }
     }
 
     keys

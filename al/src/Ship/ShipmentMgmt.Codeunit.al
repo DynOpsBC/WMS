@@ -1075,7 +1075,9 @@ codeunit 72047 "DOPSWHS Shipment Mgmt"
         AddBase: Decimal;
         ExistingBase: Decimal;
     begin
-        if WhseShipmentLine."Source Type" <> Database::"Purchase Line" then
+        // Satın alma iadesi ve transfer (ör. fasona sevk) satırlarında BC kayıtlı
+        // toplamanın lotunu kaynak satıra yazmıyor; post "lot atanmalı" ile düşüyordu.
+        if not (WhseShipmentLine."Source Type" in [Database::"Purchase Line", Database::"Transfer Line"]) then
             exit;
         if (WhseShipmentLine."Qty. to Ship (Base)" <= 0) or (not ShipmentLineRequiresLot(WhseShipmentLine)) then
             exit;

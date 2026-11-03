@@ -5,8 +5,11 @@ codeunit 72443 "DOPSWHS Subcontract Mgmt"
         tabledata "Transfer Header" = RIMD,
         tabledata "Transfer Line" = RIMD,
         tabledata "Transfer Shipment Header" = R,
+        tabledata "Warehouse Shipment Header" = RM,
+        tabledata "Warehouse Shipment Line" = R,
         tabledata "Inventory Setup" = R,
         tabledata "Reservation Entry" = RIMD,
+        tabledata "Item Ledger Entry" = R,
         tabledata "DOPSWHS LP Header" = RM,
         tabledata "DOPSWHS LP Line" = RIMD;
 
@@ -18,7 +21,8 @@ codeunit 72443 "DOPSWHS Subcontract Mgmt"
         Dispatch.SetRange("Prod. Order No.", Component."Prod. Order No.");
         Dispatch.SetRange("Prod. Order Line No.", Component."Prod. Order Line No.");
         Dispatch.SetRange("Component Line No.", Component."Line No.");
-        Dispatch.SetRange(Status, 'POSTED');
+        // PENDING: depo sevkiyatı bekleyen fason talebi; aynı malzeme ikinci kez istenmesin.
+        Dispatch.SetFilter(Status, '%1|%2', 'POSTED', 'PENDING');
         Dispatch.CalcSums(Quantity);
         exit(Dispatch.Quantity);
     end;
@@ -62,6 +66,8 @@ codeunit 72443 "DOPSWHS Subcontract Mgmt"
         PostedShipmentNo: Code[20];
         FasonReferenceNo: Code[50];
         PurchaseOrderNo: Code[20];
+        WarehouseShipmentNo: Code[20];
+        WarehouseMode: Boolean;
     begin
         if IsNullGuid(IdempotencyKey) then
             Error('İşlem anahtarı boş olamaz. Ekranı yenileyip tekrar deneyin.');
@@ -75,6 +81,8 @@ codeunit 72443 "DOPSWHS Subcontract Mgmt"
             ExistingDispatch.Reset();
             ExistingDispatch.SetRange("Idempotency Key", IdempotencyKey);
             ExistingDispatch.FindFirst();
+            if PostedShipmentNo = '' then
+                exit(PendingResultJson(TransferNo, FindWarehouseShipmentNo(TransferNo), ExistingDispatch."Fason Reference No."));
             UpdateDispatchedLps(
                 IdempotencyKey, ExistingDispatch."To Location Code", ExistingDispatch."To Bin Code");
             exit(ResultJson(TransferNo, PostedShipmentNo, ExistingDispatch."Fason Reference No."));
@@ -85,17 +93,27 @@ codeunit 72443 "DOPSWHS Subcontract Mgmt"
         TargetLocation.Get(WorkCenter."Location Code");
         if TargetLocation."Bin Mandatory" and (WorkCenter."To-Production Bin Code" = '') then
             Error('%1 fason lokasyonunda bin zorunlu. %2 iş merkezinde To-Production Bin Code tanımlayın.', TargetLocation.Code, WorkCenter."No.");
-        EnsureTransferPostingSetup();
-
-        ParseAndValidateLines(RoutingLine, WorkCenter, LinesJson, IdempotencyKey, TempDispatch);
+        ParseAndValidateLines(RoutingLine, WorkCenter, LinesJson, IdempotencyKey, TempDispatch, WarehouseMode);
+        if not WarehouseMode then
+            EnsureTransferPostingSetup();
         PurchaseOrderNo := FindSubcontractPurchaseOrder(RoutingLine, WorkCenter);
         if PurchaseOrderNo <> '' then
             FasonReferenceNo := PurchaseOrderNo
         else
             FasonReferenceNo := RoutingLine."Prod. Order No.";
-        CreateTransfer(RoutingLine, WorkCenter, TempDispatch, TransferHeader, PurchaseOrderNo, FasonReferenceNo);
+        CreateTransfer(RoutingLine, WorkCenter, TempDispatch, TransferHeader, PurchaseOrderNo, FasonReferenceNo, WarehouseMode);
         TransferNo := TransferHeader."No.";
         PersistPending(TempDispatch, TransferNo, PurchaseOrderNo, FasonReferenceNo);
+
+        if WarehouseMode then begin
+            // Depo yönetimli kaynak lokasyon (toplama/sevkiyat zorunlu): BC transferi
+            // doğrudan kaydetmez. Depo sevkiyatı açılır; toplama ve sevk terminalin
+            // Sevkiyat ekranından yapılır. Sevk kaydı direkt transferin fason
+            // lokasyonuna girişini de kaydeder. Sevk kaydı PENDING kalır, kayıtlı
+            // transfer irsaliyesi görüldüğünde POSTED olur.
+            WarehouseShipmentNo := CreateWarehouseShipment(TransferHeader);
+            exit(PendingResultJson(TransferNo, WarehouseShipmentNo, FasonReferenceNo));
+        end;
 
         ReleaseAndPost(TransferHeader);
         PostedShipmentNo := FindPostedShipmentNo(TransferNo);
@@ -111,7 +129,7 @@ codeunit 72443 "DOPSWHS Subcontract Mgmt"
         exit(ResultJson(TransferNo, PostedShipmentNo, FasonReferenceNo));
     end;
 
-    local procedure ParseAndValidateLines(RoutingLine: Record "Prod. Order Routing Line"; WorkCenter: Record "Work Center"; LinesJson: Text; IdempotencyKey: Guid; var TempDispatch: Record "DOPSWHS Subcontract Dispatch" temporary)
+    local procedure ParseAndValidateLines(RoutingLine: Record "Prod. Order Routing Line"; WorkCenter: Record "Work Center"; LinesJson: Text; IdempotencyKey: Guid; var TempDispatch: Record "DOPSWHS Subcontract Dispatch" temporary; var WarehouseMode: Boolean)
     var
         Component: Record "Prod. Order Component";
         Rows: JsonArray;
@@ -150,12 +168,20 @@ codeunit 72443 "DOPSWHS Subcontract Mgmt"
             if not Component.Get(RoutingLine.Status, RoutingLine."Prod. Order No.", ProdOrderLineNo, ComponentLineNo) then
                 Error('%1/%2 üretim bileşeni artık bulunamıyor.', ProdOrderLineNo, ComponentLineNo);
             EnsureComponentBelongsToOperation(RoutingLine, Component);
+            // Fason teslimde sarfiyatı bu uygulama fason lokasyonundan yazar. Geriye doğru
+            // sarfiyatta BC aynı bileşeni ana lokasyondan bir kez daha düşerdi.
+            if Component."Flushing Method" in [Component."Flushing Method"::Backward, Component."Flushing Method"::"Pick + Backward"] then
+                Error('%1 bileşeninin sarfiyat yöntemi %2. Fasona gönderilen bileşenlerde sarfiyat yöntemi Manuel olmalı; üretim emri bileşeninde veya madde kartında değiştirin.', Component."Item No.", Component."Flushing Method");
             Component.TestField("Location Code");
             if Component."Location Code" = WorkCenter."Location Code" then
                 Error('%1 bileşeninin kaynak ve fason lokasyonu aynı (%2).', Component."Item No.", Component."Location Code");
-            if SourceLocation = '' then
-                SourceLocation := Component."Location Code"
-            else
+            if SourceLocation = '' then begin
+                SourceLocation := Component."Location Code";
+                SourceLocationRecord.Get(SourceLocation);
+                if SourceLocationRecord."Require Pick" and not SourceLocationRecord."Require Shipment" then
+                    Error('%1 lokasyonu envanter toplaması istiyor; fasona sevk bu lokasyon için desteklenmiyor. Depo sevkiyatı kullanan veya depo yönetimi olmayan bir kaynak lokasyon seçin.', SourceLocation);
+                WarehouseMode := SourceLocationRecord."Require Shipment";
+            end else
                 if SourceLocation <> Component."Location Code" then
                     Error('Tek sevkte yalnız bir kaynak lokasyon kullanılabilir. %1 ve %2 satırlarını ayrı gönderin.', SourceLocation, Component."Location Code");
 
@@ -164,7 +190,7 @@ codeunit 72443 "DOPSWHS Subcontract Mgmt"
                 Error('%1 için istenen %2, fasona gönderilmemiş kalan %3 miktarını aşıyor.', Component."Item No.", Qty, RemainingQty);
             ValidateTrackingAndLp(
                 Component, Qty, LpNo, LotNo, SerialNo,
-                TempQuantityForLpItem(TempDispatch, LpNo, Component."Item No.", LotNo, SerialNo));
+                TempQuantityForLpItem(TempDispatch, LpNo, Component."Item No.", LotNo, SerialNo), WarehouseMode);
 
             EntryNo += 1;
             TempDispatch.Init();
@@ -179,7 +205,9 @@ codeunit 72443 "DOPSWHS Subcontract Mgmt"
             TempDispatch."Item No." := Component."Item No.";
             TempDispatch.Quantity := Qty;
             TempDispatch."Unit of Measure Code" := Component."Unit of Measure Code";
-            TempDispatch."LP No." := LpNo;
+            // Depo sevkiyatında LP toplama/sevk akışında düşülür; sevk kaydı LP taşımaz.
+            if not WarehouseMode then
+                TempDispatch."LP No." := LpNo;
             TempDispatch."Lot No." := LotNo;
             TempDispatch."Serial No." := SerialNo;
             TempDispatch."Subcontractor No." := WorkCenter."Subcontractor No.";
@@ -189,7 +217,7 @@ codeunit 72443 "DOPSWHS Subcontract Mgmt"
             if FromBinCode = '' then
                 FromBinCode := Component."Bin Code";
             SourceLocationRecord.Get(Component."Location Code");
-            if SourceLocationRecord."Bin Mandatory" and (FromBinCode = '') then
+            if SourceLocationRecord."Bin Mandatory" and (FromBinCode = '') and not WarehouseMode then
                 Error('%1 kaynak lokasyonunda bin zorunlu. %2 bileşeni için kaynak bin girin.', Component."Location Code", Component."Item No.");
             TempDispatch."From Bin Code" := FromBinCode;
             TempDispatch."To Bin Code" := WorkCenter."To-Production Bin Code";
@@ -197,7 +225,7 @@ codeunit 72443 "DOPSWHS Subcontract Mgmt"
         end;
     end;
 
-    local procedure CreateTransfer(RoutingLine: Record "Prod. Order Routing Line"; WorkCenter: Record "Work Center"; var TempDispatch: Record "DOPSWHS Subcontract Dispatch" temporary; var TransferHeader: Record "Transfer Header"; PurchaseOrderNo: Code[20]; FasonReferenceNo: Code[50])
+    local procedure CreateTransfer(RoutingLine: Record "Prod. Order Routing Line"; WorkCenter: Record "Work Center"; var TempDispatch: Record "DOPSWHS Subcontract Dispatch" temporary; var TransferHeader: Record "Transfer Header"; PurchaseOrderNo: Code[20]; FasonReferenceNo: Code[50]; WarehouseMode: Boolean)
     var
         TransferLine: Record "Transfer Line";
         LineNo: Integer;
@@ -208,7 +236,13 @@ codeunit 72443 "DOPSWHS Subcontract Mgmt"
         TransferHeader.Insert(true);
         TransferHeader.Validate("Transfer-from Code", TempDispatch."From Location Code");
         TransferHeader.Validate("Transfer-to Code", WorkCenter."Location Code");
-        TransferHeader.Validate("Direct Transfer", true);
+        if WarehouseMode then begin
+            // BC 28: depo toplaması/sevkiyatı olan lokasyondan direkt transfer yapılamaz.
+            // Yolda lokasyonu transfer rotasından gelir; fason girişini sevk kaydı tetikler.
+            if TransferHeader."In-Transit Code" = '' then
+                Error('%1 → %2 için transfer rotasında yolda (in-transit) lokasyonu tanımlı değil. Transfer Rotaları sayfasında bu iki lokasyon arasına bir yolda lokasyonu girin.', TransferHeader."Transfer-from Code", TransferHeader."Transfer-to Code");
+        end else
+            TransferHeader.Validate("Direct Transfer", true);
         TransferHeader.Validate("Posting Date", WorkDate());
         TransferHeader.Validate("Shipment Date", WorkDate());
         TransferHeader.Validate("Receipt Date", WorkDate());
@@ -230,7 +264,8 @@ codeunit 72443 "DOPSWHS Subcontract Mgmt"
                 TransferLine.Validate("Item No.", TempDispatch."Item No.");
                 TransferLine.Validate("Unit of Measure Code", TempDispatch."Unit of Measure Code");
                 TransferLine.Validate(Quantity, TempDispatch.Quantity);
-                if TempDispatch."From Bin Code" <> '' then
+                // Depo sevkiyatında kaynak rafı toplama belirler.
+                if (TempDispatch."From Bin Code" <> '') and not WarehouseMode then
                     TransferLine.Validate("Transfer-from Bin Code", TempDispatch."From Bin Code");
                 if WorkCenter."To-Production Bin Code" <> '' then
                     TransferLine.Validate("Transfer-To Bin Code", WorkCenter."To-Production Bin Code");
@@ -244,8 +279,11 @@ codeunit 72443 "DOPSWHS Subcontract Mgmt"
         Item: Record Item;
         TrackingCode: Record "Item Tracking Code";
         TempReservation: Record "Reservation Entry" temporary;
+        CreatedEntry: Record "Reservation Entry";
         CreateReservEntry: Codeunit "Create Reserv. Entry";
     begin
+        if (LotNo = '') and (SerialNo = '') then
+            exit;
         Item.Get(TransferLine."Item No.");
         if (Item."Item Tracking Code" = '') or (not TrackingCode.Get(Item."Item Tracking Code")) then
             exit;
@@ -256,16 +294,34 @@ codeunit 72443 "DOPSWHS Subcontract Mgmt"
         // is intended to bind an existing supply to the transfer demand.
         TempReservation."Lot No." := LotNo;
         TempReservation."Serial No." := SerialNo;
-        CreateReservEntry.SetQtyToHandleAndInvoice(
-            -TransferLine."Quantity (Base)", -TransferLine."Quantity (Base)");
+        // Create Reserv. Entry çıkış yönünde miktarı kendisi eksiye çevirir; pozitif
+        // verilir. (Eksi verilince giriş yönlü +miktar kaydı oluşuyor, sevk/transfer
+        // kaydı "lot atanmalı" hatası veriyordu.) İşlenecek miktar sonra kaydın
+        // işaretli miktarına eşitlenir.
+        CreateReservEntry.SetQtyToHandleAndInvoice(TransferLine."Quantity (Base)", TransferLine."Quantity (Base)");
         CreateReservEntry.CreateReservEntryFor(
             Database::"Transfer Line", Enum::"Transfer Direction"::Outbound.AsInteger(),
             TransferLine."Document No.", '', TransferLine."Derived From Line No.", TransferLine."Line No.",
-            TransferLine."Qty. per Unit of Measure", 0, -TransferLine."Quantity (Base)", TempReservation);
+            TransferLine."Qty. per Unit of Measure", TransferLine.Quantity, TransferLine."Quantity (Base)", TempReservation);
         CreateReservEntry.CreateEntry(
             TransferLine."Item No.", TransferLine."Variant Code", TransferLine."Transfer-from Code",
             TransferLine.Description, TransferLine."Receipt Date", TransferLine."Shipment Date", 0,
             Enum::"Reservation Status"::Surplus);
+        CreatedEntry.SetRange("Source Type", Database::"Transfer Line");
+        CreatedEntry.SetRange("Source Subtype", Enum::"Transfer Direction"::Outbound.AsInteger());
+        CreatedEntry.SetRange("Source ID", TransferLine."Document No.");
+        CreatedEntry.SetRange("Source Ref. No.", TransferLine."Line No.");
+        CreatedEntry.SetRange("Lot No.", LotNo);
+        CreatedEntry.SetRange("Serial No.", SerialNo);
+        if CreatedEntry.FindLast() then begin
+            if CreatedEntry.Positive or (CreatedEntry."Quantity (Base)" > 0) then
+                Error('%1 transfer satırı için lot kaydı yanlış yönde oluştu. İşlem geri alındı; destek ekibine iletin.', TransferLine."Document No.");
+            if CreatedEntry."Qty. to Handle (Base)" <> CreatedEntry."Quantity (Base)" then begin
+                CreatedEntry."Qty. to Handle (Base)" := CreatedEntry."Quantity (Base)";
+                CreatedEntry."Qty. to Invoice (Base)" := CreatedEntry."Quantity (Base)";
+                CreatedEntry.Modify();
+            end;
+        end;
     end;
 
     local procedure ReleaseAndPost(var TransferHeader: Record "Transfer Header")
@@ -350,8 +406,11 @@ codeunit 72443 "DOPSWHS Subcontract Mgmt"
         PostedShipmentNo := Dispatch."Posted Transfer Shipment No.";
         if PostedShipmentNo = '' then
             PostedShipmentNo := FindPostedShipmentNo(TransferNo);
-        if PostedShipmentNo = '' then
+        if PostedShipmentNo = '' then begin
+            if FindWarehouseShipmentNo(TransferNo) <> '' then
+                exit(true);
             Error('%1 transferinin önceki denemesi tamamlanmamış. BC transfer emrini kontrol edin; aynı işlemi yeniden oluşturmadık.', TransferNo);
+        end;
         Dispatch.ModifyAll(Status, 'POSTED');
         Dispatch.ModifyAll("Posted Transfer Shipment No.", PostedShipmentNo);
         Dispatch.ModifyAll("Posted At", CurrentDateTime());
@@ -380,6 +439,13 @@ codeunit 72443 "DOPSWHS Subcontract Mgmt"
             until Pending.Next() = 0;
         foreach TransferNo in TransferNos do begin
             PostedShipmentNo := FindPostedShipmentNo(TransferNo);
+            if (PostedShipmentNo = '') and not TransferHeaderExists(TransferNo) then begin
+                // Transfer emri sevk edilmeden silindi: talep miktarı yeniden gönderilebilir.
+                SameTransfer.Reset();
+                SameTransfer.SetRange("Transfer Order No.", TransferNo);
+                SameTransfer.SetRange(Status, 'PENDING');
+                SameTransfer.ModifyAll(Status, 'CANCELLED');
+            end;
             if PostedShipmentNo <> '' then begin
                 SameTransfer.Reset();
                 SameTransfer.SetRange("Transfer Order No.", TransferNo);
@@ -396,6 +462,194 @@ codeunit 72443 "DOPSWHS Subcontract Mgmt"
         end;
     end;
 
+    /// <summary>
+    /// Yolda bekleyen fason transferinin fason lokasyonuna girişini kaydeder.
+    /// Hedefte depo kabulü gerekiyorsa dokunmaz. Kaydedildiyse true.
+    /// </summary>
+    procedure PostPendingFasonTransferReceipt(TransferNo: Code[20]): Boolean
+    var
+        TransferHeader: Record "Transfer Header";
+        TransferLine: Record "Transfer Line";
+        ToLocation: Record Location;
+        PostReceipt: Codeunit "TransferOrder-Post Receipt";
+    begin
+        if not TransferHeader.Get(TransferNo) then
+            exit(false);
+        if (TransferHeader."DOPSWHS Fason Reference No." = '') or TransferHeader."Direct Transfer" then
+            exit(false);
+        if ToLocation.Get(TransferHeader."Transfer-to Code") then
+            if ToLocation."Require Receive" or ToLocation."Require Put-away" then
+                exit(false);
+        TransferLine.SetRange("Document No.", TransferNo);
+        TransferLine.SetRange("Derived From Line No.", 0);
+        TransferLine.SetFilter("Qty. in Transit", '>0');
+        if TransferLine.IsEmpty() then
+            exit(false);
+        TransferLine.SetRange("Qty. in Transit");
+        if TransferLine.FindSet(true) then
+            repeat
+                if TransferLine."Qty. to Receive" <> TransferLine."Qty. in Transit" then begin
+                    TransferLine.Validate("Qty. to Receive", TransferLine."Qty. in Transit");
+                    TransferLine.Modify(true);
+                end;
+            until TransferLine.Next() = 0;
+        TransferHeader.Get(TransferNo);
+        EnsureInboundTracking(TransferHeader);
+        PostReceipt.SetHideValidationDialog(true);
+        PostReceipt.SetSuppressCommit(true);
+        PostReceipt.Run(TransferHeader);
+        exit(true);
+    end;
+
+    /// <summary>
+    /// Depo sevkiyatıyla yola çıkan transferde BC türetilmiş giriş satırına lot
+    /// bağlamayabiliyor; giriş "lot atanmalı" ile durur. Lot ve miktar yoldaki
+    /// açık stok kaydından (bu transferin sevk girişi) alınır; tahmin yapılmaz.
+    /// </summary>
+    local procedure EnsureInboundTracking(TransferHeader: Record "Transfer Header")
+    var
+        DerivedLine: Record "Transfer Line";
+        ReservEntry: Record "Reservation Entry";
+        InTransitEntry: Record "Item Ledger Entry";
+        Item: Record Item;
+        TempReservation: Record "Reservation Entry" temporary;
+        CreatedEntry: Record "Reservation Entry";
+        CreateReservEntry: Codeunit "Create Reserv. Entry";
+        UsedFromEntry: Dictionary of [Integer, Decimal];
+        Used: Decimal;
+        NeedBase: Decimal;
+        TakeBase: Decimal;
+    begin
+        if TransferHeader."In-Transit Code" = '' then
+            exit;
+        DerivedLine.SetRange("Document No.", TransferHeader."No.");
+        DerivedLine.SetFilter("Derived From Line No.", '<>0');
+        if not DerivedLine.FindSet() then
+            exit;
+        repeat
+            if Item.Get(DerivedLine."Item No.") and (Item."Item Tracking Code" <> '') then begin
+                ReservEntry.Reset();
+                ReservEntry.SetRange("Source Type", Database::"Transfer Line");
+                ReservEntry.SetRange("Source Subtype", Enum::"Transfer Direction"::Inbound.AsInteger());
+                ReservEntry.SetRange("Source ID", DerivedLine."Document No.");
+                ReservEntry.SetRange("Source Ref. No.", DerivedLine."Line No.");
+                ReservEntry.SetRange("Source Prod. Order Line", DerivedLine."Derived From Line No.");
+                ReservEntry.CalcSums("Quantity (Base)");
+                NeedBase := DerivedLine."Quantity (Base)" - ReservEntry."Quantity (Base)";
+                if NeedBase > 0.00001 then begin
+                    InTransitEntry.Reset();
+                    InTransitEntry.SetCurrentKey("Entry No.");
+                    InTransitEntry.SetRange("Item No.", DerivedLine."Item No.");
+                    InTransitEntry.SetRange("Variant Code", DerivedLine."Variant Code");
+                    InTransitEntry.SetRange("Location Code", TransferHeader."In-Transit Code");
+                    InTransitEntry.SetRange("Order Type", InTransitEntry."Order Type"::Transfer);
+                    InTransitEntry.SetRange("Order No.", TransferHeader."No.");
+                    InTransitEntry.SetRange(Positive, true);
+                    InTransitEntry.SetRange(Open, true);
+                    if InTransitEntry.FindSet() then
+                        repeat
+                            Used := 0;
+                            if UsedFromEntry.ContainsKey(InTransitEntry."Entry No.") then
+                                Used := UsedFromEntry.Get(InTransitEntry."Entry No.");
+                            TakeBase := InTransitEntry."Remaining Quantity" - Used;
+                            if TakeBase > NeedBase then
+                                TakeBase := NeedBase;
+                            if (TakeBase > 0) and ((InTransitEntry."Lot No." <> '') or (InTransitEntry."Serial No." <> '')) then begin
+                                Clear(TempReservation);
+                                TempReservation."Lot No." := InTransitEntry."Lot No.";
+                                TempReservation."Serial No." := InTransitEntry."Serial No.";
+                                Clear(CreateReservEntry);
+                                CreateReservEntry.SetDates(0D, InTransitEntry."Expiration Date");
+                                CreateReservEntry.SetQtyToHandleAndInvoice(TakeBase, TakeBase);
+                                CreateReservEntry.CreateReservEntryFor(
+                                    Database::"Transfer Line", Enum::"Transfer Direction"::Inbound.AsInteger(),
+                                    DerivedLine."Document No.", '', DerivedLine."Derived From Line No.", DerivedLine."Line No.",
+                                    DerivedLine."Qty. per Unit of Measure",
+                                    Round(TakeBase / DerivedLine."Qty. per Unit of Measure", 0.00001), TakeBase, TempReservation);
+                                CreateReservEntry.CreateEntry(
+                                    DerivedLine."Item No.", DerivedLine."Variant Code", DerivedLine."Transfer-to Code",
+                                    DerivedLine.Description, DerivedLine."Receipt Date", 0D, 0,
+                                    Enum::"Reservation Status"::Surplus);
+                                CreatedEntry.Reset();
+                                CreatedEntry.SetRange("Source Type", Database::"Transfer Line");
+                                CreatedEntry.SetRange("Source Subtype", Enum::"Transfer Direction"::Inbound.AsInteger());
+                                CreatedEntry.SetRange("Source ID", DerivedLine."Document No.");
+                                CreatedEntry.SetRange("Source Ref. No.", DerivedLine."Line No.");
+                                CreatedEntry.SetRange("Lot No.", InTransitEntry."Lot No.");
+                                if CreatedEntry.FindLast() then
+                                    if CreatedEntry."Qty. to Handle (Base)" <> CreatedEntry."Quantity (Base)" then begin
+                                        CreatedEntry."Qty. to Handle (Base)" := CreatedEntry."Quantity (Base)";
+                                        CreatedEntry."Qty. to Invoice (Base)" := CreatedEntry."Quantity (Base)";
+                                        CreatedEntry.Modify();
+                                    end;
+                                UsedFromEntry.Set(InTransitEntry."Entry No.", Used + TakeBase);
+                                NeedBase -= TakeBase;
+                            end;
+                        until (InTransitEntry.Next() = 0) or (NeedBase <= 0.00001);
+                end;
+            end;
+        until DerivedLine.Next() = 0;
+    end;
+
+    local procedure CreateWarehouseShipment(var TransferHeader: Record "Transfer Header"): Code[20]
+    var
+        ReleaseTransfer: Codeunit "Release Transfer Document";
+        GetSourceDocOutbound: Codeunit "Get Source Doc. Outbound";
+        WhseShipmentHeader: Record "Warehouse Shipment Header";
+        WhseShipmentRelease: Codeunit "Whse.-Shipment Release";
+        ShipmentNo: Code[20];
+    begin
+        ReleaseTransfer.Release(TransferHeader);
+        TransferHeader.Get(TransferHeader."No.");
+        GetSourceDocOutbound.CreateFromOutbndTransferOrderHideDialog(TransferHeader);
+        ShipmentNo := FindWarehouseShipmentNo(TransferHeader."No.");
+        if ShipmentNo = '' then
+            Error('%1 fason transferi için depo sevkiyatı oluşturulamadı.', TransferHeader."No.");
+        WhseShipmentHeader.Get(ShipmentNo);
+        if WhseShipmentHeader.Status <> WhseShipmentHeader.Status::Released then
+            WhseShipmentRelease.Release(WhseShipmentHeader);
+        exit(ShipmentNo);
+    end;
+
+    local procedure FindWarehouseShipmentNo(TransferNo: Code[20]): Code[20]
+    var
+        WhseShipmentLine: Record "Warehouse Shipment Line";
+    begin
+        if TransferNo = '' then
+            exit('');
+        WhseShipmentLine.SetRange("Source Type", Database::"Transfer Line");
+        WhseShipmentLine.SetRange("Source Subtype", 0);
+        WhseShipmentLine.SetRange("Source No.", TransferNo);
+        if WhseShipmentLine.FindFirst() then
+            exit(WhseShipmentLine."No.");
+    end;
+
+    local procedure TransferHeaderExists(TransferNo: Code[20]): Boolean
+    var
+        TransferHeader: Record "Transfer Header";
+    begin
+        exit(TransferHeader.Get(TransferNo));
+    end;
+
+    local procedure PendingResultJson(TransferNo: Code[20]; WarehouseShipmentNo: Code[20]; FasonReferenceNo: Code[50]): Text
+    var
+        Result: JsonObject;
+        TextResult: Text;
+    begin
+        Result.Add('transferOrderNo', TransferNo);
+        Result.Add('postedTransferShipmentNo', '');
+        Result.Add('warehouseShipmentNo', WarehouseShipmentNo);
+        Result.Add('fasonReferenceNo', FasonReferenceNo);
+        Result.Add('stockTransferred', false);
+        Result.Add('eDespatchStatus', 'NOT_QUEUED');
+        Result.Add('eDespatchDocumentNo', '');
+        Result.Add('message', StrSubstNo(
+            '%1 depo sevkiyatı açıldı. Sevkiyat ekranında belgeyi üstünüze alın, paletten toplayın ve sevk edin; sevk kaydıyla malzeme fason lokasyonuna geçer.',
+            WarehouseShipmentNo));
+        Result.WriteTo(TextResult);
+        exit(TextResult);
+    end;
+
     local procedure FindPostedShipmentNo(TransferNo: Code[20]): Code[20]
     var
         PostedShipment: Record "Transfer Shipment Header";
@@ -405,7 +659,7 @@ codeunit 72443 "DOPSWHS Subcontract Mgmt"
             exit(PostedShipment."No.");
     end;
 
-    local procedure ValidateTrackingAndLp(Component: Record "Prod. Order Component"; Qty: Decimal; LpNo: Code[20]; LotNo: Code[50]; SerialNo: Code[50]; AlreadyRequestedQty: Decimal)
+    local procedure ValidateTrackingAndLp(Component: Record "Prod. Order Component"; Qty: Decimal; LpNo: Code[20]; LotNo: Code[50]; SerialNo: Code[50]; AlreadyRequestedQty: Decimal; WarehouseMode: Boolean)
     var
         Item: Record Item;
         TrackingCode: Record "Item Tracking Code";
@@ -414,7 +668,8 @@ codeunit 72443 "DOPSWHS Subcontract Mgmt"
         LpAvailable: Decimal;
     begin
         Item.Get(Component."Item No.");
-        if (Item."Item Tracking Code" <> '') and TrackingCode.Get(Item."Item Tracking Code") then begin
+        // Depo sevkiyatında lot/seriyi toplama belirler; girilmişse transfer o lota bağlanır.
+        if (Item."Item Tracking Code" <> '') and TrackingCode.Get(Item."Item Tracking Code") and not WarehouseMode then begin
             if (TrackingCode."Lot Specific Tracking" or TrackingCode."Lot Warehouse Tracking") and (LotNo = '') then
                 Error('%1 ürünü için lot numarası zorunludur.', Component."Item No.");
             if (TrackingCode."SN Specific Tracking" or TrackingCode."SN Warehouse Tracking") and (SerialNo = '') then

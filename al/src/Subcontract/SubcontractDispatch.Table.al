@@ -36,6 +36,8 @@ table 72440 "DOPSWHS Subcontract Dispatch"
         field(51; "Created At"; DateTime) { }
         field(52; "Posted At"; DateTime) { }
         field(53; "LP Updated"; Boolean) { }
+        // Fason teslim alındığında bu sevkten fason lokasyonunda tüketilen miktar.
+        field(60; "Consumed Quantity"; Decimal) { DecimalPlaces = 0 : 5; }
     }
 
     keys

@@ -411,6 +411,8 @@ permissionset 72094 "DOPSWHS-ADMIN"
         page "DOPSWHS Subcont Receipt API" = X,
         page "DOPSWHS Subcontract EDesp API" = X,
         codeunit "DOPSWHS Subcontract Mgmt" = X,
+        codeunit "DOPSWHS Subcont Consumption" = X,
+        codeunit "DOPSWHS Subcont Transfer Rcpt" = X,
         codeunit "DOPSWHS Subcont Receipt Mgt" = X,
         codeunit "DOPSWHS Subcontract EDesp Mgt" = X,
         codeunit "DOPSWHS Subcontract EDesp Task" = X,
