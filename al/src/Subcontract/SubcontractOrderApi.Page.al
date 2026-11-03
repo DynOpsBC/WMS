@@ -53,7 +53,8 @@ page 72441 "DOPSWHS Subcontract Order API"
                 WorkCenterFilter += WorkCenter."No.";
             until WorkCenter.Next() = 0;
         if WorkCenterFilter = '' then
-            Rec.SetRange("No.", '#DOPSWHS-NO-SUBCONTRACTOR#')
+            // Fason iş merkezi yoksa boş liste (değer Code[20]'ye sığmalı).
+            Rec.SetRange("No.", '#NO-SUBCONTRACTOR#')
         else
             Rec.SetFilter("No.", WorkCenterFilter);
     end;
