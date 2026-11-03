@@ -175,7 +175,7 @@ codeunit 72047 "DOPSWHS Shipment Mgmt"
         // split the requested quantity across the actually available lots and
         // bins. Remove only shipment-level tracking copied from an earlier
         // single-lot choice. Source sales reservations are left untouched.
-        PrepareShipmentForMultiLotPick(WhseShipmentHeader."No.");
+        PrepareShipmentForMultiLotPick(WhseShipmentHeader."No.", ForcedLpNo);
         // Kısmi posttan sonra satırın "Qty. to Ship" değeri 0'a düşebiliyor;
         // bu durumda Create Pick raporu "Nothing to handle" der ve belge
         // kilitlenir. Kalan miktarı olan satırlarda sevk miktarını geri aç.
@@ -313,7 +313,7 @@ codeunit 72047 "DOPSWHS Shipment Mgmt"
             until WhseActivityLine.Next() = 0;
     end;
 
-    local procedure PrepareShipmentForMultiLotPick(ShipmentNo: Code[20])
+    local procedure PrepareShipmentForMultiLotPick(ShipmentNo: Code[20]; PreferredLpNo: Code[20])
     var
         WhseShipmentLine: Record "Warehouse Shipment Line";
         WhseItemTrackingLine: Record "Whse. Item Tracking Line";
@@ -347,7 +347,7 @@ codeunit 72047 "DOPSWHS Shipment Mgmt"
                     // bu adım tümüyle atlanıyordu: geriye yalnız tamamen işlenmiş
                     // izleme satırı kalıyor, Create Pick "Nothing to handle" deyip
                     // belge kilitleniyordu (kalan 50 KG hiç toplanamıyordu).
-                    CreateAutomaticMultiLotTracking(WhseShipmentLine);
+                    CreateAutomaticMultiLotTracking(WhseShipmentLine, PreferredLpNo);
                 end;
             until WhseShipmentLine.Next() = 0;
     end;
@@ -371,9 +371,11 @@ codeunit 72047 "DOPSWHS Shipment Mgmt"
         exit(OpenQtyBase);
     end;
 
-    local procedure CreateAutomaticMultiLotTracking(WhseShipmentLine: Record "Warehouse Shipment Line")
+    local procedure CreateAutomaticMultiLotTracking(WhseShipmentLine: Record "Warehouse Shipment Line"; PreferredLpNo: Code[20])
     var
         WarehouseEntry: Record "Warehouse Entry";
+        PreferredLpLine: Record "DOPSWHS LP Line";
+        PreferredLots: List of [Code[50]];
         WhseItemTrackingLine: Record "Whse. Item Tracking Line";
         LotQtyByNo: Dictionary of [Code[50], Decimal];
         LotNos: List of [Code[50]];
@@ -412,6 +414,27 @@ codeunit 72047 "DOPSWHS Shipment Mgmt"
                     LotNos.Add(LotNo);
                 end;
             until WarehouseEntry.Next() = 0;
+
+        // BADE (3 Kas 2026, SH001007): operatörün "Hangi paletten başlansın?"
+        // ile seçtiği paletin lotu önce dağıtılır. Aksi hâlde ilk bulunan lot
+        // (A101296) dağıtılıyor, Create Pick de LP000080 (A101812) yerine o
+        // lotu tutan LP000014'ü getiriyordu.
+        if PreferredLpNo <> '' then begin
+            PreferredLpLine.SetRange("LP No.", PreferredLpNo);
+            PreferredLpLine.SetRange("Item No.", WhseShipmentLine."Item No.");
+            PreferredLpLine.SetRange("Variant Code", WhseShipmentLine."Variant Code");
+            PreferredLpLine.SetFilter("Lot No.", '<>%1', '');
+            PreferredLpLine.SetFilter(Quantity, '>0');
+            if PreferredLpLine.FindSet() then
+                repeat
+                    if LotNos.Contains(PreferredLpLine."Lot No.") and not PreferredLots.Contains(PreferredLpLine."Lot No.") then
+                        PreferredLots.Add(PreferredLpLine."Lot No.");
+                until PreferredLpLine.Next() = 0;
+            foreach LotNo in LotNos do
+                if not PreferredLots.Contains(LotNo) then
+                    PreferredLots.Add(LotNo);
+            LotNos := PreferredLots;
+        end;
 
         EntryNo := WhseItemTrackingLine.GetLastEntryNo();
         foreach LotNo in LotNos do begin
