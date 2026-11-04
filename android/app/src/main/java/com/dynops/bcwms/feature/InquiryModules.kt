@@ -46,6 +46,38 @@ internal fun queriedLpSummary(lpNo: String, lines: List<JSONObject>): QueriedLpS
     )
 }
 
+/**
+ * BADE (4 Kas 2026): Ürün Sorgu'da LP okutulunca LP'nin içeriği satır satır gösterilir (her madde kendi
+ * lotu ve miktarıyla). Eskiden yalnız ilk satırın maddesi açılıyor, LP toplamı o maddenin miktarı gibi görünüyordu.
+ */
+internal data class LpContentRow(
+    val itemNo: String,
+    val description: String,
+    val lotNo: String,
+    val serialNo: String,
+    val quantity: Double,
+    val uom: String,
+)
+
+internal fun lpContentRows(lines: List<JSONObject>, items: Map<String, JSONObject>): List<LpContentRow> =
+    lines.sortedBy { it.optInt("lineNo", 0) }.map { line ->
+        val itemNo = line.optString("itemNo").trim()
+        val card = items[itemNo.uppercase()]
+        LpContentRow(
+            itemNo = itemNo,
+            description = card?.let { firstValue(it, "description", "displayName") }.orEmpty(),
+            lotNo = line.optString("lotNo").trim(),
+            serialNo = line.optString("serialNo").trim(),
+            quantity = line.optDouble("quantity", 0.0),
+            uom = line.optString("unitOfMeasure").trim()
+                .ifBlank { card?.let { firstValue(it, "baseUnitOfMeasure", "baseUoM") }.orEmpty() },
+        )
+    }
+
+/** Satırların ortak birimi; birimler farklıysa boş (toplam birimsiz gösterilir). */
+internal fun lpContentUnit(rows: List<LpContentRow>): String =
+    rows.map { it.uom.uppercase() }.filter { it.isNotBlank() }.distinct().singleOrNull().orEmpty()
+
 /** BADE (16 Eyl 2026): LP ile sorguda paletin bulunduğu lokasyon/raf ve alan (zone) kodu. */
 internal data class LpPlacement(val locationCode: String, val binCode: String, val zoneCode: String)
 
@@ -95,32 +127,47 @@ fun ItemInquiryModule() {
     var ledger by remember { mutableStateOf<List<JSONObject>>(emptyList()) }
     var queriedLpNo by remember { mutableStateOf("") }
     var lpPlacement by remember { mutableStateOf<Map<String, LpPlacement>>(emptyMap()) }
+    // LP okutulduysa: LP içeriği (madde · lot · miktar) — madde stok kartı gösterilmez.
+    var lpContent by remember { mutableStateOf<List<LpContentRow>>(emptyList()) }
     var status by remember { mutableStateOf("Ürün No. veya LP No. tarayın/girin.") }
     var loading by remember { mutableStateOf(false) }
     // BADE (25 Eki 2026): BC'deki Etiket Tasarımları; varsayılan = BC'de aktif (yoksa sabit 4x2").
     val itemLayout = rememberLabelLayoutChoice(LabelLayoutKind.Item)
 
+    suspend fun fetchItem(itemNo: String): JSONObject? {
+        val safe = itemNo.replace("'", "''")
+        val r = BcApi.getWithStandardFallback(context, "items?\$filter=no eq '$safe'&\$top=1", "items?\$filter=number eq '$safe'&\$top=1")
+        return if (r.ok) BcApi.parseValueArray(r.body).firstOrNull() else null
+    }
+
     fun load() {
         if (query.trim().isBlank()) return
         scope.launch {
             loading = true; status = "Sorgulanıyor..."
-            item = null; lpLines = emptyList(); ledger = emptyList(); queriedLpNo = ""; lpPlacement = emptyMap()
+            item = null; lpLines = emptyList(); ledger = emptyList(); queriedLpNo = ""; lpPlacement = emptyMap(); lpContent = emptyList()
             val q = query.trim()
             val safeQ = q.replace("'", "''")
             val byLp = BcApi.getAllPages(context, "licensePlateLines?\$filter=lpNo eq '$safeQ'&\$top=200")
             if (byLp.complete && byLp.rows.isNotEmpty()) {
-                queriedLpNo = byLp.rows.first().optString("lpNo").trim().ifBlank { q }
+                val lpNo = byLp.rows.first().optString("lpNo").trim().ifBlank { q }
+                val itemNos = byLp.rows.map { it.optString("itemNo").trim() }.filter { it.isNotBlank() }
+                    .distinctBy { it.uppercase() }.take(25)
+                val cards = itemNos.map { no -> async { no.uppercase() to fetchItem(no) } }.awaitAll()
+                    .mapNotNull { (no, card) -> card?.let { no to it } }.toMap()
+                lpLines = byLp.rows
+                lpContent = lpContentRows(byLp.rows, cards)
+                queriedLpNo = lpNo
+                lpPlacement = loadLpPlacements(context, listOf(lpNo))
+                loading = false
+                val unit = lpContentUnit(lpContent)
+                status = "TAMAM: $lpNo LP içeriği · ${lpContent.size} satır · toplam ${fmtItemQty(lpContent.sumOf { it.quantity })}" +
+                    (if (unit.isBlank()) "" else " $unit") + "."
+                return@launch
             }
-            val resolvedItemNo = if (byLp.complete && byLp.rows.isNotEmpty()) byLp.rows.first().optString("itemNo") else q
-            val safeItemNo = resolvedItemNo.replace("'", "''")
-            val r = BcApi.getWithStandardFallback(context, "items?\$filter=no eq '$safeItemNo'&\$top=1", "items?\$filter=number eq '$safeItemNo'&\$top=1")
-            if (r.ok) {
-                val list = BcApi.parseValueArray(r.body)
-                item = list.firstOrNull()
-            }
+            val safeItemNo = q.replace("'", "''")
+            item = fetchItem(q)
             // on-hand by LP: lines for this item across license plates
-            val lpPage = if (byLp.complete && byLp.rows.isNotEmpty()) byLp
-                else BcApi.getAllPages(context, "licensePlateLines?\$filter=itemNo eq '$safeItemNo'&\$top=50")
+            val lpPage = BcApi.getAllPages(context, "licensePlateLines?\$filter=itemNo eq '$safeItemNo'&\$top=50")
             if (lpPage.complete) lpLines = lpPage.rows
             // BADE (16 Eyl 2026): LP ile sorguda Alan Kodu ve Raf/Depo Gözü de gelsin.
             lpPlacement = loadLpPlacements(context, lpLines.map { it.optString("lpNo") })
@@ -129,9 +176,9 @@ fun ItemInquiryModule() {
             if (le.ok) ledger = BcApi.parseValueArray(le.body)
             loading = false
             status = when {
+                !byLp.complete && item == null -> "HATA: LP kontrolü yapılamadı. Yenileyin."
                 !lpPage.complete -> "HATA: Ürünün LP kayıtlarının tamamı alınamadı. Yenileyin."
                 item == null -> "BOŞ: '$q' için ürün veya LP bulunamadı."
-                byLp.rows.isNotEmpty() -> "TAMAM: $q LP içeriği · ${lpLines.size} satır · ${ledger.size} ürün hareketi."
                 else -> "TAMAM: ürün bulundu · ${lpLines.size} LP · ${ledger.size} hareket."
             }
         }
@@ -166,6 +213,65 @@ fun ItemInquiryModule() {
         Spacer(Modifier.height(8.dp))
         StatusText(status)
         Spacer(Modifier.height(8.dp))
+        if (lpContent.isNotEmpty()) {
+            // LP okutuldu: LP özeti + içerik listesi. Satıra dokununca o maddenin genel stoğu açılır.
+            val unit = lpContentUnit(lpContent)
+            Card(
+                Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.07f)),
+            ) {
+                Column(Modifier.padding(16.dp)) {
+                    Text("LP", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(queriedLpNo, fontWeight = FontWeight.Bold, fontSize = 18.sp, color = MaterialTheme.colorScheme.onSurface)
+                    Text(
+                        "Toplam ${lpContent.size} satır · ${fmtItemQty(lpContent.sumOf { it.quantity })} $unit".trim(),
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.onSurface,
+                    )
+                    lpPlacementLabel(lpPlacement[queriedLpNo]).takeIf { it.isNotBlank() }?.let { place ->
+                        Text(place, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                }
+            }
+            Spacer(Modifier.height(12.dp))
+            Text("LP İçeriği (${lpContent.size})", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
+            Text("Maddenin genel stoğu için satıra dokunun.", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Spacer(Modifier.height(6.dp))
+            LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                items(lpContent) { row ->
+                    Card(
+                        Modifier.fillMaxWidth().heightIn(min = 72.dp).clip(RoundedCornerShape(12.dp))
+                            .clickable(enabled = !loading && row.itemNo.isNotBlank()) { query = row.itemNo; load() },
+                        shape = RoundedCornerShape(12.dp),
+                    ) {
+                        Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Column(Modifier.weight(1f)) {
+                                Text(row.itemNo, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
+                                if (row.description.isNotBlank()) {
+                                    Text(row.description, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurface, maxLines = 2)
+                                }
+                                val extra = listOfNotNull(
+                                    row.lotNo.takeIf { it.isNotBlank() }?.let { "Lot $it" },
+                                    row.serialNo.takeIf { it.isNotBlank() }?.let { "Seri $it" },
+                                ).joinToString(" · ")
+                                if (extra.isNotBlank()) {
+                                    Text(extra, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                }
+                            }
+                            Spacer(Modifier.width(12.dp))
+                            Column(horizontalAlignment = Alignment.End) {
+                                Text(fmtItemQty(row.quantity), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+                                Text(row.uom.ifBlank { "ADET" }, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                            Spacer(Modifier.width(8.dp))
+                            Text("›", style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                    }
+                }
+            }
+        } else {
         item?.let { it ->
             val blocked = it.optBoolean("blocked", false)
             val inventory = it.optDouble("inventory", Double.NaN)
@@ -176,7 +282,6 @@ fun ItemInquiryModule() {
             val uom = itemUom
             val available = (if (inventory.isNaN()) 0.0 else inventory) - reserved
             val totalOnLp = lpLines.sumOf { l -> l.optDouble("quantity") }
-            val scannedLp = queriedLpSummary(queriedLpNo, lpLines)
             Card(
                 Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(16.dp),
@@ -195,40 +300,6 @@ fun ItemInquiryModule() {
                     }
                     Text(firstValue(it, "description", "displayName"), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurface)
                     Spacer(Modifier.height(10.dp))
-                    scannedLp?.let { lp ->
-                        Surface(
-                            modifier = Modifier.fillMaxWidth(),
-                            shape = RoundedCornerShape(12.dp),
-                            color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.72f),
-                        ) {
-                            Column(Modifier.padding(horizontal = 12.dp, vertical = 10.dp)) {
-                                Text(
-                                    "Okutulan LP",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.onSecondaryContainer,
-                                )
-                                Text(
-                                    "${lp.lpNo} · Adet: ${fmtItemQty(lp.quantity)}",
-                                    style = MaterialTheme.typography.titleSmall,
-                                    fontWeight = FontWeight.Bold,
-                                    color = MaterialTheme.colorScheme.onSecondaryContainer,
-                                )
-                                Text(
-                                    "Lot: ${lp.lotNos.joinToString(" · ").ifBlank { "-" }}",
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = MaterialTheme.colorScheme.onSecondaryContainer,
-                                )
-                                lpPlacementLabel(lpPlacement[lp.lpNo]).takeIf { it.isNotBlank() }?.let { place ->
-                                    Text(
-                                        place,
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        color = MaterialTheme.colorScheme.onSecondaryContainer,
-                                    )
-                                }
-                            }
-                        }
-                        Spacer(Modifier.height(10.dp))
-                    }
                     // Stock block — PDF Item Inquiry §1 critical fix.
                     if (!inventory.isNaN()) {
                         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -315,6 +386,7 @@ fun ItemInquiryModule() {
                     }
                 }
             }
+        }
         }
     }
 }
