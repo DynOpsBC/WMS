@@ -49,6 +49,7 @@ object BcApi {
     val KNOWN_ENVIRONMENTS = buildList {
         add(DEFAULT_ENVIRONMENT)
         addAll(listOf("Sandbox", "SandboxUS", "CustomerSandbox"))
+        addAll(BuildConfig.BC_EXTRA_ENVIRONMENTS.split(',').map { it.trim() }.filter { it.isNotBlank() })
         if (BuildConfig.BC_ALLOW_PRODUCTION) add("Production")
     }.distinct()
 

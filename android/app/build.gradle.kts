@@ -9,8 +9,8 @@ val releaseVersionCodeOverride = providers.gradleProperty("releaseVersionCode").
 val releaseVersionNameOverride = providers.gradleProperty("releaseVersionName").orNull?.takeIf { it.isNotBlank() }
 // BADE ve EMU aynı kaynak koddan aynı anda yayınlanır. Müşteri flavor'larında
 // ayrı sürüm değeri tutmak bir paketin geride kalmasına neden oluyordu.
-val customerVersionCode = releaseVersionCodeOverride ?: 200206
-val customerVersionName = releaseVersionNameOverride ?: "1.14.206"
+val customerVersionCode = releaseVersionCodeOverride ?: 200207
+val customerVersionName = releaseVersionNameOverride ?: "1.14.207"
 
 plugins {
   alias(libs.plugins.android.application)
@@ -38,12 +38,14 @@ android {
     // Saha APK'larından bazılarında CI tarafından 100000+ versionCode
     // kullanıldı. Görünen sürüm adı eski olsa bile Android yalnız sayısal kodu
     // karşılaştırdığı için semantik sürümleri 200000 bandında monoton tutuyoruz.
-    versionCode = releaseVersionCodeOverride ?: 200206
-    versionName = releaseVersionNameOverride ?: "1.14.206"
+    versionCode = releaseVersionCodeOverride ?: 200207
+    versionName = releaseVersionNameOverride ?: "1.14.207"
     manifestPlaceholders["appLabel"] = "BCWMS"
     // Ücretsiz dağıtım kanalı: public GitHub Release içindeki sabit latest.json.
     // APK aynı release'de tutulur; uygulamaya GitHub hesabı/token gömülmez.
     buildConfigField("String", "UPDATE_MANIFEST_URL", "\"https://github.com/DynOpsBC/WMS/releases/latest/download/latest.json\"")
+    // Oturum açınca otomatik yoklanacak ek ortam adları (virgülle). Müşteri flavor'ları doldurur.
+    buildConfigField("String", "BC_EXTRA_ENVIRONMENTS", "\"\"")
     // El terminalleri ARM tabanlıdır. ML Kit'in x86/x86_64 yerel
     // kütüphaneleri gerçek cihazda hiç kullanılmıyor ve APK'yı yaklaşık
     // 12 MB şişiriyordu. ARM32 desteği eski terminaller için korunur.
@@ -76,6 +78,8 @@ android {
       buildConfigField("String", "BC_CLIENT_ID", "\"3c4ba25a-89f4-41df-acf8-ebab8cb4809b\"")
       buildConfigField("String", "BC_FALLBACK_TENANT", "\"3bbd610b-95e4-47b3-8b48-4f7caf717bc3\"")
       buildConfigField("String", "BC_DEFAULT_ENVIRONMENT", "\"E-DefterSandbox\"")
+      // BADE test ortamı: ortam listesinde kendiliğinden çıksın (elle "Ortam adıyla ara" gerekmesin).
+      buildConfigField("String", "BC_EXTRA_ENVIRONMENTS", "\"Sand2809\"")
       // BADE APK must never fall back to the shared CRONUS demo company. The
       // company UUID is discovered from BC by this exact display name after
       // token acquisition, then persisted for all subsequent requests.

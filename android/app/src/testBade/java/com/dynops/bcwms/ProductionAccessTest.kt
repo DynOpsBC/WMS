@@ -12,6 +12,14 @@ class ProductionAccessTest {
         assertEquals("E-DefterSandbox", BcApi.DEFAULT_ENVIRONMENT)
     }
 
+    @Test fun `BADE test environment Sand2809 is discovered automatically as a sandbox`() {
+        assertTrue("Sand2809" in BcApi.KNOWN_ENVIRONMENTS)
+        assertTrue(BcApi.KNOWN_ENVIRONMENTS.indexOf("Sand2809") < BcApi.KNOWN_ENVIRONMENTS.indexOf("Production"))
+        for (screen in Screen.entries) {
+            assertTrue(productionScreenAllowed(screen, "Sand2809", manager = false))
+        }
+    }
+
     private val restricted = setOf(
         Screen.Shipping, Screen.Packing, Screen.Picking, Screen.Production,
     )

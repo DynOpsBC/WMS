@@ -272,7 +272,11 @@ fun ItemInquiryModule() {
                 }
             }
         } else {
-        item?.let { it ->
+        // BADE (9 Kas 2026, Merve): ürün kartı + etiket seçici + düğme listenin DIŞINDA sabitti; küçük ekranda
+        // ekranı doldurup "LP'lerde" satırlarını sıfır yüksekliğe sıkıştırıyordu. Artık hepsi listenin ilk öğesi,
+        // sayfanın tamamı birlikte kayar.
+        LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            item?.let { it ->
             val blocked = it.optBoolean("blocked", false)
             val inventory = it.optDouble("inventory", Double.NaN)
             val qtyOnPo = it.optDouble("quantityOnPurchOrder", 0.0)
@@ -282,6 +286,8 @@ fun ItemInquiryModule() {
             val uom = itemUom
             val available = (if (inventory.isNaN()) 0.0 else inventory) - reserved
             val totalOnLp = lpLines.sumOf { l -> l.optDouble("quantity") }
+            item {
+            Column {
             Card(
                 Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(16.dp),
@@ -325,10 +331,9 @@ fun ItemInquiryModule() {
             Spacer(Modifier.height(12.dp))
             Text("LP'lerde (${lpLines.size})", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
             Spacer(Modifier.height(6.dp))
-        }
-        // weight(1f): üstteki sabit ürün kartı listeyi sıfır yüksekliğe
-        // sıkıştırıp LP/hareket satırlarını kesiyordu (yatay mod / küçük ekran).
-        LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            }
+            }
+            }
             items(lpLines) { ln ->
                 Card(Modifier.fillMaxWidth().heightIn(min = 82.dp), shape = RoundedCornerShape(12.dp)) {
                     Row(
