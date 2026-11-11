@@ -20,6 +20,8 @@ object TerminalLayoutCatalog {
         Triple("Picking", "PICKING", 30),
         Triple("Packing", "PACKING", 40),
         Triple("Shipping", "SHIPPING", 50),
+        // Kitoko/Element4 #3338: Projeye Çıkış (yalnız Kitoko menüsünde).
+        Triple("ProjectIssue", "PROJECT_ISSUE", 55),
         Triple("LicensePlates", "LICENSE_PLATES", 60),
         Triple("HierarchicalLP", "HIERARCHICAL_LP", 70),
         Triple("AdHocMove", "ADHOC_MOVE", 80),

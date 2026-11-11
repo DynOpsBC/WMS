@@ -426,6 +426,14 @@ table 72000 "DOPSWHS Setup"
             DataClassification = SystemMetadata;
             Editable = false;
         }
+        field(900; "Project Dimension Code"; Code[20])
+        {
+            // Kitoko/Element4 #3338: terminalden saha iş emrine çıkışta proje kullanımına
+            // eklenen boyut. Boş = 'PROJE'. Boyut değeri proje no. ile aynı kodda olmalı.
+            Caption = 'Project Dimension Code';
+            DataClassification = CustomerContent;
+            TableRelation = Dimension.Code;
+        }
         field(480; "Allow Edition Change"; Boolean)
         {
             // Escape hatch for the edition guard: an admin ticks this before

@@ -13,7 +13,7 @@ class ProductionAccessTest {
     }
 
     private val restricted = setOf(
-        Screen.Shipping, Screen.Packing, Screen.Picking, Screen.Production,
+        Screen.Shipping, Screen.Packing, Screen.Picking, Screen.Production, Screen.ProjectIssue,
     )
 
     @Test fun `receiving and put-away are open to every production operator`() {

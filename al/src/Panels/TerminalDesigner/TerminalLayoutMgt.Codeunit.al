@@ -113,6 +113,7 @@ codeunit 72384 "DOPSWHS Terminal Layout Mgt"
         AddTile('Giden', 'PICKING', 'Toplama', 'Sipariş ürünlerini raflardan topla', 30, 'LP,BIN', '', false);
         AddTile('Giden', 'PACKING', 'Paketleme', 'Toplanan ürünleri kolilere ayır', 40, '', '', false);
         AddTile('Giden', 'SHIPPING', 'Sevkiyat', 'Belgeyi tamamla ve çıkışı kaydet', 50, 'LP', '', false);
+        AddTile('Giden', 'PROJECT_ISSUE', 'Projeye Çıkış', 'Saha iş emrini seç, malzemeyi projeye düş', 55, 'LP,BIN,LOT', '', false);
         AddTile('İç Operasyon', 'LICENSE_PLATES', 'LP', 'Palet ve taşıma kabı işlemleri', 60, '', '', false);
         AddTile('İç Operasyon', 'HIERARCHICAL_LP', 'Kutu ve Palet', 'Ürün LP''lerini kutuya, kutuları palete bağla', 70, '', 'Bu sürümde kullanılmıyor', false);
         AddTile('İç Operasyon', 'ADHOC_MOVE', 'Ad-Hoc Hareket', 'Belgesiz raf veya LP hareketi', 80, 'LP,BIN', '', false);

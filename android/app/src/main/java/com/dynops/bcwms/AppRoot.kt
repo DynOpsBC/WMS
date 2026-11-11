@@ -96,6 +96,8 @@ enum class Screen(val title: String) {
     FirstCount("İlk Sayım"),
     PutAway("Yerleştirme"),
     Shipping("Sevkiyat"),
+    // Kitoko/Element4 #3338 (11 Kas 2026): saha iş emrine (projeye) malzeme çıkışı.
+    ProjectIssue("Projeye Çıkış"),
     Production("Üretim"),
     Subcontracting("Fason İşlemler"),
     Assembly("Montaj"),
@@ -313,6 +315,7 @@ fun AppRoot() {
                 Screen.FirstCount -> com.dynops.bcwms.feature.FirstCountModule()
                 Screen.PutAway -> PutAwayModule()
                 Screen.Shipping -> ShippingModule()
+                Screen.ProjectIssue -> com.dynops.bcwms.feature.ProjectIssueModule()
                 Screen.Production -> ProductionModule()
                 Screen.Subcontracting -> SubcontractingModule()
                 Screen.Assembly -> AssemblyModule()
@@ -359,6 +362,12 @@ internal fun isHomeTileEnabled(screen: Screen, connected: Boolean): Boolean =
 
 /** Operatör ana menüsünde destek/test araçları gösterilmez; ekranlar koddan silinmez. */
 internal fun operatorHomeScreens(flavor: String, includeAdminTestTools: Boolean = false): Set<Screen> {
+    // Projeye Çıkış (saha iş emri) yalnız Kitoko/Element4 menüsünde.
+    val projectIssue = if (flavor.equals("kitoko", ignoreCase = true)) emptySet() else setOf(Screen.ProjectIssue)
+    return operatorHomeScreensBase(flavor, includeAdminTestTools) - projectIssue
+}
+
+private fun operatorHomeScreensBase(flavor: String, includeAdminTestTools: Boolean): Set<Screen> {
     if (shouldForceProductionFlow(flavor)) {
         val hidden = mutableSetOf(
             Screen.Home,
@@ -467,6 +476,7 @@ private val HomeCategories = listOf(
         HomeTile(Screen.Picking, WmsGlyph.PICKING, "Toplama", "Sipariş ürünlerini raflardan topla"),
         HomeTile(Screen.Packing, WmsGlyph.PACKING, "Paketleme", "Toplanan ürünleri kolilere ayır"),
         HomeTile(Screen.Shipping, WmsGlyph.SHIPPING, "Sevkiyat", "Belgeyi tamamla ve çıkışı kaydet"),
+        HomeTile(Screen.ProjectIssue, WmsGlyph.PROJECT_ISSUE, "Projeye Çıkış", "Saha iş emrini seç, malzemeyi projeye düş"),
     )),
     HomeCategory("İç Operasyon", Color(0xFF2D9CDB), listOf(
         HomeTile(Screen.LicensePlates, WmsGlyph.LICENSE_PLATE, "LP", "Palet ve taşıma kabı işlemleri"),

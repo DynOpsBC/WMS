@@ -1872,6 +1872,56 @@ codeunit 72040 "DOPSWHS LP Management"
         DebitProductionLpContent(DebitLine, -ItemLedgerEntry.Quantity, RelatedDocument);
     end;
 
+    /// <summary>
+    /// Kitoko/Element4 #3338: terminalden saha iş emrine (projeye) çıkış yapılan LP'nin
+    /// içeriğini, BC proje kullanımı kaydedildikten sonra aynı işlemde düşer. LP açık veya
+    /// oluşturulmuş olmalı, mal kabulü beklememeli ve çıkış yapılan raf/lokasyonda durmalıdır.
+    /// RelatedDocument (ör. 'PJ:<madde defteri no>') aynı kaydın iki kez düşülmesini engeller.
+    /// </summary>
+    procedure DebitProjectIssueLp(LpNo: Code[20]; LocationCode: Code[10]; BinCode: Code[20]; ItemNo: Code[20]; VariantCode: Code[10]; LotNo: Code[50]; SerialNo: Code[50]; BaseQty: Decimal; RelatedDocument: Code[40])
+    var
+        LP: Record "DOPSWHS LP Header";
+        DebitLine: Record "Registered Whse. Activity Line" temporary;
+    begin
+        if not LP.Get(LpNo) then
+            Error('%1 LP numarası bulunamadı.', LpNo);
+        EnsureNotPendingReceipt(LP);
+        if not (LP.Status in [LP.Status::Open, LP.Status::Built]) then
+            Error('%1 LP''si projeye çıkışta kullanılamaz (durum: %2). Atanmış veya kullanılmış LP''den çıkış yapılamaz.', LP."No.", LP.Status);
+        if LP."Location Code" <> LocationCode then
+            Error('%1 LP''si %2 lokasyonunda değil (LP lokasyonu: %3).', LP."No.", LocationCode, LP."Location Code");
+        if LP."Bin Code" <> BinCode then
+            Error('%1 LP''si %2 rafında değil (LP rafı: %3). Önce LP''nin bulunduğu rafı okutun.', LP."No.", BinCode, LP."Bin Code");
+        DebitLine."LP No." := LP."No.";
+        DebitLine."Location Code" := LocationCode;
+        DebitLine."Bin Code" := BinCode;
+        DebitLine."Item No." := ItemNo;
+        DebitLine."Variant Code" := VariantCode;
+        DebitLine."Lot No." := LotNo;
+        DebitLine."Serial No." := SerialNo;
+        DebitProductionLpContent(DebitLine, BaseQty, RelatedDocument);
+    end;
+
+    /// <summary>LP içinde bu ürün için tek bir lot varsa onu döner; yoksa veya birden çoksa boş.</summary>
+    procedure SingleLotOnLp(LpNo: Code[20]; ItemNo: Code[20]; VariantCode: Code[10]): Code[50]
+    var
+        LPLine: Record "DOPSWHS LP Line";
+        LotNo: Code[50];
+    begin
+        LPLine.SetRange("LP No.", LpNo);
+        LPLine.SetRange("Item No.", ItemNo);
+        LPLine.SetRange("Variant Code", VariantCode);
+        LPLine.SetFilter(Quantity, '>0');
+        if not LPLine.FindSet() then
+            exit('');
+        LotNo := LPLine."Lot No.";
+        repeat
+            if LPLine."Lot No." <> LotNo then
+                exit('');
+        until LPLine.Next() = 0;
+        exit(LotNo);
+    end;
+
     local procedure DebitProductionLpContent(RegisteredLine: Record "Registered Whse. Activity Line"; BaseQty: Decimal; RelatedDocument: Code[40])
     var
         LP: Record "DOPSWHS LP Header";

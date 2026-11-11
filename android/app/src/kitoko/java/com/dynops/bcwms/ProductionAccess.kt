@@ -11,6 +11,8 @@ import org.json.JSONObject
  */
 internal val ProductionManagerOnlyScreens = setOf(
     Screen.Shipping, Screen.Packing, Screen.Picking, Screen.Production,
+    // Kitoko/Element4 #3338: stok düşen yeni ekran canlıda önce yöneticilere açılır.
+    Screen.ProjectIssue,
 )
 
 internal fun productionScreenAllowed(screen: Screen, environment: String, manager: Boolean): Boolean =

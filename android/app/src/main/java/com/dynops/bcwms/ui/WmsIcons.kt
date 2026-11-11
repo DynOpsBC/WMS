@@ -40,6 +40,7 @@ enum class WmsGlyph {
     PICKING,
     PACKING,
     SHIPPING,
+    PROJECT_ISSUE,
     LICENSE_PLATE,
     HIERARCHICAL_LP,
     AD_HOC,
@@ -77,6 +78,7 @@ fun glyphForScreen(screen: Screen): WmsGlyph = when (screen) {
     Screen.Picking -> WmsGlyph.PICKING
     Screen.Packing -> WmsGlyph.PACKING
     Screen.Shipping -> WmsGlyph.SHIPPING
+    Screen.ProjectIssue -> WmsGlyph.PROJECT_ISSUE
     Screen.LicensePlates -> WmsGlyph.LICENSE_PLATE
     Screen.HierarchicalLP -> WmsGlyph.HIERARCHICAL_LP
     Screen.AdHocMove -> WmsGlyph.AD_HOC
@@ -374,6 +376,21 @@ fun WmsIcon(
                 roundRect(0.10f, 0.47f, 0.48f, 0.32f, fill = true); roundRect(0.10f, 0.47f, 0.48f, 0.32f)
                 thinLine(0.10f, 0.63f, 0.58f, 0.63f); thinLine(0.34f, 0.47f, 0.34f, 0.79f)
                 magnifier(0.66f, 0.37f)
+            }
+            WmsGlyph.PROJECT_ISSUE -> {
+                // Kutu → ok → proje bayrağı: malzeme projeye çıkıyor.
+                roundRect(0.08f, 0.44f, 0.32f, 0.32f, fill = true)
+                roundRect(0.08f, 0.44f, 0.32f, 0.32f)
+                line(0.46f, 0.60f, 0.66f, 0.60f)
+                line(0.59f, 0.53f, 0.66f, 0.60f); line(0.59f, 0.67f, 0.66f, 0.60f)
+                line(0.76f, 0.18f, 0.76f, 0.86f)
+                val flag = Path().apply {
+                    moveTo(p(0.76f, 0.18f).x, p(0.76f, 0.18f).y)
+                    lineTo(p(0.94f, 0.27f).x, p(0.94f, 0.27f).y)
+                    lineTo(p(0.76f, 0.36f).x, p(0.76f, 0.36f).y)
+                    close()
+                }
+                drawPath(flag, color, style = lineStroke)
             }
             WmsGlyph.STOCK -> {
                 roundRect(0.12f, 0.16f, 0.76f, 0.20f, fill = true)

@@ -134,6 +134,16 @@ page 72061 "DOPSWHS Setup"
                     ToolTip = 'Etiketin yüksekliği (mm). Boş/0 = 40 mm. Yazıcıdaki rulo değişince yalnız bu iki değer güncellenir; yeni paket gerekmez.';
                 }
             }
+            group(ProjectIssue)
+            {
+                Caption = 'Projeye Çıkış (Saha İş Emri)';
+                field("Project Dimension Code"; Rec."Project Dimension Code")
+                {
+                    ApplicationArea = All;
+                    Caption = 'Proje Boyutu';
+                    ToolTip = 'Terminalden saha iş emrine çıkışta kayda eklenen boyut. Boş = PROJE. Boyut değeri proje no. ile aynı kodda tanımlıysa eklenir.';
+                }
+            }
             group(License)
             {
                 Caption = 'License';
