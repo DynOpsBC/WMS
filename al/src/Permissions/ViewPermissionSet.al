@@ -105,6 +105,7 @@ permissionset 72096 "DOPSWHS-VIEW"
         page "DOPSWHS Field WO Line API" = X,
         page "DOPSWHS Project Issue Entries" = X,
         page "DOPSWHS Field WO List" = X,
+        page "DOPSWHS Field WO Line List" = X,
         page "DOPSWHS Project Issue" = X,
         codeunit "DOPSWHS Project Issue Mgmt" = X,
         table "DOPSWHS First Count Header" = X,

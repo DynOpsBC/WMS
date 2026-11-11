@@ -1,4 +1,4 @@
-# Kitoko / Element 4 — Android 1.14.202 + BC 1.14.3.24
+# Kitoko / Element 4 — Android 1.14.202 + BC 1.14.3.32
 
 11 Kasım 2026 · versionCode 200202 · com.dynops.bcwms.kitoko · Azure DevOps #3338
 
@@ -12,7 +12,13 @@ Terminal ana menüsü → Giden → **Projeye Çıkış**:
 
 Kurallar: yönlendirilmiş lokasyon ve proje tüketiminde ambar toplaması zorunlu lokasyon reddedilir; LP okutulmadıysa yalnız LP'ye atanmamış serbest stoktan çıkılır; iş emrinde proje görevi yoksa çıkış yapılmaz. Canlı ortamda ekran yalnız terminal yöneticilerine açıktır (Sevkiyat/Toplama gibi).
 
-## BC 1.14.3.24
+## Yönlendirilmiş lokasyon (ELM4-WMS)
+
+Element 4 deposu yönlendirilmiş ve "Proje Sarf. Ambar İşlemi = Ambar Çekme (zorunlu)". BC burada proje günlüğünden doğrudan düşüme izin vermez. Çıkış Yap aynı işlemde: iş emrinin proje görevine bütçe planlama satırı açar → yalnız okutulan raftan ambar toplaması oluşturur → terminal kullanıcısı adına onaylayıp kaydeder (stok Projeye Depo Gözü'ne geçer) → toplanan miktarı proje kullanımı olarak işler. Lokasyonda "Projeye Depo Gözü Kodu" dolu olmalı (Sand2010: PROJE, URETIM alanı).
+
+Sand2010 testi (11 Kas 2026): PR00010/100, TEST-3338-01, P-00016 HM1'den 2 + 3 adet → proje defteri 1 ve 2, HM1 82→77, PROJE gözü boş, iş emri satırı gerçekleşen 3 (ilk çıkışta Türkçe "I" hatası nedeniyle yazılmamıştı, düzeltildi). LP'li çıkış ve terminal (API) yolu cihazda denenmedi.
+
+## BC 1.14.3.32
 
 - API: `fieldWorkOrders`, `fieldWorkOrderLines`, `fieldWorkOrders('…')/Microsoft.NAV.issueItem`.
 - Sayfalar: **WMS Projeye Çıkış (Saha İş Emri)** (terminalsiz aynı işlem), **WMS Proje Malzeme Çıkışları** (proje bazında stok çıkış listesi), DOPSWHS Setup → "Proje Boyutu" (boş = PROJE).

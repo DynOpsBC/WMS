@@ -17,6 +17,9 @@ codeunit 72477 "DOPSWHS Project Issue Mgmt"
         tabledata "Job Journal Batch" = RIMD,
         tabledata "Job Journal Line" = RIMD,
         tabledata "Job Ledger Entry" = R,
+        tabledata "Job Planning Line" = RIMD,
+        tabledata "Warehouse Activity Header" = RIMD,
+        tabledata "Warehouse Activity Line" = RIMD,
         tabledata "Reservation Entry" = RIMD,
         tabledata "Dimension Value" = R,
         tabledata "DOPSWHS Setup" = R;
@@ -41,6 +44,10 @@ codeunit 72477 "DOPSWHS Project Issue Mgmt"
         SerialQtyErr: Label '%1 seri numarası tek bir birimdir; miktar 1 olmalı.', Comment = '%1 = serial';
         NoReadPermissionErr: Label 'Saha iş emirlerini okuma yetkiniz yok. BC''de Proje Yönetimi izin kümesini kontrol edin.';
         LooseStockErr: Label '%1 ürününün %2 %3 konumundaki LP''ye atanmamış serbest stoku yetersiz. Stok: %4, LP''lerdeki: %5, istenen: %6. Palet/kutudan veriyorsanız LP''yi okutun.', Comment = '%1 item, %2 location, %3 bin, %4 stock, %5 allocated, %6 required';
+        ToJobBinErr: Label '%1 lokasyonunda "Projeye Depo Gözü Kodu" tanımlı değil. Yönlendirilmiş lokasyonda projeye çıkış için Konum Kartı > Depo Gözleri > Proje alanını doldurun.', Comment = '%1 = location';
+        UserRequiredErr: Label 'Ambar toplaması için terminal kullanıcısı zorunludur.';
+        PickNotCreatedErr: Label '%1 için %2 rafından ambar toplaması oluşturulamadı. Rafta toplanabilir stok olduğunu kontrol edin.', Comment = '%1 item, %2 bin';
+        PickShortErr: Label '%1 için %2 rafında yeterli toplanabilir stok yok (eksik temel miktar: %3).', Comment = '%1 item, %2 bin, %3 qty';
         NotPostedErr: Label 'Proje kullanımı kaydedilemedi; proje defterinde kayıt bulunamadı.';
         TemplateNameTok: Label 'WMSPROJE', Locked = true;
 
@@ -116,6 +123,9 @@ codeunit 72477 "DOPSWHS Project Issue Mgmt"
         TemplateName: Code[10];
         BatchName: Code[10];
         ActualNote: Text;
+        UsePick: Boolean;
+        EntryNo: Integer;
+        PickNo: Code[20];
     begin
         if not IsAvailable() then
             Error(NotInstalledErr);
@@ -133,11 +143,13 @@ codeunit 72477 "DOPSWHS Project Issue Mgmt"
             Error(NoTaskErr, WorkOrderNo);
 
         Location.Get(LocationCode);
-        if Location."Directed Put-away and Pick" then
-            Error(DirectedErr, LocationCode);
-        if Location."Job Consump. Whse. Handling" = Location."Job Consump. Whse. Handling"::"Warehouse Pick (mandatory)" then
-            Error(PickRequiredErr, LocationCode);
-        if Location."Bin Mandatory" then begin
+        // Yönlendirilmiş veya proje tüketiminde ambar toplaması zorunlu lokasyonda BC proje
+        // günlüğünden doğrudan düşüme izin vermez: planlama satırı + ambar toplaması yolu.
+        UsePick := Location."Directed Put-away and Pick" or
+            (Location."Job Consump. Whse. Handling" = Location."Job Consump. Whse. Handling"::"Warehouse Pick (mandatory)");
+        if UsePick and (Location."To-Job Bin Code" = '') then
+            Error(ToJobBinErr, LocationCode);
+        if Location."Bin Mandatory" or Location."Directed Put-away and Pick" then begin
             if BinCode = '' then
                 Error(BinRequiredErr, LocationCode);
             if not Bin.Get(LocationCode, BinCode) then
@@ -170,6 +182,14 @@ codeunit 72477 "DOPSWHS Project Issue Mgmt"
         JobLedgerEntry.Reset();
         if JobLedgerEntry.FindLast() then
             LastJobEntryNo := JobLedgerEntry."Entry No.";
+
+        if UsePick then begin
+            EntryNo := IssueViaWarehousePick(Orders, WorkOrderNo, Item, VariantCode, UomCode, Qty, BaseQty, Location, BinCode, LpNo, LotNo,
+                WmsUserId, TemplateName, BatchName, LastJobEntryNo, PickNo);
+            ActualNote := AddActualQuantity(WorkOrderNo, Item, BaseQty);
+            exit(StrSubstNo('%1 × %2 %3 → %4 / %5 / %6 (ambar toplama %7, proje defteri %8)%9',
+                ItemNo, Format(Qty, 0, 9), UomCode, WorkOrderNo, Orders."Project No.", Orders."Project Task No.", PickNo, EntryNo, ActualNote));
+        end;
 
         JobJnlLine.Init();
         JobJnlLine."Journal Template Name" := TemplateName;
@@ -230,6 +250,140 @@ codeunit 72477 "DOPSWHS Project Issue Mgmt"
 
         exit(StrSubstNo('%1 × %2 %3 → %4 / %5 / %6 (proje defteri %7)%8',
             ItemNo, Format(Qty, 0, 9), UomCode, WorkOrderNo, Orders."Project No.", Orders."Project Task No.", JobLedgerEntry."Entry No.", ActualNote));
+    end;
+
+    /// <summary>
+    /// Yönlendirilmiş lokasyon: (1) iş emrinin proje görevine bütçe planlama satırı açılır,
+    /// (2) yalnız bu satır için okutulan raftan ambar toplaması oluşturulur, (3) satır terminal
+    /// operatörü adına okutulan LP/lot ile onaylanıp kaydedilir (stok "Projeye Depo Gözü"ne
+    /// geçer), (4) toplanan miktar proje günlüğünden kullanım olarak işlenir. Hepsi tek işlem.
+    /// </summary>
+    local procedure IssueViaWarehousePick(Orders: Record "DOPSWHS Field WO Buffer" temporary; WorkOrderNo: Code[20]; Item: Record Item; VariantCode: Code[10]; UomCode: Code[10]; Qty: Decimal; BaseQty: Decimal; Location: Record Location; FromBinCode: Code[20]; LpNo: Code[20]; LotNo: Code[50]; WmsUserId: Code[50]; TemplateName: Code[10]; BatchName: Code[10]; LastJobEntryNo: Integer; var PickNo: Code[20]): Integer
+    var
+        JobPlanningLine: Record "Job Planning Line";
+        PickHeader: Record "Warehouse Activity Header";
+        TakeLine: Record "Warehouse Activity Line";
+        JobJnlLine: Record "Job Journal Line";
+        JobLedgerEntry: Record "Job Ledger Entry";
+        LP: Record "DOPSWHS LP Header";
+        PickMgmt: Codeunit "DOPSWHS Pick Mgmt";
+        JobTransferLine: Codeunit "Job Transfer Line";
+        JobJnlPostBatch: Codeunit "Job Jnl.-Post Batch";
+        LPMgt: Codeunit "DOPSWHS LP Management";
+        UsageQty: Decimal;
+    begin
+        if WmsUserId = '' then
+            Error(UserRequiredErr);
+        CreatePlanningLine(Orders, WorkOrderNo, Item, VariantCode, UomCode, Qty, Location.Code, JobPlanningLine);
+        PickNo := CreateScopedPick(JobPlanningLine, FromBinCode);
+
+        PickHeader.Get(PickHeader.Type::Pick, PickNo);
+        PickMgmt.ClaimPick(PickHeader, WmsUserId, 'Projeye çıkış (saha iş emri)');
+        TakeLine.SetRange("Activity Type", TakeLine."Activity Type"::Pick);
+        TakeLine.SetRange("No.", PickNo);
+        TakeLine.SetRange("Action Type", TakeLine."Action Type"::Take);
+        if not TakeLine.FindSet(true) then
+            Error(PickNotCreatedErr, Item."No.", FromBinCode);
+        repeat
+            PickMgmt.ConfirmPickLineFor(TakeLine, TakeLine."Qty. Outstanding", LotNo, LpNo, WmsUserId);
+        until TakeLine.Next() = 0;
+        PickHeader.Get(PickHeader.Type::Pick, PickNo);
+        PickMgmt.RegisterPickFor(PickHeader, WmsUserId);
+
+        // Kayıt BC tarafından otomatik kullanıma dönüştürülmediyse toplanan miktarı işle.
+        JobPlanningLine.Get(JobPlanningLine."Job No.", JobPlanningLine."Job Task No.", JobPlanningLine."Line No.");
+        UsageQty := JobPlanningLine."Qty. Picked" - JobPlanningLine."Qty. Posted";
+        if UsageQty > 0 then begin
+            // FromPlanningLineToJnlLine satırı günlüğe kendisi ekler; burada yalnız güncellenir.
+            JobTransferLine.FromPlanningLineToJnlLine(JobPlanningLine, WorkDate(), TemplateName, BatchName, JobJnlLine);
+            JobJnlLine."Document No." := WorkOrderNo;
+            JobJnlLine."External Document No." := CopyStr(WmsUserId, 1, MaxStrLen(JobJnlLine."External Document No."));
+            if JobJnlLine."Bin Code" <> Location."To-Job Bin Code" then
+                JobJnlLine.Validate("Bin Code", Location."To-Job Bin Code");
+            JobJnlLine.Validate(Quantity, UsageQty);
+            AddProjectDimension(JobJnlLine, Orders."Project No.");
+            JobJnlLine.Modify(true);
+            if LotNo <> '' then
+                AddTracking(JobJnlLine, LotNo, '');
+            JobJnlPostBatch.SetSuppressCommit(true);
+            JobJnlPostBatch.Run(JobJnlLine);
+        end;
+
+        JobLedgerEntry.SetFilter("Entry No.", '>%1', LastJobEntryNo);
+        JobLedgerEntry.SetRange("Job No.", Orders."Project No.");
+        JobLedgerEntry.SetRange(Type, JobLedgerEntry.Type::Item);
+        JobLedgerEntry.SetRange("No.", Item."No.");
+        if not JobLedgerEntry.FindLast() then
+            Error(NotPostedErr);
+
+        // Bütün LP toplandıysa palet Projeye Depo Gözü'ne taşınmış olabilir: kullanılan
+        // içerik paletten de düşülür ki LP ile raf stoku ayrışmasın.
+        if (LpNo <> '') and LP.Get(LpNo) then
+            if (LP."Bin Code" = Location."To-Job Bin Code") and (LP.Status in [LP.Status::Open, LP.Status::Built]) then
+                LPMgt.DebitProjectIssueLp(LpNo, Location.Code, Location."To-Job Bin Code", Item."No.", VariantCode, LotNo, '', BaseQty,
+                    CopyStr('PJ:J' + Format(JobLedgerEntry."Entry No."), 1, 40));
+        exit(JobLedgerEntry."Entry No.");
+    end;
+
+    local procedure CreatePlanningLine(Orders: Record "DOPSWHS Field WO Buffer" temporary; WorkOrderNo: Code[20]; Item: Record Item; VariantCode: Code[10]; UomCode: Code[10]; Qty: Decimal; LocationCode: Code[10]; var JobPlanningLine: Record "Job Planning Line")
+    var
+        LastLine: Record "Job Planning Line";
+        LineNo: Integer;
+    begin
+        LastLine.SetRange("Job No.", Orders."Project No.");
+        LastLine.SetRange("Job Task No.", Orders."Project Task No.");
+        if LastLine.FindLast() then
+            LineNo := LastLine."Line No.";
+        LineNo += 10000;
+        JobPlanningLine.Init();
+        JobPlanningLine.Validate("Job No.", Orders."Project No.");
+        JobPlanningLine.Validate("Job Task No.", Orders."Project Task No.");
+        JobPlanningLine."Line No." := LineNo;
+        JobPlanningLine.Validate("Line Type", JobPlanningLine."Line Type"::Budget);
+        JobPlanningLine.Validate("Planning Date", WorkDate());
+        JobPlanningLine."Document No." := WorkOrderNo;
+        JobPlanningLine.Validate(Type, JobPlanningLine.Type::Item);
+        JobPlanningLine.Validate("No.", Item."No.");
+        if VariantCode <> '' then
+            JobPlanningLine.Validate("Variant Code", VariantCode);
+        JobPlanningLine.Validate("Location Code", LocationCode);
+        JobPlanningLine.Validate("Unit of Measure Code", UomCode);
+        JobPlanningLine.Validate(Quantity, Qty);
+        JobPlanningLine.Validate("Usage Link", true);
+        JobPlanningLine.Description := CopyStr(StrSubstNo('%1 · %2', WorkOrderNo, Item.Description), 1, MaxStrLen(JobPlanningLine.Description));
+        JobPlanningLine.Insert(true);
+    end;
+
+    /// <summary>Yalnız verilen planlama satırı için, yalnız okutulan raftan ambar toplaması oluşturur.</summary>
+    local procedure CreateScopedPick(var JobPlanningLine: Record "Job Planning Line"; FromBinCode: Code[20]): Code[20]
+    var
+        CreatePickParameters: Record "Create Pick Parameters";
+        CreatePick: Codeunit "Create Pick";
+        FirstNo: Code[20];
+        LastNo: Code[20];
+        QtyToPick: Decimal;
+        QtyToPickBase: Decimal;
+    begin
+        CreatePickParameters."Whse. Document" := CreatePickParameters."Whse. Document"::Job;
+        CreatePickParameters."Whse. Document Type" := CreatePickParameters."Whse. Document Type"::Pick;
+        CreatePickParameters."Sorting Method" := Enum::"Whse. Activity Sorting Method"::None;
+        CreatePickParameters."Max No. of Source Doc." := 1;
+        CreatePickParameters."Do Not Fill Qty. to Handle" := true;
+        CreatePick.SetParameters(CreatePickParameters);
+        CreatePick.SetJobPlanningLine(JobPlanningLine);
+        CreatePick.SetTempWhseItemTrkgLine(JobPlanningLine."Job No.", Database::Job, '', 0,
+            JobPlanningLine."Job Contract Entry No.", JobPlanningLine."Location Code");
+        QtyToPick := JobPlanningLine."Remaining Qty.";
+        QtyToPickBase := JobPlanningLine."Remaining Qty. (Base)";
+        CreatePick.CreateTempLine(JobPlanningLine."Location Code", JobPlanningLine."No.", JobPlanningLine."Variant Code",
+            JobPlanningLine."Unit of Measure Code", FromBinCode, JobPlanningLine."Bin Code", JobPlanningLine."Qty. per Unit of Measure",
+            JobPlanningLine."Qty. Rounding Precision", JobPlanningLine."Qty. Rounding Precision (Base)", QtyToPick, QtyToPickBase);
+        if QtyToPickBase > 0 then
+            Error(PickShortErr, JobPlanningLine."No.", FromBinCode, QtyToPickBase);
+        CreatePick.CreateWhseDocument(FirstNo, LastNo, true);
+        if FirstNo = '' then
+            Error(PickNotCreatedErr, JobPlanningLine."No.", FromBinCode);
+        exit(FirstNo);
     end;
 
     procedure GetWorkOrder(WorkOrderNo: Code[20]; var Buffer: Record "DOPSWHS Field WO Buffer" temporary)
@@ -536,29 +690,35 @@ codeunit 72477 "DOPSWHS Project Issue Mgmt"
     end;
 
     /// <summary>Durum adı (dil bağımsız) tamamlanmış/iptal/kapalı ise true.</summary>
+    /// <summary>
+    /// Durum adı (dil bağımsız) tamamlanmış/iptal/kapalı ise true. LowerCase/UpperCase
+    /// kullanılmaz: Türkçe oturumda "I" → "ı" dönüşür ve "Item" ile eşleşme bozulur.
+    /// </summary>
     procedure IsClosedStatus(StatusRef: FieldRef): Boolean
     var
         Name: Text;
     begin
-        Name := LowerCase(EnumName(StatusRef));
-        exit((StrPos(Name, 'complet') > 0) or (StrPos(Name, 'cancel') > 0) or (StrPos(Name, 'closed') > 0) or
-             (StrPos(Name, 'finish') > 0) or (StrPos(Name, 'done') > 0));
+        Name := EnumName(StatusRef);
+        exit(Name in ['Completed', 'Complete', 'Cancelled', 'Canceled', 'Closed', 'Finished', 'Done']);
     end;
 
     local procedure IsItemType(TypeRef: FieldRef): Boolean
     begin
-        exit(LowerCase(EnumName(TypeRef)) = 'item');
+        exit(EnumName(TypeRef) = 'Item');
     end;
 
     local procedure EnumName(Ref: FieldRef): Text
     var
+        Value: Text;
         Ordinal: Integer;
     begin
-        if not (Ref.Type in [FieldType::Option]) then
-            exit(Format(Ref.Value));
-        if not Evaluate(Ordinal, Format(Ref.Value, 0, '<Number>')) then
-            exit(Format(Ref.Value));
-        exit(Ref.GetEnumValueNameFromOrdinalValue(Ordinal));
+        // Dil bağımsız değer adı (ör. Item, Completed). XML biçimi enum'da sıra numarası
+        // döndürebilir; sayıysa adı FieldRef'ten çözülür. Format(Ref.Value) kullanıcı dilinde
+        // başlık ("Madde") verdiği için karşılaştırmada kullanılmaz.
+        Value := Format(Ref.Value, 0, 9);
+        if Evaluate(Ordinal, Value) then
+            exit(Ref.GetEnumValueNameFromOrdinalValue(Ordinal));
+        exit(Value);
     end;
 
     local procedure StatusCaption(Ref: FieldRef): Text

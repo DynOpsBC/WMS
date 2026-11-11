@@ -100,6 +100,14 @@ page 72478 "DOPSWHS Project Issue"
                     CurrPage.Update(false);
                 end;
             }
+            action(LinesAction)
+            {
+                ApplicationArea = All;
+                Caption = 'İş Emri Malzemeleri';
+                Image = List;
+                RunObject = page "DOPSWHS Field WO Line List";
+                ToolTip = 'Açık saha iş emirlerinin satırlarını terminalin gördüğü biçimde gösterir.';
+            }
             action(EntriesAction)
             {
                 ApplicationArea = All;
@@ -112,6 +120,7 @@ page 72478 "DOPSWHS Project Issue"
         area(Promoted)
         {
             actionref(IssuePromoted; IssueAction) { }
+            actionref(LinesPromoted; LinesAction) { }
             actionref(EntriesPromoted; EntriesAction) { }
         }
     }

@@ -3,10 +3,10 @@ package com.dynops.bcwms.feature
 import org.json.JSONObject
 
 // Kitoko/Element4 #3338 (11 Kas 2026): Projeye Çıkış — saha iş emrine malzeme çıkışı.
-// BC tarafı: BCWMSApp 1.14.3.24 (fieldWorkOrders / fieldWorkOrderLines / issueItem).
+// BC tarafı: BCWMSApp 1.14.3.32 (fieldWorkOrders / fieldWorkOrderLines / issueItem).
 // Bu dosya ekrandan bağımsız kurallardır; birim testleri ProjectIssueWorkflowTest.
 
-internal const val PROJECT_ISSUE_BC_MISSING = "Bu BC sürümünde Projeye Çıkış yok. BCWMSApp 1.14.3.24 kurulmalı."
+internal const val PROJECT_ISSUE_BC_MISSING = "Bu BC sürümünde Projeye Çıkış yok. BCWMSApp 1.14.3.32 kurulmalı."
 
 internal data class FieldWorkOrder(
     val no: String,

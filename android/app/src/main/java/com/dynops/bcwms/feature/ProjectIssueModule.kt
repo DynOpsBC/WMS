@@ -141,7 +141,8 @@ private fun ProjectIssueDocument(wo: FieldWorkOrder, onBack: () -> Unit) {
     var status by remember { mutableStateOf("") }
     var done by remember { mutableStateOf<List<String>>(emptyList()) }
     val itemFocus = remember { androidx.compose.ui.focus.FocusRequester() }
-    val binMandatory = locations.firstOrNull { it.optString("code").equals(location, ignoreCase = true) }?.optBoolean("binMandatory") == true
+    val binMandatory = locations.firstOrNull { it.optString("code").equals(location, ignoreCase = true) }
+        ?.let { it.optBoolean("binMandatory") || it.optBoolean("directedPutAwayAndPick") } == true
 
     suspend fun reloadLines() {
         val page = BcApi.getAllPages(context, fieldWorkOrderLinesPath(wo.no))
@@ -152,7 +153,9 @@ private fun ProjectIssueDocument(wo: FieldWorkOrder, onBack: () -> Unit) {
         busy = true
         reloadLines()
         val page = BcApi.getAllPages(context, "locations?\$top=200")
-        if (page.complete) locations = page.rows.filterNot { it.optBoolean("useAsInTransit") || it.optBoolean("directedPutAwayAndPick") }
+        // Yönlendirilmiş lokasyon da listelenir: BC orada çıkışı ambar toplaması üzerinden yapar
+        // (planlama satırı → okutulan raftan toplama → Projeye Depo Gözü → proje kullanımı).
+        if (page.complete) locations = page.rows.filterNot { it.optBoolean("useAsInTransit") }
             .sortedBy { it.optString("code") }
         if (location.isBlank() && locations.size == 1) location = locations.first().optString("code")
         busy = false
