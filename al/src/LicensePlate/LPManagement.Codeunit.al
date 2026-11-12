@@ -1782,9 +1782,11 @@ codeunit 72040 "DOPSWHS LP Management"
         MovementLedger: Record "DOPSWHS LP Movement Ledger";
     begin
         MovementLedger.SetRange(Action, MovementLedger.Action::ItemRemoved);
-        // 1.14.1.186: SetFilter yer tutucuyu yalnız tek başına ('%1') değiştirir; metne
-        // gömülü 'UNDO-RCPT:%1:*' süzgeci olduğu gibi kalıyor ve hiçbir kaydı bulmuyordu.
-        MovementLedger.SetFilter("Related Document", '%1', 'UNDO-RCPT:' + Format(UndoEntryNo) + ':*');
+        // BİLİNEN DURUM (1.14.1.186'da bilerek değiştirilmedi): SetFilter metne gömülü %1'i
+        // değiştirmez; bu süzgeç hiçbir kaydı bulmaz ve bu koruma bugüne dek hep "false"
+        // dönmüştür. Etkinleştirmek mal kabul geri alma düşümünün davranışını değiştirir;
+        // ayrı bir işte, geri alma senaryolarıyla test edilerek ele alınacak.
+        MovementLedger.SetFilter("Related Document", 'UNDO-RCPT:%1:*', Format(UndoEntryNo));
         exit(not MovementLedger.IsEmpty());
     end;
 
