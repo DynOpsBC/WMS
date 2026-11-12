@@ -152,7 +152,7 @@ page 72204 "DOPSWHS Unbuilt LP Repair"
         Repair: Codeunit "DOPSWHS Unbuilt LP Repair";
         Filters: Text;
     begin
-        Filters := Rec.GetView();
+        Filters := Rec.GetView(false);
         Repair.Analyze(Rec);
         Rec.SetView(Filters);
         if Rec.FindFirst() then;

@@ -34,7 +34,6 @@ codeunit 72204 "DOPSWHS Unbuilt LP Repair"
     var
         LP: Record "DOPSWHS LP Header";
         LPLine: Record "DOPSWHS LP Line";
-        Claimed: Dictionary of [Text, Decimal];
         NextEntryNo: Integer;
     begin
         Buffer.Reset();
@@ -45,50 +44,71 @@ codeunit 72204 "DOPSWHS Unbuilt LP Repair"
             repeat
                 LPLine.SetRange("LP No.", LP."No.");
                 if LPLine.IsEmpty() then
-                    AnalyzeLp(LP, Buffer, Claimed, NextEntryNo);
+                    AnalyzeLp(LP, Buffer, NextEntryNo);
             until LP.Next() = 0;
-        ApplyExactMatchRule(Buffer, Claimed);
+        ApplyStockRule(Buffer);
     end;
 
     /// <summary>
-    /// Raftaki LP'siz stok, o raf/madde/lot için onarılabilir görünen LP'lerin toplamından
-    /// FAZLAYSA geçmişten çıkan miktar tek başına güvenilir değildir (ör. geçmişe yazılmamış bir
-    /// miktar azaltması): bu LP'ler toplu onarımdan çıkarılır, yalnız elle onayla onarılabilir.
+    /// Stok kuralı raf/madde/lot bazında, o anahtar için geçmişten içerik çıkan BÜTÜN bozuk
+    /// LP'ler birlikte değerlendirilerek uygulanır (yapısal nedenle elenenler dahil):
+    ///  - toplam = raftaki LP'siz stok  → satırlar onarılabilir kalır;
+    ///  - toplam > stok → hangi paletin rafta kaldığı bilinemez: hepsi "Stok Yetersiz";
+    ///  - toplam < stok → rafta açıklanamayan fazla var: hepsi "Elle İncele" (yalnız fazla stok).
+    /// LP ancak bütün satırları onarılabilirse toplu onarıma girer.
     /// </summary>
-    local procedure ApplyExactMatchRule(var Buffer: Record "DOPSWHS Unbuilt LP Repair Buf." temporary; var Claimed: Dictionary of [Text, Decimal])
+    local procedure ApplyStockRule(var Buffer: Record "DOPSWHS Unbuilt LP Repair Buf." temporary)
     var
-        SurplusLps: List of [Code[20]];
+        Totals: Dictionary of [Text, Decimal];
+        NotReadyLps: List of [Code[20]];
         LpNo: Code[20];
-        ClaimedBase: Decimal;
         StockKey: Text;
+        Total: Decimal;
     begin
         Buffer.Reset();
-        Buffer.SetRange("LP Ready", true);
         if Buffer.FindSet() then
             repeat
-                StockKey := Buffer."Location Code" + '|' + Buffer."Bin Code" + '|' + Buffer."Item No." + '|' + Buffer."Lot No.";
-                ClaimedBase := 0;
-                if Claimed.ContainsKey(StockKey) then
-                    ClaimedBase := Claimed.Get(StockKey);
-                if Buffer."Loose Qty. (Base)" - ClaimedBase > 0.00001 then
-                    if not SurplusLps.Contains(Buffer."LP No.") then
-                        SurplusLps.Add(Buffer."LP No.");
+                if Buffer.Quantity > 0 then begin
+                    StockKey := StockKeyOf(Buffer);
+                    if Totals.Get(StockKey, Total) then
+                        Totals.Set(StockKey, Total + Buffer.Quantity)
+                    else
+                        Totals.Add(StockKey, Buffer.Quantity);
+                end;
             until Buffer.Next() = 0;
-        Buffer.Reset();
-        foreach LpNo in SurplusLps do begin
+
+        if Buffer.FindSet() then
+            repeat
+                if Buffer.Result = Buffer.Result::Ready then begin
+                    Total := Totals.Get(StockKeyOf(Buffer));
+                    if Total - Buffer."Loose Qty. (Base)" > 0.00001 then begin
+                        Buffer.Result := Buffer.Result::"Insufficient Stock";
+                        Buffer.Note := CopyStr(StrSubstNo('Rafta LP''siz stok %1; bu raf/madde/lot için bozuk LP''lerin geçmişteki toplamı %2. Hangi paletin rafta olduğu belirsiz.', Buffer."Loose Qty. (Base)", Total), 1, MaxStrLen(Buffer.Note));
+                        Buffer.Modify();
+                    end else
+                        if Buffer."Loose Qty. (Base)" - Total > 0.00001 then begin
+                            Buffer.Result := Buffer.Result::Review;
+                            Buffer."Surplus Only" := true;
+                            Buffer.Note := CopyStr(StrSubstNo('Rafta LP''siz stok %1; bozuk LP''lerin geçmişteki toplamı %2. Açıklanamayan fazla var; paleti fiziksel doğrulayıp tek tek onarın.', Buffer."Loose Qty. (Base)", Total), 1, MaxStrLen(Buffer.Note));
+                            Buffer.Modify();
+                        end;
+                end;
+                if Buffer.Result <> Buffer.Result::Ready then
+                    if not NotReadyLps.Contains(Buffer."LP No.") then
+                        NotReadyLps.Add(Buffer."LP No.");
+            until Buffer.Next() = 0;
+
+        Buffer.ModifyAll("LP Ready", true);
+        foreach LpNo in NotReadyLps do begin
             Buffer.SetRange("LP No.", LpNo);
-            if Buffer.FindSet() then
-                repeat
-                    Buffer."LP Ready" := false;
-                    if Buffer.Result = Buffer.Result::Ready then begin
-                        Buffer.Result := Buffer.Result::Review;
-                        Buffer."Surplus Only" := true;
-                        Buffer.Note := 'Rafta bu listedeki LP''lerle açıklanmayan fazla LP''siz stok var; paleti fiziksel doğrulayıp tek tek onarın.';
-                    end;
-                    Buffer.Modify();
-                until Buffer.Next() = 0;
+            Buffer.ModifyAll("LP Ready", false);
         end;
         Buffer.Reset();
+    end;
+
+    local procedure StockKeyOf(Buffer: Record "DOPSWHS Unbuilt LP Repair Buf." temporary): Text
+    begin
+        exit(Buffer."Location Code" + '|' + Buffer."Bin Code" + '|' + Buffer."Item No." + '|' + Buffer."Lot No.");
     end;
 
     /// <summary>
@@ -130,7 +150,7 @@ codeunit 72204 "DOPSWHS Unbuilt LP Repair"
         if not Fresh.FindSet() then
             Error('%1 LP''sinin geçmişinden onarılacak içerik çıkarılamadı.', LpNo);
         repeat
-            if not (Fresh."LP Ready" and (Fresh.Result = Fresh.Result::Ready)) then
+            if Fresh.Result <> Fresh.Result::Ready then
                 if not (AllowSurplusStock and Fresh."Surplus Only") then
                     Error('%1 LP''si onarılamaz: %2 %3 — %4', LpNo, Fresh."Item No.", Fresh."Lot No.", Fresh.Note);
         until Fresh.Next() = 0;
@@ -159,7 +179,7 @@ codeunit 72204 "DOPSWHS Unbuilt LP Repair"
         LPMgt.RepairMissingStockSources(Scope, true);
     end;
 
-    local procedure AnalyzeLp(LP: Record "DOPSWHS LP Header"; var Buffer: Record "DOPSWHS Unbuilt LP Repair Buf." temporary; var Claimed: Dictionary of [Text, Decimal]; var NextEntryNo: Integer)
+    local procedure AnalyzeLp(LP: Record "DOPSWHS LP Header"; var Buffer: Record "DOPSWHS Unbuilt LP Repair Buf." temporary; var NextEntryNo: Integer)
     var
         Ledger: Record "DOPSWHS LP Movement Ledger";
         Item: Record Item;
@@ -170,15 +190,13 @@ codeunit 72204 "DOPSWHS Unbuilt LP Repair"
         LotNo: Code[50];
         Qty: Decimal;
         LooseBase: Decimal;
-        ClaimedBase: Decimal;
         UnbuiltEntryNo: Integer;
         UnbuiltAt: DateTime;
         UnbuiltBy: Code[50];
-        FirstRowNo: Integer;
-        LastMoveTotal: Decimal;
         ContentTotal: Decimal;
+        MismatchMoveTotal: Decimal;
+        MismatchContentTotal: Decimal;
         MoveMismatch: Boolean;
-        AllReady: Boolean;
         Result: Option Ready,"Insufficient Stock",Review,Repaired;
         Note: Text;
     begin
@@ -192,49 +210,42 @@ codeunit 72204 "DOPSWHS Unbuilt LP Repair"
         UnbuiltAt := Ledger.DateTime;
         UnbuiltBy := Ledger."User ID";
 
-        LastMoveTotal := -1;
         Ledger.SetFilter("Entry No.", '<%1', UnbuiltEntryNo);
         if Ledger.FindSet() then
             repeat
                 case Ledger.Action of
                     Ledger.Action::Unbuilt:
-                        begin
-                            Clear(Content);
-                            LastMoveTotal := -1;
-                        end;
+                        ResetContent(Content, ContentTotal, MoveMismatch);
                     Ledger.Action::ItemAdded, Ledger.Action::TransferIn:
                         if Ledger."Item No." <> '' then begin
                             AddContent(Content, Ledger."Item No.", Ledger."Lot Serial", Ledger.Quantity);
-                            LastMoveTotal := -1;
+                            ContentTotal += Ledger.Quantity;
                         end;
                     Ledger.Action::TransferOut:
                         // Madde no'suz Transfer Out raf taşımadır (BIN-MOVE / BIN-ASSIGN), içerik değil.
-                        // BIN-MOVE o andaki LP toplamını taşır; sonrasında içerik değişmediyse
-                        // geçmişten çıkan toplamla aynı olmalıdır (bağımsız doğrulama).
+                        // BIN-MOVE o andaki LP satır toplamını taşır: geçmişten o ana kadar çıkan
+                        // toplamla aynı değilse geçmiş eksiktir (kayıtsız miktar değişikliği) ve bu
+                        // tutarsızlık sonraki hareketlerle kapanmaz.
                         if Ledger."Item No." <> '' then begin
                             AddContent(Content, Ledger."Item No.", Ledger."Lot Serial", -Ledger.Quantity);
-                            LastMoveTotal := -1;
+                            ContentTotal -= Ledger.Quantity;
                         end else
                             if Ledger."Related Document" = BinMoveMarkerTok then
-                                LastMoveTotal := Ledger.Quantity;
+                                if Abs(Ledger.Quantity - ContentTotal) > 0.00001 then begin
+                                    MoveMismatch := true;
+                                    MismatchMoveTotal := Ledger.Quantity;
+                                    MismatchContentTotal := ContentTotal;
+                                end;
                     Ledger.Action::ItemRemoved:
-                        begin
-                            if Ledger."Item No." <> '' then
-                                AddContent(Content, Ledger."Item No.", Ledger."Lot Serial", -Ledger.Quantity)
-                            else
-                                if Ledger."Related Document" = EmptiedMarkerTok then
-                                    Clear(Content);
-                            LastMoveTotal := -1;
-                        end;
+                        if Ledger."Item No." <> '' then begin
+                            AddContent(Content, Ledger."Item No.", Ledger."Lot Serial", -Ledger.Quantity);
+                            ContentTotal -= Ledger.Quantity;
+                        end else
+                            if Ledger."Related Document" = EmptiedMarkerTok then
+                                ResetContent(Content, ContentTotal, MoveMismatch);
                 end;
             until Ledger.Next() = 0;
 
-        foreach ContentKey in Content.Keys() do
-            ContentTotal += Round(Content.Get(ContentKey), 0.00001);
-        MoveMismatch := (LastMoveTotal >= 0) and (Abs(LastMoveTotal - ContentTotal) > 0.00001);
-
-        AllReady := true;
-        FirstRowNo := NextEntryNo + 1;
         foreach ContentKey in Content.Keys() do begin
             Qty := Round(Content.Get(ContentKey), 0.00001);
             if Qty <> 0 then begin
@@ -246,7 +257,7 @@ codeunit 72204 "DOPSWHS Unbuilt LP Repair"
                 LooseBase := 0;
                 if MoveMismatch then begin
                     Result := Result::Review;
-                    Note := StrSubstNo('Son raf taşıma kaydındaki LP toplamı %1, geçmişten çıkan içerik %2; uyuşmuyor.', LastMoveTotal, ContentTotal);
+                    Note := StrSubstNo('Bir raf taşıma kaydındaki LP toplamı %1 iken geçmişten çıkan içerik %2 idi; geçmiş eksik.', MismatchMoveTotal, MismatchContentTotal);
                 end else
                 if Qty < 0 then begin
                     Result := Result::Review;
@@ -264,22 +275,15 @@ codeunit 72204 "DOPSWHS Unbuilt LP Repair"
                                 Result := Result::Review;
                                 Note := 'Seri takipli madde; elle onarılmalı.';
                             end else
+                            if HasVariants(Item) then begin
+                                Result := Result::Review;
+                                Note := 'Maddenin varyantları var; LP geçmişi varyantı tutmadığından elle onarılmalı.';
+                            end else
                                 if HasAlternativeUom(Item) then begin
                                     Result := Result::Review;
                                     Note := 'Maddenin birden çok ölçü birimi var; geçmişteki miktarın birimi belirsiz.';
-                                end else begin
+                                end else
                                     LooseBase := LooseStockBase(LP."Location Code", LP."Bin Code", ItemNo, LotNo);
-                                    ClaimedBase := 0;
-                                    if Claimed.ContainsKey(ClaimKey(LP, ItemNo, LotNo)) then
-                                        ClaimedBase := Claimed.Get(ClaimKey(LP, ItemNo, LotNo));
-                                    if LooseBase - ClaimedBase + 0.00001 < Qty then begin
-                                        Result := Result::"Insufficient Stock";
-                                        Note := StrSubstNo('Rafta LP''siz stok %1, bu listede önceki LP''lere ayrılan %2, gereken %3.', LooseBase, ClaimedBase, Qty);
-                                    end;
-                                end;
-                if Result <> Result::Ready then
-                    AllReady := false;
-
                 NextEntryNo += 1;
                 Buffer.Init();
                 Buffer."Entry No." := NextEntryNo;
@@ -300,21 +304,13 @@ codeunit 72204 "DOPSWHS Unbuilt LP Repair"
                 Buffer.Insert();
             end;
         end;
-        if NextEntryNo < FirstRowNo then
-            exit; // Geçmişe göre LP boşken bozulmuş: onarılacak içerik yok.
+    end;
 
-        // LP ancak bütün satırları onarılabilirse onarılır; o zaman stoku bu listede ayrılır.
-        Buffer.SetRange("Entry No.", FirstRowNo, NextEntryNo);
-        Buffer.ModifyAll("LP Ready", AllReady);
-        if AllReady then
-            if Buffer.FindSet() then
-                repeat
-                    ClaimedBase := 0;
-                    if Claimed.ContainsKey(ClaimKey(LP, Buffer."Item No.", Buffer."Lot No.")) then
-                        ClaimedBase := Claimed.Get(ClaimKey(LP, Buffer."Item No.", Buffer."Lot No."));
-                    Claimed.Set(ClaimKey(LP, Buffer."Item No.", Buffer."Lot No."), ClaimedBase + Buffer.Quantity);
-                until Buffer.Next() = 0;
-        Buffer.SetRange("Entry No.");
+    local procedure ResetContent(var Content: Dictionary of [Text, Decimal]; var ContentTotal: Decimal; var MoveMismatch: Boolean)
+    begin
+        Clear(Content);
+        ContentTotal := 0;
+        MoveMismatch := false;
     end;
 
     local procedure AddContent(var Content: Dictionary of [Text, Decimal]; ItemNo: Code[20]; LotSerial: Code[50]; Qty: Decimal)
@@ -327,11 +323,6 @@ codeunit 72204 "DOPSWHS Unbuilt LP Repair"
             Content.Set(ContentKey, Existing + Qty)
         else
             Content.Add(ContentKey, Qty);
-    end;
-
-    local procedure ClaimKey(LP: Record "DOPSWHS LP Header"; ItemNo: Code[20]; LotNo: Code[50]): Text
-    begin
-        exit(LP."Location Code" + '|' + LP."Bin Code" + '|' + ItemNo + '|' + LotNo);
     end;
 
     /// <summary>Raftaki madde/lot stoku eksi aynı raftaki aktif LP'lerin (Açık/Oluşturuldu/Atanmış) içeriği.</summary>
@@ -375,6 +366,14 @@ codeunit 72204 "DOPSWHS Unbuilt LP Repair"
         if (Item."Item Tracking Code" = '') or not ItemTrackingCode.Get(Item."Item Tracking Code") then
             exit(false);
         exit(ItemTrackingCode."SN Specific Tracking" or ItemTrackingCode."SN Warehouse Tracking");
+    end;
+
+    local procedure HasVariants(Item: Record Item): Boolean
+    var
+        ItemVariant: Record "Item Variant";
+    begin
+        ItemVariant.SetRange("Item No.", Item."No.");
+        exit(not ItemVariant.IsEmpty());
     end;
 
     local procedure HasAlternativeUom(Item: Record Item): Boolean
