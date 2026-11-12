@@ -104,6 +104,34 @@ page 72204 "DOPSWHS Unbuilt LP Repair"
                     Message('%1 onarıldı.', LpNo);
                 end;
             }
+            action(RepairWithShelfStockAction)
+            {
+                ApplicationArea = All;
+                Caption = 'Seçili LP''yi Rafta Kalan Stokla Onar';
+                Image = Reuse;
+                ToolTip = 'LP bozulduktan sonra içeriğinin bir kısmı kullanılmış/taşınmışsa ("Stok Yetersiz" ama rafta stok var): LP''yi rafta kalan LP''siz stok kadar onarır. Önce paletin rafta olduğunu ve üzerindeki etiketi doğrulayın.';
+                trigger OnAction()
+                var
+                    Repair: Codeunit "DOPSWHS Unbuilt LP Repair";
+                    LpNo: Code[20];
+                    Competing: Integer;
+                    Summary: Text;
+                begin
+                    LpNo := Rec."LP No.";
+                    if LpNo = '' then
+                        exit;
+                    Competing := Repair.CountCompetingLps(Rec, LpNo);
+                    if Competing > 0 then begin
+                        if not Confirm('DİKKAT: aynı raf/madde/lot stoku için %1 bozuk LP daha aday. %2 etiketli paletin rafta olduğunu fiziksel olarak doğruladınız mı? Rafta kalan stok bu LP''ye yazılacak.', false, Competing, LpNo) then
+                            exit;
+                    end else
+                        if not Confirm('%1 LP''si rafta kalan LP''siz stok kadar onarılacak (geçmişteki miktarı aşmaz). Devam edilsin mi?', false, LpNo) then
+                            exit;
+                    Summary := Repair.RepairLpWithShelfStock(LpNo);
+                    Reload();
+                    Message('%1 onarıldı: %2', LpNo, Summary);
+                end;
+            }
             action(LedgerAction)
             {
                 ApplicationArea = All;
@@ -123,6 +151,7 @@ page 72204 "DOPSWHS Unbuilt LP Repair"
         {
             actionref(RefreshPromoted; RefreshAction) { }
             actionref(RepairPromoted; RepairListedAction) { }
+            actionref(RepairShelfPromoted; RepairWithShelfStockAction) { }
             actionref(LedgerPromoted; LedgerAction) { }
         }
     }

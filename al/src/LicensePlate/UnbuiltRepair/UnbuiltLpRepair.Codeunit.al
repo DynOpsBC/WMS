@@ -179,6 +179,102 @@ codeunit 72204 "DOPSWHS Unbuilt LP Repair"
         LPMgt.RepairMissingStockSources(Scope, true);
     end;
 
+    /// <summary>
+    /// LP bozulduktan sonra içeriğinin bir kısmı LP'siz stok olarak kullanılmış/taşınmışsa
+    /// ("Stok Yetersiz" ama rafta hâlâ stok var): LP'yi geçmişteki miktarla değil, rafta KALAN
+    /// LP'siz stokla (geçmişteki miktarı aşmadan) onarır. Yalnız tek LP için, kullanıcı paleti
+    /// doğruladıktan sonra çağrılır. Yapısal nedenle "Elle İncele" olan satır varsa onarmaz.
+    /// Dönüş: yazılan satırların özeti.
+    /// </summary>
+    procedure RepairLpWithShelfStock(LpNo: Code[20]): Text
+    var
+        LP: Record "DOPSWHS LP Header";
+        LPLine: Record "DOPSWHS LP Line";
+        Fresh: Record "DOPSWHS Unbuilt LP Repair Buf." temporary;
+        Scope: Record "DOPSWHS LP Header";
+        LPMgt: Codeunit "DOPSWHS LP Management";
+        Qty: Decimal;
+        Summary: Text;
+        Lines: Integer;
+    begin
+        LP.LockTable();
+        LP.Get(LpNo);
+        if LP.Status <> LP.Status::Unbuilt then
+            Error('%1 LP''si bozulmuş durumda değil (%2).', LpNo, LP.Status);
+        if LP."Pending Receipt No." <> '' then
+            Error('%1 LP''si %2 mal kabulünü bekliyor.', LpNo, LP."Pending Receipt No.");
+        LPLine.SetRange("LP No.", LpNo);
+        if not LPLine.IsEmpty() then
+            Error('%1 LP''sinde satır var; onarım yalnız satırsız LP içindir.', LpNo);
+
+        Analyze(Fresh);
+        Fresh.SetRange("LP No.", LpNo);
+        if not Fresh.FindSet() then
+            Error('%1 LP''sinin geçmişinden onarılacak içerik çıkarılamadı.', LpNo);
+        repeat
+            if (Fresh.Result = Fresh.Result::Review) or (Fresh.Quantity <= 0) then
+                Error('%1 LP''si kalan stokla onarılamaz: %2 %3 — %4', LpNo, Fresh."Item No.", Fresh."Lot No.", Fresh.Note);
+            if MinQty(Fresh.Quantity, Fresh."Loose Qty. (Base)") > 0 then
+                Lines += 1;
+        until Fresh.Next() = 0;
+        if Lines = 0 then
+            Error('%1 LP''sinin rafında (%2) bu madde/lot için LP''siz stok kalmamış; onarılacak bir şey yok.', LpNo, LP."Bin Code");
+
+        LP.Status := LP.Status::Open;
+        LP.Modify(true);
+        LPMgt.WriteToLedger(LP, Enum::"DOPSWHS LP Action"::SourceLinked, LP."Bin Code", LP."Bin Code", 0, '', '', RepairMarkerTok);
+        Fresh.FindSet();
+        repeat
+            Qty := MinQty(Fresh.Quantity, Fresh."Loose Qty. (Base)");
+            if Qty > 0 then begin
+                LPMgt.AddLine(LP, Fresh."Item No.", Fresh."Unit of Measure", Qty, Fresh."Lot No.", '',
+                    ExpirationDateOf(Fresh."Item No.", Fresh."Lot No.", LP."Location Code"));
+                LPLine.Reset();
+                LPLine.SetRange("LP No.", LpNo);
+                if LPLine.FindLast() then begin
+                    LPLine."Source Bin Code" := LP."Bin Code";
+                    LPLine.Modify(true);
+                end;
+                Summary += StrSubstNo('%1 %2: %3 (geçmişte %4) ', Fresh."Item No.", Fresh."Lot No.", Qty, Fresh.Quantity);
+            end;
+        until Fresh.Next() = 0;
+        LP.Get(LpNo);
+        LPMgt.Stop(LP, false);
+        Scope.SetRange("No.", LpNo);
+        LPMgt.RepairMissingStockSources(Scope, true);
+        exit(Summary);
+    end;
+
+    /// <summary>Aynı raf/madde/lot stokuna aday olan başka bozuk LP sayısı (onay metni için).</summary>
+    procedure CountCompetingLps(var Buffer: Record "DOPSWHS Unbuilt LP Repair Buf." temporary; LpNo: Code[20]): Integer
+    var
+        Copy: Record "DOPSWHS Unbuilt LP Repair Buf." temporary;
+        Keys: List of [Text];
+        Others: List of [Code[20]];
+    begin
+        Copy.Copy(Buffer, true);
+        Copy.Reset();
+        Copy.SetRange("LP No.", LpNo);
+        if Copy.FindSet() then
+            repeat
+                Keys.Add(StockKeyOf(Copy));
+            until Copy.Next() = 0;
+        Copy.Reset();
+        if Copy.FindSet() then
+            repeat
+                if (Copy."LP No." <> LpNo) and Keys.Contains(StockKeyOf(Copy)) and not Others.Contains(Copy."LP No.") then
+                    Others.Add(Copy."LP No.");
+            until Copy.Next() = 0;
+        exit(Others.Count());
+    end;
+
+    local procedure MinQty(A: Decimal; B: Decimal): Decimal
+    begin
+        if A < B then
+            exit(A);
+        exit(B);
+    end;
+
     local procedure AnalyzeLp(LP: Record "DOPSWHS LP Header"; var Buffer: Record "DOPSWHS Unbuilt LP Repair Buf." temporary; var NextEntryNo: Integer)
     var
         Ledger: Record "DOPSWHS LP Movement Ledger";
