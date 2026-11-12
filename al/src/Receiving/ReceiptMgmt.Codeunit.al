@@ -204,9 +204,15 @@ codeunit 72043 "DOPSWHS Receipt Mgmt"
         ReceiptRef.GetTable(WhseReceiptHeader);
         for FieldIndex := 1 to ReceiptRef.FieldCount do begin
             CandidateField := ReceiptRef.FieldIndex(FieldIndex);
+            // 1.14.1.186: alan BadeProduction'da "Actual Receipt DateTime" adıyla tanımlı;
+            // başlığı yalnız Türkçe oturumda "Fiili Alış Tarihi - Saati" döner. Terminal
+            // API oturumu İngilizce olduğundan yalnız başlığa bakmak alanı bulamıyor,
+            // kayıt "zorunlu alan boş" ile düşüyordu (RE001387).
             if (CandidateField.Type = FieldType::DateTime) and
-               ((CandidateField.Name = 'Fiili Alış Tarihi - Saati') or
-                (CandidateField.Caption = 'Fiili Alış Tarihi - Saati'))
+               ((CandidateField.Name = 'Actual Receipt DateTime') or
+                (CandidateField.Name = 'Fiili Alış Tarihi - Saati') or
+                (CandidateField.Caption = 'Fiili Alış Tarihi - Saati') or
+                (CandidateField.Caption = 'Actual Receipt DateTime'))
             then begin
                 ExistingValue := CandidateField.Value;
                 if ExistingValue = 0DT then begin
@@ -827,7 +833,6 @@ codeunit 72043 "DOPSWHS Receipt Mgmt"
     /// </summary>
     procedure CleanupCanceledReceiptLPs(ReceiptNo: Code[20])
     var
-        ReceiptLPLine: Record "DOPSWHS LP Line";
         OtherLPLine: Record "DOPSWHS LP Line";
         LP: Record "DOPSWHS LP Header";
         Mixed: Record "DOPSWHS Receipt Mixed Alloc.";
@@ -842,6 +847,13 @@ codeunit 72043 "DOPSWHS Receipt Mgmt"
         Mixed.SetRange("Receipt No.", ReceiptNo);
         if not Mixed.IsEmpty() then
             Mixed.DeleteAll(true);
+        // 1.14.1.186: yalnız HÂLÂ bu mal kabulünü bekleyen taslak LP'ler temizlenir.
+        // Önceki sürüm, satırında bu belge no'su yazan bütün LP'leri de topluyordu;
+        // kısmen nakledilmiş bir ambar alış irsaliyesinin kalanı BC'den silinince
+        // nakledilip rafa kaldırılmış LP'ler (ve içeriği o LP'lerden aktarılmış
+        // başka LP'ler) bozuluyor, stok LP'siz kalıyordu (LP001703 ve ~50 LP).
+        // Nakledilen LP'nin "Pending Receipt No." alanı kayıt anında boşaltılır;
+        // dolayısıyla bu alan taslak ile stoktaki LP'yi kesin ayırır.
         LP.SetRange("Pending Receipt No.", ReceiptNo);
         if LP.FindSet() then
             repeat
@@ -849,16 +861,11 @@ codeunit 72043 "DOPSWHS Receipt Mgmt"
                     LpNos.Add(LP."No.", true);
             until LP.Next() = 0;
         LP.Reset();
-        ReceiptLPLine.SetRange("Source Document Type", ReceiptLPLine."Source Document Type"::WhseReceipt);
-        ReceiptLPLine.SetRange("Source Document No.", ReceiptNo);
-        if ReceiptLPLine.FindSet() then
-            repeat
-                if not LpNos.ContainsKey(ReceiptLPLine."LP No.") then
-                    LpNos.Add(ReceiptLPLine."LP No.", true);
-            until ReceiptLPLine.Next() = 0;
 
         foreach LpNo in LpNos.Keys do
-            if LP.Get(LpNo) and (LP.Status in [LP.Status::Open, LP.Status::Built]) then begin
+            if LP.Get(LpNo) and (LP."Pending Receipt No." = ReceiptNo) and
+               (LP.Status in [LP.Status::Open, LP.Status::Built])
+            then begin
                 OtherLPLine.SetRange("LP No.", LpNo);
                 HasOtherSource := false;
                 if OtherLPLine.FindSet() then

@@ -469,6 +469,11 @@ codeunit 72046 "DOPSWHS Pick Mgmt"
             if not StageLedger.IsEmpty() then
                 exit(true);
         end;
+        // BİLİNEN DURUM (1.14.1.186'da bilerek değiştirilmedi): SetFilter metne gömülü %1'i
+        // değiştirmez, bu süzgeç hiçbir kaydı bulmaz ve aşağıdaki dal bugüne dek hep "false"
+        // dönmüştür. Düzeltmek, hazırlık gözüne aktarımın (PICK:… izi) ardından çekişi BC'den
+        // kaydedilen LP'lerin hiç düşülmemesine yol açabilir; davranış ayrı bir işte, Take
+        // hareketinin gerçekten işlendiği doğrulanarak ele alınacak.
         StageLedger.SetFilter("Related Document", 'PICK:%1:*', PickNo);
         exit(not StageLedger.IsEmpty());
     end;

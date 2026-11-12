@@ -1782,7 +1782,9 @@ codeunit 72040 "DOPSWHS LP Management"
         MovementLedger: Record "DOPSWHS LP Movement Ledger";
     begin
         MovementLedger.SetRange(Action, MovementLedger.Action::ItemRemoved);
-        MovementLedger.SetFilter("Related Document", 'UNDO-RCPT:%1:*', Format(UndoEntryNo));
+        // 1.14.1.186: SetFilter yer tutucuyu yalnız tek başına ('%1') değiştirir; metne
+        // gömülü 'UNDO-RCPT:%1:*' süzgeci olduğu gibi kalıyor ve hiçbir kaydı bulmuyordu.
+        MovementLedger.SetFilter("Related Document", '%1', 'UNDO-RCPT:' + Format(UndoEntryNo) + ':*');
         exit(not MovementLedger.IsEmpty());
     end;
 
@@ -1967,7 +1969,8 @@ codeunit 72040 "DOPSWHS LP Management"
             Error('%1 LP numarası %2 üretim emrine bu gözde atanmış değil.', LP."No.", ItemJournalLine."Order No.");
         StageLedger.SetRange("LP No.", LP."No.");
         StageLedger.SetRange(Action, StageLedger.Action::Assigned);
-        StageLedger.SetFilter("Related Document", 'PROD:%1/PICK:*', ItemJournalLine."Order No.");
+        // 1.14.1.186: gömülü %1 değiştirilmediği için çekiş izi hiç bulunamıyordu.
+        StageLedger.SetFilter("Related Document", '%1', 'PROD:' + ItemJournalLine."Order No." + '/PICK:*');
         if StageLedger.IsEmpty() then
             Error('%1 LP numarasının %2 üretim emrine kayıtlı çekiş izi bulunamadı; sarfiyat kaydedilmedi.',
                 LP."No.", ItemJournalLine."Order No.");

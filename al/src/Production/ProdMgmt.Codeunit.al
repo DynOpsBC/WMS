@@ -815,7 +815,9 @@ codeunit 72048 "DOPSWHS Prod Mgmt"
                     Error('%1 LP numarası %2 üretim emrine bu gözde atanmış değil.', LP."No.", ItemJournalLine."Order No.");
                 StageLedger.SetRange("LP No.", LP."No.");
                 StageLedger.SetRange(Action, StageLedger.Action::Assigned);
-                StageLedger.SetFilter("Related Document", 'PROD:%1/PICK:*', ItemJournalLine."Order No.");
+                // 1.14.1.186: SetFilter gömülü %1'i değiştirmez ('PROD:%1/PICK:*' olduğu gibi
+                // kalır); LP000889 / RLO.B100955 sarfiyatı "çekiş izi bulunamadı" ile düşüyordu.
+                StageLedger.SetFilter("Related Document", '%1', 'PROD:' + ItemJournalLine."Order No." + '/PICK:*');
                 if StageLedger.IsEmpty() then
                     Error('%1 LP numarasının %2 üretim emrine kayıtlı çekiş izi bulunamadı; sarfiyat kaydedilmedi.',
                         LP."No.", ItemJournalLine."Order No.");
