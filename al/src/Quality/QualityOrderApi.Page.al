@@ -33,6 +33,19 @@ page 72256 "DOPSWHS Quality Order API"
                 field(rejectReason; Rec."Reject Reason") { Caption = 'rejectReason'; }
                 field(quarantineBin; Rec."Quarantine Bin") { Caption = 'quarantineBin'; }
                 field(dueDate; Rec."Due Date") { Caption = 'dueDate'; }
+                // Kitoko (Kas 2026), read-only: the inspected stock, its source line
+                // and the decision (KIT-009/010, INV-009/010). Changes go through
+                // the BC quality order card so the quality hold follows them.
+                field(variantCode; Rec."Variant Code") { Caption = 'variantCode', Locked = true; Editable = false; }
+                field(lotNo; Rec."Lot No.") { Caption = 'lotNo', Locked = true; Editable = false; }
+                field(serialNo; Rec."Serial No.") { Caption = 'serialNo', Locked = true; Editable = false; }
+                field(unitOfMeasureCode; Rec."Unit of Measure Code") { Caption = 'unitOfMeasureCode', Locked = true; Editable = false; }
+                field(sourceLineNo; Rec."Source Line No.") { Caption = 'sourceLineNo', Locked = true; Editable = false; }
+                field(whseDocumentNo; Rec."Whse. Document No.") { Caption = 'whseDocumentNo', Locked = true; Editable = false; }
+                field(postedDocumentNo; Rec."Posted Document No.") { Caption = 'postedDocumentNo', Locked = true; Editable = false; }
+                field(vendorNo; Rec."Vendor No.") { Caption = 'vendorNo', Locked = true; Editable = false; }
+                field(decision; Rec.Decision) { Caption = 'decision', Locked = true; Editable = false; }
+                field(decisionExecuted; Rec."Decision Executed") { Caption = 'decisionExecuted', Locked = true; Editable = false; }
             }
         }
     }

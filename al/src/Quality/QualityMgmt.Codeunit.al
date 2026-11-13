@@ -4,7 +4,10 @@ codeunit 72255 "DOPSWHS Quality Mgmt"
     // received or produced) until an inspector passes/fails them; failing routes to a quarantine bin.
     Access = Public;
 
+    // Kitoko (Kas 2026): also called while warehouse receipts are created or
+    // posted by users without WMS permission sets (quality gate, KIT-009).
     /// <summary>Creates an open quality order and returns its No.</summary>
+    [InherentPermissions(PermissionObjectType::TableData, Database::"DOPSWHS Quality Order", 'RIM')]
     procedure CreateOrder(SourceTypeOpt: Integer; SourceNo: Code[20]; ItemNo: Code[20]; Qty: Decimal; LocationCode: Code[10]; BinCode: Code[20]; LpNo: Code[20]): Code[20]
     var
         QualityOrder: Record "DOPSWHS Quality Order";
@@ -26,7 +29,20 @@ codeunit 72255 "DOPSWHS Quality Mgmt"
         QualityOrder."Created DateTime" := CurrentDateTime();
         QualityOrder."Due Date" := Today();
         QualityOrder.Insert(true);
+        OnAfterCreateOrder(QualityOrder);
         exit(QualityOrder."No.");
+    end;
+
+    /// <summary>Next free quality order number (same scheme as CreateOrder).</summary>
+    procedure GetNextOrderNo(): Code[20]
+    begin
+        exit(NextNo());
+    end;
+
+    /// <summary>Sample size suggested for an inspected quantity.</summary>
+    procedure GetSampleSize(Qty: Decimal): Decimal
+    begin
+        exit(SampleSizeFor(Qty));
     end;
 
     /// <summary>Records a PASS result; goods are released for normal handling.</summary>
@@ -38,6 +54,7 @@ codeunit 72255 "DOPSWHS Quality Mgmt"
         QualityOrder."Inspected DateTime" := CurrentDateTime();
         QualityOrder."Result Notes" := Notes;
         QualityOrder.Modify(true);
+        OnAfterPass(QualityOrder);
         LogTelemetry('AdvWMS.Quality.Passed', QualityOrder."No.");
     end;
 
@@ -52,6 +69,7 @@ codeunit 72255 "DOPSWHS Quality Mgmt"
         QualityOrder."Result Notes" := Notes;
         QualityOrder."Quarantine Bin" := QuarantineBin;
         QualityOrder.Modify(true);
+        OnAfterFail(QualityOrder);
         LogTelemetry('AdvWMS.Quality.Failed', QualityOrder."No.");
     end;
 
@@ -88,7 +106,17 @@ codeunit 72255 "DOPSWHS Quality Mgmt"
         Candidate := CopyStr(Base, 1, 20);
         while QualityOrder.Get(Candidate) do begin
             Suffix += 1;
-            Candidate := CopyStr(Base + '-' + Format(Suffix), 1, 20);
+            // "QO-" + 14 digits leaves room for "-NN" only. Bulk creation (one
+            // order per receipt lot) can exceed 99 per second; from 100 on the
+            // dash is dropped so the number stays unique instead of being cut
+            // back to an existing one.
+            if Suffix < 100 then
+                Candidate := CopyStr(Base + '-' + Format(Suffix), 1, 20)
+            else begin
+                if Suffix > 999 then
+                    Error(TooManyOrdersErr);
+                Candidate := CopyStr(Base + Format(Suffix), 1, 20);
+            end;
         end;
         exit(Candidate);
     end;
@@ -110,4 +138,25 @@ codeunit 72255 "DOPSWHS Quality Mgmt"
         Dimensions.Add('qualityOrderNo', QoNo);
         Session.LogMessage(EventId, StrSubstNo('Quality order %1', QoNo), Verbosity::Normal, DataClassification::SystemMetadata, TelemetryScope::ExtensionPublisher, Dimensions);
     end;
+
+    // Kitoko (Kas 2026): result events. The quality lot hold (KIT-010) blocks
+    // and releases lots from here, for orders handled on the terminal (API)
+    // as well as in Business Central.
+    [IntegrationEvent(false, false)]
+    local procedure OnAfterCreateOrder(var QualityOrder: Record "DOPSWHS Quality Order")
+    begin
+    end;
+
+    [IntegrationEvent(false, false)]
+    local procedure OnAfterPass(var QualityOrder: Record "DOPSWHS Quality Order")
+    begin
+    end;
+
+    [IntegrationEvent(false, false)]
+    local procedure OnAfterFail(var QualityOrder: Record "DOPSWHS Quality Order")
+    begin
+    end;
+
+    var
+        TooManyOrdersErr: Label 'Too many quality orders were created within one second. Try again.';
 }

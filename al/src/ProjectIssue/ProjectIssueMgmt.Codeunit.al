@@ -161,6 +161,8 @@ codeunit 72477 "DOPSWHS Project Issue Mgmt"
         if UomCode = '' then
             UomCode := Item."Base Unit of Measure";
         GetTracking(Item, LotTracked, SerialTracked);
+        if UsePick and SerialTracked then
+            Error('Seri takipli ürünün yönlendirilmiş depodan projeye çıkışını standart BC proje toplama akışından yapın.');
         if LotTracked and (LotNo = '') and (LpNo <> '') then
             LotNo := LPMgt.SingleLotOnLp(LpNo, ItemNo, VariantCode);
         if LotTracked and (LotNo = '') then
@@ -473,6 +475,7 @@ codeunit 72477 "DOPSWHS Project Issue Mgmt"
         Actual: Decimal;
     begin
         WorkLine.Open(WorkLineTableNo);
+        WorkLine.LockTable();
         WorkLine.Field(1).SetRange(WorkOrderNo);
         WorkLine.Field(4).SetRange(Item."No.");
         if WorkLine.FindSet() then
@@ -491,11 +494,11 @@ codeunit 72477 "DOPSWHS Project Issue Mgmt"
             TargetPosition := FirstPosition;
         if TargetPosition = '' then begin
             WorkLine.Close();
-            exit(' · iş emrinde bu madde satırı yok, gerçekleşen miktar yazılmadı');
+            Error('İş emrinde bu madde satırı yok; önce iş emrine malzeme satırı ekleyin.');
         end;
         if not WorkLine.WritePermission() then begin
             WorkLine.Close();
-            exit(' · iş emri satırına yazma yetkisi yok, gerçekleşen miktar güncellenmedi');
+            Error('İş emri satırının gerçekleşen miktarını güncelleme yetkiniz yok.');
         end;
         WorkLine.SetPosition(TargetPosition);
         WorkLine.Find('=');

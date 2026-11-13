@@ -71,6 +71,30 @@ codeunit 72113 "DOPSWHS LP Partial Use Tests"
         Assert.AreEqual(4, LooseQtyCreated(LP."Location Code", LP."Bin Code", 'ITEMY'), 'Loose bin quantity should represent remainder.');
     end;
 
+    [Test]
+    procedure ProjectIssueDebitsLpOnce()
+    var LP: Record "DOPSWHS LP Header"; Line: Record "DOPSWHS LP Line"; LPMgt: Codeunit "DOPSWHS LP Management"; Assert: Codeunit "Library Assert";
+    begin
+        Seed(); BuildLPWithQty(LP, 10, Line);
+        LPMgt.DebitProjectIssueLp(LP."No.", 'BLUE', 'PICK', 'ITEMY', '', '', '', 3, 'PJ:REGRESSION-1');
+        Line.Get(LP."No.", Line."Line No.");
+        Assert.AreEqual(7, Line.Quantity, 'Project issue must debit exact base quantity');
+        LPMgt.DebitProjectIssueLp(LP."No.", 'BLUE', 'PICK', 'ITEMY', '', '', '', 3, 'PJ:REGRESSION-1');
+        Line.Get(LP."No.", Line."Line No.");
+        Assert.AreEqual(7, Line.Quantity, 'Same ledger reference must not debit twice');
+    end;
+
+    [Test]
+    procedure ProjectIssueRejectsWrongBinAndExcess()
+    var LP: Record "DOPSWHS LP Header"; Line: Record "DOPSWHS LP Line"; LPMgt: Codeunit "DOPSWHS LP Management"; Assert: Codeunit "Library Assert";
+    begin
+        Seed(); BuildLPWithQty(LP, 10, Line);
+        asserterror LPMgt.DebitProjectIssueLp(LP."No.", 'BLUE', 'WRONG', 'ITEMY', '', '', '', 3, 'PJ:REGRESSION-2');
+        asserterror LPMgt.DebitProjectIssueLp(LP."No.", 'BLUE', 'PICK', 'ITEMY', '', '', '', 11, 'PJ:REGRESSION-3');
+        Line.Get(LP."No.", Line."Line No.");
+        Assert.AreEqual(10, Line.Quantity, 'Rejected project issue must preserve LP content');
+    end;
+
     local procedure BuildLPWithQty(var LP: Record "DOPSWHS LP Header"; Qty: Decimal; var LPLine: Record "DOPSWHS LP Line")
     var
         LPMgt: Codeunit "DOPSWHS LP Management";

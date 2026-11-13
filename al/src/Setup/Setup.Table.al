@@ -442,6 +442,87 @@ table 72000 "DOPSWHS Setup"
             Caption = 'Allow Edition Change';
             DataClassification = SystemMetadata;
         }
+        // Kitoko (Kas 2026) quality & inventory control. Every switch is OFF by
+        // default: an upgrade changes nothing until a company opts in.
+        field(600; "Receipt Quality Gate"; Boolean)
+        {
+            // KIT-009: purchase receipts in the scope of a quality rule cannot be
+            // posted while their inspection has no result.
+            Caption = 'Receipt Quality Gate';
+            DataClassification = CustomerContent;
+            InitValue = false;
+        }
+        field(601; "Quality Lot Hold"; Boolean)
+        {
+            // KIT-010: a quality order blocks its lot/serial until it is passed;
+            // put-away/movement of held stock is limited to the quarantine bin.
+            Caption = 'Quality Lot Hold';
+            DataClassification = CustomerContent;
+            InitValue = false;
+        }
+        field(602; "Assembly Quality Gate"; Boolean)
+        {
+            // INV-009: assembly orders in the scope of a quality rule cannot be
+            // posted without a passed (or accepted) final inspection.
+            Caption = 'Assembly Quality Gate';
+            DataClassification = CustomerContent;
+            InitValue = false;
+        }
+        field(603; "Quality Scrap Jnl. Template"; Code[10])
+        {
+            // INV-010: item journal used to post scrap decisions.
+            Caption = 'Quality Scrap Jnl. Template';
+            DataClassification = CustomerContent;
+            TableRelation = "Item Journal Template".Name where(Type = const(Item), Recurring = const(false));
+
+            trigger OnValidate()
+            begin
+                if "Quality Scrap Jnl. Template" <> xRec."Quality Scrap Jnl. Template" then
+                    "Quality Scrap Jnl. Batch" := '';
+            end;
+        }
+        field(604; "Quality Scrap Jnl. Batch"; Code[10])
+        {
+            Caption = 'Quality Scrap Jnl. Batch';
+            DataClassification = CustomerContent;
+            TableRelation = "Item Journal Batch".Name where("Journal Template Name" = field("Quality Scrap Jnl. Template"));
+        }
+        field(610; "Count Tolerance Check"; Enum "DOPSWHS Count Tolerance Check")
+        {
+            // KIT-014: what happens when a count variance exceeds the tolerance.
+            Caption = 'Count Tolerance Check';
+            DataClassification = CustomerContent;
+        }
+        field(611; "Count Tolerance %"; Decimal)
+        {
+            Caption = 'Count Tolerance %';
+            DataClassification = CustomerContent;
+            DecimalPlaces = 0 : 2;
+            MinValue = 0;
+        }
+        field(612; "Count Tolerance Amount"; Decimal)
+        {
+            // Absolute variance value (base quantity x item unit cost, LCY).
+            Caption = 'Count Tolerance Amount (LCY)';
+            DataClassification = CustomerContent;
+            AutoFormatType = 1;
+            MinValue = 0;
+        }
+        field(620; "Reclass Reason Mandatory"; Boolean)
+        {
+            // KIT-015: item reclassification journal lines need a reason code.
+            Caption = 'Reclass Reason Code Mandatory';
+            DataClassification = CustomerContent;
+            InitValue = false;
+        }
+        field(621; "Reclass Approval Required"; Boolean)
+        {
+            // KIT-015: only users on the inventory approver list with "Approve
+            // Reclassification" may post item reclassification journals.
+            Caption = 'Reclass Posting Restricted';
+            DataClassification = CustomerContent;
+            InitValue = false;
+        }
     }
 
     keys

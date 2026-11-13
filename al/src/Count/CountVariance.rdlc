@@ -1,0 +1,287 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Report xmlns="http://schemas.microsoft.com/sqlserver/reporting/2016/01/reportdefinition" xmlns:rd="http://schemas.microsoft.com/SQLServer/reporting/reportdesigner">
+  <AutoRefresh>0</AutoRefresh>
+  <DataSources>
+    <DataSource Name="DataSource">
+      <ConnectionProperties>
+        <DataProvider>SQL</DataProvider>
+        <ConnectString />
+      </ConnectionProperties>
+      <rd:SecurityType>None</rd:SecurityType>
+    </DataSource>
+  </DataSources>
+  <ReportSections>
+    <ReportSection>
+      <Body>
+        <Height>2in</Height>
+        <Style />
+      </Body>
+      <Width>6.5in</Width>
+      <Page>
+        <Style />
+      </Page>
+    </ReportSection>
+  </ReportSections>
+  <Code>Public Function BlankZero(ByVal Value As Decimal)
+    if Value = 0 then
+        Return ""
+    end if
+    Return Value
+End Function
+
+Public Function BlankPos(ByVal Value As Decimal)
+    if Value &gt; 0 then
+        Return ""
+    end if
+    Return Value
+End Function
+
+Public Function BlankZeroAndPos(ByVal Value As Decimal)
+    if Value &gt;= 0 then
+        Return ""
+    end if
+    Return Value
+End Function
+
+Public Function BlankNeg(ByVal Value As Decimal)
+    if Value &lt; 0 then
+        Return ""
+    end if
+    Return Value
+End Function
+
+Public Function BlankNegAndZero(ByVal Value As Decimal)
+    if Value &lt;= 0 then
+        Return ""
+    end if
+    Return Value
+End Function
+</Code>
+  <Language>=User!Language</Language>
+  <ConsumeContainerWhitespace>true</ConsumeContainerWhitespace>
+  <rd:ReportUnitType>Inch</rd:ReportUnitType>
+  <rd:ReportID>0eeb6585-38ae-40f1-885b-8d50088d51b4</rd:ReportID>
+  <DataSets>
+    <DataSet Name="DataSet_Result">
+      <Fields>
+        <Field Name="No_">
+          <DataField>No_</DataField>
+        </Field>
+        <Field Name="Location_Code">
+          <DataField>Location_Code</DataField>
+        </Field>
+        <Field Name="CompanyName">
+          <DataField>CompanyName</DataField>
+        </Field>
+        <Field Name="Status_Text">
+          <DataField>Status_Text</DataField>
+        </Field>
+        <Field Name="Created_DateTime">
+          <DataField>Created_DateTime</DataField>
+        </Field>
+        <Field Name="Posted_DateTime">
+          <DataField>Posted_DateTime</DataField>
+        </Field>
+        <Field Name="Cycle_Count">
+          <DataField>Cycle_Count</DataField>
+        </Field>
+        <Field Name="Tolerance_Text">
+          <DataField>Tolerance_Text</DataField>
+        </Field>
+        <Field Name="Approved_By">
+          <DataField>Approved_By</DataField>
+        </Field>
+        <Field Name="Approved_At">
+          <DataField>Approved_At</DataField>
+        </Field>
+        <Field Name="Exceeding_Lines">
+          <DataField>Exceeding_Lines</DataField>
+        </Field>
+        <Field Name="Exceeding_Amount">
+          <DataField>Exceeding_Amount</DataField>
+        </Field>
+        <Field Name="Exceeding_AmountFormat">
+          <DataField>Exceeding_AmountFormat</DataField>
+        </Field>
+        <Field Name="Total_Variance_Amount">
+          <DataField>Total_Variance_Amount</DataField>
+        </Field>
+        <Field Name="Total_Variance_AmountFormat">
+          <DataField>Total_Variance_AmountFormat</DataField>
+        </Field>
+        <Field Name="ReportTitleCaption">
+          <DataField>ReportTitleCaption</DataField>
+        </Field>
+        <Field Name="SheetCaption">
+          <DataField>SheetCaption</DataField>
+        </Field>
+        <Field Name="LocationCaption">
+          <DataField>LocationCaption</DataField>
+        </Field>
+        <Field Name="StatusCaption">
+          <DataField>StatusCaption</DataField>
+        </Field>
+        <Field Name="CreatedCaption">
+          <DataField>CreatedCaption</DataField>
+        </Field>
+        <Field Name="PostedCaption">
+          <DataField>PostedCaption</DataField>
+        </Field>
+        <Field Name="CycleCountCaption">
+          <DataField>CycleCountCaption</DataField>
+        </Field>
+        <Field Name="ToleranceCaption">
+          <DataField>ToleranceCaption</DataField>
+        </Field>
+        <Field Name="ApprovedByCaption">
+          <DataField>ApprovedByCaption</DataField>
+        </Field>
+        <Field Name="ExceedingLinesCaption">
+          <DataField>ExceedingLinesCaption</DataField>
+        </Field>
+        <Field Name="ExceedingAmountCaption">
+          <DataField>ExceedingAmountCaption</DataField>
+        </Field>
+        <Field Name="TotalVarianceAmountCaption">
+          <DataField>TotalVarianceAmountCaption</DataField>
+        </Field>
+        <Field Name="ItemNoCaption">
+          <DataField>ItemNoCaption</DataField>
+        </Field>
+        <Field Name="DescriptionCaption">
+          <DataField>DescriptionCaption</DataField>
+        </Field>
+        <Field Name="VariantCaption">
+          <DataField>VariantCaption</DataField>
+        </Field>
+        <Field Name="BinCaption">
+          <DataField>BinCaption</DataField>
+        </Field>
+        <Field Name="LpCaption">
+          <DataField>LpCaption</DataField>
+        </Field>
+        <Field Name="LotSerialCaption">
+          <DataField>LotSerialCaption</DataField>
+        </Field>
+        <Field Name="UomCaption">
+          <DataField>UomCaption</DataField>
+        </Field>
+        <Field Name="SystemQtyCaption">
+          <DataField>SystemQtyCaption</DataField>
+        </Field>
+        <Field Name="CountedQtyCaption">
+          <DataField>CountedQtyCaption</DataField>
+        </Field>
+        <Field Name="VarianceCaption">
+          <DataField>VarianceCaption</DataField>
+        </Field>
+        <Field Name="VariancePctCaption">
+          <DataField>VariancePctCaption</DataField>
+        </Field>
+        <Field Name="UnitCostCaption">
+          <DataField>UnitCostCaption</DataField>
+        </Field>
+        <Field Name="VarianceAmountCaption">
+          <DataField>VarianceAmountCaption</DataField>
+        </Field>
+        <Field Name="ExceedsCaption">
+          <DataField>ExceedsCaption</DataField>
+        </Field>
+        <Field Name="PageCaption">
+          <DataField>PageCaption</DataField>
+        </Field>
+        <Field Name="Item_No_">
+          <DataField>Item_No_</DataField>
+        </Field>
+        <Field Name="Bin_Code">
+          <DataField>Bin_Code</DataField>
+        </Field>
+        <Field Name="LP_No_">
+          <DataField>LP_No_</DataField>
+        </Field>
+        <Field Name="Lot_No_">
+          <DataField>Lot_No_</DataField>
+        </Field>
+        <Field Name="Serial_No_">
+          <DataField>Serial_No_</DataField>
+        </Field>
+        <Field Name="System_Qty">
+          <DataField>System_Qty</DataField>
+        </Field>
+        <Field Name="System_QtyFormat">
+          <DataField>System_QtyFormat</DataField>
+        </Field>
+        <Field Name="Counted_Qty_1">
+          <DataField>Counted_Qty_1</DataField>
+        </Field>
+        <Field Name="Counted_Qty_1Format">
+          <DataField>Counted_Qty_1Format</DataField>
+        </Field>
+        <Field Name="Counted_Qty_2">
+          <DataField>Counted_Qty_2</DataField>
+        </Field>
+        <Field Name="Counted_Qty_2Format">
+          <DataField>Counted_Qty_2Format</DataField>
+        </Field>
+        <Field Name="Counted_Qty_3">
+          <DataField>Counted_Qty_3</DataField>
+        </Field>
+        <Field Name="Counted_Qty_3Format">
+          <DataField>Counted_Qty_3Format</DataField>
+        </Field>
+        <Field Name="Variance">
+          <DataField>Variance</DataField>
+        </Field>
+        <Field Name="VarianceFormat">
+          <DataField>VarianceFormat</DataField>
+        </Field>
+        <Field Name="Line_No_">
+          <DataField>Line_No_</DataField>
+        </Field>
+        <Field Name="Variant_Code">
+          <DataField>Variant_Code</DataField>
+        </Field>
+        <Field Name="Unit_of_Measure_Code">
+          <DataField>Unit_of_Measure_Code</DataField>
+        </Field>
+        <Field Name="Item_Description">
+          <DataField>Item_Description</DataField>
+        </Field>
+        <Field Name="Lot_Serial">
+          <DataField>Lot_Serial</DataField>
+        </Field>
+        <Field Name="Counted_Qty">
+          <DataField>Counted_Qty</DataField>
+        </Field>
+        <Field Name="Counted_QtyFormat">
+          <DataField>Counted_QtyFormat</DataField>
+        </Field>
+        <Field Name="Variance_Pct">
+          <DataField>Variance_Pct</DataField>
+        </Field>
+        <Field Name="Variance_PctFormat">
+          <DataField>Variance_PctFormat</DataField>
+        </Field>
+        <Field Name="Unit_Cost">
+          <DataField>Unit_Cost</DataField>
+        </Field>
+        <Field Name="Unit_CostFormat">
+          <DataField>Unit_CostFormat</DataField>
+        </Field>
+        <Field Name="Variance_Amount">
+          <DataField>Variance_Amount</DataField>
+        </Field>
+        <Field Name="Variance_AmountFormat">
+          <DataField>Variance_AmountFormat</DataField>
+        </Field>
+        <Field Name="Exceeds_Tolerance">
+          <DataField>Exceeds_Tolerance</DataField>
+        </Field>
+      </Fields>
+      <Query>
+        <DataSourceName>DataSource</DataSourceName>
+        <CommandText />
+      </Query>
+    </DataSet>
+  </DataSets>
+</Report>

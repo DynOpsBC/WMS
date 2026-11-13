@@ -118,6 +118,63 @@ page 72061 "DOPSWHS Setup"
                     ToolTip = 'Terminaldeki MTE Yazdır bu raporu çalıştırır. BADE''de 60150 seçiliyse terminal için ayrı 60298 LP raporu kullanılır; 60150''nin BC düzeni değişmez. 0 = BCWMS''in kendi MTE raporu.';
                 }
             }
+            // Kitoko (Kas 2026): quality & inventory control (KIT-009, KIT-010,
+            // INV-009, INV-010, KIT-014, KIT-015). All switches default to off.
+            group(QualityInventoryControl)
+            {
+                Caption = 'Quality & Inventory Control';
+                InstructionalText = 'Optional controls for quality inspection, quality hold, count tolerance and reclassification. Each switch is off by default; nothing changes until it is turned on.';
+                field("Receipt Quality Gate"; Rec."Receipt Quality Gate")
+                {
+                    ApplicationArea = All;
+                    ToolTip = 'Specifies that purchase receipt lines covered by a quality inspection rule (Before Posting) cannot be posted until their quality order has a result. After Posting rules create the quality orders when the receipt is posted.';
+                }
+                field("Quality Lot Hold"; Rec."Quality Lot Hold")
+                {
+                    ApplicationArea = All;
+                    ToolTip = 'Specifies that the lot or serial number of an open or failed quality order is blocked, so it cannot be picked, shipped, consumed or reserved. Held stock can only be put away or moved to the quality order''s quarantine bin. Passing the order releases the block.';
+                }
+                field("Assembly Quality Gate"; Rec."Assembly Quality Gate")
+                {
+                    ApplicationArea = All;
+                    ToolTip = 'Specifies that assembly orders covered by an Assembly Output quality rule can only be posted after their final inspection is passed or accepted with deviation.';
+                }
+                field("Quality Scrap Jnl. Template"; Rec."Quality Scrap Jnl. Template")
+                {
+                    ApplicationArea = All;
+                    ToolTip = 'Specifies the item journal template used to post scrap decisions of failed quality orders.';
+                }
+                field("Quality Scrap Jnl. Batch"; Rec."Quality Scrap Jnl. Batch")
+                {
+                    ApplicationArea = All;
+                    ToolTip = 'Specifies the item journal batch used to post scrap decisions. Keep it empty; it is posted as a whole.';
+                }
+                field("Count Tolerance Check"; Rec."Count Tolerance Check")
+                {
+                    ApplicationArea = All;
+                    ToolTip = 'Specifies what happens when a count variance exceeds the tolerance: nothing (Disabled), a confirmation (Warning) or an approval by an inventory control approver (Approval Required). Applies to WMS count sheets and phys. inventory journals.';
+                }
+                field("Count Tolerance %"; Rec."Count Tolerance %")
+                {
+                    ApplicationArea = All;
+                    ToolTip = 'Specifies the allowed variance in percent of the system quantity. 0 = not used. With both tolerance values 0 every variance exceeds the tolerance.';
+                }
+                field("Count Tolerance Amount"; Rec."Count Tolerance Amount")
+                {
+                    ApplicationArea = All;
+                    ToolTip = 'Specifies the allowed variance value in LCY (variance in base unit x item unit cost) per line. 0 = not used.';
+                }
+                field("Reclass Reason Mandatory"; Rec."Reclass Reason Mandatory")
+                {
+                    ApplicationArea = All;
+                    ToolTip = 'Specifies that every item reclassification journal line must have a reason code. Batches the WMS posts itself for terminal moves are exempt.';
+                }
+                field("Reclass Approval Required"; Rec."Reclass Approval Required")
+                {
+                    ApplicationArea = All;
+                    ToolTip = 'Specifies that only users on the Inventory Control Approvers list with Approve Reclassification can post item reclassification journals.';
+                }
+            }
             // Kitoko (19 Eki 2026): DKÇ/EMU etiket çıkarma, etiket rulosu ölçüsü.
             group(LabelStock)
             {
@@ -324,6 +381,43 @@ page 72061 "DOPSWHS Setup"
                     Promoted = true;
                     PromotedCategory = Process;
                     RunObject = page "DOPSWHS Demo E2E Results";
+                }
+            }
+            // Kitoko (Kas 2026): quality & inventory control lists.
+            group(QualityInventoryControlActions)
+            {
+                Caption = 'Quality & Inventory Control';
+                action(QualityRulesAction)
+                {
+                    Caption = 'Quality Inspection Rules';
+                    ApplicationArea = All;
+                    Image = CheckRulesSyntax;
+                    RunObject = page "DOPSWHS Quality Rules";
+                    ToolTip = 'Define which purchase receipts and assembly outputs require a quality inspection.';
+                }
+                action(QualityOrdersAction)
+                {
+                    Caption = 'Quality Orders';
+                    ApplicationArea = All;
+                    Image = TaskQualityMeasure;
+                    RunObject = page "DOPSWHS Quality Orders";
+                    ToolTip = 'Open the quality orders.';
+                }
+                action(InventoryApproversAction)
+                {
+                    Caption = 'Inventory Control Approvers';
+                    ApplicationArea = All;
+                    Image = UserSetup;
+                    RunObject = page "DOPSWHS Inventory Approvers";
+                    ToolTip = 'Define who may approve count variances above tolerance and post item reclassification journals.';
+                }
+                action(CycleCountPlanAction)
+                {
+                    Caption = 'Cycle Count Plan';
+                    ApplicationArea = All;
+                    Image = PeriodEntries;
+                    RunObject = page "DOPSWHS Cycle Count Plan";
+                    ToolTip = 'Show the items with a counting period and create count sheets for the due ones.';
                 }
             }
             group(LicenseActions)

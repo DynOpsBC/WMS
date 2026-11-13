@@ -230,6 +230,8 @@ private fun InspectionDetail(insp: JSONObject, onBack: () -> Unit) {
             )
             Spacer(Modifier.height(6.dp))
             StatusText(status)
+            if (com.dynops.bcwms.BuildConfig.FLAVOR.startsWith("kitoko"))
+                QualityEvidence(systemId, !busy && isOpen && canMutate)
             if (!canMutate) {
                 StatusText(
                     if (myUserId.isBlank()) "HATA: Kullanıcı kimliği doğrulanamadı. Kalite işlemleri için yeniden giriş yapın."
