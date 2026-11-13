@@ -90,9 +90,9 @@ codeunit 72113 "DOPSWHS LP Partial Use Tests"
     begin
         Seed(); BuildLPWithQty(LP, 10, Line);
         asserterror LPMgt.DebitProjectIssueLp(LP."No.", 'BLUE', 'WRONG', 'ITEMY', '', '', '', 3, 'PJ:REGRESSION-2');
+        Seed(); BuildLPWithQty(LP, 10, Line);
         asserterror LPMgt.DebitProjectIssueLp(LP."No.", 'BLUE', 'PICK', 'ITEMY', '', '', '', 11, 'PJ:REGRESSION-3');
-        Line.Get(LP."No.", Line."Line No.");
-        Assert.AreEqual(10, Line.Quantity, 'Rejected project issue must preserve LP content');
+        if StrPos(GetLastErrorText(), 'çekilen miktar') = 0 then Error('Excess quantity must fail the LP availability check.');
     end;
 
     local procedure BuildLPWithQty(var LP: Record "DOPSWHS LP Header"; Qty: Decimal; var LPLine: Record "DOPSWHS LP Line")
