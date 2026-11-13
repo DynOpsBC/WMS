@@ -97,6 +97,9 @@ internal object TerminalSession {
     )
     private fun key(context: Context) = "wms_terminal." + scope(context)
     fun code(context: Context): String = prefs(context).getString(key(context), "").orEmpty()
+    fun hasConfiguredTerminal(context: Context): Boolean = prefs(context).all.any {
+        it.key.startsWith("wms_terminal.") && (it.value as? String).orEmpty().isNotBlank()
+    }
     fun select(context: Context, code: String, managerProfile: JSONObject? = null): Boolean {
         if (!terminalSelectionAllowed(code(context), code, managerProfile)) return false
         signOut(context)
@@ -146,7 +149,7 @@ internal interface TerminalLoginGateway {
     suspend fun login(terminal: String, username: String, pin: String): String?
 }
 
-private class BcTerminalLoginGateway(private val context: Context) : TerminalLoginGateway {
+internal class BcTerminalLoginGateway(private val context: Context) : TerminalLoginGateway {
     override suspend fun terminals(): List<JSONObject>? =
         BcApi.getAllPages(context, "wmsTerminals?\$filter=disabled eq false").let { if (it.complete) it.rows else null }
     override suspend fun users(terminal: String): List<JSONObject>? =

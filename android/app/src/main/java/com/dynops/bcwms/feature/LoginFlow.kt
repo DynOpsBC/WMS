@@ -53,6 +53,15 @@ fun LoginFlow(onConnected: (Boolean) -> Unit) {
     val scope = rememberCoroutineScope()
 
     var connectionSetup by remember { mutableStateOf(!BcApi.hasToken(context)) }
+    var settingsApproved by remember { mutableStateOf(false) }
+    if (BuildConfig.FLAVOR == "bade" && BcApi.hasToken(context) && connectionSetup &&
+        TerminalSession.hasConfiguredTerminal(context) && !settingsApproved) {
+        CompanyChangeApproval(
+            onApproved = { settingsApproved = true },
+            onDismiss = { connectionSetup = false },
+        )
+        return
+    }
     if (BuildConfig.FLAVOR == "bade" && BcApi.hasToken(context) && !connectionSetup) {
         TerminalOperatorLogin(onConnected = onConnected, onConnectionSettings = { connectionSetup = true })
         return
@@ -62,7 +71,7 @@ fun LoginFlow(onConnected: (Boolean) -> Unit) {
     // ekran doğrudan WMS operatör girişinden başlar (vardiya/kullanıcı değişimi
     // de "Bağlı" rozetine dokunup buradan yapılır).
     val finishConnection: (Boolean) -> Unit = { success ->
-        if (success && BuildConfig.FLAVOR == "bade") connectionSetup = false
+        if (success && BuildConfig.FLAVOR == "bade") { connectionSetup = false; settingsApproved = false }
         onConnected(success)
     }
     var step by remember { mutableStateOf(if (BcApi.hasToken(context)) Step.LocalUser else Step.Email) }
@@ -880,7 +889,7 @@ fun LoginFlow(onConnected: (Boolean) -> Unit) {
                                     // şifresiyle doğrulanınca açılır (BC → WMS Users / Local User).
                                     status = "🟢 Ortam bağlandı: ${environmentToConnect.environment} / ${c.displayName} — şimdi WMS kullanıcınızla giriş yapın"
                                     step = Step.LocalUser
-                                    if (BuildConfig.FLAVOR == "bade") connectionSetup = false
+                                    if (BuildConfig.FLAVOR == "bade") { connectionSetup = false; settingsApproved = false }
                                 } else { status = "🔴 ${BcApi.connectionFailureMessage(r)}"; finishConnection(false) }
                             }
                         },

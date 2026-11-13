@@ -455,6 +455,7 @@ private fun HomeScreen(
     // basit bir sürüm sayacı. setCompany sonrası artırılır.
     var companyEpoch by remember { mutableStateOf(0) }
     var showSwitcher by remember { mutableStateOf(false) }
+    var approveCompanyChange by remember { mutableStateOf(false) }
     // companyEpoch değişince company adını yeniden oku.
     val companyName = remember(companyEpoch) { BcApi.getCompanyName(context) }
     val companyBrand = remember(companyName, flavor) { resolveCompanyBrand(companyName, flavor) }
@@ -514,7 +515,13 @@ private fun HomeScreen(
             operatorName = if (flavor == "bade") "${TerminalSession.code(context)} · $operatorName" else operatorName,
             connected = connected,
             canSwitch = accessible.size > 1,
-            onSwitchClick = { showSwitcher = true },
+            onSwitchClick = {
+                if (flavor == "bade") approveCompanyChange = true else showSwitcher = true
+            },
+        )
+        if (approveCompanyChange) CompanyChangeApproval(
+            onApproved = { approveCompanyChange = false; showSwitcher = true },
+            onDismiss = { approveCompanyChange = false },
         )
         if (showSwitcher) {
             CompanySwitcherSheet(
@@ -526,7 +533,15 @@ private fun HomeScreen(
                     showSwitcher = false
                     onConnectionChanged(false)
                     scope.launch {
-                        BcApi.setCompany(context, c.id, c.displayName)
+                        if (flavor == "bade") TerminalSession.signOut(context)
+                        if (runCatching { BcApi.setCompany(context, c.id, c.displayName) }.isFailure) {
+                            onNavigate(Screen.Connection)
+                            return@launch
+                        }
+                        if (flavor == "bade") {
+                            onNavigate(Screen.Connection)
+                            return@launch
+                        }
                         val ok = BcApi.testConnection(context).ok
                         onConnectionChanged(ok)
                         if (ok) {

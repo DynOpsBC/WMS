@@ -95,11 +95,23 @@ internal fun odataOrFilter(values: List<String>, build: (String) -> String): Str
 
 /** LP başlıklarından lokasyon/raf, raf kaydından alan kodu; eksik veri boş kalır, ekran kırılmaz. */
 internal suspend fun loadLpPlacements(context: android.content.Context, lpNos: List<String>): Map<String, LpPlacement> {
-    val keys = lpNos.map { it.trim() }.filter { it.isNotBlank() }.distinct().take(25)
+    return loadAllLpPlacements(lpNos) { path ->
+        BcApi.getAllPages(context, path).let { if (it.complete) it.rows else null }
+    }
+}
+
+internal suspend fun loadAllLpPlacements(lpNos: List<String>, fetch: suspend (String) -> List<JSONObject>?): Map<String, LpPlacement> {
+    val result = mutableMapOf<String, LpPlacement>()
+    for (batch in lpNos.map { it.trim() }.filter { it.isNotBlank() }.distinct().chunked(25)) {
+        result.putAll(loadLpPlacementBatch(batch, fetch))
+    }
+    return result
+}
+
+private suspend fun loadLpPlacementBatch(keys: List<String>, fetch: suspend (String) -> List<JSONObject>?): Map<String, LpPlacement> {
     if (keys.isEmpty()) return emptyMap()
-    val heads = BcApi.getAllPages(context, "licensePlates?\$filter=${odataOrFilter(keys) { "no eq '$it'" }}&\$select=no,locationCode,binCode&\$top=50")
-    if (!heads.complete) return emptyMap()
-    val placements = heads.rows.associate { h ->
+    val heads = fetch("licensePlates?\$filter=${odataOrFilter(keys) { "no eq '$it'" }}&\$select=no,locationCode,binCode&\$top=50") ?: return emptyMap()
+    val placements = heads.associate { h ->
         h.optString("no").trim() to LpPlacement(h.optString("locationCode").trim(), h.optString("binCode").trim(), "")
     }
     val binKeys = placements.values.filter { it.binCode.isNotBlank() }.map { it.locationCode to it.binCode }.distinct()
@@ -107,9 +119,8 @@ internal suspend fun loadLpPlacements(context: android.content.Context, lpNos: L
     val binFilter = binKeys.joinToString(" or ") { (loc, bin) ->
         "(locationCode eq '${loc.replace("'", "''")}' and code eq '${bin.replace("'", "''")}')"
     }
-    val bins = BcApi.getAllPages(context, "bins?\$filter=$binFilter&\$select=locationCode,code,zoneCode&\$top=50")
-    if (!bins.complete) return placements
-    val zones = bins.rows.associate { (it.optString("locationCode").trim() to it.optString("code").trim()) to it.optString("zoneCode").trim() }
+    val bins = fetch("bins?\$filter=$binFilter&\$select=locationCode,code,zoneCode&\$top=50") ?: return placements
+    val zones = bins.associate { (it.optString("locationCode").trim() to it.optString("code").trim()) to it.optString("zoneCode").trim() }
     return placements.mapValues { (_, p) -> p.copy(zoneCode = zones[p.locationCode to p.binCode].orEmpty()) }
 }
 
@@ -141,7 +152,7 @@ fun ItemInquiryModule() {
     }
 
     fun load() {
-        if (query.trim().isBlank()) return
+        if (query.trim().isBlank() || loading) return
         scope.launch {
             loading = true; status = "Sorgulanıyor..."
             item = null; lpLines = emptyList(); ledger = emptyList(); queriedLpNo = ""; lpPlacement = emptyMap(); lpContent = emptyList()
@@ -314,22 +325,13 @@ fun ItemInquiryModule() {
                             StockTile("Rezerve", reserved, uom, palette.warning, Modifier.weight(1f))
                         }
                         Spacer(Modifier.height(8.dp))
-                        Text("Gelen ${fmtItemQty(qtyOnPo)} · Giden ${fmtItemQty(qtyOnSo)} · Üretim ${fmtItemQty(qtyOnProd)}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                     Spacer(Modifier.height(8.dp))
-                    Text("Temel UOM: $uom", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    Text("Kategori: ${firstValue(it, "itemCategoryCode")} · LP Şablonu: ${firstValue(it, "defaultLpTemplateCode")}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     Text("LP'lerdeki toplam: ${fmtItemQty(totalOnLp)} $uom", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
             Spacer(Modifier.height(8.dp))
-            LabelLayoutSelector(itemLayout)
-            Spacer(Modifier.height(6.dp))
-            OutlinedButton(onClick = { printItemLabel() }, modifier = Modifier.fillMaxWidth().height(48.dp)) {
-                WmsActionLabel(WmsGlyph.PRINTER, "Ürün Etiketi Bas")
-            }
-            Spacer(Modifier.height(12.dp))
-            Text("LP'lerde (${lpLines.size})", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
+            Text("LP ve konum (${lpLines.size})", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
             Spacer(Modifier.height(6.dp))
             }
             }
@@ -350,7 +352,7 @@ fun ItemInquiryModule() {
                             val extra = listOfNotNull(
                                 ln.optString("lotNo").takeIf { it.isNotBlank() }?.let { "Lot $it" },
                                 ln.optString("serialNo").takeIf { it.isNotBlank() }?.let { "Seri $it" },
-                                lpPlacementLabel(lpPlacement[ln.optString("lpNo").trim()]).takeIf { it.isNotBlank() },
+                                lpPlacementLabel(lpPlacement[ln.optString("lpNo").trim()]).ifBlank { "Konum bilgisi alınamadı; yeniden sorgulayın." },
                             ).joinToString(" · ")
                             if (extra.isNotBlank()) {
                                 Text(extra, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -374,6 +376,17 @@ fun ItemInquiryModule() {
                 }
             }
             if (item != null && lpLines.isEmpty() && !loading) item { EmptyState("Bu ürün hiçbir LP'de bulunmuyor.") }
+            if (item != null) item {
+                var details by remember { mutableStateOf(false) }
+                TextButton(onClick = { details = !details }) { Text(if (details) "Detayları gizle" else "Ürün detayları / etiket") }
+                if (details) {
+                    val product = item!!
+                    Text("Gelen ${fmtItemQty(product.optDouble("quantityOnPurchOrder", 0.0))} · Giden ${fmtItemQty(product.optDouble("quantityOnSalesOrder", 0.0))} · Üretim ${fmtItemQty(product.optDouble("quantityOnProdOrder", 0.0))}")
+                    Text("Temel UOM: $itemUom · Kategori: ${firstValue(product, "itemCategoryCode")}")
+                    LabelLayoutSelector(itemLayout)
+                    OutlinedButton(onClick = { printItemLabel() }, modifier = Modifier.fillMaxWidth()) { Text("Ürün Etiketi Bas") }
+                }
+            }
             if (ledger.isNotEmpty()) {
                 item {
                     Text("Son Hareketler (${ledger.size})", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface, modifier = Modifier.padding(top = 10.dp, bottom = 4.dp))

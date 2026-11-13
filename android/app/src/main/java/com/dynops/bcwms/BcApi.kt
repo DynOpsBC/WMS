@@ -93,7 +93,9 @@ object BcApi {
      */
     fun captureTenantFromToken(context: Context, accessToken: String) {
         val tid = tenantIdFromJwt(accessToken)
-        if (!tid.isNullOrBlank()) setTenant(context, tid)
+        if (!tid.isNullOrBlank() && com.dynops.bcwms.feature.mayCaptureTerminalTenant(
+                BuildConfig.FLAVOR, com.dynops.bcwms.feature.TerminalSession.hasConfiguredTerminal(context),
+                getTenant(context), tid)) setTenant(context, tid)
     }
 
     private fun tenantIdFromJwt(jwt: String): String? = try {
