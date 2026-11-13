@@ -45,7 +45,8 @@ class ItemStockDistributionTest {
         compose.onNodeWithText("-2 KOLI").assertIsDisplayed()
         compose.onNodeWithText("680 ADET").assertIsDisplayed()
         compose.onNodeWithText("Varyant: MAVI").assertIsDisplayed()
-        compose.onAllNodesWithText("DEPO · Alan: HAMMADDE")[0].assertIsDisplayed()
+        compose.onAllNodesWithText("HAMMADDE")[0].assertIsDisplayed()
+        compose.onNodeWithText("DEPO · Alan: HAMMADDE").assertDoesNotExist()
         compose.onNodeWithText("Dağılım").assertDoesNotExist()
     }
 
@@ -74,6 +75,38 @@ class ItemStockDistributionTest {
         } } }
         compose.onNodeWithTag("stock-list").performScrollToNode(hasText("RAF-40"))
         compose.onNodeWithText("RAF-40").assertIsDisplayed()
+    }
+
+    @Test fun stockNoteIsCollapsedAndDuplicateZoneIsHidden() {
+        compose.setContent { BcwmsTheme(darkTheme = false) { StockList {
+            BcApi.PagedItemsResult(listOf(row("HM1").put("zoneCode", "HM1")), true)
+        } } }
+        compose.onAllNodesWithText("HM1").assertCountEquals(1)
+        val note = "Satırlar kendi biriminde, depo toplamları temel birimdedir. Bin takibi olmayan stoklar dahil değildir."
+        compose.onNodeWithText(note).assertDoesNotExist()
+        compose.onNodeWithText("Stok bilgisi ⓘ").performClick()
+        compose.onNodeWithText(note).assertIsDisplayed()
+    }
+
+    @Test fun narrowDarkCardsKeepLargeTextAndQuantityVisible() {
+        compose.setContent {
+            val density = androidx.compose.ui.platform.LocalDensity.current
+            CompositionLocalProvider(androidx.compose.ui.platform.LocalDensity provides
+                androidx.compose.ui.unit.Density(density.density, 1.8f)) {
+                BcwmsTheme(darkTheme = true) {
+                    Box(Modifier.width(androidx.compose.ui.unit.Dp(240f))) { StockList {
+                        BcApi.PagedItemsResult(listOf(row("MONTAJ-RAF-12", 12345.25, "KOLI")), true)
+                    } }
+                }
+            }
+        }
+        compose.onNodeWithTag("stock-list").performScrollToNode(hasText("MONTAJ-RAF-12"))
+        compose.onNodeWithText("MONTAJ-RAF-12").assertIsDisplayed()
+        compose.onAllNodesWithText("12.345,25 KOLI")[0].assertIsDisplayed()
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        File(instrumentation.targetContext.filesDir, "stock-cards-narrow-dark.png").outputStream().use {
+            instrumentation.uiAutomation.takeScreenshot().compress(Bitmap.CompressFormat.PNG, 100, it)
+        }
     }
 
     @Test fun qrAndItemSubmissionQueryWhileLpSubmissionOpensLpCard() {
@@ -131,7 +164,9 @@ class ItemStockDistributionTest {
         rows.filter { it.getDouble("quantity") != 0.0 }.forEach { row ->
             compose.onNodeWithTag("stock-list").performScrollToNode(hasText(row.getString("binCode")))
             compose.onNodeWithText(row.getString("binCode")).assertIsDisplayed()
-            compose.onAllNodesWithText("${row.getString("locationCode")} · Alan: ${row.optString("zoneCode").ifBlank { "—" }}")[0].assertIsDisplayed()
+            val zone = row.optString("zoneCode")
+            if (zone.isNotBlank() && zone != row.getString("binCode"))
+                compose.onAllNodesWithText(zone)[0].assertIsDisplayed()
             compose.onAllNodesWithText("${formatStockQuantity(row.getDouble("quantity"))} ${row.getString("unitOfMeasureCode")}")[0].assertIsDisplayed()
         }
         compose.waitForIdle()

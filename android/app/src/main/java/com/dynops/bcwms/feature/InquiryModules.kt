@@ -499,9 +499,15 @@ private fun ItemStockInquiry() {
             if (stockItem != null) {
                 itemStockDistribution(distribution, itemUom)
                 item {
+                    var detailsExpanded by remember { mutableStateOf(false) }
+                    TextButton(onClick = { detailsExpanded = !detailsExpanded }) {
+                        Text(if (detailsExpanded) "Ürün detaylarını gizle" else "Ürün detayları")
+                    }
+                    if (detailsExpanded) {
                     Text("Gelen ${fmtItemQty(stockItem.optDouble("quantityOnPurchOrder", 0.0))} · Giden ${fmtItemQty(stockItem.optDouble("quantityOnSalesOrder", 0.0))} · Üretim ${fmtItemQty(stockItem.optDouble("quantityOnProdOrder", 0.0))}", style = MaterialTheme.typography.labelSmall)
                     Text("Temel UOM: $itemUom · Kategori: ${firstValue(stockItem, "itemCategoryCode")}", style = MaterialTheme.typography.bodySmall)
                     Text("LP'lerdeki toplam: ${fmtItemQty(lpLines.sumOf { it.optDouble("quantity", 0.0) })} $itemUom", style = MaterialTheme.typography.bodySmall)
+                    }
                     OutlinedButton(onClick = { labelStatus = ""; showLabelSheet = true }, enabled = !printing,
                         modifier = Modifier.fillMaxWidth().height(48.dp)) {
                         WmsActionLabel(WmsGlyph.PRINTER, "Ürün Etiketi Bas")

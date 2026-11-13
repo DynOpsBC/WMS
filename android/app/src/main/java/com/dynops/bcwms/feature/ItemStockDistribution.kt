@@ -1,16 +1,20 @@
 package com.dynops.bcwms.feature
 
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.background
 import androidx.compose.foundation.lazy.LazyListScope
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.dynops.bcwms.BcApi
 import kotlinx.coroutines.CancellationException
 
@@ -47,9 +51,10 @@ internal fun rememberItemStockDistribution(
 }
 
 /** Part of the inquiry's single lazy list: every bin is visible without opening anything. */
+@OptIn(ExperimentalLayoutApi::class)
 internal fun LazyListScope.itemStockDistribution(state: ItemStockDistributionState, baseUom: String) {
     item(key = "stock-heading") {
-        Text("Nerede, ne kadar?", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+        Text("Raflardaki stok", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
     }
     when {
         state.loading -> item(key = "stock-loading") {
@@ -75,34 +80,52 @@ internal fun LazyListScope.itemStockDistribution(state: ItemStockDistributionSta
                     }
                 }
             }
-            items(location.bins, key = { "stock-bin:${location.code.length}:${location.code}:${it.code}" }) { bin ->
-                Surface(Modifier.fillMaxWidth(), shape = RoundedCornerShape(10.dp),
-                    color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.35f)) {
-                    Column(Modifier.padding(horizontal = 12.dp, vertical = 10.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            itemsIndexed(location.bins, key = { _, bin -> "stock-bin:${location.code.length}:${location.code}:${bin.code}" }) { index, bin ->
+                val dark = MaterialTheme.colorScheme.surface.luminance() < 0.5f
+                val accents = if (dark) listOf(Color(0xFF80C7FF), Color(0xFF68DBC0), Color(0xFFFFC47C))
+                    else listOf(Color(0xFF0065B3), Color(0xFF007D65), Color(0xFF9B5700))
+                val accent = accents[index % accents.size]
+                Surface(Modifier.fillMaxWidth(), shape = RoundedCornerShape(16.dp),
+                    color = accent.copy(alpha = if (dark) 0.16f else 0.09f)) {
+                    Row(Modifier.height(IntrinsicSize.Min)) {
+                     Box(Modifier.width(5.dp).fillMaxHeight().background(accent))
+                     Column(Modifier.weight(1f).padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         bin.rows.forEach { row ->
-                            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                                Column(Modifier.weight(1f)) {
-                                    Text(bin.code.ifBlank { "Binsiz / depo gözü yok" }, fontWeight = FontWeight.Bold)
-                                    Text("${location.code.ifBlank { "Lokasyonsuz" }} · Alan: ${row.optString("zoneCode").ifBlank { "—" }}",
-                                        style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            FlowRow(Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                Column(Modifier.widthIn(min = 120.dp, max = 200.dp)) {
+                                    Text(bin.code.ifBlank { "Depo gözü yok" }, fontWeight = FontWeight.Bold,
+                                        fontSize = 22.sp, color = accent)
+                                    row.optString("zoneCode").takeIf { it.isNotBlank() && it != bin.code }?.let {
+                                        Text(it, style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    }
                                     row.optString("variantCode").takeIf { it.isNotBlank() }?.let {
                                         Text("Varyant: $it", style = MaterialTheme.typography.labelSmall)
                                     }
                                 }
                                 val quantity = row.getDouble("quantity")
-                                Text("${formatStockQuantity(quantity)} ${row.optString("unitOfMeasureCode").ifBlank { "—" }}",
-                                    fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium,
-                                    color = if (quantity < 0) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary)
+                                Surface(Modifier.widthIn(max = 180.dp), shape = RoundedCornerShape(12.dp), color = MaterialTheme.colorScheme.surface) {
+                                    Text("${formatStockQuantity(quantity)} ${row.optString("unitOfMeasureCode").ifBlank { "—" }}",
+                                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+                                        fontWeight = FontWeight.Bold, fontSize = 22.sp,
+                                        color = if (quantity < 0) MaterialTheme.colorScheme.error else accent)
+                                }
                             }
                         }
+                    }
                     }
                 }
             }
         }
     }
     if (!state.loading && !state.failed) item(key = "stock-note") {
-        Text("Satırlar kendi biriminde, depo toplamları temel birimdedir. Bin takibi olmayan stoklar dahil değildir.",
-            style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        var expanded by remember { mutableStateOf(false) }
+        TextButton(onClick = { expanded = !expanded }, contentPadding = PaddingValues(horizontal = 0.dp)) {
+            Text(if (expanded) "Bilgiyi gizle" else "Stok bilgisi ⓘ", style = MaterialTheme.typography.labelMedium)
+        }
+        if (expanded) Text("Satırlar kendi biriminde, depo toplamları temel birimdedir. Bin takibi olmayan stoklar dahil değildir.",
+            style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
