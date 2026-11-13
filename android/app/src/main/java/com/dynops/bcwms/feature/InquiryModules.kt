@@ -294,6 +294,7 @@ fun ItemInquiryModule(labelsOnly: Boolean = false) {
 private fun ItemStockInquiry() {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
+    val latestInquiry = remember(scope) { LatestStockInquiry(scope) }
     // PDF Item Inquiry §1: hardcoded "1004" preset removed — start empty so
     // the screen does not falsely claim an item exists before the operator
     // scans/types one.
@@ -314,13 +315,15 @@ private fun ItemStockInquiry() {
     // Kitoko (22 Eki 2026): LP okutulunca LP kartı (içerik + LP / lot etiketi) açılır.
     var lpCard by remember { mutableStateOf<LpScanRef?>(null) }
 
-    fun load() {
-        if (query.trim().isBlank() || printing) return
-        scope.launch {
-            loading = true; status = "Sorgulanıyor..."
+    fun load(requestedQuery: String = query) {
+        if (requestedQuery.trim().isBlank() || printing) return
+        latestInquiry.submit {
+          loading = true
+          try {
+            status = "Sorgulanıyor..."
             item = null; lpLines = emptyList(); ledger = emptyList(); queriedLpNo = ""; lpPlacement = emptyMap()
             labelCopies = "1"; showLabelSheet = false
-            val q = query.trim()
+            val q = requestedQuery.trim()
             val safeQ = q.replace("'", "''")
             val byLp = BcApi.getAllPages(context, "licensePlateLines?\$filter=lpNo eq '$safeQ'&\$top=200")
             if (byLp.complete && byLp.rows.isNotEmpty()) {
@@ -342,13 +345,19 @@ private fun ItemStockInquiry() {
             // Son Hareketler (Item Ledger) — WI "Recent Transactions" pariteti.
             val le = BcApi.get(context, "itemLedgerEntries?\$filter=itemNo eq '$safeItemNo'&\$orderby=postingDate desc,entryNo desc&\$top=20")
             if (le.ok) ledger = BcApi.parseValueArray(le.body)
-            loading = false
             status = when {
                 !lpPage.complete -> "HATA: Ürünün LP kayıtlarının tamamı alınamadı. Yenileyin."
                 item == null -> "BOŞ: '$q' için ürün veya LP bulunamadı."
                 byLp.rows.isNotEmpty() -> "TAMAM: $q LP içeriği · ${lpLines.size} satır · ${ledger.size} ürün hareketi."
                 else -> "TAMAM: ürün bulundu · ${lpLines.size} LP · ${ledger.size} hareket."
             }
+          } catch (e: CancellationException) {
+            throw e
+          } catch (_: Exception) {
+            status = "HATA: Ürün sorgulanamadı. Tekrar deneyin."
+          } finally {
+            loading = false
+          }
         }
     }
 
@@ -389,31 +398,33 @@ private fun ItemStockInquiry() {
         return
     }
 
+    val inquiryListState = rememberLazyListState()
+    StockInquiryScanListener(enabled = !printing && !showLabelSheet) { raw ->
+        routeStockInquiryScan(raw, { query = it }, { load(it) }, { latestInquiry.cancel(); lpCard = it })
+        scope.launch { inquiryListState.scrollToItem(0) }
+    }
     val palette = bcwmsStatus()
     val itemUom = item?.let { firstValue(it, "baseUnitOfMeasure", "baseUoM") }.orEmpty()
-    Column(Modifier.fillMaxSize().padding(12.dp)) {
-        ScanField("Ürün No / LP No", query, { query = it }, modifier = Modifier.fillMaxWidth(), onScanned = {
-            val resolved = BarcodeIntentResolver.resolve(it)
-            query = resolved.itemNo ?: resolved.value
-            lpScanRef(it)?.let { ref -> lpCard = ref }
-        })
-        Spacer(Modifier.height(8.dp))
-        Button(onClick = { load() }, enabled = !loading, modifier = Modifier.fillMaxWidth()) {
-            Text(if (loading) "..." else "🔎 Sorgula", fontWeight = FontWeight.Bold)
-        }
+    val distribution = rememberItemStockDistribution(
+        itemNo = item?.let { firstValue(it, "no", "number") }, refreshKey = item,
+    )
+    LazyColumn(Modifier.fillMaxSize().padding(12.dp), state = inquiryListState, verticalArrangement = Arrangement.spacedBy(6.dp)) {
+      item {
+       Column {
+        StockInquiryInput(
+            query = query, onQuery = { query = it }, loading = loading, printing = printing,
+            onItem = { load(it) },
+            onLp = { latestInquiry.cancel(); lpCard = it },
+        )
         Spacer(Modifier.height(8.dp))
         StatusText(status)
         Spacer(Modifier.height(8.dp))
         item?.let { it ->
             val blocked = it.optBoolean("blocked", false)
             val inventory = it.optDouble("inventory", Double.NaN)
-            val qtyOnPo = it.optDouble("quantityOnPurchOrder", 0.0)
-            val qtyOnSo = it.optDouble("quantityOnSalesOrder", 0.0)
-            val qtyOnProd = it.optDouble("quantityOnProdOrder", 0.0)
             val reserved = it.optDouble("reservedQtyOnInventory", 0.0)
             val uom = itemUom
             val available = (if (inventory.isNaN()) 0.0 else inventory) - reserved
-            val totalOnLp = lpLines.sumOf { l -> l.optDouble("quantity") }
             val scannedLp = queriedLpSummary(queriedLpNo, lpLines)
             Card(
                 Modifier.fillMaxWidth(),
@@ -472,35 +483,34 @@ private fun ItemStockInquiry() {
                     }
                     // Stock block — PDF Item Inquiry §1 critical fix.
                     if (!inventory.isNaN()) {
-                        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                            StockTile("Stok", inventory, uom, palette.success, Modifier.weight(1f))
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            StockTile("Toplam stok", inventory, uom, palette.success, Modifier.weight(1f))
                             StockTile("Müsait", available, uom, MaterialTheme.colorScheme.primary, Modifier.weight(1f))
                             StockTile("Rezerve", reserved, uom, palette.warning, Modifier.weight(1f))
                         }
                         Spacer(Modifier.height(8.dp))
-                        Text("Gelen ${fmtItemQty(qtyOnPo)} · Giden ${fmtItemQty(qtyOnSo)} · Üretim ${fmtItemQty(qtyOnProd)}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
-                    Spacer(Modifier.height(8.dp))
-                    Text("Temel UOM: $uom", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    Text("Kategori: ${firstValue(it, "itemCategoryCode")} · LP Şablonu: ${firstValue(it, "defaultLpTemplateCode")}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    Text("LP'lerdeki toplam: ${fmtItemQty(totalOnLp)} $uom", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
-            Spacer(Modifier.height(8.dp))
-            OutlinedButton(
-                onClick = { labelStatus = ""; showLabelSheet = true },
-                enabled = !printing,
-                modifier = Modifier.fillMaxWidth().height(48.dp),
-            ) {
-                WmsActionLabel(WmsGlyph.PRINTER, "Ürün Etiketi Bas")
-            }
-            Spacer(Modifier.height(12.dp))
-            Text("LP'lerde (${lpLines.size})", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
-            Spacer(Modifier.height(6.dp))
         }
-        // weight(1f): üstteki sabit ürün kartı listeyi sıfır yüksekliğe
-        // sıkıştırıp LP/hareket satırlarını kesiyordu (yatay mod / küçük ekran).
-        LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+       }
+      }
+            val stockItem = item
+            if (stockItem != null) {
+                itemStockDistribution(distribution, itemUom)
+                item {
+                    Text("Gelen ${fmtItemQty(stockItem.optDouble("quantityOnPurchOrder", 0.0))} · Giden ${fmtItemQty(stockItem.optDouble("quantityOnSalesOrder", 0.0))} · Üretim ${fmtItemQty(stockItem.optDouble("quantityOnProdOrder", 0.0))}", style = MaterialTheme.typography.labelSmall)
+                    Text("Temel UOM: $itemUom · Kategori: ${firstValue(stockItem, "itemCategoryCode")}", style = MaterialTheme.typography.bodySmall)
+                    Text("LP'lerdeki toplam: ${fmtItemQty(lpLines.sumOf { it.optDouble("quantity", 0.0) })} $itemUom", style = MaterialTheme.typography.bodySmall)
+                    OutlinedButton(onClick = { labelStatus = ""; showLabelSheet = true }, enabled = !printing,
+                        modifier = Modifier.fillMaxWidth().height(48.dp)) {
+                        WmsActionLabel(WmsGlyph.PRINTER, "Ürün Etiketi Bas")
+                    }
+                }
+            }
+            if (item != null) item {
+                Text("LP'lerde (${lpLines.size})", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+            }
             items(lpLines) { ln ->
                 Card(Modifier.fillMaxWidth().heightIn(min = 82.dp), shape = RoundedCornerShape(12.dp)) {
                     Row(
@@ -558,7 +568,6 @@ private fun ItemStockInquiry() {
                     }
                 }
             }
-        }
     }
     val labelItem = item
     if (showLabelSheet && labelItem != null) ItemLabelPrintSheet(
