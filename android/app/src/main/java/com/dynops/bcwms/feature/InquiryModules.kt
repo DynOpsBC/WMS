@@ -1096,6 +1096,7 @@ private fun BinStockInquiry() {
     // PDF Bin Inquiry §2: hardcoded SILVER/S-1-01 preset removed.
     var location by remember { mutableStateOf("") }
     var binCode by remember { mutableStateOf("") }
+    var itemFilter by rememberSaveable { mutableStateOf("") }
     var bin by remember { mutableStateOf<JSONObject?>(null) }
     var contents by remember { mutableStateOf<List<JSONObject>>(emptyList()) }
     var lps by remember { mutableStateOf<List<JSONObject>>(emptyList()) }
@@ -1193,13 +1194,21 @@ private fun BinStockInquiry() {
         }
     }
 
+    val visibleContents = filterBinInquiryItems(contents, itemFilter)
     val palette = bcwmsStatus()
-    Column(Modifier.fillMaxSize().padding(12.dp)) {
+    LazyColumn(Modifier.fillMaxSize().padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+      item {
+       Column {
         ScanField("Lokasyon", location, { location = it }, modifier = Modifier.fillMaxWidth())
         Spacer(Modifier.height(8.dp))
         ScanField("Bin", binCode, { binCode = it }, modifier = Modifier.fillMaxWidth(), onScanned = {
             binCode = BarcodeIntentResolver.resolve(it).value
         })
+        Spacer(Modifier.height(8.dp))
+        ScanField("Ürün filtresi (kod / açıklama)", itemFilter, { itemFilter = it },
+            modifier = Modifier.fillMaxWidth(), okButton = false,
+            onScanned = { itemFilter = BarcodeIntentResolver.resolve(it).value },
+            onClear = { itemFilter = "" })
         Spacer(Modifier.height(8.dp))
         Button(onClick = { load() }, enabled = !loading, modifier = Modifier.fillMaxWidth()) {
             Text(if (loading) "..." else "🔎 Sorgula", fontWeight = FontWeight.Bold)
@@ -1238,12 +1247,16 @@ private fun BinStockInquiry() {
             }
             Spacer(Modifier.height(8.dp))
         }
-        LazyColumn(verticalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.weight(1f)) {
-            if (contents.isNotEmpty()) {
+       }
+      }
+            if (contents.isNotEmpty() && itemFilter.isNotBlank() && visibleContents.isEmpty() && !loading) item {
+                EmptyState("Ürün filtresine uyan raf içeriği yok.")
+            }
+            if (visibleContents.isNotEmpty()) {
                 item {
-                    Text("Bin İçeriği (${contents.size})", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface, modifier = Modifier.padding(vertical = 4.dp))
+                    Text("Bin İçeriği (${visibleContents.size}/${contents.size})", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface, modifier = Modifier.padding(vertical = 4.dp))
                 }
-                items(contents) { c ->
+                items(visibleContents) { c ->
                     Card(
                         Modifier.fillMaxWidth(),
                         shape = RoundedCornerShape(12.dp),
@@ -1278,7 +1291,7 @@ private fun BinStockInquiry() {
             }
             item {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("LP'ler (${lps.size})", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface, modifier = Modifier.weight(1f))
+                    Text("Raftaki tüm LP'ler (${lps.size})", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface, modifier = Modifier.weight(1f))
                     if (lps.isNotEmpty()) TextButton(
                         onClick = {
                             selectedLpNos = if (selectedLpNos.size == lps.size) emptySet()
@@ -1338,7 +1351,6 @@ private fun BinStockInquiry() {
                     }
                 }
             }
-        }
     }
     val labelBin = bin
     if (showLabelSheet && labelBin != null) BinLabelPrintSheet(
