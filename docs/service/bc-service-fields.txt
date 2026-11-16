@@ -1,0 +1,910 @@
+## 5900 Service Header
+1	Document Type	Enum Service Document Type
+2	Customer No.	Code[20] 
+3	No.	Code[20] 
+4	Bill-to Customer No.	Code[20] 
+5	Bill-to Name	Text[100] 
+6	Bill-to Name 2	Text[50] 
+7	Bill-to Address	Text[100] 
+8	Bill-to Address 2	Text[50] 
+9	Bill-to City	Text[30] 
+10	Bill-to Contact	Text[100] 
+11	Your Reference	Text[35] 
+12	Ship-to Code	Code[10] 
+13	Ship-to Name	Text[100] 
+14	Ship-to Name 2	Text[50] 
+15	Ship-to Address	Text[100] 
+16	Ship-to Address 2	Text[50] 
+17	Ship-to City	Text[30] 
+18	Ship-to Contact	Text[100] 
+19	Order Date	Date 
+20	Posting Date	Date 
+22	Posting Description	Text[100] 
+23	Payment Terms Code	Code[10] 
+24	Due Date	Date 
+25	Payment Discount %	Decimal 
+26	Pmt. Discount Date	Date 
+27	Shipment Method Code	Code[10] 
+28	Location Code	Code[10] 
+29	Shortcut Dimension 1 Code	Code[20] 
+30	Shortcut Dimension 2 Code	Code[20] 
+31	Customer Posting Group	Code[20] 
+32	Currency Code	Code[10] 
+33	Currency Factor	Decimal 
+34	Customer Price Group	Code[10] 
+35	Prices Including VAT	Boolean 
+37	Invoice Disc. Code	Code[20] 
+40	Customer Disc. Group	Code[20] 
+41	Language Code	Code[10] 
+42	Format Region	Text[80] 
+43	Salesperson Code	Code[20] 
+46	Comment	Boolean 
+47	No. Printed	Integer 
+52	Applies-to Doc. Type	Enum Gen. Journal Document Type
+53	Applies-to Doc. No.	Code[20] 
+55	Bal. Account No.	Code[20] 
+60	Amount	Decimal 
+61	Amount Including VAT	Decimal 
+62	Shipping No.	Code[20] 
+63	Posting No.	Code[20] 
+64	Last Shipping No.	Code[20] 
+65	Last Posting No.	Code[20] 
+70	VAT Registration No.	Text[20] 
+71	Combine Shipments	Boolean 
+73	Reason Code	Code[10] 
+74	Gen. Bus. Posting Group	Code[20] 
+75	EU 3-Party Trade	Boolean 
+76	Transaction Type	Code[10] 
+77	Transport Method	Code[10] 
+78	VAT Country/Region Code	Code[10] 
+79	Name	Text[100] 
+80	Name 2	Text[50] 
+81	Address	Text[100] 
+82	Address 2	Text[50] 
+83	City	Text[30] 
+84	Contact Name	Text[100] 
+85	Bill-to Post Code	Code[20] 
+86	Bill-to County	Text[30] 
+87	Bill-to Country/Region Code	Code[10] 
+88	Post Code	Code[20] 
+89	County	Text[30] 
+90	Country/Region Code	Code[10] 
+91	Ship-to Post Code	Code[20] 
+92	Ship-to County	Text[30] 
+93	Ship-to Country/Region Code	Code[10] 
+94	Bal. Account Type	Enum Payment Balance Account Type
+97	Exit Point	Code[10] 
+98	Correction	Boolean 
+99	Document Date	Date 
+100	External Document No.	Code[35] 
+101	Area	Code[10] 
+102	Transaction Specification	Code[10] 
+104	Payment Method Code	Code[10] 
+105	Shipping Agent Code	Code[10] 
+107	No. Series	Code[20] 
+108	Posting No. Series	Code[20] 
+109	Shipping No. Series	Code[20] 
+114	Tax Area Code	Code[20] 
+115	Tax Liable	Boolean 
+116	VAT Bus. Posting Group	Code[20] 
+117	Reserve	Enum Reserve Method
+118	Applies-to ID	Code[50] 
+119	VAT Base Discount %	Decimal 
+120	Status	Enum Service Document Status
+121	Invoice Discount Calculation	Option 
+122	Invoice Discount Value	Decimal 
+129	Company Bank Account Code	Code[20] 
+130	Release Status	Enum Service Doc. Release Status
+131	VAT Reporting Date	Date 
+165	Incoming Document Entry No.	Integer 
+176	Tax System Type	Enum Tax System Type
+178	Journal Templ. Name	Code[10] 
+200	Work Description	Blob 
+480	Dimension Set ID	Integer 
+1200	Direct Debit Mandate ID	Code[35] 
+5043	No. of Archived Versions	Integer 
+5048	Doc. No. Occurrence	Integer 
+5052	Contact No.	Code[20] 
+5053	Bill-to Contact No.	Code[20] 
+5700	Responsibility Center	Code[10] 
+5750	Shipping Advice	Enum Sales Header Shipping Advice
+5752	Completely Shipped	Boolean 
+5754	Location Filter	Code[10] 
+5792	Shipping Time	DateFormula 
+5794	Shipping Agent Service Code	Code[10] 
+5796	Date Filter	Date 
+5902	Description	Text[100] 
+5904	Service Order Type	Code[10] 
+5905	Link Service to Service Item	Boolean 
+5907	Priority	Enum Service Priority
+5911	Allocated Hours	Decimal 
+5915	Phone No.	Text[30] 
+5916	E-Mail	Text[80] 
+5917	Phone No. 2	Text[30] 
+5918	Fax No.	Text[30] 
+5921	No. of Unallocated Items	Integer 
+5923	Order Time	Time 
+5924	Default Response Time (Hours)	Decimal 
+5925	Actual Response Time (Hours)	Decimal 
+5926	Service Time (Hours)	Decimal 
+5927	Response Date	Date 
+5928	Response Time	Time 
+5929	Starting Date	Date 
+5930	Starting Time	Time 
+5931	Finishing Date	Date 
+5932	Finishing Time	Time 
+5933	Contract Serv. Hours Exist	Boolean 
+5934	Reallocation Needed	Boolean 
+5936	Notify Customer	Option 
+5937	Max. Labor Unit Price	Decimal 
+5938	Warning Status	Option 
+5939	No. of Allocations	Integer 
+5940	Contract No.	Code[20] 
+5951	Type Filter	Option 
+5952	Customer Filter	Code[20] 
+5953	Resource Filter	Code[20] 
+5954	Contract Filter	Code[20] 
+5955	Ship-to Fax No.	Text[30] 
+5956	Ship-to E-Mail	Text[80] 
+5957	Resource Group Filter	Code[20] 
+5958	Ship-to Phone	Text[30] 
+5959	Ship-to Phone 2	Text[30] 
+5966	Service Zone Filter	Code[10] 
+5968	Service Zone Code	Code[10] 
+5981	Expected Finishing Date	Date 
+7000	Price Calculation Method	Enum Price Calculation Method
+7001	Allow Line Disc.	Boolean 
+9000	Assigned User ID	Code[50] 
+9001	Quote No.	Code[20] 
+## 5901 Service Item Line
+1	Document No.	Code[20] 
+2	Line No.	Integer 
+3	Service Item No.	Code[20] 
+4	Service Item Group Code	Code[10] 
+5	Item No.	Code[20] 
+6	Serial No.	Code[50] 
+7	Description	Text[100] 
+8	Description 2	Text[50] 
+9	Repair Status Code	Code[10] 
+10	Priority	Enum Service Priority
+11	Response Time (Hours)	Decimal 
+12	Response Date	Date 
+13	Response Time	Time 
+14	Starting Date	Date 
+15	Starting Time	Time 
+16	Finishing Date	Date 
+17	Finishing Time	Time 
+18	Service Shelf No.	Code[10] 
+19	Warranty Starting Date (Parts)	Date 
+20	Warranty Ending Date (Parts)	Date 
+21	Warranty	Boolean 
+22	Warranty % (Parts)	Decimal 
+23	Warranty % (Labor)	Decimal 
+24	Warranty Starting Date (Labor)	Date 
+25	Warranty Ending Date (Labor)	Date 
+26	Contract No.	Code[20] 
+27	Location of Service Item	Text[30] 
+28	Loaner No.	Code[20] 
+29	Vendor No.	Code[20] 
+30	Vendor Item No.	Text[50] 
+31	Fault Reason Code	Code[10] 
+32	Service Price Group Code	Code[10] 
+33	Fault Area Code	Code[10] 
+34	Symptom Code	Code[10] 
+35	Fault Code	Code[10] 
+36	Resolution Code	Code[10] 
+37	Fault Comment	Boolean 
+38	Resolution Comment	Boolean 
+40	Variant Code	Code[10] 
+41	Service Item Loaner Comment	Boolean 
+42	Actual Response Time (Hours)	Decimal 
+43	Document Type	Enum Service Document Type
+44	Serv. Price Adjmt. Gr. Code	Code[10] 
+45	Adjustment Type	Option 
+46	Base Amount to Adjust	Decimal 
+60	No. of Active/Finished Allocs	Integer 
+61	No. of Allocations	Integer 
+62	No. of Previous Services	Integer 
+63	Contract Line No.	Integer 
+64	Ship-to Code	Code[10] 
+65	Customer No.	Code[20] 
+91	Date Filter	Date 
+92	Resource Filter	Code[20] 
+93	Allocation Date Filter	Date 
+94	Repair Status Code Filter	Code[10] 
+96	Allocation Status Filter	Option 
+97	Responsibility Center	Code[10] 
+98	Service Order Filter	Code[20] 
+99	Resource Group Filter	Code[20] 
+100	Shortcut Dimension 1 Code	Code[20] 
+101	Shortcut Dimension 2 Code	Code[20] 
+130	Release Status	Enum Service Doc. Release Status
+480	Dimension Set ID	Integer 
+## 5902 Service Line
+1	Document Type	Enum Service Document Type
+2	Customer No.	Code[20] 
+3	Document No.	Code[20] 
+4	Line No.	Integer 
+5	Type	Enum Service Line Type
+6	No.	Code[20] 
+7	Location Code	Code[10] 
+8	Posting Group	Code[20] 
+11	Description	Text[100] 
+12	Description 2	Text[50] 
+13	Unit of Measure	Text[50] 
+15	Quantity	Decimal 
+16	Outstanding Quantity	Decimal 
+17	Qty. to Invoice	Decimal 
+18	Qty. to Ship	Decimal 
+22	Unit Price	Decimal 
+23	Unit Cost (LCY)	Decimal 
+25	VAT %	Decimal 
+27	Line Discount %	Decimal 
+28	Line Discount Amount	Decimal 
+29	Amount	Decimal 
+30	Amount Including VAT	Decimal 
+32	Allow Invoice Disc.	Boolean 
+34	Gross Weight	Decimal 
+35	Net Weight	Decimal 
+36	Units per Parcel	Decimal 
+37	Unit Volume	Decimal 
+38	Appl.-to Item Entry	Integer 
+40	Shortcut Dimension 1 Code	Code[20] 
+41	Shortcut Dimension 2 Code	Code[20] 
+42	Customer Price Group	Code[10] 
+45	Job No.	Code[20] 
+46	Job Task No.	Code[20] 
+47	Job Line Type	Enum Job Line Type
+52	Work Type Code	Code[10] 
+57	Outstanding Amount	Decimal 
+58	Qty. Shipped Not Invoiced	Decimal 
+59	Shipped Not Invoiced	Decimal 
+60	Quantity Shipped	Decimal 
+61	Quantity Invoiced	Decimal 
+63	Shipment No.	Code[20] 
+64	Shipment Line No.	Integer 
+65	Order No.	Code[20] 
+68	Bill-to Customer No.	Code[20] 
+69	Inv. Discount Amount	Decimal 
+74	Gen. Bus. Posting Group	Code[20] 
+75	Gen. Prod. Posting Group	Code[20] 
+77	VAT Calculation Type	Enum Tax Calculation Type
+78	Transaction Type	Code[10] 
+79	Transport Method	Code[10] 
+80	Attached to Line No.	Integer 
+81	Exit Point	Code[10] 
+82	Area	Code[10] 
+83	Transaction Specification	Code[10] 
+85	Tax Area Code	Code[20] 
+86	Tax Liable	Boolean 
+87	Tax Group Code	Code[20] 
+88	VAT Clause Code	Code[20] 
+89	VAT Bus. Posting Group	Code[20] 
+90	VAT Prod. Posting Group	Code[20] 
+91	Currency Code	Code[10] 
+92	Outstanding Amount (LCY)	Decimal 
+93	Shipped Not Invoiced (LCY)	Decimal 
+95	Reserved Quantity	Decimal 
+96	Reserve	Enum Reserve Method
+99	VAT Base Amount	Decimal 
+100	Unit Cost	Decimal 
+101	System-Created Entry	Boolean 
+103	Line Amount	Decimal 
+104	VAT Difference	Decimal 
+105	Inv. Disc. Amount to Invoice	Decimal 
+106	VAT Identifier	Code[20] 
+145	Pmt. Discount Amount	Decimal 
+480	Dimension Set ID	Integer 
+950	Time Sheet No.	Code[20] 
+951	Time Sheet Line No.	Integer 
+952	Time Sheet Date	Date 
+1019	Job Planning Line No.	Integer 
+1030	Job Remaining Qty.	Decimal 
+1031	Job Remaining Qty. (Base)	Decimal 
+1032	Job Remaining Total Cost	Decimal 
+1033	Job Remaining Total Cost (LCY)	Decimal 
+1034	Job Remaining Line Amount	Decimal 
+5402	Variant Code	Code[10] 
+5403	Bin Code	Code[20] 
+5404	Qty. per Unit of Measure	Decimal 
+5405	Planned	Boolean 
+5407	Unit of Measure Code	Code[10] 
+5408	Qty. Rounding Precision	Decimal 
+5409	Qty. Rounding Precision (Base)	Decimal 
+5415	Quantity (Base)	Decimal 
+5416	Outstanding Qty. (Base)	Decimal 
+5417	Qty. to Invoice (Base)	Decimal 
+5418	Qty. to Ship (Base)	Decimal 
+5458	Qty. Shipped Not Invd. (Base)	Decimal 
+5460	Qty. Shipped (Base)	Decimal 
+5461	Qty. Invoiced (Base)	Decimal 
+5495	Reserved Qty. (Base)	Decimal 
+5700	Responsibility Center	Code[10] 
+5702	Substitution Available	Boolean 
+5709	Item Category Code	Code[20] 
+5710	Nonstock	Boolean 
+5750	Whse. Outstanding Qty. (Base)	Decimal 
+5725	Item Reference No.	Code[50] 
+5726	Item Reference Unit of Measure	Code[10] 
+5727	Item Reference Type	Enum Item Reference Type
+5728	Item Reference Type No.	Code[30] 
+5752	Completely Shipped	Boolean 
+5790	Requested Delivery Date	Date 
+5791	Promised Delivery Date	Date 
+5792	Shipping Time	DateFormula 
+5794	Planned Delivery Date	Date 
+5796	Shipping Agent Code	Code[10] 
+5797	Shipping Agent Service Code	Code[10] 
+5811	Appl.-from Item Entry	Integer 
+5902	Service Item No.	Code[20] 
+5903	Appl.-to Service Entry	Integer 
+5904	Service Item Line No.	Integer 
+5905	Service Item Serial No.	Code[50] 
+5906	Service Item Line Description	Text[100] 
+5907	Serv. Price Adjmt. Gr. Code	Code[10] 
+5908	Posting Date	Date 
+5909	Order Date	Date 
+5910	Needed by Date	Date 
+5916	Ship-to Code	Code[10] 
+5917	Qty. to Consume	Decimal 
+5918	Quantity Consumed	Decimal 
+5919	Qty. to Consume (Base)	Decimal 
+5920	Qty. Consumed (Base)	Decimal 
+5928	Service Price Group Code	Code[10] 
+5929	Fault Area Code	Code[10] 
+5930	Symptom Code	Code[10] 
+5931	Fault Code	Code[10] 
+5932	Resolution Code	Code[10] 
+5933	Exclude Warranty	Boolean 
+5934	Warranty	Boolean 
+5936	Contract No.	Code[20] 
+5938	Contract Disc. %	Decimal 
+5939	Warranty Disc. %	Decimal 
+5965	Component Line No.	Integer 
+5966	Spare Part Action	Option 
+5967	Fault Reason Code	Code[10] 
+5968	Replaced Item No.	Code[20] 
+5969	Exclude Contract Discount	Boolean 
+5970	Replaced Item Type	Enum Replaced Service Item Component Type
+5994	Price Adjmt. Status	Option 
+5997	Line Discount Type	Enum Service Line Discount Type
+5999	Copy Components From	Option 
+6608	Return Reason Code	Code[10] 
+7000	Price Calculation Method	Enum Price Calculation Method
+7001	Allow Line Disc.	Boolean 
+7002	Customer Disc. Group	Code[20] 
+7300	Qty. Picked	Decimal 
+7301	Qty. Picked (Base)	Decimal 
+7302	Completely Picked	Boolean 
+7303	Pick Qty. (Base)	Decimal 
+## 5950 Service Order Allocation
+1	Entry No.	Integer 
+2	Status	Option 
+3	Document No.	Code[20] 
+4	Allocation Date	Date 
+5	Resource No.	Code[20] 
+6	Resource Group No.	Code[20] 
+7	Service Item Line No.	Integer 
+8	Allocated Hours	Decimal 
+9	Starting Time	Time 
+10	Finishing Time	Time 
+11	Description	Text[100] 
+12	Reason Code	Code[10] 
+13	Service Item No.	Code[20] 
+14	Posted	Boolean 
+15	Service Item Description	Text[100] 
+16	Service Item Serial No.	Code[50] 
+17	Repair Status	Code[20] 
+18	Service Started	Boolean 
+19	Document Type	Enum Service Document Type
+## 5906 Service Comment Line
+1	Type	Enum Service Comment Line Type
+2	No.	Code[20] 
+3	Table Line No.	Integer 
+4	Line No.	Integer 
+6	Comment	Text[80] 
+7	Date	Date 
+8	Table Subtype	Enum Service Comment Table Subtype
+9	Table Name	Enum Service Comment Table Name
+## 5927 Repair Status
+1	Code	Code[10] 
+2	Description	Text[100] 
+3	Service Order Status	Enum Service Document Status
+4	Priority	Option 
+5	Initial	Boolean 
+6	Partly Serviced	Boolean 
+7	In Process	Boolean 
+8	Finished	Boolean 
+9	Referred	Boolean 
+10	Spare Part Ordered	Boolean 
+11	Spare Part Received	Boolean 
+12	Waiting for Customer	Boolean 
+13	Quote Finished	Boolean 
+20	Posting Allowed	Boolean 
+21	Pending Status Allowed	Boolean 
+22	In Process Status Allowed	Boolean 
+23	Finished Status Allowed	Boolean 
+24	On Hold Status Allowed	Boolean 
+## 156 Resource
+1	No.	Code[20] 
+2	Type	Enum Resource Type
+3	Name	Text[100] 
+4	Search Name	Code[100] 
+5	Name 2	Text[50] 
+6	Address	Text[100] 
+7	Address 2	Text[50] 
+8	City	Text[30] 
+9	Social Security No.	Text[30] 
+10	Job Title	Text[30] 
+11	Education	Text[30] 
+12	Contract Class	Text[30] 
+13	Employment Date	Date 
+14	Resource Group No.	Code[20] 
+16	Global Dimension 1 Code	Code[20] 
+17	Global Dimension 2 Code	Code[20] 
+18	Base Unit of Measure	Code[10] 
+19	Direct Unit Cost	Decimal 
+20	Indirect Cost %	Decimal 
+21	Unit Cost	Decimal 
+22	Profit %	Decimal 
+23	Price/Profit Calculation	Option 
+24	Unit Price	Decimal 
+25	Vendor No.	Code[20] 
+26	Last Date Modified	Date 
+27	Comment	Boolean 
+38	Blocked	Boolean 
+39	Date Filter	Date 
+40	Unit of Measure Filter	Code[10] 
+41	Capacity	Decimal 
+42	Qty. on Order (Job)	Decimal 
+43	Qty. Quoted (Job)	Decimal 
+44	Usage (Qty.)	Decimal 
+45	Usage (Cost)	Decimal 
+46	Usage (Price)	Decimal 
+47	Sales (Qty.)	Decimal 
+48	Sales (Cost)	Decimal 
+49	Sales (Price)	Decimal 
+50	Chargeable Filter	Boolean 
+51	Gen. Prod. Posting Group	Code[20] 
+53	Post Code	Code[20] 
+54	County	Text[30] 
+55	Automatic Ext. Texts	Boolean 
+56	No. Series	Code[20] 
+57	Tax Group Code	Code[20] 
+58	VAT Prod. Posting Group	Code[20] 
+59	Country/Region Code	Code[10] 
+60	IC Partner Purch. G/L Acc. No.	Code[20] 
+61	Unit Group Exists	Boolean 
+140	Image	Media 
+150	Privacy Blocked	Boolean 
+720	Coupled to CRM	Boolean 
+721	Coupled to Dataverse	Boolean 
+900	Qty. on Assembly Order	Decimal 
+950	Use Time Sheet	Boolean 
+951	Time Sheet Owner User ID	Code[50] 
+952	Time Sheet Approver User ID	Code[50] 
+1700	Default Deferral Template Code	Code[10] 
+## 5940 Service Item
+1	No.	Code[20] 
+2	Serial No.	Code[50] 
+3	Service Item Group Code	Code[10] 
+4	Description	Text[100] 
+5	Description 2	Text[50] 
+6	Status	Enum Service Item Status
+7	Priority	Enum Service Priority
+8	Customer No.	Code[20] 
+9	Ship-to Code	Code[10] 
+10	Item No.	Code[20] 
+11	Unit of Measure Code	Code[10] 
+12	Location of Service Item	Text[30] 
+13	Sales Unit Price	Decimal 
+14	Sales Unit Cost	Decimal 
+15	Warranty Starting Date (Labor)	Date 
+16	Warranty Ending Date (Labor)	Date 
+17	Warranty Starting Date (Parts)	Date 
+18	Warranty Ending Date (Parts)	Date 
+19	Warranty % (Parts)	Decimal 
+20	Warranty % (Labor)	Decimal 
+21	Response Time (Hours)	Decimal 
+22	Installation Date	Date 
+23	Sales Date	Date 
+24	Last Service Date	Date 
+25	Default Contract Value	Decimal 
+26	Default Contract Discount %	Decimal 
+28	No. of Active Contracts	Integer 
+33	Vendor No.	Code[20] 
+34	Vendor Item No.	Code[50] 
+40	Blocked	Enum Service Item Blocked
+47	No. Series	Code[20] 
+48	Item Description	Text[100] 
+49	Name	Text[100] 
+50	Address	Text[100] 
+51	Address 2	Text[50] 
+52	Post Code	Code[20] 
+53	City	Text[30] 
+54	Contact	Text[100] 
+55	Phone No.	Text[30] 
+56	Ship-to Name	Text[100] 
+57	Ship-to Address	Text[100] 
+58	Ship-to Address 2	Text[50] 
+59	Ship-to Post Code	Code[20] 
+60	Ship-to City	Text[30] 
+61	Ship-to Contact	Text[100] 
+62	Ship-to Phone No.	Text[30] 
+63	Usage (Cost)	Decimal 
+64	Usage (Amount)	Decimal 
+65	Invoiced Amount	Decimal 
+66	Total Quantity	Decimal 
+67	Total Qty. Invoiced	Decimal 
+68	Resources Used	Decimal 
+69	Parts Used	Decimal 
+70	Cost Used	Decimal 
+71	Vendor Name	Text[100] 
+72	Vendor Item Name	Text[100] 
+73	Comment	Boolean 
+74	Service Item Components	Boolean 
+75	Preferred Resource	Code[20] 
+76	Variant Code	Code[10] 
+77	County	Text[30] 
+78	Ship-to County	Text[30] 
+79	Contract Cost	Decimal 
+81	Country/Region Code	Code[10] 
+82	Ship-to Country/Region Code	Code[10] 
+83	Name 2	Text[50] 
+84	Ship-to Name 2	Text[50] 
+85	Service Price Group Code	Code[10] 
+86	Default Contract Cost	Decimal 
+87	Prepaid Amount	Decimal 
+88	Search Description	Code[100] 
+89	Service Contracts	Boolean 
+90	Total Qty. Consumed	Decimal 
+100	Date Filter	Date 
+101	Type Filter	Enum Service Ledger Entry Type
+102	Contract Filter	Code[20] 
+103	Service Order Filter	Code[20] 
+104	Sales/Serv. Shpt. Document No.	Code[20] 
+105	Sales/Serv. Shpt. Line No.	Integer 
+106	Shipment Type	Enum Service Item Shipment Type
+211	Ship-to E-Mail	Text[80] 
+721	Coupled to Dataverse	Boolean 
+## 5911 Service Mgt. Setup
+1	Primary Key	Code[10] 
+4	Fault Reporting Level	Option 
+5	Link Service to Service Item	Boolean 
+7	Salesperson Mandatory	Boolean 
+8	Warranty Disc. % (Parts)	Decimal 
+9	Warranty Disc. % (Labor)	Decimal 
+11	Contract Rsp. Time Mandatory	Boolean 
+13	Service Order Starting Fee	Code[10] 
+14	Register Contract Changes	Boolean 
+15	Contract Inv. Line Text Code	Code[20] 
+16	Contract Line Inv. Text Code	Code[20] 
+19	Contract Inv. Period Text Code	Code[20] 
+20	Contract Credit Line Text Code	Code[20] 
+23	Send First Warning To	Text[80] 
+24	Send Second Warning To	Text[80] 
+25	Send Third Warning To	Text[80] 
+26	First Warning Within (Hours)	Decimal 
+27	Second Warning Within (Hours)	Decimal 
+28	Third Warning Within (Hours)	Decimal 
+29	Next Service Calc. Method	Option 
+30	Service Order Type Mandatory	Boolean 
+31	Service Zones Option	Option 
+32	Service Order Start Mandatory	Boolean 
+33	Service Order Finish Mandatory	Boolean 
+36	Resource Skills Option	Option 
+37	One Service Item Line/Order	Boolean 
+38	Unit of Measure Mandatory	Boolean 
+39	Fault Reason Code Mandatory	Boolean 
+40	Contract Serv. Ord.  Max. Days	Integer 
+41	Last Contract Service Date	Date 
+42	Work Type Code Mandatory	Boolean 
+43	Logo Position on Documents	Option 
+44	Use Contract Cancel Reason	Boolean 
+45	Default Response Time (Hours)	Decimal 
+46	Ext. Doc. No. Mandatory	Boolean 
+52	Default Warranty Duration	DateFormula 
+54	Service Invoice Nos.	Code[20] 
+55	Contract Invoice Nos.	Code[20] 
+56	Service Item Nos.	Code[20] 
+57	Service Order Nos.	Code[20] 
+58	Service Contract Nos.	Code[20] 
+59	Contract Template Nos.	Code[20] 
+60	Troubleshooting Nos.	Code[20] 
+61	Prepaid Posting Document Nos.	Code[20] 
+62	Loaner Nos.	Code[20] 
+63	Serv. Job Responsibility Code	Code[10] 
+64	Contract Value Calc. Method	Option 
+65	Contract Value %	Decimal 
+66	Service Quote Nos.	Code[20] 
+68	Posted Service Invoice Nos.	Code[20] 
+69	Posted Serv. Credit Memo Nos.	Code[20] 
+70	Posted Service Shipment Nos.	Code[20] 
+76	Shipment on Invoice	Boolean 
+77	Skip Manual Reservation	Boolean 
+81	Copy Comments Order to Invoice	Boolean 
+82	Copy Comments Order to Shpt.	Boolean 
+85	Service Credit Memo Nos.	Code[20] 
+175	Allow Multiple Posting Groups	Boolean 
+176	Check Multiple Posting Groups	Enum Posting Group Change Method
+185	Archive Quotes	Enum Archive Service Quotes
+186	Archive Orders	Boolean 
+190	Del. Filed Cont. w. main Cont.	Boolean 
+200	Serv. Inv. Template Name	Code[10] 
+201	Serv. Contr. Inv. Templ. Name	Code[10] 
+202	Serv. Contr. Cr.M. Templ. Name	Code[10] 
+203	Serv. Cr. Memo Templ. Name	Code[10] 
+210	Copy Line Descr. to G/L Entry	Boolean 
+950	Copy Time Sheet to Order	Boolean 
+7600	Base Calendar Code	Code[10] 
+7601	Contract Credit Memo Nos.	Code[20] 
+## 5915 Fault Area
+1	Code	Code[10] 
+2	Description	Text[100] 
+## 5916 Symptom Code
+1	Code	Code[10] 
+2	Description	Text[100] 
+## 5917 Fault Reason Code
+1	Code	Code[10] 
+2	Description	Text[100] 
+3	Exclude Warranty Discount	Boolean 
+4	Exclude Contract Discount	Boolean 
+## 5918 Fault Code
+1	Fault Area Code	Code[10] 
+2	Symptom Code	Code[10] 
+3	Code	Code[10] 
+4	Description	Text[80] 
+## 5919 Resolution Code
+1	Code	Code[10] 
+2	Description	Text[80] 
+## 5920 Fault/Resol. Cod. Relationship
+1	Fault Code	Code[10] 
+2	Symptom Code	Code[10] 
+3	Fault Area Code	Code[10] 
+4	Resolution Code	Code[10] 
+5	Occurrences	Integer 
+6	Description	Text[80] 
+7	Service Item Group Code	Code[10] 
+8	Created Manually	Boolean 
+## 5904 Service Item Group
+1	Code	Code[10] 
+2	Description	Text[100] 
+3	Create Service Item	Boolean 
+4	Default Contract Discount %	Decimal 
+5	Default Serv. Price Group Code	Code[10] 
+6	Default Response Time (Hours)	Decimal 
+## 5905 Service Cost
+1	Code	Code[10] 
+2	Description	Text[100] 
+3	Account No.	Code[20] 
+4	Default Unit Price	Decimal 
+5	Default Quantity	Decimal 
+6	Unit of Measure Code	Code[10] 
+7	Cost Type	Option 
+8	Service Zone Code	Code[10] 
+9	Default Unit Cost	Decimal 
+## 5928 Service Status Priority Setup
+1	Service Order Status	Enum Service Document Status
+2	Priority	Option 
+## 5929 Service Shelf
+1	No.	Code[10] 
+2	Description	Text[100] 
+## 200 Work Type
+1	Code	Code[10] 
+2	Description	Text[100] 
+3	Unit of Measure Code	Code[10] 
+## 5990 Service Shipment Header
+2	Customer No.	Code[20] 
+3	No.	Code[20] 
+4	Bill-to Customer No.	Code[20] 
+5	Bill-to Name	Text[100] 
+6	Bill-to Name 2	Text[50] 
+7	Bill-to Address	Text[100] 
+8	Bill-to Address 2	Text[50] 
+9	Bill-to City	Text[30] 
+10	Bill-to Contact	Text[100] 
+11	Your Reference	Text[35] 
+12	Ship-to Code	Code[10] 
+13	Ship-to Name	Text[100] 
+14	Ship-to Name 2	Text[50] 
+15	Ship-to Address	Text[100] 
+16	Ship-to Address 2	Text[50] 
+17	Ship-to City	Text[30] 
+18	Ship-to Contact	Text[100] 
+19	Order Date	Date 
+20	Posting Date	Date 
+22	Posting Description	Text[100] 
+23	Payment Terms Code	Code[10] 
+24	Due Date	Date 
+25	Payment Discount %	Decimal 
+26	Pmt. Discount Date	Date 
+27	Shipment Method Code	Code[10] 
+28	Location Code	Code[10] 
+29	Shortcut Dimension 1 Code	Code[20] 
+30	Shortcut Dimension 2 Code	Code[20] 
+31	Customer Posting Group	Code[20] 
+32	Currency Code	Code[10] 
+33	Currency Factor	Decimal 
+34	Customer Price Group	Code[10] 
+35	Prices Including VAT	Boolean 
+37	Invoice Disc. Code	Code[20] 
+40	Customer Disc. Group	Code[20] 
+41	Language Code	Code[10] 
+42	Format Region	Text[80] 
+43	Salesperson Code	Code[20] 
+44	Order No.	Code[20] 
+46	Comment	Boolean 
+47	No. Printed	Integer 
+52	Applies-to Doc. Type	Enum Gen. Journal Document Type
+53	Applies-to Doc. No.	Code[20] 
+55	Bal. Account No.	Code[20] 
+70	VAT Registration No.	Text[20] 
+73	Reason Code	Code[10] 
+74	Gen. Bus. Posting Group	Code[20] 
+75	EU 3-Party Trade	Boolean 
+76	Transaction Type	Code[10] 
+77	Transport Method	Code[10] 
+78	VAT Country/Region Code	Code[10] 
+79	Name	Text[100] 
+80	Name 2	Text[50] 
+81	Address	Text[100] 
+82	Address 2	Text[50] 
+83	City	Text[30] 
+84	Contact Name	Text[100] 
+85	Bill-to Post Code	Code[20] 
+86	Bill-to County	Text[30] 
+87	Bill-to Country/Region Code	Code[10] 
+88	Post Code	Code[20] 
+89	County	Text[30] 
+90	Country/Region Code	Code[10] 
+91	Ship-to Post Code	Code[20] 
+92	Ship-to County	Text[30] 
+93	Ship-to Country/Region Code	Code[10] 
+94	Bal. Account Type	Enum Payment Balance Account Type
+97	Exit Point	Code[10] 
+98	Correction	Boolean 
+99	Document Date	Date 
+100	External Document No.	Code[35] 
+101	Area	Code[10] 
+102	Transaction Specification	Code[10] 
+104	Payment Method Code	Code[10] 
+105	Shipping Agent Code	Code[10] 
+109	No. Series	Code[20] 
+110	Order No. Series	Code[20] 
+112	User ID	Code[50] 
+113	Source Code	Code[10] 
+114	Tax Area Code	Code[20] 
+115	Tax Liable	Boolean 
+116	VAT Bus. Posting Group	Code[20] 
+119	VAT Base Discount %	Decimal 
+129	Company Bank Account Code	Code[20] 
+200	Work Description	Blob 
+480	Dimension Set ID	Integer 
+5052	Contact No.	Code[20] 
+5053	Bill-to Contact No.	Code[20] 
+5700	Responsibility Center	Code[10] 
+5794	Shipping Agent Service Code	Code[10] 
+5796	Date Filter	Date 
+5902	Description	Text[100] 
+5904	Service Order Type	Code[10] 
+5905	Link Service to Service Item	Boolean 
+5907	Priority	Option 
+5911	Allocated Hours	Decimal 
+5915	Phone No.	Text[30] 
+5916	E-Mail	Text[80] 
+5917	Phone No. 2	Text[30] 
+5918	Fax No.	Text[30] 
+5921	No. of Unallocated Items	Integer 
+5923	Order Time	Time 
+5924	Default Response Time (Hours)	Decimal 
+5925	Actual Response Time (Hours)	Decimal 
+5926	Service Time (Hours)	Decimal 
+5927	Response Date	Date 
+5928	Response Time	Time 
+5929	Starting Date	Date 
+5930	Starting Time	Time 
+5931	Finishing Date	Date 
+5932	Finishing Time	Time 
+5933	Contract Serv. Hours Exist	Boolean 
+5934	Reallocation Needed	Boolean 
+5936	Notify Customer	Option 
+5937	Max. Labor Unit Price	Decimal 
+5938	Warning Status	Option 
+5939	No. of Allocations	Integer 
+5940	Contract No.	Code[20] 
+5951	Type Filter	Option 
+5952	Customer Filter	Code[20] 
+5953	Resource Filter	Code[20] 
+5954	Contract Filter	Code[20] 
+5955	Ship-to Fax No.	Text[30] 
+5956	Ship-to E-Mail	Text[80] 
+5957	Resource Group Filter	Code[20] 
+5958	Ship-to Phone	Text[30] 
+5959	Ship-to Phone 2	Text[30] 
+5966	Service Zone Filter	Code[10] 
+5968	Service Zone Code	Code[10] 
+5981	Expected Finishing Date	Date 
+7000	Price Calculation Method	Enum Price Calculation Method
+7001	Allow Line Disc.	Boolean 
+9001	Quote No.	Code[20] 
+## 5989 Service Shipment Item Line
+1	No.	Code[20] 
+2	Line No.	Integer 
+3	Service Item No.	Code[20] 
+4	Service Item Group Code	Code[10] 
+5	Item No.	Code[20] 
+6	Serial No.	Code[50] 
+7	Description	Text[100] 
+8	Description 2	Text[50] 
+10	Priority	Option 
+11	Response Time (Hours)	Decimal 
+12	Response Date	Date 
+13	Response Time	Time 
+14	Starting Date	Date 
+15	Starting Time	Time 
+16	Finishing Date	Date 
+17	Finishing Time	Time 
+18	Service Shelf No.	Code[10] 
+19	Warranty Starting Date (Parts)	Date 
+20	Warranty Ending Date (Parts)	Date 
+21	Warranty	Boolean 
+22	Warranty % (Parts)	Decimal 
+23	Warranty % (Labor)	Decimal 
+24	Warranty Starting Date (Labor)	Date 
+25	Warranty Ending Date (Labor)	Date 
+26	Contract No.	Code[20] 
+27	Location of Service Item	Text[30] 
+28	Loaner No.	Code[20] 
+29	Vendor No.	Code[20] 
+30	Vendor Item No.	Text[50] 
+31	Fault Reason Code	Code[10] 
+32	Service Price Group Code	Code[10] 
+33	Fault Area Code	Code[10] 
+34	Symptom Code	Code[10] 
+35	Fault Code	Code[10] 
+36	Resolution Code	Code[10] 
+37	Fault Comment	Boolean 
+38	Resolution Comment	Boolean 
+39	Accessory Comment	Boolean 
+40	Variant Code	Code[10] 
+42	Actual Response Time (Hours)	Decimal 
+44	Service Price Adjmt. Gr. Code	Code[10] 
+45	Adjustment Type	Option 
+46	Base Amount to Adjust	Decimal 
+60	No. of Active/Finished Allocs	Integer 
+64	Ship-to Code	Code[10] 
+65	Customer No.	Code[20] 
+91	Date Filter	Date 
+92	Resource Filter	Code[20] 
+93	Allocation Date Filter	Date 
+95	Resource Group Filter	Code[20] 
+97	Responsibility Center	Code[10] 
+480	Dimension Set ID	Integer 
+## 1173 Document Attachment
+1	ID	Integer 
+2	Table ID	Integer 
+3	No.	Code[20] 
+4	Attached Date	DateTime 
+5	File Name	Text[250] 
+6	File Type	Enum Document Attachment File Type
+7	File Extension	Text[30] 
+8	Document Reference ID	Media 
+9	Attached By	Guid 
+10	User	Code[50] 
+11	Document Flow Purchase	Boolean 
+12	Document Flow Sales	Boolean 
+13	Document Type	Enum Attachment Document Type
+14	Line No.	Integer 
+15	VAT Report Config. Code	Enum VAT Report Configuration
+20	Document Flow Service	Boolean 
+21	Document Flow Production	Boolean 
+## 5934 Service Register
+1	No.	Integer 
+2	From Entry No.	Integer 
+3	To Entry No.	Integer 
+4	From Warranty Entry No.	Integer 
+5	To Warranty Entry No.	Integer 
+6	Creation Date	Date 
+7	Source Code	Code[10] 
+8	User ID	Code[50] 
+9	Creation Time	Time 
