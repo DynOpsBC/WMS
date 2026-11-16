@@ -1773,6 +1773,11 @@ codeunit 72050 "DOPSWHS Count Mgmt"
                     ItemJournalLine."Line No." := LineNo;
                     ItemJournalLine.Validate("Posting Date", Today());
                     ItemJournalLine."Document No." := CountDocumentNo;
+                    // Init leaves Entry Type = Purchase; validating Item No. in that state makes BC
+                    // refuse items with "Purchasing Blocked" (BADE 16 Kas 2026, CNT-20261116164244).
+                    // Like BC's Calculate Inventory: start as Positive Adjmt.; the Qty. (Phys.
+                    // Inventory) validation below sets the final positive/negative type.
+                    ItemJournalLine.Validate("Entry Type", ItemJournalLine."Entry Type"::"Positive Adjmt.");
                     ItemJournalLine.Validate("Item No.", CountLine."Item No.");
                     ItemJournalLine.Validate("Location Code", CountHeader."Location Code");
                     ItemJournalLine.Validate("Variant Code", CountLine."Variant Code");
