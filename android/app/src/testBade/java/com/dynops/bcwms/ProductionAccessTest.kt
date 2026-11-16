@@ -9,7 +9,14 @@ class ProductionAccessTest {
     @Test fun `BADE discovers Production while retaining its sandbox default`() {
         assertTrue(BuildConfig.BC_ALLOW_PRODUCTION)
         assertTrue("Production" in BcApi.KNOWN_ENVIRONMENTS)
-        assertEquals("E-DefterSandbox", BcApi.DEFAULT_ENVIRONMENT)
+        assertEquals("Sand1311", BcApi.DEFAULT_ENVIRONMENT)
+    }
+
+    @Test fun `BADE Sand1311 is the first discovery target and retains sandbox permissions`() {
+        assertEquals("Sand1311", BcApi.KNOWN_ENVIRONMENTS.first())
+        for (screen in Screen.entries) {
+            assertTrue(productionScreenAllowed(screen, "Sand1311", manager = false))
+        }
     }
 
     @Test fun `BADE test environment Sand2809 is discovered automatically as a sandbox`() {

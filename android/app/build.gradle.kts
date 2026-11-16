@@ -77,9 +77,9 @@ android {
       manifestPlaceholders["appLabel"] = "BCWMS BADE"
       buildConfigField("String", "BC_CLIENT_ID", "\"3c4ba25a-89f4-41df-acf8-ebab8cb4809b\"")
       buildConfigField("String", "BC_FALLBACK_TENANT", "\"3bbd610b-95e4-47b3-8b48-4f7caf717bc3\"")
-      buildConfigField("String", "BC_DEFAULT_ENVIRONMENT", "\"E-DefterSandbox\"")
+      buildConfigField("String", "BC_DEFAULT_ENVIRONMENT", "\"Sand1311\"")
       // BADE test ortamı: ortam listesinde kendiliğinden çıksın (elle "Ortam adıyla ara" gerekmesin).
-      buildConfigField("String", "BC_EXTRA_ENVIRONMENTS", "\"Sand2809\"")
+      buildConfigField("String", "BC_EXTRA_ENVIRONMENTS", "\"Sand2809,E-DefterSandbox\"")
       // BADE APK must never fall back to the shared CRONUS demo company. The
       // company UUID is discovered from BC by this exact display name after
       // token acquisition, then persisted for all subsequent requests.
