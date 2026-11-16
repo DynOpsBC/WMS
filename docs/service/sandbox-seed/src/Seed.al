@@ -60,6 +60,14 @@ page 72190 "DOPS Svc Seed API"
     end;
 
     [ServiceEnabled]
+    procedure addDemoOrder(): Text
+    var
+        Seeder: Codeunit "DOPS Svc Seeder";
+    begin
+        exit(Seeder.AddExtraOrder());
+    end;
+
+    [ServiceEnabled]
     procedure runSeed(): Text
     var
         Seeder: Codeunit "DOPS Svc Seeder";
@@ -126,6 +134,20 @@ codeunit 72191 "DOPS Svc Seeder"
         OrderNo := AddOrder('120.01.00004', SiTupras, 'H-7 hattında bant kayması', 'Tahrik tamburunda kayma, ses var.');
         SetPriority(OrderNo, 1);
         Allocate(OrderNo, 'TEKN01', 3);
+        exit(Log.ToText());
+    end;
+
+    procedure AddExtraOrder(): Text
+    var
+        EnvInfo: Codeunit "Environment Information";
+        SiAta: Code[20];
+        OrderNo: Code[20];
+    begin
+        if not EnvInfo.IsSandbox() then
+            Error('Yalnız sandbox.');
+        SiAta := AddServiceItem('120.01.00003', 'Ocak konveyörü C-2 (800 mm)', 'ATA-C2');
+        OrderNo := AddOrder('120.01.00003', SiAta, 'C-2 bant kenarında aşınma', 'Bant kenarı aşınmış, hizalama kontrol edilecek.');
+        SetPriority(OrderNo, 1);
         exit(Log.ToText());
     end;
 

@@ -2,7 +2,7 @@
   "id": "5d7c2a1e-91b4-4c3e-8a0f-6b2e7d9c1a47",
   "name": "DynOps Sandbox Service Seed",
   "publisher": "DynamicsOps",
-  "version": "1.0.0.5",
+  "version": "1.0.0.6",
   "brief": "Sandbox-only demo data for BCWMS service terminal tests",
   "description": "Creates sample technicians, service items and service orders in a SANDBOX. Refuses to run in production.",
   "privacyStatement": "", "EULA": "", "help": "", "url": "", "logo": "",
