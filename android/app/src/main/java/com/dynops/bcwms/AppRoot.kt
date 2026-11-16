@@ -63,6 +63,7 @@ object WhsePickNavigation {
 
 enum class Screen(val title: String) {
     Home("Ana Menü"),
+    Service("Servis"),
     Connection("Bağlantı Ayarları"),
     LicensePlates("LP (Taşıma Kabı)"),
     HierarchicalLP("DKC Kutu ve Palet"),
@@ -186,6 +187,7 @@ fun AppRoot() {
                     onConnectionChanged = { connected = it },
                     onNavigate = { screen = it },
                 )
+                Screen.Service -> ServiceModule()
                 Screen.Connection -> LoginFlow(onConnected = { connected = it })
                 Screen.LicensePlates -> LicensePlateModule()
                 Screen.HierarchicalLP -> HierarchicalLpModule()
@@ -304,6 +306,9 @@ private data class HomeTile(
 private data class HomeCategory(val title: String, val accent: Color, val tiles: List<HomeTile>)
 
 private val HomeCategories = listOf(
+    HomeCategory("Servis", Color(0xFF2D9CDB), listOf(
+        HomeTile(Screen.Service, WmsGlyph.SERVICE, "Servis İşlerim", "Atanan servis işlerini yürüt"),
+    )),
     HomeCategory("Gelen", Color(0xFF26A65B), listOf(
         HomeTile(Screen.Receiving, WmsGlyph.RECEIVING, "Mal Kabul", "Gelen ürünü kaydet, LP'yi başlat"),
         HomeTile(Screen.PutAway, WmsGlyph.PUT_AWAY, "Yerleştirme", "Ürünü veya LP'yi rafına kaldır"),
@@ -389,7 +394,28 @@ private fun HomeScreen(
         flavor,
         includeAdminTestTools = BuildConfig.DEBUG && BcApi.isAdminTestSession(context),
     )
-    val visibleCategories = HomeCategories.mapNotNull { category ->
+    val servicePrefs = context.getSharedPreferences("bcwms_prefs", android.content.Context.MODE_PRIVATE)
+    val serviceCacheKey = "service_setup_${BcApi.getTenant(context)}_${BcApi.getEnvironment(context)}_${BcApi.getCompanyId(context)}"
+    var serviceSetup by remember(serviceCacheKey) { mutableStateOf(parseServiceSetup(servicePrefs.getString(serviceCacheKey, "{}").orEmpty())) }
+    LaunchedEffect(connected, companyEpoch, serviceCacheKey) {
+        if (connected) {
+            val result = runCatching { BcApi.get(context, "serviceSetups") }.getOrNull()
+            when {
+                result?.ok == true -> {
+                    serviceSetup = parseServiceSetup(result.body)
+                    servicePrefs.edit().putString(serviceCacheKey, result.body).apply()
+                }
+                // 404: this BC has no service API (older BCWMS) -> hide the tile for good.
+                result?.httpCode == 404 -> {
+                    serviceSetup = ServiceSetup()
+                    servicePrefs.edit().remove(serviceCacheKey).apply()
+                }
+                // Transient failure: keep the cached menu instead of flipping categories.
+            }
+        }
+    }
+    val categories = serviceCategories(serviceSetup.enabled, serviceSetup.hideWarehouseModules)
+    val visibleCategories = HomeCategories.filter { it.title in categories }.mapNotNull { category ->
         category.copy(tiles = category.tiles.filter { it.screen in visibleScreens })
             .takeIf { it.tiles.isNotEmpty() }
     }

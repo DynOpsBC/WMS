@@ -6,6 +6,27 @@ permissionset 72095 "DOPSWHS-USER"
     Caption = 'Advanced WMS User';
 
     Permissions =
+        page "DOPSWHS Service Orders API" = X,
+        page "DOPSWHS Svc Item Lines API" = X,
+        page "DOPSWHS Service Lines API" = X,
+        page "DOPSWHS My Svc Allocs API" = X,
+        page "DOPSWHS Svc Allocations API" = X,
+        page "DOPSWHS Svc Comments API" = X,
+        page "DOPSWHS Svc Repair Status API" = X,
+        page "DOPSWHS Svc Fault Areas API" = X,
+        page "DOPSWHS Svc Symptom Codes API" = X,
+        page "DOPSWHS Svc Fault Codes API" = X,
+        page "DOPSWHS Svc Resolution API" = X,
+        page "DOPSWHS Svc Work Types API" = X,
+        page "DOPSWHS Svc Technicians API" = X,
+        page "DOPSWHS Service Setup API" = X,
+        page "DOPSWHS Svc Attachments API" = X,
+        page "DOPSWHS Service Setup" = X,
+        page "DOPSWHS Service Technicians" = X,
+        page "DOPSWHS Service Dispatch" = X,
+        page "DOPSWHS Svc Assign Dialog" = X,
+        page "DOPSWHS Service Dispatch Cue" = X,
+
         tabledata "DOPSWHS Service Setup" = R,
         table "DOPSWHS Service Setup" = X,
         tabledata "DOPSWHS Service Technician" = R,

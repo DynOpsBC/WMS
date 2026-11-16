@@ -14,6 +14,13 @@ codeunit 72100 "DOPSWHS Service Terminal Mgt"
         tabledata "Work Type" = R,
         tabledata Location = R;
 
+    procedure EnsureSetup()
+    var
+        Setup: Record "DOPSWHS Service Setup";
+    begin
+        Setup.GetSetup();
+    end;
+
     procedure CurrentTechnician(var Tech: Record "DOPSWHS Service Technician")
     begin
         if not TryCurrentTechnician(Tech) then
@@ -108,9 +115,9 @@ codeunit 72100 "DOPSWHS Service Terminal Mgt"
     begin
         PrepareItem(ItemLine, OrderNo, SILineNo);
         if ItemLine."Starting Date" = 0D then
-            ItemLine."Starting Date" := Today();
+            ItemLine."Starting Date" := LocalToday();
         if ItemLine."Starting Time" = 0T then
-            ItemLine."Starting Time" := Time();
+            ItemLine."Starting Time" := LocalTime();
         StartDate := ItemLine."Starting Date";
         StartTime := ItemLine."Starting Time";
         ItemLine.Validate("Repair Status Code", FindRepairStatus(1));
@@ -123,7 +130,7 @@ codeunit 72100 "DOPSWHS Service Terminal Mgt"
         Allocation.SetRange(Status, Allocation.Status::Active);
         if Allocation.FindSet(true) then
             repeat
-                Allocation."Starting Time" := Time();
+                Allocation."Starting Time" := LocalTime();
                 Allocation."Service Started" := true;
                 Allocation.Modify(true);
             until Allocation.Next() = 0;
@@ -156,21 +163,21 @@ codeunit 72100 "DOPSWHS Service Terminal Mgt"
         // Add the note before the repair status can finish the header.
         if ResolutionNote <> '' then
             AddComment(OrderNo, ItemLine."Line No.", 'Resolution', ResolutionNote);
-        ItemLine."Finishing Date" := Today();
-        ItemLine."Finishing Time" := Time();
+        ItemLine."Finishing Date" := LocalToday();
+        ItemLine."Finishing Time" := LocalTime();
         CurrentTechnician(Tech);
         FilterAllocations(Allocation, OrderNo, ItemLine."Line No.", Tech."Resource No.");
         Allocation.SetRange(Status, Allocation.Status::Active);
         if Allocation.FindSet(true) then
             repeat
                 Allocation.Status := Allocation.Status::Finished;
-                Allocation."Finishing Time" := Time();
+                Allocation."Finishing Time" := LocalTime();
                 Allocation.Modify(true);
             until Allocation.Next() = 0;
         ItemLine.Validate("Repair Status Code", FindRepairStatus(2));
         // Standard repair validation uses WorkDate; terminal timestamps use today.
-        ItemLine.Validate("Finishing Date", Today());
-        ItemLine.Validate("Finishing Time", Time());
+        ItemLine.Validate("Finishing Date", LocalToday());
+        ItemLine.Validate("Finishing Time", LocalTime());
         ItemLine.Modify(true);
     end;
 
@@ -276,7 +283,7 @@ codeunit 72100 "DOPSWHS Service Terminal Mgt"
         while CommentText <> '' do begin
             NextNo += 10000;
             Comment."Line No." := NextNo;
-            Comment.Date := Today();
+            Comment.Date := LocalToday();
             Comment.Comment := CopyStr(CommentText, 1, MaxStrLen(Comment.Comment));
             Comment.Insert(true);
             CommentText := CopyStr(CommentText, MaxStrLen(Comment.Comment) + 1);
@@ -297,7 +304,7 @@ codeunit 72100 "DOPSWHS Service Terminal Mgt"
         Header.Get(Header."Document Type"::Order, OrderNo);
         AssertCanWork(OrderNo, 0);
         if LowerCase(Kind) = 'signature' then
-            FileName := 'IMZA-' + OrderNo + '-' + Format(CurrentDateTime(), 0, '<Year4><Month,2><Day,2><Hours24,2><Minutes,2><Seconds,2>') + '.png';
+            FileName := 'IMZA-' + OrderNo + '-' + Format(LocalNow(), 0, '<Year4><Month,2><Day,2><Hours24,2><Minutes,2><Seconds,2>') + '.png';
         TempBlob.CreateOutStream(ContentOut);
         Base64Convert.FromBase64(Base64, ContentOut);
         TempBlob.CreateInStream(ContentIn);
@@ -358,7 +365,7 @@ codeunit 72100 "DOPSWHS Service Terminal Mgt"
     begin
         if StartDate = 0D then
             exit(0);
-        Elapsed := (CurrentDateTime() - CreateDateTime(StartDate, StartTime)) / 3600000;
+        Elapsed := (LocalNow() - CreateDateTime(StartDate, StartTime)) / 3600000;
         if Elapsed < 0 then
             exit(0);
         if Rounding > 0 then
@@ -408,6 +415,27 @@ codeunit 72100 "DOPSWHS Service Terminal Mgt"
         if ItemLine.FindFirst() then
             exit(ItemLine."Line No.");
         Error(NoItemErr, OrderNo);
+    end;
+
+    /// <summary>
+    /// BC online runs AL in UTC, while Time fields on service documents are shown
+    /// without conversion. Technicians must see the clock time of their own zone.
+    /// </summary>
+    local procedure LocalNow(): DateTime
+    var
+        TypeHelper: Codeunit "Type Helper";
+    begin
+        exit(TypeHelper.GetCurrentDateTimeInUserTimeZone());
+    end;
+
+    local procedure LocalToday(): Date
+    begin
+        exit(DT2Date(LocalNow()));
+    end;
+
+    local procedure LocalTime(): Time
+    begin
+        exit(DT2Time(LocalNow()));
     end;
 
     local procedure GetWritableOrder(var Header: Record "Service Header"; OrderNo: Code[20])

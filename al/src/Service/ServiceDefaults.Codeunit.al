@@ -21,6 +21,15 @@ codeunit 72101 "DOPSWHS Service Defaults"
         Priority: Record "Service Status Priority Setup";
         SetupChanged: Boolean;
     begin
+        if not MgtSetup.Get() then begin
+            MgtSetup.Init();
+            MgtSetup.Insert(true);
+        end;
+        // Fault areas, symptoms and fault codes are rejected while the level is None.
+        if MgtSetup."Fault Reporting Level" = MgtSetup."Fault Reporting Level"::None then begin
+            MgtSetup."Fault Reporting Level" := MgtSetup."Fault Reporting Level"::"Fault+Symptom+Area (IRIS)";
+            MgtSetup.Modify(true);
+        end;
         if not UOM.Get('SAAT') then begin
             UOM.Init();
             UOM.Code := 'SAAT';

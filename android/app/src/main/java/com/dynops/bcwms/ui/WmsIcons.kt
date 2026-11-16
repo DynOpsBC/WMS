@@ -35,6 +35,7 @@ import com.dynops.bcwms.Screen
  * Android/emoji sürümünden bağımsız, tutarlı ve keskin görünürler.
  */
 enum class WmsGlyph {
+    SERVICE,
     RECEIVING,
     PUT_AWAY,
     PICKING,
@@ -70,6 +71,7 @@ enum class WmsGlyph {
 }
 
 fun glyphForScreen(screen: Screen): WmsGlyph = when (screen) {
+    Screen.Service -> WmsGlyph.SERVICE
     Screen.Receiving -> WmsGlyph.RECEIVING
     Screen.PutAway -> WmsGlyph.PUT_AWAY
     Screen.Picking -> WmsGlyph.PICKING
@@ -206,6 +208,22 @@ fun WmsIcon(
         }
 
         when (glyph) {
+            WmsGlyph.SERVICE -> {
+                val wrench = Path().apply {
+                    val points = listOf(0.76f to 0.13f, 0.61f to 0.28f, 0.71f to 0.39f,
+                        0.87f to 0.24f, 0.87f to 0.44f, 0.74f to 0.56f,
+                        0.58f to 0.54f, 0.31f to 0.83f, 0.17f to 0.83f,
+                        0.17f to 0.69f, 0.46f to 0.42f, 0.44f to 0.26f,
+                        0.56f to 0.13f)
+                    points.forEachIndexed { index, (x, y) ->
+                        val point = p(x, y)
+                        if (index == 0) moveTo(point.x, point.y) else lineTo(point.x, point.y)
+                    }
+                    close()
+                }
+                drawPath(wrench, soft)
+                drawPath(wrench, color, style = lineStroke)
+            }
             WmsGlyph.RECEIVING, WmsGlyph.PUT_AWAY -> {
                 drawRoundRect(soft, p(0.16f, 0.48f), Size(s * 0.68f, s * 0.34f), CornerRadius(s * 0.08f))
                 val tray = Path().apply {
