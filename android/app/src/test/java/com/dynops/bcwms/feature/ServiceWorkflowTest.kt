@@ -94,5 +94,6 @@ class ServiceWorkflowTest {
         assertEquals("14:05", serviceTimeText("14:05:33.12Z"))
         assertEquals("1,5", serviceQtyText(1.5))
         assertEquals("2", serviceQtyText(2.0))
+        assertEquals(listOf("High", "Medium", "Low", "?"), listOf("Low", "?", "High", "Medium").sortedBy { servicePriorityRank(it) })
     }
 }

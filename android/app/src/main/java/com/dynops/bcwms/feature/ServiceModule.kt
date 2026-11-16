@@ -73,7 +73,8 @@ fun ServiceModule() {
         if (current == null) {
             val allocations = fetch(if(all) "serviceOrders?\$orderby=orderDate%20desc&\$filter=" + Uri.encode("status ne 'Finished'") else "myServiceAllocations?\$filter=" + Uri.encode("status eq '${if(finished) "Finished" else "Active"}'"))
             // Finished + not posted: the technician still has to post (Servisi Kaydet).
-            rows = allocations
+            // Technicians see urgent work first; the dispatcher list keeps newest-first.
+            rows = if (all) allocations else allocations.sortedWith(compareBy({ servicePriorityRank(it.optString("priority")) }, { it.optString("allocationDate") }))
         } else {
             detailReady = false
             val r = BcApi.get(context, "serviceOrders(${current.optString("id")})")

@@ -46,6 +46,8 @@ fun serviceQtyText(value: Double): String =
 fun servicePriorityLabel(value: String): String = when(serviceEnumName(value)) {
     "High" -> "Yüksek"; "Medium" -> "Orta"; "Low" -> "Düşük"; else -> value
 }
+/** High first, then Medium, then Low; unknown last. */
+fun servicePriorityRank(value: String): Int = when(serviceEnumName(value)) { "High" -> 0; "Medium" -> 1; "Low" -> 2; else -> 3 }
 fun servicePriorityColor(value: String): String = when(serviceEnumName(value)) { "High" -> "danger"; "Medium" -> "warning"; "Low" -> "success"; else -> "neutral" }
 fun serviceStatusColor(value: String): String = when(serviceEnumName(value)) { "Finished" -> "success"; "On Hold" -> "warning"; "In Process" -> "primary"; else -> "neutral" }
 fun serviceElapsedHours(start: LocalDateTime?, now: LocalDateTime, rounding: Double): Double {
