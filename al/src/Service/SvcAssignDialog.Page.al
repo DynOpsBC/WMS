@@ -35,8 +35,20 @@ page 72103 "DOPSWHS Svc Assign Dialog"
                         if Selection = 0 then
                             exit(false);
                         ItemLineNo := LineNumbers.Get(Selection);
+                        UpdateItemDescription();
                         exit(true);
                     end;
+
+                    trigger OnValidate()
+                    begin
+                        UpdateItemDescription();
+                    end;
+                }
+                field(ServiceItem; ItemDescription)
+                {
+                    ApplicationArea = All;
+                    Caption = 'Service Item';
+                    Editable = false;
                 }
                 field(Technician; TechnicianUser)
                 {
@@ -71,8 +83,28 @@ page 72103 "DOPSWHS Svc Assign Dialog"
         AssignHours := 1;
     end;
     procedure SetOrder(NewOrderNo: Code[20])
+    var
+        ItemLine: Record "Service Item Line";
     begin
         OrderNo := NewOrderNo;
+        ItemLine.SetRange("Document Type", ItemLine."Document Type"::Order);
+        ItemLine.SetRange("Document No.", OrderNo);
+        if ItemLine.FindFirst() then begin
+            ItemLineNo := ItemLine."Line No.";
+            UpdateItemDescription();
+        end;
+    end;
+
+    local procedure UpdateItemDescription()
+    var
+        ItemLine: Record "Service Item Line";
+    begin
+        ItemDescription := '';
+        if ItemLineNo = 0 then
+            exit;
+        if not ItemLine.Get(ItemLine."Document Type"::Order, OrderNo, ItemLineNo) then
+            Error(ItemLineNotFoundErr, ItemLineNo, OrderNo);
+        ItemDescription := CopyStr(DelChr(ItemLine."Service Item No." + ' ' + ItemLine.Description, '<>', ' '), 1, MaxStrLen(ItemDescription));
     end;
     procedure Assign()
     var
@@ -89,8 +121,10 @@ page 72103 "DOPSWHS Svc Assign Dialog"
     var
         SelectItemLineLbl: Label 'Select a service item line';
         SelectTechnicianErr: Label 'Select a technician before assigning the service order.';
+        ItemLineNotFoundErr: Label 'Service item line %1 does not exist on service order %2.', Comment = '%1 = line no., %2 = order no.';
         OrderNo: Code[20];
         ItemLineNo: Integer;
+        ItemDescription: Text[150];
         TechnicianUser: Code[50];
         AssignDate: Date;
         AssignHours: Decimal;

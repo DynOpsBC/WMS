@@ -18,14 +18,15 @@ Alan adları: `docs/service/bc-service-fields.txt` (Base Application 28.1 sembol
   - Aynı kaleme birden çok aktif teknisyen atanmışsa `finishWork` yalnız çağıranın tahsisini kapatır.
   - `IMZA-` dosya adı yalnız imza eylemiyle oluşur; boş ek reddedilir.
   - Terminal "Bugün bitenler" yerine **Kayıt bekleyen** (Finished + kaydedilmemiş tahsisler); İşlerim önceliğe göre sıralı; fotoğraf tam çözünürlük (FileProvider + `TakePicture`, en fazla 1600 px).
-  - Sayfa başlıkları `DOPSWHS.tr-TR.xlf` ile Türkçe.
-- Doğrulama: AL 0 hata; Android 359 birim testi; Ayıkband Sandbox1611'de emülatörle uçtan uca (SS000006 → SV000001, ILE −6 METRE; SS000004 bitirildi, imza + fotoğraf, kayıt bekliyor; SS000005 PARCA ile beklemede).
+  - Sayfa başlıkları `DOPSWHS.tr-TR.xlf` ile Türkçe. BC, `<trans-unit>` öğelerini `<body><group id="body">` altında bekler; grup olmadan dosyanın tamamı yok sayılıyordu (dosyadaki eski `CountSheet` vb. geçersiz kimlikli 25 yer tutucu da kaldırıldı). Bu düzeltme diğer müşteri dallarındaki `DOPSWHS.tr-TR.xlf` için de geçerlidir; oralarda henüz yapılmadı.
+  - Teknisyen Ata diyaloğu siparişin ilk servis kalemi satırıyla dolu açılır ve servis maddesini gösterir.
+- Doğrulama: AL 0 hata; Android 359 birim testi; Ayıkband Sandbox1611'de emülatörle uçtan uca (SS000006 → SV000001, ILE −6 METRE; SS000004 → SV000002, ILE −12 METRE; SS000005 PARCA ile beklemede). BC sayfalarının Türkçe görünümü 1.14.0.5 ile tarayıcıda kontrol edildi.
 - Denenmedi: fiziksel el terminali, Premium olmayan / yalnız `DOPSWHS SERVICE` izinli teknisyen kullanıcısı, faturalama, canlı ortam.
 - Sandbox demo verisi: `docs/service/sandbox-seed` (yalnız sandbox'ta çalışır; `runSeed`, `resetSeed`, `addDemoOrder`).
 
 ## 1. Kapsam
 
-### BC tarafı (AL, BCWMSApp BASE, sürüm 1.14.0.4)
+### BC tarafı (AL, BCWMSApp BASE, sürüm 1.14.0.5)
 1. Servis kurulumu (tekil kayıt) + teknisyen eşlemesi (BC kullanıcısı → Kaynak).
 2. "Servis Yönetimi" sayfası: açık servis siparişleri, durum/öncelik/teknisyen/yanıt tarihi, sayaçlar, teknisyen atama, standart sayfalara geçiş.
 3. Terminal için API sayfaları (dynops/warehouse/v2.0) + iş kuralları codeunit'i.
