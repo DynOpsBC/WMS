@@ -1,0 +1,18 @@
+{
+  "id": "5d7c2a1e-91b4-4c3e-8a0f-6b2e7d9c1a47",
+  "name": "DynOps Sandbox Service Seed",
+  "publisher": "DynamicsOps",
+  "version": "1.0.0.5",
+  "brief": "Sandbox-only demo data for BCWMS service terminal tests",
+  "description": "Creates sample technicians, service items and service orders in a SANDBOX. Refuses to run in production.",
+  "privacyStatement": "", "EULA": "", "help": "", "url": "", "logo": "",
+  "dependencies": [
+    { "id": "984e25aa-07c2-4401-babc-88f975303a52", "name": "BCWMSApp", "publisher": "DynamicsOps", "version": "1.14.0.4" }
+  ],
+  "platform": "24.0.0.0",
+  "application": "24.0.0.0",
+  "idRanges": [ { "from": 72190, "to": 72199 } ],
+  "runtime": "13.0",
+  "features": [ "NoImplicitWith" ],
+  "resourceExposurePolicy": { "allowDebugging": true, "allowDownloadingSource": true, "includeSourceInSymbolFile": true }
+}

@@ -72,11 +72,8 @@ fun ServiceModule() {
         val current = order
         if (current == null) {
             val allocations = fetch(if(all) "serviceOrders?\$orderby=orderDate%20desc&\$filter=" + Uri.encode("status ne 'Finished'") else "myServiceAllocations?\$filter=" + Uri.encode("status eq '${if(finished) "Finished" else "Active"}'"))
-            rows = if (!all && finished) {
-                val todayLines = fetch("serviceItemLines?\$filter=" + Uri.encode("finishingDate eq ${LocalDate.now()}"))
-                val keys = todayLines.map { it.optString("documentNo") to it.optInt("lineNo") }.toSet()
-                allocations.filter { (it.optString("documentNo") to it.optInt("serviceItemLineNo")) in keys }
-            } else allocations
+            // Finished + not posted: the technician still has to post (Servisi Kaydet).
+            rows = allocations
         } else {
             detailReady = false
             val r = BcApi.get(context, "serviceOrders(${current.optString("id")})")
@@ -200,13 +197,13 @@ fun ServiceModule() {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                 FilterChip(!all, { if(!busy && all) { rows = emptyList(); all = false } }, label = { Text("İşlerim") }, enabled = !busy)
                 if(setup.isDispatcher) FilterChip(all, { if(!busy && !all) { rows = emptyList(); all = true } }, label = { Text("Tüm İşler") }, enabled = !busy)
-                if(!all) FilterChip(finished, { rows = emptyList(); finished = !finished }, label = { Text("Bugün bitenler") }, enabled = !busy)
+                if(!all) FilterChip(finished, { rows = emptyList(); finished = !finished }, label = { Text("Kayıt bekleyen") }, enabled = !busy)
             }
             OutlinedButton({ runJob { reload() } }, enabled = !busy, modifier = Modifier.fillMaxWidth()) { WmsRefreshLabel(busy) }
             if(rows.isNotEmpty()) Text(
-                "${rows.size} " + if(all) "açık servis siparişi" else if(finished) "bugün biten iş" else "açık iş",
+                "${rows.size} " + if(all) "açık servis siparişi" else if(finished) "kayıt bekleyen iş" else "açık iş",
                 style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            if(rows.isEmpty() && !busy) EmptyState(if(all) "Açık servis siparişi yok." else if(finished) "Bugün bitirilen iş yok." else "Size atanmış açık servis işi yok.")
+            if(rows.isEmpty() && !busy) EmptyState(if(all) "Açık servis siparişi yok." else if(finished) "Kaydedilmeyi bekleyen bitmiş iş yok." else "Size atanmış açık servis işi yok.")
             rows.forEach { row ->
                 val priority = row.optString("priority")
                 Card(onClick = {
@@ -432,10 +429,10 @@ fun ServiceModule() {
                 }
                 "Teknisyen Ata" -> {
                     choose("resourceNo", "Teknisyen", catalog["serviceTechnicians"].orEmpty(), "resourceNo")
-                    field("allocationDate", "Tarih (yyyy-MM-dd)")
+                    field("allocationDate", "Atama tarihi (yyyy-AA-gg)")
                 }
             }
-            if(dialog in listOf("İşi Bitir", "İşçilik Ekle", "Teknisyen Ata")) field("hours", "İşçilik saati")
+            if(dialog in listOf("İşi Bitir", "İşçilik Ekle", "Teknisyen Ata")) field("hours", if(dialog == "Teknisyen Ata") "Planlanan süre (saat)" else "İşçilik saati")
             if(dialog in listOf("İşi Bitir", "İşçilik Ekle")) choose("workTypeCode", "İş türü", catalog["serviceWorkTypes"].orEmpty())
             if(dialog == "İşçilik Ekle") field("description", "Açıklama")
             Button({
