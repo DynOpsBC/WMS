@@ -2,6 +2,7 @@ codeunit 72034 "DOPSWHS Upgrade"
 {
     Subtype = Upgrade;
     Permissions =
+        tabledata "DOPSWHS Service Setup" = RI,
         tabledata "Lot No. Information" = rm,
         tabledata "DOPSWHS LP Header" = rm,
         tabledata "DOPSWHS LP Line" = r,
@@ -47,6 +48,7 @@ codeunit 72034 "DOPSWHS Upgrade"
     trigger OnUpgradePerCompany()
     var
         Setup: Record "DOPSWHS Setup";
+        ServiceSetup: Record "DOPSWHS Service Setup";
         Cue: Record "DOPSWHS Warehouse Mgr Cue";
         AppProfileMgmt: Codeunit "DOPSWHS App Profile Mgmt";
         AppRoleSeed: Codeunit "DOPSWHS App Role Seed";
@@ -61,6 +63,7 @@ codeunit 72034 "DOPSWHS Upgrade"
             Setup.Init();
             Setup.Insert(true);
         end;
+        ServiceSetup.GetSetup();
         Edition.Stamp(Setup);
         if not Cue.Get('') then begin
             Cue.Init();

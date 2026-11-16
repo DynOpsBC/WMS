@@ -1,6 +1,7 @@
 codeunit 72033 "DOPSWHS Install"
 {
     Subtype = Install;
+    Permissions = tabledata "DOPSWHS Service Setup" = RI;
 
     /// <summary>
     /// On a fresh install (or upgrade), we only seed singleton master rows and
@@ -14,6 +15,7 @@ codeunit 72033 "DOPSWHS Install"
     trigger OnInstallAppPerCompany()
     var
         Setup: Record "DOPSWHS Setup";
+        ServiceSetup: Record "DOPSWHS Service Setup";
         Cue: Record "DOPSWHS Warehouse Mgr Cue";
         SetupWizard: Codeunit "DOPSWHS Setup Wizard";
         AppProfileMgmt: Codeunit "DOPSWHS App Profile Mgmt";
@@ -27,6 +29,7 @@ codeunit 72033 "DOPSWHS Install"
             Setup.Init();
             Setup.Insert(true);
         end;
+        ServiceSetup.GetSetup();
         Edition.Stamp(Setup);
         if not Cue.Get('') then begin
             Cue.Init();
