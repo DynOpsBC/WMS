@@ -29,7 +29,7 @@ page 72100 "DOPSWHS Service Setup"
         area(Processing)
         {
             action(Technicians) { ApplicationArea = All; Caption = 'Service Technicians'; RunObject = page "DOPSWHS Service Technicians"; }
-            action(Dispatch) { ApplicationArea = All; Caption = 'Service Management'; RunObject = page "DOPSWHS Service Dispatch"; }
+            action(Dispatch) { ApplicationArea = All; Caption = 'Service Management'; RunObject = page "DOPSWHS Service Board"; }
             action(CreateDefaults)
             {
                 ApplicationArea = All;
@@ -45,7 +45,18 @@ page 72100 "DOPSWHS Service Setup"
         }
     }
     trigger OnOpenPage()
+    var
+        AppArea: Codeunit "DOPSWHS Service App Area";
     begin
         Rec.GetSetup();
+        AppArea.Sync();
+    end;
+
+    trigger OnClosePage()
+    var
+        AppArea: Codeunit "DOPSWHS Service App Area";
+    begin
+        // Shows or hides the Service links on the role centers after "Enabled" changes.
+        AppArea.Sync();
     end;
 }

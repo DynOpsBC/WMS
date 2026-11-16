@@ -3,7 +3,7 @@ page 72102 "DOPSWHS Service Dispatch"
     PageType = List;
     SourceTable = "Service Header";
     SourceTableView = where("Document Type" = const(Order));
-    Caption = 'Service Management';
+    Caption = 'Service Job List';
     UsageCategory = Lists;
     ApplicationArea = All;
     Editable = false;
@@ -39,6 +39,13 @@ page 72102 "DOPSWHS Service Dispatch"
     {
         area(Processing)
         {
+            action(BoardView)
+            {
+                ApplicationArea = All;
+                Caption = 'Board View';
+                Image = Workdays;
+                RunObject = page "DOPSWHS Service Board";
+            }
             action(NewOrder)
             {
                 ApplicationArea = All;
@@ -116,6 +123,7 @@ page 72102 "DOPSWHS Service Dispatch"
             group(Category_Process)
             {
                 Caption = 'Process';
+                actionref(BoardView_Promoted; BoardView) { }
                 actionref(NewOrder_Promoted; NewOrder) { }
                 actionref(AssignTechnician_Promoted; AssignTechnician) { }
                 actionref(OpenOrder_Promoted; OpenOrder) { }

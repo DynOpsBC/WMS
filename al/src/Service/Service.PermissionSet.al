@@ -21,6 +21,7 @@ permissionset 72100 "DOPSWHS SERVICE"
         page "DOPSWHS Service Setup" = X,
         page "DOPSWHS Service Technicians" = X,
         page "DOPSWHS Service Dispatch" = X,
+        page "DOPSWHS Service Board" = X,
         page "DOPSWHS Svc Assign Dialog" = X,
         page "DOPSWHS Service Dispatch Cue" = X,
 
@@ -31,6 +32,9 @@ permissionset 72100 "DOPSWHS SERVICE"
         tabledata "DOPSWHS Service Cue" = RIMD,
         table "DOPSWHS Service Cue" = X,
         codeunit "DOPSWHS Service Terminal Mgt" = X,
+        codeunit "DOPSWHS Service Board Data" = X,
+        codeunit "DOPSWHS Svc Board Assign" = X,
+        codeunit "DOPSWHS Service App Area" = X,
         codeunit "DOPSWHS Service Defaults" = X,
         tabledata "Service Header" = RIMD,
         tabledata "Service Item Line" = RIMD,

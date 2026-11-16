@@ -137,6 +137,16 @@ page 72095 "DOPSWHS DynOps WMS RC"
                     ToolTip = 'BC standart "Users" sayfasını açar; oradan "Get users from Microsoft 365" ile yeni kullanıcı çek.';
                 }
             }
+            // Servis: yalnız Servis Terminali Kurulumu etkinse görünür (DOPSWHSService uygulama alanı).
+            group(ServisNav)
+            {
+                Caption = 'Servis';
+                action(ServiceBoardNav) { Caption = 'Servis Yönetimi'; ApplicationArea = DOPSWHSService; RunObject = page "DOPSWHS Service Board"; }
+                action(ServiceOrdersNav) { Caption = 'Servis Siparişleri'; ApplicationArea = DOPSWHSService; RunObject = page "Service Orders"; }
+                action(ServiceItemsNav) { Caption = 'Servis Maddeleri'; ApplicationArea = DOPSWHSService; RunObject = page "Service Item List"; }
+                action(PostedServiceShipmentsNav) { Caption = 'Kayıtlı Servis Sevkiyatları'; ApplicationArea = DOPSWHSService; RunObject = page "Posted Service Shipments"; }
+                action(ServiceTechniciansNav) { Caption = 'Servis Teknisyenleri'; ApplicationArea = DOPSWHSService; RunObject = page "DOPSWHS Service Technicians"; }
+            }
         }
 
         // ============================================
@@ -144,6 +154,14 @@ page 72095 "DOPSWHS DynOps WMS RC"
         // ============================================
         area(Embedding)
         {
+            action(ServiceShortcut)
+            {
+                Caption = 'Servis';
+                ApplicationArea = DOPSWHSService;
+                RunObject = page "DOPSWHS Service Board";
+                Image = ServiceSetup;
+                ToolTip = 'Servis Yönetimi panosunu açar: açık servis işleri, teknisyen atama ve teknisyen iş yükü.';
+            }
             action(NewLPShortcut)
             {
                 Caption = '+ Yeni LP';

@@ -31,6 +31,12 @@ page 72081 "DOPSWHS Warehouse Manager RC"
                 action(OrderPacking) { Caption = 'Sipariş Paketleme'; ApplicationArea = All; RunObject = page "DOPSWHS Packing Order List"; }
                 action(PackSessions) { Caption = 'Pack Sessions (All)'; ApplicationArea = All; RunObject = page "DOPSWHS Pack Session List"; }
             }
+            group(Service)
+            {
+                Caption = 'Service';
+                action(ServiceBoard) { Caption = 'Service Management'; ApplicationArea = DOPSWHSService; RunObject = page "DOPSWHS Service Board"; }
+                action(ServiceTechnicians) { Caption = 'Service Technicians'; ApplicationArea = DOPSWHSService; RunObject = page "DOPSWHS Service Technicians"; }
+            }
         }
     }
 }

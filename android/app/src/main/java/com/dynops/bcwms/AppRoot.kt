@@ -307,7 +307,7 @@ private data class HomeCategory(val title: String, val accent: Color, val tiles:
 
 private val HomeCategories = listOf(
     HomeCategory("Servis", Color(0xFF2D9CDB), listOf(
-        HomeTile(Screen.Service, WmsGlyph.SERVICE, "Servis İşlerim", "Atanan servis işlerini yürüt"),
+        HomeTile(Screen.Service, WmsGlyph.SERVICE, "Servis", "Atanan servis işleri"),
     )),
     HomeCategory("Gelen", Color(0xFF26A65B), listOf(
         HomeTile(Screen.Receiving, WmsGlyph.RECEIVING, "Mal Kabul", "Gelen ürünü kaydet, LP'yi başlat"),
