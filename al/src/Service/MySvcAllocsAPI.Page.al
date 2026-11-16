@@ -60,6 +60,7 @@ page 72108 "DOPSWHS My Svc Allocs API"
         Mgt.CurrentTechnician(Tech);
         Rec.FilterGroup(2);
         Rec.SetRange("Resource No.", Tech."Resource No.");
+        Rec.SetFilter(Status, '%1|%2', Rec.Status::Active, Rec.Status::Finished);
         Rec.FilterGroup(0);
     end;
     trigger OnAfterGetRecord()

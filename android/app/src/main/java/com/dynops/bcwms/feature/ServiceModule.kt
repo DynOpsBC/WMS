@@ -36,6 +36,8 @@ import kotlinx.coroutines.launch
 import org.json.JSONObject
 import java.io.ByteArrayOutputStream
 import java.time.LocalDate
+import android.graphics.BitmapFactory
+import android.graphics.Matrix
 import java.time.LocalDateTime
 
 @OptIn(ExperimentalFoundationApi::class, ExperimentalMaterial3Api::class)
@@ -116,6 +118,7 @@ fun ServiceModule() {
         try { action(name, *fields); dialog = ""; message = "İşlem tamamlandı." } finally { refreshAfterAction() }
     }
     fun attach(bitmap: Bitmap, signature: Boolean) {
+        if (busy) { message = "Önceki işlem sürüyor; birkaç saniye sonra tekrar deneyin."; return }
         runJob {
             val bytes = withContext(Dispatchers.Default) {
                 val size = serviceBitmapSize(bitmap.width, bitmap.height)
@@ -132,9 +135,27 @@ fun ServiceModule() {
             } finally { refreshAfterAction() }
         }
     }
-    val camera = rememberLauncherForActivityResult(ActivityResultContracts.TakePicturePreview()) { it?.let { bitmap -> attach(bitmap, false) } }
+    // Full-resolution photo through a FileProvider file (TakePicturePreview only returns a thumbnail).
+    var pendingPhoto by remember { mutableStateOf<java.io.File?>(null) }
+    val camera = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { ok ->
+        val file = pendingPhoto
+        pendingPhoto = null
+        if (ok && file != null && file.length() > 0) {
+            scope.launch {
+                val bitmap = withContext(Dispatchers.IO) { runCatching { serviceDecodePhoto(file.absolutePath) }.getOrNull() }
+                file.delete()
+                if (bitmap == null) message = "Fotoğraf okunamadı." else attach(bitmap, false)
+            }
+        } else file?.delete()
+    }
     fun launchCamera() {
-        runCatching { camera.launch(null) }.onFailure { message = "Kamera açılamadı." }
+        runCatching {
+            val dir = java.io.File(context.cacheDir, "service_photos").apply { mkdirs() }
+            val file = java.io.File(dir, "foto-${System.currentTimeMillis()}.jpg")
+            val uri = androidx.core.content.FileProvider.getUriForFile(context, context.packageName + ".fileprovider", file)
+            pendingPhoto = file
+            camera.launch(uri)
+        }.onFailure { pendingPhoto = null; message = "Kamera açılamadı." }
     }
     // The existing barcode scanner declares CAMERA. Android requires its grant
     // even for an external camera intent when that permission is declared.
@@ -150,7 +171,7 @@ fun ServiceModule() {
         }
     }
     LaunchedEffect(all, finished) { if(setup.enabled) runJob { reload() } }
-    androidx.activity.compose.BackHandler(order != null && !busy) { order = null; runJob { reload() } }
+    androidx.activity.compose.BackHandler(order != null && !busy) { dialog = ""; laborSaved = false; message = ""; order = null; runJob { reload() } }
     fun open(name: String) {
         values = mapOf("commentType" to "General", "hours" to "1", "quantity" to "1", "allocationDate" to LocalDate.now().toString(), "workTypeCode" to setup.defaultWorkTypeCode)
         laborSaved = false
@@ -239,7 +260,7 @@ fun ServiceModule() {
                 }
             }
         } else {
-            TextButton({ order = null; runJob { reload() } }, enabled = !busy) { Text(if(all) "‹ Tüm İşler" else "‹ İşlerim") }
+            TextButton({ dialog = ""; laborSaved = false; message = ""; order = null; runJob { reload() } }, enabled = !busy) { Text(if(all) "‹ Tüm İşler" else "‹ İşlerim") }
             val o = order!!
             DocHeaderCard(o.optString("no"), listOf(o.optString("name"), o.optString("city")).filter { it.isNotBlank() }.joinToString(" · "),
                 badge = o.optString("status").takeIf { it.isNotBlank() }?.let { serviceStatusLabel(it) })
@@ -523,4 +544,22 @@ private fun ServiceSignature(busy: Boolean, onSave: (Bitmap) -> Unit) {
         strokes.forEach { it.zipWithNext().forEach { (a,b) -> canvas.drawLine(a.x,a.y,b.x,b.y,paint) } }
         onSave(bitmap)
     }, enabled = !busy && strokes.any { it.size > 1 }) { Text("Kaydet") }
+}
+
+/** Decodes a camera JPEG at most ~2x the upload size and applies its EXIF rotation. */
+internal fun serviceDecodePhoto(path: String, maxSide: Int = 1600): Bitmap? {
+    val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+    BitmapFactory.decodeFile(path, bounds)
+    if (bounds.outWidth <= 0 || bounds.outHeight <= 0) return null
+    var sample = 1
+    while (maxOf(bounds.outWidth, bounds.outHeight) / (sample * 2) >= maxSide) sample *= 2
+    val bitmap = BitmapFactory.decodeFile(path, BitmapFactory.Options().apply { inSampleSize = sample }) ?: return null
+    val degrees = when (android.media.ExifInterface(path).getAttributeInt(android.media.ExifInterface.TAG_ORIENTATION, android.media.ExifInterface.ORIENTATION_NORMAL)) {
+        android.media.ExifInterface.ORIENTATION_ROTATE_90 -> 90f
+        android.media.ExifInterface.ORIENTATION_ROTATE_180 -> 180f
+        android.media.ExifInterface.ORIENTATION_ROTATE_270 -> 270f
+        else -> 0f
+    }
+    if (degrees == 0f) return bitmap
+    return Bitmap.createBitmap(bitmap, 0, 0, bitmap.width, bitmap.height, Matrix().apply { postRotate(degrees) }, true)
 }

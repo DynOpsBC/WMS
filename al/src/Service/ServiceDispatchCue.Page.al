@@ -74,7 +74,7 @@ page 72104 "DOPSWHS Service Dispatch Cue"
         Rec.Init();
         Rec.Insert();
         // Blank response dates are not overdue.
-        Rec.SetRange("Date Filter", DMY2Date(1, 1, 2000), Today() - 1);
+        Rec.SetRange("Date Filter", DMY2Date(1, 1, 2000), Mgt.LocalToday() - 1);
     end;
     trigger OnAfterGetRecord()
     var
@@ -138,10 +138,12 @@ page 72104 "DOPSWHS Service Dispatch Cue"
             5:
                 begin
                     Header.SetFilter(Status, '<>%1', Header.Status::Finished);
-                    Header.SetRange("Response Date", DMY2Date(1, 1, 2000), Today() - 1);
+                    Header.SetRange("Response Date", DMY2Date(1, 1, 2000), Mgt.LocalToday() - 1);
                 end;
         end;
         Dispatch.SetTableView(Header);
         Dispatch.Run();
     end;
+    var
+        Mgt: Codeunit "DOPSWHS Service Terminal Mgt";
 }

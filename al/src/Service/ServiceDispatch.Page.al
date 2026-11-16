@@ -153,7 +153,7 @@ page 72102 "DOPSWHS Service Dispatch"
         ItemLine.SetRange("Document No.", Rec."No.");
         if ItemLine.FindFirst() then
             RepairStatus := ItemLine."Repair Status Code";
-        IsOverdue := (Rec."Response Date" <> 0D) and (Rec."Response Date" < Today()) and (Rec.Status <> Rec.Status::Finished);
+        IsOverdue := (Rec."Response Date" <> 0D) and (Rec."Response Date" < Mgt.LocalToday()) and (Rec.Status <> Rec.Status::Finished);
         Clear(DelayStyle);
         if IsOverdue then
             DelayStyle := 'Unfavorable';

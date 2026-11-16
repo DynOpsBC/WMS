@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <paths>
     <cache-path name="updates" path="updates/" />
+    <cache-path name="service_photos" path="service_photos/" />
     <files-path name="updates_internal" path="updates/" />
     <external-files-path name="downloaded_updates" path="Download/" />
 </paths>

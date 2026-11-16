@@ -64,8 +64,10 @@ page 72103 "DOPSWHS Svc Assign Dialog"
         }
     }
     trigger OnOpenPage()
+    var
+        Mgt: Codeunit "DOPSWHS Service Terminal Mgt";
     begin
-        AssignDate := Today();
+        AssignDate := Mgt.LocalToday();
         AssignHours := 1;
     end;
     procedure SetOrder(NewOrderNo: Code[20])

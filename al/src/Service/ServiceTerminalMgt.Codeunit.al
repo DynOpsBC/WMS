@@ -139,8 +139,14 @@ codeunit 72100 "DOPSWHS Service Terminal Mgt"
     procedure SetRepairStatus(OrderNo: Code[20]; SILineNo: Integer; RepairStatusCode: Code[10])
     var
         ItemLine: Record "Service Item Line";
+        Repair: Record "Repair Status";
     begin
         PrepareItem(ItemLine, OrderNo, SILineNo);
+        // Terminal "Beklet" only: start/finish have their own actions with codes, times and allocations.
+        if not Repair.Get(RepairStatusCode) then
+            Error(HoldStatusErr, RepairStatusCode);
+        if not (Repair."Waiting for Customer" or Repair."Spare Part Ordered") then
+            Error(HoldStatusErr, RepairStatusCode);
         ItemLine.Validate("Repair Status Code", RepairStatusCode);
         ItemLine.Modify(true);
     end;
@@ -174,6 +180,16 @@ codeunit 72100 "DOPSWHS Service Terminal Mgt"
                 Allocation."Finishing Time" := LocalTime();
                 Allocation.Modify(true);
             until Allocation.Next() = 0;
+        // Another technician still works on this item: close only the caller's allocation.
+        Allocation.Reset();
+        FilterAllocations(Allocation, OrderNo, ItemLine."Line No.", '');
+        Allocation.SetRange(Status, Allocation.Status::Active);
+        if not Allocation.IsEmpty() then begin
+            ItemLine."Finishing Date" := 0D;
+            ItemLine."Finishing Time" := 0T;
+            ItemLine.Modify(true);
+            exit;
+        end;
         ItemLine.Validate("Repair Status Code", FindRepairStatus(2));
         // Standard repair validation uses WorkDate; terminal timestamps use today.
         ItemLine.Validate("Finishing Date", LocalToday());
@@ -304,9 +320,15 @@ codeunit 72100 "DOPSWHS Service Terminal Mgt"
         Header.Get(Header."Document Type"::Order, OrderNo);
         AssertCanWork(OrderNo, 0);
         if LowerCase(Kind) = 'signature' then
-            FileName := 'IMZA-' + OrderNo + '-' + Format(LocalNow(), 0, '<Year4><Month,2><Day,2><Hours24,2><Minutes,2><Seconds,2>') + '.png';
+            FileName := 'IMZA-' + OrderNo + '-' + Format(LocalNow(), 0, '<Year4><Month,2><Day,2><Hours24,2><Minutes,2><Seconds,2>') + '.png'
+        else
+            if UpperCase(CopyStr(FileName, 1, 5)) = 'IMZA-' then
+                // Only the signature action may produce IMZA- files (signature requirement check).
+                FileName := 'EK-' + FileName;
         TempBlob.CreateOutStream(ContentOut);
         Base64Convert.FromBase64(Base64, ContentOut);
+        if TempBlob.Length() = 0 then
+            Error(EmptyAttachmentErr);
         TempBlob.CreateInStream(ContentIn);
         RecRef.GetTable(Header);
         Attachment.SaveAttachmentFromStream(ContentIn, RecRef, FileName);
@@ -428,7 +450,7 @@ codeunit 72100 "DOPSWHS Service Terminal Mgt"
         exit(TypeHelper.GetCurrentDateTimeInUserTimeZone());
     end;
 
-    local procedure LocalToday(): Date
+    procedure LocalToday(): Date
     begin
         exit(DT2Date(LocalNow()));
     end;
@@ -459,6 +481,20 @@ codeunit 72100 "DOPSWHS Service Terminal Mgt"
         GetWritableOrder(Header, OrderNo);
         GetItemLine(ItemLine, OrderNo, SILineNo);
         AssertCanWork(OrderNo, ItemLine."Line No.");
+        // Notes, attachments and posting do not use PrepareItem and stay allowed.
+        if IsFinishedRepairStatus(ItemLine."Repair Status Code") then
+            Error(ItemFinishedErr, ItemLine.Description);
+    end;
+
+    local procedure IsFinishedRepairStatus(RepairCode: Code[10]): Boolean
+    var
+        Repair: Record "Repair Status";
+    begin
+        if RepairCode = '' then
+            exit(false);
+        if not Repair.Get(RepairCode) then
+            exit(false);
+        exit(Repair.Finished);
     end;
 
     local procedure AssertUnpostedLine(Line: Record "Service Line")
@@ -530,4 +566,7 @@ codeunit 72100 "DOPSWHS Service Terminal Mgt"
         CommentTypeErr: Label 'Geçersiz yorum türü: %1.', Comment = '%1 = Yorum türü';
         PostingErr: Label 'Terminalden servis kaydına izin verilmiyor.';
         SignatureErr: Label 'Servis kaydından önce müşteri imzası eklenmelidir.';
+        HoldStatusErr: Label '%1 bir bekletme durumu değil. Müşteri bekleniyor veya parça sipariş edildi durumlarından birini seçin.', Comment = '%1 = Onarım durumu kodu';
+        ItemFinishedErr: Label '%1 için iş bitirildi; yeni işlem yapılamaz. Not, fotoğraf ve imza eklenebilir.', Comment = '%1 = Servis kalemi açıklaması';
+        EmptyAttachmentErr: Label 'Ek dosyası boş.';
 }
