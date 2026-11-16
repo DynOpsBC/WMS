@@ -7,6 +7,22 @@ saha teknisyeninin terminalden işini yürütmesi ve ofisin BC içinden servis i
 
 Alan adları: `docs/service/bc-service-fields.txt` (Base Application 28.1 sembollerinden). Derleme sembolleri 28.1, `app.json application 24.0`.
 
+## 0. Uygulama durumu (16 Kas 2026)
+
+- Uygulandı: bölüm 2–8 (dal `feat/service-terminal`). Codex `ai run` ile üç görev (AL çekirdek, AL API+sayfalar, Android), ardından inceleme ve sandbox testinde bulunan düzeltmeler.
+- Spec'ten sapmalar / eklemeler:
+  - Zaman damgaları kullanıcının BC saat diliminde (`Type Helper.GetCurrentDateTimeInUserTimeZone`); BC online AL `Time()` UTC döner.
+  - `Service Mgt. Setup."Fault Reporting Level"` None ise varsayılan kodlar IRIS düzeyine çeker (None iken arıza alanı eklenemez).
+  - Not ve ekler (imza) tamamlanmış ama kaydedilmemiş siparişe eklenebilir; bitmiş servis kalemine başlama/parça/işçilik/bekletme reddedilir.
+  - `setRepairStatus` yalnız *Waiting for Customer* / *Spare Part Ordered* kodlarını kabul eder.
+  - Aynı kaleme birden çok aktif teknisyen atanmışsa `finishWork` yalnız çağıranın tahsisini kapatır.
+  - `IMZA-` dosya adı yalnız imza eylemiyle oluşur; boş ek reddedilir.
+  - Terminal "Bugün bitenler" yerine **Kayıt bekleyen** (Finished + kaydedilmemiş tahsisler); İşlerim önceliğe göre sıralı; fotoğraf tam çözünürlük (FileProvider + `TakePicture`, en fazla 1600 px).
+  - Sayfa başlıkları `DOPSWHS.tr-TR.xlf` ile Türkçe.
+- Doğrulama: AL 0 hata; Android 359 birim testi; Ayıkband Sandbox1611'de emülatörle uçtan uca (SS000006 → SV000001, ILE −6 METRE; SS000004 bitirildi, imza + fotoğraf, kayıt bekliyor; SS000005 PARCA ile beklemede).
+- Denenmedi: fiziksel el terminali, Premium olmayan / yalnız `DOPSWHS SERVICE` izinli teknisyen kullanıcısı, faturalama, canlı ortam.
+- Sandbox demo verisi: `docs/service/sandbox-seed` (yalnız sandbox'ta çalışır; `runSeed`, `resetSeed`, `addDemoOrder`).
+
 ## 1. Kapsam
 
 ### BC tarafı (AL, BCWMSApp BASE, sürüm 1.14.0.4)
