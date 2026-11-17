@@ -137,8 +137,9 @@ html, body { height: 100%; margin: 0; padding: 0; }
 .sb-card.pr-medium::before { background: var(--sb-medium); }
 .sb-card:hover { border-color: var(--sb-line-strong); box-shadow: 0 4px 12px rgba(16, 24, 40, .08); transform: translateY(-1px); }
 .sb-card.is-late { border-color: #f1c1c2; }
-.sb-card-top { display: flex; align-items: center; gap: 6px; }
-.sb-no { font-weight: 700; font-size: 12.5px; color: var(--sb-brand); margin-right: auto; letter-spacing: .01em; }
+.sb-card-top { display: flex; align-items: center; gap: 4px; min-width: 0; }
+.sb-no { font-weight: 700; font-size: 12.5px; color: var(--sb-brand); margin-right: auto; letter-spacing: .01em; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sb-card-top .sb-pill, .sb-card-top .sb-icon { flex: none; }
 .sb-pill { font-size: 11px; font-weight: 600; padding: 1px 7px; border-radius: 999px; white-space: nowrap; }
 .pr-high .sb-pill.pr { background: #fde7e8; color: #a4262c; }
 .pr-medium .sb-pill.pr { background: #fff1d6; color: #8a5600; }
@@ -162,7 +163,7 @@ html, body { height: 100%; margin: 0; padding: 0; }
 .sb-when.today { color: #8a5600; font-weight: 600; }
 .sb-when.late { color: var(--sb-high); font-weight: 600; }
 .sb-icon {
-  margin-left: 2px; width: 26px; height: 26px; display: inline-flex; align-items: center; justify-content: center; flex: none;
+  margin-left: 0; width: 22px; height: 22px; display: inline-flex; align-items: center; justify-content: center; flex: none;
   border: 1px solid transparent; border-radius: 6px; background: none; color: var(--sb-muted); cursor: pointer; padding: 0;
 }
 .sb .sb-icon { color: var(--sb-muted); }
