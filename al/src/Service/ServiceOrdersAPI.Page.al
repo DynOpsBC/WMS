@@ -46,6 +46,7 @@ page 72105 "DOPSWHS Service Orders API"
                 field(locationCode; Rec."Location Code") { Caption = 'locationCode'; }
                 field(serviceOrderType; Rec."Service Order Type") { Caption = 'serviceOrderType'; }
                 field(assignedUserId; Rec."Assigned User ID") { Caption = 'assignedUserId'; }
+                field(salesOrderNo; Rec."DOPSWHS Sales Order No.") { Caption = 'salesOrderNo'; }
                 field(statusText; statusTextValue) { Caption = 'statusText'; }
                 field(priority; priorityValue) { Caption = 'priority'; }
                 field(priorityText; priorityTextValue) { Caption = 'priorityText'; }

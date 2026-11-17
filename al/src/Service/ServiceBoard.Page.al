@@ -46,6 +46,14 @@ page 72120 "DOPSWHS Service Board"
                     SendData();
                 end;
 
+                trigger OpenSummary(OrderNo: Text)
+                var
+                    Summary: Page "DOPSWHS Service Summary";
+                begin
+                    Summary.SetServiceOrder(CopyStr(OrderNo, 1, 20));
+                    Summary.Run();
+                end;
+
                 trigger AssignTechnician(OrderNo: Text; ItemLineNo: Integer; TechnicianUser: Text; AllocationDate: Text; Hours: Text)
                 var
                     Assign: Codeunit "DOPSWHS Svc Board Assign";
@@ -102,6 +110,7 @@ page 72120 "DOPSWHS Service Board"
                 Image = List;
                 RunObject = page "DOPSWHS Service Dispatch";
             }
+            action(ServiceLog) { ApplicationArea = All; Caption = 'Service Log'; Image = Log; RunObject = page "DOPSWHS Service Log"; ToolTip = 'Every text entered for service orders, on the terminal or here, and the steps of the jobs.'; }
             action(ServiceOrders) { ApplicationArea = All; Caption = 'Service Orders'; Image = Document; RunObject = page "Service Orders"; }
             action(Shipments) { ApplicationArea = All; Caption = 'Posted Service Shipments'; Image = PostedShipment; RunObject = page "Posted Service Shipments"; }
             action(ServiceItems) { ApplicationArea = All; Caption = 'Service Items'; Image = ServiceItem; RunObject = page "Service Item List"; }
@@ -116,6 +125,7 @@ page 72120 "DOPSWHS Service Board"
                 actionref(NewOrder_Promoted; NewOrder) { }
                 actionref(Refresh_Promoted; Refresh) { }
                 actionref(ListView_Promoted; ListView) { }
+                actionref(ServiceLog_Promoted; ServiceLog) { }
             }
             group(Category_Related)
             {

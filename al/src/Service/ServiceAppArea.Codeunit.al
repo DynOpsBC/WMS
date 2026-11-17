@@ -8,6 +8,8 @@ codeunit 72104 "DOPSWHS Service App Area"
     Access = Internal;
     // The subscriber runs in the session of whoever resets the experience tier (often an admin
     // without BCWMS permissions); it must still see the real setup value.
+    InherentEntitlements = X;
+    InherentPermissions = X;
     Permissions = tabledata "DOPSWHS Service Setup" = R;
 
     [EventSubscriber(ObjectType::Codeunit, Codeunit::"Application Area Mgmt. Facade", 'OnGetEssentialExperienceAppAreas', '', false, false)]
@@ -36,10 +38,14 @@ codeunit 72104 "DOPSWHS Service App Area"
         ApplicationAreaMgmtFacade.RefreshExperienceTierCurrentCompany();
     end;
 
+    [InherentPermissions(PermissionObjectType::TableData, Database::"DOPSWHS Service Setup", 'R')]
     local procedure IsServiceEnabled(): Boolean
     var
         Setup: Record "DOPSWHS Service Setup";
     begin
+        // An admin without a BCWMS permission set must not get an error from this subscriber.
+        if not Setup.ReadPermission() then
+            exit(false);
         if not Setup.Get() then
             exit(false);
         exit(Setup.Enabled);

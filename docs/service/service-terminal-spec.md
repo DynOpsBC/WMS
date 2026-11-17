@@ -28,15 +28,30 @@ Alan adları: `docs/service/bc-service-fields.txt` (Base Application 28.1 sembol
 - Denenmedi: fiziksel el terminali, Premium olmayan / yalnız `DOPSWHS SERVICE` izinli teknisyen kullanıcısı, faturalama, canlı ortam.
 - Sandbox demo verisi: `docs/service/sandbox-seed` (yalnız sandbox'ta çalışır; `runSeed`, `resetSeed`, `addDemoOrder`).
 
+## 0. 1.14.0.8 / 1.14.112 (17 Kas 2026): İşi Bitir sadeleşti, servis günlüğü, satış siparişine istinaden özet
+
+Kullanıcı geri bildirimi: İşi Bitir "GENEL, Fault Code listesinde tanımlı değil" hatası veriyordu, alan/belirti/arıza seçimi karışıktı, atanan teknisyen BC'de görünmüyordu; girilen metinlerin günlüğü ve satış siparişine istinaden servis özeti istendi.
+
+- **Arıza kodu hatası**: Standart BC arıza kodunu (Arıza Alanı, Belirti, Kod) üçlüsüyle tutar; varsayılan `GENEL` yalnız boş belirtiyle tanımlıydı, belirti seçilince doğrulama düşüyordu. `ResolveFaultCode` (codeunit 72100): terminal arıza kodu göndermez; alan + belirti için tek kod tanımlıysa o (ör. RULO + SES → RULMAN), yoksa `GENEL`; kod yalnız alan için (boş belirti) tanımlıysa seçilen belirtiye kopyalanır. Arıza kodu ekleme yetkisi olmayan teknisyende kod boş kalır, iş yine biter.
+- **Terminal İşi Bitir**: üç soru, dokunmatik seçenekler (kod değil ad): "Arıza neredeydi?" (arıza alanı), "Sorun neydi?" (belirti), "Ne yapıldı?" (çözüm) + açıklama + işçilik (−/+ adımlı; bu kaleme daha önce girilen işçilik düşülerek önerilir). "Ne yapıldı?" veya açıklamadan biri zorunlu. Beklet ve Not türü de dokunmatik seçenek oldu. İş başladıysa İşi Bitir ekranın ana düğmesidir.
+- **Servis günlüğü**: tablo 72103 `DOPSWHS Service Log Entry` (kim, ne zaman, sipariş, servis maddesi, müşteri, satış siparişi, tür, 2048 karakter metin, terminalden mi). Terminal eylemleri kendi tam metnini yazar (codeunit 72100 → 72105 `DOPSWHS Service Log`); BC'de elle yazılan servis yorumları ve değişen sipariş açıklaması abonelerle yakalanır (Service Comment Line OnAfterInsert/Modify, Service Header Description OnAfterValidate). Kayıt servis siparişi faturalanıp silindikten sonra da kalır. Günlük yalnız Servis Terminali Kurulumu etkinken ve kullanıcının yazma izni varken yazılır; hiçbir durumda standart işlemi durdurmaz (codeunit `InherentPermissions = X`). BC sayfası 72125 "Servis Günlüğü"; terminal iş detayında "Servis geçmişi" (API 72124 `serviceLogEntries`).
+- **Satış siparişi bağlantısı**: Service Header / Service Shipment Header / Service Invoice Header alanı 72101 `DOPSWHS Sales Order No.` (aynı alan no; standart kayıt TransferFields ile taşır). Terminal Yeni Servis'te müşterinin açık satış siparişleri isteğe bağlı seçilir (API 72123 `serviceSalesOrders`, eylem `createServiceOrderForSalesOrder`); BC'de Servis Siparişi kartında alan, Satış Siparişi kartında Servis > "Yeni Servis Siparişi".
+- **Servis Özeti**: sayfa 72126 + control add-in `DOPSWHS Service Summary` (`Resources/serviceSummary*.js/css`), veri codeunit 72106. Bir servis siparişi veya bir satış siparişine bağlı tüm servisler: "… numaralı satış siparişine istinaden", siparişteki ürünler, bildirilen sorun, teknisyen, arıza yeri / sorun / yapılan işlem, işçilik ve parçalar, günlükteki tüm metinler. Yazdır / PDF (belge kendi penceresinde açılır) ve metni kopyala. Açılış: pano kartındaki belge simgesi, Servis Siparişi kartı/listesi, Servis Günlüğü, Satış Siparişi kartı (Servis > Servis Özeti). Servis siparişi silindiyse kayıtlı sevkiyat ve günlükten kurulur.
+- **Teknisyen BC'de görünür**: Servis Siparişi kartında Açıklama'nın altında "Teknisyen" (aktif + tamamlanmış tahsisler; tıklayınca tahsisler), Servis Siparişleri listesinde sütun. API `technicianNames` artık tamamlanan tahsisleri de içerir (bitmiş işte boş dönüyordu).
+- **Saat**: terminalden açılan siparişin Sipariş Tarihi/Saati kullanıcı saat dilimiyle yazılır (API oturumu UTC idi; yanıt saati 3 saat erken görünüyordu).
+- Standart sayfalardaki tüm eklemeler `DOPSWHSService` uygulama alanındadır; depo-only müşteride görünmez, sayfa uzantıları kurulum etkin değilken hiçbir şey okumaz.
+- Sandbox1611 doğrulaması (BC 1.14.0.8 Dev, terminal 1.14.112 emülatör): SS000008'de kullanıcının aldığı hata senaryosu (Bant + Isınma) terminal ekranından hatasız bitirildi; SS000011 API ile (STS0003460'a bağlı; parça 2 METRE → SV000006, madde hareketi −2 Satış); SS000012 baştan sona terminal ekranından (Yeni Servis + satış siparişi STS0003429 → İşe Başla → İşi Bitir Rulo + Ses → arıza kodu RULMAN → Servisi Kaydet SV000007). BC'de elle yazılan yorum ve açıklama değişikliği günlüğe düştü. Özet sayfası Satış Siparişi kartından ve panodan açıldı. Android birim testleri 368/368.
+- Denenmedi: yazdırma penceresi gerçek BC oturumunda (yalnız yerel Chrome düzeneğinde), faturalama sonrası servis siparişi silinmiş özet, BCWMS izni olmayan standart kullanıcıyla servis yorumu girişi, fiziksel cihaz.
+
 ## 1. Kapsam
 
-### BC tarafı (AL, BCWMSApp BASE, sürüm 1.14.0.7)
+### BC tarafı (AL, BCWMSApp BASE, sürüm 1.14.0.8)
 1. Servis kurulumu (tekil kayıt) + teknisyen eşlemesi (BC kullanıcısı → Kaynak).
 2. "Servis Yönetimi" sayfası: açık servis siparişleri, durum/öncelik/teknisyen/yanıt tarihi, sayaçlar, teknisyen atama, standart sayfalara geçiş.
 3. Terminal için API sayfaları (dynops/warehouse/v2.0) + iş kuralları codeunit'i.
 4. "Varsayılan servis kodlarını oluştur" eylemi (onarım durumları, durum öncelikleri, arıza alanı/belirti/arıza/çözüm, iş türü, SAAT birimi) — yalnız eksikleri ekler, mevcut kayda dokunmaz.
 
-### Terminal (Android, `dynops` flavor, sürüm 1.14.111)
+### Terminal (Android, `dynops` flavor, sürüm 1.14.112)
 1. Ana menüde "Servis" kutusu (servis kurulumu etkinse). Kurulumda "Depo modüllerini gizle" açıksa yalnız Servis + Destek ve Ayarlar görünür.
 2. Teknisyen: "İşlerim" listesi → iş detayı → İşe Başla / Beklet / Bitir, arıza-çözüm kodları, işçilik saati, parça (barkod/elle), not, fotoğraf, müşteri imzası, "Servisi Kaydet (Sevk)".
 3. Servis yöneticisi (dispatcher): "Tüm İşler" sekmesi, teknisyen atama.
@@ -202,7 +217,7 @@ Hiçbir posting group, müşteri, madde veya fiyat OLUŞTURMAZ.
   Düğmeler (servis kalemi satırı bazında):
   - **İşe Başla** → startWork (Starting Date boşsa görünür).
   - **Beklet** → onarım durumu seçimi (waitingForCustomer veya sparePartOrdered olan kodlar) → setRepairStatus.
-  - **İşi Bitir** → sayfa: arıza alanı / belirti / arıza kodu (seçilen alana göre filtreli) / çözüm kodu seçicileri, çözüm notu, işçilik saati (öneri: başlangıçtan bu yana geçen, laborRounding'e yukarı yuvarla; 0 girilirse işçilik satırı eklenmez) → finishWork + addLabor.
+  - **İşi Bitir** → sayfa: üç dokunmatik soru (arıza alanı / belirti / çözüm; arıza kodunu BC belirler, bkz. bölüm 0), açıklama, işçilik saati (öneri: başlangıçtan bu yana geçen süre eksi kaleme daha önce girilen işçilik, laborRounding'e yukarı yuvarla; 0 girilirse işçilik satırı eklenmez) → addLabor + finishWork(faultCode boş).
   - **İşçilik Ekle** (saat + iş türü), **Parça Ekle** (ScannerTextField ile madde no/barkod; `items?$filter=number eq '<x>'` standart API ile doğrula; miktar) → addPart. Satır listesinde kaydedilmemiş satırı uzun basınca sil (deleteLine, onay).
   - **Not Ekle** (Genel/Arıza/Çözüm/Dahili seçimi) → addComment.
   - **Fotoğraf** → `ActivityResultContracts.TakePicturePreview` → JPEG %80, uzun kenar ≤1600 px → base64 → addAttachment(kind=photo, `FOTO-<no>-<zaman>.jpg`).

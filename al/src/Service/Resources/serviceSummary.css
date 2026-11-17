@@ -1,0 +1,138 @@
+/* DynamicsOps BCWMS - Servis Özeti */
+html, body { height: 100%; margin: 0; padding: 0; }
+#controlAddIn { height: 100%; }
+.ss, .ss * { box-sizing: border-box; }
+.ss {
+  --ss-surface: #ffffff;
+  --ss-line: #e3e6eb;
+  --ss-line-strong: #cfd4dc;
+  --ss-text: #1d2129;
+  --ss-muted: #646d7a;
+  --ss-brand: #5b4bdb;
+  --ss-brand-soft: #eeebfd;
+  --ss-high: #d13438;
+  --ss-medium: #c27a00;
+  --ss-low: #2f8f4e;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  font-family: "Segoe UI", "Segoe UI Web (West European)", -apple-system, BlinkMacSystemFont, "Helvetica Neue", Arial, sans-serif;
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--ss-text);
+  position: relative;
+}
+.ss button { font: inherit; }
+.ss-bar { display: flex; gap: 8px; padding: 2px 2px 10px; flex: none; }
+.ss-btn {
+  height: 34px; padding: 0 14px; border-radius: 8px; border: 1px solid var(--ss-line-strong);
+  background: var(--ss-surface); color: var(--ss-text); font-weight: 600; cursor: pointer;
+}
+.ss-btn:hover { border-color: var(--ss-brand); color: var(--ss-brand); }
+.ss-btn.primary { background: var(--ss-brand); border-color: var(--ss-brand); color: #fff; }
+.ss-btn.primary:hover { background: #4b3bc7; color: #fff; }
+.ss-btn:focus-visible, .ss-link:focus-visible { outline: 2px solid var(--ss-brand); outline-offset: 2px; }
+.ss-link { border: 0; background: none; color: var(--ss-brand); font-weight: 600; cursor: pointer; padding: 0; margin-left: auto; }
+.ss-link:hover { text-decoration: underline; }
+
+.ss-scroll { flex: 1; min-height: 0; overflow: auto; padding: 0 2px 16px; }
+.ss-doc {
+  max-width: 880px; margin: 0 auto; background: var(--ss-surface);
+  border: 1px solid var(--ss-line); border-radius: 12px; padding: 28px 32px 32px;
+  box-shadow: 0 1px 3px rgba(16, 24, 40, .06);
+}
+.ss-head { display: flex; justify-content: space-between; gap: 20px; align-items: flex-start; padding-bottom: 18px; border-bottom: 2px solid var(--ss-text); }
+.ss-company { font-size: 12px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--ss-muted); }
+.ss-head h1 { margin: 2px 0 4px; font-size: 26px; line-height: 1.15; font-weight: 650; letter-spacing: -.01em; }
+.ss-sub { font-size: 14px; font-weight: 600; color: var(--ss-brand); }
+.ss-sub.is-none { color: var(--ss-muted); font-weight: 400; }
+.ss-head-meta { display: flex; flex-direction: column; align-items: flex-end; gap: 2px; text-align: right; color: var(--ss-muted); font-size: 12px; max-width: 46%; }
+.ss-head-meta b { color: var(--ss-text); font-size: 14px; font-weight: 600; }
+
+.ss-block { margin-top: 22px; }
+.ss-block-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 10px; }
+.ss-block h2 { margin: 0; font-size: 17px; font-weight: 650; }
+.ss-block h3 {
+  margin: 18px 0 8px; font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--ss-muted);
+}
+.ss-sales { background: #f7f8fa; border: 1px solid var(--ss-line); border-radius: 10px; padding: 14px 16px 16px; }
+.ss-order { border-top: 1px solid var(--ss-line); padding-top: 20px; }
+.ss-sales + .ss-order { border-top: 0; padding-top: 0; }
+
+.ss-pill { display: inline-flex; align-items: center; height: 22px; padding: 0 9px; border-radius: 11px; font-size: 12px; font-weight: 600; background: #eef0f3; color: var(--ss-muted); white-space: nowrap; }
+.ss-pill.st-posted, .ss-pill.st-closed, .ss-pill.st-invoiced { background: #e4f3e9; color: #1f6f3b; }
+.ss-pill.st-finished { background: #fdf1d8; color: #8a5a00; }
+.ss-pill.st-inprocess, .ss-pill.st-open { background: var(--ss-brand-soft); color: var(--ss-brand); }
+.ss-pill.st-onhold { background: #fdf1d8; color: #8a5a00; }
+.ss-pill.pr-high { background: #fbe6e6; color: var(--ss-high); }
+.ss-pill.pr-medium { background: #fdf1d8; color: #8a5a00; }
+.ss-pill.pr-low { background: #e4f3e9; color: #1f6f3b; }
+
+.ss-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 10px 18px; }
+.ss-kv { display: flex; flex-direction: column; min-width: 0; }
+.ss-kv span { font-size: 11px; color: var(--ss-muted); }
+.ss-kv b { font-weight: 600; overflow-wrap: anywhere; }
+
+.ss-complaint { margin-top: 14px; padding: 10px 14px; border-left: 3px solid var(--ss-brand); background: var(--ss-brand-soft); border-radius: 0 8px 8px 0; }
+.ss-complaint span { font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--ss-brand); }
+.ss-complaint p { margin: 2px 0 0; font-size: 14px; font-weight: 600; overflow-wrap: anywhere; }
+
+.ss-item { border: 1px solid var(--ss-line); border-radius: 10px; padding: 12px 14px; }
+.ss-item + .ss-item { margin-top: 8px; }
+.ss-item-name { font-size: 14px; font-weight: 600; }
+.ss-item-sub { font-size: 12px; color: var(--ss-muted); margin-bottom: 8px; }
+.ss-item .ss-grid { margin-top: 8px; }
+.ss-item .ss-grid:first-child { margin-top: 0; }
+
+.ss-table { width: 100%; border-collapse: collapse; }
+.ss-table th { text-align: left; font-size: 11px; font-weight: 600; color: var(--ss-muted); padding: 6px 8px; border-bottom: 1px solid var(--ss-line-strong); }
+.ss-table td { padding: 7px 8px; border-bottom: 1px solid var(--ss-line); vertical-align: top; overflow-wrap: anywhere; }
+.ss-table .num { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.ss-table tfoot td { font-weight: 650; border-bottom: 0; border-top: 1px solid var(--ss-line-strong); }
+.ss-table .code, .ss-item .code { font-size: 12px; color: var(--ss-muted); white-space: nowrap; }
+.ss-kind { display: inline-block; padding: 1px 8px; border-radius: 9px; font-size: 11px; font-weight: 600; background: #eef0f3; color: var(--ss-muted); white-space: nowrap; }
+.ss-kind.k-labor { background: var(--ss-brand-soft); color: var(--ss-brand); }
+.ss-kind.k-part { background: #e3f1f3; color: #0e6a73; }
+
+.ss-log { list-style: none; margin: 0; padding: 0 0 0 14px; border-left: 2px solid var(--ss-line); }
+.ss-log li { position: relative; padding: 0 0 12px 14px; }
+.ss-log li:last-child { padding-bottom: 0; }
+.ss-log li::before {
+  content: ""; position: absolute; left: -20px; top: 5px; width: 10px; height: 10px; border-radius: 50%;
+  background: var(--ss-surface); border: 2px solid var(--ss-line-strong);
+}
+.ss-log li.is-note::before { border-color: var(--ss-brand); background: var(--ss-brand); }
+.ss-log-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; }
+.ss-log-head span { font-size: 12px; color: var(--ss-muted); }
+.ss-src { padding: 0 6px; border: 1px solid var(--ss-line); border-radius: 8px; font-size: 11px !important; }
+.ss-log-text { margin-top: 2px; overflow-wrap: anywhere; white-space: pre-wrap; }
+.ss-log li.is-note .ss-log-text { padding: 8px 12px; margin-top: 4px; background: #f7f8fa; border: 1px solid var(--ss-line); border-radius: 8px; font-size: 14px; }
+.ss-log li.is-step .ss-log-text { color: var(--ss-muted); }
+
+.ss-muted { margin: 0; color: var(--ss-muted); }
+.ss-empty { padding: 40px 0; text-align: center; color: var(--ss-muted); }
+
+.ss-toast {
+  position: absolute; left: 50%; bottom: 18px; transform: translate(-50%, 12px); opacity: 0; pointer-events: none;
+  padding: 9px 16px; border-radius: 8px; background: #1d2129; color: #fff; font-weight: 600; transition: opacity .18s, transform .18s;
+}
+.ss-toast.is-open { opacity: 1; transform: translate(-50%, 0); }
+.ss-toast.is-error { background: var(--ss-high); }
+
+@media (max-width: 640px) {
+  .ss-doc { padding: 18px 16px 22px; }
+  .ss-head { flex-direction: column; }
+  .ss-head-meta { align-items: flex-start; text-align: left; max-width: none; }
+}
+@media (prefers-reduced-motion: reduce) { .ss-toast { transition: none; } }
+@media print {
+  html, body, #controlAddIn, .ss { height: auto; }
+  .no-print { display: none !important; }
+  .ss-scroll { overflow: visible; padding: 0; }
+  .ss-doc { max-width: none; border: 0; border-radius: 0; box-shadow: none; padding: 0; }
+  .ss-item, .ss-log li, .ss-table tr, .ss-complaint { break-inside: avoid; }
+  .ss-block-head { break-after: avoid; }
+  .ss-pill, .ss-kind, .ss-sales, .ss-complaint, .ss-log li.is-note .ss-log-text, .ss-log li::before {
+    -webkit-print-color-adjust: exact; print-color-adjust: exact;
+  }
+}

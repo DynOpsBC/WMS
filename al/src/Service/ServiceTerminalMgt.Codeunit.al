@@ -9,6 +9,11 @@ codeunit 72100 "DOPSWHS Service Terminal Mgt"
         tabledata "Repair Status" = RIMD,
         tabledata "DOPSWHS Service Setup" = RI,
         tabledata "DOPSWHS Service Technician" = R,
+        tabledata "Fault Code" = RI,
+        tabledata "Service Mgt. Setup" = R,
+        tabledata "Fault Area" = R,
+        tabledata "Symptom Code" = R,
+        tabledata "Resolution Code" = R,
         tabledata Resource = R,
         tabledata "Service Item" = R,
         tabledata "Work Type" = R,
@@ -72,6 +77,12 @@ codeunit 72100 "DOPSWHS Service Terminal Mgt"
     /// for today, so the job appears in his "İşlerim" list right away.
     /// </summary>
     procedure CreateServiceOrder(CustomerNo: Code[20]; ServiceItemNo: Code[20]; OrderDescription: Text[100]; PriorityName: Text; AssignToMe: Boolean): Code[20]
+    begin
+        exit(CreateServiceOrder(CustomerNo, ServiceItemNo, OrderDescription, PriorityName, AssignToMe, ''));
+    end;
+
+    /// <summary>SalesOrderNo: the sales order this service is for (optional), kept on the order and in the log.</summary>
+    procedure CreateServiceOrder(CustomerNo: Code[20]; ServiceItemNo: Code[20]; OrderDescription: Text[100]; PriorityName: Text; AssignToMe: Boolean; SalesOrderNo: Code[20]): Code[20]
     var
         Tech: Record "DOPSWHS Service Technician";
         Customer: Record Customer;
@@ -94,9 +105,16 @@ codeunit 72100 "DOPSWHS Service Terminal Mgt"
         Header.Init();
         Header."Document Type" := Header."Document Type"::Order;
         Header.Insert(true);
+        // API sessions run in UTC: without this the order (and its response time) is stamped three hours early.
+        Header."Order Date" := LocalToday();
+        Header."Order Time" := LocalTime();
         Header.Validate("Customer No.", CustomerNo);
+        // Logged once below as "Service Opened", not also as a changed description.
+        ServiceLog.Suppress(true);
         Header.Validate(Description, OrderDescription);
+        ServiceLog.Suppress(false);
         Header.Validate(Priority, PriorityValue(PriorityName));
+        Header."DOPSWHS Sales Order No." := SalesOrderNo;
         Header.Modify(true);
 
         ItemLine.Init();
@@ -109,6 +127,7 @@ codeunit 72100 "DOPSWHS Service Terminal Mgt"
             ItemLine.Validate(Description, CopyStr(OrderDescription, 1, MaxStrLen(ItemLine.Description)));
         ItemLine.Validate(Priority, PriorityValue(PriorityName));
         ItemLine.Insert(true);
+        ServiceLog.Add(Header."No.", ItemLine."Line No.", Enum::"DOPSWHS Service Log Type"::Created, OrderDescription);
 
         if AssignToMe then
             AllocateResource(Header."No.", ItemLine."Line No.", Tech."Resource No.", LocalToday(), 1);
@@ -167,6 +186,8 @@ codeunit 72100 "DOPSWHS Service Terminal Mgt"
             ItemLine.Validate("Repair Status Code", FindRepairStatus(0));
             ItemLine.Modify(true);
         end;
+        ServiceLog.Add(OrderNo, ItemLine."Line No.", Enum::"DOPSWHS Service Log Type"::Assigned,
+            StrSubstNo(AssignedLogTxt, ResourceText(ResourceNo), Format(AllocDate, 0, '<Day,2>.<Month,2>.<Year4>'), NumText(Hours)));
         exit(Allocation."Entry No.");
     end;
 
@@ -199,6 +220,7 @@ codeunit 72100 "DOPSWHS Service Terminal Mgt"
                 Allocation."Service Started" := true;
                 Allocation.Modify(true);
             until Allocation.Next() = 0;
+        ServiceLog.Add(OrderNo, ItemLine."Line No.", Enum::"DOPSWHS Service Log Type"::Started, '');
     end;
 
     procedure SetRepairStatus(OrderNo: Code[20]; SILineNo: Integer; RepairStatusCode: Code[10])
@@ -214,6 +236,7 @@ codeunit 72100 "DOPSWHS Service Terminal Mgt"
             Error(HoldStatusErr, RepairStatusCode);
         ItemLine.Validate("Repair Status Code", RepairStatusCode);
         ItemLine.Modify(true);
+        ServiceLog.Add(OrderNo, ItemLine."Line No.", Enum::"DOPSWHS Service Log Type"::"On Hold", Repair.Description);
     end;
 
     procedure FinishWork(OrderNo: Code[20]; SILineNo: Integer; FaultArea: Code[10]; Symptom: Code[10]; Fault: Code[10]; Resolution: Code[10]; ResolutionNote: Text)
@@ -227,10 +250,12 @@ codeunit 72100 "DOPSWHS Service Terminal Mgt"
             ItemLine.Validate("Fault Area Code", FaultArea);
         if Symptom <> '' then
             ItemLine.Validate("Symptom Code", Symptom);
+        Fault := ResolveFaultCode(ItemLine, Fault);
         if Fault <> '' then
             ItemLine.Validate("Fault Code", Fault);
         if Resolution <> '' then
             ItemLine.Validate("Resolution Code", Resolution);
+        ServiceLog.Add(OrderNo, ItemLine."Line No.", Enum::"DOPSWHS Service Log Type"::Finished, FinishText(ItemLine));
         // Add the note before the repair status can finish the header.
         if ResolutionNote <> '' then
             AddComment(OrderNo, ItemLine."Line No.", 'Resolution', ResolutionNote);
@@ -285,6 +310,8 @@ codeunit 72100 "DOPSWHS Service Terminal Mgt"
         if Description <> '' then
             Line.Validate(Description, CopyStr(Description, 1, MaxStrLen(Line.Description)));
         Line.Modify(true);
+        ServiceLog.Add(OrderNo, ItemLine."Line No.", Enum::"DOPSWHS Service Log Type"::Labor,
+            JoinText(StrSubstNo(HoursLogTxt, NumText(Hours)), JoinText(WorkTypeCode, Description)));
         exit(Line."Line No.");
     end;
 
@@ -314,6 +341,8 @@ codeunit 72100 "DOPSWHS Service Terminal Mgt"
         Line.Validate("Location Code", LocationCode);
         Line.Validate(Quantity, Qty);
         Line.Modify(true);
+        ServiceLog.Add(OrderNo, ItemLine."Line No.", Enum::"DOPSWHS Service Log Type"::Part,
+            StrSubstNo(PartLogTxt, Line."No.", Line.Description, NumText(Line.Quantity), Line."Unit of Measure Code"));
         exit(Line."Line No.");
     end;
 
@@ -326,6 +355,8 @@ codeunit 72100 "DOPSWHS Service Terminal Mgt"
         Line.Get(Line."Document Type"::Order, OrderNo, LineNo);
         AssertCanWork(OrderNo, Line."Service Item Line No.");
         AssertUnpostedLine(Line);
+        ServiceLog.Add(OrderNo, Line."Service Item Line No.", Enum::"DOPSWHS Service Log Type"::"Line Deleted",
+            StrSubstNo(PartLogTxt, Line."No.", Line.Description, NumText(Line.Quantity), Line."Unit of Measure Code"));
         Line.Delete(true);
     end;
 
@@ -361,6 +392,9 @@ codeunit 72100 "DOPSWHS Service Terminal Mgt"
         Comment.SetRange(Type, Comment.Type);
         if Comment.FindLast() then
             NextNo := Comment."Line No.";
+        // One log entry with the whole text; the 80-character comment lines are not logged again.
+        ServiceLog.Add(OrderNo, SILineNo, CommentLogType(Comment), CommentText);
+        ServiceLog.Suppress(true);
         while CommentText <> '' do begin
             NextNo += 10000;
             Comment."Line No." := NextNo;
@@ -369,6 +403,20 @@ codeunit 72100 "DOPSWHS Service Terminal Mgt"
             Comment.Insert(true);
             CommentText := CopyStr(CommentText, MaxStrLen(Comment.Comment) + 1);
         end;
+        ServiceLog.Suppress(false);
+    end;
+
+    local procedure CommentLogType(Comment: Record "Service Comment Line"): Enum "DOPSWHS Service Log Type"
+    begin
+        case Comment.Type of
+            Comment.Type::Fault:
+                exit(Enum::"DOPSWHS Service Log Type"::"Fault Note");
+            Comment.Type::Resolution:
+                exit(Enum::"DOPSWHS Service Log Type"::"Resolution Note");
+            Comment.Type::Internal:
+                exit(Enum::"DOPSWHS Service Log Type"::"Internal Note");
+        end;
+        exit(Enum::"DOPSWHS Service Log Type"::Note);
     end;
 
     procedure AddAttachment(OrderNo: Code[20]; FileName: Text; Base64: Text; Kind: Text): Integer
@@ -397,6 +445,10 @@ codeunit 72100 "DOPSWHS Service Terminal Mgt"
         TempBlob.CreateInStream(ContentIn);
         RecRef.GetTable(Header);
         Attachment.SaveAttachmentFromStream(ContentIn, RecRef, FileName);
+        if LowerCase(Kind) = 'signature' then
+            ServiceLog.Add(OrderNo, 0, Enum::"DOPSWHS Service Log Type"::Attachment, SignatureLogTxt)
+        else
+            ServiceLog.Add(OrderNo, 0, Enum::"DOPSWHS Service Log Type"::Attachment, StrSubstNo(PhotoLogTxt, FileName));
         exit(Attachment.ID);
     end;
 
@@ -443,6 +495,7 @@ codeunit 72100 "DOPSWHS Service Terminal Mgt"
         Invoice := false;
         ServicePost.PostWithLines(Header, TempLine, Ship, Consume, Invoice);
         Header.Get(Header."Document Type"::Order, OrderNo);
+        ServiceLog.Add(OrderNo, 0, Enum::"DOPSWHS Service Log Type"::Posted, StrSubstNo(PostedLogTxt, Header."Last Shipping No."));
         exit(Header."Last Shipping No.");
     end;
 
@@ -467,8 +520,11 @@ codeunit 72100 "DOPSWHS Service Terminal Mgt"
         Seen: List of [Code[20]];
         Names: Text;
     begin
-        FilterAllocations(Allocation, OrderNo, 0, '');
-        Allocation.SetRange(Status, Allocation.Status::Active);
+        // Finished allocations too: the office must still see who did a finished or posted job.
+        Allocation.SetRange("Document Type", Allocation."Document Type"::Order);
+        Allocation.SetRange("Document No.", OrderNo);
+        Allocation.SetFilter(Status, '%1|%2', Allocation.Status::Active, Allocation.Status::Finished);
+        Allocation.SetFilter("Resource No.", '<>%1', '');
         if Allocation.FindSet() then
             repeat
                 if not Seen.Contains(Allocation."Resource No.") then begin
@@ -502,6 +558,106 @@ codeunit 72100 "DOPSWHS Service Terminal Mgt"
         if ItemLine.FindFirst() then
             exit(ItemLine."Line No.");
         Error(NoItemErr, OrderNo);
+    end;
+
+    /// <summary>
+    /// The terminal asks only "where" (fault area) and "what" (symptom); the fault code follows from
+    /// them. Standard BC keeps a fault code per area + symptom pair, so a code defined for the area
+    /// alone (blank symptom, like the default GENEL) is copied to the chosen symptom instead of
+    /// failing the lookup ("GENEL, Fault Code listesinde tanımlı değil").
+    /// </summary>
+    local procedure ResolveFaultCode(ItemLine: Record "Service Item Line"; Fault: Code[10]): Code[10]
+    var
+        ServiceMgtSetup: Record "Service Mgt. Setup";
+        FaultCode: Record "Fault Code";
+        Generic: Record "Fault Code";
+        FullLevel: Boolean;
+    begin
+        // Fault codes are keyed by area + symptom only at the full (IRIS) reporting level.
+        FullLevel := ServiceMgtSetup.Get() and
+            (ServiceMgtSetup."Fault Reporting Level" = ServiceMgtSetup."Fault Reporting Level"::"Fault+Symptom+Area (IRIS)");
+        if Fault = '' then begin
+            // A code the office already put on the line (and that survived the area/symptom validation) stays.
+            if (ItemLine."Fault Code" <> '') or not FullLevel or (ItemLine."Fault Area Code" = '') then
+                exit('');
+            // Exactly one code defined for this area + symptom (e.g. Rulo + Ses = RULMAN): that is the fault.
+            if ItemLine."Symptom Code" <> '' then begin
+                FaultCode.SetRange("Fault Area Code", ItemLine."Fault Area Code");
+                FaultCode.SetRange("Symptom Code", ItemLine."Symptom Code");
+                if FaultCode.Count() = 1 then begin
+                    FaultCode.FindFirst();
+                    exit(FaultCode.Code);
+                end;
+                FaultCode.Reset();
+            end;
+            if not FaultCode.Get(ItemLine."Fault Area Code", ItemLine."Symptom Code", GeneralFaultTok) and
+               not FaultCode.Get(ItemLine."Fault Area Code", '', GeneralFaultTok)
+            then
+                exit('');
+            Fault := GeneralFaultTok;
+        end;
+        // An explicit code (older terminal) at another reporting level goes to the standard validation as it is.
+        if not FullLevel then
+            exit(Fault);
+        if FaultCode.Get(ItemLine."Fault Area Code", ItemLine."Symptom Code", Fault) then
+            exit(Fault);
+        if (ItemLine."Symptom Code" <> '') and Generic.Get(ItemLine."Fault Area Code", '', Fault) then begin
+            FaultCode.Init();
+            FaultCode."Fault Area Code" := ItemLine."Fault Area Code";
+            FaultCode."Symptom Code" := ItemLine."Symptom Code";
+            FaultCode.Code := Fault;
+            FaultCode.Description := Generic.Description;
+            FaultCode.Insert(true);
+            exit(Fault);
+        end;
+        Error(FaultCodeErr, Fault, ItemLine."Fault Area Code", ItemLine."Symptom Code");
+    end;
+
+    local procedure FinishText(ItemLine: Record "Service Item Line"): Text
+    var
+        FaultArea: Record "Fault Area";
+        SymptomCode: Record "Symptom Code";
+        ResolutionCode: Record "Resolution Code";
+        Result: Text;
+    begin
+        if FaultArea.Get(ItemLine."Fault Area Code") then
+            Result := JoinText(Result, StrSubstNo(FaultAreaLogTxt, DescriptionOrCode(FaultArea.Description, FaultArea.Code)));
+        if SymptomCode.Get(ItemLine."Symptom Code") then
+            Result := JoinText(Result, StrSubstNo(SymptomLogTxt, DescriptionOrCode(SymptomCode.Description, SymptomCode.Code)));
+        if ResolutionCode.Get(ItemLine."Resolution Code") then
+            Result := JoinText(Result, StrSubstNo(ResolutionLogTxt, DescriptionOrCode(ResolutionCode.Description, ResolutionCode.Code)));
+        exit(Result);
+    end;
+
+    local procedure DescriptionOrCode(Description: Text; Code: Text): Text
+    begin
+        if Description <> '' then
+            exit(Description);
+        exit(Code);
+    end;
+
+    local procedure JoinText(First: Text; Second: Text): Text
+    begin
+        if First = '' then
+            exit(Second);
+        if Second = '' then
+            exit(First);
+        exit(First + ' · ' + Second);
+    end;
+
+    /// <summary>Log texts are read in Turkish whatever the session language (API sessions are en-US).</summary>
+    local procedure NumText(Value: Decimal): Text
+    begin
+        exit(ConvertStr(Format(Value, 0, 9), '.', ','));
+    end;
+
+    local procedure ResourceText(ResourceNo: Code[20]): Text
+    var
+        Res: Record Resource;
+    begin
+        if Res.Get(ResourceNo) and (Res.Name <> '') then
+            exit(Res.Name);
+        exit(ResourceNo);
     end;
 
     /// <summary>
@@ -618,6 +774,18 @@ codeunit 72100 "DOPSWHS Service Terminal Mgt"
     end;
 
     var
+        ServiceLog: Codeunit "DOPSWHS Service Log";
+        GeneralFaultTok: Label 'GENEL', Locked = true;
+        FaultCodeErr: Label '%1 arıza kodu, %2 arıza alanı ve %3 belirtisi için tanımlı değil. BC''de Arıza Kodları sayfasından tanımlayın veya başka bir seçim yapın.', Comment = '%1 = Arıza kodu, %2 = Arıza alanı kodu, %3 = Belirti kodu';
+        AssignedLogTxt: Label '%1 · %2 · %3 saat', Comment = '%1 = Teknisyen adı, %2 = Tarih, %3 = Planlanan saat';
+        HoursLogTxt: Label '%1 saat', Comment = '%1 = İşçilik saati';
+        PartLogTxt: Label '%1 %2 · %3 %4', Comment = '%1 = No, %2 = Açıklama, %3 = Miktar, %4 = Birim';
+        FaultAreaLogTxt: Label 'Arıza yeri: %1', Comment = '%1 = Arıza alanı';
+        SymptomLogTxt: Label 'Sorun: %1', Comment = '%1 = Belirti';
+        ResolutionLogTxt: Label 'Yapılan: %1', Comment = '%1 = Çözüm';
+        SignatureLogTxt: Label 'Müşteri imzası alındı';
+        PhotoLogTxt: Label 'Fotoğraf: %1', Comment = '%1 = Dosya adı';
+        PostedLogTxt: Label 'Servis sevkiyatı %1', Comment = '%1 = Sevkiyat no';
         ResourceRequiredErr: Label 'Teknisyen kaynağı boş olamaz.';
         AllocationDateErr: Label 'Tahsis tarihi boş olamaz.';
         NoTechnicianErr: Label 'Bu kullanıcı servis teknisyeni olarak tanımlı değil (Servis Teknisyenleri sayfası).';

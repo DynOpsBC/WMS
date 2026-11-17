@@ -46,13 +46,39 @@ page 72106 "DOPSWHS Svc Item Lines API"
                 field(locationOfServiceItem; Rec."Location of Service Item") { Caption = 'locationOfServiceItem'; }
                 field(customerNo; Rec."Customer No.") { Caption = 'customerNo'; }
                 field(priority; priorityValue) { Caption = 'priority'; }
+                field(faultAreaText; faultAreaTextValue) { Caption = 'faultAreaText'; }
+                field(symptomText; symptomTextValue) { Caption = 'symptomText'; }
+                field(resolutionText; resolutionTextValue) { Caption = 'resolutionText'; }
+                field(repairStatusText; repairStatusTextValue) { Caption = 'repairStatusText'; }
             }
         }
     }
     trigger OnAfterGetRecord()
+    var
+        FaultArea: Record "Fault Area";
+        SymptomCode: Record "Symptom Code";
+        ResolutionCode: Record "Resolution Code";
+        RepairStatus: Record "Repair Status";
     begin
         priorityValue := Rec.Priority.Names.Get(Rec.Priority.Ordinals.IndexOf(Rec.Priority.AsInteger()));
+        // Technicians read descriptions, not codes.
+        Clear(faultAreaTextValue);
+        Clear(symptomTextValue);
+        Clear(resolutionTextValue);
+        Clear(repairStatusTextValue);
+        if FaultArea.Get(Rec."Fault Area Code") then
+            faultAreaTextValue := FaultArea.Description;
+        if SymptomCode.Get(Rec."Symptom Code") then
+            symptomTextValue := SymptomCode.Description;
+        if ResolutionCode.Get(Rec."Resolution Code") then
+            resolutionTextValue := ResolutionCode.Description;
+        if RepairStatus.Get(Rec."Repair Status Code") then
+            repairStatusTextValue := RepairStatus.Description;
     end;
     var
         priorityValue: Text;
+        faultAreaTextValue: Text;
+        symptomTextValue: Text;
+        resolutionTextValue: Text;
+        repairStatusTextValue: Text;
 }

@@ -27,7 +27,8 @@
       truncated: 'En yeni {0} sipariş gösteriliyor.', clear: 'Filtreleri temizle',
       loading: 'Servis işleri yükleniyor…', moreItems: '+{0} servis maddesi', noAssignRight: 'Atama için Servis Teknisyenleri sayfasında "Servis Yöneticisi" işaretli olmalısınız.',
       busyTech: 'Bugün {0} sa planlı', freeTech: 'Bugün boş', noMatch: 'Filtreye uyan iş yok.',
-      noReply: 'Business Central yanıt vermedi. Panoyu yenileyip atamayı kontrol edin.'
+      noReply: 'Business Central yanıt vermedi. Panoyu yenileyip atamayı kontrol edin.',
+      summaryTitle: 'Servis özeti (yazdırılabilir)', salesOrder: 'Satış sip.'
     },
     en: {
       search: 'Search customer, order no. or description',
@@ -52,7 +53,8 @@
       truncated: 'Showing the newest {0} orders.', clear: 'Clear filters',
       loading: 'Loading service jobs…', moreItems: '+{0} service items', noAssignRight: 'To assign jobs, mark yourself as "Dispatcher" on the Service Technicians page.',
       busyTech: '{0} h planned today', freeTech: 'Free today', noMatch: 'No jobs match the filter.',
-      noReply: 'Business Central did not answer. Refresh the board and check the assignment.'
+      noReply: 'Business Central did not answer. Refresh the board and check the assignment.',
+      summaryTitle: 'Service summary (printable)', salesOrder: 'Sales order'
     }
   };
 
@@ -283,15 +285,19 @@
     var html = '<article class="sb-card pr-' + esc(o.priority) + (o.overdue ? ' is-late' : '') + '" data-action="open" data-no="' + esc(o.no) + '" tabindex="0">';
     html += '<div class="sb-card-top"><span class="sb-no">' + esc(o.no) + '</span>' +
       '<span class="sb-pill pr">' + esc(t(o.priority)) + '</span>' +
-      (o.overdue ? '<span class="sb-pill late">' + esc(t('late')) + '</span>' : '') + '</div>';
+      (o.overdue ? '<span class="sb-pill late">' + esc(t('late')) + '</span>' : '') +
+      '<button type="button" class="sb-icon" data-action="summary" data-no="' + esc(o.no) + '" title="' + esc(t('summaryTitle')) + '" aria-label="' + esc(t('summaryTitle')) + '">' +
+      '<svg viewBox="0 0 20 20" aria-hidden="true"><path d="M6 2.5h5.5L15 6v11.5H6z"/><path d="M11.5 2.5V6H15"/><path d="M8.5 10h4M8.5 13h4"/></svg></button></div>';
     html += '<div class="sb-cust">' + esc(o.name || o.customerNo) + '</div>';
     if (o.description) { html += '<div class="sb-desc">' + esc(o.description) + '</div>'; }
-    if (first) {
+    // No service item picked: the item line only repeats the order description.
+    if (first && (first.serviceItemNo || first.description !== o.description)) {
       html += '<div class="sb-item">' + esc([first.serviceItemNo, first.description].filter(Boolean).join(' · ')) +
         (items.length > 1 ? ' <span class="sb-more">' + esc(fmt(t('moreItems'), items.length - 1)) + '</span>' : '') + '</div>';
     }
     var tags = '';
     if (o.city) { tags += '<span class="sb-tag city">' + esc(o.city) + '</span>'; }
+    if (o.salesOrderNo) { tags += '<span class="sb-tag sales">' + esc(t('salesOrder')) + ' ' + esc(o.salesOrderNo) + '</span>'; }
     if (first && first.repairStatus && !isDone(o)) {
       tags += '<span class="sb-tag status" title="' + esc(first.repairStatus) + '">' + esc(first.repairStatusText || first.repairStatus) + '</span>';
     }
@@ -475,6 +481,10 @@
         break;
       case 'open':
         invoke('OpenOrder', [el.getAttribute('data-no')]);
+        break;
+      case 'summary':
+        ev.stopPropagation();
+        invoke('OpenSummary', [el.getAttribute('data-no')]);
         break;
       case 'assign':
         ev.stopPropagation();

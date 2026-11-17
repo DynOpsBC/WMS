@@ -40,7 +40,7 @@ import android.graphics.BitmapFactory
 import android.graphics.Matrix
 import java.time.LocalDateTime
 
-@OptIn(ExperimentalFoundationApi::class, ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalFoundationApi::class, ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun ServiceModule() {
     val context = LocalContext.current
@@ -66,6 +66,8 @@ fun ServiceModule() {
     var confirmLeaveFinish by remember { mutableStateOf(false) }
     var customers by remember { mutableStateOf<List<JSONObject>>(emptyList()) }
     var customerItems by remember { mutableStateOf<List<JSONObject>>(emptyList()) }
+    var customerSalesOrders by remember { mutableStateOf<List<JSONObject>>(emptyList()) }
+    var logEntries by remember { mutableStateOf<List<JSONObject>>(emptyList()) }
     fun value(key: String) = values[key].orEmpty()
     suspend fun fetch(path: String): List<JSONObject> {
         val r = BcApi.getAllPages(context, path)
@@ -89,6 +91,10 @@ fun ServiceModule() {
             lines = fetch("serviceLines$filter")
             comments = fetch("serviceComments?\$filter=" + Uri.encode("no eq '${serviceODataText(current.optString("no"))}'"))
             attachments = fetch("serviceAttachments?\$filter=" + Uri.encode("no eq '${serviceODataText(current.optString("no"))}'"))
+            // Service history (BC 1.14.0.8+); an older BC has no log and the notes list is shown instead.
+            logEntries = runCatching {
+                fetch("serviceLogEntries?\$orderby=entryNo&\$filter=" + Uri.encode("serviceOrderNo eq '${serviceODataText(current.optString("no"))}'"))
+            }.getOrDefault(emptyList())
             if(itemLines.none { it.optInt("lineNo") == selectedLine }) selectedLine = itemLines.firstOrNull()?.optInt("lineNo") ?: 0
             detailReady = true
         }
@@ -185,7 +191,14 @@ fun ServiceModule() {
                 if (date.isBlank() || date == "0001-01-01") null
                 else LocalDateTime.parse("${date}T${line?.optString("startingTime")?.removeSuffix("Z")}")
             }.getOrNull()
-            values = values + ("hours" to serviceElapsedHours(start, LocalDateTime.now(), setup.laborRoundingHours).toString())
+            // Labor already entered for this item (an earlier attempt, or "İşçilik Ekle") is not asked for again.
+            // Only the technician's own lines: a colleague's hours on the same item are not his.
+            val already = lines.filter { serviceEnumName(it.optString("type")) == "Resource" && it.optInt("serviceItemLineNo") == selectedLine &&
+                setup.myResourceNo.isNotBlank() && it.optString("no") == setup.myResourceNo }
+                .sumOf { it.optDouble("quantity", 0.0) }
+            val elapsed = serviceElapsedHours(start, LocalDateTime.now(), setup.laborRoundingHours)
+            values = values + ("hours" to serviceQtyText(serviceRemainingHours(elapsed, already))) + ("laborAlready" to if(already > 0) serviceQtyText(already) else "")
+            // The elapsed time is replaced by a zero suggestion only when labor was really entered before.
         }
         catalog = emptyMap()
         dialog = name
@@ -203,6 +216,7 @@ fun ServiceModule() {
     fun openNewService() {
         values = mapOf("priority" to "Medium", "assignToMe" to "true")
         customerItems = emptyList()
+        customerSalesOrders = emptyList()
         message = ""
         dialog = "Yeni Servis"
         if (customers.isEmpty()) runJob {
@@ -212,9 +226,15 @@ fun ServiceModule() {
     }
     fun selectCustomer(c: JSONObject) {
         values = values + ("customerNo" to c.optString("no")) + ("customerName" to c.optString("name")) +
-            ("customerCity" to c.optString("city")) + ("serviceItemNo" to "")
+            ("customerCity" to c.optString("city")) + ("serviceItemNo" to "") + ("salesOrderNo" to "")
         customerItems = emptyList()
-        runJob { customerItems = fetch("serviceItems?\$filter=" + Uri.encode("customerNo eq '${serviceODataText(c.optString("no"))}'")) }
+        customerSalesOrders = emptyList()
+        runJob {
+            val filter = "\$filter=" + Uri.encode("customerNo eq '${serviceODataText(c.optString("no"))}'")
+            customerItems = fetch("serviceItems?$filter")
+            // Optional: the customer's open sales orders (BC 1.14.0.8+).
+            customerSalesOrders = runCatching { fetch("serviceSalesOrders?\$orderby=orderDate%20desc&$filter") }.getOrDefault(emptyList())
+        }
     }
     val status = bcwmsStatus()
     @Composable fun priorityColor(value: String): Color = when(servicePriorityColor(value)) {
@@ -266,11 +286,17 @@ fun ServiceModule() {
                             }
                             Text(row.optString(if(all) "name" else "customerName"), style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold,
                                 maxLines = 2, overflow = TextOverflow.Ellipsis)
-                            Text(listOf(row.optString("city"), row.optString(if(all) "description" else "serviceItemDescription")).filter { it.isNotBlank() }.joinToString(" · "),
+                            row.optString(if(all) "description" else "orderDescription").takeIf { it.isNotBlank() }?.let {
+                                Text(it, style = MaterialTheme.typography.bodyMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                            }
+                            Text(listOf(row.optString("city"), if(all) "" else row.optString("serviceItemDescription")).filter { it.isNotBlank() }.joinToString(" · "),
                                 style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                             Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
                                 statusPill(row.optString(if(all) "status" else "orderStatus"))
-                                if(!all && row.optString("repairStatus").isNotBlank()) InfoPill("Onarım: " + row.optString("repairStatus"))
+                                // The repair status is shown only when it says more than the order status ("Parça sipariş edildi").
+                                val repairText = row.optString("repairStatusText").ifBlank { row.optString("repairStatus").let { if(it.isBlank()) "" else "Onarım: $it" } }
+                                if(!all && repairText.isNotBlank() && repairText != serviceStatusLabel(row.optString("orderStatus"))) InfoPill(repairText)
+                                if(row.optString("salesOrderNo").isNotBlank()) InfoPill(row.optString("salesOrderNo"), MaterialTheme.colorScheme.primary.copy(alpha = 0.10f), MaterialTheme.colorScheme.primary)
                                 if(all && row.optString("technicianNames").isNotBlank()) InfoPill(row.optString("technicianNames"))
                             }
                             val when_ = if(all) listOf(serviceDateText(row.optString("responseDate")).let { if(it.isBlank()) "" else "Yanıt: $it" })
@@ -294,6 +320,8 @@ fun ServiceModule() {
                         o.optString("priority").takeIf { it.isNotBlank() }?.let { InfoPill("Öncelik: " + servicePriorityLabel(it), priorityColor(it).copy(alpha = 0.14f), priorityColor(it)) }
                         serviceDateText(o.optString("responseDate")).takeIf { it.isNotBlank() }?.let { InfoPill("Yanıt: $it ${serviceTimeText(o.optString("responseTime"))}".trim()) }
                     }
+                    if(o.optString("salesOrderNo").isNotBlank()) InfoPill("Satış siparişi: " + o.optString("salesOrderNo"),
+                        MaterialTheme.colorScheme.primary.copy(alpha = 0.10f), MaterialTheme.colorScheme.primary)
                     if(o.optString("contactName").isNotBlank()) Text("İlgili: " + o.optString("contactName"), style = MaterialTheme.typography.bodyMedium)
                     val address = listOf("address", "address2", "postCode", "city").map { o.optString(it) }.filter { it.isNotBlank() }.joinToString(" ")
                     if(address.isNotBlank()) OutlinedButton({ launchUri(Intent.ACTION_VIEW, "geo:0,0?q=${Uri.encode(address)}") }, enabled = !busy, modifier = Modifier.fillMaxWidth()) {
@@ -317,12 +345,15 @@ fun ServiceModule() {
                         Text(listOf(line.optString("serviceItemNo"), line.optString("serialNo").let { if(it.isBlank()) "" else "Seri: $it" }).filter { it.isNotBlank() }.joinToString(" · "),
                             style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                            if(line.optString("repairStatusCode").isNotBlank()) InfoPill("Onarım: " + line.optString("repairStatusCode"))
+                            if(line.optString("repairStatusCode").isNotBlank()) InfoPill(line.optString("repairStatusText").ifBlank { "Onarım: " + line.optString("repairStatusCode") })
                             serviceDateText(line.optString("startingDate")).takeIf { it.isNotBlank() }?.let { InfoPill("Başladı ${serviceTimeText(line.optString("startingTime"))}") }
                             serviceDateText(line.optString("finishingDate")).takeIf { it.isNotBlank() }?.let { InfoPill("Bitti ${serviceTimeText(line.optString("finishingTime"))}", status.success.copy(alpha = 0.14f), status.success) }
                         }
-                        val codes = listOf("faultAreaCode", "symptomCode", "faultCode", "resolutionCode").map { line.optString(it) }.filter { it.isNotBlank() }
-                        if(codes.isNotEmpty()) Text("Arıza/çözüm: " + codes.joinToString(" / "), style = MaterialTheme.typography.bodySmall)
+                        val result = serviceFinishSummary(
+                            line.optString("faultAreaText").ifBlank { line.optString("faultAreaCode") },
+                            line.optString("symptomText").ifBlank { line.optString("symptomCode") },
+                            line.optString("resolutionText").ifBlank { line.optString("resolutionCode") })
+                        if(result.isNotBlank()) Text(result, style = MaterialTheme.typography.bodyMedium)
                     }
                 }
             }
@@ -334,9 +365,13 @@ fun ServiceModule() {
             }
             // A finished line only takes photos, the signature and notes before posting.
             val lineFinished = selected?.optString("finishingDate").let { !it.isNullOrBlank() && it != "0001-01-01" }
+            val lineStarted = !selected?.optString("startingDate").let { it.isNullOrBlank() || it == "0001-01-01" }
+            // The one thing a technician does next is always the big button.
+            if(lineStarted && !lineFinished) Button({ open("İşi Bitir") }, enabled = ready,
+                modifier = Modifier.fillMaxWidth().height(wmsPrimaryButtonHeight())) { Text("İşi Bitir", fontWeight = FontWeight.Bold) }
             val actions = buildList {
-                if(!lineFinished) { add("İşi Bitir"); add("Beklet"); add("Parça Ekle"); add("İşçilik Ekle") }
-                add("Fotoğraf"); add("Müşteri İmzası"); add("Not Ekle")
+                if(!lineFinished) { if(!lineStarted) add("İşi Bitir"); add("Parça Ekle"); add("İşçilik Ekle"); add("Beklet") }
+                add("Not Ekle"); add("Fotoğraf"); add("Müşteri İmzası")
                 if(setup.isDispatcher && !lineFinished) add("Teknisyen Ata")
             }
             if(lineFinished) Text("İş bitirildi. Fotoğraf ve müşteri imzasını ekleyip servisi kaydedin.",
@@ -383,11 +418,44 @@ fun ServiceModule() {
             }
             if(lines.any { it.optDouble("quantityShipped", 0.0) == 0.0 }) Text("Kaydedilmemiş satırı silmek için satıra uzun basın.",
                 style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            sectionTitle("Notlar (${comments.size})")
-            comments.forEach {
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.Top) {
-                    InfoPill(serviceCommentTypeLabel(it.optString("type")))
-                    Text("${serviceDateText(it.optString("date"))}  ${it.optString("comment")}", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
+            if(logEntries.isNotEmpty()) {
+                // Whole texts as typed, with who and when; the office reads the same log in BC.
+                sectionTitle("Servis geçmişi (${logEntries.size})")
+                Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)) {
+                    Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        logEntries.forEach { entry ->
+                            val type = entry.optString("entryType")
+                            val note = serviceLogIsNote(type)
+                            Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.Top) {
+                                Box(Modifier.padding(top = 5.dp).size(9.dp).background(
+                                    if(note) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant, androidx.compose.foundation.shape.CircleShape))
+                                Column(Modifier.weight(1f)) {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Text(serviceLogTypeLabel(type), style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+                                        Text(serviceLogTimeText(entry.optString("loggedAt")), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    }
+                                    val text = entry.optString("entryText")
+                                    if(text.isNotBlank()) Text(text, style = if(note) MaterialTheme.typography.bodyMedium else MaterialTheme.typography.bodySmall,
+                                        color = if(note) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant)
+                                    entry.optString("technicianName").ifBlank { entry.optString("userName") }.takeIf { it.isNotBlank() }?.let {
+                                        Text(it, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            // Notes the history does not cover (typed before the log existed, or not logged) are never hidden.
+            val unlogged = serviceUnloggedComments(comments.map { it.optString("comment") }, logEntries.map { it.optString("entryText") }).map { comments[it] }
+            if(unlogged.isNotEmpty() || logEntries.isEmpty()) {
+                sectionTitle(if(logEntries.isEmpty()) "Notlar (${unlogged.size})" else "Diğer notlar (${unlogged.size})")
+                unlogged.forEach {
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.Top) {
+                        InfoPill(serviceCommentTypeLabel(it.optString("type")))
+                        Text("${serviceDateText(it.optString("date"))}  ${it.optString("comment")}", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
+                    }
                 }
             }
             sectionTitle("Ekler (${attachments.size})")
@@ -445,7 +513,7 @@ fun ServiceModule() {
                             Text(value("customerName"), style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold, maxLines = 2, overflow = TextOverflow.Ellipsis)
                             Text(listOf(value("customerNo"), value("customerCity")).filter { it.isNotBlank() }.joinToString(" · "), style = MaterialTheme.typography.bodySmall)
                         }
-                        TextButton({ values = values - "customerNo" - "customerName" - "customerCity" - "serviceItemNo"; customerItems = emptyList() }, enabled = !busy) { Text("Değiştir") }
+                        TextButton({ values = values - "customerNo" - "customerName" - "customerCity" - "serviceItemNo" - "salesOrderNo"; customerItems = emptyList(); customerSalesOrders = emptyList() }, enabled = !busy) { Text("Değiştir") }
                     }
                 }
                 var itemsOpen by remember { mutableStateOf(false) }
@@ -464,6 +532,24 @@ fun ServiceModule() {
                             onClick = { values = values + ("serviceItemNo" to item.optString("no")); itemsOpen = false }) }
                     }
                 }
+                if(customerSalesOrders.isNotEmpty()) {
+                    var ordersOpen by remember { mutableStateOf(false) }
+                    val selectedOrder = customerSalesOrders.firstOrNull { it.optString("no") == value("salesOrderNo") }
+                    Text("Satış siparişi (isteğe bağlı)", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Box(Modifier.fillMaxWidth()) {
+                        OutlinedButton({ ordersOpen = true }, enabled = !busy, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(10.dp)) {
+                            Text(selectedOrder?.let { serviceSalesOrderLabel(it.optString("no"), it.optString("orderDate"), it.optString("yourReference"), it.optString("externalDocumentNo")) }
+                                ?: "Satış siparişine bağlamadan devam", modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            Text("▾")
+                        }
+                        DropdownMenu(ordersOpen, { ordersOpen = false }) {
+                            DropdownMenuItem(text = { Text("Satış siparişine bağlamadan devam") }, onClick = { values = values + ("salesOrderNo" to ""); ordersOpen = false })
+                            customerSalesOrders.take(40).forEach { so -> DropdownMenuItem(
+                                text = { Text(serviceSalesOrderLabel(so.optString("no"), so.optString("orderDate"), so.optString("yourReference"), so.optString("externalDocumentNo"))) },
+                                onClick = { values = values + ("salesOrderNo" to so.optString("no")); ordersOpen = false }) }
+                        }
+                    }
+                }
                 OutlinedTextField(value("description"), { values = values + ("description" to it.take(100)) }, label = { Text("Arıza / iş açıklaması") },
                     minLines = 2, enabled = !busy, modifier = Modifier.fillMaxWidth())
                 Text("Öncelik", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -479,10 +565,14 @@ fun ServiceModule() {
                 Button({
                     runJob {
                         require(value("description").isNotBlank()) { "Arıza açıklaması girin." }
-                        val r = BcApi.post(context, "serviceSetups(${setup.id})/Microsoft.NAV.createServiceOrder", serviceActionBody(
+                        val fields = arrayOf<Pair<String, Any>>(
                             "customerNo" to value("customerNo"), "serviceItemNo" to value("serviceItemNo"),
                             "description" to value("description").trim(), "priority" to value("priority").ifBlank { "Medium" },
-                            "assignToMe" to (value("assignToMe") == "true")))
+                            "assignToMe" to (value("assignToMe") == "true"))
+                        // The plain action also works on a BC without the sales order link.
+                        val r = if(value("salesOrderNo").isBlank()) BcApi.post(context, "serviceSetups(${setup.id})/Microsoft.NAV.createServiceOrder", serviceActionBody(*fields))
+                            else BcApi.post(context, "serviceSetups(${setup.id})/Microsoft.NAV.createServiceOrderForSalesOrder",
+                                serviceActionBody(*fields, "salesOrderNo" to value("salesOrderNo")))
                         check(r.ok) { BcApi.errorMessage(r.body) }
                         val no = JSONObject(r.body).optString("value")
                         val created = fetch("serviceOrders?\$filter=" + Uri.encode("no eq '${serviceODataText(no)}'")).firstOrNull()
@@ -532,37 +622,79 @@ fun ServiceModule() {
                             DropdownMenuItem(text = { Text("—") }, onClick = { values = values + (key to ""); expanded = false })
                             options.forEach { option -> DropdownMenuItem(text = { Text(describe(option)) }, onClick = {
                                 values = values + (key to option.optString(codeKey))
-                                if(key == "faultAreaCode" || key == "symptomCode") values = values + ("faultCode" to "")
                                 expanded = false
                             }) }
                         }
                     }
                 }
             }
+            // One tap per answer: the options are shown as chips with their plain names, never as codes.
+            @Composable fun chips(key: String, title: String, options: List<JSONObject>, step: String = "", locked: Boolean = false) {
+                Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        if(step.isNotBlank()) Box(Modifier.size(22.dp).background(
+                            if(value(key).isBlank()) MaterialTheme.colorScheme.outlineVariant else MaterialTheme.colorScheme.primary, androidx.compose.foundation.shape.CircleShape),
+                            contentAlignment = Alignment.Center) {
+                            Text(if(value(key).isBlank()) step else "✓", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold,
+                                color = if(value(key).isBlank()) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onPrimary)
+                        }
+                        Text(title, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+                    }
+                    if(options.isEmpty()) Text(if(busy) "Yükleniyor…" else "Tanımlı seçenek yok.", style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        options.forEach { option ->
+                            val code = option.optString("code")
+                            FilterChip(value(key) == code, { values = values + (key to if(value(key) == code) "" else code) },
+                                label = { Text(serviceChoiceLabel(code, option.optString("description")), style = MaterialTheme.typography.bodyLarge) },
+                                enabled = !busy && !locked, modifier = Modifier.heightIn(min = 40.dp))
+                        }
+                    }
+                }
+            }
             when(dialog) {
-                "Beklet" -> choose("repairStatusCode", "Onarım durumu", catalog["serviceRepairStatuses"].orEmpty().filter { it.optBoolean("waitingForCustomer") || it.optBoolean("sparePartOrdered") })
+                "Beklet" -> chips("repairStatusCode", "Neden bekletiliyor?", catalog["serviceRepairStatuses"].orEmpty().filter { it.optBoolean("waitingForCustomer") || it.optBoolean("sparePartOrdered") })
                 "İşi Bitir" -> {
-                    choose("faultAreaCode", "Arıza alanı", catalog["serviceFaultAreas"].orEmpty())
-                    choose("symptomCode", "Belirti", catalog["serviceSymptomCodes"].orEmpty())
-                    choose("faultCode", "Arıza", catalog["serviceFaultCodes"].orEmpty().filter { it.optString("faultAreaCode") == value("faultAreaCode") && (it.optString("symptomCode").isBlank() || it.optString("symptomCode") == value("symptomCode")) })
-                    choose("resolutionCode", "Çözüm", catalog["serviceResolutionCodes"].orEmpty())
-                    field("resolutionNote", "Çözüm notu")
+                    Text("Üç soruyu dokunarak cevaplayın. Kod yazmanız gerekmez.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    chips("faultAreaCode", "Arıza neredeydi?", catalog["serviceFaultAreas"].orEmpty(), "1")
+                    chips("symptomCode", "Sorun neydi?", catalog["serviceSymptomCodes"].orEmpty(), "2")
+                    chips("resolutionCode", "Ne yapıldı?", catalog["serviceResolutionCodes"].orEmpty(), "3")
+                    OutlinedTextField(value("resolutionNote"), { values = values + ("resolutionNote" to it) }, label = { Text("Açıklama (yapılan işi kısaca yazın)") },
+                        minLines = 3, enabled = !busy, modifier = Modifier.fillMaxWidth())
+                    HorizontalDivider()
+                    Text("İşçilik", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        OutlinedButton({ values = values + ("hours" to serviceStepHours(value("hours"), -1, setup.laborRoundingHours)) }, enabled = !busy && !laborSaved,
+                            modifier = Modifier.size(52.dp), contentPadding = PaddingValues(0.dp), shape = RoundedCornerShape(12.dp)) { Text("−", style = MaterialTheme.typography.titleLarge) }
+                        OutlinedTextField(value("hours"), { values = values + ("hours" to it) }, label = { Text("Saat") }, enabled = !busy && !laborSaved, singleLine = true,
+                            keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Decimal),
+                            modifier = Modifier.weight(1f))
+                        OutlinedButton({ values = values + ("hours" to serviceStepHours(value("hours"), 1, setup.laborRoundingHours)) }, enabled = !busy && !laborSaved,
+                            modifier = Modifier.size(52.dp), contentPadding = PaddingValues(0.dp), shape = RoundedCornerShape(12.dp)) { Text("+", style = MaterialTheme.typography.titleLarge) }
+                    }
+                    if(laborSaved) Text("İşçilik kaydedildi; yalnız işi bitirme adımı tekrarlanacak.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    else if(value("laborAlready").isNotBlank()) Text("Bu iş için daha önce ${value("laborAlready")} saat işçilik girdiniz. Buraya yalnız eklenecek süreyi yazın.",
+                        style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    // One work type that is already the default needs no question.
+                    val workTypes = catalog["serviceWorkTypes"].orEmpty()
+                    if(workTypes.size > 1 || (workTypes.size == 1 && value("workTypeCode") != workTypes[0].optString("code")))
+                        chips("workTypeCode", "İş türü", workTypes, locked = laborSaved)
                 }
                 "Parça Ekle" -> {
                     ScanField(label = "Madde no / barkod", value = value("itemNo"), onValueChange = { values = values + ("itemNo" to it) }, onScanned = { values = values + ("itemNo" to it) }, enabled = !busy)
                     field("quantity", "Miktar")
                 }
                 "Not Ekle" -> {
-                    choose("commentType", "Not türü", listOf("General" to "Genel", "Fault" to "Arıza", "Resolution" to "Çözüm", "Internal" to "Dahili").map { JSONObject().put("code", it.first).put("description", it.second) }, showCode = false)
-                    field("text", "Not")
+                    chips("commentType", "Not türü", listOf("General" to "Genel", "Fault" to "Arıza", "Resolution" to "Çözüm", "Internal" to "Dahili").map { JSONObject().put("code", it.first).put("description", it.second) })
+                    OutlinedTextField(value("text"), { values = values + ("text" to it) }, label = { Text("Not") }, minLines = 3, enabled = !busy, modifier = Modifier.fillMaxWidth())
                 }
                 "Teknisyen Ata" -> {
                     choose("resourceNo", "Teknisyen", catalog["serviceTechnicians"].orEmpty(), "resourceNo")
                     field("allocationDate", "Atama tarihi (yyyy-AA-gg)")
                 }
             }
-            if(dialog in listOf("İşi Bitir", "İşçilik Ekle", "Teknisyen Ata")) field("hours", if(dialog == "Teknisyen Ata") "Planlanan süre (saat)" else "İşçilik saati")
-            if(dialog in listOf("İşi Bitir", "İşçilik Ekle")) choose("workTypeCode", "İş türü", catalog["serviceWorkTypes"].orEmpty())
+            if(dialog in listOf("İşçilik Ekle", "Teknisyen Ata")) field("hours", if(dialog == "Teknisyen Ata") "Planlanan süre (saat)" else "İşçilik saati")
+            if(dialog == "İşçilik Ekle") choose("workTypeCode", "İş türü", catalog["serviceWorkTypes"].orEmpty())
             if(dialog == "İşçilik Ekle") field("description", "Açıklama")
             Button({
                 runJob {
@@ -570,16 +702,19 @@ fun ServiceModule() {
                         val line = "serviceItemLineNo" to selectedLine
                         val hours = value("hours").replace(',', '.').toDoubleOrNull()
                         when(dialog) {
-                            "Beklet" -> { require(value("repairStatusCode").isNotBlank()) { "Onarım durumu seçin." }; action("setRepairStatus", line, "repairStatusCode" to value("repairStatusCode")) }
+                            "Beklet" -> { require(value("repairStatusCode").isNotBlank()) { "Bekletme nedenini seçin." }; action("setRepairStatus", line, "repairStatusCode" to value("repairStatusCode")) }
                             "İşi Bitir" -> {
                                 require(hours != null && hours.isFinite() && hours >= 0) { "Geçerli saat girin." }
+                                require(value("resolutionCode").isNotBlank() || value("resolutionNote").isNotBlank()) { "Ne yapıldığını seçin veya açıklama yazın." }
                                 // Save labor before finishWork: a finished order rejects new lines.
                                 // Retain this flag on failure so retry never repeats saved labor.
                                 if(!laborSaved && hours > 0) {
                                     action("addLabor", line, "hours" to hours, "workTypeCode" to value("workTypeCode"), "description" to "")
                                     laborSaved = true
                                 }
-                                action("finishWork", line, *listOf("faultAreaCode", "symptomCode", "faultCode", "resolutionCode", "resolutionNote").map { it to value(it) }.toTypedArray())
+                                // BC picks the fault code from the fault area and the problem; the terminal never asks for it.
+                                action("finishWork", line, "faultAreaCode" to value("faultAreaCode"), "symptomCode" to value("symptomCode"), "faultCode" to "",
+                                    "resolutionCode" to value("resolutionCode"), "resolutionNote" to value("resolutionNote").trim())
                             }
                             "İşçilik Ekle", "Teknisyen Ata" -> {
                                 require(hours != null && hours.isFinite() && hours > 0) { "Sıfırdan büyük saat girin." }

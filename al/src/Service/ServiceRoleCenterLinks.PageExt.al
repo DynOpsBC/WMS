@@ -52,6 +52,12 @@ pageextension 72120 "DOPSWHS Svc Business Mgr RC" extends "Business Manager Role
                     Caption = 'Posted Service Invoices';
                     RunObject = page "Posted Service Invoices";
                 }
+                action(DOPSWHSServiceLog)
+                {
+                    ApplicationArea = DOPSWHSService;
+                    Caption = 'Service Log';
+                    RunObject = page "DOPSWHS Service Log";
+                }
                 action(DOPSWHSTechnicians)
                 {
                     ApplicationArea = DOPSWHSService;

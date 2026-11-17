@@ -112,4 +112,66 @@ class ServiceWorkflowTest {
         assertFalse(s.isDispatcher)
         assertEquals("", parseServiceSetup("{}").id)
     }
+
+    @Test fun `finish chips show the plain name and fall back to the code`() {
+        assertEquals("Isınma", serviceChoiceLabel("ISINMA", "Isınma"))
+        assertEquals("ISINMA", serviceChoiceLabel("ISINMA", "  "))
+    }
+
+    @Test fun `finish summary reads where, what and what was done`() {
+        assertEquals("Bant · Isınma → Ayar", serviceFinishSummary("Bant", "Isınma", "Ayar"))
+        assertEquals("Bant", serviceFinishSummary("Bant", "", ""))
+        assertEquals("Ayar", serviceFinishSummary("", " ", "Ayar"))
+        assertEquals("", serviceFinishSummary("", "", ""))
+    }
+
+    @Test fun `labor stepper moves one rounding step and never goes below zero`() {
+        assertEquals("1,75", serviceStepHours("1,5", 1, 0.25))
+        assertEquals("1,25", serviceStepHours("1.5", -1, 0.25))
+        assertEquals("0", serviceStepHours("0", -1, 0.25))
+        assertEquals("0,5", serviceStepHours("", 1, 0.5))
+        assertEquals("0,25", serviceStepHours("abc", 1, 0.0))
+        // An off-step value snaps to the grid before stepping.
+        assertEquals("1,5", serviceStepHours("1,3", 1, 0.25))
+    }
+
+    @Test fun `log entries are labelled in Turkish and notes are told apart from steps`() {
+        assertEquals("Çözüm notu", serviceLogTypeLabel("Resolution_x0020_Note"))
+        assertEquals("İş bitirildi", serviceLogTypeLabel("Finished"))
+        assertEquals("Satır silindi", serviceLogTypeLabel("Line Deleted"))
+        assertTrue(serviceLogIsNote("Fault_x0020_Note"))
+        assertTrue(serviceLogIsNote("Created"))
+        assertFalse(serviceLogIsNote("Labor"))
+    }
+
+    @Test fun `log time is shown in the technician's own time zone`() {
+        val istanbul = java.time.ZoneId.of("Europe/Istanbul")
+        assertEquals("17.11 12:24", serviceLogTimeText("2026-11-17T09:24:13.063Z", istanbul))
+        assertEquals("", serviceLogTimeText("", istanbul))
+        assertEquals("", serviceLogTimeText("0001-01-01T00:00:00Z".replace("0001", "x"), istanbul))
+    }
+
+    @Test fun `sales order label shows number, date and the customer's reference`() {
+        assertEquals("STS0003460 · 12.11.2026 · Ref: 1005379047", serviceSalesOrderLabel("STS0003460", "2026-11-12", "1005379047", ""))
+        assertEquals("STS0003460 · Ref: PO-7", serviceSalesOrderLabel("STS0003460", "0001-01-01", "", "PO-7"))
+        assertEquals("STS0003460", serviceSalesOrderLabel("STS0003460", "", "", ""))
+    }
+
+    @Test fun `finishing asks only for labor that is not entered yet`() {
+        assertEquals(0.5, serviceRemainingHours(1.5, 1.0), 0.0)
+        assertEquals(0.0, serviceRemainingHours(0.75, 1.0), 0.0)
+        assertEquals(1.25, serviceRemainingHours(1.25, 0.0), 0.0)
+    }
+
+    @Test fun `notes missing from the history stay visible`() {
+        val logged = listOf("Gergi ayarı yapıldı, bant hizalandı, 2 metre bant değiştirildi. Deneme çalıştırması sorunsuz.", "")
+        val comments = listOf("Gergi ayarı yapıldı, bant hizalandı, 2 metre bant değiştirildi. Deneme çalıştırm", "ası sorunsuz.", "Eski not: müşteri aradı", " ")
+        assertEquals(listOf(2), serviceUnloggedComments(comments, logged))
+        assertEquals(listOf(0, 1, 2), serviceUnloggedComments(comments, emptyList()))
+    }
+
+    @Test fun `setup carries the technician's own resource for the labor suggestion`() {
+        assertEquals("TEKN01", parseServiceSetup("""{"value":[{"id":"abc","myResourceNo":"TEKN01"}]}""").myResourceNo)
+        assertEquals("", parseServiceSetup("{}").myResourceNo)
+    }
 }

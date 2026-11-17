@@ -20,5 +20,6 @@ controladdin "DOPSWHS Service Board"
     event ControlReady();
     event RequestRefresh();
     event OpenOrder(OrderNo: Text);
+    event OpenSummary(OrderNo: Text);
     event AssignTechnician(OrderNo: Text; ItemLineNo: Integer; TechnicianUser: Text; AllocationDate: Text; Hours: Text);
 }

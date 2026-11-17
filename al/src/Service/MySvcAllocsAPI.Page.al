@@ -50,6 +50,8 @@ page 72108 "DOPSWHS My Svc Allocs API"
                 field(responseDate; responseDateValue) { Caption = 'responseDate'; }
                 field(responseTime; responseTimeValue) { Caption = 'responseTime'; }
                 field(orderSystemId; orderSystemIdValue) { Caption = 'orderSystemId'; }
+                field(repairStatusText; repairStatusTextValue) { Caption = 'repairStatusText'; }
+                field(salesOrderNo; salesOrderNoValue) { Caption = 'salesOrderNo'; }
             }
         }
     }
@@ -66,6 +68,7 @@ page 72108 "DOPSWHS My Svc Allocs API"
     trigger OnAfterGetRecord()
     var
         Header: Record "Service Header";
+        RepairStatus: Record "Repair Status";
         AllocationRef: RecordRef;
         StatusField: FieldRef;
     begin
@@ -88,6 +91,11 @@ page 72108 "DOPSWHS My Svc Allocs API"
         responseDateValue := Header."Response Date";
         responseTimeValue := Header."Response Time";
         orderSystemIdValue := Header.SystemId;
+        salesOrderNoValue := Header."DOPSWHS Sales Order No.";
+        Clear(repairStatusTextValue);
+        Rec.CalcFields("Repair Status");
+        if RepairStatus.Get(Rec."Repair Status") then
+            repairStatusTextValue := RepairStatus.Description;
     end;
     var
         Mgt: Codeunit "DOPSWHS Service Terminal Mgt";
@@ -105,4 +113,6 @@ page 72108 "DOPSWHS My Svc Allocs API"
         responseDateValue: Date;
         responseTimeValue: Time;
         orderSystemIdValue: Guid;
+        repairStatusTextValue: Text;
+        salesOrderNoValue: Code[20];
 }

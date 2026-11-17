@@ -46,7 +46,7 @@ codeunit 72102 "DOPSWHS Service Board Data"
     local procedure AddOrders(var Header: Record "Service Header"; var Orders: JsonArray; LocalDate: Date; MaxOrders: Integer; var Counter: Integer; var Truncated: Boolean)
     begin
         Header.SetLoadFields("Document Type", "No.", "Customer No.", Name, City, Description, "Phone No.", Priority, Status,
-            "Order Date", "Response Date", "Response Time");
+            "Order Date", "Response Date", "Response Time", "DOPSWHS Sales Order No.");
         Header.Ascending(false);
         if not Header.FindSet() then
             exit;
@@ -90,6 +90,7 @@ codeunit 72102 "DOPSWHS Service Board Data"
         Order.Add('orderDate', DateText(Header."Order Date"));
         Order.Add('responseDate', DateText(Header."Response Date"));
         Order.Add('responseTime', TimeText(Header."Response Time"));
+        Order.Add('salesOrderNo', Header."DOPSWHS Sales Order No.");
 
         // Active allocations decide the stage; finished ones still show who did the job.
         Allocation.SetLoadFields("Resource No.", Status, "Allocated Hours");

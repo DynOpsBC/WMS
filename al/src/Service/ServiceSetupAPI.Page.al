@@ -51,6 +51,15 @@ page 72118 "DOPSWHS Service Setup API"
         exit(Mgt.CreateServiceOrder(customerNo, serviceItemNo, CopyStr(description, 1, 100), priority, assignToMe));
     end;
 
+    /// <summary>Same as createServiceOrder, with the sales order the service is for (may be blank).</summary>
+    [ServiceEnabled]
+    procedure createServiceOrderForSalesOrder(customerNo: Code[20]; serviceItemNo: Code[20]; description: Text; priority: Text; assignToMe: Boolean; salesOrderNo: Code[20]): Text
+    var
+        Mgt: Codeunit "DOPSWHS Service Terminal Mgt";
+    begin
+        exit(Mgt.CreateServiceOrder(customerNo, serviceItemNo, CopyStr(description, 1, 100), priority, assignToMe, salesOrderNo));
+    end;
+
     trigger OnAfterGetRecord()
     var
         Tech: Record "DOPSWHS Service Technician";

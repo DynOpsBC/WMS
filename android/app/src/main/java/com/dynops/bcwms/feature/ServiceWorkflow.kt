@@ -12,6 +12,7 @@ data class ServiceSetup(
     val allowTerminalPosting: Boolean = false, val requireSignature: Boolean = false,
     val laborRoundingHours: Double = 0.25, val defaultWorkTypeCode: String = "",
     val isDispatcher: Boolean = false, val id: String = "", val isTechnician: Boolean = false,
+    val myResourceNo: String = "",
 )
 fun parseServiceSetup(json: String): ServiceSetup = runCatching {
     val root = JSONObject(json)
@@ -19,7 +20,8 @@ fun parseServiceSetup(json: String): ServiceSetup = runCatching {
     ServiceSetup(o.optBoolean("enabled"), o.optBoolean("hideWarehouseModules"),
         o.optBoolean("allowTerminalPosting"), o.optBoolean("requireSignature"),
         o.optDouble("laborRoundingHours", 0.25).takeIf { it.isFinite() && it > 0 } ?: 0.25,
-        o.optString("defaultWorkTypeCode", ""), o.optBoolean("isDispatcher"), o.optString("id", ""), o.optBoolean("isTechnician"))
+        o.optString("defaultWorkTypeCode", ""), o.optBoolean("isDispatcher"), o.optString("id", ""), o.optBoolean("isTechnician"),
+        o.optString("myResourceNo", ""))
 }.getOrDefault(ServiceSetup())
 /** BC API returns option/enum names with spaces encoded as _x0020_ ("In_x0020_Process"). */
 fun serviceEnumName(value: String): String = value.replace("_x0020_", " ").trim()
@@ -86,3 +88,50 @@ fun serviceBitmapSize(width: Int, height: Int, maxSide: Int = 1600): Pair<Int, I
 fun serviceSignatureSize(points: List<Pair<Float, Float>>): Pair<Int, Int> =
     maxOf(1, ceil((points.maxOfOrNull { it.first } ?: 0f).toDouble()).toInt() + 1) to
         maxOf(1, ceil((points.maxOfOrNull { it.second } ?: 0f).toDouble()).toInt() + 1)
+/** Chips show the plain name; the code is only a fallback when BC has no description. */
+fun serviceChoiceLabel(code: String, description: String): String = description.trim().ifBlank { code }
+/** "Bant · Isınma → Ayar": where, what, and what was done, skipping blanks. */
+fun serviceFinishSummary(faultArea: String, symptom: String, resolution: String): String {
+    val problem = listOf(faultArea, symptom).map { it.trim() }.filter { it.isNotEmpty() }.joinToString(" · ")
+    val done = resolution.trim()
+    return when {
+        problem.isEmpty() -> done
+        done.isEmpty() -> problem
+        else -> "$problem → $done"
+    }
+}
+/** − / + next to the labor hours: one rounding step at a time, never below zero, Turkish decimal comma. */
+fun serviceStepHours(current: String, direction: Int, step: Double): String {
+    val size = step.takeIf { it.isFinite() && it > 0 } ?: 0.25
+    val now = current.replace(',', '.').toDoubleOrNull()?.takeIf { it.isFinite() && it >= 0 } ?: 0.0
+    val steps = Math.round(now / size) + direction
+    return serviceQtyText((steps.coerceAtLeast(0) * size))
+}
+fun serviceLogTypeLabel(value: String): String = when(serviceEnumName(value)) {
+    "Note" -> "Not"; "Fault Note" -> "Arıza notu"; "Resolution Note" -> "Çözüm notu"; "Internal Note" -> "Dahili not"
+    "Order Description" -> "Sipariş açıklaması"; "Created" -> "Servis açıldı"; "Assigned" -> "Teknisyen atandı"; "Started" -> "İşe başlandı"
+    "On Hold" -> "Bekletildi"; "Labor" -> "İşçilik"; "Part" -> "Parça"; "Finished" -> "İş bitirildi"; "Posted" -> "Servis kaydedildi"
+    "Attachment" -> "Ek"; "Line Deleted" -> "Satır silindi"; else -> serviceEnumName(value)
+}
+/** Typed texts (notes, descriptions) stand out in the history; job steps stay in the background. */
+fun serviceLogIsNote(value: String): Boolean = serviceEnumName(value) in setOf("Note", "Fault Note", "Resolution Note", "Internal Note", "Order Description", "Created")
+/** BC stores log times in UTC ("2026-11-17T09:24:13.063Z"); the technician reads his own clock. */
+fun serviceLogTimeText(value: String, zone: java.time.ZoneId = java.time.ZoneId.systemDefault()): String = runCatching {
+    java.time.Instant.parse(value).atZone(zone).format(DateTimeFormatter.ofPattern("dd.MM HH:mm"))
+}.getOrDefault("")
+fun serviceSalesOrderLabel(no: String, orderDate: String, yourReference: String, externalDocumentNo: String): String =
+    listOf(no, serviceDateText(orderDate), yourReference.ifBlank { externalDocumentNo }.let { if(it.isBlank()) "" else "Ref: $it" })
+        .filter { it.isNotBlank() }.joinToString(" · ")
+/** Hours still to enter when finishing: elapsed time minus the labor already on the item, never negative. */
+fun serviceRemainingHours(elapsed: Double, alreadyEntered: Double): Double =
+    java.math.BigDecimal(elapsed).subtract(java.math.BigDecimal(alreadyEntered)).setScale(2, java.math.RoundingMode.HALF_UP).toDouble().coerceAtLeast(0.0)
+/**
+ * Notes that the service history does not show: comments typed before the log existed, or by an
+ * office user whose entry was not logged. BC stores a note in 80-character lines; a line counts as
+ * shown when a logged text contains it.
+ */
+fun serviceUnloggedComments(comments: List<String>, loggedTexts: List<String>): List<Int> =
+    comments.indices.filter { i ->
+        val line = comments[i].trim()
+        line.isNotEmpty() && loggedTexts.none { it.contains(line) }
+    }
