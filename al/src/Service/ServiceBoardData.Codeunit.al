@@ -26,10 +26,9 @@ codeunit 72102 "DOPSWHS Service Board Data"
         Evaluate(MaxOrders, MaxOrdersTok);
         LocalDate := Mgt.LocalToday();
         Root.Add('today', Format(LocalDate, 0, 9));
-        Root.Add('canAssign', IsDispatcher());
 
         // Open work first, so a long tail of finished-but-not-invoiced orders can never push
-        // unassigned or overdue jobs off the board; finished orders fill the remaining room.
+        // waiting or overdue jobs off the board; finished orders fill the remaining room.
         Header.SetRange("Document Type", Header."Document Type"::Order);
         Header.SetFilter(Status, '<>%1', Header.Status::Finished);
         AddOrders(Header, Orders, LocalDate, MaxOrders, Counter, Truncated);
@@ -38,7 +37,7 @@ codeunit 72102 "DOPSWHS Service Board Data"
 
         Root.Add('orders', Orders);
         Root.Add('truncated', Truncated);
-        Root.Add('technicians', TechniciansJson(LocalDate));
+        Root.Add('technicians', TechniciansJson());
         Root.WriteTo(Result);
         exit(Result);
     end;
@@ -60,16 +59,6 @@ codeunit 72102 "DOPSWHS Service Board Data"
         until Header.Next() = 0;
     end;
 
-    local procedure IsDispatcher(): Boolean
-    var
-        Tech: Record "DOPSWHS Service Technician";
-        Mgt: Codeunit "DOPSWHS Service Terminal Mgt";
-    begin
-        if not Mgt.TryCurrentTechnician(Tech) then
-            exit(false);
-        exit(Tech.Dispatcher);
-    end;
-
     local procedure OrderJson(var Header: Record "Service Header"; LocalDate: Date): JsonObject
     var
         Allocation: Record "Service Order Allocation";
@@ -77,8 +66,6 @@ codeunit 72102 "DOPSWHS Service Board Data"
         Names: JsonArray;
         ResourceNos: JsonArray;
         SeenResources: List of [Code[20]];
-        HasActive: Boolean;
-        Hours: Decimal;
     begin
         Order.Add('no', Header."No.");
         Order.Add('customerNo', Header."Customer No.");
@@ -92,17 +79,13 @@ codeunit 72102 "DOPSWHS Service Board Data"
         Order.Add('responseTime', TimeText(Header."Response Time"));
         Order.Add('salesOrderNo', Header."DOPSWHS Sales Order No.");
 
-        // Active allocations decide the stage; finished ones still show who did the job.
-        Allocation.SetLoadFields("Resource No.", Status, "Allocated Hours");
+        // Jobs are not assigned: the allocations only tell who works or worked on the job.
+        Allocation.SetLoadFields("Resource No.");
         Allocation.SetRange("Document Type", Allocation."Document Type"::Order);
         Allocation.SetRange("Document No.", Header."No.");
         Allocation.SetFilter(Status, '%1|%2', Allocation.Status::Active, Allocation.Status::Finished);
         if Allocation.FindSet() then
             repeat
-                if Allocation.Status = Allocation.Status::Active then begin
-                    HasActive := true;
-                    Hours += Allocation."Allocated Hours";
-                end;
                 if (Allocation."Resource No." <> '') and not SeenResources.Contains(Allocation."Resource No.") then begin
                     SeenResources.Add(Allocation."Resource No.");
                     ResourceNos.Add(Allocation."Resource No.");
@@ -111,9 +94,8 @@ codeunit 72102 "DOPSWHS Service Board Data"
             until Allocation.Next() = 0;
         Order.Add('technicians', Names);
         Order.Add('resourceNos', ResourceNos);
-        Order.Add('hours', Hours);
         Order.Add('items', ItemLinesJson(Header));
-        Order.Add('stage', StageName(Header, HasActive));
+        Order.Add('stage', StageName(Header));
         Order.Add('overdue', (Header."Response Date" <> 0D) and (Header."Response Date" < LocalDate) and (Header.Status <> Header.Status::Finished));
         exit(Order);
     end;
@@ -140,11 +122,13 @@ codeunit 72102 "DOPSWHS Service Board Data"
         exit(Items);
     end;
 
-    local procedure StageName(var Header: Record "Service Header"; HasActive: Boolean): Text
+    local procedure StageName(var Header: Record "Service Header"): Text
+    var
+        Mgt: Codeunit "DOPSWHS Service Terminal Mgt";
     begin
         case Header.Status of
             Header.Status::Finished:
-                if HasUnshippedLines(Header) then
+                if Mgt.HasUnshippedLines(Header."No.") then
                     exit('toship')
                 else
                     exit('toinvoice');
@@ -153,35 +137,7 @@ codeunit 72102 "DOPSWHS Service Board Data"
             Header.Status::"In Process":
                 exit('inprogress');
         end;
-        if HasActive then
-            exit('assigned');
-        exit('unassigned');
-    end;
-
-    /// <summary>
-    /// True while something is still to be posted: a typed line with unshipped quantity, or no
-    /// typed line at all (the office has to look at such an order before it can be closed).
-    /// </summary>
-    local procedure HasUnshippedLines(var Header: Record "Service Header"): Boolean
-    var
-        ServiceLine: Record "Service Line";
-    begin
-        ServiceLine.SetRange("Document Type", Header."Document Type");
-        ServiceLine.SetRange("Document No.", Header."No.");
-        ServiceLine.SetFilter(Type, '<>%1', ServiceLine.Type::" ");
-        if ServiceLine.IsEmpty() then
-            exit(true);
-        ServiceLine.SetFilter("Qty. to Ship", '<>0');
-        if not ServiceLine.IsEmpty() then
-            exit(true);
-        ServiceLine.SetRange("Qty. to Ship");
-        ServiceLine.SetLoadFields(Quantity, "Quantity Shipped");
-        if ServiceLine.FindSet() then
-            repeat
-                if ServiceLine.Quantity > ServiceLine."Quantity Shipped" then
-                    exit(true);
-            until ServiceLine.Next() = 0;
-        exit(false);
+        exit('waiting');
     end;
 
     local procedure PriorityName(var Header: Record "Service Header"): Text
@@ -195,7 +151,7 @@ codeunit 72102 "DOPSWHS Service Board Data"
         exit('low');
     end;
 
-    local procedure TechniciansJson(LocalDate: Date): JsonArray
+    local procedure TechniciansJson(): JsonArray
     var
         Tech: Record "DOPSWHS Service Technician";
         Allocation: Record "Service Order Allocation";
@@ -214,9 +170,8 @@ codeunit 72102 "DOPSWHS Service Board Data"
                     Entry.Add('name', Tech."Resource Name")
                 else
                     Entry.Add('name', Tech."User Name");
-                Entry.Add('dispatcher', Tech.Dispatcher);
 
-                // "Open jobs" counts orders, not allocation lines of multi-item orders.
+                // "Open jobs" counts the orders he is working on, not allocation lines of multi-item orders.
                 Clear(OpenOrders);
                 Allocation.Reset();
                 Allocation.SetLoadFields("Document No.");
@@ -229,9 +184,6 @@ codeunit 72102 "DOPSWHS Service Board Data"
                             OpenOrders.Add(Allocation."Document No.");
                     until Allocation.Next() = 0;
                 Entry.Add('activeJobs', OpenOrders.Count());
-                Allocation.SetRange("Allocation Date", LocalDate);
-                Allocation.CalcSums("Allocated Hours");
-                Entry.Add('hoursToday', Allocation."Allocated Hours");
                 Techs.Add(Entry);
             until Tech.Next() = 0;
         exit(Techs);

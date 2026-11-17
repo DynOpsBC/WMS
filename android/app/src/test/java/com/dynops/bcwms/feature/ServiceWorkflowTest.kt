@@ -195,4 +195,13 @@ class ServiceWorkflowTest {
         assertEquals("SÜLÜKLÜ GÖL MEVKİİ SAHİLKÖY ŞİLE-İSTANBUL 34", serviceAddressText("SÜLÜKLÜ GÖL MEVKİİ SAHİLKÖY ", "ŞİLE-İSTANBUL", "34", "İSTANBUL"))
         assertEquals("", serviceAddressText("", " ", "", ""))
     }
+    @Test fun `job list puts urgent jobs first then the earliest promised date and undated jobs last`() {
+        data class Job(val no: String, val priority: String, val responseDate: String)
+        val jobs = listOf(Job("SS1", "Low", "2026-11-18"), Job("SS2", "High", ""), Job("SS3", "High", "2026-11-20"),
+            Job("SS4", "Medium", "0001-01-01"), Job("SS5", "Medium", "2026-11-17"), Job("SS6", "High", "2026-11-20"))
+        val sorted = jobs.sortedWith(compareBy<Job>({ servicePriorityRank(it.priority) }, { serviceDateSortKey(it.responseDate) }).thenByDescending { it.no })
+        assertEquals(listOf("SS6", "SS3", "SS2", "SS5", "SS4", "SS1"), sorted.map { it.no })
+        assertEquals("9999-12-31", serviceDateSortKey(""))
+        assertEquals("2026-11-17", serviceDateSortKey("2026-11-17T00:00:00Z"))
+    }
 }

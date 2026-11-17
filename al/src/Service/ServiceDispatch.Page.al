@@ -25,7 +25,6 @@ page 72102 "DOPSWHS Service Dispatch"
                 field(ResponseDate; Rec."Response Date") { ApplicationArea = All; Caption = 'Response Date';  }
                 field(ResponseTime; Rec."Response Time") { ApplicationArea = All; Caption = 'Response Time';  }
                 field(TechnicianNamesField; TechnicianNames) { ApplicationArea = All; Caption = 'Technicians';  }
-                field(AllocatedHours; Hours) { ApplicationArea = All; Caption = 'Allocated Hours';  }
                 field(RepairStatus; RepairStatus) { ApplicationArea = All; Caption = 'Repair Status';  }
                 field(Overdue; IsOverdue) { ApplicationArea = All; Caption = 'Overdue'; StyleExpr = DelayStyle; }
             }
@@ -53,30 +52,6 @@ page 72102 "DOPSWHS Service Dispatch"
                 Image = New;
                 RunObject = page "Service Order";
                 RunPageMode = Create;
-            }
-            action(AssignTechnician)
-            {
-                ApplicationArea = All;
-                Caption = 'Assign Technician';
-                Image = Resource;
-                trigger OnAction()
-                var
-                    AssignDialog: Page "DOPSWHS Svc Assign Dialog";
-                begin
-                    Mgt.AssertDispatcher();
-                    AssignDialog.SetOrder(Rec."No.");
-                    if AssignDialog.RunModal() = Action::OK then begin
-                        AssignDialog.Assign();
-                        CurrPage.Update(false);
-                    end;
-                end;
-            }
-            action(ResourceAllocations)
-            {
-                ApplicationArea = All;
-                Caption = 'Resource Allocations';
-                RunObject = page "Resource Allocations";
-                RunPageLink = "Document Type" = const(Order), "Document No." = field("No.");
             }
             action(OpenOrder)
             {
@@ -125,9 +100,7 @@ page 72102 "DOPSWHS Service Dispatch"
                 Caption = 'Process';
                 actionref(BoardView_Promoted; BoardView) { }
                 actionref(NewOrder_Promoted; NewOrder) { }
-                actionref(AssignTechnician_Promoted; AssignTechnician) { }
                 actionref(OpenOrder_Promoted; OpenOrder) { }
-                actionref(ResourceAllocations_Promoted; ResourceAllocations) { }
             }
             group(Category_Related)
             {
@@ -155,7 +128,6 @@ page 72102 "DOPSWHS Service Dispatch"
         ItemLine: Record "Service Item Line";
     begin
         TechnicianNames := Mgt.TechnicianNames(Rec."No.");
-        Hours := Mgt.AllocatedHours(Rec."No.");
         Clear(RepairStatus);
         ItemLine.SetRange("Document Type", Rec."Document Type");
         ItemLine.SetRange("Document No.", Rec."No.");
@@ -169,7 +141,6 @@ page 72102 "DOPSWHS Service Dispatch"
     var
         Mgt: Codeunit "DOPSWHS Service Terminal Mgt";
         TechnicianNames: Text;
-        Hours: Decimal;
         RepairStatus: Code[10];
         IsOverdue: Boolean;
         DelayStyle: Text;

@@ -35,7 +35,6 @@ import com.dynops.bcwms.ui.*
 import kotlinx.coroutines.launch
 import org.json.JSONObject
 import java.io.ByteArrayOutputStream
-import java.time.LocalDate
 import android.graphics.BitmapFactory
 import android.graphics.Matrix
 import java.time.LocalDateTime
@@ -53,7 +52,6 @@ fun ServiceModule() {
     var comments by remember { mutableStateOf<List<JSONObject>>(emptyList()) }
     var attachments by remember { mutableStateOf<List<JSONObject>>(emptyList()) }
     var selectedLine by remember { mutableIntStateOf(0) }
-    var all by remember { mutableStateOf(false) }
     var finished by remember { mutableStateOf(false) }
     var busy by remember { mutableStateOf(false) }
     var detailReady by remember { mutableStateOf(false) }
@@ -78,10 +76,13 @@ fun ServiceModule() {
     suspend fun reload() {
         val current = order
         if (current == null) {
-            val allocations = fetch(if(all) "serviceOrders?\$orderby=orderDate%20desc&\$filter=" + Uri.encode("status ne 'Finished'") else "myServiceAllocations?\$filter=" + Uri.encode("status eq '${if(finished) "Finished" else "Active"}'"))
-            // Finished + not posted: the technician still has to post (Servisi Kaydet).
-            // Technicians see urgent work first; the dispatcher list keeps newest-first.
-            rows = if (all) allocations else allocations.sortedWith(compareBy({ servicePriorityRank(it.optString("priority")) }, { it.optString("allocationDate") }))
+            // Jobs are not assigned to a technician: everybody sees every open service order.
+            // "Kayıt bekleyen" = finished on site and still to be posted (Servisi Kaydet).
+            val orders = fetch("serviceOrders?\$filter=" + Uri.encode(if(finished) "status eq 'Finished'" else "status ne 'Finished'"))
+                .filter { !finished || it.optBoolean("awaitingPost", true) }
+            // Urgent work first, then the earliest promised date, then the newest order.
+            rows = orders.sortedWith(compareBy<JSONObject>({ servicePriorityRank(it.optString("priority")) }, { serviceDateSortKey(it.optString("responseDate")) })
+                .thenByDescending { it.optString("no") })
         } else {
             detailReady = false
             val r = BcApi.get(context, "serviceOrders(${current.optString("id")})")
@@ -179,10 +180,10 @@ fun ServiceModule() {
             reload()
         }
     }
-    LaunchedEffect(all, finished) { if(setup.enabled) runJob { reload() } }
+    LaunchedEffect(finished) { if(setup.enabled) runJob { reload() } }
     androidx.activity.compose.BackHandler(order != null && !busy) { dialog = ""; laborSaved = false; message = ""; order = null; runJob { reload() } }
     fun open(name: String) {
-        values = mapOf("commentType" to "General", "hours" to "1", "quantity" to "1", "allocationDate" to LocalDate.now().toString(), "workTypeCode" to setup.defaultWorkTypeCode)
+        values = mapOf("commentType" to "General", "hours" to "1", "quantity" to "1", "workTypeCode" to setup.defaultWorkTypeCode)
         laborSaved = false
         message = ""
         if(name == "İşi Bitir") {
@@ -208,14 +209,13 @@ fun ServiceModule() {
                 "Beklet" -> listOf("serviceRepairStatuses")
                 "İşi Bitir" -> listOf("serviceFaultAreas", "serviceSymptomCodes", "serviceFaultCodes", "serviceResolutionCodes", "serviceWorkTypes")
                 "İşçilik Ekle" -> listOf("serviceWorkTypes")
-                "Teknisyen Ata" -> listOf("serviceTechnicians")
                 else -> emptyList()
             }
             catalog = names.associateWith { fetch(it) }
         }
     }
     fun openNewService() {
-        values = mapOf("priority" to "Medium", "assignToMe" to "true")
+        values = mapOf("priority" to "Medium")
         customerItems = emptyList()
         customerSalesOrders = emptyList()
         message = ""
@@ -251,7 +251,11 @@ fun ServiceModule() {
         Text(text, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface,
             modifier = Modifier.padding(top = 6.dp))
     }
-    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+    // The list and the job detail share this column: opening a job far down the list, or coming
+    // back from one, must start at the top instead of keeping the other screen's scroll position.
+    val scroll = rememberScrollState()
+    LaunchedEffect(order?.optString("no")) { scroll.scrollTo(0) }
+    Column(Modifier.fillMaxSize().verticalScroll(scroll).padding(12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         if(busy) LinearProgressIndicator(Modifier.fillMaxWidth())
         StatusText(message)
         if(order == null) {
@@ -259,21 +263,20 @@ fun ServiceModule() {
                 Text("+ Yeni Servis", fontWeight = FontWeight.Bold)
             }
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                FilterChip(!all, { if(!busy && all) { rows = emptyList(); all = false } }, label = { Text("İşlerim") }, enabled = !busy)
-                if(setup.isDispatcher) FilterChip(all, { if(!busy && !all) { rows = emptyList(); all = true } }, label = { Text("Tüm İşler") }, enabled = !busy)
-                if(!all) FilterChip(finished, { rows = emptyList(); finished = !finished }, label = { Text("Kayıt bekleyen") }, enabled = !busy)
+                FilterChip(!finished, { if(finished) { rows = emptyList(); finished = false } }, label = { Text("Açık işler") }, enabled = !busy)
+                FilterChip(finished, { if(!finished) { rows = emptyList(); finished = true } }, label = { Text("Kayıt bekleyen") }, enabled = !busy)
             }
             OutlinedButton({ runJob { reload() } }, enabled = !busy, modifier = Modifier.fillMaxWidth()) { WmsRefreshLabel(busy) }
             if(rows.isNotEmpty()) Text(
-                "${rows.size} " + if(all) "açık servis siparişi" else if(finished) "kayıt bekleyen iş" else "açık iş",
+                "${rows.size} " + if(finished) "kayıt bekleyen iş" else "açık iş",
                 style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            if(rows.isEmpty() && !busy) EmptyState(if(all) "Açık servis siparişi yok." else if(finished) "Kaydedilmeyi bekleyen bitmiş iş yok." else "Size atanmış açık servis işi yok.")
+            if(rows.isEmpty() && !busy) EmptyState(if(finished) "Kaydedilmeyi bekleyen bitmiş iş yok." else "Açık servis işi yok.")
             rows.forEach { row ->
                 val priority = row.optString("priority")
                 Card(onClick = {
                     detailReady = false
-                    order = if(all) row else JSONObject().put("id", row.optString("orderSystemId")).put("no", row.optString("documentNo"))
-                    selectedLine = row.optInt("serviceItemLineNo"); runJob { reload() }
+                    order = row
+                    selectedLine = 0; runJob { reload() }
                 }, enabled = !busy, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(14.dp),
                     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
                     border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)) {
@@ -281,28 +284,25 @@ fun ServiceModule() {
                         Box(Modifier.width(6.dp).fillMaxHeight().background(priorityColor(priority)))
                         Column(Modifier.padding(12.dp).weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
-                                Text(if(all) row.optString("no") else row.optString("documentNo"), style = MaterialTheme.typography.titleMedium,
+                                Text(row.optString("no"), style = MaterialTheme.typography.titleMedium,
                                     fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
                                 InfoPill(servicePriorityLabel(priority), priorityColor(priority).copy(alpha = 0.14f), priorityColor(priority))
                             }
-                            Text(row.optString(if(all) "name" else "customerName"), style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold,
+                            Text(row.optString("name"), style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold,
                                 maxLines = 2, overflow = TextOverflow.Ellipsis)
-                            row.optString(if(all) "description" else "orderDescription").takeIf { it.isNotBlank() }?.let {
+                            row.optString("description").takeIf { it.isNotBlank() }?.let {
                                 Text(it, style = MaterialTheme.typography.bodyMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
                             }
-                            Text(listOf(row.optString("city"), if(all) "" else row.optString("serviceItemDescription")).filter { it.isNotBlank() }.joinToString(" · "),
-                                style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            // City, promised date and who is already on the job, in one quiet line.
+                            val facts = listOf(row.optString("city"),
+                                serviceDateText(row.optString("responseDate")).let { if(it.isBlank()) "" else "Yanıt: $it" },
+                                row.optString("technicianNames")).filter { it.isNotBlank() }
+                            if(facts.isNotEmpty()) Text(facts.joinToString(" · "), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = 2, overflow = TextOverflow.Ellipsis)
                             Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
-                                statusPill(row.optString(if(all) "status" else "orderStatus"))
-                                // The repair status is shown only when it says more than the order status ("Parça sipariş edildi").
-                                val repairText = row.optString("repairStatusText").ifBlank { row.optString("repairStatus").let { if(it.isBlank()) "" else "Onarım: $it" } }
-                                if(!all && repairText.isNotBlank() && repairText != serviceStatusLabel(row.optString("orderStatus"))) InfoPill(repairText)
+                                statusPill(row.optString("status"))
                                 if(row.optString("salesOrderNo").isNotBlank()) InfoPill(row.optString("salesOrderNo"), MaterialTheme.colorScheme.primary.copy(alpha = 0.10f), MaterialTheme.colorScheme.primary)
-                                if(all && row.optString("technicianNames").isNotBlank()) InfoPill(row.optString("technicianNames"))
                             }
-                            val when_ = if(all) listOf(serviceDateText(row.optString("responseDate")).let { if(it.isBlank()) "" else "Yanıt: $it" })
-                                else listOf(serviceDateText(row.optString("allocationDate")), "${serviceQtyText(row.optDouble("allocatedHours", 0.0))} saat")
-                            Text(when_.filter { it.isNotBlank() }.joinToString(" · "), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                     }
                 }
@@ -317,7 +317,7 @@ fun ServiceModule() {
             val step = serviceStep(hasDate("startingDate"), hasDate("finishingDate"))
             val onHold = serviceEnumName(o.optString("status")) == "On Hold"
             Row(verticalAlignment = Alignment.CenterVertically) {
-                TextButton({ dialog = ""; laborSaved = false; message = ""; order = null; runJob { reload() } }, enabled = !busy) { Text(if(all) "‹ Tüm İşler" else "‹ İşlerim") }
+                TextButton({ dialog = ""; laborSaved = false; message = ""; order = null; runJob { reload() } }, enabled = !busy) { Text("‹ İşler") }
                 Spacer(Modifier.weight(1f))
                 TextButton({ runJob { reload() } }, enabled = !busy) { Text("Yenile") }
             }
@@ -431,7 +431,6 @@ fun ServiceModule() {
                         if(step < 2) { add("Parça" to "Parça Ekle"); add("İşçilik" to "İşçilik Ekle") }
                         add("Not" to "Not Ekle"); add("Fotoğraf" to "Fotoğraf"); add("İmza" to "Müşteri İmzası")
                         if(step < 2) add("Beklet" to "Beklet")
-                        if(setup.isDispatcher && step < 2) add("Teknisyen" to "Teknisyen Ata")
                     }
                     tiles.chunked(4).forEach { rowTiles ->
                         Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -618,17 +617,14 @@ fun ServiceModule() {
                         FilterChip(value("priority") == code, { values = values + ("priority" to code) }, label = { Text(label) }, enabled = !busy)
                     }
                 }
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Checkbox(value("assignToMe") == "true", { values = values + ("assignToMe" to it.toString()) }, enabled = !busy)
-                    Text("Bana ata (İşlerim listesine düşsün)", style = MaterialTheme.typography.bodyMedium)
-                }
                 Button({
                     runJob {
                         require(value("description").isNotBlank()) { "Arıza açıklaması girin." }
                         val fields = arrayOf<Pair<String, Any>>(
                             "customerNo" to value("customerNo"), "serviceItemNo" to value("serviceItemNo"),
                             "description" to value("description").trim(), "priority" to value("priority").ifBlank { "Medium" },
-                            "assignToMe" to (value("assignToMe") == "true"))
+                            // Nobody is assigned: the new job shows up in every technician's list.
+                            "assignToMe" to false)
                         // The plain action also works on a BC without the sales order link.
                         val r = if(value("salesOrderNo").isBlank()) BcApi.post(context, "serviceSetups(${setup.id})/Microsoft.NAV.createServiceOrder", serviceActionBody(*fields))
                             else BcApi.post(context, "serviceSetups(${setup.id})/Microsoft.NAV.createServiceOrderForSalesOrder",
@@ -748,12 +744,8 @@ fun ServiceModule() {
                     chips("commentType", "Not türü", listOf("General" to "Genel", "Fault" to "Arıza", "Resolution" to "Çözüm", "Internal" to "Dahili").map { JSONObject().put("code", it.first).put("description", it.second) })
                     OutlinedTextField(value("text"), { values = values + ("text" to it) }, label = { Text("Not") }, minLines = 3, enabled = !busy, modifier = Modifier.fillMaxWidth())
                 }
-                "Teknisyen Ata" -> {
-                    choose("resourceNo", "Teknisyen", catalog["serviceTechnicians"].orEmpty(), "resourceNo")
-                    field("allocationDate", "Atama tarihi (yyyy-AA-gg)")
-                }
             }
-            if(dialog in listOf("İşçilik Ekle", "Teknisyen Ata")) field("hours", if(dialog == "Teknisyen Ata") "Planlanan süre (saat)" else "İşçilik saati")
+            if(dialog == "İşçilik Ekle") field("hours", "İşçilik saati")
             if(dialog == "İşçilik Ekle") choose("workTypeCode", "İş türü", catalog["serviceWorkTypes"].orEmpty())
             if(dialog == "İşçilik Ekle") field("description", "Açıklama")
             Button({
@@ -776,14 +768,9 @@ fun ServiceModule() {
                                 action("finishWork", line, "faultAreaCode" to value("faultAreaCode"), "symptomCode" to value("symptomCode"), "faultCode" to "",
                                     "resolutionCode" to value("resolutionCode"), "resolutionNote" to value("resolutionNote").trim())
                             }
-                            "İşçilik Ekle", "Teknisyen Ata" -> {
+                            "İşçilik Ekle" -> {
                                 require(hours != null && hours.isFinite() && hours > 0) { "Sıfırdan büyük saat girin." }
-                                if(dialog == "İşçilik Ekle") action("addLabor", line, "hours" to hours, "workTypeCode" to value("workTypeCode"), "description" to value("description"))
-                                else {
-                                    require(value("resourceNo").isNotBlank()) { "Teknisyen seçin." }
-                                    val date = LocalDate.parse(value("allocationDate")).toString()
-                                    action("assignTechnician", line, "resourceNo" to value("resourceNo"), "allocationDate" to date, "hours" to hours)
-                                }
+                                action("addLabor", line, "hours" to hours, "workTypeCode" to value("workTypeCode"), "description" to value("description"))
                             }
                             "Parça Ekle" -> {
                                 val quantity = value("quantity").replace(',', '.').toDoubleOrNull()

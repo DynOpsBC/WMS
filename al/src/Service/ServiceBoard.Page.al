@@ -53,30 +53,6 @@ page 72120 "DOPSWHS Service Board"
                     Summary.SetServiceOrder(CopyStr(OrderNo, 1, 20));
                     Summary.Run();
                 end;
-
-                trigger AssignTechnician(OrderNo: Text; ItemLineNo: Integer; TechnicianUser: Text; AllocationDate: Text; Hours: Text)
-                var
-                    Assign: Codeunit "DOPSWHS Svc Board Assign";
-                    AssignDate: Date;
-                    AssignHours: Decimal;
-                begin
-                    if not Evaluate(AssignDate, AllocationDate, 9) then begin
-                        CurrPage.Board.ShowMessage(InvalidDateErr, true);
-                        exit;
-                    end;
-                    if not Evaluate(AssignHours, Hours, 9) then begin
-                        CurrPage.Board.ShowMessage(InvalidHoursErr, true);
-                        exit;
-                    end;
-                    Assign.SetParameters(CopyStr(OrderNo, 1, 20), ItemLineNo, CopyStr(TechnicianUser, 1, 50), AssignDate, AssignHours);
-                    Commit();
-                    if not Assign.Run() then begin
-                        CurrPage.Board.ShowMessage(GetLastErrorText(), true);
-                        exit;
-                    end;
-                    CurrPage.Board.AssignDone();
-                    SendData();
-                end;
             }
         }
     }
@@ -162,6 +138,4 @@ page 72120 "DOPSWHS Service Board"
 
     var
         OrderNotFoundErr: Label 'Service order %1 no longer exists.', Comment = '%1 = service order no.';
-        InvalidDateErr: Label 'Enter a valid allocation date.';
-        InvalidHoursErr: Label 'Enter the planned hours as a number, for example 1.5.';
 }

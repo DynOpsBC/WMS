@@ -49,32 +49,29 @@ codeunit 72100 "DOPSWHS Service Terminal Mgt"
             Error(DispatcherErr);
     end;
 
-    procedure AssertCanWork(OrderNo: Code[20]; SILineNo: Integer)
+    /// <summary>
+    /// There is no assignment step: every active technician sees every service order and may
+    /// work on it. Who did the work is recorded when he starts, enters labor or finishes.
+    /// </summary>
+    procedure AssertCanWork(OrderNo: Code[20])
     var
         Tech: Record "DOPSWHS Service Technician";
-        Allocation: Record "Service Order Allocation";
         Header: Record "Service Header";
     begin
         Header.Get(Header."Document Type"::Order, OrderNo);
         CurrentTechnician(Tech);
-        if Tech.Dispatcher then
-            exit;
-        FilterAllocations(Allocation, OrderNo, SILineNo, Tech."Resource No.");
-        Allocation.SetFilter(Status, '%1|%2', Allocation.Status::Active, Allocation.Status::Finished);
-        if Allocation.IsEmpty() then
-            Error(NotAssignedErr, OrderNo);
     end;
 
     procedure AssignTechnician(OrderNo: Code[20]; SILineNo: Integer; ResourceNo: Code[20]; AllocDate: Date; Hours: Decimal): Integer
     begin
         AssertDispatcher();
-        exit(AllocateResource(OrderNo, SILineNo, ResourceNo, AllocDate, Hours));
+        exit(AllocateResource(OrderNo, SILineNo, ResourceNo, AllocDate, Hours, true));
     end;
 
     /// <summary>
     /// Opens a standard service order from the terminal (customer reported a new fault on site).
-    /// Any active technician may open one; with AssignToMe the creator gets an Active allocation
-    /// for today, so the job appears in his "İşlerim" list right away.
+    /// Any active technician may open one. AssignToMe is only sent by terminals before 1.14.113,
+    /// which listed a technician's own allocations; newer terminals list every open order.
     /// </summary>
     procedure CreateServiceOrder(CustomerNo: Code[20]; ServiceItemNo: Code[20]; OrderDescription: Text[100]; PriorityName: Text; AssignToMe: Boolean): Code[20]
     begin
@@ -130,7 +127,7 @@ codeunit 72100 "DOPSWHS Service Terminal Mgt"
         ServiceLog.Add(Header."No.", ItemLine."Line No.", Enum::"DOPSWHS Service Log Type"::Created, OrderDescription);
 
         if AssignToMe then
-            AllocateResource(Header."No.", ItemLine."Line No.", Tech."Resource No.", LocalToday(), 1);
+            AllocateResource(Header."No.", ItemLine."Line No.", Tech."Resource No.", LocalToday(), 1, true);
         exit(Header."No.");
     end;
 
@@ -145,7 +142,24 @@ codeunit 72100 "DOPSWHS Service Terminal Mgt"
         exit(Enum::"Service Priority"::Medium);
     end;
 
-    local procedure AllocateResource(OrderNo: Code[20]; SILineNo: Integer; ResourceNo: Code[20]; AllocDate: Date; Hours: Decimal): Integer
+    /// <summary>
+    /// Records on the standard allocation table that the technician works on the service item, so
+    /// Business Central shows who did the job. Nothing is planned: no hours, no "assigned" log entry.
+    /// </summary>
+    local procedure RecordTechnician(OrderNo: Code[20]; SILineNo: Integer; ResourceNo: Code[20])
+    var
+        Allocation: Record "Service Order Allocation";
+    begin
+        if ResourceNo = '' then
+            exit;
+        FilterAllocations(Allocation, OrderNo, SILineNo, ResourceNo);
+        Allocation.SetFilter(Status, '%1|%2', Allocation.Status::Active, Allocation.Status::Finished);
+        if not Allocation.IsEmpty() then
+            exit;
+        AllocateResource(OrderNo, SILineNo, ResourceNo, LocalToday(), 0, false);
+    end;
+
+    local procedure AllocateResource(OrderNo: Code[20]; SILineNo: Integer; ResourceNo: Code[20]; AllocDate: Date; Hours: Decimal; Planned: Boolean): Integer
     var
         Header: Record "Service Header";
         ItemLine: Record "Service Item Line";
@@ -154,7 +168,8 @@ codeunit 72100 "DOPSWHS Service Terminal Mgt"
     begin
         GetWritableOrder(Header, OrderNo);
         GetItemLine(ItemLine, OrderNo, SILineNo);
-        CheckPositive(Hours);
+        if Planned then
+            CheckPositive(Hours);
         if ResourceNo = '' then
             Error(ResourceRequiredErr);
         if AllocDate = 0D then
@@ -173,7 +188,8 @@ codeunit 72100 "DOPSWHS Service Terminal Mgt"
             Allocation.Validate("Resource No.", ResourceNo);
         Allocation.TestField("Resource No.");
         Allocation.Validate("Allocation Date", AllocDate);
-        Allocation.Validate("Allocated Hours", Hours);
+        if Planned then
+            Allocation.Validate("Allocated Hours", Hours);
         Allocation."Service Item No." := ItemLine."Service Item No.";
         Allocation."Service Item Description" := ItemLine.Description;
         Allocation."Service Item Serial No." := ItemLine."Serial No.";
@@ -182,6 +198,9 @@ codeunit 72100 "DOPSWHS Service Terminal Mgt"
             Allocation.Insert(true)
         else
             Allocation.Modify(true);
+        // The callers of an unplanned allocation hold the item line themselves: it is not touched here.
+        if not Planned then
+            exit(Allocation."Entry No.");
         if ItemLine."Repair Status Code" = '' then begin
             ItemLine.Validate("Repair Status Code", FindRepairStatus(0));
             ItemLine.Modify(true);
@@ -212,6 +231,7 @@ codeunit 72100 "DOPSWHS Service Terminal Mgt"
         ItemLine."Starting Time" := StartTime;
         ItemLine.Modify(true);
         CurrentTechnician(Tech);
+        RecordTechnician(OrderNo, ItemLine."Line No.", Tech."Resource No.");
         FilterAllocations(Allocation, OrderNo, ItemLine."Line No.", Tech."Resource No.");
         Allocation.SetRange(Status, Allocation.Status::Active);
         if Allocation.FindSet(true) then
@@ -262,7 +282,10 @@ codeunit 72100 "DOPSWHS Service Terminal Mgt"
         ItemLine."Finishing Date" := LocalToday();
         ItemLine."Finishing Time" := LocalTime();
         CurrentTechnician(Tech);
-        FilterAllocations(Allocation, OrderNo, ItemLine."Line No.", Tech."Resource No.");
+        RecordTechnician(OrderNo, ItemLine."Line No.", Tech."Resource No.");
+        // "İşi Bitir" finishes the service item for everyone who worked on it, as the standard
+        // Finished repair status does; nobody else has to finish it again.
+        FilterAllocations(Allocation, OrderNo, ItemLine."Line No.", '');
         Allocation.SetRange(Status, Allocation.Status::Active);
         if Allocation.FindSet(true) then
             repeat
@@ -270,16 +293,6 @@ codeunit 72100 "DOPSWHS Service Terminal Mgt"
                 Allocation."Finishing Time" := LocalTime();
                 Allocation.Modify(true);
             until Allocation.Next() = 0;
-        // Another technician still works on this item: close only the caller's allocation.
-        Allocation.Reset();
-        FilterAllocations(Allocation, OrderNo, ItemLine."Line No.", '');
-        Allocation.SetRange(Status, Allocation.Status::Active);
-        if not Allocation.IsEmpty() then begin
-            ItemLine."Finishing Date" := 0D;
-            ItemLine."Finishing Time" := 0T;
-            ItemLine.Modify(true);
-            exit;
-        end;
         ItemLine.Validate("Repair Status Code", FindRepairStatus(2));
         // Standard repair validation uses WorkDate; terminal timestamps use today.
         ItemLine.Validate("Finishing Date", LocalToday());
@@ -297,6 +310,7 @@ codeunit 72100 "DOPSWHS Service Terminal Mgt"
         PrepareItem(ItemLine, OrderNo, SILineNo);
         CheckPositive(Hours);
         CurrentTechnician(Tech);
+        RecordTechnician(OrderNo, ItemLine."Line No.", Tech."Resource No.");
         Setup.GetSetup();
         NewLine(Line, OrderNo);
         Line.Validate(Type, Line.Type::Resource);
@@ -353,7 +367,7 @@ codeunit 72100 "DOPSWHS Service Terminal Mgt"
     begin
         GetWritableOrder(Header, OrderNo);
         Line.Get(Line."Document Type"::Order, OrderNo, LineNo);
-        AssertCanWork(OrderNo, Line."Service Item Line No.");
+        AssertCanWork(OrderNo);
         AssertUnpostedLine(Line);
         ServiceLog.Add(OrderNo, Line."Service Item Line No.", Enum::"DOPSWHS Service Log Type"::"Line Deleted",
             StrSubstNo(PartLogTxt, Line."No.", Line.Description, NumText(Line.Quantity), Line."Unit of Measure Code"));
@@ -369,7 +383,7 @@ codeunit 72100 "DOPSWHS Service Terminal Mgt"
     begin
         // Notes stay allowed after FinishWork: the order is finished but not posted yet.
         Header.Get(Header."Document Type"::Order, OrderNo);
-        AssertCanWork(OrderNo, SILineNo);
+        AssertCanWork(OrderNo);
         if SILineNo <> 0 then begin
             GetItemLine(ItemLine, OrderNo, SILineNo);
         end;
@@ -431,7 +445,7 @@ codeunit 72100 "DOPSWHS Service Terminal Mgt"
     begin
         // Photos and the customer signature are taken after FinishWork, before posting.
         Header.Get(Header."Document Type"::Order, OrderNo);
-        AssertCanWork(OrderNo, 0);
+        AssertCanWork(OrderNo);
         if LowerCase(Kind) = 'signature' then
             FileName := 'IMZA-' + OrderNo + '-' + Format(LocalNow(), 0, '<Year4><Month,2><Day,2><Hours24,2><Minutes,2><Seconds,2>') + '.png'
         else
@@ -465,7 +479,7 @@ codeunit 72100 "DOPSWHS Service Terminal Mgt"
     begin
         // Finished orders must remain postable after FinishWork.
         Header.Get(Header."Document Type"::Order, OrderNo);
-        AssertCanWork(OrderNo, 0);
+        AssertCanWork(OrderNo);
         Setup.GetSetup();
         if not Setup."Allow Terminal Posting" then
             Error(PostingErr);
@@ -481,7 +495,6 @@ codeunit 72100 "DOPSWHS Service Terminal Mgt"
         Line.SetRange("Document No.", OrderNo);
         if Line.FindSet(true) then
             repeat
-                AssertCanWork(OrderNo, Line."Service Item Line No.");
                 if Line.Type <> Line.Type::" " then begin
                     Line.Validate("Qty. to Ship", Line."Outstanding Quantity");
                     if Consume then
@@ -547,6 +560,32 @@ codeunit 72100 "DOPSWHS Service Terminal Mgt"
         Allocation.SetRange(Status, Allocation.Status::Active);
         Allocation.CalcSums("Allocated Hours");
         exit(Allocation."Allocated Hours");
+    end;
+
+    /// <summary>
+    /// True while something is still to be posted: a typed line with unshipped quantity, or no
+    /// typed line at all (the office has to look at such an order before it can be closed).
+    /// </summary>
+    procedure HasUnshippedLines(OrderNo: Code[20]): Boolean
+    var
+        ServiceLine: Record "Service Line";
+    begin
+        ServiceLine.SetRange("Document Type", ServiceLine."Document Type"::Order);
+        ServiceLine.SetRange("Document No.", OrderNo);
+        ServiceLine.SetFilter(Type, '<>%1', ServiceLine.Type::" ");
+        if ServiceLine.IsEmpty() then
+            exit(true);
+        ServiceLine.SetFilter("Qty. to Ship", '<>0');
+        if not ServiceLine.IsEmpty() then
+            exit(true);
+        ServiceLine.SetRange("Qty. to Ship");
+        ServiceLine.SetLoadFields(Quantity, "Quantity Shipped");
+        if ServiceLine.FindSet() then
+            repeat
+                if ServiceLine.Quantity > ServiceLine."Quantity Shipped" then
+                    exit(true);
+            until ServiceLine.Next() = 0;
+        exit(false);
     end;
 
     procedure FirstServiceItemLineNo(OrderNo: Code[20]): Integer
@@ -701,7 +740,7 @@ codeunit 72100 "DOPSWHS Service Terminal Mgt"
     begin
         GetWritableOrder(Header, OrderNo);
         GetItemLine(ItemLine, OrderNo, SILineNo);
-        AssertCanWork(OrderNo, ItemLine."Line No.");
+        AssertCanWork(OrderNo);
         // Notes, attachments and posting do not use PrepareItem and stay allowed.
         if IsFinishedRepairStatus(ItemLine."Repair Status Code") then
             Error(ItemFinishedErr, ItemLine.Description);
@@ -790,7 +829,6 @@ codeunit 72100 "DOPSWHS Service Terminal Mgt"
         AllocationDateErr: Label 'Tahsis tarihi boş olamaz.';
         NoTechnicianErr: Label 'Bu kullanıcı servis teknisyeni olarak tanımlı değil (Servis Teknisyenleri sayfası).';
         DispatcherErr: Label 'Bu işlem için servis yöneticisi yetkisi gereklidir.';
-        NotAssignedErr: Label '%1 servis siparişinde bu işlem için kaynak tahsisiniz yok.', Comment = '%1 = Servis siparişi numarası';
         FinishedErr: Label '%1 servis siparişi tamamlandı; değişiklik yapılamaz.', Comment = '%1 = Servis siparişi numarası';
         PostedErr: Label '%1 satırı kaydedilmiş; değişiklik yapılamaz.', Comment = '%1 = Servis satırı numarası';
         PositiveErr: Label 'Miktar veya saat sıfırdan büyük olmalıdır.';

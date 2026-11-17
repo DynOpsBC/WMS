@@ -1,4 +1,4 @@
-// Shows on the standard service and sales documents what the terminal knows: who is assigned,
+// Shows on the standard service and sales documents what the terminal knows: who works on the job,
 // which sales order the service is for, and the log and summary behind it. Everything here uses
 // the DOPSWHSService application area, so warehouse-only customers see no change.
 pageextension 72122 "DOPSWHS Svc Order Card" extends "Service Order"
@@ -14,7 +14,7 @@ pageextension 72122 "DOPSWHS Svc Order Card" extends "Service Order"
                 Caption = 'Technician';
                 Editable = false;
                 Importance = Promoted;
-                ToolTip = 'The technicians assigned to this service order (Service Management board or terminal).';
+                ToolTip = 'The technicians who work or worked on this service order.';
 
                 trigger OnDrillDown()
                 begin
@@ -116,7 +116,7 @@ pageextension 72123 "DOPSWHS Svc Order List" extends "Service Orders"
                 ApplicationArea = DOPSWHSService;
                 Caption = 'Technician';
                 Editable = false;
-                ToolTip = 'The technicians assigned to the service order.';
+                ToolTip = 'The technicians who work or worked on the service order.';
             }
             field("DOPSWHS Sales Order No."; Rec."DOPSWHS Sales Order No.")
             {

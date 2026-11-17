@@ -14,7 +14,7 @@ pageextension 72120 "DOPSWHS Svc Business Mgr RC" extends "Business Manager Role
                 Caption = 'Service Management';
                 Image = ServiceSetup;
                 RunObject = page "DOPSWHS Service Board";
-                ToolTip = 'Open the service board: open jobs, technician assignment and technician workload.';
+                ToolTip = 'Open the service board: open jobs, who is working on them and what is waiting to be posted.';
             }
         }
         addlast(Sections)
@@ -88,7 +88,7 @@ pageextension 72121 "DOPSWHS Svc Dispatcher RC" extends "Service Dispatcher Role
                 Caption = 'Service Management';
                 Image = ServiceSetup;
                 RunObject = page "DOPSWHS Service Board";
-                ToolTip = 'Open the service board: open jobs, technician assignment and technician workload.';
+                ToolTip = 'Open the service board: open jobs, who is working on them and what is waiting to be posted.';
             }
             action(DOPSWHSTechnicians)
             {

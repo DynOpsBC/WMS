@@ -54,6 +54,7 @@ page 72105 "DOPSWHS Service Orders API"
                 field(technicianNames; technicianNamesValue) { Caption = 'technicianNames'; }
                 field(allocatedHours; allocatedHoursValue) { Caption = 'allocatedHours'; }
                 field(noOfServiceItemLines; noOfServiceItemLinesValue) { Caption = 'noOfServiceItemLines'; }
+                field(awaitingPost; awaitingPostValue) { Caption = 'awaitingPost'; }
             }
         }
     }
@@ -70,6 +71,8 @@ page 72105 "DOPSWHS Service Orders API"
         ItemLine.SetRange("Document Type", Rec."Document Type");
         ItemLine.SetRange("Document No.", Rec."No.");
         noOfServiceItemLinesValue := ItemLine.Count();
+        // Finished on site and still to be posted ("Kayıt bekleyen" on the terminal).
+        awaitingPostValue := (Rec.Status = Rec.Status::Finished) and Mgt.HasUnshippedLines(Rec."No.");
     end;
 
     local procedure ResolveLine(serviceItemLineNo: Integer): Integer
@@ -152,4 +155,5 @@ page 72105 "DOPSWHS Service Orders API"
         technicianNamesValue: Text;
         allocatedHoursValue: Decimal;
         noOfServiceItemLinesValue: Integer;
+        awaitingPostValue: Boolean;
 }

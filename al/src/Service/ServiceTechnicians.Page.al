@@ -15,7 +15,6 @@ page 72101 "DOPSWHS Service Technicians"
                 field(ResourceNo; Rec."Resource No.") { ApplicationArea = All; Caption = 'Resource No.';  }
                 field(ResourceName; Rec."Resource Name") { ApplicationArea = All; Caption = 'Resource Name';  }
                 field(Location; Rec."Van Location Code") { ApplicationArea = All; Caption = 'Van Location Code';  }
-                field(Dispatcher; Rec."Dispatcher") { ApplicationArea = All; Caption = 'Dispatcher';  }
                 field(Active; Rec."Active") { ApplicationArea = All; Caption = 'Active';  }
             }
         }

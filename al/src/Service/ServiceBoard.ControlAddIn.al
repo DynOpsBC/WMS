@@ -15,11 +15,9 @@ controladdin "DOPSWHS Service Board"
     procedure SetLocale(LocaleCode: Text);
     procedure SetData(Json: Text);
     procedure ShowMessage(MessageText: Text; IsError: Boolean);
-    procedure AssignDone();
 
     event ControlReady();
     event RequestRefresh();
     event OpenOrder(OrderNo: Text);
     event OpenSummary(OrderNo: Text);
-    event AssignTechnician(OrderNo: Text; ItemLineNo: Integer; TechnicianUser: Text; AllocationDate: Text; Hours: Text);
 }

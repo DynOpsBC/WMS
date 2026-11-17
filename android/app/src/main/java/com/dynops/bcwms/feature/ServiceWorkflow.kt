@@ -42,6 +42,9 @@ fun serviceDateText(value: String): String =
     if (value.isBlank() || value.startsWith("0001-01-01")) "" else runCatching {
         java.time.LocalDate.parse(value.take(10)).format(DateTimeFormatter.ofPattern("dd.MM.yyyy"))
     }.getOrDefault(value)
+/** Sort key for the job list: jobs without a promised date come after the dated ones. */
+fun serviceDateSortKey(value: String): String =
+    if (value.isBlank() || value.startsWith("0001-01-01")) "9999-12-31" else value.take(10)
 fun serviceTimeText(value: String): String = value.removeSuffix("Z").take(5).takeIf { it.length == 5 && it != "00:00" }.orEmpty()
 fun serviceQtyText(value: Double): String =
     if (value == Math.floor(value)) value.toLong().toString() else java.math.BigDecimal(value).setScale(2, java.math.RoundingMode.HALF_UP).stripTrailingZeros().toPlainString().replace('.', ',')
