@@ -39,6 +39,7 @@ Kullanıcı kararı: "hepsini de görebileyim ve teknisyene atmak işini kaldır
 - Kaldırılan nesneler: sayfa 72103 `DOPSWHS Svc Assign Dialog`, codeunit 72103 `DOPSWHS Svc Board Assign`; Servis İş Listesi'nde Teknisyen Ata / Kaynak Tahsisleri eylemleri ve Tahsis Edilen Saat sütunu; Servis Özeti parçasında "Atanmamış" sayacı; Servis Teknisyenleri sayfasında Servis Yöneticisi sütunu (tablo alanı duruyor).
 - Geriye uyum: `assignTechnician` eylemi, `myServiceAllocations` ve `createServiceOrder(assignToMe)` API'de duruyor (1.14.112 ve öncesi terminaller için). Planlamak isteyen ofis standart **Kaynak Tahsisleri** sayfasını kullanabilir; tahsis yalnız bilgi olarak görünür, işi kimseye kilitlemez.
 - Doğrulama (Sandbox1611, BC 1.14.0.9 Dev): API — SS000018 atamasız aç → başla (tahsis kendiliğinden) → parça + işçilik → bitir → SV000010, stok −1; SS000019 başlamadan bitir; SS000020 eski terminal `assignToMe` + ikinci kaynak planlı → terminalden başla/bitir, iki tahsis de Bitti → SV000011. Terminal arayüzü — SS000021 Yeni Servis → başla → parça → bitir → Kayıt bekleyen → Servisi Kaydet → SV000012. Android birim testleri 374/374.
+- Terminal 1.14.114 (17 Kas 2026, kullanıcı isteği): iş kartındaki **Yol tarifi** ve **Ara** düğmeleri kaldırıldı; adres ve telefon yazı olarak duruyor. Doğrulama: SS000022 terminalden uçtan uca → SV000013; birim testleri 374/374.
 - Denenmedi: iki ayrı teknisyen kullanıcısıyla aynı iş (sandbox'ta tek teknisyen kullanıcısı var), SUPER olmayan teknisyen, fiziksel cihaz.
 
 ## 0. 1.14.0.8 / 1.14.112 (17 Kas 2026): İşi Bitir sadeleşti, servis günlüğü, satış siparişine istinaden özet
@@ -65,7 +66,7 @@ Kullanıcı geri bildirimi: İşi Bitir "GENEL, Fault Code listesinde tanımlı 
 3. Terminal için API sayfaları (dynops/warehouse/v2.0) + iş kuralları codeunit'i.
 4. "Varsayılan servis kodlarını oluştur" eylemi (onarım durumları, durum öncelikleri, arıza alanı/belirti/arıza/çözüm, iş türü, SAAT birimi) — yalnız eksikleri ekler, mevcut kayda dokunmaz.
 
-### Terminal (Android, `dynops` flavor, sürüm 1.14.113)
+### Terminal (Android, `dynops` flavor, sürüm 1.14.114)
 1. Ana menüde "Servis" kutusu (servis kurulumu etkinse). Kurulumda "Depo modüllerini gizle" açıksa yalnız Servis + Destek ve Ayarlar görünür.
 2. Teknisyen: "İşlerim" listesi → iş detayı → İşe Başla / Beklet / Bitir, arıza-çözüm kodları, işçilik saati, parça (barkod/elle), not, fotoğraf, müşteri imzası, "Servisi Kaydet (Sevk)".
 3. Servis yöneticisi (dispatcher): "Tüm İşler" sekmesi, teknisyen atama.

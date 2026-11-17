@@ -1,6 +1,5 @@
 package com.dynops.bcwms.feature
 
-import android.content.Intent
 import android.net.Uri
 import android.graphics.Bitmap
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -309,7 +308,6 @@ fun ServiceModule() {
             }
         } else {
             val o = order!!
-            fun launchUri(action: String, uri: String) { runCatching { context.startActivity(Intent(action, Uri.parse(uri))) }.onFailure { message = "Uygun uygulama bulunamadı." } }
             val selected = itemLines.firstOrNull { it.optInt("lineNo") == selectedLine }
             val ready = !busy && detailReady && selected != null
             fun hasDate(key: String) = selected?.optString(key).let { !it.isNullOrBlank() && it != "0001-01-01" }
@@ -351,12 +349,6 @@ fun ServiceModule() {
                         HorizontalDivider(Modifier.padding(vertical = 4.dp))
                         if(address.isNotBlank()) Text(address, style = MaterialTheme.typography.bodyMedium)
                         if(phone.isNotBlank()) Text("Tel: $phone", style = MaterialTheme.typography.bodyMedium)
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            if(address.isNotBlank()) FilledTonalButton({ launchUri(Intent.ACTION_VIEW, "geo:0,0?q=${Uri.encode(address)}") }, enabled = !busy,
-                                modifier = Modifier.weight(1f).height(44.dp), shape = RoundedCornerShape(12.dp)) { Text("Yol tarifi", maxLines = 1) }
-                            if(phone.isNotBlank()) FilledTonalButton({ launchUri(Intent.ACTION_DIAL, "tel:${Uri.encode(phone)}") }, enabled = !busy,
-                                modifier = Modifier.weight(1f).height(44.dp), shape = RoundedCornerShape(12.dp)) { Text("Ara", maxLines = 1) }
-                        }
                     }
                 }
             }
