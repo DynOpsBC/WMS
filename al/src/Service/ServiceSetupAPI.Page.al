@@ -42,6 +42,15 @@ page 72118 "DOPSWHS Service Setup API"
         // Technicians only read the setup; the codeunit creates it with indirect permission.
         Mgt.EnsureSetup();
     end;
+    /// <summary>Terminal "Yeni Servis": returns the new service order no.</summary>
+    [ServiceEnabled]
+    procedure createServiceOrder(customerNo: Code[20]; serviceItemNo: Code[20]; description: Text; priority: Text; assignToMe: Boolean): Text
+    var
+        Mgt: Codeunit "DOPSWHS Service Terminal Mgt";
+    begin
+        exit(Mgt.CreateServiceOrder(customerNo, serviceItemNo, CopyStr(description, 1, 100), priority, assignToMe));
+    end;
+
     trigger OnAfterGetRecord()
     var
         Tech: Record "DOPSWHS Service Technician";

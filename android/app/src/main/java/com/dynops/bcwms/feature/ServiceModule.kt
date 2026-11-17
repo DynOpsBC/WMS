@@ -64,6 +64,8 @@ fun ServiceModule() {
     var values by remember { mutableStateOf<Map<String, String>>(emptyMap()) }
     var laborSaved by remember { mutableStateOf(false) }
     var confirmLeaveFinish by remember { mutableStateOf(false) }
+    var customers by remember { mutableStateOf<List<JSONObject>>(emptyList()) }
+    var customerItems by remember { mutableStateOf<List<JSONObject>>(emptyList()) }
     fun value(key: String) = values[key].orEmpty()
     suspend fun fetch(path: String): List<JSONObject> {
         val r = BcApi.getAllPages(context, path)
@@ -198,6 +200,22 @@ fun ServiceModule() {
             catalog = names.associateWith { fetch(it) }
         }
     }
+    fun openNewService() {
+        values = mapOf("priority" to "Medium", "assignToMe" to "true")
+        customerItems = emptyList()
+        message = ""
+        dialog = "Yeni Servis"
+        if (customers.isEmpty()) runJob {
+            customers = fetch("serviceCustomers?\$select=no,name,city,blocked")
+                .filter { serviceEnumName(it.optString("blocked")) != "All" }
+        }
+    }
+    fun selectCustomer(c: JSONObject) {
+        values = values + ("customerNo" to c.optString("no")) + ("customerName" to c.optString("name")) +
+            ("customerCity" to c.optString("city")) + ("serviceItemNo" to "")
+        customerItems = emptyList()
+        runJob { customerItems = fetch("serviceItems?\$filter=" + Uri.encode("customerNo eq '${serviceODataText(c.optString("no"))}'")) }
+    }
     val status = bcwmsStatus()
     @Composable fun priorityColor(value: String): Color = when(servicePriorityColor(value)) {
         "danger" -> status.danger; "warning" -> status.warning; "success" -> status.success; else -> MaterialTheme.colorScheme.outline
@@ -216,6 +234,9 @@ fun ServiceModule() {
         if(busy) LinearProgressIndicator(Modifier.fillMaxWidth())
         StatusText(message)
         if(order == null) {
+            if(setup.isTechnician) Button({ openNewService() }, enabled = !busy, modifier = Modifier.fillMaxWidth().height(52.dp)) {
+                Text("+ Yeni Servis", fontWeight = FontWeight.Bold)
+            }
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                 FilterChip(!all, { if(!busy && all) { rows = emptyList(); all = false } }, label = { Text("İşlerim") }, enabled = !busy)
                 if(setup.isDispatcher) FilterChip(all, { if(!busy && !all) { rows = emptyList(); all = true } }, label = { Text("Tüm İşler") }, enabled = !busy)
@@ -395,7 +416,93 @@ fun ServiceModule() {
     if(dialog == "Müşteri İmzası") SheetScaffold(onDismiss = { if(!busy) dialog = "" }) {
         ServiceSignature(busy, onSave = { attach(it, true) })
     }
-    if(dialog.isNotBlank() && dialog !in listOf("Servisi Kaydet", "Müşteri İmzası")) SheetScaffold(onDismiss = { dismissForm() }) {
+    if(dialog == "Yeni Servis") SheetScaffold(onDismiss = { if(!busy) dialog = "" }) {
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text("Yeni Servis", style = MaterialTheme.typography.titleLarge)
+            StatusText(message)
+            if(value("customerNo").isBlank()) {
+                OutlinedTextField(value("customerQuery"), { values = values + ("customerQuery" to it) }, label = { Text("Müşteri ara (ad, no veya şehir)") },
+                    singleLine = true, enabled = !busy, modifier = Modifier.fillMaxWidth())
+                val query = value("customerQuery")
+                val matches = if(query.trim().length < 2) emptyList() else customers.filter {
+                    serviceSearchMatches(query, it.optString("name"), it.optString("no"), it.optString("city"))
+                }.take(25)
+                if(query.trim().length < 2) Text("En az 2 harf yazın.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                else if(matches.isEmpty() && !busy) Text("Müşteri bulunamadı.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                matches.forEach { c ->
+                    OutlinedCard(onClick = { selectCustomer(c) }, enabled = !busy, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp)) {
+                        Column(Modifier.padding(horizontal = 12.dp, vertical = 10.dp)) {
+                            Text(c.optString("name"), style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                            Text(listOf(c.optString("no"), c.optString("city")).filter { it.isNotBlank() }.joinToString(" · "),
+                                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                    }
+                }
+            } else {
+                Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)) {
+                    Row(Modifier.padding(horizontal = 12.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Column(Modifier.weight(1f)) {
+                            Text(value("customerName"), style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                            Text(listOf(value("customerNo"), value("customerCity")).filter { it.isNotBlank() }.joinToString(" · "), style = MaterialTheme.typography.bodySmall)
+                        }
+                        TextButton({ values = values - "customerNo" - "customerName" - "customerCity" - "serviceItemNo"; customerItems = emptyList() }, enabled = !busy) { Text("Değiştir") }
+                    }
+                }
+                var itemsOpen by remember { mutableStateOf(false) }
+                val selectedItem = customerItems.firstOrNull { it.optString("no") == value("serviceItemNo") }
+                Text("Servis maddesi (ekipman)", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Box(Modifier.fillMaxWidth()) {
+                    OutlinedButton({ itemsOpen = true }, enabled = !busy, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(10.dp)) {
+                        Text(selectedItem?.let { "${it.optString("no")} · ${it.optString("description")}" }
+                            ?: if(customerItems.isEmpty()) "Bu müşterinin servis maddesi yok" else "Servis maddesi seçmeden devam",
+                            modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        Text("▾")
+                    }
+                    DropdownMenu(itemsOpen, { itemsOpen = false }) {
+                        DropdownMenuItem(text = { Text("Servis maddesi seçmeden devam") }, onClick = { values = values + ("serviceItemNo" to ""); itemsOpen = false })
+                        customerItems.forEach { item -> DropdownMenuItem(text = { Text("${item.optString("no")} · ${item.optString("description")}") },
+                            onClick = { values = values + ("serviceItemNo" to item.optString("no")); itemsOpen = false }) }
+                    }
+                }
+                OutlinedTextField(value("description"), { values = values + ("description" to it.take(100)) }, label = { Text("Arıza / iş açıklaması") },
+                    minLines = 2, enabled = !busy, modifier = Modifier.fillMaxWidth())
+                Text("Öncelik", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    listOf("Low" to "Düşük", "Medium" to "Orta", "High" to "Yüksek").forEach { (code, label) ->
+                        FilterChip(value("priority") == code, { values = values + ("priority" to code) }, label = { Text(label) }, enabled = !busy)
+                    }
+                }
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Checkbox(value("assignToMe") == "true", { values = values + ("assignToMe" to it.toString()) }, enabled = !busy)
+                    Text("Bana ata (İşlerim listesine düşsün)", style = MaterialTheme.typography.bodyMedium)
+                }
+                Button({
+                    runJob {
+                        require(value("description").isNotBlank()) { "Arıza açıklaması girin." }
+                        val r = BcApi.post(context, "serviceSetups(${setup.id})/Microsoft.NAV.createServiceOrder", serviceActionBody(
+                            "customerNo" to value("customerNo"), "serviceItemNo" to value("serviceItemNo"),
+                            "description" to value("description").trim(), "priority" to value("priority").ifBlank { "Medium" },
+                            "assignToMe" to (value("assignToMe") == "true")))
+                        check(r.ok) { BcApi.errorMessage(r.body) }
+                        val no = JSONObject(r.body).optString("value")
+                        val created = fetch("serviceOrders?\$filter=" + Uri.encode("no eq '${serviceODataText(no)}'")).firstOrNull()
+                        dialog = ""
+                        message = "$no servis siparişi oluşturuldu."
+                        if(created != null) {
+                            detailReady = false
+                            order = JSONObject().put("id", created.optString("id")).put("no", no)
+                            selectedLine = 0
+                        }
+                        refreshAfterAction()
+                    }
+                }, enabled = !busy && setup.id.isNotBlank(), modifier = Modifier.fillMaxWidth().height(52.dp)) {
+                    Text("Servisi Oluştur", fontWeight = FontWeight.Bold)
+                }
+            }
+            TextButton({ if(!busy) dialog = "" }, enabled = !busy, modifier = Modifier.fillMaxWidth()) { Text("Vazgeç") }
+        }
+    }
+    if(dialog.isNotBlank() && dialog !in listOf("Servisi Kaydet", "Müşteri İmzası", "Yeni Servis")) SheetScaffold(onDismiss = { dismissForm() }) {
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text(dialog, style = MaterialTheme.typography.titleLarge)
             StatusText(message)

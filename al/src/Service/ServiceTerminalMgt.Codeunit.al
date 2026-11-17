@@ -61,13 +61,78 @@ codeunit 72100 "DOPSWHS Service Terminal Mgt"
     end;
 
     procedure AssignTechnician(OrderNo: Code[20]; SILineNo: Integer; ResourceNo: Code[20]; AllocDate: Date; Hours: Decimal): Integer
+    begin
+        AssertDispatcher();
+        exit(AllocateResource(OrderNo, SILineNo, ResourceNo, AllocDate, Hours));
+    end;
+
+    /// <summary>
+    /// Opens a standard service order from the terminal (customer reported a new fault on site).
+    /// Any active technician may open one; with AssignToMe the creator gets an Active allocation
+    /// for today, so the job appears in his "İşlerim" list right away.
+    /// </summary>
+    procedure CreateServiceOrder(CustomerNo: Code[20]; ServiceItemNo: Code[20]; OrderDescription: Text[100]; PriorityName: Text; AssignToMe: Boolean): Code[20]
+    var
+        Tech: Record "DOPSWHS Service Technician";
+        Customer: Record Customer;
+        ServiceItem: Record "Service Item";
+        Header: Record "Service Header";
+        ItemLine: Record "Service Item Line";
+    begin
+        CurrentTechnician(Tech);
+        if CustomerNo = '' then
+            Error(CustomerRequiredErr);
+        Customer.Get(CustomerNo);
+        if DelChr(OrderDescription, '<>', ' ') = '' then
+            Error(DescriptionRequiredErr);
+        if ServiceItemNo <> '' then begin
+            ServiceItem.Get(ServiceItemNo);
+            if ServiceItem."Customer No." <> CustomerNo then
+                Error(ServiceItemCustomerErr, ServiceItemNo, CustomerNo);
+        end;
+
+        Header.Init();
+        Header."Document Type" := Header."Document Type"::Order;
+        Header.Insert(true);
+        Header.Validate("Customer No.", CustomerNo);
+        Header.Validate(Description, OrderDescription);
+        Header.Validate(Priority, PriorityValue(PriorityName));
+        Header.Modify(true);
+
+        ItemLine.Init();
+        ItemLine."Document Type" := Header."Document Type";
+        ItemLine."Document No." := Header."No.";
+        ItemLine."Line No." := 10000;
+        if ServiceItemNo <> '' then
+            ItemLine.Validate("Service Item No.", ServiceItemNo)
+        else
+            ItemLine.Validate(Description, CopyStr(OrderDescription, 1, MaxStrLen(ItemLine.Description)));
+        ItemLine.Validate(Priority, PriorityValue(PriorityName));
+        ItemLine.Insert(true);
+
+        if AssignToMe then
+            AllocateResource(Header."No.", ItemLine."Line No.", Tech."Resource No.", LocalToday(), 1);
+        exit(Header."No.");
+    end;
+
+    local procedure PriorityValue(PriorityName: Text): Enum "Service Priority"
+    begin
+        case LowerCase(PriorityName) of
+            'high':
+                exit(Enum::"Service Priority"::High);
+            'low':
+                exit(Enum::"Service Priority"::Low);
+        end;
+        exit(Enum::"Service Priority"::Medium);
+    end;
+
+    local procedure AllocateResource(OrderNo: Code[20]; SILineNo: Integer; ResourceNo: Code[20]; AllocDate: Date; Hours: Decimal): Integer
     var
         Header: Record "Service Header";
         ItemLine: Record "Service Item Line";
         Allocation: Record "Service Order Allocation";
         IsNew: Boolean;
     begin
-        AssertDispatcher();
         GetWritableOrder(Header, OrderNo);
         GetItemLine(ItemLine, OrderNo, SILineNo);
         CheckPositive(Hours);
@@ -569,4 +634,7 @@ codeunit 72100 "DOPSWHS Service Terminal Mgt"
         HoldStatusErr: Label '%1 bir bekletme durumu değil. Müşteri bekleniyor veya parça sipariş edildi durumlarından birini seçin.', Comment = '%1 = Onarım durumu kodu';
         ItemFinishedErr: Label '%1 için iş bitirildi; yeni işlem yapılamaz. Not, fotoğraf ve imza eklenebilir.', Comment = '%1 = Servis kalemi açıklaması';
         EmptyAttachmentErr: Label 'Ek dosyası boş.';
+        CustomerRequiredErr: Label 'Müşteri seçin.';
+        DescriptionRequiredErr: Label 'Arıza açıklaması girin.';
+        ServiceItemCustomerErr: Label '%1 servis maddesi %2 müşterisine ait değil.', Comment = '%1 = Servis maddesi no, %2 = Müşteri no';
 }

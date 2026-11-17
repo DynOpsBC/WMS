@@ -11,7 +11,7 @@ data class ServiceSetup(
     val enabled: Boolean = false, val hideWarehouseModules: Boolean = false,
     val allowTerminalPosting: Boolean = false, val requireSignature: Boolean = false,
     val laborRoundingHours: Double = 0.25, val defaultWorkTypeCode: String = "",
-    val isDispatcher: Boolean = false,
+    val isDispatcher: Boolean = false, val id: String = "", val isTechnician: Boolean = false,
 )
 fun parseServiceSetup(json: String): ServiceSetup = runCatching {
     val root = JSONObject(json)
@@ -19,7 +19,7 @@ fun parseServiceSetup(json: String): ServiceSetup = runCatching {
     ServiceSetup(o.optBoolean("enabled"), o.optBoolean("hideWarehouseModules"),
         o.optBoolean("allowTerminalPosting"), o.optBoolean("requireSignature"),
         o.optDouble("laborRoundingHours", 0.25).takeIf { it.isFinite() && it > 0 } ?: 0.25,
-        o.optString("defaultWorkTypeCode", ""), o.optBoolean("isDispatcher"))
+        o.optString("defaultWorkTypeCode", ""), o.optBoolean("isDispatcher"), o.optString("id", ""), o.optBoolean("isTechnician"))
 }.getOrDefault(ServiceSetup())
 /** BC API returns option/enum names with spaces encoded as _x0020_ ("In_x0020_Process"). */
 fun serviceEnumName(value: String): String = value.replace("_x0020_", " ").trim()
@@ -60,6 +60,17 @@ fun serviceElapsedHours(start: LocalDateTime?, now: LocalDateTime, rounding: Dou
     return java.math.BigDecimal(roundedMinutes).divide(java.math.BigDecimal(60), 2, java.math.RoundingMode.HALF_UP).toDouble()
 }
 fun serviceODataText(value: String): String = value.replace("'", "''")
+/** Turkish-insensitive search key: "Tüpraş", "TUPRAS" and "tupras" all match. */
+fun serviceSearchKey(value: String): String = value.lowercase(java.util.Locale.forLanguageTag("tr-TR"))
+    .replace('ç', 'c').replace('ğ', 'g').replace('ı', 'i').replace('ö', 'o').replace('ş', 's').replace('ü', 'u')
+    .replace("i̇", "i").trim()
+/** Every word of the query must appear in one of the fields (customer name, no, city). */
+fun serviceSearchMatches(query: String, vararg fields: String): Boolean {
+    val words = serviceSearchKey(query).split(Regex("\\s+")).filter { it.isNotEmpty() }
+    if (words.isEmpty()) return false
+    val haystack = fields.joinToString(" ") { serviceSearchKey(it) }
+    return words.all { haystack.contains(it) }
+}
 fun serviceCategories(enabled: Boolean, hideWarehouseModules: Boolean): List<String> =
     (if(enabled) listOf("Servis") else emptyList()) +
         (if(enabled && hideWarehouseModules) emptyList() else listOf("Gelen", "Giden", "İç Operasyon", "Üretim", "Kalite", "Sorgu")) + "Destek ve Ayarlar"

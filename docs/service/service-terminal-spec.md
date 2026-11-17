@@ -22,6 +22,7 @@ Alan adları: `docs/service/bc-service-fields.txt` (Base Application 28.1 sembol
   - Teknisyen Ata diyaloğu siparişin ilk servis kalemi satırıyla dolu açılır ve servis maddesini gösterir.
   - **Servis Yönetimi panosu (1.14.0.6)**: sayfa 72120 `DOPSWHS Service Board` (List tipi, tam genişlik; içinde `DOPSWHS Service Board` control add-in'i, `al/src/Service/Resources/serviceBoard*.js/css`, bağımlılıksız). Sayaçlar, teknisyen şeridi, beş durum sütunu (Atanmamış / Atandı / Sahada / Beklemede / Tamamlandı: kayıt bekliyor | faturaya hazır), panodan teknisyen atama (codeunit 72103 `Codeunit.Run` ile; hata panoya döner, başarı `AssignDone`), karttan servis siparişi açma. Veri codeunit 72102 (önce açık siparişler, sonra Finished; en fazla 500). Eski liste sayfası 72102 "Servis İş Listesi" olarak kaldı; iki sayfa birbirine bağlı (Liste Görünümü / Pano Görünümü).
   - **Servis tuşu**: Business Manager ve Service Dispatcher rol merkezlerine, DynOps WMS ve Warehouse Manager rol merkezlerine "Servis" menüsü/kısayolu. Rol merkezi kod çalıştıramadığı için özel uygulama alanı `DOPSWHSService` kullanılır (tableextension 72120 Application Area Setup, codeunit 72104); yalnız Servis Terminali Kurulumu Etkin iken açılır, kurulum veya pano sayfası açılınca senkronlanır. Depo-only müşterilerde menü değişmez.
+  - **Terminalden yeni servis (1.14.0.7 / 1.14.111)**: Servis ekranında "+ Yeni Servis" (yalnız aktif teknisyen). Müşteri arama (Türkçe harften bağımsız, istemci tarafı), müşterinin servis maddesi (isteğe bağlı), açıklama, öncelik, "Bana ata". API: `serviceSetups(id)/Microsoft.NAV.createServiceOrder` → Mgt.CreateServiceOrder (Service Header + 10000 nolu servis maddesi satırı; Bana ata → bugün 1 saat aktif tahsis, dispatcher şartı yok). Seçim listeleri: `serviceCustomers`, `serviceItems` (72121, 72122, salt okunur). Başka müşterinin servis maddesi reddedilir. Sandbox1611'de SS000008/SS000009 (API) ve SS000010 (terminal ekranından) açıldı; SS000010 uçtan uca SV000003 ile kaydedildi.
   - Terminal: ana menü kutusu "Servis" (1.14.110). Açılışta otomatik atlama kullanıcı isteğiyle yapılmadı; teknisyen Servis tuşundan girer.
 - Doğrulama: AL 0 hata; Android 359 birim testi; Ayıkband Sandbox1611'de emülatörle uçtan uca (SS000006 → SV000001, ILE −6 METRE; SS000004 → SV000002, ILE −12 METRE; SS000005 PARCA ile beklemede). BC sayfalarının Türkçe görünümü 1.14.0.5 ile tarayıcıda kontrol edildi. 1.14.0.6 panosu tarayıcıda denendi: Servis menüsü, panodan atama (SS000007 → TEKN01 aktif tahsis, terminalde İşlerim'de göründü), hatalı teknisyenle atamada hata panoya döndü, teknisyen süzme, karttan sipariş açma.
 - Denenmedi: fiziksel el terminali, Premium olmayan / yalnız `DOPSWHS SERVICE` izinli teknisyen kullanıcısı, faturalama, canlı ortam.
@@ -29,13 +30,13 @@ Alan adları: `docs/service/bc-service-fields.txt` (Base Application 28.1 sembol
 
 ## 1. Kapsam
 
-### BC tarafı (AL, BCWMSApp BASE, sürüm 1.14.0.6)
+### BC tarafı (AL, BCWMSApp BASE, sürüm 1.14.0.7)
 1. Servis kurulumu (tekil kayıt) + teknisyen eşlemesi (BC kullanıcısı → Kaynak).
 2. "Servis Yönetimi" sayfası: açık servis siparişleri, durum/öncelik/teknisyen/yanıt tarihi, sayaçlar, teknisyen atama, standart sayfalara geçiş.
 3. Terminal için API sayfaları (dynops/warehouse/v2.0) + iş kuralları codeunit'i.
 4. "Varsayılan servis kodlarını oluştur" eylemi (onarım durumları, durum öncelikleri, arıza alanı/belirti/arıza/çözüm, iş türü, SAAT birimi) — yalnız eksikleri ekler, mevcut kayda dokunmaz.
 
-### Terminal (Android, `dynops` flavor, sürüm 1.14.110)
+### Terminal (Android, `dynops` flavor, sürüm 1.14.111)
 1. Ana menüde "Servis" kutusu (servis kurulumu etkinse). Kurulumda "Depo modüllerini gizle" açıksa yalnız Servis + Destek ve Ayarlar görünür.
 2. Teknisyen: "İşlerim" listesi → iş detayı → İşe Başla / Beklet / Bitir, arıza-çözüm kodları, işçilik saati, parça (barkod/elle), not, fotoğraf, müşteri imzası, "Servisi Kaydet (Sevk)".
 3. Servis yöneticisi (dispatcher): "Tüm İşler" sekmesi, teknisyen atama.

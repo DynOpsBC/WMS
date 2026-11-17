@@ -25,6 +25,8 @@ permissionset 72094 "DOPSWHS-ADMIN"
         page "DOPSWHS Service Technicians" = X,
         page "DOPSWHS Service Dispatch" = X,
         page "DOPSWHS Service Board" = X,
+        page "DOPSWHS Svc Customers API" = X,
+        page "DOPSWHS Svc Service Items API" = X,
         page "DOPSWHS Svc Assign Dialog" = X,
         page "DOPSWHS Service Dispatch Cue" = X,
 

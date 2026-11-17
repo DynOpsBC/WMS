@@ -96,4 +96,20 @@ class ServiceWorkflowTest {
         assertEquals("2", serviceQtyText(2.0))
         assertEquals(listOf("High", "Medium", "Low", "?"), listOf("Low", "?", "High", "Medium").sortedBy { servicePriorityRank(it) })
     }
+    @Test fun `customer search ignores Turkish letters and case`() {
+        assertTrue(serviceSearchMatches("tupras", "TÜPRAŞ İZMİT RAFİNERİ", "120.01.00004", "KÖRFEZ"))
+        assertTrue(serviceSearchMatches("İzmit", "TÜPRAŞ İZMİT RAFİNERİ", "120.01.00004", ""))
+        assertTrue(serviceSearchMatches("akçansa ataşehir", "AKÇANSA ÇİMENTO", "120.01.00008", "ATAŞEHİR/İSTANBUL"))
+        assertTrue(serviceSearchMatches("00008", "AKÇANSA ÇİMENTO", "120.01.00008", ""))
+        assertFalse(serviceSearchMatches("aksa", "AKÇANSA ÇİMENTO", "120.01.00008", ""))
+        assertFalse(serviceSearchMatches("  ", "AKÇANSA", "1", ""))
+    }
+
+    @Test fun `setup parses id and technician flag for Yeni Servis`() {
+        val s = parseServiceSetup("""{"value":[{"id":"abc","enabled":true,"isTechnician":true,"isDispatcher":false}]}""")
+        assertEquals("abc", s.id)
+        assertTrue(s.isTechnician)
+        assertFalse(s.isDispatcher)
+        assertEquals("", parseServiceSetup("{}").id)
+    }
 }
