@@ -83,4 +83,18 @@ page 72231 "DOPSWHS Movement Ops API"
     begin
         MovementMgmt.AdHocMove(fromBin, toBin, itemNo, lpNo, qty, userId, lotNo);
     end;
+
+    /// <summary>
+    /// Element4 (17 Kas 2026): ad-hoc ürün taşıması + proje kodu. Taşıma ve PROJE boyutu
+    /// kaydı aynı istekte (tek işlem) yapılır; proje geçersizse hiçbir şey kaydedilmez.
+    /// </summary>
+    [ServiceEnabled]
+    procedure adHocProject(fromBin: Code[20]; toBin: Code[20]; itemNo: Code[20]; lpNo: Code[20]; qty: Decimal; userId: Code[50]; lotNo: Code[50]; projectCode: Code[20])
+    var
+        MovementMgmt: Codeunit "DOPSWHS Movement Mgmt";
+    begin
+        MovementMgmt.CheckMoveProject(projectCode);
+        MovementMgmt.AdHocMove(fromBin, toBin, itemNo, lpNo, qty, userId, lotNo);
+        MovementMgmt.TagMovedStockWithProject(MovementMgmt.LocationForBin(fromBin), toBin, itemNo, '', lotNo, '', qty, projectCode, userId);
+    end;
 }

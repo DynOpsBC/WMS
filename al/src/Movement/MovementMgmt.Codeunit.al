@@ -185,6 +185,133 @@ codeunit 72045 "DOPSWHS Movement Mgmt"
         ItemJnlPostBatch.Run(ItemJournalLine);
     end;
 
+    // ---- Element4 (17 Kas 2026): ad-hoc taşımada proje kodu ----
+    // Taşınan stok PROJE boyutuyla işaretlenir. Yönlendirilmiş lokasyonda raf taşıması
+    // ambar yeniden sınıflandırmasıdır ve madde hareketi oluşturmaz; bu yüzden boyut,
+    // aynı stok için ayrı bir rafsız madde yeniden sınıflandırmasıyla (yalnız boyut
+    // değişir) yazılır. Rafa zorunlu, yönlendirilmemiş lokasyonda hedef raf kullanılır.
+
+    /// <summary>Checks that the project exists and has a value in the project dimension.</summary>
+    procedure CheckMoveProject(ProjectCode: Code[20])
+    var
+        Job: Record Job;
+        DimensionValue: Record "Dimension Value";
+        DimCode: Code[20];
+    begin
+        if ProjectCode = '' then
+            Error('Proje kodu boş olamaz.');
+        if not Job.Get(ProjectCode) then
+            Error('%1 projesi bulunamadı. Proje kodunu kontrol edin.', ProjectCode);
+        DimCode := ProjectDimensionCode();
+        if not DimensionValue.Get(DimCode, ProjectCode) then
+            Error('%1 boyutunda %2 değeri yok. BC''de proje boyut değerini oluşturun.', DimCode, ProjectCode);
+        if DimensionValue.Blocked then
+            Error('%1 boyutundaki %2 değeri bloke.', DimCode, ProjectCode);
+    end;
+
+    procedure LocationForBin(BinCode: Code[20]): Code[10]
+    var
+        Setup: Record "DOPSWHS Setup";
+    begin
+        if not Setup.Get('') then
+            Clear(Setup);
+        exit(ResolveLocationForBin(BinCode, Setup."Default Location Code"));
+    end;
+
+    /// <summary>
+    /// Posts a dimension-only item reclass for stock that has just been moved, so the moved
+    /// quantity carries the project dimension. QtyBase is in the item's base unit of measure.
+    /// </summary>
+    procedure TagMovedStockWithProject(LocationCode: Code[10]; BinCode: Code[20]; ItemNo: Code[20]; VariantCode: Code[10]; LotNo: Code[50]; SerialNo: Code[50]; QtyBase: Decimal; ProjectCode: Code[20]; UserId: Code[50])
+    var
+        Location: Record Location;
+        Item: Record Item;
+        ItemJournalTemplate: Record "Item Journal Template";
+        ItemJournalLine: Record "Item Journal Line";
+        ExistingLine: Record "Item Journal Line";
+        ItemJnlPostBatch: Codeunit "Item Jnl.-Post Batch";
+        BatchName: Code[10];
+        NextLineNo: Integer;
+    begin
+        if (ProjectCode = '') or (QtyBase <= 0) then
+            exit;
+        CheckMoveProject(ProjectCode);
+        Location.Get(LocationCode);
+        Item.Get(ItemNo);
+        EnsureReclassTemplate(ItemJournalTemplate);
+        BatchName := EnsureDeviceJournalBatch(UserId);
+        PurgeStaleItemLines(ItemJournalTemplate.Name, BatchName);
+        ExistingLine.SetRange("Journal Template Name", ItemJournalTemplate.Name);
+        ExistingLine.SetRange("Journal Batch Name", BatchName);
+        if ExistingLine.FindLast() then
+            NextLineNo := ExistingLine."Line No." + 10000
+        else
+            NextLineNo := 10000;
+
+        ItemJournalLine.Init();
+        ItemJournalLine."Journal Template Name" := ItemJournalTemplate.Name;
+        ItemJournalLine."Journal Batch Name" := BatchName;
+        ItemJournalLine."Line No." := NextLineNo;
+        ItemJournalLine."Posting Date" := WorkDate();
+        ItemJournalLine."Document No." := CopyStr('DOPS-PRJ-' + ProjectCode, 1, MaxStrLen(ItemJournalLine."Document No."));
+        ItemJournalLine."Entry Type" := ItemJournalLine."Entry Type"::Transfer;
+        ItemJournalLine.Validate("Item No.", ItemNo);
+        if VariantCode <> '' then
+            ItemJournalLine.Validate("Variant Code", VariantCode);
+        ItemJournalLine.Validate("Location Code", LocationCode);
+        ItemJournalLine.Validate("New Location Code", LocationCode);
+        if Location."Bin Mandatory" and not Location."Directed Put-away and Pick" then begin
+            ItemJournalLine.Validate("Bin Code", BinCode);
+            ItemJournalLine.Validate("New Bin Code", BinCode);
+        end;
+        ItemJournalLine.Validate("Unit of Measure Code", Item."Base Unit of Measure");
+        ItemJournalLine.Validate(Quantity, QtyBase);
+        ItemJournalLine.Description := CopyStr('Proje ' + ProjectCode + ' - terminal taşıma', 1, MaxStrLen(ItemJournalLine.Description));
+        ApplyProjectDimension(ItemJournalLine, ProjectCode);
+        ItemJournalLine.Insert(true);
+        if (LotNo <> '') or (SerialNo <> '') then
+            AddItemTracking(ItemJournalLine, LotNo, SerialNo);
+        Session.LogMessage('DOPSWHS-Move-ProjectTag', StrSubstNo('Project %1 tagged item %2 qty %3 at %4/%5', ProjectCode, ItemNo, QtyBase, LocationCode, BinCode), Verbosity::Normal, DataClassification::SystemMetadata, TelemetryScope::ExtensionPublisher, 'Category', 'Movement');
+        ItemJnlPostBatch.SetSuppressCommit(true);
+        ItemJnlPostBatch.Run(ItemJournalLine);
+    end;
+
+    local procedure ApplyProjectDimension(var ItemJournalLine: Record "Item Journal Line"; ProjectCode: Code[20])
+    var
+        TempDimSetEntry: Record "Dimension Set Entry" temporary;
+        DimMgt: Codeunit DimensionManagement;
+        DimCode: Code[20];
+        NewDimSetId: Integer;
+        NewShortcut1: Code[20];
+        NewShortcut2: Code[20];
+    begin
+        DimCode := ProjectDimensionCode();
+        DimMgt.GetDimensionSet(TempDimSetEntry, ItemJournalLine."Dimension Set ID");
+        if TempDimSetEntry.Get(ItemJournalLine."Dimension Set ID", DimCode) then
+            TempDimSetEntry.Delete();
+        TempDimSetEntry.Init();
+        TempDimSetEntry."Dimension Set ID" := ItemJournalLine."Dimension Set ID";
+        TempDimSetEntry.Validate("Dimension Code", DimCode);
+        TempDimSetEntry.Validate("Dimension Value Code", ProjectCode);
+        TempDimSetEntry.Insert();
+        NewDimSetId := DimMgt.GetDimensionSetID(TempDimSetEntry);
+        NewShortcut1 := ItemJournalLine."New Shortcut Dimension 1 Code";
+        NewShortcut2 := ItemJournalLine."New Shortcut Dimension 2 Code";
+        DimMgt.UpdateGlobalDimFromDimSetID(NewDimSetId, NewShortcut1, NewShortcut2);
+        ItemJournalLine."New Dimension Set ID" := NewDimSetId;
+        ItemJournalLine."New Shortcut Dimension 1 Code" := NewShortcut1;
+        ItemJournalLine."New Shortcut Dimension 2 Code" := NewShortcut2;
+    end;
+
+    local procedure ProjectDimensionCode(): Code[20]
+    var
+        Setup: Record "DOPSWHS Setup";
+    begin
+        if Setup.Get('') and (Setup."Project Dimension Code" <> '') then
+            exit(Setup."Project Dimension Code");
+        exit('PROJE');
+    end;
+
     /// <summary>Geriye dönük imza: operatör kimliği belgenin atamasından okunur.</summary>
     procedure RegisterDirected(var WhseActivityHeader: Record "Warehouse Activity Header")
     begin

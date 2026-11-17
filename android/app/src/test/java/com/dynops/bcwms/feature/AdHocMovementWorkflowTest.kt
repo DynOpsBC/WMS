@@ -1,6 +1,8 @@
 package com.dynops.bcwms.feature
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class AdHocMovementWorkflowTest {
@@ -33,5 +35,15 @@ class AdHocMovementWorkflowTest {
         val decision = decideAdHocProductInput("B-A01-11")
 
         assertEquals(AdHocProductInputRoute.Invalid, decision.route)
+    }
+
+    @Test fun `project code routes product moves to adHocProject`() {
+        assertEquals("adHoc", adHocProductAction("", ""))
+        assertEquals("adHocLot", adHocProductAction("L1", ""))
+        assertEquals("adHocProject", adHocProductAction("", "PR00010"))
+        assertEquals("adHocProject", adHocProductAction("L1", "PR00010"))
+        assertEquals("PR00010", normalizeProjectCode("  pr00010 "))
+        assertTrue(adHocProjectEnabled("kitoko"))
+        assertFalse(adHocProjectEnabled("bade"))
     }
 }

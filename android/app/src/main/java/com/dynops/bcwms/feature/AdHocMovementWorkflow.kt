@@ -175,3 +175,19 @@ internal fun adHocLpConfirmLabel(
     targetIsLp == false -> "✅ LP'yi $target Rafına Taşı"
     else -> "✅ Hareketi Onayla"
 }
+
+/** Element4 (17 Kas 2026): ad-hoc taşımada proje kodu alanı yalnız Kitoko/Element4 menüsünde. */
+internal fun adHocProjectEnabled(flavor: String = com.dynops.bcwms.BuildConfig.FLAVOR): Boolean =
+    flavor.equals("kitoko", ignoreCase = true)
+
+/** Ürün modu: proje kodu girildiyse taşıma + PROJE boyutu tek istekte (adHocProject). */
+internal fun adHocProductAction(lotNo: String, projectCode: String): String = when {
+    projectCode.isNotBlank() -> "adHocProject"
+    lotNo.isNotBlank() -> "adHocLot"
+    else -> "adHoc"
+}
+
+/** Proje kodu BC'de büyük harfli Code alanıdır; terminal girişini normalleştirir. */
+internal fun normalizeProjectCode(raw: String): String =
+    raw.trim().uppercase(java.util.Locale.ROOT).take(20)
+

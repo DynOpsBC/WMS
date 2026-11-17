@@ -120,6 +120,9 @@ fun AdHocMoveModule() {
     var toBin by remember { mutableStateOf("") }
     var qty by remember { mutableStateOf("1") }
     var lotNoInput by remember { mutableStateOf("") }
+    // Element4: proje kodu sonraki taşımalarda da korunur (aynı projeye birden çok kalem).
+    var projectCode by remember { mutableStateOf("") }
+    val projectEnabled = remember { adHocProjectEnabled() }
     var lotPickerOpen by remember { mutableStateOf(false) }
     var availableLots by remember { mutableStateOf<List<JSONObject>>(emptyList()) }
     var availableLotsLoading by remember { mutableStateOf(false) }
@@ -422,6 +425,10 @@ fun AdHocMoveModule() {
             return
         }
         if (crossLocation()) {
+            if (projectCode.isNotBlank()) {
+                status = "HATA: Lokasyonlar arası taşımada proje kodu kullanılamaz. Proje kodunu silin veya aynı lokasyonda taşıyın."
+                return
+            }
             if (target.isNotBlank() && targetIsLp != false) {
                 status = "HATA: Önce hedef rafı doğrulayın."
                 return
@@ -477,14 +484,16 @@ fun AdHocMoveModule() {
                 }
                 // LP→bin tek sunucu transaction'ıdır. Satır bazlı adHoc + sonradan
                 // header PATCH zinciri kısmi stok/LP konumu üretebildiği için kullanılmaz.
+                val project = projectCode
                 val r = BcApi.boundAction(
                     context,
                     "licensePlates",
                     lpNo,
-                    "moveToBin",
+                    if (project.isBlank()) "moveToBin" else "moveToBinProject",
                     JSONObject().apply {
                         put("targetBinCode", target)
                         put("userId", userId)
+                        if (project.isNotBlank()) put("projectCode", project)
                     }.toString(),
                 )
                 busy = false
@@ -496,6 +505,7 @@ fun AdHocMoveModule() {
                 status = "TAMAM: LP $lpNo ve stok içeriği atomik olarak $target rafına taşındı"
                 lastMove = buildList {
                     add("🧺 $lpNo · 📍 ${fromBin.trim()} → 📍 $target")
+                    if (project.isNotBlank()) add("📁 Proje: $project")
                     lpLines.forEach { ln ->
                         add("• ${ln.optString("itemNo")} × ${fmtq(ln.optDouble("quantity"))}" +
                             (ln.optString("lotNo").takeIf { it.isNotBlank() && it != "null" }?.let { " · Lot $it" } ?: ""))
@@ -850,6 +860,13 @@ fun AdHocMoveModule() {
                         modifier = Modifier.fillMaxWidth().height(44.dp),
                     ) { Text("🔎 Hedefi Doğrula (LP mi bin mi?)", fontWeight = FontWeight.SemiBold) }
                 }
+                if (projectEnabled) {
+                    Spacer(Modifier.height(8.dp))
+                    OutlinedTextField(projectCode, { projectCode = normalizeProjectCode(it) },
+                        label = { Text("Proje kodu (isteğe bağlı)") }, singleLine = true, enabled = !busy,
+                        supportingText = { Text(if (projectCode.isBlank()) "Boş bırakılırsa normal taşıma yapılır." else "Taşınan stok $projectCode projesine (PROJE boyutu) işaretlenir.") },
+                        modifier = Modifier.fillMaxWidth())
+                }
                 Spacer(Modifier.height(12.dp))
                 Button(
                     enabled = !busy && lpLinesComplete && lpNo.isNotBlank() && (
@@ -912,6 +929,13 @@ fun AdHocMoveModule() {
             ScanField("Lot No (lot izlemeli üründe)", lotNoInput, { lotNoInput = it }, modifier = Modifier.fillMaxWidth(), listenScanBus = !screenRouting, onScanned = {
                 lotNoInput = BarcodeIntentResolver.resolve(it).value
             })
+            if (projectEnabled) {
+                Spacer(Modifier.height(8.dp))
+                OutlinedTextField(projectCode, { projectCode = normalizeProjectCode(it) },
+                    label = { Text("Proje kodu (isteğe bağlı)") }, singleLine = true, enabled = !busy,
+                    supportingText = { Text(if (projectCode.isBlank()) "Boş bırakılırsa normal taşıma yapılır." else "Taşınan stok $projectCode projesine (PROJE boyutu) işaretlenir.") },
+                    modifier = Modifier.fillMaxWidth())
+            }
             Spacer(Modifier.height(6.dp))
             OutlinedButton(
                 enabled = !busy && fromBin.isNotBlank() && itemOrLp.isNotBlank(),
@@ -976,12 +1000,16 @@ fun AdHocMoveModule() {
                                 // but Product mode never sends an LP through this contract.
                                 put("lpNo", "")
                                 put("userId", userId)
-                                if (lot.isNotBlank()) put("lotNo", lot)
+                                val project = projectCode
+                                if (project.isNotBlank()) {
+                                    // adHocProject tüm parametreleri ister (lot boş olabilir).
+                                    put("lotNo", lot); put("projectCode", project)
+                                } else if (lot.isNotBlank()) put("lotNo", lot)
                             }.toString()
                             // adHoc is bound to the singleton Setup record (key '') via the movementOps API,
                             // because a fresh bin-to-bin move has no existing movement document to bind to.
                             // Lot girildiyse lot-tracking bağlayan adHocLot action'ı kullanılır.
-                            val r = BcApi.boundAction(context, "movementOps", "", if (lot.isBlank()) "adHoc" else "adHocLot", body)
+                            val r = BcApi.boundAction(context, "movementOps", "", adHocProductAction(lot, projectCode), body)
                             busy = false
                             status = if (r.ok) "TAMAM: Hareket kaydedildi (HTTP ${r.httpCode})"
                                 else "HATA: ${BcApi.errorMessage(r.body)} (HTTP ${r.httpCode})" +
@@ -992,6 +1020,7 @@ fun AdHocMoveModule() {
                                     add("📍 ${fromBin.trim()} → 📍 ${toBin.trim()}")
                                     add("• $itemNo × ${qty.toFiniteDoubleOrNull()?.let { fmtq(it) } ?: qty}" +
                                         if (lot.isNotBlank()) " · Lot $lot" else "")
+                                    if (projectCode.isNotBlank()) add("📁 Proje: $projectCode")
                                 }
                                 itemOrLp = ""; qty = "1"; lotNoInput = ""
                             }

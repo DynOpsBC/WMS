@@ -297,6 +297,45 @@ page 72088 "DOPSWHS LP API"
     end;
 
     /// <summary>
+    /// Element4 (17 Kas 2026): LP'yi rafa taşır ve içeriğini PROJE boyutuyla işaretler (tek işlem).
+    /// </summary>
+    [ServiceEnabled]
+    procedure moveToBinProject(targetBinCode: Code[20]; userId: Code[50]; projectCode: Code[20])
+    var
+        LPLine: Record "DOPSWHS LP Line";
+        TempLPLine: Record "DOPSWHS LP Line" temporary;
+        Item: Record Item;
+        ItemUoM: Record "Item Unit of Measure";
+        LPMgt: Codeunit "DOPSWHS LP Management";
+        MovementMgmt: Codeunit "DOPSWHS Movement Mgmt";
+        LocationCode: Code[10];
+        QtyBase: Decimal;
+    begin
+        MovementMgmt.CheckMoveProject(projectCode);
+        LocationCode := Rec."Location Code";
+        LPLine.SetRange("LP No.", Rec."No.");
+        LPLine.SetFilter("Item No.", '<>%1', '');
+        if LPLine.FindSet() then
+            repeat
+                TempLPLine := LPLine;
+                TempLPLine.Insert();
+            until LPLine.Next() = 0;
+        LPMgt.MoveToBin(Rec, targetBinCode, userId);
+        if TempLPLine.FindSet() then
+            repeat
+                QtyBase := TempLPLine.Quantity;
+                if (TempLPLine."Unit of Measure" <> '') and Item.Get(TempLPLine."Item No.") and
+                   (TempLPLine."Unit of Measure" <> Item."Base Unit of Measure") and
+                   ItemUoM.Get(TempLPLine."Item No.", TempLPLine."Unit of Measure")
+                then
+                    QtyBase := TempLPLine.Quantity * ItemUoM."Qty. per Unit of Measure";
+                MovementMgmt.TagMovedStockWithProject(LocationCode, targetBinCode, TempLPLine."Item No.", TempLPLine."Variant Code",
+                    TempLPLine."Lot No.", TempLPLine."Serial No.", QtyBase, projectCode, userId);
+            until TempLPLine.Next() = 0;
+        Rec.Get(Rec."No.");
+    end;
+
+    /// <summary>
     /// Kitoko (22 Eki 2026): belgesiz lokasyonlar arası LP taşıma (yönlendirilmemiş
     /// depolar). İçerik madde yeniden sınıflandırmasıyla kaydedilir; tek işlem.
     /// </summary>
