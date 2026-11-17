@@ -135,3 +135,23 @@ fun serviceUnloggedComments(comments: List<String>, loggedTexts: List<String>): 
         val line = comments[i].trim()
         line.isNotEmpty() && loggedTexts.none { it.contains(line) }
     }
+/** Where a job stands on the detail screen: 0 = to start, 1 = working, 2 = finished (waiting to be posted). */
+fun serviceStep(started: Boolean, finished: Boolean): Int = when {
+    finished -> 2
+    started -> 1
+    else -> 0
+}
+/** One line under the steps: "Başladı 13:23 · Bitti 13:25 · Rulo · Ses → Değişim", or why the job is on hold. */
+fun serviceProgressText(startTime: String, finishTime: String, result: String, holdReason: String): String =
+    listOf(if(holdReason.isBlank()) "" else "Bekletiliyor: $holdReason",
+        if(startTime.isBlank()) "" else "Başladı $startTime", if(finishTime.isBlank()) "" else "Bitti $finishTime", result)
+        .filter { it.isNotBlank() }.joinToString(" · ")
+/** One address line; a post code or city already written inside the address lines is not repeated. */
+fun serviceAddressText(address: String, address2: String, postCode: String, city: String): String {
+    val parts = mutableListOf<String>()
+    listOf(address, address2, postCode, city).map { it.trim().replace(Regex("\\s+"), " ") }.filter { it.isNotEmpty() }.forEach { part ->
+        val key = serviceSearchKey(part)
+        if (parts.none { serviceSearchKey(it).contains(key) }) parts.add(part)
+    }
+    return parts.joinToString(" ")
+}

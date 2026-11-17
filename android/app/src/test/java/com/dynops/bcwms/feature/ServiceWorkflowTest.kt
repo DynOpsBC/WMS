@@ -174,4 +174,25 @@ class ServiceWorkflowTest {
         assertEquals("TEKN01", parseServiceSetup("""{"value":[{"id":"abc","myResourceNo":"TEKN01"}]}""").myResourceNo)
         assertEquals("", parseServiceSetup("{}").myResourceNo)
     }
+
+    @Test fun `detail screen shows one next step`() {
+        assertEquals(0, serviceStep(started = false, finished = false))
+        assertEquals(1, serviceStep(started = true, finished = false))
+        assertEquals(2, serviceStep(started = true, finished = true))
+        // Finished without pressing start (older terminal) still counts as finished.
+        assertEquals(2, serviceStep(started = false, finished = true))
+    }
+
+    @Test fun `progress line lists what happened and skips blanks`() {
+        assertEquals("Başladı 13:23 · Bitti 13:25 · Rulo · Ses → Değişim", serviceProgressText("13:23", "13:25", "Rulo · Ses → Değişim", ""))
+        assertEquals("Bekletiliyor: Parça sipariş edildi · Başladı 09:10", serviceProgressText("09:10", "", "", "Parça sipariş edildi"))
+        assertEquals("", serviceProgressText("", "", "", ""))
+    }
+
+    @Test fun `address line does not repeat the post code or city`() {
+        assertEquals("41780 KÖRFEZ KÖRFEZ-KOCAELİ KÖRFEZ/TÜTÜNÇİFTLİK/KOCAELİ",
+            serviceAddressText("41780 KÖRFEZ ", "KÖRFEZ-KOCAELİ", "41780", "KÖRFEZ/TÜTÜNÇİFTLİK/KOCAELİ"))
+        assertEquals("SÜLÜKLÜ GÖL MEVKİİ SAHİLKÖY ŞİLE-İSTANBUL 34", serviceAddressText("SÜLÜKLÜ GÖL MEVKİİ SAHİLKÖY ", "ŞİLE-İSTANBUL", "34", "İSTANBUL"))
+        assertEquals("", serviceAddressText("", " ", "", ""))
+    }
 }

@@ -68,6 +68,7 @@ fun ServiceModule() {
     var customerItems by remember { mutableStateOf<List<JSONObject>>(emptyList()) }
     var customerSalesOrders by remember { mutableStateOf<List<JSONObject>>(emptyList()) }
     var logEntries by remember { mutableStateOf<List<JSONObject>>(emptyList()) }
+    var historyOpen by remember { mutableStateOf(false) }
     fun value(key: String) = values[key].orEmpty()
     suspend fun fetch(path: String): List<JSONObject> {
         val r = BcApi.getAllPages(context, path)
@@ -307,124 +308,197 @@ fun ServiceModule() {
                 }
             }
         } else {
-            TextButton({ dialog = ""; laborSaved = false; message = ""; order = null; runJob { reload() } }, enabled = !busy) { Text(if(all) "‹ Tüm İşler" else "‹ İşlerim") }
             val o = order!!
-            DocHeaderCard(o.optString("no"), listOf(o.optString("name"), o.optString("city")).filter { it.isNotBlank() }.joinToString(" · "),
-                badge = o.optString("status").takeIf { it.isNotBlank() }?.let { serviceStatusLabel(it) })
             fun launchUri(action: String, uri: String) { runCatching { context.startActivity(Intent(action, Uri.parse(uri))) }.onFailure { message = "Uygun uygulama bulunamadı." } }
+            val selected = itemLines.firstOrNull { it.optInt("lineNo") == selectedLine }
+            val ready = !busy && detailReady && selected != null
+            fun hasDate(key: String) = selected?.optString(key).let { !it.isNullOrBlank() && it != "0001-01-01" }
+            // 0 = to start, 1 = working, 2 = finished and waiting to be posted.
+            val step = serviceStep(hasDate("startingDate"), hasDate("finishingDate"))
+            val onHold = serviceEnumName(o.optString("status")) == "On Hold"
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                TextButton({ dialog = ""; laborSaved = false; message = ""; order = null; runJob { reload() } }, enabled = !busy) { Text(if(all) "‹ Tüm İşler" else "‹ İşlerim") }
+                Spacer(Modifier.weight(1f))
+                TextButton({ runJob { reload() } }, enabled = !busy) { Text("Yenile") }
+            }
+
+            // ---- 1. What is the job: one card, read top to bottom.
             Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(14.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
                 border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)) {
                 Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    if(o.optString("description").isNotBlank()) Text(o.optString("description"), style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold)
-                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        o.optString("priority").takeIf { it.isNotBlank() }?.let { InfoPill("Öncelik: " + servicePriorityLabel(it), priorityColor(it).copy(alpha = 0.14f), priorityColor(it)) }
-                        serviceDateText(o.optString("responseDate")).takeIf { it.isNotBlank() }?.let { InfoPill("Yanıt: $it ${serviceTimeText(o.optString("responseTime"))}".trim()) }
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(o.optString("no"), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f))
+                        o.optString("priority").takeIf { it.isNotBlank() }?.let { InfoPill(servicePriorityLabel(it), priorityColor(it).copy(alpha = 0.14f), priorityColor(it)) }
                     }
-                    if(o.optString("salesOrderNo").isNotBlank()) InfoPill("Satış siparişi: " + o.optString("salesOrderNo"),
-                        MaterialTheme.colorScheme.primary.copy(alpha = 0.10f), MaterialTheme.colorScheme.primary)
-                    if(o.optString("contactName").isNotBlank()) Text("İlgili: " + o.optString("contactName"), style = MaterialTheme.typography.bodyMedium)
-                    val address = listOf("address", "address2", "postCode", "city").map { o.optString(it) }.filter { it.isNotBlank() }.joinToString(" ")
-                    if(address.isNotBlank()) OutlinedButton({ launchUri(Intent.ACTION_VIEW, "geo:0,0?q=${Uri.encode(address)}") }, enabled = !busy, modifier = Modifier.fillMaxWidth()) {
-                        Text("Adres: $address", maxLines = 2, overflow = TextOverflow.Ellipsis)
+                    Text(o.optString("description").ifBlank { o.optString("name") }, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                    Text(listOf(o.optString("name").takeIf { o.optString("description").isNotBlank() }.orEmpty(), o.optString("city")).filter { it.isNotBlank() }.joinToString(" · "),
+                        style = MaterialTheme.typography.bodyLarge)
+                    // The equipment belongs to the job description when there is only one.
+                    if(itemLines.size == 1) itemLines[0].let { line ->
+                        val equipment = listOf(line.optString("description").takeIf { it != o.optString("description") }.orEmpty(), line.optString("serviceItemNo"),
+                            line.optString("serialNo").let { if(it.isBlank()) "" else "Seri $it" }).filter { it.isNotBlank() }.joinToString(" · ")
+                        if(equipment.isNotBlank()) Text(equipment, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
-                    listOf("phoneNo", "phoneNo2").map { o.optString(it) }.filter { it.isNotBlank() }.forEach { phone ->
-                        OutlinedButton({ launchUri(Intent.ACTION_DIAL, "tel:${Uri.encode(phone)}") }, enabled = !busy, modifier = Modifier.fillMaxWidth()) { Text("Ara: $phone") }
-                    }
-                    if(o.optString("technicianNames").isNotBlank()) Text("Teknisyen: " + o.optString("technicianNames"), style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
-            }
-            sectionTitle("Servis kalemi")
-            itemLines.forEach { line ->
-                val isSel = selectedLine == line.optInt("lineNo")
-                Card(onClick = { if(!busy) selectedLine = line.optInt("lineNo") }, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp),
-                    colors = CardDefaults.cardColors(containerColor = if(isSel) MaterialTheme.colorScheme.primary.copy(alpha = 0.08f) else MaterialTheme.colorScheme.surface),
-                    border = androidx.compose.foundation.BorderStroke(if(isSel) 2.dp else 1.dp, if(isSel) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant)) {
-                    Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        Text(line.optString("description"), style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold)
-                        Text(listOf(line.optString("serviceItemNo"), line.optString("serialNo").let { if(it.isBlank()) "" else "Seri: $it" }).filter { it.isNotBlank() }.joinToString(" · "),
-                            style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                            if(line.optString("repairStatusCode").isNotBlank()) InfoPill(line.optString("repairStatusText").ifBlank { "Onarım: " + line.optString("repairStatusCode") })
-                            serviceDateText(line.optString("startingDate")).takeIf { it.isNotBlank() }?.let { InfoPill("Başladı ${serviceTimeText(line.optString("startingTime"))}") }
-                            serviceDateText(line.optString("finishingDate")).takeIf { it.isNotBlank() }?.let { InfoPill("Bitti ${serviceTimeText(line.optString("finishingTime"))}", status.success.copy(alpha = 0.14f), status.success) }
+                    val facts = listOf(
+                        serviceDateText(o.optString("responseDate")).let { if(it.isBlank()) "" else "Yanıt: $it ${serviceTimeText(o.optString("responseTime"))}".trim() },
+                        o.optString("salesOrderNo").let { if(it.isBlank()) "" else "Satış siparişi: $it" },
+                        o.optString("technicianNames").let { if(it.isBlank()) "" else "Teknisyen: $it" },
+                        o.optString("contactName").let { if(it.isBlank()) "" else "İlgili: $it" }).filter { it.isNotBlank() }
+                    facts.forEach { Text(it, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+                    val address = serviceAddressText(o.optString("address"), o.optString("address2"), o.optString("postCode"), o.optString("city"))
+                    val phone = listOf("phoneNo", "phoneNo2").map { o.optString(it).trim() }.firstOrNull { it.isNotBlank() }.orEmpty()
+                    if(address.isNotBlank() || phone.isNotBlank()) {
+                        HorizontalDivider(Modifier.padding(vertical = 4.dp))
+                        if(address.isNotBlank()) Text(address, style = MaterialTheme.typography.bodyMedium)
+                        if(phone.isNotBlank()) Text("Tel: $phone", style = MaterialTheme.typography.bodyMedium)
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            if(address.isNotBlank()) FilledTonalButton({ launchUri(Intent.ACTION_VIEW, "geo:0,0?q=${Uri.encode(address)}") }, enabled = !busy,
+                                modifier = Modifier.weight(1f).height(44.dp), shape = RoundedCornerShape(12.dp)) { Text("Yol tarifi", maxLines = 1) }
+                            if(phone.isNotBlank()) FilledTonalButton({ launchUri(Intent.ACTION_DIAL, "tel:${Uri.encode(phone)}") }, enabled = !busy,
+                                modifier = Modifier.weight(1f).height(44.dp), shape = RoundedCornerShape(12.dp)) { Text("Ara", maxLines = 1) }
                         }
-                        val result = serviceFinishSummary(
-                            line.optString("faultAreaText").ifBlank { line.optString("faultAreaCode") },
-                            line.optString("symptomText").ifBlank { line.optString("symptomCode") },
-                            line.optString("resolutionText").ifBlank { line.optString("resolutionCode") })
-                        if(result.isNotBlank()) Text(result, style = MaterialTheme.typography.bodyMedium)
                     }
                 }
             }
-            val selected = itemLines.firstOrNull { it.optInt("lineNo") == selectedLine }
-            val ready = !busy && detailReady && selected != null
-            if(selected?.optString("startingDate").let { it.isNullOrBlank() || it == "0001-01-01" }) {
-                Button({ execute("startWork", "serviceItemLineNo" to selectedLine) }, enabled = ready,
-                    modifier = Modifier.fillMaxWidth().height(wmsPrimaryButtonHeight())) { Text("İşe Başla", fontWeight = FontWeight.Bold) }
+
+            // Several service items on one order: pick the one being worked on.
+            if(itemLines.size > 1) {
+                sectionTitle("Hangi ekipman?")
+                itemLines.forEach { line ->
+                    val isSel = selectedLine == line.optInt("lineNo")
+                    Card(onClick = { if(!busy) selectedLine = line.optInt("lineNo") }, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp),
+                        colors = CardDefaults.cardColors(containerColor = if(isSel) MaterialTheme.colorScheme.primary.copy(alpha = 0.08f) else MaterialTheme.colorScheme.surface),
+                        border = androidx.compose.foundation.BorderStroke(if(isSel) 2.dp else 1.dp, if(isSel) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant)) {
+                        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                            Text(line.optString("description"), style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold)
+                            Text(listOf(line.optString("serviceItemNo"), line.optString("serialNo").let { if(it.isBlank()) "" else "Seri $it" }).filter { it.isNotBlank() }.joinToString(" · "),
+                                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                    }
+                }
             }
-            // A finished line only takes photos, the signature and notes before posting.
-            val lineFinished = selected?.optString("finishingDate").let { !it.isNullOrBlank() && it != "0001-01-01" }
-            val lineStarted = !selected?.optString("startingDate").let { it.isNullOrBlank() || it == "0001-01-01" }
-            // The one thing a technician does next is always the big button.
-            if(lineStarted && !lineFinished) Button({ open("İşi Bitir") }, enabled = ready,
-                modifier = Modifier.fillMaxWidth().height(wmsPrimaryButtonHeight())) { Text("İşi Bitir", fontWeight = FontWeight.Bold) }
-            val actions = buildList {
-                if(!lineFinished) { if(!lineStarted) add("İşi Bitir"); add("Parça Ekle"); add("İşçilik Ekle"); add("Beklet") }
-                add("Not Ekle"); add("Fotoğraf"); add("Müşteri İmzası")
-                if(setup.isDispatcher && !lineFinished) add("Teknisyen Ata")
-            }
-            if(lineFinished) Text("İş bitirildi. Fotoğraf ve müşteri imzasını ekleyip servisi kaydedin.",
-                style = MaterialTheme.typography.bodyMedium, color = status.success, fontWeight = FontWeight.SemiBold)
-            actions.chunked(2).forEach { pair ->
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    pair.forEach { name ->
-                        OutlinedButton({
-                            when(name) {
-                                "Fotoğraf" -> if (androidx.core.content.ContextCompat.checkSelfPermission(context, android.Manifest.permission.CAMERA) == android.content.pm.PackageManager.PERMISSION_GRANTED) launchCamera()
-                                    else cameraPermission.launch(android.Manifest.permission.CAMERA)
-                                "Müşteri İmzası" -> { message = ""; dialog = "Müşteri İmzası" }
-                                else -> open(name)
+
+            // ---- 2. Where the job stands and the one thing to do next.
+            Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(14.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)) {
+                Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        listOf("Başla", "Bitir", "Kaydet").forEachIndexed { index, label ->
+                            val done = index < step
+                            val current = index == step
+                            if(index > 0) HorizontalDivider(Modifier.weight(1f).padding(horizontal = 6.dp),
+                                color = if(index <= step) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant, thickness = 2.dp)
+                            Box(Modifier.size(26.dp).background(if(done || current) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant,
+                                androidx.compose.foundation.shape.CircleShape), contentAlignment = Alignment.Center) {
+                                Text(if(done) "✓" else "${index + 1}", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold,
+                                    color = if(done || current) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface)
                             }
-                        }, enabled = if(name == "Fotoğraf" || name == "Müşteri İmzası") !busy && detailReady else ready,
-                            modifier = Modifier.weight(1f).height(50.dp), shape = RoundedCornerShape(12.dp)) {
-                            Text(name, fontWeight = FontWeight.SemiBold, maxLines = 1)
+                            Text(label, modifier = Modifier.padding(start = 6.dp), style = MaterialTheme.typography.labelLarge,
+                                fontWeight = if(current) FontWeight.Bold else FontWeight.Normal,
+                                color = if(done || current) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                     }
-                    if(pair.size == 1) Spacer(Modifier.weight(1f))
-                }
-            }
-            sectionTitle("Parça ve işçilik (${lines.size})")
-            if(lines.isEmpty()) Text("Henüz parça veya işçilik eklenmedi.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            lines.forEach { line ->
-                val shipped = line.optDouble("quantityShipped", 0.0)
-                Card(Modifier.fillMaxWidth().combinedClickable(onClick = {}, onLongClick = {
-                    if(!busy && detailReady && shipped == 0.0 && line.optDouble("quantityConsumed", 0.0) == 0.0) deleteLine = line
-                }), shape = RoundedCornerShape(12.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                    border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)) {
-                    Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                        InfoPill(serviceLineTypeLabel(line.optString("type")))
-                        Column(Modifier.weight(1f)) {
-                            Text(line.optString("description"), style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold, maxLines = 2, overflow = TextOverflow.Ellipsis)
-                            Text(listOf(line.optString("no"), line.optString("locationCode")).filter { it.isNotBlank() }.joinToString(" · "),
-                                style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    val progress = serviceProgressText(serviceTimeText(selected?.optString("startingTime").orEmpty()).takeIf { hasDate("startingDate") }.orEmpty(),
+                        serviceTimeText(selected?.optString("finishingTime").orEmpty()).takeIf { hasDate("finishingDate") }.orEmpty(),
+                        serviceFinishSummary(selected?.optString("faultAreaText").orEmpty().ifBlank { selected?.optString("faultAreaCode").orEmpty() },
+                            selected?.optString("symptomText").orEmpty().ifBlank { selected?.optString("symptomCode").orEmpty() },
+                            selected?.optString("resolutionText").orEmpty().ifBlank { selected?.optString("resolutionCode").orEmpty() }),
+                        if(onHold) selected?.optString("repairStatusText").orEmpty() else "")
+                    if(progress.isNotBlank()) Text(progress, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    when(step) {
+                        0 -> Button({ execute("startWork", "serviceItemLineNo" to selectedLine) }, enabled = ready,
+                            modifier = Modifier.fillMaxWidth().height(wmsPrimaryButtonHeight())) { Text("İşe Başla", fontWeight = FontWeight.Bold) }
+                        1 -> Button({ open("İşi Bitir") }, enabled = ready,
+                            modifier = Modifier.fillMaxWidth().height(wmsPrimaryButtonHeight())) { Text("İşi Bitir", fontWeight = FontWeight.Bold) }
+                        else -> {
+                            val signed = attachments.any { it.optString("fileName").startsWith("IMZA-") }
+                            if(setup.allowTerminalPosting) {
+                                Button({ dialog = "Servisi Kaydet" }, enabled = !busy && detailReady && lines.isNotEmpty() && (signed || !setup.requireSignature),
+                                    modifier = Modifier.fillMaxWidth().height(wmsPrimaryButtonHeight()), colors = ButtonDefaults.buttonColors(containerColor = status.success)) {
+                                    Text("Servisi Kaydet", fontWeight = FontWeight.Bold)
+                                }
+                                Text(when {
+                                    lines.isEmpty() -> "Parça veya işçilik satırı olmadığı için kayıt ofiste yapılır."
+                                    setup.requireSignature && !signed -> "Kaydetmeden önce müşteri imzasını alın."
+                                    signed -> "Müşteri imzası alındı. Servisi kaydedebilirsiniz."
+                                    else -> "İsterseniz önce fotoğraf ve müşteri imzası ekleyin."
+                                }, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            } else Text("İş bitirildi. Servis kaydını ofis yapacak.", style = MaterialTheme.typography.bodyMedium, color = status.success, fontWeight = FontWeight.SemiBold)
                         }
-                        Column(horizontalAlignment = Alignment.End) {
-                            Text("${serviceQtyText(line.optDouble("quantity", 0.0))} ${line.optString("unitOfMeasureCode")}", fontWeight = FontWeight.Bold)
-                            if(shipped > 0) Text("Sevk: ${serviceQtyText(shipped)}", style = MaterialTheme.typography.labelSmall, color = status.success)
+                    }
+                    // Everything else is optional and small.
+                    val tiles = buildList {
+                        if(step < 2) { add("Parça" to "Parça Ekle"); add("İşçilik" to "İşçilik Ekle") }
+                        add("Not" to "Not Ekle"); add("Fotoğraf" to "Fotoğraf"); add("İmza" to "Müşteri İmzası")
+                        if(step < 2) add("Beklet" to "Beklet")
+                        if(setup.isDispatcher && step < 2) add("Teknisyen" to "Teknisyen Ata")
+                    }
+                    tiles.chunked(4).forEach { rowTiles ->
+                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            rowTiles.forEach { (label, name) ->
+                                OutlinedButton({
+                                    when(name) {
+                                        "Fotoğraf" -> if (androidx.core.content.ContextCompat.checkSelfPermission(context, android.Manifest.permission.CAMERA) == android.content.pm.PackageManager.PERMISSION_GRANTED) launchCamera()
+                                            else cameraPermission.launch(android.Manifest.permission.CAMERA)
+                                        "Müşteri İmzası" -> { message = ""; dialog = "Müşteri İmzası" }
+                                        else -> open(name)
+                                    }
+                                }, enabled = if(name == "Fotoğraf" || name == "Müşteri İmzası") !busy && detailReady else ready,
+                                    modifier = Modifier.weight(1f).height(44.dp), shape = RoundedCornerShape(12.dp), contentPadding = PaddingValues(horizontal = 2.dp)) {
+                                    Text(label, style = MaterialTheme.typography.labelLarge, maxLines = 1, softWrap = false)
+                                }
+                            }
+                            repeat(4 - rowTiles.size) { Spacer(Modifier.weight(1f)) }
                         }
                     }
                 }
             }
-            if(lines.any { it.optDouble("quantityShipped", 0.0) == 0.0 }) Text("Kaydedilmemiş satırı silmek için satıra uzun basın.",
-                style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            if(logEntries.isNotEmpty()) {
-                // Whole texts as typed, with who and when; the office reads the same log in BC.
-                sectionTitle("Servis geçmişi (${logEntries.size})")
+
+            // ---- 3. What has been entered so far.
+            if(lines.isNotEmpty()) {
+                sectionTitle("Parça ve işçilik")
                 Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
                     border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)) {
+                    Column {
+                        lines.forEachIndexed { index, line ->
+                            val shipped = line.optDouble("quantityShipped", 0.0)
+                            if(index > 0) HorizontalDivider()
+                            Row(Modifier.fillMaxWidth().combinedClickable(onClick = {}, onLongClick = {
+                                if(!busy && detailReady && shipped == 0.0 && line.optDouble("quantityConsumed", 0.0) == 0.0) deleteLine = line
+                            }).padding(horizontal = 12.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                                Column(Modifier.weight(1f)) {
+                                    Text(line.optString("description"), style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                                    Text(serviceLineTypeLabel(line.optString("type")) + if(shipped > 0) " · kaydedildi" else "",
+                                        style = MaterialTheme.typography.labelSmall, color = if(shipped > 0) status.success else MaterialTheme.colorScheme.onSurfaceVariant)
+                                }
+                                Text("${serviceQtyText(line.optDouble("quantity", 0.0))} ${line.optString("unitOfMeasureCode")}", fontWeight = FontWeight.Bold)
+                            }
+                        }
+                    }
+                }
+                if(lines.any { it.optDouble("quantityShipped", 0.0) == 0.0 }) Text("Yanlış satırı silmek için üzerine uzun basın.",
+                    style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            // Notes the history does not cover (typed before the log existed, or not logged) are never hidden.
+            val unlogged = serviceUnloggedComments(comments.map { it.optString("comment") }, logEntries.map { it.optString("entryText") }).map { comments[it] }
+            if(unlogged.isNotEmpty()) {
+                sectionTitle("Notlar")
+                unlogged.forEach {
+                    Text("${serviceCommentTypeLabel(it.optString("type"))} · ${serviceDateText(it.optString("date"))}  ${it.optString("comment")}", style = MaterialTheme.typography.bodyMedium)
+                }
+            }
+            if(logEntries.isNotEmpty()) {
+                // Typed notes are always shown; the steps of the job open on request.
+                val notes = logEntries.filter { serviceLogIsNote(it.optString("entryType")) }
+                val shown = if(historyOpen) logEntries else notes
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(if(historyOpen) "Servis geçmişi" else "Notlar", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+                    TextButton({ historyOpen = !historyOpen }) { Text(if(historyOpen) "Yalnız notlar" else "Tüm geçmiş (${logEntries.size})") }
+                }
+                if(shown.isNotEmpty()) Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)) {
                     Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                        logEntries.forEach { entry ->
+                        shown.forEach { entry ->
                             val type = entry.optString("entryType")
                             val note = serviceLogIsNote(type)
                             Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.Top) {
@@ -447,25 +521,11 @@ fun ServiceModule() {
                     }
                 }
             }
-            // Notes the history does not cover (typed before the log existed, or not logged) are never hidden.
-            val unlogged = serviceUnloggedComments(comments.map { it.optString("comment") }, logEntries.map { it.optString("entryText") }).map { comments[it] }
-            if(unlogged.isNotEmpty() || logEntries.isEmpty()) {
-                sectionTitle(if(logEntries.isEmpty()) "Notlar (${unlogged.size})" else "Diğer notlar (${unlogged.size})")
-                unlogged.forEach {
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.Top) {
-                        InfoPill(serviceCommentTypeLabel(it.optString("type")))
-                        Text("${serviceDateText(it.optString("date"))}  ${it.optString("comment")}", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
-                    }
-                }
+            if(attachments.isNotEmpty()) {
+                sectionTitle("Ekler (${attachments.size})")
+                attachments.forEach { Text("• " + it.optString("fileName") + it.optString("fileExtension").let { e -> if(e.isBlank() || it.optString("fileName").endsWith(".$e")) "" else ".$e" },
+                    style = MaterialTheme.typography.bodySmall) }
             }
-            sectionTitle("Ekler (${attachments.size})")
-            attachments.forEach { Text("• " + it.optString("fileName") + it.optString("fileExtension").let { e -> if(e.isBlank() || it.optString("fileName").endsWith(".$e")) "" else ".$e" },
-                style = MaterialTheme.typography.bodySmall) }
-            if(setup.allowTerminalPosting) Button({ dialog = "Servisi Kaydet" }, enabled = !busy && detailReady && lines.isNotEmpty(),
-                modifier = Modifier.fillMaxWidth().height(wmsPrimaryButtonHeight()), colors = ButtonDefaults.buttonColors(containerColor = status.success)) {
-                Text("Servisi Kaydet", fontWeight = FontWeight.Bold)
-            }
-            OutlinedButton({ runJob { reload() } }, enabled = !busy, modifier = Modifier.fillMaxWidth()) { WmsRefreshLabel(busy) }
         }
     }
     deleteLine?.let { line -> AlertDialog(onDismissRequest = { if(!busy) deleteLine = null }, title = { Text("Satır silinsin mi?") },
