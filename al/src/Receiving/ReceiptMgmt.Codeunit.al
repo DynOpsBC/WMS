@@ -1312,8 +1312,9 @@ codeunit 72043 "DOPSWHS Receipt Mgmt"
     /// çifti kalan miktara iner, yeni LP aynı belgede ayrı bir Al/Koy çifti olur.
     /// Toplam miktar değişmez. LP bir yerleştirmede değilse hiçbir şey yapmaz.
     /// Belge güvenle güncellenemiyorsa (kısmen kaydedilmiş satır, birden çok rafa
-    /// bölünmüş Al satırı) belgeye dokunmaz ve false döner: bölme eskisi gibi tamamlanır,
-    /// üretimin malzemesi beklemez; yeni LP için "LP'ye göre böl" kullanılır.
+    /// bölünmüş Al satırı, hedef LP başka bir yerleştirmede) hiçbir satır yazmadan false
+    /// döner: bölme eskisi gibi tamamlanır, yeni LP belgede olmaz. Hedef LP bu belgede
+    /// zaten varsa (birleştirme) taşınan miktar onun çiftine eklenir.
     /// </summary>
     /// <returns>True: yerleştirme belgesi güncellendi.</returns>
     procedure SyncPutAwayAfterLpSplit(SourceLpNo: Code[20]; TargetLpNo: Code[20]; MovedLine: Record "DOPSWHS LP Line"): Boolean
@@ -1325,10 +1326,18 @@ codeunit 72043 "DOPSWHS Receipt Mgmt"
         NewLine: Record "Warehouse Activity Line";
         SourceLP: Record "DOPSWHS LP Header";
         LPVerification: Codeunit "DOPSWHS LP Verification";
+        OtherDocLine: Record "Warehouse Activity Line";
+        OriginalPlace: Record "Warehouse Activity Line";
+        OriginalTake: Record "Warehouse Activity Line";
+        TargetLP: Record "DOPSWHS LP Header";
         TargetLpNos: List of [Code[20]];
         MovedBase: Decimal;
         TakeBase: Decimal;
         QtyPerUoM: Decimal;
+        MovedPlaceQty: Decimal;
+        MovedTakeQty: Decimal;
+        TargetHasPair: Boolean;
+        OriginalDocNo: Code[20];
     begin
         if (SourceLpNo = '') or (TargetLpNo = '') or (SourceLpNo = TargetLpNo) or (MovedLine.Quantity <= 0) then
             exit(false);
@@ -1387,11 +1396,37 @@ codeunit 72043 "DOPSWHS Receipt Mgmt"
         TargetPlace.CopyFilters(PlaceLine);
         TargetPlace.SetRange("LP No.", TargetLpNo);
 
+        // Hedef LP başka bir yerleştirme belgesindeyse iki belgeye birden girmesin.
+        OtherDocLine.SetRange("Activity Type", TakeLine."Activity Type");
+        OtherDocLine.SetFilter("No.", '<>%1', TakeLine."No.");
+        OtherDocLine.SetRange("LP No.", TargetLpNo);
+        if not OtherDocLine.IsEmpty() then
+            exit(false);
+
+        OriginalDocNo := TakeLine."No.";
+        TargetHasPair := TargetTake.FindFirst() and TargetPlace.FindFirst();
+        if TargetHasPair then
+            if (TargetTake."Qty. Handled" <> 0) or (TargetPlace."Qty. Handled" <> 0) or
+               (TargetTake.Count() <> 1) or (TargetPlace.Count() <> 1)
+            then
+                exit(false);
+
+        // Buradan sonrası yazar. Sıra: önce kaynak çift küçülür, sonra hedef büyür;
+        // böylece Koy rafının kapasitesi aynı miktarı iki kez saymaz.
         if MovedBase >= TakeBase - 0.00001 then begin
-            // Satırın tamamı yeni LP'ye geçti.
-            if TargetTake.FindFirst() and TargetPlace.FindFirst() then begin
-                if (TargetTake."Qty. Handled" <> 0) or (TargetPlace."Qty. Handled" <> 0) then
-                    exit(false);
+            // Satırın tamamı hedef LP'ye geçti.
+            if TargetHasPair then begin
+                MovedPlaceQty := PlaceLine.Quantity;
+                MovedTakeQty := TakeLine.Quantity;
+                // Delete(false): standart OnDelete onay ister (API'de "update was interrupted")
+                // ve aynı mal kabul satırının BÜTÜN Al/Koy çiftlerini siler. Burada miktar
+                // belgeden çıkmıyor, hedef LP'nin çiftine geçiyor; yalnız bu çift kalkar.
+                PlaceLine.Delete(false);
+                TakeLine.Delete(false);
+                ApplyPutAwayLpQuantity(TargetPlace, TargetLpNo, TargetPlace.Quantity + MovedPlaceQty);
+                TargetPlace.Modify(true);
+                ApplyPutAwayLpQuantity(TargetTake, TargetLpNo, TargetTake.Quantity + MovedTakeQty);
+                TargetTake.Modify(true);
             end else begin
                 PlaceLine."LP No." := TargetLpNo;
                 PlaceLine.Modify(true);
@@ -1399,17 +1434,23 @@ codeunit 72043 "DOPSWHS Receipt Mgmt"
                 TakeLine.Modify(true);
             end;
         end else begin
-            if TargetTake.FindFirst() and TargetPlace.FindFirst() then begin
-                if (TargetTake."Qty. Handled" <> 0) or (TargetPlace."Qty. Handled" <> 0) then
-                    exit(false);
-            end else begin
-                InsertPutAwayLpLine(PlaceLine, TargetLpNo, BinLpLineQuantity(MovedBase, PlaceLine), NewLine);
-                InsertPutAwayLpLine(TakeLine, TargetLpNo, BinLpLineQuantity(MovedBase, TakeLine), NewLine);
-            end;
+            MovedPlaceQty := BinLpLineQuantity(MovedBase, PlaceLine);
+            MovedTakeQty := BinLpLineQuantity(MovedBase, TakeLine);
+            OriginalPlace := PlaceLine;
+            OriginalTake := TakeLine;
             ApplyPutAwayLpQuantity(PlaceLine, SourceLpNo, BinLpLineQuantity(TakeBase - MovedBase, PlaceLine));
             PlaceLine.Modify(true);
             ApplyPutAwayLpQuantity(TakeLine, SourceLpNo, BinLpLineQuantity(TakeBase - MovedBase, TakeLine));
             TakeLine.Modify(true);
+            if TargetHasPair then begin
+                ApplyPutAwayLpQuantity(TargetPlace, TargetLpNo, TargetPlace.Quantity + MovedPlaceQty);
+                TargetPlace.Modify(true);
+                ApplyPutAwayLpQuantity(TargetTake, TargetLpNo, TargetTake.Quantity + MovedTakeQty);
+                TargetTake.Modify(true);
+            end else begin
+                InsertPutAwayLpLine(OriginalPlace, TargetLpNo, MovedPlaceQty, NewLine);
+                InsertPutAwayLpLine(OriginalTake, TargetLpNo, MovedTakeQty, NewLine);
+            end;
         end;
 
         // Kaynak LP bu yerleştirmeye atanmışsa yeni LP de atanır; kayıt sonrası
@@ -1417,11 +1458,13 @@ codeunit 72043 "DOPSWHS Receipt Mgmt"
         if SourceLP.Get(SourceLpNo) then
             if (SourceLP.Status = SourceLP.Status::Assigned) and
                (SourceLP."Assigned Document Type" = SourceLP."Assigned Document Type"::WhsePutaway) and
-               (SourceLP."Assigned Document No." = TakeLine."No.")
-            then begin
-                TargetLpNos.Add(TargetLpNo);
-                AssignBinLpsToPutAway(TakeLine."No.", TargetLpNos);
-            end;
+               (SourceLP."Assigned Document No." = OriginalDocNo)
+            then
+                // Atama yalnız tamamlanmış (Built) LP'ye yapılabilir; açık LP'yi operatör kapatınca atanır.
+                if TargetLP.Get(TargetLpNo) and (TargetLP.Status = TargetLP.Status::Built) then begin
+                    TargetLpNos.Add(TargetLpNo);
+                    AssignBinLpsToPutAway(OriginalDocNo, TargetLpNos);
+                end;
         exit(true);
     end;
 
