@@ -23,6 +23,7 @@ enum 72270 "DOPSWHS App Filter Entity"
     value(80; "QualityOrder")       { Caption = 'Quality Order'; }
     value(90; "ProductionConsumption") { Caption = 'Production Consumption'; }
     value(91; "ProductionOutput")   { Caption = 'Production Output'; }
+    value(92; "ProductionOrderLine") { Caption = 'Production Order Line'; }
     value(100; "Assembly")          { Caption = 'Assembly'; }
     value(101; "AssemblyLine")      { Caption = 'Assembly Line'; }
 }

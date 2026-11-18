@@ -128,6 +128,13 @@ private fun bumpPackedQty(
  */
 @Composable
 fun PackingModule(v2Enabled: Boolean = false) {
+    // DKÇ (18 Kas 2026): sepet/koli paketlemesi kullanılmıyor. Paketleme tuşu,
+    // tür seçici ve paketleme kuyruğu yerine doğrudan Sevkiyat > Toplama
+    // listesini açar; belgeye basınca parçalı toplama ekranı gelir.
+    if (isDkcFlavor()) {
+        WhsePickTab()
+        return
+    }
     if (v2Enabled) {
         V2PackingModule()
         return

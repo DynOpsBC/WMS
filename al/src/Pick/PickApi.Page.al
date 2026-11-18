@@ -32,6 +32,7 @@ page 72092 "DOPSWHS Pick API"
                 // Ana sepet: terminal toplamaya başlarken PATCH'ler; ekrandan
                 // çıkıp girince kaybolmasın diye kalıcı. Paketleme de okur.
                 field(mainLpNo; Rec."DOPSWHS Main LP No.") { Caption = 'mainLpNo'; Editable = false; }
+                field(sourceSummary; SourceSummary) { Caption = 'sourceSummary'; }
                 field(sourceNo; SourceNo) { Caption = 'sourceNo'; }
                 field(status; StatusText) { Caption = 'status'; }
                 field(dueDate; DueDate) { Caption = 'dueDate'; }
@@ -237,6 +238,7 @@ page 72092 "DOPSWHS Pick API"
 
     var
         SourceNo: Code[20];
+        SourceSummary: Text;
         DueDate: Date;
         PercentComplete: Decimal;
         StatusText: Text[30];
@@ -245,10 +247,14 @@ page 72092 "DOPSWHS Pick API"
     local procedure FillCalculatedFields()
     var
         PickLine: Record "Warehouse Activity Line";
+        PickMgmt: Codeunit "DOPSWHS Pick Mgmt";
+        Sources: List of [Text];
+        SourceText: Text;
         TotalQty: Decimal;
         HandledQty: Decimal;
     begin
         Clear(SourceNo);
+        Clear(SourceSummary);
         Clear(DueDate);
         Clear(PercentComplete);
         Clear(StatusText);
@@ -261,6 +267,13 @@ page 72092 "DOPSWHS Pick API"
                 if SourceNo = '' then begin
                     SourceNo := PickLine."Source No.";
                     DueDate := PickLine."Due Date";
+                end;
+                SourceText := PickMgmt.SourceDocumentCaption(PickLine."Source Type", PickLine."Source Subtype", PickLine."Source No.");
+                if (SourceText <> '') and (not Sources.Contains(SourceText)) then begin
+                    Sources.Add(SourceText);
+                    if SourceSummary <> '' then
+                        SourceSummary += ' · ';
+                    SourceSummary += SourceText;
                 end;
                 TotalQty += PickLine.Quantity;
                 // BC yeni toplamada "Qty. to Handle" alanını önceden doldurur;

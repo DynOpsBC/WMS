@@ -164,12 +164,15 @@ private fun ClassicPickingModule() {
 @Composable
 private fun V2PickingModule() {
     var flow by rememberSaveable { mutableStateOf(OutboundFlowMode.Multi) }
-    // DKÇ: belge açıkken tür seçici gizlenir; küçük el terminalinde ekranın
-    // yarısını kaplayıp toplama satırlarına yer bırakmıyordu.
-    var documentOpen by remember { mutableStateOf(false) }
+    // DKÇ'de toplama Multi/Mono/Tek SKU ayrımıyla çalışmaz (iş emri ve sevkiyat
+    // toplamaları tek kuyruk): tür seçici hiç gösterilmez, bütün toplamalar listelenir.
+    if (isDkcFlavor()) {
+        V2PicksForFlow(flow, allModes = true)
+        return
+    }
     Column(Modifier.fillMaxSize()) {
-        if (!(documentOpen && isDkcFlavor())) V2FlowSelector(current = flow, onSelect = { flow = it })
-        Box(Modifier.weight(1f)) { key(flow) { V2PicksForFlow(flow, onDocumentOpen = { documentOpen = it }) } }
+        V2FlowSelector(current = flow, onSelect = { flow = it })
+        Box(Modifier.weight(1f)) { key(flow) { V2PicksForFlow(flow) } }
     }
 }
 
@@ -213,7 +216,8 @@ internal fun V2FlowSelector(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun V2PicksForFlow(flow: OutboundFlowMode, onDocumentOpen: (Boolean) -> Unit = {}) {
+private fun V2PicksForFlow(flow: OutboundFlowMode, allModes: Boolean = false, onDocumentOpen: (Boolean) -> Unit = {}) {
+    val queueTitle = if (allModes) "Toplama" else flow.title
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var rows by remember { mutableStateOf<List<JSONObject>>(emptyList()) }
@@ -228,7 +232,7 @@ private fun V2PicksForFlow(flow: OutboundFlowMode, onDocumentOpen: (Boolean) -> 
     fun load() {
         scope.launch {
             loading = true
-            status = "${flow.title} işleri yükleniyor…"
+            status = "$queueTitle işleri yükleniyor…"
             val me = BcApi.currentUserId(context)
             myUserId = me
             val ownerClause = when (pickScope) {
@@ -252,20 +256,18 @@ private fun V2PicksForFlow(flow: OutboundFlowMode, onDocumentOpen: (Boolean) -> 
             )
             val page = BcApi.getAllPagesWithStandardFallback(
                 context,
-                "picks?\$top=100&\$orderby=no desc&\$select=no,locationCode,assignedUserId,sourceNo,status,percentComplete,pickMode,mainLpNo$filter",
+                "picks?\$top=100&\$orderby=no desc&\$select=no,locationCode,assignedUserId,sourceNo,sourceSummary,status,percentComplete,pickMode,mainLpNo$filter",
             )
             rows = if (page.complete) page.rows.filter { row ->
                 // BC modu OData kaçışıyla döndürebiliyor: boş mod "_x0020_"
                 // (kaçışlı boşluk) olarak geliyor ve düz karşılaştırmada tutmuyor.
-                val mode = BcEnum.decodeOData(row.optString("pickMode")).trim()
-                if (mode.isBlank()) flow == OutboundFlowMode.Multi
-                else mode.equals(flow.apiValue, ignoreCase = true)
+                pickMatchesFlow(row.optString("pickMode"), flow, allModes)
             } else emptyList()
             loading = false
             status = when {
                 !page.complete -> "HATA: Toplama kuyruğunun tamamı alınamadı. Yenileyin."
-                rows.isEmpty() -> "${pickScope.label} kapsamında ${flow.title} işi yok."
-                else -> "${rows.size} ${flow.title} toplaması"
+                rows.isEmpty() -> "${pickScope.label} kapsamında $queueTitle işi yok."
+                else -> if (allModes) "${rows.size} toplama" else "${rows.size} ${flow.title} toplaması"
             }
         }
     }
@@ -335,7 +337,7 @@ private fun V2PicksForFlow(flow: OutboundFlowMode, onDocumentOpen: (Boolean) -> 
                     onTake = { takeOver(no) },
                 )
             }
-            if (rows.isEmpty() && !loading) item { EmptyState("${flow.title} kuyruğunda açık toplama yok.") }
+            if (rows.isEmpty() && !loading) item { EmptyState(if (allModes) "Açık toplama yok." else "${flow.title} kuyruğunda açık toplama yok.") }
         }
     }
 
@@ -390,7 +392,7 @@ private fun ActivePicksTab() {
                 return@launch
             }
             val combined = buildODataFilter(scopeClause, searchClause("no", search))
-            val page = BcApi.getAllPagesWithStandardFallback(context, "picks?\$top=100&\$orderby=no desc&\$select=no,locationCode,assignedUserId,vehicleNo,sourceNo,status,percentComplete$combined")
+            val page = BcApi.getAllPagesWithStandardFallback(context, "picks?\$top=100&\$orderby=no desc&\$select=no,locationCode,assignedUserId,vehicleNo,sourceNo,sourceSummary,status,percentComplete$combined")
             loading = false
             rows = if (page.complete) page.rows else emptyList()
             status = when {
@@ -1860,6 +1862,10 @@ private fun PickListCard(
                 }
                 Spacer(Modifier.height(2.dp))
                 // Atama bilgisi artık alttaki rozette — burada tekrar edilmiyor.
+                // Hangi siparişten / iş emrinden çekildiği liste kartında da görünür.
+                pickSourceSummary(d).takeIf { it.isNotBlank() }?.let { source ->
+                    Text(source, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = PickAccent)
+                }
                 Text(
                     "📍 ${rawValue(d, "locationCode").ifBlank { "—" }}",
                     fontSize = 11.sp, color = Color.Gray,

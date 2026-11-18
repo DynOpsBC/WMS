@@ -26,6 +26,10 @@ page 72214 "DOPSWHS Item Ledger Entry API"
                 field(postingDate; Rec."Posting Date") { Caption = 'postingDate'; }
                 field(entryType; Rec."Entry Type") { Caption = 'entryType'; }
                 field(documentNo; Rec."Document No.") { Caption = 'documentNo'; }
+                // Üretim çıktısı/sarfiyatı her zaman emir numarasıyla belgelenmez (ör. D11-10000);
+                // emre bağlı hareketler bu alanlarla bulunur.
+                field(orderNo; Rec."Order No.") { Caption = 'orderNo'; }
+                field(orderLineNo; Rec."Order Line No.") { Caption = 'orderLineNo'; }
                 field(locationCode; Rec."Location Code") { Caption = 'locationCode'; }
                 field(quantity; Rec.Quantity) { Caption = 'quantity'; }
                 field(remainingQuantity; Rec."Remaining Quantity") { Caption = 'remainingQuantity'; }

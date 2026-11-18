@@ -1,7 +1,7 @@
 {
-  "versionCode": 200165,
-  "versionName": "1.14.165-emu",
-  "apkUrl": "https://github.com/DynOpsBC/WMS/releases/download/android-v1.14.165-emu/BCWMS-EMU-1.14.165-UYUMLU.apk",
-  "sha256": "279b13b555c74727854272c5c6e4dfd34b7e9de02eed6ecd4d4a723e5e5a2e68",
-  "releaseNotes": "Excel seçmeden Hazır göz listesi — 1.535 etiket. 15.10.2026 listesi BC’den açılır; sıra, gözler ve tekrarlar korunur. Önizleme ve Tümünü yazdır. BCWMSApp 1.14.2.25 ve hazırlanmış liste gerekir."
+  "versionCode": 200174,
+  "versionName": "1.14.174-emu",
+  "apkUrl": "https://github.com/DynOpsBC/WMS/releases/download/android-v1.14.174-emu/BCWMS-EMU-1.14.174-UYUMLU.apk",
+  "sha256": "53a6847a784f172565d024649c41fd05c9ce1bdb964ce5739cb393b4fc3a481f",
+  "releaseNotes": "Paketleme tuşu artık doğrudan Sevkiyat'taki Toplama listesini açar: tür seçici ve sepet/koli adımı yok, belgeye basınca parçalı toplama ekranı gelir. Üretim Çıktısı ve kaynak belgeli toplama (1.14.173) aynen devam eder. BCWMSApp 1.14.2.32 gerekir."
 }

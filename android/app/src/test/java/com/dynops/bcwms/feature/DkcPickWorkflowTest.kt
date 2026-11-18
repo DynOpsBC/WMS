@@ -7,6 +7,17 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class DkcPickWorkflowTest {
+    @Test
+    fun dkcQueueIncludesEveryModeWithoutChangingOtherCustomerQueues() {
+        listOf("Multi", "Batch", "Bulk", "", "_x0020_", "Legacy").forEach { mode ->
+            assertTrue(pickMatchesFlow(mode, OutboundFlowMode.Multi, allModes = true))
+        }
+        assertFalse(pickMatchesFlow("Batch", OutboundFlowMode.Multi, allModes = false))
+        assertTrue(pickMatchesFlow("Batch", OutboundFlowMode.Mono, allModes = false))
+        assertTrue(pickMatchesFlow("_x0020_", OutboundFlowMode.Multi, allModes = false))
+        assertFalse(pickMatchesFlow("", OutboundFlowMode.SingleSku, allModes = false))
+    }
+
     private fun line(
         lineNo: Int,
         quantity: Double,

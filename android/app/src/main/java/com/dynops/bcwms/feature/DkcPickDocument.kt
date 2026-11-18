@@ -116,6 +116,8 @@ internal fun DkcPickDocument(no: String, onBack: () -> Unit) {
     val rowDone: (JSONObject) -> Boolean = { pickRowDone(it, entries) }
     val rowPartial: (JSONObject) -> Boolean = { pickRowPartial(it, entries) }
     val postLines = pickPostLines(takeLines, entries)
+    // Hangi siparişten / iş emrinden çekildiği: satırların kaynak belgesi.
+    val sources = takeLines.map(::pickSourceCaption).filter { it.isNotBlank() }.distinct()
     val postQty = postLines.sumOf { pickEnteredQty(it, entries) }
 
     fun takeOver() {
@@ -301,7 +303,7 @@ internal fun DkcPickDocument(no: String, onBack: () -> Unit) {
             GridColumn("uom", "Birim", true, 58) { pickCell(it, "unitOfMeasureCode") },
             GridColumn("lotNo", "Lot No.", true, 110) { pickCell(it, "lotNo") },
             GridColumn("description", "Açıklama", true, 190) { pickCell(it, "description") },
-            GridColumn("sourceNo", "Kaynak", true, 96) { pickCell(it, "sourceNo") },
+            GridColumn("sourceNo", "Kaynak Belge", true, 180) { pickSourceCaption(it) },
         )
     }
     val gridColumns = remember(gridDefs) { gridDefs.map { ColumnState(it.key, it.defaultVisible, it.defaultWidth) } }
@@ -317,15 +319,29 @@ internal fun DkcPickDocument(no: String, onBack: () -> Unit) {
                     Text("Toplamayı İptal Et", color = MaterialTheme.colorScheme.error)
                 }
             }
-            val sources = takeLines.map { pickCell(it, "sourceNo") }.filter { it.isNotBlank() }.distinct()
             val totalQty = takeLines.sumOf { it.optDouble("quantity", 0.0) }
             val handledQty = takeLines.sumOf { it.optDouble("qtyHandled", 0.0) }
             DocHeaderCard(
                 title = no,
-                subtitle = "Lokasyon: ${h?.optString("locationCode").orEmpty()}" +
-                    if (sources.isNotEmpty()) " · Kaynak: ${sources.take(3).joinToString(", ")}${if (sources.size > 3) " +${sources.size - 3}" else ""}" else "",
+                subtitle = "Lokasyon: ${h?.optString("locationCode").orEmpty()}",
                 percent = if (totalQty > 0.0) (handledQty * 100.0 / totalQty).toInt() else 0,
             )
+            if (sources.isNotEmpty()) {
+                Spacer(Modifier.height(6.dp))
+                Surface(
+                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.10f),
+                    shape = RoundedCornerShape(10.dp),
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Column(Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
+                        Text(
+                            sources.joinToString("\n"),
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 16.sp,
+                        )
+                    }
+                }
+            }
             if (headerLoaded && linesComplete && !canMutate) {
                 Spacer(Modifier.height(6.dp))
                 Card(

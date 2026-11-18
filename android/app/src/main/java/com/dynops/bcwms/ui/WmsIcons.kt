@@ -47,6 +47,7 @@ enum class WmsGlyph {
     COUNT,
     COUNT_V2,
     PRODUCTION,
+    PRODUCTION_OUTPUT,
     SUBCONTRACTING,
     ASSEMBLY,
     QUALITY,
@@ -85,6 +86,7 @@ fun glyphForScreen(screen: Screen): WmsGlyph = when (screen) {
     Screen.Count -> WmsGlyph.COUNT
     Screen.CountV2 -> WmsGlyph.COUNT_V2
     Screen.Production -> WmsGlyph.PRODUCTION
+    Screen.ProductionOutput -> WmsGlyph.PRODUCTION_OUTPUT
     Screen.Subcontracting -> WmsGlyph.SUBCONTRACTING
     Screen.Assembly -> WmsGlyph.ASSEMBLY
     Screen.Quality -> WmsGlyph.QUALITY
@@ -313,6 +315,13 @@ fun WmsIcon(
                 line(0.17f, 0.66f, 0.17f, 0.82f); line(0.17f, 0.82f, 0.33f, 0.82f)
                 line(0.83f, 0.66f, 0.83f, 0.82f); line(0.83f, 0.82f, 0.67f, 0.82f)
                 check(0.32f, 0.52f)
+            }
+            WmsGlyph.PRODUCTION_OUTPUT -> {
+                roundRect(0.16f, 0.44f, 0.68f, 0.40f, fill = true)
+                roundRect(0.16f, 0.44f, 0.68f, 0.40f)
+                line(0.50f, 0.12f, 0.50f, 0.52f)
+                line(0.35f, 0.37f, 0.50f, 0.52f); line(0.65f, 0.37f, 0.50f, 0.52f)
+                line(0.30f, 0.67f, 0.43f, 0.67f); line(0.57f, 0.67f, 0.70f, 0.67f)
             }
             WmsGlyph.PRODUCTION -> {
                 val factory = Path().apply {

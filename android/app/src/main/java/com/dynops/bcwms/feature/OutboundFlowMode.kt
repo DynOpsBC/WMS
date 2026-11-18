@@ -42,3 +42,10 @@ enum class OutboundFlowMode(
         }
     }
 }
+
+/** DKÇ uses one queue, including blank and legacy BC pick modes. */
+internal fun pickMatchesFlow(apiMode: String, flow: OutboundFlowMode, allModes: Boolean): Boolean {
+    if (allModes) return true
+    val mode = BcEnum.decodeOData(apiMode).trim()
+    return if (mode.isBlank()) flow == OutboundFlowMode.Multi else mode.equals(flow.apiValue, ignoreCase = true)
+}

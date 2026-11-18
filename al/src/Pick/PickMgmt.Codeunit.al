@@ -2,6 +2,22 @@ codeunit 72046 "DOPSWHS Pick Mgmt"
 {
     Access = Public;
 
+    procedure SourceDocumentCaption(SourceType: Integer; SourceSubtype: Integer; SourceNo: Code[20]): Text
+    begin
+        if SourceNo = '' then
+            exit('');
+        case SourceType of
+            Database::"Sales Line":
+                if SourceSubtype = 1 then
+                    exit('Satış siparişi: ' + SourceNo);
+            Database::"Prod. Order Component", Database::"Prod. Order Line":
+                if SourceSubtype = 3 then
+                    exit('Serbest bırakılmış üretim emri: ' + SourceNo);
+        end;
+        exit('Kaynak belge: ' + SourceNo);
+    end;
+
+
     procedure AssignToMe(var Pick: Record "Warehouse Activity Header")
     var
         CurrentUserId: Code[50];

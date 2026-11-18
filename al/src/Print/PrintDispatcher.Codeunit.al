@@ -191,7 +191,32 @@ codeunit 72051 "DOPSWHS Print Dispatcher"
         exit(Count);
     end;
 
+    /// <summary>
+    /// DKÇ (18 Kas 2026): üretimden çıkan ürünün etiketi. Mal kabul etiketiyle aynı
+    /// düzen; başlık ÜRETİM, belge satırında üretim emri no. Satır alanları aynıdır
+    /// (receiptNo = üretim emri no).
+    /// </summary>
+    procedure PrintProductionItemLabels(RowsJson: Text; PrinterId: Code[50]): Integer
+    var
+        Printer: Record "DOPSWHS Printer";
+        Zpl: Text;
+        SourceDoc: Code[50];
+        Count: Integer;
+    begin
+        if Printer.Get(PrinterId) then
+            if Printer.Format <> Printer.Format::ZPL then
+                Error('Üretim etiketleri için ZPL etiket yazıcısı seçin.');
+        Zpl := BuildDocumentItemLabels(RowsJson, 'ÜRETİM', Count, SourceDoc);
+        EnqueueZpl(SourceDoc, Zpl, PrinterId, 1, Enum::"DOPSWHS IWX Report Usage"::Item, 'Production item labels');
+        exit(Count);
+    end;
+
     procedure BuildReceiptItemLabels(RowsJson: Text; var Count: Integer; var SourceDoc: Code[50]): Text
+    begin
+        exit(BuildDocumentItemLabels(RowsJson, 'MAL KABUL', Count, SourceDoc));
+    end;
+
+    procedure BuildDocumentItemLabels(RowsJson: Text; Title: Text; var Count: Integer; var SourceDoc: Code[50]): Text
     var
         Item: Record Item;
         Rows: JsonArray;
@@ -210,11 +235,11 @@ codeunit 72051 "DOPSWHS Print Dispatcher"
         Zpl: Text;
     begin
         Count := 0;
-        SourceDoc := 'MAL KABUL';
+        SourceDoc := CopyStr(Title, 1, MaxStrLen(SourceDoc));
         if not Rows.ReadFrom(RowsJson) then
-            Error('Mal kabul etiket satırları okunamadı.');
+            Error('Etiket satırları okunamadı.');
         if Rows.Count() = 0 then
-            Error('Yazdırılacak mal kabul etiketi yok.');
+            Error('Yazdırılacak etiket yok.');
         foreach Token in Rows do begin
             RowNo += 1;
             if not Token.IsObject() then
@@ -232,10 +257,10 @@ codeunit 72051 "DOPSWHS Print Dispatcher"
             if (Copies < 1) or (Copies > LabelsPerJob()) then
                 Error('Etiket satırı %1: adet 1 ile %2 arasında olmalı.', RowNo, LabelsPerJob());
             if Count + Copies > LabelsPerJob() then
-                Error('Tek seferde en fazla %1 mal kabul etiketi gönderilebilir.', LabelsPerJob());
+                Error('Tek seferde en fazla %1 etiket gönderilebilir.', LabelsPerJob());
             if (RowNo = 1) and (ReceiptNo <> '') then
                 SourceDoc := CopyStr(ReceiptNo, 1, MaxStrLen(SourceDoc));
-            Label := BuildReceiptItemZpl(Item, LotNo, SupplierLotNo, QtyText, ReceiptNo, DateText);
+            Label := BuildReceiptItemZpl(Item, Title, LotNo, SupplierLotNo, QtyText, ReceiptNo, DateText);
             for i := 1 to Copies do
                 Zpl += Label;
             Count += Copies;
@@ -270,7 +295,7 @@ codeunit 72051 "DOPSWHS Print Dispatcher"
         exit(Value.AsValue().AsInteger());
     end;
 
-    local procedure BuildReceiptItemZpl(var Item: Record Item; LotNo: Text; SupplierLotNo: Text; QtyText: Text; ReceiptNo: Text; DateText: Text): Text
+    local procedure BuildReceiptItemZpl(var Item: Record Item; Title: Text; LotNo: Text; SupplierLotNo: Text; QtyText: Text; ReceiptNo: Text; DateText: Text): Text
     var
         Canvas: Codeunit "DOPSWHS Label Canvas";
         Lines: List of [Text];
@@ -289,7 +314,7 @@ codeunit 72051 "DOPSWHS Print Dispatcher"
         // DKÇ (18 Kas 2026): mal kabul etiketi kenarlardan taşıyordu; tasarım
         // etiketin %90'ına çizilir ve ortalanır.
         Canvas.InitScaled(ReceiptLabelScalePercent());
-        Zpl := Canvas.Frame('MAL KABUL', DateText, Item."No.", '', 34, X, ColumnWidth, Y);
+        Zpl := Canvas.Frame(Title, DateText, Item."No.", '', 34, X, ColumnWidth, Y);
         TextFont := Canvas.NormalFont() + 4;
         QtyFont := Canvas.QtyFont();
         NoFont := Canvas.FitFontMeasured(Item."No.", ColumnWidth, Canvas.ItemNoFont(), Canvas.SmallFont());

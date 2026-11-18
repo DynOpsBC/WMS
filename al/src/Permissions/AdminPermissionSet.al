@@ -22,6 +22,7 @@ permissionset 72094 "DOPSWHS-ADMIN"
         // Creation/completion is only allowed through LP Management's indirect
         // table permission so the immutable request guard cannot be bypassed.
         tabledata "DOPSWHS LP Bulk Request" = R,
+        tabledata "DOPSWHS Prod Output Request" = R,
         tabledata "DOPSWHS LP Header" = RIMD,
         tabledata "DOPSWHS LP Line" = RIMD,
         tabledata "DOPSWHS LP Movement Ledger" = RIMD,
@@ -65,6 +66,7 @@ permissionset 72094 "DOPSWHS-ADMIN"
         table "DOPSWHS Barcode Symbology" = X,
         table "DOPSWHS IWX Report Selection" = X,
         table "DOPSWHS LP Bulk Request" = X,
+        table "DOPSWHS Prod Output Request" = X,
         table "DOPSWHS LP Header" = X,
         table "DOPSWHS LP Line" = X,
         table "DOPSWHS LP Movement Ledger" = X,
@@ -120,6 +122,8 @@ permissionset 72094 "DOPSWHS-ADMIN"
         page "DOPSWHS Prod LP Factbox" = X,
         page "DOPSWHS Consumption API" = X,
         page "DOPSWHS Output API" = X,
+        page "DOPSWHS Prod Order Line API" = X,
+        page "DOPSWHS Prod Output Req API" = X,
         page "DOPSWHS Assembly API" = X,
         page "DOPSWHS Assembly Line API" = X,
         page "DOPSWHS Shipment Queue" = X,
@@ -242,6 +246,7 @@ permissionset 72094 "DOPSWHS-ADMIN"
         codeunit "DOPSWHS Shipment Mgmt" = X, // 72047
         codeunit "DOPSWHS LP Pick Preference" = X, // 72439
         codeunit "DOPSWHS Prod Mgmt" = X,
+        codeunit "DOPSWHS Partial Output Mgmt" = X,
         codeunit "DOPSWHS Assembly Mgmt" = X,
         codeunit "DOPSWHS Count Mgmt" = X,
         codeunit "DOPSWHS Webhook Mgmt" = X,
@@ -403,6 +408,7 @@ permissionset 72094 "DOPSWHS-ADMIN"
         codeunit "DOPSWHS Subcont Receipt Mgt" = X,
         codeunit "DOPSWHS Subcontract EDesp Mgt" = X,
         codeunit "DOPSWHS Subcontract EDesp Task" = X,
+        tabledata "Prod. Order Line" = R,
         tabledata "Prod. Order Routing Line" = R,
         tabledata "Prod. Order Component" = R,
         tabledata "Work Center" = R,

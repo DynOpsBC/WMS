@@ -81,6 +81,7 @@ enum class Screen(val title: String) {
     PutAway("Yerleştirme"),
     Shipping("Sevkiyat"),
     Production("Üretim"),
+    ProductionOutput("Üretim Çıktısı"),
     Subcontracting("Fason İşlemler"),
     Assembly("Montaj"),
     DirectedMove("Yönlendirilmiş Hareket"),
@@ -229,6 +230,7 @@ fun AppRoot() {
                 Screen.PutAway -> PutAwayModule()
                 Screen.Shipping -> ShippingModule()
                 Screen.Production -> ProductionModule()
+                Screen.ProductionOutput -> DkcProductionOutputTab()
                 Screen.Subcontracting -> SubcontractingModule()
                 Screen.Assembly -> AssemblyModule()
                 Screen.DirectedMove -> DirectedMoveModule()
@@ -270,10 +272,10 @@ internal fun operatorHomeScreens(flavor: String, includeAdminTestTools: Boolean 
             hidden.remove(Screen.TestCenter)
             hidden.remove(Screen.PostingTest)
         }
-        if (!flavor.equals("emu", ignoreCase = true)) hidden += Screen.HierarchicalLP
+        if (!flavor.equals("emu", ignoreCase = true)) hidden += setOf(Screen.HierarchicalLP, Screen.ProductionOutput)
         return Screen.entries.toSet() - hidden
     }
-    return Screen.entries.toSet() - setOf(Screen.Home, Screen.HierarchicalLP)
+    return Screen.entries.toSet() - setOf(Screen.Home, Screen.HierarchicalLP, Screen.ProductionOutput)
 }
 
 /** Tek dokunuşla klasik ve V2 operasyonlarını değiştirir. */
@@ -352,6 +354,7 @@ private val HomeCategories = listOf(
     )),
     HomeCategory("Üretim", Color(0xFFE2873B), listOf(
         HomeTile(Screen.Production, WmsGlyph.PRODUCTION, "Üretim", "Tüketim ve üretim çıkışı kaydet"),
+        HomeTile(Screen.ProductionOutput, WmsGlyph.PRODUCTION_OUTPUT, "Üretim Çıktısı", "Planlanan ve çıkan miktarı gör, ürün etiketini bas"),
         HomeTile(Screen.Subcontracting, WmsGlyph.SUBCONTRACTING, "Fason İşlemler", "Fasona sevk ve referansla teslim alma"),
         HomeTile(Screen.Assembly, WmsGlyph.ASSEMBLY, "Montaj", "Montaj emrinin sarf ve çıktıları"),
     )),

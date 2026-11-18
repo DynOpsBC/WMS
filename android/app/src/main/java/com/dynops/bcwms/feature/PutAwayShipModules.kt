@@ -1829,7 +1829,7 @@ fun ShippingModule() {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun WhsePickTab(initialPickNo: String? = null, onInitialPickConsumed: () -> Unit = {}) {
+internal fun WhsePickTab(initialPickNo: String? = null, onInitialPickConsumed: () -> Unit = {}) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var selected by remember { mutableStateOf<String?>(null) }

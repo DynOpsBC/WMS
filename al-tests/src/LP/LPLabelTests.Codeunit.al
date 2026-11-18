@@ -3,6 +3,36 @@ codeunit 72141 "DOPSWHS LP Label Tests"
     Subtype = Test;
 
     [Test]
+    [TransactionModel(TransactionModel::AutoRollback)]
+    procedure ProductionAndReceiptLabelsKeepTheirOwnTitleAndSource()
+    var
+        Item: Record Item;
+        Dispatcher: Codeunit "DOPSWHS Print Dispatcher";
+        Assert: Codeunit "Library Assert";
+        SourceDoc: Code[50];
+        Count: Integer;
+        Rows: Text;
+        Zpl: Text;
+    begin
+        Item.Init();
+        Item."No." := 'TEST-OUTPUT-LABEL';
+        Item.Description := 'Output label test';
+        Item.Insert();
+        Rows := '[{"itemNo":"TEST-OUTPUT-LABEL","lotNo":"LOT-01","quantityText":"12,5 KG","receiptNo":"UR001","dateText":"18.11.2026","copies":2}]';
+        Zpl := Dispatcher.BuildDocumentItemLabels(Rows, 'ÜRETİM', Count, SourceDoc);
+        Assert.AreEqual(2, Count, 'Requested copies must be preserved.');
+        Assert.AreEqual('UR001', SourceDoc, 'The print job references the production order.');
+        Assert.IsTrue(StrPos(Zpl, 'ÜRETİM') > 0, 'Production title.');
+        Assert.IsTrue(StrPos(Zpl, 'LOT-01') > 0, 'Produced lot is printed.');
+        Assert.IsTrue(StrPos(Zpl, '12,5 KG') > 0, 'Base quantity and unit are printed.');
+        Zpl := Dispatcher.BuildReceiptItemLabels(Rows, Count, SourceDoc);
+        Assert.AreEqual(2, Count, 'Receipt copies remain unchanged.');
+        Assert.IsTrue(StrPos(Zpl, 'MAL KABUL') > 0, 'Receipt title remains unchanged.');
+        Assert.IsFalse(StrPos(Zpl, 'ÜRETİM') > 0, 'Receipt must not gain a production title.');
+        asserterror Dispatcher.BuildDocumentItemLabels('[]', 'ÜRETİM', Count, SourceDoc);
+    end;
+
+    [Test]
     procedure LabelContainsScannableLpQr()
     var
         LP: Record "DOPSWHS LP Header" temporary;

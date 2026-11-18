@@ -27,6 +27,7 @@ class ProductionUxRulesTest {
         assertFalse(Screen.SelfTest in screens)
         assertTrue(Screen.Printers in screens)
         assertTrue(Screen.HierarchicalLP in screens)
+        assertTrue(Screen.ProductionOutput in screens)
     }
 
     @Test
@@ -52,6 +53,8 @@ class ProductionUxRulesTest {
         assertTrue(Screen.Connection in screens)
         assertTrue(Screen.Help in screens)
         assertFalse(Screen.HierarchicalLP in screens)
+        assertFalse(Screen.ProductionOutput in screens)
+        assertFalse(Screen.ProductionOutput in operatorHomeScreens("dynops"))
         assertFalse(Screen.TestCenter in screens)
         assertFalse(Screen.PostingTest in screens)
         assertFalse(Screen.SelfTest in screens)

@@ -124,6 +124,15 @@ page 72086 "DOPSWHS Item API"
         exit(Dispatcher.PrintReceiptItemLabels(rowsJson, printerId));
     end;
 
+    // DKÇ: production output labels (item, lot, quantity, production order) from the terminal.
+    [ServiceEnabled]
+    procedure printProductionLabels(rowsJson: Text; printerId: Code[50]): Integer
+    var
+        Dispatcher: Codeunit "DOPSWHS Print Dispatcher";
+    begin
+        exit(Dispatcher.PrintProductionItemLabels(rowsJson, printerId));
+    end;
+
     [ServiceEnabled]
     procedure printLabels(itemNosJson: Text; printerId: Code[50]): Integer
     var
