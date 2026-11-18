@@ -87,4 +87,34 @@ class ProductionPostingWorkflowTest {
         assertEquals("Kaynak belge: 001", pickSourceCaption(sales.put("sourceSubtype", 5)))
         assertEquals("", pickSourceCaption(JSONObject()))
     }
+
+    @Test
+    fun listCardShowsOnlySourceNumbers() {
+        assertEquals("UR000382", pickSourceNumbers(JSONObject().put("sourceSummary", "Serbest bırakılmış üretim emri: UR000382").put("sourceNo", "UR000382")))
+        assertEquals(
+            "UR000382 · SS000044",
+            pickSourceNumbers(JSONObject().put("sourceSummary", "Serbest bırakılmış üretim emri: UR000382 · Satış siparişi: SS000044")),
+        )
+        // Older BC without sourceSummary: fall back to the header source number.
+        assertEquals("UR000335", pickSourceNumbers(JSONObject().put("sourceNo", "UR000335")))
+        assertEquals("", pickSourceNumbers(JSONObject()))
+    }
+
+    @Test
+    fun listCardItemsComeFromTakeLinesOncePerItem() {
+        fun line(no: String, action: String, item: String, description: String) = JSONObject()
+            .put("no", no).put("actionType", action).put("itemNo", item).put("description", description)
+        val items = pickItemsByDocument(
+            listOf(
+                line("PI000435", "Take", "KLC-4", "HAMMADDE KÜLÇE KURŞUN"),
+                line("PI000435", "Place", "KLC-4", "HAMMADDE KÜLÇE KURŞUN"),
+                line("PI000435", "Take", "KLC-4", "HAMMADDE KÜLÇE KURŞUN"),
+                line("PI000435", "Take", "JMB-3", "JMB-3"),
+                line("PI000436", "Take", "6.50 MM TEL", ""),
+            ),
+        )
+        assertEquals(listOf("KLC-4 — HAMMADDE KÜLÇE KURŞUN", "JMB-3"), items["PI000435"])
+        assertEquals(listOf("6.50 MM TEL"), items["PI000436"])
+        assertTrue(pickItemsByDocument(emptyList()).isEmpty())
+    }
 }

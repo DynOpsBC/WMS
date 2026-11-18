@@ -18,6 +18,35 @@ internal fun pickSourceCaption(line: JSONObject): String {
 internal fun pickSourceSummary(header: JSONObject): String =
     header.optString("sourceSummary").trim().ifBlank { pickSourceCaption(header) }
 
+/**
+ * Liste kartı için kısa kaynak: yalnız belge numaraları ("UR000382" ya da
+ * "UR000382 · SS000044"). Uzun başlık ("Serbest bırakılmış üretim emri: …")
+ * belge ekranında kalır; listede yer kaplıyordu.
+ */
+internal fun pickSourceNumbers(header: JSONObject): String {
+    val fromSummary = header.optString("sourceSummary").split('·')
+        .map { it.substringAfterLast(':').trim() }
+        .filter { it.isNotBlank() }
+    val numbers = fromSummary.ifEmpty { listOf(header.optString("sourceNo").trim()).filter { it.isNotBlank() && it != "null" } }
+    return numbers.distinct().joinToString(" · ")
+}
+
+/**
+ * Toplama belgesi başına ürünler (liste kartında gösterilir): yalnız Take
+ * satırları, ürün başına bir kez, "ÜRÜN NO — açıklama".
+ */
+internal fun pickItemsByDocument(lines: List<JSONObject>): Map<String, List<String>> =
+    pickTakeLines(lines)
+        .filter { it.optString("no").isNotBlank() && it.optString("itemNo").isNotBlank() }
+        .groupBy { it.optString("no") }
+        .mapValues { (_, rows) ->
+            rows.distinctBy { it.optString("itemNo") }.map { row ->
+                val item = row.optString("itemNo").trim()
+                val description = row.optString("description").trim().takeIf { it.isNotBlank() && it != "null" && !it.equals(item, ignoreCase = true) }
+                listOfNotNull(item, description).joinToString(" — ")
+            }
+        }
+
 internal fun productionReportQuantityError(quantity: Double?, remaining: Double): String? = when {
     quantity == null || !quantity.isFinite() || quantity <= 0.0 -> "Bildirilen miktar sıfırdan büyük olmalı."
     !remaining.isFinite() || quantity > remaining -> "Bildirilen miktar kalan miktarı aşıyor. Emir bilgilerini yenileyin."

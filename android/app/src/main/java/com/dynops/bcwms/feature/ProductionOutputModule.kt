@@ -159,6 +159,12 @@ private fun ProductionOutputDetail(line: JSONObject, onBack: () -> Unit) {
     var loading by remember(orderNo, lineNo) { mutableStateOf(false) }
     var labelFor by remember(orderNo, lineNo) { mutableStateOf<OutputLot?>(null) }
     var showReport by remember(orderNo, lineNo) { mutableStateOf(false) }
+    // Sarfiyat: bileşenler, bugüne kadar tüketilen ve üretim gözündeki stok.
+    var components by remember(orderNo, lineNo) { mutableStateOf<List<JSONObject>>(emptyList()) }
+    var consumed by remember(orderNo, lineNo) { mutableStateOf<Map<String, Double>>(emptyMap()) }
+    var binStock by remember(orderNo, lineNo) { mutableStateOf<Map<String, Double>>(emptyMap()) }
+    var consumeFor by remember(orderNo, lineNo) { mutableStateOf<JSONObject?>(null) }
+    var consumeMsg by remember(orderNo, lineNo) { mutableStateOf("") }
 
     fun load() {
         if (loading) return
@@ -174,6 +180,19 @@ private fun ProductionOutputDetail(line: JSONObject, onBack: () -> Unit) {
                 context,
                 productionOutputEntriesPath(orderNo, lineNo, current.optString("itemNo")),
             )
+            // Bileşenler ve tüketim durumu. Alınamazsa çıktı bölümü yine çalışır.
+            val comp = BcApi.getAllPages(context, "productionConsumption?\$top=200&\$filter=prodOrderNo eq '$safe' and prodOrderLineNo eq $lineNo")
+            components = if (comp.complete) comp.rows else emptyList()
+            val used = BcApi.getAllPages(context, productionConsumptionEntriesPath(orderNo, lineNo))
+            consumed = if (used.complete) consumedByItem(used.rows) else emptyMap()
+            val stock = mutableMapOf<String, Double>()
+            for (c in components) {
+                val item = c.optString("itemNo"); val bin = c.optString("binCode")
+                if (item.isBlank() || bin.isBlank()) continue
+                val r = BcApi.get(context, "binContents?\$filter=itemNo eq '${item.replace("'", "''")}' and binCode eq '${bin.replace("'", "''")}'&\$select=quantity")
+                if (r.ok) stock["$item|$bin"] = BcApi.parseValueArray(r.body).sumOf { it.optDouble("quantity", 0.0) }
+            }
+            binStock = stock
             loading = false
             lots = if (page.complete) productionOutputLots(page.rows) else emptyList()
             status = when {
@@ -185,6 +204,27 @@ private fun ProductionOutputDetail(line: JSONObject, onBack: () -> Unit) {
     }
     LaunchedEffect(orderNo, lineNo) { load() }
 
+    /** Mevcut Üretim > Sarfiyat kaydıyla aynı BC işlemi (productionConsumption.consume). */
+    fun consume(c: JSONObject, qty: Double, lotNo: String) {
+        if (loading) return
+        loading = true
+        scope.launch {
+            consumeMsg = "Sarfiyat kaydediliyor..."
+            val body = JSONObject()
+                .put("prodOrderNo", orderNo).put("componentLineNo", c.optInt("componentLineNo"))
+                .put("itemNo", c.optString("itemNo")).put("qty", qty).put("lpNo", "")
+                .put("lotNo", lotNo).put("serialNo", "").put("binCode", c.optString("binCode")).toString()
+            val key = "status='Released',prodOrderNo='${orderNo.replace("'", "''")}'," +
+                "prodOrderLineNo=$lineNo,componentLineNo=${c.optInt("componentLineNo")}"
+            val r = BcApi.post(context, "productionConsumption($key)/Microsoft.NAV.consume", body)
+            loading = false
+            consumeMsg = if (r.ok) "TAMAM: ${c.optString("itemNo")} · ${outQty(qty, c.optString("unitOfMeasureCode"))} tüketildi."
+                else "HATA: ${BcApi.errorMessage(r.body)}"
+            if (r.ok) load()
+        }
+    }
+
+    val released = current.optString("status").equals("Released", true)
     Column(Modifier.fillMaxSize()) {
         Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(12.dp)) {
             TextButton(onClick = onBack) { Text("‹ Üretim Emirleri") }
@@ -212,6 +252,48 @@ private fun ProductionOutputDetail(line: JSONObject, onBack: () -> Unit) {
                     }
                 }
             }
+            if (components.isNotEmpty()) {
+                Spacer(Modifier.height(14.dp))
+                Text("Sarfiyat — çıkan miktara göre", fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                Text("Önce çıktıyı bildirin, sonra bileşeni tüketin. Tüketmek için bileşene dokunun.", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                StatusText(consumeMsg)
+                Spacer(Modifier.height(4.dp))
+                val finished = current.optDouble("finishedQuantity", 0.0)
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    components.forEach { c ->
+                        val item = c.optString("itemNo")
+                        val cu = c.optString("unitOfMeasureCode")
+                        val bin = c.optString("binCode")
+                        val inBin = binStock["$item|$bin"]
+                        val needOnly = componentConsumption(finished, c.optDouble("quantity", 0.0), consumed[item] ?: 0.0, c.optDouble("remainingQuantity", 0.0))
+                        val state = componentConsumption(finished, c.optDouble("quantity", 0.0), consumed[item] ?: 0.0, c.optDouble("remainingQuantity", 0.0), inBin)
+                        val canConsume = !loading && released && state.consumableNow > 0.0
+                        Card(onClick = { if (canConsume) consumeFor = c }, modifier = Modifier.fillMaxWidth()) {
+                            Column(Modifier.padding(12.dp)) {
+                                Text(item, fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                                val desc = c.optString("description")
+                                if (desc.isNotBlank() && desc != item) Text(desc, fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
+                                Spacer(Modifier.height(6.dp))
+                                Row(Modifier.fillMaxWidth()) {
+                                    ProductionFigure("Gereken", outQty(state.neededForOutput, cu), Modifier.weight(1f))
+                                    ProductionFigure("Tüketilen", outQty(state.consumed, cu), Modifier.weight(1f))
+                                    ProductionFigure("Tüketebileceğiniz", outQty(state.consumableNow, cu), Modifier.weight(1.2f), strong = true)
+                                }
+                                Spacer(Modifier.height(4.dp))
+                                Text(
+                                    when {
+                                        bin.isBlank() -> "Bileşenin üretim gözü tanımlı değil."
+                                        inBin == null -> "$bin gözündeki stok okunamadı."
+                                        else -> "$bin gözünde: ${outQty(inBin, cu)}"
+                                    } + if (needOnly.consumableNow > state.consumableNow + 0.000001) " — çekilen kadar tüketilir; kalan için toplama yapın." else "",
+                                    fontSize = 12.sp,
+                                    color = if (needOnly.consumableNow > state.consumableNow + 0.000001) bcwmsStatus().warning else MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                        }
+                    }
+                }
+            }
         }
         BottomActionBar {
             OutlinedButton(onClick = { load() }, enabled = !loading, modifier = Modifier.weight(1f).height(46.dp)) {
@@ -229,6 +311,33 @@ private fun ProductionOutputDetail(line: JSONObject, onBack: () -> Unit) {
         onPosted = { load() },
         onPrint = { lot -> showReport = false; labelFor = lot },
     )
+
+    consumeFor?.let { c ->
+        val item = c.optString("itemNo")
+        val cu = c.optString("unitOfMeasureCode")
+        val bin = c.optString("binCode")
+        val remainingOnOrder = c.optDouble("remainingQuantity", 0.0)
+        val inBin = binStock["$item|$bin"]
+        val state = componentConsumption(current.optDouble("finishedQuantity", 0.0), c.optDouble("quantity", 0.0), consumed[item] ?: 0.0, remainingOnOrder, inBin)
+        QuantityDialogSheet(
+            title = "Sarfiyat · tüketebileceğiniz ${outQty(state.consumableNow, cu)}",
+            itemNo = item,
+            // Varsayılan: çıktıya göre tüketilebilir miktar; gözdeki stok daha azsa o kadar.
+            initialQty = state.consumableNow,
+            // Çekilen (üretim gözündeki) ve emirde kalan miktardan fazlası girilemez.
+            maximumQuantity = minOf(remainingOnOrder, inBin ?: remainingOnOrder).coerceAtLeast(0.0),
+            initialUom = cu,
+            showLotSerial = true,
+            showSerial = false,
+            showAvailableLotLookup = true,
+            autoDetectLotFromStock = true,
+            locationCode = c.optString("locationCode"),
+            binCode = bin,
+            variantCode = "",
+            onDismiss = { consumeFor = null },
+            onConfirm = { res -> consumeFor = null; consume(c, res.quantity, res.lotNo) },
+        )
+    }
 
     labelFor?.let { lot ->
         ProductionLabelSheet(

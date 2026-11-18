@@ -82,3 +82,45 @@ internal fun productionOutputEntriesPath(orderNo: String, lineNo: Int, itemNo: S
         " and itemNo eq '${escaped(itemNo)}' and entryType eq 'Output'" +
         "&\$select=entryNo,postingDate,quantity,lotNo,baseUnitOfMeasure"
 }
+
+/** Bir bileşenin, emrin şu ana kadarki çıktısına göre sarfiyat durumu. */
+internal data class ComponentConsumption(
+    /** Çıkan miktar için gereken toplam (çıkan × birim başına). */
+    val neededForOutput: Double,
+    /** Bugüne kadar tüketilen. */
+    val consumed: Double,
+    /** Şimdi tüketilebilecek: gereken − tüketilen; emirde kalanı ve üretim gözüne çekileni aşmaz. */
+    val consumableNow: Double,
+)
+
+/**
+ * "Önce üret, sonra tüket": çıktı kaydedildikten sonra bileşenden ne kadar
+ * tüketilebileceği. [qtyPer] bir birim ürün için bileşen miktarı,
+ * [remainingOnOrder] emrin tamamı için hâlâ tüketilmemiş miktardır.
+ */
+internal fun componentConsumption(
+    finished: Double,
+    qtyPer: Double,
+    consumed: Double,
+    remainingOnOrder: Double,
+    /** Üretim gözüne toplanmış (çekilmiş) stok; null = okunamadı, sınır uygulanmaz. */
+    pickedInBin: Double? = null,
+): ComponentConsumption {
+    val needed = (finished.coerceAtLeast(0.0) * qtyPer.coerceAtLeast(0.0))
+    val used = consumed.coerceAtLeast(0.0)
+    // DKÇ: yalnız çekilen (üretim gözüne toplanan) kadar tüketilebilir.
+    val now = minOf(needed - used, remainingOnOrder.coerceAtLeast(0.0), pickedInBin?.coerceAtLeast(0.0) ?: Double.MAX_VALUE).coerceAtLeast(0.0)
+    // 5 hane: BC miktar hassasiyeti; 115.50000000000001 gibi kayan nokta artığı gösterilmesin.
+    fun r(v: Double) = java.math.BigDecimal.valueOf(v).setScale(5, java.math.RoundingMode.HALF_UP).toDouble()
+    return ComponentConsumption(r(needed), r(used), r(now))
+}
+
+/** Sarfiyat madde hareketlerinden ürün başına tüketilen miktar (hareketler eksi gelir, geri almalar artı). */
+internal fun consumedByItem(entries: List<JSONObject>): Map<String, Double> =
+    entries.groupBy { it.optString("itemNo").trim() }
+        .filterKeys { it.isNotBlank() }
+        .mapValues { (_, rows) -> (-rows.sumOf { it.optDouble("quantity", 0.0) }).coerceAtLeast(0.0) }
+
+internal fun productionConsumptionEntriesPath(orderNo: String, lineNo: Int): String =
+    "itemLedgerEntries?\$top=1000&\$filter=orderNo eq '${orderNo.replace("'", "''")}' and orderLineNo eq $lineNo" +
+        " and entryType eq 'Consumption'&\$select=entryNo,itemNo,quantity"

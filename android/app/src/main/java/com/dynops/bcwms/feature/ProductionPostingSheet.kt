@@ -157,9 +157,12 @@ internal fun ProductionPostingSheet(line: JSONObject, onDismiss: () -> Unit, onP
                     Button(enabled = !busy && !blocked && result != null, modifier = Modifier.fillMaxWidth(), onClick = {
                         result?.let { onPrint(OutputLot(it.getString("lotNo"), it.getDouble("quantityBase"), it.getString("baseUnitOfMeasure"), it.getString("postingDate"))) }
                     }) { Text("Bu Çıktının Etiketini Bas") }
+                    // Önce üret, sonra tüket: çıktıdan sonra emir ekranındaki Sarfiyat
+                    // bölümü ne kadar tüketilebileceğini gösterir.
                     OutlinedButton(enabled = !busy && !blocked, modifier = Modifier.fillMaxWidth(), onClick = {
                         if (store.clear()) { onDismiss() } else { blocked = true; status = "HATA: Cihazdaki bildirim kapatılamadı." }
-                    }) { Text("Bildirimi Kapat — Yeni Üretime Geç") }
+                    }) { Text("Sarfiyata Geç") }
+                    Text("Bildirim kapanır; emir ekranında bu çıktı için ne kadar bileşen tüketebileceğiniz görünür.", style = MaterialTheme.typography.bodySmall)
                 }
             }
             if (current.phase in setOf("prepare", "prepared", "posting")) TextButton(enabled = !busy && !blocked, onClick = { send("cancelOutput") }) { Text("Bildirimi İptal Et / Miktarı Değiştir") }

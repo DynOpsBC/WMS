@@ -1,7 +1,7 @@
 {
-  "versionCode": 200174,
-  "versionName": "1.14.174-emu",
-  "apkUrl": "https://github.com/DynOpsBC/WMS/releases/download/android-v1.14.174-emu/BCWMS-EMU-1.14.174-RELEASE.apk",
-  "sha256": "f2ca5f692150cae56842f65b20a9452bb9ba69039a561ce71bc62794d614c268",
-  "releaseNotes": "Paketleme tuşu artık doğrudan Sevkiyat'taki Toplama listesini açar: tür seçici ve sepet/koli adımı yok, belgeye basınca parçalı toplama ekranı gelir. Üretim Çıktısı ve kaynak belgeli toplama (1.14.173) aynen devam eder. BCWMSApp 1.14.2.32 gerekir."
+  "versionCode": 200175,
+  "versionName": "1.14.175-emu",
+  "apkUrl": "https://github.com/DynOpsBC/WMS/releases/download/android-v1.14.175-emu/BCWMS-EMU-1.14.175-RELEASE.apk",
+  "sha256": "1e7cfafcd0520344d45d9b864722b8f815f0756ab898ba7782678a51e8465e86",
+  "releaseNotes": "Üretim Çıktısı: önce çıktıyı bildirin, sonra emir ekranındaki Sarfiyat bölümünde her bileşen için gereken, tüketilen ve şimdi tüketebileceğiniz miktar görünür (yalnız üretim gözüne çekilen kadar); bileşene dokunup tüketin. Toplama listesinde kartta yalnız emir/sipariş numarası ve toplanacak ürünler yazar. BCWMSApp 1.14.2.32 gerekir."
 }

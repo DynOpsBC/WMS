@@ -106,4 +106,47 @@ class ProductionOutputWorkflowTest {
         assertTrue(productionLabelRows("", "", "", 5.0, "KG", 1).isEmpty())
         assertEquals(RECEIPT_LABEL_COPIES_MAX, productionLabelRows("X", "", "", 5.0, "KG", 999)[0].copies)
     }
+
+    @Test
+    fun consumableFollowsTheOutputAlreadyPosted() {
+        // 200 KG'lik emirden 110 KG çıktı, birim başına 1,05 KG bileşen, henüz tüketim yok.
+        val c = componentConsumption(finished = 110.0, qtyPer = 1.05, consumed = 0.0, remainingOnOrder = 210.0)
+        assertEquals(115.5, c.neededForOutput, 0.0)
+        assertEquals(115.5, c.consumableNow, 0.0)
+        // 100 KG zaten tüketildiyse yalnız fark kalır.
+        assertEquals(15.5, componentConsumption(110.0, 1.05, 100.0, 110.0).consumableNow, 0.0)
+    }
+
+    @Test
+    fun nothingIsConsumableWhenMoreThanNeededWasAlreadyConsumed() {
+        // UR000381: 100 KG çıktıda emrin bütün bileşeni (210 KG) tüketilmişti.
+        val c = componentConsumption(finished = 110.0, qtyPer = 1.05, consumed = 210.0, remainingOnOrder = 0.0)
+        assertEquals(0.0, c.consumableNow, 0.0)
+        assertEquals(210.0, c.consumed, 0.0)
+        // Çıktı yokken tüketilecek bir şey yoktur.
+        assertEquals(0.0, componentConsumption(0.0, 1.05, 0.0, 210.0).consumableNow, 0.0)
+    }
+
+    @Test
+    fun consumableNeverExceedsWhatIsLeftOnTheOrder() {
+        assertEquals(40.0, componentConsumption(finished = 500.0, qtyPer = 1.0, consumed = 0.0, remainingOnOrder = 40.0).consumableNow, 0.0)
+    }
+
+    @Test
+    fun consumedQuantityNetsReversalsPerItem() {
+        fun e(item: String, qty: Double) = JSONObject().put("itemNo", item).put("quantity", qty)
+        val used = consumedByItem(listOf(e("KLC-4", -210.0), e("KLC-4", 10.0), e("JMB-3", -50.0), e("X", 5.0)))
+        assertEquals(200.0, used.getValue("KLC-4"), 0.0)
+        assertEquals(50.0, used.getValue("JMB-3"), 0.0)
+        assertEquals(0.0, used.getValue("X"), 0.0)
+    }
+
+    @Test
+    fun onlyWhatWasPickedIntoTheProductionBinCanBeConsumed() {
+        // Çıktıya göre 115,5 KG gerekir ama üretim gözüne 80 KG çekilmiş.
+        assertEquals(80.0, componentConsumption(110.0, 1.05, 0.0, 210.0, pickedInBin = 80.0).consumableNow, 0.0)
+        assertEquals(0.0, componentConsumption(110.0, 1.05, 0.0, 210.0, pickedInBin = 0.0).consumableNow, 0.0)
+        // Göz okunamadıysa sınır uygulanmaz (ekran ayrıca uyarı gösterir).
+        assertEquals(115.5, componentConsumption(110.0, 1.05, 0.0, 210.0, pickedInBin = null).consumableNow, 0.0)
+    }
 }

@@ -228,6 +228,8 @@ private fun V2PicksForFlow(flow: OutboundFlowMode, allModes: Boolean = false, on
     var search by remember { mutableStateOf("") }
     var myUserId by remember { mutableStateOf("") }
     var blockedPick by remember { mutableStateOf<Pair<String, String>?>(null) }
+    // DKÇ: kartta kaynak belge numarası ve toplanacak ürünler yazar.
+    var itemsByPick by remember { mutableStateOf<Map<String, List<String>>>(emptyMap()) }
 
     fun load() {
         scope.launch {
@@ -263,6 +265,11 @@ private fun V2PicksForFlow(flow: OutboundFlowMode, allModes: Boolean = false, on
                 // (kaçışlı boşluk) olarak geliyor ve düz karşılaştırmada tutmuyor.
                 pickMatchesFlow(row.optString("pickMode"), flow, allModes)
             } else emptyList()
+            if (allModes && rows.isNotEmpty()) {
+                // Ürünler ayrı istekle gelir; alınamazsa kart yalnız kaynak belgeyi gösterir.
+                val linePage = BcApi.getAllPages(context, "pickLines?\$top=1000&\$select=no,actionType,itemNo,description")
+                itemsByPick = if (linePage.complete) pickItemsByDocument(linePage.rows) else emptyMap()
+            }
             loading = false
             status = when {
                 !page.complete -> "HATA: Toplama kuyruğunun tamamı alınamadı. Yenileyin."
@@ -335,6 +342,8 @@ private fun V2PicksForFlow(flow: OutboundFlowMode, allModes: Boolean = false, on
                     owner = owner,
                     onOpen = { if (owner == PickOwner.Other) blockedPick = no to assigned else selected = no },
                     onTake = { takeOver(no) },
+                    shortSource = allModes,
+                    items = itemsByPick[no].orEmpty(),
                 )
             }
             if (rows.isEmpty() && !loading) item { EmptyState(if (allModes) "Açık toplama yok." else "${flow.title} kuyruğunda açık toplama yok.") }
@@ -1839,6 +1848,8 @@ private fun PickListCard(
     owner: PickOwner,
     onOpen: () -> Unit,
     onTake: () -> Unit,
+    shortSource: Boolean = false,
+    items: List<String> = emptyList(),
 ) {
     val assigned = d.optString("assignedUserId").trim()
     val pct = d.optInt("percentComplete").coerceIn(0, 100)
@@ -1863,9 +1874,14 @@ private fun PickListCard(
                 Spacer(Modifier.height(2.dp))
                 // Atama bilgisi artık alttaki rozette — burada tekrar edilmiyor.
                 // Hangi siparişten / iş emrinden çekildiği liste kartında da görünür.
-                pickSourceSummary(d).takeIf { it.isNotBlank() }?.let { source ->
-                    Text(source, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = PickAccent)
+                (if (shortSource) pickSourceNumbers(d) else pickSourceSummary(d)).takeIf { it.isNotBlank() }?.let { source ->
+                    Text(source, fontSize = if (shortSource) 15.sp else 13.sp, fontWeight = FontWeight.SemiBold, color = PickAccent)
                 }
+                // DKÇ: toplanacak ürünler (en çok üç satır; fazlası "+N ürün").
+                items.take(3).forEach { item ->
+                    Text(item, fontSize = 13.sp, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+                }
+                if (items.size > 3) Text("+${items.size - 3} ürün", fontSize = 12.sp, color = Color.Gray)
                 Text(
                     "📍 ${rawValue(d, "locationCode").ifBlank { "—" }}",
                     fontSize = 11.sp, color = Color.Gray,
