@@ -286,7 +286,9 @@ codeunit 72051 "DOPSWHS Print Dispatcher"
         TextFont: Integer;
         QtyFont: Integer;
     begin
-        Canvas.Init();
+        // DKÇ (18 Kas 2026): mal kabul etiketi kenarlardan taşıyordu; tasarım
+        // etiketin %90'ına çizilir ve ortalanır.
+        Canvas.InitScaled(ReceiptLabelScalePercent());
         Zpl := Canvas.Frame('MAL KABUL', DateText, Item."No.", '', 34, X, ColumnWidth, Y);
         TextFont := Canvas.NormalFont() + 4;
         QtyFont := Canvas.QtyFont();
@@ -320,6 +322,11 @@ codeunit 72051 "DOPSWHS Print Dispatcher"
             BarData := Item."No.";
         Zpl += Canvas.Code128(X, Y, Canvas.BarHeightToBottom(Y, true, 30), BarData, ColumnWidth, true);
         exit(Zpl + Canvas.Finish());
+    end;
+
+    local procedure ReceiptLabelScalePercent(): Integer
+    begin
+        exit(90);
     end;
 
     procedure BuildExcelItemLabels(RowsJson: Text; var Count: Integer): Text

@@ -44,6 +44,9 @@ internal fun isPickContainerStatusUsable(status: String): Boolean =
 
 /** Assigned picks are mutable only after the local warehouse identity is resolved
  * and verified as the current owner. Unknown identity is deliberately fail-closed. */
+/** DKÇ / EMU müşteri sürümü. */
+internal fun isDkcFlavor(flavor: String = BuildConfig.FLAVOR): Boolean = flavor.equals("emu", ignoreCase = true)
+
 internal fun canMutateAssignedPick(assignedUserId: String, localUserId: String): Boolean =
     canMutateAssignedDocument(assignedUserId, localUserId)
 
@@ -161,9 +164,12 @@ private fun ClassicPickingModule() {
 @Composable
 private fun V2PickingModule() {
     var flow by rememberSaveable { mutableStateOf(OutboundFlowMode.Multi) }
+    // DKÇ: belge açıkken tür seçici gizlenir; küçük el terminalinde ekranın
+    // yarısını kaplayıp toplama satırlarına yer bırakmıyordu.
+    var documentOpen by remember { mutableStateOf(false) }
     Column(Modifier.fillMaxSize()) {
-        V2FlowSelector(current = flow, onSelect = { flow = it })
-        Box(Modifier.weight(1f)) { key(flow) { V2PicksForFlow(flow) } }
+        if (!(documentOpen && isDkcFlavor())) V2FlowSelector(current = flow, onSelect = { flow = it })
+        Box(Modifier.weight(1f)) { key(flow) { V2PicksForFlow(flow, onDocumentOpen = { documentOpen = it }) } }
     }
 }
 
@@ -207,7 +213,7 @@ internal fun V2FlowSelector(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun V2PicksForFlow(flow: OutboundFlowMode) {
+private fun V2PicksForFlow(flow: OutboundFlowMode, onDocumentOpen: (Boolean) -> Unit = {}) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var rows by remember { mutableStateOf<List<JSONObject>>(emptyList()) }
@@ -283,8 +289,12 @@ private fun V2PicksForFlow(flow: OutboundFlowMode) {
 
     LaunchedEffect(flow, pickScope) { load() }
     val selectedNo = selected
+    LaunchedEffect(selectedNo != null) { onDocumentOpen(selectedNo != null) }
     if (selectedNo != null) {
-        GuidedPickDocument(no = selectedNo, flowMode = flow, onBack = { selected = null; load() })
+        // DKÇ: mal kabuldeki gibi parçalı toplama — satır bazında miktar girilir,
+        // girilen kadar kaydedilir, kalan belgede kalır.
+        if (isDkcFlavor()) DkcPickDocument(no = selectedNo, onBack = { selected = null; load() })
+        else GuidedPickDocument(no = selectedNo, flowMode = flow, onBack = { selected = null; load() })
         return
     }
 
@@ -418,7 +428,11 @@ private fun ActivePicksTab() {
 
     var itemDocs by remember { mutableStateOf<Pair<String, Set<String>>?>(null) }
     val sel = selected
-    if (sel != null) { GuidedPickDocument(no = sel, onBack = { selected = null; load() }); return }
+    if (sel != null) {
+        if (isDkcFlavor()) DkcPickDocument(no = sel, onBack = { selected = null; load() })
+        else GuidedPickDocument(no = sel, onBack = { selected = null; load() })
+        return
+    }
 
     DocListScanHandler(
         enabled = true,

@@ -28,6 +28,10 @@ codeunit 72321 "DOPSWHS Label Canvas"
         DefaultWidthMm: Decimal;
         DefaultHeightMm: Decimal;
         TopOffsetDots: Integer;
+        MediaWidth: Integer;
+        MediaHeight: Integer;
+        OriginX: Integer;
+        OriginY: Integer;
 
     /// <summary>Reads the label size from Setup (default 80x40 mm) and derives the metrics.</summary>
     procedure Init()
@@ -47,9 +51,44 @@ codeunit 72321 "DOPSWHS Label Canvas"
         TopOffsetDots := Clamp(Round(Setup."Label Top Offset (mm)" * 8, 1), -120, 120);
     end;
 
+    /// <summary>
+    /// DKÇ (18 Kas 2026): "etiket tam sığmıyor, %10 küçült". The label still
+    /// prints on the Setup size, but the design is laid out at Percent of it and
+    /// centred: at 90% every edge gains a 5% quiet zone, so a roll that sits a
+    /// little off or a printer with an unprintable edge no longer cuts the text.
+    /// Percent outside 50..99, or a design that would fall under the smallest
+    /// supported canvas, leaves the label at full size.
+    /// </summary>
+    procedure InitScaled(Percent: Integer)
+    var
+        FullWidth: Integer;
+        FullHeight: Integer;
+        Offset: Integer;
+    begin
+        Init();
+        if (Percent < 50) or (Percent > 99) then
+            exit;
+        FullWidth := Width;
+        FullHeight := Height;
+        // InitSize falls back to 80x40 mm below 25x20 mm; never scale into that.
+        if (FullWidth * Percent < 25 * 8 * 100) or (FullHeight * Percent < 20 * 8 * 100) then
+            exit;
+        Offset := TopOffsetDots;
+        InitSize(FullWidth * Percent / 800, FullHeight * Percent / 800);
+        TopOffsetDots := Offset;
+        MediaWidth := FullWidth;
+        MediaHeight := FullHeight;
+        OriginX := (FullWidth - Width) div 2;
+        OriginY := (FullHeight - Height) div 2;
+    end;
+
     /// <summary>Canvas for an explicit size; 0 or an unusable value falls back to 80x40 mm.</summary>
     procedure InitSize(WidthMm: Decimal; HeightMm: Decimal)
     begin
+        MediaWidth := 0;
+        MediaHeight := 0;
+        OriginX := 0;
+        OriginY := 0;
         if DefaultWidthMm = 0 then begin
             DefaultWidthMm := 80;
             DefaultHeightMm := 40;
@@ -298,12 +337,26 @@ codeunit 72321 "DOPSWHS Label Canvas"
     // ------------------------------------------------------------------
 
     procedure Start(): Text
+    var
+        Zpl: Text;
+        PrintWidth: Integer;
+        PrintHeight: Integer;
     begin
         EnsureInit();
+        // A scaled design (InitScaled) keeps the media size and moves the label
+        // home instead. ^LH stays in the printer until the next one, which is
+        // why every label, scaled or not, sets it explicitly.
+        PrintWidth := Width;
+        PrintHeight := Height;
+        if MediaWidth <> 0 then begin
+            PrintWidth := MediaWidth;
+            PrintHeight := MediaHeight;
+        end;
         // ^CI28 = UTF-8 so Turkish characters print correctly.
+        Zpl := '^XA^CI28^PW' + Format(PrintWidth) + '^LL' + Format(PrintHeight);
         if TopOffsetDots <> 0 then
-            exit('^XA^CI28^PW' + Format(Width) + '^LL' + Format(Height) + '^LT' + Format(TopOffsetDots) + '^LH0,0');
-        exit('^XA^CI28^PW' + Format(Width) + '^LL' + Format(Height) + '^LH0,0');
+            Zpl += '^LT' + Format(TopOffsetDots);
+        exit(Zpl + '^LH' + Format(OriginX) + ',' + Format(OriginY));
     end;
 
     procedure Finish(): Text
