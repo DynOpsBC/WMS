@@ -125,7 +125,7 @@ private fun ProjectMovesSheet(projectCode: String, onDismiss: () -> Unit) {
             page.error?.httpCode == 404 -> "HATA: Bu liste için Business Central güncellemesi gerekli (BCWMS 1.14.4.3)."
             !page.complete && entries.isEmpty() -> "HATA: Taşımalar alınamadı. Tekrar deneyin."
             entries.isEmpty() -> "Bu proje için henüz taşıma yapılmadı."
-            else -> "${entries.size} taşıma" + if (!page.complete) " (son kayıtlar)" else ""
+            else -> if (!page.complete || entries.size >= 200) "Son ${entries.size} taşıma" else "${entries.size} taşıma"
         }
     }
     SheetScaffold(onDismiss = onDismiss, contentPadding = PaddingValues(16.dp)) {

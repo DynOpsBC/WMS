@@ -335,7 +335,8 @@ permissionset 72095 "DOPSWHS-USER"
         page "DOPSWHS Project API" = X,
         page "DOPSWHS Project Move Entries" = X,
         table "DOPSWHS Project Move Entry" = X,
-        tabledata "DOPSWHS Project Move Entry" = R,
+        // Kayıt terminalden yazılır: kullanıcıda doğrudan ekleme izni olmalı (LP Movement Ledger gibi).
+        tabledata "DOPSWHS Project Move Entry" = RI,
         tabledata Job = R,
         page "DOPSWHS Multi Orders" = X,
         page "DOPSWHS Mono Orders" = X,

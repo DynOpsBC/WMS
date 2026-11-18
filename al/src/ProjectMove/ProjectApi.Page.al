@@ -8,7 +8,7 @@ page 72207 "DOPSWHS Project API"
     EntityName = 'wmsProject';
     EntitySetName = 'wmsProjects';
     SourceTable = Job;
-    SourceTableView = where(Blocked = filter(<> All));
+    SourceTableView = where(Blocked = filter(<> All), Status = filter(<> Completed));
     ODataKeyFields = "No.";
     Editable = false;
     InsertAllowed = false;

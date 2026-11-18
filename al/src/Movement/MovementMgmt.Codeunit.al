@@ -209,12 +209,20 @@ codeunit 72045 "DOPSWHS Movement Mgmt"
             Error('%1 projesi bulunamadı. Proje kodunu kontrol edin.', ProjectCode);
         if Job.Blocked = Job.Blocked::All then
             Error('%1 projesi bloke; bu projeye taşıma yapılamaz.', ProjectCode);
+        if Job.Status = Job.Status::Completed then
+            Error('%1 projesi tamamlanmış; bu projeye taşıma yapılamaz.', ProjectCode);
     end;
 
     local procedure HasProjectDimensionValue(ProjectCode: Code[20]): Boolean
     var
         DimensionValue: Record "Dimension Value";
+        Setup: Record "DOPSWHS Setup";
     begin
+        // Boyut etiketi yalnız Kurulum'da "Project Dimension Code" açıkça doluysa atılır.
+        // Varsayılan PROJE adına güvenilmez: biri sonradan o boyuta proje numarasıyla aynı
+        // değeri açarsa her taşıma kendiliğinden ek madde transfer kaydı atmaya başlardı.
+        if not (Setup.Get('') and (Setup."Project Dimension Code" <> '')) then
+            exit(false);
         if not DimensionValue.Get(ProjectDimensionCode(), ProjectCode) then
             exit(false);
         exit(not DimensionValue.Blocked);
