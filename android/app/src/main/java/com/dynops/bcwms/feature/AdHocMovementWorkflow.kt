@@ -191,3 +191,26 @@ internal fun adHocProductAction(lotNo: String, projectCode: String): String = wh
 internal fun normalizeProjectCode(raw: String): String =
     raw.trim().uppercase(java.util.Locale.ROOT).take(20)
 
+
+/** Proje seçim listesinde arama: proje no, adı ya da müşteri adı (büyük-küçük harf ayrımı yok). */
+internal fun projectMatches(project: org.json.JSONObject, query: String): Boolean {
+    val q = query.trim()
+    if (q.isEmpty()) return true
+    return listOf("no", "description", "billToName").any { project.optString(it).contains(q, ignoreCase = true) }
+}
+
+/** Proje taşıma kaydının tek satırlık özeti: "12 ADET · A-01-01 → MONTAJ-1". */
+internal fun projectMoveSummary(entry: org.json.JSONObject): String {
+    val qty = java.math.BigDecimal.valueOf(entry.optDouble("quantity", 0.0)).stripTrailingZeros().toPlainString()
+    val unit = entry.optString("unitOfMeasureCode").trim()
+    val from = entry.optString("fromBinCode").trim().ifBlank { "—" }
+    val to = entry.optString("toBinCode").trim().ifBlank { "—" }
+    return listOf(listOf(qty, unit).filter { it.isNotBlank() }.joinToString(" "), "$from → $to").joinToString(" · ")
+}
+
+/** BC tarih-saatini (UTC ISO) cihaz saatinde gg.aa.yyyy ss:dd gösterir; çözülemezse boş. */
+internal fun projectMoveTimeText(iso: String, zone: java.time.ZoneId = java.time.ZoneId.systemDefault()): String =
+    runCatching {
+        java.time.Instant.parse(iso.trim()).atZone(zone)
+            .format(java.time.format.DateTimeFormatter.ofPattern("dd.MM.yyyy HH:mm"))
+    }.getOrDefault("")

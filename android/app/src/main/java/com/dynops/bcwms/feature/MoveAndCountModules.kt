@@ -862,10 +862,7 @@ fun AdHocMoveModule() {
                 }
                 if (projectEnabled) {
                     Spacer(Modifier.height(8.dp))
-                    OutlinedTextField(projectCode, { projectCode = normalizeProjectCode(it) },
-                        label = { Text("Proje kodu (isteğe bağlı)") }, singleLine = true, enabled = !busy,
-                        supportingText = { Text(if (projectCode.isBlank()) "Boş bırakılırsa normal taşıma yapılır." else "Taşınan stok $projectCode projesine (PROJE boyutu) işaretlenir.") },
-                        modifier = Modifier.fillMaxWidth())
+                    AdHocProjectField(projectCode, { projectCode = it }, enabled = !busy)
                 }
                 Spacer(Modifier.height(12.dp))
                 Button(
@@ -931,10 +928,7 @@ fun AdHocMoveModule() {
             })
             if (projectEnabled) {
                 Spacer(Modifier.height(8.dp))
-                OutlinedTextField(projectCode, { projectCode = normalizeProjectCode(it) },
-                    label = { Text("Proje kodu (isteğe bağlı)") }, singleLine = true, enabled = !busy,
-                    supportingText = { Text(if (projectCode.isBlank()) "Boş bırakılırsa normal taşıma yapılır." else "Taşınan stok $projectCode projesine (PROJE boyutu) işaretlenir.") },
-                    modifier = Modifier.fillMaxWidth())
+                AdHocProjectField(projectCode, { projectCode = it }, enabled = !busy)
             }
             Spacer(Modifier.height(6.dp))
             OutlinedButton(

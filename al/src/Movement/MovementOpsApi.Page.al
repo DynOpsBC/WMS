@@ -96,5 +96,6 @@ page 72231 "DOPSWHS Movement Ops API"
         MovementMgmt.CheckMoveProject(projectCode);
         MovementMgmt.AdHocMove(fromBin, toBin, itemNo, lpNo, qty, userId, lotNo);
         MovementMgmt.TagMovedStockWithProject(MovementMgmt.LocationForBin(fromBin), toBin, itemNo, '', lotNo, '', qty, projectCode, userId);
+        MovementMgmt.LogProjectMove(MovementMgmt.LocationForBin(fromBin), fromBin, toBin, itemNo, '', lotNo, '', qty, projectCode, userId, lpNo);
     end;
 }

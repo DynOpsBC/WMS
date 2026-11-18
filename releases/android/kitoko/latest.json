@@ -1,7 +1,7 @@
 {
-  "versionCode": 200199,
-  "versionName": "1.14.199-kitoko",
-  "apkUrl": "https://github.com/DynOpsBC/WMS/releases/download/android-v1.14.199-kitoko/BCWMS-Kitoko-1.14.199.apk",
-  "sha256": "d09c12773d032f1b831b8c9e96b3c5e59c0eb89cb3db9d2d1f983a130642aafd",
-  "releaseNotes": "Ana menüden Ortam / şirket değiştir. Sand2010, DemoSandbox ve canlı ortam için kolay seçim; bağlantı doğrulandıktan sonra geçiş. BC güncellemesi gerekmez."
+  "versionCode": 200208,
+  "versionName": "1.14.208-kitoko",
+  "apkUrl": "https://github.com/DynOpsBC/WMS/releases/download/android-v1.14.208-kitoko/BCWMS-Kitoko-1.14.208.apk",
+  "sha256": "f9f0f39908ce958658815ff258a8ec0dea0d471fa2674513e2b2a1288cd29f1f",
+  "releaseNotes": "Element4 Ad-Hoc Hareket: taşıma yaparken proje seçilir (Proje Seç listesi). Ürün hedef rafta/alanda stokta kalır; hangi proje için taşındığı kaydedilir ve \"Bu projenin taşımaları\" ile terminalden görülür. BC'de Proje Taşıma Kayıtları sayfası. BCWMSApp 1.14.4.3 gerekir."
 }

@@ -309,10 +309,12 @@ page 72088 "DOPSWHS LP API"
         LPMgt: Codeunit "DOPSWHS LP Management";
         MovementMgmt: Codeunit "DOPSWHS Movement Mgmt";
         LocationCode: Code[10];
+        FromBinCode: Code[20];
         QtyBase: Decimal;
     begin
         MovementMgmt.CheckMoveProject(projectCode);
         LocationCode := Rec."Location Code";
+        FromBinCode := Rec."Bin Code";
         LPLine.SetRange("LP No.", Rec."No.");
         LPLine.SetFilter("Item No.", '<>%1', '');
         if LPLine.FindSet() then
@@ -331,6 +333,8 @@ page 72088 "DOPSWHS LP API"
                     QtyBase := TempLPLine.Quantity * ItemUoM."Qty. per Unit of Measure";
                 MovementMgmt.TagMovedStockWithProject(LocationCode, targetBinCode, TempLPLine."Item No.", TempLPLine."Variant Code",
                     TempLPLine."Lot No.", TempLPLine."Serial No.", QtyBase, projectCode, userId);
+                MovementMgmt.LogProjectMove(LocationCode, FromBinCode, targetBinCode, TempLPLine."Item No.", TempLPLine."Variant Code",
+                    TempLPLine."Lot No.", TempLPLine."Serial No.", QtyBase, projectCode, userId, Rec."No.");
             until TempLPLine.Next() = 0;
         Rec.Get(Rec."No.");
     end;

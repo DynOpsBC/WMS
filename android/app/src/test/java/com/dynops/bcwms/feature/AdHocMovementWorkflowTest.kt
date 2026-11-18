@@ -46,4 +46,28 @@ class AdHocMovementWorkflowTest {
         assertTrue(adHocProjectEnabled("kitoko"))
         assertFalse(adHocProjectEnabled("bade"))
     }
+
+    @Test
+    fun projectPickerSearchesNumberNameAndCustomer() {
+        val p = org.json.JSONObject().put("no", "PR00010").put("description", "Rafineri bakım hattı").put("billToName", "TÜPRAŞ")
+        assertTrue(projectMatches(p, ""))
+        assertTrue(projectMatches(p, "pr0001"))
+        assertTrue(projectMatches(p, "BAKIM"))
+        assertTrue(projectMatches(p, "tüpraş"))
+        assertFalse(projectMatches(p, "montaj"))
+    }
+
+    @Test
+    fun projectMoveSummaryShowsQuantityAndRoute() {
+        val e = org.json.JSONObject().put("quantity", 12.0).put("unitOfMeasureCode", "ADET").put("fromBinCode", "A-01-01").put("toBinCode", "MONTAJ-1")
+        assertEquals("12 ADET · A-01-01 → MONTAJ-1", projectMoveSummary(e))
+        assertEquals("2.5 · — → KAYNAK", projectMoveSummary(org.json.JSONObject().put("quantity", 2.5).put("toBinCode", "KAYNAK")))
+    }
+
+    @Test
+    fun projectMoveTimeIsShownInDeviceTime() {
+        val istanbul = java.time.ZoneId.of("Europe/Istanbul")
+        assertEquals("18.11.2026 16:05", projectMoveTimeText("2026-11-18T13:05:00Z", istanbul))
+        assertEquals("", projectMoveTimeText("", istanbul))
+    }
 }

@@ -9,6 +9,9 @@ codeunit 72045 "DOPSWHS Movement Mgmt"
         tabledata "Item Journal Template" = RIMD,
         tabledata "Item Journal Batch" = RIMD,
         tabledata "Item Journal Line" = RIMD,
+        tabledata "DOPSWHS Project Move Entry" = RI,
+        tabledata "DOPSWHS Local User" = R,
+        tabledata Job = R,
         tabledata "Warehouse Journal Template" = RIMD,
         tabledata "Warehouse Journal Batch" = RIMD,
         tabledata "Warehouse Journal Line" = RIMD,
@@ -191,22 +194,72 @@ codeunit 72045 "DOPSWHS Movement Mgmt"
     // aynı stok için ayrı bir rafsız madde yeniden sınıflandırmasıyla (yalnız boyut
     // değişir) yazılır. Rafa zorunlu, yönlendirilmemiş lokasyonda hedef raf kullanılır.
 
-    /// <summary>Checks that the project exists and has a value in the project dimension.</summary>
+    /// <summary>
+    /// Checks that the project exists and is usable. The project dimension is optional
+    /// (18 Kas 2026): Element4 has no PROJE dimension; the move is always written to the
+    /// project move log, and tagged with the dimension only where a value exists.
+    /// </summary>
     procedure CheckMoveProject(ProjectCode: Code[20])
     var
         Job: Record Job;
-        DimensionValue: Record "Dimension Value";
-        DimCode: Code[20];
     begin
         if ProjectCode = '' then
             Error('Proje kodu boş olamaz.');
         if not Job.Get(ProjectCode) then
             Error('%1 projesi bulunamadı. Proje kodunu kontrol edin.', ProjectCode);
-        DimCode := ProjectDimensionCode();
-        if not DimensionValue.Get(DimCode, ProjectCode) then
-            Error('%1 boyutunda %2 değeri yok. BC''de proje boyut değerini oluşturun.', DimCode, ProjectCode);
-        if DimensionValue.Blocked then
-            Error('%1 boyutundaki %2 değeri bloke.', DimCode, ProjectCode);
+        if Job.Blocked = Job.Blocked::All then
+            Error('%1 projesi bloke; bu projeye taşıma yapılamaz.', ProjectCode);
+    end;
+
+    local procedure HasProjectDimensionValue(ProjectCode: Code[20]): Boolean
+    var
+        DimensionValue: Record "Dimension Value";
+    begin
+        if not DimensionValue.Get(ProjectDimensionCode(), ProjectCode) then
+            exit(false);
+        exit(not DimensionValue.Blocked);
+    end;
+
+    /// <summary>
+    /// Writes one row to the project move log: what was moved where, for which project.
+    /// Runs in the same transaction as the move; QtyBase is in the item's base unit.
+    /// </summary>
+    procedure LogProjectMove(LocationCode: Code[10]; FromBinCode: Code[20]; ToBinCode: Code[20]; ItemNo: Code[20]; VariantCode: Code[10]; LotNo: Code[50]; SerialNo: Code[50]; QtyBase: Decimal; ProjectCode: Code[20]; UserId: Code[50]; LpNo: Code[20])
+    var
+        Entry: Record "DOPSWHS Project Move Entry";
+        Job: Record Job;
+        Item: Record Item;
+        LocalUser: Record "DOPSWHS Local User";
+    begin
+        if (ProjectCode = '') or (QtyBase <= 0) then
+            exit;
+        Entry.Init();
+        Entry."Entry No." := 0;
+        Entry."Moved At" := CurrentDateTime();
+        Entry."User ID" := UserId;
+        // Terminal kullanıcı kodu (OP…) okunaklı değildir; kayıtta adı da tutulur.
+        if (UserId <> '') and (StrLen(UserId) <= MaxStrLen(LocalUser.Username)) then
+            if LocalUser.Get(CopyStr(UserId, 1, MaxStrLen(LocalUser.Username))) then
+                Entry."User Name" := CopyStr(LocalUser."Display Name", 1, MaxStrLen(Entry."User Name"));
+        if Entry."User Name" = '' then
+            Entry."User Name" := CopyStr(UserId, 1, MaxStrLen(Entry."User Name"));
+        Entry."Project No." := ProjectCode;
+        if Job.Get(ProjectCode) then
+            Entry."Project Description" := CopyStr(Job.Description, 1, MaxStrLen(Entry."Project Description"));
+        Entry."Item No." := ItemNo;
+        if Item.Get(ItemNo) then begin
+            Entry."Item Description" := CopyStr(Item.Description, 1, MaxStrLen(Entry."Item Description"));
+            Entry."Unit of Measure Code" := Item."Base Unit of Measure";
+        end;
+        Entry."Variant Code" := VariantCode;
+        Entry."Lot No." := LotNo;
+        Entry."Serial No." := SerialNo;
+        Entry.Quantity := QtyBase;
+        Entry."Location Code" := LocationCode;
+        Entry."From Bin Code" := FromBinCode;
+        Entry."To Bin Code" := ToBinCode;
+        Entry."LP No." := LpNo;
+        Entry.Insert(true);
     end;
 
     procedure LocationForBin(BinCode: Code[20]): Code[10]
@@ -236,6 +289,9 @@ codeunit 72045 "DOPSWHS Movement Mgmt"
         if (ProjectCode = '') or (QtyBase <= 0) then
             exit;
         CheckMoveProject(ProjectCode);
+        // Boyut etiketi isteğe bağlı: proje boyut değeri tanımlı değilse yalnız kayıt tutulur.
+        if not HasProjectDimensionValue(ProjectCode) then
+            exit;
         Location.Get(LocationCode);
         Item.Get(ItemNo);
         EnsureReclassTemplate(ItemJournalTemplate);
