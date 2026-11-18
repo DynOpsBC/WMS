@@ -124,3 +124,35 @@ internal fun consumedByItem(entries: List<JSONObject>): Map<String, Double> =
 internal fun productionConsumptionEntriesPath(orderNo: String, lineNo: Int): String =
     "itemLedgerEntries?\$top=1000&\$filter=orderNo eq '${orderNo.replace("'", "''")}' and orderLineNo eq $lineNo" +
         " and entryType eq 'Consumption'&\$select=entryNo,itemNo,quantity"
+
+/** Bir bileşenin üretim kuralı için gereken bilgisi. */
+internal data class ComponentStock(
+    val itemNo: String,
+    /** Bir birim ürün için bileşen miktarı. */
+    val qtyPer: Double,
+    /** Bugüne kadar tüketilen. */
+    val consumed: Double,
+    /** Emrin tamamı için hâlâ tüketilmemiş miktar. */
+    val remainingOnOrder: Double,
+    /** Üretim gözüne çekilmiş stok; null = okunamadı. */
+    val pickedInBin: Double?,
+)
+
+/**
+ * "Tüketmeden üretme yok": çıkan miktarın sarfiyatı tamamlanmamış bileşenler.
+ * Liste boş değilse yeni çıktı bildirilemez; önce bu bileşenler tüketilir.
+ */
+internal fun pendingConsumption(finished: Double, components: List<ComponentStock>): List<String> =
+    components.filter { componentConsumption(finished, it.qtyPer, it.consumed, it.remainingOnOrder).consumableNow > PICK_QTY_EPSILON }
+        .map { it.itemNo }
+
+/**
+ * Çekilen malzemeyle en çok ne kadar üretilebilir: bileşen başına gözdeki
+ * stok ÷ birim başına miktar, en küçüğü. Hiçbir bileşenin stoğu okunamadıysa null (sınır yok).
+ */
+internal fun maxOutputByPicked(components: List<ComponentStock>): Double? {
+    val limits = components.filter { it.qtyPer > 0.0 && it.pickedInBin != null }
+        .map { (it.pickedInBin!!.coerceAtLeast(0.0) / it.qtyPer) }
+    if (limits.isEmpty()) return null
+    return java.math.BigDecimal.valueOf(limits.min()).setScale(5, java.math.RoundingMode.DOWN).toDouble()
+}

@@ -38,7 +38,8 @@ data class ResolvedBarcode(
 object BarcodeIntentResolver {
 
     fun resolve(raw0: String): ResolvedBarcode {
-        val raw = raw0.trim()
+        // Klavye ya da kamera yolundan gelen bozuk Türkçe metin de onarılır.
+        val raw = ScanText.repair(raw0).trim()
         if (raw.isEmpty()) return ResolvedBarcode(BarcodeKind.Unknown, "", raw)
 
         // Rule 4 & 5: explicit prefixes

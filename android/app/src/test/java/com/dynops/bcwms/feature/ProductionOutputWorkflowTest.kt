@@ -149,4 +149,27 @@ class ProductionOutputWorkflowTest {
         // Göz okunamadıysa sınır uygulanmaz (ekran ayrıca uyarı gösterir).
         assertEquals(115.5, componentConsumption(110.0, 1.05, 0.0, 210.0, pickedInBin = null).consumableNow, 0.0)
     }
+
+    @Test
+    fun nextOutputWaitsUntilThePreviousOutputIsConsumed() {
+        val klc = ComponentStock("KLC-4", qtyPer = 1.05, consumed = 0.0, remainingOnOrder = 210.0, pickedInBin = 400.0)
+        // 110 KG çıktı var, hiç tüketilmedi → yeni çıktı yok.
+        assertEquals(listOf("KLC-4"), pendingConsumption(110.0, listOf(klc)))
+        // Gereken 115,5 KG tüketildi → serbest.
+        assertTrue(pendingConsumption(110.0, listOf(klc.copy(consumed = 115.5, remainingOnOrder = 94.5))).isEmpty())
+        // Henüz çıktı yokken ilk bildirim serbest.
+        assertTrue(pendingConsumption(0.0, listOf(klc)).isEmpty())
+        // Emirde tüketilecek bileşen kalmadıysa (fazla tüketilmiş) engel yok.
+        assertTrue(pendingConsumption(110.0, listOf(klc.copy(consumed = 210.0, remainingOnOrder = 0.0))).isEmpty())
+    }
+
+    @Test
+    fun outputIsLimitedByThePickedMaterial() {
+        val a = ComponentStock("KLC-4", 1.05, 0.0, 210.0, pickedInBin = 105.0)
+        val b = ComponentStock("JMB-3", 0.5, 0.0, 100.0, pickedInBin = 80.0)
+        assertEquals(100.0, maxOutputByPicked(listOf(a, b))!!, 0.0)
+        assertEquals(0.0, maxOutputByPicked(listOf(a.copy(pickedInBin = 0.0)))!!, 0.0)
+        assertEquals(null, maxOutputByPicked(listOf(a.copy(pickedInBin = null))))
+        assertEquals(null, maxOutputByPicked(emptyList()))
+    }
 }

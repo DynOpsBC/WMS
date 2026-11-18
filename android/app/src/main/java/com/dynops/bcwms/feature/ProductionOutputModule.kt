@@ -225,6 +225,19 @@ private fun ProductionOutputDetail(line: JSONObject, onBack: () -> Unit) {
     }
 
     val released = current.optString("status").equals("Released", true)
+    val stocks = components.map { c ->
+        ComponentStock(
+            itemNo = c.optString("itemNo"),
+            qtyPer = c.optDouble("quantity", 0.0),
+            consumed = consumed[c.optString("itemNo")] ?: 0.0,
+            remainingOnOrder = c.optDouble("remainingQuantity", 0.0),
+            pickedInBin = binStock["${c.optString("itemNo")}|${c.optString("binCode")}"],
+        )
+    }
+    val pending = pendingConsumption(current.optDouble("finishedQuantity", 0.0), stocks)
+    val blockedReason = if (pending.isEmpty()) null
+        else "Önce çıkan miktarın sarfiyatını yapın: ${pending.joinToString(", ")}. Sarfiyat tamamlanmadan yeni çıktı bildirilemez."
+    val outputCap = maxOutputByPicked(stocks)
     Column(Modifier.fillMaxSize()) {
         Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(12.dp)) {
             TextButton(onClick = onBack) { Text("‹ Üretim Emirleri") }
@@ -254,7 +267,8 @@ private fun ProductionOutputDetail(line: JSONObject, onBack: () -> Unit) {
             }
             if (components.isNotEmpty()) {
                 Spacer(Modifier.height(14.dp))
-                Text("Sarfiyat — çıkan miktara göre", fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                Text("Sarfiyat — çekilen malzeme ve çıkan miktara göre", fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                if (blockedReason != null) Text(blockedReason, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = bcwmsStatus().warning)
                 Text("Önce çıktıyı bildirin, sonra bileşeni tüketin. Tüketmek için bileşene dokunun.", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 StatusText(consumeMsg)
                 Spacer(Modifier.height(4.dp))
@@ -284,7 +298,7 @@ private fun ProductionOutputDetail(line: JSONObject, onBack: () -> Unit) {
                                     when {
                                         bin.isBlank() -> "Bileşenin üretim gözü tanımlı değil."
                                         inBin == null -> "$bin gözündeki stok okunamadı."
-                                        else -> "$bin gözünde: ${outQty(inBin, cu)}"
+                                        else -> "Çekilen ($bin gözünde): ${outQty(inBin, cu)}"
                                     } + if (needOnly.consumableNow > state.consumableNow + 0.000001) " — çekilen kadar tüketilir; kalan için toplama yapın." else "",
                                     fontSize = 12.sp,
                                     color = if (needOnly.consumableNow > state.consumableNow + 0.000001) bcwmsStatus().warning else MaterialTheme.colorScheme.onSurfaceVariant,
@@ -306,6 +320,8 @@ private fun ProductionOutputDetail(line: JSONObject, onBack: () -> Unit) {
     }
 
     if (showReport) ProductionPostingSheet(
+        newOutputBlockedReason = blockedReason,
+        outputCapByPicked = outputCap,
         line = current,
         onDismiss = { showReport = false; load() },
         onPosted = { load() },

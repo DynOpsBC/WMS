@@ -1,7 +1,7 @@
 {
-  "versionCode": 200175,
-  "versionName": "1.14.175-emu",
-  "apkUrl": "https://github.com/DynOpsBC/WMS/releases/download/android-v1.14.175-emu/BCWMS-EMU-1.14.175-UYUMLU.apk",
-  "sha256": "7e162f84230db27775bf82f1d5c19adf508d29d9f44ee28200fc3a4fecde2a87",
-  "releaseNotes": "Üretim Çıktısı: önce çıktıyı bildirin, sonra emir ekranındaki Sarfiyat bölümünde her bileşen için gereken, tüketilen ve şimdi tüketebileceğiniz miktar görünür (yalnız üretim gözüne çekilen kadar); bileşene dokunup tüketin. Toplama listesinde kartta yalnız emir/sipariş numarası ve toplanacak ürünler yazar. BCWMSApp 1.14.2.32 gerekir."
+  "versionCode": 200176,
+  "versionName": "1.14.176-emu",
+  "apkUrl": "https://github.com/DynOpsBC/WMS/releases/download/android-v1.14.176-emu/BCWMS-EMU-1.14.176-UYUMLU.apk",
+  "sha256": "9bacab71d747a13d0d275b3af2b25e6f1b3cc34c42a33f21784a90b30b702a0e",
+  "releaseNotes": "QR ve barkodlardaki Türkçe harfler (Ü, Ç, İ, Ş, Ğ, Ö) artık doğru okunur: ÜR.0002, KÜLÇE.HM.0001 gibi gözler bulunur. Üretim Çıktısı: önceki çıktının sarfiyatı yapılmadan yeni çıktı bildirilemez; çıktı miktarı üretim gözüne çekilen malzemenin yettiği kadarla sınırlıdır; tüketim de yalnız çekilen kadar yapılır. BCWMSApp 1.14.2.32 gerekir."
 }

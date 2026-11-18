@@ -30,7 +30,16 @@ private class ProductionDraftStore(context: Context, orderNo: String, lineNo: In
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-internal fun ProductionPostingSheet(line: JSONObject, onDismiss: () -> Unit, onPosted: () -> Unit, onPrint: (OutputLot) -> Unit) {
+internal fun ProductionPostingSheet(
+    line: JSONObject,
+    onDismiss: () -> Unit,
+    onPosted: () -> Unit,
+    onPrint: (OutputLot) -> Unit,
+    /** Doluysa yeni çıktı açılmaz: önceki çıktının sarfiyatı bekleniyor. */
+    newOutputBlockedReason: String? = null,
+    /** Çekilen malzemenin yettiği en çok çıktı; null = sınır yok. */
+    outputCapByPicked: Double? = null,
+) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val store = remember { ProductionDraftStore(context, line.optString("prodOrderNo"), line.optInt("lineNo")) }
@@ -116,7 +125,10 @@ internal fun ProductionPostingSheet(line: JSONObject, onDismiss: () -> Unit, onP
         StatusText(status)
         if (current == null && !line.optString("status").equals("Released", true)) {
             Text("Yeni çıktı yalnız serbest bırakılmış üretim emrine bildirilebilir.")
+        } else if (current == null && newOutputBlockedReason != null) {
+            Text(newOutputBlockedReason, color = MaterialTheme.colorScheme.error, fontWeight = FontWeight.Bold)
         } else if (current == null) {
+            outputCapByPicked?.let { Text("Çekilen malzeme en çok ${receiptLabelQtyText(it, unit)} üretmeye yeter.", fontWeight = FontWeight.SemiBold) }
             OutlinedTextField(quantity, { quantity = normalizeQtyInput(it) }, label = { Text("Bu bildirimin miktarı ($unit)") },
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), enabled = !busy && !blocked, modifier = Modifier.fillMaxWidth())
             OutlinedTextField(postingDate, { postingDate = it }, label = { Text("Kayıt tarihi (YYYY-AA-GG)") }, enabled = !busy && !blocked, modifier = Modifier.fillMaxWidth())
@@ -128,6 +140,8 @@ internal fun ProductionPostingSheet(line: JSONObject, onDismiss: () -> Unit, onP
             Button(enabled = !busy && !blocked && !line.optBoolean("serialRequired"), modifier = Modifier.fillMaxWidth(), onClick = {
                 val qty = quantity.toDoubleOrNull()
                 val error = productionReportQuantityError(qty, remaining)
+                    ?: if (qty != null && outputCapByPicked != null && qty > outputCapByPicked + 0.000001)
+                        "Çekilen malzeme en çok ${receiptLabelQtyText(outputCapByPicked, unit)} üretmeye yeter. Önce toplama yapın." else null
                 val date = productionIsoDate(postingDate)
                 val expiry = productionIsoDate(expirationDate, optional = !line.optBoolean("expirationRequired"))
                 if (error != null || date == null || expiry == null) {

@@ -44,7 +44,9 @@ object ScanBus {
     fun dispatch(intent: Intent?) {
         if (intent == null) return
         if (intent.action != ACTION_SCAN) return
-        val data = intent.getStringExtra(EXTRA_DATA_STRING).orEmpty()
+        // DataWedge ham baytları da gönderir; Türkçe harfler için önce onlar
+        // UTF-8 olarak çözülür, yoksa bozuk metin onarılır (bkz. ScanText).
+        val data = ScanText.best(intent.getStringExtra(EXTRA_DATA_STRING).orEmpty(), firstDecodeBytes(intent))
         if (data.isBlank()) return
         val symbology = intent.getStringExtra(EXTRA_LABEL_TYPE) ?: ""
         Log.d(TAG, "intent → ${data.take(30)} ($symbology)")
@@ -61,11 +63,18 @@ object ScanBus {
         _events.tryEmit(event)
     }
 
+    private fun firstDecodeBytes(intent: Intent): ByteArray? = runCatching {
+        @Suppress("DEPRECATION", "UNCHECKED_CAST")
+        val list = intent.getSerializableExtra(EXTRA_DECODE_DATA) as? List<*>
+        list?.firstOrNull() as? ByteArray
+    }.getOrNull()
+
     // DataWedge intent contract — mirrored from android/core-scanner module
     // so the app module doesn't need to depend on it.
     private const val ACTION_SCAN = "com.dynops.bcwms.SCAN"
     private const val EXTRA_DATA_STRING = "com.symbol.datawedge.data_string"
     private const val EXTRA_LABEL_TYPE = "com.symbol.datawedge.label_type"
+    private const val EXTRA_DECODE_DATA = "com.symbol.datawedge.decode_data"
 }
 
 data class ScanEvent(
