@@ -59,6 +59,7 @@ internal fun DkcPickDocument(no: String, onBack: () -> Unit) {
     var binFilter by remember(no) { mutableStateOf("") }
     var showScan by remember(no) { mutableStateOf(false) }
     var showPostConfirm by remember(no) { mutableStateOf(false) }
+    var showCancelConfirm by remember(no) { mutableStateOf(false) }
 
     suspend fun reloadNow() {
         // Eski/eksik veriyle işlem yapılmasın: başlık ya da satırların bir
@@ -131,6 +132,20 @@ internal fun DkcPickDocument(no: String, onBack: () -> Unit) {
             status = if (r.ok) "TAMAM: $no üzerinize alındı." else QcErrorParser.friendlyStatus(BcApi.errorMessage(r.body), r.httpCode)
             reloadNow()
             busy = false
+        }
+    }
+
+    fun cancelPick() {
+        scope.launch {
+            busy = true; status = "Toplama iptal ediliyor..."
+            val r = BcApi.cancelPick(context, no)
+            busy = false
+            showCancelConfirm = false
+            if (r.ok) {
+                entries = emptyMap()
+                android.widget.Toast.makeText(context, "$no iptal edildi.", android.widget.Toast.LENGTH_LONG).show()
+                onBack()
+            } else status = QcErrorParser.friendlyStatus(BcApi.errorMessage(r.body), r.httpCode)
         }
     }
 
@@ -250,7 +265,7 @@ internal fun DkcPickDocument(no: String, onBack: () -> Unit) {
     // Donanım tarayıcı: ürün okut → tek satırsa miktar ekranı açılır, çok satırsa
     // liste o ürüne iner; raf barkodu okutulursa liste o rafa iner.
     DocumentScanHandler(
-        enabled = canMutate && !busy && qtyLine == null && !showScan && !showPostConfirm,
+        enabled = canMutate && !busy && qtyLine == null && !showScan && !showPostConfirm && !showCancelConfirm,
         lines = takeLines,
         onSingleMatch = { line, r -> scanFilter = ""; openLine(line, r.lotNo.orEmpty()) },
         onMultiMatch = { itemNo, r ->
@@ -295,7 +310,13 @@ internal fun DkcPickDocument(no: String, onBack: () -> Unit) {
         // Başlık, özet ve satırlar tek kaydırma alanında: küçük el terminalinde
         // ekranın tamamı kayar.
         Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(12.dp)) {
-            TextButton(onClick = onBack) { Text("‹ Belge Listesi") }
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                TextButton(onClick = onBack) { Text("‹ Belge Listesi") }
+                Spacer(Modifier.weight(1f))
+                TextButton(onClick = { showCancelConfirm = true }, enabled = !busy && canMutate) {
+                    Text("Toplamayı İptal Et", color = MaterialTheme.colorScheme.error)
+                }
+            }
             val sources = takeLines.map { pickCell(it, "sourceNo") }.filter { it.isNotBlank() }.distinct()
             val totalQty = takeLines.sumOf { it.optDouble("quantity", 0.0) }
             val handledQty = takeLines.sumOf { it.optDouble("qtyHandled", 0.0) }
@@ -433,6 +454,22 @@ internal fun DkcPickDocument(no: String, onBack: () -> Unit) {
             onConfirm = { res ->
                 qtyLine = null
                 confirmLine(ql, res.quantity, res.lotNo, res.sourceLpNo)
+            },
+        )
+    }
+
+    if (showCancelConfirm) {
+        AlertDialog(
+            onDismissRequest = { if (!busy) showCancelConfirm = false },
+            title = { Text("$no iptal edilsin mi?") },
+            text = { Text("Yalnız hiç kaydedilmemiş toplama iptal edilir; bir kısmı kaydedildiyse Business Central reddeder. Kaynak belge (iş emri / sevkiyat) silinmez, toplama yeniden oluşturulabilir.") },
+            dismissButton = { TextButton(onClick = { showCancelConfirm = false }, enabled = !busy) { Text("Vazgeç") } },
+            confirmButton = {
+                Button(
+                    onClick = { cancelPick() },
+                    enabled = !busy,
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
+                ) { Text("Toplamayı İptal Et") }
             },
         )
     }

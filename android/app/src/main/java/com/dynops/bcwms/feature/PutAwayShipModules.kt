@@ -1871,7 +1871,13 @@ private fun WhsePickTab(initialPickNo: String? = null, onInitialPickConsumed: ()
 
     var itemDocs by remember { mutableStateOf<Pair<String, Set<String>>?>(null) }
     val sel = selected
-    if (sel != null) { WhsePickDocument(no = sel, onBack = { selected = null; load() }); return }
+    if (sel != null) {
+        // DKÇ: toplama hangi yoldan açılırsa açılsın (Toplama menüsü, Sevkiyat
+        // sekmesi, İş Emri > Pick Et) aynı parçalı toplama ekranı kullanılır.
+        if (isDkcFlavor()) DkcPickDocument(no = sel, onBack = { selected = null; load() })
+        else WhsePickDocument(no = sel, onBack = { selected = null; load() })
+        return
+    }
 
     DocListScanHandler(
         enabled = true,
