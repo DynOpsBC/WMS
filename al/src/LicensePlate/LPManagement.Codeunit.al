@@ -933,6 +933,7 @@ codeunit 72040 "DOPSWHS LP Management"
     var
         SourceLine: Record "DOPSWHS LP Line";
         TargetLine: Record "DOPSWHS LP Line";
+        ReceiptMgmt: Codeunit "DOPSWHS Receipt Mgmt";
         LineNo: Integer;
         TransferQty: Decimal;
     begin
@@ -941,7 +942,12 @@ codeunit 72040 "DOPSWHS LP Management"
         OnBeforeTransfer(SourceLP, TargetLP);
         if SourceLP."No." = TargetLP."No." then
             Error('Kaynak ve hedef LP aynı olamaz: %1.', SourceLP."No.");
-        if not (SourceLP.Status in [SourceLP.Status::Open, SourceLP.Status::Built]) then
+        // BADE (19 Kas 2026): yerleştirme belgesine atanmış LP de bölünebilir; belge
+        // SyncPutAwayAfterLpSplit ile aynı işlemde güncellenir (önce elle "serbest bırak" gerekmez).
+        if not ((SourceLP.Status in [SourceLP.Status::Open, SourceLP.Status::Built]) or
+                ((SourceLP.Status = SourceLP.Status::Assigned) and
+                 (SourceLP."Assigned Document Type" = SourceLP."Assigned Document Type"::WhsePutaway)))
+        then
             Error('Kaynak LP %1 açık veya tamamlanmış durumda olmalıdır. Mevcut durum: %2.', SourceLP."No.", SourceLP.Status);
         if not (TargetLP.Status in [TargetLP.Status::Open, TargetLP.Status::Built]) then
             Error('Hedef LP %1 açık veya tamamlanmış durumda olmalıdır. Mevcut durum: %2.', TargetLP."No.", TargetLP.Status);
@@ -985,6 +991,13 @@ codeunit 72040 "DOPSWHS LP Management"
             TargetLine."Source Item Ledger Entry No." := SourceLine."Source Item Ledger Entry No.";
             TargetLine."Source LP No." := SourceLP."No.";
             TargetLine.Insert(true);
+            // BADE (19 Kas 2026): LP bir yerleştirme belgesindeyse belge de güncellenir —
+            // kaynak LP satırı kalan miktara iner, hedef LP aynı belgede ayrı satır olur.
+            if ReceiptMgmt.SyncPutAwayAfterLpSplit(SourceLP."No.", TargetLP."No.", TargetLine) then begin
+                // Eşitleme hedef LP'yi belgeye atamış olabilir; bayat kayıtla Modify hata verir.
+                SourceLP.Get(SourceLP."No.");
+                TargetLP.Get(TargetLP."No.");
+            end;
 
             SourceLine.Validate(Quantity, SourceLine.Quantity - TransferQty);
             if SourceLine.Quantity = 0 then
