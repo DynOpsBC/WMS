@@ -49,7 +49,7 @@ internal fun DkcSalesOrderVehicle(no: String, onBack: () -> Unit) {
         )
     }.orEmpty()
 
-    Column(Modifier.fillMaxSize().padding(12.dp)) {
+    ScrollAwayColumn(Modifier.fillMaxSize().padding(12.dp)) { fullScreenList ->
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
             TextButton(onClick = onBack) { Text("‹ Siparişler") }
             TextButton(onClick = { load() }, enabled = !loading) { WmsRefreshLabel(loading) }
@@ -59,7 +59,7 @@ internal fun DkcSalesOrderVehicle(no: String, onBack: () -> Unit) {
         StatusText(status)
         if (order != null && values.all { it.second.isBlank() })
             Text("Bu siparişte BC araç bilgileri boş.", color = MaterialTheme.colorScheme.error)
-        LazyColumn(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        LazyColumn(fullScreenList, verticalArrangement = Arrangement.spacedBy(6.dp)) {
             items(values) { (label, value) ->
                 Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(8.dp)) {
                     Column(Modifier.padding(10.dp)) {
@@ -107,14 +107,14 @@ internal fun DkcPostedShipmentTab() {
         search.isBlank() || listOf("no", "orderNo", "customerName", "vehiclePlateNo")
             .any { key -> rawValue(it, key).contains(search.trim(), ignoreCase = true) }
     }
-    Column(Modifier.fillMaxSize().padding(12.dp)) {
+    ScrollAwayColumn(Modifier.fillMaxSize().padding(12.dp)) { fullScreenList ->
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
             Text("Kayıtlı Sevk İrsaliyeleri", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
             TextButton(onClick = { load() }, enabled = !loading) { WmsRefreshLabel(loading) }
         }
         DocSearchBar(value = search, onValueChange = { search = it }, onSearch = { }, label = "İrsaliye / sipariş ara")
         StatusText(status)
-        LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        LazyColumn(fullScreenList, verticalArrangement = Arrangement.spacedBy(6.dp)) {
             items(shown) { doc ->
                 Card(onClick = { selected = doc.optString("no") }, modifier = Modifier.fillMaxWidth()) {
                     Column(Modifier.padding(10.dp)) {

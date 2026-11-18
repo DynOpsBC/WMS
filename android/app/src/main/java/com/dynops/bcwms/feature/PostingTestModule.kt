@@ -62,7 +62,7 @@ fun PostingTestModule() {
 
     val grouped = remember(rows) { groupPostingResults(rows) }
 
-    Column(Modifier.fillMaxSize().padding(12.dp)) {
+    ScrollAwayColumn(Modifier.fillMaxSize().padding(12.dp)) { fullScreenList ->
         Text("BC Kayıt Testi", fontWeight = FontWeight.Bold, fontSize = 16.sp)
         Text("Her WMS post/register aksiyonu için BC'de gerçek belge oluşturup post eder.", fontSize = 11.sp, color = Color.Gray)
         Spacer(Modifier.height(8.dp))
@@ -79,7 +79,7 @@ fun PostingTestModule() {
         if (rows.isNotEmpty()) PostingSummary(grouped)
         Spacer(Modifier.height(6.dp))
 
-        LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        LazyColumn(fullScreenList, verticalArrangement = Arrangement.spacedBy(6.dp)) {
             // 1) Passed — yeşil özet kart (varsa, default açık)
             items(grouped.passed) { row -> PostingRowCard(row, kind = PostingKind.PASSED) }
 

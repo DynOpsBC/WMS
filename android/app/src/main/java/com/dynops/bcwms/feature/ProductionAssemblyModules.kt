@@ -146,7 +146,7 @@ private fun ConsumptionTab() {
 
     if (selectedOrderNo == null) {
         val grouped = rows.groupBy { it.optString("prodOrderNo") }.filterKeys { it.isNotBlank() }
-        Column(Modifier.fillMaxSize().padding(12.dp)) {
+        ScrollAwayColumn(Modifier.fillMaxSize().padding(12.dp)) { fullScreenList ->
             Button(onClick = { load() }, enabled = !loading) { WmsRefreshLabel(loading) }
             Spacer(Modifier.height(8.dp))
             com.dynops.bcwms.ui.DocSearchBar(value = search, onValueChange = { search = it }, onSearch = { load() }, label = "PÜ no ile ara")
@@ -156,7 +156,7 @@ private fun ConsumptionTab() {
             Text("Üretim Emirleri (${grouped.size})", fontWeight = FontWeight.Bold, fontSize = 14.sp)
             Text("Bileşenleri görmek için üretim emrine dokunun.", fontSize = 12.sp, color = Color.Gray)
             Spacer(Modifier.height(8.dp))
-            LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            LazyColumn(fullScreenList, verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 grouped.forEach { (orderNo, lines) ->
                     item(key = orderNo) {
                         val header = lines.first()
@@ -484,14 +484,14 @@ fun AssemblyModule() {
     val sel = selected
     if (sel != null) { AssemblyDocument(no = sel, onBack = { selected = null; load() }); return }
 
-    Column(Modifier.fillMaxSize().padding(12.dp)) {
+    ScrollAwayColumn(Modifier.fillMaxSize().padding(12.dp)) { fullScreenList ->
         Button(onClick = { load() }, enabled = !loading) { WmsRefreshLabel(loading) }
         Spacer(Modifier.height(8.dp))
         com.dynops.bcwms.ui.DocSearchBar(value = search, onValueChange = { search = it }, onSearch = { load() }, label = "Montaj no ile ara")
         Spacer(Modifier.height(4.dp))
         StatusText(status)
         Spacer(Modifier.height(8.dp))
-        LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        LazyColumn(fullScreenList, verticalArrangement = Arrangement.spacedBy(6.dp)) {
             items(rows) { d ->
                 Card(onClick = { selected = d.optString("no") }, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(10.dp)) {
                     Column(Modifier.padding(12.dp)) {

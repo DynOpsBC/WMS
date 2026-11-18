@@ -1,5 +1,6 @@
 package com.dynops.bcwms.feature
 
+import com.dynops.bcwms.ui.ScrollAwayColumn
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -179,7 +180,7 @@ fun SelfTestModule() {
     val pending = total - summary.first - summary.second - summary.third
     val grouped = results.groupBy { it.group }
 
-    Column(Modifier.fillMaxSize().padding(12.dp)) {
+    ScrollAwayColumn(Modifier.fillMaxSize().padding(12.dp)) { fullScreenList ->
         SummaryCard(running, summary.first, summary.second, summary.third, pending)
         Spacer(Modifier.height(10.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -193,7 +194,7 @@ fun SelfTestModule() {
             ) { Text("Sıfırla") }
         }
         Spacer(Modifier.height(10.dp))
-        LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        LazyColumn(fullScreenList, verticalArrangement = Arrangement.spacedBy(6.dp)) {
             GroupOrder.forEach { group ->
                 val rows = grouped[group].orEmpty()
                 if (rows.isNotEmpty()) {

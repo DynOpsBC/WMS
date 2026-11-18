@@ -166,7 +166,7 @@ fun LicensePlateModule() {
         }
     }
 
-    Column(Modifier.fillMaxSize().padding(12.dp)) {
+    ScrollAwayColumn(Modifier.fillMaxSize().padding(12.dp)) { fullScreenList ->
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Button(onClick = { loadList() }, enabled = !loading) { WmsRefreshLabel(loading) }
             Button(onClick = { showBulkBuild = true }, enabled = !loading) {
@@ -200,7 +200,7 @@ fun LicensePlateModule() {
                 Text("Son oluşturulan LP'ler (${lastCreatedLpNos.size})", fontSize = 12.sp)
             }
         }
-        LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        LazyColumn(fullScreenList, verticalArrangement = Arrangement.spacedBy(6.dp)) {
             items(if (showLastCreatedOnly) rows.filter { it.optString("no") in lastCreatedLpNos } else rows) { lp ->
                 Card(
                     onClick = { selected = lp.optString("no") },

@@ -210,7 +210,7 @@ private fun WhseReceiptTab() {
     }
     val shownRows = itemDocs?.let { f -> rows.filter { it.optString("no") in f.second } } ?: rows
 
-    Column(Modifier.fillMaxSize().padding(12.dp)) {
+    ScrollAwayColumn(Modifier.fillMaxSize().padding(12.dp)) { fullScreenList ->
         Row(verticalAlignment = Alignment.CenterVertically) {
             Button(onClick = { load() }, enabled = !loading) { WmsRefreshLabel(loading) }
             Spacer(Modifier.width(12.dp))
@@ -226,7 +226,7 @@ private fun WhseReceiptTab() {
         StatusText(status)
         if (itemDocs != null) { ScanFilterChip("${itemDocs!!.first} → ${itemDocs!!.second.size} belge") { itemDocs = null } }
         Spacer(Modifier.height(8.dp))
-        LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        LazyColumn(fullScreenList, verticalArrangement = Arrangement.spacedBy(6.dp)) {
             items(shownRows) { d ->
                 if (isDkc) {
                     DkcReceiptPreviewCard(
@@ -269,6 +269,12 @@ private fun ReceiveDocument(no: String, onBack: () -> Unit) {
     var showBulkLinePicker by remember(no) { mutableStateOf(false) }
     var printReceipt by remember(no) { mutableStateOf(false) }
     var showReceiptMte by remember(no) { mutableStateOf(false) }
+    // DKÇ (18 Kas 2026): mal kabulde A4 belgeye ek olarak etiket. Kayıttan sonra
+    // kaydedilen satırlar listelenir; operatör adetleri seçip basar.
+    var printReceiptLabels by remember(no) { mutableStateOf(isDkc) }
+    var receiptLabelRowsState by remember(no) { mutableStateOf<List<ReceiptLabelRow>>(emptyList()) }
+    var showReceiptLabels by remember(no) { mutableStateOf(false) }
+    var mteAfterLabels by remember(no) { mutableStateOf(false) }
     // TOPLU POST: satır onayı (PATCH receiptLines) belgeyi ASLA postlamaz —
     // yalnız "Qty. to Receive"/lot/seri/LP yazar. Post tek bir yerden, alttaki
     // butondan ve özet onayından sonra çalışır.
@@ -546,7 +552,11 @@ private fun ReceiveDocument(no: String, onBack: () -> Unit) {
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         Checkbox(checked = printReceipt, onCheckedChange = { printReceipt = it })
-                        Text("Belgeyi yazdır", fontSize = 13.sp, maxLines = 1)
+                        Text(if (isDkc) "A4 belge" else "Belgeyi yazdır", fontSize = 13.sp, maxLines = 1)
+                        if (isDkc) {
+                            Checkbox(checked = printReceiptLabels, onCheckedChange = { printReceiptLabels = it })
+                            Text("Etiket", fontSize = 13.sp, maxLines = 1)
+                        }
                     }
                     if (activeLp == null) {
                         OutlinedButton(
@@ -722,6 +732,11 @@ private fun ReceiveDocument(no: String, onBack: () -> Unit) {
                         reload()
                         return@launch
                     }
+                    // Etiket satırları kayıttan ÖNCE alınır: BC tamamen kaydedilen belgeyi siler.
+                    val labelRows = if (isDkc && printReceiptLabels) receiptLabelRows(postLines) else emptyList()
+                    val lpInvolved = activeLp != null || postLines.any {
+                        it.optString("licensePlateNo").isNotBlank() || it.optInt("bulkLpCount", 0) > 0
+                    }
                     val r = BcApi.boundAction(
                         context, "receipts", no, "postAndCloseLP",
                         JSONObject().apply {
@@ -739,7 +754,13 @@ private fun ReceiveDocument(no: String, onBack: () -> Unit) {
                         touched = emptySet()
                         // Keep the successful receipt visible until labels have been checked.
                         // Reloading immediately navigates away when BC deletes a fully posted receipt.
-                        showReceiptMte = true
+                        if (labelRows.isNotEmpty()) {
+                            receiptLabelRowsState = labelRows
+                            mteAfterLabels = lpInvolved
+                            showReceiptLabels = true
+                        } else {
+                            showReceiptMte = true
+                        }
                     }
                 }
             },
@@ -748,6 +769,14 @@ private fun ReceiveDocument(no: String, onBack: () -> Unit) {
 
     if (showReceiptMte) {
         ReceiptMteSheet(receiptNo = no, onDismiss = { showReceiptMte = false; reload() })
+    }
+
+    if (showReceiptLabels) {
+        ReceiptLabelSheet(receiptNo = no, initialRows = receiptLabelRowsState, onDismiss = {
+            showReceiptLabels = false
+            // LP'li kabulde palet etiketleri (MTE) ekranı ardından açılır.
+            if (mteAfterLabels) showReceiptMte = true else reload()
+        })
     }
 
     if (showVehicle) {
@@ -1156,7 +1185,7 @@ private fun PurchaseOrderTab() {
     }
     val shownRows = itemDocs?.let { f -> rows.filter { it.optString("no") in f.second } } ?: rows
 
-    Column(Modifier.fillMaxSize().padding(12.dp)) {
+    ScrollAwayColumn(Modifier.fillMaxSize().padding(12.dp)) { fullScreenList ->
         Row(verticalAlignment = Alignment.CenterVertically) {
             Button(onClick = { load() }, enabled = !loading) { WmsRefreshLabel(loading) }
             Spacer(Modifier.width(12.dp))
@@ -1183,7 +1212,7 @@ private fun PurchaseOrderTab() {
         StatusText(status)
         if (itemDocs != null) { ScanFilterChip("${itemDocs!!.first} → ${itemDocs!!.second.size} PO") { itemDocs = null } }
         Spacer(Modifier.height(8.dp))
-        LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        LazyColumn(fullScreenList, verticalArrangement = Arrangement.spacedBy(6.dp)) {
             items(shownRows) { d ->
                 val requiresWhse = d.optBoolean("requiresWhseReceipt", false)
                 Card(onClick = { selected = d.optString("no") }, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(10.dp)) {
@@ -1221,6 +1250,9 @@ private fun ReceivePurchaseOrder(no: String, onBack: () -> Unit) {
     var status by remember { mutableStateOf("") }
     var busy by remember { mutableStateOf(false) }
     var invoiceToo by remember { mutableStateOf(false) }
+    val isDkc = com.dynops.bcwms.BuildConfig.FLAVOR.equals("emu", ignoreCase = true)
+    var printReceiptLabels by remember(no) { mutableStateOf(isDkc) }
+    var receiptLabelRowsState by remember(no) { mutableStateOf<List<ReceiptLabelRow>>(emptyList()) }
     var qtyLine by remember { mutableStateOf<JSONObject?>(null) }
     var showScan by remember { mutableStateOf(false) }
     var scanFilter by remember { mutableStateOf("") }
@@ -1373,6 +1405,10 @@ private fun ReceivePurchaseOrder(no: String, onBack: () -> Unit) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Checkbox(checked = invoiceToo, onCheckedChange = { invoiceToo = it })
                 Text("Aynı zamanda faturalandır", fontSize = 13.sp)
+                if (isDkc) {
+                    Checkbox(checked = printReceiptLabels, onCheckedChange = { printReceiptLabels = it })
+                    Text("Etiket", fontSize = 13.sp)
+                }
             }
         }
 
@@ -1436,14 +1472,25 @@ private fun ReceivePurchaseOrder(no: String, onBack: () -> Unit) {
                     }
                     status = "Mal kabul kaydı..."
                     val body = JSONObject().apply { put("invoice", invoiceToo) }.toString()
+                    val labelRows = if (isDkc && printReceiptLabels) receiptLabelRows(postLines) else emptyList()
                     val r = BcApi.boundAction(context, "purchaseSources", no, "receive", body)
                     busy = false
                     status = if (r.ok) "TAMAM: Satınalma mal kabulü kaydedildi."
                         else QcErrorParser.friendlyStatus(BcApi.errorMessage(r.body), r.httpCode)
-                    if (r.ok) { touched = emptySet(); reload() }
+                    if (r.ok) {
+                        touched = emptySet()
+                        if (labelRows.isNotEmpty()) receiptLabelRowsState = labelRows else reload()
+                    }
                 }
             },
         )
+    }
+
+    if (receiptLabelRowsState.isNotEmpty()) {
+        ReceiptLabelSheet(receiptNo = no, initialRows = receiptLabelRowsState, onDismiss = {
+            receiptLabelRowsState = emptyList()
+            reload()
+        })
     }
 
     val ql = qtyLine

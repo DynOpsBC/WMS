@@ -115,6 +115,15 @@ page 72086 "DOPSWHS Item API"
         exit(Dispatcher.PrintExcelItemLabels(rowsJson, printerId));
     end;
 
+    // DKÇ: goods-receipt labels (item, lot, received quantity) after a terminal receipt.
+    [ServiceEnabled]
+    procedure printReceiptLabels(rowsJson: Text; printerId: Code[50]): Integer
+    var
+        Dispatcher: Codeunit "DOPSWHS Print Dispatcher";
+    begin
+        exit(Dispatcher.PrintReceiptItemLabels(rowsJson, printerId));
+    end;
+
     [ServiceEnabled]
     procedure printLabels(itemNosJson: Text; printerId: Code[50]): Integer
     var

@@ -1632,7 +1632,7 @@ fun WhseEntriesModule() {
     }
     LaunchedEffect(Unit) { load() }
 
-    Column(Modifier.fillMaxSize().padding(12.dp)) {
+    ScrollAwayColumn(Modifier.fillMaxSize().padding(12.dp)) { fullScreenList ->
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Text("Ambar Hareketleri", fontWeight = FontWeight.Bold, fontSize = 17.sp)
             Spacer(Modifier.weight(1f))
@@ -1707,7 +1707,7 @@ fun WhseEntriesModule() {
         Spacer(Modifier.height(6.dp))
         StatusText(status)
         Spacer(Modifier.height(8.dp))
-        LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        LazyColumn(fullScreenList, verticalArrangement = Arrangement.spacedBy(6.dp)) {
             items(rows) { e ->
                 val qty = e.optDouble("quantity", 0.0)
                 val positive = qty >= 0

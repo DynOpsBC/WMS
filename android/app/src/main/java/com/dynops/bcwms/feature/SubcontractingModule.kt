@@ -1,5 +1,6 @@
 package com.dynops.bcwms.feature
 
+import com.dynops.bcwms.ui.ScrollAwayColumn
 import com.dynops.bcwms.ui.toFiniteDoubleOrNull
 
 import androidx.compose.foundation.layout.*
@@ -127,7 +128,7 @@ private fun SubcontractDispatchModule() {
     }
     val orderGroups = subcontractDispatchGroups(displayed)
 
-    Column(Modifier.fillMaxSize().padding(12.dp)) {
+    ScrollAwayColumn(Modifier.fillMaxSize().padding(12.dp)) { fullScreenList ->
         ScanField(
             label = "Fason emri / barkod",
             value = search,
@@ -151,7 +152,7 @@ private fun SubcontractDispatchModule() {
             lineLabel = "operasyon",
         )
         Spacer(Modifier.height(6.dp))
-        LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        LazyColumn(fullScreenList, verticalArrangement = Arrangement.spacedBy(8.dp)) {
             items(orderGroups, key = { subcontractDispatchDocumentKey(it.first()) }) { orderRows ->
                 val row = orderRows.first()
                 val targetNames = orderRows.map { it.optString("targetLocationCode") }.filter(String::isNotBlank).distinct()
@@ -197,7 +198,7 @@ private fun SubcontractDispatchOrderDetail(
 ) {
     androidx.activity.compose.BackHandler { onBack() }
     val first = operations.first()
-    Column(Modifier.fillMaxSize().padding(12.dp)) {
+    ScrollAwayColumn(Modifier.fillMaxSize().padding(12.dp)) { fullScreenList ->
         TextButton(onClick = onBack) { Text("‹ Fason Üretim Emirleri") }
         Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp)) {
             Column(Modifier.padding(14.dp)) {
@@ -219,7 +220,7 @@ private fun SubcontractDispatchOrderDetail(
         Spacer(Modifier.height(10.dp))
         Text("Operasyon satırları (${operations.size})", fontWeight = FontWeight.Bold, fontSize = 16.sp)
         Spacer(Modifier.height(6.dp))
-        LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        LazyColumn(fullScreenList, verticalArrangement = Arrangement.spacedBy(8.dp)) {
             items(operations, key = { operationKey(it) }) { operation ->
                 Card(
                     onClick = { onOperationClick(operation) },
@@ -377,7 +378,7 @@ private fun SubcontractReceiptModule() {
     val query = search.trim()
     val displayed = rows.filter { query.isBlank() || subcontractReceiptMatchesReference(it, query) }
     val documentGroups = subcontractReceiptGroups(displayed)
-    Column(Modifier.fillMaxSize().padding(12.dp)) {
+    ScrollAwayColumn(Modifier.fillMaxSize().padding(12.dp)) { fullScreenList ->
         ScanField(
             label = "İrsaliye / fason ref. / sipariş barkodu",
             value = search,
@@ -400,7 +401,7 @@ private fun SubcontractReceiptModule() {
             lineLabel = "ürün satırı",
         )
         Spacer(Modifier.height(6.dp))
-        LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        LazyColumn(fullScreenList, verticalArrangement = Arrangement.spacedBy(8.dp)) {
             items(documentGroups, key = { subcontractReceiptDocumentKey(it.first()) }) { documentRows ->
                 val row = documentRows.first()
                 val reference = subcontractReceiptDocumentKey(row)
@@ -451,7 +452,7 @@ private fun SubcontractReceiptDocumentDetail(
     val first = lines.first()
     val reference = subcontractReceiptDocumentKey(first)
     val units = lines.map { it.optString("unitOfMeasureCode") }.filter(String::isNotBlank).distinct()
-    Column(Modifier.fillMaxSize().padding(12.dp)) {
+    ScrollAwayColumn(Modifier.fillMaxSize().padding(12.dp)) { fullScreenList ->
         TextButton(onClick = onBack) { Text("‹ Fason Teslim Belgeleri") }
         Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp)) {
             Column(Modifier.padding(14.dp)) {
@@ -480,7 +481,7 @@ private fun SubcontractReceiptDocumentDetail(
         Spacer(Modifier.height(10.dp))
         Text("Teslim alınacak satırlar (${lines.size})", fontWeight = FontWeight.Bold, fontSize = 16.sp)
         Spacer(Modifier.height(6.dp))
-        LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        LazyColumn(fullScreenList, verticalArrangement = Arrangement.spacedBy(8.dp)) {
             items(lines, key = { subcontractReceiptKey(it) }) { line ->
                 Card(
                     onClick = { onLineClick(line) },

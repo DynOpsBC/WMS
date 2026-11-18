@@ -1,5 +1,6 @@
 package com.dynops.bcwms.feature
 
+import com.dynops.bcwms.ui.ScrollAwayColumn
 import android.content.Context
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -188,7 +189,7 @@ fun PrintersModule() {
     }
     LaunchedEffect(Unit) { load() }
 
-    Column(Modifier.fillMaxSize().padding(12.dp)) {
+    ScrollAwayColumn(Modifier.fillMaxSize().padding(12.dp)) { fullScreenList ->
         Row(verticalAlignment = Alignment.CenterVertically) {
             WmsIcon(WmsGlyph.PRINTER, MaterialTheme.colorScheme.primary, Modifier.size(24.dp))
             Spacer(Modifier.width(8.dp))
@@ -207,7 +208,7 @@ fun PrintersModule() {
         Spacer(Modifier.height(6.dp))
         StatusText(status)
         Spacer(Modifier.height(8.dp))
-        LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        LazyColumn(fullScreenList, verticalArrangement = Arrangement.spacedBy(8.dp)) {
             if (!productionCustomer) item { DevicePrinterSettings() }
             if (!productionCustomer) item {
                 Card(

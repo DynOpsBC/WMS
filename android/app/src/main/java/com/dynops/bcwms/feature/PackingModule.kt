@@ -1,5 +1,6 @@
 package com.dynops.bcwms.feature
 
+import com.dynops.bcwms.ui.ScrollAwayColumn
 import android.os.SystemClock
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.*
@@ -206,7 +207,7 @@ private fun PackingQueue(flowMode: OutboundFlowMode?) {
             }
     }
 
-    Column(Modifier.fillMaxSize().padding(12.dp)) {
+    ScrollAwayColumn(Modifier.fillMaxSize().padding(12.dp)) { fullScreenList ->
         // Ekran başlığı üst çubukta ("Paketleme") zaten var — burada sadece
         // sayaç + yenile duruyor.
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -243,7 +244,7 @@ private fun PackingQueue(flowMode: OutboundFlowMode?) {
         Spacer(Modifier.height(6.dp))
         PackStatusLine(msg)
         Spacer(Modifier.height(8.dp))
-        LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        LazyColumn(fullScreenList, verticalArrangement = Arrangement.spacedBy(8.dp)) {
             items(shownPicks.entries.toList(), key = { it.key }) { (pickNo, ords) ->
                 val started = ords.any { rawValue(it, "status").contains("Progress", ignoreCase = true) }
                 // Ürünlerin toplandığı sepet (LP) — operatörün elindeki nesne bu,

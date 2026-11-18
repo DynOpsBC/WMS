@@ -288,7 +288,7 @@ private fun V2PicksForFlow(flow: OutboundFlowMode) {
         return
     }
 
-    Column(Modifier.fillMaxSize().padding(12.dp)) {
+    ScrollAwayColumn(Modifier.fillMaxSize().padding(12.dp)) { fullScreenList ->
         Row(verticalAlignment = Alignment.CenterVertically) {
             PickScope.entries.forEach { item ->
                 FilterChip(
@@ -312,7 +312,7 @@ private fun V2PicksForFlow(flow: OutboundFlowMode) {
         Spacer(Modifier.height(4.dp))
         StatusText(status)
         Spacer(Modifier.height(6.dp))
-        LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        LazyColumn(fullScreenList, verticalArrangement = Arrangement.spacedBy(8.dp)) {
             items(rows, key = { it.optString("no") }) { row ->
                 val no = row.optString("no")
                 val assigned = row.optString("assignedUserId").trim()
@@ -432,7 +432,7 @@ private fun ActivePicksTab() {
     }
     val shownRows = itemDocs?.let { f -> rows.filter { it.optString("no") in f.second } } ?: rows
 
-    Column(Modifier.fillMaxSize().padding(12.dp)) {
+    ScrollAwayColumn(Modifier.fillMaxSize().padding(12.dp)) { fullScreenList ->
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             // Üç kapsam yan yana ve tek seçimli — hangisinin açık olduğu net görünsün.
             PickScope.entries.forEach { s ->
@@ -478,7 +478,7 @@ private fun ActivePicksTab() {
         StatusText(status)
         if (itemDocs != null) { ScanFilterChip("${itemDocs!!.first} → ${itemDocs!!.second.size} belge") { itemDocs = null } }
         Spacer(Modifier.height(8.dp))
-        LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        LazyColumn(fullScreenList, verticalArrangement = Arrangement.spacedBy(8.dp)) {
             items(shownRows) { d ->
                 val no = d.optString("no")
                 val assigned = d.optString("assignedUserId").trim()
@@ -625,7 +625,7 @@ private fun PickHistoryTab(tab: PickTab) {
     }
     LaunchedEffect(tab, range, customFrom, customTo) { load() }
 
-    Column(Modifier.fillMaxSize().padding(12.dp)) {
+    ScrollAwayColumn(Modifier.fillMaxSize().padding(12.dp)) { fullScreenList ->
         // Zaman filtresi çipleri.
         ScrollableTabRowChips(range, customLabel = customRangeLabel(customFrom, customTo)) { range = it }
         if (range == DateRange.Custom) {
@@ -653,7 +653,7 @@ private fun PickHistoryTab(tab: PickTab) {
             ) { WmsRefreshLabel(loading, compact = true) }
         }
         Spacer(Modifier.height(8.dp))
-        LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        LazyColumn(fullScreenList, verticalArrangement = Arrangement.spacedBy(8.dp)) {
             items(rows) { d -> PickHistoryCard(d, tab) }
             if (rows.isEmpty() && !loading) item {
                 EmptyState(

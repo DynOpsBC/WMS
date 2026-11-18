@@ -52,7 +52,7 @@ fun QualityModule() {
     }
     LaunchedEffect(showOnlyOpen) { load() }
 
-    Column(Modifier.fillMaxSize().padding(12.dp)) {
+    ScrollAwayColumn(Modifier.fillMaxSize().padding(12.dp)) { fullScreenList ->
         Row(verticalAlignment = Alignment.CenterVertically) {
             Button(onClick = { load() }, enabled = !loading) { WmsRefreshLabel(loading) }
             Spacer(Modifier.width(12.dp))
@@ -65,7 +65,7 @@ fun QualityModule() {
         Spacer(Modifier.height(4.dp))
         StatusText(status)
         Spacer(Modifier.height(8.dp))
-        LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        LazyColumn(fullScreenList, verticalArrangement = Arrangement.spacedBy(6.dp)) {
             items(rows) { d ->
                 val st = d.optString("status")
                 // BC durum değeri (st) karşılaştırmalarda kullanılır; ekrana Türkçe etiket gösterilir.

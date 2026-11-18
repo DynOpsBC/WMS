@@ -170,6 +170,158 @@ codeunit 72051 "DOPSWHS Print Dispatcher"
         exit(Count);
     end;
 
+    /// <summary>
+    /// DKÇ (18 Kas 2026): goods-receipt labels, printed after a terminal receipt next to the A4
+    /// receipt document. One row per received line (item, lot, received quantity, receipt no);
+    /// the operator chooses how many copies. QR = item no (opens the item on the terminal),
+    /// Code128 = lot no (item no when the line has no lot).
+    /// </summary>
+    procedure PrintReceiptItemLabels(RowsJson: Text; PrinterId: Code[50]): Integer
+    var
+        Printer: Record "DOPSWHS Printer";
+        Zpl: Text;
+        SourceDoc: Code[50];
+        Count: Integer;
+    begin
+        if Printer.Get(PrinterId) then
+            if Printer.Format <> Printer.Format::ZPL then
+                Error('Mal kabul etiketleri için ZPL etiket yazıcısı seçin.');
+        Zpl := BuildReceiptItemLabels(RowsJson, Count, SourceDoc);
+        EnqueueZpl(SourceDoc, Zpl, PrinterId, 1, Enum::"DOPSWHS IWX Report Usage"::Item, 'Receipt item labels');
+        exit(Count);
+    end;
+
+    procedure BuildReceiptItemLabels(RowsJson: Text; var Count: Integer; var SourceDoc: Code[50]): Text
+    var
+        Item: Record Item;
+        Rows: JsonArray;
+        Token: JsonToken;
+        Row: JsonObject;
+        ItemNo: Text;
+        LotNo: Text;
+        SupplierLotNo: Text;
+        QtyText: Text;
+        ReceiptNo: Text;
+        DateText: Text;
+        Copies: Integer;
+        RowNo: Integer;
+        i: Integer;
+        Label: Text;
+        Zpl: Text;
+    begin
+        Count := 0;
+        SourceDoc := 'MAL KABUL';
+        if not Rows.ReadFrom(RowsJson) then
+            Error('Mal kabul etiket satırları okunamadı.');
+        if Rows.Count() = 0 then
+            Error('Yazdırılacak mal kabul etiketi yok.');
+        foreach Token in Rows do begin
+            RowNo += 1;
+            if not Token.IsObject() then
+                Error('Etiket satırı %1 geçersiz.', RowNo);
+            Row := Token.AsObject();
+            ItemNo := RowText(Row, 'itemNo', 20, RowNo, true);
+            if not Item.Get(ItemNo) then
+                Error('Etiket satırı %1: %2 ürünü bulunamadı.', RowNo, ItemNo);
+            LotNo := RowText(Row, 'lotNo', 50, RowNo, false);
+            SupplierLotNo := RowText(Row, 'supplierLotNo', 50, RowNo, false);
+            QtyText := RowText(Row, 'quantityText', 30, RowNo, true);
+            ReceiptNo := RowText(Row, 'receiptNo', 20, RowNo, false);
+            DateText := RowText(Row, 'dateText', 20, RowNo, false);
+            Copies := RowInteger(Row, 'copies', RowNo);
+            if (Copies < 1) or (Copies > LabelsPerJob()) then
+                Error('Etiket satırı %1: adet 1 ile %2 arasında olmalı.', RowNo, LabelsPerJob());
+            if Count + Copies > LabelsPerJob() then
+                Error('Tek seferde en fazla %1 mal kabul etiketi gönderilebilir.', LabelsPerJob());
+            if (RowNo = 1) and (ReceiptNo <> '') then
+                SourceDoc := CopyStr(ReceiptNo, 1, MaxStrLen(SourceDoc));
+            Label := BuildReceiptItemZpl(Item, LotNo, SupplierLotNo, QtyText, ReceiptNo, DateText);
+            for i := 1 to Copies do
+                Zpl += Label;
+            Count += Copies;
+        end;
+        exit(Zpl);
+    end;
+
+    local procedure RowText(Row: JsonObject; Name: Text; MaxLength: Integer; RowNo: Integer; Required: Boolean): Text
+    var
+        Value: JsonToken;
+        Result: Text;
+    begin
+        if Row.Get(Name, Value) then
+            if Value.IsValue() then
+                if not Value.AsValue().IsNull() then
+                    Result := DelChr(Value.AsValue().AsText(), '<>', ' ');
+        if Required and (Result = '') then
+            Error('Etiket satırı %1: %2 eksik.', RowNo, Name);
+        if StrLen(Result) > MaxLength then
+            Error('Etiket satırı %1: %2 en fazla %3 karakter olabilir.', RowNo, Name, MaxLength);
+        exit(Result);
+    end;
+
+    local procedure RowInteger(Row: JsonObject; Name: Text; RowNo: Integer): Integer
+    var
+        Value: JsonToken;
+    begin
+        if not Row.Get(Name, Value) then
+            Error('Etiket satırı %1: %2 eksik.', RowNo, Name);
+        if not Value.IsValue() then
+            Error('Etiket satırı %1: %2 geçersiz.', RowNo, Name);
+        exit(Value.AsValue().AsInteger());
+    end;
+
+    local procedure BuildReceiptItemZpl(var Item: Record Item; LotNo: Text; SupplierLotNo: Text; QtyText: Text; ReceiptNo: Text; DateText: Text): Text
+    var
+        Canvas: Codeunit "DOPSWHS Label Canvas";
+        Lines: List of [Text];
+        Line: Text;
+        Info: Text;
+        BarData: Text;
+        Zpl: Text;
+        X: Integer;
+        ColumnWidth: Integer;
+        Y: Integer;
+        NoFont: Integer;
+        NoWidth: Integer;
+        TextFont: Integer;
+        QtyFont: Integer;
+    begin
+        Canvas.Init();
+        Zpl := Canvas.Frame('MAL KABUL', DateText, Item."No.", '', 34, X, ColumnWidth, Y);
+        TextFont := Canvas.NormalFont() + 4;
+        QtyFont := Canvas.QtyFont();
+        NoFont := Canvas.FitFontMeasured(Item."No.", ColumnWidth, Canvas.ItemNoFont(), Canvas.SmallFont());
+        NoWidth := Canvas.FitFontMeasured(Item."No.", ColumnWidth, NoFont, 10);
+        Zpl += Canvas.WriteSized(X, Y, NoFont, NoWidth, ColumnWidth, Item."No.");
+        Y += NoFont + 6;
+        Canvas.WrapText(Item.Description, Canvas.MaxChars(ColumnWidth, Canvas.NormalFont()), 1, Lines);
+        foreach Line in Lines do begin
+            Zpl += Canvas.Write(X, Y, Canvas.NormalFont(), ColumnWidth, Line);
+            Y += Canvas.NormalFont() + 6;
+        end;
+        if LotNo <> '' then begin
+            Zpl += Canvas.Write(X, Y, TextFont, ColumnWidth, CopyStr('LOT: ' + LotNo, 1, Canvas.MaxChars(ColumnWidth, TextFont)));
+            Y += TextFont + 6;
+        end;
+        Zpl += Canvas.Write(X, Y, QtyFont, ColumnWidth, CopyStr(QtyText, 1, Canvas.MaxChars(ColumnWidth, QtyFont)));
+        Y += QtyFont + 6;
+        Info := ReceiptNo;
+        if SupplierLotNo <> '' then begin
+            if Info <> '' then
+                Info += '  ';
+            Info += 'TED. LOT: ' + SupplierLotNo;
+        end;
+        if Info <> '' then begin
+            Zpl += Canvas.Write(X, Y, Canvas.SmallFont(), ColumnWidth, CopyStr(Info, 1, Canvas.MaxChars(ColumnWidth, Canvas.SmallFont())));
+            Y += Canvas.SmallFont() + 6;
+        end;
+        BarData := LotNo;
+        if BarData = '' then
+            BarData := Item."No.";
+        Zpl += Canvas.Code128(X, Y, Canvas.BarHeightToBottom(Y, true, 30), BarData, ColumnWidth, true);
+        exit(Zpl + Canvas.Finish());
+    end;
+
     procedure BuildExcelItemLabels(RowsJson: Text; var Count: Integer): Text
     var
         Item: Record Item;

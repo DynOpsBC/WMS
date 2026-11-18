@@ -1,5 +1,6 @@
 package com.dynops.bcwms.feature
 
+import com.dynops.bcwms.ui.ScrollAwayColumn
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -197,7 +198,7 @@ fun CountV2Module() {
         return
     }
 
-    Column(Modifier.fillMaxSize().padding(12.dp)) {
+    ScrollAwayColumn(Modifier.fillMaxSize().padding(12.dp)) { fullScreenList ->
         Card(
             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.10f)),
             shape = RoundedCornerShape(12.dp),
@@ -224,7 +225,7 @@ fun CountV2Module() {
         Spacer(Modifier.height(6.dp))
         StatusText(status)
         Spacer(Modifier.height(8.dp))
-        LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        LazyColumn(fullScreenList, verticalArrangement = Arrangement.spacedBy(6.dp)) {
             items(visibleRows) { sheet ->
                 val posted = sheet.optString("status").equals("Posted", ignoreCase = true)
                 val v2 = sheet.optBoolean("v2ScanMode", false)
