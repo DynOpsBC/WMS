@@ -1,7 +1,7 @@
 {
-  "versionCode": 200177,
-  "versionName": "1.14.177-emu",
-  "apkUrl": "https://github.com/DynOpsBC/WMS/releases/download/android-v1.14.177-emu/BCWMS-EMU-1.14.177-RELEASE.apk",
-  "sha256": "f2ac1744bbf5b7fae92eed9152b2abe06da3dc4103c0cc04f34375c0f1d903a3",
-  "releaseNotes": "Depo Girişi: terminal seçilince büyük \"TERMİNAL-x ile devam et\" düğmesi çıkar ve basınca doğrudan ana menü açılır. \"BC'de tanımlı WMS kullanıcısı yok\" uyarısı ile boş kullanıcı adı/şifre alanları artık gösterilmez; bağlantı hatası olursa düğmenin hemen altında yazar. BCWMSApp 1.14.2.32 gerekir."
+  "versionCode": 200178,
+  "versionName": "1.14.178-emu",
+  "apkUrl": "https://github.com/DynOpsBC/WMS/releases/download/android-v1.14.178-emu/BCWMS-EMU-1.14.178-RELEASE.apk",
+  "sha256": "64e8f6084a8daa2466adea29c4df6702030fc38e56495307893a2a3a3b7ed0f9",
+  "releaseNotes": "Ürün Sorgu: ürün adının bir kısmı büyük/küçük harf fark etmeden aranır (\"kovan\", \"alev zimba\"); Sorgula'ya basınca eşleşen ürünler listelenir. Ad-Hoc Hareket: BC'nin rafta lot tutmadığı ürünlerde lot yazmadan taşınır, BC'nin hata nedeni artık açık yazılır. BCWMSApp 1.14.2.33 gerekir."
 }

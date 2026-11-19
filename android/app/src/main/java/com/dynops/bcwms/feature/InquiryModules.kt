@@ -63,28 +63,71 @@ internal fun isSparePart(row: JSONObject): Boolean {
            no.startsWith("YP") || no.startsWith("YD")
 }
 
+private val TR_LOCALE = java.util.Locale("tr", "TR")
+
+/**
+ * BC'de `contains(description, …)` büyük/küçük harfe duyarlıdır ("kovan" yazınca
+ * "KOVAN …" gelmez) ve sunucuda tolower/toupper çalışmaz. Bu yüzden aranan
+ * kelime yaygın yazılışlarıyla ayrı ayrı sorulur. Aynı alanda `or` ile `and`
+ * karışınca BC süzgeci yanlış kurduğu için her yazılış ayrı istektir.
+ */
+internal fun itemSearchVariants(word: String): List<String> {
+    val w = word.trim()
+    if (w.isEmpty()) return emptyList()
+    val lower = w.lowercase(TR_LOCALE)
+    return listOf(
+        w.uppercase(TR_LOCALE),
+        w,
+        lower,
+        w.uppercase(java.util.Locale.ROOT),
+        lower.replaceFirstChar { it.titlecase(TR_LOCALE) },
+    ).distinct()
+}
+
+internal fun itemSearchWords(value: String): List<String> =
+    value.trim().split(Regex("\\s+")).filter { it.isNotBlank() }
+
+/** Karşılaştırma için sadeleştirme: Türkçe küçük harf, ı→i. */
+internal fun foldItemSearchText(value: String): String =
+    value.lowercase(TR_LOCALE).replace('ı', 'i').replace("i̇", "i")
+
+/** Satır, yazılan metnin tamamını (no) ya da bütün kelimelerini (no + açıklama) içeriyor mu? */
+internal fun itemMatchesSearch(row: JSONObject, value: String): Boolean {
+    val words = itemSearchWords(value).map(::foldItemSearchText)
+    if (words.isEmpty()) return true
+    val no = foldItemSearchText(firstValue(row, "no", "number"))
+    val text = no + " " + foldItemSearchText(firstValue(row, "description", "displayName"))
+    return no.contains(foldItemSearchText(value.trim())) || words.all { text.contains(it) }
+}
+
 internal fun itemLookupPaths(value: String, sparePartsOnly: Boolean = false): List<String> {
     val safe = value.trim().replace("'", "''")
-    val suffix = "&\$select=no,description,baseUnitOfMeasure,itemCategoryCode&\$orderby=no&\$top=25"
+    val words = itemSearchWords(value)
+    // Birden çok kelimede sunucu yalnız en uzun kelimeyle süzer; kalan kelimeler
+    // cihazda büyük/küçük harfe bakmadan elenir, bu yüzden daha çok satır istenir.
+    val top = if (words.size > 1) 200 else 25
+    val suffix = "&\$select=no,description,baseUnitOfMeasure,itemCategoryCode&\$orderby=no&\$top=$top"
+    val descriptionTerms = itemSearchVariants(words.maxByOrNull { it.length }.orEmpty()).map { it.replace("'", "''") }
     if (sparePartsOnly) {
         val spareFilter = "(contains(itemCategoryCode,'YEDEK') or contains(itemCategoryCode,'SPARE') or contains(description,'YEDEK') or contains(description,'SPARE'))"
         return if (safe.isBlank()) {
             listOf("items?\$filter=$spareFilter$suffix")
         } else {
-            listOf(
-                "items?\$filter=contains(no,'$safe') and $spareFilter$suffix",
-                "items?\$filter=contains(description,'$safe') and $spareFilter$suffix",
-            )
+            listOf("items?\$filter=contains(no,'$safe') and $spareFilter$suffix") +
+                descriptionTerms.map { "items?\$filter=contains(description,'$it') and $spareFilter$suffix" }
         }
     }
-    return listOf(
-        "items?\$filter=contains(no,'$safe')$suffix",
-        "items?\$filter=contains(description,'$safe')$suffix",
-    )
+    return listOf("items?\$filter=contains(no,'$safe')$suffix") +
+        descriptionTerms.map { "items?\$filter=contains(description,'$it')$suffix" }
 }
 
-internal fun mergeItemLookupRows(pages: List<List<JSONObject>>, sparePartsOnly: Boolean = false): List<JSONObject> {
+internal fun mergeItemLookupRows(
+    pages: List<List<JSONObject>>,
+    sparePartsOnly: Boolean = false,
+    search: String = "",
+): List<JSONObject> {
     val merged = pages.flatten()
+        .filter { itemMatchesSearch(it, search) }
         .distinctBy { firstValue(it, "no", "number").trim().uppercase() }
         .sortedBy { firstValue(it, "no", "number").trim().uppercase() }
     return if (sparePartsOnly) {
@@ -175,7 +218,8 @@ fun ItemInquiryModule(labelsOnly: Boolean = false) {
         }.awaitAll()
         suggestions = mergeItemLookupRows(
             pages.filter { it?.complete == true }.map { requireNotNull(it).rows },
-            sparePartsOnly
+            sparePartsOnly,
+            needle,
         )
         suggestionsLoading = false
     }
@@ -230,6 +274,25 @@ fun ItemInquiryModule(labelsOnly: Boolean = false) {
 
                     val le = BcApi.get(context, "itemLedgerEntries?\$filter=itemNo eq '$safeItemNo'&\$orderby=postingDate desc,entryNo desc&\$top=20")
                     if (le.ok) resolvedLedger = BcApi.parseValueArray(le.body)
+                }
+
+                // Tam eşleşen ürün/LP yoksa yazılan metin adın ya da numaranın bir
+                // parçasıdır: "bulunamadı" demek yerine eşleşen ürünleri listele.
+                if (resolvedItem == null && queriedLpNo.isBlank()) {
+                    val pages = itemLookupPaths(q, sparePartsOnly).map { path ->
+                        async { runCatching { BcApi.getAllPages(context, path) }.getOrNull() }
+                    }.awaitAll()
+                    val matches = mergeItemLookupRows(
+                        pages.filter { it?.complete == true }.map { requireNotNull(it).rows },
+                        sparePartsOnly,
+                        q,
+                    )
+                    if (matches.isNotEmpty()) {
+                        query = q
+                        suggestions = matches
+                        status = "'$q' ile eşleşen ${matches.size} ürün var. Listeden seçin."
+                        return@launch
+                    }
                 }
 
                 val resolvedUom = resolvedItem?.let { firstValue(it, "baseUnitOfMeasure", "baseUoM") }.orEmpty()
@@ -419,7 +482,7 @@ fun ItemInquiryModule(labelsOnly: Boolean = false) {
             ) {
                 Column(Modifier.padding(10.dp)) {
             ScanField(
-                label = "Ürün No / LP No",
+                label = "Ürün no, adı veya LP no",
                 value = query,
                 voiceInput = com.dynops.bcwms.BuildConfig.FLAVOR == "emu",
                 onValueChange = { query = it },

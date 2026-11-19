@@ -97,6 +97,12 @@ codeunit 72045 "DOPSWHS Movement Mgmt"
         Telemetry: Codeunit "DOPSWHS Telemetry";
         CustomDimensions: Dictionary of [Text, Text];
         BatchName: Code[10];
+        WhseLotTracked: Boolean;
+        WhseSerialTracked: Boolean;
+        LotRequired: Boolean;
+        SerialRequired: Boolean;
+        WhseLotNo: Code[50];
+        WhseSerialNo: Code[50];
     begin
         if ItemNo = '' then
             Error('Item No. is required for ad-hoc moves.');
@@ -117,13 +123,34 @@ codeunit 72045 "DOPSWHS Movement Mgmt"
         if not ToBin.Get(LocationCode, ToBinCode) then
             Error('Target bin %1 does not exist in location %2.', ToBinCode, LocationCode);
         Item.Get(ItemNo);
+        // Saha hatası (DKÇ, 19 Kas 2026): izleme kodunda yalnız "Lot Specific
+        // Tracking" açık, "Lot Warehouse Tracking" kapalıysa lot madde defterinde
+        // tutulur ama raf (ambar) kayıtlarında TUTULMAZ. Böyle bir ürün lotsuz
+        // "lot zorunlu", lotla "bu lotun rafta stoku yok" hatasına düşüyor ve
+        // raftan rafa hiç taşınamıyordu. Raf düzeyinde lot/seri yalnız
+        // "… Warehouse Tracking" açıkken sorulur ve doğrulanır.
         if (Item."Item Tracking Code" <> '') and ItemTrackingCode.Get(Item."Item Tracking Code") then begin
-            if (ItemTrackingCode."Lot Specific Tracking" or ItemTrackingCode."Lot Warehouse Tracking") and (LotNo = '') then
+            WhseLotTracked := ItemTrackingCode."Lot Warehouse Tracking";
+            WhseSerialTracked := ItemTrackingCode."SN Warehouse Tracking";
+            if Location."Directed Put-away and Pick" then begin
+                // Yalnız ambar kaydı oluşur; madde defterine dokunulmaz.
+                LotRequired := WhseLotTracked;
+                SerialRequired := WhseSerialTracked;
+            end else begin
+                // Madde transferi de kaydedilir; orada lot/seri zorunludur.
+                LotRequired := ItemTrackingCode."Lot Specific Tracking" or WhseLotTracked;
+                SerialRequired := ItemTrackingCode."SN Specific Tracking" or WhseSerialTracked;
+            end;
+            if LotRequired and (LotNo = '') then
                 Error('%1 lot takipli maddesi için lot numarası zorunludur.', ItemNo);
-            if (ItemTrackingCode."SN Specific Tracking" or ItemTrackingCode."SN Warehouse Tracking") and (SerialNo = '') then
+            if SerialRequired and (SerialNo = '') then
                 Error('%1 seri takipli maddesi için seri numarası zorunludur.', ItemNo);
         end;
-        if (SerialNo <> '') and (Qty <> 1) then
+        if WhseLotTracked then
+            WhseLotNo := LotNo;
+        if WhseSerialTracked then
+            WhseSerialNo := SerialNo;
+        if (SerialNo <> '') and (Qty <> 1) and (SerialRequired or WhseSerialTracked) then
             Error('%1 seri numarası tek bir temel birimi temsil eder; hareket miktarı 1 olmalıdır.', SerialNo);
 
         // Ürün bazlı ad-hoc hareket hangi fiziksel LP'nin seçildiğini söylemez.
@@ -132,14 +159,14 @@ codeunit 72045 "DOPSWHS Movement Mgmt"
         // kendiliğinden bölünmüş gibi tutarsız bir görünüm oluşur.
         if LpNo = '' then
             LPMgt.EnsureLooseStockAvailable(
-                LocationCode, FromBinCode, ItemNo, LotNo, SerialNo, Qty);
+                LocationCode, FromBinCode, ItemNo, WhseLotNo, WhseSerialNo, Qty);
 
         // Yönlendirilmiş (Directed Put-away and Pick) lokasyonda Item Journal
         // bin taşıyamaz — post adjustment bin'den (W-99-...) geçer ve raf
         // seviyesinde hareket OLMAZ. Doğru araç: Warehouse Reclass Journal
         // (Movement) — bin'den bin'e, ILE'ye dokunmadan.
         if Location."Directed Put-away and Pick" then begin
-            RegisterWhseMove(LocationCode, FromBinCode, ToBinCode, ItemNo, LpNo, Qty, UserId, LotNo, SerialNo);
+            RegisterWhseMove(LocationCode, FromBinCode, ToBinCode, ItemNo, LpNo, Qty, UserId, WhseLotNo, WhseSerialNo);
             CustomDimensions.Add('Category', 'Movement');
             // Hareketi yapan operatör terminalden parametre olarak geliyor
             // (UserId parametresi). Paylaşımlı BC hesabı ile ayırt edilemezdi;

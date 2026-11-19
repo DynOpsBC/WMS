@@ -430,8 +430,10 @@ fun AdHocMoveModule() {
                                 modifier = Modifier.fillMaxWidth(),
                             ) { Text("Yeniden Dene") }
                         }
+                        // Lot listesi boşsa çoğu zaman BC bu ürünün lotunu rafta tutmuyordur
+                        // (izleme kodunda ambar lot izleme kapalı); lot yazmak gerekmez.
                         availableLots.isEmpty() -> Text(
-                            "Bu ürünün $lotLookupBin kaynak bininde pozitif stoklu lotu bulunamadı. Lot numarasını QR ile okutabilir veya elle girebilirsiniz.",
+                            "$lotLookupBin rafında bu ürün için lot kaydı yok. Rafta lot tutulmuyorsa lot yazmadan Hareketi Onayla'ya basın.",
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                         else -> LazyColumn(
@@ -716,7 +718,10 @@ fun AdHocMoveModule() {
                             busy = false
                             status = if (r.ok) "TAMAM: Hareket kaydedildi (HTTP ${r.httpCode})"
                                 else "HATA: ${BcApi.errorMessage(r.body)} (HTTP ${r.httpCode})" +
-                                    if (lot.isNotBlank() && (r.httpCode == 404 || r.httpCode == 400))
+                                    // Yalnız 404 (eylem BC'de yok) eski BC sürümünü gösterir. 400 bir
+                                    // iş kuralı hatasıdır; ek metin BC'nin Türkçe nedenini
+                                    // "Lot bilgisi doğrulanamadı" kalıbının arkasına gizliyordu.
+                                    if (lot.isNotBlank() && r.httpCode == 404)
                                         " — lot desteği için BC publish gerekli olabilir" else ""
                             if (r.ok) {
                                 lastMove = buildList {
