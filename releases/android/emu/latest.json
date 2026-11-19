@@ -1,7 +1,7 @@
 {
-  "versionCode": 200181,
-  "versionName": "1.14.181-emu",
-  "apkUrl": "https://github.com/DynOpsBC/WMS/releases/download/android-v1.14.181-emu/BCWMS-EMU-1.14.181-RELEASE.apk",
-  "sha256": "4781c78d5ecf065df49a626fba2fdaee5a6f29bae188681c23428b209ce21fc8",
-  "releaseNotes": "Ad-Hoc Hareket, LP ile: kaynak raf artık sorulmaz. LP etiketini okutun, hedef rafı okutun, onaylayın; LP'nin şu an durduğu raf ekranda gösterilir. BCWMSApp 1.14.2.34 veya üstü gerekir."
+  "versionCode": 200182,
+  "versionName": "1.14.182-emu",
+  "apkUrl": "https://github.com/DynOpsBC/WMS/releases/download/android-v1.14.182-emu/BCWMS-EMU-1.14.182-RELEASE.apk",
+  "sha256": "ded6cf806e92d9110bf3270431d084c5ddadff0626e4365bd36ec775ec5c1bfa",
+  "releaseNotes": "Ürün Sorgu ve Etiket Çıkar: ürün etiketine lot yazılır. Etiket yazdır penceresinde lot seçilir (tek lot varsa kendiliğinden); Stok ayrıntılarında stoktaki lotlar listelenir, lota ya da LP satırına dokununca ürün, lot, miktar ve LP numarası yazan etiket basılır. BCWMSApp 1.14.2.37 gerekir."
 }

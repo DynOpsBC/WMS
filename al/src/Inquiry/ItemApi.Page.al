@@ -133,6 +133,15 @@ page 72086 "DOPSWHS Item API"
         exit(Dispatcher.PrintProductionItemLabels(rowsJson, printerId));
     end;
 
+    // DKÇ: Ürün Sorgu'da seçilen lot / LP için ürün etiketi (ürün, lot, miktar, LP no).
+    [ServiceEnabled]
+    procedure printStockLabels(rowsJson: Text; printerId: Code[50]): Integer
+    var
+        Dispatcher: Codeunit "DOPSWHS Print Dispatcher";
+    begin
+        exit(Dispatcher.PrintStockItemLabels(rowsJson, printerId));
+    end;
+
     [ServiceEnabled]
     procedure printLabels(itemNosJson: Text; printerId: Code[50]): Integer
     var

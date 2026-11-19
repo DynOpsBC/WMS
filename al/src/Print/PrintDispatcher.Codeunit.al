@@ -211,6 +211,26 @@ codeunit 72051 "DOPSWHS Print Dispatcher"
         exit(Count);
     end;
 
+    /// <summary>
+    /// DKÇ (19 Kas 2026): Ürün Sorgu'da bir lota ya da LP'ye dokununca basılan
+    /// etiket. Mal kabul etiketiyle aynı düzen; başlık ÜRÜN ETİKETİ, belge
+    /// satırında LP numarası (receiptNo = "LP: …").
+    /// </summary>
+    procedure PrintStockItemLabels(RowsJson: Text; PrinterId: Code[50]): Integer
+    var
+        Printer: Record "DOPSWHS Printer";
+        Zpl: Text;
+        SourceDoc: Code[50];
+        Count: Integer;
+    begin
+        if Printer.Get(PrinterId) then
+            if Printer.Format <> Printer.Format::ZPL then
+                Error('Ürün etiketleri için ZPL etiket yazıcısı seçin.');
+        Zpl := BuildDocumentItemLabels(RowsJson, 'ÜRÜN ETİKETİ', Count, SourceDoc);
+        EnqueueZpl(SourceDoc, Zpl, PrinterId, 1, Enum::"DOPSWHS IWX Report Usage"::Item, 'Stock item labels');
+        exit(Count);
+    end;
+
     procedure BuildReceiptItemLabels(RowsJson: Text; var Count: Integer; var SourceDoc: Code[50]): Text
     begin
         exit(BuildDocumentItemLabels(RowsJson, 'MAL KABUL', Count, SourceDoc));

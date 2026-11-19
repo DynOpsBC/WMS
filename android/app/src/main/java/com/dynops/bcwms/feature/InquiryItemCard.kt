@@ -37,6 +37,7 @@ internal fun InquiryItemCard(
     onToggle: () -> Unit,
     onRemove: () -> Unit,
     onPrint: () -> Unit,
+    onPrintLot: (InquiryLotLabel) -> Unit = {},
 ) {
     val item = entry.item
     val no = item?.let { firstValue(it, "no", "number") } ?: entry.queryKey
@@ -150,6 +151,25 @@ internal fun InquiryItemCard(
                             InquiryDetailRow("Üretim emrinde", "${inquiryQuantity(item?.optDouble("quantityOnProdOrder", 0.0) ?: 0.0)} $uom")
                             val category = item?.let { firstValue(it, "itemCategoryCode") }.orEmpty()
                             if (category.isNotBlank() && category != "-") InquiryDetailRow("Kategori", category)
+                            if (entry.lots.isNotEmpty()) {
+                                HorizontalDivider()
+                                Text("Lotlar (${entry.lots.size})", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+                                Text("Etiket basmak için lota dokunun.", style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                entry.lots.forEach { lot ->
+                                    Column(
+                                        Modifier.fillMaxWidth()
+                                            .clickable(enabled = !busy, onClickLabel = "Lot etiketi yazdır") {
+                                                onPrintLot(InquiryLotLabel(lot.lotNo, lot.quantity, lot.lpNos))
+                                            }
+                                            .padding(vertical = 6.dp),
+                                    ) {
+                                        InquiryDetailRow("🖨 ${lot.lotNo}", "${inquiryQuantity(lot.quantity)} $uom")
+                                        if (lot.lpNos.isNotEmpty()) Text("LP: ${lot.lpNos.joinToString(" · ")}",
+                                            style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    }
+                                }
+                            }
                             HorizontalDivider()
                             Text("LP bilgileri ($lpCount)", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
                             if (entry.lpLines.isEmpty()) {
@@ -158,7 +178,21 @@ internal fun InquiryItemCard(
                             } else {
                                 InquiryDetailRow("LP'lerdeki toplam", "${inquiryQuantity(entry.lpLines.sumOf { it.optDouble("quantity", 0.0) })} $uom")
                                 entry.lpLines.forEach { line ->
-                                    Column {
+                                    val lineLot = line.optString("lotNo").trim()
+                                    Column(
+                                        // Lotlu LP satırına dokununca o LP'nin lot etiketi basılır.
+                                        if (lineLot.isBlank()) Modifier else Modifier.fillMaxWidth()
+                                            .clickable(enabled = !busy, onClickLabel = "LP lot etiketi yazdır") {
+                                                onPrintLot(
+                                                    InquiryLotLabel(
+                                                        lineLot,
+                                                        line.optDouble("quantity", 0.0),
+                                                        listOf(line.optString("lpNo").trim()).filter(String::isNotBlank),
+                                                    ),
+                                                )
+                                            }
+                                            .padding(vertical = 4.dp),
+                                    ) {
                                         InquiryDetailRow(line.optString("lpNo"), "${inquiryQuantity(line.optDouble("quantity", 0.0))} $uom")
                                         val extra = listOfNotNull(
                                             line.optString("lotNo").takeIf(String::isNotBlank)?.let { "Lot: $it" },

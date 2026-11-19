@@ -3,6 +3,7 @@ package com.dynops.bcwms.feature
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -146,6 +147,7 @@ internal data class InquiryItemEntry(
     val queriedLpNo: String,
     val uom: String,
     val labelCopies: String = "1",
+    val lots: List<InquiryLotStock> = emptyList(),
 )
 
 internal fun addInquiryEntry(
@@ -172,6 +174,7 @@ fun ItemInquiryModule(labelsOnly: Boolean = false) {
     var queriedItems by remember { mutableStateOf<List<InquiryItemEntry>>(emptyList()) }
     var expandedKey by remember { mutableStateOf<String?>(null) }
     var printKey by remember { mutableStateOf<String?>(null) }
+    var lotLabel by remember { mutableStateOf<Pair<String, InquiryLotLabel>?>(null) }
     var showPrintStatus by remember { mutableStateOf(false) }
     var bulkProducts by remember { mutableStateOf<List<InquiryLabelProduct>?>(null) }
     var bulkResult by remember { mutableStateOf<InquiryLabelBatchResult?>(null) }
@@ -254,6 +257,7 @@ fun ItemInquiryModule(labelsOnly: Boolean = false) {
                 var resolvedItem: JSONObject? = null
                 var resolvedLpLines: List<JSONObject> = emptyList()
                 var resolvedLedger: List<JSONObject> = emptyList()
+                var resolvedLots: List<InquiryLotStock> = emptyList()
 
                 val byLp = BcApi.getAllPages(context, "licensePlateLines?\$filter=lpNo eq '$safeQ'&\$top=200")
                 if (byLp.complete && byLp.rows.isNotEmpty()) {
@@ -274,6 +278,15 @@ fun ItemInquiryModule(labelsOnly: Boolean = false) {
 
                     val le = BcApi.get(context, "itemLedgerEntries?\$filter=itemNo eq '$safeItemNo'&\$orderby=postingDate desc,entryNo desc&\$top=20")
                     if (le.ok) resolvedLedger = BcApi.parseValueArray(le.body)
+                }
+                // Stoktaki lotlar: kalan miktarı olan giriş kayıtları lota göre toplanır.
+                // Etiket Çıkar ekranında da gerekir: ürün etiketine lot yazılabilsin.
+                if (resolvedItem != null) {
+                    val openPage = BcApi.getAllPages(
+                        context,
+                        "itemLedgerEntries?\$filter=itemNo eq '$safeItemNo' and remainingQuantity gt 0&\$select=entryNo,lotNo,remainingQuantity&\$top=500",
+                    )
+                    if (openPage.complete) resolvedLots = inquiryLotStocks(openPage.rows, resolvedLpLines)
                 }
 
                 // Tam eşleşen ürün/LP yoksa yazılan metin adın ya da numaranın bir
@@ -303,6 +316,7 @@ fun ItemInquiryModule(labelsOnly: Boolean = false) {
                     ledger = resolvedLedger,
                     queriedLpNo = queriedLpNo,
                     uom = resolvedUom,
+                    lots = resolvedLots,
                 )
 
                 queriedItems = addInquiryEntry(queriedItems, newEntry)
@@ -332,7 +346,7 @@ fun ItemInquiryModule(labelsOnly: Boolean = false) {
         }
     }
 
-    fun printItemLabel(entry: InquiryItemEntry) {
+    fun printItemLabel(entry: InquiryItemEntry, lot: InquiryLotStock? = null) {
         if (printing) return
         val no = entry.item?.let { rawValue(it, "no", "number") }?.takeIf { it.isNotBlank() } ?: return
         val total = parseLabelCopies(entry.labelCopies) ?: run {
@@ -349,11 +363,25 @@ fun ItemInquiryModule(labelsOnly: Boolean = false) {
                 }
                 var sent = 0
                 for (copies in labelCopyBatches(total)) {
-                    val payload = JSONObject().apply {
-                        put("printerId", choice.printerCode)
-                        put("copies", copies)
-                    }.toString()
-                    val r = BcApi.boundAction(context, "items", no, "printLabel", payload)
+                    val r = if (lot == null) {
+                        val payload = JSONObject().apply {
+                            put("printerId", choice.printerCode)
+                            put("copies", copies)
+                        }.toString()
+                        BcApi.boundAction(context, "items", no, "printLabel", payload)
+                    } else {
+                        // Lot seçildi: etikette ürünle birlikte lot, lot stoku ve LP yazar.
+                        val today = java.text.SimpleDateFormat("dd.MM.yyyy", java.util.Locale.forLanguageTag("tr-TR")).format(java.util.Date())
+                        val payload = JSONObject()
+                            .put("rowsJson", lotLabelRowsJson(no, InquiryLotLabel(lot.lotNo, lot.quantity, lot.lpNos), entry.uom, today, copies))
+                            .put("printerId", choice.printerCode)
+                            .toString()
+                        BcApi.boundAction(context, "items", no, "printStockLabels", payload)
+                    }
+                    if (!r.ok && lot != null && r.httpCode == 404) {
+                        status = "🔴 Lotlu etiket için Business Central güncellemesi gerekiyor (BCWMS 1.14.2.37)."
+                        return@launch
+                    }
                     if (!r.ok) {
                         status = "🔴 Yazdırma: ${BcApi.errorMessage(r.body)} (HTTP ${r.httpCode})" +
                             if (sent > 0) " · $total etiketin $sent adedi kuyruğa alınmıştı." else ""
@@ -367,6 +395,41 @@ fun ItemInquiryModule(labelsOnly: Boolean = false) {
                 throw cancelled
             } catch (error: Exception) {
                 status = "HATA: $no etiketi gönderilemedi. ${error.message.orEmpty()}"
+            } finally {
+                printing = false
+            }
+        }
+    }
+
+    fun printLotLabel(entry: InquiryItemEntry, label: InquiryLotLabel) {
+        if (printing) return
+        val no = entry.item?.let { rawValue(it, "no", "number") }?.takeIf { it.isNotBlank() } ?: return
+        printing = true
+        scope.launch {
+            try {
+                status = "🖨 Lot etiketi yazdırılıyor..."
+                val choice = resolveInquiryPrinter(context).getOrElse {
+                    status = "HATA: ${it.message}"
+                    return@launch
+                }
+                val today = java.text.SimpleDateFormat("dd.MM.yyyy", java.util.Locale.forLanguageTag("tr-TR")).format(java.util.Date())
+                val body = JSONObject()
+                    .put("rowsJson", lotLabelRowsJson(no, label, entry.uom, today, 1))
+                    .put("printerId", choice.printerCode)
+                    .toString()
+                val r = BcApi.boundAction(context, "items", no, "printStockLabels", body)
+                status = if (r.ok) {
+                    "🟢 ${label.lotNo} lot etiketi ${choice.printerCode.ifBlank { "BC varsayılanı" }} kuyruğuna alındı ($no)." +
+                        if (choice.warning.isBlank()) "" else " ${choice.warning}"
+                } else if (r.httpCode == 404) {
+                    "🔴 Lot etiketi için Business Central güncellemesi gerekiyor (BCWMS 1.14.2.37)."
+                } else {
+                    "🔴 Yazdırma: ${BcApi.errorMessage(r.body)} (HTTP ${r.httpCode})"
+                }
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (error: Exception) {
+                status = "HATA: Lot etiketi gönderilemedi. ${error.message.orEmpty()}"
             } finally {
                 printing = false
             }
@@ -671,6 +734,10 @@ fun ItemInquiryModule(labelsOnly: Boolean = false) {
                         showPrintStatus = false
                         printKey = entry.queryKey
                     },
+                    onPrintLot = { label ->
+                        showPrintStatus = false
+                        lotLabel = entry.queryKey to label
+                    },
                 )
             }
         }
@@ -687,6 +754,37 @@ fun ItemInquiryModule(labelsOnly: Boolean = false) {
         )
     }
 
+    val lotEntry = lotLabel?.let { (key, _) -> queriedItems.firstOrNull { it.queryKey == key } }
+    val lotToPrint = lotLabel?.second
+    if (lotEntry != null && lotToPrint != null) {
+        ModalBottomSheet(onDismissRequest = { if (!printing) lotLabel = null }) {
+            Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 8.dp)) {
+                Text("Lot etiketi yazdır", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                Spacer(Modifier.height(6.dp))
+                Text(
+                    lotEntry.item?.let { firstValue(it, "no", "number") } ?: lotEntry.queryKey,
+                    fontWeight = FontWeight.Bold,
+                )
+                Text("Lot: ${lotToPrint.lotNo}")
+                Text("Miktar: ${lotLabelQuantityText(lotToPrint.quantity, lotEntry.uom)}")
+                Text(lotLabelLpText(lotToPrint.lpNos).ifBlank { "LP: yok" })
+                Spacer(Modifier.height(10.dp))
+                PrinterDestinationCard(inquiryFallback = true)
+                Spacer(Modifier.height(10.dp))
+                if (showPrintStatus) StatusText(status)
+                Button(
+                    onClick = { showPrintStatus = true; printLotLabel(lotEntry, lotToPrint) },
+                    enabled = !printing,
+                    modifier = Modifier.fillMaxWidth().height(52.dp),
+                ) { Text(if (printing) "Gönderiliyor..." else "Etiketi Yazdır", fontWeight = FontWeight.Bold) }
+                TextButton(onClick = { lotLabel = null }, enabled = !printing, modifier = Modifier.fillMaxWidth()) {
+                    Text("Kapat")
+                }
+                Spacer(Modifier.height(16.dp))
+            }
+        }
+    }
+
     val printEntry = queriedItems.firstOrNull { it.queryKey == printKey }
     if (printEntry != null) {
         ModalBottomSheet(onDismissRequest = { if (!printing) printKey = null }) {
@@ -701,6 +799,41 @@ fun ItemInquiryModule(labelsOnly: Boolean = false) {
                     style = MaterialTheme.typography.titleMedium,
                 )
                 PrinterDestinationCard(inquiryFallback = true)
+                // DKÇ (19 Kas 2026): ürün etiketine lot da yazılır. Tek lot varsa
+                // kendiliğinden seçilir; birden çok lot varsa operatör seçer.
+                var printLotNo by remember(printEntry.queryKey, printEntry.lots) {
+                    mutableStateOf(if (printEntry.lots.size == 1) printEntry.lots.first().lotNo else "")
+                }
+                if (printEntry.lots.isNotEmpty()) {
+                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Text("Etikete yazılacak lot", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+                        Row(
+                            Modifier.fillMaxWidth().horizontalScroll(androidx.compose.foundation.rememberScrollState()),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            printEntry.lots.forEach { lot ->
+                                FilterChip(
+                                    selected = printLotNo == lot.lotNo,
+                                    enabled = !printing,
+                                    onClick = { printLotNo = lot.lotNo },
+                                    label = { Text("${lot.lotNo} · ${lotLabelQuantityText(lot.quantity, printEntry.uom)}") },
+                                )
+                            }
+                            FilterChip(
+                                selected = printLotNo.isBlank(),
+                                enabled = !printing,
+                                onClick = { printLotNo = "" },
+                                label = { Text("Lotsuz") },
+                            )
+                        }
+                        if (printLotNo.isBlank()) Text(
+                            "Lot seçilmedi: etikette lot yazmaz.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+                val chosenLot = printEntry.lots.firstOrNull { it.lotNo == printLotNo }
                 LabelCopiesField(
                     printEntry.labelCopies,
                     { copies ->
@@ -713,7 +846,7 @@ fun ItemInquiryModule(labelsOnly: Boolean = false) {
                 if (showPrintStatus) StatusText(status)
                 val copies = parseLabelCopies(printEntry.labelCopies)
                 Button(
-                    onClick = { showPrintStatus = true; printItemLabel(printEntry) },
+                    onClick = { showPrintStatus = true; printItemLabel(printEntry, chosenLot) },
                     enabled = !printing && copies != null,
                     modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
                 ) {
