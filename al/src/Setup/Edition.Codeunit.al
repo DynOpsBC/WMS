@@ -12,7 +12,7 @@ codeunit 72322 "DOPSWHS Edition"
     Permissions = tabledata "DOPSWHS Setup" = RM;
 
     var
-        WrongEditionErr: Label 'Bu ortamda BCWMS %1 sürümü kurulu; %2 paketi yüklenemez (şirket: %3). Her müşterinin kendi paketi vardır: BASE 1.14.0.x, BADE 1.14.1.x, EMU/DKÇ 1.14.2.x. Bilinçli geçiş için Kurulum kartında "Allow Edition Change" işaretleyip yeniden deneyin.', Comment = '%1 installed edition, %2 edition of this package, %3 company name';
+        WrongEditionErr: Label 'Bu ortamda BCWMS %1 sürümü kurulu; %2 paketi yüklenemez (şirket: %3). Her müşterinin kendi paketi vardır: BASE 1.14.0.x, BADE 1.14.1.x, EMU/DKC 1.14.2.x. Bilinçli geçiş için Kurulum kartında "Allow Edition Change" işaretleyip yeniden deneyin.', Comment = '%1 installed edition, %2 edition of this package, %3 company name';
 
     /// <summary>Edition compiled into this package.</summary>
     procedure Current(): Code[10]

@@ -51,7 +51,7 @@ enum class CompanyBrand(
         logoRes = R.drawable.logo_pim_grup,
     ),
     DKC(
-        shortName = "DKÇ",
+        shortName = "DKC",
         primary = Color(0xFF1F1F1F),
         secondary = Color(0xFF5A5A5A),
         logoRes = R.drawable.logo_dkc,
