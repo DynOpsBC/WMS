@@ -1,7 +1,7 @@
 {
-  "versionCode": 200179,
-  "versionName": "1.14.179-emu",
-  "apkUrl": "https://github.com/DynOpsBC/WMS/releases/download/android-v1.14.179-emu/BCWMS-EMU-1.14.179-RELEASE.apk",
-  "sha256": "71a495eb9e8a568c8f67cd31ad03d839ad9a9c353e8e77c7993795472a78da6c",
-  "releaseNotes": "LP ekranına \"Boş LP Oluştur\" eklendi: LP türünü seçip rafı okutunca boş LP açılır, Satır Ekle ile içine birden çok ürün ya da bir ürünün bir kısmı konur, LP'yi Tamamla etiketi basar. Lot takipli ürünler LP'ye lotuyla eklenir. BCWMSApp 1.14.2.34 gerekir."
+  "versionCode": 200180,
+  "versionName": "1.14.180-emu",
+  "apkUrl": "https://github.com/DynOpsBC/WMS/releases/download/android-v1.14.180-emu/BCWMS-EMU-1.14.180-RELEASE.apk",
+  "sha256": "d2e825b20c26625ee31759d238b2852ef4f50631d01d6625926dfbc320629ce9",
+  "releaseNotes": "LP ekranı sadeleşti: LP'ye ürün koyarken yalnız Satır Ekle ve LP'yi Tamamla görünür, LP'nin satırları ekranda kalır; yazdırma ve bozma düğmeleri \"Diğer işlemler\" altındadır. LP ekranında \"Boş LP Oluştur\" ile boş LP açılıp içine birden çok ürün konur. BCWMSApp 1.14.2.34 gerekir."
 }

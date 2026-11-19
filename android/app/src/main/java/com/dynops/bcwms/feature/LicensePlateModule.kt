@@ -302,6 +302,7 @@ private fun LpDocument(lpNo: String, onBack: () -> Unit) {
 
     // dialogs — LP aç → kaynak bin + ürün/lot seç → adet → kaydet.
     var showAddLine by remember { mutableStateOf(false) }
+    var showMoreActions by remember { mutableStateOf(false) }
     var showQty by remember { mutableStateOf(false) }
     var scannedItem by remember { mutableStateOf("") }
     var selectedLineItem by remember { mutableStateOf<LpItemSelection?>(null) }
@@ -570,120 +571,131 @@ private fun LpDocument(lpNo: String, onBack: () -> Unit) {
                     }
                 }
 
-                val templateLabels = usesTemplateLpLabels(com.dynops.bcwms.BuildConfig.FLAVOR)
-                if (templateLabels) {
-                    // EMU/DKÇ: tek "Etiket Yazdır" — BC, LP şablonunun tasarımını
-                    // (palet/koli/kutu/çuval, içerik listesi) ve kopya sayısını uygular.
+                // Açık LP'de ürün konurken ekranın çoğunu yazdırma/bozma düğmeleri
+                // kaplıyor, LP'nin satırları görünmüyordu. İçerik eklenirken yalnız
+                // Satır Ekle ve LP'yi Tamamla görünür; gerisi "Diğer işlemler" altında.
+                if (canEdit) {
+                    TextButton(
+                        onClick = { showMoreActions = !showMoreActions },
+                        modifier = Modifier.fillMaxWidth(),
+                    ) { Text(if (showMoreActions) "Diğer işlemler ▴" else "Diğer işlemler ▾", fontSize = 13.sp) }
+                }
+                if (!canEdit || showMoreActions) {
+                    val templateLabels = usesTemplateLpLabels(com.dynops.bcwms.BuildConfig.FLAVOR)
+                    if (templateLabels) {
+                        // EMU/DKÇ: tek "Etiket Yazdır" — BC, LP şablonunun tasarımını
+                        // (palet/koli/kutu/çuval, içerik listesi) ve kopya sayısını uygular.
+                        OutlinedButton(
+                            onClick = {
+                                action(
+                                    "printLabel",
+                                    JSONObject().apply {
+                                        put("printerId", getMtePrinter(context))
+                                        put("copies", 0)
+                                    }.toString(),
+                                    "Etiket yazıcıya gönderildi (şablon tasarımı ve kopya sayısı BC'den).",
+                                    requiresCompleteLines = false,
+                                )
+                            },
+                            enabled = !busy && headerLoaded,
+                            modifier = Modifier.fillMaxWidth().height(50.dp),
+                            shape = RoundedCornerShape(14.dp),
+                        ) { WmsActionLabel(WmsGlyph.PRINTER, "Etiket Yazdır") }
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            OutlinedButton(
+                                onClick = { showPullDocument = true },
+                                enabled = !busy && headerLoaded && canPullFromDocument(st, pendingReceiptNo),
+                                modifier = Modifier.weight(1f).height(50.dp),
+                                shape = RoundedCornerShape(14.dp),
+                            ) { WmsActionLabel(WmsGlyph.ENTRIES, "Belgeden Doldur") }
+                            OutlinedButton(
+                                onClick = {
+                                    action(
+                                        "printPackingList",
+                                        JSONObject().apply { put("printerId", getDefaultPrinter(context, PRINTER_USAGE_DOCUMENT)) }.toString(),
+                                        "Paketleme listesi belge yazıcısına gönderildi.",
+                                        requiresCompleteLines = false,
+                                    )
+                                },
+                                enabled = !busy && headerLoaded && lines.isNotEmpty(),
+                                modifier = Modifier.weight(1f).height(50.dp),
+                                shape = RoundedCornerShape(14.dp),
+                            ) { WmsActionLabel(WmsGlyph.PRINTER, "Paketleme Listesi") }
+                        }
+                    } else {
+                        OutlinedButton(
+                            onClick = {
+                                val route = mtePrintRoute(getDefaultPrinter(context, PRINTER_USAGE_LABEL), getDefaultPrinter(context, PRINTER_USAGE_DOCUMENT))
+                                action(
+                                    route.action,
+                                    JSONObject().apply {
+                                        put("printerId", route.printerCode)
+                                        put("copies", 1)
+                                    }.toString(),
+                                    "MTE yazdırma isteği gönderildi. Fiziksel etiketi kontrol edin.",
+                                )
+                            },
+                            enabled = !busy && headerLoaded && canPrintMte(linesComplete, lines.size, pendingReceiptNo),
+                            modifier = Modifier.fillMaxWidth().height(50.dp),
+                            shape = RoundedCornerShape(14.dp),
+                        ) { WmsActionLabel(WmsGlyph.PRINTER, "MTE Yazdır") }
+                    }
+                    if (awaitingReceipt) {
+                        Text("MTE, mal kabul kaydedildikten sonra yazdırılabilir.", style = MaterialTheme.typography.bodySmall)
+                    }
+
                     OutlinedButton(
                         onClick = {
+                            val defaultPrinter = getDefaultPrinter(context, PRINTER_USAGE_DOCUMENT)
+                            val payload = JSONObject().apply {
+                                put("printerId", defaultPrinter)
+                                put("copies", 1)
+                            }.toString()
                             action(
-                                "printLabel",
-                                JSONObject().apply {
-                                    put("printerId", getMtePrinter(context))
-                                    put("copies", 0)
-                                }.toString(),
-                                "Etiket yazıcıya gönderildi (şablon tasarımı ve kopya sayısı BC'den).",
+                                "printDocument",
+                                payload,
+                                if (defaultPrinter.isBlank()) "LP QR belgesi varsayılan yazıcıya gönderildi" else "LP QR belgesi $defaultPrinter yazıcısına gönderildi",
                                 requiresCompleteLines = false,
                             )
                         },
                         enabled = !busy && headerLoaded,
                         modifier = Modifier.fillMaxWidth().height(50.dp),
                         shape = RoundedCornerShape(14.dp),
-                    ) { WmsActionLabel(WmsGlyph.PRINTER, "Etiket Yazdır") }
-                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        OutlinedButton(
-                            onClick = { showPullDocument = true },
-                            enabled = !busy && headerLoaded && canPullFromDocument(st, pendingReceiptNo),
-                            modifier = Modifier.weight(1f).height(50.dp),
+                    ) { WmsActionLabel(WmsGlyph.PRINTER, "LP QR Belgesini Yazdır") }
+
+                    when {
+                        canDelete -> OutlinedButton(
+                            onClick = { showDeleteConfirm = true },
+                            enabled = !busy,
+                            modifier = Modifier.fillMaxWidth().height(50.dp),
                             shape = RoundedCornerShape(14.dp),
-                        ) { WmsActionLabel(WmsGlyph.ENTRIES, "Belgeden Doldur") }
-                        OutlinedButton(
-                            onClick = {
-                                action(
-                                    "printPackingList",
-                                    JSONObject().apply { put("printerId", getDefaultPrinter(context, PRINTER_USAGE_DOCUMENT)) }.toString(),
-                                    "Paketleme listesi belge yazıcısına gönderildi.",
-                                    requiresCompleteLines = false,
-                                )
+                            colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error),
+                        ) { WmsActionLabel(WmsGlyph.WARNING, "Boş LP'yi Sil") }
+                        canUnbuild -> OutlinedButton(
+                            onClick = { showUnbuildConfirm = true },
+                            enabled = !busy,
+                            modifier = Modifier.fillMaxWidth().height(50.dp),
+                            shape = RoundedCornerShape(14.dp),
+                            colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error),
+                        ) { WmsActionLabel(WmsGlyph.WARNING, "LP'yi Boz") }
+                        // Bozma/silme yapılamıyorsa neden yapılamadığı hiç yazmıyordu;
+                        // düğme sessizce kayboluyordu (UAT lp-04).
+                        else -> Text(
+                            when {
+                                awaitingReceipt -> "Bu LP mal kabul için ayrıldı. Değişiklik veya iptal işlemini $pendingReceiptNo belgesinden yapın."
+                                st.equals("Assigned", ignoreCase = true) ->
+                                    "Bu LP bir belgeye atanmış; bozulamaz. Önce 'Serbest Bırak' ile belgeden çıkarın."
+                                st.equals("Used", ignoreCase = true) ->
+                                    "Bu LP tüketilmiş (Kullanıldı); içeriği sevk edildiği için bozulamaz."
+                                st.equals("Unbuilt", ignoreCase = true) ->
+                                    "Bu LP zaten bozulmuş durumda."
+                                else -> "Bu LP'nin durumu ($st) bozmaya uygun değil."
                             },
-                            enabled = !busy && headerLoaded && lines.isNotEmpty(),
-                            modifier = Modifier.weight(1f).height(50.dp),
-                            shape = RoundedCornerShape(14.dp),
-                        ) { WmsActionLabel(WmsGlyph.PRINTER, "Paketleme Listesi") }
-                    }
-                } else {
-                    OutlinedButton(
-                        onClick = {
-                            val route = mtePrintRoute(getDefaultPrinter(context, PRINTER_USAGE_LABEL), getDefaultPrinter(context, PRINTER_USAGE_DOCUMENT))
-                            action(
-                                route.action,
-                                JSONObject().apply {
-                                    put("printerId", route.printerCode)
-                                    put("copies", 1)
-                                }.toString(),
-                                "MTE yazdırma isteği gönderildi. Fiziksel etiketi kontrol edin.",
-                            )
-                        },
-                        enabled = !busy && headerLoaded && canPrintMte(linesComplete, lines.size, pendingReceiptNo),
-                        modifier = Modifier.fillMaxWidth().height(50.dp),
-                        shape = RoundedCornerShape(14.dp),
-                    ) { WmsActionLabel(WmsGlyph.PRINTER, "MTE Yazdır") }
-                }
-                if (awaitingReceipt) {
-                    Text("MTE, mal kabul kaydedildikten sonra yazdırılabilir.", style = MaterialTheme.typography.bodySmall)
-                }
-
-                OutlinedButton(
-                    onClick = {
-                        val defaultPrinter = getDefaultPrinter(context, PRINTER_USAGE_DOCUMENT)
-                        val payload = JSONObject().apply {
-                            put("printerId", defaultPrinter)
-                            put("copies", 1)
-                        }.toString()
-                        action(
-                            "printDocument",
-                            payload,
-                            if (defaultPrinter.isBlank()) "LP QR belgesi varsayılan yazıcıya gönderildi" else "LP QR belgesi $defaultPrinter yazıcısına gönderildi",
-                            requiresCompleteLines = false,
+                            fontSize = 12.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
                         )
-                    },
-                    enabled = !busy && headerLoaded,
-                    modifier = Modifier.fillMaxWidth().height(50.dp),
-                    shape = RoundedCornerShape(14.dp),
-                ) { WmsActionLabel(WmsGlyph.PRINTER, "LP QR Belgesini Yazdır") }
-
-                when {
-                    canDelete -> OutlinedButton(
-                        onClick = { showDeleteConfirm = true },
-                        enabled = !busy,
-                        modifier = Modifier.fillMaxWidth().height(50.dp),
-                        shape = RoundedCornerShape(14.dp),
-                        colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error),
-                    ) { WmsActionLabel(WmsGlyph.WARNING, "Boş LP'yi Sil") }
-                    canUnbuild -> OutlinedButton(
-                        onClick = { showUnbuildConfirm = true },
-                        enabled = !busy,
-                        modifier = Modifier.fillMaxWidth().height(50.dp),
-                        shape = RoundedCornerShape(14.dp),
-                        colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error),
-                    ) { WmsActionLabel(WmsGlyph.WARNING, "LP'yi Boz") }
-                    // Bozma/silme yapılamıyorsa neden yapılamadığı hiç yazmıyordu;
-                    // düğme sessizce kayboluyordu (UAT lp-04).
-                    else -> Text(
-                        when {
-                            awaitingReceipt -> "Bu LP mal kabul için ayrıldı. Değişiklik veya iptal işlemini $pendingReceiptNo belgesinden yapın."
-                            st.equals("Assigned", ignoreCase = true) ->
-                                "Bu LP bir belgeye atanmış; bozulamaz. Önce 'Serbest Bırak' ile belgeden çıkarın."
-                            st.equals("Used", ignoreCase = true) ->
-                                "Bu LP tüketilmiş (Kullanıldı); içeriği sevk edildiği için bozulamaz."
-                            st.equals("Unbuilt", ignoreCase = true) ->
-                                "Bu LP zaten bozulmuş durumda."
-                            else -> "Bu LP'nin durumu ($st) bozmaya uygun değil."
-                        },
-                        fontSize = 12.sp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
-                    )
+                    }
                 }
             }
         }
