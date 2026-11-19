@@ -213,11 +213,22 @@ fun AdHocMoveModule() {
             val header = JSONObject(h.body)
             sourceLpLocation = header.optString("locationCode").trim().takeUnless { it == "null" }.orEmpty()
             sourceLpBin = header.optString("binCode").trim().takeUnless { it == "null" }.orEmpty()
-            if (sourceLpBin.isNotBlank() && fromBin.isNotBlank() && !sourceLpBin.equals(fromBin.trim(), ignoreCase = true)) {
+            if (!isDkcFlavor() && sourceLpBin.isNotBlank() && fromBin.isNotBlank() && !sourceLpBin.equals(fromBin.trim(), ignoreCase = true)) {
                 busy = false
                 lpNo = ""; lpLines = emptyList(); lpLinesComplete = false
                 status = "HATA: $t, ${sourceLpBin} rafında kayıtlı. Kaynak rafı kontrol edin."
                 return@launch
+            }
+            // DKÇ (19 Kas 2026): LP'nin durduğu raf BC'de kayıtlı; operatör rafı
+            // ayrıca okutmak zorunda değil. Raf okutulmadıysa kayıtlı raf alınır.
+            if (fromBin.isBlank() || isDkcFlavor()) {
+                if (sourceLpBin.isBlank()) {
+                    busy = false
+                    lpNo = ""; lpLines = emptyList(); lpLinesComplete = false
+                    status = "HATA: $t LP'sinin rafı kayıtlı değil. LP ekranından Depo Gözü Ata ile rafını belirleyin."
+                    return@launch
+                }
+                fromBin = sourceLpBin
             }
             val l = BcApi.getAllPages(context, "licensePlateLines?\$filter=lpNo eq '$safeNo'&\$orderby=lineNo")
             if (!l.complete) {
@@ -254,7 +265,7 @@ fun AdHocMoveModule() {
         targetIsLp = null
         targetLpBin = ""
         lpFlow = true
-        if (fromBin.isBlank()) {
+        if (fromBin.isBlank() && !isDkcFlavor()) {
             status = "LP barkodu algılandı. Önce kaynak rafı okutun, ardından LP içeriğini getirin."
             return
         }
@@ -491,6 +502,31 @@ fun AdHocMoveModule() {
         Spacer(Modifier.height(12.dp))
 
         if (lpFlow) {
+            // DKÇ (19 Kas 2026): LP'nin durduğu raf BC'de kayıtlı; LP ile taşımada
+            // kaynak raf sorulmaz. Operatör LP etiketini, sonra hedef rafı okutur.
+            val lpFirst = isDkcFlavor()
+            if (lpFirst) {
+                ScanField(if (lpLines.isEmpty()) "1) LP etiketini okutun" else "LP", lpNo, { lpNo = it }, modifier = Modifier.fillMaxWidth(), onScanned = {
+                    loadLp(BarcodeIntentResolver.resolve(it).value)
+                })
+                if (lpNo.isNotBlank() && lpLines.isEmpty()) {
+                    Spacer(Modifier.height(6.dp))
+                    OutlinedButton(
+                        enabled = !busy,
+                        onClick = { loadLp(lpNo) },
+                        modifier = Modifier.fillMaxWidth().height(44.dp),
+                    ) { Text("📥 LP İçeriğini Getir", fontWeight = FontWeight.SemiBold) }
+                }
+                if (lpLinesComplete && sourceLpBin.isNotBlank()) {
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        "📍 Şu an $sourceLpBin rafında",
+                        fontSize = 12.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                Spacer(Modifier.height(8.dp))
+            } else {
             // 1) Kaynak bin — okutulunca o bindeki LP'ler otomatik listelenir.
             ScanField("1) Kaynak Bin okut", fromBin, { fromBin = it }, modifier = Modifier.fillMaxWidth(), onScanned = {
                 val b = BarcodeIntentResolver.resolve(it).value
@@ -549,9 +585,10 @@ fun AdHocMoveModule() {
                 }
                 Spacer(Modifier.height(8.dp))
             }
+            }
             // 3) İçerik (sistem gösterir)
             if (lpLines.isNotEmpty()) {
-                Text("3) LP içeriği (${lpLines.size})", fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+                Text((if (isDkcFlavor()) "LP içeriği" else "3) LP içeriği") + " (${lpLines.size})", fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
                 Spacer(Modifier.height(4.dp))
                 lpLines.forEach { ln ->
                     Card(Modifier.fillMaxWidth().padding(vertical = 2.dp)) {
@@ -567,7 +604,7 @@ fun AdHocMoveModule() {
                 }
                 Spacer(Modifier.height(8.dp))
                 // 4) Hedef: LP ya da bin
-                ScanField("4) Hedef okut (LP veya Bin)", target, {
+                ScanField(if (isDkcFlavor()) "2) Hedef rafı okutun" else "4) Hedef okut (LP veya Bin)", target, {
                     target = it; targetIsLp = null; targetLpBin = ""
                 }, modifier = Modifier.fillMaxWidth(), onScanned = {
                     resolveTarget(BarcodeIntentResolver.resolve(it).value)

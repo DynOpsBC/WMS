@@ -1,7 +1,7 @@
 {
-  "versionCode": 200180,
-  "versionName": "1.14.180-emu",
-  "apkUrl": "https://github.com/DynOpsBC/WMS/releases/download/android-v1.14.180-emu/BCWMS-EMU-1.14.180-RELEASE.apk",
-  "sha256": "d2e825b20c26625ee31759d238b2852ef4f50631d01d6625926dfbc320629ce9",
-  "releaseNotes": "LP ekranı sadeleşti: LP'ye ürün koyarken yalnız Satır Ekle ve LP'yi Tamamla görünür, LP'nin satırları ekranda kalır; yazdırma ve bozma düğmeleri \"Diğer işlemler\" altındadır. LP ekranında \"Boş LP Oluştur\" ile boş LP açılıp içine birden çok ürün konur. BCWMSApp 1.14.2.34 gerekir."
+  "versionCode": 200181,
+  "versionName": "1.14.181-emu",
+  "apkUrl": "https://github.com/DynOpsBC/WMS/releases/download/android-v1.14.181-emu/BCWMS-EMU-1.14.181-RELEASE.apk",
+  "sha256": "4781c78d5ecf065df49a626fba2fdaee5a6f29bae188681c23428b209ce21fc8",
+  "releaseNotes": "Ad-Hoc Hareket, LP ile: kaynak raf artık sorulmaz. LP etiketini okutun, hedef rafı okutun, onaylayın; LP'nin şu an durduğu raf ekranda gösterilir. BCWMSApp 1.14.2.34 veya üstü gerekir."
 }
