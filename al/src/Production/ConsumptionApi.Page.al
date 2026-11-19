@@ -32,6 +32,10 @@ page 72222 "DOPSWHS Consumption API"
                 field(producedItemDescription; ProducedItemDescription) { Caption = 'producedItemDescription'; }
                 field(productionQuantity; ProductionQuantity) { Caption = 'productionQuantity'; }
                 field(dueDate; DueDate) { Caption = 'dueDate'; }
+                // DKC (19 Kas 2026): BC sarfiyatı bu emre toplanan (pick ile kaydedilen)
+                // miktarla sınırlar; terminal "tüketebileceğiniz"i buradan hesaplar.
+                field(qtyPicked; Rec."Qty. Picked") { Caption = 'qtyPicked'; Editable = false; }
+                field(actConsumptionQty; Rec."Act. Consumption (Qty)") { Caption = 'actConsumptionQty'; Editable = false; }
             }
         }
     }

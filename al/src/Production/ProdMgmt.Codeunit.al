@@ -229,9 +229,53 @@ codeunit 72048 "DOPSWHS Prod Mgmt"
                 ItemJournalLine.Validate("Bin Code", ProdOrderComponent."Bin Code");
         ItemJournalLine.Validate(Quantity, Qty);
         ItemJournalLine."Package No." := LpNo;
-        ItemJournalLine."Lot No." := LotNo;
-        ItemJournalLine."Serial No." := SerialNo;
-        ItemJournalLine.Insert(true);
+        // DKC (19 Kas 2026): lot takipli bileşende lot satır alanına yazılınca
+        // BC kaydı "lot numarası gerekli" diye reddediyordu; izleme, ambar
+        // hareketindeki gibi bağlı izleme kaydıyla (reservation entry) verilir.
+        if TrackingOnReservation(ItemNo) and ((LotNo <> '') or (SerialNo <> '')) then begin
+            ItemJournalLine.Insert(true);
+            AddConsumptionTracking(ItemJournalLine, LotNo, SerialNo);
+        end else begin
+            ItemJournalLine."Lot No." := LotNo;
+            ItemJournalLine."Serial No." := SerialNo;
+            ItemJournalLine.Insert(true);
+        end;
+    end;
+
+    local procedure TrackingOnReservation(ItemNo: Code[20]): Boolean
+    var
+        Item: Record Item;
+        ItemTrackingCode: Record "Item Tracking Code";
+    begin
+        if not Item.Get(ItemNo) then
+            exit(false);
+        if (Item."Item Tracking Code" = '') or not ItemTrackingCode.Get(Item."Item Tracking Code") then
+            exit(false);
+        exit(ItemTrackingCode."Lot Specific Tracking" or ItemTrackingCode."Lot Warehouse Tracking" or
+            ItemTrackingCode."SN Specific Tracking" or ItemTrackingCode."SN Warehouse Tracking");
+    end;
+
+    local procedure AddConsumptionTracking(var ItemJnlLine: Record "Item Journal Line"; LotNo: Code[50]; SerialNo: Code[50])
+    var
+        TempReservEntry: Record "Reservation Entry" temporary;
+        CreateReservEntry: Codeunit "Create Reserv. Entry";
+    begin
+        TempReservEntry."Lot No." := LotNo;
+        TempReservEntry."Serial No." := SerialNo;
+        CreateReservEntry.CreateReservEntryFor(
+            Database::"Item Journal Line",
+            ItemJnlLine."Entry Type".AsInteger(),
+            ItemJnlLine."Journal Template Name",
+            ItemJnlLine."Journal Batch Name",
+            0,
+            ItemJnlLine."Line No.",
+            ItemJnlLine."Qty. per Unit of Measure",
+            ItemJnlLine.Quantity,
+            ItemJnlLine."Quantity (Base)",
+            TempReservEntry);
+        CreateReservEntry.CreateEntry(
+            ItemJnlLine."Item No.", ItemJnlLine."Variant Code", ItemJnlLine."Location Code",
+            ItemJnlLine.Description, 0D, 0D, 0, Enum::"Reservation Status"::Prospect);
     end;
 
     local procedure CreateOutputLine(var ProdOrderRoutingLine: Record "Prod. Order Routing Line"; OutputQty: Decimal; ScrapQty: Decimal; Runtime: Decimal; BinCode: Code[20]; var ItemJournalLine: Record "Item Journal Line")
@@ -311,13 +355,21 @@ codeunit 72048 "DOPSWHS Prod Mgmt"
         ItemJournalTemplate: Record "Item Journal Template";
         ItemJournalBatch: Record "Item Journal Batch";
     begin
-        ItemJournalTemplate.SetRange(Type, ItemJournalTemplate.Type::Item);
-        if not ItemJournalTemplate.FindFirst() then begin
+        // DKC (19 Kas 2026): eskiden ilk "Madde" tipi şablon alınıyordu; başka bir
+        // uzantının açtığı numara serili şablon (DKCCLOSE) ilk sıraya geçince
+        // sarfiyat "geçerli belge numarası" hatasıyla reddediliyordu. WMS kendi
+        // numara serisiz şablonunu ve toplu işini kullanır.
+        if not ItemJournalTemplate.Get('DOPSPROD') then begin
             ItemJournalTemplate.Init();
-            ItemJournalTemplate.Name := 'ITEM';
+            ItemJournalTemplate.Name := 'DOPSPROD';
             ItemJournalTemplate.Type := ItemJournalTemplate.Type::Item;
-            ItemJournalTemplate.Description := 'Item Journal';
+            ItemJournalTemplate.Description := 'WMS production';
             ItemJournalTemplate.Insert(true);
+        end;
+        if (ItemJournalTemplate."No. Series" <> '') or (ItemJournalTemplate."Posting No. Series" <> '') then begin
+            ItemJournalTemplate."No. Series" := '';
+            ItemJournalTemplate."Posting No. Series" := '';
+            ItemJournalTemplate.Modify();
         end;
 
         TemplateName := ItemJournalTemplate.Name;
@@ -328,6 +380,11 @@ codeunit 72048 "DOPSWHS Prod Mgmt"
             ItemJournalBatch.Name := BatchName;
             ItemJournalBatch.Description := 'DOPSWHS production';
             ItemJournalBatch.Insert(true);
+        end;
+        if (ItemJournalBatch."No. Series" <> '') or (ItemJournalBatch."Posting No. Series" <> '') then begin
+            ItemJournalBatch."No. Series" := '';
+            ItemJournalBatch."Posting No. Series" := '';
+            ItemJournalBatch.Modify();
         end;
     end;
 

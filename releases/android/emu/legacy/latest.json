@@ -1,7 +1,7 @@
 {
-  "versionCode": 200182,
-  "versionName": "1.14.182-emu",
-  "apkUrl": "https://github.com/DynOpsBC/WMS/releases/download/android-v1.14.182-emu/BCWMS-EMU-1.14.182-UYUMLU.apk",
-  "sha256": "79c92d7db4afdbb7203d0e0fb905157a27405f82326adf75c509946153fa113a",
-  "releaseNotes": "Ürün Sorgu ve Etiket Çıkar: ürün etiketine lot yazılır. Etiket yazdır penceresinde lot seçilir (tek lot varsa kendiliğinden); Stok ayrıntılarında stoktaki lotlar listelenir, lota ya da LP satırına dokununca ürün, lot, miktar ve LP numarası yazan etiket basılır. BCWMSApp 1.14.2.37 gerekir."
+  "versionCode": 200183,
+  "versionName": "1.14.183-emu",
+  "apkUrl": "https://github.com/DynOpsBC/WMS/releases/download/android-v1.14.183-emu/BCWMS-EMU-1.14.183-UYUMLU.apk",
+  "sha256": "036cf36fa2b2ed0ec9adc3195714554216efea154cef7bbb80a9033e4b2b34a8",
+  "releaseNotes": "Üretim Çıktısı sarfiyatı: lot seçilir (lokasyondaki stoktan), tüketim miktarı yazılır (toplananın bir kısmı tüketilebilir), onaylanır. Tüketilebilecek miktar bu emre toplanan eksi tüketilen miktardır. BCWMSApp 1.14.2.39 gerekir."
 }
