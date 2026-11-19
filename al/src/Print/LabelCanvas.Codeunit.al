@@ -33,8 +33,22 @@ codeunit 72321 "DOPSWHS Label Canvas"
         OriginX: Integer;
         OriginY: Integer;
 
-    /// <summary>Reads the label size from Setup (default 80x40 mm) and derives the metrics.</summary>
+    /// <summary>
+    /// DKÇ (19 Kas 2026): bütün etiket tasarımları etiketin %90'ına çizilir ve
+    /// ortalanır (kenardan taşan yazı kesilmesin). Etiket ölçüsü Setup'tan gelir.
+    /// </summary>
     procedure Init()
+    begin
+        InitScaled(DefaultScalePercent());
+    end;
+
+    procedure DefaultScalePercent(): Integer
+    begin
+        exit(90);
+    end;
+
+    /// <summary>Reads the label size from Setup (default 80x40 mm) and derives the metrics.</summary>
+    local procedure InitFullSize()
     var
         Setup: Record "DOPSWHS Setup";
         WidthMm: Decimal;
@@ -65,7 +79,7 @@ codeunit 72321 "DOPSWHS Label Canvas"
         FullHeight: Integer;
         Offset: Integer;
     begin
-        Init();
+        InitFullSize();
         if (Percent < 50) or (Percent > 99) then
             exit;
         FullWidth := Width;
