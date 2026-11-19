@@ -1,7 +1,7 @@
 {
-  "versionCode": 200176,
-  "versionName": "1.14.176-emu",
-  "apkUrl": "https://github.com/DynOpsBC/WMS/releases/download/android-v1.14.176-emu/BCWMS-EMU-1.14.176-RELEASE.apk",
-  "sha256": "3833aa151b9b2ddf1b11e6101a8234e4de278c0eea7ee49f18733013719f0777",
-  "releaseNotes": "QR ve barkodlardaki Türkçe harfler (Ü, Ç, İ, Ş, Ğ, Ö) artık doğru okunur: ÜR.0002, KÜLÇE.HM.0001 gibi gözler bulunur. Üretim Çıktısı: önceki çıktının sarfiyatı yapılmadan yeni çıktı bildirilemez; çıktı miktarı üretim gözüne çekilen malzemenin yettiği kadarla sınırlıdır; tüketim de yalnız çekilen kadar yapılır. BCWMSApp 1.14.2.32 gerekir."
+  "versionCode": 200177,
+  "versionName": "1.14.177-emu",
+  "apkUrl": "https://github.com/DynOpsBC/WMS/releases/download/android-v1.14.177-emu/BCWMS-EMU-1.14.177-RELEASE.apk",
+  "sha256": "f2ac1744bbf5b7fae92eed9152b2abe06da3dc4103c0cc04f34375c0f1d903a3",
+  "releaseNotes": "Depo Girişi: terminal seçilince büyük \"TERMİNAL-x ile devam et\" düğmesi çıkar ve basınca doğrudan ana menü açılır. \"BC'de tanımlı WMS kullanıcısı yok\" uyarısı ile boş kullanıcı adı/şifre alanları artık gösterilmez; bağlantı hatası olursa düğmenin hemen altında yazar. BCWMSApp 1.14.2.32 gerekir."
 }

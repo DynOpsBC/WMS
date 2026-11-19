@@ -57,11 +57,23 @@ internal fun showAdminShortcutCard(flavor: String): Boolean =
     allowAdminBypass(flavor) && !com.dynops.bcwms.shouldForceProductionFlow(flavor)
 
 /**
+ * DKÇ (19 Kas 2026): BC'de hiç WMS kullanıcısı tanımlı değilse bu bir hata
+ * değil, müşterinin çalışma biçimidir — terminal seçilir ve doğrudan girilir.
+ * Sahada yeni kurulan terminaller, "kullanıcı yok" uyarısı ile altındaki silik
+ * düğmeyi hata sanıp giriş ekranında kalıyordu.
+ */
+internal fun directTerminalEntry(flavor: String, usersLoaded: Boolean, userCount: Int): Boolean =
+    flavor.equals("emu", ignoreCase = true) && usersLoaded && userCount == 0
+
+internal fun directEntryLabel(terminalCode: String): String =
+    if (terminalCode.isBlank()) "Önce terminal seçin" else "$terminalCode ile devam et"
+
+/**
  * Email-based sign-in: email → device-code (browser) → environment + company selection → connect.
  * No token paste required. Token-paste remains available as an "advanced" fallback.
  */
 @Composable
-fun LoginFlow(onConnected: (Boolean) -> Unit) {
+fun LoginFlow(onConnected: (Boolean) -> Unit, onEntered: () -> Unit = {}) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
 
@@ -106,6 +118,7 @@ fun LoginFlow(onConnected: (Boolean) -> Unit) {
     var usersLoading by remember { mutableStateOf(false) }
     var usersError by remember { mutableStateOf("") }
     var manualUserEntry by remember { mutableStateOf(false) }
+    var directEntry by remember { mutableStateOf(false) }
     var showPassword by remember { mutableStateOf(false) }
     var showForgotPassword by remember { mutableStateOf(false) }
     // Giriş sonrası şirket seçimi (operatör birden çok şirkete erişebiliyorsa).
@@ -143,6 +156,7 @@ fun LoginFlow(onConnected: (Boolean) -> Unit) {
                 BcApi.startAdminTestSession(context)
                 status = "Yönetici olarak bağlandı."
                 onConnected(true)
+                onEntered()
             } else {
                 status = "🔴 ${BcApi.connectionFailureMessage(result)}"
                 onConnected(false)
@@ -427,7 +441,11 @@ fun LoginFlow(onConnected: (Boolean) -> Unit) {
                 if (u.isBlank()) null else LocalUserOption(u, o.optString("displayName").trim())
             }.sortedBy { it.displayName.ifBlank { it.username }.lowercase() }
             localUsers = list
-            if (list.isEmpty()) {
+            directEntry = directTerminalEntry(BuildConfig.FLAVOR, usersLoaded = true, userCount = list.size)
+            if (directEntry) {
+                manualUserEntry = false
+                usersError = ""
+            } else if (list.isEmpty()) {
                 manualUserEntry = true
                 usersError = "BC'de tanımlı WMS kullanıcısı yok. Yönetici \"Local WMS Users\" sayfasından oluşturmalı."
             } else usersError = ""
@@ -435,6 +453,7 @@ fun LoginFlow(onConnected: (Boolean) -> Unit) {
             // Eksik listede var olan kullanıcıyı "yok" sayıp farklı kimlikle
             // giriş yaptırma; bağlantı düzelene kadar kesin olarak kapalı kal.
             manualUserEntry = false
+            directEntry = false
             usersError = "Kullanıcı listesi alınamadı. Bağlantıyı kontrol edip tekrar deneyin."
         }
         usersLoading = false
@@ -794,7 +813,28 @@ fun LoginFlow(onConnected: (Boolean) -> Unit) {
                                 }
                                 Spacer(Modifier.height(10.dp))
                             }
-                            if (allowAdminBypass(BuildConfig.FLAVOR)) {
+                            if (directEntry) {
+                                Button(
+                                    onClick = { startVerifiedAdminSession() },
+                                    enabled = !busy && selectedTerminal.isNotBlank(),
+                                    modifier = Modifier.fillMaxWidth().height(56.dp),
+                                ) {
+                                    Text(
+                                        if (busy) "Bağlanıyor..." else directEntryLabel(selectedTerminal),
+                                        fontSize = 16.sp,
+                                        fontWeight = FontWeight.Bold,
+                                    )
+                                }
+                                if (status.isNotBlank()) {
+                                    Spacer(Modifier.height(8.dp))
+                                    Text(
+                                        operatorFacingStatus(status),
+                                        fontSize = 13.sp,
+                                        color = if (status.startsWith("🔴")) MaterialTheme.colorScheme.error else Color.Gray,
+                                    )
+                                }
+                                Spacer(Modifier.height(10.dp))
+                            } else if (allowAdminBypass(BuildConfig.FLAVOR)) {
                                 OutlinedButton(
                                     onClick = { startVerifiedAdminSession() },
                                     enabled = !busy,
@@ -1137,7 +1177,8 @@ fun LoginFlow(onConnected: (Boolean) -> Unit) {
         }
 
         Spacer(Modifier.height(16.dp))
-        StatusText(status)
+        // Doğrudan girişte durum, düğmenin hemen altında gösterilir.
+        if (!(directEntry && step == Step.LocalUser)) StatusText(status)
 
         Spacer(Modifier.height(24.dp))
         // Servis hesabı belirteci bir operatör ayarı değildir. Müşteri saha

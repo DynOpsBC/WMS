@@ -213,7 +213,10 @@ fun AppRoot() {
                     onConnectionChanged = { connected = it },
                     onNavigate = { screen = it },
                 )
-                Screen.Connection -> LoginFlow(onConnected = { connected = it })
+                Screen.Connection -> LoginFlow(
+                    onConnected = { connected = it },
+                    onEntered = { screen = Screen.Home },
+                )
                 Screen.LicensePlates -> LicensePlateModule()
                 Screen.HierarchicalLP -> HierarchicalLpModule()
                 Screen.ItemInquiry -> ItemInquiryModule()
