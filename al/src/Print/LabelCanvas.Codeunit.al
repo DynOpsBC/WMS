@@ -418,6 +418,12 @@ codeunit 72321 "DOPSWHS Label Canvas"
         BarWidth: Integer;
     begin
         EnsureInit();
+        // DKÇ (19 Kas 2026): Code 128 Türkçe harf (Ü, Ç, Ş, İ…) taşıyamaz. Böyle
+        // bir kodda (KÜLÇE.HM.0001, ÜR.0001) basılan çubuk barkod ya okunmuyor
+        // ya da harfler düşmüş olarak okunuyordu. Barkod basılmaz; kod yalnız
+        // QR'dan okutulur (QR UTF-8 taşır).
+        if not IsPlainAscii(Data) then
+            exit('');
         if IsDigits(Data) then
             Modules := 11 * ((StrLen(Data) + 1) div 2 + 1) + 35
         else
@@ -568,6 +574,16 @@ codeunit 72321 "DOPSWHS Label Canvas"
     local procedure TextWidth(Value: Text; Font: Integer): Integer
     begin
         exit(StrLen(Value) * Font * 55 div 100);
+    end;
+
+    local procedure IsPlainAscii(Value: Text): Boolean
+    var
+        i: Integer;
+    begin
+        for i := 1 to StrLen(Value) do
+            if (Value[i] < 32) or (Value[i] > 126) then
+                exit(false);
+        exit(true);
     end;
 
     local procedure IsDigits(Value: Text): Boolean
