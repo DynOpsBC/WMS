@@ -457,6 +457,7 @@ codeunit 72040 "DOPSWHS LP Management"
         if not TargetBin.Get(LP."Location Code", LP."Bin Code") then
             Error('%1 LP hedef rafı %2 lokasyonunda bulunamadı.', LP."Bin Code", LP."Location Code");
 
+        EnsureLedgerLotAvailable(LP."Location Code", ItemNo, LotNo, MovementQty);
         EnsureLooseStockAvailable(LP."Location Code", SourceBinCode, ItemNo, LotNo, SerialNo, MovementQty);
 
         LogMutation('LP.AddLineFromBin');
@@ -1309,6 +1310,7 @@ codeunit 72040 "DOPSWHS LP Management"
         AllocatedTrackedQtyBase: Decimal;
         TrackedQtyBase: Decimal;
     begin
+        KeepWarehouseTrackedOnly(ItemNo, LotNo, SerialNo);
         CalculateLooseStockInBin(
             LocationCode, BinCode, ItemNo, LotNo, SerialNo,
             BinQtyBase, AllocatedQtyBase, TrackedQtyBase, AllocatedTrackedQtyBase);
@@ -1324,6 +1326,88 @@ codeunit 72040 "DOPSWHS LP Management"
             Error(
                 '%1 ürününün %2 rafındaki LP''ye atanmamış serbest stoku yetersizdir. Raf stoku: %3, aktif LP miktarı: %4, istenen: %5. LP içindeki stok kendiliğinden bölünemez; terminalde "LP ile" modunu kullanıp taşınacak LP''yi seçin.',
                 ItemNo, BinCode, BinQtyBase, AllocatedQtyBase, RequiredBaseQty);
+    end;
+
+    /// <summary>
+    /// Raf (ambar) kayıtları lot/seriyi yalnız izleme kodunda "… Warehouse
+    /// Tracking" açıkken taşır. Yalnız "… Specific Tracking" açık üründe
+    /// (DKÇ, 19 Kas 2026) lot madde defterindedir, rafta lotsuz durur; raf
+    /// stoku bu lotla süzülürse hep 0 çıkar ve LP'ye ürün eklenemez.
+    /// </summary>
+    local procedure KeepWarehouseTrackedOnly(ItemNo: Code[20]; var LotNo: Code[50]; var SerialNo: Code[50])
+    var
+        Item: Record Item;
+        ItemTrackingCode: Record "Item Tracking Code";
+    begin
+        if (LotNo = '') and (SerialNo = '') then
+            exit;
+        if not Item.Get(ItemNo) then
+            exit;
+        if (Item."Item Tracking Code" = '') or not ItemTrackingCode.Get(Item."Item Tracking Code") then
+            Clear(ItemTrackingCode);
+        if not ItemTrackingCode."Lot Warehouse Tracking" then
+            LotNo := '';
+        if not ItemTrackingCode."SN Warehouse Tracking" then
+            SerialNo := '';
+    end;
+
+    /// <summary>
+    /// Lot rafta tutulmuyorsa doğrulama madde defterinden yapılır: yazılan lot bu
+    /// lokasyonda açık stokta olmalı ve aktif LP'lere konan miktarla birlikte
+    /// kalan miktarı aşmamalıdır (yanlış yazılmış lotla LP etiketi basılmasın).
+    /// </summary>
+    local procedure EnsureLedgerLotAvailable(LocationCode: Code[10]; ItemNo: Code[20]; LotNo: Code[50]; RequiredBaseQty: Decimal)
+    var
+        Item: Record Item;
+        ItemTrackingCode: Record "Item Tracking Code";
+        ItemLedgerEntry: Record "Item Ledger Entry";
+        ItemUoM: Record "Item Unit of Measure";
+        LPHeader: Record "DOPSWHS LP Header";
+        LPLine: Record "DOPSWHS LP Line";
+        RemainingBase: Decimal;
+        OnLpBase: Decimal;
+        LineQtyBase: Decimal;
+    begin
+        if LotNo = '' then
+            exit;
+        Item.Get(ItemNo);
+        if (Item."Item Tracking Code" = '') or not ItemTrackingCode.Get(Item."Item Tracking Code") then
+            exit;
+        if ItemTrackingCode."Lot Warehouse Tracking" or not ItemTrackingCode."Lot Specific Tracking" then
+            exit;
+
+        ItemLedgerEntry.SetCurrentKey("Item No.", Open, "Variant Code", Positive, "Lot No.", "Serial No.");
+        ItemLedgerEntry.SetRange("Item No.", ItemNo);
+        ItemLedgerEntry.SetRange(Open, true);
+        ItemLedgerEntry.SetRange("Lot No.", LotNo);
+        ItemLedgerEntry.SetRange("Location Code", LocationCode);
+        ItemLedgerEntry.CalcSums("Remaining Quantity");
+        RemainingBase := ItemLedgerEntry."Remaining Quantity";
+        if RemainingBase <= 0 then
+            Error('%1 ürününün %2 lotu %3 lokasyonunda stokta yok. Lot numarasını etiketten okutun ya da kontrol edin.', ItemNo, LotNo, LocationCode);
+
+        LPLine.SetRange("Item No.", ItemNo);
+        LPLine.SetRange("Lot No.", LotNo);
+        if LPLine.FindSet() then
+            repeat
+                if LPHeader.Get(LPLine."LP No.") then
+                    if (LPHeader."Location Code" = LocationCode) and
+                       (LPHeader.Status in [LPHeader.Status::Open, LPHeader.Status::Built, LPHeader.Status::Assigned])
+                    then begin
+                        LineQtyBase := LPLine.Quantity;
+                        if (LPLine."Unit of Measure" <> '') and
+                           (LPLine."Unit of Measure" <> Item."Base Unit of Measure") and
+                           ItemUoM.Get(ItemNo, LPLine."Unit of Measure")
+                        then
+                            LineQtyBase *= ItemUoM."Qty. per Unit of Measure";
+                        OnLpBase += LineQtyBase;
+                    end;
+            until LPLine.Next() = 0;
+
+        if RemainingBase - OnLpBase < RequiredBaseQty then
+            Error(
+                '%1 ürününün %2 lotunda yeterli stok yok. Lot stoku: %3, LP''lere konmuş: %4, istenen: %5.',
+                ItemNo, LotNo, RemainingBase, OnLpBase, RequiredBaseQty);
     end;
 
     local procedure CalculateLooseStockInBin(LocationCode: Code[10]; BinCode: Code[20]; ItemNo: Code[20]; LotNo: Code[50]; SerialNo: Code[50]; var BinQtyBase: Decimal; var AllocatedQtyBase: Decimal; var TrackedQtyBase: Decimal; var AllocatedTrackedQtyBase: Decimal)
@@ -1402,6 +1486,7 @@ codeunit 72040 "DOPSWHS LP Management"
         AvailableQtyBase: Decimal;
         TrackedAvailableQtyBase: Decimal;
     begin
+        KeepWarehouseTrackedOnly(ItemNo, LotNo, SerialNo);
         CalculateLooseStockInBin(
             LocationCode, BinCode, ItemNo, LotNo, SerialNo,
             BinQtyBase, AllocatedQtyBase, TrackedQtyBase, AllocatedTrackedQtyBase);

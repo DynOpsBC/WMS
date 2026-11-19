@@ -3,6 +3,7 @@ package com.dynops.bcwms.feature
 import com.dynops.bcwms.ui.toFiniteDoubleOrNull
 
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -43,6 +44,7 @@ fun LicensePlateModule() {
     var loading by remember { mutableStateOf(false) }
     var showBulkBuild by remember { mutableStateOf(false) }
     var showSingleBuild by remember { mutableStateOf(false) }
+    var showEmptyLp by remember { mutableStateOf(false) }
     var selectedForPrint by remember { mutableStateOf<Set<String>>(emptySet()) }
     var palletLabelRetryNos by remember { mutableStateOf<Set<String>>(emptySet()) }
     var search by remember { mutableStateOf("") }
@@ -86,6 +88,17 @@ fun LicensePlateModule() {
         showLastCreatedOnly = true
         search = ""
         loadList(ledgerLpCompletionStatus(result))
+    }
+
+    if (showEmptyLp) {
+        NewEmptyLpSheet(
+            onDismiss = { showEmptyLp = false },
+            onCreated = { no ->
+                showEmptyLp = false
+                lastCreatedLpNos = setOf(no)
+                selected = no
+            },
+        )
     }
 
     if (showBulkBuild || showSingleBuild) {
@@ -181,6 +194,11 @@ fun LicensePlateModule() {
             OutlinedButton(onClick = { printSelected() }, enabled = !loading && selectedForPrint.isNotEmpty(), modifier = Modifier.weight(1f)) {
                 Text("Seçilenleri Yazdır (${selectedForPrint.size})")
             }
+        }
+        Spacer(Modifier.height(6.dp))
+        // Karışık LP: önce boş LP açılır, ürünler LP ekranındaki "Satır Ekle" ile konur.
+        OutlinedButton(onClick = { showEmptyLp = true }, enabled = !loading, modifier = Modifier.fillMaxWidth()) {
+            WmsActionLabel(WmsGlyph.LICENSE_PLATE, "Boş LP Oluştur")
         }
         Spacer(Modifier.height(8.dp))
         com.dynops.bcwms.ui.DocSearchBar(value = search, onValueChange = { search = it }, onSearch = { loadList() }, label = "LP no ile ara")
@@ -900,6 +918,109 @@ private fun PullDocumentSheet(
             enabled = docNo.isNotBlank(),
             modifier = Modifier.fillMaxWidth().height(50.dp),
         ) { Text("Satırları Çek") }
+        Spacer(Modifier.height(24.dp))
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun NewEmptyLpSheet(
+    onDismiss: () -> Unit,
+    onCreated: (String) -> Unit,
+) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var templates by remember { mutableStateOf<List<JSONObject>>(emptyList()) }
+    var templateCode by remember { mutableStateOf("") }
+    var bin by remember { mutableStateOf("") }
+    var busy by remember { mutableStateOf(false) }
+    var status by remember { mutableStateOf("") }
+
+    LaunchedEffect(Unit) {
+        busy = true
+        val page = BcApi.getAllPages(context, "licensePlateTemplates?\$top=50&\$select=code,description")
+        busy = false
+        if (page.complete) {
+            templates = page.rows.sortedBy { it.optString("code") }
+            templateCode = templates.firstOrNull()?.optString("code").orEmpty()
+            if (templates.isEmpty()) status = "HATA: BC'de LP şablonu tanımlı değil. Yöneticinize bildirin."
+        } else {
+            status = "HATA: LP şablonları alınamadı. Bağlantıyı kontrol edip yeniden deneyin."
+        }
+    }
+
+    fun create() {
+        if (busy) return
+        scope.launch {
+            busy = true; status = "Raf kontrol ediliyor..."
+            val safeBin = bin.trim().replace("'", "''")
+            val binPage = BcApi.getAllPages(context, "bins?\$filter=code eq '$safeBin'&\$select=code,locationCode&\$top=10")
+            if (!binPage.complete) {
+                busy = false
+                status = "HATA: Raf doğrulanamadı. Bağlantıyı kontrol edip yeniden deneyin."
+                return@launch
+            }
+            when (val resolved = resolveEmptyLpBin(binPage.rows, bin)) {
+                is EmptyLpBin.Problem -> { busy = false; status = "HATA: ${resolved.message}" }
+                is EmptyLpBin.Found -> {
+                    status = "LP oluşturuluyor..."
+                    val result = BcApi.post(context, "licensePlates", emptyLpRequestBody(templateCode, resolved))
+                    busy = false
+                    val no = if (result.ok) createdLpNo(result.body) else ""
+                    when {
+                        no.isNotBlank() -> onCreated(no)
+                        result.ok -> status = "HATA: LP oluşturuldu ama numarası okunamadı. LP listesini yenileyin; yeniden oluşturmayın."
+                        else -> status = "HATA: ${BcApi.errorMessage(result.body)} (HTTP ${result.httpCode})"
+                    }
+                }
+            }
+        }
+    }
+
+    SheetScaffold(onDismiss = onDismiss, contentPadding = PaddingValues(20.dp)) {
+        Text("Boş LP Oluştur", fontWeight = FontWeight.Bold, fontSize = 18.sp)
+        Text(
+            "LP açılır; ürünleri sonraki ekranda Satır Ekle ile koyarsınız. Birden çok ürün ya da bir ürünün bir kısmı konabilir.",
+            fontSize = 12.sp,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Spacer(Modifier.height(12.dp))
+        if (templates.size > 1) {
+            Text("LP türü", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Row(
+                Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                templates.forEach { template ->
+                    val code = template.optString("code")
+                    FilterChip(
+                        selected = templateCode == code,
+                        enabled = !busy,
+                        onClick = { templateCode = code },
+                        label = { Text(template.optString("description").ifBlank { code }) },
+                    )
+                }
+            }
+            Spacer(Modifier.height(8.dp))
+        }
+        ScanField(
+            "LP'nin duracağı raf",
+            bin,
+            { bin = it },
+            modifier = Modifier.fillMaxWidth(),
+            onScanned = { bin = BarcodeIntentResolver.resolve(it).value },
+            enabled = !busy,
+        )
+        Spacer(Modifier.height(16.dp))
+        Button(
+            onClick = { create() },
+            enabled = !busy && bin.isNotBlank() && templateCode.isNotBlank(),
+            modifier = Modifier.fillMaxWidth().height(52.dp),
+        ) { Text(if (busy) "..." else "LP'yi Oluştur", fontWeight = FontWeight.Bold) }
+        if (status.isNotBlank()) {
+            Spacer(Modifier.height(8.dp))
+            StatusText(status)
+        }
         Spacer(Modifier.height(24.dp))
     }
 }

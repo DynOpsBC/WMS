@@ -1,7 +1,7 @@
 {
-  "versionCode": 200178,
-  "versionName": "1.14.178-emu",
-  "apkUrl": "https://github.com/DynOpsBC/WMS/releases/download/android-v1.14.178-emu/BCWMS-EMU-1.14.178-UYUMLU.apk",
-  "sha256": "b92b8dc5cb468398de315c35ec3109d805c4a2522b4d8af27873a304aac5dfae",
-  "releaseNotes": "Ürün Sorgu: ürün adının bir kısmı büyük/küçük harf fark etmeden aranır (\"kovan\", \"alev zimba\"); Sorgula'ya basınca eşleşen ürünler listelenir. Ad-Hoc Hareket: BC'nin rafta lot tutmadığı ürünlerde lot yazmadan taşınır, BC'nin hata nedeni artık açık yazılır. BCWMSApp 1.14.2.33 gerekir."
+  "versionCode": 200179,
+  "versionName": "1.14.179-emu",
+  "apkUrl": "https://github.com/DynOpsBC/WMS/releases/download/android-v1.14.179-emu/BCWMS-EMU-1.14.179-UYUMLU.apk",
+  "sha256": "a32a68100dd9e0ef7de4318752e57d105c89511a41c9dc0d7a097581800325b9",
+  "releaseNotes": "LP ekranına \"Boş LP Oluştur\" eklendi: LP türünü seçip rafı okutunca boş LP açılır, Satır Ekle ile içine birden çok ürün ya da bir ürünün bir kısmı konur, LP'yi Tamamla etiketi basar. Lot takipli ürünler LP'ye lotuyla eklenir. BCWMSApp 1.14.2.34 gerekir."
 }
