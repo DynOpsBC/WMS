@@ -1,7 +1,7 @@
 {
-  "versionCode": 200187,
-  "versionName": "1.14.187-emu",
-  "apkUrl": "https://github.com/DynOpsBC/WMS/releases/download/android-v1.14.187-emu/BCWMS-EMU-1.14.187-UYUMLU.apk",
-  "sha256": "974e65932b0e3d485f59633cbf9ee25ae6b1b2a3bfcfb82ba7abecdcae980b38",
-  "releaseNotes": "Mal kabul: ADET karşılığı tam sayıya yakınsa tam gösterilir (3.000.000 ADET yazınca satırda, pencerede ve etikette 3.000.000). Tolerans (fazla teslim) için BCWMSApp 1.14.2.46 veya üstü gerekir."
+  "versionCode": 200188,
+  "versionName": "1.14.188-emu",
+  "apkUrl": "https://github.com/DynOpsBC/WMS/releases/download/android-v1.14.188-emu/BCWMS-EMU-1.14.188-UYUMLU.apk",
+  "sha256": "4b200cae50d5fbd4802d0ba0a39252644c677f4a7082850960f1c12cc0157dfc",
+  "releaseNotes": "Ürün Sorgu: ürünü açınca 'Nerede?' bölümü — lokasyon/raf bazında stok ve LP'ler; her lotun hangi lokasyonda ve rafta olduğu (lot LP'deyse LP'nin rafı, değilse ürünün o lokasyondaki rafı)."
 }
