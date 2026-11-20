@@ -1134,7 +1134,7 @@ codeunit 72043 "DOPSWHS Receipt Mgmt"
         // "Qty. to Receive" doğrulanınca satır miktarı toleransa kadar büyür, aşınca
         // BC hata verir.
         if ExpectedQty > (OutstandingQty + 0.00001) then
-            if WhseReceiptLine."Over-Receipt Code" <> '' then begin
+            if ReceiptOverReceiptCode(WhseReceiptLine) <> '' then begin
                 DeleteSourceReservationTracking(WhseReceiptLine);
                 DeleteWarehouseItemTracking(WhseReceiptLine);
                 WhseReceiptLine.Validate("Qty. to Receive", ExpectedQty);
@@ -2250,7 +2250,9 @@ codeunit 72043 "DOPSWHS Receipt Mgmt"
         MaxQty: Decimal;
     begin
         MaxQty := WhseReceiptLine.Quantity - WhseReceiptLine."Qty. Received";
-        if (WhseReceiptLine."Over-Receipt Code" <> '') and OverReceiptCode.Get(WhseReceiptLine."Over-Receipt Code") then begin
+        // Satırdaki kod ilk fazla teslimde dolar; o zamana kadar BC'nin kullanacağı
+        // varsayılan kod (madde/satıcı) esas alınır.
+        if OverReceiptCode.Get(ReceiptOverReceiptCode(WhseReceiptLine)) and (ReceiptOverReceiptCode(WhseReceiptLine) <> '') then begin
             OriginalQty := WhseReceiptLine.Quantity - WhseReceiptLine."Over-Receipt Quantity";
             MaxQty := OriginalQty * (1 + OverReceiptCode."Over-Receipt Tolerance %" / 100) - WhseReceiptLine."Qty. Received";
         end;
@@ -2258,4 +2260,24 @@ codeunit 72043 "DOPSWHS Receipt Mgmt"
             exit(0);
         exit(MaxQty);
     end;
+
+    /// <summary>Satırın fazla teslim kodu; boşsa BC'nin ilk fazla teslimde atayacağı varsayılan kod.</summary>
+    procedure ReceiptOverReceiptCode(WhseReceiptLine: Record "Warehouse Receipt Line"): Code[20]
+    var
+        PurchaseLine: Record "Purchase Line";
+        OverReceiptMgt: Codeunit "Over-Receipt Mgt.";
+    begin
+        if WhseReceiptLine."Over-Receipt Code" <> '' then
+            exit(WhseReceiptLine."Over-Receipt Code");
+        if not OverReceiptMgt.IsOverReceiptAllowed() then
+            exit('');
+        if WhseReceiptLine."Source Type" <> Database::"Purchase Line" then
+            exit('');
+        if not PurchaseLine.Get(WhseReceiptLine."Source Subtype", WhseReceiptLine."Source No.", WhseReceiptLine."Source Line No.") then
+            exit('');
+        if PurchaseLine.Type <> PurchaseLine.Type::Item then
+            exit('');
+        exit(OverReceiptMgt.GetDefaultOverReceiptCode(PurchaseLine));
+    end;
 }
+
