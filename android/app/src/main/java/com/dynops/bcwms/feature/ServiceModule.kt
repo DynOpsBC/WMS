@@ -420,7 +420,9 @@ fun ServiceModule() {
                     }
                     // Everything else is optional and small.
                     val tiles = buildList {
-                        if(step < 2) { add("Parça" to "Parça Ekle"); add("İşçilik" to "İşçilik Ekle") }
+                        // Ayıkband (20 Kas 2026): işçilik süresi en son, yalnız İşi Bitir'de girilir;
+                        // ara işçilik girişi Bitir'deki süreyle birlikte iki kez sayılabiliyordu.
+                        if(step < 2) add("Parça" to "Parça Ekle")
                         add("Not" to "Not Ekle"); add("Fotoğraf" to "Fotoğraf"); add("İmza" to "Müşteri İmzası")
                         if(step < 2) add("Beklet" to "Beklet")
                     }
