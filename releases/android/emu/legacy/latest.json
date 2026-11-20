@@ -1,7 +1,7 @@
 {
-  "versionCode": 200186,
-  "versionName": "1.14.186-emu",
-  "apkUrl": "https://github.com/DynOpsBC/WMS/releases/download/android-v1.14.186-emu/BCWMS-EMU-1.14.186-UYUMLU.apk",
-  "sha256": "506ed205467c891c873b095fed6b889c127b9e661f5e3559140341ea33ffdfc1",
-  "releaseNotes": "Mal kabul: maddede fazla teslim alma toleransı (Over-Receipt Code) varsa kalanın üstü kabul edilir; Palet LP ve miktar penceresinde üst sınır tolerans dahil en çok miktardır. BCWMSApp 1.14.2.41 gerekir."
+  "versionCode": 200187,
+  "versionName": "1.14.187-emu",
+  "apkUrl": "https://github.com/DynOpsBC/WMS/releases/download/android-v1.14.187-emu/BCWMS-EMU-1.14.187-UYUMLU.apk",
+  "sha256": "974e65932b0e3d485f59633cbf9ee25ae6b1b2a3bfcfb82ba7abecdcae980b38",
+  "releaseNotes": "Mal kabul: ADET karşılığı tam sayıya yakınsa tam gösterilir (3.000.000 ADET yazınca satırda, pencerede ve etikette 3.000.000). Tolerans (fazla teslim) için BCWMSApp 1.14.2.46 veya üstü gerekir."
 }
