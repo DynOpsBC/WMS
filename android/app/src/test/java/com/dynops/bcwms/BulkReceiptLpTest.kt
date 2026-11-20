@@ -79,7 +79,7 @@ class BulkReceiptLpTest {
             BulkReceiptLpRow("2", 5.0, "", "", ""),
         )
 
-        assertEquals("LP toplamı açık miktarı aşamaz.", manualBulkLpValidation(10.0, rows, expiryRequired = false))
+        assertEquals("LP toplamı alınabilecek en çok miktarı (tolerans dahil) aşamaz.", manualBulkLpValidation(10.0, rows, expiryRequired = false))
     }
 
     @Test

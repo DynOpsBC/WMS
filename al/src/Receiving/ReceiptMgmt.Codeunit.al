@@ -1129,6 +1129,17 @@ codeunit 72043 "DOPSWHS Receipt Mgmt"
             Error('Tek işlemde en fazla 200 LP oluşturulabilir.');
 
         OutstandingQty := WhseReceiptLine.Quantity - WhseReceiptLine."Qty. Received";
+        // DKC (20 Kas 2026): maddede fazla teslim alma toleransı (Over-Receipt Code)
+        // varsa kalanın üstü kabul edilir. Sınırı BC'nin kendi doğrulaması koyar:
+        // "Qty. to Receive" doğrulanınca satır miktarı toleransa kadar büyür, aşınca
+        // BC hata verir.
+        if ExpectedQty > (OutstandingQty + 0.00001) then
+            if WhseReceiptLine."Over-Receipt Code" <> '' then begin
+                WhseReceiptLine.Validate("Qty. to Receive", ExpectedQty);
+                WhseReceiptLine.Modify(true);
+                WhseReceiptLine.Get(WhseReceiptHeader."No.", LineNo);
+                OutstandingQty := WhseReceiptLine.Quantity - WhseReceiptLine."Qty. Received";
+            end;
         if ExpectedQty > (OutstandingQty + 0.00001) then
             Error(
                 'Toplam kabul miktarı satırın kalan miktarını aşamaz. Kalan: %1, girilen: %2.',
@@ -2225,4 +2236,24 @@ codeunit 72043 "DOPSWHS Receipt Mgmt"
         AndTxt: Label 've';
         VehicleInfoMissingErr: Label 'Araç bilgileri eksik (%1). Terminalde "Araç / Sürücü" kartından girip tekrar kaydedin.', Comment = '%1 = eksik alanlar';
         VehicleInfoUnsupportedErr: Label 'Bu şirkette mal kabul başlığında araç alanları tanımlı değil.';
+
+    /// <summary>
+    /// Satırdan bu kabulde alınabilecek en çok miktar: Over-Receipt Code varsa
+    /// asıl sipariş miktarı × (1 + tolerans %) − alınan; yoksa kalan miktar.
+    /// </summary>
+    procedure MaxQtyToReceive(WhseReceiptLine: Record "Warehouse Receipt Line"): Decimal
+    var
+        OverReceiptCode: Record "Over-Receipt Code";
+        OriginalQty: Decimal;
+        MaxQty: Decimal;
+    begin
+        MaxQty := WhseReceiptLine.Quantity - WhseReceiptLine."Qty. Received";
+        if (WhseReceiptLine."Over-Receipt Code" <> '') and OverReceiptCode.Get(WhseReceiptLine."Over-Receipt Code") then begin
+            OriginalQty := WhseReceiptLine.Quantity - WhseReceiptLine."Over-Receipt Quantity";
+            MaxQty := OriginalQty * (1 + OverReceiptCode."Over-Receipt Tolerance %" / 100) - WhseReceiptLine."Qty. Received";
+        end;
+        if MaxQty < 0 then
+            exit(0);
+        exit(MaxQty);
+    end;
 }

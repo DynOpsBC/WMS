@@ -44,4 +44,12 @@ class ReceiptBaseQtyTest {
         assertEquals(14100.0, com.dynops.bcwms.ui.convertFromBase(14100.0 * 211.8644, 211.8644), 0.00001)
         assertEquals(0.0, com.dynops.bcwms.ui.convertFromBase(10.0, 0.0), 0.0)
     }
+
+    @Test
+    fun `tolerance raises the receivable maximum`() {
+        val withTolerance = JSONObject().put("quantity", 14100.0).put("qtyReceived", 0.0).put("maxQtyToReceive", 28200.0)
+        assertEquals(28200.0, receiptMaxQty(withTolerance), 0.0001)
+        val oldBc = JSONObject().put("quantity", 14100.0).put("qtyReceived", 100.0)
+        assertEquals(14000.0, receiptMaxQty(oldBc), 0.0001)
+    }
 }

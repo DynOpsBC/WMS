@@ -246,3 +246,13 @@ internal fun ReceiptLabelSheet(receiptNo: String, initialRows: List<ReceiptLabel
         }
     }
 }
+
+/**
+ * DKC (20 Kas 2026): satırdan alınabilecek en çok miktar. BC fazla teslim alma
+ * toleransını (Over-Receipt Code) hesaba katıp maxQtyToReceive gönderir; eski BC'de
+ * alan yoksa kalan miktar (sipariş − alınan).
+ */
+internal fun receiptMaxQty(line: JSONObject): Double =
+    if (line.has("maxQtyToReceive")) line.optDouble("maxQtyToReceive", 0.0).coerceAtLeast(0.0)
+    else (line.optDouble("quantity", 0.0) - line.optDouble("qtyReceived", 0.0)).coerceAtLeast(0.0)
+

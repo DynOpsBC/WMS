@@ -106,11 +106,11 @@ internal fun manualBulkLpValidation(
     if (expectedQty != null && (!expectedQty.isFinite() || expectedQty <= 0.0))
         return "Toplam kabul miktarı sıfırdan büyük olmalıdır."
     if (expectedQty != null && expectedQty - maxQty > 0.00001)
-        return "Toplam kabul miktarı açık miktarı aşamaz."
+        return "Toplam kabul miktarı alınabilecek en çok miktarı (tolerans dahil) aşamaz."
     if (rows.isEmpty()) return "En az bir LP ekleyin."
     if (rows.any { it.quantity <= 0.0 }) return "Her LP için sıfırdan büyük miktar girin."
     val rowTotal = rows.sumOf { it.quantity }
-    if (rowTotal - maxQty > 0.00001) return "LP toplamı açık miktarı aşamaz."
+    if (rowTotal - maxQty > 0.00001) return "LP toplamı alınabilecek en çok miktarı (tolerans dahil) aşamaz."
     if (expectedQty != null && abs(rowTotal - expectedQty) > 0.00001)
         return "LP toplamı kabul miktarına eşit olmalıdır."
     if (expiryRequired && rows.any { it.expiryDate.isBlank() }) return "Bu mal kabul için SKT girin."
@@ -194,7 +194,7 @@ internal fun BulkReceiptLpSheet(
                 .verticalScroll(rememberScrollState()).imePadding().padding(horizontal = 16.dp, vertical = 8.dp)
         ) {
             Text("Palet LP'lerini Oluştur", fontSize = 21.sp, fontWeight = FontWeight.Bold)
-            Text("$itemNo · Açık: ${fmtBulkQty(maxExpectedQty)} $uom", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text("$itemNo · En çok: ${fmtBulkQty(maxExpectedQty)} $uom", color = MaterialTheme.colorScheme.onSurfaceVariant)
             Spacer(Modifier.height(8.dp))
             Surface(
                 color = MaterialTheme.colorScheme.secondaryContainer,

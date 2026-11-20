@@ -817,7 +817,8 @@ private fun ReceiveDocument(no: String, onBack: () -> Unit) {
     }
     val bulkLine = bulkLpTarget
     if (bulkLine != null) {
-        val outstanding = (bulkLine.optDouble("quantity") - bulkLine.optDouble("qtyReceived")).coerceAtLeast(0.0)
+        // Fazla teslim alma toleransı varsa üst sınır BC'nin hesapladığı en çok miktar.
+        val outstanding = receiptMaxQty(bulkLine)
         BulkReceiptLpSheet(
             itemNo = bulkLine.optString("itemNo"),
             uom = bulkLine.optString("unitOfMeasureCode"),
@@ -883,6 +884,8 @@ private fun ReceiveDocument(no: String, onBack: () -> Unit) {
             itemNo = scannedItem,
             initialQty = line?.optDouble("qtyToReceive")?.takeIf { it > 0 } ?: 1.0,
             initialUom = line?.optString("unitOfMeasureCode") ?: "",
+            // Tolerans (Over-Receipt Code) varsa kalanın üstü girilebilir; sınırı BC verir.
+            maximumQuantity = line?.takeIf { it.has("maxQtyToReceive") }?.let { receiptMaxQty(it) },
             initialLot = scanLot,
             initialSerial = scanSerial,
             initialSupplierLot = scanSupplierLot,
@@ -940,14 +943,14 @@ private fun ReceiveDocument(no: String, onBack: () -> Unit) {
         val groupRequiresExpiryDate = gt.lines.any { it.optBoolean("expirationDateRequired") }
         val firstGroupLine = gt.lines.first()
         val capReceipt: (JSONObject) -> Double = { l ->
-            val q = l.optDouble("quantity"); val rec = l.optDouble("qtyReceived")
-            if (q > 0) (q - rec).coerceAtLeast(0.0) else (l.optDouble("qtyToReceive").takeIf { it > 0 } ?: 1.0)
+            val q = l.optDouble("quantity")
+            if (q > 0) receiptMaxQty(l) else (l.optDouble("qtyToReceive").takeIf { it > 0 } ?: 1.0)
         }
         QuantityDialogSheet(
             title = "İade Miktarı (${gt.count} satıra dağıtılır)",
             itemNo = gt.itemNo,
             initialQty = gt.totalOutstanding.takeIf { it > 0 } ?: 1.0,
-            maximumQuantity = gt.totalOutstanding,
+            maximumQuantity = gt.lines.sumOf { capReceipt(it) },
             initialUom = gt.lines.first().optString("unitOfMeasureCode"),
             initialLot = gt.lines.first().optString("lotNo"),
             initialSerial = gt.lines.first().optString("serialNo"),

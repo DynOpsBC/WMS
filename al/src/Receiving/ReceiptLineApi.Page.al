@@ -45,6 +45,9 @@ page 72227 "DOPSWHS Receipt Line API"
                 // adet karşılığını gösterir ve etikete adet yazar.
                 field(qtyPerUnitOfMeasure; Rec."Qty. per Unit of Measure") { Caption = 'qtyPerUnitOfMeasure'; Editable = false; }
                 field(baseUnitOfMeasure; BaseUnitOfMeasure) { Caption = 'baseUnitOfMeasure'; Editable = false; }
+                // DKC (20 Kas 2026): fazla teslim alma toleransıyla alınabilecek en çok miktar
+                // (toleranssız satırda kalan miktar). Terminal üst sınırı buradan alır.
+                field(maxQtyToReceive; MaxQtyToReceive) { Caption = 'maxQtyToReceive'; Editable = false; }
             }
         }
     }
@@ -67,6 +70,7 @@ page 72227 "DOPSWHS Receipt Line API"
         // GTIN kolonu için Item'dan çöz (WI Receiving grid'inde GTIN kolonu var).
         Clear(ItemGtin);
         Clear(BaseUnitOfMeasure);
+        MaxQtyToReceive := ReceiptMgmt.MaxQtyToReceive(Rec);
         if (Rec."Item No." <> '') and Item.Get(Rec."Item No.") then begin
             ItemGtin := Item.GTIN;
             BaseUnitOfMeasure := Item."Base Unit of Measure";
@@ -131,4 +135,5 @@ page 72227 "DOPSWHS Receipt Line API"
         BulkLpCount: Integer;
         ItemGtin: Code[14];
         BaseUnitOfMeasure: Code[10];
+        MaxQtyToReceive: Decimal;
 }

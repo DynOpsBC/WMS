@@ -1,7 +1,7 @@
 {
-  "versionCode": 200185,
-  "versionName": "1.14.185-emu",
-  "apkUrl": "https://github.com/DynOpsBC/WMS/releases/download/android-v1.14.185-emu/BCWMS-EMU-1.14.185-UYUMLU.apk",
-  "sha256": "a0f68012fb85aaefdef27bf6d8a619ba0b1532ec7d783d50cbc06b344754fd33",
-  "releaseNotes": "Mal kabul: KG ile alınan, ana birimi ADET olan üründe satırda KG'nin altında adet karşılığı; Alınan Miktar penceresinde '= … ADET' ve 'ADET ile gir' alanı (adet yazılınca KG'a çevrilir). Tolerans (fazla teslim alma) BC'deki madde ayarına göre çalışır. BCWMSApp 1.14.2.40 gerekir; eski BC'de adet bilgisi görünmez."
+  "versionCode": 200186,
+  "versionName": "1.14.186-emu",
+  "apkUrl": "https://github.com/DynOpsBC/WMS/releases/download/android-v1.14.186-emu/BCWMS-EMU-1.14.186-UYUMLU.apk",
+  "sha256": "506ed205467c891c873b095fed6b889c127b9e661f5e3559140341ea33ffdfc1",
+  "releaseNotes": "Mal kabul: maddede fazla teslim alma toleransı (Over-Receipt Code) varsa kalanın üstü kabul edilir; Palet LP ve miktar penceresinde üst sınır tolerans dahil en çok miktardır. BCWMSApp 1.14.2.41 gerekir."
 }
