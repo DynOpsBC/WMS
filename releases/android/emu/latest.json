@@ -1,7 +1,7 @@
 {
-  "versionCode": 200183,
-  "versionName": "1.14.183-emu",
-  "apkUrl": "https://github.com/DynOpsBC/WMS/releases/download/android-v1.14.183-emu/BCWMS-EMU-1.14.183-RELEASE.apk",
-  "sha256": "dd8f1ae5bdf7179c3e10fe55b0249f828335969a62d428ade386e87c4e57da4b",
-  "releaseNotes": "Üretim Çıktısı sarfiyatı: lot seçilir (lokasyondaki stoktan), tüketim miktarı yazılır (toplananın bir kısmı tüketilebilir), onaylanır. Tüketilebilecek miktar bu emre toplanan eksi tüketilen miktardır. BCWMSApp 1.14.2.39 gerekir."
+  "versionCode": 200184,
+  "versionName": "1.14.184-emu",
+  "apkUrl": "https://github.com/DynOpsBC/WMS/releases/download/android-v1.14.184-emu/BCWMS-EMU-1.14.184-RELEASE.apk",
+  "sha256": "6884fead4348768995097d8ab7bb13a4732ecfa1c21240989d67e219510305c1",
+  "releaseNotes": "Mal kabul: KG ile alınan, ana birimi ADET olan üründe satırda 'Adet Karş.' sütunu; mal kabul etiketinde miktar adet önde yazılır (ör. 70.500 ADET (14.100 KG)). BCWMSApp 1.14.2.40 gerekir; eski BC'de sütun boş kalır."
 }
