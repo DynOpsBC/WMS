@@ -47,6 +47,12 @@ object GridColumns {
             fmtCol(if (q > 0) (q - r) else it.optDouble("qtyToReceive"))
         },
         GridColumn("uom", "UOM", true, 62) { nz(it, "unitOfMeasureCode") },
+        // DKC: KG ile alınan, ana birimi ADET olan üründe açık miktarın adet karşılığı.
+        GridColumn("baseQty", "Adet Karş.", true, 104) {
+            val q = it.optDouble("quantity"); val r = it.optDouble("qtyReceived")
+            val open = if (q > 0) (q - r) else it.optDouble("qtyToReceive")
+            com.dynops.bcwms.feature.receiptBaseQtyText(it, open)
+        },
         GridColumn("gtin", "GTIN", true, 116) { nz(it, "gtin").ifBlank { nz(it, "itemReference") } },
         // BC'de zaten atanmış (veya mobilden girilmiş) lot/seri burada görünür —
         // Item Tracking Lines ile çift yönlü senkron.

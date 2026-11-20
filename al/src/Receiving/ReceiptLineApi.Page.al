@@ -41,6 +41,10 @@ page 72227 "DOPSWHS Receipt Line API"
                 field(expirationDateRequired; ExpirationDateRequired) { Caption = 'expirationDateRequired'; Editable = false; }
                 field(licensePlateNo; Rec."DOPSWHS LP No.") { Caption = 'licensePlateNo'; }
                 field(bulkLpCount; BulkLpCount) { Caption = 'bulkLpCount'; Editable = false; }
+                // DKC (20 Kas 2026): KG ile alınan, ana birimi ADET olan ürünlerde terminal
+                // adet karşılığını gösterir ve etikete adet yazar.
+                field(qtyPerUnitOfMeasure; Rec."Qty. per Unit of Measure") { Caption = 'qtyPerUnitOfMeasure'; Editable = false; }
+                field(baseUnitOfMeasure; BaseUnitOfMeasure) { Caption = 'baseUnitOfMeasure'; Editable = false; }
             }
         }
     }
@@ -62,8 +66,11 @@ page 72227 "DOPSWHS Receipt Line API"
     begin
         // GTIN kolonu için Item'dan çöz (WI Receiving grid'inde GTIN kolonu var).
         Clear(ItemGtin);
-        if (Rec."Item No." <> '') and Item.Get(Rec."Item No.") then
+        Clear(BaseUnitOfMeasure);
+        if (Rec."Item No." <> '') and Item.Get(Rec."Item No.") then begin
             ItemGtin := Item.GTIN;
+            BaseUnitOfMeasure := Item."Base Unit of Measure";
+        end;
         // GET yalnız mevcut BC item-tracking bilgisini okur. İç lot numarası
         // satır açılırken üretilmez; operatör terminalde "Lot No Ata" dediğinde
         // aşağıdaki bound action standart Item."Lot Nos." serisini tüketir.
@@ -123,4 +130,5 @@ page 72227 "DOPSWHS Receipt Line API"
         ExpirationDateRequired: Boolean;
         BulkLpCount: Integer;
         ItemGtin: Code[14];
+        BaseUnitOfMeasure: Code[10];
 }

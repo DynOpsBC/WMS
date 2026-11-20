@@ -30,6 +30,9 @@ internal data class ReceiptLabelRow(
     val quantity: Double,
     val unit: String,
     val copies: Int = 1,
+    /** Ana birim karşılığı (KG ile alınan ADET ürün); birimler aynıysa boş. */
+    val baseQuantity: Double = 0.0,
+    val baseUnit: String = "",
 )
 
 internal const val RECEIPT_LABEL_COPIES_MAX = 50
@@ -46,8 +49,36 @@ internal fun receiptLabelRows(postLines: List<JSONObject>): List<ReceiptLabelRow
             supplierLotNo = it.optString("supplierLotNo").trim(),
             quantity = it.optDouble("qtyToReceive", 0.0),
             unit = it.optString("unitOfMeasureCode").trim(),
+            baseQuantity = receiptBaseQuantity(it, it.optDouble("qtyToReceive", 0.0)) ?: 0.0,
+            baseUnit = if (receiptBaseQuantity(it, 1.0) != null) it.optString("baseUnitOfMeasure").trim() else "",
         )
     }
+
+/**
+ * DKC (20 Kas 2026): satır birimi ana birimden farklıysa (KG ile alınan, ana
+ * birimi ADET olan ürün) miktarın ana birim karşılığı; aynıysa ya da çevrim
+ * bilinmiyorsa null.
+ */
+internal fun receiptBaseQuantity(line: JSONObject, quantity: Double): Double? {
+    val unit = line.optString("unitOfMeasureCode").trim()
+    val base = line.optString("baseUnitOfMeasure").trim()
+    val factor = line.optDouble("qtyPerUnitOfMeasure", 0.0)
+    if (base.isEmpty() || base == "null" || unit.equals(base, ignoreCase = true)) return null
+    if (!factor.isFinite() || factor <= 0.0 || factor == 1.0 && unit.isEmpty()) return null
+    return quantity * factor
+}
+
+/** Grid hücresi: "70.500 ADET"; çevrim yoksa boş. */
+internal fun receiptBaseQtyText(line: JSONObject, quantity: Double): String =
+    receiptBaseQuantity(line, quantity)?.let { receiptLabelQtyText(it, line.optString("baseUnitOfMeasure")) }.orEmpty()
+
+/** Etiket miktarı: ana birim önde, alış birimi parantezde; 30 karakteri aşarsa yalnız ana birim. */
+internal fun receiptLabelQuantityText(row: ReceiptLabelRow): String {
+    if (row.baseUnit.isBlank()) return receiptLabelQtyText(row.quantity, row.unit)
+    val base = receiptLabelQtyText(row.baseQuantity, row.baseUnit)
+    val both = "$base (${receiptLabelQtyText(row.quantity, row.unit)})"
+    return if (both.length <= 30) both else base.take(30)
+}
 
 /** Turkish quantity text for the label: 25.060 KG, 12,5 KG, 1.234,567 ADET. */
 internal fun receiptLabelQtyText(quantity: Double, unit: String): String {
@@ -95,7 +126,7 @@ internal fun receiptLabelRowsJson(batch: List<ReceiptLabelRow>, receiptNo: Strin
                 put("itemNo", row.itemNo)
                 put("lotNo", row.lotNo)
                 put("supplierLotNo", row.supplierLotNo)
-                put("quantityText", receiptLabelQtyText(row.quantity, row.unit))
+                put("quantityText", receiptLabelQuantityText(row))
                 put("receiptNo", receiptNo)
                 put("dateText", dateText)
                 put("copies", row.copies)
