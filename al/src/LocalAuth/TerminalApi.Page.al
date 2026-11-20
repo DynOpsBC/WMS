@@ -8,7 +8,11 @@ page 72325 "DOPSWHS Terminal API"
     EntitySetName = 'wmsTerminals';
     SourceTable = "DOPSWHS WMS Terminal";
     ODataKeyFields = Code;
-    InsertAllowed = false;
+    // DKC (20 Kas 2026): yeni el terminali kaydı API'den açılabilir. Sayfa izni
+    // yalnız değiştirmeyi kapsar; ekleme kullanıcının kendi iznine (yönetici
+    // izin setinde RIMD) bağlıdır, operatörler terminal ekleyemez.
+    DelayedInsert = true;
+    InsertAllowed = true;
     ModifyAllowed = false;
     DeleteAllowed = false;
     Permissions = tabledata "DOPSWHS WMS Terminal" = m;
