@@ -148,6 +148,10 @@ internal data class InquiryItemEntry(
     val uom: String,
     val labelCopies: String = "1",
     val lots: List<InquiryLotStock> = emptyList(),
+    /** Ürünün durduğu lokasyon/raflar (raf içeriği). */
+    val places: List<InquiryPlace> = emptyList(),
+    /** Açık kalem hareketlerinden lokasyon bazında stok (rafsız lokasyonlar için de). */
+    val locationStock: List<Pair<String, Double>> = emptyList(),
 )
 
 internal fun addInquiryEntry(
@@ -258,6 +262,8 @@ fun ItemInquiryModule(labelsOnly: Boolean = false) {
                 var resolvedLpLines: List<JSONObject> = emptyList()
                 var resolvedLedger: List<JSONObject> = emptyList()
                 var resolvedLots: List<InquiryLotStock> = emptyList()
+                var resolvedPlaces: List<InquiryPlace> = emptyList()
+                var resolvedLocationStock: List<Pair<String, Double>> = emptyList()
 
                 val byLp = BcApi.getAllPages(context, "licensePlateLines?\$filter=lpNo eq '$safeQ'&\$top=200")
                 if (byLp.complete && byLp.rows.isNotEmpty()) {
@@ -273,7 +279,7 @@ fun ItemInquiryModule(labelsOnly: Boolean = false) {
 
                 if (!labelsOnly) {
                     val lpPage = if (byLp.complete && byLp.rows.isNotEmpty()) byLp
-                        else BcApi.getAllPages(context, "licensePlateLines?\$filter=itemNo eq '$safeItemNo'&\$top=50")
+                        else BcApi.getAllPages(context, "licensePlateLines?\$filter=itemNo eq '$safeItemNo'&\$top=200")
                     if (lpPage.complete) resolvedLpLines = lpPage.rows
 
                     val le = BcApi.get(context, "itemLedgerEntries?\$filter=itemNo eq '$safeItemNo'&\$orderby=postingDate desc,entryNo desc&\$top=20")
@@ -284,9 +290,33 @@ fun ItemInquiryModule(labelsOnly: Boolean = false) {
                 if (resolvedItem != null) {
                     val openPage = BcApi.getAllPages(
                         context,
-                        "itemLedgerEntries?\$filter=itemNo eq '$safeItemNo' and remainingQuantity gt 0&\$select=entryNo,lotNo,remainingQuantity&\$top=500",
+                        "itemLedgerEntries?\$filter=itemNo eq '$safeItemNo' and remainingQuantity gt 0&\$select=entryNo,lotNo,locationCode,remainingQuantity&\$top=500",
                     )
-                    if (openPage.complete) resolvedLots = inquiryLotStocks(openPage.rows, resolvedLpLines)
+                    if (openPage.complete) {
+                        resolvedLots = inquiryLotStocks(openPage.rows, resolvedLpLines)
+                        resolvedLocationStock = inquiryLocationStock(openPage.rows)
+                    }
+                    // Ürün nerede: raf içeriği + lotların lokasyon/raf dağılımı (LP üzerinden).
+                    if (!labelsOnly) {
+                        val binPage = runCatching {
+                            BcApi.getAllPages(context, "binContents?\$filter=itemNo eq '$safeItemNo'&\$top=500")
+                        }.getOrNull()
+                        if (binPage?.complete == true) resolvedPlaces = inquiryBinPlaces(binPage.rows)
+                        if (openPage.complete && resolvedLots.isNotEmpty()) {
+                            val lotLpNos = resolvedLpLines.filter { it.optString("lotNo").isNotBlank() }.map { it.optString("lpNo") }
+                            val headerPages = lpHeaderFilters(lotLpNos).map { filter ->
+                                async {
+                                    runCatching {
+                                        BcApi.getAllPages(context, "licensePlates?\$filter=$filter&\$select=no,locationCode,binCode,status")
+                                    }.getOrNull()
+                                }
+                            }.awaitAll()
+                            val headers = activeLpHeaders(headerPages.filter { it?.complete == true }.flatMap { requireNotNull(it).rows })
+                            resolvedLots = resolvedLots.map { lot ->
+                                lot.copy(locations = inquiryLotLocations(lot.lotNo, openPage.rows, resolvedLpLines, headers, resolvedPlaces))
+                            }
+                        }
+                    }
                 }
 
                 // Tam eşleşen ürün/LP yoksa yazılan metin adın ya da numaranın bir
@@ -317,6 +347,8 @@ fun ItemInquiryModule(labelsOnly: Boolean = false) {
                     queriedLpNo = queriedLpNo,
                     uom = resolvedUom,
                     lots = resolvedLots,
+                    places = resolvedPlaces,
+                    locationStock = resolvedLocationStock,
                 )
 
                 queriedItems = addInquiryEntry(queriedItems, newEntry)

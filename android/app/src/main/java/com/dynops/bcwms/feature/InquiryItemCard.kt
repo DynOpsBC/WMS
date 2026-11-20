@@ -127,6 +127,7 @@ internal fun InquiryItemCard(
                             }
                         }
                     }
+                    InquiryWhereSection(entry, uom, busy, onPrintLot)
                     Surface(
                         onClick = { showDetails = !showDetails },
                         color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f),
@@ -151,25 +152,6 @@ internal fun InquiryItemCard(
                             InquiryDetailRow("Üretim emrinde", "${inquiryQuantity(item?.optDouble("quantityOnProdOrder", 0.0) ?: 0.0)} $uom")
                             val category = item?.let { firstValue(it, "itemCategoryCode") }.orEmpty()
                             if (category.isNotBlank() && category != "-") InquiryDetailRow("Kategori", category)
-                            if (entry.lots.isNotEmpty()) {
-                                HorizontalDivider()
-                                Text("Lotlar (${entry.lots.size})", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
-                                Text("Etiket basmak için lota dokunun.", style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                entry.lots.forEach { lot ->
-                                    Column(
-                                        Modifier.fillMaxWidth()
-                                            .clickable(enabled = !busy, onClickLabel = "Lot etiketi yazdır") {
-                                                onPrintLot(InquiryLotLabel(lot.lotNo, lot.quantity, lot.lpNos))
-                                            }
-                                            .padding(vertical = 6.dp),
-                                    ) {
-                                        InquiryDetailRow("🖨 ${lot.lotNo}", "${inquiryQuantity(lot.quantity)} $uom")
-                                        if (lot.lpNos.isNotEmpty()) Text("LP: ${lot.lpNos.joinToString(" · ")}",
-                                            style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                    }
-                                }
-                            }
                             HorizontalDivider()
                             Text("LP bilgileri ($lpCount)", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
                             if (entry.lpLines.isEmpty()) {
@@ -258,5 +240,76 @@ private fun InquiryDetailRow(label: String, value: String) {
             color = MaterialTheme.colorScheme.onSurfaceVariant)
         Text(value, modifier = Modifier.weight(1f), style = MaterialTheme.typography.bodySmall,
             fontWeight = FontWeight.Medium, textAlign = androidx.compose.ui.text.style.TextAlign.End)
+    }
+}
+
+/**
+ * Ürün nerede: lokasyon/raf bazında stok ve lotların yerleri. Lota dokununca
+ * o lotun etiketi basılır.
+ */
+@Composable
+private fun InquiryWhereSection(
+    entry: InquiryItemEntry,
+    uom: String,
+    busy: Boolean,
+    onPrintLot: (InquiryLotLabel) -> Unit,
+) {
+    if (entry.places.isEmpty() && entry.locationStock.isEmpty() && entry.lots.isEmpty()) return
+    val muted = MaterialTheme.colorScheme.onSurfaceVariant
+    Surface(color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f), shape = RoundedCornerShape(10.dp)) {
+        Column(Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Text("Nerede?", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+            val binnedLocations = entry.places.map { it.locationCode.uppercase() }.toSet()
+            entry.places.forEach { place ->
+                InquiryDetailRow("📍 ${inquiryPlaceText(place.locationCode, place.binCode)}", "${inquiryQuantity(place.quantity)} $uom")
+                if (place.lpNos.isNotEmpty()) Text("LP: ${place.lpNos.joinToString(" · ")}",
+                    style = MaterialTheme.typography.bodySmall, color = muted)
+            }
+            // Rafsız lokasyonlar raf içeriğinde görünmez; kalem hareketinden gösterilir.
+            entry.locationStock.filter { it.first.uppercase() !in binnedLocations }.forEach { (loc, qty) ->
+                InquiryDetailRow("📍 ${inquiryPlaceText(loc, "")}", "${inquiryQuantity(qty)} $uom")
+            }
+            if (entry.lots.isNotEmpty()) {
+                HorizontalDivider()
+                Text("Lotlar (${entry.lots.size})", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+                Text("Etiket basmak için lota dokunun.", style = MaterialTheme.typography.bodySmall, color = muted)
+                entry.lots.forEach { lot ->
+                    Column(
+                        Modifier.fillMaxWidth()
+                            .clickable(enabled = !busy, onClickLabel = "Lot etiketi yazdır") {
+                                onPrintLot(InquiryLotLabel(lot.lotNo, lot.quantity, lot.lpNos))
+                            }
+                            .padding(vertical = 6.dp),
+                        verticalArrangement = Arrangement.spacedBy(2.dp),
+                    ) {
+                        InquiryDetailRow("🖨 ${lot.lotNo}", "${inquiryQuantity(lot.quantity)} $uom")
+                        if (lot.locations.isEmpty() && lot.lpNos.isNotEmpty()) Text("LP: ${lot.lpNos.joinToString(" · ")}",
+                            style = MaterialTheme.typography.bodySmall, color = muted)
+                        lot.locations.forEach { location ->
+                            // LP'siz ve tek raflı: tek satır "DKC WMS · Raf X".
+                            if (location.lps.isEmpty() && location.looseBins.size == 1) {
+                                val qtyText = if (lot.locations.size > 1) ": ${inquiryQuantity(location.quantity)} $uom" else ""
+                                Text("📍 ${inquiryPlaceText(location.locationCode, location.looseBins.first())}$qtyText",
+                                    style = MaterialTheme.typography.bodySmall, color = muted)
+                                return@forEach
+                            }
+                            if (lot.locations.size > 1 || location.lps.isEmpty())
+                                Text("${inquiryPlaceText(location.locationCode, "")}: ${inquiryQuantity(location.quantity)} $uom",
+                                    style = MaterialTheme.typography.bodySmall, color = muted)
+                            location.lps.forEach { lp ->
+                                Text("${inquiryPlaceText(location.locationCode, lp.binCode)} · ${lp.lpNo}: ${inquiryQuantity(lp.quantity)} $uom",
+                                    style = MaterialTheme.typography.bodySmall, color = muted)
+                            }
+                            if (location.looseQuantity > 0.0 && location.lps.isNotEmpty())
+                                Text("LP dışı ${inquiryQuantity(location.looseQuantity)} $uom · ${looseBinText(location.looseBins)}",
+                                    style = MaterialTheme.typography.bodySmall, color = muted)
+                            else if (location.looseQuantity > 0.0 && location.looseBins.isNotEmpty())
+                                Text(looseBinText(location.looseBins).replaceFirstChar { it.uppercase() },
+                                    style = MaterialTheme.typography.bodySmall, color = muted)
+                        }
+                    }
+                }
+            }
+        }
     }
 }

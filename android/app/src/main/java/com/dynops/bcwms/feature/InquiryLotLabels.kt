@@ -9,7 +9,12 @@ import java.util.Locale
  * DKÇ (19 Kas 2026): Ürün Sorgu'da stoktaki lotlar listelenir; bir lota ya da
  * LP satırına dokununca o lotun ve LP'nin yazdığı ürün etiketi basılır.
  */
-internal data class InquiryLotStock(val lotNo: String, val quantity: Double, val lpNos: List<String>)
+internal data class InquiryLotStock(
+    val lotNo: String,
+    val quantity: Double,
+    val lpNos: List<String>,
+    val locations: List<InquiryLotLocation> = emptyList(),
+)
 
 /** Basılacak etiket: ürünün bir lotu, miktarı ve (varsa) LP'leri. */
 internal data class InquiryLotLabel(val lotNo: String, val quantity: Double, val lpNos: List<String>)
