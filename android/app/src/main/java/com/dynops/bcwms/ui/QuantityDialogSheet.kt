@@ -717,7 +717,7 @@ internal fun convertFromBase(baseQty: Double, factor: Double): Double =
     if (factor <= 0.0) 0.0 else java.math.BigDecimal.valueOf(baseQty / factor).setScale(5, java.math.RoundingMode.HALF_UP).toDouble()
 
 internal fun quantityConversionText(v: Double): String =
-    com.dynops.bcwms.feature.receiptLabelQtyText(v, "")
+    com.dynops.bcwms.feature.receiptLabelQtyText(com.dynops.bcwms.feature.displayBaseQty(v), "")
 
 private fun formatQty(v: Double): String =
     if (v == v.toLong().toDouble()) v.toLong().toString() else v.toString()

@@ -49,7 +49,7 @@ object GridColumns {
             val q = it.optDouble("quantity"); val r = it.optDouble("qtyReceived")
             val open = if (q > 0) (q - r) else it.optDouble("qtyToReceive")
             val base = com.dynops.bcwms.feature.receiptBaseQuantity(it, open)
-            if (base == null) fmtCol(open) else fmtCol(open) + "\n" + com.dynops.bcwms.feature.receiptLabelQtyText(base, "")
+            if (base == null) fmtCol(open) else fmtCol(open) + "\n" + com.dynops.bcwms.feature.receiptLabelQtyText(com.dynops.bcwms.feature.displayBaseQty(base), "")
         },
         GridColumn("uom", "UOM", true, 62) {
             val base = com.dynops.bcwms.feature.receiptBaseQuantity(it, 1.0)

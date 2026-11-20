@@ -23,6 +23,8 @@ page 72479 "DOPSWHS Item UOM API"
                 {
                     Caption = 'qtyPerUnitOfMeasure';
                 }
+                // DKC (20 Kas 2026): ADET ana birimde tam sayı kaydı için yuvarlama hassasiyeti.
+                field(qtyRoundingPrecision; Rec."Qty. Rounding Precision") { Caption = 'qtyRoundingPrecision'; }
             }
         }
     }

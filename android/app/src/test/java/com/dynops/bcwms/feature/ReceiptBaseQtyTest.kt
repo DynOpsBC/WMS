@@ -52,4 +52,11 @@ class ReceiptBaseQtyTest {
         val oldBc = JSONObject().put("quantity", 14100.0).put("qtyReceived", 100.0)
         assertEquals(14000.0, receiptMaxQty(oldBc), 0.0001)
     }
+
+    @Test
+    fun `adet typed in is shown back exactly`() {
+        val kg = com.dynops.bcwms.ui.convertFromBase(3000000.0, 211.8644)
+        assertEquals("3.000.000", com.dynops.bcwms.ui.quantityConversionText(kg * 211.8644))
+        assertEquals(2987288.04, displayBaseQty(2987288.04), 0.0001)
+    }
 }

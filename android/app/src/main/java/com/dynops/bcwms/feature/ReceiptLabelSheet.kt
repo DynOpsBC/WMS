@@ -68,14 +68,24 @@ internal fun receiptBaseQuantity(line: JSONObject, quantity: Double): Double? {
     return quantity * factor
 }
 
+/**
+ * Adet karşılığı ekranda/etikette: KG ↔ ADET çevrimi (ör. 211,8644) BC'nin 5
+ * ondalığına sığmadığı için 3.000.000 ADET 2.999.999,9993 olarak saklanır; adet
+ * tam sayıya 0,01'den yakınsa tam sayı gösterilir.
+ */
+internal fun displayBaseQty(value: Double): Double {
+    val whole = Math.rint(value)
+    return if (Math.abs(value - whole) < 0.01) whole else value
+}
+
 /** Grid hücresi: "70.500 ADET"; çevrim yoksa boş. */
 internal fun receiptBaseQtyText(line: JSONObject, quantity: Double): String =
-    receiptBaseQuantity(line, quantity)?.let { receiptLabelQtyText(it, line.optString("baseUnitOfMeasure")) }.orEmpty()
+    receiptBaseQuantity(line, quantity)?.let { receiptLabelQtyText(displayBaseQty(it), line.optString("baseUnitOfMeasure")) }.orEmpty()
 
 /** Etiket miktarı: ana birim önde, alış birimi parantezde; 30 karakteri aşarsa yalnız ana birim. */
 internal fun receiptLabelQuantityText(row: ReceiptLabelRow): String {
     if (row.baseUnit.isBlank()) return receiptLabelQtyText(row.quantity, row.unit)
-    val base = receiptLabelQtyText(row.baseQuantity, row.baseUnit)
+    val base = receiptLabelQtyText(displayBaseQty(row.baseQuantity), row.baseUnit)
     val both = "$base (${receiptLabelQtyText(row.quantity, row.unit)})"
     return if (both.length <= 30) both else base.take(30)
 }
