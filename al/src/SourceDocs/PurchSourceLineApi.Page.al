@@ -38,6 +38,8 @@ page 72293 "DOPSWHS Purch Source Line API"
                 field(directUnitCost; Rec."Direct Unit Cost") { Caption = 'directUnitCost'; Editable = false; }
                 field(lotRequired; LotRequired) { Caption = 'lotRequired'; Editable = false; }
                 field(serialRequired; SerialRequired) { Caption = 'serialRequired'; Editable = false; }
+                field(overReceiptCode; Rec."Over-Receipt Code") { Caption = 'overReceiptCode'; Editable = false; }
+                field(overReceiptQuantity; Rec."Over-Receipt Quantity") { Caption = 'overReceiptQuantity'; Editable = false; }
             }
         }
     }
@@ -74,4 +76,29 @@ page 72293 "DOPSWHS Purch Source Line API"
     var
         LotRequired: Boolean;
         SerialRequired: Boolean;
+
+    /// <summary>
+    /// DKC (20 Kas 2026): bekleyen ambar mal kabulü kalmamış bir satırda,
+    /// silinmiş bir mal kabulden kalan fazla teslim miktarını sıfırlar. Satır
+    /// miktarına dokunmaz (alan doğrudan yazılır, doğrulama zinciri çalışmaz).
+    /// Yalnız fazla teslim denemesinin bıraktığı tutarsızlığı temizlemek içindir.
+    /// </summary>
+    [ServiceEnabled]
+    procedure clearStaleOverReceipt(): Text
+    var
+        WhseReceiptLine: Record "Warehouse Receipt Line";
+    begin
+        Rec.TestField("Quantity Received", 0);
+        WhseReceiptLine.SetRange("Source Type", Database::"Purchase Line");
+        WhseReceiptLine.SetRange("Source Subtype", Rec."Document Type".AsInteger());
+        WhseReceiptLine.SetRange("Source No.", Rec."Document No.");
+        WhseReceiptLine.SetRange("Source Line No.", Rec."Line No.");
+        WhseReceiptLine.SetFilter("Over-Receipt Quantity", '<>0');
+        if not WhseReceiptLine.IsEmpty() then
+            Error('Bu satırın ambar mal kabulünde fazla teslim var; önce mal kabulde miktarı düzeltin.');
+        Rec."Over-Receipt Quantity" := 0;
+        Rec."Over-Receipt Approval Status" := Rec."Over-Receipt Approval Status"::" ";
+        Rec.Modify();
+        exit(StrSubstNo('%1 %2 satırında fazla teslim sıfırlandı.', Rec."Document No.", Rec."Line No."));
+    end;
 }
