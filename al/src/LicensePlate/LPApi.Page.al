@@ -302,6 +302,24 @@ page 72088 "DOPSWHS LP API"
     [ServiceEnabled]
     procedure moveToBinProject(targetBinCode: Code[20]; userId: Code[50]; projectCode: Code[20])
     var
+        MovementMgmt: Codeunit "DOPSWHS Movement Mgmt";
+    begin
+        MovementMgmt.CheckMoveProject(projectCode);
+        MoveToBinWithReference(targetBinCode, userId, projectCode, '');
+    end;
+
+    [ServiceEnabled]
+    [CommitBehavior(CommitBehavior::Error)]
+    procedure moveToBinSalesOrder(targetBinCode: Code[20]; userId: Code[50]; salesOrderNo: Code[20])
+    var
+        MovementMgmt: Codeunit "DOPSWHS Movement Mgmt";
+    begin
+        MovementMgmt.CheckMoveSalesOrder(salesOrderNo);
+        MoveToBinWithReference(targetBinCode, userId, '', salesOrderNo);
+    end;
+
+    local procedure MoveToBinWithReference(TargetBinCode: Code[20]; UserId: Code[50]; ProjectCode: Code[20]; SalesOrderNo: Code[20])
+    var
         LPLine: Record "DOPSWHS LP Line";
         TempLPLine: Record "DOPSWHS LP Line" temporary;
         Item: Record Item;
@@ -312,7 +330,9 @@ page 72088 "DOPSWHS LP API"
         FromBinCode: Code[20];
         QtyBase: Decimal;
     begin
-        MovementMgmt.CheckMoveProject(projectCode);
+        // Keep the source bin and contents used for the history consistent with MoveToBin.
+        Rec.LockTable();
+        Rec.Get(Rec."No.");
         LocationCode := Rec."Location Code";
         FromBinCode := Rec."Bin Code";
         LPLine.SetRange("LP No.", Rec."No.");
@@ -322,6 +342,8 @@ page 72088 "DOPSWHS LP API"
                 TempLPLine := LPLine;
                 TempLPLine.Insert();
             until LPLine.Next() = 0;
+        if (SalesOrderNo <> '') and TempLPLine.IsEmpty() then
+            Error('%1 LP numarasında satış siparişine bağlanacak stok yok.', Rec."No.");
         LPMgt.MoveToBin(Rec, targetBinCode, userId);
         if TempLPLine.FindSet() then
             repeat
@@ -331,10 +353,15 @@ page 72088 "DOPSWHS LP API"
                    ItemUoM.Get(TempLPLine."Item No.", TempLPLine."Unit of Measure")
                 then
                     QtyBase := TempLPLine.Quantity * ItemUoM."Qty. per Unit of Measure";
-                MovementMgmt.TagMovedStockWithProject(LocationCode, targetBinCode, TempLPLine."Item No.", TempLPLine."Variant Code",
-                    TempLPLine."Lot No.", TempLPLine."Serial No.", QtyBase, projectCode, userId);
-                MovementMgmt.LogProjectMove(LocationCode, FromBinCode, targetBinCode, TempLPLine."Item No.", TempLPLine."Variant Code",
-                    TempLPLine."Lot No.", TempLPLine."Serial No.", QtyBase, projectCode, userId, Rec."No.");
+                if SalesOrderNo <> '' then
+                    MovementMgmt.LogSalesOrderMove(LocationCode, FromBinCode, TargetBinCode, TempLPLine."Item No.", TempLPLine."Variant Code",
+                        TempLPLine."Lot No.", TempLPLine."Serial No.", QtyBase, SalesOrderNo, UserId, Rec."No.")
+                else begin
+                    MovementMgmt.TagMovedStockWithProject(LocationCode, TargetBinCode, TempLPLine."Item No.", TempLPLine."Variant Code",
+                        TempLPLine."Lot No.", TempLPLine."Serial No.", QtyBase, ProjectCode, UserId);
+                    MovementMgmt.LogProjectMove(LocationCode, FromBinCode, TargetBinCode, TempLPLine."Item No.", TempLPLine."Variant Code",
+                        TempLPLine."Lot No.", TempLPLine."Serial No.", QtyBase, ProjectCode, UserId, Rec."No.");
+                end;
             until TempLPLine.Next() = 0;
         Rec.Get(Rec."No.");
     end;

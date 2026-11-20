@@ -29,12 +29,18 @@ table 72205 "DOPSWHS Project Move Entry"
         field(15; "To Bin Code"; Code[20]) { Caption = 'Nereye (Raf / Alan)'; }
         field(16; "LP No."; Code[20]) { Caption = 'LP No.'; }
         field(17; "User Name"; Text[100]) { Caption = 'Kullanıcı Adı'; DataClassification = EndUserIdentifiableInformation; }
+        field(18; "Sales Order No."; Code[20])
+        {
+            Caption = 'Satış Sipariş No.';
+            TableRelation = "Sales Header"."No." where("Document Type" = const(Order));
+        }
     }
 
     keys
     {
         key(PK; "Entry No.") { Clustered = true; }
         key(Project; "Project No.", "Moved At") { }
+        key(SalesOrder; "Sales Order No.", "Moved At") { }
         key(Item; "Item No.", "To Bin Code") { }
     }
 

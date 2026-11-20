@@ -26,6 +26,7 @@ page 72206 "DOPSWHS Project Move API"
                 field(userName; Rec."User Name") { Caption = 'userName'; }
                 field(projectNo; Rec."Project No.") { Caption = 'projectNo'; }
                 field(projectDescription; Rec."Project Description") { Caption = 'projectDescription'; }
+                field(salesOrderNo; Rec."Sales Order No.") { Caption = 'salesOrderNo'; }
                 field(itemNo; Rec."Item No.") { Caption = 'itemNo'; }
                 field(itemDescription; Rec."Item Description") { Caption = 'itemDescription'; }
                 field(lotNo; Rec."Lot No.") { Caption = 'lotNo'; }

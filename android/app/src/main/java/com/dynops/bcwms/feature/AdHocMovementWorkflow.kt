@@ -180,11 +180,20 @@ internal fun adHocLpConfirmLabel(
 internal fun adHocProjectEnabled(flavor: String = com.dynops.bcwms.BuildConfig.FLAVOR): Boolean =
     flavor.equals("kitoko", ignoreCase = true)
 
-/** Ürün modu: proje kodu girildiyse taşıma + PROJE boyutu tek istekte (adHocProject). */
-internal fun adHocProductAction(lotNo: String, projectCode: String): String = when {
-    projectCode.isNotBlank() -> "adHocProject"
+internal fun adHocSalesOrderEnabled(companyName: String): Boolean =
+    Regex("^element[ -]*4(?:[^a-z0-9]|$)", RegexOption.IGNORE_CASE).containsMatchIn(companyName.trim())
+
+/** Ürün modu: numara girildiyse hareket ve ilgili kayıt tek istekte yapılır. */
+internal fun adHocProductAction(lotNo: String, referenceCode: String, useSalesOrder: Boolean = false): String = when {
+    referenceCode.isNotBlank() -> if (useSalesOrder) "adHocSalesOrder" else "adHocProject"
     lotNo.isNotBlank() -> "adHocLot"
     else -> "adHoc"
+}
+
+internal fun adHocLpBinAction(referenceCode: String, useSalesOrder: Boolean): String = when {
+    referenceCode.isBlank() -> "moveToBin"
+    useSalesOrder -> "moveToBinSalesOrder"
+    else -> "moveToBinProject"
 }
 
 /** Proje kodu BC'de büyük harfli Code alanıdır; terminal girişini normalleştirir. */
@@ -192,11 +201,11 @@ internal fun normalizeProjectCode(raw: String): String =
     raw.trim().uppercase(java.util.Locale.ROOT).take(20)
 
 
-/** Proje seçim listesinde arama: proje no, adı ya da müşteri adı (büyük-küçük harf ayrımı yok). */
+/** Sipariş/proje numarası, proje adı veya müşteri adına göre arama. */
 internal fun projectMatches(project: org.json.JSONObject, query: String): Boolean {
     val q = query.trim()
     if (q.isEmpty()) return true
-    return listOf("no", "description", "billToName").any { project.optString(it).contains(q, ignoreCase = true) }
+    return listOf("no", "description", "billToName", "customerName").any { project.optString(it).contains(q, ignoreCase = true) }
 }
 
 /** Proje taşıma kaydının tek satırlık özeti: "12 ADET · A-01-01 → MONTAJ-1". */

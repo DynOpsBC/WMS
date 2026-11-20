@@ -1,7 +1,7 @@
 {
-  "versionCode": 200208,
-  "versionName": "1.14.208-kitoko",
-  "apkUrl": "https://github.com/DynOpsBC/WMS/releases/download/android-v1.14.208-kitoko/BCWMS-Kitoko-1.14.208.apk",
-  "sha256": "f9f0f39908ce958658815ff258a8ec0dea0d471fa2674513e2b2a1288cd29f1f",
-  "releaseNotes": "Element4 Ad-Hoc Hareket: taşıma yaparken proje seçilir (Proje Seç listesi). Ürün hedef rafta/alanda stokta kalır; hangi proje için taşındığı kaydedilir ve \"Bu projenin taşımaları\" ile terminalden görülür. BC'de Proje Taşıma Kayıtları sayfası. BCWMSApp 1.14.4.3 gerekir."
+  "versionCode": 200209,
+  "versionName": "1.14.209-kitoko",
+  "apkUrl": "https://github.com/DynOpsBC/WMS/releases/download/android-v1.14.209-kitoko/BCWMS-Kitoko-1.14.209.apk",
+  "sha256": "17b9888afc71c247b5184b1fe42c5257458168f32ca2d57cbd3d827398211a22",
+  "releaseNotes": "Element 4 Ad-Hoc Hareket: E4 ile başlayan satış siparişini seçin veya numarasını girin. Taşıma, sipariş numarasıyla geçmişe kaydedilir. Siparişli taşıma için BCWMSApp 1.14.4.5 gerekir."
 }

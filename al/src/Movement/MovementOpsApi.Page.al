@@ -98,4 +98,17 @@ page 72231 "DOPSWHS Movement Ops API"
         MovementMgmt.TagMovedStockWithProject(MovementMgmt.LocationForBin(fromBin), toBin, itemNo, '', lotNo, '', qty, projectCode, userId);
         MovementMgmt.LogProjectMove(MovementMgmt.LocationForBin(fromBin), fromBin, toBin, itemNo, '', lotNo, '', qty, projectCode, userId, lpNo);
     end;
+
+    [ServiceEnabled]
+    [CommitBehavior(CommitBehavior::Error)]
+    procedure adHocSalesOrder(fromBin: Code[20]; toBin: Code[20]; itemNo: Code[20]; lpNo: Code[20]; qty: Decimal; userId: Code[50]; lotNo: Code[50]; salesOrderNo: Code[20])
+    var
+        MovementMgmt: Codeunit "DOPSWHS Movement Mgmt";
+    begin
+        MovementMgmt.CheckMoveSalesOrder(salesOrderNo);
+        if lpNo <> '' then
+            Error('Satış siparişine bağlı LP taşıması için LP taşıma işlemini kullanın.');
+        MovementMgmt.AdHocMove(fromBin, toBin, itemNo, '', qty, userId, lotNo);
+        MovementMgmt.LogSalesOrderMove(MovementMgmt.LocationForBin(fromBin), fromBin, toBin, itemNo, '', lotNo, '', qty, salesOrderNo, userId, '');
+    end;
 }

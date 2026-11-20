@@ -10,6 +10,7 @@ codeunit 72045 "DOPSWHS Movement Mgmt"
         tabledata "Item Journal Batch" = RIMD,
         tabledata "Item Journal Line" = RIMD,
         tabledata "DOPSWHS Project Move Entry" = RI,
+        tabledata "Sales Header" = R,
         tabledata "DOPSWHS Local User" = R,
         tabledata Job = R,
         tabledata "Warehouse Journal Template" = RIMD,
@@ -213,6 +214,16 @@ codeunit 72045 "DOPSWHS Movement Mgmt"
             Error('%1 projesi tamamlanmış; bu projeye taşıma yapılamaz.', ProjectCode);
     end;
 
+    procedure CheckMoveSalesOrder(SalesOrderNo: Code[20])
+    var
+        SalesHeader: Record "Sales Header";
+    begin
+        if CopyStr(SalesOrderNo, 1, 2) <> 'E4' then
+            Error('E4 ile başlayan bir Satış Sipariş No girin.');
+        if not SalesHeader.Get(SalesHeader."Document Type"::Order, SalesOrderNo) then
+            Error('%1 satış siparişi bağlı Business Central şirketinde bulunamadı.', SalesOrderNo);
+    end;
+
     local procedure HasProjectDimensionValue(ProjectCode: Code[20]): Boolean
     var
         DimensionValue: Record "Dimension Value";
@@ -233,13 +244,23 @@ codeunit 72045 "DOPSWHS Movement Mgmt"
     /// Runs in the same transaction as the move; QtyBase is in the item's base unit.
     /// </summary>
     procedure LogProjectMove(LocationCode: Code[10]; FromBinCode: Code[20]; ToBinCode: Code[20]; ItemNo: Code[20]; VariantCode: Code[10]; LotNo: Code[50]; SerialNo: Code[50]; QtyBase: Decimal; ProjectCode: Code[20]; UserId: Code[50]; LpNo: Code[20])
+    begin
+        LogMove(LocationCode, FromBinCode, ToBinCode, ItemNo, VariantCode, LotNo, SerialNo, QtyBase, ProjectCode, '', UserId, LpNo);
+    end;
+
+    procedure LogSalesOrderMove(LocationCode: Code[10]; FromBinCode: Code[20]; ToBinCode: Code[20]; ItemNo: Code[20]; VariantCode: Code[10]; LotNo: Code[50]; SerialNo: Code[50]; QtyBase: Decimal; SalesOrderNo: Code[20]; UserId: Code[50]; LpNo: Code[20])
+    begin
+        LogMove(LocationCode, FromBinCode, ToBinCode, ItemNo, VariantCode, LotNo, SerialNo, QtyBase, '', SalesOrderNo, UserId, LpNo);
+    end;
+
+    local procedure LogMove(LocationCode: Code[10]; FromBinCode: Code[20]; ToBinCode: Code[20]; ItemNo: Code[20]; VariantCode: Code[10]; LotNo: Code[50]; SerialNo: Code[50]; QtyBase: Decimal; ProjectCode: Code[20]; SalesOrderNo: Code[20]; UserId: Code[50]; LpNo: Code[20])
     var
         Entry: Record "DOPSWHS Project Move Entry";
         Job: Record Job;
         Item: Record Item;
         LocalUser: Record "DOPSWHS Local User";
     begin
-        if (ProjectCode = '') or (QtyBase <= 0) then
+        if ((ProjectCode = '') and (SalesOrderNo = '')) or (QtyBase <= 0) then
             exit;
         Entry.Init();
         Entry."Entry No." := 0;
@@ -252,8 +273,10 @@ codeunit 72045 "DOPSWHS Movement Mgmt"
         if Entry."User Name" = '' then
             Entry."User Name" := CopyStr(UserId, 1, MaxStrLen(Entry."User Name"));
         Entry."Project No." := ProjectCode;
-        if Job.Get(ProjectCode) then
-            Entry."Project Description" := CopyStr(Job.Description, 1, MaxStrLen(Entry."Project Description"));
+        if ProjectCode <> '' then
+            if Job.Get(ProjectCode) then
+                Entry."Project Description" := CopyStr(Job.Description, 1, MaxStrLen(Entry."Project Description"));
+        Entry."Sales Order No." := SalesOrderNo;
         Entry."Item No." := ItemNo;
         if Item.Get(ItemNo) then begin
             Entry."Item Description" := CopyStr(Item.Description, 1, MaxStrLen(Entry."Item Description"));

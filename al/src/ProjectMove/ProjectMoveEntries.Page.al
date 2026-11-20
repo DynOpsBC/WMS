@@ -3,7 +3,7 @@ page 72205 "DOPSWHS Project Move Entries"
     PageType = List;
     SourceTable = "DOPSWHS Project Move Entry";
     SourceTableView = sorting("Entry No.") order(descending);
-    Caption = 'Proje Taşıma Kayıtları';
+    Caption = 'Proje ve Sipariş Taşıma Kayıtları';
     ApplicationArea = All;
     UsageCategory = History;
     Editable = false;
@@ -20,6 +20,7 @@ page 72205 "DOPSWHS Project Move Entries"
                 field("Moved At"; Rec."Moved At") { ApplicationArea = All; ToolTip = 'Taşımanın yapıldığı an.'; }
                 field("Project No."; Rec."Project No.") { ApplicationArea = All; ToolTip = 'Ürünün hangi proje için taşındığı.'; }
                 field("Project Description"; Rec."Project Description") { ApplicationArea = All; ToolTip = 'Projenin adı.'; }
+                field("Sales Order No."; Rec."Sales Order No.") { ApplicationArea = All; ToolTip = 'Ürünün hangi satış siparişi için taşındığı.'; }
                 field("Item No."; Rec."Item No.") { ApplicationArea = All; ToolTip = 'Taşınan madde.'; }
                 field("Item Description"; Rec."Item Description") { ApplicationArea = All; ToolTip = 'Maddenin adı.'; }
                 field(Quantity; Rec.Quantity) { ApplicationArea = All; ToolTip = 'Taşınan miktar (temel birim).'; }

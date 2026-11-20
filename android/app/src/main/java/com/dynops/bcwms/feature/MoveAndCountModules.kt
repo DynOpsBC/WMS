@@ -120,9 +120,12 @@ fun AdHocMoveModule() {
     var toBin by remember { mutableStateOf("") }
     var qty by remember { mutableStateOf("1") }
     var lotNoInput by remember { mutableStateOf("") }
-    // Element4: proje kodu sonraki taşımalarda da korunur (aynı projeye birden çok kalem).
-    var projectCode by remember { mutableStateOf("") }
-    val projectEnabled = remember { adHocProjectEnabled() }
+    val companyName = BcApi.getCompanyName(context)
+    val referenceEnabled = adHocProjectEnabled()
+    val useSalesOrder = referenceEnabled && adHocSalesOrderEnabled(companyName)
+    val referenceParameter = if (useSalesOrder) "salesOrderNo" else "projectCode"
+    val referenceLabel = if (useSalesOrder) "Satış Sipariş No" else "Proje"
+    var referenceCode by remember(BcApi.getCompanyId(context), useSalesOrder) { mutableStateOf("") }
     var lotPickerOpen by remember { mutableStateOf(false) }
     var availableLots by remember { mutableStateOf<List<JSONObject>>(emptyList()) }
     var availableLotsLoading by remember { mutableStateOf(false) }
@@ -425,8 +428,8 @@ fun AdHocMoveModule() {
             return
         }
         if (crossLocation()) {
-            if (projectCode.isNotBlank()) {
-                status = "HATA: Lokasyonlar arası taşımada proje kodu kullanılamaz. Proje kodunu silin veya aynı lokasyonda taşıyın."
+            if (referenceCode.isNotBlank()) {
+                status = "HATA: Lokasyonlar arası taşımada $referenceLabel kullanılamaz. Alanı boşaltın veya aynı lokasyonda taşıyın."
                 return
             }
             if (target.isNotBlank() && targetIsLp != false) {
@@ -438,6 +441,10 @@ fun AdHocMoveModule() {
         }
         if (targetIsLp == null || target.isBlank()) {
             status = "HATA: Hareket yapılmadı. Önce hedef LP veya rafı doğrulayın."
+            return
+        }
+        if (targetIsLp == true && useSalesOrder && referenceCode.isNotBlank()) {
+            status = "HATA: Siparişe bağlı taşıma için hedef rafı seçin."
             return
         }
         scope.launch {
@@ -484,16 +491,16 @@ fun AdHocMoveModule() {
                 }
                 // LP→bin tek sunucu transaction'ıdır. Satır bazlı adHoc + sonradan
                 // header PATCH zinciri kısmi stok/LP konumu üretebildiği için kullanılmaz.
-                val project = projectCode
+                val reference = referenceCode
                 val r = BcApi.boundAction(
                     context,
                     "licensePlates",
                     lpNo,
-                    if (project.isBlank()) "moveToBin" else "moveToBinProject",
+                    adHocLpBinAction(reference, useSalesOrder),
                     JSONObject().apply {
                         put("targetBinCode", target)
                         put("userId", userId)
-                        if (project.isNotBlank()) put("projectCode", project)
+                        if (reference.isNotBlank()) put(referenceParameter, reference)
                     }.toString(),
                 )
                 busy = false
@@ -505,7 +512,7 @@ fun AdHocMoveModule() {
                 status = "TAMAM: LP $lpNo ve stok içeriği atomik olarak $target rafına taşındı"
                 lastMove = buildList {
                     add("🧺 $lpNo · 📍 ${fromBin.trim()} → 📍 $target")
-                    if (project.isNotBlank()) add("📁 Proje: $project")
+                    if (reference.isNotBlank()) add("📁 $referenceLabel: $reference")
                     lpLines.forEach { ln ->
                         add("• ${ln.optString("itemNo")} × ${fmtq(ln.optDouble("quantity"))}" +
                             (ln.optString("lotNo").takeIf { it.isNotBlank() && it != "null" }?.let { " · Lot $it" } ?: ""))
@@ -860,9 +867,9 @@ fun AdHocMoveModule() {
                         modifier = Modifier.fillMaxWidth().height(44.dp),
                     ) { Text("🔎 Hedefi Doğrula (LP mi bin mi?)", fontWeight = FontWeight.SemiBold) }
                 }
-                if (projectEnabled) {
+                if (referenceEnabled) {
                     Spacer(Modifier.height(8.dp))
-                    AdHocProjectField(projectCode, { projectCode = it }, enabled = !busy)
+                    AdHocReferenceField(referenceCode, { referenceCode = it }, enabled = !busy, useSalesOrder)
                 }
                 Spacer(Modifier.height(12.dp))
                 Button(
@@ -926,9 +933,9 @@ fun AdHocMoveModule() {
             ScanField("Lot No (lot izlemeli üründe)", lotNoInput, { lotNoInput = it }, modifier = Modifier.fillMaxWidth(), listenScanBus = !screenRouting, onScanned = {
                 lotNoInput = BarcodeIntentResolver.resolve(it).value
             })
-            if (projectEnabled) {
+            if (referenceEnabled) {
                 Spacer(Modifier.height(8.dp))
-                AdHocProjectField(projectCode, { projectCode = it }, enabled = !busy)
+                AdHocReferenceField(referenceCode, { referenceCode = it }, enabled = !busy, useSalesOrder)
             }
             Spacer(Modifier.height(6.dp))
             OutlinedButton(
@@ -985,6 +992,7 @@ fun AdHocMoveModule() {
                             }
                             val itemNo = decision.value
                             val lot = lotNoInput.trim()
+                            val reference = referenceCode
                             val body = JSONObject().apply {
                                 put("fromBin", fromBin.trim()); put("toBin", toBin.trim())
                                 // AL action param is "qty" (not "quantity"); send every param so OData binds them all.
@@ -994,16 +1002,13 @@ fun AdHocMoveModule() {
                                 // but Product mode never sends an LP through this contract.
                                 put("lpNo", "")
                                 put("userId", userId)
-                                val project = projectCode
-                                if (project.isNotBlank()) {
-                                    // adHocProject tüm parametreleri ister (lot boş olabilir).
-                                    put("lotNo", lot); put("projectCode", project)
-                                } else if (lot.isNotBlank()) put("lotNo", lot)
+                                if (reference.isNotBlank()) put(referenceParameter, reference)
+                                if (reference.isNotBlank() || lot.isNotBlank()) put("lotNo", lot)
                             }.toString()
                             // adHoc is bound to the singleton Setup record (key '') via the movementOps API,
                             // because a fresh bin-to-bin move has no existing movement document to bind to.
                             // Lot girildiyse lot-tracking bağlayan adHocLot action'ı kullanılır.
-                            val r = BcApi.boundAction(context, "movementOps", "", adHocProductAction(lot, projectCode), body)
+                            val r = BcApi.boundAction(context, "movementOps", "", adHocProductAction(lot, reference, useSalesOrder), body)
                             busy = false
                             status = if (r.ok) "TAMAM: Hareket kaydedildi (HTTP ${r.httpCode})"
                                 else "HATA: ${BcApi.errorMessage(r.body)} (HTTP ${r.httpCode})" +
@@ -1014,7 +1019,7 @@ fun AdHocMoveModule() {
                                     add("📍 ${fromBin.trim()} → 📍 ${toBin.trim()}")
                                     add("• $itemNo × ${qty.toFiniteDoubleOrNull()?.let { fmtq(it) } ?: qty}" +
                                         if (lot.isNotBlank()) " · Lot $lot" else "")
-                                    if (projectCode.isNotBlank()) add("📁 Proje: $projectCode")
+                                    if (reference.isNotBlank()) add("📁 $referenceLabel: $reference")
                                 }
                                 itemOrLp = ""; qty = "1"; lotNoInput = ""
                             }

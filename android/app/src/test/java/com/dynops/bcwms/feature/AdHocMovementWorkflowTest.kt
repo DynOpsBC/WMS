@@ -58,6 +58,23 @@ class AdHocMovementWorkflowTest {
     }
 
     @Test
+    fun salesOrderRoutesAndSearchAreScopedToElement4() {
+        assertTrue(adHocSalesOrderEnabled("Element 4 Dizayn Müh. End. A.Ş"))
+        assertTrue(adHocSalesOrderEnabled("ELEMENT4-TR-DEMO-V1"))
+        assertFalse(adHocSalesOrderEnabled("Kitoko Aydınlatma ve Müh. A.Ş."))
+        assertEquals("adHocSalesOrder", adHocProductAction("", "E4TEST.R1", useSalesOrder = true))
+        assertEquals("adHocSalesOrder", adHocProductAction("L1", "E4TEST.R1", useSalesOrder = true))
+        assertEquals("adHocLot", adHocProductAction("L1", "", useSalesOrder = true))
+        assertEquals("moveToBinSalesOrder", adHocLpBinAction("E4TEST.R1", useSalesOrder = true))
+        assertEquals("moveToBinProject", adHocLpBinAction("PR001", useSalesOrder = false))
+        assertEquals("moveToBin", adHocLpBinAction("", useSalesOrder = true))
+        val order = org.json.JSONObject().put("no", "E4TEST.R1").put("customerName", "Deneme Müşterisi")
+        assertTrue(projectMatches(order, "test.r1"))
+        assertTrue(projectMatches(order, "müşterisi"))
+        assertFalse(projectMatches(order, "PR001"))
+    }
+
+    @Test
     fun projectMoveSummaryShowsQuantityAndRoute() {
         val e = org.json.JSONObject().put("quantity", 12.0).put("unitOfMeasureCode", "ADET").put("fromBinCode", "A-01-01").put("toBinCode", "MONTAJ-1")
         assertEquals("12 ADET · A-01-01 → MONTAJ-1", projectMoveSummary(e))
