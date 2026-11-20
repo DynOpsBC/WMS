@@ -931,7 +931,9 @@ codeunit 72040 "DOPSWHS LP Management"
 
     procedure Transfer(var SourceLP: Record "DOPSWHS LP Header"; var TargetLP: Record "DOPSWHS LP Header"; LineSelections: List of [Integer]; QtyByLine: Dictionary of [Integer, Decimal])
     var
-        SourceLine: Record "DOPSWHS LP Line";
+         RefreshedEntryNos: List of [Integer];
+        RefreshEntryNo: Integer;
+       SourceLine: Record "DOPSWHS LP Line";
         TargetLine: Record "DOPSWHS LP Line";
         ReceiptMgmt: Codeunit "DOPSWHS Receipt Mgmt";
         LineNo: Integer;
@@ -1007,10 +1009,18 @@ codeunit 72040 "DOPSWHS LP Management"
 
             WriteTransferToLedger(SourceLP, LPActionTransferOut(), SourceLP."Bin Code", TargetLP."Bin Code", TransferQty, SourceLine."Item No.", SourceLine."Lot No.", TargetLP."No.", SourceLP."No.", TargetLP."No.");
             WriteTransferToLedger(TargetLP, LPActionTransferIn(), SourceLP."Bin Code", TargetLP."Bin Code", TransferQty, SourceLine."Item No.", SourceLine."Lot No.", SourceLP."No.", SourceLP."No.", TargetLP."No.");
+            // BADE (21 Kas 2026): madde defteri girişinin "LP No.leri" alanı bölünen
+            // yeni LP'yi de göstersin (Merve: LP002761 ilgili satıra gelmedi).
+            if (TargetLine."Source Item Ledger Entry No." <> 0) and
+               not RefreshedEntryNos.Contains(TargetLine."Source Item Ledger Entry No.")
+            then
+                RefreshedEntryNos.Add(TargetLine."Source Item Ledger Entry No.");
         end;
         // BADE (16 Eyl 2026): a pallet emptied by transfer is consumed, not a
         // reusable "Built" shell.
         MarkUsedIfEmptied(SourceLP);
+        foreach RefreshEntryNo in RefreshedEntryNos do
+            RefreshItemLedgerEntryLpReferences(RefreshEntryNo);
         OnAfterTransfer(SourceLP, TargetLP);
     end;
 
