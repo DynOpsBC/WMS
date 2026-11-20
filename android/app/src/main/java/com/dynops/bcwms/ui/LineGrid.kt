@@ -131,7 +131,8 @@ fun LineGrid(
                         Text(
                             def.value(row).ifBlank { "—" },
                             Modifier.width(w.dp).padding(horizontal = 6.dp, vertical = 11.dp),
-                            fontSize = 13.sp, maxLines = 1,
+                            // İki satırlı hücre (ör. KG + adet karşılığı) kırpılmasın.
+                            fontSize = 13.sp, maxLines = if (def.value(row).contains('\n')) 2 else 1,
                             color = MaterialTheme.colorScheme.onSurface,
                         )
                     }

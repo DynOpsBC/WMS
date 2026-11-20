@@ -42,11 +42,19 @@ object GridColumns {
         GridColumn("bin", "Bin", true, 92) { nz(it, "binCode") },
         GridColumn("itemNo", "Ürün No.", true, 104) { nz(it, "itemNo") },
         GridColumn("description", "Açıklama", false, 170) { nz(it, "description") },
+        // DKC (20 Kas 2026): KG ile alınan ADET üründe adet karşılığı ikinci satırda
+        // (miktarın altında sayı, birimin altında ADET); ayrı sütun dar ekranda
+        // sağda kalıp görünmüyordu.
         GridColumn("openQty", "Açık Mik.", true, 84) {
             val q = it.optDouble("quantity"); val r = it.optDouble("qtyReceived")
-            fmtCol(if (q > 0) (q - r) else it.optDouble("qtyToReceive"))
+            val open = if (q > 0) (q - r) else it.optDouble("qtyToReceive")
+            val base = com.dynops.bcwms.feature.receiptBaseQuantity(it, open)
+            if (base == null) fmtCol(open) else fmtCol(open) + "\n" + com.dynops.bcwms.feature.receiptLabelQtyText(base, "")
         },
-        GridColumn("uom", "UOM", true, 62) { nz(it, "unitOfMeasureCode") },
+        GridColumn("uom", "UOM", true, 62) {
+            val base = com.dynops.bcwms.feature.receiptBaseQuantity(it, 1.0)
+            if (base == null) nz(it, "unitOfMeasureCode") else nz(it, "unitOfMeasureCode") + "\n" + nz(it, "baseUnitOfMeasure")
+        },
         // DKC: KG ile alınan, ana birimi ADET olan üründe açık miktarın adet karşılığı.
         GridColumn("baseQty", "Adet Karş.", true, 104) {
             val q = it.optDouble("quantity"); val r = it.optDouble("qtyReceived")

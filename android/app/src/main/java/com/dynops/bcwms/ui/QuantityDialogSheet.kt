@@ -82,6 +82,10 @@ fun QuantityDialogSheet(
     expiryDateRequired: Boolean = false,
     onAssignLotNo: (suspend () -> Result<String>)? = null,
     onSelectMultipleLots: (() -> Unit)? = null,
+    // DKC (20 Kas 2026): KG ile alınan, ana birimi ADET olan üründe adet karşılığı
+    // gösterilir ve operatör adet yazarak miktarı (KG) çevirebilir.
+    conversionUnit: String = "",
+    conversionFactor: Double = 0.0,
     onConfirm: (QuantityResult) -> Unit,
     onDismiss: () -> Unit,
 ) {
@@ -193,6 +197,27 @@ fun QuantityDialogSheet(
             if (maximumQuantity != null && qty() > maximumQuantity) {
                 Text("Miktar kalan ${formatQty(maximumQuantity)} $initialUom değerini aşamaz.",
                     color = MaterialTheme.colorScheme.error)
+            }
+            if (conversionUnit.isNotBlank() && conversionFactor > 0.0) {
+                var baseText by remember { mutableStateOf("") }
+                Text(
+                    "= ${quantityConversionText(qty() * conversionFactor)} $conversionUnit",
+                    fontWeight = FontWeight.Bold, fontSize = 16.sp,
+                    color = MaterialTheme.colorScheme.primary,
+                )
+                Spacer(Modifier.height(6.dp))
+                OutlinedTextField(
+                    value = baseText,
+                    onValueChange = { raw ->
+                        baseText = normalizeQtyInput(raw)
+                        baseText.toDoubleOrNull()?.let { qtyText = formatQty(convertFromBase(it, conversionFactor)) }
+                    },
+                    label = { Text("$conversionUnit ile gir ($initialUom'a çevrilir)") },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                Spacer(Modifier.height(10.dp))
             }
             Button(
                 onClick = { setQty(qty() + 1) },
@@ -686,6 +711,13 @@ private fun SupplierLotLookupContent(
     }
     Spacer(Modifier.height(24.dp))
 }
+
+/** Adet → alış birimi (KG): BC miktar hassasiyeti 0,00001. */
+internal fun convertFromBase(baseQty: Double, factor: Double): Double =
+    if (factor <= 0.0) 0.0 else java.math.BigDecimal.valueOf(baseQty / factor).setScale(5, java.math.RoundingMode.HALF_UP).toDouble()
+
+internal fun quantityConversionText(v: Double): String =
+    com.dynops.bcwms.feature.receiptLabelQtyText(v, "")
 
 private fun formatQty(v: Double): String =
     if (v == v.toLong().toDouble()) v.toLong().toString() else v.toString()

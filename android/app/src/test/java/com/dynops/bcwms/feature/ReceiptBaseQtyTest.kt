@@ -38,4 +38,10 @@ class ReceiptBaseQtyTest {
         val row = ReceiptLabelRow("X", "", "", "", 123456789.123, "KILOGRAM", baseQuantity = 98765432109.5, baseUnit = "ADET")
         assertEquals(receiptLabelQtyText(98765432109.5, "ADET"), receiptLabelQuantityText(row))
     }
+
+    @Test
+    fun `adet entry converts back to kg`() {
+        assertEquals(14100.0, com.dynops.bcwms.ui.convertFromBase(14100.0 * 211.8644, 211.8644), 0.00001)
+        assertEquals(0.0, com.dynops.bcwms.ui.convertFromBase(10.0, 0.0), 0.0)
+    }
 }

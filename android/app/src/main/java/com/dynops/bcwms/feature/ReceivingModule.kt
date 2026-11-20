@@ -896,6 +896,8 @@ private fun ReceiveDocument(no: String, onBack: () -> Unit) {
             onAssignLotNo = if (line?.optBoolean("lotRequired") == true) {
                 { assignReceiptLot(line.optInt("lineNo")) }
             } else null,
+            conversionUnit = line?.let { l -> if (receiptBaseQuantity(l, 1.0) != null) l.optString("baseUnitOfMeasure") else "" }.orEmpty(),
+            conversionFactor = line?.let { l -> receiptBaseQuantity(l, 1.0) } ?: 0.0,
             onDismiss = {
                 showQty = false
                 scanLot = ""; scanSerial = ""; scanSupplierLot = ""; scanExpiryDate = ""

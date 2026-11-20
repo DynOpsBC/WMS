@@ -1,7 +1,7 @@
 {
-  "versionCode": 200184,
-  "versionName": "1.14.184-emu",
-  "apkUrl": "https://github.com/DynOpsBC/WMS/releases/download/android-v1.14.184-emu/BCWMS-EMU-1.14.184-UYUMLU.apk",
-  "sha256": "b5d3d539fea91c4c4a1c6b2e9cf8c1dc8f0f661e66d0f56aa534a883023086dd",
-  "releaseNotes": "Mal kabul: KG ile alınan, ana birimi ADET olan üründe satırda 'Adet Karş.' sütunu; mal kabul etiketinde miktar adet önde yazılır (ör. 70.500 ADET (14.100 KG)). BCWMSApp 1.14.2.40 gerekir; eski BC'de sütun boş kalır."
+  "versionCode": 200185,
+  "versionName": "1.14.185-emu",
+  "apkUrl": "https://github.com/DynOpsBC/WMS/releases/download/android-v1.14.185-emu/BCWMS-EMU-1.14.185-UYUMLU.apk",
+  "sha256": "a0f68012fb85aaefdef27bf6d8a619ba0b1532ec7d783d50cbc06b344754fd33",
+  "releaseNotes": "Mal kabul: KG ile alınan, ana birimi ADET olan üründe satırda KG'nin altında adet karşılığı; Alınan Miktar penceresinde '= … ADET' ve 'ADET ile gir' alanı (adet yazılınca KG'a çevrilir). Tolerans (fazla teslim alma) BC'deki madde ayarına göre çalışır. BCWMSApp 1.14.2.40 gerekir; eski BC'de adet bilgisi görünmez."
 }
