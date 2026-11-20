@@ -1135,6 +1135,8 @@ codeunit 72043 "DOPSWHS Receipt Mgmt"
         // BC hata verir.
         if ExpectedQty > (OutstandingQty + 0.00001) then
             if WhseReceiptLine."Over-Receipt Code" <> '' then begin
+                DeleteSourceReservationTracking(WhseReceiptLine);
+                DeleteWarehouseItemTracking(WhseReceiptLine);
                 WhseReceiptLine.Validate("Qty. to Receive", ExpectedQty);
                 WhseReceiptLine.Modify(true);
                 WhseReceiptLine.Get(WhseReceiptHeader."No.", LineNo);
