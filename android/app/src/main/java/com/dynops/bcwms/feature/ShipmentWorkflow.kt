@@ -163,3 +163,22 @@ internal fun pickSourceSubtitle(option: PickSourceOption): String {
     if (item.isNotBlank()) parts.add(item)
     return parts.joinToString(" · ")
 }
+
+
+/**
+ * DKC (23 Kas 2026): sevkiyat toplamadan kaydedilmez. Sevk edilecek her satırın
+ * miktarı kaydedilmiş toplamayla (Qty. Picked) karşılanmalı. BC alanları yoksa
+ * (eski uzantı) engellenmez. Engel yoksa null.
+ */
+internal fun shipmentPickBlockReason(lines: List<org.json.JSONObject>): String? {
+    val shipping = lines.filter { it.has("qtyPicked") && it.optDouble("qtyToShip", 0.0) > 0.00001 }
+    val missing = shipping.filter { it.optDouble("qtyToShip", 0.0) > it.optDouble("qtyPicked", 0.0) + 0.00001 }
+    if (missing.isEmpty()) {
+        val anyLine = lines.any { it.has("qtyPicked") }
+        val nothingPicked = anyLine && lines.none { it.optDouble("qtyPicked", 0.0) > 0.00001 }
+        return if (anyLine && nothingPicked && shipping.isEmpty()) "Önce Toplama Oluştur ile toplama yapın." else null
+    }
+    val waiting = missing.any { it.optDouble("pickQty", 0.0) > 0.00001 }
+    return if (waiting) "Toplama belgesi açık ama kaydedilmemiş. Önce Toplama ekranında toplamayı kaydedin."
+        else "Önce Toplama Oluştur ile toplama yapın; toplanmayan miktar sevk edilemez."
+}

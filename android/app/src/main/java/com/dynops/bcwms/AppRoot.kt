@@ -69,7 +69,7 @@ enum class Screen(val title: String) {
     HierarchicalLP("DKC Kutu ve Palet"),
     ItemInquiry("Ürün Sorgu"),
     Stock("Stok"),
-    BinInquiry("Bin Sorgu"),
+    BinInquiry("Raf Sorgu"),
     Labels("Etiket Çıkar"),
     WhseEntries("Ambar Hareketleri"),
     Receiving("Mal Kabul"),
@@ -369,7 +369,7 @@ private val HomeCategories = listOf(
         HomeTile(Screen.ItemInquiry, WmsGlyph.ITEM_SEARCH, "Ürün Sorgu", "Ürünün raf, lot ve miktarını bul"),
         HomeTile(Screen.Stock, WmsGlyph.STOCK, "Stok", "Tüm stoktaki ürünler ve kritik seviyeler"),
         HomeTile(Screen.Labels, WmsGlyph.LABEL, "Etiket Çıkar", "Ürün etiketi · Bin etiketi · A3 belge"),
-        HomeTile(Screen.BinInquiry, WmsGlyph.BIN_SEARCH, "Bin Sorgu", "Bir rafın mevcut içeriğini gör"),
+        HomeTile(Screen.BinInquiry, WmsGlyph.BIN_SEARCH, "Raf Sorgu", "Bir rafın mevcut içeriğini gör"),
         HomeTile(Screen.WhseEntries, WmsGlyph.ENTRIES, "Ambar Hareketleri", "Geçmiş stok hareketlerini incele"),
     )),
     // Yardım bu listede DEĞİL: ana sayfanın en altındaki HelpButton ile açılır.

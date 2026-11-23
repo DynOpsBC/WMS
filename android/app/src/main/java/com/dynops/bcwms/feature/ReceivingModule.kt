@@ -819,7 +819,19 @@ private fun ReceiveDocument(no: String, onBack: () -> Unit) {
     if (bulkLine != null) {
         // Fazla teslim alma toleransı varsa üst sınır BC'nin hesapladığı en çok miktar.
         val outstanding = receiptMaxQty(bulkLine)
+        var bulkTemplates by remember { mutableStateOf<List<Pair<String, String>>>(emptyList()) }
+        var bulkTemplate by remember { mutableStateOf("") }
+        LaunchedEffect(Unit) {
+            val page = BcApi.getAllPages(context, "licensePlateTemplates?\$top=100&\$select=code,description")
+            if (page.complete) {
+                bulkTemplates = page.rows.map { it.optString("code") to it.optString("description") }.sortedBy { it.first }
+                bulkTemplate = resolveLpTemplate(context, LpPurpose.PALLET).orEmpty()
+            }
+        }
         BulkReceiptLpSheet(
+            templates = bulkTemplates,
+            selectedTemplate = bulkTemplate,
+            onTemplate = { bulkTemplate = it },
             itemNo = bulkLine.optString("itemNo"),
             uom = bulkLine.optString("unitOfMeasureCode"),
             maxExpectedQty = outstanding,
@@ -835,7 +847,7 @@ private fun ReceiveDocument(no: String, onBack: () -> Unit) {
                 scope.launch {
                     busy = true
                     status = "Boş palet LP taslakları hazırlanıyor..."
-                    val template = resolveLpTemplate(context, LpPurpose.PALLET)
+                    val template = bulkTemplate.ifBlank { resolveLpTemplate(context, LpPurpose.PALLET).orEmpty() }.ifBlank { null }
                     if (template == null) {
                         busy = false
                         status = "HATA: Uygun palet şablonu belirlenemedi."

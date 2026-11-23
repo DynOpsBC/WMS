@@ -172,7 +172,7 @@ internal val TerminalHelpTopics = listOf(
         listOf(
             "Sevkiyat ekranında “Ambar Sevkiyatı” sekmesinden belgeyi seçin.",
             "“Bana Ata”ya basın. Bunu yapmadan diğer düğmeler açılmaz.",
-            "Toplanmamış ya da eksik kalan ürün varsa “Pick Oluştur”a basın.",
+            "Toplanmamış ya da eksik kalan ürün varsa “Toplama Oluştur”a basın.",
             "Birden fazla kaynak palet varsa açılan listeden başlangıç LP'sini seçin; otomatik yürüyüş için “Raf sırasına göre topla”ya basın.",
             "Açık bir toplama varsa sistem onu getirir; yoksa sadece kalan miktar için yenisini açar.",
             "Toplama numarasına geçip toplamayı bitirin.",
@@ -301,7 +301,7 @@ internal val TerminalHelpTopics = listOf(
         "Stoğa dokunmadan bilgi bakar, yazıcı ayarlar, hataları çözersiniz.",
         listOf(
             "Ürün Sorgu: bir ürün hangi rafta, hangi lotta, kaç adet var.",
-            "Bin Sorgu: bir rafta ne var.",
+            "Raf Sorgu: bir rafta ne var.",
             "Ambar Hareketleri: son kayıtları görürsünüz, değiştiremezsiniz.",
             "Yazıcılar: etiket ve belge için ayrı ayrı varsayılan yazıcı seçin.",
             "HATA mesajı görürseniz önce Yenile deyip fiziksel durumu kontrol edin.",

@@ -46,6 +46,14 @@ internal fun OutputLpSheet(
     var busy by remember { mutableStateOf(false) }
     var done by remember { mutableStateOf(false) }
     var status by remember { mutableStateOf("") }
+    // Palet etiketi: her oluşan/eklenen LP'nin şablon etiketi (BC tasarımı) basılır.
+    var printPallet by remember { mutableStateOf(true) }
+
+    suspend fun printLp(no: String): Boolean {
+        val r = BcApi.boundAction(context, "licensePlates", no, "printLabel",
+            JSONObject().put("printerId", getMtePrinter(context)).put("copies", 0).toString())
+        return r.ok
+    }
 
     LaunchedEffect(Unit) {
         val page = BcApi.getAllPages(context, "licensePlateTemplates?\$top=50&\$select=code,description")
@@ -79,8 +87,10 @@ internal fun OutputLpSheet(
                 busy = false
                 if (add.ok) {
                     done = true
+                    val printed = if (printPallet) printLp(lpNo) else true
                     status = "TAMAM: ${receiptLabelQtyText(qty, unit)} $lpNo LP'sine kondu" +
-                        lp.optString("binCode").takeIf { it.isNotBlank() && !it.equals(outputBin, true) }?.let { " ve stok $it rafına taşındı." }.orEmpty()
+                        lp.optString("binCode").takeIf { it.isNotBlank() && !it.equals(outputBin, true) }?.let { " ve stok $it rafına taşındı" }.orEmpty() +
+                        when { !printPallet -> "."; printed -> ", palet etiketi basıldı."; else -> ". Palet etiketi gönderilemedi; LP ekranından yazdırın." }
                 } else status = "HATA: ${BcApi.errorMessage(add.body)} (HTTP ${add.httpCode})"
                 return@launch
             }
@@ -110,14 +120,19 @@ internal fun OutputLpSheet(
                 }
                 created += no
             }
+            val notPrinted = if (printPallet) created.filterNot { status = "Palet etiketi basılıyor: $it"; printLp(it) } else emptyList()
             busy = false
             done = true
-            status = "TAMAM: ${created.size} LP oluşturuldu: ${created.joinToString()}. Etiket için LP ekranından yazdırın."
+            status = "TAMAM: ${created.size} LP oluşturuldu: ${created.joinToString()}." + when {
+                !printPallet -> " Etiket için LP ekranından yazdırın."
+                notPrinted.isEmpty() -> " Palet etiketleri basıldı."
+                else -> " Etiketi gönderilemeyen LP: ${notPrinted.joinToString()} — LP ekranından yazdırın."
+            }
         }
     }
 
     SheetScaffold(onDismiss = { if (!busy) onDismiss() }, contentPadding = PaddingValues(20.dp)) {
-        Text("Çıktıyı LP'ye Koy", fontWeight = FontWeight.Bold, fontSize = 18.sp)
+        Text("Çıktıyı LP'ye Koy / Palet Etiketi", fontWeight = FontWeight.Bold, fontSize = 18.sp)
         Text("$itemNo · Lot ${lotNo.ifBlank { "yok" }} · Çıkan ${receiptLabelQtyText(quantity, unit)} · Göz $outputBin",
             fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
         Spacer(Modifier.height(10.dp))
@@ -149,7 +164,10 @@ internal fun OutputLpSheet(
                 }
             }
         }
-        Spacer(Modifier.height(8.dp))
+        Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+            Checkbox(checked = printPallet, onCheckedChange = { printPallet = it }, enabled = !busy && !done)
+            Text("Palet etiketi bas")
+        }
         StatusText(status)
         Spacer(Modifier.height(8.dp))
         if (!done) Button(onClick = { run() }, enabled = !busy, modifier = Modifier.fillMaxWidth().height(48.dp)) {

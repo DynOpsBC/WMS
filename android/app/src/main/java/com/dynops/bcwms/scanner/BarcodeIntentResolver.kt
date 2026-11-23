@@ -257,12 +257,14 @@ object BarcodeIntentResolver {
         return normalized.toDoubleOrNull()?.takeIf { it >= 0.0 }
     }
 
+    // DKC (23 Kas 2026): ürün kodunda boşluk ve parantez olabilir ("9MM KOVAN KASE(AKS)");
+    // değer ';' ya da satır sonuna kadar okunur.
     private val CUSTOM_ITEM = Regex(
-        """(?:madde\s*kodu|item\s*(?:no|code)|stok\s*kodu)[\"']?\s*[:=]\s*[\"']?([\p{L}\p{N}._/-]+)""",
+        """(?:madde\s*kodu|item\s*(?:no|code)|stok\s*kodu)[\"']?\s*[:=]\s*[\"']?([^;&,\"'\r\n]+)""",
         RegexOption.IGNORE_CASE,
     )
     private val CUSTOM_LOT = Regex(
-        """(?:lot\s*(?:no|number)?|tedarikci\s*lotu|tedarikçi\s*lotu)[\"']?\s*[:=]\s*[\"']?([\p{L}\p{N}._/-]+)""",
+        """(?:lot\s*(?:no|number)?|tedarikci\s*lotu|tedarikçi\s*lotu)[\"']?\s*[:=]\s*[\"']?([^;&,\"'\r\n]+)""",
         RegexOption.IGNORE_CASE,
     )
     private val CUSTOM_SERIAL = Regex(

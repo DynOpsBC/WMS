@@ -53,10 +53,7 @@ pageextension 72314 "DOPSWHS Warehouse Entries" extends "Warehouse Entries"
     var
         BinContentSubscriber: Codeunit "DOPSWHS Bin Content Subscriber";
     begin
-        BinContentSubscriber.GetActiveLPTrackingInfo(
-            Rec."Location Code", Rec."Bin Code", Rec."Item No.", Rec."Variant Code", Rec."Unit of Measure Code",
-            Rec."Lot No.", Rec."Serial No.",
-            CurrentActiveLpNos, CurrentActiveLpQuantity);
+        BinContentSubscriber.GetActiveLPInfoForWhseEntry(Rec, CurrentActiveLpNos, CurrentActiveLpQuantity);
     end;
 
     local procedure OpenActiveLPContents()

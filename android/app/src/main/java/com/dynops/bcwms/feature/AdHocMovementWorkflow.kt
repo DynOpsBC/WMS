@@ -12,6 +12,8 @@ internal enum class AdHocProductInputRoute {
 internal data class AdHocProductInputDecision(
     val route: AdHocProductInputRoute,
     val value: String,
+    /** Etiket QR'ı lotu da taşıyorsa (MADDE KODU=…; LOT NO=…) okunan lot. */
+    val lotNo: String = "",
 )
 
 /**
@@ -31,6 +33,7 @@ internal fun decideAdHocProductInput(raw: String): AdHocProductInputDecision {
         BarcodeKind.Item -> AdHocProductInputDecision(
             route = AdHocProductInputRoute.ProductMutation,
             value = resolved.itemNo?.trim().orEmpty().ifBlank { resolved.value.trim() },
+            lotNo = resolved.lotNo?.trim().orEmpty(),
         )
 
         else -> AdHocProductInputDecision(

@@ -248,7 +248,7 @@ private fun V2PicksForFlow(flow: OutboundFlowMode, allModes: Boolean = false, on
                 status = "HATA: Kullanıcı kimliği çözülemedi."
                 return@launch
             }
-            // Sevkiyattan "Pick Oluştur" ile üretilen belgelerde pickMode boş
+            // Sevkiyattan "Toplama Oluştur" ile üretilen belgelerde pickMode boş
             // kalabiliyor; sunucuda katı eşitlik bu işleri HİÇBİR kuyrukta
             // göstermiyordu. Mod ayrımı istemcide yapılır: boş mod, varsayılan
             // akış olan Multi kuyruğunda listelenir.
@@ -2225,7 +2225,7 @@ private fun PickDocument(no: String, onBack: () -> Unit) {
         AlertDialog(
             onDismissRequest = { if (!busy) showCancelConfirm = false },
             title = { Text("$no iptal edilsin mi?") },
-            text = { Text("Yalnız kaydedilmemiş toplama iptal edilir. Sevkiyat silinmez; gerekirse yeniden Pick Oluşturabilirsiniz.") },
+            text = { Text("Yalnız kaydedilmemiş toplama iptal edilir. Sevkiyat silinmez; gerekirse yeniden Toplama Oluşturabilirsiniz.") },
             dismissButton = {
                 TextButton(onClick = { showCancelConfirm = false }, enabled = !busy) { Text("Vazgeç") }
             },

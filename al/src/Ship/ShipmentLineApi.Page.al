@@ -25,6 +25,9 @@ page 72094 "DOPSWHS Shipment Line API"
                 field(gtin; ItemGtin) { Caption = 'gtin'; Editable = false; }
                 field(qtyOutstanding; Rec."Qty. Outstanding") { Caption = 'qtyOutstanding'; Editable = false; }
                 field(qtyToShip; Rec."Qty. to Ship") { Caption = 'qtyToShip'; }
+                // DKC (23 Kas 2026): terminal toplama olmadan sevk kaydını engeller.
+                field(qtyPicked; Rec."Qty. Picked") { Caption = 'qtyPicked'; Editable = false; }
+                field(pickQty; Rec."Pick Qty.") { Caption = 'pickQty'; Editable = false; }
                 field(lotNo; LotNo) { Caption = 'lotNo'; }
                 field(lotRequired; LotRequired) { Caption = 'lotRequired'; Editable = false; }
                 field(licensePlateNo; Rec."LP No.") { Caption = 'licensePlateNo'; }
@@ -51,6 +54,7 @@ page 72094 "DOPSWHS Shipment Line API"
         Item: Record Item;
         ShipmentMgmt: Codeunit "DOPSWHS Shipment Mgmt";
     begin
+        Rec.CalcFields("Pick Qty.");
         Clear(ItemGtin);
         if (Rec."Item No." <> '') and Item.Get(Rec."Item No.") then
             ItemGtin := Item.GTIN;

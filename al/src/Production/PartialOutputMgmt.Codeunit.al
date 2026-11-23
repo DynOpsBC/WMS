@@ -9,6 +9,16 @@ codeunit 72234 "DOPSWHS Partial Output Mgmt"
 
     [CommitBehavior(CommitBehavior::Error)]
     procedure PrepareOutput(var Line: Record "Prod. Order Line"; Quantity: Decimal; PostingDate: Date; BinCode: Code[20]; ExpirationDate: Date; RequestId: Guid): Text
+    begin
+        exit(PrepareOutputWithLot(Line, Quantity, PostingDate, BinCode, ExpirationDate, RequestId, ''));
+    end;
+
+    /// <summary>
+    /// DKC (23 Kas 2026): parçalı üretimde aynı lot sürer. LotNo doluysa bu lot
+    /// kullanılır; boşsa ürünün lot serisinden yeni numara alınır ("Lot Ata").
+    /// </summary>
+    [CommitBehavior(CommitBehavior::Error)]
+    procedure PrepareOutputWithLot(var Line: Record "Prod. Order Line"; Quantity: Decimal; PostingDate: Date; BinCode: Code[20]; ExpirationDate: Date; RequestId: Guid; LotNo: Code[50]): Text
     var
         Request: Record "DOPSWHS Prod Output Request";
         Item: Record Item;
@@ -64,8 +74,12 @@ codeunit 72234 "DOPSWHS Partial Output Mgmt"
             if Tracking."SN Specific Tracking" or Tracking."SN Pos. Adjmt. Inb. Tracking" then
                 Error('Seri numarası takipli ürünün çıktısını BC ürün izleme ekranından kaydedin.');
             if Tracking."Lot Specific Tracking" or Tracking."Lot Pos. Adjmt. Inb. Tracking" then begin
-                Item.TestField("Lot Nos.");
-                Request."Lot No." := NoSeries.GetNextNo(Item."Lot Nos.", PostingDate);
+                if LotNo <> '' then
+                    Request."Lot No." := LotNo
+                else begin
+                    Item.TestField("Lot Nos.");
+                    Request."Lot No." := NoSeries.GetNextNo(Item."Lot Nos.", PostingDate);
+                end;
                 if Request."Lot No." = '' then
                     Error('BC lot numara serisinden numara alınamadı.');
                 if Tracking."Lot Info. Inbound Must Exist" then

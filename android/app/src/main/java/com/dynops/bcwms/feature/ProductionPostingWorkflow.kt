@@ -92,8 +92,30 @@ internal fun productionOutputDraftFromJson(text: String): ProductionOutputDraft?
     draft
 }.getOrNull()
 
-internal fun productionPreparePath(draft: ProductionOutputDraft): String =
-    "productionOrderLines(status='Released',prodOrderNo='${draft.orderNo.replace("'", "''")}',lineNo=${draft.lineNo})/Microsoft.NAV.prepareOutput"
+internal fun productionPreparePath(draft: ProductionOutputDraft): String {
+    // DKC (23 Kas 2026): parçalı üretimde aynı lot sürer; lot istenmişse BC'nin lotlu eylemi.
+    val action = if (productionRequestedLot(draft).isNotBlank()) "prepareOutputWithLot" else "prepareOutput"
+    return "productionOrderLines(status='Released',prodOrderNo='${draft.orderNo.replace("'", "''")}',lineNo=${draft.lineNo})/Microsoft.NAV.$action"
+}
+
+internal fun productionRequestedLot(draft: ProductionOutputDraft): String =
+    runCatching { JSONObject(draft.body).optString("lotNo").trim() }.getOrDefault("")
+
+/** Son çıktının lotu cihazda emir satırı başına saklanır; "Lot Ata" ile yenisi istenir. */
+internal object ProductionLotMemory {
+    private const val PREFS = "production_output_last_lot_v1"
+    private fun key(context: android.content.Context, orderNo: String, lineNo: Int) =
+        listOf(com.dynops.bcwms.BcApi.getEnvironment(context).lowercase(), com.dynops.bcwms.BcApi.getCompanyId(context).lowercase(), orderNo, lineNo.toString()).joinToString("|")
+    fun load(context: android.content.Context, orderNo: String, lineNo: Int): String =
+        runCatching { context.getSharedPreferences(PREFS, android.content.Context.MODE_PRIVATE).getString(key(context, orderNo, lineNo), "").orEmpty() }.getOrDefault("")
+    fun save(context: android.content.Context, orderNo: String, lineNo: Int, lotNo: String) {
+        runCatching {
+            val e = context.getSharedPreferences(PREFS, android.content.Context.MODE_PRIVATE).edit()
+            if (lotNo.isBlank()) e.remove(key(context, orderNo, lineNo)) else e.putString(key(context, orderNo, lineNo), lotNo)
+            e.apply()
+        }
+    }
+}
 
 internal fun productionRequestPath(draft: ProductionOutputDraft, action: String): String {
     require(action in setOf("postOutput", "cancelOutput"))
@@ -109,7 +131,8 @@ internal fun validatedProductionOutputResult(draft: ProductionOutputDraft, text:
     val completed = result.getBoolean("completed")
     val cancelled = result.getBoolean("cancelled")
     require(!(completed && cancelled))
-    result.getString("lotNo")
+    val requestedLot = productionRequestedLot(draft)
+    require(requestedLot.isBlank() || result.getString("lotNo").equals(requestedLot, ignoreCase = true))
     result.getString("postingDate")
     if (completed) {
         require(result.getInt("entryNo") > 0)

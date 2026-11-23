@@ -2313,7 +2313,7 @@ private fun WhsePickDocument(no: String, onBack: () -> Unit) {
         AlertDialog(
             onDismissRequest = { if (!busy) showCancelConfirm = false },
             title = { Text("$no iptal edilsin mi?") },
-            text = { Text("Yalnız kaydedilmemiş toplama iptal edilir. Sevkiyat silinmez; yeniden Pick Oluşturabilirsiniz.") },
+            text = { Text("Yalnız kaydedilmemiş toplama iptal edilir. Sevkiyat silinmez; yeniden Toplama Oluşturabilirsiniz.") },
             dismissButton = {
                 TextButton(onClick = { showCancelConfirm = false }, enabled = !busy) { Text("Vazgeç") }
             },
@@ -2545,7 +2545,11 @@ private fun ShipDocument(no: String, onBack: () -> Unit, onPickCreated: (String)
         canMutateAssignedDocument(assignedUserId, myUserId)
     val shippingAgent = h?.optString("shippingAgentCode")?.trim().orEmpty()
     val sourceShippingAgent = h?.optString("sourceShippingAgentCode")?.trim().orEmpty()
-    val agentMissing = headerLoaded && shippingAgent.isBlank() && sourceShippingAgent.isBlank() && !agentSkipped
+    // DKC (23 Kas 2026): sevkiyatta acente sorulmaz.
+    val agentsUsed = !com.dynops.bcwms.BuildConfig.FLAVOR.equals("emu", ignoreCase = true)
+    val agentMissing = agentsUsed && headerLoaded && shippingAgent.isBlank() && sourceShippingAgent.isBlank() && !agentSkipped
+    // DKC (23 Kas 2026): Toplama Oluştur'la toplanmadan sevk kaydı yapılmaz.
+    val pickBlock = if (agentsUsed) null else shipmentPickBlockReason(lines)
 
     /**
      * Toplama cevabını tek yerde değerlendir: hem "sistem seçsin" (createPickFor)
@@ -2665,7 +2669,7 @@ private fun ShipDocument(no: String, onBack: () -> Unit, onPickCreated: (String)
                 title = no,
                 subtitle = "Sevk: ${firstValue(h ?: JSONObject(), "shipTo")} · ${bcStatusLabelTr(firstValue(h ?: JSONObject(), "status"))} · 👤 Atanan Kullanıcı: ${assignedUserId.ifBlank { "Atanmamış" }}",
             )
-            if (headerLoaded && h?.has("shippingAgentCode") == true) {
+            if (agentsUsed && headerLoaded && h?.has("shippingAgentCode") == true) {
                 Spacer(Modifier.height(6.dp))
                 ShippingAgentCard(
                     agentCode = shippingAgent.ifBlank { sourceShippingAgent },
@@ -2762,11 +2766,12 @@ private fun ShipDocument(no: String, onBack: () -> Unit, onPickCreated: (String)
                     onClick = { openPickForMultipleLots() },
                     enabled = !busy && lines.isNotEmpty(),
                     modifier = Modifier.weight(1f).height(com.dynops.bcwms.ui.wmsPrimaryButtonHeight()),
-                ) { Text("📦 Pick Oluştur", fontWeight = FontWeight.Bold) }
+                ) { Text("📦 Toplama Oluştur", fontWeight = FontWeight.Bold) }
                 Button(
                     onClick = onClick@{
                         // Acente boşsa BC (BADE) postu reddeder; önce seçtir.
                         if (agentMissing) { showAgent = true; return@onClick }
+                        if (pickBlock != null) { status = "HATA: $pickBlock"; return@onClick }
                         scope.launch {
                             busy = true; status = "Sevk kaydı..."
                             val body = JSONObject().apply {
@@ -2813,7 +2818,11 @@ private fun ShipDocument(no: String, onBack: () -> Unit, onPickCreated: (String)
                     modifier = Modifier.weight(1f).height(com.dynops.bcwms.ui.wmsPrimaryButtonHeight()),
                 ) {
                     Text(
-                        if (com.dynops.bcwms.lib.ActionGuards.hasQuantity(lines, field = "qtyToShip")) "✅ Sevkiyatı Kaydet" else "Önce satırlara miktar girin",
+                        when {
+                            pickBlock != null -> "Önce Toplama Oluştur"
+                            com.dynops.bcwms.lib.ActionGuards.hasQuantity(lines, field = "qtyToShip") -> "✅ Sevkiyatı Kaydet"
+                            else -> "Önce satırlara miktar girin"
+                        },
                         fontWeight = FontWeight.Bold,
                     )
                 }

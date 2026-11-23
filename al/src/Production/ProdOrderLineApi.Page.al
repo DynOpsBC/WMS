@@ -76,6 +76,16 @@ page 72233 "DOPSWHS Prod Order Line API"
         Rec.TestField(Status, Rec.Status::Released);
         exit(Mgmt.PrepareOutput(Rec, quantity, postingDate, binCode, expirationDate, requestId));
     end;
+
+    /// <summary>Aynı lotla parçalı çıktı; lotNo boşsa yeni lot atanır.</summary>
+    [ServiceEnabled]
+    procedure prepareOutputWithLot(quantity: Decimal; postingDate: Date; binCode: Code[20]; expirationDate: Date; requestId: Guid; lotNo: Code[50]): Text
+    var
+        Mgmt: Codeunit "DOPSWHS Partial Output Mgmt";
+    begin
+        Rec.TestField(Status, Rec.Status::Released);
+        exit(Mgmt.PrepareOutputWithLot(Rec, quantity, postingDate, binCode, expirationDate, requestId, lotNo));
+    end;
     var
         LotRequired: Boolean;
         SerialRequired: Boolean;

@@ -62,11 +62,13 @@ page 72485 "DOPSWHS Active LP Contents"
     end;
 
     procedure LoadFromWarehouseEntry(WarehouseEntry: Record "Warehouse Entry")
+    var
+        BinContentSubscriber: Codeunit "DOPSWHS Bin Content Subscriber";
     begin
         LoadFromBinInternal(
             WarehouseEntry."Location Code", WarehouseEntry."Bin Code", WarehouseEntry."Item No.",
             WarehouseEntry."Variant Code", WarehouseEntry."Unit of Measure Code",
-            WarehouseEntry."Lot No.", WarehouseEntry."Serial No.", true);
+            WarehouseEntry."Lot No.", WarehouseEntry."Serial No.", BinContentSubscriber.WhseEntryMatchesTracking(WarehouseEntry));
     end;
 
     local procedure LoadFromBinInternal(LocationCode: Code[10]; BinCode: Code[20]; ItemNo: Code[20]; VariantCode: Code[10]; UomCode: Code[10]; LotNo: Code[50]; SerialNo: Code[50]; MatchTracking: Boolean)

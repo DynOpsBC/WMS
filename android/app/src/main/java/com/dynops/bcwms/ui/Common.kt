@@ -261,7 +261,7 @@ fun operatorKnownBcError(raw: String): String? {
         return "Alınan miktar kalan miktardan (${it.groupValues[1]}) fazla olamaz."
     }
     if (Regex("""Status must be equal to 'Open'\s+in Warehouse Shipment Header""", RegexOption.IGNORE_CASE).containsMatchIn(raw))
-        return "Sevkiyat serbest bırakılmış (Released): satır miktarı/lotu BC'de doğrudan değiştirilemez. Miktarı ve lotu Pick Oluştur ile toplayarak belirleyin."
+        return "Sevkiyat serbest bırakılmış (Released): satır miktarı/lotu BC'de doğrudan değiştirilemez. Miktarı ve lotu Toplama Oluştur ile toplayarak belirleyin."
     if (Regex("""Status must be equal to 'Open'\s+in Warehouse Receipt Header""", RegexOption.IGNORE_CASE).containsMatchIn(raw))
         return "Mal kabul belgesi serbest bırakılmış; satır BC'de doğrudan değiştirilemez. Belgeyi BC'de yeniden açın."
     Regex("""Qty\. to Handle \(Base\) in the item tracking assigned to the document line for item\s+(\S+)\s+is currently\s+(\d+(?:[.,]\d+)?)\. It must be\s+(\d+(?:[.,]\d+)?)""", RegexOption.IGNORE_CASE).find(raw)?.let {
@@ -299,7 +299,7 @@ fun operatorKnownBcError(raw: String): String? {
     // gorunuyordu; eski ceviri "kalan miktardan (0) fazla olamaz" diyerek
     // operatoru yaniltiyordu. Gercek sebep: satira sevk miktari girilmemis.
     Regex("""Qty\. to Ship must not be greater than\s*0(\D|$)""", RegexOption.IGNORE_CASE).find(raw)?.let {
-        return "Bu depoda sevk miktarı toplamadan gelir; elle girilemez. Önce 'Pick Oluştur' ile toplama yapıp kaydedin, sonra sevkiyatı kaydedin."
+        return "Bu depoda sevk miktarı toplamadan gelir; elle girilemez. Önce 'Toplama Oluştur' ile toplama yapıp kaydedin, sonra sevkiyatı kaydedin."
     }
     Regex("""is already being packed""", RegexOption.IGNORE_CASE).find(raw)?.let {
         return "Bu siparişte açık bir paketleme var. Paketlemeyi tamamlayın ya da kapatın, sonra sevkiyatı tekrar deneyin."
@@ -371,7 +371,7 @@ fun operatorFacingApiError(raw: String, httpCode: Int = 0): String {
             "Zorunlu alan boş: $field ($table). Belge bilgilerini tamamlayıp tekrar deneyin."
         }
         raw.contains("lot", ignoreCase = true) ->
-            "Lot bilgisi doğrulanamadı. Birden fazla lot veya raf varsa Pick Oluştur ile toplama yapın."
+            "Lot bilgisi doğrulanamadı. Birden fazla lot veya raf varsa Toplama Oluştur ile toplama yapın."
         raw.contains("printer", ignoreCase = true) || raw.contains("yazıcı", ignoreCase = true) ->
             "Yazıcı ayarı tamamlanamadı. Yazıcılar ekranını yenileyin."
         raw.contains("quantity", ignoreCase = true) || raw.contains("miktar", ignoreCase = true) ->

@@ -159,6 +159,8 @@ private fun ProductionOutputDetail(line: JSONObject, onBack: () -> Unit) {
     var loading by remember(orderNo, lineNo) { mutableStateOf(false) }
     var labelFor by remember(orderNo, lineNo) { mutableStateOf<OutputLot?>(null) }
     var lpFor by remember(orderNo, lineNo) { mutableStateOf<OutputLot?>(null) }
+    // DKC (23 Kas 2026): çıktı onaylanınca etiket açılır; etiket kapanınca yeni çıktı ekranı.
+    var continueOutput by remember(orderNo, lineNo) { mutableStateOf(false) }
     var showReport by remember(orderNo, lineNo) { mutableStateOf(false) }
     // Sarfiyat: bileşenler, bugüne kadar tüketilen ve üretim gözündeki stok.
     var components by remember(orderNo, lineNo) { mutableStateOf<List<JSONObject>>(emptyList()) }
@@ -235,10 +237,9 @@ private fun ProductionOutputDetail(line: JSONObject, onBack: () -> Unit) {
             pickedInBin = pickedNotConsumed(c, binStock),
         )
     }
-    val pending = pendingConsumption(current.optDouble("finishedQuantity", 0.0), stocks)
-    val blockedReason = if (pending.isEmpty()) null
-        else "Önce çıkan miktarın sarfiyatını yapın: ${pending.joinToString(", ")}. Sarfiyat tamamlanmadan yeni çıktı bildirilemez."
-    val outputCap = maxOutputByPicked(stocks)
+    // DKC (23 Kas 2026): çıktı sarfiyata bağlı değil; sarfiyat ayrı yapılır.
+    val blockedReason: String? = null
+    val outputCap: Double? = null
     Column(Modifier.fillMaxSize()) {
         Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(12.dp)) {
             TextButton(onClick = onBack) { Text("‹ Üretim Emirleri") }
@@ -336,8 +337,9 @@ private fun ProductionOutputDetail(line: JSONObject, onBack: () -> Unit) {
         line = current,
         onDismiss = { showReport = false; load() },
         onPosted = { load() },
-        onPrint = { lot -> showReport = false; labelFor = lot },
+        onPrint = { lot -> showReport = false; continueOutput = true; labelFor = lot },
         onLp = { lot -> showReport = false; lpFor = lot },
+        knownLot = lots.maxByOrNull { it.lastDate }?.lotNo.orEmpty(),
     )
 
     lpFor?.let { lot ->
@@ -348,7 +350,7 @@ private fun ProductionOutputDetail(line: JSONObject, onBack: () -> Unit) {
             unit = lot.unit,
             locationCode = current.optString("locationCode"),
             outputBin = current.optString("binCode"),
-            onDismiss = { lpFor = null; load() },
+            onDismiss = { lpFor = null; load(); if (continueOutput) { continueOutput = false; showReport = true } },
         )
     }
 
@@ -380,7 +382,9 @@ private fun ProductionOutputDetail(line: JSONObject, onBack: () -> Unit) {
             itemNo = current.optString("itemNo"),
             description = current.optString("description"),
             lot = lot,
-            onDismiss = { labelFor = null },
+            onDismiss = { labelFor = null; if (continueOutput) { continueOutput = false; showReport = true } },
+            onPallet = { labelFor = null; lpFor = lot },
+            autoClose = continueOutput,
         )
     }
 }
@@ -398,6 +402,10 @@ private fun ProductionLabelSheet(
     description: String,
     lot: OutputLot,
     onDismiss: () -> Unit,
+    /** Palet etiketi: çıktıyı LP'ye koyup LP (palet) etiketi bas. */
+    onPallet: (() -> Unit)? = null,
+    /** Çıktı akışında: etiket başarıyla gidince pencere kendiliğinden kapanır. */
+    autoClose: Boolean = false,
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -494,11 +502,20 @@ private fun ProductionLabelSheet(
                         else -> "HATA: Yazdırma sonucu doğrulanamadı: $failure Tekrar göndermeden önce yazıcıyı kontrol edin."
                     }
                     busy = false
+                    if (failure.isEmpty() && autoClose) {
+                        kotlinx.coroutines.delay(900)
+                        onDismiss()
+                    }
                 }
             },
         ) { Text(if (attempted) "Yazdırma isteği tamamlandı" else "Etiketi Yazdır ($copies)", fontWeight = FontWeight.Bold) }
-        if (attempted && !busy) Text("Yeniden etiket basmak için bu pencereyi kapatıp lotu tekrar seçin.", fontSize = 12.sp)
-        TextButton(onClick = onDismiss, enabled = !busy, modifier = Modifier.fillMaxWidth()) { Text("Kapat") }
+        if (attempted && !busy && !autoClose) Text("Yeniden etiket basmak için bu pencereyi kapatıp lotu tekrar seçin.", fontSize = 12.sp)
+        if (onPallet != null) OutlinedButton(onClick = onPallet, enabled = !busy, modifier = Modifier.fillMaxWidth().height(48.dp)) {
+            Text("Palet Etiketi — LP'ye koy ve bas")
+        }
+        TextButton(onClick = onDismiss, enabled = !busy, modifier = Modifier.fillMaxWidth()) {
+            Text(if (autoClose) "Etiketsiz devam — yeni çıktı" else "Kapat")
+        }
         Spacer(Modifier.height(12.dp))
     }
 }

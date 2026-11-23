@@ -662,6 +662,8 @@ fun AdHocMoveModule() {
                     AdHocProductInputRoute.ProductMutation -> {
                         if (decision.value != itemOrLp) invalidateAvailableLots()
                         itemOrLp = decision.value
+                        // DKC (23 Kas 2026): ürün etiketinin QR'ı lotu da taşır; lot kendiliğinden dolar.
+                        if (decision.lotNo.isNotBlank()) lotNoInput = decision.lotNo
                     }
 
                     AdHocProductInputRoute.Invalid -> {
@@ -680,7 +682,8 @@ fun AdHocMoveModule() {
             Spacer(Modifier.height(8.dp))
             // Lot izlemeli ürünler için ("You must assign a lot number" hatası).
             ScanField("Lot No (lot izlemeli üründe)", lotNoInput, { lotNoInput = it }, modifier = Modifier.fillMaxWidth(), onScanned = {
-                lotNoInput = BarcodeIntentResolver.resolve(it).value
+                val r = BarcodeIntentResolver.resolve(it)
+                lotNoInput = r.lotNo?.trim().takeUnless { l -> l.isNullOrBlank() } ?: r.value
             })
             Spacer(Modifier.height(6.dp))
             OutlinedButton(

@@ -1,5 +1,7 @@
 package com.dynops.bcwms.feature
 
+import androidx.compose.foundation.horizontalScroll
+
 import com.dynops.bcwms.ui.toFiniteDoubleOrNull
 
 import androidx.compose.foundation.layout.*
@@ -137,6 +139,10 @@ internal fun BulkReceiptLpSheet(
     expiryRequired: Boolean,
     onDismiss: () -> Unit,
     onSubmit: (expectedQty: Double, rows: List<BulkReceiptLpRow>) -> Unit,
+    /** DKC (23 Kas 2026): LP şablonu (kutu/palet…) seçimi; boş liste = seçim gösterilmez. */
+    templates: List<Pair<String, String>> = emptyList(),
+    selectedTemplate: String = "",
+    onTemplate: (String) -> Unit = {},
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     var nextLpId by remember { mutableIntStateOf(2) }
@@ -209,6 +215,22 @@ internal fun BulkReceiptLpSheet(
             }
             Spacer(Modifier.height(10.dp))
 
+            if (templates.isNotEmpty()) {
+                Text("LP türü (şablon)", fontWeight = FontWeight.Bold)
+                Row(
+                    Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    templates.forEach { (code, description) ->
+                        FilterChip(
+                            selected = code == selectedTemplate,
+                            onClick = { onTemplate(code) },
+                            label = { Text(description.ifBlank { code }) },
+                        )
+                    }
+                }
+                Spacer(Modifier.height(10.dp))
+            }
             Text("Otomatik dağıtım", fontWeight = FontWeight.Bold)
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -362,7 +384,7 @@ internal fun BulkReceiptLpSheet(
                 OutlinedButton(onClick = onDismiss, modifier = Modifier.weight(1f)) { Text("İptal") }
                 Button(
                     onClick = { onSubmit(expectedQty, rows) },
-                    enabled = canSubmit,
+                    enabled = canSubmit && (templates.isEmpty() || selectedTemplate.isNotBlank()),
                     modifier = Modifier.weight(1f),
                 ) { Text("${drafts.size} LP Taslağı Hazırla") }
             }

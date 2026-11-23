@@ -35,6 +35,36 @@ codeunit 72039 "DOPSWHS Bin Content Subscriber"
         GetActiveLPItemInfoInternal(LocationCode, BinCode, ItemNo, VariantCode, UomCode, LotNo, SerialNo, true, LpNos, LPQuantity);
     end;
 
+    /// <summary>
+    /// DKC (23 Kas 2026): lot yalnız kalem hareketinde tutuluyorsa (depo lot izleme
+    /// kapalı) ambar hareketinin lotu boştur; LP satırları ise lotludur. Bu durumda
+    /// LP eşleşmesi lot/seri aramadan madde düzeyinde yapılır.
+    /// </summary>
+    procedure WhseEntryMatchesTracking(WarehouseEntry: Record "Warehouse Entry"): Boolean
+    var
+        Item: Record Item;
+        ItemTrackingCode: Record "Item Tracking Code";
+    begin
+        if (WarehouseEntry."Lot No." <> '') or (WarehouseEntry."Serial No." <> '') then
+            exit(true);
+        if not Item.Get(WarehouseEntry."Item No.") then
+            exit(true);
+        if (Item."Item Tracking Code" = '') or not ItemTrackingCode.Get(Item."Item Tracking Code") then
+            exit(true);
+        if ItemTrackingCode."Lot Specific Tracking" and not ItemTrackingCode."Lot Warehouse Tracking" then
+            exit(false);
+        if ItemTrackingCode."SN Specific Tracking" and not ItemTrackingCode."SN Warehouse Tracking" then
+            exit(false);
+        exit(true);
+    end;
+
+    procedure GetActiveLPInfoForWhseEntry(WarehouseEntry: Record "Warehouse Entry"; var LpNos: Text[250]; var LPQuantity: Decimal)
+    begin
+        GetActiveLPItemInfoInternal(WarehouseEntry."Location Code", WarehouseEntry."Bin Code", WarehouseEntry."Item No.",
+            WarehouseEntry."Variant Code", WarehouseEntry."Unit of Measure Code", WarehouseEntry."Lot No.", WarehouseEntry."Serial No.",
+            WhseEntryMatchesTracking(WarehouseEntry), LpNos, LPQuantity);
+    end;
+
     local procedure GetActiveLPItemInfoInternal(LocationCode: Code[10]; BinCode: Code[20]; ItemNo: Code[20]; VariantCode: Code[10]; UomCode: Code[10]; LotNo: Code[50]; SerialNo: Code[50]; MatchTracking: Boolean; var LpNos: Text[250]; var LPQuantity: Decimal)
     var
         LP: Record "DOPSWHS LP Header";

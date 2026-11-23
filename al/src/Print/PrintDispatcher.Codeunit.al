@@ -330,11 +330,17 @@ codeunit 72051 "DOPSWHS Print Dispatcher"
         NoWidth: Integer;
         TextFont: Integer;
         QtyFont: Integer;
+        QrData: Text;
     begin
         // DKÇ (18 Kas 2026): mal kabul etiketi kenarlardan taşıyordu; tasarım
         // etiketin %90'ına çizilir ve ortalanır.
         Canvas.InitScaled(ReceiptLabelScalePercent());
-        Zpl := Canvas.Frame(Title, DateText, Item."No.", '', 34, X, ColumnWidth, Y);
+        // DKC (23 Kas 2026): lotlu etiketin QR'ı lotu da taşır; terminal okutunca
+        // ürün ve lot birlikte dolar. Lotsuz etiket eskisi gibi yalnız ürün no.
+        QrData := Item."No.";
+        if LotNo <> '' then
+            QrData := 'MADDE KODU=' + Item."No." + '; LOT NO=' + LotNo;
+        Zpl := Canvas.Frame(Title, DateText, QrData, '', 34, X, ColumnWidth, Y);
         TextFont := Canvas.NormalFont() + 4;
         QtyFont := Canvas.QtyFont();
         NoFont := Canvas.FitFontMeasured(Item."No.", ColumnWidth, Canvas.ItemNoFont(), Canvas.SmallFont());

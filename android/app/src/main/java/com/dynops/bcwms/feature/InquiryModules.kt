@@ -179,6 +179,7 @@ fun ItemInquiryModule(labelsOnly: Boolean = false) {
     var expandedKey by remember { mutableStateOf<String?>(null) }
     var printKey by remember { mutableStateOf<String?>(null) }
     var lotLabel by remember { mutableStateOf<Pair<String, InquiryLotLabel>?>(null) }
+    var lotCopies by remember { mutableStateOf(1) }
     var showPrintStatus by remember { mutableStateOf(false) }
     var bulkProducts by remember { mutableStateOf<List<InquiryLabelProduct>?>(null) }
     var bulkResult by remember { mutableStateOf<InquiryLabelBatchResult?>(null) }
@@ -433,7 +434,7 @@ fun ItemInquiryModule(labelsOnly: Boolean = false) {
         }
     }
 
-    fun printLotLabel(entry: InquiryItemEntry, label: InquiryLotLabel) {
+    fun printLotLabel(entry: InquiryItemEntry, label: InquiryLotLabel, copies: Int = 1) {
         if (printing) return
         val no = entry.item?.let { rawValue(it, "no", "number") }?.takeIf { it.isNotBlank() } ?: return
         printing = true
@@ -446,12 +447,12 @@ fun ItemInquiryModule(labelsOnly: Boolean = false) {
                 }
                 val today = java.text.SimpleDateFormat("dd.MM.yyyy", java.util.Locale.forLanguageTag("tr-TR")).format(java.util.Date())
                 val body = JSONObject()
-                    .put("rowsJson", lotLabelRowsJson(no, label, entry.uom, today, 1))
+                    .put("rowsJson", lotLabelRowsJson(no, label, entry.uom, today, copies.coerceIn(1, 50)))
                     .put("printerId", choice.printerCode)
                     .toString()
                 val r = BcApi.boundAction(context, "items", no, "printStockLabels", body)
                 status = if (r.ok) {
-                    "🟢 ${label.lotNo} lot etiketi ${choice.printerCode.ifBlank { "BC varsayılanı" }} kuyruğuna alındı ($no)." +
+                    "🟢 ${label.lotNo} lot etiketi ($copies adet) ${choice.printerCode.ifBlank { "BC varsayılanı" }} kuyruğuna alındı ($no)." +
                         if (choice.warning.isBlank()) "" else " ${choice.warning}"
                 } else if (r.httpCode == 404) {
                     "🔴 Lot etiketi için Business Central güncellemesi gerekiyor (BCWMS 1.14.2.37)."
@@ -768,6 +769,7 @@ fun ItemInquiryModule(labelsOnly: Boolean = false) {
                     },
                     onPrintLot = { label ->
                         showPrintStatus = false
+                        lotCopies = 1
                         lotLabel = entry.queryKey to label
                     },
                 )
@@ -801,14 +803,26 @@ fun ItemInquiryModule(labelsOnly: Boolean = false) {
                 Text("Miktar: ${lotLabelQuantityText(lotToPrint.quantity, lotEntry.uom)}")
                 Text(lotLabelLpText(lotToPrint.lpNos).ifBlank { "LP: yok" })
                 Spacer(Modifier.height(10.dp))
+                // DKC (23 Kas 2026): kaç etiket basılacağı sorulur; tek tek basmak gerekmez.
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("Etiket adedi", modifier = Modifier.weight(1f), fontSize = 15.sp)
+                    OutlinedButton(onClick = { lotCopies = (lotCopies - 1).coerceAtLeast(1) }, enabled = !printing && lotCopies > 1,
+                        modifier = Modifier.size(46.dp), contentPadding = PaddingValues(0.dp)) { Text("−", fontSize = 20.sp) }
+                    OutlinedTextField(lotCopies.toString(), { v -> lotCopies = v.filter(Char::isDigit).take(2).toIntOrNull()?.coerceIn(1, 50) ?: 1 },
+                        singleLine = true, modifier = Modifier.width(72.dp),
+                        keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Number))
+                    OutlinedButton(onClick = { lotCopies = (lotCopies + 1).coerceAtMost(50) }, enabled = !printing && lotCopies < 50,
+                        modifier = Modifier.size(46.dp), contentPadding = PaddingValues(0.dp)) { Text("+", fontSize = 20.sp) }
+                }
+                Spacer(Modifier.height(10.dp))
                 PrinterDestinationCard(inquiryFallback = true)
                 Spacer(Modifier.height(10.dp))
                 if (showPrintStatus) StatusText(status)
                 Button(
-                    onClick = { showPrintStatus = true; printLotLabel(lotEntry, lotToPrint) },
+                    onClick = { showPrintStatus = true; printLotLabel(lotEntry, lotToPrint, lotCopies) },
                     enabled = !printing,
                     modifier = Modifier.fillMaxWidth().height(52.dp),
-                ) { Text(if (printing) "Gönderiliyor..." else "Etiketi Yazdır", fontWeight = FontWeight.Bold) }
+                ) { Text(if (printing) "Gönderiliyor..." else "Etiketi Yazdır ($lotCopies)", fontWeight = FontWeight.Bold) }
                 TextButton(onClick = { lotLabel = null }, enabled = !printing, modifier = Modifier.fillMaxWidth()) {
                     Text("Kapat")
                 }

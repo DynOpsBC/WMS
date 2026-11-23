@@ -37,6 +37,8 @@ internal fun ProductionPostingSheet(
     onPrint: (OutputLot) -> Unit,
     /** Çıktıyı LP'ye koy (yeni ya da mevcut LP). */
     onLp: (OutputLot) -> Unit = {},
+    /** Emrin bilinen son çıktı lotu (cihazda kayıt yoksa aynı lot için kullanılır). */
+    knownLot: String = "",
     /** Doluysa yeni çıktı açılmaz: önceki çıktının sarfiyatı bekleniyor. */
     newOutputBlockedReason: String? = null,
     /** Çekilen malzemenin yettiği en çok çıktı; null = sınır yok. */
@@ -56,6 +58,14 @@ internal fun ProductionPostingSheet(
     var busy by remember { mutableStateOf(false) }
     var status by remember { mutableStateOf(if (blocked) "HATA: Önceki bildirim okunamadı. Yeni bildirim oluşturmadan sistem yöneticinize bildirin." else "") }
     var confirmPost by remember { mutableStateOf(false) }
+    // DKC (23 Kas 2026): parçalı üretimde aynı lot sürer; "Lot Ata" yeni lot ister.
+    val orderNo = line.optString("prodOrderNo")
+    val orderLineNo = line.optInt("lineNo")
+    var keepLot by remember {
+        val saved = ProductionLotMemory.load(context, orderNo, orderLineNo)
+        mutableStateOf(when (saved) { "-" -> ""; "" -> knownLot; else -> saved })
+    }
+    var chainPost by remember { mutableStateOf(false) }
     val current = draft
     val result = current?.result?.takeIf { it.isNotBlank() }?.let { validatedProductionOutputResult(current, it) }
     val posted = current?.phase == "posted"
@@ -107,15 +117,30 @@ internal fun ProductionPostingSheet(
                     val complete = answer.getBoolean("completed")
                     if (persist(pending.copy(phase = if (complete) "posted" else "prepared", result = text))) {
                         status = if (complete) "TAMAM: ${receiptLabelQtyText(answer.getDouble("quantity"), unit)} deftere nakledildi. Etiketi basabilirsiniz."
-                            else "Bildirim hazır. ${answer.optString("lotNo").takeIf { it.isNotBlank() }?.let { "BC lotu: $it." }.orEmpty()} Henüz deftere nakledilmedi."
-                        if (complete) onPosted()
+                            else "Bildirim hazır. ${answer.optString("lotNo").takeIf { it.isNotBlank() }?.let { "BC lotu: $it." }.orEmpty()} Deftere nakil yapılıyor…"
+                        if (!complete && action == "prepare") chainPost = true
+                        if (complete) {
+                            val lot = answer.optString("lotNo")
+                            ProductionLotMemory.save(context, orderNo, orderLineNo, lot)
+                            keepLot = lot
+                            onPosted()
+                            // Soru sormadan etikete geç; etiket kapanınca yeni çıktı ekranı açılır.
+                            if (store.clear()) {
+                                draft = null
+                                quantity = ""
+                                onPrint(OutputLot(lot, answer.getDouble("quantityBase"), answer.getString("baseUnitOfMeasure"), answer.getString("postingDate")))
+                            }
+                        }
                     }
                 }
             } catch (cancelled: kotlinx.coroutines.CancellationException) {
                 throw cancelled
             } catch (_: Exception) {
                 status = "HATA: Bildirim sonucu alınamadı. Aynı bildirim cihazda saklandı; yeniden kontrol edin."
-            } finally { busy = false }
+            } finally {
+                busy = false
+                if (chainPost) { chainPost = false; send("postOutput") }
+            }
         }
     }
 
@@ -127,8 +152,6 @@ internal fun ProductionPostingSheet(
         StatusText(status)
         if (current == null && !line.optString("status").equals("Released", true)) {
             Text("Yeni çıktı yalnız serbest bırakılmış üretim emrine bildirilebilir.")
-        } else if (current == null && newOutputBlockedReason != null) {
-            Text(newOutputBlockedReason, color = MaterialTheme.colorScheme.error, fontWeight = FontWeight.Bold)
         } else if (current == null) {
             outputCapByPicked?.let { Text("Çekilen malzeme en çok ${receiptLabelQtyText(it, unit)} üretmeye yeter.", fontWeight = FontWeight.SemiBold) }
             OutlinedTextField(quantity, { quantity = normalizeQtyInput(it) }, label = { Text("Bu bildirimin miktarı ($unit)") },
@@ -152,9 +175,19 @@ internal fun ProductionPostingSheet(
                 }
                 val id = UUID.randomUUID().toString()
                 val body = JSONObject().put("quantity", qty).put("postingDate", date).put("expirationDate", expiry)
-                    .put("binCode", bin.trim()).put("requestId", id).toString()
-                if (persist(ProductionOutputDraft(id, line.optString("prodOrderNo"), line.optInt("lineNo"), line.optString("itemNo"), body))) send("prepare")
-            }) { Text(if (line.optBoolean("lotRequired")) "Lot Ata — BC'den Otomatik" else "Bildirimi Hazırla") }
+                    .put("binCode", bin.trim()).put("requestId", id)
+                if (line.optBoolean("lotRequired") && keepLot.isNotBlank()) body.put("lotNo", keepLot)
+                if (persist(ProductionOutputDraft(id, line.optString("prodOrderNo"), line.optInt("lineNo"), line.optString("itemNo"), body.toString()))) send("prepare")
+            }) { Text("Çıktıyı Onayla", fontWeight = FontWeight.Bold) }
+            if (line.optBoolean("lotRequired")) {
+                Text(if (keepLot.isNotBlank()) "Lot: $keepLot (önceki çıktıyla aynı lot)" else "Lot: onaylayınca BC yeni lot atar",
+                    fontWeight = FontWeight.SemiBold)
+                if (keepLot.isNotBlank()) OutlinedButton(enabled = !busy && !blocked, modifier = Modifier.fillMaxWidth(), onClick = {
+                    keepLot = ""
+                    ProductionLotMemory.save(context, orderNo, orderLineNo, "-")
+                    status = "Sonraki çıktıda BC yeni lot numarası atar."
+                }) { Text("Lot Ata — yeni lot numarası") }
+            }
             if (line.optBoolean("serialRequired")) Text("Seri takipli ürün için BC ürün izleme ekranını kullanın.")
         } else {
             val body = JSONObject(current.body)
