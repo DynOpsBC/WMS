@@ -480,7 +480,54 @@ codeunit 72321 "DOPSWHS Label Canvas"
     var
         ZplEncoder: Codeunit "DOPSWHS ZPL Encoder";
     begin
+        // DKC (23 Kas 2026): otomatik modda Zebra QR'a Türkçe harfleri (Ü, Ç, Ş…)
+        // koymuyordu: "KÜLÇE.HM.0001" rafı "KLE.HM.0001" okunuyordu. ASCII dışı
+        // veri elle bayt kipinde, UTF-8 baytları onaltılık kaçışla yazılır.
+        if not IsPlainAscii(Data) then
+            exit('^FO' + Format(X) + ',' + Format(Y) + '^BQN,2,' + Format(Magnification) + '^FH_^FDLM,B' + QrUtf8Field(Data) + '^FS');
         exit('^FO' + Format(X) + ',' + Format(Y) + '^BQN,2,' + Format(Magnification) + '^FH_^FDLA,' + ZplEncoder.EncodeFieldData(Data) + '^FS');
+    end;
+
+    /// <summary>
+    /// QR bayt kipi alanı: 4 haneli UTF-8 bayt sayısı + veri. ASCII dışı ve ZPL'de
+    /// özel anlamı olan karakterler ^FH_ ile _XX olarak yazılır.
+    /// </summary>
+    procedure QrUtf8Field(Data: Text): Text
+    var
+        Encoded: TextBuilder;
+        i: Integer;
+        Code: Integer;
+        ByteCount: Integer;
+    begin
+        for i := 1 to StrLen(Data) do begin
+            Code := Data[i];
+            if Code < 128 then begin
+                if (Code < 32) or (Code = 127) or (Code in [95, 94, 126, 62]) then
+                    Encoded.Append(HexByte(Code))
+                else
+                    Encoded.Append(Format(Data[i]));
+                ByteCount += 1;
+            end else
+                if Code < 2048 then begin
+                    Encoded.Append(HexByte(192 + (Code div 64)));
+                    Encoded.Append(HexByte(128 + (Code mod 64)));
+                    ByteCount += 2;
+                end else begin
+                    Encoded.Append(HexByte(224 + (Code div 4096)));
+                    Encoded.Append(HexByte(128 + ((Code div 64) mod 64)));
+                    Encoded.Append(HexByte(128 + (Code mod 64)));
+                    ByteCount += 3;
+                end;
+        end;
+        exit(PadStr('', 4 - StrLen(Format(ByteCount)), '0') + Format(ByteCount) + Encoded.ToText());
+    end;
+
+    local procedure HexByte(Value: Integer): Text
+    var
+        Digits: Text;
+    begin
+        Digits := '0123456789ABCDEF';
+        exit('_' + CopyStr(Digits, (Value div 16) + 1, 1) + CopyStr(Digits, (Value mod 16) + 1, 1));
     end;
 
     /// <summary>
