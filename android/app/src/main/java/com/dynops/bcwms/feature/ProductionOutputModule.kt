@@ -158,6 +158,7 @@ private fun ProductionOutputDetail(line: JSONObject, onBack: () -> Unit) {
     var status by remember(orderNo, lineNo) { mutableStateOf("") }
     var loading by remember(orderNo, lineNo) { mutableStateOf(false) }
     var labelFor by remember(orderNo, lineNo) { mutableStateOf<OutputLot?>(null) }
+    var lpFor by remember(orderNo, lineNo) { mutableStateOf<OutputLot?>(null) }
     var showReport by remember(orderNo, lineNo) { mutableStateOf(false) }
     // Sarfiyat: bileşenler, bugüne kadar tüketilen ve üretim gözündeki stok.
     var components by remember(orderNo, lineNo) { mutableStateOf<List<JSONObject>>(emptyList()) }
@@ -260,6 +261,8 @@ private fun ProductionOutputDetail(line: JSONObject, onBack: () -> Unit) {
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
                             }
+                            OutlinedButton(onClick = { lpFor = lot }, enabled = !loading && lot.unit.isNotBlank() && lot.quantity > 0.0) { Text("LP") }
+                            Spacer(Modifier.width(6.dp))
                             FilledTonalButton(onClick = { labelFor = lot }, enabled = !loading && lot.unit.isNotBlank()) { WmsActionLabel(WmsGlyph.LABEL, "Etiket") }
                         }
                     }
@@ -334,7 +337,20 @@ private fun ProductionOutputDetail(line: JSONObject, onBack: () -> Unit) {
         onDismiss = { showReport = false; load() },
         onPosted = { load() },
         onPrint = { lot -> showReport = false; labelFor = lot },
+        onLp = { lot -> showReport = false; lpFor = lot },
     )
+
+    lpFor?.let { lot ->
+        OutputLpSheet(
+            itemNo = current.optString("itemNo"),
+            lotNo = lot.lotNo,
+            quantity = lot.quantity,
+            unit = lot.unit,
+            locationCode = current.optString("locationCode"),
+            outputBin = current.optString("binCode"),
+            onDismiss = { lpFor = null; load() },
+        )
+    }
 
     consumeFor?.let { c ->
         val item = c.optString("itemNo")

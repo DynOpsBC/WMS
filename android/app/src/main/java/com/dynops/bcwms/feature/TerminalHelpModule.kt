@@ -212,10 +212,10 @@ internal val TerminalHelpTopics = listOf(
         Screen.LicensePlates,
     ),
     HelpTopic(
-        "adhoc", HelpCategory.LP_MOVE, "↔", "Ad-Hoc hareket",
+        "adhoc", HelpCategory.LP_MOVE, "↔", "Hareket",
         "Belge olmadan, elinizle paleti veya ürünü başka yere taşırsınız.",
         listOf(
-            "Ad-Hoc Hareket ekranında “LP ile” modunu seçin.",
+            "Hareket ekranında “LP ile” modunu seçin.",
             "Kaynak rafı okutun, sonra o raftaki LP'yi okutun veya listeden seçin.",
             "LP içeriğinin tam yüklendiğini ekranda görün.",
             "Rafa taşıyacaksanız hedef raf barkodunu okutun.",

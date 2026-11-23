@@ -35,6 +35,8 @@ internal fun ProductionPostingSheet(
     onDismiss: () -> Unit,
     onPosted: () -> Unit,
     onPrint: (OutputLot) -> Unit,
+    /** Çıktıyı LP'ye koy (yeni ya da mevcut LP). */
+    onLp: (OutputLot) -> Unit = {},
     /** Doluysa yeni çıktı açılmaz: önceki çıktının sarfiyatı bekleniyor. */
     newOutputBlockedReason: String? = null,
     /** Çekilen malzemenin yettiği en çok çıktı; null = sınır yok. */
@@ -171,6 +173,9 @@ internal fun ProductionPostingSheet(
                     Button(enabled = !busy && !blocked && result != null, modifier = Modifier.fillMaxWidth(), onClick = {
                         result?.let { onPrint(OutputLot(it.getString("lotNo"), it.getDouble("quantityBase"), it.getString("baseUnitOfMeasure"), it.getString("postingDate"))) }
                     }) { Text("Bu Çıktının Etiketini Bas") }
+                    FilledTonalButton(enabled = !busy && !blocked && result != null, modifier = Modifier.fillMaxWidth(), onClick = {
+                        result?.let { onLp(OutputLot(it.getString("lotNo"), it.getDouble("quantityBase"), it.getString("baseUnitOfMeasure"), it.getString("postingDate"))) }
+                    }) { Text("Çıktıyı LP'ye Koy") }
                     // Önce üret, sonra tüket: çıktıdan sonra emir ekranındaki Sarfiyat
                     // bölümü ne kadar tüketilebileceğini gösterir.
                     OutlinedButton(enabled = !busy && !blocked, modifier = Modifier.fillMaxWidth(), onClick = {

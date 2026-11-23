@@ -493,7 +493,7 @@ fun AdHocMoveModule() {
     }
 
     Column(Modifier.fillMaxSize().padding(16.dp).verticalScroll(rememberScrollState())) {
-        Text("Ad-Hoc Hareket", fontWeight = FontWeight.Bold, fontSize = 16.sp)
+        Text("Hareket", fontWeight = FontWeight.Bold, fontSize = 16.sp)
         Spacer(Modifier.height(8.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             FilterChip(selected = lpFlow, onClick = { lpFlow = true }, label = { Text("🧺 LP ile") })

@@ -75,7 +75,7 @@ enum class Screen(val title: String) {
     Receiving("Mal Kabul"),
     Picking("Toplama"),
     Packing("Paketleme"),
-    AdHocMove("Ad-Hoc Hareket"),
+    AdHocMove("Hareket"),
     Count("Sayım"),
     CountV2("Sayım V2"),
     PutAway("Yerleştirme"),
@@ -350,7 +350,7 @@ private val HomeCategories = listOf(
     HomeCategory("İç Operasyon", Color(0xFF2D9CDB), listOf(
         HomeTile(Screen.LicensePlates, WmsGlyph.LICENSE_PLATE, "LP", "Palet ve taşıma kabı işlemleri"),
         HomeTile(Screen.HierarchicalLP, WmsGlyph.LICENSE_PLATE, "Kutu ve Palet", "Ürün LP'lerini kutuya, kutuları palete bağla"),
-        HomeTile(Screen.AdHocMove, WmsGlyph.AD_HOC, "Ad-Hoc Hareket", "Belgesiz raf veya LP hareketi"),
+        HomeTile(Screen.AdHocMove, WmsGlyph.AD_HOC, "Hareket", "Belgesiz raf veya LP hareketi"),
         HomeTile(Screen.DirectedMove, WmsGlyph.DIRECTED_MOVE, "Yönlendirilmiş", "Hazırlanmış taşıma emrini uygula"),
         HomeTile(Screen.Count, WmsGlyph.COUNT, "Sayım", "Hazır sayım belgesini tamamla"),
         HomeTile(Screen.CountV2, WmsGlyph.COUNT_V2, "Sayım V2", "QR okutarak sıfırdan sayım yap"),
