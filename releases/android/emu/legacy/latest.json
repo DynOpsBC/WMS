@@ -1,7 +1,7 @@
 {
-  "versionCode": 200188,
-  "versionName": "1.14.188-emu",
-  "apkUrl": "https://github.com/DynOpsBC/WMS/releases/download/android-v1.14.188-emu/BCWMS-EMU-1.14.188-UYUMLU.apk",
-  "sha256": "4b200cae50d5fbd4802d0ba0a39252644c677f4a7082850960f1c12cc0157dfc",
-  "releaseNotes": "Ürün Sorgu: ürünü açınca 'Nerede?' bölümü — lokasyon/raf bazında stok ve LP'ler; her lotun hangi lokasyonda ve rafta olduğu (lot LP'deyse LP'nin rafı, değilse ürünün o lokasyondaki rafı)."
+  "versionCode": 200189,
+  "versionName": "1.14.189-emu",
+  "apkUrl": "https://github.com/DynOpsBC/WMS/releases/download/android-v1.14.189-emu/BCWMS-EMU-1.14.189-UYUMLU.apk",
+  "sha256": "e0528587298a90f5466dc576f0e81bc272c884a82a9e4905dee23a92f7d31416",
+  "releaseNotes": "Ad-Hoc Hareket'in adı artık Hareket. Üretim çıktısı LP'ye konabilir: çıktı nakledilince (ya da emirdeki lot kartında LP düğmesiyle) çıkan miktar yeni LP'lere eşit bölünerek ya da okutulan mevcut LP'ye (palet) konur."
 }
