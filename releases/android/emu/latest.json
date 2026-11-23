@@ -1,7 +1,7 @@
 {
-  "versionCode": 200189,
-  "versionName": "1.14.189-emu",
-  "apkUrl": "https://github.com/DynOpsBC/WMS/releases/download/android-v1.14.189-emu/BCWMS-EMU-1.14.189-RELEASE.apk",
-  "sha256": "dea577d336009163b801f1af3c3f18976adaf4cb925ae6c77cd59a288f15dfe2",
-  "releaseNotes": "Ad-Hoc Hareket'in adı artık Hareket. Üretim çıktısı LP'ye konabilir: çıktı nakledilince (ya da emirdeki lot kartında LP düğmesiyle) çıkan miktar yeni LP'lere eşit bölünerek ya da okutulan mevcut LP'ye (palet) konur."
+  "versionCode": 200190,
+  "versionName": "1.14.190-emu",
+  "apkUrl": "https://github.com/DynOpsBC/WMS/releases/download/android-v1.14.190-emu/BCWMS-EMU-1.14.190-RELEASE.apk",
+  "sha256": "3f68d64b8e420d473068592fc33ccc35cf23fc41bf2ba6dc243262b7f8947d90",
+  "releaseNotes": "Hareket: lotlu ürün etiketi okutulunca lot kendiliğinden dolar. Üretim çıktısı: sarfiyat şartı yok, tek Çıktıyı Onayla, sonra etiket ve yeni çıktı ekranı; aynı lot sürer, Lot Ata yeni lot verir; palet etiketi. Ürün Sorgu: lot etiketinde adet. Mal kabul: LP türü seçimi, uzun kayıtta yanlış timeout uyarısı giderildi. Sevkiyat: Toplama Oluştur olmadan kayıt yok, acente yok. Raf Sorgu. BCWMSApp 1.14.2.51 gerekir."
 }
