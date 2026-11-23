@@ -737,7 +737,9 @@ private fun ReceiveDocument(no: String, onBack: () -> Unit) {
                     val lpInvolved = activeLp != null || postLines.any {
                         it.optString("licensePlateNo").isNotBlank() || it.optInt("bulkLpCount", 0) > 0
                     }
-                    val r = BcApi.boundAction(
+                    // DKC (23 Kas 2026): 100 LP'li palet kabulü uzun sürüyor; kısa
+                    // istemci "timeout" deyip kaydı başarısız gösteriyordu.
+                    val r = BcApi.boundActionLongRunning(
                         context, "receipts", no, "postAndCloseLP",
                         JSONObject().apply {
                             put("print", printReceipt)
@@ -746,11 +748,31 @@ private fun ReceiveDocument(no: String, onBack: () -> Unit) {
                             put("lpPrinterId", getMtePrinter(context))
                         }.toString(),
                     )
+                    // Yanıt kaybolduysa (zaman aşımı) BC'de kaydın olup olmadığına bak:
+                    // tamamen kaydedilen belge silinir, kısmi kayıtta alınan miktar artar.
+                    var postedDespiteError = false
+                    if (!r.ok && missingReceiptPostBackendStatus(r.httpCode, r.body) == null) {
+                        val safeNo = no.replace("'", "''")
+                        val head = BcApi.get(context, "receipts('$safeNo')")
+                        if (head.httpCode == 404) postedDespiteError = true
+                        else if (head.ok) {
+                            val after = BcApi.getAllPages(context, "receiptLines?\$filter=no eq '$safeNo'")
+                            if (after.complete) {
+                                val before = lines.associateBy { it.optInt("lineNo") }
+                                postedDespiteError = after.rows.any { l ->
+                                    val b = before[l.optInt("lineNo")] ?: return@any false
+                                    l.optDouble("qtyReceived", 0.0) > b.optDouble("qtyReceived", 0.0) + 0.00001
+                                }
+                            }
+                        }
+                    }
+                    val ok = r.ok || postedDespiteError
                     busy = false
                     status = if (r.ok) "TAMAM: Mal kabul kaydedildi."
+                        else if (postedDespiteError) "TAMAM: Mal kabul kaydedildi (BC yanıtı geç geldi, kayıt doğrulandı)."
                         else missingReceiptPostBackendStatus(r.httpCode, r.body)
                             ?: receiptPostFailureStatus(BcApi.errorMessage(r.body), r.httpCode)
-                    if (r.ok) {
+                    if (ok) {
                         touched = emptySet()
                         // Keep the successful receipt visible until labels have been checked.
                         // Reloading immediately navigates away when BC deletes a fully posted receipt.

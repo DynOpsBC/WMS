@@ -823,9 +823,10 @@ object BcApi {
     private val longRunningClient: OkHttpClient by lazy {
         mutationClient.newBuilder()
             .connectTimeout(15, TimeUnit.SECONDS)
-            .readTimeout(90, TimeUnit.SECONDS)
+            // DKC (23 Kas 2026): 100 LP'li mal kabul 2 dakikayı aşabiliyor.
+            .readTimeout(240, TimeUnit.SECONDS)
             .writeTimeout(30, TimeUnit.SECONDS)
-            .callTimeout(120, TimeUnit.SECONDS)
+            .callTimeout(300, TimeUnit.SECONDS)
             .build()
     }
 
