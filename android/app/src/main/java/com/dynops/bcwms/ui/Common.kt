@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -116,6 +117,7 @@ fun OperationDocumentCard(
 }
 
 /** Status banner that colour-codes PASS / EMPTY / error text. */
+@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
 fun StatusText(status: String) {
     if (status.isBlank()) return
@@ -127,10 +129,22 @@ fun StatusText(status: String) {
         visibleStatus.startsWith("HATA") || visibleStatus.startsWith("🔴") || visibleStatus.startsWith("❌") -> palette.danger
         else -> MaterialTheme.colorScheme.onSurfaceVariant
     }
+    var showDetail by remember(visibleStatus) { mutableStateOf(false) }
+    val detail = remember(visibleStatus) { SupportReferenceLog.lookup(visibleStatus) }
+    if (showDetail && detail != null) {
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { showDetail = false },
+            title = { Text("Hata ayrıntısı ${detail.first}") },
+            text = { Text(detail.second, style = MaterialTheme.typography.bodySmall) },
+            confirmButton = { androidx.compose.material3.TextButton(onClick = { showDetail = false }) { Text("Kapat") } },
+        )
+    }
     Surface(
         color = color.copy(alpha = 0.10f),
         shape = RoundedCornerShape(10.dp),
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier.fillMaxWidth().then(
+            if (detail != null) Modifier.combinedClickable(onClick = {}, onLongClick = { showDetail = true }) else Modifier
+        ),
     ) {
         Row(Modifier.padding(horizontal = 11.dp, vertical = 9.dp), verticalAlignment = Alignment.Top) {
             val glyph = if (visibleStatus.startsWith("HATA") || visibleStatus.startsWith("BOŞ") || visibleStatus.startsWith("⚠")) {
@@ -195,8 +209,27 @@ fun operatorFacingStatus(raw: String): String {
 }
 
 /** Stable, non-sensitive reference for matching an operator report to raw logs. */
-fun operatorSupportReference(raw: String, httpCode: Int = 0): String =
-    "REF-" + "$httpCode:${raw.trim()}".hashCode().toUInt().toString(16).uppercase().padStart(8, '0')
+fun operatorSupportReference(raw: String, httpCode: Int = 0): String {
+    val ref = "REF-" + "$httpCode:${raw.trim()}".hashCode().toUInt().toString(16).uppercase().padStart(8, '0')
+    SupportReferenceLog.remember(ref, raw)
+    return ref
+}
+
+/**
+ * DKC (23 Kas 2026): genel hata metni nedeni gizliyor; fotoğraftan teşhis
+ * edilemiyordu. REF koduna karşılık BC'nin özgün metni bellekte tutulur ve hata
+ * kutusuna uzun basınca gösterilir (operatör ekranında varsayılan olarak görünmez).
+ */
+object SupportReferenceLog {
+    private val entries = java.util.Collections.synchronizedMap(object : LinkedHashMap<String, String>(32, 0.75f, true) {
+        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, String>?) = size > 30
+    })
+    fun remember(ref: String, raw: String) { if (raw.isNotBlank()) entries[ref] = raw.trim() }
+    fun lookup(text: String): Pair<String, String>? {
+        val ref = Regex("""REF-[0-9A-F]{8}""").find(text)?.value ?: return null
+        return entries[ref]?.let { ref to it }
+    }
+}
 
 /**
  * BCWMS'in kendi AL hataları Türkçe ve operatöre yöneliktir ("Araç bilgileri
