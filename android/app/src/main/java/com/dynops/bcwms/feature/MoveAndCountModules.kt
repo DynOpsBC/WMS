@@ -739,7 +739,9 @@ fun AdHocMoveModule() {
                                 return@launch
                             }
                             val itemNo = decision.value
-                            val lot = lotNoInput.trim()
+                            // Okuyucu Enter göndermeyip QR'ı alana düz yazdıysa lot
+                            // otomatik dolmamıştır; etiketteki lot burada alınır.
+                            val lot = lotNoInput.trim().ifBlank { decision.lotNo.trim() }
                             val body = JSONObject().apply {
                                 put("fromBin", fromBin.trim()); put("toBin", toBin.trim())
                                 // AL action param is "qty" (not "quantity"); send every param so OData binds them all.

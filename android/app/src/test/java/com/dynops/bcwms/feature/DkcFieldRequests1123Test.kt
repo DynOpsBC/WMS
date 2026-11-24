@@ -50,3 +50,28 @@ class DkcFieldRequests1123Test {
         assertEquals("L1", productionRequestedLot(withLot))
     }
 }
+
+class DkcHareketBinContent1124Test {
+    @Test
+    fun binContentErrorKeepsDottedBinAndItem() {
+        val raw = "The Bin Content does not exist. Identification fields and values: Location Code='DKC WMS',Bin Code='ÜR.0002',Item No.='9MM KOVAN KASE(AKS)',Variant Code='',Unit of Measure Code='ADET'"
+        val msg = com.dynops.bcwms.ui.operatorKnownBcError(raw)!!
+        assertTrue(msg, msg.contains("ÜR.0002"))
+        assertTrue(msg, msg.contains("9MM KOVAN KASE(AKS)"))
+        assertTrue(msg, msg.contains("ADET"))
+    }
+
+    @Test
+    fun genericNotFoundDoesNotCutAtDotInValue() {
+        val msg = com.dynops.bcwms.ui.operatorKnownBcError(
+            "The Bin does not exist. Identification fields and values: Location Code='DKC WMS',Code='ÜR.0009'")!!
+        assertTrue(msg, msg.contains("ÜR.0009"))
+    }
+
+    @Test
+    fun typedLabelQrStillGivesLot() {
+        val d = decideAdHocProductInput("MADDE KODU=9MM KOVAN KASE(AKS); LOT NO=DKC26L408-013")
+        assertEquals("9MM KOVAN KASE(AKS)", d.value)
+        assertEquals("DKC26L408-013", d.lotNo)
+    }
+}

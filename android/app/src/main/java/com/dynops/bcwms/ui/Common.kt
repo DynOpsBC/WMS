@@ -323,8 +323,16 @@ fun operatorKnownBcError(raw: String): String? {
     Regex("""do not match the available bin content""", RegexOption.IGNORE_CASE).find(raw)?.let {
         return "Girilen miktar bu rafın bakiyesiyle uyuşmuyor. 'Kaynak Bindeki Lotları Göster' ile raftaki lot ve miktarları kontrol edin."
     }
-    // Olmayan urun/kayit: BC'nin "does not exist" kalibi.
-    Regex("""The\s+(.+?)\s+does not exist[^.]*\.\s*Identification fields and values:\s*(.+?)(\.|$)""", RegexOption.IGNORE_CASE).find(raw)?.let {
+    // DKC (24 Kas 2026): raf içeriği yok. Eski genel kalıp değeri ilk noktada
+    // kesiyordu ("Bin Code='ÜR"); raf, ürün ve birim kayboluyordu.
+    Regex("""The\s+Bin Content does not exist.*?Bin Code='([^']*)'.*?Item No\.='([^']*)'(?:.*?Unit of Measure Code='([^']*)')?""", setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL)).find(raw)?.let {
+        val (bin, item, uom) = it.destructured
+        return "$item ürünü $bin rafında" + (if (uom.isNotBlank()) " $uom biriminde" else "") +
+            " kayıtlı değil. Kaynak rafı doğru okuttuğunuzu 'Raf Sorgu' ile kontrol edin; ürün rafta başka birimle duruyorsa hareketi BC'den yapın."
+    }
+    // Olmayan urun/kayit: BC'nin "does not exist" kalibi. Değer tırnak içindeki
+    // noktalarda kesilmez (ör. 'ÜR.0002', 'Item No.').
+    Regex("""The\s+(.+?)\s+does not exist[^.]*\.\s*Identification fields and values:\s*((?:[^'.]|'[^']*'|\.(?=\S))+)""", RegexOption.IGNORE_CASE).find(raw)?.let {
         val (tur, deger) = it.destructured
         return "$tur kaydı bulunamadı ($deger). Okuttuğunuz kodu kontrol edin."
     }
