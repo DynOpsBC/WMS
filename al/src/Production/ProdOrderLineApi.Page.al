@@ -86,6 +86,18 @@ page 72233 "DOPSWHS Prod Order Line API"
         Rec.TestField(Status, Rec.Status::Released);
         exit(Mgmt.PrepareOutputWithLot(Rec, quantity, postingDate, binCode, expirationDate, requestId, lotNo));
     end;
+
+    /// <summary>
+    /// DKC: emrin çıktı gözündeki kutu LP'lerini palete koyar. palletLpNo boşsa
+    /// templateCode ile yeni palet kurulur. Sonuç JSON (palletLpNo, boxCount...).
+    /// </summary>
+    [ServiceEnabled]
+    procedure palletizeOutput(templateCode: Code[20]; palletLpNo: Code[20]): Text
+    var
+        Pallet: Codeunit "DOPSWHS Output Pallet Mgmt";
+    begin
+        exit(Pallet.PalletizeOutput(Rec, templateCode, palletLpNo));
+    end;
     var
         LotRequired: Boolean;
         SerialRequired: Boolean;

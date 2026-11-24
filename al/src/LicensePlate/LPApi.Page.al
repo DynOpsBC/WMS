@@ -256,7 +256,14 @@ page 72088 "DOPSWHS LP API"
     procedure moveToBin(targetBinCode: Code[20]; userId: Code[50])
     var
         LPMgt: Codeunit "DOPSWHS LP Management";
+        OutputPallet: Codeunit "DOPSWHS Output Pallet Mgmt";
     begin
+        // Palet: kutuların yerleştirmeleri kaydedilir (Commit içeren standart kayıt).
+        if OutputPallet.HasChildren(Rec."No.") then begin
+            OutputPallet.MovePalletChecked(Rec, targetBinCode, userId);
+            Rec.Get(Rec."No.");
+            exit;
+        end;
         LPMgt.MoveToBin(Rec, targetBinCode, userId);
         Rec.Get(Rec."No.");
     end;

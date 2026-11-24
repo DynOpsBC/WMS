@@ -52,6 +52,7 @@ fun PutAwayModule() {
     // 20 belgelik listede aramak zorunda kalmasın (UAT pa-01).
     var mineOnly by remember { mutableStateOf(true) }
     var myUser by remember { mutableStateOf("") }
+    var palletOpen by remember { mutableStateOf(false) }
 
     fun load() {
         scope.launch {
@@ -81,7 +82,7 @@ fun PutAwayModule() {
     if (sel != null) { PutAwayDocument(no = sel, onBack = { selected = null; load() }); return }
 
     DocListScanHandler(
-        enabled = true,
+        enabled = !palletOpen,
         linesEndpoint = "putAwayLines",
         documentsEndpoint = "putAways",
         acceptDocTypes = setOf("putaway"),
@@ -111,11 +112,17 @@ fun PutAwayModule() {
         previewLoading = false
     }
 
+    if (palletOpen) PalletPutAwaySheet(onDismiss = { palletOpen = false; load() })
+
     ScrollAwayColumn(Modifier.fillMaxSize().padding(12.dp)) { fullScreenList ->
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Button(onClick = { load() }, enabled = !loading, modifier = Modifier.weight(1f)) { WmsRefreshLabel(loading) }
             FilterChip(selected = mineOnly, onClick = { mineOnly = true; load() }, label = { Text("Bana atanan", fontSize = 12.sp) })
             FilterChip(selected = !mineOnly, onClick = { mineOnly = false; load() }, label = { Text("Tümü", fontSize = 12.sp) })
+        }
+        if (isDkc) {
+            Spacer(Modifier.height(6.dp))
+            OutlinedButton(onClick = { palletOpen = true }, modifier = Modifier.fillMaxWidth()) { Text("Palet Yerleştir") }
         }
         Spacer(Modifier.height(8.dp))
         com.dynops.bcwms.ui.DocSearchBar(value = search, onValueChange = { search = it }, onSearch = { load() })

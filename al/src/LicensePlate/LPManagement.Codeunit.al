@@ -409,6 +409,7 @@ codeunit 72040 "DOPSWHS LP Management"
         SourceBinInOtherLocation: Record Bin;
         TargetBin: Record Bin;
         MovementMgmt: Codeunit "DOPSWHS Movement Mgmt";
+        OutputPalletMgmt: Codeunit "DOPSWHS Output Pallet Mgmt";
         EffectiveUoM: Code[10];
         MovementQty: Decimal;
     begin
@@ -478,6 +479,10 @@ codeunit 72040 "DOPSWHS LP Management"
         LPLine.Insert(true);
         WriteToLedger(LP, LPActionItemAdded(), SourceBinCode, LP."Bin Code", Qty, ItemNo, LotNo + SerialNo, '');
         OnAfterAddLine(LP, LPLine);
+        // DKC: çıktı gözünde kurulan kutu LP'si açık çıktı yerleştirmesine bağlanır;
+        // yerleştirme kaydında ambar girişleri bu LP numarasını taşır.
+        OutputPalletMgmt.LinkLpToOutputPutAway(LP."No.", false);
+        LP.Get(LP."No.");
     end;
 
     /// <summary>
@@ -494,6 +499,8 @@ codeunit 72040 "DOPSWHS LP Management"
         SourceBin: Record Bin;
         TargetBin: Record Bin;
         MovementMgmt: Codeunit "DOPSWHS Movement Mgmt";
+        OutputPallet: Codeunit "DOPSWHS Output Pallet Mgmt";
+        OpenPutAwayNo: Code[20];
         SourceBinCode: Code[20];
         EffectiveUoM: Code[10];
         MovementQty: Decimal;
@@ -512,6 +519,18 @@ codeunit 72040 "DOPSWHS LP Management"
         LP.TestField("Location Code");
         if TargetBinCode = '' then
             Error('%1 LP numarasını taşımak için hedef raf zorunludur.', LP."No.");
+
+        // Palet (içinde kutu LP'leri olan LP): kutuların açık yerleştirmeleri hedef
+        // rafa kaydedilir, kutular ve palet birlikte taşınır.
+        if OutputPallet.HasChildren(LP."No.") then begin
+            OutputPallet.MovePallet(LP, TargetBinCode, OperatorUserId);
+            LP.Get(LP."No.");
+            exit;
+        end;
+        // Açık yerleştirmeye bağlı kutu serbest taşınırsa stok yerleştirmeyi atlar
+        // ve belge kaydedilemez hale gelir.
+        if OutputPallet.HasOpenPutAwayLines(LP."No.", OpenPutAwayNo) then
+            Error('%1 LP''si %2 yerleştirmesinde bekliyor. Bu LP''yi Yerleştirme ekranından (ya da paleti Palet Yerleştir ile) taşıyın.', LP."No.", OpenPutAwayNo);
 
         // Toplu üretimde LP fiziksel bir rafa yerleştirilmeden hazırlanabilir.
         // İlk raf atamasında taşınacak stok bulunmadığı için depo hareketi

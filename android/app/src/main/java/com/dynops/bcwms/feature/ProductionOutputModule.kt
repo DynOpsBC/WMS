@@ -159,6 +159,7 @@ private fun ProductionOutputDetail(line: JSONObject, onBack: () -> Unit) {
     var loading by remember(orderNo, lineNo) { mutableStateOf(false) }
     var labelFor by remember(orderNo, lineNo) { mutableStateOf<OutputLot?>(null) }
     var lpFor by remember(orderNo, lineNo) { mutableStateOf<OutputLot?>(null) }
+    var palletOpen by remember(orderNo, lineNo) { mutableStateOf(false) }
     // DKC (23 Kas 2026): çıktı onaylanınca etiket açılır; etiket kapanınca yeni çıktı ekranı.
     var continueOutput by remember(orderNo, lineNo) { mutableStateOf(false) }
     var showReport by remember(orderNo, lineNo) { mutableStateOf(false) }
@@ -269,6 +270,12 @@ private fun ProductionOutputDetail(line: JSONObject, onBack: () -> Unit) {
                     }
                 }
             }
+            if (lots.isNotEmpty() && current.optString("status").equals("Released", true)) {
+                Spacer(Modifier.height(8.dp))
+                OutlinedButton(onClick = { palletOpen = true }, enabled = !loading, modifier = Modifier.fillMaxWidth().height(46.dp)) {
+                    Text("Kutuları Palete Koy")
+                }
+            }
             if (components.isNotEmpty()) {
                 Spacer(Modifier.height(14.dp))
                 Text("Sarfiyat — çekilen malzeme ve çıkan miktara göre", fontWeight = FontWeight.Bold, fontSize = 14.sp)
@@ -353,6 +360,8 @@ private fun ProductionOutputDetail(line: JSONObject, onBack: () -> Unit) {
             onDismiss = { lpFor = null; load(); if (continueOutput) { continueOutput = false; showReport = true } },
         )
     }
+
+    if (palletOpen) OutputPalletSheet(orderNo = orderNo, lineNo = lineNo, onDismiss = { palletOpen = false; load() })
 
     consumeFor?.let { c ->
         val item = c.optString("itemNo")

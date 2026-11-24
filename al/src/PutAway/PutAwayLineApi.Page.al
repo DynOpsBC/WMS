@@ -280,6 +280,12 @@ page 72228 "DOPSWHS PutAway Line API"
         TakeLine.SetRange("Unit of Measure Code", PlaceLine."Unit of Measure Code");
         TakeLine.SetRange("Lot No.", PlaceLine."Lot No.");
         TakeLine.SetRange("Serial No.", PlaceLine."Serial No.");
+        // LP'lere bölünmüş belgede aynı belge satırından birden çok Al/Koy çifti
+        // vardır; eş Al satırı aynı LP numarasını taşıyandır (LP'siz Koy için LP'siz Al).
+        TakeLine.SetRange("LP No.", PlaceLine."LP No.");
+        if TakeLine.FindFirst() then
+            exit(true);
+        TakeLine.SetRange("LP No.");
         if TakeLine.FindFirst() then
             exit(true);
         TakeLine.SetRange("Lot No.");
