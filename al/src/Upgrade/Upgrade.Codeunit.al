@@ -86,6 +86,13 @@ codeunit 72034 "DOPSWHS Upgrade"
             RepairOpenPutAwaysByReceiptLps();
         if ModuleInfo.DataVersion() < Version.Create(1, 14, 1, 29) then
             MigratePostedShipmentSscc();
+        // DKC 24 Kas 2026: ambar lot izlemesi kapalı lotlu üründe yerleştirmeler
+        // LP'ye bölünmüyordu; açık olanları böl, kapanmış belgelere asılı LP'leri düzelt.
+        if ModuleInfo.DataVersion() < Version.Create(1, 14, 2, 57) then begin
+            RepairOpenPutAwaysByReceiptLps();
+            RepairStaleLpAssignments();
+            if TryTrimLots() then;
+        end;
         AppProfileMgmt.SeedDefaults();          // seed DEFAULT app profile + install-user profile
         AppRoleSeed.Seed();                     // seed system roles + starter filter rules
         SetupWizard.SeedReportSelections();     // repair legacy empty/wrong document print routes
@@ -142,6 +149,38 @@ codeunit 72034 "DOPSWHS Upgrade"
                     TrySplitOpenPutAway(
                         PostedReceiptHeader."Whse. Receipt No.",
                         PostedReceiptHeader."No.");
+    end;
+
+    local procedure RepairStaleLpAssignments()
+    var
+        LP: Record "DOPSWHS LP Header";
+        LpNos: List of [Code[20]];
+        LpNo: Code[20];
+    begin
+        LP.SetRange(Status, LP.Status::Assigned);
+        if LP.FindSet() then
+            repeat
+                LpNos.Add(LP."No.");
+            until LP.Next() = 0;
+        foreach LpNo in LpNos do
+            if LP.Get(LpNo) then
+                if TryReconcileLp(LP) then;
+    end;
+
+    [TryFunction]
+    local procedure TryTrimLots()
+    var
+        Reconcile: Codeunit "DOPSWHS LP Assign Reconcile";
+    begin
+        Reconcile.TrimAllLotOverAllocations('LOTUPG');
+    end;
+
+    [TryFunction]
+    local procedure TryReconcileLp(var LP: Record "DOPSWHS LP Header")
+    var
+        Reconcile: Codeunit "DOPSWHS LP Assign Reconcile";
+    begin
+        Reconcile.ReconcileStaleAssignment(LP);
     end;
 
     [TryFunction]

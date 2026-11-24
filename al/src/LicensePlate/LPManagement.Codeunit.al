@@ -461,6 +461,7 @@ codeunit 72040 "DOPSWHS LP Management"
         EnsureLooseStockAvailable(LP."Location Code", SourceBinCode, ItemNo, LotNo, SerialNo, MovementQty);
 
         LogMutation('LP.AddLineFromBin');
+        MovementMgmt.SetPreferredMoveUom(EffectiveUoM);
         if SourceBinCode <> LP."Bin Code" then
             MovementMgmt.AdHocMoveTrackedAtLocation(
                 LP."Location Code", SourceBinCode, LP."Bin Code", ItemNo, LP."No.",
@@ -504,6 +505,8 @@ codeunit 72040 "DOPSWHS LP Management"
         EnsureNotPendingReceipt(LP);
         if OperatorUserId = '' then
             Error('%1 LP numarasını taşımak için operatör kullanıcı kimliği zorunludur.', LP."No.");
+        if LP.Status = LP.Status::Assigned then
+            Error('%1 LP numarası %2 %3 belgesine atanmış. Bu LP''yi o belgenin ekranından (ör. Yerleştirme) taşıyın.', LP."No.", Format(LP."Assigned Document Type"), LP."Assigned Document No.");
         if not (LP.Status in [LP.Status::Open, LP.Status::Built]) then
             Error('%1 LP numarası %2 durumundayken taşınamaz. Önce belge atamasını kaldırın.', LP."No.", LP.Status);
         LP.TestField("Location Code");
@@ -561,6 +564,7 @@ codeunit 72040 "DOPSWHS LP Management"
                 if (LPLine."Serial No." <> '') and (MovementQty <> 1) then
                     Error('%1 seri numarası tek bir temel birimi temsil eder; miktar 1 olmalıdır.', LPLine."Serial No.");
 
+                MovementMgmt.SetPreferredMoveUom(EffectiveUoM);
                 MovementMgmt.AdHocMoveTrackedAtLocation(
                     LP."Location Code", SourceBinCode, TargetBinCode, LPLine."Item No.", LP."No.",
                     MovementQty, OperatorUserId, LPLine."Lot No.", LPLine."Serial No.");

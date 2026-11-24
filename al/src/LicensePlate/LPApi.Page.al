@@ -114,6 +114,24 @@ page 72088 "DOPSWHS LP API"
         LPMgt.Release(Rec);
     end;
 
+    /// <summary>Atandığı belge kapanmış LP'yi düzeltir (yerleştirmede hedef rafa taşır). Sonuç metni döner.</summary>
+    [ServiceEnabled]
+    procedure reconcileAssignment(): Text
+    var
+        Reconcile: Codeunit "DOPSWHS LP Assign Reconcile";
+    begin
+        exit(Reconcile.ReconcileStaleAssignment(Rec));
+    end;
+
+    /// <summary>Lot stoğunu aşan LP lot miktarlarını (tüm LP'lerde) düzeltir; düşülen temel miktarı döner.</summary>
+    [ServiceEnabled]
+    procedure reconcileLots(): Decimal
+    var
+        Reconcile: Codeunit "DOPSWHS LP Assign Reconcile";
+    begin
+        exit(Reconcile.TrimAllLotOverAllocations('LOTAPI'));
+    end;
+
     [ServiceEnabled]
     procedure assign(docType: Enum "DOPSWHS Assigned Doc Type"; docNo: Code[20])
     var

@@ -792,13 +792,23 @@ codeunit 72043 "DOPSWHS Receipt Mgmt"
         SourceLPLine.SetRange("Source Document Line No.", ReceiptLineNo);
         SourceLPLine.SetRange("Item No.", PlaceLine."Item No.");
         SourceLPLine.SetRange("Variant Code", PlaceLine."Variant Code");
-        SourceLPLine.SetRange("Lot No.", PlaceLine."Lot No.");
-        SourceLPLine.SetRange("Serial No.", PlaceLine."Serial No.");
+        // Lot yalnız madde defterinde tutulan üründe (ambar lot izleme kapalı,
+        // DKC) yerleştirme satırı lotsuzdur, LP satırı lotludur. Boş lotla
+        // süzmek hiçbir LP bulamıyor, yerleştirme LP'siz tek satır kalıyor ve
+        // kayıttan sonra LP'ler giriş rafında "Atanmış" kalıyordu (24 Kas 2026).
+        if PlaceLine."Lot No." <> '' then
+            SourceLPLine.SetRange("Lot No.", PlaceLine."Lot No.");
+        if PlaceLine."Serial No." <> '' then
+            SourceLPLine.SetRange("Serial No.", PlaceLine."Serial No.");
         SourceLPLine.SetFilter(Quantity, '>0');
         if SourceLPLine.FindSet() then
             repeat
+                // Onarımda LP'ler bu yerleştirmeye zaten atanmış olabilir.
                 if SourceLPHeader.Get(SourceLPLine."LP No.") and
-                   (SourceLPHeader.Status = SourceLPHeader.Status::Built)
+                   ((SourceLPHeader.Status = SourceLPHeader.Status::Built) or
+                    ((SourceLPHeader.Status = SourceLPHeader.Status::Assigned) and
+                     (SourceLPHeader."Assigned Document Type" = SourceLPHeader."Assigned Document Type"::WhsePutaway) and
+                     (SourceLPHeader."Assigned Document No." = PlaceLine."No.")))
                 then
                     if (SourceLPLine."Unit of Measure" = '') or
                        (SourceLPLine."Unit of Measure" = PlaceLine."Unit of Measure Code")
@@ -813,10 +823,11 @@ codeunit 72043 "DOPSWHS Receipt Mgmt"
 
         if LPQuantities.Count() = 0 then
             exit;
+        // Toplam tutmuyorsa bölme yapılmaz; mal kabul kaydı engellenmez.
+        // Yerleştirme kaydedildiğinde LP'ler "DOPSWHS LP Assign Reconcile"
+        // ile kayıtlı satırlardan hedef rafa taşınır.
         if Abs(TotalLpQty - PlaceLine.Quantity) > 0.00001 then
-            Error(
-                '%1 ürünü, lot %2 için LP toplamı (%3) yerleştirme miktarına (%4) eşit değil. İşlem geri alındı.',
-                PlaceLine."Item No.", PlaceLine."Lot No.", TotalLpQty, PlaceLine.Quantity);
+            exit;
 
         FindRelatedPutAwayTakeLine(PlaceLine, TakeLine, HasTakeLine);
         OriginalPlaceLine := PlaceLine;

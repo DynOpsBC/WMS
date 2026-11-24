@@ -101,8 +101,10 @@ page 72215 "DOPSWHS Warehouse Entry API"
         LPLine.SetRange("LP No.", LpNo);
         LPLine.SetRange("Item No.", WarehouseEntry."Item No.");
         LPLine.SetRange("Variant Code", WarehouseEntry."Variant Code");
-        LPLine.SetRange("Lot No.", WarehouseEntry."Lot No.");
-        LPLine.SetRange("Serial No.", WarehouseEntry."Serial No.");
+        if WarehouseEntry."Lot No." <> '' then
+            LPLine.SetRange("Lot No.", WarehouseEntry."Lot No.");
+        if WarehouseEntry."Serial No." <> '' then
+            LPLine.SetRange("Serial No.", WarehouseEntry."Serial No.");
         exit(not LPLine.IsEmpty());
     end;
 

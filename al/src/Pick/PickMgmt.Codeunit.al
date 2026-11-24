@@ -522,8 +522,11 @@ codeunit 72046 "DOPSWHS Pick Mgmt"
                     LPLine.SetRange("LP No.", LPHeader."No.");
                     LPLine.SetRange("Item No.", PickLine."Item No.");
                     LPLine.SetRange("Variant Code", PickLine."Variant Code");
-                    LPLine.SetRange("Lot No.", PickLine."Lot No.");
-                    LPLine.SetRange("Serial No.", PickLine."Serial No.");
+                    // Ambar lot izlemesi kapalı üründe toplama satırı lotsuzdur.
+                    if PickLine."Lot No." <> '' then
+                        LPLine.SetRange("Lot No.", PickLine."Lot No.");
+                    if PickLine."Serial No." <> '' then
+                        LPLine.SetRange("Serial No.", PickLine."Serial No.");
                     LPLine.SetFilter(Quantity, '>0');
                     if LPLine.FindSet() then
                         repeat

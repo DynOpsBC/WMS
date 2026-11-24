@@ -46,6 +46,19 @@ codeunit 72045 "DOPSWHS Movement Mgmt"
         exit(BatchName);
     end;
 
+    var
+        PreferredMoveUom: Code[10];
+
+    /// <summary>
+    /// LP taşımaları: raf içeriği LP satırının biriminde (ör. KG) varsa hareket o
+    /// birimle yapılır; aynı rafta temel birimde de stok olsa bile LP'nin durduğu
+    /// birimin raf içeriği azalır.
+    /// </summary>
+    procedure SetPreferredMoveUom(UomCode: Code[10])
+    begin
+        PreferredMoveUom := UomCode;
+    end;
+
     /// <summary>Geriye dönük sarmalayıcı — lot izlemesiz ürünler.</summary>
     procedure AdHocMove(FromBinCode: Code[20]; ToBinCode: Code[20]; ItemNo: Code[20]; LpNo: Code[20]; Qty: Decimal; UserId: Code[50])
     begin
@@ -938,6 +951,14 @@ codeunit 72045 "DOPSWHS Movement Mgmt"
         BestQtyBase: Decimal;
     begin
         QtyPerUom := 1;
+        if (PreferredMoveUom <> '') and (PreferredMoveUom <> BaseUom) then
+            if BinContent.Get(LocationCode, BinCode, ItemNo, '', PreferredMoveUom) then begin
+                BinContent.CalcFields("Quantity (Base)");
+                if (BinContent."Qty. per Unit of Measure" > 0) and (BinContent."Quantity (Base)" >= QtyBase) then begin
+                    QtyPerUom := BinContent."Qty. per Unit of Measure";
+                    exit(PreferredMoveUom);
+                end;
+            end;
         if BinContent.Get(LocationCode, BinCode, ItemNo, '', BaseUom) then
             exit(BaseUom);
         BinContent.SetRange("Location Code", LocationCode);
