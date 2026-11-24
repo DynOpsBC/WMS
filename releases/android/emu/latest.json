@@ -1,7 +1,7 @@
 {
-  "versionCode": 200190,
-  "versionName": "1.14.190-emu",
-  "apkUrl": "https://github.com/DynOpsBC/WMS/releases/download/android-v1.14.190-emu/BCWMS-EMU-1.14.190-RELEASE.apk",
-  "sha256": "3f68d64b8e420d473068592fc33ccc35cf23fc41bf2ba6dc243262b7f8947d90",
-  "releaseNotes": "Hareket: lotlu ürün etiketi okutulunca lot kendiliğinden dolar. Üretim çıktısı: sarfiyat şartı yok, tek Çıktıyı Onayla, sonra etiket ve yeni çıktı ekranı; aynı lot sürer, Lot Ata yeni lot verir; palet etiketi. Ürün Sorgu: lot etiketinde adet. Mal kabul: LP türü seçimi, uzun kayıtta yanlış timeout uyarısı giderildi. Sevkiyat: Toplama Oluştur olmadan kayıt yok, acente yok. Raf Sorgu. BCWMSApp 1.14.2.51 gerekir."
+  "versionCode": 200192,
+  "versionName": "1.14.192-emu",
+  "apkUrl": "https://github.com/DynOpsBC/WMS/releases/download/android-v1.14.192-emu/BCWMS-EMU-1.14.192-RELEASE.apk",
+  "sha256": "f62663ab25aa8a07327051b1913cab76c77a671709447aa625d2712df3aadb20",
+  "releaseNotes": "Hareket: raf içeriği temel birimden farklı birimde (ör. KG) duruyorsa taşıma artık o birimle yapılır; hata mesajı raf, ürün ve birimi tam gösterir; Enter göndermeyen okuyucuda etiket lotu alınır. Hata kutusuna uzun basınca BC'nin özgün hata metni görünür. BCWMSApp 1.14.2.52 gerekir."
 }

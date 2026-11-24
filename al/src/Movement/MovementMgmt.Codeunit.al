@@ -866,6 +866,8 @@ codeunit 72045 "DOPSWHS Movement Mgmt"
         WhseJournalLine: Record "Warehouse Journal Line";
         WhseJnlRegisterBatch: Codeunit "Whse. Jnl.-Register Batch";
         BatchName: Code[10];
+        MoveUomCode: Code[10];
+        QtyPerMoveUom: Decimal;
     begin
         FromBin.Get(LocationCode, FromBinCode);
         ToBin.Get(LocationCode, ToBinCode);
@@ -889,12 +891,20 @@ codeunit 72045 "DOPSWHS Movement Mgmt"
         WhseJournalLine."User ID" := CopyStr(UserId, 1, MaxStrLen(WhseJournalLine."User ID"));
         WhseJournalLine.Validate("Entry Type", WhseJournalLine."Entry Type"::Movement);
         WhseJournalLine.Validate("Item No.", ItemNo);
-        WhseJournalLine.Validate("Unit of Measure Code", Item."Base Unit of Measure");
+        // Saha hatası (DKC, 24 Kas 2026): raf içeriği temel birimden farklı
+        // birimde (ör. ADET ürün KG ile) duruyorsa temel birimle "Bin Content
+        // does not exist" hatası alınıyordu. Terminal miktarı temel birimde
+        // gönderir; raftaki birime çevrilip o birimle taşınır.
+        MoveUomCode := ResolveMoveUom(LocationCode, FromBinCode, ItemNo, Item."Base Unit of Measure", Qty, QtyPerMoveUom);
+        WhseJournalLine.Validate("Unit of Measure Code", MoveUomCode);
         WhseJournalLine.Validate("From Zone Code", FromBin."Zone Code");
         WhseJournalLine.Validate("From Bin Code", FromBinCode);
         WhseJournalLine.Validate("To Zone Code", ToBin."Zone Code");
         WhseJournalLine.Validate("To Bin Code", ToBinCode);
-        WhseJournalLine.Validate(Quantity, Qty);
+        if MoveUomCode = Item."Base Unit of Measure" then
+            WhseJournalLine.Validate(Quantity, Qty)
+        else
+            WhseJournalLine.Validate(Quantity, Round(Qty / QtyPerMoveUom, 0.00001));
         // The ad-hoc LP move has no Warehouse Activity Line from which the
         // propagation subscriber can infer an LP. Carry the exact LP on the
         // posting line so both generated Warehouse Entries keep their source
@@ -914,6 +924,40 @@ codeunit 72045 "DOPSWHS Movement Mgmt"
         // register eder (web servis bağlamı).
         WhseJnlRegisterBatch.SetSuppressCommit(true);
         WhseJnlRegisterBatch.Run(WhseJournalLine);
+    end;
+
+    /// <summary>
+    /// Kaynak raftaki raf içeriğinin birimi. Temel birimde raf içeriği varsa
+    /// (eski davranış) temel birim döner. Yoksa istenen temel miktarı karşılayan
+    /// tek bir diğer birim seçilir; birden fazla aday varsa en çok stoğu olan.
+    /// </summary>
+    local procedure ResolveMoveUom(LocationCode: Code[10]; BinCode: Code[20]; ItemNo: Code[20]; BaseUom: Code[10]; QtyBase: Decimal; var QtyPerUom: Decimal): Code[10]
+    var
+        BinContent: Record "Bin Content";
+        BestUom: Code[10];
+        BestQtyBase: Decimal;
+    begin
+        QtyPerUom := 1;
+        if BinContent.Get(LocationCode, BinCode, ItemNo, '', BaseUom) then
+            exit(BaseUom);
+        BinContent.SetRange("Location Code", LocationCode);
+        BinContent.SetRange("Bin Code", BinCode);
+        BinContent.SetRange("Item No.", ItemNo);
+        BinContent.SetRange("Variant Code", '');
+        if BinContent.FindSet() then
+            repeat
+                BinContent.CalcFields("Quantity (Base)");
+                if (BinContent."Qty. per Unit of Measure" > 0) and (BinContent."Quantity (Base)" > BestQtyBase) then begin
+                    BestQtyBase := BinContent."Quantity (Base)";
+                    BestUom := BinContent."Unit of Measure Code";
+                    QtyPerUom := BinContent."Qty. per Unit of Measure";
+                end;
+            until BinContent.Next() = 0;
+        if BestUom = '' then
+            exit(BaseUom);
+        if BestQtyBase < QtyBase then
+            Error('%1 ürününün %2 rafındaki stoku (%3 %4) istenen miktardan (%5 %4) az.', ItemNo, BinCode, BestQtyBase, BaseUom, QtyBase);
+        exit(BestUom);
     end;
 
     local procedure AddWhseItemTracking(WhseJnlLine: Record "Warehouse Journal Line"; LotNo: Code[50]; SerialNo: Code[50])
