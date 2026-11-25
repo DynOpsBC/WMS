@@ -987,6 +987,19 @@ codeunit 72047 "DOPSWHS Shipment Mgmt"
                 TrackedQtyBase += Abs(WhseItemTrackingLine."Quantity (Base)");
             until WhseItemTrackingLine.Next() = 0;
 
+        // Ambar lot izleme kapalıysa (DKC) ambar izleme satırı hiç oluşmaz; lot,
+        // satış satırının izlemesinden ya da BC'nin nakil sırasındaki kendi
+        // kontrolünden gelir. Bu durumda ambar dağılımı aranmaz, karar BC'nindir
+        // (bilgisayardan nakil de böyle çalışıyor).
+        if TrackedQtyBase < Abs(WhseShipmentLine."Qty. to Ship (Base)") then
+            if not LotWarehouseTracked(WhseShipmentLine."Item No.") then begin
+                if SourceLotTrackedQtyBase(WhseShipmentLine) >= Abs(WhseShipmentLine."Qty. to Ship (Base)") then
+                    exit;
+                Error(
+                    '%1 ürününün %2 sevkiyat satırında lot atanmamış (%3 siparişi). BC''de satış siparişi satırında Satır > Madde İzleme Satırları''ndan lotları atayın, sonra yeniden kaydedin.',
+                    WhseShipmentLine."Item No.", WhseShipmentLine."Line No.", WhseShipmentLine."Source No.");
+            end;
+
         if TrackedQtyBase < Abs(WhseShipmentLine."Qty. to Ship (Base)") then
             Error(
                 '%1 ürününün %2 sevkiyat satırı birden fazla lot içeriyor ancak lot dağılımı eksik. Lotlanan (temel): %3, sevk edilecek (temel): %4. Önce ambar toplamayı tamamlayın.',
@@ -994,6 +1007,34 @@ codeunit 72047 "DOPSWHS Shipment Mgmt"
                 WhseShipmentLine."Line No.",
                 TrackedQtyBase,
                 Abs(WhseShipmentLine."Qty. to Ship (Base)"));
+    end;
+
+    local procedure LotWarehouseTracked(ItemNo: Code[20]): Boolean
+    var
+        Item: Record Item;
+        ItemTrackingCode: Record "Item Tracking Code";
+    begin
+        if not Item.Get(ItemNo) then
+            exit(false);
+        if (Item."Item Tracking Code" = '') or not ItemTrackingCode.Get(Item."Item Tracking Code") then
+            exit(false);
+        exit(ItemTrackingCode."Lot Warehouse Tracking");
+    end;
+
+    /// <summary>Kaynak (satış) satırında lot numaralı izleme kayıtlarının toplamı (taban, mutlak).</summary>
+    local procedure SourceLotTrackedQtyBase(WhseShipmentLine: Record "Warehouse Shipment Line"): Decimal
+    var
+        ReservationEntry: Record "Reservation Entry";
+        Total: Decimal;
+    begin
+        SetSourceReservationFilters(ReservationEntry, WhseShipmentLine);
+        ReservationEntry.SetFilter("Lot No.", '<>%1', '');
+        ReservationEntry.SetRange(Positive, false);
+        if ReservationEntry.FindSet() then
+            repeat
+                Total += Abs(ReservationEntry."Quantity (Base)");
+            until ReservationEntry.Next() = 0;
+        exit(Total);
     end;
 
     local procedure EnsureShipmentLot(WhseShipmentLine: Record "Warehouse Shipment Line"; LotNo: Code[50])
