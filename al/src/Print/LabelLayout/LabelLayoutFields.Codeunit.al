@@ -251,7 +251,33 @@ codeunit 72467 "DOPSWHS Label Layout Fields"
         Values.Add('ContentsLine1', ContentsLine[1]);
         Values.Add('ContentsLine2', ContentsLine[2]);
         Values.Add('ContentsLine3', ContentsLine[3]);
+        if LpLabelHidesContents() then
+            BlankLpContents(Values);
         AddCommon(Values);
+    end;
+
+    /// <summary>WMS Kurulum "LP Etiketinde Ürünleri Gizle" açık mı.</summary>
+    procedure LpLabelHidesContents(): Boolean
+    var
+        Setup: Record "DOPSWHS Setup";
+    begin
+        if not Setup.Get('') then
+            exit(false);
+        exit(Setup."LP Label Hide Contents");
+    end;
+
+    /// <summary>Ürün, lot, miktar ve içerik alanları boş basılır; LP no, barkod, yer ve belge kalır.</summary>
+    local procedure BlankLpContents(var Values: Dictionary of [Text, Text])
+    var
+        FieldKey: Text;
+        ContentKeys: List of [Text];
+    begin
+        ContentKeys.AddRange('ItemNo', 'Description', 'LotNo', 'ExpirationDate', 'Quantity', 'TotalQuantity', 'UoM',
+            'ItemCount', 'LineCount', 'ExtraLines', 'Lots', 'VariantCode', 'PackageNo');
+        ContentKeys.AddRange('ContentsLine1', 'ContentsLine2', 'ContentsLine3');
+        foreach FieldKey in ContentKeys do
+            if Values.ContainsKey(FieldKey) then
+                Values.Set(FieldKey, '');
     end;
 
     /// <summary>

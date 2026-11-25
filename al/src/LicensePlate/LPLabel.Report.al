@@ -71,6 +71,9 @@ report 72091 "DOPSWHS LP Label"
         end;
         LPLine.SetRange("LP No.", LP."No.");
         LPLine.SetFilter("Item No.", '<>%1', '');
+        // WMS Kurulum "LP Etiketinde Ürünleri Gizle": ürün, lot ve miktar satırları boş kalır.
+        if LayoutFields.LpLabelHidesContents() then
+            LPLine.SetRange("LP No.", '');
         if LPLine.FindSet() then begin
             repeat
                 LineCount += 1;
@@ -89,7 +92,8 @@ report 72091 "DOPSWHS LP Label"
                 LotText += StrSubstNo('+%1 DİĞER SATIR', LineCount - 1);
             end;
         end else
-            QtyText := 'BOŞ TAŞIYICI';
+            if not LayoutFields.LpLabelHidesContents() then
+                QtyText := 'BOŞ TAŞIYICI';
 
         PlaceText := LP."Location Code";
         if LP."Bin Code" <> '' then

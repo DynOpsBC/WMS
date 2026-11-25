@@ -190,6 +190,11 @@ page 72061 "DOPSWHS Setup"
                     ApplicationArea = All;
                     ToolTip = 'Etiketin yüksekliği (mm). Boş/0 = 40 mm. Yazıcıdaki rulo değişince yalnız bu iki değer güncellenir; yeni paket gerekmez.';
                 }
+                field("LP Label Hide Contents"; Rec."LP Label Hide Contents")
+                {
+                    ApplicationArea = All;
+                    ToolTip = 'Açıksa LP (palet / kap) etiketinde ürün, lot ve miktar basılmaz; yalnız LP numarası, QR / barkod, yer ve tarih basılır. İçeriği sık değişen paletlerde etiketin yanıltmasını önler.';
+                }
             }
             group(ProjectIssue)
             {

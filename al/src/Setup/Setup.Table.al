@@ -523,6 +523,14 @@ table 72000 "DOPSWHS Setup"
             DataClassification = CustomerContent;
             InitValue = false;
         }
+        field(630; "LP Label Hide Contents"; Boolean)
+        {
+            // Element4 (25 Kas 2026): LP etiketinde yalnız LP no, QR/barkod, yer ve tarih;
+            // ürün, lot ve miktar basılmaz (içerik sık değişiyor, etiket yanıltıyordu).
+            Caption = 'LP Etiketinde Ürünleri Gizle';
+            DataClassification = CustomerContent;
+            InitValue = false;
+        }
     }
 
     keys

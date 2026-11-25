@@ -40,6 +40,18 @@ page 72474 "DOPSWHS Label Layout API"
         }
     }
 
+    /// <summary>WMS Kurulum "LP Etiketinde Ürünleri Gizle" ayarını açar/kapatır; yeni değeri döner.</summary>
+    [ServiceEnabled]
+    procedure setLpLabelHideContents(hide: Boolean): Text
+    var
+        Setup: Record "DOPSWHS Setup";
+    begin
+        Setup.Get('');
+        Setup."LP Label Hide Contents" := hide;
+        Setup.Modify(true);
+        exit(Format(Setup."LP Label Hide Contents", 0, 9));
+    end;
+
     trigger OnAfterGetRecord()
     var
         LayoutEngine: Codeunit "DOPSWHS Label Layout Engine";
