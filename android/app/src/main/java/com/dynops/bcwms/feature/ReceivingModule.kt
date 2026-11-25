@@ -49,12 +49,20 @@ internal fun receiptAttachLinesBody(lpNo: String, lineNos: List<Int>): String =
         put("lineNosJson", org.json.JSONArray(lineNos).toString())
     }.toString()
 
+/** Belge kartında tedarikçi ve sipariş: "Tedarikçi: ÖZ METAL · Sipariş: 106007". */
+internal fun receiptVendorLine(vendorName: String, sourceNo: String): String {
+    val vendor = vendorName.trim()
+    val order = sourceNo.trim()
+    return listOf(if (vendor.isNotEmpty()) "Tedarikçi: $vendor" else "", if (order.isNotEmpty()) "Sipariş: $order" else "")
+        .filter { it.isNotEmpty() }.joinToString(" · ").ifEmpty { "Tedarikçi: -" }
+}
+
 /** "LP Kapat": etiket nakilden sonra basılır; taslak palette henüz ürün yoktur. */
 internal fun receiptStopLpBody(lpNo: String): String =
     JSONObject().apply { put("lpNo", lpNo); put("printLabel", false) }.toString()
 
 internal fun receiptLpClosedStatus(lpNo: String): String =
-    "TAMAM: $lpNo kapatıldı. Sonraki palet için LP Başlat'a, bitince Naklet'e basın."
+    "TAMAM: $lpNo paleti kapatıldı. Sonraki palet için Palet Başlat'a, bitince Kaydet'e basın."
 
 internal fun restoredBulkReceiptLineNos(lines: List<JSONObject>): Set<Int> = lines
     .asSequence()
@@ -191,7 +199,8 @@ private fun WhseReceiptTab() {
             items(shownRows) { d ->
                 OperationDocumentCard(
                     title = d.optString("no"),
-                    metadata = "Lokasyon: ${firstValue(d, "locationCode")}  ·  Kaynak: ${firstValue(d, "sourceNo")}\nAtanan: ${rawValue(d, "assignedUserName", "assignedUserId").ifBlank { "Atanmamış" }}",
+                    metadata = receiptVendorLine(d.optString("vendorSourceName"), d.optString("sourceNo")) +
+                        "\nLokasyon: ${firstValue(d, "locationCode")}  ·  Atanan: ${rawValue(d, "assignedUserName", "assignedUserId").ifBlank { "Atanmamış" }}",
                     progressPercent = d.optInt("percentComplete"),
                     onClick = { selected = d.optString("no") },
                 )
@@ -261,7 +270,7 @@ private fun ReceiveDocument(no: String, onBack: () -> Unit) {
     var merge by remember { mutableStateOf(false) }
     var groupTarget by remember { mutableStateOf<LineGroup?>(null) }
     // Konfigüre edilebilir kolonlar (WI "Choose Columns").
-    var columns by remember { mutableStateOf(ColumnPrefs.get(context, "receipt", GridColumns.receipt)) }
+    var columns by remember { mutableStateOf(ColumnPrefs.get(context, "receipt.v2", GridColumns.receipt)) }
     var showColumns by remember { mutableStateOf(false) }
 
     fun reload(preserveActiveLp: String? = null) {
@@ -333,7 +342,7 @@ private fun ReceiveDocument(no: String, onBack: () -> Unit) {
             if (r.ok) {
                 val cancelledLines = cancelledDistributionLineNos(BcApi.scalarValue(r.body)).ifEmpty { setOf(lineNo) }
                 touched = touched - cancelledLines
-                status = "TAMAM: Dağıtım geri alındı; ${cancelledLines.size} ürünün kabul miktarı sıfırlandı. Palet LP ya da Karma Palet ile yeniden hazırlayabilirsiniz."
+                status = "TAMAM: Dağıtım geri alındı; ${cancelledLines.size} ürünün kabul miktarı sıfırlandı. Paletlere Böl ya da Karma Palet ile yeniden hazırlayabilirsiniz."
                 reload()
             } else status = QcErrorParser.friendlyStatus(BcApi.errorMessage(r.body), r.httpCode)
         }
@@ -420,8 +429,9 @@ private fun ReceiveDocument(no: String, onBack: () -> Unit) {
             TextButton(onClick = onBack) { Text("‹ Belge Listesi") }
             DocHeaderCard(
                 title = no,
-                subtitle = "Lokasyon: ${h?.optString("locationCode") ?: ""} · Kaynak: ${h?.optString("sourceNo") ?: "-"}" +
-                    (activeLp?.let { "\nAktif LP: $it" } ?: ""),
+                subtitle = receiptVendorLine(h?.optString("vendorSourceName").orEmpty(), h?.optString("sourceNo").orEmpty()) +
+                    "\nLokasyon: ${h?.optString("locationCode") ?: ""}" +
+                    (activeLp?.let { "\nAçık palet: $it" } ?: ""),
                 badge = rawValue(h ?: JSONObject(), "assignedUserName", "assignedUserId").ifBlank { "Atanmadı" },
                 percent = h?.optDouble("percentComplete")?.toInt() ?: 0
             )
@@ -559,7 +569,7 @@ private fun ReceiveDocument(no: String, onBack: () -> Unit) {
                             enabled = !busy && canMutate,
                             modifier = Modifier.height(42.dp),
                             contentPadding = PaddingValues(horizontal = 14.dp),
-                        ) { Text("Palet LP", maxLines = 1) }
+                        ) { Text("Paletlere Böl", maxLines = 1) }
                     }
                 }
 
@@ -629,7 +639,7 @@ private fun ReceiveDocument(no: String, onBack: () -> Unit) {
                                 enabled = !busy,
                                 modifier = Modifier.weight(1f).height(46.dp),
                                 contentPadding = PaddingValues(horizontal = 8.dp),
-                            ) { Text("LP Başlat", maxLines = 1) }
+                            ) { Text("Palet Başlat", maxLines = 1) }
                         } else {
                             // BADE (8 Eki 2026): paleti kapatmak ile belgeyi nakletmek
                             // ayrı adımlar. Kapanan taslak palet nakilde tek irsaliyeyle
@@ -656,7 +666,7 @@ private fun ReceiveDocument(no: String, onBack: () -> Unit) {
                                 enabled = !busy,
                                 modifier = Modifier.weight(1f).height(46.dp),
                                 contentPadding = PaddingValues(horizontal = 8.dp),
-                            ) { Text("LP Kapat", maxLines = 1) }
+                            ) { Text("Palet Kapat", maxLines = 1) }
                         }
 
                         // TOPLU POST: operatör istediği kadar satırı okutur/girer,
@@ -670,9 +680,9 @@ private fun ReceiveDocument(no: String, onBack: () -> Unit) {
                             Text(
                                 when {
                                     !canPost -> "Önce miktar gir"
-                                    vehicleInfoMissing -> "Araç → Naklet"
-                                    activeLp != null -> "LP + Naklet"
-                                    else -> "Naklet · $readyCount"
+                                    vehicleInfoMissing -> "Araç → Kaydet"
+                                    activeLp != null -> "Kapat ve Kaydet"
+                                    else -> "Kaydet · $readyCount"
                                 },
                                 fontWeight = FontWeight.Bold,
                                 maxLines = 1,
@@ -686,12 +696,12 @@ private fun ReceiveDocument(no: String, onBack: () -> Unit) {
 
     if (showPostConfirm) {
         PostConfirmDialog(
-            title = if (activeLp != null) "LP’yi kapat ve deftere naklet" else "Deftere naklet",
+            title = if (activeLp != null) "Paleti kapat ve mal kabulü kaydet" else "Mal kabulü kaydet",
             readyCount = readyCount,
             postLineCount = postLines.size,
             totalLineCount = lines.size,
             totalQty = postQty,
-            confirmLabel = if (activeLp != null) "LP’yi Kapat ve Naklet" else "Deftere Naklet",
+            confirmLabel = if (activeLp != null) "Paleti Kapat ve Kaydet" else "Kaydet",
             extraContent = if (terminalReceiptLabels) {
                 { ReceiptPostLabelOptions(skipPrinting, receiptLpLayout, receiptLotLayout, lotLabelsToo) { lotLabelsToo = it } }
             } else null,
@@ -1003,6 +1013,8 @@ private fun ReceiveDocument(no: String, onBack: () -> Unit) {
         ) else QuantityDialogSheet(
             title = "Alınan Miktar",
             itemNo = scannedItem,
+            itemDescription = line?.let { itemCellText(it).substringBefore('\n').takeIf { d -> d != scannedItem } }.orEmpty() +
+                (line?.optString("description2")?.trim()?.takeIf { it.isNotEmpty() }?.let { " · $it" } ?: ""),
             initialQty = line?.optDouble("qtyToReceive")?.takeIf { it > 0 } ?: 1.0,
             initialUom = line?.optString("unitOfMeasureCode") ?: "",
             initialLot = scanLot,
@@ -1136,7 +1148,7 @@ private fun ReceiveDocument(no: String, onBack: () -> Unit) {
             defs = GridColumns.receipt,
             initial = columns,
             onDismiss = { showColumns = false },
-            onSave = { newCols -> columns = newCols; ColumnPrefs.save(context, "receipt", newCols); showColumns = false },
+            onSave = { newCols -> columns = newCols; ColumnPrefs.save(context, "receipt.v2", newCols); showColumns = false },
         )
     }
 }
@@ -1386,7 +1398,7 @@ private fun ReceivePurchaseOrder(no: String, onBack: () -> Unit) {
     LaunchedEffect(touched) { ReceiptTouchedStore.save(context, no, touched) }
     // Ambar Mal Kabul'deki gibi konfigüre edilebilir kolonlar (kendi tercihi:
     // PO satırlarının alan adları farklı olduğu için ayrı kolon seti + ayrı anahtar).
-    var columns by remember { mutableStateOf(ColumnPrefs.get(context, "purchaseOrder", GridColumns.purchaseOrder)) }
+    var columns by remember { mutableStateOf(ColumnPrefs.get(context, "purchaseOrder.v2", GridColumns.purchaseOrder)) }
     var showColumns by remember { mutableStateOf(false) }
 
     fun reload(statusAfterReload: String? = null) {
@@ -1604,6 +1616,7 @@ private fun ReceivePurchaseOrder(no: String, onBack: () -> Unit) {
         QuantityDialogSheet(
             title = "Alınacak Miktar",
             itemNo = ql.optString("itemNo"),
+            itemDescription = ql.optString("description").trim(),
             initialQty = ql.optDouble("qtyToReceive").takeIf { it > 0 }
                 ?: ql.optDouble("outstandingQuantity").takeIf { it > 0 } ?: 1.0,
             initialUom = ql.optString("unitOfMeasureCode"),
@@ -1646,7 +1659,7 @@ private fun ReceivePurchaseOrder(no: String, onBack: () -> Unit) {
             defs = GridColumns.purchaseOrder,
             initial = columns,
             onDismiss = { showColumns = false },
-            onSave = { newCols -> columns = newCols; ColumnPrefs.save(context, "purchaseOrder", newCols); showColumns = false },
+            onSave = { newCols -> columns = newCols; ColumnPrefs.save(context, "purchaseOrder.v2", newCols); showColumns = false },
         )
     }
 }

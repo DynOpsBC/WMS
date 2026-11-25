@@ -131,7 +131,7 @@ fun LineGrid(
                         Text(
                             def.value(row).ifBlank { "—" },
                             Modifier.width(w.dp).padding(horizontal = 6.dp, vertical = 11.dp),
-                            fontSize = 13.sp, maxLines = 1,
+                            fontSize = 13.sp, maxLines = def.maxLines,
                             color = MaterialTheme.colorScheme.onSurface,
                         )
                     }

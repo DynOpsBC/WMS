@@ -19,7 +19,8 @@ class ReceiptLpCloseTest {
         val text = receiptLpClosedStatus("LP000700")
         assertTrue(text.startsWith("TAMAM:"))
         assertTrue(text.contains("LP000700"))
-        assertTrue(text.contains("Naklet"))
+        assertTrue(text.contains("Kaydet"))
+        assertTrue(text.contains("Palet Başlat"))
     }
 
     @Test

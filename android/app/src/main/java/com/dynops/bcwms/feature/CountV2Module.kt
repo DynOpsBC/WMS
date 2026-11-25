@@ -129,7 +129,7 @@ fun CountV2Module() {
             status = when {
                 !page.complete -> "HATA: Sayım listesinin tamamı alınamadı. Yenileyin."
                 !capabilities.metadataLoaded -> "HATA: BC sayım özellikleri doğrulanamadı; bağlantıyı kontrol edin."
-                !capabilities.v2Ready -> "HATA: Sayım V2 sunucu aksiyonları hazır değil — BCWMS AL 1.14.0.52 paketini yayınlayın."
+                !capabilities.v2Ready -> "HATA: Hızlı Sayım sunucu aksiyonları hazır değil — BCWMS AL 1.14.0.52 paketini yayınlayın."
                 rows.isEmpty() -> "BOŞ: Sayım sayfası yok"
                 else -> "TAMAM: ${rows.size} sayfa — yeni sayım için Yeni V2 Sayımı'na basın"
             }
@@ -141,7 +141,7 @@ fun CountV2Module() {
         if (location.isBlank() || creating) return
         scope.launch {
             creating = true
-            status = "$location lokasyonunda boş Sayım V2 oluşturuluyor..."
+            status = "$location lokasyonunda boş Hızlı Sayım oluşturuluyor..."
             val userId = BcApi.currentUserId(context).trim()
             if (userId.isBlank()) {
                 creating = false
@@ -181,7 +181,7 @@ fun CountV2Module() {
                 showCreate = false
                 if (createdNo.isNotBlank()) selected = createdNo
                 else {
-                    status = "TAMAM: Boş Sayım V2 oluşturuldu. Listeden en yeni sayfayı açın."
+                    status = "TAMAM: Boş Hızlı Sayım oluşturuldu. Listeden en yeni sayfayı açın."
                     load()
                 }
             } else if (BcApi.isAmbiguousMutationFailure(result)) {
@@ -192,7 +192,7 @@ fun CountV2Module() {
                 // Diyalog açık kalırsa hata arkada kalır ve "hiçbir şey olmadı"
                 // gibi görünür; kapat ki mesaj listede görünsün.
                 showCreate = false
-                status = "HATA: Sayım V2 oluşturulamadı — ${BcApi.errorMessage(result.body)}"
+                status = "HATA: Hızlı Sayım oluşturulamadı — ${BcApi.errorMessage(result.body)}"
             }
         }
     }
@@ -240,7 +240,7 @@ fun CountV2Module() {
             shape = RoundedCornerShape(12.dp),
         ) {
             Column(Modifier.fillMaxWidth().padding(12.dp)) {
-                Text("Sayım V2 — sadece okut", fontWeight = FontWeight.Bold)
+                Text("Hızlı Sayım — sadece okut", fontWeight = FontWeight.Bold)
                 Text(
                     "Yeni V2 Sayımı Oluştur'a basın. Rafı okutun; sonra LP (MTE etiketi) okutunca LP içeriği, ürün/lot barkodu okutunca o rafın BC stoku olduğu gibi sayılır. Fark varsa satıra dokunup düzeltin.",
                     fontSize = 12.sp,
@@ -381,7 +381,7 @@ private fun CountV2Document(no: String, onBack: () -> Unit, onRoundChanged: (Str
     var lines by remember(no) { mutableStateOf<List<JSONObject>>(emptyList()) }
     var linesComplete by remember(no) { mutableStateOf(false) }
     var busy by remember(no) { mutableStateOf(false) }
-    var status by remember(no) { mutableStateOf("Sayım V2 hazırlanıyor...") }
+    var status by remember(no) { mutableStateOf("Hızlı Sayım hazırlanıyor...") }
     var prepared by remember(no) { mutableStateOf(false) }
     var myUserId by remember(no) { mutableStateOf("") }
     var adminTestSession by remember(no) { mutableStateOf(false) }
@@ -486,7 +486,7 @@ private fun CountV2Document(no: String, onBack: () -> Unit, onRoundChanged: (Str
             status = if (!capabilities.metadataLoaded)
                 "HATA: BC sayım özellikleri doğrulanamadı; bağlantıyı kontrol edin."
             else
-                "HATA: Sayım V2 sunucu aksiyonları hazır değil — BCWMS AL 1.14.0.52 paketini yayınlayın."
+                "HATA: Hızlı Sayım sunucu aksiyonları hazır değil — BCWMS AL 1.14.0.52 paketini yayınlayın."
             busy = false
             return@LaunchedEffect
         }

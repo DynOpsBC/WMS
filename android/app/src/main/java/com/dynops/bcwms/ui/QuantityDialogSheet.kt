@@ -77,6 +77,8 @@ fun QuantityDialogSheet(
     locationCode: String = "",
     binCode: String = "",
     variantCode: String = "",
+    /** Ürün adı ve ayrıntısı (ör. "Sac 1500x3000x2 mm · 2. açıklama"); doluysa kodun üstünde gösterilir. */
+    itemDescription: String = "",
     supplierLotRequired: Boolean = false,
     showExpiryDate: Boolean = false,
     expiryDateRequired: Boolean = false,
@@ -169,6 +171,7 @@ fun QuantityDialogSheet(
             }
 
             Text(title, fontWeight = FontWeight.Bold, fontSize = 18.sp)
+            if (itemDescription.isNotBlank()) Text(itemDescription, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
             Text("Ürün: $itemNo", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
             Spacer(Modifier.height(16.dp))
 

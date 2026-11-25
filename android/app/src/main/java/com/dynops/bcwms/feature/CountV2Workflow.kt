@@ -58,7 +58,7 @@ internal sealed interface CountV2LabelResult {
  */
 internal fun validateCountV2Label(resolved: ResolvedBarcode): CountV2LabelResult {
     if (resolved.kind != BarcodeKind.Item)
-        return CountV2LabelResult.Invalid("Sayım V2 yalnız ürün etiketi kabul eder.")
+        return CountV2LabelResult.Invalid("Hızlı Sayım yalnız ürün etiketi kabul eder.")
 
     val itemNo = resolved.itemNo?.trim().orEmpty().ifBlank { resolved.value.trim() }
     if (itemNo.isBlank())

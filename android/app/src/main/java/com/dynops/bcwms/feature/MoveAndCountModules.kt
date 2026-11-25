@@ -692,7 +692,7 @@ fun AdHocMoveModule() {
     }
 
     Column(Modifier.fillMaxSize().padding(16.dp).verticalScroll(rememberScrollState())) {
-        Text("Ad-Hoc Hareket", fontWeight = FontWeight.Bold, fontSize = 16.sp)
+        Text("Raf Değiştir", fontWeight = FontWeight.Bold, fontSize = 16.sp)
         Spacer(Modifier.height(8.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             FilterChip(selected = lpFlow, onClick = { lpFlow = true }, label = { Text("🧺 LP ile") })
@@ -1531,7 +1531,7 @@ private fun CountDocument(no: String, onBack: () -> Unit, onOpenCountV2: ((Strin
                 Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.10f))) {
                     Column(Modifier.fillMaxWidth().padding(12.dp)) {
                         Text(
-                            "Bu belge Sayım V2 ile başlatılmıştır. Raf ve etiket okutarak saymak için Sayım V2'de açın.",
+                            "Bu belge Hızlı Sayım ile başlatılmıştır. Raf ve etiket okutarak saymak için Hızlı Sayım'da açın.",
                             fontWeight = FontWeight.SemiBold,
                             color = MaterialTheme.colorScheme.primary,
                         )
@@ -1540,11 +1540,11 @@ private fun CountDocument(no: String, onBack: () -> Unit, onOpenCountV2: ((Strin
                             Button(
                                 onClick = { onOpenCountV2(no) },
                                 modifier = Modifier.fillMaxWidth().height(48.dp),
-                            ) { Text("Sayım V2'de Aç") }
+                            ) { Text("Hızlı Sayım'da Aç") }
                         } else {
                             Spacer(Modifier.height(4.dp))
                             Text(
-                                "Ana menüden Sayım V2'yi açıp $no belgesini seçin.",
+                                "Ana menüden Hızlı Sayım'ı açıp $no belgesini seçin.",
                                 fontSize = 12.sp,
                                 color = MaterialTheme.colorScheme.primary,
                             )

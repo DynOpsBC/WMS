@@ -79,19 +79,19 @@ object CountV2Handoff {
 enum class Screen(val title: String) {
     Home("Ana Menü"),
     Connection("Bağlantı Ayarları"),
-    LicensePlates("LP (Taşıma Kabı)"),
+    LicensePlates("Palet / Kap"),
     HierarchicalLP("DKC Kutu ve Palet"),
     ItemInquiry("Ürün Sorgu"),
-    BinInquiry("Bin Sorgu"),
+    BinInquiry("Raf Sorgu"),
     // Kitoko (19 Eki 2026): DKÇ/EMU etiket ekranı — ürün/raf/alan etiketi, A4 raf belgesi.
     Labels("Etiket Çıkar"),
     WhseEntries("Ambar Hareketleri"),
     Receiving("Mal Kabul"),
     Picking("Toplama"),
     Packing("Paketleme"),
-    AdHocMove("Ad-Hoc Hareket"),
+    AdHocMove("Raf Değiştir"),
     Count("Sayım"),
-    CountV2("Sayım V2"),
+    CountV2("Hızlı Sayım"),
     // Kitoko (22 Eki 2026): rafsız/alansız madde sayımı.
     FirstCount("İlk Sayım"),
     PutAway("Yerleştirme"),
@@ -101,7 +101,7 @@ enum class Screen(val title: String) {
     Production("Üretim"),
     Subcontracting("Fason İşlemler"),
     Assembly("Montaj"),
-    DirectedMove("Yönlendirilmiş Hareket"),
+    DirectedMove("Taşıma İşleri"),
     Quality("Kalite Denetimi"),
     QualityMgmt("MS Kalite Yönetimi"),
     TestCenter("Test Merkezi"),
@@ -469,8 +469,8 @@ private fun applyTerminalLayout(tiles: List<HomeTile>, layout: com.dynops.bcwms.
 
 private val HomeCategories = listOf(
     HomeCategory("Gelen", Color(0xFF26A65B), listOf(
-        HomeTile(Screen.Receiving, WmsGlyph.RECEIVING, "Mal Kabul", "Gelen ürünü kaydet, LP'yi başlat"),
-        HomeTile(Screen.PutAway, WmsGlyph.PUT_AWAY, "Yerleştirme", "Ürünü veya LP'yi rafına kaldır"),
+        HomeTile(Screen.Receiving, WmsGlyph.RECEIVING, "Mal Kabul", "Gelen ürünü kaydet, paleti başlat"),
+        HomeTile(Screen.PutAway, WmsGlyph.PUT_AWAY, "Yerleştirme", "Ürünü veya paleti rafına kaldır"),
     )),
     HomeCategory("Giden", Color(0xFF6C5CE7), listOf(
         HomeTile(Screen.Picking, WmsGlyph.PICKING, "Toplama", "Sipariş ürünlerini raflardan topla"),
@@ -479,12 +479,12 @@ private val HomeCategories = listOf(
         HomeTile(Screen.ProjectIssue, WmsGlyph.PROJECT_ISSUE, "Projeye Çıkış", "Saha iş emrini seç, malzemeyi projeye düş"),
     )),
     HomeCategory("İç Operasyon", Color(0xFF2D9CDB), listOf(
-        HomeTile(Screen.LicensePlates, WmsGlyph.LICENSE_PLATE, "LP", "Palet ve taşıma kabı işlemleri"),
+        HomeTile(Screen.LicensePlates, WmsGlyph.LICENSE_PLATE, "Palet / Kap", "Palet ve kap işlemleri"),
         HomeTile(Screen.HierarchicalLP, WmsGlyph.LICENSE_PLATE, "Kutu ve Palet", "Ürün LP'lerini kutuya, kutuları palete bağla"),
-        HomeTile(Screen.AdHocMove, WmsGlyph.AD_HOC, "Ad-Hoc Hareket", "Belgesiz raf veya LP hareketi"),
-        HomeTile(Screen.DirectedMove, WmsGlyph.DIRECTED_MOVE, "Yönlendirilmiş", "Hazırlanmış taşıma emrini uygula"),
+        HomeTile(Screen.AdHocMove, WmsGlyph.AD_HOC, "Raf Değiştir", "Ürünü ya da paleti başka rafa taşı"),
+        HomeTile(Screen.DirectedMove, WmsGlyph.DIRECTED_MOVE, "Taşıma İşleri", "Ofisin hazırladığı taşımayı yap"),
         HomeTile(Screen.Count, WmsGlyph.COUNT, "Sayım", "Hazır sayım belgesini tamamla"),
-        HomeTile(Screen.CountV2, WmsGlyph.COUNT_V2, "Sayım V2", "QR okutarak sıfırdan sayım yap"),
+        HomeTile(Screen.CountV2, WmsGlyph.COUNT_V2, "Hızlı Sayım", "QR okutarak sıfırdan sayım yap"),
     )),
     HomeCategory("Üretim", Color(0xFFE2873B), listOf(
         HomeTile(Screen.Production, WmsGlyph.PRODUCTION, "Üretim", "Tüketim ve üretim çıkışı kaydet"),
@@ -498,7 +498,7 @@ private val HomeCategories = listOf(
     HomeCategory("Sorgu", Color(0xFF9B59B6), listOf(
         HomeTile(Screen.ItemInquiry, WmsGlyph.ITEM_SEARCH, "Ürün Sorgu", "Ürünün raf, lot ve miktarını bul"),
         HomeTile(Screen.Labels, WmsGlyph.LABEL, "Etiket Çıkar", "Ürün etiketi · Raf etiketi · A4 belge"),
-        HomeTile(Screen.BinInquiry, WmsGlyph.BIN_SEARCH, "Bin Sorgu", "Bir rafın mevcut içeriğini gör"),
+        HomeTile(Screen.BinInquiry, WmsGlyph.BIN_SEARCH, "Raf Sorgu", "Bir rafın mevcut içeriğini gör"),
         HomeTile(Screen.WhseEntries, WmsGlyph.ENTRIES, "Ambar Hareketleri", "Geçmiş stok hareketlerini incele"),
     )),
     // Yardım bu listede DEĞİL: ana sayfanın en altındaki HelpButton ile açılır.

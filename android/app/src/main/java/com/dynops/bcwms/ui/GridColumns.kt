@@ -15,6 +15,8 @@ data class GridColumn(
     val label: String,
     val defaultVisible: Boolean,
     val defaultWidth: Int,          // dp
+    /** Hücrede gösterilecek en fazla satır (ürün adı gibi uzun metinler için 2). */
+    val maxLines: Int = 1,
     val value: (JSONObject) -> String,
 )
 
@@ -35,19 +37,36 @@ private fun actionTypeLabel(actionType: String): String = when (actionType) {
     else -> actionType
 }
 
+/**
+ * Ürün hücresi: 1. satır ürün adı (yoksa kod), 2. satır kod · ikinci açıklama · varyant.
+ * Operatör doğru kalemi koddan değil adından seçsin diye (Element4, 25 Kas 2026).
+ */
+fun itemCellText(row: JSONObject): String {
+    val code = row.optString("itemNo").trim()
+    val name = row.optString("description").trim()
+    val detail = listOf(if (name.isNotEmpty()) code else "", row.optString("description2").trim(),
+        row.optString("variantCode").trim().takeIf { it.isNotEmpty() }?.let { "Varyant $it" } ?: "")
+        .filter { it.isNotEmpty() }.joinToString(" · ")
+    val first = name.ifEmpty { code }
+    return if (detail.isEmpty()) first else "$first\n$detail"
+}
+
 /** Ekran-bazlı kolon tanımları (mevcut olabilecek tüm kolonlar). */
 object GridColumns {
 
     val receipt = listOf(
-        GridColumn("bin", "Bin", true, 92) { nz(it, "binCode") },
-        GridColumn("itemNo", "Ürün No.", true, 104) { nz(it, "itemNo") },
-        GridColumn("description", "Açıklama", false, 170) { nz(it, "description") },
-        GridColumn("openQty", "Açık Mik.", true, 84) {
+        // Element4 (25 Kas 2026): yalnız kod okunmuyor; ürün adı, ikinci açıklama ve
+        // varyant tek hücrede iki satır. Kod da hücrenin ikinci satırında durur.
+        GridColumn("item", "Ürün", true, 210, maxLines = 3) { itemCellText(it) },
+        GridColumn("openQty", "Kalan", true, 72) {
             val q = it.optDouble("quantity"); val r = it.optDouble("qtyReceived")
             fmtCol(if (q > 0) (q - r) else it.optDouble("qtyToReceive"))
         },
-        GridColumn("uom", "UOM", true, 62) { nz(it, "unitOfMeasureCode") },
-        GridColumn("gtin", "GTIN", true, 116) { nz(it, "gtin").ifBlank { nz(it, "itemReference") } },
+        GridColumn("uom", "Birim", true, 58) { nz(it, "unitOfMeasureCode") },
+        GridColumn("bin", "Raf", false, 92) { nz(it, "binCode") },
+        GridColumn("itemNo", "Ürün No.", false, 104) { nz(it, "itemNo") },
+        GridColumn("description", "Açıklama", false, 170) { nz(it, "description") },
+        GridColumn("gtin", "Barkod", false, 116) { nz(it, "gtin").ifBlank { nz(it, "itemReference") } },
         // BC'de zaten atanmış (veya mobilden girilmiş) lot/seri burada görünür —
         // Item Tracking Lines ile çift yönlü senkron.
         GridColumn("lotNo", "Lot No.", true, 96) { nz(it, "lotNo") },
@@ -65,13 +84,14 @@ object GridColumns {
      * (outstandingQuantity / qtyToReceive / qtyReceived).
      */
     val purchaseOrder = listOf(
-        GridColumn("itemNo", "Ürün No.", true, 104) { nz(it, "itemNo") },
-        GridColumn("description", "Açıklama", true, 170) { nz(it, "description") },
-        GridColumn("outstanding", "Kalan", true, 76) { fmtCol(it.optDouble("outstandingQuantity")) },
-        GridColumn("toReceive", "Alınacak", true, 84) { fmtCol(it.optDouble("qtyToReceive")) },
-        GridColumn("received", "Alınan", true, 76) { fmtCol(it.optDouble("qtyReceived")) },
-        GridColumn("bin", "Bin", true, 92) { nz(it, "binCode") },
-        GridColumn("uom", "UOM", true, 62) { nz(it, "unitOfMeasureCode") },
+        GridColumn("item", "Ürün", true, 210, maxLines = 3) { itemCellText(it) },
+        GridColumn("outstanding", "Kalan", true, 72) { fmtCol(it.optDouble("outstandingQuantity")) },
+        GridColumn("toReceive", "Alınacak", true, 80) { fmtCol(it.optDouble("qtyToReceive")) },
+        GridColumn("uom", "Birim", true, 58) { nz(it, "unitOfMeasureCode") },
+        GridColumn("received", "Alınan", false, 76) { fmtCol(it.optDouble("qtyReceived")) },
+        GridColumn("bin", "Raf", false, 92) { nz(it, "binCode") },
+        GridColumn("itemNo", "Ürün No.", false, 104) { nz(it, "itemNo") },
+        GridColumn("description", "Açıklama", false, 170) { nz(it, "description") },
         GridColumn("gtin", "GTIN", false, 116) { nz(it, "gtin").ifBlank { nz(it, "itemReference") } },
         GridColumn("lotNo", "Lot No.", false, 96) { nz(it, "lotNo") },
         GridColumn("serialNo", "Seri No.", false, 96) { nz(it, "serialNo") },
