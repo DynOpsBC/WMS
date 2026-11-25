@@ -257,8 +257,12 @@ fun LoginFlow(onConnected: (Boolean) -> Unit, onEntered: () -> Unit = {}) {
                 if (finalList.size > 1) {
                     loginCompanies = finalList
                     step = Step.SelectCompanyAfterLogin
-                } else
+                } else {
                     onConnected(true)
+                    // Giriş başarılı: operatör doğrudan ana menüye geçer;
+                    // bağlantı ekranında kalıp tekrar "Bağlan"a basmasın.
+                    onEntered()
+                }
             } else {
                 val msg = BcApi.errorMessage(r.body).ifBlank { "HTTP ${r.httpCode}" }
                 status = "🔴 ${if (msg.contains("Invalid username")) "Kullanıcı adı veya şifre hatalı." else msg}"
@@ -992,6 +996,7 @@ fun LoginFlow(onConnected: (Boolean) -> Unit, onEntered: () -> Unit = {}) {
                                 if (result.ok) {
                                     status = "🟢 ${c.displayName} şirketine bağlandı."
                                     onConnected(true)
+                                    onEntered()
                                 } else {
                                     status = "🔴 ${BcApi.connectionFailureMessage(result)}"
                                     onConnected(false)

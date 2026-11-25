@@ -62,6 +62,14 @@ object WhsePickNavigation {
     fun consume(): String? = pendingPickNo.also { pendingPickNo = null }
 }
 
+/** DKC: operatör seçimi yalnız EMU sürümünde ve kimse giriş yapmamışken sorulur. */
+internal fun operatorGateApplies(flavor: String, localUser: String): Boolean =
+    flavor.equals("emu", ignoreCase = true) && localUser.isBlank()
+
+/** BC'de en az bir etkin terminal kullanıcısı varsa giriş ekranı açılır. */
+internal fun operatorGateRequired(users: List<org.json.JSONObject>): Boolean =
+    users.any { !it.optBoolean("disabled", false) && it.optString("username").isNotBlank() }
+
 enum class Screen(val title: String) {
     Home("Ana Menü"),
     Connection("Bağlantı Ayarları"),
@@ -112,6 +120,9 @@ fun AppRoot() {
             else Screen.Connection
         )
     }
+    // DKC: operatör girişi zorunluyken bağlantı ekranından "Menü" ile
+    // hesapsız Ana Menü'ye kaçılmasın.
+    var operatorLocked by rememberSaveable { mutableStateOf(false) }
     // Keep the menu position alive while a module replaces HomeScreen.
     val homeScrollState = rememberScrollState()
     // Bir belirtecin diskte bulunması bağlantı anlamına gelmez. Şirket ve API
@@ -139,6 +150,16 @@ fun AppRoot() {
             // BADE must not inherit the historical shared CRONUS company UUID.
             BcApi.ensurePreferredCompany(context)
             connected = BcApi.testConnection(context).ok
+            // DKC (26 Kas 2026): BC'de terminal kullanıcıları tanımlıysa uygulama
+            // kimin çalıştığını sormadan Ana Menü'ye girmez. Giriş yapmış operatör
+            // kalıcıdır; "Bağlı" rozetinden kullanıcı değiştirilir.
+            if (connected && operatorGateApplies(BuildConfig.FLAVOR, BcApi.getLocalUser(context))) {
+                val users = runCatching { BcApi.getAllPages(context, "localUsers?\$top=200") }.getOrNull()
+                if (users?.complete == true && operatorGateRequired(users.rows)) {
+                    operatorLocked = true
+                    screen = Screen.Connection
+                }
+            }
         }
         // Marka açılışı görülebilsin ama operatörü gereksiz yere bekletmesin.
         val remaining = 850L - (android.os.SystemClock.elapsedRealtime() - startedAt)
@@ -156,8 +177,9 @@ fun AppRoot() {
     // Depoda geri tuşu refleksle kullanılıyor: modül listesindeyken uygulamayı
     // kapatmak yerine Ana Menü'ye dönmeli. Ana Menü'de geri, sistemin normal
     // davranışına (uygulamadan çıkış) bırakılır (UAT gen-01).
-    androidx.activity.compose.BackHandler(enabled = screen != Screen.Home) {
-        screen = Screen.Home
+    val menuTarget = if (operatorLocked) Screen.Connection else Screen.Home
+    androidx.activity.compose.BackHandler(enabled = screen != Screen.Home && screen != menuTarget) {
+        screen = menuTarget
     }
 
     var showDevicePrinters by remember { mutableStateOf(false) }
@@ -168,8 +190,8 @@ fun AppRoot() {
             TopAppBar(
                 title = { Text(screen.title) },
                 navigationIcon = {
-                    if (screen != Screen.Home) {
-                        TextButton(onClick = { screen = Screen.Home }) { Text("‹ Menü") }
+                    if (screen != Screen.Home && screen != menuTarget) {
+                        TextButton(onClick = { screen = menuTarget }) { Text(if (operatorLocked) "‹ Giriş" else "‹ Menü") }
                     }
                 },
                 actions = {
@@ -215,7 +237,7 @@ fun AppRoot() {
                 )
                 Screen.Connection -> LoginFlow(
                     onConnected = { connected = it },
-                    onEntered = { screen = Screen.Home },
+                    onEntered = { operatorLocked = false; screen = Screen.Home },
                 )
                 Screen.LicensePlates -> LicensePlateModule()
                 Screen.HierarchicalLP -> HierarchicalLpModule()
@@ -402,7 +424,9 @@ private fun HomeScreen(
     val companyName = remember(companyEpoch) { BcApi.getCompanyName(context) }
     val companyBrand = remember(companyName, flavor) { resolveCompanyBrand(companyName, flavor) }
     val operatorName = remember(companyEpoch, connected) { BcApi.getOperatorDisplayName(context) }
-    val welcomeName = if (flavor.equals("emu", ignoreCase = true))
+    // DKC: operatör hesabıyla girildiyse kişinin adı, hesapsız terminal
+    // girişinde terminal kodu gösterilir.
+    val welcomeName = if (flavor.equals("emu", ignoreCase = true) && BcApi.getLocalUser(context).isBlank())
         WmsTerminalSession.code(context).ifBlank { operatorName }
     else operatorName
     var accessible by remember(companyEpoch, connected) { mutableStateOf(BcApi.getAccessibleCompanies(context)) }
