@@ -567,6 +567,7 @@ codeunit 72051 "DOPSWHS Print Dispatcher"
     /// </summary>
     procedure BuildPalletItemZpl(var LP: Record "DOPSWHS LP Header"; var LPLine: Record "DOPSWHS LP Line"): Text
     var
+        LabelBuilder: Codeunit "DOPSWHS LP Label Builder";
         Item: Record Item;
         Canvas: Codeunit "DOPSWHS Label Canvas";
         Lines: List of [Text];
@@ -590,7 +591,7 @@ codeunit 72051 "DOPSWHS Print Dispatcher"
             TotalQuantity := LPLine.Quantity;
 
         TotalText := StrSubstNo('TOPLAM MAL KABUL: %1 %2', TotalQuantity, LPLine."Unit of Measure");
-        PalletText := StrSubstNo('PALET MİKTARI: %1 %2', LPLine.Quantity, LPLine."Unit of Measure");
+        PalletText := StrSubstNo('%1 MİKTARI: %2 %3', LabelBuilder.KindWord(LP), LPLine.Quantity, LPLine."Unit of Measure");
         if LPLine."Lot No." <> '' then
             LotText := 'LOT: ' + LPLine."Lot No.";
 

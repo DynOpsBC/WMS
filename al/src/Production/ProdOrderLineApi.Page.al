@@ -98,6 +98,24 @@ page 72233 "DOPSWHS Prod Order Line API"
     begin
         exit(Pallet.PalletizeOutput(Rec, templateCode, palletLpNo));
     end;
+
+    /// <summary>DKC: palete konabilecek kutu LP'leri (JSON dizi).</summary>
+    [ServiceEnabled]
+    procedure listOutputBoxes(): Text
+    var
+        Pallet: Codeunit "DOPSWHS Output Pallet Mgmt";
+    begin
+        exit(Pallet.ListOutputBoxes(Rec));
+    end;
+
+    /// <summary>DKC: yalnız seçilen kutu LP'lerini (virgülle ayrılmış) palete koyar.</summary>
+    [ServiceEnabled]
+    procedure palletizeOutputBoxes(templateCode: Code[20]; palletLpNo: Code[20]; boxLpNos: Text): Text
+    var
+        Pallet: Codeunit "DOPSWHS Output Pallet Mgmt";
+    begin
+        exit(Pallet.PalletizeOutputBoxes(Rec, templateCode, palletLpNo, boxLpNos));
+    end;
     var
         LotRequired: Boolean;
         SerialRequired: Boolean;

@@ -46,7 +46,7 @@ internal fun OutputLpSheet(
     var busy by remember { mutableStateOf(false) }
     var done by remember { mutableStateOf(false) }
     var status by remember { mutableStateOf("") }
-    // Palet etiketi: her oluşan/eklenen LP'nin şablon etiketi (BC tasarımı) basılır.
+    // Her oluşan/eklenen LP'nin şablon etiketi (BC tasarımı) basılır.
     var printPallet by remember { mutableStateOf(true) }
 
     suspend fun printLp(no: String): Boolean {
@@ -58,11 +58,17 @@ internal fun OutputLpSheet(
     LaunchedEffect(Unit) {
         val page = BcApi.getAllPages(context, "licensePlateTemplates?\$top=50&\$select=code,description")
         if (page.complete) {
-            templates = page.rows.sortedBy { it.optString("code") }
-            templateCode = templates.firstOrNull()?.optString("code").orEmpty()
+            val sorted = page.rows.sortedBy { it.optString("code") }
+            // Üretim çıktısı önce kutuya konur: KUTU şablonu varsayılan ve ilk sırada.
+            templateCode = (sorted.firstOrNull { lpKindWord(it.optString("code"), it.optString("description")) == "Kutu" } ?: sorted.firstOrNull())
+                ?.optString("code").orEmpty()
+            templates = sorted.sortedBy { if (it.optString("code") == templateCode) 0 else 1 }
         }
     }
 
+    // Etiket ve mesajlarda taşıyıcının adı: seçili şablon kutuysa "Kutu", paletse "Palet".
+    val kind = if (existingMode) "LP" else templates.firstOrNull { it.optString("code") == templateCode }
+        ?.let { lpKindWord(it.optString("code"), it.optString("description")) } ?: "LP"
     fun run() {
         if (busy || done) return
         val qty = qtyText.replace(',', '.').toDoubleOrNull()
@@ -90,7 +96,7 @@ internal fun OutputLpSheet(
                     val printed = if (printPallet) printLp(lpNo) else true
                     status = "TAMAM: ${receiptLabelQtyText(qty, unit)} $lpNo LP'sine kondu" +
                         lp.optString("binCode").takeIf { it.isNotBlank() && !it.equals(outputBin, true) }?.let { " ve stok $it rafına taşındı" }.orEmpty() +
-                        when { !printPallet -> "."; printed -> ", palet etiketi basıldı."; else -> ". Palet etiketi gönderilemedi; LP ekranından yazdırın." }
+                        when { !printPallet -> "."; printed -> ", etiket basıldı."; else -> ". Etiket gönderilemedi; LP ekranından yazdırın." }
                 } else status = "HATA: ${BcApi.errorMessage(add.body)} (HTTP ${add.httpCode})"
                 return@launch
             }
@@ -120,19 +126,19 @@ internal fun OutputLpSheet(
                 }
                 created += no
             }
-            val notPrinted = if (printPallet) created.filterNot { status = "Palet etiketi basılıyor: $it"; printLp(it) } else emptyList()
+            val notPrinted = if (printPallet) created.filterNot { status = "$kind etiketi basılıyor: $it"; printLp(it) } else emptyList()
             busy = false
             done = true
-            status = "TAMAM: ${created.size} LP oluşturuldu: ${created.joinToString()}." + when {
+            status = "TAMAM: ${created.size} ${kind.lowercase()} LP oluşturuldu: ${created.joinToString()}." + when {
                 !printPallet -> " Etiket için LP ekranından yazdırın."
-                notPrinted.isEmpty() -> " Palet etiketleri basıldı."
+                notPrinted.isEmpty() -> " $kind etiketleri basıldı."
                 else -> " Etiketi gönderilemeyen LP: ${notPrinted.joinToString()} — LP ekranından yazdırın."
             }
         }
     }
 
     SheetScaffold(onDismiss = { if (!busy) onDismiss() }, contentPadding = PaddingValues(20.dp)) {
-        Text("Çıktıyı LP'ye Koy / Palet Etiketi", fontWeight = FontWeight.Bold, fontSize = 18.sp)
+        Text("Çıktıyı LP'ye Koy", fontWeight = FontWeight.Bold, fontSize = 18.sp)
         Text("$itemNo · Lot ${lotNo.ifBlank { "yok" }} · Çıkan ${receiptLabelQtyText(quantity, unit)} · Göz $outputBin",
             fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
         Spacer(Modifier.height(10.dp))
@@ -149,12 +155,12 @@ internal fun OutputLpSheet(
                 enabled = !busy && !done, singleLine = true, modifier = Modifier.fillMaxWidth())
             Text("LP başka bir raftaysa ürün o rafa taşınır.", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
         } else {
-            OutlinedTextField(countText, { countText = it.filter(Char::isDigit).take(2) }, label = { Text("Kaç LP'ye bölünsün") },
+            OutlinedTextField(countText, { countText = it.filter(Char::isDigit).take(2) }, label = { Text(if (kind == "LP") "Kaç LP'ye bölünsün" else "Kaç ${kind.lowercase()}ya bölünsün") },
                 enabled = !busy && !done, singleLine = true,
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), modifier = Modifier.fillMaxWidth())
             val preview = splitOutputQuantity(qtyText.replace(',', '.').toDoubleOrNull() ?: 0.0, countText.toIntOrNull() ?: 0)
-            if (preview.size > 1) Text("LP başına: ${receiptLabelQtyText(preview.first(), unit)}" +
-                if (preview.last() != preview.first()) " (son LP ${receiptLabelQtyText(preview.last(), unit)})" else "",
+            if (preview.size > 1) Text("${if (kind == "LP") "LP" else kind} başına: ${receiptLabelQtyText(preview.first(), unit)}" +
+                if (preview.last() != preview.first()) " (sonuncu ${receiptLabelQtyText(preview.last(), unit)})" else "",
                 fontSize = 12.sp)
             if (templates.size > 1) Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 templates.forEach { t ->
@@ -166,12 +172,12 @@ internal fun OutputLpSheet(
         }
         Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
             Checkbox(checked = printPallet, onCheckedChange = { printPallet = it }, enabled = !busy && !done)
-            Text("Palet etiketi bas")
+            Text("$kind etiketi bas")
         }
         StatusText(status)
         Spacer(Modifier.height(8.dp))
         if (!done) Button(onClick = { run() }, enabled = !busy, modifier = Modifier.fillMaxWidth().height(48.dp)) {
-            Text(if (existingMode) "LP'ye Ekle" else "LP Oluştur")
+            Text(if (existingMode) "LP'ye Ekle" else if (kind == "LP") "LP Oluştur" else "$kind LP Oluştur")
         }
         TextButton(onClick = onDismiss, enabled = !busy, modifier = Modifier.fillMaxWidth()) { Text(if (done) "Kapat" else "Vazgeç") }
     }

@@ -305,6 +305,65 @@ codeunit 72487 "DOPSWHS Output Pallet Mgmt"
     /// palet kurulur; doluysa o palete eklenir. Sonuç JSON döner.
     /// </summary>
     procedure PalletizeOutput(ProdOrderLine: Record "Prod. Order Line"; TemplateCode: Code[20]; PalletLpNo: Code[20]): Text
+    begin
+        exit(PalletizeOutputBoxes(ProdOrderLine, TemplateCode, PalletLpNo, ''));
+    end;
+
+    /// <summary>
+    /// Emrin palete konabilecek kutu LP'leri (JSON dizi): lpNo, binCode, quantity,
+    /// unit, lotNo. Operatör terminalde hangilerini palete koyacağını buradan seçer.
+    /// </summary>
+    procedure ListOutputBoxes(ProdOrderLine: Record "Prod. Order Line"): Text
+    var
+        LP: Record "DOPSWHS LP Header";
+        LPLine: Record "DOPSWHS LP Line";
+        Lots: List of [Code[50]];
+        Bins: List of [Code[20]];
+        Boxes: List of [Code[20]];
+        NoSelection: List of [Code[20]];
+        BoxNo: Code[20];
+        Box: JsonObject;
+        Result: JsonArray;
+        Qty: Decimal;
+        Unit: Code[10];
+        LotText: Text;
+    begin
+        ProdOrderLine.TestField(Status, ProdOrderLine.Status::Released);
+        CollectOutputLotsAndBins(ProdOrderLine, Lots, Bins);
+        CollectCandidates(ProdOrderLine, Lots, Bins, '', NoSelection, Boxes);
+        foreach BoxNo in Boxes do begin
+            LP.Get(BoxNo);
+            Qty := 0;
+            Unit := '';
+            LotText := '';
+            LPLine.SetRange("LP No.", BoxNo);
+            LPLine.SetFilter(Quantity, '>0');
+            if LPLine.FindSet() then
+                repeat
+                    Qty += LPLine.Quantity;
+                    Unit := LPLine."Unit of Measure";
+                    if (LPLine."Lot No." <> '') and (StrPos(LotText, LPLine."Lot No.") = 0) then begin
+                        if LotText <> '' then
+                            LotText += ', ';
+                        LotText += LPLine."Lot No.";
+                    end;
+                until LPLine.Next() = 0;
+            Clear(Box);
+            Box.Add('lpNo', BoxNo);
+            Box.Add('binCode', LP."Bin Code");
+            Box.Add('quantity', Qty);
+            Box.Add('unit', Unit);
+            Box.Add('lotNo', LotText);
+            Result.Add(Box);
+        end;
+        exit(Format(Result));
+    end;
+
+    /// <summary>
+    /// BoxLpNos boşsa emrin bütün uygun kutuları, doluysa yalnız virgülle ayrılmış
+    /// bu LP'ler palete konur. Seçilen her LP emrin uygun kutularından biri olmalı.
+    /// </summary>
+    procedure PalletizeOutputBoxes(ProdOrderLine: Record "Prod. Order Line"; TemplateCode: Code[20]; PalletLpNo: Code[20]; BoxLpNos: Text): Text
     var
         Pallet: Record "DOPSWHS LP Header";
         Child: Record "DOPSWHS LP Header";
@@ -313,6 +372,7 @@ codeunit 72487 "DOPSWHS Output Pallet Mgmt"
         Lots: List of [Code[50]];
         Bins: List of [Code[20]];
         Boxes: List of [Code[20]];
+        Selected: List of [Code[20]];
         BoxNo: Code[20];
         BinCode: Code[20];
         PutAwayNo: Code[20];
@@ -321,7 +381,8 @@ codeunit 72487 "DOPSWHS Output Pallet Mgmt"
     begin
         ProdOrderLine.TestField(Status, ProdOrderLine.Status::Released);
         CollectOutputLotsAndBins(ProdOrderLine, Lots, Bins);
-        CollectBoxes(ProdOrderLine, Lots, Bins, PalletLpNo, Boxes, BinCode);
+        ParseSelection(BoxLpNos, Selected);
+        CollectBoxes(ProdOrderLine, Lots, Bins, PalletLpNo, Selected, Boxes, BinCode);
         if Boxes.Count() = 0 then
             Error(
                 '%1 üretim emri için palete konacak kutu LP bulunamadı. Kutular çıktı gözünde (%2) olmalı ve başka bir palete bağlı olmamalı.',
@@ -410,11 +471,26 @@ codeunit 72487 "DOPSWHS Output Pallet Mgmt"
             Bins.Add(ProdOrderLine."Bin Code");
     end;
 
-    local procedure CollectBoxes(ProdOrderLine: Record "Prod. Order Line"; Lots: List of [Code[50]]; Bins: List of [Code[20]]; PalletLpNo: Code[20]; var Boxes: List of [Code[20]]; var BinCode: Code[20])
+    local procedure ParseSelection(BoxLpNos: Text; var Selected: List of [Code[20]])
+    var
+        Part: Text;
+        No: Code[20];
+    begin
+        foreach Part in BoxLpNos.Split(',', ';', ' ') do begin
+            Part := Part.Trim();
+            if Part <> '' then begin
+                No := CopyStr(UpperCase(Part), 1, MaxStrLen(No));
+                if not Selected.Contains(No) then
+                    Selected.Add(No);
+            end;
+        end;
+    end;
+
+    /// <summary>Emrin uygun kutuları; Selected doluysa yalnız onlar.</summary>
+    local procedure CollectCandidates(ProdOrderLine: Record "Prod. Order Line"; Lots: List of [Code[50]]; Bins: List of [Code[20]]; PalletLpNo: Code[20]; Selected: List of [Code[20]]; var Boxes: List of [Code[20]])
     var
         LPLine: Record "DOPSWHS LP Line";
         LP: Record "DOPSWHS LP Header";
-        BinsFound: List of [Code[20]];
         LotTracked: Boolean;
     begin
         LotTracked := IsLotTracked(ProdOrderLine."Item No.");
@@ -424,14 +500,30 @@ codeunit 72487 "DOPSWHS Output Pallet Mgmt"
         if LPLine.FindSet() then
             repeat
                 if not Boxes.Contains(LPLine."LP No.") and (LPLine."LP No." <> PalletLpNo) then
-                    if (not LotTracked) or Lots.Contains(LPLine."Lot No.") then
-                        if LP.Get(LPLine."LP No.") then
-                            if IsEligibleBox(LP, ProdOrderLine, Bins) then begin
-                                Boxes.Add(LP."No.");
-                                if not BinsFound.Contains(LP."Bin Code") then
-                                    BinsFound.Add(LP."Bin Code");
-                            end;
+                    if (Selected.Count() = 0) or Selected.Contains(LPLine."LP No.") then
+                        if (not LotTracked) or Lots.Contains(LPLine."Lot No.") then
+                            if LP.Get(LPLine."LP No.") then
+                                if IsEligibleBox(LP, ProdOrderLine, Bins) then
+                                    Boxes.Add(LP."No.");
             until LPLine.Next() = 0;
+    end;
+
+    local procedure CollectBoxes(ProdOrderLine: Record "Prod. Order Line"; Lots: List of [Code[50]]; Bins: List of [Code[20]]; PalletLpNo: Code[20]; Selected: List of [Code[20]]; var Boxes: List of [Code[20]]; var BinCode: Code[20])
+    var
+        LP: Record "DOPSWHS LP Header";
+        BinsFound: List of [Code[20]];
+        BoxNo: Code[20];
+    begin
+        CollectCandidates(ProdOrderLine, Lots, Bins, PalletLpNo, Selected, Boxes);
+        foreach BoxNo in Selected do
+            if not Boxes.Contains(BoxNo) then
+                Error('%1 LP''si %2 üretim emrinin palete konabilecek kutularından biri değil (başka bir palete bağlı, başka üründen ya da çıktı gözünde değil).',
+                    BoxNo, ProdOrderLine."Prod. Order No.");
+        foreach BoxNo in Boxes do begin
+            LP.Get(BoxNo);
+            if not BinsFound.Contains(LP."Bin Code") then
+                BinsFound.Add(LP."Bin Code");
+        end;
 
         if BinsFound.Count() > 1 then
             Error(

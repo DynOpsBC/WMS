@@ -95,6 +95,42 @@ codeunit 72302 "DOPSWHS LP Label Builder"
         exit(Format(Template."Container Kind"));
     end;
 
+    /// <summary>
+    /// Etikette taşıyıcının adı: şablonun taşıyıcı türü (Kutu, Koli, Palet...), tür
+    /// belirtilmemişse şablon kodu/açıklamasındaki KUTU, KOLİ, PALET, ÇUVAL; hiçbiri
+    /// yoksa 'LP'. Büyük harf döner (ör. 'KUTU').
+    /// </summary>
+    procedure KindWord(var LP: Record "DOPSWHS LP Header"): Text
+    var
+        Template: Record "DOPSWHS LP Template";
+        Hint: Text;
+    begin
+        if not ResolveTemplate(LP, Template) then
+            exit('LP');
+        case Template."Container Kind" of
+            Template."Container Kind"::Pallet:
+                exit('PALET');
+            Template."Container Kind"::Carton:
+                exit('KOLİ');
+            Template."Container Kind"::Box:
+                exit('KUTU');
+            Template."Container Kind"::Sack:
+                exit('ÇUVAL');
+            Template."Container Kind"::Tote:
+                exit('SEPET');
+        end;
+        Hint := UpperCase(Template.Code + ' ' + Template.Description);
+        if Hint.Contains('KUTU') or Hint.Contains('BOX') then
+            exit('KUTU');
+        if Hint.Contains('KOLİ') or Hint.Contains('KOLI') then
+            exit('KOLİ');
+        if Hint.Contains('ÇUVAL') or Hint.Contains('CUVAL') then
+            exit('ÇUVAL');
+        if Hint.Contains('PALET') or Hint.Contains('PALLET') then
+            exit('PALET');
+        exit('LP');
+    end;
+
     procedure ResolveTemplate(var LP: Record "DOPSWHS LP Header"; var Template: Record "DOPSWHS LP Template"): Boolean
     begin
         Clear(Template);
@@ -110,6 +146,7 @@ codeunit 72302 "DOPSWHS LP Label Builder"
     /// <summary>Standard LP: number, first item, lot, quantity, Code128 (SSCC or LP), footer, QR.</summary>
     local procedure BuildStandardZpl(var LP: Record "DOPSWHS LP Header"): Text
     var
+        Kind: Text;
         Content: Record "DOPSWHS LP Line";
         Item: Record Item;
         Canvas: Codeunit "DOPSWHS Label Canvas";
@@ -146,7 +183,12 @@ codeunit 72302 "DOPSWHS LP Label Builder"
             QtyText := 'BOŞ TAŞIYICI';
 
         Canvas.Init();
-        Zpl := Canvas.Frame('PALET / LP ETİKETİ', PlaceText(LP), LP."No.", 'QR = LP NO', X, ColumnWidth, Y);
+        Kind := KindWord(LP);
+        if Kind = 'LP' then
+            Kind := 'LP ETİKETİ'
+        else
+            Kind += ' / LP ETİKETİ';
+        Zpl := Canvas.Frame(Kind, PlaceText(LP), LP."No.", 'QR = LP NO', X, ColumnWidth, Y);
         NoFont := Canvas.FitFont(LP."No.", ColumnWidth, Canvas.BigFont(), 28);
         Zpl += Canvas.Write(X, Y, NoFont, ColumnWidth, LP."No.");
         Y += NoFont + 6;

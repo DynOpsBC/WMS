@@ -411,7 +411,7 @@ private fun ProductionLabelSheet(
     description: String,
     lot: OutputLot,
     onDismiss: () -> Unit,
-    /** Palet etiketi: çıktıyı LP'ye koyup LP (palet) etiketi bas. */
+    /** Çıktıyı LP'ye (kutu/palet) koyup o LP'nin etiketini bas. */
     onPallet: (() -> Unit)? = null,
     /** Çıktı akışında: etiket başarıyla gidince pencere kendiliğinden kapanır. */
     autoClose: Boolean = false,
@@ -520,7 +520,7 @@ private fun ProductionLabelSheet(
         ) { Text(if (attempted) "Yazdırma isteği tamamlandı" else "Etiketi Yazdır ($copies)", fontWeight = FontWeight.Bold) }
         if (attempted && !busy && !autoClose) Text("Yeniden etiket basmak için bu pencereyi kapatıp lotu tekrar seçin.", fontSize = 12.sp)
         if (onPallet != null) OutlinedButton(onClick = onPallet, enabled = !busy, modifier = Modifier.fillMaxWidth().height(48.dp)) {
-            Text("Palet Etiketi — LP'ye koy ve bas")
+            Text("LP'ye koy ve etiket bas")
         }
         TextButton(onClick = onDismiss, enabled = !busy, modifier = Modifier.fillMaxWidth()) {
             Text(if (autoClose) "Etiketsiz devam — yeni çıktı" else "Kapat")
