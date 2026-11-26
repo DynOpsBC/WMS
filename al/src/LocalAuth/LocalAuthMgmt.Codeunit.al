@@ -14,7 +14,10 @@ codeunit 72285 "DOPSWHS Local Auth Mgmt"
         // terminals. Keep this account exception inside the Kitoko edition.
         if Edition.Current() = 'KITOKO' then
             case UpperCase(UserId()) of
-                'BCADMIN', 'BCADMİN':
+                'BCADMIN', 'BCADMİN',
+                // Element4 (26 Kas 2026): PIN'i bu iki kişi de değiştirebilir.
+                'KEMALETTIN.TAYLAN', 'KEMALETTİN.TAYLAN',
+                'YIGIT.KARACA', 'YİGİT.KARACA':
                     exit(true);
             end;
         case UpperCase(UserId()) of
